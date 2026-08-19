@@ -142,9 +142,29 @@ join code can tag where someone came from. Not a lock on the door — none was a
   grid, streaks, and one-click promote-from-routine. Stop adding to that file.
 - **Client data is private, no coach view** → rules stay simple: each person reaches
   only their own data. Adding coach visibility later is real work, not a switch.
+- **Base is Manila** (from the Motherbase brief), so SMS is Philippine numbers —
+  no US carrier registration, but check per-message rates, they are not US rates.
+- **Storage must be rows, not one blob** — see below. Non-negotiable, from the brief.
 
 ## Still needed
 
-- Where are the users, mostly? (UK / US / mixed — changes SMS setup and bill.)
 - Do ARC maps hold images? (Changes storage sizing.)
 - Amounts rule: bigger, sum, or ask?
+
+## Where this plan disagrees with the Motherbase brief
+
+The repo brief (`Claude.md`) is the older and stricter document, and on one point it
+wins outright:
+
+> Predecessors and how they failed: SystemOS, which synced one large JSON blob to
+> Supabase. Last-write-wins, silent data loss across devices. **Do not repeat this
+> under any circumstances.**
+
+**The LifeOS kernel as built stores and broadcasts one JSON blob.** On a single
+device that is survivable — there is no second writer to lose to — but it is the
+exact shape that failed before, and it must not be what syncs if this plan ever
+un-parks. The brief already specifies the replacement: independently addressable
+rows, `{id, user_id, type, date, key, payload, updated_at, deleted}`, newer
+`updated_at` wins per row, tombstones instead of deletes, in `/shared/records.js`.
+That is compatible with everything above — the tick log is already one cell per
+activity per day, which is already a row in all but storage format.

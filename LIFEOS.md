@@ -152,6 +152,18 @@ why promoting an activity to a habit inherits its history immediately.
 
 ## Known limits
 
+- **The doc is one blob, and the Motherbase brief forbids that.** `Claude.md` in this
+  repo names it as how SystemOS died: one large JSON blob, last-write-wins, silent
+  data loss across devices. On one device with no sync there is nothing to lose to,
+  so this is safe *today* — but it must be converted to the brief's row model
+  (`{id, user_id, type, date, key, payload, updated_at, deleted}` in
+  `/shared/records.js`) before anything ever syncs. The tick log is already one cell
+  per activity per day, so the conversion is mostly mechanical.
+- **The kernel is copied into three files** and kept in step by a script. The repo
+  already loads `shared/skins.js` with a plain `<script src>`, which works from
+  `file://` too — so the copies could become one shared file and the script could go.
+- **Each app carries its own theme CSS**, which `shared/skins.json` says they should
+  not: "Every app reads this file. Apps add no theme CSS of their own."
 - Same-origin only: the apps must sit in the same folder.
 - The doc is broadcast whole. Fine at a few years of log; revisit past ~1MB.
 - `file://` works, but browsers treat file-origin storage differently — serving the
