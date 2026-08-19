@@ -1,0 +1,2305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BLOCK — routine scheduler</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080b10; --panel:#0e141d; --panel2:#131b26; --line:#1e2a38; --line2:#2b3a4d;
+  --txt:#dbe7f0; --dim:#7f93a8; --dim2:#5b6d80;
+  --acc:#7ee8fa; --acc-d:#1a3a44; --warn:#ffb347; --bad:#ff6b81; --good:#6ee7a8;
+  --f1:'Chakra Petch',system-ui,sans-serif; --f2:'IBM Plex Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:
+    radial-gradient(1200px 600px at 80% -10%, #10202b 0%, transparent 60%),
+    radial-gradient(900px 500px at 0% 100%, #131024 0%, transparent 55%),
+    var(--bg);
+  color:var(--txt); font-family:var(--f2); font-size:13px; overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#22303f;border-radius:9px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- shell ---------- */
+#app{display:flex;flex-direction:column;height:100vh}
+header{
+  display:flex;align-items:center;gap:12px;padding:9px 14px;
+  border-bottom:1px solid var(--line);background:rgba(10,15,22,.85);backdrop-filter:blur(8px);flex:0 0 auto;
+}
+.logo{font-family:var(--f1);font-weight:700;font-size:17px;letter-spacing:.14em;display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.logo b{color:var(--acc)}
+.views{display:flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:8px;background:#0a1018;flex:0 0 auto}
+.views button{
+  padding:4px 13px;border-radius:6px;font-family:var(--f1);font-size:12px;letter-spacing:.08em;color:var(--dim);
+}
+.views button.on{background:linear-gradient(180deg,#16303a,#102028);color:var(--acc);box-shadow:0 0 0 1px var(--acc-d)}
+#tabs{display:flex;gap:6px;align-items:center;overflow-x:auto;flex:1;padding:2px;min-width:0}
+.tab{
+  padding:5px 11px;border:1px solid var(--line);border-radius:7px;background:var(--panel);
+  font-family:var(--f1);font-size:12px;letter-spacing:.04em;color:var(--dim);white-space:nowrap;
+  display:flex;align-items:center;gap:7px;
+}
+.tab:hover{border-color:var(--line2);color:var(--txt)}
+.tab.on{border-color:var(--acc);color:var(--acc);background:linear-gradient(180deg,#12242b,#0d1a20)}
+.tab .x,.tab .cp{opacity:0;font-size:11px}
+.tab:hover .x,.tab:hover .cp{opacity:.45}
+.tab .x:hover{opacity:1;color:var(--bad)}
+.tab .cp:hover{opacity:1;color:var(--acc)}
+.tab .daypip{font-size:9px;color:var(--dim2);letter-spacing:.06em}
+.hbtns{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+.btn{
+  padding:6px 11px;border:1px solid var(--line);border-radius:7px;background:var(--panel);
+  font-family:var(--f1);font-size:12px;letter-spacing:.04em;color:var(--txt);white-space:nowrap;
+  transition:border-color .12s,background .12s,color .12s;
+}
+.btn:hover{border-color:var(--line2);background:var(--panel2)}
+.btn.acc{border-color:var(--acc-d);color:var(--acc)}
+.btn.acc:hover{border-color:var(--acc);background:#0f2028}
+.btn.sm{padding:3px 7px;font-size:11px;border-radius:5px}
+.btn .bad{color:var(--bad)}
+main{display:flex;flex:1;min-height:0}
+
+/* ---------- bin ---------- */
+#bin{
+  width:238px;flex:0 0 auto;border-right:1px solid var(--line);background:rgba(12,17,24,.6);
+  display:flex;flex-direction:column;min-height:0;
+}
+.bin-head{padding:10px 11px 8px;border-bottom:1px solid var(--line)}
+.bin-head h2{font-family:var(--f1);font-size:11px;letter-spacing:.16em;color:var(--dim);font-weight:600;text-transform:uppercase;margin-bottom:3px}
+.bin-head p{font-size:10.5px;color:var(--dim2);line-height:1.4;margin-bottom:8px}
+#search{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:#0a1018;font-size:12px;outline:none}
+#search:focus{border-color:var(--acc-d)}
+#binlist{flex:1;overflow-y:auto;padding:9px}
+.cat{font-family:var(--f1);font-size:10px;letter-spacing:.16em;color:var(--dim2);text-transform:uppercase;margin:11px 0 6px;padding-left:2px}
+.cat:first-child{margin-top:0}
+.chip{
+  position:relative;display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;
+  border:1px solid var(--line);border-left:3px solid var(--c);border-radius:6px;background:var(--panel);
+  cursor:grab;touch-action:none;user-select:none;
+}
+.chip:hover{background:var(--panel2);border-color:var(--line2);border-left-color:var(--c)}
+.chip .nm{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip .mn{font-family:var(--f1);font-size:10.5px;color:var(--dim2)}
+.chip .eg{font-size:9px;color:var(--dim2)}
+.chip .del{opacity:0;font-size:11px;color:var(--dim2);padding:0 2px}
+.chip:hover .del{opacity:.6}
+.chip .del:hover{color:var(--bad);opacity:1}
+.chip.tpl{border-left-color:var(--acc);background:#0c1a20}
+.bin-foot{padding:9px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+#newform{display:none;flex-direction:column;gap:6px}
+#newform.on{display:flex}
+#newform input,#newform select{padding:5px 8px;border:1px solid var(--line);border-radius:5px;background:#0a1018;outline:none;font-size:12px}
+#newform input:focus{border-color:var(--acc-d)}
+.swatches{display:flex;gap:4px;flex-wrap:wrap}
+.sw{width:18px;height:18px;border-radius:5px;border:2px solid transparent}
+.sw.on{border-color:#fff}
+
+/* ---------- board ---------- */
+#board{flex:1;display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;padding:12px;min-width:0;align-items:flex-start}
+#board.hide,#week.hide{display:none}
+.lane{
+  flex:0 0 264px;display:flex;flex-direction:column;max-height:100%;min-height:0;
+  border:1px solid var(--line);border-radius:11px;background:linear-gradient(180deg,rgba(19,27,38,.75),rgba(11,16,23,.55));
+}
+.lane.focus{border-color:#2f4a5c}
+.lane.over{border-color:var(--acc-d);box-shadow:0 0 0 1px var(--acc-d)}
+.lane-head{padding:9px 10px 8px;border-bottom:1px solid var(--line)}
+.lane-top{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.lane-name{
+  flex:1;background:none;border:1px solid transparent;border-radius:5px;padding:2px 5px;
+  font-family:var(--f1);font-size:13.5px;font-weight:600;letter-spacing:.05em;outline:none;min-width:0;
+}
+.lane-name:hover{border-color:var(--line)}
+.lane-name:focus{border-color:var(--acc-d);background:#0a1018}
+.lane-x{color:var(--dim2);font-size:12px;padding:2px 4px;opacity:0}
+.lane:hover .lane-x{opacity:.55}
+.lane-x:hover{color:var(--bad);opacity:1}
+.lane-row{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
+.lane-row input[type=time]{
+  background:#0a1018;border:1px solid var(--line);border-radius:5px;padding:2px 5px;
+  font-family:var(--f1);font-size:11.5px;color:var(--acc);outline:none;
+}
+.lane-row input[type=time]:focus{border-color:var(--acc-d)}
+.lane-row .end{font-family:var(--f1);color:var(--txt)}
+.lane-meta{display:flex;align-items:center;gap:5px;margin-top:6px;flex-wrap:wrap;font-size:10.5px;color:var(--dim2);font-family:var(--f1);letter-spacing:.04em}
+.lane-meta .tag{padding:1px 5px;border:1px solid var(--line);border-radius:4px}
+.lane-meta .tag.over{border-color:#4d1f28;color:var(--bad)}
+.lane-meta .tag.ok{border-color:#20402f;color:var(--good)}
+.lane-meta .tag.warn{border-color:#4d3616;color:var(--warn)}
+.bars{margin-top:7px;display:flex;flex-direction:column;gap:4px}
+.prog{height:3px;border-radius:2px;background:#0a1018;overflow:hidden}
+.prog i{display:block;height:100%;background:linear-gradient(90deg,#2a7f7f,var(--good));transition:width .25s}
+.loadbar{display:flex;height:5px;gap:1px;border-radius:3px;overflow:hidden;background:#0a1018}
+.loadbar i{display:block;height:100%}
+.lane-tools{display:flex;gap:4px;margin-top:8px}
+.lane-tools .btn{flex:1;text-align:center;padding:3px 0;font-size:10.5px;letter-spacing:.05em}
+.lane-tools .hov{opacity:.25;transition:opacity .12s}
+.lane:hover .lane-tools .hov{opacity:1}
+.lane-body{flex:1;overflow-y:auto;padding:9px;display:flex;flex-direction:column;gap:8px;min-height:74px}
+.lane-empty{border:1px dashed var(--line2);border-radius:8px;padding:14px 8px;text-align:center;color:var(--dim2);font-size:11.5px;line-height:1.5}
+.lane-add{margin:0 9px 9px;padding:5px;border:1px dashed var(--line);border-radius:7px;color:var(--dim2);font-family:var(--f1);font-size:11px;letter-spacing:.06em}
+.lane-add:hover{border-color:var(--acc-d);color:var(--acc)}
+#addlane{flex:0 0 44px;align-self:stretch;border:1px dashed var(--line);border-radius:11px;color:var(--dim2);font-family:var(--f1);font-size:16px}
+#addlane:hover{border-color:var(--acc-d);color:var(--acc)}
+
+/* ---------- block ---------- */
+.brick{
+  position:relative;border-radius:8px;padding:8px 9px 10px;flex:0 0 auto;
+  display:flex;flex-direction:column;gap:2px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--c) 26%,#0d141c),color-mix(in srgb,var(--c) 13%,#0a1018));
+  border:1px solid color-mix(in srgb,var(--c) 40%,#0d141c);
+  border-top:1px solid color-mix(in srgb,var(--c) 62%,#0d141c);
+  box-shadow:0 2px 0 color-mix(in srgb,var(--c) 22%,#05080c), 0 4px 12px rgba(0,0,0,.35);
+  cursor:grab;touch-action:none;user-select:none;
+}
+.brick.pinned{box-shadow:0 0 0 1px var(--acc) inset,0 2px 0 color-mix(in srgb,var(--c) 22%,#05080c)}
+.brick.done{opacity:.42;filter:saturate(.4)}
+.brick.hid{opacity:.3;filter:grayscale(.7);border-style:dashed}
+.brick.hid .b-name{text-decoration:line-through;text-decoration-style:dotted}
+.b-link{font-family:var(--f1);font-size:9px;color:var(--dim2);opacity:.75}
+.brick.done .b-name{text-decoration:line-through;text-decoration-color:var(--dim2)}
+.brick.broke{border-color:#7a3040}
+.brick.celebrate{animation:cel .5s ease}
+@keyframes cel{0%{box-shadow:0 0 0 0 var(--good)}50%{box-shadow:0 0 0 3px rgba(110,231,168,.5)}100%{box-shadow:0 0 0 0 transparent}}
+.b-top{display:flex;align-items:center;gap:5px;flex-wrap:wrap;row-gap:2px;min-height:15px}
+.b-time{
+  font-family:var(--f1);font-size:10.5px;letter-spacing:.04em;color:color-mix(in srgb,var(--c) 80%,#fff);
+  border-radius:4px;padding:1px 4px;margin-left:-4px;cursor:text;white-space:nowrap;
+}
+.b-time:hover{background:rgba(0,0,0,.35);box-shadow:0 0 0 1px var(--line2)}
+.b-time.anc{color:var(--acc);box-shadow:0 0 0 1px var(--acc-d)}
+.b-time.clash{color:var(--bad);box-shadow:0 0 0 1px #4d1f28}
+.b-dash{font-family:var(--f1);font-size:10.5px;color:var(--dim2);margin:0 -2px}
+.b-timein{background:#060a0e;border:1px solid var(--acc-d);border-radius:4px;color:var(--acc);font-family:var(--f1);font-size:10.5px;padding:1px 3px;outline:none;width:92px}
+.b-flag{font-family:var(--f1);font-size:9px;color:var(--dim2);border:1px solid var(--line);border-radius:3px;padding:0 3px;white-space:nowrap}
+.b-flag.bad{color:var(--bad);border-color:#4d1f28}
+.b-sp{flex:1}
+.b-dur{font-family:var(--f1);font-size:10.5px;color:var(--dim);display:flex;align-items:center;gap:3px}
+.b-dur button{color:var(--dim2);padding:0 3px;font-size:12px;line-height:1;opacity:.3;transition:opacity .12s}
+.brick:hover .b-dur button{opacity:1}
+.b-dur button:hover{color:var(--acc)}
+.b-dur b{min-width:30px;text-align:center;color:var(--txt);font-weight:500;border-radius:3px;cursor:text}
+.b-dur b:hover{background:rgba(0,0,0,.35);box-shadow:0 0 0 1px var(--line2)}
+.b-durin{background:#060a0e;border:1px solid var(--acc-d);border-radius:4px;color:var(--acc);font-family:var(--f1);font-size:10.5px;padding:0 2px;outline:none;width:40px;text-align:center}
+.b-main{display:flex;align-items:flex-start;gap:7px}
+.b-check{
+  flex:0 0 auto;width:16px;height:16px;margin-top:1px;border-radius:5px;border:1.5px solid color-mix(in srgb,var(--c) 55%,#33414f);
+  background:rgba(0,0,0,.28);font-size:10px;line-height:1;color:transparent;display:flex;align-items:center;justify-content:center;
+}
+.b-check:hover{border-color:var(--good);color:rgba(110,231,168,.35)}
+.b-check.on{background:var(--good);border-color:var(--good);color:#05130c;font-weight:700}
+.b-txt{flex:1;min-width:0}
+.b-name{font-size:12.5px;line-height:1.28;outline:none;border-radius:4px;padding:1px 2px;margin-left:-2px;word-break:break-word;cursor:text}
+.b-name:focus{background:#060a0e;box-shadow:0 0 0 1px var(--acc-d)}
+.b-note{font-size:10.5px;color:var(--dim);line-height:1.34;outline:none;padding:1px 2px;margin-left:-2px;border-radius:4px;cursor:text}
+.b-note:focus{background:#060a0e;box-shadow:0 0 0 1px var(--acc-d)}
+.b-note:empty:before{content:'note…';color:var(--dim2);opacity:.4}
+.b-foot{display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:5px}
+.b-days{display:flex;gap:2px}
+.b-days b{
+  width:13px;height:13px;border-radius:3px;font-family:var(--f1);font-size:8.5px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;background:#0a1018;color:var(--dim2);
+  border:1px solid var(--line);cursor:pointer;
+}
+.b-days b.on{background:color-mix(in srgb,var(--c) 42%,#0a1018);color:#fff;border-color:transparent}
+.b-ctl{margin-left:auto;display:flex;gap:2px;align-items:center}
+.b-ctl button{color:var(--dim2);font-size:10.5px;padding:1px 3px;border-radius:4px}
+.b-ctl button:hover{color:var(--txt);background:#0007}
+.b-ctl button.on{color:var(--acc)}
+.b-ctl .hov{opacity:0;transition:opacity .12s}
+.brick:hover .b-ctl .hov{opacity:1}
+.b-badge{font-family:var(--f1);font-size:8.5px;font-weight:700;letter-spacing:.04em;border:1px solid var(--line);border-radius:3px;padding:1px 3px;color:var(--dim2);line-height:1.1}
+.b-badge.dim{opacity:0;transition:opacity .12s}
+.brick:hover .b-badge.dim{opacity:.55}
+.b-badge.p1{color:#ff8a9c;border-color:#5a2430;background:#2a0f16}
+.b-badge.p2{color:var(--warn);border-color:#4d3616;background:#241a09}
+.b-badge.p3{color:#7fb8ff;border-color:#1d3450;background:#0d1a2b}
+.b-badge.e1{color:#8fd9b6;border-color:#20402f}
+.b-badge.e2{color:var(--warn);border-color:#4d3616}
+.b-badge.e3{color:#ff8a9c;border-color:#5a2430;background:#2a0f16}
+.b-grip{position:absolute;left:0;right:0;bottom:0;height:8px;cursor:ns-resize}
+.b-grip:hover{background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--c) 45%,transparent))}
+/* --- compact row for the one-minute stuff --- */
+.brick.mini{flex-direction:row;align-items:center;gap:8px;padding:5px 9px 5px 9px;min-height:0!important}
+.brick.mini .b-main{flex:1;min-width:0;align-items:center;gap:7px}
+.brick.mini .b-name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brick.mini .b-mtime{font-family:var(--f1);font-size:10px;color:color-mix(in srgb,var(--c) 80%,#fff);white-space:nowrap;border-radius:4px;padding:1px 4px;cursor:text}
+.brick.mini .b-mtime:hover{background:rgba(0,0,0,.35);box-shadow:0 0 0 1px var(--line2)}
+.brick.mini .b-mtime.anc{color:var(--acc)}
+.brick.mini .b-mdays{font-family:var(--f1);font-size:9px;color:var(--dim2);white-space:nowrap}
+.brick.mini .b-foot{
+  position:absolute;top:0;right:0;bottom:0;margin:0;padding:0 8px 0 26px;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--c) 17%,#0a1017) 32%);
+  opacity:0;transition:opacity .12s;
+}
+.brick.mini:hover .b-foot{opacity:1}
+.brick.mini .b-days,.brick.mini .b-grip{display:none}
+.brick.mini .b-ctl .hov{opacity:1}
+.nowline{flex:0 0 auto;display:flex;align-items:center;gap:6px;margin:-2px 0}
+.nowline i{flex:1;height:2px;background:linear-gradient(90deg,#ff3b5c,rgba(255,59,92,.25));border-radius:2px}
+.nowline b{font-family:var(--f1);font-size:9px;letter-spacing:.08em;color:#ff6b81;font-weight:600}
+.nowline em{width:6px;height:6px;border-radius:50%;background:#ff3b5c;flex:0 0 auto;box-shadow:0 0 7px #ff3b5c}
+.brick.past{opacity:.5}
+.brick.past.done{opacity:.3}
+.placeholder{flex:0 0 auto;border:1px dashed var(--acc);border-radius:8px;background:#0d2028;opacity:.7}
+#dragghost{position:fixed;z-index:9999;pointer-events:none;opacity:.92;transform:rotate(-1.4deg) scale(1.02);width:240px}
+#dragghost.tplghost{
+  background:var(--panel2);border:1px solid var(--acc);border-radius:9px;padding:10px 12px;
+  font-family:var(--f1);font-size:12px;color:var(--acc);
+}
+
+/* ---------- week ---------- */
+#week{flex:1;overflow:auto;padding:12px;display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;align-content:start}
+.day{border:1px solid var(--line);border-radius:11px;background:linear-gradient(180deg,rgba(19,27,38,.75),rgba(11,16,23,.55));display:flex;flex-direction:column;min-height:220px}
+.day.today{border-color:var(--acc-d);box-shadow:0 0 0 1px var(--acc-d)}
+.day-head{padding:9px 10px;border-bottom:1px solid var(--line)}
+.day-head h3{font-family:var(--f1);font-size:13px;letter-spacing:.09em;display:flex;align-items:center;gap:6px}
+.day-head h3 em{font-style:normal;font-size:9px;color:var(--acc);border:1px solid var(--acc-d);border-radius:3px;padding:0 4px}
+.day-head select{
+  width:100%;margin-top:7px;background:#0a1018;border:1px solid var(--line);border-radius:6px;padding:4px 6px;
+  font-family:var(--f1);font-size:11.5px;color:var(--txt);outline:none;
+}
+.day-head select:focus{border-color:var(--acc-d)}
+.day-meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;font-family:var(--f1);font-size:10px;color:var(--dim2)}
+.day-meta span{border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.day-meta span.bad{border-color:#4d1f28;color:var(--bad)}
+.day-body{flex:1;overflow-y:auto;padding:8px 9px;display:flex;flex-direction:column;gap:8px}
+.day-lane{font-family:var(--f1);font-size:9.5px;letter-spacing:.12em;color:var(--dim2);text-transform:uppercase;margin-top:3px}
+.day-b{display:flex;align-items:center;gap:6px;font-size:11px;padding:2px 0;line-height:1.25}
+.day-b i{width:3px;align-self:stretch;min-height:12px;border-radius:2px;background:var(--c);flex:0 0 auto}
+.day-b span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.day-b em{font-style:normal;color:var(--dim2);font-family:var(--f1);font-size:9.5px}
+.day-rest{padding:18px 8px;text-align:center;color:var(--dim2);font-size:11px}
+.day-edit{margin:0 9px 9px;padding:4px;border:1px dashed var(--line);border-radius:7px;color:var(--dim2);font-family:var(--f1);font-size:10.5px;letter-spacing:.05em}
+.day-edit:hover{border-color:var(--acc-d);color:var(--acc)}
+
+/* ---------- footer ---------- */
+footer{
+  flex:0 0 auto;border-top:1px solid var(--line);padding:6px 14px;display:flex;align-items:center;gap:14px;
+  font-family:var(--f1);font-size:11px;letter-spacing:.05em;color:var(--dim2);background:rgba(10,15,22,.7);
+}
+footer b{color:var(--txt);font-weight:500}
+footer .sp{flex:1}
+.step{display:flex;align-items:center;gap:3px;border:1px solid var(--line);border-radius:6px;padding:1px 3px}
+.step button{color:var(--dim2);padding:0 4px;font-size:12px;line-height:1}
+.step button:hover{color:var(--acc)}
+.step b{min-width:26px;text-align:center}
+.dayprog{width:80px;height:4px;border-radius:2px;background:#0a1018;overflow:hidden;display:inline-block;vertical-align:middle}
+.dayprog i{display:block;height:100%;background:linear-gradient(90deg,#2a7f7f,var(--good))}
+
+/* ---------- modal + tooltip ---------- */
+#veil{position:fixed;inset:0;background:rgba(4,7,11,.72);backdrop-filter:blur(3px);z-index:500;display:none;align-items:center;justify-content:center;padding:24px}
+#veil.on{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line2);border-radius:13px;width:100%;max-width:840px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.modal-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.modal-head h3{font-family:var(--f1);font-size:14px;letter-spacing:.1em;font-weight:600;flex:1}
+.modal-body{padding:14px;overflow-y:auto;flex:1}
+.mtabs{display:flex;gap:5px;padding:10px 14px 0;flex-wrap:wrap}
+.mtab{padding:5px 10px;border:1px solid var(--line);border-radius:6px;font-family:var(--f1);font-size:11.5px;color:var(--dim)}
+.mtab.on{border-color:var(--acc-d);color:var(--acc);background:#0f1e25}
+.modal textarea{width:100%;height:250px;background:#070b10;border:1px solid var(--line);border-radius:8px;padding:10px;font-family:ui-monospace,Consolas,monospace;font-size:11px;line-height:1.5;color:#b9cbdc;resize:vertical;outline:none}
+.hint{font-size:11.5px;color:var(--dim);line-height:1.6;margin-bottom:10px}
+.hint code,.hint b.k{background:#0a1018;border:1px solid var(--line);border-radius:4px;padding:0 4px;font-size:11px;color:var(--acc);font-weight:500}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.glinks{display:flex;flex-direction:column;gap:4px;margin-top:10px;max-height:200px;overflow-y:auto}
+.glink{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:11.5px}
+.glink span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glink a{color:var(--acc);text-decoration:none;font-family:var(--f1);font-size:11px}
+.set{display:grid;grid-template-columns:1fr auto;gap:9px 14px;align-items:center;font-size:12.5px}
+.set input[type=text],.set input[type=number],.set select{background:#0a1018;border:1px solid var(--line);border-radius:6px;padding:5px 8px;outline:none;min-width:190px}
+.set input:focus,.set select:focus{border-color:var(--acc-d)}
+.cmp{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px}
+.cmp-col{flex:0 0 215px;border:1px solid var(--line);border-radius:9px;padding:10px;background:var(--panel2)}
+.cmp-col.on{border-color:var(--acc-d)}
+.cmp-col h4{font-family:var(--f1);font-size:12.5px;letter-spacing:.06em}
+.cmp-col .sub{font-size:10.5px;color:var(--dim2);margin-bottom:8px;font-family:var(--f1)}
+.rule{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--line);border-radius:7px;margin-bottom:6px;font-size:12px}
+.rule.broke{border-color:#4d1f28;background:#170a0e}
+.rule .txt{flex:1;line-height:1.4}
+.rule .st{font-family:var(--f1);font-size:10px;padding:1px 5px;border-radius:4px;border:1px solid var(--line);color:var(--good)}
+.rule .st.bad{color:var(--bad);border-color:#4d1f28}
+.rule input[type=checkbox]{accent-color:var(--acc)}
+.rulebuild{border:1px dashed var(--line2);border-radius:8px;padding:10px;margin-top:12px;display:flex;flex-wrap:wrap;gap:7px;align-items:center;font-size:12px}
+.rulebuild select,.rulebuild input{background:#0a1018;border:1px solid var(--line);border-radius:6px;padding:5px 7px;outline:none;font-size:12px}
+.rulebuild input[type=text]{width:150px}
+.rulebuild input[type=number]{width:66px}
+.rulebuild .f{display:none;align-items:center;gap:6px}
+.rulebuild .f.on{display:flex}
+#toast{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);z-index:900;background:var(--panel2);border:1px solid var(--acc-d);color:var(--acc);border-radius:8px;padding:8px 15px;font-family:var(--f1);font-size:12px;letter-spacing:.05em;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;max-width:70vw;text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(-6px)}
+#tip{
+  position:fixed;z-index:1000;background:#0b1119;border:1px solid var(--line2);border-radius:7px;padding:6px 9px;
+  font-size:11.5px;line-height:1.45;color:var(--txt);max-width:250px;pointer-events:none;opacity:0;
+  box-shadow:0 8px 22px rgba(0,0,0,.5);transition:opacity .08s;
+}
+#tip.on{opacity:1}
+#tip b{color:var(--acc);font-weight:600}
+.ctxmenu{
+  position:fixed;z-index:1200;background:#0d141d;border:1px solid var(--line2);border-radius:9px;padding:5px;
+  min-width:192px;box-shadow:0 18px 42px rgba(0,0,0,.62);font-size:12.5px;
+}
+.ctxmenu .mi{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.ctxmenu .mi:hover{background:var(--panel2)}
+.ctxmenu .mi.danger:hover{background:#2a0f16;color:#ff8a9c}
+.ctxmenu .mi .k{margin-left:auto;color:var(--dim2);font-size:10.5px;font-family:var(--f1);padding-left:14px}
+.ctxmenu .sep{height:1px;background:var(--line);margin:4px 6px}
+.ctxmenu .hd{padding:4px 9px 6px;font-family:var(--f1);font-size:10px;letter-spacing:.14em;color:var(--dim2);text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;max-width:230px}
+.pop{
+  position:fixed;z-index:1300;background:#0d141d;border:1px solid var(--acc-d);border-radius:9px;padding:10px;
+  box-shadow:0 18px 42px rgba(0,0,0,.62);display:flex;flex-direction:column;gap:8px;min-width:176px;
+}
+.pop h5{font-family:var(--f1);font-size:10px;letter-spacing:.13em;color:var(--dim2);text-transform:uppercase;font-weight:600}
+.pop input{background:#070b10;border:1px solid var(--line2);border-radius:6px;padding:6px 8px;outline:none;font-family:var(--f1);font-size:14px;color:var(--acc);width:100%}
+.pop input:focus{border-color:var(--acc)}
+.pop .prow{display:flex;gap:6px}
+.pop .prow .btn{flex:1;text-align:center;padding:5px 8px}
+.pop .note{font-size:10.5px;color:var(--dim2);line-height:1.4}
+@media (max-width:820px){ #bin{width:180px} .lane{flex-basis:230px} }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">🧱 <b>BLOCK</b></div>
+    <div class="views">
+      <button id="vDay" class="on" data-tip="<b>Day</b> — build one routine out of blocks">Day</button>
+      <button id="vWeek" data-tip="<b>Week</b> — which <b>day</b> runs on which weekday">Week</button>
+    </div>
+    <div id="tabs"></div>
+    <div class="hbtns">
+      <button class="btn" id="bNew" data-tip="Build another <b>day</b> — Weekday, Rest day, Travel…">+ Day</button>
+      <button class="btn" id="bCmp" data-tip="See your routines side by side">Compare</button>
+      <button class="btn" id="bRules" data-tip="Rules that check your routine — <b>“Lift ≥90m after breakfast”</b>">Rules</button>
+      <button class="btn" id="bHelp" data-tip="How BLOCK works">?</button>
+      <button class="btn" id="bSet" data-tip="Settings">⚙</button>
+      <button class="btn acc" id="bExp" data-tip="Send this to Google Calendar or Todoist">Export ▸</button>
+    </div>
+  </header>
+
+  <main>
+    <aside id="bin">
+      <div class="bin-head">
+        <h2>Block bin</h2>
+        <p>Drag one into a routine →<br>or just click to drop it in.</p>
+        <input id="search" placeholder="filter blocks…" autocomplete="off">
+      </div>
+      <div id="binlist"></div>
+      <div class="bin-foot">
+        <button class="btn" id="bAddBlock" data-tip="Make a block that isn't in the list">+ New block</button>
+        <div id="newform">
+          <input id="nfName" placeholder="name" autocomplete="off">
+          <input id="nfMin" type="number" min="5" step="5" value="30" placeholder="minutes">
+          <select id="nfEnergy">
+            <option value="1">◔ light</option>
+            <option value="2" selected>◑ medium</option>
+            <option value="3">● heavy</option>
+          </select>
+          <div class="swatches" id="nfSw"></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn acc sm" id="nfOk" style="flex:1">Add</button>
+            <button class="btn sm" id="nfNo">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div id="board"></div>
+    <div id="week" class="hide"></div>
+  </main>
+
+  <footer>
+    <span id="statTotal">—</span>
+    <span class="sp"></span>
+    <span id="statDone"></span>
+    <span class="sp"></span>
+    <span data-tip="Dead time inserted between every block in a routine">buffer</span>
+    <span class="step"><button id="gapM">−</button><b id="gapv">0m</b><button id="gapP">+</button></span>
+  </footer>
+</div>
+
+<div id="veil"><div class="modal" id="modal"></div></div>
+<div id="toast"></div>
+<div id="tip"></div>
+
+<script>
+/* ══════════════════════════ LIFEOS KERNEL v1 ══════════════════════════
+   The shared brain. This block is IDENTICAL in every LifeOS app — edit the
+   copy in lifeos.html and re-paste it between the sentinels in the others.
+
+   Two modes, decided at load:
+     • hosted   — the app is in an iframe inside lifeos.html. Every mutation is
+                  proxied to the shell over postMessage, so the shell is the
+                  single writer and nothing races. Works on file:// too, where
+                  frames cannot touch each other's DOM but postMessage still flows.
+     • solo     — the app was opened on its own. It owns localStorage 'lifeos_v1'
+                  directly and gossips over BroadcastChannel to other tabs.
+   Either way the app calls the same API and never knows which one it got.
+
+   The shared doc is small and is broadcast whole — no diffing, no versions to
+   reconcile. Apps keep their own private state (block_v1, arc's IDB, …) exactly
+   as before; only what MUST be shared lives here.                          */
+window.LifeOS = (function () {
+  const KEY = 'lifeos_v1';
+  const HOSTED = (function () { try { return !!(window.parent && window.parent !== window); } catch (e) { return false; } })();
+  const blank = () => ({ v: 1, ts: 0, activities: {}, habits: {}, log: {}, today: null });
+
+  let doc = blank(), subs = [], waits = {}, seq = 0, bc = null, booted = false, bootQ = [], persistHook = null;
+
+  const pad = n => String(n).padStart(2, '0');
+  /** the only date format anything here speaks: YYYY-MM-DD, local time */
+  const day = d => { d = d || new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+  /** canonical activity id — apps agree on a thing by its NAME, slugged */
+  const slug = s => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
+  const shift = (date, n) => { const d = new Date(date + 'T12:00:00'); d.setDate(d.getDate() + n); return day(d); };
+
+  /* ─── ops: the complete list of ways the shared doc may change ───
+     Pure mutations on a doc. The authority (a solo app, or the shell) runs them;
+     hosted apps only ever ask for them by name. */
+  const OPS = {
+    /** upsert activities — the vocabulary of things you do */
+    acts(d, list) {
+      (list || []).forEach(a => {
+        if (!a || !a.name) return;
+        const id = a.id || slug(a.name);
+        d.activities[id] = Object.assign({ id: id, name: a.name, cat: '', dur: 0, color: '', energy: 2 }, d.activities[id], a, { id: id });
+      });
+    },
+    /** tick / untick one activity on one date. Idempotent — the same cell no
+        matter who writes it, which is what makes BLOCK and HABITS agree. */
+    done(d, a) {
+      const date = a.date || day(), id = a.actId;
+      if (!id) return;
+      const rec = d.log[date] || (d.log[date] = {});
+      if (a.on === false) delete rec[id];
+      else rec[id] = { ts: Date.now(), src: a.src || '?', habitId: a.habitId || null, note: a.note || '' };
+      if (!Object.keys(rec).length) delete d.log[date];
+    },
+    habit(d, h) {
+      if (!h || !h.id) return;
+      d.habits[h.id] = Object.assign(
+        { created: day(), archived: false, cadence: { type: 'daily', days: [1, 1, 1, 1, 1, 1, 1], target: 7 } },
+        d.habits[h.id], h);
+    },
+    habitDel(d, id) { delete d.habits[id]; },
+    /** whichever app owns the schedule publishes today's plan here, so the home
+        screen (and anything else) can show and tick it without ever reading
+        that app's private storage */
+    today(d, t) { d.today = t || null; },
+    /** housekeeping: the log only grows, so drop ancient days */
+    prune(d, keepDays) {
+      const cut = shift(day(), -(keepDays || 800));
+      Object.keys(d.log).forEach(k => { if (k < cut) delete d.log[k]; });
+    },
+  };
+
+  function emit() { subs.forEach(f => { try { f(doc); } catch (e) { console.warn('[lifeos]', e); } }); }
+  function onBoot(fn) { booted ? fn(doc) : bootQ.push(fn); }
+  function setDoc(d) {
+    doc = Object.assign(blank(), d || {});
+    if (!booted) { booted = true; bootQ.splice(0).forEach(f => { try { f(doc); } catch (e) { console.warn('[lifeos]', e); } }); }
+    emit();
+    /* state that arrived from another tab (or from IndexedDB at boot) still has
+       to reach the apps we are hosting, and still deserves persisting */
+    if (!HOSTED) { toFrames({ lifeos: 1, ev: 'doc', doc: doc }); if (persistHook) persistHook(doc); }
+  }
+
+  /* ─── solo mode: this window owns the data ─── */
+  function loadLocal() { try { const r = JSON.parse(localStorage.getItem(KEY)); if (r && r.v) return Object.assign(blank(), r); } catch (e) {} return blank(); }
+  function saveLocal() {
+    doc.ts = Date.now();
+    try { localStorage.setItem(KEY, JSON.stringify(doc)); } catch (e) { console.warn('[lifeos] localStorage full', e); }
+    if (persistHook) persistHook(doc);              /* the shell hangs IndexedDB here */
+    if (bc) { try { bc.postMessage({ lifeos: 1, ev: 'doc', doc: doc }); } catch (e) {} }
+    toFrames({ lifeos: 1, ev: 'doc', doc: doc });   /* no-op unless we are the shell */
+  }
+  function apply(op, args) {
+    if (!OPS[op]) throw new Error('lifeos: unknown op ' + op);
+    OPS[op](doc, args); saveLocal(); emit(); return doc;
+  }
+
+  /* ─── hosted mode: ask the shell to do it ─── */
+  function ask(op, args) {
+    return new Promise(res => {
+      const id = ++seq; waits[id] = res;
+      try { window.parent.postMessage({ lifeos: 1, id: id, op: op, args: args }, '*'); }
+      catch (e) { delete waits[id]; res(doc); return; }
+      setTimeout(() => { if (waits[id]) { delete waits[id]; res(doc); } }, 4000);
+    });
+  }
+  function toFrames(msg) {
+    if (HOSTED) return;
+    document.querySelectorAll('iframe').forEach(f => { try { f.contentWindow.postMessage(msg, '*'); } catch (e) {} });
+  }
+
+  const run = HOSTED ? ask : (op, args) => Promise.resolve(apply(op, args));
+
+  /* ─── wiring ─── */
+  window.addEventListener('message', e => {
+    const m = e.data;
+    if (!m || m.lifeos !== 1) return;
+    if (m.ev === 'doc') { setDoc(m.doc); return; }               /* the shell pushed new state */
+    if (m.id && m.ok) { const w = waits[m.id]; delete waits[m.id]; setDoc(m.doc); if (w) w(doc); return; }
+    /* a child frame is asking us to mutate — only the shell answers these */
+    if (!HOSTED && m.op) {
+      if (m.op !== 'hello') { try { apply(m.op, m.args); } catch (err) { console.warn('[lifeos]', err); } }
+      try { e.source.postMessage({ lifeos: 1, id: m.id, ok: 1, doc: doc }, '*'); } catch (err) {}
+    }
+  });
+
+  if (HOSTED) {
+    try { window.parent.postMessage({ lifeos: 1, id: ++seq, op: 'hello' }, '*'); } catch (e) {}
+    /* if no shell answers (the file was opened in a frame by hand), go solo */
+    setTimeout(() => { if (!booted) setDoc(loadLocal()); }, 1200);
+  } else {
+    try { bc = new BroadcastChannel('lifeos'); bc.onmessage = e => { if (e.data && e.data.lifeos === 1 && e.data.ev === 'doc') setDoc(e.data.doc); }; } catch (e) {}
+    window.addEventListener('storage', e => { if (e.key === KEY) setDoc(loadLocal()); });
+    setDoc(loadLocal());
+  }
+
+  const API = {
+    hosted: HOSTED,
+    day: day, slug: slug, shift: shift,
+    ready: onBoot,
+    doc: () => doc,
+    on: f => { subs.push(f); if (booted) f(doc); return () => { const i = subs.indexOf(f); if (i > -1) subs.splice(i, 1); }; },
+
+    acts: list => run('acts', list),
+    act: id => doc.activities[id] || null,
+    done: (actId, date, on, meta) => run('done', Object.assign({ actId: actId, date: date || day(), on: on !== false }, meta || {})),
+    isDone: (actId, date) => !!(doc.log[date || day()] || {})[actId],
+    dayLog: date => doc.log[date || day()] || {},
+    habit: h => run('habit', h),
+    habitDel: id => run('habitDel', id),
+    publishToday: t => run('today', t),
+    prune: n => run('prune', n),
+
+    /** consecutive due-days ending today (today still counts as open, not broken) */
+    streak(actId, cadence) {
+      const due = d => (!cadence || cadence.type !== 'days') ? true : !!cadence.days[new Date(d + 'T12:00:00').getDay()];
+      let n = 0, d = day(), guard = 0;
+      if (!API.isDone(actId, d)) d = shift(d, -1);
+      while (guard++ < 900) {
+        if (!due(d)) { d = shift(d, -1); continue; }
+        if (!API.isDone(actId, d)) break;
+        n++; d = shift(d, -1);
+      }
+      return n;
+    },
+    /** how many of the last n days this was done */
+    count(actId, n) {
+      let c = 0, d = day();
+      for (let i = 0; i < (n || 30); i++) { if (API.isDone(actId, d)) c++; d = shift(d, -1); }
+      return c;
+    },
+    /* the shell hangs IndexedDB durability here — an accessor, so the kernel
+       never touches a binding that does not exist yet at boot */
+    get persist() { return persistHook; },
+    set persist(f) { persistHook = f; },
+    _apply: apply,
+    _adopt: d => { setDoc(d); saveLocal(); },
+  };
+  return API;
+})();
+/* ════════════════════════ END LIFEOS KERNEL ════════════════════════ */
+
+'use strict';
+/* ============================ helpers ============================ */
+const $ = s => document.querySelector(s);
+const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
+const uid = () => Math.random().toString(36).slice(2, 9);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DSHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DLET = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const ICSD = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+const TDD = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+/* week view order follows the "week starts on" setting, like Calendar and Todoist */
+const weekOrd = () => { const s = S && S.weekStart != null ? S.weekStart : 1; return [0, 1, 2, 3, 4, 5, 6].map(i => (s + i) % 7); };
+const PAL = ['#7ee8fa', '#9d8cff', '#ffb347', '#6ee7a8', '#ff6b81', '#5aa9ff', '#ffd166', '#4fd6c0', '#e879f9', '#94a3b8'];
+const SCALE = 0.75;                                     /* minutes → px, fixed. Blocks grow to fit content. */
+const EGLYPH = ['', '◔', '◑', '●'];
+const ENAME = ['', 'light', 'medium', 'heavy'];
+const EWEIGHT = [1, 0.5, 1, 1.75];
+const ECOL = ['#33414f', '#6ee7a8', '#ffb347', '#ff6b81'];
+const PRI = ['', 'P1', 'P2', 'P3'];
+const PALNAME = ['Ice', 'Violet', 'Amber', 'Mint', 'Rose', 'Blue', 'Gold', 'Teal', 'Orchid', 'Slate'];
+
+function toast(msg) {
+  const t = $('#toast'); t.innerHTML = msg; t.classList.add('on');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 2200);
+}
+/* instant hover tooltips — every control explains itself */
+const tipBox = $('#tip');
+document.addEventListener('mouseover', e => {
+  const t = e.target.closest('[data-tip]');
+  if (!t) { tipBox.classList.remove('on'); return; }
+  tipBox.innerHTML = t.dataset.tip;
+  const r = t.getBoundingClientRect();
+  tipBox.classList.add('on');
+  const w = tipBox.offsetWidth, h = tipBox.offsetHeight;
+  let x = clamp(r.left + r.width / 2 - w / 2, 8, innerWidth - w - 8);
+  let y = r.top - h - 7; if (y < 8) y = r.bottom + 7;
+  tipBox.style.left = x + 'px'; tipBox.style.top = y + 'px';
+});
+document.addEventListener('mouseleave', () => tipBox.classList.remove('on'));
+
+/* ---------- context menus ---------- */
+function closeMenu() { clearTimeout(closeSub._t); document.querySelectorAll('.ctxmenu').forEach(m => m.remove()); }
+/** Submenus close on a delay: the pointer has to cross sibling rows to reach one,
+ *  and each sibling asks for a close. Entering the submenu itself cancels that. */
+function closeSub(now) {
+  clearTimeout(closeSub._t);
+  const kill = () => document.querySelectorAll('.ctxmenu.sub').forEach(m => m.remove());
+  if (now) kill(); else closeSub._t = setTimeout(kill, 320);
+}
+function placeMenu(m, x, y) {
+  m.style.left = clamp(x, 6, innerWidth - m.offsetWidth - 6) + 'px';
+  m.style.top = clamp(y, 6, innerHeight - m.offsetHeight - 6) + 'px';
+}
+function buildMenu(m, list) {
+  list.forEach(it => {
+    if (it.sep) return m.appendChild(el('div', 'sep'));
+    if (it.head) return m.appendChild(el('div', 'hd', esc(it.head)));
+    const d = el('div', 'mi' + (it.danger ? ' danger' : ''),
+      (it.check ? '✓ ' : '') + esc(it.label) + (it.sub ? '<span class="k">▸</span>' : (it.k ? '<span class="k">' + esc(it.k) + '</span>' : '')));
+    if (it.sub) {
+      const open = () => {
+        closeSub(true);
+        const s = el('div', 'ctxmenu sub');
+        buildMenu(s, typeof it.sub === 'function' ? it.sub() : it.sub);
+        s.onmouseenter = () => clearTimeout(closeSub._t);   /* reached it — call off the close */
+        s.onmouseleave = () => closeSub();
+        document.body.appendChild(s);
+        const r = d.getBoundingClientRect();
+        placeMenu(s, r.right + 3, r.top - 5);
+      };
+      d.onmouseenter = () => { clearTimeout(closeSub._t); open(); };
+      d.onclick = ev => { ev.stopPropagation(); open(); };   /* click works too, for touch + impatience */
+    } else {
+      d.onmouseenter = () => closeSub();
+      d.onclick = () => { closeMenu(); if (it.fn) it.fn(); };
+    }
+    m.appendChild(d);
+  });
+}
+/**
+ * Small editor anchored to whatever you clicked. Nothing commits on blur — you press Set —
+ * so a focus wobble can never silently swallow the edit (which is what broke the old inline editor).
+ */
+function popEdit(anchor, opt) {
+  closePop();
+  const p = el('div', 'pop');
+  p.appendChild(el('h5', null, esc(opt.title)));
+  const inp = el('input');
+  inp.type = opt.type || 'time'; inp.value = opt.value || '';
+  if (opt.type === 'number') { inp.min = opt.min || 1; inp.max = opt.max || 1440; }
+  p.appendChild(inp);
+  if (opt.note) p.appendChild(el('div', 'note', opt.note));
+  const row = el('div', 'prow');
+  const ok = el('button', 'btn acc', opt.okLabel || 'Set');
+  ok.onclick = () => { const v = inp.value; closePop(); opt.onSet(v); };
+  row.appendChild(ok);
+  if (opt.onClear) { const c = el('button', 'btn', opt.clearLabel || 'Clear'); c.onclick = () => { closePop(); opt.onClear(); }; row.appendChild(c); }
+  const x = el('button', 'btn', '✕'); x.onclick = closePop; row.appendChild(x);
+  p.appendChild(row);
+  document.body.appendChild(p);
+  const r = anchor.getBoundingClientRect();
+  p.style.left = clamp(r.left - 4, 6, innerWidth - p.offsetWidth - 6) + 'px';
+  p.style.top = clamp(r.bottom + 6, 6, innerHeight - p.offsetHeight - 6) + 'px';
+  inp.focus(); inp.select && inp.select();
+  inp.onkeydown = ev => { ev.stopPropagation(); if (ev.key === 'Enter') ok.click(); if (ev.key === 'Escape') closePop(); };
+}
+function closePop() { document.querySelectorAll('.pop').forEach(p => p.remove()); }
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.pop')) closePop(); }, true);
+
+function openMenu(x, y, list) {
+  closeMenu(); tipBox.classList.remove('on');
+  const m = el('div', 'ctxmenu');
+  buildMenu(m, list);
+  document.body.appendChild(m);
+  placeMenu(m, x, y);
+}
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.ctxmenu')) closeMenu(); }, true);
+window.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+window.addEventListener('blur', closeMenu);
+
+/* ============================ state ============================ */
+const KEY = 'block_v1';
+/* name, minutes, colour index, energy */
+const DEFLIB = [
+  ['Morning', [['Wake + hydrate', 5, 0, 1], ['Sunlight walk', 15, 3, 1], ['Cold shower', 10, 5, 2], ['Coffee', 10, 2, 1], ['Journal', 10, 1, 1], ['Meditate', 10, 1, 1], ['Mobility', 15, 3, 2], ['Breakfast', 20, 2, 1], ['Read', 20, 1, 2]]],
+  ['Work', [['Deep work', 90, 5, 3], ['Admin + email', 30, 9, 1], ['Client calls', 60, 5, 3], ['Content creation', 45, 8, 3], ['Program writing', 60, 8, 3], ['Check-ins', 20, 9, 2], ['Plan tomorrow', 10, 9, 1]]],
+  ['Training', [['Lift', 60, 4, 3], ['Conditioning', 25, 4, 3], ['Zone 2', 45, 3, 2], ['Stretch', 15, 3, 1], ['Steps walk', 30, 3, 1]]],
+  ['Life', [['Lunch', 30, 2, 1], ['Dinner', 45, 2, 1], ['Family time', 60, 6, 2], ['Errands', 30, 9, 2], ['Chores', 20, 9, 2]]],
+  ['Wind down', [['Screens off', 30, 1, 1], ['Shower', 10, 1, 1], ['Read fiction', 20, 1, 1], ['Evening stretch', 10, 3, 1], ['Sleep', 480, 1, 1]]],
+];
+function seedLib() {
+  const out = [];
+  DEFLIB.forEach(([cat, arr]) => arr.forEach(([name, dur, ci, en]) => out.push({ id: uid(), name, dur, color: PAL[ci], cat, energy: en })));
+  return out;
+}
+const seedVariant = name => ({ id: uid(), name, items: {} });
+function seedState() {
+  const lanes = [
+    { id: uid(), name: 'Morning', start: '06:00', target: '09:00' },
+    { id: uid(), name: 'Midday', start: '12:00', target: '' },
+    { id: uid(), name: 'Evening', start: '18:00', target: '22:30' },
+  ];
+  const v = seedVariant('Weekday');
+  lanes.forEach(l => v.items[l.id] = []);
+  return {
+    v: 2, lanes, lib: seedLib(), templates: [], variants: [v], current: v.id,
+    week: [null, null, null, null, null, null, null], rules: [],
+    view: 'day', gap: 0, h24: false, doneDate: '',
+    tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
+    calName: 'Routine', tdProject: 'Routine', tdPriority: 1, exportScope: 'variant',
+  };
+}
+let S;
+try { S = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem('brick_v1')) || seedState(); } catch (e) { S = seedState(); }
+if (!S.lanes || !S.variants) S = seedState();
+/* forward-compat for maps saved by older versions */
+S.templates = S.templates || []; S.rules = S.rules || []; S.week = S.week || [null, null, null, null, null, null, null];
+S.view = S.view || 'day'; S.exportScope = S.exportScope || 'variant'; S.doneDate = S.doneDate || ''; if (S.weekStart == null) S.weekStart = 1; if (S.sound == null) S.sound = true; if (S.nowline == null) S.nowline = true; if (S.keepDone == null) S.keepDone = true;
+delete S.zoom;
+S.variants.forEach(v => S.lanes.forEach(l => { if (!v.items[l.id]) v.items[l.id] = []; }));
+
+const M = () => S.variants.find(v => v.id === S.current) || S.variants[0];
+const variant = id => S.variants.find(v => v.id === id);
+const lane = id => S.lanes.find(l => l.id === id);
+const items = laneId => (M().items[laneId] || (M().items[laneId] = []));
+/** run fn with a different routine active — schedule()/items() always read the current one */
+function withVariant(id, fn) { const p = S.current; S.current = id; try { return fn(); } finally { S.current = p; } }
+
+let saveT;
+function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }, 250); }
+
+const HIST = [];
+function snap() {
+  HIST.push(JSON.stringify({ lanes: S.lanes, variants: S.variants, current: S.current, lib: S.lib, templates: S.templates, rules: S.rules, week: S.week }));
+  if (HIST.length > 80) HIST.shift();
+}
+function undo() {
+  if (!HIST.length) return toast('nothing to undo');
+  Object.assign(S, JSON.parse(HIST.pop()));
+  render(); toast('undo');
+}
+
+/* ============================ time ============================ */
+const hm2min = s => { const [h, m] = String(s || '0:00').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+function fmt(min) {
+  min = ((Math.round(min) % 1440) + 1440) % 1440;
+  const h = Math.floor(min / 60), m = min % 60;
+  if (S.h24) return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  const ap = h < 12 ? 'am' : 'pm', hh = h % 12 === 0 ? 12 : h % 12;
+  return hh + ':' + String(m).padStart(2, '0') + ap;
+}
+const dur2s = d => d >= 60 ? (d % 60 ? Math.floor(d / 60) + 'h' + String(d % 60).padStart(2, '0') : Math.floor(d / 60) + 'h') : d + 'm';
+function pad(n) { return String(n).padStart(2, '0'); }
+const hhmm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + ':' + pad(m % 60); };
+const todayIdx = () => new Date().getDay();
+const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const todayKey = () => { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+
+/**
+ * Blocks flow from the lane start (buffer between them) EXCEPT anchored ones
+ * (it.at = 'HH:MM'), which own their start; the flow resumes from there.
+ */
+function schedule(laneId) {
+  const L = lane(laneId); let cur = hm2min(L.start); const out = [];
+  items(laneId).forEach((it, i) => {
+    if (it.hidden) { out.push({ it, s: cur, e: cur, gap: 0, clash: 0, hidden: true }); return; }
+    if (i) cur += S.gap;
+    let s = cur, gap = 0, clash = 0;
+    if (it.at) {
+      const a = hm2min(it.at) + (cur > hm2min(it.at) + 720 ? 1440 : 0);
+      s = a;
+      if (i && a < cur) { clash = cur - a; }
+      else if (i) gap = a - cur;
+    }
+    out.push({ it, s, e: s + it.dur, gap, clash });
+    cur = s + it.dur;
+  });
+  return out;
+}
+const laneEnd = laneId => { const sc = schedule(laneId).filter(r => !r.hidden); return sc.length ? sc[sc.length - 1].e : hm2min(lane(laneId).start); };
+const laneMins = laneId => items(laneId).filter(x => !x.hidden).reduce((a, b) => a + b.dur, 0);
+/** duration sets a FLOOR — content decides the real height, so nothing can ever overlap */
+const brickMin = d => Math.max(52, 22 + d * SCALE);
+/** ≤10 min collapses to one row by default; it.compact overrides either way, at any duration */
+const isMini = it => it.compact != null ? !!it.compact : it.dur < 10;
+/** single minutes below 10, fives from 10 up */
+const durStep = d => d < 10 ? 1 : 5;
+/** "Vitamins 1m" / "Deep work 1h30" → name + duration */
+function parseTrailingDur(s) {
+  let m = s.match(/^(.+?)[\s,–-]+(\d+)\s*h(?:ours?|rs?)?(?:[\s,]*(\d+)\s*(?:m(?:in(?:ute)?s?)?)?)?$/i);
+  if (m) return { name: m[1].trim(), dur: (+m[2]) * 60 + (+(m[3] || 0)) };
+  m = s.match(/^(.+?)[\s,–-]+(\d+)\s*m(?:in(?:ute)?s?)?$/i);
+  if (m) return { name: m[1].trim(), dur: +m[2] };
+  return null;
+}
+const daysShort = days => {
+  const on = days.map((d, i) => d ? i : -1).filter(i => i >= 0);
+  if (!on.length) return 'never';
+  if (on.length === 7) return 'daily';
+  if (on.join() === '1,2,3,4,5') return 'M–F';
+  if (on.join() === '0,6') return 'S/S';
+  return on.map(i => DLET[i]).join('');
+};
+const locked = it => !!(it.pin || it.at);
+const energyOf = it => it.energy || 2;
+/** load units: one hour of medium work = 1.0 */
+const loadOf = it => it.dur / 60 * EWEIGHT[energyOf(it)];
+const laneLoad = laneId => items(laneId).filter(x => !x.hidden).reduce((a, b) => a + loadOf(b), 0);
+
+/* ============================ mutations ============================ */
+function mkItem(src) {
+  return {
+    id: uid(), srcId: src.srcId || src.id || uid(),   /* instances of the same thing share srcId */
+    name: src.name, dur: src.dur, color: src.color, note: src.note || '',
+    days: src.days ? src.days.slice() : [0, 1, 1, 1, 1, 1, 0],
+    pin: false, at: src.at || null, pri: src.pri || 0, energy: src.energy || 2, done: false, hidden: false,
+  };
+}
+/* ---------- linked instances ----------
+ * Blocks that came from the same bin entry stay in sync on WHAT they are
+ * (name, length, colour, effort, note). WHEN and HOW they fit — anchored time,
+ * priority, days, pin, position, ticks — stays local to each routine.
+ */
+const SYNCED = ['name', 'dur', 'color', 'energy', 'note'];
+function kinOf(it) {
+  const out = [];
+  S.variants.forEach(v => withVariant(v.id, () => S.lanes.forEach(l =>
+    items(l.id).forEach(x => { if (x.srcId && x.srcId === it.srcId && x.id !== it.id) out.push(x); }))));
+  return out;
+}
+function syncKin(it, patch) {
+  const keys = Object.keys(patch).filter(k => SYNCED.includes(k));
+  if (!keys.length) return 0;
+  const kin = kinOf(it);
+  kin.forEach(x => keys.forEach(k => x[k] = patch[k]));
+  const b = S.lib.find(x => x.id === it.srcId);
+  if (b) keys.forEach(k => { if (k !== 'note') b[k] = patch[k]; });
+  return kin.length;
+}
+/** anything you type into a routine joins the bin, so it can be reused and stays linked */
+function ensureInBin(it) {
+  if (S.lib.some(b => b.id === it.srcId)) return;
+  S.lib.push({ id: it.srcId, name: it.name, dur: it.dur, color: it.color, energy: energyOf(it), cat: 'Yours' });
+}
+/** put a linked copy of this block into the same routine of every other day */
+function spreadToAllDays(laneId, it) {
+  let n = 0;
+  S.variants.forEach(v => {
+    if (v.id === S.current) return;
+    const arr = v.items[laneId] || (v.items[laneId] = []);
+    if (arr.some(x => x.srcId === it.srcId)) return;
+    const copy = mkItem(it);
+    copy.srcId = it.srcId; copy.at = it.at; copy.pri = it.pri; copy.days = it.days.slice();
+    /* land it in time order if it carries an anchor, otherwise at the end */
+    let idx = arr.length;
+    if (it.at) { const a = hm2min(it.at); idx = arr.findIndex(x => x.at && hm2min(x.at) > a); if (idx < 0) idx = arr.length; }
+    arr.splice(idx, 0, copy); n++;
+  });
+  return n;
+}
+function addItem(laneId, src, idx) {
+  snap(); const it = mkItem(src); const arr = items(laneId);
+  arr.splice(idx == null ? arr.length : idx, 0, it); render(); return it;
+}
+function removeItem(laneId, id) { snap(); const a = items(laneId); const i = a.findIndex(x => x.id === id); if (i > -1) a.splice(i, 1); render(); }
+function findItem(id) {
+  for (const l of S.lanes) { const a = items(l.id); const i = a.findIndex(x => x.id === id); if (i > -1) return { laneId: l.id, arr: a, i, it: a[i] }; }
+  return null;
+}
+/** priority first: P1 → P2 → P3 → unset. Stable inside a tier; pinned + anchored blocks keep their slot. */
+function sortPri(laneId) {
+  const arr = items(laneId);
+  const idx = arr.map((x, i) => locked(x) ? -1 : i).filter(i => i >= 0);
+  if (idx.length < 2) return toast('need 2+ unlocked blocks in this routine');
+  const vals = idx.map(i => arr[i]);
+  if (vals.every(v => !v.pri)) return toast('no priorities set yet — click a block’s <b>P</b> badge first');
+  snap();
+  const rank = it => (it.pri > 0 ? it.pri : 9);
+  vals.map((v, i) => [v, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).forEach(([v], k) => arr[idx[k]] = v);
+  render();
+}
+
+/* ============================ today’s checklist ============================ */
+/** which routine is meant to run today: the week assignment wins, else whatever is open */
+const routineForToday = () => S.week[todayIdx()] || S.current;
+/** blocks in a routine that actually apply today */
+function todaysBlocks(vid) {
+  const d = todayIdx();
+  return withVariant(vid, () => S.lanes.flatMap(l => items(l.id)).filter(it => it.days[d] && !it.hidden));
+}
+function clearDone(vid) { withVariant(vid, () => S.lanes.forEach(l => items(l.id).forEach(it => it.done = false))); }
+/** new day → yesterday's ticks are gone, and today's come back from the LifeOS
+    log (you may have ticked something in HABITS or on the home screen already) */
+function rolloverIfNewDay() {
+  if (S.doneDate === todayKey()) return;
+  S.doneDate = todayKey();
+  S.variants.forEach(v => clearDone(v.id));
+  pullDone();
+  save();
+}
+function toggleDone(it) {
+  it.done = !it.done;
+  /* the tick is not ours to keep — it goes in the shared day log, which is what
+     HABITS and the home screen read. Same block name = same tick, everywhere. */
+  LifeOS.done(actIdOf(it), todayKey(), it.done, { src: 'block' });
+  save();
+  if (!it.done) return render();
+  const vid = routineForToday();
+  const todays = todaysBlocks(vid);
+  const open = todays.filter(b => !b.done);
+  render();
+  if (todays.length && !open.length) {
+    document.querySelectorAll('.brick').forEach(n => n.classList.add('celebrate'));
+    toast('✓ <b>' + todays.length + '/' + todays.length + '</b> — routine complete, logged for today.');
+  }
+}
+
+/* ============================ rules ============================ */
+const RULEKINDS = {
+  after: { label: '‹A› starts at least ‹N›m after ‹B› ends', f: ['a', 'mins', 'b'] },
+  order: { label: '‹A› comes before ‹B›', f: ['a', 'b'] },
+  notbefore: { label: '‹A› never starts before ‹time›', f: ['a', 'time'] },
+  notafter: { label: '‹A› never starts after ‹time›', f: ['a', 'time'] },
+  endby: { label: '‹A› is finished by ‹time›', f: ['a', 'time'] },
+  maxheavy: { label: 'no more than ‹N› ● heavy blocks back to back', f: ['mins'] },
+};
+function ruleText(r) {
+  const a = '<b>' + esc(r.a || '?') + '</b>', b = '<b>' + esc(r.b || '?') + '</b>';
+  if (r.kind === 'after') return a + ' starts at least <b>' + (r.mins || 0) + 'm</b> after ' + b + ' ends';
+  if (r.kind === 'order') return a + ' comes before ' + b;
+  if (r.kind === 'notbefore') return a + ' never starts before <b>' + esc(r.time || '') + '</b>';
+  if (r.kind === 'notafter') return a + ' never starts after <b>' + esc(r.time || '') + '</b>';
+  if (r.kind === 'endby') return a + ' is finished by <b>' + esc(r.time || '') + '</b>';
+  if (r.kind === 'maxheavy') return 'no more than <b>' + (r.mins || 2) + '</b> ● heavy blocks back to back';
+  return '?';
+}
+/** check the arrangement against every enabled rule; returns per-block messages + per-rule status */
+function checkRules(vid) {
+  const res = { byItem: new Map(), byRule: new Map(), count: 0 };
+  const rows = withVariant(vid || S.current, () => S.lanes.flatMap(L => schedule(L.id).map(r => Object.assign({ lane: L }, r))));
+  const hit = (r, ids, msg) => {
+    res.count++;
+    res.byRule.set(r.id, (res.byRule.get(r.id) || 0) + 1);
+    ids.forEach(id => { if (!res.byItem.has(id)) res.byItem.set(id, []); res.byItem.get(id).push(msg); });
+  };
+  const named = n => rows.filter(r => r.it.name.toLowerCase().trim() === String(n || '').toLowerCase().trim());
+  (S.rules || []).filter(r => r.on !== false).forEach(r => {
+    const A = named(r.a), B = named(r.b);
+    if (r.kind === 'after') A.forEach(a => B.forEach(b => { if (a.s < b.e + (+r.mins || 0)) hit(r, [a.it.id, b.it.id], a.it.name + ' needs ' + r.mins + 'm after ' + b.it.name); }));
+    if (r.kind === 'order') A.forEach(a => B.forEach(b => { if (a.s >= b.s) hit(r, [a.it.id, b.it.id], a.it.name + ' should come before ' + b.it.name); }));
+    if (r.kind === 'notbefore') A.forEach(a => { if (a.s < hm2min(r.time)) hit(r, [a.it.id], a.it.name + ' starts before ' + r.time); });
+    if (r.kind === 'notafter') A.forEach(a => { if (a.s > hm2min(r.time)) hit(r, [a.it.id], a.it.name + ' starts after ' + r.time); });
+    if (r.kind === 'endby') A.forEach(a => { if (a.e > hm2min(r.time)) hit(r, [a.it.id], a.it.name + ' runs past ' + r.time); });
+    if (r.kind === 'maxheavy') {
+      const lim = +r.mins || 2;
+      withVariant(vid || S.current, () => S.lanes.forEach(L => {
+        let run = [];
+        items(L.id).forEach(it => {
+          if (energyOf(it) === 3) run.push(it); else run = [];
+          if (run.length > lim) hit(r, run.map(x => x.id), run.length + ' heavy blocks in a row in ' + L.name);
+        });
+      }));
+    }
+  });
+  return res;
+}
+let RULECHK = { byItem: new Map(), byRule: new Map(), count: 0 };
+
+/* ============================ render ============================ */
+function render() {
+  rolloverIfNewDay();
+  RULECHK = checkRules(S.current);
+  $('#board').classList.toggle('hide', S.view !== 'day');
+  $('#week').classList.toggle('hide', S.view !== 'week');
+  $('#vDay').classList.toggle('on', S.view === 'day');
+  $('#vWeek').classList.toggle('on', S.view === 'week');
+  $('#tabs').style.display = S.view === 'day' ? '' : 'none';
+  $('#bNew').style.display = $('#bCmp').style.display = S.view === 'day' ? '' : 'none';
+  $('#bRules').innerHTML = 'Rules' + (RULECHK.count ? ' <span class="bad">⚠' + RULECHK.count + '</span>' : (S.rules.length ? ' ✓' : ''));
+  renderTabs(); renderBin();
+  if (S.view === 'day') renderBoard(); else renderWeek();
+  renderFoot(); save();
+}
+
+function renderTabs() {
+  const t = $('#tabs'); t.innerHTML = '';
+  S.variants.forEach(v => {
+    const b = el('div', 'tab' + (v.id === S.current ? ' on' : ''));
+    const dys = weekOrd().filter(d => S.week[d] === v.id).map(d => DLET[d]).join('');
+    b.appendChild(el('span', null, esc(v.name) + (dys ? ' <span class="daypip">' + dys + '</span>' : '')));
+    b.dataset.tip = '<b>' + esc(v.name) + '</b>' + (dys ? ' — runs on ' + weekOrd().filter(d => S.week[d] === v.id).map(d => DSHORT[d]).join(', ') : ' — not assigned to a day yet (Week tab)') + '<br>double-click to rename';
+    b.ondblclick = () => { const n = prompt('Day name', v.name); if (n) { snap(); v.name = n.trim(); render(); } };
+    if (v.id === S.current) {
+      const cp = el('button', 'cp', '⧉'); cp.dataset.tip = 'Duplicate this routine';
+      cp.onclick = e => { e.stopPropagation(); dupVariant(v); };
+      b.appendChild(cp);
+    }
+    if (S.variants.length > 1) {
+      const x = el('button', 'x', '✕'); x.dataset.tip = 'Delete this routine';
+      x.onclick = e => {
+        e.stopPropagation();
+        if (!confirm('Delete day "' + v.name + '"?')) return;
+        snap(); S.variants = S.variants.filter(z => z.id !== v.id);
+        S.week = S.week.map(w => w === v.id ? null : w);
+        if (S.current === v.id) S.current = S.variants[0].id;
+        render();
+      };
+      b.appendChild(x);
+    }
+    b.onclick = () => { S.current = v.id; render(); };
+    t.appendChild(b);
+  });
+}
+function dupVariant(src) {
+  snap();
+  const v = { id: uid(), name: src.name + ' copy', items: {} };
+  S.lanes.forEach(l => v.items[l.id] = (src.items[l.id] || []).map(it => Object.assign({}, it, { id: uid(), days: it.days.slice(), done: false })));
+  S.variants.push(v); S.current = v.id; render();
+}
+
+let focusLane = 0;
+
+function renderBin() {
+  const q = ($('#search').value || '').toLowerCase().trim();
+  const list = $('#binlist'); list.innerHTML = '';
+
+  if (S.templates.length) {
+    const shown = S.templates.filter(t => !q || t.name.toLowerCase().includes(q));
+    if (shown.length) {
+      list.appendChild(el('div', 'cat', 'Templates'));
+      shown.forEach(t => {
+        const mins = t.blocks.reduce((a, b) => a + b.dur, 0);
+        const c = el('div', 'chip tpl');
+        c.innerHTML = '<span class="nm">' + esc(t.name) + '</span><span class="mn">' + t.blocks.length + '×' + '</span>';
+        c.dataset.tip = '<b>' + esc(t.name) + '</b> — ' + t.blocks.length + ' blocks, ' + dur2s(mins) + '<br>' +
+          t.blocks.slice(0, 6).map(b => '· ' + esc(b.name)).join('<br>') + (t.blocks.length > 6 ? '<br>…' : '') +
+          '<br><br><b>click</b> to drop it in, or drag';
+        const d = el('button', 'del', '✕');
+        d.onclick = e => { e.stopPropagation(); snap(); S.templates = S.templates.filter(x => x.id !== t.id); render(); };
+        c.appendChild(d);
+        c.addEventListener('pointerdown', e => {
+          if (e.target === d || e.button === 2) return;
+          startDrag(e, { kind: 'tpl', tpl: t, node: c, onTap: () => applyTemplate(t, (S.lanes[focusLane] || S.lanes[0]).id) });
+        });
+        list.appendChild(c);
+      });
+    }
+  }
+
+  const cats = [...new Set(S.lib.map(b => b.cat || 'Custom'))];
+  cats.forEach(cat => {
+    const blocks = S.lib.filter(b => (b.cat || 'Custom') === cat && (!q || b.name.toLowerCase().includes(q)));
+    if (!blocks.length) return;
+    list.appendChild(el('div', 'cat', esc(cat)));
+    blocks.forEach(b => {
+      const c = el('div', 'chip');
+      c.style.setProperty('--c', b.color);
+      c.innerHTML = '<span class="nm">' + esc(b.name) + '</span><span class="eg">' + EGLYPH[b.energy || 2] + '</span><span class="mn">' + dur2s(b.dur) + '</span>';
+      c.dataset.tip = '<b>' + esc(b.name) + '</b> — ' + dur2s(b.dur) + ', ' + ENAME[b.energy || 2] + ' effort<br>click to drop it into <b>' + esc((S.lanes[focusLane] || S.lanes[0] || {}).name || '') + '</b>';
+      const d = el('button', 'del', '✕');
+      d.onclick = e => { e.stopPropagation(); snap(); S.lib = S.lib.filter(x => x.id !== b.id); render(); };
+      c.appendChild(d);
+      const drop = () => { const l = S.lanes[focusLane] || S.lanes[0]; if (l) { addItem(l.id, b); toast('<b>' + esc(b.name) + '</b> → ' + esc(l.name) + ' · Ctrl+Z to undo'); } };
+      c.addEventListener('pointerdown', e => { if (e.target === d || e.button === 2) return; startDrag(e, { kind: 'lib', src: b, node: c, onTap: drop }); });
+      c.addEventListener('contextmenu', ev => {
+        ev.preventDefault();
+        openMenu(ev.clientX, ev.clientY, [
+          { head: b.name },
+          { label: 'Add to routine', sub: S.lanes.map(L => ({ label: L.name, fn: () => { addItem(L.id, b); toast('added to <b>' + esc(L.name) + '</b>'); } })) },
+          { sep: 1 },
+          { label: 'Rename…', fn: () => { const v = prompt('Name', b.name); if (v) { snap(); b.name = v.trim(); render(); } } },
+          { label: 'Set duration…', fn: () => { const v = prompt('Minutes', b.dur); if (v) { snap(); b.dur = clamp(parseInt(v) || b.dur, 1, 1440); render(); } } },
+          { label: 'Effort', sub: [1, 2, 3].map(k => ({ label: EGLYPH[k] + ' ' + ENAME[k], check: (b.energy || 2) === k, fn: () => { snap(); b.energy = k; render(); } })) },
+          { sep: 1 },
+          { label: 'Delete from bin', danger: 1, fn: () => { snap(); S.lib = S.lib.filter(x => x.id !== b.id); render(); } },
+        ]);
+      });
+      list.appendChild(c);
+    });
+  });
+  if (!list.children.length) list.appendChild(el('div', 'cat', 'no matches'));
+}
+function applyTemplate(t, laneId, idx) {
+  snap();
+  const arr = items(laneId);
+  const made = t.blocks.map(b => mkItem(b));
+  arr.splice(idx == null ? arr.length : idx, 0, ...made);
+  render(); toast('<b>' + esc(t.name) + '</b> — ' + made.length + ' blocks added');
+}
+
+/* ---------- day view ---------- */
+function renderBoard() {
+  const b = $('#board'); b.innerHTML = '';
+  S.lanes.forEach((L, li) => {
+    const d = el('div', 'lane' + (li === focusLane ? ' focus' : ''));
+    d.dataset.lane = L.id;
+
+    const head = el('div', 'lane-head');
+    const top = el('div', 'lane-top');
+    const nm = el('input', 'lane-name'); nm.value = L.name;
+    nm.dataset.tip = 'Rename this routine — it becomes a section in Todoist';
+    nm.onchange = () => { snap(); L.name = nm.value.trim() || 'Routine'; render(); };
+    nm.onfocus = () => { focusLane = li; };
+    top.appendChild(nm);
+    if (S.lanes.length > 1) {
+      const x = el('button', 'lane-x', '✕'); x.dataset.tip = 'Delete this routine from every routine';
+      x.onclick = () => {
+        if (!confirm('Delete routine "' + L.name + '" from every day?')) return;
+        snap(); S.lanes = S.lanes.filter(z => z.id !== L.id);
+        S.variants.forEach(v => delete v.items[L.id]); render();
+      };
+      top.appendChild(x);
+    }
+    head.appendChild(top);
+
+    const row = el('div', 'lane-row');
+    const st = el('input'); st.type = 'time'; st.value = L.start;
+    st.dataset.tip = 'When this routine starts — everything below flows from here';
+    st.onchange = () => { snap(); L.start = st.value || '00:00'; render(); };
+    row.appendChild(st);
+    row.appendChild(el('span', null, '→'));
+    row.appendChild(el('span', 'end', fmt(laneEnd(L.id))));
+    head.appendChild(row);
+
+    const sc = schedule(L.id);
+    const meta = el('div', 'lane-meta');
+    const nb = sc.length;
+    meta.appendChild(el('span', 'tag', nb + (nb === 1 ? ' block' : ' blocks')));
+    meta.appendChild(el('span', 'tag', dur2s(laneMins(L.id))));
+    if (L.target) {
+      const delta = laneEnd(L.id) - hm2min(L.target);
+      const t = el('span', 'tag ' + (delta > 0 ? 'over' : 'ok'), (delta > 0 ? '+' : '') + dur2s(Math.abs(delta)) + (delta > 0 ? ' over' : ' spare'));
+      t.dataset.tip = 'Target finish is <b>' + fmt(hm2min(L.target)) + '</b>';
+      meta.appendChild(t);
+    }
+    const clashes = sc.filter(r => r.clash > 0).length;
+    if (clashes) {
+      const c = el('span', 'tag over', '⚠ ' + clashes + ' clash' + (clashes > 1 ? 'es' : ''));
+      c.dataset.tip = 'A block runs past an ⚓ anchored start below it';
+      meta.appendChild(c);
+    }
+    /* routines are independent clocks — say so when two of them cover the same wall time */
+    const mySpan = [hm2min(L.start), laneEnd(L.id)];
+    const bump = S.lanes.filter(O => O.id !== L.id && items(O.id).length)
+      .filter(O => mySpan[0] < laneEnd(O.id) && hm2min(O.start) < mySpan[1]).map(O => O.name);
+    if (sc.length && bump.length) {
+      const b2 = el('span', 'tag warn', '⚠ overlaps ' + bump[0] + (bump.length > 1 ? ' +' + (bump.length - 1) : ''));
+      b2.dataset.tip = 'This routine runs at the same wall-clock time as <b>' + esc(bump.join(', ')) + '</b>';
+      meta.appendChild(b2);
+    }
+    const tg = el('button', 'tag', L.target ? '⏱ ' + L.target : '⏱ target');
+    tg.dataset.tip = 'Set a “must be done by” time for this routine';
+    tg.onclick = () => { const v = prompt('Target end time (HH:MM), blank to clear', L.target || ''); if (v !== null) { snap(); L.target = v.trim(); render(); } };
+    meta.appendChild(tg);
+    head.appendChild(meta);
+
+    /* progress + load meters */
+    const bars = el('div', 'bars');
+    const done = sc.filter(r => r.it.done).length;
+    if (nb) {
+      const p = el('div', 'prog'); p.dataset.tip = '<b>' + done + ' of ' + nb + '</b> checked off in this routine';
+      p.appendChild(el('i')).style.width = (done / nb * 100) + '%';
+      bars.appendChild(p);
+      const lb = el('div', 'loadbar');
+      lb.dataset.tip = 'Effort load <b>' + laneLoad(L.id).toFixed(1) + '</b> — width is time, colour is effort (◔ light / ◑ medium / ● heavy)';
+      sc.forEach(({ it }) => { const i = el('i'); i.style.flex = it.dur; i.style.background = ECOL[energyOf(it)]; lb.appendChild(i); });
+      bars.appendChild(lb);
+      head.appendChild(bars);
+      const lm = el('div', 'lane-meta');
+      lm.appendChild(el('span', 'tag', 'load ' + laneLoad(L.id).toFixed(1)));
+      let run = 0, worst = 0;
+      items(L.id).forEach(it => { run = energyOf(it) === 3 ? run + 1 : 0; worst = Math.max(worst, run); });
+      if (worst > 1) { const w = el('span', 'tag warn', '⚡ ' + worst + ' heavy in a row'); w.dataset.tip = 'Back-to-back heavy blocks — consider putting something light between them'; lm.appendChild(w); }
+      head.appendChild(lm);
+    }
+
+    const tools = el('div', 'lane-tools');
+    const mk = (label, tip, fn, cls) => { const x = el('button', 'btn ' + (cls || ''), label); x.dataset.tip = tip; x.onclick = fn; tools.appendChild(x); };
+    mk('↓P', 'Sort this routine by priority — P1 first. Pinned 📌 and anchored ⚓ blocks stay put.', () => sortPri(L.id));
+    mk('⇩ template', 'Save this routine as a reusable template', () => saveTemplate(L.id), 'hov');
+    mk('⌫', 'Empty this routine', () => { if (items(L.id).length && confirm('Clear ' + L.name + '?')) { snap(); M().items[L.id] = []; render(); } }, 'hov');
+    head.appendChild(tools);
+    d.appendChild(head);
+
+    d.addEventListener('contextmenu', ev => { if (ev.target.closest('.brick')) return; ev.preventDefault(); laneMenu(L, ev.clientX, ev.clientY); });
+
+    const body = el('div', 'lane-body'); body.dataset.lane = L.id;
+    body.onclick = () => { if (focusLane !== li) { focusLane = li; renderBoard(); renderBin(); } };
+    if (!sc.length) body.appendChild(el('div', 'lane-empty', 'Drag a block here<br><span style="opacity:.6">or click one in the bin</span>'));
+    const nowM = nowMin(), showNow = S.nowline && L.nowline !== false && L.start != null;
+    let nowDrawn = false;
+    sc.forEach(({ it, s, e, gap, clash, hidden }) => {
+      if (showNow && !nowDrawn && !hidden && s > nowM) { body.appendChild(nowLine(nowM)); nowDrawn = true; }
+      const nd = brickNode(L.id, it, s, e, { gap, clash });
+      if (showNow && e <= nowM && !hidden) nd.classList.add('past');
+      body.appendChild(nd);
+    });
+    if (showNow && !nowDrawn && sc.length && nowM > hm2min(L.start) && nowM <= laneEnd(L.id) + 60) body.appendChild(nowLine(nowM));
+    d.appendChild(body);
+
+    const add = el('button', 'lane-add', '+ blank block');
+    add.dataset.tip = 'Add an empty block and type your own name';
+    add.onclick = () => {
+      focusLane = li;
+      const it = addItem(L.id, { name: 'New block', dur: 30, color: PAL[Math.floor(Math.random() * PAL.length)], energy: 2 });
+      setTimeout(() => { const n = document.querySelector('[data-id="' + it.id + '"] .b-name'); if (n) { n.focus(); document.getSelection().selectAllChildren(n); } }, 20);
+    };
+    d.appendChild(add);
+    b.appendChild(d);
+  });
+
+  const al = el('button', null, '+'); al.id = 'addlane';
+  al.dataset.tip = 'Add another routine — <b>Client block</b>, <b>Night shift</b>, anything';
+  al.onclick = () => {
+    const n = prompt('Routine name', 'Block ' + (S.lanes.length + 1)); if (!n) return;
+    snap(); const L = { id: uid(), name: n.trim(), start: '09:00', target: '' };
+    S.lanes.push(L); S.variants.forEach(v => v.items[L.id] = []); render();
+  };
+  b.appendChild(al);
+}
+/* ---------- right-click: routine ---------- */
+function laneMenu(L, x, y) {
+  const others = S.variants.filter(v => v.id !== S.current);
+  openMenu(x, y, [
+    { head: L.name },
+    { label: 'Add blank block', fn: () => { const it = addItem(L.id, { name: 'New block', dur: 30, color: PAL[Math.floor(Math.random() * PAL.length)], energy: 2 }); setTimeout(() => { const n = document.querySelector('[data-id="' + it.id + '"] .b-name'); if (n) { n.focus(); document.getSelection().selectAllChildren(n); } }, 20); } },
+    { label: 'Sort by priority', k: '↓P', fn: () => sortPri(L.id) },
+    { label: 'Save as template', k: '⇩', fn: () => saveTemplate(L.id) },
+    { sep: 1 },
+    { label: 'Set start time…', fn: () => promptTime('Routine starts at (HH:MM)', L.start, v => { snap(); L.start = v || '00:00'; render(); }) },
+    { label: 'Set target finish…', fn: () => promptTime('Must be done by (HH:MM)', L.target || '', v => { snap(); L.target = v; render(); }) },
+    { label: 'Rename routine…', fn: () => { const v = prompt('Routine name', L.name); if (v) { snap(); L.name = v.trim(); render(); } } },
+    { sep: 1 },
+    ...(others.length ? [{ label: 'Copy this routine into', sub: others.map(v => ({ label: v.name, fn: () => {
+        snap();
+        v.items[L.id] = (v.items[L.id] || []).concat(items(L.id).map(it => Object.assign({}, it, { id: uid(), days: it.days.slice(), done: false })));
+        render(); toast('copied into <b>' + esc(v.name) + '</b>');
+      } })) }] : []),
+    { label: 'Clear routine', danger: 1, fn: () => { if (items(L.id).length && confirm('Clear ' + L.name + '?')) { snap(); M().items[L.id] = []; render(); } } },
+    ...(S.lanes.length > 1 ? [{ label: 'Delete routine', danger: 1, fn: () => {
+        if (!confirm('Delete routine "' + L.name + '" from every day?')) return;
+        snap(); S.lanes = S.lanes.filter(z => z.id !== L.id); S.variants.forEach(v => delete v.items[L.id]); render();
+      } }] : []),
+  ]);
+}
+function saveTemplate(laneId) {
+  const arr = items(laneId);
+  if (!arr.length) return toast('nothing in this routine to save');
+  const n = prompt('Template name', lane(laneId).name); if (!n) return;
+  snap();
+  S.templates.push({ id: uid(), name: n.trim(), blocks: arr.map(it => ({ name: it.name, dur: it.dur, color: it.color, note: it.note, days: it.days.slice(), pri: it.pri, energy: it.energy })) });
+  render(); toast('saved <b>' + esc(n.trim()) + '</b> to the bin');
+}
+
+function nowLine(m) {
+  const n = el('div', 'nowline', '<em></em><b>NOW ' + fmt(m) + '</b><i></i>');
+  n.dataset.tip = 'Where you are in the day. Turn it off in ⚙, or per routine with right-click.';
+  return n;
+}
+/* ---------- sounds: tiny synthesised blips, no files ---------- */
+let AC;
+function beep(kind) {
+  if (!S.sound) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const seq = kind === 'done' ? [[660, 0], [880, .07]] : kind === 'complete' ? [[523, 0], [659, .1], [784, .2], [1047, .3]] : [[300, 0]];
+    seq.forEach(([f, t]) => {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, AC.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(kind === 'complete' ? .16 : .09, AC.currentTime + t + .012);
+      g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + t + .19);
+      o.connect(g); g.connect(AC.destination);
+      o.start(AC.currentTime + t); o.stop(AC.currentTime + t + .2);
+    });
+  } catch (e) {}
+}
+
+function brickNode(laneId, it, s, e, meta) {
+  meta = meta || {};
+  const broke = RULECHK.byItem.get(it.id);
+  const mini = isMini(it);
+  const n = el('div', 'brick' + (mini ? ' mini' : '') + (it.pin ? ' pinned' : '') + (it.done ? ' done' : '') + (it.hidden ? ' hid' : '') + (broke ? ' broke' : ''));
+  n.dataset.id = it.id; n.dataset.lane = laneId;
+  n.style.setProperty('--c', it.color);
+  if (!mini) n.style.minHeight = brickMin(it.dur) + 'px';
+
+  const startTip = it.at
+    ? 'Starts at <b>' + it.at + '</b> — anchored, so it holds this time and the rest flows around it.<br>Click to change or release.'
+    : 'Click to set an exact <b>start</b> time (anchors the block)';
+  const endTip = 'Click to set when this <b>finishes</b> — the duration adjusts to match';
+
+  if (!mini) {
+    /* --- top row: start – end, warnings, duration --- */
+    const top = el('div', 'b-top');
+    const t0 = el('button', 'b-time' + (it.at ? ' anc' : '') + (meta.clash ? ' clash' : ''), (it.at ? '⚓ ' : '') + fmt(s));
+    t0.dataset.tip = startTip;
+    t0.onclick = ev => { ev.stopPropagation(); editTime(t0, it, s); };
+    const t1 = el('button', 'b-time b-end', fmt(e));
+    t1.dataset.tip = endTip;
+    t1.onclick = ev => { ev.stopPropagation(); editEnd(t1, it, s); };
+    top.appendChild(t0); top.appendChild(el('span', 'b-dash', '–')); top.appendChild(t1);
+    if (meta.gap > 0) { const g = el('span', 'b-flag', '↧' + dur2s(meta.gap)); g.dataset.tip = '<b>' + dur2s(meta.gap) + '</b> of empty time before this block'; top.appendChild(g); }
+    if (meta.clash > 0) { const g = el('span', 'b-flag bad', '⚠' + dur2s(meta.clash)); g.dataset.tip = 'The block above runs <b>' + dur2s(meta.clash) + '</b> past this anchored start'; top.appendChild(g); }
+    if (broke) { const g = el('span', 'b-flag bad', '⚠ rule'); g.dataset.tip = broke.map(esc).join('<br>'); top.appendChild(g); }
+    top.appendChild(el('span', 'b-sp'));
+    const du = el('div', 'b-dur');
+    const step = durStep(it.dur);
+    const mi = el('button', null, '−'), pl = el('button', null, '+');
+    mi.dataset.tip = step + ' minute' + (step > 1 ? 's' : '') + ' shorter'; pl.dataset.tip = step + ' minute' + (step > 1 ? 's' : '') + ' longer';
+    mi.onclick = ev => { ev.stopPropagation(); snap(); it.dur = Math.max(1, it.dur - durStep(it.dur)); syncKin(it, { dur: it.dur }); render(); };
+    pl.onclick = ev => { ev.stopPropagation(); snap(); it.dur += durStep(it.dur + 1); syncKin(it, { dur: it.dur }); render(); };
+    const db = el('b', null, dur2s(it.dur));
+    db.dataset.tip = 'Click to type exact minutes — <b>1</b> is fine';
+    db.onclick = ev => { ev.stopPropagation(); editDur(db, it); };
+    du.appendChild(mi); du.appendChild(db); du.appendChild(pl);
+    top.appendChild(du);
+    n.appendChild(top);
+  }
+
+  /* --- checkbox + name --- */
+  const main = el('div', 'b-main');
+  const ck = el('button', 'b-check' + (it.done ? ' on' : ''), '✓');
+  ck.dataset.tip = it.done ? 'Done — click to un-check' : 'Check it off. When today’s whole routine is ticked, it resets itself.';
+  ck.onclick = ev => { ev.stopPropagation(); toggleDone(it); };
+  main.appendChild(ck);
+  const txt = el('div', 'b-txt');
+  const nm = el('div', 'b-name', esc(it.name));
+  nm.contentEditable = 'true'; nm.spellcheck = false;
+  nm.onblur = () => {
+    const v = nm.textContent.replace(/\s+/g, ' ').trim();
+    if (!v || v === it.name) { nm.textContent = it.name; return; }
+    snap();
+    const p = parseTrailingDur(v);            /* "Vitamins 1m" sets the name AND the duration */
+    const patch = (p && p.dur >= 1 && p.dur <= 1440) ? { name: p.name, dur: p.dur } : { name: v };
+    Object.assign(it, patch);
+    const kin = kinOf(it);
+    if (kin.length) {
+      /* a renamed block has copies elsewhere — follow them, or break away */
+      if (confirm('“' + it.name + '” has ' + kin.length + ' linked cop' + (kin.length > 1 ? 'ies' : 'y') + ' in other days.\n\nOK — rename them too and stay linked.\nCancel — split this one off and let it live its own life.')) {
+        syncKin(it, patch);
+      } else { it.srcId = uid(); ensureInBin(it); }
+    } else ensureInBin(it);
+    render();
+  };
+  nm.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); nm.blur(); } ev.stopPropagation(); };
+  txt.appendChild(nm);
+  if (it.note || it.noteOpen) {
+    const no = el('div', 'b-note', esc(it.note || ''));
+    no.contentEditable = 'true'; no.spellcheck = false;
+    no.onblur = () => {
+      const v = no.textContent.replace(/\s+/g, ' ').trim();
+      if (v !== it.note) { snap(); it.note = v; syncKin(it, { note: v }); }
+      if (!v) { it.noteOpen = false; render(); } else save();
+    };
+    no.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === 'Escape') { ev.preventDefault(); no.blur(); } ev.stopPropagation(); };
+    txt.appendChild(no);
+    if (it.noteOpen) setTimeout(() => no.focus(), 10);
+  }
+  main.appendChild(txt);
+  if (mini) {
+    const mt = el('button', 'b-mtime' + (it.at ? ' anc' : ''), (it.at ? '⚓' : '') + fmt(s));
+    mt.dataset.tip = startTip;
+    mt.onclick = ev => { ev.stopPropagation(); editTime(mt, it, s); };
+    const md = el('span', 'b-mdays', daysShort(it.days) + ' · ' + dur2s(it.dur));
+    md.dataset.tip = 'Runs <b>' + esc(daysLabel(it.days)) + '</b> · ' + dur2s(it.dur) + '<br>Right-click for days, duration, effort…';
+    if (broke) { const g = el('span', 'b-flag bad', '⚠'); g.dataset.tip = broke.map(esc).join('<br>'); main.appendChild(g); }
+    main.appendChild(mt); main.appendChild(md);
+  }
+  n.appendChild(main);
+
+  /* --- foot: days, badges, hover controls --- */
+  const foot = el('div', 'b-foot');
+  const dz = el('div', 'b-days');
+  dz.dataset.tip = 'Which days this block runs — drives the repeat rule in Calendar / Todoist';
+  it.days.forEach((on, i) => {
+    const b = el('b', on ? 'on' : '', DLET[i]);
+    b.onclick = ev => { ev.stopPropagation(); snap(); it.days[i] = it.days[i] ? 0 : 1; render(); };
+    dz.appendChild(b);
+  });
+  foot.appendChild(dz);
+
+  const ctl = el('div', 'b-ctl');
+  const eg = el('button', 'b-badge ' + (it.energy ? 'e' + it.energy : 'dim'), it.energy ? EGLYPH[it.energy] : '◌');
+  eg.dataset.tip = 'Effort: <b>' + ENAME[energyOf(it)] + '</b> — click to cycle ◔ light / ◑ medium / ● heavy.<br>Feeds the routine’s load meter.';
+  eg.onclick = ev => { ev.stopPropagation(); snap(); it.energy = ((it.energy || 0) % 3) + 1; syncKin(it, { energy: it.energy }); render(); };
+  const pr = el('button', 'b-badge ' + (it.pri ? 'p' + it.pri : 'dim'), it.pri ? PRI[it.pri] : 'P');
+  pr.dataset.tip = 'Priority: <b>' + (it.pri ? 'P' + it.pri : 'none') + '</b> — click to pick.<br>Exports as Todoist p1–p3 and drives the ↓P sort.';
+  pr.onclick = ev => {
+    ev.stopPropagation();
+    const r = pr.getBoundingClientRect();
+    openMenu(r.left, r.bottom + 4, [{ head: 'Priority' },
+      ...[1, 2, 3, 0].map(k => ({ label: k ? 'P' + k + (k === 1 ? ' — must happen' : k === 2 ? ' — should happen' : ' — nice to have') : 'No priority',
+        check: (it.pri || 0) === k, fn: () => { snap(); it.pri = k; render(); } }))]);
+  };
+  const nt = el('button', 'hov' + (it.note ? ' on' : ''), '✎'); nt.dataset.tip = 'Add a note (exports as the task description)';
+  nt.onclick = ev => { ev.stopPropagation(); it.noteOpen = !it.noteOpen; render(); };
+  const pin = el('button', 'hov' + (it.pin ? ' on' : ''), '📌'); pin.dataset.tip = 'Pin this block’s position so ↓P sort leaves it alone';
+  pin.onclick = ev => { ev.stopPropagation(); snap(); it.pin = !it.pin; render(); };
+  const cp = el('button', 'hov', '⧉'); cp.dataset.tip = 'Duplicate';
+  cp.onclick = ev => { ev.stopPropagation(); const f = findItem(it.id); snap(); f.arr.splice(f.i + 1, 0, Object.assign({}, it, { id: uid(), days: it.days.slice(), at: null, done: false })); render(); };
+  const rm = el('button', 'hov', '✕'); rm.dataset.tip = 'Remove this block';
+  rm.onclick = ev => { ev.stopPropagation(); removeItem(laneId, it.id); };
+  const mo = el('button', 'hov', '⋯'); mo.dataset.tip = 'Everything else — days, move, times… (same as right-click)';
+  mo.onclick = ev => { ev.stopPropagation(); const r = mo.getBoundingClientRect(); blockMenu(laneId, it, r.left, r.bottom + 4); };
+  (mini ? [eg, pr, mo] : [eg, pr, nt, pin, cp, rm, mo]).forEach(x => ctl.appendChild(x));
+  foot.appendChild(ctl);
+  n.appendChild(foot);
+
+  const grip = el('div', 'b-grip'); grip.dataset.tip = 'Drag to change how long this takes';
+  grip.addEventListener('pointerdown', ev => startResize(ev, it, n));
+  n.appendChild(grip);
+
+  n.addEventListener('pointerdown', ev => {
+    if (ev.button === 2) return;
+    if (ev.target.closest('.b-ctl,.b-days,.b-dur,.b-grip,.b-name,.b-note,.b-time,.b-mtime,.b-timein,.b-durin,.b-check')) return;
+    startDrag(ev, { kind: 'move', id: it.id, node: n });
+  });
+  n.addEventListener('contextmenu', ev => { ev.preventDefault(); ev.stopPropagation(); blockMenu(laneId, it, ev.clientX, ev.clientY); });
+  return n;
+}
+
+/* ---------- right-click: block ---------- */
+function blockMenu(laneId, it, x, y) {
+  const setDays = arr => { snap(); it.days = arr.slice(); render(); };
+  openMenu(x, y, [
+    { head: it.name },
+    { label: 'Set start time…', k: '⚓', fn: () => promptTime('Start time (HH:MM) — anchors the block', it.at || '', v => { snap(); it.at = v || null; render(); }) },
+    { label: 'Set end time…', fn: () => {
+        const st = schedule(laneId).find(r => r.it.id === it.id);
+        promptTime('Finish time (HH:MM)', hhmm(st.e), v => { if (!v) return; snap(); let d = hm2min(v) - (st.s % 1440); if (d <= 0) d += 1440; it.dur = clamp(d, 1, 1440); syncKin(it, { dur: it.dur }); render(); });
+      } },
+    { label: 'Set duration…', fn: () => { const v = prompt('Minutes', it.dur); if (v) { snap(); it.dur = clamp(parseInt(v) || it.dur, 1, 1440); render(); } } },
+    { sep: 1 },
+    { label: 'Effort', sub: [1, 2, 3].map(k => ({ label: EGLYPH[k] + ' ' + ENAME[k], check: energyOf(it) === k, fn: () => { snap(); it.energy = k; syncKin(it, { energy: k }); render(); } })) },
+    { label: 'Priority', sub: [0, 1, 2, 3].map(k => ({ label: k ? 'P' + k : 'none', check: (it.pri || 0) === k, fn: () => { snap(); it.pri = k; render(); } })) },
+    { label: 'Colour', sub: PAL.map((c, i) => ({ label: PALNAME[i], check: it.color === c, fn: () => { snap(); it.color = c; syncKin(it, { color: c }); render(); } })) },
+    { label: 'Days', sub: () => [
+        { label: 'Every day', fn: () => setDays([1, 1, 1, 1, 1, 1, 1]) },
+        { label: 'Weekdays', fn: () => setDays([0, 1, 1, 1, 1, 1, 0]) },
+        { label: 'Weekend', fn: () => setDays([1, 0, 0, 0, 0, 0, 1]) },
+        { sep: 1 },
+        ...weekOrd().map(d => ({ label: DSHORT[d], check: !!it.days[d], fn: () => { snap(); it.days[d] = it.days[d] ? 0 : 1; render(); } })),
+      ] },
+    { sep: 1 },
+    { label: it.note ? 'Edit note' : 'Add note', fn: () => { it.noteOpen = true; it.compact = false; render(); } },
+    { label: 'Pin position', check: !!it.pin, fn: () => { snap(); it.pin = !it.pin; render(); } },
+    { label: isMini(it) ? 'Expand to full card' : 'Compact to one line', check: isMini(it),
+      fn: () => { it.compact = !isMini(it); render(); } },
+    { sep: 1 },
+    { label: 'Add to every day', k: kinOf(it).length ? kinOf(it).length + ' linked' : '',
+      fn: () => { snap(); ensureInBin(it); const n = spreadToAllDays(laneId, it); render(); toast(n ? 'added to <b>' + n + '</b> other day' + (n > 1 ? 's' : '') + ' — edits stay in sync' : 'already in every day'); } },
+    { label: 'Hide in this day', check: !!it.hidden,
+      fn: () => { snap(); it.hidden = !it.hidden; render(); toast(it.hidden ? 'hidden here — it still runs in your other days' : 'back in'); } },
+    ...(kinOf(it).length ? [{ label: 'Unlink from its copies', fn: () => { snap(); it.srcId = uid(); ensureInBin(it); render(); toast('unlinked — edits here stay here'); } }] : []),
+    { sep: 1 },
+    { label: 'Move to routine', sub: S.lanes.filter(L => L.id !== laneId).map(L => ({
+        label: L.name, fn: () => { const f = findItem(it.id); snap(); f.arr.splice(f.i, 1); items(L.id).push(it); render(); } })) },
+    { label: 'Duplicate', fn: () => { const f = findItem(it.id); snap(); f.arr.splice(f.i + 1, 0, Object.assign({}, it, { id: uid(), days: it.days.slice(), at: null, done: false })); render(); } },
+    { label: 'Save to bin', fn: () => { snap(); S.lib.push({ id: uid(), name: it.name, dur: it.dur, color: it.color, cat: 'Custom', energy: energyOf(it) }); render(); toast('<b>' + esc(it.name) + '</b> saved to the bin'); } },
+    { sep: 1 },
+    { label: 'Delete block', danger: 1, fn: () => removeItem(laneId, it.id) },
+  ]);
+}
+function promptTime(msg, cur, fn) { const v = prompt(msg + '\n(blank to clear)', cur); if (v !== null) fn(v.trim()); }
+
+function editTime(chip, it, s) {
+  popEdit(chip, {
+    title: 'Start time', value: it.at || hhmm(s),
+    note: 'Anchors the block: it holds this time and the rest of the routine flows around it.',
+    onSet: v => { snap(); it.at = v || null; render(); },
+    onClear: it.at ? () => { snap(); it.at = null; render(); } : null, clearLabel: 'Un-anchor',
+  });
+}
+/** setting the finish time is just duration arithmetic — end before start means it runs past midnight */
+function editEnd(node, it, s) {
+  popEdit(node, {
+    title: 'Finish time', value: hhmm(s + it.dur),
+    note: 'Starts ' + fmt(s) + ' — the duration adjusts to match.',
+    onSet: v => {
+      if (!v) return;
+      let d = hm2min(v) - (((s % 1440) + 1440) % 1440);
+      if (d <= 0) d += 1440;
+      if (d !== it.dur) { snap(); it.dur = clamp(d, 1, 1440); syncKin(it, { dur: it.dur }); }
+      render();
+    },
+  });
+}
+function editDur(node, it) {
+  popEdit(node, {
+    title: 'Minutes', type: 'number', value: it.dur, min: 1, max: 1440,
+    onSet: v => { const n = clamp(Math.round(parseInt(v) || it.dur), 1, 1440); if (n !== it.dur) { snap(); it.dur = n; syncKin(it, { dur: n }); } render(); },
+  });
+}
+/* ---------- week view ---------- */
+function renderWeek() {
+  const w = $('#week'); w.innerHTML = '';
+  weekOrd().forEach(d => {
+    const vid = S.week[d];
+    const v = variant(vid);
+    const col = el('div', 'day' + (d === todayIdx() ? ' today' : ''));
+
+    const head = el('div', 'day-head');
+    head.appendChild(el('h3', null, DSHORT[d] + (d === todayIdx() ? ' <em>today</em>' : '')));
+    const sel = el('select');
+    sel.dataset.tip = 'Which day runs on ' + DAYS[d] + '?';
+    sel.appendChild(el('option', null, '— rest day —')).value = '';
+    S.variants.forEach(x => { const o = el('option', null, esc(x.name)); o.value = x.id; if (x.id === vid) o.selected = true; sel.appendChild(o); });
+    sel.onchange = () => {
+      snap(); S.week[d] = sel.value || null;
+      /* a routine put on Saturday whose blocks are all set to weekdays would silently vanish — offer the fix up front */
+      const nv = variant(S.week[d]);
+      if (nv) {
+        const off = withVariant(nv.id, () => S.lanes.flatMap(l => items(l.id)).filter(it => !it.days[d]));
+        if (off.length && confirm(nv.name + ' now runs on ' + DAYS[d] + ', but ' + off.length + ' of its blocks aren\'t set to run that day.\n\nTurn ' + DSHORT[d] + ' on for them?')) {
+          off.forEach(it => it.days[d] = 1);
+        }
+      }
+      render();
+    };
+    head.appendChild(sel);
+
+    const meta = el('div', 'day-meta');
+    if (v) {
+      const rows = withVariant(v.id, () => S.lanes.map(L => ({ L, sc: schedule(L.id).filter(r => r.it.days[d]) })).filter(x => x.sc.length));
+      const mins = rows.reduce((a, x) => a + x.sc.reduce((b, r) => b + r.it.dur, 0), 0);
+      const load = rows.reduce((a, x) => a + x.sc.reduce((b, r) => b + loadOf(r.it), 0), 0);
+      const nblocks = rows.reduce((a, x) => a + x.sc.length, 0);
+      const chk = checkRules(v.id);
+      meta.appendChild(el('span', null, nblocks + (nblocks === 1 ? ' block' : ' blocks')));
+      meta.appendChild(el('span', null, dur2s(mins)));
+      const ld = el('span', null, 'load ' + load.toFixed(1));
+      ld.dataset.tip = 'Effort load for ' + DAYS[d] + ' — one hour of medium effort = 1.0';
+      meta.appendChild(ld);
+      if (chk.count) { const b = el('span', 'bad', '⚠ ' + chk.count); b.dataset.tip = 'Rule breaks in this day'; meta.appendChild(b); }
+      const off = withVariant(v.id, () => S.lanes.flatMap(l => items(l.id)).filter(it => !it.days[d]));
+      if (off.length) {
+        const b = el('span', 'bad', off.length + ' off');
+        b.dataset.tip = '<b>' + off.length + ' blocks</b> in this routine aren’t set to run on ' + DSHORT[d] + ', so they won’t fire or export.<br>Click to switch ' + DSHORT[d] + ' on for them.';
+        b.style.cursor = 'pointer';
+        b.onclick = () => { snap(); off.forEach(it => it.days[d] = 1); render(); };
+        meta.appendChild(b);
+      }
+      head.appendChild(meta);
+      col.appendChild(head);
+
+      const body = el('div', 'day-body');
+      rows.forEach(({ L, sc }) => {
+        body.appendChild(el('div', 'day-lane', esc(L.name)));
+        sc.forEach(({ it, s }) => {
+          const r = el('div', 'day-b'); r.style.setProperty('--c', it.color);
+          r.innerHTML = '<i></i><span>' + (it.pri ? '<b style="color:#ff8a9c">' + PRI[it.pri] + '</b> ' : '') + esc(it.name) + '</span><em>' + fmt(s) + '</em>';
+          r.dataset.tip = '<b>' + esc(it.name) + '</b> — ' + dur2s(it.dur) + ', ' + ENAME[energyOf(it)] + ' effort';
+          body.appendChild(r);
+        });
+      });
+      if (!rows.length) body.appendChild(el('div', 'day-rest', 'nothing scheduled on ' + DSHORT[d]));
+      col.appendChild(body);
+      const ed = el('button', 'day-edit', '✎ edit ' + esc(v.name));
+      ed.onclick = () => { S.current = v.id; S.view = 'day'; render(); };
+      col.appendChild(ed);
+    } else {
+      head.appendChild(meta);
+      col.appendChild(head);
+      col.appendChild(el('div', 'day-body', '<div class="day-rest">— rest day —<br><span style="opacity:.6">pick a routine above</span></div>'));
+    }
+    w.appendChild(col);
+  });
+}
+
+function renderFoot() {
+  const tot = S.lanes.reduce((a, l) => a + laneMins(l.id), 0);
+  const cnt = S.lanes.reduce((a, l) => a + items(l.id).length, 0);
+  const load = S.lanes.reduce((a, l) => a + laneLoad(l.id), 0);
+  $('#statTotal').innerHTML = '<b>' + esc(M().name) + '</b> · ' + cnt + (cnt === 1 ? ' block · ' : ' blocks · ') +
+    '<b>' + dur2s(tot) + '</b> · load <b>' + load.toFixed(1) + '</b>';
+  const vid = routineForToday();
+  const td = todaysBlocks(vid), dn = td.filter(b => b.done).length;
+  $('#statDone').innerHTML = td.length
+    ? DSHORT[todayIdx()] + ' · <b>' + dn + '/' + td.length + '</b> done <span class="dayprog"><i style="width:' + (dn / td.length * 100) + '%"></i></span>'
+    : 'nothing scheduled today';
+  $('#statDone').dataset.tip = 'Today’s checklist from <b>' + esc((variant(vid) || M()).name) + '</b>. Tick them all and it resets itself.';
+  $('#gapv').textContent = S.gap + 'm';
+}
+
+/* ============================ drag & drop ============================ */
+let drag = null;
+function startDrag(ev, cfg) {
+  if (ev.button != null && ev.button !== 0) return;
+  const rect = cfg.node.getBoundingClientRect();
+  drag = { cfg, startX: ev.clientX, startY: ev.clientY, offX: ev.clientX - rect.left, offY: ev.clientY - rect.top, moved: false, ghost: null, ph: null, target: null, idx: 0 };
+  ev.preventDefault();
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragUp, { once: true });
+}
+function onDragMove(ev) {
+  if (!drag) return;
+  if (!drag.moved) {
+    if (Math.abs(ev.clientX - drag.startX) < 5 && Math.abs(ev.clientY - drag.startY) < 5) return;
+    drag.moved = true;
+    tipBox.classList.remove('on');
+    const c = drag.cfg;
+    snap();
+    let g, h;
+    if (c.kind === 'tpl') {
+      drag.payload = c.tpl.blocks.map(b => mkItem(b));
+      g = el('div', 'tplghost', '⇩ ' + esc(c.tpl.name) + ' · ' + c.tpl.blocks.length + ' blocks');
+      h = 46;
+    } else {
+      if (c.kind === 'lib') drag.payload = mkItem(c.src);
+      else { const f = findItem(c.id); if (!f) return cancelDrag(); drag.payload = f.it; drag.from = f; f.arr.splice(f.i, 1); }
+      g = brickNode('ghost', drag.payload, 0, drag.payload.dur, {});
+      h = Math.max(brickMin(drag.payload.dur), 68);
+    }
+    g.id = 'dragghost'; g.style.minHeight = h + 'px';
+    document.body.appendChild(g); drag.ghost = g;
+    drag.ph = el('div', 'placeholder'); drag.ph.style.height = h + 'px';
+    if (c.kind === 'move') renderBoardKeepDrag();
+    document.body.style.cursor = 'grabbing';
+  }
+  drag.ghost.style.left = (ev.clientX - Math.min(drag.offX, 220)) + 'px';
+  drag.ghost.style.top = (ev.clientY - drag.offY) + 'px';
+
+  drag.ghost.style.display = 'none';
+  const under = document.elementFromPoint(ev.clientX, ev.clientY);
+  drag.ghost.style.display = '';
+  const body = (under && under.closest('.lane-body')) || bodyAt(ev.clientX, ev.clientY);
+  document.querySelectorAll('.lane').forEach(l => l.classList.remove('over'));
+  if (!body) { if (drag.ph.parentNode) drag.ph.remove(); drag.target = null; return; }
+  body.closest('.lane').classList.add('over');
+  drag.target = body.dataset.lane;
+  const kids = [...body.children].filter(k => k.classList.contains('brick'));
+  let idx = kids.length;
+  for (let i = 0; i < kids.length; i++) {
+    const r = kids[i].getBoundingClientRect();
+    if (ev.clientY < r.top + r.height / 2) { idx = i; break; }
+  }
+  drag.idx = idx;
+  const empty = body.querySelector('.lane-empty'); if (empty) empty.remove();
+  if (kids[idx]) body.insertBefore(drag.ph, kids[idx]); else body.appendChild(drag.ph);
+}
+function renderBoardKeepDrag() { const keep = drag; renderBoard(); drag = keep; }
+/** geometric fallback so drops near a routine's padding still land */
+function bodyAt(x, y) {
+  let hit = null;
+  document.querySelectorAll('.lane').forEach(l => {
+    const r = l.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) hit = l.querySelector('.lane-body');
+  });
+  return hit;
+}
+function onDragUp() {
+  window.removeEventListener('pointermove', onDragMove);
+  document.body.style.cursor = '';
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (d.ghost) d.ghost.remove();
+  if (d.ph && d.ph.parentNode) d.ph.remove();
+  /* a click that never became a drag must leave the DOM alone — re-rendering here
+     destroyed the node between the two halves of a double-click */
+  if (!d.moved) { if (d.cfg.onTap) d.cfg.onTap(); return; }
+  if (d.target) {
+    const arr = items(d.target);
+    if (Array.isArray(d.payload)) arr.splice(d.idx, 0, ...d.payload);
+    else arr.splice(d.idx, 0, d.payload);
+  } else if (d.from) toast('block removed — <b>Ctrl+Z</b> to undo');
+  else HIST.pop();
+  render();
+}
+function cancelDrag() {
+  window.removeEventListener('pointermove', onDragMove);
+  if (drag && drag.ghost) drag.ghost.remove();
+  if (drag && drag.moved) HIST.pop();
+  drag = null; render();
+}
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && drag) { const d = drag; if (d.from) d.from.arr.splice(d.from.i, 0, d.payload); cancelDrag(); } });
+
+function startResize(ev, it, node) {
+  ev.preventDefault(); ev.stopPropagation();
+  const y0 = ev.clientY, h0 = node.getBoundingClientRect().height, d0 = it.dur;
+  let last = d0;
+  const mv = e => {
+    const h = Math.max(30, h0 + (e.clientY - y0));
+    const raw = (h - 22) / SCALE;
+    const d = raw < 15 ? Math.max(1, Math.round(raw)) : Math.round(raw / 5) * 5;
+    if (d !== last) { last = d; node.style.minHeight = brickMin(d) + 'px'; const b = node.querySelector('.b-dur b'); if (b) b.textContent = dur2s(d); }
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', mv);
+    if (last !== d0) { snap(); it.dur = last; }
+    render();
+  };
+  window.addEventListener('pointermove', mv);
+  window.addEventListener('pointerup', up, { once: true });
+}
+
+/* ============================ exports ============================ */
+/** rows for export. Week scope = every routine that owns a weekday, intersected with each block's own days. */
+function allRows() {
+  const weekly = S.exportScope === 'week' && S.week.some(Boolean);
+  const vs = weekly ? S.variants.filter(v => S.week.includes(v.id)) : [M()];
+  const out = [];
+  vs.forEach(v => withVariant(v.id, () => {
+    S.lanes.forEach(L => schedule(L.id).filter(r => !r.hidden).forEach(({ it, s, e }) => {
+      const days = weekly ? it.days.map((d, i) => d && S.week[i] === v.id ? 1 : 0) : it.days.slice();
+      if (days.some(Boolean)) out.push({ v, lane: L, it, s, e, days, weekly });
+    }));
+  }));
+  return out;
+}
+const bydays = days => days.map((d, i) => d ? ICSD[i] : null).filter(Boolean);
+function daysLabel(days) {
+  const on = days.map((d, i) => d ? i : -1).filter(i => i >= 0);
+  if (!on.length) return '(no days)';
+  if (on.length === 7) return 'every day';
+  if (on.length === 5 && on.join() === '1,2,3,4,5') return 'every weekday';
+  return 'every ' + on.map(i => TDD[i]).join(', ');
+}
+function nextDateFor(days, minutes) {
+  const now = new Date(); const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const shift = Math.floor(minutes / 1440);
+  for (let k = 0; k < 14; k++) {
+    const d = new Date(base); d.setDate(base.getDate() + k);
+    if (days[d.getDay()]) { d.setDate(d.getDate() + shift); return d; }
+  }
+  return base;
+}
+function icsFold(line) { const out = []; let s = line; while (s.length > 73) { out.push(s.slice(0, 73)); s = ' ' + s.slice(73); } out.push(s); return out.join('\r\n'); }
+const icsEsc = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+const ymd = d => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate());
+const hms = m => { m = ((m % 1440) + 1440) % 1440; return pad(Math.floor(m / 60)) + pad(m % 60) + '00'; };
+
+function buildICS() {
+  const now = new Date();
+  const stamp = now.getUTCFullYear() + pad(now.getUTCMonth() + 1) + pad(now.getUTCDate()) + 'T' + pad(now.getUTCHours()) + pad(now.getUTCMinutes()) + pad(now.getUTCSeconds()) + 'Z';
+  const rows = allRows();
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BLOCK routine builder//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'X-WR-CALNAME:' + icsEsc(S.calName + (rows[0] && rows[0].weekly ? ' — week' : ' — ' + M().name)), 'X-WR-TIMEZONE:' + S.tz];
+  rows.forEach(({ v, lane, it, s, e, days }) => {
+    const bd = bydays(days); if (!bd.length) return;
+    const d = nextDateFor(days, s);
+    const d2 = new Date(d); d2.setDate(d.getDate() + (Math.floor(e / 1440) - Math.floor(s / 1440)));
+    L.push('BEGIN:VEVENT');
+    L.push('UID:' + it.id + '-' + v.id + '@block');
+    L.push('DTSTAMP:' + stamp);
+    L.push('DTSTART:' + ymd(d) + 'T' + hms(s));
+    L.push('DTEND:' + ymd(d2) + 'T' + hms(e));
+    L.push('RRULE:FREQ=WEEKLY;BYDAY=' + bd.join(','));
+    L.push(icsFold('SUMMARY:' + icsEsc((it.pri ? '[P' + it.pri + '] ' : '') + it.name)));
+    if (it.pri) L.push('PRIORITY:' + [0, 1, 5, 9][it.pri]);
+    L.push(icsFold('DESCRIPTION:' + icsEsc((it.note ? it.note + '\n' : '') + lane.name + ' · ' + v.name + ' · ' + dur2s(it.dur) + ' · ' + ENAME[energyOf(it)] + ' effort')));
+    L.push(icsFold('CATEGORIES:' + icsEsc(lane.name)));
+    L.push('TRANSP:OPAQUE');
+    L.push('END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  return L.join('\r\n');
+}
+function gcalLink(r) {
+  const d = nextDateFor(r.days, r.s);
+  const d2 = new Date(d); d2.setDate(d.getDate() + (Math.floor(r.e / 1440) - Math.floor(r.s / 1440)));
+  const p = new URLSearchParams({
+    action: 'TEMPLATE', text: (r.it.pri ? '[P' + r.it.pri + '] ' : '') + r.it.name,
+    dates: ymd(d) + 'T' + hms(r.s) + '/' + ymd(d2) + 'T' + hms(r.e),
+    details: (r.it.note ? r.it.note + ' — ' : '') + r.lane.name + ' · ' + r.v.name, ctz: S.tz,
+  });
+  const bd = bydays(r.days);
+  return 'https://calendar.google.com/calendar/render?' + p.toString() + (bd.length ? '&recur=' + encodeURIComponent('RRULE:FREQ=WEEKLY;BYDAY=' + bd.join(',')) : '');
+}
+const csvQ = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+const tdPri = it => it.pri ? [0, 4, 3, 2][it.pri] : S.tdPriority;
+function buildTodoistCSV() {
+  const out = ['TYPE,CONTENT,DESCRIPTION,PRIORITY,INDENT,AUTHOR,RESPONSIBLE,DATE,DATE_LANG,TIMEZONE,DURATION,DURATION_UNIT'];
+  const blank = ',,,,,,,,,,,';
+  const rows = allRows();
+  const sections = [...new Set(rows.map(r => (r.weekly && S.variants.length > 1 ? r.v.name + ' — ' : '') + r.lane.name))];
+  sections.forEach(sec => {
+    out.push(['section', csvQ(sec), '', '', '', '', '', '', '', '', '', ''].join(','));
+    out.push(blank);
+    rows.filter(r => ((r.weekly && S.variants.length > 1 ? r.v.name + ' — ' : '') + r.lane.name) === sec).forEach(r => {
+      const when = daysLabel(r.days); if (when === '(no days)') return;
+      out.push(['task', csvQ(r.it.name), csvQ(r.it.note || ''), tdPri(r.it), 1, '', '', csvQ(when + ' at ' + hhmm(r.s)), 'en', csvQ(S.tz), r.it.dur, 'minute'].join(','));
+      out.push(blank);
+    });
+  });
+  return out.join('\n');
+}
+function buildQuickAdd() {
+  const out = []; let sec = null;
+  allRows().forEach(r => {
+    const s = (r.weekly ? r.v.name + ' / ' : '') + r.lane.name;
+    if (s !== sec) { sec = s; out.push('', '# ' + s); }
+    const when = daysLabel(r.days); if (when === '(no days)') return;
+    out.push(r.it.name + ' ' + when + ' at ' + hhmm(r.s) + ' for ' + r.it.dur + 'min #' + S.tdProject.replace(/\s+/g, '')
+      + (r.it.pri ? ' p' + r.it.pri : (S.tdPriority > 1 ? ' p' + (5 - S.tdPriority) : '')));
+  });
+  return out.join('\n').trim();
+}
+function buildText() {
+  const rows = allRows();
+  const out = ['# ' + S.calName + (rows[0] && rows[0].weekly ? ' — full week' : ' — ' + M().name), ''];
+  let sec = null;
+  rows.forEach(r => {
+    const s = (r.weekly ? r.v.name + ' / ' : '') + r.lane.name;
+    if (s !== sec) { sec = s; out.push('', '## ' + s); }
+    out.push('- ' + fmt(r.s) + '–' + fmt(r.e) + '  ' + (r.it.pri ? '[P' + r.it.pri + '] ' : '') + r.it.name + (r.it.at ? ' ⚓' : '')
+      + '  (' + dur2s(r.it.dur) + ', ' + EGLYPH[energyOf(r.it)] + ', ' + daysLabel(r.days) + ')' + (r.it.note ? ' — ' + r.it.note : ''));
+  });
+  return out.join('\n').trim();
+}
+function download(name, text, mime) {
+  const b = new Blob([text], { type: mime || 'text/plain;charset=utf-8' });
+  const u = URL.createObjectURL(b);
+  const a = document.createElement('a'); a.href = u; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 4000);
+  toast('downloaded <b>' + esc(name) + '</b>');
+}
+function copy(text) {
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('copied'), () => fallbackCopy(text));
+  else fallbackCopy(text);
+}
+function fallbackCopy(text) {
+  const t = el('textarea'); t.value = text; document.body.appendChild(t); t.select();
+  try { document.execCommand('copy'); toast('copied'); } catch (e) { toast('copy failed — select it manually'); }
+  t.remove();
+}
+
+/* ============================ modals ============================ */
+function openModal(html) { $('#modal').innerHTML = html; $('#veil').classList.add('on'); }
+function closeModal() { $('#veil').classList.remove('on'); }
+$('#veil').onclick = e => { if (e.target.id === 'veil') closeModal(); };
+
+let expTab = 'ics';
+function openExport() {
+  const tabs = [['ics', 'Google Calendar (.ics)'], ['gl', 'GCal links'], ['csv', 'Todoist CSV'], ['qa', 'Todoist quick-add'], ['md', 'Plain text'], ['json', 'Backup']];
+  const assigned = S.week.some(Boolean);
+  openModal(
+    '<div class="modal-head"><h3>EXPORT</h3>' +
+    '<span style="font-size:11.5px;color:var(--dim)">scope</span>' +
+    '<select id="scope" style="background:#0a1018;border:1px solid var(--line);border-radius:6px;padding:4px 7px;outline:none;font-size:12px">' +
+    '<option value="variant"' + (S.exportScope === 'variant' ? ' selected' : '') + '>This day — ' + esc(M().name) + '</option>' +
+    '<option value="week"' + (S.exportScope === 'week' ? ' selected' : '') + (assigned ? '' : ' disabled') + '>Full week' + (assigned ? '' : ' (assign days first)') + '</option>' +
+    '</select><button class="btn sm" id="mX">✕</button></div>' +
+    '<div class="mtabs">' + tabs.map(([k, l]) => '<button class="mtab' + (k === expTab ? ' on' : '') + '" data-k="' + k + '">' + l + '</button>').join('') + '</div>' +
+    '<div class="modal-body" id="mBody"></div>'
+  );
+  $('#mX').onclick = closeModal;
+  $('#scope').onchange = e => { S.exportScope = e.target.value; save(); openExport(); };
+  $('#modal').querySelectorAll('.mtab').forEach(b => b.onclick = () => { expTab = b.dataset.k; openExport(); });
+  paintExport();
+}
+function paintExport() {
+  const body = $('#mBody');
+  const rows = allRows();
+  if (!rows.length && expTab !== 'json') { body.innerHTML = '<div class="hint">Nothing to export yet — drag some blocks in first.</div>'; return; }
+  const scopeNote = S.exportScope === 'week' && S.week.some(Boolean)
+    ? '<div class="hint">Exporting the <b>full week</b>: each routine only fires on the days you assigned it in the Week tab, further narrowed by each block’s own day toggles.</div>' : '';
+  if (expTab === 'ics') {
+    const t = buildICS();
+    body.innerHTML = scopeNote +
+      '<div class="hint">Download, then in Google Calendar: <code>Settings → Import &amp; export → Import</code>. Each block becomes one <b>weekly recurring event</b>. ' +
+      'Times are local wall-clock (' + esc(S.tz) + '), and the UIDs are stable — re-importing an edited file updates the same events instead of duplicating them.</div>' +
+      '<textarea readonly>' + esc(t) + '</textarea>' +
+      '<div class="row"><button class="btn acc" id="dl">⤓ Download .ics</button><button class="btn" id="cp">Copy</button></div>';
+    $('#dl').onclick = () => download('routine-' + (S.exportScope === 'week' ? 'week' : M().name.replace(/\W+/g, '-').toLowerCase()) + '.ics', t, 'text/calendar;charset=utf-8');
+    $('#cp').onclick = () => copy(t);
+  } else if (expTab === 'gl') {
+    body.innerHTML = scopeNote + '<div class="hint">One prefilled Google Calendar event per block, recurrence included — you press Save. Good for adding a couple of blocks without a full import.</div><div class="glinks">' +
+      rows.map(r => '<div class="glink"><span>' + esc(r.it.name) + ' · ' + fmt(r.s) + ' · ' + esc(daysLabel(r.days)) + '</span><a target="_blank" rel="noopener" href="' + esc(gcalLink(r)) + '">open ▸</a></div>').join('') + '</div>';
+  } else if (expTab === 'csv') {
+    const t = buildTodoistCSV();
+    body.innerHTML = scopeNote +
+      '<div class="hint">Todoist template format. In Todoist: create a project → <code>⋯ → Import from template → Upload file</code>. Columns become sections; ' +
+      'each block is a recurring task with time, duration and priority (P1→p1, P2→p2, P3→p3).</div>' +
+      '<textarea readonly>' + esc(t) + '</textarea>' +
+      '<div class="row"><button class="btn acc" id="dl">⤓ Download .csv</button><button class="btn" id="cp">Copy</button></div>';
+    $('#dl').onclick = () => download('todoist-' + (S.exportScope === 'week' ? 'week' : M().name.replace(/\W+/g, '-').toLowerCase()) + '.csv', t, 'text/csv;charset=utf-8');
+    $('#cp').onclick = () => copy(t);
+  } else if (expTab === 'qa') {
+    const t = buildQuickAdd();
+    body.innerHTML = scopeNote + '<div class="hint">Paste these one at a time into Todoist’s quick-add box. Recurrence, duration, project and priority are baked into the text.</div>' +
+      '<textarea readonly>' + esc(t) + '</textarea><div class="row"><button class="btn acc" id="cp">Copy all</button></div>';
+    $('#cp').onclick = () => copy(t);
+  } else if (expTab === 'md') {
+    const t = buildText();
+    body.innerHTML = '<textarea readonly>' + esc(t) + '</textarea><div class="row"><button class="btn acc" id="cp">Copy</button><button class="btn" id="dl">⤓ Download .md</button></div>';
+    $('#cp').onclick = () => copy(t);
+    $('#dl').onclick = () => download('routine.md', t);
+  } else {
+    const t = JSON.stringify(S, null, 1);
+    body.innerHTML = '<div class="hint">Everything: blocks, routines, routines, templates, rules, week plan. Paste one back in and hit Restore to move it to another machine.</div>' +
+      '<textarea id="js">' + esc(t) + '</textarea>' +
+      '<div class="row"><button class="btn acc" id="dl">⤓ Download</button><button class="btn" id="rs">Restore from box</button></div>';
+    $('#dl').onclick = () => download('block-backup.json', t, 'application/json');
+    $('#rs').onclick = () => {
+      try {
+        const o = JSON.parse($('#js').value); if (!o.lanes || !o.variants) throw 0;
+        snap(); S = o;
+        S.templates = S.templates || []; S.rules = S.rules || []; S.week = S.week || [null, null, null, null, null, null, null];
+        S.variants.forEach(v => S.lanes.forEach(l => { if (!v.items[l.id]) v.items[l.id] = []; }));
+        closeModal(); render(); toast('restored');
+      } catch (e) { toast('that isn’t valid BLOCK JSON'); }
+    };
+  }
+}
+
+function openCompare() {
+  const cols = S.variants.map(v => withVariant(v.id, () => {
+    const tot = S.lanes.reduce((a, l) => a + laneMins(l.id), 0);
+    const load = S.lanes.reduce((a, l) => a + laneLoad(l.id), 0);
+    const dys = weekOrd().filter(d => S.week[d] === v.id).map(d => DSHORT[d]).join(' ');
+    return '<div class="cmp-col' + (v.id === S.current ? ' on' : '') + '">' +
+      '<h4>' + esc(v.name) + '</h4><div class="sub">' + dur2s(tot) + ' · load ' + load.toFixed(1) + (dys ? ' · ' + dys : ' · unassigned') + '</div>' +
+      S.lanes.map(L => {
+        const sc = schedule(L.id); if (!sc.length) return '';
+        return '<div style="margin-bottom:9px"><div style="font-family:var(--f1);font-size:10px;letter-spacing:.1em;color:var(--dim2);text-transform:uppercase;margin-bottom:3px">' +
+          esc(L.name) + ' · ' + fmt(hm2min(L.start)) + '–' + fmt(laneEnd(L.id)) + '</div>' +
+          sc.map(({ it, s }) => '<div class="day-b" style="--c:' + it.color + '"><i></i><span>' + esc(it.name) + '</span><em>' + fmt(s) + '</em></div>').join('') + '</div>';
+      }).join('') +
+      '<button class="btn sm" style="width:100%;margin-top:6px" data-go="' + v.id + '">open</button></div>';
+  })).join('');
+  openModal('<div class="modal-head"><h3>DAYS</h3><button class="btn sm" id="mX">✕</button></div><div class="modal-body"><div class="cmp">' + cols + '</div></div>');
+  $('#mX').onclick = closeModal;
+  $('#modal').querySelectorAll('[data-go]').forEach(b => b.onclick = () => { S.current = b.dataset.go; S.view = 'day'; closeModal(); render(); });
+}
+
+function openRules() {
+  const names = [...new Set(S.variants.flatMap(v => withVariant(v.id, () => S.lanes.flatMap(l => items(l.id).map(i => i.name)))))].sort();
+  const chk = RULECHK;
+  openModal(
+    '<div class="modal-head"><h3>RULES</h3><button class="btn sm" id="mX">✕</button></div>' +
+    '<div class="modal-body">' +
+    '<div class="hint">Rules check the day you have open (<b>' + esc(M().name) + '</b>) and flag what breaks them — they never rearrange anything behind your back. ' +
+    'A broken rule outlines the block in red and shows why on hover.</div>' +
+    '<div id="rlist">' + (S.rules.length ? '' : '<div class="hint" style="opacity:.6">No rules yet. Add one below.</div>') + '</div>' +
+    '<div class="rulebuild">' +
+    '<select id="rk">' + Object.keys(RULEKINDS).map(k => '<option value="' + k + '">' + RULEKINDS[k].label + '</option>').join('') + '</select>' +
+    '<span class="f fa">A <input type="text" id="ra" list="bnames" placeholder="block name"></span>' +
+    '<span class="f fmins"><input type="number" id="rmins" value="30" min="0" step="5"> min</span>' +
+    '<span class="f fb">B <input type="text" id="rb" list="bnames" placeholder="block name"></span>' +
+    '<span class="f ftime"><input type="time" id="rtime" value="09:00"></span>' +
+    '<button class="btn acc sm" id="radd">Add rule</button>' +
+    '<datalist id="bnames">' + names.map(n => '<option value="' + esc(n) + '">').join('') + '</datalist>' +
+    '</div></div>'
+  );
+  $('#mX').onclick = closeModal;
+  const list = $('#rlist');
+  S.rules.forEach(r => {
+    const broke = chk.byRule.get(r.id) || 0;
+    const d = el('div', 'rule' + (broke ? ' broke' : ''));
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = r.on !== false;
+    cb.onchange = () => { snap(); r.on = cb.checked; render(); openRules(); };
+    d.appendChild(cb);
+    d.appendChild(el('div', 'txt', ruleText(r)));
+    d.appendChild(el('span', 'st' + (broke ? ' bad' : ''), broke ? broke + ' break' + (broke > 1 ? 's' : '') : 'ok'));
+    const x = el('button', null, '✕'); x.style.color = 'var(--dim2)';
+    x.onclick = () => { snap(); S.rules = S.rules.filter(z => z.id !== r.id); render(); openRules(); };
+    d.appendChild(x);
+    list.appendChild(d);
+  });
+  const sync = () => {
+    const k = $('#rk').value, f = RULEKINDS[k].f;
+    $('#modal').querySelectorAll('.rulebuild .f').forEach(x => x.classList.remove('on'));
+    if (f.includes('a')) $('#modal').querySelector('.fa').classList.add('on');
+    if (f.includes('mins')) $('#modal').querySelector('.fmins').classList.add('on');
+    if (f.includes('b')) $('#modal').querySelector('.fb').classList.add('on');
+    if (f.includes('time')) $('#modal').querySelector('.ftime').classList.add('on');
+  };
+  $('#rk').onchange = sync; sync();
+  $('#radd').onclick = () => {
+    const k = $('#rk').value, f = RULEKINDS[k].f;
+    const r = { id: uid(), kind: k, on: true };
+    if (f.includes('a')) { r.a = $('#ra').value.trim(); if (!r.a) return toast('name block A'); }
+    if (f.includes('b')) { r.b = $('#rb').value.trim(); if (!r.b) return toast('name block B'); }
+    if (f.includes('mins')) r.mins = parseInt($('#rmins').value) || 0;
+    if (f.includes('time')) r.time = $('#rtime').value;
+    snap(); S.rules.push(r); render(); openRules();
+  };
+}
+
+/* ============================ self-test ============================
+ * Drives the REAL DOM events every control uses — pointer sequences, clicks,
+ * contextmenu, submenu hovers — because testing the functions behind them is
+ * exactly how the bin double-click and the vanishing submenu got shipped broken.
+ * Runs on a scratch state and restores yours afterwards. ⚙ → Run self-test.
+ */
+function selfTest() {
+  const backup = JSON.stringify(S);
+  const R = [];
+  const ok = (name, fn) => { try { const r = fn(); R.push([r === true, name, r === true ? '' : String(r)]); } catch (e) { R.push([false, name, e.message]); } };
+  const pd = (n, x, y) => n.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerId: 1 }));
+  const pm = (x, y) => window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+  const pu = (x, y) => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: x, clientY: y, pointerId: 1 }));
+  const rc = n => n.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
+  const enter = n => n.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+  const chip = nm => [...document.querySelectorAll('.chip')].find(c => c.textContent.includes(nm));
+  const bricks = () => [...document.querySelectorAll('.brick')];
+  const tap = n => { const r = n.getBoundingClientRect(); pd(n, r.x + 25, r.y + 4); pu(r.x + 25, r.y + 4); };
+
+  try {
+    S = seedState(); S.view = 'day'; closeModal(); render();
+    const L = S.lanes[0].id, L2 = S.lanes[1].id;
+
+    ok('bin block: single click adds it', () => { tap(chip('Coffee')); return items(L).length === 1 || 'got ' + items(L).length; });
+    ok('bin block: clicking twice adds two', () => { tap(chip('Journal')); return items(L).length === 2 || 'got ' + items(L).length; });
+    ok('bin block: drag into a routine', () => {
+      const c = chip('Lift'), r = c.getBoundingClientRect(), t = document.querySelectorAll('.lane')[1].getBoundingClientRect();
+      pd(c, r.x + 25, r.y + 4); pm(r.x + 40, r.y + 30); pm(t.x + t.width / 2, t.y + 2); pu(t.x + t.width / 2, t.y + 2);
+      return items(L2).length === 1 || 'landed ' + items(L2).length;
+    });
+    ok('block: drag between routines', () => {
+      const b = bricks()[0], r = b.getBoundingClientRect(), t = document.querySelectorAll('.lane')[1].getBoundingClientRect();
+      pd(b, r.x + 40, r.y + 2); pm(r.x + 50, r.y + 30); pm(t.x + t.width / 2, t.y + 2); pu(t.x + t.width / 2, t.y + 2);
+      return items(L2).length === 2 || 'landed ' + items(L2).length;
+    });
+    ok('block: start-time popover anchors it', () => {
+      bricks()[0].querySelector('.b-time,.b-mtime').click();
+      const p = document.querySelector('.pop'); if (!p) return 'no popover';
+      p.querySelector('input').value = '07:30'; p.querySelector('.btn.acc').click();
+      return !!findItem(bricks()[0].dataset.id) && S.lanes.flatMap(l => items(l.id)).some(i => i.at === '07:30') || 'not anchored';
+    });
+    ok('block: end-time popover sets the duration', () => {
+      const b = bricks().find(x => x.querySelector('.b-end')); if (!b) return 'no full card';
+      const it = findItem(b.dataset.id).it, before = it.dur;
+      const st = schedule(findItem(b.dataset.id).laneId).find(r => r.it.id === it.id);
+      b.querySelector('.b-end').click();
+      const p = document.querySelector('.pop'); if (!p) return 'no popover';
+      p.querySelector('input').value = hhmm(st.s + 45); p.querySelector('.btn.acc').click();
+      return it.dur === 45 || 'dur ' + it.dur + ' (was ' + before + ')';
+    });
+    ok('block: duration popover accepts 1 minute', () => {
+      const b = bricks().find(x => x.querySelector('.b-dur b'));
+      const it = findItem(b.dataset.id).it;
+      b.querySelector('.b-dur b').click();
+      const p = document.querySelector('.pop'); p.querySelector('input').value = '1'; p.querySelector('.btn.acc').click();
+      return it.dur === 1 || 'dur ' + it.dur;
+    });
+    ok('duration steps: 1 below 10, 5 from 10 up', () => (durStep(1) === 1 && durStep(9) === 1 && durStep(10) === 5 && durStep(45) === 5) || 'steps wrong');
+    ok('compact: works at any duration', () => {
+      const it = S.lanes.flatMap(l => items(l.id)).find(i => i.dur >= 20) || items(L2)[0];
+      it.dur = 30; it.compact = true; render();
+      const n = document.querySelector('[data-id="' + it.id + '"]');
+      const r = n.classList.contains('mini'); it.compact = null; render();
+      return r || 'did not compact';
+    });
+    ok('right-click: block menu opens', () => { rc(bricks()[0]); const m = document.querySelector('.ctxmenu'); const n = m && m.querySelectorAll('.mi').length; closeMenu(); return n > 8 || 'items ' + n; });
+    ok('right-click: submenu survives crossing sibling rows', () => {
+      rc(bricks()[0]);
+      const m = document.querySelector('.ctxmenu');
+      const days = [...m.querySelectorAll('.mi')].find(x => x.textContent.startsWith('Days'));
+      enter(days);
+      if (!document.querySelector('.ctxmenu.sub')) return 'submenu never opened';
+      [...m.querySelectorAll('.mi')].slice(0, 3).forEach(enter);
+      const alive = !!document.querySelector('.ctxmenu.sub');
+      closeMenu();
+      return alive || 'submenu vanished on the way over';
+    });
+    ok('right-click: submenu action applies', () => {
+      const it = findItem(bricks()[0].dataset.id).it;
+      rc(bricks()[0]);
+      const m = document.querySelector('.ctxmenu');
+      enter([...m.querySelectorAll('.mi')].find(x => x.textContent.startsWith('Days')));
+      [...document.querySelector('.ctxmenu.sub').querySelectorAll('.mi')].find(x => x.textContent.includes('Every day')).click();
+      return it.days.join('') === '1111111' || 'days ' + it.days.join('');
+    });
+    ok('right-click: routine menu opens', () => { rc(document.querySelector('.lane-head')); const n = document.querySelectorAll('.ctxmenu .mi').length; closeMenu(); return n > 5 || 'items ' + n; });
+    ok('right-click: bin menu opens', () => { rc(chip('Coffee')); const n = document.querySelectorAll('.ctxmenu .mi').length; closeMenu(); return n >= 5 || 'items ' + n; });
+    ok('check-off: ticking everything resets the list', () => {
+      const vid = routineForToday(), td = todaysBlocks(vid);
+      if (!td.length) return 'nothing scheduled today';
+      td.forEach(b => b.done = true); render();
+      const allOn = document.querySelectorAll('.b-check.on').length === document.querySelectorAll('.brick').length;
+      clearDone(vid); render();
+      return allOn || 'checkboxes did not all show';
+    });
+    ok('rules: a broken rule is detected and shown', () => {
+      const nm = S.lanes.flatMap(l => items(l.id))[0].name;
+      S.rules = [{ id: 'test', kind: 'notafter', a: nm, time: '00:01', on: true }];
+      render();
+      const found = RULECHK.count > 0 && document.querySelectorAll('.brick.broke').length > 0;
+      S.rules = []; render();
+      return found || 'not flagged';
+    });
+    ok('exports: all four builders produce output', () => {
+      const a = buildICS(), b = buildTodoistCSV(), c = buildQuickAdd(), d = buildText();
+      return (/BEGIN:VEVENT/.test(a) && /^task/m.test(b) && c.length > 5 && d.length > 5) || 'a builder came back empty';
+    });
+    ok('undo: Ctrl+Z restores the previous arrangement', () => {
+      const before = items(L).length;
+      addItem(L, { name: 'zz', dur: 5, color: '#fff', energy: 1 });
+      undo();
+      return items(L).length === before || 'expected ' + before + ' got ' + items(L).length;
+    });
+    ok('week view renders 7 days', () => { S.view = 'week'; render(); const n = document.querySelectorAll('.day').length; S.view = 'day'; render(); return n === 7 || 'got ' + n; });
+  } finally {
+    closeMenu(); closePop();
+    S = JSON.parse(backup); render();
+  }
+
+  const fails = R.filter(r => !r[0]).length;
+  openModal(
+    '<div class="modal-head"><h3>SELF-TEST — ' + (R.length - fails) + '/' + R.length + ' passed</h3><button class="btn sm" id="mX">✕</button></div>' +
+    '<div class="modal-body"><div class="hint">Every check drives the real mouse/keyboard events, not the functions behind them. Your own data was restored afterwards.</div>' +
+    R.map(([p, n, why]) => '<div class="rule' + (p ? '' : ' broke') + '"><span class="st' + (p ? '' : ' bad') + '">' + (p ? 'PASS' : 'FAIL') + '</span>' +
+      '<div class="txt">' + esc(n) + (why ? ' <span style="color:var(--bad)">— ' + esc(why) + '</span>' : '') + '</div></div>').join('') +
+    '</div>'
+  );
+  $('#mX').onclick = closeModal;
+  return R;
+}
+
+function openHelp() {
+  openModal(
+    '<div class="modal-head"><h3>HOW BLOCK WORKS</h3><button class="btn sm" id="mX">✕</button></div><div class="modal-body">' +
+    '<div class="hint"><b class="k">1</b> &nbsp;<b>Build a day.</b> Drag blocks from the bin into a routine (or just click one). Columns are just named parts of your day — rename them, add your own, set when each starts. Times are worked out for you.</div>' +
+    '<div class="hint"><b class="k">2</b> &nbsp;<b>Adjust.</b> A block shows <b>start – end</b>: click the start to anchor it to an exact hour (⚓ — everything else flows around it), click the end to say when it finishes, click the duration to type minutes. Drag a block to reorder; drop it outside the routines to delete.</div>' +
+    '<div class="hint"><b class="k">3</b> &nbsp;<b>Right-click anything</b> — a block, a routine, a block in the bin. That’s where days, effort, priority, “move to routine”, “copy routine to routine” and the rest live. Typing <b>Vitamins 1m</b> as a name sets the duration too, and anything under 10 minutes collapses to a single line.</div>' +
+    '<div class="hint"><b class="k">4</b> &nbsp;<b>Tag it.</b> Each block carries an effort dot (◔ light / ◑ medium / ● heavy) and an optional priority (P1–P3). Effort drives the routine’s load meter, so you can see when you’ve stacked three heavy things before noon. Priority drives the <b>↓P</b> sort and exports to Todoist.</div>' +
+    '<div class="hint"><b class="k">5</b> &nbsp;<b>Check things off.</b> Tick the box on a block as you do it. When everything scheduled for today is ticked, the list congratulates you and resets itself — and it resets on its own each new day.</div>' +
+    '<div class="hint"><b class="k">6</b> &nbsp;<b>Make more days.</b> A group of blocks is a <b>routine</b> (Morning, Midday); a group of routines is a <b>day</b> (Weekday, Rest day). <b>+ Day</b> builds another one, and the <b>Week</b> tab picks which day runs on which weekday.</div>' +
+    '<div class="hint"><b class="k">7</b> &nbsp;<b>Reuse.</b> <b>⇩ template</b> on a routine saves it to the bin — drop the whole thing into any routine later.</div>' +
+    '<div class="hint"><b class="k">8</b> &nbsp;<b>Ship it.</b> <b>Export</b> writes a recurring Google Calendar file or a Todoist import — for the open routine, or the whole week at once.</div>' +
+    '<div class="hint" style="margin-top:14px;opacity:.75">Hover anything to find out what it does. <b class="k">Ctrl</b>+<b class="k">Z</b> undoes. Everything saves in this browser automatically; <b>Export → Backup</b> gives you a file.</div>' +
+    '</div>'
+  );
+  $('#mX').onclick = closeModal;
+}
+
+function openSettings() {
+  openModal(
+    '<div class="modal-head"><h3>SETTINGS</h3><button class="btn sm" id="mX">✕</button></div><div class="modal-body">' +
+    '<div class="set">' +
+    '<label>Routine / calendar name</label><input type="text" id="sCal" value="' + esc(S.calName) + '">' +
+    '<label>Todoist project tag</label><input type="text" id="sProj" value="' + esc(S.tdProject) + '">' +
+    '<label>Todoist priority for blocks with no P set (4 = urgent)</label><input type="number" id="sPri" min="1" max="4" value="' + S.tdPriority + '">' +
+    '<label>Timezone</label><input type="text" id="sTz" value="' + esc(S.tz) + '">' +
+    '<label>24-hour clock</label><input type="checkbox" id="sH24" ' + (S.h24 ? 'checked' : '') + '>' +
+    '</div>' +
+    '<div class="row"><button class="btn acc" id="sOk">Save</button>' +
+    '<button class="btn" id="sTest" style="margin-left:auto">Run self-test</button>' +
+    '<button class="btn" id="sClear">Reset today’s ticks</button>' +
+    '<button class="btn" id="sReset" style="color:var(--bad)">Reset everything</button></div>' +
+    '</div>'
+  );
+  $('#mX').onclick = closeModal;
+  $('#sOk').onclick = () => {
+    S.calName = $('#sCal').value.trim() || 'Routine';
+    S.tdProject = $('#sProj').value.trim() || 'Routine';
+    S.tdPriority = clamp(parseInt($('#sPri').value) || 1, 1, 4);
+    S.tz = $('#sTz').value.trim() || S.tz;
+    S.h24 = $('#sH24').checked;
+    closeModal(); render();
+  };
+  $('#sTest').onclick = () => selfTest();
+  $('#sClear').onclick = () => { snap(); S.variants.forEach(v => clearDone(v.id)); render(); toast('ticks cleared'); };
+  $('#sReset').onclick = () => { if (confirm('Wipe all blocks, routines, routines, templates and rules?')) { snap(); S = seedState(); render(); closeModal(); } };
+}
+
+/* ============================ wiring ============================ */
+$('#vDay').onclick = () => { S.view = 'day'; render(); };
+$('#vWeek').onclick = () => { S.view = 'week'; render(); };
+$('#bExp').onclick = openExport;
+$('#bCmp').onclick = openCompare;
+$('#bRules').onclick = openRules;
+$('#bHelp').onclick = openHelp;
+$('#bSet').onclick = openSettings;
+$('#bNew').onclick = () => {
+  const n = prompt('Name this day', 'Rest day'); if (!n) return;
+  snap(); const v = seedVariant(n.trim()); S.lanes.forEach(l => v.items[l.id] = []); S.variants.push(v); S.current = v.id; render();
+};
+$('#search').oninput = renderBin;
+$('#gapM').onclick = () => { S.gap = Math.max(0, S.gap - 5); render(); };
+$('#gapP').onclick = () => { S.gap = Math.min(60, S.gap + 5); render(); };
+$('#bAddBlock').onclick = () => { $('#newform').classList.toggle('on'); $('#nfName').focus(); };
+$('#nfNo').onclick = () => $('#newform').classList.remove('on');
+let nfColor = PAL[0];
+PAL.forEach(c => {
+  const s = el('button', 'sw' + (c === nfColor ? ' on' : '')); s.style.background = c;
+  s.onclick = () => { nfColor = c; $('#nfSw').querySelectorAll('.sw').forEach(x => x.classList.remove('on')); s.classList.add('on'); };
+  $('#nfSw').appendChild(s);
+});
+$('#nfOk').onclick = () => {
+  const n = $('#nfName').value.trim(); if (!n) return toast('give it a name first');
+  snap();
+  S.lib.push({ id: uid(), name: n, dur: Math.max(5, parseInt($('#nfMin').value) || 30), color: nfColor, cat: 'Custom', energy: parseInt($('#nfEnergy').value) || 2 });
+  $('#nfName').value = ''; $('#newform').classList.remove('on'); render();
+};
+$('#nfName').onkeydown = e => { if (e.key === 'Enter') $('#nfOk').click(); };
+
+window.addEventListener('keydown', e => {
+  const typing = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); undo(); }
+  if (e.key === 'Escape') closeModal();
+});
+window.addEventListener('beforeunload', () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} });
+
+/* ══════════════════════ LifeOS bridge ══════════════════════
+   BLOCK owns the schedule. LifeOS owns what actually got done. Three wires:
+     library  →  the shared activity vocabulary (so HABITS can promote any of it)
+     ticks    →  the shared day log (so a tick here is a tick everywhere)
+     plan     →  today's blocks, published for the home screen to show and tick
+   Blocks are matched across apps by slugged NAME: two blocks called the same
+   thing are the same thing, which is exactly what makes the ticks agree.  */
+const actIdOf = it => it.actId || (it.actId = LifeOS.slug(it.name));
+
+function pushLib() {
+  const seen = {}, out = [];
+  const add = (name, cat, dur, color, energy) => {
+    const id = LifeOS.slug(name); if (seen[id]) return; seen[id] = 1;
+    out.push({ id: id, name: name, cat: cat || '', dur: dur || 0, color: color || '', energy: energy || 2 });
+  };
+  S.lib.forEach(l => add(l.name, l.cat, l.dur, l.color, l.energy));
+  S.variants.forEach(v => S.lanes.forEach(l => (v.items[l.id] || []).forEach(it => add(it.name, 'routine', it.dur, it.color, it.energy))));
+  LifeOS.acts(out);
+}
+function publishToday() {
+  const vid = routineForToday(), d = todayIdx();
+  const blocks = withVariant(vid, () => S.lanes.flatMap(l =>
+    schedule(l.id).filter(r => r.it.days[d]).map(r => ({
+      id: r.it.id, actId: actIdOf(r.it), name: r.it.name, s: r.s, dur: r.it.dur,
+      color: r.it.color, lane: lane(l.id).name,
+    })))).sort((a, b) => a.s - b.s);
+  LifeOS.publishToday({ date: todayKey(), vid: vid, name: (variant(vid) || {}).name || 'routine', blocks: blocks });
+}
+/** the shared log is the truth about what got done — mirror it onto the blocks */
+function pullDone() {
+  if (!window.LifeOS) return 0;
+  const date = todayKey(); let changed = 0;
+  S.variants.forEach(v => withVariant(v.id, () => S.lanes.forEach(l => items(l.id).forEach(it => {
+    const on = LifeOS.isDone(actIdOf(it), date);
+    if (!!it.done !== on) { it.done = on; changed++; }
+  }))));
+  return changed;
+}
+
+let pubT;
+const _render = render;
+render = function () { _render.apply(this, arguments); clearTimeout(pubT); pubT = setTimeout(() => { pushLib(); publishToday(); }, 400); };
+/* someone ticked something elsewhere — only repaint if it actually moved */
+LifeOS.on(() => { if (pullDone()) { save(); render(); } });
+LifeOS.ready(() => { pullDone(); render(); });
+
+render();
+if (!S.lanes.some(l => items(l.id).length) && !S.templates.length) setTimeout(openHelp, 400);
+</script>
+</body>
+</html>

@@ -1,0 +1,1255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Form Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0d12; --panel:#111722; --panel2:#0d131c; --line:#1e2a3a; --line2:#28374a;
+  --ink:#e8eef6; --dim:#8ba0b8; --dim2:#5c7089;
+  --accent:#33e1ed; --accent-dim:#177f88;
+  --hi:#ff4136; --warn:#ffb400; --good:#2ecc71; --pose:#c77dff;
+  --radius:10px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0; background:radial-gradient(1200px 600px at 50% -10%, #12202e 0%, transparent 60%), var(--bg);
+  color:var(--ink); font-family:'Chakra Petch',system-ui,sans-serif; overflow:hidden; user-select:none; -webkit-user-select:none}
+button{font-family:inherit; cursor:pointer}
+.mono{font-family:'IBM Plex Mono',monospace}
+
+#app{display:flex; flex-direction:column; height:100vh}
+header{display:flex; align-items:center; gap:12px; padding:9px 14px; border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#0e141d,#0a0f16)}
+.brand{display:flex; align-items:baseline; gap:9px; font-weight:700; letter-spacing:.5px}
+.brand b{color:var(--accent); font-size:17px}
+.brand span{color:var(--dim2); font-size:10px; letter-spacing:2px; text-transform:uppercase}
+.spacer{flex:1}
+
+.seg{display:flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:#0c131c}
+.seg button{background:transparent; color:var(--dim); border:0; padding:6px 12px; font-size:12px; font-weight:600; display:flex; align-items:center; gap:6px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--accent); color:#04252a}
+.seg button:not(.on):hover{color:var(--ink); background:#131d29}
+
+.btn{background:#182333; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:6px 10px;
+  font-size:12px; font-weight:500; display:inline-flex; align-items:center; gap:5px; line-height:1; transition:.12s}
+.btn:hover{border-color:var(--accent-dim); background:#1d2b3d}
+.btn:active{transform:translateY(1px)}
+.btn.sq{padding:6px 8px; min-width:32px; justify-content:center}
+.btn.on{background:var(--accent); color:#04252a; border-color:var(--accent); font-weight:700}
+.btn.auto{border-color:#3d3a1c; background:#1e1b0e; color:var(--warn)}
+.btn.auto:hover{border-color:var(--warn); background:#2a2410}
+.btn.ghost{background:transparent}
+.btn:disabled{opacity:.35; cursor:not-allowed}
+select.btn{padding:6px}
+
+.bodyrow{flex:1; display:flex; min-height:0}
+#rail{width:62px; border-right:1px solid var(--line); background:#0b111a; display:flex; flex-direction:column; align-items:center; padding:9px 0; gap:6px}
+.railbtn{width:46px; height:46px; border-radius:11px; border:1px solid var(--line); background:#141d29; color:var(--dim);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:16px; transition:.12s}
+.railbtn small{font-size:8px; letter-spacing:.5px; text-transform:uppercase}
+.railbtn:hover{color:var(--ink); border-color:var(--accent-dim)}
+.railbtn.on{background:var(--accent); color:#04252a; border-color:var(--accent)}
+.railbtn.on small{color:#04252a}
+
+#work{flex:1; display:flex; flex-direction:column; min-width:0}
+#toolbar{min-height:44px; display:flex; align-items:center; gap:10px; padding:7px 12px; border-bottom:1px solid var(--line); background:#0c131c; flex-wrap:wrap}
+.tbpanel{display:none; align-items:center; gap:9px; flex-wrap:wrap}
+.tbpanel.on{display:flex}
+.tbpanel .lbl{font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--dim2)}
+.tbpanel .sep{width:1px; height:22px; background:var(--line)}
+.swatch{width:22px; height:22px; border-radius:50%; border:2px solid #0009; cursor:pointer}
+.swatch.on{border-color:#fff; box-shadow:0 0 0 2px var(--accent)}
+.tool{width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:#141d29; color:var(--ink); display:flex; align-items:center; justify-content:center; font-size:14px}
+.tool.on{background:var(--accent); color:#04252a; border-color:var(--accent)}
+
+.stage{flex:1; display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:10px; min-height:0}
+body.view-stack .stage{grid-template-columns:1fr; grid-template-rows:1fr 1fr; align-self:center; width:auto; max-width:100%; aspect-ratio:9/16; margin:0 auto}
+body.view-overlay .stage{display:none}
+body.view-solo .stage{grid-template-columns:1fr}
+body.view-solo.solo-A .pane[data-pane="B"]{display:none}
+body.view-solo.solo-B .pane[data-pane="A"]{display:none}
+body.view-solo #syncGroup,body.view-solo #syncDivider{display:none}
+#soloPick{display:none}
+body.view-solo #soloPick{display:flex}
+/* solo hides dual-only controls and the inactive side's buttons */
+body.view-solo .dual-only{display:none !important}
+body.view-solo.solo-A [data-for="B"]{display:none !important}
+body.view-solo.solo-B [data-for="A"]{display:none !important}
+body.view-solo .side-sep{display:none}
+
+.pane{position:relative; background:#05080c; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; display:flex; flex-direction:column; min-height:0}
+.pane.dragover{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-dim) inset}
+.vwrap{position:relative; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; background:#000}
+video{max-width:100%; max-height:100%; display:block; background:#000}
+video.mirror{transform:scaleX(-1)}
+canvas.draw{position:absolute; inset:0; margin:auto; touch-action:none}
+.label{position:absolute; top:8px; left:8px; z-index:4; font-size:11px; font-weight:700; letter-spacing:1px; padding:3px 9px;
+  border-radius:20px; background:#000a; color:var(--accent); border:1px solid var(--accent-dim); max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.srcwrap{position:absolute; top:8px; right:8px; z-index:6}
+.srcbtn{width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:#0b1119cc; color:var(--ink); display:flex; align-items:center; justify-content:center; font-size:15px; backdrop-filter:blur(6px)}
+.srcbtn:hover{border-color:var(--accent-dim)}
+.srcmenu{position:absolute; top:36px; right:0; width:200px; background:#0d1522f2; border:1px solid var(--line2); border-radius:10px; padding:7px;
+  display:none; flex-direction:column; gap:6px; box-shadow:0 12px 40px #000a; backdrop-filter:blur(8px)}
+.srcmenu.open{display:flex}
+.srcmenu .row{display:flex; align-items:center; gap:8px; justify-content:space-between}
+.srcmenu .row span{font-size:11px; color:var(--dim)}
+.srcmenu input[type=number]{width:56px; background:#0a0f16; border:1px solid var(--line); color:var(--ink); border-radius:6px; padding:4px 6px; font-family:'IBM Plex Mono',monospace; font-size:12px}
+.dropzone{position:absolute; inset:0; z-index:3; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; color:var(--dim); text-align:center; padding:20px; pointer-events:none}
+.dropzone.hidden{display:none}
+.dropzone .big{font-size:15px; color:var(--ink)}
+.dropzone button{pointer-events:auto}
+
+/* ---- unified transport: filmstrip IS the scrubber, with trim handles on it ---- */
+.transport{display:flex; align-items:center; gap:7px; padding:7px 9px; background:var(--panel2); border-top:1px solid var(--line)}
+.timeline{position:relative; flex:1; min-width:80px; height:44px; border-radius:6px; overflow:hidden; background:#0a0f16; border:1px solid var(--line); cursor:pointer; display:flex}
+.timeline .thumb{flex:1 1 0; height:100%; background-size:cover; background-position:center; background-color:#131c28}
+.timeline .thumb+.thumb{border-left:1px solid #0006}
+.tshade{position:absolute; top:0; bottom:0; background:#05080ce0; z-index:2; pointer-events:none}
+.tshade.left{left:0} .tshade.right{right:0}
+.thandle{position:absolute; top:-1px; bottom:-1px; width:13px; margin-left:-6.5px; background:var(--warn); border-radius:4px; z-index:4;
+  cursor:ew-resize; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 1px #0008}
+.thandle::before{content:''; width:2px; height:15px; background:#241900; border-radius:2px}
+.tplayhead{position:absolute; top:0; bottom:0; width:2px; background:var(--accent); z-index:3; pointer-events:none; box-shadow:0 0 5px var(--accent)}
+.trepmark{position:absolute; top:0; bottom:0; width:1px; background:#c77dff88; z-index:2; pointer-events:none}
+.time{font-size:11px; color:var(--dim); min-width:104px; text-align:center}
+
+#overlayWrap{flex:1; display:none; flex-direction:column; min-height:0; padding:10px; gap:8px}
+body.view-overlay #overlayWrap{display:flex}
+#overlayWrap .ovtools{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+#overlayWrap .ovtools .lbl{font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--dim2)}
+#ovStage{flex:1; min-height:0; display:flex; align-items:center; justify-content:center; background:#000; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden}
+#ovCanvas{max-width:100%; max-height:100%}
+
+#drawer{width:348px; border-left:1px solid var(--line); background:#0b111a; display:flex; flex-direction:column; min-height:0}
+/* set analysis: chart + RIR + load */
+canvas.repchart{width:100%; height:132px; display:block; margin:7px 0 4px; border:1px solid var(--line); border-radius:7px; background:#080d14}
+.rirbox{display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:7px; background:#0e1620; margin-bottom:6px}
+.rirbig{font-family:'IBM Plex Mono',monospace; font-size:19px; font-weight:600; line-height:1}
+.rirmeta{font-size:10px; color:var(--dim2); line-height:1.45}
+.loadrow{display:flex; gap:5px; margin-bottom:5px; flex-wrap:wrap}
+.loadrow input{width:74px; background:#0a0f16; border:1px solid var(--line); color:var(--ink); border-radius:6px; padding:5px 7px; font-size:12px; font-family:'IBM Plex Mono',monospace}
+.loadrow select{background:#0a0f16; border:1px solid var(--line); color:var(--ink); border-radius:6px; padding:5px 4px; font-size:11px; font-family:inherit; flex:1; min-width:60px}
+.rmgrid{display:grid; grid-template-columns:repeat(4,1fr); gap:3px; margin-top:5px}
+.rmcell{background:#0e1620; border:1px solid var(--line); border-radius:5px; padding:4px 2px; text-align:center; font-family:'IBM Plex Mono',monospace}
+.rmcell b{display:block; font-size:12px; color:var(--ink)} .rmcell span{font-size:9px; color:var(--dim2)}
+.rmcell.hero{border-color:var(--accent-dim); background:#0d2027} .rmcell.hero b{color:var(--accent)}
+.warn{color:var(--warn)} .bad{color:var(--hi)} .good{color:var(--good)}
+#drawer.collapsed{width:0; border-left:0; overflow:hidden}
+.drawerhd{display:flex; align-items:center; gap:8px; padding:9px 12px; border-bottom:1px solid var(--line)}
+.drawerhd b{font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--dim)}
+.drawerbody{flex:1; overflow:auto; padding:10px 12px; display:flex; flex-direction:column; gap:14px}
+.dsec h4{margin:0 0 6px; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--accent-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+table.rep{width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:11px}
+table.rep th,table.rep td{border:1px solid var(--line); padding:3px 4px; text-align:right}
+table.rep th{color:var(--dim2); font-weight:500; background:#0e1620}
+table.rep td:first-child,table.rep th:first-child{text-align:left; color:var(--accent); cursor:pointer}
+table.rep tr.reprow{cursor:pointer}
+table.rep tr.reprow:hover td{background:#131d29}
+table.rep tr.reprow.sel td{background:#123039; box-shadow:inset 0 0 0 1px var(--accent-dim)}
+table.rep td.flag{color:var(--warn)}
+table.rep td.bad{color:var(--hi)}
+.muted{color:var(--dim2); font-size:11px; line-height:1.5}
+.angles{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); line-height:1.7}
+.angles b{color:var(--ink)}
+.notelist{display:flex; flex-direction:column; gap:4px}
+.noteitem{display:flex; align-items:center; gap:6px; font-size:11px; background:#0e1620; border:1px solid var(--line); border-radius:6px; padding:4px 7px}
+.noteitem .t{font-family:'IBM Plex Mono',monospace; color:var(--accent); cursor:pointer}
+.noteitem .x{margin-left:auto; color:var(--dim2); cursor:pointer}
+.notadd{display:flex; gap:5px}
+.notadd input{flex:1; background:#0a0f16; border:1px solid var(--line); color:var(--ink); border-radius:6px; padding:5px 7px; font-size:12px; font-family:inherit}
+
+.univ{display:flex; align-items:center; gap:11px; padding:10px 14px; border-top:1px solid var(--line); background:linear-gradient(180deg,#0e151f,#0a0f16); flex-wrap:wrap}
+.univ .group{display:flex; align-items:center; gap:7px}
+.univ .divider{width:1px; height:26px; background:var(--line)}
+.univ .master-seek{flex:1 1 200px; min-width:150px; display:flex; align-items:center; gap:9px}
+.univ label.mini{font-size:10px; color:var(--dim2); text-transform:uppercase; letter-spacing:1px}
+input[type=range]{-webkit-appearance:none; appearance:none; height:5px; border-radius:5px; background:#22303f; outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none; width:15px; height:15px; border-radius:50%; background:var(--accent); border:2px solid #0a0f16; cursor:pointer; box-shadow:0 0 6px var(--accent-dim)}
+.pill{font-size:10px; padding:2px 8px; border-radius:20px; letter-spacing:1px; text-transform:uppercase; border:1px solid var(--line); color:var(--dim2)}
+.speedbadge{font-size:11px; color:var(--accent); min-width:44px; text-align:center; font-weight:600}
+.hint{position:fixed; bottom:78px; left:50%; transform:translateX(-50%); z-index:40; background:#0e1620ee; border:1px solid var(--accent-dim);
+  color:var(--ink); padding:9px 16px; border-radius:10px; font-size:13px; opacity:0; transition:opacity .3s; pointer-events:none; box-shadow:0 6px 30px #000a; max-width:82vw; text-align:center; line-height:1.7}
+.hint.show{opacity:1}
+kbd{font-family:'IBM Plex Mono',monospace; background:#1a2534; border:1px solid var(--line); border-bottom-width:2px; border-radius:5px; padding:1px 6px; font-size:11px; color:var(--accent)}
+#busy{position:fixed; inset:0; z-index:60; background:#05080ccc; display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px; backdrop-filter:blur(3px)}
+#busy.on{display:flex}
+#busy .bar{width:260px; height:6px; background:#1b2734; border-radius:4px; overflow:hidden}
+#busy .bar i{display:block; height:100%; width:0; background:var(--accent); transition:width .15s}
+@media (max-width:820px){ .stage{grid-template-columns:1fr; grid-template-rows:1fr 1fr} #drawer{width:250px} }
+</style>
+</head>
+<body class="view-side solo-A">
+<div id="app">
+  <header>
+    <div class="brand"><b>FORM REVIEW</b><span>coach</span></div>
+    <div class="seg" id="viewSeg">
+      <button data-view="solo" title="One clip only (1)">◧ Solo</button>
+      <button data-view="side" class="on" title="Side by side (2)">▮▮ Side</button>
+      <button data-view="stack" title="Stacked portrait 9:16 — phone screen-recording (3)">⬒ Stack</button>
+      <button data-view="overlay" title="Onion-skin: superimpose both clips (4)">◉ Overlay</button>
+    </div>
+    <div class="seg" id="soloPick" title="Which clip to work on"><button data-solo="A" class="on">Left</button><button data-solo="B">Right</button></div>
+    <div class="spacer"></div>
+    <button class="btn auto" id="autoAll" title="Scan clip(s): motion + pose, then auto-trim, auto-sync and auto-detect reps">⚡ Analyse</button>
+    <button class="btn ghost" id="snapBtn" title="Save current view as PNG">⤓ Snapshot</button>
+    <button class="btn ghost dual-only" id="swapBtn" title="Swap left / right">⇄ Swap</button>
+    <button class="btn ghost" id="drawerBtn" title="Toggle telemetry panel">▤ Panel</button>
+    <button class="btn ghost" id="helpBtn" title="Shortcuts">? Keys</button>
+  </header>
+
+  <div class="bodyrow">
+    <div id="rail">
+      <button class="railbtn on" data-tool="move" title="Move / interact (V)">✥<small>Move</small></button>
+      <button class="railbtn" data-tool="anno" title="Annotate (A)">✎<small>Draw</small></button>
+      <button class="railbtn" data-tool="path" title="Bar path (B)">◍<small>Path</small></button>
+      <button class="railbtn" data-tool="rep" title="Rep speed / tempo (T)">⏱<small>Reps</small></button>
+      <button class="railbtn" data-tool="pose" title="Pose skeleton + joint angles (P)">⛷<small>Pose</small></button>
+    </div>
+
+    <div id="work">
+      <div id="toolbar">
+        <div class="tbpanel on" data-tb="move"><span class="lbl">Move</span>
+          <span class="muted">Drag the filmstrip to scrub · drag the yellow handles to trim. Hit <b>⚡ Analyse</b> to auto-trim, auto-sync and count reps.</span></div>
+
+        <div class="tbpanel" data-tb="anno">
+          <span class="lbl">Draw</span>
+          <button class="tool on" data-atool="line" title="Line — straight reference line (default)">╱</button>
+          <button class="tool" data-atool="pen" title="Pencil — freehand">✎</button>
+          <button class="tool" data-atool="blur" title="Blur — hide a face, logo or bystander (follows playback)">◌</button>
+          <button class="tool" data-atool="arrow" title="Arrow">➔</button>
+          <button class="tool" data-atool="highlight" title="Highlighter">▰</button>
+          <span class="sep"></span>
+          <span class="swatch on" data-color="#ff4136" style="background:#ff4136"></span>
+          <span class="swatch" data-color="#33e1ed" style="background:#33e1ed"></span>
+          <span class="swatch" data-color="#ffb400" style="background:#ffb400"></span>
+          <span class="swatch" data-color="#2ecc71" style="background:#2ecc71"></span>
+          <span class="swatch" data-color="#ffffff" style="background:#ffffff"></span>
+          <span class="sep"></span>
+          <span class="lbl">Muscle</span>
+          <select class="btn" id="muscleSel" title="Highlights the region between the tracked joints — follows the movement">
+            <optgroup label="Arms"><option value="upperarm">Biceps / triceps</option><option value="forearm">Forearm</option><option value="delt">Delts</option></optgroup>
+            <optgroup label="Legs"><option value="thigh">Quads / hams</option><option value="calf">Calves</option><option value="glute">Glutes</option></optgroup>
+            <optgroup label="Torso"><option value="chest">Chest</option><option value="lat">Lats / back</option><option value="abs">Abs</option></optgroup>
+          </select>
+          <select class="btn" id="muscleSide"><option value="both">Both</option><option value="l">L side</option><option value="r">R side</option></select>
+          <button class="btn auto" data-muscle="A" data-for="A">⚡ Paint <span data-side="A"></span></button>
+          <button class="btn auto" data-muscle="B" data-for="B">⚡ Paint <span data-side="B"></span></button>
+          <span class="sep side-sep"></span>
+          <button class="btn" data-clear="A" data-for="A">Clear <span data-side="A"></span></button>
+          <button class="btn" data-clear="B" data-for="B">Clear <span data-side="B"></span></button>
+        </div>
+
+        <div class="tbpanel" data-tb="path">
+          <span class="lbl">Bar path</span>
+          <button class="btn auto" data-autopath="A" data-for="A">⚡ Auto <span data-side="A"></span></button>
+          <button class="btn auto" data-autopath="B" data-for="B">⚡ Auto <span data-side="B"></span></button>
+          <span class="sep"></span>
+          <span class="muted">Or pause and click the bar frame by frame.</span>
+          <span class="sep"></span>
+          <button class="btn" data-pathundo="A" data-for="A">↶ <span data-side="A"></span></button>
+          <button class="btn" data-pathclear="A" data-for="A">Clear <span data-side="A"></span></button>
+          <button class="btn" data-pathundo="B" data-for="B">↶ <span data-side="B"></span></button>
+          <button class="btn" data-pathclear="B" data-for="B">Clear <span data-side="B"></span></button>
+        </div>
+
+        <div class="tbpanel" data-tb="rep">
+          <span class="lbl">Reps</span>
+          <button class="btn auto" id="repAuto">⚡ Auto-detect</button>
+          <button class="btn" id="repCalc" title="Recompute from current marks / signals">∑ Calc</button>
+          <span class="sep"></span>
+          <span class="lbl">Movement starts</span>
+          <select class="btn" id="repFirst" title="Does the clip start with the weight going down (eccentric) or up (concentric)?">
+            <option value="ecc">Going down</option><option value="con">Going up</option></select>
+          <span class="lbl">Flag if slower than rep 1 by</span>
+          <select class="btn" id="repTol"><option value="0.15">15%</option><option value="0.25" selected>25%</option><option value="0.4">40%</option></select>
+          <span class="sep"></span>
+          <span class="lbl" title="A turnaround is where the weight changes direction — bottom of a squat, top of a curl">Direction change</span>
+          <button class="btn" data-mark="A" data-for="A" title="Mark where the weight changes direction ( [ )">⟳ Mark <span data-side="A"></span></button>
+          <button class="btn" data-mark="B" data-for="B" title="Mark where the weight changes direction ( ] )">⟳ Mark <span data-side="B"></span></button>
+          <button class="btn" data-repclear="A" data-for="A">Clear <span data-side="A"></span></button>
+          <button class="btn" data-repclear="B" data-for="B">Clear <span data-side="B"></span></button>
+          <span class="sep"></span>
+          <button class="btn" data-cal="A" data-for="A" title="Draw a line of known length for m/s">⟺ Cal <span data-side="A"></span></button>
+          <button class="btn" data-cal="B" data-for="B" title="Draw a line of known length for m/s">⟺ Cal <span data-side="B"></span></button>
+        </div>
+
+        <div class="tbpanel" data-tb="pose">
+          <span class="lbl">Pose</span>
+          <button class="btn" id="poseToggle" title="Track skeleton live during playback (needs internet on first use)">▶ Track live</button>
+          <button class="btn auto" id="poseScan" title="Scan the whole clip and record pose for every frame">⚡ Scan clip</button>
+          <span class="sep"></span>
+          <span class="lbl">Accuracy</span>
+          <select class="btn" id="poseModel" title="Heavy is the most accurate; lite is fastest">
+            <option value="heavy" selected>Heavy (best)</option><option value="full">Full</option><option value="lite">Lite (fast)</option>
+          </select>
+          <label class="muted" title="Averages landmarks across frames to kill jitter"><input type="checkbox" id="poseSmooth" checked> smooth</label>
+          <label class="muted"><input type="checkbox" id="poseSkeleton" checked> show skeleton</label>
+          <label class="muted"><input type="checkbox" id="poseAngles" checked> joint angles</label>
+          <span class="sep"></span>
+          <span class="lbl">Track joint</span>
+          <select class="btn" id="poseJoint"><option value="wrist">Wrist</option><option value="hip">Hip</option><option value="shoulder">Shoulder</option><option value="ankle">Ankle</option></select>
+          <span class="muted" id="poseStatus">idle</span>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="pane" data-pane="A">
+          <div class="vwrap">
+            <span class="label" data-panelabel="A">A</span>
+            <div class="srcwrap" data-src="A">
+              <button class="srcbtn" title="Source options">⚙</button>
+              <div class="srcmenu">
+                <button class="btn" data-load="A">⤴ Load / replace…</button>
+                <div class="row"><span>Mirror (flip)</span><button class="btn sq" data-mirror="A">⇋</button></div>
+                <div class="row"><span>Frame rate (fps)</span><input type="number" data-fps="A" value="30" min="1" max="240" step="1"></div>
+                <div class="row"><span>Trim</span><button class="btn sq" data-trimreset="A" title="Reset trim">⟲</button></div>
+              </div>
+            </div>
+            <video data-pane="A" playsinline></video>
+            <canvas class="draw" data-pane="A"></canvas>
+            <div class="dropzone" data-pane="A"><div class="big">Drop a video here</div><div>or</div><button class="btn" data-load="A">Choose file…</button></div>
+          </div>
+          <div class="transport" data-pane="A">
+            <button class="btn sq" data-act="fprev" title="Frame back">⏴|</button>
+            <button class="btn sq" data-act="play" title="Play / pause">▶</button>
+            <button class="btn sq" data-act="fnext" title="Frame forward">|⏵</button>
+            <div class="timeline" data-timeline="A">
+              <div class="tshade left"></div><div class="tshade right"></div>
+              <div class="tplayhead"></div>
+              <div class="thandle" data-handle="start" style="left:0%"></div>
+              <div class="thandle" data-handle="end" style="left:100%"></div>
+            </div>
+            <span class="time mono" data-act="time">0:00.00 / 0:00.00</span>
+            <select class="btn" data-act="rate" title="Speed">
+              <option value="0.1">0.1×</option><option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pane" data-pane="B">
+          <div class="vwrap">
+            <span class="label" data-panelabel="B">B</span>
+            <div class="srcwrap" data-src="B">
+              <button class="srcbtn" title="Source options">⚙</button>
+              <div class="srcmenu">
+                <button class="btn" data-load="B">⤴ Load / replace…</button>
+                <div class="row"><span>Mirror (flip)</span><button class="btn sq" data-mirror="B">⇋</button></div>
+                <div class="row"><span>Frame rate (fps)</span><input type="number" data-fps="B" value="30" min="1" max="240" step="1"></div>
+                <div class="row"><span>Trim</span><button class="btn sq" data-trimreset="B" title="Reset trim">⟲</button></div>
+              </div>
+            </div>
+            <video data-pane="B" playsinline></video>
+            <canvas class="draw" data-pane="B"></canvas>
+            <div class="dropzone" data-pane="B"><div class="big">Drop a video here</div><div>or</div><button class="btn" data-load="B">Choose file…</button></div>
+          </div>
+          <div class="transport" data-pane="B">
+            <button class="btn sq" data-act="fprev" title="Frame back">⏴|</button>
+            <button class="btn sq" data-act="play" title="Play / pause">▶</button>
+            <button class="btn sq" data-act="fnext" title="Frame forward">|⏵</button>
+            <div class="timeline" data-timeline="B">
+              <div class="tshade left"></div><div class="tshade right"></div>
+              <div class="tplayhead"></div>
+              <div class="thandle" data-handle="start" style="left:0%"></div>
+              <div class="thandle" data-handle="end" style="left:100%"></div>
+            </div>
+            <span class="time mono" data-act="time">0:00.00 / 0:00.00</span>
+            <select class="btn" data-act="rate" title="Speed">
+              <option value="0.1">0.1×</option><option value="0.25">0.25×</option><option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="overlayWrap">
+        <div class="ovtools">
+          <span class="lbl">Overlay</span><span class="lbl">B opacity</span>
+          <input type="range" id="ovOpacity" min="0" max="100" value="50" style="width:140px">
+          <label class="muted"><input type="checkbox" id="ovDiff"> difference blend</label>
+          <span class="muted">Identical motion cancels to black — drift lights up.</span>
+        </div>
+        <div id="ovStage"><canvas id="ovCanvas"></canvas></div>
+      </div>
+    </div>
+
+    <div id="drawer">
+      <div class="drawerhd"><b>Telemetry</b><span style="flex:1"></span><button class="btn ghost sq" id="drawerClose">✕</button></div>
+      <div class="drawerbody">
+        <div class="dsec"><h4 data-hd="repA">Reps · Left</h4>
+          <div id="repTableA"><span class="muted">Hit ⚡ Analyse.</span></div>
+          <canvas class="repchart" data-chart="A"></canvas>
+          <div class="rirbox" id="rirA"><span class="muted">Rep-speed chart and RIR estimate appear once reps are detected.</span></div>
+          <div class="loadrow">
+            <input type="number" data-weight="A" placeholder="weight" min="0" step="0.5">
+            <select data-unit="A"><option value="kg">kg</option><option value="lb">lb</option></select>
+            <select data-ex="A">
+              <option value="squat">Squat</option><option value="bench">Bench</option><option value="dead">Deadlift</option>
+              <option value="row">Row / pull</option><option value="iso">Curl / isolation</option><option value="gen" selected>Generic</option>
+            </select>
+          </div>
+          <div id="rmA"></div>
+        </div>
+        <div class="dsec"><h4 data-hd="repB">Reps · Right</h4>
+          <div id="repTableB"><span class="muted">—</span></div>
+          <canvas class="repchart" data-chart="B"></canvas>
+          <div class="rirbox" id="rirB"><span class="muted">—</span></div>
+          <div class="loadrow">
+            <input type="number" data-weight="B" placeholder="weight" min="0" step="0.5">
+            <select data-unit="B"><option value="kg">kg</option><option value="lb">lb</option></select>
+            <select data-ex="B">
+              <option value="squat">Squat</option><option value="bench">Bench</option><option value="dead">Deadlift</option>
+              <option value="row">Row / pull</option><option value="iso">Curl / isolation</option><option value="gen" selected>Generic</option>
+            </select>
+          </div>
+          <div id="rmB"></div>
+        </div>
+        <div class="dsec"><h4>Joint angles (live)</h4><div class="angles" id="poseReadout"><span class="muted">Track or scan pose to see angles.</span></div></div>
+        <div class="dsec"><h4 data-hd="noteA">Notes · A</h4><div class="notelist" id="notesA"></div>
+          <div class="notadd"><input data-noteinput="A" placeholder="Cue at current time…"><button class="btn" data-noteadd="A">+</button></div></div>
+        <div class="dsec"><h4 data-hd="noteB">Notes · B</h4><div class="notelist" id="notesB"></div>
+          <div class="notadd"><input data-noteinput="B" placeholder="Cue at current time…"><button class="btn" data-noteadd="B">+</button></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="univ">
+    <div class="group">
+      <button class="btn" id="uPlay" title="Play/pause (Space)">▶ Play</button>
+      <button class="btn sq" id="uFprev" title="Frame back (,)">⏴|</button>
+      <button class="btn sq" id="uFnext" title="Frame forward (.)">|⏵</button>
+      <button class="btn sq" id="uRestart" title="Restart (R)">⟲</button>
+    </div>
+    <div class="divider"></div>
+    <div class="master-seek"><label class="mini">Master</label><input type="range" id="uSeek" min="0" max="1000" value="0" step="1"></div>
+    <div class="divider"></div>
+    <div class="group"><label class="mini">Speed</label><input type="range" id="uRate" min="0.1" max="2" step="0.05" value="1" style="width:100px"><span class="speedbadge mono" id="uRateVal">1.00×</span></div>
+    <div class="divider" id="syncDivider"></div>
+    <div class="group" id="syncGroup">
+      <button class="btn auto" id="uAutoSync" title="Align the two clips automatically by matching their motion">⚡ Auto-sync</button>
+      <button class="btn" id="uLink" title="Master moves both, keeping the offset (L)">🔗 Link: OFF</button>
+      <button class="btn" id="uSync" title="Set current frames as aligned (S)">⛓ Set</button>
+      <span class="pill mono" id="uOffset">offset 0.00s</span>
+    </div>
+    <div class="divider"></div>
+    <div class="group">
+      <button class="btn sq" id="repPrev" title="Previous rep (←)">◀</button>
+      <span class="pill mono" id="repNow">rep –</span>
+      <button class="btn sq" id="repNext" title="Next rep (→)">▶</button>
+      <button class="btn" id="repLoop" title="Loop the current rep">↻ Rep</button>
+      <button class="btn" id="uLoopClear" title="Clear loop">✕</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="filePick" accept="video/*" style="display:none">
+<div class="hint" id="hint"></div>
+<div id="busy"><div id="busyMsg">Working…</div><div class="bar"><i id="busyBar"></i></div></div>
+
+<script>
+/* ============================== state ============================== */
+const V = {
+  A:{ video:null,canvas:null,ctx:null,url:null,name:'',fps:30,mirrored:false,strokes:[],cur:null,path:[],marks:[],
+      scale:null,notes:[],pose:null,smooth:null,lastPoseT:null,series:[],motion:null,reps:[],trim:{start:0,end:null} },
+  B:{ video:null,canvas:null,ctx:null,url:null,name:'',fps:30,mirrored:false,strokes:[],cur:null,path:[],marks:[],
+      scale:null,notes:[],pose:null,smooth:null,lastPoseT:null,series:[],motion:null,reps:[],trim:{start:0,end:null} },
+};
+const anno={ tool:'line', color:'#ff4136' };
+let tool='move', view='side', soloPane='A';
+let linked=false, syncOffset=0, pickTarget='A';
+let loop={a:null,b:null,on:false};
+let calibrating=null, repCursor=-1;
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+for(const k of ['A','B']){ V[k].video=document.querySelector(`video[data-pane="${k}"]`); V[k].canvas=document.querySelector(`canvas[data-pane="${k}"]`); V[k].ctx=V[k].canvas.getContext('2d'); }
+
+/* ============================== helpers ============================== */
+function fmt(t){ if(!isFinite(t)||t<0)t=0; const m=Math.floor(t/60),s=Math.floor(t%60),cs=Math.floor((t*100)%100); return `${m}:${String(s).padStart(2,'0')}.${String(cs).padStart(2,'0')}`; }
+function toast(msg){ const h=$('#hint'); h.innerHTML=msg; h.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>h.classList.remove('show'),2600); }
+function loaded(p){ return !!V[p].url; }
+function panes(){ return ['A','B'].filter(loaded); }
+function activePanes(){ return view==='solo' ? (loaded(soloPane)?[soloPane]:[]) : panes(); }
+function sideName(p){ return p==='A'?'Left':'Right'; }
+function paneName(p){ return V[p].name || sideName(p); }
+function busy(on,msg,pct){ const b=$('#busy'); b.classList.toggle('on',!!on); if(msg)$('#busyMsg').textContent=msg; $('#busyBar').style.width=((pct||0)*100)+'%'; }
+function seekTo(v,t){ return new Promise(res=>{ let done=false; const h=()=>{ if(done)return; done=true; v.removeEventListener('seeked',h); res(); };
+  v.addEventListener('seeked',h); try{ v.currentTime=t; }catch(e){ h(); } setTimeout(h,300); }); }
+
+/* trim: end===null means "to the real end" — never freeze a duration that may still be wrong */
+function trimOf(p){ const t=V[p].trim, d=V[p].video.duration, dur=(isFinite(d)&&d>0)?d:1e9;
+  const s=Math.max(0,(t&&isFinite(t.start))?t.start:0);
+  let e=(t&&t.end!=null&&isFinite(t.end))?t.end:dur; if(e>dur)e=dur; if(e<=s)e=dur; return {s,e}; }
+function clampTime(p,t){ const {s,e}=trimOf(p); return Math.min(e,Math.max(s,t)); }
+
+/* ============================== loading ============================== */
+$('#filePick').addEventListener('change', e=>{ const f=e.target.files[0]; if(f) loadFile(pickTarget,f); e.target.value=''; });
+$$('[data-load]').forEach(b=>b.addEventListener('click', ()=>{ pickTarget=b.dataset.load; $('#filePick').click(); closeSrcMenus(); }));
+function loadFile(pane,file){
+  if(!file.type.startsWith('video/')){ toast('Not a video file'); return; }
+  const st=V[pane]; if(st.url) URL.revokeObjectURL(st.url);
+  st.url=URL.createObjectURL(file); st.name=file.name.replace(/\.[^.]+$/,'');
+  st.video.src=st.url; st.video.load();
+  st.strokes=[]; st.path=[]; st.marks=[]; st.scale=null; st.series=[]; st.motion=null; st.reps=[]; st.notes=[];
+  st.pose=null; st.smooth=null; st.lastPoseT=null;
+  st.trim={start:0,end:null};
+  redraw(pane); renderNotes(pane); renderReps(pane);
+  document.querySelector(`.dropzone[data-pane="${pane}"]`).classList.add('hidden');
+  st.video.addEventListener('loadedmetadata', ()=>{ sizeCanvas(pane); updateTime(pane); updateTrimVisual(pane); onDurationKnown(pane); },{once:true});
+  refreshPaneNames(); toast(`Loaded ${st.name} into ${pane}`);
+}
+function onDurationKnown(pane){ const v=V[pane].video, ready=()=>isFinite(v.duration)&&v.duration>0;
+  if(ready()){ buildFilmstrip(pane); updateTrimVisual(pane); return; }
+  const h=()=>{ if(ready()){ v.removeEventListener('durationchange',h); try{v.currentTime=0;}catch(e){} buildFilmstrip(pane); updateTrimVisual(pane); } };
+  v.addEventListener('durationchange',h);
+  setTimeout(()=>{ if(!ready()&&V[pane].url){ try{ v.currentTime=1e6; }catch(e){} } },400); }
+function refreshPaneNames(){ ['A','B'].forEach(p=>{
+  const solo=(view==='solo'), side=sideName(p), nm=V[p].name;
+  const lab=document.querySelector(`[data-panelabel="${p}"]`);
+  if(lab) lab.textContent = solo ? (nm||side) : (nm?`${side.toUpperCase()} · ${nm}`:side.toUpperCase());
+  const head=nm?`${side} · ${nm}`:side;
+  const rh=document.querySelector(`[data-hd="rep${p}"]`); if(rh) rh.textContent=`Reps · ${head}`;
+  const nh=document.querySelector(`[data-hd="note${p}"]`); if(nh) nh.textContent=`Notes · ${head}`;
+  // in solo the side word is redundant — buttons just read "Clear", "Mark", …
+  document.querySelectorAll(`[data-side="${p}"]`).forEach(s=>{ s.textContent = solo ? '' : side; });
+}); }
+$$('.pane').forEach(p=>{ const pane=p.dataset.pane;
+  p.addEventListener('dragover', e=>{ e.preventDefault(); p.classList.add('dragover'); });
+  p.addEventListener('dragleave', e=>{ if(e.target===p) p.classList.remove('dragover'); });
+  p.addEventListener('drop', e=>{ e.preventDefault(); p.classList.remove('dragover'); const f=e.dataTransfer.files[0]; if(f) loadFile(pane,f); }); });
+
+function closeSrcMenus(){ $$('.srcmenu').forEach(m=>m.classList.remove('open')); }
+$$('.srcwrap').forEach(w=>{ const pane=w.dataset.src, menu=w.querySelector('.srcmenu');
+  w.querySelector('.srcbtn').addEventListener('click', e=>{ e.stopPropagation(); const was=menu.classList.contains('open'); closeSrcMenus(); menu.classList.toggle('open',!was); });
+  menu.addEventListener('click', e=>e.stopPropagation());
+  w.querySelector(`[data-mirror="${pane}"]`).addEventListener('click', e=>{ V[pane].mirrored=!V[pane].mirrored; V[pane].video.classList.toggle('mirror',V[pane].mirrored); e.currentTarget.classList.toggle('on',V[pane].mirrored); });
+  w.querySelector(`[data-fps="${pane}"]`).addEventListener('change', e=>{ V[pane].fps=Math.max(1,parseFloat(e.target.value)||30); });
+  w.querySelector(`[data-trimreset="${pane}"]`).addEventListener('click', ()=>{ if(!loaded(pane))return; V[pane].trim={start:0,end:null}; updateTrimVisual(pane); toast(`${paneName(pane)} trim reset`); }); });
+document.addEventListener('click', closeSrcMenus);
+
+/* ============================== canvas ============================== */
+function videoDisplayRect(video){ const cw=video.clientWidth,ch=video.clientHeight,vw=video.videoWidth||16,vh=video.videoHeight||9;
+  const s=Math.min(cw/vw,ch/vh); return {left:(cw-vw*s)/2, top:(ch-vh*s)/2, width:vw*s, height:vh*s}; }
+function sizeCanvas(pane){ const st=V[pane]; if(!st.url) return; const r=videoDisplayRect(st.video), cv=st.canvas;
+  cv.style.left=st.video.offsetLeft+r.left+'px'; cv.style.top=st.video.offsetTop+r.top+'px';
+  cv.style.width=r.width+'px'; cv.style.height=r.height+'px'; cv.style.margin='0';
+  const dpr=window.devicePixelRatio||1; cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr));
+  st.ctx.setTransform(dpr,0,0,dpr,0,0); redraw(pane); }
+window.addEventListener('resize', ()=>{ ['A','B'].forEach(sizeCanvas); if(view==='overlay') sizeOv(); ['A','B'].forEach(drawRepChart); });
+
+function relPt(pane,e){ const r=V[pane].canvas.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height}; }
+function canvasInteractive(){ return tool==='anno'||tool==='path'||calibrating; }
+function setCanvasPointers(){ ['A','B'].forEach(p=>{ const cv=V[p].canvas; cv.style.pointerEvents=canvasInteractive()?'auto':'none'; cv.style.cursor=canvasInteractive()?'crosshair':'default'; }); }
+['A','B'].forEach(pane=>{ const cv=V[pane].canvas;
+  cv.addEventListener('pointerdown', e=>{
+    if(calibrating===pane){ V[pane].cur={cal:true,pts:[relPt(pane,e)]}; cv.setPointerCapture(e.pointerId); return; }
+    if(tool==='path'){ addPathPoint(pane,relPt(pane,e)); return; }
+    if(tool!=='anno') return;
+    cv.setPointerCapture(e.pointerId); V[pane].cur={tool:anno.tool,color:anno.color,pts:[relPt(pane,e)]};
+    V[pane].video.pause(); reflectPlay(pane); });
+  cv.addEventListener('pointermove', e=>{ const st=V[pane]; if(!st.cur) return; const p=relPt(pane,e);
+    if(st.cur.cal){ st.cur.pts[1]=p; redraw(pane,st.cur); return; }
+    if(st.cur.tool==='highlight'||st.cur.tool==='pen') st.cur.pts.push(p); else st.cur.pts[1]=p; redraw(pane,st.cur); });
+  const end=()=>{ const st=V[pane]; if(!st.cur) return;
+    if(st.cur.cal){ finishCalibration(pane,st.cur.pts); st.cur=null; redraw(pane); return; }
+    if(st.cur.pts.length>1||st.cur.tool==='pen'||st.cur.tool==='highlight') st.strokes.push(st.cur); st.cur=null; redraw(pane); };
+  cv.addEventListener('pointerup',end); cv.addEventListener('pointercancel',end); });
+
+/* Muscle regions defined by the joints they span. Not true anatomical segmentation —
+   these are the limb/torso regions between tracked landmarks, so they follow the movement. */
+const MUSCLE={
+  upperarm:{type:'seg', l:[11,13], r:[12,14], w:0.085},
+  forearm: {type:'seg', l:[13,15], r:[14,16], w:0.070},
+  delt:    {type:'blob',l:[11],    r:[12],    w:0.075},
+  thigh:   {type:'seg', l:[23,25], r:[24,26], w:0.110},
+  calf:    {type:'seg', l:[25,27], r:[26,28], w:0.080},
+  glute:   {type:'blob',l:[23],    r:[24],    w:0.095},
+  chest:   {type:'quad',pts:[11,12,24,23], shrink:0.55, top:true},
+  lat:     {type:'quad',pts:[11,12,24,23], shrink:0.85},
+  abs:     {type:'quad',pts:[11,12,24,23], shrink:0.5, bottom:true},
+};
+function muscleShape(ctx,lm,def,side,W,H){
+  const paths=[];
+  const add=(idx)=>{ if(!idx) return; const pts=idx.map(i=>lm[i]).filter(Boolean); if(pts.length!==idx.length) return; paths.push(pts); };
+  if(def.type==='seg'||def.type==='blob'){ if(side!=='r') add(def.l); if(side!=='l') add(def.r); }
+  else add(def.pts);
+  paths.forEach(pts=>{
+    if(def.type==='blob'){ const p=pts[0]; ctx.beginPath(); ctx.arc(p.x*W,p.y*H,def.w*H,0,7); ctx.fill(); return; }
+    if(def.type==='seg'){ const [a,b]=pts; ctx.save(); ctx.lineCap='round'; ctx.lineWidth=def.w*H*2;
+      ctx.beginPath(); ctx.moveTo(a.x*W,a.y*H); ctx.lineTo(b.x*W,b.y*H); ctx.strokeStyle=ctx.fillStyle; ctx.stroke(); ctx.restore(); return; }
+    // quad: torso box, optionally the upper or lower half
+    let q=pts.map(p=>({x:p.x*W,y:p.y*H}));
+    const cx=q.reduce((s,p)=>s+p.x,0)/q.length, cy=q.reduce((s,p)=>s+p.y,0)/q.length, k=def.shrink||1;
+    q=q.map(p=>({x:cx+(p.x-cx)*k, y:cy+(p.y-cy)*k}));
+    if(def.top) q=[q[0],q[1],{x:(q[1].x+q[2].x)/2,y:(q[1].y+q[2].y)/2},{x:(q[0].x+q[3].x)/2,y:(q[0].y+q[3].y)/2}];
+    if(def.bottom) q=[{x:(q[0].x+q[3].x)/2,y:(q[0].y+q[3].y)/2},{x:(q[1].x+q[2].x)/2,y:(q[1].y+q[2].y)/2},q[2],q[3]];
+    ctx.beginPath(); q.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
+  });
+}
+function drawStroke(ctx,s,W,H,src){ ctx.save(); ctx.strokeStyle=s.color; ctx.fillStyle=s.color; ctx.lineCap='round'; ctx.lineJoin='round'; const pts=s.pts;
+  if(s.tool==='blur'){
+    if(src&&src.video&&src.video.videoWidth){
+      ctx.beginPath(); const r=Math.max(16,H*(s.radius||0.06));
+      pts.forEach(p=>{ ctx.moveTo(p.x*W+r,p.y*H); ctx.arc(p.x*W,p.y*H,r,0,7); });
+      ctx.clip(); ctx.filter=`blur(${Math.max(8,Math.round(H*0.035))}px)`;
+      if(src.mirrored){ ctx.translate(W,0); ctx.scale(-1,1); }
+      ctx.drawImage(src.video,0,0,W,H); ctx.filter='none';
+    }
+    ctx.restore(); return;
+  }
+  if(s.tool==='muscle'){
+    const lm=src&&src.lm; if(!lm){ ctx.restore(); return; }
+    const def=MUSCLE[s.muscle]; if(!def){ ctx.restore(); return; }
+    ctx.globalAlpha=0.42; ctx.fillStyle=s.color; ctx.strokeStyle=s.color;
+    muscleShape(ctx,lm,def,s.side||'both',W,H);
+    ctx.restore(); return;
+  }
+  if(s.tool==='highlight'){ ctx.globalAlpha=.4; ctx.lineWidth=Math.max(14,H*.05); ctx.beginPath(); pts.forEach((p,i)=>i?ctx.lineTo(p.x*W,p.y*H):ctx.moveTo(p.x*W,p.y*H)); ctx.stroke(); }
+  else if(s.tool==='pen'){ ctx.lineWidth=Math.max(2.5,H*.006); ctx.beginPath(); pts.forEach((p,i)=>i?ctx.lineTo(p.x*W,p.y*H):ctx.moveTo(p.x*W,p.y*H)); ctx.stroke(); }
+  else if(s.tool==='line'||s.tool==='arrow'){ if(pts.length<2){ctx.restore();return;} const a=pts[0],b=pts[1]; ctx.lineWidth=Math.max(3,H*.008);
+    ctx.beginPath(); ctx.moveTo(a.x*W,a.y*H); ctx.lineTo(b.x*W,b.y*H); ctx.stroke();
+    if(s.tool==='arrow'){ const ang=Math.atan2((b.y-a.y)*H,(b.x-a.x)*W), len=Math.max(12,H*.03); ctx.beginPath();
+      ctx.moveTo(b.x*W,b.y*H); ctx.lineTo(b.x*W-len*Math.cos(ang-.4), b.y*H-len*Math.sin(ang-.4));
+      ctx.moveTo(b.x*W,b.y*H); ctx.lineTo(b.x*W-len*Math.cos(ang+.4), b.y*H-len*Math.sin(ang+.4)); ctx.stroke(); } }
+  ctx.restore(); }
+function drawPath(ctx,pane,W,H){ const pts=V[pane].path; if(!pts.length) return; ctx.save();
+  ctx.strokeStyle='#33e1ed'; ctx.lineWidth=Math.max(2,H*.005); ctx.lineJoin='round'; ctx.beginPath();
+  pts.forEach((p,i)=>i?ctx.lineTo(p.x*W,p.y*H):ctx.moveTo(p.x*W,p.y*H)); ctx.stroke();
+  if(pts.length<=40) pts.forEach(p=>{ ctx.beginPath(); ctx.fillStyle='#0a0f16'; ctx.arc(p.x*W,p.y*H,Math.max(3,H*.008),0,7); ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='#33e1ed'; ctx.stroke(); });
+  ctx.restore(); }
+const POSE_CONN=[[11,13],[13,15],[12,14],[14,16],[11,12],[23,24],[11,23],[12,24],[23,25],[25,27],[24,26],[26,28],[27,31],[28,32]];
+function drawPose(ctx,pane,W,H){ const p=V[pane].pose; if(!p||!p.lm) return; const sk=$('#poseSkeleton'); if(sk&&!sk.checked) return;
+  const lm=p.lm; ctx.save(); ctx.strokeStyle='#c77dff'; ctx.lineWidth=Math.max(2,H*.006);
+  POSE_CONN.forEach(([a,b])=>{ if(!lm[a]||!lm[b])return; ctx.beginPath(); ctx.moveTo(lm[a].x*W,lm[a].y*H); ctx.lineTo(lm[b].x*W,lm[b].y*H); ctx.stroke(); });
+  ctx.fillStyle='#fff'; lm.forEach(k=>{ if(!k)return; ctx.beginPath(); ctx.arc(k.x*W,k.y*H,Math.max(2.5,H*.006),0,7); ctx.fill(); }); ctx.restore(); }
+function drawScaleLine(ctx,pane,W,H){ const s=V[pane].scale; if(!s||!s.p0) return; ctx.save(); ctx.strokeStyle='#ffb400'; ctx.lineWidth=2; ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(s.p0.x*W,s.p0.y*H); ctx.lineTo(s.p1.x*W,s.p1.y*H); ctx.stroke(); ctx.restore(); }
+function srcOf(pane){ return { video:V[pane].video, mirrored:V[pane].mirrored, lm:V[pane].pose&&V[pane].pose.lm }; }
+/* blur + muscle strokes are frame-dependent, so a pane holding one must repaint every frame */
+function hasLiveStrokes(pane){ return V[pane].strokes.some(s=>s.tool==='blur'||s.tool==='muscle'); }
+function redraw(pane,live){ const st=V[pane]; if(!st.ctx) return; const dpr=window.devicePixelRatio||1, W=st.canvas.width/dpr, H=st.canvas.height/dpr;
+  const src=srcOf(pane);
+  st.ctx.clearRect(0,0,W,H); st.strokes.forEach(s=>drawStroke(st.ctx,s,W,H,src)); drawPath(st.ctx,pane,W,H); drawPose(st.ctx,pane,W,H); if(st.scale) drawScaleLine(st.ctx,pane,W,H);
+  if(live){ if(live.cal){ st.ctx.save(); st.ctx.strokeStyle='#ffb400'; st.ctx.lineWidth=3; st.ctx.setLineDash([6,4]);
+      if(live.pts[1]){ st.ctx.beginPath(); st.ctx.moveTo(live.pts[0].x*W,live.pts[0].y*H); st.ctx.lineTo(live.pts[1].x*W,live.pts[1].y*H); st.ctx.stroke(); } st.ctx.restore(); }
+    else drawStroke(st.ctx,live,W,H,src); } }
+
+/* ============================== timeline (scrub + trim in one) ============================== */
+async function buildFilmstrip(pane){
+  const st=V[pane], v=st.video, track=document.querySelector(`[data-timeline="${pane}"]`);
+  if(!track||!isFinite(v.duration)||v.duration<=0) return;
+  track.querySelectorAll('.thumb').forEach(n=>n.remove());
+  const N=14, dur=v.duration, was=v.currentTime, wasPaused=v.paused; v.pause();
+  const cv=document.createElement('canvas'), tw=72, th=Math.max(1,Math.round(tw*((v.videoHeight/v.videoWidth)||0.56)));
+  cv.width=tw; cv.height=th; const cx=cv.getContext('2d'); const frag=document.createDocumentFragment();
+  for(let i=0;i<N;i++){ try{ await seekTo(v,Math.min(dur-0.01,(i+0.5)/N*dur)); cx.drawImage(v,0,0,tw,th); }catch(e){}
+    const d=document.createElement('div'); d.className='thumb'; d.style.backgroundImage=`url(${cv.toDataURL('image/jpeg',0.5)})`; frag.appendChild(d); }
+  track.insertBefore(frag, track.querySelector('.tshade.left'));
+  v.currentTime=was; if(!wasPaused) v.play();
+}
+function updateTrimVisual(pane){ const v=V[pane].video, track=document.querySelector(`[data-timeline="${pane}"]`);
+  if(!track||!isFinite(v.duration)||v.duration<=0) return;
+  const {s,e}=trimOf(pane), dur=v.duration, lp=s/dur*100, rp=e/dur*100;
+  track.querySelector('[data-handle="start"]').style.left=lp+'%';
+  track.querySelector('[data-handle="end"]').style.left=rp+'%';
+  track.querySelector('.tshade.left').style.width=lp+'%';
+  track.querySelector('.tshade.right').style.width=(100-rp)+'%';
+  renderRepMarks(pane); }
+function renderRepMarks(pane){ const v=V[pane].video, track=document.querySelector(`[data-timeline="${pane}"]`); if(!track||!isFinite(v.duration)||v.duration<=0) return;
+  track.querySelectorAll('.trepmark').forEach(n=>n.remove());
+  V[pane].reps.forEach(r=>{ const d=document.createElement('div'); d.className='trepmark'; d.style.left=(r.t0/v.duration*100)+'%'; track.appendChild(d); }); }
+function updatePlayhead(pane){ const v=V[pane].video, track=document.querySelector(`[data-timeline="${pane}"]`); if(!track||!isFinite(v.duration)||v.duration<=0) return;
+  const ph=track.querySelector('.tplayhead'); if(ph) ph.style.left=(v.currentTime/v.duration*100)+'%'; }
+function setupTimeline(pane){
+  const track=document.querySelector(`[data-timeline="${pane}"]`); if(!track) return;
+  const timeAt=cx=>{ const r=track.getBoundingClientRect(); return Math.max(0,Math.min(1,(cx-r.left)/r.width))*(V[pane].video.duration||0); };
+  // trim handles
+  track.querySelectorAll('.thandle').forEach(h=>h.addEventListener('pointerdown', e=>{
+    e.preventDefault(); e.stopPropagation(); const which=h.dataset.handle;
+    V[pane].video.pause(); reflectPlay(pane);
+    const move=me=>{ const dur=V[pane].video.duration||1, minD=Math.min(0.34,dur*0.03), tr=V[pane].trim; let t=timeAt(me.clientX);
+      if(which==='start'){ t=Math.max(0,Math.min(t,trimOf(pane).e-minD)); tr.start=t; } else { t=Math.min(dur,Math.max(t,trimOf(pane).s+minD)); tr.end=t; }
+      V[pane].video.currentTime=t; updateTrimVisual(pane); };
+    const up=()=>{ document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up); };
+    document.addEventListener('pointermove',move); document.addEventListener('pointerup',up); }));
+  // scrub anywhere else on the strip
+  track.addEventListener('pointerdown', e=>{ if(e.target.classList.contains('thandle')) return; if(!loaded(pane)) return;
+    e.preventDefault(); const v=V[pane].video; const wasPaused=v.paused; v.pause();
+    const go=cx=>{ v.currentTime=clampTime(pane,timeAt(cx)); }; go(e.clientX);
+    const move=me=>go(me.clientX);
+    const up=()=>{ document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up); if(!wasPaused) v.play(); };
+    document.addEventListener('pointermove',move); document.addEventListener('pointerup',up); });
+}
+setupTimeline('A'); setupTimeline('B');
+
+/* ============================== transport ============================== */
+function frameDur(p){ return 1/(V[p].fps||30); }
+function stepFrame(p,dir){ const v=V[p].video; if(!loaded(p)) return; v.pause(); reflectPlay(p); v.currentTime=clampTime(p, v.currentTime+dir*frameDur(p)); }
+function reflectPlay(p){ const btn=document.querySelector(`.transport[data-pane="${p}"] [data-act="play"]`); btn.textContent=V[p].video.paused?'▶':'⏸'; updateUplay(); }
+$$('.transport').forEach(tr=>{ const pane=tr.dataset.pane, v=V[pane].video;
+  tr.querySelector('[data-act="play"]').addEventListener('click', ()=>{ if(!loaded(pane))return; v.paused?v.play():v.pause(); });
+  tr.querySelector('[data-act="fprev"]').addEventListener('click', ()=>stepFrame(pane,-1));
+  tr.querySelector('[data-act="fnext"]').addEventListener('click', ()=>stepFrame(pane,1));
+  tr.querySelector('[data-act="rate"]').addEventListener('change', e=>{ v.playbackRate=parseFloat(e.target.value); });
+  v.addEventListener('play',()=>reflectPlay(pane)); v.addEventListener('pause',()=>reflectPlay(pane));
+  v.addEventListener('seeked',()=>{ updateTime(pane);
+    if(v.paused){ if(poseRunning&&poseLandmarker) refreshPoseAt(pane); else if(hasLiveStrokes(pane)) redraw(pane); } }); });
+function updateTime(p){ const v=V[p].video, tr=document.querySelector(`.transport[data-pane="${p}"]`);
+  const {s,e}=trimOf(p);
+  tr.querySelector('[data-act="time"]').textContent=`${fmt(v.currentTime-s)} / ${fmt(e-s)}`;
+  updatePlayhead(p); if(p==='A'||view==='solo') updateMaster(); }
+
+/* universal */
+const uPlay=$('#uPlay');
+function updateUplay(){ const any=activePanes().some(p=>!V[p].video.paused); uPlay.innerHTML=any?'⏸ Pause':'▶ Play'; uPlay.classList.toggle('on',any); }
+uPlay.addEventListener('click', ()=>{ activePanes().some(p=>!V[p].video.paused) ? pauseAll() : playAll(); });
+function playAll(){ const ps=activePanes(); ps.forEach(p=>{ const v=V[p].video, {s,e}=trimOf(p); if(v.currentTime>=e-0.01) v.currentTime=s; });
+  if(linked&&ps.length===2) V.B.video.currentTime=clampTime('B',V.A.video.currentTime+syncOffset); ps.forEach(p=>V[p].video.play()); }
+function pauseAll(){ activePanes().forEach(p=>V[p].video.pause()); }
+$('#uFprev').addEventListener('click', ()=>activePanes().forEach(p=>stepFrame(p,-1)));
+$('#uFnext').addEventListener('click', ()=>activePanes().forEach(p=>stepFrame(p,1)));
+$('#uRestart').addEventListener('click', ()=>{ pauseAll(); const ps=activePanes(); ps.forEach(p=>V[p].video.currentTime=trimOf(p).s);
+  if(linked&&ps.length===2) V.B.video.currentTime=clampTime('B',trimOf('A').s+syncOffset); });
+const uRate=$('#uRate'), uRateVal=$('#uRateVal');
+uRate.addEventListener('input', ()=>{ const r=parseFloat(uRate.value); uRateVal.textContent=r.toFixed(2)+'×';
+  ['A','B'].forEach(p=>{ if(loaded(p)) V[p].video.playbackRate=r;
+    const sel=document.querySelector(`.transport[data-pane="${p}"] [data-act="rate"]`); const o=[...sel.options].find(o=>parseFloat(o.value)===r); if(o) sel.value=o.value; }); });
+const uSeek=$('#uSeek'), masterPane=()=>view==='solo'?soloPane:'A';
+uSeek.addEventListener('input', ()=>{ const mp=masterPane(); if(!loaded(mp)) return; const {s,e}=trimOf(mp), t=s+(uSeek.value/1000)*(e-s);
+  V[mp].video.currentTime=t; if(linked&&mp==='A'&&loaded('B')) V.B.video.currentTime=clampTime('B',t+syncOffset); });
+function updateMaster(){ const mp=masterPane(); if(!loaded(mp)) return; const {s,e}=trimOf(mp); uSeek.value=e>s?Math.round(((V[mp].video.currentTime-s)/(e-s))*1000):0; }
+$('#uLink').addEventListener('click', ()=>{ linked=!linked; $('#uLink').innerHTML='🔗 Link: '+(linked?'ON':'OFF'); $('#uLink').classList.toggle('on',linked); toast(linked?'Linked — master moves both':'Unlinked'); });
+$('#uSync').addEventListener('click', ()=>{ if(panes().length<2){ toast('Load both clips first'); return; } setOffset(V.B.video.currentTime-V.A.video.currentTime,'manual'); });
+function setOffset(off,how){ syncOffset=off; $('#uOffset').textContent=`offset ${off>=0?'+':''}${off.toFixed(2)}s`;
+  if(!linked){ linked=true; $('#uLink').innerHTML='🔗 Link: ON'; $('#uLink').classList.add('on'); }
+  toast(`Sync ${how} · B is ${off>=0?'+':''}${off.toFixed(2)}s vs A`); }
+
+/* ============================== views & tools ============================== */
+$$('#viewSeg button').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+function setView(v){ view=v; document.body.classList.remove('view-solo','view-side','view-stack','view-overlay'); document.body.classList.add('view-'+v);
+  $$('#viewSeg button').forEach(x=>x.classList.toggle('on',x.dataset.view===v));
+  refreshPaneNames(); updateRepPill();
+  setTimeout(()=>{ ['A','B'].forEach(sizeCanvas); if(v==='overlay') sizeOv(); },60); }
+$$('#soloPick button').forEach(b=>b.addEventListener('click',()=>setSolo(b.dataset.solo)));
+function setSolo(p){ soloPane=p; document.body.classList.remove('solo-A','solo-B'); document.body.classList.add('solo-'+p);
+  $$('#soloPick button').forEach(x=>x.classList.toggle('on',x.dataset.solo===p));
+  refreshPaneNames(); updateRepPill(); setTimeout(()=>['A','B'].forEach(sizeCanvas),60); }
+$$('#rail .railbtn').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+function setTool(t){ tool=t; $$('#rail .railbtn').forEach(x=>x.classList.toggle('on',x.dataset.tool===t));
+  $$('.tbpanel').forEach(p=>p.classList.toggle('on',p.dataset.tb===t)); calibrating=null; setCanvasPointers();
+  if(t==='rep') openDrawer(); setTimeout(()=>['A','B'].forEach(sizeCanvas),60); }
+$$('.tbpanel[data-tb="anno"] [data-atool]').forEach(btn=>btn.addEventListener('click',()=>{ anno.tool=btn.dataset.atool; $$('.tbpanel[data-tb="anno"] [data-atool]').forEach(b=>b.classList.toggle('on',b===btn)); }));
+$$('.tbpanel[data-tb="anno"] .swatch').forEach(sw=>sw.addEventListener('click',()=>{ anno.color=sw.dataset.color; $$('.tbpanel[data-tb="anno"] .swatch').forEach(s=>s.classList.toggle('on',s===sw)); }));
+$$('[data-clear]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.clear; V[p].strokes=[]; redraw(p); }));
+/* muscle highlight — anchored to tracked joints, so it follows the limb through the rep */
+$$('[data-muscle]').forEach(b=>b.addEventListener('click', async ()=>{ const p=b.dataset.muscle;
+  if(!loaded(p)){ toast('Load a clip first'); return; }
+  if(!(V[p].pose&&V[p].pose.lm)){ const ok=await ensurePose(p); if(!ok) return; await refreshPoseAt(p); }
+  if(!(V[p].pose&&V[p].pose.lm)){ toast('No body detected on this frame'); return; }
+  V[p].strokes.push({ tool:'muscle', muscle:$('#muscleSel').value, side:$('#muscleSide').value, color:anno.color });
+  // the highlight is anchored to landmarks, so live tracking must be on for it to follow
+  if(!poseRunning&&poseLandmarker){ poseRunning=true; $('#poseToggle').innerHTML='⏸ Tracking'; $('#poseStatus').textContent='tracking'; }
+  redraw(p); toast(`${$('#muscleSel').selectedOptions[0].text} highlighted — it tracks the movement`); }));
+
+/* ============================== bar path & calibration ============================== */
+function addPathPoint(pane,p){ const t=V[pane].video.currentTime, arr=V[pane].path;
+  const i=arr.findIndex(q=>Math.abs(q.t-t)<1e-3); if(i>=0) arr[i]={t,x:p.x,y:p.y}; else { arr.push({t,x:p.x,y:p.y}); arr.sort((a,b)=>a.t-b.t); } redraw(pane); }
+$$('[data-pathundo]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.pathundo; V[p].path.pop(); redraw(p); }));
+$$('[data-pathclear]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.pathclear; V[p].path=[]; redraw(p); }));
+$$('[data-autopath]').forEach(b=>b.addEventListener('click', async ()=>{ const p=b.dataset.autopath; if(!loaded(p)){ toast(`No clip in ${p}`); return; }
+  if(V[p].series.length<8){ const ok=await ensurePose(p); if(!ok) return; }
+  const {s,e}=trimOf(p); const src=V[p].series.filter(q=>q.t>=s&&q.t<=e);
+  if(src.length<4){ toast('Not enough tracked frames — run ⚡ Scan clip'); return; }
+  const step=Math.max(1,Math.round(src.length/160));
+  V[p].path=src.filter((_,i)=>i%step===0).map(q=>({t:q.t,x:q.x,y:q.y})); redraw(p); toast(`Auto bar path from ${V[p].path.length} tracked points`); }));
+$$('[data-cal]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.cal; calibrating=p; setCanvasPointers(); toast(`Draw a line of known length on ${paneName(p)}, then enter its real length.`); }));
+function finishCalibration(pane,pts){ calibrating=null; setCanvasPointers(); if(!pts[1]) return;
+  const m=parseFloat(prompt('Length of that line in metres? (e.g. 0.45 for a plate diameter)','0.45')); if(!m||m<=0){ toast('Calibration cancelled'); return; }
+  const r=videoDisplayRect(V[pane].video), dx=(pts[1].x-pts[0].x)*r.width, dy=(pts[1].y-pts[0].y)*r.height, px=Math.hypot(dx,dy);
+  V[pane].scale={mPerPx:m/px, p0:pts[0], p1:pts[1]}; redraw(pane); renderReps(pane); toast(`${paneName(pane)} calibrated — velocity now in m/s`); }
+
+/* ============================== signals: pose + motion ============================== */
+let poseLandmarker=null, poseRunning=false, poseModelKind=null;
+const JOINT_IDX={ wrist:[15,16], hip:[23,24], shoulder:[11,12], ankle:[27,28] };
+async function loadPoseModel(){ const want=$('#poseModel').value;
+  if(poseLandmarker&&poseModelKind===want) return true;
+  try{ $('#poseStatus').textContent='loading model…'; busy(true,`Loading ${want} pose model…`,0.15);
+    const vision=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+    const files=await vision.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+    if(poseLandmarker){ try{ poseLandmarker.close(); }catch(e){} poseLandmarker=null; }
+    poseLandmarker=await vision.PoseLandmarker.createFromOptions(files,{
+      baseOptions:{ modelAssetPath:`https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${want}/float16/1/pose_landmarker_${want}.task` },
+      runningMode:'VIDEO', numPoses:1,
+      minPoseDetectionConfidence:0.6, minPosePresenceConfidence:0.6, minTrackingConfidence:0.6 });
+    poseModelKind=want; busy(false); $('#poseStatus').textContent=want+' ready'; return true;
+  }catch(err){ busy(false); console.error(err); $('#poseStatus').textContent='model failed';
+    toast('Pose model failed to load (needs internet). Motion-based features still work.'); return false; } }
+$('#poseModel').addEventListener('change', async ()=>{ if(!poseLandmarker) return;
+  ['A','B'].forEach(p=>{ V[p].series=[]; V[p].smooth=null; }); await loadPoseModel(); toast('Model changed — re-run ⚡ Scan clip for new data'); });
+/* exponential smoothing kills the per-frame landmark jitter */
+function smoothLandmarks(p,lm){ if(!$('#poseSmooth').checked){ V[p].smooth=null; return lm; }
+  const prev=V[p].smooth; if(!prev||prev.length!==lm.length){ V[p].smooth=lm.map(k=>({...k})); return V[p].smooth; }
+  const a=0.45; const out=lm.map((k,i)=>({ ...k, x:prev[i].x+(k.x-prev[i].x)*a, y:prev[i].y+(k.y-prev[i].y)*a }));
+  V[p].smooth=out; return out; }
+/* run detection once for the current frame (used when paused / after a seek) */
+async function refreshPoseAt(pane){ if(!poseLandmarker||!loaded(pane)) return;
+  const v=V[pane].video; if(!v.videoWidth||v.readyState<2) return;
+  try{ const res=poseLandmarker.detectForVideo(v,++poseTs); const lm=res.landmarks&&res.landmarks[0];
+    V[pane].pose=lm?{lm:smoothLandmarks(pane,lm)}:null; V[pane].lastPoseT=v.currentTime; redraw(pane); }catch(e){} }
+function ang(a,b,c){ if(!a||!b||!c) return null; const ab={x:a.x-b.x,y:a.y-b.y}, cb={x:c.x-b.x,y:c.y-b.y};
+  const d=(ab.x*cb.x+ab.y*cb.y)/((Math.hypot(ab.x,ab.y)*Math.hypot(cb.x,cb.y))||1);
+  return Math.round(Math.acos(Math.max(-1,Math.min(1,d)))*180/Math.PI); }
+function sampleFromLandmarks(p,lm,t){ const idx=JOINT_IDX[$('#poseJoint').value]||JOINT_IDX.wrist;
+  const pts=[lm[idx[0]],lm[idx[1]]].filter(Boolean); if(!pts.length) return null;
+  const y=pts.reduce((s,k)=>s+k.y,0)/pts.length, x=pts.reduce((s,k)=>s+k.x,0)/pts.length;
+  return { t, x, y, a:{ elbow:avg2(ang(lm[11],lm[13],lm[15]),ang(lm[12],lm[14],lm[16])),
+                        hip:  avg2(ang(lm[11],lm[23],lm[25]),ang(lm[12],lm[24],lm[26])),
+                        knee: avg2(ang(lm[23],lm[25],lm[27]),ang(lm[24],lm[26],lm[28])) } }; }
+function avg2(a,b){ const v=[a,b].filter(x=>x!=null); return v.length?Math.round(v.reduce((s,x)=>s+x,0)/v.length):null; }
+let poseTs=0;
+function runPoseLive(){ if(!poseRunning||!poseLandmarker) return;
+  ['A','B'].forEach(p=>{ const v=V[p].video; if(!loaded(p)||!v.videoWidth||v.readyState<2) return;
+    /* Only infer when the frame actually changed. Re-running the model on a held frame
+       produced slightly different landmarks each pass — that was the "skeleton moves while paused" jitter. */
+    if(V[p].lastPoseT!=null && Math.abs(v.currentTime-V[p].lastPoseT)<1e-4) return;
+    try{ const res=poseLandmarker.detectForVideo(v, ++poseTs); const lm=res.landmarks&&res.landmarks[0];
+      V[p].pose=lm?{lm:smoothLandmarks(p,lm)}:null; V[p].lastPoseT=v.currentTime;
+      if(lm){ const s=sampleFromLandmarks(p,V[p].pose.lm,v.currentTime);
+        if(s&&(!V[p].series.length||Math.abs(V[p].series[V[p].series.length-1].t-s.t)>1e-3)){ V[p].series.push(s); V[p].series.sort((a,b)=>a.t-b.t); } }
+      redraw(p); }catch(e){} });
+  renderAngles(); }
+$('#poseToggle').addEventListener('click', async ()=>{ if(poseRunning){ poseRunning=false; $('#poseToggle').innerHTML='▶ Track live'; $('#poseStatus').textContent='paused'; return; }
+  if(!await loadPoseModel()) return; poseRunning=true; $('#poseToggle').innerHTML='⏸ Tracking'; $('#poseStatus').textContent='tracking'; openDrawer(); });
+$('#poseSkeleton').addEventListener('change', ()=>['A','B'].forEach(p=>redraw(p)));
+
+/* scan a clip: step through and record pose for the whole trimmed range */
+async function scanPose(pane){ if(!loaded(pane)) return false; if(!await loadPoseModel()) return false;
+  const v=V[pane].video, {s,e}=trimOf(pane); if(!isFinite(e-s)||e<=s) return false;
+  const wasPaused=v.paused, was=v.currentTime; v.pause();
+  const step=Math.max(1/30, (e-s)/900), N=Math.floor((e-s)/step); V[pane].series=[];
+  V[pane].smooth=null;
+  for(let i=0;i<=N;i++){ const t=Math.min(e,s+i*step); await seekTo(v,t);
+    try{ const res=poseLandmarker.detectForVideo(v,++poseTs); let lm=res.landmarks&&res.landmarks[0];
+      if(lm){ lm=smoothLandmarks(pane,lm); const smp=sampleFromLandmarks(pane,lm,t); if(smp) V[pane].series.push(smp); V[pane].pose={lm}; V[pane].lastPoseT=t; } }catch(err){}
+    if(i%6===0){ busy(true,`Scanning ${paneName(pane)} — pose…`, i/N); await new Promise(r=>setTimeout(r)); } }
+  v.currentTime=was; if(!wasPaused) v.play(); redraw(pane);
+  return V[pane].series.length>=8; }
+async function ensurePose(pane){ if(V[pane].series.length>=8) return true; busy(true,`Scanning ${paneName(pane)}…`,0);
+  const ok=await scanPose(pane); busy(false); if(!ok) toast('Pose scan produced no data — check lighting/framing, or use manual marks.'); return ok; }
+$('#poseScan').addEventListener('click', async ()=>{ const ps=activePanes(); if(!ps.length){ toast('Load a clip first'); return; }
+  for(const p of ps){ busy(true,`Scanning ${paneName(p)}…`,0); await scanPose(p); } busy(false); renderAngles(); toast('Pose scan complete'); });
+
+/* motion energy — works with no model at all (frame differencing) */
+async function scanMotion(pane){ if(!loaded(pane)) return null; const v=V[pane].video; const d=v.duration; if(!isFinite(d)||d<=0) return null;
+  const wasPaused=v.paused, was=v.currentTime; v.pause();
+  const N=Math.min(300,Math.max(60,Math.round(d*12))), cw=64, ch=Math.max(1,Math.round(cw*((v.videoHeight/v.videoWidth)||0.56)));
+  const cv=document.createElement('canvas'); cv.width=cw; cv.height=ch; const cx=cv.getContext('2d',{willReadFrequently:true});
+  let prev=null; const out=[];
+  for(let i=0;i<N;i++){ const t=(i/(N-1))*Math.max(0,d-0.02); await seekTo(v,t);
+    try{ cx.drawImage(v,0,0,cw,ch); const img=cx.getImageData(0,0,cw,ch).data;
+      const g=new Float32Array(cw*ch); for(let j=0,k=0;j<img.length;j+=4,k++) g[k]=(img[j]*0.299+img[j+1]*0.587+img[j+2]*0.114);
+      let e=0; if(prev){ for(let k=0;k<g.length;k++) e+=Math.abs(g[k]-prev[k]); e/=g.length; }
+      out.push({t, v:e}); prev=g; }catch(err){ out.push({t,v:0}); }
+    if(i%10===0){ busy(true,`Scanning ${paneName(pane)} — motion…`, i/N); await new Promise(r=>setTimeout(r)); } }
+  if(out.length) out[0].v=out.length>1?out[1].v:0;
+  v.currentTime=was; if(!wasPaused) v.play(); V[pane].motion=out; return out; }
+
+/* ============================== analysis math ============================== */
+function smoothSeries(pts,win){ if(pts.length<3||win<2) return pts.slice(); const half=Math.floor(win/2);
+  return pts.map((p,i)=>{ let s=0,n=0; for(let j=Math.max(0,i-half);j<=Math.min(pts.length-1,i+half);j++){ s+=pts[j].y; n++; } return {...p, y:s/n}; }); }
+function detectTurns(pts,sensitivity){ if(pts.length<5) return null;
+  const ys=pts.map(p=>p.y), span=Math.max(...ys)-Math.min(...ys); if(span<=0) return null;
+  const thr=span*(sensitivity||0.18); const turns=[]; let dir=0, ext=pts[0];
+  for(let i=1;i<pts.length;i++){ const p=pts[i];
+    if(dir===0){ if(Math.abs(p.y-ext.y)>=thr){ dir=Math.sign(p.y-ext.y); turns.push(ext.t); ext=p; } else if(Math.abs(p.y-ext.y)>0 && ((p.y<ext.y)&&(p.y<ext.y))) ext=p; continue; }
+    if(dir>0){ if(p.y>ext.y) ext=p; else if(ext.y-p.y>=thr){ turns.push(ext.t); dir=-1; ext=p; } }
+    else { if(p.y<ext.y) ext=p; else if(p.y-ext.y>=thr){ turns.push(ext.t); dir=1; ext=p; } } }
+  turns.push(pts[pts.length-1].t);
+  const out=turns.filter((t,i)=>i===0||t-turns[i-1]>0.08); return out.length>=2?out:null; }
+function resample(pts,key,s,e,dt){ if(!pts||!pts.length) return null; const n=Math.floor((e-s)/dt); if(n<8) return null;
+  const out=new Float64Array(n); let j=0;
+  for(let i=0;i<n;i++){ const t=s+i*dt; while(j<pts.length-2&&pts[j+1].t<t) j++;
+    const a=pts[j], b=pts[Math.min(pts.length-1,j+1)]; const va=a[key], vb=b[key];
+    out[i]=(b.t===a.t)?va:va+(vb-va)*Math.max(0,Math.min(1,(t-a.t)/(b.t-a.t))); }
+  return out; }
+function zscore(arr){ const n=arr.length; let m=0; for(let i=0;i<n;i++) m+=arr[i]; m/=n;
+  let sd=0; for(let i=0;i<n;i++) sd+=(arr[i]-m)**2; sd=Math.sqrt(sd/n)||1;
+  const o=new Float64Array(n); for(let i=0;i<n;i++) o[i]=(arr[i]-m)/sd; return o; }
+/* Best lag k (in samples) so that b[i+k] matches a[i].
+   Correlation is normalised over the overlapping window itself (not globally), so it stays in [-1,1].
+   Rep sets are periodic, so many lags score nearly the same — among near-ties we take the SMALLEST
+   shift, which keeps rep 1 aligned to rep 1 instead of rep 1 to rep 3. */
+function bestLag(a,b,minOverlap){
+  const cands=[]; const kMin=-(b.length-minOverlap), kMax=a.length-minOverlap;
+  for(let k=kMin;k<=kMax;k++){
+    const i0=Math.max(0,-k), i1=Math.min(a.length,b.length-k), n=i1-i0;
+    if(n<minOverlap) continue;
+    let sa=0,sb=0; for(let i=i0;i<i1;i++){ sa+=a[i]; sb+=b[i+k]; }
+    const ma=sa/n, mb=sb/n;
+    let num=0,da=0,db=0;
+    for(let i=i0;i<i1;i++){ const x=a[i]-ma, y=b[i+k]-mb; num+=x*y; da+=x*x; db+=y*y; }
+    const den=Math.sqrt(da*db); if(!den) continue;
+    cands.push({k, c:num/den});
+  }
+  if(!cands.length) return {k:0,c:0};
+  const top=cands.reduce((m,x)=>x.c>m.c?x:m,cands[0]);
+  const near=cands.filter(x=>x.c>=top.c-0.02);              // statistically indistinguishable matches
+  return near.reduce((m,x)=>Math.abs(x.k)<Math.abs(m.k)?x:m, near[0]);
+}
+
+/* signal used for reps/sync: pose series y if present, else motion energy */
+function signalFor(pane){ const {s,e}=trimOf(pane);
+  const ser=V[pane].series.filter(p=>p.t>=s-1e-6&&p.t<=e+1e-6);
+  if(ser.length>=8) return {pts:smoothSeries(ser,5), key:'y', src:'pose'};
+  const path=V[pane].path.slice().sort((a,b)=>a.t-b.t); if(path.length>=3) return {pts:path, key:'y', src:'bar path'};
+  if(V[pane].motion&&V[pane].motion.length>=8){ const m=V[pane].motion.filter(p=>p.t>=s-1e-6&&p.t<=e+1e-6).map(p=>({t:p.t,y:p.v}));
+    if(m.length>=8) return {pts:smoothSeries(m,5), key:'y', src:'motion'}; }
+  return null; }
+
+/* ============================== auto features ============================== */
+/* 1. auto-trim: cut idle head/tail using motion energy */
+async function autoTrim(pane){ let m=V[pane].motion; if(!m){ m=await scanMotion(pane); } if(!m||m.length<8) return false;
+  const vs=m.map(p=>p.v), lo=Math.min(...vs), hi=Math.max(...vs); if(hi-lo<=0) return false;
+  const thr=lo+(hi-lo)*0.18;
+  let i0=m.findIndex(p=>p.v>=thr), i1=-1; for(let i=m.length-1;i>=0;i--) if(m[i].v>=thr){ i1=i; break; }
+  if(i0<0||i1<0||i1<=i0) return false;
+  const pad=0.35, d=V[pane].video.duration;
+  V[pane].trim={ start:Math.max(0,m[i0].t-pad), end:Math.min(d,m[i1].t+pad) };
+  updateTrimVisual(pane); return true; }
+
+/* 2. auto-sync: cross-correlate the two motion signals */
+function autoSync(){ if(panes().length<2){ toast('Load both clips first'); return false; }
+  const dt=1/30, sa=signalFor('A'), sb=signalFor('B'); if(!sa||!sb){ toast('No signal yet — run ⚡ Analyse first'); return false; }
+  const ta=trimOf('A'), tb=trimOf('B');
+  const A=resample(sa.pts,'y',ta.s,ta.e,dt), B=resample(sb.pts,'y',tb.s,tb.e,dt);
+  if(!A||!B){ toast('Clips too short to auto-sync'); return false; }
+  const za=zscore(A), zb=zscore(B), minOv=Math.min(30,Math.floor(Math.min(za.length,zb.length)*0.5));
+  const {k,c}=bestLag(za,zb,Math.max(10,minOv));
+  const off=(tb.s - ta.s) + k*dt;
+  setOffset(off, `auto (match ${(c>0?c:0).toFixed(2)})`);
+  if(c<0.3) toast(`Auto-sync confidence is low (${c.toFixed(2)}) — check it, or use ⛓ Set manually.`);
+  V.B.video.currentTime=clampTime('B', V.A.video.currentTime+syncOffset);
+  return true; }
+$('#uAutoSync').addEventListener('click', ()=>autoSync());
+
+/* 3. rep analysis: turns -> reps + tempo/ROM/angle extremes + velocity */
+function analyzeReps(pane){ const firstEcc=$('#repFirst').value==='ecc';
+  let turns=V[pane].marks.slice(), sig=null, src='manual marks';
+  if(turns.length<2){ sig=signalFor(pane); if(sig){ const t=detectTurns(sig.pts, sig.src==='motion'?0.25:0.18); if(t){ turns=t; src='auto · '+sig.src; } } }
+  else sig=signalFor(pane);
+  if(turns.length<3){ V[pane].reps=[]; return {reps:[],src}; }
+  const segs=[]; for(let i=0;i<turns.length-1;i++) segs.push({t0:turns[i],t1:turns[i+1],dur:turns[i+1]-turns[i]});
+  const reps=[];
+  for(let i=0;i+1<segs.length;i+=2){ const s1=segs[i], s2=segs[i+1];
+    const eccS=firstEcc?s1:s2, conS=firstEcc?s2:s1;
+    const r={ i:reps.length+1, t0:s1.t0, tMid:s1.t1, t1:s2.t1, ecc:eccS.dur, con:conS.dur, total:s1.dur+s2.dur, rom:null, romM:null, vNorm:null, vel:null, ang:null };
+    if(sig){ const win=sig.pts.filter(p=>p.t>=r.t0-1e-6&&p.t<=r.t1+1e-6);
+      if(win.length>1){ const ys=win.map(p=>p.y); r.rom=Math.max(...ys)-Math.min(...ys);
+        /* velocity in normalised units/s — scale-free, so velocity LOSS works with no calibration */
+        if(conS.dur>0) r.vNorm=r.rom/conS.dur;
+        const sc=V[pane].scale; if(sc){ const rr=videoDisplayRect(V[pane].video); r.romM=r.rom*rr.height*sc.mPerPx; r.vel=r.romM/conS.dur; }
+        const withA=win.filter(p=>p.a); if(withA.length){ const pick=k=>{ const vals=withA.map(p=>p.a[k]).filter(x=>x!=null); return vals.length?{min:Math.min(...vals),max:Math.max(...vals)}:null; };
+          r.ang={ knee:pick('knee'), hip:pick('hip'), elbow:pick('elbow') }; } } }
+    reps.push(r); }
+  V[pane].reps=reps; renderRepMarks(pane); return {reps,src}; }
+
+/* ===================== velocity loss · RIR · 1RM =====================
+   Velocity loss within a set tracks proximity to failure. The loss at which a
+   trainee actually fails is exercise-specific (bench tolerates much more than squat)
+   and varies person to person — so everything here is reported as a RANGE.        */
+const EXERCISE={
+  squat:{name:'Squat', vlFail:35, mvt:0.30},
+  bench:{name:'Bench', vlFail:48, mvt:0.17},
+  dead: {name:'Deadlift', vlFail:30, mvt:0.16},
+  row:  {name:'Row / pull', vlFail:40, mvt:0.25},
+  iso:  {name:'Curl / isolation', vlFail:50, mvt:0.20},
+  gen:  {name:'Generic', vlFail:40, mvt:0.25},
+};
+function exOf(p){ const s=document.querySelector(`[data-ex="${p}"]`); return EXERCISE[s?s.value:'gen']||EXERCISE.gen; }
+function setMetrics(pane){
+  const reps=(V[pane].reps||[]).filter(r=>r.vNorm>0);
+  if(reps.length<1) return null;
+  const ref=Math.max(...reps.map(r=>r.vNorm));            // fastest rep = reference, standard VBT practice
+  const ex=exOf(pane);
+  const rows=reps.map(r=>{ const vl=(1-r.vNorm/ref)*100;
+    const f=Math.max(0,Math.min(1.25, vl/ex.vlFail));      // fraction of the way to failure
+    const rir=Math.max(0,(1-f)*6);
+    return { ...r, vl, rir }; });
+  const last=rows[rows.length-1];
+  return { rows, ref, ex, lastVL:last.vl, rirMid:last.rir,
+           rirLo:Math.max(0,Math.round(last.rir-1.5)), rirHi:Math.round(last.rir+1.5) };
+}
+/* Several accepted formulas; their spread IS the honest error bar. */
+function oneRMset(w,reps){
+  if(!(w>0)||!(reps>0)) return null;
+  const f={ Epley:w*(1+reps/30), Brzycki:(reps<37)?w*36/(37-reps):null, Lombardi:w*Math.pow(reps,0.10),
+            OConner:w*(1+0.025*reps), Wathan:100*w/(48.8+53.8*Math.exp(-0.075*reps)) };
+  const vals=Object.values(f).filter(x=>x&&isFinite(x)&&x>0); if(!vals.length) return null;
+  const sorted=vals.slice().sort((a,b)=>a-b);
+  const median=sorted.length%2?sorted[(sorted.length-1)/2]:(sorted[sorted.length/2-1]+sorted[sorted.length/2])/2;
+  return { each:f, median, lo:sorted[0], hi:sorted[sorted.length-1] };
+}
+const RMPCT={1:100,2:95,3:93,5:87,8:80,10:75,12:70};
+function renderLoad(pane){
+  const host=document.getElementById('rm'+pane); if(!host) return;
+  const w=parseFloat((document.querySelector(`[data-weight="${pane}"]`)||{}).value);
+  const unit=(document.querySelector(`[data-unit="${pane}"]`)||{}).value||'kg';
+  const m=setMetrics(pane), doneReps=(V[pane].reps||[]).length;
+  if(!(w>0)){ host.innerHTML='<span class="muted">Enter the weight used to estimate rep maxes.</span>'; return; }
+  if(!doneReps){ host.innerHTML='<span class="muted">No reps detected yet — hit ⚡ Analyse.</span>'; return; }
+  const rir=m?Math.round(m.rirMid):0;
+  const effective=doneReps+rir;                      // reps-to-failure = completed + estimated RIR
+  const est=oneRMset(w,effective); if(!est){ host.innerHTML='<span class="muted">Could not estimate.</span>'; return; }
+  const spread=(est.hi-est.lo)/est.median*100;
+  let h=`<div class="muted" style="margin-bottom:4px">${doneReps} reps @ ${w}${unit}`+
+        (m?` + ~${rir} RIR → <b>${effective}</b> reps to failure`:'')+`</div>`;
+  h+='<div class="rmgrid">';
+  h+=`<div class="rmcell hero"><b>${est.median.toFixed(1)}</b><span>1RM</span></div>`;
+  [3,5,8].forEach(n=>{ h+=`<div class="rmcell"><b>${(est.median*RMPCT[n]/100).toFixed(1)}</b><span>${n}RM</span></div>`; });
+  h+='</div><div class="rmgrid">';
+  [2,10,12].forEach(n=>{ h+=`<div class="rmcell"><b>${(est.median*RMPCT[n]/100).toFixed(1)}</b><span>${n}RM</span></div>`; });
+  h+=`<div class="rmcell"><b>${((w/est.median)*100).toFixed(0)}%</b><span>of 1RM</span></div>`;
+  h+='</div>';
+  h+=`<div class="muted" style="margin-top:5px">Formula spread ${est.lo.toFixed(1)}–${est.hi.toFixed(1)}${unit} (±${(spread/2).toFixed(0)}%)`;
+  if(effective>12) h+=` · <span class="warn">${effective} reps — estimates lose accuracy above ~12</span>`;
+  if(!m) h+=' · no velocity data, RIR not applied';
+  h+='</div>';
+  host.innerHTML=h;
+}
+function drawRepChart(pane){
+  const cv=document.querySelector(`[data-chart="${pane}"]`); if(!cv) return;
+  const wCSS=cv.clientWidth||300, hCSS=132, dpr=window.devicePixelRatio||1;
+  cv.width=Math.round(wCSS*dpr); cv.height=Math.round(hCSS*dpr);
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0);
+  c.clearRect(0,0,wCSS,hCSS); c.fillStyle='#080d14'; c.fillRect(0,0,wCSS,hCSS);
+  const m=setMetrics(pane);
+  if(!m||m.rows.length<1){ c.fillStyle='#5c7089'; c.font='11px "Chakra Petch",sans-serif'; c.textAlign='center';
+    c.fillText('No rep-speed data yet', wCSS/2, hCSS/2); return; }
+  const padL=26,padR=8,padT=12,padB=18, W=wCSS-padL-padR, H=hCSS-padT-padB;
+  // gridlines = velocity loss %
+  c.strokeStyle='#1a2634'; c.fillStyle='#5c7089'; c.font='9px "IBM Plex Mono",monospace'; c.textAlign='right'; c.lineWidth=1;
+  [0,25,50,75,100].forEach(pct=>{ const y=padT+H*(1-pct/100); c.beginPath(); c.moveTo(padL,y); c.lineTo(padL+W,y); c.stroke();
+    c.fillText(pct+'%', padL-4, y+3); });
+  // failure threshold line
+  const fy=padT+H*(1-(1-m.ex.vlFail/100));
+  c.strokeStyle='#ff413688'; c.setLineDash([4,3]); c.beginPath(); c.moveTo(padL,fy); c.lineTo(padL+W,fy); c.stroke(); c.setLineDash([]);
+  c.fillStyle='#ff4136aa'; c.textAlign='left'; c.fillText('failure zone', padL+3, fy-3);
+  // bars = velocity as % of fastest rep
+  const n=m.rows.length, bw=Math.max(4, Math.min(30, W/n*0.68)), gap=W/n;
+  m.rows.forEach((r,i)=>{ const pctV=(r.vNorm/m.ref)*100, x=padL+gap*i+(gap-bw)/2, bh=H*(pctV/100), y=padT+H-bh;
+    const col=r.rir>=4?'#2ecc71':r.rir>=2.5?'#33e1ed':r.rir>=1?'#ffb400':'#ff4136';
+    c.fillStyle=col; c.fillRect(x,y,bw,bh);
+    c.fillStyle='#8ba0b8'; c.font='9px "IBM Plex Mono",monospace'; c.textAlign='center';
+    c.fillText(String(r.i), x+bw/2, hCSS-6);
+    if(bw>=14){ c.fillStyle='#04252a'; c.font='bold 9px "IBM Plex Mono",monospace';
+      if(bh>14) c.fillText(Math.round(pctV), x+bw/2, y+11); } });
+  // velocity-loss trend
+  c.strokeStyle='#e8eef6'; c.lineWidth=1.5; c.beginPath();
+  m.rows.forEach((r,i)=>{ const x=padL+gap*i+gap/2, y=padT+H*(1-(1-r.vl/100)); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke();
+}
+function renderRIR(pane){
+  const host=document.getElementById('rir'+pane); if(!host) return;
+  const m=setMetrics(pane);
+  if(!m){ host.innerHTML='<span class="muted">Rep-speed chart and RIR estimate appear once reps are detected.</span>'; return; }
+  const col=m.rirMid>=4?'var(--good)':m.rirMid>=2.5?'var(--accent)':m.rirMid>=1?'var(--warn)':'var(--hi)';
+  const conf=m.rows.length>=3?'':' · <span class="warn">only '+m.rows.length+' rep(s) — low confidence</span>';
+  host.innerHTML=`<div class="rirbig" style="color:${col}">${m.rirLo}–${m.rirHi}</div>`+
+    `<div class="rirmeta"><b style="color:var(--ink)">RIR estimate</b> at last rep<br>`+
+    `velocity loss ${m.lastVL.toFixed(0)}% of ${m.ex.vlFail}% typical failure (${m.ex.name})${conf}<br>`+
+    `<span style="color:var(--dim2)">Estimate only — exercise- and lifter-specific.</span></div>`;
+}
+function renderSetAnalysis(pane){ drawRepChart(pane); renderRIR(pane); renderLoad(pane); }
+['A','B'].forEach(p=>{
+  const w=document.querySelector(`[data-weight="${p}"]`); if(w) w.addEventListener('input',()=>renderLoad(p));
+  const u=document.querySelector(`[data-unit="${p}"]`); if(u) u.addEventListener('change',()=>renderLoad(p));
+  const e=document.querySelector(`[data-ex="${p}"]`); if(e) e.addEventListener('change',()=>renderSetAnalysis(p));
+});
+
+function renderReps(pane){ const host=document.getElementById('repTable'+pane);
+  if(!loaded(pane)){ host.innerHTML='<span class="muted">—</span>'; renderSetAnalysis(pane); return; }
+  const {reps,src}=analyzeReps(pane);
+  if(!reps.length){ host.innerHTML='<span class="muted">No reps found. Hit <b>⚡ Analyse</b>, or mark direction changes manually with ⟳.</span>'; renderSetAnalysis(pane); return; }
+  const tol=parseFloat($('#repTol').value), base=reps[0], hasVel=reps.some(r=>r.vel!=null), hasRom=reps.some(r=>r.rom!=null);
+  const met=setMetrics(pane), vlOf=i=>met?(met.rows.find(x=>x.i===i)||{}).vl:null;
+  const hasVL=!!met;
+  let h='<table class="rep"><tr><th>Rep</th><th>Ecc</th><th>Con</th><th>Tot</th>'+(hasRom?'<th>ROM</th>':'')+(hasVL?'<th>VL</th>':'')+(hasVel?'<th>m/s</th>':'')+'</tr>';
+  reps.forEach(r=>{ const slow=base.con>0 && (r.con-base.con)/base.con > tol;
+    const romPct=(hasRom&&base.rom)?Math.round(r.rom/base.rom*100):null; const shortRom=romPct!=null&&romPct<85;
+    const vl=vlOf(r.i), deep=vl!=null&&met&&vl>=met.ex.vlFail;
+    h+=`<tr class="reprow" data-rep="${r.i}"><td>${r.i}</td><td>${r.ecc.toFixed(2)}</td>`+
+       `<td class="${slow?'flag':''}">${r.con.toFixed(2)}${slow?' ▲':''}</td><td>${r.total.toFixed(2)}</td>`+
+       (hasRom?`<td class="${shortRom?'bad':''}">${romPct!=null?romPct+'%':'–'}</td>`:'')+
+       (hasVL?`<td class="${deep?'bad':(vl>=20?'flag':'')}">${vl!=null?Math.round(vl)+'%':'–'}</td>`:'')+
+       (hasVel?`<td>${r.vel!=null?r.vel.toFixed(2):'–'}</td>`:'')+`</tr>`; });
+  const avg=reps.reduce((a,r)=>a+r.total,0)/reps.length;
+  const slowN=reps.filter(r=>base.con>0&&(r.con-base.con)/base.con>tol).length;
+  const romN=hasRom&&base.rom?reps.filter(r=>r.rom/base.rom<0.85).length:0;
+  h+=`</table><div class="muted" style="margin-top:5px">${reps.length} reps · avg ${avg.toFixed(2)}s · ${src}`+
+     (slowN?` · <span style="color:var(--warn)">${slowN} slower than rep 1 by >${Math.round(tol*100)}%</span>`:'')+
+     (romN?` · <span style="color:var(--hi)">${romN} short ROM</span>`:'')+`</div>`;
+  const ex=reps.map(r=>r.ang).filter(Boolean);
+  if(ex.length){ const agg=k=>{ const mins=ex.map(a=>a[k]&&a[k].min).filter(x=>x!=null), maxs=ex.map(a=>a[k]&&a[k].max).filter(x=>x!=null);
+      return mins.length?`${Math.min(...mins)}–${Math.max(...maxs)}°`:'–'; };
+    h+=`<div class="muted" style="margin-top:4px">knee ${agg('knee')} · hip ${agg('hip')} · elbow ${agg('elbow')}</div>`; }
+  host.innerHTML=h;
+  host.querySelectorAll('.reprow').forEach(row=>row.addEventListener('click',()=>{
+    const idx=+row.dataset.rep-1, r=V[pane].reps[idx]; if(!r) return;
+    V[pane].video.pause();
+    V[pane].video.currentTime=r.t0;                       // jump to the start of that rep
+    if(linked&&loaded('A')&&loaded('B')){ const other=pane==='A'?'B':'A';
+      V[other].video.currentTime=clampTime(other, pane==='A'? r.t0+syncOffset : r.t0-syncOffset); }
+    repCursor=idx; loop.a=r.t0; loop.b=r.t1;              // arm the loop on this rep
+    host.querySelectorAll('.reprow').forEach(x=>x.classList.toggle('sel',x===row));
+    updateRepPill(); toast(`Rep ${r.i} · ${fmt(r.t0)}–${fmt(r.t1)} — ↻ Rep loops it`); }));
+  renderSetAnalysis(pane); }
+$('#repCalc').addEventListener('click', ()=>{ ['A','B'].forEach(renderReps); openDrawer(); });
+$('#repFirst').addEventListener('change', ()=>['A','B'].forEach(renderReps));
+$('#repTol').addEventListener('change', ()=>['A','B'].forEach(renderReps));
+$('#repAuto').addEventListener('click', ()=>runAnalyse(true));
+$$('[data-mark]').forEach(b=>b.addEventListener('click',()=>markRep(b.dataset.mark)));
+$$('[data-repclear]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.repclear; V[p].marks=[]; V[p].reps=[]; renderReps(p); renderRepMarks(p); }));
+function markRep(p){ if(!loaded(p)) return; V[p].marks.push(V[p].video.currentTime); V[p].marks.sort((a,b)=>a-b);
+  toast(`${paneName(p)}: turnaround @ ${fmt(V[p].video.currentTime)} (${V[p].marks.length})`); }
+
+/* rep navigation + loop one rep */
+function repPane(){ return view==='solo'?soloPane:(V.A.reps.length?'A':(V.B.reps.length?'B':'A')); }
+function updateRepPill(){ const p=repPane(), n=V[p].reps.length; $('#repNow').textContent=n?`rep ${repCursor>=0?repCursor+1:'–'}/${n}`:'rep –'; }
+function gotoRep(d){ const p=repPane(), reps=V[p].reps; if(!reps.length){ toast('No reps detected yet — hit ⚡ Analyse'); return; }
+  repCursor=Math.max(0,Math.min(reps.length-1, repCursor<0?0:repCursor+d)); const r=reps[repCursor];
+  V[p].video.currentTime=r.t0; if(linked&&p==='A'&&loaded('B')) V.B.video.currentTime=clampTime('B',r.t0+syncOffset);
+  if(loop.on) setLoopToRep(); updateRepPill(); }
+$('#repPrev').addEventListener('click',()=>gotoRep(-1)); $('#repNext').addEventListener('click',()=>gotoRep(1));
+function setLoopToRep(){ const p=repPane(), reps=V[p].reps; if(!reps.length||repCursor<0) return false;
+  const r=reps[repCursor]; loop.a=r.t0; loop.b=r.t1; return true; }
+$('#repLoop').addEventListener('click',()=>{ const p=repPane(); if(!V[p].reps.length){ toast('No reps detected yet — hit ⚡ Analyse'); return; }
+  if(repCursor<0) repCursor=0;
+  if(loop.on){ loop.on=false; $('#repLoop').classList.remove('on'); toast('Rep loop off'); }
+  else { setLoopToRep(); loop.on=true; $('#repLoop').classList.add('on'); V[p].video.currentTime=loop.a; V[p].video.play(); toast(`Looping rep ${repCursor+1}`); }
+  updateRepPill(); });
+$('#uLoopClear').addEventListener('click',()=>{ loop={a:null,b:null,on:false}; $('#repLoop').classList.remove('on'); toast('Loop cleared'); });
+
+/* master: one button that does everything */
+async function runAnalyse(repsOnly){
+  const ps=activePanes(); if(!ps.length){ toast('Load a clip first'); return; }
+  try{
+    for(const p of ps){
+      if(!repsOnly){ busy(true,`Scanning ${paneName(p)} — motion…`,0); await scanMotion(p); busy(true,`Trimming ${paneName(p)}…`,0.5); await autoTrim(p); }
+      busy(true,`Tracking ${paneName(p)} — pose…`,0.2); await scanPose(p);
+    }
+    busy(true,'Finding reps…',0.9); ps.forEach(renderReps);
+    if(!repsOnly && ps.length===2) autoSync();
+    busy(false); openDrawer(); repCursor=-1; updateRepPill();
+    const summary=ps.map(p=>`${paneName(p)}: ${V[p].reps.length} reps`).join(' · ');
+    toast(`Analysis complete — ${summary}`);
+  }catch(err){ busy(false); console.error(err); toast('Analysis failed: '+err.message); } }
+$('#autoAll').addEventListener('click',()=>runAnalyse(false));
+
+function renderAngles(){ if(!$('#poseAngles').checked){ $('#poseReadout').innerHTML='<span class="muted">angles off</span>'; return; }
+  const rows=['A','B'].filter(loaded).map(p=>{ const lm=V[p].pose&&V[p].pose.lm; if(!lm) return `<div><b>${p}</b>: <span class="muted">no pose</span></div>`;
+    const e=avg2(ang(lm[11],lm[13],lm[15]),ang(lm[12],lm[14],lm[16])), h=avg2(ang(lm[11],lm[23],lm[25]),ang(lm[12],lm[24],lm[26])), k=avg2(ang(lm[23],lm[25],lm[27]),ang(lm[24],lm[26],lm[28]));
+    return `<div><b>${p}</b> · elbow ${e??'–'}° · hip ${h??'–'}° · knee ${k??'–'}°</div>`; });
+  $('#poseReadout').innerHTML=rows.length?rows.join(''):'<span class="muted">Load a clip.</span>'; }
+
+/* ============================== notes ============================== */
+$$('[data-noteadd]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.noteadd, inp=document.querySelector(`[data-noteinput="${p}"]`);
+  const txt=inp.value.trim(); if(!txt||!loaded(p)) return; V[p].notes.push({t:V[p].video.currentTime,txt}); V[p].notes.sort((a,b)=>a.t-b.t); inp.value=''; renderNotes(p); openDrawer(); }));
+$$('[data-noteinput]').forEach(inp=>inp.addEventListener('keydown', e=>{ if(e.key==='Enter') document.querySelector(`[data-noteadd="${inp.dataset.noteinput}"]`).click(); }));
+function renderNotes(p){ const host=document.getElementById('notes'+p); host.innerHTML='';
+  V[p].notes.forEach((n,i)=>{ const el=document.createElement('div'); el.className='noteitem';
+    el.innerHTML=`<span class="t">${fmt(n.t)}</span><span>${n.txt.replace(/</g,'&lt;')}</span><span class="x">✕</span>`;
+    el.querySelector('.t').onclick=()=>{ V[p].video.currentTime=n.t; }; el.querySelector('.x').onclick=()=>{ V[p].notes.splice(i,1); renderNotes(p); }; host.appendChild(el); }); }
+
+/* ============================== drawer / snapshot / swap ============================== */
+function openDrawer(){ $('#drawer').classList.remove('collapsed'); }
+$('#drawerBtn').addEventListener('click',()=>{ $('#drawer').classList.toggle('collapsed'); setTimeout(()=>{ ['A','B'].forEach(sizeCanvas); ['A','B'].forEach(drawRepChart); },60); });
+$('#drawerClose').addEventListener('click',()=>{ $('#drawer').classList.add('collapsed'); setTimeout(()=>['A','B'].forEach(sizeCanvas),60); });
+function paintPane(ctx,p,x,y,w,h){ const v=V[p].video; ctx.save();
+  if(V[p].mirrored){ ctx.translate(x+w,y); ctx.scale(-1,1); ctx.drawImage(v,0,0,w,h); } else ctx.drawImage(v,x,y,w,h); ctx.restore();
+  ctx.save(); ctx.translate(x,y); const src=srcOf(p); V[p].strokes.forEach(s=>drawStroke(ctx,s,w,h,src)); drawPath(ctx,p,w,h); drawPose(ctx,p,w,h); ctx.restore(); }
+$('#snapBtn').addEventListener('click',()=>{
+  if(view==='overlay'){ const a=document.createElement('a'); a.download=`formreview-overlay-${Date.now()}.png`; a.href=$('#ovCanvas').toDataURL('image/png'); a.click(); toast('Overlay snapshot saved'); return; }
+  const ready=panes().filter(p=>V[p].video.videoWidth); if(!ready.length){ toast('Load a clip first'); return; }
+  const base=880;
+  if(view==='solo'){ const p=soloPane; if(!loaded(p)||!V[p].video.videoWidth){ toast(`No clip in ${p}`); return; }
+    const v=V[p].video, w=base, h=Math.round(w*v.videoHeight/v.videoWidth);
+    const o=document.createElement('canvas'); o.width=w; o.height=h; const c=o.getContext('2d'); c.fillStyle='#05080c'; c.fillRect(0,0,w,h);
+    paintPane(c,p,0,0,w,h);
+    const a=document.createElement('a'); a.download=`formreview-${paneName(p).replace(/\s+/g,'_')}-${Date.now()}.png`; a.href=o.toDataURL('image/png'); a.click(); toast('Snapshot saved'); return; }
+  const gap=12, stack=(view==='stack');
+  const cells=['A','B'].map(p=>{ const v=V[p].video, has=loaded(p)&&v.videoWidth, vw=has?v.videoWidth:16, vh=has?v.videoHeight:9;
+    return {p,has,w:base,h:Math.round(base*vh/vw)}; });
+  let cw,ch,pos; if(stack){ cw=base; ch=cells[0].h+gap+cells[1].h; pos=[{x:0,y:0},{x:0,y:cells[0].h+gap}]; }
+  else { const H=Math.max(cells[0].h,cells[1].h); cw=base*2+gap; ch=H; pos=[{x:0,y:(H-cells[0].h)/2},{x:base+gap,y:(H-cells[1].h)/2}]; }
+  const out=document.createElement('canvas'); out.width=cw; out.height=ch; const ctx=out.getContext('2d'); ctx.fillStyle='#05080c'; ctx.fillRect(0,0,cw,ch);
+  cells.forEach((c,i)=>{ if(c.has) paintPane(ctx,c.p,pos[i].x,pos[i].y,c.w,c.h); });
+  const a=document.createElement('a'); a.download=`formreview-${Date.now()}.png`; a.href=out.toDataURL('image/png'); a.click(); toast('Snapshot saved'); });
+
+$('#swapBtn').addEventListener('click',()=>{ const a=V.A,b=V.B;
+  [a.url,b.url]=[b.url,a.url]; a.video.src=a.url||''; b.video.src=b.url||'';
+  ['name','mirrored','fps','strokes','path','marks','scale','notes','series','motion','reps','trim'].forEach(k=>{ const t=a[k]; a[k]=b[k]; b[k]=t; });
+  ['A','B'].forEach(p=>{ const has=loaded(p); document.querySelector(`.dropzone[data-pane="${p}"]`).classList.toggle('hidden',has);
+    V[p].video.classList.toggle('mirror',!!V[p].mirrored);
+    if(has) V[p].video.addEventListener('loadedmetadata',()=>{ sizeCanvas(p); updateTime(p); updateTrimVisual(p); onDurationKnown(p); },{once:true});
+    redraw(p); renderNotes(p); renderReps(p); updateTrimVisual(p); });
+  syncOffset=-syncOffset; $('#uOffset').textContent=`offset ${syncOffset>=0?'+':''}${syncOffset.toFixed(2)}s`; refreshPaneNames(); toast('Swapped A ⇄ B'); });
+
+/* ============================== overlay ============================== */
+const ovCanvas=$('#ovCanvas'), ovCtx=ovCanvas.getContext('2d');
+function sizeOv(){ const wrap=$('#ovStage'); const base=(loaded('A')&&V.A.video.videoWidth)?V.A.video:(loaded('B')?V.B.video:null);
+  const ar=base&&base.videoWidth?base.videoWidth/base.videoHeight:16/9;
+  let w=wrap.clientWidth,h=wrap.clientHeight; if(!w||!h) return; if(w/h>ar) w=h*ar; else h=w/ar;
+  const dpr=window.devicePixelRatio||1; ovCanvas.style.width=w+'px'; ovCanvas.style.height=h+'px';
+  ovCanvas.width=Math.round(w*dpr); ovCanvas.height=Math.round(h*dpr); ovCtx.setTransform(dpr,0,0,dpr,0,0); }
+function drawOverlayFrame(){ const dpr=window.devicePixelRatio||1, W=ovCanvas.width/dpr, H=ovCanvas.height/dpr; if(!W||!H) return;
+  ovCtx.clearRect(0,0,W,H); ovCtx.fillStyle='#000'; ovCtx.fillRect(0,0,W,H);
+  const put=(p,alpha,blend)=>{ const v=V[p].video; if(!loaded(p)||!v.videoWidth) return; ovCtx.save(); ovCtx.globalAlpha=alpha;
+    if(blend) ovCtx.globalCompositeOperation='difference'; if(V[p].mirrored){ ovCtx.translate(W,0); ovCtx.scale(-1,1); }
+    ovCtx.drawImage(v,0,0,W,H); ovCtx.restore(); };
+  put('A',1,false); put('B', $('#ovOpacity').value/100, $('#ovDiff').checked); }
+
+/* ============================== keyboard ============================== */
+window.addEventListener('keydown', e=>{ if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  switch(e.key){
+    case ' ': e.preventDefault(); uPlay.click(); break;
+    case ',': e.preventDefault(); $('#uFprev').click(); break;
+    case '.': e.preventDefault(); $('#uFnext').click(); break;
+    case 'ArrowLeft': e.preventDefault(); gotoRep(-1); break;
+    case 'ArrowRight': e.preventDefault(); gotoRep(1); break;
+    case 's': case 'S': $('#uSync').click(); break;
+    case 'l': case 'L': $('#uLink').click(); break;
+    case 'r': case 'R': $('#uRestart').click(); break;
+    case 'v': case 'V': setTool('move'); break;
+    case 'a': case 'A': setTool('anno'); break;
+    case 'b': case 'B': setTool('path'); break;
+    case 't': case 'T': setTool('rep'); break;
+    case 'p': case 'P': setTool('pose'); break;
+    case '1': setView('solo'); break; case '2': setView('side'); break; case '3': setView('stack'); break; case '4': setView('overlay'); break;
+    case '[': markRep('A'); break; case ']': markRep('B'); break; } });
+$('#helpBtn').addEventListener('click',()=>toast(
+  '<kbd>Space</kbd> play · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>←</kbd><kbd>→</kbd> rep · <kbd>S</kbd> sync · <kbd>L</kbd> link · <kbd>R</kbd> restart<br>'+
+  '<kbd>V</kbd>move <kbd>A</kbd>draw <kbd>B</kbd>path <kbd>T</kbd>reps <kbd>P</kbd>pose · <kbd>1</kbd>solo <kbd>2</kbd>side <kbd>3</kbd>stack <kbd>4</kbd>overlay · <kbd>[</kbd><kbd>]</kbd> mark'));
+
+/* ============================== main loop ============================== */
+function tick(){
+  ['A','B'].forEach(p=>{ if(!loaded(p)) return; updateTime(p);
+    const v=V[p].video; if(v.paused) return; const {s,e}=trimOf(p);
+    if(v.currentTime>=e-0.02){ if(loop.on&&loop.a!=null){ v.currentTime=Math.max(s,loop.a); } else { v.pause(); v.currentTime=e; } }
+    else if(v.currentTime<s-0.05) v.currentTime=s; });
+  if(loop.on&&loop.a!=null&&loop.b!=null){ const p=repPane(); if(loaded(p)&&!V[p].video.paused){ const v=V[p].video;
+      if(v.currentTime>=loop.b||v.currentTime<loop.a-0.05){ v.currentTime=loop.a; if(linked&&p==='A'&&loaded('B')) V.B.video.currentTime=clampTime('B',loop.a+syncOffset); } } }
+  if(view==='overlay') drawOverlayFrame();
+  if(poseRunning) runPoseLive();
+  /* blur / muscle overlays are tied to the current frame — repaint them while the clip runs */
+  ['A','B'].forEach(p=>{ if(loaded(p)&&!V[p].video.paused&&hasLiveStrokes(p)) redraw(p); });
+  requestAnimationFrame(tick); }
+requestAnimationFrame(tick);
+setView('side'); setSolo('A'); setTool('move'); setCanvasPointers(); refreshPaneNames(); updateRepPill();
+['A','B'].forEach(renderSetAnalysis);
+setTimeout(()=>toast('Load a clip, then hit <b>⚡ Analyse</b> — it trims, syncs and counts reps for you.'),500);
+</script>
+</body>
+</html>
