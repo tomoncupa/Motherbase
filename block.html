@@ -847,7 +847,16 @@ function placeMenu(m, x, y) {
   m.style.left = clamp(x, 6, innerWidth - m.offsetWidth - 6) + 'px';
   m.style.top = clamp(y, 6, innerHeight - m.offsetHeight - 6) + 'px';
 }
-function buildMenu(m, list) {
+/** rebuild a menu in place, so a toggle can show its new state without closing */
+function refreshMenu(m) {
+  if (!m || !m._gen) return;
+  const r = m.getBoundingClientRect();
+  m.innerHTML = '';
+  buildMenu(m, m._gen(), m._gen);
+  placeMenu(m, r.left, r.top);
+}
+function buildMenu(m, list, gen) {
+  if (gen) m._gen = gen;
   list.forEach(it => {
     if (it.sep) return m.appendChild(el('div', 'sep'));
     if (it.head) return m.appendChild(el('div', 'hd', esc(it.head)));
@@ -857,7 +866,8 @@ function buildMenu(m, list) {
       const open = () => {
         closeSub(true);
         const s = el('div', 'ctxmenu sub');
-        buildMenu(s, typeof it.sub === 'function' ? it.sub() : it.sub);
+        const gen = typeof it.sub === 'function' ? it.sub : () => it.sub;
+        buildMenu(s, gen(), gen);
         s.onmouseenter = () => clearTimeout(closeSub._t);   /* reached it — call off the close */
         s.onmouseleave = () => closeSub();
         document.body.appendChild(s);
@@ -868,7 +878,12 @@ function buildMenu(m, list) {
       d.onclick = ev => { ev.stopPropagation(); open(); };   /* click works too, for touch + impatience */
     } else {
       d.onmouseenter = () => closeSub();
-      d.onclick = () => { closeMenu(); if (it.fn) it.fn(); };
+      d.onclick = () => {
+        /* multi-select rows (days, routines in a day) stay open and show the new tick,
+           so you can set several without reopening the menu every time */
+        if (it.keepOpen) { if (it.fn) it.fn(); refreshMenu(m); return; }
+        closeMenu(); if (it.fn) it.fn();
+      };
     }
     m.appendChild(d);
   });
@@ -1374,7 +1389,7 @@ function dayMenu(v, x, y) {
         const has = v.routines || S.lanes.map(l => l.id);
         return [
           { head: 'Which routines ' + v.name + ' runs' },
-          ...S.lanes.map(L => ({ label: L.name, check: has.includes(L.id), fn: () => {
+          ...S.lanes.map(L => ({ label: L.name, check: has.includes(L.id), keepOpen: 1, fn: () => {
               snap();
               if (!v.routines) v.routines = S.lanes.map(x => x.id);
               if (v.routines.includes(L.id)) {
@@ -1387,12 +1402,13 @@ function dayMenu(v, x, y) {
       } },
     { label: 'Runs on', k: runs.length ? runs.map(d => DLET[d]).join('') : 'nothing', sub: () => [
         { head: 'Weekdays this day covers' },
-        { label: 'Every weekday (Mon–Fri)', fn: () => { snap(); [1, 2, 3, 4, 5].forEach(d => S.week[d] = v.id); render(); } },
-        { label: 'The weekend', fn: () => { snap(); [0, 6].forEach(d => S.week[d] = v.id); render(); } },
-        { label: 'Every day of the week', fn: () => { snap(); for (let d = 0; d < 7; d++) S.week[d] = v.id; render(); } },
-        { label: 'None — take it off the week', fn: () => { snap(); S.week = S.week.map(w => w === v.id ? null : w); render(); } },
+        { label: 'Every weekday (Mon–Fri)', keepOpen: 1, fn: () => { snap(); [1, 2, 3, 4, 5].forEach(d => S.week[d] = v.id); render(); } },
+        { label: 'The weekend', keepOpen: 1, fn: () => { snap(); [0, 6].forEach(d => S.week[d] = v.id); render(); } },
+        { label: 'Every day of the week', keepOpen: 1, fn: () => { snap(); for (let d = 0; d < 7; d++) S.week[d] = v.id; render(); } },
+        { label: 'None — take it off the week', keepOpen: 1, fn: () => { snap(); S.week = S.week.map(w => w === v.id ? null : w); render(); } },
         { sep: 1 },
-        ...weekOrd().map(d => ({ label: DAYS[d], check: S.week[d] === v.id,
+        ...weekOrd().map(d => ({ label: DAYS[d], check: S.week[d] === v.id, keepOpen: 1,
+          k: S.week[d] && S.week[d] !== v.id ? (variant(S.week[d]) || {}).name : '',
           fn: () => { snap(); S.week[d] = S.week[d] === v.id ? null : v.id; render(); } })),
       ] },
     { sep: 1 },
@@ -1825,7 +1841,8 @@ function laneMenu(L, x, y) {
           { label: 'Weekdays only', check: !!L.days && L.days.join('') === '0111110', fn: () => set([0, 1, 1, 1, 1, 1, 0]) },
           { label: 'Weekend only', check: !!L.days && L.days.join('') === '1000001', fn: () => set([1, 0, 0, 0, 0, 0, 1]) },
           { sep: 1 },
-          ...weekOrd().map(d => ({ label: DSHORT[d], check: !!cur[d], fn: () => { snap(); const n = cur.slice(); n[d] = n[d] ? 0 : 1; L.days = n; render(); } })),
+          ...weekOrd().map(d => ({ label: DAYS[d], check: !!cur[d], keepOpen: 1,
+          fn: () => { snap(); const n = (L.days || [1, 1, 1, 1, 1, 1, 1]).slice(); n[d] = n[d] ? 0 : 1; L.days = n; render(); } })),
         ];
       } },
     { label: 'Move left', fn: () => moveLane(L.id, -1) },
@@ -2156,10 +2173,10 @@ function blockMenu(laneId, it, x, y) {
           { head: it.daysEx ? 'Exception' : 'Following ' + L.name },
           { label: 'Follow the routine (' + daysShort(rd) + ')', check: !it.daysEx, fn: () => { snap(); it.daysEx = false; render(); } },
           { sep: 1 },
-          { label: 'Exception: every day', fn: () => setDays([1, 1, 1, 1, 1, 1, 1]) },
-          { label: 'Exception: weekdays', fn: () => setDays([0, 1, 1, 1, 1, 1, 0]) },
-          { label: 'Exception: weekend', fn: () => setDays([1, 0, 0, 0, 0, 0, 1]) },
-          ...weekOrd().map(d => ({ label: DSHORT[d], check: !!effDays(L, it)[d],
+          { label: 'Exception: every day', keepOpen: 1, fn: () => setDays([1, 1, 1, 1, 1, 1, 1]) },
+          { label: 'Exception: weekdays', keepOpen: 1, fn: () => setDays([0, 1, 1, 1, 1, 1, 0]) },
+          { label: 'Exception: weekend', keepOpen: 1, fn: () => setDays([1, 0, 0, 0, 0, 0, 1]) },
+          ...weekOrd().map(d => ({ label: DAYS[d], check: !!effDays(L, it)[d], keepOpen: 1,
             fn: () => { snap(); if (!it.daysEx) { it.days = rd.slice(); it.daysEx = true; } it.days[d] = it.days[d] ? 0 : 1; render(); } })),
         ];
       } },
@@ -3167,6 +3184,29 @@ function selfTest() {
       const sameDay = twin.dur === 77;
       S.variants = S.variants.filter(v => v.id !== other.id);
       return (after === before && sameDay) || 'other day ' + before + '→' + after + ', same-day sync ' + sameDay;
+    });
+    ok('day menu: several weekdays can be toggled without it closing', () => {
+      reset();
+      const v = M(); S.week = [null, null, null, null, null, null, null];
+      const tab = document.querySelector('.tab');
+      rc(tab);
+      enter([...document.querySelector('.ctxmenu').querySelectorAll('.mi')].find(x => x.textContent.startsWith('Runs on')));
+      const pick = name => {
+        const sub = document.querySelector('.ctxmenu.sub');
+        if (!sub) return false;
+        const row = [...sub.querySelectorAll('.mi')].find(x => x.textContent.trim().replace(/^✓ /, '') === name);
+        if (!row) return false;
+        row.click(); return true;
+      };
+      const first = pick('Monday');
+      const stillOpen = !!document.querySelector('.ctxmenu.sub');
+      const second = pick('Friday');                    /* only possible if it stayed open */
+      const ticked = document.querySelector('.ctxmenu.sub') &&
+        [...document.querySelector('.ctxmenu.sub').querySelectorAll('.mi')].filter(x => /^✓/.test(x.textContent)).length;
+      closeMenu();
+      const got = [1, 5].every(d => S.week[d] === v.id);
+      return (first && stillOpen && second && got && ticked >= 2) ||
+        'first ' + first + ', stayed open ' + stillOpen + ', second ' + second + ', assigned ' + got + ', ticks ' + ticked;
     });
     ok('day tab right-click assigns weekdays', () => {
       const v = M(); S.week = [null, null, null, null, null, null, null];
