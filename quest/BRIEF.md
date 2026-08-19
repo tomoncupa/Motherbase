@@ -1,5 +1,14 @@
 # Daily Quest OS — build brief
 
+> **Scope changed 2026-08-20.** Everything in here that measures a number —
+> sleep, weight, steps, calories, protein, mood, energy — was built into
+> `status/` instead, and STATUS is now the one writer of those facts. What is
+> left for Daily Quest OS is the todolist: quests, scoring, streaks and ranks,
+> reading the measurements rather than collecting them. The data model, the
+> field/day/ev row shapes and the design system below all still govern —
+> STATUS was built to them. Check the ownership table in the root `CLAUDE.md`
+> before writing anything that stores a number.
+
 ## Who I am
 
 Tom. Solo premium fitness coach in Manila, 8+ years lifting, founder of Personal

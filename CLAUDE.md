@@ -83,9 +83,12 @@ arc/index.html     mind canvas
 arc/CLAUDE.md      ARC's own brief, governs arc/ only
 habits/index.html  habit tracker (a stand-in, see Debt)
 form/index.html    lift review
+status/index.html  sleep, weight, mood, energy, steps, food and money
 _template/         a working starter app, copied to make a new one
-quest/BRIEF.md     the Daily Quest OS brief: authoritative on WHAT to build,
-                   superseded on repo layout and testing by this file
+quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
+                   status/ on 2026-08-20; what is left of it is a todolist.
+                   Its data model and design system still govern. Superseded
+                   on repo layout and testing by this file.
 ```
 
 One folder per app. The home page is `index.html` at the root. `.nojekyll` sits at
@@ -143,9 +146,16 @@ An app may read any type. It writes only the types it owns.
 | `activity` | the shared vocabulary | slug of the name | `{name, cat, dur, color}` |
 | `tick` | **shared, every app may write** | activity id | `{src, qty}` |
 | `lane` `item` `routine` | block | | |
-| `habit` `field` `day` `ev` | quest | | |
+| `field` | **status** | field id | the definition of a tracked measure |
+| `ev` | **status** | field id | `{e:[{t,v}]}` — one row per field per day |
+| `day` | **status** | `''` | `{note, rest}` |
+| `food` | **status** | food id | the label as printed, plus your own servings |
+| `meal` | **status** | timestamp id | one logged serving, numbers frozen in |
+| `spend` | **status** | timestamp id | `{amt, acct, note, t}` |
+| `acct` | **status** | account id | `{name, order}` |
+| `shot` | **status** | photo id | a shrunk photo of a label or receipt |
+| `habit` | quest, later | | a todolist, once STATUS took the measurements |
 | `exercise` `session` `set` | training, later | | |
-| `food` `meal` | nutrition, later | | |
 
 **One writer per fact**, with exactly one deliberate exception: `tick`. Any app may
 tick anything, because one cell per activity per day is one fact and later save
@@ -321,9 +331,10 @@ Never claim something works because it should. Claim it because you watched it.
 | `index.html` | Home screen. Widget grid, drag to move, drag the corner to resize. Still on the old LifeOS kernel, see Debt. |
 | `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. |
 | `arc/` | Tom's build, with its own brief. Standalone: its own IndexedDB, its own theme engine. Shares nothing yet. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. |
-| `habits/` | A stand-in. Daily Quest OS replaces it. Harvest the 28-day grid, the streaks, and one-click promote-from-routine. Do not add to it. |
+| `habits/` | A stand-in, now superseded by `status/`. Harvest the streaks and one-click promote-from-routine if they are still wanted. Do not add to it. |
 | `form/` | Standalone by design. Video never leaves the device. |
-| `_template/` | The only app already on the new foundation. |
+| `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
+| `_template/` | The starter app, on the new foundation. |
 | `shared/` | Built and passing 35 checks. Not yet wired into the real apps. |
 
 ### Debt, in the order it should be paid
