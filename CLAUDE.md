@@ -68,6 +68,13 @@ Do not break these. Ask first if you think one needs to change.
    one of his systems.
 8. **No hex colours in app CSS.** Use the tokens. A hex code is a theme that works
    in exactly one skin.
+9. **No raw sizes in app CSS either.** Spacing, type, corners, shadows and
+   durations are all tokens, on scales where no two steps are within about 25%
+   of each other. `shared/STANDARDS.md` says why.
+10. **Phone first, and literally.** Every control is at least a 44px target,
+   nothing important hides behind hover, panels come up from the bottom, and the
+   back gesture closes what is open rather than leaving the app. The rules are in
+   `shared/STANDARDS.md` and the working example is `_template/index.html`.
 
 ---
 
@@ -106,10 +113,12 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `day.js` | One definition of "today" for the whole suite. |
 | `skins.js` + `skins.json` | Themes, and the colour layer on top of them. |
 | `sound.js` | Sound themes and instruments, synthesised, no audio files. |
-| `ui.js` | Toasts, dialogs, confirms, menus, and the standard Settings panel. |
+| `mobile.js` | The touch layer. Sheets, swipes, safe areas, keyboard, back stack, haptics. |
+| `ui.js` | Snackbars, dialogs, confirms, menus, switches, and the standard Settings panel. |
 | `io.js` | Per-app backup, restore, and the readable spreadsheet export. |
 | `health.js` | Answers "is my data okay" without a test suite. |
-| `_smoke.html` | 35 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 58 checks over all of the above. Run it after touching any of them. |
+| `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. |
 
 ---
 
@@ -280,7 +289,8 @@ because it runs the real thing rather than only parsing it:
 
 1. Serve the folder: `py -3 -m http.server 8777 -d "<repo>"`.
 2. Open it with the browser tool, drive it with JavaScript, read the console.
-3. Run `shared/_smoke.html`. It must say 35 of 35, or more once you add checks.
+3. Run `shared/_smoke.html`. It must say 58 of 58, or more once you add checks.
+   Run it at phone width too — some checks only mean anything at one width.
 4. Clean up any test data you wrote, and stop the server.
 
 **Always test:** record merge including the two-device case where each device wrote
@@ -328,13 +338,13 @@ Never claim something works because it should. Claim it because you watched it.
 
 | App | State |
 |---|---|
-| `index.html` | Home screen. Widget grid, drag to move, drag the corner to resize. Still on the old LifeOS kernel, see Debt. |
+| `index.html` | Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab bar on a phone, sheets instead of its own modal. Widget grid still drags and resizes with a mouse; a phone gets a REARRANGE mode instead. |
 | `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. |
 | `arc/` | Tom's build, with its own brief. Standalone: its own IndexedDB, its own theme engine. Shares nothing yet. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. |
 | `habits/` | A stand-in, now superseded by `status/`. Harvest the streaks and one-click promote-from-routine if they are still wanted. Do not add to it. |
 | `form/` | Standalone by design. Video never leaves the device. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
-| `_template/` | The starter app, on the new foundation. |
+| `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | Built and passing 35 checks. Not yet wired into the real apps. |
 
 ### Debt, in the order it should be paid
@@ -346,6 +356,13 @@ Never claim something works because it should. Claim it because you watched it.
    `shared/skins.js` instead of defining `THEMES` itself.
 3. **The apps still carry their own settings, themes and sounds** instead of using
    `shared/ui.js`, `skins.js` and `sound.js`. Only `_template/` is fully on them.
+3b. **`block/`, `arc/`, `status/`, `form/` and `habits/` do not load
+   `shared/mobile.js`**, so they get none of the touch layer: no bottom sheets,
+   no swipe, no safe areas, no keyboard handling, desktop-sized tap targets.
+   They are not broken — `ui.js` keeps the old styling for apps without it — but
+   they feel like web pages next to the two that are wired. One line in each
+   head is the whole migration; the work is auditing each app's own CSS for
+   hover-only controls and sub-44px targets afterwards.
 4. **Commits are unpushed** and the GitHub repo is public. He has not yet said
    push.
 

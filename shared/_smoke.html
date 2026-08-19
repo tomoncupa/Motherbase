@@ -8,6 +8,7 @@
 <script src="skins.js"></script>
 <script src="day.js"></script>
 <script src="records.js"></script>
+<script src="mobile.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
 <script src="io.js"></script>
@@ -28,11 +29,14 @@ button:hover{border-color:var(--accent,#7ee8fa);color:var(--accent,#7ee8fa)}
 </head>
 <body>
 <h1>SHARED FOUNDATION CHECK</h1>
-<div class="sub">Exercises day, records, sound, ui, io and health without touching any app's data.</div>
+<div class="sub">Exercises day, records, mobile, sound, ui, io and health without touching any app's data.
+Open it on a phone too: the buttons below should feel like an app, not like this page.</div>
 <div class="bar">
   <button onclick="Sfx.unlock();Sfx.preview()">HEAR THE PACK</button>
   <button onclick="UI.settings('smoke')">OPEN SETTINGS</button>
-  <button onclick="UI.confirm('Does this dialog look right?','It should match whatever theme is picked.').then(v=>UI.toast('you said '+v))">CONFIRM</button>
+  <button onclick="UI.confirm('Does this dialog look right?','A sheet from the bottom on a phone, a card in the middle on a desktop.').then(v=>UI.toast('you said '+v))">CONFIRM</button>
+  <button onclick="UI.menu(80,80,[{label:'First thing',note:'with a note under it',icon:'✦',fn:()=>UI.toast('first')},'-',{label:'Delete it',kind:'bad',icon:'⌫',fn:()=>UI.undo('deleted <b>the thing</b>',()=>UI.toast('brought back'))}],{title:'A MENU'})">MENU</button>
+  <button onclick="UI.undo('deleted <b>3 rows</b>',()=>UI.toast('brought back'))">UNDO SNACKBAR</button>
   <button onclick="IO.export('smoke')">EXPORT SPREADSHEET</button>
   <button onclick="run()">RE-RUN CHECKS</button>
 </div>
@@ -123,11 +127,118 @@ function run() {
   ok('ui: dialog, confirm, menu, settings all present', ['dialog', 'confirm', 'menu', 'settings', 'toast'].every(k => typeof UI[k] === 'function'));
   ok('skins: per-app key is scoped', (Skins.for('smoke'), Skins.restore('smoke'), localStorage.getItem('suite_skin.smoke') != null));
 
+  /* ---- mobile: the native-feel layer ---- */
+  const R = getComputedStyle(document.documentElement);
+  const tok = k => R.getPropertyValue(k).trim();
+  ok('mobile: loaded and reports the platform',
+    typeof Mobile === 'object' && typeof Mobile.touch === 'boolean' && typeof Mobile.ios === 'boolean');
+  ok('mobile: base stylesheet injected once',
+    document.querySelectorAll('#mb-mobile-css').length === 1);
+  ok('mobile: viewport covers the safe area',
+    /viewport-fit=cover/.test(document.querySelector('meta[name=viewport]').content));
+  ok('mobile: pinch zoom was not disabled',
+    !/user-scalable=no/.test(document.querySelector('meta[name=viewport]').content));
+  ok('mobile: every field kind names a keyboard',
+    Object.keys(Mobile.KINDS).length >= 12 &&
+    Mobile.KINDS.decimal.inputmode === 'decimal' && Mobile.KINDS.search.enterkeyhint === 'search');
+  ok('mobile: number fields are text, so half-typed values survive',
+    Mobile.KINDS.number.type === 'text' && Mobile.KINDS.money.type === 'text');
+  ok('mobile: haptics can be turned off and stay off',
+    (Mobile.setHaptics(false), Mobile.haptics === false && Mobile.haptic('tick') === false &&
+     JSON.parse(localStorage.getItem('mb.mobile')).haptics === false));
+  Mobile.setHaptics(true);
+  ok('mobile: field() sets the keyboard and the return key', (() => {
+    const i = document.createElement('input'); Mobile.field(i, 'decimal');
+    return i.getAttribute('inputmode') === 'decimal' && i.getAttribute('enterkeyhint') === 'done';
+  })());
+  ok('mobile: form() is Next down the fields and Done on the last', (() => {
+    const box = document.createElement('div');
+    box.innerHTML = '<input><input><input>';
+    const f = Mobile.form(box);
+    return f.length === 3 && f[0].getAttribute('enterkeyhint') === 'next' &&
+           f[2].getAttribute('enterkeyhint') === 'done';
+  })());
+  ok('mobile: the back stack balances', (() => {
+    const before = history.length;
+    const rel = Mobile.trap(() => {});
+    const pushed = history.length > before || history.state && history.state.mb;
+    rel();
+    return !!pushed;
+  })());
+  ok('mobile: a sheet opens, locks the page and closes clean', (() => {
+    const h = Mobile.sheet({ title: 'SMOKE', body: b => { b.textContent = 'x'; } });
+    const open = document.querySelectorAll('.mb-sheet').length === 1 &&
+      document.documentElement.classList.contains('mb-locked');
+    h.close();
+    return open && !document.documentElement.classList.contains('mb-locked');
+  })());
+  /* This one exists because it broke: the open animation used to run on a
+     frame callback, and a tab that is not compositing never runs one, so the
+     sheet stayed parked off the bottom of the screen with no way back. */
+  ok('mobile: an open sheet is actually on screen, not parked below it', (() => {
+    const h = Mobile.sheet({ title: 'SMOKE', body: b => { b.textContent = 'x'; } });
+    /* Killing the transition snaps it to where it is travelling to, so this
+       reads the destination rather than a frame part-way through. */
+    h.panel.style.transition = 'none';
+    const r = h.panel.getBoundingClientRect();
+    const landed = h.panel.classList.contains('on') && r.top < innerHeight - 20 && r.bottom > 0;
+    h.close();
+    return landed;
+  })());
+  ok('mobile: a sheet is dismissable by the system back gesture', (() => {
+    const before = history.length;
+    const h = Mobile.sheet({ title: 'SMOKE', body: b => { b.textContent = 'x'; } });
+    const pushed = history.state && history.state.mb;
+    h.close();
+    return !!pushed;
+  })());
+
+  /* ---- the measurement tokens ---- */
+  ok('tokens: the spacing scale never steps closer than 25%', (() => {
+    const v = [1,2,3,4,5,6,7,8,9,10].map(i => parseFloat(tok('--s-' + i)));
+    if (v.some(isNaN)) return false;
+    for (let i = 1; i < v.length; i++) if (v[i] / v[i - 1] < 1.25) return false;
+    return true;
+  })());
+  ok('tokens: the type scale climbs and stays whole pixels', (() => {
+    const v = [1,2,3,4,5,6,7,8,9].map(i => parseFloat(tok('--f-' + i)));
+    return !v.some(isNaN) && v.every((x, i) => i === 0 || x > v[i - 1]) && v.every(x => x === Math.round(x));
+  })());
+  ok('tokens: five elevations, each a two-part shadow but the top one',
+    [1,2,3,4].every(i => (tok('--e-' + i).match(/rgba/g) || []).length === 2) &&
+    (tok('--e-5').match(/rgba/g) || []).length === 1);
+  ok('tokens: the touch target is at least 44px', parseFloat(tok('--tap')) >= 44);
+  ok('tokens: safe areas are tokens, so no app writes env() itself',
+    /safe-area-inset/.test(Skins.tokensFor(Skins.current)['--safe-b']));
+  ok('tokens: measurement survives a palette edit', (() => {
+    const id = Skins.current.id, had = Skins.isCustomised(id);
+    const p = Skins.paletteFor(id); p.acc = '#ff00ff';
+    Skins.apply(Skins.current, p);
+    const held = parseFloat(tok('--s-4')) === 16 && parseFloat(tok('--tap')) === 44;
+    if (!had) Skins.clearPalette(id);
+    Skins.apply(Skins.current);
+    return held;
+  })());
+  ok('ui: the new components are all there',
+    ['segmented', 'toggle', 'row', 'field', 'undo'].every(k => typeof UI[k] === 'function'));
+  ok('ui: the segmented control marks exactly one live tab', (() => {
+    const seg = UI.segmented([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], 'a', () => {});
+    return seg.querySelectorAll('button.on').length === 1;
+  })());
+  ok('ui: the switch flips and reports', (() => {
+    let got = null;
+    const sw = UI.toggle(false, v => { got = v; });
+    sw.click();
+    return sw.on === true && got === true && sw.getAttribute('aria-checked') === 'true';
+  })());
+
   /* ---- clean up after ourselves ---- */
   Rec.clear([stamp]);
   Rec.del('tick', d, 'smoke-run'); Rec.del('activity', null, 'smoke-run');
   Rec.vacuum(0);
   ok('cleanup: smoke rows removed', Rec.all(stamp).length === 0);
+  document.querySelectorAll('.mb-sheet,.mb-veil').forEach(n => n.remove());
+  ok('cleanup: no overlay left on the page', !document.querySelector('.mb-sheet,.mb-veil'));
 
   const pass = T.filter(t => t.pass).length;
   document.getElementById('out').innerHTML =

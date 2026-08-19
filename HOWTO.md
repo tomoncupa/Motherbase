@@ -46,7 +46,7 @@ template loads the shared files and declares itself.
 against macro targets, show today's totals, warn when protein is short." I
 work inside your new folder and nothing else moves.
 
-### The three rules a new app must follow
+### The four rules a new app must follow
 
 1. **Only write your own types.** Yours are whatever you listed in `types`.
    Reading anything is always fine.
@@ -54,7 +54,14 @@ work inside your new folder and nothing else moves.
    what makes a tick in one app show up in all of them. Later save wins.
 3. **Never write a colour into your CSS.** Use the tokens (`var(--accent)`,
    `var(--surface-1)`, `var(--text-1)` …). A hex code is a theme that only
-   works in one skin.
+   works in one skin. Sizes work the same way: `var(--s-4)` for spacing,
+   `var(--f-3)` for text. If you find yourself typing a number, there is
+   probably already a step that says it.
+4. **It has to feel like an app on a phone.** Every control at least a 44px
+   target, nothing important behind hover, panels up from the bottom, the back
+   gesture closes what is open. The full list is `shared/STANDARDS.md` and the
+   working example is the template you just copied — its comments say why each
+   piece is the way it is.
 
 ---
 
@@ -134,7 +141,9 @@ read there, it will be hard to read everywhere.
 | What "today" means | Settings → Day (or `shared/day.js` for the default) |
 | How data is stored | `shared/records.js` — the one file to be careful with |
 | Backups and exports | `shared/io.js` |
-| Dialogs, toasts, menus, the settings panel | `shared/ui.js` |
+| Panels, snackbars, menus, switches, the settings panel | `shared/ui.js` |
+| How it feels on a phone — touch, swipes, keyboard, buzzes | `shared/mobile.js` |
+| The rules about how it feels, in plain language | `shared/STANDARDS.md` |
 | Which apps show on the home screen | `index.html` at the root |
 
 **The one file to leave alone unless you mean it:** `shared/records.js`. Every

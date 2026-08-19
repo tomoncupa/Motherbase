@@ -3,8 +3,12 @@
 Governs `shared/` only. The repo-root `CLAUDE.md` governs everything else and
 still applies here.
 
-**Every app depends on these seven files.** A mistake in an app breaks one app. A
+**Every app depends on these eight files.** A mistake in an app breaks one app. A
 mistake here breaks all of them and can lose data. Work slowly.
+
+`STANDARDS.md`, next to this file, is the house style for how the apps feel on a
+phone. It is binding the same way this file is, and it is written for Tom rather
+than for you — read it before changing anything anybody touches.
 
 ## The one-session rule
 
@@ -22,11 +26,12 @@ are holding a stale copy of whatever you just changed.
 | `records.js` | The store. Rows, merge, subscriptions. | Highest. Holds his history. |
 | `day.js` | One definition of "today" for the whole suite. | High. Everything dates through it. |
 | `skins.js` `skins.json` | Themes, and the colour layer on top. | Medium. Cosmetic but wide. |
+| `mobile.js` | The touch layer: sheets, swipes, keyboard, back stack, haptics, safe areas. | Medium. Every app's feel. |
 | `sound.js` | Sound themes and instruments, synthesised. | Low. |
-| `ui.js` | Toasts, dialogs, menus, the Settings panel. | Medium. |
+| `ui.js` | Snackbars, dialogs, menus, switches, the Settings panel. | Medium. |
 | `io.js` | Backup, restore, spreadsheet export. | High. It is the safety net. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 35 checks over all of it. | Run it every time. |
+| `_smoke.html` | 58 checks over all of it. | Run it every time. |
 
 ## Rules
 
@@ -40,8 +45,13 @@ are holding a stale copy of whatever you just changed.
 4. **Every colour is a token.** No hex in `ui.js`, ever. Use the skin tokens with a
    fallback so the file works before a skin is applied.
 5. **`_smoke.html` must pass before you commit.** Add checks when you add
-   behaviour; the count only goes up.
-6. **The kernel is copied into three apps.** Edit the copy in the root
+   behaviour; the count only goes up. Run it at phone width as well as desktop
+   width — several of the checks measure things that only exist at one of them.
+6. **`mobile.js` loads before `ui.js`.** It owns the sheet, the button and the
+   press states; `ui.js` checks whether it is there and falls back to the old
+   desktop dialog if it is not. Two definitions of the same class is how one of
+   them silently wins.
+7. **The kernel is copied into three apps.** Edit the copy in the root
    `index.html`, then run the sync script, which asserts all copies are identical.
    Never hand-edit a copy.
 
@@ -67,3 +77,10 @@ work. Clean up any test data you write, and stop the server when you are done.
   and the day-start hour. BLOCK did exactly that.
 - `localStorage` is roughly 5MB. `health.js` warns at 3MB. Rows are small but the
   tick log only grows.
+- **An animation that starts on `requestAnimationFrame` never starts in a tab
+  that is not compositing.** A sheet opened that way stayed parked off the
+  bottom of the screen with no way back. Force the layout with `offsetHeight`
+  and set the class in the same tick instead.
+- **A row key built from the clock alone is not unique.** Two rows created in
+  the same millisecond derive the same row id, and the second silently replaces
+  the first. Add a counter.

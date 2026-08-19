@@ -21,32 +21,144 @@ const el = (t, c, h) => { const n = document.createElement(t); if (c) n.classNam
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const beep = (cue, o) => { if (g.Sfx) g.Sfx.play(cue, o); };
 
+/* ── the stylesheet ──
+   mobile.js owns the sheet, the button and the press states; this file owns
+   the furniture that sits on top of them. When mobile.js is not loaded — an
+   app that has not been wired to it yet — the LEGACY block at the bottom puts
+   back the desktop styling those pieces used to have, so nothing an older app
+   already relies on loses its face. */
 function css() {
   if (document.getElementById('mb-ui-css')) return;
   const s = el('style'); s.id = 'mb-ui-css';
   s.textContent = `
-.mb-toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,18px);opacity:0;pointer-events:none;
-  z-index:9000;padding:9px 15px;font-size:12.5px;transition:opacity .2s,transform .2s;
-  background:var(--surface-1,#0e141d);color:var(--text-1,#dbe7f0);
-  border:1px solid var(--border-strong,#2b3a4d);border-radius:var(--radius-md,9px);
-  box-shadow:0 12px 40px -14px rgba(0,0,0,.8);font-family:var(--font-body,system-ui);max-width:min(420px,90vw)}
-.mb-toast.on{opacity:1;transform:translate(-50%,0)}
+/* ── the snackbar ──
+   Sits above the home indicator and above the keyboard, never under either.
+   An undo action holds it open longer, because a message you might act on is
+   not the same as a message you only read. */
+.mb-toast{position:fixed;left:50%;z-index:9000;
+  bottom:calc(var(--s-5,24px) + var(--safe-b,0px) + var(--kb,0px));
+  transform:translate(-50%,14px) scale(.97);opacity:0;pointer-events:none;
+  display:flex;align-items:center;gap:var(--s-3,12px);
+  padding:var(--s-3,12px) var(--s-4,16px);font-size:var(--f-2,14px);
+  transition:opacity var(--dur-med,240ms) var(--ease-out,ease),transform var(--dur-med,240ms) var(--ease-out,ease);
+  background:var(--surface-3,#1a2430);color:var(--text-1,#dbe7f0);
+  border-radius:var(--radius-full,999px);box-shadow:var(--e-4,0 15px 25px rgba(0,0,0,.3));
+  font-family:var(--font-body,system-ui);max-width:min(460px,calc(100vw - 24px))}
+.mb-toast.on{opacity:1;transform:translate(-50%,0) scale(1);pointer-events:auto}
+.mb-toast .msg{flex:1;min-width:0;line-height:1.4}
 .mb-toast b{color:var(--accent,#7ee8fa)}
-.mb-toast.bad{border-color:var(--danger,#ff6b81)}
 .mb-toast.bad b{color:var(--danger,#ff6b81)}
-.mb-veil{position:fixed;inset:0;z-index:8900;display:flex;align-items:center;justify-content:center;padding:20px;
-  background:var(--overlay,rgba(4,7,11,.72));backdrop-filter:blur(3px);animation:mb-fade var(--dur-fast,140ms) ease}
-@keyframes mb-fade{from{opacity:0}to{opacity:1}}
-.mb-dialog{width:min(var(--mb-w,520px),96vw);max-height:88vh;display:flex;flex-direction:column;
-  background:var(--surface-1,#0e141d);color:var(--text-1,#dbe7f0);
-  border:1px solid var(--border-strong,#2b3a4d);border-radius:var(--radius-md,14px);
-  box-shadow:0 30px 80px -30px #000;font-family:var(--font-body,system-ui);font-size:13px;overflow:hidden}
-.mb-dialog h3{margin:0;padding:16px 18px 12px;font-family:var(--font-display,system-ui);
-  font-size:13px;font-weight:600;letter-spacing:.18em;color:var(--accent,#7ee8fa);flex:0 0 auto}
-.mb-body{padding:0 18px 4px;overflow:auto;flex:1;min-height:0;line-height:1.65}
-.mb-body p{margin:0 0 12px;color:var(--text-2,#7f93a8)}
-.mb-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 18px 16px;flex:0 0 auto;
-  border-top:1px solid var(--border,#1e2a38);margin-top:12px}
+.mb-toast .act{flex:0 0 auto;border:0;background:none;cursor:pointer;font:inherit;
+  font-family:var(--font-display,system-ui);font-size:var(--f-1,12px);font-weight:var(--w-bold,700);
+  letter-spacing:var(--track-cap,.18em);color:var(--accent,#7ee8fa);padding:0 var(--s-1,4px)}
+
+/* ── rows and options, the furniture of every settings pane ── */
+.mb-row{display:flex;align-items:center;gap:var(--s-3,12px);padding:var(--s-3,12px) 0;
+  min-height:var(--tap,44px);border-bottom:1px solid var(--border,#1e2a38)}
+.mb-row:last-child{border-bottom:0}
+.mb-row .lbl{flex:1;min-width:0}
+.mb-row .lbl b{display:block;font-weight:var(--w-bold,700);font-size:var(--f-2,14px);color:var(--text-1,#dbe7f0)}
+.mb-row .lbl span{display:block;color:var(--text-muted,#5b6d80);font-size:var(--f-1,12px);line-height:1.5;margin-top:2px}
+/* No border here on purpose. Two background colours already separate the row
+   from the pane, and a border on top of that is one separator too many. */
+.mb-opt{display:flex;align-items:center;gap:var(--s-3,12px);width:100%;text-align:left;
+  margin-bottom:var(--s-2,8px);cursor:pointer;min-height:var(--tap,44px);
+  padding:var(--s-3,12px);border:0;border-radius:var(--radius-md,10px);
+  background:var(--surface-2,#131b26);color:inherit;font:inherit}
+.mb-opt.bad{color:var(--danger,#ff6b81)}
+.mb-opt .ic{width:20px;text-align:center;color:var(--accent,#7ee8fa);flex:0 0 auto}
+.mb-opt .t{flex:1;min-width:0}
+.mb-opt .t b{display:block;font-size:var(--f-2,14px)}
+.mb-opt .t span{color:var(--text-muted,#5b6d80);font-size:var(--f-1,12px);line-height:1.5}
+
+.mb-group{font-family:var(--font-display,system-ui);font-size:var(--f-1,12px);
+  font-weight:var(--w-bold,700);letter-spacing:var(--track-cap,.18em);
+  color:var(--text-muted,#5b6d80);margin:var(--s-5,24px) 0 var(--s-2,8px)}
+.mb-group:first-child{margin-top:var(--s-2,8px)}
+
+/* ── the segmented control ──
+   Replaces the desktop tab strip. Thumb-sized, one visible group, and the
+   selection slides instead of blinking, so it reads as one physical control
+   rather than five buttons that happen to be next to each other. */
+.mb-seg{position:relative;display:flex;gap:2px;padding:3px;flex:0 0 auto;
+  background:var(--surface-2,#131b26);border-radius:var(--radius-md,10px);
+  overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.mb-seg::-webkit-scrollbar{height:0}
+.mb-seg i.ind{position:absolute;top:3px;bottom:3px;left:0;border-radius:calc(var(--radius-md,10px) - 3px);
+  background:var(--surface-1,#0e141d);box-shadow:var(--e-1,0 1px 3px rgba(0,0,0,.3));pointer-events:none;
+  transition:transform var(--dur-med,240ms) var(--ease-out,ease),width var(--dur-med,240ms) var(--ease-out,ease)}
+.mb-seg button{position:relative;z-index:1;flex:1 0 auto;min-height:38px;padding:0 var(--s-3,12px);
+  border:0;background:none;cursor:pointer;white-space:nowrap;
+  font-family:var(--font-display,system-ui);font-size:var(--f-1,12px);font-weight:var(--w-bold,700);
+  letter-spacing:.1em;color:var(--text-muted,#5b6d80);
+  transition:color var(--dur-fast,140ms) linear}
+.mb-seg button.on{color:var(--text-1,#dbe7f0)}
+
+/* ── the switch ──
+   The one control whose state has to be readable without reading anything. */
+.mb-sw{flex:0 0 auto;width:50px;height:30px;border:0;padding:2px;cursor:pointer;
+  border-radius:var(--radius-full,999px);background:var(--surface-3,#1a2430);
+  transition:background-color var(--dur-med,240ms) var(--ease-out,ease)}
+.mb-sw i{display:block;width:26px;height:26px;border-radius:50%;background:var(--text-muted,#5b6d80);
+  box-shadow:var(--e-1,0 1px 3px rgba(0,0,0,.3));
+  transition:transform var(--dur-med,240ms) var(--ease-sheet,ease),background-color var(--dur-med,240ms)}
+.mb-sw.on{background:var(--accent,#7ee8fa)}
+.mb-sw.on i{transform:translateX(20px);background:var(--accent-fg,#04212a)}
+
+/* ── chips, sliders, fields ── */
+.mb-chips{display:flex;flex-wrap:wrap;gap:var(--s-2,8px)}
+.mb-chip{min-height:var(--tap,44px);padding:0 var(--s-4,16px);cursor:pointer;
+  border:1px solid var(--border,#1e2a38);border-radius:var(--radius-full,999px);
+  background:var(--surface-2,#131b26);color:var(--text-2,#7f93a8);font:inherit;font-size:var(--f-2,14px)}
+.mb-chip.on{border-color:var(--accent,#7ee8fa);color:var(--accent,#7ee8fa);background:var(--surface-3,#1a2430)}
+.mb-range{width:100%;height:var(--tap,44px);accent-color:var(--accent,#7ee8fa);background:none}
+.mb-sel,.mb-input{min-height:var(--tap,44px);width:100%;
+  background:var(--surface-2,#131b26);border:1px solid var(--border,#1e2a38);
+  border-radius:var(--radius-md,10px);padding:0 var(--s-3,12px);color:inherit;font:inherit;
+  font-size:var(--f-3,16px)}
+/* A native select on a phone opens the system picker, which is exactly right.
+   Only its closed-state chrome is replaced, never the picker itself. */
+.mb-sel{-webkit-appearance:none;appearance:none;padding-right:var(--s-6,32px);
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),
+    linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 17px) 55%,calc(100% - 12px) 55%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+.mb-input:focus,.mb-sel:focus{outline:2px solid var(--focus,#7ee8fa);outline-offset:-1px}
+.mb-swatch{width:44px;height:34px;flex:0 0 auto;padding:0;cursor:pointer;
+  border:1px solid var(--border,#1e2a38);border-radius:var(--radius-sm,6px);background:none}
+
+/* ── the desktop popover menu ──
+   Only ever seen with a mouse: on a phone UI.menu opens an action sheet. */
+.mb-menu{position:fixed;z-index:9100;min-width:190px;padding:5px;
+  background:var(--surface-1,#0e141d);border:1px solid var(--border-strong,#2b3a4d);
+  border-radius:var(--radius-md,10px);box-shadow:var(--e-3,0 10px 20px rgba(0,0,0,.3));
+  font-family:var(--font-body,system-ui);font-size:var(--f-2,14px)}
+.mb-menu button{display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:none;
+  cursor:pointer;color:var(--text-2,#7f93a8);border-radius:var(--radius-sm,6px);font:inherit}
+.mb-menu button.bad{color:var(--danger,#ff6b81)}
+.mb-menu hr{border:0;border-top:1px solid var(--border,#1e2a38);margin:4px 2px}
+
+/* Hover is a mouse idea. On a touch screen it sticks after a tap and looks
+   broken, so it only exists where there is a real pointer. */
+@media (hover:hover) and (pointer:fine){
+  .mb-opt:hover{background:var(--surface-3,#1a2430)}
+  .mb-chip:hover{border-color:var(--accent,#7ee8fa);color:var(--text-1,#dbe7f0)}
+  .mb-seg button:hover{color:var(--text-2,#7f93a8)}
+  .mb-menu button:hover{background:var(--surface-2,#131b26);color:var(--text-1,#dbe7f0)}
+  .mb-menu button.bad:hover{color:var(--danger,#ff6b81)}
+  .mb-toast .act:hover{color:var(--accent-hover,#7ee8fa)}
+}
+@media (prefers-reduced-motion:reduce){.mb-toast,.mb-seg i.ind,.mb-sw,.mb-sw i{transition:none}}
+`;
+  document.head.appendChild(s);
+
+  /* ── LEGACY ──
+     Only reached by a page that loads ui.js without mobile.js. Everything in
+     here used to live in this file and now lives in mobile.js; this is a copy
+     so an app that has not been migrated keeps exactly the dialog it had. */
+  if (!g.Mobile) {
+    const l = el('style'); l.id = 'mb-ui-legacy';
+    l.textContent = `
 .mb-btn{padding:7px 15px;border:1px solid var(--border-strong,#2b3a4d);border-radius:var(--radius-sm,8px);
   background:none;cursor:pointer;font-family:var(--font-display,system-ui);font-size:11px;letter-spacing:.1em;
   color:var(--text-2,#7f93a8)}
@@ -54,102 +166,78 @@ function css() {
 .mb-btn.go{border-color:var(--accent,#7ee8fa);color:var(--accent,#7ee8fa);background:var(--surface-2,#131b26)}
 .mb-btn.bad{border-color:var(--danger,#ff6b81);color:var(--danger,#ff6b81)}
 .mb-btn:focus-visible{outline:2px solid var(--focus,#7ee8fa);outline-offset:2px}
-.mb-tabs{display:flex;gap:3px;padding:0 18px 12px;flex-wrap:wrap;flex:0 0 auto}
-.mb-tabs button{padding:5px 12px;border:1px solid transparent;border-radius:var(--radius-sm,6px);background:none;
-  cursor:pointer;font-family:var(--font-display,system-ui);font-size:11px;letter-spacing:.12em;color:var(--text-muted,#5b6d80)}
-.mb-tabs button:hover{color:var(--text-1,#dbe7f0)}
-.mb-tabs button.on{color:var(--accent,#7ee8fa);border-color:var(--border,#1e2a38);background:var(--surface-2,#131b26)}
-.mb-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border,#1e2a38)}
-.mb-row:last-child{border-bottom:0}
-.mb-row .lbl{flex:1;min-width:0}
-.mb-row .lbl b{display:block;font-weight:600;font-size:13px;color:var(--text-1,#dbe7f0)}
-.mb-row .lbl span{color:var(--text-muted,#5b6d80);font-size:11.5px;line-height:1.5}
-.mb-opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin-bottom:8px;cursor:pointer;
-  padding:11px 12px;border:1px solid var(--border,#1e2a38);border-radius:var(--radius-md,10px);
-  background:var(--surface-2,#131b26);color:inherit;font:inherit}
-.mb-opt:hover{border-color:var(--accent,#7ee8fa)}
-.mb-opt.bad:hover{border-color:var(--danger,#ff6b81)}
-.mb-opt .ic{width:18px;text-align:center;color:var(--accent,#7ee8fa);flex:0 0 auto}
-.mb-opt .t{flex:1;min-width:0}
-.mb-opt .t b{display:block;font-size:13px}
-.mb-opt .t span{color:var(--text-muted,#5b6d80);font-size:11.5px;line-height:1.5}
-.mb-group{font-family:var(--font-display,system-ui);font-size:10px;letter-spacing:.18em;
-  color:var(--text-muted,#5b6d80);margin:18px 0 9px}
-.mb-chips{display:flex;flex-wrap:wrap;gap:8px}
-.mb-chip{padding:6px 12px;border:1px solid var(--border,#1e2a38);border-radius:20px;cursor:pointer;
-  background:var(--surface-2,#131b26);color:var(--text-2,#7f93a8);font:inherit;font-size:11.5px}
-.mb-chip:hover{border-color:var(--accent,#7ee8fa);color:var(--text-1,#dbe7f0)}
-.mb-chip.on{border-color:var(--accent,#7ee8fa);color:var(--accent,#7ee8fa)}
-.mb-range{width:100%;accent-color:var(--accent,#7ee8fa)}
-.mb-sel{background:var(--surface-2,#131b26);border:1px solid var(--border,#1e2a38);
-  border-radius:var(--radius-sm,8px);padding:7px 9px;color:inherit;font:inherit}
-.mb-menu{position:fixed;z-index:9100;min-width:180px;padding:5px;
-  background:var(--surface-1,#0e141d);border:1px solid var(--border-strong,#2b3a4d);
-  border-radius:var(--radius-md,10px);box-shadow:0 18px 44px -18px #000;font-family:var(--font-body,system-ui);font-size:12.5px}
-.mb-menu button{display:block;width:100%;text-align:left;padding:7px 10px;border:0;background:none;cursor:pointer;
-  color:var(--text-2,#7f93a8);border-radius:var(--radius-sm,6px);font:inherit}
-.mb-menu button:hover{background:var(--surface-2,#131b26);color:var(--text-1,#dbe7f0)}
-.mb-menu button.bad:hover{color:var(--danger,#ff6b81)}
-.mb-menu hr{border:0;border-top:1px solid var(--border,#1e2a38);margin:4px 2px}
-@media (prefers-reduced-motion:reduce){.mb-toast,.mb-veil{transition:none;animation:none}}
+.mb-veil{position:fixed;inset:0;z-index:8900;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:var(--overlay,rgba(4,7,11,.72));backdrop-filter:blur(3px)}
+.mb-sheet{position:relative;width:min(var(--mb-w,520px),96vw);max-height:88vh;display:flex;flex-direction:column;
+  background:var(--surface-1,#0e141d);color:var(--text-1,#dbe7f0);
+  border:1px solid var(--border-strong,#2b3a4d);border-radius:var(--radius-md,14px);
+  box-shadow:0 30px 80px -30px #000;font-family:var(--font-body,system-ui);font-size:13px;overflow:hidden}
+.mb-grab{display:none}
+.mb-sheet-head{display:flex;align-items:center;gap:8px;padding:16px 18px 12px;flex:0 0 auto}
+.mb-sheet-head h3{margin:0;flex:1;font-family:var(--font-display,system-ui);font-size:13px;font-weight:600;
+  letter-spacing:.18em;color:var(--accent,#7ee8fa)}
+.mb-x{width:30px;height:30px;border:0;border-radius:50%;background:none;color:var(--text-muted,#5b6d80);cursor:pointer}
+.mb-sheet-body{padding:0 18px 4px;overflow:auto;flex:1;min-height:0;line-height:1.65}
+.mb-sheet-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 18px 16px;flex:0 0 auto;
+  border-top:1px solid var(--border,#1e2a38);margin-top:12px}
+.mb-act{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 12px;border:0;
+  cursor:pointer;border-radius:var(--radius-md,10px);background:var(--surface-2,#131b26);color:inherit;font:inherit}
 `;
-  document.head.appendChild(s);
+    document.head.appendChild(l);
+  }
 }
 
 let toastEl, toastT;
+/* Every overlay in the suite goes through mobile.js when it is loaded, which
+   is what makes the same call site a bottom sheet on a phone and a centred
+   card on a laptop. Without mobile.js these fall back to the plain versions,
+   so nothing that already calls UI breaks. */
+const M = () => g.Mobile;
+const buzz = (kind, opts) => { const m = M(); if (m) m.feedback(kind, opts); else if (g.Sfx) g.Sfx.play(kind === 'warn' ? 'error' : 'drop'); };
+
 const UI = {
   el: el, esc: esc,
 
+  /** The snackbar. `opts.action = {label, fn}` turns it into an undo. */
   toast(html, opts) {
     css(); opts = opts || {};
     if (!toastEl) { toastEl = el('div', 'mb-toast'); document.body.appendChild(toastEl); }
     toastEl.className = 'mb-toast' + (opts.bad ? ' bad' : '');
-    toastEl.innerHTML = html;
-    requestAnimationFrame(() => toastEl.classList.add('on'));
+    toastEl.innerHTML = '';
+    const msg = el('div', 'msg'); msg.innerHTML = html;
+    toastEl.appendChild(msg);
+    if (opts.action) {
+      const a = el('button', 'act mb-tap', esc(opts.action.label));
+      a.type = 'button';
+      a.onclick = () => { clearTimeout(toastT); toastEl.classList.remove('on'); buzz('select'); opts.action.fn(); };
+      toastEl.appendChild(a);
+    }
+    void toastEl.offsetHeight;
+    toastEl.classList.add('on');
     clearTimeout(toastT);
-    toastT = setTimeout(() => toastEl.classList.remove('on'), opts.ms || 2600);
-    if (opts.bad) beep('error');
+    /* Long enough to notice, and longer again when there is something to
+       press — a message you might act on is not one you only read. */
+    toastT = setTimeout(() => toastEl.classList.remove('on'), opts.ms || (opts.action ? 6000 : 2600));
+    if (opts.bad) buzz('warn'); else if (opts.action) buzz('select');
   },
 
-  /** the one dialog. `body` is a function that fills the content element. */
+  /** Delete something and offer it straight back. Nothing in this suite
+      should ever destroy work without a way out of it. */
+  undo(message, fn, opts) {
+    UI.toast(message, Object.assign({ action: { label: 'UNDO', fn: fn } }, opts || {}));
+  },
+
+  /** the one dialog. `body` is a function that fills the content element.
+      A bottom sheet on a phone, a centred card on a desktop, same call. */
   dialog(o) {
     css();
-    const veil = el('div', 'mb-veil'), box = el('div', 'mb-dialog');
-    if (o.width) box.style.setProperty('--mb-w', o.width + 'px');
-    if (o.title) box.appendChild(el('h3', null, esc(o.title)));
-    const body = el('div', 'mb-body');
-    box.appendChild(body);
-    const handle = {
-      body: body, box: box,
-      close(v) {
-        veil.remove(); document.removeEventListener('keydown', onKey);
-        beep('close');
-        if (o.onClose) o.onClose(v);
-      },
-    };
-    if (typeof o.body === 'function') o.body(body, handle); else if (o.body) body.innerHTML = o.body;
-    if (o.actions && o.actions.length) {
-      const foot = el('div', 'mb-foot');
-      o.actions.forEach(a => {
-        const b = el('button', 'mb-btn' + (a.kind ? ' ' + a.kind : ''), esc(a.label));
-        b.onclick = () => { const r = a.fn ? a.fn(handle) : undefined; if (r !== false) handle.close(a.value); };
-        foot.appendChild(b);
-      });
-      box.appendChild(foot);
-    }
-    function onKey(e) {
-      if (e.key === 'Escape') { e.stopPropagation(); handle.close(); }
-      if (e.key === 'Enter' && o.enter && !/TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); o.enter(handle); }
-    }
-    document.addEventListener('keydown', onKey);
-    veil.onclick = e => { if (e.target === veil && o.dismissable !== false) handle.close(); };
-    veil.appendChild(box); document.body.appendChild(veil);
-    beep('open');
-    setTimeout(() => { const f = box.querySelector('input,select,button.go'); if (f) f.focus(); }, 40);
-    return handle;
+    const m = M();
+    if (m) return m.sheet(o);
+    return legacyDialog(o);
   },
 
-  /** a real confirm, in the app's own clothes */
+  /** a real confirm, in the app's own clothes. The destructive button is
+      filled rather than outlined, because it is the one you must not mistap. */
   confirm(question, detail, opts) {
     opts = opts || {};
     return new Promise(res => {
@@ -158,7 +246,8 @@ const UI = {
         title: opts.title || 'CONFIRM',
         width: 420,
         body: b => {
-          b.appendChild(el('p', null, '<b style="color:var(--text-1,#dbe7f0);font-size:14px">' + esc(question) + '</b>'));
+          b.appendChild(el('p', null, '<b style="color:var(--text-1,#dbe7f0);font-size:var(--f-4,18px);' +
+            'font-weight:var(--w-bold,700);line-height:1.4">' + esc(question) + '</b>'));
           if (detail) b.appendChild(el('p', null, esc(detail)));
         },
         actions: [
@@ -170,35 +259,124 @@ const UI = {
     });
   },
 
-  /** items: [{label, fn, kind}] or '-' for a divider */
-  menu(x, y, items) {
+  /** items: [{label, note, icon, kind, on, fn}] or '-' for a divider.
+      x and y are where a mouse was; a phone ignores them and comes up from
+      the bottom, which is where a thumb already is. */
+  menu(x, y, items, opts) {
     css(); UI.closeMenus();
-    const m = el('div', 'mb-menu');
+    const m = M();
+    if (m && m.sheetish()) return m.actions((opts && opts.title) || '', items, opts);
+
+    const box = el('div', 'mb-menu');
     items.forEach(it => {
-      if (it === '-') return m.appendChild(el('hr'));
+      if (it === '-') return box.appendChild(el('hr'));
       const b = el('button', it.kind || '', esc(it.label));
-      b.onclick = () => { UI.closeMenus(); it.fn && it.fn(); };
-      m.appendChild(b);
+      b.onclick = () => { UI.closeMenus(); buzz('select'); it.fn && it.fn(); };
+      box.appendChild(b);
     });
-    m.style.left = '-9999px'; document.body.appendChild(m);
-    const r = m.getBoundingClientRect();
-    m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
-    m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+    box.style.left = '-9999px'; document.body.appendChild(box);
+    const r = box.getBoundingClientRect();
+    box.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
+    box.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
     setTimeout(() => document.addEventListener('pointerdown', UI.closeMenus, { once: true }), 0);
-    return m;
+    return box;
   },
   closeMenus() { document.querySelectorAll('.mb-menu').forEach(n => n.remove()); },
 
+  /* ── components ──
+     Small, and deliberately so. An app that needs a control that is not here
+     should say why before adding one. */
+
+  /** the segmented control. items:[{id,name}] — returns the element. */
+  segmented(items, value, onChange) {
+    css();
+    const box = el('div', 'mb-seg');
+    const ind = el('i', 'ind');
+    box.appendChild(ind);
+    let cur = value;
+    const slide = () => {
+      const b = box.querySelector('button.on');
+      if (!b) return;
+      ind.style.width = b.offsetWidth + 'px';
+      ind.style.transform = 'translateX(' + (b.offsetLeft - 3) + 'px)';
+      /* keep the live one on screen when the strip is wider than the phone */
+      if (b.offsetLeft < box.scrollLeft || b.offsetLeft + b.offsetWidth > box.scrollLeft + box.clientWidth) {
+        box.scrollTo({ left: Math.max(0, b.offsetLeft - 12), behavior: 'smooth' });
+      }
+    };
+    items.forEach(it => {
+      const b = el('button', it.id === cur ? 'on' : '', esc(it.name));
+      b.type = 'button';
+      b.onclick = () => {
+        if (it.id === cur) return;
+        cur = it.id;
+        box.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+        slide(); buzz('select');
+        onChange && onChange(it.id);
+      };
+      box.appendChild(b);
+    });
+    /* Place the indicator before it is ever painted, so it does not slide in
+       from zero the first time. Synchronous for the same reason the sheet is:
+       a frame callback is not guaranteed to run. */
+    ind.style.transition = 'none';
+    setTimeout(() => { slide(); ind.style.transition = ''; }, 0);
+    box.select = id => { const b = [].find.call(box.querySelectorAll('button'), (x, i) => items[i].id === id); if (b) b.click(); };
+    return box;
+  },
+
+  /** the switch. Returns the element; read `.on` for its state. */
+  toggle(on, onChange) {
+    css();
+    const b = el('button', 'mb-sw' + (on ? ' on' : ''));
+    b.type = 'button';
+    b.setAttribute('role', 'switch');
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+    b.appendChild(el('i'));
+    b.on = !!on;
+    b.onclick = () => {
+      b.on = !b.on;
+      b.classList.toggle('on', b.on);
+      b.setAttribute('aria-checked', b.on ? 'true' : 'false');
+      buzz('toggle');
+      onChange && onChange(b.on);
+    };
+    return b;
+  },
+
+  /** a settings row with a label, a description and a control on the right */
+  row(title, note, control) {
+    const r = el('div', 'mb-row');
+    r.appendChild(el('div', 'lbl', '<b>' + esc(title) + '</b>' + (note ? '<span>' + note + '</span>' : '')));
+    if (control) r.appendChild(control);
+    return r;
+  },
+
+  /** an input that already knows which keyboard it wants */
+  field(kind, opts) {
+    css();
+    opts = opts || {};
+    const i = el(kind === 'note' ? 'textarea' : 'input', 'mb-input');
+    if (kind === 'note') i.rows = opts.rows || 3;
+    const m = M();
+    if (m) m.field(i, kind, opts); else i.type = 'text';
+    if (opts.placeholder) i.placeholder = opts.placeholder;
+    if (opts.value != null) i.value = opts.value;
+    return i;
+  },
+
   /* ── the standard settings panel ──
      Look and Sound are per app on purpose: ARC can be Monarch while BLOCK is
-     Ice. Day is shared, because two apps disagreeing about what day it is is
-     how numbers start disagreeing. */
+     Ice. Day and Feel are shared, because two apps disagreeing about what day
+     it is, or about whether the phone buzzes, is how a suite stops feeling
+     like one product. */
   settings(appId, extraTabs) {
     css();
     const tabs = [];
 
     if (g.Skins) tabs.push({ id: 'look', name: 'LOOK', draw: drawLook.bind(null, appId) });
     if (g.Sfx) tabs.push({ id: 'sound', name: 'SOUND', draw: drawSound.bind(null, appId) });
+    if (g.Mobile) tabs.push({ id: 'feel', name: 'FEEL', draw: drawFeel });
     if (g.Day) tabs.push({ id: 'day', name: 'DAY', draw: drawDay });
     if (g.IO) tabs.push({ id: 'data', name: 'DATA', draw: el2 => g.IO.panel(el2, appId) });
     (extraTabs || []).forEach(t => tabs.push(t));
@@ -208,26 +386,111 @@ const UI = {
       title: 'SETTINGS · ' + String(appId || '').toUpperCase(),
       width: 560,
       body: (body, h) => {
-        const bar = el('div', 'mb-tabs'), pane = el('div');
-        h.box.insertBefore(bar, body);
-        body.appendChild(pane);
-        const paint = () => {
-          bar.innerHTML = '';
-          tabs.forEach(t => {
-            const b = el('button', t.id === active ? 'on' : '', t.name);
-            b.onclick = () => { active = t.id; paint(); };
-            bar.appendChild(b);
-          });
+        /* The strip sits outside the scrolling area, so it stays put while
+           the pane under it moves. A tab bar that scrolls away is a web page. */
+        const pane = el('div');
+        const show = id => {
+          active = id;
           pane.innerHTML = '';
           const t = tabs.filter(x => x.id === active)[0];
           if (t) t.draw(pane, h);
+          body.scrollTop = 0;
         };
-        paint();
+        const bar = UI.segmented(tabs, active, show);
+        bar.style.margin = '0 var(--s-4,16px) var(--s-3,12px)';
+        h.box.insertBefore(bar, body);
+        body.appendChild(pane);
+        show(active);
       },
       actions: [{ label: 'DONE', kind: 'go' }],
     });
   },
 };
+
+/* ── the plain dialog ──
+   Reached only when mobile.js is not loaded. Same markup as the sheet so the
+   LEGACY stylesheet can dress it, and the same handle shape so no caller can
+   tell which one it got. */
+function legacyDialog(o) {
+  const veil = el('div', 'mb-veil'), box = el('div', 'mb-sheet');
+  if (o.width) box.style.setProperty('--mb-w', o.width + 'px');
+  box.appendChild(el('div', 'mb-grab'));
+  const head = el('div', 'mb-sheet-head');
+  head.appendChild(el('h3', null, esc(o.title || '')));
+  box.appendChild(head);
+  const body = el('div', 'mb-sheet-body');
+  box.appendChild(body);
+  const handle = {
+    body: body, box: box, panel: box, wide: true,
+    close(v) {
+      veil.remove(); document.removeEventListener('keydown', onKey);
+      if (g.Sfx) g.Sfx.play('close');
+      if (o.onClose) o.onClose(v);
+    },
+  };
+  if (typeof o.body === 'function') o.body(body, handle); else if (o.body) body.innerHTML = o.body;
+  if (o.actions && o.actions.length) {
+    const foot = el('div', 'mb-sheet-foot');
+    o.actions.forEach(a => {
+      const b = el('button', 'mb-btn' + (a.kind ? ' ' + a.kind : ''), esc(a.label));
+      b.onclick = () => { const r = a.fn ? a.fn(handle) : undefined; if (r !== false) handle.close(a.value); };
+      foot.appendChild(b);
+    });
+    box.appendChild(foot);
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') { e.stopPropagation(); handle.close(); }
+    if (e.key === 'Enter' && o.enter && !/TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); o.enter(handle); }
+  }
+  document.addEventListener('keydown', onKey);
+  veil.onclick = e => { if (e.target === veil && o.dismissable !== false) handle.close(); };
+  veil.appendChild(box); document.body.appendChild(veil);
+  if (g.Sfx) g.Sfx.play('open');
+  setTimeout(() => { const f = box.querySelector('input,select,button.go'); if (f) f.focus(); }, 40);
+  return handle;
+}
+
+/* ── feel ──
+   The one tab that is about the hands rather than the eyes. */
+function drawFeel(pane) {
+  const M = g.Mobile;
+  pane.appendChild(el('div', 'mb-group', 'HOW IT ANSWERS — SHARED BY EVERY APP'));
+
+  const canBuzz = !!navigator.vibrate;
+  pane.appendChild(UI.row('Vibrate on a tap',
+    canBuzz
+      ? 'A short buzz when something lands, a longer one when something finishes.'
+      : 'This phone or browser has no vibration. <b>iPhone Safari has none at all</b>, so on an iPhone the sound is the whole of the feedback.',
+    UI.toggle(M.haptics && canBuzz, on => { M.setHaptics(on); if (on) M.haptic('success'); })));
+
+  pane.appendChild(UI.row('Feel it', 'Tap, finish, then a whole day done.', (() => {
+    const b = el('button', 'mb-btn mb-press mb-tap', 'PLAY');
+    b.type = 'button';
+    b.onclick = () => {
+      M.feedback('tick');
+      setTimeout(() => M.feedback('success'), 260);
+      setTimeout(() => M.feedback('complete', { level: 3 }), 620);
+    };
+    return b;
+  })()));
+
+  pane.appendChild(el('div', 'mb-group', 'THIS DEVICE'));
+  const bits = [
+    M.ios ? 'iPhone or iPad' : M.android ? 'Android' : 'desktop',
+    M.touch ? 'touch screen' : 'mouse and keyboard',
+    M.standalone ? 'installed to the home screen' : 'running in the browser',
+    canBuzz ? 'can vibrate' : 'cannot vibrate',
+    M.reduced() ? 'motion reduced in system settings' : 'full motion',
+  ];
+  pane.appendChild(el('p', null, '<span style="color:var(--text-muted,#5b6d80);font-size:var(--f-1,12px);line-height:1.6">' +
+    esc(bits.join(' · ')) + '</span>'));
+
+  if (!M.standalone && M.touch) {
+    pane.appendChild(el('p', null, '<span style="color:var(--warn,#ffb347);font-size:var(--f-1,12px);line-height:1.6">' +
+      'Add this to your home screen and it opens without the browser bars, gets the full screen, ' +
+      'and stops iOS clearing its data after seven days of not being opened.</span>'));
+  }
+}
 
 /* ── settings tabs ── */
 /* Two layers, kept visibly separate because they are separate:
@@ -269,9 +532,8 @@ function drawLook(appId, pane) {
     S.FIELDS.forEach(([key, label]) => {
       const row = el('div', 'mb-row');
       row.appendChild(el('div', 'lbl', '<b>' + esc(label) + '</b>'));
-      const c = el('input');
+      const c = el('input', 'mb-swatch mb-tap');
       c.type = 'color'; c.value = pal[key];
-      c.style.cssText = 'width:44px;height:30px;border:1px solid var(--border,#1e2a38);border-radius:6px;background:none;cursor:pointer';
       c.oninput = () => { pal[key] = c.value; live(); };
       c.onchange = commit;
       row.appendChild(c);
@@ -281,11 +543,13 @@ function drawLook(appId, pane) {
     const nrow = el('div', 'mb-row');
     nrow.appendChild(el('div', 'lbl', '<b>Node &amp; chart colours</b><span>The six ARC paints with.</span>'));
     const strip = el('div');
-    strip.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap';
+    strip.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
     pal.colors.forEach((hex, i) => {
-      const c = el('input');
+      /* 44 wide even though the ink is small: six swatches in a row is the
+         easiest thing in this panel to mis-tap. */
+      const c = el('input', 'mb-swatch mb-tap');
       c.type = 'color'; c.value = hex;
-      c.style.cssText = 'width:28px;height:28px;border:1px solid var(--border,#1e2a38);border-radius:6px;background:none;cursor:pointer;padding:0';
+      c.style.width = '38px';
       c.oninput = () => { pal.colors[i] = c.value; live(); };
       c.onchange = commit;
       strip.appendChild(c);
@@ -305,11 +569,11 @@ function drawLook(appId, pane) {
       ? '<b>Back to normal</b><span>Throws away your colours and repaints ' + esc(skin.name) + ' as it ships.</span>'
       : '<b>Use this everywhere</b><span>Sets every other app to this theme. Their own colours are untouched.</span>'));
     if (S.isCustomised(id)) {
-      const b = el('button', 'mb-btn bad', 'RESET COLOURS');
+      const b = el('button', 'mb-btn bad mb-press mb-tap', 'RESET COLOURS');
       b.onclick = () => { S.clearPalette(id); S.apply(skin); pal = S.paletteFor(id); paintColours(); UI.toast('reset to the theme’s own colours'); };
       acts.appendChild(b);
     } else {
-      const b = el('button', 'mb-btn', 'APPLY TO ALL');
+      const b = el('button', 'mb-btn mb-press mb-tap', 'APPLY TO ALL');
       b.onclick = () => {
         try {
           Object.keys(localStorage).filter(k => k.indexOf('suite_skin.') === 0).forEach(k => localStorage.setItem(k, id));
@@ -328,7 +592,7 @@ function drawSound(appId, pane) {
   pane.appendChild(el('div', 'mb-group', 'SOUND THEME — THIS APP ONLY'));
   const chips = el('div', 'mb-chips');
   S.PACKS.forEach(p => {
-    const c = el('button', 'mb-chip' + (cur.pack === p.id ? ' on' : ''), esc(p.name));
+    const c = el('button', 'mb-chip mb-press mb-tap' + (cur.pack === p.id ? ' on' : ''), esc(p.name));
     c.onclick = () => { S.pack(p.id); S.preview(p.id); pane.innerHTML = ''; drawSound(appId, pane); };
     chips.appendChild(c);
   });
@@ -352,14 +616,13 @@ function drawSound(appId, pane) {
   volrow.appendChild(r); pane.appendChild(volrow);
 
   const mrow = el('div', 'mb-row');
-  mrow.appendChild(el('div', 'lbl', '<b>Mute this app</b><span>Other apps keep their own setting.</span>'));
-  const mb = el('button', 'mb-btn' + (cur.mute ? '' : ' go'), cur.mute ? 'MUTED' : 'ON');
-  mb.onclick = () => { S.mute(!S.mute()); pane.innerHTML = ''; drawSound(appId, pane); if (!S.mute()) S.play('done'); };
+  mrow.appendChild(el('div', 'lbl', '<b>Sound in this app</b><span>Every app remembers its own.</span>'));
+  const mb = UI.toggle(!cur.mute, on => { S.mute(!on); if (on) S.play('done'); });
   mrow.appendChild(mb); pane.appendChild(mrow);
 
   const trow = el('div', 'mb-row');
   trow.appendChild(el('div', 'lbl', '<b>Hear it</b><span>Tick, finish, then a full completion.</span>'));
-  const tb = el('button', 'mb-btn', 'PLAY');
+  const tb = el('button', 'mb-btn mb-press mb-tap', 'PLAY');
   tb.onclick = () => S.preview();
   trow.appendChild(tb); pane.appendChild(trow);
 }

@@ -188,7 +188,7 @@ const IO = {
       ' <span style="opacity:.7">' + stats.live + ' rows · ' + stats.kb + 'kb</span>'));
 
     const opt = (ic, t, d, fn, cls) => {
-      const b = el('button', 'mb-opt' + (cls ? ' ' + cls : ''));
+      const b = el('button', 'mb-opt mb-press flat' + (cls ? ' ' + cls : ''));
       b.innerHTML = '<span class="ic">' + ic + '</span><span class="t"><b>' + t + '</b><span>' + d + '</span></span>';
       b.onclick = fn; pane.appendChild(b); return b;
     };
