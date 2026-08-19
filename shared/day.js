@@ -1,0 +1,98 @@
+/* ══════════════════════ MOTHERBASE · DAY ══════════════════════
+   One definition of "today" for the whole suite, because two apps that
+   disagree about what day it is will quietly disagree about everything else.
+
+   Two separate hours, and they do different jobs:
+
+     startsAt (default 4am) — WHICH DATE a tick belongs to. Something logged
+       at 2am belongs to yesterday, because that is the day you were still in.
+       This is the only rule that decides dates. Nothing else may.
+
+     closesAt (default 1am)  — WHEN THE DAY IS WRAPPED UP: scored, celebrated,
+       shown as finished. It sits before the rollover on purpose, so there is a
+       grace window (1am → 4am) where the day is closed but you can still log
+       into it without arguing with the clock.
+
+   Backfilling any past date is always allowed and always has been — see
+   Day.editable(). The boundary decides where new ticks land, never what you
+   are permitted to correct.
+
+     <script src="shared/day.js"></script>
+*/
+(function (g) {
+'use strict';
+
+const DEF = { startsAt: 4, closesAt: 1 };
+const KEY = 'mb.day';                     /* read directly: Records depends on Day, not the reverse */
+let cfg = Object.assign({}, DEF);
+try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+
+const pad = n => String(n).padStart(2, '0');
+const iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const noon = date => new Date(date + 'T12:00:00');   /* noon dodges every DST edge case */
+
+const Day = {
+  DEF: DEF,
+  get startsAt() { return cfg.startsAt; },
+  get closesAt() { return cfg.closesAt; },
+
+  /** the tracking date a moment belongs to */
+  of(when) {
+    const d = new Date(when == null ? Date.now() : when);
+    if (d.getHours() < cfg.startsAt) d.setDate(d.getDate() - 1);
+    return iso(d);
+  },
+  today() { return Day.of(); },
+  /** plain calendar date, ignoring the boundary — for anything genuinely clock-based */
+  calendar(when) { return iso(new Date(when == null ? Date.now() : when)); },
+
+  shift(date, n) { const d = noon(date); d.setDate(d.getDate() + n); return iso(d); },
+  dow(date) { return noon(date).getDay(); },
+  diff(a, b) { return Math.round((noon(a) - noon(b)) / 86400000); },
+  /** every date from `from` to `to` inclusive */
+  range(from, to) { const out = []; for (let d = from; d <= to; d = Day.shift(d, 1)) out.push(d); return out; },
+  /** the last n dates ending today, oldest first */
+  last(n, end) { const e = end || Day.today(); return Day.range(Day.shift(e, -(n - 1)), e); },
+
+  /** has this date been wrapped up? true for anything before today, and for
+      today once the close hour has passed */
+  isClosed(date) {
+    const t = Day.today();
+    if (date < t) return true;
+    if (date > t) return false;
+    const h = new Date().getHours();
+    /* closesAt is an early-morning hour, so "past the close" means we are in
+       the window between it and the rollover */
+    return h >= cfg.closesAt && h < cfg.startsAt;
+  },
+  /** minutes until this date rolls over — for a countdown, or a nudge */
+  untilRollover() {
+    const now = new Date(), r = new Date(now);
+    r.setHours(cfg.startsAt, 0, 0, 0);
+    if (r <= now) r.setDate(r.getDate() + 1);
+    return Math.round((r - now) / 60000);
+  },
+
+  /** past and present are editable; the future is not a record, it is a plan */
+  editable(date) { return date <= Day.today(); },
+
+  set(patch) {
+    Object.assign(cfg, patch);
+    cfg.startsAt = Math.max(0, Math.min(11, +cfg.startsAt || 0));
+    cfg.closesAt = Math.max(0, Math.min(23, +cfg.closesAt || 0));
+    try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {}
+    (Day._subs || []).forEach(f => { try { f(cfg); } catch (e) {} });
+    return cfg;
+  },
+  on(f) { (Day._subs = Day._subs || []).push(f); return () => { const i = Day._subs.indexOf(f); if (i > -1) Day._subs.splice(i, 1); }; },
+
+  /** "Mon 19 Aug" — one date format for the whole suite */
+  label(date, opts) {
+    return noon(date).toLocaleDateString(undefined, opts || { weekday: 'short', day: 'numeric', month: 'short' });
+  },
+  short(date) { return noon(date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); },
+  isToday(date) { return date === Day.today(); },
+};
+
+g.Day = Day;
+})(window);

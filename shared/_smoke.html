@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Motherbase — shared foundation check</title>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="skins.js"></script>
+<script src="day.js"></script>
+<script src="records.js"></script>
+<script src="sound.js"></script>
+<script src="ui.js"></script>
+<script src="io.js"></script>
+<script src="health.js"></script>
+<style>
+body{background:var(--bg,#080b10);color:var(--text-1,#dbe7f0);font-family:var(--font-body,system-ui);
+  margin:0;padding:24px;font-size:14px;line-height:1.6}
+h1{font-family:var(--font-display,system-ui);font-size:16px;letter-spacing:.2em;color:var(--accent,#7ee8fa);margin:0 0 4px}
+.sub{color:var(--text-muted,#5b6d80);font-size:12.5px;margin-bottom:20px}
+#out{font-family:var(--font-mono,monospace);font-size:12.5px;white-space:pre-wrap;
+  border:1px solid var(--border,#1e2a38);border-radius:10px;padding:14px;background:var(--surface-1,#0e141d);max-width:900px}
+.p{color:var(--success,#6ee7a8)}.f{color:var(--danger,#ff6b81)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}
+button{padding:7px 14px;border:1px solid var(--border-strong,#2b3a4d);border-radius:8px;background:var(--surface-2,#131b26);
+  color:var(--text-2,#7f93a8);font-family:var(--font-display,system-ui);font-size:11px;letter-spacing:.1em;cursor:pointer}
+button:hover{border-color:var(--accent,#7ee8fa);color:var(--accent,#7ee8fa)}
+</style>
+</head>
+<body>
+<h1>SHARED FOUNDATION CHECK</h1>
+<div class="sub">Exercises day, records, sound, ui, io and health without touching any app's data.</div>
+<div class="bar">
+  <button onclick="Sfx.unlock();Sfx.preview()">HEAR THE PACK</button>
+  <button onclick="UI.settings('smoke')">OPEN SETTINGS</button>
+  <button onclick="UI.confirm('Does this dialog look right?','It should match whatever theme is picked.').then(v=>UI.toast('you said '+v))">CONFIRM</button>
+  <button onclick="IO.export('smoke')">EXPORT SPREADSHEET</button>
+  <button onclick="run()">RE-RUN CHECKS</button>
+</div>
+<div id="out">running…</div>
+
+<script>
+const T = [];
+const ok = (name, cond, note) => T.push({ name, pass: !!cond, note: note || '' });
+
+function run() {
+  T.length = 0;
+  const stamp = 'smoke-' + Date.now();
+
+  /* ---- day ---- */
+  Day.set({ startsAt: 4, closesAt: 1 });
+  const at2am = new Date(); at2am.setHours(2, 0, 0, 0);
+  const at9am = new Date(); at9am.setHours(9, 0, 0, 0);
+  ok('day: 2am belongs to yesterday', Day.of(at2am) === Day.shift(Day.calendar(at2am), -1));
+  ok('day: 9am belongs to today', Day.of(at9am) === Day.calendar(at9am));
+  ok('day: shift round-trips', Day.shift(Day.shift('2026-03-01', 40), -40) === '2026-03-01');
+  ok('day: diff counts days', Day.diff('2026-03-11', '2026-03-01') === 10);
+  ok('day: last(7) is 7 dates ending today', Day.last(7).length === 7 && Day.last(7)[6] === Day.today());
+  ok('day: past is editable, future is not', Day.editable(Day.shift(Day.today(), -30)) && !Day.editable(Day.shift(Day.today(), 1)));
+  ok('day: dst-safe across a spring forward', Day.diff('2026-03-30', '2026-03-28') === 2);
+
+  /* ---- records ---- */
+  Rec.declare('smoke', [stamp]);
+  const d = Day.today();
+  Rec.set(stamp, d, 'a', { v: 1 });
+  ok('rec: write then read', Rec.get(stamp, d, 'a').v === 1);
+  const r1 = Rec.set(stamp, d, 'a', { v: 1 });
+  ok('rec: identical write is not a write', r1.updated_at === Rec.row(stamp, d, 'a').updated_at);
+  const before = Rec.row(stamp, d, 'a').updated_at;
+  Rec.set(stamp, d, 'a', { v: 2 });
+  ok('rec: real change bumps updated_at', Rec.row(stamp, d, 'a').updated_at >= before && Rec.get(stamp, d, 'a').v === 2);
+  Rec.set(stamp, d, 'b', { v: 9 });
+  ok('rec: all() lists live rows', Rec.all(stamp, { date: d }).length === 2);
+  ok('rec: map() is key to payload', Rec.map(stamp, d).b.v === 9);
+  Rec.del(stamp, d, 'b');
+  ok('rec: delete hides the row', Rec.get(stamp, d, 'b') === null && Rec.all(stamp, { date: d }).length === 1);
+  ok('rec: delete leaves a tombstone', Rec.export([stamp]).some(r => r.key === 'b' && r.deleted));
+
+  /* the whole reason for rows: a stale copy must not win */
+  const mine = Rec.row(stamp, d, 'a');
+  const stale = Object.assign({}, mine, { payload: { v: 99 }, updated_at: '2000-01-01T00:00:00.000Z' });
+  Rec.merge([stale]);
+  ok('rec: older row loses the merge', Rec.get(stamp, d, 'a').v === 2);
+  const newer = Object.assign({}, mine, { payload: { v: 42 }, updated_at: new Date(Date.now() + 60000).toISOString() });
+  const n1 = Rec.merge([newer]);
+  const n2 = Rec.merge([newer]);
+  ok('rec: newer row wins the merge', Rec.get(stamp, d, 'a').v === 42);
+  ok('rec: merge is idempotent', n1 === 1 && n2 === 0);
+
+  Rec.set(stamp, null, 'undated', { v: 'x' });
+  ok('rec: undated rows work', Rec.get(stamp, null, 'undated').v === 'x');
+  Rec.setting('smoke', 'colour', 'blue');
+  ok('rec: settings are namespaced', Rec.setting('smoke', 'colour') === 'blue');
+  ok('rec: window query narrows by date', Rec.all(stamp, { from: d, to: d }).length === Rec.all(stamp, { date: d }).length);
+  ok('rec: export round-trips through merge', (() => {
+    const rows = Rec.export([stamp]);
+    return Rec.merge(rows) === 0 && rows.length > 0;
+  })());
+  ok('rec: rows are individually addressable in storage',
+    Object.keys(localStorage).filter(k => k.indexOf('mb.r.') === 0 && k.indexOf(stamp) > -1).length >= 2);
+
+  /* ---- ticks, the shared cell ---- */
+  Rec.set('activity', null, 'smoke-run', { name: 'Smoke Run', cat: 'test' });
+  Rec.set('tick', d, 'smoke-run', { src: 'smoke' });
+  ok('tick: written and readable', Rec.has('tick', d, 'smoke-run'));
+  ok('tick: activity resolves for display', Rec.map('activity')['smoke-run'].name === 'Smoke Run');
+
+  /* ---- io ---- */
+  IO.register({ app: 'smoke', name: 'Smoke', types: [stamp] });
+  const sheets = IO.sheets('smoke', 14);
+  ok('io: builds a calendar and a log sheet', sheets.length >= 2 && sheets[0].name === 'Calendar');
+  ok('io: calendar has a date header row', sheets[0].rows[0][0] === 'Activity' && sheets[0].rows[0].length === 15);
+  ok('io: calendar marks today as TRUE', sheets[0].rows.some(r => r[0] === 'Smoke Run' && r[r.length - 1] === true));
+  ok('io: log rows carry date and source', sheets[1].rows.some(r => r[0] === d && r[2] === 'smoke'));
+
+  /* ---- health ---- */
+  const h = Health.check();
+  ok('health: reports a verdict', typeof h.ok === 'boolean' && h.stats.live > 0);
+  ok('health: no malformed rows', !h.issues.some(i => /malformed|duplicate/.test(i.msg)));
+
+  /* ---- sound + ui exist and are wired ---- */
+  ok('sfx: packs and voices are listed', Sfx.PACKS.length >= 5 && Sfx.VOICES.length >= 5);
+  ok('sfx: settings persist per app', (Sfx.init('smoke'), Sfx.volume(0.4), Sfx.settings.vol === 0.4));
+  ok('ui: dialog, confirm, menu, settings all present', ['dialog', 'confirm', 'menu', 'settings', 'toast'].every(k => typeof UI[k] === 'function'));
+  ok('skins: per-app key is scoped', (Skins.for('smoke'), Skins.restore('smoke'), localStorage.getItem('suite_skin.smoke') != null));
+
+  /* ---- clean up after ourselves ---- */
+  Rec.clear([stamp]);
+  Rec.del('tick', d, 'smoke-run'); Rec.del('activity', null, 'smoke-run');
+  Rec.vacuum(0);
+  ok('cleanup: smoke rows removed', Rec.all(stamp).length === 0);
+
+  const pass = T.filter(t => t.pass).length;
+  document.getElementById('out').innerHTML =
+    T.map(t => (t.pass ? '<span class="p">  ok  </span>' : '<span class="f">  FAIL</span>') + '  ' + t.name).join('\n') +
+    '\n\n' + (pass === T.length ? '<span class="p">' : '<span class="f">') + pass + ' / ' + T.length + ' passed</span>';
+  return { pass, total: T.length, failed: T.filter(t => !t.pass).map(t => t.name) };
+}
+
+Skins.load('skins.json').then(() => { Skins.restore('smoke'); Sfx.init('smoke'); run(); });
+</script>
+</body>
+</html>

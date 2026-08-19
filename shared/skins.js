@@ -12,7 +12,12 @@
 const FALLBACK={schema:1,skins:[
  {id:'status-window',name:'Status Window',mode:'dark',cut:'10px',base:{bg:'#070A11',panel:'#0E131D',accent:'#4FD8E8',text:'#E6EDF7'}}],
  ranks:{S:'#F2C14E',A:'#5FE39B',B:'#4FD8E8',C:'#6C8CFF',D:'#C79BF0',E:'#FF9F6B',F:'#FF6B6B'}};
+/* The skin is chosen PER APP on purpose — ARC can be Monarch while BLOCK is
+   Ice. `Skins.for('block')` before restore()/apply() scopes it; without it
+   everything shares the old single key, exactly as before. */
+let APP='';
 const KEY='suite_skin';
+const skinKey=()=>APP?KEY+'.'+APP:KEY;
 
 const hex2rgb=h=>{h=String(h).replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');
   return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]};
@@ -85,10 +90,15 @@ const Skins={
     r.dataset.skin=s.id;r.dataset.mode=s.mode;
     const m=document.querySelector('meta[name=theme-color]');if(m)m.content=t['--bg'];
     this.current=s;
-    try{localStorage.setItem(KEY,s.id);if(s.custom)this.saveCustom(s)}catch(e){}
+    try{localStorage.setItem(skinKey(),s.id);if(s.custom)this.saveCustom(s)}catch(e){}
     return s;
   },
-  restore(){try{return this.apply(localStorage.getItem(KEY)||this.data.skins[0].id)}
+  /* Name the app before restoring and the choice becomes that app's own.
+     Falls back to the suite-wide key, so an existing choice carries over once. */
+  for(appId){APP=appId||'';return this},
+  restore(appId){
+    if(appId)APP=appId;
+    try{return this.apply(localStorage.getItem(skinKey())||localStorage.getItem(KEY)||this.data.skins[0].id)}
     catch(e){return this.apply(this.data.skins[0].id)}},
   check(base){return{accentOnBg:contrast(base.accent,base.bg),textOnPanel:contrast(base.text,base.panel),
     ok:contrast(base.accent,base.bg)>=3&&contrast(base.text,base.panel)>=4.5}},
