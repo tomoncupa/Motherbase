@@ -261,6 +261,28 @@ main{display:flex;flex:1;min-height:0}
 
 /* ---------- week ---------- */
 #week{flex:1;overflow:auto;padding:12px;display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;align-content:start}
+.weekbar{grid-column:1/-1;display:flex;align-items:center;gap:7px;margin-bottom:2px}
+#pri{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:14px;max-width:920px}
+#pri.hide{display:none}
+.prisec h4{font-family:var(--f1);font-size:12px;letter-spacing:.12em;margin-bottom:7px;display:flex;align-items:center;gap:8px}
+.prisec h4 span{font-size:10px;color:var(--dim2);letter-spacing:.05em}
+.prisec h4.pri1{color:#ff8a9c}.prisec h4.pri2{color:var(--warn)}.prisec h4.pri3{color:#7fb8ff}.prisec h4.pri0{color:var(--dim2)}
+.prirow{
+  display:flex;align-items:center;gap:9px;padding:7px 10px;border:1px solid var(--line);border-left:3px solid var(--c);
+  border-radius:7px;background:var(--panel);margin-bottom:5px;cursor:pointer;
+}
+.prirow:hover{background:var(--panel2);border-color:var(--line2);border-left-color:var(--c)}
+.prirow .pn{flex:1;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prirow .pw{font-family:var(--f1);font-size:10.5px;color:var(--dim2);white-space:nowrap}
+.prirow.isdone .pn{text-decoration:line-through;color:var(--dim2)}
+.wbnote{font-family:var(--f1);font-size:10.5px;color:var(--dim2);letter-spacing:.05em}
+.day-ck{
+  flex:0 0 auto;width:13px;height:13px;border-radius:4px;border:1.5px solid var(--line2);background:rgba(0,0,0,.3);
+  font-size:8px;line-height:1;color:transparent;display:flex;align-items:center;justify-content:center;
+}
+.day-ck:hover{border-color:var(--good)}
+.day-ck.on{background:var(--good);border-color:var(--good);color:#05130c;font-weight:700}
+.day-b.isdone span{text-decoration:line-through;color:var(--dim2)}
 .day{border:1px solid var(--line);border-radius:11px;background:linear-gradient(180deg,rgba(19,27,38,.75),rgba(11,16,23,.55));display:flex;flex-direction:column;min-height:220px}
 .day.today{border-color:var(--acc-d);box-shadow:0 0 0 1px var(--acc-d)}
 .day-head{padding:9px 10px;border-bottom:1px solid var(--line)}
@@ -375,6 +397,7 @@ footer .sp{flex:1}
     <div class="views">
       <button id="vDay" class="on" data-tip="<b>Day</b> — build one routine out of blocks">Day</button>
       <button id="vWeek" data-tip="<b>Week</b> — which <b>day</b> runs on which weekday">Week</button>
+      <button id="vPri" data-tip="<b>Priority</b> — everything you've flagged, P1 first, across every routine">Priority</button>
     </div>
     <div id="tabs"></div>
     <div class="hbtns">
@@ -416,6 +439,7 @@ footer .sp{flex:1}
 
     <div id="board"></div>
     <div id="week" class="hide"></div>
+    <div id="pri" class="hide"></div>
   </main>
 
   <footer>
@@ -957,6 +981,8 @@ function rolloverIfNewDay() {
 }
 function toggleDone(it) {
   it.done = !it.done;
+  /* an explicit tick outranks a post-completion clear */
+  if (S.cleared && S.cleared.date === todayKey() && window.LifeOS) delete S.cleared.ids[actIdOf(it)];
   /* the tick is not ours to keep — it goes in the shared day log, which is what
      HABITS and the home screen read. Same block name = same tick, everywhere. */
   LifeOS.done(actIdOf(it), todayKey(), it.done, { src: 'block' });
@@ -968,8 +994,24 @@ function toggleDone(it) {
   render();
   if (todays.length && !open.length) {
     document.querySelectorAll('.brick').forEach(n => n.classList.add('celebrate'));
-    toast('✓ <b>' + todays.length + '/' + todays.length + '</b> — routine complete, logged for today.');
+    beep('complete');
+    toast('✓ <b>' + todays.length + '/' + todays.length + '</b> — day complete, logged. Clearing the boxes…');
+    setTimeout(() => { clearForNextPass(vid); render(); }, 1500);
   }
+}
+/**
+ * Wipe the checkboxes for a fresh run WITHOUT un-saying that it happened:
+ * the shared LifeOS log keeps the tick (habits + streaks depend on it), and
+ * pullDone() is told not to paint these back on for the rest of today.
+ */
+function clearForNextPass(vid) {
+  if (!S.cleared || S.cleared.date !== todayKey()) S.cleared = { date: todayKey(), ids: {} };
+  withVariant(vid, () => S.lanes.forEach(l => items(l.id).forEach(it => {
+    if (!it.done) return;
+    it.done = false;
+    if (window.LifeOS) S.cleared.ids[actIdOf(it)] = 1;
+  })));
+  save();
 }
 
 /* ============================ rules ============================ */
@@ -1029,13 +1071,15 @@ function render() {
   RULECHK = checkRules(S.current);
   $('#board').classList.toggle('hide', S.view !== 'day');
   $('#week').classList.toggle('hide', S.view !== 'week');
+  $('#pri').classList.toggle('hide', S.view !== 'pri');
   $('#vDay').classList.toggle('on', S.view === 'day');
   $('#vWeek').classList.toggle('on', S.view === 'week');
-  $('#tabs').style.display = S.view === 'day' ? '' : 'none';
+  $('#vPri').classList.toggle('on', S.view === 'pri');
+  $('#tabs').style.display = S.view === 'week' ? 'none' : '';
   $('#bNew').style.display = $('#bCmp').style.display = S.view === 'day' ? '' : 'none';
   $('#bRules').innerHTML = 'Rules' + (RULECHK.count ? ' <span class="bad">⚠' + RULECHK.count + '</span>' : (S.rules.length ? ' ✓' : ''));
   renderTabs(); renderBin();
-  if (S.view === 'day') renderBoard(); else renderWeek();
+  if (S.view === 'day') renderBoard(); else if (S.view === 'week') renderWeek(); else renderPri();
   renderFoot(); save();
 }
 
@@ -1232,8 +1276,20 @@ function renderBoard() {
     }
 
     const tools = el('div', 'lane-tools');
-    const mk = (label, tip, fn, cls) => { const x = el('button', 'btn ' + (cls || ''), label); x.dataset.tip = tip; x.onclick = fn; tools.appendChild(x); };
-    mk('↓P', 'Sort this routine by priority — P1 first. Pinned 📌 and anchored ⚓ blocks stay put.', () => sortPri(L.id));
+    const mk = (label, tip, fn, cls, rc) => {
+      const x = el('button', 'btn ' + (cls || ''), label); x.dataset.tip = tip; x.onclick = fn;
+      if (rc) x.oncontextmenu = rc;
+      tools.appendChild(x);
+    };
+    mk(L.byPri ? '◧P' : '↓P', L.byPri
+      ? 'Showing this routine <b>by priority</b> — times still belong to the real order. Click to go back.'
+      : 'Sort by priority — P1 first. Pinned 📌 and anchored ⚓ stay put.<br>Right-click for a view-only version that leaves the order alone.',
+      () => sortPri(L.id), '', ev => {
+        ev.preventDefault();
+        openMenu(ev.clientX, ev.clientY, [{ head: 'Priority in ' + L.name },
+          { label: 'Sort them for real', fn: () => sortPri(L.id) },
+          { label: 'Just show me by priority', check: !!L.byPri, fn: () => { L.byPri = !L.byPri; render(); } }]);
+      });
     mk('⇩ template', 'Save this routine as a reusable template', () => saveTemplate(L.id), 'hov');
     mk('⌫', 'Empty this routine', () => { if (items(L.id).length && confirm('Clear ' + L.name + '?')) { snap(); M().items[L.id] = []; render(); } }, 'hov');
     head.appendChild(tools);
@@ -1244,9 +1300,11 @@ function renderBoard() {
     const body = el('div', 'lane-body'); body.dataset.lane = L.id;
     body.onclick = () => { if (focusLane !== li) { focusLane = li; renderBoard(); renderBin(); } };
     if (!sc.length) body.appendChild(el('div', 'lane-empty', 'Drag a block here<br><span style="opacity:.6">or click one in the bin</span>'));
-    const nowM = nowMin(), showNow = S.nowline && L.nowline !== false && L.start != null;
+    const nowM = nowMin(), showNow = S.nowline && L.nowline !== false && L.start != null && !L.byPri;
     let nowDrawn = false;
-    sc.forEach(({ it, s, e, gap, clash, hidden }) => {
+    /* view-only priority ordering: the clock times stay attached to the real order */
+    const view = L.byPri ? sc.slice().sort((a, b) => ((a.it.pri || 9) - (b.it.pri || 9)) || (a.s - b.s)) : sc;
+    view.forEach(({ it, s, e, gap, clash, hidden }) => {
       if (showNow && !nowDrawn && !hidden && s > nowM) { body.appendChild(nowLine(nowM)); nowDrawn = true; }
       const nd = brickNode(L.id, it, s, e, { gap, clash });
       if (showNow && e <= nowM && !hidden) nd.classList.add('past');
@@ -1552,6 +1610,19 @@ function editDur(node, it) {
 /* ---------- week view ---------- */
 function renderWeek() {
   const w = $('#week'); w.innerHTML = '';
+  const bar = el('div', 'weekbar');
+  const kd = el('button', 'btn sm' + (S.keepDone ? ' acc' : ''), S.keepDone ? '✓ showing done' : '⊘ hiding done');
+  kd.dataset.tip = 'Keep finished blocks visible in the week, or clear them out as you go';
+  kd.onclick = () => { S.keepDone = !S.keepDone; render(); };
+  bar.appendChild(kd);
+  const ws = el('button', 'btn sm', 'week starts ' + DSHORT[S.weekStart]);
+  ws.dataset.tip = 'Match your calendar — Sunday, Monday or Saturday';
+  ws.onclick = ev => openMenu(ev.clientX, ev.clientY, [{ head: 'Week starts on' },
+    ...[0, 1, 6].map(k => ({ label: DAYS[k], check: S.weekStart === k, fn: () => { S.weekStart = k; render(); } }))]);
+  bar.appendChild(ws);
+  const done = weekOrd().reduce((a, d) => a + (variant(S.week[d]) ? 1 : 0), 0);
+  bar.appendChild(el('span', 'wbnote', done + '/7 weekdays assigned'));
+  w.appendChild(bar);
   weekOrd().forEach(d => {
     const vid = S.week[d];
     const v = variant(vid);
@@ -1602,11 +1673,21 @@ function renderWeek() {
       col.appendChild(head);
 
       const body = el('div', 'day-body');
+      const isToday = d === todayIdx();
       rows.forEach(({ L, sc }) => {
+        const shown = sc.filter(r => S.keepDone || !r.it.done);
+        if (!shown.length) return;
         body.appendChild(el('div', 'day-lane', esc(L.name)));
-        sc.forEach(({ it, s }) => {
-          const r = el('div', 'day-b'); r.style.setProperty('--c', it.color);
-          r.innerHTML = '<i></i><span>' + (it.pri ? '<b style="color:#ff8a9c">' + PRI[it.pri] + '</b> ' : '') + esc(it.name) + '</span><em>' + fmt(s) + '</em>';
+        shown.forEach(({ it, s }) => {
+          const r = el('div', 'day-b' + (it.done ? ' isdone' : '')); r.style.setProperty('--c', it.color);
+          r.appendChild(el('i'));
+          const ck = el('button', 'day-ck' + (it.done ? ' on' : ''), it.done ? '✓' : '');
+          ck.dataset.tip = isToday ? (it.done ? 'Done today — click to un-tick' : 'Tick it off') :
+            'Ticks always belong to <b>today</b> — this is the same block ' + DSHORT[d] + ' runs.';
+          ck.onclick = ev => { ev.stopPropagation(); toggleDone(it); };
+          r.appendChild(ck);
+          r.appendChild(el('span', null, (it.pri ? '<b style="color:#ff8a9c">' + PRI[it.pri] + '</b> ' : '') + esc(it.name)));
+          r.appendChild(el('em', null, fmt(s)));
           r.dataset.tip = '<b>' + esc(it.name) + '</b> — ' + dur2s(it.dur) + ', ' + ENAME[energyOf(it)] + ' effort';
           body.appendChild(r);
         });
@@ -1623,6 +1704,48 @@ function renderWeek() {
     }
     w.appendChild(col);
   });
+}
+
+/* ---------- priority view: everything flagged, across every routine ---------- */
+function renderPri() {
+  const p = $('#pri'); p.innerHTML = '';
+  const scope = S.priScope || 'day';
+  const bar = el('div', 'weekbar');
+  const sc = el('button', 'btn sm acc', scope === 'day' ? 'this day: ' + M().name : 'every day');
+  sc.dataset.tip = 'Show priorities from the open day only, or from every day you have built';
+  sc.onclick = () => { S.priScope = scope === 'day' ? 'all' : 'day'; render(); };
+  bar.appendChild(sc);
+  const kd = el('button', 'btn sm' + (S.keepDone ? ' acc' : ''), S.keepDone ? '✓ showing done' : '⊘ hiding done');
+  kd.onclick = () => { S.keepDone = !S.keepDone; render(); };
+  bar.appendChild(kd);
+  p.appendChild(bar);
+
+  const rows = [];
+  (scope === 'day' ? [M()] : S.variants).forEach(v => withVariant(v.id, () => {
+    S.lanes.forEach(L => schedule(L.id).forEach(r => { if (!r.hidden) rows.push({ v, L, it: r.it, s: r.s }); }));
+  }));
+
+  [1, 2, 3, 0].forEach(k => {
+    const grp = rows.filter(r => (r.it.pri || 0) === k && (S.keepDone || !r.it.done));
+    if (!grp.length) return;
+    const sec = el('div', 'prisec');
+    const mins = grp.reduce((a, r) => a + r.it.dur, 0);
+    sec.appendChild(el('h4', 'pri' + k, (k ? 'P' + k : 'No priority') + ' <span>' + grp.length + ' · ' + dur2s(mins) + '</span>'));
+    grp.sort((a, b) => a.s - b.s).forEach(r => {
+      const row = el('div', 'prirow' + (r.it.done ? ' isdone' : ''));
+      row.style.setProperty('--c', r.it.color);
+      const ck = el('button', 'day-ck' + (r.it.done ? ' on' : ''), r.it.done ? '✓' : '');
+      ck.onclick = ev => { ev.stopPropagation(); toggleDone(r.it); };
+      row.appendChild(ck);
+      row.appendChild(el('span', 'pn', esc(r.it.name)));
+      row.appendChild(el('span', 'pw', esc((scope === 'all' ? r.v.name + ' · ' : '') + r.L.name) + ' · ' + fmt(r.s) + ' · ' + dur2s(r.it.dur) + ' ' + EGLYPH[energyOf(r.it)]));
+      row.oncontextmenu = ev => { ev.preventDefault(); withVariant(r.v.id, () => blockMenu(r.L.id, r.it, ev.clientX, ev.clientY)); };
+      row.onclick = () => { S.current = r.v.id; S.view = 'day'; render(); };
+      sec.appendChild(row);
+    });
+    p.appendChild(sec);
+  });
+  if (!p.querySelector('.prisec')) p.appendChild(el('div', 'lane-empty', 'Nothing flagged yet — click a block’s <b>P</b> badge to give it a priority.'));
 }
 
 function renderFoot() {
@@ -2217,6 +2340,7 @@ function openSettings() {
 /* ============================ wiring ============================ */
 $('#vDay').onclick = () => { S.view = 'day'; render(); };
 $('#vWeek').onclick = () => { S.view = 'week'; render(); };
+$('#vPri').onclick = () => { S.view = 'pri'; render(); };
 $('#bExp').onclick = openExport;
 $('#bCmp').onclick = openCompare;
 $('#bRules').onclick = openRules;
@@ -2284,8 +2408,11 @@ function publishToday() {
 function pullDone() {
   if (!window.LifeOS) return 0;
   const date = todayKey(); let changed = 0;
+  const cleared = (S.cleared && S.cleared.date === date) ? S.cleared.ids : {};
   S.variants.forEach(v => withVariant(v.id, () => S.lanes.forEach(l => items(l.id).forEach(it => {
-    const on = LifeOS.isDone(actIdOf(it), date);
+    const aid = actIdOf(it);
+    if (cleared[aid]) return;              /* boxes deliberately cleared after a full pass — leave them empty */
+    const on = LifeOS.isDone(aid, date);
     if (!!it.done !== on) { it.done = on; changed++; }
   }))));
   return changed;
