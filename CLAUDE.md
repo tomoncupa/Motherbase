@@ -91,6 +91,8 @@ arc/CLAUDE.md      ARC's own brief, governs arc/ only
 habits/index.html  habit tracker (a stand-in, see Debt)
 form/index.html    lift review
 status/index.html  sleep, weight, mood, energy, steps, food and money
+train/index.html   the training log, a reproduction of FitNotes
+train/CLAUDE.md    TRAIN's own brief, governs train/ only
 _template/         a working starter app, copied to make a new one
 quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
                    status/ on 2026-08-20; what is left of it is a todolist.
@@ -164,7 +166,13 @@ An app may read any type. It writes only the types it owns.
 | `acct` | **status** | account id | `{name, order}` |
 | `shot` | **status** | photo id | a shrunk photo of a label or receipt |
 | `habit` | quest, later | | a todolist, once STATUS took the measurements |
-| `exercise` `session` `set` | training, later | | |
+| `excat` | **train** | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
+| `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph}` |
+| `set` | **train** | timestamp id | one logged set, weight stored in kg with the unit it was typed in |
+| `session` | **train** | `''` | `{start, end, note}` — the day's workout timing and comment |
+| `sgroup` | **train** | group id | a superset |
+| `program` `progday` `progex` | **train** | | routines. Named around BLOCK's `routine` |
+| `goal` | **train** | goal id | a training goal |
 
 **One writer per fact**, with exactly one deliberate exception: `tick`. Any app may
 tick anything, because one cell per activity per day is one fact and later save
@@ -344,6 +352,7 @@ Never claim something works because it should. Claim it because you watched it.
 | `habits/` | A stand-in, now superseded by `status/`. Harvest the streaks and one-click promote-from-routine if they are still wanted. Do not add to it. |
 | `form/` | Standalone by design. Video never leaves the device. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
+| `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | Built and passing 35 checks. Not yet wired into the real apps. |
 
