@@ -352,6 +352,33 @@ diagnose. Revisit only if hosting returns.
 
 ---
 
+## Working alongside other sessions
+
+Tom runs more than one Claude Code session at once, often one per app. Sessions
+cannot see each other. There is no shared memory and no channel: the only thing
+they have in common is this folder and its git history.
+
+Two consequences, both of which have already cost work here:
+
+- **A session works from the copy of a file it read**, which may be hours stale.
+- **`CLAUDE.md` is read once, at session start.** A session that began before a
+  structural change has never seen it.
+
+So:
+
+1. **Stay in your folder.** An app session touches its own folder. Only a session
+   working on the foundation touches `shared/` or the root.
+2. **Look before you write.** `git status` and a fresh read of the file, right
+   before editing it, not at the start of the task.
+3. **Never `git add -A` while another session may be live.** Add explicit paths.
+   Sweeping someone else's half-finished work into your commit is not destructive,
+   but it is rude and it muddles the history.
+4. **Commit early and often.** Commits are the only handoff channel that exists.
+5. **After a structural change, tell Tom to restart his other sessions.** They will
+   not pick up a new or moved brief any other way.
+6. **If you find files you did not create**, assume another session is mid-task.
+   Leave them alone and say so, rather than tidying them up.
+
 ## Commits
 
 One commit per coherent change. Subject line names the area in caps, for example
