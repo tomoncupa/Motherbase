@@ -17,6 +17,7 @@
 <script src="../shared/skins.js"></script>
 <script src="../shared/day.js"></script>
 <script src="../shared/records.js"></script>
+<script src="../shared/mobile.js"></script>
 <script src="../shared/sound.js"></script>
 <script src="../shared/ui.js"></script>
 <script src="../shared/io.js"></script>
@@ -176,30 +177,6 @@ nav button{
 nav button .g{font-size:var(--t5);line-height:1}
 nav button.on{color:var(--accent);opacity:1}
 
-/* ── the sheet ── */
-#sheet{position:fixed;inset:0;z-index:60;display:none}
-#sheet.open{display:block}
-#sheet .veil{position:absolute;inset:0;background:var(--overlay);backdrop-filter:blur(6px)}
-#sheet .panel{
-  position:absolute;left:0;right:0;bottom:0;max-height:92%;overflow-y:auto;
-  overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
-  background:var(--surface-1);
-  border-radius:var(--radius-md) var(--radius-md) 0 0;
-  padding:var(--s3) var(--s5) calc(var(--s6) + env(safe-area-inset-bottom));
-  max-width:620px;margin:0 auto;box-shadow:var(--lift2);
-  animation:up var(--dur-fast) ease;
-}
-@keyframes up{from{transform:translateY(24px)}to{transform:none}}
-#sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--surface-3);
-  margin:var(--s2) auto var(--s5)}
-#sheet h3{
-  font-family:var(--font-display);font-size:var(--t1);letter-spacing:.16em;font-weight:600;
-  color:var(--text-muted);margin-bottom:var(--s5);display:flex;align-items:center;gap:var(--s3);
-}
-#sheet h3 .x{margin-left:auto;background:none;border:0;color:var(--text-muted);
-  font-size:var(--t5);cursor:pointer;width:44px;height:44px;border-radius:50%}
-#sheet h3 .x:active{background:var(--surface-2)}
-
 /* ── chips ── */
 .chips{display:flex;flex-wrap:wrap;gap:var(--s2);margin-bottom:var(--s4)}
 .chip{
@@ -296,13 +273,12 @@ label.fl:first-child{margin-top:0}
   <button class="hbtn" onclick="openSettings()" aria-label="Settings">⚙</button>
   <button class="hbtn" onclick="location.href='../index.html'" aria-label="Home">◈</button>
 </header>
-<main><div class="wrap" id="main"></div></main>
+<main class="mb-scroll"><div class="wrap" id="main"></div></main>
 
 <button id="fab" onclick="fastInput()">+<i></i></button>
 
 <nav id="nav"></nav>
 
-<div id="sheet"><div class="veil" onclick="closeSheet()"></div><div class="panel" id="sheetPanel"></div></div>
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
@@ -867,27 +843,47 @@ Day.on(() => { TD._dirty = true; });
    Everything you log slides up from the bottom, within thumb reach, and
    closes itself the moment the fact is saved.                            */
 
-let sheetStack = [];
-function openSheet(title, build, opts) {
-  const box = document.getElementById('sheet'), p = document.getElementById('sheetPanel');
-  p.innerHTML = '';
-  p.appendChild(el('div', 'grab'));
-  const h = document.createElement('h3');
-  h.innerHTML = '<span>' + esc(title) + '</span>';
-  const x = document.createElement('button');
-  x.className = 'x'; x.textContent = '✕'; x.onclick = closeSheet;
-  h.appendChild(x); p.appendChild(h);
-  const body = document.createElement('div');
-  p.appendChild(body);
-  build(body, { close: closeSheet, panel: p });
-  box.classList.add('open');
-  Sfx.play('open');
-  if (opts && opts.focus) setTimeout(() => { const i = body.querySelector('input'); if (i) i.focus(); }, 60);
+/* The sheet is the shared one now. Loading shared/mobile.js turns every
+   UI.dialog into a bottom sheet that the back gesture closes, that can be
+   thrown away downwards, and that gets out of the keyboard's way. All of
+   that used to be hand-rolled in this file and is now deleted.          */
+let sheetH = null;
+
+/* Stepping from the Log sheet into Weight is navigation inside one sheet,
+   not a second sheet on top of the first. Closing one and opening another
+   also breaks: the shared sheet unwinds its own history entry on close, and
+   that back() lands asynchronously — after the replacement has already
+   pushed its own. Do that a few times and the stack walks off the page.
+   So there is exactly one sheet, and moving around swaps what is in it. */
+function fillSheet(h, title, build, opts) {
+  const t = h.panel.querySelector('.mb-sheet-head h3');
+  if (t) t.textContent = title || '';
+  h.body.innerHTML = '';
+  h.body.scrollTop = 0;
+  build(h.body, { close: closeSheet, panel: h.body });
+  Mobile.form(h.body);          /* Next moves down the fields, Done closes the keyboard */
+  if (opts && opts.focus) {
+    setTimeout(() => { const f = h.body.querySelector('input,textarea,select'); if (f) f.focus(); }, 380);
+  }
 }
+
+function openSheet(title, build, opts) {
+  if (sheetH) {
+    Mobile.feedback('select');
+    fillSheet(sheetH, title, build, opts);
+    return sheetH;
+  }
+  return UI.dialog({
+    title: title,
+    width: 620,
+    onClose: () => { sheetH = null; },     /* back gesture, veil tap and drag all land here */
+    body: (b, h) => { sheetH = h; fillSheet(h, title, build, opts); },
+  });
+}
+
 function closeSheet() {
-  document.getElementById('sheet').classList.remove('open');
-  document.getElementById('sheetPanel').innerHTML = '';
-  Sfx.play('close');
+  const h = sheetH; sheetH = null;
+  if (h) { try { h.close(); } catch (e) {} }
 }
 
 /* small builders ---------------------------------------------------- */
@@ -905,9 +901,8 @@ function numberInput(v, step, dec) {
   const w = el('div', 'stepper');
   const minus = el('button', null, '−'), plus = el('button', null, '+');
   const i = document.createElement('input');
-  i.className = 'num'; i.type = 'text';
-  i.inputMode = dec ? 'decimal' : 'numeric';
-  i.setAttribute('pattern', dec ? '[0-9.]*' : '[0-9]*');
+  i.className = 'num';
+  Mobile.field(i, dec ? 'decimal' : 'number');
   i.value = v == null ? '' : String(v);
   const bump = d => {
     const cur = num(i.value, 0) || 0;
@@ -1119,8 +1114,8 @@ function fieldSheet(f, date) {
 /* a check needs no sheet at all: tapping it is the whole interaction */
 function toggleCheck(f, date) {
   const d = date || vd();
-  if (logged(d, f.id)) { Rec.del('ev', d, f.id); Sfx.play('untick'); }
-  else { evAdd(d, f.id, 1); Sfx.play('tick'); }
+  if (logged(d, f.id)) { Rec.del('ev', d, f.id); Mobile.feedback('untick'); }
+  else { evAdd(d, f.id, 1); Mobile.feedback('tick'); }
   closeSheet(); draw();
 }
 
@@ -1141,7 +1136,7 @@ function numberSheet(f, date) {
     const commit = v => {
       if (v == null || !isFinite(v)) return UI.toast('Type a number first', { bad: true });
       evAdd(d, f.id, v);
-      Sfx.play(f.target && (f.dir === 'lte' ? v <= f.target : v >= f.target) ? 'done' : 'tick');
+      Mobile.feedback(f.target && (f.dir === 'lte' ? v <= f.target : v >= f.target) ? 'success' : 'tick');
       afterLog();
     };
 
@@ -1188,7 +1183,7 @@ function scaleSheet(f, date) {
     const w = el('div', 'chips');
     [1, 2, 3, 4, 5].forEach(v => {
       const b = el('button', 'chip big', v + '<small>' + WORDS[v] + '</small>');
-      b.onclick = () => { evAdd(d, f.id, v); Sfx.play('tick'); afterLog(); };
+      b.onclick = () => { evAdd(d, f.id, v); Mobile.feedback('tick'); afterLog(); };
       w.appendChild(b);
     });
     body.appendChild(w);
@@ -1201,7 +1196,7 @@ function afterLog() {
   const left = outstanding().length;
   closeSheet();
   draw();
-  if (!left) { Sfx.play('complete', { level: 2 }); UI.toast('Day complete'); }
+  if (!left) { Mobile.feedback('complete'); UI.toast('Day complete'); }
 }
 
 /* ══════════════ SPENDING ══════════════
@@ -1258,7 +1253,7 @@ function spendSheet(existing) {
       const row = { amt: v, acct: acct, note: note.value.trim(), t: dt.getTime(), shot: shotId };
       Rec.set('spend', existing ? existing.date : vd(), existing ? existing.key : uid(), row);
       S.set('lastAcct', acct);
-      Sfx.play('tick');
+      Mobile.feedback('tick');
       closeSheet(); draw();
     }));
   }, { focus: !existing });
@@ -1390,7 +1385,7 @@ function amountSheet(fd) {
     body.appendChild(saveBar('Log it', () => {
       if (!mult || mult <= 0) return UI.toast('How much?', { bad: true });
       logMeal(fd, mult, mode === 'serve' ? serves[si].label : (mode === 'unit' ? r1(mult * num(fd.base.amt, 0)) + ' ' + (fd.base.unit || '') : 'to target'));
-      Sfx.play('tick');
+      Mobile.feedback('tick');
       closeSheet(); draw();
     }));
   });
@@ -1507,9 +1502,11 @@ function foodEditor(fd) {
       const row = { id: f.id, name: name, brand: inputs.brand.value.trim(), cat: inputs.cat.value.trim(),
         base: base, serves: f.serves || [], dflt: f.dflt || 0, uses: f.uses || 0, shot: shotId };
       Rec.set('food', null, f.id, row);
-      Sfx.play('drop');
-      closeSheet();
-      if (isNew) amountSheet(row); else draw();
+      Mobile.feedback('select');
+      /* Straight on to how much, swapping this sheet's contents. Closing
+         first and reopening would race the shared sheet's history unwind. */
+      if (isNew) { amountSheet(row); }
+      else { closeSheet(); draw(); }
     }));
 
     if (!isNew) {
@@ -1671,7 +1668,7 @@ function drawFood(m) {
     r.innerHTML = '<span class="nm">' + esc(x.name) + '<small>' + esc(x.serve || '') + ' · ' + r1(x.amt) + ' ' + esc(x.unit || '') + '</small></span>' +
       '<span class="fig">' + Math.round(x.kcal) + '<small>' + r1(x.p) + 'g protein</small></span>';
     const del = el('button', 'x', '✕');
-    del.onclick = () => { Rec.del('meal', d, x.key); Sfx.play('untick'); draw(); };
+    del.onclick = () => { Rec.del('meal', d, x.key); Mobile.feedback('untick'); draw(); };
     r.appendChild(del);
     c2.appendChild(r);
   });
@@ -1701,7 +1698,7 @@ function drawMoney(m) {
       '<span class="fig">' + money(s.amt) + '</span>';
     r.onclick = () => spendSheet(Object.assign({ date: d }, s));
     const del = el('button', 'x', '✕');
-    del.onclick = ev => { ev.stopPropagation(); Rec.del('spend', d, s.key); Sfx.play('untick'); draw(); };
+    del.onclick = ev => { ev.stopPropagation(); Rec.del('spend', d, s.key); Mobile.feedback('untick'); draw(); };
     r.appendChild(del);
     c.appendChild(r);
   });
@@ -1887,6 +1884,7 @@ function openSettings() {
 }
 
 function drawTrackTab(pane) {
+  settingsPane = pane;
   Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(f => {
     const kind = { number: 'once a day', amount: 'a dose, added up', scale: '1 to 5, any time', check: 'done or not' }[f.measure] || '';
     pane.appendChild(toggleRow(f.label, kind + (f.unit ? ' · ' + f.unit : '') + (f.target ? ' · ' + (f.dir === 'lte' ? '≤' : '≥') + ' ' + f.target : ''), !!f.on, on => {
@@ -1904,7 +1902,7 @@ function drawTrackTab(pane) {
     const w = el('div', 'chips');
     rest.forEach(l => {
       const b = el('button', 'chip', '+ ' + esc(l.label));
-      b.onclick = () => { addField(l); Sfx.play('drop'); drawSettingsPane('track'); draw(); };
+      b.onclick = () => { addField(l); Mobile.feedback('select'); drawSettingsPane('track'); draw(); };
       w.appendChild(b);
     });
     pane.appendChild(w);
@@ -1977,7 +1975,7 @@ function newFieldForm(pane) {
     if (t != null) { spec.target = t; spec.dir = 'gte'; }
     if (measure === 'amount' || measure === 'number') { spec.step = 1; spec.dec = 1; }
     addField(spec);
-    Sfx.play('drop');
+    Mobile.feedback('select');
     drawSettingsPane('track'); draw();
   };
   pane.appendChild(save);
@@ -1987,6 +1985,7 @@ function newFieldForm(pane) {
 }
 
 function drawGoalsTab(pane) {
+  settingsPane = pane;
   const tg = TARGETS();
   let mode = S.get('calMode', 'fixed');
 
@@ -2086,6 +2085,7 @@ function runBacktest() {
 }
 
 function drawSyncTab(pane) {
+  settingsPane = pane;
   pane.appendChild(el('div', 'note', 'Two ways out, and they do different jobs. <b>Backup</b> is a file that restores. <b>Export</b> is a spreadsheet you can read but not restore from. Both live in the DATA tab.'));
   const cfg = S.get('mirror', { url: '', on: 0, at: null });
 
@@ -2120,10 +2120,12 @@ function drawSyncTab(pane) {
   pane.appendChild(show);
 }
 
-/* repaint one settings pane in place, since the dialog owns the tab bar */
+/* Repaint one settings pane in place. The pane element is handed to each tab
+   when it draws, so hold on to it rather than hunting for it in the DOM —
+   shared/ui.js owns that markup and has already changed it once. */
+let settingsPane = null;
 function drawSettingsPane(which) {
-  const panes = document.querySelectorAll('.mb-dialog .mb-body > div');
-  const pane = panes[panes.length - 1];
+  const pane = settingsPane;
   if (!pane) return;
   pane.innerHTML = '';
   if (which === 'track') drawTrackTab(pane);
