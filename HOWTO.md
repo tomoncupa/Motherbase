@@ -58,67 +58,78 @@ work inside your new folder and nothing else moves.
 
 ---
 
-## Make or edit a theme
+## Themes and colours
 
-### The easy way — in the app
+Two layers, and they are separate on purpose — the same split you built in ARC.
 
-**Settings → Look → Custom.** Pick four colours: background, panels, accent,
-text. Everything else — borders, muted text, chart colours, hover states — is
-worked out from those four. The page repaints as you drag, so you are choosing
-by looking, not guessing.
+**The theme** is the structure: fonts, corner shape, texture, and the colours it
+ships with. Picked **per app**, so ARC can be Doodle while BLOCK is Ice.
 
-It warns you if a pairing is unreadable before you save it. Take that
-seriously; a low-contrast theme looks great for ten minutes and then you stop
-using the app.
+**The colours** belong to the theme. Edit Ice's colours and every app set to Ice
+gets them. Edit them again and nothing else in the suite moves.
 
-Saved themes appear in the list next to the built-in ones, on this device.
+### Editing colours — in the app
 
-**Themes are per app.** ARC can be Monarch while BLOCK is Ice. If you want them
-matched there is an *Apply to all* button under the picker.
+**Settings → Look.** Pick a theme along the top; its colours appear underneath:
 
-### The permanent way — `shared/skins.json`
+| Field | What it paints |
+|---|---|
+| Canvas background | the page behind everything |
+| Card fill | panels, headers, dialogs |
+| Card border | the lines around them |
+| Text | the main reading colour |
+| Secondary text | labels, captions, anything quieter |
+| Accent | buttons, ticks, the selected thing |
 
-A theme that should exist in every app forever, including on other devices,
-goes in the file. Open `shared/skins.json` and copy an existing block:
+Plus the **six node and chart colours** — the ones ARC paints branches with.
+
+It repaints as you drag and only saves when you let go, so you can push a colour
+around and back without leaving a trail. The header shows **· EDITED** once a
+theme has your colours on it, and **RESET COLOURS** puts it back to how it ships.
+There is a contrast line underneath that tells you when a pairing is unreadable
+— worth heeding, a low-contrast theme looks great for ten minutes.
+
+Your edits live on this device, per theme, and never touch `skins.json`.
+
+### Adding a theme — permanently, for every device
+
+A theme that should always exist goes in `shared/skins.json`. Copy a block:
 
 ```json
 {
-  "id": "ember",
-  "name": "Ember",
+  "id": "doodle",
+  "name": "Doodle",
   "mode": "dark",
-  "cut": "10px",
-  "base": { "bg": "#140C0A", "panel": "#1F1512", "accent": "#FF8A3D", "text": "#F5E8E0" }
+  "base": { "bg": "#12151B", "panel": "#181C24", "accent": "#F4F1EA", "text": "#F4F1EA" },
+  "overrides": { "--surface-2": "#12151B", "--border": "#39414F",
+                 "--text-2": "#A9AFBC", "--text-muted": "#727A8A" },
+  "ramp": ["#F4F1EA", "#FFD9A0", "#9FD8F2", "#F5A8B8", "#B4E4A6", "#CBC2F0"],
+  "texture": { "display": "'Caveat',cursive", "body": "'Caveat',cursive", "cut": "14px" }
 }
 ```
 
-- `id` — one lowercase word, unique.
-- `mode` — `dark` or `light`. Say which, so the interface knows.
-- `cut` — how round the corners are. `10px` normal, `2px` sharp, `18px` soft.
-- `base` — the same four colours as the editor.
+- `id` — one lowercase word, unique. `name` — what you see on the chip.
+- `mode` — `dark` or `light`, so the interface knows which way round it is.
+- `base` — the four colours everything else is derived from.
+- `overrides` — pin anything you do not want derived (borders, secondary text).
+- `ramp` — the six node and chart colours.
+- `texture` — fonts and corner shape. This is what makes two themes feel like
+  different products rather than the same one repainted.
 
-Optional extras a skin may carry:
+A theme with structural CSS of its own (like Doodle's hand-drawn node outlines)
+also needs a `body.theme-<id>` block in the app that draws it — in ARC that is
+what `SCHEME_CSS` lists.
 
-```json
-"ramp": ["#FF8A3D","#FFC46B","#7ED9A6","#6EC6FF","#B694FF","#FF7A9A"],
-"texture": { "display": "'Chakra Petch', sans-serif", "body": "'Inter Tight', sans-serif", "cut": "4px" }
-```
-
-`ramp` is the six chart colours (ARC uses these). `texture` swaps the fonts and
-corner shape, which is what makes two skins feel like different products rather
-than the same product repainted.
-
-**Check your work:** open `shared/_smoke.html`, use the Look tab, and click
-through your new skin. If the text is hard to read there, it will be hard to
-read everywhere.
-
----
+**Check your work** in `shared/_smoke.html` → Settings → Look. If text is hard to
+read there, it will be hard to read everywhere.
 
 ## Where things live
 
 | I want to change… | It lives in |
 |---|---|
 | How a specific app works | `thatapp/index.html` |
-| Colours and fonts for everything | `shared/skins.json` |
+| Themes — fonts, structure, defaults | `shared/skins.json` |
+| Colours of a theme | Settings → Look (saved per theme, on this device) |
 | The sounds | `shared/sound.js` |
 | What "today" means | Settings → Day (or `shared/day.js` for the default) |
 | How data is stored | `shared/records.js` — the one file to be careful with |

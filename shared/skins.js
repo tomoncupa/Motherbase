@@ -17,6 +17,7 @@ const FALLBACK={schema:1,skins:[
    everything shares the old single key, exactly as before. */
 let APP='';
 const KEY='suite_skin';
+const PAL_KEY='suite_palettes';
 const skinKey=()=>APP?KEY+'.'+APP:KEY;
 
 const hex2rgb=h=>{h=String(h).replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');
@@ -83,9 +84,47 @@ const Skins={
   custom(base,name,cut){return{id:'custom-'+Date.now().toString(36),name:name||'Custom',
     mode:lum(base.bg)>.5?'light':'dark',cut:cut||'10px',base:base,custom:true}},
   tokensFor(skin){return tokens(skin.base,skin.cut,this.data.ranks,skin)},
-  apply(idOrSkin){
+
+  /* ---- the colour layer ----------------------------------------------
+     A skin is the THEME: structure, fonts, corners, texture, default colours.
+     A palette sits on top of one skin and is the six named fields plus the six
+     node colours, saved per skin in 'suite_palettes'. Same split ARC uses and
+     the same field names, so a palette means the same thing in either place.
+     A skin nobody has edited paints exactly as this file describes. */
+  FIELDS:[['bg','Canvas background'],['panel','Card fill'],['line','Card border'],
+          ['ink','Text'],['mut','Secondary text'],['acc','Accent — buttons, selection']],
+  defaultsFor(idOrSkin){
+    const s=typeof idOrSkin==='string'?this.get(idOrSkin):idOrSkin,t=this.tokensFor(s);
+    return {bg:t['--bg'],panel:t['--surface-1'],line:t['--border'],ink:t['--text-1'],
+      mut:t['--text-2'],acc:t['--accent'],colors:[1,2,3,4,5,6].map(i=>t['--data-'+i])};
+  },
+  palettes(){try{return JSON.parse(localStorage.getItem(PAL_KEY))||{}}catch(e){return{}}},
+  paletteFor(id){
+    const d=this.defaultsFor(id),o=this.palettes()[id]||{};
+    return Object.assign({},d,o,{colors:(o.colors&&o.colors.length===6)?o.colors.slice():d.colors});
+  },
+  isCustomised(id){return !!this.palettes()[id]},
+  savePalette(id,pal){const a=this.palettes();a[id]=pal;
+    try{localStorage.setItem(PAL_KEY,JSON.stringify(a))}catch(e){}return pal},
+  clearPalette(id){const a=this.palettes();delete a[id];
+    try{localStorage.setItem(PAL_KEY,JSON.stringify(a))}catch(e){}},
+  /* six fields back out into the full token set */
+  palTokens(p){
+    const t={'--bg':p.bg,'--surface-1':p.panel,'--surface-2':mix(p.panel,p.bg,.5),
+      '--surface-3':mix(p.panel,p.ink,.15),'--overlay':mix(p.bg,'#000000',.25),
+      '--border':p.line,'--border-strong':mix(p.line,p.ink,.3),
+      '--text-1':p.ink,'--text-2':p.mut,'--text-muted':mix(p.mut,p.bg,.45),'--text-inverse':p.bg,
+      '--accent':p.acc,'--accent-hover':mix(p.acc,p.ink,.22),'--accent-fg':readable(p.acc),'--focus':p.acc};
+    (p.colors||[]).slice(0,6).forEach((c,i)=>{t['--data-'+(i+1)]=c});
+    return t;
+  },
+
+  /* `pal` paints without saving — that is what makes live preview possible */
+  apply(idOrSkin,pal){
     const s=typeof idOrSkin==='string'?this.get(idOrSkin):idOrSkin;
-    const t=this.tokensFor(s),r=document.documentElement;
+    const use=pal||(this.isCustomised(s.id)?this.paletteFor(s.id):null);
+    const t=use?Object.assign(this.tokensFor(s),this.palTokens(use)):this.tokensFor(s),
+      r=document.documentElement;
     Object.entries(t).forEach(([k,v])=>r.style.setProperty(k,v));
     r.dataset.skin=s.id;r.dataset.mode=s.mode;
     const m=document.querySelector('meta[name=theme-color]');if(m)m.content=t['--bg'];

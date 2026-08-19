@@ -189,75 +189,6 @@ const UI = {
   },
   closeMenus() { document.querySelectorAll('.mb-menu').forEach(n => n.remove()); },
 
-  /** Make a theme from four colours. Everything else — borders, muted text,
-      chart colours, the lot — is derived, which is why four is enough. The
-      page repaints as you drag, and it warns when a pairing is unreadable
-      rather than letting you save something you cannot use. */
-  themeMaker(onSaved, startFrom) {
-    const S = g.Skins;
-    const was = S.current;
-    const base = Object.assign({ bg: '#0B0E14', panel: '#121826', accent: '#6EE7FF', text: '#E7EEF9' },
-      (startFrom || (was && was.base) || {}));
-    let name = 'My theme';
-
-    /* `custom:false` matters: Skins.apply() saves anything flagged custom, and
-       a live preview must not leave a trail of half-made themes behind it */
-    const preview = () => S.apply(Object.assign(S.custom(base, name), { id: '__preview', custom: false }));
-    const sweep = () => { try { localStorage.setItem('suite_skins_custom', JSON.stringify(S.customs().filter(s => s.id !== '__preview'))); } catch (e) {} };
-    sweep();
-
-    return UI.dialog({
-      title: 'MAKE A THEME',
-      width: 460,
-      body: (b, h) => {
-        b.appendChild(el('p', null, 'Four colours in. Everything else is worked out from them.'));
-
-        const nrow = el('div', 'mb-row');
-        nrow.appendChild(el('div', 'lbl', '<b>Name</b>'));
-        const ni = el('input', 'mb-sel'); ni.type = 'text'; ni.value = name; ni.style.maxWidth = '180px';
-        ni.oninput = () => { name = ni.value; };
-        nrow.appendChild(ni); b.appendChild(nrow);
-
-        const warn = el('p');
-        const pick = (key, label, note) => {
-          const row = el('div', 'mb-row');
-          row.appendChild(el('div', 'lbl', '<b>' + label + '</b><span>' + note + '</span>'));
-          const c = el('input'); c.type = 'color'; c.value = base[key];
-          c.style.cssText = 'width:44px;height:30px;border:1px solid var(--border,#1e2a38);border-radius:6px;background:none;cursor:pointer';
-          c.oninput = () => { base[key] = c.value; preview(); check(); };
-          row.appendChild(c); b.appendChild(row);
-        };
-        pick('bg', 'Background', 'The page behind everything.');
-        pick('panel', 'Panels', 'Cards, headers, dialogs. Usually a shade off the background.');
-        pick('accent', 'Accent', 'Highlights, ticks, the active thing.');
-        pick('text', 'Text', 'The main reading colour.');
-
-        const check = () => {
-          const r = S.check(base);
-          warn.innerHTML = r.ok
-            ? '<span style="color:var(--success,#6ee7a8);font-size:12px">Readable — good contrast on both counts.</span>'
-            : '<span style="color:var(--warn,#ffb347);font-size:12px">Hard to read: ' +
-              (r.accentOnBg < 3 ? 'the accent is too close to the background. ' : '') +
-              (r.textOnPanel < 4.5 ? 'the text is too close to the panels.' : '') + '</span>';
-        };
-        b.appendChild(warn); check(); preview();
-      },
-      actions: [
-        { label: 'CANCEL', fn: () => { if (was) S.apply(was); } },
-        {
-          label: 'SAVE THEME', kind: 'go', fn: () => {
-            const skin = S.custom(base, (name || 'My theme').trim());
-            sweep(); S.saveCustom(skin); S.apply(skin);
-            UI.toast('<b>' + esc(skin.name) + '</b> saved — it is in the list now');
-            if (g.Sfx) g.Sfx.play('complete', { level: 2 });
-            if (onSaved) onSaved(skin);
-          },
-        },
-      ],
-      onClose: () => { if (S.current && S.current.id === '__preview' && was) S.apply(was); },
-    });
-  },
-
   /* ── the standard settings panel ──
      Look and Sound are per app on purpose: ARC can be Monarch while BLOCK is
      Ice. Day is shared, because two apps disagreeing about what day it is is
@@ -299,30 +230,97 @@ const UI = {
 };
 
 /* ── settings tabs ── */
+/* Two layers, kept visibly separate because they are separate:
+   the THEME is picked per app, the COLOURS belong to that theme and follow it
+   into every app that wears it. */
 function drawLook(appId, pane) {
   const S = g.Skins;
   S.injectPickerCSS();
-  pane.appendChild(el('div', 'mb-group', 'THEME — THIS APP ONLY'));
-  const wrap = el('div'); wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px';
-  pane.appendChild(wrap);
-  S.picker(wrap, {
-    onChange: () => { if (g.Sfx) g.Sfx.play('drop'); },
-    onCustom: () => UI.themeMaker(() => { pane.innerHTML = ''; drawLook(appId, pane); }),
-  });
 
-  const row = el('div', 'mb-row');
-  row.appendChild(el('div', 'lbl', '<b>Use this theme everywhere</b><span>Sets every other app to the same skin. Nothing else about them changes.</span>'));
-  const b = el('button', 'mb-btn', 'APPLY TO ALL');
-  b.onclick = () => {
-    const id = S.current && S.current.id; if (!id) return;
-    try {
-      Object.keys(localStorage).filter(k => k.indexOf('suite_skin.') === 0).forEach(k => localStorage.setItem(k, id));
-      localStorage.setItem('suite_skin', id);
-      UI.toast('every app is now <b>' + esc(S.current.name) + '</b>');
-    } catch (e) { UI.toast('could not save that', { bad: true }); }
-  };
-  row.appendChild(b);
-  pane.appendChild(row);
+  pane.appendChild(el('div', 'mb-group', 'THEME — THIS APP ONLY'));
+  const wrap = el('div');
+  wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px';
+  pane.appendChild(wrap);
+
+  const colours = el('div');
+  S.picker(wrap, {
+    custom: false,
+    onChange: () => { if (g.Sfx) g.Sfx.play('drop'); paintColours(); },
+  });
+  pane.appendChild(colours);
+  paintColours();
+
+  function paintColours() {
+    const skin = S.current || S.get(S.list()[0].id);
+    const id = skin.id;
+    let pal = S.paletteFor(id);
+    colours.innerHTML = '';
+
+    colours.appendChild(el('div', 'mb-group',
+      'COLOURS — ' + esc(skin.name.toUpperCase()) +
+      (S.isCustomised(id) ? ' <span style="color:var(--accent,#7ee8fa)">· EDITED</span>' : '')));
+    colours.appendChild(el('p', null,
+      'These belong to the theme, so every app set to ' + esc(skin.name) + ' gets them.'));
+
+    /* live while you drag, saved when you let go */
+    const live = () => S.apply(skin, pal);
+    const commit = () => { S.savePalette(id, pal); paintColours(); };
+
+    S.FIELDS.forEach(([key, label]) => {
+      const row = el('div', 'mb-row');
+      row.appendChild(el('div', 'lbl', '<b>' + esc(label) + '</b>'));
+      const c = el('input');
+      c.type = 'color'; c.value = pal[key];
+      c.style.cssText = 'width:44px;height:30px;border:1px solid var(--border,#1e2a38);border-radius:6px;background:none;cursor:pointer';
+      c.oninput = () => { pal[key] = c.value; live(); };
+      c.onchange = commit;
+      row.appendChild(c);
+      colours.appendChild(row);
+    });
+
+    const nrow = el('div', 'mb-row');
+    nrow.appendChild(el('div', 'lbl', '<b>Node &amp; chart colours</b><span>The six ARC paints with.</span>'));
+    const strip = el('div');
+    strip.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap';
+    pal.colors.forEach((hex, i) => {
+      const c = el('input');
+      c.type = 'color'; c.value = hex;
+      c.style.cssText = 'width:28px;height:28px;border:1px solid var(--border,#1e2a38);border-radius:6px;background:none;cursor:pointer;padding:0';
+      c.oninput = () => { pal.colors[i] = c.value; live(); };
+      c.onchange = commit;
+      strip.appendChild(c);
+    });
+    nrow.appendChild(strip);
+    colours.appendChild(nrow);
+
+    const warn = S.check({ bg: pal.bg, panel: pal.panel, accent: pal.acc, text: pal.ink });
+    colours.appendChild(el('p', null, warn.ok
+      ? '<span style="color:var(--success,#6ee7a8);font-size:12px">Readable — good contrast on both counts.</span>'
+      : '<span style="color:var(--warn,#ffb347);font-size:12px">Hard to read: ' +
+        (warn.accentOnBg < 3 ? 'the accent is too close to the background. ' : '') +
+        (warn.textOnPanel < 4.5 ? 'the text is too close to the cards.' : '') + '</span>'));
+
+    const acts = el('div', 'mb-row');
+    acts.appendChild(el('div', 'lbl', S.isCustomised(id)
+      ? '<b>Back to normal</b><span>Throws away your colours and repaints ' + esc(skin.name) + ' as it ships.</span>'
+      : '<b>Use this everywhere</b><span>Sets every other app to this theme. Their own colours are untouched.</span>'));
+    if (S.isCustomised(id)) {
+      const b = el('button', 'mb-btn bad', 'RESET COLOURS');
+      b.onclick = () => { S.clearPalette(id); S.apply(skin); pal = S.paletteFor(id); paintColours(); UI.toast('reset to the theme’s own colours'); };
+      acts.appendChild(b);
+    } else {
+      const b = el('button', 'mb-btn', 'APPLY TO ALL');
+      b.onclick = () => {
+        try {
+          Object.keys(localStorage).filter(k => k.indexOf('suite_skin.') === 0).forEach(k => localStorage.setItem(k, id));
+          localStorage.setItem('suite_skin', id);
+          UI.toast('every app is now <b>' + esc(skin.name) + '</b>');
+        } catch (e) { UI.toast('could not save that', { bad: true }); }
+      };
+      acts.appendChild(b);
+    }
+    colours.appendChild(acts);
+  }
 }
 
 function drawSound(appId, pane) {
