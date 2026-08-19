@@ -213,6 +213,11 @@ main{display:flex;flex:1;min-height:0}
   border:1px solid var(--line);cursor:pointer;
 }
 .b-days b.on{background:color-mix(in srgb,var(--c) 42%,#0a1018);color:#fff;border-color:transparent}
+.b-days.ex b{box-shadow:0 1px 0 var(--warn)}
+.lane-untimed{font-family:var(--f1);font-size:11.5px;color:var(--dim2);border:1px dashed var(--line);border-radius:5px;padding:2px 7px}
+.lane-untimed:hover{border-color:var(--acc-d);color:var(--acc)}
+.lane-days{font-family:var(--f1);font-size:10.5px;color:var(--dim2);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.lane-days:hover{border-color:var(--acc-d);color:var(--acc)}
 .b-ctl{margin-left:auto;display:flex;gap:2px;align-items:center}
 .b-ctl button{color:var(--dim2);font-size:10.5px;padding:1px 3px;border-radius:4px}
 .b-ctl button:hover{color:var(--txt);background:#0007}
@@ -842,7 +847,10 @@ const todayKey = () => { const d = new Date(); return d.getFullYear() + '-' + pa
  * (it.at = 'HH:MM'), which own their start; the flow resumes from there.
  */
 function schedule(laneId) {
-  const L = lane(laneId); let cur = hm2min(L.start); const out = [];
+  const L = lane(laneId);
+  /* an untimed routine is just an ordered list — no clock, no anchors, no now line */
+  if (L.start == null) return items(laneId).map(it => ({ it, s: null, e: null, gap: 0, clash: 0, hidden: !!it.hidden, untimed: true }));
+  let cur = hm2min(L.start); const out = [];
   items(laneId).forEach((it, i) => {
     if (it.hidden) { out.push({ it, s: cur, e: cur, gap: 0, clash: 0, hidden: true }); return; }
     if (i) cur += S.gap;
@@ -858,7 +866,12 @@ function schedule(laneId) {
   });
   return out;
 }
-const laneEnd = laneId => { const sc = schedule(laneId).filter(r => !r.hidden); return sc.length ? sc[sc.length - 1].e : hm2min(lane(laneId).start); };
+const laneEnd = laneId => {
+  const L = lane(laneId);
+  if (L.start == null) return null;
+  const sc = schedule(laneId).filter(r => !r.hidden);
+  return sc.length ? sc[sc.length - 1].e : hm2min(L.start);
+};
 const laneMins = laneId => items(laneId).filter(x => !x.hidden).reduce((a, b) => a + b.dur, 0);
 /** duration sets a FLOOR — content decides the real height, so nothing can ever overlap */
 const brickMin = d => Math.max(52, 22 + d * SCALE);
@@ -967,7 +980,7 @@ const routineForToday = () => S.week[todayIdx()] || S.current;
 /** blocks in a routine that actually apply today */
 function todaysBlocks(vid) {
   const d = todayIdx();
-  return withVariant(vid, () => S.lanes.flatMap(l => items(l.id)).filter(it => it.days[d] && !it.hidden));
+  return withVariant(vid, () => S.lanes.flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => effDays(l, it)[d] && !it.hidden).map(({ it }) => it));
 }
 function clearDone(vid) { withVariant(vid, () => S.lanes.forEach(l => items(l.id).forEach(it => it.done = false))); }
 /** new day → yesterday's ticks are gone, and today's come back from the LifeOS
@@ -1215,12 +1228,20 @@ function renderBoard() {
     head.appendChild(top);
 
     const row = el('div', 'lane-row');
-    const st = el('input'); st.type = 'time'; st.value = L.start;
-    st.dataset.tip = 'When this routine starts — everything below flows from here';
-    st.onchange = () => { snap(); L.start = st.value || '00:00'; render(); };
-    row.appendChild(st);
-    row.appendChild(el('span', null, '→'));
-    row.appendChild(el('span', 'end', fmt(laneEnd(L.id))));
+    if (L.start == null) {
+      const un = el('button', 'lane-untimed', '◷ no set time');
+      un.dataset.tip = 'This routine is an ordered list with no clock. Click to give it a start time.';
+      un.onclick = () => { snap(); L.start = '09:00'; render(); };
+      row.appendChild(un);
+    } else {
+      const st = el('input'); st.type = 'time'; st.value = L.start;
+      st.dataset.tip = 'When this routine starts — everything below flows from here.<br>Right-click for “no set time”.';
+      st.onchange = () => { snap(); L.start = st.value || '00:00'; render(); };
+      st.oncontextmenu = ev => { ev.preventDefault(); snap(); L.start = null; render(); toast('<b>' + esc(L.name) + '</b> is now untimed'); };
+      row.appendChild(st);
+      row.appendChild(el('span', null, '→'));
+      row.appendChild(el('span', 'end', fmt(laneEnd(L.id))));
+    }
     head.appendChild(row);
 
     const sc = schedule(L.id);
@@ -1228,7 +1249,7 @@ function renderBoard() {
     const nb = sc.length;
     meta.appendChild(el('span', 'tag', nb + (nb === 1 ? ' block' : ' blocks')));
     meta.appendChild(el('span', 'tag', dur2s(laneMins(L.id))));
-    if (L.target) {
+    if (L.target && L.start != null) {
       const delta = laneEnd(L.id) - hm2min(L.target);
       const t = el('span', 'tag ' + (delta > 0 ? 'over' : 'ok'), (delta > 0 ? '+' : '') + dur2s(Math.abs(delta)) + (delta > 0 ? ' over' : ' spare'));
       t.dataset.tip = 'Target finish is <b>' + fmt(hm2min(L.target)) + '</b>';
@@ -1241,14 +1262,18 @@ function renderBoard() {
       meta.appendChild(c);
     }
     /* routines are independent clocks — say so when two of them cover the same wall time */
-    const mySpan = [hm2min(L.start), laneEnd(L.id)];
-    const bump = S.lanes.filter(O => O.id !== L.id && items(O.id).length)
+    const mySpan = L.start == null ? null : [hm2min(L.start), laneEnd(L.id)];
+    const bump = !mySpan ? [] : S.lanes.filter(O => O.id !== L.id && O.start != null && items(O.id).length)
       .filter(O => mySpan[0] < laneEnd(O.id) && hm2min(O.start) < mySpan[1]).map(O => O.name);
     if (sc.length && bump.length) {
       const b2 = el('span', 'tag warn', '⚠ overlaps ' + bump[0] + (bump.length > 1 ? ' +' + (bump.length - 1) : ''));
       b2.dataset.tip = 'This routine runs at the same wall-clock time as <b>' + esc(bump.join(', ')) + '</b>';
       meta.appendChild(b2);
     }
+    const ld = el('button', 'lane-days', daysShort(L.days || [1, 1, 1, 1, 1, 1, 1]));
+    ld.dataset.tip = 'Days this whole routine runs — blocks follow it unless they carry an exception';
+    ld.onclick = ev => { ev.stopPropagation(); laneMenu(L, ev.clientX, ev.clientY); };
+    meta.appendChild(ld);
     const tg = el('button', 'tag', L.target ? '⏱ ' + L.target : '⏱ target');
     tg.dataset.tip = 'Set a “must be done by” time for this routine';
     tg.onclick = () => { const v = prompt('Target end time (HH:MM), blank to clear', L.target || ''); if (v !== null) { snap(); L.target = v.trim(); render(); } };
@@ -1333,6 +1358,22 @@ function renderBoard() {
   };
   b.appendChild(al);
 }
+function moveLane(id, dir) {
+  const i = S.lanes.findIndex(l => l.id === id), j = i + dir;
+  if (i < 0 || j < 0 || j >= S.lanes.length) return toast('already at the end');
+  snap();
+  const [x] = S.lanes.splice(i, 1); S.lanes.splice(j, 0, x);
+  focusLane = j; render();
+}
+/**
+ * Which weekdays a block actually runs: the routine decides, and a block only
+ * overrides it if you set an exception (right-click → Days).
+ */
+function effDays(L, it) {
+  if (it.daysEx) return it.days.slice();          /* an exception overrules the routine outright */
+  return ((L && L.days) || [1, 1, 1, 1, 1, 1, 1]).slice();
+}
+
 /* ---------- right-click: routine ---------- */
 function laneMenu(L, x, y) {
   const others = S.variants.filter(v => v.id !== S.current);
@@ -1342,9 +1383,24 @@ function laneMenu(L, x, y) {
     { label: 'Sort by priority', k: '↓P', fn: () => sortPri(L.id) },
     { label: 'Save as template', k: '⇩', fn: () => saveTemplate(L.id) },
     { sep: 1 },
-    { label: 'Set start time…', fn: () => promptTime('Routine starts at (HH:MM)', L.start, v => { snap(); L.start = v || '00:00'; render(); }) },
+    { label: 'Set start time…', fn: () => promptTime('Routine starts at (HH:MM)', L.start || '', v => { snap(); L.start = v || '00:00'; render(); }) },
+    { label: 'No set time', check: L.start == null, fn: () => { snap(); L.start = L.start == null ? '09:00' : null; render(); } },
+    { label: 'Show the now line here', check: L.nowline !== false, fn: () => { L.nowline = L.nowline === false; render(); } },
     { label: 'Set target finish…', fn: () => promptTime('Must be done by (HH:MM)', L.target || '', v => { snap(); L.target = v; render(); }) },
     { label: 'Rename routine…', fn: () => { const v = prompt('Routine name', L.name); if (v) { snap(); L.name = v.trim(); render(); } } },
+    { label: 'Days this routine runs', sub: () => {
+        const cur = L.days || [1, 1, 1, 1, 1, 1, 1];
+        const set = arr => { snap(); L.days = arr; render(); };
+        return [
+          { label: 'Every day it exists', check: !L.days, fn: () => { snap(); L.days = null; render(); } },
+          { label: 'Weekdays only', check: !!L.days && L.days.join('') === '0111110', fn: () => set([0, 1, 1, 1, 1, 1, 0]) },
+          { label: 'Weekend only', check: !!L.days && L.days.join('') === '1000001', fn: () => set([1, 0, 0, 0, 0, 0, 1]) },
+          { sep: 1 },
+          ...weekOrd().map(d => ({ label: DSHORT[d], check: !!cur[d], fn: () => { snap(); const n = cur.slice(); n[d] = n[d] ? 0 : 1; L.days = n; render(); } })),
+        ];
+      } },
+    { label: 'Move left', fn: () => moveLane(L.id, -1) },
+    { label: 'Move right', fn: () => moveLane(L.id, 1) },
     { sep: 1 },
     ...(others.length ? [{ label: 'Copy this routine into', sub: others.map(v => ({ label: v.name, fn: () => {
         snap();
@@ -1408,13 +1464,19 @@ function brickNode(laneId, it, s, e, meta) {
   if (!mini) {
     /* --- top row: start – end, warnings, duration --- */
     const top = el('div', 'b-top');
-    const t0 = el('button', 'b-time' + (it.at ? ' anc' : '') + (meta.clash ? ' clash' : ''), (it.at ? '⚓ ' : '') + fmt(s));
-    t0.dataset.tip = startTip;
-    t0.onclick = ev => { ev.stopPropagation(); editTime(t0, it, s); };
-    const t1 = el('button', 'b-time b-end', fmt(e));
-    t1.dataset.tip = endTip;
-    t1.onclick = ev => { ev.stopPropagation(); editEnd(t1, it, s); };
-    top.appendChild(t0); top.appendChild(el('span', 'b-dash', '–')); top.appendChild(t1);
+    if (s == null) {
+      const u = el('span', 'b-flag', '◷ no set time');
+      u.dataset.tip = 'This routine has no clock — the order is what matters';
+      top.appendChild(u);
+    } else {
+      const t0 = el('button', 'b-time' + (it.at ? ' anc' : '') + (meta.clash ? ' clash' : ''), (it.at ? '⚓ ' : '') + fmt(s));
+      t0.dataset.tip = startTip;
+      t0.onclick = ev => { ev.stopPropagation(); editTime(t0, it, s); };
+      const t1 = el('button', 'b-time b-end', fmt(e));
+      t1.dataset.tip = endTip;
+      t1.onclick = ev => { ev.stopPropagation(); editEnd(t1, it, s); };
+      top.appendChild(t0); top.appendChild(el('span', 'b-dash', '–')); top.appendChild(t1);
+    }
     if (meta.gap > 0) { const g = el('span', 'b-flag', '↧' + dur2s(meta.gap)); g.dataset.tip = '<b>' + dur2s(meta.gap) + '</b> of empty time before this block'; top.appendChild(g); }
     if (meta.clash > 0) { const g = el('span', 'b-flag bad', '⚠' + dur2s(meta.clash)); g.dataset.tip = 'The block above runs <b>' + dur2s(meta.clash) + '</b> past this anchored start'; top.appendChild(g); }
     if (broke) { const g = el('span', 'b-flag bad', '⚠ rule'); g.dataset.tip = broke.map(esc).join('<br>'); top.appendChild(g); }
@@ -1474,7 +1536,7 @@ function brickNode(laneId, it, s, e, meta) {
   }
   main.appendChild(txt);
   if (mini) {
-    const mt = el('button', 'b-mtime' + (it.at ? ' anc' : ''), (it.at ? '⚓' : '') + fmt(s));
+    const mt = el('button', 'b-mtime' + (it.at ? ' anc' : ''), s == null ? '◷' : (it.at ? '⚓' : '') + fmt(s));
     mt.dataset.tip = startTip;
     mt.onclick = ev => { ev.stopPropagation(); editTime(mt, it, s); };
     const md = el('span', 'b-mdays', daysShort(it.days) + ' · ' + dur2s(it.dur));
@@ -1486,11 +1548,18 @@ function brickNode(laneId, it, s, e, meta) {
 
   /* --- foot: days, badges, hover controls --- */
   const foot = el('div', 'b-foot');
-  const dz = el('div', 'b-days');
-  dz.dataset.tip = 'Which days this block runs — drives the repeat rule in Calendar / Todoist';
-  it.days.forEach((on, i) => {
+  const L0 = lane(laneId), ed = L0 ? effDays(L0, it) : it.days;
+  const dz = el('div', 'b-days' + (it.daysEx ? ' ex' : ''));
+  dz.dataset.tip = it.daysEx
+    ? '<b>Exception</b> — this block runs ' + esc(daysLabel(ed)) + ', not whatever ' + esc(L0 ? L0.name : '') + ' says.<br>Right-click → Days to put it back in step.'
+    : 'Following <b>' + esc(L0 ? L0.name : '') + '</b> — ' + esc(daysLabel(ed)) + '.<br>Click a day to set an exception for this block only.';
+  ed.forEach((on, i) => {
     const b = el('b', on ? 'on' : '', DLET[i]);
-    b.onclick = ev => { ev.stopPropagation(); snap(); it.days[i] = it.days[i] ? 0 : 1; render(); };
+    b.onclick = ev => {
+      ev.stopPropagation(); snap();
+      if (!it.daysEx) { it.days = ed.slice(); it.daysEx = true; }
+      it.days[i] = it.days[i] ? 0 : 1; render();
+    };
     dz.appendChild(b);
   });
   foot.appendChild(dz);
@@ -1537,7 +1606,7 @@ function brickNode(laneId, it, s, e, meta) {
 
 /* ---------- right-click: block ---------- */
 function blockMenu(laneId, it, x, y) {
-  const setDays = arr => { snap(); it.days = arr.slice(); render(); };
+  const setDays = arr => { snap(); it.days = arr.slice(); it.daysEx = true; render(); };
   openMenu(x, y, [
     { head: it.name },
     { label: 'Set start time…', k: '⚓', fn: () => promptTime('Start time (HH:MM) — anchors the block', it.at || '', v => { snap(); it.at = v || null; render(); }) },
@@ -1550,13 +1619,20 @@ function blockMenu(laneId, it, x, y) {
     { label: 'Effort', sub: [1, 2, 3].map(k => ({ label: EGLYPH[k] + ' ' + ENAME[k], check: energyOf(it) === k, fn: () => { snap(); it.energy = k; syncKin(it, { energy: k }); render(); } })) },
     { label: 'Priority', sub: [0, 1, 2, 3].map(k => ({ label: k ? 'P' + k : 'none', check: (it.pri || 0) === k, fn: () => { snap(); it.pri = k; render(); } })) },
     { label: 'Colour', sub: PAL.map((c, i) => ({ label: PALNAME[i], check: it.color === c, fn: () => { snap(); it.color = c; syncKin(it, { color: c }); render(); } })) },
-    { label: 'Days', sub: () => [
-        { label: 'Every day', fn: () => setDays([1, 1, 1, 1, 1, 1, 1]) },
-        { label: 'Weekdays', fn: () => setDays([0, 1, 1, 1, 1, 1, 0]) },
-        { label: 'Weekend', fn: () => setDays([1, 0, 0, 0, 0, 0, 1]) },
-        { sep: 1 },
-        ...weekOrd().map(d => ({ label: DSHORT[d], check: !!it.days[d], fn: () => { snap(); it.days[d] = it.days[d] ? 0 : 1; render(); } })),
-      ] },
+    { label: 'Days', sub: () => {
+        const L = lane(laneId);
+        const rd = (L.days || [1, 1, 1, 1, 1, 1, 1]);
+        return [
+          { head: it.daysEx ? 'Exception' : 'Following ' + L.name },
+          { label: 'Follow the routine (' + daysShort(rd) + ')', check: !it.daysEx, fn: () => { snap(); it.daysEx = false; render(); } },
+          { sep: 1 },
+          { label: 'Exception: every day', fn: () => setDays([1, 1, 1, 1, 1, 1, 1]) },
+          { label: 'Exception: weekdays', fn: () => setDays([0, 1, 1, 1, 1, 1, 0]) },
+          { label: 'Exception: weekend', fn: () => setDays([1, 0, 0, 0, 0, 0, 1]) },
+          ...weekOrd().map(d => ({ label: DSHORT[d], check: !!effDays(L, it)[d],
+            fn: () => { snap(); if (!it.daysEx) { it.days = rd.slice(); it.daysEx = true; } it.days[d] = it.days[d] ? 0 : 1; render(); } })),
+        ];
+      } },
     { sep: 1 },
     { label: it.note ? 'Edit note' : 'Add note', fn: () => { it.noteOpen = true; it.compact = false; render(); } },
     { label: 'Pin position', check: !!it.pin, fn: () => { snap(); it.pin = !it.pin; render(); } },
@@ -1639,9 +1715,9 @@ function renderWeek() {
       /* a routine put on Saturday whose blocks are all set to weekdays would silently vanish — offer the fix up front */
       const nv = variant(S.week[d]);
       if (nv) {
-        const off = withVariant(nv.id, () => S.lanes.flatMap(l => items(l.id)).filter(it => !it.days[d]));
+        const off = withVariant(nv.id, () => S.lanes.flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => !effDays(l, it)[d]).map(({ it }) => it));
         if (off.length && confirm(nv.name + ' now runs on ' + DAYS[d] + ', but ' + off.length + ' of its blocks aren\'t set to run that day.\n\nTurn ' + DSHORT[d] + ' on for them?')) {
-          off.forEach(it => it.days[d] = 1);
+          off.forEach(it => { if (!it.daysEx) { it.days = [1,1,1,1,1,1,1]; it.daysEx = true; } it.days[d] = 1; });
         }
       }
       render();
@@ -1650,7 +1726,7 @@ function renderWeek() {
 
     const meta = el('div', 'day-meta');
     if (v) {
-      const rows = withVariant(v.id, () => S.lanes.map(L => ({ L, sc: schedule(L.id).filter(r => r.it.days[d]) })).filter(x => x.sc.length));
+      const rows = withVariant(v.id, () => S.lanes.map(L => ({ L, sc: schedule(L.id).filter(r => effDays(L, r.it)[d]) })).filter(x => x.sc.length));
       const mins = rows.reduce((a, x) => a + x.sc.reduce((b, r) => b + r.it.dur, 0), 0);
       const load = rows.reduce((a, x) => a + x.sc.reduce((b, r) => b + loadOf(r.it), 0), 0);
       const nblocks = rows.reduce((a, x) => a + x.sc.length, 0);
@@ -1661,12 +1737,12 @@ function renderWeek() {
       ld.dataset.tip = 'Effort load for ' + DAYS[d] + ' — one hour of medium effort = 1.0';
       meta.appendChild(ld);
       if (chk.count) { const b = el('span', 'bad', '⚠ ' + chk.count); b.dataset.tip = 'Rule breaks in this day'; meta.appendChild(b); }
-      const off = withVariant(v.id, () => S.lanes.flatMap(l => items(l.id)).filter(it => !it.days[d]));
+      const off = withVariant(v.id, () => S.lanes.flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => !effDays(l, it)[d]).map(({ it }) => it));
       if (off.length) {
         const b = el('span', 'bad', off.length + ' off');
         b.dataset.tip = '<b>' + off.length + ' blocks</b> in this routine aren’t set to run on ' + DSHORT[d] + ', so they won’t fire or export.<br>Click to switch ' + DSHORT[d] + ' on for them.';
         b.style.cursor = 'pointer';
-        b.onclick = () => { snap(); off.forEach(it => it.days[d] = 1); render(); };
+        b.onclick = () => { snap(); off.forEach(it => { if (!it.daysEx) { it.days = [1,1,1,1,1,1,1]; it.daysEx = true; } it.days[d] = 1; }); render(); };
         meta.appendChild(b);
       }
       head.appendChild(meta);
@@ -1882,7 +1958,7 @@ function allRows() {
   const out = [];
   vs.forEach(v => withVariant(v.id, () => {
     S.lanes.forEach(L => schedule(L.id).filter(r => !r.hidden).forEach(({ it, s, e }) => {
-      const days = weekly ? it.days.map((d, i) => d && S.week[i] === v.id ? 1 : 0) : it.days.slice();
+      const ed = effDays(L, it); const days = weekly ? ed.map((d, i) => d && S.week[i] === v.id ? 1 : 0) : ed;
       if (days.some(Boolean)) out.push({ v, lane: L, it, s, e, days, weekly });
     }));
   }));
@@ -1923,6 +1999,16 @@ function buildICS() {
     L.push('BEGIN:VEVENT');
     L.push('UID:' + it.id + '-' + v.id + '@block');
     L.push('DTSTAMP:' + stamp);
+    if (s == null) {                                   /* untimed → an all-day recurring event */
+      L.push('DTSTART;VALUE=DATE:' + ymd(d));
+      const nd = new Date(d); nd.setDate(d.getDate() + 1);
+      L.push('DTEND;VALUE=DATE:' + ymd(nd));
+      L.push('RRULE:FREQ=WEEKLY;BYDAY=' + bd.join(','));
+      L.push(icsFold('SUMMARY:' + icsEsc((it.pri ? '[P' + it.pri + '] ' : '') + it.name)));
+      L.push('TRANSP:TRANSPARENT');
+      L.push('END:VEVENT');
+      return;
+    }
     L.push('DTSTART:' + ymd(d) + 'T' + hms(s));
     L.push('DTEND:' + ymd(d2) + 'T' + hms(e));
     L.push('RRULE:FREQ=WEEKLY;BYDAY=' + bd.join(','));
@@ -1959,7 +2045,7 @@ function buildTodoistCSV() {
     out.push(blank);
     rows.filter(r => ((r.weekly && S.variants.length > 1 ? r.v.name + ' — ' : '') + r.lane.name) === sec).forEach(r => {
       const when = daysLabel(r.days); if (when === '(no days)') return;
-      out.push(['task', csvQ(r.it.name), csvQ(r.it.note || ''), tdPri(r.it), 1, '', '', csvQ(when + ' at ' + hhmm(r.s)), 'en', csvQ(S.tz), r.it.dur, 'minute'].join(','));
+      out.push(['task', csvQ(r.it.name), csvQ(r.it.note || ''), tdPri(r.it), 1, '', '', csvQ(when + (r.s == null ? '' : ' at ' + hhmm(r.s))), 'en', csvQ(S.tz), r.it.dur, 'minute'].join(','));
       out.push(blank);
     });
   });
@@ -1971,7 +2057,7 @@ function buildQuickAdd() {
     const s = (r.weekly ? r.v.name + ' / ' : '') + r.lane.name;
     if (s !== sec) { sec = s; out.push('', '# ' + s); }
     const when = daysLabel(r.days); if (when === '(no days)') return;
-    out.push(r.it.name + ' ' + when + ' at ' + hhmm(r.s) + ' for ' + r.it.dur + 'min #' + S.tdProject.replace(/\s+/g, '')
+    out.push(r.it.name + ' ' + when + (r.s == null ? '' : ' at ' + hhmm(r.s)) + ' for ' + r.it.dur + 'min #' + S.tdProject.replace(/\s+/g, '')
       + (r.it.pri ? ' p' + r.it.pri : (S.tdPriority > 1 ? ' p' + (5 - S.tdPriority) : '')));
   });
   return out.join('\n').trim();
@@ -2398,7 +2484,7 @@ function pushLib() {
 function publishToday() {
   const vid = routineForToday(), d = todayIdx();
   const blocks = withVariant(vid, () => S.lanes.flatMap(l =>
-    schedule(l.id).filter(r => r.it.days[d]).map(r => ({
+    schedule(l.id).filter(r => effDays(lane(l.id), r.it)[d]).map(r => ({
       id: r.it.id, actId: actIdOf(r.it), name: r.it.name, s: r.s, dur: r.it.dur,
       color: r.it.color, lane: lane(l.id).name,
     })))).sort((a, b) => a.s - b.s);
