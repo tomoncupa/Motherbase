@@ -376,6 +376,15 @@ main{display:flex;flex:1;min-height:0}
 .day-meta span.bad{border-color:#4d1f28;color:var(--bad)}
 .day-body{flex:1;overflow-y:auto;padding:8px 9px;display:flex;flex-direction:column;gap:8px}
 .day-lane{font-family:var(--f1);font-size:9.5px;letter-spacing:.12em;color:var(--dim2);text-transform:uppercase;margin-top:3px}
+.day-lane.p1{color:#ff8a9c}.day-lane.p2{color:var(--warn)}.day-lane.p3{color:#7fb8ff}
+.seg{display:flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:7px;background:#0a1018}
+.seg button{padding:3px 9px;border-radius:5px;font-family:var(--f1);font-size:11px;color:var(--dim)}
+.seg button.on{background:linear-gradient(180deg,#16303a,#102028);color:var(--acc);box-shadow:0 0 0 1px var(--acc-d)}
+.donenote{
+  flex:0 0 auto;align-self:flex-start;margin-top:4px;padding:7px 11px;border:1px dashed var(--line2);border-radius:9px;
+  font-family:var(--f1);font-size:11px;color:var(--good);letter-spacing:.05em;
+}
+.donenote:hover{border-color:var(--good)}
 .day-b{display:flex;align-items:center;gap:6px;font-size:11px;padding:2px 0;line-height:1.25}
 .day-b i{width:3px;align-self:stretch;min-height:12px;border-radius:2px;background:var(--c);flex:0 0 auto}
 .day-b span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -416,7 +425,11 @@ footer .sp{flex:1}
 .glink{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:11.5px}
 .glink span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .glink a{color:var(--acc);text-decoration:none;font-family:var(--f1);font-size:11px}
-.set{display:grid;grid-template-columns:1fr auto;gap:9px 14px;align-items:center;font-size:12.5px}
+.set{display:grid;grid-template-columns:1fr auto;gap:12px 16px;align-items:center;font-size:12.5px}
+.set label{display:flex;flex-direction:column;gap:2px}
+.set label span{font-size:10.5px;color:var(--dim2);line-height:1.35}
+.set input[type=range]{width:190px;accent-color:var(--acc)}
+.set input[type=checkbox]{width:16px;height:16px;accent-color:var(--acc)}
 .set input[type=text],.set input[type=number],.set select{background:#0a1018;border:1px solid var(--line);border-radius:6px;padding:5px 8px;outline:none;min-width:190px}
 .set input:focus,.set select:focus{border-color:var(--acc-d)}
 .cmp{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px}
@@ -494,7 +507,6 @@ footer .sp{flex:1}
     <div class="views">
       <button id="vDay" class="on" data-tip="<b>Day</b> — build one routine out of blocks">Day</button>
       <button id="vWeek" data-tip="<b>Week</b> — which <b>day</b> runs on which weekday">Week</button>
-      <button id="vPri" data-tip="<b>Priority</b> — everything you've flagged, P1 first, across every routine">Priority</button>
       <button id="vSum" data-tip="<b>Summary</b> — what actually gets done, and what to do about it">Summary</button>
     </div>
     <div id="tabs"></div>
@@ -539,7 +551,6 @@ footer .sp{flex:1}
 
     <div id="board"></div>
     <div id="week" class="hide"></div>
-    <div id="pri" class="hide"></div>
     <div id="sum" class="hide"></div>
   </main>
 
@@ -927,7 +938,7 @@ function seedState() {
   return {
     v: 2, lanes, lib: seedLib(), templates: [], variants: [v], current: v.id,
     week: [null, null, null, null, null, null, null], rules: [],
-    view: 'day', gap: 0, h24: false, doneDate: '', nowline: false, sound: true, keepDone: true, weekStart: 1, proportional: false,
+    view: 'day', gap: 0, h24: false, doneDate: '', nowline: false, sound: true, soundTheme: 'marimba', volume: 0.6, keepDone: true, weekStart: 1, proportional: false, doneRoutines: 'stay', weekMode: 'time',
     tz: (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
     calName: 'Routine', tdProject: 'Routine', tdPriority: 1, exportScope: 'variant',
   };
@@ -937,13 +948,25 @@ try { S = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem('brick_v1
 if (!S.lanes || !S.variants) S = seedState();
 /* forward-compat for maps saved by older versions */
 S.templates = S.templates || []; S.rules = S.rules || []; S.week = S.week || [null, null, null, null, null, null, null];
-S.view = S.view || 'day'; S.exportScope = S.exportScope || 'variant'; S.doneDate = S.doneDate || ''; if (S.weekStart == null) S.weekStart = 1; if (S.sound == null) S.sound = true; if (S.nowline == null) S.nowline = false; if (S.keepDone == null) S.keepDone = true;
+S.view = S.view || 'day'; S.exportScope = S.exportScope || 'variant'; S.doneDate = S.doneDate || ''; if (S.weekStart == null) S.weekStart = 1; if (S.sound == null) S.sound = true; if (!S.soundTheme) S.soundTheme = 'marimba'; if (S.volume == null) S.volume = 0.6; if (!S.doneRoutines) S.doneRoutines = 'stay'; if (!S.weekMode) S.weekMode = 'time'; if (S.nowline == null) S.nowline = false; if (S.keepDone == null) S.keepDone = true;
 delete S.zoom;
 S.variants.forEach(v => S.lanes.forEach(l => { if (!v.items[l.id]) v.items[l.id] = []; }));
 
 const M = () => S.variants.find(v => v.id === S.current) || S.variants[0];
 const variant = id => S.variants.find(v => v.id === id);
 const lane = id => S.lanes.find(l => l.id === id);
+/**
+ * A day is a group of routines — and not every day runs every routine.
+ * S.lanes is the shelf of routines that exist; day.routines is the ordered
+ * subset THIS day actually runs. No entry = runs them all (older saves).
+ */
+const LANES = (vid) => {
+  const v = vid ? variant(vid) : M();
+  if (!v) return S.lanes.slice();
+  const ids = v.routines || S.lanes.map(l => l.id);
+  return ids.map(id => lane(id)).filter(Boolean);
+};
+const dayHas = (v, laneId) => !v.routines || v.routines.includes(laneId);
 const items = laneId => (M().items[laneId] || (M().items[laneId] = []));
 /** run fn with a different routine active — schedule()/items() always read the current one */
 function withVariant(id, fn) { const p = S.current; S.current = id; try { return fn(); } finally { S.current = p; } }
@@ -1069,7 +1092,7 @@ const SYNCED = ['name', 'dur', 'color', 'energy', 'note'];
  */
 function kinOf(it) {
   const out = [];
-  S.lanes.forEach(l => items(l.id).forEach(x => { if (x.srcId && x.srcId === it.srcId && x.id !== it.id) out.push(x); }));
+  LANES().forEach(l => items(l.id).forEach(x => { if (x.srcId && x.srcId === it.srcId && x.id !== it.id) out.push(x); }));
   return out;
 }
 function syncKin(it, patch) {
@@ -1129,9 +1152,9 @@ const routineForToday = () => S.week[todayIdx()] || S.current;
 /** blocks in a routine that actually apply today */
 function todaysBlocks(vid) {
   const d = todayIdx();
-  return withVariant(vid, () => S.lanes.flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => effDays(l, it)[d] && !it.hidden).map(({ it }) => it));
+  return withVariant(vid, () => LANES(vid).flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => effDays(l, it)[d] && !it.hidden).map(({ it }) => it));
 }
-function clearDone(vid) { withVariant(vid, () => S.lanes.forEach(l => items(l.id).forEach(it => it.done = false))); }
+function clearDone(vid) { withVariant(vid, () => LANES(vid).forEach(l => items(l.id).forEach(it => it.done = false))); }
 /** new day → yesterday's ticks are gone, and today's come back from the LifeOS
     log (you may have ticked something in HABITS or on the home screen already) */
 /* ---------- history: what was scheduled, and what actually got ticked ----------
@@ -1193,7 +1216,8 @@ function toggleDone(it) {
     toast('shared log unavailable — ticks are being kept locally');
   }
   save();
-  if (!it.done) return render();
+  if (!it.done) { beep('untick'); return render(); }
+  beep('done');
   const vid = routineForToday();
   const todays = todaysBlocks(vid);
   const open = todays.filter(b => !b.done);
@@ -1213,7 +1237,7 @@ function toggleDone(it) {
  */
 function clearForNextPass(vid) {
   if (!S.cleared || S.cleared.date !== todayKey()) S.cleared = { date: todayKey(), ids: {} };
-  withVariant(vid, () => S.lanes.forEach(l => items(l.id).forEach(it => {
+  withVariant(vid, () => LANES(vid).forEach(l => items(l.id).forEach(it => {
     if (!it.done) return;
     it.done = false;
     if (window.LifeOS) S.cleared.ids[actIdOf(it)] = 1;
@@ -1243,7 +1267,7 @@ function ruleText(r) {
 /** check the arrangement against every enabled rule; returns per-block messages + per-rule status */
 function checkRules(vid) {
   const res = { byItem: new Map(), byRule: new Map(), count: 0 };
-  const rows = withVariant(vid || S.current, () => S.lanes.flatMap(L => schedule(L.id).map(r => Object.assign({ lane: L }, r))));
+  const rows = withVariant(vid || S.current, () => LANES(vid || S.current).flatMap(L => schedule(L.id).map(r => Object.assign({ lane: L }, r))));
   const hit = (r, ids, msg) => {
     res.count++;
     res.byRule.set(r.id, (res.byRule.get(r.id) || 0) + 1);
@@ -1259,7 +1283,7 @@ function checkRules(vid) {
     if (r.kind === 'endby') A.forEach(a => { if (a.e > hm2min(r.time)) hit(r, [a.it.id], a.it.name + ' runs past ' + r.time); });
     if (r.kind === 'maxheavy') {
       const lim = +r.mins || 2;
-      withVariant(vid || S.current, () => S.lanes.forEach(L => {
+      withVariant(vid || S.current, () => LANES(vid || S.current).forEach(L => {
         let run = [];
         items(L.id).forEach(it => {
           if (energyOf(it) === 3) run.push(it); else run = [];
@@ -1278,17 +1302,15 @@ function render() {
   RULECHK = checkRules(S.current);
   $('#board').classList.toggle('hide', S.view !== 'day');
   $('#week').classList.toggle('hide', S.view !== 'week');
-  $('#pri').classList.toggle('hide', S.view !== 'pri');
   $('#sum').classList.toggle('hide', S.view !== 'sum');
   $('#vDay').classList.toggle('on', S.view === 'day');
   $('#vWeek').classList.toggle('on', S.view === 'week');
-  $('#vPri').classList.toggle('on', S.view === 'pri');
   $('#vSum').classList.toggle('on', S.view === 'sum');
   $('#tabs').style.display = S.view === 'week' ? 'none' : '';
   $('#bNew').style.display = $('#bCmp').style.display = S.view === 'day' ? '' : 'none';
   $('#bRules').innerHTML = 'Rules' + (RULECHK.count ? ' <span class="bad">⚠' + RULECHK.count + '</span>' : (S.rules.length ? ' ✓' : ''));
   renderTabs(); renderBin();
-  if (S.view === 'day') renderBoard(); else if (S.view === 'week') renderWeek(); else if (S.view === 'pri') renderPri(); else renderSum();
+  if (S.view === 'day') renderBoard(); else if (S.view === 'week') renderWeek(); else renderSum();
   renderFoot(); save();
 }
 
@@ -1327,6 +1349,21 @@ function dayMenu(v, x, y) {
   const runs = weekOrd().filter(d => S.week[d] === v.id);
   openMenu(x, y, [
     { head: v.name },
+    { label: 'Routines in this day', k: LANES(v.id).length + '/' + S.lanes.length, sub: () => {
+        const has = v.routines || S.lanes.map(l => l.id);
+        return [
+          { head: 'Which routines ' + v.name + ' runs' },
+          ...S.lanes.map(L => ({ label: L.name, check: has.includes(L.id), fn: () => {
+              snap();
+              if (!v.routines) v.routines = S.lanes.map(x => x.id);
+              if (v.routines.includes(L.id)) {
+                if (v.routines.length < 2) return toast('a day needs at least one routine');
+                v.routines = v.routines.filter(x => x !== L.id);
+              } else v.routines.push(L.id);
+              render();
+            } })),
+        ];
+      } },
     { label: 'Runs on', k: runs.length ? runs.map(d => DLET[d]).join('') : 'nothing', sub: () => [
         { head: 'Weekdays this day covers' },
         { label: 'Every weekday (Mon–Fri)', fn: () => { snap(); [1, 2, 3, 4, 5].forEach(d => S.week[d] = v.id); render(); } },
@@ -1353,14 +1390,16 @@ function dayMenu(v, x, y) {
 function dupVariant(src) {
   snap();
   const v = { id: uid(), name: src.name + ' copy', items: {} };
-  S.lanes.forEach(l => v.items[l.id] = (src.items[l.id] || []).map(it => Object.assign({}, it, { id: uid(), days: it.days.slice(), done: false })));
+  v.routines = (src.routines || S.lanes.map(l => l.id)).slice();
+  S.lanes.forEach(l => v.items[l.id] = (src.items[l.id] || []).map(it => Object.assign({}, it, { id: uid(), srcId: uid(), days: it.days.slice(), done: false })));
   S.variants.push(v); S.current = v.id; render();
 }
 
-let focusLane = 0;
+let focusId = null;
+const focusLaneObj = () => lane(focusId) || LANES()[0];
 /* ---------- multi-select: ctrl/shift-click blocks, then act on the lot ---------- */
 let SEL = new Set();
-const selected = () => S.lanes.flatMap(l => items(l.id).map(it => ({ l, it }))).filter(x => SEL.has(x.it.id));
+const selected = () => LANES().flatMap(l => items(l.id).map(it => ({ l, it }))).filter(x => SEL.has(x.it.id));
 function clearSel() { if (!SEL.size) return false; SEL.clear(); return true; }
 function selMenu(x, y) {
   const picks = selected();
@@ -1375,7 +1414,7 @@ function selMenu(x, y) {
     { label: 'Tick them all off', fn: () => { picks.forEach(({ it }) => { if (!it.done) toggleDone(it); }); } },
     { label: 'Compact them', fn: () => each(it => it.compact = true) },
     { label: 'Expand them', fn: () => each(it => it.compact = false) },
-    { label: 'Move to routine', sub: S.lanes.map(L => ({ label: L.name, fn: () => {
+    { label: 'Move to routine', sub: LANES().map(L => ({ label: L.name, fn: () => {
         snap();
         picks.forEach(({ it }) => { const f = findItem(it.id); if (f && f.laneId !== L.id) { f.arr.splice(f.i, 1); items(L.id).push(it); } });
         render();
@@ -1393,12 +1432,12 @@ function renderBin() {
   const q = ($('#search').value || '').toLowerCase().trim();
   const list = $('#binlist'); list.innerHTML = '';
   /* be explicit about where a click lands — it used to be an invisible rule */
-  const tgt = S.lanes[focusLane] || S.lanes[0];
+  const tgt = focusLaneObj();
   const tb = $('#binTarget');
   if (tb) {
     tb.innerHTML = 'clicks go to <b>' + esc(tgt ? tgt.name : '—') + '</b> ▾';
     tb.onclick = ev => openMenu(ev.clientX, ev.clientY, [{ head: 'Send clicked blocks to' },
-      ...S.lanes.map((L, i) => ({ label: L.name, check: i === focusLane, fn: () => { focusLane = i; render(); } }))]);
+      ...LANES().map((L, i) => ({ label: L.name, check: L.id === focusId, fn: () => { focusId = L.id; render(); } }))]);
   }
 
   if (S.templates.length) {
@@ -1417,7 +1456,7 @@ function renderBin() {
         c.appendChild(d);
         c.addEventListener('pointerdown', e => {
           if (e.target === d || e.button === 2) return;
-          startDrag(e, { kind: 'tpl', tpl: t, node: c, onTap: () => applyTemplate(t, (S.lanes[focusLane] || S.lanes[0]).id) });
+          startDrag(e, { kind: 'tpl', tpl: t, node: c, onTap: () => applyTemplate(t, focusLaneObj().id) });
         });
         list.appendChild(c);
       });
@@ -1433,17 +1472,17 @@ function renderBin() {
       const c = el('div', 'chip');
       c.style.setProperty('--c', b.color);
       c.innerHTML = '<span class="nm">' + esc(b.name) + '</span><span class="eg">' + EGLYPH[b.energy || 2] + '</span><span class="mn">' + dur2s(b.dur) + '</span>';
-      c.dataset.tip = '<b>' + esc(b.name) + '</b> — ' + dur2s(b.dur) + ', ' + ENAME[b.energy || 2] + ' effort<br>click to drop it into <b>' + esc((S.lanes[focusLane] || S.lanes[0] || {}).name || '') + '</b>';
+      c.dataset.tip = '<b>' + esc(b.name) + '</b> — ' + dur2s(b.dur) + ', ' + ENAME[b.energy || 2] + ' effort<br>click to drop it into <b>' + esc((focusLaneObj() || {}).name || '') + '</b>';
       const d = el('button', 'del', '✕');
       d.onclick = e => { e.stopPropagation(); snap(); S.lib = S.lib.filter(x => x.id !== b.id); render(); };
       c.appendChild(d);
-      const drop = () => { const l = S.lanes[focusLane] || S.lanes[0]; if (l) { addItem(l.id, b); toast('<b>' + esc(b.name) + '</b> → ' + esc(l.name) + ' · Ctrl+Z to undo'); } };
+      const drop = () => { const l = focusLaneObj(); if (l) { addItem(l.id, b); toast('<b>' + esc(b.name) + '</b> → ' + esc(l.name) + ' · Ctrl+Z to undo'); } };
       c.addEventListener('pointerdown', e => { if (e.target === d || e.button === 2) return; startDrag(e, { kind: 'lib', src: b, node: c, onTap: drop }); });
       c.addEventListener('contextmenu', ev => {
         ev.preventDefault();
         openMenu(ev.clientX, ev.clientY, [
           { head: b.name },
-          { label: 'Add to routine', sub: S.lanes.map(L => ({ label: L.name, fn: () => { addItem(L.id, b); toast('added to <b>' + esc(L.name) + '</b>'); } })) },
+          { label: 'Add to routine', sub: LANES().map(L => ({ label: L.name, fn: () => { addItem(L.id, b); toast('added to <b>' + esc(L.name) + '</b>'); } })) },
           { sep: 1 },
           { label: 'Rename…', fn: () => { const v = prompt('Name', b.name); if (v) { snap(); b.name = v.trim(); render(); } } },
           { label: 'Set duration…', fn: () => { const v = prompt('Minutes', b.dur); if (v) { snap(); b.dur = clamp(parseInt(v) || b.dur, 1, 1440); render(); } } },
@@ -1468,8 +1507,22 @@ function applyTemplate(t, laneId, idx) {
 /* ---------- day view ---------- */
 function renderBoard() {
   const b = $('#board'); b.innerHTML = '';
-  S.lanes.forEach((L, li) => {
-    const d = el('div', 'lane' + (li === focusLane ? ' focus' : ''));
+  /* finished routines can stay put, slide to the end, or get out of the way entirely */
+  const isDoneLane = L => { const a = items(L.id).filter(x => !x.hidden); return a.length > 0 && a.every(x => x.done); };
+  let lanes = LANES();
+  if (S.doneRoutines === 'right') lanes = lanes.slice().sort((a, b) => (isDoneLane(a) ? 1 : 0) - (isDoneLane(b) ? 1 : 0));
+  if (S.doneRoutines === 'hide') {
+    const hidden = lanes.filter(isDoneLane);
+    lanes = lanes.filter(L => !isDoneLane(L));
+    if (hidden.length) {
+      const note = el('button', 'donenote', '✓ ' + hidden.length + ' finished routine' + (hidden.length > 1 ? 's' : '') + ' hidden');
+      note.dataset.tip = esc(hidden.map(L => L.name).join(', ')) + '<br>Click to show them again';
+      note.onclick = () => { S.doneRoutines = 'stay'; render(); };
+      b.appendChild(note);
+    }
+  }
+  lanes.forEach((L, li) => {
+    const d = el('div', 'lane' + (L.id === focusId ? ' focus' : ''));
     d.dataset.lane = L.id;
 
     const head = el('div', 'lane-head');
@@ -1486,16 +1539,13 @@ function renderBoard() {
     const nm = el('input', 'lane-name'); nm.value = L.name;
     nm.dataset.tip = 'Rename this routine — it becomes a section in Todoist';
     nm.onchange = () => { snap(); L.name = nm.value.trim() || 'Routine'; render(); };
-    nm.onfocus = () => { focusLane = li; renderBin(); };
+    nm.onfocus = () => { focusId = L.id; renderBin(); };
     top.appendChild(nm);
     top.appendChild(lt); top.appendChild(rt);
-    if (S.lanes.length > 1) {
-      const x = el('button', 'lane-x', '✕'); x.dataset.tip = 'Delete this routine from every routine';
-      x.onclick = () => {
-        if (!confirm('Delete routine "' + L.name + '" from every day?')) return;
-        snap(); S.lanes = S.lanes.filter(z => z.id !== L.id);
-        S.variants.forEach(v => delete v.items[L.id]); render();
-      };
+    if (LANES().length > 1) {
+      const x = el('button', 'lane-x', '✕');
+      x.dataset.tip = 'Take <b>' + esc(L.name) + '</b> off ' + esc(M().name) + '.<br>It keeps running on your other days — right-click the header to delete it everywhere.';
+      x.onclick = () => removeLaneFromDay(L.id);
       top.appendChild(x);
     }
     head.appendChild(top);
@@ -1596,7 +1646,7 @@ function renderBoard() {
     d.addEventListener('contextmenu', ev => { if (ev.target.closest('.brick')) return; ev.preventDefault(); laneMenu(L, ev.clientX, ev.clientY); });
 
     const body = el('div', 'lane-body'); body.dataset.lane = L.id;
-    body.onclick = () => { if (focusLane !== li) { focusLane = li; renderBoard(); renderBin(); } };
+    body.onclick = () => { if (focusId !== L.id) { focusId = L.id; renderBoard(); renderBin(); } };
     if (!sc.length) body.appendChild(el('div', 'lane-empty', 'Drag a block here<br><span style="opacity:.6">or click one in the bin</span>'));
     const nowM = nowMin();
     /* only where the clock actually is: the routine has to cover this minute */
@@ -1635,7 +1685,7 @@ function renderBoard() {
     const add = el('button', 'lane-add', '+ blank block');
     add.dataset.tip = 'Add an empty block and type your own name';
     add.onclick = () => {
-      focusLane = li;
+      focusId = L.id;
       const it = addItem(L.id, { name: 'New block', dur: 30, color: PAL[Math.floor(Math.random() * PAL.length)], energy: 2 });
       setTimeout(() => { const n = document.querySelector('[data-id="' + it.id + '"] .b-name'); if (n) { n.focus(); document.getSelection().selectAllChildren(n); } }, 20);
     };
@@ -1645,10 +1695,22 @@ function renderBoard() {
 
   const al = el('button', null, '+'); al.id = 'addlane';
   al.dataset.tip = 'Add another routine — <b>Client block</b>, <b>Night shift</b>, anything';
-  al.onclick = () => {
-    const n = prompt('Routine name', 'Block ' + (S.lanes.length + 1)); if (!n) return;
-    snap(); const L = { id: uid(), name: n.trim(), start: '09:00', target: '' };
-    S.lanes.push(L); S.variants.forEach(v => v.items[L.id] = []); render();
+  al.onclick = ev => {
+    const off = S.lanes.filter(L => !LANES().some(x => x.id === L.id));
+    openMenu(ev.clientX - 150, ev.clientY, [
+      { head: 'Add a routine to ' + M().name },
+      { label: '+ Build a new routine', fn: () => {
+          const n = prompt('Routine name', 'Routine ' + (S.lanes.length + 1)); if (!n) return;
+          snap();
+          const L = { id: uid(), name: n.trim(), start: '09:00', target: '' };
+          S.lanes.push(L);
+          S.variants.forEach(v => { v.items[L.id] = []; });
+          const v = M(); if (!v.routines) v.routines = S.lanes.map(x => x.id); else v.routines.push(L.id);
+          render();
+        } },
+      ...(off.length ? [{ sep: 1 }, { head: 'Or reuse one from another day' },
+        ...off.map(L => ({ label: L.name, k: (items(L.id) || []).length ? '' : 'empty', fn: () => addLaneToDay(L.id) }))] : []),
+    ]);
   };
   b.appendChild(al);
   requestAnimationFrame(runLayout);
@@ -1663,12 +1725,14 @@ function startLaneDrag(ev, L, node) {
     for (const o of others) {
       const r = o.getBoundingClientRect();
       if (e.clientX > r.left && e.clientX < r.right) {
-        const from = S.lanes.findIndex(x => x.id === L.id);
-        const to = S.lanes.findIndex(x => x.id === o.dataset.lane);
+        const v = M();
+        if (!v.routines) v.routines = S.lanes.map(x => x.id);
+        const from = v.routines.indexOf(L.id);
+        const to = v.routines.indexOf(o.dataset.lane);
         if (from > -1 && to > -1 && from !== to) {
           snap();
-          const [x] = S.lanes.splice(from, 1); S.lanes.splice(to, 0, x);
-          focusLane = to; renderBoard();
+          const [x] = v.routines.splice(from, 1); v.routines.splice(to, 0, x);
+          focusId = L.id; renderBoard();
           const again = document.querySelector('[data-lane="' + L.id + '"]');
           if (again) again.classList.add('dragging');
         }
@@ -1684,12 +1748,30 @@ function startLaneDrag(ev, L, node) {
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up, { once: true });
 }
-function moveLane(id, dir) {
-  const i = S.lanes.findIndex(l => l.id === id), j = i + dir;
-  if (i < 0 || j < 0 || j >= S.lanes.length) return toast('already at the end');
+/** take a routine out of THIS day, leaving it intact everywhere else */
+function removeLaneFromDay(id) {
+  const v = M();
+  if (!v.routines) v.routines = S.lanes.map(l => l.id);
+  if (v.routines.length < 2) return toast('a day needs at least one routine');
   snap();
-  const [x] = S.lanes.splice(i, 1); S.lanes.splice(j, 0, x);
-  focusLane = j; render();
+  v.routines = v.routines.filter(x => x !== id);
+  focusId = null; render();
+  toast('<b>' + esc(lane(id).name) + '</b> is off ' + esc(v.name) + ' — its blocks are kept, and it still runs on your other days');
+}
+function addLaneToDay(id) {
+  const v = M();
+  if (!v.routines) v.routines = S.lanes.map(l => l.id);
+  if (!v.routines.includes(id)) { snap(); v.routines.push(id); render(); }
+}
+/** order is a per-day thing, so reordering here never disturbs your other days */
+function moveLane(id, dir) {
+  const v = M();
+  if (!v.routines) v.routines = S.lanes.map(l => l.id);
+  const i = v.routines.indexOf(id), j = i + dir;
+  if (i < 0 || j < 0 || j >= v.routines.length) return toast('already at the end');
+  snap();
+  const [x] = v.routines.splice(i, 1); v.routines.splice(j, 0, x);
+  focusId = id; render();
 }
 /**
  * Which weekdays a block actually runs: the routine decides, and a block only
@@ -1733,10 +1815,14 @@ function laneMenu(L, x, y) {
         v.items[L.id] = (v.items[L.id] || []).concat(items(L.id).map(it => Object.assign({}, it, { id: uid(), days: it.days.slice(), done: false })));
         render(); toast('copied into <b>' + esc(v.name) + '</b>');
       } })) }] : []),
-    { label: 'Clear routine', danger: 1, fn: () => { if (items(L.id).length && confirm('Clear ' + L.name + '?')) { snap(); M().items[L.id] = []; render(); } } },
-    ...(S.lanes.length > 1 ? [{ label: 'Delete routine', danger: 1, fn: () => {
-        if (!confirm('Delete routine "' + L.name + '" from every day?')) return;
-        snap(); S.lanes = S.lanes.filter(z => z.id !== L.id); S.variants.forEach(v => delete v.items[L.id]); render();
+    { label: 'Clear its blocks', danger: 1, fn: () => { if (items(L.id).length && confirm('Clear ' + L.name + '?')) { snap(); M().items[L.id] = []; render(); } } },
+    { label: 'Remove from ' + M().name, danger: 1, fn: () => { removeLaneFromDay(L.id); } },
+    ...(S.lanes.length > 1 ? [{ label: 'Delete it from every day', danger: 1, fn: () => {
+        if (!confirm('Delete the routine "' + L.name + '" everywhere?\n\nIts blocks are removed from every day. To just drop it from ' + M().name + ', use “Remove from ' + M().name + '”.')) return;
+        snap();
+        S.lanes = S.lanes.filter(z => z.id !== L.id);
+        S.variants.forEach(v => { delete v.items[L.id]; if (v.routines) v.routines = v.routines.filter(id => id !== L.id); });
+        render();
       } }] : []),
   ]);
 }
@@ -1792,22 +1878,64 @@ function nowLine(m) {
   n.dataset.tip = 'Where you are in the day. Turn it off in ⚙, or per routine with right-click.';
   return n;
 }
-/* ---------- sounds: tiny synthesised blips, no files ---------- */
+/* ---------- sounds ----------
+ * Synthesised, no files. A tick should feel like a small physical click with a
+ * pitch that RISES as you get closer to finishing (that rise is most of the
+ * satisfaction); finishing the day gets a proper little fanfare.
+ */
+const THEMES = {
+  soft:    { name: 'Soft', wave: 'sine',     tick: [1, 2.01], decay: .17, bright: .55 },
+  marimba: { name: 'Marimba', wave: 'sine',  tick: [1, 4.02, 6.5], decay: .3, bright: .5 },
+  arcade:  { name: 'Arcade', wave: 'square', tick: [1, 1.5], decay: .1, bright: .3 },
+  bell:    { name: 'Bell', wave: 'triangle', tick: [1, 2.76, 5.4], decay: .45, bright: .42 },
+};
 let AC;
-function beep(kind) {
-  if (!S.sound) return;
+function audio() {
+  if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+  if (AC.state === 'suspended') AC.resume();      /* browsers park it until you interact */
+  return AC;
+}
+function tone(f, t, dur, vol, wave) {
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = wave || 'sine'; o.frequency.setValueAtTime(f, AC.currentTime + t);
+  g.gain.setValueAtTime(0.0001, AC.currentTime + t);
+  g.gain.exponentialRampToValueAtTime(Math.max(.0002, vol), AC.currentTime + t + .008);
+  g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + t + dur);
+  o.connect(g); g.connect(AC.destination);
+  o.start(AC.currentTime + t); o.stop(AC.currentTime + t + dur + .02);
+}
+/** how far through today's list we are — drives the rising pitch */
+function progressRatio() {
   try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-    const seq = kind === 'done' ? [[660, 0], [880, .07]] : kind === 'complete' ? [[523, 0], [659, .1], [784, .2], [1047, .3]] : [[300, 0]];
-    seq.forEach(([f, t]) => {
-      const o = AC.createOscillator(), g = AC.createGain();
-      o.type = 'sine'; o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, AC.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(kind === 'complete' ? .16 : .09, AC.currentTime + t + .012);
-      g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + t + .19);
-      o.connect(g); g.connect(AC.destination);
-      o.start(AC.currentTime + t); o.stop(AC.currentTime + t + .2);
-    });
+    const td = todaysBlocks(routineForToday());
+    if (!td.length) return 0;
+    return td.filter(b => b.done).length / td.length;
+  } catch (e) { return 0; }
+}
+function beep(kind) {
+  if (!S.sound || S.soundTheme === 'off') return;
+  const T = THEMES[S.soundTheme] || THEMES.soft;
+  const vol = (S.volume == null ? 0.6 : S.volume) * 0.16;
+  if (vol <= 0) return;
+  try {
+    audio();
+    if (kind === 'untick') { tone(240, 0, .12, vol * .45, T.wave); return; }
+    if (kind === 'done') {
+      /* pentatonic step up the list: C D E G A C — never a sour note, always "one more" */
+      const scale = [523.25, 587.33, 659.25, 783.99, 880, 1046.5];
+      const base = scale[Math.min(scale.length - 1, Math.round(progressRatio() * (scale.length - 1)))];
+      T.tick.forEach((mult, i) => tone(base * mult, i * .012, T.decay * (i ? T.bright : 1), vol / (i + 1.4), T.wave));
+      return;
+    }
+    if (kind === 'complete') {
+      const chord = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+      chord.forEach((f, i) => {
+        T.tick.forEach((mult, j) => tone(f * mult, i * .085 + j * .012, (T.decay + .35) / (j + 1), vol / (j + 1.3), T.wave));
+      });
+      tone(1567.98, .5, .7, vol * .5, T.wave);      /* the little sparkle on top */
+      return;
+    }
+    tone(440, 0, .12, vol, T.wave);
   } catch (e) {}
 }
 
@@ -2072,6 +2200,15 @@ function editDur(node, it) {
 function renderWeek() {
   const w = $('#week'); w.innerHTML = '';
   const bar = el('div', 'weekbar');
+  /* the week can be read two ways: as a timetable, or as what matters most */
+  const seg = el('div', 'seg');
+  [['time', '🕘 by time'], ['pri', '⚑ by priority']].forEach(([k, label]) => {
+    const b2 = el('button', S.weekMode === k ? 'on' : '', label);
+    b2.dataset.tip = k === 'time' ? 'Each day in clock order' : 'Each day grouped P1 → P3, so the must-dos read first';
+    b2.onclick = () => { S.weekMode = k; render(); };
+    seg.appendChild(b2);
+  });
+  bar.appendChild(seg);
   const kd = el('button', 'btn sm' + (S.keepDone ? ' acc' : ''), S.keepDone ? '✓ showing done' : '⊘ hiding done');
   kd.dataset.tip = 'Keep finished blocks visible in the week, or clear them out as you go';
   kd.onclick = () => { S.keepDone = !S.keepDone; render(); };
@@ -2103,7 +2240,7 @@ function renderWeek() {
       /* a routine put on Saturday whose blocks are all set to weekdays would silently vanish — offer the fix up front */
       const nv = variant(S.week[d]);
       if (nv) {
-        const off = withVariant(nv.id, () => S.lanes.flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => !effDays(l, it)[d]).map(({ it }) => it));
+        const off = withVariant(nv.id, () => LANES(nv.id).flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => !effDays(l, it)[d]).map(({ it }) => it));
         if (off.length && confirm(nv.name + ' now runs on ' + DAYS[d] + ', but ' + off.length + ' of its blocks aren\'t set to run that day.\n\nTurn ' + DSHORT[d] + ' on for them?')) {
           off.forEach(it => { if (!it.daysEx) { it.days = [1,1,1,1,1,1,1]; it.daysEx = true; } it.days[d] = 1; });
         }
@@ -2114,7 +2251,7 @@ function renderWeek() {
 
     const meta = el('div', 'day-meta');
     if (v) {
-      const rows = withVariant(v.id, () => S.lanes.map(L => ({ L, sc: schedule(L.id).filter(r => effDays(L, r.it)[d]) })).filter(x => x.sc.length));
+      const rows = withVariant(v.id, () => LANES(v.id).map(L => ({ L, sc: schedule(L.id).filter(r => effDays(L, r.it)[d]) })).filter(x => x.sc.length));
       const mins = rows.reduce((a, x) => a + x.sc.reduce((b, r) => b + r.it.dur, 0), 0);
       const load = rows.reduce((a, x) => a + x.sc.reduce((b, r) => b + loadOf(r.it), 0), 0);
       const nblocks = rows.reduce((a, x) => a + x.sc.length, 0);
@@ -2125,7 +2262,7 @@ function renderWeek() {
       ld.dataset.tip = 'Effort load for ' + DAYS[d] + ' — one hour of medium effort = 1.0';
       meta.appendChild(ld);
       if (chk.count) { const b = el('span', 'bad', '⚠ ' + chk.count); b.dataset.tip = 'Rule breaks in this day'; meta.appendChild(b); }
-      const off = withVariant(v.id, () => S.lanes.flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => !effDays(l, it)[d]).map(({ it }) => it));
+      const off = withVariant(v.id, () => LANES(v.id).flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => !effDays(l, it)[d]).map(({ it }) => it));
       if (off.length) {
         const b = el('span', 'bad', off.length + ' off');
         b.dataset.tip = '<b>' + off.length + ' blocks</b> in this routine aren’t set to run on ' + DSHORT[d] + ', so they won’t fire or export.<br>Click to switch ' + DSHORT[d] + ' on for them.';
@@ -2138,11 +2275,18 @@ function renderWeek() {
 
       const body = el('div', 'day-body');
       const names = rows.flatMap(x => x.sc.map(r => r.it.name));
-      rows.forEach(({ L, sc }) => {
+      /* priority mode: one flat list per day, P1 first, routine shown as the subtitle */
+      const groups = S.weekMode === 'pri'
+        ? [1, 2, 3, 0].map(k => ({
+            L: { name: k ? 'P' + k : 'Unflagged', pri: k },
+            sc: rows.flatMap(x => x.sc.filter(r => (r.it.pri || 0) === k).map(r => Object.assign({ from: x.L }, r))),
+          })).filter(g => g.sc.length)
+        : rows;
+      groups.forEach(({ L, sc }) => {
         const shown = sc.filter(r => S.keepDone || !isDoneOn(r.it, col));
         if (!shown.length) return;
-        body.appendChild(el('div', 'day-lane', esc(L.name)));
-        shown.forEach(({ it, s }) => {
+        body.appendChild(el('div', 'day-lane' + (L.pri ? ' p' + L.pri : ''), esc(L.name)));
+        shown.forEach(({ it, s, from }) => {
           const on = isDoneOn(it, col);
           const r = el('div', 'day-b' + (on ? ' isdone' : '')); r.style.setProperty('--c', it.color);
           r.appendChild(el('i'));
@@ -2152,9 +2296,10 @@ function renderWeek() {
             : 'Not yet — you can tick this on the day';
           ck.onclick = ev => { ev.stopPropagation(); setDoneOn(it, col, names); };
           r.appendChild(ck);
-          r.appendChild(el('span', null, (it.pri ? '<b style="color:#ff8a9c">' + PRI[it.pri] + '</b> ' : '') + esc(it.name)));
-          r.appendChild(el('em', null, fmt(s)));
-          r.dataset.tip = '<b>' + esc(it.name) + '</b> — ' + dur2s(it.dur) + ', ' + ENAME[energyOf(it)] + ' effort';
+          r.appendChild(el('span', null, (S.weekMode !== 'pri' && it.pri ? '<b style="color:#ff8a9c">' + PRI[it.pri] + '</b> ' : '') + esc(it.name)));
+          r.appendChild(el('em', null, S.weekMode === 'pri' && from ? esc(from.name) : (s == null ? '◷' : fmt(s))));
+          r.dataset.tip = '<b>' + esc(it.name) + '</b> — ' + dur2s(it.dur) + ', ' + ENAME[energyOf(it)] + ' effort' +
+            (from ? '<br>' + esc(from.name) + (s == null ? '' : ' · ' + fmt(s)) : '');
           body.appendChild(r);
         });
       });
@@ -2172,47 +2317,6 @@ function renderWeek() {
   });
 }
 
-/* ---------- priority view: everything flagged, across every routine ---------- */
-function renderPri() {
-  const p = $('#pri'); p.innerHTML = '';
-  const scope = S.priScope || 'day';
-  const bar = el('div', 'weekbar');
-  const sc = el('button', 'btn sm acc', scope === 'day' ? 'this day: ' + M().name : 'every day');
-  sc.dataset.tip = 'Show priorities from the open day only, or from every day you have built';
-  sc.onclick = () => { S.priScope = scope === 'day' ? 'all' : 'day'; render(); };
-  bar.appendChild(sc);
-  const kd = el('button', 'btn sm' + (S.keepDone ? ' acc' : ''), S.keepDone ? '✓ showing done' : '⊘ hiding done');
-  kd.onclick = () => { S.keepDone = !S.keepDone; render(); };
-  bar.appendChild(kd);
-  p.appendChild(bar);
-
-  const rows = [];
-  (scope === 'day' ? [M()] : S.variants).forEach(v => withVariant(v.id, () => {
-    S.lanes.forEach(L => schedule(L.id).forEach(r => { if (!r.hidden) rows.push({ v, L, it: r.it, s: r.s }); }));
-  }));
-
-  [1, 2, 3, 0].forEach(k => {
-    const grp = rows.filter(r => (r.it.pri || 0) === k && (S.keepDone || !r.it.done));
-    if (!grp.length) return;
-    const sec = el('div', 'prisec');
-    const mins = grp.reduce((a, r) => a + r.it.dur, 0);
-    sec.appendChild(el('h4', 'pri' + k, (k ? 'P' + k : 'No priority') + ' <span>' + grp.length + ' · ' + dur2s(mins) + '</span>'));
-    grp.sort((a, b) => a.s - b.s).forEach(r => {
-      const row = el('div', 'prirow' + (r.it.done ? ' isdone' : ''));
-      row.style.setProperty('--c', r.it.color);
-      const ck = el('button', 'day-ck' + (r.it.done ? ' on' : ''), r.it.done ? '✓' : '');
-      ck.onclick = ev => { ev.stopPropagation(); toggleDone(r.it); };
-      row.appendChild(ck);
-      row.appendChild(el('span', 'pn', esc(r.it.name)));
-      row.appendChild(el('span', 'pw', esc((scope === 'all' ? r.v.name + ' · ' : '') + r.L.name) + ' · ' + fmt(r.s) + ' · ' + dur2s(r.it.dur) + ' ' + EGLYPH[energyOf(r.it)]));
-      row.oncontextmenu = ev => { ev.preventDefault(); withVariant(r.v.id, () => blockMenu(r.L.id, r.it, ev.clientX, ev.clientY)); };
-      row.onclick = () => { S.current = r.v.id; S.view = 'day'; render(); };
-      sec.appendChild(row);
-    });
-    p.appendChild(sec);
-  });
-  if (!p.querySelector('.prisec')) p.appendChild(el('div', 'lane-empty', 'Nothing flagged yet — click a block’s <b>P</b> badge to give it a priority.'));
-}
 
 /* ---------- summary: what the record says about your routine ---------- */
 function renderSum() {
@@ -2274,7 +2378,7 @@ function renderSum() {
   }
   chronic.forEach(s => {
     const pct = Math.round(s.rate * 100);
-    const found = S.variants.flatMap(v => withVariant(v.id, () => S.lanes.flatMap(l => items(l.id).filter(i => i.name === s.n).map(i => ({ v, l, i })))))[0];
+    const found = S.variants.flatMap(v => withVariant(v.id, () => LANES(v.id).flatMap(l => items(l.id).filter(i => i.name === s.n).map(i => ({ v, l, i })))))[0];
     const anchor = found ? withVariant(found.v.id, () => {
       const sc = schedule(found.l.id).filter(r => !r.hidden);
       const i = sc.findIndex(r => r.it.id === found.i.id);
@@ -2333,9 +2437,9 @@ function findItemIn(vid, id) {
 }
 
 function renderFoot() {
-  const tot = S.lanes.reduce((a, l) => a + laneMins(l.id), 0);
-  const cnt = S.lanes.reduce((a, l) => a + items(l.id).length, 0);
-  const load = S.lanes.reduce((a, l) => a + laneLoad(l.id), 0);
+  const tot = LANES().reduce((a, l) => a + laneMins(l.id), 0);
+  const cnt = LANES().reduce((a, l) => a + items(l.id).length, 0);
+  const load = LANES().reduce((a, l) => a + laneLoad(l.id), 0);
   $('#statTotal').innerHTML = '<b>' + esc(M().name) + '</b> · ' + cnt + (cnt === 1 ? ' block · ' : ' blocks · ') +
     '<b>' + dur2s(tot) + '</b> · load <b>' + load.toFixed(1) + '</b>';
   const vid = routineForToday();
@@ -2468,7 +2572,7 @@ function allRows() {
   const vs = weekly ? S.variants.filter(v => S.week.includes(v.id)) : [M()];
   const out = [];
   vs.forEach(v => withVariant(v.id, () => {
-    S.lanes.forEach(L => schedule(L.id).filter(r => !r.hidden).forEach(({ it, s, e }) => {
+    LANES(v.id).forEach(L => schedule(L.id).filter(r => !r.hidden).forEach(({ it, s, e }) => {
       const ed = effDays(L, it); const days = weekly ? ed.map((d, i) => d && S.week[i] === v.id ? 1 : 0) : ed;
       if (days.some(Boolean)) out.push({ v, lane: L, it, s, e, days, weekly });
     }));
@@ -2684,12 +2788,12 @@ function paintExport() {
 
 function openCompare() {
   const cols = S.variants.map(v => withVariant(v.id, () => {
-    const tot = S.lanes.reduce((a, l) => a + laneMins(l.id), 0);
-    const load = S.lanes.reduce((a, l) => a + laneLoad(l.id), 0);
+    const tot = LANES().reduce((a, l) => a + laneMins(l.id), 0);
+    const load = LANES().reduce((a, l) => a + laneLoad(l.id), 0);
     const dys = weekOrd().filter(d => S.week[d] === v.id).map(d => DSHORT[d]).join(' ');
     return '<div class="cmp-col' + (v.id === S.current ? ' on' : '') + '">' +
       '<h4>' + esc(v.name) + '</h4><div class="sub">' + dur2s(tot) + ' · load ' + load.toFixed(1) + (dys ? ' · ' + dys : ' · unassigned') + '</div>' +
-      S.lanes.map(L => {
+      LANES().map(L => {
         const sc = schedule(L.id); if (!sc.length) return '';
         return '<div style="margin-bottom:9px"><div style="font-family:var(--f1);font-size:10px;letter-spacing:.1em;color:var(--dim2);text-transform:uppercase;margin-bottom:3px">' +
           esc(L.name) + ' · ' + fmt(hm2min(L.start)) + '–' + fmt(laneEnd(L.id)) + '</div>' +
@@ -2703,7 +2807,7 @@ function openCompare() {
 }
 
 function openRules() {
-  const names = [...new Set(S.variants.flatMap(v => withVariant(v.id, () => S.lanes.flatMap(l => items(l.id).map(i => i.name)))))].sort();
+  const names = [...new Set(S.variants.flatMap(v => withVariant(v.id, () => LANES(v.id).flatMap(l => items(l.id).map(i => i.name)))))].sort();
   const chk = RULECHK;
   openModal(
     '<div class="modal-head"><h3>RULES</h3><button class="btn sm" id="mX">✕</button></div>' +
@@ -2882,12 +2986,55 @@ function selfTest() {
       S.view = 'day'; render();
       return n > 0 || 'nothing ticked';
     });
-    ok('priority view lists flagged blocks', () => {
-      const it = S.lanes.flatMap(l => items(l.id))[0]; it.pri = 1;
-      S.view = 'pri'; render();
-      const n = document.querySelectorAll('.prirow').length;
-      S.view = 'day'; render();
-      return n > 0 || 'empty';
+    ok('week: priority mode groups by P, keeps the routine as subtitle', () => {
+      const it = LANES().flatMap(l => items(l.id))[0]; it.pri = 1;
+      S.week = S.week.map(() => S.current);
+      S.view = 'week'; S.weekMode = 'pri'; render();
+      const heads = [...document.querySelectorAll('.day-lane')].map(x => x.textContent);
+      S.weekMode = 'time'; S.view = 'day'; render();
+      return heads.includes('P1') || 'headings ' + heads.join(',');
+    });
+    ok('a routine can be dropped from one day and kept in others', () => {
+      const other = seedVariant('Other day');
+      S.lanes.forEach(l => other.items[l.id] = []);
+      other.routines = S.lanes.map(l => l.id);
+      S.variants.push(other);
+      const keep = S.current; S.current = other.id;
+      const before = LANES().length;
+      removeLaneFromDay(S.lanes[0].id);
+      const after = LANES().length;
+      S.current = keep;
+      const stillHere = LANES().some(l => l.id === S.lanes[0].id);
+      S.variants = S.variants.filter(v => v.id !== other.id);
+      return (after === before - 1 && stillHere) || 'dropped ' + before + '→' + after + ', other day kept ' + stillHere;
+    });
+    ok('finished routines can slide right or hide', () => {
+      const L = LANES()[0];
+      items(L.id).forEach(i => i.done = true);
+      if (!items(L.id).length) return 'no blocks';
+      S.doneRoutines = 'right'; render();
+      const last = [...document.querySelectorAll('.lane-name')].pop();
+      const wentRight = last && last.value === L.name;
+      S.doneRoutines = 'hide'; render();
+      const hidden = ![...document.querySelectorAll('.lane-name')].some(i => i.value === L.name) && !!document.querySelector('.donenote');
+      S.doneRoutines = 'stay'; items(L.id).forEach(i => i.done = false); render();
+      return (wentRight && hidden) || 'right ' + wentRight + ', hide ' + hidden;
+    });
+    ok('sounds build without error on every theme', () => {
+      const keep = [S.sound, S.soundTheme];
+      S.sound = true;
+      Object.keys(THEMES).forEach(t => { S.soundTheme = t; beep('done'); beep('complete'); beep('untick'); });
+      S.sound = keep[0]; S.soundTheme = keep[1];
+      return true;
+    });
+    ok('settings apply without a Save button', () => {
+      const keep = S.doneRoutines;
+      setTab = 'board'; openSettings();
+      const n = $('#sDone'); if (!n) { closeModal(); return 'no control'; }
+      n.value = 'hide'; n.onchange();
+      const applied = S.doneRoutines === 'hide';
+      S.doneRoutines = keep; closeModal(); setTab = 'general';
+      return applied || 'not applied';
     });
     ok('multi-select: ctrl-click selects, bulk menu opens', () => {
       SEL.clear();
@@ -3008,14 +3155,15 @@ function selfTest() {
       return (r.s === null && next && next.s != null) || 'timeless s=' + (r && r.s);
     });
     ok('proportional mode scales blocks and still fits', () => {
+      S.view = 'day'; S.doneRoutines = 'stay';
       const L = need2(); const arr = items(L);
-      arr[0].dur = 90; arr[1].dur = 30;
+      arr[0].dur = 90; arr[1].dur = 30; arr.forEach(x => { x.done = false; x.compact = null; });
       S.proportional = true; render(); runLayout();
-      const body = document.querySelectorAll('.lane-body')[0];
+      const body = document.querySelector('[data-lane="' + L + '"] .lane-body') || document.querySelector('.lane-body');
       const a = body.querySelector('[data-id="' + arr[0].id + '"]'), b = body.querySelector('[data-id="' + arr[1].id + '"]');
       const ok2 = a && b && a.offsetHeight > b.offsetHeight * 2 && body.scrollHeight <= body.clientHeight + 3;
       S.proportional = false; render();
-      return ok2 || 'heights ' + (a && a.offsetHeight) + '/' + (b && b.offsetHeight);
+      return ok2 || 'heights ' + (a && a.offsetHeight) + '/' + (b && b.offsetHeight) + ' body ' + body.clientHeight;
     });
     ok('history log lists recorded days', () => {
       S.log = {};
@@ -3025,11 +3173,15 @@ function selfTest() {
       S.view = 'day'; render();
       return n === 3 || 'rows ' + n;
     });
-    ok('routine reorder arrow moves it', () => {
-      if (S.lanes.length < 2) return 'need 2 routines';
-      const before = S.lanes.map(l => l.name).join('|');
+    ok('routine reorder is per day and leaves other days alone', () => {
+      if (LANES().length < 2) return 'need 2 routines';
+      S.view = 'day'; S.doneRoutines = 'stay'; render();
+      const before = LANES().map(l => l.name).join('|');
+      const globalBefore = S.lanes.map(l => l.name).join('|');
       document.querySelectorAll('.lane')[0].querySelectorAll('.lane-arr')[1].click();
-      return S.lanes.map(l => l.name).join('|') !== before || 'order unchanged';
+      const moved = LANES().map(l => l.name).join('|') !== before;
+      const globalIntact = S.lanes.map(l => l.name).join('|') === globalBefore;
+      return (moved && globalIntact) || 'moved ' + moved + ', shelf intact ' + globalIntact;
     });
     ok('block cards no longer carry day toggles', () => document.querySelectorAll('.b-days').length === 0 || 'still there');
     ok('gap offers what fits', () => {
@@ -3124,47 +3276,122 @@ function openHelp() {
   $('#mX').onclick = closeModal;
 }
 
+/* ---------- settings ----------
+ * Grouped the way you actually think about them: what this thing is called,
+ * how the board behaves, what it sounds like, where it exports to, and the data itself.
+ */
+function tzList() {
+  let zones = [];
+  try { zones = Intl.supportedValuesOf('timeZone'); } catch (e) {}
+  if (!zones.length) zones = ['UTC', 'Europe/London', 'Europe/Berlin', 'Europe/Madrid', 'America/New_York', 'America/Chicago',
+    'America/Denver', 'America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Manila', 'Asia/Singapore', 'Asia/Tokyo',
+    'Asia/Kolkata', 'Asia/Dubai', 'Australia/Sydney', 'Pacific/Auckland'];
+  if (!zones.includes(S.tz)) zones = [S.tz].concat(zones);
+  return zones;
+}
+let setTab = 'general';
 function openSettings() {
+  const tabs = [['general', 'General'], ['board', 'Board'], ['sound', 'Sound'], ['export', 'Calendar + Todoist'], ['data', 'Data']];
+  const sel = (id, opts, val) => '<select id="' + id + '">' + opts.map(([v, l]) =>
+    '<option value="' + esc(v) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + esc(l) + '</option>').join('') + '</select>';
+  const chk = (id, on) => '<input type="checkbox" id="' + id + '" ' + (on ? 'checked' : '') + '>';
+
+  let body = '';
+  if (setTab === 'general') {
+    body = '<div class="set">' +
+      '<label>What this is called<span>Used as the calendar name on export</span></label><input type="text" id="sCal" value="' + esc(S.calName) + '">' +
+      '<label>Timezone<span>Times are written as local wall-clock in this zone</span></label>' +
+      sel('sTz', tzList().map(z => [z, z]), S.tz) +
+      '<label>Clock<span></span></label>' + sel('sH24', [['0', '12-hour — 6:30am'], ['1', '24-hour — 06:30']], S.h24 ? '1' : '0') +
+      '<label>Week starts on<span>Also sets the order of the Week tab</span></label>' +
+      sel('sWS', [['today', 'Today (rolling 7 days)'], ['0', 'Sunday'], ['1', 'Monday'], ['6', 'Saturday']], S.weekStart) +
+      '</div>';
+  } else if (setTab === 'board') {
+    body = '<div class="set">' +
+      '<label>Buffer between blocks<span>Dead time inserted after every block</span></label><input type="number" id="sGap" min="0" max="60" step="5" value="' + S.gap + '">' +
+      '<label>When a routine is fully ticked<span></span></label>' +
+      sel('sDone', [['stay', 'Leave it where it is'], ['right', 'Slide it to the far right'], ['hide', 'Hide it until tomorrow']], S.doneRoutines) +
+      '<label>Fit blocks to their length<span>Draw an hour as an hour, scaled to fit without scrolling</span></label>' + chk('sProp', S.proportional) +
+      '<label>Moving “now” line<span>A red line at the current minute, only in routines it passes through</span></label>' + chk('sNow', S.nowline) +
+      '<label>Keep finished blocks in the Week tab<span>Off hides them as you tick</span></label>' + chk('sKeep', S.keepDone) +
+      '</div>';
+  } else if (setTab === 'sound') {
+    body = '<div class="set">' +
+      '<label>Sounds<span>Synthesised in the browser — no files, no network</span></label>' + chk('sSnd', S.sound) +
+      '<label>Sound set<span>Ticks rise in pitch as you get closer to finishing</span></label>' +
+      sel('sTheme', Object.keys(THEMES).map(k => [k, THEMES[k].name]), S.soundTheme) +
+      '<label>Volume<span></span></label><input type="range" id="sVol" min="0" max="1" step="0.05" value="' + (S.volume == null ? .6 : S.volume) + '">' +
+      '</div>' +
+      '<div class="row"><button class="btn" id="tTick">▸ Hear a tick</button><button class="btn" id="tDone">▸ Hear a finished day</button></div>' +
+      '<div class="hint" style="margin-top:12px">The tick climbs a pentatonic scale as your list empties, so the last one of the day sounds like the last one. Finishing everything plays a short fanfare.</div>';
+  } else if (setTab === 'export') {
+    body = '<div class="set">' +
+      '<label>Todoist project tag<span>Appended as #Tag on quick-add lines</span></label><input type="text" id="sProj" value="' + esc(S.tdProject) + '">' +
+      '<label>Todoist priority for blocks with no P<span>4 = urgent, 1 = normal</span></label><input type="number" id="sPri" min="1" max="4" value="' + S.tdPriority + '">' +
+      '<label>Default export scope<span></span></label>' +
+      sel('sScope', [['variant', 'Just the open day'], ['week', 'The whole week']], S.exportScope) +
+      '</div>' +
+      '<div class="row"><button class="btn acc" id="goExport">Open export ▸</button><button class="btn" id="goPrint">Print / client sheet ▸</button></div>';
+  } else {
+    const days = Object.keys(S.log || {}).length;
+    const blocks = S.variants.reduce((a, v) => a + S.lanes.reduce((b, l) => b + ((v.items[l.id] || []).length), 0), 0);
+    body = '<div class="hint">' + S.variants.length + ' days · ' + S.lanes.length + ' routines · ' + blocks + ' blocks · ' +
+      S.lib.length + ' in the bin · ' + S.templates.length + ' templates · ' + days + ' days of history</div>' +
+      '<div class="row"><button class="btn acc" id="sBackup">⤓ Backup everything</button><button class="btn" id="sTest">Run self-test</button></div>' +
+      '<div class="row"><button class="btn" id="sClear">Reset today’s ticks</button>' +
+      '<button class="btn" id="sWipeLog">Clear history</button>' +
+      '<button class="btn" id="sReset" style="color:var(--bad)">Reset everything</button></div>' +
+      '<div class="hint" style="margin-top:12px">Everything lives in this browser. The backup is a single JSON file you can restore on another machine from <b>Export → Backup</b>.</div>';
+  }
+
   openModal(
-    '<div class="modal-head"><h3>SETTINGS</h3><button class="btn sm" id="mX">✕</button></div><div class="modal-body">' +
-    '<div class="set">' +
-    '<label>Routine / calendar name</label><input type="text" id="sCal" value="' + esc(S.calName) + '">' +
-    '<label>Todoist project tag</label><input type="text" id="sProj" value="' + esc(S.tdProject) + '">' +
-    '<label>Todoist priority for blocks with no P set (4 = urgent)</label><input type="number" id="sPri" min="1" max="4" value="' + S.tdPriority + '">' +
-    '<label>Timezone</label><input type="text" id="sTz" value="' + esc(S.tz) + '">' +
-    '<label>24-hour clock</label><input type="checkbox" id="sH24" ' + (S.h24 ? 'checked' : '') + '>' +
-    '<label>Week starts on</label><select id="sWS">' + [0, 1, 6].map(k => '<option value="' + k + '"' + (S.weekStart === k ? ' selected' : '') + '>' + DAYS[k] + '</option>').join('') + '</select>' +
-    '<label>Moving “now” line</label><input type="checkbox" id="sNow" ' + (S.nowline ? 'checked' : '') + '>' +
-    '<label>Sounds when you tick things off</label><input type="checkbox" id="sSnd" ' + (S.sound ? 'checked' : '') + '>' +
-    '</div>' +
-    '<div class="row"><button class="btn acc" id="sOk">Save</button>' +
-    '<button class="btn" id="sTest" style="margin-left:auto">Run self-test</button>' +
-    '<button class="btn" id="sClear">Reset today’s ticks</button>' +
-    '<button class="btn" id="sReset" style="color:var(--bad)">Reset everything</button></div>' +
-    '</div>'
+    '<div class="modal-head"><h3>SETTINGS</h3><button class="btn sm" id="mX">✕</button></div>' +
+    '<div class="mtabs">' + tabs.map(([k, l]) => '<button class="mtab' + (k === setTab ? ' on' : '') + '" data-k="' + k + '">' + l + '</button>').join('') + '</div>' +
+    '<div class="modal-body">' + body + '</div>'
   );
   $('#mX').onclick = closeModal;
-  $('#sOk').onclick = () => {
-    S.calName = $('#sCal').value.trim() || 'Routine';
-    S.tdProject = $('#sProj').value.trim() || 'Routine';
-    S.tdPriority = clamp(parseInt($('#sPri').value) || 1, 1, 4);
-    S.tz = $('#sTz').value.trim() || S.tz;
-    S.h24 = $('#sH24').checked;
-    S.weekStart = parseInt($('#sWS').value);
-    S.nowline = $('#sNow').checked;
-    S.sound = $('#sSnd').checked;
-    if (S.sound) beep('done');
-    closeModal(); render();
-  };
-  $('#sTest').onclick = () => selfTest();
-  $('#sClear').onclick = () => { snap(); S.variants.forEach(v => clearDone(v.id)); render(); toast('ticks cleared'); };
-  $('#sReset').onclick = () => { if (confirm('Wipe all blocks, routines, routines, templates and rules?')) { snap(); S = seedState(); render(); closeModal(); } };
+  $('#modal').querySelectorAll('.mtab').forEach(b => b.onclick = () => { saveSettings(); setTab = b.dataset.k; openSettings(); });
+
+  const on = (id, fn) => { const n = $(id); if (n) n.onclick = fn; };
+  on('#tTick', () => { saveSettings(); beep('done'); });
+  on('#tDone', () => { saveSettings(); beep('complete'); });
+  on('#goExport', () => { saveSettings(); closeModal(); openExport(); });
+  on('#goPrint', ev => { saveSettings(); closeModal(); openPrintMenu(innerWidth / 2 - 100, 120); });
+  on('#sBackup', () => { saveSettings(); closeModal(); expTab = 'json'; openExport(); });
+  on('#sTest', () => { saveSettings(); selfTest(); });
+  on('#sClear', () => { snap(); S.variants.forEach(v => clearDone(v.id)); render(); toast('ticks cleared'); });
+  on('#sWipeLog', () => { if (confirm('Delete the completion history? Your routines stay.')) { snap(); S.log = {}; render(); toast('history cleared'); } });
+  on('#sReset', () => { if (confirm('Wipe all blocks, routines, days, templates and rules?')) { snap(); S = seedState(); closeModal(); render(); } });
+  const vol = $('#sVol'); if (vol) vol.onchange = () => { S.volume = parseFloat(vol.value); beep('done'); };
+  ['#sSnd', '#sTheme', '#sNow', '#sProp', '#sKeep', '#sDone', '#sH24', '#sWS', '#sTz', '#sScope'].forEach(id => {
+    const n = $(id); if (n) n.onchange = () => { saveSettings(); render(); };
+  });
+}
+/** settings apply as you touch them — no Save button to forget */
+function saveSettings() {
+  const val = (id, d) => { const n = $(id); return n ? n.value : d; };
+  const on = id => { const n = $(id); return n ? n.checked : null; };
+  if ($('#sCal')) S.calName = val('#sCal', S.calName).trim() || 'Routine';
+  if ($('#sTz')) S.tz = val('#sTz', S.tz);
+  if ($('#sH24')) S.h24 = val('#sH24', '0') === '1';
+  if ($('#sWS')) { const w = val('#sWS', '1'); S.weekStart = w === 'today' ? 'today' : parseInt(w); }
+  if ($('#sGap')) S.gap = clamp(parseInt(val('#sGap', S.gap)) || 0, 0, 60);
+  if ($('#sDone')) S.doneRoutines = val('#sDone', 'stay');
+  if (on('#sProp') != null) S.proportional = on('#sProp');
+  if (on('#sNow') != null) S.nowline = on('#sNow');
+  if (on('#sKeep') != null) S.keepDone = on('#sKeep');
+  if (on('#sSnd') != null) S.sound = on('#sSnd');
+  if ($('#sTheme')) S.soundTheme = val('#sTheme', S.soundTheme);
+  if ($('#sVol')) S.volume = parseFloat(val('#sVol', S.volume));
+  if ($('#sProj')) S.tdProject = val('#sProj', S.tdProject).trim() || 'Routine';
+  if ($('#sPri')) S.tdPriority = clamp(parseInt(val('#sPri', S.tdPriority)) || 1, 1, 4);
+  if ($('#sScope')) S.exportScope = val('#sScope', S.exportScope);
+  save();
 }
 
 /* ============================ wiring ============================ */
 $('#vDay').onclick = () => { S.view = 'day'; render(); };
 $('#vWeek').onclick = () => { S.view = 'week'; render(); };
-$('#vPri').onclick = () => { S.view = 'pri'; render(); };
 $('#vSum').onclick = () => { S.view = 'sum'; render(); };
 $('#bExp').onclick = openExport;
 $('#bCmp').onclick = openCompare;
