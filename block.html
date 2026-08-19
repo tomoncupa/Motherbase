@@ -788,19 +788,22 @@ function weekCols() {
   });
 }
 /** was this block ticked on that date? today reads live state, other days read the log */
-function isDoneOn(it, col) {
+function isDoneOn(it, col, L) {
   if (col.isToday) return !!it.done;
   const e = (S.log || {})[col.key];
-  return !!(e && e.d && e.d.includes(it.name));
+  if (!e || !e.d) return false;
+  const k = tickKey(it, L || laneOf(it));
+  return e.d.includes(k) || (e.d.includes(it.name) && !e.d.includes(k) && sameNameCount(it) < 2);
 }
-function setDoneOn(it, col, scheduledNames) {
+function setDoneOn(it, col, scheduled, L) {
   if (col.isToday) return toggleDone(it);
   if (col.isFuture) return toast('you can tick that off on the day');
   S.log = S.log || {};
-  const e = S.log[col.key] || (S.log[col.key] = { t: scheduledNames || [it.name], d: [] });
-  if (!e.t.includes(it.name)) e.t.push(it.name);
-  const i = e.d.indexOf(it.name);
-  if (i > -1) e.d.splice(i, 1); else { e.d.push(it.name); beep('done'); }
+  const k = tickKey(it, L || laneOf(it));
+  const e = S.log[col.key] || (S.log[col.key] = { t: scheduled || [k], d: [] });
+  if (!e.t.includes(k)) e.t.push(k);
+  const i = e.d.indexOf(k);
+  if (i > -1) e.d.splice(i, 1); else { e.d.push(k); beep('done'); }
   save(); render();
 }
 const PAL = ['#7ee8fa', '#9d8cff', '#ffb347', '#6ee7a8', '#ff6b81', '#5aa9ff', '#ffd166', '#4fd6c0', '#e879f9', '#94a3b8'];
@@ -1150,10 +1153,25 @@ function sortPri(laneId) {
 /** which routine is meant to run today: the week assignment wins, else whatever is open */
 const routineForToday = () => S.week[todayIdx()] || S.current;
 /** blocks in a routine that actually apply today */
-function todaysBlocks(vid) {
+function todaysPairs(vid) {
   const d = todayIdx();
-  return withVariant(vid, () => LANES(vid).flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => effDays(l, it)[d] && !it.hidden).map(({ it }) => it));
+  return withVariant(vid, () => LANES(vid).flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => effDays(l, it)[d] && !it.hidden));
 }
+function todaysBlocks(vid) { return todaysPairs(vid).map(({ it }) => it); }
+/**
+ * A tick belongs to one block in one routine. Brushing your teeth in the morning
+ * and again at night are two different ticks, so the key carries the routine.
+ * (Plain names in older logs still match — split() just returns the name.)
+ */
+const tickKey = (it, L) => it.name + '||' + ((L && L.name) || '');
+const keyName = k => String(k).split('||')[0];
+function laneOf(it) {
+  for (const L of LANES()) if (items(L.id).some(x => x.id === it.id)) return L;
+  for (const L of S.lanes) if (items(L.id).some(x => x.id === it.id)) return L;
+  return null;
+}
+/** every block in the open day sharing this one's name — the reason ticks must not collapse */
+const sameNameCount = it => LANES().reduce((n, L) => n + items(L.id).filter(x => x.name === it.name && !x.hidden).length, 0);
 function clearDone(vid) { withVariant(vid, () => LANES(vid).forEach(l => items(l.id).forEach(it => it.done = false))); }
 /** new day → yesterday's ticks are gone, and today's come back from the LifeOS
     log (you may have ticked something in HABITS or on the home screen already) */
@@ -1164,12 +1182,12 @@ function clearDone(vid) { withVariant(vid, () => LANES(vid).forEach(l => items(l
 function logToday() {
   const k = todayKey();
   S.log = S.log || {};
-  const all = todaysBlocks(routineForToday());
+  const all = todaysPairs(routineForToday());
   if (!all.length) return;
   const e = S.log[k] || (S.log[k] = { t: [], d: [] });
-  e.t = [...new Set(all.map(b => b.name))];
+  e.t = [...new Set(all.map(({ it, l }) => tickKey(it, l)))];
   const ticked = new Set(e.d);
-  all.forEach(b => { if (b.done) ticked.add(b.name); });
+  all.forEach(({ it, l }) => { if (it.done) ticked.add(tickKey(it, l)); });
   e.d = [...ticked].filter(n => e.t.includes(n));
   const keys = Object.keys(S.log).sort();
   while (keys.length > 180) delete S.log[keys.shift()];
@@ -1178,8 +1196,8 @@ function logToday() {
 function blockStats() {
   const m = {};
   Object.values(S.log || {}).forEach(e => {
-    (e.t || []).forEach(n => { (m[n] = m[n] || { n, seen: 0, done: 0 }).seen++; });
-    (e.d || []).forEach(n => { if (m[n]) m[n].done++; });
+    (e.t || []).forEach(k => { (m[k] = m[k] || { key: k, n: keyName(k), where: String(k).split('||')[1] || '', seen: 0, done: 0 }).seen++; });
+    (e.d || []).forEach(k => { if (m[k]) m[k].done++; });
   });
   return Object.values(m).map(x => Object.assign(x, { rate: x.seen ? x.done / x.seen : 0 })).sort((a, b) => a.rate - b.rate);
 }
@@ -1208,10 +1226,13 @@ function toggleDone(it) {
   if (S.cleared && S.cleared.date === todayKey() && window.LifeOS) delete S.cleared.ids[actIdOf(it)];
   /* the tick is not ours to keep — it goes in the shared day log, which is what
      HABITS and the home screen read. Same block name = same tick, everywhere. */
-  LifeOS.done(actIdOf(it), todayKey(), it.done, { src: 'block' });
+  /* report to the shared log by name, but only flip it off once EVERY block with that
+     name is unticked — otherwise un-ticking your evening brush would erase the morning one */
+  const twins = LANES().flatMap(L => items(L.id)).filter(x => x.name === it.name && !x.hidden);
+  LifeOS.done(actIdOf(it), todayKey(), twins.some(x => x.done), { src: 'block' });
   /* if the shared log can't actually store it (private mode, blocked storage, quota),
      stop mirroring from it — otherwise pullDone would quietly un-tick everything */
-  if (LIFEOS_OK && LifeOS.isDone(actIdOf(it), todayKey()) !== it.done) {
+  if (LIFEOS_OK && LifeOS.isDone(actIdOf(it), todayKey()) !== twins.some(x => x.done)) {
     LIFEOS_OK = false;
     toast('shared log unavailable — ticks are being kept locally');
   }
@@ -2274,7 +2295,7 @@ function renderWeek() {
       colEl.appendChild(head);
 
       const body = el('div', 'day-body');
-      const names = rows.flatMap(x => x.sc.map(r => r.it.name));
+      const names = rows.flatMap(x => x.sc.map(r => tickKey(r.it, x.L)));
       /* priority mode: one flat list per day, P1 first, routine shown as the subtitle */
       const groups = S.weekMode === 'pri'
         ? [1, 2, 3, 0].map(k => ({
@@ -2283,18 +2304,18 @@ function renderWeek() {
           })).filter(g => g.sc.length)
         : rows;
       groups.forEach(({ L, sc }) => {
-        const shown = sc.filter(r => S.keepDone || !isDoneOn(r.it, col));
+        const shown = sc.filter(r => S.keepDone || !isDoneOn(r.it, col, r.from || L));
         if (!shown.length) return;
         body.appendChild(el('div', 'day-lane' + (L.pri ? ' p' + L.pri : ''), esc(L.name)));
         shown.forEach(({ it, s, from }) => {
-          const on = isDoneOn(it, col);
+          const on = isDoneOn(it, col, from || L);
           const r = el('div', 'day-b' + (on ? ' isdone' : '')); r.style.setProperty('--c', it.color);
           r.appendChild(el('i'));
           const ck = el('button', 'day-ck' + (on ? ' on' : '') + (col.isFuture ? ' fut' : ''), on ? '✓' : '');
           ck.dataset.tip = col.isToday ? (on ? 'Done today — click to un-tick' : 'Tick it off')
             : col.isPast ? 'Backfill <b>' + DSHORT[d] + ' ' + col.date.getDate() + '</b> — ticks belong to that date, not to the block'
             : 'Not yet — you can tick this on the day';
-          ck.onclick = ev => { ev.stopPropagation(); setDoneOn(it, col, names); };
+          ck.onclick = ev => { ev.stopPropagation(); setDoneOn(it, col, names, from || L); };
           r.appendChild(ck);
           r.appendChild(el('span', null, (S.weekMode !== 'pri' && it.pri ? '<b style="color:#ff8a9c">' + PRI[it.pri] + '</b> ' : '') + esc(it.name)));
           r.appendChild(el('em', null, S.weekMode === 'pri' && from ? esc(from.name) : (s == null ? '◷' : fmt(s))));
@@ -2378,12 +2399,12 @@ function renderSum() {
   }
   chronic.forEach(s => {
     const pct = Math.round(s.rate * 100);
-    const found = S.variants.flatMap(v => withVariant(v.id, () => LANES(v.id).flatMap(l => items(l.id).filter(i => i.name === s.n).map(i => ({ v, l, i })))))[0];
+    const found = S.variants.flatMap(v => withVariant(v.id, () => LANES(v.id).flatMap(l => items(l.id).filter(i => i.name === s.n && (!s.where || l.name === s.where)).map(i => ({ v, l, i })))))[0];
     const anchor = found ? withVariant(found.v.id, () => {
       const sc = schedule(found.l.id).filter(r => !r.hidden);
       const i = sc.findIndex(r => r.it.id === found.i.id);
       const prev = i > 0 ? sc[i - 1].it : null;
-      const st = prev ? stats.find(x => x.n === prev.name) : null;
+      const st = prev ? stats.find(x => x.n === prev.name && (!x.where || x.where === found.l.name)) : null;
       return (st && st.rate >= .8) ? prev.name : null;
     }) : null;
     const d = el('div', 'adv');
@@ -2392,7 +2413,7 @@ function renderSum() {
       : found && found.i.at
         ? 'It is anchored to ' + found.i.at + '. A fixed time only works if that minute is genuinely free — if it is not, unanchor it and let it flow.'
         : anchor
-          ? 'It sits right after <b>' + esc(anchor) + '</b>, which you do ' + Math.round(stats.find(x => x.n === anchor).rate * 100) + '% of the time. That is a strong cue going unused — make this one small enough that finishing ' + esc(anchor) + ' carries you straight into it.'
+          ? 'It sits right after <b>' + esc(anchor) + '</b>, which you do ' + Math.round((stats.find(x => x.n === anchor) || { rate: 0 }).rate * 100) + '% of the time. That is a strong cue going unused — make this one small enough that finishing ' + esc(anchor) + ' carries you straight into it.'
           : 'No obvious cue in front of it. Blocks that follow something already automatic stick far better than blocks that rely on remembering.';
     d.innerHTML = '<b>' + esc(s.n) + '</b> — done <b>' + pct + '%</b> of the ' + s.seen + ' times it came up' +
       (found ? ' · ' + esc(found.l.name) + ' · ' + esc(found.v.name) : '') +
@@ -3020,6 +3041,24 @@ function selfTest() {
       S.doneRoutines = 'stay'; items(L.id).forEach(i => i.done = false); render();
       return (wentRight && hidden) || 'right ' + wentRight + ', hide ' + hidden;
     });
+    ok('the same block in two routines ticks independently', () => {
+      const A = LANES()[0], B = LANES()[1];
+      if (!A || !B) return 'need 2 routines';
+      const am = addItem(A.id, { name: 'Brush teeth', dur: 3, color: PAL[0], energy: 1 });
+      const pm = addItem(B.id, { name: 'Brush teeth', dur: 3, color: PAL[0], energy: 1 });
+      am.done = false; pm.done = false;
+      toggleDone(am);
+      const split = am.done === true && pm.done === false;
+      /* and the history keeps them apart too */
+      logToday();
+      const e = S.log[todayKey()] || { t: [], d: [] };
+      const keysDiffer = tickKey(am, A) !== tickKey(pm, B);
+      const loggedOne = e.d.filter(k => keyName(k) === 'Brush teeth').length === 1;
+      toggleDone(am);
+      [am, pm].forEach(x => { const f = findItem(x.id); if (f) f.arr.splice(f.i, 1); });
+      render();
+      return (split && keysDiffer && loggedOne) || 'independent ' + split + ', keys differ ' + keysDiffer + ', logged ' + loggedOne;
+    });
     ok('sounds build without error on every theme', () => {
       const keep = [S.sound, S.soundTheme];
       S.sound = true;
@@ -3048,6 +3087,14 @@ function selfTest() {
       closeMenu(); SEL.clear(); render();
       return (n === 2 && bulk) || 'selected ' + n + ', bulk menu ' + !!bulk;
     });
+    /* checks share one scratch board, so anything order-sensitive says what it needs first */
+    const reset = () => {
+      closeModal(); closePop(); closeMenu();
+      S.view = 'day'; S.keepDone = true; S.doneRoutines = 'stay'; S.proportional = false; S.weekMode = 'time';
+      S.lanes.forEach(l => { l.byPri = false; l.nowline = true; items(l.id).forEach(i => { i.done = false; i.hidden = false; }); });
+      S.cleared = null;
+      render();
+    };
     /* earlier checks shuffle blocks between routines — top the first one back up */
     const need2 = () => { const L = S.lanes[0].id; while (items(L).length < 2) addItem(L, { name: 'filler ' + items(L).length, dur: 30, color: PAL[0], energy: 2 }); return L; };
     ok('ongoing block does not push the next one back', () => {
@@ -3095,6 +3142,7 @@ function selfTest() {
       return (withNote && without) || 'full ' + withNote + ', client ' + without;
     });
     ok('week ticks belong to a date, not to the block', () => {
+      reset();
       S.week = S.week.map(() => S.current); S.view = 'week'; render();
       const cols = [...document.querySelectorAll('.day')];
       const todayCol = cols.find(c => c.classList.contains('today'));
@@ -3155,7 +3203,7 @@ function selfTest() {
       return (r.s === null && next && next.s != null) || 'timeless s=' + (r && r.s);
     });
     ok('proportional mode scales blocks and still fits', () => {
-      S.view = 'day'; S.doneRoutines = 'stay';
+      reset();
       const L = need2(); const arr = items(L);
       arr[0].dur = 90; arr[1].dur = 30; arr.forEach(x => { x.done = false; x.compact = null; });
       S.proportional = true; render(); runLayout();
@@ -3473,12 +3521,19 @@ function pullDone() {
   if (!window.LifeOS) return 0;
   const date = todayKey(); let changed = 0;
   const cleared = (S.cleared && S.cleared.date === date) ? S.cleared.ids : {};
-  S.variants.forEach(v => withVariant(v.id, () => S.lanes.forEach(l => items(l.id).forEach(it => {
-    const aid = actIdOf(it);
-    if (cleared[aid]) return;              /* boxes deliberately cleared after a full pass — leave them empty */
-    const on = LifeOS.isDone(aid, date);
-    if (!!it.done !== on) { it.done = on; changed++; }
-  }))));
+  S.variants.forEach(v => withVariant(v.id, () => {
+    /* the shared log is keyed by NAME, so it cannot tell a morning brush from an
+       evening one. Where a name appears more than once in a day, local ticks win. */
+    const seen = {};
+    LANES(v.id).forEach(l => items(l.id).forEach(it => { seen[it.name] = (seen[it.name] || 0) + 1; }));
+    LANES(v.id).forEach(l => items(l.id).forEach(it => {
+      if (seen[it.name] > 1) return;
+      const aid = actIdOf(it);
+      if (cleared[aid]) return;            /* boxes deliberately cleared after a full pass — leave them empty */
+      const on = LifeOS.isDone(aid, date);
+      if (!!it.done !== on) { it.done = on; changed++; }
+    }));
+  }));
   return changed;
 }
 
