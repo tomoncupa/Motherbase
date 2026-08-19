@@ -166,6 +166,14 @@ main{display:flex;flex:1;min-height:0}
 .brick.pinned{box-shadow:0 0 0 1px var(--acc) inset,0 2px 0 color-mix(in srgb,var(--c) 22%,#05080c)}
 .brick.done{opacity:.42;filter:saturate(.4)}
 .brick.hid{opacity:.3;filter:grayscale(.7);border-style:dashed}
+.brick.sel{box-shadow:0 0 0 2px var(--acc),0 4px 14px rgba(0,0,0,.4)}
+.brick.ongoing{border-left:3px dashed color-mix(in srgb,var(--c) 75%,#0d141c)}
+.b-cover{
+  position:absolute;left:-1px;right:-1px;top:100%;pointer-events:none;border-radius:0 0 8px 8px;
+  background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 13%,transparent) 0 7px,transparent 7px 14px);
+  border:1px dashed color-mix(in srgb,var(--c) 32%,transparent);border-top:0;
+}
+.b-cover b{position:absolute;bottom:3px;right:6px;font-family:var(--f1);font-size:8.5px;color:color-mix(in srgb,var(--c) 70%,#fff);opacity:.75}
 .brick.hid .b-name{text-decoration:line-through;text-decoration-style:dotted}
 .b-link{font-family:var(--f1);font-size:9px;color:var(--dim2);opacity:.75}
 .brick.done .b-name{text-decoration:line-through;text-decoration-color:var(--dim2)}
@@ -854,6 +862,14 @@ function schedule(laneId) {
   items(laneId).forEach((it, i) => {
     if (it.hidden) { out.push({ it, s: cur, e: cur, gap: 0, clash: 0, hidden: true }); return; }
     if (i) cur += S.gap;
+    /* an ongoing block runs alongside what follows — it takes wall-clock time but not
+       a slot in the queue, so the next block starts when this one started */
+    if (it.ongoing) {
+      const os = it.at ? hm2min(it.at) : cur;
+      out.push({ it, s: os, e: os + it.dur, gap: 0, clash: 0, ongoing: true });
+      cur = os;
+      return;
+    }
     let s = cur, gap = 0, clash = 0;
     if (it.at) {
       const a = hm2min(it.at) + (cur > hm2min(it.at) + 720 ? 1440 : 0);
@@ -1133,6 +1149,36 @@ function dupVariant(src) {
 }
 
 let focusLane = 0;
+/* ---------- multi-select: ctrl/shift-click blocks, then act on the lot ---------- */
+let SEL = new Set();
+const selected = () => S.lanes.flatMap(l => items(l.id).map(it => ({ l, it }))).filter(x => SEL.has(x.it.id));
+function clearSel() { if (!SEL.size) return false; SEL.clear(); return true; }
+function selMenu(x, y) {
+  const picks = selected();
+  if (!picks.length) return;
+  const each = fn => { snap(); picks.forEach(({ it }) => fn(it)); render(); };
+  openMenu(x, y, [
+    { head: picks.length + ' blocks selected' },
+    { label: 'Effort', sub: [1, 2, 3].map(k => ({ label: EGLYPH[k] + ' ' + ENAME[k], fn: () => each(it => { it.energy = k; syncKin(it, { energy: k }); }) })) },
+    { label: 'Priority', sub: [0, 1, 2, 3].map(k => ({ label: k ? 'P' + k : 'none', fn: () => each(it => it.pri = k) })) },
+    { label: 'Colour', sub: PAL.map((c, i) => ({ label: PALNAME[i], fn: () => each(it => { it.color = c; syncKin(it, { color: c }); }) })) },
+    { sep: 1 },
+    { label: 'Tick them all off', fn: () => { picks.forEach(({ it }) => { if (!it.done) toggleDone(it); }); } },
+    { label: 'Compact them', fn: () => each(it => it.compact = true) },
+    { label: 'Expand them', fn: () => each(it => it.compact = false) },
+    { label: 'Move to routine', sub: S.lanes.map(L => ({ label: L.name, fn: () => {
+        snap();
+        picks.forEach(({ it }) => { const f = findItem(it.id); if (f && f.laneId !== L.id) { f.arr.splice(f.i, 1); items(L.id).push(it); } });
+        render();
+      } })) },
+    { sep: 1 },
+    { label: 'Delete ' + picks.length + ' blocks', danger: 1, fn: () => {
+        snap();
+        picks.forEach(({ it }) => { const f = findItem(it.id); if (f) f.arr.splice(f.i, 1); });
+        SEL.clear(); render();
+      } },
+  ]);
+}
 
 function renderBin() {
   const q = ($('#search').value || '').toLowerCase().trim();
@@ -1331,9 +1377,26 @@ function renderBoard() {
     const view = L.byPri ? sc.slice().sort((a, b) => ((a.it.pri || 9) - (b.it.pri || 9)) || (a.s - b.s)) : sc;
     view.forEach(({ it, s, e, gap, clash, hidden }) => {
       if (showNow && !nowDrawn && !hidden && s > nowM) { body.appendChild(nowLine(nowM)); nowDrawn = true; }
-      const nd = brickNode(L.id, it, s, e, { gap, clash });
-      if (showNow && e <= nowM && !hidden) nd.classList.add('past');
+      const nd = brickNode(L.id, it, s, e, { gap, clash, ongoing: it.ongoing });
+      if (showNow && e != null && e <= nowM && !hidden) nd.classList.add('past');
       body.appendChild(nd);
+    });
+    /* draw each ongoing block's shadow down over the blocks it overlaps */
+    requestAnimationFrame(() => {
+      view.forEach(({ it, e }) => {
+        if (!it.ongoing || e == null) return;
+        const node = body.querySelector('[data-id="' + it.id + '"]');
+        if (!node) return;
+        const covered = view.filter(r => r.it !== it && r.s != null && r.s >= 0 && r.s < e && view.indexOf(r) > view.findIndex(z => z.it === it));
+        let h = 0;
+        covered.forEach(r => { const n2 = body.querySelector('[data-id="' + r.it.id + '"]'); if (n2) h += n2.offsetHeight + 8; });
+        const old = node.querySelector('.b-cover'); if (old) old.remove();
+        if (h > 6) {
+          const cov = el('div', 'b-cover', '<b>⟲ while this runs</b>');
+          cov.style.height = (h - 8) + 'px';
+          node.appendChild(cov);
+        }
+      });
     });
     if (showNow && !nowDrawn && sc.length && nowM > hm2min(L.start) && nowM <= laneEnd(L.id) + 60) body.appendChild(nowLine(nowM));
     d.appendChild(body);
@@ -1451,7 +1514,7 @@ function brickNode(laneId, it, s, e, meta) {
   meta = meta || {};
   const broke = RULECHK.byItem.get(it.id);
   const mini = isMini(it);
-  const n = el('div', 'brick' + (mini ? ' mini' : '') + (it.pin ? ' pinned' : '') + (it.done ? ' done' : '') + (it.hidden ? ' hid' : '') + (broke ? ' broke' : ''));
+  const n = el('div', 'brick' + (mini ? ' mini' : '') + (it.pin ? ' pinned' : '') + (it.done ? ' done' : '') + (it.hidden ? ' hid' : '') + (it.ongoing ? ' ongoing' : '') + (broke ? ' broke' : ''));
   n.dataset.id = it.id; n.dataset.lane = laneId;
   n.style.setProperty('--c', it.color);
   if (!mini) n.style.minHeight = brickMin(it.dur) + 'px';
@@ -1480,6 +1543,7 @@ function brickNode(laneId, it, s, e, meta) {
     if (meta.gap > 0) { const g = el('span', 'b-flag', '↧' + dur2s(meta.gap)); g.dataset.tip = '<b>' + dur2s(meta.gap) + '</b> of empty time before this block'; top.appendChild(g); }
     if (meta.clash > 0) { const g = el('span', 'b-flag bad', '⚠' + dur2s(meta.clash)); g.dataset.tip = 'The block above runs <b>' + dur2s(meta.clash) + '</b> past this anchored start'; top.appendChild(g); }
     if (broke) { const g = el('span', 'b-flag bad', '⚠ rule'); g.dataset.tip = broke.map(esc).join('<br>'); top.appendChild(g); }
+    if (it.ongoing) { const g = el('span', 'b-flag', '⟲ ongoing'); g.dataset.tip = 'Runs <b>alongside</b> the blocks below — they don’t wait for it'; top.appendChild(g); }
     top.appendChild(el('span', 'b-sp'));
     const du = el('div', 'b-dur');
     const step = durStep(it.dur);
@@ -1595,12 +1659,29 @@ function brickNode(laneId, it, s, e, meta) {
   grip.addEventListener('pointerdown', ev => startResize(ev, it, n));
   n.appendChild(grip);
 
+  if (SEL.has(it.id)) n.classList.add('sel');
   n.addEventListener('pointerdown', ev => {
     if (ev.button === 2) return;
     if (ev.target.closest('.b-ctl,.b-days,.b-dur,.b-grip,.b-name,.b-note,.b-time,.b-mtime,.b-timein,.b-durin,.b-check')) return;
+    if (ev.ctrlKey || ev.metaKey || ev.shiftKey) {      /* multi-select instead of dragging */
+      ev.preventDefault();
+      if (ev.shiftKey && SEL.size) {
+        const ids = items(laneId).map(x => x.id);
+        const last = [...SEL].filter(id => ids.includes(id)).pop();
+        const a = ids.indexOf(last), b = ids.indexOf(it.id);
+        if (a > -1 && b > -1) ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(id => SEL.add(id));
+        else SEL.add(it.id);
+      } else SEL.has(it.id) ? SEL.delete(it.id) : SEL.add(it.id);
+      render();
+      return;
+    }
     startDrag(ev, { kind: 'move', id: it.id, node: n });
   });
-  n.addEventListener('contextmenu', ev => { ev.preventDefault(); ev.stopPropagation(); blockMenu(laneId, it, ev.clientX, ev.clientY); });
+  n.addEventListener('contextmenu', ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    if (SEL.size > 1 && SEL.has(it.id)) return selMenu(ev.clientX, ev.clientY);
+    blockMenu(laneId, it, ev.clientX, ev.clientY);
+  });
   return n;
 }
 
@@ -1636,6 +1717,8 @@ function blockMenu(laneId, it, x, y) {
     { sep: 1 },
     { label: it.note ? 'Edit note' : 'Add note', fn: () => { it.noteOpen = true; it.compact = false; render(); } },
     { label: 'Pin position', check: !!it.pin, fn: () => { snap(); it.pin = !it.pin; render(); } },
+    { label: 'Ongoing / multi-tasked', check: !!it.ongoing,
+      fn: () => { snap(); it.ongoing = !it.ongoing; render(); toast(it.ongoing ? 'the blocks after it now run <b>alongside</b> it' : 'back in the queue'); } },
     { label: isMini(it) ? 'Expand to full card' : 'Compact to one line', check: isMini(it),
       fn: () => { it.compact = !isMini(it); render(); } },
     { sep: 1 },
@@ -1837,6 +1920,9 @@ function renderFoot() {
     : 'nothing scheduled today';
   $('#statDone').dataset.tip = 'Today’s checklist from <b>' + esc((variant(vid) || M()).name) + '</b>. Tick them all and it resets itself.';
   $('#gapv').textContent = S.gap + 'm';
+  if (SEL.size) {
+    $('#statTotal').innerHTML = '<b style="color:var(--acc)">' + SEL.size + ' selected</b> — right-click for bulk edits · Esc to clear · Del to remove';
+  }
 }
 
 /* ============================ drag & drop ============================ */
@@ -2458,7 +2544,15 @@ $('#nfName').onkeydown = e => { if (e.key === 'Enter') $('#nfOk').click(); };
 window.addEventListener('keydown', e => {
   const typing = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); undo(); }
-  if (e.key === 'Escape') closeModal();
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && !typing && S.view === 'day') {
+    e.preventDefault(); S.lanes.forEach(l => items(l.id).forEach(it => SEL.add(it.id))); render();
+  }
+  if (e.key === 'Escape') { if (clearSel()) render(); closeModal(); }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && SEL.size) {
+    e.preventDefault(); snap();
+    selected().forEach(({ it }) => { const f = findItem(it.id); if (f) f.arr.splice(f.i, 1); });
+    SEL.clear(); render();
+  }
 });
 window.addEventListener('beforeunload', () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} });
 
