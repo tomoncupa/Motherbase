@@ -179,6 +179,26 @@ const Rec = {
     for (const id in rows) { alive(rows[id]) ? live++ : dead++; bytes += JSON.stringify(rows[id]).length; }
     return { live: live, tombstones: dead, kb: Math.round(bytes / 102.4) / 10, types: Rec.types() };
   },
+  /** re-read everything from storage. Frames on file:// share the storage but not
+      always the change events, so a sibling can ask us to look again. */
+  reload() {
+    const before = JSON.stringify(Object.keys(rows).map(k => rows[k].updated_at));
+    Object.keys(rows).forEach(k => delete rows[k]);
+    load();
+    if (JSON.stringify(Object.keys(rows).map(k => rows[k].updated_at)) !== before) announce([], false);
+    return Rec;
+  },
+  /** really remove rows of a type before a date — no tombstone, no trace.
+      Only safe while everything is local; a tombstone is required once it syncs. */
+  purge(type, beforeDate) {
+    let n = 0;
+    for (const id in rows) {
+      const r = rows[id];
+      if (r.type !== type || !r.date || r.date >= beforeDate) continue;
+      delete rows[id]; Store.del(PREFIX + id); n++;
+    }
+    return n;
+  },
   /** drop tombstones older than n days — safe only while nothing syncs */
   vacuum(days) {
     const cut = new Date(Date.now() - (days || 400) * 86400000).toISOString();

@@ -38,7 +38,8 @@ line in this file.
 - **Complete truth only.** If something is untested, say so. If a number is a
   guess, label it. Never assert a figure, formula or price without a real basis.
 - **No hedging and no corporate filler.** Be precise. Give numbers.
-- **Do not use em dashes in anything he might publish.**
+- **No em dashes in anything he publishes** (posts, client-facing copy). Docs and
+  code comments in this repo are fine.
 - **End substantive replies with a confidence assessment and one concrete next
   action.**
 - He is the device test. You cannot open anything on his iPhone. Say so plainly
@@ -83,11 +84,16 @@ arc/CLAUDE.md      ARC's own brief, governs arc/ only
 habits/index.html  habit tracker (a stand-in, see Debt)
 form/index.html    lift review
 _template/         a working starter app, copied to make a new one
-quest/BRIEF.md     the Daily Quest OS brief, still authoritative for that app
+quest/BRIEF.md     the Daily Quest OS brief: authoritative on WHAT to build,
+                   superseded on repo layout and testing by this file
 ```
 
 One folder per app. The home page is `index.html` at the root. `.nojekyll` sits at
 the root so GitHub Pages does not eat underscore folders.
+
+**Deploy is a copy.** The folder as it stands is the deployable artifact: copy it to
+`tomoncupa.github.io`, or open `index.html` straight from disk. No build, no step
+in between. Anything that breaks opening from a folder breaks the product.
 
 ### The shared foundation
 
@@ -228,7 +234,10 @@ once. No developer account, no API keys, no OAuth.
 
 ## Behaviour design rules
 
-These come from evidence, and they are not up for redesign on taste.
+These come from evidence, and they are not up for redesign on taste. Sources are in
+`quest/BRIEF.md`: Lally 2010 on time-to-automaticity and missed days, Gollwitzer &
+Sheeran 2006 on if-then plans, Nunes & Dreze 2006 on endowed progress, and
+Duolingo's published streak-freeze results.
 
 - **Design for month 6, not week 2.** Adherence declines in essentially every
   study. Build for the version of him who is bored of it.
@@ -253,10 +262,11 @@ These come from evidence, and they are not up for redesign on taste.
 
 ## Testing, not optional
 
-There is no test framework and Tom cannot test code himself. `node` is **not
-installed on this machine**, so any brief telling you to extract the script and run
-`node --check` cannot be followed literally. Use the browser instead, which is
-better anyway because it runs the real thing rather than only parsing it:
+There is no test framework and Tom cannot test code himself. **Check whether `node`
+exists before relying on it** (`node --version`); as of 2026-08-20 it is not
+installed here, so any brief telling you to extract the script and run `node --check`
+cannot be followed literally. Use the browser instead, which is better anyway
+because it runs the real thing rather than only parsing it:
 
 1. Serve the folder: `py -3 -m http.server 8777 -d "<repo>"`.
 2. Open it with the browser tool, drive it with JavaScript, read the console.
@@ -288,6 +298,19 @@ Never claim something works because it should. Claim it because you watched it.
   `window`. Reaching them from a test harness needs `frame.contentWindow.eval`.
 - Anything flagged `custom` passed to `Skins.apply` gets persisted. A live preview
   must not be flagged custom or it leaves a trail of half-made themes.
+- **Windows filenames are case-insensitive.** `Claude.md` and `CLAUDE.md` are the
+  same file, and writing one silently overwrites the other. This has already
+  happened once. Check with `git ls-files` before creating a file whose name
+  differs from an existing one only in case.
+- `py -3` is the Python launcher here. Plain `python` hits the Microsoft Store stub
+  and fails.
+- **A literal closing script tag inside an inline script ends the script element**,
+  even inside a comment. Writing `<script src=...></script>` in the kernel's own
+  doc comment silently truncated three apps. ARC's `'<scr'+'ipt>'` split is the
+  same defence. Never write the closing tag inside inline code.
+- An app that computes its own `today` will disagree with `Day.today()` the moment
+  the clock is past midnight but before the day-start hour. BLOCK did exactly this
+  and published its plan on a date nothing else was reading.
 
 ---
 
@@ -305,14 +328,13 @@ Never claim something works because it should. Claim it because you watched it.
 
 ### Debt, in the order it should be paid
 
-1. **The old LifeOS kernel is still live** in `index.html`, `block/` and `habits/`.
-   It stores the shared doc as one blob, which constraint 7 forbids. Safe only
-   while everything is single-device. Convert to `records.js`. The tick log is
-   already one cell per activity per day, so the conversion is mostly mechanical.
-   **Back up his real data to a file before touching it.**
+1. ~~The old blob kernel~~ **Done 2026-08-20.** Kernel v2 is a view over
+   `records.js`; the apps kept their API and did not move. First load copies the
+   old `lifeos_v1` blob into rows and leaves it in place as its own backup.
 2. **ARC carries its own copy of the theme engine.** It should load
    `shared/skins.js` instead of defining `THEMES` itself.
-3. **The docs use em dashes**, against his own rule. Sweep them when convenient.
+3. **The apps still carry their own settings, themes and sounds** instead of using
+   `shared/ui.js`, `skins.js` and `sound.js`. Only `_template/` is fully on them.
 4. **Commits are unpushed** and the GitHub repo is public. He has not yet said
    push.
 

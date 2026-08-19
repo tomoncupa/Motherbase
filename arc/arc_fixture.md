@@ -1,0 +1,877 @@
+# Life Maxxing/ Protagonistic Authorship
+- Protagonistic Gameplay/ Living
+  - Protagonism
+    - Locus of control
+    - Actioned Orientedness
+      - What can be done?
+      - The Character Sheet
+        - _Personal Tracker_
+        - Stats
+        - Traits
+        - Skills
+        - Story
+        - What's worth tracking?
+        - What do you want to track?
+        - What do you need to track?
+        - What is useful to track?
+        - How can we make it easy to use?
+      - "if not me then who?"
+      - What is within my power & control to do?
+    - The Character Sheet
+      - _Personal Tracker_
+      - Stats
+      - Traits
+      - Skills
+      - Story
+      - What's worth tracking?
+      - What do you want to track?
+      - What do you need to track?
+      - What is useful to track?
+      - How can we make it easy to use?
+    - Meta Skills
+      - Self Reflection
+      - Pattern Recognition
+      - Critical Thinking
+      - Adaptability
+      - Systems Thinking
+      - Communication
+        - Directness
+        - Conflict Resolution
+    - Directness
+  - Joymaxxing
+    - Flow
+    - Play
+    - A defined sense of personal "balance"
+      - Play
+    - Adventure
+      - Progress
+        - Mental Health
+          - Performance
+            - Flow
+  - Adaptation & Growth
+    - Progress
+      - Mental Health
+        - Performance
+          - Flow
+  - Performance
+    - Flow
+  - Self Development
+    - Adaptation & Growth
+      - Progress
+        - Mental Health
+          - Performance
+            - Flow
+    - Privilege Stacking
+      - Money
+      - Personality
+        - Charisma
+      - Halo Effect
+        - _the tendency for positive impressions in one area to positively influence one's opinion_
+        - Performance
+          - Flow
+        - Physique Maxxing
+          - Muscle Building
+            - Training
+              - Form, Technique & Execution
+                - Hierarchy of Focus
+              - Movement Patterns
+              - Training Intensity
+                - RIR Assesment
+                  - Lambo Test
+                  - How many more could you have done? ( Assess immediately post set & after footage review)
+              - Anatomy Knowledge
+                - "Why are we doing this exercise?"
+                  - "How can we maximize and optimize this movement?"
+                - "How can we maximize and optimize this movement?"
+              - Program Design
+                - Exercise Selection
+                  - "Why are we doing this exercise?"
+                    - "How can we maximize and optimize this movement?"
+                - Considerations:
+                  - Physique & Performance Goals
+                  - Preferred Movements
+                  - Minimum, Maximum, and Expected Training Frequency
+                  - Available Equipment
+                  - Training Capacity
+                  - Injuries
+                  - Strong & Weak Points
+                  - Life Contexts
+                  - Experience
+                  - Training Volume
+              - The Training Flow:
+                - Execute
+                  - Review Footage
+                    - How many more could you have done? ( Assess immediately post set & after footage review)
+                    - Take notes for improvement
+                      - Apply improvement to next set
+                        - Repeat
+              - Misc
+                - Mobility
+                - Warmups
+                - Flexibility
+                - Deloads
+                - Platues
+              - Progress
+                - Mental Health
+                  - Performance
+                    - Flow
+          - Fat Loss
+            - Calorie Deficit
+              - Metabolism: BMR TDEE
+            - Movement
+              - Steps
+              - Calorie Deficit
+                - Metabolism: BMR TDEE
+            - Diet Design
+              - Considerations
+                - Time needed for cooking
+                - Accessibility
+                - Budget
+                - Progression Speed
+                - Palatability
+                - Satiety
+    - Philosophy
+      - Growth Mindset
+      - Beliefs & Principles
+        - Adaptation & Growth
+          - Progress
+            - Mental Health
+              - Performance
+                - Flow
+        - Mindfulness
+        - Prayer Through Action
+        - Frameworks
+          - Evolved Animal
+          - Barbarian
+          - Caveman
+            - Directness
+        - Useful Humility
+          - Knowing shortcomings & Areas for improvement
+          - Being open to learn
+        - Pursued Vanity
+        - Progress
+          - Mental Health
+            - Performance
+              - Flow
+      - Stoicism
+        - Discipline (Lv 1/7)
+          - Mood Freedom (Lv 3/4)
+            - _Enables taking action regardless of mood_
+          - Mood Control
+      - Frameworks
+        - Evolved Animal
+        - Barbarian
+        - Caveman
+          - Directness
+  - Habits & Routines
+    - The Habit Loop
+      - Trigger
+        - Routine
+          - Reward
+    - Habit Development & Reprogramming
+      - The Habit Loop
+        - Trigger
+          - Routine
+            - Reward
+      - Friction Control
+        - Automation
+          - Systems Thinking
+    - Routine Design
+    - Main Quest Work
+    - Progress
+      - Mental Health
+        - Performance
+          - Flow
+  - Main Quest Work
+- Authorship/Life Design
+  - Ownership
+  - Goal Setting — (What kind of life do you actually want for yourself?)
+    - Main Quest
+      - Adventure
+        - Progress
+          - Mental Health
+            - Performance
+              - Flow
+      - Main Quest Work
+    - Routine Design
+  - Identity Design
+    - Manual Mental Programming
+      - Mantras
+      - Habit Development & Reprogramming
+        - The Habit Loop
+          - Trigger
+            - Routine
+              - Reward
+        - Friction Control
+          - Automation
+            - Systems Thinking
+  - Habits & Routines
+    - The Habit Loop
+      - Trigger
+        - Routine
+          - Reward
+    - Habit Development & Reprogramming
+      - The Habit Loop
+        - Trigger
+          - Routine
+            - Reward
+      - Friction Control
+        - Automation
+          - Systems Thinking
+    - Routine Design
+    - Main Quest Work
+    - Progress
+      - Mental Health
+        - Performance
+          - Flow
+  - Philosophy
+    - Growth Mindset
+    - Beliefs & Principles
+      - Adaptation & Growth
+        - Progress
+          - Mental Health
+            - Performance
+              - Flow
+      - Mindfulness
+      - Prayer Through Action
+      - Frameworks
+        - Evolved Animal
+        - Barbarian
+        - Caveman
+          - Directness
+      - Useful Humility
+        - Knowing shortcomings & Areas for improvement
+        - Being open to learn
+      - Pursued Vanity
+      - Progress
+        - Mental Health
+          - Performance
+            - Flow
+    - Stoicism
+      - Discipline (Lv 1/7)
+        - Mood Freedom (Lv 3/4)
+          - _Enables taking action regardless of mood_
+        - Mood Control
+    - Frameworks
+      - Evolved Animal
+      - Barbarian
+      - Caveman
+        - Directness
+
+# Physical Health
+- Performance
+  - Flow
+- Muscle Building
+  - Training
+    - Form, Technique & Execution
+      - Hierarchy of Focus
+    - Movement Patterns
+    - Training Intensity
+      - RIR Assesment
+        - Lambo Test
+        - How many more could you have done? ( Assess immediately post set & after footage review)
+    - Anatomy Knowledge
+      - "Why are we doing this exercise?"
+        - "How can we maximize and optimize this movement?"
+      - "How can we maximize and optimize this movement?"
+    - Program Design
+      - Exercise Selection
+        - "Why are we doing this exercise?"
+          - "How can we maximize and optimize this movement?"
+      - Considerations:
+        - Physique & Performance Goals
+        - Preferred Movements
+        - Minimum, Maximum, and Expected Training Frequency
+        - Available Equipment
+        - Training Capacity
+        - Injuries
+        - Strong & Weak Points
+        - Life Contexts
+        - Experience
+        - Training Volume
+    - The Training Flow:
+      - Execute
+        - Review Footage
+          - How many more could you have done? ( Assess immediately post set & after footage review)
+          - Take notes for improvement
+            - Apply improvement to next set
+              - Repeat
+    - Misc
+      - Mobility
+      - Warmups
+      - Flexibility
+      - Deloads
+      - Platues
+    - Progress
+      - Mental Health
+        - Performance
+          - Flow
+- Hormonal Health
+  - Proportions & Aesthethics
+- Steps
+- Nutrition
+  - Hitting Protein
+    - Hitting Calories
+  - Macro Nutrients
+    - Carbohydrates
+    - Protein
+      - Hitting Protein
+        - Hitting Calories
+    - Fats
+    - Alcohol
+  - Reading Nutrition Labels
+  - Meal Timing
+  - Hitting Calories
+  - Micronutrients
+    - Minerals
+    - Vitamins
+  - Supplementation
+    - Caffeine
+    - Zinc
+    - Magnesium
+    - Creatine
+- Cognition
+  - Learning Ability
+    - Intentional Practice
+    - Feynman Technique
+    - Spaced Repetition
+      - Flash Cards
+    - Chunking
+    - Flash Cards
+    - First Principles
+    - Meta Skills
+      - Self Reflection
+      - Pattern Recognition
+      - Critical Thinking
+      - Adaptability
+      - Systems Thinking
+      - Communication
+        - Directness
+        - Conflict Resolution
+    - Mental Models
+  - Meta Skills
+    - Self Reflection
+    - Pattern Recognition
+    - Critical Thinking
+    - Adaptability
+    - Systems Thinking
+    - Communication
+      - Directness
+      - Conflict Resolution
+  - Philosophy
+    - Growth Mindset
+    - Beliefs & Principles
+      - Adaptation & Growth
+        - Progress
+          - Mental Health
+            - Performance
+              - Flow
+      - Mindfulness
+      - Prayer Through Action
+      - Frameworks
+        - Evolved Animal
+        - Barbarian
+        - Caveman
+          - Directness
+      - Useful Humility
+        - Knowing shortcomings & Areas for improvement
+        - Being open to learn
+      - Pursued Vanity
+      - Progress
+        - Mental Health
+          - Performance
+            - Flow
+    - Stoicism
+      - Discipline (Lv 1/7)
+        - Mood Freedom (Lv 3/4)
+          - _Enables taking action regardless of mood_
+        - Mood Control
+    - Frameworks
+      - Evolved Animal
+      - Barbarian
+      - Caveman
+        - Directness
+  - Systems Thinking
+- Recovery
+  - Nutrition
+    - Hitting Protein
+      - Hitting Calories
+    - Macro Nutrients
+      - Carbohydrates
+      - Protein
+        - Hitting Protein
+          - Hitting Calories
+      - Fats
+      - Alcohol
+    - Reading Nutrition Labels
+    - Meal Timing
+    - Hitting Calories
+    - Micronutrients
+      - Minerals
+      - Vitamins
+    - Supplementation
+      - Caffeine
+      - Zinc
+      - Magnesium
+      - Creatine
+  - Sleep
+    - Sleep Hygiene
+  - Progress
+    - Mental Health
+      - Performance
+        - Flow
+
+# Humor
+- Personality
+  - Charisma
+
+# Life Skills
+- Goal Setting
+  - Main Quest
+    - Adventure
+      - Progress
+        - Mental Health
+          - Performance
+            - Flow
+    - Main Quest Work
+  - Routine Design
+- Identity Design
+  - Manual Mental Programming
+    - Mantras
+    - Habit Development & Reprogramming
+      - The Habit Loop
+        - Trigger
+          - Routine
+            - Reward
+      - Friction Control
+        - Automation
+          - Systems Thinking
+- Dopamine Calibration & Control
+- Habit Development & Reprogramming
+  - The Habit Loop
+    - Trigger
+      - Routine
+        - Reward
+  - Friction Control
+    - Automation
+      - Systems Thinking
+- Manual Mental Programming
+  - Mantras
+  - Habit Development & Reprogramming
+    - The Habit Loop
+      - Trigger
+        - Routine
+          - Reward
+    - Friction Control
+      - Automation
+        - Systems Thinking
+- Discipline (Lv 1/7)
+  - Mood Freedom (Lv 3/4)
+    - _Enables taking action regardless of mood_
+  - Mood Control
+- Routine Design
+- Automation
+  - Systems Thinking
+- Muscle Building
+  - Training
+    - Form, Technique & Execution
+      - Hierarchy of Focus
+    - Movement Patterns
+    - Training Intensity
+      - RIR Assesment
+        - Lambo Test
+        - How many more could you have done? ( Assess immediately post set & after footage review)
+    - Anatomy Knowledge
+      - "Why are we doing this exercise?"
+        - "How can we maximize and optimize this movement?"
+      - "How can we maximize and optimize this movement?"
+    - Program Design
+      - Exercise Selection
+        - "Why are we doing this exercise?"
+          - "How can we maximize and optimize this movement?"
+      - Considerations:
+        - Physique & Performance Goals
+        - Preferred Movements
+        - Minimum, Maximum, and Expected Training Frequency
+        - Available Equipment
+        - Training Capacity
+        - Injuries
+        - Strong & Weak Points
+        - Life Contexts
+        - Experience
+        - Training Volume
+    - The Training Flow:
+      - Execute
+        - Review Footage
+          - How many more could you have done? ( Assess immediately post set & after footage review)
+          - Take notes for improvement
+            - Apply improvement to next set
+              - Repeat
+    - Misc
+      - Mobility
+      - Warmups
+      - Flexibility
+      - Deloads
+      - Platues
+    - Progress
+      - Mental Health
+        - Performance
+          - Flow
+- Productivity
+  - Todo Lists
+- Environment Design
+  - Friction Control
+    - Automation
+      - Systems Thinking
+  - Automation
+    - Systems Thinking
+- Personal Grooming & Presentation Optimization
+- Learning Ability
+  - Intentional Practice
+  - Feynman Technique
+  - Spaced Repetition
+    - Flash Cards
+  - Chunking
+  - Flash Cards
+  - First Principles
+  - Meta Skills
+    - Self Reflection
+    - Pattern Recognition
+    - Critical Thinking
+    - Adaptability
+    - Systems Thinking
+    - Communication
+      - Directness
+      - Conflict Resolution
+  - Mental Models
+- Applied Neuroscience
+  - Mood Control
+- Calorie Counting
+- Meditation
+- Time Management
+  - Time Blocking
+- Cooking (Lv 1/7)
+  - Meal Planning
+  - Meal Prepping
+- Reading Nutrition Labels
+- Finance
+  - Budgeting
+  - Investing
+  - Accounting
+- Calorie Guesstimation
+- Cognition
+  - Learning Ability
+    - Intentional Practice
+    - Feynman Technique
+    - Spaced Repetition
+      - Flash Cards
+    - Chunking
+    - Flash Cards
+    - First Principles
+    - Meta Skills
+      - Self Reflection
+      - Pattern Recognition
+      - Critical Thinking
+      - Adaptability
+      - Systems Thinking
+      - Communication
+        - Directness
+        - Conflict Resolution
+    - Mental Models
+  - Meta Skills
+    - Self Reflection
+    - Pattern Recognition
+    - Critical Thinking
+    - Adaptability
+    - Systems Thinking
+    - Communication
+      - Directness
+      - Conflict Resolution
+  - Philosophy
+    - Growth Mindset
+    - Beliefs & Principles
+      - Adaptation & Growth
+        - Progress
+          - Mental Health
+            - Performance
+              - Flow
+      - Mindfulness
+      - Prayer Through Action
+      - Frameworks
+        - Evolved Animal
+        - Barbarian
+        - Caveman
+          - Directness
+      - Useful Humility
+        - Knowing shortcomings & Areas for improvement
+        - Being open to learn
+      - Pursued Vanity
+      - Progress
+        - Mental Health
+          - Performance
+            - Flow
+    - Stoicism
+      - Discipline (Lv 1/7)
+        - Mood Freedom (Lv 3/4)
+          - _Enables taking action regardless of mood_
+        - Mood Control
+    - Frameworks
+      - Evolved Animal
+      - Barbarian
+      - Caveman
+        - Directness
+  - Systems Thinking
+- Reality Alignment
+  - Knowing yourself
+  - Reflection and Self Assessment
+    - Identity Work/ Self Definition & Authorship
+      - A defined sense of personal "balance"
+        - Play
+      - Manual Mental Programming
+        - Mantras
+        - Habit Development & Reprogramming
+          - The Habit Loop
+            - Trigger
+              - Routine
+                - Reward
+          - Friction Control
+            - Automation
+              - Systems Thinking
+      - Discipline (Lv 1/7)
+        - Mood Freedom (Lv 3/4)
+          - _Enables taking action regardless of mood_
+        - Mood Control
+      - Who are you now?
+        - Who would you like to be?
+        - What's possible for you?
+  - Progress assessment
+- Meta Skills
+  - Self Reflection
+  - Pattern Recognition
+  - Critical Thinking
+  - Adaptability
+  - Systems Thinking
+  - Communication
+    - Directness
+    - Conflict Resolution
+- Training
+  - Form, Technique & Execution
+    - Hierarchy of Focus
+  - Movement Patterns
+  - Training Intensity
+    - RIR Assesment
+      - Lambo Test
+      - How many more could you have done? ( Assess immediately post set & after footage review)
+  - Anatomy Knowledge
+    - "Why are we doing this exercise?"
+      - "How can we maximize and optimize this movement?"
+    - "How can we maximize and optimize this movement?"
+  - Program Design
+    - Exercise Selection
+      - "Why are we doing this exercise?"
+        - "How can we maximize and optimize this movement?"
+    - Considerations:
+      - Physique & Performance Goals
+      - Preferred Movements
+      - Minimum, Maximum, and Expected Training Frequency
+      - Available Equipment
+      - Training Capacity
+      - Injuries
+      - Strong & Weak Points
+      - Life Contexts
+      - Experience
+      - Training Volume
+  - The Training Flow:
+    - Execute
+      - Review Footage
+        - How many more could you have done? ( Assess immediately post set & after footage review)
+        - Take notes for improvement
+          - Apply improvement to next set
+            - Repeat
+  - Misc
+    - Mobility
+    - Warmups
+    - Flexibility
+    - Deloads
+    - Platues
+  - Progress
+    - Mental Health
+      - Performance
+        - Flow
+- Decision Making
+  - Reversible & Irreversible Outcomes?
+    - Which path will have the least regret?
+    - How will this affect everyone?
+  - What do I expect to get from this?
+    - What comes after? Immediately and long term?
+      - How will this affect everyone?
+    - What is the Opportunity Cost of this?
+      - How will this affect everyone?
+      - Opportunity Cost
+        - _Noun: The next best thing that could have been done/gotten, that will be missed out on._
+  - What will I be happy with?
+    - Which path will have the least regret?
+  - Does this truly align & bring me closer to what I want? For myself and those around me?
+    - How will this affect everyone?
+- Journalling
+- Social Skills
+  - Communication
+    - Directness
+    - Conflict Resolution
+  - Personal Branding
+  - Making Friends
+  - Networking
+  - Dating
+    - Flirting
+
+# Daily Quest Sytem
+_Quests done Daily to bring one closer to their ideal future_
+- Main Quest Work
+- Steps
+- Hitting Protein
+  - Hitting Calories
+- Hitting Calories
+- Sleep
+  - Sleep Hygiene
+- Training
+  - Form, Technique & Execution
+    - Hierarchy of Focus
+  - Movement Patterns
+  - Training Intensity
+    - RIR Assesment
+      - Lambo Test
+      - How many more could you have done? ( Assess immediately post set & after footage review)
+  - Anatomy Knowledge
+    - "Why are we doing this exercise?"
+      - "How can we maximize and optimize this movement?"
+    - "How can we maximize and optimize this movement?"
+  - Program Design
+    - Exercise Selection
+      - "Why are we doing this exercise?"
+        - "How can we maximize and optimize this movement?"
+    - Considerations:
+      - Physique & Performance Goals
+      - Preferred Movements
+      - Minimum, Maximum, and Expected Training Frequency
+      - Available Equipment
+      - Training Capacity
+      - Injuries
+      - Strong & Weak Points
+      - Life Contexts
+      - Experience
+      - Training Volume
+  - The Training Flow:
+    - Execute
+      - Review Footage
+        - How many more could you have done? ( Assess immediately post set & after footage review)
+        - Take notes for improvement
+          - Apply improvement to next set
+            - Repeat
+  - Misc
+    - Mobility
+    - Warmups
+    - Flexibility
+    - Deloads
+    - Platues
+  - Progress
+    - Mental Health
+      - Performance
+        - Flow
+- Recovery
+  - Nutrition
+    - Hitting Protein
+      - Hitting Calories
+    - Macro Nutrients
+      - Carbohydrates
+      - Protein
+        - Hitting Protein
+          - Hitting Calories
+      - Fats
+      - Alcohol
+    - Reading Nutrition Labels
+    - Meal Timing
+    - Hitting Calories
+    - Micronutrients
+      - Minerals
+      - Vitamins
+    - Supplementation
+      - Caffeine
+      - Zinc
+      - Magnesium
+      - Creatine
+  - Sleep
+    - Sleep Hygiene
+  - Progress
+    - Mental Health
+      - Performance
+        - Flow
+
+# The Algrowrithm
+- The Training Flow:
+  - Execute
+    - Review Footage
+      - How many more could you have done? ( Assess immediately post set & after footage review)
+      - Take notes for improvement
+        - Apply improvement to next set
+          - Repeat
+- Progress
+  - Mental Health
+    - Performance
+      - Flow
+
+# Emotional Health
+- Emotional Control
+- Setting Boundaries
+- Emotional Awareness
+- Emotional Management
+
+## Connections
+- Muscle Building ⇄ Habits & Routines
+- Fat Loss ⇄ Habits & Routines
+- Calorie Deficit ⇄ Calorie Counting
+- Fat Loss ⇄ Sleep
+- Muscle Building ⇄ Sleep
+- Productivity ⇄ Time Management
+- Self Development ⇄ Physique Maxxing
+- Self Development ⇄ Learning Ability
+- Identity Design ⇄ Goal Setting
+- Self Development ⇄ Habits & Routines
+- Environment Design ⇄ Sleep Hygiene _(cousin)_
+- Environment Design ⇄ Habits & Routines
+- Charisma ⇄ Humor
+- Halo Effect ⇄ Proportions & Aesthethics
+- Hormonal Health ⇄ Muscle Building
+- Hormonal Health ⇄ Fat Loss
+- Hormonal Health ⇄ Nutrition
+- Muscle Building ⇄ Nutrition
+- Fat Loss ⇄ Nutrition
+- Muscle Building ⇄ Hitting Calories
+- Muscle Building ⇄ Hitting Protein
+- Fat Loss ⇄ Hitting Protein
+- Daily Quest Sytem ⇄ The Character Sheet
+- Metabolism: BMR TDEE ⇄ Fat Loss
+- Metabolism: BMR TDEE ⇄ Nutrition
+- Nutrition ⇄ Cooking
+- Halo Effect ⇄ Personal Grooming & Presentation Optimization
+- Meal Planning ⇄ Meal Prepping
+- Joymaxxing ⇄ Dopamine Calibration & Control
+- Authorship/Life Design ⇄ Identity Work/ Self Definition & Authorship
+- Calorie Counting ⇄ Calorie Guesstimation
+- Self Development ⇄ Joymaxxing
+- The Character Sheet ⇄ Journalling _(cousin)_
+- Goal Setting ⇄ Discipline
+- Sleep ⇄ Mental Health
+- Environment Design ⇄ Discipline _(cousin)_
+- Habits & Routines ⇄ Discipline
+- Anatomy Knowledge ⇄ Movement Patterns
+- What do I expect to get from this? ⇄ Reversible & Irreversible Outcomes?
+- Beliefs & Principles ⇄ Ownership _(cousin)_
+- Discipline ⇄ Emotional Health _(cousin)_
+- Beliefs & Principles ⇄ Stoicism
+- Reality Alignment ⇄ Useful Humility _(cousin)_
+- Physical Health ⇄ Sleep
+- Physical Health ⇄ Mental Health
+- Training ⇄ The Algrowrithm
+- Daily Quest Sytem ⇄ Habits & Routines _(cousin)_
+- Personality ⇄ Halo Effect
+- Joymaxxing ⇄ Performance

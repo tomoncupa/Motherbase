@@ -206,186 +206,194 @@ kbd{font-family:var(--f1);font-size:10px;border:1px solid var(--line2);border-ra
 <div id="toast"></div>
 <input type="file" id="fileIn" accept="application/json" style="display:none">
 
+<script src="shared/day.js"></script>
+<script src="shared/records.js"></script>
 <script>
-/* ══════════════════════════ LIFEOS KERNEL v1 ══════════════════════════
-   The shared brain. This block is IDENTICAL in every LifeOS app — edit the
-   copy in lifeos.html and re-paste it between the sentinels in the others.
+/* ══════════════════════════ LIFEOS KERNEL v2 ══════════════════════════
+   Identical in every app that shares data — edit the copy in index.html and
+   re-run the sync script.
 
-   Two modes, decided at load:
-     • hosted   — the app is in an iframe inside lifeos.html. Every mutation is
-                  proxied to the shell over postMessage, so the shell is the
-                  single writer and nothing races. Works on file:// too, where
-                  frames cannot touch each other's DOM but postMessage still flows.
-     • solo     — the app was opened on its own. It owns localStorage 'lifeos_v1'
-                  directly and gossips over BroadcastChannel to other tabs.
-   Either way the app calls the same API and never knows which one it got.
+   v1 kept the shared state as ONE JSON blob and broadcast it whole, with the
+   shell as the single writer and a postMessage broker underneath. That is the
+   shape the brief forbids and the shape SystemOS died of, so v2 is a thin view
+   over `shared/records.js` instead:
 
-   The shared doc is small and is broadcast whole — no diffing, no versions to
-   reconcile. Apps keep their own private state (block_v1, arc's IDB, …) exactly
-   as before; only what MUST be shared lives here.                          */
+     activities → one `activity` row each
+     habits     → one `habit` row each
+     ticks      → one `tick` row per activity per day
+     today      → one dated `plan` row, published by whoever owns the schedule
+
+   Every app now writes directly. There is no broker and no hosted/solo split,
+   because every app on this origin reads and writes the same rows. What remains
+   is a nudge: frames opened from a folder do not reliably get storage events, so
+   a writer tells its neighbours to look again. It sends no data.
+
+   The API is unchanged from v1 on purpose — the apps did not have to move.
+
+   Load order in the page, before this block:
+     shared/day.js  then  shared/records.js
+   (written without tags on purpose: a literal closing script tag inside an
+    inline script ends the script element, even inside a comment)
+                                                                            */
 window.LifeOS = (function () {
-  const KEY = 'lifeos_v1';
+  if (!window.Rec || !window.Day) {
+    console.error('[lifeos] records.js and day.js must load first');
+    return { broken: 1, ready: function () {}, on: function () { return function () {}; },
+             doc: function () { return { activities: {}, habits: {}, log: {}, today: null }; },
+             isDone: function () { return false; }, dayLog: function () { return {}; },
+             done: function () { return Promise.resolve(); }, acts: function () { return Promise.resolve(); } };
+  }
+
   const HOSTED = (function () { try { return !!(window.parent && window.parent !== window); } catch (e) { return false; } })();
-  const blank = () => ({ v: 1, ts: 0, activities: {}, habits: {}, log: {}, today: null });
+  let doc = null, subs = [], booted = false, bootQ = [];
 
-  let doc = blank(), subs = [], waits = {}, seq = 0, bc = null, booted = false, bootQ = [], persistHook = null;
-
-  const pad = n => String(n).padStart(2, '0');
-  /** the only date format anything here speaks: YYYY-MM-DD, local time */
-  const day = d => { d = d || new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
-  /** canonical activity id — apps agree on a thing by its NAME, slugged */
-  const slug = s => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
-  const shift = (date, n) => { const d = new Date(date + 'T12:00:00'); d.setDate(d.getDate() + n); return day(d); };
-
-  /* ─── ops: the complete list of ways the shared doc may change ───
-     Pure mutations on a doc. The authority (a solo app, or the shell) runs them;
-     hosted apps only ever ask for them by name. */
-  const OPS = {
-    /** upsert activities — the vocabulary of things you do */
-    acts(d, list) {
-      (list || []).forEach(a => {
-        if (!a || !a.name) return;
-        const id = a.id || slug(a.name);
-        d.activities[id] = Object.assign({ id: id, name: a.name, cat: '', dur: 0, color: '', energy: 2 }, d.activities[id], a, { id: id });
-      });
-    },
-    /** tick / untick one activity on one date. Idempotent — the same cell no
-        matter who writes it, which is what makes BLOCK and HABITS agree. */
-    done(d, a) {
-      const date = a.date || day(), id = a.actId;
-      if (!id) return;
-      const rec = d.log[date] || (d.log[date] = {});
-      if (a.on === false) delete rec[id];
-      else rec[id] = { ts: Date.now(), src: a.src || '?', habitId: a.habitId || null, note: a.note || '' };
-      if (!Object.keys(rec).length) delete d.log[date];
-    },
-    habit(d, h) {
-      if (!h || !h.id) return;
-      d.habits[h.id] = Object.assign(
-        { created: day(), archived: false, cadence: { type: 'daily', days: [1, 1, 1, 1, 1, 1, 1], target: 7 } },
-        d.habits[h.id], h);
-    },
-    habitDel(d, id) { delete d.habits[id]; },
-    /** whichever app owns the schedule publishes today's plan here, so the home
-        screen (and anything else) can show and tick it without ever reading
-        that app's private storage */
-    today(d, t) { d.today = t || null; },
-    /** housekeeping: the log only grows, so drop ancient days */
-    prune(d, keepDays) {
-      const cut = shift(day(), -(keepDays || 800));
-      Object.keys(d.log).forEach(k => { if (k < cut) delete d.log[k]; });
-    },
-  };
-
-  function emit() { subs.forEach(f => { try { f(doc); } catch (e) { console.warn('[lifeos]', e); } }); }
-  function onBoot(fn) { booted ? fn(doc) : bootQ.push(fn); }
-  function setDoc(d) {
-    doc = Object.assign(blank(), d || {});
-    if (!booted) { booted = true; bootQ.splice(0).forEach(f => { try { f(doc); } catch (e) { console.warn('[lifeos]', e); } }); }
-    emit();
-    /* state that arrived from another tab (or from IndexedDB at boot) still has
-       to reach the apps we are hosting, and still deserves persisting */
-    if (!HOSTED) { toFrames({ lifeos: 1, ev: 'doc', doc: doc }); if (persistHook) persistHook(doc); }
-  }
-
-  /* ─── solo mode: this window owns the data ─── */
-  function loadLocal() { try { const r = JSON.parse(localStorage.getItem(KEY)); if (r && r.v) return Object.assign(blank(), r); } catch (e) {} return blank(); }
-  function saveLocal() {
-    doc.ts = Date.now();
-    try { localStorage.setItem(KEY, JSON.stringify(doc)); } catch (e) { console.warn('[lifeos] localStorage full', e); }
-    if (persistHook) persistHook(doc);              /* the shell hangs IndexedDB here */
-    if (bc) { try { bc.postMessage({ lifeos: 1, ev: 'doc', doc: doc }); } catch (e) {} }
-    toFrames({ lifeos: 1, ev: 'doc', doc: doc });   /* no-op unless we are the shell */
-  }
-  function apply(op, args) {
-    if (!OPS[op]) throw new Error('lifeos: unknown op ' + op);
-    OPS[op](doc, args); saveLocal(); emit(); return doc;
-  }
-
-  /* ─── hosted mode: ask the shell to do it ─── */
-  function ask(op, args) {
-    return new Promise(res => {
-      const id = ++seq; waits[id] = res;
-      try { window.parent.postMessage({ lifeos: 1, id: id, op: op, args: args }, '*'); }
-      catch (e) { delete waits[id]; res(doc); return; }
-      setTimeout(() => { if (waits[id]) { delete waits[id]; res(doc); } }, 4000);
+  /* ─── the view: rows assembled into the shape the apps already expect ─── */
+  function build() {
+    const d = { v: 2, ts: Date.now(), activities: {}, habits: {}, log: {}, today: null };
+    Rec.all('activity').forEach(r => { d.activities[r.key] = Object.assign({ id: r.key }, r.payload); });
+    Rec.all('habit').forEach(r => { d.habits[r.key] = Object.assign({ id: r.key }, r.payload); });
+    /* the row carries the time now, but callers still expect payload.ts */
+    Rec.all('tick').forEach(r => {
+      (d.log[r.date] || (d.log[r.date] = {}))[r.key] =
+        Object.assign({ ts: Date.parse(r.updated_at) || 0 }, r.payload);
     });
+    d.today = Rec.get('plan', Day.today(), 'routine');
+    return d;
   }
-  function toFrames(msg) {
-    if (HOSTED) return;
+  function refresh() {
+    doc = build();
+    if (!booted) { booted = true; bootQ.splice(0).forEach(f => { try { f(doc); } catch (e) { console.warn('[lifeos]', e); } }); }
+    subs.forEach(f => { try { f(doc); } catch (e) { console.warn('[lifeos]', e); } });
+  }
+
+  /* ─── neighbours ───
+     Same storage, but a frame loaded from a folder may never see the storage
+     event. A write pokes everyone else; they re-read for themselves. */
+  function poke() {
+    const msg = { lifeos: 2, poke: 1 };
+    try { if (HOSTED) window.parent.postMessage(msg, '*'); } catch (e) {}
     document.querySelectorAll('iframe').forEach(f => { try { f.contentWindow.postMessage(msg, '*'); } catch (e) {} });
   }
-
-  const run = HOSTED ? ask : (op, args) => Promise.resolve(apply(op, args));
-
-  /* ─── wiring ─── */
   window.addEventListener('message', e => {
     const m = e.data;
-    if (!m || m.lifeos !== 1) return;
-    if (m.ev === 'doc') { setDoc(m.doc); return; }               /* the shell pushed new state */
-    if (m.id && m.ok) { const w = waits[m.id]; delete waits[m.id]; setDoc(m.doc); if (w) w(doc); return; }
-    /* a child frame is asking us to mutate — only the shell answers these */
-    if (!HOSTED && m.op) {
-      if (m.op !== 'hello') { try { apply(m.op, m.args); } catch (err) { console.warn('[lifeos]', err); } }
-      try { e.source.postMessage({ lifeos: 1, id: m.id, ok: 1, doc: doc }, '*'); } catch (err) {}
+    if (!m || m.lifeos !== 2 || !m.poke) return;
+    Rec.reload();
+    /* pass it on once, so a frame's sibling hears about it too */
+    if (!m.relay) {
+      const on = { lifeos: 2, poke: 1, relay: 1 };
+      try { if (HOSTED && e.source !== window.parent) window.parent.postMessage(on, '*'); } catch (err) {}
+      document.querySelectorAll('iframe').forEach(f => { try { if (f.contentWindow !== e.source) f.contentWindow.postMessage(on, '*'); } catch (err) {} });
     }
   });
+  const wrote = v => { poke(); return Promise.resolve(v); };
 
-  if (HOSTED) {
-    try { window.parent.postMessage({ lifeos: 1, id: ++seq, op: 'hello' }, '*'); } catch (e) {}
-    /* if no shell answers (the file was opened in a frame by hand), go solo */
-    setTimeout(() => { if (!booted) setDoc(loadLocal()); }, 1200);
-  } else {
-    try { bc = new BroadcastChannel('lifeos'); bc.onmessage = e => { if (e.data && e.data.lifeos === 1 && e.data.ev === 'doc') setDoc(e.data.doc); }; } catch (e) {}
-    window.addEventListener('storage', e => { if (e.key === KEY) setDoc(loadLocal()); });
-    setDoc(loadLocal());
+  /* ─── one-time move off the v1 blob ───
+     Copies, never moves: `lifeos_v1` is left exactly where it is, so the old
+     data is its own backup if anything here is wrong. */
+  function migrate() {
+    if (Rec.setting('lifeos', 'migrated')) return 0;
+    let old = null;
+    try { old = JSON.parse(localStorage.getItem('lifeos_v1')); } catch (e) {}
+    let n = 0;
+    if (old && old.v) {
+      Object.keys(old.activities || {}).forEach(id => {
+        const a = old.activities[id];
+        Rec.set('activity', null, id, { name: a.name, cat: a.cat || '', dur: a.dur || 0, color: a.color || '', energy: a.energy || 2 }); n++;
+      });
+      Object.keys(old.habits || {}).forEach(id => { Rec.set('habit', null, id, old.habits[id]); n++; });
+      Object.keys(old.log || {}).forEach(date => {
+        const day = old.log[date] || {};
+        Object.keys(day).forEach(k => { Rec.set('tick', date, k, day[k]); n++; });
+      });
+      console.info('[lifeos] moved ' + n + ' things off the old blob; lifeos_v1 left in place as a backup');
+    }
+    Rec.setting('lifeos', 'migrated', new Date().toISOString());
+    return n;
   }
 
   const API = {
+    v: 2,
     hosted: HOSTED,
-    day: day, slug: slug, shift: shift,
-    ready: onBoot,
-    doc: () => doc,
-    on: f => { subs.push(f); if (booted) f(doc); return () => { const i = subs.indexOf(f); if (i > -1) subs.splice(i, 1); }; },
+    day: d => Day.of(d), slug: s => Day && String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'x',
+    shift: (date, n) => Day.shift(date, n),
+    ready(fn) { booted ? fn(doc) : bootQ.push(fn); },
+    doc: () => doc || (doc = build()),
+    on(f) { subs.push(f); if (booted) f(doc); return () => { const i = subs.indexOf(f); if (i > -1) subs.splice(i, 1); }; },
 
-    acts: list => run('acts', list),
-    act: id => doc.activities[id] || null,
-    done: (actId, date, on, meta) => run('done', Object.assign({ actId: actId, date: date || day(), on: on !== false }, meta || {})),
-    isDone: (actId, date) => !!(doc.log[date || day()] || {})[actId],
-    dayLog: date => doc.log[date || day()] || {},
-    habit: h => run('habit', h),
-    habitDel: id => run('habitDel', id),
-    publishToday: t => run('today', t),
-    prune: n => run('prune', n),
+    /** upsert activities — the shared vocabulary */
+    acts(list) {
+      (list || []).forEach(a => {
+        if (!a || !a.name) return;
+        const id = a.id || API.slug(a.name);
+        const prev = doc.activities[id] || {};
+        Rec.set('activity', null, id, Object.assign({ name: a.name, cat: '', dur: 0, color: '', energy: 2 }, prev, a, { id: undefined }));
+      });
+      return wrote(doc);
+    },
+    act: id => (doc.activities[id] || null),
+
+    /** the one tick, everywhere. One row: one activity, one day. */
+    done(actId, date, on, meta) {
+      if (!actId) return Promise.resolve(doc);
+      const d = date || Day.today();
+      if (on === false) Rec.del('tick', d, actId);
+      else Rec.set('tick', d, actId, Object.assign({ src: '?' }, meta || {}));
+      return wrote(doc);
+    },
+    isDone: (actId, date) => Rec.has('tick', date || Day.today(), actId),
+    dayLog: date => (doc.log[date || Day.today()] || {}),
+
+    habit(h) { if (!h || !h.id) return Promise.resolve(doc); Rec.set('habit', null, h.id, Object.assign({ created: Day.today(), archived: false, cadence: { type: 'daily', days: [1, 1, 1, 1, 1, 1, 1], target: 7 } }, doc.habits[h.id], h)); return wrote(doc); },
+    habitDel(id) { Rec.del('habit', null, id); return wrote(doc); },
+
+    /** whoever owns the schedule publishes today's plan for everyone else */
+    publishToday(t) { if (t && t.date) Rec.set('plan', t.date, 'routine', t); return wrote(doc); },
+
+    /** local-only housekeeping: really drop ancient ticks, no tombstones */
+    prune(days) { return Rec.purge('tick', Day.shift(Day.today(), -(days || 800))); },
 
     /** consecutive due-days ending today (today still counts as open, not broken) */
     streak(actId, cadence) {
-      const due = d => (!cadence || cadence.type !== 'days') ? true : !!cadence.days[new Date(d + 'T12:00:00').getDay()];
-      let n = 0, d = day(), guard = 0;
-      if (!API.isDone(actId, d)) d = shift(d, -1);
+      const due = d => (!cadence || cadence.type !== 'days') ? true : !!cadence.days[Day.dow(d)];
+      let n = 0, d = Day.today(), guard = 0;
+      if (!API.isDone(actId, d)) d = Day.shift(d, -1);
       while (guard++ < 900) {
-        if (!due(d)) { d = shift(d, -1); continue; }
+        if (!due(d)) { d = Day.shift(d, -1); continue; }
         if (!API.isDone(actId, d)) break;
-        n++; d = shift(d, -1);
+        n++; d = Day.shift(d, -1);
       }
       return n;
     },
-    /** how many of the last n days this was done */
     count(actId, n) {
-      let c = 0, d = day();
-      for (let i = 0; i < (n || 30); i++) { if (API.isDone(actId, d)) c++; d = shift(d, -1); }
+      let c = 0, d = Day.today();
+      for (let i = 0; i < (n || 30); i++) { if (API.isDone(actId, d)) c++; d = Day.shift(d, -1); }
       return c;
     },
-    /* the shell hangs IndexedDB durability here — an accessor, so the kernel
-       never touches a binding that does not exist yet at boot */
-    get persist() { return persistHook; },
-    set persist(f) { persistHook = f; },
-    _apply: apply,
-    _adopt: d => { setDoc(d); saveLocal(); },
+
+    /** rows persist themselves; kept so v1 callers do not break */
+    get persist() { return null; }, set persist(f) {},
+    /** restore path: a v1-shaped doc becomes rows */
+    _adopt(d) {
+      d = d || {};
+      Object.keys(d.activities || {}).forEach(id => Rec.set('activity', null, id, d.activities[id]));
+      Object.keys(d.habits || {}).forEach(id => Rec.set('habit', null, id, d.habits[id]));
+      Object.keys(d.log || {}).forEach(date => Object.keys(d.log[date]).forEach(k => Rec.set('tick', date, k, d.log[date][k])));
+      if (d.today && d.today.date) Rec.set('plan', d.today.date, 'routine', d.today);
+      poke(); refresh();
+    },
+    rows: () => Rec,
   };
+
+  Rec.on(refresh);
+  migrate();
+  refresh();
   return API;
 })();
 /* ════════════════════════ END LIFEOS KERNEL ════════════════════════ */
+
+
+
+
 
 /* ══════════════ shell: durability ══════════════
    localStorage is the fast synchronous copy the kernel already keeps. IndexedDB

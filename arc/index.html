@@ -1072,7 +1072,7 @@ function drawEdge(n){
   const a=nodeRect(n.parentId), b=nodeRect(n.id); if(!a||!b)return;
   let p=edgesSvg.querySelector(`#e-${n.id}`);
   if(!p){p=document.createElementNS('http://www.w3.org/2000/svg','path');p.id='e-'+n.id;edgesSvg.appendChild(p)}
-  const dstr=edgeD(a,b,M().edgeStyle||'organic');
+  const dstr=edgeD(a,b,edgeStyleNow());
   p.setAttribute('d',dstr);
   p.setAttribute('stroke',nodeColor(n));
   p.classList.toggle('dashed',dashFor(false,n)==='dashed');
@@ -2579,18 +2579,23 @@ function edgeD(a,b,style){
   const m=Math.max(40,dist*0.4);
   return `M ${A.x} ${A.y} C ${A.x+A.nx*m} ${A.y+A.ny*m}, ${B.x+B.nx*m} ${B.y+B.ny*m}, ${B.x} ${B.y}`;
 }
-const ESTYLES=[['organic','⌇ organic'],['straight','∕ straight'],['ortho','⌐ ortho'],['hand','✎ hand-drawn']];
+const ESTYLES=[['organic','⌇ organic'],['straight','∕ straight'],['ortho','⌐ ortho']];
+/* The hand-drawn curve is not a style you pick - it is baked into the doodle scheme.
+   Every other scheme uses the map's own setting. A per-link override still wins. */
+function edgeStyleNow(){return THEME_NAME==='doodle'?'hand':(M().edgeStyle||'organic')}
 function syncEdgeBtn(){
   const cur=M().edgeStyle||'organic';
   const f=ESTYLES.find(s=>s[0]===cur)||ESTYLES[0];
-  $('#btn-edges').textContent=f[1];
+  $('#btn-edges').textContent=THEME_NAME==='doodle'?'✎ hand-drawn':f[1];
 }
 $('#btn-edges').onclick=()=>{
   const cur=M().edgeStyle||'organic';
   const i=(ESTYLES.findIndex(s=>s[0]===cur)+1)%ESTYLES.length;
   M().edgeStyle=ESTYLES[i][0];
   syncEdgeBtn(); render(); save();
-  toast('Edges: '+ESTYLES[i][0]);
+  toast(THEME_NAME==='doodle'
+    ? 'Doodle always draws hand-drawn lines — set to '+ESTYLES[i][0]+' for other schemes'
+    : 'Edges: '+ESTYLES[i][0]);
 };
 
 /* ===================== directional growth ===================== */
@@ -2805,7 +2810,7 @@ async function exportPng(){
   await Promise.all(ns.filter(n=>n.img).map(n=>new Promise(res=>{
     const im=new Image(); im.onload=()=>{imgs[n.id]=im;res()}; im.onerror=()=>res(); im.src=n.img;
   })));
-  const style=M().edgeStyle||'organic';
+  const style=edgeStyleNow();
   ctx.lineWidth=1.8; ctx.globalAlpha=0.7;
   for(const n of ns){
     if(!n.parentId||!rects[n.parentId]||!rects[n.id])continue;
@@ -2910,7 +2915,7 @@ async function exportChartPng(scope){
   // second offset pass = hand-drawn double-stroke; Path2D re-transforms at stroke time
   const ink2=p2=>{ctx.save();ctx.translate(0.8,-0.6);ctx.globalAlpha=ctx.globalAlpha*0.55;ctx.stroke(p2);ctx.restore()};
   const strokeD=d=>{const p2=new Path2D(d);ctx.stroke(p2);if(hand)ink2(p2)};
-  const style=M().edgeStyle||'organic';
+  const style=edgeStyleNow();
   ctx.lineCap='round';
   ctx.lineWidth=hand?2.4:1.8; ctx.globalAlpha=hand?1:0.7;
   for(const n of ns){
@@ -3046,8 +3051,7 @@ function linkD(a,b,l){
   const st=l&&l.style;
   if(st==='organic')return edgeD(a,b,'organic');
   if(st==='straight')return edgeD(a,b,'straight');
-  if(st==='hand')return edgeD(a,b,'hand');
-  if(st!=='octo')return edgeD(a,b,M().edgeStyle||'organic');
+  if(st!=='octo')return edgeD(a,b,edgeStyleNow());
   const x1=a.cx,y1=a.cy,x2=b.cx,y2=b.cy;
   const dx=x2-x1, dy=y2-y1;
   const d=Math.min(Math.abs(dx),Math.abs(dy));
@@ -3168,7 +3172,7 @@ function applyScheme(name,palIn){
   SCHEME_CSS.forEach(x=>document.body.classList.toggle('theme-'+x,name===x));
   COLORS.length=0; pal.colors.forEach(c=>COLORS.push(c));
   buildSwatches();
-  if(DB)render();
+  if(DB){if(typeof syncEdgeBtn==='function')syncEdgeBtn();render()}
 }
 function setScheme(name){
   if(!THEMES[name])return;
@@ -3667,7 +3671,7 @@ function openEdgeMenu(pid,x,y){
 <div class="epad seg" data-k="lpos">${['start','mid','end'].map(v=>`<button data-v="${v}" class="${v===lpos?'on':''}">${v}</button>`).join('')}</div>
 ${relBlock}`+
 (isLink?`<div class="mhead">LINE STYLE</div>
-<div class="epad seg" data-k="style">${[['auto','auto'],['organic','⌇'],['straight','∕'],['hand','✎'],['octo','90°']].map(a=>`<button data-v="${a[0]}" class="${a[0]===st?'on':''}">${a[1]}</button>`).join('')}</div>
+<div class="epad seg" data-k="style">${[['auto','auto'],['organic','⌇'],['straight','∕'],['octo','90°']].map(a=>`<button data-v="${a[0]}" class="${a[0]===st?'on':''}">${a[1]}</button>`).join('')}</div>
 <hr><button data-eact="del">Remove connection</button>`:`<hr><button data-eact="repick">⤴ Change parent…</button>
 <button data-eact="detach">✂ Detach — make root</button>`);
   m.classList.add('show');

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- ①  Name it. This shows in the browser tab. -->
+<title>NEW APP</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>">
+<meta name="theme-color" content="#0B0E14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- ②  The shared foundation. Never edit these — every app uses the same ones. -->
+<script src="../shared/skins.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="../shared/io.js"></script>
+<script src="../shared/health.js"></script>
+
+<style>
+/* ③  Your app's own layout. Colours always come from the tokens below, never
+       from hex codes — that is the one rule that keeps themes working. */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--text-1);font-family:var(--font-body);font-size:14px;
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+}
+header{
+  display:flex;align-items:center;gap:12px;padding:10px 14px;flex:0 0 auto;
+  border-bottom:1px solid var(--border);background:var(--surface-1);
+}
+.logo{font-family:var(--font-display);font-weight:700;font-size:16px;letter-spacing:.2em}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+.btn{
+  padding:6px 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  background:var(--surface-2);color:var(--text-2);cursor:pointer;
+  font-family:var(--font-display);font-size:11px;letter-spacing:.1em;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+main{flex:1;overflow:auto;padding:18px 14px 60px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.card{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-1);padding:14px 15px}
+h2{font-family:var(--font-display);font-size:11px;letter-spacing:.2em;color:var(--text-muted);margin-bottom:10px}
+.item{display:flex;align-items:center;gap:11px;padding:9px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-md);background:var(--surface-2);margin-bottom:6px}
+.item.on{opacity:.55}
+.item.on .nm{text-decoration:line-through}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chk{width:26px;height:26px;flex:0 0 auto;border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  display:flex;align-items:center;justify-content:center;color:transparent;background:none;cursor:pointer}
+.chk:hover{border-color:var(--accent)}
+.chk.on{border-color:var(--accent);color:var(--accent);background:var(--surface-3)}
+.empty{color:var(--text-muted);line-height:1.7}
+</style>
+</head>
+<body>
+<header>
+  <!-- ④  Your app's name again, for the header -->
+  <div class="logo">NEW<b>APP</b></div>
+  <div class="spacer"></div>
+  <button class="btn" onclick="UI.settings(APP.id)">SETTINGS</button>
+  <button class="btn" onclick="location.href='../index.html'">◈</button>
+</header>
+<main><div class="wrap" id="main"></div></main>
+
+<script>
+/* ══════════════════ ⑤ THE ONLY BLOCK YOU CHANGE ══════════════════
+   Everything above is the same in every app. This is your app.        */
+
+const APP = {
+  id: 'newapp',                 // one lowercase word, no spaces. Must be unique.
+  name: 'New App',              // how it appears in menus and backups
+  icon: '✦',
+  blurb: 'what this app is for, in a few words',
+  types: ['thing'],             // the kinds of row THIS app owns and nobody else writes
+};
+
+/* Tell the suite who we are. This is what makes settings, backups, exports,
+   sounds and themes all work without another line of code. */
+Skins.load('../shared/skins.json').then(() => Skins.restore(APP.id));
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({ app: APP.id, name: APP.name, types: APP.types });
+
+/* ---- your data ----
+   Rec.set(type, date, key, payload)   write one fact
+   Rec.get(type, date, key)            read it back
+   Rec.map(type)                       everything of a type, as key → payload
+   Rec.del(type, date, key)            remove it
+   Day.today()                         today, honouring the day-start setting  */
+
+const things = () => Rec.map('thing');
+const addThing = name => Rec.set('thing', null, Rec.USER + '-' + Date.now().toString(36), { name: name });
+
+/* ---- ticking something off ----
+   A tick is shared. Tick it here and BLOCK, the home screen and every other
+   app see it immediately, because they all read the same row.               */
+const tickId = name => name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
+function toggle(name) {
+  const id = tickId(name), on = Rec.has('tick', Day.today(), id);
+  Rec.set('activity', null, id, { name: name });            // so other apps know its proper name
+  if (on) { Rec.del('tick', Day.today(), id); Sfx.play('untick'); }
+  else { Rec.set('tick', Day.today(), id, { src: APP.id }); Sfx.play('done'); }
+}
+
+/* ---- drawing the screen ---- */
+function draw() {
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<h2>TODAY · ' + Day.label(Day.today()).toUpperCase() + '</h2>';
+
+  const list = Object.values(things());
+  if (!list.length) {
+    const p = document.createElement('div');
+    p.className = 'empty';
+    p.innerHTML = 'Nothing here yet. Hit <b>+ ADD</b> below and it appears — and anything you tick shows up in every other app too.';
+    card.appendChild(p);
+  }
+  list.forEach(t => {
+    const on = Rec.has('tick', Day.today(), tickId(t.name));
+    const row = document.createElement('div');
+    row.className = 'item' + (on ? ' on' : '');
+    row.innerHTML = '<span class="nm">' + UI.esc(t.name) + '</span>';
+    const b = document.createElement('button');
+    b.className = 'chk' + (on ? ' on' : ''); b.textContent = '✓';
+    b.onclick = () => toggle(t.name);
+    row.appendChild(b);
+    card.appendChild(row);
+  });
+
+  const add = document.createElement('button');
+  add.className = 'btn'; add.textContent = '+ ADD';
+  add.onclick = () => UI.dialog({
+    title: 'ADD',
+    width: 380,
+    body: (b, h) => {
+      const i = document.createElement('input');
+      i.className = 'mb-sel'; i.type = 'text'; i.placeholder = 'Morning run';
+      i.style.width = '100%';
+      i.onkeydown = e => { if (e.key === 'Enter') { addThing(i.value.trim()); h.close(); } };
+      b.appendChild(i);
+      h.input = i;
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'ADD', kind: 'go', fn: h => { const v = h.body.querySelector('input').value.trim(); if (v) addThing(v); } }],
+  });
+  card.appendChild(add);
+  m.appendChild(card);
+}
+
+/* Redraw whenever anything changes — including changes made in another app or
+   another tab. You never have to refresh. */
+Rec.on(draw);
+Day.on(draw);
+draw();
+</script>
+</body>
+</html>

@@ -23,36 +23,38 @@ Nothing leaves the machine. No account, no server, no sync. The backend plan in
 ## The kernel
 
 Every data-sharing app carries an identical block between the sentinels
-`LIFEOS KERNEL v1` … `END LIFEOS KERNEL`. **The copy in `index.html` is canonical.**
-Edit it there, then re-run the sync script, which copies it into the others verbatim
-and asserts all copies are identical.
+`LIFEOS KERNEL v2` ... `END LIFEOS KERNEL`. **The copy in `index.html` is
+canonical.** Edit it there, then re-run the sync script, which copies it into the
+others verbatim and asserts all copies are identical.
 
-The kernel picks its mode at load and the app never knows which one it got:
+**v2 is a thin view over `shared/records.js`.** v1 kept the shared state as one
+JSON blob with the shell as the single writer and a postMessage broker underneath.
+That is the shape the brief forbids, so it is gone:
 
-- **hosted** — running in an iframe inside `index.html`. Every mutation is a
-  `postMessage` to the shell, so the shell is the only writer and nothing races.
-  This is also why it works from `file://`, where frames cannot touch each other's
-  DOM but `postMessage` still flows.
-- **solo** — opened on its own. It owns `localStorage['lifeos_v1']` directly and
-  gossips to other tabs over `BroadcastChannel('lifeos')`.
+| v1 | v2 |
+|---|---|
+| one `lifeos_v1` blob, rewritten whole | one row per fact, `mb.r.<id>` each |
+| shell was the only writer | every app writes directly |
+| hosted / solo modes, ~250 lines of broker | neither, both apps share the storage |
+| broadcast the whole doc | broadcast nothing, just a nudge to re-read |
 
-The shell adds durability on top: IndexedDB `lifeos` / store `kv` / key `doc`, same
-doctrine as ARC — the synchronous localStorage copy loads first, IndexedDB swaps in
-if its `ts` is newer.
+What remains of the messaging is a poke: a frame opened from a folder does not
+reliably get storage events, so a writer tells its neighbours to look again. It
+carries no data.
 
-### The shared doc
+The API is unchanged from v1 on purpose, so the apps did not have to move. It maps
+onto rows like this:
 
-```js
-{ v:1, ts,
-  activities: { [actId]: {id, name, cat, dur, color, energy} },   // the vocabulary
-  habits:     { [id]: {id, actId, name, color, cadence, ord, archived} },
-  log:        { 'YYYY-MM-DD': { [actId]: {ts, src, habitId, note} } },   // what got done
-  today:      { date, vid, name, blocks:[{id, actId, name, s, dur, color, lane}] } }
+```
+activities → one `activity` row each        habits → one `habit` row each
+ticks      → one `tick` row per day         today  → one dated `plan` row
 ```
 
-Apps keep their private state where it was (`block_v1`, ARC's IndexedDB, view prefs).
-Only what must be shared lives in the doc, and it is small enough to broadcast whole
-— no diffing, no merge rules.
+### Moving off the blob
+
+First load after the change copies `lifeos_v1` into rows and stamps a
+`lifeos.migrated` setting so it never runs twice. **It copies, never moves:** the
+old blob is left exactly where it is, so it is its own backup.
 
 ### The identity rule
 
@@ -157,16 +159,9 @@ why promoting an activity to a habit inherits its history immediately.
 
 ## Known limits
 
-- **The doc is one blob, and the Motherbase brief forbids that.** `Claude.md` in this
-  repo names it as how SystemOS died: one large JSON blob, last-write-wins, silent
-  data loss across devices. On one device with no sync there is nothing to lose to,
-  so this is safe *today* — but it must be converted to the brief's row model
-  (`{id, user_id, type, date, key, payload, updated_at, deleted}` in
-  `/shared/records.js`) before anything ever syncs. The tick log is already one cell
-  per activity per day, so the conversion is mostly mechanical.
-- **The kernel is copied into three files** and kept in step by a script. The repo
-  already loads `shared/skins.js` with a plain `<script src>`, which works from
-  `file://` too — so the copies could become one shared file and the script could go.
+- **The kernel is still copied into three files** and kept in step by a script. It
+  is now small enough that this barely matters, but it could become a shared file
+  like the rest.
 - **Each app carries its own theme CSS**, which `shared/skins.json` says they should
   not: "Every app reads this file. Apps add no theme CSS of their own."
 - Same-origin only: the apps must sit in the same folder.
