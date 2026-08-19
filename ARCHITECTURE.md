@@ -1,5 +1,25 @@
 # LifeOS foundation — the plan, in plain English
 
+> ## ⏸ PARKED — 2026-08-19
+>
+> Hosting and accounts are off the table for now. **Everything is local**: one
+> folder, one browser, no server, no sign-in. See `LIFEOS.md` for what actually
+> exists today.
+>
+> This document is the plan for *if* the apps ever go to other people. Three of its
+> decisions were kept and are already live locally:
+>
+> - **Whoever saved later wins.** Ticks land on one cell per activity per day, and
+>   the last write is the truth.
+> - **Backups instead of sync.** The `DATA` button in `lifeos.html` does the whole
+>   safety net: one restorable JSON, plus CSV exports.
+> - **Build order still holds** if this restarts: shared plumbing first, BLOCK first
+>   among the apps.
+>
+> The part *not* yet adopted is permanent hidden IDs — locally, things are still
+> matched by name, so renaming something restarts its history. Worth fixing on the
+> day that bites, or on the day this plan un-parks.
+
 **Rev 2, 2026-08-19. Firebase. Nothing built yet.**
 Answers [ARCHITECTURE-BRIEF.md](ARCHITECTURE-BRIEF.md). Readable version:
 https://claude.ai/code/artifact/0cc23bb2-0212-4216-aa4d-03828d380173
