@@ -275,8 +275,23 @@ main{display:flex;flex:1;min-height:0}
 /* ---------- week ---------- */
 #week{flex:1;overflow:auto;padding:12px;display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:10px;align-content:start}
 .weekbar{grid-column:1/-1;display:flex;align-items:center;gap:7px;margin-bottom:2px}
-#pri{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:14px;max-width:920px}
-#pri.hide{display:none}
+#pri,#sum{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:14px;max-width:920px}
+#pri.hide,#sum.hide{display:none}
+.sumcards{display:flex;gap:10px;flex-wrap:wrap}
+.sumcard{
+  flex:1 1 150px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel);
+  display:flex;flex-direction:column;gap:3px;
+}
+.sumcard b{font-family:var(--f1);font-size:23px;color:var(--acc);font-weight:600;letter-spacing:.02em}
+.sumcard span{font-size:11px;color:var(--dim2)}
+.sumh{font-family:var(--f1);font-size:11px;letter-spacing:.15em;color:var(--dim2);text-transform:uppercase;margin-bottom:-6px}
+.spark{display:flex;align-items:flex-end;gap:4px;height:50px;padding:0 2px}
+.spark i{flex:1;border-radius:2px 2px 0 0;min-height:3px;display:block}
+.advice{display:flex;flex-direction:column;gap:8px}
+.adv{border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.55;background:var(--panel)}
+.adv.good{border-left-color:var(--good)}
+.adv .dim{color:var(--dim)}
+.advbtns{display:flex;gap:6px;margin-top:8px}
 .prisec h4{font-family:var(--f1);font-size:12px;letter-spacing:.12em;margin-bottom:7px;display:flex;align-items:center;gap:8px}
 .prisec h4 span{font-size:10px;color:var(--dim2);letter-spacing:.05em}
 .prisec h4.pri1{color:#ff8a9c}.prisec h4.pri2{color:var(--warn)}.prisec h4.pri3{color:#7fb8ff}.prisec h4.pri0{color:var(--dim2)}
@@ -401,6 +416,25 @@ footer .sp{flex:1}
 .pop .prow .btn{flex:1;text-align:center;padding:5px 8px}
 .pop .note{font-size:10.5px;color:var(--dim2);line-height:1.4}
 @media (max-width:820px){ #bin{width:180px} .lane{flex-basis:230px} }
+
+/* ---------- print / client sheet ---------- */
+#printarea{display:none}
+@media print{
+  body{background:#fff!important;color:#111;overflow:visible}
+  #app,#veil,#toast,#tip,.ctxmenu,.pop{display:none!important}
+  #printarea{display:block;padding:0}
+  #printarea h1{font-family:var(--f1);font-size:22px;margin-bottom:2px;color:#111}
+  #printarea .psub{font-size:11px;color:#666;margin-bottom:16px}
+  #printarea .prt{break-inside:avoid;margin-bottom:14px}
+  #printarea .prt h2{font-family:var(--f1);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#111;border-bottom:1px solid #ccc;padding-bottom:3px;margin-bottom:6px}
+  #printarea .pb{display:flex;gap:10px;padding:3px 0;font-size:12px;color:#111;break-inside:avoid}
+  #printarea .pb .pt{font-family:var(--f1);width:104px;flex:0 0 auto;color:#444}
+  #printarea .pb .pn{flex:1}
+  #printarea .pb .pd{color:#666;font-size:11px}
+  #printarea .pb .box{width:11px;height:11px;border:1px solid #333;border-radius:2px;flex:0 0 auto;margin-top:2px}
+  #printarea .pnote{font-size:10.5px;color:#666;padding-left:114px}
+  #printarea .pfoot{margin-top:18px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:6px}
+}
 </style>
 </head>
 <body>
@@ -411,12 +445,14 @@ footer .sp{flex:1}
       <button id="vDay" class="on" data-tip="<b>Day</b> — build one routine out of blocks">Day</button>
       <button id="vWeek" data-tip="<b>Week</b> — which <b>day</b> runs on which weekday">Week</button>
       <button id="vPri" data-tip="<b>Priority</b> — everything you've flagged, P1 first, across every routine">Priority</button>
+      <button id="vSum" data-tip="<b>Summary</b> — what actually gets done, and what to do about it">Summary</button>
     </div>
     <div id="tabs"></div>
     <div class="hbtns">
       <button class="btn" id="bNew" data-tip="Build another <b>day</b> — Weekday, Rest day, Travel…">+ Day</button>
       <button class="btn" id="bCmp" data-tip="See your routines side by side">Compare</button>
       <button class="btn" id="bRules" data-tip="Rules that check your routine — <b>“Lift ≥90m after breakfast”</b>">Rules</button>
+      <button class="btn" id="bPrint" data-tip="Print it, or make a clean client sheet">⎙</button>
       <button class="btn" id="bHelp" data-tip="How BLOCK works">?</button>
       <button class="btn" id="bSet" data-tip="Settings">⚙</button>
       <button class="btn acc" id="bExp" data-tip="Send this to Google Calendar or Todoist">Export ▸</button>
@@ -453,6 +489,7 @@ footer .sp{flex:1}
     <div id="board"></div>
     <div id="week" class="hide"></div>
     <div id="pri" class="hide"></div>
+    <div id="sum" class="hide"></div>
   </main>
 
   <footer>
@@ -1001,8 +1038,46 @@ function todaysBlocks(vid) {
 function clearDone(vid) { withVariant(vid, () => S.lanes.forEach(l => items(l.id).forEach(it => it.done = false))); }
 /** new day → yesterday's ticks are gone, and today's come back from the LifeOS
     log (you may have ticked something in HABITS or on the home screen already) */
+/* ---------- history: what was scheduled, and what actually got ticked ----------
+ * S.log[date] = { t: names scheduled, d: names ticked }. Names rather than ids,
+ * so a block keeps its record when you rebuild the routine around it.
+ */
+function logToday() {
+  const k = todayKey();
+  S.log = S.log || {};
+  const all = todaysBlocks(routineForToday());
+  if (!all.length) return;
+  const e = S.log[k] || (S.log[k] = { t: [], d: [] });
+  e.t = [...new Set(all.map(b => b.name))];
+  const ticked = new Set(e.d);
+  all.forEach(b => { if (b.done) ticked.add(b.name); });
+  e.d = [...ticked].filter(n => e.t.includes(n));
+  const keys = Object.keys(S.log).sort();
+  while (keys.length > 180) delete S.log[keys.shift()];
+}
+/** completion rate per block name across the recorded history */
+function blockStats() {
+  const m = {};
+  Object.values(S.log || {}).forEach(e => {
+    (e.t || []).forEach(n => { (m[n] = m[n] || { n, seen: 0, done: 0 }).seen++; });
+    (e.d || []).forEach(n => { if (m[n]) m[n].done++; });
+  });
+  return Object.values(m).map(x => Object.assign(x, { rate: x.seen ? x.done / x.seen : 0 })).sort((a, b) => a.rate - b.rate);
+}
+/** consecutive days back from today where everything scheduled got ticked */
+function streak() {
+  let n = 0;
+  for (let i = 0; i < 180; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const e = (S.log || {})[d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())];
+    if (!e || !e.t.length) { if (i === 0) continue; break; }
+    if (e.d.length >= e.t.length) n++; else break;
+  }
+  return n;
+}
 function rolloverIfNewDay() {
   if (S.doneDate === todayKey()) return;
+  logToday();                                  /* close yesterday's page before turning it */
   S.doneDate = todayKey();
   S.variants.forEach(v => clearDone(v.id));
   pullDone();
@@ -1020,6 +1095,7 @@ function toggleDone(it) {
   const vid = routineForToday();
   const todays = todaysBlocks(vid);
   const open = todays.filter(b => !b.done);
+  logToday();
   render();
   if (todays.length && !open.length) {
     document.querySelectorAll('.brick').forEach(n => n.classList.add('celebrate'));
@@ -1101,14 +1177,16 @@ function render() {
   $('#board').classList.toggle('hide', S.view !== 'day');
   $('#week').classList.toggle('hide', S.view !== 'week');
   $('#pri').classList.toggle('hide', S.view !== 'pri');
+  $('#sum').classList.toggle('hide', S.view !== 'sum');
   $('#vDay').classList.toggle('on', S.view === 'day');
   $('#vWeek').classList.toggle('on', S.view === 'week');
   $('#vPri').classList.toggle('on', S.view === 'pri');
+  $('#vSum').classList.toggle('on', S.view === 'sum');
   $('#tabs').style.display = S.view === 'week' ? 'none' : '';
   $('#bNew').style.display = $('#bCmp').style.display = S.view === 'day' ? '' : 'none';
   $('#bRules').innerHTML = 'Rules' + (RULECHK.count ? ' <span class="bad">⚠' + RULECHK.count + '</span>' : (S.rules.length ? ' ✓' : ''));
   renderTabs(); renderBin();
-  if (S.view === 'day') renderBoard(); else if (S.view === 'week') renderWeek(); else renderPri();
+  if (S.view === 'day') renderBoard(); else if (S.view === 'week') renderWeek(); else if (S.view === 'pri') renderPri(); else renderSum();
   renderFoot(); save();
 }
 
@@ -1540,7 +1618,12 @@ function brickNode(laneId, it, s, e, meta) {
       t1.onclick = ev => { ev.stopPropagation(); editEnd(t1, it, s); };
       top.appendChild(t0); top.appendChild(el('span', 'b-dash', '–')); top.appendChild(t1);
     }
-    if (meta.gap > 0) { const g = el('span', 'b-flag', '↧' + dur2s(meta.gap)); g.dataset.tip = '<b>' + dur2s(meta.gap) + '</b> of empty time before this block'; top.appendChild(g); }
+    if (meta.gap > 0) {
+      const g = el('button', 'b-flag', '↧' + dur2s(meta.gap));
+      g.dataset.tip = '<b>' + dur2s(meta.gap) + '</b> of empty time before this block — click to see what fits';
+      g.onclick = ev => { ev.stopPropagation(); const f = findItem(it.id); whatFits(g.getBoundingClientRect(), laneId, f ? f.i : 0, meta.gap); };
+      top.appendChild(g);
+    }
     if (meta.clash > 0) { const g = el('span', 'b-flag bad', '⚠' + dur2s(meta.clash)); g.dataset.tip = 'The block above runs <b>' + dur2s(meta.clash) + '</b> past this anchored start'; top.appendChild(g); }
     if (broke) { const g = el('span', 'b-flag bad', '⚠ rule'); g.dataset.tip = broke.map(esc).join('<br>'); top.appendChild(g); }
     if (it.ongoing) { const g = el('span', 'b-flag', '⟲ ongoing'); g.dataset.tip = 'Runs <b>alongside</b> the blocks below — they don’t wait for it'; top.appendChild(g); }
@@ -1905,6 +1988,74 @@ function renderPri() {
     p.appendChild(sec);
   });
   if (!p.querySelector('.prisec')) p.appendChild(el('div', 'lane-empty', 'Nothing flagged yet — click a block’s <b>P</b> badge to give it a priority.'));
+}
+
+/* ---------- summary: what the record says about your routine ---------- */
+function renderSum() {
+  const p = $('#sum'); p.innerHTML = '';
+  const stats = blockStats();
+  const days = Object.keys(S.log || {}).sort();
+  const st = streak();
+
+  const bar = el('div', 'weekbar');
+  bar.appendChild(el('span', 'wbnote', days.length ? days.length + ' days recorded' : 'no history yet — tick some blocks off'));
+  const wipe = el('button', 'btn sm', 'Clear history');
+  wipe.onclick = () => { if (confirm('Delete the completion history? Your routines stay.')) { snap(); S.log = {}; render(); } };
+  bar.appendChild(wipe);
+  p.appendChild(bar);
+
+  const cards = el('div', 'sumcards');
+  const last14 = [];
+  for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); last14.push(d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())); }
+  const rates = last14.map(k => { const e = (S.log || {})[k]; return e && e.t.length ? e.d.length / e.t.length : null; });
+  const avg = rates.filter(r => r != null);
+  const card = (big, label, tip) => { const c = el('div', 'sumcard'); c.innerHTML = '<b>' + big + '</b><span>' + label + '</span>'; if (tip) c.dataset.tip = tip; return c; };
+  cards.appendChild(card(st + (st === 1 ? ' day' : ' days'), 'current streak', 'Days in a row where everything scheduled got ticked'));
+  cards.appendChild(card(avg.length ? Math.round(avg.reduce((a, b) => a + b, 0) / avg.length * 100) + '%' : '—', 'finished, last 14 days'));
+  cards.appendChild(card(stats.length ? stats.filter(s => s.rate >= .8 && s.seen >= 3).length : 0, 'blocks you reliably do', 'Done 80%+ of the times they came up'));
+  p.appendChild(cards);
+
+  const spark = el('div', 'spark');
+  last14.forEach((k, i) => {
+    const r = rates[i];
+    const b = el('i'); b.style.height = (r == null ? 3 : Math.max(4, r * 46)) + 'px';
+    b.style.background = r == null ? '#1b2430' : r >= 1 ? 'var(--good)' : r >= .5 ? 'var(--warn)' : 'var(--bad)';
+    b.dataset.tip = k + (r == null ? ' — nothing recorded' : ' — ' + Math.round(r * 100) + '% finished');
+    spark.appendChild(b);
+  });
+  p.appendChild(el('h4', 'sumh', 'Last 14 days'));
+  p.appendChild(spark);
+
+  /* the point of all this: name the blocks that keep not happening */
+  const chronic = stats.filter(s => s.seen >= 4 && s.rate < .5);
+  p.appendChild(el('h4', 'sumh', 'What the record says'));
+  const advice = el('div', 'advice');
+  if (!days.length) advice.appendChild(el('div', 'adv', 'Tick blocks off for a few days and this fills in.'));
+  else if (!chronic.length) advice.appendChild(el('div', 'adv good', 'Nothing is chronically slipping. Your routine matches what you actually do — that is the rare case.'));
+  else chronic.forEach(s => {
+    const pct = Math.round(s.rate * 100);
+    const found = S.variants.flatMap(v => withVariant(v.id, () => S.lanes.flatMap(l => items(l.id).filter(i => i.name === s.n).map(i => ({ v, l, i })))))[0];
+    const d = el('div', 'adv');
+    d.innerHTML = '<b>' + esc(s.n) + '</b> — done <b>' + pct + '%</b> of the ' + s.seen + ' times it came up' +
+      (found ? ' (' + esc(found.l.name) + (found.i.dur >= 45 ? ', ' + dur2s(found.i.dur) + ' — try halving it' : '') + ')' : '') +
+      '. <span class="dim">Shrink it, move it somewhere you actually have room, or cut it — a block you skip 4 times in 5 is costing you more as a reminder of failure than it gives back.</span>';
+    if (found) {
+      const row = el('div', 'advbtns');
+      const go = el('button', 'btn sm', 'Show me'); go.onclick = () => { S.current = found.v.id; S.view = 'day'; render(); };
+      const half = el('button', 'btn sm', 'Halve it'); half.onclick = () => { snap(); found.i.dur = Math.max(1, Math.round(found.i.dur / 2)); syncKin(found.i, { dur: found.i.dur }); render(); toast('<b>' + esc(s.n) + '</b> → ' + dur2s(found.i.dur)); };
+      const cut = el('button', 'btn sm', 'Cut it'); cut.onclick = () => { if (confirm('Remove "' + s.n + '" from ' + found.l.name + '?')) { snap(); const f = findItemIn(found.v.id, found.i.id); if (f) f.arr.splice(f.i, 1); render(); } };
+      [go, half, cut].forEach(b => row.appendChild(b));
+      d.appendChild(row);
+    }
+    advice.appendChild(d);
+  });
+  p.appendChild(advice);
+}
+function findItemIn(vid, id) {
+  return withVariant(vid, () => {
+    for (const l of S.lanes) { const a = items(l.id); const i = a.findIndex(x => x.id === id); if (i > -1) return { arr: a, i }; }
+    return null;
+  });
 }
 
 function renderFoot() {
@@ -2413,8 +2564,10 @@ function selfTest() {
       rc(bricks()[0]);
       const m = document.querySelector('.ctxmenu');
       enter([...m.querySelectorAll('.mi')].find(x => x.textContent.startsWith('Days')));
-      [...document.querySelector('.ctxmenu.sub').querySelectorAll('.mi')].find(x => x.textContent.includes('Every day')).click();
-      return it.days.join('') === '1111111' || 'days ' + it.days.join('');
+      const row = [...document.querySelector('.ctxmenu.sub').querySelectorAll('.mi')].find(x => /every day/i.test(x.textContent));
+      if (!row) return 'no “every day” row in the Days submenu';
+      row.click();
+      return (it.daysEx && it.days.join('') === '1111111') || 'daysEx ' + !!it.daysEx + ' days ' + it.days.join('');
     });
     ok('right-click: routine menu opens', () => { rc(document.querySelector('.lane-head')); const n = document.querySelectorAll('.ctxmenu .mi').length; closeMenu(); return n > 5 || 'items ' + n; });
     ok('right-click: bin menu opens', () => { rc(chip('Coffee')); const n = document.querySelectorAll('.ctxmenu .mi').length; closeMenu(); return n >= 5 || 'items ' + n; });
@@ -2445,6 +2598,92 @@ function selfTest() {
       return items(L).length === before || 'expected ' + before + ' got ' + items(L).length;
     });
     ok('week view renders 7 days', () => { S.view = 'week'; render(); const n = document.querySelectorAll('.day').length; S.view = 'day'; render(); return n === 7 || 'got ' + n; });
+    ok('week view: a checkbox ticks the block', () => {
+      S.week[todayIdx()] = S.current; S.view = 'week'; render();
+      const ck = document.querySelector('.day-ck');
+      if (!ck) { S.view = 'day'; render(); return 'no checkbox'; }
+      ck.click();
+      const n = S.lanes.flatMap(l => items(l.id)).filter(i => i.done).length;
+      S.lanes.forEach(l => items(l.id).forEach(i => i.done = false));
+      S.view = 'day'; render();
+      return n > 0 || 'nothing ticked';
+    });
+    ok('priority view lists flagged blocks', () => {
+      const it = S.lanes.flatMap(l => items(l.id))[0]; it.pri = 1;
+      S.view = 'pri'; render();
+      const n = document.querySelectorAll('.prirow').length;
+      S.view = 'day'; render();
+      return n > 0 || 'empty';
+    });
+    ok('multi-select: ctrl-click selects, bulk menu opens', () => {
+      SEL.clear();
+      const bs = [...document.querySelectorAll('.brick')].slice(0, 2);
+      if (bs.length < 2) return 'need 2 blocks';
+      bs.forEach(b => { const r = b.getBoundingClientRect(); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: r.x + 60, clientY: r.y + 2, button: 0, ctrlKey: true, pointerId: 1 })); });
+      const n = SEL.size;
+      const first = document.querySelector('.brick.sel');
+      if (first) rc(first);
+      const bulk = document.querySelector('.ctxmenu') && /selected/.test(document.querySelector('.ctxmenu').textContent);
+      closeMenu(); SEL.clear(); render();
+      return (n === 2 && bulk) || 'selected ' + n + ', bulk menu ' + !!bulk;
+    });
+    /* earlier checks shuffle blocks between routines — top the first one back up */
+    const need2 = () => { const L = S.lanes[0].id; while (items(L).length < 2) addItem(L, { name: 'filler ' + items(L).length, dur: 30, color: PAL[0], energy: 2 }); return L; };
+    ok('ongoing block does not push the next one back', () => {
+      const L = need2(), arr = items(L);
+      if (arr.length < 2) return 'need 2 blocks';
+      arr[0].ongoing = true; arr[0].at = null;
+      const sc = schedule(L);
+      const same = sc[0].s === sc[1].s;
+      arr[0].ongoing = false;
+      return same || 'starts ' + sc[0].s + ' vs ' + sc[1].s;
+    });
+    ok('untimed routine drops the clock and still exports', () => {
+      const L = S.lanes[0]; const keep = L.start; L.start = null; render();
+      const sc = schedule(L.id);
+      const noTimes = sc.every(r => r.s == null);
+      const ics = /DTSTART;VALUE=DATE/.test(buildICS());
+      L.start = keep; render();
+      return (noTimes && ics) || 'times ' + noTimes + ', all-day ics ' + ics;
+    });
+    ok('routine days drive blocks; an exception overrules', () => {
+      const L = S.lanes[0], it = items(L.id)[0];
+      L.days = [0, 1, 0, 1, 0, 1, 0]; it.daysEx = false;
+      const inherited = effDays(L, it).join('') === '0101010';
+      it.daysEx = true; it.days = [1, 1, 1, 1, 1, 1, 1];
+      const overrides = effDays(L, it).join('') === '1111111';
+      L.days = null; it.daysEx = false;
+      return (inherited && overrides) || 'inherit ' + inherited + ', override ' + overrides;
+    });
+    ok('summary reads the history and names what slips', () => {
+      S.log = {};
+      const nm = items(S.lanes[0].id)[0].name;
+      for (let i = 1; i <= 8; i++) {
+        const t = new Date(); t.setDate(t.getDate() - i);
+        S.log[t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate())] = { t: [nm], d: i % 5 === 0 ? [nm] : [] };
+      }
+      S.view = 'sum'; render();
+      const flagged = [...document.querySelectorAll('.adv')].some(a => a.textContent.includes(nm));
+      S.view = 'day'; render();
+      return flagged || 'not flagged';
+    });
+    ok('print sheet builds, client mode hides the private layer', () => {
+      const it = items(S.lanes[0].id)[0]; it.note = 'private note';
+      const a = buildPrint(false, true), withNote = /private note/.test(a.innerHTML);
+      const b = buildPrint(true, true), without = !/private note/.test(b.innerHTML);
+      return (withNote && without) || 'full ' + withNote + ', client ' + without;
+    });
+    ok('gap offers what fits', () => {
+      const L = need2(), arr = items(L);
+      if (arr.length < 2) return 'need 2 blocks';
+      arr[1].at = '23:00'; render();
+      const g = document.querySelector('.b-flag');
+      if (!g || !/↧/.test(g.textContent)) { arr[1].at = null; render(); return 'no gap flag'; }
+      g.click();
+      const n = document.querySelectorAll('.ctxmenu .mi').length;
+      closeMenu(); arr[1].at = null; render();
+      return n > 1 || 'menu had ' + n;
+    });
   } finally {
     closeMenu(); closePop();
     S = JSON.parse(backup); render();
@@ -2460,6 +2699,53 @@ function selfTest() {
   );
   $('#mX').onclick = closeModal;
   return R;
+}
+
+/**
+ * Print sheet — doubles as the client hand-out. "Client mode" drops your private
+ * layer (notes, effort, priority) and keeps the times, names and tick boxes.
+ */
+function buildPrint(client, noDialog) {
+  const a = $('#printarea') || document.body.appendChild(el('div', null, '')); a.id = 'printarea';
+  const rows = S.lanes.map(L => ({ L, sc: schedule(L.id).filter(r => !r.hidden) })).filter(x => x.sc.length);
+  a.innerHTML =
+    '<h1>' + esc(client ? S.calName : M().name) + '</h1>' +
+    '<div class="psub">' + esc(client ? '' : S.calName + ' · ') + rows.reduce((n, x) => n + x.sc.length, 0) + ' blocks · ' +
+    dur2s(S.lanes.reduce((n, l) => n + laneMins(l.id), 0)) + (client ? '' : ' · load ' + S.lanes.reduce((n, l) => n + laneLoad(l.id), 0).toFixed(1)) + '</div>' +
+    rows.map(({ L, sc }) =>
+      '<div class="prt"><h2>' + esc(L.name) + (L.start != null ? ' · ' + fmt(hm2min(L.start)) + '–' + fmt(laneEnd(L.id)) : '') + '</h2>' +
+      sc.map(r =>
+        '<div class="pb"><span class="box"></span><span class="pt">' + (r.s == null ? '' : fmt(r.s) + ' – ' + fmt(r.e)) + '</span>' +
+        '<span class="pn">' + esc(r.it.name) + (client ? '' : (r.it.pri ? ' [P' + r.it.pri + ']' : '')) + '</span>' +
+        '<span class="pd">' + dur2s(r.it.dur) + (client ? '' : ' ' + EGLYPH[energyOf(r.it)]) + '</span></div>' +
+        (!client && r.it.note ? '<div class="pnote">' + esc(r.it.note) + '</div>' : '')
+      ).join('') + '</div>').join('') +
+    '<div class="pfoot">' + esc(daysLabel(effDays(S.lanes[0], { daysEx: false }))) + ' · made with BLOCK</div>';
+  if (!noDialog) window.print();
+  return a;
+}
+function openPrintMenu(x, y) {
+  openMenu(x, y, [
+    { head: 'Print / share' },
+    { label: 'Print this day', fn: () => buildPrint(false) },
+    { label: 'Client sheet (no notes, effort or P)', fn: () => buildPrint(true) },
+  ]);
+}
+
+/** click a gap and BLOCK offers what actually fits in it */
+function whatFits(anchor, laneId, idx, mins) {
+  const fits = S.lib.filter(b => b.dur <= mins).sort((a, b) => b.dur - a.dur).slice(0, 12);
+  openMenu(anchor.left, anchor.bottom, [
+    { head: dur2s(mins) + ' free — what fits' },
+    ...(fits.length ? fits.map(b => ({ label: b.name, k: dur2s(b.dur) + ' ' + EGLYPH[b.energy || 2], fn: () => addItem(laneId, b, idx) }))
+      : [{ label: 'nothing in the bin is that short' }]),
+    { sep: 1 },
+    { label: 'Stretch the block above to fill it', fn: () => {
+        const arr = items(laneId), prev = arr[idx - 1];
+        if (!prev) return toast('nothing above to stretch');
+        snap(); prev.dur += mins; syncKin(prev, { dur: prev.dur }); render();
+      } },
+  ]);
 }
 
 function openHelp() {
@@ -2513,9 +2799,11 @@ function openSettings() {
 $('#vDay').onclick = () => { S.view = 'day'; render(); };
 $('#vWeek').onclick = () => { S.view = 'week'; render(); };
 $('#vPri').onclick = () => { S.view = 'pri'; render(); };
+$('#vSum').onclick = () => { S.view = 'sum'; render(); };
 $('#bExp').onclick = openExport;
 $('#bCmp').onclick = openCompare;
 $('#bRules').onclick = openRules;
+$('#bPrint').onclick = ev => { const r = ev.target.getBoundingClientRect(); openPrintMenu(r.left - 120, r.bottom + 5); };
 $('#bHelp').onclick = openHelp;
 $('#bSet').onclick = openSettings;
 $('#bNew').onclick = () => {
