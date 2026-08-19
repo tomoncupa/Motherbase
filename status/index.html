@@ -330,7 +330,26 @@ Rec.declare(APP.id, APP.types);
 /* the spreadsheet builder lives further down the file, so it is reached
    through a wrapper rather than by name — a name would be read now. */
 IO.register({ app: APP.id, name: APP.name, types: APP.types, sheets: function () { return exportSheets(); } });
-const uid = () => Rec.USER + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+/* ── row ids ──
+   Every row this app keys by time comes through here: meals, spending, photos,
+   foods and field definitions. Three parts, and each one is doing a job:
+
+     the clock      so ids sort in the order things happened
+     a counter      so two rows made in the same millisecond CANNOT collide.
+                    Random characters only make that unlikely — three base-36
+                    characters is one chance in 46,656 per pair, which is fine
+                    until something writes in a loop. A counter makes it
+                    impossible within a session, which is where loops live.
+     random         so two DEVICES writing in the same millisecond with the
+                    same counter still differ. Both carry user_id 'local', so
+                    without this a merge could fuse two different meals into
+                    one row and the older one would just be gone.
+
+   Rec.set is keyed on (user, type, date, key), so a repeated key is not a new
+   row — it is a write over the one that is already there, and it is silent. */
+let seq = 0;
+const uid = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
+  (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
 const esc = s => UI.esc(String(s == null ? '' : s));
 const num = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : (d == null ? null : d); };
 const r1 = n => Math.round(n * 10) / 10;
