@@ -5,12 +5,17 @@ home screen and the data authority; the apps are the same single-file apps as
 before, each still openable on its own.
 
 ```
-lifeos.html       home screen (widget grid) + app dock + the shared data authority
-arc.html          mind canvas            (standalone — no shared data yet)
-block.html        routine builder        (publishes today's plan, reads/writes ticks)
-habits.html       habit tracker          (reads/writes the same ticks)
-form-review.html  lift review            (standalone by design)
+index.html        home screen (widget grid) + app dock + the shared data authority
+shared/           the foundation every app loads — see HOWTO.md
+block/index.html  routine builder        (publishes today's plan, reads/writes ticks)
+habits/index.html habit tracker          (reads/writes the same ticks)
+arc/index.html    mind canvas            (standalone — no shared data yet)
+form/index.html   lift review            (standalone by design)
+_template/        the starter app you copy to make a new one
 ```
+
+One folder per app, as of 2026-08-20. Adding an app or a theme is written up in
+[HOWTO.md](HOWTO.md).
 
 Nothing leaves the machine. No account, no server, no sync. The backend plan in
 `ARCHITECTURE.md` is parked, not cancelled — nothing here blocks it later.
@@ -18,13 +23,13 @@ Nothing leaves the machine. No account, no server, no sync. The backend plan in
 ## The kernel
 
 Every data-sharing app carries an identical block between the sentinels
-`LIFEOS KERNEL v1` … `END LIFEOS KERNEL`. **The copy in `lifeos.html` is canonical.**
+`LIFEOS KERNEL v1` … `END LIFEOS KERNEL`. **The copy in `index.html` is canonical.**
 Edit it there, then re-run the sync script, which copies it into the others verbatim
 and asserts all copies are identical.
 
 The kernel picks its mode at load and the app never knows which one it got:
 
-- **hosted** — running in an iframe inside `lifeos.html`. Every mutation is a
+- **hosted** — running in an iframe inside `index.html`. Every mutation is a
   `postMessage` to the shell, so the shell is the only writer and nothing races.
   This is also why it works from `file://`, where frames cannot touch each other's
   DOM but `postMessage` still flows.
@@ -146,7 +151,7 @@ why promoting an activity to a habit inherits its history immediately.
 
 ## Adding an app
 
-1. One entry in `APPS` in `lifeos.html` (`id, nm, ic, file, ds`, plus `shares` or `solo`).
+1. One entry in `APPS` in `index.html` (`id, nm, ic, file, ds`, plus `shares` or `solo`).
 2. If it shares data, paste the kernel block in and call the API.
 3. Nothing else in the shell knows any app's name.
 

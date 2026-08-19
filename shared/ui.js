@@ -189,6 +189,75 @@ const UI = {
   },
   closeMenus() { document.querySelectorAll('.mb-menu').forEach(n => n.remove()); },
 
+  /** Make a theme from four colours. Everything else — borders, muted text,
+      chart colours, the lot — is derived, which is why four is enough. The
+      page repaints as you drag, and it warns when a pairing is unreadable
+      rather than letting you save something you cannot use. */
+  themeMaker(onSaved, startFrom) {
+    const S = g.Skins;
+    const was = S.current;
+    const base = Object.assign({ bg: '#0B0E14', panel: '#121826', accent: '#6EE7FF', text: '#E7EEF9' },
+      (startFrom || (was && was.base) || {}));
+    let name = 'My theme';
+
+    /* `custom:false` matters: Skins.apply() saves anything flagged custom, and
+       a live preview must not leave a trail of half-made themes behind it */
+    const preview = () => S.apply(Object.assign(S.custom(base, name), { id: '__preview', custom: false }));
+    const sweep = () => { try { localStorage.setItem('suite_skins_custom', JSON.stringify(S.customs().filter(s => s.id !== '__preview'))); } catch (e) {} };
+    sweep();
+
+    return UI.dialog({
+      title: 'MAKE A THEME',
+      width: 460,
+      body: (b, h) => {
+        b.appendChild(el('p', null, 'Four colours in. Everything else is worked out from them.'));
+
+        const nrow = el('div', 'mb-row');
+        nrow.appendChild(el('div', 'lbl', '<b>Name</b>'));
+        const ni = el('input', 'mb-sel'); ni.type = 'text'; ni.value = name; ni.style.maxWidth = '180px';
+        ni.oninput = () => { name = ni.value; };
+        nrow.appendChild(ni); b.appendChild(nrow);
+
+        const warn = el('p');
+        const pick = (key, label, note) => {
+          const row = el('div', 'mb-row');
+          row.appendChild(el('div', 'lbl', '<b>' + label + '</b><span>' + note + '</span>'));
+          const c = el('input'); c.type = 'color'; c.value = base[key];
+          c.style.cssText = 'width:44px;height:30px;border:1px solid var(--border,#1e2a38);border-radius:6px;background:none;cursor:pointer';
+          c.oninput = () => { base[key] = c.value; preview(); check(); };
+          row.appendChild(c); b.appendChild(row);
+        };
+        pick('bg', 'Background', 'The page behind everything.');
+        pick('panel', 'Panels', 'Cards, headers, dialogs. Usually a shade off the background.');
+        pick('accent', 'Accent', 'Highlights, ticks, the active thing.');
+        pick('text', 'Text', 'The main reading colour.');
+
+        const check = () => {
+          const r = S.check(base);
+          warn.innerHTML = r.ok
+            ? '<span style="color:var(--success,#6ee7a8);font-size:12px">Readable — good contrast on both counts.</span>'
+            : '<span style="color:var(--warn,#ffb347);font-size:12px">Hard to read: ' +
+              (r.accentOnBg < 3 ? 'the accent is too close to the background. ' : '') +
+              (r.textOnPanel < 4.5 ? 'the text is too close to the panels.' : '') + '</span>';
+        };
+        b.appendChild(warn); check(); preview();
+      },
+      actions: [
+        { label: 'CANCEL', fn: () => { if (was) S.apply(was); } },
+        {
+          label: 'SAVE THEME', kind: 'go', fn: () => {
+            const skin = S.custom(base, (name || 'My theme').trim());
+            sweep(); S.saveCustom(skin); S.apply(skin);
+            UI.toast('<b>' + esc(skin.name) + '</b> saved — it is in the list now');
+            if (g.Sfx) g.Sfx.play('complete', { level: 2 });
+            if (onSaved) onSaved(skin);
+          },
+        },
+      ],
+      onClose: () => { if (S.current && S.current.id === '__preview' && was) S.apply(was); },
+    });
+  },
+
   /* ── the standard settings panel ──
      Look and Sound are per app on purpose: ARC can be Monarch while BLOCK is
      Ice. Day is shared, because two apps disagreeing about what day it is is
@@ -236,7 +305,10 @@ function drawLook(appId, pane) {
   pane.appendChild(el('div', 'mb-group', 'THEME — THIS APP ONLY'));
   const wrap = el('div'); wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px';
   pane.appendChild(wrap);
-  S.picker(wrap, { onChange: () => { if (g.Sfx) g.Sfx.play('drop'); } });
+  S.picker(wrap, {
+    onChange: () => { if (g.Sfx) g.Sfx.play('drop'); },
+    onCustom: () => UI.themeMaker(() => { pane.innerHTML = ''; drawLook(appId, pane); }),
+  });
 
   const row = el('div', 'mb-row');
   row.appendChild(el('div', 'lbl', '<b>Use this theme everywhere</b><span>Sets every other app to the same skin. Nothing else about them changes.</span>'));
@@ -301,16 +373,12 @@ function drawDay(pane) {
     'Anything logged before <b>' + D.startsAt + ':00</b> counts as the day before. ' +
     'A session at 2am belongs to the day you were still in, not the one the clock says.'));
 
-  const mk = (title, note, get, set, lo, hi) => {
-    const row = el('div', 'mb-row');
-    row.appendChild(el('div', 'lbl', '<b>' + title + '</b><span>' + note + '</span>'));
-    const sel = el('select', 'mb-sel');
-    for (let h = lo; h <= hi; h++) { const o = el('option', null, String(h).padStart(2, '0') + ':00'); o.value = h; if (get() === h) o.selected = true; sel.appendChild(o); }
-    sel.onchange = () => { set(+sel.value); pane.innerHTML = ''; drawDay(pane); UI.toast('saved'); };
-    row.appendChild(sel); pane.appendChild(row);
-  };
-  mk('New day starts at', 'Which date a tick lands on.', () => D.startsAt, v => D.set({ startsAt: v }), 0, 11);
-  mk('Day is closed at', 'When it counts as finished and gets scored. Sits before the rollover, so there is a grace window to log late.', () => D.closesAt, v => D.set({ closesAt: v }), 0, 23);
+  const row = el('div', 'mb-row');
+  row.appendChild(el('div', 'lbl', '<b>My day starts at</b><span>Everything else follows from this.</span>'));
+  const sel = el('select', 'mb-sel');
+  for (let h = 0; h <= 11; h++) { const o = el('option', null, String(h).padStart(2, '0') + ':00'); o.value = h; if (D.startsAt === h) o.selected = true; sel.appendChild(o); }
+  sel.onchange = () => { D.set({ startsAt: +sel.value }); pane.innerHTML = ''; drawDay(pane); UI.toast('saved'); };
+  row.appendChild(sel); pane.appendChild(row);
 
   const info = el('div', 'mb-row');
   info.appendChild(el('div', 'lbl', '<b>Right now</b><span>Today is <b>' + D.today() + '</b> · rolls over in ' +

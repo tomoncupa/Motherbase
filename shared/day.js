@@ -2,16 +2,15 @@
    One definition of "today" for the whole suite, because two apps that
    disagree about what day it is will quietly disagree about everything else.
 
-   Two separate hours, and they do different jobs:
+   ONE setting: what time your day starts. Default 4am.
 
-     startsAt (default 4am) — WHICH DATE a tick belongs to. Something logged
-       at 2am belongs to yesterday, because that is the day you were still in.
-       This is the only rule that decides dates. Nothing else may.
+   A tick before 4am belongs to yesterday, because that is the day you were
+   still in. This is the only rule that decides dates and nothing else may.
 
-     closesAt (default 1am)  — WHEN THE DAY IS WRAPPED UP: scored, celebrated,
-       shown as finished. It sits before the rollover on purpose, so there is a
-       grace window (1am → 4am) where the day is closed but you can still log
-       into it without arguing with the clock.
+   The day is *wrapped up* three hours before it turns over — 1am on a 4am
+   start — so there is a grace window where the day reads as finished but you
+   can still log into it. That follows the one setting; it is not a second
+   thing to configure.
 
    Backfilling any past date is always allowed and always has been — see
    Day.editable(). The boundary decides where new ticks land, never what you
@@ -22,7 +21,8 @@
 (function (g) {
 'use strict';
 
-const DEF = { startsAt: 4, closesAt: 1 };
+const DEF = { startsAt: 4 };
+const GRACE = 3;                          /* hours between the wrap-up and the rollover */
 const KEY = 'mb.day';                     /* read directly: Records depends on Day, not the reverse */
 let cfg = Object.assign({}, DEF);
 try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
@@ -34,7 +34,8 @@ const noon = date => new Date(date + 'T12:00:00');   /* noon dodges every DST ed
 const Day = {
   DEF: DEF,
   get startsAt() { return cfg.startsAt; },
-  get closesAt() { return cfg.closesAt; },
+  /** derived, never stored: the hour the day stops counting as live */
+  get closesAt() { return cfg.startsAt >= GRACE ? cfg.startsAt - GRACE : cfg.startsAt; },
 
   /** the tracking date a moment belongs to */
   of(when) {
@@ -63,7 +64,7 @@ const Day = {
     const h = new Date().getHours();
     /* closesAt is an early-morning hour, so "past the close" means we are in
        the window between it and the rollover */
-    return h >= cfg.closesAt && h < cfg.startsAt;
+    return h >= Day.closesAt && h < cfg.startsAt;
   },
   /** minutes until this date rolls over — for a countdown, or a nudge */
   untilRollover() {
@@ -78,8 +79,8 @@ const Day = {
 
   set(patch) {
     Object.assign(cfg, patch);
+    delete cfg.closesAt;                    /* derived — an old saved value must not linger */
     cfg.startsAt = Math.max(0, Math.min(11, +cfg.startsAt || 0));
-    cfg.closesAt = Math.max(0, Math.min(23, +cfg.closesAt || 0));
     try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {}
     (Day._subs || []).forEach(f => { try { f(cfg); } catch (e) {} });
     return cfg;
