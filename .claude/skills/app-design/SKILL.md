@@ -1,157 +1,328 @@
 ---
 name: app-design
 description: >
-  Designing or reviewing any interface — screens, layouts, components, themes,
-  settings panels, empty states, forms, dashboards. Use this whenever the work
-  touches how something LOOKS or FEELS to use, not just whether it functions:
-  building a new screen, adding a component, "make this look better", "this
-  feels off", "this feels like a website", fixing spacing or colour or type,
-  reviewing a design against a screenshot, or choosing between layout options.
-  Also use it when someone reports a vague visual complaint ("too cramped",
-  "hard to read", "looks unfinished", "doesn't feel native") — those are design
-  diagnoses, and this skill is how to make them specific. Applies to touch and
-  pointer interfaces alike; it says which rules are shared and which are not.
-  Do not skip it because a change seems small: a single hard-coded colour or a
-  36px tap target is exactly the kind of thing it exists to catch.
+  Use for any work on how an interface looks or feels, not just whether it
+  functions — building a screen or component, restyling one, or diagnosing a
+  complaint about one. Triggers include "make this look better", "this feels
+  off / cramped / cluttered / unfinished", "feels like a website not an app",
+  "why does this look bad", reviewing a screenshot or mockup, fixing spacing,
+  colour, type, contrast or tap targets, designing an empty state or a form,
+  choosing between two layouts, or building a theme or design system. Vague
+  visual complaints are the strongest trigger of all: turning "it feels
+  cluttered" into a specific, fixable cause is the main thing this does. Covers
+  touch and pointer interfaces and says which rules are shared. Do not skip it
+  for small changes — one hard-coded colour or one 36px tap target is exactly
+  what it exists to catch.
 ---
 
 # App design
 
-Interfaces get called "well designed" when their **hierarchy** is right and
-their **decisions come from systems** rather than from taste applied one
-element at a time. Almost everything else follows from those two.
+Two things make an interface read as "designed": its **hierarchy** is right,
+and its **decisions come from systems** rather than from taste applied one
+element at a time. Nearly everything else follows.
 
-This skill is the method. The detail lives in four reference files — read the
-ones the task needs rather than all of them.
+Most design problems presented as visual problems are **content problems**.
+Before restyling anything, check whether something should be deleted. This is
+the single highest-value move in this skill and the one most often skipped.
 
-| Read this | When |
+## Which files to read
+
+| Read | When |
 |---|---|
 | `references/foundations.md` | Always. Hierarchy, spacing, type, colour, depth. Surface-independent. |
-| `references/mobile.md` | The thing runs on a phone or tablet, or anyone says "native" / "feels like a website". |
-| `references/browser.md` | The thing runs on a desktop with a mouse and keyboard. |
-| `references/motherbase.md` | Working inside this repo. The actual tokens and components. |
+| `references/states.md` | Building or reviewing any component. Empty, loading, error, overflow — where designs actually break. |
+| `references/mobile.md` | Runs on a phone or tablet, or anyone says "native" / "feels like a website". |
+| `references/browser.md` | Runs on a desktop with a mouse and keyboard. |
+| `references/motherbase.md` | Working in this repo. The tokens, classes and API that already exist. |
 
-Most work needs `foundations.md` plus **one** interaction file. A design that
-must do both reads both — but build the touch version first, because touch is
-the harder constraint and a pointer can always use a touch-sized target.
+Typical load: `foundations.md` + one interaction file. Something that must serve
+both reads both — **but build the touch version first.** Touch is the harder
+constraint, and a pointer can always use a touch-sized target; the reverse is
+not true.
 
-## The order of work
+## Calibrate the effort
 
-Doing these out of order is the single most common way design work stalls.
+Not every task deserves a full pass. Match the work to the ask:
 
-**1. Start with a feature, not a shell.** Design "logging a set" before you
-design the navigation. Until a few real features exist, there is no
-information on which to base a decision about the shell. Starting with the
-nav bar is how people get stuck.
+- **A one-line fix** ("this colour is wrong") — fix it, check it came from a
+  token, stop. Do not audit the screen.
+- **A reported complaint** ("this feels cluttered") — run *Diagnosing* below.
+  The answer is usually one or two changes, not a redesign.
+- **A new screen or component** — run *Building* below in order.
+- **"Review this"** — run *Reviewing* below and report; do not start editing
+  unless asked.
 
-**2. Work in greyscale first.** Forcing yourself to establish hierarchy with
-size, weight, spacing and contrast alone produces a clearer interface, and one
-that is easy to enhance with colour afterwards. Reaching for colour early hides
-a weak hierarchy instead of fixing it.
+Over-serving is a real failure. A request to change a label is not an
+invitation to restructure the screen.
 
-**3. Then colour, depth and finish.** Only once the greyscale version reads
-correctly.
+---
 
-**4. Detail comes last.** Typeface, shadow and icon decisions matter, but not
-before the layout is settled.
+## Job 1: Diagnosing a complaint
 
-## What "hierarchy" actually means
+Vague complaints — cramped, cluttered, busy, hard to read, unfinished, feels
+like a website — are symptoms. Work causes to symptoms, in this order. Early
+steps often dissolve later ones, which is why the order matters.
 
-Every element is primary, secondary or tertiary. Say which, out loud, before
-styling anything. Then:
+**1. What is redundant?** Two elements showing the same number. A label that
+restates its value. A card that repeats the one above it. A heading over a
+single item. Explanatory text that says what the control already says.
+**Deleting beats restyling**, and it is the fix least often reached for.
 
-- **Don't do it all with font size.** Oversized primary text and unreadably
-  small secondary text is the classic failure. Use **weight** and **colour**
-  to carry most of the difference and keep sizes reasonable.
-- **Two weights is enough** — a normal (400–500) and a bold (600–700). Nothing
-  under 400; to de-emphasise, use a softer colour or a smaller size, never a
+**2. Is the hierarchy legible?** Squint at it, or describe it aloud: what is
+primary, secondary, tertiary? If everything is the same weight and colour,
+that is the problem — not the spacing.
+
+**3. Is anything off-system?** A hard-coded colour, a size that is not a step
+on the scale, a third font weight, a one-off radius. Off-system values are
+what makes a screen feel subtly wrong when nothing is obviously wrong.
+
+**4. Is the spacing ambiguous?** More space *around* a group than *within* it.
+Where that is violated the interface is genuinely harder to parse, not just
+less pretty.
+
+**5. Only now, the interaction layer.** Tap targets, hover, scroll, keyboard —
+from `mobile.md` or `browser.md`.
+
+### The trap
+
+**"It's cramped" and "still scrolling" do not mean "make things smaller."**
+They usually mean something is on screen that should not be. Shrinking to fit
+is the reflex to distrust: it preserves the redundancy and costs you legibility
+as well.
+
+Worked case from this repo. A phone screen still scrolled after the summary
+tiles were made smaller. The tiles were never the problem — beneath them sat a
+card listing every multi-entry measure with its running total, and that total
+was the same number already shown on the tile directly above. Deleting the card
+removed the scroll *and* restored the tiles to full size. Two symptoms, one
+cause, and the first attempt had made the screen worse.
+
+---
+
+## Job 2: Building something new
+
+**1. Start with a feature, not a shell.** Design "logging a set" before the
+navigation. Until a few real features exist there is nothing to base a shell
+decision on. Starting with the nav bar is how design work stalls.
+
+**2. Establish content and hierarchy in greyscale.** Assign every element
+primary / secondary / tertiary and make that legible using size, weight and
+contrast alone. Colour applied early hides a weak hierarchy instead of fixing
+it.
+
+**3. Handle every state before adding polish.** Empty, one item, many items,
+long text, loading, error. See `states.md`. A component that only works with
+three items of medium-length text is not finished, and finding that out later
+usually forces a redesign.
+
+**4. Then colour, depth and finish.** Accent, elevation, the finishing pass.
+
+**5. Then check the interaction layer** for the surface it runs on.
+
+---
+
+## Job 3: Reviewing
+
+Report findings, do not silently fix them. Order by severity — things that make
+the interface unusable, then wrong, then unpolished. For each: what is wrong,
+why it matters, and the specific fix. "Improve the spacing" is not a finding;
+"the 12px gap between label and input equals the gap between fields, so it is
+ambiguous which label belongs to which — use 8px within and 24px between" is.
+
+Say what you **measured** versus what you **reasoned**. See *Honesty* below.
+
+---
+
+## What hierarchy actually means
+
+- **Do not do it all with font size.** Oversized primary text next to
+  unreadably small secondary text is the classic failure. Let **weight** and
+  **colour** carry most of the difference and keep sizes moderate.
+- **Two weights is enough** — normal (400–500) and bold (600–700). Nothing
+  under 400. To de-emphasise, use a softer colour or a smaller size, never a
   thinner stroke.
 - **Two or three text colours** — primary, secondary, tertiary.
-- **Emphasise by de-emphasising.** When the important thing won't stand out,
-  the fix is usually to quieten what surrounds it, not to shout louder.
+- **Emphasise by de-emphasising.** When the important thing will not stand out,
+  quieten what surrounds it rather than shouting louder. If a sidebar competes
+  with the content, remove the sidebar's background rather than adding one to
+  the content.
 - **Balance weight against contrast.** Icons and bold text cover more surface
   area, so they read as emphasised whether or not you meant it. Give a heavy
-  element a softer colour to compensate; give a too-subtle 1px border more
-  width rather than a darker colour.
+  element a softer colour; give a too-faint 1px border more *width* rather than
+  a darker colour.
 
 ## Systems, not judgement calls
 
-If you are deciding between 13px and 14px, the problem is not the decision, it
-is that you are making it at all. Every dimension in an interface should come
-from a short scale defined in advance: spacing, type size, weight, line-height,
-colour shades, radii, border widths, shadows, opacity.
+Deciding between 13px and 14px is not a decision to make carefully — it is a
+decision that should not exist. Every dimension comes from a short scale fixed
+in advance: spacing, size, weight, line-height, colour shades, radii, border
+widths, shadows, opacity.
 
-The rule that makes a scale useful: **no two adjacent steps within about 25% of
-each other.** A linear scale ("multiples of 4") does not help, because it still
-leaves you choosing between 120 and 124. When steps are far enough apart, one
-option is obviously right and the rest are obviously wrong.
+The rule that makes a scale work: **no two adjacent steps within ~25%.** A
+linear scale ("multiples of 4") does not help, because it still leaves you
+choosing between 120 and 124. Steps far enough apart make one option obviously
+right.
 
-To pick from a scale: guess, then try the step either side. If both neighbours
-look worse, you are done.
+To pick: guess a step, then try the one either side. If both neighbours look
+worse, you are done.
 
-`foundations.md` has the actual numbers.
+**When to break the system:** almost never, and never for taste. Legitimate
+reasons are optical correction (a circular icon needs slightly more room than a
+square one to look equally spaced), hitting a hard external constraint (44px
+targets, 4.5:1 contrast), or aligning to something you do not control. If you
+break it, say why in a comment — an unexplained off-scale value reads as a
+mistake and gets "corrected" later.
 
-## Reviewing an existing screen
+---
 
-When given a screenshot or a live screen and asked what's wrong, go in this
-order — it moves from causes to symptoms, so early fixes often dissolve later
-complaints:
+## How this goes wrong
 
-1. **What is redundant?** Two elements saying the same number, a label that
-   repeats its value, a card that restates the one above it. Deleting beats
-   restyling, and it is the fix people least expect.
-2. **Is the hierarchy legible?** Squint. Can you tell what matters?
-3. **Is anything off-system?** Hard-coded colours, sizes that aren't scale
-   steps, a third font weight.
-4. **Is the spacing ambiguous?** More space *around* a group than *within* it,
-   always. Where that is violated, the interface is genuinely harder to parse,
-   not merely uglier.
-5. **Then the interaction layer** — the mobile or browser reference file.
+These are the characteristic failures of generated interface work. They are
+listed because recognising them in your own output is faster than rediscovering
+them from feedback.
 
-A complaint of "it's cramped" or "still scrolling" is a symptom. Look for what
-should not be on the screen at all before making what's there smaller. Shrinking
-things to fit is the reflex to distrust.
+**Adding where you should remove.** The instinct on "this needs work" is to add
+— a heading, a hint, a divider, a badge, a card. Ask what could come off first.
+
+**Explaining instead of clarifying.** Adding a sentence under a control to say
+what it does. If a control needs explaining, it needs a better name. Put the
+reasoning in a code comment, where it helps whoever maintains it, and keep it
+off the screen.
+
+**Decorating instead of prioritising.** Gradients, glows, blur, heavy shadows
+and animation applied to make something "look designed". They make a weak
+hierarchy louder, not stronger. If the greyscale version does not read, effects
+will not save it.
+
+**Uniform spacing.** The same gap everywhere destroys grouping. Spacing is how
+you say what belongs together; making it consistent everywhere makes it say
+nothing.
+
+**Symmetrical emphasis.** Every element the same size, weight and colour,
+neatly aligned — tidy and unreadable, because nothing tells you where to look.
+
+**Too many accent colours.** One accent, used for one job. A second colour
+needs a reason a reader could state.
+
+**Centring everything.** Centred text is for short headings. Centred body copy
+and centred left-aligned-in-spirit lists are harder to scan because every line
+starts in a different place.
+
+**Emoji as an icon set.** They render differently per platform, cannot take
+your colour, and read as informal. Fine as a deliberate personality choice, not
+as a default.
+
+**Maximum radius on everything.** Corner radius is a personality decision: near
+0 is formal, large is playful. Pick one and hold it. Mixing radii in one
+interface almost always looks worse than either choice alone.
+
+**Inventing a component that exists.** Check what the codebase already has
+before building a new one. Two dialogs mean two behaviours to keep in step, and
+they will drift.
+
+**Claiming it works.** Saying a design "works on iOS" from a desktop browser,
+or that contrast passes without computing it. See below.
+
+---
 
 ## Words are part of the design
 
-Language sets personality as strongly as typeface or colour does, and it is
-usually the cheapest thing to fix.
+Language sets personality as strongly as typeface or colour, and it is the
+cheapest thing to change.
 
-- **Labels are a last resort.** `$19.99` and `jane@example.com` need no label.
-  Where a label helps, fold it into the value — "12 left in stock", not "In
-  stock: 12" — so the unit can be styled as one thing.
-- Where a label genuinely is needed (a dashboard, scannable data), it is
-  *supporting* content: smaller, softer, lighter than the value it labels.
+- **Labels are a last resort.** `$19.99` and `jane@example.com` need none.
+  Where one helps, fold it into the value — "12 left in stock", not
+  "In stock: 12" — so the whole unit can be styled as one thing.
+- Where a label is genuinely needed (scannable data, a dashboard), it is
+  *supporting* content: smaller, softer, lighter than the value it labels. The
+  exception is a spec table, where people scan for the label — there, lift the
+  label and keep the value only slightly quieter.
 - **Say each thing once.** "₱242 of food eaten" above a list of food eaten is
   the same sentence twice.
-- Cut explanation that only restates what the control obviously does. If a
-  setting needs a paragraph, the paragraph belongs in a code comment and the
-  setting needs a better name.
+- Match the vocabulary to the reader. If the person using this does not read
+  code, no jargon reaches the screen — say what a thing does before what it is
+  called.
 
 ## The finishing pass
 
-Cheap moves that make a plain-but-correct design look designed:
+Cheap moves that make a correct-but-plain design look finished:
 
 - **Supercharge the defaults** — icons instead of bullets, real styled
   checkboxes instead of browser ones, a considered link treatment.
 - **Accent borders** — a coloured bar across the top of a card, beside an
-  alert, under the live nav item. No illustration talent required.
-- **Use fewer borders.** Before adding a line, try a different background
-  colour, a shadow, or simply more space. Borders accumulate into noise.
-- **Don't rely on colour alone.** Red/green needs an icon, a sign or a word
-  next to it. For chart series, differing *contrast* separates better than
-  differing *hue* for a colourblind reader.
-- **Empty states matter most.** They are the first thing a new user sees. Say
-  what to do next, not "no data".
+  alert, under the active nav item. No illustration talent required.
+- **Use fewer borders.** Before adding a line try a different background
+  colour, a shadow, or more space. Borders accumulate into noise.
+- **Never let colour be the only signal.** Red/green needs an icon, a sign or a
+  word. For chart series, differing *contrast* separates better than differing
+  *hue* for a colourblind reader.
+- **Empty states matter most** — often the first thing anyone sees. Say what to
+  do next, not "no data".
 
-## Honesty about what you have checked
+---
 
-Design claims are easy to make and easy to get wrong. Distinguish:
+## Accessibility
 
-- **Measured** — you read the computed value, the rendered size, the contrast
-  ratio.
-- **Reasoned** — it follows from the code but you did not see it render.
-- **Unverifiable here** — anything about how a real device actually feels.
+Not a separate pass at the end — it is mostly the same work as good hierarchy,
+which is why it is spread through the other files rather than quarantined here.
+Where each part lives:
 
-Say which. "The tap target is 44px" and "the tap target should be 44px" are
-different statements, and only one of them is a check.
+| Concern | Where |
+|---|---|
+| Contrast ratios, and how to compute them | `foundations.md` → Contrast |
+| Never colour alone | `foundations.md` → Colour |
+| Focus rings, tab order, focus trapping, arrow keys | `browser.md` → Keyboard |
+| Target size | `mobile.md` → Touch targets |
+| Text scaling to 200% without clipping | `mobile.md` → Text that scales |
+| Disabled, selected and focus states | `states.md` → Interactive states |
+| `prefers-reduced-motion` | `mobile.md`, and honour it anywhere you animate |
+
+Three things worth stating once, because they are decisions rather than
+details:
+
+- **Semantics first.** A `<button>` that looks like a link still behaves like a
+  button for a screen reader and a keyboard. Reaching for a `<div>` with a
+  click handler creates work — role, tabindex, key handling — that the right
+  element does for free. Choose the element for meaning, style it for
+  hierarchy.
+- **Do not remove what you do not replace.** `outline: none` without a
+  replacement focus style, or `user-scalable=no`, each remove a capability
+  someone depends on.
+- **An icon-only control needs an accessible name.** `aria-label` costs one
+  attribute and is invisible until it is the only thing there is.
+
+## Verification: look at it
+
+A design claim you have not looked at is a guess. The point of this skill is to
+make the guesses good, not to make looking optional.
+
+Render it and check the things that are actually checkable:
+
+- Computed values — is that colour a token, is that size a scale step?
+- Measured geometry — target sizes, whether a bar reaches the bottom of the
+  viewport, whether a region actually scrolls.
+- Contrast ratios — computed, not eyeballed.
+- The extremes from `states.md` — empty, one, many, long, error.
+- Both widths — a phone width and a desktop width, because several rules only
+  mean something at one of them.
+
+Prefer measuring over screenshotting where a number exists: "the tap target
+computes to 44×44" is stronger evidence than a picture, and survives being
+reported to someone who cannot see the screen.
+
+---
+
+## Honesty about what you checked
+
+Design claims are easy to make and easy to get wrong. Label them:
+
+- **Measured** — you read the computed value, rendered size, or contrast ratio.
+- **Reasoned** — it follows from the code, but you did not watch it render.
+- **Unverifiable here** — anything about how a real device actually feels:
+  scroll momentum, haptics, share sheets, whether audio respects the silent
+  switch, how a font renders on the hardware.
+
+"The tap target is 44px" and "the tap target should be 44px" are different
+claims and only one is a check. When someone cannot verify it themselves, an
+unearned claim costs them real time — which is the whole reason the distinction
+is worth the words.

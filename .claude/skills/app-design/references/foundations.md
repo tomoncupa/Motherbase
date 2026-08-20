@@ -11,9 +11,11 @@ this repo has settled on something more specific.
 - [Spacing and sizing](#spacing-and-sizing)
 - [Type](#type)
 - [Colour](#colour)
+- [Contrast](#contrast)
 - [Depth](#depth)
 - [Layout](#layout)
 - [Images](#images)
+- [Optical adjustments](#optical-adjustments)
 
 ---
 
@@ -158,6 +160,32 @@ True grey is 0% saturation and it looks lifeless. Saturate toward blue for a
 cool interface, toward yellow/orange for a warm one. Keep the temperature
 consistent across the ramp, which again means raising saturation at both ends.
 
+### Building a ramp, concretely
+
+An example so the procedure is unambiguous. Building a blue from a base of
+`hsl(212, 92%, 43%)`:
+
+1. **Base (500)** — the shade that would work as a button background.
+   `hsl(212, 92%, 43%)`
+2. **Darkest (900)** — dark enough for text on a light background.
+   Same hue family, higher saturation because lightness is far from 50%, and
+   rotated a few degrees toward the nearest *dark* hue (240° for blue):
+   `hsl(215, 100%, 21%)`
+3. **Lightest (100)** — a tint that works as an alert or badge background.
+   Saturation raised again for the same reason:
+   `hsl(204, 100%, 92%)`
+4. **Fill 300 and 700** as the honest midpoints — the shade that looks like a
+   fair compromise between its neighbours, not the arithmetic mean.
+5. **Fill 200, 400, 600, 800** the same way.
+
+Notice what moves: lightness does most of the work, **saturation rises at both
+ends**, and **hue drifts slightly** — toward a dark hue as it darkens, toward a
+bright one as it lightens. A ramp built by changing lightness alone looks
+chalky at the top and muddy at the bottom.
+
+Then adjust by eye and stop. Trust your eyes over the arithmetic; just do not
+keep adding shades, because an unbounded palette is the same as no palette.
+
 ### Accessible does not mean ugly
 
 Aim for 4.5:1 on body text, 3:1 on large text and meaningful non-text. When
@@ -175,6 +203,50 @@ lighter/darker shade of that same hue.
 Red/green needs an icon, an arrow or a word. For multi-series charts, vary
 contrast rather than hue — light-vs-dark survives colourblindness, red-vs-green
 does not.
+
+---
+
+## Contrast
+
+Contrast is the one part of colour that is objectively checkable, so check it
+rather than estimating.
+
+| Content | Minimum |
+|---|---|
+| Body text | 4.5:1 |
+| Text 18px+, or 14px+ bold | 3:1 |
+| Icons, borders, and controls that carry meaning | 3:1 |
+| Focus indicators | 3:1 against both the control and the background |
+| Disabled controls | exempt, but if nobody can read it, say why it is disabled elsewhere |
+
+The ratio is computed from relative luminance, not from how different two hex
+codes look. Two colours can be far apart in hue and nearly identical in
+luminance — which is exactly the pair a colourblind reader cannot separate, and
+also the pair that vanishes in greyscale.
+
+```js
+const lum = h => {
+  const c = [1,3,5].map(i => parseInt(h.substr(i,2),16)/255)
+    .map(v => v <= .03928 ? v/12.92 : Math.pow((v+.055)/1.055, 2.4));
+  return .2126*c[0] + .7152*c[1] + .0722*c[2];
+};
+const ratio = (a,b) => {
+  const [x,y] = [lum(a), lum(b)].sort((m,n) => n-m);
+  return (x + .05) / (y + .05);
+};
+```
+
+**When light text on a coloured background fails, darken the background**
+rather than dulling the text. The design keeps its punch and passes. Fading the
+text is the instinct and it is the wrong one — it costs legibility to fix a
+legibility problem.
+
+**Dark interfaces need care in the other direction.** Pure white on pure black
+is uncomfortable to read for long — it blooms. But secondary text on a dark
+background goes illegible much faster than on a light one, so the *range* you
+have to play with is narrower. If a design keeps reading as murky, the cause is
+usually secondary text pushed too far toward the background in the name of
+hierarchy. Get the hierarchy from size and weight and bring the colour back.
 
 ---
 
@@ -259,3 +331,27 @@ point, not a constraint.
   transparent background against your dark surface, and a much larger file
   than you expected. Constrain with `object-fit`, and give avatars a subtle
   inner border so a white-on-white upload still has an edge.
+
+---
+
+## Optical adjustments
+
+Places where the mathematically correct answer looks wrong, and the eye should
+win. These are the legitimate exceptions to the scale.
+
+- **Circles need more room.** A round icon or avatar in a row of square ones
+  looks smaller at the same dimensions, because less of its bounding box is
+  filled. Size it slightly larger.
+- **Centring text vertically.** Most typefaces have more space above the
+  x-height than below the baseline, so mathematically centred text sits low.
+  Nudge it up a pixel where it matters — a single character in a circular
+  badge is the usual case.
+- **Triangles and play icons.** A triangle centred by its bounding box looks
+  left-heavy; shift it right by about an eighth of its width.
+- **Punctuation and quotes** hang better slightly outside the text block than
+  aligned to it.
+- **Optical alignment beats geometric alignment** for anything with an
+  irregular silhouette. If it looks aligned, it is aligned.
+
+Comment any of these when you use one. An unexplained off-scale value looks
+like a mistake and gets "corrected" by the next person.

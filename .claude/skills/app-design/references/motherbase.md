@@ -6,6 +6,11 @@ this repo has already built. Use these rather than reinventing them.
 Authority order: repo-root `CLAUDE.md` (data and structure) → `shared/STANDARDS.md`
 (how it should feel) → this file (what to type).
 
+**This file dates faster than the others.** Everything else in this skill is
+principle; this is inventory. If a token or a method named here is not in the
+source, the source wins — read `shared/skins.js`, `shared/mobile.js` and
+`shared/ui.js` and fix this file rather than working around it.
+
 ## Loading order
 
 ```
@@ -129,6 +134,13 @@ row — a margin inside the swipe wrapper measures wrong.
   returns.
 - **`py -3`, not `python`** — plain `python` hits the Microsoft Store stub.
   `node` is not installed.
+
+## Before calling a screen done
+
+Run the states from `states.md` against real data, in the browser: no rows, one
+row, several hundred, a 60-character name, a 9-digit number, a missing photo.
+`Rec.set` in the console is enough to produce any of them, and cleaning up
+afterwards is `Rec.del` plus `Rec.vacuum(0)`.
 
 ## Checking work
 

@@ -6,6 +6,22 @@ Read this when the interface runs on a phone or tablet, or when anyone says it
 Everything here is the *interaction* layer. Hierarchy, spacing, type and colour
 come from `foundations.md` and do not change because the screen got smaller.
 
+## Contents
+
+- [The tells](#the-tells)
+- [Touch targets](#touch-targets)
+- [Feedback must be immediate](#feedback-must-be-immediate)
+- [Panels come from the bottom](#panels-come-from-the-bottom)
+- [Navigation and the back gesture](#navigation-and-the-back-gesture)
+- [Forms and the keyboard](#forms-and-the-keyboard)
+- [Scrolling](#scrolling)
+- [Safe areas](#safe-areas)
+- [Gestures](#gestures)
+- [Performance is a design constraint](#performance-is-a-design-constraint)
+- [Text that scales](#text-that-scales)
+- [Platform differences worth honouring](#platform-differences-worth-honouring)
+- [What you cannot check from a desktop](#what-you-cannot-check-from-a-desktop)
+
 ## The tells
 
 "Feels like a website" is never one thing. It is an accumulation of small
@@ -156,6 +172,71 @@ worse than one without.
 Deleting shows a snackbar naming what went, with **UNDO**, for about six
 seconds. This is not politeness — it is what makes a one-tap delete safe enough
 to be one tap.
+
+## Performance is a design constraint
+
+On a phone, jank is a *design* failure, not only an engineering one — a
+stuttering scroll feels broken in a way a slightly wrong colour never does.
+Sixty frames per second means 16ms per frame, and only two CSS properties can
+be animated without repainting: **`transform` and `opacity`**.
+
+Animating `width`, `height`, `top`, `left`, `margin` or `padding` forces layout
+on every frame and will drop frames on a mid-range Android. If a design needs
+something to grow, animate a `scale` transform instead, or accept the cost
+knowingly.
+
+Other things that show up as "feels cheap":
+
+- **Layout shift.** Content jumping as images or data arrive. Reserve the space
+  — see `states.md`.
+- **`backdrop-filter`** is expensive, especially over a scrolling surface.
+  Worth it on a static overlay; painful on a sticky header.
+- **Large shadows over scrolling content** repaint constantly.
+- **Long lists** rendered in full. Beyond a few hundred rows this stops being
+  a design question and becomes a rendering one.
+- **Images at the wrong size.** A 3000px photo scaled into a 60px avatar costs
+  memory and decode time on every render.
+
+The test that matters is a cheap Android device, not a desktop browser.
+
+## Text that scales
+
+People set their phone's text size larger, and a design that ignores it is
+unusable for them.
+
+- Size text in `rem`, and do not disable text scaling.
+- Test at roughly 200% and check nothing clips or overlaps. Layouts that
+  survive are the ones that let containers grow rather than fixing heights.
+- **Avoid fixed heights on anything containing text.** Use `min-height` so the
+  box can grow. This is the single most common cause of clipped text at large
+  sizes.
+- Icons beside text should scale with it, or the pairing falls apart.
+
+Related: never disable pinch zoom (`user-scalable=no`). iOS ignores it anyway,
+and where it is honoured it is an accessibility failure. The tap delay it was
+once used to remove is handled by `touch-action: manipulation`.
+
+## Platform differences worth honouring
+
+Do not build two products. Do respect these, because they are muscle memory:
+
+| | iOS | Android |
+|---|---|---|
+| Back | Edge swipe from the left | System back gesture or button |
+| Primary action | Often top-right in the bar | Often a floating action button |
+| Sheets | Drag down to dismiss, rounded top | Same, plus back closes it |
+| Switches | Standard toggle | Material toggle |
+| Sharing | Share sheet — the real way to save a file | Share intent, but downloads work |
+| Haptics | **None available to a web page** | Vibration API |
+
+The one that bites hardest is the last: on iPhone Safari there is no vibration,
+with no workaround. Pair every haptic with a sound cue so the response lands on
+both platforms through whichever sense is available.
+
+The second is the share sheet. `<a download>` does nothing on iOS and nothing
+at all inside a home-screen app — no file, no error. Anything that hands the
+user a file must go through the share sheet there, and must not record that a
+file was saved until it actually was.
 
 ## What you cannot check from a desktop
 
