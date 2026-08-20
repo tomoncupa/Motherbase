@@ -119,7 +119,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `ui.js` | Snackbars, dialogs, confirms, menus, switches, and the standard Settings panel. |
 | `io.js` | Per-app backup, restore, and the readable spreadsheet export. |
 | `health.js` | Answers "is my data okay" without a test suite. |
-| `_smoke.html` | 58 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 64 checks over all of the above. Run it after touching any of them. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. |
 
 ---
@@ -185,14 +185,13 @@ writers for one fact is how numbers start disagreeing.
 
 ## What "today" means
 
-One setting: **what time your day starts.** Default 4am.
+**The calendar day.** Nothing else.
 
-A tick before 4am belongs to the day before, because that is the day he was still
-in. This is the only rule that decides dates and nothing else may.
-
-The day is wrapped up three hours before it turns over, so 1am on a 4am start.
-That gives a grace window where the day reads as finished but can still be logged
-into. It follows the one setting and is not a second thing to configure.
+There used to be a day-start hour, default 4am, so anything logged before then
+counted as the day before. Tom asked for it gone on 2026-08-20 and it is gone,
+along with its setting and its grace window. `day.js` keeps the machinery with
+`startsAt` at 0, where it does nothing — bringing it back would be one number,
+but do not, without being asked.
 
 **Any past date is always editable.** Backfill is normal, not an exception. The
 future is not a record and cannot be ticked.
@@ -297,7 +296,7 @@ because it runs the real thing rather than only parsing it:
 
 1. Serve the folder: `py -3 -m http.server 8777 -d "<repo>"`.
 2. Open it with the browser tool, drive it with JavaScript, read the console.
-3. Run `shared/_smoke.html`. It must say 58 of 58, or more once you add checks.
+3. Run `shared/_smoke.html`. It must say 64 of 64, or more once you add checks.
    Run it at phone width too — some checks only mean anything at one width.
 4. Clean up any test data you wrote, and stop the server.
 
@@ -365,13 +364,10 @@ Never claim something works because it should. Claim it because you watched it.
    `shared/skins.js` instead of defining `THEMES` itself.
 3. **The apps still carry their own settings, themes and sounds** instead of using
    `shared/ui.js`, `skins.js` and `sound.js`. Only `_template/` is fully on them.
-3b. **`block/`, `arc/`, `status/`, `form/` and `habits/` do not load
-   `shared/mobile.js`**, so they get none of the touch layer: no bottom sheets,
-   no swipe, no safe areas, no keyboard handling, desktop-sized tap targets.
-   They are not broken — `ui.js` keeps the old styling for apps without it — but
-   they feel like web pages next to the two that are wired. One line in each
-   head is the whole migration; the work is auditing each app's own CSS for
-   hover-only controls and sub-44px targets afterwards.
+3b. ~~Apps not loading `shared/mobile.js`~~ **Done 2026-08-20.** Every app
+   loads it and every viewport covers the safe area. What is left is per-app:
+   auditing each one's own CSS for hover-only controls and sub-44px targets,
+   which the shared layer cannot do for them.
 4. **Commits are unpushed** and the GitHub repo is public. He has not yet said
    push.
 

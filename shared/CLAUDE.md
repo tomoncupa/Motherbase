@@ -31,7 +31,7 @@ are holding a stale copy of whatever you just changed.
 | `ui.js` | Snackbars, dialogs, menus, switches, the Settings panel. | Medium. |
 | `io.js` | Backup, restore, spreadsheet export. | High. It is the safety net. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 58 checks over all of it. | Run it every time. |
+| `_smoke.html` | 64 checks over all of it. | Run it every time. |
 
 ## Rules
 

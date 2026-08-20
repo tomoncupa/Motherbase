@@ -162,7 +162,7 @@ A working example of all of it, with the reasoning written into the comments:
 py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Claude Code"
 ```
 
-Open `http://127.0.0.1:8777/shared/_smoke.html`. It must say **58 of 58**, or
+Open `http://127.0.0.1:8777/shared/_smoke.html`. It must say **64 of 64**, or
 more once checks are added. Then open it again on your phone, on the same
 Wi-Fi, using this machine's address instead of `127.0.0.1`. The buttons on that
 page should feel like an app. If they feel like a web page, something in here
@@ -180,10 +180,9 @@ Being straight about the edges of this:
   desktop browser at phone size, with touch emulated. That catches layout,
   sizing, gestures and behaviour. It does not catch how iOS Safari actually
   feels, and it cannot.
-- **Only `_template/` and the home screen are wired to `mobile.js`.**
-  `block/`, `arc/`, `status/`, `form/` and `habits/` still load `ui.js` without
-  it, so they get their old dialogs and none of the touch layer. They are not
-  broken — `ui.js` keeps a copy of the old styling for exactly that case — but
-  they do not feel like the two that are wired.
+- **Every app loads `mobile.js` now**, so every app has safe areas, real tap
+  targets, no zoom-on-focus and contained overscroll. What the shared layer
+  cannot do for them is fix their own CSS: each app still needs auditing for
+  hover-only controls and controls smaller than 44px.
 - **`arc/` still carries its own copy of the theme engine**, so it does not
   follow the shared colours at all. That was already on the debt list.
