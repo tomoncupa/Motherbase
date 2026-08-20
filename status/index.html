@@ -42,9 +42,14 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;
   touch-action:manipulation}
-html{height:100%}
+/* The band under the tab bar was the page background showing through below
+   the app's own column: a stripe of a different colour between the bar and the
+   home indicator, which no native app has. html takes the bar's colour, so
+   anything outside the column reads as the bar continuing. dvh measures the
+   viewport as it actually is rather than as tall as it ever gets. */
+html{height:100%;height:100dvh;background:var(--surface-1)}
 body{
-  height:100%;overflow:hidden;                    /* only main scrolls, so Safari cannot bounce the page */
+  height:100%;height:100dvh;overflow:hidden;      /* only main scrolls, so Safari cannot bounce the page */
   overscroll-behavior:none;
   background:var(--bg);color:var(--text-1);
   font-family:var(--font-body);font-size:var(--t4);line-height:1.45;
@@ -108,6 +113,7 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 .tile .vl{font-family:var(--font-mono);font-size:var(--t6);font-weight:600;line-height:1.1;color:var(--text-1)}
 .tile .vl .un{font-size:var(--t2);font-weight:400;color:var(--text-muted);margin-left:2px}
 .tile .lb{font-size:var(--t2);color:var(--text-muted);margin-top:auto}
+.tile .lb i{display:block;font-style:normal;font-size:var(--t1);opacity:.75}
 .tile.todo .vl{color:var(--text-muted);opacity:.5}
 .tile .bar{height:2px;border-radius:1px;background:var(--surface-3);overflow:hidden;margin-top:var(--s2)}
 .tile .bar i{display:block;height:100%;background:var(--accent)}
@@ -1084,7 +1090,11 @@ function photoBlock(body, kind, onText, onShot) {
    this list the moment it is logged, so what is left is only what is left
    to do.                                                                  */
 
-const outstanding = () => liveFields().filter(f => f.once && !logged(vd(), f.id));
+/* A field with `days` is only due on those weekdays — 0 is Sunday. Without
+   `days` it is due every day, which is what everything used to be. `slot` is
+   just a word for when, printed next to it: "Sunday morning". */
+const dueToday = (f, date) => !f.days || !f.days.length || f.days.indexOf(Day.dow(date || vd())) > -1;
+const outstanding = () => liveFields().filter(f => f.once && dueToday(f) && !logged(vd(), f.id));
 
 function fastInput() {
   openSheet('Log', body => {
@@ -1117,6 +1127,34 @@ function fastInput() {
   });
 }
 
+/* ── half-life ──
+   For anything with a `half` (hours): every dose decays on its own clock and
+   what is left is the sum of them. 200mg of caffeine at 8am with a 5 hour
+   half-life is 100mg at 1pm and 50mg at 6pm. Doses from yesterday still count,
+   which is the whole point — that is why an evening coffee shows up in your
+   sleep.                                                                    */
+function remaining(f, when) {
+  if (!f.half) return null;
+  const now = when == null ? Date.now() : when;
+  let total = 0;
+  /* three half-lives back is 12% left; anything older is noise */
+  const span = Math.ceil(f.half * 4 / 24) + 1;
+  Day.last(span).forEach(date => {
+    evList(date, f.id).forEach(e => {
+      const hrs = (now - e.t) / 3600000;
+      if (hrs < 0) return;
+      total += e.v * Math.pow(0.5, hrs / f.half);
+    });
+  });
+  return total;
+}
+/** when the level will next fall below `to` — the practical question */
+function clearsAt(f, to) {
+  const now = remaining(f);
+  if (!now || now <= to) return null;
+  return Date.now() + f.half * Math.log(now / to) / Math.log(2) * 3600000;
+}
+
 /* ── one field, one sheet ── */
 function fieldSheet(f, date) {
   if (f.measure === 'scale') return scaleSheet(f, date);
@@ -1134,9 +1172,14 @@ function toggleCheck(f, date) {
 
 /* numbers and doses. A dose adds up through the day; a number replaces. */
 function numberSheet(f, date) {
+  /* a half-life field opens with what is still in you, not just today's total */
   const d = date || vd();
   const dose = f.measure === 'amount';
   openSheet(f.label + (Day.isToday(d) ? '' : ' · ' + Day.short(d)), body => {
+    /* For anything that wears off, the useful number is not what you took, it
+       is what is still in you now. */
+    const hl = Day.isToday(d) ? halfLine(f) : null;
+    if (hl) body.appendChild(el('div', 'note', hl));
     const cur = dose ? null : value(d, f.id);
     let prev = null, prevAgo = 0;
     if (!dose) {
@@ -1191,14 +1234,22 @@ function entryRow(f, d, e) {
 
 function scaleSheet(f, date) {
   const d = date || vd();
-  const WORDS = { 1: 'bad', 2: 'low', 3: 'ok', 4: 'good', 5: 'great' };
+  /* A scale runs 1..max, and max is whatever the field says — 3, 5, 10. The
+     words are stretched over whatever range that is rather than assuming five,
+     so a 1-to-3 scale reads bad / ok / great and a 1-to-10 still labels its
+     ends. */
+  const hi = Math.max(2, Math.min(10, f.max || 5));
+  const WORDS = v => {
+    const t = (v - 1) / (hi - 1);
+    return t === 0 ? 'bad' : t === 1 ? 'great' : t < .34 ? 'low' : t > .66 ? 'good' : 'ok';
+  };
   openSheet(f.label, body => {
     const w = el('div', 'chips');
-    [1, 2, 3, 4, 5].forEach(v => {
-      const b = el('button', 'chip big', v + '<small>' + WORDS[v] + '</small>');
-      b.onclick = () => { evAdd(d, f.id, v); Mobile.feedback('tick'); afterLog(); };
+    for (let v = 1; v <= hi; v++) {
+      const b = el('button', 'chip big', v + '<small>' + WORDS(v) + '</small>');
+      b.onclick = (n => () => { evAdd(d, f.id, n); Mobile.feedback('tick'); afterLog(); })(v);
       w.appendChild(b);
-    });
+    }
     body.appendChild(w);
     evList(d, f.id).slice().reverse().forEach(e => body.appendChild(entryRow(f, d, e)));
   });
@@ -1576,11 +1627,11 @@ function card(title, sub) {
   return c;
 }
 
-function tile(label, val, unit, cls, onclick, pct) {
+function tile(label, val, unit, cls, onclick, pct, sub) {
   const t = el('button', 'tile ' + (cls || ''));
   t.innerHTML = '<div class="vl">' + (val == null ? '–' : esc(val)) +
     (unit ? '<span class="un">' + esc(unit) + '</span>' : '') + '</div>' +
-    '<div class="lb">' + esc(label) + '</div>';
+    '<div class="lb">' + esc(label) + (sub ? '<i>' + esc(sub) + '</i>' : '') + '</div>';
   if (pct != null) {
     const bar = el('div', 'bar');
     bar.innerHTML = '<i style="width:' + Math.min(100, Math.round(pct * 100)) + '%"></i>';
@@ -1591,6 +1642,15 @@ function tile(label, val, unit, cls, onclick, pct) {
 }
 
 /* how a field's value reads on its tile */
+function halfLine(f) {
+  if (!f.half) return null;
+  const now = remaining(f);
+  if (now == null || now < 1) return null;
+  const gone = clearsAt(f, Math.max(1, (f.target || 0) * .25 || 25));
+  return Math.round(now) + (f.unit || '') + ' still in you' +
+    (gone ? ' · down to a trace by ' + new Date(gone).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
+}
+
 function tileValue(f, v) {
   if (v == null) return f.measure === 'check' ? '·' : '–';
   if (f.measure === 'check') return '✓';
@@ -1607,13 +1667,13 @@ function drawNow(m) {
   const c = card('Today', Day.label(d));
 
   const left = ct.v - Math.round(t.kcal);
-  const hero = el('div', 'hero', left.toLocaleString() + '<span class="u">left of ' + ct.v.toLocaleString() + '</span>');
+  const hero = el('div', 'hero', left.toLocaleString() + '<span class="u">calories left of ' + ct.v.toLocaleString() + '</span>');
   hero.style.marginBottom = 'var(--s5)';
   if (left < 0) hero.style.color = 'var(--warn)';
   c.appendChild(hero);
 
   const g = el('div', 'tiles');
-  liveFields().forEach(f => {
+  liveFields().filter(f => dueToday(f, d)).forEach(f => {
     const v = value(d, f.id);
     let cls = v == null ? 'todo' : '';
     let pct = null;
@@ -1621,9 +1681,13 @@ function drawNow(m) {
       pct = v / f.target;
       if (f.dir === 'lte' && v > f.target) cls += ' over';
     }
-    g.appendChild(tile(f.label, tileValue(f, v), f.unit, cls, () => fieldSheet(f, d), pct));
+    /* a decaying field says what is still in you under its label, because the
+       total you took today stops being the interesting number by mid-afternoon */
+    const left = (f.half && Day.isToday(d)) ? remaining(f) : null;
+    g.appendChild(tile(f.label, tileValue(f, v), f.unit, cls, () => fieldSheet(f, d), pct,
+      left != null && left >= 1 ? Math.round(left) + (f.unit || '') + ' left' : null));
   });
-  g.appendChild(tile('Protein', Math.round(t.p), 'g', t.p ? '' : 'todo', () => { TAB = 'food'; draw(); }, t.p / TARGETS().p));
+  g.appendChild(tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', t.p ? '' : 'todo', () => { TAB = 'food'; draw(); }, t.p / TARGETS().p));
   g.appendChild(tile('Spent', Math.round(dayMoney(d)).toLocaleString(), '₱', dayMoney(d) ? '' : 'todo', () => { TAB = 'money'; draw(); }));
   c.appendChild(g);
 
@@ -1882,8 +1946,12 @@ function openSettings() {
   UI.settings(APP.id, [
     { id: 'track', name: 'TRACK', draw: drawTrackTab },
     { id: 'goals', name: 'GOALS', draw: drawGoalsTab },
-    { id: 'sync',  name: 'SYNC',  draw: drawSyncTab },
-  ]);
+  ], {
+    order: ['track', 'goals', 'app', 'data'],
+    /* the sheet mirror is a way of getting data out, so it belongs under DATA
+       with the backup and the export rather than in a tab of its own */
+    append: { data: drawSyncTab },
+  });
 }
 
 /* Move a field up or down the list. `order` already decided the tile order on
@@ -1904,8 +1972,14 @@ function drawTrackTab(pane) {
   settingsPane = pane;
   const list = Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0));
   list.forEach((f, i) => {
-    const kind = { number: 'once a day', amount: 'a dose, added up', scale: '1 to 5, any time', check: 'done or not' }[f.measure] || '';
-    const row = toggleRow(f.label, kind + (f.unit ? ' · ' + f.unit : '') + (f.target ? ' · ' + (f.dir === 'lte' ? '≤' : '≥') + ' ' + f.target : ''), !!f.on, on => {
+    const kind = { number: 'once a day', amount: 'a dose, added up', scale: '1 to ' + (f.max || 5), check: 'done or not' }[f.measure] || '';
+    const bits = [kind];
+    if (f.unit) bits.push(f.unit);
+    if (f.target) bits.push((f.dir === 'lte' ? '\u2264' : '\u2265') + ' ' + f.target);
+    if (f.days && f.days.length) bits.push(f.days.map(i => DOW[i]).join(' '));
+    if (f.slot) bits.push(f.slot);
+    if (f.half) bits.push('half-life ' + f.half + 'h');
+    const row = toggleRow(f.label, bits.join(' \u00b7 '), !!f.on, on => {
       Rec.set('field', null, f.id, Object.assign({}, f, { on: on ? 1 : 0 }));
       drawSettingsPane('track'); draw();
     });
@@ -1919,6 +1993,9 @@ function drawTrackTab(pane) {
       mv.appendChild(b);
     });
     row.insertBefore(mv, row.firstChild);
+    /* tapping the name opens the field, so everything about it is editable */
+    const lbl = row.querySelector('.lbl') || row.querySelector('b');
+    if (lbl) { lbl.style.cursor = 'pointer'; lbl.onclick = () => newFieldForm(settingsPane, f); }
     pane.appendChild(row);
   });
   pane.appendChild(el('div', 'note', 'Off hides it. History is kept. Arrows set the order on Today.'));
@@ -1965,45 +2042,107 @@ function drawTrackTab(pane) {
 }
 
 /* anything not in the library */
-function newFieldForm(pane) {
+const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+/* One form for adding a field and for editing one that already exists.
+   Everything a field can be lives here: what it measures, how far its scale
+   runs, which days it is due, and whether it wears off. */
+function newFieldForm(pane, existing) {
+  const f = existing || {};
   pane.innerHTML = '';
   pane.appendChild(el('label', 'fl', 'Name'));
   const nm = document.createElement('input'); nm.type = 'text'; nm.placeholder = 'Collagen';
+  nm.value = f.label || '';
   pane.appendChild(nm);
 
   pane.appendChild(el('label', 'fl', 'Unit'));
   const un = document.createElement('input'); un.type = 'text'; un.placeholder = 'g';
+  un.value = f.unit || '';
   pane.appendChild(un);
 
   pane.appendChild(el('label', 'fl', 'Kind'));
-  let measure = 'amount';
+  let measure = f.measure || 'amount';
+  let hi = f.max || 5;
   const seg = el('div', 'seg');
+  const extra = el('div');
   const paint = () => {
     seg.innerHTML = '';
-    [['amount', 'A dose'], ['number', 'One a day'], ['scale', '1 to 5'], ['check', 'Done or not']].forEach(k => {
+    [['amount', 'A dose'], ['number', 'One a day'], ['scale', 'A scale'], ['check', 'Done or not']].forEach(k => {
       const b = el('button', measure === k[0] ? 'on' : '', k[1]);
       b.onclick = () => { measure = k[0]; paint(); };
       seg.appendChild(b);
     });
+    /* how far the scale runs. 1 to 3 is a perfectly good scale. */
+    extra.innerHTML = '';
+    if (measure === 'scale') {
+      extra.appendChild(el('label', 'fl', 'How far it runs'));
+      const w = el('div', 'chips');
+      [3, 4, 5, 10].forEach(n => {
+        const b = el('button', 'chip' + (hi === n ? ' on' : ''), '1 to ' + n);
+        b.onclick = () => { hi = n; paint(); };
+        w.appendChild(b);
+      });
+      extra.appendChild(w);
+    }
   };
   paint();
   pane.appendChild(seg);
+  pane.appendChild(extra);
 
   pane.appendChild(el('label', 'fl', 'Target, if it has one'));
   const tg = document.createElement('input');
   tg.type = 'text'; tg.inputMode = 'decimal'; tg.placeholder = 'optional';
+  tg.value = f.target == null ? '' : String(f.target);
   pane.appendChild(tg);
 
-  const save = el('button', 'btn go wide', 'Add it');
+  /* Which days it is due. Nothing picked means every day, which is the common
+     case and should not cost seven taps to say. */
+  pane.appendChild(el('label', 'fl', 'Due on — nothing picked means every day'));
+  const days = (f.days || []).slice();
+  const dw = el('div', 'chips');
+  DOW.forEach((lbl, i) => {
+    const b = el('button', 'chip' + (days.indexOf(i) > -1 ? ' on' : ''), lbl);
+    b.onclick = () => {
+      const at = days.indexOf(i);
+      if (at > -1) days.splice(at, 1); else days.push(i);
+      b.className = 'chip' + (days.indexOf(i) > -1 ? ' on' : '');
+      Mobile.haptic('select');
+    };
+    dw.appendChild(b);
+  });
+  pane.appendChild(dw);
+
+  pane.appendChild(el('label', 'fl', 'When, if it matters'));
+  const slot = document.createElement('input');
+  slot.type = 'text'; slot.placeholder = 'morning, before bed';
+  slot.value = f.slot || '';
+  pane.appendChild(slot);
+
+  /* Half-life. Caffeine is about 5 hours; most things worth tracking have a
+     published number. Leave it blank and nothing decays. */
+  pane.appendChild(el('label', 'fl', 'Half-life in hours, if it wears off'));
+  const hl = document.createElement('input');
+  hl.type = 'text'; hl.inputMode = 'decimal'; hl.placeholder = 'caffeine is about 5';
+  hl.value = f.half == null ? '' : String(f.half);
+  pane.appendChild(hl);
+
+  const save = el('button', 'btn go wide', existing ? 'Save' : 'Add it');
   save.style.marginTop = 'var(--s5)';
   save.onclick = () => {
     const label = nm.value.trim();
     if (!label) return UI.toast('It needs a name', { bad: true });
-    const spec = { id: uid(), label: label, unit: un.value.trim(), measure: measure };
+    const spec = Object.assign({}, f, {
+      id: f.id || uid(), label: label, unit: un.value.trim(), measure: measure,
+    });
     const t = num(tg.value);
-    if (t != null) { spec.target = t; spec.dir = 'gte'; }
-    if (measure === 'amount' || measure === 'number') { spec.step = 1; spec.dec = 1; }
-    addField(spec);
+    if (t != null) { spec.target = t; if (!spec.dir) spec.dir = 'gte'; } else { delete spec.target; }
+    const h = num(hl.value);
+    if (h != null && h > 0) spec.half = h; else delete spec.half;
+    if (measure === 'scale') spec.max = hi; else delete spec.max;
+    if (days.length && days.length < 7) spec.days = days.slice().sort(); else delete spec.days;
+    if (slot.value.trim()) spec.slot = slot.value.trim(); else delete spec.slot;
+    if (measure === 'amount' || measure === 'number') { spec.step = spec.step || 1; spec.dec = spec.dec == null ? 1 : spec.dec; }
+    if (existing) Rec.set('field', null, spec.id, spec); else addField(spec);
     Mobile.feedback('select');
     drawSettingsPane('track'); draw();
   };
@@ -2125,7 +2264,10 @@ function drawSyncTab(pane) {
   const u = document.createElement('input');
   u.type = 'text'; u.placeholder = 'https://script.google.com/macros/s/…/exec';
   u.value = cfg.url || '';
-  u.onchange = () => { const c = S.get('mirror', {}); c.url = u.value.trim(); S.set('mirror', c); };
+  /* on `input`, not `onchange`. change only fires when the field loses focus,
+     and pasting a URL then tapping DONE closes the sheet and removes the node
+     before that ever happens — so the link was silently never saved. */
+  u.oninput = () => { const c = S.get('mirror', {}); c.url = u.value.trim(); S.set('mirror', c); };
   pane.appendChild(u);
 
   pane.appendChild(toggleRow('Push at the end of each day', cfg.at ? 'last pushed ' + cfg.at : 'never pushed yet', !!cfg.on, on => {

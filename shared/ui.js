@@ -368,12 +368,28 @@ const UI = {
   /* ── settings ──
      Two tabs. Look, sound and feel are all "how this app comes across", which
      is one idea and does not need three places to live. */
-  settings(appId, extraTabs) {
+  /** opts.order names the tab ids in the order they should appear.
+      opts.append bolts extra drawing onto a tab the foundation owns. */
+  settings(appId, extraTabs, opts) {
     css();
+    opts = opts || {};
     const tabs = [];
     if (g.Skins || g.Sfx || g.Mobile) tabs.push({ id: 'app', name: 'APP', draw: drawApp.bind(null, appId) });
     if (g.IO) tabs.push({ id: 'data', name: 'DATA', draw: el2 => g.IO.panel(el2, appId) });
     (extraTabs || []).forEach(t => tabs.push(t));
+
+    if (opts.order) {
+      const rank = id => { const i = opts.order.indexOf(id); return i < 0 ? 99 : i; };
+      tabs.sort((a, b) => rank(a.id) - rank(b.id));
+    }
+    /* Backing up and mirroring to a sheet are the same errand, so an app can
+       put its mirror at the bottom of DATA instead of in a tab of its own. */
+    if (opts.append) Object.keys(opts.append).forEach(id => {
+      const t = tabs.filter(x => x.id === id)[0];
+      if (!t) return;
+      const was = t.draw, more = opts.append[id];
+      t.draw = (pane, h) => { was(pane, h); more(pane, h); };
+    });
 
     let active = tabs[0] && tabs[0].id;
     return UI.dialog({
