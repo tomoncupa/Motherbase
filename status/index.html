@@ -72,7 +72,11 @@ header{
 main{
   flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
   overscroll-behavior:contain;
-  padding:var(--s4) var(--s4) 132px;
+  /* Enough to clear the fixed bar and the home indicator. It was 132px, which
+     also cleared the whole floating button — but content is allowed to scroll
+     under a floating button, and reserving room for it left a dead band at the
+     bottom of every screen. */
+  padding:var(--s4) var(--s4) calc(70px + env(safe-area-inset-bottom));
 }
 .wrap{max-width:620px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s4)}
 
@@ -93,20 +97,17 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 .hero .u{font-size:var(--t3);font-weight:400;color:var(--text-muted);letter-spacing:0;margin-left:var(--s2)}
 
 /* ── tiles: value is the point, label recedes ── */
-/* Four across, not three. Nine measures then fit in three rows and the whole
-   of Today lands on one screen — scrolling to see today is the thing that
-   makes it feel like a page rather than a dashboard. */
-.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:var(--s2)}
 .tile{
   background:var(--surface-2);border:0;border-radius:var(--radius-md);
-  padding:var(--s3) var(--s3) var(--s2);text-align:left;cursor:pointer;
-  min-height:58px;display:flex;flex-direction:column;gap:0;
+  padding:var(--s4) var(--s4) var(--s3);text-align:left;cursor:pointer;
+  min-height:76px;display:flex;flex-direction:column;gap:var(--s1);
   font-size:var(--t2);font-family:inherit;color:inherit;
 }
 .tile:active{background:var(--surface-3)}
-.tile .vl{font-family:var(--font-mono);font-size:var(--t5);font-weight:600;line-height:1.15;color:var(--text-1)}
+.tile .vl{font-family:var(--font-mono);font-size:var(--t6);font-weight:600;line-height:1.1;color:var(--text-1)}
 .tile .vl .un{font-size:var(--t2);font-weight:400;color:var(--text-muted);margin-left:2px}
-.tile .lb{font-size:var(--t1);color:var(--text-muted);margin-top:auto;line-height:1.3}
+.tile .lb{font-size:var(--t2);color:var(--text-muted);margin-top:auto}
 .tile.todo .vl{color:var(--text-muted);opacity:.5}
 .tile .bar{height:2px;border-radius:1px;background:var(--surface-3);overflow:hidden;margin-top:var(--s2)}
 .tile .bar i{display:block;height:100%;background:var(--accent)}
@@ -1607,7 +1608,7 @@ function drawNow(m) {
 
   const left = ct.v - Math.round(t.kcal);
   const hero = el('div', 'hero', left.toLocaleString() + '<span class="u">left of ' + ct.v.toLocaleString() + '</span>');
-  hero.style.marginBottom = 'var(--s3)';
+  hero.style.marginBottom = 'var(--s5)';
   if (left < 0) hero.style.color = 'var(--warn)';
   c.appendChild(hero);
 
@@ -1630,19 +1631,10 @@ function drawNow(m) {
   if (open.length) c.appendChild(el('div', 'note', 'Still open: ' + open.map(f => f.label).join(', ')));
   m.appendChild(c);
 
-  const multi = liveFields().filter(f => !f.once && evList(d, f.id).length);
-  if (multi.length) {
-    const c3 = card('Through the day');
-    multi.forEach(f => {
-      const e = evList(d, f.id);
-      const r = el('div', 'row tap');
-      r.innerHTML = '<span class="nm">' + esc(f.label) + '<small>' + e.map(x => r1(x.v)).join(' · ') + '</small></span>' +
-        '<span class="fig">' + r1(value(d, f.id)) + (f.unit ? ' ' + esc(f.unit) : '') + '</span>';
-      r.onclick = () => fieldSheet(f, d);
-      c3.appendChild(r);
-    });
-    m.appendChild(c3);
-  }
+  /* "Through the day" used to repeat every multi-entry field underneath the
+     tiles, with its running total on the right — the same number the tile
+     already shows. The individual readings are still one tap away, in the
+     field's own sheet, which is where you go to add one anyway. */
 }
 
 /* ── FOOD ── */
