@@ -365,29 +365,20 @@ const UI = {
     return i;
   },
 
-  /* ── the standard settings panel ──
-     Look and Sound are per app on purpose: ARC can be Monarch while BLOCK is
-     Ice. Day and Feel are shared, because two apps disagreeing about what day
-     it is, or about whether the phone buzzes, is how a suite stops feeling
-     like one product. */
+  /* ── settings ──
+     Two tabs. Look, sound and feel are all "how this app comes across", which
+     is one idea and does not need three places to live. */
   settings(appId, extraTabs) {
     css();
     const tabs = [];
-
-    if (g.Skins) tabs.push({ id: 'look', name: 'LOOK', draw: drawLook.bind(null, appId) });
-    if (g.Sfx) tabs.push({ id: 'sound', name: 'SOUND', draw: drawSound.bind(null, appId) });
-    if (g.Mobile) tabs.push({ id: 'feel', name: 'FEEL', draw: drawFeel });
-    if (g.Day) tabs.push({ id: 'day', name: 'DAY', draw: drawDay });
+    if (g.Skins || g.Sfx || g.Mobile) tabs.push({ id: 'app', name: 'APP', draw: drawApp.bind(null, appId) });
     if (g.IO) tabs.push({ id: 'data', name: 'DATA', draw: el2 => g.IO.panel(el2, appId) });
     (extraTabs || []).forEach(t => tabs.push(t));
 
     let active = tabs[0] && tabs[0].id;
     return UI.dialog({
-      title: 'SETTINGS · ' + String(appId || '').toUpperCase(),
-      width: 560,
+      title: 'SETTINGS', width: 560,
       body: (body, h) => {
-        /* The strip sits outside the scrolling area, so it stays put while
-           the pane under it moves. A tab bar that scrolls away is a web page. */
         const pane = el('div');
         const show = id => {
           active = id;
@@ -396,9 +387,11 @@ const UI = {
           if (t) t.draw(pane, h);
           body.scrollTop = 0;
         };
-        const bar = UI.segmented(tabs, active, show);
-        bar.style.margin = '0 var(--s-4,16px) var(--s-3,12px)';
-        h.box.insertBefore(bar, body);
+        if (tabs.length > 1) {
+          const bar = UI.segmented(tabs, active, show);
+          bar.style.margin = '0 var(--s-4,16px) var(--s-3,12px)';
+          h.box.insertBefore(bar, body);
+        }
         body.appendChild(pane);
         show(active);
       },
@@ -450,203 +443,116 @@ function legacyDialog(o) {
   return handle;
 }
 
-/* ── feel ──
-   The one tab that is about the hands rather than the eyes. */
-function drawFeel(pane) {
-  const M = g.Mobile;
-  pane.appendChild(el('div', 'mb-group', 'HOW IT ANSWERS — SHARED BY EVERY APP'));
+/* ── the APP tab ──
+   Theme, colours, sound, buzz. Every app keeps its own; the colours belong to
+   the theme and follow it into any app wearing it. That last sentence used to
+   be printed on the screen. It is written here instead, where it belongs. */
+function drawApp(appId, pane) {
+  const S = g.Skins, X = g.Sfx, M = g.Mobile;
 
-  const canBuzz = !!navigator.vibrate;
-  pane.appendChild(UI.row('Vibrate on a tap',
-    canBuzz
-      ? 'A short buzz when something lands, a longer one when something finishes.'
-      : 'This phone or browser has no vibration. <b>iPhone Safari has none at all</b>, so on an iPhone the sound is the whole of the feedback.',
-    UI.toggle(M.haptics && canBuzz, on => { M.setHaptics(on); if (on) M.haptic('success'); })));
+  if (S) {
+    S.injectPickerCSS();
+    const wrap = el('div');
+    wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--s-2,8px)';
+    pane.appendChild(wrap);
+    const colours = el('div');
+    S.picker(wrap, { custom: false, onChange: () => { if (X) X.play('drop'); paint(); } });
+    pane.appendChild(colours);
+    paint();
 
-  pane.appendChild(UI.row('Feel it', 'Tap, finish, then a whole day done.', (() => {
-    const b = el('button', 'mb-btn mb-press mb-tap', 'PLAY');
-    b.type = 'button';
-    b.onclick = () => {
-      M.feedback('tick');
-      setTimeout(() => M.feedback('success'), 260);
-      setTimeout(() => M.feedback('complete', { level: 3 }), 620);
-    };
-    return b;
-  })()));
+    function paint() {
+      const skin = S.current || S.get(S.list()[0].id), id = skin.id;
+      const pal = S.paletteFor(id);
+      colours.innerHTML = '';
 
-  pane.appendChild(el('div', 'mb-group', 'THIS DEVICE'));
-  const bits = [
-    M.ios ? 'iPhone or iPad' : M.android ? 'Android' : 'desktop',
-    M.touch ? 'touch screen' : 'mouse and keyboard',
-    M.standalone ? 'installed to the home screen' : 'running in the browser',
-    canBuzz ? 'can vibrate' : 'cannot vibrate',
-    M.reduced() ? 'motion reduced in system settings' : 'full motion',
-  ];
-  pane.appendChild(el('p', null, '<span style="color:var(--text-muted,#5b6d80);font-size:var(--f-1,12px);line-height:1.6">' +
-    esc(bits.join(' · ')) + '</span>'));
+      const head = el('div', 'mb-group');
+      head.style.cssText = 'display:flex;align-items:center;gap:var(--s-2,8px)';
+      head.appendChild(el('span', null, 'COLOURS'));
+      const sp = el('span'); sp.style.flex = '1'; head.appendChild(sp);
+      if (S.isCustomised(id)) {
+        const b = el('button', 'mb-btn quiet mb-press mb-tap', 'RESET');
+        b.style.minHeight = '32px';
+        b.onclick = () => { S.clearPalette(id); S.apply(skin); paint(); };
+        head.appendChild(b);
+      }
+      colours.appendChild(head);
 
-  if (!M.standalone && M.touch) {
-    pane.appendChild(el('p', null, '<span style="color:var(--warn,#ffb347);font-size:var(--f-1,12px);line-height:1.6">' +
-      'Add this to your home screen and it opens without the browser bars, gets the full screen, ' +
-      'and stops iOS clearing its data after seven days of not being opened.</span>'));
-  }
-}
+      /* Six swatches in a row, named underneath. The row of labelled lines it
+         replaced was six headings, six sentences and a lot of scrolling. */
+      const strip = el('div');
+      strip.style.cssText = 'display:flex;gap:var(--s-2,8px);flex-wrap:wrap';
+      const live = () => S.apply(skin, pal);
+      const commit = () => { S.savePalette(id, pal); paint(); };
+      const swatch = (key, label, val, set) => {
+        const cell = el('div');
+        cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;flex:1 0 46px';
+        const c = el('input', 'mb-swatch mb-tap');
+        c.type = 'color'; c.value = val; c.style.width = '100%';
+        c.oninput = () => { set(c.value); live(); };
+        c.onchange = commit;
+        cell.appendChild(c);
+        cell.appendChild(el('span', null, label)).style.cssText =
+          'font-size:10px;color:var(--text-muted,#5b6d80);letter-spacing:.04em';
+        return cell;
+      };
+      [['bg', 'Back'], ['panel', 'Card'], ['line', 'Line'],
+       ['ink', 'Text'], ['mut', 'Muted'], ['acc', 'Accent']]
+        .forEach(([k, l]) => strip.appendChild(swatch(k, l, pal[k], v => { pal[k] = v; })));
+      colours.appendChild(strip);
 
-/* ── settings tabs ── */
-/* Two layers, kept visibly separate because they are separate:
-   the THEME is picked per app, the COLOURS belong to that theme and follow it
-   into every app that wears it. */
-function drawLook(appId, pane) {
-  const S = g.Skins;
-  S.injectPickerCSS();
+      const chart = el('div');
+      chart.style.cssText = 'display:flex;gap:var(--s-2,8px);flex-wrap:wrap;margin-top:var(--s-3,12px)';
+      pal.colors.forEach((hex, i) =>
+        chart.appendChild(swatch('c' + i, i === 0 ? 'Charts' : ' ', hex, v => { pal.colors[i] = v; })));
+      colours.appendChild(chart);
 
-  pane.appendChild(el('div', 'mb-group', 'THEME — THIS APP ONLY'));
-  const wrap = el('div');
-  wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px';
-  pane.appendChild(wrap);
+      const warn = S.check({ bg: pal.bg, panel: pal.panel, accent: pal.acc, text: pal.ink });
+      if (!warn.ok) {
+        colours.appendChild(el('p', null,
+          '<span style="color:var(--warn,#ffb347);font-size:var(--f-1,12px)">Hard to read: ' +
+          (warn.accentOnBg < 3 ? 'accent too close to the background. ' : '') +
+          (warn.textOnPanel < 4.5 ? 'text too close to the cards.' : '') + '</span>'));
+      }
 
-  const colours = el('div');
-  S.picker(wrap, {
-    custom: false,
-    onChange: () => { if (g.Sfx) g.Sfx.play('drop'); paintColours(); },
-  });
-  pane.appendChild(colours);
-  paintColours();
-
-  function paintColours() {
-    const skin = S.current || S.get(S.list()[0].id);
-    const id = skin.id;
-    let pal = S.paletteFor(id);
-    colours.innerHTML = '';
-
-    colours.appendChild(el('div', 'mb-group',
-      'COLOURS — ' + esc(skin.name.toUpperCase()) +
-      (S.isCustomised(id) ? ' <span style="color:var(--accent,#7ee8fa)">· EDITED</span>' : '')));
-    colours.appendChild(el('p', null,
-      'These belong to the theme, so every app set to ' + esc(skin.name) + ' gets them.'));
-
-    /* live while you drag, saved when you let go */
-    const live = () => S.apply(skin, pal);
-    const commit = () => { S.savePalette(id, pal); paintColours(); };
-
-    S.FIELDS.forEach(([key, label]) => {
-      const row = el('div', 'mb-row');
-      row.appendChild(el('div', 'lbl', '<b>' + esc(label) + '</b>'));
-      const c = el('input', 'mb-swatch mb-tap');
-      c.type = 'color'; c.value = pal[key];
-      c.oninput = () => { pal[key] = c.value; live(); };
-      c.onchange = commit;
-      row.appendChild(c);
-      colours.appendChild(row);
-    });
-
-    const nrow = el('div', 'mb-row');
-    nrow.appendChild(el('div', 'lbl', '<b>Node &amp; chart colours</b><span>The six ARC paints with.</span>'));
-    const strip = el('div');
-    strip.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
-    pal.colors.forEach((hex, i) => {
-      /* 44 wide even though the ink is small: six swatches in a row is the
-         easiest thing in this panel to mis-tap. */
-      const c = el('input', 'mb-swatch mb-tap');
-      c.type = 'color'; c.value = hex;
-      c.style.width = '38px';
-      c.oninput = () => { pal.colors[i] = c.value; live(); };
-      c.onchange = commit;
-      strip.appendChild(c);
-    });
-    nrow.appendChild(strip);
-    colours.appendChild(nrow);
-
-    const warn = S.check({ bg: pal.bg, panel: pal.panel, accent: pal.acc, text: pal.ink });
-    colours.appendChild(el('p', null, warn.ok
-      ? '<span style="color:var(--success,#6ee7a8);font-size:12px">Readable — good contrast on both counts.</span>'
-      : '<span style="color:var(--warn,#ffb347);font-size:12px">Hard to read: ' +
-        (warn.accentOnBg < 3 ? 'the accent is too close to the background. ' : '') +
-        (warn.textOnPanel < 4.5 ? 'the text is too close to the cards.' : '') + '</span>'));
-
-    const acts = el('div', 'mb-row');
-    acts.appendChild(el('div', 'lbl', S.isCustomised(id)
-      ? '<b>Back to normal</b><span>Throws away your colours and repaints ' + esc(skin.name) + ' as it ships.</span>'
-      : '<b>Use this everywhere</b><span>Sets every other app to this theme. Their own colours are untouched.</span>'));
-    if (S.isCustomised(id)) {
-      const b = el('button', 'mb-btn bad mb-press mb-tap', 'RESET COLOURS');
-      b.onclick = () => { S.clearPalette(id); S.apply(skin); pal = S.paletteFor(id); paintColours(); UI.toast('reset to the theme’s own colours'); };
-      acts.appendChild(b);
-    } else {
-      const b = el('button', 'mb-btn mb-press mb-tap', 'APPLY TO ALL');
-      b.onclick = () => {
+      const all = el('button', 'mb-btn mb-press mb-tap', 'USE THIS THEME EVERYWHERE');
+      all.style.cssText = 'width:100%;margin-top:var(--s-4,16px)';
+      all.onclick = () => {
         try {
-          Object.keys(localStorage).filter(k => k.indexOf('suite_skin.') === 0).forEach(k => localStorage.setItem(k, id));
+          Object.keys(localStorage).filter(k => k.indexOf('suite_skin.') === 0)
+            .forEach(k => localStorage.setItem(k, id));
           localStorage.setItem('suite_skin', id);
-          UI.toast('every app is now <b>' + esc(skin.name) + '</b>');
+          UI.toast('every app is <b>' + esc(skin.name) + '</b>');
         } catch (e) { UI.toast('could not save that', { bad: true }); }
       };
-      acts.appendChild(b);
+      colours.appendChild(all);
     }
-    colours.appendChild(acts);
   }
-}
 
-function drawSound(appId, pane) {
-  const S = g.Sfx, cur = S.settings;
-  pane.appendChild(el('div', 'mb-group', 'SOUND THEME — THIS APP ONLY'));
-  const chips = el('div', 'mb-chips');
-  S.PACKS.forEach(p => {
-    const c = el('button', 'mb-chip mb-press mb-tap' + (cur.pack === p.id ? ' on' : ''), esc(p.name));
-    c.onclick = () => { S.pack(p.id); S.preview(p.id); pane.innerHTML = ''; drawSound(appId, pane); };
-    chips.appendChild(c);
-  });
-  pane.appendChild(chips);
+  if (X) {
+    pane.appendChild(el('div', 'mb-group', 'SOUND'));
+    const chips = el('div', 'mb-chips');
+    const redraw = () => { pane.innerHTML = ''; drawApp(appId, pane); };
+    X.PACKS.forEach(p => {
+      const c = el('button', 'mb-chip mb-press mb-tap' + (X.settings.pack === p.id ? ' on' : ''), esc(p.name));
+      c.onclick = () => { X.pack(p.id); X.unlock(); X.preview(p.id); redraw(); };
+      chips.appendChild(c);
+    });
+    pane.appendChild(chips);
 
-  pane.appendChild(el('div', 'mb-group', 'INSTRUMENT'));
-  const vrow = el('div', 'mb-row');
-  vrow.appendChild(el('div', 'lbl', '<b>Voice</b><span>The same theme played on a different instrument.</span>'));
-  const sel = el('select', 'mb-sel');
-  sel.appendChild(Object.assign(el('option', null, 'theme default'), { value: '' }));
-  S.VOICES.forEach(v => { const o = el('option', null, v); o.value = v; if (cur.voice === v) o.selected = true; sel.appendChild(o); });
-  sel.onchange = () => { S.voice(sel.value); S.preview(); };
-  vrow.appendChild(sel); pane.appendChild(vrow);
+    pane.appendChild(UI.row('Sound', null, UI.toggle(!X.mute(), on => { X.mute(!on); if (on) { X.unlock(); X.play('done'); } })));
 
-  const volrow = el('div', 'mb-row');
-  volrow.appendChild(el('div', 'lbl', '<b>Volume</b>'));
-  const r = el('input', 'mb-range'); r.type = 'range'; r.min = 0; r.max = 100; r.value = Math.round(cur.vol * 100);
-  r.style.maxWidth = '180px';
-  r.oninput = () => S.volume(r.value / 100);
-  r.onchange = () => S.play('done');
-  volrow.appendChild(r); pane.appendChild(volrow);
+    const r = el('input', 'mb-range'); r.type = 'range'; r.min = 0; r.max = 100;
+    r.value = Math.round(X.volume() * 100); r.style.maxWidth = '180px';
+    r.oninput = () => X.volume(r.value / 100);
+    r.onchange = () => { X.unlock(); X.play('done'); };
+    pane.appendChild(UI.row('Volume', null, r));
+  }
 
-  const mrow = el('div', 'mb-row');
-  mrow.appendChild(el('div', 'lbl', '<b>Sound in this app</b><span>Every app remembers its own.</span>'));
-  const mb = UI.toggle(!cur.mute, on => { S.mute(!on); if (on) S.play('done'); });
-  mrow.appendChild(mb); pane.appendChild(mrow);
-
-  const trow = el('div', 'mb-row');
-  trow.appendChild(el('div', 'lbl', '<b>Hear it</b><span>Tick, finish, then a full completion.</span>'));
-  const tb = el('button', 'mb-btn mb-press mb-tap', 'PLAY');
-  tb.onclick = () => S.preview();
-  trow.appendChild(tb); pane.appendChild(trow);
-}
-
-function drawDay(pane) {
-  const D = g.Day;
-  pane.appendChild(el('div', 'mb-group', 'WHEN YOUR DAY TURNS OVER — SHARED BY EVERY APP'));
-  pane.appendChild(el('p', null,
-    'Anything logged before <b>' + D.startsAt + ':00</b> counts as the day before. ' +
-    'A session at 2am belongs to the day you were still in, not the one the clock says.'));
-
-  const row = el('div', 'mb-row');
-  row.appendChild(el('div', 'lbl', '<b>My day starts at</b><span>Everything else follows from this.</span>'));
-  const sel = el('select', 'mb-sel');
-  for (let h = 0; h <= 11; h++) { const o = el('option', null, String(h).padStart(2, '0') + ':00'); o.value = h; if (D.startsAt === h) o.selected = true; sel.appendChild(o); }
-  sel.onchange = () => { D.set({ startsAt: +sel.value }); pane.innerHTML = ''; drawDay(pane); UI.toast('saved'); };
-  row.appendChild(sel); pane.appendChild(row);
-
-  const info = el('div', 'mb-row');
-  info.appendChild(el('div', 'lbl', '<b>Right now</b><span>Today is <b>' + D.today() + '</b> · rolls over in ' +
-    Math.floor(D.untilRollover() / 60) + 'h ' + (D.untilRollover() % 60) + 'm · ' +
-    (D.isClosed(D.today()) ? 'closed, still open to edits' : 'still running') + '</span>'));
-  pane.appendChild(info);
-  pane.appendChild(el('p', null, '<span style="color:var(--text-muted,#5b6d80);font-size:11.5px">Past dates can always be edited, whatever these are set to.</span>'));
+  if (M) {
+    const canBuzz = !!navigator.vibrate;
+    pane.appendChild(UI.row('Vibrate', canBuzz ? null : 'This device cannot vibrate. iPhones never can.',
+      UI.toggle(M.haptics && canBuzz, on => { M.setHaptics(on); if (on) M.haptic('success'); })));
+  }
 }
 
 g.UI = UI;

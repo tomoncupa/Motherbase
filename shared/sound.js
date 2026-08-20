@@ -23,6 +23,7 @@
 */
 (function (g) {
 'use strict';
+const doc = g.document;
 
 /* voices — the "instrument options". Each is a recipe, not a sample. */
 const VOICES = {
@@ -129,6 +130,20 @@ const CUES = {
   },
 };
 
+/* A single silent loop, started on the first gesture and left running. It
+   costs nothing audible and it is what keeps the session in "playback" on the
+   iOS versions with no audioSession API. */
+let silent = null;
+function keepAwake() {
+  if (silent) { if (silent.paused) silent.play().catch(() => {}); return; }
+  try {
+    silent = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=');
+    silent.loop = true; silent.volume = 0;
+    silent.setAttribute('playsinline', '');
+    silent.play().catch(() => {});
+  } catch (e) { silent = null; }
+}
+
 const Sfx = {
   PACKS: PACKS,
   VOICES: Object.keys(VOICES),
@@ -137,13 +152,41 @@ const Sfx = {
   init(appId) {
     cfg.app = appId || 'app';
     try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY(cfg.app)) || '{}')); } catch (e) {}
-    /* browsers refuse to make noise before the user has touched the page */
-    const unlock = () => { Sfx.unlock(); g.removeEventListener('pointerdown', unlock); g.removeEventListener('keydown', unlock); };
-    g.addEventListener('pointerdown', unlock, { once: true });
-    g.addEventListener('keydown', unlock, { once: true });
+    /* Browsers refuse to make noise before the user has touched the page, and
+       a backgrounded app is suspended again on the way out. So this listener
+       stays for the life of the page rather than firing once — it is a no-op
+       whenever the context is already running. */
+    const wake = () => { if (!ctx || ctx.state !== 'running') Sfx.unlock(); };
+    g.addEventListener('pointerdown', wake, { passive: true });
+    g.addEventListener('keydown', wake);
+    doc.addEventListener('visibilitychange', () => { if (!doc.hidden) wake(); });
+    g.addEventListener('pageshow', wake);
     return Sfx;
   },
-  unlock() { const c = boot(); if (c && c.state === 'suspended') c.resume(); return !!c; },
+  /* ── making an iPhone actually make a noise ──
+     Three separate things silence a home-screen web app, and all three have
+     to be handled or it stays mute:
+
+     1. The context starts suspended until a real gesture. Ordinary, handled
+        everywhere.
+     2. iOS puts a page in an "ambient" audio session by default, and an
+        ambient session is silenced by the physical ring/silent switch. A
+        WebAudio-only page therefore plays nothing whenever that switch is
+        flipped, with no error. Asking for the "playback" session fixes it;
+        where that API is missing, starting a silent looping <audio> element
+        pushes WebKit into a playback session as a side effect, which is the
+        long-standing workaround.
+     3. Backgrounding a standalone app suspends the context, and it does not
+        come back on its own. The old unlock listener was bound {once}, so
+        after the first trip to the home screen the app went quiet for good. */
+  unlock() {
+    const c = boot();
+    if (!c) return false;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    keepAwake();
+    if (c.state === 'suspended') c.resume();
+    return true;
+  },
   save() { try { localStorage.setItem(KEY(cfg.app), JSON.stringify({ pack: cfg.pack, voice: cfg.voice, vol: cfg.vol, mute: cfg.mute })); } catch (e) {} },
 
   get settings() { return Object.assign({}, cfg); },

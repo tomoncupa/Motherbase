@@ -187,9 +187,26 @@ const Skins={
     return t;
   },
 
+  /* A theme that names a font has to fetch it, or the browser falls back to
+     the generic family — and on iOS generic `cursive` is Snell Roundhand, a
+     formal copperplate script. That is why Doodle read as a wedding
+     invitation and Chalkboard read as the same thing: neither font was ever
+     loaded. Injected once per family, and if it never arrives the stack falls
+     back to the system sans rather than to anything decorative. */
+  font(skin){
+    if(!skin||!skin.font)return;
+    const id='mb-font-'+skin.font.replace(/[^a-z0-9]/gi,'');
+    if(document.getElementById(id))return;
+    const l=document.createElement('link');
+    l.id=id;l.rel='stylesheet';
+    l.href='https://fonts.googleapis.com/css2?family='+skin.font+'&display=swap';
+    document.head.appendChild(l);
+  },
+
   /* `pal` paints without saving — that is what makes live preview possible */
   apply(idOrSkin,pal){
     const s=typeof idOrSkin==='string'?this.get(idOrSkin):idOrSkin;
+    this.font(s);
     const use=pal||(this.isCustomised(s.id)?this.paletteFor(s.id):null);
     const t=use?Object.assign(this.tokensFor(s),this.palTokens(use)):this.tokensFor(s),
       r=document.documentElement;
@@ -224,10 +241,11 @@ const Skins={
     const draw=()=>{
       el.innerHTML=this.list().map(s=>{
         const t=this.tokensFor(s);
+        this.font(s);                       /* so the chip is set in its own face */
         return `<button class="skin-chip${this.current&&this.current.id===s.id?' on':''}" data-skin-id="${s.id}"
           style="--sw-bg:${t['--bg']};--sw-panel:${t['--surface-1']};--sw-acc:${t['--accent']}">
           <span class="skin-dots"><i style="background:${t['--bg']}"></i><i style="background:${t['--surface-1']}"></i><i style="background:${t['--accent']}"></i></span>
-          <span class="skin-name">${s.name}</span></button>`}).join('')
+          <span class="skin-name" style="font-family:${t['--font-display']}">${s.name}</span></button>`}).join('')
         +(o.custom===false?'':`<button class="skin-chip" data-skin-id="__custom"><span class="skin-dots">
           <i style="background:var(--surface-2)"></i><i style="background:var(--surface-3)"></i><i style="background:var(--accent)"></i></span>
           <span class="skin-name">Custom</span></button>`);

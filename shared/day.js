@@ -21,11 +21,22 @@
 (function (g) {
 'use strict';
 
-const DEF = { startsAt: 4 };
+/* The day is the calendar day. It used to start at 4am, so anything logged
+   before then counted as the day before — which is defensible and was, in
+   practice, just confusing. Removed 2026-08-20 along with the setting for it.
+
+   The machinery is still here rather than ripped out, because every date in
+   the suite goes through this file and a rewrite would touch everything. With
+   startsAt at 0 it simply does nothing: Day.of() returns the calendar date,
+   isClosed() is never true, and there is no grace window. If a reason to
+   bring it back ever turns up, it is one number. */
+const DEF = { startsAt: 0 };
 const GRACE = 3;                          /* hours between the wrap-up and the rollover */
 const KEY = 'mb.day';                     /* read directly: Records depends on Day, not the reverse */
 let cfg = Object.assign({}, DEF);
-try { Object.assign(cfg, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
+/* Any stored 4am from before that change is dropped rather than honoured —
+   there is no longer a screen that could tell you it was set, or turn it off. */
+try { localStorage.removeItem(KEY); } catch (e) {}
 
 const pad = n => String(n).padStart(2, '0');
 const iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());

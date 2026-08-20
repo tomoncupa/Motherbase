@@ -30,11 +30,44 @@ const el = (t, c, h) => { const n = document.createElement(t); if (c) n.classNam
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const toast = (h, o) => g.UI ? g.UI.toast(h, o) : console.log(h.replace(/<[^>]+>/g, ''));
 
+/* Handing a file to the user, on a platform that does not really do downloads.
+
+   `<a download>` is ignored by iOS Safari and does nothing at all inside a
+   home-screen web app: no file, no error, no hint that it failed. Since a
+   backup is the only safety net local-only data has, silently not producing
+   one is the worst bug in this file.
+
+   So: the share sheet where there is one, which is how you actually save a
+   file on an iPhone (Save to Files, or send it to yourself), and the anchor
+   everywhere else. Returns a promise that resolves true only if the file
+   really went somewhere, so the caller can decide whether to claim a backup
+   happened. */
 function save(name, data, mime) {
-  const a = el('a');
-  a.href = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: mime || 'text/plain;charset=utf-8' }));
-  a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  const type = mime || 'text/plain;charset=utf-8';
+  const blob = data instanceof Blob ? data : new Blob([data], { type: type });
+
+  const anchor = () => {
+    const a = el('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);        /* Safari ignores a detached anchor */
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000);
+    return true;
+  };
+
+  const file = (function () {
+    try { return new File([blob], name, { type: type }); } catch (e) { return null; }
+  })();
+
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    return navigator.share({ files: [file], title: name })
+      .then(() => true)
+      /* AbortError means they closed the share sheet — nothing was saved, and
+         we must not go on to claim a backup was made. */
+      .catch(e => (e && e.name === 'AbortError') ? false : anchor());
+  }
+  return Promise.resolve(anchor());
 }
 const cell = v => { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
 const csv = rows => rows.map(r => r.map(cell).join(',')).join('\r\n');
@@ -102,10 +135,19 @@ const IO = {
       types: types, rows: rows,
       local: S.localKeys ? S.localKeys().reduce((o, k) => { o[k] = localStorage.getItem(k); return o; }, {}) : undefined,
     };
-    save('motherbase-' + appId + '-' + g.Day.today() + '.json', JSON.stringify(bag), 'application/json');
-    try { localStorage.setItem(BK(appId), g.Day.today()); } catch (e) {}
-    toast('<b>' + rows.length + '</b> rows backed up');
-    if (g.Sfx) g.Sfx.play('done');
+    /* The stamp is written when the file lands, not when the button is
+       pressed. It used to be set unconditionally, so on an iPhone — where the
+       download silently did nothing — the app would report a backup that did
+       not exist. Now a cancelled share leaves the warning up, which is
+       correct: nothing was saved. */
+    return save('motherbase-' + appId + '-' + g.Day.today() + '.json', JSON.stringify(bag), 'application/json')
+      .then(done => {
+        if (!done) { toast('nothing saved', { bad: true }); return false; }
+        try { localStorage.setItem(BK(appId), g.Day.today()); } catch (e) {}
+        toast('<b>' + rows.length + '</b> rows backed up');
+        if (g.Sfx) g.Sfx.play('done');
+        return true;
+      });
   },
   /** every app at once — the belt-and-braces one, lives on the home screen */
   backupAll() {
@@ -182,10 +224,9 @@ const IO = {
     const stats = R ? R.stats() : { live: 0, kb: 0 };
 
     pane.appendChild(el('p', null,
-      'Everything lives in this browser, on this machine. ' +
-      (n === null ? '<b style="color:var(--warn,#ffb347)">You have never backed this app up.</b>'
-        : n === 0 ? 'Last backup: <b>today</b>.' : 'Last backup: <b>' + n + ' day' + (n === 1 ? '' : 's') + ' ago</b>.') +
-      ' <span style="opacity:.7">' + stats.live + ' rows · ' + stats.kb + 'kb</span>'));
+      (n === null ? '<b style="color:var(--warn,#ffb347)">Never backed up.</b>'
+        : n === 0 ? 'Backed up <b>today</b>.' : 'Backed up <b>' + n + 'd ago</b>.') +
+      ' <span style="opacity:.6">' + stats.live + ' rows · ' + stats.kb + 'kb</span>'));
 
     const opt = (ic, t, d, fn, cls) => {
       const b = el('button', 'mb-opt mb-press flat' + (cls ? ' ' + cls : ''));
@@ -193,25 +234,24 @@ const IO = {
       b.onclick = fn; pane.appendChild(b); return b;
     };
 
-    pane.appendChild(el('div', 'mb-group', 'SAFETY NET'));
-    opt('⭳', 'Back up ' + esc(IO.spec(appId).name), 'One file with this app’s data. The one that restores.', () => IO.backup(appId));
-    opt('⭱', 'Restore from a backup', 'Brings back anything missing. Newer data on this device is never overwritten.',
+    /* No repaint of this pane afterwards: opt() closes over `pane` and
+       redrawing it from inside a handler rebuilds the node that handler is
+       attached to, which locks the renderer. The line updates next open. */
+    opt('⭳', 'Back up', 'The file that can be restored.', () => IO.backup(appId));
+    opt('⭱', 'Restore', 'Fills in anything missing. Never overwrites newer data.',
       () => IO.pick(f => IO.read(f).then(bag => {
         const c = IO.restore(bag, 'merge');
         toast(c ? '<b>' + c + '</b> rows restored' : 'nothing to restore — this device is already up to date');
       }).catch(e => toast(esc(e.message), { bad: true }))));
-    opt('⟲', 'Rewind to a backup', 'Replaces this app’s data with the file, discarding anything newer.',
+    opt('⟲', 'Rewind', 'Replaces everything with the file. Discards anything newer.',
       () => IO.pick(f => IO.read(f).then(bag =>
         (g.UI ? g.UI.confirm('Rewind to the backup from ' + (bag.at || '?') + '?', 'Anything newer than the file is discarded.', { yes: 'REWIND', danger: true }) : Promise.resolve(confirm('Rewind?')))
           .then(ok => { if (!ok) return; const c = IO.restore(bag, 'replace'); toast('<b>' + c + '</b> rows restored'); })
       ).catch(e => toast(esc(e.message), { bad: true }))), 'bad');
 
-    pane.appendChild(el('div', 'mb-group', 'READABLE EXPORT — NOT A BACKUP'));
-    opt('▦', 'Export as a spreadsheet', 'Opens straight in Google Sheets or Excel. A calendar tab you can read, a log tab you can pivot.',
-      () => IO.export(appId));
+    opt('▦', 'Spreadsheet', 'Readable, not restorable.', () => IO.export(appId));
 
-    pane.appendChild(el('div', 'mb-group', 'DANGER'));
-    opt('⌫', 'Delete ' + esc(IO.spec(appId).name) + '’s data', 'Only this app’s own data. Ticks and activities are shared and stay.',
+    opt('⌫', 'Delete this app’s data', 'Ticks and activities are shared and stay.',
       () => (g.UI ? g.UI.confirm('Delete all of ' + IO.spec(appId).name + '’s data?', 'Back up first. This cannot be undone.', { yes: 'DELETE', danger: true }) : Promise.resolve(confirm('Delete?')))
         .then(ok => { if (!ok) return; const c = g.Rec.clear(IO.spec(appId).types); toast('<b>' + c + '</b> rows deleted'); }), 'bad');
   },

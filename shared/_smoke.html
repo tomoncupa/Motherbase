@@ -51,11 +51,12 @@ function run() {
   const stamp = 'smoke-' + Date.now();
 
   /* ---- day ---- */
-  Day.set({ startsAt: 4, closesAt: 1 });
   const at2am = new Date(); at2am.setHours(2, 0, 0, 0);
   const at9am = new Date(); at9am.setHours(9, 0, 0, 0);
-  ok('day: 2am belongs to yesterday', Day.of(at2am) === Day.shift(Day.calendar(at2am), -1));
-  ok('day: 9am belongs to today', Day.of(at9am) === Day.calendar(at9am));
+  /* The 4am day start was removed on 2026-08-20. A date is now the date. */
+  ok('day: the day is the calendar day, at 2am and at 9am',
+    Day.startsAt === 0 && Day.of(at2am) === Day.calendar(at2am) && Day.of(at9am) === Day.calendar(at9am));
+  ok('day: nothing is ever "closed but still open to edits"', !Day.isClosed(Day.today()));
   ok('day: shift round-trips', Day.shift(Day.shift('2026-03-01', 40), -40) === '2026-03-01');
   ok('day: diff counts days', Day.diff('2026-03-11', '2026-03-01') === 10);
   ok('day: last(7) is 7 dates ending today', Day.last(7).length === 7 && Day.last(7)[6] === Day.today());
@@ -231,6 +232,38 @@ function run() {
     sw.click();
     return sw.on === true && got === true && sw.getAttribute('aria-checked') === 'true';
   })());
+
+  /* ---- themes carry their own face ---- */
+  /* This one exists because it broke: Chalkboard and Doodle named the same
+     font, and neither font was ever fetched — so both fell through to the
+     generic `cursive` family, which iOS renders as a copperplate script. */
+  const faces = Skins.data.skins.map(k => (k.texture || {}).display || '').filter(Boolean);
+  ok('skins: no theme falls back to a generic decorative family',
+    !Skins.data.skins.some(k => /(^|,)\s*(cursive|fantasy)\s*$/.test((k.texture || {}).display || '')));
+  ok('skins: no two themes wear the same face',
+    new Set(faces).size === faces.length);
+  ok('skins: a theme that names a font fetches it', (() => {
+    const k = Skins.data.skins.filter(x => x.font)[0];
+    if (!k) return false;
+    Skins.font(k);
+    return !!document.getElementById('mb-font-' + k.font.replace(/[^a-z0-9]/gi, ''));
+  })());
+  ok('skins: mono is actually monochrome',
+    (() => { const t = Skins.tokensFor(Skins.get('mono')); return t['--text-1'] === '#FFFFFF' && t['--accent'] === '#FFFFFF'; })());
+
+  /* ---- the backup stamp ---- */
+  /* Also because it broke: the stamp was written when the button was pressed
+     rather than when the file landed, so an iPhone — where the download
+     silently does nothing — reported backups that did not exist. */
+  ok('io: a backup that saved nothing does not claim to have run', (() => {
+    const key = 'mb.backup.__smoke', had = localStorage.getItem(key);
+    localStorage.removeItem(key);
+    const stamped = localStorage.getItem(key) != null;
+    if (had != null) localStorage.setItem(key, had);
+    return !stamped && IO.staleDays('__smoke') === null && IO.isStale('__smoke');
+  })());
+  ok('io: save() reports whether the file actually went anywhere',
+    typeof IO.backup === 'function' && /Promise|then/.test(String(IO.backup)));
 
   /* ---- clean up after ourselves ---- */
   Rec.clear([stamp]);
