@@ -531,6 +531,71 @@ function dragToDismiss(panel, veil, scroller, close) {
 }
 
 /* ── swipe a row ───────────────────────────────────────────────────────── */
+/* == hold to open a menu ==================================================
+   Two gestures start identically and must not be confused:
+
+     a SHORT hold (~500ms) opens a contextual menu — "what can I do with this?"
+     a LONG hold (~900ms) picks the thing up to move it — "put this elsewhere"
+
+   They are separated by time on purpose, because separating them by anything
+   else means guessing at intent. 500ms is roughly the platform convention for
+   a context menu and is comfortably longer than a slow tap.
+
+   A hold that has fired must not also fire the click underneath it, or opening
+   the menu about a thing also toggles that thing. That is what the capture
+   listener below is for.
+
+   On a desktop the same call wires right-click, because that is what
+   right-click has always meant — one call, both surfaces. */
+function hold(el, fn, opts) {
+  base();
+  opts = opts || {};
+  const delay = opts.delay || 500;
+  let timer = null, sx = 0, sy = 0, fired = false, id = null;
+  const cancel = () => { clearTimeout(timer); timer = null; id = null; };
+
+  el.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;  /* right-click has its own path */
+    if (opts.skip && e.target.closest(opts.skip)) return;
+    id = e.pointerId; sx = e.clientX; sy = e.clientY; fired = false;
+    timer = setTimeout(() => {
+      fired = true; timer = null;
+      /* The buzz is the only signal that the hold registered. Without it you
+         cannot tell a working long-press from a dead one until the menu
+         appears, by which point you have already held too long. */
+      Mobile.haptic('heavy');
+      fn(e);
+    }, delay);
+  }, { passive: true });
+
+  /* Movement means this was a scroll or a drag, not a hold. */
+  el.addEventListener('pointermove', e => {
+    if (id === null || e.pointerId !== id) return;
+    if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 10) cancel();
+  }, { passive: true });
+
+  el.addEventListener('pointerup', cancel, { passive: true });
+  el.addEventListener('pointercancel', cancel, { passive: true });
+
+  el.addEventListener('click', e => {
+    if (!fired) return;
+    fired = false;
+    e.preventDefault(); e.stopPropagation();
+  }, true);
+
+  el.addEventListener('contextmenu', e => {
+    if (opts.skip && e.target.closest(opts.skip)) return;
+    e.preventDefault();
+    fn(e);
+  });
+
+  /* iOS puts its own callout (Copy / Look Up) over a long press on text, and
+     nothing else suppresses it. */
+  el.style.webkitTouchCallout = 'none';
+  return el;
+}
+
+
 function swipe(row, opts) {
   base();
   opts = opts || {};
@@ -624,6 +689,11 @@ const Mobile = {
 
   sheet: sheet,
   swipe: swipe,
+  /** hold to open a contextual menu; right-click does the same with a mouse.
+      opts.delay raises the threshold — use ~900 for pick-up-to-move, so the
+      two gestures stay tellable apart. opts.skip is a selector for children
+      that should keep their own behaviour. */
+  hold: hold,
 
   /** the contextual menu, as a sheet on a phone.
       items: [{label, note, icon, kind:'bad', on:true, fn}] or '-' */
