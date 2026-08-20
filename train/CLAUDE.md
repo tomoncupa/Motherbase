@@ -308,6 +308,34 @@ Two limits that are **not** verified and must not be claimed:
 
 ---
 
+## What is built, as of 2026-08-20
+
+| Screen | State |
+|---|---|
+| Workout (the day) | Built. Matches the screenshots line for line |
+| Exercise picker | Built. Categories, drill-down, and search across all 270 |
+| Training ▸ TRACK | Built. Steppers, SAVE/UPDATE, CLEAR, set list, tap to edit, tick to complete, hold to delete, comments |
+| Training ▸ HISTORY | Built. Newest first, 100 workouts at a time |
+| Training ▸ GRAPH | Built, max weight only. The other graph types are not in yet |
+| Day's exercises drawer | Built. Add Exercise and Home; Add To Superset is not in yet |
+| Importer | Built and verified against his real backup |
+| Settings | The shared panel plus a TRAIN tab holding the unit and the importer |
+
+Not built: calendar, analysis and breakdown, records and the rep-max grid,
+routines, supersets, goals, plate calculator, custom barbells, rest timer,
+workout timer, copy and move workout, share, the app-level navigation drawer,
+and the first-run sequence.
+
+Two known problems worth fixing before he trains with it on the phone:
+
+1. **The import blocks the screen for about ten seconds** on a desktop, and it
+   is one synchronous block, so the progress bar cannot paint. On a Galaxy A10
+   that could be half a minute of a frozen screen, which reads as a crash.
+2. **`health.js` warns above 4.2MB** on the basis that localStorage caps at
+   about 5MB. His training data alone is 4.16MB. That cap was measured in
+   Chrome on 2026-08-20 and is wrong: 20,000 entries and 19.5MB wrote without
+   an error. The threshold is in `shared/`, so it is not TRAIN's to change.
+
 ## Testing
 
 There is no test framework and Tom cannot test code. Node is not installed here
