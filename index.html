@@ -520,6 +520,7 @@ const APPS = [
   { id: 'habits', nm: 'HABITS', ic: '◎', file: 'habits/',           ds: 'cadence, streaks, the long view',           shares: 'the same ticks' },
   { id: 'form',   nm: 'FORM',   ic: '▶', file: 'form/',             ds: 'side-by-side lift review',                  solo: 1 },
   { id: 'status', nm: 'STATUS', ic: '◐', file: 'status/',           ds: 'sleep, weight, mood, food and money',        shares: 'the daily measurements' },
+  { id: 'train',  nm: 'TRAIN',  ic: '⛭', file: 'train/',            ds: 'the training log — sets, reps, records',     shares: 'the training log + ticks' },
 ];
 const app = id => APPS.find(a => a.id === id);
 const frames = {};      /* id -> iframe. Built on first visit, then kept alive. */
@@ -619,6 +620,18 @@ function dueHabits(date) {
     .filter(h => !h.archived)
     .filter(h => h.cadence.type !== 'days' || h.cadence.days[d])
     .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+}
+
+/* The most recent day TRAIN has any sets on. Read-only: the home screen is a
+   window onto TRAIN's rows, never a second writer of them. */
+function trainLastDay() {
+  const rows = Rec.all('set');
+  let best = null;
+  for (let i = 0; i < rows.length; i++) {
+    const d = rows[i].date;
+    if (d && (!best || d > best)) best = d;
+  }
+  return best;
 }
 
 /* ══════════════ widgets ══════════════
@@ -761,6 +774,92 @@ const WIDGETS = {
       st.appendChild(el('div', 'stat', '<b>' + best + '</b><span>BEST STREAK</span>'));
       st.appendChild(el('div', 'stat', '<b>' + Object.keys(doc.activities).length + '</b><span>ACTIVITIES</span>'));
       body.appendChild(st);
+    },
+  },
+
+  /* ── TRAIN ──
+     Both widgets read the shared rows directly. TRAIN owns `set`, `exercise`
+     and `session`; nothing here writes any of them, which is what lets the
+     home screen show the training log without becoming a second author of it. */
+  training: {
+    nm: 'TRAINING', w: 5, h: 3,
+    sub: () => {
+      const d = trainLastDay();
+      if (!d) return 'nothing logged yet';
+      return d === LifeOS.day() ? 'today' : LifeOS.shift(LifeOS.day(), -1) === d ? 'yesterday' : esc(d);
+    },
+    draw(body) {
+      const day = trainLastDay();
+      if (!day) {
+        body.appendChild(el('div', 'empty',
+          'No training logged. Open <span class="link" onclick="go(\'train\')">TRAIN</span> — ' +
+          'if you have been using FitNotes, it imports your whole history.'));
+        return;
+      }
+      const sets = Rec.all('set', { date: day }), exs = Rec.map('exercise');
+      const order = [], byEx = {};
+      sets.forEach(r => {
+        const p = r.payload;
+        if (!byEx[p.ex]) { byEx[p.ex] = []; order.push(p.ex); }
+        byEx[p.ex].push(p);
+      });
+      let reps = 0, vol = 0;
+      sets.forEach(r => { reps += r.payload.r || 0; vol += (r.payload.kg || 0) * (r.payload.r || 0); });
+
+      const st = el('div', 'stats');
+      st.appendChild(el('div', 'stat acc', '<b>' + order.length + '</b><span>EXERCISES</span>'));
+      st.appendChild(el('div', 'stat', '<b>' + sets.length + '</b><span>SETS</span>'));
+      st.appendChild(el('div', 'stat', '<b>' + reps + '</b><span>REPS</span>'));
+      st.appendChild(el('div', 'stat', '<b>' + Math.round(vol) + '</b><span>VOLUME KG</span>'));
+      body.appendChild(st);
+
+      const list = el('div', 'rowlist');
+      order.slice(0, 6).forEach(id => {
+        const nm = exs[id] ? exs[id].name : id;
+        const n = byEx[id].length;
+        const row = el('div', 'row');
+        row.innerHTML = '<span class="nm">' + esc(nm) + '</span><span class="rt">' + n +
+          ' set' + (n === 1 ? '' : 's') + '</span>';
+        list.appendChild(row);
+      });
+      body.appendChild(list);
+    },
+  },
+
+  trainvol: {
+    nm: 'TRAINING VOLUME', w: 4, h: 2,
+    sub: () => 'last 8 weeks',
+    draw(body) {
+      const weeks = 8, bars = [];
+      for (let w = weeks - 1; w >= 0; w--) {
+        const end = LifeOS.shift(LifeOS.day(), -w * 7);
+        let vol = 0, days = 0;
+        for (let i = 0; i < 7; i++) {
+          const d = LifeOS.shift(end, -i);
+          const rows = Rec.all('set', { date: d });
+          if (rows.length) days++;
+          rows.forEach(r => { vol += (r.payload.kg || 0) * (r.payload.r || 0); });
+        }
+        bars.push({ vol, days });
+      }
+      const max = Math.max(1, ...bars.map(b => b.vol));
+      if (!max || max === 1) {
+        body.appendChild(el('div', 'empty', 'No training in the last eight weeks.'));
+        return;
+      }
+      const wrap = el('div');
+      wrap.style.cssText = 'display:flex;align-items:flex-end;gap:6px;height:100%;min-height:60px;padding:6px 0';
+      bars.forEach((b, i) => {
+        const col = el('div');
+        col.style.cssText = 'flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%';
+        const bar = el('div');
+        bar.style.cssText = 'width:100%;border-radius:3px;background:var(--acc);opacity:' +
+          (i === bars.length - 1 ? 1 : .55) + ';height:' + Math.max(3, Math.round((b.vol / max) * 100)) + '%';
+        bar.title = Math.round(b.vol) + ' kg over ' + b.days + ' days';
+        col.appendChild(bar);
+        wrap.appendChild(col);
+      });
+      body.appendChild(wrap);
     },
   },
 
