@@ -45,7 +45,12 @@ function tokens(base,cut,ranks,skin){
   const t={
     '--bg':bg,'--surface-1':panel,'--surface-2':mix(panel,text,.07),'--surface-3':mix(panel,text,.15),
     '--overlay':mix(bg,'#000000',.25),
-    '--text-1':text,'--text-2':mix(text,bg,.32),'--text-muted':mix(text,bg,.56),'--text-inverse':bg,
+    /* Secondary text used to sit 32% and 56% of the way toward the
+        background, which is the textbook way to build hierarchy with colour.
+        It also meant a label never looked white on a screen that is meant to
+        look white. Pulled most of the way back: hierarchy now comes from size
+        and weight, which it should have been doing more of anyway. */
+    '--text-1':text,'--text-2':mix(text,bg,.12),'--text-muted':mix(text,bg,.34),'--text-inverse':bg,
     '--border':mix(panel,text,.13),'--border-strong':mix(panel,text,.28),'--focus':accent,
     '--accent':accent,'--accent-hover':mix(accent,text,.22),'--accent-fg':readable(accent),
     '--success':'#5FE39B','--warn':'#F2C14E','--danger':'#FF6B6B','--info':'#6C8CFF',
