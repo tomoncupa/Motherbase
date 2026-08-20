@@ -116,12 +116,68 @@ number and you corrupt four years of training; convert only the display and
 nothing moves.
 
 - **Default display unit is pounds**, set in the first-run sequence.
-- A set always redisplays in the unit it was entered in, never the global default.
+- **Everything on screen reads in the currently chosen unit**, not the unit each
+  set was typed in. This was wrong in the first version of `index.html`, which
+  showed each set in its entry unit and so put kilograms and pounds on one
+  screen. FitNotes does not do that: its `Change Weight Unit ▸ Convert Existing
+  Values / Just Change Unit` dialog only makes sense if the stored kilograms are
+  the truth and the setting decides how they read.
+- The entry unit is still recorded per set, and it earns its place: a set typed
+  as 500 lb is stored as 226.79645 kg, and knowing it was typed in pounds is
+  what lets it read back as exactly 500 rather than 500.0000001.
+- **One decimal, always, and the unit plural**: `4.0 kgs`, `12.5 kgs`. That is
+  how FitNotes prints a weight in the log.
+- A workout's length **truncates** rather than rounds. His 5 August session ran
+  72m 56s and FitNotes calls it `1h 12m`, not `1h 13m`.
 - Rounding is display-only. Never write a rounded value back over a stored one.
 - Old FitNotes versions stored some weights at lower float precision, so the file
   contains both 226.79645471781987 and 226.79644775390625 for the same 500 lb.
   Import must round to a sane number of decimals for display without altering the
   stored value.
+
+## Where things live on screen
+
+The screenshots in `Downloads/Fitnotes Screen Shots/` are the reference. Match
+them. Some of what they settle, because the first version of this file guessed
+and guessed wrong:
+
+- **The top bar is drawer, title, calendar, add, overflow.** Nothing else ever
+  goes in it.
+- **The overflow menu** is Settings, Copy Workout, Comment Workout, Time
+  Workout, Share Workout, Analysis. FitNotes also lists Body Tracker; TRAIN does
+  not, because it does not have one.
+- **One card per exercise**: the name across the top, a hairline under it, the
+  sets below. Weight and reps are two right-aligned columns of bold numbers with
+  a small unit after each. **No set numbers in the day view** — those appear on
+  the training screen, where you are editing one of them.
+- **A set comment shows as a small marker at the left of its row**, not as a
+  line of text under the set. Four thousand of his sets carry one; a line each
+  would triple the length of every workout.
+- **A filled tick on the exercise card** means every set in it is complete.
+- **The workout's start and end** sit in their own card above the first
+  exercise, and only when a time was recorded.
+- **The empty day** says "Workout Log Empty" in the middle, with Start New
+  Workout and Copy Previous Workout near the bottom where the thumb is.
+
+**No invented summaries.** The first version put a sets/reps/volume strip at the
+top of every workout. FitNotes has no such thing: those numbers live in
+Analysis, and inventing a widget is not reproducing an app.
+
+## A once-ever action does not get permanent furniture
+
+The importer had a button in the top bar of every screen. It is used once.
+
+The rule this is an instance of: **weight in the interface follows frequency of
+use, not difficulty of build.** The import was the hard part to write, which is
+exactly why it was tempting to give it a permanent home, and that reasoning is
+backwards. It now lives in Settings, and appears on the empty screen only while
+the store has nothing in it at all — the one moment it is the next thing he
+would want.
+
+Apply the same test to everything still unbuilt. The rest timer, the plate
+calculator and the set editor are touched many times per session and belong
+within a thumb's reach. Routines, goals and the analysis screens are touched
+occasionally and belong behind the drawer or the overflow menu.
 
 ## First run
 
