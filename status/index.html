@@ -1323,7 +1323,7 @@ function parseReceipt(text) {
 /* the photo strip used by both the label reader and the receipt reader */
 function photoBlock(body, kind, onText, onShot) {
   const wrap = el('div', 'shot');
-  const status = el('div', 'note', 'Photograph the label. Check what it reads.');
+  const status = el('div', 'note', 'Photograph the label, then check what it read.');
   let imgEl = null;
   const take = el('button', 'btn', 'Photo');
   take.onclick = () => pickPhoto(file => {
@@ -1505,7 +1505,7 @@ function recost(row, before) {
 
   UI.confirm(
     'Update ' + hits.length + ' logged serving' + (hits.length === 1 ? '' : 's') + '?',
-    'They were saved with the old numbers. Each keeps the amount you ate and is recalculated from the corrected ' + row.name + '. Leave it and only future servings use the new numbers.',
+    'Each keeps the amount you ate and is recalculated from the corrected ' + row.name + '. Leave it and only future servings use the new numbers.',
     { yes: 'UPDATE', no: 'LEAVE THEM' }
   ).then(ok => {
     if (!ok) return;
@@ -1771,8 +1771,8 @@ function foodPicker() {
       list.innerHTML = '';
       if (!all.length) {
         list.appendChild(el('div', 'empty', Object.keys(foods()).length
-          ? 'Nothing matches. Try fewer letters, or add it as a new food.'
-          : 'No foods yet. Add one by photographing its nutrition panel, or type it in. Once it is in here, logging it is two taps.'));
+          ? 'Nothing matches, so try fewer letters or add it as a new food.'
+          : 'Photograph a nutrition panel or type one in, and logging it after that is two taps.'));
       }
       all.slice(0, 40).forEach(f => {
         const r = el('div', 'row tap');
@@ -2004,7 +2004,7 @@ function foodEditor(fd) {
     if (!isNew) {
       const del = el('button', 'btn wide quiet', 'Delete this food');
       del.style.marginTop = '8px';
-      del.onclick = () => UI.confirm('Delete ' + f.name + '?', 'Meals already logged keep their numbers.')
+      del.onclick = () => UI.confirm('Delete ' + f.name + '?', 'Meals you already logged keep the numbers they were saved with.')
         .then(ok => { if (ok) { Rec.del('food', null, f.id); closeSheet(); draw(); } });
       body.appendChild(del);
     }
@@ -2083,7 +2083,7 @@ function halfLine(f) {
   if (now == null || now < 1) return null;
   const gone = clearsAt(f, Math.max(1, (f.target || 0) * .25 || 25));
   return Math.round(now) + (f.unit || '') + ' still in you' +
-    (gone ? ' · down to a trace by ' + new Date(gone).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
+    (gone ? ', down to a trace by ' + new Date(gone).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
 }
 
 function tileValue(f, v) {
@@ -2966,7 +2966,7 @@ function drawTrackTab(pane) {
     if (lbl) { lbl.style.cursor = 'pointer'; lbl.onclick = () => newFieldForm(settingsPane, f); }
     pane.appendChild(row);
   });
-  pane.appendChild(el('div', 'note', 'Off hides it. History is kept. Arrows set the order on Today.'));
+  pane.appendChild(el('div', 'note', 'Turning one off hides it and keeps its history, and the arrows set the order on Today.'));
 
   /* the library: an empty setup screen is a dead end */
   const have = fields();
@@ -3012,7 +3012,7 @@ function drawTrackTab(pane) {
 
   pane.appendChild(el('label', 'fl', 'Photos'));
   const n = shotCount();
-  pane.appendChild(el('div', 'note', n + ' stored. Storage on a phone is about 5MB in total, and photos are the only thing here big enough to fill it.'));
+  pane.appendChild(el('div', 'note', n + ' stored, and photos are the only thing here big enough to fill the roughly 5MB a phone gives you.'));
   const clr = el('button', 'btn wide', 'Delete all photos');
   clr.onclick = () => UI.confirm('Delete every photo?', 'The entries they belong to stay.')
     .then(ok => { if (ok) { Rec.all('shot').forEach(r => Rec.del('shot', r.date, r.key)); drawSettingsPane('track'); } });
@@ -3092,7 +3092,7 @@ function newFieldForm(pane, existing) {
   const loI = mkLim('min', 'At least', 'none');
   const hiI = mkLim('max', 'At most', 'none');
   pane.appendChild(lim);
-  pane.appendChild(el('div', 'note', 'Outside either edge is flagged on the tile.'));
+  pane.appendChild(el('div', 'note', 'Going outside either edge is flagged on the tile.'));
 
   /* Which days it is due. Nothing picked means every day, which is the common
      case and should not cost seven taps to say. */
@@ -3266,36 +3266,67 @@ function drawGoalsTab(pane) {
   const sum = el('div');
   pane.appendChild(sum);
   function paintSum() {
+    const t = TARGETS(), w2 = S.get('macroOn', { p: 1, c: 1, f: 1 });
+    const all = w2.p && w2.c && w2.f;
     const k = kcalFromMacros();
     sum.innerHTML = '';
-    if (k == null) return;
+
     if (mode === 'macros') {
+      if (k == null) return;
       sum.appendChild(el('div', 'note derived',
-        'Calories work out to <span class="derived-tag">' + k.toLocaleString() + '</span> — derived, not set.'));
-      const t = TARGETS();
+        'Calories work out to <span class="derived-tag">' + k.toLocaleString() + '</span>, from your macros.'));
       if (t.kcal !== k) { t.kcal = k; S.set('targets', t); }
       return;
     }
+
     const set = num(TARGETS().kcal, 0) || 0;
+    if (!set) return;
+
+    /* ── nothing to correct, only something to offer ──
+       Leaving a macro untargeted is a choice, not an omission. With all three
+       set the two numbers are two descriptions of one day and either agree or
+       do not. With any of them left open there is no disagreement possible —
+       what is left is simply room, and the useful thing to say is how much. */
+    if (!all) {
+      const spent = k || 0;
+      const left = set - spent;
+      const named = [['p', 'protein'], ['c', 'carbs'], ['f', 'fat']]
+        .filter(x => w2[x[0]]).map(x => x[1]);
+      if (!named.length) {
+        sum.appendChild(el('div', 'note',
+          'All ' + set.toLocaleString() + ' calories are yours to spend however you like.'));
+      } else {
+        sum.appendChild(el('div', 'note',
+          'Your ' + named.join(' and ') + (named.length > 1 ? ' take ' : ' takes ') +
+          spent.toLocaleString() + ', leaving ' + Math.max(0, left).toLocaleString() + ' to allocate.'));
+      }
+      if (left < 0) {
+        sum.appendChild(el('div', 'warnbox',
+          'That is ' + Math.abs(left).toLocaleString() + ' more than your calorie target.'));
+      }
+      return;
+    }
+
+    if (k == null) return;
     const off = k - set;
-    /* No tolerance. Two numbers that are meant to describe the same day either
-       agree or they do not, and a band of "close enough" is just a place for a
-       mistake to live. */
+    /* No tolerance. Two numbers meant to describe the same day either agree or
+       they do not, and a band of "close enough" is a place for a mistake to
+       live. */
     if (off === 0) {
-      sum.appendChild(el('div', 'note', 'Macros come to ' + k.toLocaleString() + ' kcal. That matches.'));
+      sum.appendChild(el('div', 'note', 'Your macros come to exactly your target.'));
     } else {
       sum.appendChild(el('div', 'warnbox',
-        'Your macros come to <b>' + k.toLocaleString() + '</b> kcal but your target is <b>' +
-        set.toLocaleString() + '</b> — ' + (off > 0 ? Math.round(off) + ' over' : Math.round(-off) + ' under') +
-        '. One of them needs changing.'));
-      const b = el('button', 'btn wide quiet', 'Set calories to ' + k.toLocaleString());
-      b.onclick = () => { const t = TARGETS(); t.kcal = k; S.set('targets', t); drawSettingsPane('goals'); draw(); };
+        'Your macros come to <b>' + k.toLocaleString() + '</b>, which is ' +
+        Math.abs(off).toLocaleString() + (off > 0 ? ' over' : ' under') + ' your target.'));
+      const b = el('button', 'btn wide quiet', 'Set target to ' + k.toLocaleString());
+      b.onclick = () => { const t2 = TARGETS(); t2.kcal = k; S.set('targets', t2); drawSettingsPane('goals'); draw(); };
       sum.appendChild(b);
     }
   }
+
   paintSum();
 
-  fieldRow(pane, 'Goal weight (lb)', 'goalWeight', S.get('goalWeight', null), 'Drawn on the weight chart. Optional.');
+  fieldRow(pane, 'Goal weight (lb)', 'goalWeight', S.get('goalWeight', null), 'Optional, and drawn on the weight chart.');
 
   /* The goal date is what turns a goal weight into a line you can be ahead of
      or behind. Without it the chart can only show a level. */
@@ -3308,7 +3339,7 @@ function drawGoalsTab(pane) {
   di.onchange = () => { S.set('goalDate', di.value); draw(); };
   gd.appendChild(di);
   gd.appendChild(el('div', 'note',
-    'Draws the straight line from where you are to where you said you would be. Above it means ahead.'));
+    'Draws the line from where you are to where you said you would be, and above it means ahead.'));
   pane.appendChild(gd);
 
   /* The chart scale. Left blank it fits the data; set, it is his. */
@@ -3330,12 +3361,12 @@ function drawGoalsTab(pane) {
   });
   pane.appendChild(sc);
   pane.appendChild(el('div', 'note',
-    'Blank means fit the data. Fixing it keeps the chart steady week to week, which is the only way small changes stay visible.'));
+    'Blank fits the data, and a fixed scale keeps the chart steady so small changes stay visible.'));
 
   pane.appendChild(el('label', 'fl', 'The estimator'));
-  pane.appendChild(el('div', 'note', 'Backtest before changing these.'));
-  fieldRow(pane, 'Energy per lb (kcal)', 'ed', TD.ed(), 'What one pound of change is worth. A working figure, not a law.');
-  fieldRow(pane, 'Half-life (days)', 'halfLife', S.get('halfLife', 21), 'How fast old data stops counting. At 21, three weeks ago counts half.');
+  pane.appendChild(el('div', 'note', 'Backtest before changing these, because they steer every estimate.'));
+  fieldRow(pane, 'Energy per lb (kcal)', 'ed', TD.ed(), 'What one pound of change is worth, as a working figure rather than a law.');
+  fieldRow(pane, 'Half-life (days)', 'halfLife', S.get('halfLife', 21), 'How fast old data stops counting, so at 21 a reading from three weeks ago counts half.');
   fieldRow(pane, 'Adaptation rate', 'alpha', TD.alpha(), 'How far the estimate moves toward each new reading.');
   fieldRow(pane, 'Trend window (days)', 'win', TD.win(), 'How far back the weight trend line looks.');
   fieldRow(pane, 'Starting guess (kcal per lb)', 'perLb', TD.perLb(), 'Before there is data: weight × this. 13 is what your sheet used.');

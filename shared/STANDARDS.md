@@ -134,7 +134,27 @@ you hear it, and on both the app answered you.
 Buzzes follow the same rule as the sounds: small actions stay small. If
 everything buzzes, nothing does.
 
-### 12. Animation says what happened, or it does not happen
+### 12. Every message is one plain sentence
+
+Say the thing, in one sentence, with enough of the why to act on it.
+
+```
+Too terse    2,150 kcal from macros · target 2,000
+Too much     Your macros come to 2,150 kcal but your target is 2,000 — 150
+             over. One of them needs changing.
+Right        Your macros come to 2,150, which is 150 over your target.
+```
+
+One sentence is the constraint that does the most work, because a second
+sentence is nearly always the first one apologising for itself.
+
+And do not tell somebody their own choice was wrong. If nothing is set there is
+nothing to correct, only something to offer: "you have 1,280 left to allocate",
+not "one of them needs changing".
+
+No em dashes on screen.
+
+### 13. Animation says what happened, or it does not happen
 
 Panels rise because they came from the bottom. A selected tab slides because it
 is one control, not five. Nothing animates for decoration, and nothing takes

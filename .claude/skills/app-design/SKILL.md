@@ -225,6 +225,38 @@ or that contrast passes without computing it. See below.
 
 ---
 
+## The voice
+
+**Plain, one sentence, with a simple explanation.** That is the whole rule, and
+each third of it is doing work.
+
+**Plain** — say the thing. No jargon, no hedging, no cheerfulness. The reader
+is an expert in his own life and a beginner in nothing that matters here.
+
+**One sentence** — not two. This is the constraint that does the most, because
+a second sentence is almost always the first one apologising for itself. If a
+message genuinely needs two, the screen is the problem, not the message.
+
+**With a simple explanation** — the fact alone is often useless. "2,150 vs
+2,000" is data; "2,150, which is 150 over your target" is something you can act
+on. The explanation is the clause that turns a number into a decision.
+
+```
+Too terse       2,150 kcal from macros · target 2,000
+Too much        Your macros come to 2,150 kcal but your target is 2,000 — 150
+                over. One of them needs changing.
+Right           Your macros come to 2,150, which is 150 over your target.
+```
+
+Two more rules that follow from it:
+
+- **Do not tell someone their own choice was wrong.** If nothing is set, the
+  screen has nothing to correct; it has something to offer. "One of them needs
+  changing" assumes a mistake. "You have 1,280 left to allocate" assumes a
+  plan in progress. The second is almost always the truer reading.
+- **No em dashes in anything on screen.** A comma or a full stop does the job,
+  and it keeps app copy consistent with everything else he publishes.
+
 ## Words are part of the design
 
 Language sets personality as strongly as typeface or colour, and it is the
