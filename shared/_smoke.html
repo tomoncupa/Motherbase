@@ -573,6 +573,51 @@ function run() {
       return t['--bg'] && t['--radius-md'] && t['--border-width'] && t['--e-1'] && t['--tap'] === '44px';
     }));
 
+  /* ---- a saved theme is a row ----
+     Custom themes used to be one JSON array under a single localStorage key.
+     One blob, last write wins over the whole set, which is the exact shape
+     that lost data in the system this suite replaced. They are rows now, and
+     skins.json stays the read-only factory set. */
+  ok('skins: a saved theme is a row of its own, with its own updated_at', (() => {
+    Rec.declare('__sk', ['skin']);
+    Skins.saveCustom({ id: '__t1', name: 'T1', mode: 'dark', custom: true,
+      base: { bg: '#000000', panel: '#111111', accent: '#FF0090', text: '#FFFFFF' } });
+    const row = Rec.row('skin', null, '__t1');
+    const listed = Skins.list().some(k => k.id === '__t1');
+    Skins.forget('__t1');
+    return !!row && !!row.updated_at && listed;
+  })());
+  ok('skins: a saved theme with a factory id replaces it, and the factory survives', (() => {
+    const f = Skins.factory('ice');
+    Skins.saveCustom(Object.assign({}, f, { weight: 3, custom: true }));
+    const live = Skins.get('ice').weight === 3;
+    const factoryUntouched = Skins.factory('ice').weight === undefined;
+    const edited = Skins.isEdited('ice');
+    Skins.forget('ice');
+    return live && factoryUntouched && edited;
+  })());
+  ok('skins: forgetting an edited theme puts the factory one back', (() => {
+    Skins.saveCustom(Object.assign({}, Skins.factory('ice'), { weight: 4, custom: true }));
+    Skins.forget('ice');
+    return Skins.get('ice').weight === undefined && !Skins.isEdited('ice');
+  })());
+  ok('skins: a theme carrying two faces asks for both', (() => {
+    const html = Skins.fontLinks({ font: ['Silkscreen', 'Inter+Tight:wght@400'] });
+    return (html.match(/<link/g) || []).length === 2 && html.indexOf('Silkscreen') > -1;
+  })());
+  ok('skins: a theme with no font asks for nothing',
+    Skins.fontLinks({}) === '' && Skins.fontLinks(null) === '');
+  ok('skins: a saved theme is in the backup, so a reinstall keeps it', (() => {
+    IO.register({ app: '__sk', name: 'Sk', types: ['skin'] });
+    Skins.saveCustom({ id: '__t2', name: 'T2', mode: 'dark', custom: true, depth: 'glow',
+      base: { bg: '#000000', panel: '#111111', accent: '#FF0090', text: '#FFFFFF' } });
+    const bag = IO.bagFor('__sk');
+    const carried = bag.rows.some(r => r.type === 'skin' && r.key === '__t2' &&
+      r.payload.depth === 'glow');
+    Skins.forget('__t2');
+    return carried;
+  })());
+
   /* ---- the backup stamp ---- */
   /* Also because it broke: the stamp was written when the button was pressed
      rather than when the file landed, so an iPhone — where the download

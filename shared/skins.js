@@ -238,11 +238,62 @@ const Skins={
     }catch(e){/* offline or file:// — built-ins carry it */}
     return this.data;
   },
-  list(){return this.data.skins.concat(this.customs())},
+  /* skins.json is the FACTORY set and is never written to. A saved theme is a
+     row, and a row with the same id as a factory theme replaces it — which is
+     how a built-in theme becomes editable without the file changing. Deleting
+     the row is the reset. */
+  list(){
+    const out=this.data.skins.slice(), at={};
+    out.forEach((s,i)=>{at[s.id]=i});
+    this.customs().forEach(s=>{
+      if(at[s.id]!=null)out[at[s.id]]=s; else out.push(s)});
+    return out;
+  },
   get(id){return this.list().find(s=>s.id===id)||this.data.skins[0]},
-  customs(){try{return JSON.parse(localStorage.getItem('suite_skins_custom')||'[]')}catch(e){return[]}},
-  saveCustom(skin){const all=this.customs().filter(s=>s.id!==skin.id);all.push(skin);
-    try{localStorage.setItem('suite_skins_custom',JSON.stringify(all))}catch(e){}return skin},
+  /* The untouched factory version, for "reset this theme". */
+  factory(id){return this.data.skins.filter(s=>s.id===id)[0]||null},
+  isEdited(id){return this.customs().some(s=>s.id===id)},
+
+  /* Saved themes are ROWS when the store is there — one row per theme, each
+     with its own updated_at, so two devices that each made a different theme
+     both keep theirs.
+
+     The old shape was every custom theme in a single JSON array under one
+     localStorage key. That is one blob with last-write-wins over the whole
+     set, which is the precise failure this suite was built to avoid. Rows and
+     the old key are merged with rows winning, so an existing custom theme
+     keeps working and upgrades itself the first time it is saved. */
+  customs(){
+    let old=[];
+    try{old=JSON.parse(localStorage.getItem('suite_skins_custom')||'[]')||[]}catch(e){}
+    let rows=[];
+    try{
+      if(typeof Rec!=='undefined'&&typeof Rec.map==='function'){
+        const m=Rec.map('skin')||{};
+        rows=Object.keys(m).map(k=>Object.assign({},m[k],{id:k,custom:true}));
+      }
+    }catch(e){}
+    if(!rows.length)return old;
+    const seen={};rows.forEach(s=>{seen[s.id]=1});
+    return rows.concat(old.filter(s=>!seen[s.id]));
+  },
+  saveCustom(skin){
+    try{
+      if(typeof Rec!=='undefined'&&typeof Rec.set==='function'){
+        const p=Object.assign({},skin);delete p.id;delete p.custom;
+        Rec.set('skin',null,skin.id,p);
+        return skin;
+      }
+    }catch(e){}
+    const all=this.customs().filter(s=>s.id!==skin.id);all.push(skin);
+    try{localStorage.setItem('suite_skins_custom',JSON.stringify(all))}catch(e){}
+    return skin;
+  },
+  forget(id){
+    try{if(typeof Rec!=='undefined'&&typeof Rec.del==='function')Rec.del('skin',null,id)}catch(e){}
+    try{const all=this.customs().filter(s=>s.id!==id&&!this.factory(s.id));
+      localStorage.setItem('suite_skins_custom',JSON.stringify(all))}catch(e){}
+  },
   custom(base,name,cut){return{id:'custom-'+Date.now().toString(36),name:name||'Custom',
     mode:lum(base.bg)>.5?'light':'dark',cut:cut||'10px',base:base,custom:true}},
   tokensFor(skin){return tokens(skin.base,skin.cut,this.data.ranks,skin)},
@@ -289,12 +340,26 @@ const Skins={
      back to the system sans rather than to anything decorative. */
   font(skin){
     if(!skin||!skin.font)return;
-    const id='mb-font-'+skin.font.replace(/[^a-z0-9]/gi,'');
-    if(document.getElementById(id))return;
-    const l=document.createElement('link');
-    l.id=id;l.rel='stylesheet';
-    l.href='https://fonts.googleapis.com/css2?family='+skin.font+'&display=swap';
-    document.head.appendChild(l);
+    /* One face or two: a theme may set a display font and a body font, so
+       `font` takes a string or a list of Google font specs. */
+    const want=Array.isArray(skin.font)?skin.font:[skin.font];
+    want.filter(Boolean).forEach(spec=>{
+      const id='mb-font-'+String(spec).replace(/[^a-z0-9]/gi,'');
+      if(document.getElementById(id))return;
+      const l=document.createElement('link');
+      l.id=id;l.rel='stylesheet';
+      l.href='https://fonts.googleapis.com/css2?family='+spec+'&display=swap';
+      document.head.appendChild(l);
+    });
+  },
+  /* The same list, as plain <link> markup, for a preview rendered in a frame
+     that has its own document and cannot borrow this one's head. */
+  fontLinks(skin){
+    if(!skin||!skin.font)return '';
+    const want=Array.isArray(skin.font)?skin.font:[skin.font];
+    return want.filter(Boolean).map(spec=>
+      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family='+
+      String(spec).replace(/"/g,'')+'&display=swap">').join('');
   },
 
   /* A theme's own stylesheet. Tokens repaint a component; this restyles it —
