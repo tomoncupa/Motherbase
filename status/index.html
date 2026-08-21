@@ -3486,14 +3486,34 @@ function drawSyncTab(pane) {
   };
   pane.appendChild(now);
 
-  const show = el('button', 'btn wide', 'SHOW ME THE SCRIPT TO PASTE');
-  show.style.marginTop = '8px';
+  const show = el('button', 'btn wide', 'Copy the script');
+  show.style.marginTop = 'var(--s2)';
   show.onclick = () => {
-    const t = document.createElement('textarea');
-    t.rows = 14; t.value = Mirror.script();
-    t.style.fontFamily = 'var(--font-mono)'; t.style.fontSize = '11px';
-    UI.dialog({ title: 'APPS SCRIPT', width: 560, body: b => { b.appendChild(t); setTimeout(() => { t.select(); }, 50); },
-      actions: [{ label: 'DONE', kind: 'go' }] });
+    const code = Mirror.script();
+    /* One tap, whole thing. Selecting it by hand on a phone is how characters
+       go missing: a copy that drops two pipes turns line seven into a syntax
+       error, and the error names a line rather than the cause. */
+    const done = ok2 => {
+      const t = document.createElement('textarea');
+      t.rows = 12; t.value = code;
+      t.style.fontFamily = 'var(--font-mono)'; t.style.fontSize = 'var(--t1)';
+      t.setAttribute('readonly', '');
+      UI.dialog({
+        title: 'APPS SCRIPT', width: 560,
+        body: b => {
+          b.appendChild(el('div', 'note', ok2
+            ? 'Copied, so paste it over everything in the Apps Script editor.'
+            : 'Select all of this and copy it, then paste it over everything in the Apps Script editor.'));
+          b.appendChild(t);
+          if (!ok2) setTimeout(() => { t.select(); }, 50);
+        },
+        actions: [{ label: 'DONE', kind: 'go' }],
+      });
+      if (ok2) Mobile.feedback('success');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(() => done(true)).catch(() => done(false));
+    } else done(false);
   };
   pane.appendChild(show);
 }
