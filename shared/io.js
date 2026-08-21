@@ -125,16 +125,24 @@ const IO = {
   spec(appId) { return apps[appId] || { app: appId, name: appId, types: [] }; },
 
   /* ── backup ── */
-  backup(appId) {
+  /** everything one app owns, in the shape restore() expects. One builder, so
+      the backup file and the spreadsheet's Data tab cannot drift apart. */
+  bagFor(appId) {
     const S = IO.spec(appId), R = g.Rec;
-    if (!R) return toast('no store loaded', { bad: true });
     const types = S.types.concat(['tick', 'activity']);
     const rows = R.export(types).concat(R.export(['setting']).filter(r => String(r.key).indexOf(appId + '.') === 0));
-    const bag = {
+    return {
       kind: 'motherbase-backup', v: 1, app: appId, at: new Date().toISOString(),
       types: types, rows: rows,
       local: S.localKeys ? S.localKeys().reduce((o, k) => { o[k] = localStorage.getItem(k); return o; }, {}) : undefined,
     };
+  },
+
+  backup(appId) {
+    const S = IO.spec(appId), R = g.Rec;
+    if (!R) return toast('no store loaded', { bad: true });
+    const bag = IO.bagFor(appId);
+    const rows = bag.rows;
     /* The stamp is written when the file lands, not when the button is
        pressed. It used to be set unconditionally, so on an iPhone — where the
        download silently did nothing — the app would report a backup that did
@@ -178,9 +186,40 @@ const IO = {
     return R.merge(bag.rows || []);
   },
   pick(onFile) {
-    const i = el('input'); i.type = 'file'; i.accept = 'application/json';
+    const i = el('input'); i.type = 'file';
+    i.accept = '.json,.xlsx,application/json';
     i.onchange = () => { if (i.files[0]) onFile(i.files[0]); };
     i.click();
+  },
+
+  /** Read either kind back. A .json is the plain backup; an .xlsx is the
+      spreadsheet, whose Data tab holds the same rows. */
+  readAny(file) {
+    if (!/\.xlsx$/i.test(file.name || '')) return IO.read(file);
+    return loadXLSX().then(X => {
+      if (!X) throw new Error('the spreadsheet library did not load — use the .json backup, or try again on a connection');
+      return new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => {
+          try {
+            const wb = X.read(new Uint8Array(fr.result), { type: 'array' });
+            const ws = wb.Sheets['Data'];
+            if (!ws) throw new Error('that spreadsheet has no Data tab, so there is nothing to restore from. Only exports made by this app carry one.');
+            const aoa = X.utils.sheet_to_json(ws, { header: 1 });
+            const rows = [];
+            aoa.forEach(line => {
+              const cell = line && line[0];
+              if (typeof cell !== 'string' || cell.charAt(0) !== '{') return;
+              try { rows.push(JSON.parse(cell)); } catch (e) {}
+            });
+            if (!rows.length) throw new Error('the Data tab had no rows in it');
+            res({ kind: 'motherbase-backup', v: 1, rows: rows });
+          } catch (e) { rej(e); }
+        };
+        fr.onerror = () => rej(new Error('could not read that file'));
+        fr.readAsArrayBuffer(file);
+      });
+    });
   },
 
   /* ── the readable export ── */
@@ -205,9 +244,31 @@ const IO = {
         if (s.widths) ws['!cols'] = s.widths.map(w => ({ wch: w }));
         X.utils.book_append_sheet(wb, ws, s.name.slice(0, 28));
       });
-      X.writeFile(wb, 'motherbase-' + appId + '-' + stamp + '.xlsx');
-      toast('spreadsheet exported — <b>' + sheets.length + ' tabs</b>');
-      if (g.Sfx) g.Sfx.play('complete', { level: 2 });
+
+      /* ── the Data tab ──
+         The readable tabs are a view: they round numbers, drop fields and
+         reshape everything for a human, so they cannot be read back without
+         guessing. That is why an export used to say "not restorable".
+
+         So the workbook carries the rows themselves as well, one JSON row per
+         line on a tab at the end. The file is now both things at once — open
+         it and read it, or hand it back to the app and it restores exactly.
+         Two files that mean nearly the same thing is how you end up restoring
+         the wrong one. */
+      const raw = [['Motherbase rows — do not edit. The readable tabs are the ones to look at.']];
+      IO.bagFor(appId).rows.forEach(r => raw.push([JSON.stringify(r)]));
+      const rws = X.utils.aoa_to_sheet(raw);
+      rws['!cols'] = [{ wch: 120 }];
+      X.utils.book_append_sheet(wb, rws, 'Data');
+
+      return save('motherbase-' + appId + '-' + stamp + '.xlsx',
+        new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })],
+          { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+        .then(done => {
+          if (!done) return toast('nothing saved', { bad: true });
+          toast('spreadsheet exported — <b>' + (sheets.length + 1) + ' tabs</b>, and it restores');
+          if (g.Sfx) g.Sfx.play('complete', { level: 2 });
+        });
     });
   },
 
@@ -238,18 +299,18 @@ const IO = {
        redrawing it from inside a handler rebuilds the node that handler is
        attached to, which locks the renderer. The line updates next open. */
     opt('⭳', 'Back up', 'The file that can be restored.', () => IO.backup(appId));
-    opt('⭱', 'Restore', 'Fills in anything missing. Never overwrites newer data.',
-      () => IO.pick(f => IO.read(f).then(bag => {
+    opt('⭱', 'Restore', 'From a backup or an exported spreadsheet. Fills in what is missing, never overwrites newer.',
+      () => IO.pick(f => IO.readAny(f).then(bag => {
         const c = IO.restore(bag, 'merge');
         toast(c ? '<b>' + c + '</b> rows restored' : 'nothing to restore — this device is already up to date');
       }).catch(e => toast(esc(e.message), { bad: true }))));
     opt('⟲', 'Rewind', 'Replaces everything with the file. Discards anything newer.',
-      () => IO.pick(f => IO.read(f).then(bag =>
+      () => IO.pick(f => IO.readAny(f).then(bag =>
         (g.UI ? g.UI.confirm('Rewind to the backup from ' + (bag.at || '?') + '?', 'Anything newer than the file is discarded.', { yes: 'REWIND', danger: true }) : Promise.resolve(confirm('Rewind?')))
           .then(ok => { if (!ok) return; const c = IO.restore(bag, 'replace'); toast('<b>' + c + '</b> rows restored'); })
       ).catch(e => toast(esc(e.message), { bad: true }))), 'bad');
 
-    opt('▦', 'Spreadsheet', 'Readable, not restorable.', () => IO.export(appId));
+    opt('▦', 'Spreadsheet', 'Readable, and it restores too.', () => IO.export(appId));
 
     opt('⌫', 'Delete this app’s data', 'Ticks and activities are shared and stay.',
       () => (g.UI ? g.UI.confirm('Delete all of ' + IO.spec(appId).name + '’s data?', 'Back up first. This cannot be undone.', { yes: 'DELETE', danger: true }) : Promise.resolve(confirm('Delete?')))

@@ -51,11 +51,36 @@ const clean = s => String(s == null ? '' : s).replace(/\|/g, '-');
 const rowId = (type, date, key) => USER + '|' + clean(type) + '|' + clean(date || '') + '|' + clean(key);
 const alive = r => r && !r.deleted;
 
+/* What each row's payload looked like the last time it was written.
+
+   The "identical write is not a write" check used to compare against
+   rows[id].payload, which sounds right and is not: get() hands out the stored
+   object itself, so the universal read-modify-write —
+
+       const t = TARGETS();      // the live stored object
+       t.kcal = 2000;            // mutates the row in place
+       S.set('targets', t);      // compares equal to itself
+
+   — mutated the row in memory, compared it against the mutation, found no
+   change, and never wrote to storage. Everything worked for the whole session
+   and was gone on reopening. That is how a sheet URL and a calorie target both
+   quietly refused to save.
+
+   Comparing against a snapshot taken at write time cannot be fooled that way,
+   because the snapshot is a string and nothing can reach in and alter it. */
+const serial = {};
+
 function write(r) {
   rows[r.id] = r;
+  serial[r.id] = JSON.stringify(r.payload);
   try { Store.set(PREFIX + r.id, JSON.stringify(r)); }
   catch (e) { console.warn('[records] storage full', e); Rec.onfull && Rec.onfull(e); }
 }
+
+/* Callers get their own copy. A store that hands out live internal references
+   is one aliasing bug away from losing data, and the payloads here are small
+   enough that the clone costs nothing worth measuring. */
+const copy = v => (v == null || typeof v !== 'object') ? v : JSON.parse(JSON.stringify(v));
 function announce(list, local) {
   subs.forEach(f => { try { f(list); } catch (e) { console.warn('[records]', e); } });
   if (local && bc) { try { bc.postMessage({ mb: 1, rows: list }); } catch (e) {} }
@@ -63,7 +88,7 @@ function announce(list, local) {
 
 function load() {
   Store.keys().forEach(k => {
-    try { const r = JSON.parse(Store.get(k)); if (r && r.id) rows[r.id] = r; }
+    try { const r = JSON.parse(Store.get(k)); if (r && r.id) { rows[r.id] = r; serial[r.id] = JSON.stringify(r.payload); } }
     catch (e) { console.warn('[records] unreadable row', k); }
   });
   booted = true;
@@ -98,7 +123,7 @@ const Rec = {
     };
     /* an identical write is not a write — this is what keeps updated_at honest
        and stops a repaint loop from touching every row it renders */
-    if (prev && !prev.deleted && JSON.stringify(prev.payload) === JSON.stringify(payload)) return prev;
+    if (prev && !prev.deleted && serial[id] === JSON.stringify(payload)) return prev;
     write(r); announce([r], true);
     return r;
   },
@@ -114,7 +139,7 @@ const Rec = {
   recDel(type, date, key) { return Rec.del(type, date, key); },
 
   /* ── reading ── */
-  get(type, date, key) { const r = rows[rowId(type, date, key)]; return alive(r) ? r.payload : null; },
+  get(type, date, key) { const r = rows[rowId(type, date, key)]; return alive(r) ? copy(r.payload) : null; },
   has(type, date, key) { return alive(rows[rowId(type, date, key)]); },
   row(type, date, key) { const r = rows[rowId(type, date, key)]; return alive(r) ? r : null; },
 
@@ -144,6 +169,8 @@ const Rec = {
   /* ── settings: one type, namespaced per app, so nobody clobbers anybody ── */
   setting(app, key, val) {
     const k = app + '.' + key;
+    /* Rec.get already copies, so a caller can mutate what it gets back and
+       write it again without the change being mistaken for no change. */
     if (val === undefined) { const v = Rec.get('setting', null, k); return v == null ? null : v.v; }
     return Rec.set('setting', null, k, { v: val });
   },

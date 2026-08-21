@@ -233,6 +233,42 @@ function run() {
     return sw.on === true && got === true && sw.getAttribute('aria-checked') === 'true';
   })());
 
+  /* ---- the store hands out copies ---- */
+  /* This one exists because it cost two rounds of "it does not save". get()
+     used to return the stored object itself, so the ordinary read-modify-write
+     mutated the row in place, the identical-write check compared the mutation
+     against itself, and nothing ever reached storage. It worked all session
+     and was gone on reopening. */
+  ok('rec: get() returns a copy, not the stored row', (() => {
+    Rec.set(stamp, null, 'alias', { n: 1 });
+    const a = Rec.get(stamp, null, 'alias');
+    a.n = 99;
+    return Rec.get(stamp, null, 'alias').n === 1;
+  })());
+  ok('rec: read, modify, write again actually persists', (() => {
+    Rec.set(stamp, null, 'rmw', { url: '' });
+    const c = Rec.get(stamp, null, 'rmw');
+    c.url = 'https://example.test/exec';
+    Rec.set(stamp, null, 'rmw', c);
+    /* the row in memory is not the question — storage is */
+    const raw = Object.keys(localStorage).filter(k => k.indexOf('rmw') > -1)[0];
+    return Rec.get(stamp, null, 'rmw').url === 'https://example.test/exec' &&
+      !!raw && /example\.test/.test(localStorage.getItem(raw));
+  })());
+  ok('rec: a genuinely identical write is still skipped', (() => {
+    const before = Rec.row(stamp, null, 'rmw').updated_at;
+    Rec.set(stamp, null, 'rmw', { url: 'https://example.test/exec' });
+    return Rec.row(stamp, null, 'rmw').updated_at === before;
+  })());
+  ok('rec: a setting survives read, modify and write', (() => {
+    Rec.setting('__smoke', 'obj', { a: 1, b: 2 });
+    const o = Rec.setting('__smoke', 'obj');
+    o.a = 7;
+    Rec.setting('__smoke', 'obj', o);
+    const back = Rec.setting('__smoke', 'obj');
+    return back.a === 7 && back.b === 2;
+  })());
+
   /* ---- themes carry their own face ---- */
   /* This one exists because it broke: Chalkboard and Doodle named the same
      font, and neither font was ever fetched — so both fell through to the

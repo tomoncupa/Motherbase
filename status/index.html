@@ -2390,7 +2390,7 @@ function drawTrends(m) {
   const ahead = goal != null && goalOn2 && goalOn2 > Day.today();
   const keys = [['avg', '7-day average']];
   if (ahead) keys.push(['reality', 'to hit ' + r1(goal) + ' by ' + Day.short(goalOn2)]);
-  const showPredict = ahead && e.basis === 'measured';
+  const showPredict = ahead && !!(e.predicted || e.tdee);
   if (showPredict) keys.push(['predict', 'where you are heading']);
   if (keys.length > 1) {
     const lg = el('div', 'legend');
@@ -2428,9 +2428,15 @@ function drawTrends(m) {
         line = 'At ' + pr.intake.toLocaleString() + ' kcal you pass your goal, reaching <b>' +
           r1(end) + '</b> by ' + Day.short(goalOn2) + '.';
       }
+      /* Say which TDEE this rests on. A number from your own logging and one
+         from bodyweight × 13 deserve different amounts of trust, and the only
+         way you can weigh that is if the sentence tells you which it is. */
+      const src = e.basis === 'measured'
+        ? 'a measured TDEE of ' + Math.round(pr.tdee).toLocaleString() + ', ' + e.conf + '% confident'
+        : 'a starting estimate of ' + Math.round(pr.tdee).toLocaleString() +
+          ' (bodyweight × ' + TD.perLb() + '), which sharpens as you log';
       c2.appendChild(el('div', 'note derived', line +
-        ' <span style="opacity:.8">That is ' + r1(Math.abs(rate)) + ' lb a week, from a measured TDEE of ' +
-        Math.round(pr.tdee).toLocaleString() + '.</span>'));
+        ' <span style="opacity:.8">That is ' + r1(Math.abs(rate)) + ' lb a week, from ' + src + '.</span>'));
       if (pr.settles && pr.settles > 0 && Math.abs(pr.settles - goal) > 2) {
         c2.appendChild(el('div', 'note derived',
           'Held forever, that intake settles you around <b>' + r1(pr.settles) + ' lb</b>.'));
@@ -2649,10 +2655,12 @@ function weightChart(e) {
   }
 
   /* ── the prediction ──
-     Only drawn when there is somewhere to draw it to, and only when the TDEE
-     is actually measured. Projecting from a population guess would look like
-     knowledge and would not be. */
-  if (aheadDays > 0 && nowW != null && TD.estimate().basis === 'measured') {
+     Drawn as soon as there is a weight to start from. Bodyweight × 13 is a
+     serviceable opening guess and the estimator moves off it within days of
+     real logging, so withholding the line until it says "measured" hid a
+     useful answer for two months to avoid overstating it by a few per cent.
+     Better to draw it and say what it is standing on. */
+  if (aheadDays > 0 && nowW != null) {
     const pr = predictWeight(nowW, aheadDays);
     if (pr && pr.pts.length > 1) {
       const dstr = pr.pts.map((q, i) =>
@@ -3312,9 +3320,18 @@ function drawSyncTab(pane) {
     const c = S.get('mirror', {}); c.on = on ? 1 : 0; S.set('mirror', c); drawSettingsPane('sync');
   }));
 
-  const now = el('button', 'btn go wide', 'PUSH NOW');
-  now.style.minHeight = '46px';
-  now.onclick = () => Mirror.push(true).then(() => drawSettingsPane('sync'));
+  const now = el('button', 'btn go wide', 'Save & sync');
+  now.style.minHeight = 'var(--tap)';
+  now.onclick = () => {
+    /* Take whatever is in the box first. Pressing a button that says Save and
+       having it not save what is on screen is the kind of thing that makes
+       people paste a link four times. */
+    const c = S.get('mirror', {});
+    c.url = u.value.trim();
+    S.set('mirror', c);
+    if (!c.url) return UI.toast('Paste the link first', { bad: true });
+    Mirror.push(true).then(() => drawSettingsPane('sync'));
+  };
   pane.appendChild(now);
 
   const show = el('button', 'btn wide', 'SHOW ME THE SCRIPT TO PASTE');
