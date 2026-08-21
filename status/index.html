@@ -272,6 +272,15 @@ label.fl:first-child{margin-top:0}
 .shot img{width:var(--s8);height:var(--s8);object-fit:cover;border-radius:var(--radius-sm)}
 .thumb{width:var(--s6);height:var(--s6);object-fit:cover;border-radius:var(--radius-sm);flex:0 0 auto}
 
+/* ── chart legend ──
+   Named lines, because three unlabelled dashes are decoration. */
+.legend{display:flex;flex-wrap:wrap;gap:var(--s3);margin-top:var(--s2)}
+.lgi{display:flex;align-items:center;gap:var(--s2);font-size:var(--t1);color:var(--text-muted)}
+.lgi i{width:16px;height:0;border-top-width:2px;border-top-style:solid;display:block}
+.lgi i.avg{border-color:var(--accent)}
+.lgi i.reality{border-color:var(--data-5);border-top-style:dashed}
+.lgi i.predict{border-color:var(--data-2);border-top-style:dotted}
+
 /* ── the wheel ── */
 .wheel{display:flex;flex-direction:column;gap:var(--s2)}
 .wheel .num{width:100%}
@@ -321,6 +330,9 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 .chart .goal{stroke:var(--data-3);stroke-width:1;stroke-dasharray:3 5;fill:none}
 /* the line of reality: where you have to travel to arrive on time */
 .chart .reality{stroke:var(--data-5);stroke-width:1.5;stroke-dasharray:5 4;fill:none;opacity:.9}
+/* the prediction: where you are actually heading. Thinner and dotted, because
+   it is derived from an estimate and should not read as a promise. */
+.chart .predict{stroke:var(--data-2);stroke-width:1.5;stroke-dasharray:1 3;fill:none;opacity:.75}
 .chart .now{stroke:var(--border-strong);stroke-width:1;stroke-dasharray:2 3}
 .chart .lab{fill:var(--text-muted);font-family:var(--font-mono);font-size:var(--t1)}
 
@@ -2371,6 +2383,60 @@ function drawTrends(m) {
   const c2 = card('Weight', plotted + ' days');
   c2.appendChild(weightChart(e));
   const w = TD.lastWeight(e.rows), goal = num(S.get('goalWeight', null));
+
+  /* Three lines is two more than the eye can identify unaided, so name them —
+     and only name the ones actually drawn. */
+  const goalOn2 = S.get('goalDate', '') || '';
+  const ahead = goal != null && goalOn2 && goalOn2 > Day.today();
+  const keys = [['avg', '7-day average']];
+  if (ahead) keys.push(['reality', 'to hit ' + r1(goal) + ' by ' + Day.short(goalOn2)]);
+  const showPredict = ahead && e.basis === 'measured';
+  if (showPredict) keys.push(['predict', 'where you are heading']);
+  if (keys.length > 1) {
+    const lg = el('div', 'legend');
+    keys.forEach(k => {
+      const it = el('span', 'lgi');
+      it.innerHTML = '<i class="' + k[0] + '"></i>' + esc(k[1]);
+      lg.appendChild(it);
+    });
+    c2.appendChild(lg);
+  }
+
+  /* ── the verdict ──
+     The whole reason for two future lines: one says where you must be, the
+     other where you will be. The useful sentence is the gap between them. */
+  if (showPredict) {
+    const nowW2 = (e.roll && e.roll.length) ? e.roll[e.roll.length - 1].y : w;
+    const days = Day.diff(goalOn2, Day.today());
+    const pr = predictWeight(nowW2, days);
+    if (pr && pr.pts.length) {
+      const end = pr.pts[pr.pts.length - 1].w;
+      const miss = end - goal;
+      const rate = (nowW2 - end) / Math.max(1, days) * 7;
+      let line;
+      if (Math.abs(miss) < 1) {
+        line = 'At ' + pr.intake.toLocaleString() + ' kcal you land on <b>' + r1(end) +
+          '</b> by ' + Day.short(goalOn2) + '. That is your goal.';
+      } else if (miss > 0) {
+        /* short of it: say by how much, and what it would actually take —
+           solved with the same model the line uses, not a linear shortcut */
+        const need = intakeToReach(nowW2, goal, days);
+        line = 'At ' + pr.intake.toLocaleString() + ' kcal you reach <b>' + r1(end) + '</b> by ' +
+          Day.short(goalOn2) + ', which is ' + r1(miss) + ' lb short.' +
+          (need ? ' <b>' + need.toLocaleString() + '</b> a day would get you there.' : '');
+      } else {
+        line = 'At ' + pr.intake.toLocaleString() + ' kcal you pass your goal, reaching <b>' +
+          r1(end) + '</b> by ' + Day.short(goalOn2) + '.';
+      }
+      c2.appendChild(el('div', 'note derived', line +
+        ' <span style="opacity:.8">That is ' + r1(Math.abs(rate)) + ' lb a week, from a measured TDEE of ' +
+        Math.round(pr.tdee).toLocaleString() + '.</span>'));
+      if (pr.settles && pr.settles > 0 && Math.abs(pr.settles - goal) > 2) {
+        c2.appendChild(el('div', 'note derived',
+          'Held forever, that intake settles you around <b>' + r1(pr.settles) + ' lb</b>.'));
+      }
+    }
+  }
   c2.appendChild(el('div', 'note', (w ? r1(w) + ' lb' : 'nothing logged') +
     (goal != null && w ? ' · ' + r1(Math.abs(w - goal)) + ' lb to go' : '') +
     (e.rate != null ? ' · ' + (e.rate > 0 ? '+' : '') + r1(e.rate) + ' lb a week' : '')));
@@ -2409,6 +2475,77 @@ function drawTrends(m) {
 }
 
 /* raw weights as dots, the 7-day average as the line, the goal as a dash */
+/* ── the prediction ──
+   Two different questions, and the chart should answer both:
+
+     the LINE OF REALITY is where you have to be to arrive on time
+     the PREDICTION is where you will actually be if nothing changes
+
+   Above the reality line and below the prediction is the only combination
+   that means "on track and going to make it".
+
+   The arithmetic: eat `intake` against a measured TDEE and the daily shortfall
+   is `tdee - intake`, which at `ed` kilocalories per pound is that much weight
+   a day. But TDEE is not a constant — a smaller body costs less to run, so the
+   shortfall shrinks as you lose and the loss slows. Modelling that is the
+   difference between a line that is roughly right for a fortnight and one that
+   is still honest in three months, and it is why real weight loss curves
+   rather than running straight into the floor.
+
+   The part of TDEE that scales with mass is taken as `perLb` kcal per pound —
+   the same population figure the estimator already falls back on. Whatever is
+   left over is treated as fixed. That is a simplification, and it is the
+   reason this is drawn as a thin dotted line rather than a promise.        */
+/* What intake actually lands on `goal` in `days`, according to the same model
+   the line is drawn from. Solved by bisection rather than algebra, because the
+   model recomputes the burn each day and inverting that in closed form buys
+   nothing — twenty-four halvings on a bounded range is exact to the calorie
+   and takes no measurable time.
+
+   Doing it this way matters: the obvious shortcut is deficit = (lb to lose ×
+   kcal per lb) ÷ days, which is the LINEAR answer. Recommending a linear
+   number beside a curved line means the app disagrees with itself, and the
+   recommendation would leave you short. */
+function intakeToReach(w0, goalW, days) {
+  if (!w0 || goalW == null || days < 1) return null;
+  const at = intake => {
+    const pr = predictWeight(w0, days, intake);
+    return pr ? pr.pts[pr.pts.length - 1].w : null;
+  };
+  let lo = 500, hi = 6000;
+  if (at(hi) < goalW) return hi;      /* even eating freely you would get there */
+  if (at(lo) > goalW) return null;    /* not reachable on any sane intake */
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (at(mid) > goalW) hi = mid; else lo = mid;
+  }
+  return Math.round((lo + hi) / 2);
+}
+
+function predictWeight(w0, days, intakeOver) {
+  const e = TD.estimate();
+  const tdee = e.predicted != null ? e.predicted : e.tdee;
+  const intake = intakeOver != null ? intakeOver : calTarget().v;
+  if (!tdee || !intake || !w0) return null;
+
+  const P = TD.P();
+  const ed = P.ed || 3500;
+  const perLb = P.perLb || 13;
+  /* split the measured TDEE into the part that follows body mass and the part
+     that does not, using this body as the reference point */
+  const fixed = tdee - w0 * perLb;
+
+  const out = [];
+  let w = w0;
+  for (let i = 0; i <= days; i++) {
+    out.push({ i: i, w: w });
+    const burn = fixed + w * perLb;
+    w = w - (burn - intake) / ed;
+    if (!isFinite(w) || w <= 0) break;
+  }
+  return { pts: out, tdee: tdee, intake: intake, settles: perLb > 0 ? (intake - fixed) / perLb : null };
+}
+
 /* ── the weight chart ──
    Three things are drawn: the raw weigh-ins, the 7-day average, and the line
    of reality — a straight line from where you are now to your goal weight on
@@ -2509,6 +2646,19 @@ function weightChart(e) {
   const nowW = roll.length ? roll[roll.length - 1].y : pts[pts.length - 1].w;
   if (goal != null && aheadDays > 0 && nowW != null) {
     add('line', { x1: X(today), y1: clamp(nowW), x2: X(goalOn), y2: clamp(goal) }, 'reality');
+  }
+
+  /* ── the prediction ──
+     Only drawn when there is somewhere to draw it to, and only when the TDEE
+     is actually measured. Projecting from a population guess would look like
+     knowledge and would not be. */
+  if (aheadDays > 0 && nowW != null && TD.estimate().basis === 'measured') {
+    const pr = predictWeight(nowW, aheadDays);
+    if (pr && pr.pts.length > 1) {
+      const dstr = pr.pts.map((q, i) =>
+        (i ? 'L' : 'M') + X(Day.shift(today, q.i)) + ' ' + clamp(q.w)).join(' ');
+      add('path', { d: dstr }, 'predict');
+    }
   }
 
   /* raw weigh-ins. Thinned once they would overlap, or they smear into a grey
