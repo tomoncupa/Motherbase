@@ -367,6 +367,28 @@ function run() {
     return /function doPost/.test(sc) && /function doGet/.test(sc) &&
       /function onEdit/.test(sc) && /callback/.test(sc);
   })());
+
+  /* ---- a tab belongs to its data, not to whoever writes it today ---- */
+  ok('mirror: a tab is named after its data, not its app', (() => {
+    const names = IO.mirror.tabs('__dup').map(t => t.name);
+    return names.indexOf('Things') > -1 && !names.some(n => n.indexOf('DUP') === 0);
+  })());
+  ok('mirror: who owns what is recorded, not spelled into names', (() => {
+    const set = IO.bagTabs('__dup')[1].rows;
+    return set.some(r => r[0] === 'owns.' + stamp && r[1] === '__dup');
+  })());
+  ok('mirror: the sheet is told to drop the old prefixed tabs', (() =>
+    IO.oldPrefix('__dup') === 'DUP \u00b7 ' &&
+    /body\.retire/.test(IO.mirror.script()) &&
+    /retire: IO\.oldPrefix/.test(String(IO.mirror.push)))());
+  /* Deleting before writing would leave a hole where the data used to be if
+     the write then failed. The order is the whole safety of a rename. */
+  ok('mirror: old tabs go only after the new ones are written', (() => {
+    const sc = IO.mirror.script();
+    return sc.indexOf('deleteSheet') > sc.indexOf('setValues');
+  })());
+  ok('export: a CSV path that needs no library',
+    typeof IO.exportCsv === 'function' && !/loadXLSX/.test(String(IO.exportCsv)));
   /* The script is text until somebody pastes it, so nothing checked whether it
      was even valid JavaScript. It went out with a syntax error and the first
      anyone knew was Apps Script naming a line number. new Function is the same

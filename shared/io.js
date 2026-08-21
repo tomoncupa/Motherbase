@@ -31,7 +31,7 @@
    Bumped by hand, and only when something changed that a person would notice
    or that changes the shape of stored data. VERSIONS.md says what each one
    did. */
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
@@ -194,12 +194,38 @@ const IO = {
     });
   },
 
-  /** What a tab is called. One function decides, because two places deciding
-      is how the same table ends up with two names and the sheet grows a
-      duplicate nobody notices — tables() was using the app id and the mirror
-      was using its display name, which agree for STATUS and would not for the
-      next app. */
-  tabName(appId, name) { return IO.spec(appId).name.toUpperCase() + ' · ' + name; },
+  /* ── what a tab is called ──
+     The name of the data, and nothing else. Tabs used to be stamped with the
+     app that wrote them — STATUS · Food — and that name was a claim the app
+     was not entitled to make. Food is food. Build a dedicated nutrition
+     tracker later, let it take over the type the way the data model already
+     prescribes, and the sheet ends up holding a live FUEL · Food beside a
+     stale STATUS · Food. Two tabs for one thing, and no way to tell from
+     inside the sheet which one is still being written.
+
+     The same argument applies to a read-out. STATUS · TDEE looks like STATUS's
+     arithmetic, but TDEE is a fact about the body, and a nutrition app would
+     compute the same one. Naming it after today's writer is a rename waiting
+     to happen.
+
+     Ownership is not lost, it is recorded instead of spelled: _Settings
+     carries a line per type saying which app writes it. Handing a type over
+     then changes one line rather than orphaning a tab.
+
+     The cost, said plainly: two apps that both want the tab called Daily will
+     overwrite each other. Nothing here can detect that, because an app only
+     knows the specs registered on its own page. It is a naming decision to
+     make once, when the second app is written. */
+  tabName(appId, name) { return name; },
+
+  /** the prefix tabs used to carry, so the sheet can drop the old ones */
+  oldPrefix(appId) { return IO.spec(appId).name.toUpperCase() + ' · '; },
+
+  /** which registered app declares itself the writer of a type */
+  owner(type) {
+    const hit = Object.keys(apps).filter(a => (apps[a].types || []).indexOf(type) > -1);
+    return hit.length ? hit[0] : null;
+  },
 
   /** the value at a dotted path, so a table can expose nested fields flat */
   reach(o, path) {
@@ -377,6 +403,10 @@ const IO = {
        identifies itself without anybody having to remember */
     set.push(['motherbase.version', VERSION]);
     set.push(['motherbase.written', new Date().toISOString()]);
+    /* Which app writes which kind of thing. Recorded here rather than spelled
+       into tab names, so handing a type to a new app is one line changing
+       instead of a tab going stale beside a new one. */
+    (IO.spec(appId).types || []).forEach(t => set.push(['owns.' + t, appId]));
     Object.keys(bag.local || {}).sort().forEach(k => set.push([k, bag.local[k]]));
 
     return [
@@ -554,6 +584,25 @@ const IO = {
     });
   },
 
+  /* ── one tab, as plain CSV ──
+     The spreadsheet export needs SheetJS off a CDN, so it is the one thing in
+     here that stops working on a plane. A CSV needs nothing: it is built from
+     the same rows, by the same builders, and every spreadsheet on earth opens
+     it. One tab at a time, because handing a phone five files at once means
+     five share sheets in a row. */
+  exportCsv(appId) {
+    const tabs = IO.workbook(appId).concat(IO.bagTabs(appId));
+    if (!tabs.length) return toast('nothing to export yet');
+    const stamp = g.Day.today();
+    const pick = t => save('motherbase-' + appId + '-' + t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + stamp + '.csv',
+      csv(IO.rect(t.rows)), 'text/csv;charset=utf-8')
+      .then(done => toast(done ? '<b>' + esc(t.name) + '</b> exported' : 'nothing saved', done ? null : { bad: true }));
+    if (!g.UI || !g.UI.menu) return pick(tabs[0]);
+    g.UI.menu(0, 0, tabs.map(t => ({
+      label: t.name, note: Math.max(0, t.rows.length - 1) + ' rows', icon: '▤', fn: () => pick(t),
+    })), { title: 'EXPORT WHICH' });
+  },
+
   lastBackup(appId) { return localStorage.getItem(BK(appId)); },
   staleDays(appId) {
     const d = IO.lastBackup(appId);
@@ -592,7 +641,8 @@ const IO = {
           .then(ok => { if (!ok) return; const c = IO.restore(bag, 'replace'); toast('<b>' + c + '</b> rows restored'); })
       ).catch(e => toast(esc(e.message), { bad: true }))), 'bad');
 
-    opt('▦', 'Spreadsheet', 'Readable, and it restores too.', () => IO.export(appId));
+    opt('▦', 'Export a spreadsheet', 'Every tab, readable, and it restores too.', () => IO.export(appId));
+    opt('▤', 'Export one tab as CSV', 'Works with no internet. Pick which.', () => IO.exportCsv(appId));
 
     opt('⌫', 'Delete this app’s data', 'Ticks and activities are shared and stay.',
       () => (g.UI ? g.UI.confirm('Delete all of ' + IO.spec(appId).name + '’s data?', 'Back up first. This cannot be undone.', { yes: 'DELETE', danger: true }) : Promise.resolve(confirm('Delete?')))
@@ -716,8 +766,10 @@ const Mirror = {
       const S = IO.spec(appId);
       const out = { changed: 0, added: 0, clashes: 0 };
       (S.tables || []).forEach(t => {
-        const full = IO.tabName(appId, t.name);
-        const grid = reply.tabs[full] || reply.tabs[t.name];
+        /* the old prefixed name too: anything typed into it before the
+           rename is still real, and the pull runs before the push that
+           retires it */
+        const grid = reply.tabs[t.name] || reply.tabs[IO.oldPrefix(appId) + t.name];
         if (!grid) return;
         const diff = IO.readTable(appId, t.name, grid);
         out.changed += diff.changed.length;
@@ -749,7 +801,11 @@ const Mirror = {
       return Promise.resolve({ state: 'failed', missing: 0, of: 0 });
     }
     const tabs = Mirror.tabs(appId);
-    const body = JSON.stringify({ app: appId, at: new Date().toISOString(), tabs: tabs });
+    /* Tabs this app wrote under the old prefixed name. The sheet drops them
+       after writing the new ones, because a rename that leaves the old tab
+       behind is how you end up reading last month's data and believing it. */
+    const body = JSON.stringify({ app: appId, at: new Date().toISOString(), tabs: tabs,
+      retire: IO.oldPrefix(appId) });
     /* text/plain sidesteps the CORS preflight Apps Script cannot answer */
     const head = { 'Content-Type': 'text/plain;charset=utf-8' };
 
@@ -813,21 +869,6 @@ const Mirror = {
             return { state: 'failed', missing: tabs.length, of: tabs.length };
           });
       });
-  },
-
-  /** Why a sync probably failed.
-
-      "Could not reach the sheet" is true and useless. Every one of these has
-      the same symptom and a different fix, and the link itself tells us which
-      is likely — so say the likely one rather than making him guess. */
-  why() {
-    const u = mcfg.url || '';
-    if (!u) return 'Paste the link first.';
-    if (u.indexOf('script.google.com') < 0)
-      return 'That link is not an Apps Script web app, so check you copied the one ending in /exec.';
-    if (!/\/exec\s*$/.test(u))
-      return 'That link should end in /exec, and a link ending in /dev only works while you are signed in.';
-    return 'Could not reach the sheet, and the usual cause is pasting new code without deploying it again, so try Deploy, Manage deployments, the pencil, Version New version.';
   },
 
   /** Why a sync probably failed.
@@ -928,6 +969,17 @@ const Mirror = {
       '      failed.push(t.name + ": " + err);',
       '    }',
       '  });',
+      '',
+      '  /* Tabs written under an older name. Dropped only after the new ones',
+      '     exist, so nothing is ever deleted before its replacement is there. */',
+      '  if (body.retire) {',
+      '    ss.getSheets().forEach(function (sh) {',
+      '      try {',
+      '        if (sh.getName().indexOf(body.retire) === 0 && ss.getSheets().length > 1) ss.deleteSheet(sh);',
+      '      } catch (err) {}',
+      '    });',
+      '  }',
+      '',
       '  return ContentService.createTextOutput(JSON.stringify({ ok: failed.length === 0, wrote: wrote, failed: failed }))',
       '    .setMimeType(ContentService.MimeType.JSON);',
       '}',

@@ -314,7 +314,12 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 .note-row{display:flex;align-items:flex-start;gap:var(--s3);padding:var(--s3);
   min-height:var(--tap);border-radius:var(--radius-md);background:var(--surface-2);cursor:pointer}
 .note-row .k{flex:0 0 auto;width:16px;display:flex;align-items:center;justify-content:center;
-  color:var(--accent);font-size:var(--t4);line-height:1.5;font-family:var(--font-mono)}
+  color:var(--accent);font-size:var(--t4);line-height:1.5;font-family:var(--font-mono);
+  position:relative;background:none;border:0;padding:0;cursor:pointer}
+/* The box is 13px of ink and a full finger of target. Growing the ink would
+   make the list shout; growing the reach costs nothing on screen. */
+.note-row .k::after{content:'';position:absolute;left:50%;top:50%;
+  width:var(--tap);height:var(--tap);transform:translate(-50%,-50%)}
 /* the open box, the only mark you tick */
 .nm-box{width:13px;height:13px;border:1.5px solid currentColor;border-radius:3px;display:block}
 .nm-ch{display:block;font-weight:700}
@@ -433,6 +438,7 @@ IO.register({
     { name: 'Meals', type: 'meal', cols: [
       ['name', 'Food'], ['serve', 'Serving'], ['amt', 'Amount'], ['unit', 'Unit'],
       ['kcal', 'Calories'], ['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat'], ['price', 'Price'],
+      ['err', 'Margin'], ['acct', 'Paid from'],
     ] },
     { name: 'Spending', type: 'spend', cols: [
       ['amt', 'Amount'], ['acct', 'Account'], ['note', 'Details'],
@@ -494,11 +500,15 @@ const SEED = [
 
 /* Things worth tracking that most people want eventually. An empty setup
    screen is a dead end; a list is an invitation.                          */
+/* `from` is the nutrient on a food label this field is the same substance as,
+   and `per` converts the label's unit into the field's. A coffee logged in
+   FOOD is caffeine you drank; it has to show up under Caffeine or the tile is
+   lying by omission. See NUT_FROM. */
 const LIBRARY = [
   { id: 'creatine',  label: 'Creatine',   unit: 'g',   measure: 'amount', step: 5,   dec: 0, chips: [5, 10, 20] },
-  { id: 'potassium', label: 'Potassium',  unit: 'g',   measure: 'amount', step: .5,  dec: 1, chips: [1, 2, 3, 4] },
-  { id: 'sodium',    label: 'Sodium',     unit: 'g',   measure: 'amount', step: .5,  dec: 1, chips: [1, 2, 3, 4, 5] },
-  { id: 'caffeine',  label: 'Caffeine',   unit: 'mg',  measure: 'amount', step: 50,  dec: 0, chips: [100, 150, 200, 300] },
+  { id: 'potassium', label: 'Potassium',  unit: 'g',   measure: 'amount', step: .5,  dec: 1, chips: [1, 2, 3, 4], from: 'k',    per: .001 },
+  { id: 'sodium',    label: 'Sodium',     unit: 'g',   measure: 'amount', step: .5,  dec: 1, chips: [1, 2, 3, 4, 5], from: 'na', per: .001 },
+  { id: 'caffeine',  label: 'Caffeine',   unit: 'mg',  measure: 'amount', step: 50,  dec: 0, chips: [100, 150, 200, 300], from: 'caff', per: 1 },
   { id: 'magnesium', label: 'Magnesium',  unit: 'mg',  measure: 'amount', step: 100, dec: 0, chips: [200, 400, 600] },
   { id: 'zinc',      label: 'Zinc',       unit: 'mg',  measure: 'amount', step: 5,   dec: 0, chips: [15, 30, 50] },
   { id: 'water',     label: 'Water',      unit: 'L',   measure: 'amount', step: .5,  dec: 1, chips: [.5, 1, 1.5, 2] },
@@ -521,6 +531,20 @@ function addField(spec) {
   const f = makeField(spec);
   Rec.set('field', null, f.id, f);
   return f;
+}
+
+/* Fields added from the library before it knew about nutrients have no link,
+   so a caffeine tile built last week would go on ignoring coffee forever.
+   Runs once, matches by id, and only fills a link in where there is none. */
+function linkNutrients() {
+  if (S.get('nutlinked')) return;
+  const have = fields();
+  LIBRARY.forEach(lib => {
+    const f = have[lib.id];
+    if (!lib.from || !f || f.from) return;
+    Rec.set('field', null, f.id, Object.assign({}, f, { from: lib.from, per: nutPer(lib.from, f.unit) }));
+  });
+  S.set('nutlinked', 1);
 }
 
 function seedFields() {
@@ -547,14 +571,45 @@ function evDrop(date, fid, t) {
   const e = evList(date, fid).filter(x => x.t !== t);
   if (e.length) Rec.set('ev', date, fid, { e: e }); else Rec.del('ev', date, fid);
 }
+/* ── what a nutrient field can be fed by ──
+   Every number a food label carries, in the unit the label uses. A field says
+   which one it is made of and what to multiply by, and from then on eating
+   counts toward it exactly as taking a dose does.
+
+   No copying. The meal row stays the only record of the coffee; the caffeine
+   figure is read out of it every time. A copy would double up the moment you
+   edited the meal, and nothing would say which of the two was the real one. */
+const NUT_FROM = [
+  ['kcal', 'Calories', 'kcal'], ['p', 'Protein', 'g'], ['c', 'Carbs', 'g'], ['f', 'Fat', 'g'],
+  ['na', 'Sodium', 'mg'], ['k', 'Potassium', 'mg'], ['caff', 'Caffeine', 'mg'],
+];
+
+function fromFood(date, f) {
+  if (!f || !f.from) return [];
+  const per = f.per == null ? 1 : f.per;
+  const out = [];
+  meals(date).forEach(m => {
+    const v = (num(m[f.from], 0) || 0) * per;
+    if (v > 0) out.push({ t: m.t, v: v, food: m.name });
+  });
+  return out;
+}
+
+/* Every reading for a field on a day, in the order they happened. */
+function entries(date, fid) {
+  const f = field(fid) || {};
+  if (!f.from) return evList(date, fid);
+  return evList(date, fid).concat(fromFood(date, f)).sort((a, b) => a.t - b.t);
+}
+
 function value(date, fid) {
-  const e = evList(date, fid); if (!e.length) return null;
+  const e = entries(date, fid); if (!e.length) return null;
   const f = field(fid) || {};
   if (f.agg === 'sum') return e.reduce((a, x) => a + x.v, 0);
   if (f.agg === 'avg') return e.reduce((a, x) => a + x.v, 0) / e.length;
   return e[e.length - 1].v;
 }
-const logged = (date, fid) => evList(date, fid).length > 0;
+const logged = (date, fid) => entries(date, fid).length > 0;
 
 /* ══════════════ FOOD ══════════════
    A `food` row is the label as printed, plus your own serving sizes on top
@@ -563,6 +618,35 @@ const logged = (date, fid) => evList(date, fid).length > 0;
    a food tomorrow never rewrites what you ate today.                       */
 
 const NUTS = ['p', 'c', 'f', 'kcal', 'na', 'k', 'caff'];
+
+/* ══ how sure you are of a meal ══
+   A weighed chicken breast and a plate of adobo somebody else cooked are not
+   the same kind of number, and treating them as one is why measured intake
+   drifts from real intake. `err` on a meal is a fraction: .2 means the
+   calories could be a fifth out either way.
+
+   Added up rather than squared: a guess about portion size leans the same
+   way each time — people under-guess restaurant food, consistently — so the
+   errors do not cancel the way independent ones would.
+
+   It matters most to TDEE, which is measured intake minus what the scale
+   did. A systematic 15% under-guess moves the estimate by 15% of intake and
+   never corrects itself, so the band has to say so. */
+const ERRS = [[0, 'Sure'], [.1, '±10%'], [.2, '±20%'], [.3, '±30%']];
+function errChips(cur, onPick) {
+  const w = el('div', 'chips');
+  const paint = () => {
+    w.innerHTML = '';
+    ERRS.forEach(e => {
+      const b = el('button', 'chip' + (Math.abs(cur - e[0]) < .001 ? ' on' : ''), e[1]);
+      b.onclick = () => { cur = e[0]; onPick(cur); paint(); Mobile.haptic('select'); };
+      w.appendChild(b);
+    });
+  };
+  paint();
+  return w;
+}
+const errTag = e => (num(e, 0) || 0) > 0 ? '±' + Math.round(e * 100) + '%' : '';
 const foods = () => Rec.map('food');
 
 function foodServes(fd) {
@@ -579,19 +663,46 @@ function scale(fd, mult) {
   o.amt = (num(fd.base.amt, 0) || 0) * mult;
   return o;
 }
-function logMeal(fd, mult, serveLabel) {
+function logMeal(fd, mult, serveLabel, extra) {
   const s = scale(fd, mult);
   const row = { fid: fd.id, name: fd.name, serve: serveLabel, unit: fd.base.unit, t: Date.now() };
   NUTS.forEach(n => { row[n] = s[n]; });
   row.price = s.price; row.amt = s.amt; row.mult = mult;
-  Rec.set('meal', vd(), uid(), row);
+  Object.assign(row, extra || {});
+  const key = uid();
+  Rec.set('meal', vd(), key, row);
+  mealSpend(vd(), key, row);
   Rec.set('food', null, fd.id, Object.assign({}, fd, { uses: (fd.uses || 0) + 1, last: Day.today() }));
+}
+
+/* ══ eating out is money leaving an account ══
+   The price on a meal is normally the VALUE of what you ate, not a payment:
+   the rice was bought on some other day and counting it as today's spending
+   would double it. That is why food has never touched the money screen.
+
+   A restaurant breaks that. You ate it and you paid for it, in one act, from
+   one account. So the account is the switch: name one and the meal becomes a
+   real spend as well; leave it blank and nothing changes.
+
+   The spend is a row of its own, keyed off the meal, so the money screen
+   needs no special case and the two can never disagree — change the amount,
+   change the account, delete the meal, and the spend follows. */
+function mealSpend(date, key, row) {
+  const id = 'meal-' + key;
+  const paid = row && row.acct && (num(row.price, 0) || 0) > 0;
+  if (!paid) { if (Rec.get('spend', date, id)) Rec.del('spend', date, id); return; }
+  Rec.set('spend', date, id, {
+    amt: num(row.price, 0) || 0, acct: row.acct, note: row.name,
+    t: row.t || Date.now(), viaMeal: key,
+  });
 }
 const meals = date => Rec.all('meal', { date: date }).map(r => Object.assign({ key: r.key }, r.payload)).sort((a, b) => a.t - b.t);
 
 function dayTotals(date) {
   const t = { p: 0, c: 0, f: 0, kcal: 0, na: 0, k: 0, caff: 0, price: 0 };
   meals(date).forEach(m => { Object.keys(t).forEach(n => { t[n] += num(m[n], 0) || 0; }); });
+  /* how many of today's calories are guessed rather than read off a label */
+  t.kerr = meals(date).reduce((a, m) => a + (num(m.kcal, 0) || 0) * (num(m.err, 0) || 0), 0);
   return t;
 }
 const TARGETS = () => S.get('targets', { p: 175, c: 200, f: 80, kcal: 2220, na: 3500, k: 4500 });
@@ -781,6 +892,13 @@ const dayKcal = d => {
   return k > 0 ? k : null;
 };
 
+/* the guessed part of a day's calories, in calories */
+const dayKerr = d => {
+  const m = meals(d);
+  if (!m.length) return null;
+  return m.reduce((a, x) => a + (num(x.kcal, 0) || 0) * (num(x.err, 0) || 0), 0);
+};
+
 const TD = {
   P(over) {
     const p = {
@@ -814,6 +932,7 @@ const TD = {
       rw: Math.exp(-Math.LN2 * (last - i) / P.halfLife),
       w: value(d, 'weight'),
       kcal: dayKcal(d),
+      kerr: dayKerr(d),
       steps: value(d, 'steps'),
       sleep: value(d, 'sleep'),
       train: value(d, 'train'),
@@ -853,7 +972,12 @@ const TD = {
     const m = (S0 * Sxy - S1 * Sy) / den, b = (Sy - m * S1) / S0, ybar = Sy / S0;
     let ssRes = 0, ssTot = 0;
     pts.forEach(p => { const w = wOf ? wOf(p) : 1; ssRes += w * Math.pow(p.y - (m * p.i + b), 2); ssTot += w * Math.pow(p.y - ybar, 2); });
-    return { m: m, b: b, r2: ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0, n: n };
+    /* the standard error of the slope: how much the line could tilt and still
+       fit the points this well. It is what turns "losing 1.2 lb a week" into
+       "losing 1.2, give or take", and the give-or-take is most of the
+       uncertainty in a measured TDEE. */
+    const se = (n > 2 && den > 0 && S0 > 0) ? Math.sqrt(Math.max(0, ssRes / (n - 2)) * S0 / den) : 0;
+    return { m: m, b: b, se: se, r2: ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0, n: n };
   },
 
   /* recency-weighted mean, skipping missing values entirely */
@@ -882,6 +1006,17 @@ const TD = {
     res.rate = fit.m;                      /* lb per day, negative = losing */
     res.r2 = fit.r2;
     res.tdee = res.intake - fit.m * P.ed;  /* losing weight means burning above intake */
+
+    /* ── the give-or-take ──
+       The points fed to the fit are a 7-day rolling average, so neighbours
+       share six of their seven days and the fit thinks it has seven times
+       more independent evidence than it does. Widening by the square root of
+       the window width undoes roughly that. It is an approximation and the
+       band is indicative, not exact — but a band that is roughly right beats
+       a single number that is confidently wrong. */
+    const overlap = P.smooth === 'ewma' ? 4 : 7;
+    res.seRate = (fit.se || 0) * Math.sqrt(overlap);   /* lb per day */
+    res.guess = TD.wmean(cal, r => r.kerr || 0) || 0;  /* kcal a day of guessed food */
     return res;
   },
 
@@ -1021,6 +1156,25 @@ const TD = {
     if (Math.abs(next - prev) > P.guard) next = prev + (next > prev ? P.guard : -P.guard);
     o.tdee = Math.round(next);
 
+    /* ── margin of error ──
+       Three real sources, added in quadrature because they are independent of
+       each other:
+
+         trend   how much the weight line could tilt and still fit
+         guess   food you told it you were unsure about, carried straight
+                 through: a fifth of a restaurant meal never averages out
+         ed      3,500 kcal per lb is a round number, not a constant. The
+                 literature spread is roughly 8%, and it multiplies the rate.
+
+       It deliberately does not include model error, so treat it as a floor on
+       the uncertainty rather than the whole of it. */
+    const eTrend = (obs.seRate || 0) * P.ed;
+    const eGuess = obs.guess || 0;
+    const eEd = Math.abs(obs.rate || 0) * P.ed * .08;
+    o.errTrend = Math.round(eTrend);
+    o.errGuess = Math.round(eGuess);
+    o.err = Math.round(Math.sqrt(eTrend * eTrend + eGuess * eGuess + eEd * eEd) / 10) * 10;
+
     /* the two numbers, kept separate on purpose */
     o.predicted = Math.round(next + adj);
     o.gap = o.predicted - o.observed;
@@ -1137,6 +1291,7 @@ function fillSheet(h, title, build, opts) {
   h.body.scrollTop = 0;
   build(h.body, { close: closeSheet, panel: h.body });
   Mobile.form(h.body);          /* Next moves down the fields, Done closes the keyboard */
+  labelsFocus(h.body);          /* tapping the words puts the cursor in the box */
   if (opts && opts.focus) {
     setTimeout(() => { const f = h.body.querySelector('input,textarea,select'); if (f) f.focus(); }, 380);
   }
@@ -1153,6 +1308,32 @@ function openSheet(title, build, opts) {
     width: 620,
     onClose: () => { sheetH = null; },     /* back gesture, veil tap and drag all land here */
     body: (b, h) => { sheetH = h; fillSheet(h, title, build, opts); },
+  });
+}
+
+/* ── tapping a label opens its field ──
+   Every sheet in here is a label above a box. The label is a word describing
+   the box, so it should behave like part of it — which on the web it does not,
+   unless something wires the two together. Done once, here, rather than
+   remembered at every call site. The reach is worth more on a phone than
+   anywhere: a label is a comfortable target and a text field is a thin one. */
+function labelsFocus(root) {
+  [].forEach.call(root.querySelectorAll('label.fl'), lb => {
+    let n = lb.nextElementSibling, box = null;
+    /* Stop at the next label. Without that, a label whose control is a row of
+       chips walks straight past them and adopts the NEXT field's box, so
+       tapping Account put the cursor in Details. */
+    for (let i = 0; n && i < 3 && !box && !n.matches('label.fl'); i++, n = n.nextElementSibling) {
+      box = n.matches('input,textarea,select') ? n : n.querySelector('input:not([type=range]),textarea,select');
+    }
+    if (!box || box.disabled || box.readOnly) return;
+    lb.style.cursor = 'pointer';
+    lb.onclick = () => {
+      box.focus();
+      if (box.setSelectionRange && /^(text|search|tel|url|password)$/.test(box.type || 'text')) {
+        try { box.setSelectionRange(box.value.length, box.value.length); } catch (e) {}
+      }
+    };
   });
 }
 
@@ -1440,7 +1621,9 @@ function remaining(f, when) {
   /* three half-lives back is 12% left; anything older is noise */
   const span = Math.ceil(f.half * 4 / 24) + 1;
   Day.last(span).forEach(date => {
-    evList(date, f.id).forEach(e => {
+    /* food counts here too: an evening coffee is why you are awake, whether
+       it was logged as a dose or eaten as a meal */
+    entries(date, f.id).forEach(e => {
       const hrs = (now - e.t) / 3600000;
       if (hrs < 0) return;
       total += e.v * Math.pow(0.5, hrs / f.half);
@@ -1500,6 +1683,18 @@ function oneOffSheet() {
             ? 'Those macros come to ' + k + ' kcal.' : '');
     };
     ['p', 'c', 'f', 'kcal'].forEach(k => { f[k].oninput = sync; });
+
+    /* A one-off is almost always a plate somebody else cooked, and a plate
+       somebody else cooked is a guess. Urban 2011 measured restaurant meals
+       averaging around 18% above their stated calories, so a fifth out is the
+       honest starting point rather than pretending to know. One tap says
+       otherwise when you read it off a menu. */
+    let err = .2, acct = '';
+    body.appendChild(el('label', 'fl', 'How sure'));
+    body.appendChild(errChips(err, v => { err = v; }));
+    body.appendChild(el('label', 'fl', 'Paid from'));
+    body.appendChild(acctChips(acct, v => { acct = v; }));
+
     Mobile.form(body);
 
     body.appendChild(saveBar('Log it', () => {
@@ -1508,8 +1703,10 @@ function oneOffSheet() {
       const kcal = num(f.kcal.value) == null ? derived() : num(f.kcal.value, 0);
       const row = { fid: null, name: name, serve: 'one-off', unit: '', amt: 1, mult: 1, t: Date.now(),
         kcal: kcal, p: num(f.p.value, 0) || 0, c: num(f.c.value, 0) || 0, f: num(f.f.value, 0) || 0,
-        na: 0, k: 0, caff: 0, price: num(f.price.value, 0) || 0 };
-      Rec.set('meal', d, uid(), row);
+        na: 0, k: 0, caff: 0, price: num(f.price.value, 0) || 0, err: err, acct: acct };
+      const key = uid();
+      Rec.set('meal', d, key, row);
+      mealSpend(d, key, row);
       Mobile.feedback('success');
       closeSheet(); draw();
     }));
@@ -1581,8 +1778,9 @@ function mealMenu(x, d) {
     '-',
     { label: 'Delete', kind: 'bad', icon: '⌫', fn: () => {
       const row = Object.assign({}, x); delete row.key;
-      Rec.del('meal', d, x.key); Mobile.haptic('warn'); draw();
-      UI.undo('removed <b>' + esc(x.name) + '</b>', () => { Rec.set('meal', d, x.key, row); draw(); });
+      Rec.del('meal', d, x.key); mealSpend(d, x.key, null); Mobile.haptic('warn'); draw();
+      UI.undo('removed <b>' + esc(x.name) + '</b>',
+        () => { Rec.set('meal', d, x.key, row); mealSpend(d, x.key, row); draw(); });
     } },
   ].filter(Boolean), { title: x.name });
 }
@@ -1600,6 +1798,12 @@ function mealSheet(x, d) {
     amt.setAttribute('pattern', '[0-9.]*'); amt.value = String(r1(x.amt));
     body.appendChild(amt);
 
+    let err = num(x.err, 0) || 0, acct = x.acct || '';
+    body.appendChild(el('label', 'fl', 'How sure'));
+    body.appendChild(errChips(err, v => { err = v; }));
+    body.appendChild(el('label', 'fl', 'Paid from'));
+    body.appendChild(acctChips(acct, v => { acct = v; }));
+
     body.appendChild(saveBar('Save', () => {
       const v = num(amt.value);
       if (v == null || v <= 0) return UI.toast('How much?', { bad: true });
@@ -1610,7 +1814,10 @@ function mealSheet(x, d) {
       NUTS.forEach(n => { if (row[n] != null) row[n] = row[n] * k; });
       if (row.price != null) row.price = row.price * k;
       row.amt = v; row.mult = (x.mult || 1) * k;
+      /* a fraction, so it survives a rescale untouched */
+      row.err = err; row.acct = acct;
       Rec.set('meal', d, x.key, row);
+      mealSpend(d, x.key, row);
       Mobile.feedback('success');
       closeSheet(); draw();
     }));
@@ -1673,7 +1880,7 @@ function numberSheet(f, date) {
     body.appendChild(saveBar('Save', () => commit(num(inp.input.value))));
 
     if (dose) {
-      const list = evList(d, f.id);
+      const list = entries(d, f.id);
       if (list.length) {
         const tot = el('div', 'note', 'Today: ' + r1(value(d, f.id)) + (f.unit ? ' ' + f.unit : ''));
         body.appendChild(tot);
@@ -1687,10 +1894,16 @@ function numberSheet(f, date) {
 function entryRow(f, d, e) {
   const r = el('div', 'row');
   r.innerHTML = '<span class="nm">' + r1(e.v) + (f.unit ? ' ' + esc(f.unit) : '') +
+    (e.food ? '<small>' + esc(e.food) + '</small>' : '') +
     '</span><span class="fig">' + new Date(e.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '</span>';
-  const x = el('button', 'x', '✕');
-  x.onclick = () => { evDrop(d, f.id, e.t); fieldSheet(f, d); };
-  r.appendChild(x);
+  /* One that came off a food label has no row of its own to delete: it is the
+     meal, read a different way. Removing it means removing the meal, which is
+     one screen away and where you would expect to do it. */
+  if (!e.food) {
+    const x = el('button', 'x', '✕');
+    x.onclick = () => { evDrop(d, f.id, e.t); fieldSheet(f, d); };
+    r.appendChild(x);
+  }
   return r;
 }
 
@@ -1713,7 +1926,7 @@ function scaleSheet(f, date) {
       w.appendChild(b);
     }
     body.appendChild(w);
-    evList(d, f.id).slice().reverse().forEach(e => body.appendChild(entryRow(f, d, e)));
+    entries(d, f.id).slice().reverse().forEach(e => body.appendChild(entryRow(f, d, e)));
   });
 }
 
@@ -1830,6 +2043,22 @@ function foodPicker() {
   });
 }
 
+/* Which account it came out of. Blank is a real answer and the default: most
+   food was paid for on some other day. */
+function acctChips(cur, onPick) {
+  const w = el('div', 'chips');
+  const paint = () => {
+    w.innerHTML = '';
+    [{ name: '', label: 'Not now' }].concat(accts()).forEach(a => {
+      const b = el('button', 'chip' + (cur === a.name ? ' on' : ''), esc(a.label || a.name));
+      b.onclick = () => { cur = a.name; onPick(cur); paint(); Mobile.haptic('select'); };
+      w.appendChild(b);
+    });
+  };
+  paint();
+  return w;
+}
+
 /* how much of it — servings, straight units, or "however much hits 50g protein" */
 function amountSheet(fd) {
   openSheet(fd.name, body => {
@@ -1908,9 +2137,21 @@ function amountSheet(fd) {
     body.appendChild(preview);
     paintMode();
 
+    let err = 0, acct = '';
+    body.appendChild(el('label', 'fl', 'How sure'));
+    body.appendChild(errChips(err, v => { err = v; }));
+
+    /* Only where there is a price to pay. Blank means the food was already
+       bought, which is the normal case for anything in your own kitchen. */
+    if (num(fd.base.price, 0)) {
+      body.appendChild(el('label', 'fl', 'Paid from, if you paid just now'));
+      body.appendChild(acctChips('', v => { acct = v; }));
+    }
+
     body.appendChild(saveBar('Log it', () => {
       if (!mult || mult <= 0) return UI.toast('How much?', { bad: true });
-      logMeal(fd, mult, mode === 'serve' ? serves[si].label : (mode === 'unit' ? r1(mult * num(fd.base.amt, 0)) + ' ' + (fd.base.unit || '') : 'to target'));
+      logMeal(fd, mult, mode === 'serve' ? serves[si].label : (mode === 'unit' ? r1(mult * num(fd.base.amt, 0)) + ' ' + (fd.base.unit || '') : 'to target'),
+        { err: err, acct: acct });
       Mobile.feedback('tick');
       closeSheet(); draw();
     }));
@@ -2133,7 +2374,10 @@ function drawNow(m) {
   const d = vd();
 
   const t = dayTotals(d), ct = calTarget();
-  const c = card('Today', Day.label(d));
+  /* No heading and no date. The date bar sits directly above this card and
+     already says which day is on screen; repeating it underneath was one line
+     of chrome saying nothing the eye had not just read. */
+  const c = card();
 
   const left = ct.v - Math.round(t.kcal);
   const hero = el('div', 'hero', left.toLocaleString() + '<span class="u">calories left of ' + ct.v.toLocaleString() + '</span>');
@@ -2222,20 +2466,36 @@ function drawJournal(m) {
   const wrap = el('div', 'list');
   list.forEach((x, i) => {
     const r = el('div', 'note-row' + (x.done ? ' done' : '') + (x.cancelled ? ' cancelled' : ''));
-    r.innerHTML = '<span class="k">' + noteSvg(x.kind) + '</span>' +
+    /* ── two targets, two meanings ──
+       The line used to do one thing: tapping anywhere ticked it, and the only
+       way to fix a typo was to hold. That is backwards. A written line is text
+       first, so tapping the words puts the cursor in them; ticking is what the
+       box is for, and the box is the thing that looks like a control.
+
+       It is also what every list app already does, which means it needs no
+       explaining. */
+    r.innerHTML = '<button class="k" type="button"></button>' +
       '<span class="tx">' + esc(x.text) +
       /* how long it has been following you — quiet, but it should sting a bit */
       (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') + '</span>';
-    r.onclick = () => {
-      if (x.kind === 'todo') {
+    const box = r.querySelector('.k');
+    box.innerHTML = noteSvg(x.kind);
+    box.setAttribute('aria-label', x.kind === 'todo' ? (x.done ? 'Untick' : 'Tick') : noteKind(x.kind).label);
+    if (x.kind === 'todo') {
+      box.onclick = e => {
+        e.stopPropagation();
         /* write to the row's own date, not the one being looked at — a carried
            task is the original seen from later, not a copy */
         const own = x.date || d;
         Rec.set('note', own, x.key, Object.assign(bare(x), { done: x.done ? 0 : 1 }));
         Mobile.feedback(x.done ? 'untick' : 'tick');
         publishNotes(own); draw();
-      } else noteSheet(x, x.date || d);
-    };
+      };
+    } else {
+      box.tabIndex = -1;
+      box.style.cursor = 'inherit';
+    }
+    r.onclick = () => noteSheet(x, x.date || d);
     Mobile.hold(r, () => noteMenu(x, d, i, list.length));
     wrap.appendChild(r);
   });
@@ -2275,7 +2535,14 @@ function noteSheet(x, d) {
       closeSheet(); draw();
     }));
   });
-  setTimeout(() => { const t = document.querySelector('#sheet textarea'); if (t) t.focus(); }, 380);
+  /* Focus alone drops the caret wherever the platform feels like. Putting it
+     after the last character is what "carry on writing" means. */
+  setTimeout(() => {
+    const t = document.querySelector('#sheet textarea');
+    if (!t) return;
+    t.focus();
+    try { t.setSelectionRange(t.value.length, t.value.length); } catch (e) {}
+  }, 380);
 }
 
 function noteMenu(x, d, i, n) {
@@ -2344,7 +2611,11 @@ function drawFood(m) {
       const lim = row[2] || 0, pct = lim ? v / lim : 0;
       const over = row[4] === 'lte' && v > lim;
       if (over) w.className += ' over';
-      w.innerHTML = '<div class="top"><b>' + row[1] + '</b><span class="n">' + Math.round(v) + ' / ' + Math.round(lim) + '</span></div>' +
+      /* the band on calories only, because that is the one it changes a
+         decision about — the macros inherit the same doubt and saying so four
+         times is noise */
+      const band = (key === 'kcal' && t.kerr >= 25) ? ' ±' + Math.round(t.kerr) : '';
+      w.innerHTML = '<div class="top"><b>' + row[1] + '</b><span class="n">' + Math.round(v) + band + ' / ' + Math.round(lim) + '</span></div>' +
         '<div class="track"><i style="width:' + Math.min(100, Math.round(pct * 100)) + '%"></i></div>';
     } else {
       const share = t.kcal > 0 ? (v * KCALG[key]) / t.kcal : 0;
@@ -2368,14 +2639,17 @@ function drawFood(m) {
   if (!list.length) c2.appendChild(el('div', 'empty', 'Nothing yet.'));
   list.forEach(x => {
     const r = el('div', 'row tap');
-    r.innerHTML = '<span class="nm">' + esc(x.name) + '<small>' + esc(x.serve || '') + ' · ' + r1(x.amt) + ' ' + esc(x.unit || '') + '</small></span>' +
+    const marks = [esc(x.serve || ''), r1(x.amt) + ' ' + esc(x.unit || '')]
+      .concat(errTag(x.err) ? [errTag(x.err)] : []).concat(x.acct ? [esc(x.acct)] : []);
+    r.innerHTML = '<span class="nm">' + esc(x.name) + '<small>' + marks.filter(Boolean).join(' · ') + '</small></span>' +
       '<span class="fig">' + Math.round(x.kcal) + '<small>' + r1(x.p) + 'g protein</small></span>';
     const del = el('button', 'x', '✕');
     del.onclick = e => {
       e.stopPropagation();
       const row = Object.assign({}, x); delete row.key;
-      Rec.del('meal', d, x.key); Mobile.feedback('untick'); draw();
-      UI.undo('removed <b>' + esc(x.name) + '</b>', () => { Rec.set('meal', d, x.key, row); draw(); });
+      Rec.del('meal', d, x.key); mealSpend(d, x.key, null); Mobile.feedback('untick'); draw();
+      UI.undo('removed <b>' + esc(x.name) + '</b>',
+        () => { Rec.set('meal', d, x.key, row); mealSpend(d, x.key, row); draw(); });
     };
     r.appendChild(del);
     /* Tap edits this serving. Hold asks the wider question — because "change
@@ -2423,6 +2697,11 @@ function drawMoney(m) {
        the gesture means one thing across the app rather than one per screen. */
     Mobile.hold(r, () => UI.menu(0, 0, [
       { label: 'Edit', icon: '✎', fn: () => spendSheet(Object.assign({ date: d }, s)) },
+      s.viaMeal ? { label: 'Not paid for today', note: 'Keeps the meal, drops the payment', icon: '⊘', fn: () => {
+        const m = Rec.get('meal', d, s.viaMeal);
+        if (m) Rec.set('meal', d, s.viaMeal, Object.assign({}, m, { acct: '' }));
+        Rec.del('spend', d, s.key); Mobile.feedback('untick'); draw();
+      } } : null,
       { label: 'Same again today', note: money(s.amt) + ' · ' + esc(s.acct), icon: '⧉', fn: () => {
         Rec.set('spend', Day.today(), uid(), { amt: s.amt, acct: s.acct, note: s.note, t: Date.now() });
         Mobile.feedback('success'); draw();
@@ -2450,7 +2729,12 @@ function drawMoney(m) {
   b.style.marginTop = 'var(--s3)';
   b.onclick = () => spendSheet();
   c.appendChild(b);
-  if (food) c.appendChild(el('div', 'note', money(food) + ' of food eaten today.'));
+  if (food) {
+    /* what you ate, and how much of it you have already paid for today — the
+       rest was bought on some other day and is not today's spending */
+    const paid = sp.reduce((a, x) => a + (x.viaMeal ? (num(x.amt, 0) || 0) : 0), 0);
+    c.appendChild(el('div', 'note', money(food) + ' eaten' + (paid ? ' · ' + money(paid) + ' of it paid today' : '')));
+  }
   m.appendChild(c);
   /* the same seam as Today, so the add button does not move between tabs */
   seamButton(m);
@@ -2481,14 +2765,16 @@ function drawTrends(m) {
     /* two numbers, kept apart on purpose */
     const sp = el('div', 'split');
     sp.innerHTML =
-      '<div><div class="k">' + (e.predicted || e.tdee).toLocaleString() + '</div><div class="kl">now</div></div>' +
+      '<div><div class="k">' + (e.predicted || e.tdee).toLocaleString() + '</div><div class="kl">now' +
+        (e.err ? ', ±' + e.err.toLocaleString() : '') + '</div></div>' +
       '<div><div class="k muted">' + e.observed.toLocaleString() + '</div><div class="kl">measured, ' + e.calDays + ' days</div></div>';
     c.appendChild(sp);
     c.appendChild(el('div', 'note',
       'You ate ' + e.intake.toLocaleString() + ' kcal a day while your weight went ' +
       (e.rate > 0 ? 'up ' : 'down ') + r1(Math.abs(e.rate)) + ' lb a week.'));
 
-    if (e.adj) {
+    /* rounded, because "reading lower by 0 kcal" is a sentence about nothing */
+    if (Math.round(e.adj)) {
       c.appendChild(el('div', 'note', 'Reading ' + (e.adj > 0 ? 'higher' : 'lower') +
         ' by ' + Math.abs(Math.round(e.adj)) + ' kcal today: steps are ' +
         (e.stepDelta < 0 ? 'down ' : 'up ') + Math.abs(Math.round(e.stepDelta)) + ' on your normal. ' +
@@ -2497,6 +2783,10 @@ function drawTrends(m) {
           : 'Using your own rate, ' + esc(e.stepSrc || '') + '.')));
     }
     if (e.sleepNote) c.appendChild(el('div', 'note', esc(e.sleepNote)));
+    /* Only when guessed food is actually part of it, because otherwise the
+       band is the scale and saying so adds nothing. */
+    if (e.errGuess >= 25) c.appendChild(el('div', 'note',
+      '±' + e.errGuess.toLocaleString() + ' of that is food you marked unsure. Weigh more of it and the band closes.'));
 
     const cf = el('div');
     cf.innerHTML = '<div class="note">Confidence ' + e.conf + '%</div><div class="conf"><i style="width:' + e.conf + '%"></i></div>';
@@ -3059,6 +3349,17 @@ const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 /* One form for adding a field and for editing one that already exists.
    Everything a field can be lives here: what it measures, how far its scale
    runs, which days it is due, and whether it wears off. */
+/* How many of the field's units one of the label's units is. Only the two
+   conversions that actually come up: milligrams to grams and back. Anything
+   else is one to one, which is right for calories, protein and the rest. */
+function nutPer(from, unit) {
+  const lab = (NUT_FROM.filter(n => n[0] === from)[0] || [])[2] || '';
+  const u = String(unit || '').trim().toLowerCase();
+  if (lab === 'mg' && u === 'g') return .001;
+  if (lab === 'g' && u === 'mg') return 1000;
+  return 1;
+}
+
 function newFieldForm(pane, existing) {
   const f = existing || {};
   pane.innerHTML = '';
@@ -3151,6 +3452,22 @@ function newFieldForm(pane, existing) {
   slot.value = f.slot || '';
   pane.appendChild(slot);
 
+  /* Which nutrient on a food label this is the same substance as. Without it
+     a Caffeine tile counts your capsules and ignores your coffee. */
+  pane.appendChild(el('label', 'fl', 'Also count it from food'));
+  let from = f.from || '';
+  const fw = el('div', 'chips');
+  const paintFrom = () => {
+    fw.innerHTML = '';
+    [['', 'No']].concat(NUT_FROM.map(n => [n[0], n[1]])).forEach(n => {
+      const b = el('button', 'chip' + (from === n[0] ? ' on' : ''), esc(n[1]));
+      b.onclick = () => { from = n[0]; paintFrom(); Mobile.haptic('select'); };
+      fw.appendChild(b);
+    });
+  };
+  paintFrom();
+  pane.appendChild(fw);
+
   /* Half-life. Caffeine is about 5 hours; most things worth tracking have a
      published number. Leave it blank and nothing decays. */
   pane.appendChild(el('label', 'fl', 'Half-life in hours, if it wears off'));
@@ -3171,10 +3488,20 @@ function newFieldForm(pane, existing) {
     if (t != null) { spec.target = t; if (!spec.dir) spec.dir = 'gte'; } else { delete spec.target; }
     const h = num(hl.value);
     if (h != null && h > 0) spec.half = h; else delete spec.half;
+    if (from) {
+      spec.from = from;
+      /* the label is in the unit NUT_FROM names; `per` gets it into yours */
+      spec.per = nutPer(from, spec.unit);
+    } else { delete spec.from; delete spec.per; }
     const lv = num(loI.value), hv = num(hiI.value);
     if (lv != null) spec.min = lv; else delete spec.min;
-    if (hv != null) spec.max = hv; else delete spec.max;
-    if (measure === 'scale') spec.max = hi; else delete spec.max;
+    /* `max` carries two meanings and the scale one wins where it applies: on a
+       scale it is how far the scale runs, everywhere else it is the ceiling
+       typed into Edges. Setting the ceiling and then deleting it on the next
+       line meant "at most" never saved for anything. */
+    if (measure === 'scale') spec.max = hi;
+    else if (hv != null) spec.max = hv;
+    else delete spec.max;
     if (days.length && days.length < 7) spec.days = days.slice().sort(); else delete spec.days;
     if (slot.value.trim()) spec.slot = slot.value.trim(); else delete spec.slot;
     if (measure === 'amount' || measure === 'number') { spec.step = spec.step || 1; spec.dec = spec.dec == null ? 1 : spec.dec; }
@@ -3223,7 +3550,8 @@ function drawGoalsTab(pane) {
     pane.appendChild(rateOut);
     pane.appendChild(el('div', e.basis === 'measured' ? 'note' : 'warnbox',
       e.basis === 'measured'
-        ? 'Target right now: ' + calTarget().v.toLocaleString() + ' kcal, from a measured TDEE of ' + (e.predicted || e.tdee).toLocaleString() + '.'
+        ? 'Target right now: ' + calTarget().v.toLocaleString() + ' kcal, from a measured TDEE of ' +
+          (e.predicted || e.tdee).toLocaleString() + (e.err ? ' ± ' + e.err.toLocaleString() : '') + '.'
         : 'Your TDEE is not measured yet — ' + esc(e.why || '') + '. Until it is, the fixed number below is used.'));
   }
   const kc = el('div', 'field');
@@ -3545,19 +3873,20 @@ function exportSheets() {
   const live = Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0));
 
   const daily = [['Date', 'Day'].concat(live.map(f => f.label + (f.unit ? ' (' + f.unit + ')' : '')))
-    .concat(['Calories', 'Protein g', 'Carbs g', 'Fat g', 'Sodium mg', 'Potassium mg', 'Caffeine mg', 'Food eaten ₱', 'Spent ₱'])];
+    .concat(['Calories', 'Calories ±', 'Protein g', 'Carbs g', 'Fat g', 'Sodium mg', 'Potassium mg', 'Caffeine mg', 'Food eaten ₱', 'Spent ₱'])];
   days.forEach(d => {
     const t = dayTotals(d), sp = spendTotal(d);
     const any = live.some(f => value(d, f.id) != null) || t.kcal || sp;
     if (!any) return;
     daily.push([d, new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })].concat(live.map(f => { const v = value(d, f.id); return v == null ? '' : r1(v); }))
-      .concat([Math.round(t.kcal), r1(t.p), r1(t.c), r1(t.f), Math.round(t.na), Math.round(t.k), Math.round(t.caff),
+      .concat([Math.round(t.kcal), Math.round(t.kerr), r1(t.p), r1(t.c), r1(t.f), Math.round(t.na), Math.round(t.k), Math.round(t.caff),
         Math.round(t.price), Math.round(sp)]));
   });
 
-  const mealRows = [['Date', 'Time', 'Food', 'Serving', 'Amount', 'Unit', 'Calories', 'Protein', 'Carbs', 'Fat', 'Sodium', 'Potassium', 'Caffeine', 'Price']];
+  const mealRows = [['Date', 'Time', 'Food', 'Serving', 'Amount', 'Unit', 'Calories', 'Protein', 'Carbs', 'Fat', 'Sodium', 'Potassium', 'Caffeine', 'Price', 'Margin', 'Paid from']];
   days.forEach(d => meals(d).forEach(x => mealRows.push([d, new Date(x.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    x.name, x.serve || '', r1(x.amt), x.unit || '', Math.round(x.kcal), r1(x.p), r1(x.c), r1(x.f), Math.round(x.na), Math.round(x.k), Math.round(x.caff), Math.round(x.price)])));
+    x.name, x.serve || '', r1(x.amt), x.unit || '', Math.round(x.kcal), r1(x.p), r1(x.c), r1(x.f), Math.round(x.na), Math.round(x.k), Math.round(x.caff), Math.round(x.price),
+    errTag(x.err), x.acct || ''])));
 
   const spendRows = [['Date', 'Time', 'Amount', 'Account', 'Details']];
   days.forEach(d => spends(d).forEach(s => spendRows.push([d, new Date(s.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -3570,7 +3899,10 @@ function exportSheets() {
 
   const e = TD.estimate();
   const tdeeRows = [['Measure', 'Value'],
-    ['TDEE', e.tdee == null ? '' : e.tdee], ['Basis', e.basis], ['Confidence %', e.conf],
+    ['TDEE', e.tdee == null ? '' : e.tdee], ['Margin of error', e.err == null ? '' : e.err],
+    ['  of which, weight trend', e.errTrend == null ? '' : e.errTrend],
+    ['  of which, guessed food', e.errGuess == null ? '' : e.errGuess],
+    ['Basis', e.basis], ['Confidence %', e.conf],
     ['Average intake', e.intake == null ? '' : e.intake], ['Trend lb/week', e.rate == null ? '' : r1(e.rate)],
     ['Days of food logged', e.calDays], ['Weigh-ins', e.weighIns],
     ['Energy per lb', TD.ed()], ['Smoothing', TD.alpha()], ['Window days', TD.win()],
@@ -3591,6 +3923,7 @@ Rec.onfull = () => UI.toast('<b>storage is full.</b> Settings → TRACK → dele
 
 Rec.ready(() => {
   seedFields();
+  linkNutrients();
   TD.tick();
   /* On open, quietly: pull anything typed into the sheet since last time.
      Never blocks, never speaks unless it actually brought something back. */
