@@ -107,6 +107,9 @@ function hit(freq, when, gain, dur, opts) {
 /* the vocabulary. Everything an app can ask for, in one place, so two apps
    cannot mean different things by "done". */
 const CUES = {
+  /* Navigation. Quieter and shorter than a tick, because moving between
+     screens is not an achievement — it should register and vanish. */
+  blip:     () => [[3, .13, .05, { air: .15, click: false }]],
   tick:     () => [[0, .34, .10, { air: .3 }]],
   untick:   () => [[0, .22, .09, { bend: .82, air: .1, click: false }]],
   done:     () => [[2, .42, .28]],

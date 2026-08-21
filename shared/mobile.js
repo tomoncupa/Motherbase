@@ -286,12 +286,14 @@ let touched = false;
 addEventListener('pointerdown', () => { touched = true; }, { once: true, capture: true });
 addEventListener('keydown', () => { touched = true; }, { once: true, capture: true });
 const BUZZ = {
+  nav: 4,
   tick: 8, untick: 8, select: 6, toggle: 12, open: 6, close: 6,
   success: [10, 40, 18], complete: [12, 40, 12, 40, 24],
   warn: [16, 60, 16], error: [22, 60, 22, 60, 22], heavy: 22,
 };
 /* which sound cue goes with which moment — the vocabulary is sound.js's */
 const CUE = {
+  nav: 'blip',
   tick: 'tick', untick: 'untick', select: 'drop', toggle: 'tick', open: 'open',
   close: 'close', success: 'done', complete: 'complete', warn: 'error', error: 'error', heavy: 'drop',
 };
