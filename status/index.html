@@ -269,6 +269,35 @@ label.fl:first-child{margin-top:0}
 .shot img{width:var(--s8);height:var(--s8);object-fit:cover;border-radius:var(--radius-sm)}
 .thumb{width:var(--s6);height:var(--s6);object-fit:cover;border-radius:var(--radius-sm);flex:0 0 auto}
 
+/* ── journal ── */
+.segmini{display:flex;gap:2px;margin-left:auto;background:var(--surface-3);
+  padding:2px;border-radius:var(--radius-sm)}
+.segmini button{padding:0 var(--s3);min-height:28px;background:none;border:0;cursor:pointer;
+  border-radius:calc(var(--radius-sm) - 1px);color:var(--text-muted);
+  font-family:inherit;font-size:var(--t1);font-weight:600;letter-spacing:.04em}
+.segmini button.on{background:var(--surface-1);color:var(--text-1)}
+
+textarea{width:100%;background:var(--surface-2);border:0;border-radius:var(--radius-md);
+  padding:var(--s3);color:var(--text-1);font:inherit;font-size:var(--t3);
+  line-height:var(--lh-body);resize:vertical}
+textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
+
+.note-row{display:flex;align-items:flex-start;gap:var(--s3);padding:var(--s3);
+  min-height:var(--tap);border-radius:var(--radius-md);background:var(--surface-2);cursor:pointer}
+.note-row .k{flex:0 0 auto;width:20px;text-align:center;color:var(--accent);line-height:1.5}
+.note-row .tx{flex:1;min-width:0;line-height:var(--lh-body);overflow-wrap:anywhere}
+/* A done to-do stays readable — it is still a record of what you did. */
+.note-row.done .tx{text-decoration:line-through;color:var(--text-muted)}
+.note-row.done .k{color:var(--text-muted)}
+
+.kinds{display:flex;gap:var(--s2);margin-top:var(--s3);overflow-x:auto;scrollbar-width:none}
+.kinds::-webkit-scrollbar{height:0}
+.kind{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:2px;
+  min-height:var(--tap);padding:var(--s2) var(--s3);border:0;border-radius:var(--radius-md);
+  background:var(--surface-2);color:var(--text-muted);cursor:pointer;
+  font-family:inherit;font-size:var(--t1)}
+.kind i{font-style:normal;font-size:var(--t3);color:var(--accent)}
+
 /* ── chart ── */
 .chart{width:100%;height:180px;display:block}
 .chart .gl{stroke:var(--surface-3);stroke-width:1}
@@ -327,7 +356,7 @@ const APP = {
   name: 'Status',
   icon: '◐',
   blurb: 'sleep, weight, mood, food and money',
-  types: ['field', 'ev', 'day', 'food', 'meal', 'spend', 'acct', 'shot'],
+  types: ['field', 'ev', 'day', 'food', 'meal', 'spend', 'acct', 'shot', 'note'],
 };
 
 /* ── settings, all namespaced under status. ───────────────────────────── */
@@ -495,11 +524,83 @@ const TARGETS = () => S.get('targets', { p: 175, c: 200, f: 80, kcal: 2220, na: 
 /* One number, one place it comes from. Either you set it, or it is derived
    from the measured TDEE and a goal rate you chose. Never invented.      */
 function calTarget() {
-  if (S.get('calMode', 'fixed') === 'tdee') {
+  const mode = S.get('calMode', 'fixed');
+  if (mode === 'tdee') {
     const t = TD.targetIntake();
     if (t != null) return { v: t, src: 'tdee' };
   }
+  if (mode === 'macros') {
+    /* 4 kcal per gram of protein and carbohydrate, 9 per gram of fat — the
+       Atwater factors, the rounded figures every food label uses. Only the
+       macros you actually target count toward it. */
+    const t = TARGETS(), on = S.get('macroOn', { p: 1, c: 1, f: 1 });
+    let k = 0;
+    [['p', 4], ['c', 4], ['f', 9]].forEach(x => { if (on[x[0]]) k += (num(t[x[0]], 0) || 0) * x[1]; });
+    if (k > 0) return { v: Math.round(k), src: 'macros' };
+  }
   return { v: num(TARGETS().kcal, 2220), src: 'fixed' };
+}
+
+/* ══════════════ JOURNAL ══════════════
+   One `note` row per entry, dated, so a day's writing merges the same way
+   everything else does and a note written on two devices cannot clobber a
+   different note.
+
+   Two shapes, because they are genuinely different kinds of writing and
+   forcing one into the other makes both worse:
+
+     a PARAGRAPH is one piece of prose for the day — `kind:'para'`
+     a BULLET is one line with a type — `kind` is one of the five below
+
+   The five types are not decoration. They decide what happens to the line
+   afterwards: an idea surfaces on the Motherbase home screen, a to-do sorts to
+   the top and will hand off to the quests app, a reminder carries a date. An
+   event and a reflection are the record itself, which is why they do nothing
+   special — most writing is one of those two.                              */
+const NOTE_KINDS = [
+  { id: 'todo',    label: 'To do',      icon: '☐', rank: 0 },
+  { id: 'idea',    label: 'Idea',       icon: '✦', rank: 1 },
+  { id: 'remind',  label: 'Reminder',   icon: '⏰', rank: 2 },
+  { id: 'event',   label: 'Event',      icon: '•', rank: 3 },
+  { id: 'reflect', label: 'Reflection', icon: '❞', rank: 4 },
+];
+const noteKind = id => NOTE_KINDS.filter(k => k.id === id)[0] || NOTE_KINDS[3];
+
+const notes = date => Rec.all('note', { date: date })
+  .map(r => Object.assign({ key: r.key }, r.payload))
+  .sort(noteOrder);
+
+/* Sorting. To-dos hold the top whatever else is chosen, because an open task
+   is the one kind of line you need to see without looking for it. Everything
+   below that follows the chosen order. */
+function noteOrder(a, b) {
+  const done = x => (x.kind === 'todo' && x.done) ? 1 : 0;
+  const top = x => (x.kind === 'todo' && !x.done) ? 0 : 1;
+  if (top(a) !== top(b)) return top(a) - top(b);
+  if (done(a) !== done(b)) return done(a) - done(b);
+  const mode = S.get('noteSort', 'manual');
+  if (mode === 'manual') return (a.ord || 0) - (b.ord || 0);
+  return mode === 'oldest' ? (a.t || 0) - (b.t || 0) : (b.t || 0) - (a.t || 0);
+}
+
+const addNote = (date, kind, text) => {
+  const list = Rec.all('note', { date: date });
+  Rec.set('note', date, uid(), {
+    kind: kind, text: text, t: Date.now(),
+    ord: list.length, done: 0,
+  });
+  /* published here rather than at the call site, so an idea reaches the hub
+     however it was written */
+  if (kind === 'idea') publishIdea();
+};
+
+/* Ideas are the one kind meant to leave this app. A tick is how the suite
+   already shares a fact, so an idea also writes one — that is what puts it on
+   the Motherbase home screen without the home screen knowing about STATUS. */
+function publishIdea() {
+  const id = 'idea-' + Day.today();
+  Rec.set('activity', null, id, { name: 'Ideas', cat: 'journal' });
+  Rec.set('tick', Day.today(), id, { src: APP.id, qty: Rec.all('note').filter(r => r.payload && r.payload.kind === 'idea').length });
 }
 
 /* ══════════════ MONEY ══════════════ */
@@ -1170,6 +1271,67 @@ function clearsAt(f, to) {
   return Date.now() + f.half * Math.log(now / to) / Math.log(2) * 3600000;
 }
 
+/* A meal logged without a food behind it. Same `meal` row as any other, with
+   no `fid`, so it counts everywhere and simply has nothing to edit back into. */
+function oneOffSheet() {
+  const d = vd();
+  openSheet('One-off', body => {
+    const f = {};
+    const add = (key, label, kind) => {
+      body.appendChild(el('label', 'fl', label));
+      const i = document.createElement('input');
+      if (kind === 'name') { i.type = 'text'; i.setAttribute('autocapitalize', 'words'); }
+      else { i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*'); }
+      f[key] = i; body.appendChild(i);
+      return i;
+    };
+    add('name', 'What was it', 'name').placeholder = 'Chicken rice, the place on the corner';
+    const g = el('div', 'grid2');
+    [['kcal', 'Calories'], ['price', 'Price']].forEach(k => {
+      const w = el('div'); w.appendChild(el('label', 'fl', k[1]));
+      const i = document.createElement('input');
+      i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*');
+      f[k[0]] = i; w.appendChild(i); g.appendChild(w);
+    });
+    body.appendChild(g);
+    const g2 = el('div', 'grid3');
+    [['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat']].forEach(k => {
+      const w = el('div'); w.appendChild(el('label', 'fl', k[1]));
+      const i = document.createElement('input');
+      i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*');
+      f[k[0]] = i; w.appendChild(i); g2.appendChild(w);
+    });
+    body.appendChild(g2);
+
+    /* If calories are left blank, work them out from whatever macros were
+       given rather than logging a zero. */
+    const note = el('div', 'note');
+    body.appendChild(note);
+    const derived = () => Math.round((num(f.p.value, 0) || 0) * 4 + (num(f.c.value, 0) || 0) * 4 + (num(f.f.value, 0) || 0) * 9);
+    const sync = () => {
+      const k = derived();
+      note.textContent = num(f.kcal.value) == null
+        ? (k ? 'Calories will be ' + k + ', from the macros.' : '')
+        : (k && Math.abs(k - num(f.kcal.value, 0)) > Math.max(50, num(f.kcal.value, 0) * .1)
+            ? 'Those macros come to ' + k + ' kcal.' : '');
+    };
+    ['p', 'c', 'f', 'kcal'].forEach(k => { f[k].oninput = sync; });
+    Mobile.form(body);
+
+    body.appendChild(saveBar('Log it', () => {
+      const name = f.name.value.trim();
+      if (!name) return UI.toast('It needs a name', { bad: true });
+      const kcal = num(f.kcal.value) == null ? derived() : num(f.kcal.value, 0);
+      const row = { fid: null, name: name, serve: 'one-off', unit: '', amt: 1, mult: 1, t: Date.now(),
+        kcal: kcal, p: num(f.p.value, 0) || 0, c: num(f.c.value, 0) || 0, f: num(f.f.value, 0) || 0,
+        na: 0, k: 0, caff: 0, price: num(f.price.value, 0) || 0 };
+      Rec.set('meal', d, uid(), row);
+      Mobile.feedback('success');
+      closeSheet(); draw();
+    }));
+  });
+}
+
 /* ── correcting the past ──
    A meal row froze its numbers when it was logged, so fixing a food's macros
    does not touch what you already ate. That is right by default — it is what
@@ -1812,17 +1974,153 @@ function drawNow(m) {
   g.appendChild(tile('Spent', Math.round(dayMoney(d)).toLocaleString(), '₱', dayMoney(d) ? '' : 'todo', () => { TAB = 'money'; draw(); }));
   c.appendChild(g);
 
-  const open = outstanding();
-  if (open.length) c.appendChild(el('div', 'note', 'Still open: ' + open.map(f => f.label).join(', ')));
   m.appendChild(c);
 
   /* "Through the day" used to repeat every multi-entry field underneath the
      tiles, with its running total on the right — the same number the tile
      already shows. The individual readings are still one tap away, in the
      field's own sheet, which is where you go to add one anyway. */
+  drawJournal(m);
 }
 
 /* ── FOOD ── */
+/* ── the journal, on the main screen ──
+   Paragraph or bullets, chosen per day rather than globally: some days are one
+   piece of writing and some are a list, and having to pick once for all time
+   makes one of those days awkward forever. */
+function drawJournal(m) {
+  const d = vd();
+  const mode = S.get('noteMode', 'bullet');
+  const list = notes(d);
+
+  const c = card('Journal');
+  const head = c.querySelector('h2');
+  if (head) {
+    const seg = el('div', 'segmini');
+    [['bullet', 'Bullets'], ['para', 'Writing']].forEach(k => {
+      const b = el('button', mode === k[0] ? 'on' : '', k[1]);
+      b.onclick = () => { S.set('noteMode', k[0]); draw(); };
+      seg.appendChild(b);
+    });
+    head.appendChild(seg);
+  }
+
+  if (mode === 'para') {
+    const row = list.filter(x => x.kind === 'para')[0];
+    const ta = document.createElement('textarea');
+    ta.rows = 6; ta.placeholder = 'How was today?';
+    ta.value = row ? row.text : '';
+    ta.setAttribute('autocapitalize', 'sentences');
+    /* Saved as you stop typing. A journal with a Save button is a journal with
+       unsaved writing in it. */
+    let t = null;
+    ta.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        const key = row ? row.key : uid();
+        Rec.set('note', d, key, { kind: 'para', text: ta.value, t: row ? row.t : Date.now(), ord: 0 });
+      }, 600);
+    };
+    c.appendChild(ta);
+    m.appendChild(c);
+    return;
+  }
+
+  const bullets = list.filter(x => x.kind !== 'para');
+  if (!bullets.length) {
+    c.appendChild(el('div', 'empty', 'Nothing written today. Tap a type below and start a line.'));
+  }
+
+  const wrap = el('div', 'list');
+  bullets.forEach((x, i) => {
+    const k = noteKind(x.kind);
+    const r = el('div', 'note-row' + (x.done ? ' done' : ''));
+    r.innerHTML = '<span class="k" title="' + esc(k.label) + '">' + k.icon + '</span>' +
+      '<span class="tx">' + esc(x.text) + '</span>';
+    /* A to-do is the one type you act on rather than only read, so tapping it
+       ticks it. Everything else opens to edit. */
+    r.onclick = () => {
+      if (x.kind === 'todo') {
+        Rec.set('note', d, x.key, Object.assign({}, x, { done: x.done ? 0 : 1, key: undefined }));
+        Mobile.feedback(x.done ? 'untick' : 'tick');
+        draw();
+      } else noteSheet(x, d);
+    };
+    Mobile.hold(r, () => noteMenu(x, d, i, bullets.length));
+    wrap.appendChild(r);
+  });
+  c.appendChild(wrap);
+
+  /* One row of types. Tapping one starts a line of that type — which is both
+     the add button and the type picker, so there is no separate step. */
+  const add = el('div', 'kinds');
+  NOTE_KINDS.forEach(k => {
+    const b = el('button', 'kind mb-press mb-tap', '<i>' + k.icon + '</i>' + k.label);
+    b.onclick = () => noteSheet({ kind: k.id, text: '' }, d);
+    add.appendChild(b);
+  });
+  c.appendChild(add);
+  m.appendChild(c);
+}
+
+/* write or edit one line */
+function noteSheet(x, d) {
+  const isNew = !x.key;
+  openSheet(noteKind(x.kind).label, body => {
+    const seg = el('div', 'seg');
+    let kind = x.kind;
+    NOTE_KINDS.forEach(k => {
+      const b = el('button', kind === k.id ? 'on' : '', k.icon);
+      b.title = k.label;
+      b.onclick = () => { kind = k.id; [].forEach.call(seg.children, n => n.className = ''); b.className = 'on'; };
+      seg.appendChild(b);
+    });
+    body.appendChild(seg);
+
+    const ta = document.createElement('textarea');
+    ta.rows = 3; ta.value = x.text || '';
+    ta.placeholder = 'One line';
+    ta.setAttribute('autocapitalize', 'sentences');
+    body.appendChild(ta);
+
+    body.appendChild(saveBar(isNew ? 'Add' : 'Save', () => {
+      const text = ta.value.trim();
+      if (!text) return UI.toast('Nothing to save', { bad: true });
+      if (isNew) addNote(d, kind, text);
+      else Rec.set('note', d, x.key, Object.assign({}, x, { kind: kind, text: text, key: undefined }));
+      Mobile.feedback('success');
+      closeSheet(); draw();
+    }));
+  });
+  setTimeout(() => { const t = document.querySelector('#sheet textarea'); if (t) t.focus(); }, 380);
+}
+
+function noteMenu(x, d, i, n) {
+  const manual = S.get('noteSort', 'manual') === 'manual';
+  UI.menu(0, 0, [
+    { label: 'Edit', icon: '✎', fn: () => noteSheet(x, d) },
+    manual && i > 0 ? { label: 'Move up', icon: '↑', fn: () => moveNote(d, x, -1) } : null,
+    manual && i < n - 1 ? { label: 'Move down', icon: '↓', fn: () => moveNote(d, x, 1) } : null,
+    '-',
+    { label: 'Delete', kind: 'bad', icon: '⌫', fn: () => {
+      const keep = Object.assign({}, x); delete keep.key;
+      Rec.del('note', d, x.key); Mobile.haptic('warn'); draw();
+      UI.undo('removed the line', () => { Rec.set('note', d, x.key, keep); draw(); });
+    } },
+  ].filter(Boolean), { title: noteKind(x.kind).label });
+}
+
+function moveNote(d, x, dir) {
+  const list = notes(d).filter(y => y.kind !== 'para');
+  const i = list.findIndex(y => y.key === x.key), j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  list.splice(j, 0, list.splice(i, 1)[0]);
+  list.forEach((y, n) => Rec.set('note', d, y.key, Object.assign({}, y, { ord: n, key: undefined })));
+  Mobile.feedback('select');
+  draw();
+}
+
+
 function drawFood(m) {
   const d = vd(), t = dayTotals(d), tg = TARGETS(), ct = calTarget();
 
@@ -1833,8 +2131,14 @@ function drawFood(m) {
   if (left < 0) hero.style.color = 'var(--warn)';
   c.appendChild(hero);
 
+  /* A macro with no target still gets counted and still shows in the summary
+     line below — it just has no bar, because a bar with nothing to fill is a
+     progress indicator that cannot indicate progress. */
+  const on = S.get('macroOn', { p: 1, c: 1, f: 1 });
   [['kcal', 'Calories', ct.v, 'k1', 'lte'], ['p', 'Protein', tg.p, 'k2', 'gte'],
-   ['c', 'Carbs', tg.c, 'k3', 'lte'], ['f', 'Fat', tg.f, 'k4', 'lte']].forEach(row => {
+   ['c', 'Carbs', tg.c, 'k3', 'lte'], ['f', 'Fat', tg.f, 'k4', 'lte']]
+   .filter(row => row[0] === 'kcal' || on[row[0]])
+   .forEach(row => {
     const v = t[row[0]], lim = row[2] || 0, pct = lim ? v / lim : 0;
     const over = row[4] === 'lte' && v > lim;
     const w = el('div', 'macro ' + row[3] + (over ? ' over' : ''));
@@ -1842,9 +2146,15 @@ function drawFood(m) {
       '<div class="track"><i style="width:' + Math.min(100, Math.round(pct * 100)) + '%"></i></div>';
     c.appendChild(w);
   });
-  c.appendChild(el('div', 'note', Math.max(0, Math.round(tg.p - t.p)) + 'g protein to go · ' +
-    Math.round(t.na) + 'mg sodium · ' + Math.round(t.k) + 'mg potassium' +
-    (ct.src === 'tdee' ? ' · target from measured TDEE' : '')));
+  const bits = [];
+  if (on.p) bits.push(Math.max(0, Math.round(tg.p - t.p)) + 'g protein to go');
+  [['c', 'carbs', 'c'], ['f', 'fat', 'f']].forEach(x => {
+    if (!on[x[0]]) bits.push(Math.round(t[x[2]]) + 'g ' + x[1]);
+  });
+  bits.push(Math.round(t.na) + 'mg sodium', Math.round(t.k) + 'mg potassium');
+  if (ct.src === 'tdee') bits.push('target from measured TDEE');
+  if (ct.src === 'macros') bits.push('calories from macros');
+  c.appendChild(el('div', 'note', bits.join(' · ')));
   m.appendChild(c);
 
   const list = meals(d);
@@ -1873,6 +2183,13 @@ function drawFood(m) {
   b.style.marginTop = 'var(--s3)';
   b.onclick = foodPicker;
   c2.appendChild(b);
+  /* Quieter on purpose: a one-off leaves nothing behind to log again, so it is
+     the wrong default. It is here for a restaurant meal you will never eat
+     twice, where adding it to the database is just litter. */
+  const one = el('button', 'btn wide quiet', 'One-off');
+  one.style.marginTop = 'var(--s2)';
+  one.onclick = oneOffSheet;
+  c2.appendChild(one);
   m.appendChild(c2);
 }
 
@@ -2133,6 +2450,35 @@ function weightChart(e) {
     add('path', { d: roll.map((p, i) => (i ? 'L' : 'M') + Xi(p.i) + ' ' + Y(p.y)).join(' ') }, 'avg');
   }
   return svg;
+}
+
+/* ── swipe the day ──
+   The arrows in the date bar still work; this is the same action for a thumb
+   that is already on the screen. Left is forward in time, matching the way a
+   photo roll or a calendar moves — you are pushing the current day aside to
+   reveal the next one.
+
+   Only horizontal gestures count, and only past a threshold well clear of the
+   wobble in a vertical scroll, or the screen changes day while you are trying
+   to read it. */
+function wireDaySwipe() {
+  const m = document.getElementById('main');
+  let x0 = 0, y0 = 0, live = false;
+  m.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { live = false; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; live = true;
+  }, { passive: true });
+  m.addEventListener('touchend', e => {
+    if (!live) return;
+    live = false;
+    if (TAB === 'trends') return;              /* no day to move on that screen */
+    const t = e.changedTouches[0];
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    /* clearly horizontal, and far enough to be deliberate */
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 2) return;
+    shiftView(dx < 0 ? 1 : -1);
+    Mobile.haptic('select');
+  }, { passive: true });
 }
 
 /* ── the painter ── */
@@ -2402,7 +2748,7 @@ function drawGoalsTab(pane) {
 
   pane.appendChild(el('label', 'fl', 'Calorie target'));
   const seg = el('div', 'seg');
-  [['fixed', 'A number I set'], ['tdee', 'From my TDEE']].forEach(k => {
+  [['fixed', 'A number I set'], ['tdee', 'From my TDEE'], ['macros', 'From my macros']].forEach(k => {
     const b = el('button', mode === k[0] ? 'on' : '', k[1]);
     b.onclick = () => { S.set('calMode', k[0]); drawSettingsPane('goals'); draw(); };
     seg.appendChild(b);
@@ -2419,6 +2765,7 @@ function drawGoalsTab(pane) {
         : 'Your TDEE is not measured yet — ' + esc(e.why || '') + '. Until it is, the fixed number below is used.'));
   }
   const kc = el('div', 'field');
+  kc.style.display = mode === 'macros' ? 'none' : '';   /* derived, so not typed */
   kc.appendChild(el('label', 'fl', mode === 'tdee' ? 'Fallback calories' : 'Calories'));
   const ki = document.createElement('input');
   ki.type = 'text'; ki.inputMode = 'decimal'; ki.value = String(tg.kcal == null ? '' : tg.kcal);
@@ -2426,17 +2773,95 @@ function drawGoalsTab(pane) {
   kc.appendChild(ki);
   pane.appendChild(kc);
 
-  pane.appendChild(el('label', 'fl', 'Macros'));
+  /* ── which macros you are actually chasing ──
+     Not everybody tracks all three, and pretending otherwise means three
+     boxes that have to be filled in with numbers that do not mean anything.
+     A macro that is off is simply not a target: it still gets counted and
+     shown, it just has no bar to fill.
+
+     Calories can also be derived rather than set — 4 kcal per gram of protein
+     and carbohydrate, 9 per gram of fat. Those are the Atwater factors, the
+     standard rounded figures used on every food label. */
+  pane.appendChild(el('label', 'fl', 'Track a target for'));
+  const want = S.get('macroOn', { p: 1, c: 1, f: 1 });
+  const chips = el('div', 'mb-chips');
+  [['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat']].forEach(k => {
+    const b = el('button', 'mb-chip mb-press mb-tap' + (want[k[0]] ? ' on' : ''), k[1]);
+    b.onclick = () => {
+      const w2 = Object.assign({}, S.get('macroOn', { p: 1, c: 1, f: 1 }));
+      w2[k[0]] = w2[k[0]] ? 0 : 1;
+      S.set('macroOn', w2);
+      drawSettingsPane('goals'); draw();
+    };
+    chips.appendChild(b);
+  });
+  pane.appendChild(chips);
+
   const g = el('div', 'grid3');
+  const macroIn = {};
+  const kcalFromMacros = () => {
+    const t = TARGETS(), w2 = S.get('macroOn', { p: 1, c: 1, f: 1 });
+    let k = 0, any = false;
+    [['p', 4], ['c', 4], ['f', 9]].forEach(x => {
+      if (!w2[x[0]]) return;
+      const v = num(macroIn[x[0]] ? macroIn[x[0]].value : t[x[0]], 0) || 0;
+      k += v * x[1]; any = any || v > 0;
+    });
+    return any ? Math.round(k) : null;
+  };
+
   [['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g']].forEach(k => {
     const w = el('div');
     w.appendChild(el('label', 'fl', k[1]));
     const i = document.createElement('input');
-    i.type = 'text'; i.inputMode = 'decimal'; i.value = String(tg[k[0]] == null ? '' : tg[k[0]]);
-    i.onchange = () => { const t = TARGETS(); t[k[0]] = num(i.value, t[k[0]]); S.set('targets', t); draw(); };
+    i.type = 'text'; i.inputMode = 'decimal';
+    i.setAttribute('pattern', '[0-9.]*');
+    i.value = String(tg[k[0]] == null ? '' : tg[k[0]]);
+    i.disabled = !want[k[0]];
+    if (!want[k[0]]) i.style.opacity = '.4';
+    macroIn[k[0]] = i;
+    /* live, so the arithmetic answers while you are still typing rather than
+       after you look away */
+    i.oninput = () => paintSum();
+    i.onchange = () => { const t = TARGETS(); t[k[0]] = num(i.value, t[k[0]]); S.set('targets', t); draw(); paintSum(); };
     w.appendChild(i); g.appendChild(w);
   });
   pane.appendChild(g);
+
+  /* ── does the arithmetic agree? ──
+     Setting calories and macros independently is normal and usually fine —
+     they are two different ways of steering. But when they disagree badly one
+     of them is wrong, and nothing on screen would otherwise say so. */
+  const sum = el('div');
+  pane.appendChild(sum);
+  function paintSum() {
+    const k = kcalFromMacros();
+    sum.innerHTML = '';
+    if (k == null) return;
+    if (mode === 'macros') {
+      sum.appendChild(el('div', 'note', 'Calories work out to ' + k.toLocaleString() + '.'));
+      const t = TARGETS();
+      if (t.kcal !== k) { t.kcal = k; S.set('targets', t); }
+      return;
+    }
+    const set = num(TARGETS().kcal, 0) || 0;
+    const off = k - set;
+    /* 5% or 50 kcal, whichever is larger — below that it is rounding, not a
+       disagreement, and flagging rounding trains you to ignore the flag */
+    const slack = Math.max(50, set * .05);
+    if (Math.abs(off) <= slack) {
+      sum.appendChild(el('div', 'note', 'Macros come to ' + k.toLocaleString() + ' kcal. That matches.'));
+    } else {
+      sum.appendChild(el('div', 'warnbox',
+        'Your macros come to <b>' + k.toLocaleString() + '</b> kcal but your target is <b>' +
+        set.toLocaleString() + '</b> — ' + (off > 0 ? Math.round(off) + ' over' : Math.round(-off) + ' under') +
+        '. One of them needs changing.'));
+      const b = el('button', 'btn wide quiet', 'Set calories to ' + k.toLocaleString());
+      b.onclick = () => { const t = TARGETS(); t.kcal = k; S.set('targets', t); drawSettingsPane('goals'); draw(); };
+      sum.appendChild(b);
+    }
+  }
+  paintSum();
 
   fieldRow(pane, 'Goal weight (lb)', 'goalWeight', S.get('goalWeight', null), 'Drawn on the weight chart. Optional.');
 
@@ -2685,6 +3110,7 @@ Rec.ready(() => {
   draw();
   if (IO.isStale(APP.id)) setTimeout(() => UI.toast('no backup in ' + (IO.staleDays(APP.id) == null ? 'a while' : IO.staleDays(APP.id) + ' days') + ' — <b>settings → data</b>'), 1500);
 });
+wireDaySwipe();
 Rec.on(draw);
 Day.on(() => { TD.tick(); draw(); });
 </script>

@@ -130,18 +130,25 @@ const CUES = {
   },
 };
 
-/* A single silent loop, started on the first gesture and left running. It
-   costs nothing audible and it is what keeps the session in "playback" on the
-   iOS versions with no audioSession API. */
-let silent = null;
-function keepAwake() {
-  if (silent) { if (silent.paused) silent.play().catch(() => {}); return; }
+/* ── the audio session ──
+   This app makes small interface noises. It is not a media player, and it must
+   never behave like one.
+
+   An earlier version kept a silent looping <audio> element running to force
+   iOS into a "playback" session, so that ticks would be audible even with the
+   ring switch on silent. It worked, and the cost was unacceptable: a page
+   holding a playback session takes over the device's audio, so opening the app
+   stopped whatever music was playing. Trading somebody's music for a tick is
+   not a trade worth making.
+
+   "ambient" is the correct session for interface sound. It mixes with other
+   audio rather than interrupting it, so music keeps playing underneath. The
+   price is that the ring switch silences the app — which is exactly what the
+   ring switch is for, and what every well-behaved app does. */
+function audioSession() {
   try {
-    silent = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=');
-    silent.loop = true; silent.volume = 0;
-    silent.setAttribute('playsinline', '');
-    silent.play().catch(() => {});
-  } catch (e) { silent = null; }
+    if (navigator.audioSession) navigator.audioSession.type = 'ambient';
+  } catch (e) {}
 }
 
 const Sfx = {
@@ -169,21 +176,17 @@ const Sfx = {
 
      1. The context starts suspended until a real gesture. Ordinary, handled
         everywhere.
-     2. iOS puts a page in an "ambient" audio session by default, and an
-        ambient session is silenced by the physical ring/silent switch. A
-        WebAudio-only page therefore plays nothing whenever that switch is
-        flipped, with no error. Asking for the "playback" session fixes it;
-        where that API is missing, starting a silent looping <audio> element
-        pushes WebKit into a playback session as a side effect, which is the
-        long-standing workaround.
+     2. The session type decides whether the ring switch silences us and
+        whether we interrupt other audio. We ask for "ambient" on purpose:
+        interface sound mixes with music instead of stopping it. See the note
+        above audioSession() for why the alternative was worse.
      3. Backgrounding a standalone app suspends the context, and it does not
         come back on its own. The old unlock listener was bound {once}, so
         after the first trip to the home screen the app went quiet for good. */
   unlock() {
     const c = boot();
     if (!c) return false;
-    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
-    keepAwake();
+    audioSession();
     if (c.state === 'suspended') c.resume();
     return true;
   },
