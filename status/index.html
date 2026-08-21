@@ -157,6 +157,9 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 .macro.k3 .track i{background:var(--data-3)}
 .macro.k4 .track i{background:var(--data-4)}
 .macro.over .track i{background:var(--warn)}
+/* no target, so the bar describes rather than measures */
+.macro.untargeted{opacity:.62}
+.macro.untargeted .track i{background:var(--text-muted)}
 
 /* ── buttons ── */
 .btn{
@@ -268,6 +271,18 @@ label.fl:first-child{margin-top:0}
 .shot{display:flex;gap:var(--s4);align-items:flex-start;margin-bottom:var(--s4)}
 .shot img{width:var(--s8);height:var(--s8);object-fit:cover;border-radius:var(--radius-sm)}
 .thumb{width:var(--s6);height:var(--s6);object-fit:cover;border-radius:var(--radius-sm);flex:0 0 auto}
+
+/* ── the wheel ── */
+.wheel{display:flex;flex-direction:column;gap:var(--s2)}
+.wheel .num{width:100%}
+
+/* ── derived numbers ──
+   Anything the app worked out rather than something you typed. Faded and
+   marked, so at a glance you can tell what you set from what followed from it
+   — and so changing a derived number never feels like changing a fact. */
+.derived{opacity:.62}
+.derived-tag{font-size:var(--t1);color:var(--text-muted);letter-spacing:.04em;
+  border-bottom:1px dotted var(--border-strong);padding-bottom:1px}
 
 /* ── journal ── */
 .segmini{display:flex;gap:2px;margin-left:auto;background:var(--surface-3);
@@ -1049,6 +1064,50 @@ function numberInput(v, step, dec) {
   w.input = i;
   return w;
 }
+/* ── a wheel, next to the keypad ──
+   Only worth adding where dragging changes something else you are watching.
+   Without a coupled readout a keypad is faster and more precise, so this lives
+   in Goals — where grams drive calories and a rate drives a target — and
+   nowhere else.
+
+   Both controls edit the same value and stay in step. The keypad is for when
+   you know the number; the wheel is for when you are looking for it.        */
+function wheelInput(v, opts) {
+  opts = opts || {};
+  const lo = opts.min == null ? 0 : opts.min;
+  const hi = opts.max == null ? 100 : opts.max;
+  const step = opts.step || 1;
+  const dec = opts.dec ? 1 : 0;
+
+  const w = el('div', 'wheel');
+  const i = document.createElement('input');
+  i.className = 'num';
+  Mobile.field(i, dec ? 'decimal' : 'number');
+  i.value = v == null ? '' : String(v);
+
+  const r = document.createElement('input');
+  r.type = 'range'; r.className = 'mb-range';
+  r.min = lo; r.max = hi; r.step = step;
+  r.value = v == null ? lo : Math.max(lo, Math.min(hi, v));
+
+  const val = () => num(i.value, lo) || 0;
+  const say = () => { if (opts.onChange) opts.onChange(val()); };
+
+  /* Dragging is the whole point, so it reports on every frame rather than on
+     release — the number it drives has to move with your thumb or there is no
+     reason to drag instead of type. */
+  r.oninput = () => {
+    i.value = dec ? String(r1(+r.value)) : String(Math.round(+r.value));
+    say();
+  };
+  i.oninput = () => { r.value = Math.max(lo, Math.min(hi, val())); say(); };
+
+  w.appendChild(i); w.appendChild(r);
+  w.input = i;
+  w.set = n => { i.value = dec ? String(r1(n)) : String(Math.round(n)); r.value = n; };
+  return w;
+}
+
 function saveBar(label, fn) {
   const b = el('button', 'btn go wide', label || 'SAVE');
   b.style.marginTop = '12px'; b.style.minHeight = '50px';
@@ -1964,6 +2023,9 @@ function drawNow(m) {
       pct = v / f.target;
       if (f.dir === 'lte' && v > f.target) cls += ' over';
     }
+    /* An edge outranks a target: being outside one is the thing to notice,
+       whether or not you also hit what you were aiming at. */
+    if (v != null && ((f.min != null && v < f.min) || (f.max != null && v > f.max))) cls += ' over';
     /* a decaying field says what is still in you under its label, because the
        total you took today stops being the interesting number by mid-afternoon */
     const left = (f.half && Day.isToday(d)) ? remaining(f) : null;
@@ -2131,26 +2193,36 @@ function drawFood(m) {
   if (left < 0) hero.style.color = 'var(--warn)';
   c.appendChild(hero);
 
-  /* A macro with no target still gets counted and still shows in the summary
-     line below — it just has no bar, because a bar with nothing to fill is a
-     progress indicator that cannot indicate progress. */
+  /* Every macro gets a bar. A targeted one fills toward its target. An
+     untargeted one fills by its share of the calories you actually ate — 4
+     kcal a gram for protein and carbohydrate, 9 for fat — so it still shows
+     the shape of the day without inventing a goal you never set. It is drawn
+     faded and reads "31% of intake" rather than "x / y", because it is a
+     description of what happened, not progress toward anything. */
   const on = S.get('macroOn', { p: 1, c: 1, f: 1 });
+  const KCALG = { p: 4, c: 4, f: 9 };
   [['kcal', 'Calories', ct.v, 'k1', 'lte'], ['p', 'Protein', tg.p, 'k2', 'gte'],
    ['c', 'Carbs', tg.c, 'k3', 'lte'], ['f', 'Fat', tg.f, 'k4', 'lte']]
-   .filter(row => row[0] === 'kcal' || on[row[0]])
    .forEach(row => {
-    const v = t[row[0]], lim = row[2] || 0, pct = lim ? v / lim : 0;
-    const over = row[4] === 'lte' && v > lim;
-    const w = el('div', 'macro ' + row[3] + (over ? ' over' : ''));
-    w.innerHTML = '<div class="top"><b>' + row[1] + '</b><span class="n">' + Math.round(v) + ' / ' + Math.round(lim) + '</span></div>' +
-      '<div class="track"><i style="width:' + Math.min(100, Math.round(pct * 100)) + '%"></i></div>';
+    const key = row[0], v = t[key] || 0;
+    const targeted = key === 'kcal' || on[key];
+    const w = el('div', 'macro ' + row[3] + (targeted ? '' : ' untargeted'));
+    if (targeted) {
+      const lim = row[2] || 0, pct = lim ? v / lim : 0;
+      const over = row[4] === 'lte' && v > lim;
+      if (over) w.className += ' over';
+      w.innerHTML = '<div class="top"><b>' + row[1] + '</b><span class="n">' + Math.round(v) + ' / ' + Math.round(lim) + '</span></div>' +
+        '<div class="track"><i style="width:' + Math.min(100, Math.round(pct * 100)) + '%"></i></div>';
+    } else {
+      const share = t.kcal > 0 ? (v * KCALG[key]) / t.kcal : 0;
+      w.innerHTML = '<div class="top"><b>' + row[1] + '</b><span class="n derived-tag">' +
+        Math.round(v) + 'g · ' + Math.round(share * 100) + '% of intake</span></div>' +
+        '<div class="track"><i style="width:' + Math.min(100, Math.round(share * 100)) + '%"></i></div>';
+    }
     c.appendChild(w);
   });
   const bits = [];
   if (on.p) bits.push(Math.max(0, Math.round(tg.p - t.p)) + 'g protein to go');
-  [['c', 'carbs', 'c'], ['f', 'fat', 'f']].forEach(x => {
-    if (!on[x[0]]) bits.push(Math.round(t[x[2]]) + 'g ' + x[1]);
-  });
   bits.push(Math.round(t.na) + 'mg sodium', Math.round(t.k) + 'mg potassium');
   if (ct.src === 'tdee') bits.push('target from measured TDEE');
   if (ct.src === 'macros') bits.push('calories from macros');
@@ -2557,6 +2629,64 @@ function moveField(id, dir) {
   drawSettingsPane('track'); draw();
 }
 
+/* Renaming an account changes its key, and every spend row points at the old
+   one by name. So the rows move with it — otherwise a rename quietly orphans
+   every payment you ever made from that account. */
+function renameAcct(a) {
+  UI.dialog({
+    title: 'Rename', width: 380, focus: true,
+    body: (b, h) => {
+      const i = UI.field('name', { value: a.name });
+      b.appendChild(i);
+      h.input = i;
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: h => {
+      const v = h.body.querySelector('input').value.trim();
+      if (!v || v === a.name) return;
+      const oldKey = a.name.toLowerCase(), newKey = v.toLowerCase();
+      let moved = 0;
+      Rec.all('spend').forEach(r => {
+        if (!r.payload || r.payload.acct !== a.name) return;
+        Rec.set('spend', r.date, r.key, Object.assign({}, r.payload, { acct: v }));
+        moved++;
+      });
+      Rec.set('acct', null, newKey, { name: v, order: a.order || 0 });
+      if (newKey !== oldKey) Rec.del('acct', null, oldKey);
+      if (S.get('lastAcct', '') === a.name) S.set('lastAcct', v);
+      Mobile.feedback('success');
+      drawSettingsPane('track'); draw();
+      if (moved) UI.toast('<b>' + moved + '</b> payment' + (moved === 1 ? '' : 's') + ' moved with it');
+    } }],
+  });
+}
+
+function moveAcct(i, dir) {
+  const list = accts(), j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  list.splice(j, 0, list.splice(i, 1)[0]);
+  list.forEach((a, n) => Rec.set('acct', null, a.name.toLowerCase(), Object.assign({}, a, { order: n })));
+  Mobile.feedback('select');
+  drawSettingsPane('track');
+}
+
+function removeAcct(a) {
+  const used = Rec.all('spend').filter(r => r.payload && r.payload.acct === a.name).length;
+  const go = () => {
+    const keep = Object.assign({}, a);
+    Rec.del('acct', null, a.name.toLowerCase());
+    Mobile.haptic('warn');
+    drawSettingsPane('track');
+    UI.undo('removed <b>' + esc(a.name) + '</b>',
+      () => { Rec.set('acct', null, a.name.toLowerCase(), keep); drawSettingsPane('track'); });
+  };
+  if (!used) return go();
+  /* The payments stay either way — they carry the name, not a link. Saying so
+     is the difference between a confident delete and a nervous one. */
+  UI.confirm('Delete ' + a.name + '?',
+    used + ' payment' + (used === 1 ? '' : 's') + ' used it. They keep their record and stay on the money screen.',
+    { yes: 'DELETE', danger: true }).then(ok => { if (ok) go(); });
+}
+
 function drawTrackTab(pane) {
   settingsPane = pane;
   const list = Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -2567,6 +2697,8 @@ function drawTrackTab(pane) {
     if (f.target) bits.push((f.dir === 'lte' ? '\u2264' : '\u2265') + ' ' + f.target);
     if (f.days && f.days.length) bits.push(f.days.map(i => DOW[i]).join(' '));
     if (f.slot) bits.push(f.slot);
+    if (f.min != null) bits.push('\u2265 ' + f.min);
+    if (f.max != null) bits.push('\u2264 ' + f.max);
     if (f.half) bits.push('half-life ' + f.half + 'h');
     const row = toggleRow(f.label, bits.join(' \u00b7 '), !!f.on, on => {
       Rec.set('field', null, f.id, Object.assign({}, f, { on: on ? 1 : 0 }));
@@ -2607,12 +2739,22 @@ function drawTrackTab(pane) {
   pane.appendChild(custom);
 
   pane.appendChild(el('label', 'fl', 'Accounts'));
-  accts().forEach(a => {
-    const r = el('div', 'row');
+  const all = accts();
+  all.forEach((a, i) => {
+    const r = el('div', 'row tap');
     r.innerHTML = '<span class="nm">' + esc(a.name) + '</span>';
     const x = el('button', 'x', '✕');
-    x.onclick = () => { Rec.del('acct', null, a.name.toLowerCase()); drawSettingsPane('track'); };
-    r.appendChild(x); pane.appendChild(r);
+    x.onclick = e => { e.stopPropagation(); removeAcct(a); };
+    r.appendChild(x);
+    r.onclick = () => renameAcct(a);
+    Mobile.hold(r, () => UI.menu(0, 0, [
+      { label: 'Rename', icon: '✎', fn: () => renameAcct(a) },
+      i > 0 ? { label: 'Move up', icon: '↑', fn: () => moveAcct(i, -1) } : null,
+      i < all.length - 1 ? { label: 'Move down', icon: '↓', fn: () => moveAcct(i, 1) } : null,
+      '-',
+      { label: 'Delete', kind: 'bad', icon: '⌫', fn: () => removeAcct(a) },
+    ].filter(Boolean), { title: a.name }), { skip: '.x' });
+    pane.appendChild(r);
   });
   const add = el('div', 'stepper');
   const ni = document.createElement('input'); ni.type = 'text'; ni.placeholder = 'New account';
@@ -2684,6 +2826,27 @@ function newFieldForm(pane, existing) {
   tg.value = f.target == null ? '' : String(f.target);
   pane.appendChild(tg);
 
+  /* A target is what you are aiming at. A floor and a ceiling are the edges
+     you should not be outside — different question, and both can be true at
+     once. Sodium has a ceiling and no target; sleep has a floor and a target;
+     blood pressure has both edges and no target at all. */
+  pane.appendChild(el('label', 'fl', 'Edges, if it has them'));
+  const lim = el('div', 'grid2');
+  const mkLim = (key, label, ph) => {
+    const w = el('div');
+    w.appendChild(el('label', 'fl', label));
+    const i = document.createElement('input');
+    i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*');
+    i.placeholder = ph;
+    i.value = f[key] == null ? '' : String(f[key]);
+    w.appendChild(i); lim.appendChild(w);
+    return i;
+  };
+  const loI = mkLim('min', 'At least', 'none');
+  const hiI = mkLim('max', 'At most', 'none');
+  pane.appendChild(lim);
+  pane.appendChild(el('div', 'note', 'Outside either edge is flagged on the tile.'));
+
   /* Which days it is due. Nothing picked means every day, which is the common
      case and should not cost seven taps to say. */
   pane.appendChild(el('label', 'fl', 'Due on — nothing picked means every day'));
@@ -2727,6 +2890,9 @@ function newFieldForm(pane, existing) {
     if (t != null) { spec.target = t; if (!spec.dir) spec.dir = 'gte'; } else { delete spec.target; }
     const h = num(hl.value);
     if (h != null && h > 0) spec.half = h; else delete spec.half;
+    const lv = num(loI.value), hv = num(hiI.value);
+    if (lv != null) spec.min = lv; else delete spec.min;
+    if (hv != null) spec.max = hv; else delete spec.max;
     if (measure === 'scale') spec.max = hi; else delete spec.max;
     if (days.length && days.length < 7) spec.days = days.slice().sort(); else delete spec.days;
     if (slot.value.trim()) spec.slot = slot.value.trim(); else delete spec.slot;
@@ -2757,8 +2923,23 @@ function drawGoalsTab(pane) {
 
   if (mode === 'tdee') {
     const e = TD.estimate();
-    fieldRow(pane, 'Lose this much a week (lb)', 'goalRate', S.get('goalRate', 1.25),
-      'Target = TDEE − (rate × ' + TD.ed() + ' ÷ 7), which is ' + Math.round(S.get('goalRate', 1.25) * TD.ed() / 7) + ' kcal a day under.');
+    /* The other place a wheel earns its keep: the rate drives the daily
+       target, and watching it move is the whole point of choosing a rate. */
+    pane.appendChild(el('label', 'fl', 'Lose this much a week (lb)'));
+    const rateOut = el('div', 'note derived');
+    const rw = wheelInput(S.get('goalRate', 1.25), { min: 0, max: 3, step: .25, dec: 1,
+      onChange: r => {
+        const under = Math.round(r * TD.ed() / 7);
+        const est = TD.estimate();
+        const base = est.predicted || est.tdee;
+        rateOut.innerHTML = base
+          ? '<span class="derived-tag">' + Math.max(0, Math.round(base - under)).toLocaleString() + ' kcal</span> a day — ' + under + ' under your measured ' + Math.round(base).toLocaleString() + '.'
+          : '<span class="derived-tag">' + under + ' kcal</span> a day under, once your TDEE is measured.';
+      } });
+    rw.input.onchange = () => { S.set('goalRate', num(rw.input.value, 1.25)); TD._dirty = true; draw(); };
+    rw.querySelector('input[type=range]').onchange = () => { S.set('goalRate', num(rw.input.value, 1.25)); TD._dirty = true; draw(); };
+    pane.appendChild(rw);
+    pane.appendChild(rateOut);
     pane.appendChild(el('div', e.basis === 'measured' ? 'note' : 'warnbox',
       e.basis === 'measured'
         ? 'Target right now: ' + calTarget().v.toLocaleString() + ' kcal, from a measured TDEE of ' + (e.predicted || e.tdee).toLocaleString() + '.'
@@ -2810,21 +2991,24 @@ function drawGoalsTab(pane) {
     return any ? Math.round(k) : null;
   };
 
+  /* Each macro gets a wheel as well as a keypad, because the calorie total
+     underneath moves as you drag — which is the only reason a wheel beats
+     typing. The ceilings are generous rather than opinionated. */
+  const MAXG = { p: 400, c: 700, f: 250 };
   [['p', 'Protein g'], ['c', 'Carbs g'], ['f', 'Fat g']].forEach(k => {
     const w = el('div');
     w.appendChild(el('label', 'fl', k[1]));
-    const i = document.createElement('input');
-    i.type = 'text'; i.inputMode = 'decimal';
-    i.setAttribute('pattern', '[0-9.]*');
-    i.value = String(tg[k[0]] == null ? '' : tg[k[0]]);
-    i.disabled = !want[k[0]];
-    if (!want[k[0]]) i.style.opacity = '.4';
-    macroIn[k[0]] = i;
-    /* live, so the arithmetic answers while you are still typing rather than
-       after you look away */
-    i.oninput = () => paintSum();
-    i.onchange = () => { const t = TARGETS(); t[k[0]] = num(i.value, t[k[0]]); S.set('targets', t); draw(); paintSum(); };
-    w.appendChild(i); g.appendChild(w);
+    const wh = wheelInput(tg[k[0]] == null ? 0 : tg[k[0]], {
+      min: 0, max: MAXG[k[0]], step: 5,
+      onChange: () => paintSum(),
+    });
+    if (!want[k[0]]) { wh.style.opacity = '.4'; wh.input.disabled = true; wh.querySelector('input[type=range]').disabled = true; }
+    wh.input.onchange = () => { const t = TARGETS(); t[k[0]] = num(wh.input.value, t[k[0]]); S.set('targets', t); draw(); paintSum(); };
+    wh.querySelector('input[type=range]').onchange = () => {
+      const t = TARGETS(); t[k[0]] = num(wh.input.value, t[k[0]]); S.set('targets', t); draw(); paintSum();
+    };
+    macroIn[k[0]] = wh.input;
+    w.appendChild(wh); g.appendChild(w);
   });
   pane.appendChild(g);
 
@@ -2839,17 +3023,18 @@ function drawGoalsTab(pane) {
     sum.innerHTML = '';
     if (k == null) return;
     if (mode === 'macros') {
-      sum.appendChild(el('div', 'note', 'Calories work out to ' + k.toLocaleString() + '.'));
+      sum.appendChild(el('div', 'note derived',
+        'Calories work out to <span class="derived-tag">' + k.toLocaleString() + '</span> — derived, not set.'));
       const t = TARGETS();
       if (t.kcal !== k) { t.kcal = k; S.set('targets', t); }
       return;
     }
     const set = num(TARGETS().kcal, 0) || 0;
     const off = k - set;
-    /* 5% or 50 kcal, whichever is larger — below that it is rounding, not a
-       disagreement, and flagging rounding trains you to ignore the flag */
-    const slack = Math.max(50, set * .05);
-    if (Math.abs(off) <= slack) {
+    /* No tolerance. Two numbers that are meant to describe the same day either
+       agree or they do not, and a band of "close enough" is just a place for a
+       mistake to live. */
+    if (off === 0) {
       sum.appendChild(el('div', 'note', 'Macros come to ' + k.toLocaleString() + ' kcal. That matches.'));
     } else {
       sum.appendChild(el('div', 'warnbox',
