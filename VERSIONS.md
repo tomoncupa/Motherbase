@@ -16,6 +16,38 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.3 — 2026-08-21
+
+Caffeine from food reached the tile in one route out of three. Two holes, both
+silent, and silence is the problem: an empty tile looks the same whether
+nothing was logged or the number was thrown away on the way in.
+
+**A one-off had nowhere to put it.** Sodium, potassium and caffeine were
+hard-coded to zero on that form, so a can logged there counted its calories
+and dropped everything else. It has the boxes now.
+
+**A field you named yourself never linked.** The pass that connects a tracked
+field to the nutrient it is made of matched on the id, and a field added from
+the library has the id `caffeine` while one you typed into Something else has
+a timestamp. Same thing to whoever made it, so it matches on the name too. The
+guard is a number rather than a tick, so the pass runs again when the library
+learns a new link instead of being locked out by the previous version.
+
+The library also stopped offering you a second Caffeine when you already had
+one under a different id.
+
+**A field says whether food feeds it.** The TRACK list now reads `+ caffeine
+from food` under anything linked. A tile that ignores what you ate used to
+look identical to one that counts it.
+
+**Correction to 0.1.2's note:** the smoke run reported there as 102 of 102 was
+against a browser-cached copy of the shared files, not the ones on disk. Run
+against the real files it is **114 of 114**, all passing. The twelve checks
+that were missing were skipped, not failed — but the number quoted was wrong
+and the cache was not noticed.
+
+---
+
 ## 0.1.2 — 2026-08-21
 
 **Tabs are named after their data.** They used to carry the app that wrote

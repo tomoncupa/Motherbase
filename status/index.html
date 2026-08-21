@@ -533,18 +533,30 @@ function addField(spec) {
   return f;
 }
 
-/* Fields added from the library before it knew about nutrients have no link,
-   so a caffeine tile built last week would go on ignoring coffee forever.
-   Runs once, matches by id, and only fills a link in where there is none. */
+/* ── linking the fields that were made before links existed ──
+   A Caffeine tile built last week has no idea that `caff` on a food label is
+   the same substance, so it would go on ignoring your coffee forever.
+
+   Matched on the name, not only on the id. A field added from the library has
+   the id `caffeine`; one you made yourself by typing "Caffeine" into
+   Something else has a timestamp for an id and would never have matched. Both
+   are the same thing to the person who made them, so both link.
+
+   The guard carries a number rather than a flag, so adding a link to the
+   library later runs the pass again instead of being locked out by a tick
+   left behind by the previous version. Never overwrites a link you set. */
+const NUTLINK = 2;
 function linkNutrients() {
-  if (S.get('nutlinked')) return;
-  const have = fields();
-  LIBRARY.forEach(lib => {
-    const f = have[lib.id];
-    if (!lib.from || !f || f.from) return;
+  if (num(S.get('nutlinked', 0), 0) >= NUTLINK) return;
+  const byName = {};
+  LIBRARY.forEach(l => { if (l.from) byName[String(l.label).toLowerCase()] = l; });
+  Object.values(fields()).forEach(f => {
+    if (f.from) return;
+    const lib = byName[String(f.label || '').toLowerCase()];
+    if (!lib) return;
     Rec.set('field', null, f.id, Object.assign({}, f, { from: lib.from, per: nutPer(lib.from, f.unit) }));
   });
-  S.set('nutlinked', 1);
+  S.set('nutlinked', NUTLINK);
 }
 
 function seedFields() {
@@ -1670,6 +1682,20 @@ function oneOffSheet() {
     });
     body.appendChild(g2);
 
+    /* The rest of the label. These were hard-coded to zero, so a can of
+       something logged here counted its calories and threw its caffeine away
+       — and the Caffeine tile stayed empty with no way to tell why. Blank
+       still means zero; the difference is that now there is somewhere to type
+       it. */
+    const g3 = el('div', 'grid3');
+    [['na', 'Sodium mg'], ['k', 'Potassium mg'], ['caff', 'Caffeine mg']].forEach(k => {
+      const w = el('div'); w.appendChild(el('label', 'fl', k[1]));
+      const i = document.createElement('input');
+      i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*');
+      f[k[0]] = i; w.appendChild(i); g3.appendChild(w);
+    });
+    body.appendChild(g3);
+
     /* If calories are left blank, work them out from whatever macros were
        given rather than logging a zero. */
     const note = el('div', 'note');
@@ -1703,7 +1729,8 @@ function oneOffSheet() {
       const kcal = num(f.kcal.value) == null ? derived() : num(f.kcal.value, 0);
       const row = { fid: null, name: name, serve: 'one-off', unit: '', amt: 1, mult: 1, t: Date.now(),
         kcal: kcal, p: num(f.p.value, 0) || 0, c: num(f.c.value, 0) || 0, f: num(f.f.value, 0) || 0,
-        na: 0, k: 0, caff: 0, price: num(f.price.value, 0) || 0, err: err, acct: acct };
+        na: num(f.na.value, 0) || 0, k: num(f.k.value, 0) || 0, caff: num(f.caff.value, 0) || 0,
+        price: num(f.price.value, 0) || 0, err: err, acct: acct };
       const key = uid();
       Rec.set('meal', d, key, row);
       mealSpend(d, key, row);
@@ -3271,6 +3298,10 @@ function drawTrackTab(pane) {
     if (f.min != null) bits.push('\u2265 ' + f.min);
     if (f.max != null) bits.push('\u2264 ' + f.max);
     if (f.half) bits.push('half-life ' + f.half + 'h');
+    /* Whether it is fed by food, said out loud. Without this a tile that
+       ignores what you ate looks identical to one that counts it, and the
+       only symptom is a number that stays at nothing. */
+    if (f.from) bits.push('+ ' + ((NUT_FROM.filter(n => n[0] === f.from)[0] || [])[1] || f.from).toLowerCase() + ' from food');
     const row = toggleRow(f.label, bits.join(' \u00b7 '), !!f.on, on => {
       Rec.set('field', null, f.id, Object.assign({}, f, { on: on ? 1 : 0 }));
       drawSettingsPane('track'); draw();
@@ -3294,7 +3325,11 @@ function drawTrackTab(pane) {
 
   /* the library: an empty setup screen is a dead end */
   const have = fields();
-  const rest = LIBRARY.filter(l => !have[l.id]);
+  /* by name as well as by id: a Caffeine you made yourself has a timestamp
+     for an id, so the library went on offering you a second one */
+  const names = {};
+  Object.values(have).forEach(f => { names[String(f.label || '').toLowerCase()] = 1; });
+  const rest = LIBRARY.filter(l => !have[l.id] && !names[String(l.label).toLowerCase()]);
   pane.appendChild(el('label', 'fl', 'Add'));
   if (rest.length) {
     const w = el('div', 'chips');
