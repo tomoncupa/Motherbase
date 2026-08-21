@@ -595,6 +595,18 @@ let mcfg = { url: '', on: 0, at: null };
 try { Object.assign(mcfg, JSON.parse(localStorage.getItem(MKEY) || '{}')); } catch (e) {}
 const msave = () => { try { localStorage.setItem(MKEY, JSON.stringify(mcfg)); } catch (e) {} };
 
+/* The link used to live in a `setting` row belonging to one app, because the
+   mirror belonged to one app. Moving it to the suite moved where it is kept,
+   which strands whatever was already pasted — the app looks configured and
+   has no link. Carry it across once, the first time an app asks. */
+function adoptOldLink(appId) {
+  if (mcfg.url || !g.Rec) return;
+  try {
+    const old = g.Rec.setting(appId, 'mirror');
+    if (old && old.url) { mcfg.url = old.url; if (old.on) mcfg.on = old.on; msave(); }
+  } catch (e) {}
+}
+
 /** ask the sheet for its editable tabs, by script tag */
 function jsonp(url, params, ms) {
   return new Promise((res, rej) => {
@@ -616,6 +628,9 @@ function jsonp(url, params, ms) {
 }
 
 const Mirror = {
+  /** an app asking for the settings is the first chance to carry an old link
+      across, so do it here too */
+  adopt(appId) { adoptOldLink(appId); return Mirror.settings; },
   get settings() { return Object.assign({}, mcfg); },
   set(patch) { Object.assign(mcfg, patch || {}); msave(); return Mirror.settings; },
   get url() { return mcfg.url; },
@@ -650,6 +665,7 @@ const Mirror = {
 
   /* ── 1 and 2: pull and resolve ── */
   pull(appId) {
+    adoptOldLink(appId);
     if (!mcfg.url) return Promise.resolve({ skipped: 'no link' });
     return jsonp(mcfg.url, { app: appId, want: 'tables' }).then(reply => {
       if (!reply || !reply.tabs) return { skipped: 'nothing came back' };
@@ -683,21 +699,38 @@ const Mirror = {
 
   /* ── 4: push ── */
   push(appId, quiet) {
+    adoptOldLink(appId);
     if (!mcfg.url) { if (!quiet) toast('Paste the link first', { bad: true }); return Promise.resolve(false); }
     const tabs = Mirror.tabs(appId);
-    return fetch(mcfg.url, {
-      method: 'POST', redirect: 'follow',
-      /* text/plain sidesteps the CORS preflight Apps Script cannot answer */
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ app: appId, at: new Date().toISOString(), tabs: tabs }),
-    }).then(() => {
+    const body = JSON.stringify({ app: appId, at: new Date().toISOString(), tabs: tabs });
+    /* text/plain sidesteps the CORS preflight Apps Script cannot answer */
+    const head = { 'Content-Type': 'text/plain;charset=utf-8' };
+
+    const landed = confirmed => {
       Mirror.set({ at: g.Day.today() });
-      if (!quiet) toast('Synced <b>' + tabs.length + '</b> tabs.');
+      if (!quiet) {
+        toast(confirmed
+          ? 'Synced <b>' + tabs.length + '</b> tabs.'
+          : 'Sent <b>' + tabs.length + '</b> tabs, and the browser will not let us read the reply, so check the sheet.');
+      }
       return true;
-    }).catch(() => {
-      if (!quiet) toast(Mirror.why(), { bad: true, ms: 7000 });
-      return false;
-    });
+    };
+
+    return fetch(mcfg.url, { method: 'POST', redirect: 'follow', headers: head, body: body })
+      .then(() => landed(true))
+      .catch(() => {
+        /* An Apps Script web app answers a POST with a redirect, and reading
+           across that redirect needs permission the browser will not always
+           grant — Safari least of all. no-cors sends the same request and
+           refuses to show us the answer, which is a fair trade when the answer
+           was only ever "ok". The write still happens. */
+        return fetch(mcfg.url, { method: 'POST', mode: 'no-cors', headers: head, body: body })
+          .then(() => landed(false))
+          .catch(() => {
+            if (!quiet) toast(Mirror.why(), { bad: true, ms: 7000 });
+            return false;
+          });
+      });
   },
 
   /** Why a sync probably failed.
@@ -713,6 +746,51 @@ const Mirror = {
     if (!/\/exec\s*$/.test(u))
       return 'That link should end in /exec, and a link ending in /dev only works while you are signed in.';
     return 'Could not reach the sheet, and the usual cause is pasting new code without deploying it again, so try Deploy, Manage deployments, the pencil, Version New version.';
+  },
+
+  /* ── what actually happened ──
+     "Could not reach the sheet" covers a dozen different failures with one
+     sentence, and guessing between them from the outside wastes more time than
+     the feature saves. This tries each step and reports what each one did, in
+     words, so the answer comes from the phone rather than from a hunch.
+
+     It writes nothing. The POST it sends carries a single empty tab, so a
+     working script does nothing visible and a broken one still tells us how it
+     broke. */
+  check(appId) {
+    const lines = [];
+    const say = (label, ok, detail) => lines.push({ label: label, ok: ok, detail: detail || '' });
+
+    const u = mcfg.url || '';
+    say('Link saved', !!u, u ? u.slice(0, 60) + (u.length > 60 ? '…' : '') : 'nothing stored');
+    if (!u) return Promise.resolve(lines);
+
+    say('Looks like a web app', u.indexOf('script.google.com/macros/') > -1,
+      u.indexOf('script.google.com/macros/') > -1 ? '' : 'wanted script.google.com/macros/…/exec');
+    say('Ends in /exec', /\/exec\s*$/.test(u), /\/exec\s*$/.test(u) ? '' : 'a /dev link only works while signed in');
+    say('Page is secure', location.protocol !== 'file:',
+      location.protocol === 'file:' ? 'opened from a folder, so the browser blocks the request' : location.protocol);
+
+    /* the read direction, by script tag */
+    return jsonp(u, { app: appId, want: 'tables' }, 12000)
+      .then(r => {
+        say('Reading the sheet', !!(r && r.ok), r && r.tabs
+          ? Object.keys(r.tabs).length + ' tabs came back'
+          : 'answered, but not in the shape expected, which usually means old code is still deployed');
+      })
+      .catch(e => {
+        say('Reading the sheet', false, e.message + ', which usually means the new code was pasted but not deployed again');
+      })
+      .then(() => fetch(u, {
+        method: 'POST', redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ app: appId, at: new Date().toISOString(), tabs: [] }),
+      }).then(r => {
+        say('Writing to the sheet', r.ok || r.type === 'opaque', 'the server answered ' + (r.status || r.type));
+      }).catch(e => {
+        say('Writing to the sheet', false, e.message);
+      }))
+      .then(() => lines);
   },
 
   /** the whole round trip, in the order that makes it safe */
