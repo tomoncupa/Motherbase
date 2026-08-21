@@ -607,6 +607,29 @@ function run() {
   })());
   ok('skins: a theme with no font asks for nothing',
     Skins.fontLinks({}) === '' && Skins.fontLinks(null) === '');
+  /* ---- the themes have to be there with no network ----
+     skins.js fetches skins.json, and a page opened off the disk cannot fetch.
+     The built-in list used to hold one placeholder theme, so every app opened
+     from a folder showed a library of exactly one. The factory set is embedded
+     now, and these two checks are what stop the copy going stale. */
+  ok('skins: the embedded themes carry the whole factory set, not a placeholder',
+    Skins.builtin && Skins.builtin.skins && Skins.builtin.skins.length >= 10);
+  ok('skins: the embedded copy has not drifted from skins.json', (() => {
+    /* Skins.data is whatever load() fetched. Over http that is skins.json, so
+       the two must agree exactly. Run tools/embed-skins.py if this fails. */
+    const a = Skins.builtin.skins, b = Skins.data.skins;
+    if (a.length !== b.length) return false;
+    const key = k => JSON.stringify(k, Object.keys(k).sort());
+    const A = a.map(key).sort(), B = b.map(key).sort();
+    return A.every((v, i) => v === B[i]);
+  })());
+  ok('skins: every theme still names a face nothing else uses', (() => {
+    const faces = Skins.data.skins.map(k => (k.texture || {}).display || '').filter(Boolean);
+    return new Set(faces).size === faces.length;
+  })());
+  ok('skins: a theme that brings css keeps it in the embedded copy',
+    Skins.builtin.skins.filter(k => k.id === 'ragnarok').every(k => (k.css || '').length > 100));
+
   ok('skins: a saved theme is in the backup, so a reinstall keeps it', (() => {
     IO.register({ app: '__sk', name: 'Sk', types: ['skin'] });
     Skins.saveCustom({ id: '__t2', name: 'T2', mode: 'dark', custom: true, depth: 'glow',

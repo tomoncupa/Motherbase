@@ -205,6 +205,21 @@ future is not a record and cannot be ticked.
 Two layers, deliberately separate. ARC established this model and `shared/skins.js`
 mirrors it exactly.
 
+**The hierarchy is STYLE > shared > every other app.** Set by Tom on
+2026-08-21, and it settles who wins an argument about how things look:
+
+1. **STYLE decides** what a theme is allowed to change. If a theme needs a
+   lever that does not exist, that is a real requirement, not a nice-to-have.
+2. **`shared/` implements it.** `skins.js` grows the lever, and every app gets
+   it for free because components read tokens. A session working on the
+   foundation is allowed to change `skins.js` for this reason.
+3. **Every other app obeys.** An app never invents its own theming, never
+   hard-codes a colour or a corner, and never fights a theme. If a theme cannot
+   reach something in an app, the app is wrong and the app changes.
+
+The practical test: if changing a theme in STYLE does not change an app, that
+app has a bug.
+
 **Theme:** structure, fonts, corner shape, texture, and the colours it ships with.
 Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. Ten of them, in
 `skins.json`.
