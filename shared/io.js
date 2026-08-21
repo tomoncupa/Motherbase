@@ -23,6 +23,16 @@
 (function (g) {
 'use strict';
 
+/* ── the version ──
+   One number for the whole suite, because the apps share a foundation and
+   "which version" is only a useful question if it has one answer. It goes in
+   every backup and on every sheet, so a file found later says what wrote it.
+
+   Bumped by hand, and only when something changed that a person would notice
+   or that changes the shape of stored data. VERSIONS.md says what each one
+   did. */
+const VERSION = '0.1.1';
+
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
 const BK = a => 'mb.backup.' + a;
@@ -95,7 +105,10 @@ function tickSheets(days) {
 
   const cal = [['Activity'].concat(window_)];
   ids.forEach(id => cal.push([name(id)].concat(window_.map(d => done[d + '|' + id] ? true : ''))));
-  cal.push([]);
+  /* A full-width blank, not an empty array. A ragged row is fine in a file you
+     download and fatal to a sheet: setValues writes a rectangle and throws on
+     anything else, which aborts the whole write. */
+  cal.push(new Array(window_.length + 1).fill(''));
   cal.push(['Total'].concat(window_.map(d => ids.filter(id => done[d + '|' + id]).length)));
 
   return [
@@ -118,6 +131,8 @@ function loadXLSX() {
 const IO = {
   /** an app describes itself once: which types it owns, and any sheets of its
       own it wants in the spreadsheet */
+  VERSION: VERSION,
+
   register(spec) {
     apps[spec.app] = Object.assign({ types: [], sheets: null, tables: null, name: spec.app }, spec);
     return IO;
@@ -154,6 +169,30 @@ const IO = {
      round trip. Blank id means a new thing. Clearing a line's text means
      delete it. Both are what somebody editing a spreadsheet would expect,
      which is the point.                                                     */
+
+  /* ── every tab is a rectangle ──
+     Google's setValues takes a range and a grid and insists they match. One
+     short row anywhere throws, the tab is abandoned, and because the tabs are
+     written in a loop everything after it is abandoned too. STATUS put a blank
+     spacer row in its calendar, so the first tab failed and no sync ever wrote
+     anything — for weeks, while reporting success.
+
+     Any app can make that mistake. So no tab leaves here ragged: rows are
+     padded to the widest, holes become empty strings, and undefined never
+     survives, because setValues rejects that as well. */
+  rect(rows) {
+    if (!rows || !rows.length) return rows || [];
+    let w = 0;
+    rows.forEach(r => { if (r && r.length > w) w = r.length; });
+    return rows.map(r => {
+      const line = new Array(w);
+      for (let i = 0; i < w; i++) {
+        const v = r ? r[i] : null;
+        line[i] = (v === undefined || v === null) ? '' : v;
+      }
+      return line;
+    });
+  },
 
   /** What a tab is called. One function decides, because two places deciding
       is how the same table ends up with two names and the sheet grows a
@@ -334,6 +373,10 @@ const IO = {
     bag.rows.forEach(r => data.push([JSON.stringify(r)]));
 
     const set = [['Setting', 'Value']];
+    /* first two lines say what wrote this and when, so a sheet found in a year
+       identifies itself without anybody having to remember */
+    set.push(['motherbase.version', VERSION]);
+    set.push(['motherbase.written', new Date().toISOString()]);
     Object.keys(bag.local || {}).sort().forEach(k => set.push([k, bag.local[k]]));
 
     return [
@@ -366,7 +409,7 @@ const IO = {
     const types = S.types.concat(['tick', 'activity']);
     const rows = R.export(types).concat(R.export(['setting']).filter(r => String(r.key).indexOf(appId + '.') === 0));
     return {
-      kind: 'motherbase-backup', v: 1, app: appId, at: new Date().toISOString(),
+      kind: 'motherbase-backup', v: 1, version: VERSION, app: appId, at: new Date().toISOString(),
       types: types, rows: rows,
       local: IO.localBits(appId),
     };
@@ -660,7 +703,8 @@ const Mirror = {
     });
     /* the machinery last, so the sheet is a complete save file rather than a
        pretty view of one */
-    return read.concat(edit).concat(IO.bagTabs(appId));
+    return read.concat(edit).concat(IO.bagTabs(appId))
+      .map(t => Object.assign({}, t, { rows: IO.rect(t.rows) }));
   },
 
   /* ── 1 and 2: pull and resolve ── */
@@ -786,61 +830,19 @@ const Mirror = {
     return 'Could not reach the sheet, and the usual cause is pasting new code without deploying it again, so try Deploy, Manage deployments, the pencil, Version New version.';
   },
 
-  /* ── what actually happened ──
-     "Could not reach the sheet" covers a dozen different failures with one
-     sentence, and guessing between them from the outside wastes more time than
-     the feature saves. This tries each step and reports what each one did, in
-     words, so the answer comes from the phone rather than from a hunch.
+  /** Why a sync probably failed.
 
-     It writes nothing. The POST it sends carries a single empty tab, so a
-     working script does nothing visible and a broken one still tells us how it
-     broke. */
-  check(appId) {
-    const lines = [];
-    const say = (label, ok, detail) => lines.push({ label: label, ok: ok, detail: detail || '' });
-
+      "Could not reach the sheet" is true and useless. Every one of these has
+      the same symptom and a different fix, and the link itself tells us which
+      is likely — so say the likely one rather than making him guess. */
+  why() {
     const u = mcfg.url || '';
-    say('Link saved', !!u, u ? u.slice(0, 60) + (u.length > 60 ? '…' : '') : 'nothing stored');
-    if (!u) return Promise.resolve(lines);
-
-    say('Looks like a web app', u.indexOf('script.google.com/macros/') > -1,
-      u.indexOf('script.google.com/macros/') > -1 ? '' : 'wanted script.google.com/macros/…/exec');
-    say('Ends in /exec', /\/exec\s*$/.test(u), /\/exec\s*$/.test(u) ? '' : 'a /dev link only works while signed in');
-    say('Page is secure', location.protocol !== 'file:',
-      location.protocol === 'file:' ? 'opened from a folder, so the browser blocks the request' : location.protocol);
-
-    /* the read direction, by script tag */
-    return jsonp(u, { app: appId, want: 'tables' }, 12000)
-      .then(r => {
-        say('Reading the sheet', !!(r && r.ok), r && r.tabs
-          ? Object.keys(r.tabs).length + ' tabs came back'
-          : 'answered, but not in the shape expected, which usually means old code is still deployed');
-      })
-      .catch(e => {
-        say('Reading the sheet', false, e.message + ', which usually means the new code was pasted but not deployed again');
-      })
-      /* A real tab, so this proves the script can write rather than only that
-         it answers. An empty payload succeeds against broken code too. */
-      .then(() => fetch(u, {
-        method: 'POST', redirect: 'follow',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ app: appId, at: new Date().toISOString(),
-          tabs: [{ name: '_Test', rows: [['written at'], [new Date().toISOString()]] }] }),
-      }).then(r => {
-        say('Writing to the sheet', true, 'the server answered ' + (r.status || r.type));
-      }).catch(e => {
-        say('Writing to the sheet', false, e.message);
-      }))
-      .then(() => jsonp(u, { app: appId, want: 'stat' }, 12000).then(r => {
-        const stat = (r && r.stat) || {};
-        const got = stat['_Test'];
-        say('The sheet kept it', !!got, got
-          ? 'a _Test tab is there with ' + got + ' rows, so writing works'
-          : 'the write answered but no _Test tab appeared, so the deployment is running older code');
-      }).catch(e => {
-        say('The sheet kept it', false, e.message + ', so the receipt could not be read');
-      }))
-      .then(() => lines);
+    if (!u) return 'Paste the link first.';
+    if (u.indexOf('script.google.com') < 0)
+      return 'That link is not an Apps Script web app, so check you copied the one ending in /exec.';
+    if (!/\/exec\s*$/.test(u))
+      return 'That link should end in /exec, and a link ending in /dev only works while you are signed in.';
+    return 'Could not reach the sheet, and the usual cause is pasting new code without deploying it again, so try Deploy, Manage deployments, the pencil, Version New version.';
   },
 
   /** the whole round trip, in the order that makes it safe */
@@ -891,17 +893,42 @@ const Mirror = {
       '  var tabs = body.tabs;',
       '  if (!tabs) tabs = body.sheets;',
       '  if (!tabs) tabs = [];',
+      '  var wrote = [];',
+      '  var failed = [];',
       '  tabs.forEach(function (t) {',
-      '    var sh = ss.getSheetByName(t.name);',
-      '    if (!sh) sh = ss.insertSheet(t.name);',
-      '    sh.clear();',
-      '    if (t.rows && t.rows.length) {',
-      '      sh.getRange(1, 1, t.rows.length, t.rows[0].length).setValues(t.rows);',
-      '      sh.setFrozenRows(1);',
-      '      if (t.editable) sh.getRange(1, 1, 1, t.rows[0].length).setFontWeight("bold");',
+      '    /* One bad tab must not take the rest with it. Without this the',
+      '       whole write is abandoned at the first problem and the sheet is',
+      '       left exactly as it was, which looks identical to never having',
+      '       been called. */',
+      '    try {',
+      '      var sh = ss.getSheetByName(t.name);',
+      '      if (!sh) sh = ss.insertSheet(t.name);',
+      '      sh.clear();',
+      '      var rows = t.rows;',
+      '      if (rows && rows.length) {',
+      '        /* setValues needs a rectangle, so square it off here too */',
+      '        var w = 0;',
+      '        rows.forEach(function (r) { if (r && r.length > w) w = r.length; });',
+      '        var grid = rows.map(function (r) {',
+      '          var line = [];',
+      '          for (var i = 0; i < w; i++) {',
+      '            var v = r ? r[i] : "";',
+      '            if (v === null) v = "";',
+      '            if (v === undefined) v = "";',
+      '            line.push(v);',
+      '          }',
+      '          return line;',
+      '        });',
+      '        sh.getRange(1, 1, grid.length, w).setValues(grid);',
+      '        sh.setFrozenRows(1);',
+      '        if (t.editable) sh.getRange(1, 1, 1, w).setFontWeight("bold");',
+      '      }',
+      '      wrote.push(t.name);',
+      '    } catch (err) {',
+      '      failed.push(t.name + ": " + err);',
       '    }',
       '  });',
-      '  return ContentService.createTextOutput(JSON.stringify({ ok: true }))',
+      '  return ContentService.createTextOutput(JSON.stringify({ ok: failed.length === 0, wrote: wrote, failed: failed }))',
       '    .setMimeType(ContentService.MimeType.JSON);',
       '}',
       '',

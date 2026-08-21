@@ -374,6 +374,36 @@ function run() {
   /* It reported "Synced" against a sheet it never touched, because a POST to
      an Apps Script web app resolves even when the script threw. Not failing is
      not the same as working. */
+  /* The bug that meant no sync ever wrote anything: setValues writes a
+     rectangle and throws on a short row, the calendar was the first tab, and
+     the throw abandoned the whole write while the app reported success. */
+  ok('mirror: no tab leaves ragged', (() => {
+    const g2 = IO.rect([['a', 'b', 'c'], [], ['x']]);
+    return g2.length === 3 && g2.every(r => r.length === 3) &&
+      g2[1][0] === '' && g2[2][1] === '';
+  })());
+  ok('mirror: undefined never reaches the sheet',
+    IO.rect([['a', undefined, null]])[0].join('|') === 'a||');
+  ok('mirror: every tab it sends is a rectangle', (() => {
+    return IO.mirror.tabs('__dup').every(t => {
+      if (!t.rows.length) return true;
+      const w = t.rows[0].length;
+      return t.rows.every(r => r.length === w);
+    });
+  })());
+  ok('mirror: the script squares tabs off and survives a bad one', (() => {
+    const sc = IO.mirror.script();
+    return /try \{/.test(sc) && /failed\.push/.test(sc) && /if \(r && r\.length > w\) w = r\.length/.test(sc);
+  })());
+  ok('version: one number, and it is in the backup', (() => {
+    return /^\d+\.\d+\.\d+$/.test(IO.VERSION) && IO.bagFor('__dup').version === IO.VERSION;
+  })());
+  ok('version: the sheet says what wrote it', (() => {
+    const set = IO.bagTabs('__dup')[1].rows;
+    return set.some(r => r[0] === 'motherbase.version' && r[1] === IO.VERSION);
+  })());
+  ok('mirror: the diagnostic that lied is gone', typeof IO.mirror.check === 'undefined');
+
   ok('mirror: it does not claim a sync it cannot see', (() => {
     const sc = IO.mirror.script();
     return /want === "stat"/.test(sc) &&
