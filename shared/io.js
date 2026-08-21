@@ -700,24 +700,62 @@ const Mirror = {
   /* ── 4: push ── */
   push(appId, quiet) {
     adoptOldLink(appId);
-    if (!mcfg.url) { if (!quiet) toast('Paste the link first', { bad: true }); return Promise.resolve(false); }
+    if (!mcfg.url) {
+      if (!quiet) toast('Paste the link first', { bad: true });
+      return Promise.resolve({ state: 'failed', missing: 0, of: 0 });
+    }
     const tabs = Mirror.tabs(appId);
     const body = JSON.stringify({ app: appId, at: new Date().toISOString(), tabs: tabs });
     /* text/plain sidesteps the CORS preflight Apps Script cannot answer */
     const head = { 'Content-Type': 'text/plain;charset=utf-8' };
 
-    const landed = confirmed => {
-      Mirror.set({ at: g.Day.today() });
+    /* Asking the sheet what it now holds, rather than believing the request
+       that appeared to succeed. A POST to an Apps Script web app resolves even
+       when the script threw — an old deployment reading body.sheets against a
+       payload that carries body.tabs fails silently and answers 200 — so the
+       only honest confirmation is the sheet saying it has the rows. */
+    /* Three outcomes, not two, because "it did not fail" is not the same as
+       "it worked" and reporting them as one is how an app tells you it synced
+       while the sheet sits untouched.
+
+         confirmed   the sheet says it has the rows
+         unconfirmed the request went and the sheet would not answer
+         failed      the sheet answered and does not have them
+
+       The caller phrases from this rather than from whether a promise
+       rejected. */
+    const landed = () => {
+      const want = {};
+      tabs.forEach(t => { want[t.name] = t.rows.length; });
+      return jsonp(mcfg.url, { app: appId, want: 'stat' }, 12000).then(r => {
+        const stat = (r && r.stat) || {};
+        const missing = Object.keys(want).filter(n => !stat[n]);
+        const short = Object.keys(want).filter(n => stat[n] && stat[n] < want[n]);
+        if (missing.length) return { state: 'failed', missing: missing.length, of: tabs.length };
+        Mirror.set({ at: g.Day.today() });
+        return { state: 'confirmed', tabs: tabs.length, short: short.length };
+      }).catch(() => ({ state: 'unconfirmed', tabs: tabs.length }));
+    };
+
+    const speak = res => {
       if (!quiet) {
-        toast(confirmed
-          ? 'Synced <b>' + tabs.length + '</b> tabs.'
-          : 'Sent <b>' + tabs.length + '</b> tabs, and the browser will not let us read the reply, so check the sheet.');
+        if (res.state === 'failed') {
+          toast('The sheet did not take <b>' + res.missing + '</b> of ' + res.of +
+            ' tabs, which usually means the deployment is running older code.', { bad: true, ms: 8000 });
+        } else if (res.state === 'unconfirmed') {
+          toast('Sent <b>' + res.tabs + '</b> tabs and the sheet would not confirm, so open it and check.',
+            { bad: true, ms: 8000 });
+        } else if (res.short) {
+          toast('Synced, though <b>' + res.short + '</b> tabs came out shorter than sent.');
+        } else {
+          toast('Synced <b>' + res.tabs + '</b> tabs, and the sheet confirms it.');
+        }
       }
-      return true;
+      return res;
     };
 
     return fetch(mcfg.url, { method: 'POST', redirect: 'follow', headers: head, body: body })
-      .then(() => landed(true))
+      .then(() => landed()).then(speak)
       .catch(() => {
         /* An Apps Script web app answers a POST with a redirect, and reading
            across that redirect needs permission the browser will not always
@@ -725,10 +763,10 @@ const Mirror = {
            refuses to show us the answer, which is a fair trade when the answer
            was only ever "ok". The write still happens. */
         return fetch(mcfg.url, { method: 'POST', mode: 'no-cors', headers: head, body: body })
-          .then(() => landed(false))
+          .then(() => landed()).then(speak)
           .catch(() => {
             if (!quiet) toast(Mirror.why(), { bad: true, ms: 7000 });
-            return false;
+            return { state: 'failed', missing: tabs.length, of: tabs.length };
           });
       });
   },
@@ -781,14 +819,26 @@ const Mirror = {
       .catch(e => {
         say('Reading the sheet', false, e.message + ', which usually means the new code was pasted but not deployed again');
       })
+      /* A real tab, so this proves the script can write rather than only that
+         it answers. An empty payload succeeds against broken code too. */
       .then(() => fetch(u, {
         method: 'POST', redirect: 'follow',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ app: appId, at: new Date().toISOString(), tabs: [] }),
+        body: JSON.stringify({ app: appId, at: new Date().toISOString(),
+          tabs: [{ name: '_Test', rows: [['written at'], [new Date().toISOString()]] }] }),
       }).then(r => {
-        say('Writing to the sheet', r.ok || r.type === 'opaque', 'the server answered ' + (r.status || r.type));
+        say('Writing to the sheet', true, 'the server answered ' + (r.status || r.type));
       }).catch(e => {
         say('Writing to the sheet', false, e.message);
+      }))
+      .then(() => jsonp(u, { app: appId, want: 'stat' }, 12000).then(r => {
+        const stat = (r && r.stat) || {};
+        const got = stat['_Test'];
+        say('The sheet kept it', !!got, got
+          ? 'a _Test tab is there with ' + got + ' rows, so writing works'
+          : 'the write answered but no _Test tab appeared, so the deployment is running older code');
+      }).catch(e => {
+        say('The sheet kept it', false, e.message + ', so the receipt could not be read');
       }))
       .then(() => lines);
   },
@@ -799,15 +849,19 @@ const Mirror = {
     if (!quiet) toast('Syncing…');
     return Mirror.pull(appId)
       .catch(() => ({ skipped: 'could not read' }))
-      .then(got => Mirror.push(appId, true).then(sent => {
+      .then(got => Mirror.push(appId, true).then(res => {
+        const ok2 = res && res.state === 'confirmed';
         if (!quiet) {
-          if (!sent) toast(Mirror.why(), { bad: true, ms: 7000 });
-          else if (got && got.clashes) toast('Synced, and <b>' + got.clashes + '</b> older sheet edits were kept aside.');
+          if (!res || res.state === 'failed') toast(Mirror.why(), { bad: true, ms: 8000 });
+          else if (res.state === 'unconfirmed') {
+            toast('Sent <b>' + res.tabs + '</b> tabs and the sheet would not confirm, so open it and check.',
+              { bad: true, ms: 8000 });
+          } else if (got && got.clashes) toast('Synced, and <b>' + got.clashes + '</b> older sheet edits were kept aside.');
           else if (got && (got.changed || got.added)) toast('Synced, with <b>' + (got.changed + got.added) + '</b> changes from the sheet.');
-          else toast('Synced.');
+          else toast('Synced <b>' + res.tabs + '</b> tabs, and the sheet confirms it.');
         }
-        if (sent && g.Sfx) g.Sfx.play('complete', { level: 2 });
-        return sent;
+        if (ok2 && g.Sfx) g.Sfx.play('complete', { level: 2 });
+        return ok2;
       }));
   },
 
@@ -855,6 +909,24 @@ const Mirror = {
       '   a web app cannot reliably answer a cross-origin fetch. */',
       'function doGet(e) {',
       '  var ss = SpreadsheetApp.getActiveSpreadsheet();',
+      '  var want = (e && e.parameter) ? e.parameter.want : null;',
+      '',
+      '  /* A receipt: what tabs exist and how many rows each holds. Small',
+      '     enough to ask for after every push, which is how the app checks a',
+      '     sync actually landed rather than taking its own word for it. */',
+      '  if (want === "stat") {',
+      '    var stat = {};',
+      '    ss.getSheets().forEach(function (sh) {',
+      '      stat[sh.getName()] = sh.getLastRow();',
+      '    });',
+      '    var sbody = JSON.stringify({ ok: true, stat: stat });',
+      '    var scb = (e && e.parameter) ? e.parameter.callback : null;',
+      '    if (scb) return ContentService.createTextOutput(scb + "(" + sbody + ")")',
+      '      .setMimeType(ContentService.MimeType.JAVASCRIPT);',
+      '    return ContentService.createTextOutput(sbody)',
+      '      .setMimeType(ContentService.MimeType.JSON);',
+      '  }',
+      '',
       '  var out = {};',
       '  ss.getSheets().forEach(function (sh) {',
       '    var name = sh.getName();',
