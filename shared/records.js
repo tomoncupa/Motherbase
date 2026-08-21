@@ -84,6 +84,42 @@ const copy = v => (v == null || typeof v !== 'object') ? v : JSON.parse(JSON.str
 function announce(list, local) {
   subs.forEach(f => { try { f(list); } catch (e) { console.warn('[records]', e); } });
   if (local && bc) { try { bc.postMessage({ mb: 1, rows: list }); } catch (e) {} }
+  if (local) poke();
+}
+
+/* ── neighbours, when there is no channel ──
+
+   BroadcastChannel reaches every tab and frame on a served origin, and that is
+   the whole story on localhost or on hosting. Opened straight from a folder it
+   is not: a file:// page can be its own opaque origin, in which case the
+   channel is a private line to itself, and the storage event does not reliably
+   cross frames either. So a write in STATUS would land, and the home screen
+   sitting around it would go on showing the old number until it was reloaded.
+
+   postMessage has never needed the origins to match. A write pokes the frame
+   above and any frames below, and each hop passes it on once so a sibling
+   hears about it too. Nothing is sent but the poke: the storage underneath is
+   shared, so a neighbour re-reads it for itself rather than being handed rows
+   by whoever happens to be talking. A page that cannot be trusted with the
+   store cannot be trusted to describe it either.
+
+   Debounced, because it has to survive an import. Twelve thousand sets going
+   in one Rec.set at a time is twelve thousand announcements, and a reload
+   re-parses every row in storage — undebounced that is minutes of work to say
+   one thing. The trailing edge says it once, after the burst. */
+let pokeT = null, readT = null;
+function send(msg, skip) {
+  try { if (g.parent && g.parent !== g && g.parent !== skip) g.parent.postMessage(msg, '*'); } catch (e) {}
+  try {
+    const fr = g.document ? g.document.querySelectorAll('iframe') : [];
+    for (let i = 0; i < fr.length; i++) {
+      try { const w = fr[i].contentWindow; if (w && w !== skip) w.postMessage(msg, '*'); } catch (e) {}
+    }
+  } catch (e) {}
+}
+function poke() {
+  if (pokeT) return;
+  pokeT = setTimeout(() => { pokeT = null; send({ mb: 1, poke: 1 }); }, 150);
 }
 
 function load() {
@@ -260,6 +296,14 @@ try {
 g.addEventListener('storage', e => {
   if (!e.key || e.key.indexOf(PREFIX) !== 0) return;
   try { const r = JSON.parse(e.newValue); if (r && r.id) Rec.merge([r]); } catch (err) {}
+});
+/* a poke from a neighbour: look at storage again, then pass it on once. The
+   relay flag is what stops two frames poking each other forever. */
+g.addEventListener('message', e => {
+  const m = e.data;
+  if (!m || m.mb !== 1 || !m.poke) return;
+  if (!readT) readT = setTimeout(() => { readT = null; Rec.reload(); }, 60);
+  if (!m.relay) send({ mb: 1, poke: 1, relay: 1 }, e.source);
 });
 
 load();
