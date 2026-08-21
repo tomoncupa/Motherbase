@@ -3455,7 +3455,7 @@ function runBacktest() {
 function drawSyncTab(pane) {
   settingsPane = pane;
   pane.appendChild(el('div', 'note', 'Two ways out, and they do different jobs. <b>Backup</b> is a file that restores. <b>Export</b> is a spreadsheet you can read but not restore from. Both live in the DATA tab.'));
-  const cfg = S.get('mirror', { url: '', on: 0, at: null });
+  const cfg = Mirror.settings;
 
   pane.appendChild(el('label', 'fl', 'GOOGLE SHEET MIRROR'));
   pane.appendChild(el('div', 'warnbox', '<b>Untested.</b> I cannot try this end to end without your sheet, so treat the first run as the test. It never blocks anything: if the push fails, STATUS carries on and tries again next time.'));
@@ -3467,11 +3467,11 @@ function drawSyncTab(pane) {
   /* on `input`, not `onchange`. change only fires when the field loses focus,
      and pasting a URL then tapping DONE closes the sheet and removes the node
      before that ever happens — so the link was silently never saved. */
-  u.oninput = () => { const c = S.get('mirror', {}); c.url = u.value.trim(); S.set('mirror', c); };
+  u.oninput = () => Mirror.set({ url: u.value.trim() });
   pane.appendChild(u);
 
   pane.appendChild(toggleRow('Push at the end of each day', cfg.at ? 'last pushed ' + cfg.at : 'never pushed yet', !!cfg.on, on => {
-    const c = S.get('mirror', {}); c.on = on ? 1 : 0; S.set('mirror', c); drawSettingsPane('sync');
+    Mirror.set({ on: on ? 1 : 0 }); drawSettingsPane('sync');
   }));
 
   const now = el('button', 'btn go wide', 'Save & sync');
@@ -3480,11 +3480,9 @@ function drawSyncTab(pane) {
     /* Take whatever is in the box first. Pressing a button that says Save and
        having it not save what is on screen is the kind of thing that makes
        people paste a link four times. */
-    const c = S.get('mirror', {});
-    c.url = u.value.trim();
-    S.set('mirror', c);
-    if (!c.url) return UI.toast('Paste the link first', { bad: true });
-    Mirror.push(true).then(() => drawSettingsPane('sync'));
+    Mirror.set({ url: u.value.trim() });
+    if (!Mirror.ready()) return UI.toast('Paste the link first', { bad: true });
+    Mirror.sync(APP.id).then(() => drawSettingsPane('sync'));
   };
   pane.appendChild(now);
 
@@ -3515,48 +3513,10 @@ function drawSettingsPane(which) {
 
 /* ══════════════ THE SHEET MIRROR ══════════════ */
 
-const Mirror = {
-  script() {
-    return [
-      'function doPost(e) {',
-      '  var body = JSON.parse(e.postData.contents);',
-      '  var ss = SpreadsheetApp.getActiveSpreadsheet();',
-      '  body.sheets.forEach(function (s) {',
-      '    var sh = ss.getSheetByName(s.name) || ss.insertSheet(s.name);',
-      '    sh.clear();',
-      '    if (s.rows.length) sh.getRange(1, 1, s.rows.length, s.rows[0].length).setValues(s.rows);',
-      '  });',
-      '  return ContentService.createTextOutput(JSON.stringify({ ok: true }))',
-      '    .setMimeType(ContentService.MimeType.JSON);',
-      '}',
-    ].join('\n');
-  },
-  push(manual) {
-    const cfg = S.get('mirror', {});
-    if (!cfg.url) { if (manual) UI.toast('paste the web app URL first', { bad: true }); return Promise.resolve(false); }
-    const sheets = exportSheets().map(s => ({ name: s.name, rows: s.rows }));
-    if (manual) UI.toast('pushing…');
-    return fetch(cfg.url, {
-      method: 'POST', redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },  /* text/plain avoids the CORS preflight Apps Script cannot answer */
-      body: JSON.stringify({ app: APP.id, at: new Date().toISOString(), sheets: sheets }),
-    }).then(r => {
-      const c = S.get('mirror', {}); c.at = Day.today(); S.set('mirror', c);
-      if (manual) UI.toast('pushed <b>' + sheets.length + ' tabs</b>');
-      return true;
-    }).catch(e => {
-      if (manual) UI.toast('could not reach the sheet — <b>nothing lost</b>, it will try again', { bad: true });
-      return false;
-    });
-  },
-  maybe() {
-    const cfg = S.get('mirror', {});
-    if (!cfg.on || !cfg.url) return;
-    if (cfg.at === Day.today()) return;
-    if (!Day.isClosed || !Day.isClosed(Day.today())) return;
-    Mirror.push(false);
-  },
-};
+/* The mirror moved to shared/io.js on 2026-08-21. One sheet is the save
+   file for the whole suite, so one link belongs to the suite rather than
+   to this app, and TRAIN and the home screen use the same one. */
+const Mirror = IO.mirror;
 
 /* ══════════════ EXPORT ══════════════ */
 
@@ -3612,7 +3572,9 @@ Rec.onfull = () => UI.toast('<b>storage is full.</b> Settings → TRACK → dele
 Rec.ready(() => {
   seedFields();
   TD.tick();
-  Mirror.maybe();
+  /* On open, quietly: pull anything typed into the sheet since last time.
+     Never blocks, never speaks unless it actually brought something back. */
+  Mirror.onOpen(APP.id);
   draw();
   if (IO.isStale(APP.id)) setTimeout(() => UI.toast('no backup in ' + (IO.staleDays(APP.id) == null ? 'a while' : IO.staleDays(APP.id) + ' days') + ' — <b>settings → data</b>'), 1500);
 });

@@ -302,6 +302,33 @@ function run() {
     return Rec.get(stamp, null, 't1') == null && Rec.get(stamp, null, 't2') != null;
   })());
 
+  /* ---- the mirror ---- */
+  ok('mirror: it is shared, not per app', typeof IO.mirror === 'object' &&
+    ['pull', 'push', 'sync', 'onOpen', 'script', 'tabs'].every(k => typeof IO.mirror[k] === 'function'));
+  ok('mirror: the link lives outside any one app',
+    (IO.mirror.set({ url: 'https://example.test/exec' }),
+     JSON.parse(localStorage.getItem('mb.mirror')).url === 'https://example.test/exec'));
+  IO.mirror.set({ url: '' });
+  /* Two tabs cannot share a name: a sheet has one tab per name, so the second
+     would overwrite the first and half the data would seem to vanish. */
+  ok('mirror: no two tabs share a name', (() => {
+    IO.register({ app: '__dup', name: 'Dup', types: [stamp],
+      sheets: () => [{ name: 'Things', rows: [['a']] }, { name: 'Other', rows: [['b']] }],
+      tables: [{ name: 'Things', type: stamp, cols: [['name', 'Name']] }] });
+    const names = IO.mirror.tabs('__dup').map(t => t.name);
+    return new Set(names).size === names.length;
+  })());
+  ok('mirror: an editable table supersedes the read-out of the same thing', (() => {
+    const tabs = IO.mirror.tabs('__dup');
+    const things = tabs.filter(t => /Things$/.test(t.name));
+    return things.length === 1 && things[0].editable === true;
+  })());
+  ok('mirror: the script has both directions and stamps sheet edits', (() => {
+    const sc = IO.mirror.script();
+    return /function doPost/.test(sc) && /function doGet/.test(sc) &&
+      /function stampEdit/.test(sc) && /callback/.test(sc);
+  })());
+
   /* ---- the store hands out copies ---- */
   /* This one exists because it cost two rounds of "it does not save". get()
      used to return the stored object itself, so the ordinary read-modify-write

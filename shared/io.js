@@ -155,6 +155,13 @@ const IO = {
      delete it. Both are what somebody editing a spreadsheet would expect,
      which is the point.                                                     */
 
+  /** What a tab is called. One function decides, because two places deciding
+      is how the same table ends up with two names and the sheet grows a
+      duplicate nobody notices — tables() was using the app id and the mirror
+      was using its display name, which agree for STATUS and would not for the
+      next app. */
+  tabName(appId, name) { return IO.spec(appId).name.toUpperCase() + ' · ' + name; },
+
   /** the value at a dotted path, so a table can expose nested fields flat */
   reach(o, path) {
     return String(path).split('.').reduce((v, k) => (v == null ? v : v[k]), o);
@@ -187,7 +194,7 @@ const IO = {
         line.push(new Date(r.updated_at).toISOString(), r.by || 'phone');
         rows.push(line);
       });
-      return { name: appId.toUpperCase() + ' · ' + t.name, table: t, rows: rows, editable: true };
+      return { name: IO.tabName(appId, t.name), table: t, rows: rows, editable: true };
     });
   },
 
@@ -477,6 +484,247 @@ const IO = {
         .then(ok => { if (!ok) return; const c = g.Rec.clear(IO.spec(appId).types); toast('<b>' + c + '</b> rows deleted'); }), 'bad');
   },
 };
+
+
+  /* ══════════════ THE MIRROR ══════════════
+
+     One Google Sheet for the whole suite. One link, pasted once, shared by
+     every app — because "the sheet is the save file" stops being true the
+     moment there are four of them.
+
+     The config lives in localStorage rather than in a row, for the same reason
+     day.js keeps its own: this has to work before the store is up, and every
+     app has to see the same value.
+
+     ── how a sync goes ──
+
+       1. PULL. Ask the sheet for its editable tabs.
+       2. RESOLVE. readTable() works out what changed there, and for each row
+          the newer edit wins. The loser is written to a `conflict` row rather
+          than dropped.
+       3. APPLY. Write the winners into the store.
+       4. PUSH. Send everything back, so the sheet and the phone agree.
+
+     Pulling before pushing is what makes a push safe. Push first and you
+     overwrite whatever you typed in the sheet since last time, which is the
+     bug in the version this replaces — it called sh.clear() on every tab.
+
+     ── why the pull is JSONP ──
+
+     An Apps Script web app does not reliably answer the CORS preflight a
+     cross-origin fetch needs, and an opaque no-cors response is unreadable.
+     A <script> tag has never needed permission to cross origins, so the pull
+     asks for JavaScript and the script wraps the answer in a callback. It is
+     an old technique and it is the one that works here. Nothing is sent: a
+     GET carries no data out, and the sheet is his own.                      */
+
+const MKEY = 'mb.mirror';
+let mcfg = { url: '', on: 0, at: null };
+try { Object.assign(mcfg, JSON.parse(localStorage.getItem(MKEY) || '{}')); } catch (e) {}
+const msave = () => { try { localStorage.setItem(MKEY, JSON.stringify(mcfg)); } catch (e) {} };
+
+/** ask the sheet for its editable tabs, by script tag */
+function jsonp(url, params, ms) {
+  return new Promise((res, rej) => {
+    const cb = 'mbcb' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+    const sep = url.indexOf('?') > -1 ? '&' : '?';
+    const q = Object.keys(params || {}).map(k => k + '=' + encodeURIComponent(params[k])).join('&');
+    const tag = document.createElement('script');
+    let done = false;
+    const clean = () => { delete g[cb]; tag.remove(); };
+    const timer = setTimeout(() => {
+      if (done) return; done = true; clean();
+      rej(new Error('the sheet did not answer'));
+    }, ms || 15000);
+    g[cb] = data => { if (done) return; done = true; clearTimeout(timer); clean(); res(data); };
+    tag.onerror = () => { if (done) return; done = true; clearTimeout(timer); clean(); rej(new Error('could not reach the sheet')); };
+    tag.src = url + sep + q + '&callback=' + cb;
+    document.head.appendChild(tag);
+  });
+}
+
+const Mirror = {
+  get settings() { return Object.assign({}, mcfg); },
+  set(patch) { Object.assign(mcfg, patch || {}); msave(); return Mirror.settings; },
+  get url() { return mcfg.url; },
+  ready() { return !!mcfg.url; },
+
+  /** Every tab this app owns: the read-outs, then the ones you can type into.
+
+      Two tabs cannot share a name — a sheet has one tab per name, so the
+      second would silently overwrite the first and half the data would appear
+      to vanish. Where an app has both a read-out and an editable table of the
+      same thing, the editable one wins and the read-out is dropped: it is the
+      same data, and offering a rounded copy beside a typable original is how
+      somebody ends up editing the wrong one. */
+  tabs(appId) {
+    const edit = IO.tables(appId).map(t => ({ name: t.name, rows: t.rows, editable: true }));
+    const taken = {};
+    edit.forEach(t => { taken[t.name.toLowerCase()] = 1; });
+
+    const read = [];
+    IO.sheets(appId).forEach(s => {
+      const name = IO.tabName(appId, s.name);
+      /* a plural read-out and a singular table are the same thing */
+      const key = name.toLowerCase().replace(/s$/, '');
+      if (taken[name.toLowerCase()] || taken[key] || taken[key + 's']) return;
+      taken[name.toLowerCase()] = 1;
+      read.push({ name: name, rows: s.rows, editable: false });
+    });
+    return read.concat(edit);
+  },
+
+  /* ── 1 and 2: pull and resolve ── */
+  pull(appId) {
+    if (!mcfg.url) return Promise.resolve({ skipped: 'no link' });
+    return jsonp(mcfg.url, { app: appId, want: 'tables' }).then(reply => {
+      if (!reply || !reply.tabs) return { skipped: 'nothing came back' };
+      const S = IO.spec(appId);
+      const out = { changed: 0, added: 0, clashes: 0 };
+      (S.tables || []).forEach(t => {
+        const full = IO.tabName(appId, t.name);
+        const grid = reply.tabs[full] || reply.tabs[t.name];
+        if (!grid) return;
+        const diff = IO.readTable(appId, t.name, grid);
+        out.changed += diff.changed.length;
+        out.added += diff.added.length;
+        out.clashes += diff.clashes.length;
+        IO.applyTable(appId, diff);                 /* never deletes on a pull */
+        diff.clashes.forEach(c => IO.logConflict(appId, c));
+      });
+      return out;
+    });
+  },
+
+  /** A row the sheet wanted to change and lost. Kept as a row of its own so
+      the hub can show it — nothing is overwritten without a trace. */
+  logConflict(appId, c) {
+    const R = g.Rec;
+    if (!R) return;
+    R.set('conflict', g.Day.today(), appId + '-' + c.type + '-' + c.key + '-' + Date.now().toString(36), {
+      app: appId, type: c.type, row: c.key, table: c.table,
+      kept: c.kept, at: c.at, ours: c.ours, theirs: c.theirs,
+    });
+  },
+
+  /* ── 4: push ── */
+  push(appId, quiet) {
+    if (!mcfg.url) { if (!quiet) toast('Paste the link first', { bad: true }); return Promise.resolve(false); }
+    const tabs = Mirror.tabs(appId);
+    return fetch(mcfg.url, {
+      method: 'POST', redirect: 'follow',
+      /* text/plain sidesteps the CORS preflight Apps Script cannot answer */
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ app: appId, at: new Date().toISOString(), tabs: tabs }),
+    }).then(() => {
+      Mirror.set({ at: g.Day.today() });
+      if (!quiet) toast('Synced <b>' + tabs.length + '</b> tabs.');
+      return true;
+    }).catch(() => {
+      if (!quiet) toast('Could not reach the sheet, so nothing was sent and nothing was lost.', { bad: true });
+      return false;
+    });
+  },
+
+  /** the whole round trip, in the order that makes it safe */
+  sync(appId, quiet) {
+    if (!mcfg.url) return Promise.resolve(false);
+    if (!quiet) toast('Syncing…');
+    return Mirror.pull(appId)
+      .catch(() => ({ skipped: 'could not read' }))
+      .then(got => Mirror.push(appId, true).then(sent => {
+        if (!quiet) {
+          if (!sent) toast('Could not reach the sheet, so nothing was lost.', { bad: true });
+          else if (got && got.clashes) toast('Synced, and <b>' + got.clashes + '</b> older sheet edits were kept aside.');
+          else if (got && (got.changed || got.added)) toast('Synced, with <b>' + (got.changed + got.added) + '</b> changes from the sheet.');
+          else toast('Synced.');
+        }
+        if (sent && g.Sfx) g.Sfx.play('complete', { level: 2 });
+        return sent;
+      }));
+  },
+
+  /** on open, quietly. Never blocks anything and never says anything unless
+      it actually brought something back. */
+  onOpen(appId) {
+    if (!mcfg.url || !mcfg.on) return Promise.resolve(false);
+    return Mirror.pull(appId).then(got => {
+      if (got && (got.changed || got.added)) {
+        toast('<b>' + (got.changed + got.added) + '</b> changes came in from the sheet.');
+        if (g.Rec) g.Rec.reload && g.Rec.reload();
+      }
+      return true;
+    }).catch(() => false);
+  },
+
+  /** The Apps Script to paste. Generated here so it cannot drift from the
+      protocol above. */
+  script() {
+    return [
+      '/* Motherbase sheet bridge. Paste into Extensions > Apps Script,',
+      '   then Deploy > New deployment > Web app, execute as me, access anyone. */',
+      '',
+      'function doPost(e) {',
+      '  var body = JSON.parse(e.postData.contents);',
+      '  var ss = SpreadsheetApp.getActiveSpreadsheet();',
+      '  (body.tabs || body.sheets || []).forEach(function (t) {',
+      '    var sh = ss.getSheetByName(t.name) || ss.insertSheet(t.name);',
+      '    sh.clear();',
+      '    if (t.rows && t.rows.length) {',
+      '      sh.getRange(1, 1, t.rows.length, t.rows[0].length).setValues(t.rows);',
+      '      sh.setFrozenRows(1);',
+      '      if (t.editable) sh.getRange(1, 1, 1, t.rows[0].length).setFontWeight("bold");',
+      '    }',
+      '  });',
+      '  return ContentService.createTextOutput(JSON.stringify({ ok: true }))',
+      '    .setMimeType(ContentService.MimeType.JSON);',
+      '}',
+      '',
+      '/* The pull. Answers as JavaScript so a script tag can read it, because',
+      '   a web app cannot reliably answer a cross-origin fetch. */',
+      'function doGet(e) {',
+      '  var ss = SpreadsheetApp.getActiveSpreadsheet();',
+      '  var out = {};',
+      '  ss.getSheets().forEach(function (sh) {',
+      '    var name = sh.getName();',
+      '    var vals = sh.getDataRange().getValues();',
+      '    if (!vals.length) return;',
+      '    /* only the tabs with an id column can be read back */',
+      '    if (String(vals[0][0]).toLowerCase() !== "id") return;',
+      '    out[name] = vals.map(function (row) {',
+      '      return row.map(function (c) {',
+      '        return (c instanceof Date) ? c.toISOString() : c;',
+      '      });',
+      '    });',
+      '  });',
+      '  var body = JSON.stringify({ ok: true, tabs: out });',
+      '  var cb = e && e.parameter && e.parameter.callback;',
+      '  if (cb) return ContentService.createTextOutput(cb + "(" + body + ")")',
+      '    .setMimeType(ContentService.MimeType.JAVASCRIPT);',
+      '  return ContentService.createTextOutput(body)',
+      '    .setMimeType(ContentService.MimeType.JSON);',
+      '}',
+      '',
+      '/* Stamps the row you just edited. Without this a sheet edit has no time',
+      '   on it, and "the newer edit wins" has nothing to compare, so the phone',
+      '   would win every argument by default.',
+      '   Add it once: Triggers > Add trigger > stampEdit > From spreadsheet >',
+      '   On edit. */',
+      'function stampEdit(e) {',
+      '  var sh = e.range.getSheet();',
+      '  var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];',
+      '  if (String(head[0]).toLowerCase() !== "id") return;',
+      '  var at = head.indexOf("edited"), by = head.indexOf("by");',
+      '  if (at < 0) return;',
+      '  var row = e.range.getRow();',
+      '  if (row < 2) return;',
+      '  sh.getRange(row, at + 1).setValue(new Date().toISOString());',
+      '  if (by > -1) sh.getRange(row, by + 1).setValue("sheet");',
+      '}',
+    ].join('\n');
+  },
+};
+IO.mirror = Mirror;
 
 g.IO = IO;
 })(window);
