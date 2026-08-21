@@ -93,6 +93,7 @@ form/index.html    lift review
 status/index.html  sleep, weight, mood, energy, steps, food and money
 train/index.html   the training log, a reproduction of FitNotes
 train/CLAUDE.md    TRAIN's own brief, governs train/ only
+style/index.html   the theme workbench. Desktop only, deliberately.
 _template/         a working starter app, copied to make a new one
 quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
                    status/ on 2026-08-20; what is left of it is a todolist.
@@ -173,6 +174,7 @@ An app may read any type. It writes only the types it owns.
 | `sgroup` | **train** | group id | a superset |
 | `program` `progday` `progex` | **train** | | routines. Named around BLOCK's `routine` |
 | `goal` | **train** | goal id | a training goal |
+| `skin` | **style** | theme id | a saved or edited theme. A row whose id matches a factory theme in `skins.json` replaces it; deleting the row is the reset |
 
 **One writer per fact**, with exactly one deliberate exception: `tick`. Any app may
 tick anything, because one cell per activity per day is one fact and later save
@@ -217,6 +219,19 @@ preview work. `isCustomised` and `clearPalette` give the reset.
 
 Everything else, thirty-odd tokens, is derived from those. **Components read
 tokens, never raw colours.** That one rule is what keeps themes working.
+
+**The feel layer.** A theme also owns how a box is *drawn*, not just its
+colour: `texture.cut` drives the whole radius family, `weight` the border
+thickness, `depth` picks one of soft, flat, bevel or glow, and `track` and
+`motion` set letter spacing and tempo. A theme may also carry `css`, its own
+stylesheet over the shared class names, swapped wholesale when the theme
+changes. That is what makes a theme feel like a different universe rather than
+a recolour. Apps still write no theme CSS of their own.
+
+**What a theme may never touch:** the spacing scale and the 44px tap target.
+It changes how a box is drawn, never where it sits or how big it is under a
+thumb. Density was considered and rejected on 2026-08-21 — it reflows every
+hand-tuned layout and the bugs only surface on a phone nobody here can see.
 
 ---
 
@@ -352,6 +367,7 @@ Never claim something works because it should. Claim it because you watched it.
 | `form/` | Standalone by design. Video never leaves the device. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
 | `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
+| `style/` | Built 2026-08-21. Pick, compare, edit and add themes. The only app built for a computer first, at Tom's request: comparing themes honestly means several real screens side by side at true phone width. Owns `skin`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | Built and passing 35 checks. Not yet wired into the real apps. |
 
