@@ -137,6 +137,95 @@ function tokens(base,cut,ranks,skin){
     t['--tex-image']=x.image||'none';
     t['--tex-size']=x.size||'auto';}
   if(!t['--tex-image']){t['--tex-image']='none';t['--tex-size']='auto'}
+
+  /* ══════════════ the feel layer ══════════════
+     Everything above this point is identical in every theme. Everything below
+     it a theme may change, and these are the levers that make one theme feel
+     unlike another rather than merely look recoloured.
+
+     Deliberately NOT here: the spacing scale and the 44px tap target. A theme
+     may change how a box is drawn. It may never move a box or shrink a thumb
+     target, because that is how a theme quietly becomes a layout bug you only
+     find on a phone.                                                         */
+
+  /* Corners. One number per theme and the whole family follows it.
+
+     The ratios are picked so that cut:10 reproduces the old hardcoded values
+     exactly — 4, 10, 16, 20 — which is the point: a theme that does not set
+     `cut` renders precisely as it did before. Until now `--cut` was read by no
+     file in the repo, so every theme's corner setting was dead. Chalkboard
+     asked for square corners for months and got 16px cards.
+     --radius-full stays a pill forever; a theme does not get to un-round an
+     avatar or a toggle track.                                                */
+  const cutPx = Math.max(0, parseFloat(t['--cut']) || 0);
+  const rad = m => Math.round(cutPx * m) + 'px';
+  t['--radius-sm'] = rad(.4);  t['--radius-md']    = rad(1);
+  t['--radius-lg'] = rad(1.6); t['--radius-sheet'] = rad(2);
+  t['--radius-full'] = '999px';
+
+  /* Border weight. A 1px hairline and a 2px drawn line are different products.
+     Also read by nothing until now, for the same reason.                     */
+  t['--border-width'] = (skin && skin.weight ? skin.weight : 1) + 'px';
+
+  /* Depth — the strongest lever here. The same card in the same colours reads
+     as glass, as paper, as a stamped metal plate or as a lit sign depending
+     only on this. Every app already reads --e-1..5 and --rim, so a theme gets
+     the whole suite repainted without any app changing a line.
+
+     `plate` is measured from the PANEL, not the page. A bevel is drawn on the
+     surface it sits on, and a theme can perfectly well hang light plates on a
+     dark page — which is exactly what a game window does.                    */
+  const darkPlate = lum(panel) < .5;
+  const depth = (skin && skin.depth) || 'soft';
+  if (depth === 'flat') {
+    /* Nothing floats. Separation comes from fill and border alone, which is
+       what a printed or a hand-drawn interface actually does.                */
+    for (let i = 1; i <= 5; i++) t['--e-' + i] = 'none';
+    t['--rim'] = 'none';
+  } else if (depth === 'bevel') {
+    /* A lit top-left edge and a shaded bottom-right one, drawn inside the box.
+       This is the entire trick behind a 90s game panel: the surface is not
+       hovering above the page, it is a plate with thickness.                 */
+    const lit = darkPlate ? 'rgba(255,255,255,.30)' : 'rgba(255,255,255,.90)';
+    const shd = darkPlate ? 'rgba(0,0,0,.62)'       : 'rgba(0,0,0,.38)';
+    const bev = w => 'inset ' + w + 'px ' + w + 'px 0 ' + lit +
+                   ', inset -' + w + 'px -' + w + 'px 0 ' + shd;
+    t['--e-1'] = bev(1); t['--e-2'] = bev(1); t['--e-3'] = bev(2);
+    t['--e-4'] = bev(2); t['--e-5'] = bev(2) + ', 0 6px 18px ' + sh(.30);
+    t['--rim'] = 'none';
+    /* The inverse, for anything that should read as pressed in rather than
+       standing out: a button under the finger, an input well, a track.       */
+    t['--bevel-in'] = 'inset 1px 1px 0 ' + shd + ', inset -1px -1px 0 ' + lit;
+  } else if (depth === 'glow') {
+    /* Light comes off the element instead of falling onto it. */
+    const rgb = hex2rgb(accent).join(',');
+    const glow = (a, b) => '0 0 ' + b + 'px rgba(' + rgb + ',' + a + ')';
+    t['--e-1'] = glow(.14, 6);  t['--e-2'] = glow(.20, 12);
+    t['--e-3'] = glow(.28, 22); t['--e-4'] = glow(.34, 34);
+    t['--e-5'] = glow(.40, 48);
+    t['--rim'] = 'inset 0 1px 0 rgba(255,255,255,.10)';
+  }
+  if (!t['--bevel-in']) t['--bevel-in'] = 'none';
+
+  /* Letter spacing. On a short leash on purpose. This is the one lever that
+     can quietly wreck a line of text at a width nobody happened to test, so a
+     theme gets the two tokens it already had plus body, and no more.         */
+  const tr = (skin && skin.track) || {};
+  if (tr.cap   != null) t['--track-cap']   = tr.cap;
+  if (tr.tight != null) t['--track-tight'] = tr.tight;
+  t['--track-body'] = tr.body != null ? tr.body : '0';
+
+  /* Motion. A theme sets its own tempo and curve: a 90s panel snaps because it
+     has no transition to speak of, a hand-drawn theme can afford to be soft. */
+  const mo = (skin && skin.motion) || {};
+  ['tap', 'fast', 'med', 'slow', 'sheet'].forEach(k => {
+    if (mo[k] != null) t['--dur-' + k] = mo[k];
+  });
+  if (mo.ease) t['--ease-out'] = mo.ease;
+
+  /* Explicit overrides win over everything, including the feel layer, so a
+     theme always has a last word on any single token. */
+  if (skin && skin.overrides) Object.assign(t, skin.overrides);
   Object.entries(ranks||FALLBACK.ranks).forEach(([k,v])=>{t['--rank-'+k]=v});
   return t;
 }
@@ -208,10 +297,29 @@ const Skins={
     document.head.appendChild(l);
   },
 
+  /* A theme's own stylesheet. Tokens repaint a component; this restyles it —
+     a bevelled plate, a gradient title bar, a pressed-in button — which is the
+     difference between a recolour and looking like it was opened somewhere
+     else entirely.
+
+     One element, replaced wholesale on every apply, so exactly one theme's CSS
+     is ever live and there is nothing to clean up. It styles SELECTORS only:
+     tokens are set as inline properties on :root and would beat it anyway.
+
+     This is shared CSS, not app CSS. "Apps add no theme CSS of their own"
+     still holds — the theme brings its own and the app never knows.          */
+  themeCSS(s){
+    let el=document.getElementById('skin-theme-css');
+    if(!el){el=document.createElement('style');el.id='skin-theme-css';
+      document.head.appendChild(el)}
+    el.textContent=(s&&s.css)||'';
+  },
+
   /* `pal` paints without saving — that is what makes live preview possible */
   apply(idOrSkin,pal){
     const s=typeof idOrSkin==='string'?this.get(idOrSkin):idOrSkin;
     this.font(s);
+    this.themeCSS(s);
     const use=pal||(this.isCustomised(s.id)?this.paletteFor(s.id):null);
     const t=use?Object.assign(this.tokensFor(s),this.palTokens(use)):this.tokensFor(s),
       r=document.documentElement;

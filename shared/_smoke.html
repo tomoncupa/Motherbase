@@ -205,9 +205,14 @@ function run() {
     const v = [1,2,3,4,5,6,7,8,9].map(i => parseFloat(tok('--f-' + i)));
     return !v.some(isNaN) && v.every((x, i) => i === 0 || x > v[i - 1]) && v.every(x => x === Math.round(x));
   })());
-  ok('tokens: five elevations, each a two-part shadow but the top one',
-    [1,2,3,4].every(i => (tok('--e-' + i).match(/rgba/g) || []).length === 2) &&
-    (tok('--e-5').match(/rgba/g) || []).length === 1);
+  /* The two-part ladder is what `depth:soft` MEANS. A bevelled or a flat theme
+     builds depth a different way on purpose, so the shape of the ladder is
+     only asserted for the family it actually describes. Before this guard the
+     suite passed only because it happened to be running under a soft theme. */
+  ok('tokens: on a soft theme, five elevations, each a two-part shadow but the top one',
+    ((Skins.current && Skins.current.depth) || 'soft') !== 'soft' ||
+    ([1,2,3,4].every(i => (tok('--e-' + i).match(/rgba/g) || []).length === 2) &&
+     (tok('--e-5').match(/rgba/g) || []).length === 1));
   ok('tokens: the touch target is at least 44px', parseFloat(tok('--tap')) >= 44);
   ok('tokens: safe areas are tokens, so no app writes env() itself',
     /safe-area-inset/.test(Skins.tokensFor(Skins.current)['--safe-b']));
@@ -497,6 +502,76 @@ function run() {
   })());
   ok('skins: mono is actually monochrome',
     (() => { const t = Skins.tokensFor(Skins.get('mono')); return t['--text-1'] === '#FFFFFF' && t['--accent'] === '#FFFFFF'; })());
+
+  /* ---- the feel layer ----
+     Corners and border weight were wired into the engine and read by NOTHING:
+     --cut had zero consumers anywhere in the repo, so every theme's corner
+     setting was dead. Chalkboard asked for square cards for months and got
+     16px ones. These checks hold the wiring in place. */
+  const mk = o => Object.assign({ id: '__feel', name: 'Feel', mode: 'dark',
+    base: { bg: '#0B0E14', panel: '#121826', accent: '#6EE7FF', text: '#FFFFFF' } }, o);
+
+  ok('feel: cut 10 reproduces the ladder the tokens used to be hardcoded to', (() => {
+    const t = Skins.tokensFor(mk({ texture: { cut: '10px' } }));
+    return t['--radius-sm'] === '4px' && t['--radius-md'] === '10px' &&
+      t['--radius-lg'] === '16px' && t['--radius-sheet'] === '20px';
+  })());
+  ok('feel: a square theme is square everywhere except the pills', (() => {
+    const t = Skins.tokensFor(mk({ texture: { cut: '0px' } }));
+    return ['sm', 'md', 'lg', 'sheet'].every(k => t['--radius-' + k] === '0px') &&
+      t['--radius-full'] === '999px';
+  })());
+  ok('feel: a rounder theme rounds the whole family', (() => {
+    const t = Skins.tokensFor(mk({ texture: { cut: '14px' } }));
+    return t['--radius-md'] === '14px' && parseFloat(t['--radius-lg']) > 14;
+  })());
+  ok('feel: border weight follows the theme',
+    Skins.tokensFor(mk({ weight: 2 }))['--border-width'] === '2px' &&
+    Skins.tokensFor(mk({}))['--border-width'] === '1px');
+  ok('feel: flat has no shadow at all', (() => {
+    const t = Skins.tokensFor(mk({ depth: 'flat' }));
+    return [1, 2, 3, 4, 5].every(i => t['--e-' + i] === 'none') && t['--rim'] === 'none';
+  })());
+  ok('feel: bevel lights one corner and shades the other', (() => {
+    const t = Skins.tokensFor(mk({ depth: 'bevel' }));
+    return /inset 1px 1px/.test(t['--e-1']) && /inset -1px -1px/.test(t['--e-1']) &&
+      /inset 1px 1px/.test(t['--bevel-in']);
+  })());
+  /* A bevel is drawn on the surface it sits on, so it is measured from the
+     PANEL, not the page — which is what lets a theme hang light plates on a
+     dark background, exactly as a game window does. */
+  ok('feel: a bevel is measured from the panel, not the page', (() => {
+    const onDark = Skins.tokensFor(mk({ depth: 'bevel' }));
+    const onLight = Skins.tokensFor(mk({ depth: 'bevel',
+      base: { bg: '#0B0E14', panel: '#DCD8CB', accent: '#2F4F8F', text: '#241F18' } }));
+    return onDark['--e-1'] !== onLight['--e-1'];
+  })());
+  ok('feel: glow is built out of the accent',
+    /110,231,255/.test(Skins.tokensFor(mk({ depth: 'glow' }))['--e-2']));
+  /* The line the feel layer is not allowed to cross. */
+  ok('feel: no theme can move a box or shrink a thumb target', (() => {
+    const t = Skins.tokensFor(mk({ depth: 'flat', weight: 3, texture: { cut: '0px' },
+      motion: { fast: '0ms' }, track: { cap: '.4em' } }));
+    return t['--s-4'] === '16px' && t['--tap'] === '44px' && t['--f-3'] === '16px';
+  })());
+  ok('feel: an explicit override still beats the feel layer',
+    Skins.tokensFor(mk({ depth: 'flat', overrides: { '--e-1': 'X' } }))['--e-1'] === 'X');
+  ok('feel: a theme brings its own css, and it leaves when the theme does', (() => {
+    const was = Skins.current;
+    Skins.apply(mk({ id: '__css', css: '.zz{color:red}' }));
+    const el = document.getElementById('skin-theme-css');
+    const arrived = !!el && el.textContent.indexOf('.zz') > -1;
+    Skins.apply(mk({ id: '__nocss' }));
+    const gone = document.getElementById('skin-theme-css').textContent === '';
+    const single = document.querySelectorAll('#skin-theme-css').length === 1;
+    if (was) Skins.apply(was);
+    return arrived && gone && single;
+  })());
+  ok('feel: every theme in the file still builds a full token set',
+    Skins.data.skins.every(k => {
+      const t = Skins.tokensFor(k);
+      return t['--bg'] && t['--radius-md'] && t['--border-width'] && t['--e-1'] && t['--tap'] === '44px';
+    }));
 
   /* ---- the backup stamp ---- */
   /* Also because it broke: the stamp was written when the button was pressed
