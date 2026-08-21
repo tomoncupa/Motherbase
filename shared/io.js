@@ -283,6 +283,82 @@ const IO = {
   spec(appId) { return apps[appId] || { app: appId, name: appId, types: [] }; },
 
   /* ── backup ── */
+  /* ── the settings a backup has to carry ──
+     Rows are only half of what makes the app yours. The theme, the palette you
+     edited, the sound pack, the day, whether it buzzes, the sheet link — none
+     of those are rows. They are plain localStorage keys written by the shared
+     layer, and none of them were in a backup.
+
+     So restoring after reinstalling gave back every measurement and none of
+     the appearance, which is a backup that does not restore the thing you were
+     using. There was a `localKeys` hook for apps to declare their own and no
+     app had ever used it — a hook nobody calls is not a feature.
+
+     These belong to the foundation rather than to any one app, so the
+     foundation collects them and every app gets it for nothing. */
+  APPEARANCE: ['suite_skin', 'suite_palettes', 'suite_skins_custom', 'mb.day', 'mb.mobile', 'mb.mirror', 'mb.sfx'],
+
+  localBits(appId) {
+    const out = {};
+    try {
+      Object.keys(localStorage).forEach(k => {
+        /* prefix match, so suite_skin.status and mb.sfx.status come too */
+        if (!IO.APPEARANCE.some(pre => k === pre || k.indexOf(pre + '.') === 0)) return;
+        out[k] = localStorage.getItem(k);
+      });
+    } catch (e) {}
+    const S = IO.spec(appId);
+    if (S.localKeys) S.localKeys().forEach(k => { out[k] = localStorage.getItem(k); });
+    return out;
+  },
+
+  /* ── everything, as two tabs ──
+     A save file that restores your measurements and not your app is not a save
+     file. These two tabs are the whole of it, and they are the same content
+     the .json backup carries, built by the same function so the two cannot
+     disagree.
+
+     _Data     every row: what you logged, and every setting the app stores as
+               a row, which is where the calorie and macro targets live.
+     _Settings the things that are not rows at all — the theme, the palette you
+               edited, the sound pack, the day, whether it buzzes, the sheet
+               link. Written by the shared layer straight to storage, so no
+               amount of exporting rows would ever have caught them.
+
+     Named with a leading underscore so they sort to the end and read as
+     machinery rather than as something to look at. The header says so too,
+     because a tab full of JSON invites exactly one question. */
+  bagTabs(appId) {
+    const bag = IO.bagFor(appId);
+    const data = [['Motherbase rows. Do not edit by hand, the readable tabs are the ones to look at.']];
+    bag.rows.forEach(r => data.push([JSON.stringify(r)]));
+
+    const set = [['Setting', 'Value']];
+    Object.keys(bag.local || {}).sort().forEach(k => set.push([k, bag.local[k]]));
+
+    return [
+      { name: '_Data', rows: data, machine: true },
+      { name: '_Settings', rows: set, machine: true },
+    ];
+  },
+
+  /** read those two tabs back into a restorable bag */
+  bagFromTabs(tabs) {
+    const rows = [], local = {};
+    const data = tabs['_Data'] || tabs['_data'];
+    (data || []).forEach(line => {
+      const cell = line && line[0];
+      if (typeof cell !== 'string' || cell.charAt(0) !== '{') return;
+      try { rows.push(JSON.parse(cell)); } catch (e) {}
+    });
+    const set = tabs['_Settings'] || tabs['_settings'];
+    (set || []).slice(1).forEach(line => {
+      if (!line || !line[0] || line[0] === 'Setting') return;
+      local[String(line[0])] = line[1] == null ? '' : String(line[1]);
+    });
+    return { kind: 'motherbase-backup', v: 1, rows: rows, local: local };
+  },
+
   /** everything one app owns, in the shape restore() expects. One builder, so
       the backup file and the spreadsheet's Data tab cannot drift apart. */
   bagFor(appId) {
@@ -292,7 +368,7 @@ const IO = {
     return {
       kind: 'motherbase-backup', v: 1, app: appId, at: new Date().toISOString(),
       types: types, rows: rows,
-      local: S.localKeys ? S.localKeys().reduce((o, k) => { o[k] = localStorage.getItem(k); return o; }, {}) : undefined,
+      local: IO.localBits(appId),
     };
   },
 
@@ -340,7 +416,14 @@ const IO = {
       const types = []; bag.rows.forEach(r => { if (types.indexOf(r.type) === -1) types.push(r.type); });
       R.clear(types);
     }
-    if (bag.local) Object.keys(bag.local).forEach(k => { try { localStorage.setItem(k, bag.local[k]); } catch (e) {} });
+    let painted = false;
+    if (bag.local) Object.keys(bag.local).forEach(k => {
+      if (bag.local[k] == null) return;
+      try { localStorage.setItem(k, bag.local[k]); painted = painted || k.indexOf('suite_') === 0; } catch (e) {}
+    });
+    /* A theme that is restored but not repainted looks exactly like a theme
+       that was not restored. */
+    if (painted && g.Skins && g.Skins.restore) { try { g.Skins.restore(); } catch (e) {} }
     return R.merge(bag.rows || []);
   },
   pick(onFile) {
@@ -361,17 +444,14 @@ const IO = {
         fr.onload = () => {
           try {
             const wb = X.read(new Uint8Array(fr.result), { type: 'array' });
-            const ws = wb.Sheets['Data'];
-            if (!ws) throw new Error('that spreadsheet has no Data tab, so there is nothing to restore from. Only exports made by this app carry one.');
-            const aoa = X.utils.sheet_to_json(ws, { header: 1 });
-            const rows = [];
-            aoa.forEach(line => {
-              const cell = line && line[0];
-              if (typeof cell !== 'string' || cell.charAt(0) !== '{') return;
-              try { rows.push(JSON.parse(cell)); } catch (e) {}
+            const tabs = {};
+            ['_Data', '_Settings', 'Data'].forEach(nm => {
+              if (wb.Sheets[nm]) tabs[nm === 'Data' ? '_Data' : nm] = X.utils.sheet_to_json(wb.Sheets[nm], { header: 1 });
             });
-            if (!rows.length) throw new Error('the Data tab had no rows in it');
-            res({ kind: 'motherbase-backup', v: 1, rows: rows });
+            if (!tabs._Data) throw new Error('that spreadsheet has no _Data tab, so there is nothing to restore from, and only exports made by this app carry one');
+            const bag = IO.bagFromTabs(tabs);
+            if (!bag.rows.length) throw new Error('the _Data tab had no rows in it');
+            res(bag);
           } catch (e) { rej(e); }
         };
         fr.onerror = () => rej(new Error('could not read that file'));
@@ -412,21 +492,13 @@ const IO = {
         X.utils.book_append_sheet(wb, ws, s.name.slice(0, 28));
       });
 
-      /* ── the Data tab ──
-         The readable tabs are a view: they round numbers, drop fields and
-         reshape everything for a human, so they cannot be read back without
-         guessing. That is why an export used to say "not restorable".
-
-         So the workbook carries the rows themselves as well, one JSON row per
-         line on a tab at the end. The file is now both things at once — open
-         it and read it, or hand it back to the app and it restores exactly.
-         Two files that mean nearly the same thing is how you end up restoring
-         the wrong one. */
-      const raw = [['Motherbase rows — do not edit. The readable tabs are the ones to look at.']];
-      IO.bagFor(appId).rows.forEach(r => raw.push([JSON.stringify(r)]));
-      const rws = X.utils.aoa_to_sheet(raw);
-      rws['!cols'] = [{ wch: 120 }];
-      X.utils.book_append_sheet(wb, rws, 'Data');
+      /* The same two machinery tabs the sheet gets, from the same builder, so
+         a workbook and the mirror always carry identical contents. */
+      IO.bagTabs(appId).forEach(t => {
+        const ws2 = X.utils.aoa_to_sheet(t.rows);
+        ws2['!cols'] = [{ wch: 90 }, { wch: 60 }];
+        X.utils.book_append_sheet(wb, ws2, t.name);
+      });
 
       return save('motherbase-' + appId + '-' + stamp + '.xlsx',
         new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })],
@@ -571,7 +643,9 @@ const Mirror = {
       taken[name.toLowerCase()] = 1;
       read.push({ name: name, rows: s.rows, editable: false });
     });
-    return read.concat(edit);
+    /* the machinery last, so the sheet is a complete save file rather than a
+       pretty view of one */
+    return read.concat(edit).concat(IO.bagTabs(appId));
   },
 
   /* ── 1 and 2: pull and resolve ── */
@@ -621,9 +695,24 @@ const Mirror = {
       if (!quiet) toast('Synced <b>' + tabs.length + '</b> tabs.');
       return true;
     }).catch(() => {
-      if (!quiet) toast('Could not reach the sheet, so nothing was sent and nothing was lost.', { bad: true });
+      if (!quiet) toast(Mirror.why(), { bad: true, ms: 7000 });
       return false;
     });
+  },
+
+  /** Why a sync probably failed.
+
+      "Could not reach the sheet" is true and useless. Every one of these has
+      the same symptom and a different fix, and the link itself tells us which
+      is likely — so say the likely one rather than making him guess. */
+  why() {
+    const u = mcfg.url || '';
+    if (!u) return 'Paste the link first.';
+    if (u.indexOf('script.google.com') < 0)
+      return 'That link is not an Apps Script web app, so check you copied the one ending in /exec.';
+    if (!/\/exec\s*$/.test(u))
+      return 'That link should end in /exec, and a link ending in /dev only works while you are signed in.';
+    return 'Could not reach the sheet, and the usual cause is pasting new code without deploying it again, so try Deploy, Manage deployments, the pencil, Version New version.';
   },
 
   /** the whole round trip, in the order that makes it safe */
@@ -634,7 +723,7 @@ const Mirror = {
       .catch(() => ({ skipped: 'could not read' }))
       .then(got => Mirror.push(appId, true).then(sent => {
         if (!quiet) {
-          if (!sent) toast('Could not reach the sheet, so nothing was lost.', { bad: true });
+          if (!sent) toast(Mirror.why(), { bad: true, ms: 7000 });
           else if (got && got.clashes) toast('Synced, and <b>' + got.clashes + '</b> older sheet edits were kept aside.');
           else if (got && (got.changed || got.added)) toast('Synced, with <b>' + (got.changed + got.added) + '</b> changes from the sheet.');
           else toast('Synced.');

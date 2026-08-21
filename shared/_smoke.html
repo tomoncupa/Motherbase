@@ -302,6 +302,45 @@ function run() {
     return Rec.get(stamp, null, 't1') == null && Rec.get(stamp, null, 't2') != null;
   })());
 
+  /* ---- a backup is everything, or it is not a backup ---- */
+  /* These exist because a reinstall gave back every measurement and none of
+     the appearance. Rows were only ever half of it: the theme, the palette,
+     the sound pack, the day and the sheet link are plain storage keys, and no
+     amount of exporting rows would ever have caught them. */
+  ok('backup: it carries the settings that are not rows', (() => {
+    localStorage.setItem('suite_skin.__smoke', 'ember');
+    localStorage.setItem('mb.sfx.__smoke', '{"pack":"temple"}');
+    IO.register({ app: '__smoke', name: 'Smk', types: [stamp] });
+    const bag = IO.bagFor('__smoke');
+    return bag.local && bag.local['suite_skin.__smoke'] === 'ember' &&
+      bag.local['mb.sfx.__smoke'] === '{"pack":"temple"}';
+  })());
+  ok('backup: restoring puts them back', (() => {
+    const bag = JSON.parse(JSON.stringify(IO.bagFor('__smoke')));
+    localStorage.removeItem('suite_skin.__smoke');
+    localStorage.removeItem('mb.sfx.__smoke');
+    IO.restore(bag, 'merge');
+    return localStorage.getItem('suite_skin.__smoke') === 'ember' &&
+      localStorage.getItem('mb.sfx.__smoke') === '{"pack":"temple"}';
+  })());
+  ok('backup: a setting stored as a row is in there too', (() => {
+    Rec.setting('__smoke', 'targets', { kcal: 2345 });
+    const bag = IO.bagFor('__smoke');
+    return bag.rows.some(r => r.type === 'setting' && r.key === '__smoke.targets' &&
+      r.payload.v.kcal === 2345);
+  })());
+  ok('backup: the sheet carries the same two machinery tabs', (() => {
+    const tabs = IO.bagTabs('__smoke').map(t => t.name);
+    return tabs.indexOf('_Data') > -1 && tabs.indexOf('_Settings') > -1;
+  })());
+  ok('backup: those tabs read back into a restorable bag', (() => {
+    const t = IO.bagTabs('__smoke');
+    const bag = IO.bagFromTabs({ _Data: t[0].rows, _Settings: t[1].rows });
+    return bag.rows.length > 0 && bag.local['suite_skin.__smoke'] === 'ember';
+  })());
+  localStorage.removeItem('suite_skin.__smoke');
+  localStorage.removeItem('mb.sfx.__smoke');
+
   /* ---- the mirror ---- */
   ok('mirror: it is shared, not per app', typeof IO.mirror === 'object' &&
     ['pull', 'push', 'sync', 'onOpen', 'script', 'tabs'].every(k => typeof IO.mirror[k] === 'function'));
