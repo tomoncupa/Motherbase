@@ -1054,5 +1054,39 @@ const Mirror = {
 };
 IO.mirror = Mirror;
 
+/* ── the home screen asking an app to sync itself ──
+
+   Motherbase cannot sync TRAIN's tabs on TRAIN's behalf. Which tabs exist,
+   and how a row flattens into a line somebody can type into, live in the
+   registration inside TRAIN's own page — the home screen has never run it and
+   has no way to know. So the home screen asks, and each app answers for
+   itself. The link is already suite-wide, so this is only about who does the
+   work, not about pasting anything twice.
+
+   Quiet by design. Six apps each announcing success is six snackbars for one
+   button press, so the answers go back as data and the asker says it once. */
+g.addEventListener('message', e => {
+  const m = e.data;
+  if (!m || m.mb !== 2) return;
+
+  /* "are you on the shared drawer?" — answered at once, before any syncing.
+     Half the suite still keeps its own storage and loads none of this, so it
+     never answers, and the asker must not sit waiting on apps that cannot
+     reply. Asking is also the only honest way to know: the day BLOCK moves
+     onto the store it starts answering, and nothing here has to be edited to
+     notice. */
+  if (m.ping) {
+    try { e.source && e.source.postMessage({ mb: 2, pong: 1, apps: Object.keys(apps) }, '*'); } catch (err) {}
+    return;
+  }
+  if (!m.sync) return;
+  const back = out => { try { e.source && e.source.postMessage(Object.assign({ mb: 2, synced: 1 }, out), '*'); } catch (err) {} };
+  const ids = Object.keys(apps);
+  if (!ids.length) return back({ app: null, ok: false, why: 'no app is registered in this frame' });
+  if (!Mirror.ready()) return back({ app: ids[0], ok: false, why: Mirror.why() });
+  Promise.all(ids.map(id => Mirror.sync(id, true).then(ok => !!ok, () => false)))
+    .then(res => back({ app: ids.join(','), ok: res.every(Boolean), why: res.every(Boolean) ? '' : Mirror.why() }));
+});
+
 g.IO = IO;
 })(window);

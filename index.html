@@ -21,6 +21,7 @@
 <script src="shared/mobile.js"></script>
 <script src="shared/sound.js"></script>
 <script src="shared/ui.js"></script>
+<script src="shared/io.js"></script>
 <style>
 :root{
   /* ── the bridge ──
@@ -542,16 +543,28 @@ function go(id) {
   location.hash = id === 'home' ? '' : id;
   $('#home').style.display = id === 'home' ? '' : 'none';
   $('#btnWidget').style.display = id === 'home' ? '' : 'none';
+  if (a.file) frameFor(id);
   Object.keys(frames).forEach(k => frames[k].classList.toggle('hide', k !== id));
-  if (a.file && !frames[id]) {
-    const f = el('iframe', 'frame');
-    f.setAttribute('allow', 'camera; microphone; fullscreen; clipboard-read; clipboard-write');
-    f.src = a.file;
-    frames[id] = f; $('#stage').appendChild(f);
-  }
   drawNav();
   if (id === 'home') drawHome();
 }
+/* An app's frame, made if it is not there yet. Opening an app is not the only
+   reason to need one: the sheet mirror has to ask every app to sync itself,
+   and an app he has not opened today has no frame to ask. Made hidden, and
+   go() decides what is on screen straight after. */
+function frameFor(id) {
+  const a = app(id);
+  if (!a || !a.file) return null;
+  if (!frames[id]) {
+    const f = el('iframe', 'frame hide');
+    f.setAttribute('allow', 'camera; microphone; fullscreen; clipboard-read; clipboard-write');
+    f.addEventListener('load', () => { f.dataset.loaded = '1'; }, { once: true });
+    f.src = a.file;
+    frames[id] = f; $('#stage').appendChild(f);
+  }
+  return frames[id];
+}
+
 /* apps can ask the shell to move: postMessage({lifeos:1, nav:'home'}) */
 window.addEventListener('message', e => { const m = e.data; if (m && m.lifeos === 1 && m.nav && app(m.nav)) go(m.nav); });
 
@@ -1208,6 +1221,153 @@ function refreshDataBtn() {
     : 'Last backup ' + (n === 0 ? 'today' : n + ' day' + (n === 1 ? '' : 's') + ' ago');
 }
 
+/* ══════════════ the sheet mirror ══════════════
+   One Google Sheet for the whole suite, one link, pasted once. shared/io.js
+   carries the protocol and STATUS already has a panel for it. The home screen
+   is here because it is the only place that can reasonably offer "all of them".
+
+   It does not do the syncing itself. Which tabs an app has, and how one of its
+   rows flattens into a line somebody can type into, live in that app's own
+   registration — the shell has never run it and cannot guess. So the shell
+   loads the app, asks it to sync itself, and counts the answers.
+
+   Editing in the sheet is the point of the thing. Forty foods on a laptop
+   keyboard beats forty on a phone, and the pull runs before the push, so what
+   was typed there is read before anything is written back over it. */
+function syncEveryApp() {
+  const M = IO.mirror;
+  if (!M.ready()) return toast(esc(M.why()), { bad: true, ms: 8000 });
+
+  /* ARC and FORM keep their own storage by design and are not asked at all.
+     Of the rest, only the ones actually on the shared drawer can answer, so
+     ask first and sync whoever puts a hand up. Nothing here needs editing on
+     the day BLOCK moves over — it will simply start answering. */
+  const candidates = APPS.filter(a => a.file && !a.solo && !missing[a.id]);
+  if (!candidates.length) return toast('Nothing to sync', { bad: true });
+  toast('Syncing…');
+  /* How long to wait for hands to go up. An app already open answers in
+     milliseconds; one being loaded to be asked has to fetch and run its whole
+     file first, and on his phone that is not instant. Being too quick here
+     does not fail loudly — it quietly leaves an app out of the sheet — so the
+     window is generous whenever anything had to be loaded. */
+  const cold = candidates.some(a => !frames[a.id] || !frames[a.id].dataset.loaded);
+  reach(candidates, { mb: 2, ping: 1 }, m => m.pong, cold ? 9000 : 3000, on => {
+    if (!on.length) {
+      return toast('None of the apps are on the shared drawer yet, so there is nothing to put in the sheet.',
+        { bad: true, ms: 9000 });
+    }
+    pushToSheet(on, candidates.length);
+  });
+}
+
+/* Ask a set of apps something, and call back with the ones that answered.
+   Making the frame is part of asking: an app he has not opened today is not
+   loaded, and an app that is not loaded cannot say anything. */
+function reach(list, msg, keep, ms, then) {
+  const said = {};
+  let done = false;
+  const heard = e => {
+    const m = e.data;
+    if (!m || m.mb !== 2 || !keep(m)) return;
+    const a = list.find(x => frames[x.id] && frames[x.id].contentWindow === e.source);
+    if (a) said[a.id] = m;
+    if (Object.keys(said).length === list.length) finish();
+  };
+  const finish = () => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    window.removeEventListener('message', heard);
+    then(list.filter(a => said[a.id]).map(a => Object.assign({}, a, { said: said[a.id] })));
+  };
+  const timer = setTimeout(finish, ms);
+  window.addEventListener('message', heard);
+  list.forEach(a => {
+    const f = frameFor(a.id);
+    const ask = () => { try { f.contentWindow.postMessage(msg, '*'); } catch (e) {} };
+    /* a frame made a moment ago has not run its scripts yet, and an app that
+       has not registered cannot answer for itself */
+    if (f.dataset.loaded) ask();
+    else f.addEventListener('load', () => setTimeout(ask, 400), { once: true });
+  });
+}
+
+/* the round trip itself, once we know who can do it */
+function pushToSheet(on, asked) {
+  toast('Syncing <b>' + on.length + '</b> apps…');
+  reach(on, { mb: 2, sync: 1 }, m => m.synced, 40000, res => {
+    const ok = res.filter(a => a.said.ok);
+    if (ok.length === on.length) {
+      const extra = asked - on.length;
+      toast('Synced <b>' + ok.length + '</b> apps into the sheet.' +
+        (extra ? ' <b>' + extra + '</b> are not on the shared drawer yet and have nothing to send.' : ''));
+      if (typeof Sfx !== 'undefined' && Sfx.play) Sfx.play('complete', { level: 2 });
+      return;
+    }
+    /* Say the likely fix rather than the symptom. io.js works out which one
+       the link itself points at, and they all share the one link, so the
+       first app with an opinion is enough. */
+    const why = (res.map(a => a.said).find(m => m && m.why) || {}).why;
+    toast('Synced <b>' + ok.length + ' of ' + on.length + '</b>. ' +
+      esc(why || 'The rest did not answer.'), { bad: true, ms: 9000 });
+  });
+}
+
+
+/* The script that has to go in the sheet once. Generated by io.js so it cannot
+   drift from the protocol it talks to, and copied in one tap: selecting twelve
+   lines by hand on a phone is how two characters go missing and the error
+   names a line rather than the cause. */
+function copyMirrorScript() {
+  const code = IO.mirror.script();
+  const show = copied => UI.dialog({
+    title: 'APPS SCRIPT', width: 560,
+    body: b => {
+      b.appendChild(el('div', 'lede', copied
+        ? 'Copied. In the sheet: Extensions, Apps Script, paste it over everything, then Deploy, New deployment, Web app, execute as <b>me</b>, access <b>anyone</b>. Paste the link it gives you into the box on the DATA panel.'
+        : 'Select all of this and copy it, then paste it over everything in the Apps Script editor.'));
+      const t = el('textarea', 'mb-input');
+      t.rows = 12; t.value = code; t.setAttribute('readonly', '');
+      t.style.fontFamily = 'var(--font-mono, monospace)';
+      b.appendChild(t);
+      if (!copied) setTimeout(() => t.select(), 50);
+    },
+    actions: [{ label: 'DONE', kind: 'go' }],
+  });
+  if (navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(code).then(() => show(true)).catch(() => show(false));
+  else show(false);
+}
+
+/* the sheet's half of the DATA panel */
+function mirrorSection(mo) {
+  const cfg = IO.mirror.adopt('lifeos');
+  mo.appendChild(el('div', 'mgroup', 'GOOGLE SHEET — THE OTHER PLACE YOU CAN EDIT'));
+  mo.appendChild(el('div', 'lede',
+    'One sheet you own, holding a copy of every app, and what you type in it comes back. ' +
+    'This is where mass edits belong: a real keyboard and forty rows at a time. ' +
+    (cfg.at ? 'Last synced <b>' + esc(cfg.at) + '</b>.'
+            : '<b style="color:var(--warn)">Never synced.</b> Paste the link below, then press sync.')));
+
+  const u = el('input', 'mb-input');
+  u.type = 'text';
+  u.placeholder = 'https://script.google.com/macros/s/…/exec';
+  u.value = cfg.url || '';
+  /* on input, not change. change only fires when the box loses focus, and
+     pasting a link then tapping sync closes the panel before that happens —
+     so the link was silently never saved. */
+  u.oninput = () => IO.mirror.set({ url: u.value.trim() });
+  mo.appendChild(u);
+
+  [['⟳', 'Sync every app now', 'Reads the sheet first, then writes back to it. Apps you have not opened today get loaded to do their part.', () => { IO.mirror.set({ url: u.value.trim() }); syncEveryApp(); }],
+   ['⧉', 'Copy the Apps Script', 'The bit that goes in the sheet once, before any of this works.', copyMirrorScript],
+  ].forEach(([ic, t, d, fn]) => {
+    const b = el('button', 'opt');
+    b.innerHTML = '<span class="ic">' + ic + '</span><span class="t"><b>' + t + '</b><span>' + d + '</span></span>';
+    b.onclick = fn; mo.appendChild(b);
+  });
+}
+
 function dataPanel() {
   const mo = $('#modal'); mo.innerHTML = '';
   const n = daysSinceBackup();
@@ -1227,6 +1387,8 @@ function dataPanel() {
     b.innerHTML = '<span class="ic">' + ic + '</span><span class="t"><b>' + t + '</b><span>' + d + '</span></span>';
     b.onclick = fn; mo.appendChild(b);
   });
+
+  mirrorSection(mo);
 
   mo.appendChild(el('div', 'mgroup', 'EXPORTS — READABLE, NOT RESTORABLE'));
   [
