@@ -55,7 +55,7 @@ header{
 
 /* ---------- three panes ---------- */
 .work{flex:1;min-height:0;display:grid;grid-template-columns:210px 1fr 360px}
-.rail,.editor,.canvas{min-height:0;overflow:auto}
+.rail,.editor,.canvas{min-height:0;min-width:0;overflow:auto}
 .rail{border-right:var(--border-width) solid var(--border);background:var(--surface-1)}
 .editor{border-left:var(--border-width) solid var(--border);background:var(--surface-1)}
 .canvas{padding:var(--s-4)}
@@ -361,7 +361,10 @@ function frameHTML(skin) {
 /* ---- the left rail ---- */
 function drawRail() {
   const list = Skins.list();
-  $('#count').textContent = list.length + ' themes';
+  const n = mine().length;
+  $('#count').innerHTML = list.length + ' themes &middot; ' + n + ' of yours' +
+    (n > MAX_MINE ? ' <b style="color:var(--warn)">(over the limit of ' + MAX_MINE + ')</b>'
+                  : ' of ' + MAX_MINE);
   const box = $('#rail');
   box.innerHTML = '<div class="railhead">THEMES</div>';
   list.forEach(s => {
@@ -378,6 +381,7 @@ function drawRail() {
       + '<span class="nm" style="font-family:' + t['--font-display'] + '">' + esc(s.name) + '</span>'
       + (isNew ? '<span class="tag">NEW</span>' : edited ? '<span class="tag">EDITED</span>' : '');
     b.onclick = () => select(s.id);
+    b.oncontextmenu = e => { e.preventDefault(); themeMenu(s, e.clientX, e.clientY); };
     box.appendChild(b);
   });
   const add = document.createElement('button');
@@ -405,20 +409,19 @@ function tile(skin) {
     '<div class="pvhead"><span class="nm">' + esc(skin.name) + '</span>'
     + (inUse ? '<span class="tag">STYLE</span>' : '')
     + '<button class="mini" data-act="use">USE HERE</button>'
-    + '<button class="mini" data-act="copy">COPY</button>'
-    + '<button class="mini" data-act="dupe">DUPLICATE</button></div>'
+    + '<button class="mini" data-act="more">\u22ef</button></div>'
     + '<div class="pvwrap"><iframe title="' + esc(skin.name) + ' preview"></iframe>'
     + '<div class="pvsheet"></div></div>';
   const f = d.querySelector('iframe');
   f.srcdoc = frameHTML(skin);
   d.querySelector('.pvsheet').onclick = () => select(skin.id);
+  d.oncontextmenu = e => { e.preventDefault(); themeMenu(skin, e.clientX, e.clientY); };
   d.querySelectorAll('[data-act]').forEach(b => {
     b.onclick = e => {
       e.stopPropagation();
       const a = b.dataset.act;
       if (a === 'use') { Skins.apply(skin.id); Sfx.play('drop'); drawAll(); UI.toast('STYLE is <b>' + esc(skin.name) + '</b>'); }
-      if (a === 'copy') copyJSON(skin);
-      if (a === 'dupe') duplicate(skin);
+      if (a === 'more') { const r = b.getBoundingClientRect(); themeMenu(skin, r.left, r.bottom + 4); }
     };
   });
   return d;
@@ -434,6 +437,42 @@ function repaint(skin) {
 }
 
 function drawAll() { drawRail(); drawGrid(); drawEditor(); }
+
+/* ---- right-click a theme ----
+   Everything you can do to a theme, in one place, on both the list and the
+   tile. The destructive ones live here rather than on the tile, because a
+   button sitting next to USE HERE is one slip away from a theme you did not
+   mean to make. */
+function themeMenu(skin, x, y) {
+  const isMine = !Skins.factory(skin.id);
+  const items = [
+    { label: 'USE IN STYLE', fn: () => {
+        Skins.apply(skin.id); Sfx.play('drop'); drawAll();
+        UI.toast('STYLE is <b>' + esc(skin.name) + '</b>');
+      } },
+    { label: 'EDIT', fn: () => select(skin.id) },
+    { label: 'COPY AS JSON', fn: () => copyJSON(skin) },
+    '-',
+    { label: 'DUPLICATE', fn: () => duplicate(skin) },
+  ];
+  if (!isMine && Skins.isEdited(skin.id))
+    items.push({ label: 'RESET TO FACTORY', fn: () => { select(skin.id); reset(); } });
+  if (isMine)
+    items.push({ label: 'DELETE', kind: 'bad', fn: () => { select(skin.id); remove(); } });
+  UI.menu(x, y, items, { title: skin.name });
+}
+
+/* ---- how many themes are yours ----
+   Factory themes do not count: they are always there and cannot be lost. */
+const MAX_MINE = 3;
+const mine = () => Skins.list().filter(s => !Skins.factory(s.id));
+function roomForOne() {
+  const n = mine().length;
+  if (n < MAX_MINE) return true;
+  UI.toast('You keep <b>' + MAX_MINE + '</b> of your own themes and you have <b>' + n +
+    '</b>. Right-click one and delete it first.', { bad: true });
+  return false;
+}
 
 /* ---- selecting ---- */
 function select(id) {
@@ -478,7 +517,8 @@ function drawEditor() {
   head.querySelector('#e-name').oninput = e => { s.name = e.target.value; touch(); };
   head.querySelector('#e-save').onclick = save;
   head.querySelector('#e-use').onclick = () => {
-    save(); Skins.apply(s.id); Sfx.play('drop'); drawAll();
+    if (dirty) save();
+    Skins.apply(Skins.get(s.id)); Sfx.play('drop'); drawAll();
     UI.toast('STYLE is <b>' + esc(s.name) + '</b>');
   };
   head.querySelector('#e-copy').onclick = () => copyJSON(s);
@@ -651,40 +691,39 @@ function save() {
 function reset() {
   const f = Skins.factory(draft.id);
   if (!f) return;
-  UI.confirm({
-    title: 'RESET ' + esc(draft.name).toUpperCase(),
-    body: 'Puts it back exactly as it ships and throws away your changes to it. '
-        + 'Other themes are untouched.',
-    go: 'RESET',
-    fn: () => {
-      Skins.forget(draft.id);
-      if (Skins.current && Skins.current.id === draft.id) Skins.apply(Skins.get(draft.id));
-      select(draft.id);
-      UI.toast('<b>' + esc(f.name) + '</b> is back to factory');
-    },
+  const id = draft.id;
+  UI.confirm('Put ' + f.name + ' back to how it ships?',
+    'Throws away your changes to this one theme. Every other theme is left alone.',
+    { title: 'RESET', yes: 'RESET' }
+  ).then(ok => {
+    if (!ok) return;
+    Skins.forget(id);
+    if (Skins.current && Skins.current.id === id) Skins.apply(Skins.get(id));
+    select(id);
+    UI.toast('<b>' + esc(f.name) + '</b> is back to factory');
   });
 }
 
 function remove() {
   const id = draft.id, nm = draft.name;
   const payload = clone(Rec.get('skin', null, id) || draft);
-  UI.confirm({
-    title: 'DELETE ' + esc(nm).toUpperCase(),
-    body: 'Removes this theme. Any app set to it falls back to the first theme.',
-    go: 'DELETE', danger: true,
-    fn: () => {
-      Skins.forget(id);
-      sel = null; draft = null; dirty = false;
-      drawAll();
-      UI.undo('deleted <b>' + esc(nm) + '</b>', () => {
-        Rec.set('skin', null, id, payload);
-        select(id);
-      });
-    },
+  UI.confirm('Delete ' + nm + '?',
+    'Any app set to it falls back to the first theme. You can undo this straight after.',
+    { title: 'DELETE', yes: 'DELETE', danger: true }
+  ).then(ok => {
+    if (!ok) return;
+    Skins.forget(id);
+    sel = null; draft = null; dirty = false;
+    drawAll();
+    UI.undo('deleted <b>' + esc(nm) + '</b>', () => {
+      Rec.set('skin', null, id, payload);
+      select(id);
+    });
   });
 }
 
 function duplicate(skin) {
+  if (!roomForOne()) return;
   const copy = clone(skin);
   copy.id = slug(skin.name + ' copy');
   copy.name = skin.name + ' copy';
@@ -695,6 +734,7 @@ function duplicate(skin) {
 }
 
 function newTheme() {
+  if (!roomForOne()) return;
   const base = clone(Skins.get(sel || Skins.list()[0].id));
   base.id = slug('theme ' + (Skins.customs().length + 1));
   base.name = 'New theme';
