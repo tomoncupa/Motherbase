@@ -16,6 +16,23 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.4 — 2026-08-21
+
+**The + button is four buttons now: Mood, Energy, Food, Spending.** It used to
+list whatever was outstanding, then every field you log more than once, then
+Food and Spending — so its contents moved through the day and the button you
+wanted was somewhere different each time. A quick add you have to read is not
+quick. These four are the things that happen more than once a day; weight,
+sleep and steps are once, and their tiles are on Today already.
+
+The amber dot came off the button with the list it pointed at. An empty tile
+is the same reminder in a better place.
+
+Mood and Energy are looked up rather than assumed, so turning one off takes
+its button away instead of leaving one that opens nothing.
+
+---
+
 ## 0.1.3 — 2026-08-21
 
 Caffeine from food reached the tile in one route out of three. Two holes, both

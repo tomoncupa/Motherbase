@@ -187,9 +187,6 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
   position:relative;
 }
 .fab:active{transform:scale(.94)}
-/* something is still open today */
-.fab.dot::after{content:'';position:absolute;top:2px;right:2px;width:12px;height:12px;
-  border-radius:50%;background:var(--warn);border:2px solid var(--surface-1)}
 
 /* ── tabs ── */
 nav{
@@ -1589,33 +1586,46 @@ function photoBlock(body, kind, onText, onShot) {
 const dueToday = (f, date) => !f.days || !f.days.length || f.days.indexOf(Day.dow(date || vd())) > -1;
 const outstanding = () => liveFields().filter(f => f.once && dueToday(f) && !logged(vd(), f.id));
 
+/* ── the quick add ──
+   Four buttons, in the same four places every time. It used to list whatever
+   was outstanding, then every multi-entry field, then Food and Spending — so
+   the contents moved through the day and the button you wanted was somewhere
+   different each time you opened it. A grid you have to read is not a quick
+   add; the whole value is knowing where your thumb goes before you look.
+
+   These four because they are the ones that happen more than once a day.
+   Weight, sleep and steps are once, and their tiles are already on Today, one
+   tap each — a tile with nothing in it is its own reminder, which is why the
+   amber dot came off the button as well. A badge pointing at a list that is
+   no longer in the sheet is a badge that lies.
+
+   Mood and Energy are looked up rather than assumed, so turning one off takes
+   its button with it instead of leaving one that opens nothing. QUICK is
+   where to change which two. */
+const QUICK = ['mood', 'energy'];
+
+function quickField(key) {
+  const all = Object.values(fields());
+  return all.filter(f => f.on && (f.id === key || String(f.label).toLowerCase() === key))[0] || null;
+}
+
 function fastInput() {
   openSheet('Log', body => {
-    const out = outstanding();
-    const multi = liveFields().filter(f => !f.once);
     if (!Day.isToday(vd())) body.appendChild(el('div', 'warnbox', 'Logging into ' + esc(Day.label(vd())) + ', not today.'));
 
-    if (out.length) {
-      const g = el('div');
-      out.forEach(f => {
-        const b = el('button', 'btn wide', f.label + (f.target ? '  <span class="muted mono">' + (f.dir === 'lte' ? '≤' : '≥') + ' ' + f.target + '</span>' : ''));
-        b.style.cssText = 'margin-bottom:var(--s2);min-height:var(--tap);text-align:left';
-        b.onclick = () => fieldSheet(f, vd());
-        g.appendChild(b);
-      });
-      body.appendChild(g);
-    }
-
     const row = el('div', 'grid2');
-    multi.forEach(f => {
-      const b = el('button', 'btn wide', f.label);
+    const big = (label, fn) => {
+      const b = el('button', 'btn wide mb-press mb-tap', esc(label));
       b.style.minHeight = '54px';
-      b.onclick = () => fieldSheet(f, vd());
+      b.onclick = fn;
       row.appendChild(b);
+    };
+    QUICK.forEach(key => {
+      const f = quickField(key);
+      if (f) big(f.label, () => fieldSheet(f, vd()));
     });
-    const fb = el('button', 'btn wide', 'Food');   fb.style.minHeight = '54px'; fb.onclick = foodPicker;
-    const sb = el('button', 'btn wide', 'Spend');  sb.style.minHeight = '54px'; sb.onclick = () => spendSheet();
-    row.appendChild(fb); row.appendChild(sb);
+    big('Food', foodPicker);
+    big('Spending', () => spendSheet());
     body.appendChild(row);
   });
 }
@@ -2458,7 +2468,6 @@ function seamButton(m) {
   const b = el('button', 'fab mb-press mb-tap');
   b.setAttribute('aria-label', 'Add');
   b.textContent = '+';
-  if (outstanding().length) b.className += ' dot';
   b.onclick = () => { Mobile.feedback('open'); fastInput(); };
   w.appendChild(b);
   m.appendChild(w);
