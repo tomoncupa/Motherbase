@@ -233,6 +233,75 @@ function run() {
     return sw.on === true && got === true && sw.getAttribute('aria-checked') === 'true';
   })());
 
+  /* ---- tables you can type into ---- */
+  IO.register({ app: '__tbl', name: 'Tbl', types: [stamp],
+    tables: [{ name: 'Things', type: stamp, cols: [['name', 'Name'], ['base.n', 'N']] }] });
+  Rec.set(stamp, null, 't1', { name: 'first', base: { n: 1 } });
+
+  ok('tables: a table is one line per row, with an id and a stamp', (() => {
+    const t = IO.tables('__tbl')[0];
+    return t && t.rows[0][0] === 'id' && t.rows[0][2] === 'Name' &&
+      t.rows.some(r => r[0] === 't1' && r[2] === 'first' && r[3] === 1);
+  })());
+  ok('tables: an edit in the grid comes back as a change', (() => {
+    const g = IO.tables('__tbl')[0].rows.map(r => r.slice());
+    const line = g.filter(r => r[0] === 't1')[0];
+    line[2] = 'edited'; line[3] = 9;
+    line[4] = new Date(Date.now() + 60000).toISOString();
+    const d = IO.readTable('__tbl', 'Things', g);
+    return d.changed.length === 1 && d.changed[0].payload.name === 'edited' && d.changed[0].payload.base.n === 9;
+  })());
+  ok('tables: a line with no id is a new thing', (() => {
+    const g = IO.tables('__tbl')[0].rows.map(r => r.slice());
+    g.push(['', '', 'brand new', 5, new Date().toISOString(), 'sheet']);
+    const d = IO.readTable('__tbl', 'Things', g);
+    return d.added.length === 1 && d.added[0].payload.name === 'brand new';
+  })());
+  /* This one exists because it silently never fired: updated_at is an ISO
+     string, and comparing it to a parsed number coerced to NaN, so the sheet
+     always appeared to win and no clash was ever recorded. */
+  ok('tables: the newer edit wins, and the loser is kept', (() => {
+    Rec.set(stamp, null, 't1', { name: 'phone', base: { n: 1 } });
+    const g = IO.tables('__tbl')[0].rows.map(r => r.slice());
+    const line = g.filter(r => r[0] === 't1')[0];
+    line[2] = 'sheet';
+    line[4] = new Date(Date.now() - 60000).toISOString();
+    const d = IO.readTable('__tbl', 'Things', g);
+    return d.changed.length === 0 && d.clashes.length === 1 &&
+      d.clashes[0].kept === 'phone' && d.clashes[0].theirs.name === 'sheet' &&
+      d.clashes[0].ours.name === 'phone';
+  })());
+  ok('tables: applying a diff writes it', (() => {
+    const g = IO.tables('__tbl')[0].rows.map(r => r.slice());
+    const line = g.filter(r => r[0] === 't1')[0];
+    line[2] = 'applied';
+    line[4] = new Date(Date.now() + 60000).toISOString();
+    IO.applyTable('__tbl', IO.readTable('__tbl', 'Things', g));
+    return Rec.get(stamp, null, 't1').name === 'applied';
+  })());
+  /* An empty grid is far more likely to be a failed read than an instruction
+     to erase everything, so it is refused outright rather than obeyed. */
+  ok('tables: an empty grid deletes nothing', (() => {
+    const d = IO.readTable('__tbl', 'Things', [IO.tables('__tbl')[0].rows[0]]);
+    return d.removed.length === 0 && d.changed.length === 0;
+  })());
+  ok('tables: a line dropped from a real grid is reported, not deleted', (() => {
+    Rec.set(stamp, null, 't2', { name: 'keep me', base: { n: 2 } });
+    const all = IO.tables('__tbl')[0].rows.map(r => r.slice());
+    const g = all.filter(r => r[0] !== 't1');       /* t1 removed, t2 still there */
+    const d = IO.readTable('__tbl', 'Things', g);
+    IO.applyTable('__tbl', d);                      /* no allowDelete */
+    return d.removed.some(x => x.key === 't1') && Rec.get(stamp, null, 't1') != null;
+  })());
+  ok('tables: it does delete when asked', (() => {
+    const all = IO.tables('__tbl')[0].rows.map(r => r.slice());
+    const g = all.filter(r => r[0] !== 't1');
+    const d = IO.readTable('__tbl', 'Things', g);
+    d.removed.forEach(x => { x.type = stamp; });
+    IO.applyTable('__tbl', d, { allowDelete: true });
+    return Rec.get(stamp, null, 't1') == null && Rec.get(stamp, null, 't2') != null;
+  })());
+
   /* ---- the store hands out copies ---- */
   /* This one exists because it cost two rounds of "it does not save". get()
      used to return the stored object itself, so the ordinary read-modify-write

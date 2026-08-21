@@ -119,8 +119,159 @@ const IO = {
   /** an app describes itself once: which types it owns, and any sheets of its
       own it wants in the spreadsheet */
   register(spec) {
-    apps[spec.app] = Object.assign({ types: [], sheets: null, name: spec.app }, spec);
+    apps[spec.app] = Object.assign({ types: [], sheets: null, tables: null, name: spec.app }, spec);
     return IO;
+  },
+
+  /* ══════════════ EDITABLE TABLES ══════════════
+
+     Two kinds of tab, and the difference is not taste, it is arithmetic.
+
+     A TABLE is one line per real thing. Line 4 is the chicken breast. Change
+     165 to 170 and there is exactly one row to save it to, so it can be typed
+     into freely — in the sheet, on a laptop, forty rows at a time.
+
+     A SHEET is maths done on those things. "Monday: 2,340 kcal" is not stored
+     anywhere; it is the seven meals added up on the way to the screen. Typing
+     over it has no row to land in — which meal got bigger? — so the only
+     honest options are to guess or to discard, and both are worse than not
+     offering the box. Change the meals and the total changes itself.
+
+     So: everything one-per-thing is editable, nothing derived is. That is the
+     whole rule, and it is why STATUS can hand you its food database to edit in
+     bulk while its daily summary stays a read-out.
+
+     An app declares its tables and io.js does the rest — building the tab,
+     reading it back, and deciding what won:
+
+       IO.register({ app:'status', types:[…],
+         tables: [
+           { name:'Food', type:'food',
+             cols:[['name','Name'],['brand','Brand'],['base.kcal','Calories']] },
+         ] });
+
+     `id` is the first column and it is how a line keeps its identity across a
+     round trip. Blank id means a new thing. Clearing a line's text means
+     delete it. Both are what somebody editing a spreadsheet would expect,
+     which is the point.                                                     */
+
+  /** the value at a dotted path, so a table can expose nested fields flat */
+  reach(o, path) {
+    return String(path).split('.').reduce((v, k) => (v == null ? v : v[k]), o);
+  },
+  plant(o, path, val) {
+    const parts = String(path).split('.');
+    let cur = o;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (cur[parts[i]] == null || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {};
+      cur = cur[parts[i]];
+    }
+    cur[parts[parts.length - 1]] = val;
+    return o;
+  },
+
+  /** every declared table for an app, as rows ready to write into a sheet */
+  tables(appId) {
+    const S = IO.spec(appId), R = g.Rec;
+    if (!S.tables || !R) return [];
+    return S.tables.map(t => {
+      const head = ['id', 'date'].concat(t.cols.map(c => c[1])).concat(['edited', 'by']);
+      const rows = [head];
+      R.all(t.type).forEach(r => {
+        const line = [r.key, r.date || ''];
+        t.cols.forEach(c => {
+          const v = IO.reach(r.payload, c[0]);
+          line.push(v == null ? '' : v);
+        });
+        /* the stamp every row carries, so a clash has something to settle it */
+        line.push(new Date(r.updated_at).toISOString(), r.by || 'phone');
+        rows.push(line);
+      });
+      return { name: appId.toUpperCase() + ' · ' + t.name, table: t, rows: rows, editable: true };
+    });
+  },
+
+  /** Read one table's grid back and work out what changed.
+      Returns {changed, added, removed, clashes} without writing anything, so a
+      caller can show the damage before doing it. */
+  readTable(appId, tableName, grid) {
+    const S = IO.spec(appId), R = g.Rec;
+    const t = (S.tables || []).filter(x => x.name === tableName)[0];
+    const out = { changed: [], added: [], removed: [], clashes: [] };
+    if (!t || !grid || grid.length < 2) return out;
+
+    const seen = {};
+    grid.slice(1).forEach(line => {
+      if (!line || !line.length) return;
+      const id = String(line[0] || '').trim();
+      const date = String(line[1] || '').trim() || null;
+      const blank = t.cols.every((c, i) => String(line[2 + i] == null ? '' : line[2 + i]).trim() === '');
+      if (id) seen[id] = true;
+
+      if (id && blank) { out.removed.push({ key: id, date: date }); return; }
+      if (blank) return;
+
+      const prev = id ? R.row(t.type, date, id) : null;
+      const payload = prev ? JSON.parse(JSON.stringify(prev.payload)) : {};
+      let differs = false;
+      t.cols.forEach((c, i) => {
+        let v = line[2 + i];
+        if (typeof v === 'string') v = v.trim();
+        /* a column that held a number keeps holding one */
+        const was = IO.reach(payload, c[0]);
+        if (typeof was === 'number' || (was == null && v !== '' && isFinite(v) && String(v).trim() !== '')) {
+          const n = parseFloat(v);
+          if (isFinite(n)) v = n;
+        }
+        if (v === '') v = null;
+        if (JSON.stringify(was == null ? null : was) !== JSON.stringify(v)) {
+          IO.plant(payload, c[0], v);
+          differs = true;
+        }
+      });
+
+      if (!prev) { out.added.push({ key: id || null, date: date, payload: payload, type: t.type }); return; }
+      if (!differs) return;
+
+      /* Newest wins, per row, the same rule the store already merges by. The
+         sheet stamps its own edits; if the phone's is newer the phone keeps
+         it, and the loser is recorded rather than dropped so nothing vanishes
+         without a trace. */
+      /* updated_at is an ISO string, so both sides get parsed to numbers.
+         Comparing a number against the string silently coerced to NaN and no
+         clash was ever detected — the sheet always appeared to win. */
+      const sheetAt = Date.parse(line[2 + t.cols.length] || '') || 0;
+      const ourAt = Date.parse(prev.updated_at) || 0;
+      if (sheetAt && ourAt && sheetAt < ourAt) {
+        out.clashes.push({
+          type: t.type, key: id, date: date, table: tableName,
+          kept: 'phone', at: prev.updated_at,
+          theirs: payload, ours: prev.payload,
+        });
+        return;
+      }
+      out.changed.push({ type: t.type, key: id, date: date, payload: payload });
+    });
+
+    /* a line deleted outright in the sheet, rather than emptied */
+    R.all(t.type).forEach(r => { if (!seen[r.key]) out.removed.push({ key: r.key, date: r.date, gone: true }); });
+    return out;
+  },
+
+  /** apply what readTable found */
+  applyTable(appId, diff, opts) {
+    const R = g.Rec;
+    opts = opts || {};
+    let n = 0;
+    (diff.changed || []).forEach(c => { R.set(c.type, c.date, c.key, c.payload); n++; });
+    (diff.added || []).forEach(a => {
+      const key = a.key || (R.USER + '-' + Date.now().toString(36) + '-' + (n).toString(36));
+      R.set(a.type, a.date, key, a.payload); n++;
+    });
+    /* Deleting from a spreadsheet is easy to do by accident, so it only
+       happens when the caller says so. */
+    if (opts.allowDelete) (diff.removed || []).forEach(r0 => { R.del(r0.type || diff.type, r0.date, r0.key); n++; });
+    return n;
   },
   spec(appId) { return apps[appId] || { app: appId, name: appId, types: [] }; },
 
@@ -227,6 +378,14 @@ const IO = {
     const S = IO.spec(appId);
     return tickSheets(days).concat(S.sheets ? S.sheets() : []);
   },
+
+  /** everything that goes in the workbook: the read-outs, then the tables you
+      can type into, then the exact rows. Named so the three are never confused
+      for each other at a glance. */
+  workbook(appId, days) {
+    const read = IO.sheets(appId, days).map(x => Object.assign({}, x, { name: x.name }));
+    return read.concat(IO.tables(appId));
+  },
   export(appId) {
     const sheets = IO.sheets(appId);
     if (!sheets.length) return toast('nothing to export yet');
@@ -239,6 +398,7 @@ const IO = {
         return;
       }
       const wb = X.utils.book_new();
+      IO.tables(appId).forEach(t => sheets.push(t));
       sheets.forEach(s => {
         const ws = X.utils.aoa_to_sheet(s.rows);
         if (s.widths) ws['!cols'] = s.widths.map(w => ({ wch: w }));
