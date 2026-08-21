@@ -187,6 +187,9 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
   position:relative;
 }
 .fab:active{transform:scale(.94)}
+/* something is still open today */
+.fab.dot::after{content:'';position:absolute;top:2px;right:2px;width:12px;height:12px;
+  border-radius:50%;background:var(--warn);border:2px solid var(--surface-1)}
 
 /* ── tabs ── */
 nav{
@@ -1587,21 +1590,32 @@ const dueToday = (f, date) => !f.days || !f.days.length || f.days.indexOf(Day.do
 const outstanding = () => liveFields().filter(f => f.once && dueToday(f) && !logged(vd(), f.id));
 
 /* ── the quick add ──
-   Four buttons, in the same four places every time. It used to list whatever
-   was outstanding, then every multi-entry field, then Food and Spending — so
-   the contents moved through the day and the button you wanted was somewhere
-   different each time you opened it. A grid you have to read is not a quick
-   add; the whole value is knowing where your thumb goes before you look.
+   Two halves, and the top one empties itself.
 
-   These four because they are the ones that happen more than once a day.
-   Weight, sleep and steps are once, and their tiles are already on Today, one
-   tap each — a tile with nothing in it is its own reminder, which is why the
-   amber dot came off the button as well. A badge pointing at a list that is
-   no longer in the sheet is a badge that lies.
+   Above: whatever is still unlogged today, in the order the tiles are in on
+   Today. Same list, same sequence, so the button is where the gap was — you
+   look at the island, see a dash, open the sheet, and the thing is in the
+   position you just looked at. That is the part worth keeping: while there is
+   a list, it is the shortest path to the end of it, and it shrinks by one
+   every time you use it.
+
+   Below: four that never move. Mood, Energy, Food, Spending — the things you
+   do more than once a day, so they can never be "done" and can never leave.
+   They stay in the same four places whether the list above is five items or
+   nothing, which is what makes the sheet learnable rather than something you
+   read each time.
+
+   So it builds itself until everything once-a-day is in, then it settles down
+   to the four. The amber dot on the + tracks the top half exactly, and when
+   the top half is empty the dot is gone.
+
+   Food and Spending sit below rather than in the list because they are never
+   finished either — hiding them behind an unweighed morning would mean not
+   logging lunch until you had stood on a scale.
 
    Mood and Energy are looked up rather than assumed, so turning one off takes
-   its button with it instead of leaving one that opens nothing. QUICK is
-   where to change which two. */
+   its button with it instead of leaving one that opens nothing. QUICK is the
+   line to change to pick a different two. */
 const QUICK = ['mood', 'energy'];
 
 function quickField(key) {
@@ -1612,6 +1626,24 @@ function quickField(key) {
 function fastInput() {
   openSheet('Log', body => {
     if (!Day.isToday(vd())) body.appendChild(el('div', 'warnbox', 'Logging into ' + esc(Day.label(vd())) + ', not today.'));
+
+    /* outstanding() is liveFields() narrowed, so it is already in tile order
+       — the island and this list cannot drift apart without someone changing
+       both */
+    const out = outstanding();
+    if (out.length) {
+      const g = el('div');
+      g.style.marginBottom = 'var(--s3)';
+      out.forEach(f => {
+        const hint = f.target ? '<span class="muted mono">' + (f.dir === 'lte' ? '≤' : '≥') + ' ' + f.target +
+          (f.unit ? ' ' + esc(f.unit) : '') + '</span>' : '';
+        const b = el('button', 'btn wide mb-press mb-tap', esc(f.label) + (hint ? '  ' + hint : ''));
+        b.style.cssText = 'margin-bottom:var(--s2);min-height:var(--tap);text-align:left';
+        b.onclick = () => fieldSheet(f, vd());
+        g.appendChild(b);
+      });
+      body.appendChild(g);
+    }
 
     const row = el('div', 'grid2');
     const big = (label, fn) => {
@@ -2468,6 +2500,9 @@ function seamButton(m) {
   const b = el('button', 'fab mb-press mb-tap');
   b.setAttribute('aria-label', 'Add');
   b.textContent = '+';
+  /* exactly the list at the top of the sheet, so the badge is a promise the
+     sheet keeps */
+  if (outstanding().length) b.className += ' dot';
   b.onclick = () => { Mobile.feedback('open'); fastInput(); };
   w.appendChild(b);
   m.appendChild(w);

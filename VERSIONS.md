@@ -16,6 +16,26 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.5 — 2026-08-21
+
+**The + builds itself again, and then settles down.** 0.1.4 threw out the
+self-building list and it should not have. Corrected here.
+
+Two halves now. On top, whatever is still unlogged today, in the same order as
+the tiles on Today — so you look at the island, see a dash, open the sheet,
+and the button is in the position you just looked at. It shrinks by one each
+time you use it and disappears when the day is in.
+
+Underneath, the four that never move: Mood, Energy, Food, Spending. Those
+happen more than once a day, so they can never be finished and can never
+leave. Food and Spending are down there rather than in the list on purpose:
+hiding lunch behind an unweighed morning would be absurd.
+
+The amber dot on the + is back, and it tracks the top half exactly — dot means
+there is a list, no dot means there is not.
+
+---
+
 ## 0.1.4 — 2026-08-21
 
 **The + button is four buttons now: Mood, Energy, Food, Spending.** It used to
