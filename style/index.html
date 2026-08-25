@@ -10,15 +10,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<script src="../shared/skins.js?v=7"></script>
-<script src="../shared/day.js?v=7"></script>
-<script src="../shared/records.js?v=7"></script>
-<script src="../shared/mobile.js?v=7"></script>
-<script src="../shared/sound.js?v=7"></script>
-<script src="../shared/ui.js?v=7"></script>
-<script src="../shared/io.js?v=7"></script>
-<script src="../shared/health.js?v=7"></script>
-<script src="../shared/icons.js?v=7"></script>
+<script src="../shared/skins.js?v=8"></script>
+<script src="../shared/day.js?v=8"></script>
+<script src="../shared/records.js?v=8"></script>
+<script src="../shared/mobile.js?v=8"></script>
+<script src="../shared/sound.js?v=8"></script>
+<script src="../shared/ui.js?v=8"></script>
+<script src="../shared/io.js?v=8"></script>
+<script src="../shared/health.js?v=8"></script>
+<script src="../shared/icons.js?v=8"></script>
 
 <style>
 /* A desktop app, like most of the suite: only STATUS and TRAIN are built for a
@@ -60,6 +60,8 @@ header{
 /* Every action carries its icon. STYLE owns the icon set; it should be the
    first thing using it. */
 header .mb-btn{display:inline-flex;align-items:center;gap:6px}
+.isum .mb-btn{display:inline-flex;align-items:center;gap:6px}
+.isum .mb-btn.on{border-color:var(--accent);color:var(--accent)}
 .grp{display:flex;align-items:center;gap:var(--s-2)}
 
 /* ---------- three panes ---------- */
@@ -153,6 +155,18 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
    every control is a shared component, so what is left here is the pane it
    sits in and two shapes the kit has no opinion about. */
 .pad{padding:var(--s-4)}
+/* A 360px column cannot hold a long label and a long control on one line.
+   Stack them: the shared row, its shared label and its shared control, just
+   arranged for the space they actually have. */
+.editor .mb-row{flex-direction:column;align-items:stretch;gap:var(--s-2)}
+.editor .mb-row .lbl{flex:none}
+.editor .mb-row > *:not(.lbl){width:100%}
+.editor .mb-sel,.editor .mb-input{width:100%}
+.editor .pair{width:100%}
+.editor .pair .hex{flex:1;min-width:0;width:auto}
+.editor .pair .mb-range{flex:1;min-width:0;width:auto}
+/* A switch should not stretch to the width of the pane. */
+.editor .mb-row > .mb-sw{width:auto;align-self:flex-start}
 .pair{display:flex;align-items:center;gap:var(--s-2);flex:0 0 auto}
 .pair .hex{width:104px;font-family:var(--font-mono);font-size:var(--f-1)}
 .pair .val{min-width:38px;text-align:right;color:var(--text-muted);font-size:var(--f-1)}
@@ -160,7 +174,9 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
 .btns{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:var(--s-3) 0}
 .btns .mb-btn{display:inline-flex;align-items:center;gap:6px}
 .iprev{display:flex;gap:var(--s-4);padding:var(--s-3) 0;color:var(--text-1)}
+.iprev.wrap{flex-wrap:wrap;gap:var(--s-3)}
 .css{font-family:var(--font-mono);font-size:var(--f-1);min-height:150px}
+.mono{font-family:var(--font-mono);font-size:var(--f-1)}
 .warn{color:var(--warn);font-size:var(--f-1);line-height:var(--lh-body)}
 .note{color:var(--text-muted);font-size:var(--f-1);line-height:var(--lh-body);
   padding-bottom:var(--s-3)}
@@ -215,7 +231,7 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
 /* Bumped whenever this file changes in a way you would notice. If the number
    on screen is behind the one in the repo, the browser is serving a cached
    copy and nothing you do will appear to work. */
-const BUILD = 'build 7';
+const BUILD = 'build 8';
 
 const APP = {
   id: 'style',
@@ -386,6 +402,56 @@ const SAMPLE_HTML = `
 <button id="fab">+</button>
 `;
 
+/* ---- background patterns ----
+   Written once here rather than typed into every theme. Each is a plain CSS
+   background, so it costs nothing, works offline and themes with the accent. */
+const BGP = {
+  glow:  () => ({ image: 'radial-gradient(ellipse at 50% 0%,rgba(255,255,255,.07),transparent 62%)',
+                  size: '100% 100%' }),
+  grid:  () => ({ image: 'linear-gradient(rgba(128,128,128,.10) 1px,transparent 1px),'
+                       + 'linear-gradient(90deg,rgba(128,128,128,.10) 1px,transparent 1px)',
+                  size: '32px 32px,32px 32px' }),
+  dots:  () => ({ image: 'radial-gradient(rgba(128,128,128,.16) 1px,transparent 1.6px)',
+                  size: '14px 14px' }),
+  lines: () => ({ image: 'repeating-linear-gradient(0deg,rgba(0,0,0,.16) 0 1px,transparent 1px 3px)',
+                  size: 'auto' }),
+  hatch: () => ({ image: 'repeating-linear-gradient(45deg,rgba(128,128,128,.08) 0 2px,transparent 2px 6px)',
+                  size: 'auto' }),
+  paper: () => ({ image: 'radial-gradient(rgba(255,255,255,.035) 1px,transparent 1.5px),'
+                       + 'radial-gradient(rgba(0,0,0,.035) 1px,transparent 1.5px)',
+                  size: '7px 7px,11px 11px' }),
+};
+
+/* A picture becomes part of the theme, so it has to be small enough to live in
+   a row and travel in a backup. Shrunk to fit and re-encoded before it is
+   stored; a 4MB photo off a phone would otherwise sit in localStorage forever. */
+function loadBackground(file) {
+  const MAXPX = 1600, MAXKB = 500;
+  const r = new FileReader();
+  r.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const sc = Math.min(1, MAXPX / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      let url = c.toDataURL('image/jpeg', 0.82);
+      if (url.length > MAXKB * 1400) url = c.toDataURL('image/jpeg', 0.62);
+      const kb = Math.round(url.length / 1400);
+      draft.texture = draft.texture || {};
+      draft.texture.image = 'url("' + url + '")';
+      draft.texture.size = 'cover';
+      touch(); drawEditor();
+      UI.toast('picture added, <b>' + kb + 'kb</b>'
+        + (kb > MAXKB ? ' &mdash; that is large for a theme' : ''));
+    };
+    img.onerror = () => UI.toast('that file is not a picture this browser can read', { bad: true });
+    img.src = r.result;
+  };
+  r.onerror = () => UI.toast('could not read that file', { bad: true });
+  r.readAsDataURL(file);
+}
+
 /* The full token set for a theme, palette included, without painting the page.
    This is `apply()` minus the side effects, which is exactly what a preview
    needs and exactly what a live edit needs. */
@@ -517,6 +583,23 @@ function drawIcons() {
     box.appendChild(g);
   }
 
+  const packBar = document.createElement('div');
+  packBar.className = 'isum';
+  packBar.innerHTML = '<b>Pack.</b> ';
+  Icons.packs().forEach(id => {
+    const b = document.createElement('button');
+    b.className = 'mb-btn mb-press mb-tap' + (Icons.packOf(skin) === id ? ' on' : '');
+    b.style.marginRight = 'var(--s-2)';
+    b.innerHTML = Icons.svg('add', { size: 14, skin: Object.assign({}, skin, { iconPack: id, icon: null }) })
+      + '<span>' + esc(Icons.PACKS[id].name) + '</span>';
+    b.onclick = () => {
+      if (!draft) return;
+      draft.iconPack = id; delete draft.icon; touch(); drawGrid(); drawEditor();
+    };
+    packBar.appendChild(b);
+  });
+  box.appendChild(packBar);
+
   const audit = document.createElement('div');
   audit.className = 'isum';
   audit.innerHTML = '<b>Coverage.</b> Checking which apps still use a plain '
@@ -535,7 +618,9 @@ function drawIcons() {
     c.innerHTML =
       '<div class="draw">' + Icons.svg(users[0] || id, { size: 26, skin: skin }) + '</div>'
       + '<div class="meta"><div class="iname">' + esc(id) + '</div>'
-      + '<div class="inote">' + esc(Icons.NOTES[id] || (users.length + ' buttons')) + '</div>'
+      + '<div class="inote">' + esc(Icons.NOTES[id] || (users.length + ' buttons'))
+      + (Icons.packRedraws(Icons.packOf(skin)).indexOf(id) > -1
+          ? ' <b style="color:var(--accent)">pack</b>' : '') + '</div>'
       + '<div class="chips"></div></div>';
     const chips = c.querySelector('.chips');
     users.forEach(role => {
@@ -975,6 +1060,111 @@ function drawEditor() {
     'Spacing and tap targets are not on this list on purpose. A theme changes '
     + 'how a box is drawn, never where it sits.'));
 
+  /* -- the surfaces the four base colours cannot reach -- */
+  group('SURFACES');
+  pad.appendChild(el('p', 'note',
+    'These are worked out from the four colours above. Set one only when the '
+    + 'guess is wrong for this theme, which is usually a raised button that '
+    + 'needs to be lighter than the card it sits on.'));
+  const OVR = [
+    ['--surface-2', 'Recessed fill', 'wells, rows, inputs'],
+    ['--surface-3', 'Raised fill', 'button faces'],
+    ['--border', 'Border', 'the ordinary line'],
+    ['--border-strong', 'Strong border', 'the emphasised line'],
+    ['--text-2', 'Secondary text', 'still readable, less loud'],
+    ['--text-muted', 'Muted text', 'notes and captions'],
+  ];
+  const derived = Skins.tokensFor(Object.assign({}, s, { overrides: {} }));
+  OVR.forEach(([k, t, n]) => {
+    const o = s.overrides || (s.overrides = {});
+    const row = colourRow(t, n + (o[k] ? '' : ' (worked out)'),
+      () => o[k] || derived[k],
+      v => { o[k] = v; });
+    /* a way back to the worked-out value */
+    const clear = document.createElement('button');
+    clear.className = 'mini';
+    clear.textContent = 'auto';
+    clear.title = 'Go back to the worked-out colour';
+    clear.onclick = () => { delete o[k]; touch(); drawEditor(); };
+    if (o[k]) row.querySelector('.pair').appendChild(clear);
+    pad.appendChild(row);
+  });
+
+  /* -- the page behind everything -- */
+  group('BACKGROUND');
+  const BGS = [
+    ['none', 'Nothing'],
+    ['glow', 'Glow from the top'],
+    ['grid', 'Grid'],
+    ['dots', 'Dots'],
+    ['lines', 'Scanlines'],
+    ['hatch', 'Diagonal hatch'],
+    ['paper', 'Paper grain'],
+    ['custom', 'My own CSS'],
+    ['image', 'A picture'],
+  ];
+  const bgKind = () => {
+    const im = tex.image || 'none';
+    if (im === 'none' || !im) return 'none';
+    if (/^url\(/.test(im)) return 'image';
+    for (const k of Object.keys(BGP)) if (im === BGP[k]().image) return k;
+    return 'custom';
+  };
+  pad.appendChild(pickRow('Pattern', 'drawn behind every screen',
+    BGS, bgKind(), v => {
+      if (v === 'none') { tex.image = 'none'; tex.size = 'auto'; }
+      else if (v === 'custom' || v === 'image') { /* leave what is there */ }
+      else { const p = BGP[v](); tex.image = p.image; tex.size = p.size; }
+      drawEditor();
+    }));
+
+  if (bgKind() === 'image') {
+    pad.appendChild(el('p', 'note', 'A picture is stored inside the theme, so it '
+      + 'travels in the backup and works offline. It is shrunk on the way in.'));
+  }
+  const pickFile = document.createElement('input');
+  pickFile.type = 'file'; pickFile.accept = 'image/*'; pickFile.style.display = 'none';
+  pickFile.onchange = () => { if (pickFile.files[0]) loadBackground(pickFile.files[0]); };
+  const chooser = document.createElement('button');
+  chooser.className = 'mb-btn mb-press mb-tap';
+  chooser.innerHTML = Icons.svg('photo', { size: 15 }) + '<span>CHOOSE A PICTURE</span>';
+  chooser.onclick = () => pickFile.click();
+  const bgBtns = el('div', 'btns');
+  bgBtns.appendChild(chooser);
+  if (/^url\(/.test(tex.image || '')) {
+    const drop = document.createElement('button');
+    drop.className = 'mb-btn mb-press mb-tap';
+    drop.innerHTML = Icons.svg('delete', { size: 15 }) + '<span>REMOVE</span>';
+    drop.onclick = () => { tex.image = 'none'; tex.size = 'auto'; touch(); drawEditor(); };
+    bgBtns.appendChild(drop);
+  }
+  bgBtns.appendChild(pickFile);
+  pad.appendChild(bgBtns);
+
+  const bgCss = UI.field('text', { value: tex.image || 'none' });
+  bgCss.classList.add('mono');
+  bgCss.onchange = () => { tex.image = bgCss.value.trim() || 'none'; touch(); };
+  pad.appendChild(UI.row('CSS background', 'any background-image value', bgCss));
+  const bgSize = UI.field('text', { value: tex.size || 'auto' });
+  bgSize.classList.add('mono');
+  bgSize.onchange = () => { tex.size = bgSize.value.trim() || 'auto'; touch(); };
+  pad.appendChild(UI.row('Size', 'cover, auto, or per layer', bgSize));
+
+  /* -- letter spacing -- */
+  group('LETTER SPACING');
+  const tr = s.track || (s.track = {});
+  const trackRow = (key, title, note, def) => {
+    const f = UI.field('text', { value: tr[key] != null ? tr[key] : def });
+    f.classList.add('mono');
+    f.onchange = () => { tr[key] = f.value.trim(); touch(); };
+    pad.appendChild(UI.row(title, note, f));
+  };
+  trackRow('cap', 'Small capitals', 'headings and buttons', '.18em');
+  trackRow('body', 'Body text', 'usually zero', '0');
+  trackRow('tight', 'Big numbers', 'usually slightly negative', '-.01em');
+  pad.appendChild(el('p', 'note', 'Kept on a short leash on purpose. This is the '
+    + 'one lever that can wreck a line of text at a width nobody tested.'));
+
   /* -- type -- */
   group('TYPE');
   const dCur = fontByStack(tex.display || ''), bCur = fontByStack(tex.body || '');
@@ -997,20 +1187,38 @@ function drawEditor() {
     + 'fall back to the system face.'));
 
   /* -- icons -- */
-  group('ICONS');
+  group('ICON PACK');
+  const packOpts = Icons.packs().map(id => [id, Icons.PACKS[id].name]);
+  pad.appendChild(pickRow('Pack', 'swaps every icon at once',
+    packOpts, Icons.packOf(s), v => { s.iconPack = v; delete s.icon; drawEditor(); }));
+  const pk = Icons.PACKS[Icons.packOf(s)];
+  const redrawn = Icons.packRedraws(Icons.packOf(s)).length;
+  pad.appendChild(el('p', 'note', esc(pk.note)
+    + (redrawn ? ' <b>' + redrawn + ' of ' + Icons.list().length
+        + '</b> drawings are its own; the rest inherit.' : '')));
+  const packStrip = el('div', 'iprev wrap');
+  packStrip.innerHTML = ['add','delete','today','food','train','settings','chart',
+    'search','play','grid','star','close']
+    .map(r => Icons.svg(r, { size: 22, skin: s })).join('');
+  pad.appendChild(packStrip);
+
+  group('FINE TUNING');
+  pad.appendChild(el('p', 'note',
+    'The pack sets these. Change one only if this theme needs to differ from it.'));
   const ipreview = el('div', 'iprev');
   const ipaint = () => {
     ipreview.innerHTML = ['add', 'delete', 'today', 'food', 'train', 'settings']
       .map(r => Icons.svg(r, { size: 24, skin: s })).join('');
   };
+  const st = Icons.styleFor(s);
   pad.appendChild(slideRow('Line weight', 'how heavy the stroke is', 1, 3, 0.05,
-    () => (ico.weight != null ? ico.weight : 1.75), v => { ico.weight = v; ipaint(); }));
+    () => st.weight, v => { ico.weight = v; ipaint(); }));
   pad.appendChild(pickRow('Line ends', null, ['round', 'butt', 'square'],
-    ico.cap || 'round', v => { ico.cap = v; ipaint(); }));
+    st.cap, v => { ico.cap = v; ipaint(); }));
   pad.appendChild(pickRow('Corners', null, ['round', 'miter', 'bevel'],
-    ico.join || 'round', v => { ico.join = v; ipaint(); }));
+    st.join, v => { ico.join = v; ipaint(); }));
   pad.appendChild(UI.row('Hand-drawn wobble', 'for a theme that is drawn, not printed',
-    UI.toggle(!!ico.wobble, v => { ico.wobble = v; ipaint(); touch(); })));
+    UI.toggle(!!st.wobble, v => { ico.wobble = v; ipaint(); touch(); })));
   pad.appendChild(ipreview);
   ipaint();
   pad.appendChild(el('p', 'note',
