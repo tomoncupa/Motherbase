@@ -10,15 +10,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<script src="../shared/skins.js"></script>
-<script src="../shared/day.js"></script>
-<script src="../shared/records.js"></script>
-<script src="../shared/mobile.js"></script>
-<script src="../shared/sound.js"></script>
-<script src="../shared/ui.js"></script>
-<script src="../shared/io.js"></script>
-<script src="../shared/health.js"></script>
-<script src="../shared/icons.js"></script>
+<script src="../shared/skins.js?v=3"></script>
+<script src="../shared/day.js?v=3"></script>
+<script src="../shared/records.js?v=3"></script>
+<script src="../shared/mobile.js?v=3"></script>
+<script src="../shared/sound.js?v=3"></script>
+<script src="../shared/ui.js?v=3"></script>
+<script src="../shared/io.js?v=3"></script>
+<script src="../shared/health.js?v=3"></script>
+<script src="../shared/icons.js?v=3"></script>
 
 <style>
 /* STYLE is the one app in the suite built for a computer first. Tom asked for
@@ -166,11 +166,13 @@ textarea{width:100%;min-height:150px;background:var(--surface-2);color:var(--tex
 <header>
   <div class="logo">STY<b>LE</b></div>
   <div class="sub" id="count"></div>
+  <div class="sub" id="build" title="If this number is behind, your browser is showing you a cached copy. Hold Shift and press reload."></div>
   <div class="spacer"></div>
   <button class="mb-btn mb-press mb-tap" onclick="pasteTheme()">PASTE A THEME</button>
   <button class="mb-btn mb-press mb-tap" onclick="briefForClaude()">BRIEF FOR CLAUDE</button>
   <button class="mb-btn mb-press mb-tap" id="tab-themes" onclick="setView('themes')">THEMES</button>
   <button class="mb-btn mb-press mb-tap" id="tab-icons" onclick="setView('icons')">ICONS</button>
+  <button class="mb-btn mb-press mb-tap" onclick="tidy()">TIDY</button>
   <button class="mb-btn mb-press mb-tap" onclick="assignApps()">APPS</button>
   <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
   <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'">◈</button>
@@ -197,6 +199,11 @@ textarea{width:100%;min-height:150px;background:var(--surface-2);color:var(--tex
    here, and it is a theme. So the exchange format IS a skins.json entry and
    nothing else — there is no second format to keep in step.                   */
 
+/* Bumped whenever this file changes in a way you would notice. If the number
+   on screen is behind the one in the repo, the browser is serving a cached
+   copy and nothing you do will appear to work. */
+const BUILD = 'build 3';
+
 const APP = {
   id: 'style',
   name: 'STYLE',
@@ -204,6 +211,8 @@ const APP = {
   blurb: 'pick, compare, edit and add themes',
   types: ['skin'],
 };
+
+document.getElementById('build').textContent = BUILD;
 
 Sfx.init(APP.id);
 Rec.declare(APP.id, APP.types);
@@ -963,6 +972,36 @@ function newTheme() {
 
 const slug = s => String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-')
   .replace(/^-|-$/g, '').slice(0, 32) || ('theme-' + Date.now().toString(36));
+
+/* ---- clear the lot ----
+   Deleting six half-made themes one at a time is a chore, and a chore is how
+   they end up staying. This removes every theme that is yours and leaves every
+   factory one alone. Undo puts them all back. */
+function tidy() {
+  const ours = Skins.list().filter(s => !Skins.factory(s.id));
+  const edits = Skins.list().filter(s => Skins.factory(s.id) && Skins.isEdited(s.id));
+  if (!ours.length && !edits.length) { UI.toast('nothing to tidy'); return; }
+  const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+  UI.confirm(
+    'Clear ' + plural(ours.length, 'theme of your own', 'themes of your own')
+      + ' and reset ' + plural(edits.length, 'edited one', 'edited ones') + '?',
+    'Your own themes are deleted and the factory themes you changed go back to '
+    + 'how they ship. Nothing else is touched, and you can undo it straight after.',
+    { title: 'TIDY UP', yes: 'CLEAR', danger: true }
+  ).then(ok => {
+    if (!ok) return;
+    /* Everything is kept whole so a single UNDO puts the lot back. */
+    const kept = ours.concat(edits).map(s => ({ id: s.id, row: clone(Rec.get('skin', null, s.id) || s) }));
+    kept.forEach(k => Skins.forget(k.id));
+    sel = Skins.list()[0].id; draft = clone(Skins.get(sel)); dirty = false;
+    Skins.apply(Skins.get(sel));
+    drawAll();
+    UI.undo('cleared <b>' + kept.length + '</b> themes', () => {
+      kept.forEach(k => Rec.set('skin', null, k.id, k.row));
+      drawAll();
+    });
+  });
+}
 
 /* ---- the paste box ----
    The whole reason STYLE exists in the shape it does. Show Claude some

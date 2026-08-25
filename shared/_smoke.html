@@ -609,6 +609,33 @@ function run() {
     Skins.forget('ice');
     return live && factoryUntouched && edited;
   })());
+  /* forget() used to write customs() back into the legacy blob, which copied
+     every row-backed theme into the old store on every delete. Deleting one
+     theme therefore made stale duplicates of all the others, and stale
+     duplicates are how a theme comes back with no explanation. */
+  ok('skins: deleting one theme does not copy the others into the old store', (() => {
+    const KEY = 'suite_skins_custom', had = localStorage.getItem(KEY);
+    localStorage.removeItem(KEY);
+    const mk = id => ({ id: id, name: id, mode: 'dark', custom: true,
+      base: { bg: '#000000', panel: '#111111', accent: '#FF0090', text: '#FFFFFF' } });
+    ['__k1', '__k2'].forEach(id => Skins.saveCustom(mk(id)));
+    Skins.forget('__k1');
+    const blob = JSON.parse(localStorage.getItem(KEY) || '[]');
+    const leaked = blob.some(x => x && Rec.get('skin', null, x.id));
+    Skins.forget('__k2');
+    if (had != null) localStorage.setItem(KEY, had); else localStorage.removeItem(KEY);
+    return !leaked;
+  })());
+  ok('skins: a theme in the legacy store can still be deleted', (() => {
+    const KEY = 'suite_skins_custom', had = localStorage.getItem(KEY);
+    localStorage.setItem(KEY, JSON.stringify([{ id: '__old', name: 'Old', mode: 'dark',
+      base: { bg: '#000000', panel: '#111111', accent: '#FF0090', text: '#FFFFFF' } }]));
+    const there = Skins.list().some(k => k.id === '__old');
+    Skins.forget('__old');
+    const gone = !Skins.list().some(k => k.id === '__old');
+    if (had != null) localStorage.setItem(KEY, had); else localStorage.removeItem(KEY);
+    return there && gone;
+  })());
   ok('skins: forgetting an edited theme puts the factory one back', (() => {
     Skins.saveCustom(Object.assign({}, Skins.factory('ice'), { weight: 4, custom: true }));
     Skins.forget('ice');

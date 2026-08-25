@@ -307,10 +307,23 @@ const Skins={
     return skin;
   },
   forget(id){
+    /* The row is the real one. */
     try{if(typeof Rec!=='undefined'&&typeof Rec.del==='function')Rec.del('skin',null,id)}catch(e){}
-    try{const all=this.customs().filter(s=>s.id!==id&&!this.factory(s.id));
-      localStorage.setItem('suite_skins_custom',JSON.stringify(all))}catch(e){}
+    /* Then prune the legacy blob, and ONLY prune it.
+       This used to write customs() back into that key, which quietly copied
+       every row-backed theme into the old store on every delete. Deleting one
+       theme therefore made stale duplicates of all the others, and those
+       duplicates are exactly the sort of thing that reappears later with no
+       explanation. Read the key, remove this id, put it back. Nothing else. */
+    try{
+      const raw=JSON.parse(localStorage.getItem('suite_skins_custom')||'[]')||[];
+      const left=raw.filter(s=>s&&s.id!==id);
+      if(left.length)localStorage.setItem('suite_skins_custom',JSON.stringify(left));
+      else localStorage.removeItem('suite_skins_custom');
+    }catch(e){}
   },
+  /* Every theme that is yours rather than the factory's. */
+  minesOnly(){return this.list().filter(s=>!this.factory(s.id))},
   custom(base,name,cut){return{id:'custom-'+Date.now().toString(36),name:name||'Custom',
     mode:lum(base.bg)>.5?'light':'dark',cut:cut||'10px',base:base,custom:true}},
   tokensFor(skin){return tokens(skin.base,skin.cut,this.data.ranks,skin)},
