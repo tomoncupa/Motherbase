@@ -10,15 +10,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<script src="../shared/skins.js?v=6"></script>
-<script src="../shared/day.js?v=6"></script>
-<script src="../shared/records.js?v=6"></script>
-<script src="../shared/mobile.js?v=6"></script>
-<script src="../shared/sound.js?v=6"></script>
-<script src="../shared/ui.js?v=6"></script>
-<script src="../shared/io.js?v=6"></script>
-<script src="../shared/health.js?v=6"></script>
-<script src="../shared/icons.js?v=6"></script>
+<script src="../shared/skins.js?v=7"></script>
+<script src="../shared/day.js?v=7"></script>
+<script src="../shared/records.js?v=7"></script>
+<script src="../shared/mobile.js?v=7"></script>
+<script src="../shared/sound.js?v=7"></script>
+<script src="../shared/ui.js?v=7"></script>
+<script src="../shared/io.js?v=7"></script>
+<script src="../shared/health.js?v=7"></script>
+<script src="../shared/icons.js?v=7"></script>
 
 <style>
 /* A desktop app, like most of the suite: only STATUS and TRAIN are built for a
@@ -106,13 +106,21 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
 .pv.on{border-color:var(--accent);box-shadow:var(--e-3)}
 .pvhead{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-2) var(--s-3);
   border-bottom:var(--border-width) solid var(--border);background:var(--surface-2)}
-.pvhead .nm{flex:1;font-family:var(--font-display);font-size:var(--f-1);
-  letter-spacing:var(--track-cap);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 .pvwrap{position:relative;height:540px}
 .pvwrap iframe{width:100%;height:100%;border:0;display:block;background:var(--bg)}
 /* The frame is a picture of a theme, not a working app: the sheet swallows
    clicks so the whole tile is one target and nothing inside is tappable. */
 .pvsheet{position:absolute;inset:0;cursor:pointer}
+/* The picker is the head of the slot, so it gets the room. */
+.pvpick{flex:1;min-width:0;font-family:var(--font-display);font-size:var(--f-1);
+  letter-spacing:var(--track-cap);padding:4px var(--s-2)}
+.addpv{display:flex;align-items:center;justify-content:center;
+  border-style:dashed;background:none;box-shadow:none;min-height:200px}
+.addbtn{display:flex;flex-direction:column;align-items:center;gap:var(--s-2);
+  background:none;border:0;color:var(--text-muted);cursor:pointer;font:inherit;
+  font-size:var(--f-1);padding:var(--s-5)}
+.addbtn:hover{color:var(--accent)}
 .mini{border:0;background:none;color:var(--text-muted);cursor:pointer;
   font:inherit;font-size:var(--f-1);padding:var(--s-1) var(--s-2);
   border-radius:var(--radius-sm)}
@@ -207,7 +215,7 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
 /* Bumped whenever this file changes in a way you would notice. If the number
    on screen is behind the one in the repo, the browser is serving a cached
    copy and nothing you do will appear to work. */
-const BUILD = 'build 6';
+const BUILD = 'build 7';
 
 const APP = {
   id: 'style',
@@ -616,48 +624,119 @@ function moveRole(role, x, y) {
   UI.menu(x, y, items);
 }
 
+/* ---- the comparison slots ----
+   The canvas is not one tile per theme. Sixteen previews is a wall, and it
+   makes the answer to "how do these two compare" worse rather than better.
+
+   It is a small number of SLOTS instead. Each one picks its own theme and can
+   be closed, so what is on screen is the handful you are actually deciding
+   between. Closing a slot hides a mock-up; it does nothing whatsoever to the
+   theme, which stays in the list on the left.
+
+   The arrangement is saved, so the three you were comparing are still there
+   tomorrow. */
+const MAX_SLOTS = 6, DEFAULT_SLOTS = 3;
+
+function slots() {
+  let saved = null;
+  try { saved = Rec.setting('style', 'slots'); } catch (e) {}
+  const all = Skins.list().map(k => k.id);
+  let ids = Array.isArray(saved) ? saved.filter(id => all.indexOf(id) > -1) : null;
+  if (!ids || !ids.length) ids = all.slice(0, DEFAULT_SLOTS);
+  return ids.slice(0, MAX_SLOTS);
+}
+function setSlots(ids) {
+  try { Rec.setting('style', 'slots', ids.slice(0, MAX_SLOTS)); } catch (e) {}
+  drawGrid();
+}
+
 function drawGrid() {
   if (view === 'icons') return drawIcons();
   const box = $('#grid');
   box.className = 'grid';
   box.innerHTML = '';
-  Skins.list().forEach(s => box.appendChild(tile(s)));
+  const ids = slots();
+  ids.forEach((id, i) => box.appendChild(tile(Skins.get(id), i)));
+  if (ids.length < MAX_SLOTS) box.appendChild(addTile(ids));
 }
 
-function tile(skin) {
+function tile(skin, index) {
   const d = document.createElement('div');
   d.className = 'pv' + (skin.id === sel ? ' on' : '');
   d.dataset.id = skin.id;
-  const inUse = Skins.current && Skins.current.id === skin.id;
-  d.innerHTML =
-    '<div class="pvhead"><span class="nm">' + esc(skin.name) + '</span>'
-    + (inUse ? '<span class="tag">STYLE</span>' : '')
-    + '<button class="mini" data-act="use">USE HERE</button>'
-    + '<button class="mini" data-act="more">\u22ef</button></div>'
-    + '<div class="pvwrap"><iframe title="' + esc(skin.name) + ' preview"></iframe>'
-    + '<div class="pvsheet"></div></div>';
-  const f = d.querySelector('iframe');
-  f.srcdoc = frameHTML(skin);
-  d.querySelector('.pvsheet').onclick = () => select(skin.id);
+  d.dataset.slot = index;
+
+  const head = document.createElement('div');
+  head.className = 'pvhead';
+
+  /* the picker: this slot can show any theme, and swapping is the point */
+  const pick = document.createElement('select');
+  pick.className = 'mb-sel pvpick';
+  pick.innerHTML = Skins.list().map(k =>
+    '<option value="' + esc(k.id) + '"' + (k.id === skin.id ? ' selected' : '') + '>'
+    + esc(k.name) + '</option>').join('');
+  pick.onchange = () => {
+    const ids = slots(); ids[index] = pick.value; setSlots(ids);
+  };
+  head.appendChild(pick);
+
+  if (Skins.current && Skins.current.id === skin.id) {
+    const t = document.createElement('span');
+    t.className = 'tag'; t.textContent = 'STYLE';
+    head.appendChild(t);
+  }
+
+  const mk = (act, label, title, html) => {
+    const b = document.createElement('button');
+    b.className = 'mini'; b.title = title;
+    if (html) b.innerHTML = html; else b.textContent = label;
+    b.onclick = e => { e.stopPropagation(); act(b); };
+    head.appendChild(b);
+    return b;
+  };
+  mk(() => { Skins.apply(skin.id); Sfx.play('drop'); drawAll();
+             UI.toast('STYLE is <b>' + esc(skin.name) + '</b>'); },
+     'USE', 'Make STYLE itself wear this theme');
+  mk(b => { const r = b.getBoundingClientRect(); themeMenu(skin, r.left, r.bottom + 4); },
+     '⋯', 'More');
+  mk(() => { const ids = slots(); ids.splice(index, 1); setSlots(ids); },
+     null, 'Close this mock-up. The theme itself is not touched.',
+     Icons.svg('close', { size: 14 }));
+
+  d.appendChild(head);
+  const wrap = document.createElement('div');
+  wrap.className = 'pvwrap';
+  wrap.innerHTML = '<iframe title="' + esc(skin.name) + ' preview"></iframe>'
+    + '<div class="pvsheet"></div>';
+  wrap.querySelector('iframe').srcdoc = frameHTML(skin);
+  wrap.querySelector('.pvsheet').onclick = () => select(skin.id);
+  d.appendChild(wrap);
   d.oncontextmenu = e => { e.preventDefault(); themeMenu(skin, e.clientX, e.clientY); };
-  d.querySelectorAll('[data-act]').forEach(b => {
-    b.onclick = e => {
-      e.stopPropagation();
-      const a = b.dataset.act;
-      if (a === 'use') { Skins.apply(skin.id); Sfx.play('drop'); drawAll(); UI.toast('STYLE is <b>' + esc(skin.name) + '</b>'); }
-      if (a === 'more') { const r = b.getBoundingClientRect(); themeMenu(skin, r.left, r.bottom + 4); }
-    };
-  });
+  return d;
+}
+
+/* An empty slot, so adding one back is as easy as closing one. */
+function addTile(ids) {
+  const d = document.createElement('div');
+  d.className = 'pv addpv';
+  const unused = Skins.list().filter(k => ids.indexOf(k.id) === -1)[0] || Skins.list()[0];
+  d.innerHTML = '<button class="addbtn mb-press">'
+    + Icons.svg('add', { size: 22 })
+    + '<span>Compare another</span></button>';
+  d.querySelector('.addbtn').onclick = () => setSlots(ids.concat([unused.id]));
   return d;
 }
 
 /* Repaint one tile only. Repainting all eleven on every slider drag is what
    would make the editor feel like treacle. */
 function repaint(skin) {
-  const d = $('.pv[data-id="' + skin.id + '"]');
-  if (!d) { drawGrid(); return; }
-  d.querySelector('iframe').srcdoc = frameHTML(skin);
-  d.querySelector('.pvhead .nm').textContent = skin.name;
+  const tiles = document.querySelectorAll('.pv[data-id="' + skin.id + '"]');
+  if (!tiles.length) return;          /* not on the canvas: nothing to repaint */
+  tiles.forEach(d => {
+    d.querySelector('iframe').srcdoc = frameHTML(skin);
+    const opt = d.querySelector('.pvpick option[value="' + skin.id + '"]');
+    if (opt) opt.textContent = skin.name;
+  });
 }
 
 function drawAll() { drawRail(); drawGrid(); drawEditor(); }
@@ -730,6 +809,17 @@ function select(id) {
   sel = id;
   draft = clone(Skins.get(id));
   dirty = false;
+  /* Editing a theme you cannot see is pointless, so picking one in the list
+     puts it on the canvas: into a free slot if there is one, otherwise into
+     the last slot, which is the least likely to be one of the two you are
+     deliberately holding side by side. */
+  if (view === 'themes') {
+    const ids = slots();
+    if (ids.indexOf(id) === -1) {
+      if (ids.length < MAX_SLOTS) ids.push(id); else ids[ids.length - 1] = id;
+      try { Rec.setting('style', 'slots', ids); } catch (e) {}
+    }
+  }
   drawAll();
 }
 
