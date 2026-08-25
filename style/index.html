@@ -10,15 +10,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<script src="../shared/skins.js?v=8"></script>
-<script src="../shared/day.js?v=8"></script>
-<script src="../shared/records.js?v=8"></script>
-<script src="../shared/mobile.js?v=8"></script>
-<script src="../shared/sound.js?v=8"></script>
-<script src="../shared/ui.js?v=8"></script>
-<script src="../shared/io.js?v=8"></script>
-<script src="../shared/health.js?v=8"></script>
-<script src="../shared/icons.js?v=8"></script>
+<script src="../shared/skins.js?v=9"></script>
+<script src="../shared/day.js?v=9"></script>
+<script src="../shared/records.js?v=9"></script>
+<script src="../shared/mobile.js?v=9"></script>
+<script src="../shared/sound.js?v=9"></script>
+<script src="../shared/ui.js?v=9"></script>
+<script src="../shared/io.js?v=9"></script>
+<script src="../shared/health.js?v=9"></script>
+<script src="../shared/icons.js?v=9"></script>
 
 <style>
 /* A desktop app, like most of the suite: only STATUS and TRAIN are built for a
@@ -61,6 +61,12 @@ header{
    first thing using it. */
 header .mb-btn{display:inline-flex;align-items:center;gap:6px}
 .isum .mb-btn{display:inline-flex;align-items:center;gap:6px}
+.dropzone{display:flex;align-items:center;gap:var(--s-3);cursor:pointer;
+  padding:var(--s-4);border:2px dashed var(--border);border-radius:var(--radius-md);
+  color:var(--text-muted);font-size:var(--f-1)}
+.dropzone:hover,.dropzone.over{border-color:var(--accent);color:var(--text-1)}
+.dropzone.over{background:var(--surface-2)}
+.icard.on{border-color:var(--accent)}
 .isum .mb-btn.on{border-color:var(--accent);color:var(--accent)}
 .grp{display:flex;align-items:center;gap:var(--s-2)}
 
@@ -231,7 +237,7 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
 /* Bumped whenever this file changes in a way you would notice. If the number
    on screen is behind the one in the repo, the browser is serving a cached
    copy and nothing you do will appear to work. */
-const BUILD = 'build 8';
+const BUILD = 'build 9';
 
 const APP = {
   id: 'style',
@@ -542,7 +548,8 @@ function drawTabs() {
   /* The shared segmented control, not a pair of buttons pretending to be one.
      Every other app uses it; STYLE was the only one hand-rolling its chrome. */
   box.appendChild(UI.segmented(
-    [{ id: 'themes', name: 'THEMES' }, { id: 'icons', name: 'ICONS' }],
+    [{ id: 'themes', name: 'THEMES' }, { id: 'icons', name: 'ICONS' },
+     { id: 'sound', name: 'SOUND' }],
     view, id => setView(id)));
 }
 function setView(v) {
@@ -583,6 +590,29 @@ function drawIcons() {
     box.appendChild(g);
   }
 
+  const drop = document.createElement('div');
+  drop.className = 'dropzone';
+  drop.innerHTML = Icons.svg('upload', { size: 20 })
+    + '<span>Drag an icon pack here, or <b>browse</b>. One .json file.</span>';
+  const chooseP = document.createElement('input');
+  chooseP.type = 'file'; chooseP.accept = '.json,application/json';
+  chooseP.style.display = 'none';
+  chooseP.onchange = () => { if (chooseP.files[0]) readPackFile(chooseP.files[0]); };
+  drop.appendChild(chooseP);
+  drop.onclick = () => chooseP.click();
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = e => {
+    e.preventDefault(); drop.classList.remove('over');
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) readPackFile(f);
+    else {
+      const t = e.dataTransfer.getData('text');
+      if (t) installPack(t);
+    }
+  };
+  box.appendChild(drop);
+
   const packBar = document.createElement('div');
   packBar.className = 'isum';
   packBar.innerHTML = '<b>Pack.</b> ';
@@ -591,13 +621,28 @@ function drawIcons() {
     b.className = 'mb-btn mb-press mb-tap' + (Icons.packOf(skin) === id ? ' on' : '');
     b.style.marginRight = 'var(--s-2)';
     b.innerHTML = Icons.svg('add', { size: 14, skin: Object.assign({}, skin, { iconPack: id, icon: null }) })
-      + '<span>' + esc(Icons.PACKS[id].name) + '</span>';
+      + '<span>' + esc(Icons.pack(id).name) + '</span>';
     b.onclick = () => {
       if (!draft) return;
       draft.iconPack = id; delete draft.icon; touch(); drawGrid(); drawEditor();
     };
+    b.oncontextmenu = e => {
+      e.preventDefault();
+      const items = [{ label: 'SAVE AS A FILE', fn: () => downloadPack(id) },
+                     { label: 'COPY AS JSON', fn: () => toClipboard(Icons.packFile(id),
+                        esc(Icons.pack(id).name) + ' copied') }];
+      if (!Icons.isBuiltIn(id)) items.push({ label: 'DELETE PACK', kind: 'bad',
+        fn: () => { Icons.forgetPack(id);
+          if (draft && draft.iconPack === id) { delete draft.iconPack; touch(); }
+          drawGrid(); drawEditor(); UI.toast('pack removed'); } });
+      UI.menu(e.clientX, e.clientY, items);
+    };
     packBar.appendChild(b);
   });
+  const hint = document.createElement('span');
+  hint.className = 'note';
+  hint.innerHTML = ' Right-click a pack to save it as a file or remove it.';
+  packBar.appendChild(hint);
   box.appendChild(packBar);
 
   const audit = document.createElement('div');
@@ -692,6 +737,142 @@ async function runAudit(into) {
       }).join(' &nbsp;\u00b7&nbsp; ');
 }
 
+/* A pack leaves as the same file it arrives as. */
+function downloadPack(id) {
+  const blob = new Blob([Icons.packFile(id)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = id + '.iconpack.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 400);
+  UI.toast('saved <b>' + esc(id) + '.iconpack.json</b>');
+}
+
+/* ---- installing an icon pack ----
+   One json file, dragged on or chosen. The same text pasted in works too, so a
+   pack can arrive from a chat without ever being a file. */
+function readPackFile(file) {
+  const r = new FileReader();
+  r.onload = () => installPack(r.result);
+  r.onerror = () => UI.toast('could not read that file', { bad: true });
+  r.readAsText(file);
+}
+function installPack(text) {
+  const res = Icons.readPack(text);
+  if (res.error) { UI.toast(esc(res.error), { bad: true }); return; }
+  Icons.savePack(res.pack);
+  if (draft) { draft.iconPack = res.pack.id; delete draft.icon; touch(); }
+  drawGrid(); drawEditor();
+  const n = Object.keys(res.pack.paths || {}).length;
+  UI.toast('added <b>' + esc(res.pack.name) + '</b>'
+    + (n ? ', ' + n + ' drawings of its own' : ', a stroke recipe')
+    + (res.unknown.length ? ' &mdash; ' + res.unknown.length + ' names it uses are not drawings here' : ''));
+}
+
+/* ---- sound ----
+   Look, sound and feel are one idea: how the suite comes across. STYLE owns
+   the first two, so it owns the third rather than leaving it buried in a
+   settings panel nobody opens.
+
+   A theme may carry `sound`, and then choosing the theme chooses its pack too:
+   Minecraft should not sound like Ornate. */
+function drawSound() {
+  const box = $('#grid');
+  box.className = 'icons';
+  box.innerHTML = '';
+  const skin = draft || Skins.current;
+
+  const sum = document.createElement('div');
+  sum.className = 'isum';
+  sum.innerHTML = '<b>' + Sfx.PACKS.length + '</b> sound packs and <b>'
+    + Sfx.VOICES.length + '</b> instruments, all worked out on the fly rather '
+    + 'than played from files, so they work offline and weigh nothing.'
+    + '<br>Press one to hear it. A small action stays small; only the finish '
+    + 'is allowed to celebrate.';
+  box.appendChild(sum);
+
+  const grid = document.createElement('div');
+  grid.className = 'igrid';
+  Sfx.PACKS.forEach(p => {
+    const cur = Sfx.settings.pack === p.id;
+    const c = document.createElement('div');
+    c.className = 'icard' + (cur ? ' on' : '');
+    c.innerHTML =
+      '<div class="draw">' + Icons.svg('sound', { size: 24, skin: skin }) + '</div>'
+      + '<div class="meta"><div class="iname">' + esc(p.name) + '</div>'
+      + '<div class="inote">' + esc(p.voice) + ', '
+      + p.scale.length + ' notes</div>'
+      + '<div class="chips"></div></div>';
+    const chips = c.querySelector('.chips');
+    const hear = document.createElement('button');
+    hear.className = 'chip';
+    hear.textContent = 'HEAR IT';
+    hear.onclick = () => {
+      const was = Sfx.settings.pack;
+      Sfx.pack(p.id);
+      Sfx.play('tick');
+      setTimeout(() => Sfx.play('done'), 190);
+      setTimeout(() => Sfx.play('complete', { level: 3 }), 420);
+      if (!cur) setTimeout(() => Sfx.pack(was), 1100);
+    };
+    const use = document.createElement('button');
+    use.className = 'chip' + (cur ? ' moved' : '');
+    use.textContent = cur ? 'IN USE' : 'USE IT';
+    use.onclick = () => { Sfx.pack(p.id); Sfx.play('done'); drawSound(); };
+    chips.appendChild(hear); chips.appendChild(use);
+    grid.appendChild(c);
+  });
+  box.appendChild(grid);
+
+  /* the instrument, and how loud */
+  const pad = document.createElement('div');
+  pad.className = 'pad';
+  box.appendChild(pad);
+  pad.appendChild(el2('div', 'mb-group', 'INSTRUMENT'));
+  const vsel = document.createElement('select');
+  vsel.className = 'mb-sel';
+  vsel.innerHTML = Sfx.VOICES.map(v =>
+    '<option value="' + esc(v) + '"' + (Sfx.voice() === v ? ' selected' : '') + '>'
+    + esc(v) + '</option>').join('');
+  vsel.onchange = () => { Sfx.voice(vsel.value); Sfx.play('tick'); };
+  pad.appendChild(UI.row('Instrument', 'what the notes are played on', vsel));
+
+  const vol = document.createElement('input');
+  vol.type = 'range'; vol.min = 0; vol.max = 1; vol.step = 0.05;
+  vol.value = Sfx.volume(); vol.className = 'mb-range';
+  vol.oninput = () => { Sfx.volume(+vol.value); };
+  vol.onchange = () => Sfx.play('done');
+  pad.appendChild(UI.row('Volume', 'zero is silent', vol));
+
+  /* tie a pack to the theme being edited */
+  if (skin) {
+    pad.appendChild(el2('div', 'mb-group', 'THIS THEME&rsquo;S SOUND'));
+    const tsel = document.createElement('select');
+    tsel.className = 'mb-sel';
+    tsel.innerHTML = '<option value="">(whatever is set above)</option>'
+      + Sfx.PACKS.map(p => '<option value="' + esc(p.id) + '"'
+        + ((skin.sound || '') === p.id ? ' selected' : '') + '>' + esc(p.name)
+        + '</option>').join('');
+    tsel.onchange = () => {
+      if (!draft) return;
+      if (tsel.value) draft.sound = tsel.value; else delete draft.sound;
+      touch();
+    };
+    pad.appendChild(UI.row('Pack for ' + esc(skin.name),
+      'choosing this theme also chooses this sound', tsel));
+    pad.appendChild(el2('p', 'note', 'Minecraft should not sound like Ornate. '
+      + 'Leave it unset and the theme does not touch your sound at all.'));
+  }
+}
+
+/* a tiny element helper, since drawEditor keeps its own inside its scope */
+function el2(tag, cls, html) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html != null) n.innerHTML = html;
+  return n;
+}
+
 /* Point one button at a different drawing. Saved as a setting, so it is in the
    backup and it does not need this file edited. */
 function moveRole(role, x, y) {
@@ -737,6 +918,7 @@ function setSlots(ids) {
 
 function drawGrid() {
   if (view === 'icons') return drawIcons();
+  if (view === 'sound') return drawSound();
   const box = $('#grid');
   box.className = 'grid';
   box.innerHTML = '';
@@ -1007,8 +1189,14 @@ function drawEditor() {
   acts.querySelector('#e-save').onclick = save;
   acts.querySelector('#e-use').onclick = () => {
     if (dirty) save();
-    Skins.apply(Skins.get(s.id)); Sfx.play('drop'); drawAll();
-    UI.toast('STYLE is <b>' + esc(s.name) + '</b>');
+    const live = Skins.get(s.id);
+    Skins.apply(live);
+    /* A theme that names a sound brings it along: look, sound and feel are one
+       idea, and Minecraft should not sound like Ornate. */
+    if (live.sound) Sfx.pack(live.sound);
+    Sfx.play('drop'); drawAll();
+    UI.toast('STYLE is <b>' + esc(s.name) + '</b>'
+      + (live.sound ? ', sounding like <b>' + esc(live.sound) + '</b>' : ''));
   };
   acts.querySelector('#e-copy').onclick = () => copyJSON(s);
   const d1 = acts.querySelector('#e-del'); if (d1) d1.onclick = remove;
@@ -1188,10 +1376,10 @@ function drawEditor() {
 
   /* -- icons -- */
   group('ICON PACK');
-  const packOpts = Icons.packs().map(id => [id, Icons.PACKS[id].name]);
+  const packOpts = Icons.packs().map(id => [id, Icons.pack(id).name]);
   pad.appendChild(pickRow('Pack', 'swaps every icon at once',
     packOpts, Icons.packOf(s), v => { s.iconPack = v; delete s.icon; drawEditor(); }));
-  const pk = Icons.PACKS[Icons.packOf(s)];
+  const pk = Icons.pack(Icons.packOf(s));
   const redrawn = Icons.packRedraws(Icons.packOf(s)).length;
   pad.appendChild(el('p', 'note', esc(pk.note)
     + (redrawn ? ' <b>' + redrawn + ' of ' + Icons.list().length
