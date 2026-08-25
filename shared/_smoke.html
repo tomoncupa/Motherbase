@@ -686,17 +686,29 @@ function run() {
      this whole layer was built around and it was being broken in the data
      rather than in the code, where no check was looking. */
   ok('skins: no theme sets padding or margin on a container', (() => {
-    const BAD = /(^|[};\s])(padding|margin)(-top|-bottom|-left|-right)?\s*:/;
-    return !Skins.data.skins.some(k => {
-      const css = k.css || '';
-      /* the gap under a heading's rule is part of drawing the rule, and the
-         pseudo-element nudges position an arrow rather than a box */
-      return css.split('\n').some(line => {
-        if (/::(before|after)/.test(line)) return false;
-        if (/padding-bottom:\s*var\(--s-2\)/.test(line)) return false;
-        return BAD.test(line);
+    /* Read it as BLOCKS, not as lines. A selector and its declarations are
+       routinely on different lines, so the line-by-line version passed a
+       margin that belonged to a ::before whose selector sat one line above. */
+    const BAD = /(^|[;{\s])(padding|margin)(-top|-bottom|-left|-right)?\s*:/;
+    const offenders = [];
+    Skins.data.skins.forEach(k => {
+      const css = (k.css || '').replace(/\/\*[\s\S]*?\*\//g, '');
+      css.split('}').forEach(chunk => {
+        const at = chunk.lastIndexOf('{');
+        if (at < 0) return;
+        const sel = chunk.slice(0, at), body = chunk.slice(at + 1);
+        /* a pseudo-element positions a mark, not a box */
+        if (/::(before|after)/.test(sel)) return;
+        body.split(';').forEach(decl => {
+          if (!BAD.test(decl)) return;
+          /* the gap under a heading's rule is part of drawing the rule */
+          if (/padding-bottom\s*:\s*var\(--s-2\)/.test(decl)) return;
+          offenders.push(k.id + ' {' + sel.trim().slice(0, 22) + '} ' + decl.trim());
+        });
       });
     });
+    if (offenders.length) console.warn('theme spacing offenders:', offenders);
+    return offenders.length === 0;
   })());
   ok('skins: every theme draws a card the same size', (() => {
     /* the measurement tokens are what decide it, and no theme may touch them */
