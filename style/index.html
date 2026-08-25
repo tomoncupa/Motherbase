@@ -10,15 +10,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<script src="../shared/skins.js?v=5"></script>
-<script src="../shared/day.js?v=5"></script>
-<script src="../shared/records.js?v=5"></script>
-<script src="../shared/mobile.js?v=5"></script>
-<script src="../shared/sound.js?v=5"></script>
-<script src="../shared/ui.js?v=5"></script>
-<script src="../shared/io.js?v=5"></script>
-<script src="../shared/health.js?v=5"></script>
-<script src="../shared/icons.js?v=5"></script>
+<script src="../shared/skins.js?v=6"></script>
+<script src="../shared/day.js?v=6"></script>
+<script src="../shared/records.js?v=6"></script>
+<script src="../shared/mobile.js?v=6"></script>
+<script src="../shared/sound.js?v=6"></script>
+<script src="../shared/ui.js?v=6"></script>
+<script src="../shared/io.js?v=6"></script>
+<script src="../shared/health.js?v=6"></script>
+<script src="../shared/icons.js?v=6"></script>
 
 <style>
 /* A desktop app, like most of the suite: only STATUS and TRAIN are built for a
@@ -207,7 +207,7 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
 /* Bumped whenever this file changes in a way you would notice. If the number
    on screen is behind the one in the repo, the browser is serving a cached
    copy and nothing you do will appear to work. */
-const BUILD = 'build 5';
+const BUILD = 'build 6';
 
 const APP = {
   id: 'style',
@@ -430,15 +430,17 @@ function drawRail() {
       + '<i style="background:' + t['--surface-1'] + '"></i>'
       + '<i style="background:' + t['--accent'] + '"></i></span>'
       + '<span class="nm" style="font-family:' + t['--font-display'] + '">' + esc(s.name) + '</span>'
-      + (edited ? '<span class="tag">EDITED</span>' : '');
+      + (isNew ? '<span class="tag">MINE</span>'
+               : edited ? '<span class="tag">EDITED</span>' : '');
     b.onclick = () => select(s.id);
     b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(s.id); } };
     b.oncontextmenu = e => { e.preventDefault(); themeMenu(s, e.clientX, e.clientY); };
-    if (isNew) {
+    const rm = removal(s);
+    if (rm) {
       const x = document.createElement('button');
       x.className = 'del';
-      x.title = 'Delete ' + s.name;
-      x.setAttribute('aria-label', 'Delete ' + s.name);
+      x.title = rm.title;
+      x.setAttribute('aria-label', rm.title);
       x.innerHTML = Icons.svg('delete', { size: 15 });
       x.onclick = e => { e.stopPropagation(); select(s.id); remove(); };
       b.appendChild(x);
@@ -660,13 +662,36 @@ function repaint(skin) {
 
 function drawAll() { drawRail(); drawGrid(); drawEditor(); }
 
+/* ---- can this be removed, and what do we call it ----
+   The old rule was "only a theme with no factory version can be deleted".
+   True, and useless: rename Ice to Base and it is yours in every way that
+   matters to the person who renamed it, but the menu offered RESET TO FACTORY
+   and no delete at all. Nobody hunting for a delete finds it under that name.
+
+   Both cases remove the theme from the list. They differ only in what is left
+   behind: nothing, or the factory theme it was made from. So both are called
+   delete, and the wording says which one you are getting. */
+function removal(skin) {
+  if (!Skins.factory(skin.id))
+    return { label: 'DELETE', title: 'Delete ' + skin.name,
+             ask: 'Delete ' + skin.name + '?',
+             detail: 'It is gone from the list. Any app set to it falls back to '
+                   + 'the first theme. You can undo this straight after.' };
+  if (Skins.isEdited(skin.id))
+    return { label: 'DELETE MY VERSION', title: 'Delete your version of ' + skin.name,
+             ask: 'Delete your version of ' + skin.name + '?',
+             detail: 'Your changes go, and ' + Skins.factory(skin.id).name
+                   + ' comes back exactly as it ships. Every other theme is left '
+                   + 'alone, and you can undo this straight after.' };
+  return null;   /* an untouched factory theme: there is nothing of yours to remove */
+}
+
 /* ---- right-click a theme ----
    Everything you can do to a theme, in one place, on both the list and the
    tile. The destructive ones live here rather than on the tile, because a
    button sitting next to USE HERE is one slip away from a theme you did not
    mean to make. */
 function themeMenu(skin, x, y) {
-  const isMine = !Skins.factory(skin.id);
   const items = [
     { label: 'USE IN STYLE', fn: () => {
         Skins.apply(skin.id); Sfx.play('drop'); drawAll();
@@ -677,10 +702,12 @@ function themeMenu(skin, x, y) {
     '-',
     { label: 'DUPLICATE', fn: () => duplicate(skin) },
   ];
-  if (!isMine && Skins.isEdited(skin.id))
-    items.push({ label: 'RESET TO FACTORY', fn: () => { select(skin.id); reset(); } });
-  if (isMine)
-    items.push({ label: 'DELETE', kind: 'bad', fn: () => { select(skin.id); remove(); } });
+  const rm = removal(skin);
+  if (rm) items.push({ label: rm.label, kind: 'bad',
+    fn: () => { select(skin.id); remove(); } });
+  else items.push({ label: 'DELETE', fn: () => UI.toast(
+    '<b>' + esc(skin.name) + '</b> ships with the app, so there is nothing of '
+    + 'yours to delete. Change it first, or duplicate it.') });
   UI.menu(x, y, items, { title: skin.name });
 }
 
@@ -793,11 +820,11 @@ function drawEditor() {
   name.oninput = () => { s.name = name.value; touch(); };
   pad.appendChild(UI.row('Name', null, name));
 
+  const rm = removal(Skins.get(s.id));
   const acts = el('div', 'btns',
     btn('e-save', 'save', 'SAVE') + btn('e-use', 'theme', 'USE IN STYLE')
     + btn('e-copy', 'copy', 'COPY JSON')
-    + (isNew ? btn('e-del', 'delete', 'DELETE')
-             : (Skins.isEdited(s.id) ? btn('e-reset', 'undo', 'RESET') : '')));
+    + (rm ? btn('e-del', 'delete', rm.label) : ''));
   pad.appendChild(acts);
   const dmsg = el('p', 'dirty', '');
   dmsg.id = 'e-dirty';
@@ -810,7 +837,6 @@ function drawEditor() {
   };
   acts.querySelector('#e-copy').onclick = () => copyJSON(s);
   const d1 = acts.querySelector('#e-del'); if (d1) d1.onclick = remove;
-  const r1 = acts.querySelector('#e-reset'); if (r1) r1.onclick = reset;
 
   /* -- colour -- */
   group('COLOUR');
@@ -959,38 +985,28 @@ function save() {
   UI.toast('saved <b>' + esc(draft.name) + '</b>');
 }
 
-function reset() {
-  const f = Skins.factory(draft.id);
-  if (!f) return;
-  const id = draft.id;
-  UI.confirm('Put ' + f.name + ' back to how it ships?',
-    'Throws away your changes to this one theme. Every other theme is left alone.',
-    { title: 'RESET', yes: 'RESET' }
-  ).then(ok => {
-    if (!ok) return;
-    Skins.forget(id);
-    if (Skins.current && Skins.current.id === id) Skins.apply(Skins.get(id));
-    select(id);
-    UI.toast('<b>' + esc(f.name) + '</b> is back to factory');
-  });
-}
-
 function remove() {
+  const live = Skins.get(draft.id);
+  const rm = removal(live);
+  if (!rm) { UI.toast('<b>' + esc(live.name) + '</b> ships with the app, so there '
+    + 'is nothing of yours to delete.'); return; }
   const id = draft.id, nm = draft.name;
   const payload = clone(Rec.get('skin', null, id) || draft);
-  UI.confirm('Delete ' + nm + '?',
-    'Any app set to it falls back to the first theme. You can undo this straight after.',
-    { title: 'DELETE', yes: 'DELETE', danger: true }
-  ).then(ok => {
-    if (!ok) return;
-    Skins.forget(id);
-    sel = null; draft = null; dirty = false;
-    drawAll();
-    UI.undo('deleted <b>' + esc(nm) + '</b>', () => {
-      Rec.set('skin', null, id, payload);
-      select(id);
+  UI.confirm(rm.ask, rm.detail, { title: rm.label, yes: 'DELETE', danger: true })
+    .then(ok => {
+      if (!ok) return;
+      Skins.forget(id);
+      const back = Skins.factory(id);
+      if (Skins.current && Skins.current.id === id) Skins.apply(Skins.get(back ? id : Skins.list()[0].id));
+      sel = back ? id : Skins.list()[0].id;
+      draft = clone(Skins.get(sel));
+      dirty = false;
+      drawAll();
+      UI.undo('deleted <b>' + esc(nm) + '</b>', () => {
+        Rec.set('skin', null, id, payload);
+        select(id);
+      });
     });
-  });
 }
 
 function duplicate(skin) {
