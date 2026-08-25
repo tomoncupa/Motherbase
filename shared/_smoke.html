@@ -13,6 +13,7 @@
 <script src="ui.js"></script>
 <script src="io.js"></script>
 <script src="health.js"></script>
+<script src="icons.js"></script>
 <style>
 body{background:var(--bg,#080b10);color:var(--text-1,#dbe7f0);font-family:var(--font-body,system-ui);
   margin:0;padding:24px;font-size:14px;line-height:1.6}
@@ -619,6 +620,47 @@ function run() {
   })());
   ok('skins: a theme with no font asks for nothing',
     Skins.fontLinks({}) === '' && Skins.fontLinks(null) === '');
+  /* ---- the icon master set ----
+     The whole design is that one drawing serves many buttons. These checks are
+     what keep that true: a suite with one drawing per button is a suite where
+     nobody looked for an existing one first. */
+  ok('icons: loaded, with drawings and buttons', (() => {
+    const r = Icons.reuse();
+    return r.drawings >= 30 && r.roles >= 80;
+  })());
+  ok('icons: every button has a drawing behind it',
+    Object.keys(Icons.ROLES).every(role => !!Icons.PATHS[Icons.ROLES[role]]));
+  ok('icons: no drawing is carried for nothing',
+    Icons.list().every(id => Icons.usersOf(id).length > 0));
+  ok('icons: buttons outnumber drawings, which is the point',
+    Icons.reuse().perDrawing >= 2);
+  ok('icons: every app in the dock has one',
+    ['home', 'arc', 'block', 'habits', 'form', 'status', 'train', 'style']
+      .every(a => !!Icons.iconFor('app.' + a)));
+  ok('icons: it renders currentColor svg, so it takes the colour beside it', (() => {
+    const svg = Icons.svg('add');
+    return /^<svg/.test(svg) && /stroke="currentColor"/.test(svg) && /viewBox="0 0 24 24"/.test(svg);
+  })());
+  ok('icons: an unknown button draws nothing rather than a broken square',
+    Icons.svg('no-such-button-anywhere') === '');
+  /* A theme is allowed the stroke and nothing else. If a theme could change the
+     shape, every theme would owe forty drawings. */
+  ok('icons: a theme changes the stroke, and two themes differ', (() => {
+    const w = id => (Icons.svg('add', { skin: Skins.get(id) }).match(/stroke-width="([^"]+)"/) || [])[1];
+    return w('doodle') !== w('monarch') && !!w('ice');
+  })());
+  ok('icons: the shape is the same in every theme', (() => {
+    const d = id => (Icons.svg('add', { skin: Skins.get(id) }).match(/ d="([^"]+)"/) || [])[1];
+    return d('doodle') === d('monarch') && d('ice') === d('ragnarok');
+  })());
+  ok('icons: a button can be pointed elsewhere and put back', (() => {
+    const was = Icons.iconFor('add');
+    Rec.setting('style', 'icons', { add: 'star' });
+    const moved = Icons.iconFor('add') === 'star';
+    Rec.setting('style', 'icons', {});
+    return moved && Icons.iconFor('add') === was;
+  })());
+
   /* ---- the themes have to be there with no network ----
      skins.js fetches skins.json, and a page opened off the disk cannot fetch.
      The built-in list used to hold one placeholder theme, so every app opened

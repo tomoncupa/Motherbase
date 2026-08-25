@@ -119,6 +119,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `mobile.js` | The touch layer. Sheets, swipes, safe areas, keyboard, back stack, haptics. |
 | `ui.js` | Snackbars, dialogs, confirms, menus, switches, and the standard Settings panel. |
 | `io.js` | Per-app backup, restore, and the readable spreadsheet export. |
+| `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
 | `_smoke.html` | 64 checks over all of the above. Run it after touching any of them. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. |
@@ -245,6 +246,19 @@ thickness, `depth` picks one of soft, flat, bevel or glow, and `track` and
 stylesheet over the shared class names, swapped wholesale when the theme
 changes. That is what makes a theme feel like a different universe rather than
 a recolour. Apps still write no theme CSS of their own.
+
+**Icons.** `shared/icons.js` is the master set: about fifty drawings carrying
+about a hundred and fifty buttons. A button asks for a ROLE (`add`, `today`,
+`food`) and many roles point at one drawing. **Look for an existing role before
+adding one, and an existing drawing before adding one of those** — a new drawing
+is another thing to keep in step across every theme. A theme changes the icon's
+`weight`, `cap`, `join`, `fill` and `wobble`, never its shape, which is what
+stops a new theme costing fifty new paths. STYLE's ICONS tab is the database:
+it shows every drawing with its buttons hanging off it, and audits every app for
+buttons still drawn with a plain Unicode character.
+
+**A character is not an icon.** It renders differently on every device, cannot
+take a colour, and vanishes when a font does. Never put one in a button.
 
 **What a theme may never touch:** the spacing scale and the 44px tap target.
 It changes how a box is drawn, never where it sits or how big it is under a
