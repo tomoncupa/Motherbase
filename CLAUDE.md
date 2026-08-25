@@ -222,7 +222,7 @@ The practical test: if changing a theme in STYLE does not change an app, that
 app has a bug.
 
 **Theme:** structure, fonts, corner shape, texture, and the colours it ships with.
-Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. Eleven of them, in
+Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. Sixteen of them, in
 `skins.json`, and every one differs by more than its colours. Ember, Violet,
 Matrix and Mono were dropped on 2026-08-21: they were Ice with a different
 accent hex and nothing else. Changing one colour is an edit in STYLE, not a
