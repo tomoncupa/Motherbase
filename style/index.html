@@ -18,6 +18,7 @@
 <script src="../shared/ui.js"></script>
 <script src="../shared/io.js"></script>
 <script src="../shared/health.js"></script>
+<script src="../shared/icons.js"></script>
 
 <style>
 /* STYLE is the one app in the suite built for a computer first. Tom asked for
@@ -52,6 +53,7 @@ header{
 .logo b{color:var(--accent)}
 .spacer{flex:1}
 .sub{color:var(--text-muted);font-size:var(--f-1)}
+header .mb-btn.on{border-color:var(--accent);color:var(--accent)}
 
 /* ---------- three panes ---------- */
 .work{flex:1;min-height:0;display:grid;grid-template-columns:210px 1fr 360px}
@@ -101,6 +103,28 @@ header{
   border-radius:var(--radius-sm)}
 .mini:hover{background:var(--surface-3);color:var(--text-1)}
 
+/* ---------- the icon database ---------- */
+.icons{display:flex;flex-direction:column;gap:var(--s-4)}
+.isum{color:var(--text-2);font-size:var(--f-2);line-height:var(--lh-body)}
+.isum b{color:var(--accent)}
+.igrid{display:grid;gap:var(--s-3);
+  grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.icard{background:var(--surface-1);border:var(--border-width) solid var(--border);
+  border-radius:var(--radius-md);padding:var(--s-3);display:flex;gap:var(--s-3)}
+.icard .draw{width:44px;height:44px;flex:0 0 auto;display:flex;align-items:center;
+  justify-content:center;background:var(--surface-2);border-radius:var(--radius-sm);
+  color:var(--text-1)}
+.icard .meta{flex:1;min-width:0}
+.icard .iname{font-family:var(--font-display);font-size:var(--f-1);
+  letter-spacing:var(--track-cap);color:var(--text-1)}
+.icard .inote{color:var(--text-muted);font-size:var(--f-1);margin-top:2px}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--s-2)}
+.chip{font-size:11px;padding:1px 6px;border-radius:var(--radius-full);
+  border:1px solid var(--border);color:var(--text-2);background:none;
+  cursor:pointer;font-family:var(--font-body)}
+.chip:hover{border-color:var(--accent);color:var(--text-1)}
+.chip.moved{border-color:var(--accent);color:var(--accent)}
+
 /* ---------- the editor ---------- */
 .sec{padding:var(--s-4);border-bottom:var(--border-width) solid var(--border)}
 .sec h3{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
@@ -145,6 +169,8 @@ textarea{width:100%;min-height:150px;background:var(--surface-2);color:var(--tex
   <div class="spacer"></div>
   <button class="mb-btn mb-press mb-tap" onclick="pasteTheme()">PASTE A THEME</button>
   <button class="mb-btn mb-press mb-tap" onclick="briefForClaude()">BRIEF FOR CLAUDE</button>
+  <button class="mb-btn mb-press mb-tap" id="tab-themes" onclick="setView('themes')">THEMES</button>
+  <button class="mb-btn mb-press mb-tap" id="tab-icons" onclick="setView('icons')">ICONS</button>
   <button class="mb-btn mb-press mb-tap" onclick="assignApps()">APPS</button>
   <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
   <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'">◈</button>
@@ -394,8 +420,161 @@ function drawRail() {
 }
 
 /* ---- the compare canvas ---- */
-function drawGrid() {
+/* ---- which screen the middle pane is showing ----
+   The rail keeps working in both: picking a theme in ICONS redraws every icon
+   in that theme, which is the only honest way to judge whether a stroke weight
+   survives contact with a hand-drawn face. */
+let view = 'themes';
+function setView(v) {
+  view = v;
+  document.getElementById('tab-themes').classList.toggle('on', v === 'themes');
+  document.getElementById('tab-icons').classList.toggle('on', v === 'icons');
+  drawGrid();
+}
+
+/* ---- the icon master database ----
+   One drawing serves many buttons. This screen exists to keep that ratio
+   honest: it shows every drawing with the buttons hanging off it, so adding a
+   forty-first is visibly a bigger decision than pointing a new button at one
+   that already exists. */
+function drawIcons() {
   const box = $('#grid');
+  box.className = 'icons';
+  box.innerHTML = '';
+  const skin = draft || Skins.current;
+  const r = Icons.reuse();
+  const over = Icons.overrides();
+
+  const sum = document.createElement('div');
+  sum.className = 'isum';
+  sum.innerHTML = '<b>' + r.drawings + '</b> drawings carrying <b>' + r.roles
+    + '</b> buttons, <b>' + r.perDrawing + '</b> buttons each. Drawn in <b>'
+    + esc(skin ? skin.name : '-') + '</b>.'
+    + '<br>Click a button name to point it at a different drawing. '
+    + 'Reach for an existing drawing before adding one: every new drawing is '
+    + 'another thing to keep in step across every theme.';
+  box.appendChild(sum);
+
+  /* anything a build asks for that nothing draws */
+  const gaps = Object.keys(Icons.ROLES).filter(k => !Icons.pathFor(k, skin));
+  if (gaps.length) {
+    const g = document.createElement('div');
+    g.className = 'warn';
+    g.textContent = gaps.length + ' buttons have no drawing: ' + gaps.join(', ');
+    box.appendChild(g);
+  }
+
+  const audit = document.createElement('div');
+  audit.className = 'isum';
+  audit.innerHTML = '<b>Coverage.</b> Checking which apps still use a plain '
+    + 'character where an icon belongs\u2026';
+  box.appendChild(audit);
+  runAudit(audit);
+
+  const grid = document.createElement('div');
+  grid.className = 'igrid';
+  Icons.list().forEach(id => {
+    const users = Object.keys(Icons.ROLES).concat(Object.keys(over))
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .filter(role => Icons.iconFor(role) === id).sort();
+    const c = document.createElement('div');
+    c.className = 'icard';
+    c.innerHTML =
+      '<div class="draw">' + Icons.svg(users[0] || id, { size: 26, skin: skin }) + '</div>'
+      + '<div class="meta"><div class="iname">' + esc(id) + '</div>'
+      + '<div class="inote">' + esc(Icons.NOTES[id] || (users.length + ' buttons')) + '</div>'
+      + '<div class="chips"></div></div>';
+    const chips = c.querySelector('.chips');
+    users.forEach(role => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (over[role] ? ' moved' : '');
+      b.textContent = role;
+      b.onclick = e => moveRole(role, e.clientX, e.clientY);
+      chips.appendChild(b);
+    });
+    grid.appendChild(c);
+  });
+  box.appendChild(grid);
+}
+
+/* ---- the coverage audit ----
+   The reason a master set exists is so no app goes on drawing its own buttons
+   out of Unicode. A character is not an icon: it renders differently on every
+   device, cannot take a colour, and disappears when a font does. This reads
+   each app as it actually ships and says which ones are still doing it, so
+   the answer is checked rather than assumed.
+
+   It needs the folder served, because a page opened off the disk cannot fetch.
+   It says so rather than reporting a clean bill it has not earned. */
+const GLYPHS = /[\u2190-\u21FF\u2500-\u257F\u25A0-\u25FF\u2600-\u27BF\u2B00-\u2BFF\uFF0B]|[\uD83C-\uDBFF][\uDC00-\uDFFF]/g;
+const AUDIT_FILES = [
+  ['home', '../index.html'], ['block', '../block/index.html'],
+  ['habits', '../habits/index.html'], ['form', '../form/index.html'],
+  ['status', '../status/index.html'], ['train', '../train/index.html'],
+  ['arc', '../arc/index.html'], ['style', 'index.html'],
+  ['template', '../_template/index.html'],
+];
+
+async function runAudit(into) {
+  const rows = [];
+  let reachable = 0;
+  for (const [name, url] of AUDIT_FILES) {
+    let txt = null;
+    try { const r = await fetch(url, { cache: 'no-cache' }); if (r.ok) txt = await r.text(); }
+    catch (e) {}
+    if (txt == null) { rows.push([name, null]); continue; }
+    reachable++;
+    /* Comments and the icon set's own table are not buttons, so they are cut
+       before counting. This is a smell test, not a parser: it is meant to say
+       which app to look at next, not to be exact. */
+    const body = txt.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const hits = body.match(GLYPHS) || [];
+    const uses = Icons.svg ? (body.match(/Icons\.svg|Icons\.el/g) || []).length : 0;
+    rows.push([name, { glyphs: hits.length, distinct: [...new Set(hits)].join(' '), uses: uses }]);
+  }
+  if (!reachable) {
+    into.innerHTML = '<b>Coverage.</b> Cannot read the other apps from here. '
+      + 'This page has to be served for the audit to run \u2014 opened straight '
+      + 'off the disk a page cannot fetch its neighbours. Nothing is wrong; '
+      + 'it simply cannot tell you either way.';
+    return;
+  }
+  const clean = rows.filter(r => r[1] && r[1].glyphs === 0).length;
+  into.innerHTML = '<b>Coverage.</b> ' + clean + ' of ' + reachable
+    + ' apps are drawing every button. The rest are still using a plain '
+    + 'character somewhere, which renders differently on every phone and cannot '
+    + 'take a theme colour.<br>'
+    + rows.map(([name, d]) => {
+        if (!d) return '<span style="color:var(--text-muted)">' + esc(name) + ' not found</span>';
+        if (!d.glyphs) return '<b style="color:var(--success)">' + esc(name) + ' clean</b>'
+          + ' <span style="color:var(--text-muted)">(' + d.uses + ' drawn)</span>';
+        return '<span style="color:var(--warn)">' + esc(name) + ' ' + d.glyphs
+          + '</span> <span style="color:var(--text-muted)">' + esc(d.distinct.slice(0, 40))
+          + (d.uses ? ' \u00b7 ' + d.uses + ' drawn' : '') + '</span>';
+      }).join(' &nbsp;\u00b7&nbsp; ');
+}
+
+/* Point one button at a different drawing. Saved as a setting, so it is in the
+   backup and it does not need this file edited. */
+function moveRole(role, x, y) {
+  const cur = Icons.iconFor(role);
+  const items = Icons.list().map(id => ({
+    label: (id === cur ? '\u2713 ' : '   ') + id,
+    fn: () => {
+      const o = Object.assign({}, Icons.overrides());
+      if (id === Icons.ROLES[role]) delete o[role]; else o[role] = id;
+      Rec.setting('style', 'icons', o);
+      drawGrid();
+      UI.toast('<b>' + esc(role) + '</b> is now <b>' + esc(id) + '</b>');
+    },
+  }));
+  UI.menu(x, y, items);
+}
+
+function drawGrid() {
+  if (view === 'icons') return drawIcons();
+  const box = $('#grid');
+  box.className = 'grid';
   box.innerHTML = '';
   Skins.list().forEach(s => box.appendChild(tile(s)));
 }
@@ -601,6 +780,45 @@ function drawEditor() {
     touch();
   };
   feel.querySelector('#e-depth').onchange = e => { s.depth = e.target.value; touch(); };
+  /* -- how this theme draws an icon -- */
+  const ico = s.icon || (s.icon = {});
+  const iw = ico.weight != null ? ico.weight : 1.75;
+  const isec = sec('ICONS',
+    '<div class="fld"><label>Line weight</label>'
+    + '<input type="range" id="e-iw" min="1" max="3" step="0.05" value="' + iw + '">'
+    + '<span class="val" id="e-iwv">' + iw + '</span></div>'
+    + '<div class="fld"><label>Line ends</label><select id="e-icap">'
+    + ['round', 'butt', 'square'].map(v =>
+        '<option value="' + v + '"' + ((ico.cap || 'round') === v ? ' selected' : '') + '>'
+        + v + '</option>').join('')
+    + '</select></div>'
+    + '<div class="fld"><label>Corners</label><select id="e-ijoin">'
+    + ['round', 'miter', 'bevel'].map(v =>
+        '<option value="' + v + '"' + ((ico.join || 'round') === v ? ' selected' : '') + '>'
+        + v + '</option>').join('')
+    + '</select></div>'
+    + '<div class="fld"><label>Hand-drawn wobble</label>'
+    + '<input type="checkbox" id="e-iwob"' + (ico.wobble ? ' checked' : '') + '></div>'
+    + '<div class="fld" id="e-ipreview" style="gap:var(--s-4);color:var(--text-1)"></div>'
+    + '<p class="note">A theme changes the stroke, never the shape. That is what '
+    + 'stops a new theme costing forty new drawings.</p>');
+  const ipaint = () => {
+    isec.querySelector('#e-ipreview').innerHTML =
+      ['add', 'delete', 'today', 'food', 'train', 'settings']
+        .map(r => Icons.svg(r, { size: 24, skin: s })).join('');
+  };
+  ipaint();
+  isec.querySelector('#e-iw').oninput = e => {
+    ico.weight = +e.target.value;
+    isec.querySelector('#e-iwv').textContent = ico.weight;
+    ipaint(); touch();
+  };
+  isec.querySelector('#e-icap').onchange = e => { ico.cap = e.target.value; ipaint(); touch(); };
+  isec.querySelector('#e-ijoin').onchange = e => { ico.join = e.target.value; ipaint(); touch(); };
+  isec.querySelector('#e-iwob').onchange = e => {
+    ico.wobble = e.target.checked; ipaint(); touch();
+  };
+
   feel.querySelector('#e-motion').onchange = e => {
     if (e.target.value === 'custom') return;
     s.motion = clone(MOTIONS[e.target.value]);
@@ -954,6 +1172,7 @@ Skins.load('../shared/skins.json').then(() => {
   sel = (Skins.current && Skins.current.id) || Skins.list()[0].id;
   draft = clone(Skins.get(sel));
   drawAll();
+  setView('themes');
 });
 
 /* A theme saved in another tab is a row like anything else, so the store tells

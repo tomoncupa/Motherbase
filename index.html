@@ -22,6 +22,7 @@
 <script src="shared/sound.js"></script>
 <script src="shared/ui.js"></script>
 <script src="shared/io.js"></script>
+<script src="shared/icons.js"></script>
 <style>
 :root{
   /* ── the bridge ──
@@ -285,7 +286,7 @@ kbd{font-family:var(--f1);font-size:10px;border:1px solid var(--line2);border-ra
     <nav id="nav"></nav>
     <div class="spacer"></div>
     <div class="clock"><b id="cDate">—</b><span id="cSub">—</span></div>
-    <button class="hbtn mb-press mb-tap" id="btnWidget" title="Add a widget to the home screen"><span class="lg">+ WIDGET</span><span class="sm">＋</span></button>
+    <button class="hbtn mb-press mb-tap" id="btnWidget" title="Add a widget to the home screen"><span class="lg">+ WIDGET</span><span class="sm" id="wIco"></span></button>
     <button class="hbtn mb-press mb-tap" id="btnData" title="Backup, restore and export your data"><span class="lg">DATA</span><span class="sm">⛁</span></button>
   </header>
   <main id="stage">
@@ -525,6 +526,16 @@ const APPS = [
   { id: 'style',  nm: 'STYLE',  ic: '◧', file: 'style/index.html',  ds: 'pick, compare, edit and add themes',         shares: 'the themes every app wears' },
 ];
 const app = id => APPS.find(a => a.id === id);
+if (typeof Icons !== 'undefined') addEventListener('DOMContentLoaded', () => {
+  const w = document.getElementById('wIco');
+  if (w) w.innerHTML = Icons.svg('add', { size: 16 });
+});
+/* The dock used to be Unicode characters, which render differently on every
+   device, cannot take a colour and vanish when a font does. These are drawn.
+   The old glyph stays as the fallback so a missing icons.js is a plain dock
+   rather than an empty one. */
+const appIco = (a, size) => (typeof Icons !== 'undefined' &&
+  Icons.svg('app.' + a.id, { size: size || 18 })) || a.ic;
 const frames = {};      /* id -> iframe. Built on first visit, then kept alive. */
 const missing = {};     /* id -> true once a HEAD check says the file is not there */
 let view = 'home';
@@ -577,14 +588,14 @@ function drawNav() {
       ? toast('<b>' + esc(a.file) + '</b> is missing from this folder', { bad: true })
       : (Mobile.feedback('select'), go(a.id));
 
-    const b = el('button', state, '<span>' + a.ic + '</span>' + a.nm + '<span class="k">' + (i + 1) + '</span>');
+    const b = el('button', state, '<span>' + appIco(a, 16) + '</span>' + a.nm + '<span class="k">' + (i + 1) + '</span>');
     b.title = missing[a.id] ? a.file + ' is not in this folder' : a.ds;
     b.onclick = open;
     n.appendChild(b);
 
     /* the same button again, for the thumb. Icon over label, because at this
        size the icon is what is actually read. */
-    const t = el('button', state + ' mb-press mb-tap', '<span class="g">' + a.ic + '</span>' + a.nm);
+    const t = el('button', state + ' mb-press mb-tap', '<span class="g">' + appIco(a, 22) + '</span>' + a.nm);
     t.setAttribute('aria-label', a.nm + ' — ' + a.ds);
     if (view === a.id) t.setAttribute('aria-current', 'page');
     t.onclick = open;
@@ -892,7 +903,7 @@ const WIDGETS = {
       const tiles = el('div', 'tiles');
       APPS.filter(a => a.file).forEach(a => {
         const b = el('button', 'tile' + (missing[a.id] ? ' missing' : ''));
-        b.innerHTML = '<span class="ic">' + a.ic + '</span><span class="nm">' + a.nm + '</span><span class="ds">' +
+        b.innerHTML = '<span class="ic">' + appIco(a, 18) + '</span><span class="nm">' + a.nm + '</span><span class="ds">' +
           (missing[a.id] ? '<span style="color:var(--bad)">' + esc(a.file) + ' not found</span>' : esc(a.ds)) + '</span>';
         b.onclick = () => missing[a.id] ? toast('<b>' + esc(a.file) + '</b> is missing') : go(a.id);
         tiles.appendChild(b);
@@ -979,7 +990,8 @@ function drawHome() {
       dn.onclick = ev => { ev.stopPropagation(); move(i, 1); };
       head.appendChild(dn);
     }
-    const x = el('button', 'x mb-press mb-tap', '✕');
+    const x = el('button', 'x mb-press mb-tap',
+      (typeof Icons !== 'undefined' && Icons.svg('close', { size: 15 })) || '✕');
     x.title = 'remove this widget';
     x.setAttribute('aria-label', 'Remove ' + W.nm);
     x.onclick = ev => {
