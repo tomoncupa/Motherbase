@@ -71,10 +71,27 @@ Do not break these. Ask first if you think one needs to change.
 9. **No raw sizes in app CSS either.** Spacing, type, corners, shadows and
    durations are all tokens, on scales where no two steps are within about 25%
    of each other. `shared/STANDARDS.md` says why.
-10. **Phone first, and literally.** Every control is at least a 44px target,
-   nothing important hides behind hover, panels come up from the bottom, and the
-   back gesture closes what is open rather than leaving the app. The rules are in
-   `shared/STANDARDS.md` and the working example is `_template/index.html`.
+10. **Know which device an app is for.** Set by Tom on 2026-08-22, and it
+   replaces the old "phone first, and literally" rule that applied to
+   everything.
+
+   **STATUS and TRAIN are phone apps.** They are used standing up, one-handed,
+   at the gym or in a kitchen. Every control is at least a 44px target, nothing
+   important hides behind hover, panels come up from the bottom, and the back
+   gesture closes what is open rather than leaving the app. `shared/STANDARDS.md`
+   is binding on these two and `_template/index.html` is the working example.
+
+   **Everything else is a desktop app**: the home screen, ARC, BLOCK, HABITS,
+   FORM and STYLE. They are used sitting down, with a mouse, to plan, build,
+   review and compare. Hover is allowed, density can be tighter, dialogs may sit
+   in the middle of the screen rather than rising from the bottom, and a layout
+   may assume a wide window.
+
+   Neither kind may break on the other. A desktop app on a phone should stack
+   and stay usable; a phone app on a desktop should not stretch to nonsense. The
+   44px target and the safe-area insets stay everywhere, because they cost
+   nothing on a mouse and they are the difference between usable and not on a
+   thumb.
 
 ---
 
@@ -100,6 +117,9 @@ quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
                    Its data model and design system still govern. Superseded
                    on repo layout and testing by this file.
 ```
+
+**Phone or desktop:** `status/` and `train/` are phone apps. Every other app,
+including the home screen, is a desktop app. See hard constraint 10.
 
 One folder per app. The home page is `index.html` at the root. `.nojekyll` sits at
 the root so GitHub Pages does not eat underscore folders.
@@ -399,7 +419,7 @@ Never claim something works because it should. Claim it because you watched it.
 | `form/` | Standalone by design. Video never leaves the device. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
 | `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
-| `style/` | Built 2026-08-21. Pick, compare, edit and add themes. The only app built for a computer first, at Tom's request: comparing themes honestly means several real screens side by side at true phone width. Owns `skin`. |
+| `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | Built and passing 35 checks. Not yet wired into the real apps. |
 

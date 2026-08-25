@@ -1,5 +1,13 @@
 # STANDARDS — what every app in the suite does the same way
 
+> **Who this governs.** `status/` and `train/` are the phone apps, and every
+> rule below is binding on them. The home screen, `arc/`, `block/`, `habits/`,
+> `form/` and `style/` are desktop apps: they may use hover, tighter density and
+> centred dialogs, and they are not bound by the one-handed rules. Two things
+> hold everywhere regardless, because they cost nothing with a mouse — the 44px
+> tap target and the safe-area insets. Set by Tom on 2026-08-22.
+
+
 This is the house style. It governs how the apps **feel**, the way `CLAUDE.md`
 governs how they **store**. Both are binding.
 
