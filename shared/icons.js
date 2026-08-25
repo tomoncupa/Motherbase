@@ -258,11 +258,39 @@ const PACKS = {
   },
 };
 
+/* ── packs you drop in ──
+   A pack is one JSON file and nothing else, so it can be handed around, kept
+   in a folder, pasted into a chat or dragged onto STYLE:
+
+     {
+       "kind": "motherbase.iconpack",   marks the file, so a stray json is not
+       "id":   "chunky",                mistaken for one
+       "name": "Chunky",
+       "note": "one line about it",
+       "style": { "weight": 3, "cap": "butt", "join": "miter", "wobble": false },
+       "paths": { "plus": "M...", "x": "M..." }
+     }
+
+   `style` alone is a valid pack: a stroke recipe over the master drawings is
+   the cheap way to make a set feel different. `paths` overrides individual
+   drawings by their NAME, and anything it leaves out inherits.
+
+   Installed packs are a setting, so they travel in the backup. */
+const PACK_KIND = 'motherbase.iconpack';
+
+function installed() {
+  try {
+    if (typeof Rec !== 'undefined' && Rec.setting) return Rec.setting('style', 'iconpacks') || {};
+  } catch (e) {}
+  return {};
+}
+function allPacks() { return Object.assign({}, PACKS, installed()); }
+
 /* A theme may name a pack. Nothing else about a theme changes. */
 function packFor(skin) {
   const s = skin || (typeof Skins !== 'undefined' && Skins.current) || null;
   const id = (s && s.iconPack) || 'line';
-  return PACKS[id] ? id : 'line';
+  return allPacks()[id] ? id : 'line';
 }
 
 let WOBBLE_READY = false;
@@ -319,17 +347,61 @@ const Icons = {
   },
 
   PACKS: PACKS,
-  packs() { return Object.keys(PACKS); },
+  PACK_KIND: PACK_KIND,
+  packs() { return Object.keys(allPacks()); },
+  pack(id) { return allPacks()[id] || PACKS.line; },
+  isBuiltIn(id) { return !!PACKS[id]; },
   packOf(skin) { return packFor(skin); },
   /* Which drawings a pack actually redraws, so STYLE can be honest about how
      much of a pack is its own work and how much it inherits. */
-  packRedraws(id) { return Object.keys((PACKS[id] || {}).paths || {}); },
+  packRedraws(id) { return Object.keys((allPacks()[id] || {}).paths || {}); },
+
+  /* Read a dropped or pasted file. Says what is wrong in words, because the
+     person dropping it is not going to read a stack trace. */
+  readPack(text) {
+    let o;
+    try { o = JSON.parse(String(text || '').trim()); }
+    catch (e) { return { error: 'That is not valid JSON. ' + e.message }; }
+    if (!o || typeof o !== 'object' || Array.isArray(o))
+      return { error: 'An icon pack is one object, not a list.' };
+    if (o.kind && o.kind !== PACK_KIND)
+      return { error: 'That file says it is a "' + o.kind + '", not an icon pack.' };
+    if (o.base || o.skins) return { error: 'That looks like a THEME. Themes go in the paste box on the themes screen.' };
+    if (!o.style && !o.paths)
+      return { error: 'A pack needs a "style" (weight, cap, join) or "paths", and this has neither.' };
+    if (o.paths && typeof o.paths !== 'object')
+      return { error: '"paths" should be a list of drawing names to path data.' };
+    const unknown = Object.keys(o.paths || {}).filter(k => !PATHS[k]);
+    if (unknown.length === Object.keys(o.paths || {}).length && unknown.length)
+      return { error: 'None of those drawing names exist. They should be things like '
+        + Object.keys(PATHS).slice(0, 4).join(', ') + '.' };
+    o.id = String(o.id || o.name || 'pack').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '').slice(0, 24) || ('pack-' + Date.now().toString(36));
+    if (!o.name) o.name = o.id;
+    return { pack: o, unknown: unknown };
+  },
+  savePack(pack) {
+    const all = Object.assign({}, installed());
+    all[pack.id] = pack;
+    try { Rec.setting('style', 'iconpacks', all); } catch (e) {}
+    return pack;
+  },
+  forgetPack(id) {
+    const all = Object.assign({}, installed());
+    delete all[id];
+    try { Rec.setting('style', 'iconpacks', all); } catch (e) {}
+  },
+  /* A pack as a file, for handing one out. */
+  packFile(id) {
+    const p = allPacks()[id] || PACKS.line;
+    return JSON.stringify(Object.assign({ kind: PACK_KIND, id: id }, p), null, 2);
+  },
 
   /* The pack sets the recipe; anything the theme states itself still wins, so
      a theme can pick Bold and then thin it slightly. */
   styleFor(skin) {
     const s = skin || (typeof Skins !== 'undefined' && Skins.current) || null;
-    const pack = PACKS[packFor(s)];
+    const pack = allPacks()[packFor(s)] || PACKS.line;
     return Object.assign({}, DEFAULT_STYLE, pack.style || {}, (s && s.icon) || {});
   },
 
@@ -341,7 +413,7 @@ const Icons = {
     /* A single drawing named by the theme beats everything. */
     if (s && s.icons && s.icons[id]) return s.icons[id];
     /* Then the pack, if it redrew this one. */
-    const pack = PACKS[packFor(s)];
+    const pack = allPacks()[packFor(s)] || PACKS.line;
     if (pack.paths && pack.paths[id]) return pack.paths[id];
     return PATHS[id] || null;
   },

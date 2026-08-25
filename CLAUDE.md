@@ -242,7 +242,7 @@ The practical test: if changing a theme in STYLE does not change an app, that
 app has a bug.
 
 **Theme:** structure, fonts, corner shape, texture, and the colours it ships with.
-Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. Sixteen of them, in
+Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. Seventeen of them, in
 `skins.json`, and every one differs by more than its colours. Ember, Violet,
 Matrix and Mono were dropped on 2026-08-21: they were Ice with a different
 accent hex and nothing else. Changing one colour is an edit in STYLE, not a
@@ -279,6 +279,20 @@ buttons still drawn with a plain Unicode character.
 
 **A character is not an icon.** It renders differently on every device, cannot
 take a colour, and vanishes when a font does. Never put one in a button.
+
+**What a theme may never touch:** the spacing scale, padding, margins, or the
+44px tap target. A theme's own CSS setting `padding` on a card is the same
+mistake as changing the spacing scale, and five themes were doing it until
+2026-08-22 — cards were a different size depending on which theme you wore.
+`_smoke.html` now fails on it.
+
+**Icon packs are a file.** One JSON object with `kind: "motherbase.iconpack"`,
+a `style` (the stroke recipe) and optionally `paths` (drawings by name). Drag
+one onto STYLE's ICONS screen. Installed packs are a setting, so they are in
+the backup.
+
+**STYLE owns sound too.** Look, sound and feel are one idea. A theme may carry
+`sound: "<pack id>"` and choosing that theme chooses its sound pack.
 
 **What a theme may never touch:** the spacing scale and the 44px tap target.
 It changes how a box is drawn, never where it sits or how big it is under a

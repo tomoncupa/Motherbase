@@ -680,6 +680,63 @@ function run() {
     const d = id => (Icons.svg('add', { skin: Skins.get(id) }).match(/ d="([^"]+)"/) || [])[1];
     return d('doodle') === d('monarch') && d('ice') === d('ragnarok');
   })());
+  /* ---- a theme may not move anything ----
+     Five themes were quietly setting padding on the card, so a card was a
+     different size depending on which theme you were wearing. That is the rule
+     this whole layer was built around and it was being broken in the data
+     rather than in the code, where no check was looking. */
+  ok('skins: no theme sets padding or margin on a container', (() => {
+    const BAD = /(^|[};\s])(padding|margin)(-top|-bottom|-left|-right)?\s*:/;
+    return !Skins.data.skins.some(k => {
+      const css = k.css || '';
+      /* the gap under a heading's rule is part of drawing the rule, and the
+         pseudo-element nudges position an arrow rather than a box */
+      return css.split('\n').some(line => {
+        if (/::(before|after)/.test(line)) return false;
+        if (/padding-bottom:\s*var\(--s-2\)/.test(line)) return false;
+        return BAD.test(line);
+      });
+    });
+  })());
+  ok('skins: every theme draws a card the same size', (() => {
+    /* the measurement tokens are what decide it, and no theme may touch them */
+    return Skins.data.skins.every(k => {
+      const t = Skins.tokensFor(k);
+      return t['--s-4'] === '16px' && t['--s-5'] === '24px' && t['--tap'] === '44px';
+    });
+  })());
+
+  /* ---- a pack is a file you can hand someone ---- */
+  ok('icons: a pack round-trips through its file format', (() => {
+    const file = Icons.packFile('pixel');
+    const back = Icons.readPack(file);
+    return !back.error && back.pack.id === 'pixel'
+      && Object.keys(back.pack.paths || {}).length === Icons.packRedraws('pixel').length;
+  })());
+  ok('icons: a dropped pack installs, is used, and can be removed', (() => {
+    const res = Icons.readPack(JSON.stringify({ kind: Icons.PACK_KIND, id: '__drop',
+      name: 'Dropped', style: { weight: 3, cap: 'butt', join: 'miter' },
+      paths: { plus: 'M2 2h20' } }));
+    if (res.error) return false;
+    /* readPack slugifies the id, so use the one it hands back rather than the
+       one that went in. Leading underscores do not survive, which is exactly
+       the sort of thing worth finding here rather than in the app. */
+    const id = res.pack.id;
+    Icons.savePack(res.pack);
+    const there = Icons.packs().indexOf(id) > -1;
+    const used = / d="M2 2h20"/.test(Icons.svg('add', { skin: { iconPack: id } }));
+    const weight = Icons.styleFor({ iconPack: id }).weight === 3;
+    Icons.forgetPack(id);
+    return there && used && weight && Icons.packs().indexOf(id) === -1;
+  })());
+  ok('icons: a stroke-only pack is valid, a nonsense file is not',
+    !Icons.readPack('{"name":"x","style":{"weight":2}}').error &&
+    !!Icons.readPack('{"name":"x"}').error &&
+    !!Icons.readPack('not json').error &&
+    !!Icons.readPack('{"base":{"bg":"#000"}}').error);
+  ok('icons: a pack file says what it is',
+    JSON.parse(Icons.packFile('bold')).kind === Icons.PACK_KIND);
+
   /* ---- icon packs ----
      A pack swaps the whole set. Most of a pack is a stroke recipe rather than
      new drawings, which is what makes a pack cost nothing. It may also redraw
