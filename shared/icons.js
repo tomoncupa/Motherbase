@@ -200,6 +200,71 @@ const NOTES = {
    Stroke, never shape. Defaults chosen to sit correctly next to 16px text. */
 const DEFAULT_STYLE = { weight: 1.75, cap: 'round', join: 'round', fill: false, wobble: false };
 
+/* ── packs ──
+   A pack swaps the whole set at once. Most of a pack is a STROKE RECIPE, not a
+   new set of drawings, because that is what makes a pack cost nothing: the same
+   fifty-two paths, drawn fine and engraved, or heavy and blunt, or wobbling.
+
+   A pack may also carry `paths`, which override individual drawings. `pixel`
+   does, for the handful where a blocky redraw actually reads differently at
+   20px. The rest of that pack inherits the line drawings, and STYLE says so
+   rather than pretending the whole set was redrawn.
+
+   A genuinely complete alternative set is fifty-two new paths. That is a real
+   piece of work and it should be a deliberate decision, not something that
+   happens by accident because a pack looked easy to add. */
+const PACKS = {
+  line: {
+    name: 'Line',
+    note: 'the default. Even stroke, rounded ends.',
+    style: { weight: 1.75, cap: 'round', join: 'round', fill: false, wobble: false },
+  },
+  bold: {
+    name: 'Bold',
+    note: 'heavier and rounder, for a chunky theme.',
+    style: { weight: 2.6, cap: 'round', join: 'round', fill: false, wobble: false },
+  },
+  engraved: {
+    name: 'Engraved',
+    note: 'fine and mitred, for a formal theme.',
+    style: { weight: 1.1, cap: 'butt', join: 'miter', fill: false, wobble: false },
+  },
+  hand: {
+    name: 'Hand-drawn',
+    note: 'wobbling, for a theme that is drawn rather than printed.',
+    style: { weight: 2.2, cap: 'round', join: 'round', fill: false, wobble: true },
+  },
+  pixel: {
+    name: 'Pixel',
+    note: 'blunt and square. A few are redrawn on a coarse grid; the rest '
+        + 'inherit the line drawings.',
+    style: { weight: 2.5, cap: 'butt', join: 'miter', fill: false, wobble: false },
+    /* Drawn on a 3px grid so every corner lands on it. Only the ones where a
+       blocky redraw actually reads differently at 20px are here. */
+    paths: {
+      plus:   'M10.5 4.5h3v6h6v3h-6v6h-3v-6h-6v-3h6z',
+      x:      'M6 4.5l3 3 3-3 3 3 3-3 1.5 1.5-3 3 3 3-1.5 1.5-3-3-3 3-3-3-3 3L4.5 16.5l3-3-3-3z',
+      check:  'M4.5 12h3v3h3v-3h3V9h3V6h3v3h-3v3h-3v3h-3v3h-3v-3h-3z',
+      dots:   'M4.5 10.5h3v3h-3zM10.5 10.5h3v3h-3zM16.5 10.5h3v3h-3z',
+      grid:   'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',
+      up:     'M12 6l7.5 7.5h-15z',
+      down:   'M12 18L4.5 10.5h15z',
+      left:   'M7.5 12L15 4.5v15z',
+      right:  'M16.5 12L9 19.5v-15z',
+      play:   'M7.5 4.5l12 7.5-12 7.5z',
+      pause:  'M7.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z',
+      star:   'M12 3l3 6h6l-4.5 4.5 1.5 6-6-3-6 3 1.5-6L3 9h6z',
+    },
+  },
+};
+
+/* A theme may name a pack. Nothing else about a theme changes. */
+function packFor(skin) {
+  const s = skin || (typeof Skins !== 'undefined' && Skins.current) || null;
+  const id = (s && s.iconPack) || 'line';
+  return PACKS[id] ? id : 'line';
+}
+
 let WOBBLE_READY = false;
 function ensureWobble() {
   if (WOBBLE_READY || typeof document === 'undefined') return;
@@ -253,9 +318,19 @@ const Icons = {
     return (wanted || []).filter(r => !this.iconFor(r));
   },
 
+  PACKS: PACKS,
+  packs() { return Object.keys(PACKS); },
+  packOf(skin) { return packFor(skin); },
+  /* Which drawings a pack actually redraws, so STYLE can be honest about how
+     much of a pack is its own work and how much it inherits. */
+  packRedraws(id) { return Object.keys((PACKS[id] || {}).paths || {}); },
+
+  /* The pack sets the recipe; anything the theme states itself still wins, so
+     a theme can pick Bold and then thin it slightly. */
   styleFor(skin) {
     const s = skin || (typeof Skins !== 'undefined' && Skins.current) || null;
-    return Object.assign({}, DEFAULT_STYLE, (s && s.icon) || {});
+    const pack = PACKS[packFor(s)];
+    return Object.assign({}, DEFAULT_STYLE, pack.style || {}, (s && s.icon) || {});
   },
 
   /* The drawing for a role, honouring a theme that overrides one shape. */
@@ -263,7 +338,11 @@ const Icons = {
     const id = this.iconFor(role);
     if (!id) return null;
     const s = skin || (typeof Skins !== 'undefined' && Skins.current) || null;
+    /* A single drawing named by the theme beats everything. */
     if (s && s.icons && s.icons[id]) return s.icons[id];
+    /* Then the pack, if it redrew this one. */
+    const pack = PACKS[packFor(s)];
+    if (pack.paths && pack.paths[id]) return pack.paths[id];
     return PATHS[id] || null;
   },
 

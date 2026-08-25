@@ -680,6 +680,45 @@ function run() {
     const d = id => (Icons.svg('add', { skin: Skins.get(id) }).match(/ d="([^"]+)"/) || [])[1];
     return d('doodle') === d('monarch') && d('ice') === d('ragnarok');
   })());
+  /* ---- icon packs ----
+     A pack swaps the whole set. Most of a pack is a stroke recipe rather than
+     new drawings, which is what makes a pack cost nothing. It may also redraw
+     individual icons, and a theme naming a single drawing still beats it. */
+  ok('icons: every pack builds a full style', Icons.packs().every(id => {
+    const st = Icons.styleFor({ iconPack: id });
+    return st.weight > 0 && st.cap && st.join;
+  }));
+  ok('icons: the packs are actually different from each other', (() => {
+    const seen = Icons.packs().map(id => {
+      const st = Icons.styleFor({ iconPack: id });
+      return [st.weight, st.cap, st.join, !!st.wobble].join('/');
+    });
+    return new Set(seen).size === seen.length;
+  })());
+  ok('icons: a pack may redraw an icon, and does', (() => {
+    const d = p => Icons.svg('add', { skin: { iconPack: p } }).match(/ d="([^"]+)"/)[1];
+    return Icons.packRedraws('pixel').length > 0 && d('pixel') !== d('line');
+  })());
+  /* svg() takes a ROLE, not a drawing name. 'gear' is a drawing; the button
+     that uses it is called 'settings'. Getting this wrong returns an empty
+     string rather than throwing, which is how it slipped past me once. */
+  ok('icons: what a pack does not redraw it inherits', (() => {
+    const d = p => (Icons.svg('settings', { skin: { iconPack: p } })
+      .match(/ d="([^"]+)"/) || [])[1];
+    return Icons.packRedraws('pixel').indexOf('gear') === -1
+      && !!d('line') && d('pixel') === d('line');
+  })());
+  ok('icons: a theme still overrides its pack', (() => {
+    const st = Icons.styleFor({ iconPack: 'bold', icon: { weight: 1.1 } });
+    return st.weight === 1.1;
+  })());
+  ok('icons: a theme naming one drawing beats the pack', (() => {
+    const d = Icons.svg('add', { skin: { iconPack: 'pixel', icons: { plus: 'M1 1' } } });
+    return / d="M1 1"/.test(d);
+  })());
+  ok('icons: an unknown pack falls back rather than breaking',
+    Icons.packOf({ iconPack: 'no-such-pack' }) === 'line');
+
   ok('icons: a button can be pointed elsewhere and put back', (() => {
     const was = Icons.iconFor('add');
     Rec.setting('style', 'icons', { add: 'star' });

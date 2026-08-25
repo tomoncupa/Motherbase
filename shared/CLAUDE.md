@@ -3,12 +3,14 @@
 Governs `shared/` only. The repo-root `CLAUDE.md` governs everything else and
 still applies here.
 
-**Every app depends on these eight files.** A mistake in an app breaks one app. A
+**Every app depends on these nine files.** A mistake in an app breaks one app. A
 mistake here breaks all of them and can lose data. Work slowly.
 
-`STANDARDS.md`, next to this file, is the house style for how the apps feel on a
-phone. It is binding the same way this file is, and it is written for Tom rather
-than for you — read it before changing anything anybody touches.
+`STANDARDS.md`, next to this file, is the house style for how the apps feel. It
+is binding the same way this file is, and it is written for Tom rather than for
+you — read it before changing anything anybody touches. **It governs `status/`
+and `train/` only:** those are the phone apps. Everything else in the suite is a
+desktop app. Set by Tom on 2026-08-22, and the top of `STANDARDS.md` says so.
 
 ## The one-session rule
 
@@ -28,10 +30,11 @@ are holding a stale copy of whatever you just changed.
 | `skins.js` `skins.json` | Themes, and the colour layer on top. | Medium. Cosmetic but wide. |
 | `mobile.js` | The touch layer: sheets, swipes, keyboard, back stack, haptics, safe areas. | Medium. Every app's feel. |
 | `sound.js` | Sound themes and instruments, synthesised. | Low. |
-| `ui.js` | Snackbars, dialogs, menus, switches, the Settings panel. | Medium. |
+| `ui.js` | Snackbars, dialogs, menus, switches, the Settings panel. **Build app screens out of these, never a private copy of them.** | Medium. |
+| `icons.js` | The icon master set: ~52 drawings carrying ~144 buttons, plus the packs. | Medium. Every button in the suite. |
 | `io.js` | Backup, restore, spreadsheet export. | High. It is the safety net. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 64 checks over all of it. | Run it every time. |
+| `_smoke.html` | 143 checks over all of it. | Run it every time. |
 
 ## Rules
 
@@ -45,8 +48,14 @@ are holding a stale copy of whatever you just changed.
 4. **Every colour is a token.** No hex in `ui.js`, ever. Use the skin tokens with a
    fallback so the file works before a skin is applied.
 5. **`_smoke.html` must pass before you commit.** Add checks when you add
-   behaviour; the count only goes up. Run it at phone width as well as desktop
-   width — several of the checks measure things that only exist at one of them.
+   behaviour; the count only goes up. Run it in a window with a real height —
+   several checks measure geometry, and a zero-height pane reports a false
+   failure on the sheet check.
+5b. **An app screen is built out of `ui.js`, not beside it.** `UI.row`,
+   `UI.field`, `UI.toggle`, `UI.segmented` and the `.mb-group`, `.mb-swatch`,
+   `.mb-opt` classes. A private copy of a component inherits nothing: not the
+   current theme, not the next fix. STYLE was built the wrong way round once and
+   had to be rebuilt.
 6. **`mobile.js` loads before `ui.js`.** It owns the sheet, the button and the
    press states; `ui.js` checks whether it is there and falls back to the old
    desktop dialog if it is not. Two definitions of the same class is how one of
@@ -84,3 +93,11 @@ work. Clean up any test data you write, and stop the server when you are done.
 - **A row key built from the clock alone is not unique.** Two rows created in
   the same millisecond derive the same row id, and the second silently replaces
   the first. Add a counter.
+- **`Icons.svg()` takes a ROLE, not a drawing name.** `gear` is a drawing; the
+  button is `settings`. Passing a drawing name returns an empty string rather
+  than throwing, so it looks like nothing happened.
+- **`UI.confirm` is `(question, detail, opts)` and returns a promise.** Calling
+  it with an options object renders `[object Object]` and never runs the action.
+- **The browser caches a changed shared file hard.** Every test this session
+  needed a new port. Apps carry `?v=N` on their script tags; bump it when you
+  change something here, or the app will not see it.
