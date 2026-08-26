@@ -718,6 +718,30 @@ function run() {
      about it. Lego's header went transparent because I wrote var(--panel):
      the four base colours are called bg, panel, accent and text, but the
      tokens they become are --bg, --surface-1, --accent and --text-1. */
+  /* A theme writing its own colour as a literal, when a token already holds
+     that exact colour, quietly breaks the colour editor: you change "Card
+     fill" and nothing moves, because the CSS said #FFFFFF rather than
+     var(--surface-1). Ragnarok was doing it seventeen times and its card was
+     unreachable. */
+  ok('skins: no theme writes a colour a token already holds', (() => {
+    const OF = { bg: '--bg', panel: '--surface-1', accent: '--accent', text: '--text-1' };
+    const bad = [];
+    Skins.data.skins.forEach(k => {
+      const css = (k.css || '').replace(/\/\*[\s\S]*?\*\//g, '');
+      const holds = {};
+      Object.keys(OF).forEach(n => { if (k.base[n]) holds[k.base[n].toLowerCase()] = OF[n]; });
+      Object.keys(k.overrides || {}).forEach(tok => {
+        const v = k.overrides[tok];
+        if (typeof v === 'string' && v[0] === '#') holds[v.toLowerCase()] = holds[v.toLowerCase()] || tok;
+      });
+      (css.match(/#[0-9a-f]{6}\b/gi) || []).forEach(h => {
+        if (holds[h.toLowerCase()]) bad.push(k.id + ' ' + h + ' is ' + holds[h.toLowerCase()]);
+      });
+    });
+    if (bad.length) console.warn('literal where a token exists:', bad);
+    return bad.length === 0;
+  })());
+
   ok('skins: no theme names a token that does not exist', (() => {
     const real = Object.keys(Skins.tokensFor(Skins.data.skins[0]));
     const bad = [];
