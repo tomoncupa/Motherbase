@@ -86,6 +86,10 @@ nav button{
 nav button.on{background:color-mix(in srgb,var(--accent) 14%,var(--surface-2));color:var(--acc);box-shadow:0 0 0 1px var(--acc-d)}
 nav button .k{font-size:9px;opacity:.5}
 nav button.dead{color:#43535f}
+/* dragging the dock into the order you want */
+nav button[draggable]{cursor:grab}
+nav button.dragging{opacity:.4;cursor:grabbing}
+nav button.dropinto{box-shadow:inset 2px 0 0 var(--acc)}
 .spacer{flex:1}
 .clock{font-family:var(--f1);font-size:12px;letter-spacing:.1em;color:var(--dim);text-align:right;line-height:1.35}
 .clock b{display:block;color:var(--txt);font-size:14px;letter-spacing:.14em}
@@ -528,6 +532,41 @@ const APPS = [
   { id: 'style',  nm: 'STYLE',  ic: '◧', file: 'style/index.html',  ds: 'pick, compare, edit and add themes',         shares: 'the themes every app wears' },
 ];
 const app = id => APPS.find(a => a.id === id);
+
+/* ══════════════ the order of the dock ══════════════
+   APPS above is the roster — which apps exist. This is the order you put them
+   in, which is a different fact and yours rather than the file's.
+
+   Stored as a list of ids, and always reconciled against the roster on the way
+   out: an id for an app that no longer exists is dropped, and an app added to
+   the roster later appears at the end rather than not at all. That is what
+   stops a saved order from quietly hiding a new app.
+
+   The number on each button is its position, not its identity, so the keyboard
+   shortcut always matches what you can see: 3 opens the third one along. */
+function dockOrder() {
+  const saved = Rec.setting('lifeos', 'dock') || [];
+  const known = {};
+  APPS.forEach(a => known[a.id] = a);
+  const out = [];
+  saved.forEach(id => { if (known[id] && out.indexOf(id) < 0) out.push(id); });
+  APPS.forEach(a => { if (out.indexOf(a.id) < 0) out.push(a.id); });
+  return out;
+}
+const dockApps = () => dockOrder().map(app).filter(Boolean);
+function saveDock(ids) {
+  Rec.setting('lifeos', 'dock', ids);
+  drawNav();
+}
+/** move one app n places along the dock */
+function moveApp(id, d) {
+  const ids = dockOrder();
+  const i = ids.indexOf(id), j = i + d;
+  if (i < 0 || j < 0 || j >= ids.length) return;
+  ids.splice(j, 0, ids.splice(i, 1)[0]);
+  saveDock(ids);
+  if (typeof Mobile !== 'undefined') Mobile.feedback('select');
+}
 if (typeof Icons !== 'undefined') addEventListener('DOMContentLoaded', () => {
   const w = document.getElementById('wIco');
   if (w) w.innerHTML = Icons.svg('add', { size: 16 });
@@ -584,7 +623,8 @@ window.addEventListener('message', e => { const m = e.data; if (m && m.lifeos ==
 function drawNav() {
   const n = $('#nav'); n.innerHTML = '';
   const tabs = $('#tabs'); tabs.innerHTML = '';
-  APPS.forEach((a, i) => {
+  const order = dockApps();
+  order.forEach((a, i) => {
     const state = (view === a.id ? 'on ' : '') + (missing[a.id] ? 'dead' : '');
     const open = () => missing[a.id]
       ? toast('<b>' + esc(a.file) + '</b> is missing from this folder', { bad: true })
@@ -593,6 +633,39 @@ function drawNav() {
     const b = el('button', state, '<span>' + appIco(a, 16) + '</span>' + a.nm + '<span class="k">' + (i + 1) + '</span>');
     b.title = missing[a.id] ? a.file + ' is not in this folder' : a.ds;
     b.onclick = open;
+
+    /* ── drag to reorder ──
+       The dock is a row of things you look at every day, so the order should be
+       the one that suits you rather than the one the roster happens to be
+       written in. Native HTML drag and drop, because this is the desktop
+       screen and it is what a mouse already expects.
+
+       Right-click does the same job without a drag, which is the route that
+       works for a keyboard, for a trackpad someone finds fiddly, and on a
+       phone where the dock is the tab bar at the bottom. */
+    b.draggable = true;
+    b.dataset.appId = a.id;
+    b.addEventListener('dragstart', ev => {
+      ev.dataTransfer.setData('text/plain', a.id);
+      ev.dataTransfer.effectAllowed = 'move';
+      b.classList.add('dragging');
+    });
+    b.addEventListener('dragend', () => b.classList.remove('dragging'));
+    b.addEventListener('dragover', ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; b.classList.add('dropinto'); });
+    b.addEventListener('dragleave', () => b.classList.remove('dropinto'));
+    b.addEventListener('drop', ev => {
+      ev.preventDefault();
+      b.classList.remove('dropinto');
+      const from = ev.dataTransfer.getData('text/plain');
+      if (!from || from === a.id) return;
+      const ids = dockOrder();
+      const fi = ids.indexOf(from);
+      if (fi < 0) return;
+      ids.splice(fi, 1);
+      ids.splice(ids.indexOf(a.id) + (fi < ids.indexOf(a.id) ? 1 : 0), 0, from);
+      saveDock(ids);
+    });
+    b.oncontextmenu = ev => { ev.preventDefault(); dockMenu(a, i, order.length, ev.clientX, ev.clientY); };
     n.appendChild(b);
 
     /* the same button again, for the thumb. Icon over label, because at this
@@ -601,8 +674,25 @@ function drawNav() {
     t.setAttribute('aria-label', a.nm + ' — ' + a.ds);
     if (view === a.id) t.setAttribute('aria-current', 'page');
     t.onclick = open;
+    /* the thumb route to the same menu */
+    if (typeof Mobile !== 'undefined' && Mobile.hold) Mobile.hold(t, () => dockMenu(a, i, order.length, 0, 0));
     tabs.appendChild(t);
   });
+}
+
+/* Move it, or put the whole dock back the way it shipped. */
+function dockMenu(a, i, total, x, y) {
+  UI.menu(x, y, [
+    i > 0 ? { label: 'Move left', icon: '\u2190', fn: () => moveApp(a.id, -1) } : null,
+    i < total - 1 ? { label: 'Move right', icon: '\u2192', fn: () => moveApp(a.id, 1) } : null,
+    i > 0 ? { label: 'Move to the front', fn: () => {
+        const ids = dockOrder();
+        ids.splice(0, 0, ids.splice(ids.indexOf(a.id), 1)[0]);
+        saveDock(ids);
+      } } : null,
+    '-',
+    { label: 'Reset the order', fn: () => { Rec.setting('lifeos', 'dock', []); drawNav(); } },
+  ].filter(Boolean), { title: a.nm });
 }
 /* a tile for a file that is not there should say so, not open a blank frame */
 function probe() {
@@ -1469,7 +1559,10 @@ window.addEventListener('keydown', e => {
      nothing open and Escape means "back to home". */
   if (e.key === 'Escape') { if (modalH) return; return go('home'); }
   const n = parseInt(e.key, 10);
-  if (n >= 1 && n <= APPS.length && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); go(APPS[n - 1].id); }
+  /* the number on the button, which is its position — so the key and the badge
+     never disagree after the dock has been rearranged */
+  const dock = dockApps();
+  if (n >= 1 && n <= dock.length && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); go(dock[n - 1].id); }
 });
 window.addEventListener('hashchange', () => { const id = location.hash.slice(1) || 'home'; if (id !== view && app(id)) go(id); });
 
