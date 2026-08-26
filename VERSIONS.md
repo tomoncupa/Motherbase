@@ -16,6 +16,51 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.9 — 2026-08-26
+
+**A date is YYYY-MM-DD, and the Google Sheet stops saying otherwise.** This one
+changes stored data, which is why it gets a number.
+
+A date cell came back from Apps Script as a Date object, `toISOString()` turned
+it into `2026-08-20T16:00:00.000Z`, and the sheet pull wrote that in as the
+row's date. Half of every row id is its date, so that is not a badly formatted
+date — it is a second row for a fact that already had one.
+
+It was doubling up carried tasks in the STATUS journal. Because the ISO string
+sorts after the plain date it belongs to, the copy stayed invisible on its own
+day and then turned up alongside the original from the next day onward, wearing
+a NaN age badge. Reproduced in the browser, before and after.
+
+Fixed at both ends: the generated Apps Script formats the date column in the
+sheet's own timezone, and `io.js` normalises whatever arrives regardless —
+plain string, ISO timestamp, Date object or Excel serial. `records.js` repairs
+the rows already written, once, at load; where a malformed row collides with a
+good one the newer `updated_at` wins, which is the rule a merge already
+follows. **Redeploy the Apps Script to get the first half.**
+
+**A spreadsheet column can name its own values.** A column spec may carry a map
+of stored value to the word for it, resolved at export time so it can be built
+from the app's own vocabulary rather than typed out twice. STATUS's Journal tab
+now reads Todo / Entry / Event / Idea instead of the slugs underneath, and
+typing any of them back stores the slug again. Tracked's second column called
+Kind is now "Measured as".
+
+**The home screen is called MAIN MENU.** LIFEOS was a project name.
+
+**BLOCK learned about dates.** A date strip on the board, and days that can be
+pinned to a single calendar date instead of a weekday — the one-off content day
+built on the day itself. New days start with no routines rather than a copy of
+every routine you own. Blocks can be marked not needed today, which counts
+neither as done nor as owed and cannot break a streak. Notes take links. The
+time field is typeable.
+
+**TRAIN's Copy Previous Workout works.** A placeholder further down the file had
+been silently replacing the real implementation at load since it was written. A
+copied session now also says how much stronger it went, per exercise and for
+the session.
+
+---
+
 ## 0.1.8 — 2026-08-26
 
 **No theme ships an unreadable colour.** Every text colour, and the accent
