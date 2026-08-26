@@ -383,7 +383,7 @@ because it runs the real thing rather than only parsing it:
 
 1. Serve the folder: `py -3 -m http.server 8777 -d "<repo>"`.
 2. Open it with the browser tool, drive it with JavaScript, read the console.
-3. Run `shared/_smoke.html`. It must say 64 of 64, or more once you add checks.
+3. Run `shared/_smoke.html`. It must say 152 of 152, or more once you add checks.
    Run it at phone width too — some checks only mean anything at one width.
 4. Clean up any test data you wrote, and stop the server.
 
@@ -441,15 +441,18 @@ Never claim something works because it should. Claim it because you watched it.
 | `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
-| `shared/` | Built and passing 35 checks. Not yet wired into the real apps. |
+| `shared/` | The foundation, passing 152 checks. Every app loads it. |
 
 ### Debt, in the order it should be paid
 
 1. ~~The old blob kernel~~ **Done 2026-08-20.** Kernel v2 is a view over
    `records.js`; the apps kept their API and did not move. First load copies the
    old `lifeos_v1` blob into rows and leaves it in place as its own backup.
-2. **ARC carries its own copy of the theme engine.** It should load
-   `shared/skins.js` instead of defining `THEMES` itself.
+2. ~~ARC carries its own copy of the theme engine~~ **Done 2026-08-26.** It
+   reads `shared/skins.js` and went from ten themes to eighteen, keeping its
+   own per-theme colour editing. BLOCK and FORM went onto it the same day.
+   HABITS is the only app not on the theme system, deliberately: it is a
+   placeholder.
 3. **The apps still carry their own settings, themes and sounds** instead of using
    `shared/ui.js`, `skins.js` and `sound.js`. Only `_template/` is fully on them.
 3b. ~~Apps not loading `shared/mobile.js`~~ **Done 2026-08-20.** Every app
