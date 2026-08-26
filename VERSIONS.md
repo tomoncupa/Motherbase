@@ -16,6 +16,52 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.7 — 2026-08-26
+
+**BLOCK, ARC and FORM obey STYLE.** All three loaded `mobile.js` and nothing
+else, so picking a theme did nothing in any of them. That was 470 hard-coded
+colours across the three, and it is the reason the suite looked like four
+different products.
+
+Pick a theme now and it reaches every app except HABITS, which is a
+placeholder and was deliberately left alone.
+
+**ARC also stopped carrying a second theme engine** — repo debt item 2. It had
+its own ten schemes and its own palette store, and `skins.js` is modelled on
+it, which is exactly why two of them could not both exist. ARC went from ten
+themes to eighteen and keeps its own colour editing on all of them. If it was
+wearing Ember, Violet, Matrix or Mono, it moves to Ice carrying that accent as
+a saved palette, so the map keeps its colours.
+
+**Three lines where a theme deliberately stops**, all commented in place:
+
+- BLOCK's lane palette. The colour you pick is written onto the row, and a
+  stored colour that followed the theme would re-colour last month's plan
+  every time you changed skin.
+- BLOCK's print stylesheet. Paper has no theme.
+- FORM's pen, pose skeleton and letterbox. Those sit on a gym floor the theme
+  knows nothing about. Sketch's accent is legible on cream paper and invisible
+  over a dim squat rack.
+
+**Faults the conversion exposed**, all measured across six themes:
+
+- BLOCK's selected tab was the accent used as text on a plate, which came to
+  1.53 on Minecraft. It is the accent with `--accent-fg` on it now.
+- FORM's Analyse button was amber on amber: 2.51 on Ragnarok. 11.32 now.
+- FORM's empty video plate covered the themed wrapper and took "Drop a video
+  here" with it, grey on black on any light theme.
+- ARC's four scheme rules each named their own font and beat the token, so it
+  rendered in IBM Plex Sans whatever it wore. Its own font picker did the same
+  thing inline; "default" now clears the override rather than writing one.
+
+**One finding left open, because it is the theme's and not an app's.**
+`--text-muted` on the two light themes computes to about 3.9 against the page,
+under the 4.5 that small text needs. It shows up in STATUS, FORM and BLOCK,
+fourteen elements in BLOCK alone. One fix in the engine beats fourteen
+workarounds in three apps.
+
+---
+
 ## 0.1.6 — 2026-08-26
 
 **STATUS stopped keeping its own rulers.** Its colours came from the theme, so
