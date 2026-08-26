@@ -294,6 +294,11 @@ label.fl:first-child{margin-top:0}
 .shot img{width:var(--s-7);height:var(--s-7);object-fit:cover;border-radius:var(--radius-sm)}
 .thumb{width:var(--s-5);height:var(--s-5);object-fit:cover;border-radius:var(--radius-sm);flex:0 0 auto}
 
+.fdot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;order:-1;align-self:center;display:block}
+.chip.swatch{min-width:var(--tap);position:relative}
+.chip.swatch[style*="--sw"]::after{content:'';position:absolute;inset:var(--s-2);
+  border-radius:calc(var(--radius-1) / 2);background:var(--sw)}
+
 /* ── chart legend ──
    Named lines, because three unlabelled dashes are decoration. */
 .legend{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-2)}
@@ -354,6 +359,7 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 .note-row.cancelled{opacity:.45}
 .note-row.cancelled .tx{text-decoration:line-through;text-decoration-style:double}
 .note-row.cancelled .nm-box{border-style:dashed}
+.nm-mig{line-height:13px}
 /* how many days it has been following you */
 .carried{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);
   color:var(--warn);margin-left:var(--s-2);opacity:.8}
@@ -378,8 +384,8 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 
 .grid28{display:grid;grid-template-columns:repeat(14,1fr);gap:3px;margin-top:var(--s-2)}
 .grid28 i{aspect-ratio:1;border-radius:2px;background:var(--surface-3);display:block}
-.grid28 i.on{background:var(--accent)}
-.grid28 i.part{background:var(--accent);opacity:.35}
+.grid28 i.on{background:var(--cell,var(--accent))}
+.grid28 i.part{background:var(--cell,var(--accent));opacity:.35}
 
 .conf{height:4px;border-radius:2px;background:var(--surface-3);overflow:hidden;margin-top:var(--s-2)}
 .conf i{display:block;height:100%;background:var(--accent);border-radius:2px}
@@ -589,6 +595,39 @@ function seedFields() {
 
 const fields = () => Rec.map('field');
 const field = id => fields()[id] || null;
+/* ── the tracker list, grouped ──
+   Sorting by order alone and emitting a heading whenever it changes gives you
+   "Body" twice the moment an uncategorised field sits between two Body ones.
+   So the groups are collected first and only then flattened: the unnamed group
+   leads, because a field with no category is not in a group and should not be
+   filed under whichever name happens to sort first, and every named category
+   follows in the order its first field appears.
+
+   The flattened result is also the order the arrows renumber, so what the
+   tracker screen shows and what Today shows stay the same list. */
+function groupedFields() {
+  const list = Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const byCat = Object.create(null), order = [];
+  list.forEach(f => {
+    const c = f.cat || '';
+    if (!byCat[c]) { byCat[c] = []; order.push(c); }
+    byCat[c].push(f);
+  });
+  const out = (byCat[''] || []).slice();
+  order.forEach(c => { if (c) byCat[c].forEach(f => out.push(f)); });
+  return out;
+}
+
+/* every category in use, for the type-ahead on the field form */
+const fieldCats = () => {
+  const seen = Object.create(null);
+  Object.values(fields()).forEach(f => { if (f.cat) seen[f.cat] = 1; });
+  return Object.keys(seen).sort();
+};
+/* A field's colour as a token, never a hex. An explicit slot wins; otherwise
+   it is dealt round the ramp by position, so a screen of fields that nobody
+   has coloured still reads as six distinct things rather than six greys. */
+const fieldColor = f => 'var(--data-' + ((num(f.color, 0) || (((f.order || 0) % 6) + 1))) + ')';
 const liveFields = () => Object.values(fields()).filter(f => f.on).sort((a, b) => (a.order || 0) - (b.order || 0));
 
 /* ── values ── */
@@ -800,10 +839,19 @@ const NOTE_KINDS = [
    Drawn as one glyph each so they take the theme's colour and scale with the
    text around them. */
 const NOTE_MARK = { todo: '', entry: '·', event: '–', idea: '!' };
-const noteSvg = id =>
-  id === 'todo'
-    ? '<span class="nm-box" aria-hidden="true"></span>'
-    : '<span class="nm-ch" aria-hidden="true">' + (NOTE_MARK[id] || '·') + '</span>';
+/* A task that has followed you here is drawn `>`, not as a box.
+
+   That is what the notation already means — migrated — and it is the whole
+   point of the mark: an open box is something you decided to do today, and a
+   `>` is something you have now decided to do four times. Same row, same tick,
+   different glyph, so the list tells you which is which at a glance instead of
+   making you read the little age badge on the right. */
+const noteSvg = (id, migrated) =>
+  id !== 'todo'
+    ? '<span class="nm-ch" aria-hidden="true">' + (NOTE_MARK[id] || '·') + '</span>'
+    : migrated
+      ? '<span class="nm-ch nm-mig" aria-hidden="true">&gt;</span>'
+      : '<span class="nm-box" aria-hidden="true"></span>';
 
 const noteKind = id => NOTE_KINDS.filter(k => k.id === id)[0] || NOTE_KINDS[1];
 
@@ -1393,10 +1441,16 @@ function numberInput(v, step, dec) {
   i.className = 'num';
   Mobile.field(i, dec ? 'decimal' : 'number');
   i.value = v == null ? '' : String(v);
+  /* The buttons have to announce themselves. Setting .value from script fires
+     no event, so every sheet that watches `oninput` to recompute something —
+     the whole of the food amount sheet — sat there showing one multiple and
+     logging another. Typing worked and pressing + did nothing, which is
+     exactly how "logging by multiples doesn't work" looks from outside. */
   const bump = d => {
     const cur = num(i.value, 0) || 0;
     const n = Math.max(0, cur + d * step);
     i.value = dec ? String(r1(n)) : String(Math.round(n));
+    i.dispatchEvent(new Event('input', { bubbles: true }));
   };
   minus.onclick = () => bump(-1); plus.onclick = () => bump(1);
   w.appendChild(minus); w.appendChild(i); w.appendChild(plus);
@@ -1929,6 +1983,44 @@ function toggleCheck(f, date) {
   closeSheet(); draw();
 }
 
+/* ── the doses you actually take ──
+   A fixed chip list is a guess made once, by whoever wrote the library, about
+   what a coffee is. It is wrong within a week: the shots you actually drink
+   are 95, 160, 210, not the round 100/150/200/300 that shipped.
+
+   So the chips are read back out of your own log — most recent first, deduped,
+   at most six. The static list only fills what is left until there is enough
+   history to have an opinion. Nothing to configure, and it keeps following you
+   as what you drink changes.                                                */
+function recentDoses(f) {
+  const seen = Object.create(null), out = [];
+  const days = Day.last(60);
+  /* newest day first, and newest entry first within a day */
+  for (let i = days.length - 1; i >= 0 && out.length < 6; i--) {
+    const list = entries(days[i], f.id);
+    for (let j = list.length - 1; j >= 0 && out.length < 6; j--) {
+      /* a figure off a food label is not a dose you chose, so it is not
+         offered back to you as one */
+      if (list[j].food) continue;
+      const v = r1(list[j].v);
+      if (!v || seen[v]) continue;
+      seen[v] = 1; out.push(v);
+    }
+  }
+  (f.chips || []).forEach(v => { if (out.length < 6 && !seen[v]) { seen[v] = 1; out.push(v); } });
+  return out.sort((a, b) => a - b);
+}
+
+/* ── fast typing ──
+   These ADD to what is in the box rather than replacing it, which is what
+   makes a step count three taps instead of five digits. Derived from the
+   field's own step so the sizes suit the quantity: steps step by 500 and get
+   +1000 / +500 / +100, caffeine steps by 50 and gets +100 / +50 / +10.     */
+function bumpsFor(f) {
+  const b = num(f.step, 1) || 1;
+  return [b * 2, b, b / 5].filter(v => v > 0);
+}
+
 /* numbers and doses. A dose adds up through the day; a number replaces. */
 function numberSheet(f, date) {
   /* a half-life field opens with what is still in you, not just today's total */
@@ -1955,11 +2047,29 @@ function numberSheet(f, date) {
       afterLog();
     };
 
-    if (f.chips && f.chips.length) {
-      body.appendChild(chipRow(f.chips.map(v => ({ label: String(v), value: v })), commit));
+    /* A dose offers what you have actually been taking; everything else offers
+       the list its definition carries. */
+    const chips = dose ? recentDoses(f) : (f.chips || []);
+    if (chips.length) {
+      body.appendChild(chipRow(chips.map(v => ({ label: String(v), value: v })), commit));
     }
-    const inp = numberInput(cur != null ? cur : prev, f.step || 1, f.dec ? 1 : 0);
+
+    /* ── blank, not filled in ──
+       It used to open showing the last value logged, days old, sitting in the
+       box you are about to type into. That is not a suggestion — it reads as a
+       number already in the record, and pressing Save without noticing files
+       last Tuesday's steps as today's. Repeating a reading should be a
+       deliberate press, and it already has its own button below.           */
+    const inp = numberInput(cur, f.step || 1, f.dec ? 1 : 0);
     body.appendChild(inp);
+
+    const add = n => {
+      const at = (num(inp.input.value, 0) || 0) + n;
+      inp.input.value = f.dec ? String(r1(at)) : String(Math.round(at));
+      inp.input.dispatchEvent(new Event('input', { bubbles: true }));
+      Mobile.haptic('select');
+    };
+    body.appendChild(chipRow(bumpsFor(f).map(v => ({ label: '+' + r1(v), value: v })), add));
 
     if (prev != null) {
       const p = el('button', 'btn wide quiet', 'Last ' + prev + (f.unit ? ' ' + f.unit : '') + ' · ' + (prevAgo === 1 ? 'yesterday' : prevAgo + ' days ago'));
@@ -1977,7 +2087,10 @@ function numberSheet(f, date) {
         list.slice().reverse().forEach(e => body.appendChild(entryRow(f, d, e)));
       }
     }
-  }, { focus: !(f.chips && f.chips.length) });
+    /* The box is the point of the sheet, so the cursor starts in it. Chips no
+       longer suppress that: a chip is one tap either way, and having to tap
+       the field first was the slower path for everything else.             */
+  }, { focus: true });
 }
 
 /* one logged entry, with the time it happened and a way to take it back */
@@ -2571,7 +2684,7 @@ function drawJournal(m) {
       /* how long it has been following you — quiet, but it should sting a bit */
       (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') + '</span>';
     const box = r.querySelector('.k');
-    box.innerHTML = noteSvg(x.kind);
+    box.innerHTML = noteSvg(x.kind, x.carried);
     box.setAttribute('aria-label', x.kind === 'todo' ? (x.done ? 'Untick' : 'Tick') : noteKind(x.kind).label);
     if (x.kind === 'todo') {
       box.onclick = e => {
@@ -2617,15 +2730,40 @@ function noteSheet(x, d) {
     ta.setAttribute('autocapitalize', 'sentences');
     body.appendChild(ta);
 
-    body.appendChild(saveBar(isNew ? 'Add' : 'Save', () => {
+    /* `again` reopens an empty line of the same kind instead of closing, which
+       is what makes a list a list. */
+    const commit = again => {
       const text = ta.value.trim();
       if (!text) return UI.toast('Nothing to save', { bad: true });
       if (isNew) addNote(d, kind, text);
       else Rec.set('note', x.date || d, x.key, Object.assign(bare(x), { kind: kind, text: text }));
       publishNotes(d);
-      Mobile.feedback('success');
+      Mobile.feedback(again ? 'tick' : 'success');
+      if (again) { draw(); noteSheet({ kind: kind, text: '' }, d); return; }
       closeSheet(); draw();
-    }));
+    };
+
+    /* ── Enter carries on the list ──
+       A bullet is one line, so Return has nothing useful to do inside the box:
+       it makes an invisible second line in a field three rows tall. Writing
+       five todos meant Add, tap the todo button, type, Add, tap, type. Now it
+       is type, Enter, type, Enter — which is how every outliner and every
+       paper bullet journal already behaves.
+
+       An Entry is the exception and keeps Return as a newline, because an
+       entry is prose and genuinely has paragraphs. Shift+Enter forces a
+       newline anywhere, and an empty line closes the sheet — that is the
+       gesture for "done making these".                                     */
+    ta.onkeydown = e => {
+      if (e.key !== 'Enter' || e.shiftKey || e.altKey || kind === 'entry') return;
+      /* mid-composition on an IME, Enter is choosing a candidate, not a line */
+      if (e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      if (!ta.value.trim()) { closeSheet(); draw(); return; }
+      commit(true);
+    };
+
+    body.appendChild(saveBar(isNew ? 'Add' : 'Save', () => commit(false)));
   });
   /* Focus alone drops the caret wherever the platform feels like. Putting it
      after the last character is what "carry on writing" means. */
@@ -2969,8 +3107,13 @@ function drawTrends(m) {
     m.appendChild(c4);
   }
 
+  /* Only what you asked to see. A field turned out of the visualiser is still
+     logged and still on Today — it has simply stopped being one more row on a
+     card that only works while you can take it in at a glance. */
   const c3 = card('Last 28 days');
-  liveFields().forEach(f => {
+  const shown = liveFields().filter(f => f.viz !== 0);
+  if (!shown.length) c3.appendChild(el('div', 'empty', 'Nothing is set to show here. Settings, Track, and turn one back on.'));
+  shown.forEach(f => {
     const days = Day.last(28);
     const r = el('div');
     r.style.marginBottom = 'var(--s-3)';
@@ -2978,6 +3121,10 @@ function drawTrends(m) {
     r.innerHTML = '<div style="display:flex;font-size:var(--f-1)"><b style="font-weight:600;color:var(--text-2)">' +
       esc(f.label) + '</b><span class="mono muted" style="margin-left:auto">' + hit + '/28</span></div>';
     const g = el('div', 'grid28');
+    /* Its own colour, so twelve stacked grids are twelve things rather than
+       one accent-coloured smear. Set on the row and inherited by the cells,
+       which keeps it one property instead of twenty-eight. */
+    g.style.setProperty('--cell', fieldColor(f));
     days.forEach(d => {
       const v = value(d, f.id);
       const on = v != null && (!f.target || (f.dir === 'lte' ? v <= f.target : v >= f.target));
@@ -3283,9 +3430,12 @@ function openSettings() {
    keeps the numbers dense and means a field added later cannot land in the
    middle of the pack by accident. */
 function moveField(id, dir) {
-  const list = Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const list = groupedFields();
   const i = list.findIndex(f => f.id === id), j = i + dir;
   if (i < 0 || j < 0 || j >= list.length) return;
+  /* within its own group only — the button is already disabled at the edges,
+     and this is the guard that keeps that true if anything else calls it */
+  if ((list[j].cat || '') !== (list[i].cat || '')) return;
   list.splice(j, 0, list.splice(i, 1)[0]);
   list.forEach((f, n) => Rec.set('field', null, f.id, Object.assign({}, f, { order: n })));
   Mobile.feedback('select');
@@ -3352,8 +3502,14 @@ function removeAcct(a) {
 
 function drawTrackTab(pane) {
   settingsPane = pane;
-  const list = Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const list = groupedFields();
+  let lastCat = null;
   list.forEach((f, i) => {
+    const c = f.cat || '';
+    if (c !== lastCat) {
+      lastCat = c;
+      if (c) pane.appendChild(el('label', 'fl', esc(c)));
+    }
     const kind = { number: 'once a day', amount: 'a dose, added up', scale: '1 to ' + (f.max || 5), check: 'done or not' }[f.measure] || '';
     const bits = [kind];
     if (f.unit) bits.push(f.unit);
@@ -3367,13 +3523,20 @@ function drawTrackTab(pane) {
        ignores what you ate looks identical to one that counts it, and the
        only symptom is a number that stays at nothing. */
     if (f.from) bits.push('+ ' + ((NUT_FROM.filter(n => n[0] === f.from)[0] || [])[1] || f.from).toLowerCase() + ' from food');
+    /* Said out loud, for the same reason the food link is: a field missing
+       from the chart looks identical to a field with no data. */
+    if (f.viz === 0) bits.push('not charted');
     const row = toggleRow(f.label, bits.join(' \u00b7 '), !!f.on, on => {
       Rec.set('field', null, f.id, Object.assign({}, f, { on: on ? 1 : 0 }));
       drawSettingsPane('track'); draw();
     });
     const mv = el('div');
     mv.style.cssText = 'display:flex;gap:2px;flex:0 0 auto;order:-1';
-    [['↑', -1, i === 0], ['↓', 1, i === list.length - 1]].forEach(([g, d, off]) => {
+    /* An arrow may not carry a field out of its category: that would silently
+       recategorise it, which is not what an up arrow means anywhere. So the
+       first and last of each group have nowhere to go. */
+    const sameCat = k => list[k] && (list[k].cat || '') === c;
+    [['↑', -1, !sameCat(i - 1)], ['↓', 1, !sameCat(i + 1)]].forEach(([g, d, off]) => {
       const b = el('button', 'ord mb-press mb-tap', g);
       b.disabled = off;
       b.setAttribute('aria-label', (d < 0 ? 'Move up: ' : 'Move down: ') + f.label);
@@ -3381,6 +3544,11 @@ function drawTrackTab(pane) {
       mv.appendChild(b);
     });
     row.insertBefore(mv, row.firstChild);
+    /* A dot in the field's own colour, so the list and the chart agree about
+       which line is which without either of them having to say so. */
+    const dot = el('i', 'fdot');
+    dot.style.background = fieldColor(f);
+    row.insertBefore(dot, row.firstChild);
     /* tapping the name opens the field, so everything about it is editable */
     const lbl = row.querySelector('.lbl') || row.querySelector('b');
     if (lbl) { lbl.style.cursor = 'pointer'; lbl.onclick = () => newFieldForm(settingsPane, f); }
@@ -3576,6 +3744,50 @@ function newFieldForm(pane, existing) {
   hl.value = f.half == null ? '' : String(f.half);
   pane.appendChild(hl);
 
+  /* ── which group it belongs to ──
+     Free text rather than a fixed list, because the groupings that are useful
+     are yours: Sleep, Supplements, Lifts. Anything left blank falls into one
+     unnamed group at the top, which is exactly how it behaved before there
+     were groups at all. */
+  pane.appendChild(el('label', 'fl', 'Category'));
+  const cat = document.createElement('input');
+  cat.type = 'text'; cat.placeholder = 'Supplements';
+  cat.setAttribute('list', 'catlist');
+  cat.value = f.cat || '';
+  const dl = document.createElement('datalist');
+  dl.id = 'catlist';
+  fieldCats().forEach(c => { const o = document.createElement('option'); o.value = c; dl.appendChild(o); });
+  pane.appendChild(cat); pane.appendChild(dl);
+
+  /* ── its colour ──
+     A slot, one to six, never a hex. The six are the theme's own chart ramp,
+     so a field keeps its identity across every skin and STYLE can still
+     repaint the whole suite. Picking a hex here would be picking a colour that
+     is right in Ice and invisible in Monarch. */
+  pane.appendChild(el('label', 'fl', 'Colour'));
+  let color = num(f.color, 0) || 0;
+  const cw = el('div', 'chips');
+  const paintColor = () => {
+    cw.innerHTML = '';
+    for (let i = 0; i <= 6; i++) {
+      const b = el('button', 'chip swatch' + (color === i ? ' on' : ''), i ? '' : 'Auto');
+      if (i) b.style.setProperty('--sw', 'var(--data-' + i + ')');
+      b.setAttribute('aria-label', i ? 'Colour ' + i : 'Automatic colour');
+      b.onclick = (k => () => { color = k; paintColor(); Mobile.haptic('select'); })(i);
+      cw.appendChild(b);
+    }
+  };
+  paintColor();
+  pane.appendChild(cw);
+
+  /* ── whether it is drawn ──
+     Separate from `on`. Turning a field OFF stops you logging it; turning it
+     out of the visualiser keeps logging it and stops it crowding the chart.
+     Twenty fields on one 28-day grid is not a picture of anything.        */
+  let viz = f.viz == null ? 1 : (f.viz ? 1 : 0);
+  const vizRow = toggleRow('Show in the visualiser', 'The 28-day grid on Trends', !!viz, v => { viz = v ? 1 : 0; });
+  pane.appendChild(vizRow);
+
   const save = el('button', 'btn go wide', existing ? 'Save' : 'Add it');
   save.style.marginTop = 'var(--s-4)';
   save.onclick = () => {
@@ -3604,6 +3816,9 @@ function newFieldForm(pane, existing) {
     else delete spec.max;
     if (days.length && days.length < 7) spec.days = days.slice().sort(); else delete spec.days;
     if (slot.value.trim()) spec.slot = slot.value.trim(); else delete spec.slot;
+    if (cat.value.trim()) spec.cat = cat.value.trim(); else delete spec.cat;
+    if (color) spec.color = color; else delete spec.color;
+    spec.viz = viz;
     if (measure === 'amount' || measure === 'number') { spec.step = spec.step || 1; spec.dec = spec.dec == null ? 1 : spec.dec; }
     if (existing) Rec.set('field', null, spec.id, spec); else addField(spec);
     Mobile.feedback('select');
