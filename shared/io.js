@@ -40,6 +40,48 @@ const el = (t, c, h) => { const n = document.createElement(t); if (c) n.classNam
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const toast = (h, o) => g.UI ? g.UI.toast(h, o) : console.log(h.replace(/<[^>]+>/g, ''));
 
+/* ── whatever the spreadsheet thinks a date is ──
+   Half of every row id is its date, and the store only accepts YYYY-MM-DD.
+   A sheet will hand back any of four things for the same cell:
+
+     "2026-08-21"                a plain string, already right
+     "2026-08-20T16:00:00.000Z"  a Date cell, ISO'd by Apps Script
+     a real Date object          SheetJS with cellDates on
+     45890                       an Excel serial, if the cell lost its format
+
+   All four mean the 21st of August. Anything else in that slot silently
+   becomes a second row for a fact that already has one.
+
+   The timestamp forms are read in LOCAL time on purpose. Apps Script turned
+   the sheet's own midnight into UTC, so the Z-string above is the 21st here
+   and slicing off its first ten characters would file it as the 20th — a
+   quietly wrong date instead of a duplicate, which is the worse of the two.
+   Excel serials are counted in whole days and have no timezone to get wrong.
+*/
+const DATE_OK = /^\d{4}-\d{2}-\d{2}$/;
+const pad2 = n => String(n).padStart(2, '0');
+const localDate = ms => {
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+};
+function sheetDate(v) {
+  if (v == null || v === '') return null;
+  if (v instanceof Date) return isFinite(+v) ? localDate(+v) : null;
+  /* an Excel serial: days since 1899-12-30, the epoch that makes Excel's own
+     leap-year bug come out right. Built as a UTC instant and read back as a
+     UTC date, so no timezone is involved in either direction. */
+  if (typeof v === 'number' && isFinite(v)) {
+    if (v < 1 || v > 200000) return null;
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+  }
+  const str = String(v).trim();
+  if (!str) return null;
+  if (DATE_OK.test(str)) return str;
+  const ms = Date.parse(str);
+  return isFinite(ms) ? localDate(ms) : null;
+}
+
 /* Handing a file to the user, on a platform that does not really do downloads.
 
    `<a download>` is ignored by iOS Safari and does nothing at all inside a
@@ -273,6 +315,9 @@ const IO = {
     });
   },
 
+  /** Whatever a spreadsheet put in the date column, as YYYY-MM-DD or null. */
+  sheetDate: sheetDate,
+
   /** Read one table's grid back and work out what changed.
       Returns {changed, added, removed, clashes} without writing anything, so a
       caller can show the damage before doing it. */
@@ -286,7 +331,14 @@ const IO = {
     grid.slice(1).forEach(line => {
       if (!line || !line.length) return;
       const id = String(line[0] || '').trim();
-      const date = String(line[1] || '').trim() || null;
+      /* A date cell reaches us as a Date object turned into an ISO timestamp,
+         never as the YYYY-MM-DD the store requires. Left alone it becomes half
+         of a second row id for a fact that already has one — see repairDates
+         in records.js for what that did to the journal. Normalised here, at
+         the boundary, because this is the one place a sheet's idea of a date
+         becomes ours. Read back in local time: the sheet meant its own
+         midnight, and slicing the string would file it a day early. */
+      const date = sheetDate(line[1]);
       const blank = t.cols.every((c, i) => String(line[2 + i] == null ? '' : line[2 + i]).trim() === '');
       if (id) seen[id] = true;
 
@@ -1242,6 +1294,7 @@ const Mirror = {
       '  /* Only the tabs asked for, when the app names them. It knows which ones',
       '     were typed in from the index, so there is no reason to send the rest. */',
       '  var only = null;',
+      '  var tz = ss.getSpreadsheetTimeZone();',
       '  if (e && e.parameter && e.parameter.only) only = String(e.parameter.only).split(",");',
       '  var out = {};',
       '  ss.getSheets().forEach(function (sh) {',
@@ -1252,7 +1305,14 @@ const Mirror = {
       '    /* only the tabs with an id column can be read back */',
       '    if (String(vals[0][0]).toLowerCase() !== "id") return;',
       '    out[name] = vals.map(function (row) {',
-      '      return row.map(function (c) { return (c instanceof Date) ? c.toISOString() : c; });',
+      '      /* Column 1 is the row date and belongs to the calendar, not the',
+      '         clock: ISO would push the sheet local midnight back into the',
+      '         previous day in UTC and the app would file it a day early.',
+      '         Every other Date here is a real instant and stays ISO. */',
+      '      return row.map(function (c, i) {',
+      '        if (!(c instanceof Date)) return c;',
+      '        return i === 1 ? Utilities.formatDate(c, tz, "yyyy-MM-dd") : c.toISOString();',
+      '      });',
       '    });',
       '  });',
       '  return mbReply(e, { ok: true, v: MB_V, tabs: out });',

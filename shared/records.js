@@ -122,11 +122,62 @@ function poke() {
   pokeT = setTimeout(() => { pokeT = null; send({ mb: 1, poke: 1 }); }, 150);
 }
 
+/* ── a date is YYYY-MM-DD, and nothing else ──
+
+   `date` is half of every row's id, so anything else in that slot is not a
+   badly formatted date — it is a different row. Two ids for one fact is the
+   one failure this store exists to prevent.
+
+   It got in through the Google Sheet. A date cell comes back from Apps Script
+   as a Date object, `toISOString()` turned it into "2026-08-20T16:00:00.000Z",
+   and the pull wrote that in as the date. Same task, same key, second row —
+   and because the ISO string sorts AFTER the plain date it belongs to, the
+   copy stayed invisible on its own day and then showed up alongside the
+   original from the next day on. That is the STATUS journal doubling up
+   carried tasks in future dates.
+
+   Both ends are fixed in io.js. This is for the rows already written, and it
+   runs at load because there is no other moment that covers every app.
+
+   The timestamp is read back in LOCAL time, not sliced to its first ten
+   characters. Apps Script converted the sheet's local midnight to UTC, so
+   "2026-08-20T16:00:00.000Z" is the 21st in Manila and slicing it would file
+   the row a day early — trading a duplicate for a quietly wrong date, which is
+   worse. Where the two rows collide the newer `updated_at` wins, which is the
+   same rule a merge already follows. */
+const DATE_OK = /^\d{4}-\d{2}-\d{2}$/;
+const pad2 = n => String(n).padStart(2, '0');
+function localDate(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+function repairDates() {
+  const bad = [];
+  for (const id in rows) { const r = rows[id]; if (r.date && !DATE_OK.test(r.date)) bad.push(r); }
+  if (!bad.length) return 0;
+  let fixed = 0;
+  bad.forEach(r => {
+    const ms = Date.parse(r.date);
+    /* unparseable is left exactly where it is — a row nobody can interpret is
+       still a row, and guessing at it would lose it for good */
+    if (!isFinite(ms)) return;
+    const to = rowId(r.type, localDate(ms), r.key);
+    delete rows[r.id]; Store.del(PREFIX + r.id); delete serial[r.id];
+    const have = rows[to];
+    if (have && have.updated_at >= r.updated_at) { fixed++; return; }
+    write(Object.assign({}, r, { id: to, date: localDate(ms) }));
+    fixed++;
+  });
+  if (fixed) console.warn('[records] repaired ' + fixed + ' row(s) with a malformed date');
+  return fixed;
+}
+
 function load() {
   Store.keys().forEach(k => {
     try { const r = JSON.parse(Store.get(k)); if (r && r.id) { rows[r.id] = r; serial[r.id] = JSON.stringify(r.payload); } }
     catch (e) { console.warn('[records] unreadable row', k); }
   });
+  repairDates();
   booted = true;
 }
 
@@ -283,6 +334,9 @@ const Rec = {
     announce([], true);
     return n;
   },
+  /** normalise any row whose date is not YYYY-MM-DD. Runs at load; exposed so
+      a restore or a sheet pull can run it again over what it just brought in. */
+  repairDates() { const k = repairDates(); if (k) announce([], true); return k; },
   _rows: rows,
 };
 
