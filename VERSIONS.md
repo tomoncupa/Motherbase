@@ -16,6 +16,32 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.6 — 2026-08-26
+
+**STATUS stopped keeping its own rulers.** Its colours came from the theme, so
+it looked like it was on the system. Every measurement in it was still its
+own: a private spacing scale, a private type scale and two hand-written
+shadows, 144 references in total. All of them now point at the shared tokens.
+
+What that was costing, measured rather than guessed:
+
+- The type scale ran 11, 12, 13, 15, 17, 22, 28, 40. Three of those sit within
+  two pixels of each other, which is the exact choice a scale exists to
+  abolish, and 11px is below what anyone should have to read on a phone. It is
+  now 12, 14, 16, 18, 24, 30, 36 — the shared steps. Everything is slightly
+  larger and easier to read.
+- `--s8` was used to size the receipt thumbnail and never defined anywhere, so
+  those images were sized by whatever the browser fell back to.
+- The two shadows were fixed black at a fixed opacity, so they missed the
+  doubling `skins.js` applies on a dark theme, and a light theme got shadows
+  built for a dark one.
+
+**The close button on a sheet is reachable.** It measured 32px, twelve short
+of the minimum, and it sits in the corner where a thumb is least accurate. The
+circle stays 32px so it does not shout; the reach around it is now 44.
+
+---
+
 ## 0.1.5 — 2026-08-21
 
 **The + builds itself again, and then settles down.** 0.1.4 threw out the

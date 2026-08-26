@@ -176,8 +176,15 @@ body{overscroll-behavior-y:none}
 .mb-sheet-head h3{margin:0;flex:1;min-width:0;font-family:var(--font-display,system-ui);
   font-size:var(--f-1,12px);font-weight:var(--w-bold,700);letter-spacing:var(--track-cap,.18em);
   color:var(--text-muted,#5b6d80)}
-.mb-x{flex:0 0 auto;width:32px;height:32px;border:0;border-radius:var(--radius-full,999px);
-  background:var(--surface-2,#131b26);color:var(--text-2,#7f93a8);font-size:15px;line-height:1;cursor:pointer}
+/* Thirty-two pixels of ink and a whole finger of target. Close is the control
+   most often missed, because it sits in the corner where a thumb is least
+   accurate, and it measured 32x32 -- twelve short of the minimum. Growing the
+   circle would make it shout; growing only the reach costs nothing on screen. */
+.mb-x{position:relative;flex:0 0 auto;width:32px;height:32px;border:0;border-radius:var(--radius-full,999px);
+  background:var(--surface-2,#131b26);color:var(--text-2,#7f93a8);
+  font-size:var(--f-2,14px);line-height:1;cursor:pointer}
+.mb-x::after{content:'';position:absolute;left:50%;top:50%;
+  width:var(--tap,44px);height:var(--tap,44px);transform:translate(-50%,-50%)}
 .mb-sheet-body{padding:0 var(--s-4,16px);line-height:var(--lh-body,1.6);min-height:0;flex:1 1 auto}
 .mb-sheet-body>p{margin:0 0 var(--s-3,12px);color:var(--text-2,#7f93a8)}
 .mb-sheet-foot{flex:0 0 auto;display:flex;gap:var(--s-2,8px);
