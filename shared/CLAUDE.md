@@ -6,6 +6,11 @@ still applies here.
 **Every app depends on these nine files.** A mistake in an app breaks one app. A
 mistake here breaks all of them and can lose data. Work slowly.
 
+`THEMING.md`, next to this file, is the contract between STYLE and every app:
+every token, what an app may never do, and how to prove it obeyed. It is
+binding on the apps rather than on this folder, but change a token name in here
+and you have changed that contract for all of them — so read it first.
+
 `STANDARDS.md`, next to this file, is the house style for how the apps feel. It
 is binding the same way this file is, and it is written for Tom rather than for
 you — read it before changing anything anybody touches. **It governs `status/`
@@ -34,7 +39,8 @@ are holding a stale copy of whatever you just changed.
 | `icons.js` | The icon master set: ~52 drawings carrying ~144 buttons, plus the packs. | Medium. Every button in the suite. |
 | `io.js` | Backup, restore, spreadsheet export. | High. It is the safety net. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 143 checks over all of it. | Run it every time. |
+| `_smoke.html` | 152 checks over all of it. | Run it every time. |
+| `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
 

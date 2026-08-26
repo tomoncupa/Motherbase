@@ -142,6 +142,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
 | `_smoke.html` | 64 checks over all of the above. Run it after touching any of them. |
+| `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. |
 
 ---
@@ -240,6 +241,11 @@ mirrors it exactly.
 
 The practical test: if changing a theme in STYLE does not change an app, that
 app has a bug.
+
+**The contract is `shared/THEMING.md`.** It lists all ninety-two tokens with
+what each is for, the seven things an app may never do, and the three ways to
+prove an app obeyed — the first of which is STYLE's own measured highlight,
+which cannot flatter you. Read it before touching any app's CSS.
 
 **Theme:** structure, fonts, corner shape, texture, and the colours it ships with.
 Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. Seventeen of them, in
