@@ -16,6 +16,43 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.8 — 2026-08-26
+
+**No theme ships an unreadable colour.** Every text colour, and the accent
+with them, is pushed away from what it sits on until it clears 4.5 to 1 — the
+ratio ordinary eyesight needs to read a paragraph — and no further. Only
+lightness moves, so a theme keeps its character. Fourteen of the eighteen come
+back exactly as they were written.
+
+Measured on real rendered elements across all eighteen themes: 15 of 18 now
+have nothing under 4.5 on STATUS's main screen, up from 6. Lego had put its
+reading colour at 1.66 against its own page, which made "calories left of
+2,220" measure 1.02.
+
+**And where it cannot reach, it says so.** Each theme tile in STYLE now carries
+LIFTED n when the engine had to correct the author's colours, and PAINTS n
+when the theme writes colours into its own stylesheet instead of asking for a
+token. A colour on an element is not in a token, so no arithmetic reaches it.
+Hovering gives the detail. Three themes still fail because of that: Ragnarok
+in one place, Lego and Minecraft 2 more widely.
+
+**Buttons written in the markup can have a drawing.** They could not before,
+for a mechanical reason: the icon set returns a string and a static button has
+nobody to hand it to. A button now says `data-icon="settings"` and gets one,
+including buttons built after the page loads, and the drawings redraw when the
+theme changes — a theme owns the stroke weight and cap, so an icon changes
+shape rather than colour.
+
+BLOCK, STATUS, the home screen and the template are converted. FORM and ARC
+keep their characters for now: 77 buttons between them and roughly half want a
+drawing the set does not have.
+
+**A theme may repaint the header, and STATUS now follows it.** Slab makes the
+header its accent and Ragnarok gives it a blue gradient; the date stayed grey
+and read 1:1 on orange. Quiet text in the header is quiet by transparency now.
+
+---
+
 ## 0.1.7 — 2026-08-26
 
 **BLOCK, ARC and FORM obey STYLE.** All three loaded `mobile.js` and nothing
