@@ -500,6 +500,22 @@ const Rec = {
     announce([], true);
     return n;
   },
+  /** Push the queued IndexedDB writes immediately instead of on the next turn.
+      For `beforeunload`, where the 60ms debounce would never fire. The write is
+      still asynchronous — a browser is not obliged to finish it — but starting
+      the transaction before the page goes is the most that can be done, and
+      everything written more than a moment ago is already safely down. */
+  flush() {
+    if (idbT) { clearTimeout(idbT); idbT = null; }
+    const list = Object.keys(idbQ).map(k => idbQ[k]);
+    const gone = Object.keys(idbGone);
+    Object.keys(idbQ).forEach(k => delete idbQ[k]);
+    Object.keys(idbGone).forEach(k => delete idbGone[k]);
+    if (!list.length && !gone.length) return 0;
+    IDB.put(list, gone).catch(e => console.warn('[records] flush failed', e));
+    return list.length + gone.length;
+  },
+
   /** normalise any row whose date is not YYYY-MM-DD. Runs at load; exposed so
       a restore or a sheet pull can run it again over what it just brought in. */
   repairDates() { const k = repairDates(); if (k) announce([], true); return k; },

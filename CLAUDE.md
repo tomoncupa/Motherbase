@@ -163,8 +163,17 @@ Everything persists as independently addressable rows. Never as one blob.
 - `user_id` is on every row from day one, set to `local` until accounts exist.
 - One row per field per day. Finer is theatre. Coarser is a blob.
 
-Storage is one `localStorage` entry per row, so rows are addressable in storage and
-not only in the API.
+Storage is one entry per row, so rows are addressable in storage and not only in
+the API. Two halves, since 2026-08-27: `localStorage` is the fast half, read
+synchronously at boot so the first paint needs no waiting, and holds any row
+under 64KB. **IndexedDB is the big half**, written always and read straight
+after boot. A row past the ceiling — a photographed label, a pasted image on an
+ARC node — lives only there and arrives a few milliseconds later, merged in by
+`updated_at` like any other row.
+
+That is what `Rec.ready()` is for. **An app that draws from the store on load
+must wait on it**, or a big row will be missing from its first paint. STATUS,
+TRAIN and ARC all do.
 
 **Why this is non-negotiable:** SystemOS, a predecessor, synced one large JSON blob
 with last-write-wins and lost data silently across devices. A Motherbase Excel life
@@ -197,6 +206,9 @@ An app may read any type. It writes only the types it owns.
 | `program` `progday` `progex` | **train** | | routines. Named around BLOCK's `routine` |
 | `goal` | **train** | goal id | a training goal |
 | `skin` | **style** | theme id | a saved or edited theme. A row whose id matches a factory theme in `skins.json` replaces it; deleting the row is the reset |
+| `map` | **arc** | map id | `{title, view, snaps, order}` — a mind map, without its nodes |
+| `node` | **arc** | `mapId\|nodeId` | one node. The addressable fact on a canvas, so moving one node writes one row |
+| `link` | **arc** | `mapId\|linkId` | `{a, b, rel, ord}` — a connection that is not a parent link |
 
 **One writer per fact**, with exactly one deliberate exception: `tick`. Any app may
 tick anything, because one cell per activity per day is one fact and later save
@@ -434,7 +446,7 @@ Never claim something works because it should. Claim it because you watched it.
 |---|---|
 | `index.html` | Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab bar on a phone, sheets instead of its own modal. Widget grid still drags and resizes with a mouse; a phone gets a REARRANGE mode instead. |
 | `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. |
-| `arc/` | Tom's build, with its own brief. Standalone: its own IndexedDB, its own theme engine. Shares nothing yet. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. |
+| `arc/` | Tom's build, with its own brief. On the shared foundation as of 2026-08-27: the store, the theme engine, the icon set, the settings sheet and the standard backup. Owns `map`, `node` and `link`. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. |
 | `habits/` | A stand-in, now superseded by `status/`. Harvest the streaks and one-click promote-from-routine if they are still wanted. Do not add to it. |
 | `form/` | Standalone by design. Video never leaves the device. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
@@ -454,7 +466,8 @@ Never claim something works because it should. Claim it because you watched it.
    HABITS is the only app not on the theme system, deliberately: it is a
    placeholder.
 3. **The apps still carry their own settings, themes and sounds** instead of using
-   `shared/ui.js`, `skins.js` and `sound.js`. Only `_template/` is fully on them.
+   `shared/ui.js`, `skins.js` and `sound.js`. `_template/` and `arc/` are fully
+   on them; the rest are not.
 3b. ~~Apps not loading `shared/mobile.js`~~ **Done 2026-08-20.** Every app
    loads it and every viewport covers the safe area. What is left is per-app:
    auditing each one's own CSS for hover-only controls and sub-44px targets,

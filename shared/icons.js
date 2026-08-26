@@ -148,7 +148,7 @@ const ROLES = {
   sleep: 'moon', bed: 'moon',
   weight: 'scale',
   mood: 'face',
-  energy: 'bolt',
+  energy: 'bolt', auto: 'bolt', analyse: 'bolt', detect: 'bolt', scan: 'bolt',
   steps: 'foot', walk: 'foot',
   food: 'bowl', meal: 'bowl', eat: 'bowl',
   money: 'cash', spend: 'cash', cost: 'cash', account: 'cash',
