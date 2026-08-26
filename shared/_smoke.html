@@ -495,11 +495,25 @@ function run() {
     !Skins.data.skins.some(k => /(^|,)\s*(cursive|fantasy)\s*$/.test((k.texture || {}).display || '')));
   ok('skins: no two themes wear the same face',
     new Set(faces).size === faces.length);
-  ok('skins: a theme that names a font fetches it', (() => {
-    const k = Skins.data.skins.filter(x => x.font)[0];
-    if (!k) return false;
-    Skins.font(k);
-    return !!document.getElementById('mb-font-' + k.font.replace(/[^a-z0-9]/gi, ''));
+  /* `font` takes a string OR a list of two, because a theme usually wants one
+     face for labels and another for reading. This check assumed a string and
+     threw the moment a theme used the list - the same shape of mistake as
+     passing a drawing name where a role goes. Every theme is checked now, not
+     just the first one that happens to name a font. */
+  ok('skins: every theme that names a font fetches all of them', (() => {
+    const named = Skins.data.skins.filter(x => x.font);
+    if (!named.length) return false;
+    return named.every(k => {
+      Skins.font(k);
+      const want = Array.isArray(k.font) ? k.font : [k.font];
+      return want.every(spec =>
+        !!document.getElementById('mb-font-' + String(spec).replace(/[^a-z0-9]/gi, '')));
+    });
+  })());
+  ok('skins: a theme may name two faces, and does', (() => {
+    const two = Skins.data.skins.filter(k => Array.isArray(k.font));
+    return two.length > 0 && two.every(k => k.font.length === 2 &&
+      (k.texture || {}).display && (k.texture || {}).body);
   })());
   /* Mono, Ember, Violet and Matrix were dropped on 2026-08-21: they were Ice
      with a different accent hex and nothing else. The accent is an edit in
