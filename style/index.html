@@ -196,6 +196,8 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
 .dirty{color:var(--warn);font-size:var(--f-1)}
 
 /* ---------- phone ---------- */
+.tag.warn{background:color-mix(in srgb, var(--warn) 22%, var(--surface-1));
+  color:var(--text-1);border-color:var(--warn);cursor:help}
 .hlnote{position:fixed;left:50%;bottom:var(--s-4);transform:translateX(-50%) translateY(8px);
   padding:var(--s-2) var(--s-4);background:var(--surface-3);color:var(--text-1);
   border:var(--border-width) solid var(--accent);border-radius:var(--radius-full);
@@ -1068,6 +1070,40 @@ function drawGrid() {
   if (ids.length < MAX_SLOTS) box.appendChild(addTile(ids));
 }
 
+/* ══════════════ does this theme read? ══════════════
+   The engine will not ship an unreadable colour: every text token is lifted
+   away from what it sits on until it clears 4.5, which is the ratio a person
+   with ordinary eyesight needs to read a paragraph. That is silent and
+   automatic and it fixes fifteen of the eighteen.
+
+   It cannot fix everything, and the gap is worth naming rather than hiding.
+   Two things it cannot see:
+
+   LIFTED  A theme whose own colours failed and were corrected. Nothing is
+           broken and the screen reads, but what you see is not quite what you
+           wrote, and you would rather know.
+
+   PAINTED A theme that writes a colour into its own stylesheet instead of
+           reaching for a token. That colour is on an element, not in a token,
+           so no amount of arithmetic reaches it — Ragnarok's header is a blue
+           gradient with a pale blue word on it at 1.04, which is a word you
+           cannot see, and the floor never gets a look.
+
+   Both are the theme's to fix, in here, which is why the warning lives on the
+   tile rather than in a console nobody opens. */
+function contrastNote(skin) {
+  const c = Skins.check(skin.base, skin);
+  const lifted = (c.nudged || []).map(n => n.token.replace('--', '') + ' was ' + n.had);
+  /* A hex in the theme's own stylesheet is a colour the floor cannot reach.
+     Comments are stripped first: BLOCK's stylesheet quotes the two colours it
+     replaced, in a note explaining that it replaced them, and counting those
+     as faults would be the tool marking its own homework wrong. */
+  const bare = (skin.css || '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const painted = bare.match(/#[0-9a-fA-F]{3,8}\b/g) || [];
+  const solid = painted.filter(h => !/^#[0-9a-fA-F]{8}$/.test(h));
+  return { lifted: lifted, painted: solid.length, distinct: [...new Set(solid)].slice(0, 6) };
+}
+
 function tile(skin, index) {
   const d = document.createElement('div');
   d.className = 'pv' + (skin.id === sel ? ' on' : '');
@@ -1092,6 +1128,23 @@ function tile(skin, index) {
     const t = document.createElement('span');
     t.className = 'tag'; t.textContent = 'STYLE';
     head.appendChild(t);
+  }
+
+  const note = contrastNote(skin);
+  if (note.lifted.length || note.painted) {
+    const w = document.createElement('span');
+    w.className = 'tag warn';
+    w.textContent = [note.lifted.length ? 'LIFTED ' + note.lifted.length : '',
+                     note.painted ? 'PAINTS ' + note.painted : ''].filter(Boolean).join(' \u00b7 ');
+    w.title = (note.lifted.length
+        ? 'Corrected so it reads: ' + note.lifted.join(', ') + '.\n'
+        : '')
+      + (note.painted
+        ? note.painted + '' + (note.painted === 1 ? ' colour is' : ' colours are') + ' written into this theme\u2019s own CSS rather than '
+          + 'taken from a token, so the contrast floor cannot reach ' + (note.painted === 1 ? 'it' : 'them') + ': '
+          + note.distinct.join(' ') + '.'
+        : '');
+    head.appendChild(w);
   }
 
   const mk = (act, label, title, html) => {

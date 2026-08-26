@@ -80,6 +80,45 @@ function autoRamp(base){
 const contrast=(a,b)=>{const l1=lum(a),l2=lum(b);return(Math.max(l1,l2)+.05)/(Math.min(l1,l2)+.05)};
 const readable=bg=>contrast(bg,'#000000')>contrast(bg,'#ffffff')?'#000000':'#ffffff';
 
+/* ── nothing unreadable leaves here ──
+   A theme is a look, and a look is allowed to be strange. It is not allowed
+   to be illegible. Four of the eighteen shipped colours that failed against
+   their own page — Lego put its reading colour at 1.7 to 1 on its background,
+   which made "calories left of 2,220" measure 1.02 and disappear.
+
+   So every text colour is pushed away from what it sits on until it clears
+   the ratio, and no further. Hue and saturation are untouched: only lightness
+   moves, so a theme keeps its character and stops being a hazard. A theme
+   that already passes is returned exactly as its author wrote it.
+
+   Twelve steps of bisection lands within a thousandth, which is far finer
+   than a colour can be seen. `nudged` records what had to move so STYLE can
+   say so rather than silently correcting the author. */
+function lift(fg,bg,need){
+  if(contrast(fg,bg)>=need)return fg;
+  const away=lum(bg)<.5?'#FFFFFF':'#000000';
+  if(contrast(away,bg)<need)return away;      /* nothing on this page can pass */
+  let lo=0,hi=1;
+  for(let i=0;i<12;i++){const m=(lo+hi)/2;
+    if(contrast(mix(fg,away,m),bg)>=need)hi=m;else lo=m}
+  return mix(fg,away,hi);
+}
+
+/* Text lands on four different things: the page, a card, a recessed row and a
+   raised button face. It has to clear all four, so the biggest push wins and
+   the colour is only ever moved once.
+
+   Checking the page alone was not enough and the difference was not small.
+   Sketch's secondary text measured 4.52 against its page and 4.25 against a
+   tile, so the floor left it alone and thirteen elements on one screen still
+   failed. */
+function liftAll(fg,need,grounds){
+  let out=fg;
+  grounds.forEach(g=>{if(g&&/^#/.test(g)){const c=lift(fg,g,need);
+    if(contrast(c,fg)>contrast(out,fg))out=c}});
+  return out;
+}
+
 /* The semantic tokens. Two halves, and the split matters:
 
    COLOUR — derived from the four base colours, so a theme or a palette edit
@@ -182,6 +221,8 @@ function tokens(base,cut,ranks,skin){
   else autoRamp(base).forEach((c,i)=>{t['--data-'+(i+1)]=c});
   // Explicit overrides win over anything derived.
   if(skin&&skin.overrides)Object.assign(t,skin.overrides);
+
+
   // Texture layer: fonts and corner shape per skin.
   if(skin&&skin.texture){const x=skin.texture;
     if(x.display)t['--font-display']=x.display;
@@ -296,6 +337,76 @@ function tokens(base,cut,ranks,skin){
      theme always has a last word on any single token. */
   if (skin && skin.overrides) Object.assign(t, skin.overrides);
   Object.entries(ranks||FALLBACK.ranks).forEach(([k,v])=>{t['--rank-'+k]=v});
+
+  /* ══════════════ the contrast floor ══════════════
+     Last of everything, so it catches a derived value, a feel-layer value and
+     a hand-written override alike.
+
+     Every text colour is pushed away from what it will sit on until it clears
+     4.5, and no further. Only lightness moves; hue and saturation are left
+     alone, so a theme keeps its character and stops being a hazard. A theme
+     that already passes comes back exactly as its author wrote it, which is
+     fourteen of the eighteen.
+
+     Four grounds, not one. Text lands on the page, on a card, on a recessed
+     row and on a raised button face, and checking only the page was not
+     enough: Sketch's secondary text measured 4.52 against its page and 4.25
+     against a tile, so the page-only version left it alone and thirteen
+     elements on one screen still failed.
+
+     The accent is floored to the reading ratio rather than the graphic one.
+     It is a fill most of the time and a word some of the time, and the places
+     it is a word — a logo, a live number, the active tab — are the places
+     anyone looks first.
+
+     ── what this cannot reach ──
+     A theme may bring its own stylesheet, and five of them do. A colour
+     painted there is painted on an element, not held in a token, so no amount
+     of token arithmetic can see it. Those are reported by Skins.audit() and
+     shown in STYLE rather than silently corrected, because the fix belongs in
+     the theme.
+
+     Nothing else moves. The chart ramp, the four meaning colours and every
+     measurement pass through untouched: a series colour is judged against its
+     neighbours rather than against a paragraph. */
+  const nudged=[];
+  const GROUND=()=>[t['--bg'],t['--surface-1'],t['--surface-2'],t['--surface-3']];
+  const floorIt=(k,against,need)=>{
+    const was=t[k];
+    if(!/^#/.test(String(was)))return;
+    const now=against==='ground'?liftAll(was,need,GROUND()):lift(was,t[against],need);
+    if(now!==was){
+      const had=against==='ground'
+        ? Math.min.apply(null,GROUND().filter(g=>g&&/^#/.test(g)).map(g=>contrast(was,g)))
+        : contrast(was,t[against]);
+      t[k]=now;nudged.push({token:k,was:was,now:now,need:need,had:+had.toFixed(2)});
+    }
+  };
+  floorIt('--text-1','ground',4.5);
+  floorIt('--text-2','ground',4.5);
+  floorIt('--text-muted','ground',4.5);
+  floorIt('--accent','ground',4.5);
+  floorIt('--accent-fg','--accent',4.5);
+  floorIt('--focus','--bg',3);
+
+  /* A surface that can hold no text at all. Not a matter of taste: if neither
+     pure white nor pure black clears 4.5 on it, then nothing does, and every
+     word printed there is unreadable whatever the text colour says. Minecraft
+     2's recessed row was a mid grey exactly there.
+
+     This is the only case where a background is moved rather than a word,
+     because it is the only case where moving the word cannot work. It steps
+     away from the reading colour by the smallest amount that clears. */
+  ['--surface-1','--surface-2','--surface-3'].forEach(k=>{
+    const was=t[k]; if(!/^#/.test(String(was)))return;
+    if(contrast('#FFFFFF',was)>=4.5||contrast('#000000',was)>=4.5)return;
+    const now=lift(was,t['--text-1'],4.5);
+    if(now!==was){t[k]=now;
+      nudged.push({token:k,was:was,now:now,need:4.5,
+        had:+contrast(was,t['--text-1']).toFixed(2),deadEnd:true})}
+  });
+  if(nudged.length)t['--mb-nudged']=JSON.stringify(nudged);
+
   return t;
 }
 
@@ -488,8 +599,28 @@ const Skins={
     if(appId)APP=appId;
     try{return this.apply(localStorage.getItem(skinKey())||localStorage.getItem(KEY)||this.data.skins[0].id)}
     catch(e){return this.apply(this.data.skins[0].id)}},
-  check(base){return{accentOnBg:contrast(base.accent,base.bg),textOnPanel:contrast(base.text,base.panel),
-    ok:contrast(base.accent,base.bg)>=3&&contrast(base.text,base.panel)>=4.5}},
+  /* What a theme's own colours measure, before the floor lifts them. `ok` is
+     whether the author got it right; `nudged` is what the engine had to do
+     about it. A theme is never rejected — it is corrected and the correction
+     is reported, which is the only version of this that does not either ship
+     unreadable screens or throw away somebody's theme. */
+  check(base,skin){
+    const t=this.tokensFor(skin||{base:base,id:'_check',mode:lum(base.bg)>.5?'light':'dark'});
+    let nudged=[];try{nudged=JSON.parse(t['--mb-nudged']||'[]')}catch(e){}
+    return{accentOnBg:contrast(base.accent,base.bg),
+      textOnBg:contrast(base.text,base.bg),
+      textOnPanel:contrast(base.text,base.panel),
+      nudged:nudged,
+      ok:contrast(base.accent,base.bg)>=3&&contrast(base.text,base.panel)>=4.5
+        &&contrast(base.text,base.bg)>=4.5}},
+
+  /* Every theme, and what the floor had to do to it. One call for a settings
+     screen or a check suite: [{id, ok, nudged:[{token, was, now, had}]}] */
+  audit(){return this.data.skins.map(k=>{
+    const c=this.check(k.base,k);
+    return{id:k.id,name:k.name,ok:c.ok,nudged:c.nudged,
+      accentOnBg:+c.accentOnBg.toFixed(2),textOnBg:+c.textOnBg.toFixed(2),
+      textOnPanel:+c.textOnPanel.toFixed(2)}})},
   /* palettes for things CSS cannot reach: canvas share cards, spreadsheet fills */
   exportFor(skin){const t=this.tokensFor(skin);
     return{social:{bg:t['--bg'],panel:t['--surface-1'],accent:t['--accent'],text:t['--text-1']},
@@ -543,7 +674,7 @@ const Skins={
   },
   /* exposed so STYLE can show what "automatic" would give without applying it */
   autoRamp(base){return autoRamp(base)},
-  util:{mix,contrast,readable,lum,rgb2hsl,hsl2rgb}
+  util:{mix,contrast,readable,lum,rgb2hsl,hsl2rgb,lift,liftAll}
 };
 g.Skins=Skins;
 })(typeof window!=='undefined'?window:globalThis);
