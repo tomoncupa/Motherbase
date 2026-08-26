@@ -42,9 +42,104 @@ const Store = {
   },
 };
 
+/* ══════════════ where the rows actually live ══════════════
+
+   localStorage is about 5MB and it is the only storage that can be read
+   synchronously. Every app in this suite reads the store on the line after it
+   loads it, so that synchronous read is not a detail — it is the API.
+
+   5MB is also not enough. STATUS keeps photographs of labels, ARC keeps pasted
+   images on its nodes, and either one fills the whole allowance on its own.
+   ARC avoided the problem by keeping its own IndexedDB and staying outside the
+   store entirely, which is the exact exception this change exists to remove.
+
+   So: both. The in-memory picture stays the single source of truth and stays
+   synchronous. localStorage is the FAST half — written where a row fits, and
+   read at boot so the first paint has data with no waiting. IndexedDB is the
+   BIG half — written always, read straight after boot, and merged in.
+
+   The merge is what makes that safe rather than clever. Every row carries
+   updated_at, merge is idempotent and newer-wins per row, so a late arrival
+   from IndexedDB cannot undo anything and cannot double anything. A row too
+   big for localStorage is simply absent from the first paint and present a few
+   milliseconds later, which is what Rec.ready() is for and why STATUS and
+   TRAIN already wait on it.
+
+   Nothing is lost if IndexedDB is unavailable: writes fall back to
+   localStorage alone, which is exactly the behaviour before this existed. */
+const IDBNAME = 'motherbase', IDBSTORE = 'rows';
+const IDB = (() => {
+  let dbp = null, dead = false;
+  function open() {
+    if (dead) return Promise.reject();
+    if (dbp) return dbp;
+    dbp = new Promise((res, rej) => {
+      let q;
+      try { q = g.indexedDB.open(IDBNAME, 1); } catch (e) { dead = true; rej(e); return; }
+      q.onupgradeneeded = () => {
+        const d = q.result;
+        if (!d.objectStoreNames.contains(IDBSTORE)) d.createObjectStore(IDBSTORE);
+      };
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => { dead = true; rej(q.error); };
+    });
+    return dbp;
+  }
+  return {
+    get available() { return !dead && typeof g.indexedDB !== 'undefined'; },
+    /* every row, in one pass */
+    all() {
+      return open().then(d => new Promise((res, rej) => {
+        const t = d.transaction(IDBSTORE).objectStore(IDBSTORE).getAll();
+        t.onsuccess = () => res(t.result || []);
+        t.onerror = () => rej(t.error);
+      }));
+    },
+    /* one transaction for a burst of writes: an import is twelve thousand rows
+       and twelve thousand transactions is minutes of work to say one thing */
+    put(list, gone) {
+      return open().then(d => new Promise((res, rej) => {
+        const tx = d.transaction(IDBSTORE, 'readwrite'), st = tx.objectStore(IDBSTORE);
+        list.forEach(r => st.put(r, r.id));
+        (gone || []).forEach(id => st.delete(id));
+        tx.oncomplete = res;
+        tx.onerror = () => rej(tx.error);
+      }));
+    },
+    wipe() {
+      return open().then(d => new Promise((res, rej) => {
+        const tx = d.transaction(IDBSTORE, 'readwrite');
+        tx.objectStore(IDBSTORE).clear();
+        tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+      }));
+    },
+  };
+})();
+
+/* Writes are queued and flushed on the next turn, so a burst costs one
+   transaction. Nothing waits on the flush: the memory picture is already
+   correct and localStorage already has whatever fits. */
+const idbQ = Object.create(null), idbGone = Object.create(null);
+let idbT = null;
+function idbPush(r, deleting) {
+  if (!IDB.available) return;
+  if (deleting) { delete idbQ[r.id]; idbGone[r.id] = 1; }
+  else { delete idbGone[r.id]; idbQ[r.id] = r; }
+  if (idbT) return;
+  idbT = setTimeout(() => {
+    idbT = null;
+    const list = Object.keys(idbQ).map(k => idbQ[k]);
+    const gone = Object.keys(idbGone);
+    Object.keys(idbQ).forEach(k => delete idbQ[k]);
+    Object.keys(idbGone).forEach(k => delete idbGone[k]);
+    if (!list.length && !gone.length) return;
+    IDB.put(list, gone).catch(e => console.warn('[records] indexeddb write failed', e));
+  }, 60);
+}
+
 const rows = Object.create(null);      /* id -> row, the live picture */
 const owners = Object.create(null);    /* type -> app id, so a bug is a warning not a mystery */
-let me = 'app', subs = [], bc = null, booted = false;
+let me = 'app', subs = [], bc = null, booted = false, hydrated = false;
 
 const now = () => new Date().toISOString();
 const clean = s => String(s == null ? '' : s).replace(/\|/g, '-');
@@ -70,11 +165,26 @@ const alive = r => r && !r.deleted;
    because the snapshot is a string and nothing can reach in and alter it. */
 const serial = {};
 
+/* Roughly the largest row worth putting in a 5MB drawer. Past this it lives in
+   IndexedDB only and arrives on the second pass — which is invisible unless it
+   is the very first thing on screen. */
+const LS_MAX = 64 * 1024;
+
 function write(r) {
   rows[r.id] = r;
   serial[r.id] = JSON.stringify(r.payload);
-  try { Store.set(PREFIX + r.id, JSON.stringify(r)); }
-  catch (e) { console.warn('[records] storage full', e); Rec.onfull && Rec.onfull(e); }
+  idbPush(r, false);
+  const j = JSON.stringify(r);
+  /* A row too big for the fast half is not an error and must not look like
+     one: IndexedDB has it, and this drawer is only ever a head start. */
+  if (j.length > LS_MAX) { try { Store.del(PREFIX + r.id); } catch (e) {} return; }
+  try { Store.set(PREFIX + r.id, j); }
+  catch (e) {
+    /* Out of room in the fast half. With IndexedDB behind it that is survivable
+       — say so once and carry on rather than telling the app the write failed. */
+    if (IDB.available) { try { Store.del(PREFIX + r.id); } catch (e2) {} return; }
+    console.warn('[records] storage full', e); Rec.onfull && Rec.onfull(e);
+  }
 }
 
 /* Callers get their own copy. A store that hands out live internal references
@@ -172,13 +282,41 @@ function repairDates() {
   return fixed;
 }
 
-function load() {
+function loadFast() {
   Store.keys().forEach(k => {
     try { const r = JSON.parse(Store.get(k)); if (r && r.id) { rows[r.id] = r; serial[r.id] = JSON.stringify(r.payload); } }
     catch (e) { console.warn('[records] unreadable row', k); }
   });
+}
+
+/* The big half, straight after. Merged rather than assigned, so anything the
+   app has already written in the meantime keeps its place by updated_at. */
+function hydrate() {
+  if (!IDB.available) { hydrated = true; flushReady(); return; }
+  IDB.all().then(list => {
+    let changed = 0;
+    (list || []).forEach(r => {
+      if (!r || !r.id) return;
+      const prev = rows[r.id];
+      if (prev && prev.updated_at >= r.updated_at) return;
+      rows[r.id] = r; serial[r.id] = JSON.stringify(r.payload); changed++;
+    });
+    if (changed) { repairDates(); announce([], false); }
+    hydrated = true; flushReady();
+  }).catch(e => {
+    console.warn('[records] indexeddb unavailable, localStorage only', e);
+    hydrated = true; flushReady();
+  });
+}
+
+let readyQ = [];
+function flushReady() { const q = readyQ; readyQ = []; q.forEach(f => { try { f(); } catch (e) { console.warn('[records]', e); } }); }
+
+function load() {
+  loadFast();
   repairDates();
   booted = true;
+  hydrate();
 }
 
 const Rec = {
@@ -195,7 +333,14 @@ const Rec = {
   owner: t => owners[t] || null,
   shared: { tick: 1 },      /* the one type every app may write: one cell, one day, one fact */
 
-  ready(fn) { booted ? fn() : setTimeout(() => fn(), 0); },
+  /** Fires once every row is in memory, IndexedDB included. An app that draws
+      from the store on load should use this rather than running immediately,
+      or a row too big for localStorage will be missing from its first paint. */
+  ready(fn) {
+    if (hydrated) { setTimeout(fn, 0); return; }
+    readyQ.push(fn);
+  },
+  get hydrated() { return hydrated; },
   on(f) { subs.push(f); return () => { const i = subs.indexOf(f); if (i > -1) subs.splice(i, 1); }; },
 
   /* ── writing ── */
@@ -289,16 +434,31 @@ const Rec = {
     return t;
   },
   stats() {
-    let live = 0, dead = 0, bytes = 0;
-    for (const id in rows) { alive(rows[id]) ? live++ : dead++; bytes += JSON.stringify(rows[id]).length; }
-    return { live: live, tombstones: dead, kb: Math.round(bytes / 102.4) / 10, types: Rec.types() };
+    let live = 0, dead = 0, bytes = 0, big = 0;
+    for (const id in rows) {
+      alive(rows[id]) ? live++ : dead++;
+      const j = JSON.stringify(rows[id]).length;
+      bytes += j;
+      if (j > LS_MAX) big++;
+    }
+    return {
+      live: live, tombstones: dead, kb: Math.round(bytes / 102.4) / 10, types: Rec.types(),
+      /* how many rows are too big for the fast half, and whether the big half
+         is actually there to hold them */
+      big: big, idb: IDB.available, hydrated: hydrated,
+    };
   },
   /** re-read everything from storage. Frames on file:// share the storage but not
       always the change events, so a sibling can ask us to look again. */
   reload() {
     const before = JSON.stringify(Object.keys(rows).map(k => rows[k].updated_at));
     Object.keys(rows).forEach(k => delete rows[k]);
-    load();
+    loadFast();
+    repairDates();
+    /* The fast half alone is not the store any more, so a reload that stopped
+       there would drop every row too big for it until the next page load.
+       Re-reading IndexedDB is a merge, so it costs nothing when nothing moved. */
+    hydrate();
     if (JSON.stringify(Object.keys(rows).map(k => rows[k].updated_at)) !== before) announce([], false);
     return Rec;
   },
@@ -309,7 +469,7 @@ const Rec = {
     for (const id in rows) {
       const r = rows[id];
       if (r.type !== type || !r.date || r.date >= beforeDate) continue;
-      delete rows[id]; Store.del(PREFIX + id); n++;
+      delete rows[id]; Store.del(PREFIX + id); idbPush(r, true); n++;
     }
     return n;
   },
@@ -319,18 +479,24 @@ const Rec = {
     let n = 0;
     for (const id in rows) {
       const r = rows[id];
-      if (r.deleted && r.updated_at < cut) { delete rows[id]; Store.del(PREFIX + id); n++; }
+      if (r.deleted && r.updated_at < cut) { delete rows[id]; Store.del(PREFIX + id); idbPush(r, true); n++; }
     }
     return n;
   },
   /** wipe — everything, or just one app's types */
   clear(types) {
     let n = 0;
+    const wipeAll = !types;
     for (const id in rows) {
       const r = rows[id];
       if (types && types.indexOf(r.type) === -1) continue;
-      delete rows[id]; Store.del(PREFIX + id); n++;
+      delete rows[id]; Store.del(PREFIX + id);
+      if (!wipeAll) idbPush(r, true);
+      n++;
     }
+    /* Wiping everything is one transaction rather than a queue of thousands of
+       individual deletes. */
+    if (wipeAll && IDB.available) IDB.wipe().catch(e => console.warn('[records] indexeddb wipe failed', e));
     announce([], true);
     return n;
   },
