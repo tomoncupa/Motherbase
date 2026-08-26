@@ -588,6 +588,11 @@ const Skins={
     Object.entries(t).forEach(([k,v])=>r.style.setProperty(k,v));
     r.dataset.skin=s.id;r.dataset.mode=s.mode;
     const m=document.querySelector('meta[name=theme-color]');if(m)m.content=t['--bg'];
+    /* Redraw the icons. A theme owns the stroke recipe -- weight, cap, join,
+       fill, wobble -- so an icon changes SHAPE when the theme changes and
+       cannot simply be recoloured like everything else. Done here rather than
+       in each app, because every app would otherwise have to remember. */
+    if(g.Icons&&g.Icons.paint)try{g.Icons.paint(null,{force:true})}catch(e){}
     this.current=s;
     try{localStorage.setItem(skinKey(),s.id);if(s.custom)this.saveCustom(s)}catch(e){}
     return s;

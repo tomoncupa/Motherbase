@@ -445,6 +445,67 @@ const Icons = {
     return svg || wrap;
   },
 
+  /* ── fill in every data-icon on the page ──
+     Most buttons in this suite are written in the HTML rather than built in
+     JavaScript, and until now that meant they could not have a drawn icon:
+     Icons.svg() returns a string and a static button has nobody to hand it
+     to. So a button says what it wants — data-icon="settings" — and this
+     fills it once at boot.
+
+     Idempotent, so it is safe to call after any re-render: an element that
+     already has its drawing is skipped. `data-icon-size` overrides the
+     default, and any text already inside the element is kept and pushed
+     along, which is what makes "Export ▸" become an arrow beside the word
+     rather than instead of it.
+
+     Call it again when the theme changes: the stroke recipe is per theme, so
+     the drawings have to be redrawn rather than recoloured. */
+  paint(root, opts) {
+    if (typeof document === 'undefined') return 0;
+    this.css();
+    const scope = root || document;
+    if (!root) this.watch();
+    let n = 0;
+    scope.querySelectorAll('[data-icon]').forEach(el => {
+      const role = el.getAttribute('data-icon');
+      if (!role) return;
+      const done = el.querySelector('svg.mb-ico');
+      if (done && el.getAttribute('data-icon-drawn') === role && !(opts && opts.force)) return;
+      const size = +el.getAttribute('data-icon-size') || (opts && opts.size) || 18;
+      const markup = this.svg(role, { size: size, skin: opts && opts.skin });
+      if (!markup) return;
+      if (done) done.outerHTML = markup;
+      else if (el.getAttribute('data-icon-after') !== null) el.insertAdjacentHTML('beforeend', markup);
+      else el.insertAdjacentHTML('afterbegin', markup);
+      el.setAttribute('data-icon-drawn', role);
+      n++;
+    });
+    return n;
+  },
+
+  /* ── and keep drawing them ──
+     Half the buttons in this suite are built when a screen renders, not when
+     the page loads, so a single paint at boot catches the header and misses
+     every dialog. Rather than ask each app to remember, watch for new nodes
+     and draw them as they arrive.
+
+     One observer per page, started by the first paint(). It only ever reads
+     the tree and fills elements that asked for a drawing and have not got one
+     yet, so it cannot loop on its own output. */
+  watch() {
+    if (typeof MutationObserver === 'undefined' || this._watching) return;
+    this._watching = true;
+    let queued = false;
+    const ob = new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      /* one pass per frame: a render that adds forty rows should cost one
+         sweep, not forty */
+      (window.requestAnimationFrame || setTimeout)(() => { queued = false; Icons.paint(); });
+    });
+    ob.observe(document.documentElement, { childList: true, subtree: true });
+  },
+
   /* Minimal styling, injected once. An icon sits on the text baseline and
      takes the colour of whatever it is inside, which is the whole reason
      these are drawn rather than fetched. */
