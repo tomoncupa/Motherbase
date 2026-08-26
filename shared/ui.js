@@ -159,7 +159,11 @@ function css() {
   if (!g.Mobile) {
     const l = el('style'); l.id = 'mb-ui-legacy';
     l.textContent = `
-.mb-btn{padding:7px 15px;border:1px solid var(--border-strong,#2b3a4d);border-radius:var(--radius-sm,8px);
+/* min-width so the same label is roughly the same button in every theme. A
+   pixel face is genuinely wider than a condensed sans, so short labels used
+   to measure 73px in one theme and 124px in another. This holds the floor;
+   the clamp on letter spacing in skins.js holds the ceiling. */
+.mb-btn{padding:7px 15px;min-width:88px;border:1px solid var(--border-strong,#2b3a4d);border-radius:var(--radius-sm,8px);
   background:none;cursor:pointer;font-family:var(--font-display,system-ui);font-size:11px;letter-spacing:.1em;
   color:var(--text-2,#7f93a8)}
 .mb-btn:hover{color:var(--text-1,#dbe7f0);border-color:var(--text-muted,#5b6d80)}
