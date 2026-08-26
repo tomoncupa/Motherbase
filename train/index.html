@@ -253,6 +253,27 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
   padding:var(--s-3) var(--s-4);min-height:var(--tap)}
 .dfoot svg{width:20px;height:20px;flex:0 0 auto;color:var(--text-muted)}
 
+/* ── the repeat comparison ──
+   Its own card rather than a line inside the first exercise, because it is
+   about the whole session. Coloured by the theme's own good/bad tokens, so it
+   still reads in every skin and never carries a hex of its own. */
+.cmpcard{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-2);
+  padding:var(--s-3) var(--s-4);margin-bottom:var(--s-3);border-left:3px solid var(--text-muted)}
+.cmpcard.up{border-left-color:var(--success)}
+.cmpcard.down{border-left-color:var(--warn)}
+.cmphead{font-size:var(--f-1);color:var(--text-muted);letter-spacing:.08em;text-transform:uppercase}
+.cmpbig{font-size:var(--f-4);font-weight:600;color:var(--text-1);margin:2px 0 3px}
+.cmpcard.up .cmpbig{color:var(--success)}
+.cmpcard.down .cmpbig{color:var(--warn)}
+.cmpsub{font-size:var(--f-1);color:var(--text-2);line-height:1.5}
+
+.cmprow{display:flex;flex-wrap:wrap;gap:var(--s-2);align-items:baseline;
+  padding:0 var(--s-4) var(--s-2);font-size:var(--f-1)}
+.cmprow .d{font-weight:600;color:var(--text-muted)}
+.cmprow.up .d{color:var(--success)}
+.cmprow.down .d{color:var(--warn)}
+.cmprow .was,.cmprow .vol{color:var(--text-muted);font-family:var(--font-mono)}
+
 /* ══════════ CALENDAR ══════════ */
 .calhead{display:flex;align-items:center;gap:var(--s-2)}
 .caltitle{flex:1;text-align:center;font-family:var(--font-display);font-weight:var(--w-bold);
@@ -1421,6 +1442,31 @@ function drawWorkout(m) {
     m.appendChild(dn);
   }
 
+  /* ── a repeat says how it went ──
+     Only on a day copied from another one, and only once something has been
+     ticked. Before that there is nothing to compare and the card would be
+     announcing a result for work not yet done. */
+  var cmp = TRAIN.sessionCompare(date);
+  if (cmp && cmp.rows.length) {
+    var vd = cmp.volNow - cmp.volThen;
+    var card = UI.el('div', 'cmpcard' + (cmp.up > cmp.down ? ' up' : cmp.down > cmp.up ? ' down' : ''));
+    /* One word, so it reads as a verdict rather than a sentence fragment with a
+       capital letter dropped into the middle of it. */
+    var verdict = cmp.up > cmp.down ? 'Stronger' : cmp.down > cmp.up ? 'Weaker' : 'Level';
+    card.innerHTML =
+      '<div class="cmphead">Repeat of ' + UI.esc(Day.label(cmp.from)) + '</div>' +
+      '<div class="cmpbig">' + verdict + '</div>' +
+      '<div class="cmpsub">' +
+        cmp.up + ' up · ' + cmp.same + ' level · ' + cmp.down + ' down' +
+        '<br>' + (Math.abs(vd) < 0.05
+          ? 'the same total volume'
+          : TRAIN.showDelta(vd) + ' ' + TRAIN.unitLabel() + ' of total volume') +
+      '</div>';
+    m.appendChild(card);
+  }
+  var cmpBy = {};
+  if (cmp) cmp.rows.forEach(function (r) { cmpBy[r.ex] = r; });
+
   groups.forEach(function (g) {
     var cat = g.def.cat ? cats[g.def.cat] : null;
     var block = UI.el('div', 'exblock');
@@ -1435,6 +1481,27 @@ function drawWorkout(m) {
       '<span class="tickdot' + (done ? '' : ' off') + '">' + (done ? '✓' : '') + '</span>';
     head.onclick = function () { TRAIN.openExercise(g.ex); };
     block.appendChild(head);
+
+    /* What this exercise did against the day it was copied from. The top set
+       leads because that is what "stronger" means; the volume line is there
+       because a day can be more work at the same weight and that is real. */
+    var c = cmpBy[g.ex];
+    if (c) {
+      var dir = c.delta > 0.05 ? 'up' : c.delta < -0.05 ? 'down' : 'level';
+      var line = UI.el('div', 'cmprow ' + dir);
+      var head1 = dir === 'level'
+        ? 'same top set as ' + UI.esc(Day.short(cmp.from))
+        : TRAIN.showDelta(c.delta) + ' ' + TRAIN.unitLabel() +
+          (c.basis === 'e1rm' ? ' est. 1RM' : ' top set');
+      line.innerHTML =
+        '<span class="d">' + head1 + '</span>' +
+        '<span class="was">' + TRAIN.showWeight(c.topKg, null) + '×' + c.topReps +
+          ' vs ' + TRAIN.showWeight(c.wasKg, null) + '×' + c.wasReps + '</span>' +
+        (Math.abs(c.volDelta) > 0.05
+          ? '<span class="vol">' + TRAIN.showDelta(c.volDelta) + ' ' + TRAIN.unitLabel() + ' volume</span>'
+          : '');
+      block.appendChild(line);
+    }
 
     var sets = UI.el('div', 'sets');
     g.sets.forEach(function (s) {
@@ -2665,11 +2732,101 @@ TRAIN.copyWorkout = function (fromDate, toDate) {
       });
     });
   });
+  /* Where it came from, kept on the day's own session row. Without this the
+     copy is indistinguishable from a workout typed out by hand, and there is
+     nothing to measure today against. */
+  var sess = Rec.get('session', toDate, '') || {};
+  sess.from = fromDate;
+  Rec.set('session', toDate, '', sess);
   TRAIN.reindex();
   TRAIN.assertTick(toDate);
   Mobile.feedback('success');
   draw();
   UI.toast('copied <b>' + n + '</b> sets from ' + UI.esc(Day.label(fromDate)));
+};
+
+/* ═══════════════════ AM I STRONGER ═══════════════════
+   The question a repeated session exists to answer. You copied last Tuesday
+   onto today precisely so you could beat it, and the log used to make you work
+   that out by reading two screens side by side.
+
+   Two numbers, because "stronger" is genuinely two things and picking one
+   would be a lie of omission:
+
+     TOP SET, as an estimated one-rep max. This is the strength answer, and it
+     is the one that leads. Using e1RM rather than raw weight is what lets the
+     same bar for two more reps count as progress, which it is.
+
+     VOLUME, weight times reps summed. This is the work answer. You can move
+     more total load on a day your top set went nowhere, and that is a real
+     thing that happened.
+
+   Only COMPLETED sets count on today's side. A copied set starts life
+   unticked, so before you have done anything the whole session is sitting
+   there at exactly last week's numbers — comparing against that would open
+   every workout with a cheerful "no change" about work you have not done yet.
+   The source day is taken as logged, in full.
+
+   e1RM returns 0 above the rep cap, so the comparison falls back to the
+   heaviest weight whenever either side has no usable estimate. Comparing an
+   estimate against a raw weight would be arithmetic on two different things.  */
+TRAIN.topOf = function (sets) {
+  var best = { kg: 0, r: 0, e: 0 };
+  sets.forEach(function (x) {
+    var e = TRAIN.e1rm(x.kg, x.r);
+    if (e > best.e) best.e = e;
+    if ((x.kg || 0) > best.kg || ((x.kg || 0) === best.kg && (x.r || 0) > best.r)) {
+      best.kg = x.kg || 0; best.r = x.r || 0;
+    }
+  });
+  return best;
+};
+
+TRAIN.sessionCompare = function (date) {
+  var sess = Rec.get('session', date, '') || {};
+  if (!sess.from) return null;
+  var from = sess.from;
+  var thenGroups = TRAIN.dayGroups(from);
+  if (!thenGroups.length) return null;
+
+  var thenBy = {};
+  thenGroups.forEach(function (g) { thenBy[g.ex] = g.sets; });
+
+  var out = { from: from, rows: [], volNow: 0, volThen: 0, up: 0, down: 0, same: 0, doneSets: 0 };
+
+  TRAIN.dayGroups(date).forEach(function (g) {
+    var done = g.sets.filter(function (x) { return x.done; });
+    out.doneSets += done.length;
+    var was = thenBy[g.ex];
+    if (!was || !done.length) return;
+
+    var a = TRAIN.topOf(done), b = TRAIN.topOf(was);
+    var volNow = TRAIN.volume(done), volThen = TRAIN.volume(was);
+    out.volNow += volNow; out.volThen += volThen;
+
+    /* both sides on the same footing, or neither */
+    var useE = a.e > 0 && b.e > 0;
+    var now = useE ? a.e : a.kg, then = useE ? b.e : b.kg;
+    var d = now - then;
+
+    if (d > 0.05) out.up++; else if (d < -0.05) out.down++; else out.same++;
+    out.rows.push({
+      ex: g.ex, name: g.def.name, basis: useE ? 'e1rm' : 'weight',
+      now: now, then: then, delta: d,
+      topKg: a.kg, topReps: a.r, wasKg: b.kg, wasReps: b.r,
+      volNow: volNow, volThen: volThen, volDelta: volNow - volThen,
+    });
+  });
+  return out.rows.length ? out : (out.doneSets ? out : null);
+};
+
+/* A signed weight in the unit on screen. The delta is a difference between two
+   kilogram figures, so it converts as a quantity — never by running each side
+   through showWeight and subtracting the printed strings. */
+TRAIN.showDelta = function (kg) {
+  var v = TRAIN.toUnit(Math.abs(kg), TRAIN.unit());
+  var t = (Math.round(v * 10) / 10).toFixed(1);
+  return (kg >= 0 ? '+' : '−') + t;
 };
 
 TRAIN.shareWorkout = function () {
@@ -3274,8 +3431,6 @@ document.getElementById('dscrim').onclick = function () { closeDrawer(); };
   };
 });
 
-function soon(what) { UI.toast(UI.esc(what) + ' is not built yet'); }
-
 TRAIN.addExercise = function () {
   TRAIN.query = '';
   TRAIN.show('picker', { cat: null });
@@ -3284,7 +3439,11 @@ TRAIN.openExercise = function (exId) {
   TRAIN.draftW = null; TRAIN.draftR = null; TRAIN.tab = 'track';
   TRAIN.show('training', { ex: exId });
 };
-TRAIN.copyWorkout = function () { soon('Copy Workout'); };
+/* copyWorkout is implemented above, with the rest of the day's operations. The
+   placeholder that used to sit here was written before it existed and was never
+   removed, so it silently replaced the real one at load and every "Copy
+   Previous Workout" answered "not built yet". See CLAUDE.md, known traps: a
+   duplicate definition resolves in favour of the later one, without a word. */
 
 /* ── settings ──
    The shared panel, with TRAIN's own tab in front of it. Import sits here,
