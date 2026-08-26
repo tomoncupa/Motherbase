@@ -178,7 +178,11 @@ function tokens(base,cut,ranks,skin){
 
   /* Border weight. A 1px hairline and a 2px drawn line are different products.
      Also read by nothing until now, for the same reason.                     */
-  t['--border-width'] = (skin && skin.weight ? skin.weight : 1) + 'px';
+  /* `!= null`, not truthiness: weight 0 is a theme asking for NO border, and a
+     falsy check silently handed it 1px instead. Blocks has been asking for
+     zero and getting a hairline since the day it was written. */
+  t['--border-width'] =
+    (skin && skin.weight != null ? skin.weight : 1) + 'px';
 
   /* Depth — the strongest lever here. The same card in the same colours reads
      as glass, as paper, as a stamped metal plate or as a lit sign depending
