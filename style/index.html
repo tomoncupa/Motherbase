@@ -3,6 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- The browser was serving a STYLE from eight commits ago, and there is no
+     way to tell by looking: an old theme is still a theme. This stops the page
+     itself being cached, so from the first fresh load onwards what is on
+     screen is what is on disk. The shared files carry ?v= for the same
+     reason. -->
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>STYLE</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◧</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -10,15 +17,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<script src="../shared/skins.js?v=10"></script>
-<script src="../shared/day.js?v=10"></script>
-<script src="../shared/records.js?v=10"></script>
-<script src="../shared/mobile.js?v=10"></script>
-<script src="../shared/sound.js?v=10"></script>
-<script src="../shared/ui.js?v=10"></script>
-<script src="../shared/io.js?v=10"></script>
-<script src="../shared/health.js?v=10"></script>
-<script src="../shared/icons.js?v=10"></script>
+<script src="../shared/skins.js?v=11"></script>
+<script src="../shared/day.js?v=11"></script>
+<script src="../shared/records.js?v=11"></script>
+<script src="../shared/mobile.js?v=11"></script>
+<script src="../shared/sound.js?v=11"></script>
+<script src="../shared/ui.js?v=11"></script>
+<script src="../shared/io.js?v=11"></script>
+<script src="../shared/health.js?v=11"></script>
+<script src="../shared/icons.js?v=11"></script>
 
 <style>
 /* A desktop app, like most of the suite: only STATUS and TRAIN are built for a
@@ -189,6 +196,11 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
 .dirty{color:var(--warn);font-size:var(--f-1)}
 
 /* ---------- phone ---------- */
+.stalebar{display:flex;align-items:center;gap:var(--s-3);
+  padding:var(--s-3) var(--s-4);background:var(--warn);color:#101010;
+  font-size:var(--f-1);line-height:var(--lh-body);z-index:20}
+.stalebar b{font-weight:var(--w-bold)}
+.stalebar .mb-btn{margin-left:auto;border-color:#101010;color:#101010;flex:0 0 auto}
 .phoneonly{display:none}
 @media (max-width:900px){
   body{overflow:auto}
@@ -234,10 +246,14 @@ header .mb-btn{display:inline-flex;align-items:center;gap:6px}
    here, and it is a theme. So the exchange format IS a skins.json entry and
    nothing else — there is no second format to keep in step.                   */
 
-/* Bumped whenever this file changes in a way you would notice. If the number
-   on screen is behind the one in the repo, the browser is serving a cached
-   copy and nothing you do will appear to work. */
-const BUILD = 'build 10';
+/* Bumped whenever this file changes in a way you would notice.
+
+   NEEDS_REV is the revision of shared/skins.json this build expects. If the
+   file that actually loaded is older, the browser has handed us a cached copy
+   and every theme on screen is out of date - which is not visible by looking,
+   because an old theme is still a theme. So it says so instead. */
+const BUILD = 'build 11';
+const NEEDS_REV = 11;
 
 const APP = {
   id: 'style',
@@ -476,6 +492,32 @@ function frameHTML(skin) {
     + '<style>' + SAMPLE_CSS + '</style>'
     + '<style>' + (skin.css || '') + '</style>'
     + '</head><body>' + SAMPLE_HTML + '</body></html>';
+}
+
+/* ---- am I running the current code ----
+   Cheap, and it has already been worth it: three rounds were spent on a theme
+   that had been rewritten twice, because the browser was serving the first
+   version and nothing said so. */
+function staleCheck() {
+  const got = Skins.data && Skins.data.rev;
+  if (got === NEEDS_REV) return;
+  const bar = document.createElement('div');
+  bar.className = 'stalebar';
+  bar.innerHTML =
+    Icons.svg('warning', { size: 18 })
+    + '<span>Your browser is showing a <b>cached copy</b>. The themes on screen '
+    + 'are older than the ones on disk'
+    + (got ? ' (loaded revision ' + got + ', expected ' + NEEDS_REV + ')' : '')
+    + '.</span>';
+  const b = document.createElement('button');
+  b.className = 'mb-btn mb-press mb-tap';
+  b.textContent = 'LOAD IT FRESH';
+  b.onclick = () => {
+    /* A changing query string is the one reload the cache cannot answer. */
+    location.href = location.pathname + '?fresh=' + Date.now();
+  };
+  bar.appendChild(b);
+  document.body.insertBefore(bar, document.body.firstChild);
 }
 
 /* ---- the left rail ---- */
@@ -1722,7 +1764,8 @@ function assignApps() {
 /* ---- boot ----
    skins.json has to be in before anything can be drawn, and Rec has to be
    there before Skins.customs() can find the saved themes. */
-Skins.load('../shared/skins.json').then(() => {
+Skins.load('../shared/skins.json?v=11').then(() => {
+  staleCheck();
   Skins.restore(APP.id);
   sel = (Skins.current && Skins.current.id) || Skins.list()[0].id;
   draft = clone(Skins.get(sel));
