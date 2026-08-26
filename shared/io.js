@@ -135,6 +135,9 @@ const IO = {
 
   register(spec) {
     apps[spec.app] = Object.assign({ types: [], sheets: null, tables: null, name: spec.app }, spec);
+    /* An app that says who it is has said enough. Keeping the sheet up to date
+       is not something each app should have to remember to switch on. */
+    try { Mirror.watch(spec.app); } catch (e) {}
     return IO;
   },
 
@@ -242,14 +245,18 @@ const IO = {
     return o;
   },
 
-  /** every declared table for an app, as rows ready to write into a sheet */
-  tables(appId) {
+  /** every declared table for an app, as rows ready to write into a sheet.
+
+      With `since`, only the rows written after it. The header always goes,
+      because a tab the sheet has never seen has to be given one. */
+  tables(appId, since) {
     const S = IO.spec(appId), R = g.Rec;
     if (!S.tables || !R) return [];
     return S.tables.map(t => {
       const head = ['id', 'date'].concat(t.cols.map(c => c[1])).concat(['edited', 'by']);
       const rows = [head];
       R.all(t.type).forEach(r => {
+        if (since && !(r.updated_at > since)) return;
         const line = [r.key, r.date || ''];
         t.cols.forEach(c => {
           const v = IO.reach(r.payload, c[0]);
@@ -259,7 +266,10 @@ const IO = {
         line.push(new Date(r.updated_at).toISOString(), r.by || 'phone');
         rows.push(line);
       });
-      return { name: IO.tabName(appId, t.name), table: t, rows: rows, editable: true };
+      /* `key` is which column the sheet matches on to update a line in place.
+         Column one is the id, so a changed set updates the line it is already
+         on instead of the tab being rewritten around it. */
+      return { name: IO.tabName(appId, t.name), table: t, rows: rows, editable: true, key: 0 };
     });
   },
 
@@ -393,10 +403,16 @@ const IO = {
      Named with a leading underscore so they sort to the end and read as
      machinery rather than as something to look at. The header says so too,
      because a tab full of JSON invites exactly one question. */
-  bagTabs(appId) {
+  bagTabs(appId, since) {
     const bag = IO.bagFor(appId);
-    const data = [['Motherbase rows. Do not edit by hand, the readable tabs are the ones to look at.']];
-    bag.rows.forEach(r => data.push([JSON.stringify(r)]));
+    /* The id goes in the SECOND column, never the first. Restore reads column
+       one and needs to find the row's JSON sitting there, so the key the sheet
+       matches on goes beside it rather than in front of it. */
+    const data = since ? [] : [['Motherbase rows. Do not edit by hand, the readable tabs are the ones to look at.']];
+    bag.rows.forEach(r => {
+      if (since && !(r.updated_at > since)) return;
+      data.push([JSON.stringify(r), r.id]);
+    });
 
     const set = [['Setting', 'Value']];
     /* first two lines say what wrote this and when, so a sheet found in a year
@@ -410,8 +426,10 @@ const IO = {
     Object.keys(bag.local || {}).sort().forEach(k => set.push([k, bag.local[k]]));
 
     return [
-      { name: '_Data', rows: data, machine: true },
-      { name: '_Settings', rows: set, machine: true },
+      { name: '_Data', rows: data, machine: true, key: 1 },
+      /* two columns and a version stamp: cheap enough to send whole every time,
+         and it is the tab that says what wrote the file */
+      { name: '_Settings', rows: set, machine: true, whole: true },
     ];
   },
 
@@ -684,7 +702,15 @@ const IO = {
      GET carries no data out, and the sheet is his own.                      */
 
 const MKEY = 'mb.mirror';
-let mcfg = { url: '', on: 0, at: null };
+const watching = Object.create(null);
+/* `pushed` is the line between what the sheet has and what it has not: rows
+   written after it are the next push, and it only moves when the sheet
+   confirms. A failed sync therefore needs no queue and no retry list — the
+   boundary simply does not move, and the same rows go again next time.
+   `full` is when the derived tabs (Calendar, Log) were last rebuilt, `seen`
+   is the last edit we have read out of each tab, and `sheetV` is which
+   version of the script the sheet is running. */
+let mcfg = { url: '', on: 0, at: null, pushed: {}, seen: {}, full: {}, sig: {}, sheetV: 0 };
 try { Object.assign(mcfg, JSON.parse(localStorage.getItem(MKEY) || '{}')); } catch (e) {}
 const msave = () => { try { localStorage.setItem(MKEY, JSON.stringify(mcfg)); } catch (e) {} };
 
@@ -737,39 +763,72 @@ const Mirror = {
       same thing, the editable one wins and the read-out is dropped: it is the
       same data, and offering a rounded copy beside a typable original is how
       somebody ends up editing the wrong one. */
-  tabs(appId) {
-    const edit = IO.tables(appId).map(t => ({ name: t.name, rows: t.rows, editable: true }));
+  tabs(appId, opts) {
+    opts = opts || {};
+    const since = opts.since || '';
+    const edit = IO.tables(appId, since).map(t => ({ name: t.name, rows: t.rows, editable: true, key: t.key }));
     const taken = {};
     edit.forEach(t => { taken[t.name.toLowerCase()] = 1; });
 
+    /* The derived tabs — a calendar with the days across the top, a log of
+       every tick — are worked out from the rows rather than stored, so there
+       is no such thing as the three of them that changed. They are rebuilt
+       whole or not at all, which is why a background sync leaves them alone
+       and the daily one puts them right. */
     const read = [];
-    IO.sheets(appId).forEach(s => {
+    if (opts.views) IO.sheets(appId).forEach(s => {
       const name = IO.tabName(appId, s.name);
       /* a plural read-out and a singular table are the same thing */
       const key = name.toLowerCase().replace(/s$/, '');
       if (taken[name.toLowerCase()] || taken[key] || taken[key + 's']) return;
       taken[name.toLowerCase()] = 1;
-      read.push({ name: name, rows: s.rows, editable: false });
+      read.push({ name: name, rows: s.rows, editable: false, whole: true });
     });
     /* the machinery last, so the sheet is a complete save file rather than a
        pretty view of one */
-    return read.concat(edit).concat(IO.bagTabs(appId))
+    const all = read.concat(edit).concat(IO.bagTabs(appId, since))
       .map(t => Object.assign({}, t, { rows: IO.rect(t.rows) }));
+    if (!since) return all;
+    /* a tab whose only line is its header changed nothing, and sending it says
+       nothing at exactly the cost of saying something */
+    return all.filter(t => t.whole || t.rows.length > (t.key === 0 ? 1 : 0));
+  },
+
+  /* ── 0: what does the sheet hold? ──
+
+     One small answer: how many lines are in each tab and when each was last
+     typed in. Worth its own trip because it replaces a much bigger one — the
+     pull used to download every tab in full in order to discover you had not
+     touched the sheet since Tuesday. */
+  index(appId) {
+    adoptOldLink(appId);
+    if (!mcfg.url) return Promise.resolve({ v: 0, skipped: 'no link' });
+    return jsonp(mcfg.url, { app: appId, want: 'index' }, 12000).then(r => {
+      if (r && r.index) {
+        mcfg.sheetV = r.v || 2; msave();
+        return { v: mcfg.sheetV, index: r.index, pushedAt: r.pushedAt || {} };
+      }
+      /* A deployment running the older script has never heard of an index and
+         answers with the whole spreadsheet instead. Not wasted: that is what
+         the pull was about to ask for, so it is carried through rather than
+         fetched a second time. */
+      if (r && r.tabs) { mcfg.sheetV = 1; msave(); return { v: 1, dump: r.tabs }; }
+      return { v: 0 };
+    }).catch(() => ({ v: 0, failed: 1 }));
   },
 
   /* ── 1 and 2: pull and resolve ── */
-  pull(appId) {
+  pull(appId, pre) {
     adoptOldLink(appId);
     if (!mcfg.url) return Promise.resolve({ skipped: 'no link' });
-    return jsonp(mcfg.url, { app: appId, want: 'tables' }).then(reply => {
-      if (!reply || !reply.tabs) return { skipped: 'nothing came back' };
-      const S = IO.spec(appId);
+    const S = IO.spec(appId);
+    const apply = tabs => {
       const out = { changed: 0, added: 0, clashes: 0 };
       (S.tables || []).forEach(t => {
         /* the old prefixed name too: anything typed into it before the
            rename is still real, and the pull runs before the push that
            retires it */
-        const grid = reply.tabs[t.name] || reply.tabs[IO.oldPrefix(appId) + t.name];
+        const grid = tabs[IO.tabName(appId, t.name)] || tabs[t.name] || tabs[IO.oldPrefix(appId) + t.name];
         if (!grid) return;
         const diff = IO.readTable(appId, t.name, grid);
         out.changed += diff.changed.length;
@@ -779,6 +838,33 @@ const Mirror = {
         diff.clashes.forEach(c => IO.logConflict(appId, c));
       });
       return out;
+    };
+
+    /* an older sheet already handed us everything it has */
+    if (pre && pre.dump) return Promise.resolve(apply(pre.dump));
+
+    if (pre && pre.index) {
+      const want = Object.keys(pre.index).filter(n => {
+        const at = pre.index[n] && pre.index[n].edited;
+        return at && at > (mcfg.seen[appId + '|' + n] || '');
+      });
+      /* Nobody has typed in the sheet since we last looked, so there is
+         nothing to read. This is the ordinary case and it now costs nothing. */
+      if (!want.length) return Promise.resolve({ skipped: 'nothing new', changed: 0, added: 0, clashes: 0 });
+      return jsonp(mcfg.url, { app: appId, want: 'tables', only: want.join(',') }).then(reply => {
+        if (!reply || !reply.tabs) return { skipped: 'nothing came back' };
+        const out = apply(reply.tabs);
+        /* moved only after the rows are in, so a failure half way through
+           means we read the tab again rather than skip it forever */
+        want.forEach(n => { mcfg.seen[appId + '|' + n] = pre.index[n].edited; });
+        msave();
+        return out;
+      });
+    }
+
+    return jsonp(mcfg.url, { app: appId, want: 'tables' }).then(reply => {
+      if (!reply || !reply.tabs) return { skipped: 'nothing came back' };
+      return apply(reply.tabs);
     });
   },
 
@@ -794,18 +880,45 @@ const Mirror = {
   },
 
   /* ── 4: push ── */
-  push(appId, quiet) {
+  push(appId, quiet, opts) {
     adoptOldLink(appId);
+    opts = opts || {};
     if (!mcfg.url) {
       if (!quiet) toast('Paste the link first', { bad: true });
       return Promise.resolve({ state: 'failed', missing: 0, of: 0 });
     }
-    const tabs = Mirror.tabs(appId);
+    /* Sending only what changed needs a sheet that can update one line in
+       place. An older deployment rewrites whole tabs, so it gets whole tabs,
+       and nothing breaks on the day between pasting the new script and
+       deploying it. */
+    const canDelta = mcfg.sheetV >= 2 && !!mcfg.pushed[appId];
+    /* The derived tabs are rebuilt on a full push. Once a day is enough for a
+       calendar view: it is a read-out, and a read-out being a few hours behind
+       is visible, where a set going missing is not. */
+    const stale = !mcfg.full[appId] || (Date.now() - (Date.parse(mcfg.full[appId]) || 0) > 20 * 3600 * 1000);
+    const full = !!opts.full || !canDelta || stale;
+    /* Take the boundary BEFORE reading the rows, never after. A set logged
+       while this push is still in the air is newer than this stamp and goes
+       next time; stamping afterwards would step straight over it. */
+    const at = new Date().toISOString();
+    let tabs = Mirror.tabs(appId, { since: full ? '' : mcfg.pushed[appId], views: full });
+    /* The settings tab is small and always built, which would make every idle
+       sync a write of fourteen unchanged lines. Compare it with what was sent
+       last time instead, and an afternoon where nothing was logged costs one
+       question and no answer. The signature moves only when the sheet
+       confirms, like every other boundary here. */
+    let sig = null;
+    if (!full) {
+      const now = JSON.stringify((tabs.filter(t => t.name === '_Settings')[0] || {}).rows || []);
+      if (now === mcfg.sig[appId]) tabs = tabs.filter(t => t.name !== '_Settings');
+      else sig = now;
+    }
+    if (!tabs.length) return Promise.resolve({ state: 'clean', tabs: 0 });
     /* Tabs this app wrote under the old prefixed name. The sheet drops them
        after writing the new ones, because a rename that leaves the old tab
        behind is how you end up reading last month's data and believing it. */
-    const body = JSON.stringify({ app: appId, at: new Date().toISOString(), tabs: tabs,
-      retire: IO.oldPrefix(appId) });
+    const body = JSON.stringify({ app: appId, at: at, mode: full ? 'full' : 'delta',
+      tabs: tabs, retire: IO.oldPrefix(appId) });
     /* text/plain sidesteps the CORS preflight Apps Script cannot answer */
     const head = { 'Content-Type': 'text/plain;charset=utf-8' };
 
@@ -824,18 +937,35 @@ const Mirror = {
 
        The caller phrases from this rather than from whether a promise
        rejected. */
-    const landed = () => {
+    const landed = () => jsonp(mcfg.url, { app: appId, want: 'index' }, 12000).then(r => {
+      if (r && r.index) {
+        mcfg.sheetV = r.v || 2;
+        /* The sheet echoes back the stamp it was handed, so "did it land" is a
+           comparison instead of a guess at row counts. Counting broke the
+           moment we started sending deltas: twelve lines were never meant to
+           make the tab twelve lines long. */
+        if (((r.pushedAt || {})[appId] || '') === at) {
+          mcfg.pushed[appId] = at;
+          if (full) mcfg.full[appId] = at;
+          if (sig) mcfg.sig[appId] = sig;
+          mcfg.at = g.Day.today(); msave();
+          return { state: 'confirmed', tabs: tabs.length, mode: full ? 'full' : 'delta' };
+        }
+        return { state: 'failed', missing: tabs.length, of: tabs.length };
+      }
+      /* an older sheet cannot echo anything, so fall back to counting rows */
       const want = {};
       tabs.forEach(t => { want[t.name] = t.rows.length; });
-      return jsonp(mcfg.url, { app: appId, want: 'stat' }, 12000).then(r => {
-        const stat = (r && r.stat) || {};
+      return jsonp(mcfg.url, { app: appId, want: 'stat' }, 12000).then(r2 => {
+        const stat = (r2 && r2.stat) || {};
         const missing = Object.keys(want).filter(n => !stat[n]);
         const short = Object.keys(want).filter(n => stat[n] && stat[n] < want[n]);
         if (missing.length) return { state: 'failed', missing: missing.length, of: tabs.length };
-        Mirror.set({ at: g.Day.today() });
+        mcfg.pushed[appId] = at; mcfg.full[appId] = at;
+        mcfg.at = g.Day.today(); msave();
         return { state: 'confirmed', tabs: tabs.length, short: short.length };
-      }).catch(() => ({ state: 'unconfirmed', tabs: tabs.length }));
-    };
+      });
+    }).catch(() => ({ state: 'unconfirmed', tabs: tabs.length }));
 
     const speak = res => {
       if (!quiet) {
@@ -887,15 +1017,16 @@ const Mirror = {
   },
 
   /** the whole round trip, in the order that makes it safe */
-  sync(appId, quiet) {
+  sync(appId, quiet, opts) {
     if (!mcfg.url) return Promise.resolve(false);
     if (!quiet) toast('Syncing…');
-    return Mirror.pull(appId)
-      .catch(() => ({ skipped: 'could not read' }))
-      .then(got => Mirror.push(appId, true).then(res => {
-        const ok2 = res && res.state === 'confirmed';
+    return Mirror.index(appId)
+      .then(pre => Mirror.pull(appId, pre).catch(() => ({ skipped: 'could not read' })))
+      .then(got => Mirror.push(appId, true, opts || {}).then(res => {
+        const ok2 = res && (res.state === 'confirmed' || res.state === 'clean');
         if (!quiet) {
-          if (!res || res.state === 'failed') toast(Mirror.why(), { bad: true, ms: 8000 });
+          if (res && res.state === 'clean') toast('Already up to date.');
+          else if (!res || res.state === 'failed') toast(Mirror.why(), { bad: true, ms: 8000 });
           else if (res.state === 'unconfirmed') {
             toast('Sent <b>' + res.tabs + '</b> tabs and the sheet would not confirm, so open it and check.',
               { bad: true, ms: 8000 });
@@ -903,16 +1034,47 @@ const Mirror = {
           else if (got && (got.changed || got.added)) toast('Synced, with <b>' + (got.changed + got.added) + '</b> changes from the sheet.');
           else toast('Synced <b>' + res.tabs + '</b> tabs, and the sheet confirms it.');
         }
-        if (ok2 && g.Sfx) g.Sfx.play('complete', { level: 2 });
+        if (ok2 && res.state === 'confirmed' && g.Sfx) g.Sfx.play('complete', { level: 2 });
         return ok2;
       }));
+  },
+
+  /** ── keeping up without being asked ──
+
+      Three moments, and none of them is a button. On open, because the sheet
+      may have been typed in on a laptop since. Half a minute after the last
+      thing he logs, because syncing on every tap would send a set, then the
+      same set with its weight corrected, then again. And the moment the app
+      goes out of view, which is the best one of the three: the work is done,
+      the phone is about to be locked, and nobody is waiting on it.
+
+      There is no retry queue, deliberately. What goes next time is decided by
+      the boundary in `pushed`, and that only moves when the sheet confirms —
+      so a sync that fails leaves the boundary where it was and the same rows
+      go again at the next moment. A queue would be a second copy of a fact
+      the store already holds. */
+  watch(appId) {
+    if (watching[appId]) return false;
+    watching[appId] = 1;
+    let dirty = 0, t = null;
+    const run = () => {
+      clearTimeout(t); t = null;
+      if (!dirty || !mcfg.on || !mcfg.url) return;
+      dirty = 0;
+      Mirror.sync(appId, true).then(ok => { if (!ok) dirty = 1; }, () => { dirty = 1; });
+    };
+    if (g.Rec && g.Rec.on) g.Rec.on(() => { dirty = 1; clearTimeout(t); t = setTimeout(run, 30000); });
+    if (g.document) g.document.addEventListener('visibilitychange', () => {
+      if (g.document.visibilityState === 'hidden') run();
+    });
+    return true;
   },
 
   /** on open, quietly. Never blocks anything and never says anything unless
       it actually brought something back. */
   onOpen(appId) {
     if (!mcfg.url || !mcfg.on) return Promise.resolve(false);
-    return Mirror.pull(appId).then(got => {
+    return Mirror.index(appId).then(pre => Mirror.pull(appId, pre)).then(got => {
       if (got && (got.changed || got.added)) {
         toast('<b>' + (got.changed + got.added) + '</b> changes came in from the sheet.');
         if (g.Rec) g.Rec.reload && g.Rec.reload();
@@ -925,8 +1087,87 @@ const Mirror = {
       protocol above. */
   script() {
     return [
-      '/* Motherbase sheet bridge. Paste into Extensions > Apps Script,',
-      '   then Deploy > New deployment > Web app, execute as me, access anyone. */',
+      '/* Motherbase sheet bridge, version 2. Paste into Extensions > Apps Script,',
+      '   then Deploy > New deployment > Web app, execute as me, access anyone.',
+      '',
+      '   Version 2 can update one line in place instead of rewriting a whole tab.',
+      '   That is what lets the phone send the eight sets you did this morning',
+      '   rather than all twelve thousand of them, every time. */',
+      '',
+      'var MB_V = 2;',
+      '',
+      'function mbProps() { return PropertiesService.getScriptProperties(); }',
+      '',
+      'function mbReply(e, obj) {',
+      '  var body = JSON.stringify(obj);',
+      '  var cb = (e && e.parameter) ? e.parameter.callback : null;',
+      '  if (cb) return ContentService.createTextOutput(cb + "(" + body + ")")',
+      '    .setMimeType(ContentService.MimeType.JAVASCRIPT);',
+      '  return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);',
+      '}',
+      '',
+      '/* setValues writes a rectangle and throws on anything else, so square it off */',
+      'function mbSquare(rows) {',
+      '  var w = 0;',
+      '  rows.forEach(function (r) { if (r && r.length > w) w = r.length; });',
+      '  return { w: w, grid: rows.map(function (r) {',
+      '    var line = [];',
+      '    for (var i = 0; i < w; i++) {',
+      '      var v = r ? r[i] : "";',
+      '      if (v === null) v = "";',
+      '      if (v === undefined) v = "";',
+      '      line.push(v);',
+      '    }',
+      '    return line;',
+      '  }) };',
+      '}',
+      '',
+      'function mbWriteTab(ss, t, mode) {',
+      '  var rows = t.rows;',
+      '  if (!rows) rows = [];',
+      '  if (!rows.length) return;',
+      '  var sq = mbSquare(rows);',
+      '  var grid = sq.grid, w = sq.w;',
+      '  var sh = ss.getSheetByName(t.name);',
+      '  var whole = false;',
+      '  if (mode !== "delta") whole = true;',
+      '  if (t.whole) whole = true;',
+      '  if (t.key === null) whole = true;',
+      '  if (t.key === undefined) whole = true;',
+      '',
+      '  /* A tab nobody has seen, or one somebody has emptied, gets everything we',
+      '     have rather than a handful of lines with no header above them. */',
+      '  if (!sh) { sh = ss.insertSheet(t.name); whole = true; }',
+      '  if (sh.getLastRow() < 1) whole = true;',
+      '',
+      '  if (whole) {',
+      '    sh.clear();',
+      '    sh.getRange(1, 1, grid.length, w).setValues(grid);',
+      '    sh.setFrozenRows(1);',
+      '    if (t.editable) sh.getRange(1, 1, 1, w).setFontWeight("bold");',
+      '    return;',
+      '  }',
+      '',
+      '  /* Match on the key column, update what is already there, append the rest.',
+      '     One read of that column and one write per changed line, so the cost is',
+      '     the size of the change and not the size of the tab. */',
+      '  var last = sh.getLastRow();',
+      '  var keyCol = t.key + 1;',
+      '  var have = {};',
+      '  if (last > 1) {',
+      '    var keys = sh.getRange(2, keyCol, last - 1, 1).getValues();',
+      '    for (var i = 0; i < keys.length; i++) have[String(keys[i][0])] = i + 2;',
+      '  }',
+      '  var append = [];',
+      '  var from = t.editable ? 1 : 0;      /* skip the header line we were sent */',
+      '  for (var j = from; j < grid.length; j++) {',
+      '    var line = grid[j];',
+      '    var at = have[String(line[t.key])];',
+      '    if (at) sh.getRange(at, 1, 1, w).setValues([line]);',
+      '    else append.push(line);',
+      '  }',
+      '  if (append.length) sh.getRange(last + 1, 1, append.length, w).setValues(append);',
+      '}',
       '',
       'function doPost(e) {',
       '  var body = JSON.parse(e.postData.contents);',
@@ -934,44 +1175,20 @@ const Mirror = {
       '  var tabs = body.tabs;',
       '  if (!tabs) tabs = body.sheets;',
       '  if (!tabs) tabs = [];',
+      '  var mode = body.mode;',
+      '  if (!mode) mode = "full";',
       '  var wrote = [];',
       '  var failed = [];',
       '  tabs.forEach(function (t) {',
-      '    /* One bad tab must not take the rest with it. Without this the',
-      '       whole write is abandoned at the first problem and the sheet is',
-      '       left exactly as it was, which looks identical to never having',
-      '       been called. */',
-      '    try {',
-      '      var sh = ss.getSheetByName(t.name);',
-      '      if (!sh) sh = ss.insertSheet(t.name);',
-      '      sh.clear();',
-      '      var rows = t.rows;',
-      '      if (rows && rows.length) {',
-      '        /* setValues needs a rectangle, so square it off here too */',
-      '        var w = 0;',
-      '        rows.forEach(function (r) { if (r && r.length > w) w = r.length; });',
-      '        var grid = rows.map(function (r) {',
-      '          var line = [];',
-      '          for (var i = 0; i < w; i++) {',
-      '            var v = r ? r[i] : "";',
-      '            if (v === null) v = "";',
-      '            if (v === undefined) v = "";',
-      '            line.push(v);',
-      '          }',
-      '          return line;',
-      '        });',
-      '        sh.getRange(1, 1, grid.length, w).setValues(grid);',
-      '        sh.setFrozenRows(1);',
-      '        if (t.editable) sh.getRange(1, 1, 1, w).setFontWeight("bold");',
-      '      }',
-      '      wrote.push(t.name);',
-      '    } catch (err) {',
-      '      failed.push(t.name + ": " + err);',
-      '    }',
+      '    /* One bad tab must not take the rest with it. Without this the whole',
+      '       write is abandoned at the first problem and the sheet is left exactly',
+      '       as it was, which looks identical to never having been called. */',
+      '    try { mbWriteTab(ss, t, mode); wrote.push(t.name); }',
+      '    catch (err) { failed.push(t.name + ": " + err); }',
       '  });',
       '',
-      '  /* Tabs written under an older name. Dropped only after the new ones',
-      '     exist, so nothing is ever deleted before its replacement is there. */',
+      '  /* Tabs written under an older name. Dropped only after the new ones exist,',
+      '     so nothing is ever deleted before its replacement is there. */',
       '  if (body.retire) {',
       '    ss.getSheets().forEach(function (sh) {',
       '      try {',
@@ -980,63 +1197,80 @@ const Mirror = {
       '    });',
       '  }',
       '',
-      '  return ContentService.createTextOutput(JSON.stringify({ ok: failed.length === 0, wrote: wrote, failed: failed }))',
+      '  /* The receipt. The app asks for this back and compares it with what it',
+      '     sent, which is how it knows the write landed. Counting rows cannot say',
+      '     that any more: a delta of twelve lines was never meant to leave the tab',
+      '     twelve lines long. */',
+      '  if (!failed.length && body.app && body.at) mbProps().setProperty("mb.at." + body.app, body.at);',
+      '',
+      '  return ContentService.createTextOutput(JSON.stringify({ ok: failed.length === 0, v: MB_V, wrote: wrote, failed: failed }))',
       '    .setMimeType(ContentService.MimeType.JSON);',
       '}',
       '',
-      '/* The pull. Answers as JavaScript so a script tag can read it, because',
-      '   a web app cannot reliably answer a cross-origin fetch. */',
+      '/* The pull. Answers as JavaScript so a script tag can read it, because a web',
+      '   app cannot reliably answer a cross-origin fetch. */',
       'function doGet(e) {',
       '  var ss = SpreadsheetApp.getActiveSpreadsheet();',
       '  var want = (e && e.parameter) ? e.parameter.want : null;',
       '',
-      '  /* A receipt: what tabs exist and how many rows each holds. Small',
-      '     enough to ask for after every push, which is how the app checks a',
-      '     sync actually landed rather than taking its own word for it. */',
-      '  if (want === "stat") {',
-      '    var stat = {};',
+      '  /* What is in here, in one small answer: how many lines each tab holds and',
+      '     when it was last typed in. The app asks this before every sync, and most',
+      '     of the time the answer means it downloads nothing at all. */',
+      '  if (want === "index") {',
+      '    var all = mbProps().getProperties();',
+      '    var index = {}, pushedAt = {};',
       '    ss.getSheets().forEach(function (sh) {',
-      '      stat[sh.getName()] = sh.getLastRow();',
+      '      var n = sh.getName();',
+      '      var ed = all["mb.edited." + n];',
+      '      if (!ed) ed = "";',
+      '      index[n] = { rows: sh.getLastRow(), edited: ed };',
       '    });',
-      '    var sbody = JSON.stringify({ ok: true, stat: stat });',
-      '    var scb = (e && e.parameter) ? e.parameter.callback : null;',
-      '    if (scb) return ContentService.createTextOutput(scb + "(" + sbody + ")")',
-      '      .setMimeType(ContentService.MimeType.JAVASCRIPT);',
-      '    return ContentService.createTextOutput(sbody)',
-      '      .setMimeType(ContentService.MimeType.JSON);',
+      '    Object.keys(all).forEach(function (k) {',
+      '      if (k.indexOf("mb.at.") === 0) pushedAt[k.substring(6)] = all[k];',
+      '    });',
+      '    return mbReply(e, { ok: true, v: MB_V, index: index, pushedAt: pushedAt });',
       '  }',
       '',
+      '  /* A receipt in the old shape, kept so an app running older code than this',
+      '     sheet still gets an answer it understands. */',
+      '  if (want === "stat") {',
+      '    var stat = {};',
+      '    ss.getSheets().forEach(function (sh) { stat[sh.getName()] = sh.getLastRow(); });',
+      '    return mbReply(e, { ok: true, v: MB_V, stat: stat });',
+      '  }',
+      '',
+      '  /* Only the tabs asked for, when the app names them. It knows which ones',
+      '     were typed in from the index, so there is no reason to send the rest. */',
+      '  var only = null;',
+      '  if (e && e.parameter && e.parameter.only) only = String(e.parameter.only).split(",");',
       '  var out = {};',
       '  ss.getSheets().forEach(function (sh) {',
       '    var name = sh.getName();',
+      '    if (only && only.indexOf(name) < 0) return;',
       '    var vals = sh.getDataRange().getValues();',
       '    if (!vals.length) return;',
       '    /* only the tabs with an id column can be read back */',
       '    if (String(vals[0][0]).toLowerCase() !== "id") return;',
       '    out[name] = vals.map(function (row) {',
-      '      return row.map(function (c) {',
-      '        return (c instanceof Date) ? c.toISOString() : c;',
-      '      });',
+      '      return row.map(function (c) { return (c instanceof Date) ? c.toISOString() : c; });',
       '    });',
       '  });',
-      '  var body = JSON.stringify({ ok: true, tabs: out });',
-      '  var cb = null;',
-      '  if (e && e.parameter) cb = e.parameter.callback;',
-      '  if (cb) return ContentService.createTextOutput(cb + "(" + body + ")")',
-      '    .setMimeType(ContentService.MimeType.JAVASCRIPT);',
-      '  return ContentService.createTextOutput(body)',
-      '    .setMimeType(ContentService.MimeType.JSON);',
+      '  return mbReply(e, { ok: true, v: MB_V, tabs: out });',
       '}',
       '',
-      '/* Stamps the row you just edited, so the app can tell whether the sheet',
-      '   or the phone changed it last. Without a time on it the phone would win',
-      '   every disagreement by default.',
+      '/* Stamps the row you just edited, so the app can tell whether the sheet or',
+      '   the phone changed it last. Without a time on it the phone would win every',
+      '   disagreement by default.',
+      '',
+      '   It also notes the tab against the clock, which is what the index reports.',
+      '   That is the whole change check: the app compares one string instead of',
+      '   downloading a tab to find out that nobody touched it.',
       '',
       '   Named onEdit on purpose: Google runs a function with that exact name by',
-      '   itself whenever somebody types in the sheet. There is nothing to set up',
-      '   and no permission to grant. It also does not fire when this script',
-      '   writes, which is what we want: a push from the phone must not mark its',
-      '   own rows as edited in the sheet. */',
+      '   itself whenever somebody types in the sheet. There is nothing to set up and',
+      '   no permission to grant. It also does not fire when this script writes,',
+      '   which is what we want: a push from the phone must not mark its own rows as',
+      '   edited in the sheet. */',
       'function onEdit(e) {',
       '  var sh = e.range.getSheet();',
       '  var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];',
@@ -1046,8 +1280,10 @@ const Mirror = {
       '  if (at < 0) return;',
       '  var row = e.range.getRow();',
       '  if (row < 2) return;',
-      '  sh.getRange(row, at + 1).setValue(new Date().toISOString());',
+      '  var now = new Date().toISOString();',
+      '  sh.getRange(row, at + 1).setValue(now);',
       '  if (by > -1) sh.getRange(row, by + 1).setValue("sheet");',
+      '  mbProps().setProperty("mb.edited." + sh.getName(), now);',
       '}',
     ].join('\n');
   },
@@ -1084,7 +1320,9 @@ g.addEventListener('message', e => {
   const ids = Object.keys(apps);
   if (!ids.length) return back({ app: null, ok: false, why: 'no app is registered in this frame' });
   if (!Mirror.ready()) return back({ app: ids[0], ok: false, why: Mirror.why() });
-  Promise.all(ids.map(id => Mirror.sync(id, true).then(ok => !!ok, () => false)))
+  /* The button means "put the sheet right", so it sends everything including
+     the derived views. The automatic ones send only what changed. */
+  Promise.all(ids.map(id => Mirror.sync(id, true, { full: !!m.full }).then(ok => !!ok, () => false)))
     .then(res => back({ app: ids.join(','), ok: res.every(Boolean), why: res.every(Boolean) ? '' : Mirror.why() }));
 });
 

@@ -1307,7 +1307,7 @@ function reach(list, msg, keep, ms, then) {
 /* the round trip itself, once we know who can do it */
 function pushToSheet(on, asked) {
   toast('Syncing <b>' + on.length + '</b> apps…');
-  reach(on, { mb: 2, sync: 1 }, m => m.synced, 40000, res => {
+  reach(on, { mb: 2, sync: 1, full: 1 }, m => m.synced, 40000, res => {
     const ok = res.filter(a => a.said.ok);
     if (ok.length === on.length) {
       const extra = asked - on.length;
@@ -1371,7 +1371,15 @@ function mirrorSection(mo) {
   u.oninput = () => IO.mirror.set({ url: u.value.trim() });
   mo.appendChild(u);
 
-  [['⟳', 'Sync every app now', 'Reads the sheet first, then writes back to it. Apps you have not opened today get loaded to do their part.', () => { IO.mirror.set({ url: u.value.trim() }); syncEveryApp(); }],
+  /* The switch that makes it stop being a button. With this on, every app on
+     the shared drawer syncs itself: when it opens, half a minute after the
+     last thing you log, and the moment you put the phone down. */
+  mo.appendChild(UI.row('Keep the sheet up to date by itself',
+    cfg.on ? 'On. Syncs on open, after you log something, and when you leave.'
+           : 'Off. The sheet only changes when you press the button below.',
+    UI.toggle(!!cfg.on, on => { IO.mirror.set({ on: on ? 1 : 0 }); toast(on ? 'The sheet will keep itself up to date.' : 'Automatic syncing off.'); })));
+
+  [['⟳', 'Sync every app now', 'Reads the sheet first, then writes back everything, including the calendar views. The automatic ones only send what changed.', () => { IO.mirror.set({ url: u.value.trim() }); syncEveryApp(); }],
    ['⧉', 'Copy the Apps Script', 'The bit that goes in the sheet once, before any of this works.', copyMirrorScript],
   ].forEach(([ic, t, d, fn]) => {
     const b = el('button', 'opt');
