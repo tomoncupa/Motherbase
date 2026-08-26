@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLEX — rules engine check</title>
+<!-- The row store and the latch, in the order the app loads them, so the
+     read-only guarantee can be tested rather than believed. -->
+<script src="../shared/skins.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="readonly.js"></script>
+
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="combos.js"></script>
+<script src="optimizer.js"></script>
+<style>
+body{background:#080b10;color:#dbe7f0;font-family:system-ui;margin:0;padding:24px;font-size:14px;line-height:1.6}
+h1{font-size:16px;letter-spacing:.2em;color:#7ee8fa;margin:0 0 4px}
+.sub{color:#5b6d80;font-size:12.5px;margin-bottom:20px;max-width:900px}
+#out{font-family:ui-monospace,monospace;font-size:12.5px;white-space:pre-wrap;
+  border:1px solid #1e2a38;border-radius:10px;padding:14px;background:#0e141d;max-width:1000px}
+.p{color:#6ee7a8}.f{color:#ff6b81}.h{color:#7ee8fa}
+</style>
+</head>
+<body>
+<h1>CLEX RULES ENGINE CHECK</h1>
+<div class="sub">Every expected number below was worked out by hand from the printed Oracle text and the
+Comprehensive Rules, then written down before the engine was run. If a line is red, the engine is wrong,
+not the test.</div>
+<div id="out">running…</div>
+
+<script>
+const T = [];
+const ok = (name, cond, note) => T.push({ name, pass: !!cond, note: note || '' });
+const S = Clex;
+
+function board(names) {
+  const st = S.newState('clex');
+  (names || []).forEach(n => S.addPermanent(st, n, { sick: false }));
+  return st;
+}
+function creature(st, name, counters) {
+  return S.addPermanent(st, name, { sick: false, counters: counters || {} });
+}
+
+function run() {
+  T.length = 0;
+
+  /* ---------------------------------------------------------- data ---- */
+  ok('data: 186 cards loaded with oracle text',
+    S.cards.length === 186 && S.card('Vorinclex, Monstrous Raider').o.indexOf('twice that many') > -1);
+  ok('data: Vorinclex deck is exactly 100 cards',
+    (() => { const d = S.deck('clex');
+      return d.main.reduce((a, x) => a + x[0], 0) + d.commanders.reduce((a, x) => a + x[0], 0) === 100; })());
+  ok('data: Krenko deck is exactly 100 cards',
+    (() => { const d = S.deck('krenko');
+      return d.main.reduce((a, x) => a + x[0], 0) + d.commanders.reduce((a, x) => a + x[0], 0) === 100; })());
+  ok('data: commanders are right',
+    S.commanderOf('clex') === 'Vorinclex, Monstrous Raider' && S.commanderOf('krenko') === 'Krenko, Mob Boss');
+
+  /* -------------------------------------------------------- search ---- */
+  /* "vor" is also a prefix of Voracious Hydra. At a table you mean the
+     commander, so the app boosts it — and both still show up in the list. */
+  const boost = { boost: [S.commanderOf('clex')] };
+  ok('search: "vor" finds Vorinclex first when the commander is boosted',
+    S.search('vor', boost)[0].n === 'Vorinclex, Monstrous Raider');
+  ok('search: "vor" still offers Voracious Hydra as well',
+    S.search('vor', boost).map(c => c.n).indexOf('Voracious Hydra') > 0);
+  ok('search: "oz" finds both Ozoliths',
+    (() => { const r = S.search('oz').map(c => c.n);
+      return r.indexOf('The Ozolith') > -1 && r.indexOf('Ozolith, the Shattered Spire') > -1; })());
+  ok('search: "worldly" finds Worldly Tutor', S.search('worldly')[0].n === 'Worldly Tutor');
+  ok('search: "kalonian" finds Kalonian Hydra', S.search('kalonian')[0].n === 'Kalonian Hydra');
+  ok('search: "devoted" finds Devoted Druid', S.search('devoted')[0].n === 'Devoted Druid');
+  ok('search: "doubling" finds Doubling Season', S.search('doubling')[0].n === 'Doubling Season');
+  ok('search: subsequence typing still lands', S.search('bristl')[0].n === 'Bristly Bill, Spine Sower');
+  ok('search: empty query returns nothing', S.search('').length === 0);
+
+  /* --------------------------------------- single replacement effects -- */
+  let st = board(['Vorinclex, Monstrous Raider']);
+  let c = creature(st, 'Forgotten Ancient');
+  ok('counters: Vorinclex alone doubles 6 -> 12', S.putCounters(st, c, S.P1, 6).placed === 12);
+
+  st = board(['Hardened Scales']); c = creature(st, 'Forgotten Ancient');
+  ok('counters: Hardened Scales alone 6 -> 7', S.putCounters(st, c, S.P1, 6).placed === 7);
+
+  st = board(['Branching Evolution']); c = creature(st, 'Forgotten Ancient');
+  ok('counters: Branching Evolution alone 6 -> 12', S.putCounters(st, c, S.P1, 6).placed === 12);
+
+  /* The worked example from the brief: base 6, Scales, Vorinclex -> 14.
+     Adds before multiplies is the order that helps me, and CR 616.1 says the
+     choice is mine. (6+1)*2 = 14, not 6*2+1 = 13.                            */
+  st = board(['Hardened Scales', 'Vorinclex, Monstrous Raider']);
+  c = creature(st, 'Forgotten Ancient');
+  let r = S.putCounters(st, c, S.P1, 6);
+  ok('counters: Scales + Vorinclex, base 6 -> 14 (adds first, my choice)', r.placed === 14, '(6+1)x2');
+  ok('counters: it found that by real enumeration, not a shortcut', r.exhaustive);
+
+  /* Four modifiers: (6 +1 +1) x2 x2 = 32. */
+  st = board(['Hardened Scales', 'Ozolith, the Shattered Spire',
+              'Branching Evolution', 'Vorinclex, Monstrous Raider']);
+  c = creature(st, 'Forgotten Ancient');
+  ok('counters: Scales+Shattered+Branching+Vorinclex, 6 -> 32',
+    S.putCounters(st, c, S.P1, 6).placed === 32, '(6+1+1)x2x2');
+
+  /* Everything at once: (6 +1 +1 +1) x2 x2 x2 x2 = 144. */
+  st = board(['Hardened Scales', 'Ozolith, the Shattered Spire', 'Kami of Whispered Hopes',
+              'Branching Evolution', 'The Earth Crystal', 'Doubling Season',
+              'Vorinclex, Monstrous Raider']);
+  c = creature(st, 'Forgotten Ancient');
+  ok('counters: all seven modifiers, 6 -> 144',
+    S.putCounters(st, c, S.P1, 6).placed === 144, '(6+1+1+1)x2x2x2x2');
+
+  /* ------------------------------------------- who each effect applies to */
+  st = board(['Hardened Scales', 'Vorinclex, Monstrous Raider']);
+  let art = S.addPermanent(st, 'The Ozolith', { sick: false });
+  ok('scope: Hardened Scales does not touch a noncreature artifact',
+    S.putCounters(st, art, S.P1, 4).placed === 8, 'only Vorinclex applies: 4x2');
+
+  st = board(['Ozolith, the Shattered Spire']);
+  art = S.addPermanent(st, 'The Ozolith', { sick: false });
+  ok('scope: Shattered Spire DOES touch an artifact', S.putCounters(st, art, S.P1, 4).placed === 5);
+
+  st = board(['Kami of Whispered Hopes']);
+  let land = S.addPermanent(st, 'Karn\'s Bastion', { sick: false });
+  ok('scope: Kami reaches any permanent you control, even a land',
+    S.putCounters(st, land, S.P1, 3).placed === 4);
+
+  st = board(['Hardened Scales']);
+  land = S.addPermanent(st, 'Karn\'s Bastion', { sick: false });
+  ok('scope: Hardened Scales does not reach a land', S.putCounters(st, land, S.P1, 3).placed === 3);
+
+  /* Benevolent Hydra says "another creature you control". */
+  st = S.newState('clex');
+  let ben = S.addPermanent(st, 'Benevolent Hydra', { sick: false });
+  ok('scope: Benevolent Hydra never pumps itself', S.putCounters(st, ben, S.P1, 4).placed === 4);
+  let other = creature(st, 'Forgotten Ancient');
+  ok('scope: Benevolent Hydra does pump another creature', S.putCounters(st, other, S.P1, 4).placed === 5);
+
+  /* Primal Vigor is symmetrical — it helps the table, not just me. */
+  st = board(['Primal Vigor']);
+  let theirs = S.addPermanent(st, 'Forgotten Ancient', { sick: false, controller: 'opp' });
+  ok('scope: Primal Vigor doubles counters on an OPPONENT creature too',
+    S.putCounters(st, theirs, S.P1, 3, { by: 'opp' }).placed === 6);
+
+  st = board(['Branching Evolution']);
+  theirs = S.addPermanent(st, 'Forgotten Ancient', { sick: false, controller: 'opp' });
+  ok('scope: Branching Evolution does NOT help an opponent',
+    S.putCounters(st, theirs, S.P1, 3, { by: 'opp' }).placed === 3);
+
+  /* Doubling Season is permanents only; Vorinclex reaches players. */
+  st = board(['Doubling Season', 'Vorinclex, Monstrous Raider']);
+  r = S.putCounters(st, null, 'poison', 3, { player: 'opp' });
+  ok('scope: on a PLAYER, Vorinclex applies and Doubling Season does not',
+    r.placed === 6, '3x2 only');
+
+  /* ------------------------------------------------- the -1/-1 trap ---- */
+  st = board(['Vorinclex, Monstrous Raider', 'Hardened Scales']);
+  c = creature(st, 'Devoted Druid');
+  r = S.putCounters(st, c, S.M1, 1);
+  ok('trap: Vorinclex doubles a -1/-1 counter you put on your own creature',
+    r.placed === 2, 'Devoted Druid untaps cost twice as much');
+  ok('trap: Hardened Scales does not soften it (it is +1/+1 only)',
+    r.effects.indexOf('Hardened Scales') < 0);
+
+  /* +1/+1 and -1/-1 cancel (CR 704.5q). */
+  st = S.newState('clex');
+  c = creature(st, 'Forgotten Ancient', { '+1/+1': 5 });
+  S.putCounters(st, c, S.M1, 2);
+  ok('rules: +1/+1 and -1/-1 annihilate',
+    S.countersOn(c, S.P1) === 3 && S.countersOn(c, S.M1) === 0);
+
+  /* ----------------------------------------- entering with counters ---- */
+  ok('etb: Kalonian Hydra is printed with four', S.printedEnterCounters('Kalonian Hydra') === 4);
+  st = board(['Vorinclex, Monstrous Raider']);
+  ok('etb: Kalonian Hydra enters with 8 under Vorinclex',
+    S.enterWithCounters(st, 'Kalonian Hydra').placed === 8);
+  st = board(['Vorinclex, Monstrous Raider', 'Hardened Scales']);
+  ok('etb: and with 10 if Hardened Scales is out too',
+    S.enterWithCounters(st, 'Kalonian Hydra').placed === 10, '(4+1)x2');
+
+  /* --------------------------------------- "double the counters on X" -- */
+  /* This is the one people get wrong. Doubling is not a replacement effect:
+     it reads the current count and PUTS that many more, and that put is then
+     replaced. Ancient on 13, Vorinclex out: put 13 -> 26, total 39.          */
+  st = board(['Vorinclex, Monstrous Raider']);
+  c = creature(st, 'Forgotten Ancient', { '+1/+1': 13 });
+  S.doubleCounters(st, [c]);
+  ok('double: Ancient 13, Vorinclex -> 39 not 26',
+    S.countersOn(c, S.P1) === 39, '13 + (13x2)');
+
+  st = board(['Vorinclex, Monstrous Raider', 'Hardened Scales']);
+  c = creature(st, 'Forgotten Ancient', { '+1/+1': 13 });
+  S.doubleCounters(st, [c]);
+  ok('double: Ancient 13, Vorinclex + Scales -> 41',
+    S.countersOn(c, S.P1) === 41, '13 + ((13+1)x2)');
+
+  /* Kalonian Hydra attacking reads the board as a snapshot: two creatures
+     each double from their OWN count, they do not compound into each other. */
+  st = board(['Vorinclex, Monstrous Raider']);
+  let a = creature(st, 'Forgotten Ancient', { '+1/+1': 13 });
+  let b = creature(st, 'Managorger Hydra', { '+1/+1': 5 });
+  S.doubleCounters(st, [a, b]);
+  ok('double: each creature doubles from its own snapshot',
+    S.countersOn(a, S.P1) === 39 && S.countersOn(b, S.P1) === 15);
+
+  /* --------------------------------------------------- proliferate ---- */
+  st = board(['Vorinclex, Monstrous Raider']);
+  c = creature(st, 'Forgotten Ancient', { '+1/+1': 10 });
+  S.proliferate(st, 1);
+  ok('proliferate: one round adds 1, doubled to 2', S.countersOn(c, S.P1) === 12);
+  S.proliferate(st, 5);
+  ok('proliferate: five more rounds add 2 each', S.countersOn(c, S.P1) === 22);
+
+  st = S.newState('clex');
+  c = creature(st, 'Devoted Druid', { '-1/-1': 2 });
+  S.proliferate(st, 1);
+  ok('proliferate: we never choose our own -1/-1 counters', S.countersOn(c, S.M1) === 2);
+
+  /* ------------------------------------------------- moving counters -- */
+  /* Nesting Grounds ruling: a move is a remove plus a PUT, so the put is
+     replaced. 12 off Ancient becomes 24 on Selvala under Vorinclex.          */
+  st = board(['Vorinclex, Monstrous Raider']);
+  a = creature(st, 'Forgotten Ancient', { '+1/+1': 12 });
+  b = creature(st, 'Selvala, Heart of the Wilds');
+  r = S.moveCounters(st, a, b, S.P1, 12);
+  ok('move: 12 off Ancient arrives on Selvala as 24 under Vorinclex',
+    r.placed === 24 && S.countersOn(a, S.P1) === 0 && S.countersOn(b, S.P1) === 24);
+
+  /* ------------------------------------------------------- tokens ----- */
+  st = board(['Doubling Season', 'Parallel Lives']);
+  ok('tokens: two doublers turn 1 token into 4', S.createTokens(st, 1).tokens === 4);
+  st = board(['Doubling Season', 'Vorinclex, Monstrous Raider']);
+  ok('tokens: Vorinclex does NOT double tokens', S.createTokens(st, 1).tokens === 2);
+  st = board(['Peregrin Took']);
+  r = S.createTokens(st, 3);
+  ok('tokens: Peregrin Took adds a Food rather than doubling',
+    r.tokens === 3 && r.food === 1);
+
+  /* --------------------------------------------- Innkeeper's Talent --- */
+  st = S.newState('clex');
+  let ink = S.addPermanent(st, "Innkeeper's Talent", { sick: false, level: 1 });
+  c = creature(st, 'Forgotten Ancient');
+  ok('talent: level 1 does not double', S.putCounters(st, c, S.P1, 5).placed === 5);
+  ink.level = 3;
+  c.counters = {};
+  ok('talent: level 3 doubles', S.putCounters(st, c, S.P1, 5).placed === 10);
+
+  /* ----------------------------------------------- power and mana ----- */
+  st = S.newState('clex');
+  c = creature(st, 'Forgotten Ancient', { '+1/+1': 13 });
+  ok('board: Forgotten Ancient 0/3 with 13 counters is 13/16',
+    S.powerOf(st, c) === 13 && S.toughnessOf(st, c) === 16);
+
+  st = S.newState('clex');
+  let inc = creature(st, 'Incubation Druid');
+  ok('mana: Incubation Druid taps for 1 with no counter', S.manaFrom(st, inc) === 1);
+  S.setCounters(inc, S.P1, 1);
+  ok('mana: Incubation Druid taps for 3 with a counter', S.manaFrom(st, inc) === 3);
+
+  st = S.newState('clex');
+  let gyre = creature(st, 'Gyre Sage', { '+1/+1': 4 });
+  ok('mana: Gyre Sage taps for its counters', S.manaFrom(st, gyre) === 4);
+
+  st = S.newState('clex');
+  creature(st, 'Forgotten Ancient', { '+1/+1': 20 });
+  let sel = creature(st, 'Selvala, Heart of the Wilds');
+  ok('mana: Selvala taps for the greatest power on board', S.manaFrom(st, sel) === 20);
+
+  st = S.newState('clex');
+  S.addPermanent(st, 'Incubation Druid', { sick: true });
+  ok('mana: a summoning-sick creature contributes nothing', S.manaAvailable(st) === 0);
+
+  st = board(['The Earth Crystal']);
+  ok('cost: The Earth Crystal makes green spells 1 cheaper',
+    S.costOf(st, 'Kalonian Hydra') === 4 && S.card('Kalonian Hydra').v === 5);
+
+  /* --------------------------------------------------------- combos --- */
+  st = board(['Scurry Oak', 'Ivy Lane Denizen']);
+  let found = Combos.detect(st, []);
+  ok('combo: Scurry Oak + Ivy Lane Denizen is detected as infinite',
+    found.some(f => f.infinite && /Scurry Oak/.test(f.name)));
+
+  st = board(['Scurry Oak']);
+  found = Combos.detect(st, ['Worldly Tutor']);
+  let so = found.filter(f => /Scurry Oak/.test(f.name))[0];
+  ok('combo: with only one piece it reports the missing card',
+    so && so.missing.indexOf('Ivy Lane Denizen') > -1);
+  ok('combo: and tells me the tutor that fetches it',
+    so && so.route && /Worldly Tutor/.test(so.route));
+
+  /* Krenko's real infinites, using only cards that are actually in that 99. */
+  let kst = S.newState('krenko');
+  S.addPermanent(kst, 'Kiki-Jiki, Mirror Breaker', { sick: false });
+  S.addPermanent(kst, 'Zealous Conscripts', { sick: false });
+  ok('combo: Kiki-Jiki + Zealous Conscripts is infinite',
+    Combos.detect(kst, []).some(f => f.infinite && /Kiki-Jiki/.test(f.name)));
+
+  kst = S.newState('krenko');
+  S.addPermanent(kst, 'Krenko, Mob Boss', { sick: false });
+  S.addPermanent(kst, 'Skirk Prospector', { sick: false });
+  let kr = Combos.detect(kst, []).filter(f => /Staff of Domination/.test(f.name))[0];
+  ok('combo: Krenko + Prospector reports Staff of Domination as the missing piece',
+    kr && kr.missing.indexOf('Staff of Domination') > -1 && !kr.complete);
+
+  ok('combo: a combo is never offered against the wrong deck',
+    Combos.detect(kst, []).every(f => f.deck === 'krenko'));
+
+  /* The Devoted Druid line is finite and must never be sold as infinite. */
+  st = board(['Agatha\'s Soul Cauldron', 'Devoted Druid', 'Incubation Druid']);
+  let dd = Combos.detect(st, []).filter(f => /mana burst/.test(f.name))[0];
+  ok('combo: the Devoted Druid mana line is reported FINITE', dd && dd.infinite === false);
+
+  /* Sideboard pieces are flagged, because he cannot draw them. */
+  st = board(['Scurry Oak']);
+  let sb = Combos.detect(st, []).filter(f => /Ivy Lane/.test(f.name))[0];
+  ok('combo: a piece sitting in the sideboard is called out',
+    sb && sb.offDeck.indexOf('Ivy Lane Denizen') > -1);
+
+  /* A big value engine is NOT infinite, and must not be reported as one. */
+  st = board(['Vorinclex, Monstrous Raider', 'Hardened Scales', 'Forgotten Ancient']);
+  ok('combo: a big counter engine is not called infinite',
+    !Combos.detect(st, []).some(f => f.infinite && /Forgotten Ancient/.test(f.name)));
+
+  /* ------------------------------------------------------ optimizer --- */
+  st = board(['Forgotten Ancient']);
+  S.find(st, st.field[st.field.length - 1].uid).counters = { '+1/+1': 13 };
+  st.hand = ['Hardened Scales', 'Kalonian Hydra'];
+  st.mana.total = 6;
+  let plan = Optimizer.run(st);
+  ok('optimizer: returns a line it can actually pay for',
+    plan.best && plan.best.spent <= 6);
+  ok('optimizer: every step names a card that was really available',
+    plan.best.steps.every(s => !s.card || st.hand.indexOf(s.card) > -1 ||
+      st.field.some(p => p.name === s.card) || s.card === S.commanderOf('clex')));
+  ok('optimizer: refuses to suggest a card that is not in hand',
+    !plan.best.steps.some(s => s.card === 'Doubling Season'));
+
+  /* An instant is not board state. Casting Worldly Tutor must never put it on
+     the battlefield, and the omission has to be stated rather than silent. */
+  st = board([]);
+  st.hand = ['Worldly Tutor', 'Hardened Scales'];
+  st.mana.total = 6;
+  plan = Optimizer.run(st);
+  ok('optimizer: an instant never lands on the battlefield',
+    !plan.best.state.field.some(p => p.name === 'Worldly Tutor'));
+  ok('optimizer: it says which cards it did not simulate',
+    plan.notSimulated.indexOf('Worldly Tutor') > -1);
+
+  /* Ordering is the whole point: Scales must be cast BEFORE the Hydra. */
+  st = board([]);
+  st.hand = ['Kalonian Hydra', 'Hardened Scales', 'Branching Evolution'];
+  st.mana.total = 9;
+  plan = Optimizer.run(st);
+  let order = plan.best.steps.map(s => s.card);
+  ok('optimizer: casts the modifiers before Kalonian Hydra',
+    order.indexOf('Hardened Scales') < order.indexOf('Kalonian Hydra') &&
+    order.indexOf('Branching Evolution') < order.indexOf('Kalonian Hydra'));
+  ok('optimizer: so the Hydra enters with 10, not 4',
+    plan.best.state.field.some(p => p.name === 'Kalonian Hydra' &&
+      S.countersOn(p, S.P1) === 10), '(4+1)x2');
+
+  /* It must not attack with a creature it just cast. */
+  ok('optimizer: never attacks with a summoning-sick creature',
+    !plan.best.steps.some(s => /Attack/.test(s.label)));
+
+  st = board([]);
+  st.hand = [];
+  st.mana.total = 0;
+  plan = Optimizer.run(st);
+  ok('optimizer: an empty board does not crash and says so',
+    plan.best && plan.best.steps.length === 0);
+
+  /* The whole scenario from the brief, end to end. */
+  st = board(['Vorinclex, Monstrous Raider', 'Hardened Scales', 'Ozolith, the Shattered Spire']);
+  let anc = creature(st, 'Forgotten Ancient', { '+1/+1': 47 });
+  let kh = creature(st, 'Kalonian Hydra', { '+1/+1': 10 });
+  S.doubleCounters(st, [anc, kh]);
+  ok('scenario: Ancient on 47 with Clex + Scales + Spire, Hydra attacks -> 145',
+    S.countersOn(anc, S.P1) === 145, '47 + (47+1+1)x2');
+  ok('scenario: and Kalonian Hydra itself goes 10 -> 34',
+    S.countersOn(kh, S.P1) === 34, '10 + (10+1+1)x2');
+
+  /* ------------------------------------------------- the read-only latch */
+  /* CLEX may read everything Motherbase knows and change none of it. These
+     checks write to the real row store, or try to, and confirm nothing lands. */
+  ok('readonly: the row store IS loaded, so CLEX can read the suite',
+    typeof Rec === 'object' && typeof Rec.all === 'function');
+
+  const v = ClexReadOnly.verify();
+  ok('readonly: every row writer is latched', v.latched && v.reading,
+    v.open && v.open.length ? 'still open: ' + v.open.join(', ') : '');
+
+  const probeType = 'clex_probe';
+  const beforeRows = Rec.all(probeType).length;
+  Rec.set(probeType, null, 'x', { v: 1 });
+  ok('readonly: Rec.set writes nothing', Rec.all(probeType).length === beforeRows);
+
+  Rec.declare('clex', [probeType]);
+  ok('readonly: Rec.declare is refused', Rec.all(probeType).length === beforeRows);
+
+  /* A real row must survive a delete attempt. The latch keeps the original
+     writer on the side, so the test can plant a genuine row the way another
+     app would, prove CLEX cannot remove it, then clean up after itself. */
+  Rec.set.blockedOriginal.call(Rec, probeType, null, 'victim', { v: 42 });
+  const planted = !!Rec.row(probeType, null, 'victim');
+  Rec.del(probeType, null, 'victim');
+  ok('readonly: a real row survives Rec.del',
+    planted && !!Rec.row(probeType, null, 'victim') &&
+    Rec.get(probeType, null, 'victim').v === 42);
+
+  Rec.set(probeType, null, 'victim', { v: 99 });
+  ok('readonly: and survives being overwritten',
+    Rec.get(probeType, null, 'victim').v === 42);
+
+  /* Clean up properly. Rec.del would only write a tombstone, which is correct
+     for the suite (a deletion has to travel between devices) but would leave
+     CLEX's test litter in Tom's real storage forever. Remove the raw keys. */
+  (function purgeProbe() {
+    const doomed = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf(probeType) > -1) doomed.push(k);
+    }
+    doomed.forEach(k => localStorage.removeItem(k));
+    if (typeof Rec.reload === 'function') Rec.reload();
+  })();
+  ok('readonly: the latch test leaves no litter in the real store',
+    Rec.all(probeType).length === 0 &&
+    !Object.keys(localStorage).some(k => k.indexOf(probeType) > -1));
+
+  ok('readonly: Rec.setting still READS with two arguments',
+    Rec.setting('clex', 'nothing-here') === null);
+  ok('readonly: Rec.setting REFUSES to write with three',
+    Rec.setting('clex', 'nothing-here', 'x') === null &&
+    Rec.setting('clex', 'nothing-here') === null);
+
+  ok('readonly: Rec.merge and Rec.clear are latched',
+    Rec.merge.isClexLatch === true && Rec.clear.isClexLatch === true);
+
+  ok('readonly: suite-wide theme and icon editing is latched',
+    Skins.savePalette.isClexLatch === true && Skins.saveCustom.isClexLatch === true &&
+    Icons.savePack.isClexLatch === true);
+
+  ok('readonly: reading a theme still works',
+    Array.isArray(Skins.list()) && Skins.list().length > 0);
+
+  ok('readonly: every refusal was recorded for anyone auditing this',
+    ClexReadOnly.blocked.length > 0);
+
+  /* ---------------------------------------------------------- render -- */
+  const pass = T.filter(t => t.pass).length;
+  document.getElementById('out').innerHTML =
+    T.map(t => `<span class="${t.pass ? 'p' : 'f'}">${t.pass ? 'PASS' : 'FAIL'}</span>  ${t.name}` +
+      (t.note ? `  <span style="color:#5b6d80">${t.note}</span>` : '')).join('\n') +
+    `\n\n<span class="h">${pass} of ${T.length} checks passed.</span>` +
+    (pass === T.length ? '' : '\n<span class="f">The engine is wrong. Fix it before trusting a number.</span>');
+}
+run();
+</script>
+</body>
+</html>

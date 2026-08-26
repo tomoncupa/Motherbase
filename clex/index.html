@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CLEX</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
+<meta name="theme-color" content="#0B0E14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- CLEX reads Motherbase and never writes it.
+
+     records.js is loaded so the themes and icon packs Tom made in STYLE show
+     up here. readonly.js loads straight after it and replaces every write
+     entry point with a refusal, so reading works and writing cannot. That
+     latch is tested in _smoke.html rather than trusted.
+
+     io.js and health.js stay out on purpose: io.js is the backup and export
+     registry, and CLEX is not part of the suite's backup. A game in progress
+     is scratch state, not a record.
+
+     CLEX's own state lives under its own localStorage key. See save() below. -->
+<script src="../shared/skins.js?v=15"></script>
+<script src="../shared/day.js?v=15"></script>
+<script src="../shared/records.js?v=15"></script>
+<script src="../shared/mobile.js?v=15"></script>
+<script src="../shared/sound.js?v=15"></script>
+<script src="../shared/ui.js?v=15"></script>
+<script src="../shared/icons.js?v=15"></script>
+<script src="readonly.js?v=1"></script>
+
+<script src="data.js?v=1"></script>
+<script src="engine.js?v=1"></script>
+<script src="combos.js?v=1"></script>
+<script src="optimizer.js?v=1"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--text-1);
+  font-family:var(--font-body);font-size:var(--f-3);font-weight:var(--w-body);
+  line-height:var(--lh-body);
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+}
+
+/* ---- chrome ---- */
+header{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);
+  background:var(--surface-1);border-bottom:var(--border-width) solid var(--line);
+}
+header h1{
+  font-family:var(--font-display);font-size:var(--f-4);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--accent);
+}
+header .grow{flex:1}
+.iconbtn{
+  min-width:var(--tap);min-height:var(--tap);display:flex;align-items:center;justify-content:center;
+  background:transparent;border:var(--border-width) solid transparent;border-radius:var(--radius-md);
+  color:var(--text-2);cursor:pointer;font-size:var(--f-4);font-family:var(--font-display);
+}
+.iconbtn:active{background:var(--surface-2)}
+
+main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:var(--s-10)}
+
+section{padding:var(--s-4) var(--gutter) 0}
+.stitle{
+  font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);
+  color:var(--text-muted);text-transform:uppercase;margin-bottom:var(--s-2);
+  display:flex;align-items:center;gap:var(--s-2);
+}
+.stitle .count{color:var(--text-2)}
+
+/* ---- the engine strip ---- */
+.engines{display:flex;gap:var(--s-2);overflow-x:auto;padding-bottom:var(--s-2);scrollbar-width:none}
+.engines::-webkit-scrollbar{display:none}
+.eng{
+  flex:0 0 auto;min-height:var(--tap);padding:0 var(--s-3);
+  display:flex;align-items:center;gap:var(--s-2);
+  border:var(--border-width) solid var(--border);border-radius:var(--radius-full);
+  background:var(--surface-2);color:var(--text-muted);
+  font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);
+  cursor:pointer;white-space:nowrap;transition:background var(--dur-tap) var(--ease-out);
+}
+.eng[data-on="1"]{
+  background:var(--accent);color:var(--accent-fg);border-color:var(--accent);
+}
+.eng .tick{font-size:var(--f-2)}
+
+/* ---- search ---- */
+.searchwrap{position:relative}
+input.search,input.num{
+  width:100%;min-height:var(--tap);
+  padding:var(--s-2) var(--s-3);
+  background:var(--surface-2);color:var(--text-1);
+  border:var(--border-width) solid var(--border);border-radius:var(--radius-md);
+  font-family:var(--font-body);font-size:var(--f-3);
+}
+input.search:focus,input.num:focus{outline:none;border-color:var(--accent);box-shadow:var(--focus)}
+.results{
+  position:absolute;left:0;right:0;top:calc(100% + var(--s-1));z-index:20;
+  background:var(--surface-3);border:var(--border-width) solid var(--border-strong);
+  border-radius:var(--radius-md);overflow:hidden;box-shadow:var(--e-5);
+}
+.results div{
+  min-height:var(--tap);display:flex;align-items:center;gap:var(--s-2);
+  padding:var(--s-2) var(--s-3);cursor:pointer;border-bottom:var(--border-width) solid var(--line);
+}
+.results div:last-child{border-bottom:none}
+.results div:active{background:var(--surface-2)}
+.results .cost{color:var(--text-muted);font-family:var(--font-mono);font-size:var(--f-1);margin-left:auto}
+
+/* ---- permanents ---- */
+.perm{
+  display:flex;align-items:center;gap:var(--s-3);
+  padding:var(--s-3);margin-top:var(--s-2);
+  background:var(--surface-2);border:var(--border-width) solid var(--line);
+  border-radius:var(--radius-md);
+}
+.perm.mod{border-color:var(--accent);}
+.perm .body{flex:1;min-width:0}
+.perm .nm{font-weight:var(--w-bold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.perm .sub{font-size:var(--f-1);color:var(--text-muted);font-family:var(--font-mono)}
+.perm .pt{font-family:var(--font-mono);font-size:var(--f-2);color:var(--accent);font-weight:var(--w-bold)}
+.stepper{display:flex;align-items:center;gap:var(--s-1)}
+.stepper button{
+  min-width:var(--tap);min-height:var(--tap);
+  background:var(--surface-3);border:var(--border-width) solid var(--border);
+  border-radius:var(--radius-sm);color:var(--text-1);
+  font-family:var(--font-display);font-size:var(--f-4);cursor:pointer;
+}
+.stepper button:active{background:var(--accent);color:var(--accent-fg)}
+.stepper .val{
+  min-width:calc(var(--tap) + var(--s-2));text-align:center;
+  font-family:var(--font-mono);font-size:var(--f-4);font-weight:var(--w-bold);
+}
+.chips{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-2)}
+.chip{
+  min-height:var(--tap);display:flex;align-items:center;gap:var(--s-2);
+  padding:0 var(--s-3);background:var(--surface-2);
+  border:var(--border-width) solid var(--line);border-radius:var(--radius-full);
+  font-size:var(--f-2);cursor:pointer;
+}
+.chip .x{color:var(--text-muted);font-size:var(--f-3)}
+
+.empty{color:var(--text-muted);font-size:var(--f-2);padding:var(--s-3) 0;font-style:italic}
+
+/* ---- mana ---- */
+.manarow{display:flex;align-items:center;gap:var(--s-3)}
+.manarow .stepper .val{font-size:var(--f-6);min-width:calc(var(--tap) * 1.5)}
+.manahint{font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-2)}
+
+/* ---- actions ---- */
+.actions{
+  position:sticky;bottom:0;z-index:15;
+  display:flex;gap:var(--s-2);padding:var(--s-3) var(--gutter) calc(var(--s-3) + var(--safe-b));
+  background:var(--surface-1);border-top:var(--border-width) solid var(--line);
+}
+.btn{
+  flex:1;min-height:var(--tap);padding:var(--s-2) var(--s-3);
+  border-radius:var(--radius-md);border:var(--border-width) solid var(--border-strong);
+  background:var(--surface-2);color:var(--text-1);
+  font-family:var(--font-display);font-size:var(--f-2);letter-spacing:var(--track-cap);
+  cursor:pointer;
+}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn:active{opacity:.85}
+
+/* ---- results panel ---- */
+.out{
+  margin-top:var(--s-3);padding:var(--s-3);
+  background:var(--surface-1);border:var(--border-width) solid var(--border);
+  border-radius:var(--radius-md);
+}
+.out h3{
+  font-family:var(--font-display);font-size:var(--f-2);letter-spacing:var(--track-cap);
+  color:var(--accent);margin-bottom:var(--s-2);
+}
+.big{font-family:var(--font-mono);font-size:var(--f-6);font-weight:var(--w-bold);color:var(--accent)}
+.step{
+  display:flex;gap:var(--s-3);padding:var(--s-2) 0;
+  border-bottom:var(--border-width) solid var(--line);
+}
+.step:last-child{border-bottom:none}
+.step .n{
+  flex:0 0 auto;min-width:var(--s-6);height:var(--s-6);border-radius:var(--radius-full);
+  background:var(--accent);color:var(--accent-fg);display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:var(--f-1);font-weight:var(--w-bold);
+}
+.step .txt{flex:1}
+.step .txt b{color:var(--text-1)}
+.step .note{font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-1)}
+details summary{
+  cursor:pointer;color:var(--text-2);font-size:var(--f-2);
+  min-height:var(--tap);display:flex;align-items:center;
+}
+.calc{font-family:var(--font-mono);font-size:var(--f-1);color:var(--text-2)}
+.calc div{padding:var(--s-1) 0;display:flex;gap:var(--s-2)}
+.calc .lbl{flex:1}
+.calc .v{color:var(--accent);font-weight:var(--w-bold)}
+.badge{
+  display:inline-flex;align-items:center;padding:0 var(--s-2);height:var(--s-5);
+  border-radius:var(--radius-full);font-family:var(--font-display);
+  font-size:var(--f-1);letter-spacing:var(--track-cap);
+}
+.badge.inf{background:var(--success);color:var(--text-inverse)}
+.badge.fin{background:var(--warn);color:var(--text-inverse)}
+.badge.side{background:var(--surface-3);color:var(--text-muted);border:var(--border-width) solid var(--border)}
+.warnbox{
+  margin-top:var(--s-2);padding:var(--s-2) var(--s-3);border-radius:var(--radius-sm);
+  background:var(--surface-2);border-left:var(--s-1) solid var(--warn);
+  font-size:var(--f-2);color:var(--text-2);
+}
+.hist{font-size:var(--f-2);color:var(--text-2)}
+.hist div{padding:var(--s-1) 0;border-bottom:var(--border-width) solid var(--line)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CLEX</h1>
+  <!-- Drawings, not characters: a glyph renders differently on every device,
+       cannot take a theme colour, and disappears with the font. The steppers
+       below still use ± because status/ and train/ do and there is no minus
+       drawing in the shared set yet. -->
+  <button class="iconbtn" id="deckBtn" aria-label="Switch deck" data-icon="cycle"></button>
+  <span class="grow"></span>
+  <button class="iconbtn" id="undoBtn" aria-label="Undo" data-icon="undo"></button>
+  <button class="iconbtn" id="redoBtn" aria-label="Redo" data-icon="next"></button>
+  <button class="iconbtn" id="setBtn" aria-label="Settings" data-icon="settings"></button>
+</header>
+
+<main>
+  <section>
+    <div class="stitle">Counter engines</div>
+    <div class="engines" id="engines"></div>
+  </section>
+
+  <section>
+    <div class="stitle">Field <span class="count" id="fieldCount"></span></div>
+    <div class="searchwrap">
+      <input class="search" id="fieldSearch" placeholder="Add to battlefield…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="results" id="fieldResults" hidden></div>
+    </div>
+    <div id="field"></div>
+  </section>
+
+  <section>
+    <div class="stitle">Hand <span class="count" id="handCount"></span></div>
+    <div class="searchwrap">
+      <input class="search" id="handSearch" placeholder="Add to hand…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="results" id="handResults" hidden></div>
+    </div>
+    <div class="chips" id="hand"></div>
+  </section>
+
+  <section>
+    <div class="stitle">Available mana</div>
+    <div class="manarow">
+      <div class="stepper">
+        <button id="manaDown">−</button>
+        <span class="val" id="manaVal">0</span>
+        <button id="manaUp">+</button>
+      </div>
+      <input class="num" id="manaInput" type="number" inputmode="numeric" min="0" style="flex:1">
+    </div>
+    <div class="manahint" id="manaHint"></div>
+  </section>
+
+  <section>
+    <div class="stitle">What just happened?</div>
+    <div class="searchwrap">
+      <input class="search" id="quick" placeholder="Proliferate 5 · Kalonian Hydra attacks · put 12 on Ancient" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="manahint">Type it and press enter. The board updates and the maths is shown.</div>
+  </section>
+
+  <section id="outSection"></section>
+
+  <section>
+    <details>
+      <summary>History</summary>
+      <div class="hist" id="hist"></div>
+      <div class="chips" style="margin-top:var(--s-3)">
+        <div class="chip" id="resetBtn">Reset game</div>
+      </div>
+    </details>
+  </section>
+</main>
+
+<div class="actions">
+  <button class="btn" id="calcBtn">Counters</button>
+  <button class="btn primary" id="optBtn">Optimize turn</button>
+</div>
+
+<script>
+/* ------------------------------------------------------------------ boot */
+const APP = { id: 'clex', name: 'CLEX' };
+
+/* Skins.restore names the app first, so the theme choice is written to
+   suite_skin.clex and never to the suite-wide key. Sfx does the same with its
+   own namespaced key. Neither goes near a Motherbase data row. */
+Skins.load('../shared/skins.json?v=13').then(() => {
+  Skins.restore(APP.id);
+  if (window.Icons) Icons.paint(null, { force: true });
+});
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+
+/* The guarantee, checked out loud rather than assumed. If a later edit loads
+   the row store without the latch, this says so on the way in. */
+(function () {
+  const v = window.ClexReadOnly && ClexReadOnly.verify();
+  if (!v || (window.Rec && !v.latched)) {
+    console.warn('CLEX: the read-only latch is not in place' +
+      (v && v.open ? ' (' + v.open.join(', ') + ' still writable)' : '') +
+      '. CLEX must never write Motherbase data.');
+  }
+})();
+
+const C = window.Clex;
+const $ = id => document.getElementById(id);
+
+/* ------------------------------------------------------------- game state
+ *
+ * The board lives in rows, one per permanent, so it survives a reload and
+ * rides along in the backup like everything else in the suite. Undo is a
+ * session-only stack of snapshots — history of a game in progress is not a
+ * fact worth keeping once the game is over.                                */
+
+let G = C.newState('clex');
+let past = [], future = [];
+
+/* One key, one game, and it is CLEX's own.
+ *
+ * Motherbase stores rows because a fact about a day has to survive a merge
+ * between two devices. A game in progress is neither of those things: it is
+ * scratch state on one phone that stops mattering when you shuffle up. So it
+ * is a single JSON blob under a clex-only key, and none of the suite's row
+ * doctrine applies here.                                                    */
+const SAVE_KEY = 'clex.game';
+
+function save() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      deck: G.deck, field: G.field, hand: G.hand,
+      mana: G.mana.total, tax: G.tax,
+      cmdAvailable: G.cmdAvailable !== false,
+      log: G.log.slice(-40)
+    }));
+  } catch (e) { /* private mode, a full disk. The game still plays. */ }
+}
+
+function load() {
+  let g = null;
+  try { g = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) {}
+  G = C.newState(g && g.deck ? g.deck : 'clex');
+  if (!g) return;
+  G.field = Array.isArray(g.field) ? g.field : [];
+  G.hand = Array.isArray(g.hand) ? g.hand : [];
+  G.mana.total = g.mana || 0;
+  G.tax = g.tax || 0;
+  G.cmdAvailable = g.cmdAvailable !== false;
+  G.log = g.log || [];
+}
+
+function snap() { past.push(JSON.stringify(G)); if (past.length > 60) past.shift(); future = []; }
+function commit(msg) { if (msg) G.log.push(msg); save(); render(); }
+
+function undo() {
+  if (!past.length) return UI.toast('Nothing to undo');
+  future.push(JSON.stringify(G));
+  G = JSON.parse(past.pop());
+  save(); render(); UI.toast('Undone');
+}
+function redo() {
+  if (!future.length) return UI.toast('Nothing to redo');
+  past.push(JSON.stringify(G));
+  G = JSON.parse(future.pop());
+  save(); render(); UI.toast('Redone');
+}
+
+/* --------------------------------------------------------------- helpers */
+
+const commander = () => C.commanderOf(G.deck);
+const pool = () => C.deckPool(G.deck);
+
+/* The one-tap engine strip. Only the modifiers that change the maths. */
+const ENGINE_STRIP = {
+  clex: ['Vorinclex, Monstrous Raider', 'Hardened Scales', 'Ozolith, the Shattered Spire',
+         'Branching Evolution', 'Doubling Season', "Innkeeper's Talent",
+         'The Earth Crystal', 'Kami of Whispered Hopes', 'Arwen, Weaver of Hope'],
+  krenko: ['Krenko, Mob Boss', 'Impact Tremors', 'Purphoros, God of the Forge',
+           'Goblin Bombardment', 'Thousand-Year Elixir', 'Ashnod\'s Altar',
+           'Skirk Prospector', 'Mana Echoes']
+};
+
+const SHORT = {
+  'Vorinclex, Monstrous Raider': 'BIG CLEX',
+  'Ozolith, the Shattered Spire': 'SHATTERED SPIRE',
+  'Kami of Whispered Hopes': 'KAMI',
+  'Arwen, Weaver of Hope': 'ARWEN',
+  "Innkeeper's Talent": 'TALENT',
+  'Krenko, Mob Boss': 'KRENKO',
+  'Purphoros, God of the Forge': 'PURPHOROS',
+  'Thousand-Year Elixir': 'ELIXIR',
+  'Ashnod\'s Altar': 'ALTAR',
+  'Skirk Prospector': 'PROSPECTOR'
+};
+const shortName = n => SHORT[n] || n.split(',')[0].toUpperCase();
+
+function onField(name) { return G.field.filter(p => p.name === name && p.controller === 'you')[0] || null; }
+
+function toggleEngine(name) {
+  snap();
+  const p = onField(name);
+  if (p) { C.remove(G, p.uid); commit('Removed ' + name); }
+  else {
+    const r = C.enterWithCounters(G, name, null);
+    if (name === "Innkeeper's Talent") r.permanent.level = 3;
+    r.permanent.sick = false;
+    commit('Added ' + name);
+  }
+  Sfx.play && Sfx.play('tick');
+}
+
+/* --------------------------------------------------------------- render */
+
+function render() {
+  renderEngines();
+  renderField();
+  renderHand();
+  renderMana();
+  renderHistory();
+  $('fieldCount').textContent = G.field.length ? G.field.length + ' permanents' : '';
+  $('handCount').textContent = G.hand.length ? G.hand.length + ' cards' : '';
+}
+
+function renderEngines() {
+  const wrap = $('engines');
+  wrap.innerHTML = '';
+  (ENGINE_STRIP[G.deck] || []).forEach(name => {
+    const on = !!onField(name);
+    const b = document.createElement('button');
+    b.className = 'eng';
+    b.dataset.on = on ? '1' : '0';
+    b.innerHTML = '<span class="tick">' + (on ? '✓' : '○') + '</span>' + shortName(name);
+    b.onclick = () => toggleEngine(name);
+    wrap.appendChild(b);
+  });
+}
+
+function renderField() {
+  const wrap = $('field');
+  wrap.innerHTML = '';
+  if (!G.field.length) {
+    wrap.innerHTML = '<div class="empty">Nothing on the battlefield yet.</div>';
+    return;
+  }
+  G.field.forEach(p => {
+    const isMod = !!C.REPLACE[p.name];
+    const n = C.countersOn(p, C.P1);
+    const m = C.countersOn(p, C.M1);
+    const pt = C.basePT(p.name);
+
+    const row = document.createElement('div');
+    row.className = 'perm' + (isMod ? ' mod' : '');
+
+    const body = document.createElement('div');
+    body.className = 'body';
+    let sub = [];
+    if (m > 0) sub.push(m + ' × −1/−1');
+    if (p.tapped) sub.push('tapped');
+    if (p.sick) sub.push('sick');
+    if (p.name === "Innkeeper's Talent") sub.push('level ' + (p.level || 1));
+    const mana = C.manaFrom(G, p);
+    if (mana > 0) sub.push('taps for ' + mana);
+    body.innerHTML = '<div class="nm">' + p.name + '</div>' +
+      (pt ? '<div class="pt">' + C.powerOf(G, p) + '/' + C.toughnessOf(G, p) + '</div>' : '') +
+      (sub.length ? '<div class="sub">' + sub.join(' · ') + '</div>' : '');
+    body.onclick = () => permMenu(p);
+    row.appendChild(body);
+
+    if (pt || n > 0) {
+      const st = document.createElement('div');
+      st.className = 'stepper';
+      st.innerHTML = '<button>−</button><span class="val">' + n + '</span><button>+</button>';
+      st.children[0].onclick = e => { e.stopPropagation(); snap();
+        C.setCounters(p, C.P1, Math.max(0, n - 1)); commit(p.name + ' −1 counter'); };
+      st.children[2].onclick = e => { e.stopPropagation(); snap();
+        const r = C.putCounters(G, p, C.P1, 1);
+        commit(p.name + ' +' + r.placed + ' counter' + (r.placed === 1 ? '' : 's'));
+        if (r.placed > 1) showCalc('Put 1 counter on ' + p.name, r); };
+      row.appendChild(st);
+    }
+    wrap.appendChild(row);
+  });
+}
+
+function permMenu(p) {
+  const items = [
+    { label: p.tapped ? 'Untap' : 'Tap', fn: () => { snap(); p.tapped = !p.tapped; commit(); } },
+    { label: p.sick ? 'Clear summoning sickness' : 'Mark summoning sick',
+      fn: () => { snap(); p.sick = !p.sick; commit(); } },
+    { label: 'Add 5 counters', fn: () => { snap();
+      const r = C.putCounters(G, p, C.P1, 5); commit(p.name + ' +' + r.placed);
+      showCalc('Put 5 counters on ' + p.name, r); } },
+    { label: 'Double its counters', fn: () => { snap();
+      const before = C.countersOn(p, C.P1);
+      const res = C.doubleCounters(G, [p]);
+      commit(p.name + ' doubled to ' + C.countersOn(p, C.P1));
+      if (res[0]) showCalc('Double ' + p.name + ' (' + before + ' counters)', res[0]); } },
+    { label: 'Move all counters to…', fn: () => moveDialog(p) },
+    '-',
+    { label: 'Remove from battlefield', kind: 'bad',
+      fn: () => { snap(); C.remove(G, p.uid); commit('Removed ' + p.name); } }
+  ];
+  if (p.name === "Innkeeper's Talent") {
+    items.splice(1, 0, { label: 'Level ' + ((p.level || 1) >= 3 ? '1' : '3'),
+      fn: () => { snap(); p.level = (p.level || 1) >= 3 ? 1 : 3; commit(); } });
+  }
+  Mobile.actions(p.name, items);
+}
+
+function moveDialog(from) {
+  const others = G.field.filter(q => q.uid !== from.uid && C.isType(q.name, 'creature'));
+  if (!others.length) return UI.toast('No other creature to move them to');
+  Mobile.actions('Move counters to', others.map(q => ({
+    label: q.name,
+    fn: () => {
+      snap();
+      const r = C.moveCounters(G, from, q, C.P1, null);
+      commit('Moved ' + r.moved + ' → ' + q.name + ' as ' + r.placed);
+      showCalc('Move ' + r.moved + ' counters from ' + from.name + ' to ' + q.name, r);
+    }
+  })));
+}
+
+function renderHand() {
+  const wrap = $('hand');
+  wrap.innerHTML = '';
+  if (!G.hand.length) {
+    wrap.innerHTML = '<div class="empty">Hand is empty. The optimizer will only suggest cards you put here.</div>';
+    return;
+  }
+  G.hand.forEach((n, i) => {
+    const c = C.card(n);
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.innerHTML = '<span>' + n + '</span><span class="cost">' +
+      (c ? c.c : '') + '</span><span class="x">×</span>';
+    chip.onclick = () => { snap(); G.hand.splice(i, 1); commit('Removed ' + n + ' from hand'); };
+    wrap.appendChild(chip);
+  });
+}
+
+function renderMana() {
+  $('manaVal').textContent = G.mana.total;
+  $('manaInput').value = G.mana.total;
+  const auto = C.manaAvailable(G);
+  $('manaHint').textContent = auto > 0
+    ? 'Your board can produce about ' + auto + '. Tap to use that instead.'
+    : 'Type the number. Do not bother configuring sources.';
+  $('manaHint').onclick = auto > 0 ? () => { snap(); G.mana.total = auto; commit(); } : null;
+}
+
+function renderHistory() {
+  $('hist').innerHTML = G.log.length
+    ? G.log.slice(-25).reverse().map(l => '<div>' + l + '</div>').join('')
+    : '<div class="empty">Nothing yet.</div>';
+}
+
+/* ------------------------------------------------------------ card search */
+
+function wireSearch(inputId, resultsId, onPick) {
+  const inp = $(inputId), res = $(resultsId);
+  let items = [];
+  const close = () => { res.hidden = true; res.innerHTML = ''; items = []; };
+
+  inp.addEventListener('input', () => {
+    const q = inp.value.trim();
+    items = C.search(q, { pool: pool(), boost: [commander()], limit: 8 });
+    if (!items.length) return close();
+    res.innerHTML = '';
+    items.forEach(c => {
+      const d = document.createElement('div');
+      d.innerHTML = '<span>' + c.n + '</span><span class="cost">' + (c.c || '') + '</span>';
+      d.onclick = () => { onPick(c.n); inp.value = ''; close(); };
+      res.appendChild(d);
+    });
+    res.hidden = false;
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && items.length) { onPick(items[0].n); inp.value = ''; close(); }
+    if (e.key === 'Escape') close();
+  });
+  inp.addEventListener('blur', () => setTimeout(close, 180));
+}
+
+wireSearch('fieldSearch', 'fieldResults', name => {
+  snap();
+  const r = C.enterWithCounters(G, name, null);
+  r.permanent.sick = C.isType(name, 'creature');
+  commit('Added ' + name + (r.placed ? ' with ' + r.placed + ' counters' : ''));
+  if (r.placed > 0) showCalc(name + ' enters', r);
+});
+
+wireSearch('handSearch', 'handResults', name => {
+  snap(); G.hand.push(name); commit('Drew ' + name);
+});
+
+/* ------------------------------------------------------------------ mana */
+
+$('manaUp').onclick = () => { snap(); G.mana.total++; commit(); };
+$('manaDown').onclick = () => { snap(); G.mana.total = Math.max(0, G.mana.total - 1); commit(); };
+$('manaInput').addEventListener('change', e => {
+  snap(); G.mana.total = Math.max(0, parseInt(e.target.value, 10) || 0); commit();
+});
+
+/* ------------------------------------------------------- quick language */
+
+/* Deliberately small. It recognises the handful of things actually said out
+ * loud at a table, and when it does not understand it says so rather than
+ * guessing and silently corrupting the board.                              */
+function quickAction(text) {
+  const s = text.trim().toLowerCase();
+  if (!s) return false;
+
+  let m;
+  if ((m = /^prolif\w*\s*(?:x\s*)?(\d+)?/.exec(s))) {
+    const times = parseInt(m[1] || '1', 10);
+    snap();
+    const rounds = C.proliferate(G, times);
+    const touched = rounds[0] ? rounds[0].length : 0;
+    commit('Proliferated ×' + times);
+    outHTML('<h3>Proliferate ×' + times + '</h3>' +
+      (touched ? boardSummary() : '<div class="empty">Nothing on board had counters to proliferate.</div>'));
+    return true;
+  }
+
+  if ((m = /^(?:put\s+)?(\d+)\s*(?:\+1\/\+1\s*)?counters?\s+on\s+(.+)$/.exec(s))) {
+    const p = matchPermanent(m[2]);
+    if (!p) { UI.toast('No permanent matching "' + m[2] + '"'); return true; }
+    snap();
+    const r = C.putCounters(G, p, C.P1, parseInt(m[1], 10));
+    commit('Put ' + r.placed + ' counters on ' + p.name);
+    showCalc('Put ' + m[1] + ' counters on ' + p.name, r);
+    return true;
+  }
+
+  if ((m = /^move\s+(?:(\d+)\s+)?counters?\s+from\s+(.+?)\s+to\s+(.+)$/.exec(s))) {
+    const a = matchPermanent(m[2]), b = matchPermanent(m[3]);
+    if (!a || !b) { UI.toast('Could not find both permanents'); return true; }
+    snap();
+    const r = C.moveCounters(G, a, b, C.P1, m[1] ? parseInt(m[1], 10) : null);
+    commit('Moved ' + r.moved + ' from ' + a.name + ' → ' + r.placed + ' on ' + b.name);
+    showCalc('Move ' + r.moved + ' counters from ' + a.name + ' to ' + b.name, r);
+    return true;
+  }
+
+  if (/attack/.test(s) || /double/.test(s)) {
+    const who = s.replace(/\b(attacks?|attacking|double[sd]?|the counters on|with)\b/g, '').trim();
+    const p = who ? matchPermanent(who) : null;
+    snap();
+    let targets;
+    if (p && (p.name === 'Kalonian Hydra' || p.name === 'Bristly Bill, Spine Sower' ||
+              /each creature/i.test((C.card(p.name) || {}).o || ''))) {
+      targets = G.field.filter(q => q.controller === 'you' && C.isType(q.name, 'creature') &&
+                                    C.countersOn(q, C.P1) > 0);
+    } else if (p) {
+      targets = [p];
+    } else {
+      targets = G.field.filter(q => q.controller === 'you' && C.isType(q.name, 'creature') &&
+                                    C.countersOn(q, C.P1) > 0);
+    }
+    if (!targets.length) { UI.toast('Nothing with counters to double'); return true; }
+    const res = C.doubleCounters(G, targets);
+    commit('Doubled counters on ' + targets.length + ' creature' + (targets.length === 1 ? '' : 's'));
+    outHTML('<h3>Counters doubled</h3>' +
+      res.map(r => '<div class="step"><div class="txt"><b>' + r.target.name + '</b>: ' +
+        r.had + ' → ' + r.now + '<div class="note">Put ' + r.placed +
+        ' more (doubling reads the count, then PUTS that many, so every modifier applies).</div></div></div>').join('') +
+      boardSummary());
+    return true;
+  }
+
+  if ((m = /^(?:cast|play)\s+(.+)$/.exec(s))) {
+    const hit = C.search(m[1], { pool: pool(), boost: [commander()], limit: 1 })[0];
+    if (!hit) { UI.toast('No card matching "' + m[1] + '"'); return true; }
+    snap();
+    const r = C.enterWithCounters(G, hit.n, null);
+    r.permanent.sick = C.isType(hit.n, 'creature');
+    const i = G.hand.indexOf(hit.n); if (i > -1) G.hand.splice(i, 1);
+    commit('Cast ' + hit.n);
+    if (r.placed > 0) showCalc(hit.n + ' enters', r);
+    else outHTML('<h3>' + hit.n + '</h3><div class="calc">On the battlefield.</div>' + boardSummary());
+    return true;
+  }
+
+  UI.toast('Not understood. Try "proliferate 5", "put 12 counters on Ancient", or "Kalonian Hydra attacks".');
+  return false;
+}
+
+function matchPermanent(txt) {
+  const q = txt.trim().toLowerCase();
+  if (!q) return null;
+  let best = null, bestRank = 99;
+  G.field.forEach(p => {
+    const n = p.name.toLowerCase();
+    let r = 99;
+    if (n === q) r = 0;
+    else if (n.indexOf(q) === 0) r = 1;
+    else if (n.split(/[^a-z0-9']+/).some(w => w.indexOf(q) === 0)) r = 2;
+    else if (n.indexOf(q) > -1) r = 3;
+    if (r < bestRank) { bestRank = r; best = p; }
+  });
+  return best;
+}
+
+$('quick').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (quickAction(e.target.value)) e.target.value = '';
+});
+
+/* --------------------------------------------------------------- output */
+
+function outHTML(html) {
+  $('outSection').innerHTML = '<div class="out">' + html + '</div>';
+  $('outSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showCalc(title, r) {
+  const rows = (r.steps || []).map(s =>
+    '<div><span class="lbl">' + s.label + '</span><span class="v">' + s.n + '</span></div>').join('');
+  const trap = (r.effects || []).indexOf('Vorinclex, Monstrous Raider') > -1 &&
+    r.target && C.countersOn(r.target, C.M1) > 0;
+  outHTML(
+    '<h3>' + title + '</h3>' +
+    '<div class="big">' + (r.base != null ? r.base + ' → ' + r.placed : r.placed) + '</div>' +
+    (r.target ? '<div class="calc">' + r.target.name + ' now has ' +
+      C.countersOn(r.target, C.P1) + ' +1/+1 counters (' +
+      C.powerOf(G, r.target) + '/' + C.toughnessOf(G, r.target) + ').</div>' : '') +
+    (rows ? '<details open><summary>Show calculation</summary><div class="calc">' + rows +
+      '</div></details>' : '') +
+    (r.exhaustive === false
+      ? '<div class="warnbox">Too many modifiers to check every order, so this used adds-before-doubles. ' +
+        'That is the best order for +1/+1 counters, but it was not proved here.</div>' : '') +
+    (trap ? '<div class="warnbox">This permanent also has −1/−1 counters. Vorinclex doubles those too.</div>' : '') +
+    boardSummary()
+  );
+}
+
+function boardSummary() {
+  const creatures = G.field.filter(p => p.controller === 'you' && C.isType(p.name, 'creature'));
+  if (!creatures.length) return '';
+  const total = creatures.reduce((a, p) => a + C.countersOn(p, C.P1), 0);
+  return '<details><summary>Board (' + total + ' counters total)</summary><div class="calc">' +
+    creatures.map(p => '<div><span class="lbl">' + p.name + '</span><span class="v">' +
+      C.powerOf(G, p) + '/' + C.toughnessOf(G, p) + '</span></div>').join('') +
+    '</div></details>';
+}
+
+/* ------------------------------------------------------------- the modes */
+
+$('calcBtn').onclick = () => {
+  const creatures = G.field.filter(p => p.controller === 'you' && C.isType(p.name, 'creature'));
+  if (!creatures.length) return UI.toast('Put something on the battlefield first');
+
+  const mods = G.field.filter(p => C.REPLACE[p.name]).map(p => p.name);
+  const probe = creatures.reduce((best, p) =>
+    C.countersOn(p, C.P1) >= C.countersOn(best, C.P1) ? p : best, creatures[0]);
+
+  /* Answer the question without changing the board: what would one counter,
+     and what would a doubling, actually be worth right now? */
+  const sim = C.clone(G);
+  const simP = C.find(sim, probe.uid);
+  const one = C.putCounters(sim, simP, C.P1, 1);
+
+  const sim2 = C.clone(G);
+  const simP2 = C.find(sim2, probe.uid);
+  const had = C.countersOn(simP2, C.P1);
+  const dbl = had > 0 ? C.doubleCounters(sim2, [simP2])[0] : null;
+
+  outHTML(
+    '<h3>Counter maths right now</h3>' +
+    '<div class="calc"><div><span class="lbl">Modifiers on board</span><span class="v">' +
+      (mods.length ? mods.length : 'none') + '</span></div>' +
+      mods.map(m => '<div><span class="lbl">· ' + m + '</span></div>').join('') + '</div>' +
+    '<div class="step"><div class="n">1</div><div class="txt"><b>One counter on ' + probe.name +
+      '</b> becomes <b>' + one.placed + '</b>' +
+      '<div class="note">' + one.steps.map(s => s.label + ' → ' + s.n).join(' · ') + '</div></div></div>' +
+    (dbl ? '<div class="step"><div class="n">2</div><div class="txt"><b>Doubling ' + probe.name +
+      '</b> (' + dbl.had + ' counters) puts <b>' + dbl.placed + '</b> more, ending at <b>' +
+      dbl.now + '</b><div class="note">Doubling is not a replacement effect. It reads the count, then ' +
+      'puts that many, and the put is what gets modified.</div></div></div>' : '') +
+    boardSummary()
+  );
+};
+
+$('optBtn').onclick = () => {
+  const plan = Optimizer.run(G);
+  const b = plan.best;
+
+  let html = '<h3>Best play</h3>';
+  if (!b.steps.length) {
+    html += '<div class="empty">Nothing castable with ' + G.mana.total +
+      ' mana. Add cards to your hand or raise the mana.</div>';
+  } else {
+    html += '<div class="calc" style="margin-bottom:var(--s-2)">' + plan.why + '</div>';
+    b.steps.forEach((s, i) => {
+      html += '<div class="step"><div class="n">' + (i + 1) + '</div><div class="txt"><b>' +
+        s.label + '</b>' + (s.cost ? ' — ' + s.cost + ' mana' : ' — free') +
+        '<div class="note">Remaining mana: ' + s.remaining +
+        (s.notes && s.notes.length ? '<br>' + s.notes.join('<br>') : '') + '</div></div></div>';
+    });
+    const sc = b.score;
+    html += '<div class="calc" style="margin-top:var(--s-3)">' +
+      '<div><span class="lbl">Mana spent</span><span class="v">' + b.spent + ' of ' + G.mana.total + '</span></div>' +
+      '<div><span class="lbl">+1/+1 counters on board</span><span class="v">' + sc.counters + '</span></div>' +
+      '<div><span class="lbl">Biggest creature</span><span class="v">' + sc.biggest + ' power</span></div>' +
+      '<div><span class="lbl">Damage you can swing now</span><span class="v">' + sc.swing + '</span></div>' +
+      '</div>';
+    html += '<div class="chips"><div class="chip" id="applyBtn">Apply this line to the board</div></div>';
+  }
+
+  /* Tutors are a decision, so they are shown separately from the line. */
+  const tut = Optimizer.tutorTargets(G, G.hand);
+  tut.forEach(t => {
+    if (!t.targets.length) return;
+    html += '<h3 style="margin-top:var(--s-4)">' + t.tutor + '</h3>' +
+      '<div class="calc">Puts the card ' + t.to + '.' +
+      (t.immediate ? '' : ' You cannot cast it this turn.') + '</div>' +
+      t.targets.map(x => '<div class="step"><div class="txt"><b>' + x.card + '</b> ' +
+        (x.infinite ? '<span class="badge inf">INFINITE</span>' : '') +
+        '<div class="note">Completes: ' + x.why + '</div></div></div>').join('');
+  });
+
+  if (plan.notSimulated && plan.notSimulated.length) {
+    html += '<div class="warnbox">Not simulated: ' + plan.notSimulated.join(', ') +
+      '. Instants and sorceries do not stay on the battlefield, so the line above ignores them. ' +
+      'Tutors are covered separately.</div>';
+  }
+
+  html += comboHTML(plan.combos);
+  outHTML(html);
+
+  const ap = $('applyBtn');
+  if (ap) ap.onclick = () => {
+    snap();
+    G = b.state;
+    G.hand = G.hand || [];
+    G.mana.total = b.remaining;
+    commit('Applied optimizer line');
+    UI.toast('Line applied');
+  };
+};
+
+function comboHTML(combos) {
+  if (!combos || !combos.length) return '';
+  let h = '<h3 style="margin-top:var(--s-4)">Combos</h3>';
+  combos.slice(0, 5).forEach(c => {
+    h += '<div class="step"><div class="txt"><b>' + c.name + '</b> ' +
+      (c.infinite ? '<span class="badge inf">INFINITE</span>'
+                  : '<span class="badge fin">FINITE</span>') +
+      (c.offDeck.length ? ' <span class="badge side">NOT IN THE 99</span>' : '') +
+      '<div class="note">' +
+      (c.complete ? 'All pieces present.' : 'Missing: ' + c.missing.join(', ')) +
+      (c.route ? '<br>How to get it: ' + c.route : '') +
+      (c.start ? '<br>' + c.start : '') +
+      '<br>Result: ' + c.result.join(', ') +
+      (c.note ? '<br>' + c.note : '') +
+      '</div></div></div>';
+  });
+  return h;
+}
+
+/* ------------------------------------------------------------- chrome */
+
+$('undoBtn').onclick = undo;
+$('redoBtn').onclick = redo;
+$('setBtn').onclick = () => UI.settings(APP.id);
+
+$('deckBtn').onclick = () => {
+  Mobile.actions('Deck', (C.DATA.decks || []).map(d => ({
+    label: d.name + (d.id === G.deck ? '  ✓' : ''),
+    note: C.commanderOf(d.id),
+    fn: () => {
+      if (d.id === G.deck) return;
+      snap();
+      G = C.newState(d.id);
+      commit('Switched to ' + d.name);
+    }
+  })));
+};
+
+$('resetBtn').onclick = async () => {
+  const yes = await UI.confirm('Reset the game?', 'Clears the battlefield, your hand and the mana. Undo can still bring it back.');
+  if (!yes) return;
+  snap();
+  const deck = G.deck;
+  G = C.newState(deck);
+  commit('Reset');
+};
+
+/* Android back closes what is open rather than leaving the app. */
+if (window.Mobile && Mobile.trap) Mobile.trap(() => {
+  const r = document.querySelector('.results:not([hidden])');
+  if (r) { r.hidden = true; return true; }
+  return false;
+});
+
+/* No row store to wait for. The app owns its own save file. */
+load();
+render();
+</script>
+</body>
+</html>
