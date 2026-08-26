@@ -471,10 +471,14 @@ IO.register({
       ['amt', 'Amount'], ['acct', 'Account'], ['note', 'Details'],
     ] },
     { name: 'Journal', type: 'note', cols: [
-      ['kind', 'Kind'], ['text', 'Text'], ['done', 'Done'], ['cancelled', 'Cancelled'],
+      /* the words the app calls them, not the slugs it stores — and derived
+         from NOTE_KINDS so a new bullet type cannot forget to appear here */
+      ['kind', 'Kind', () => kindLabels()], ['text', 'Text'], ['done', 'Done'], ['cancelled', 'Cancelled'],
     ] },
     { name: 'Tracked', type: 'field', cols: [
-      ['label', 'Name'], ['unit', 'Unit'], ['measure', 'Kind'], ['target', 'Target'],
+      /* "Measured as" rather than a second column called Kind meaning something
+         else entirely one tab over */
+      ['label', 'Name'], ['unit', 'Unit'], ['measure', 'Measured as', () => MEASURE_LABELS], ['target', 'Target'],
       ['min', 'At least'], ['max', 'At most'], ['half', 'Half-life'], ['on', 'On'],
     ] },
   ],
@@ -543,6 +547,10 @@ const LIBRARY = [
 ];
 
 /* the defaults each kind of measure carries, so nothing has to be repeated */
+/* the same four words the field form offers, so the sheet and the app agree */
+const MEASURE_LABELS = {
+  number: 'One a day', amount: 'A dose', scale: 'A scale', check: 'Done or not',
+};
 const MEASURE = {
   number: { once: 1, agg: 'last' },
   amount: { once: 0, agg: 'sum'  },
@@ -854,6 +862,28 @@ const noteSvg = (id, migrated) =>
       : '<span class="nm-box" aria-hidden="true"></span>';
 
 const noteKind = id => NOTE_KINDS.filter(k => k.id === id)[0] || NOTE_KINDS[1];
+/* ── what a Kind column says in the spreadsheet ──
+   Built from NOTE_KINDS rather than typed out again, so adding a bullet type
+   cannot leave the export writing a slug nobody recognises.
+
+   `para` is not a kind you can pick any more — an Entry absorbed it — but rows
+   written before that still carry it, and a spreadsheet that showed them blank
+   would be lying about what is in the file. */
+const kindLabels = () => {
+  const m = {};
+  /* The real kinds first. `para` shares Entry's label, and a lookup coming back
+     from the sheet takes the first key that matches — listing the legacy one
+     first filed every hand-typed "Entry" as a `para`.
+
+     One consequence, deliberate: a `para` row exported as "Entry" and read back
+     in becomes a real `entry`. That is a normalisation rather than a loss —
+     `para` has not been a kind you can choose since Entry absorbed it, and the
+     app already draws and counts it as an Entry everywhere. The sheet round
+     trip is simply where the last of them get tidied up. */
+  NOTE_KINDS.forEach(k => m[k.id] = k.label);
+  m.para = 'Entry';
+  return m;
+};
 
 /* Everything written on this day, plus any task still open from before it.
 

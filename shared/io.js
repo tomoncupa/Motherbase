@@ -40,6 +40,44 @@ const el = (t, c, h) => { const n = document.createElement(t); if (c) n.classNam
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const toast = (h, o) => g.UI ? g.UI.toast(h, o) : console.log(h.replace(/<[^>]+>/g, ''));
 
+/* ── a column that stores an id and shows a word ──
+   `kind` on a journal line is stored as `todo`, because that is a stable key
+   the code can branch on. In a spreadsheet you are reading it, and a column of
+   lowercase slugs is a column you have to translate in your head. Worse, the
+   Journal tab and the Tracked tab both have a column called Kind holding two
+   completely different vocabularies.
+
+   A column spec may carry a third element: a plain map of stored value to the
+   word for it. The sheet gets the word, and typing the word back in stores the
+   value again. Matching on the way in is case-insensitive and also accepts the
+   raw stored value, so a sheet written before this still imports and so does
+   one where somebody typed "todo" in lower case.
+
+   Anything not in the map passes through untouched — an unknown value is data,
+   and quietly blanking it would be worse than showing it raw. */
+const colMap = col => {
+  /* A function, resolved at export time, so a table spec written near the top
+     of a file can name a vocabulary declared further down it without tripping
+     over the order things are defined in. */
+  const m = typeof col[2] === 'function' ? col[2]() : col[2];
+  return (m && typeof m === 'object') ? m : null;
+};
+function labelFor(col, v) {
+  const map = colMap(col);
+  if (!map) return v;
+  return Object.prototype.hasOwnProperty.call(map, v) ? map[v] : v;
+}
+function storedFor(col, v) {
+  const map = colMap(col);
+  if (!map || v == null || v === '') return v;
+  const want = String(v).trim().toLowerCase();
+  for (const k in map) {
+    if (String(map[k]).toLowerCase() === want) return k;
+    if (String(k).toLowerCase() === want) return k;
+  }
+  return v;
+}
+
 /* ── whatever the spreadsheet thinks a date is ──
    Half of every row id is its date, and the store only accepts YYYY-MM-DD.
    A sheet will hand back any of four things for the same cell:
@@ -302,7 +340,7 @@ const IO = {
         const line = [r.key, r.date || ''];
         t.cols.forEach(c => {
           const v = IO.reach(r.payload, c[0]);
-          line.push(v == null ? '' : v);
+          line.push(v == null ? '' : labelFor(c, v));
         });
         /* the stamp every row carries, so a clash has something to settle it */
         line.push(new Date(r.updated_at).toISOString(), r.by || 'phone');
@@ -351,6 +389,7 @@ const IO = {
       t.cols.forEach((c, i) => {
         let v = line[2 + i];
         if (typeof v === 'string') v = v.trim();
+        v = storedFor(c, v);
         /* a column that held a number keeps holding one */
         const was = IO.reach(payload, c[0]);
         if (typeof was === 'number' || (was == null && v !== '' && isFinite(v) && String(v).trim() !== '')) {
