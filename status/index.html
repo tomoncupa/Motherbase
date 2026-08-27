@@ -2196,6 +2196,27 @@ function mealSheet(x, d) {
     let err = num(x.err, 0) || 0, acct = x.acct || '';
     body.appendChild(el('label', 'fl', 'How sure'));
     body.appendChild(errChips(err, v => { err = v; }));
+
+    /* The cost of THIS serving, and it had nowhere to be typed.
+       Until now the only way a price moved was by rescaling: change the
+       amount and the cost followed proportionally. That is right when the
+       label price is right and you ate a different amount, and useless the
+       rest of the time - a deal, a different shop, a restaurant that charged
+       what it charged, or a food whose price was never filled in.
+
+       Left alone it still rescales with the amount, exactly as before. Type
+       in it and the number you typed is the number, because at that point you
+       know something the arithmetic does not. */
+    let costTyped = false;
+    body.appendChild(el('label', 'fl', 'Cost'));
+    const cost = numberInput(x.price != null ? r1(x.price) : '', 5, 1);
+    cost.input.oninput = () => { costTyped = true; };
+    body.appendChild(cost);
+    body.appendChild(el('div', 'note',
+      'Blank means it cost nothing today &mdash; food bought on another day is '
+      + 'already paid for. Give it a cost AND an account and it lands on the '
+      + 'money screen as well.'));
+
     body.appendChild(el('label', 'fl', 'Paid from'));
     body.appendChild(acctChips(acct, v => { acct = v; }));
 
@@ -2207,7 +2228,12 @@ function mealSheet(x, d) {
       const k = x.amt ? v / x.amt : 1;
       const row = Object.assign({}, x); delete row.key;
       NUTS.forEach(n => { if (row[n] != null) row[n] = row[n] * k; });
-      if (row.price != null) row.price = row.price * k;
+      /* A typed cost wins over the rescale: you are correcting it, not
+         resizing it. An untouched one follows the amount as it always did. */
+      if (costTyped) {
+        const c = num(cost.input.value, 0) || 0;
+        if (c > 0) row.price = c; else delete row.price;
+      } else if (row.price != null) row.price = row.price * k;
       row.amt = v; row.mult = (x.mult || 1) * k;
       /* a fraction, so it survives a rescale untouched */
       row.err = err; row.acct = acct;
