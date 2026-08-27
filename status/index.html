@@ -602,18 +602,36 @@ function linkNutrients() {
    linkNutrients: a number rather than a flag, so a later change runs again
    instead of being locked out by a tick from the previous version. Only the
    library's own fields are touched, and only where nothing was set by hand. */
-const FIELDFIX = 1;
+const FIELDFIX = 2;
+/* Which kind of thing each library field is, so the form can narrow itself
+   without him having to categorise five things by hand first. */
+const SEEDCAT = {
+  weight: 'body', rhr: 'body', sleep: 'body',
+  steps: 'activity',
+  mood: 'feeling', energy: 'feeling',
+  creatine: 'intake', potassium: 'intake', sodium: 'intake', caffeine: 'intake',
+  magnesium: 'intake', zinc: 'intake', water: 'intake',
+};
 function fixSeedFields() {
   if (num(S.get('fieldfix', 0), 0) >= FIELDFIX) return;
   const want = {};
   SEED.concat(LIBRARY).forEach(l => { if (l.bump) want[l.id] = l; });
   Object.values(fields()).forEach(f => {
     const lib = want[f.id];
-    if (!lib || f.bump) return;
-    const next = Object.assign({}, f, { bump: lib.bump.slice() });
-    /* the list it shipped with goes when the field is meant to be built up
-       rather than picked from */
-    if (!lib.chips) delete next.chips;
+    const kind = SEEDCAT[f.id];
+    if (!lib && !kind) return;
+    const next = Object.assign({}, f);
+    if (lib && !f.bump) {
+      next.bump = lib.bump.slice();
+      /* the list it shipped with goes when the field is meant to be built up
+         rather than picked from */
+      if (!lib.chips) delete next.chips;
+    }
+    /* Only where he has not chosen one himself. */
+    if (kind && !f.cat) next.cat = kind;
+    /* A body measurement does not wear off, so a half-life on one is a
+       leftover that would decay a number that does not decay. */
+    if (next.cat && catOf(next.cat).has.indexOf('half') < 0) delete next.half;
     Rec.set('field', null, f.id, next);
   });
   S.set('fieldfix', FIELDFIX);
@@ -628,6 +646,60 @@ function seedFields() {
 
 const fields = () => Rec.map('field');
 const field = id => fields()[id] || null;
+/* ══════════════ WHEN, AND WHAT KIND OF THING ══════════════
+
+   Both of these used to be free text boxes that did nothing much. `When` was
+   stored, printed once in grey on the settings list, and read by nothing.
+   `Category` grouped the settings list and stopped there.
+
+   They are fixed lists now, and each one earns its place:
+
+   WHEN orders your Today tiles. Nothing else about a field can say that a
+   weigh-in belongs before breakfast and a sleep score belongs after it. Fixed
+   rather than typed because "evening", "Evening" and "at night" are three
+   different strings and one intention, and a sort on free text is a sort on
+   spelling.
+
+   CATEGORY decides which settings a field even has. A weight has no half-life:
+   it does not wear off, and offering the box invites a number that would make
+   the tile lie. A mood has no target in pounds. Rather than show every control
+   for every field and trust you to ignore the wrong ones, the category says
+   what applies and the form shows only that.                                */
+const WHENS = [
+  { id: 'morning', label: 'Morning' },
+  { id: 'midday',  label: 'Midday' },
+  { id: 'afternoon', label: 'Afternoon' },
+  { id: 'evening', label: 'Evening' },
+  { id: 'bed',     label: 'Before bed' },
+];
+const whenLabel = id => (WHENS.filter(w => w.id === id)[0] || {}).label || '';
+/* where a field sits in the day. No answer sorts last, keeping the manual
+   order you set with the arrows. */
+const whenRank = f => {
+  const i = WHENS.findIndex(w => w.id === f.slot);
+  return i < 0 ? WHENS.length : i;
+};
+
+/* `has` lists the controls this kind of thing actually has. Anything not
+   listed is not drawn and not stored. */
+const CATS = [
+  { id: 'body',     label: 'Body',     note: 'weight, resting heart rate',
+    has: ['target', 'edges', 'days', 'when'] },
+  { id: 'intake',   label: 'Intake',   note: 'anything you take or drink',
+    has: ['target', 'half', 'from', 'days', 'when'] },
+  { id: 'activity', label: 'Activity', note: 'steps, minutes moved',
+    has: ['target', 'edges', 'days', 'when'] },
+  { id: 'feeling',  label: 'Feeling',  note: 'mood, energy, soreness',
+    has: ['scale', 'days', 'when'] },
+  { id: 'other',    label: 'Other',    note: 'everything else',
+    has: ['target', 'edges', 'half', 'from', 'days', 'when'] },
+];
+const catOf = id => CATS.filter(c => c.id === id)[0] || CATS[CATS.length - 1];
+const catLabel = id => (CATS.filter(c => c.id === id)[0] || {}).label || '';
+/* An older field with no category set keeps every control, so nothing a field
+   already carries can be hidden by a category it never chose. */
+const catHas = (f, what) => !f.cat ? true : catOf(f.cat).has.indexOf(what) > -1;
+
 /* ── the tracker list, grouped ──
    Sorting by order alone and emitting a heading whenever it changes gives you
    "Body" twice the moment an uncategorised field sits between two Body ones.
@@ -651,17 +723,15 @@ function groupedFields() {
   return out;
 }
 
-/* every category in use, for the type-ahead on the field form */
-const fieldCats = () => {
-  const seen = Object.create(null);
-  Object.values(fields()).forEach(f => { if (f.cat) seen[f.cat] = 1; });
-  return Object.keys(seen).sort();
-};
 /* A field's colour as a token, never a hex. An explicit slot wins; otherwise
    it is dealt round the ramp by position, so a screen of fields that nobody
    has coloured still reads as six distinct things rather than six greys. */
 const fieldColor = f => 'var(--data-' + ((num(f.color, 0) || (((f.order || 0) % 6) + 1))) + ')';
-const liveFields = () => Object.values(fields()).filter(f => f.on).sort((a, b) => (a.order || 0) - (b.order || 0));
+/* Tile order on Today: where a field sits in the day first, then the order you
+   set with the arrows. A field with no When sorts last, so setting it on one
+   thing does not reshuffle everything else. */
+const liveFields = () => Object.values(fields()).filter(f => f.on)
+  .sort((a, b) => (whenRank(a) - whenRank(b)) || ((a.order || 0) - (b.order || 0)));
 
 /* ── values ── */
 function evList(date, fid) { const r = Rec.get('ev', date, fid); return r && r.e ? r.e : []; }
@@ -3620,14 +3690,14 @@ function drawTrackTab(pane) {
     const c = f.cat || '';
     if (c !== lastCat) {
       lastCat = c;
-      if (c) pane.appendChild(el('label', 'fl', esc(c)));
+      if (c) pane.appendChild(el('label', 'fl', esc(catLabel(c) || c)));
     }
     const kind = { number: 'once a day', amount: 'a dose, added up', scale: '1 to ' + (f.max || 5), check: 'done or not' }[f.measure] || '';
     const bits = [kind];
     if (f.unit) bits.push(f.unit);
     if (f.target) bits.push((f.dir === 'lte' ? '\u2264' : '\u2265') + ' ' + f.target);
     if (f.days && f.days.length) bits.push(f.days.map(i => DOW[i]).join(' '));
-    if (f.slot) bits.push(f.slot);
+    if (f.slot) bits.push(whenLabel(f.slot) || f.slot);
     if (f.min != null) bits.push('\u2265 ' + f.min);
     if (f.max != null) bits.push('\u2264 ' + f.max);
     if (f.half) bits.push('half-life ' + f.half + 'h');
@@ -3797,94 +3867,141 @@ function newFieldForm(pane, existing) {
   pane.appendChild(seg);
   pane.appendChild(extra);
 
-  pane.appendChild(el('label', 'fl', 'Target, if it has one'));
+  /* ── what kind of thing this is ──
+     First on the form, because it decides what the rest of it offers. A weight
+     has no half-life: it does not wear off, and a box inviting a number would
+     only let the tile start lying. A mood has no target in pounds. */
+  pane.appendChild(el('label', 'fl', 'What kind of thing is it'));
+  let cat = f.cat || '';
+  const catw = el('div', 'chips');
+  const catNote = el('div', 'note');
+  pane.appendChild(catw);
+  pane.appendChild(catNote);
+
+  /* Each block below is a section the category can switch off. Switching one
+     off only hides it: whatever the field already had is left alone unless you
+     change it, so nothing is quietly wiped by picking a category. */
+  const sect = {};
+  const section = key => (sect[key] = el('div'));
+
+  const sTarget = section('target');
+  sTarget.appendChild(el('label', 'fl', 'Target, if it has one'));
   const tg = document.createElement('input');
   tg.type = 'text'; tg.inputMode = 'decimal'; tg.placeholder = 'optional';
   tg.value = f.target == null ? '' : String(f.target);
-  pane.appendChild(tg);
+  sTarget.appendChild(tg);
+  pane.appendChild(sTarget);
 
   /* A target is what you are aiming at. A floor and a ceiling are the edges
      you should not be outside — different question, and both can be true at
      once. Sodium has a ceiling and no target; sleep has a floor and a target;
      blood pressure has both edges and no target at all. */
-  pane.appendChild(el('label', 'fl', 'Edges, if it has them'));
+  const sEdges = section('edges');
+  sEdges.appendChild(el('label', 'fl', 'Edges, if it has them'));
   const lim = el('div', 'grid2');
   const mkLim = (key, label, ph) => {
     const w = el('div');
     w.appendChild(el('label', 'fl', label));
-    const i = document.createElement('input');
-    i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*');
-    i.placeholder = ph;
-    i.value = f[key] == null ? '' : String(f[key]);
-    w.appendChild(i); lim.appendChild(w);
-    return i;
+    const i2 = document.createElement('input');
+    i2.type = 'text'; i2.inputMode = 'decimal'; i2.setAttribute('pattern', '[0-9.]*');
+    i2.placeholder = ph;
+    i2.value = f[key] == null ? '' : String(f[key]);
+    w.appendChild(i2); lim.appendChild(w);
+    return i2;
   };
   const loI = mkLim('min', 'At least', 'none');
   const hiI = mkLim('max', 'At most', 'none');
-  pane.appendChild(lim);
-  pane.appendChild(el('div', 'note', 'Going outside either edge is flagged on the tile.'));
+  sEdges.appendChild(lim);
+  sEdges.appendChild(el('div', 'note', 'Going outside either edge is flagged on the tile.'));
+  pane.appendChild(sEdges);
 
   /* Which days it is due. Nothing picked means every day, which is the common
      case and should not cost seven taps to say. */
-  pane.appendChild(el('label', 'fl', 'Due on — nothing picked means every day'));
+  const sDays = section('days');
+  sDays.appendChild(el('label', 'fl', 'Due on — nothing picked means every day'));
   const days = (f.days || []).slice();
   const dw = el('div', 'chips');
-  DOW.forEach((lbl, i) => {
-    const b = el('button', 'chip' + (days.indexOf(i) > -1 ? ' on' : ''), lbl);
+  DOW.forEach((lbl, i3) => {
+    const b = el('button', 'chip' + (days.indexOf(i3) > -1 ? ' on' : ''), lbl);
     b.onclick = () => {
-      const at = days.indexOf(i);
-      if (at > -1) days.splice(at, 1); else days.push(i);
-      b.className = 'chip' + (days.indexOf(i) > -1 ? ' on' : '');
+      const at = days.indexOf(i3);
+      if (at > -1) days.splice(at, 1); else days.push(i3);
+      b.className = 'chip' + (days.indexOf(i3) > -1 ? ' on' : '');
       Mobile.haptic('select');
     };
     dw.appendChild(b);
   });
-  pane.appendChild(dw);
+  sDays.appendChild(dw);
+  pane.appendChild(sDays);
 
-  pane.appendChild(el('label', 'fl', 'When, if it matters'));
-  const slot = document.createElement('input');
-  slot.type = 'text'; slot.placeholder = 'morning, before bed';
-  slot.value = f.slot || '';
-  pane.appendChild(slot);
+  /* ── when in the day ──
+     A fixed five rather than a text box. It orders your Today tiles, and a
+     sort on typed words is a sort on spelling: "evening", "Evening" and "at
+     night" are three strings and one intention. */
+  const sWhen = section('when');
+  sWhen.appendChild(el('label', 'fl', 'When in the day — sets the order on Today'));
+  let slot = f.slot || '';
+  const ww = el('div', 'chips');
+  const paintWhen = () => {
+    ww.innerHTML = '';
+    [{ id: '', label: 'Any time' }].concat(WHENS).forEach(w => {
+      const b = el('button', 'chip' + (slot === w.id ? ' on' : ''), esc(w.label));
+      b.onclick = () => { slot = w.id; paintWhen(); Mobile.haptic('select'); };
+      ww.appendChild(b);
+    });
+  };
+  paintWhen();
+  sWhen.appendChild(ww);
+  pane.appendChild(sWhen);
 
   /* Which nutrient on a food label this is the same substance as. Without it
      a Caffeine tile counts your capsules and ignores your coffee. */
-  pane.appendChild(el('label', 'fl', 'Also count it from food'));
+  const sFrom = section('from');
+  sFrom.appendChild(el('label', 'fl', 'Also count it from food'));
   let from = f.from || '';
   const fw = el('div', 'chips');
   const paintFrom = () => {
     fw.innerHTML = '';
-    [['', 'No']].concat(NUT_FROM.map(n => [n[0], n[1]])).forEach(n => {
-      const b = el('button', 'chip' + (from === n[0] ? ' on' : ''), esc(n[1]));
-      b.onclick = () => { from = n[0]; paintFrom(); Mobile.haptic('select'); };
+    [['', 'No']].concat(NUT_FROM.map(nn => [nn[0], nn[1]])).forEach(nn => {
+      const b = el('button', 'chip' + (from === nn[0] ? ' on' : ''), esc(nn[1]));
+      b.onclick = () => { from = nn[0]; paintFrom(); Mobile.haptic('select'); };
       fw.appendChild(b);
     });
   };
   paintFrom();
-  pane.appendChild(fw);
+  sFrom.appendChild(fw);
+  pane.appendChild(sFrom);
 
   /* Half-life. Caffeine is about 5 hours; most things worth tracking have a
      published number. Leave it blank and nothing decays. */
-  pane.appendChild(el('label', 'fl', 'Half-life in hours, if it wears off'));
+  const sHalf = section('half');
+  sHalf.appendChild(el('label', 'fl', 'Half-life in hours, if it wears off'));
   const hl = document.createElement('input');
   hl.type = 'text'; hl.inputMode = 'decimal'; hl.placeholder = 'caffeine is about 5';
   hl.value = f.half == null ? '' : String(f.half);
-  pane.appendChild(hl);
+  sHalf.appendChild(hl);
+  pane.appendChild(sHalf);
 
-  /* ── which group it belongs to ──
-     Free text rather than a fixed list, because the groupings that are useful
-     are yours: Sleep, Supplements, Lifts. Anything left blank falls into one
-     unnamed group at the top, which is exactly how it behaved before there
-     were groups at all. */
-  pane.appendChild(el('label', 'fl', 'Category'));
-  const cat = document.createElement('input');
-  cat.type = 'text'; cat.placeholder = 'Supplements';
-  cat.setAttribute('list', 'catlist');
-  cat.value = f.cat || '';
-  const dl = document.createElement('datalist');
-  dl.id = 'catlist';
-  fieldCats().forEach(c => { const o = document.createElement('option'); o.value = c; dl.appendChild(o); });
-  pane.appendChild(cat); pane.appendChild(dl);
+  /* Show only what this kind of thing actually has. A field with no category
+     set keeps everything, so nothing a field already carries can be hidden by
+     a category it never chose. */
+  const gate = () => {
+    Object.keys(sect).forEach(k => {
+      sect[k].style.display = (!cat || catOf(cat).has.indexOf(k) > -1) ? '' : 'none';
+    });
+  };
+  const paintCat = () => {
+    catw.innerHTML = '';
+    CATS.forEach(c => {
+      const b = el('button', 'chip' + (cat === c.id ? ' on' : ''), esc(c.label));
+      b.onclick = () => { cat = c.id; paintCat(); gate(); Mobile.haptic('select'); };
+      catw.appendChild(b);
+    });
+    catNote.textContent = cat ? catOf(cat).note
+      : 'Pick one and the settings below narrow to what applies.';
+  };
+  paintCat();
+  gate();
 
   /* ── its colour ──
      A slot, one to six, never a hex. The six are the theme's own chart ramp,
@@ -3923,16 +4040,33 @@ function newFieldForm(pane, existing) {
     const spec = Object.assign({}, f, {
       id: f.id || uid(), label: label, unit: un.value.trim(), measure: measure,
     });
-    const t = num(tg.value);
-    if (t != null) { spec.target = t; if (!spec.dir) spec.dir = 'gte'; } else { delete spec.target; }
-    const h = num(hl.value);
-    if (h != null && h > 0) spec.half = h; else delete spec.half;
-    if (from) {
-      spec.from = from;
-      /* the label is in the unit NUT_FROM names; `per` gets it into yours */
-      spec.per = nutPer(from, spec.unit);
+    /* A control the category switched off is not read and not saved — its
+       value is whatever the field already had, and hiding a box is not the
+       same as clearing it. `on` is that test. */
+    const on = k => !cat || catOf(cat).has.indexOf(k) > -1;
+
+    if (on('target')) {
+      const t = num(tg.value);
+      if (t != null) { spec.target = t; if (!spec.dir) spec.dir = 'gte'; } else { delete spec.target; }
+    }
+    if (on('half')) {
+      const h = num(hl.value);
+      if (h != null && h > 0) spec.half = h; else delete spec.half;
+    } else {
+      /* Nothing in this category wears off, so a half-life left over from
+         before would keep decaying a number that does not decay. */
+      delete spec.half;
+    }
+    if (on('from')) {
+      if (from) {
+        spec.from = from;
+        /* the label is in the unit NUT_FROM names; `per` gets it into yours */
+        spec.per = nutPer(from, spec.unit);
+      } else { delete spec.from; delete spec.per; }
     } else { delete spec.from; delete spec.per; }
-    const lv = num(loI.value), hv = num(hiI.value);
+
+    const lv = on('edges') ? num(loI.value) : null;
+    const hv = on('edges') ? num(hiI.value) : null;
     if (lv != null) spec.min = lv; else delete spec.min;
     /* `max` carries two meanings and the scale one wins where it applies: on a
        scale it is how far the scale runs, everywhere else it is the ceiling
@@ -3941,9 +4075,10 @@ function newFieldForm(pane, existing) {
     if (measure === 'scale') spec.max = hi;
     else if (hv != null) spec.max = hv;
     else delete spec.max;
+
     if (days.length && days.length < 7) spec.days = days.slice().sort(); else delete spec.days;
-    if (slot.value.trim()) spec.slot = slot.value.trim(); else delete spec.slot;
-    if (cat.value.trim()) spec.cat = cat.value.trim(); else delete spec.cat;
+    if (on('when') && slot) spec.slot = slot; else delete spec.slot;
+    if (cat) spec.cat = cat; else delete spec.cat;
     if (color) spec.color = color; else delete spec.color;
     spec.viz = viz;
     if (measure === 'amount' || measure === 'number') { spec.step = spec.step || 1; spec.dec = spec.dec == null ? 1 : spec.dec; }
