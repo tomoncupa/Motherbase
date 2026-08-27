@@ -218,6 +218,11 @@ const IO = {
     /* An app that says who it is has said enough. Keeping the sheet up to date
        is not something each app should have to remember to switch on. */
     try { Mirror.watch(spec.app); } catch (e) {}
+    /* And read the sheet once, now. watch() only ever fired after THIS device
+       wrote something, so a device that had nothing new never learned what the
+       other one had done - open STATUS on the laptop after logging on the
+       phone and it sat there showing yesterday. */
+    try { Mirror.onOpen(spec.app); } catch (e) {}
     return IO;
   },
 
@@ -1155,9 +1160,26 @@ const Mirror = {
       Mirror.sync(appId, true).then(ok => { if (!ok) dirty = 1; }, () => { dirty = 1; });
     };
     if (g.Rec && g.Rec.on) g.Rec.on(() => { dirty = 1; clearTimeout(t); t = setTimeout(run, 30000); });
+
+    /* Hidden means the phone is being locked or the tab is being left: push
+       what is waiting before it goes. Visible means you have just come back to
+       this device, which is exactly the moment the other one's work matters,
+       so read first and then send. */
     if (g.document) g.document.addEventListener('visibilitychange', () => {
-      if (g.document.visibilityState === 'hidden') run();
+      if (g.document.visibilityState === 'hidden') { run(); return; }
+      if (!mcfg.on || !mcfg.url) return;
+      Mirror.onOpen(appId).then(() => { if (dirty) run(); });
     });
+
+    /* A slow pull while you are actually looking at it, so a screen left open
+       on the desk catches up on its own. Three minutes, and only while the tab
+       is visible: the push half is already covered by the write above, and a
+       tab nobody is watching does not need to be current. */
+    setInterval(() => {
+      if (!mcfg.on || !mcfg.url) return;
+      if (g.document && g.document.visibilityState !== 'visible') return;
+      Mirror.onOpen(appId);
+    }, 180000);
     return true;
   },
 

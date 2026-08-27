@@ -3599,99 +3599,82 @@ function rankCard() {
 }
 
 /* ── the overlay ──
-   A see-through PNG of the numbers and nothing else, to sit on top of a photo
-   or a clip. No card, no background: what gets painted is what you see.
+   A see-through PNG of the rank card, to sit on top of a photo or a clip.
 
-   It wears the theme - rank colour, text colour and both fonts come from
-   whatever skin is on. The black border is the one thing the theme does not
-   get to change, because the picture underneath can be any colour and an
-   outline is what makes the numbers hold up on all of them. */
+   It does not redraw the card. It photographs the real one: rankCard() builds
+   the same element the Trends screen shows, that element goes into an SVG
+   foreignObject, and the browser rasterises it. So the overlay cannot drift
+   from the app - change the card and the picture changes with it, with
+   nothing here to keep in step.
 
-let _swatch = null;
-/* Put any CSS colour through the canvas to get it back normalised, which also
-   catches a colour the browser refused: fillStyle simply does not change. */
-function cssColour(c, fallback) {
-  if (!_swatch) _swatch = document.createElement('canvas').getContext('2d');
-  _swatch.fillStyle = '#010203';
-  _swatch.fillStyle = c;
-  return _swatch.fillStyle === '#010203' ? fallback : _swatch.fillStyle;
-}
+   Two things get overridden on the way out, and only two. Every background
+   goes transparent, because a see-through picture is the whole point. And the
+   text gets a black outline, because the photo underneath can be any colour
+   and the theme has no way to know that. Everything else - fonts, colours,
+   spacing, corners - is whatever the card already is. */
 
 async function shareCard(a, kind) {
   const W = 1080, H = kind === 'story' ? 1920 : 1350;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const x = cv.getContext('2d');
-  const T = k => cssColour(tok(k), '#ffffff');
-  const disp = tok('--font-display') || 'system-ui';
-  const body = tok('--font-body') || 'system-ui';
 
-  /* Text drawn against a webfont that has not arrived yet renders in the
-     fallback, and on some engines does not render at all. */
+  /* A webfont that has not arrived renders as a fallback inside the SVG too. */
   try { await document.fonts.ready; } catch (e) {}
 
-  const ink = T('--text-1'), mut = T('--text-muted'), acc = rankColour(a.rank.k);
-  const stamp = (str, X, Y, size) => {
-    x.lineJoin = 'round'; x.miterLimit = 2;
-    x.strokeStyle = '#000000'; x.lineWidth = Math.max(4, size * 0.13);
-    x.strokeText(str, X, Y);
-    x.fillText(str, X, Y);
-  };
+  /* The real component, built off screen so it lays out for measuring. */
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:fixed;left:-99999px;top:0;width:460px;pointer-events:none';
+  const card = rankCard();
+  stage.appendChild(card);
+  document.body.appendChild(stage);
 
-  const S = kind === 'story'
-    ? { mark: 210, pct: 150, lab: 34, sub: 31, bars: 120, gap: 46 }
-    : { mark: 170, pct: 120, lab: 29, sub: 26, bars: 96, gap: 38 };
+  let png = null;
+  try {
+    const box = card.getBoundingClientRect();
+    const cw = Math.max(1, Math.ceil(box.width)), ch = Math.max(1, Math.ceil(box.height));
 
-  /* The block sits below the middle: a face or a barbell is usually in the
-     centre of the frame, and both Instagram sizes keep their own controls
-     clear of this band. */
-  const cx = W / 2;
-  let cy = H * (kind === 'story' ? 0.60 : 0.62);
-  x.textAlign = 'center';
+    /* Scale up rather than blow up a small bitmap: the whole thing renders at
+       this size, so the type stays sharp. */
+    const scale = (W * 0.88) / cw;
+    const sw = cw * scale, sh = ch * scale;
+    const ox = (W - sw) / 2, oy = (H - sh) / 2 + H * 0.06;
 
-  /* the rank in its box, the same shape the stat island draws */
-  const box = S.mark, r = Math.round(box * 0.17), bx = cx - box / 2, by = cy - box;
-  x.beginPath();
-  if (x.roundRect) x.roundRect(bx, by, box, box, r); else x.rect(bx, by, box, box);
-  x.strokeStyle = '#000000'; x.lineWidth = Math.max(9, Math.round(box * 0.08));
-  x.stroke();
-  x.strokeStyle = acc; x.lineWidth = Math.max(4, Math.round(box * 0.035));
-  x.stroke();
+    /* The page's own stylesheets, and the tokens the theme wrote onto :root. */
+    const sheets = Array.prototype.map.call(document.querySelectorAll('style'),
+      n => n.textContent).join(String.fromCharCode(10));
+    const rootVars = document.documentElement.style.cssText || '';
 
-  x.fillStyle = acc;
-  x.font = '700 ' + Math.round(box * 0.62) + 'px ' + disp;
-  x.textBaseline = 'middle';
-  stamp(a.rank.k, cx, by + box / 2 + box * 0.03, box * 0.62);
-  x.textBaseline = 'alphabetic';
+    const override =
+      '*{background:transparent !important;box-shadow:none !important;' +
+      '-webkit-text-stroke:3px #000;paint-order:stroke fill;' +
+      'text-shadow:0 0 5px rgba(0,0,0,.85),0 0 5px rgba(0,0,0,.85) !important}' +
+      'button,.seg,.btns{display:none !important}';
 
-  cy += S.gap + S.pct * 0.74;
-  x.font = '700 ' + S.pct + 'px ' + body; x.fillStyle = ink;
-  stamp(a.pct + '%', cx, cy, S.pct);
+    const body = new XMLSerializer().serializeToString(card);
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
+      '<foreignObject x="' + ox + '" y="' + oy + '" width="' + sw + '" height="' + sh + '">' +
+      '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(rootVars) + '">' +
+      '<style>' + sheets + String.fromCharCode(10) + override + '</style>' +
+      '<div style="width:' + cw + 'px;transform:scale(' + scale + ');transform-origin:top left">' +
+      body + '</div></div></foreignObject></svg>';
 
-  cy += 26 + S.lab;
-  x.font = '600 ' + S.lab + 'px ' + disp; x.fillStyle = mut;
-  try { x.letterSpacing = '0.16em'; } catch (e) {}
-  stamp('ADHERENCE · ' + a.days + ' DAYS', cx, cy, S.lab);
-  try { x.letterSpacing = '0px'; } catch (e) {}
-
-  cy += 14 + S.sub;
-  x.font = '400 ' + S.sub + 'px ' + body;
-  stamp(a.sessions + ' training session' + (a.sessions === 1 ? '' : 's'), cx, cy, S.sub);
-
-  /* a bar per day, so the number carries its working */
-  const rows = a.rows.slice(-30), span = W * 0.58, dw = span / rows.length;
-  const dy = cy + 46, bw = Math.max(3, dw - 5);
-  rows.forEach((r2, i) => {
-    const h = r2.pct == null ? 6 : Math.max(6, r2.pct / 100 * S.bars);
-    const X = cx - span / 2 + i * dw, Y = dy + S.bars - h;
-    x.fillStyle = '#000000';
-    x.fillRect(X - 3, Y - 3, bw + 6, h + 6);
-    x.fillStyle = r2.pct == null ? mut : rankColour(rankFor(r2.pct).k);
-    x.fillRect(X, Y, bw, h);
-  });
+    png = await new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => {
+        const cv = document.createElement('canvas');
+        cv.width = W; cv.height = H;
+        cv.getContext('2d').drawImage(img, 0, 0);
+        res(cv.toDataURL('image/png'));
+      };
+      img.onerror = () => rej(new Error('could not draw the card'));
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    });
+  } finally {
+    stage.remove();
+  }
 
   const link = document.createElement('a');
   link.download = 'status-' + a.rank.k + '-' + a.pct + '-' + kind + '.png';
-  link.href = cv.toDataURL('image/png');
+  link.href = png;
   link.click();
   UI.toast('Overlay saved');
 }
@@ -4854,8 +4837,7 @@ function drawGoalsTab(pane) {
   });
   pane.appendChild(lbSeg);
   pane.appendChild(el('div', 'note', 'How far back anything is read'));
-  pane.appendChild(el('div', 'note',
-    'A pound of fat is taken as 3,500 kcal'));
+
   fieldRow(pane, 'Starting guess (kcal per lb)', 'perLb', TD.perLb(), 'Before there is data: weight × this');
   fieldRow(pane, 'Brake (kcal)', 'guard', TD.guard(), 'The most one update may move the estimate');
 
