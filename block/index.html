@@ -689,6 +689,7 @@ Skins.load('../shared/skins.json').then(() => {
 if (window.Icons) Icons.paint();
 </script>
 <script src="../shared/records.js"></script>
+<script src="../shared/io.js"></script>
 <script>
 /* ══════════════════════════ LIFEOS KERNEL v2 ══════════════════════════
    Identical in every app that shares data — edit the copy in index.html and
@@ -1246,17 +1247,152 @@ function seedState() {
   };
 }
 let S;
-try { S = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem('brick_v1')) || seedState(); } catch (e) { S = seedState(); }
-if (!S.lanes || !S.variants) S = seedState();
-/* forward-compat for maps saved by older versions */
-S.templates = S.templates || []; S.rules = S.rules || []; S.week = S.week || [null, null, null, null, null, null, null];
-S.view = S.view || 'day'; S.exportScope = S.exportScope || 'variant'; S.doneDate = S.doneDate || ''; if (S.weekStart == null) S.weekStart = 1; if (S.sound == null) S.sound = true; if (!S.soundTheme) S.soundTheme = 'marimba'; if (S.volume == null) S.volume = 0.6; if (!S.doneRoutines) S.doneRoutines = 'stay'; if (!S.weekMode) S.weekMode = 'time'; if (S.nowline == null) S.nowline = false; if (S.keepDone == null) S.keepDone = true;
-delete S.zoom;
-S.variants.forEach(v => S.lanes.forEach(l => { if (!v.items[l.id]) v.items[l.id] = []; }));
-/* A weekday pointing at a day that no longer exists reads as a rest day and is
-   invisible in the picker, so the slot looks empty and behaves as taken. Any
-   delete path that missed a reference gets swept here, on load, once. */
-S.week = S.week.map(w => (w && S.variants.some(v => v.id === w)) ? w : null);
+/* ── storage: rows, not a blob ──
+   BLOCK kept its whole world - every routine, every block, every setting - as
+   one JSON string in localStorage under `block_v1`. That is the shape
+   CLAUDE.md forbids and the shape SystemOS died of: last write wins over the
+   entire thing, so two devices editing different routines lose one of them
+   silently. It is also why BLOCK had no backup, no export and no sync, while
+   every other app had all three.
+
+   `S` stays exactly as it was. Four thousand lines read and write it and none
+   of them move. What changed is how it is PUT DOWN: on the way out it is
+   taken apart into rows - one per routine, one per block, one per setting -
+   and on the way in it is put back together. A row only gets written when
+   that row's own contents changed, so `updated_at` moves for the block you
+   edited and nothing else, which is what makes a merge a comparison rather
+   than a guess. */
+const NOT_A_ROW = { lanes: 1, lib: 1, variants: 1 };
+
+/** S, taken apart. */
+function blockRows() {
+  const out = { lane: {}, routine: {}, item: {}, setting: {} };
+  (S.lanes || []).forEach((l, i) => { out.lane[l.id] = Object.assign({}, l, { ord: i }); });
+  (S.lib || []).forEach((b, i) => { out.item['lib|' + b.id] = Object.assign({}, b, { ord: i, bin: 1 }); });
+  (S.variants || []).forEach((v, i) => {
+    const r = Object.assign({}, v, { ord: i });
+    delete r.items;
+    out.routine[v.id] = r;
+    Object.keys(v.items || {}).forEach(laneId => {
+      (v.items[laneId] || []).forEach((it, j) => {
+        out.item[v.id + '|' + laneId + '|' + it.id] =
+          Object.assign({}, it, { ord: j, lane: laneId, rt: v.id });
+      });
+    });
+  });
+  /* Everything that is not one of the three lists is a setting. Derived
+     rather than listed, so a field added later is carried without anybody
+     remembering to add it here. */
+  Object.keys(S).forEach(k => { if (!NOT_A_ROW[k]) out.setting[k] = S[k]; });
+  return out;
+}
+
+/** rows, put back together. Null when there is nothing stored yet. */
+function blockState() {
+  const lanes = Rec.map('lane'), routines = Rec.map('routine'), items = Rec.map('item');
+  if (!Object.keys(lanes).length && !Object.keys(routines).length) return null;
+  const st = {};
+  const sets = Rec.map('setting');
+  Object.keys(sets).forEach(k => {
+    if (k.indexOf('block.') === 0) st[k.slice(6)] = sets[k].v;
+  });
+  const ord = (a, b) => (a.ord || 0) - (b.ord || 0);
+  st.lanes = Object.keys(lanes).map(id => Object.assign({ id: id }, lanes[id])).sort(ord);
+  st.lib = Object.keys(items).filter(k => k.indexOf('lib|') === 0)
+    .map(k => Object.assign({ id: k.slice(4) }, items[k])).sort(ord);
+  st.variants = Object.keys(routines).map(id => {
+    const v = Object.assign({ id: id }, routines[id]);
+    v.items = {};
+    return v;
+  }).sort(ord);
+  const byId = {};
+  st.variants.forEach(v => byId[v.id] = v);
+  Object.keys(items).forEach(k => {
+    if (k.indexOf('lib|') === 0) return;
+    const cut = k.split('|');
+    const v = byId[cut[0]]; if (!v) return;
+    const laneId = cut[1];
+    (v.items[laneId] = v.items[laneId] || []).push(Object.assign({ id: cut[2] }, items[k]));
+  });
+  st.variants.forEach(v => Object.keys(v.items).forEach(l => v.items[l].sort(ord)));
+  st.lanes.forEach(l => delete l.ord);
+  st.lib.forEach(b => { delete b.ord; delete b.bin; });
+  st.variants.forEach(v => {
+    delete v.ord;
+    Object.keys(v.items).forEach(l => v.items[l].forEach(it => {
+      delete it.ord; delete it.lane; delete it.rt;
+    }));
+  });
+  return st;
+}
+
+/* What was on disk last time we looked, so a save can tell what actually
+   changed instead of rewriting everything and moving every timestamp. */
+let lastRows = null;
+
+function writeRows() {
+  const now = blockRows();
+  ['lane', 'routine', 'item'].forEach(type => {
+    const was = (lastRows && lastRows[type]) || {};
+    Object.keys(now[type]).forEach(k => {
+      if (JSON.stringify(was[k]) !== JSON.stringify(now[type][k])) Rec.set(type, null, k, now[type][k]);
+    });
+    /* A tombstone, never a removal, or the deletion cannot travel. */
+    Object.keys(was).forEach(k => { if (!(k in now[type])) Rec.del(type, null, k); });
+  });
+  const wasS = (lastRows && lastRows.setting) || {};
+  Object.keys(now.setting).forEach(k => {
+    if (JSON.stringify(wasS[k]) !== JSON.stringify(now.setting[k])) Rec.setting('block', k, now.setting[k]);
+  });
+  lastRows = now;
+}
+
+S = blockState();
+if (!S) {
+  /* First run on rows. An old blob is taken across once and then left exactly
+     where it is: it costs nothing, and it is the only copy of the old world
+     until the new one has proved itself. */
+  let old = null;
+  try { old = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem('brick_v1')); } catch (e) {}
+  S = (old && old.lanes && old.variants) ? old : seedState();
+  writeRows();
+}
+if (!S.lanes || !S.variants) { S = seedState(); lastRows = null; writeRows(); }
+/* forward-compat for maps saved by older versions.
+
+   Wrapped in a function because it no longer runs exactly once. The store
+   hands over any row above 64KB a few milliseconds after boot, and the
+   Rec.ready handler further down rebuilds S from rows when it does. That
+   rebuild has to be normalised too, or a day loaded that way arrives with
+   no items map and the first thing to touch it throws. */
+function normalise() {
+  S.templates = S.templates || []; S.rules = S.rules || []; S.week = S.week || [null, null, null, null, null, null, null];
+  S.view = S.view || 'day'; S.exportScope = S.exportScope || 'variant'; S.doneDate = S.doneDate || ''; if (S.weekStart == null) S.weekStart = 1; if (S.sound == null) S.sound = true; if (!S.soundTheme) S.soundTheme = 'marimba'; if (S.volume == null) S.volume = 0.6; if (!S.doneRoutines) S.doneRoutines = 'stay'; if (!S.weekMode) S.weekMode = 'time'; if (S.nowline == null) S.nowline = false; if (S.keepDone == null) S.keepDone = true;
+  delete S.zoom;
+  S.variants.forEach(v => S.lanes.forEach(l => { if (!v.items[l.id]) v.items[l.id] = []; }));
+  /* Every block gets the fields mkItem() would have given it. That used to be
+     guaranteed, because the only way a block existed was through mkItem. It is
+     not any more: blocks are rows now, rows go into the spreadsheet, and the
+     spreadsheet is a thing you can type into. A row with the days column left
+     blank should read as every day, not take the board down. */
+  S.variants.forEach(v => Object.keys(v.items).forEach(l => v.items[l].forEach(it => {
+    if (!Array.isArray(it.days)) it.days = [0, 1, 1, 1, 1, 1, 0];
+    if (it.dur == null) it.dur = 30;
+    if (it.energy == null) it.energy = 2;
+    if (it.pri == null) it.pri = 0;
+    if (!it.color) it.color = PAL[0];
+  })));
+  (S.lib || []).forEach(b => {
+    if (b.dur == null) b.dur = 30;
+    if (b.energy == null) b.energy = 2;
+    if (!b.color) b.color = PAL[0];
+  });
+  /* A weekday pointing at a day that no longer exists reads as a rest day and is
+     invisible in the picker, so the slot looks empty and behaves as taken. Any
+     delete path that missed a reference gets swept here, on load, once. */
+  S.week = S.week.map(w => (w && S.variants.some(v => v.id === w)) ? w : null);
+}
+normalise();
 
 /* ── the date on screen ──
    BLOCK used to know about weekdays and nothing else: Monday ran whatever the
@@ -1308,8 +1444,11 @@ const items = laneId => (M().items[laneId] || (M().items[laneId] = []));
 /** run fn with a different routine active — schedule()/items() always read the current one */
 function withVariant(id, fn) { const p = S.current; S.current = id; try { return fn(); } finally { S.current = p; } }
 
+/* set the moment anything is edited, so the late arrival from IndexedDB
+   below never overwrites work done in the first few milliseconds */
+let touched = false;
 let saveT;
-function save() { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }, 250); }
+function save() { touched = true; clearTimeout(saveT); saveT = setTimeout(writeRows, 250); }
 
 const HIST = [];
 function snap() {
@@ -4216,7 +4355,24 @@ window.addEventListener('keydown', e => {
     SEL.clear(); render();
   }
 });
-window.addEventListener('beforeunload', () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} });
+window.addEventListener('beforeunload', () => { clearTimeout(saveT); try { writeRows(); } catch (e) {} });
+
+/* BLOCK owns these three, so it says so once and gets backup, the readable
+   spreadsheet and the sheet mirror for free, the same as every other app. */
+IO.register({ app: 'block', name: 'BLOCK', types: ['lane', 'item', 'routine'] });
+
+/* A row over 64KB lives only in IndexedDB and lands a few milliseconds after
+   boot. Nothing here is that big today, but a pasted note on a block would
+   be, and a first paint missing it is the bug that rule exists to stop.
+   Rebuild only if nothing has been touched yet, or this would undo an edit
+   made in those few milliseconds. */
+Rec.ready(() => {
+  if (touched) return;
+  const fresh = blockState();
+  if (!fresh) return;
+  S = fresh; normalise(); lastRows = blockRows();
+  try { render(); } catch (e) {}
+});
 
 /* ══════════════════════ LifeOS bridge ══════════════════════
    BLOCK owns the schedule. LifeOS owns what actually got done. Three wires:
