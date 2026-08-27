@@ -108,6 +108,7 @@ Do not break these. Ask first if you think one needs to change.
 CLAUDE.md          this file
 DOCTRINE.md        what each app is FOR, and the laws every app obeys
 HOWTO.md           how Tom adds an app or a theme, in plain language
+ONBOARDING.md      how a beta tester gets the suite, and what happens after
 index.html         the home screen: widget grid, app dock, data authority
 shared/            the foundation, loaded by every app
 block/index.html   routine builder
@@ -120,6 +121,10 @@ train/index.html   the training log, a reproduction of FitNotes
 train/CLAUDE.md    TRAIN's own brief, governs train/ only
 style/index.html   the theme workbench. Desktop only, deliberately.
 _template/         a working starter app, copied to make a new one
+tools/             not build steps. embed-skins.py re-embeds the factory themes;
+                   build-client.py generates the tester copy of the suite into
+                   ../Motherbase-Client. Its output is never edited by hand —
+                   client-only files live in tools/client/. See ONBOARDING.md.
 quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
                    status/ on 2026-08-20; what is left of it is a todolist.
                    Its data model and design system still govern. Superseded
