@@ -121,6 +121,13 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 
 /* ── the hero number ── */
 .hero{font-family:var(--font-mono);font-size:var(--f-8);font-weight:600;line-height:1.05;letter-spacing:-.02em}
+/* the rank, and the number behind it */
+.rankrow{display:flex;align-items:center;gap:var(--s-4);margin:var(--s-3) 0}
+.rankmark{width:96px;height:96px;flex:0 0 auto;display:flex;align-items:center;
+  justify-content:center;font-family:var(--font-display);font-size:var(--f-9);
+  font-weight:700;line-height:1;border:3px solid;border-radius:var(--radius-md)}
+.rankside{flex:1;min-width:0}
+.rankside .lb{font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-1)}
 .hero .u{font-size:var(--f-2);font-weight:400;color:var(--text-muted);letter-spacing:0;margin-left:var(--s-2)}
 
 /* ── tiles: value is the point, label recedes ── */
@@ -3326,7 +3333,193 @@ function drawMoney(m) {
 }
 
 /* ── TRENDS ── */
+
+/* ══════════════ ADHERENCE, AND THE RANK IT EARNS ══════════════
+
+   Tom gave three of the bands: S at 95 and above, A at 88 to 94, and F is
+   failing. B, C, D and E are inferred from the spacing of the two he gave,
+   and they are in one place so they are one edit to change:
+
+     S  95+      everything, essentially
+     A  88-94    his number
+     B  80-87
+     C  70-79
+     D  60-69
+     E  50-59
+     F  under 50   failing
+
+   WHAT ADHERENCE MEANS HERE, stated because it is a choice and not a fact:
+   the share of TARGET OPPORTUNITIES that were met. Every tracked thing that
+   has a target and was due that day is one opportunity. Meeting it counts;
+   missing it counts against; not logging it at all counts as a miss, because
+   a target you did not measure is a target you did not hit.
+
+   Protein and calories are opportunities too - they are targets like any
+   other, and for a coach they are the two that matter most.
+
+   A thing with no target is not counted at all. Mood has no target and never
+   will; scoring it would be inventing a pass mark for how somebody felt. */
+
+const tok = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+
+const RANKS = [
+  { k: 'S', at: 95, say: 'Near perfect' },
+  { k: 'A', at: 88, say: 'Strong' },
+  { k: 'B', at: 80, say: 'Good' },
+  { k: 'C', at: 70, say: 'Patchy' },
+  { k: 'D', at: 60, say: 'Slipping' },
+  { k: 'E', at: 50, say: 'Barely there' },
+  { k: 'F', at: 0,  say: 'Failing' },
+];
+const rankFor = pct => RANKS.find(r => pct >= r.at) || RANKS[RANKS.length - 1];
+const rankColour = k => tok('--rank-' + k) || tok('--accent');
+
+/* One day: how many targets were up, and how many were met. */
+function dayScore(date) {
+  let met = 0, of = 0; const miss = [], hit = [];
+  Object.values(fields()).forEach(f => {
+    if (!f.on || f.target == null || f.target === '' || !dueToday(f, date)) return;
+    of++;
+    const v = value(date, f.id);
+    const ok = v != null && (f.dir === 'lte' ? v <= f.target : v >= f.target);
+    if (ok) { met++; hit.push(f.label); } else miss.push(f.label);
+  });
+  /* the macros, which are targets in their own right */
+  const T = TARGETS(), tot = dayTotals(date);
+  [['p', 'Protein', 'gte'], ['kcal', 'Calories', 'lte']].forEach(([k, label, dir]) => {
+    const t = num(T[k], 0) || 0; if (!t) return;
+    of++;
+    const v = num(tot[k], 0) || 0;
+    /* a day with nothing logged is a miss, not a free pass */
+    const any = meals(date).length > 0;
+    const ok = any && (dir === 'lte' ? v <= t : v >= t);
+    if (ok) { met++; hit.push(label); } else miss.push(label);
+  });
+  return { met: met, of: of, hit: hit, miss: miss };
+}
+
+/* A stretch of days, and what it earns. */
+function adherence(days) {
+  const end = Day.today();
+  let met = 0, of = 0; const missCount = {}, dayPct = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = Day.shift(end, -i);
+    const s = dayScore(d);
+    met += s.met; of += s.of;
+    s.miss.forEach(m => { missCount[m] = (missCount[m] || 0) + 1; });
+    dayPct.push({ d: d, pct: s.of ? Math.round(s.met / s.of * 100) : null });
+  }
+  const pct = of ? Math.round(met / of * 100) : 0;
+  const worst = Object.entries(missCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  return { pct: pct, met: met, of: of, rank: rankFor(pct), worst: worst,
+           days: days, dayPct: dayPct };
+}
+
+/* ── the card on the trends screen ── */
+function rankCard() {
+  const days = S.get('rankDays', 7);
+  const a = adherence(days);
+  const c = card('RANK', a.of ? a.met + ' of ' + a.of + ' targets' : 'no targets set');
+
+  const seg = el('div', 'seg');
+  [[7, '7 days'], [30, '30 days'], [90, '90 days']].forEach(([n, lbl]) => {
+    const b = el('button', n === days ? 'on' : '', lbl);
+    b.onclick = () => { S.set('rankDays', n); draw(); };
+    seg.appendChild(b);
+  });
+  c.appendChild(seg);
+
+  const head = el('div', 'rankrow');
+  head.innerHTML =
+    '<div class="rankmark" style="color:' + rankColour(a.rank.k) + ';border-color:'
+      + rankColour(a.rank.k) + '">' + a.rank.k + '</div>' +
+    '<div class="rankside"><div class="hero">' + a.pct + '<span class="u">% adherence</span></div>' +
+    '<div class="lb">' + esc(a.rank.say) + ' &middot; ' + a.met + ' of ' + a.of +
+    ' targets met over ' + days + ' days</div></div>';
+  c.appendChild(head);
+
+  if (a.worst.length) {
+    c.appendChild(el('div', 'note', 'Costing you the most: ' +
+      a.worst.map(w => esc(w[0]) + ' (' + w[1] + ')').join(', ') + '.'));
+  }
+  if (!a.of) {
+    c.appendChild(el('div', 'note', 'Nothing has a target yet, so there is nothing '
+      + 'to score. Give a tracked thing a target and this starts working.'));
+  }
+
+  const bar = el('div', 'btns');
+  const story = el('button', 'btn', 'STORY');
+  const feed = el('button', 'btn', 'POST');
+  story.onclick = () => shareCard(a, 'story');
+  feed.onclick = () => shareCard(a, 'feed');
+  bar.appendChild(story); bar.appendChild(feed);
+  c.appendChild(el('label', 'fl', 'Share it'));
+  c.appendChild(bar);
+  c.appendChild(el('div', 'note', 'Story is 1080 by 1920. Post is 1080 by 1350, '
+    + 'which is the tallest a feed post is allowed to be and so the biggest it '
+    + 'lands on a phone. Both are drawn in the theme you are wearing.'));
+  return c;
+}
+
+/* ── the picture ──
+   Drawn rather than screenshotted, so it is the right size, the right shape
+   and readable at a glance on a phone in a feed. It takes its colours from
+   whatever theme is on, which is the whole reason STYLE exists. */
+function shareCard(a, kind) {
+  const W = 1080, H = kind === 'story' ? 1920 : 1350;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const x = cv.getContext('2d');
+  const T = k => tok(k) || '#000';
+  const disp = (tok('--font-display') || 'system-ui').replace(/^\s+/, '');
+  const body = (tok('--font-body') || 'system-ui').replace(/^\s+/, '');
+
+  x.fillStyle = T('--bg'); x.fillRect(0, 0, W, H);
+  /* a panel inset from the edge, so it reads as a card and not as a screenshot */
+  const M = 72, cardTop = kind === 'story' ? 300 : 120;
+  const cardH = H - cardTop - M;
+  x.fillStyle = T('--surface-1');
+  x.fillRect(M, cardTop, W - M * 2, cardH);
+
+  const accent = rankColour(a.rank.k);
+  /* the letter, as big as it can honestly be */
+  const letterSize = kind === 'story' ? 520 : 400;
+  x.font = '700 ' + letterSize + 'px ' + disp;
+  x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  x.fillStyle = accent;
+  const letterY = cardTop + letterSize * 0.82 + 60;
+  x.fillText(a.rank.k, W / 2, letterY);
+
+  x.font = '600 96px ' + body; x.fillStyle = T('--text-1');
+  x.fillText(a.pct + '%', W / 2, letterY + 130);
+  x.font = '400 40px ' + body; x.fillStyle = T('--text-muted');
+  x.fillText('adherence over ' + a.days + ' days', W / 2, letterY + 190);
+  x.font = '400 36px ' + body;
+  x.fillText(a.met + ' of ' + a.of + ' targets met', W / 2, letterY + 246);
+
+  /* a row of days, so the number has something behind it */
+  const dots = a.dayPct.slice(-Math.min(a.dayPct.length, 30));
+  const dw = (W - M * 2 - 80) / dots.length, dy = letterY + 330;
+  dots.forEach((p, i) => {
+    const h = p.pct == null ? 6 : Math.max(6, p.pct / 100 * 150);
+    x.fillStyle = p.pct == null ? T('--surface-3')
+      : rankColour(rankFor(p.pct).k);
+    x.fillRect(M + 40 + i * dw, dy + 150 - h, Math.max(3, dw - 6), h);
+  });
+
+  x.font = '700 34px ' + disp; x.fillStyle = T('--text-muted');
+  x.fillText('STATUS', W / 2, cardTop + cardH - 56);
+
+  const a2 = document.createElement('a');
+  a2.download = 'status-' + a.rank.k + '-' + a.pct + '-' + kind + '.png';
+  a2.href = cv.toDataURL('image/png');
+  a2.click();
+  UI.toast('Saved a ' + (kind === 'story' ? '1080&times;1920 story' : '1080&times;1350 post'));
+}
+
 function drawTrends(m) {
+  /* The rank goes first: it is the answer to "how am I doing", and everything
+     under it is the working. */
+  m.appendChild(rankCard());
   const e = TD.estimate();
   const c = card('TDEE', e.basis === 'measured' ? 'measured' : 'starting estimate');
   if (e.tdee == null) {
