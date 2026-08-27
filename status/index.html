@@ -2741,6 +2741,10 @@ function drawJournal(m) {
 /* write or edit one line */
 function noteSheet(x, d) {
   const isNew = !x.key;
+  /* Reusing a sheet that is already up needs no wait; opening a new one has to
+     let it finish rising or the focus lands mid-animation and the keyboard
+     fights the transform. */
+  const reopening = !!sheetH;
   openSheet(noteKind(x.kind).label, body => {
     const seg = el('div', 'seg');
     let kind = x.kind;
@@ -2794,15 +2798,25 @@ function noteSheet(x, d) {
     };
 
     body.appendChild(saveBar(isNew ? 'Add' : 'Save', () => commit(false)));
+
+    /* ── the cursor starts in the box ──
+       This used to look the textarea up as `#sheet textarea`. Nothing on the
+       page has that id — it only ever existed as a CSS selector — so the
+       lookup matched nothing, hit its own `if (!t) return`, and quietly did
+       nothing at all. Every note sheet opened with no cursor in it.
+
+       That also made Enter look broken, which it was not: the key is bound to
+       this textarea, and a box that never receives focus never sees a
+       keystroke. One missing element, two symptoms.
+
+       Held onto directly now rather than searched for. Focus alone drops the
+       caret wherever the platform feels like, so it goes after the last
+       character, which is what "carry on writing" means. */
+    setTimeout(() => {
+      ta.focus();
+      try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+    }, reopening ? 40 : 380);
   });
-  /* Focus alone drops the caret wherever the platform feels like. Putting it
-     after the last character is what "carry on writing" means. */
-  setTimeout(() => {
-    const t = document.querySelector('#sheet textarea');
-    if (!t) return;
-    t.focus();
-    try { t.setSelectionRange(t.value.length, t.value.length); } catch (e) {}
-  }, 380);
 }
 
 function noteMenu(x, d, i, n) {
