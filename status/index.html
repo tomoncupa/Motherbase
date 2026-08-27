@@ -1042,7 +1042,17 @@ const TD = {
       ed:        S.get('ed', 3500),          /* kcal per lb of scale change */
       alpha:     S.get('alpha', .25),        /* how fast the estimate adapts */
       trendWin:  S.get('win', 28),           /* days the weight trend looks at */
-      lookback:  S.get('lookback', 120),     /* days of history considered at all */
+      /* ── how far back anything is read at all ──
+         This was 120 days, which quietly capped the weight chart: a weigh-in
+         from five months ago was in the store and not on the screen.
+
+         0 now means "everything since your first weigh-in". That is safe for
+         the estimate as well as right for the chart, because `halfLife` has
+         already made old readings weigh nothing — at the default 21 days, a
+         reading from 120 days ago counts about 2% and one from a year ago
+         counts about two millionths. The cutoff was saving arithmetic, not
+         protecting the number. */
+      lookback:  num(S.get('lookback', 0), 0) || 0,
       smooth:    S.get('smooth', 'roll7'),   /* roll7 | ewma */
       perLb:     S.get('perLb', 13),         /* population fallback: weight × this */
       guard:     S.get('guard', 250),        /* most one update may move it */
@@ -1060,8 +1070,18 @@ const TD = {
   perLb: () => TD.P().perLb, guard: () => TD.P().guard,
 
   /* ── one row per day, with recency weight. Missing stays null. ── */
+  /** The first day there is anything to read, so "all of it" has a length.
+      Capped at five years so a stray date far in the past cannot make the
+      chart draw ten thousand columns. */
+  span() {
+    const rows = Rec.all('ev').filter(r => r.date && (r.key === 'weight'));
+    const first = rows.length ? rows[0].date : null;
+    if (!first) return 120;
+    return Math.max(14, Math.min(1825, Day.diff(Day.today(), first) + 1));
+  },
+
   frame(P, end, len) {
-    const days = Day.last(len || P.lookback, end || Day.today());
+    const days = Day.last(len || P.lookback || TD.span(), end || Day.today());
     const last = days.length - 1;
     return days.map((d, i) => ({
       d: d, i: i, age: last - i,
@@ -4153,6 +4173,7 @@ function drawGoalsTab(pane) {
   fieldRow(pane, 'Half-life (days)', 'halfLife', S.get('halfLife', 21), 'How fast old data stops counting, so at 21 a reading from three weeks ago counts half.');
   fieldRow(pane, 'Adaptation rate', 'alpha', TD.alpha(), 'How far the estimate moves toward each new reading.');
   fieldRow(pane, 'Trend window (days)', 'win', TD.win(), 'How far back the weight trend line looks.');
+  fieldRow(pane, 'History read (days)', 'lookback', S.get('lookback', 0), 'How far back anything is read. 0 reads all of it, which is what the weight chart draws.');
   fieldRow(pane, 'Starting guess (kcal per lb)', 'perLb', TD.perLb(), 'Before there is data: weight × this. 13 is what your sheet used.');
   fieldRow(pane, 'Brake (kcal)', 'guard', TD.guard(), 'The most one update may move the estimate.');
 
