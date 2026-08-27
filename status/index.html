@@ -523,8 +523,10 @@ const SEED = [
   { id: 'weight', label: 'Weight', unit: 'lb',  measure: 'number', once: 1, agg: 'last', step: .1,  dec: 1, order: 1, on: 1 },
   { id: 'sleep',  label: 'Sleep',  unit: 'hrs', measure: 'number', once: 1, agg: 'last', step: .5,  dec: 1, target: 7, dir: 'gte', order: 2, on: 1,
     chips: [5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9] },
+  /* No chips: a step count is not a number you pick off a list, it is one you
+     build up. The three bumps are the whole interaction. */
   { id: 'steps',  label: 'Steps',  unit: '',    measure: 'number', once: 1, agg: 'last', step: 500, dec: 0, target: 10000, dir: 'gte', order: 3, on: 1,
-    chips: [3000, 5000, 8000, 10000, 12000, 15000] },
+    bump: [1000, 500, 100] },
   { id: 'mood',   label: 'Mood',   unit: '',    measure: 'scale',  once: 0, agg: 'avg',  order: 4, on: 1 },
   { id: 'energy', label: 'Energy', unit: '',    measure: 'scale',  once: 0, agg: 'avg',  order: 5, on: 1 },
 ];
@@ -592,6 +594,29 @@ function linkNutrients() {
     Rec.set('field', null, f.id, Object.assign({}, f, { from: lib.from, per: nutPer(lib.from, f.unit) }));
   });
   S.set('nutlinked', NUTLINK);
+}
+
+/* ── bringing existing fields into line ──
+   SEED only ever runs once, so a Steps field made last week still carries the
+   six chips it shipped with and no bumps. Same pass and same guard shape as
+   linkNutrients: a number rather than a flag, so a later change runs again
+   instead of being locked out by a tick from the previous version. Only the
+   library's own fields are touched, and only where nothing was set by hand. */
+const FIELDFIX = 1;
+function fixSeedFields() {
+  if (num(S.get('fieldfix', 0), 0) >= FIELDFIX) return;
+  const want = {};
+  SEED.concat(LIBRARY).forEach(l => { if (l.bump) want[l.id] = l; });
+  Object.values(fields()).forEach(f => {
+    const lib = want[f.id];
+    if (!lib || f.bump) return;
+    const next = Object.assign({}, f, { bump: lib.bump.slice() });
+    /* the list it shipped with goes when the field is meant to be built up
+       rather than picked from */
+    if (!lib.chips) delete next.chips;
+    Rec.set('field', null, f.id, next);
+  });
+  S.set('fieldfix', FIELDFIX);
 }
 
 function seedFields() {
@@ -2018,17 +2043,22 @@ function toggleCheck(f, date) {
    what a coffee is. It is wrong within a week: the shots you actually drink
    are 95, 160, 210, not the round 100/150/200/300 that shipped.
 
-   So the chips are read back out of your own log — most recent first, deduped,
-   at most six. The static list only fills what is left until there is enough
-   history to have an opinion. Nothing to configure, and it keeps following you
-   as what you drink changes.                                                */
+   So the chips are read back out of your own log: the last three distinct
+   amounts, most recent first. Three because a row of six is a list to read
+   rather than a target to hit, and because the fourth-most-recent dose is not
+   a thing anyone reaches for.
+
+   The library's list only stands in until you have logged three of your own,
+   so a field added this morning still has something on it. After that it is
+   entirely yours and it keeps following you as what you take changes.      */
+const DOSE_CHIPS = 3;
 function recentDoses(f) {
   const seen = Object.create(null), out = [];
   const days = Day.last(60);
   /* newest day first, and newest entry first within a day */
-  for (let i = days.length - 1; i >= 0 && out.length < 6; i--) {
+  for (let i = days.length - 1; i >= 0 && out.length < DOSE_CHIPS; i--) {
     const list = entries(days[i], f.id);
-    for (let j = list.length - 1; j >= 0 && out.length < 6; j--) {
+    for (let j = list.length - 1; j >= 0 && out.length < DOSE_CHIPS; j--) {
       /* a figure off a food label is not a dose you chose, so it is not
          offered back to you as one */
       if (list[j].food) continue;
@@ -2037,18 +2067,35 @@ function recentDoses(f) {
       seen[v] = 1; out.push(v);
     }
   }
-  (f.chips || []).forEach(v => { if (out.length < 6 && !seen[v]) { seen[v] = 1; out.push(v); } });
+  (f.chips || []).forEach(v => { if (out.length < DOSE_CHIPS && !seen[v]) { seen[v] = 1; out.push(v); } });
   return out.sort((a, b) => a - b);
 }
 
 /* ── fast typing ──
    These ADD to what is in the box rather than replacing it, which is what
-   makes a step count three taps instead of five digits. Derived from the
-   field's own step so the sizes suit the quantity: steps step by 500 and get
-   +1000 / +500 / +100, caffeine steps by 50 and gets +100 / +50 / +10.     */
+   makes a step count three taps instead of five digits.
+
+   They used to be derived from the field's own step, and the arithmetic was
+   right while the idea was wrong: weight steps by 0.1 and got +0.2 / +0.1,
+   sleep got +1 / +0.5 / +0.1. Nobody adds a fifth of a pound to their body
+   weight. A number you read off a scale is typed, not accumulated, and a row
+   of buttons under it is noise on every single open.
+
+   So a field says whether it wants them:
+
+     `bump` on the field    exactly those, in that order — steps asks for
+                            +1000 / +500 / +100
+     a dose, and no bump    one button, its own step. Creatine is +5, caffeine
+                            +50, water +0.5. A dose is the one thing you take
+                            repeatedly in the same size, so one button covers
+                            it and the rest comes off your own history below.
+     anything else          none
+
+   Which means weight and sleep get nothing, which is correct.              */
 function bumpsFor(f) {
-  const b = num(f.step, 1) || 1;
-  return [b * 2, b, b / 5].filter(v => v > 0);
+  if (f.bump && f.bump.length) return f.bump.filter(v => v > 0);
+  if (f.measure === 'amount') { const b = num(f.step, 1) || 1; return b > 0 ? [b] : []; }
+  return [];
 }
 
 /* numbers and doses. A dose adds up through the day; a number replaces. */
@@ -2099,7 +2146,8 @@ function numberSheet(f, date) {
       inp.input.dispatchEvent(new Event('input', { bubbles: true }));
       Mobile.haptic('select');
     };
-    body.appendChild(chipRow(bumpsFor(f).map(v => ({ label: '+' + r1(v), value: v })), add));
+    const bumps = bumpsFor(f);
+    if (bumps.length) body.appendChild(chipRow(bumps.map(v => ({ label: '+' + r1(v), value: v })), add));
 
     if (prev != null) {
       const p = el('button', 'btn wide quiet', 'Last ' + prev + (f.unit ? ' ' + f.unit : '') + ' · ' + (prevAgo === 1 ? 'yesterday' : prevAgo + ' days ago'));
@@ -4290,6 +4338,7 @@ if (window.Icons) Icons.paint();
 Rec.ready(() => {
   seedFields();
   linkNutrients();
+  fixSeedFields();
   TD.tick();
   /* On open, quietly: pull anything typed into the sheet since last time.
      Never blocks, never speaks unless it actually brought something back. */
