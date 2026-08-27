@@ -45,18 +45,35 @@ ten, and the tenth is in the log forever.
 
 These are cross-app. They were each written after something broke.
 
-### 1. Ship it full, not empty
+### 1. Ship vocabulary. Never ship prescription.
 
-An app opens with real, usable, editable content. Never an empty shell with an
-invitation to build one.
+The most important line in this document, and the easiest one to get wrong,
+because both halves look like "sensible defaults".
 
-TRAIN could not create a single movement on a fresh install: the button sat
-below an early return, and the form behind it refused because no categories
-existed and nothing in the app could make one. Two bugs, but one cause — nobody
-had ever opened it empty and tried to use it.
+**Vocabulary** is a list of things that exist whoever you are. A bench press is
+a bench press. Shipping it saves typing and assumes nothing, so ship all of it.
+TRAIN opens with 111 movements.
+
+**Prescription** is a claim about how a person should live. A morning routine
+is not a fact about the world, it is an opinion about them — and shipping one
+tells someone they are already behind before they have done anything. Tom,
+2026-08-27: *"there should be no default blocks, not everyone will want a
+morning routine — being forced feels grossly unpleasant."*
+
+BLOCK therefore opens with no blocks and no routines at all. This is not a
+failure of law 1, it is law 1 applied correctly: the vocabulary of BLOCK is
+whatever *you* do, so there is none to ship.
+
+**Where you ship nothing, the empty state does the work.** It says what the
+thing is, why it is empty, and offers the one action that fills it. It is never
+a dead end — if the only route out is "add an existing X" and no X exists, the
+button makes one.
 
 **Test:** wipe storage, open the app, and do the main thing. If you cannot, it
-does not ship.
+does not ship. TRAIN failed this for months: the create button sat below an
+early return, and the form behind it refused because no categories existed and
+nothing in the app could make one. BLOCK failed it within an hour of shipping
+empty, for the same reason in a different place.
 
 ### 2. Defaults are generic, specifics are data
 
@@ -113,7 +130,30 @@ Two controls showing the same fact is the most common cause of "this feels
 cluttered". BLOCK's header carried the date twice in two formats, the day's
 name twice, and a button the menu already had. Deleting four things fixed it.
 
-### 9. One fact, one row, one writer
+### 9. Share the shell, not the shape
+
+Every app uses the shared foundation — the store, the themes, the sheet, the
+backup. That is what stops six apps having six ideas about what a dialog is.
+
+It does not follow that every settings screen should look the same. Tom,
+2026-08-27: *"it feels a bit too forced if all their setting screens look the
+same — ARC has node colours and STATUS has tracked stat colours, so don't force
+unity for the sake of it at the cost of more important things."*
+
+An app's own settings are its own. What is shared is shared because sharing it
+is genuinely better, never because symmetry is tidy.
+
+### 10. Setup, not a walkthrough
+
+An app may ask what it genuinely cannot infer — TRAIN cannot guess kilograms or
+pounds. One question, at the start, and **reachable again from settings
+afterwards**, because a decision made in the first ten seconds is the one most
+likely to be wrong.
+
+No tours. No coach marks. No "tap here to continue". If a screen needs
+explaining, it needs a better screen, and that is law 6.
+
+### 11. One fact, one row, one writer
 
 From `CLAUDE.md`, repeated because it is the one that has already cost data.
 Rows, never a blob. `tick` is the single deliberate exception.
@@ -159,9 +199,16 @@ the capture rate falls and every downstream estimate degrades with it.
 **In hand:** between sets, sweaty, one hand, sometimes with a bar still racked.
 
 **Good looks like:** a full movement list on first open, editable and
-extendable. Weight and reps are two taps. A repeated session says how it went
-against the one it was copied from, per exercise and overall — because that is
-the entire reason for repeating it.
+extendable, and no dependence on having come from anywhere else. Weight and
+reps are two taps. A repeated session says how it went against the one it was
+copied from, per exercise and overall — because that is the entire reason for
+repeating it.
+
+**It takes your history from wherever it is.** FitNotes' own backup file, and a
+spreadsheet from anything else — Strong, Hevy, JEFIT all export a row per set
+and only disagree about column names. Whatever it cannot match it says so and
+imports the rest, because a log 90% across beats a log 0% across with a tidy
+error message.
 
 **Never:** a programming tool. Building the plan is BLOCK's job and the coach's
 job. This records what was lifted.
@@ -175,9 +222,12 @@ job. This records what was lifted.
 **Good looks like:** blocks group into routines, routines group into days —
 that hierarchy is visible in the furniture, not just the data. A day can be a
 repeating template or a one-off pinned to a date. A block can be marked not
-needed, which is neither done nor owed. Starting content is minimal and
-generic: the core self-improvement routines anyone would want, which he then
-makes personal.
+needed, which is neither done nor owed.
+
+**It ships empty, and that is the design.** See law 1. Everything in BLOCK is a
+claim about how someone spends their time, so there is nothing here that can
+honestly be shipped as a default. The empty states carry the whole introduction
+instead.
 
 **Never:** a calendar. It does not own time, it owns intent.
 

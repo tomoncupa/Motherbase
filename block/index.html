@@ -146,6 +146,9 @@ main{display:flex;flex:1;min-height:0}
 #binlist{flex:1;overflow-y:auto;padding:9px}
 .cat{font-family:var(--f1);font-size:10px;letter-spacing:.16em;color:var(--dim2);text-transform:uppercase;margin:11px 0 6px;padding-left:2px}
 .cat:first-child{margin-top:0}
+.binempty{padding:14px 4px 12px;line-height:1.5}
+.binempty b{display:block;font-size:12.5px;color:var(--txt);margin-bottom:4px}
+.binempty span{display:block;font-size:10.5px;color:var(--dim2)}
 .dayempty{flex:1;min-width:260px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;
   padding:22px;border:1px dashed var(--line2);border-radius:10px;background:var(--panel)}
 .dayempty b{font-size:13px;color:var(--txt)}
@@ -1178,57 +1181,27 @@ window.addEventListener('blur', closeMenu);
 /* ============================ state ============================ */
 const KEY = 'block_v1';
 /* name, minutes, colour index, energy */
-/* ── the blocks it opens with ──
-   DOCTRINE law 1: ship it full. DOCTRINE law 2: a default is what a stranger
-   would also want, so none of this is Tom's actual day — it is the shape of a
-   day anyone trying to improve one would recognise, and the raw material he
-   makes personal.
+/* ── it opens with nothing, on purpose ──
+   It used to ship twenty blocks and four routines: Morning, Deep Work,
+   Training, Wind Down. Tom, 2026-08-27: "there should be no default blocks,
+   not everyone will want a morning routine — being forced feels grossly
+   unpleasant."
 
-   Deliberately short. This is a vocabulary, not a plan: twenty blocks you will
-   actually use beat sixty you scroll past, and everything here is one click to
-   duplicate, rename or delete. Law 2 of utility — a thing earns its place by
-   being used, not by being reasonable.
+   That is the line between the two kinds of default, and it is worth stating
+   because getting it wrong is easy. TRAIN ships a hundred and eleven movements
+   because a bench press is a bench press whoever you are — that is a
+   VOCABULARY, and having it saves you typing. A morning routine is a
+   PRESCRIPTION about how a person should live, and shipping one tells them
+   they are already behind before they have done anything.
 
-   name, minutes, colour index, effort (1 light, 2 medium, 3 heavy)          */
-const DEFLIB = [
-  ['Morning', [
-    ['Wake + hydrate', 5, 0, 1], ['Sunlight walk', 15, 3, 1],
-    ['Movement', 15, 3, 2], ['Journal', 10, 1, 1], ['Breakfast', 20, 2, 1],
-  ]],
-  ['Focus', [
-    ['Deep work', 90, 5, 3], ['Admin + email', 30, 9, 1],
-    ['Plan tomorrow', 10, 9, 1], ['Learn', 30, 1, 2],
-  ]],
-  ['Training', [
-    ['Lift', 60, 4, 3], ['Conditioning', 25, 4, 3], ['Steps walk', 30, 3, 1],
-    ['Stretch', 15, 3, 1],
-  ]],
-  ['Life', [
-    ['Lunch', 30, 2, 1], ['Dinner', 45, 2, 1], ['Chores', 20, 9, 2],
-    ['People', 60, 6, 2],
-  ]],
-  ['Wind down', [
-    ['Screens off', 30, 1, 1], ['Read', 20, 1, 1], ['Sleep', 480, 1, 1],
-  ]],
-];
-function seedLib() {
-  const out = [];
-  DEFLIB.forEach(([cat, arr]) => arr.forEach(([name, dur, ci, en]) => out.push({ id: uid(), name, dur, color: PAL[ci], cat, energy: en })));
-  return out;
-}
+   So BLOCK opens empty and says what to do. See DOCTRINE law 1.             */
+function seedLib() { return []; }
 const seedVariant = name => ({ id: uid(), name, items: {} });
 function seedState() {
-  /* Routines, not times of day. "Midday" describes the clock; "Deep Work"
-     describes what the block of time is FOR, which is the whole idea of the
-     app — blocks group into routines, routines group into days. Four is the
-     minimum that shows the shape without prescribing a life. */
-  const lanes = [
-    { id: uid(), name: 'Morning',   start: '06:00', target: '08:00' },
-    { id: uid(), name: 'Deep Work', start: '09:00', target: '12:00' },
-    { id: uid(), name: 'Training',  start: '17:00', target: '18:30' },
-    { id: uid(), name: 'Wind Down', start: '21:00', target: '22:30' },
-  ];
-  const v = seedVariant('Weekday');
+  /* No routines either. Naming them is the first real decision a person makes
+     in this app, and making it for them is exactly the imposition above. */
+  const lanes = [];
+  const v = seedVariant('My day');
   lanes.forEach(l => v.items[l.id] = []);
   return {
     v: 2, lanes, lib: seedLib(), templates: [], variants: [v], current: v.id,
@@ -1887,20 +1860,31 @@ function renderRoutines() {
   const mk = el('button', 'btn');
   mk.style.marginTop = '10px';
   mk.textContent = '+ Build a routine';
-  mk.onclick = () => {
-    const nm = prompt('Routine name', 'Routine ' + (S.lanes.length + 1)); if (!nm) return;
-    snap();
-    const L = { id: uid(), name: nm.trim(), start: '09:00', target: '' };
-    S.lanes.push(L);
-    S.variants.forEach(x => { x.items[L.id] = []; });
-    addLaneToDay(L.id);
-  };
+  mk.onclick = () => { newRoutine(); };
   list.appendChild(mk);
 }
 
 function renderBin() {
   const q = ($('#search').value || '').toLowerCase().trim();
   const list = $('#binlist'); list.innerHTML = '';
+  /* Nothing in the bin at all is a different state from a search that found
+     nothing, and saying NO MATCHES to someone who has not typed anything is
+     the app blaming them for its own emptiness. */
+  if (!S.lib.length && !q) {
+    const em = el('div', 'binempty');
+    em.innerHTML = '<b>No blocks yet.</b><span>A block is one thing you do, with a length. ' +
+      'Make the ones your day is actually built from \u2014 they stay here to reuse.</span>';
+    list.appendChild(em);
+    const mk = el('button', 'btn acc');
+    mk.style.width = '100%';
+    mk.textContent = '+ New block';
+    mk.onclick = () => { $('#newform').classList.add('on'); $('#nfName').focus(); };
+    list.appendChild(mk);
+    const tb0 = $('#binTarget');
+    if (tb0) tb0.style.display = 'none';
+    return;
+  }
+  { const tb0 = $('#binTarget'); if (tb0) tb0.style.display = ''; }
   /* be explicit about where a click lands — it used to be an invisible rule */
   const tgt = focusLaneObj();
   const tb = $('#binTarget');
@@ -2078,13 +2062,24 @@ function renderBoard() {
        broken. Both routes are one click from here. */
     const em = el('div', 'dayempty');
     em.innerHTML = '<b>' + esc(M() ? M().name : 'This day') + ' has no routines on it yet.</b>' +
-      '<span>A day is a set of routines. Put the ones this day needs on it.</span>';
-    const add = el('button', 'btn acc', '+ Add a routine');
+      '<span>' + (S.lanes.length
+        ? 'A day is a set of routines. Put the ones this day needs on it.'
+        : 'Blocks group into routines, and routines group into days. Name your first routine \u2014 Morning, Training, whatever your day actually has in it \u2014 and put blocks in it.') +
+      '</span>';
+    /* With no routines anywhere, offering a list of routines to add is the dead
+       end this empty state exists to prevent. It builds one instead. */
+    const none = !S.lanes.length;
+    const add = el('button', 'btn acc', none ? '+ Build your first routine' : '+ Add a routine');
     add.onclick = ev => {
+      if (none) return void newRoutine();
       const off = S.lanes.filter(L => !dayHas(M(), L.id));
-      if (!off.length) return toast('every routine you own is already on this day');
+      if (!off.length) {
+        return openMenu(ev.clientX, ev.clientY, [{ head: 'Every routine you own is already here' },
+          { label: '+ Build another routine', fn: newRoutine }]);
+      }
       openMenu(ev.clientX, ev.clientY, [{ head: 'Put a routine on ' + M().name },
-        ...off.map(L => ({ label: L.name, k: (items(L.id) || []).length ? '' : 'empty', fn: () => addLaneToDay(L.id) }))]);
+        ...off.map(L => ({ label: L.name, k: (items(L.id) || []).length ? '' : 'empty', fn: () => addLaneToDay(L.id) })),
+        { sep: 1 }, { label: '+ Build a new routine', fn: newRoutine }]);
     };
     em.appendChild(add);
     b.appendChild(em);
@@ -2327,6 +2322,21 @@ function removeLaneFromDay(id) {
   focusId = null; render();
   toast('<b>' + esc(lane(id).name) + '</b> is off ' + esc(v.name) + ' — its blocks are kept, and it still runs on your other days');
 }
+/* Build a routine and put it on the day being looked at. One function, because
+   there are now three ways in — the board's empty state, the routine bin, and
+   the + at the end of the board — and three copies of a prompt is three places
+   for them to drift apart. */
+function newRoutine() {
+  const nm = prompt('Name this routine', S.lanes.length ? 'Routine ' + (S.lanes.length + 1) : 'Morning');
+  if (!nm) return null;
+  snap();
+  const L = { id: uid(), name: nm.trim(), start: '09:00', target: '' };
+  S.lanes.push(L);
+  S.variants.forEach(v => { v.items[L.id] = []; });
+  addLaneToDay(L.id);
+  return L;
+}
+
 function addLaneToDay(id) {
   const v = M();
   if (!v.routines) v.routines = S.lanes.map(l => l.id);
@@ -3506,7 +3516,24 @@ function selfTest() {
   const tap = n => { const r = n.getBoundingClientRect(); pd(n, r.x + 25, r.y + 4); pu(r.x + 25, r.y + 4); };
 
   try {
-    S = seedState(); S.view = 'day'; closeModal(); render();
+    /* ── the test builds its own world ──
+       It used to lean on seedState() shipping routines and blocks. It ships
+       neither now, deliberately, so leaning on that was leaning on a default
+       rather than on behaviour — the same mistake as naming chip('Coffee').
+       Two routines and three blocks, made here, so what is under test is the
+       app and not the starter content. */
+    S = seedState(); S.view = 'day'; closeModal();
+    S.lanes = [
+      { id: uid(), name: 'Test A', start: '06:00', target: '09:00' },
+      { id: uid(), name: 'Test B', start: '12:00', target: '' },
+    ];
+    S.lib = [
+      { id: uid(), name: 'Alpha', dur: 10, color: PAL[0], cat: 'Test', energy: 1 },
+      { id: uid(), name: 'Bravo', dur: 20, color: PAL[1], cat: 'Test', energy: 2 },
+      { id: uid(), name: 'Charlie', dur: 60, color: PAL[2], cat: 'Test', energy: 3 },
+    ];
+    S.variants.forEach(v => { v.routines = S.lanes.map(l => l.id); S.lanes.forEach(l => { v.items[l.id] = []; }); });
+    render();
     const L = S.lanes[0].id, L2 = S.lanes[1].id;
 
     ok('bin block: single click adds it', () => { tap(nthChip(0)); return items(L).length === 1 || 'got ' + items(L).length; });

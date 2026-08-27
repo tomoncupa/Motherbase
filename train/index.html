@@ -549,11 +549,15 @@ TRAIN.DEFAULT_CATS = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core', 'Car
    Every one is editable and deletable from the moment it appears. Nothing here
    is protected, because a list you cannot prune is worse than a short one.
 
-   Descriptive names only. No trademarks, no people and no nationalities: an
-   air bike is not an Assault Bike, a rear foot elevated split squat is not
-   Bulgarian, and an anti-rotation press describes what it does while a
-   surname does not. That is partly about shipping something generic and partly
-   because the descriptive name is the one a coach writes in a programme.
+   No EQUIPMENT BRANDS. An air bike is not an Assault Bike, and nothing here is
+   named after Life Fitness, Hammer Strength, Cybex or anyone else who makes
+   the frame — a gym that does not own that brand still has the movement, and
+   a list full of one manufacturer's names is a list that fits one gym.
+
+   Names that came from a person or a place stay. Pendlay Row, Arnold Press,
+   Pallof Press, Bulgarian Split Squat, Russian Twist: these are the actual
+   names of the movements, everyone in a gym uses them, and renaming them to
+   something more literal would only make them harder to find.
 
    `kind` 0 is weight-and-reps, 1 is cardio (distance and time), 2 is
    bodyweight-and-reps. `inc` is the weight step the plus button uses. */
@@ -567,7 +571,7 @@ TRAIN.DEFAULT_EX = {
     ['Incline Push Up', 2], ['Decline Push Up', 2], ['Dip (Chest)', 2],
   ],
   Back: [
-    ['Deadlift', 0], ['Rack Pull', 0], ['Barbell Row', 0], ['Barbell Row (Dead Stop)', 0],
+    ['Deadlift', 0], ['Rack Pull', 0], ['Barbell Row', 0], ['Pendlay Row', 0],
     ['T-Bar Row', 0], ['Dumbbell Row', 0], ['Chest Supported Row', 0],
     ['Seated Cable Row', 0], ['Lat Pulldown', 0], ['Close Grip Lat Pulldown', 0],
     ['Straight Arm Pulldown', 0], ['Pull Up', 2], ['Chin Up', 2],
@@ -576,13 +580,13 @@ TRAIN.DEFAULT_EX = {
   ],
   Shoulders: [
     ['Overhead Press', 0], ['Seated Barbell Press', 0], ['Dumbbell Shoulder Press', 0],
-    ['Rotating Dumbbell Press', 0], ['Push Press', 0], ['Lateral Raise', 0],
+    ['Arnold Press', 0], ['Push Press', 0], ['Lateral Raise', 0],
     ['Cable Lateral Raise', 0], ['Front Raise', 0], ['Rear Delt Fly', 0],
     ['Face Pull', 0], ['Upright Row', 0], ['Shoulder Press Machine', 0],
   ],
   Legs: [
     ['Back Squat', 0], ['Front Squat', 0], ['Box Squat', 0], ['Goblet Squat', 0],
-    ['Hack Squat', 0], ['Leg Press', 0], ['Rear Foot Elevated Split Squat', 0],
+    ['Hack Squat', 0], ['Leg Press', 0], ['Bulgarian Split Squat', 0],
     ['Walking Lunge', 0], ['Reverse Lunge', 0], ['Step Up', 0],
     ['Romanian Deadlift', 0], ['Stiff Leg Deadlift', 0], ['Sumo Deadlift', 0],
     ['Leg Extension', 0], ['Leg Curl', 0], ['Seated Leg Curl', 0],
@@ -600,8 +604,8 @@ TRAIN.DEFAULT_EX = {
   Core: [
     ['Plank', 2], ['Side Plank', 2], ['Crunch', 2], ['Sit Up', 2],
     ['Hanging Leg Raise', 2], ['Lying Leg Raise', 2], ['Cable Crunch', 0],
-    ['Seated Trunk Twist', 0], ['Ab Wheel Rollout', 2], ['Mountain Climber', 2],
-    ['Dead Bug', 2], ['Bird Dog', 2], ['Anti-Rotation Press', 0], ['Hollow Hold', 2],
+    ['Russian Twist', 0], ['Ab Wheel Rollout', 2], ['Mountain Climber', 2],
+    ['Dead Bug', 2], ['Bird Dog', 2], ['Pallof Press', 0], ['Hollow Hold', 2],
   ],
   Cardio: [
     ['Running', 1], ['Treadmill', 1], ['Walking', 1], ['Incline Walk', 1],
@@ -1272,19 +1276,186 @@ TRAIN.importFitNotesAsync = function (buf, onStep) {
 };
 
 /* ═══════════════════ THE IMPORT PANEL ═══════════════════ */
+/* ═════════════════ IMPORTING FROM ANYWHERE ELSE ═════════════════
+   The FitNotes importer reads that app's SQLite file and nothing else. Every
+   other training app exports a spreadsheet, and they all export very nearly
+   the same one: a row per set, with the date, the movement, the weight and the
+   reps. Only the column names differ.
+
+   So rather than a parser per app, one parser and a table of what each app
+   calls things. Strong says "Exercise Name", Hevy says "exercise_title",
+   FitNotes says "Exercise". They all mean the same column.
+
+   Anything it cannot match, it says so and imports what it could rather than
+   refusing the file. A log that is 90% across beats a log that is 0% across
+   with a tidy error message.                                                */
+
+/* A real CSV reader: quoted fields, commas and newlines inside quotes, and ""
+   as an escaped quote. Splitting on commas loses every exercise with a comma
+   in its name, which is most cable variations. */
+TRAIN.parseCsv = function (text) {
+  var rows = [], row = [], cur = '', q = false, i = 0;
+  text = String(text || '').replace(/\r\n?/g, '\n');
+  for (; i < text.length; i++) {
+    var c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter(function (r) { return r.some(function (x) { return String(x).trim() !== ''; }); });
+};
+
+/* What each app calls each column. Matched case- and punctuation-insensitively,
+   longest alias first so "weight_kg" wins over "weight". */
+TRAIN.CSV_ALIASES = {
+  date: ['date', 'workoutdate', 'starttime', 'start', 'datetime', 'day'],
+  ex:   ['exercisename', 'exercisetitle', 'exercise', 'movement', 'name'],
+  cat:  ['category', 'musclegroup', 'bodypart', 'muscle'],
+  kg:   ['weightkg', 'weightlbs', 'weightlb', 'weight'],
+  reps: ['reps', 'repetitions', 'rep', 'quantity'],
+  dist: ['distancekm', 'distancemiles', 'distance'],
+  dur:  ['durationseconds', 'seconds', 'duration', 'time'],
+  note: ['exercisenotes', 'setnotes', 'comment', 'notes', 'note'],
+};
+var csvKey = function (h) { return String(h || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+
+/** Work out which column is which, and which unit the weights are in. */
+TRAIN.mapCsv = function (headers) {
+  var keys = headers.map(csvKey), map = {}, used = {};
+  Object.keys(TRAIN.CSV_ALIASES).forEach(function (field) {
+    var best = -1, bestLen = -1;
+    TRAIN.CSV_ALIASES[field].forEach(function (alias) {
+      for (var i = 0; i < keys.length; i++) {
+        if (used[i] || keys[i] !== alias) continue;
+        if (alias.length > bestLen) { best = i; bestLen = alias.length; }
+      }
+    });
+    if (best > -1) { map[field] = best; used[best] = 1; }
+  });
+  /* lbs unless the header says otherwise, which is what a bare "Weight" means
+     in every export that does not say */
+  var wh = map.kg != null ? keys[map.kg] : '';
+  map.unit = /kg/.test(wh) ? 'kg' : 'lb';
+  map.miles = map.dist != null && /mile/.test(keys[map.dist]);
+  return map;
+};
+
+/* Dates arrive as 2024-01-15, 2024-01-15 09:30:00, 15/01/2024 and worse.
+   Anything with a leading ISO date is taken at its word; the rest goes through
+   Date.parse and comes back as the local calendar day. */
+TRAIN.csvDate = function (v) {
+  var t = String(v || '').trim();
+  if (!t) return null;
+  var iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[0];
+  var ms = Date.parse(t);
+  if (!isFinite(ms)) return null;
+  var d = new Date(ms);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
+
+/** Bring a parsed spreadsheet in. Returns what it did, in plain counts. */
+TRAIN.importCsv = function (grid) {
+  var out = { sets: 0, exercises: 0, cats: 0, days: 0, skipped: 0, unit: 'lb' };
+  if (!grid || grid.length < 2) { out.error = 'That file has no rows in it.'; return out; }
+  var map = TRAIN.mapCsv(grid[0]);
+  out.unit = map.unit;
+  if (map.date == null || map.ex == null) {
+    out.error = 'Could not find a date column and an exercise column. ' +
+      'Found: ' + grid[0].filter(Boolean).join(', ');
+    return out;
+  }
+
+  /* index what is already here by name, so a second import of the same file
+     lands on the same rows instead of doubling everything */
+  var cats = TRAIN.cats(), exs = TRAIN.exercises();
+  var catByName = {}, exByName = {};
+  Object.keys(cats).forEach(function (k) { catByName[String(cats[k].name).toLowerCase()] = k; });
+  Object.keys(exs).forEach(function (k) { exByName[String(exs[k].name).toLowerCase()] = k; });
+
+  var seen = {}, days = {};
+  grid.slice(1).forEach(function (r) {
+    var date = TRAIN.csvDate(r[map.date]);
+    var name = String(r[map.ex] == null ? '' : r[map.ex]).trim();
+    if (!date || !name) { out.skipped++; return; }
+
+    var catName = map.cat != null ? String(r[map.cat] || '').trim() : '';
+    var catId = null;
+    if (catName) {
+      catId = catByName[catName.toLowerCase()];
+      if (!catId) {
+        catId = catName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || TRAIN.newId();
+        Rec.set('excat', null, catId, { name: catName, slot: Object.keys(catByName).length % TRAIN.SLOTS, ord: Object.keys(catByName).length });
+        catByName[catName.toLowerCase()] = catId; out.cats++;
+      }
+    }
+
+    var exId = exByName[name.toLowerCase()];
+    if (!exId) {
+      exId = TRAIN.newId();
+      Rec.set('exercise', null, exId, {
+        name: name, cat: catId, kind: 0, inc: 2.5, rest: 0, unit: 0,
+        fav: 0, note: '', graph: 0, ord: 0,
+      });
+      exByName[name.toLowerCase()] = exId; out.exercises++;
+    }
+
+    var w = map.kg != null ? parseFloat(r[map.kg]) : 0;
+    var reps = map.reps != null ? parseInt(r[map.reps], 10) : 0;
+    var dist = map.dist != null ? parseFloat(r[map.dist]) : 0;
+    var dur = map.dur != null ? parseFloat(r[map.dur]) : 0;
+    if (!isFinite(w)) w = 0;
+    if (!isFinite(reps)) reps = 0;
+    if (!isFinite(dist)) dist = 0;
+    if (!isFinite(dur)) dur = 0;
+    if (!w && !reps && !dist && !dur) { out.skipped++; return; }
+
+    /* Every set is stored in kilograms, whatever the file was written in. */
+    var kg = map.unit === 'kg' ? w : TRAIN.toKg(w, 'lb');
+
+    /* A stable id from the row's own contents: the same file imported twice
+       writes the same rows, which is what makes this safe to repeat. */
+    seen[date] = (seen[date] || 0) + 1;
+    var key = 'csv-' + date + '-' + exId + '-' + seen[date];
+    Rec.set('set', date, key, {
+      ex: exId, kg: kg, r: reps, u: map.unit, done: 1, pr: 0, prf: 0,
+      dist: map.miles ? dist * 1.609344 : dist, dur: Math.round(dur),
+      note: map.note != null ? String(r[map.note] || '').trim() : '',
+      ord: seen[date],
+    });
+    days[date] = 1; out.sets++;
+  });
+
+  TRAIN.reindex();
+  Object.keys(days).forEach(function (d) { TRAIN.assertTick(d); });
+  TRAIN.recomputePRs();
+  out.days = Object.keys(days).length;
+  return out;
+};
+
 TRAIN.importPanel = function () {
   UI.dialog({
-    title: 'IMPORT FROM FITNOTES', width: 460,
+    title: 'IMPORT A TRAINING LOG', width: 460,
     body: function (b) {
       var p = UI.el('div', 'empty');
       p.innerHTML =
-        'Open FitNotes, then <b>Settings ▸ Backup ▸ Backup Now</b>, and get the ' +
-        '<b>.fitnotes</b> file onto this device.<br><br>' +
-        'Everything comes across: every set, every set comment, your exercises, ' +
-        'your categories, your workout times, your supersets and your routines.<br><br>' +
+        '<b>From FitNotes.</b> Settings \u25b8 Backup \u25b8 Backup Now, then get the ' +
+        '<b>.fitnotes</b> file onto this device. Everything comes across: every set, ' +
+        'every comment, your exercises, categories, workout times, supersets and ' +
+        'routines.<br><br>' +
+        '<b>From anything else.</b> Export a <b>.csv</b> and pick it here. Strong, Hevy, ' +
+        'JEFIT and most other logs export a row per set, and they all name the columns ' +
+        'slightly differently \u2014 this reads whichever names yours used. It needs a ' +
+        'date column and an exercise column; weight, reps, distance, time, category and ' +
+        'notes come across when they are there.<br><br>' +
         'Importing <b>merges</b>. The same file twice changes nothing, and anything ' +
         'you have logged in TRAIN since is never overwritten.<br><br>' +
-        '<b>It only goes one way.</b> There is no export back into FitNotes.<br><br>' +
+        '<b>It only goes one way.</b> There is no export back.<br><br>' +
         'Body weight and measurements are not imported. Those belong to STATUS.';
       b.appendChild(p);
 
@@ -1297,7 +1468,7 @@ TRAIN.importPanel = function () {
 
       var input = document.createElement('input');
       input.type = 'file';
-      input.accept = '.fitnotes,.db,.sqlite,application/octet-stream';
+      input.accept = '.fitnotes,.db,.sqlite,.csv,text/csv,application/octet-stream';
       input.style.display = 'none';
       b.appendChild(input);
 
@@ -1319,6 +1490,36 @@ TRAIN.importPanel = function () {
           pick.disabled = false;
           out.innerHTML = '<div class="empty">Could not read that file.</div>';
         };
+
+        /* A spreadsheet is a different job from a database, so it takes a
+           different reader and a different parser. Decided by the file, not by
+           trying one and catching the explosion. */
+        if (/\.csv$/i.test(f.name) || f.type === 'text/csv') {
+          var tr = new FileReader();
+          tr.onerror = fr.onerror;
+          tr.onload = function () {
+            var res;
+            try { res = TRAIN.importCsv(TRAIN.parseCsv(tr.result)); }
+            catch (e) { res = { error: e.message || 'Could not read that spreadsheet.' }; }
+            fill.style.width = '100%';
+            pick.disabled = false;
+            if (res.error) {
+              out.innerHTML = '<div class="empty">' + UI.esc(res.error) + '</div>';
+              Mobile.feedback('error');
+              return;
+            }
+            out.innerHTML = '<div class="empty"><b>' + res.sets + '</b> sets across <b>' +
+              res.days + '</b> days.<br>' + res.exercises + ' new exercises, ' +
+              res.cats + ' new categories.<br>Weights read as <b>' + res.unit + '</b>.' +
+              (res.skipped ? '<br>' + res.skipped + ' rows had no usable numbers and were left out.' : '') +
+              '</div>';
+            Mobile.feedback('complete');
+            draw();
+          };
+          tr.readAsText(f);
+          return;
+        }
+
         fr.onload = function () {
           var yield_ = function (step) {
             var i = steps.indexOf(step);
@@ -3632,12 +3833,12 @@ TRAIN.settings = function () {
       pane.appendChild(rc);
 
       var h = UI.el('div', 'mb-group');
-      h.textContent = 'COMING FROM FITNOTES';
+      h.textContent = 'COMING FROM ANOTHER APP';
       pane.appendChild(h);
 
       var b = UI.el('button', 'mb-btn mb-press mb-tap');
       b.style.width = '100%';
-      b.textContent = 'IMPORT A FITNOTES BACKUP';
+      b.textContent = 'IMPORT A TRAINING LOG';
       b.onclick = function () { TRAIN.importPanel(); };
       pane.appendChild(b);
 
