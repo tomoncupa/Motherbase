@@ -1173,12 +1173,38 @@ window.addEventListener('blur', closeMenu);
 /* ============================ state ============================ */
 const KEY = 'block_v1';
 /* name, minutes, colour index, energy */
+/* ── the blocks it opens with ──
+   DOCTRINE law 1: ship it full. DOCTRINE law 2: a default is what a stranger
+   would also want, so none of this is Tom's actual day — it is the shape of a
+   day anyone trying to improve one would recognise, and the raw material he
+   makes personal.
+
+   Deliberately short. This is a vocabulary, not a plan: twenty blocks you will
+   actually use beat sixty you scroll past, and everything here is one click to
+   duplicate, rename or delete. Law 2 of utility — a thing earns its place by
+   being used, not by being reasonable.
+
+   name, minutes, colour index, effort (1 light, 2 medium, 3 heavy)          */
 const DEFLIB = [
-  ['Morning', [['Wake + hydrate', 5, 0, 1], ['Sunlight walk', 15, 3, 1], ['Cold shower', 10, 5, 2], ['Coffee', 10, 2, 1], ['Journal', 10, 1, 1], ['Meditate', 10, 1, 1], ['Mobility', 15, 3, 2], ['Breakfast', 20, 2, 1], ['Read', 20, 1, 2]]],
-  ['Work', [['Deep work', 90, 5, 3], ['Admin + email', 30, 9, 1], ['Client calls', 60, 5, 3], ['Content creation', 45, 8, 3], ['Program writing', 60, 8, 3], ['Check-ins', 20, 9, 2], ['Plan tomorrow', 10, 9, 1]]],
-  ['Training', [['Lift', 60, 4, 3], ['Conditioning', 25, 4, 3], ['Zone 2', 45, 3, 2], ['Stretch', 15, 3, 1], ['Steps walk', 30, 3, 1]]],
-  ['Life', [['Lunch', 30, 2, 1], ['Dinner', 45, 2, 1], ['Family time', 60, 6, 2], ['Errands', 30, 9, 2], ['Chores', 20, 9, 2]]],
-  ['Wind down', [['Screens off', 30, 1, 1], ['Shower', 10, 1, 1], ['Read fiction', 20, 1, 1], ['Evening stretch', 10, 3, 1], ['Sleep', 480, 1, 1]]],
+  ['Morning', [
+    ['Wake + hydrate', 5, 0, 1], ['Sunlight walk', 15, 3, 1],
+    ['Movement', 15, 3, 2], ['Journal', 10, 1, 1], ['Breakfast', 20, 2, 1],
+  ]],
+  ['Focus', [
+    ['Deep work', 90, 5, 3], ['Admin + email', 30, 9, 1],
+    ['Plan tomorrow', 10, 9, 1], ['Learn', 30, 1, 2],
+  ]],
+  ['Training', [
+    ['Lift', 60, 4, 3], ['Conditioning', 25, 4, 3], ['Steps walk', 30, 3, 1],
+    ['Stretch', 15, 3, 1],
+  ]],
+  ['Life', [
+    ['Lunch', 30, 2, 1], ['Dinner', 45, 2, 1], ['Chores', 20, 9, 2],
+    ['People', 60, 6, 2],
+  ]],
+  ['Wind down', [
+    ['Screens off', 30, 1, 1], ['Read', 20, 1, 1], ['Sleep', 480, 1, 1],
+  ]],
 ];
 function seedLib() {
   const out = [];
@@ -1187,10 +1213,15 @@ function seedLib() {
 }
 const seedVariant = name => ({ id: uid(), name, items: {} });
 function seedState() {
+  /* Routines, not times of day. "Midday" describes the clock; "Deep Work"
+     describes what the block of time is FOR, which is the whole idea of the
+     app — blocks group into routines, routines group into days. Four is the
+     minimum that shows the shape without prescribing a life. */
   const lanes = [
-    { id: uid(), name: 'Morning', start: '06:00', target: '09:00' },
-    { id: uid(), name: 'Midday', start: '12:00', target: '' },
-    { id: uid(), name: 'Evening', start: '18:00', target: '22:30' },
+    { id: uid(), name: 'Morning',   start: '06:00', target: '08:00' },
+    { id: uid(), name: 'Deep Work', start: '09:00', target: '12:00' },
+    { id: uid(), name: 'Training',  start: '17:00', target: '18:30' },
+    { id: uid(), name: 'Wind Down', start: '21:00', target: '22:30' },
   ];
   const v = seedVariant('Weekday');
   lanes.forEach(l => v.items[l.id] = []);
@@ -3457,6 +3488,13 @@ function selfTest() {
   const rc = n => n.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 200, clientY: 200 }));
   const enter = n => n.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
   const chip = nm => [...document.querySelectorAll('.chip')].find(c => c.textContent.includes(nm));
+  /* ── the nth block in the bin, whatever it happens to be ──
+     These checks used to name blocks: chip('Coffee'), chip('Journal'). Trimming
+     the starter list to a shorter, more generic set broke four of them, which
+     is a test failing because the DEFAULTS changed rather than because the
+     BEHAVIOUR did. A test that pins the contents of an editable list is testing
+     the wrong thing. */
+  const nthChip = i => [...document.querySelectorAll('.chip')][i];
   const bricks = () => [...document.querySelectorAll('.brick')];
   const tap = n => { const r = n.getBoundingClientRect(); pd(n, r.x + 25, r.y + 4); pu(r.x + 25, r.y + 4); };
 
@@ -3464,10 +3502,10 @@ function selfTest() {
     S = seedState(); S.view = 'day'; closeModal(); render();
     const L = S.lanes[0].id, L2 = S.lanes[1].id;
 
-    ok('bin block: single click adds it', () => { tap(chip('Coffee')); return items(L).length === 1 || 'got ' + items(L).length; });
-    ok('bin block: clicking twice adds two', () => { tap(chip('Journal')); return items(L).length === 2 || 'got ' + items(L).length; });
+    ok('bin block: single click adds it', () => { tap(nthChip(0)); return items(L).length === 1 || 'got ' + items(L).length; });
+    ok('bin block: clicking twice adds two', () => { tap(nthChip(1)); return items(L).length === 2 || 'got ' + items(L).length; });
     ok('bin block: drag into a routine', () => {
-      const c = chip('Lift'), r = c.getBoundingClientRect(), t = document.querySelectorAll('.lane')[1].getBoundingClientRect();
+      const c = nthChip(2), r = c.getBoundingClientRect(), t = document.querySelectorAll('.lane')[1].getBoundingClientRect();
       pd(c, r.x + 25, r.y + 4); pm(r.x + 40, r.y + 30); pm(t.x + t.width / 2, t.y + 2); pu(t.x + t.width / 2, t.y + 2);
       return items(L2).length === 1 || 'landed ' + items(L2).length;
     });
@@ -3529,7 +3567,7 @@ function selfTest() {
       return (it.daysEx && it.days.join('') === '1111111') || 'daysEx ' + !!it.daysEx + ' days ' + it.days.join('');
     });
     ok('right-click: routine menu opens', () => { rc(document.querySelector('.lane-head')); const n = document.querySelectorAll('.ctxmenu .mi').length; closeMenu(); return n > 5 || 'items ' + n; });
-    ok('right-click: bin menu opens', () => { rc(chip('Coffee')); const n = document.querySelectorAll('.ctxmenu .mi').length; closeMenu(); return n >= 5 || 'items ' + n; });
+    ok('right-click: bin menu opens', () => { rc(nthChip(0)); const n = document.querySelectorAll('.ctxmenu .mi').length; closeMenu(); return n >= 5 || 'items ' + n; });
     ok('check-off: ticking everything resets the list', () => {
       const vid = routineForToday(), td = todaysBlocks(vid);
       if (!td.length) return 'nothing scheduled today';

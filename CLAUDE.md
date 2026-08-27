@@ -4,6 +4,13 @@ The master brief. Every app in this repo obeys it. App-specific briefs sit insid
 their own folder, govern that folder only, and may add rules but never contradict
 these. `arc/CLAUDE.md` is one, and it is the model for the rest.
 
+**`DOCTRINE.md` sits beside this file.** This one says what the suite *is* —
+the data model, the constraints, the things that must never break. That one says
+what each app is *for*, and what good means inside it. A change can obey every
+rule here and still be wrong, because it made an app worse at its one job.
+
+Read `DOCTRINE.md` before building a feature. Read this before touching data.
+
 ## What this is
 
 A suite of small, single-file apps that share one brain. Each one opens on its
@@ -99,6 +106,7 @@ Do not break these. Ask first if you think one needs to change.
 
 ```
 CLAUDE.md          this file
+DOCTRINE.md        what each app is FOR, and the laws every app obeys
 HOWTO.md           how Tom adds an app or a theme, in plain language
 index.html         the home screen: widget grid, app dock, data authority
 shared/            the foundation, loaded by every app

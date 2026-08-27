@@ -535,13 +535,97 @@ TRAIN.cats = function () { return Rec.map('excat'); };
    else. Made once, and only when there are none: an import brings its own and
    must not find these sitting in the way. */
 TRAIN.DEFAULT_CATS = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core', 'Cardio'];
+
+/* ── the movements it opens with ──
+   DOCTRINE law 1: ship it full. An empty log is not a clean slate, it is a
+   chore standing between you and the first set, done standing at a rack.
+
+   A standard set of gym movements written here — not a copy of anyone's data
+   file. These are the common names of exercises, organised the way a gym is,
+   and they are deliberately generic: DOCTRINE law 2 says a default is what a
+   stranger would also want. Tom's own 270 come across from his FitNotes
+   backup and simply merge alongside these.
+
+   Every one is editable and deletable from the moment it appears. Nothing here
+   is protected, because a list you cannot prune is worse than a short one.
+
+   `kind` 0 is weight-and-reps, 1 is cardio (distance and time), 2 is
+   bodyweight-and-reps. `inc` is the weight step the plus button uses. */
+TRAIN.DEFAULT_EX = {
+  Chest: [
+    ['Barbell Bench Press', 0], ['Incline Barbell Bench Press', 0],
+    ['Decline Barbell Bench Press', 0], ['Dumbbell Bench Press', 0],
+    ['Incline Dumbbell Bench Press', 0], ['Dumbbell Fly', 0],
+    ['Incline Dumbbell Fly', 0], ['Cable Fly', 0], ['Cable Crossover', 0],
+    ['Chest Press Machine', 0], ['Pec Deck', 0], ['Push Up', 2],
+    ['Incline Push Up', 2], ['Decline Push Up', 2], ['Dip (Chest)', 2],
+  ],
+  Back: [
+    ['Deadlift', 0], ['Rack Pull', 0], ['Barbell Row', 0], ['Pendlay Row', 0],
+    ['T-Bar Row', 0], ['Dumbbell Row', 0], ['Chest Supported Row', 0],
+    ['Seated Cable Row', 0], ['Lat Pulldown', 0], ['Close Grip Lat Pulldown', 0],
+    ['Straight Arm Pulldown', 0], ['Pull Up', 2], ['Chin Up', 2],
+    ['Inverted Row', 2], ['Shrug', 0], ['Dumbbell Shrug', 0],
+    ['Back Extension', 2], ['Good Morning', 0],
+  ],
+  Shoulders: [
+    ['Overhead Press', 0], ['Seated Barbell Press', 0], ['Dumbbell Shoulder Press', 0],
+    ['Arnold Press', 0], ['Push Press', 0], ['Lateral Raise', 0],
+    ['Cable Lateral Raise', 0], ['Front Raise', 0], ['Rear Delt Fly', 0],
+    ['Face Pull', 0], ['Upright Row', 0], ['Shoulder Press Machine', 0],
+  ],
+  Legs: [
+    ['Back Squat', 0], ['Front Squat', 0], ['Box Squat', 0], ['Goblet Squat', 0],
+    ['Hack Squat', 0], ['Leg Press', 0], ['Bulgarian Split Squat', 0],
+    ['Walking Lunge', 0], ['Reverse Lunge', 0], ['Step Up', 0],
+    ['Romanian Deadlift', 0], ['Stiff Leg Deadlift', 0], ['Sumo Deadlift', 0],
+    ['Leg Extension', 0], ['Leg Curl', 0], ['Seated Leg Curl', 0],
+    ['Hip Thrust', 0], ['Glute Bridge', 0], ['Calf Raise', 0],
+    ['Seated Calf Raise', 0], ['Hip Abduction', 0], ['Hip Adduction', 0],
+  ],
+  Arms: [
+    ['Barbell Curl', 0], ['EZ Bar Curl', 0], ['Dumbbell Curl', 0],
+    ['Hammer Curl', 0], ['Incline Dumbbell Curl', 0], ['Preacher Curl', 0],
+    ['Concentration Curl', 0], ['Cable Curl', 0], ['Close Grip Bench Press', 0],
+    ['Skullcrusher', 0], ['Overhead Tricep Extension', 0], ['Tricep Pushdown', 0],
+    ['Rope Pushdown', 0], ['Dumbbell Kickback', 0], ['Dip (Triceps)', 2],
+    ['Wrist Curl', 0], ['Reverse Wrist Curl', 0], ['Farmer\u2019s Walk', 0],
+  ],
+  Core: [
+    ['Plank', 2], ['Side Plank', 2], ['Crunch', 2], ['Sit Up', 2],
+    ['Hanging Leg Raise', 2], ['Lying Leg Raise', 2], ['Cable Crunch', 0],
+    ['Russian Twist', 0], ['Ab Wheel Rollout', 2], ['Mountain Climber', 2],
+    ['Dead Bug', 2], ['Bird Dog', 2], ['Pallof Press', 0], ['Hollow Hold', 2],
+  ],
+  Cardio: [
+    ['Running', 1], ['Treadmill', 1], ['Walking', 1], ['Incline Walk', 1],
+    ['Cycling', 1], ['Stationary Bike', 1], ['Rowing Machine', 1],
+    ['Elliptical', 1], ['Stair Climber', 1], ['Swimming', 1],
+    ['Jump Rope', 1], ['Assault Bike', 1],
+  ],
+};
+
+/* Made once, and only when there are none: an import brings its own and must
+   not find these sitting in the way. */
 TRAIN.seedCats = function () {
   if (Object.keys(TRAIN.cats()).length) return 0;
+  var made = 0;
   TRAIN.DEFAULT_CATS.forEach(function (nm, i) {
-    Rec.set('excat', null, nm.toLowerCase(), { name: nm, slot: i, ord: i });
+    var catId = nm.toLowerCase();
+    Rec.set('excat', null, catId, { name: nm, slot: i, ord: i });
+    (TRAIN.DEFAULT_EX[nm] || []).forEach(function (row, j) {
+      var name = row[0], kind = row[1];
+      Rec.set('exercise', null, TRAIN.newId(), {
+        name: name, cat: catId, kind: kind,
+        /* 2.5 on a bar, 1 on anything you hold or hang from */
+        inc: kind === 0 ? 2.5 : 1,
+        rest: 0, unit: 0, fav: 0, note: '', graph: 0, ord: j,
+      });
+      made++;
+    });
   });
   TRAIN.reindex();
-  return TRAIN.DEFAULT_CATS.length;
+  return made;
 };
 
 /* Add one by name, for the "+ New category" route out of the exercise form. */
@@ -3653,6 +3737,14 @@ TRAIN.firstRun = function () {
 /* ═══════════════════ BOOT ═══════════════════ */
 function boot() {
   TRAIN.reindex();
+  /* ── DOCTRINE law 1: ship it full ──
+     Seed before the first draw, so the very first thing on screen is a working
+     app rather than an invitation to go and build one.
+
+     Only on a genuinely untouched store: no categories, no exercises, no sets.
+     Anyone who has ever logged anything, or imported a FitNotes backup, has a
+     list already and must not find a hundred strangers mixed into it. */
+  if (!Rec.count('excat') && !Rec.count('exercise') && !Rec.count('set')) TRAIN.seedCats();
   TRAIN.restRestore();
   draw();
   if (!Rec.setting(APP.id, 'seen') && !Rec.count('set')) {
