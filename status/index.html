@@ -122,6 +122,17 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 /* ── the hero number ── */
 .hero{font-family:var(--font-mono);font-size:var(--f-8);font-weight:600;line-height:1.05;letter-spacing:-.02em}
 /* the rank, and the number behind it */
+/* the day card's top line: calories on the left, rank on the right */
+.islerow{display:flex;align-items:flex-start;gap:var(--s-3)}
+.islehero{flex:1;min-width:0}
+.rankbadge{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-2);
+  background:none;border:0;padding:0;cursor:pointer;color:inherit;font:inherit}
+.rankbadge .rk{width:46px;height:46px;display:flex;align-items:center;
+  justify-content:center;font-family:var(--font-display);font-size:var(--f-6);
+  font-weight:700;line-height:1;border:2px solid;border-radius:var(--radius-md)}
+.rankbadge .rkm{display:flex;flex-direction:column;text-align:left;line-height:1.2}
+.rankbadge .rkm b{font-family:var(--font-mono);font-size:var(--f-2)}
+.rankbadge .rkm i{font-style:normal;font-size:var(--f-1);color:var(--text-muted)}
 .rankrow{display:flex;align-items:center;gap:var(--s-4);margin:var(--s-3) 0}
 .rankmark{width:96px;height:96px;flex:0 0 auto;display:flex;align-items:center;
   justify-content:center;font-family:var(--font-display);font-size:var(--f-9);
@@ -2910,9 +2921,19 @@ function drawNow(m) {
 
   const left = ct.v - Math.round(t.kcal);
   const hero = el('div', 'hero', left.toLocaleString() + '<span class="u">calories left of ' + ct.v.toLocaleString() + '</span>');
-  hero.style.marginBottom = 'var(--s-4)';
   if (left < 0) hero.style.color = 'var(--warn)';
-  c.appendChild(hero);
+
+  /* The rank sits up here beside the calories, because this is the screen he
+     opens and the rank is the one-glance answer to how it is going. The big
+     letter is the LAST SEVEN COMPLETED DAYS and does not move during the day;
+     today is the small figure under it, so a bad morning never appears to
+     change a rank that has already been earned. */
+  const top = el('div', 'islerow');
+  const heroBox = el('div', 'islehero'); heroBox.appendChild(hero);
+  top.appendChild(heroBox);
+  top.appendChild(rankBadge());
+  top.style.marginBottom = 'var(--s-4)';
+  c.appendChild(top);
 
   const g = el('div', 'tiles');
   liveFields().filter(f => dueToday(f, d)).forEach(f => {
@@ -3336,29 +3357,35 @@ function drawMoney(m) {
 
 /* ══════════════ ADHERENCE, AND THE RANK IT EARNS ══════════════
 
-   Tom gave three of the bands: S at 95 and above, A at 88 to 94, and F is
-   failing. B, C, D and E are inferred from the spacing of the two he gave,
-   and they are in one place so they are one edit to change:
+   THE PILLARS. Five things build a physique and they are the only things
+   scored: protein, sleep, steps, calories and training. Weight, mood and
+   everything else is tracked and never scored - a number with no target is
+   not an instruction, and scoring mood would be inventing a pass mark for how
+   somebody felt.
 
-     S  95+      everything, essentially
-     A  88-94    his number
-     B  80-87
-     C  70-79
-     D  60-69
-     E  50-59
-     F  under 50   failing
+   The list can be changed. It is deliberately not on the main settings screen,
+   because a score you can quietly redefine is a score that means nothing.
 
-   WHAT ADHERENCE MEANS HERE, stated because it is a choice and not a fact:
-   the share of TARGET OPPORTUNITIES that were met. Every tracked thing that
-   has a target and was due that day is one opportunity. Meeting it counts;
-   missing it counts against; not logging it at all counts as a miss, because
-   a target you did not measure is a target you did not hit.
+   THE BANDS. Tom set S and A and said F is failing; the middle is spaced from
+   those two and lives in one array, so it is one edit.
 
-   Protein and calories are opportunities too - they are targets like any
-   other, and for a coach they are the two that matter most.
+   NOTHING IS PASS OR FAIL. Six and a half hours of a seven hour target is
+   most of a night's sleep, not a zero. Every pillar scores between 0 and 1:
+   full marks within 5% of target, nothing at all once 20% away, and a straight
+   line between. Going OVER a target you are meant to reach - protein, sleep,
+   steps - is full marks and never more, so a huge day cannot pad the week.
+   Calories taper both ways, because both directions are a miss.
 
-   A thing with no target is not counted at all. Mood has no target and never
-   will; scoring it would be inventing a pass mark for how somebody felt. */
+   TRAINING IS NOT IN THE AVERAGE. It raises the grade a whole letter, and
+   without it S is unreachable. That shape is deliberate: it is the strongest
+   lever in the score without ever taking anything away from you, which is
+   what CLAUDE.md means by "never remove earned progress" and "design for
+   month 6, not week 2". A penalty would win week two and lose month six.
+
+   TWO CAPS, one rule. A day cannot exceed A if it was a rest day, or if the
+   day is not over yet. Rest matters and you cannot rest your way to a
+   physique; and at eleven in the morning nobody has earned an S, because the
+   hard pillars have not happened yet.                                        */
 
 const tok = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
 
@@ -3373,53 +3400,146 @@ const RANKS = [
 ];
 const rankFor = pct => RANKS.find(r => pct >= r.at) || RANKS[RANKS.length - 1];
 const rankColour = k => tok('--rank-' + k) || tok('--accent');
+const rankUp = (k, n) => {
+  const i = RANKS.findIndex(r => r.k === k);
+  return RANKS[Math.max(0, i - (n || 1))].k;
+};
+const rankCap = (k, cap) => {
+  const i = RANKS.findIndex(r => r.k === k), c = RANKS.findIndex(r => r.k === cap);
+  return i < c ? cap : k;
+};
 
-/* One day: how many targets were up, and how many were met. */
+/* full marks within FULL of target, nothing by ZERO away, straight line between */
+const FULL = 0.05, ZERO = 0.20;
+function closeness(v, target, both) {
+  if (target == null || !target) return null;
+  if (v == null) return 0;
+  const off = (v - target) / target;
+  if (!both && off >= 0) return 1;             /* over a floor target is full marks */
+  const d = Math.abs(off);
+  if (d <= FULL) return 1;
+  if (d >= ZERO) return 0;
+  return 1 - (d - FULL) / (ZERO - FULL);
+}
+
+/* ── which five, and when each one settles ──
+   The times are the user's. A pillar that has not settled is not counted
+   against today, which is the whole reason today can be scored at all. */
+const PILLARS = () => S.get('pillars', ['protein', 'sleep', 'steps', 'kcal', 'training']);
+const SETTLE = () => S.get('settle', { sleep: 10, steps: 20, kcal: 21, protein: 21, training: 20 });
+const settledYet = id => {
+  const h = num(SETTLE()[id], 21); return new Date().getHours() >= (h == null ? 21 : h);
+};
+
+/* Training comes from TRAIN if it is there, and from a tracked yes/no in here
+   if it is not. Naming a body part is itself a yes. */
+function trainedOn(date) {
+  if (Rec.get('session', date, '')) return true;
+  if (Rec.all('set', { date: date }).length) return true;
+  const f = Object.values(fields()).filter(x => /^train/i.test(x.id) || /training/i.test(x.label || ''))[0];
+  if (f && logged(date, f.id)) return true;
+  return false;
+}
+
+/* ── one day ── */
 function dayScore(date) {
-  let met = 0, of = 0; const miss = [], hit = [];
+  const live = PILLARS(), parts = [], pending = [];
+  const today = date === Day.today();
+  const T = TARGETS(), tot = dayTotals(date), ate = meals(date).length > 0;
+
+  const add = (id, label, got) => {
+    if (today && !settledYet(id)) { pending.push(label); return; }
+    parts.push({ id: id, label: label, score: got });
+  };
+
+  if (live.indexOf('protein') > -1)
+    add('protein', 'Protein', closeness(ate ? num(tot.p, 0) : null, num(T.p, 0), false));
+  if (live.indexOf('kcal') > -1)
+    add('kcal', 'Calories', closeness(ate ? num(tot.kcal, 0) : null, num(T.kcal, 0), true));
+
   Object.values(fields()).forEach(f => {
     if (!f.on || f.target == null || f.target === '' || !dueToday(f, date)) return;
-    of++;
-    const v = value(date, f.id);
-    const ok = v != null && (f.dir === 'lte' ? v <= f.target : v >= f.target);
-    if (ok) { met++; hit.push(f.label); } else miss.push(f.label);
+    const id = /sleep/i.test(f.id) ? 'sleep' : /step/i.test(f.id) ? 'steps' : f.id;
+    if (live.indexOf(id) === -1) return;
+    add(id, f.label, closeness(value(date, f.id), num(f.target, 0), f.dir === 'lte'));
   });
-  /* the macros, which are targets in their own right */
-  const T = TARGETS(), tot = dayTotals(date);
-  [['p', 'Protein', 'gte'], ['kcal', 'Calories', 'lte']].forEach(([k, label, dir]) => {
-    const t = num(T[k], 0) || 0; if (!t) return;
-    of++;
-    const v = num(tot[k], 0) || 0;
-    /* a day with nothing logged is a miss, not a free pass */
-    const any = meals(date).length > 0;
-    const ok = any && (dir === 'lte' ? v <= t : v >= t);
-    if (ok) { met++; hit.push(label); } else miss.push(label);
-  });
-  return { met: met, of: of, hit: hit, miss: miss };
+
+  const scored = parts.filter(p => p.score != null);
+  const pct = scored.length ? Math.round(scored.reduce((a, p) => a + p.score, 0) / scored.length * 100) : null;
+  return {
+    date: date, pct: pct, parts: scored, pending: pending,
+    trained: trainedOn(date),
+    rest: !!(Rec.get('day', date, '') || {}).rest,
+    partial: pending.length > 0,
+  };
 }
 
-/* A stretch of days, and what it earns. */
+/* ── a stretch of days ──
+   Today is never in here. It moves all day and a rank that moves all day is
+   one you stop reading; it is shown beside this instead. */
 function adherence(days) {
-  const end = Day.today();
-  let met = 0, of = 0; const missCount = {}, dayPct = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const d = Day.shift(end, -i);
-    const s = dayScore(d);
-    met += s.met; of += s.of;
-    s.miss.forEach(m => { missCount[m] = (missCount[m] || 0) + 1; });
-    dayPct.push({ d: d, pct: s.of ? Math.round(s.met / s.of * 100) : null });
-  }
-  const pct = of ? Math.round(met / of * 100) : 0;
-  const worst = Object.entries(missCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  return { pct: pct, met: met, of: of, rank: rankFor(pct), worst: worst,
-           days: days, dayPct: dayPct };
+  const rows = [];
+  for (let i = days; i >= 1; i--) rows.push(dayScore(Day.shift(Day.today(), -i)));
+  const scored = rows.filter(r => r.pct != null);
+  /* Scored and logged are different questions: an empty day scores zero, which
+     is the point, but calling it "logged" is a lie. */
+  const touched = rows.filter(r => r.parts.some(p => p.score > 0) || r.trained);
+  const pct = scored.length ? Math.round(scored.reduce((a, r) => a + r.pct, 0) / scored.length) : 0;
+
+  /* training is a letter, not an average */
+  const sessions = rows.filter(r => r.trained).length;
+  const want = num(S.get('trainPerWeek', 4), 4) * (days / 7);
+  const hitTraining = sessions >= Math.floor(want);
+
+  let k = rankFor(pct).k;
+  if (hitTraining) k = rankUp(k, 1);
+  else k = rankCap(k, 'A');       /* no training, no S - a ceiling, never a clawback */
+
+  /* what is costing the most, by how much it gave up rather than by count */
+  const lost = {};
+  rows.forEach(r => r.parts.forEach(p => {
+    lost[p.label] = (lost[p.label] || 0) + (1 - p.score);
+  }));
+  const worst = Object.entries(lost).filter(w => w[1] > 0.5)
+    .sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  return { pct: pct, rank: RANKS.find(r => r.k === k), days: days, rows: rows,
+           sessions: sessions, want: Math.floor(want), hitTraining: hitTraining,
+           worst: worst, scoredDays: scored.length, loggedDays: touched.length };
 }
 
-/* ── the card on the trends screen ── */
+/* Today on its own, capped at A while it is unfinished or was a rest day. */
+function todayScore() {
+  const d = dayScore(Day.today());
+  if (d.pct == null) return d;
+  let k = rankFor(d.pct).k;
+  if (d.trained) k = rankUp(k, 1);
+  if (d.partial) k = rankCap(k, 'A');
+  if (d.rest) k = rankCap(k, 'A');
+  d.rank = RANKS.find(r => r.k === k);
+  return d;
+}
+
+/* ── the badge ── */
+function rankBadge() {
+  const a = adherence(7), t = todayScore();
+  const w = el('button', 'rankbadge mb-press mb-tap');
+  w.title = 'How the last 7 days went. Tap for the working.';
+  w.innerHTML =
+    '<span class="rk" style="color:' + rankColour(a.rank.k) + ';border-color:'
+      + rankColour(a.rank.k) + '">' + a.rank.k + '</span>' +
+    '<span class="rkm"><b>' + a.pct + '%</b>' +
+    '<i>' + (t.pct == null ? 'today not started'
+      : 'today ' + t.pct + '%' + (t.partial ? ' so far' : '')) + '</i></span>';
+  w.onclick = () => { TAB = 'trends'; Mobile.feedback('nav'); draw(); };
+  return w;
+}
+
+/* ── the full working, on Trends ── */
 function rankCard() {
-  const days = S.get('rankDays', 7);
+  const days = num(S.get('rankDays', 7), 7) || 7;
   const a = adherence(days);
-  const c = card('RANK', a.of ? a.met + ' of ' + a.of + ' targets' : 'no targets set');
+  const c = card('RANK', a.loggedDays + ' of ' + days + ' days logged');
 
   const seg = el('div', 'seg');
   [[7, '7 days'], [30, '30 days'], [90, '90 days']].forEach(([n, lbl]) => {
@@ -3433,18 +3553,39 @@ function rankCard() {
   head.innerHTML =
     '<div class="rankmark" style="color:' + rankColour(a.rank.k) + ';border-color:'
       + rankColour(a.rank.k) + '">' + a.rank.k + '</div>' +
-    '<div class="rankside"><div class="hero">' + a.pct + '<span class="u">% adherence</span></div>' +
-    '<div class="lb">' + esc(a.rank.say) + ' &middot; ' + a.met + ' of ' + a.of +
-    ' targets met over ' + days + ' days</div></div>';
+    '<div class="rankside"><div class="hero">' + a.pct + '<span class="u">%</span></div>' +
+    '<div class="lb">' + esc(a.rank.say) + '</div></div>';
   c.appendChild(head);
 
+  /* training, said plainly, because it is the only thing that moves a letter */
+  c.appendChild(el('div', 'note',
+    a.hitTraining
+      ? '<b>' + a.sessions + ' sessions</b> against ' + a.want + '. That is a whole '
+        + 'letter, and it is the only way to reach S.'
+      : '<b>' + a.sessions + ' sessions</b> against ' + a.want + '. Training raises '
+        + 'the grade a letter, and without it S is out of reach. It never takes '
+        + 'anything away.'));
+
   if (a.worst.length) {
-    c.appendChild(el('div', 'note', 'Costing you the most: ' +
-      a.worst.map(w => esc(w[0]) + ' (' + w[1] + ')').join(', ') + '.'));
+    c.appendChild(el('div', 'note', 'Costing the most: ' +
+      a.worst.map(w => esc(w[0])).join(', ') + '.'));
   }
-  if (!a.of) {
-    c.appendChild(el('div', 'note', 'Nothing has a target yet, so there is nothing '
-      + 'to score. Give a tracked thing a target and this starts working.'));
+  if (!a.loggedDays) {
+    c.appendChild(el('div', 'note', 'Nothing logged in this stretch, so every '
+      + 'target counts as missed. It is an honest F rather than an empty one.'));
+  }
+
+  /* today, kept out of the number above */
+  const t = todayScore();
+  c.appendChild(el('label', 'fl', 'Today, so far'));
+  if (t.pct == null) {
+    c.appendChild(el('div', 'note', 'Nothing due yet today.'));
+  } else {
+    c.appendChild(el('div', 'note',
+      '<b>' + t.pct + '%</b>' + (t.rank ? ' &middot; ' + t.rank.k : '') +
+      (t.partial ? ' &mdash; still going, so it cannot beat A yet. Waiting on '
+        + t.pending.map(esc).join(', ') + '.' : '') +
+      (t.rest ? ' Rest day, which tops out at A.' : '')));
   }
 
   const bar = el('div', 'btns');
@@ -3455,64 +3596,58 @@ function rankCard() {
   bar.appendChild(story); bar.appendChild(feed);
   c.appendChild(el('label', 'fl', 'Share it'));
   c.appendChild(bar);
-  c.appendChild(el('div', 'note', 'Story is 1080 by 1920. Post is 1080 by 1350, '
-    + 'which is the tallest a feed post is allowed to be and so the biggest it '
-    + 'lands on a phone. Both are drawn in the theme you are wearing.'));
+  c.appendChild(el('div', 'note', 'Story is 1080 by 1920, post is 1080 by 1350 &mdash; '
+    + 'the tallest a feed post may be, so the biggest it lands on a phone. Both '
+    + 'are drawn in the theme you are wearing.'));
   return c;
 }
 
 /* ── the picture ──
-   Drawn rather than screenshotted, so it is the right size, the right shape
-   and readable at a glance on a phone in a feed. It takes its colours from
-   whatever theme is on, which is the whole reason STYLE exists. */
+   Drawn rather than screenshotted, so it is the right size and readable at a
+   glance in a feed. Its colours come from the theme, which is the whole
+   reason STYLE exists. */
 function shareCard(a, kind) {
   const W = 1080, H = kind === 'story' ? 1920 : 1350;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const x = cv.getContext('2d');
   const T = k => tok(k) || '#000';
-  const disp = (tok('--font-display') || 'system-ui').replace(/^\s+/, '');
-  const body = (tok('--font-body') || 'system-ui').replace(/^\s+/, '');
+  const disp = tok('--font-display') || 'system-ui';
+  const body = tok('--font-body') || 'system-ui';
 
   x.fillStyle = T('--bg'); x.fillRect(0, 0, W, H);
-  /* a panel inset from the edge, so it reads as a card and not as a screenshot */
-  const M = 72, cardTop = kind === 'story' ? 300 : 120;
-  const cardH = H - cardTop - M;
-  x.fillStyle = T('--surface-1');
-  x.fillRect(M, cardTop, W - M * 2, cardH);
+  const M = 72, top = kind === 'story' ? 300 : 120, cardH = H - top - M;
+  x.fillStyle = T('--surface-1'); x.fillRect(M, top, W - M * 2, cardH);
 
   const accent = rankColour(a.rank.k);
-  /* the letter, as big as it can honestly be */
-  const letterSize = kind === 'story' ? 520 : 400;
-  x.font = '700 ' + letterSize + 'px ' + disp;
-  x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  const size = kind === 'story' ? 500 : 380;
+  x.textAlign = 'center';
+  x.font = '700 ' + size + 'px ' + disp;
   x.fillStyle = accent;
-  const letterY = cardTop + letterSize * 0.82 + 60;
-  x.fillText(a.rank.k, W / 2, letterY);
+  const ly = top + size * 0.82 + 56;
+  x.fillText(a.rank.k, W / 2, ly);
 
   x.font = '600 96px ' + body; x.fillStyle = T('--text-1');
-  x.fillText(a.pct + '%', W / 2, letterY + 130);
+  x.fillText(a.pct + '%', W / 2, ly + 128);
   x.font = '400 40px ' + body; x.fillStyle = T('--text-muted');
-  x.fillText('adherence over ' + a.days + ' days', W / 2, letterY + 190);
+  x.fillText('adherence over ' + a.days + ' days', W / 2, ly + 186);
   x.font = '400 36px ' + body;
-  x.fillText(a.met + ' of ' + a.of + ' targets met', W / 2, letterY + 246);
+  x.fillText(a.sessions + ' training sessions', W / 2, ly + 240);
 
-  /* a row of days, so the number has something behind it */
-  const dots = a.dayPct.slice(-Math.min(a.dayPct.length, 30));
-  const dw = (W - M * 2 - 80) / dots.length, dy = letterY + 330;
-  dots.forEach((p, i) => {
-    const h = p.pct == null ? 6 : Math.max(6, p.pct / 100 * 150);
-    x.fillStyle = p.pct == null ? T('--surface-3')
-      : rankColour(rankFor(p.pct).k);
+  /* a bar per day, so the number carries its working */
+  const rows = a.rows.slice(-30), dw = (W - M * 2 - 80) / rows.length, dy = ly + 320;
+  rows.forEach((r, i) => {
+    const h = r.pct == null ? 6 : Math.max(6, r.pct / 100 * 150);
+    x.fillStyle = r.pct == null ? T('--surface-3') : rankColour(rankFor(r.pct).k);
     x.fillRect(M + 40 + i * dw, dy + 150 - h, Math.max(3, dw - 6), h);
   });
 
   x.font = '700 34px ' + disp; x.fillStyle = T('--text-muted');
-  x.fillText('STATUS', W / 2, cardTop + cardH - 56);
+  x.fillText('STATUS', W / 2, top + cardH - 56);
 
-  const a2 = document.createElement('a');
-  a2.download = 'status-' + a.rank.k + '-' + a.pct + '-' + kind + '.png';
-  a2.href = cv.toDataURL('image/png');
-  a2.click();
+  const link = document.createElement('a');
+  link.download = 'status-' + a.rank.k + '-' + a.pct + '-' + kind + '.png';
+  link.href = cv.toDataURL('image/png');
+  link.click();
   UI.toast('Saved a ' + (kind === 'story' ? '1080&times;1920 story' : '1080&times;1350 post'));
 }
 
