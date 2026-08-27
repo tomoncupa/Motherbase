@@ -311,7 +311,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
     <div class="seg" id="soloPick" title="Which clip to work on"><button data-solo="A" class="on">Left</button><button data-solo="B">Right</button></div>
     <div id="rail">
       <button class="railbtn on" data-tool="move" title="Move / interact (V)" data-icon="drag" data-icon-size="16"><small>Move</small></button>
-      <button class="railbtn" data-tool="anno" title="Annotate (A)" data-icon="edit" data-icon-size="16"><small>Draw</small></button>
+      <button class="railbtn" data-tool="anno" title="Annotate (W)" data-icon="edit" data-icon-size="16"><small>Draw</small></button>
       <button class="railbtn" data-tool="path" title="Bar path (B)">◍<small>Path</small></button>
       <button class="railbtn" data-tool="rep" title="Rep speed / tempo (T)" data-icon="timer" data-icon-size="16"><small>Reps</small></button>
       <button class="railbtn" data-tool="pose" title="Pose skeleton + joint angles (P)" data-icon="body" data-icon-size="16"><small>Pose</small></button>
@@ -433,9 +433,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
             <div class="dropzone" data-pane="A"><div class="big">Drop a video here</div><div>or</div><button class="btn" data-load="A">Choose file…</button></div>
           </div>
           <div class="transport" data-pane="A">
-            <button class="btn sq" data-act="fprev" title="Frame back">⏴|</button>
-            <button class="btn sq" data-act="play" title="Play / pause" data-icon="play" data-icon-size="15"></button>
-            <button class="btn sq" data-act="fnext" title="Frame forward">|⏵</button>
+            <button class="btn sq" data-act="play" title="Play / pause (Space)" data-icon="play" data-icon-size="15"></button>
             <div class="timeline" data-timeline="A">
               <div class="tshade left"></div><div class="tshade right"></div>
               <div class="tplayhead"></div>
@@ -467,9 +465,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
             <div class="dropzone" data-pane="B"><div class="big">Drop a video here</div><div>or</div><button class="btn" data-load="B">Choose file…</button></div>
           </div>
           <div class="transport" data-pane="B">
-            <button class="btn sq" data-act="fprev" title="Frame back">⏴|</button>
-            <button class="btn sq" data-act="play" title="Play / pause" data-icon="play" data-icon-size="15"></button>
-            <button class="btn sq" data-act="fnext" title="Frame forward">|⏵</button>
+            <button class="btn sq" data-act="play" title="Play / pause (Space)" data-icon="play" data-icon-size="15"></button>
             <div class="timeline" data-timeline="B">
               <div class="tshade left"></div><div class="tshade right"></div>
               <div class="tplayhead"></div>
@@ -539,8 +535,6 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
   <div class="univ">
     <div class="group">
       <button class="btn" id="uPlay" title="Play/pause (Space)" data-icon="play" data-icon-size="14">Play</button>
-      <button class="btn sq" id="uFprev" title="Frame back (,)">⏴|</button>
-      <button class="btn sq" id="uFnext" title="Frame forward (.)">|⏵</button>
       <button class="btn sq" id="uRestart" title="Restart (R)" data-icon="refresh" data-icon-size="15"></button>
     </div>
     <div class="divider"></div>
@@ -840,11 +834,15 @@ setupTimeline('A'); setupTimeline('B');
 /* ============================== transport ============================== */
 function frameDur(p){ return 1/(V[p].fps||30); }
 function stepFrame(p,dir){ const v=V[p].video; if(!loaded(p)) return; v.pause(); reflectPlay(p); v.currentTime=clampTime(p, v.currentTime+dir*frameDur(p)); }
+/* Scrubbing is the coarse version of the same move: same clamp, same pause, a
+   second instead of a frame. Held down, the key repeat makes it continuous,
+   which is how you actually find a rep. Shift makes it five. */
+function scrubBy(p,secs){ const v=V[p].video; if(!loaded(p)) return; v.pause(); reflectPlay(p); v.currentTime=clampTime(p, v.currentTime+secs); }
+function stepAll(dir){ activePanes().forEach(p=>stepFrame(p,dir)); }
+function scrubAll(secs){ activePanes().forEach(p=>scrubBy(p,secs)); }
 function reflectPlay(p){ const btn=document.querySelector(`.transport[data-pane="${p}"] [data-act="play"]`); btn.textContent=V[p].video.paused?'▶':'⏸'; updateUplay(); }
 $$('.transport').forEach(tr=>{ const pane=tr.dataset.pane, v=V[pane].video;
   tr.querySelector('[data-act="play"]').addEventListener('click', ()=>{ if(!loaded(pane))return; v.paused?v.play():v.pause(); });
-  tr.querySelector('[data-act="fprev"]').addEventListener('click', ()=>stepFrame(pane,-1));
-  tr.querySelector('[data-act="fnext"]').addEventListener('click', ()=>stepFrame(pane,1));
   tr.querySelector('[data-act="rate"]').addEventListener('change', e=>{ v.playbackRate=parseFloat(e.target.value); });
   v.addEventListener('play',()=>reflectPlay(pane)); v.addEventListener('pause',()=>reflectPlay(pane));
   v.addEventListener('seeked',()=>{ updateTime(pane);
@@ -861,8 +859,8 @@ uPlay.addEventListener('click', ()=>{ activePanes().some(p=>!V[p].video.paused) 
 function playAll(){ const ps=activePanes(); ps.forEach(p=>{ const v=V[p].video, {s,e}=trimOf(p); if(v.currentTime>=e-0.01) v.currentTime=s; });
   if(linked&&ps.length===2) V.B.video.currentTime=clampTime('B',V.A.video.currentTime+syncOffset); ps.forEach(p=>V[p].video.play()); }
 function pauseAll(){ activePanes().forEach(p=>V[p].video.pause()); }
-$('#uFprev').addEventListener('click', ()=>activePanes().forEach(p=>stepFrame(p,-1)));
-$('#uFnext').addEventListener('click', ()=>activePanes().forEach(p=>stepFrame(p,1)));
+/* The frame buttons are gone from the chrome. Q and E do this, which is one
+   fewer thing on camera and quicker than aiming at a 32px target mid-sentence. */
 $('#uRestart').addEventListener('click', ()=>{ pauseAll(); const ps=activePanes(); ps.forEach(p=>V[p].video.currentTime=trimOf(p).s);
   if(linked&&ps.length===2) V.B.video.currentTime=clampTime('B',trimOf('A').s+syncOffset); });
 const uRate=$('#uRate'), uRateVal=$('#uRateVal');
@@ -1368,23 +1366,35 @@ function drawOverlayFrame(){ const dpr=window.devicePixelRatio||1, W=ovCanvas.wi
 window.addEventListener('keydown', e=>{ if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
   switch(e.key){
     case ' ': e.preventDefault(); uPlay.click(); break;
-    case ',': e.preventDefault(); $('#uFprev').click(); break;
-    case '.': e.preventDefault(); $('#uFnext').click(); break;
+    /* Q and E step a frame, A and D scrub. The left hand sits on them and
+       never leaves, which is the point when the take is live: aiming at a
+       32px button mid-sentence is a hesitation, and a hesitation is on the
+       tape. Shift makes a scrub five seconds instead of one. */
+    case 'q': case 'Q': e.preventDefault(); stepAll(-1); break;
+    case 'e': case 'E': e.preventDefault(); stepAll(1); break;
+    case 'a': case 'A': e.preventDefault(); scrubAll(e.shiftKey ? -5 : -1); break;
+    case 'd': case 'D': e.preventDefault(); scrubAll(e.shiftKey ? 5 : 1); break;
+    /* kept, because they cost nothing and some hands already know them */
+    case ',': e.preventDefault(); stepAll(-1); break;
+    case '.': e.preventDefault(); stepAll(1); break;
     case 'ArrowLeft': e.preventDefault(); gotoRep(-1); break;
     case 'ArrowRight': e.preventDefault(); gotoRep(1); break;
     case 's': case 'S': $('#uSync').click(); break;
     case 'l': case 'L': $('#uLink').click(); break;
     case 'r': case 'R': $('#uRestart').click(); break;
     case 'v': case 'V': setTool('move'); break;
-    case 'a': case 'A': setTool('anno'); break;
+    /* Draw moves off A, which scrubbing now owns. W is the key above it. */
+    case 'w': case 'W': setTool('anno'); break;
     case 'b': case 'B': setTool('path'); break;
     case 't': case 'T': setTool('rep'); break;
     case 'p': case 'P': setTool('pose'); break;
     case '1': setView('solo'); break; case '2': setView('side'); break; case '3': setView('stack'); break; case '4': setView('overlay'); break;
     case '[': markRep('A'); break; case ']': markRep('B'); break; } });
 $('#helpBtn').addEventListener('click',()=>toast(
-  '<kbd>Space</kbd> play · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>←</kbd><kbd>→</kbd> rep · <kbd>S</kbd> sync · <kbd>L</kbd> link · <kbd>R</kbd> restart<br>'+
-  '<kbd>V</kbd>move <kbd>A</kbd>draw <kbd>B</kbd>path <kbd>T</kbd>reps <kbd>P</kbd>pose · <kbd>1</kbd>solo <kbd>2</kbd>side <kbd>3</kbd>stack <kbd>4</kbd>overlay · <kbd>[</kbd><kbd>]</kbd> mark'));
+  '<kbd>Space</kbd> play · <kbd>Q</kbd><kbd>E</kbd> a frame · <kbd>A</kbd><kbd>D</kbd> scrub (hold Shift for 5s) · <kbd>←</kbd><kbd>→</kbd> rep<br>'+
+  '<kbd>V</kbd>move <kbd>W</kbd>draw <kbd>B</kbd>path <kbd>T</kbd>reps <kbd>P</kbd>pose · <kbd>1</kbd>solo <kbd>2</kbd>side <kbd>3</kbd>stack <kbd>4</kbd>overlay<br>'+
+  '<kbd>Tab</kbd> tool panel · <kbd>Shift</kbd>+<kbd>Tab</kbd> set analysis · <kbd>H</kbd> hide everything · <kbd>Esc</kbd> back<br>'+
+  '<kbd>S</kbd> sync · <kbd>L</kbd> link · <kbd>R</kbd> restart · <kbd>[</kbd><kbd>]</kbd> mark a rep'));
 
 /* ============================== main loop ============================== */
 function tick(){
@@ -1445,14 +1455,18 @@ setTimeout(()=>toast('Load a clip, then hit <b>⚡ Analyse</b> — it trims, syn
   addEventListener('keydown', e => {
     if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target.tagName || '')) || e.metaKey || e.ctrlKey) return;
     const k = e.key.toLowerCase();
-    if (k === 'tab') { e.preventDefault(); body.classList.toggle('panel-open'); return; }
-    if (k === 'h') { e.preventDefault(); body.classList.toggle('bare'); return; }
-    if (k === 'd') {
+    /* Tab is the tool panel, Shift+Tab the set analysis. Symmetric, and it
+       needs no letter - every letter near the left hand is spoken for now. */
+    if (k === 'tab') {
       e.preventDefault();
-      const dr = document.getElementById('drawer');
-      if (dr) { dr.classList.toggle('collapsed'); dispatchEvent(new Event('resize')); }
+      if (e.shiftKey) {
+        const dr = document.getElementById('drawer');
+        if (dr) { dr.classList.toggle('collapsed'); dispatchEvent(new Event('resize')); }
+      } else body.classList.toggle('panel-open');
       return;
     }
+    if (k === 'h') { e.preventDefault(); body.classList.toggle('bare'); return; }
+
     if (k === 'escape') {
       body.classList.remove('panel-open'); body.classList.remove('bare');
       const dr = document.getElementById('drawer'); if (dr) dr.classList.add('collapsed');
