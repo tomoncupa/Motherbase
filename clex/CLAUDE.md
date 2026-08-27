@@ -65,7 +65,7 @@ reason to invent different ones.
 | `optimizer.js` | Legal play generation and line scoring. |
 | `data.js` | Generated. 186 cards with real Oracle text, plus both decklists. |
 | `readonly.js` | The read-only latch. Blocks every write into Motherbase. |
-| `_smoke.html` | 87 checks, including 11 that prove the latch holds. |
+| `_smoke.html` | 104 checks, including 11 that prove the latch holds. |
 | `tools/build-data.py` | Rebuilds `data.js` from Moxfield and Scryfall. |
 
 **`engine.js` has no DOM and never will.** That is what lets `_smoke.html`
@@ -136,6 +136,36 @@ are eight modifiers or fewer.
 - **Proliferate adds one of each kind already there**, which includes −1/−1. The
   engine never chooses your own −1/−1 counters, because you would not.
 
+## Mana is read off the card, not from a list
+
+`printedTapMana` parses the printed `{T}: Add ...` line and counts the symbols,
+so Devoted Druid gives 1, Sol Ring and The Great Henge give 2, and a card nobody
+special-cased still gets the right number.
+
+It matches a **tap** ability only, and that is the point. "Sacrifice a Goblin:
+Add {R}" is not free mana, it costs a creature, and counting it would have the
+optimizer spend mana that is not there. Over-counting loses games; under-counting
+only costs a play. When in doubt, return less.
+
+Sources that scale with the board cannot be read off the card and keep their own
+cases: Selvala, Gyre Sage, Incubation Druid, Kami, Gaea's Cradle, Fanatic of
+Rhonas (ferocious) and Howlsquad Heavy (max speed only).
+
+**Nissa, Who Shakes the World** adds an extra `{G}` per Forest tapped. In a deck
+with 26 Forests that roughly doubles the land base, so she is handled in
+`manaAvailable` rather than per-permanent.
+
+## Stacking is a display decision
+
+Twenty-six Forests are twenty-six permanents to the rules and one line to a
+person. `groupField()` collapses identical permanents for rendering only. The
+field still holds each one separately, so Gaea's Cradle still counts them.
+
+**Anything carrying counters is never stacked.** Counters are the whole point of
+this app, so each countered permanent keeps its own line and its own stepper. Put
+a counter on one of three Llanowar Elves and it splits out by itself, leaving
+"Llanowar Elves ×2" behind. Same for tapping one of a stack.
+
 ## Rules for the optimizer
 
 - **Only cards actually in hand**, abilities on the battlefield, or the
@@ -167,7 +197,7 @@ There is no Node on this machine. Use the browser:
 py -3 -m http.server 8787 -d "<repo>"
 ```
 
-Open `clex/_smoke.html`. It must say **87 of 87**, or more once you add checks.
+Open `clex/_smoke.html`. It must say **104 of 104**, or more once you add checks.
 Every expected number in it was worked out by hand from the printed Oracle text
 before the engine was run, so a red line means the engine is wrong, not the test.
 

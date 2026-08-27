@@ -558,46 +558,123 @@ window.Clex = (function () {
 
   /* ------------------------------------------------------------- mana */
 
-  /* What a permanent taps for, given the board. Only the sources that actually
-   * scale are modelled precisely; everything else falls back to its printed
-   * production so the total is never silently wrong.                          */
+  /* How much mana a printed "{T}: Add ..." ability actually makes.
+   *
+   * Read from the card text rather than from a list of names, so a card nobody
+   * thought about still gets the right number. It deliberately only matches a
+   * TAP ability: "Sacrifice a Goblin: Add {R}" is not free mana, it costs a
+   * creature, and counting it would have the optimizer spend mana that is not
+   * there. Same for triggered mana like Mana Echoes.
+   *
+   * Returns null when the amount is not a fixed number, so the caller knows to
+   * fall back to a rule of its own rather than guess.                        */
+  function printedTapMana(name) {
+    var c = card(name);
+    if (!c || !c.o) return 0;
+
+    var best = null;
+    c.o.split('\n').forEach(function (line) {
+      if (line.indexOf('{T}') < 0) return;
+
+      /* The cost is everything before the colon. Reject a cost that also wants
+       * mana or a sacrifice: those are not net production. */
+      var colon = line.indexOf(':');
+      if (colon < 0) return;
+      var cost = line.slice(0, colon);
+      var effect = line.slice(colon + 1);
+      if (!/\bAdd\b/.test(effect)) return;
+      if (/sacrifice|discard|pay|exile/i.test(cost)) return;
+      if (/\{[0-9WUBRGCXS]\}/.test(cost)) return;      // {1},{T}: Add ... is not a gain
+
+      /* Variable amounts are somebody else's problem. */
+      if (/\bfor each\b|\bX mana\b|\bequal to\b/i.test(effect)) { best = null; return; }
+
+      var add = effect.split('.')[0];
+      var symbols = add.match(/\{[WUBRGC]\}/g);
+      var amount = symbols ? symbols.length
+                 : /\bone mana\b|\ban additional\b|\bmana of any\b/i.test(add) ? 1
+                 : 0;
+      if (amount > 0 && (best === null || amount > best)) best = amount;
+    });
+    return best;
+  }
+
+  /* What a permanent taps for right now, given the board.
+   * The sources that scale with the board are modelled exactly; everything
+   * else is read off the card. Where neither is possible the answer is 0,
+   * because under-counting costs you a play and over-counting loses a game. */
   function manaFrom(state, p) {
     var n = p.name;
     if (p.tapped) return 0;
+
+    /* --- scales with the board, so it cannot be read off the card --- */
     if (n === 'Incubation Druid') return countersOn(p, P1) > 0 ? 3 : 1;
     if (n === 'Gyre Sage') return countersOn(p, P1);
     if (n === 'Kami of Whispered Hopes') return Math.max(0, powerOf(state, p));
-    if (n === 'Selvala, Heart of the Wilds') {
-      var best = 0;
-      state.field.forEach(function (q) {
-        if (q.controller !== 'you' || !isType(q.name, 'creature')) return;
-        best = Math.max(best, powerOf(state, q));
-      });
-      return best;
+    if (n === 'Selvala, Heart of the Wilds') return greatestPower(state);
+    if (n === 'Gaea\'s Cradle') return myCreatureCount(state);
+    if (n === 'Howlsquad Heavy') {
+      /* Max speed only. Until then it makes nothing, and claiming otherwise
+       * would be inventing mana. */
+      return p.maxSpeed ? countOf(state, 'goblin') : 0;
     }
-    if (n === 'Nykthos, Shrine to Nyx') return 0;   // needs devotion + activation
-    if (n === 'Gaea\'s Cradle') {
-      return state.field.filter(function (q) {
-        return q.controller === 'you' && isType(q.name, 'creature');
-      }).length;
+    if (n === 'Fanatic of Rhonas') {
+      return greatestPower(state) >= 4 ? 4 : 1;        // ferocious
     }
-    if (n === 'Castle Garenbrig') return 1;
-    if (n === 'Sol Ring' || n === 'Ancient Tomb') return 2;
-    if (n === 'Basalt Monolith' || n === 'Grim Monolith') return 3;
-    var c = card(n);
-    if (!c) return 0;
-    if (isType(n, 'land')) return 1;
-    if (c.pm && c.pm.length) return 1;
+    if (n === 'Nykthos, Shrine to Nyx') return 1;      // its {T}: Add {C}; devotion needs an activation
+    if (n === 'Castle Garenbrig') return 1;            // the 4 is creature-spells only
+
+    /* --- everything else, read from the printed ability --- */
+    var printed = printedTapMana(n);
+    if (printed !== null) return printed;
+
     return 0;
+  }
+
+  function greatestPower(state) {
+    var best = 0;
+    state.field.forEach(function (q) {
+      if (q.controller !== 'you' || !isType(q.name, 'creature')) return;
+      best = Math.max(best, powerOf(state, q));
+    });
+    return best;
+  }
+
+  function myCreatureCount(state) {
+    return state.field.filter(function (q) {
+      return q.controller === 'you' && isType(q.name, 'creature');
+    }).length;
+  }
+
+  function countOf(state, type) {
+    return state.field.filter(function (q) {
+      return q.controller === 'you' && isType(q.name, type);
+    }).length;
   }
 
   function manaAvailable(state) {
     var sum = 0;
+    var forests = 0;
+
     state.field.forEach(function (p) {
       if (p.controller !== 'you') return;
+      if (p.tapped) return;
+      /* A land that is also a creature, like Dryad Arbor, is still subject to
+       * summoning sickness. A plain land never is. */
       if (isType(p.name, 'creature') && p.sick && !hasHaste(state, p)) return;
       sum += manaFrom(state, p);
+      if (isType(p.name, 'forest')) forests++;
     });
+
+    /* "Whenever you tap a Forest for mana, add an additional {G}." With this
+     * deck's 26 Forests that is close to doubling the land base, so leaving it
+     * out was quietly costing him a turn. */
+    var nissa = state.field.some(function (p) {
+      return p.controller === 'you' && p.name === 'Nissa, Who Shakes the World' &&
+             !(p.sick && !hasHaste(state, p));
+    });
+    if (nissa) sum += forests;
+
     return sum;
   }
 
@@ -670,6 +747,8 @@ window.Clex = (function () {
     createTokens: createTokens,
 
     manaFrom: manaFrom,
+    printedTapMana: printedTapMana,
+    greatestPower: greatestPower,
     manaAvailable: manaAvailable,
     costOf: costOf,
     hasHaste: hasHaste

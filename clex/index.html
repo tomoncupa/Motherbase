@@ -453,6 +453,30 @@ function renderEngines() {
   });
 }
 
+/* Twenty-six Forests are twenty-six permanents to the rules and one line to a
+ * person. Stacking is a DISPLAY decision only: the field still holds each
+ * permanent separately, so Gaea's Cradle still counts them and Selvala still
+ * reads the right power.
+ *
+ * Anything carrying counters is never stacked. Counters are the whole point of
+ * this app and each one has to stay visible and separately adjustable. So a
+ * stack of three Llanowar Elves collapses, and the moment you put a counter on
+ * one of them it splits out onto its own line by itself.                    */
+function groupField() {
+  const groups = [];
+  const index = {};
+  G.field.forEach(p => {
+    const counters = Object.keys(p.counters || {}).some(k => p.counters[k] > 0);
+    const key = counters
+      ? 'solo:' + p.uid
+      : [p.name, p.tapped ? 't' : '', p.sick ? 's' : '', p.level || 1,
+         p.controller].join('|');
+    if (!index[key]) { index[key] = { key, name: p.name, perms: [] }; groups.push(index[key]); }
+    index[key].perms.push(p);
+  });
+  return groups;
+}
+
 function renderField() {
   const wrap = $('field');
   wrap.innerHTML = '';
@@ -460,7 +484,76 @@ function renderField() {
     wrap.innerHTML = '<div class="empty">Nothing on the battlefield yet.</div>';
     return;
   }
-  G.field.forEach(p => {
+
+  groupField().forEach(group => {
+    if (group.perms.length > 1) return renderStack(wrap, group);
+    renderOne(wrap, group.perms[0]);
+  });
+}
+
+/* One line for many copies, with a stepper that adds and removes copies
+   rather than counters. */
+function renderStack(wrap, group) {
+  const p = group.perms[0];
+  const n = group.perms.length;
+  const row = document.createElement('div');
+  row.className = 'perm';
+
+  const body = document.createElement('div');
+  body.className = 'body';
+  const sub = [];
+  if (p.tapped) sub.push('tapped');
+  if (p.sick) sub.push('sick');
+  const each = C.manaFrom(G, p);
+  if (each > 0) sub.push('taps for ' + each + ' each, ' + (each * n) + ' total');
+  body.innerHTML = '<div class="nm">' + p.name + ' <span class="pt">×' + n + '</span></div>' +
+    (sub.length ? '<div class="sub">' + sub.join(' · ') + '</div>' : '');
+  body.onclick = () => stackMenu(group);
+  row.appendChild(body);
+
+  const st = document.createElement('div');
+  st.className = 'stepper';
+  st.innerHTML = '<button aria-label="One fewer">−</button>' +
+    '<span class="val">' + n + '</span><button aria-label="One more">+</button>';
+  st.children[0].onclick = e => {
+    e.stopPropagation(); snap();
+    C.remove(G, group.perms[group.perms.length - 1].uid);
+    commit('Removed a ' + p.name);
+  };
+  st.children[2].onclick = e => {
+    e.stopPropagation(); snap();
+    C.addPermanent(G, p.name, { tapped: p.tapped, sick: p.sick, level: p.level });
+    commit('Added a ' + p.name);
+  };
+  row.appendChild(st);
+  wrap.appendChild(row);
+}
+
+function stackMenu(group) {
+  const p = group.perms[0];
+  const n = group.perms.length;
+  Mobile.actions(p.name + ' ×' + n, [
+    { label: p.tapped ? 'Untap all ' + n : 'Tap all ' + n,
+      fn: () => { snap(); const t = !p.tapped;
+        group.perms.forEach(q => q.tapped = t); commit(); } },
+    { label: 'Tap one', fn: () => { snap();
+      const free = group.perms.filter(q => !q.tapped)[0];
+      if (free) free.tapped = true; commit(); } },
+    ...(C.isType(p.name, 'creature') ? [{
+      label: 'Put a counter on one of them',
+      note: 'It splits onto its own line',
+      fn: () => { snap();
+        const r = C.putCounters(G, group.perms[0], C.P1, 1);
+        commit(p.name + ' +' + r.placed);
+        showCalc('Put 1 counter on ' + p.name, r); } }] : []),
+    '-',
+    { label: 'Remove all ' + n, kind: 'bad',
+      fn: () => { snap(); group.perms.forEach(q => C.remove(G, q.uid));
+        commit('Removed ' + n + ' × ' + p.name); } }
+  ]);
+}
+
+function renderOne(wrap, p) {
     const isMod = !!C.REPLACE[p.name];
     const n = C.countersOn(p, C.P1);
     const m = C.countersOn(p, C.M1);
@@ -497,7 +590,6 @@ function renderField() {
       row.appendChild(st);
     }
     wrap.appendChild(row);
-  });
 }
 
 function permMenu(p) {

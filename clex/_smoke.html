@@ -278,6 +278,63 @@ function run() {
   ok('cost: The Earth Crystal makes green spells 1 cheaper',
     S.costOf(st, 'Kalonian Hydra') === 4 && S.card('Kalonian Hydra').v === 5);
 
+  /* ------------------------------------------- mana read off the card ---- */
+  /* The amount comes from the printed "{T}: Add ..." line, not a list of
+     names, so a card nobody special-cased still gets the right number. */
+  ok('mana: Devoted Druid taps for 1, read from its own text',
+    S.printedTapMana('Devoted Druid') === 1);
+  ok('mana: Forest taps for 1', S.printedTapMana('Forest') === 1);
+  ok('mana: Sol Ring taps for 2', S.printedTapMana('Sol Ring') === 2);
+  ok('mana: Ancient Tomb taps for 2', S.printedTapMana('Ancient Tomb') === 2);
+  ok('mana: The Great Henge taps for 2, not 1',
+    S.printedTapMana('The Great Henge') === 2, 'it prints {G}{G}');
+  ok('mana: Llanowar Elves taps for 1', S.printedTapMana('Llanowar Elves') === 1);
+  ok('mana: Cavern of Souls counts "one mana of any color" as 1',
+    S.printedTapMana('Cavern of Souls') === 1);
+
+  /* The dangerous direction is over-counting: a mana the optimizer spends and
+     he does not have. A sacrifice is a cost, not free mana. */
+  st = S.newState('krenko');
+  let skirk = S.addPermanent(st, 'Skirk Prospector', { sick: false });
+  ok('mana: Skirk Prospector is NOT free mana (it eats a Goblin)',
+    S.manaFrom(st, skirk) === 0);
+  let altar = S.addPermanent(st, 'Ashnod\'s Altar', { sick: false });
+  ok('mana: Ashnod\'s Altar is NOT free mana (it eats a creature)',
+    S.manaFrom(st, altar) === 0);
+  st = S.newState('clex');
+  /* Urza's Saga gains "{T}: Add {C}" from chapter I, which happens the turn it
+     lands, so 1 is right — and the parser found it inside the granted ability
+     rather than needing to know what a Saga is. */
+  let saga = S.addPermanent(st, 'Urza\'s Saga', { sick: false });
+  ok('mana: Urza\'s Saga taps for 1 once chapter I has resolved',
+    S.manaFrom(st, saga) === 1);
+  ok('mana: and its chapter II token ability is not counted as mana',
+    S.printedTapMana('Urza\'s Saga') === 1, 'the {2},{T} line is rejected');
+  let echoes = S.addPermanent(st, 'Mana Echoes', { sick: false });
+  ok('mana: Mana Echoes is triggered, not a tap ability',
+    S.manaFrom(st, echoes) === 0);
+
+  /* Ferocious. */
+  st = S.newState('clex');
+  let fan = creature(st, 'Fanatic of Rhonas');
+  ok('mana: Fanatic of Rhonas taps for 1 with no big creature',
+    S.manaFrom(st, fan) === 1);
+  creature(st, 'Forgotten Ancient', { '+1/+1': 9 });
+  ok('mana: and for 4 once you control power 4 or greater',
+    S.manaFrom(st, fan) === 4);
+
+  /* Nissa doubles the Forests, which in a 26-Forest deck is the whole turn. */
+  st = S.newState('clex');
+  for (let i = 0; i < 5; i++) S.addPermanent(st, 'Forest', { sick: false });
+  ok('mana: five Forests make 5', S.manaAvailable(st) === 5);
+  S.addPermanent(st, 'Nissa, Who Shakes the World', { sick: false });
+  ok('mana: with Nissa out those same Forests make 10',
+    S.manaAvailable(st) === 10, 'an extra {G} per Forest');
+
+  st = S.newState('clex');
+  for (let i = 0; i < 3; i++) S.addPermanent(st, 'Forest', { sick: false, tapped: true });
+  ok('mana: tapped lands contribute nothing', S.manaAvailable(st) === 0);
+
   /* --------------------------------------------------------- combos --- */
   st = board(['Scurry Oak', 'Ivy Lane Denizen']);
   let found = Combos.detect(st, []);
