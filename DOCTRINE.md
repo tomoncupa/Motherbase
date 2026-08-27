@@ -182,6 +182,58 @@ exact.
 From `CLAUDE.md`, repeated because it is the one that has already cost data.
 Rows, never a blob. `tick` is the single deliberate exception.
 
+### 13. The System is talking, not a person
+
+Set 2026-08-28, after Tom rewrote fifteen strings and every single edit did
+the same thing: **kept the fact, deleted the reason.**
+
+The voice is his: *"like The System. Neutral and mildly helpful but not really
+conversational. Dry but not necessarily human."* A status window in a game,
+not a coach and not a friend. It tells you the state. It does not encourage
+you, explain itself, or make observations.
+
+Mine wrote the fact and then justified it, every time. That is the tell.
+
+**The rules, and each one came out of a line he cut:**
+
+**Say it and stop.** No clause beginning *because*, *so*, *which*, or any
+other that explains a consequence.
+> "Correcting protein does not touch them, because a corrected protein is
+> usually a better label reading rather than a different quantity."
+> → *Fixes the protein only.*
+
+**No encouragement.** Not the app's job.
+> "No streak running yet. One tick starts one." → *No streak data*
+
+**No aphorisms.** A line that sounds quotable is a line being clever at the
+reader.
+> "The future is not a record." → *Tomorrow isn't here yet*
+
+**Plain, common words.** The word the person already uses.
+> "Buzz when the rest is up. Android only." → *Beep when timer is done.
+> (Android only)* — and caveats go in brackets.
+
+**One sentence where you wrote three.**
+> "Everything lives in this browser, on this machine. No account, no server,
+> nothing uploaded." → *Data is stored locally.*
+
+**Sentence case.** Full stop only when it is a whole sentence. `Day complete`
+has none; `No backups have been made.` has one.
+
+**Failure: prefer silence, then bare fact.** Design so it cannot happen. Where
+it can, say what happened and nothing else — no instructions, no apology.
+*Sheet did not answer.* The exception is data at risk, where law 3 wins and it
+must speak.
+
+**A setting gets one help line, always, and always short.** One line under
+every setting, so its absence never reads as an oversight. If the line needs
+two sentences, the setting is named wrong.
+> "How fast old data stops counting, so at 21 a reading from three weeks ago
+> counts half." → *How fast old data stops counting*
+
+**Test:** read it aloud. If any part of it is you explaining your reasoning to
+the person, cut that part. What is left is the copy.
+
 ---
 
 ## The apps
