@@ -10,7 +10,7 @@ step 1 is the one that stops you losing your data.
 
 | | |
 |---|---|
-| **TRAIN** | Training log — exercises, sets, reps, records. Built for a phone. |
+| **TRAIN** | Training log. Exercises, sets, reps, records. Built for a phone. |
 | **STATUS** | Sleep, weight, steps, mood, food, spending, and a grade for the day. Built for a phone. |
 | **BLOCK** | Plan a day as blocks and tick them off. |
 | **ARC** | A canvas for thinking. Notes joined by lines. |
@@ -19,7 +19,7 @@ step 1 is the one that stops you losing your data.
 ## How your data works
 
 Everything is saved by your browser, on your device. There is no server holding
-a copy, so nobody else can see it — and nobody else can get it back for you.
+a copy, so nobody else can see it, and nobody else can get it back for you.
 
 Back up every week: **MAIN MENU → DATA → Back up everything**, then keep the
 file somewhere other than the device. The DATA button starts showing a warning
