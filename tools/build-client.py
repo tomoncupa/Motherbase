@@ -56,7 +56,8 @@ KEEP_THEMES = ['block', 'ice', 'chalkboard', 'sketch', 'doodle']
 RENAME_THEMES = {'block': 'Default', 'ice': 'System'}
 
 # Files that exist only in the client copy, taken from tools/client/.
-CLIENT_ONLY = {'README.md': 'README.md', 'guide.html': 'guide.html'}
+CLIENT_ONLY = {'README.md': 'README.md', 'guide.html': 'guide.html',
+               'gitignore.txt': '.gitignore'}
 
 
 def fail(msg):
