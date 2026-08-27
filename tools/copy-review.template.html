@@ -1,0 +1,353 @@
+<title>Copy Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+/* ── tokens ──
+   Light is the base. Dark redefines only the values, once for the OS
+   preference and once for an explicit stamp, so all three viewer states land
+   on a complete set. Nothing below defines a colour outside :root. */
+:root{
+  --paper:#F5F4F0;      /* a warm-leaning near-white, picked not inherited */
+  --card:#FFFFFF;
+  --ink:#191A1E;
+  --ink-2:#4E5058;
+  --ink-3:#84868E;
+  --rule:#E2E0D9;
+  --rule-2:#CFCCC2;
+  --flag:#B3302A;       /* proofreader's red. semantic, not the accent */
+  --flag-bg:#FBEDEC;
+  --keep:#2C6B4F;
+  --keep-bg:#EAF3EE;
+  --acc:#2B4573;        /* the chrome accent, kept quiet */
+  --acc-bg:#ECEFF5;
+  --focus:#2B4573;
+  --shadow:0 1px 2px rgba(25,26,30,.06),0 3px 10px rgba(25,26,30,.05);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#15161A; --card:#1C1E23; --ink:#EDECE8; --ink-2:#AFB1B8;
+    --ink-3:#7A7D86; --rule:#2B2E35; --rule-2:#3D4149;
+    --flag:#E8756C; --flag-bg:#2E1B1A; --keep:#6FBF95; --keep-bg:#16241D;
+    --acc:#8FAEE0; --acc-bg:#1B2333; --focus:#8FAEE0;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 3px 12px rgba(0,0,0,.28);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#15161A; --card:#1C1E23; --ink:#EDECE8; --ink-2:#AFB1B8;
+  --ink-3:#7A7D86; --rule:#2B2E35; --rule-2:#3D4149;
+  --flag:#E8756C; --flag-bg:#2E1B1A; --keep:#6FBF95; --keep-bg:#16241D;
+  --acc:#8FAEE0; --acc-bg:#1B2333; --focus:#8FAEE0;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 3px 12px rgba(0,0,0,.28);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:Archivo,"Helvetica Neue",Arial,sans-serif;
+  font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:3px}
+
+/* ── chrome ── */
+header{
+  position:sticky; top:0; z-index:20;
+  background:var(--paper); border-bottom:1px solid var(--rule);
+}
+.bar{max-width:1000px;margin:0 auto;padding:16px 22px 12px;
+     display:flex;flex-wrap:wrap;gap:16px;align-items:baseline}
+h1{margin:0;font-size:19px;font-weight:700;letter-spacing:-.01em}
+.lede{margin:0;color:var(--ink-2);font-size:13.5px;max-width:52ch}
+.grow{flex:1 1 auto}
+
+.tally{display:flex;gap:14px;font-family:"IBM Plex Mono",ui-monospace,monospace;
+       font-size:12px;letter-spacing:.02em;white-space:nowrap}
+.tally b{font-weight:500}
+.tally .f{color:var(--flag)} .tally .k{color:var(--keep)} .tally .r{color:var(--ink-3)}
+
+.track{height:3px;background:var(--rule);max-width:1000px;margin:0 auto}
+.track i{display:block;height:100%;background:var(--acc);width:0;
+         transition:width .18s ease-out}
+
+.tools{max-width:1000px;margin:0 auto;padding:0 22px 14px;
+       display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{font:inherit;font-size:12.5px;font-weight:600;letter-spacing:.01em;
+  padding:6px 12px;min-height:32px;border:1px solid var(--rule-2);
+  border-radius:4px;background:var(--card);color:var(--ink-2);cursor:pointer}
+button:hover{border-color:var(--ink-3);color:var(--ink)}
+button.on{background:var(--acc-bg);border-color:var(--acc);color:var(--acc)}
+/* The accent is dark on light and light on dark, so the button's own label
+   has to flip with it rather than being pinned to one of them. */
+button.go{background:var(--acc);border-color:var(--acc);color:var(--card)}
+.sep{width:1px;align-self:stretch;background:var(--rule);margin:0 4px}
+
+/* ── the list ── */
+main{max-width:1000px;margin:0 auto;padding:20px 22px 140px;
+     display:flex;flex-direction:column;gap:8px}
+
+.row{
+  display:grid; grid-template-columns:1fr auto; gap:14px; align-items:start;
+  background:var(--card); border:1px solid var(--rule); border-left-width:3px;
+  border-radius:5px; padding:13px 15px; box-shadow:var(--shadow);
+}
+.row.cur{border-color:var(--acc);border-left-color:var(--acc)}
+.row.wrong{border-left-color:var(--flag);background:var(--flag-bg)}
+.row.fine{border-left-color:var(--keep);background:var(--keep-bg)}
+.row.hide{display:none}
+
+/* The string itself is set in a serif so it reads as writing under
+   inspection, distinct from the sans the tool is built out of. */
+.txt{font-family:"Source Serif 4",Georgia,serif;font-size:16.5px;line-height:1.45;
+     max-width:64ch;overflow-wrap:anywhere}
+.txt b{font-weight:600}
+.meta{margin-top:7px;font-family:"IBM Plex Mono",ui-monospace,monospace;
+      font-size:11px;color:var(--ink-3);letter-spacing:.02em;
+      display:flex;flex-wrap:wrap;gap:10px}
+.meta .app{color:var(--ink-2);font-weight:500}
+.kind{border:1px solid var(--rule-2);border-radius:3px;padding:0 5px;
+      text-transform:uppercase;font-size:10px;letter-spacing:.06em}
+
+.marks{display:flex;gap:6px}
+.marks button{min-width:34px;padding:6px 9px;font-size:12px}
+.marks .w.on{background:var(--flag);border-color:var(--flag);color:#fff}
+.marks .g.on{background:var(--keep);border-color:var(--keep);color:#fff}
+
+.none{padding:40px 0;text-align:center;color:var(--ink-3);font-size:14px}
+
+/* ── the hand-back ── */
+.out{position:fixed;left:0;right:0;bottom:0;z-index:30;
+  background:var(--card);border-top:1px solid var(--rule-2);
+  box-shadow:0 -4px 18px rgba(0,0,0,.10)}
+.out .in{max-width:1000px;margin:0 auto;padding:14px 22px 18px}
+.out h2{margin:0 0 3px;font-size:14px;font-weight:700}
+.out p{margin:0 0 10px;font-size:12.5px;color:var(--ink-2)}
+textarea{width:100%;height:150px;resize:vertical;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+  line-height:1.55;padding:10px 12px;border:1px solid var(--rule-2);
+  border-radius:4px;background:var(--paper);color:var(--ink)}
+.out.shut .in>*:not(.head){display:none}
+.head{display:flex;gap:10px;align-items:center;justify-content:space-between}
+
+kbd{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;
+  border:1px solid var(--rule-2);border-bottom-width:2px;border-radius:3px;
+  padding:1px 4px;color:var(--ink-2);background:var(--paper)}
+
+@media (max-width:640px){
+  .row{grid-template-columns:1fr}
+  .marks{justify-content:flex-start}
+  .bar{padding:14px 16px 10px}
+  .tools,main{padding-left:16px;padding-right:16px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<header>
+  <div class="bar">
+    <div>
+      <h1>Copy Desk</h1>
+      <p class="lede">Every sentence the apps show a person. Mark the ones that
+        sound like a machine wrote them, and the ones that sound right.</p>
+    </div>
+    <div class="grow"></div>
+    <div class="tally">
+      <span class="f">wrong <b id="nW">0</b></span>
+      <span class="k">fine <b id="nG">0</b></span>
+      <span class="r">left <b id="nR">0</b></span>
+    </div>
+  </div>
+  <div class="track"><i id="bar"></i></div>
+  <div class="tools" id="tools"></div>
+</header>
+
+<main id="list"></main>
+
+<div class="out shut" id="out">
+  <div class="in">
+    <div class="head">
+      <h2>Hand it back <span id="outN" style="font-weight:400;color:var(--ink-3)"></span></h2>
+      <button id="toggle">Show</button>
+    </div>
+    <p>Select all of this and paste it into the chat. Nothing leaves this page on its own.</p>
+    <textarea id="dump" readonly spellcheck="false"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="go" id="copy">Copy to clipboard</button>
+      <button id="reset">Clear all my marks</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = /*DATA*/[]/*DATA*/;
+const KEY = 'motherbase.copydesk.v1';
+
+/* Marks are keyed by the string itself, not by line number, so re-running the
+   extractor after an edit does not throw away the judgement. */
+let marks = {};
+try { marks = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { marks = {}; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(marks)); } catch (e) {} };
+
+const APPS = [...new Set(DATA.map(d => d.app))].sort();
+let appFilter = 'ALL', order = 'long', hideDone = false, cur = 0;
+
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/* Show what the person actually sees: escape everything, then let the handful
+   of inline tags the apps really use back through. */
+const show = s => esc(s)
+  .replace(/&lt;(\/?)(b|i|em|small|br)&gt;/g, '<$1$2>')
+  .replace(/&amp;(times|mdash|nbsp|rarr|deg);/g, '&$1;');
+
+let rows = [];
+
+function build() {
+  const t = document.getElementById('tools');
+  t.innerHTML = '';
+  const chip = (label, on, fn, cls) => {
+    const b = document.createElement('button');
+    b.textContent = label; if (on) b.className = 'on ' + (cls || '');
+    b.onclick = fn; t.appendChild(b); return b;
+  };
+  chip('All ' + DATA.length, appFilter === 'ALL', () => { appFilter = 'ALL'; build(); });
+  APPS.forEach(a => chip(a + ' ' + DATA.filter(d => d.app === a).length,
+    appFilter === a, () => { appFilter = a; build(); }));
+  const s = document.createElement('div'); s.className = 'sep'; t.appendChild(s);
+  chip('Longest first', order === 'long', () => { order = 'long'; build(); });
+  chip('Shuffle', order === 'rand', () => { order = 'rand'; build(); });
+  const s2 = document.createElement('div'); s2.className = 'sep'; t.appendChild(s2);
+  chip(hideDone ? 'Showing unmarked only' : 'Hide what I have marked', hideDone,
+    () => { hideDone = !hideDone; build(); });
+
+  rows = DATA.filter(d => appFilter === 'ALL' || d.app === appFilter);
+  if (order === 'rand') {
+    /* A random pass is the honest one. Longest-first is a guess about where
+       the problem lives, and that guess is exactly what is not trusted here. */
+    rows = rows.slice();
+    for (let i = rows.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rows[i], rows[j]] = [rows[j], rows[i]];
+    }
+  }
+  draw();
+}
+
+function draw() {
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  let shown = 0;
+  rows.forEach((d, i) => {
+    const m = marks[d.text];
+    if (hideDone && m) return;
+    shown++;
+    const r = document.createElement('div');
+    r.className = 'row' + (m === 'w' ? ' wrong' : m === 'g' ? ' fine' : '') + (i === cur ? ' cur' : '');
+    r.dataset.i = i;
+
+    const left = document.createElement('div');
+    const tx = document.createElement('div');
+    tx.className = 'txt'; tx.innerHTML = show(d.text);
+    left.appendChild(tx);
+    const mt = document.createElement('div');
+    mt.className = 'meta';
+    mt.innerHTML = '<span class="app">' + d.app + '</span>'
+      + '<span class="kind">' + d.kind + '</span>'
+      + '<span>' + esc(d.file) + ':' + d.line + '</span>'
+      + '<span>' + d.words + ' words</span>';
+    left.appendChild(mt);
+    r.appendChild(left);
+
+    const mk = document.createElement('div');
+    mk.className = 'marks';
+    const bw = document.createElement('button');
+    bw.className = 'w' + (m === 'w' ? ' on' : ''); bw.textContent = 'Sounds wrong';
+    bw.title = 'F'; bw.onclick = () => set(d, 'w');
+    const bg = document.createElement('button');
+    bg.className = 'g' + (m === 'g' ? ' on' : ''); bg.textContent = 'Fine';
+    bg.title = 'G'; bg.onclick = () => set(d, 'g');
+    mk.appendChild(bw); mk.appendChild(bg);
+    r.appendChild(mk);
+    list.appendChild(r);
+  });
+  if (!shown) {
+    const n = document.createElement('div');
+    n.className = 'none';
+    n.textContent = hideDone ? 'Nothing left unmarked here.' : 'Nothing matches.';
+    list.appendChild(n);
+  }
+  tally();
+}
+
+function set(d, v) {
+  if (marks[d.text] === v) delete marks[d.text]; else marks[d.text] = v;
+  save(); draw();
+}
+
+function tally() {
+  let w = 0, g = 0;
+  DATA.forEach(d => { const m = marks[d.text]; if (m === 'w') w++; else if (m === 'g') g++; });
+  document.getElementById('nW').textContent = w;
+  document.getElementById('nG').textContent = g;
+  document.getElementById('nR').textContent = DATA.length - w - g;
+  document.getElementById('bar').style.width = ((w + g) / DATA.length * 100) + '%';
+  document.getElementById('outN').textContent = (w + g) ? '(' + (w + g) + ' marked)' : '';
+  dump();
+}
+
+function dump() {
+  const w = DATA.filter(d => marks[d.text] === 'w');
+  const g = DATA.filter(d => marks[d.text] === 'g');
+  const line = d => d.app + ' ' + d.file + ':' + d.line + ' | ' + d.text;
+  let out = '';
+  if (w.length) out += 'SOUNDS WRONG (' + w.length + ')\n' + w.map(line).join('\n') + '\n\n';
+  if (g.length) out += 'FINE (' + g.length + ')\n' + g.map(line).join('\n') + '\n';
+  document.getElementById('dump').value = out || 'Nothing marked yet.';
+}
+
+/* Keyboard, because this is 700 decisions and a mouse is the slow way.
+   J/K or the arrows move, F and G mark, U clears. */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'TEXTAREA' || e.metaKey || e.ctrlKey || e.altKey) return;
+  const vis = [...document.querySelectorAll('.row')];
+  if (!vis.length) return;
+  const k = e.key.toLowerCase();
+  const move = n => {
+    cur = Math.max(0, Math.min(vis.length - 1, cur + n));
+    vis.forEach(r => r.classList.remove('cur'));
+    vis[cur].classList.add('cur');
+    vis[cur].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
+  if (k === 'j' || e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+  else if (k === 'k' || e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+  else if (k === 'f' || k === 'g' || k === 'u') {
+    e.preventDefault();
+    const r = vis[Math.min(cur, vis.length - 1)];
+    const d = rows[+r.dataset.i]; if (!d) return;
+    if (k === 'u') delete marks[d.text]; else marks[d.text] = (k === 'f' ? 'w' : 'g');
+    save();
+    const at = cur; draw();
+    const now = [...document.querySelectorAll('.row')];
+    cur = Math.min(at + (hideDone ? 0 : 1), now.length - 1);
+    if (now[cur]) { now.forEach(x => x.classList.remove('cur')); now[cur].classList.add('cur');
+                    now[cur].scrollIntoView({ block: 'center' }); }
+  }
+});
+
+document.getElementById('toggle').onclick = () => {
+  const o = document.getElementById('out');
+  o.classList.toggle('shut');
+  document.getElementById('toggle').textContent = o.classList.contains('shut') ? 'Show' : 'Hide';
+};
+document.getElementById('copy').onclick = async () => {
+  const ta = document.getElementById('dump');
+  const b = document.getElementById('copy');
+  try { await navigator.clipboard.writeText(ta.value); b.textContent = 'Copied'; }
+  catch (e) { ta.select(); b.textContent = 'Selected — press Ctrl+C'; }
+  setTimeout(() => { b.textContent = 'Copy to clipboard'; }, 2200);
+};
+document.getElementById('reset').onclick = () => {
+  if (!confirm('Clear every mark on this page?')) return;
+  marks = {}; save(); draw();
+};
+
+build();
+</script>
