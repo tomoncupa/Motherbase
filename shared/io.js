@@ -1171,15 +1171,23 @@ const Mirror = {
       Mirror.onOpen(appId).then(() => { if (dirty) run(); });
     });
 
-    /* A slow pull while you are actually looking at it, so a screen left open
-       on the desk catches up on its own. Three minutes, and only while the tab
-       is visible: the push half is already covered by the write above, and a
-       tab nobody is watching does not need to be current. */
+    /* A pull while you are actually looking at it, so a screen left open on
+       the desk catches up on its own. Forty five seconds, Tom's number, which
+       is about 1,900 calls a day against Apps Script's 20,000.
+
+       Two guards, and the second one matters more than it looks. The home
+       screen keeps every app it has opened in an iframe and hides the ones
+       you are not on with display:none. Those documents still report
+       themselves visible, so without the size check six hidden apps would
+       each be polling the sheet behind a screen showing one. A display:none
+       frame does no layout, so its body measures zero. */
     setInterval(() => {
       if (!mcfg.on || !mcfg.url) return;
-      if (g.document && g.document.visibilityState !== 'visible') return;
+      if (!g.document || g.document.visibilityState !== 'visible') return;
+      const b = g.document.body;
+      if (b && !b.getBoundingClientRect().width) return;
       Mirror.onOpen(appId);
-    }, 180000);
+    }, 45000);
     return true;
   },
 

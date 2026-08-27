@@ -549,6 +549,12 @@ const SEED = [
     bump: [1000, 500, 100] },
   { id: 'mood',   label: 'Mood',   unit: '',    measure: 'scale',  once: 0, agg: 'avg',  order: 4, on: 1 },
   { id: 'energy', label: 'Energy', unit: '',    measure: 'scale',  once: 0, agg: 'avg',  order: 5, on: 1 },
+  /* Training is one of the five pillars and the only one that moves a whole
+     letter, and it was read out of TRAIN's rows alone. Anybody not using
+     TRAIN had no way to record it, so their rank sat capped at A for good.
+     trainedOn() already looks for a field whose id starts with "train"; this
+     is that field, and it ships on. */
+  { id: 'trained', label: 'Trained', unit: '', measure: 'check', once: 1, agg: 'last', order: 6, on: 1 },
 ];
 
 /* Things worth tracking that most people want eventually. An empty setup
@@ -622,7 +628,7 @@ function linkNutrients() {
    linkNutrients: a number rather than a flag, so a later change runs again
    instead of being locked out by a tick from the previous version. Only the
    library's own fields are touched, and only where nothing was set by hand. */
-const FIELDFIX = 2;
+const FIELDFIX = 3;
 /* Which kind of thing each library field is, so the form can narrow itself
    without him having to categorise five things by hand first. */
 const SEEDCAT = {
@@ -634,6 +640,11 @@ const SEEDCAT = {
 };
 function fixSeedFields() {
   if (num(S.get('fieldfix', 0), 0) >= FIELDFIX) return;
+  /* A SEED field added after someone was already set up never reaches them,
+     because seedFields() runs once. Anything in SEED that is simply not there
+     gets made here, which is how Trained arrives for an existing install. */
+  const have = fields();
+  SEED.forEach(f => { if (!have[f.id]) Rec.set('field', null, f.id, f); });
   const want = {};
   SEED.concat(LIBRARY).forEach(l => { if (l.bump) want[l.id] = l; });
   Object.values(fields()).forEach(f => {
@@ -3525,7 +3536,7 @@ function rankBadge() {
     '<span class="rk" style="color:' + rankColour(a.rank.k) + ';border-color:'
       + rankColour(a.rank.k) + '">' + a.rank.k + '</span>' +
     '<span class="rkm"><b>' + a.pct + '%</b>' +
-    '<i>' + (t.pct == null ? 'today not started'
+    '<i>' + (t.pct == null ? ''
       : 'today ' + t.pct + '%' + (t.partial ? ' so far' : '')) + '</i></span>';
   w.onclick = () => { TAB = 'trends'; Mobile.feedback('nav'); draw(); };
   return w;
