@@ -523,6 +523,37 @@ TRAIN.reindex = function () {
 TRAIN.setsOn = function (date) { return TRAIN.idx.byDate[date] || []; };
 TRAIN.historyOf = function (exId) { return TRAIN.idx.byEx[exId] || []; };
 TRAIN.cats = function () { return Rec.map('excat'); };
+
+/* ── the muscle groups you start with ──
+   Categories only ever arrived with a FitNotes import. Without one there were
+   none, CREATE NEW EXERCISE refused with "add a category first", and there was
+   nowhere in the app to add one — so a fresh TRAIN could not log anything at
+   all unless you happened to own a FitNotes backup.
+
+   These are the groups FitNotes itself ships with. Each takes a theme colour
+   slot rather than a colour, so they change with the skin like everything
+   else. Made once, and only when there are none: an import brings its own and
+   must not find these sitting in the way. */
+TRAIN.DEFAULT_CATS = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core', 'Cardio'];
+TRAIN.seedCats = function () {
+  if (Object.keys(TRAIN.cats()).length) return 0;
+  TRAIN.DEFAULT_CATS.forEach(function (nm, i) {
+    Rec.set('excat', null, nm.toLowerCase(), { name: nm, slot: i, ord: i });
+  });
+  TRAIN.reindex();
+  return TRAIN.DEFAULT_CATS.length;
+};
+
+/* Add one by name, for the "+ New category" route out of the exercise form. */
+TRAIN.addCat = function (name) {
+  var nm = String(name || '').trim();
+  if (!nm) return null;
+  var id = nm.toLowerCase().replace(/[^a-z0-9]+/g, '-') || TRAIN.newId();
+  var all = TRAIN.cats(), ord = Object.keys(all).length;
+  Rec.set('excat', null, id, { name: nm, slot: ord % TRAIN.SLOTS, ord: ord });
+  TRAIN.reindex();
+  return id;
+};
 TRAIN.exercises = function () { return Rec.map('exercise'); };
 
 /* A day's sets, grouped into the exercises they belong to, in the order the
@@ -1564,17 +1595,9 @@ function drawEmptyDay(m) {
     acts.appendChild(copy);
   }
 
-  /* The one moment the importer is worth a place on screen: a store with
-     nothing in it. After that it lives in Settings and never comes back. */
-  if (!Object.keys(TRAIN.idx.byDate).length) {
-    var imp = UI.el('button', 'bigact mb-press mb-tap');
-    imp.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-      'stroke-width="2" stroke-linecap="round"><path d="M12 3v12M8 11l4 4 4-4"/>' +
-      '<path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>' +
-      '<span>Import from FitNotes</span>';
-    imp.onclick = function () { TRAIN.importPanel(); };
-    acts.appendChild(imp);
-  }
+  /* The importer used to sit here too, on any empty day. It lives in Settings
+     only now: it is a thing you do once, and an empty Tuesday is not a prompt
+     to go and find a backup file. */
   m.appendChild(acts);
 }
 
@@ -1698,6 +1721,20 @@ function drawPickerList(m) {
 
 function drawList(host, q, cats, exs) {
   host.innerHTML = '';
+
+  /* ── first, and unconditionally ──
+     This used to be appended at the very end of the function, after three
+     branches that each return early. The one that fires when you have no
+     exercises yet returned before reaching it, so the button that creates your
+     first exercise was the one button you could never see. It goes at the top
+     now, above the list, which is also where FitNotes keeps it. */
+  var add = UI.el('button', 'mb-btn mb-press mb-tap');
+  add.style.width = '100%';
+  add.style.marginBottom = 'var(--s-3)';
+  add.textContent = '+ CREATE NEW EXERCISE';
+  add.onclick = function () { TRAIN.exerciseDialog(null); };
+  host.appendChild(add);
+
   var list = UI.el('div', 'plist');
   var already = {};
   TRAIN.setsOn(TRAIN.date).forEach(function (s) { already[s.ex] = 1; });
@@ -1761,15 +1798,6 @@ function drawList(host, q, cats, exs) {
     list.appendChild(b);
   });
   host.appendChild(list);
-
-  /* Create a new exercise, which FitNotes puts behind the + in the bar of
-     this same screen. */
-  var add = UI.el('button', 'mb-btn mb-press mb-tap');
-  add.style.width = '100%';
-  add.style.marginTop = 'var(--s-3)';
-  add.textContent = 'CREATE NEW EXERCISE';
-  add.onclick = function () { TRAIN.exerciseDialog(null); };
-  host.appendChild(add);
 }
 
 /* Create or edit one exercise: name, category, and the two things that
@@ -1777,8 +1805,9 @@ function drawList(host, q, cats, exs) {
 TRAIN.exerciseDialog = function (exId) {
   var exs = TRAIN.exercises(), cats = TRAIN.cats();
   var cur = exId ? exs[exId] : null;
+  /* No categories is not a reason to refuse — it is a reason to make some. */
+  if (!Object.keys(cats).length) { TRAIN.seedCats(); cats = TRAIN.cats(); }
   var catIds = Object.keys(cats).sort(function (a, b) { return cats[a].name.localeCompare(cats[b].name); });
-  if (!catIds.length) return UI.toast('add a category first', { bad: true });
 
   UI.dialog({
     title: (cur ? 'EDIT' : 'CREATE') + ' EXERCISE', width: 440,
@@ -3601,7 +3630,7 @@ TRAIN.firstRun = function () {
     title: 'WELCOME TO TRAIN', width: 440,
     body: function (b, h) {
       var p = UI.el('div', 'empty');
-      p.innerHTML = 'Two questions, then you are logging.';
+      p.innerHTML = 'One question, then you are logging.';
       b.appendChild(p);
 
       var g = UI.el('div', 'mb-group'); g.textContent = 'WEIGHT UNIT';
@@ -3611,18 +3640,9 @@ TRAIN.firstRun = function () {
         UI.segmented([{ id: 'lb', name: 'POUNDS' }, { id: 'kg', name: 'KILOGRAMS' }],
           TRAIN.unit(), function (v) { Rec.setting(APP.id, 'unit', v); draw(); })));
 
-      var g2 = UI.el('div', 'mb-group'); g2.textContent = 'ALREADY USING FITNOTES?';
-      b.appendChild(g2);
-      var imp = UI.el('button', 'mb-btn mb-press mb-tap');
-      imp.style.width = '100%';
-      imp.textContent = 'IMPORT MY FITNOTES BACKUP';
-      imp.onclick = function () { h.close(); TRAIN.importPanel(); };
-      b.appendChild(imp);
-      var note = UI.el('div', 'empty');
-      note.style.marginTop = 'var(--s-3)';
-      note.innerHTML = 'Brings across every set, comment, exercise and routine. ' +
-        'It only goes one way, and running it twice changes nothing.';
-      b.appendChild(note);
+      /* The importer is in Settings, under COMING FROM FITNOTES, and that is
+         the only place it appears now. The paragraph that used to sit here
+         described what its button did, so it went with the button. */
     },
     actions: [{ label: 'START LOGGING', kind: 'go', fn: function () {
       Rec.setting(APP.id, 'seen', 1);
