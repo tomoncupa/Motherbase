@@ -361,6 +361,8 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 .note-row.cancelled .nm-box{border-style:dashed}
 .nm-mig{line-height:13px}
 /* how many days it has been following you */
+.note-row .at{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);
+  color:var(--accent);margin-left:var(--s-2);white-space:nowrap}
 .carried{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);
   color:var(--warn);margin-left:var(--s-2);opacity:.8}
 
@@ -1029,13 +1031,87 @@ function noteOrder(a, b) {
   return mode === 'oldest' ? (a.t || 0) - (b.t || 0) : (b.t || 0) - (a.t || 0);
 }
 
+/* ═══════════════ WRITING A TIME INTO A LINE ═══════════════
+   "Train 2:45" should be a line that says Train and knows it is at 2:45. Not a
+   form with a time picker on it — the whole point of a journal line is that it
+   is one field you type into.
+
+   ONLY AT THE END OF THE LINE. That single rule is what makes this safe to
+   have on by default: "Train 2:45" gets a time, and "Call Dan about the 2:45
+   train" does not, because the number is in the middle of a sentence where it
+   is doing a different job. A parser that grabs any time anywhere would eat
+   part of what you wrote, which is worse than not parsing at all.
+
+   Times are 2:45, 2:45pm, 14:45, 9am. Durations need a unit — 45m, 1h, 1h30,
+   90min — so a bare number is never mistaken for one. Both may appear:
+   "Train 2:45 90m".
+
+   A bare 2:45 with no am/pm is read the way a person means it: hours 1 to 6
+   are afternoon, because nobody journals a 2:45am lift. 7 to 12 are taken as
+   written.                                                                  */
+const TIME_RE = /\s+(?:at\s+)?(\d{1,2})(?::|\.)(\d{2})\s*(am|pm)?$/i;
+const HOUR_RE = /\s+(?:at\s+)?(\d{1,2})\s*(am|pm)$/i;
+const DUR_RE  = /\s+(?:for\s+)?(?:(\d+)\s*h(?:rs?|ours?)?\s*(\d{1,2})?|(\d+)\s*(m|min|mins|minutes?))$/i;
+
+function parseLine(raw) {
+  let text = String(raw == null ? '' : raw).trim();
+  let at = null, dur = null;
+
+  /* duration first: "1h30" would otherwise look like nothing, and stripping it
+     leaves a clean end for the time to match against */
+  const d = text.match(DUR_RE);
+  if (d) {
+    dur = d[1] != null ? (+d[1] * 60 + (+d[2] || 0)) : +d[3];
+    if (!(dur > 0)) dur = null; else text = text.slice(0, d.index).trim();
+  }
+
+  let m = text.match(TIME_RE);
+  if (m) {
+    let h = +m[1], mm = +m[2];
+    if (mm <= 59 && h <= 23) {
+      const ap = (m[3] || '').toLowerCase();
+      if (ap === 'pm' && h < 12) h += 12;
+      else if (ap === 'am' && h === 12) h = 0;
+      else if (!ap && h >= 1 && h <= 6) h += 12;   /* 2:45 means the afternoon */
+      at = String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+      text = text.slice(0, m.index).trim();
+    }
+  } else {
+    m = text.match(HOUR_RE);
+    if (m) {
+      let h = +m[1];
+      if (h >= 1 && h <= 12) {
+        if (m[2].toLowerCase() === 'pm' && h < 12) h += 12;
+        if (m[2].toLowerCase() === 'am' && h === 12) h = 0;
+        at = String(h).padStart(2, '0') + ':00';
+        text = text.slice(0, m.index).trim();
+      }
+    }
+  }
+  /* Nothing left but a time is not a line, it is a time. Give the text back. */
+  if (!text) return { text: String(raw).trim(), at: null, dur: null };
+  return { text: text, at: at, dur: dur };
+}
+
+/** "14:45" as "2:45pm", the way it is read back on screen. */
+function clockLabel(at) {
+  if (!at) return '';
+  const [h, m] = at.split(':').map(Number);
+  const ap = h < 12 ? 'am' : 'pm', hh = h % 12 === 0 ? 12 : h % 12;
+  return hh + ':' + String(m).padStart(2, '0') + ap;
+}
+const durLabel = d => !d ? '' : (d >= 60 ? (d % 60 ? Math.floor(d / 60) + 'h' + String(d % 60).padStart(2, '0') : Math.floor(d / 60) + 'h') : d + 'm');
+
 const addNote = (date, kind, text) => {
   const list = Rec.all('note', { date: date });
+  const parsed = parseLine(text);
   Rec.set('note', date, uid(), {
     /* `t` is when it was written, which is not the same as the day it belongs
        to — a task logged at midnight for tomorrow, or a line backfilled a week
-       later, both need the two kept apart. */
-    kind: kind, text: text, t: Date.now(), made: date,
+       later, both need the two kept apart. `at` is different again: it is the
+       time the thing happens, which is the one you typed. */
+    kind: kind, text: parsed.text, t: Date.now(), made: date,
+    at: parsed.at, dur: parsed.dur,
     ord: list.length, done: 0, cancelled: 0,
   });
   /* published here rather than at the call site, so a line reaches the hub
@@ -1048,8 +1124,38 @@ const addNote = (date, kind, text) => {
    this app exists. So each kind ticks its own counter, and the home screen
    shows whichever it cares about — a journal widget today, QUEST and SPARK
    when they arrive. */
+/* ── a line with a time on it is an event the whole suite can see ──
+   A tick is the one row every app may write, so it is the only way to tell the
+   home screen that something happened without the home screen knowing STATUS
+   exists. A journal line carrying a time becomes one, with the time in the
+   payload so DAY LOG can show 2:45pm rather than the moment you typed it.
+
+   THIS CAN DOUBLE UP, and that is accepted rather than overlooked. If BLOCK
+   already has a Training block today and you also write "Train 2:45" here,
+   the home screen shows both. Tom's call: the alternative is guessing that two
+   similarly named things are the same thing, and a wrong guess silently hides
+   something you wrote. Two lines is a smaller problem than a missing one.
+
+   Keyed on the text, so editing the line updates its entry instead of leaving
+   the old one behind, and writing the same thing twice is one row.          */
+function publishTimed(d) {
+  const want = {};
+  notes(d).filter(x => x.date === d && x.at && !x.done && !x.cancelled).forEach(x => {
+    const id = 'note-at-' + String(x.text).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+    if (!id || id === 'note-at-') return;
+    want[id] = 1;
+    Rec.set('activity', null, id, { name: x.text, cat: 'journal' });
+    Rec.set('tick', d, id, { src: APP.id, qty: 1, at: x.at, dur: x.dur || 0 });
+  });
+  /* anything that used to be a timed line here and is not any more */
+  Rec.all('tick', { date: d }).forEach(r => {
+    if (r.key.indexOf('note-at-') === 0 && !want[r.key]) Rec.del('tick', d, r.key);
+  });
+}
+
 function publishNotes(date) {
   const d = date || Day.today();
+  publishTimed(d);
   NOTE_KINDS.forEach(k => {
     const n = Rec.all('note', { date: d })
       .filter(r => r.payload && r.payload.kind === k.id && !(k.id === 'todo' && r.payload.done)).length;
@@ -2849,6 +2955,11 @@ function drawJournal(m) {
        explaining. */
     r.innerHTML = '<button class="k" type="button"></button>' +
       '<span class="tx">' + esc(x.text) +
+      /* The time you typed, given back in the shape you typed it. It sits
+         after the words rather than before them because the words are what
+         you scan for; the clock is the detail. */
+      (x.at ? '<i class="at">' + esc(clockLabel(x.at)) + (x.dur ? ' \u00b7 ' + durLabel(x.dur) : '') + '</i>'
+            : (x.dur ? '<i class="at">' + durLabel(x.dur) + '</i>' : '')) +
       /* how long it has been following you — quiet, but it should sting a bit */
       (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') + '</span>';
     const box = r.querySelector('.k');
@@ -2908,7 +3019,12 @@ function noteSheet(x, d) {
       const text = ta.value.trim();
       if (!text) return UI.toast('Nothing to save', { bad: true });
       if (isNew) addNote(d, kind, text);
-      else Rec.set('note', x.date || d, x.key, Object.assign(bare(x), { kind: kind, text: text }));
+      else {
+        const pz = parseLine(text);
+        Rec.set('note', x.date || d, x.key, Object.assign(bare(x), {
+          kind: kind, text: pz.text, at: pz.at, dur: pz.dur,
+        }));
+      }
       publishNotes(d);
       Mobile.feedback(again ? 'tick' : 'success');
       if (again) { draw(); noteSheet({ kind: kind, text: '' }, d); return; }

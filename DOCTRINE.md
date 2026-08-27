@@ -60,9 +60,18 @@ tells someone they are already behind before they have done anything. Tom,
 2026-08-27: *"there should be no default blocks, not everyone will want a
 morning routine — being forced feels grossly unpleasant."*
 
-BLOCK therefore opens with no blocks and no routines at all. This is not a
-failure of law 1, it is law 1 applied correctly: the vocabulary of BLOCK is
-whatever *you* do, so there is none to ship.
+Between them sits a third thing, and BLOCK is where it lives.
+
+**A skeleton** is a demonstration of the *shape*, not of the content. BLOCK
+opens with one routine — Morning Routine: Brush Teeth, Weigh In, Track Data —
+and about ten loose blocks in the bin. That is not telling anyone how to live.
+It is showing them, in one glance, that blocks go inside routines and routines
+go inside days, which no amount of empty-state prose teaches as fast.
+
+The line is size and obviousness. Three blocks called Brush Teeth, Weigh In and
+Track Data demonstrate a structure and take ten seconds to delete. Twenty
+blocks across five routines is a life plan you did not ask for. If you cannot
+clear it in under a minute, it has stopped being a skeleton.
 
 **Where you ship nothing, the empty state does the work.** It says what the
 thing is, why it is empty, and offers the one action that fills it. It is never
@@ -153,7 +162,22 @@ likely to be wrong.
 No tours. No coach marks. No "tap here to continue". If a screen needs
 explaining, it needs a better screen, and that is law 6.
 
-### 11. One fact, one row, one writer
+### 11. Two entries beat a wrong guess
+
+Where two apps could be describing the same thing, show both rather than
+guessing they are one.
+
+Writing "Train 2:45" in STATUS puts it on the home screen's day log. If BLOCK
+also has a Training block today, both appear. That is accepted, not overlooked
+— Tom called it an acceptable rare exception. The alternative is matching on a
+name and silently hiding one of them, and a line you wrote that does not appear
+is a much worse failure than a line that appears twice.
+
+The same reasoning is why `tick` is the one shared row: one cell, one activity,
+one day, and later save wins. Deduplication is only safe where the identity is
+exact.
+
+### 12. One fact, one row, one writer
 
 From `CLAUDE.md`, repeated because it is the one that has already cost data.
 Rows, never a blob. `tick` is the single deliberate exception.
@@ -188,6 +212,15 @@ doing in the app that owns it.
 box is focused when it opens. What is offered comes from what he actually logs,
 not from a list someone wrote once — the doses on a chip row are the last three
 he took. Backfilling a past day is normal, never an exception.
+
+**Typed, not picked.** A journal line is one field you type into, so a time
+goes in the line: "Train 2:45" is a line that says Train and knows it is at
+2:45. Only at the end of the line, so "Call Dan about the 2:45 train" is left
+alone — a parser that eats part of what you wrote is worse than no parser.
+Anything with a time on it reaches the home screen's day log.
+
+**No links here.** Tom's call: BLOCK's notes take them, STATUS's do not. A
+journal line is something you wrote, not somewhere you go.
 
 **Never:** a form. The moment logging a number feels like filling something in,
 the capture rate falls and every downstream estimate degrades with it.
@@ -224,10 +257,14 @@ that hierarchy is visible in the furniture, not just the data. A day can be a
 repeating template or a one-off pinned to a date. A block can be marked not
 needed, which is neither done nor owed.
 
-**It ships empty, and that is the design.** See law 1. Everything in BLOCK is a
-claim about how someone spends their time, so there is nothing here that can
-honestly be shipped as a default. The empty states carry the whole introduction
-instead.
+**It ships a skeleton, not a plan.** See law 1. One routine and a handful of
+plain blocks, enough to show that blocks go in routines and routines go in
+days, small enough to clear in a minute. Notes take links, because a block is
+often a thing you do *to* a document.
+
+**Never** a prescribed day. The difference between demonstrating a structure
+and telling someone how to live is a real line, and it is drawn at about three
+blocks.
 
 **Never:** a calendar. It does not own time, it owns intent.
 
