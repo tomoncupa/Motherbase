@@ -47,7 +47,11 @@ COPY_FILES = ['index.html', '.nojekyll']
 #   habits/ a stand-in that STATUS replaced
 #   quest/ _template/ tools/ and every *.md brief - these are build notes
 DROP_APPS = ['habits', 'form']        # removed from the home screen roster
-DROP_WIDGETS = ['habits', 'streaks']  # nothing can write a habit row any more
+# The dead widgets are no longer here to remove: HABITS, the habit-backed
+# STREAKS and NUMBERS were deleted from the main repo on 2026-08-28, and
+# the STREAKS that replaced one of them counts ticks, so it works for a
+# tester with no HABITS just as well as it does for Tom.
+DROP_WIDGETS = []
 
 # ── the five themes ───────────────────────────────────────────────────────
 # Order matters: skins.js falls back to skins[0] when nothing is saved, so
@@ -157,13 +161,6 @@ for wid in DROP_WIDGETS:
 html = patch(html, r"\n *\['◎', 'Habits as CSV'.*?\],(?=\n)", '',
              'habits CSV row in the Data panel')
 
-# NUMBERS carried a BEST STREAK tile counted off habit rows. With HABITS gone
-# nothing can write one, so the tile is pinned at zero forever - a number on
-# the home screen that cannot move is worse than no number at all.
-html = patch(html, r"\n *const best = Object\.values\(doc\.habits\).*?;(?=\n)", '',
-             'best-streak calculation in NUMBERS')
-html = patch(html, r"\n *st\.appendChild\(el\('div', 'stat', '<b>' \+ best \+ .*?\);(?=\n)", '',
-             'BEST STREAK tile in NUMBERS')
 
 # The wipe-everything confirm still named habits.
 html = html.replace('ticks, habits, every app', 'ticks, every app')
