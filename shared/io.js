@@ -807,8 +807,33 @@ const watching = Object.create(null);
    is the last edit we have read out of each tab, and `sheetV` is which
    version of the script the sheet is running. */
 let mcfg = { url: '', on: 0, at: null, pushed: {}, seen: {}, full: {}, sig: {}, sheetV: 0 };
-try { Object.assign(mcfg, JSON.parse(localStorage.getItem(MKEY) || '{}')); } catch (e) {}
-const msave = () => { try { localStorage.setItem(MKEY, JSON.stringify(mcfg)); } catch (e) {} };
+const mread = () => { try { Object.assign(mcfg, JSON.parse(localStorage.getItem(MKEY) || '{}')); } catch (e) {} };
+mread();
+
+/* The per-app boundaries, which every frame writes and none of them owns. */
+const MPARTS = ['pushed', 'seen', 'full', 'sig'];
+const msave = () => {
+  try {
+    /* Each app runs in its own frame with its own copy of this object, and
+       they all write it back. Writing the whole thing blind means the last
+       frame to finish erases what the others recorded - the blob problem in
+       miniature, in the one file that exists to stop blobs. So the boundaries
+       are merged with whatever is on disk, ours winning only for the app we
+       actually pushed. A boundary that goes backwards costs a resend, which
+       is safe; one that gets erased costs a tab that never goes up. */
+    let disk = {};
+    try { disk = JSON.parse(localStorage.getItem(MKEY) || '{}'); } catch (e) {}
+    MPARTS.forEach(k => { mcfg[k] = Object.assign({}, disk[k] || {}, mcfg[k] || {}); });
+    localStorage.setItem(MKEY, JSON.stringify(mcfg));
+  } catch (e) {}
+};
+
+/* Another frame pasted the link, or finished a push. localStorage tells every
+   OTHER document on the origin, which is exactly the case that was broken:
+   the home screen keeps each app alive in a frame, so an app opened before
+   the link was pasted read an empty config once and never looked again. It
+   answered "no link" to every sync for the rest of the session. */
+g.addEventListener('storage', e => { if (e.key === MKEY) mread(); });
 
 /* The link used to live in a `setting` row belonging to one app, because the
    mirror belonged to one app. Moving it to the suite moved where it is kept,
