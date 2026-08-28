@@ -142,6 +142,9 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 .hero .u{font-size:var(--f-2);font-weight:400;color:var(--text-muted);letter-spacing:0;margin-left:var(--s-2)}
 /* the divider in "1,680 / 2,400" - present, and quieter than either number */
 .hero .sl{color:var(--text-muted);font-weight:400;margin:0 .12em}
+.shopt{display:flex;align-items:center;gap:var(--s-2);min-height:var(--tap);
+  font-size:var(--f-2);color:var(--text-2);cursor:pointer}
+.shopt input{width:18px;height:18px;accent-color:var(--accent)}
 
 /* ── tiles: value is the point, label recedes ── */
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:var(--s-2)}
@@ -2918,14 +2921,14 @@ function tileValue(f, v) {
   return Math.round(v).toLocaleString();
 }
 
-/* ── NOW ── */
-function drawNow(m) {
-  const d = vd();
-
+/* ── NOW ──
+   The island: what today is, in one card. Built by its own function because
+   the export is a picture of THIS, and a second drawing of the same thing is
+   a second thing to keep in step. Tom, 2026-08-28: "export should literally
+   just be stats island on the first tab." */
+function islandCard(d, opts) {
+  opts = opts || {};
   const t = dayTotals(d), ct = calTarget();
-  /* No heading and no date. The date bar sits directly above this card and
-     already says which day is on screen; repeating it underneath was one line
-     of chrome saying nothing the eye had not just read. */
   const c = card();
 
   const left = ct.v - Math.round(t.kcal);
@@ -2936,9 +2939,7 @@ function drawNow(m) {
 
   /* The rank sits up here beside the calories, because this is the screen he
      opens and the rank is the one-glance answer to how it is going. The big
-     letter is the LAST SEVEN COMPLETED DAYS and does not move during the day;
-     today is the small figure under it, so a bad morning never appears to
-     change a rank that has already been earned. */
+     letter is the LAST SEVEN COMPLETED DAYS and does not move during the day. */
   const top = el('div', 'islerow');
   const heroBox = el('div', 'islehero'); heroBox.appendChild(hero);
   top.appendChild(heroBox);
@@ -2960,15 +2961,22 @@ function drawNow(m) {
     if (v != null && ((f.min != null && v < f.min) || (f.max != null && v > f.max))) cls += ' over';
     /* a decaying field says what is still in you under its label, because the
        total you took today stops being the interesting number by mid-afternoon */
-    const left = (f.half && Day.isToday(d)) ? remaining(f) : null;
+    const lf = (f.half && Day.isToday(d)) ? remaining(f) : null;
     g.appendChild(tile(f.label, tileValue(f, v), f.unit, cls, () => fieldSheet(f, d), pct,
-      left != null && left >= 1 ? Math.round(left) + (f.unit || '') + ' left' : null));
+      lf != null && lf >= 1 ? Math.round(lf) + (f.unit || '') + ' left' : null));
   });
-  g.appendChild(tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', t.p ? '' : 'todo', () => { TAB = 'food'; draw(); }, t.p / TARGETS().p));
-  g.appendChild(tile('Spent', Math.round(dayMoney(d)).toLocaleString(), '₱', dayMoney(d) ? '' : 'todo', () => { TAB = 'money'; draw(); }));
+  g.appendChild(tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', t.p ? '' : 'todo', () => { TAB = 'food'; draw(); }, t.p / (TARGETS().p || 1)));
+  /* What you spent is the one thing on here nobody wants on a feed. */
+  if (opts.money !== false) {
+    g.appendChild(tile('Spent', Math.round(dayMoney(d)).toLocaleString(), '\u20b1', dayMoney(d) ? '' : 'todo', () => { TAB = 'money'; draw(); }));
+  }
   c.appendChild(g);
+  return c;
+}
 
-  m.appendChild(c);
+function drawNow(m) {
+  const d = vd();
+  m.appendChild(islandCard(d, {}));
 
   /* "Through the day" used to repeat every multi-entry field underneath the
      tiles, with its running total on the right — the same number the tile
@@ -3437,6 +3445,15 @@ const rankCap = (k, cap) => {
   const i = RANKS.findIndex(r => r.k === k), c = RANKS.findIndex(r => r.k === cap);
   return i < c ? cap : k;
 };
+/* The other direction: a letter this day cannot go below, whatever the four
+   numbers say. Tom, 2026-08-28: "a day trained can never be F." Training is
+   the day's hardest thing to do and the one the other four are in service of,
+   so a day you trained is not a failed day even if you ate badly and slept
+   badly on top of it. */
+const rankFloor = (k, floor) => {
+  const i = RANKS.findIndex(r => r.k === k), f = RANKS.findIndex(r => r.k === floor);
+  return i > f ? floor : k;
+};
 
 /* full marks within FULL of target, nothing by ZERO away, straight line between */
 const FULL = 0.05, ZERO = 0.20;
@@ -3542,7 +3559,7 @@ function todayScore() {
   const d = dayScore(Day.today());
   if (d.pct == null) return d;
   let k = rankFor(d.pct).k;
-  if (d.trained) k = rankUp(k, 1);
+  if (d.trained) k = rankFloor(rankUp(k, 1), 'E');
   if (d.partial) k = rankCap(k, 'A');
   if (d.rest) k = rankCap(k, 'A');
   d.rank = RANKS.find(r => r.k === k);
@@ -3605,7 +3622,7 @@ function rankCard() {
 
   /* today, kept out of the number above */
   const t = todayScore();
-  c.appendChild(el('label', 'fl', 'Today, so far'));
+  c.appendChild(el('label', 'fl', 'Today'));
   if (t.pct == null) {
     c.appendChild(el('div', 'note', 'Nothing due yet today.'));
   } else {
@@ -3624,9 +3641,13 @@ function rankCard() {
   bar.appendChild(story); bar.appendChild(feed);
   c.appendChild(el('label', 'fl', 'Share it'));
   c.appendChild(bar);
-  c.appendChild(el('div', 'note',
-    'A see-through picture of these numbers, to lay over a photo. Story is '
-    + '1080 by 1920, post is 1080 by 1350.'));
+  const hide = el('label', 'shopt');
+  const hb = document.createElement('input');
+  hb.type = 'checkbox'; hb.checked = !!S.get('hideSpend', 0);
+  hb.onchange = () => S.set('hideSpend', hb.checked ? 1 : 0);
+  hide.appendChild(hb);
+  hide.appendChild(el('span', null, 'Hide spending'));
+  c.appendChild(hide);
   return c;
 }
 
@@ -3654,13 +3675,13 @@ async function shareCard(a, kind) {
   /* The real component, built off screen so it lays out for measuring. */
   const stage = document.createElement('div');
   stage.style.cssText = 'position:fixed;left:-99999px;top:0;width:460px;pointer-events:none';
-  const card = rankCard();
-  stage.appendChild(card);
+  const shot = islandCard(vd(), { money: !S.get('hideSpend', 0) });
+  stage.appendChild(shot);
   document.body.appendChild(stage);
 
   let png = null;
   try {
-    const box = card.getBoundingClientRect();
+    const box = shot.getBoundingClientRect();
     const cw = Math.max(1, Math.ceil(box.width)), ch = Math.max(1, Math.ceil(box.height));
 
     /* Scale up rather than blow up a small bitmap: the whole thing renders at
@@ -3678,9 +3699,14 @@ async function shareCard(a, kind) {
       '*{background:transparent !important;box-shadow:none !important;' +
       '-webkit-text-stroke:3px #000;paint-order:stroke fill;' +
       'text-shadow:0 0 5px rgba(0,0,0,.85),0 0 5px rgba(0,0,0,.85) !important}' +
-      'button,.seg,.btns{display:none !important}';
+      /* Do NOT hide buttons. The tiles ARE buttons - that is how you tap one
+         to open its sheet - so hiding them emptied the picture of everything
+         except the top row, and the top row is not the island. Only the add
+         button gets dropped, because a plus sign floating on a photo is a
+         control nobody can press. */
+      '.seam,.fab{display:none !important}';
 
-    const body = new XMLSerializer().serializeToString(card);
+    const body = new XMLSerializer().serializeToString(shot);
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
       '<foreignObject x="' + ox + '" y="' + oy + '" width="' + sw + '" height="' + sh + '">' +
@@ -3721,7 +3747,7 @@ function drawTrends(m) {
     c.appendChild(el('div', 'empty', 'Log a weight and this starts working'));
   } else if (e.basis !== 'measured') {
     c.appendChild(el('div', 'hero', e.tdee.toLocaleString() + '<span class="u">kcal/day</span>'));
-    c.appendChild(el('div', 'note', 'Your weight × ' + TD.perLb() + ', the same start your sheet uses. It becomes measured once there is ' + esc(e.why || 'more data') + '.'));
+    c.appendChild(el('div', 'note', 'Your weight × ' + TD.perLb() + '. Measured once there is ' + esc(e.why || 'more data')));
   } else {
     /* two numbers, kept apart on purpose */
     const sp = el('div', 'split');
