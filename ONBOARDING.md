@@ -48,24 +48,16 @@ a client build that still has HABITS in the menu.
 
 You need this once. After the first time it is two commands.
 
-**1. Make the repo.** On github.com, New repository, name it
-`motherbase-client`, **Public**, no README. (It has to be public for free
-GitHub Pages. That is fine — the code is public already and no data is in it.)
+**1. Make the repo.** Done: `tomoncupa/Mainmenu-client`, public. Note the
+capital M — GitHub kept it and the Pages path is case sensitive.
 
-**2. Push the folder.**
-
-```bash
-cd "C:/Users/user/Downloads/Motherbase-Client"
-git init && git add -A && git commit -m "first build"
-git branch -M main
-git remote add origin https://github.com/tomoncupa/motherbase-client.git
-git push -u origin main
-```
+**2. Push the folder.** Done, and the remote is already set, so from now on
+it is just `git push` from inside the folder.
 
 **3. Turn on Pages.** In that repo: Settings → Pages → Source: `Deploy from a
 branch` → Branch: `main`, folder `/ (root)` → Save. Wait about a minute.
 
-**4. The link is** `https://tomoncupa.github.io/motherbase-client/`
+**4. The link is** `https://tomoncupa.github.io/Mainmenu-client/`
 
 Open it yourself on your own phone before you send it to anyone.
 
@@ -89,10 +81,10 @@ Paste this. Fill in the link.
 > Hey — here's the tracking setup I've been building. It's free, there's no
 > account and no sign-up, and nothing you type leaves your phone.
 >
-> **1.** Open this on your phone: `https://tomoncupa.github.io/motherbase-client/`
+> **1.** Open this on your phone: `https://tomoncupa.github.io/Mainmenu-client/`
 >
 > **2.** Read the "Start here" page first — it's 5 minutes and step 1 stops you
-> losing your data: `https://tomoncupa.github.io/motherbase-client/guide.html`
+> losing your data: `https://tomoncupa.github.io/Mainmenu-client/guide.html`
 >
 > **3.** Use it for two weeks. TRAIN for your sessions, STATUS for everything
 > else.
