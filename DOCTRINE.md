@@ -182,6 +182,25 @@ exact.
 From `CLAUDE.md`, repeated because it is the one that has already cost data.
 Rows, never a blob. `tick` is the single deliberate exception.
 
+### 14. Right click and long press, everywhere
+
+Set 2026-08-28. Tom: *"right click and long press functionality everywhere
+where possible should go without saying."*
+
+Anything that can be moved, resized, renamed, reordered or removed offers a
+menu on right click with a mouse and on a hold with a thumb. Both land on the
+same list. It is not a feature to be asked for each time; it is the baseline,
+and a thing without one is the exception that needs a reason.
+
+This does not weaken law 6. A menu is a **shortcut** to what buttons already
+do, never the only route: the dock keeps its arrows, a card in REARRANGE mode
+keeps its up, down and remove. Somebody who never discovers the gesture loses
+nothing but time.
+
+The pair is always both. A right click with no long press is a desktop-only
+feature in a suite where two apps are used one-handed, and a long press with
+no right click is a phone gesture stranded on a laptop.
+
 ### 13. The System is talking, not a person
 
 Set 2026-08-28, after Tom rewrote fifteen strings and every single edit did

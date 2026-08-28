@@ -140,6 +140,8 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 .rankside{flex:1;min-width:0}
 .rankside .lb{font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-1)}
 .hero .u{font-size:var(--f-2);font-weight:400;color:var(--text-muted);letter-spacing:0;margin-left:var(--s-2)}
+/* the divider in "1,680 / 2,400" - present, and quieter than either number */
+.hero .sl{color:var(--text-muted);font-weight:400;margin:0 .12em}
 
 /* ── tiles: value is the point, label recedes ── */
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:var(--s-2)}
@@ -2927,7 +2929,9 @@ function drawNow(m) {
   const c = card();
 
   const left = ct.v - Math.round(t.kcal);
-  const hero = el('div', 'hero', left.toLocaleString() + '<span class="u">calories left of ' + ct.v.toLocaleString() + '</span>');
+  const hero = el('div', 'hero',
+    left.toLocaleString() + ' <span class="sl">/</span> ' + ct.v.toLocaleString() +
+    '<span class="u">left</span>');
   if (left < 0) hero.style.color = 'var(--warn)';
 
   /* The rank sits up here beside the calories, because this is the screen he
@@ -3043,7 +3047,11 @@ function drawJournal(m) {
       /* how long it has been following you — quiet, but it should sting a bit */
       (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') + '</span>';
     const box = r.querySelector('.k');
-    box.innerHTML = noteSvg(x.kind, x.carried);
+    /* The mark says WHEN you are looking, not where the row came from. A box
+       is something to do today; an arrow is something that has moved on. Tom,
+       2026-08-28: "To do Bullets should only show as > on past days, and as
+       check boxes on the present day." */
+    box.innerHTML = noteSvg(x.kind, d !== Day.today());
     box.setAttribute('aria-label', x.kind === 'todo' ? (x.done ? 'Untick' : 'Tick') : noteKind(x.kind).label);
     if (x.kind === 'todo') {
       box.onclick = e => {
@@ -3092,6 +3100,18 @@ function noteSheet(x, d) {
     ta.placeholder = '';
     ta.setAttribute('autocapitalize', 'sentences');
     body.appendChild(ta);
+
+    /* When you wrote it. Not the time you typed into the line - that is `at`
+       and it already shows on the row - but the moment the line was made.
+       Tom, 2026-08-28: "when I click on a bullet in status should show the
+       time I wrote it." */
+    if (!isNew && x.t) {
+      const w = new Date(x.t);
+      const same = x.date === Day.today();
+      body.appendChild(el('div', 'note', 'Written ' +
+        clockLabel(String(w.getHours()).padStart(2, '0') + ':' + String(w.getMinutes()).padStart(2, '0')) +
+        (same ? '' : ' on ' + w.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))));
+    }
 
     /* `again` reopens an empty line of the same kind instead of closing, which
        is what makes a list a list. */
@@ -3196,7 +3216,9 @@ function drawFood(m) {
 
   const c = card('Food', Math.round(t.kcal).toLocaleString() + ' kcal');
   const left = ct.v - Math.round(t.kcal);
-  const hero = el('div', 'hero', left.toLocaleString() + '<span class="u">kcal left</span>');
+  const hero = el('div', 'hero',
+    left.toLocaleString() + ' <span class="sl">/</span> ' + (calTarget().v || 0).toLocaleString() +
+    '<span class="u">left</span>');
   hero.style.marginBottom = 'var(--s-4)';
   if (left < 0) hero.style.color = 'var(--warn)';
   c.appendChild(hero);
@@ -3536,8 +3558,11 @@ function rankBadge() {
     '<span class="rk" style="color:' + rankColour(a.rank.k) + ';border-color:'
       + rankColour(a.rank.k) + '">' + a.rank.k + '</span>' +
     '<span class="rkm"><b>' + a.pct + '%</b>' +
-    '<i>' + (t.pct == null ? ''
-      : 'today ' + t.pct + '%' + (t.partial ? ' so far' : '')) + '</i></span>';
+    /* Today's grade waits until the day has settled. A number built out of
+       two pillars at 9am is not a grade, it is a fraction of one, and a
+       figure that climbs all day is one you stop reading. Tom, 2026-08-28:
+       "The day grade should only show the later." */
+    '<i>' + (t.pct == null || t.partial ? '' : 'today ' + t.pct + '%') + '</i></span>';
   w.onclick = () => { TAB = 'trends'; Mobile.feedback('nav'); draw(); };
   return w;
 }

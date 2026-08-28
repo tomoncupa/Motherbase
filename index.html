@@ -1529,6 +1529,41 @@ function move(i, d) {
   Mobile.feedback('select');
 }
 
+
+/* ══════════════ a menu on every card ══════════════
+   Tom, 2026-08-28: "right click and long press functionality everywhere
+   where possible should go without saying."
+
+   Same pair as the dock: oncontextmenu for a mouse, Mobile.hold for a thumb,
+   both landing on the same list. The buttons in REARRANGE mode stay - law 6
+   says a gesture may be a shortcut to something visible, never the only way
+   to reach it. */
+function widgetMenu(i, x, y) {
+  const cfg = layout[i]; if (!cfg) return;
+  const W = WIDGETS[cfg.t]; if (!W) return;
+  const set = (k, v) => {
+    cfg[k] = Math.max(2, Math.min(k === 'w' ? 12 : 8, (cfg[k] || 3) + v));
+    saveLayout(); drawHome();
+  };
+  UI.menu(x, y, [
+    i > 0 ? { label: 'Move up', icon: '\u2191', fn: () => move(i, -1) } : null,
+    i < layout.length - 1 ? { label: 'Move down', icon: '\u2193', fn: () => move(i, 1) } : null,
+    '-',
+    cfg.w < 12 ? { label: 'Wider', icon: '\u2192', fn: () => set('w', 1) } : null,
+    cfg.w > 2 ? { label: 'Narrower', icon: '\u2190', fn: () => set('w', -1) } : null,
+    cfg.h < 8 ? { label: 'Taller', fn: () => set('h', 1) } : null,
+    cfg.h > 2 ? { label: 'Shorter', fn: () => set('h', -1) } : null,
+    '-',
+    { label: 'Add another widget', icon: '+', fn: widgetPicker },
+    { label: 'Remove', icon: '\u2715', kind: 'bad', fn: () => {
+        const gone = layout.splice(i, 1)[0];
+        saveLayout(); drawHome(); Mobile.haptic('warn');
+        UI.undo('<b>' + esc(W.nm) + '</b> removed',
+          () => { layout.splice(i, 0, gone); saveLayout(); drawHome(); });
+      } },
+  ].filter(Boolean), { title: W.nm });
+}
+
 function drawHome() {
   const g = $('#grid'); g.innerHTML = '';
   document.body.classList.toggle('editing', editing);
@@ -1579,6 +1614,12 @@ function drawHome() {
     const body = el('div', 'w-body');
     try { W.draw(body, cfg); } catch (e) { body.appendChild(el('div', 'empty', 'widget error: ' + esc(e.message))); }
     n.appendChild(body);
+
+    /* Right click with a mouse, hold with a thumb, same menu either way. */
+    n.oncontextmenu = ev => { ev.preventDefault(); widgetMenu(+n.dataset.i, ev.clientX, ev.clientY); };
+    if (typeof Mobile !== 'undefined' && Mobile.hold) {
+      Mobile.hold(head, () => widgetMenu(+n.dataset.i, 0, 0));
+    }
 
     if (FINE) {
       const size = el('div', 'w-size');
