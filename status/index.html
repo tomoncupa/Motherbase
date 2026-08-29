@@ -3493,21 +3493,35 @@ function dayScore(date) {
   const today = date === Day.today();
   const T = TARGETS(), tot = dayTotals(date), ate = meals(date).length > 0;
 
-  const add = (id, label, got) => {
-    if (today && !settledYet(id)) { pending.push(label); return; }
+  /* Waiting until the evening was meant to stop a half-finished morning
+     showing a number that reads worse than the day is going. It did that by
+     withholding EVERYTHING, so at 8am with fourteen thousand steps against a
+     target of ten, eight hours of sleep and every gram of protein in, the
+     grade was still blank. Nothing you did before evening moved it, which is
+     indistinguishable from broken.
+
+     A target you have already MET is finished. More steps will not un-walk
+     them. So a one-sided target at full marks is banked and scores now, and
+     only a pillar that could still get worse waits for its hour.
+
+     Calories never bank, and neither does anything with a ceiling: being
+     under at breakfast says nothing about being under at bedtime. */
+  const add = (id, label, got, twoSided) => {
+    const banked = !twoSided && got === 1;
+    if (today && !banked && !settledYet(id)) { pending.push(label); return; }
     parts.push({ id: id, label: label, score: got });
   };
 
   if (live.indexOf('protein') > -1)
-    add('protein', 'Protein', closeness(ate ? num(tot.p, 0) : null, num(T.p, 0), false));
+    add('protein', 'Protein', closeness(ate ? num(tot.p, 0) : null, num(T.p, 0), false), false);
   if (live.indexOf('kcal') > -1)
-    add('kcal', 'Calories', closeness(ate ? num(tot.kcal, 0) : null, num(T.kcal, 0), true));
+    add('kcal', 'Calories', closeness(ate ? num(tot.kcal, 0) : null, num(T.kcal, 0), true), true);
 
   Object.values(fields()).forEach(f => {
     if (!f.on || f.target == null || f.target === '' || !dueToday(f, date)) return;
     const id = /sleep/i.test(f.id) ? 'sleep' : /step/i.test(f.id) ? 'steps' : f.id;
     if (live.indexOf(id) === -1) return;
-    add(id, f.label, closeness(value(date, f.id), num(f.target, 0), f.dir === 'lte'));
+    add(id, f.label, closeness(value(date, f.id), num(f.target, 0), f.dir === 'lte'), f.dir === 'lte');
   });
 
   const scored = parts.filter(p => p.score != null);
