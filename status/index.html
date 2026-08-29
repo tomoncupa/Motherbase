@@ -166,6 +166,13 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 .tile .bar{height:2px;border-radius:1px;background:var(--surface-3);overflow:hidden;margin-top:var(--s-2)}
 .tile .bar i{display:block;height:100%;background:var(--accent)}
 .tile.over .bar i{background:var(--warn)}
+/* ── a tile being moved ──
+   `touch-action:none` goes on the GRID and only while something is lifted.
+   Put it on the tile permanently and the island stops being somewhere you can
+   start a scroll, which on a phone is most of the first screen. */
+.tiles.sorting{touch-action:none}
+.tile.lifted{box-shadow:var(--e-3);outline:2px solid var(--accent);
+  transform:scale(1.04);position:relative;z-index:2;opacity:.95}
 
 /* the two arrows that set the tile order, in Settings → Track */
 .ord{width:30px;height:34px;padding:0;border:0;border-radius:var(--radius-sm);
@@ -1947,7 +1954,8 @@ function photoBlock(body, kind, onText, onShot) {
    `days` it is due every day, which is what everything used to be. `slot` is
    just a word for when, printed next to it: "Sunday morning". */
 const dueToday = (f, date) => !f.days || !f.days.length || f.days.indexOf(Day.dow(date || vd())) > -1;
-const outstanding = () => liveFields().filter(f => f.once && dueToday(f) && !logged(vd(), f.id));
+const outstanding = () => inTileOrder(
+  liveFields().filter(f => f.once && dueToday(f) && !logged(vd(), f.id)), f => f.id);
 
 /* ── the quick add ──
    Two halves, and the top one empties itself.
@@ -2889,6 +2897,108 @@ function card(title, sub) {
   return c;
 }
 
+/* ── the order of the tiles on Today ──
+   One list of tile names, and the only truth about the order. The field tiles
+   are named by field id; the two that are not fields are named `@protein` and
+   `@spent`, with the @ so a field could never collide with one.
+
+   Anything missing from the list keeps the position it would have had and
+   sits after everything listed, so a field added tomorrow appears at the end
+   rather than being dropped or jumping to the front.
+
+   Settings has two arrows per field that do the same job. They write here
+   too, or the arrows and the tiles would each hold a different opinion about
+   the order and the last one you touched would appear to be the only one that
+   worked. */
+const tileOrder = () => S.get('tileOrder', []) || [];
+const setTileOrder = keys => S.set('tileOrder', keys);
+/** put a list in tile order, given how to read a name off each entry */
+function inTileOrder(list, keyOf) {
+  const ord = tileOrder();
+  if (!ord.length) return list;
+  const at = x => { const i = ord.indexOf(keyOf(x)); return i < 0 ? Infinity : i; };
+  return list.map((x, i) => [x, i]).sort((a, b) => (at(a[0]) - at(b[0])) || (a[1] - b[1])).map(x => x[0]);
+}
+
+/* ── hold a tile to move it ──
+   A press that stays put for 450ms picks the tile up; after that the tile
+   follows whatever is under the pointer and the others shuffle around it. A
+   press that travels first was a scroll, so it is let go.
+
+   Both surfaces, one path: pointer events cover the thumb and the mouse
+   without either needing its own version. Right-click is deliberately NOT
+   wired to this — you cannot drag with a button you are holding for a menu.
+
+   The click that follows a drag is swallowed. Without that, putting a tile
+   down also opens the sheet behind it. */
+function makeTilesSortable(g, commit) {
+  let wait = null, drag = null, dropped = false;
+
+  const stop = () => { if (wait) { clearTimeout(wait.timer); wait = null; } };
+  const end = () => {
+    stop();
+    if (!drag) return;
+    drag.t.classList.remove('lifted');
+    g.classList.remove('sorting');
+    const moved = drag.moved;
+    drag = null;
+    if (!moved) return;
+    dropped = true;
+    Mobile.feedback('select');
+    commit([...g.children].map(n => n.dataset.tile).filter(Boolean));
+  };
+
+  g.addEventListener('pointerdown', e => {
+    const t = e.target.closest('.tile');
+    if (!t || !t.dataset.tile) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    wait = { t: t, id: e.pointerId, x: e.clientX, y: e.clientY, timer: setTimeout(() => {
+      if (!wait) return;
+      drag = { t: wait.t, id: wait.id, moved: false };
+      wait = null;
+      drag.t.classList.add('lifted');
+      g.classList.add('sorting');
+      Mobile.haptic('heavy');
+    }, 450) };
+  });
+
+  /* On the window, not the grid: a finger that leaves the tile it started on
+     still owns the gesture, and letting go outside the island must still put
+     the tile down rather than leave it stuck up. */
+  addEventListener('pointermove', e => {
+    if (wait && e.pointerId === wait.id) {
+      if (Math.abs(e.clientX - wait.x) + Math.abs(e.clientY - wait.y) > 10) stop();
+      return;
+    }
+    if (!drag || e.pointerId !== drag.id) return;
+    e.preventDefault();
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const over = under && under.closest ? under.closest('.tile') : null;
+    if (!over || over === drag.t || over.parentNode !== g) return;
+    /* which side of the tile you are on decides which side of it you land,
+       so dragging left and dragging right both do what they look like */
+    const r = over.getBoundingClientRect();
+    g.insertBefore(drag.t, (e.clientX - r.left) > r.width / 2 ? over.nextSibling : over);
+    drag.moved = true;
+    /* `nav` is the lightest buzz there is — one per tile you pass, so the
+       reshuffle is felt as well as seen without turning into a rattle. */
+    Mobile.haptic('nav');
+  }, { passive: false });
+
+  addEventListener('pointerup', end);
+  addEventListener('pointercancel', end);
+
+  /* iOS decides whether a touch scrolls the page early, and only a
+     non-passive touchmove that says no can stop it once a tile is up. */
+  g.addEventListener('touchmove', e => { if (drag) e.preventDefault(); }, { passive: false });
+
+  g.addEventListener('click', e => {
+    if (!dropped) return;
+    dropped = false;
+    e.preventDefault(); e.stopPropagation();
+  }, true);
+}
+
 function tile(label, val, unit, cls, onclick, pct, sub) {
   const t = el('button', 'tile ' + (cls || ''));
   t.innerHTML = '<div class="vl">' + (val == null ? '–' : esc(val)) +
@@ -2948,6 +3058,9 @@ function islandCard(d, opts) {
   c.appendChild(top);
 
   const g = el('div', 'tiles');
+  /* Named and collected before any of them is drawn, because the order is a
+     property of the whole set and cannot be decided one tile at a time. */
+  const made = [];
   liveFields().filter(f => dueToday(f, d)).forEach(f => {
     const v = value(d, f.id);
     let cls = v == null ? 'todo' : '';
@@ -2962,21 +3075,27 @@ function islandCard(d, opts) {
     /* a decaying field says what is still in you under its label, because the
        total you took today stops being the interesting number by mid-afternoon */
     const lf = (f.half && Day.isToday(d)) ? remaining(f) : null;
-    g.appendChild(tile(f.label, tileValue(f, v), f.unit, cls, () => fieldSheet(f, d), pct,
-      lf != null && lf >= 1 ? Math.round(lf) + (f.unit || '') + ' left' : null));
+    made.push({ key: f.id, node: tile(f.label, tileValue(f, v), f.unit, cls, () => fieldSheet(f, d), pct,
+      lf != null && lf >= 1 ? Math.round(lf) + (f.unit || '') + ' left' : null) });
   });
-  g.appendChild(tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', t.p ? '' : 'todo', () => { TAB = 'food'; draw(); }, t.p / (TARGETS().p || 1)));
-  /* What you spent is the one thing on here nobody wants on a feed. */
-  if (opts.money !== false) {
-    g.appendChild(tile('Spent', Math.round(dayMoney(d)).toLocaleString(), '\u20b1', dayMoney(d) ? '' : 'todo', () => { TAB = 'money'; draw(); }));
+  made.push({ key: '@protein', node: tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', t.p ? '' : 'todo', () => { TAB = 'food'; draw(); }, t.p / (TARGETS().p || 1)) });
+  /* Two different questions, and both have to say yes. `opts.money` is the
+     export asking not to put money into a picture that leaves the phone.
+     `spendTile` is Tom deciding he does not want to look at it at all. */
+  if (opts.money !== false && S.get('spendTile', 1)) {
+    made.push({ key: '@spent', node: tile('Spent', Math.round(dayMoney(d)).toLocaleString(), '\u20b1', dayMoney(d) ? '' : 'todo', () => { TAB = 'money'; draw(); }) });
   }
+  inTileOrder(made, x => x.key).forEach(x => { x.node.dataset.tile = x.key; g.appendChild(x.node); });
   c.appendChild(g);
+  /* Not wired on the export's copy: that one is built off screen to be
+     photographed, and nothing there is ever going to be held. */
+  if (opts.sortable) makeTilesSortable(g, keys => { setTileOrder(keys); draw(); });
   return c;
 }
 
 function drawNow(m) {
   const d = vd();
-  m.appendChild(islandCard(d, {}));
+  m.appendChild(islandCard(d, { sortable: true }));
 
   /* "Through the day" used to repeat every multi-entry field underneath the
      tiles, with its running total on the right — the same number the tile
@@ -4209,6 +4328,15 @@ function moveField(id, dir) {
   if ((list[j].cat || '') !== (list[i].cat || '')) return;
   list.splice(j, 0, list.splice(i, 1)[0]);
   list.forEach((f, n) => Rec.set('field', null, f.id, Object.assign({}, f, { order: n })));
+  /* Keep the tile order saying the same thing. The fields take the new
+     sequence; anything that is not a field — Protein, Spent — stays at the
+     index it already had, so an arrow never shuffles those two. */
+  const ord = tileOrder();
+  if (ord.length) {
+    const fresh = list.map(f => f.id).filter(id => ord.indexOf(id) > -1);
+    let k = 0;
+    setTileOrder(ord.map(key => (key.charAt(0) === '@' ? key : fresh[k++]) || key));
+  }
   Mobile.feedback('select');
   drawSettingsPane('track'); draw();
 }
@@ -4340,7 +4468,28 @@ function drawTrackTab(pane) {
     row.appendChild(ed);
     pane.appendChild(row);
   });
-  pane.appendChild(el('div', 'note', 'Tap a name to set its goal, colour and group. The arrows set the order on Today'));
+  pane.appendChild(el('div', 'note', 'Tap a name to set its goal, colour and group. The arrows set the order on Today, and so does holding a tile on Today and dragging it.'));
+
+  /* ── the two tiles that are not fields ──
+     Protein and Spent sit on Today beside the fields but are not in the list
+     above, because neither is something you set a goal on or turn into a
+     chart. Spent is the one people want gone, so it is the one with a switch.
+     Turning it off hides the tile and nothing else: the Money tab, the
+     Spending button and every payment already logged stay exactly where they
+     are, and turning it back on brings the tile back with them. */
+  pane.appendChild(el('label', 'fl', 'On Today'));
+  pane.appendChild(toggleRow('Spending', 'The Spent tile on Today. Your payments and the Money tab stay either way.',
+    !!S.get('spendTile', 1), on => { S.set('spendTile', on ? 1 : 0); drawSettingsPane('track'); draw(); }));
+  if (tileOrder().length) {
+    const rst = el('button', 'btn wide', 'Reset tile order');
+    rst.onclick = () => {
+      S.set('tileOrder', []);
+      Mobile.feedback('select');
+      UI.toast('Tiles back to their normal order');
+      drawSettingsPane('track'); draw();
+    };
+    pane.appendChild(rst);
+  }
 
   /* the library: an empty setup screen is a dead end */
   const have = fields();
