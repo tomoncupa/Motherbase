@@ -337,8 +337,33 @@ function run() {
   })());
   ok('backup: the sheet carries the same two machinery tabs', (() => {
     const tabs = IO.bagTabs('__smoke').map(t => t.name);
-    return tabs.indexOf('_Data') > -1 && tabs.indexOf('_Settings') > -1;
+    return tabs.indexOf(IO.bagName('__smoke')) > -1 && tabs.indexOf(IO.setName('__smoke')) > -1;
   })());
+  /* Six apps sync to one sheet, and a full push clears the tab before writing.
+     Flat names meant they took turns erasing each other. */
+  ok('backup: each app gets its own machinery tabs, not one shared pair', (() => {
+    const a = IO.bagTabs('__smoke').map(t => t.name);
+    const b = IO.bagTabs('__dup').map(t => t.name);
+    return a[0] !== b[0] && a[1] !== b[1] &&
+      a[0].indexOf('_Data') === 0 && a[0].indexOf('__smoke') > -1;
+  })());
+  ok('backup: a workbook written before the split still reads back', (() => {
+    const t = IO.bagTabs('__smoke');
+    return IO.bagFromTabs({ _Data: t[0].rows }).rows.length > 0;
+  })());
+  /* The rows with no table — a weight, a mood, the day's note — live only in
+     _Data, so a pull that cannot read it is a one-way sync. */
+  ok('backup: the rows in a _Data grid can be read straight back out', (() => {
+    const t = IO.bagTabs('__smoke');
+    const rows = IO.bagRows(t[0].rows);
+    return rows.length > 0 && rows.every(r => r && r.id && r.type);
+  })());
+  ok('mirror: the sheet hands over a tab that was asked for by name', () =>
+    /only && only.indexOf\(name\) > -1/.test(IO.mirror.script()));
+  /* A sync that says "no changes" while the weight on screen moves is a sync
+     you stop believing. Rows merged out of _Data count like any other. */
+  ok('mirror: rows merged from _Data are counted as changes', () =>
+    IO.came({ changed: 1, added: 2, merged: 4 }) === 7 && IO.came({ merged: 3 }) === 3);
   ok('backup: those tabs read back into a restorable bag', (() => {
     const t = IO.bagTabs('__smoke');
     const bag = IO.bagFromTabs({ _Data: t[0].rows, _Settings: t[1].rows });
