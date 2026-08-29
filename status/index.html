@@ -125,6 +125,13 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 /* the day card's top line: calories on the left, rank on the right */
 .islerow{display:flex;align-items:flex-start;gap:var(--s-3)}
 .islehero{flex:1;min-width:0}
+/* "609 / 2,220 left" is one reading and it breaks in half if it is allowed to
+   wrap: the number on one line and the word under it, which looks like two
+   facts. It stays on one line and steps down the type scale instead, because
+   a smaller number is still one number. */
+.islehero .hero{white-space:nowrap;overflow:hidden;text-overflow:clip}
+.islehero .hero.tight{font-size:var(--f-7)}
+.islehero .hero.tighter{font-size:var(--f-6)}
 .rankbadge{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-2);
   background:none;border:0;padding:0;cursor:pointer;color:inherit;font:inherit}
 .rankbadge .rk{width:46px;height:46px;display:flex;align-items:center;
@@ -3042,7 +3049,11 @@ function islandCard(d, opts) {
   const c = card();
 
   const left = ct.v - Math.round(t.kcal);
-  const hero = el('div', 'hero',
+  /* How wide the reading actually is, in characters, so the size can come down
+     before it runs out of room. Four figures either side of the slash is the
+     case that used to wrap. */
+  const figures = left.toLocaleString().length + ct.v.toLocaleString().length;
+  const hero = el('div', 'hero' + (figures > 12 ? ' tighter' : figures > 10 ? ' tight' : ''),
     left.toLocaleString() + ' <span class="sl">/</span> ' + ct.v.toLocaleString() +
     '<span class="u">left</span>');
   if (left < 0) hero.style.color = 'var(--warn)';
@@ -3645,8 +3656,28 @@ function dayScore(date) {
 
   const scored = parts.filter(p => p.score != null);
   const pct = scored.length ? Math.round(scored.reduce((a, p) => a + p.score, 0) / scored.length * 100) : null;
+
+  /* ── a day you never opened is not a day you failed ──
+
+     Every pillar with no reading scores zero, which is right for a day you
+     used and missed on, and wrong for a day the app was not open. Those two
+     were being counted as the same thing, so the seven days before you started
+     were seven zeroes and the badge said F, 0% — on a morning with eight hours
+     of sleep, twelve thousand steps and every gram of protein in.
+
+     A first impression of F is not a motivator, it is a reason to close the
+     app, and CLAUDE.md is explicit that progress starts above zero and that
+     earned progress is never taken away. So a day with nothing on it at all is
+     left out of the average rather than counted as a nought, and the card says
+     how many days the number is actually built from. */
+  const used = ate || trainedOn(date) ||
+    !!(Rec.get('day', date, '') || {}).note ||
+    !!(Rec.get('day', date, '') || {}).rest ||
+    Object.values(fields()).some(f => logged(date, f.id));
+
   return {
     date: date, pct: pct, parts: scored, pending: pending,
+    used: used,
     trained: trainedOn(date),
     rest: !!(Rec.get('day', date, '') || {}).rest,
     partial: pending.length > 0,
@@ -3659,20 +3690,24 @@ function dayScore(date) {
 function adherence(days) {
   const rows = [];
   for (let i = days; i >= 1; i--) rows.push(dayScore(Day.shift(Day.today(), -i)));
-  const scored = rows.filter(r => r.pct != null);
-  /* Scored and logged are different questions: an empty day scores zero, which
-     is the point, but calling it "logged" is a lie. */
-  const touched = rows.filter(r => r.parts.some(p => p.score > 0) || r.trained);
-  const pct = scored.length ? Math.round(scored.reduce((a, r) => a + r.pct, 0) / scored.length) : 0;
+  /* Only days that were actually used. A day with nothing on it says nothing
+     about how you did, so it says nothing about the average either. */
+  const scored = rows.filter(r => r.pct != null && r.used);
+  const touched = rows.filter(r => r.used);
+  const pct = scored.length ? Math.round(scored.reduce((a, r) => a + r.pct, 0) / scored.length) : null;
 
   /* training is a letter, not an average */
   const sessions = rows.filter(r => r.trained).length;
   const want = num(S.get('trainPerWeek', 4), 4) * (days / 7);
   const hitTraining = sessions >= Math.floor(want);
 
-  let k = rankFor(pct).k;
-  if (hitTraining) k = rankUp(k, 1);
-  else k = rankCap(k, 'A');       /* no training, no S - a ceiling, never a clawback */
+  /* No days to go on means no letter. Showing F would be inventing a verdict
+     out of an absence of evidence. */
+  let k = pct == null ? null : rankFor(pct).k;
+  if (k) {
+    if (hitTraining) k = rankUp(k, 1);
+    else k = rankCap(k, 'A');     /* no training, no S - a ceiling, never a clawback */
+  }
 
   /* what is costing the most, by how much it gave up rather than by count */
   const lost = {};
@@ -3682,7 +3717,7 @@ function adherence(days) {
   const worst = Object.entries(lost).filter(w => w[1] > 0.5)
     .sort((a, b) => b[1] - a[1]).slice(0, 3);
 
-  return { pct: pct, rank: RANKS.find(r => r.k === k), days: days, rows: rows,
+  return { pct: pct, rank: k ? RANKS.find(r => r.k === k) : null, days: days, rows: rows,
            sessions: sessions, want: Math.floor(want), hitTraining: hitTraining,
            worst: worst, scoredDays: scored.length, loggedDays: touched.length };
 }
@@ -3691,6 +3726,9 @@ function adherence(days) {
 function todayScore() {
   const d = dayScore(Day.today());
   if (d.pct == null) return d;
+  /* Same rule as the days behind it: a morning you have not touched yet is not
+     a morning you are failing. It gets a number once it gets a reading. */
+  if (!d.used) { d.pct = null; return d; }
   let k = rankFor(d.pct).k;
   if (d.trained) k = rankFloor(rankUp(k, 1), 'E');
   if (d.partial) k = rankCap(k, 'A');
@@ -3703,11 +3741,16 @@ function todayScore() {
 function rankBadge() {
   const a = adherence(7), t = todayScore();
   const w = el('button', 'rankbadge mb-press mb-tap');
-  w.title = 'How the last 7 days went. Tap for the working.';
+  w.title = a.rank
+    ? 'How the last 7 days went. Tap for the working.'
+    : 'No completed days logged yet. Tap to see what it needs.';
+  /* Nothing to grade yet reads as a dash, not as an F. The letter arrives the
+     day after the first day you log. */
+  const mark = a.rank ? a.rank.k : '–';
+  const col = a.rank ? rankColour(a.rank.k) : tok('--text-muted');
   w.innerHTML =
-    '<span class="rk" style="color:' + rankColour(a.rank.k) + ';border-color:'
-      + rankColour(a.rank.k) + '">' + a.rank.k + '</span>' +
-    '<span class="rkm"><b>' + a.pct + '%</b>' +
+    '<span class="rk" style="color:' + col + ';border-color:' + col + '">' + mark + '</span>' +
+    '<span class="rkm"><b>' + (a.pct == null ? '' : a.pct + '%') + '</b>' +
     /* Today's grade waits until the day has settled. A number built out of
        two pillars at 9am is not a grade, it is a fraction of one, and a
        figure that climbs all day is one you stop reading. Tom, 2026-08-28:
@@ -3732,11 +3775,12 @@ function rankCard() {
   c.appendChild(seg);
 
   const head = el('div', 'rankrow');
+  const mk = a.rank ? a.rank.k : '–';
+  const mcol = a.rank ? rankColour(a.rank.k) : tok('--text-muted');
   head.innerHTML =
-    '<div class="rankmark" style="color:' + rankColour(a.rank.k) + ';border-color:'
-      + rankColour(a.rank.k) + '">' + a.rank.k + '</div>' +
-    '<div class="rankside"><div class="hero">' + a.pct + '<span class="u">%</span></div>' +
-    '<div class="lb">' + esc(a.rank.say) + '</div></div>';
+    '<div class="rankmark" style="color:' + mcol + ';border-color:' + mcol + '">' + mk + '</div>' +
+    '<div class="rankside"><div class="hero">' + (a.pct == null ? '–' : a.pct + '<span class="u">%</span>') + '</div>' +
+    '<div class="lb">' + esc(a.rank ? a.rank.say : 'Nothing to grade yet') + '</div></div>';
   c.appendChild(head);
 
   /* training, said plainly, because it is the only thing that moves a letter */
@@ -3750,14 +3794,22 @@ function rankCard() {
       a.worst.map(w => esc(w[0])).join(', ') + '.'));
   }
   if (!a.loggedDays) {
-    c.appendChild(el('div', 'note', 'Nothing logged in this stretch.'));
+    c.appendChild(el('div', 'note',
+      'Nothing logged in this stretch, so there is nothing to grade. Log a day and the letter arrives tomorrow.'));
+  } else if (a.loggedDays < days) {
+    /* Said out loud, because an average over two days and an average over
+       thirty are not the same claim and the letter looks identical. */
+    c.appendChild(el('div', 'note',
+      'Built from the <b>' + a.loggedDays + '</b> day' + (a.loggedDays === 1 ? '' : 's') +
+      ' you logged. Days the app was not opened are left out rather than counted as noughts.'));
   }
 
   /* today, kept out of the number above */
   const t = todayScore();
   c.appendChild(el('label', 'fl', 'Today'));
   if (t.pct == null) {
-    c.appendChild(el('div', 'note', 'Nothing due yet today.'));
+    c.appendChild(el('div', 'note',
+      t.used ? 'Nothing due yet today.' : 'Nothing logged yet today.'));
   } else {
     c.appendChild(el('div', 'note',
       '<b>' + t.pct + '%</b>' + (t.rank ? ' &middot; ' + t.rank.k : '') +
@@ -3864,7 +3916,7 @@ async function shareCard(a, kind) {
   }
 
   const link = document.createElement('a');
-  link.download = 'status-' + a.rank.k + '-' + a.pct + '-' + kind + '.png';
+  link.download = 'status-' + (a.rank ? a.rank.k : 'nograde') + '-' + (a.pct == null ? '0' : a.pct) + '-' + kind + '.png';
   link.href = png;
   link.click();
   UI.toast('Overlay saved');
