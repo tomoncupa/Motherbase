@@ -1289,16 +1289,35 @@ const DEMO_BLOCKS = [
 /* Which of them the demo routine actually contains. */
 const DEMO_ROUTINE = ['Brush teeth', 'Weigh in', 'Track data'];
 
+/* ── the starter content is one thing, not one per device ──
+
+   BLOCK builds you a lane, a routine and ten blocks the first time it opens,
+   and it used to give every one of them a random id. So two devices built two
+   different sets of the same things, and the first time they synced you had
+   two Morning Routines, two My days and twenty blocks where there should have
+   been ten. Nothing was lost. It just looked broken, and the only cure was
+   deleting one of each by hand.
+
+   Fixed ids make the starter content the same fact everywhere, so a merge
+   recognises it and there is nothing to tidy up. Anything you make yourself
+   still gets a random id, because two blocks you happen to call Walk on two
+   devices really are two different blocks. */
+const seedSlug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const SEED_LANE = 'seed-morning';
+const SEED_ROUTINE = 'seed-myday';
+const seedBlockId = n => 'seed-b-' + seedSlug(n);
+const seedItemId = n => 'seed-i-' + seedSlug(n);
+
 function seedLib() {
   return DEMO_BLOCKS.map(([name, dur, ci, en]) => ({
-    id: uid(), name, dur, color: PAL[ci], cat: 'Basics', energy: en,
+    id: seedBlockId(name), name, dur, color: PAL[ci], cat: 'Basics', energy: en,
   }));
 }
-const seedVariant = name => ({ id: uid(), name, items: {} });
+const seedVariant = (name, id) => ({ id: id || uid(), name, items: {} });
 function seedState() {
   /* One routine, so the board shows the shape rather than describing it. */
-  const lanes = [{ id: uid(), name: 'Morning Routine', start: '07:00', target: '08:00' }];
-  const v = seedVariant('My day');
+  const lanes = [{ id: SEED_LANE, name: 'Morning Routine', start: '07:00', target: '08:00' }];
+  const v = seedVariant('My day', SEED_ROUTINE);
   lanes.forEach(l => v.items[l.id] = []);
   /* The routine is filled from the same bin entries it would be filled from by
      hand, so the demo is made of real blocks and dragging one out behaves
@@ -1306,7 +1325,10 @@ function seedState() {
   const lib = seedLib();
   DEMO_ROUTINE.forEach(nm => {
     const src = lib.filter(b => b.name === nm)[0];
-    if (src) v.items[lanes[0].id].push(mkItem(src));
+    if (!src) return;
+    const it = mkItem(src);
+    it.id = seedItemId(nm);      /* fixed, like everything else the app made */
+    v.items[lanes[0].id].push(it);
   });
   return {
     v: 2, lanes, lib: lib, templates: [], variants: [v], current: v.id,
@@ -1339,11 +1361,15 @@ let S;
 const NOT_A_ROW = { lanes: 1, lib: 1, variants: 1, viewDate: 1 };
 
 /** S, taken apart. */
-function blockRows() {
+function blockRows(st) {
+  /* The live board unless handed another. Taking a state lets the same
+     description be built for one BLOCK has not adopted — which is how the
+     starter demo is recognised without having to load it first. */
+  st = st || S;
   const out = { lane: {}, routine: {}, item: {}, setting: {} };
-  (S.lanes || []).forEach((l, i) => { out.lane[l.id] = Object.assign({}, l, { ord: i }); });
-  (S.lib || []).forEach((b, i) => { out.item['lib|' + b.id] = Object.assign({}, b, { ord: i, bin: 1 }); });
-  (S.variants || []).forEach((v, i) => {
+  (st.lanes || []).forEach((l, i) => { out.lane[l.id] = Object.assign({}, l, { ord: i }); });
+  (st.lib || []).forEach((b, i) => { out.item['lib|' + b.id] = Object.assign({}, b, { ord: i, bin: 1 }); });
+  (st.variants || []).forEach((v, i) => {
     const r = Object.assign({}, v, { ord: i });
     delete r.items;
     out.routine[v.id] = r;
@@ -1357,8 +1383,35 @@ function blockRows() {
   /* Everything that is not one of the three lists is a setting. Derived
      rather than listed, so a field added later is carried without anybody
      remembering to add it here. */
-  Object.keys(S).forEach(k => { if (!NOT_A_ROW[k]) out.setting[k] = S[k]; });
+  Object.keys(st).forEach(k => { if (!NOT_A_ROW[k]) out.setting[k] = st[k]; });
   return out;
+}
+
+/* The board with the ids taken off, so one built here can be recognised as
+   the same starter content as one built on another device before the ids were
+   made to match. Names, lengths, colours and order still have to agree, so a
+   demo you have changed one thing about is your board and no longer this. */
+function boardShape(st) {
+  const rows = blockRows(st), out = [];
+  ['lane', 'routine', 'item'].forEach(t => {
+    const lines = Object.keys(rows[t]).map(k => {
+      const r = Object.assign({}, rows[t][k]);
+      delete r.id; delete r.srcId; delete r.lane; delete r.rt;
+      return t + ':' + JSON.stringify(r);
+    });
+    lines.sort().forEach(x => out.push(x));
+  });
+  return out.join('|');
+}
+
+/* The three lists as one string, so two boards can be compared. Settings are
+   left out on purpose: the timezone and the volume are not the board. */
+function boardSig(st) {
+  const rows = blockRows(st), out = [];
+  ['lane', 'routine', 'item'].forEach(t => {
+    Object.keys(rows[t]).sort().forEach(k => out.push(t + '::' + k + '=' + JSON.stringify(rows[t][k])));
+  });
+  return out.join('|');
 }
 
 /** rows, put back together. Null when there is nothing stored yet. */
@@ -1412,6 +1465,17 @@ let lastRows = null;
    different from itself. S.log is mutated in place on every tick, so every
    tick after the first save of a session was dropped before it reached
    storage. A string cannot change behind your back. */
+/* True between changing something and it reaching the store, which is the one
+   window where rows arriving from somewhere else would land on top of work
+   that has not been written down yet. writeRows clears it. */
+let touched = false;
+
+/* Set when an update had to be turned away, so it can be taken as soon as the
+   reason has passed. Without it one unlucky moment — a repaint in flight, a
+   block halfway through a drag — lost that update for good, because nothing
+   was ever going to announce it a second time. */
+let pendingAdopt = false;
+
 function rowSnap(now) {
   const snap = {};
   ['lane', 'routine', 'item', 'setting'].forEach(type => {
@@ -1437,19 +1501,46 @@ function writeRows() {
     if (was['setting::' + k] !== snap['setting::' + k]) Rec.setting('block', k, now.setting[k]);
   });
   lastRows = snap;
+  /* The edit is in the store now, so rows arriving from elsewhere are safe to
+     take. `touched` guards the gap between changing something and saving it,
+     not the whole session: left standing, one edit on the laptop would deafen
+     it to the phone until the page was reloaded. */
+  touched = false;
+  /* Anything that arrived during that gap is still waiting. Taken on the next
+     turn rather than here, so it cannot re-enter this function. */
+  if (pendingAdopt) { pendingAdopt = false; setTimeout(() => { if (typeof adoptRows === 'function') adoptRows(); }, 0); }
 }
 
+/* BLOCK owns these three. Said before the first write, because it is what
+   stamps each row with the app that wrote it and what makes the store warn if
+   another app starts writing them. */
+Rec.declare('block', ['lane', 'item', 'routine']);
+
+/* ── the demo is shown, not saved ──
+
+   The starter board used to be written into the store the instant the app
+   opened, which quietly made it data. Open BLOCK on the laptop for the first
+   time and it wrote ten blocks stamped with this second's clock — newer, by
+   the store's only rule, than the real board on the phone. The demo would
+   then win the merge and overwrite months of work.
+
+   So it is drawn and not written. Nothing reaches the store until you change
+   something, and at that moment it stops being a demonstration and starts
+   being your board, which is exactly when it deserves a row. A device that
+   has only ever looked at the demo has nothing to send and nothing to defend,
+   so the phone's board arrives and simply replaces it. */
 S = blockState();
+let showingDemo = false;
 if (!S) {
-  /* First run on rows. An old blob is taken across once and then left exactly
-     where it is: it costs nothing, and it is the only copy of the old world
-     until the new one has proved itself. */
+  /* An old blob is taken across once and then left exactly where it is: it
+     costs nothing, and it is the only copy of the old world until the new one
+     has proved itself. A real board, so it is written down at once. */
   let old = null;
   try { old = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem('brick_v1')); } catch (e) {}
-  S = (old && old.lanes && old.variants) ? old : seedState();
-  writeRows();
+  if (old && old.lanes && old.variants) { S = old; writeRows(); }
+  else { S = seedState(); showingDemo = true; }
 }
-if (!S.lanes || !S.variants) { S = seedState(); lastRows = null; writeRows(); }
+if (!S.lanes || !S.variants) { S = seedState(); lastRows = null; showingDemo = true; }
 /* forward-compat for maps saved by older versions.
 
    Wrapped in a function because it no longer runs exactly once. The store
@@ -1547,11 +1638,22 @@ const items = laneId => (M().items[laneId] || (M().items[laneId] = []));
 /** run fn with a different routine active — schedule()/items() always read the current one */
 function withVariant(id, fn) { const p = S.current; S.current = id; try { return fn(); } finally { S.current = p; } }
 
-/* set the moment anything is edited, so the late arrival from IndexedDB
-   below never overwrites work done in the first few milliseconds */
-let touched = false;
 let saveT;
-function save() { touched = true; clearTimeout(saveT); saveT = setTimeout(writeRows, 250); }
+/* Changing anything is the moment the starter board stops being a
+   demonstration and becomes yours, which is the moment it earns a row. */
+function save() { showingDemo = false; touched = true; clearTimeout(saveT); saveT = setTimeout(writeRows, 250); }
+
+/* ── saves nobody asked for ──
+
+   A repaint, the day turning over, a tick arriving from another app. All three
+   used to go through save(), and save() writes the whole board — so merely
+   opening BLOCK on a second device wrote the starter lane, routine and ten
+   blocks into the store, stamped with this second's clock. By the store's one
+   rule that beat the real board on the phone, and the demo won.
+
+   Bookkeeping does not get to turn a demonstration into data. Only you do,
+   by changing something. */
+function saveQuiet() { if (showingDemo) return; save(); }
 
 const HIST = [];
 function snap() {
@@ -1843,7 +1945,8 @@ function rolloverIfNewDay() {
   S.doneDate = todayKey();
   S.variants.forEach(v => clearDone(v.id));
   pullDone();
-  save();
+  /* A demo has no day to turn. */
+  saveQuiet();
 }
 function toggleDone(it) {
   it.done = !it.done;
@@ -1977,7 +2080,7 @@ function render() {
   if (S.view === 'day') renderDateBar(db);
   renderTabs(); renderBin();
   if (S.view === 'day') renderBoard(); else if (S.view === 'week') renderWeek(); else renderSum();
-  renderFoot(); save();
+  renderFoot(); saveQuiet();
 }
 
 function renderTabs() {
@@ -4522,18 +4625,67 @@ window.addEventListener('beforeunload', () => { clearTimeout(saveT); try { write
    spreadsheet and the sheet mirror for free, the same as every other app. */
 IO.register({ app: 'block', name: 'BLOCK', types: ['lane', 'item', 'routine'] });
 
-/* A row over 64KB lives only in IndexedDB and lands a few milliseconds after
-   boot. Nothing here is that big today, but a pasted note on a block would
-   be, and a first paint missing it is the bug that rule exists to stop.
-   Rebuild only if nothing has been touched yet, or this would undo an edit
-   made in those few milliseconds. */
-Rec.ready(() => {
-  if (touched) return;
+/* ── rows that arrive after the board is already on screen ──
+
+   Two ways that happens. A row over 64KB lives only in IndexedDB and lands a
+   few milliseconds after boot; nothing here is that big today, but a pasted
+   note on a block would be. And a sync, or this app open in another tab, can
+   hand over a whole board at any moment.
+
+   BLOCK used to read its lanes and routines out of the store exactly once, at
+   startup. So a sync worked, the rows were genuinely there, and the screen
+   went on showing what it had loaded until the page was reloaded. Same
+   rebuild, run whenever the store says something moved.
+
+   Two guards. `touched` means an edit is still on its way to the store, and
+   that edit is the newer one, so it is left alone. And a rebuild that comes
+   out identical to what is already on screen is dropped without a repaint,
+   which is what makes this cost nothing when the row that moved was our own. */
+function adoptRows() {
+  if (touched) { pendingAdopt = true; return false; }          /* an edit is still on its way down */
+  if (typeof drag !== 'undefined' && drag) { pendingAdopt = true; return false; }   /* mid-drag, hands off */
   const fresh = blockState();
-  if (!fresh) return;
+  if (!fresh) return false;
+
+  const before = boardSig(S);
+
+  /* ── a demo an older version already wrote down ──
+
+     The demo is not saved any more, but versions before this one saved it the
+     moment the app opened, so there are devices carrying starter rows with
+     their own random ids. Those cannot merge with anybody else's and would sit
+     alongside the real board as a second Morning Routine.
+
+     Recognised by shape rather than by id, and only when it is untouched, so a
+     starter board you have changed anything at all about is yours and is left
+     alone. Then it is cleared out and the real one takes its place. */
+  const demoNow = boardShape(seedState());
+  if (showingDemo || boardShape(S) === demoNow) {
+    if (boardShape(fresh) !== demoNow) {          /* a real board has turned up */
+      /* Clear our own starter rows first, if an older version wrote them down.
+         Ours by name, taken from the board we are showing, so nothing that
+         arrived is touched. */
+      if (!showingDemo) {
+        const mine = blockRows(S);
+        ['lane', 'routine', 'item'].forEach(t => Object.keys(mine[t]).forEach(k => Rec.del(t, null, k)));
+      }
+      const after = blockState();
+      if (after) {
+        S = after; normalise(); lastRows = rowSnap(blockRows()); showingDemo = false;
+        try { render(); } catch (e) {}
+        return true;
+      }
+    }
+  }
+
+  if (boardSig(fresh) === before) return false;  /* nothing moved that we can see */
+  showingDemo = false;
   S = fresh; normalise(); lastRows = rowSnap(blockRows());
   try { render(); } catch (e) {}
-});
+  return true;
+}
+Rec.ready(adoptRows);
+Rec.on(adoptRows);
 
 /* ══════════════════════ LifeOS bridge ══════════════════════
    BLOCK owns the schedule. LifeOS owns what actually got done. Three wires:
@@ -4590,7 +4742,14 @@ let pubT;
 const _render = render;
 render = function () { _render.apply(this, arguments); clearTimeout(pubT); pubT = setTimeout(() => { pushLib(); publishToday(); }, 400); };
 /* someone ticked something elsewhere — only repaint if it actually moved */
-LifeOS.on(() => { if (pullDone()) { save(); render(); } });
+LifeOS.on(() => {
+  /* Not while the starter board is only being shown. This fires when rows
+     arrive, which is exactly when the other device's board is landing, and
+     saving here would write the demo down with this second's clock on it —
+     newer than the real board, and therefore the winner. That is how a fresh
+     laptop used to overwrite the phone. */
+  if (pullDone()) { saveQuiet(); render(); }
+});
 LifeOS.ready(() => { pullDone(); render(); });
 
 render();
