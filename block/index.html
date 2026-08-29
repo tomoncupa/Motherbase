@@ -914,13 +914,35 @@ function weekCols() {
     return { d, date, key: k, isToday: k === tk, isPast: k < tk, isFuture: k > tk };
   });
 }
+/* What BLOCK'S OWN page for that day says, and nothing else. Three answers,
+   not two: true, false, and `null` for "that page has no opinion" — either
+   there is no page, or the page never knew this block. The third answer is
+   what stops an untick undoing itself: without it, a tick removed from the
+   page fell through to the shared log, read the value it was about to
+   replace, and wrote it straight back. */
+function isDoneLogged(it, col, L) {
+  const e = (S.log || {})[col.key];
+  if (!e || !e.d) return null;
+  const k = tickKey(it, L || laneOf(it));
+  if (e.d.includes(k)) return true;
+  if (e.d.includes(it.name) && sameNameCount(it) < 2) return true;
+  if ((e.s || []).includes(k) || (e.t || []).includes(k)) return false;
+  return null;
+}
 /** was this block ticked on that date? today reads live state, other days read the log */
 function isDoneOn(it, col, L) {
   if (col.isToday) return !!it.done;
-  const e = (S.log || {})[col.key];
-  if (!e || !e.d) return false;
-  const k = tickKey(it, L || laneOf(it));
-  return e.d.includes(k) || (e.d.includes(it.name) && !e.d.includes(k) && sameNameCount(it) < 2);
+  const own = isDoneLogged(it, col, L);
+  if (own !== null) return own;
+  /* BLOCK has no page for that day, or the page predates this block. A tick
+     made in HABITS or on the home screen is still a tick, so fall back to the
+     shared log. Only where the name is unique in the day, because the shared
+     log is keyed by NAME and cannot tell a morning brush from a night one.
+     Wrapped because the shared log is allowed to be missing entirely. */
+  try {
+    if (!LIFEOS_OK || !window.LifeOS || sameNameCount(it) > 1) return false;
+    return !!LifeOS.isDone(actIdOf(it), col.key);
+  } catch (x) { return false; }
 }
 function setDoneOn(it, col, scheduled, L) {
   if (col.isToday) return toggleDone(it);
@@ -928,10 +950,58 @@ function setDoneOn(it, col, scheduled, L) {
   S.log = S.log || {};
   const k = tickKey(it, L || laneOf(it));
   const e = S.log[col.key] || (S.log[col.key] = { t: scheduled || [k], d: [] });
+  /* ticking something answers the question that "not needed" was ducking */
+  if (e.s) { const si = e.s.indexOf(k); if (si > -1) e.s.splice(si, 1); }
   if (!e.t.includes(k)) e.t.push(k);
   const i = e.d.indexOf(k);
   if (i > -1) e.d.splice(i, 1); else { e.d.push(k); beep('done'); }
+  shareTick(it, col);
   save(); render();
+}
+/** was this block marked not-needed on that date? */
+function isSkippedOn(it, col, L) {
+  if (col.isToday) return !!it.skipped;
+  const e = (S.log || {})[col.key];
+  if (!e || !e.s) return false;
+  return e.s.includes(tickKey(it, L || laneOf(it)));
+}
+/* "not needed" was only ever a fact about today, held in a flag that the
+   rollover wiped. It is a fact about a DAY, so on any other date it is written
+   into that day's page of the log instead, alongside what was scheduled and
+   what got ticked. Older pages have no `s` list and simply show no skips. */
+function setSkippedOn(it, col, L) {
+  if (col.isToday) return toggleSkip(it);
+  if (col.isFuture) return toast('you can mark that on the day');
+  S.log = S.log || {};
+  const k = tickKey(it, L || laneOf(it));
+  const e = S.log[col.key] || (S.log[col.key] = { t: [], d: [] });
+  e.s = e.s || [];
+  const i = e.s.indexOf(k);
+  if (i > -1) { e.s.splice(i, 1); if (!e.t.includes(k)) e.t.push(k); }
+  else {
+    e.s.push(k);
+    /* not needed is not a miss: it leaves the day's scheduled set entirely,
+       so it can neither be owed nor break a streak */
+    const ti = e.t.indexOf(k); if (ti > -1) e.t.splice(ti, 1);
+    const di = e.d.indexOf(k); if (di > -1) e.d.splice(di, 1);
+  }
+  shareTick(it, col);
+  beep(i > -1 ? 'untick' : 'done');
+  save(); render();
+  toast(i > -1
+    ? '<b>' + esc(it.name) + '</b> is back on ' + dateLabel(col.key)
+    : '<b>' + esc(it.name) + '</b> not needed on ' + dateLabel(col.key) + ' — it will not count against you');
+}
+/* A tick belongs to the whole suite on the date it happened, not only to
+   BLOCK. Same rule as today's: report by name, and only flip it off once
+   EVERY block with that name is unticked, or un-ticking your evening brush
+   would erase the morning one. */
+function shareTick(it, col) {
+  try {
+    if (!LIFEOS_OK || !window.LifeOS) return;
+    const twins = LANES().flatMap(L => items(L.id)).filter(x => x.name === it.name && !x.hidden);
+    LifeOS.done(actIdOf(it), col.key, twins.some(x => isDoneLogged(x, col, null) === true), { src: 'block' });
+  } catch (e) {}
 }
 /* ── not themed, and it must not be ──
    These are the colours you pick for a lane, and the one you pick is WRITTEN
@@ -1262,7 +1332,11 @@ let S;
    that row's own contents changed, so `updated_at` moves for the block you
    edited and nothing else, which is what makes a merge a comparison rather
    than a guess. */
-const NOT_A_ROW = { lanes: 1, lib: 1, variants: 1 };
+/* `viewDate` is where you were LOOKING, not something you decided. Saving it
+   meant BLOCK reopened days later still parked on some past Tuesday, showing
+   a board that was not today and ticks that were not today's — the exact
+   confusion this date bar exists to clear up. It opens on today, always. */
+const NOT_A_ROW = { lanes: 1, lib: 1, variants: 1, viewDate: 1 };
 
 /** S, taken apart. */
 function blockRows() {
@@ -1330,21 +1404,39 @@ function blockState() {
    changed instead of rewriting everything and moving every timestamp. */
 let lastRows = null;
 
+/* What was last written, as STRINGS — one per row, keyed by type and id.
+   It used to be the objects themselves, and that quietly lost data: a
+   setting's value is the live object off S (`out.setting[k] = S[k]`), so the
+   record of "what we last saved" was the very object it would next be
+   compared against. Anything mutated in place therefore never looked
+   different from itself. S.log is mutated in place on every tick, so every
+   tick after the first save of a session was dropped before it reached
+   storage. A string cannot change behind your back. */
+function rowSnap(now) {
+  const snap = {};
+  ['lane', 'routine', 'item', 'setting'].forEach(type => {
+    Object.keys(now[type]).forEach(k => { snap[type + '::' + k] = JSON.stringify(now[type][k]); });
+  });
+  return snap;
+}
 function writeRows() {
-  const now = blockRows();
+  const now = blockRows(), was = lastRows || {}, snap = rowSnap(now);
   ['lane', 'routine', 'item'].forEach(type => {
-    const was = (lastRows && lastRows[type]) || {};
+    const pre = type + '::';
     Object.keys(now[type]).forEach(k => {
-      if (JSON.stringify(was[k]) !== JSON.stringify(now[type][k])) Rec.set(type, null, k, now[type][k]);
+      if (was[pre + k] !== snap[pre + k]) Rec.set(type, null, k, now[type][k]);
     });
     /* A tombstone, never a removal, or the deletion cannot travel. */
-    Object.keys(was).forEach(k => { if (!(k in now[type])) Rec.del(type, null, k); });
+    Object.keys(was).forEach(id => {
+      if (id.indexOf(pre) !== 0) return;
+      const k = id.slice(pre.length);
+      if (!(k in now[type])) Rec.del(type, null, k);
+    });
   });
-  const wasS = (lastRows && lastRows.setting) || {};
   Object.keys(now.setting).forEach(k => {
-    if (JSON.stringify(wasS[k]) !== JSON.stringify(now.setting[k])) Rec.setting('block', k, now.setting[k]);
+    if (was['setting::' + k] !== snap['setting::' + k]) Rec.setting('block', k, now.setting[k]);
   });
-  lastRows = now;
+  lastRows = snap;
 }
 
 S = blockState();
@@ -1393,6 +1485,7 @@ function normalise() {
   S.week = S.week.map(w => (w && S.variants.some(v => v.id === w)) ? w : null);
 }
 normalise();
+S.viewDate = null;                     /* a session always opens on today */
 
 /* ── the date on screen ──
    BLOCK used to know about weekdays and nothing else: Monday ran whatever the
@@ -1408,6 +1501,16 @@ normalise();
    `S.viewDate` is which date the board is showing. Null means today, so a save
    from before this existed opens exactly where it used to. */
 const viewKey = () => S.viewDate || todayKey();
+/* The week view already knew that a tick belongs to a DATE. The day view did
+   not: it read the `done` flag off the block, and that flag is one per block
+   for all time, so stepping the date changed which PLAN was on screen and
+   never which day's ticks. `viewCol` hands the day board the same little
+   {key,isToday,isPast,isFuture} object the week columns carry, so both views
+   now read and write ticks through one pair of functions. */
+function viewCol() {
+  const k = viewKey(), t = todayKey();
+  return { key: k, isToday: k === t, isPast: k < t, isFuture: k > t };
+}
 const isOneOff = v => !!(v && v.date);
 /* the templates, which are the only things a weekday can be assigned */
 const templates = () => S.variants.filter(v => !isOneOff(v));
@@ -1625,12 +1728,19 @@ function sortPri(laneId) {
 }
 
 /* ============================ today’s checklist ============================ */
-/** which routine is meant to run today: the week assignment wins, else whatever is open */
-const routineForToday = () => dayForDate(todayKey()) || S.current;
-/** blocks in a routine that actually apply today */
-function todaysPairs(vid) {
-  const d = todayIdx();
+/** which routine is meant to run on a date: the week assignment wins, else whatever is open */
+const routineForDate = key => dayForDate(key) || S.current;
+const routineForToday = () => routineForDate(todayKey());
+/** blocks in a routine that actually apply on a date */
+function pairsFor(vid, key) {
+  const d = Day.dow(key || todayKey());
   return withVariant(vid, () => LANES(vid).flatMap(l => items(l.id).map(it => ({ l, it }))).filter(({ l, it }) => effDays(l, it)[d] && !it.hidden));
+}
+/** blocks in a routine that actually apply today */
+function todaysPairs(vid) { return pairsFor(vid, todayKey()); }
+/** what the plan asked of a date, as log keys — the thing a tick is measured against */
+function scheduledFor(key) {
+  return pairsFor(routineForDate(key), key).map(({ it, l }) => tickKey(it, l));
 }
 function todaysBlocks(vid) { return todaysPairs(vid).map(({ it }) => it); }
 /**
@@ -1683,15 +1793,22 @@ function clearDone(vid) { withVariant(vid, () => LANES(vid).forEach(l => items(l
  * S.log[date] = { t: names scheduled, d: names ticked }. Names rather than ids,
  * so a block keeps its record when you rebuild the routine around it.
  */
-function logToday() {
-  const k = todayKey();
+/* The live `done` and `skipped` flags belong to ONE date — the one in
+   S.doneDate. So this takes that date, rather than assuming it is today: at
+   the rollover the flags still hold yesterday's answers, and writing them
+   under today's key filed yesterday's work as today's. */
+function logDay(k) {
+  k = k || todayKey();
   S.log = S.log || {};
-  const all = todaysPairs(routineForToday());
+  const all = pairsFor(routineForDate(k), k);
   if (!all.length) return;
   const e = S.log[k] || (S.log[k] = { t: [], d: [] });
   /* A skipped block never enters the scheduled set, so it is not something the
      day owed you. That is the whole mechanism: the streak asks whether
-     everything scheduled got ticked, and this was not scheduled. */
+     everything scheduled got ticked, and this was not scheduled. It is kept in
+     its own list too, so stepping back to that date can still show it struck
+     out rather than merely un-ticked. */
+  e.s = [...new Set(all.filter(({ it }) => isSkipped(it)).map(({ it, l }) => tickKey(it, l)))];
   e.t = [...new Set(all.filter(({ it }) => !isSkipped(it)).map(({ it, l }) => tickKey(it, l)))];
   const ticked = new Set(e.d);
   all.forEach(({ it, l }) => { if (it.done && !isSkipped(it)) ticked.add(tickKey(it, l)); });
@@ -1699,6 +1816,7 @@ function logToday() {
   const keys = Object.keys(S.log).sort();
   while (keys.length > 180) delete S.log[keys.shift()];
 }
+function logToday() { logDay(todayKey()); }
 /** completion rate per block name across the recorded history */
 function blockStats() {
   const m = {};
@@ -1721,7 +1839,7 @@ function streak() {
 }
 function rolloverIfNewDay() {
   if (S.doneDate === todayKey()) return;
-  logToday();                                  /* close yesterday's page before turning it */
+  if (S.doneDate) logDay(S.doneDate);          /* close yesterday's page before turning it */
   S.doneDate = todayKey();
   S.variants.forEach(v => clearDone(v.id));
   pullDone();
@@ -1960,7 +2078,10 @@ function selMenu(x, y) {
     { label: 'Priority', sub: [0, 1, 2, 3].map(k => ({ label: k ? 'P' + k : 'none', fn: () => each(it => it.pri = k) })) },
     { label: 'Colour', sub: PAL.map((c, i) => ({ label: PALNAME[i], fn: () => each(it => { it.color = c; syncKin(it, { color: c }); }) })) },
     { sep: 1 },
-    { label: 'Tick them all off', fn: () => { picks.forEach(({ it }) => { if (!it.done) toggleDone(it); }); } },
+    { label: 'Tick them all off', fn: () => {
+        const col = viewCol();
+        picks.forEach(({ it }) => { if (!isDoneOn(it, col, null)) setDoneOn(it, col, scheduledFor(col.key), null); });
+      } },
     { label: 'Compact them', fn: () => each(it => it.compact = true) },
     { label: 'Expand them', fn: () => each(it => it.compact = false) },
     { label: 'Move to routine', sub: LANES().map(L => ({ label: L.name, fn: () => {
@@ -2217,7 +2338,8 @@ function goDate(key) {
 function renderBoard() {
   const b = $('#board'); b.innerHTML = '';
   /* finished routines can stay put, slide to the end, or get out of the way entirely */
-  const isDoneLane = L => { const a = items(L.id).filter(x => !x.hidden); return a.length > 0 && a.every(x => x.done); };
+  const bcol = viewCol();
+  const isDoneLane = L => { const a = items(L.id).filter(x => !x.hidden); return a.length > 0 && a.every(x => isDoneOn(x, bcol, L)); };
   let lanes = LANES();
   if (S.doneRoutines === 'right') lanes = lanes.slice().sort((a, b) => (isDoneLane(a) ? 1 : 0) - (isDoneLane(b) ? 1 : 0));
   if (S.doneRoutines === 'hide') {
@@ -2341,7 +2463,7 @@ function renderBoard() {
 
     /* progress + load meters */
     const bars = el('div', 'bars');
-    const done = sc.filter(r => r.it.done).length;
+    const done = sc.filter(r => isDoneOn(r.it, viewCol(), L)).length;
     if (nb) {
       const p = el('div', 'prog'); p.dataset.tip = '<b>' + done + ' of ' + nb + '</b> checked off in this routine';
       p.appendChild(el('i')).style.width = (done / nb * 100) + '%';
@@ -2673,9 +2795,10 @@ function tone(f, t, dur, vol, wave) {
 /** how far through today's list we are — drives the rising pitch */
 function progressRatio() {
   try {
-    const td = todaysBlocks(routineForToday());
+    const col = viewCol();
+    const td = pairsFor(routineForDate(col.key), col.key);
     if (!td.length) return 0;
-    return td.filter(b => b.done).length / td.length;
+    return td.filter(({ it, l }) => isDoneOn(it, col, l)).length / td.length;
   } catch (e) { return 0; }
 }
 function beep(kind) {
@@ -2709,7 +2832,11 @@ function brickNode(laneId, it, s, e, meta) {
   meta = meta || {};
   const broke = RULECHK.byItem.get(it.id);
   const mini = isMini(it);
-  const n = el('div', 'brick' + (mini ? ' mini' : '') + (it.pin ? ' pinned' : '') + (it.done ? ' done' : '') + (it.skipped ? ' skipped' : '') + (it.hidden ? ' hid' : '') + (it.ongoing ? ' ongoing' : '') + (broke ? ' broke' : ''));
+  /* the tick shown is the one belonging to the date on screen, never the
+     block's own flag — that flag is today's, and today is one of many days */
+  const col = viewCol(), vL = lane(laneId);
+  const isDn = isDoneOn(it, col, vL), isSk = isSkippedOn(it, col, vL);
+  const n = el('div', 'brick' + (mini ? ' mini' : '') + (it.pin ? ' pinned' : '') + (isDn ? ' done' : '') + (isSk ? ' skipped' : '') + (it.hidden ? ' hid' : '') + (it.ongoing ? ' ongoing' : '') + (broke ? ' broke' : ''));
   n.dataset.id = it.id; n.dataset.lane = laneId;
   n.style.setProperty('--c', it.color);
   if (!mini) n.style.minHeight = brickMin(it.dur) + 'px';
@@ -2761,14 +2888,18 @@ function brickNode(laneId, it, s, e, meta) {
 
   /* --- checkbox + name --- */
   const main = el('div', 'b-main');
-  const ck = el('button', 'b-check' + (it.done ? ' on' : '') + (it.skipped ? ' skip' : ''), it.skipped ? '–' : '✓');
-  ck.dataset.tip = it.skipped
-    ? '<b>Not needed today</b> — counts neither as done nor as owed, and cannot break your streak.<br>Click to put it back.'
-    : (it.done ? 'Done — click to un-check' : 'Check it off. When today’s whole routine is ticked, it resets itself.<br>Right-click for <b>not needed today</b>.');
-  ck.onclick = ev => { ev.stopPropagation(); if (it.skipped) return toggleSkip(it); toggleDone(it); };
+  const ck = el('button', 'b-check' + (isDn ? ' on' : '') + (isSk ? ' skip' : ''), isSk ? '–' : '✓');
+  const when = col.isToday ? 'today' : dateLabel(col.key);
+  ck.dataset.tip = isSk
+    ? '<b>Not needed ' + esc(when) + '</b> — counts neither as done nor as owed, and cannot break your streak.<br>Click to put it back.'
+    : (isDn ? 'Done — click to un-check'
+      : col.isFuture ? 'You can tick this off on the day'
+      : col.isToday ? 'Check it off. When today’s whole routine is ticked, it resets itself.<br>Right-click for <b>not needed today</b>.'
+      : 'Tick it off for <b>' + esc(when) + '</b> — backfilling a past day is normal.<br>Right-click for <b>not needed</b>.');
+  ck.onclick = ev => { ev.stopPropagation(); if (isSk) return setSkippedOn(it, col, vL); setDoneOn(it, col, scheduledFor(col.key), vL); };
   /* right on the box, because the box is where you are already deciding
      whether this happened */
-  ck.oncontextmenu = ev => { ev.preventDefault(); ev.stopPropagation(); toggleSkip(it); };
+  ck.oncontextmenu = ev => { ev.preventDefault(); ev.stopPropagation(); setSkippedOn(it, col, vL); };
   main.appendChild(ck);
   const txt = el('div', 'b-txt');
   const nm = el('div', 'b-name', esc(it.name));
@@ -2902,8 +3033,12 @@ function blockMenu(laneId, it, x, y) {
   const setDays = arr => { snap(); it.days = arr.slice(); it.daysEx = true; render(); };
   openMenu(x, y, [
     { head: it.name },
-    { label: it.skipped ? 'Put it back on today' : 'Not needed today', k: '–',
-      fn: () => toggleSkip(it) },
+    (() => {
+      const col = viewCol(), L0 = lane(laneId), sk = isSkippedOn(it, col, L0);
+      const when = col.isToday ? 'today' : dateLabel(col.key);
+      return { label: sk ? 'Put it back on ' + when : 'Not needed ' + when, k: '–',
+        fn: () => setSkippedOn(it, col, L0) };
+    })(),
     { sep: 1 },
     { label: 'Set start time…', k: '⚓', fn: () => promptTime('Start time (HH:MM) — anchors the block', it.at || '', v => { snap(); it.at = v || null; render(); }) },
     { label: 'Set end time…', fn: () => {
@@ -3243,12 +3378,15 @@ function renderFoot() {
   const load = LANES().reduce((a, l) => a + laneLoad(l.id), 0);
   $('#statTotal').innerHTML = '<b>' + esc(M().name) + '</b> · ' + cnt + (cnt === 1 ? ' block · ' : ' blocks · ') +
     '<b>' + dur2s(tot) + '</b> · load <b>' + load.toFixed(1) + '</b>';
-  const vid = routineForToday();
-  const td = todaysBlocks(vid), dn = td.filter(b => b.done).length;
+  const col = viewCol(), vid = routineForDate(col.key);
+  const td = pairsFor(vid, col.key).filter(({ it, l }) => !isSkippedOn(it, col, l));
+  const dn = td.filter(({ it, l }) => isDoneOn(it, col, l)).length;
   $('#statDone').innerHTML = td.length
-    ? DSHORT[todayIdx()] + ' · <b>' + dn + '/' + td.length + '</b> done <span class="dayprog"><i style="width:' + (dn / td.length * 100) + '%"></i></span>'
-    : 'nothing scheduled today';
-  $('#statDone').dataset.tip = 'Today’s checklist from <b>' + esc((variant(vid) || M()).name) + '</b>. Tick them all and it resets itself.';
+    ? DSHORT[Day.dow(col.key)] + ' · <b>' + dn + '/' + td.length + '</b> done <span class="dayprog"><i style="width:' + (dn / td.length * 100) + '%"></i></span>'
+    : 'nothing scheduled ' + (col.isToday ? 'today' : 'that day');
+  $('#statDone').dataset.tip = (col.isToday ? 'Today’s' : esc(dateLabel(col.key)) + '’s') +
+    ' checklist from <b>' + esc((variant(vid) || M()).name) + '</b>.' +
+    (col.isToday ? ' Tick them all and it resets itself.' : '');
   $('#gapv').textContent = S.gap + 'm';
   if (SEL.size) {
     $('#statTotal').innerHTML = '<b style="color:var(--acc)">' + SEL.size + ' selected</b> — right-click for bulk edits · Esc to clear · Del to remove';
@@ -4370,7 +4508,7 @@ Rec.ready(() => {
   if (touched) return;
   const fresh = blockState();
   if (!fresh) return;
-  S = fresh; normalise(); lastRows = blockRows();
+  S = fresh; normalise(); lastRows = rowSnap(blockRows());
   try { render(); } catch (e) {}
 });
 
