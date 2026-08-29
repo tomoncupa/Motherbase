@@ -511,7 +511,10 @@ const IO = {
     /* The id goes in the SECOND column, never the first. Restore reads column
        one and needs to find the row's JSON sitting there, so the key the sheet
        matches on goes beside it rather than in front of it. */
-    const data = since ? [] : [['Motherbase rows. Do not edit by hand, the readable tabs are the ones to look at.']];
+    /* The banner goes on every push, delta included, because the tab is now
+       written line by line and the script has to know the first line is not
+       one of them. */
+    const data = [['Motherbase rows. Do not edit by hand, the readable tabs are the ones to look at.']];
     bag.rows.forEach(r => {
       if (since && !(r.updated_at > since)) return;
       data.push([JSON.stringify(r), r.id]);
@@ -529,7 +532,22 @@ const IO = {
     Object.keys(bag.local || {}).sort().forEach(k => set.push([k, bag.local[k]]));
 
     return [
-      { name: IO.bagName(appId), rows: data, machine: true, key: 1 },
+      /* ── the one tab that is never cleared ──
+
+         Every other tab is rewritten whole on a full push, and for a readable
+         tab that is right: the device sending it has the whole picture.
+
+         _Data is different, because a device might not. Open STATUS on the
+         laptop for the first time and it holds nothing; if its first sync
+         rewrote this tab, a fortnight of weights would go off the sheet in one
+         move. The phone would still have them — nothing here can reach across
+         and delete a row on another device — but the sheet is the backup, and a
+         backup that empties itself when you open a second device is not one.
+
+         So this tab is matched on the row id and updated in place, always.
+         Rows only ever arrive. A row that really was deleted arrives as its own
+         tombstone, which is a line to write rather than a line to leave out. */
+      { name: IO.bagName(appId), rows: data, machine: true, key: 1, head: 1, upsert: 1 },
       /* two columns and a version stamp: cheap enough to send whole every time,
          and it is the tab that says what wrote the file */
       { name: IO.setName(appId), rows: set, machine: true, whole: true },
@@ -956,7 +974,7 @@ const Mirror = {
     if (!since) return all;
     /* a tab whose only line is its header changed nothing, and sending it says
        nothing at exactly the cost of saying something */
-    return all.filter(t => t.whole || t.rows.length > (t.key === 0 ? 1 : 0));
+    return all.filter(t => t.whole || t.rows.length > ((t.head || t.key === 0) ? 1 : 0));
   },
 
   /* ── 0: what does the sheet hold? ──
@@ -1060,8 +1078,15 @@ const Mirror = {
          question we already knew. */
       const stamp = (pre.pushedAt || {})[appId] || '';
       const bagKey = appId + '|_Data';
+      const seenBag = mcfg.seen[bagKey] || '';
+      /* Skipping our own push is only safe once we have read the tab at all.
+         A device that has never read it does not know what else is in there:
+         the laptop's first sync pushed, so the last stamp was its own, and on
+         that reasoning it went on skipping the one tab holding the phone's
+         entire history. Never read means always read. */
+      const mineLast = !!seenBag && stamp === (mcfg.pushed[appId] || '');
       const bagTabsWanted = [];
-      if (mcfg.sheetV >= 3 && stamp && stamp !== (mcfg.pushed[appId] || '') && stamp !== (mcfg.seen[bagKey] || '')) {
+      if (mcfg.sheetV >= 3 && stamp && stamp !== seenBag && !mineLast) {
         bagTabsWanted.push(IO.bagName(appId));
         /* a sheet still carrying the flat tab from before the split */
         if (pre.index['_Data']) bagTabsWanted.push('_Data');
@@ -1072,7 +1097,7 @@ const Mirror = {
          nothing to read. This is the ordinary case and it now costs nothing. */
       if (!want.length) return Promise.resolve({ skipped: 'nothing new', changed: 0, added: 0, clashes: 0 });
       return jsonp(mcfg.url, { app: appId, want: 'tables', only: want.join(',') }).then(reply => {
-        if (!reply || !reply.tabs) return { skipped: 'nothing came back' };
+        if (!reply || !reply.tabs) return { skipped: 'nothing came back', failed: 1 };
         const out = apply(reply.tabs);
         /* moved only after the rows are in, so a failure half way through
            means we read the tab again rather than skip it forever */
@@ -1086,7 +1111,7 @@ const Mirror = {
     }
 
     return jsonp(mcfg.url, { app: appId, want: 'tables' }).then(reply => {
-      if (!reply || !reply.tabs) return { skipped: 'nothing came back' };
+      if (!reply || !reply.tabs) return { skipped: 'nothing came back', failed: 1 };
       return apply(reply.tabs);
     });
   },
@@ -1124,7 +1149,41 @@ const Mirror = {
        while this push is still in the air is newer than this stamp and goes
        next time; stamping afterwards would step straight over it. */
     const at = new Date().toISOString();
-    let tabs = Mirror.tabs(appId, { since: full ? '' : mcfg.pushed[appId], views: full });
+
+    /* ── sending everything, and clearing nothing ──
+
+       A full push rewrites each tab: the sheet clears it and writes what it was
+       handed. That is right when the device doing it holds the whole picture,
+       and wrong when it does not. Open STATUS on the laptop for the first time
+       and it holds almost nothing; a rewrite from there would take a fortnight
+       of weights off the sheet in one move.
+
+       A version 3 script protects _Data itself, because it is told to match
+       that tab line by line. An older one has never heard of that, and the
+       window between updating the app and redeploying the script is exactly
+       when a second device gets set up.
+
+       So the question is not how much to send — it is always everything — but
+       whether this device has earned the right to clear. It has if the sheet
+       can protect the save file itself, or if we have read the save file at
+       least once and therefore hold what is in it. Otherwise the same rows go
+       up matched on their ids instead, which adds and updates and never
+       removes. Nothing is skipped either way, so the boundary stays honest. */
+    const idx = (opts.index && opts.index.index) || {};
+    const bagHas = ((idx[IO.bagName(appId)] || {}).rows) || 0;
+    /* nobody has pushed since we did, so what is up there came from us */
+    const oursAlready = !!mcfg.pushed[appId] &&
+      ((opts.index && opts.index.pushedAt) || {})[appId] === mcfg.pushed[appId];
+    const wholePicture = mcfg.sheetV >= 3 ||     /* the sheet protects the save file itself */
+      !!mcfg.seen[appId + '|_Data'] ||           /* we have read it, so we hold what it holds */
+      bagHas <= 1 ||                             /* there is nothing up there to lose */
+      oursAlready;                               /* we are the one who put it there */
+    const clearing = full && wholePicture;
+    /* The derived read-outs — the calendar, the log, the daily totals — are
+       rewritten whole by whoever sends them, so they belong to the same rule.
+       A laptop with no meals on it should not blank the daily totals on its
+       way past. */
+    let tabs = Mirror.tabs(appId, { since: full ? '' : mcfg.pushed[appId], views: clearing });
     /* The settings tab is small and always built, which would make every idle
        sync a write of fourteen unchanged lines. Compare it with what was sent
        last time instead, and an afternoon where nothing was logged costs one
@@ -1140,7 +1199,7 @@ const Mirror = {
     /* Tabs this app wrote under the old prefixed name. The sheet drops them
        after writing the new ones, because a rename that leaves the old tab
        behind is how you end up reading last month's data and believing it. */
-    const body = JSON.stringify({ app: appId, at: at, mode: full ? 'full' : 'delta',
+    const body = JSON.stringify({ app: appId, at: at, mode: clearing ? 'full' : 'delta',
       tabs: tabs, retire: IO.oldPrefix(appId) });
     /* text/plain sidesteps the CORS preflight Apps Script cannot answer */
     const head = { 'Content-Type': 'text/plain;charset=utf-8' };
@@ -1169,10 +1228,10 @@ const Mirror = {
            make the tab twelve lines long. */
         if (((r.pushedAt || {})[appId] || '') === at) {
           mcfg.pushed[appId] = at;
-          if (full) mcfg.full[appId] = at;
+          if (clearing) mcfg.full[appId] = at;
           if (sig) mcfg.sig[appId] = sig;
           mcfg.at = g.Day.today(); msave();
-          return { state: 'confirmed', tabs: tabs.length, mode: full ? 'full' : 'delta' };
+          return { state: 'confirmed', tabs: tabs.length, mode: clearing ? 'full' : 'delta' };
         }
         return { state: 'failed', missing: tabs.length, of: tabs.length };
       }
@@ -1243,9 +1302,23 @@ const Mirror = {
   sync(appId, quiet, opts) {
     if (!mcfg.url) return Promise.resolve(false);
     if (!quiet) toast('Syncing…');
+    let idx = null;
     return Mirror.index(appId)
-      .then(pre => Mirror.pull(appId, pre).catch(() => ({ skipped: 'could not read' })))
-      .then(got => Mirror.push(appId, true, opts || {}).then(res => {
+      .then(pre => { idx = pre; return Mirror.pull(appId, pre).catch(() => ({ skipped: 'could not read', failed: 1 })); })
+      .then(got => {
+        /* ── read first, and if the read failed, do not write ──
+
+           A push rewrites the readable tabs whole. Doing that straight after a
+           read that failed means writing over a sheet we have just proved we
+           cannot see — and the thinner the device, the more it erases. The
+           boundary in `pushed` has not moved, so the same rows go up on the
+           next attempt; there is nothing to queue and nothing to lose by
+           waiting. */
+        if (got && got.failed) {
+          if (!quiet) toast('Could not read the sheet, so nothing was sent. ' + Mirror.why(), { bad: true, ms: 8000 });
+          return false;
+        }
+        return Mirror.push(appId, true, Object.assign({ index: idx }, opts || {})).then(res => {
         const ok2 = res && (res.state === 'confirmed' || res.state === 'clean');
         if (!quiet) {
           if (res && res.state === 'clean') toast('Already up to date.');
@@ -1259,7 +1332,8 @@ const Mirror = {
         }
         if (ok2 && res.state === 'confirmed' && g.Sfx) g.Sfx.play('complete', { level: 2 });
         return ok2;
-      }));
+        });
+      });
   },
 
   /** ── keeping up without being asked ──
@@ -1343,10 +1417,13 @@ const Mirror = {
       '   rather than all twelve thousand of them, every time.',
       '',
       '   Version 3 hands back a tab the app asks for by name. Everything with no',
-      '   readable tab of its own — a weight, a mood, the note on a day — lives in',
-      '   the _Data tab, and that tab has a warning across the top rather than a',
-      '   header, so the old rule refused to send it. It went up and never came',
-      '   back down. This is the half that lets the other device read it. */',
+      '   readable tab of its own, such as a weight, a mood, or the note on a day,',
+      '   lives in the _Data tab, and that tab has a warning across the top rather',
+      '   than a header, so the old rule refused to send it. It went up and never',
+      '   came back down. This is the half that lets the other device read it.',
+      '',
+      '   It also never clears that tab, so opening the app on a second device',
+      '   cannot empty the sheet. */',
       '',
       'var MB_V = 3;',
       '',
@@ -1394,6 +1471,12 @@ const Mirror = {
       '  if (!sh) { sh = ss.insertSheet(t.name); whole = true; }',
       '  if (sh.getLastRow() < 1) whole = true;',
       '',
+      '  /* A tab that must never lose a line it was not sent. _Data is the save',
+      '     file, and a device that has only just been opened does not have the',
+      '     whole of it to send, so its lines are matched on the id and updated',
+      '     in place, even when everything else is being rewritten. */',
+      '  if (t.upsert && sh.getLastRow() > 0) whole = false;',
+      '',
       '  if (whole) {',
       '    sh.clear();',
       '    sh.getRange(1, 1, grid.length, w).setValues(grid);',
@@ -1413,7 +1496,9 @@ const Mirror = {
       '    for (var i = 0; i < keys.length; i++) have[String(keys[i][0])] = i + 2;',
       '  }',
       '  var append = [];',
-      '  var from = t.editable ? 1 : 0;      /* skip the header line we were sent */',
+      '  var from = 0;                       /* skip the header line we were sent */',
+      '  if (t.editable) from = 1;',
+      '  if (t.head) from = 1;',
       '  for (var j = from; j < grid.length; j++) {',
       '    var line = grid[j];',
       '    var at = have[String(line[t.key])];',
@@ -1504,7 +1589,7 @@ const Mirror = {
       '    if (only && only.indexOf(name) < 0) return;',
       '    var vals = sh.getDataRange().getValues();',
       '    if (!vals.length) return;',
-      '    /* Only the tabs with an id column can be read back — a scratch tab',
+      '    /* Only the tabs with an id column can be read back: a scratch tab',
       '       somebody made by hand is not data. A tab the app named outright is',
       '       different: it asked for that one, and _Data (every row that has no',
       '       table, which is where a weight and a mood live) opens with a warning',

@@ -364,6 +364,25 @@ function run() {
      you stop believing. Rows merged out of _Data count like any other. */
   ok('mirror: rows merged from _Data are counted as changes', () =>
     IO.came({ changed: 1, added: 2, merged: 4 }) === 7 && IO.came({ merged: 3 }) === 3);
+  /* Opening the app on a second device must not be able to empty the sheet.
+     The tab is matched line by line rather than rewritten, and the script is
+     told so on every push. */
+  ok('mirror: the save-file tab is never rewritten whole', (() => {
+    const bag = IO.bagTabs('__smoke')[0];
+    return bag.upsert === 1 && bag.head === 1 && bag.key === 1 &&
+      /t\.upsert && sh\.getLastRow\(\) > 0/.test(IO.mirror.script());
+  })());
+  ok('mirror: a failed read stops the push that would follow it', () =>
+    /got && got\.failed/.test(String(IO.mirror.sync)));
+  /* A device only gets to rewrite the sheet if it holds what the sheet holds.
+     Everything still goes up either way; the difference is whether the tab is
+     cleared first. */
+  ok('mirror: a device that has never read the save file always reads it', () =>
+    /never read means always read/i.test(String(IO.mirror.pull)) &&
+    /!!seenBag && stamp ===/.test(String(IO.mirror.pull)));
+  ok('mirror: only a device holding the whole picture may clear a tab', () =>
+    /wholePicture/.test(String(IO.mirror.push)) &&
+    /clearing \? 'full' : 'delta'/.test(String(IO.mirror.push)));
   ok('backup: those tabs read back into a restorable bag', (() => {
     const t = IO.bagTabs('__smoke');
     const bag = IO.bagFromTabs({ _Data: t[0].rows, _Settings: t[1].rows });
