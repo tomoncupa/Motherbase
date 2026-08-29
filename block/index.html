@@ -2341,14 +2341,24 @@ function renderBoard() {
   const bcol = viewCol();
   const isDoneLane = L => { const a = items(L.id).filter(x => !x.hidden); return a.length > 0 && a.every(x => isDoneOn(x, bcol, L)); };
   let lanes = LANES();
-  if (S.doneRoutines === 'right') lanes = lanes.slice().sort((a, b) => (isDoneLane(a) ? 1 : 0) - (isDoneLane(b) ? 1 : 0));
-  if (S.doneRoutines === 'hide') {
+  /* Getting out of the way is about DOING the day, so it only happens on
+     today. A date you stepped back to is a record, and a record that hides
+     the routine you finished is the exact opposite of useful — finishing it
+     is why you went to look. */
+  if (bcol.isToday && S.doneRoutines === 'right') lanes = lanes.slice().sort((a, b) => (isDoneLane(a) ? 1 : 0) - (isDoneLane(b) ? 1 : 0));
+  if (bcol.isToday && S.doneRoutines === 'hide') {
     const hidden = lanes.filter(isDoneLane);
     lanes = lanes.filter(L => !isDoneLane(L));
     if (hidden.length) {
-      const note = el('button', 'donenote', '✓ ' + hidden.length + ' finished routine' + (hidden.length > 1 ? 's' : '') + ' hidden');
-      note.dataset.tip = esc(hidden.map(L => L.name).join(', ')) + '<br>Click to show them again';
-      note.onclick = () => { S.doneRoutines = 'stay'; render(); };
+      /* It used to say only that something was hidden. A routine you cannot
+         see and did not ask to lose reads as a routine that has been deleted,
+         so this now names it and says out loud that it is still here. */
+      const note = el('button', 'donenote',
+        '✓ ' + esc(hidden.map(L => L.name).join(', ')) + ' — finished, so ' +
+        (hidden.length > 1 ? 'they are' : 'it is') + ' tucked away. Nothing deleted. Click to show ' +
+        (hidden.length > 1 ? 'them' : 'it') + ' again.');
+      note.dataset.tip = 'You have this set to <b>hide finished routines</b>.<br>Click here, or turn it off in settings, to keep them on the board.';
+      note.onclick = () => { S.doneRoutines = 'stay'; save(); render(); toast('Finished routines stay on the board now'); };
       b.appendChild(note);
     }
   }
