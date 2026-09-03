@@ -3585,17 +3585,95 @@ const rankFloor = (k, floor) => {
   return i > f ? floor : k;
 };
 
-/* ── two targets, two curves ──
-   A target you are trying to REACH - steps, protein, sleep - is scored in
-   proportion. Tom, 2026-08-29: "half the steps is half the score." Five
-   thousand steps is not a failed day, it is half a day's walking, and the
-   band below scored it zero because it treated 50% short the same as 200%
-   over. Within FULL of the target, or past it, is still full marks.
+/* ── the adherence standards ──
+   From Tom's table, 2026-08-29. Each pillar is a LADDER, not a percentage of
+   a target: a number gets a letter directly, and the day is the average of
+   the letters it earned.
 
-   A target you are trying to LAND ON - calories - stays a band: full marks
-   within 5%, nothing by 20% out, either side. Half your calories is not half
-   a good day, it is a different kind of bad one, and proportion would score
-   starving as a partial success. */
+   This replaces one curve doing four jobs. A curve has to decide how far off
+   is "half marks", which is a question with a different answer for hours of
+   sleep than it has for grams of protein. A ladder does not ask it - the
+   table says what eight hours is worth and what six is worth, and that is
+   the whole answer.
+
+   Sleep and steps are absolute: eight hours is an S whatever you set your
+   own target to. Calories and protein are ACCURACY - how close you landed to
+   your own target, either side - because a target of 2,400 means something
+   different for each person and being 400 over is as wrong as 400 under.
+
+   Kept as a setting so the standards can be raised without a code change. */
+const STANDARDS = () => S.get('standards', {
+  sleep:   [['S', 8], ['A', 7.5], ['B', 7], ['C', 6.5], ['D', 6], ['E', 5.5]],
+  steps:   [['S', 12500], ['A', 10000], ['B', 8800], ['C', 7500], ['D', 6500], ['E', 5000]],
+  kcal:    [['S', 97], ['A', 95], ['B', 90], ['C', 85], ['D', 80], ['E', 75], ['F', 70]],
+  protein: [['S', 97], ['A', 95], ['B', 90], ['C', 85], ['D', 80], ['E', 75], ['F', 70]],
+});
+
+/* Training is graded against the plan you set rather than a flat number,
+   because four sessions out of four is not the same day's work as four out
+   of six. Straight from the table, one column per weekly plan. A plan of two
+   or three tops out at A: you cannot rest your way to an S. */
+const TRAIN_STANDARD = () => S.get('trainStandard', {
+  6: { 6: 'S', 5: 'A', 4: 'B', 3: 'C', 2: 'D', 1: 'E', 0: 'F' },
+  5: { 5: 'S', 4: 'A', 3: 'B', 2: 'C', 1: 'D', 0: 'F' },
+  4: { 4: 'S', 3: 'A', 2: 'B', 1: 'D', 0: 'F' },
+  3: { 3: 'A', 2: 'B', 1: 'D', 0: 'F' },
+  2: { 2: 'A', 1: 'C', 0: 'F' },
+});
+
+/** where a letter sits: S is 0, F is the last one */
+const rankIndex = k => {
+  const i = RANKS.findIndex(r => r.k === k);
+  return i < 0 ? RANKS.length - 1 : i;
+};
+
+/** the letter a number earns on a ladder, or F if it clears nothing */
+function ladderLetter(rungs, v) {
+  if (v == null) return 'F';
+  for (let i = 0; i < rungs.length; i++) if (v >= rungs[i][1]) return rungs[i][0];
+  return 'F';
+}
+
+/** how close you landed to a target, either side, as a percentage */
+function accuracy(v, target) {
+  if (!target) return null;
+  if (v == null) return 0;
+  return Math.max(0, 100 - Math.abs(v - target) / target * 100);
+}
+
+/** the letter for one pillar on one day, or null if it does not apply */
+function pillarLetter(id, v, target) {
+  const st = STANDARDS();
+  if (id === 'kcal' || id === 'protein') {
+    const a = accuracy(v, target);
+    return a == null ? null : ladderLetter(st[id], a);
+  }
+  if (!st[id]) return null;
+  return ladderLetter(st[id], v);
+}
+
+/** the training letter for a stretch, against the plan */
+function trainLetter(sessions, perWeek, weeks) {
+  const table = TRAIN_STANDARD();
+  const plan = Math.max(2, Math.min(6, Math.round(num(perWeek, 4) || 4)));
+  const col = table[plan] || table[4];
+  /* Over more than a week the plan scales with it, and so does what you did. */
+  const per = weeks > 0 ? sessions / weeks : sessions;
+  const hit = Math.max(0, Math.min(plan, Math.round(per)));
+  return col[hit] || 'F';
+}
+
+/** letters in, one letter out */
+function averageLetter(letters) {
+  const ok = letters.filter(Boolean);
+  if (!ok.length) return null;
+  const mean = ok.reduce((a, k) => a + rankIndex(k), 0) / ok.length;
+  return RANKS[Math.max(0, Math.min(RANKS.length - 1, Math.round(mean)))].k;
+}
+
+/* The old curve, kept because the tiles and the charts still ask "how close
+   is this to the target" as a fraction, which is a different question from
+   what letter it earned. */
 const FULL = 0.05, ZERO = 0.20;
 function closeness(v, target, both) {
   if (target == null || !target) return null;
@@ -3635,38 +3713,43 @@ function dayScore(date) {
   const today = date === Day.today();
   const T = TARGETS(), tot = dayTotals(date), ate = meals(date).length > 0;
 
-  /* Waiting until the evening was meant to stop a half-finished morning
-     showing a number that reads worse than the day is going. It did that by
-     withholding EVERYTHING, so at 8am with fourteen thousand steps against a
-     target of ten, eight hours of sleep and every gram of protein in, the
-     grade was still blank. Nothing you did before evening moved it, which is
-     indistinguishable from broken.
+  /* Each pillar earns a letter off its own ladder and the day is the average
+     of those letters. `score` is the same letter as a fraction, so the tiles
+     and the "costing the most" list still have something to sort on, and so
+     the percentage on the badge can never disagree with the letter beside it.
 
-     A target you have already MET is finished. More steps will not un-walk
-     them. So a one-sided target at full marks is banked and scores now, and
-     only a pillar that could still get worse waits for its hour.
+     Sleep and steps read straight off the table. Calories and protein are
+     scored on ACCURACY to your own target, either side, because 400 over is
+     as wrong as 400 under. */
+  const asScore = k => 1 - rankIndex(k) / (RANKS.length - 1);
 
-     Calories never bank, and neither does anything with a ceiling: being
-     under at breakfast says nothing about being under at bedtime. */
-  const add = (id, label, got, twoSided) => {
-    const banked = !twoSided && got === 1;
+  const add = (id, label, letter, monotonic) => {
+    if (letter == null) return;
+    /* A pillar that can only go up counts as soon as it is at A or better.
+       Hitting your steps at 2pm is done, and waiting until 8pm to admit it is
+       what made the grade look broken. One still short of an A can improve,
+       and one that can get worse by eating more, both wait for their hour. */
+    const banked = monotonic && rankIndex(letter) <= rankIndex('A');
     if (today && !banked && !settledYet(id)) { pending.push(label); return; }
-    parts.push({ id: id, label: label, score: got });
+    parts.push({ id: id, label: label, letter: letter, score: asScore(letter) });
   };
 
   if (live.indexOf('protein') > -1)
-    add('protein', 'Protein', closeness(ate ? num(tot.p, 0) : null, num(T.p, 0), false), false);
+    add('protein', 'Protein', pillarLetter('protein', ate ? num(tot.p, 0) : null, num(T.p, 0)), false);
   if (live.indexOf('kcal') > -1)
-    add('kcal', 'Calories', closeness(ate ? num(tot.kcal, 0) : null, num(T.kcal, 0), true), true);
+    add('kcal', 'Calories', pillarLetter('kcal', ate ? num(tot.kcal, 0) : null, num(T.kcal, 0)), false);
 
+  /* The ladders for sleep and steps are absolute, so a field with no target
+     of its own is still graded - eight hours is an S whatever you aimed at. */
   Object.values(fields()).forEach(f => {
-    if (!f.on || f.target == null || f.target === '' || !dueToday(f, date)) return;
+    if (!f.on || !dueToday(f, date)) return;
     const id = /sleep/i.test(f.id) ? 'sleep' : /step/i.test(f.id) ? 'steps' : f.id;
     if (live.indexOf(id) === -1) return;
-    add(id, f.label, closeness(value(date, f.id), num(f.target, 0), f.dir === 'lte'), f.dir === 'lte');
+    add(id, f.label, pillarLetter(id, value(date, f.id), num(f.target, 0)), true);
   });
 
-  const scored = parts.filter(p => p.score != null);
+  const scored = parts;
+  const letter = averageLetter(scored.map(p => p.letter));
   const pct = scored.length ? Math.round(scored.reduce((a, p) => a + p.score, 0) / scored.length * 100) : null;
 
   /* ── a day you never opened is not a day you failed ──
@@ -3688,7 +3771,7 @@ function dayScore(date) {
     Object.values(fields()).some(f => logged(date, f.id));
 
   return {
-    date: date, pct: pct, parts: scored, pending: pending,
+    date: date, pct: pct, letter: letter, parts: scored, pending: pending,
     used: used,
     trained: trainedOn(date),
     rest: !!(Rec.get('day', date, '') || {}).rest,
@@ -3708,17 +3791,25 @@ function adherence(days) {
   const touched = rows.filter(r => r.used);
   const pct = scored.length ? Math.round(scored.reduce((a, r) => a + r.pct, 0) / scored.length) : null;
 
-  /* training is a letter, not an average */
+  /* Training has its own ladder, graded against the plan you set: four out of
+     four is not the same week's work as four out of six. */
   const sessions = rows.filter(r => r.trained).length;
-  const want = num(S.get('trainPerWeek', 4), 4) * (days / 7);
+  const perWeek = num(S.get('trainPerWeek', 4), 4);
+  const want = perWeek * (days / 7);
+  const trainK = trainLetter(sessions, perWeek, days / 7);
   const hitTraining = sessions >= Math.floor(want);
 
   /* No days to go on means no letter. Showing F would be inventing a verdict
      out of an absence of evidence. */
-  let k = pct == null ? null : rankFor(pct).k;
+  const dayLetters = scored.map(r => r.letter).filter(Boolean);
+  let k = dayLetters.length ? averageLetter(dayLetters) : (pct == null ? null : rankFor(pct).k);
   if (k) {
-    if (hitTraining) k = rankUp(k, 1);
-    else k = rankCap(k, 'A');     /* no training, no S - a ceiling, never a clawback */
+    /* Training is the fifth pillar, so it averages in with the rest rather
+       than being bolted on afterwards - but it can still only ever help, so
+       a bad training week never drags a good one below where it stood. */
+    const withTrain = averageLetter(dayLetters.concat([trainK]));
+    if (rankIndex(withTrain) < rankIndex(k)) k = withTrain;
+    if (!hitTraining) k = rankCap(k, 'A');   /* no training, no S */
   }
 
   /* what is costing the most, by how much it gave up rather than by count */
@@ -3731,6 +3822,7 @@ function adherence(days) {
 
   return { pct: pct, rank: k ? RANKS.find(r => r.k === k) : null, days: days, rows: rows,
            sessions: sessions, want: Math.floor(want), hitTraining: hitTraining,
+           trainRank: trainK, perWeek: perWeek,
            worst: worst, scoredDays: scored.length, loggedDays: touched.length };
 }
 
@@ -3741,7 +3833,9 @@ function todayScore() {
   /* Same rule as the days behind it: a morning you have not touched yet is not
      a morning you are failing. It gets a number once it gets a reading. */
   if (!d.used) { d.pct = null; return d; }
-  let k = rankFor(d.pct).k;
+  /* The letter now comes off the pillars' own letters rather than being read
+     back out of a percentage, so the two can never disagree. */
+  let k = d.letter || rankFor(d.pct).k;
   if (d.trained) k = rankFloor(rankUp(k, 1), 'E');
   if (d.partial) k = rankCap(k, 'A');
   if (d.rest) k = rankCap(k, 'A');
