@@ -146,9 +146,14 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
   font-weight:700;line-height:1;border:3px solid;border-radius:var(--radius-md)}
 .rankside{flex:1;min-width:0}
 .rankside .lb{font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-1)}
-.hero .u{font-size:var(--f-2);font-weight:400;color:var(--text-muted);letter-spacing:0;margin-left:var(--s-2)}
+.hero .u{font-size:var(--f-2);font-weight:400;color:var(--text-muted);letter-spacing:0;margin-left:var(--s-1)}
 /* the divider in "1,680 / 2,400" - present, and quieter than either number */
-.hero .sl{color:var(--text-muted);font-weight:400;margin:0 .12em}
+.hero .sl{color:var(--text-muted);font-weight:400;margin:0 .06em}
+/* A value with a slash in it - 200/175 - is nearly twice as wide as a plain
+   one and was running under the unit. It steps down instead of overflowing;
+   the tile is a fixed width and the number has to live inside it. */
+.tile .vl.long{font-size:var(--f-5)}
+.tile .vl.longer{font-size:var(--f-4)}
 /* the pass marks, as the table Tom drew them */
 .gradetbl{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;margin:var(--s-2) 0}
 .gradetbl .gr{display:grid;grid-template-columns:2.2em repeat(4,1fr);align-items:center;
@@ -445,6 +450,12 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
    one is a warning colour waiting to be earned, the other is spent. */
 .tx .at.by{color:var(--warn)}
 .tx .at.did{color:var(--ok,var(--accent))}
+.tx .at.wrote{opacity:.6}
+/* The journal heading is the biggest word on its card because it is also the
+   control that sorts it, and a heading nobody reads as pressable is a control
+   nobody presses. */
+.jsort{font-size:var(--f-4) !important;cursor:pointer;display:flex;align-items:baseline;gap:var(--s-2)}
+.jsort b{font-weight:400;font-size:var(--f-1);color:var(--text-muted);letter-spacing:.04em}
 .carried{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);
   color:var(--warn);margin-left:var(--s-2);opacity:.8}
 
@@ -1121,6 +1132,14 @@ function noteOrder(a, b) {
   if (done(a) !== done(b)) return done(a) - done(b);
   const mode = S.get('noteSort', 'manual');
   if (mode === 'manual') return (a.ord || 0) - (b.ord || 0);
+  if (mode === 'time') {
+    /* The time ON the line, which is the one you meant, falling back to when
+       it was written. A line with no time sorts after the ones that have one
+       rather than being given a fake position at midnight. */
+    const at = x => x.at ? +String(x.at).replace(':', '') : 9999;
+    if (at(a) !== at(b)) return at(a) - at(b);
+    return (a.t || 0) - (b.t || 0);
+  }
   return mode === 'oldest' ? (a.t || 0) - (b.t || 0) : (b.t || 0) - (a.t || 0);
 }
 
@@ -1187,6 +1206,11 @@ function parseLine(raw) {
 }
 
 /** "14:45" as "2:45pm", the way it is read back on screen. */
+/** a timestamp as the HH:MM the clock label wants */
+function hhmm(ms) {
+  const d = new Date(ms);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
 function clockLabel(at) {
   if (!at) return '';
   const [h, m] = at.split(':').map(Number);
@@ -3081,7 +3105,12 @@ function fitHero(root) {
 
 function tile(label, val, unit, cls, onclick, pct, sub) {
   const t = el('button', 'tile ' + (cls || ''));
-  t.innerHTML = '<div class="vl">' + (val == null ? '–' : esc(val)) +
+  /* Measured in characters, because a tile is a fixed width and the font is
+     whatever the theme brought: a value like "200/175" plus its unit is
+     nearly twice the width of a plain number and was running off the edge. */
+  const n = String(val == null ? '' : val).length + String(unit || '').length;
+  const fit = n > 10 ? ' longer' : n > 7 ? ' long' : '';
+  t.innerHTML = '<div class="vl' + fit + '">' + (val == null ? '–' : esc(val)) +
     (unit ? '<span class="un">' + esc(unit) + '</span>' : '') + '</div>' +
     '<div class="lb">' + esc(label) + (sub ? '<i>' + esc(sub) + '</i>' : '') + '</div>';
   if (pct != null) {
@@ -3234,6 +3263,21 @@ function drawJournal(m) {
   const c = card('Journal');
   const head = c.querySelector('h2');
   if (head) {
+    /* The heading is the sort control. Tom, 2026-09-03: "Let the journal word
+       act as a button to sort bullets by time." Nothing new on the screen -
+       the word was already there doing nothing. Todos stay on top whichever
+       way it is sorted, which is the rule in noteOrder and not negotiable
+       here: an open task is not a diary entry and never sorts among them. */
+    head.classList.add('jsort');
+    const modes = ['manual', 'time', 'newest'];
+    const says = { manual: '', time: 'by time', newest: 'newest first' };
+    const mode = S.get('noteSort', 'manual');
+    head.innerHTML = 'Journal' + (says[mode] ? '<b>' + says[mode] + '</b>' : '');
+    head.title = 'Sort: ' + (says[mode] || 'as you arranged them');
+    head.onclick = () => {
+      S.set('noteSort', modes[(modes.indexOf(mode) + 1) % modes.length]);
+      Mobile.feedback('select'); draw();
+    };
     const row = el('div', 'jbtns');
     NOTE_KINDS.forEach(k => {
       const b = el('button', 'jb mb-press mb-tap', noteSvg(k.id));
@@ -3268,6 +3312,11 @@ function drawJournal(m) {
             : (x.dur ? '<i class="at">' + durLabel(x.dur) + '</i>' : '')) +
       (x.by ? '<i class="at by">by ' + esc(clockLabel(x.by)) + '</i>' : '') +
       (x.done && x.doneAt ? '<i class="at did">' + esc(clockLabel(x.doneAt)) + '</i>' : '') +
+      /* An entry has no time of its own, so the useful clock is when it was
+         written. Only where nothing else is showing, or the row starts
+         carrying three times and says nothing. */
+      (x.kind !== 'todo' && !x.at && !x.dur && x.t
+        ? '<i class="at wrote">' + esc(clockLabel(hhmm(x.t))) + '</i>' : '') +
       /* how long it has been following you — quiet, but it should sting a bit */
       (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') + '</span>';
     const box = r.querySelector('.k');
@@ -3314,6 +3363,11 @@ function noteSheet(x, d) {
      let it finish rising or the focus lands mid-animation and the keyboard
      fights the transform. */
   const reopening = !!sheetH;
+  /* Held out here so the focus can happen AFTER the sheet is in the document
+     but still inside the tap. ui.js builds the body first and appends the
+     dialog second, so a focus() inside the builder lands on an element that
+     is not in the page yet and does nothing at all. */
+  let taRef = null;
   openSheet(noteKind(x.kind).label, body => {
     const seg = el('div', 'seg');
     let kind = x.kind;
@@ -3431,11 +3485,24 @@ function noteSheet(x, d) {
        Held onto directly now rather than searched for. Focus alone drops the
        caret wherever the platform feels like, so it goes after the last
        character, which is what "carry on writing" means. */
+    taRef = ta;
     setTimeout(() => {
-      ta.focus();
+      /* ui.js focuses the first input in a dialog 40ms in, which since todos
+         gained a Start field is now a time picker rather than the Save button.
+         Take the caret back. */
+      if (document.activeElement !== ta) ta.focus();
       try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
-    }, reopening ? 40 : 380);
+    }, reopening ? 40 : 120);
   });
+
+  /* iOS raises the keyboard only when focus happens inside the tap that asked
+     for it. The old code focused on a 380ms timer, so the caret appeared and
+     the keyboard did not - which is what Tom kept seeing. This line is still
+     inside the same click, and the sheet is in the document by now. */
+  if (taRef) {
+    taRef.focus();
+    try { taRef.setSelectionRange(taRef.value.length, taRef.value.length); } catch (e) {}
+  }
 }
 
 function noteMenu(x, d, i, n) {
@@ -3987,15 +4054,19 @@ function todayScore() {
 
 /* ── the badge ── */
 function rankBadge() {
+  /* The letter on the Today tab is TODAY. It used to be the last seven
+     completed days, which is a defensible number on the wrong screen: Tom
+     read it as today's because the tab is called Today and it is. The week
+     is on Trends, where the working lives. */
   const a = adherence(7), t = todayScore();
   const w = el('button', 'rankbadge mb-press mb-tap');
-  w.title = a.rank
-    ? 'The last 7 completed days. Tap for the working.'
-    : 'No completed days logged yet. Tap to see what it needs.';
+  w.title = t.rank
+    ? 'Today so far. Tap for the week and the working.'
+    : 'Nothing graded yet today. Tap to see what it needs.';
   /* Nothing to grade yet reads as a dash, not as an F. The letter arrives the
      day after the first day you log. */
-  const mark = a.rank ? a.rank.k : '–';
-  const col = a.rank ? rankColour(a.rank.k) : tok('--text-muted');
+  const mark = t.rank ? t.rank.k : '–';
+  const col = t.rank ? rankColour(t.rank.k) : tok('--text-muted');
   /* The letter and nothing else. Tom, 2026-09-03: "I don't want the % number
      to be visible just the letter is cleaner." He is right - the percentage
      was the same fact said twice, in the less readable of the two ways, and
