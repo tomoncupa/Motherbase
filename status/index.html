@@ -3648,16 +3648,20 @@ function ladderLetter(rungs, v) {
 
 /** how close you landed to a target, as a percentage.
 
-    `overOk` makes it one-sided. Tom, 2026-09-03: "Going above protein is
-    okay, the accuracy only counts for under." Two hundred grams against a
-    target of a hundred and seventy five is not a miss by fourteen percent,
-    it is the target met, and grading it as a C was the model being tidy
-    rather than right. Calories stay two-sided: four hundred over is as
-    wrong as four hundred under. */
-function accuracy(v, target, overOk) {
+    `free` names the direction that costs nothing: 'over' means at or above
+    the target is full marks, 'under' means at or below it is. Anything else
+    counts both ways.
+
+    Tom, 2026-09-03: "Going above protein is okay, the accuracy only counts
+    for under." Two hundred grams against a target of a hundred and seventy
+    five is not a miss by fourteen percent, it is the target met, and grading
+    it as a C was the model being tidy rather than right. Protein is always
+    'over'; calories are whichever the user picked. */
+function accuracy(v, target, free) {
   if (!target) return null;
   if (v == null) return 0;
-  if (overOk && v >= target) return 100;
+  if (free === 'over' && v >= target) return 100;
+  if (free === 'under' && v <= target) return 100;
   return Math.max(0, 100 - Math.abs(v - target) / target * 100);
 }
 
@@ -3665,7 +3669,10 @@ function accuracy(v, target, overOk) {
 function pillarLetter(id, v, target) {
   const st = STANDARDS();
   if (id === 'kcal' || id === 'protein') {
-    const a = accuracy(v, target, id === 'protein');
+    /* Protein is always free above the target. Calories are whichever way
+       the user said a miss should count. */
+    const free = id === 'protein' ? 'over' : kcalDir();
+    const a = accuracy(v, target, free);
     return a == null ? null : ladderLetter(st[id], a);
   }
   if (!st[id]) return null;
@@ -5192,44 +5199,34 @@ function drawTargets(pane) {
 }
 
 /* ══════════════ DAILY QUESTS ══════════════
-   What you are actually doing right now, and the five things it is judged on.
+   The five things the day is graded on, and the settings that belong to them
+   rather than to the app.
 
-   A phase is not a label. Tom, 2026-09-03: picking one sets the numbers and
-   the pass marks, and you can still type over the rate afterwards. Cutting
-   and massing are not the same job done at different speeds - the margin for
-   error is smaller when you are eating under, so what counts as close enough
-   moves with it. */
-const PHASES = [
-  { id: 'cut',  name: 'Cutting',     rate: 1.0,  say: 'eating under, holding muscle' },
-  { id: 'hold', name: 'Maintenance', rate: 0,    say: 'holding where you are' },
-  { id: 'mass', name: 'Massing',     rate: -0.5, say: 'eating over, adding size' },
+   A phase - cutting, massing, maintenance - was built here and taken back out
+   the same day. Tom, 2026-09-03: "let's never mind the phasing, it adds
+   complications." He was right: it set a rate you could already set, and it
+   promised to change the pass marks, which meant inventing two more sets of
+   numbers to sit beside the one real table.
+
+   What it was actually FOR survives as one switch. Cutting and massing differ
+   in which direction a calorie miss matters, and that is the whole of it. */
+
+/** Which way a calorie miss costs you.
+
+    The id is the direction that is FREE, which is the opposite of the label -
+    "only if I go over" means going over is the thing that costs, so being
+    under is free. I had these the wrong way round first time and the test
+    caught it: picking "only if I go over" was handing out full marks for
+    being fourteen percent over. */
+const KCAL_DIRS = [
+  ['both',  'Both ways',            'Over and under both cost marks'],
+  ['under', 'Only if I go over',    'At or under the target is full marks'],
+  ['over',  'Only if I fall short', 'At or over the target is full marks'],
 ];
-const phaseNow = () => PHASES.filter(p => p.id === S.get('phase', 'hold'))[0] || PHASES[1];
-
-/** Pick a phase: it sets the rate and switches the target to follow your TDEE.
-    Anything you have typed by hand afterwards is yours and is left alone. */
-function setPhase(id) {
-  const ph = PHASES.filter(p => p.id === id)[0];
-  if (!ph) return;
-  S.set('phase', id);
-  S.set('goalRate', ph.rate);
-  S.set('calMode', 'tdee');
-  TD._dirty = true;
-}
+const kcalDir = () => S.get('kcalDir', 'both');
 
 function drawQuestsTab(pane) {
   settingsPane = pane;
-
-  pane.appendChild(el('label', 'fl', 'Phase'));
-  const seg = el('div', 'seg');
-  const now = phaseNow();
-  PHASES.forEach(ph => {
-    const b = el('button', ph.id === now.id ? 'on' : '', ph.name);
-    b.onclick = () => { setPhase(ph.id); Mobile.feedback('select'); drawSettingsPane('quests'); draw(); };
-    seg.appendChild(b);
-  });
-  pane.appendChild(seg);
-  pane.appendChild(el('div', 'note', esc(now.say)));
 
   /* Everything that decides a daily number: the calorie target, the macros
      you are chasing, and the rate the phase set for you. */
@@ -5255,8 +5252,21 @@ function drawQuestsTab(pane) {
       return '<div class="gr"><b style="color:' + rankColour(r.k) + '">' + r.k + '</b>' + cells + '</div>';
     }).join('');
   pane.appendChild(tbl);
+  /* The one thing a phase was for. Somebody eating under wants going over to
+     cost them and being under to be free; somebody eating over wants the
+     opposite. Two lines instead of three phases. */
+  pane.appendChild(el('label', 'fl', 'A calorie miss counts'));
+  const kseg = el('div', 'seg');
+  const kd = kcalDir();
+  KCAL_DIRS.forEach(d => {
+    const b = el('button', d[0] === kd ? 'on' : '', d[1]);
+    b.onclick = () => { S.set('kcalDir', d[0]); Mobile.feedback('select'); drawSettingsPane('quests'); draw(); };
+    kseg.appendChild(b);
+  });
+  pane.appendChild(kseg);
   pane.appendChild(el('div', 'note',
-    'Calories count either side. Protein counts only under'));
+    esc((KCAL_DIRS.filter(d => d[0] === kd)[0] || KCAL_DIRS[0])[2]) +
+    '. Protein counts only if you fall short'));
 
   /* ── training ──
      Graded against the plan rather than a flat number, so the question is
