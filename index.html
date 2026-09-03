@@ -850,6 +850,59 @@ const daysBetween = (a, b) => {
   return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
 };
 
+/** Everything on today, from both apps, in the order it happens.
+
+    A block carries `s`, the minute of the day it starts. A bullet carries
+    `at` as "HH:MM" if one was typed into it. Anything with neither sorts to
+    the end rather than being given a fake midnight, and open todos lead that
+    tail because a task with no time is still a task. */
+function todayItems() {
+  const today = LifeOS.day();
+  const out = [];
+
+  const plan = LifeOS.doc().today;
+  if (plan && plan.date === today) {
+    (plan.blocks || []).forEach(b => {
+      const on = LifeOS.isDone(b.actId, today);
+      out.push({
+        kind: 'block', name: b.name, at: b.s == null ? null : b.s,
+        dur: b.dur || 0, tag: b.lane || '', colour: b.color || '', done: on,
+        tick: () => LifeOS.done(b.actId, today, !on, { src: 'home' }),
+      });
+    });
+  }
+
+  Rec.all('note', { date: today }).forEach(r => {
+    const n = r.payload;
+    if (n.cancelled) return;
+    const isTodo = n.kind === 'todo';
+    const mins = n.at ? (+String(n.at).split(':')[0] * 60 + +String(n.at).split(':')[1]) : null;
+    out.push({
+      kind: n.kind, name: n.text || '', at: mins,
+      dur: n.dur || 0, tag: '', colour: '', done: !!n.done, todo: isTodo,
+      /* Only a todo has something to tick. An entry is a record of a thing
+         that already happened and there is nothing to say about it. */
+      tick: !isTodo ? null : () => {
+        const now = new Date();
+        const stamp = String(now.getHours()).padStart(2, '0') + ':' +
+                      String(now.getMinutes()).padStart(2, '0');
+        Rec.set('note', r.date, r.key, Object.assign({}, n, {
+          done: n.done ? 0 : 1, doneAt: n.done ? null : stamp,
+        }));
+        drawHome();
+      },
+    });
+  });
+
+  return out.sort((a, b) => {
+    const at = x => x.at == null ? 1e9 : x.at;
+    if (at(a) !== at(b)) return at(a) - at(b);
+    /* Both untimed: an open task outranks a note about the past. */
+    const rank = x => (x.todo && !x.done) ? 0 : 1;
+    return rank(a) - rank(b);
+  });
+}
+
 /** how many days back from today this activity has been ticked without a gap */
 function tickStreak(actId) {
   let n = 0;
@@ -875,61 +928,75 @@ const ageNow = born => {
    it. The grid owns size and position; the widget owns nothing but its content,
    which is what lets you drag and resize them without touching this table. */
 const WIDGETS = {
+  /* ══════════════ TODAY ══════════════
+     The day as one list. BLOCK owns the blocks and STATUS owns the bullets,
+     and until now this widget only knew about the first of them - so the
+     half of the day written as a todo was invisible from the screen called
+     Today. Tom, 2026-09-03: "is there a way to have this all sync in today
+     view in main menu."
+
+     Nothing is copied. Both are already rows in the shared store and this
+     reads them where they are, so ticking here is the same tick as ticking
+     there and nothing can disagree.
+
+     Chronological, on his call. A block knows its start as minutes into the
+     day; a bullet knows its own if you typed one. Anything with no time sits
+     after everything that has one, and among those the open todos come first,
+     because an unscheduled task is still a task and an entry is a note about
+     something that already happened. */
   today: {
     nm: 'TODAY', w: 5, h: 5,
     sub: () => {
-      const t = LifeOS.doc().today, today = LifeOS.day();
-      if (!t || t.date !== today || !t.blocks.length) return 'nothing scheduled';
-      const done = t.blocks.filter(b => LifeOS.isDone(b.actId, today)).length;
-      return done + ' / ' + t.blocks.length + ' checked';
+      const it = todayItems();
+      if (!it.length) return 'nothing scheduled';
+      const done = it.filter(x => x.done).length;
+      return done + ' / ' + it.length + ' done';
     },
     title: () => { const t = LifeOS.doc().today; return t && t.date === LifeOS.day() ? (t.name || '') : ''; },
     draw(body) {
-      const t = LifeOS.doc().today, today = LifeOS.day();
-      const blocks = (t && t.date === today) ? (t.blocks || []) : [];
-      const done = blocks.filter(b => LifeOS.isDone(b.actId, today)).length;
+      const today = LifeOS.day();
+      const t = LifeOS.doc().today;
+      const items = todayItems();
+      const blocks = items.filter(x => x.kind === 'block');
+      const done = items.filter(x => x.done).length;
 
       const rw = el('div', 'ringwrap');
-      rw.appendChild(ring(blocks.length ? done / blocks.length : 0, blocks.length ? Math.round(done / blocks.length * 100) + '%' : '—', 'ROUTINE'));
+      rw.appendChild(ring(items.length ? done / items.length : 0,
+        items.length ? Math.round(done / items.length * 100) + '%' : '—', 'TODAY'));
       const st = el('div', 'stats');
       const mins = blocks.reduce((a, b) => a + (b.dur || 0), 0);
-      const left = blocks.filter(b => !LifeOS.isDone(b.actId, today)).reduce((a, b) => a + (b.dur || 0), 0);
+      const left = blocks.filter(b => !b.done).reduce((a, b) => a + (b.dur || 0), 0);
       st.appendChild(el('div', 'stat', '<b>' + DUR(mins || 0) + '</b><span>PLANNED</span>'));
       st.appendChild(el('div', 'stat acc', '<b>' + DUR(left || 0) + '</b><span>LEFT</span>'));
       rw.appendChild(st); body.appendChild(rw);
 
-      if (!blocks.length) {
+      if (!items.length) {
         body.appendChild(el('div', 'empty',
           (t && t.date !== today ? 'The last plan BLOCK published was for <b>' + esc(t.date) + '</b>. ' : '') +
-          'Open <span class="link" onclick="go(\'block\')">BLOCK</span> and today&rsquo;s routine shows up here.'));
+          'Open <span class="link" onclick="go(\'block\')">BLOCK</span> for a routine, or write a line in ' +
+          '<span class="link" onclick="go(\'status\')">STATUS</span>.'));
         return;
       }
-      /* Checked work sinks. The plan is written in time order, but a row that
-         is already done is history, and leaving it where it was buries the
-         next thing halfway down a list you have to read past. Done rows go to
-         the bottom, each half keeping its own time order, so the top row is
-         always the next action. */
+
       const list = el('div', 'rowlist');
-      const order = blocks
-        .map(b => ({ b: b, on: LifeOS.isDone(b.actId, today) }))
-        .sort((x, y) => x.on - y.on);      /* stable, so ties keep plan order */
-      order.forEach(o => {
-        const b = o.b, on = o.on;
-        const r = el('div', 'row' + (on ? ' done' : ''));
-        const bar = el('div', 'bar'); if (b.color) bar.style.background = b.color; r.appendChild(bar);
-        r.appendChild(el('div', 't', b.s == null ? '' : MIN2(b.s)));
-        r.appendChild(el('div', 'n', esc(b.name)));
-        if (b.lane) r.appendChild(el('div', 'tag', esc(b.lane)));
-        r.appendChild(el('div', 'd', DUR(b.dur || 0)));
-        const ck = el('button', 'chk' + (on ? ' on' : ''), '✓');
-        ck.title = on ? 'logged today — click to undo' : 'check it off (BLOCK and HABITS both see this)';
-        ck.onclick = () => LifeOS.done(b.actId, today, !on, { src: 'home' });
-        r.appendChild(ck); list.appendChild(r);
+      items.forEach(x => {
+        const r = el('div', 'row' + (x.done ? ' done' : ''));
+        if (x.colour) { const bar = el('div', 'bar'); bar.style.background = x.colour; r.appendChild(bar); }
+        r.appendChild(el('div', 't', x.at == null ? '' : MIN2(x.at)));
+        r.appendChild(el('div', 'n', esc(x.name)));
+        if (x.tag) r.appendChild(el('div', 'tag', esc(x.tag)));
+        if (x.dur) r.appendChild(el('div', 'd', DUR(x.dur)));
+        if (x.tick) {
+          const ck = el('button', 'chk' + (x.done ? ' on' : ''), '✓');
+          ck.title = x.done ? 'done — click to undo' : 'check it off';
+          ck.onclick = x.tick;
+          r.appendChild(ck);
+        }
+        list.appendChild(r);
       });
       body.appendChild(list);
     },
   },
-
 
   momentum: {
     nm: 'MOMENTUM', w: 7, h: 3,
