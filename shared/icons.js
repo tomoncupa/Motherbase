@@ -42,8 +42,16 @@ const PATHS = {
   x:           'M6 6l12 12M18 6L6 18',
   check:       'M4 12.5l5 5L20 6',
   trash:       'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6',
-  gear:        'M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7M12 2v3M12 19v3M2 12h3M19 12h3'
-             + 'M4.9 4.9L7 7M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1',
+  /* A circle with eight straight rays coming out of it is a SUN, which is
+     what this was and what Tom saw. The thing that makes a gear a gear is
+     the rim: teeth sit ON a ring, they do not radiate from a dot. So there
+     are two circles now - a hub and a rim - and the eight strokes are short
+     teeth standing on the rim rather than beams leaving the middle. */
+  gear:        'M12 9.2a2.8 2.8 0 100 5.6 2.8 2.8 0 000-5.6'
+             + 'M12 5.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13'
+             + 'M12 5.5V3M12 18.5V21M18.5 12H21M5.5 12H3'
+             + 'M16.6 7.4l1.76-1.76M7.4 16.6l-1.76 1.76'
+             + 'M16.6 16.6l1.76 1.76M7.4 7.4L5.64 5.64',
   calendar:    'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
   bowl:        'M4 11h16a8 8 0 01-16 0M3 20h18M9 7c0-1 1-1 1-2M13 7c0-1 1-1 1-2',
   note:        'M5 3h14v18H5zM8 8h8M8 12h8M8 16h5',
