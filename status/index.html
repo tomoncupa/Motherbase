@@ -177,6 +177,13 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 .tile .vl{font-family:var(--font-mono);font-size:var(--f-6);font-weight:600;line-height:1.1;color:var(--text-1)}
 .tile .vl .un{font-size:var(--f-1);font-weight:400;color:var(--text-muted);margin-left:2px}
 .tile .lb{font-size:var(--f-1);color:var(--text-muted);margin-top:auto}
+/* ── which of these is being graded ──
+   Hierarchy by taking away rather than adding: a pillar is left alone and
+   everything beside it steps back a size and loses some contrast. Nothing
+   here is a new colour - `aside` is the muted text the labels already use. */
+.tile.aside{background:color-mix(in srgb,var(--surface-2) 62%,transparent)}
+.tile.aside .vl{font-size:var(--f-4);color:var(--text-2);font-weight:500}
+.tile.aside .lb{opacity:.8}
 .tile .lb i{display:block;font-style:normal;font-size:var(--f-1);opacity:.75}
 .tile.todo .vl{color:var(--text-muted);opacity:.5}
 .tile .bar{height:2px;border-radius:1px;background:var(--surface-3);overflow:hidden;margin-top:var(--s-2)}
@@ -301,6 +308,31 @@ label.fl{
   margin:var(--s-4) 0 var(--s-2);
 }
 label.fl:first-child{margin-top:0}
+
+/* ── settings, as sections rather than a form ──
+   A pane was a flat stack: a label, a control, a grey line, repeat, with the
+   switches the only thing sitting on a card. Half of it looked designed and
+   half of it looked like the raw form underneath, which is the "unfinished"
+   Tom is seeing.
+
+   Two changes and no new colours. A label that is a direct child of the pane
+   is a SECTION HEADING and is drawn like one. Everything under it sits on the
+   same card the switches already use, so a group reads as a group. */
+.setpane > label.fl{
+  text-transform:uppercase;letter-spacing:.12em;font-size:var(--f-1);
+  color:var(--text-2);margin:var(--s-5) 0 var(--s-2);
+  padding-bottom:var(--s-2);border-bottom:1px solid var(--border);
+}
+.setpane > label.fl:first-child{margin-top:0}
+.setpane > .field{
+  background:var(--surface-2);border-radius:var(--radius-md);
+  padding:var(--s-3);margin-bottom:var(--s-2);
+}
+.setpane > .field > label.fl{margin-top:0}
+/* A note that belongs to the group above it should sit with it, not float
+   between two of them. */
+.setpane > .field > .note{margin-bottom:0}
+.setpane > .seg{margin-bottom:var(--s-2)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--s-2)}
 .field{margin-bottom:var(--s-4)}          /* more space around a group than inside it */
@@ -3018,6 +3050,31 @@ function makeTilesSortable(g, commit) {
   }, true);
 }
 
+/* ── the calorie reading, sized to the room it actually has ──
+   This was decided by counting characters: over ten figures went one size
+   down, over twelve went two. "2,155 / 4,400" is exactly ten, so it took no
+   step at all and clipped to "2,155 / 4,4" on Tom's phone.
+
+   Counting was never going to work. The room left depends on the badge beside
+   it, which is wider when the percentage has three digits, and on the word
+   "left" underneath, and on whatever font the theme brought. So it is
+   measured: step the size down while the text is wider than the box, and if
+   two steps are not enough, scale it the rest of the way. */
+function fitHero(root) {
+  const h = (root || document).querySelector('.islehero .hero');
+  if (!h) return;
+  h.classList.remove('tight', 'tighter');
+  h.style.fontSize = '';
+  if (h.scrollWidth <= h.clientWidth) return;
+  h.classList.add('tight');
+  if (h.scrollWidth <= h.clientWidth) return;
+  h.classList.replace('tight', 'tighter');
+  if (h.scrollWidth <= h.clientWidth) return;
+  /* Still over: take the last of it off by measure, so it can never clip. */
+  const now = parseFloat(getComputedStyle(h).fontSize) || 24;
+  h.style.fontSize = Math.max(12, Math.floor(now * (h.clientWidth / h.scrollWidth))) + 'px';
+}
+
 function tile(label, val, unit, cls, onclick, pct, sub) {
   const t = el('button', 'tile ' + (cls || ''));
   t.innerHTML = '<div class="vl">' + (val == null ? '–' : esc(val)) +
@@ -3064,8 +3121,7 @@ function islandCard(d, opts) {
   /* How wide the reading actually is, in characters, so the size can come down
      before it runs out of room. Four figures either side of the slash is the
      case that used to wrap. */
-  const figures = left.toLocaleString().length + ct.v.toLocaleString().length;
-  const hero = el('div', 'hero' + (figures > 12 ? ' tighter' : figures > 10 ? ' tight' : ''),
+  const hero = el('div', 'hero',
     left.toLocaleString() + ' <span class="sl">/</span> ' + ct.v.toLocaleString() +
     '<span class="u">left</span>');
   if (left < 0) hero.style.color = 'var(--warn)';
@@ -3084,9 +3140,18 @@ function islandCard(d, opts) {
   /* Named and collected before any of them is drawn, because the order is a
      property of the whole set and cannot be decided one tile at a time. */
   const made = [];
+  /* Which of these the grade is actually built from. Everything on this
+     screen was drawn at the same size in the same colour, so Creatine shouted
+     exactly as loudly as Steps and you could not see what was being graded.
+     A pillar keeps the full treatment; everything else steps back. */
+  const live = PILLARS();
+  const isPillar = id => live.indexOf(
+    /sleep/i.test(id) ? 'sleep' : /step/i.test(id) ? 'steps' :
+    /^train/i.test(id) ? 'training' : id) > -1;
+
   liveFields().filter(f => dueToday(f, d)).forEach(f => {
     const v = value(d, f.id);
-    let cls = v == null ? 'todo' : '';
+    let cls = (v == null ? 'todo' : '') + (isPillar(f.id) ? ' pillar' : ' aside');
     let pct = null;
     if (f.target && v != null) {
       pct = v / f.target;
@@ -3101,12 +3166,12 @@ function islandCard(d, opts) {
     made.push({ key: f.id, node: tile(f.label, tileValue(f, v), f.unit, cls, () => fieldSheet(f, d), pct,
       lf != null && lf >= 1 ? Math.round(lf) + (f.unit || '') + ' left' : null) });
   });
-  made.push({ key: '@protein', node: tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', t.p ? '' : 'todo', () => { TAB = 'food'; draw(); }, t.p / (TARGETS().p || 1)) });
+  made.push({ key: '@protein', node: tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', 'pillar' + (t.p ? '' : ' todo'), () => { TAB = 'food'; draw(); }, t.p / (TARGETS().p || 1)) });
   /* Two different questions, and both have to say yes. `opts.money` is the
      export asking not to put money into a picture that leaves the phone.
      `spendTile` is Tom deciding he does not want to look at it at all. */
   if (opts.money !== false && S.get('spendTile', 0)) {
-    made.push({ key: '@spent', node: tile('Spent', Math.round(dayMoney(d)).toLocaleString(), '\u20b1', dayMoney(d) ? '' : 'todo', () => { TAB = 'money'; draw(); }) });
+    made.push({ key: '@spent', node: tile('Spent', Math.round(dayMoney(d)).toLocaleString(), '\u20b1', 'aside' + (dayMoney(d) ? '' : ' todo'), () => { TAB = 'money'; draw(); }) });
   }
   inTileOrder(made, x => x.key).forEach(x => { x.node.dataset.tile = x.key; g.appendChild(x.node); });
   c.appendChild(g);
@@ -4461,7 +4526,12 @@ function draw() {
   else if (TAB === 'money') drawMoney(m);
   else drawTrends(m);
   drawNav();
+  /* After it is on the screen, because the size that fits can only be known
+     once there is a box to measure. */
+  fitHero(m);
 }
+/* A rotation changes the room without redrawing anything. */
+addEventListener('resize', () => { try { fitHero(); } catch (e) {} });
 </script>
 
 <script>
@@ -4586,7 +4656,7 @@ function removeAcct(a) {
 }
 
 function drawTrackTab(pane) {
-  settingsPane = pane;
+  settingsPane = pane; pane.classList.add('setpane');
   const list = groupedFields();
   let lastCat = null;
   list.forEach((f, i) => {
@@ -5024,7 +5094,7 @@ function newFieldForm(pane, existing) {
 }
 
 function drawTargets(pane) {
-  settingsPane = pane;
+  settingsPane = pane; pane.classList.add('setpane');
   const tg = TARGETS();
   let mode = S.get('calMode', 'fixed');
 
@@ -5226,7 +5296,7 @@ const KCAL_DIRS = [
 const kcalDir = () => S.get('kcalDir', 'both');
 
 function drawQuestsTab(pane) {
-  settingsPane = pane;
+  settingsPane = pane; pane.classList.add('setpane');
 
   /* Everything that decides a daily number: the calorie target, the macros
      you are chasing, and the rate the phase set for you. */
@@ -5288,7 +5358,7 @@ function drawQuestsTab(pane) {
 
 
 function drawGoalsTab(pane) {
-  settingsPane = pane;
+  settingsPane = pane; pane.classList.add('setpane');
 
   fieldRow(pane, 'Goal weight (lb)', 'goalWeight', S.get('goalWeight', null), 'Optional, and drawn on the weight chart');
 
@@ -5396,7 +5466,7 @@ function runBacktest() {
 }
 
 function drawSyncTab(pane) {
-  settingsPane = pane;
+  settingsPane = pane; pane.classList.add('setpane');
   pane.appendChild(el('div', 'note', 'Backup creates a file you can restore from. Export creates a spreadsheet you can read, and it restores too. Both are in the DATA tab.'));
   const cfg = Mirror.settings;
 
