@@ -441,6 +441,10 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 /* how many days it has been following you */
 .note-row .at{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);
   color:var(--accent);margin-left:var(--s-2);white-space:nowrap}
+/* `by` is a deadline and `did` is what happened, so they read differently:
+   one is a warning colour waiting to be earned, the other is spent. */
+.tx .at.by{color:var(--warn)}
+.tx .at.did{color:var(--ok,var(--accent))}
 .carried{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);
   color:var(--warn);margin-left:var(--s-2);opacity:.8}
 
@@ -3257,8 +3261,13 @@ function drawJournal(m) {
       /* The time you typed, given back in the shape you typed it. It sits
          after the words rather than before them because the words are what
          you scan for; the clock is the detail. */
+      /* Times, in the order a task moves through them: when it starts, how
+         long it takes, when it is due, and when it was actually done. Tom,
+         2026-09-03: "Bullet time can be beside entry when checked." */
       (x.at ? '<i class="at">' + esc(clockLabel(x.at)) + (x.dur ? ' \u00b7 ' + durLabel(x.dur) : '') + '</i>'
             : (x.dur ? '<i class="at">' + durLabel(x.dur) + '</i>' : '')) +
+      (x.by ? '<i class="at by">by ' + esc(clockLabel(x.by)) + '</i>' : '') +
+      (x.done && x.doneAt ? '<i class="at did">' + esc(clockLabel(x.doneAt)) + '</i>' : '') +
       /* how long it has been following you — quiet, but it should sting a bit */
       (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') + '</span>';
     const box = r.querySelector('.k');
@@ -3274,7 +3283,15 @@ function drawJournal(m) {
         /* write to the row's own date, not the one being looked at — a carried
            task is the original seen from later, not a copy */
         const own = x.date || d;
-        Rec.set('note', own, x.key, Object.assign(bare(x), { done: x.done ? 0 : 1 }));
+        /* When it was actually done, kept on the row. Un-ticking clears it,
+           because a time that outlives the tick is a time that lies. */
+        const now = new Date();
+        const stamp = String(now.getHours()).padStart(2, '0') + ':' +
+                      String(now.getMinutes()).padStart(2, '0');
+        Rec.set('note', own, x.key, Object.assign(bare(x), {
+          done: x.done ? 0 : 1,
+          doneAt: x.done ? null : stamp,
+        }));
         Mobile.feedback(x.done ? 'untick' : 'tick');
         publishNotes(own); draw();
       };
@@ -3316,6 +3333,26 @@ function noteSheet(x, d) {
     ta.setAttribute('autocapitalize', 'sentences');
     body.appendChild(ta);
 
+    /* A todo runs between two clocks: when you mean to start and when it has
+       to be done. The start can be typed into the line as it always could;
+       both are here as fields because a deadline is not something you want to
+       discover you typed wrong. Only todos have them - an idea is not due. */
+    let atVal = x.at || '', byVal = x.by || '';
+    const times = el('div', 'grid2');
+    times.style.display = kind === 'todo' ? '' : 'none';
+    [['Start', 'at', atVal], ['By', 'by', byVal]].forEach(([lbl, key, val]) => {
+      const w = el('div', 'field');
+      w.appendChild(el('label', 'fl', lbl));
+      const i = document.createElement('input');
+      i.type = 'time'; i.value = val;
+      i.onchange = () => { if (key === 'at') atVal = i.value; else byVal = i.value; };
+      w.appendChild(i);
+      times.appendChild(w);
+    });
+    body.appendChild(times);
+    /* The picker above can change the kind after this is built. */
+    seg.addEventListener('click', () => { times.style.display = kind === 'todo' ? '' : 'none'; });
+
     /* When you wrote it. Not the time you typed into the line - that is `at`
        and it already shows on the row - but the moment the line was made.
        Tom, 2026-08-28: "when I click on a bullet in status should show the
@@ -3333,11 +3370,24 @@ function noteSheet(x, d) {
     const commit = again => {
       const text = ta.value.trim();
       if (!text) return UI.toast('Nothing to save', { bad: true });
-      if (isNew) addNote(d, kind, text);
-      else {
+      if (isNew) {
+        addNote(d, kind, text);
+        /* addNote made the row; the two clocks go on straight after it. */
+        if (kind === 'todo' && (atVal || byVal)) {
+          const list = Rec.all('note', { date: d })
+            .sort((a2, b2) => (b2.payload.t || 0) - (a2.payload.t || 0));
+          if (list[0]) Rec.set('note', d, list[0].key,
+            Object.assign({}, list[0].payload, { at: atVal || list[0].payload.at, by: byVal || null }));
+        }
+      } else {
         const pz = parseLine(text);
         Rec.set('note', x.date || d, x.key, Object.assign(bare(x), {
-          kind: kind, text: pz.text, at: pz.at, dur: pz.dur,
+          kind: kind, text: pz.text,
+          /* A time typed into the line still wins: it is the more recent thing
+             the person did. */
+          at: pz.at || (kind === 'todo' ? (atVal || null) : null),
+          dur: pz.dur,
+          by: kind === 'todo' ? (byVal || null) : null,
         }));
       }
       publishNotes(d);
@@ -3940,20 +3990,21 @@ function rankBadge() {
   const a = adherence(7), t = todayScore();
   const w = el('button', 'rankbadge mb-press mb-tap');
   w.title = a.rank
-    ? 'How the last 7 days went. Tap for the working.'
+    ? 'The last 7 completed days. Tap for the working.'
     : 'No completed days logged yet. Tap to see what it needs.';
   /* Nothing to grade yet reads as a dash, not as an F. The letter arrives the
      day after the first day you log. */
   const mark = a.rank ? a.rank.k : '–';
   const col = a.rank ? rankColour(a.rank.k) : tok('--text-muted');
+  /* The letter and nothing else. Tom, 2026-09-03: "I don't want the % number
+     to be visible just the letter is cleaner." He is right - the percentage
+     was the same fact said twice, in the less readable of the two ways, and
+     it was the thing crowding the calorie reading beside it.
+
+     The number is not gone, it is on Trends, which is where you go when you
+     want the working rather than the answer. */
   w.innerHTML =
-    '<span class="rk" style="color:' + col + ';border-color:' + col + '">' + mark + '</span>' +
-    '<span class="rkm"><b>' + (a.pct == null ? '' : a.pct + '%') + '</b>' +
-    /* Today's grade waits until the day has settled. A number built out of
-       two pillars at 9am is not a grade, it is a fraction of one, and a
-       figure that climbs all day is one you stop reading. Tom, 2026-08-28:
-       "The day grade should only show the later." */
-    '<i>' + (t.pct == null || t.partial ? '' : 'today ' + t.pct + '%') + '</i></span>';
+    '<span class="rk" style="color:' + col + ';border-color:' + col + '">' + mark + '</span>';
   w.onclick = () => { TAB = 'trends'; Mobile.feedback('nav'); draw(); };
   return w;
 }
@@ -5471,6 +5522,21 @@ function drawSyncTab(pane) {
   const cfg = Mirror.settings;
 
   pane.appendChild(el('label', 'fl', 'GOOGLE SHEET MIRROR'));
+
+  /* Which script this app writes, and which one the sheet is actually
+     running. They drift the moment a new version ships and the sheet is not
+     re-deployed, and that drift is invisible - the sync just quietly does
+     less. Tom, 2026-09-03: "we should probably put a version number
+     somewhere in settings." */
+  const mine = IO.SCRIPT_V, theirs = cfg.sheetV || 0;
+  const vrow = el('div', 'note');
+  vrow.innerHTML = 'App writes script <b>v' + mine + '</b>. ' +
+    (!cfg.url ? 'No sheet linked yet.'
+      : !theirs ? 'The sheet has not answered yet.'
+      : theirs >= mine ? 'The sheet is running <b>v' + theirs + '</b>.'
+      : 'The sheet is running <b>v' + theirs + '</b>, which is older. Copy the script again and re-deploy.');
+  if (theirs && theirs < mine) vrow.className = 'warnbox';
+  pane.appendChild(vrow);
   pane.appendChild(el('div', 'warnbox', '<b>Untested.</b> A failed push never blocks anything and goes again next time.'));
   pane.appendChild(el('div', 'note', 'Setup, once: blank Google Sheet → Extensions → Apps Script → paste the script below → Deploy → New deployment → Web app → Execute as <b>me</b>, access <b>anyone</b> → copy the URL → paste it here.'));
 

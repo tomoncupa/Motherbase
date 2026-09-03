@@ -215,6 +215,12 @@ const IO = {
       own it wants in the spreadsheet */
   VERSION: VERSION,
 
+  /* Which version of the Apps Script this build writes. The sheet reports its
+     own back as `sheetV` when it answers, so the two can be compared and a
+     sheet running an old script can say so instead of failing in ways nobody
+     can place. */
+  SCRIPT_V: 3,
+
   register(spec) {
     apps[spec.app] = Object.assign({ types: [], sheets: null, tables: null, name: spec.app }, spec);
     /* An app that says who it is has said enough. Keeping the sheet up to date
@@ -1425,7 +1431,7 @@ const Mirror = {
       '   It also never clears that tab, so opening the app on a second device',
       '   cannot empty the sheet. */',
       '',
-      'var MB_V = 3;',
+      'var MB_V = ' + IO.SCRIPT_V + ';',
       '',
       'function mbProps() { return PropertiesService.getScriptProperties(); }',
       '',
