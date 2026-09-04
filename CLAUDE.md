@@ -110,6 +110,8 @@ DOCTRINE.md        what each app is FOR, and the laws every app obeys
 HOWTO.md           how Tom adds an app or a theme, in plain language
 ONBOARDING.md      how a beta tester gets the suite, and what happens after
 index.html         the home screen: widget grid, app dock, data authority
+_review.html       the review: opens every app, folds in the foundation checks,
+                   and looks over the rows. Read-only. Run it on a real device
 shared/            the foundation, loaded by every app
 block/index.html   routine builder
 arc/index.html     mind canvas
@@ -202,6 +204,8 @@ An app may read any type. It writes only the types it owns.
 | `activity` | the shared vocabulary | slug of the name | `{name, cat, dur, color}` |
 | `tick` | **shared, every app may write** | activity id | `{src, qty}` |
 | `lane` `item` `routine` | block | | |
+| `plan` | **block** | `routine` | today's published plan, for anything that wants to read it |
+| `note` | **status** | line id | one journal line: a todo, an entry, an event or an idea |
 | `field` | **status** | field id | the definition of a tracked measure |
 | `ev` | **status** | field id | `{e:[{t,v}]}` — one row per field per day |
 | `day` | **status** | `''` | `{note, rest}` |
@@ -408,7 +412,12 @@ because it runs the real thing rather than only parsing it:
 
 1. Serve the folder: `py -3 -m http.server 8777 -d "<repo>"`.
 2. Open it with the browser tool, drive it with JavaScript, read the console.
-3. Run `shared/_smoke.html`. It must say 163 of 163, or more once you add checks.
+3. Run `_review.html` at the root. It opens every app in turn, checks each one
+   draws and every tab works, runs `shared/_smoke.html` inside itself and folds
+   the result in, and looks over whatever rows are on the device. One page,
+   one tally. `shared/_smoke.html` on its own is still there for when you are
+   working on the foundation and want the 163 without the apps.
+   It must say 163 of 163, or more once you add checks.
    **Load it with a `?cb=<something new>` on the end.** The browser caches these
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks
@@ -439,6 +448,27 @@ it caught a second bug in `IO.shot` the first time it ran.
 
 Ask, before writing a check: what is the ONE thing that, if it broke, would
 produce all of these? Test that.
+
+### The harness must not join in
+
+`_review.html` loaded `records.js` itself at first, so it could look at the
+rows. That made it a SECOND live copy of the store sharing one localStorage
+with the frames it was driving, and rows a frame deleted came back — written
+out again from the page's older picture of the world. Three checks went flaky
+and none of it was the app's fault.
+
+It has no `<script src>` of its own now. Every row it reads, it reads out of a
+frame. A thing that watches must not also be a thing that writes.
+
+### Open: three icon checks fail on a cold store
+
+Found 2026-09-04 by `_review.html`, which opens `_smoke.html` in a fresh frame
+every run and so always runs it cold. `icons: a dropped pack installs`, `a
+theme naming one drawing beats the pack` and `a button can be pointed
+elsewhere` fail on the first run against an empty store and pass on the second.
+Running the same code by hand passes. Waiting on `Rec.ready` before starting
+was not enough. Not chased to the bottom yet — the review reports it rather
+than hiding it, which is the point.
 
 ### A red check nobody reads is worse than no check
 

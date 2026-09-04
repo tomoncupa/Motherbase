@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Motherbase — review</title>
+<style>
+  :root{color-scheme:dark}
+  body{margin:0;padding:16px 14px 60px;background:#0b0f16;color:#dfe6f2;
+    font:15px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  h1{font-size:17px;letter-spacing:.14em;text-transform:uppercase;margin:0 0 4px}
+  .lede{color:#8b9bb4;font-size:13px;margin:0 0 14px;max-width:52em;line-height:1.55}
+  .lede b{color:#dfe6f2;font-weight:600}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+  button{min-height:44px;padding:0 16px;border:1px solid #2b3648;border-radius:8px;
+    background:#182131;color:#dfe6f2;font:inherit;font-size:13px;letter-spacing:.08em;
+    text-transform:uppercase;cursor:pointer;border-color:#2b3648}
+  button:disabled{opacity:.45;cursor:default}
+  button.go{background:#1d4ed8;border-color:#2563eb}
+  h2{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#8b9bb4;
+    margin:22px 0 6px;border-top:1px solid #1c2534;padding-top:14px}
+  pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;font-size:13.5px}
+  .p{color:#37d67a}.f{color:#ff6b6b}.w{color:#f0b429}.d{color:#6b7c96}
+  #tally{margin-top:22px;font-size:16px;letter-spacing:.06em}
+  iframe{position:absolute;left:-99999px;top:0;width:390px;height:780px;border:0}
+</style>
+</head>
+<body>
+
+<h1>Motherbase review</h1>
+<p class="lede">
+  Opens every app the way you would, checks each one draws and every tab works, runs the
+  163 foundation checks, and looks over your rows for anything broken.
+  <b>It does not change your data.</b> It reads it. The only thing it ever writes is a
+  made-up row type no app owns, which it removes again.
+  Run it on the machine you actually use — the more real data it has, the more it can see.
+</p>
+
+<div class="bar">
+  <button class="go" id="run">Run the review</button>
+  <button id="copy" disabled>Copy the report</button>
+</div>
+
+<div id="out"><span class="d">Press run.</span></div>
+<div id="tally"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   THE REVIEW
+
+   `shared/_smoke.html` checks the foundation: the store, the themes, the
+   sheets, the sounds, the backup. Every one of those passed on the day STATUS
+   shipped an export with black text in it, because nothing checked an APP.
+   This does.
+
+   Three questions, in the order they matter:
+
+   1. DOES EVERY APP STILL OPEN. The failures that have actually hurt here were
+      never subtle. A closing script tag inside a comment truncated three apps.
+      A `let` declared after the function that used it killed BLOCK. A rebuild
+      that skipped forward-compat threw on load. All of them look identical
+      from outside: you open the app and there is nothing there. So that is
+      what this asks, per app, per tab.
+
+   2. IS THE FOUNDATION STILL SOUND. It runs `_smoke.html` in a frame and folds
+      the result in, so there is one page to look at instead of two.
+
+   3. IS YOUR DATA STILL SHAPED LIKE DATA. `Health.check()` already answers
+      most of this. What is added here is the joins it does not do — a meal
+      pointing at a food that is gone, a set pointing at a missing exercise —
+      which only mean anything when there is real data to check, which is
+      exactly why this is worth running on your own machine rather than mine.
+
+   WHY IT IS SAFE. Nothing in here writes a row an app owns. The app checks
+   only read and click; the write tests live in `_smoke.html`, which has always
+   used made-up types and tidies up after itself.
+
+   AND WHY THIS PAGE LOADS NOTHING. It has no <script src> of its own on
+   purpose. The first version loaded records.js so it could look at the rows
+   itself, and that made it a SECOND live copy of the store sharing one
+   localStorage with the frames it was driving - so a row a frame deleted came
+   back, written out again from this page's older picture of the world, and
+   three checks went flaky. A harness that joins in is not a harness. Every
+   row this page reads, it reads out of a frame.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const T = [];
+const out = document.getElementById('out');
+const tallyEl = document.getElementById('tally');
+
+function ok(name, pass, note) {
+  T.push({ name: name, pass: !!pass, note: note || '' });
+  paint();
+}
+function note(name, text) { T.push({ name: name, pass: null, note: text }); paint(); }
+function head(text) { T.push({ head: text }); paint(); }
+
+function line(t) {
+  if (t.head) return '\n<span class="d">── ' + esc(t.head) + ' ─────────────</span>';
+  const mark = t.pass === null ? '<span class="w">  --  </span>'
+    : t.pass ? '<span class="p">  ok  </span>' : '<span class="f">  FAIL</span>';
+  return mark + '  ' + esc(t.name) + (t.note ? '  <span class="d">' + esc(t.note) + '</span>' : '');
+}
+function paint() {
+  out.innerHTML = '<pre>' + T.map(line).join('\n') + '</pre>';
+  const done = T.filter(t => t.pass !== null && !t.head);
+  const pass = done.filter(t => t.pass).length;
+  tallyEl.innerHTML = pass === done.length
+    ? '<span class="p">' + pass + ' / ' + done.length + ' passed</span>'
+    : '<span class="f">' + pass + ' / ' + done.length + ' passed</span>';
+}
+const esc = s => String(s == null ? '' : s)
+  .replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+/* ── the apps, and where to look inside each one ──
+   `root` is something that only exists once the app has drawn. `nav` is how
+   you move around it. An app with no nav gets the first two checks and not the
+   third, which is honest — a check that cannot run should say so rather than
+   pass. */
+const APPS = [
+  { id: 'home',   name: 'MAIN MENU', path: 'index.html',        root: '#grid',     nav: '#tabs button, #nav button' },
+  { id: 'status', name: 'STATUS',    path: 'status/index.html', root: '#main',     nav: '#nav button' },
+  { id: 'block',  name: 'BLOCK',     path: 'block/index.html',  root: '#board, #app', nav: '#tabs button' },
+  { id: 'train',  name: 'TRAIN',     path: 'train/index.html',  root: '#main',     nav: '#tabs button' },
+  { id: 'arc',    name: 'ARC',       path: 'arc/index.html',    root: '#viewport', nav: '' },
+  { id: 'style',  name: 'STYLE',     path: 'style/index.html',  root: '#grid',     nav: '#tabs button' },
+];
+
+/* Anything that could take something away. Never clicked, whatever it is
+   called or wherever it turns up. */
+const DANGER = /delete|clear|wipe|rewind|reset|restore|remove|erase|import/i;
+
+function frameFor(path) {
+  return new Promise(res => {
+    const f = document.createElement('iframe');
+    f.onload = () => res(f);
+    f.onerror = () => res(f);
+    document.body.appendChild(f);
+    /* A new query every run, because these files cache hard enough that a
+       review can come back green on code that was never loaded. */
+    f.src = path + '?review=' + Date.now();
+  });
+}
+
+async function reviewApp(a) {
+  head(a.name);
+  let f = null;
+  try {
+    f = await frameFor(a.path);
+    const w = f.contentWindow;
+
+    /* Anything thrown from here on is collected rather than lost. Boot-time
+       errors happen before this can be attached, which is why the check below
+       asks whether the app DREW rather than whether it threw: a script that
+       died on line one draws nothing, and that is the symptom every one of
+       these failures has actually had. */
+    const thrown = [];
+    w.addEventListener('error', e => thrown.push(e.message || 'error'));
+    w.addEventListener('unhandledrejection', e =>
+      thrown.push('promise: ' + ((e.reason && e.reason.message) || e.reason)));
+
+    /* The store is read straight after boot, so a first paint can be empty
+       through no fault of the app. Give it the same moment a person would. */
+    await wait(1500);
+
+    const rootEl = w.document.querySelector(a.root);
+    ok(a.id + ': opens and draws something',
+      !!rootEl && (rootEl.children.length > 0 || rootEl.textContent.trim().length > 0),
+      rootEl ? '' : 'nothing at ' + a.root);
+
+    ok(a.id + ': the shared store is loaded', !!w.Rec && typeof w.Rec.all === 'function');
+    ok(a.id + ': the theme engine is loaded', !!w.Skins && typeof w.Skins.apply === 'function');
+
+    /* A theme paints tokens onto the root element. If none are there, the app
+       is drawing itself with something other than the theme, which is the one
+       rule every app in here has to obey. */
+    /* Two ways this check was wrong before it was right, and both are worth
+       leaving written down because both look like an app failing.
+
+       It asked OUR getComputedStyle about a node in another document, which
+       answers, and answers wrong. It has to be the frame's own.
+
+       And it asked for `--text`, which is not a token and never has been - the
+       reading colour is `--text-1`. A check that names something that does not
+       exist fails everywhere, forever, and looks exactly like a real fault
+       across the whole suite. Three tokens now, so a typo in one of them
+       cannot quietly stand in for the theme being absent. */
+    const cs = w.getComputedStyle(w.document.documentElement);
+    const want = ['--bg', '--text-1', '--accent'];
+    const missing = want.filter(k => !cs.getPropertyValue(k).trim());
+    ok(a.id + ': the theme actually reached it', !missing.length,
+      missing.length ? 'no ' + missing.join(', ') + ' on :root'
+                     : '--text-1 ' + cs.getPropertyValue('--text-1').trim());
+
+    if (!a.nav) {
+      note(a.id + ': every tab draws', 'no tab bar to drive — checked by hand only');
+    } else {
+      const tabs = [].slice.call(w.document.querySelectorAll(a.nav))
+        .filter(b => !DANGER.test((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || '')));
+      if (!tabs.length) {
+        ok(a.id + ': every tab draws', false, 'no tabs found at ' + a.nav);
+      } else {
+        let broke = '';
+        for (const b of tabs) {
+          const label = (b.getAttribute('aria-label') || b.textContent || '?').trim().slice(0, 14);
+          try {
+            b.click();
+            await wait(220);
+            const r = w.document.querySelector(a.root);
+            if (!r || (!r.children.length && !r.textContent.trim())) broke = label + ' drew nothing';
+          } catch (e) { broke = label + ': ' + e.message; }
+          if (broke) break;
+        }
+        ok(a.id + ': every tab draws (' + tabs.length + ')', !broke, broke);
+      }
+    }
+
+    ok(a.id + ': nothing threw while being used', thrown.length === 0, thrown.slice(0, 2).join(' | '));
+  } catch (e) {
+    ok(a.id + ': opens at all', false, e.message);
+  } finally {
+    if (f) f.remove();
+  }
+}
+
+/* ── the foundation, folded in ──
+   Rather than a second page to remember to open. */
+async function reviewFoundation() {
+  head('FOUNDATION');
+  let f = null;
+  try {
+    f = await frameFor('shared/_smoke.html');
+    /* It starts itself on load and it is async, so wait for the tally rather
+       than guessing at a delay. */
+    const w = f.contentWindow;
+    let text = '', tries = 0;
+    while (tries++ < 60) {
+      text = (w.document.getElementById('out') || {}).innerText || '';
+      if (/\d+ \/ \d+ passed/.test(text)) break;
+      await wait(250);
+    }
+    const m = text.match(/(\d+) \/ (\d+) passed/);
+    if (!m) { ok('foundation: the 163 shared checks ran', false, 'never finished'); return; }
+    const fails = (text.match(/FAIL[^\n]*/g) || []).map(s => s.replace(/^FAIL\s*/, '').trim());
+    ok('foundation: ' + m[2] + ' shared checks, all passing', m[1] === m[2],
+      fails.slice(0, 3).join(' | '));
+  } catch (e) {
+    ok('foundation: the shared checks ran', false, e.message);
+  } finally {
+    if (f) f.remove();
+  }
+}
+
+/* ── the rows themselves ──
+   Health.check() first, because it exists and it is the app's own answer to
+   "is my data okay". Then the joins it does not do. */
+async function reviewData() {
+  head('YOUR DATA');
+
+  /* Read out of a real app rather than out of this page. STATUS declares the
+     most types, so it is the one that has the fullest view. */
+  const f = await frameFor('status/index.html');
+  await wait(1600);
+  const w = f.contentWindow, Rec = w.Rec, Health = w.Health;
+  try {
+    reviewRows(Rec, Health);
+  } catch (e) {
+    ok('data: the rows could be read', false, e.message);
+  } finally {
+    f.remove();
+  }
+}
+
+function reviewRows(Rec, Health) {
+  if (!Rec) { ok('data: the store loaded', false); return; }
+
+  const rows = Rec.export();
+  note('data: rows on this device', rows.length + ' rows, ' +
+    rows.filter(r => !r.deleted).length + ' live');
+
+  if (!rows.length) {
+    note('data: the joins below', 'nothing stored on this device, so there is nothing to join. ' +
+      'Run this where you actually use the apps.');
+  }
+
+  const h = Health.check();
+  const bad = h.issues.filter(i => i.level === 'bad');
+  ok('data: nothing malformed, duplicated or out of date range',
+    !bad.length, bad.map(i => i.msg).join(' '));
+  /* Health's warnings are things to look at rather than things that are
+     broken - a tick pointing at a renamed activity still counts. They get
+     their own line so a warning never reads as a pass and never reads as a
+     failure either. */
+  h.issues.filter(i => i.level !== 'bad').forEach(i => note('data: worth a look', i.msg));
+
+  /* ── the joins ──
+     A row that points at a row that is gone. None of this can be seen without
+     real data, which is the whole argument for running this on your own
+     machine. */
+  const live = t => Rec.all(t);
+  const idsOf = t => { const s = Object.create(null); live(t).forEach(r => s[r.key] = 1); return s; };
+
+  const foods = idsOf('food');
+  const badMeals = live('meal').filter(r => r.payload && r.payload.food && !foods[r.payload.food]);
+  ok('data: every logged meal still knows its food',
+    !badMeals.length, badMeals.length ? badMeals.length + ' point at a food that is gone' : '');
+
+  const cats = idsOf('excat');
+  const badEx = live('exercise').filter(r => r.payload && r.payload.cat && !cats[r.payload.cat]);
+  ok('data: every exercise still knows its muscle group',
+    !badEx.length, badEx.length ? badEx.length + ' point at a group that is gone' : '');
+
+  const exes = idsOf('exercise');
+  const badSets = live('set').filter(r => r.payload && r.payload.ex && !exes[r.payload.ex]);
+  ok('data: every logged set still knows its exercise',
+    !badSets.length, badSets.length ? badSets.length + ' point at an exercise that is gone' : '');
+
+  const accts = idsOf('acct');
+  const badSpend = live('spend').filter(r => r.payload && r.payload.acct && !accts[r.payload.acct]);
+  ok('data: every payment still knows its account',
+    !badSpend.length, badSpend.length ? badSpend.length + ' point at an account that is gone' : '');
+
+  const maps = idsOf('map');
+  const badNodes = live('node').filter(r => { const m = String(r.key).split('|')[0]; return m && !maps[m]; });
+  ok('data: every node still belongs to a map',
+    !badNodes.length, badNodes.length ? badNodes.length + ' belong to a map that is gone' : '');
+
+  /* A finished task carries the day it was finished, which is what puts it on
+     that day in STATUS and on the main menu. Written 2026-09-04, so anything
+     ticked before then will not have one — that is expected, not broken, and
+     it is said rather than failed. */
+  const doneNoDay = live('note')
+    .filter(r => r.payload && r.payload.kind === 'todo' && r.payload.done && !r.payload.doneOn);
+  if (doneNoDay.length) {
+    note('data: tasks finished before 4 Sep 2026',
+      doneNoDay.length + ' have no finished-on day, so they show on the day they were written');
+  } else {
+    ok('data: every finished task knows the day it was finished', true);
+  }
+
+  /* One writer per fact is the rule the whole store rests on. This cannot see
+     who wrote a row, but it can see a row of a type nobody claims — which is
+     usually a rename that half happened. */
+  /* Every type the suite writes. `note` and `plan` were missing from the first
+     version of this list and the check found them both on its first run -
+     which is the check working, because they were missing from CLAUDE.md's
+     ownership table too. `plan` is today's routine, published by BLOCK for
+     anything else that wants to read it. */
+  const KNOWN = ('setting activity tick lane item routine plan field ev day note food meal ' +
+    'spend acct shot habit excat exercise set session sgroup program progday progex goal ' +
+    'skin map node link')
+    .split(' ');
+  const strays = {};
+  /* Live rows only. A tombstone is the memory of a row that has gone, and it
+     keeps its type forever on purpose, so counting them turns every test run
+     this device has ever done into a permanent complaint. */
+  rows.filter(r => !r.deleted).forEach(r => {
+    /* The foundation checks run in a frame a few lines above this and write
+       rows of their own under a made-up type. Counting those as strays makes
+       the review complain about itself, which is the sort of noise that stops
+       people reading the list. */
+    if (/^smoke|^__/.test(r.type)) return;
+    if (KNOWN.indexOf(r.type) === -1) strays[r.type] = (strays[r.type] || 0) + 1;
+  });
+  const strayNames = Object.keys(strays);
+  ok('data: every row is a type an app owns', !strayNames.length,
+    strayNames.map(t => t + ' (' + strays[t] + ')').join(', '));
+
+  /* Rows, never one blob. The rule that killed the last system. A payload with
+     a great many keys is usually a whole app's state pretending to be a row. */
+  const blobs = rows.filter(r => r.payload && typeof r.payload === 'object' &&
+    Object.keys(r.payload).length > 40);
+  ok('data: no row is a blob', !blobs.length,
+    blobs.length ? blobs.slice(0, 3).map(r => r.type + '/' + r.key).join(', ') : '');
+
+  /* The foundation checks tidy up after themselves. If they stop, this is
+     where it shows, rather than as a slow drift nobody attributes to anything.
+     One run's worth is expected — this page ran them a moment ago and the
+     store here has not caught up with the frame's deletions yet. */
+  const leftovers = rows.filter(r => !r.deleted && /^smoke|^__/.test(r.type));
+  if (leftovers.length > 12) {
+    ok('data: the checks tidied up after themselves', false,
+      leftovers.length + ' test rows left behind across previous runs');
+  } else {
+    ok('data: the checks tidied up after themselves', true);
+  }
+}
+
+async function run() {
+  const btn = document.getElementById('run'), cp = document.getElementById('copy');
+  btn.disabled = true; cp.disabled = true;
+  T.length = 0; paint();
+
+  for (const a of APPS) await reviewApp(a);
+  /* Data before the foundation checks, not after. Those write rows of their
+     own, and a review that counts its own working as your data is a review
+     that complains about itself. */
+  await reviewData();
+  await reviewFoundation();
+
+  btn.disabled = false; cp.disabled = false;
+}
+
+document.getElementById('run').onclick = run;
+document.getElementById('copy').onclick = () => {
+  const done = T.filter(t => t.pass !== null && !t.head);
+  const body = T.map(t => t.head ? '\n-- ' + t.head :
+    (t.pass ? '  ok   ' : '  FAIL ') + t.name + (t.note ? '   (' + t.note + ')' : '')).join('\n');
+  const txt = 'MOTHERBASE REVIEW  ' + new Date().toISOString().slice(0, 16).replace('T', ' ') +
+    '\n' + navigator.userAgent + '\n' + body +
+    '\n\n' + done.filter(t => t.pass).length + ' / ' + done.length + ' passed\n';
+  const fin = () => { const b = document.getElementById('copy'); b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy the report', 1600); };
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).then(fin, () => prompt('Copy this:', txt));
+  else prompt('Copy this:', txt);
+};
+</script>
+</body>
+</html>

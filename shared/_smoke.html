@@ -1009,8 +1009,32 @@ async function run() {
   /* ---- clean up after ourselves ---- */
   Rec.clear([stamp]);
   Rec.del('tick', d, 'smoke-run'); Rec.del('activity', null, 'smoke-run');
+  /* The settings these checks wrote. They are real `setting` rows under a
+     made-up namespace, so clearing the made-up TYPE never touched them and
+     they sat in storage forever. */
+  Rec.all('setting').forEach(r => {
+    if (/^(smoke|__smoke|__sk|__tbl)\./.test(r.key)) Rec.del('setting', r.date, r.key);
+  });
   Rec.vacuum(0);
   ok('cleanup: smoke rows removed', Rec.all(stamp).length === 0);
+
+  /* ── the second sweep, and why it is here ──
+     Something in this file writes a few stamp rows AFTER the line above. An
+     async check landing late, most likely. They were building up about a dozen
+     a run in the browser of anyone who opened this page, which is not
+     dangerous - a made-up type no app reads, a few kilobytes - but it is mess
+     in his storage and mess is how real problems get missed.
+
+     Rec.clear is not at fault and that was measured rather than assumed: called
+     by hand it removes a row from memory, from localStorage and from
+     IndexedDB, all three. So this sweeps again once everything has settled.
+
+     `_review.html` fails if test rows are still piling up, so this cannot go
+     quiet on its own while the late writer is still unfound. */
+  setTimeout(() => {
+    const late = Rec.all(stamp).length;
+    if (late) Rec.clear([stamp]);
+  }, 1500);
   document.querySelectorAll('.mb-sheet,.mb-veil').forEach(n => n.remove());
   ok('cleanup: no overlay left on the page', !document.querySelector('.mb-sheet,.mb-veil'));
 
@@ -1021,7 +1045,20 @@ async function run() {
   return { pass, total: T.length, failed: T.filter(t => !t.pass).map(t => t.name) };
 }
 
-Skins.load('skins.json').then(() => { Skins.restore('smoke'); Sfx.init('smoke'); run(); });
+/* Waits for BOTH, and the second one is not decoration.
+
+   These checks read and write rows, and the store finishes loading a moment
+   after the page does - the big half comes out of IndexedDB. Starting on the
+   themes alone meant a COLD run began before the store was ready and three
+   icon checks failed, while a warm run passed because the earlier load had
+   already finished the job. A check that only passes the second time is a
+   check that lies, and `_review.html` opens this in a fresh frame every time,
+   which is how it was caught. */
+Skins.load('skins.json').then(() => {
+  Skins.restore('smoke');
+  Sfx.init('smoke');
+  Rec.ready(run);
+});
 </script>
 </body>
 </html>
