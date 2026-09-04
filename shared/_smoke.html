@@ -47,7 +47,7 @@ Open it on a phone too: the buttons below should feel like an app, not like this
 const T = [];
 const ok = (name, cond, note) => T.push({ name, pass: !!cond, note: note || '' });
 
-function run() {
+async function run() {
   T.length = 0;
   const stamp = 'smoke-' + Date.now();
 
@@ -183,7 +183,18 @@ function run() {
        reads the destination rather than a frame part-way through. */
     h.panel.style.transition = 'none';
     const r = h.panel.getBoundingClientRect();
-    const landed = h.panel.classList.contains('on') && r.top < innerHeight - 20 && r.bottom > 0;
+    /* A window with no height cannot answer a question about where something
+       is in it, and this page gets run in one - a hidden preview pane reports
+       innerHeight 0, and the check went red every time for a reason that had
+       nothing to do with the code. A check that is always red is a check
+       nobody reads. So where there is a viewport it asks the real question,
+       and where there is not it asks the thing it was really testing: that the
+       panel has finished sliding up rather than sitting parked below. */
+    const vh = innerHeight || document.documentElement.clientHeight || 0;
+    const tr = getComputedStyle(h.panel).transform;
+    const risen = !tr || tr === 'none' || /matrix\(1, 0, 0, 1, 0, 0\)/.test(tr);
+    const landed = h.panel.classList.contains('on') &&
+      (vh ? (r.top < vh - 20 && r.bottom > 0) : risen);
     h.close();
     return landed;
   })());
@@ -945,6 +956,55 @@ function run() {
   })());
   ok('io: save() reports whether the file actually went anywhere',
     typeof IO.backup === 'function' && /Promise|then/.test(String(IO.backup)));
+
+  /* ---- the picture ----
+     IO.shot photographs a live element into a see-through PNG. The first two
+     versions of it in STATUS looked right in code and came out wrong, twice,
+     for the same reason: an SVG has no page, so everything the page was
+     HANDING DOWN to the element - its colour, its typeface, its theme tokens -
+     went missing, and each missing thing looked like its own little bug.
+
+     So the check below is not "did a picture come out". It is "did the picture
+     keep what the page was handing it", which is the one question that would
+     have caught black calories and serif labels the first time, before he saw
+     either of them.
+
+     It photographs two solid squares rather than any text. One is painted from
+     a theme token and one from the inherited text colour, so if inheritance is
+     lost they come out transparent or black, and a square is something you can
+     read a single pixel out of without caring about fonts. */
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;left:-9999px;top:0;width:40px;height:40px;display:flex';
+  const pa = document.createElement('div'); pa.style.cssText = 'flex:1;background:var(--accent)';
+  const pb = document.createElement('div'); pb.style.cssText = 'flex:1;background:currentColor';
+  probe.appendChild(pa); probe.appendChild(pb);
+  document.body.appendChild(probe);
+  const wantAcc = getComputedStyle(pa).backgroundColor;
+  const wantInk = getComputedStyle(pb).backgroundColor;
+
+  let shotSize = false, shotKept = false, shotWhy = '';
+  try {
+    const png = await IO.shot(probe, { w: 40, h: 40, fill: 1, anchor: 0.5 });
+    const img = await new Promise((res, rej) => {
+      const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = png;
+    });
+    shotSize = img.width === 40 && img.height === 40;
+    const cv = document.createElement('canvas');
+    cv.width = 40; cv.height = 40;
+    const cx = cv.getContext('2d');
+    cx.drawImage(img, 0, 0);
+    const at = (x, y) => { const p = cx.getImageData(x, y, 1, 1).data; return 'rgb(' + p[0] + ', ' + p[1] + ', ' + p[2] + ')'; };
+    const near = (a, b) => {
+      const na = (a.match(/\d+/g) || []).map(Number), nb = (b.match(/\d+/g) || []).map(Number);
+      return na.length >= 3 && nb.length >= 3 &&
+        Math.abs(na[0] - nb[0]) < 12 && Math.abs(na[1] - nb[1]) < 12 && Math.abs(na[2] - nb[2]) < 12;
+    };
+    shotKept = near(at(9, 20), wantAcc) && near(at(30, 20), wantInk);
+    shotWhy = at(9, 20) + ' vs ' + wantAcc + ', ' + at(30, 20) + ' vs ' + wantInk;
+  } catch (e) { shotWhy = e.message; }
+  probe.remove();
+  ok('io: a picture comes back the size that was asked for', shotSize);
+  ok('io: a picture keeps what the page was handing down — ' + shotWhy, shotKept);
 
   /* ---- clean up after ourselves ---- */
   Rec.clear([stamp]);

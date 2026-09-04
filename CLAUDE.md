@@ -408,8 +408,11 @@ because it runs the real thing rather than only parsing it:
 
 1. Serve the folder: `py -3 -m http.server 8777 -d "<repo>"`.
 2. Open it with the browser tool, drive it with JavaScript, read the console.
-3. Run `shared/_smoke.html`. It must say 152 of 152, or more once you add checks.
-   Run it at phone width too — some checks only mean anything at one width.
+3. Run `shared/_smoke.html`. It must say 163 of 163, or more once you add checks.
+   **Load it with a `?cb=<something new>` on the end.** The browser caches these
+   files hard, and a run against a stale copy is worse than no run: it reports
+   green on code you have not tested. Run it at phone width too — some checks
+   only mean anything at one width.
 4. Clean up any test data you wrote, and stop the server.
 
 **Always test:** record merge including the two-device case where each device wrote
@@ -419,6 +422,31 @@ granting and spending, day boundary behaviour either side of the start hour, and
 theme contrast maths.
 
 Never claim something works because it should. Claim it because you watched it.
+
+### Write the check one level under the bug
+
+Added 2026-09-04, after STATUS's export was fixed three times for what turned
+out to be one cause. Each fix was a real fix and each was tested by looking at
+the picture, and the next symptom arrived anyway, because the thing being
+tested was the symptom.
+
+**A check that names a symptom only ever catches that symptom.** "The calories
+are the right colour" would have passed while the labels were still wrong. The
+check that earns its keep is one level under: *did the picture keep what the
+page was handing it* — which is the actual mechanism, and fails for every
+symptom that mechanism can produce. `shared/_smoke.html` has that one now, and
+it caught a second bug in `IO.shot` the first time it ran.
+
+Ask, before writing a check: what is the ONE thing that, if it broke, would
+produce all of these? Test that.
+
+### A red check nobody reads is worse than no check
+
+The sheet-position check failed on every run for weeks because it asked where
+something was in a window with no height, which is what a hidden preview pane
+reports. Permanent red trains you to skim the list. If a check cannot answer
+its question in the environment it runs in, make it ask a question it can
+answer, or take it out.
 
 ---
 

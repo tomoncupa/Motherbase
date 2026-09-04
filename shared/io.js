@@ -234,6 +234,146 @@ const IO = {
     return IO;
   },
 
+  /* ══════════════ PHOTOGRAPHING A COMPONENT ══════════════
+
+     Turns a live element into a see-through PNG, so an app can hand somebody a
+     picture of a real screen rather than a second drawing of one that has to
+     be kept in step. STATUS shares its Today card with it. Anything with a
+     card worth showing can use it: a session in TRAIN, a map in ARC.
+
+     THE ONE THING THAT MATTERS, and it cost three rounds of fixes in STATUS to
+     find. An SVG has no page. A component lifted out of one loses everything
+     the page was HANDING DOWN to it, and these apps hand down nearly all of
+     their appearance - the text colour, the typeface and all ninety-odd theme
+     tokens live on the page, not on the component. Carrying a few of those
+     over by hand is how STATUS's calories came out black and then its labels
+     came out serif: one cause, fixed one symptom at a time.
+
+     So the wrapper inside the picture BECOMES the page. Not a chosen list: the
+     whole computed style of the real body, every property, read at the moment
+     the picture is taken. Whatever the page was handing down, the wrapper
+     hands down, and nothing has to be remembered. It costs about 12KB. Then it
+     is flattened back into a plain empty box, because it is standing in for
+     the page's inheritance and not for its appearance - the picture has no
+     background, which is the whole point of an overlay.
+
+     The element has to be laid out before it can be measured. Pass one that is
+     already on screen, or pass a loose one with `width` and it is laid out off
+     screen at that width and tidied up afterwards.
+
+       IO.shot(node, {
+         w, h    the picture, default 1080 x 1920
+         fill    how much of the width the component takes, default .88
+         anchor  where its middle sits, top to bottom, default .46
+         width   CSS width to lay a loose node out at, default 390
+         before  run once it is laid out and the fonts have arrived, for
+                 anything that has to measure before the picture is taken
+       })  ->  Promise of a data URL
+  */
+  shot(node, opts) {
+    opts = opts || {};
+    const W = opts.w || 1080, H = opts.h || 1920;
+    const fill = opts.fill == null ? 0.88 : opts.fill;
+    const anchor = opts.anchor == null ? 0.46 : opts.anchor;
+
+    let stage = null;
+    if (!node.isConnected) {
+      stage = el('div');
+      stage.style.cssText = 'position:fixed;left:-99999px;top:0;pointer-events:none;width:' +
+        (opts.width || 390) + 'px';
+      stage.appendChild(node);
+      document.body.appendChild(stage);
+    }
+    const done = () => { if (stage) stage.remove(); };
+
+    /* A webfont that has not arrived renders as a fallback inside the SVG too,
+       so the picture would be in a different face from the screen. */
+    const fonts = document.fonts ? document.fonts.ready.catch(() => {}) : Promise.resolve();
+
+    return fonts.then(() => {
+      if (opts.before) opts.before(node);
+
+      const box = node.getBoundingClientRect();
+      const cw = Math.max(1, Math.ceil(box.width)), ch = Math.max(1, Math.ceil(box.height));
+
+      /* Where the element was parked is not part of what it looks like. A
+         caller who positioned it themselves - fixed at left:-9999px, say, the
+         usual way to lay something out off screen - would otherwise have that
+         carried into the picture, and the picture would come back empty with
+         nothing to see wrong in it. Caught by the check in _smoke.html the
+         first time it ran, which is the point of that check.
+
+         Measured from the real one, drawn from a copy with its position let
+         go. Margin goes with it: a bounding box does not include margin, so
+         leaving it on would shift the drawing off the size just measured. */
+      const flat = n => {
+        const c = n.cloneNode(true);
+        c.style.position = 'static';
+        c.style.inset = 'auto';
+        c.style.left = c.style.top = c.style.right = c.style.bottom = 'auto';
+        c.style.margin = '0';
+        c.style.float = 'none';
+        return c;
+      };
+      /* Scaled up whole rather than blown up afterwards: everything inside
+         renders at the final size, so the type stays sharp. */
+      const scale = (W * fill) / cw;
+      const sw = cw * scale, sh = ch * scale;
+      const ox = (W - sw) / 2;
+      const oy = Math.max(0, H * anchor - sh / 2);
+
+      /* ── the page, stood in for ── */
+      const bcs = getComputedStyle(document.body);
+      let stand = '';
+      for (let i = 0; i < bcs.length; i++) {
+        const prop = bcs[i];
+        stand += prop + ':' + bcs.getPropertyValue(prop) + ';';
+      }
+      stand += 'display:block;position:static;inset:auto;margin:0;padding:0;border:0;' +
+        'background:none;box-shadow:none;filter:none;transform:none;opacity:1;' +
+        'overflow:visible;width:' + Math.ceil(sw) + 'px;height:auto;' +
+        'min-width:0;max-width:none;min-height:0;max-height:none;';
+
+      /* The class rules the component is drawn with, and the theme's own
+         stylesheet over them. Everything handed down is on the wrapper, so
+         this is only here for what a rule states outright. */
+      const sheets = Array.prototype.map.call(document.querySelectorAll('style'),
+        n => n.textContent).join(String.fromCharCode(10));
+
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
+        '<foreignObject x="' + ox + '" y="' + oy + '" width="' + sw + '" height="' + sh + '">' +
+        '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(stand) + '">' +
+        '<style>' + sheets + '</style>' +
+        '<div style="width:' + cw + 'px;transform:scale(' + scale + ');transform-origin:top left">' +
+        new XMLSerializer().serializeToString(flat(node)) + '</div></div></foreignObject></svg>';
+
+      return new Promise((res, rej) => {
+        const img = new Image();
+        img.onload = () => {
+          const cv = el('canvas');
+          cv.width = W; cv.height = H;
+          cv.getContext('2d').drawImage(img, 0, 0);
+          res(cv.toDataURL('image/png'));
+        };
+        img.onerror = () => rej(new Error('could not draw the picture'));
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      });
+    }).then(png => { done(); return png; }, err => { done(); throw err; });
+  },
+
+  /** IO.shot, then hand it to the person. `name` gets .png put on it. */
+  saveShot(node, name, opts) {
+    return IO.shot(node, opts).then(png => {
+      const a = el('a');
+      a.download = String(name || 'shot').replace(/\.png$/i, '') + '.png';
+      a.href = png;
+      a.click();
+      toast('Picture saved');
+      return png;
+    }, err => { toast(esc(err.message), { bad: true }); throw err; });
+  },
+
   /* ══════════════ EDITABLE TABLES ══════════════
 
      Two kinds of tab, and the difference is not taste, it is arithmetic.

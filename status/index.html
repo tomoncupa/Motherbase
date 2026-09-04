@@ -4273,137 +4273,50 @@ function rankCard() {
    A see-through PNG of the Today card, to sit on top of a photo or a clip.
 
    It does not redraw anything. It photographs the real card: islandCard()
-   builds the same element the Today screen shows, that element goes into an
-   SVG foreignObject, and the browser rasterises it. So the picture cannot
-   drift from the app - change the card and the picture changes with it, with
-   nothing here to keep in step.
+   builds the same element the Today screen shows, and IO.shot() rasterises
+   it. So the picture cannot drift from the app - change the card and the
+   picture changes with it, with nothing here to keep in step.
 
-   TWO REWRITES, and the second one undid the first. The original forced every
-   background transparent and put a 3px black stroke on every letter, so the
-   card lost its panel and its tiles and the type went heavy and dark - a 3px
-   stroke on a 24px number is not an outline, it is a fill, which is why his
-   yellow calories came out black. The second replaced the card with a
-   Strava-shaped block of its own. Tom, 2026-09-04: "I dont want to copy
-   strava 1:1. I want the export function to show up almost exactly like the
-   status screen."
+   Everything that used to make this hard - the page's colours and typeface
+   going missing inside an SVG - now lives in IO.shot, in the shared drawer,
+   where the next app to want a picture gets it working the first time. Tom,
+   2026-09-04: "Okay, add it to shared."
 
-   So: the card, as it is, keeping its own background, its border, its corner
-   and its colours. Nothing is overridden at all now - the add button is not
-   part of the card, it sits beside it, so there was nothing to hide either.
-   The frame around the card is transparent, which is what makes it an overlay
-   rather than a screenshot, and because the card brings its own opaque panel
-   it reads on a photograph and on plain white with no scrim, no shadow and no
-   outline. */
+   What is left here is the three decisions that are STATUS's own: which card,
+   how wide, and the date on top of it. */
 
 async function shareCard(a, kind) {
-  const W = 1080, H = kind === 'story' ? 1920 : 1350;
+  const d = vd();
 
-  /* A webfont that has not arrived renders as a fallback inside the SVG too. */
-  try { await document.fonts.ready; } catch (e) {}
-
-  /* The real component, built off screen so it lays out for measuring. Built
-     at the width the card has on a phone, then scaled up whole, so the type
-     is sharp rather than a small bitmap blown up. */
   /* The width matters more than it looks. The tile grid is auto-fit at a 92px
-     minimum, so 460 gives four across and 390 gives the three he actually has
-     in his hand - and four across is not "almost exactly like the status
-     screen", it is a different screen. So it copies the width of a real card
-     on the page, which on a phone IS his screen, and clamps it in case the
-     export is run from a wide window. */
+     minimum, so a wide stage gives four tiles across where his phone gives
+     three - and four across is not the same screen. So it copies the width of
+     a real card on the page, which on a phone IS his screen, and clamps it in
+     case the export is run from a wide window. */
   const onScreen = document.querySelector('#main .card');
   const cardW = onScreen ? Math.round(onScreen.getBoundingClientRect().width) : 0;
-  const stageW = Math.max(340, Math.min(440, cardW || 390));
 
-  const stage = document.createElement('div');
-  stage.style.cssText = 'position:fixed;left:-99999px;top:0;pointer-events:none;width:' + stageW + 'px';
-  const d = vd();
   const shot = islandCard(d, {
+    /* The picture is the card, so if the Spent tile is on your Today it is in
+       the picture. hideSpend keeps it out, and starts on. */
     money: !S.get('hideSpend', 1),
+    /* On screen the date is in the app's header a few pixels above this card.
+       A picture leaves the header behind, so the card takes the date itself,
+       in the shape every other card in here uses for a heading. */
     title: new Date(d + 'T12:00:00').toLocaleDateString(undefined,
       { weekday: 'long', day: 'numeric', month: 'long' }),
   });
-  stage.appendChild(shot);
-  document.body.appendChild(stage);
-  /* The reading is sized by measuring, and this copy has never been measured -
-     without this a long one clips in the picture while looking fine on the
-     screen it was copied from. */
-  fitHero(stage);
 
-  let png = null;
   try {
-    const box = shot.getBoundingClientRect();
-    const cw = Math.max(1, Math.ceil(box.width)), ch = Math.max(1, Math.ceil(box.height));
-
-    const scale = (W * 0.88) / cw;
-    const sw = cw * scale, sh = ch * scale;
-    const ox = (W - sw) / 2;
-    /* Sat a little above the middle, where a thumb is not covering it and the
-       platform's own furniture is not either. */
-    const oy = Math.max(0, (H - sh) / 2 - H * 0.04);
-
-    /* ── the page, stood in for ──
-       An SVG has no page. A card lifted out of one loses every property that
-       was being HANDED DOWN to it, and this app hands down almost everything:
-       the text colour, the typeface, and all ninety-three theme tokens live on
-       the page, not on the card. That is one bug, not three, and patching it
-       one property at a time is how the calories came out black and then the
-       labels came out serif.
-
-       So the wrapper becomes the page. Not a list of properties somebody
-       chose - the whole computed style of the real body, every one of the five
-       hundred and fifty, read off the live document. Whatever the page was
-       passing down, the wrapper passes down, and nothing has to be remembered.
-       It is twelve kilobytes.
-
-       Then it is flattened back into a plain box, because the wrapper is
-       standing in for the page's INHERITANCE, not for its appearance - and a
-       picture with no background is the whole point. */
-    const bcs = getComputedStyle(document.body);
-    let stand = '';
-    for (let i = 0; i < bcs.length; i++) {
-      const prop = bcs[i];
-      stand += prop + ':' + bcs.getPropertyValue(prop) + ';';
-    }
-    stand += 'display:block;position:static;inset:auto;margin:0;padding:0;border:0;' +
-      'background:none;box-shadow:none;filter:none;transform:none;opacity:1;' +
-      'overflow:visible;width:' + Math.ceil(sw) + 'px;height:auto;' +
-      'min-width:0;max-width:none;min-height:0;max-height:none;';
-
-    /* The class rules the card is drawn with, and the theme's own stylesheet
-       over them. Everything handed down is on the wrapper above, so this is
-       only here for what a rule states outright. */
-    const sheets = Array.prototype.map.call(document.querySelectorAll('style'),
-      n => n.textContent).join(String.fromCharCode(10));
-
-    const body = new XMLSerializer().serializeToString(shot);
-    const svg =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
-      '<foreignObject x="' + ox + '" y="' + oy + '" width="' + sw + '" height="' + sh + '">' +
-      '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(stand) + '">' +
-      '<style>' + sheets + '</style>' +
-      '<div style="width:' + cw + 'px;transform:scale(' + scale + ');transform-origin:top left">' +
-      body + '</div></div></foreignObject></svg>';
-
-    png = await new Promise((res, rej) => {
-      const img = new Image();
-      img.onload = () => {
-        const cv = document.createElement('canvas');
-        cv.width = W; cv.height = H;
-        cv.getContext('2d').drawImage(img, 0, 0);
-        res(cv.toDataURL('image/png'));
-      };
-      img.onerror = () => rej(new Error('could not draw the card'));
-      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    await IO.saveShot(shot, 'status-' + (a && a.rank ? a.rank.k : 'day') + '-' + kind, {
+      w: 1080, h: kind === 'story' ? 1920 : 1350,
+      width: Math.max(340, Math.min(440, cardW || 390)),
+      /* The reading is sized by measuring, and this copy has never been
+         measured - without this a long one clips in the picture while looking
+         fine on the screen it was copied from. */
+      before: n => fitHero(n),
     });
-  } finally {
-    stage.remove();
-  }
-
-  const link = document.createElement('a');
-  link.download = 'status-' + (a && a.rank ? a.rank.k : 'day') + '-' + kind + '.png';
-  link.href = png;
-  link.click();
-  UI.toast('Overlay saved');
+  } catch (e) { /* saveShot has already said so */ }
 }
 
 function drawTrends(m) {
