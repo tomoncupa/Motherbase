@@ -340,32 +340,6 @@ label.fl:first-child{margin-top:0}
 .setpane > .seg{margin-bottom:var(--s-2)}
 .seg.wrapseg{flex-wrap:wrap}
 
-/* ── the share overlay ──
-   On no screen. This is the block that goes into the PNG, laid out at the
-   1080 the picture is wide so nothing is scaled afterwards. Raw pixel sizes
-   here and nowhere else in this file: the tokens are sized for a phone in
-   your hand, and this is sized for a phone at arm's length in somebody's
-   feed. It sits on a dark gradient the SVG paints behind it, which is what
-   lets the theme keep its own colours and still be readable on a photo.
-
-   No border, no card, no boxes, no per-letter outline. Strava's shape. */
-.shcard{width:1080px;box-sizing:border-box;padding:0 84px;color:#fff;
-  font-family:var(--font-ui);text-shadow:0 2px 14px rgba(0,0,0,.55)}
-.shcard .shtop{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px}
-.shcard .shdate{font-size:30px;letter-spacing:.24em;text-transform:uppercase;opacity:.75}
-.shcard .shmark{font-family:var(--font-mono);font-size:76px;font-weight:700;line-height:1}
-.shcard .shhero{font-family:var(--font-mono);line-height:.94;display:flex;align-items:baseline}
-.shcard .shhero b{font-size:180px;font-weight:600;letter-spacing:-.04em}
-.shcard .shhero i{font-style:normal;font-size:66px;font-weight:400;opacity:.6;letter-spacing:-.02em}
-.shcard .shsub{font-size:30px;letter-spacing:.24em;text-transform:uppercase;opacity:.75;margin-top:22px}
-.shcard .shrule{height:2px;background:rgba(255,255,255,.3);margin:46px 0 40px}
-.shcard .shstats{display:flex}
-.shcard .shstats > div{flex:1;min-width:0}
-.shcard .shstats b{display:flex;align-items:baseline;font-family:var(--font-mono);
-  font-size:68px;font-weight:600;letter-spacing:-.03em;line-height:1}
-.shcard .shstats i{font-style:normal;font-size:30px;font-weight:400;opacity:.6}
-.shcard .shstats span{display:block;font-size:26px;letter-spacing:.2em;
-  text-transform:uppercase;opacity:.7;margin-top:16px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--s-2)}
 .field{margin-bottom:var(--s-4)}          /* more space around a group than inside it */
@@ -561,7 +535,15 @@ const S = {
   set(k, v) { Rec.setting(APP.id, k, v); },
 };
 
-Skins.load('../shared/skins.json').then(() => { if (Skins.restore) Skins.restore(APP.id); else Skins.apply(Skins.for(APP.id)); });
+Skins.load('../shared/skins.json').then(() => {
+  if (Skins.restore) Skins.restore(APP.id); else Skins.apply(Skins.for(APP.id));
+  /* The theme is fetched, so it can land AFTER the first paint. Anything drawn
+     before it read an empty token: rankColour() came back as nothing and the
+     grade letter was left inheriting plain white until you touched the screen
+     and something redrew. Draw again once the colours are actually here.
+     Rec.ready runs it now if the store is up and queues it if it is not. */
+  Rec.ready(draw);
+});
 Sfx.init(APP.id);
 Rec.declare(APP.id, APP.types);
 /* the spreadsheet builder lives further down the file, so it is reached
@@ -3246,7 +3228,11 @@ function tileValue(f, v) {
 function islandCard(d, opts) {
   opts = opts || {};
   const t = dayTotals(d);
-  const c = card();
+  /* On screen this card has no heading - the date is in the app's own header
+     a few pixels above it. A picture leaves the app behind, so the export
+     asks for the date and gets it in the shape every other card in here uses
+     for a heading. Nothing else about the card changes. */
+  const c = card(opts.title || null);
 
   const h = heroReading(d);
   const hero = el('div', 'hero',
@@ -4259,99 +4245,43 @@ function rankCard() {
   bar.appendChild(story); bar.appendChild(feed);
   c.appendChild(el('label', 'fl', 'Share it'));
   c.appendChild(bar);
-  /* "Hide spending" used to live here, because the old picture was a
-     photograph of the whole Today card and money was on it. The new one shows
-     the big number and the pillars, and money has never been a pillar, so the
-     switch had nothing left to switch. A control that does nothing is worse
-     than no control. */
+  /* The picture is the Today card, so if the Spent tile is on your Today it is
+     in the picture too. It starts hidden: what you spend is nobody's business
+     and a default that leaks it is the wrong default. */
+  const hide = el('label', 'shopt');
+  const hb = document.createElement('input');
+  hb.type = 'checkbox'; hb.checked = !!S.get('hideSpend', 1);
+  hb.onchange = () => S.set('hideSpend', hb.checked ? 1 : 0);
+  hide.appendChild(hb);
+  hide.appendChild(el('span', null, 'Leave spending out'));
+  c.appendChild(hide);
   return c;
 }
 
 /* ── the overlay ──
-   A see-through PNG of the day, to sit on top of a photo or a clip.
+   A see-through PNG of the Today card, to sit on top of a photo or a clip.
 
-   REWRITTEN 2026-09-04. It used to photograph the Today card itself, with
-   every background forced transparent and every letter given a 3px black
-   outline so it would survive whatever was underneath. Tom: "too much
-   shadowing, why are the calories black when they are yellow on my phone?"
-   A 3px stroke on a 24px number is not an outline, it is a fill - the stroke
-   met in the middle and painted the glyph black. And a card, with its border
-   and its grid of little boxes, is a screenshot. Nobody shares a screenshot.
+   It does not redraw anything. It photographs the real card: islandCard()
+   builds the same element the Today screen shows, that element goes into an
+   SVG foreignObject, and the browser rasterises it. So the picture cannot
+   drift from the app - change the card and the picture changes with it, with
+   nothing here to keep in step.
 
-   So this is Strava's shape, which is the one he asked for: no card, no
-   boxes, no per-letter outline. One dark gradient rising from the bottom of
-   the frame, and the day set on top of it - date and letter, the big number,
-   a hairline, then the rest in a row. The scrim is what makes it readable on
-   a photograph, and it is also what makes it readable pasted on plain white,
-   which is where he was actually looking at it.
+   TWO REWRITES, and the second one undid the first. The original forced every
+   background transparent and put a 3px black stroke on every letter, so the
+   card lost its panel and its tiles and the type went heavy and dark - a 3px
+   stroke on a 24px number is not an outline, it is a fill, which is why his
+   yellow calories came out black. The second replaced the card with a
+   Strava-shaped block of its own. Tom, 2026-09-04: "I dont want to copy
+   strava 1:1. I want the export function to show up almost exactly like the
+   status screen."
 
-   The numbers still cannot drift from the app: every one of them comes out of
-   statReading(), which is the same function the tiles on Today read. Only the
-   arrangement is its own. */
-
-function shareStats(d) {
-  const heroId = heroPick(), live = PILLARS(), out = [];
-  liveFields()
-    .filter(f => dueToday(f, d) && f.id !== heroId && live.indexOf(pillarKey(f.id)) > -1)
-    /* A yes/no is not a statistic. "Trained: 1" means nothing to anybody, and
-       the letter at the top already carries whether you trained. */
-    .filter(f => f.measure !== 'check')
-    .forEach(f => out.push(statReading(f.id, d)));
-  if (heroId !== '@protein') out.push(statReading('@protein', d));
-  if (heroId !== '@kcal') out.push(statReading('@kcal', d));
-  /* Nothing logged is not worth a column. A dash on a share picture is a
-     column saying you did not measure it, which is not what the picture is
-     for - it just takes the place of one that has a number. */
-  return inTileOrder(out.filter(r => r && r.now != null), x => x.id).slice(0, 3);
-}
-
-/* The thing that gets photographed. Built at the full 1080 the picture is
-   wide, so nothing is scaled afterwards and the type stays exactly the size
-   it was set at. */
-function shareBlock(d) {
-  /* 'shcard', not 'shot': this file already has a .shot, and it is a row of
-     photographed labels laid out with display:flex. Naming this one the same
-     put the whole picture on a single line. */
-  const w = el('div', 'shcard');
-  const h = heroReading(d);
-  const sc = d === Day.today() ? todayScore() : dayScore(d);
-  const k = sc && sc.rank ? sc.rank.k : (sc && sc.letter) || null;
-
-  const top = el('div', 'shtop');
-  top.appendChild(el('span', 'shdate',
-    new Date(d + 'T12:00:00').toLocaleDateString(undefined,
-      { weekday: 'short', day: 'numeric', month: 'short' })));
-  if (k) {
-    const m = el('div', 'shmark', k);
-    m.style.color = rankColour(k);
-    top.appendChild(m);
-  }
-  w.appendChild(top);
-
-  /* The big one, in the colour it is on the phone. */
-  const hero = el('div', 'shhero',
-    '<b>' + (h.now == null ? '\u2013' : h.now.toLocaleString()) + '</b>' +
-    (h.target ? '<i>/' + h.target.toLocaleString() + '</i>' : '') +
-    (h.unit ? '<i>' + esc(h.unit) + '</i>' : ''));
-  hero.style.color = h.over ? 'var(--warn)' : 'var(--accent)';
-  w.appendChild(hero);
-  w.appendChild(el('div', 'shsub', esc(h.label + (h.word ? ' ' + h.word : ''))));
-
-  const st = shareStats(d);
-  if (st.length) {
-    w.appendChild(el('div', 'shrule'));
-    const row = el('div', 'shstats');
-    st.forEach(r => {
-      row.appendChild(el('div', null,
-        '<b>' + (r.now == null ? '\u2013' : r.now.toLocaleString()) +
-        (r.target ? '<i>/' + r.target.toLocaleString() + '</i>' : '') +
-        (r.unit ? '<i>' + esc(r.unit) + '</i>' : '') + '</b>' +
-        '<span>' + esc(r.label) + '</span>'));
-    });
-    w.appendChild(row);
-  }
-  return w;
-}
+   So: the card, as it is, keeping its own background, its border, its corner
+   and its colours. Nothing is overridden except the add button, which is a
+   control nobody can press in a picture. The frame around the card is
+   transparent, which is what makes it an overlay rather than a screenshot -
+   and because the card brings its own opaque panel, it reads on a photograph
+   and on plain white without any scrim, any shadow or any outline. */
 
 async function shareCard(a, kind) {
   const W = 1080, H = kind === 'story' ? 1920 : 1350;
@@ -4359,47 +4289,80 @@ async function shareCard(a, kind) {
   /* A webfont that has not arrived renders as a fallback inside the SVG too. */
   try { await document.fonts.ready; } catch (e) {}
 
+  /* The real component, built off screen so it lays out for measuring. Built
+     at the width the card has on a phone, then scaled up whole, so the type
+     is sharp rather than a small bitmap blown up. */
+  /* The width matters more than it looks. The tile grid is auto-fit at a 92px
+     minimum, so 460 gives four across and 390 gives the three he actually has
+     in his hand - and four across is not "almost exactly like the status
+     screen", it is a different screen. So it copies the width of a real card
+     on the page, which on a phone IS his screen, and clamps it in case the
+     export is run from a wide window. */
+  const onScreen = document.querySelector('#main .card');
+  const cardW = onScreen ? Math.round(onScreen.getBoundingClientRect().width) : 0;
+  const stageW = Math.max(340, Math.min(440, cardW || 390));
+
   const stage = document.createElement('div');
-  stage.style.cssText = 'position:fixed;left:-99999px;top:0;width:' + W + 'px;pointer-events:none';
-  const shot = shareBlock(vd());
+  stage.style.cssText = 'position:fixed;left:-99999px;top:0;pointer-events:none;width:' + stageW + 'px';
+  const d = vd();
+  const shot = islandCard(d, {
+    money: !S.get('hideSpend', 1),
+    title: new Date(d + 'T12:00:00').toLocaleDateString(undefined,
+      { weekday: 'long', day: 'numeric', month: 'long' }),
+  });
   stage.appendChild(shot);
   document.body.appendChild(stage);
+  /* The reading is sized by measuring, and this copy has never been measured -
+     without this a long one clips in the picture while looking fine on the
+     screen it was copied from. */
+  fitHero(stage);
 
   let png = null;
   try {
-    const ch = Math.max(1, Math.ceil(shot.getBoundingClientRect().height));
-    /* Sat on the bottom of the frame, the way a run report is, with room left
-       under it for the platform's own furniture. */
-    const oy = Math.max(0, H - ch - Math.round(H * (kind === 'story' ? 0.14 : 0.09)));
-    /* ── the scrim, in two pieces ──
-       One gradient from nothing to full black does not work here, because the
-       text does not sit at the bottom of it - it sits in the middle, where the
-       gradient is still half way and a white letter on a white photo is a
-       white letter on grey. So: a flat band the words actually sit on, dark
-       enough to read against anything, and a soft fade ABOVE it so the band
-       has no visible top edge. */
-    const band = Math.max(0, oy - 60);
-    const fade = Math.round(H * 0.26);
-    const fadeTop = Math.max(0, band - fade);
+    const box = shot.getBoundingClientRect();
+    const cw = Math.max(1, Math.ceil(box.width)), ch = Math.max(1, Math.ceil(box.height));
 
+    const scale = (W * 0.88) / cw;
+    const sw = cw * scale, sh = ch * scale;
+    const ox = (W - sw) / 2;
+    /* Sat a little above the middle, where a thumb is not covering it and the
+       platform's own furniture is not either. */
+    const oy = Math.max(0, (H - sh) / 2 - H * 0.04);
+
+    /* The page's own stylesheets, and the tokens the theme wrote onto :root. */
     const sheets = Array.prototype.map.call(document.querySelectorAll('style'),
       n => n.textContent).join(String.fromCharCode(10));
     const rootVars = document.documentElement.style.cssText || '';
 
+    /* ── the bit that made his calories black ──
+       Almost nothing in this app sets a colour or a font of its own. The
+       calorie reading, the tile labels, all of it INHERITS from body, which is
+       where `color: var(--text)` and the theme's typeface are set. Inside an
+       SVG there is no body, so everything fell back to the SVG default, which
+       is black text in a serif face. The 3px stroke the old version painted on
+       top hid half of that and got blamed for all of it.
+
+       So the wrapper carries what body was carrying, read off the real page
+       rather than guessed, and the card inherits it exactly as it does on
+       screen. */
+    const bs = getComputedStyle(document.body);
+    const base = 'color:' + bs.color + ';font-family:' + bs.fontFamily +
+      ';font-size:' + bs.fontSize + ';line-height:' + bs.lineHeight +
+      ';letter-spacing:' + bs.letterSpacing + ';font-weight:' + bs.fontWeight + ';';
+
+    /* The only override there is. Do NOT hide buttons: the tiles ARE buttons,
+       which is how you tap one to open its sheet, and hiding them once emptied
+       the picture of everything but the top row. */
+    const override = '.seam,.fab{display:none !important}';
+
+    const body = new XMLSerializer().serializeToString(shot);
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
-      '<defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0" stop-color="#000" stop-opacity="0"/>' +
-      '<stop offset="0.55" stop-color="#000" stop-opacity="0.42"/>' +
-      '<stop offset="1" stop-color="#000" stop-opacity="0.82"/>' +
-      '</linearGradient></defs>' +
-      '<rect x="0" y="' + fadeTop + '" width="' + W + '" height="' + (band - fadeTop) + '" fill="url(#scrim)"/>' +
-      '<rect x="0" y="' + band + '" width="' + W + '" height="' + (H - band) + '" fill="#000" fill-opacity="0.82"/>' +
-      '<foreignObject x="0" y="' + oy + '" width="' + W + '" height="' + ch + '">' +
-      '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(rootVars) + '">' +
-      '<style>' + sheets + '</style>' +
-      new XMLSerializer().serializeToString(shot) +
-      '</div></foreignObject></svg>';
+      '<foreignObject x="' + ox + '" y="' + oy + '" width="' + sw + '" height="' + sh + '">' +
+      '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(rootVars + ';' + base) + '">' +
+      '<style>' + sheets + String.fromCharCode(10) + override + '</style>' +
+      '<div style="width:' + cw + 'px;transform:scale(' + scale + ');transform-origin:top left">' +
+      body + '</div></div></foreignObject></svg>';
 
     png = await new Promise((res, rej) => {
       const img = new Image();
