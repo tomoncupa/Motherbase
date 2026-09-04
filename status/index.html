@@ -3258,7 +3258,7 @@ function islandCard(d, opts) {
   const top = el('div', 'islerow');
   const heroBox = el('div', 'islehero'); heroBox.appendChild(hero);
   top.appendChild(heroBox);
-  top.appendChild(rankBadge());
+  top.appendChild(rankBadge(d));
   top.style.marginBottom = 'var(--s-4)';
   c.appendChild(top);
 
@@ -4145,9 +4145,15 @@ function adherence(days) {
            worst: worst, scoredDays: scored.length, loggedDays: touched.length };
 }
 
-/* Today on its own, capped at A while it is unfinished or was a rest day. */
-function todayScore() {
-  const d = dayScore(Day.today());
+/* One day on its own, capped at A while it is unfinished or was a rest day.
+
+   Takes a date, because the badge sits on a screen you can step backwards
+   through. It used to be today and only today, so stepping back a day left the
+   letter reporting THIS morning - and at eight in the morning this morning has
+   nothing graded, so a finished day from last week showed a dash. The letter
+   was not missing, it was answering a question about a different day. */
+function scoreFor(date) {
+  const d = dayScore(date || Day.today());
   if (d.pct == null) return d;
   /* Same rule as the days behind it: a morning you have not touched yet is not
      a morning you are failing. It gets a number once it gets a reading. */
@@ -4161,18 +4167,23 @@ function todayScore() {
   d.rank = RANKS.find(r => r.k === k);
   return d;
 }
+const todayScore = () => scoreFor(Day.today());
 
 /* ── the badge ── */
-function rankBadge() {
-  /* The letter on the Today tab is TODAY. It used to be the last seven
-     completed days, which is a defensible number on the wrong screen: Tom
-     read it as today's because the tab is called Today and it is. The week
-     is on Trends, where the working lives. */
-  const a = adherence(7), t = todayScore();
+function rankBadge(date) {
+  /* The letter beside the calories is the DAY YOU ARE LOOKING AT. It was the
+     last seven completed days once, which is a defensible number on the wrong
+     screen; then it was today, which is right until you step back a day. The
+     week is on Trends, where the working lives. */
+  const d = date || vd();
+  const today = Day.isToday(d);
+  const t = scoreFor(d);
   const w = el('button', 'rankbadge mb-press mb-tap');
   w.title = t.rank
-    ? 'Today so far. Tap for the week and the working.'
-    : 'Nothing graded yet today. Tap to see what it needs.';
+    ? (today ? 'Today so far. Tap for the week and the working.'
+             : Day.label(d) + '. Tap for the week and the working.')
+    : (today ? 'Nothing graded yet today. Tap to see what it needs.'
+             : 'Nothing logged on ' + Day.label(d) + '.');
   /* Nothing to grade yet reads as a dash, not as an F. The letter arrives the
      day after the first day you log. */
   const mark = t.rank ? t.rank.k : '–';
