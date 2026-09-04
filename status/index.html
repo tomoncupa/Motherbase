@@ -2065,8 +2065,19 @@ function photoBlock(body, kind, onText, onShot) {
    `days` it is due every day, which is what everything used to be. `slot` is
    just a word for when, printed next to it: "Sunday morning". */
 const dueToday = (f, date) => !f.days || !f.days.length || f.days.indexOf(Day.dow(date || vd())) > -1;
+/* What is still unlogged today, and therefore what the + offers and what the
+   amber dot on it counts.
+
+   Training is not in it. Tom, 2026-09-04: "Remove trained from the FAB." He
+   is right, and for a reason worth writing down: STATUS does not own whether
+   you trained. trainedOn() reads it out of TRAIN - a session, or any logged
+   set - and only falls back to the tracked yes/no when TRAIN has nothing. So
+   a + that offers you Trained is offering to hand-write a fact another app
+   already knows, which is how two apps start disagreeing. The tile is still
+   there and still tappable for the day TRAIN was not used. */
 const outstanding = () => inTileOrder(
-  liveFields().filter(f => f.once && dueToday(f) && !logged(vd(), f.id)), f => f.id);
+  liveFields().filter(f => f.once && dueToday(f) && !logged(vd(), f.id)
+    && pillarKey(f.id) !== 'training'), f => f.id);
 
 /* ── the quick add ──
    Two halves, and the top one empties itself.
@@ -4277,11 +4288,12 @@ function rankCard() {
    status screen."
 
    So: the card, as it is, keeping its own background, its border, its corner
-   and its colours. Nothing is overridden except the add button, which is a
-   control nobody can press in a picture. The frame around the card is
-   transparent, which is what makes it an overlay rather than a screenshot -
-   and because the card brings its own opaque panel, it reads on a photograph
-   and on plain white without any scrim, any shadow or any outline. */
+   and its colours. Nothing is overridden at all now - the add button is not
+   part of the card, it sits beside it, so there was nothing to hide either.
+   The frame around the card is transparent, which is what makes it an overlay
+   rather than a screenshot, and because the card brings its own opaque panel
+   it reads on a photograph and on plain white with no scrim, no shadow and no
+   outline. */
 
 async function shareCard(a, kind) {
   const W = 1080, H = kind === 'story' ? 1920 : 1350;
@@ -4329,38 +4341,46 @@ async function shareCard(a, kind) {
        platform's own furniture is not either. */
     const oy = Math.max(0, (H - sh) / 2 - H * 0.04);
 
-    /* The page's own stylesheets, and the tokens the theme wrote onto :root. */
+    /* ── the page, stood in for ──
+       An SVG has no page. A card lifted out of one loses every property that
+       was being HANDED DOWN to it, and this app hands down almost everything:
+       the text colour, the typeface, and all ninety-three theme tokens live on
+       the page, not on the card. That is one bug, not three, and patching it
+       one property at a time is how the calories came out black and then the
+       labels came out serif.
+
+       So the wrapper becomes the page. Not a list of properties somebody
+       chose - the whole computed style of the real body, every one of the five
+       hundred and fifty, read off the live document. Whatever the page was
+       passing down, the wrapper passes down, and nothing has to be remembered.
+       It is twelve kilobytes.
+
+       Then it is flattened back into a plain box, because the wrapper is
+       standing in for the page's INHERITANCE, not for its appearance - and a
+       picture with no background is the whole point. */
+    const bcs = getComputedStyle(document.body);
+    let stand = '';
+    for (let i = 0; i < bcs.length; i++) {
+      const prop = bcs[i];
+      stand += prop + ':' + bcs.getPropertyValue(prop) + ';';
+    }
+    stand += 'display:block;position:static;inset:auto;margin:0;padding:0;border:0;' +
+      'background:none;box-shadow:none;filter:none;transform:none;opacity:1;' +
+      'overflow:visible;width:' + Math.ceil(sw) + 'px;height:auto;' +
+      'min-width:0;max-width:none;min-height:0;max-height:none;';
+
+    /* The class rules the card is drawn with, and the theme's own stylesheet
+       over them. Everything handed down is on the wrapper above, so this is
+       only here for what a rule states outright. */
     const sheets = Array.prototype.map.call(document.querySelectorAll('style'),
       n => n.textContent).join(String.fromCharCode(10));
-    const rootVars = document.documentElement.style.cssText || '';
-
-    /* ── the bit that made his calories black ──
-       Almost nothing in this app sets a colour or a font of its own. The
-       calorie reading, the tile labels, all of it INHERITS from body, which is
-       where `color: var(--text)` and the theme's typeface are set. Inside an
-       SVG there is no body, so everything fell back to the SVG default, which
-       is black text in a serif face. The 3px stroke the old version painted on
-       top hid half of that and got blamed for all of it.
-
-       So the wrapper carries what body was carrying, read off the real page
-       rather than guessed, and the card inherits it exactly as it does on
-       screen. */
-    const bs = getComputedStyle(document.body);
-    const base = 'color:' + bs.color + ';font-family:' + bs.fontFamily +
-      ';font-size:' + bs.fontSize + ';line-height:' + bs.lineHeight +
-      ';letter-spacing:' + bs.letterSpacing + ';font-weight:' + bs.fontWeight + ';';
-
-    /* The only override there is. Do NOT hide buttons: the tiles ARE buttons,
-       which is how you tap one to open its sheet, and hiding them once emptied
-       the picture of everything but the top row. */
-    const override = '.seam,.fab{display:none !important}';
 
     const body = new XMLSerializer().serializeToString(shot);
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
       '<foreignObject x="' + ox + '" y="' + oy + '" width="' + sw + '" height="' + sh + '">' +
-      '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(rootVars + ';' + base) + '">' +
-      '<style>' + sheets + String.fromCharCode(10) + override + '</style>' +
+      '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(stand) + '">' +
+      '<style>' + sheets + '</style>' +
       '<div style="width:' + cw + 'px;transform:scale(' + scale + ');transform-origin:top left">' +
       body + '</div></div></foreignObject></svg>';
 
