@@ -872,11 +872,26 @@ function todayItems() {
     });
   }
 
-  Rec.all('note', { date: today }).forEach(r => {
+  /* The same three rules STATUS uses, because a day that reads one way there
+     and another way here is two different days.
+       - written today
+       - a task from before today, still open, which follows you forward
+       - a task finished today, wherever it was written down
+     Nothing is copied and nothing moves: this is a view over the rows. */
+  Rec.all('note').forEach(r => {
     const n = r.payload;
-    if (n.cancelled) return;
+    if (!n || n.cancelled) return;
     const isTodo = n.kind === 'todo';
-    const mins = n.at ? (+String(n.at).split(':')[0] * 60 + +String(n.at).split(':')[1]) : null;
+    if (r.date !== today) {
+      if (!r.date || !isTodo) return;
+      const carried = !n.done && r.date < today;
+      const finishedToday = n.done && n.doneOn === today;
+      if (!carried && !finishedToday) return;
+    }
+    /* A finished task's clock is when you ticked it. An open one's is when you
+       said you would start. */
+    const clock = (isTodo && n.done && n.doneAt) ? n.doneAt : n.at;
+    const mins = clock ? (+String(clock).split(':')[0] * 60 + +String(clock).split(':')[1]) : null;
     out.push({
       kind: n.kind, name: n.text || '', at: mins,
       dur: n.dur || 0, tag: '', colour: '', done: !!n.done, todo: isTodo,
@@ -888,6 +903,8 @@ function todayItems() {
                       String(now.getMinutes()).padStart(2, '0');
         Rec.set('note', r.date, r.key, Object.assign({}, n, {
           done: n.done ? 0 : 1, doneAt: n.done ? null : stamp,
+          /* the day you ticked it, so STATUS can show it on that day */
+          doneOn: n.done ? null : today,
         }));
         drawHome();
       },

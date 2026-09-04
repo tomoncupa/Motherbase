@@ -148,7 +148,7 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 .rankside .lb{font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-1)}
 .hero .u{font-size:var(--f-2);font-weight:400;color:var(--text-muted);letter-spacing:0;margin-left:var(--s-1)}
 /* the divider in "1,680 / 2,400" - present, and quieter than either number */
-.hero .sl{color:var(--text-muted);font-weight:400;margin:0 .06em}
+.hero .sl{color:var(--text-muted);font-weight:400;margin:0}
 /* A value with a slash in it - 200/175 - is nearly twice as wide as a plain
    one and was running under the unit. It steps down instead of overflowing;
    the tile is a fixed width and the number has to live inside it. */
@@ -338,6 +338,34 @@ label.fl:first-child{margin-top:0}
    between two of them. */
 .setpane > .field > .note{margin-bottom:0}
 .setpane > .seg{margin-bottom:var(--s-2)}
+.seg.wrapseg{flex-wrap:wrap}
+
+/* ── the share overlay ──
+   On no screen. This is the block that goes into the PNG, laid out at the
+   1080 the picture is wide so nothing is scaled afterwards. Raw pixel sizes
+   here and nowhere else in this file: the tokens are sized for a phone in
+   your hand, and this is sized for a phone at arm's length in somebody's
+   feed. It sits on a dark gradient the SVG paints behind it, which is what
+   lets the theme keep its own colours and still be readable on a photo.
+
+   No border, no card, no boxes, no per-letter outline. Strava's shape. */
+.shcard{width:1080px;box-sizing:border-box;padding:0 84px;color:#fff;
+  font-family:var(--font-ui);text-shadow:0 2px 14px rgba(0,0,0,.55)}
+.shcard .shtop{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px}
+.shcard .shdate{font-size:30px;letter-spacing:.24em;text-transform:uppercase;opacity:.75}
+.shcard .shmark{font-family:var(--font-mono);font-size:76px;font-weight:700;line-height:1}
+.shcard .shhero{font-family:var(--font-mono);line-height:.94;display:flex;align-items:baseline}
+.shcard .shhero b{font-size:180px;font-weight:600;letter-spacing:-.04em}
+.shcard .shhero i{font-style:normal;font-size:66px;font-weight:400;opacity:.6;letter-spacing:-.02em}
+.shcard .shsub{font-size:30px;letter-spacing:.24em;text-transform:uppercase;opacity:.75;margin-top:22px}
+.shcard .shrule{height:2px;background:rgba(255,255,255,.3);margin:46px 0 40px}
+.shcard .shstats{display:flex}
+.shcard .shstats > div{flex:1;min-width:0}
+.shcard .shstats b{display:flex;align-items:baseline;font-family:var(--font-mono);
+  font-size:68px;font-weight:600;letter-spacing:-.03em;line-height:1}
+.shcard .shstats i{font-style:normal;font-size:30px;font-weight:400;opacity:.6}
+.shcard .shstats span{display:block;font-size:26px;letter-spacing:.2em;
+  text-transform:uppercase;opacity:.7;margin-top:16px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--s-2)}
 .field{margin-bottom:var(--s-4)}          /* more space around a group than inside it */
@@ -1097,14 +1125,28 @@ const kindLabels = () => {
    particular day and belong to that day. */
 function notes(date) {
   const d = date || vd();
-  const own = Rec.all('note', { date: d })
-    .map(r => Object.assign({ key: r.key, date: d }, r.payload));
-
-  const carried = Rec.all('note', { to: Day.shift(d, -1) })
-    .filter(r => r.payload && r.payload.kind === 'todo' && !r.payload.done && !r.payload.cancelled)
-    .map(r => Object.assign({ key: r.key, date: r.date, carried: Day.diff(d, r.date) }, r.payload));
-
-  return own.concat(carried).sort(noteOrder);
+  const out = [];
+  Rec.all('note').forEach(r => {
+    const p = r.payload;
+    if (!p) return;
+    /* written on this day */
+    if (r.date === d) { out.push(Object.assign({ key: r.key, date: d }, p)); return; }
+    if (!r.date) return;
+    /* still open, written before this day: it follows you forward */
+    if (p.kind === 'todo' && !p.done && !p.cancelled && r.date < d) {
+      out.push(Object.assign({ key: r.key, date: r.date, carried: Day.diff(d, r.date) }, p));
+      return;
+    }
+    /* DONE ON this day, written on another. Tom, 2026-09-04: "I want done
+       tasks to show up on the day I did them, so I know that I did them on
+       that day." The row does not move - it stays on the day it was written,
+       which is what keeps the history honest - but the day you finished it
+       shows it too, marked with where it came from. */
+    if (p.kind === 'todo' && p.done && p.doneOn === d) {
+      out.push(Object.assign({ key: r.key, date: r.date, from: r.date }, p));
+    }
+  });
+  return out.sort(noteOrder);
 }
 
 /* Sorting. To-dos hold the top whatever else is chosen, because an open task
@@ -1121,23 +1163,34 @@ function notes(date) {
    "undefined". Delete them properly. */
 function bare(x) {
   const o = Object.assign({}, x);
-  delete o.key; delete o.date; delete o.carried;
+  delete o.key; delete o.date; delete o.carried; delete o.from;
   return o;
 }
 
+/* The clock a line sorts by, which is not the same question as the clock it
+   shows. A finished task happened when you ticked it, not when you wrote it
+   down - Tom, 2026-09-04: "done tasks sort with the journal bullet types,
+   according to the time I checked them." A line with no clock at all falls
+   back to when it was written, so the list is one real sequence rather than a
+   timed half and an untimed clump. */
+function noteClock(x) {
+  const s = (x.kind === 'todo' && x.done && x.doneAt) ? x.doneAt : x.at;
+  if (s) return +String(s).replace(':', '');
+  if (x.t) { const w = hhmm(x.t); return w ? +w.replace(':', '') : 9999; }
+  return 9999;
+}
+
 function noteOrder(a, b) {
-  const done = x => (x.kind === 'todo' && (x.done || x.cancelled)) ? 1 : 0;
+  /* An open task holds the top whatever else is chosen: it is the one kind of
+     line you need to see without looking for it. A DONE one does not - it has
+     stopped being a task and gone back to being a thing that happened, which
+     is exactly what everything else on this list is. */
   const top = x => (x.kind === 'todo' && !x.done && !x.cancelled) ? 0 : 1;
   if (top(a) !== top(b)) return top(a) - top(b);
-  if (done(a) !== done(b)) return done(a) - done(b);
   const mode = S.get('noteSort', 'manual');
   if (mode === 'manual') return (a.ord || 0) - (b.ord || 0);
   if (mode === 'time') {
-    /* The time ON the line, which is the one you meant, falling back to when
-       it was written. A line with no time sorts after the ones that have one
-       rather than being given a fake position at midnight. */
-    const at = x => x.at ? +String(x.at).replace(':', '') : 9999;
-    if (at(a) !== at(b)) return at(a) - at(b);
+    if (noteClock(a) !== noteClock(b)) return noteClock(a) - noteClock(b);
     return (a.t || 0) - (b.t || 0);
   }
   return mode === 'oldest' ? (a.t || 0) - (b.t || 0) : (b.t || 0) - (a.t || 0);
@@ -3103,6 +3156,51 @@ function fitHero(root) {
   h.style.fontSize = Math.max(12, Math.floor(now * (h.clientWidth / h.scrollWidth))) + 'px';
 }
 
+/* ── which measure is the big one ──
+   Tom, 2026-09-04: "We can set one metric as the main tracked to replace
+   calories." So the hero is a choice, not a hard-coded thing. Whatever is
+   picked here is the big number on Today AND the big number on the share
+   picture, because they read the same function and cannot disagree.
+
+   A reading is: what it is called, where you are, what you were aiming at,
+   and what to call the gap. Calories are the odd one, and only because they
+   count DOWN - the number worth seeing is what is left in the day, not what
+   is gone. */
+function statReading(id, d) {
+  const t = dayTotals(d);
+  if (id === '@kcal') {
+    const ct = calTarget(), left = ct.v - Math.round(t.kcal);
+    return { id: '@kcal', label: 'Calories', now: left, target: ct.v, unit: '', word: 'left', over: left < 0 };
+  }
+  if (id === '@protein') {
+    return { id: '@protein', label: 'Protein', now: Math.round(t.p),
+             target: Math.round(TARGETS().p) || null, unit: 'g' };
+  }
+  const f = liveFields().filter(x => x.id === id)[0];
+  if (!f) return null;
+  const v = value(d, f.id);
+  return { id: f.id, label: f.label, unit: f.unit || '', target: f.target || null,
+           now: v == null ? null : (f.dec || f.measure === 'scale' ? r1(v) : Math.round(v)),
+           over: v != null && f.dir === 'lte' && f.target && v > f.target };
+}
+
+/* Everything that could be the big one. Calories first because it is the
+   default and the one most people mean. */
+function heroChoices() {
+  return [{ id: '@kcal', label: 'Calories' }, { id: '@protein', label: 'Protein' }]
+    .concat(liveFields().map(f => ({ id: f.id, label: f.label })));
+}
+const heroPick = () => S.get('heroStat', '@kcal');
+function heroReading(d) {
+  return statReading(heroPick(), d) || statReading('@kcal', d);
+}
+
+/* Which pillar a field is. The names in PILLARS are the ideas - sleep, steps,
+   training - and a field is called whatever you called it, so the two are
+   matched loosely on purpose. */
+const pillarKey = id => /sleep/i.test(id) ? 'sleep' : /step/i.test(id) ? 'steps'
+  : /^train/i.test(id) ? 'training' : id;
+
 function tile(label, val, unit, cls, onclick, pct, sub) {
   const t = el('button', 'tile ' + (cls || ''));
   /* Measured in characters, because a tile is a fixed width and the font is
@@ -3147,17 +3245,15 @@ function tileValue(f, v) {
    just be stats island on the first tab." */
 function islandCard(d, opts) {
   opts = opts || {};
-  const t = dayTotals(d), ct = calTarget();
+  const t = dayTotals(d);
   const c = card();
 
-  const left = ct.v - Math.round(t.kcal);
-  /* How wide the reading actually is, in characters, so the size can come down
-     before it runs out of room. Four figures either side of the slash is the
-     case that used to wrap. */
+  const h = heroReading(d);
   const hero = el('div', 'hero',
-    left.toLocaleString() + ' <span class="sl">/</span> ' + ct.v.toLocaleString() +
-    '<span class="u">left</span>');
-  if (left < 0) hero.style.color = 'var(--warn)';
+    (h.now == null ? '–' : h.now.toLocaleString()) +
+    (h.target ? '<span class="sl">/</span>' + h.target.toLocaleString() : '') +
+    '<span class="u">' + esc(h.word || h.unit || h.label.toLowerCase()) + '</span>');
+  if (h.over) hero.style.color = 'var(--warn)';
 
   /* The rank sits up here beside the calories, because this is the screen he
      opens and the rank is the one-glance answer to how it is going. The big
@@ -3178,11 +3274,11 @@ function islandCard(d, opts) {
      exactly as loudly as Steps and you could not see what was being graded.
      A pillar keeps the full treatment; everything else steps back. */
   const live = PILLARS();
-  const isPillar = id => live.indexOf(
-    /sleep/i.test(id) ? 'sleep' : /step/i.test(id) ? 'steps' :
-    /^train/i.test(id) ? 'training' : id) > -1;
+  const isPillar = id => live.indexOf(pillarKey(id)) > -1;
+  /* Whatever is the big number at the top does not also need a tile. */
+  const heroId = heroPick();
 
-  liveFields().filter(f => dueToday(f, d)).forEach(f => {
+  liveFields().filter(f => dueToday(f, d) && f.id !== heroId).forEach(f => {
     const v = value(d, f.id);
     let cls = (v == null ? 'todo' : '') + (isPillar(f.id) ? ' pillar' : ' aside');
     let pct = null;
@@ -3199,7 +3295,9 @@ function islandCard(d, opts) {
     made.push({ key: f.id, node: tile(f.label, tileValue(f, v), f.unit, cls, () => fieldSheet(f, d), pct,
       lf != null && lf >= 1 ? Math.round(lf) + (f.unit || '') + ' left' : null) });
   });
-  made.push({ key: '@protein', node: tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', 'pillar' + (t.p ? '' : ' todo'), () => { TAB = 'food'; draw(); }, t.p / (TARGETS().p || 1)) });
+  if (heroId !== '@protein') {
+    made.push({ key: '@protein', node: tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', 'pillar' + (t.p ? '' : ' todo'), () => { TAB = 'food'; draw(); }, t.p / (TARGETS().p || 1)) });
+  }
   /* Two different questions, and both have to say yes. `opts.money` is the
      export asking not to put money into a picture that leaves the phone.
      `spendTile` is Tom deciding he does not want to look at it at all. */
@@ -3268,15 +3366,22 @@ function drawJournal(m) {
        the word was already there doing nothing. Todos stay on top whichever
        way it is sorted, which is the rule in noteOrder and not negotiable
        here: an open task is not a diary entry and never sorts among them. */
+    /* The word stays one word. Tom, 2026-09-04: "I don't want the sort to be
+       visible beside journal, can we do a pop up that vanishes?" So the mode
+       is announced when it changes and then gets out of the way - a label that
+       lives on the heading forever is a permanent explanation of something you
+       did on purpose two seconds ago. */
     head.classList.add('jsort');
     const modes = ['manual', 'time', 'newest'];
-    const says = { manual: '', time: 'by time', newest: 'newest first' };
+    const says = { manual: 'As you arranged them', time: 'By time', newest: 'Newest first' };
     const mode = S.get('noteSort', 'manual');
-    head.innerHTML = 'Journal' + (says[mode] ? '<b>' + says[mode] + '</b>' : '');
-    head.title = 'Sort: ' + (says[mode] || 'as you arranged them');
+    head.innerHTML = 'Journal';
+    head.title = 'Sort: ' + says[mode];
     head.onclick = () => {
-      S.set('noteSort', modes[(modes.indexOf(mode) + 1) % modes.length]);
+      const next = modes[(modes.indexOf(mode) + 1) % modes.length];
+      S.set('noteSort', next);
       Mobile.feedback('select'); draw();
+      UI.toast(says[next]);
     };
     const row = el('div', 'jbtns');
     NOTE_KINDS.forEach(k => {
@@ -3318,7 +3423,11 @@ function drawJournal(m) {
       (x.kind !== 'todo' && !x.at && !x.dur && x.t
         ? '<i class="at wrote">' + esc(clockLabel(hhmm(x.t))) + '</i>' : '') +
       /* how long it has been following you — quiet, but it should sting a bit */
-      (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') + '</span>';
+      (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') +
+      /* Finished here, written earlier. Says how long it sat, so a task you
+         finally cleared reads as cleared rather than as a line you wrote
+         today. */
+      (x.from ? '<i class="carried">' + Day.diff(d, x.from) + 'd</i>' : '') + '</span>';
     const box = r.querySelector('.k');
     /* The mark says WHEN you are looking, not where the row came from. A box
        is something to do today; an arrow is something that has moved on. Tom,
@@ -3340,6 +3449,10 @@ function drawJournal(m) {
         Rec.set('note', own, x.key, Object.assign(bare(x), {
           done: x.done ? 0 : 1,
           doneAt: x.done ? null : stamp,
+          /* WHICH DAY you ticked it, so a task written on Monday and finished
+             on Thursday shows up on Thursday. Cleared on un-ticking, like the
+             time is, because a day that outlives the tick lies the same way. */
+          doneOn: x.done ? null : d,
         }));
         Mobile.feedback(x.done ? 'untick' : 'tick');
         publishNotes(own); draw();
@@ -4146,30 +4259,99 @@ function rankCard() {
   bar.appendChild(story); bar.appendChild(feed);
   c.appendChild(el('label', 'fl', 'Share it'));
   c.appendChild(bar);
-  const hide = el('label', 'shopt');
-  const hb = document.createElement('input');
-  hb.type = 'checkbox'; hb.checked = !!S.get('hideSpend', 0);
-  hb.onchange = () => S.set('hideSpend', hb.checked ? 1 : 0);
-  hide.appendChild(hb);
-  hide.appendChild(el('span', null, 'Hide spending'));
-  c.appendChild(hide);
+  /* "Hide spending" used to live here, because the old picture was a
+     photograph of the whole Today card and money was on it. The new one shows
+     the big number and the pillars, and money has never been a pillar, so the
+     switch had nothing left to switch. A control that does nothing is worse
+     than no control. */
   return c;
 }
 
 /* ── the overlay ──
-   A see-through PNG of the rank card, to sit on top of a photo or a clip.
+   A see-through PNG of the day, to sit on top of a photo or a clip.
 
-   It does not redraw the card. It photographs the real one: rankCard() builds
-   the same element the Trends screen shows, that element goes into an SVG
-   foreignObject, and the browser rasterises it. So the overlay cannot drift
-   from the app - change the card and the picture changes with it, with
-   nothing here to keep in step.
+   REWRITTEN 2026-09-04. It used to photograph the Today card itself, with
+   every background forced transparent and every letter given a 3px black
+   outline so it would survive whatever was underneath. Tom: "too much
+   shadowing, why are the calories black when they are yellow on my phone?"
+   A 3px stroke on a 24px number is not an outline, it is a fill - the stroke
+   met in the middle and painted the glyph black. And a card, with its border
+   and its grid of little boxes, is a screenshot. Nobody shares a screenshot.
 
-   Two things get overridden on the way out, and only two. Every background
-   goes transparent, because a see-through picture is the whole point. And the
-   text gets a black outline, because the photo underneath can be any colour
-   and the theme has no way to know that. Everything else - fonts, colours,
-   spacing, corners - is whatever the card already is. */
+   So this is Strava's shape, which is the one he asked for: no card, no
+   boxes, no per-letter outline. One dark gradient rising from the bottom of
+   the frame, and the day set on top of it - date and letter, the big number,
+   a hairline, then the rest in a row. The scrim is what makes it readable on
+   a photograph, and it is also what makes it readable pasted on plain white,
+   which is where he was actually looking at it.
+
+   The numbers still cannot drift from the app: every one of them comes out of
+   statReading(), which is the same function the tiles on Today read. Only the
+   arrangement is its own. */
+
+function shareStats(d) {
+  const heroId = heroPick(), live = PILLARS(), out = [];
+  liveFields()
+    .filter(f => dueToday(f, d) && f.id !== heroId && live.indexOf(pillarKey(f.id)) > -1)
+    /* A yes/no is not a statistic. "Trained: 1" means nothing to anybody, and
+       the letter at the top already carries whether you trained. */
+    .filter(f => f.measure !== 'check')
+    .forEach(f => out.push(statReading(f.id, d)));
+  if (heroId !== '@protein') out.push(statReading('@protein', d));
+  if (heroId !== '@kcal') out.push(statReading('@kcal', d));
+  /* Nothing logged is not worth a column. A dash on a share picture is a
+     column saying you did not measure it, which is not what the picture is
+     for - it just takes the place of one that has a number. */
+  return inTileOrder(out.filter(r => r && r.now != null), x => x.id).slice(0, 3);
+}
+
+/* The thing that gets photographed. Built at the full 1080 the picture is
+   wide, so nothing is scaled afterwards and the type stays exactly the size
+   it was set at. */
+function shareBlock(d) {
+  /* 'shcard', not 'shot': this file already has a .shot, and it is a row of
+     photographed labels laid out with display:flex. Naming this one the same
+     put the whole picture on a single line. */
+  const w = el('div', 'shcard');
+  const h = heroReading(d);
+  const sc = d === Day.today() ? todayScore() : dayScore(d);
+  const k = sc && sc.rank ? sc.rank.k : (sc && sc.letter) || null;
+
+  const top = el('div', 'shtop');
+  top.appendChild(el('span', 'shdate',
+    new Date(d + 'T12:00:00').toLocaleDateString(undefined,
+      { weekday: 'short', day: 'numeric', month: 'short' })));
+  if (k) {
+    const m = el('div', 'shmark', k);
+    m.style.color = rankColour(k);
+    top.appendChild(m);
+  }
+  w.appendChild(top);
+
+  /* The big one, in the colour it is on the phone. */
+  const hero = el('div', 'shhero',
+    '<b>' + (h.now == null ? '\u2013' : h.now.toLocaleString()) + '</b>' +
+    (h.target ? '<i>/' + h.target.toLocaleString() + '</i>' : '') +
+    (h.unit ? '<i>' + esc(h.unit) + '</i>' : ''));
+  hero.style.color = h.over ? 'var(--warn)' : 'var(--accent)';
+  w.appendChild(hero);
+  w.appendChild(el('div', 'shsub', esc(h.label + (h.word ? ' ' + h.word : ''))));
+
+  const st = shareStats(d);
+  if (st.length) {
+    w.appendChild(el('div', 'shrule'));
+    const row = el('div', 'shstats');
+    st.forEach(r => {
+      row.appendChild(el('div', null,
+        '<b>' + (r.now == null ? '\u2013' : r.now.toLocaleString()) +
+        (r.target ? '<i>/' + r.target.toLocaleString() + '</i>' : '') +
+        (r.unit ? '<i>' + esc(r.unit) + '</i>' : '') + '</b>' +
+        '<span>' + esc(r.label) + '</span>'));
+    });
+    w.appendChild(row);
+  }
+  return w;
+}
 
 async function shareCard(a, kind) {
   const W = 1080, H = kind === 'story' ? 1920 : 1350;
@@ -4177,48 +4359,47 @@ async function shareCard(a, kind) {
   /* A webfont that has not arrived renders as a fallback inside the SVG too. */
   try { await document.fonts.ready; } catch (e) {}
 
-  /* The real component, built off screen so it lays out for measuring. */
   const stage = document.createElement('div');
-  stage.style.cssText = 'position:fixed;left:-99999px;top:0;width:460px;pointer-events:none';
-  const shot = islandCard(vd(), { money: !S.get('hideSpend', 0) });
+  stage.style.cssText = 'position:fixed;left:-99999px;top:0;width:' + W + 'px;pointer-events:none';
+  const shot = shareBlock(vd());
   stage.appendChild(shot);
   document.body.appendChild(stage);
 
   let png = null;
   try {
-    const box = shot.getBoundingClientRect();
-    const cw = Math.max(1, Math.ceil(box.width)), ch = Math.max(1, Math.ceil(box.height));
+    const ch = Math.max(1, Math.ceil(shot.getBoundingClientRect().height));
+    /* Sat on the bottom of the frame, the way a run report is, with room left
+       under it for the platform's own furniture. */
+    const oy = Math.max(0, H - ch - Math.round(H * (kind === 'story' ? 0.14 : 0.09)));
+    /* ── the scrim, in two pieces ──
+       One gradient from nothing to full black does not work here, because the
+       text does not sit at the bottom of it - it sits in the middle, where the
+       gradient is still half way and a white letter on a white photo is a
+       white letter on grey. So: a flat band the words actually sit on, dark
+       enough to read against anything, and a soft fade ABOVE it so the band
+       has no visible top edge. */
+    const band = Math.max(0, oy - 60);
+    const fade = Math.round(H * 0.26);
+    const fadeTop = Math.max(0, band - fade);
 
-    /* Scale up rather than blow up a small bitmap: the whole thing renders at
-       this size, so the type stays sharp. */
-    const scale = (W * 0.88) / cw;
-    const sw = cw * scale, sh = ch * scale;
-    const ox = (W - sw) / 2, oy = (H - sh) / 2 + H * 0.06;
-
-    /* The page's own stylesheets, and the tokens the theme wrote onto :root. */
     const sheets = Array.prototype.map.call(document.querySelectorAll('style'),
       n => n.textContent).join(String.fromCharCode(10));
     const rootVars = document.documentElement.style.cssText || '';
 
-    const override =
-      '*{background:transparent !important;box-shadow:none !important;' +
-      '-webkit-text-stroke:3px #000;paint-order:stroke fill;' +
-      'text-shadow:0 0 5px rgba(0,0,0,.85),0 0 5px rgba(0,0,0,.85) !important}' +
-      /* Do NOT hide buttons. The tiles ARE buttons - that is how you tap one
-         to open its sheet - so hiding them emptied the picture of everything
-         except the top row, and the top row is not the island. Only the add
-         button gets dropped, because a plus sign floating on a photo is a
-         control nobody can press. */
-      '.seam,.fab{display:none !important}';
-
-    const body = new XMLSerializer().serializeToString(shot);
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
-      '<foreignObject x="' + ox + '" y="' + oy + '" width="' + sw + '" height="' + sh + '">' +
+      '<defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#000" stop-opacity="0"/>' +
+      '<stop offset="0.55" stop-color="#000" stop-opacity="0.42"/>' +
+      '<stop offset="1" stop-color="#000" stop-opacity="0.82"/>' +
+      '</linearGradient></defs>' +
+      '<rect x="0" y="' + fadeTop + '" width="' + W + '" height="' + (band - fadeTop) + '" fill="url(#scrim)"/>' +
+      '<rect x="0" y="' + band + '" width="' + W + '" height="' + (H - band) + '" fill="#000" fill-opacity="0.82"/>' +
+      '<foreignObject x="0" y="' + oy + '" width="' + W + '" height="' + ch + '">' +
       '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(rootVars) + '">' +
-      '<style>' + sheets + String.fromCharCode(10) + override + '</style>' +
-      '<div style="width:' + cw + 'px;transform:scale(' + scale + ');transform-origin:top left">' +
-      body + '</div></div></foreignObject></svg>';
+      '<style>' + sheets + '</style>' +
+      new XMLSerializer().serializeToString(shot) +
+      '</div></foreignObject></svg>';
 
     png = await new Promise((res, rej) => {
       const img = new Image();
@@ -4236,7 +4417,7 @@ async function shareCard(a, kind) {
   }
 
   const link = document.createElement('a');
-  link.download = 'status-' + (a.rank ? a.rank.k : 'nograde') + '-' + (a.pct == null ? '0' : a.pct) + '-' + kind + '.png';
+  link.download = 'status-' + (a && a.rank ? a.rank.k : 'day') + '-' + kind + '.png';
   link.href = png;
   link.click();
   UI.toast('Overlay saved');
@@ -4847,6 +5028,21 @@ function drawTrackTab(pane) {
     pane.appendChild(row);
   });
   pane.appendChild(el('div', 'note', 'Tap a name to set its goal, colour and group. The arrows set the order on Today, and so does holding a tile on Today and dragging it.'));
+
+  /* ── the big number ──
+     Whichever of these is picked stops being a tile and becomes the reading at
+     the top of Today, and the reading on the share picture with it. Calories
+     is only the default because it is the one that moves all day. */
+  pane.appendChild(el('label', 'fl', 'The big number on Today'));
+  const hseg = el('div', 'seg wrapseg');
+  const hp = heroPick();
+  heroChoices().forEach(o => {
+    const b = el('button', o.id === hp ? 'on' : '', esc(o.label));
+    b.onclick = () => { S.set('heroStat', o.id); Mobile.feedback('select'); drawSettingsPane('track'); draw(); };
+    hseg.appendChild(b);
+  });
+  pane.appendChild(hseg);
+  pane.appendChild(el('div', 'note', 'It leaves the tiles and goes to the top, so it is never shown twice.'));
 
   /* ── the two tiles that are not fields ──
      Protein and Spent sit on Today beside the fields but are not in the list
