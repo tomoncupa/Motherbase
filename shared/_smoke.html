@@ -6,6 +6,7 @@
 <title>Motherbase — shared foundation check</title>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
 <script src="skins.js"></script>
+<script src="chart.js"></script>
 <script src="day.js"></script>
 <script src="records.js"></script>
 <script src="mobile.js"></script>
@@ -1005,6 +1006,50 @@ async function run() {
   probe.remove();
   ok('io: a picture comes back the size that was asked for', shotSize);
   ok('io: a picture keeps what the page was handing down — ' + shotWhy, shotKept);
+
+  /* ---- the chart layer ----
+     Added with chart.js on 2026-09-06. The three checks are the three bugs it
+     exists to stop, each of which had been fixed separately in a different
+     app: a scale nobody can read, a drawing that grows with its box, and a
+     time axis that is really just the first date. */
+  ok('chart: a scale lands on numbers a person reads', (() => {
+    const c = Chart.make({ w: 320, h: 150 });
+    c.yFit([197.2, 203.8]);
+    /* 195 to 205 in fives, not 197.2 to 203.8 in whatever that is */
+    return c.lo % c.step === 0 && c.hi % c.step === 0 && c.lo <= 197.2 && c.hi >= 203.8;
+  })());
+
+  ok('chart: a chart does not grow taller when its box grows wider', (() => {
+    const c = Chart.make({ w: 320, h: 150 });
+    /* No height attribute and no inline height: the box decides, via
+       .mb-chart{height:100%}. An svg with height:auto is the bug. */
+    return !c.el.getAttribute('height') && !(c.el.style && c.el.style.height);
+  })());
+
+  ok('chart: a long span gets more than two dates on its axis', (() => {
+    const c = Chart.make({ w: 320, h: 150 });
+    const from = Day.shift(Day.today(), -89);
+    c.xTime(from, Day.today());
+    c.yFit([1, 2]);
+    c.timeAxis();
+    const labs = c.el.querySelectorAll('text.mb-lab');
+    let dates = 0;
+    for (let i = 0; i < labs.length; i++) if (labs[i].textContent.indexOf('/') > -1) dates++;
+    return dates >= 3;
+  })());
+
+  ok('chart: it names no colours of its own', (() => {
+    const c = Chart.make({ w: 100, h: 60 });
+    c.yFit([0, 1]); c.grid(); c.line([[0, 0], [1, 1]]);
+    /* Every mark carries a class and no fill or stroke attribute, so the theme
+       is the only thing that can colour it. */
+    const marks = c.el.querySelectorAll('path, line, circle, rect');
+    for (let i = 0; i < marks.length; i++) {
+      if (marks[i].getAttribute('fill') || marks[i].getAttribute('stroke')) return false;
+      if (!marks[i].getAttribute('class')) return false;
+    }
+    return marks.length > 0;
+  })());
 
   /* ---- clean up after ourselves ---- */
   Rec.clear([stamp]);

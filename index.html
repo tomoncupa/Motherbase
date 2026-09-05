@@ -18,6 +18,7 @@
 <script src="shared/skins.js"></script>
 <script src="shared/day.js"></script>
 <script src="shared/records.js"></script>
+<script src="shared/chart.js"></script>
 <script src="shared/mobile.js"></script>
 <script src="shared/sound.js"></script>
 <script src="shared/ui.js"></script>
@@ -185,7 +186,19 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
    finger, and the inner one always wins by accident. On a phone the card is
    as tall as its contents instead, so there is only ever one thing to scroll.
    With a mouse and a fixed-height card the inner scroll is fine. */
-.w-body{flex:1;padding:0 13px 13px;min-height:0;overflow:visible}
+/* ── why a widget was scrolling ──
+   Tom, 2026-09-06: "why does it have scrolling?" and "why is the 199.9 almost
+   out of border?" One cause. A chart keeps its shape, so its height follows
+   its WIDTH - and a widget's height does not. Wide enough, and the chart grew
+   until it pushed the numbers under it out of the box, which is what he saw:
+   a scrollbar and a figure half off the bottom edge.
+
+   A column that shares its height out. Anything that must be a fixed size says
+   so, and the chart takes what is left rather than taking what it likes. */
+.w-body{flex:1;padding:0 13px 13px;min-height:0;overflow:visible;
+  display:flex;flex-direction:column;gap:8px}
+.w-body > .fits{flex:1 1 auto;min-height:0}
+.w-body > .fits > svg{width:100%;height:100%;display:block}
 @media (hover:hover) and (pointer:fine){ .w-body{overflow:auto} }
 /* Resize is a mouse affordance and nothing else — a phone card is as wide as
    the screen and as tall as its contents, so there is nothing to resize. */
@@ -1380,76 +1393,53 @@ const WIDGETS = {
          is a seven day average. The dots are the point: a daily weight jumps
          around for reasons that have nothing to do with fat, and hiding that
          behind a smooth line is its own kind of lie. */
-      /* ── the scale, which is what makes a dot mean anything ──
-         Tom, 2026-09-05: "I can't even tell what the dots mean numerically."
-         He is right, and the fix is the boring one his spreadsheet already
-         does: numbers up the side, lines across, and dates along the bottom.
+      /* ── on shared/chart.js ──
+         This used to work out its own scale, draw its own gridlines, and put
+         the first and last date at the two ends and call that an x-axis. Tom,
+         2026-09-06: "It doesnt even have a proper X axis, don't just fix this
+         widget, review the foundation."
 
-         The range is rounded out to a round step rather than fitted tight to
-         the data. Fitted tight, every chart fills its box top to bottom and a
-         pound of noise looks like a collapse. Rounded, the same wobble is
-         visibly a wobble. */
-      const W = 320, H = 108;
-      const GL = 34, GR = 6, GT = 8, GB = 16;      /* gutters: labels and dates */
-      const vals = pts.map(p => p.v);
-      const rawLo = Math.min.apply(null, vals), rawHi = Math.max.apply(null, vals);
-      const STEPS = [0.5, 1, 2, 5, 10, 20, 25, 50];
-      const want = (rawHi - rawLo) || 1;
-      const step = STEPS.filter(x => want / x <= 4)[0] || 50;
-      const lo = Math.floor(rawLo / step) * step;
-      const hi = Math.ceil(rawHi / step) * step;
-      const span = (hi - lo) || step;
-
-      const X = i => GL + (i / (pts.length - 1)) * (W - GL - GR);
-      const Y = v => GT + (1 - (v - lo) / span) * (H - GT - GB);
-
+         The foundation is chart.js now, and this is what a chart in this suite
+         should look like: say what the axes are, hand over the points, and
+         stop. The dots are every time you stood on the scale and the line
+         through them is the seven-day average - the dots are kept because a
+         daily weight jumps around for reasons that are not fat, and hiding
+         that behind a smooth line is its own kind of lie. */
       const avg = pts.map((p, i) => {
         let a = 0, n = 0;
         for (let j = Math.max(0, i - 6); j <= i; j++) { a += pts[j].v; n++; }
         return a / n;
       });
 
-      /* One line per step, labelled. Never more than five: past that they stop
-         being a scale and start being hatching. */
-      let grid = '';
-      for (let v = lo; v <= hi + 0.0001; v += step) {
-        const y = Y(v).toFixed(1);
-        grid += '<line x1="' + GL + '" y1="' + y + '" x2="' + (W - GR) + '" y2="' + y +
-          '" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>' +
-          '<text x="' + (GL - 5) + '" y="' + (Y(v) + 3).toFixed(1) +
-          '" text-anchor="end" font-size="8" fill="var(--dim2)">' +
-          (step < 1 ? v.toFixed(1) : Math.round(v)) + '</text>';
-      }
+      const c = Chart.make({ w: 320, h: 132 });
+      c.xTime(pts[0].d, pts[pts.length - 1].d);
+      c.yFit(pts.map(p => p.v));
+      c.grid();
+      c.timeAxis();
+      c.dots(pts.map(p => [p.d, p.v, p.d + ' \u00b7 ' + p.v.toFixed(1)]), 'mb-dot', 1.8);
+      c.line(avg.map((v, i) => [pts[i].d, v]));
 
-      /* First and last, which is the question a date axis actually answers on
-         something this size: how long a stretch am I looking at. */
-      const shortD = d => { const t = String(d).split('-'); return +t[2] + '/' + +t[1]; };
-      const axis =
-        '<text x="' + GL + '" y="' + (H - 4) + '" font-size="8" fill="var(--dim2)">' +
-          shortD(pts[0].d) + '</text>' +
-        '<text x="' + (W - GR) + '" y="' + (H - 4) + '" text-anchor="end" font-size="8" fill="var(--dim2)">' +
-          shortD(pts[pts.length - 1].d) + '</text>';
-
-      const line = avg.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
-      const dots = pts.map((p, i) =>
-        '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(p.v).toFixed(1) +
-        '" r="1.8" fill="var(--dim2)"><title>' + esc(p.d) + ' \u00b7 ' + p.v.toFixed(1) + '</title></circle>').join('');
-
-      const svg = el('div');
-      /* No preserveAspectRatio="none": stretching turned every dot into an
-         oval and made the line steeper than the numbers are. */
-      svg.innerHTML =
-        '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block">' +
-        grid + axis + dots +
-        '<path d="' + line + '" fill="none" stroke="var(--acc)" stroke-width="2" ' +
-        'stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
+      const svg = el('div', 'fits');
+      svg.appendChild(c.el);
       body.appendChild(svg);
 
+      /* ── what the two numbers are for ──
+         The dots are every time you stood on the scale and they jump around
+         for reasons that are not fat. The LINE is the seven-day average, which
+         is the only one of the two you can act on, so the big number is that
+         and not today's reading.
+
+         Beside it, how far the average has actually moved. It used to say
+         "over 91 readings", which is not a length of time anybody thinks in -
+         it is the count of times he weighed himself. Days, and the days are
+         the ones on the chart. */
       const st = el('div', 'stats');
       const first = avg[0], last = avg[avg.length - 1], move = last - first;
+      /* `span` is taken in this scope by the chart's y-range. */
+      const overDays = Day.diff(pts[pts.length - 1].d, pts[0].d) + 1;
       st.appendChild(el('div', 'stat acc', '<b>' + last.toFixed(1) + '</b><span>7 DAY AVG</span>'));
       st.appendChild(el('div', 'stat', '<b>' + (move >= 0 ? '+' : '') + move.toFixed(1) +
-        '</b><span>OVER ' + pts.length + ' READINGS</span>'));
+        '</b><span>IN ' + overDays + ' DAYS</span>'));
       body.appendChild(st);
     },
   },

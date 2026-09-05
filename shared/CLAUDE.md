@@ -3,7 +3,7 @@
 Governs `shared/` only. The repo-root `CLAUDE.md` governs everything else and
 still applies here.
 
-**Every app depends on these nine files.** A mistake in an app breaks one app. A
+**Every app depends on these ten files.** A mistake in an app breaks one app. A
 mistake here breaks all of them and can lose data. Work slowly.
 
 `THEMING.md`, next to this file, is the contract between STYLE and every app:
@@ -38,8 +38,9 @@ are holding a stale copy of whatever you just changed.
 | `ui.js` | Snackbars, dialogs, menus, switches, the Settings panel. **Build app screens out of these, never a private copy of them.** | Medium. |
 | `icons.js` | The icon master set: ~52 drawings carrying ~144 buttons, plus the packs. | Medium. Every button in the suite. |
 | `io.js` | Backup, restore, spreadsheet export. | High. It is the safety net. |
+| `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 152 checks over all of it. | Run it every time. |
+| `_smoke.html` | 167 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -57,6 +58,15 @@ are holding a stale copy of whatever you just changed.
    behaviour; the count only goes up. Run it in a window with a real height —
    several checks measure geometry, and a zero-height pane reports a false
    failure on the sheet check.
+5a. **A chart is drawn with `chart.js`, not by hand.** Added 2026-09-06 after
+   a survey found 22 charts across four apps, four of them working out their own
+   scale in four different ways, and exactly one app drawing a gridline. A
+   hand-rolled chart gets no axis unless somebody remembers to write one, and
+   the same three bugs kept being fixed separately: a scale landing on 197 and
+   203, a drawing that grows taller as its box grows wider until it pushes
+   everything else out, and a "time axis" that is the first date and the last.
+   The apps are not all moved over yet — the weight widget is, and the rest
+   should follow one at a time rather than in a sweep.
 5b. **An app screen is built out of `ui.js`, not beside it.** `UI.row`,
    `UI.field`, `UI.toggle`, `UI.segmented` and the `.mb-group`, `.mb-swatch`,
    `.mb-opt` classes. A private copy of a component inherits nothing: not the
