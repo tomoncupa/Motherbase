@@ -340,6 +340,33 @@ label.fl:first-child{margin-top:0}
 .setpane > .seg{margin-bottom:var(--s-2)}
 .seg.wrapseg{flex-wrap:wrap}
 
+/* ── the card, on a photograph ──
+   Tom, 2026-09-05: "This card could not be opaque." He is right. An overlay
+   that blocks the picture it is sitting on is a sticker, and the whole reason
+   the PNG has a transparent surround is so the photo is part of it.
+
+   The colours stay the theme's — color-mix cuts their ALPHA and nothing else,
+   so a themed card is still that theme's card, just see-through. A browser
+   that does not know color-mix drops the line and gets the solid card, which
+   is the old behaviour rather than a broken one.
+
+   Only ever added by the export. Nothing on screen wears this.
+
+   THE ARITHMETIC, because the first attempt looked solid and was not obviously
+   wrong: a tile sits ON the card, so their alphas COMPOUND. Card at 74% with
+   tiles at 62% composites to 90% behind every number, which is where the eye
+   actually goes - nearly solid, and the photo only showed in the gaps. The
+   card is mostly a container now and the tiles carry the wash. */
+.card.seethru{background:color-mix(in srgb, var(--surface-1) 32%, transparent);
+  border-color:color-mix(in srgb, var(--border) 55%, transparent)}
+.card.seethru .tile{background:color-mix(in srgb, var(--surface-2) 55%, transparent)}
+/* One soft shadow, and deliberately nothing like the 3px stroke he rejected in
+   August - that one filled the glyphs and turned his yellow calories black.
+   This is a single 2px blur that does nothing on a dark photo and keeps the
+   numbers off a bright one. Text over a picture needs something; it does not
+   need much. */
+.card.seethru, .card.seethru *{text-shadow:0 1px 2px rgba(0,0,0,.45)}
+
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--s-2)}
 .field{margin-bottom:var(--s-4)}          /* more space around a group than inside it */
@@ -3268,6 +3295,7 @@ function islandCard(d, opts) {
      asks for the date and gets it in the shape every other card in here uses
      for a heading. Nothing else about the card changes. */
   const c = card(opts.title || null);
+  if (opts.seethru) c.classList.add('seethru');
 
   const h = heroReading(d);
   const hero = el('div', 'hero',
@@ -4292,13 +4320,16 @@ function rankCard() {
   /* The picture is the Today card, so if the Spent tile is on your Today it is
      in the picture too. It starts hidden: what you spend is nobody's business
      and a default that leaks it is the wrong default. */
-  const hide = el('label', 'shopt');
-  const hb = document.createElement('input');
-  hb.type = 'checkbox'; hb.checked = !!S.get('hideSpend', 1);
-  hb.onchange = () => S.set('hideSpend', hb.checked ? 1 : 0);
-  hide.appendChild(hb);
-  hide.appendChild(el('span', null, 'Leave spending out'));
-  c.appendChild(hide);
+  const opt = (label, key, dflt) => {
+    const w = el('label', 'shopt');
+    const b = document.createElement('input');
+    b.type = 'checkbox'; b.checked = !!S.get(key, dflt);
+    b.onchange = () => S.set(key, b.checked ? 1 : 0);
+    w.appendChild(b); w.appendChild(el('span', null, label));
+    c.appendChild(w);
+  };
+  opt('See-through card', 'shareSeeThru', 1);
+  opt('Leave spending out', 'hideSpend', 1);
   return c;
 }
 
@@ -4330,6 +4361,10 @@ async function shareCard(a, kind) {
   const cardW = onScreen ? Math.round(onScreen.getBoundingClientRect().width) : 0;
 
   const shot = islandCard(d, {
+    /* On by default: the point of a transparent PNG is that the photo is part
+       of the picture, and a solid panel over your own body is a sticker. Off
+       is there for a busy photo, where see-through costs you the numbers. */
+    seethru: !!S.get('shareSeeThru', 1),
     /* The picture is the card, so if the Spent tile is on your Today it is in
        the picture. hideSpend keeps it out, and starts on. */
     money: !S.get('hideSpend', 1),
