@@ -1367,7 +1367,7 @@ const TD = {
   P(over) {
     const p = {
       halfLife:  S.get('halfLife', 21),      /* days until an observation counts half */
-      ed:        S.get('ed', 3500),          /* kcal per lb of scale change */
+      ed:        S.get('ed', 3500),          /* kcal per lb of scale change — see TD.lbPer() */
       alpha:     S.get('alpha', .25),        /* how fast the estimate adapts */
       trendWin:  S.get('win', 28),           /* days the weight trend looks at */
       /* ── how far back anything is read at all ──
@@ -1396,6 +1396,23 @@ const TD = {
   /* the accessors the settings panel and the export still speak to */
   ed: () => TD.P().ed, alpha: () => TD.P().alpha, win: () => TD.P().trendWin,
   perLb: () => TD.P().perLb, guard: () => TD.P().guard,
+
+  /* ── pounds per logged unit ──
+     BOTH energy constants above are PER POUND: perLb is upkeep per pound of
+     body, ed is calories per pound of scale change. The weight field's unit
+     has only ever been a LABEL - nothing converted it. So a client logging in
+     kilos got her kilos multiplied by a per-pound number: 65 x 13 = 845, and
+     an 845 kcal TDEE told her to eat almost nothing.
+
+     Found by Tom on 2026-09-05 on a real client. The fix is here rather than
+     on every weight, because scaling the two constants is the same arithmetic
+     and it leaves every reading, chart and label showing the number she
+     actually typed. */
+  unit() { const f = fields()['weight']; return String((f && f.unit) || 'lb').toLowerCase().trim(); },
+  lbPer() { return /^(kg|kilo|kilos|kilogram|kilogrammes?|kilograms)$/.test(TD.unit()) ? 2.20462 : 1; },
+  /* the two constants, in the unit she actually logs in */
+  perUnit: () => TD.P().perLb * TD.lbPer(),
+  edUnit:  () => TD.P().ed * TD.lbPer(),
 
   /* ── one row per day, with recency weight. Missing stays null. ── */
   /** The first day there is anything to read, so "all of it" has a length.
@@ -1489,7 +1506,7 @@ const TD = {
     res.intake = TD.wmean(cal, r => r.kcal);
     res.rate = fit.m;                      /* lb per day, negative = losing */
     res.r2 = fit.r2;
-    res.tdee = res.intake - fit.m * P.ed;  /* losing weight means burning above intake */
+    res.tdee = res.intake - fit.m * P.ed * TD.lbPer();  /* losing weight means burning above intake */
 
     /* ── the give-or-take ──
        The points fed to the fit are a 7-day rolling average, so neighbours
@@ -1552,7 +1569,7 @@ const TD = {
     const rows = TD.frame(P);
     const obs = TD.observed(rows, P);
     const lastW = TD.lastWeight(rows);
-    const baseline = lastW ? Math.round(lastW * P.perLb) : null;
+    const baseline = lastW ? Math.round(lastW * P.perLb * TD.lbPer()) : null;
     const st = TD.state();
     /* The smoothing exists to damp day-to-day updates, not to make the very
        first estimate crawl up from a population guess. With no saved state,
@@ -4351,7 +4368,7 @@ function drawTrends(m) {
     c.appendChild(sp);
     c.appendChild(el('div', 'note',
       'You ate ' + e.intake.toLocaleString() + ' kcal a day while your weight went ' +
-      (e.rate > 0 ? 'up ' : 'down ') + r1(Math.abs(e.rate)) + ' lb a week.'));
+      (e.rate > 0 ? 'up ' : 'down ') + r1(Math.abs(e.rate)) + ' ' + esc(TD.unit()) + ' a week.'));
 
     /* rounded, because "reading lower by 0 kcal" is a sentence about nothing */
     if (Math.round(e.adj)) {
@@ -4431,9 +4448,9 @@ function drawTrends(m) {
       const src = e.basis === 'measured'
         ? 'a measured TDEE of ' + Math.round(pr.tdee).toLocaleString() + ', ' + e.conf + '% confident'
         : 'a starting estimate of ' + Math.round(pr.tdee).toLocaleString() +
-          ' (bodyweight × ' + TD.perLb() + '), which sharpens as you log';
+          ' (bodyweight × ' + r1(TD.perUnit()) + '), which sharpens as you log';
       c2.appendChild(el('div', 'note derived', line +
-        ' <span style="opacity:.8">That is ' + r1(Math.abs(rate)) + ' lb a week, from ' + src + '.</span>'));
+        ' <span style="opacity:.8">That is ' + r1(Math.abs(rate)) + ' ' + esc(TD.unit()) + ' a week, from ' + src + '.</span>'));
       if (pr.settles && pr.settles > 0 && Math.abs(pr.settles - goal) > 2) {
         c2.appendChild(el('div', 'note derived',
           'Held forever, that intake settles you around <b>' + r1(pr.settles) + ' lb</b>.'));
@@ -4442,7 +4459,7 @@ function drawTrends(m) {
   }
   c2.appendChild(el('div', 'note', (w ? r1(w) + ' lb' : 'nothing logged') +
     (goal != null && w ? ' · ' + r1(Math.abs(w - goal)) + ' lb to go' : '') +
-    (e.rate != null ? ' · ' + (e.rate > 0 ? '+' : '') + r1(e.rate) + ' lb a week' : '')));
+    (e.rate != null ? ' · ' + (e.rate > 0 ? '+' : '') + r1(e.rate) + ' ' + esc(TD.unit()) + ' a week' : '')));
   m.appendChild(c2);
 
   if (e.basis === 'measured' && e.learn && e.learn.steps) {
@@ -4541,8 +4558,9 @@ function predictWeight(w0, days, intakeOver) {
   if (!tdee || !intake || !w0) return null;
 
   const P = TD.P();
-  const ed = P.ed || 3500;
-  const perLb = P.perLb || 13;
+  /* Per logged unit, not per pound — see TD.lbPer(). */
+  const ed = (P.ed || 3500) * TD.lbPer();
+  const perLb = (P.perLb || 13) * TD.lbPer();
   /* split the measured TDEE into the part that follows body mass and the part
      that does not, using this body as the reference point */
   const fixed = tdee - w0 * perLb;
@@ -5641,7 +5659,12 @@ function drawGoalsTab(pane) {
   pane.appendChild(lbSeg);
   pane.appendChild(el('div', 'note', 'How far back anything is read'));
 
-  fieldRow(pane, 'Starting guess (kcal per lb)', 'perLb', TD.perLb(), 'Before there is data: weight × this');
+  /* Still stated per pound, because that is what the number IS and changing
+     its meaning per user would make one saved setting mean two things. What it
+     says underneath is the sum she will actually see. */
+  fieldRow(pane, 'Starting guess (kcal per lb)', 'perLb', TD.perLb(),
+    TD.lbPer() === 1 ? 'Before there is data: weight × this'
+      : 'Before there is data. You log in ' + esc(TD.unit()) + ', so that is weight × ' + r1(TD.perUnit()));
   fieldRow(pane, 'Brake (kcal)', 'guard', TD.guard(), 'The most one update may move the estimate');
 
   const bt = el('button', 'btn wide', 'Backtest the settings');

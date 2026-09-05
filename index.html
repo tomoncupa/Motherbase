@@ -213,6 +213,30 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .row .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .d{font-size:10px;color:var(--dim2);font-family:var(--f1);letter-spacing:.06em;flex:0 0 auto}
 .row.done{opacity:.5}
+
+/* ── the now band ──
+   The one line that answers "what am I doing", above the list rather than in
+   it. Everything here is a token: this is the home screen's own CSS and a hex
+   code would be a theme that works in exactly one skin. */
+.nowband{display:flex;align-items:center;gap:10px;position:relative;
+  padding:10px 12px;margin-bottom:10px;border-radius:var(--r-md,10px);
+  background:var(--pan2,var(--pan));border:1px solid var(--line)}
+.nowband.live{border-color:var(--acc)}
+.nowband .nlab{font-size:10px;letter-spacing:.16em;color:var(--dim);
+  text-transform:uppercase;white-space:nowrap}
+.nowband .nlab i{display:block;font-style:normal;letter-spacing:0;
+  font-size:12px;color:var(--acc);margin-top:2px}
+.nowband .nname{flex:1;min-width:0;font-size:15px;line-height:1.25;
+  overflow:hidden;text-overflow:ellipsis}
+.nowband .nname b{font-variant-numeric:tabular-nums;color:var(--dim);font-weight:400}
+.nowband .nchk{flex:none;width:var(--tap,44px);height:var(--tap,44px);
+  border-radius:var(--r-sm,8px);border:1px solid var(--line);
+  background:transparent;color:var(--acc);font-size:16px;cursor:pointer}
+
+/* Where you are in the list, and what you have slipped past. `late` is a mark,
+   not a colour change - being behind should be visible, not loud. */
+.row.here{border-color:var(--acc)}
+.row.late:not(.done) .t{color:var(--warn,var(--acc));opacity:.9}
 .row.done .n{text-decoration:line-through;text-decoration-color:var(--dim2);color:var(--dim)}
 .chk{width:26px;height:26px;flex:0 0 auto;border:2px solid var(--line2);border-radius:50%;
   display:flex;align-items:center;justify-content:center;font-size:13px;color:transparent;
@@ -944,6 +968,47 @@ const ageNow = born => {
    Each widget is a pure function of the shared doc: given a body element, fill
    it. The grid owns size and position; the widget owns nothing but its content,
    which is what lets you drag and resize them without touching this table. */
+/* ── what you are meant to be doing, right now ──
+   Tom, 2026-09-05: "make the Today widget good enough to follow without
+   thinking. If BLOCK and STATUS are properly set up then it should be able to
+   dictate my plan for the day."
+
+   A list of the day is not that. A list makes you find your place in it every
+   time you look, and finding your place is the thinking. So one line answers
+   the question before the list does: what is running, or what is next, and how
+   long you have.
+
+   Three states, in the order they are checked:
+     RUNNING   something started, has not finished, and is not ticked
+     NEXT      nothing running, so the soonest thing still ahead
+     LOOSE     nothing timed left, so the first thing still undone
+   and when there is nothing in any of them, the day is done and it says so. */
+function nowNext(items) {
+  const d = new Date(), now = d.getHours() * 60 + d.getMinutes();
+  const open = items.filter(x => !x.done);
+  if (!open.length) return items.length ? { state: 'done' } : null;
+
+  const timed = open.filter(x => x.at != null);
+  const running = timed.filter(x => x.at <= now && now < x.at + (x.dur || 0))[0];
+  if (running) return { state: 'running', it: running, mins: running.at + running.dur - now };
+
+  const next = timed.filter(x => x.at > now)[0];
+  if (next) return { state: 'next', it: next, mins: next.at - now };
+
+  /* Past everything with a time on it. Anything still open and timed is
+     behind you; say so, because "you are behind" is the useful fact. */
+  const missed = timed.length;
+  const loose = open.filter(x => x.at == null)[0] || timed[0];
+  return { state: 'loose', it: loose, missed: missed };
+}
+
+/* "in 25m", "in 1h 10m", "for 40m" — short enough to read at a glance. */
+function inWords(m) {
+  m = Math.max(0, Math.round(m));
+  if (m < 60) return m + 'm';
+  return Math.floor(m / 60) + 'h' + (m % 60 ? ' ' + (m % 60) + 'm' : '');
+}
+
 const WIDGETS = {
   /* ══════════════ TODAY ══════════════
      The day as one list. BLOCK owns the blocks and STATUS owns the bullets,
@@ -977,6 +1042,37 @@ const WIDGETS = {
       const blocks = items.filter(x => x.kind === 'block');
       const done = items.filter(x => x.done).length;
 
+      /* ── the answer, before the working ──
+         The ring says how much of the day is done, which is a summary. A
+         summary is what you want at the END of a day. During one you want to
+         be told what to do, so that goes first and the ring goes under it. */
+      const nn = nowNext(items);
+      if (nn) {
+        const band = el('div', 'nowband' + (nn.state === 'running' ? ' live' : ''));
+        if (nn.state === 'done') {
+          band.innerHTML = '<div class="nlab">DONE</div><div class="nname">Everything on today is ticked</div>';
+        } else {
+          const lab = nn.state === 'running' ? 'NOW'
+            : nn.state === 'next' ? 'NEXT' : 'STILL TO DO';
+          const when = nn.state === 'running' ? inWords(nn.mins) + ' left'
+            : nn.state === 'next' ? 'in ' + inWords(nn.mins)
+            : (nn.missed ? nn.missed + ' behind' : '');
+          band.innerHTML =
+            '<div class="nlab">' + lab + (when ? '<i>' + esc(when) + '</i>' : '') + '</div>' +
+            '<div class="nname">' + (nn.it.at != null ? '<b>' + MIN2(nn.it.at) + '</b> ' : '') +
+            esc(nn.it.name) + '</div>';
+          /* The band is the tick target too, so following the day never means
+             hunting for the right row in the list under it. */
+          if (nn.it.tick) {
+            const go = el('button', 'nchk', '✓');
+            go.title = 'tick it off';
+            go.onclick = nn.it.tick;
+            band.appendChild(go);
+          }
+        }
+        body.appendChild(band);
+      }
+
       const rw = el('div', 'ringwrap');
       rw.appendChild(ring(items.length ? done / items.length : 0,
         items.length ? Math.round(done / items.length * 100) + '%' : '—', 'TODAY'));
@@ -996,8 +1092,17 @@ const WIDGETS = {
       }
 
       const list = el('div', 'rowlist');
+      const mark = nn && nn.it ? nn.it : null;
+      const clock = new Date().getHours() * 60 + new Date().getMinutes();
+      let here = null;
       items.forEach(x => {
-        const r = el('div', 'row' + (x.done ? ' done' : ''));
+        /* `late` is quiet on purpose. It is the difference between a list and
+           a telling-off, and a day you are behind on is the day you most need
+           to still want to open this. */
+        const late = !x.done && x.at != null && x.at + (x.dur || 0) < clock;
+        const r = el('div', 'row' + (x.done ? ' done' : '') +
+          (x === mark ? ' here' : '') + (late ? ' late' : ''));
+        if (x === mark) here = r;
         if (x.colour) { const bar = el('div', 'bar'); bar.style.background = x.colour; r.appendChild(bar); }
         r.appendChild(el('div', 't', x.at == null ? '' : MIN2(x.at)));
         r.appendChild(el('div', 'n', esc(x.name)));
@@ -1012,6 +1117,11 @@ const WIDGETS = {
         list.appendChild(r);
       });
       body.appendChild(list);
+      /* Open it and the thing you are on is already on screen. Only the list
+         scrolls - scrollIntoView would take the whole page with it. */
+      if (here && list.scrollHeight > list.clientHeight) {
+        list.scrollTop = Math.max(0, here.offsetTop - 6);
+      }
     },
   },
 
