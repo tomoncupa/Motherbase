@@ -119,6 +119,8 @@ arc/CLAUDE.md      ARC's own brief, governs arc/ only
 habits/index.html  habit tracker (a stand-in, see Debt)
 form/index.html    lift review
 status/index.html  sleep, weight, mood, energy, steps, food and money
+portion/index.html a label in, the amounts you eat out. The second writer of
+                   `food`, deliberately, and the only one in the suite.
 train/index.html   the training log, a reproduction of FitNotes
 train/CLAUDE.md    TRAIN's own brief, governs train/ only
 style/index.html   the theme workbench. Desktop only, deliberately.
@@ -135,6 +137,9 @@ quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
 
 **Phone or desktop:** `status/` and `train/` are phone apps. Every other app,
 including the home screen, is a desktop app. See hard constraint 10.
+`portion/` is the one that is honestly both: it is built to the phone
+standards, because you use it holding a packet, and its column stops at 640px
+so a wide window does not stretch it.
 
 One folder per app. The home page is `index.html` at the root. `.nojekyll` sits at
 the root so GitHub Pages does not eat underscore folders.
@@ -209,7 +214,7 @@ An app may read any type. It writes only the types it owns.
 | `field` | **status** | field id | the definition of a tracked measure |
 | `ev` | **status** | field id | `{e:[{t,v}]}` — one row per field per day |
 | `day` | **status** | `''` | `{note, rest}` |
-| `food` | **status** | food id | the label as printed, plus your own servings |
+| `food` | **status**, and **portion** — the one deliberate exception below | food id | the label as printed, plus your own servings |
 | `meal` | **status** | timestamp id | one logged serving, numbers frozen in |
 | `spend` | **status** | timestamp id | `{amt, acct, note, t}` |
 | `acct` | **status** | account id | `{name, order}` |
@@ -233,6 +238,16 @@ wins. That exception is what makes a tick in BLOCK show up in the habit tracker.
 
 When a new app takes over a fact, the old writer switches to reading it. Two
 writers for one fact is how numbers start disagreeing.
+
+**The second exception, `food`, is narrower and was Tom's call on 2026-09-05.**
+PORTION writes food rows as well as STATUS. It survives because a food row is a
+DEFINITION and not a measurement: nothing anywhere adds up two versions of it,
+so the usual damage — two screens disagreeing about one day's number — has no
+way to happen, and a merge between devices is still per row and settled by
+`updated_at`. PORTION writes a brand new row, or a row you loaded and are
+looking at, and nothing else. It must never write `meal`, and it must never
+reach a food it has not put on screen. If either of those changes, this stops
+being an exception and starts being the old bug.
 
 ---
 
@@ -528,6 +543,7 @@ answer, or take it out.
 | `habits/` | A stand-in, now superseded by `status/`. Harvest the streaks and one-click promote-from-routine if they are still wanted. Do not add to it. |
 | `form/` | Standalone by design. Video never leaves the device. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
+| `portion/` | Built 2026-09-05 and tested in the browser. Paste or type a nutrition label, get the amount that hits 50g of protein or 500 calories, and what any weight of it comes to. Saves those answers into the food library as ordinary servings, so STATUS logs them in one tap. Reads Sodium, or converts Salt when a label prints that instead. |
 | `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |

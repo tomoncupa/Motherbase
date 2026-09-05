@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PORTION</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◪</text></svg>">
+<meta name="theme-color" content="#0B0E14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script src="../shared/skins.js?v=15"></script>
+<script src="../shared/day.js?v=15"></script>
+<script src="../shared/records.js?v=15"></script>
+<script src="../shared/mobile.js?v=15"></script>
+<script src="../shared/sound.js?v=15"></script>
+<script src="../shared/ui.js?v=15"></script>
+<script src="../shared/io.js?v=15"></script>
+<script src="../shared/health.js?v=15"></script>
+<script src="../shared/icons.js?v=15"></script>
+
+<style>
+/* Colours and sizes are tokens, never numbers. shared/THEMING.md is the
+   contract this app is obeying. */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text-1);
+  font-family:var(--font-body);font-size:var(--f-3);font-weight:var(--w-body);
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+
+header{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);
+  background:var(--surface-1);box-shadow:var(--e-1),var(--rim)}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+
+/* The save bar is fixed, so the page has to end above it: its height plus the
+   home indicator, or the last card sits underneath the button. */
+main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-10) + var(--safe-b))}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s-3)}
+
+.card{border-radius:var(--radius-lg);background:var(--surface-1);
+  padding:var(--s-4);box-shadow:var(--e-1),var(--rim)}
+h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted);margin-bottom:var(--s-2)}
+.note{font-size:var(--f-1);color:var(--text-muted);line-height:var(--lh-body);margin-bottom:var(--s-3)}
+
+label.fl{display:block;font-size:var(--f-1);font-weight:var(--w-med);
+  color:var(--text-2);letter-spacing:var(--track-cap);
+  margin:var(--s-3) 0 var(--s-1)}
+input,textarea{width:100%;min-width:0;min-height:var(--tap);padding:var(--s-2) var(--s-3);
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--surface-2);color:var(--text-1);font:inherit;font-size:var(--f-3)}
+input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+textarea{min-height:calc(var(--tap) * 2.5);resize:vertical;line-height:var(--lh-body)}
+.field label.fl{margin-top:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--s-2)}
+/* Without min-width:0 a flex or grid child refuses to shrink under its
+   content and the last column goes off the side of a phone. */
+.grid2 > *,.grid3 > *{min-width:0}
+
+.chips{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.chip{min-height:var(--tap);padding:0 var(--s-3);cursor:pointer;
+  border:1px solid var(--border);border-radius:var(--radius-full);
+  background:var(--surface-2);color:var(--text-2);font:inherit;font-size:var(--f-2)}
+.chip.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+
+.btn{min-height:var(--tap);padding:0 var(--s-3);cursor:pointer;
+  border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  background:var(--surface-2);color:var(--text-1);font:inherit}
+.btn.wide{width:100%;display:block}
+.btn.go{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);
+  font-weight:var(--w-bold)}
+.btn.quiet{color:var(--text-2)}
+
+/* One amount. The big line is the answer to the only question being asked:
+   how much of this goes on the plate. */
+.pt{border-radius:var(--radius-md);background:var(--surface-2);
+  padding:var(--s-3);margin-bottom:var(--s-2)}
+.pt-h{display:flex;align-items:center;gap:var(--s-2);min-height:var(--tap)}
+.pt-want{flex:1;min-width:0;font-size:var(--f-2);color:var(--text-2);
+  letter-spacing:var(--track-cap);text-transform:uppercase;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt-a{font-family:var(--font-display);font-size:var(--f-6);font-weight:var(--w-bold);
+  line-height:1.1;color:var(--text-1)}
+.pt-m{font-family:var(--font-mono);font-size:var(--f-1);color:var(--text-2);
+  margin-top:var(--s-1);line-height:var(--lh-body)}
+.pt.dead .pt-a{color:var(--text-muted)}
+.x{width:var(--tap);height:var(--tap);flex:0 0 auto;cursor:pointer;
+  border:0;background:none;color:var(--text-muted);border-radius:var(--radius-sm)}
+
+.warnbox{border-radius:var(--radius-sm);padding:var(--s-3);background:var(--surface-2);
+  color:var(--text-2);font-size:var(--f-2);line-height:var(--lh-body)}
+
+.item{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);
+  min-height:var(--tap);border-radius:var(--radius-md);background:var(--surface-2);
+  margin-bottom:var(--s-2);cursor:pointer;width:100%;border:0;
+  color:inherit;font:inherit;text-align:left}
+.item .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .nm small{display:block;color:var(--text-muted);font-size:var(--f-1)}
+.item .fig{flex:0 0 auto;font-family:var(--font-mono);font-size:var(--f-1);
+  color:var(--text-2);text-align:right}
+
+#bar{position:fixed;left:0;right:0;bottom:0;z-index:40;
+  padding:var(--s-3) var(--s-4) calc(var(--s-3) + var(--safe-b));
+  background:var(--surface-1);box-shadow:var(--e-3)}
+#bar .inner{max-width:640px;margin:0 auto;display:flex;gap:var(--s-2)}
+#bar .inner .btn.go{flex:1}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">POR<b>TION</b></div>
+  <div class="spacer"></div>
+  <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
+  <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
+</header>
+<main class="mb-scroll"><div class="wrap" id="main"></div></main>
+<div id="bar"><div class="inner">
+  <button class="btn quiet mb-press mb-tap" id="btnNew">NEW</button>
+  <button class="btn go mb-press mb-tap" id="btnSave">SAVE TO MY FOODS</button>
+</div></div>
+
+<script>
+/* ══════════════════ PORTION ══════════════════
+   Type or paste a nutrition label, and it says how much of the thing you have
+   to eat to hit a number - 50g of protein, 500 calories - and what any weight
+   of it comes to. Then it saves those answers into the food library as
+   ordinary servings, so logging it later is one tap.
+
+   ── the one rule this app knowingly bends ──
+   `food` belongs to STATUS. Two writers for one fact is what the master brief
+   forbids, and it is the rule that killed a previous system, so it is worth
+   saying out loud rather than pretending it is not happening. Tom asked for
+   this as its own app on 2026-09-05, having been offered it inside STATUS.
+
+   What makes it survivable:
+
+     · a food row is a DEFINITION, not a measurement. Nothing adds up two
+       versions of it, so the damage a second writer normally does - two
+       screens disagreeing about one day's number - has no way to happen.
+     · every row this app writes is either brand new with its own id, or one
+       you deliberately loaded and are looking at. It never touches a row it
+       has not shown you.
+     · merges are per row and settled by updated_at, so the worst case across
+       two devices is the newer edit of one food winning, which is exactly
+       what would happen inside STATUS.
+
+   What would break it is this app writing `meal` rows, or reaching a food it
+   never displayed. It does neither, and it should stay that way. */
+
+const APP = {
+  id: 'portion',
+  name: 'Portion',
+  icon: '◪',
+  blurb: 'turn a label into the amounts you actually eat',
+  types: ['food'],
+};
+
+/* Declaring `food` here is a fact about THIS page only: it stops records.js
+   warning on every write. It does not reach STATUS, whose own page still
+   declares itself the owner. */
+Skins.load('../shared/skins.json?v=15').then(() => {
+  Skins.restore(APP.id);
+  if (window.Icons) Icons.paint(null, { force: true });
+});
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({
+  app: APP.id, name: APP.name, types: APP.types,
+  tables: [
+    { name: 'Food', type: 'food', cols: [
+      ['name', 'Name'], ['brand', 'Brand'], ['cat', 'Group'],
+      ['base.amt', 'Serving'], ['base.unit', 'Unit'],
+      ['base.kcal', 'Calories'], ['base.p', 'Protein'], ['base.c', 'Carbs'], ['base.f', 'Fat'],
+      ['base.na', 'Sodium'], ['base.k', 'Potassium'], ['base.caff', 'Caffeine'],
+      ['base.price', 'Price'],
+    ] },
+  ],
+});
+
+const esc = s => UI.esc(String(s == null ? '' : s));
+const numv = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : (d == null ? null : d); };
+const r1 = n => Math.round(n * 10) / 10;
+function el(tag, cls, html) { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; }
+
+/* The clock alone is not a unique key: two rows made in the same millisecond
+   would be one row. The counter kills that inside a session, the random tail
+   kills it across two devices that both call themselves `local`. */
+let seq = 0;
+const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
+  (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
+
+/* Every number a food row can carry, in STATUS's own spelling, so what this
+   app writes and what that app writes are the same shape. */
+const NUTS = ['kcal', 'p', 'c', 'f', 'na', 'k', 'caff'];
+const WORD = { p: 'protein', c: 'carbs', f: 'fat', kcal: 'calories', amt: 'of it' };
+
+/* ══ what is on screen ══
+   L is the label as typed. PORTIONS is what you want out of it. EDIT is the
+   id of the food being changed, or null when this is a new one. */
+const L = { name: '', brand: '', cat: '', amt: '100', unit: 'g',
+  kcal: '', p: '', c: '', f: '', na: '', k: '', caff: '', price: '' };
+let PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 50 }];
+let EDIT = null;
+const INPUTS = {};
+
+/* ══════════════ READING A LABEL ══════════════
+   Labels are written by people, not machines, so this reads one the way you
+   would: line by line, looking for the word, then for the first number AFTER
+   the word. A number before the word is nearly always a percent daily value,
+   and taking those was the first thing that went wrong.
+
+   The exclusions matter as much as the words. A label says "Total Fat 5g" and
+   then "Saturated Fat 2g" two lines later, and a plain search for "fat" picks
+   the wrong one about half the time depending on the layout. */
+const AVOID = {
+  p: /$^/, na: /$^/, k: /$^/, caff: /$^/,
+  f: /saturat|trans|mono|poly|unsaturat|of which/i,
+  c: /sugar|fibre|fiber|starch|polyol|of which/i,
+};
+/* Built rather than typed: a non-breaking space is invisible in the source,
+   and a label copied off a website is full of them. The comma goes too, or
+   "1,470 kJ" reads as 1. */
+const NBSP = new RegExp(String.fromCharCode(160), 'g');
+const commas = t => String(t || '').replace(NBSP, ' ').replace(/(\d),(\d{3})\b/g, '$1$2');
+
+function afterWord(line, word) {
+  const m = new RegExp(word + '[^0-9\\n]{0,24}(\\d+(?:\\.\\d+)?)', 'i').exec(line);
+  return m ? parseFloat(m[1]) : null;
+}
+function pick(lines, words, avoid) {
+  for (let w = 0; w < words.length; w++) {
+    for (let i = 0; i < lines.length; i++) {
+      if (avoid && avoid.test(lines[i])) continue;
+      if (!new RegExp(words[w], 'i').test(lines[i])) continue;
+      const n = afterWord(lines[i], words[w]);
+      if (n != null) return n;
+    }
+  }
+  return null;
+}
+/* Energy is the one written four different ways. kcal wins wherever it turns
+   up; kilojoules are converted rather than ignored, because plenty of labels
+   here print only those. */
+function energy(text, lines) {
+  let m = /(\d+(?:\.\d+)?)\s*k\s*cal/i.exec(text);
+  if (m) return parseFloat(m[1]);
+  const c = pick(lines, ['calories', 'calorie', 'energy'], /kj/i);
+  if (c != null) return c;
+  m = /(\d+(?:\.\d+)?)\s*kj/i.exec(text);
+  if (m) return Math.round(parseFloat(m[1]) / 4.184);
+  return null;
+}
+/* Sodium, or the salt figure most labels outside the US print instead. They
+   are not the same number: salt is sodium chloride and sodium is 39.3% of it
+   by weight, so reading "Salt 0.06 g" straight into a milligram sodium field
+   is out by a factor of about four hundred. Silently wrong is the worst kind,
+   so the conversion is done here or the figure is left blank. */
+function sodium(lines) {
+  const direct = pick(lines, ['sodium'], null);
+  if (direct != null) return direct;
+  for (let i = 0; i < lines.length; i++) {
+    if (!/salt/i.test(lines[i])) continue;
+    const m = /salt[^0-9\n]{0,24}(\d+(?:\.\d+)?)\s*(mg|g)?/i.exec(lines[i]);
+    if (!m) continue;
+    const grams = (m[2] || 'g').toLowerCase() !== 'mg';
+    return Math.round(parseFloat(m[1]) * (grams ? 393 : 0.393) * 10) / 10;
+  }
+  return null;
+}
+/* The serving the numbers are FOR. "1 cup (158g)" means 158g: the figure in
+   brackets is the one to trust, because a cup is not a weight. */
+function serving(text, lines) {
+  const near = lines.filter(l => /serving|portion|per\b/i.test(l));
+  for (let i = 0; i < near.length; i++) {
+    const m = /\(\s*(\d+(?:\.\d+)?)\s*(g|ml)\s*\)/i.exec(near[i]);
+    if (m) return { amt: parseFloat(m[1]), unit: m[2].toLowerCase() };
+  }
+  let m = /serving\s*size[^0-9\n]{0,25}(\d+(?:\.\d+)?)\s*(g|ml)/i.exec(text);
+  if (m) return { amt: parseFloat(m[1]), unit: m[2].toLowerCase() };
+  m = /per\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i.exec(text);
+  if (m) return { amt: parseFloat(m[1]), unit: m[2].toLowerCase() };
+  for (let i = 0; i < near.length; i++) {
+    m = /(\d+(?:\.\d+)?)\s*(g|ml)\b/i.exec(near[i]);
+    if (m) return { amt: parseFloat(m[1]), unit: m[2].toLowerCase() };
+  }
+  return null;
+}
+function readLabel(raw) {
+  const text = commas(raw);
+  const lines = text.split(/[\n;]+/).map(l => l.trim()).filter(Boolean);
+  const o = {};
+  o.kcal = energy(text, lines);
+  o.p = pick(lines, ['protein'], AVOID.p);
+  o.c = pick(lines, ['total carbohydrate', 'carbohydrates', 'carbohydrate', 'carbs', 'carb'], AVOID.c);
+  o.f = pick(lines, ['total fat', 'fat'], AVOID.f);
+  o.na = sodium(lines);
+  o.k = pick(lines, ['potassium'], AVOID.k);
+  o.caff = pick(lines, ['caffeine'], AVOID.caff);
+  const s = serving(text, lines);
+  if (s) { o.amt = s.amt; o.unit = s.unit; }
+  /* A name is worth a guess but never worth overwriting one you typed. The
+     first line with no digits in it is the product far more often than it is
+     anything else. */
+  for (let i = 0; i < lines.length && !o.name; i++) {
+    if (/\d/.test(lines[i])) continue;
+    if (lines[i].length < 2 || lines[i].length > 44) continue;
+    if (/nutrition|amount per|per serving|serving size|ingredients|daily value/i.test(lines[i])) continue;
+    o.name = lines[i];
+  }
+  return o;
+}
+
+/* ══════════════ THE SUM ══════════════
+   One multiplier of the label serving, read from either end. "How much for
+   50g of protein" divides the target by what one serving carries. "What is in
+   50g" divides the weight by what one serving weighs. Same number. */
+function work(pt) {
+  if (pt.frozen) return { want: pt.label, mult: pt.mult };
+  const amt = numv(L.amt);
+  const want = pt.what === 'kcal' ? r1(pt.v) + ' kcal'
+    : pt.what === 'amt' ? r1(pt.v) + ' ' + (L.unit.trim() || 'units')
+    : r1(pt.v) + ' g ' + WORD[pt.what];
+  if (!(amt > 0)) return { want: want, why: 'the label serving amount is missing' };
+  if (pt.what === 'amt') return { want: want, mult: pt.v / amt };
+  const per = numv(L[pt.what]);
+  if (!(per > 0)) return { want: want, why: 'the label has no ' + WORD[pt.what] + ' figure' };
+  return { want: want, mult: pt.v / per };
+}
+/* The other way: a serving already saved on a food, turned back into the
+   question that made it, so loading a food and correcting its label
+   recalculates rather than freezing. Anything this app did not write - a
+   Bottle, a Scoop, whatever STATUS holds - is kept exactly as it is. */
+function unlabel(s, base) {
+  let m = /^([\d.]+) g (protein|carbs|fat)$/.exec(s.label);
+  if (m) return { what: { protein: 'p', carbs: 'c', fat: 'f' }[m[2]], v: parseFloat(m[1]) };
+  m = /^([\d.]+) kcal$/.exec(s.label);
+  if (m) return { what: 'kcal', v: parseFloat(m[1]) };
+  m = /^([\d.]+) (.+)$/.exec(s.label);
+  if (m && m[2] === String(base.unit || '')) return { what: 'amt', v: parseFloat(m[1]) };
+  return { frozen: 1, label: s.label, mult: s.mult };
+}
+
+/* ══════════════ THE SCREEN ══════════════
+   Built once. Only the two things that change get redrawn, and never the box
+   being typed into - rebuilding an input takes the cursor with it. */
+const M = document.getElementById('main');
+const ptBox = el('div'), foodBox = el('div');
+
+function textField(key, label, opts) {
+  const w = el('div', 'field');
+  w.appendChild(el('label', 'fl', label));
+  const i = document.createElement('input');
+  i.type = 'text';
+  if (!(opts && opts.text)) { i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*'); }
+  if (opts && opts.ph) i.placeholder = opts.ph;
+  i.value = L[key] == null ? '' : String(L[key]);
+  i.addEventListener('input', () => { L[key] = i.value; paintPortions(); saveDraft(); });
+  INPUTS[key] = i;
+  w.appendChild(i);
+  return w;
+}
+/* Setting .value in code fires no input event, so everything that fills a
+   field from outside goes through here and then repaints by hand. */
+function setField(key, v) {
+  L[key] = v == null ? '' : String(v);
+  if (INPUTS[key]) INPUTS[key].value = L[key];
+}
+
+function build() {
+  M.innerHTML = '';
+
+  /* ── the label ── */
+  const c1 = el('div', 'card');
+  c1.appendChild(el('h2', null, 'THE LABEL'));
+  c1.appendChild(el('div', 'note', 'Paste it off the pack or a website and press READ IT, or just type the numbers. Check every one before you save: reading a label is a guess, not a scan.'));
+  const ta = document.createElement('textarea');
+  ta.placeholder = 'Serving size 100 g\nEnergy 165 kcal\nProtein 31 g\nTotal Carbohydrate 0 g\nTotal Fat 3.6 g';
+  c1.appendChild(ta);
+  const readBtn = el('button', 'btn wide quiet mb-press mb-tap', 'READ IT');
+  readBtn.style.marginTop = 'var(--s-2)';
+  readBtn.onclick = () => {
+    const got = readLabel(ta.value);
+    let n = 0;
+    Object.keys(got).forEach(k => {
+      if (got[k] == null) return;
+      if (k === 'name' && L.name.trim()) return;
+      setField(k, got[k]); n++;
+    });
+    paintPortions(); saveDraft();
+    Mobile.feedback(n ? 'select' : 'warn');
+    if (n) UI.toast('Read ' + n + ' number' + (n === 1 ? '' : 's') + '. Check them.');
+    else UI.toast('Could not find anything in that. Type it in.', { bad: true });
+  };
+  c1.appendChild(readBtn);
+
+  c1.appendChild(textField('name', 'Name', { text: 1, ph: 'Chicken breast' }));
+  const g1 = el('div', 'grid2');
+  g1.appendChild(textField('brand', 'Brand or place', { text: 1 }));
+  g1.appendChild(textField('cat', 'Group', { text: 1, ph: 'Protein' }));
+  c1.appendChild(g1);
+
+  c1.appendChild(el('label', 'fl', 'One serving, as printed'));
+  const g2 = el('div', 'grid2');
+  g2.appendChild(textField('amt', 'Amount'));
+  g2.appendChild(textField('unit', 'Unit', { text: 1 }));
+  c1.appendChild(g2);
+
+  const g3 = el('div', 'grid3');
+  g3.appendChild(textField('kcal', 'Calories'));
+  g3.appendChild(textField('p', 'Protein g'));
+  g3.appendChild(textField('c', 'Carbs g'));
+  g3.appendChild(textField('f', 'Fat g'));
+  g3.appendChild(textField('na', 'Sodium mg'));
+  g3.appendChild(textField('k', 'Potassium mg'));
+  g3.appendChild(textField('caff', 'Caffeine mg'));
+  g3.appendChild(textField('price', 'Price'));
+  c1.appendChild(g3);
+
+  const kcalBtn = el('button', 'btn wide quiet mb-press mb-tap', 'Work calories out from the macros');
+  kcalBtn.style.marginTop = 'var(--s-2)';
+  kcalBtn.onclick = () => {
+    setField('kcal', Math.round((numv(L.p, 0) || 0) * 4 + (numv(L.c, 0) || 0) * 4 + (numv(L.f, 0) || 0) * 9));
+    paintPortions(); saveDraft();
+    UI.toast('Calories worked out from the macros');
+  };
+  c1.appendChild(kcalBtn);
+  M.appendChild(c1);
+
+  /* ── the amounts ── */
+  const c2 = el('div', 'card');
+  c2.appendChild(el('h2', null, 'THE AMOUNTS'));
+  c2.appendChild(el('div', 'note', 'How much of it you need, and what that comes to. Each one is saved with the food as a serving, so logging it later is one tap.'));
+  c2.appendChild(ptBox);
+  c2.appendChild(addRow());
+  M.appendChild(c2);
+
+  /* ── what is already in there ── */
+  const c3 = el('div', 'card');
+  c3.appendChild(el('h2', null, 'YOUR FOODS'));
+  c3.appendChild(el('div', 'note', 'The same library STATUS logs from. Tap one to correct it or to add another amount.'));
+  c3.appendChild(foodBox);
+  M.appendChild(c3);
+
+  paintPortions();
+}
+
+/* Adding an amount. The chip says what you are counting, the box says how
+   much of it. Both defaults are his: 50g of protein, 50g of the thing. */
+let addWhat = 'p', addVal = '50';
+function addRow() {
+  const w = el('div');
+  w.style.marginTop = 'var(--s-3)';
+  w.appendChild(el('label', 'fl', 'Add an amount'));
+  const chips = el('div', 'chips');
+  const paint = () => {
+    chips.innerHTML = '';
+    [['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat'], ['kcal', 'Calories'], ['amt', 'Weight']].forEach(k => {
+      const b = el('button', 'chip mb-press mb-tap' + (addWhat === k[0] ? ' on' : ''), k[1]);
+      b.onclick = () => { addWhat = k[0]; paint(); };
+      chips.appendChild(b);
+    });
+  };
+  paint();
+  w.appendChild(chips);
+  const g = el('div', 'grid2');
+  g.style.marginTop = 'var(--s-2)';
+  const i = document.createElement('input');
+  i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*'); i.value = addVal;
+  i.addEventListener('input', () => { addVal = i.value; });
+  const b = el('button', 'btn mb-press mb-tap', 'ADD');
+  b.onclick = () => {
+    const v = numv(i.value);
+    if (!(v > 0)) return UI.toast('How much?', { bad: true });
+    /* The same question twice is the same answer. Asking again replaces it
+       rather than stacking a second copy underneath. */
+    PORTIONS = PORTIONS.filter(p => !(p.what === addWhat && p.v === v)).concat([{ what: addWhat, v: v }]);
+    paintPortions(); saveDraft();
+    Mobile.feedback('select');
+  };
+  g.appendChild(i); g.appendChild(b);
+  w.appendChild(g);
+  return w;
+}
+
+function paintPortions() {
+  ptBox.innerHTML = '';
+  if (!PORTIONS.length) {
+    ptBox.appendChild(el('div', 'warnbox', 'Nothing yet. Add one below. 50 g of protein is the usual first question.'));
+    return;
+  }
+  PORTIONS.forEach((pt, idx) => {
+    const w = work(pt);
+    const row = el('div', 'pt' + (w.mult > 0 ? '' : ' dead'));
+    const head = el('div', 'pt-h');
+    head.appendChild(el('span', 'pt-want', esc(w.want) + (pt.frozen ? ' · as saved' : '')));
+    const x = el('button', 'x mb-press mb-tap', '');
+    x.setAttribute('aria-label', 'Remove ' + w.want);
+    x.dataset.icon = 'del';
+    x.onclick = () => {
+      const gone = PORTIONS[idx];
+      PORTIONS = PORTIONS.filter((_, i) => i !== idx);
+      paintPortions(); saveDraft();
+      Mobile.haptic('warn');
+      UI.undo('removed <b>' + esc(w.want) + '</b>',
+        () => { PORTIONS = PORTIONS.concat([gone]); paintPortions(); saveDraft(); });
+    };
+    head.appendChild(x);
+    row.appendChild(head);
+
+    if (!(w.mult > 0)) {
+      row.appendChild(el('div', 'pt-a', '—'));
+      row.appendChild(el('div', 'pt-m', esc(w.why || 'nothing to work with yet')));
+    } else {
+      row.appendChild(el('div', 'pt-a', r1(w.mult * numv(L.amt, 0)) + ' ' + esc(L.unit.trim() || 'units')));
+      const bits = [];
+      if (numv(L.kcal) != null) bits.push(Math.round(numv(L.kcal) * w.mult) + ' kcal');
+      ['p', 'c', 'f'].forEach(n => { if (numv(L[n]) != null) bits.push(r1(numv(L[n]) * w.mult) + n); });
+      bits.push(r1(w.mult) + ' × the label serving');
+      if (numv(L.price)) bits.push(r1(numv(L.price) * w.mult) + ' to buy');
+      row.appendChild(el('div', 'pt-m', esc(bits.join(' · '))));
+    }
+    ptBox.appendChild(row);
+    if (window.Icons) Icons.paint(row);
+  });
+}
+
+/* Everything already in the library, most-used first, because the reason to
+   open this list is almost always to correct something you eat a lot. */
+function paintFoods() {
+  const all = Object.values(Rec.map('food'))
+    .sort((a, b) => (b.uses || 0) - (a.uses || 0) || String(a.name).localeCompare(String(b.name)));
+  foodBox.innerHTML = '';
+  if (!all.length) {
+    foodBox.appendChild(el('div', 'warnbox', 'Nothing saved yet. Anything you save here shows up in STATUS as well, because it is the same library.'));
+    return;
+  }
+  all.slice(0, 40).forEach(fd => {
+    const per = fd.base || {}, n = (fd.serves || []).length;
+    const b = el('button', 'item mb-press mb-tap');
+    b.innerHTML = '<span class="nm">' + esc(fd.name) + '<small>' +
+      esc([fd.brand, (per.amt == null ? '' : per.amt + ' ' + (per.unit || '')),
+        n + ' serving' + (n === 1 ? '' : 's')].filter(x => String(x).trim()).join(' · ')) +
+      '</small></span><span class="fig">' +
+      (per.kcal == null ? '' : Math.round(per.kcal) + ' kcal<br>') +
+      (per.p == null ? '' : r1(per.p) + 'p') + '</span>';
+    b.onclick = () => loadFood(fd);
+    foodBox.appendChild(b);
+  });
+}
+
+function loadFood(fd) {
+  EDIT = fd.id;
+  setField('name', fd.name || ''); setField('brand', fd.brand || ''); setField('cat', fd.cat || '');
+  setField('amt', fd.base.amt); setField('unit', fd.base.unit || 'g');
+  NUTS.concat(['price']).forEach(n => setField(n, fd.base[n] == null ? '' : fd.base[n]));
+  PORTIONS = (fd.serves || []).map(s => unlabel(s, fd.base));
+  if (!PORTIONS.length) PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 50 }];
+  paintPortions(); saveDraft(); syncBar();
+  Mobile.feedback('open');
+  document.querySelector('main').scrollTop = 0;
+  UI.toast('Editing <b>' + esc(fd.name) + '</b>');
+}
+
+function blank() {
+  EDIT = null;
+  Object.keys(L).forEach(k => setField(k, k === 'amt' ? '100' : k === 'unit' ? 'g' : ''));
+  PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 50 }];
+  paintPortions(); saveDraft(); syncBar();
+}
+
+/* The button says which of the two things it is about to do, because saving
+   over a food you loaded and making a new one look identical otherwise. */
+function syncBar() {
+  document.getElementById('btnSave').textContent = EDIT ? 'UPDATE THIS FOOD' : 'SAVE TO MY FOODS';
+}
+
+function saveFood() {
+  const name = L.name.trim();
+  if (!name) { INPUTS.name.focus(); return UI.toast('Give it a name first', { bad: true }); }
+  if (!(numv(L.amt) > 0)) { INPUTS.amt.focus(); return UI.toast('The label serving amount is missing', { bad: true }); }
+
+  const base = { amt: numv(L.amt), unit: L.unit.trim() || 'serving' };
+  NUTS.concat(['price']).forEach(n => { const v = numv(L[n]); if (v != null) base[n] = v; });
+
+  /* Only the amounts that actually worked out become servings. One with no
+     protein figure behind it is a question with no answer, not a serving. */
+  const serves = [];
+  PORTIONS.forEach(pt => {
+    const w = work(pt);
+    if (!(w.mult > 0)) return;
+    if (serves.some(s => s.label === w.want)) return;
+    serves.push({ label: w.want, mult: w.mult });
+  });
+
+  const id = EDIT || newId();
+  const was = EDIT ? Rec.get('food', null, EDIT) : null;
+  Rec.set('food', null, id, {
+    id: id, name: name, brand: L.brand.trim(), cat: L.cat.trim(),
+    base: base, serves: serves,
+    /* Carried, never reset. `uses` is how STATUS sorts the list and `dflt` is
+       which serving it offers first: correcting a label is not a reason to
+       forget that you eat this every day. */
+    dflt: was ? (was.dflt || 0) : 0,
+    uses: was ? (was.uses || 0) : 0,
+    shot: was ? (was.shot || null) : null,
+  });
+  EDIT = id; syncBar();
+  Mobile.feedback('success');
+  UI.toast('<b>' + esc(name) + '</b> saved with ' + serves.length +
+    ' serving' + (serves.length === 1 ? '' : 's') + '. It is in STATUS too.');
+}
+
+/* ══ the draft ══
+   A half-typed label is easy to lose and annoying to retype, so what is on
+   screen is kept as one setting under this app's own name. It is not data,
+   it is the workbench, and it is replaced whole every time. */
+let draftT = 0;
+function saveDraft() {
+  clearTimeout(draftT);
+  draftT = setTimeout(() => {
+    try { Rec.setting(APP.id, 'draft', { L: L, P: PORTIONS, edit: EDIT }); } catch (e) {}
+  }, 700);
+}
+function loadDraft() {
+  const d = Rec.setting(APP.id, 'draft');
+  if (!d || !d.L) return;
+  Object.keys(L).forEach(k => setField(k, d.L[k]));
+  if (d.P && d.P.length) PORTIONS = d.P;
+  EDIT = d.edit || null;
+  paintPortions(); syncBar();
+}
+
+document.getElementById('btnSave').onclick = saveFood;
+document.getElementById('btnNew').onclick = () => {
+  if (!L.name.trim() && !EDIT) return blank();
+  UI.confirm('Start a new food?', 'What is on screen is cleared. Anything you already saved stays saved.')
+    .then(ok => { if (ok) { blank(); Mobile.feedback('nav'); } });
+};
+
+build();
+syncBar();
+/* A row too big for localStorage arrives from IndexedDB a few milliseconds
+   after boot, so the list of foods waits for the store rather than drawing an
+   empty one and never correcting itself. */
+Rec.ready(() => { loadDraft(); paintFoods(); });
+Rec.on(paintFoods);
+</script>
+</body>
+</html>
