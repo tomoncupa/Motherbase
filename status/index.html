@@ -348,13 +348,15 @@ label.fl:first-child{margin-top:0}
 .dayhead .dhs{font-family:var(--font-mono);font-size:var(--f-4)}
 .dayhead .dhs i{display:block;font-style:normal;font-family:var(--font-ui);
   font-size:var(--f-1);color:var(--text-muted);margin-top:2px}
-.pillars{display:flex;flex-direction:column;gap:var(--s-2)}
-.pillar{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-2) var(--s-3);
+/* `.pillar` was already taken: a tile on Today wears it to say it is scored.
+   An unscoped rule here restyled every one of them. Named and scoped now. */
+.dayrows{display:flex;flex-direction:column;gap:var(--s-2)}
+.dayrows .dayrow{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-2) var(--s-3);
   background:var(--surface-2);border-radius:var(--radius-sm);min-height:var(--tap)}
-.pillar .pl{flex:1;min-width:0}
-.pillar .pv{font-family:var(--font-mono);color:var(--text-2);text-align:right}
-.pillar .pv i{display:block;font-style:normal;font-size:var(--f-1);color:var(--text-muted)}
-.pillar .pk{flex:none;width:1.6em;text-align:center;font-family:var(--font-mono);
+.dayrows .pl{flex:1;min-width:0}
+.dayrows .pv{font-family:var(--font-mono);color:var(--text-2);text-align:right}
+.dayrows .pv i{display:block;font-style:normal;font-size:var(--f-1);color:var(--text-muted)}
+.dayrows .pk{flex:none;width:1.6em;text-align:center;font-family:var(--font-mono);
   font-size:var(--f-4);font-weight:700}
 
 /* One letter per day. A row you can read the shape of a week from. */
@@ -4553,13 +4555,23 @@ function daySheet(date) {
 
     const parts = (sc && sc.parts) || [];
     if (parts.length) {
-      const list = el('div', 'pillars');
+      const list = el('div', 'dayrows');
+      /* Training is not in the average - it is a lever on the letter, and
+         averaging it would let a rest day drag the number down. But it IS
+         part of the day, and a day sheet that cannot tell you whether you
+         trained is not a day sheet. So it reads as a fact, with no letter
+         beside it and nothing said about what it did to the grade. */
+      if (sc && sc.trained) {
+        list.appendChild(el('div', 'dayrow',
+          '<span class="pl">Trained</span><span class="pv">yes</span>' +
+          '<span class="pk" style="color:' + tok('--good') + '">\u2713</span>'));
+      }
       parts.forEach(pt => {
         const c = rankColour(pt.letter);
         const shown = pt.val == null ? '\u2013'
           : (pt.val % 1 ? r1(pt.val) : Math.round(pt.val)).toLocaleString();
         const against = pt.target ? ' / ' + pt.target.toLocaleString() : '';
-        list.appendChild(el('div', 'pillar',
+        list.appendChild(el('div', 'dayrow',
           '<span class="pl">' + esc(pt.label) + '</span>' +
           '<span class="pv">' + shown + against + (pt.unit ? ' ' + esc(pt.unit) : '') +
           (pt.acc != null ? '<i>' + Math.round(pt.acc) + '% accurate</i>' : '') + '</span>' +
@@ -4574,11 +4586,24 @@ function daySheet(date) {
       body.appendChild(el('div', 'note', 'Not counted yet: <b>' +
         sc.pending.map(esc).join('</b>, <b>') + '</b>. They settle later in the day.'));
     }
-    const moved = [];
-    if (sc && sc.trained) moved.push('trained, so the letter went up one');
-    if (sc && sc.rest) moved.push('rest day, so it tops out at A');
-    if (sc && sc.partial) moved.push('the day is not over, so it tops out at A');
-    if (moved.length) body.appendChild(el('div', 'note', moved.join(' \u00b7 ')));
+    /* ── what NOT to say ──
+       "Trained, so the letter went up one" is gone. Tom, 2026-09-05:
+       "Absolutely remove it." He is right, and the reason is worth keeping:
+       it announced a bonus. Framing a thing you did for its own sake as the
+       lever that moved a score is the fastest way to make it feel like
+       working for the score - and once training is something you do for the
+       letter, the letter is what you protect on a bad week.
+
+       Training still shows, as a row in the list above, which is a fact about
+       the day rather than a prize.
+
+       The two CAPS stay, because they answer a different question: not "what
+       did you earn" but "why can this letter not be higher", and a ceiling you
+       cannot see is the kind of thing you argue with. */
+    const capped = [];
+    if (sc && sc.rest) capped.push('Rest day, so it tops out at A.');
+    if (sc && sc.partial) capped.push('The day is not over, so it tops out at A.');
+    if (capped.length) body.appendChild(el('div', 'note', capped.join(' ')));
 
     if (!parts.length) {
       body.appendChild(el('div', 'empty', 'Log a measurement and this fills in.'));

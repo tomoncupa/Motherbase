@@ -415,6 +415,58 @@ Duolingo's published streak-freeze results.
 - **Never remove earned progress.** No decaying tiers, no lost history. Turning a
   field off keeps its data.
 
+### Beyond habit formation
+
+Added 2026-09-05 at Tom's instruction: "Expand your knowledge to developmental,
+positive, and performance psychology." The rules above are drawn almost entirely
+from habit research, which is good at stopping relapse and says nothing about
+whether the thing is worth doing. These three fields fill the gap, and each one
+has a concrete consequence here.
+
+**Self-determination theory — autonomy, competence, relatedness.** Motivation
+that lasts comes from these three, and an extrinsic frame laid over an
+intrinsically motivated act *reduces* it. That is why "trained, so the letter
+went up one" was removed: it turned training into a move in a scoring game, and
+once it is that, the score is what gets protected on a bad week. **Never tell
+him what a behaviour did to a number.** State the behaviour, show the number,
+let him join them.
+
+The suite is strong on autonomy — he defines every field, target and standard.
+It is weak on **competence**, which is evidence you are getting better, not
+evidence you complied. Adherence percentages are compliance. A personal best, a
+thing that used to be hard and is now automatic, a block that has run 30 days
+straight: those are competence. Build more of those.
+
+**Self-efficacy (Bandura).** The strongest source of believing you can do a
+thing is having done it. So the app should be able to show him **what he has
+already done**, on demand, especially when he is failing at something else. A
+screen that can only describe the current week is missing its most useful move.
+
+**Deliberate practice, and flow.** Both need difficulty matched to current
+ability — too easy is boring, too hard is quitting. Every target in here is
+fixed until he changes it by hand. **A target that has been missed for three
+weeks is not a target, it is furniture.** Offering to lower it is not
+lowering the bar, it is the only way the bar does anything.
+
+**Scaffolding and the zone of proximal development.** The next step should be
+just past what is comfortable, and supported until it is not needed. BLOCK
+already says this in its own advice — shrink it until it is almost too easy,
+attach it to something automatic, let the size grow back. That instinct is
+right and should spread: **anything the app suggests should be one step from
+where he is, never the finished version.**
+
+**Positive psychology, and what this suite has none of.** There is no mechanism
+anywhere for noticing what went well. The journal holds entries and nothing
+ever surfaces them; the grade names what cost the most and never what carried
+the week. Savouring and benefit-finding are among the better-evidenced mood
+interventions there are, and they are cheap: showing him a good day from a
+month ago costs one query.
+
+**What none of this licenses.** No praise for its own sake, no streaks-as-
+pressure, no levels, no XP — those rules stand. The test for anything added
+under this heading: does it help him see something true about himself that he
+could not see before? If it only makes him feel good, it is decoration.
+
 ---
 
 ## Testing, not optional
