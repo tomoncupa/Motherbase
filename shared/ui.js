@@ -35,6 +35,13 @@ function css() {
    Sits above the home indicator and above the keyboard, never under either.
    An undo action holds it open longer, because a message you might act on is
    not the same as a message you only read. */
+.mb-timefield{display:flex;gap:var(--s-2);align-items:stretch}
+.mb-timefield input{flex:1;min-width:0}
+.mb-ampm{flex:none;min-width:56px;min-height:var(--tap);padding:0 var(--s-3);
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--surface-3);color:var(--text-1);font:inherit;
+  font-size:var(--f-1);letter-spacing:.08em;cursor:pointer}
+.mb-ampm:disabled{opacity:.4;cursor:default}
 .mb-toast{position:fixed;left:50%;z-index:9000;
   bottom:calc(var(--s-5,24px) + var(--safe-b,0px) + var(--kb,0px));
   transform:translate(-50%,14px) scale(.97);opacity:0;pointer-events:none;
@@ -201,6 +208,114 @@ const buzz = (kind, opts) => { const m = M(); if (m) m.feedback(kind, opts); els
 
 const UI = {
   el: el, esc: esc,
+
+  /* ══════════════ TYPING A TIME ══════════════
+     Tom, 2026-09-05: "Time entry in block is still this super wonky thing
+     where hours and minutes are separate, I should also be able to click on PM
+     to turn it to AM."
+
+     `<input type="time">` is one tag and the browser draws it. A phone gives a
+     wheel, which is fine. A desktop gives three little spinners you tab
+     between, which is not. So on a pointer device it becomes a box you type
+     into, with a button beside it that says AM or PM and flips when clicked.
+
+     THE TYPING RULE, said once: a bare hour means the NEXT time that hour
+     comes round. At eight in the morning, 9 is this morning. At ten, the same
+     9 is tonight. That is what you meant both times.
+
+       9      the next 9 o'clock
+       930    9:30, same rule          9:30  9.30  9 30   all the same
+       9pm    said outright, no guessing
+       21 2130 21:30   past twelve, so it can only mean one thing         */
+  smartTime(raw, nowMin) {
+    let t = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!t) return null;
+    const ap = /am\b/.test(t) ? 'am' : /pm\b/.test(t) ? 'pm' : null;
+    t = t.replace(/[ap]m\b/g, '').trim();
+
+    let h = null, m = 0;
+    const mt = t.match(/^(\d{1,2})\s*[:.\s]\s*(\d{1,2})$/);
+    if (mt) { h = +mt[1]; m = +mt[2]; }
+    else if (/^\d{3,4}$/.test(t)) { h = +t.slice(0, t.length - 2); m = +t.slice(-2); }
+    else if (/^\d{1,2}$/.test(t)) { h = +t; m = 0; }
+    else return null;
+    if (!(h >= 0 && h <= 24) || !(m >= 0 && m <= 59)) return null;
+    if (h === 24) h = 0;
+
+    const two = n => String(n).padStart(2, '0');
+    const out = hh => two(hh % 24) + ':' + two(m);
+    if (ap === 'am') return out(h === 12 ? 0 : h);
+    if (ap === 'pm') return out(h === 12 ? 12 : h + 12);
+    if (h > 12 || h === 0) return out(h);
+
+    const now = nowMin == null ? (new Date().getHours() * 60 + new Date().getMinutes()) : nowMin;
+    const a = (h === 12 ? 0 : h) * 60 + m;
+    const b = (h === 12 ? 12 : h + 12) * 60 + m;
+    const fwd = x => (x - now + 1440) % 1440;
+    const pick = fwd(a) <= fwd(b) ? a : b;
+    return two(Math.floor(pick / 60)) + ':' + two(pick % 60);
+  },
+
+  /** "09:30" -> "9:30am" */
+  clockLabel(v) {
+    const p = String(v || '').split(':');
+    if (p.length !== 2) return '';
+    const h = +p[0], m = +p[1];
+    if (!isFinite(h) || !isFinite(m)) return '';
+    const ampm = h < 12 ? 'am' : 'pm';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return h12 + ':' + String(m).padStart(2, '0') + ampm;
+  },
+
+  /** A time control. The wheel on a phone; a box you type into, plus an
+      AM/PM button, on anything with a pointer. `onset` gets "HH:MM" or "". */
+  timeField(value, onset) {
+    let val = value || '';
+    const fine = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
+    const wrap = el('div', 'mb-timefield');
+
+    if (!fine) {
+      const i = document.createElement('input');
+      i.type = 'time'; i.value = val;
+      i.onchange = () => { val = i.value; onset(val); };
+      wrap.appendChild(i);
+      return wrap;
+    }
+
+    const i = document.createElement('input');
+    i.type = 'text'; i.inputMode = 'numeric'; i.autocomplete = 'off';
+    i.placeholder = '9, 930, 9pm';
+    const half = el('button', 'mb-ampm');
+    half.type = 'button';
+
+    const show = () => {
+      i.value = val ? UI.clockLabel(val).replace(/[ap]m$/, '') : '';
+      half.textContent = val ? (+val.split(':')[0] < 12 ? 'AM' : 'PM') : '--';
+      half.disabled = !val;
+    };
+    const settle = () => {
+      const v = UI.smartTime(i.value);
+      if (v) { val = v; onset(val); }
+      else if (!i.value.trim()) { val = ''; onset(''); }
+      show();
+    };
+    i.onblur = settle;
+    i.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); settle(); i.blur(); } };
+
+    /* Half a day either way, which is the only thing AM/PM can ever mean. */
+    half.onclick = () => {
+      if (!val) return;
+      const p = val.split(':');
+      val = String((+p[0] + 12) % 24).padStart(2, '0') + ':' + p[1];
+      onset(val); show();
+    };
+    half.title = 'Switch morning and afternoon';
+
+    show();
+    wrap.appendChild(i); wrap.appendChild(half);
+    return wrap;
+  },
+
 
   /** The snackbar. `opts.action = {label, fn}` turns it into an undo. */
   toast(html, opts) {
