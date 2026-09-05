@@ -501,6 +501,13 @@ answer, or take it out.
   differs from an existing one only in case.
 - `py -3` is the Python launcher here. Plain `python` hits the Microsoft Store stub
   and fails.
+- **A Python patch script eats backslash escapes.** Writing a JS regex inside an
+  ordinary `""".."""` string turns `` into a backspace character and `
+` into a
+  real newline, silently — the file looks fine and the regex is broken. It has
+  cost three bugs in one day: `9pm` returning nothing, and a regex split across
+  two lines. Use a raw string (`r""".."""`) for anything containing a backslash,
+  or write the file with the Write tool instead.
 - **A literal closing script tag inside an inline script ends the script element**,
   even inside a comment. Writing `<script src=...></script>` in the kernel's own
   doc comment silently truncated three apps. ARC's `'<scr'+'ipt>'` split is the

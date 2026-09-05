@@ -236,6 +236,10 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 /* Where you are in the list, and what you have slipped past. `late` is a mark,
    not a colour change - being behind should be visible, not loud. */
 .row.here{border-color:var(--acc)}
+/* A link on a row is underlined rather than coloured: colour on these rows
+   already means which lane a block belongs to. */
+.rlink{color:inherit;text-decoration:underline;text-underline-offset:3px;
+  text-decoration-color:var(--acc)}
 .tidy{display:block;width:100%;margin-top:8px;padding:8px;background:transparent;
   border:0;border-top:1px solid var(--line);color:var(--dim);font:inherit;
   font-size:12px;letter-spacing:.06em;text-align:center;cursor:pointer;
@@ -893,7 +897,7 @@ function todayItems() {
     (plan.blocks || []).forEach(b => {
       const on = LifeOS.isDone(b.actId, today);
       out.push({
-        kind: 'block', name: b.name, at: b.s == null ? null : b.s,
+        kind: 'block', name: b.name, note: b.note || '', at: b.s == null ? null : b.s,
         dur: b.dur || 0, tag: b.lane || '', colour: b.color || '', done: on,
         tick: () => LifeOS.done(b.actId, today, !on, { src: 'home' }),
       });
@@ -981,6 +985,16 @@ const ageNow = born => {
    Each widget is a pure function of the shared doc: given a body element, fill
    it. The grid owns size and position; the widget owns nothing but its content,
    which is what lets you drag and resize them without touching this table. */
+/* A block's note is where a link lives, written in BLOCK either as a plain
+   address or as [label](address). Only http and https: a note is text a person
+   typed, and text a person typed is not a reason to follow any scheme a
+   browser happens to understand. */
+const LINK_RE = /\[[^\]]{1,120}\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"']+)/i;
+function linkIn(note) {
+  const m = LINK_RE.exec(String(note || ''));
+  return m ? (m[1] || m[2]) : null;
+}
+
 /* ── what you are meant to be doing, right now ──
    Tom, 2026-09-05: "make the Today widget good enough to follow without
    thinking. If BLOCK and STATUS are properly set up then it should be able to
@@ -1071,10 +1085,12 @@ const WIDGETS = {
           const when = nn.state === 'running' ? inWords(nn.mins) + ' left'
             : nn.state === 'next' ? 'in ' + inWords(nn.mins)
             : (nn.missed ? nn.missed + ' behind' : '');
+          const bhref = linkIn(nn.it.note);
           band.innerHTML =
             '<div class="nlab">' + lab + (when ? '<i>' + esc(when) + '</i>' : '') + '</div>' +
             '<div class="nname">' + (nn.it.at != null ? '<b>' + MIN2(nn.it.at) + '</b> ' : '') +
-            esc(nn.it.name) + '</div>';
+            (bhref ? '<a class="rlink" href="' + esc(bhref) + '" target="_blank" rel="noopener noreferrer">' +
+              esc(nn.it.name) + '</a>' : esc(nn.it.name)) + '</div>';
           /* The band is the tick target too, so following the day never means
              hunting for the right row in the list under it. */
           if (nn.it.tick) {
@@ -1139,7 +1155,13 @@ const WIDGETS = {
         if (x === mark) here = r;
         if (x.colour) { const bar = el('div', 'bar'); bar.style.background = x.colour; r.appendChild(bar); }
         r.appendChild(el('div', 't', x.at == null ? '' : MIN2(x.at)));
-        r.appendChild(el('div', 'n', esc(x.name)));
+        /* Two targets, two meanings, the same split as everywhere else: the
+           box ticks it, the words take you to the thing. */
+        const href = linkIn(x.note);
+        r.appendChild(href
+          ? el('div', 'n', '<a class="rlink" href="' + esc(href) +
+              '" target="_blank" rel="noopener noreferrer">' + esc(x.name) + '</a>')
+          : el('div', 'n', esc(x.name)));
         if (x.tag) r.appendChild(el('div', 'tag', esc(x.tag)));
         if (x.dur) r.appendChild(el('div', 'd', DUR(x.dur)));
         if (x.tick) {
