@@ -712,38 +712,18 @@ const SEED = [
      is that field, and it ships on. */
   { id: 'trained', label: 'Trained', unit: '', measure: 'check', once: 1, agg: 'last', order: 6, on: 1 },
 
-  /* ── daylight ──
-     Two different things get called sun and they are not the same dose at the
-     same time of day, which is why this is minutes rather than a tick.
+  /* Sun and Main quest were shipped here on 2026-09-05 and taken out the same
+     day. Tom: "I don't want dedicated fields just for me. I want the systems
+     in place that would allow me to manually create these trackers."
 
-     MORNING LIGHT is the one that matters for mood and sleep. It works on
-     brightness and duration, not on UV: the trials that move depression use
-     10,000 lux for 30 minutes, 5,000 for an hour or 2,500 for two, and outdoor
-     light clears 10,000 easily even under cloud. Thirty minutes in the first
-     couple of hours awake is the target here.
+     He is right twice over. A field called Main quest is his private
+     vocabulary, and this file goes to clients. And a suite where the answer to
+     "I want to track X" is "ask Claude" is a worse suite than one where you
+     can build X yourself in forty seconds.
 
-     VITAMIN D is a different mechanism and in Manila it is close to a solved
-     problem: at a UV index above 10, five to fifteen minutes of midday sun on
-     arms and face is a maintenance dose for lighter skin, longer for darker.
-     Anyone getting their morning half hour outdoors has it covered.
-
-     So one field, in minutes, and the useful discipline is WHEN rather than
-     how long. */
-  { id: 'sun', label: 'Sun', unit: 'min', measure: 'amount', once: 0, agg: 'sum',
-    step: 5, target: 30, dir: 'gte', order: 7, on: 1,
-    chips: [5, 10, 15, 20, 30, 45, 60] },
-
-  /* ── main quest ──
-     Tom, 2026-09-05: "work that leads to an improvement of life circumstances
-     or progress in a true passion project."
-
-     A tick, like Trained, and for the same reason: the question is whether it
-     happened, and asking for minutes invites the arithmetic that turns a good
-     day into a bad one. Tracked, not scored - the five pillars are what build
-     a physique and this is not one of them. Whether it should count toward a
-     day's letter is a real question and a separate decision. */
-  { id: 'quest', label: 'Main quest', unit: '', measure: 'check', once: 1, agg: 'last',
-    order: 8, on: 1 },
+     Both are now buildable in Settings > Track > new field, which is where the
+     work went instead. Anyone who already has them keeps them - taking a field
+     out of SEED never deletes a field somebody has. */
 ];
 
 /* Things worth tracking that most people want eventually. An empty setup
@@ -905,15 +885,15 @@ const whenRank = f => {
    listed is not drawn and not stored. */
 const CATS = [
   { id: 'body',     label: 'Body',     note: 'weight, resting heart rate',
-    has: ['target', 'edges', 'days', 'when'] },
+    has: ['target', 'chips', 'edges', 'days', 'when'] },
   { id: 'intake',   label: 'Intake',   note: 'anything you take or drink',
-    has: ['target', 'half', 'from', 'days', 'when'] },
+    has: ['target', 'chips', 'half', 'from', 'days', 'when'] },
   { id: 'activity', label: 'Activity', note: 'steps, minutes moved',
-    has: ['target', 'edges', 'days', 'when'] },
+    has: ['target', 'chips', 'edges', 'days', 'when'] },
   { id: 'feeling',  label: 'Feeling',  note: 'mood, energy, soreness',
     has: ['scale', 'days', 'when'] },
   { id: 'other',    label: 'Other',    note: 'everything else',
-    has: ['target', 'edges', 'half', 'from', 'days', 'when'] },
+    has: ['target', 'chips', 'edges', 'half', 'from', 'days', 'when'] },
 ];
 const catOf = id => CATS.filter(c => c.id === id)[0] || CATS[CATS.length - 1];
 const catLabel = id => (CATS.filter(c => c.id === id)[0] || {}).label || '';
@@ -5750,6 +5730,24 @@ function newFieldForm(pane, existing) {
      you should not be outside — different question, and both can be true at
      once. Sodium has a ceiling and no target; sleep has a floor and a target;
      blood pressure has both edges and no target at all. */
+  /* ── the quick amounts ──
+     The buttons on the logging sheet. They were code-only, which is the one
+     thing that made a shipped field better than one you built: Sleep offers
+     6.5, 7, 7.5 and a field you made yourself made you type every time.
+
+     Spaces or commas, because nobody should have to guess which. Blank means
+     no buttons, which is right for a step count - a number you read off a
+     watch is not one you pick off a list. */
+  const sChips = section('chips');
+  sChips.appendChild(el('label', 'fl', 'Quick amounts, if some numbers come up a lot'));
+  const chp = document.createElement('input');
+  chp.type = 'text'; chp.inputMode = 'decimal';
+  chp.placeholder = '10 20 30';
+  chp.value = (f.chips || []).join(' ');
+  sChips.appendChild(chp);
+  sChips.appendChild(el('div', 'note', 'They become buttons when you log it. Leave it empty for none.'));
+  pane.appendChild(sChips);
+
   const sEdges = section('edges');
   sEdges.appendChild(el('label', 'fl', 'Edges, if it has them'));
   const lim = el('div', 'grid2');
@@ -5899,6 +5897,13 @@ function newFieldForm(pane, existing) {
        same as clearing it. `on` is that test. */
     const on = k => !cat || catOf(cat).has.indexOf(k) > -1;
 
+    /* Quick amounts ride with the target: both are about a number you are
+       aiming at, and a check field has neither. */
+    if (on('target')) {
+      const picks = String(chp.value || '').split(/[\s,]+/)
+        .map(x => num(x)).filter(x => x != null && isFinite(x));
+      if (picks.length) spec.chips = picks.slice(0, 12); else delete spec.chips;
+    }
     if (on('target')) {
       const t = num(tg.value);
       if (t != null) { spec.target = t; if (!spec.dir) spec.dir = 'gte'; } else { delete spec.target; }
