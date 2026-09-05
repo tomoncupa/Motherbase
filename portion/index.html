@@ -209,13 +209,13 @@ const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
 /* Every number a food row can carry, in STATUS's own spelling, so what this
    app writes and what that app writes are the same shape. */
 const NUTS = ['kcal', 'p', 'c', 'f', 'na', 'k', 'ca', 'caff'];
-const WORD = { p: 'protein', c: 'carbs', f: 'fat', kcal: 'calories', amt: 'of it' };
+const WORD = { p: 'protein', c: 'carbs', f: 'fat', kcal: 'calories', amt: 'of it', pc: 'pieces' };
 
 /* ══ what is on screen ══
    L is the label as typed. PORTIONS is what you want out of it. EDIT is the
    id of the food being changed, or null when this is a new one. */
 const L = { name: '', brand: '', cat: '', amt: '100', unit: 'g',
-  kcal: '', p: '', c: '', f: '', na: '', k: '', ca: '', caff: '', price: '', cook: '' };
+  kcal: '', p: '', c: '', f: '', na: '', k: '', ca: '', caff: '', price: '', pc: '' };
 let PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
 let EDIT = null;
 const INPUTS = {};
@@ -332,14 +332,24 @@ function readLabel(raw) {
    One multiplier of the label serving, read from either end. "How much for
    50g of protein" divides the target by what one serving carries. "What is in
    50g" divides the weight by what one serving weighs. Same number. */
+const pieces = n => r1(n) + ' piece' + (r1(n) === 1 ? '' : 's');
 function work(pt) {
   if (pt.frozen) return { want: pt.label, mult: pt.mult };
   const amt = numv(L.amt);
   const want = pt.what === 'kcal' ? r1(pt.v) + ' kcal'
     : pt.what === 'amt' ? r1(pt.v) + ' ' + (L.unit.trim() || 'units')
+    : pt.what === 'pc' ? pieces(pt.v)
     : r1(pt.v) + ' g ' + WORD[pt.what];
   if (!(amt > 0)) return { want: want, why: 'the label serving amount is missing' };
   if (pt.what === 'amt') return { want: want, mult: pt.v / amt };
+  /* A piece is a weight you did not have to look up. An egg, a thigh, a
+     banana: you count them, you do not weigh them, and the label is in grams.
+     Saying what one weighs once turns counting back into weighing. */
+  if (pt.what === 'pc') {
+    const one = numv(L.pc);
+    if (!(one > 0)) return { want: want, why: 'nothing says what one piece weighs' };
+    return { want: want, mult: pt.v * one / amt };
+  }
   const per = numv(L[pt.what]);
   if (!(per > 0)) return { want: want, why: 'the label has no ' + WORD[pt.what] + ' figure' };
   return { want: want, mult: pt.v / per };
@@ -353,9 +363,19 @@ function unlabel(s, base) {
   if (m) return { what: { protein: 'p', carbs: 'c', fat: 'f' }[m[2]], v: parseFloat(m[1]) };
   m = /^([\d.]+) kcal$/.exec(s.label);
   if (m) return { what: 'kcal', v: parseFloat(m[1]) };
+  m = /^([\d.]+) pieces?$/.exec(s.label);
+  if (m) return { what: 'pc', v: parseFloat(m[1]) };
   m = /^([\d.]+) (.+)$/.exec(s.label);
   if (m && m[2] === String(base.unit || '')) return { what: 'amt', v: parseFloat(m[1]) };
   return { frozen: 1, label: s.label, mult: s.mult };
+}
+/* What one piece of a saved food weighs, read back out of the "1 piece"
+   serving rather than out of a field of its own. A piece IS a serving, so
+   storing it as one means STATUS keeps it, logs from it and exports it, and
+   there is no second place for the number to disagree from. */
+function pieceOf(fd) {
+  const s = (fd.serves || []).find(x => /^1 piece$/.test(x.label));
+  return s ? r1(s.mult * (numv(fd.base.amt, 0) || 0)) : null;
 }
 
 /* ══════════════ THE SCREEN ══════════════
@@ -364,6 +384,7 @@ function unlabel(s, base) {
 const M = document.getElementById('main');
 const ptBox = el('div'), foodBox = el('div'), groupBox = el('div', 'chips');
 const shotArea = el('div'), shotTitle = el('div', 'shot-title');
+const dupNote = el('div', 'warnbox');
 
 /* The five groups Tom sorts food into. A fixed list rather than a text box,
    because typing "Protein" and "protein" on two different days is how a list
@@ -435,6 +456,11 @@ function build() {
   c1.appendChild(readBtn);
 
   c1.appendChild(textField('name', 'Name', { text: 1, ph: 'Chicken breast' }));
+  /* Caught while you type rather than at the save, which is late: by then you
+     have filled in a whole label you did not need to. */
+  dupNote.style.marginTop = 'var(--s-2)';
+  dupNote.style.display = 'none';
+  c1.appendChild(dupNote);
   c1.appendChild(textField('brand', 'Brand or place', { text: 1 }));
   c1.appendChild(el('label', 'fl', 'Group'));
   c1.appendChild(groupBox);
@@ -446,18 +472,18 @@ function build() {
   g2.appendChild(textField('unit', 'Unit', { text: 1 }));
   c1.appendChild(g2);
 
-  /* ── raw and cooked ──
-     Rice roughly triples. Chicken loses about a quarter. This is the single
-     place a client's numbers go wrong, and the label is nearly always the raw
-     one, so the app has to be able to say which weight it is talking about.
+  /* ── raw, cooked, grilled, air-fried ──
+     Each of those is its own entry, typed from its own numbers. There was a
+     generator here that made them for you from one shrink figure, and Tom cut
+     it on 2026-09-05: if you are reading a label by hand anyway, picking
+     "grilled" off a list is a tap that buys you nothing, and one shrink
+     figure cannot be true for every pot and every pan. Separate manual
+     entries are the honest version and they are less app.
 
-     It is NOT a toggle on one food. Cooked rice is not raw rice displayed
-     differently: 100g of it really does have a third of the calories, because
-     the rest is water it drank. So it becomes its own entry, with its own
-     honest numbers, which is also the one you can weigh on the plate. You
-     type the label once and press a button; the arithmetic is not yours. */
-  c1.appendChild(textField('cook', 'Cooked weight, if the label is raw', {}));
-  c1.appendChild(el('div', 'note', 'What one label serving weighs after cooking. 100 g of dry rice comes out about 300 g. Leave it blank if the label already means cooked.'));
+     What survives is the naming, which is yours: "Chicken thigh grilled" is a
+     food, and the duplicate check below stops you making it twice. */
+  c1.appendChild(textField('pc', 'One piece weighs, if it comes in pieces', {}));
+  c1.appendChild(el('div', 'note', 'An egg, a thigh, a banana. Fill this in and you can ask for amounts in pieces instead of grams, and "1 piece" is saved as a serving so STATUS can log it that way too.'));
 
   const g3 = el('div', 'grid3');
   g3.appendChild(textField('kcal', 'Calories'));
@@ -496,10 +522,12 @@ function build() {
   c2.appendChild(extraRow(shotArea));
   M.appendChild(c2);
 
+
   /* ── what is already in there ── */
   const c3 = el('div', 'card');
   c3.appendChild(el('h2', null, 'YOUR FOODS'));
   c3.appendChild(el('div', 'note', 'The same library STATUS logs from. Ranked against the first amount above, so this is also the comparison: what it takes, and what it costs, to get the same thing out of each one.'));
+  c3.appendChild(searchInput);
   c3.appendChild(listHead);
   c3.appendChild(foodBox);
   M.appendChild(c3);
@@ -507,17 +535,98 @@ function build() {
   paintPortions();
 }
 
-/* The two things that are not about one amount: making the cooked twin, and
-   turning the card into a picture. Both live under the list rather than in
-   the save bar, because neither is the main job. */
+/* ══════════════ HANDING THE ENTRY TO SOMEBODY ══════════════
+   The other half of what this app is for. You read a label once; after that
+   the entry should be usable everywhere, not only here. Two shapes, because
+   the two readers are different people:
+
+     as words   for a person. A client pastes it into MyFitnessPal, Cronometer
+                or whatever they use, one field at a time, and the fields are
+                in the order those apps ask for them.
+     as a row   for a spreadsheet. Tab separated, so it drops straight into
+                Sheets or Excel across the columns rather than into one cell.
+
+   Nothing is invented on the way out: a figure the label never carried is
+   left blank rather than written as a zero, because a zero is a claim. */
+function entryText() {
+  const u = L.unit.trim() || 'serving';
+  const line = (k, v, unit) => v == null || v === '' ? null : k + ': ' + v + (unit ? ' ' + unit : '');
+  const out = [
+    [L.name.trim(), L.brand.trim()].filter(Boolean).join(' — '),
+    line('Serving size', r1(numv(L.amt, 0)), u),
+    line('Calories', numv(L.kcal) == null ? '' : Math.round(numv(L.kcal))),
+    line('Protein', numv(L.p), 'g'),
+    line('Carbs', numv(L.c), 'g'),
+    line('Fat', numv(L.f), 'g'),
+    line('Sodium', numv(L.na), 'mg'),
+    line('Potassium', numv(L.k), 'mg'),
+    line('Calcium', numv(L.ca), 'mg'),
+    line('Caffeine', numv(L.caff), 'mg'),
+  ].filter(Boolean);
+  const one = numv(L.pc);
+  if (one > 0) out.push('One piece: ' + r1(one) + ' ' + u);
+  const serves = PORTIONS.map(pt => { const w = work(pt); return w.mult > 0 ? w : null; }).filter(Boolean);
+  if (serves.length) {
+    out.push('');
+    out.push('Portions:');
+    serves.forEach(w => out.push('  ' + w.want + ' = ' + r1(w.mult * numv(L.amt, 0)) + ' ' + u));
+  }
+  return out.join('\n');
+}
+const COLS = [['Name', () => L.name.trim()], ['Brand', () => L.brand.trim()], ['Group', () => L.cat.trim()],
+  ['Serving', () => r1(numv(L.amt, 0))], ['Unit', () => L.unit.trim() || 'serving'],
+  ['Calories', () => numv(L.kcal) == null ? '' : Math.round(numv(L.kcal))],
+  ['Protein', () => numv(L.p)], ['Carbs', () => numv(L.c)], ['Fat', () => numv(L.f)],
+  ['Sodium', () => numv(L.na)], ['Potassium', () => numv(L.k)], ['Calcium', () => numv(L.ca)],
+  ['Caffeine', () => numv(L.caff)], ['Price', () => numv(L.price)],
+  ['One piece', () => numv(L.pc)],
+  ['Portions', () => PORTIONS.map(pt => { const w = work(pt); return w.mult > 0 ? w.want + ' = ' + r1(w.mult * numv(L.amt, 0)) : null; }).filter(Boolean).join('; ')]];
+function entryRow(withHead) {
+  const cell = v => v == null ? '' : String(v).replace(/[\t\n]/g, ' ');
+  const body = COLS.map(c => cell(c[1]())).join('\t');
+  return withHead ? COLS.map(c => c[0]).join('\t') + '\n' + body : body;
+}
+
+/* Copy, and if the browser will not allow it - a page opened straight from a
+   folder often will not - show the text with everything selected so it is one
+   keystroke away instead of a dead button. */
+function handOver(what, text) {
+  const fallback = () => UI.dialog({
+    title: what.toUpperCase(), width: 520,
+    body: b => {
+      b.appendChild(el('div', 'note', 'Select all and copy. The browser would not do it for you here.'));
+      const t = document.createElement('textarea');
+      t.value = text; t.style.minHeight = 'calc(var(--tap) * 5)';
+      b.appendChild(t);
+      setTimeout(() => { t.focus(); t.select(); }, 60);
+    },
+    actions: [{ label: 'DONE' }],
+  });
+  if (!navigator.clipboard || !navigator.clipboard.writeText) return fallback();
+  navigator.clipboard.writeText(text).then(
+    () => { Mobile.feedback('success'); UI.toast(what + ' copied. Paste it anywhere.'); },
+    fallback);
+}
+
 function extraRow(card) {
   const w = el('div');
   w.style.marginTop = 'var(--s-3)';
 
-  const cook = el('button', 'btn wide quiet mb-press mb-tap', 'Save the cooked version as its own food');
-  cook.style.marginBottom = 'var(--s-2)';
-  cook.onclick = saveCooked;
-  w.appendChild(cook);
+  const guard = fn => () => {
+    if (!L.name.trim()) { INPUTS.name.focus(); return UI.toast('Give it a name first', { bad: true }); }
+    if (!(numv(L.amt) > 0)) { INPUTS.amt.focus(); return UI.toast('The label serving amount is missing', { bad: true }); }
+    fn();
+  };
+
+  const asText = el('button', 'btn wide quiet mb-press mb-tap', 'Copy the entry, to paste anywhere');
+  asText.style.marginBottom = 'var(--s-2)';
+  asText.onclick = guard(() => handOver('The entry', entryText()));
+  w.appendChild(asText);
+
+  const asRow = el('button', 'btn wide quiet mb-press mb-tap', 'Copy it as a spreadsheet row');
+  asRow.style.marginBottom = 'var(--s-2)';
+  asRow.onclick = guard(() => handOver('The row', entryRow(1)));
+  w.appendChild(asRow);
 
   const share = el('button', 'btn wide quiet mb-press mb-tap', 'Save this as a picture');
   share.onclick = () => {
@@ -541,7 +650,7 @@ function addRow() {
   const chips = el('div', 'chips');
   const paint = () => {
     chips.innerHTML = '';
-    [['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat'], ['kcal', 'Calories'], ['amt', 'Weight']].forEach(k => {
+    [['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat'], ['kcal', 'Calories'], ['amt', 'Weight'], ['pc', 'Pieces']].forEach(k => {
       const b = el('button', 'chip mb-press mb-tap' + (addWhat === k[0] ? ' on' : ''), k[1]);
       b.onclick = () => { addWhat = k[0]; paint(); };
       chips.appendChild(b);
@@ -599,6 +708,16 @@ function paintPortions() {
         .filter(x => String(x).trim()).join(' · ')) + '</small>'
     : '';
 
+  /* The same name as something you already have, said before you have typed
+     a label into a row that is about to become a second copy of one. */
+  const dup = Rec.hydrated && nm ? twinOf(nm) : null;
+  if (dup) {
+    dupNote.style.display = '';
+    dupNote.innerHTML = 'You already have <b>' + esc(dup.name) + '</b>. Saving will offer to update that one.';
+    dupNote.onclick = () => loadFood(dup);
+    dupNote.style.cursor = 'pointer';
+  } else { dupNote.style.display = 'none'; }
+
   ptBox.innerHTML = '';
   if (!PORTIONS.length) {
     ptBox.appendChild(el('div', 'warnbox', 'Nothing yet. Add one below. 50 g of protein is the usual first question.'));
@@ -635,11 +754,11 @@ function paintPortions() {
          costs ₱42 from this and ₱78 from that" is the whole argument about
          whether eating properly is expensive. */
       if (numv(L.price)) bits.push(money(numv(L.price) * w.mult));
+      /* How many of them, where a piece is a thing you can count. Not shown
+         on the amount that asked in pieces, which would only repeat itself. */
+      const one = numv(L.pc);
+      if (one > 0 && numv(L.amt) > 0 && pt.what !== 'pc') bits.push(pieces(w.mult * numv(L.amt) / one));
       bits.push(r1(w.mult) + ' × the label serving');
-      /* The cooked weight, where the label is the raw one. Same food, same
-         numbers, the weight you would actually see on the plate. */
-      const ck = numv(L.cook);
-      if (ck > 0 && numv(L.amt) > 0) bits.push(r1(w.mult * ck) + ' ' + (L.unit.trim() || 'units') + ' cooked');
       row.appendChild(el('div', 'pt-m', esc(bits.join(' · '))));
     }
     ptBox.appendChild(row);
@@ -653,55 +772,6 @@ function paintPortions() {
   if (w !== lastWant) { lastWant = w; if (Rec.hydrated) paintFoods(); }
 }
 let lastWant = '';
-
-/* ══════════════ THE COOKED TWIN ══════════════
-   Same food, same nutrients, a different weight. Cooking adds or drives off
-   water and nothing else that matters here: a chicken breast that loses a
-   quarter of its weight still has all of its protein, so the numbers do not
-   change, only what one serving of it weighs.
-
-   Matched by name rather than by a stored link, so nothing extra is kept
-   anywhere and nothing for STATUS to drop. Press it twice and the second
-   press corrects the first; the worst it can do is leave a duplicate you can
-   see, which is the right failure for something with no undo. */
-function saveCooked() {
-  const name = L.name.trim();
-  const ck = numv(L.cook), amt = numv(L.amt);
-  if (!name) { INPUTS.name.focus(); return UI.toast('Give it a name first', { bad: true }); }
-  if (!(amt > 0)) { INPUTS.amt.focus(); return UI.toast('The label serving amount is missing', { bad: true }); }
-  if (!(ck > 0)) { INPUTS.cook.focus(); return UI.toast('What does one serving weigh cooked?', { bad: true }); }
-
-  const cname = name + ' (cooked)';
-  const was = Object.values(Rec.map('food')).find(f => f.name === cname);
-  const id = was ? was.id : newId();
-
-  const base = { amt: ck, unit: L.unit.trim() || 'serving' };
-  NUTS.concat(['price']).forEach(n => { const v = numv(L[n]); if (v != null) base[n] = v; });
-
-  /* The amounts are asked again of the cooked entry, so "50 g protein" comes
-     out as a cooked weight rather than the raw one relabelled. */
-  const serves = [];
-  PORTIONS.forEach(pt => {
-    if (pt.frozen) return;
-    const per = pt.what === 'amt' ? amt : numv(L[pt.what]);
-    if (!(per > 0)) return;
-    const mult = pt.what === 'amt' ? pt.v / ck : pt.v / per;
-    const want = pt.what === 'kcal' ? r1(pt.v) + ' kcal'
-      : pt.what === 'amt' ? r1(pt.v) + ' ' + (L.unit.trim() || 'units')
-      : r1(pt.v) + ' g ' + WORD[pt.what];
-    if (!(mult > 0) || serves.some(s => s.label === want)) return;
-    serves.push({ label: want, mult: mult });
-  });
-
-  Rec.set('food', null, id, {
-    id: id, name: cname, brand: L.brand.trim(), cat: L.cat.trim(),
-    base: base, serves: serves,
-    dflt: was ? (was.dflt || 0) : 0, uses: was ? (was.uses || 0) : 0, shot: was ? (was.shot || null) : null,
-  });
-  Mobile.feedback('success');
-  UI.toast('<b>' + esc(cname) + '</b> ' + (was ? 'brought up to date' : 'saved') +
-    ': ' + r1(ck) + ' ' + esc(base.unit) + ' where the raw label says ' + r1(amt) + '.');
-}
 
 /* ══════════════ THE LIBRARY, AS A COMPARISON ══════════════
    This list used to just say what was in there. It is more useful ranked
@@ -733,6 +803,14 @@ function needOf(fd, pt) {
     kcal: (numv(b.kcal, 0) || 0) * mult, price: (numv(b.price, 0) || 0) * mult };
 }
 
+/* The search box is built once and kept, because rebuilding it on every
+   keystroke would take the cursor out of it. */
+let listQ = '';
+const searchInput = document.createElement('input');
+searchInput.type = 'text';
+searchInput.placeholder = 'Search your foods';
+searchInput.addEventListener('input', () => { listQ = searchInput.value; paintFoods(); });
+
 function paintList() {
   listHead.innerHTML = '';
   const pt = against();
@@ -757,13 +835,32 @@ function paintList() {
     sorts.appendChild(b);
   });
   listHead.appendChild(sorts);
+
+  /* Two rows with the same name is the failure this app can cause, so it is
+     the failure it has to report. Named, counted, and pointed at, rather than
+     a number in a corner. */
+  const seen = {}, dups = [];
+  Object.values(Rec.map('food')).forEach(f => {
+    const k = String(f.name).trim().toLowerCase().replace(/\s+/g, ' ');
+    if (seen[k]) { if (dups.indexOf(seen[k]) < 0) dups.push(seen[k]); } else seen[k] = f.name;
+  });
+  if (dups.length) {
+    const w = el('div', 'warnbox');
+    w.style.marginTop = 'var(--s-3)';
+    w.innerHTML = 'Two or more foods share a name: <b>' + dups.map(esc).join('</b>, <b>') +
+      '</b>. Open each and give them different names, or delete the one you do not log from.';
+    listHead.appendChild(w);
+  }
 }
 
 function paintFoods() {
   paintList();
   const pt = against();
   let all = Object.values(Rec.map('food'));
+  const total = all.length;
   if (listCat) all = all.filter(f => (f.cat || '') === listCat);
+  const q = listQ.trim().toLowerCase();
+  if (q) all = all.filter(f => (f.name + ' ' + (f.brand || '') + ' ' + (f.cat || '')).toLowerCase().indexOf(q) > -1);
 
   const rows = all.map(fd => ({ fd: fd, need: needOf(fd, pt) }));
   const key = { need: r => r.need.amt, kcal: r => r.need.kcal, price: r => r.need.price };
@@ -785,9 +882,15 @@ function paintFoods() {
       : 'Nothing saved yet. Anything you save here shows up in STATUS as well, because it is the same library.'));
     return;
   }
-  rows.slice(0, 40).forEach(r => {
-    const fd = r.fd, b = el('button', 'item mb-press mb-tap');
-    const sub = [fd.cat, fd.brand, (fd.base.amt == null ? '' : r1(fd.base.amt) + ' ' + (fd.base.unit || '') + ' label')]
+  /* Everything, not a first forty. This is the whole library and the only
+     place it can be looked at, so a cap would hide exactly the old row you
+     came here to fix. Search is what makes a long list usable. */
+  rows.forEach(r => {
+    const fd = r.fd, b = el('div', 'item mb-press mb-tap');
+    const one = pieceOf(fd);
+    const sub = [fd.cat, fd.brand,
+      (fd.base.amt == null ? '' : r1(fd.base.amt) + ' ' + (fd.base.unit || '') + ' label'),
+      (one ? 'a piece is ' + one + ' ' + (fd.base.unit || '') : '')]
       .filter(x => String(x).trim()).join(' · ');
     const fig = r.need
       ? r1(r.need.amt) + ' ' + esc(r.need.unit) + '<br>' +
@@ -797,8 +900,30 @@ function paintFoods() {
     b.innerHTML = '<span class="nm">' + esc(fd.name) + '<small>' + esc(sub) + '</small></span>' +
       '<span class="fig">' + fig + '</span>';
     b.onclick = () => loadFood(fd);
+    const x = el('button', 'x mb-press mb-tap', '');
+    x.dataset.icon = 'del';
+    x.setAttribute('aria-label', 'Delete ' + fd.name);
+    x.onclick = e => { e.stopPropagation(); removeFood(fd); };
+    b.appendChild(x);
     foodBox.appendChild(b);
+    if (window.Icons) Icons.paint(b);
   });
+  const count = el('div', 'note');
+  count.style.marginBottom = '0';
+  count.textContent = rows.length === total ? total + ' foods' : rows.length + ' of ' + total + ' foods';
+  foodBox.appendChild(count);
+}
+
+/* Deleting is the one thing here with no undo in the store, so it gets one
+   in the app: the row is held for six seconds and put straight back. Meals
+   already logged keep the numbers they were saved with either way, which is
+   the whole point of freezing them into the meal row. */
+function removeFood(fd) {
+  const was = JSON.parse(JSON.stringify(fd));
+  Rec.del('food', null, fd.id);
+  if (EDIT === fd.id) { EDIT = null; syncBar(); }
+  Mobile.haptic('warn');
+  UI.undo('deleted <b>' + esc(fd.name) + '</b>', () => Rec.set('food', null, was.id, was));
 }
 
 function loadFood(fd) {
@@ -806,10 +931,13 @@ function loadFood(fd) {
   setField('name', fd.name || ''); setField('brand', fd.brand || ''); setField('cat', fd.cat || '');
   setField('amt', fd.base.amt); setField('unit', fd.base.unit || 'g');
   NUTS.concat(['price']).forEach(n => setField(n, fd.base[n] == null ? '' : fd.base[n]));
-  /* The cooked weight belongs to the food you were just looking at, not this
-     one, and nothing stores it. Clearing it is the honest default. */
-  setField('cook', '');
-  PORTIONS = (fd.serves || []).map(s => unlabel(s, fd.base));
+  /* The piece weight, on the other hand, IS stored - as the "1 piece"
+     serving - so it comes back with the food. */
+  setField('pc', pieceOf(fd) == null ? '' : pieceOf(fd));
+  /* Open on the next version you have not made yet, so loading the raw
+  /* "1 piece" is not an amount you asked for, it is how the piece weight is
+     kept. It goes back in the box above rather than into the list. */
+  PORTIONS = (fd.serves || []).filter(s => !/^1 piece$/.test(s.label)).map(s => unlabel(s, fd.base));
   if (!PORTIONS.length) PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
   paintPortions(); saveDraft(); syncBar();
   Mobile.feedback('open');
@@ -830,11 +958,38 @@ function syncBar() {
   document.getElementById('btnSave').textContent = EDIT ? 'UPDATE THIS FOOD' : 'SAVE TO MY FOODS';
 }
 
+/* ══ the same food twice ══
+   Two rows called Chicken Breast is the quiet way a library rots: you log
+   from whichever one you happen to tap, and the numbers stop agreeing with
+   themselves. So a new food whose name is already taken stops and asks,
+   rather than sliding a second one in beside the first.
+
+   Case and spacing do not count as a difference, because they never are. */
+const sameName = (a, b) => String(a).trim().toLowerCase().replace(/\s+/g, ' ') ===
+                           String(b).trim().toLowerCase().replace(/\s+/g, ' ');
+const twinOf = name => Object.values(Rec.map('food')).find(f => f.id !== EDIT && sameName(f.name, name));
+
 function saveFood() {
   const name = L.name.trim();
   if (!name) { INPUTS.name.focus(); return UI.toast('Give it a name first', { bad: true }); }
   if (!(numv(L.amt) > 0)) { INPUTS.amt.focus(); return UI.toast('The label serving amount is missing', { bad: true }); }
 
+  const dup = twinOf(name);
+  if (dup) {
+    return UI.confirm('You already have a food called ' + name,
+      'Update that one with what is on screen? Cancel instead and change the name, if this is really a different thing.')
+      .then(ok => {
+        if (!ok) { INPUTS.name.focus(); return; }
+        /* Take over the existing row rather than making a second one. Its
+           id is what every meal you have already logged points at. */
+        EDIT = dup.id; syncBar(); writeFood();
+      });
+  }
+  writeFood();
+}
+
+function writeFood() {
+  const name = L.name.trim();
   const base = { amt: numv(L.amt), unit: L.unit.trim() || 'serving' };
   NUTS.concat(['price']).forEach(n => { const v = numv(L[n]); if (v != null) base[n] = v; });
 
@@ -847,6 +1002,14 @@ function saveFood() {
     if (serves.some(s => s.label === w.want)) return;
     serves.push({ label: w.want, mult: w.mult });
   });
+  /* One piece, always, when the food has pieces. It is the serving you will
+     reach for most, and saving it is also how the piece weight survives:
+     there is no field for it on a food row, and a serving is the honest
+     place for "this is a thing you can pick up". */
+  const one = numv(L.pc);
+  if (one > 0 && !serves.some(s => s.label === '1 piece')) {
+    serves.unshift({ label: '1 piece', mult: one / numv(L.amt) });
+  }
 
   const id = EDIT || newId();
   const was = EDIT ? Rec.get('food', null, EDIT) : null;
