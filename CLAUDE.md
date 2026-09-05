@@ -158,7 +158,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `health.js` | Answers "is my data okay" without a test suite. |
 | `_smoke.html` | 64 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
-| `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. |
+| `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
 ---
 

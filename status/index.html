@@ -341,6 +341,10 @@ label.fl:first-child{margin-top:0}
 .seg.wrapseg{flex-wrap:wrap}
 /* The two ways out of the food search. Stacked, full width, and below the list
    so they never compete with a result you could have just tapped. */
+/* The brand, beside the name rather than buried in the small print. A tint
+   rather than a size, so a long name still wins the line. */
+.nm .brand{font-weight:400;font-size:var(--f-1);color:var(--accent);
+  margin-left:var(--s-2);letter-spacing:.04em;white-space:nowrap}
 .foodroutes{display:flex;flex-direction:column;gap:var(--s-2);margin-top:var(--s-3)}
 .foodroutes .btn{min-height:var(--tap)}
 
@@ -2790,8 +2794,16 @@ function foodPicker() {
       }
       all.slice(0, 40).forEach(f => {
         const r = el('div', 'row tap');
+        /* ── the brand goes on the name line ──
+           Tom, 2026-09-05: "otherwise Mcdo and Jollibee Chicken show up the
+           same." They did: the brand sat in the grey second line among the
+           serving size and the calories, where it read as another number.
+           Two foods called Chicken have to be tellable apart in the half
+           second you spend scanning, and the brand is the only thing that
+           separates them. */
         r.innerHTML = '<span class="nm">' + esc(f.name) +
-          '<small>' + esc(f.brand || '') + (f.brand ? ' \u00b7 ' : '') + r1(num(f.base.amt, 0)) + ' ' + esc(f.base.unit || '') + ' \u00b7 ' +
+          (f.brand ? '<b class="brand">' + esc(f.brand) + '</b>' : '') +
+          '<small>' + r1(num(f.base.amt, 0)) + ' ' + esc(f.base.unit || '') + ' · ' +
           Math.round(num(f.base.kcal, 0)) + ' kcal \u00b7 ' + r1(num(f.base.p, 0)) + 'p</small></span>';
         r.onclick = () => amountSheet(f);
         const e = el('button', 'x', '\u270e');
@@ -4434,6 +4446,16 @@ function rankCard() {
   c.appendChild(sseg);
   c.appendChild(el('div', 'note', esc(styleDef()[4])));
 
+  const nowSize = shareSize()[0];
+  c.appendChild(el('label', 'fl', 'Island size'));
+  const zseg = el('div', 'seg');
+  SHARE_SIZES.forEach(z => {
+    const zb = el('button', z[0] === nowSize ? 'on' : '', esc(z[1]));
+    zb.onclick = () => { S.set('shareSize', z[0]); Mobile.feedback('select'); draw(); };
+    zseg.appendChild(zb);
+  });
+  c.appendChild(zseg);
+
   const w = el('label', 'shopt');
   const b = document.createElement('input');
   b.type = 'checkbox'; b.checked = !!S.get('hideSpend', 1);
@@ -4459,16 +4481,30 @@ function rankCard() {
    What is left here is the three decisions that are STATUS's own: which card,
    how wide, and the date on top of it. */
 
-/* Two, because two is the choice. Tom, 2026-09-05: "Stat Island opaque, stat
-   island translucent." Clear - see-through with no gradient - was the third
-   and it was the one that fails: on a bright photo it is unreadable, which is
-   not a style, it is a mistake you can pick.
+/* Three, his names. I cut Transparent as "a mistake you can pick" and he put
+   it back, which is his call to make: on a dark plain photo it is the best of
+   the three and the gradient is the thing in the way.
    id, label, see-through, gradient behind it, what it is for */
 const SHARE_STYLES = [
+  ['clear', 'Transparent', 1, 0, 'Just the card, nothing behind it. Best on a dark, plain photo.'],
   ['glass', 'Translucent', 1, 1, 'The photo shows through, on a soft gradient so it reads on anything.'],
   ['solid', 'Opaque',      0, 0, 'A solid card. Nothing shows through, so nothing can fight the numbers.'],
 ];
 const shareStyle = () => S.get('shareStyle', 'glass');
+
+/* ── how big the island sits in the frame ──
+   Tom, 2026-09-05: "We might want the gradient to be bigger than the island,
+   allowing us to have the island be smaller on the actual story post."
+
+   The gradient always covers the whole frame; what changes is the card. At
+   88% the card IS the post and the photo is a border. Smaller, the photo is
+   the post and the numbers are an overlay on it, which is what a story
+   usually wants. */
+const SHARE_SIZES = [['big', 'Big', 0.88], ['mid', 'Medium', 0.68], ['small', 'Small', 0.52]];
+const shareSize = () => {
+  const id = S.get('shareSize', 'mid');
+  return SHARE_SIZES.filter(x => x[0] === id)[0] || SHARE_SIZES[1];
+};
 const styleDef = () => SHARE_STYLES.filter(x => x[0] === shareStyle())[0] || SHARE_STYLES[0];
 
 async function shareCard(a, kind) {
@@ -4500,6 +4536,8 @@ async function shareCard(a, kind) {
   try {
     await IO.saveShot(shot, 'status-' + (a && a.rank ? a.rank.k : 'day') + '-' + kind, {
       w: 1080, h: kind === 'story' ? 1920 : 1350,
+      /* The gradient still fills the frame; only the card shrinks. */
+      fill: shareSize()[2],
       /* On by default. It is the thing that makes one picture work on a dark
          photo and a bright one without asking him which he has. */
       scrim: !!styleDef()[3],
@@ -4560,6 +4598,25 @@ function drawTrends(m) {
      numbers and the label was quoting the wrong one */
   const plotted = (e.series || e.rows).length;
   const c2 = card('Weight', plotted + ' days');
+
+  /* ── the range, on the chart ──
+     Tom, 2026-09-05: "different tabs if we're in STATUS." It was a setting
+     called "History read" three screens away, which is a strange place for
+     the answer to "show me the last month".
+
+     It is the SAME setting, moved rather than copied. It decides how far back
+     everything is read, the estimate included, so a chart-only version would
+     draw ninety days beside a TDEE worked out from three years and the two
+     would quietly disagree. One control, where it is used. */
+  const lbNow = num(S.get('lookback', 0), 0) || 0;
+  const lbSeg2 = el('div', 'seg');
+  [[30, '30d'], [90, '90d'], [365, '1y'], [0, 'All']].forEach(([n, lbl]) => {
+    const b = el('button', lbNow === n ? 'on' : '', lbl);
+    b.onclick = () => { S.set('lookback', n); TD._dirty = true; Mobile.feedback('select'); draw(); };
+    lbSeg2.appendChild(b);
+  });
+  c2.appendChild(lbSeg2);
+
   c2.appendChild(weightChart(e));
   const w = TD.lastWeight(e.rows), goal = num(S.get('goalWeight', null));
 
@@ -5883,18 +5940,9 @@ function drawGoalsTab(pane) {
   fieldRow(pane, 'Adaptation rate', 'alpha', TD.alpha(), 'How far the estimate moves toward each new reading');
   fieldRow(pane, 'Trend window (days)', 'win', TD.win(), 'How far back the weight trend line looks');
 
-  /* A box wanting a number of days made you invent one. These are the four
-     anybody would have typed. */
-  pane.appendChild(el('label', 'fl', 'History read'));
-  const lbSeg = el('div', 'seg');
-  [[0, 'All'], [365, '1 year'], [180, '6 months'], [90, '90 days']].forEach(([n, lbl]) => {
-    const on = (num(S.get('lookback', 0), 0) || 0) === n;
-    const b = el('button', on ? 'on' : '', lbl);
-    b.onclick = () => { S.set('lookback', n); TD._dirty = true; draw(); };
-    lbSeg.appendChild(b);
-  });
-  pane.appendChild(lbSeg);
-  pane.appendChild(el('div', 'note', 'How far back anything is read'));
+  /* "History read" used to be here. It is on the weight chart on Trends now,
+     which is the only place anybody wants it, and it is the same setting
+     rather than a second one. */
 
   /* Still stated per pound, because that is what the number IS and changing
      its meaning per user would make one saved setting mean two things. What it

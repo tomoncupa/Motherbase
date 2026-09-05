@@ -168,6 +168,35 @@ Panels rise because they came from the bottom. A selected tab slides because it
 is one control, not five. Nothing animates for decoration, and nothing takes
 longer than it needs to. If the phone is set to reduce motion, none of it runs.
 
+### 14. If a screen exists to be typed into, the typing cursor is already there
+
+Set by Tom on 2026-09-05: "Adapt the behavior of having the text field already
+selected and keyboard up, make sure you do this everywhere its relevant."
+
+**Use `UI.focusSoon(field)`. Never a bare `field.focus()`.** Two things make
+this harder than it looks, and both have been got wrong here:
+
+- **iOS only raises the keyboard when the focus happens inside the tap that
+  asked for it.** A focus in a callback, on an animation ending, or in a plain
+  timer is ignored. The cursor appears, the keyboard does not, and it reads as
+  the app ignoring you.
+- **A panel builder runs before the panel is on the page.** Focusing from
+  inside one lands on an element in no document and does nothing. Call
+  `UI.focusSoon` straight after the panel is open, still inside the tap.
+
+**"Relevant" is the whole rule, and it is a judgement, not a sweep.** A screen
+you came to TYPE into gets the cursor. A screen you came to READ does not,
+because a keyboard covers the thing you came for. TRAIN's exercise picker has
+it; TRAIN's records screen has the same search box and deliberately does not.
+
+Two guards wherever the screen redraws as you type, or it will fight you: only
+reach for the field when it is empty, and never when something else already
+has the cursor.
+
+Where a field is already filled in correctly, put the cursor on the FIRST
+field that still needs work instead. Logging a one-off meal fills the name in
+from what you searched, so the cursor lands on the calories.
+
 ---
 
 ## Where the parts live
