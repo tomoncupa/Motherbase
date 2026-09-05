@@ -398,6 +398,7 @@ main{display:flex;flex:1;min-height:0}
 .sumcards{display:flex;gap:10px;flex-wrap:wrap}
 .freshrow{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;
   margin-top:var(--s-4)}
+.freshlab{color:var(--text-muted);font-size:var(--f-1);letter-spacing:.06em;text-transform:uppercase}
 .freshnote{color:var(--text-muted);font-size:var(--f-1)}
 .sumcard{
   flex:1 1 150px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel);
@@ -1930,9 +1931,29 @@ function logDay(k) {
 }
 function logToday() { logDay(todayKey()); }
 /** completion rate per block name across the recorded history */
+/* ── what the record covers ──
+   Tom, 2026-09-05: "if I reset the date then I don't want the feedback on
+   where im falling short thats the point."
+
+   He is right and the old behaviour undid itself. Drawing a line under the
+   past and then being told "0% of the 13 times it came up" about days on the
+   far side of that line is not a fresh start, it is the same verdict with a
+   new number next to it.
+
+   A restart is a real device, not a comfort: a temporal landmark raises what
+   people are willing to attempt, which is the entire reason to offer one. And
+   the panel's own copy already says self-blame makes the next attempt less
+   likely — then it listed thirty-seven failures. It cannot say both.
+
+   So the line moves the START OF THE RECORD, not just the streak counter.
+   Every old day is still logged, still on the chart, still in the backup. It
+   is simply not evidence about the plan you are running now. */
+function statsFrom() { return S.streakFrom || null; }
+
 function blockStats() {
   const m = {};
-  Object.values(S.log || {}).forEach(e => {
+  const from = statsFrom();
+  Object.keys(S.log || {}).filter(k => !from || k >= from).map(k => S.log[k]).forEach(e => {
     (e.t || []).forEach(k => { (m[k] = m[k] || { key: k, n: keyName(k), where: String(k).split('||')[1] || '', seen: 0, done: 0 }).seen++; });
     (e.d || []).forEach(k => { if (m[k]) m[k].done++; });
   });
@@ -3487,27 +3508,40 @@ function renderSum() {
   cards.appendChild(card(stats.length ? stats.filter(s => s.rate >= .8 && s.seen >= 3).length : 0, 'blocks you reliably do', 'Done 80%+ of the times they came up'));
   p.appendChild(cards);
 
-  /* Quiet, under the numbers rather than beside them: this is not something to
-     reach for often, and a loud button would invite it. */
+  /* ── where the record starts ──
+     A date, not a button. Tom, 2026-09-05: "I don't need a count from the
+     beginning again button, maybe we can manually set the count date." A
+     two-state toggle only ever offers today or the beginning, and neither is
+     the answer when what you want is "from the Monday I actually restarted".
+
+     Everything before this date stays logged and stays on the chart. It stops
+     being evidence, not history. */
   const fresh = el('div', 'freshrow');
-  const fb = el('button', 'btn');
-  fb.textContent = S.streakFrom ? 'Count from the beginning again' : 'Start the streak from today';
-  fb.dataset.tip = S.streakFrom
-    ? 'Go back to counting from the first day you logged'
-    : 'Draw a line under everything before today. Nothing is deleted — every tick, chart and backup stays exactly as it is';
-  fb.onclick = () => {
+  fresh.appendChild(el('span', 'freshlab', 'Counting since'));
+  const fd = document.createElement('input');
+  fd.type = 'date';
+  fd.value = S.streakFrom || '';
+  fd.max = todayKey();
+  fd.dataset.tip = 'Days before this stay logged and stay on the chart. They stop counting toward the streak, and the notes below stop being about them.';
+  fd.onchange = () => {
     const was = S.streakFrom || null;
-    S.streakFrom = was ? null : todayKey();
+    S.streakFrom = fd.value || null;
     save(); render();
     if (window.UI && UI.undo) {
-      UI.undo(was ? 'Counting from the beginning again' : 'Streak starts from today',
+      UI.undo(S.streakFrom ? 'Counting from ' + S.streakFrom : 'Counting from the first day you logged',
         () => { S.streakFrom = was; save(); render(); });
     }
   };
-  fresh.appendChild(fb);
+  fresh.appendChild(fd);
   if (S.streakFrom) {
-    fresh.appendChild(el('span', 'freshnote',
-      'Counting from ' + esc(S.streakFrom) + '. Everything before it is still logged.'));
+    const clr = el('button', 'btn sm', 'All of it');
+    clr.dataset.tip = 'Count from the first day you ever logged';
+    clr.onclick = () => {
+      const was = S.streakFrom;
+      S.streakFrom = null; save(); render();
+      if (window.UI && UI.undo) UI.undo('Counting all of it', () => { S.streakFrom = was; save(); render(); });
+    };
+    fresh.appendChild(clr);
   }
   p.appendChild(fresh);
 
@@ -3522,26 +3556,38 @@ function renderSum() {
   p.appendChild(el('h4', 'sumh', 'Last 14 days'));
   p.appendChild(spark);
 
-  /* the point of all this: name the blocks that keep not happening */
-  const chronic = stats.filter(s => s.seen >= 4 && s.rate < .5);
+  /* ── naming what keeps not happening ──
+     Only ever about days since the line, and never more than three at once.
+     Thirty-seven cards is not feedback, it is an inventory of failure, and
+     nobody acts on an inventory. Three is a thing you can do something about
+     this week. */
+  const chronic = stats.filter(s => s.seen >= 4 && s.rate < .5).slice(0, 3);
   const solid = stats.filter(s => s.seen >= 3 && s.rate >= .8);
+  const sinceLine = statsFrom() ? days.filter(k => k >= statsFrom()).length : days.length;
   p.appendChild(el('h4', 'sumh', 'What the record says'));
   const advice = el('div', 'advice');
-  if (!days.length) {
-    advice.appendChild(el('div', 'adv', 'Tick a few days off and this fills in. Two weeks is enough to see a pattern; one bad day is never a pattern.'));
+  /* A restart means there is nothing to report yet, and saying so is the
+     point. Four days is the floor for calling anything a pattern. */
+  if (statsFrom() && sinceLine < 4) {
+    advice.appendChild(el('div', 'adv',
+      'Counting from <b>' + esc(statsFrom()) + '</b>. ' +
+      (sinceLine ? sinceLine + (sinceLine === 1 ? ' day' : ' days') + ' in.' : 'Starts today.') +
+      ' <span class="dim">Nothing to say yet.</span>'));
+  } else if (!days.length) {
+    advice.appendChild(el('div', 'adv', 'Tick a few days off and this fills in. One bad day is never a pattern.'));
   } else if (!chronic.length) {
     /* competence + autonomy, not praise for its own sake: name the specific thing that worked */
     const best = solid[solid.length - 1];
     advice.appendChild(el('div', 'adv good',
-      '<b>Everything here is holding.</b> <span class="dim">' +
-      (best ? '<b>' + esc(best.n) + '</b> is running at ' + Math.round(best.rate * 100) + '%. ' : '') +
-      'Data shows this routine can be added to.</span>'));
+      '<b>Everything is holding.</b> <span class="dim">' +
+      (best ? esc(best.n) + ' at ' + Math.round(best.rate * 100) + '%. ' : '') +
+      'Room to add something.</span>'));
   } else {
+    /* One line. The long version said the right things and said them four
+       times; he has read it. */
     advice.appendChild(el('div', 'adv note',
       '<b>' + chronic.length + (chronic.length > 1 ? ' blocks are' : ' block is') + ' not sticking.</b> ' +
-      '<span class="dim">Worth saying plainly: this is information about the <i>plan</i>, not about you. A block that keeps getting skipped is usually mis-sized, ' +
-      'mis-placed, or missing a cue — and self-blame reliably makes the next attempt <i>less</i> likely, not more. Shrink it until it is almost too easy, ' +
-      'attach it to something you already do without thinking, and let the size grow back on its own.</span>'));
+      '<span class="dim">That is the plan, not you. Make it smaller, or put it after something you already do.</span>'));
   }
   chronic.forEach(s => {
     const pct = Math.round(s.rate * 100);

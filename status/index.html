@@ -4329,17 +4329,29 @@ function rankCard() {
   /* The picture is the Today card, so if the Spent tile is on your Today it is
      in the picture too. It starts hidden: what you spend is nobody's business
      and a default that leaks it is the wrong default. */
-  const opt = (label, key, dflt) => {
-    const w = el('label', 'shopt');
-    const b = document.createElement('input');
-    b.type = 'checkbox'; b.checked = !!S.get(key, dflt);
-    b.onchange = () => S.set(key, b.checked ? 1 : 0);
-    w.appendChild(b); w.appendChild(el('span', null, label));
-    c.appendChild(w);
-  };
-  opt('See-through card', 'shareSeeThru', 1);
-  opt('Darken the photo behind it', 'shareScrim', 1);
-  opt('Leave spending out', 'hideSpend', 1);
+  /* ── one choice, not three switches ──
+     Tom, 2026-09-05: "strava leads you to a swipe menu of setting styles, so
+     it can be transparent or a solid block." Right, and three checkboxes was
+     me exposing the machinery instead of the choice. See-through and darken
+     are not two decisions, they are one look, and nobody wants a transparent
+     card with no scrim - that is the unreadable combination. */
+  const nowStyle = shareStyle();
+  c.appendChild(el('label', 'fl', 'Style'));
+  const sseg = el('div', 'seg');
+  SHARE_STYLES.forEach(st => {
+    const sb = el('button', st[0] === nowStyle ? 'on' : '', esc(st[1]));
+    sb.onclick = () => { S.set('shareStyle', st[0]); Mobile.feedback('select'); draw(); };
+    sseg.appendChild(sb);
+  });
+  c.appendChild(sseg);
+  c.appendChild(el('div', 'note', esc(styleDef()[4])));
+
+  const w = el('label', 'shopt');
+  const b = document.createElement('input');
+  b.type = 'checkbox'; b.checked = !!S.get('hideSpend', 1);
+  b.onchange = () => S.set('hideSpend', b.checked ? 1 : 0);
+  w.appendChild(b); w.appendChild(el('span', null, 'Leave spending out'));
+  c.appendChild(w);
   return c;
 }
 
@@ -4359,6 +4371,15 @@ function rankCard() {
    What is left here is the three decisions that are STATUS's own: which card,
    how wide, and the date on top of it. */
 
+/* id, label, see-through, scrim, what it is for */
+const SHARE_STYLES = [
+  ['glass', 'Glass',  1, 1, 'See-through, on a soft gradient. Works on almost any photo.'],
+  ['clear', 'Clear',  1, 0, 'See-through and nothing else. Best on a dark, plain photo.'],
+  ['solid', 'Solid',  0, 0, 'A solid card. Nothing shows through, so nothing can fight the numbers.'],
+];
+const shareStyle = () => S.get('shareStyle', 'glass');
+const styleDef = () => SHARE_STYLES.filter(x => x[0] === shareStyle())[0] || SHARE_STYLES[0];
+
 async function shareCard(a, kind) {
   const d = vd();
 
@@ -4374,7 +4395,7 @@ async function shareCard(a, kind) {
     /* On by default: the point of a transparent PNG is that the photo is part
        of the picture, and a solid panel over your own body is a sticker. Off
        is there for a busy photo, where see-through costs you the numbers. */
-    seethru: !!S.get('shareSeeThru', 1),
+    seethru: !!styleDef()[2],
     /* The picture is the card, so if the Spent tile is on your Today it is in
        the picture. hideSpend keeps it out, and starts on. */
     money: !S.get('hideSpend', 1),
@@ -4390,7 +4411,7 @@ async function shareCard(a, kind) {
       w: 1080, h: kind === 'story' ? 1920 : 1350,
       /* On by default. It is the thing that makes one picture work on a dark
          photo and a bright one without asking him which he has. */
-      scrim: !!S.get('shareScrim', 1),
+      scrim: !!styleDef()[3],
       width: Math.max(340, Math.min(440, cardW || 390)),
       /* The reading is sized by measuring, and this copy has never been
          measured - without this a long one clips in the picture while looking
