@@ -236,6 +236,10 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 /* Where you are in the list, and what you have slipped past. `late` is a mark,
    not a colour change - being behind should be visible, not loud. */
 .row.here{border-color:var(--acc)}
+.tidy{display:block;width:100%;margin-top:8px;padding:8px;background:transparent;
+  border:0;border-top:1px solid var(--line);color:var(--dim);font:inherit;
+  font-size:12px;letter-spacing:.06em;text-align:center;cursor:pointer;
+  min-height:var(--tap,44px)}
 .row.late:not(.done) .t{color:var(--warn,var(--acc));opacity:.9}
 .row.done .n{text-decoration:line-through;text-decoration-color:var(--dim2);color:var(--dim)}
 .chk{width:26px;height:26px;flex:0 0 auto;border:2px solid var(--line2);border-radius:50%;
@@ -936,6 +940,15 @@ function todayItems() {
   });
 
   return out.sort((a, b) => {
+    /* Done sinks to the bottom. This is a reversal: it used to stay where it
+       happened, because sinking is what breaks a strictly chronological read.
+       Tom, 2026-09-05, chose the other trade — what is LEFT is what he needs
+       to see, and a finished thing sitting in the middle of the list is just
+       something to read past. The history is not lost, it is underneath.
+
+       Nothing UNDONE is ever moved by this. That was the condition. */
+    const d = x => x.done ? 1 : 0;
+    if (d(a) !== d(b)) return d(a) - d(b);
     const at = x => x.at == null ? 1e9 : x.at;
     if (at(a) !== at(b)) return at(a) - at(b);
     /* Both untimed: an open task outranks a note about the past. */
@@ -1035,7 +1048,8 @@ const WIDGETS = {
       return done + ' / ' + it.length + ' done';
     },
     title: () => { const t = LifeOS.doc().today; return t && t.date === LifeOS.day() ? (t.name || '') : ''; },
-    draw(body) {
+    draw(body, cfg) {
+      cfg = cfg || {};
       const today = LifeOS.day();
       const t = LifeOS.doc().today;
       const items = todayItems();
@@ -1091,11 +1105,31 @@ const WIDGETS = {
         return;
       }
 
+      /* ── what you missed, and where it sits ──
+         Tom, 2026-09-05: "Sometimes it can be overwhelming to see how much
+         wasn't done."
+
+         The honest answer is not to hide it. It is to stop it sitting between
+         you and the next thing you could actually do. Tidied, the missed ones
+         gather just above the done ones, so the top of the list is only what
+         is still ahead of you.
+
+         OFF by default, and it is a per-widget setting, because moving
+         something you have not done is a decision he asked to be asked
+         about. */
+      const clock = new Date().getHours() * 60 + new Date().getMinutes();
+      const isMissed = x => !x.done && x.at != null && x.at + (x.dur || 0) < clock;
+      const missed = items.filter(isMissed);
+      const shown = (cfg.tidy && missed.length)
+        ? items.filter(x => !x.done && !isMissed(x))
+            .concat(missed)
+            .concat(items.filter(x => x.done))
+        : items;
+
       const list = el('div', 'rowlist');
       const mark = nn && nn.it ? nn.it : null;
-      const clock = new Date().getHours() * 60 + new Date().getMinutes();
       let here = null;
-      items.forEach(x => {
+      shown.forEach(x => {
         /* `late` is quiet on purpose. It is the difference between a list and
            a telling-off, and a day you are behind on is the day you most need
            to still want to open this. */
@@ -1117,6 +1151,20 @@ const WIDGETS = {
         list.appendChild(r);
       });
       body.appendChild(list);
+
+      /* One tap, in the place it matters, and only on a day where it means
+         anything. A setting for this would be a thing to go and find on the
+         day you least feel like looking. */
+      if (missed.length) {
+        const t2 = el('button', 'tidy', missed.length + ' missed · ' +
+          (cfg.tidy ? 'show in place' : 'move down'));
+        t2.onclick = () => {
+          cfg.tidy = cfg.tidy ? 0 : 1;
+          saveLayout(); drawHome();
+        };
+        body.appendChild(t2);
+      }
+
       /* Open it and the thing you are on is already on screen. Only the list
          scrolls - scrollIntoView would take the whole page with it. */
       if (here && list.scrollHeight > list.clientHeight) {

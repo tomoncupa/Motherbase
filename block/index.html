@@ -390,6 +390,9 @@ main{display:flex;flex:1;min-height:0}
 #pri,#sum{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:14px;max-width:920px}
 #pri.hide,#sum.hide{display:none}
 .sumcards{display:flex;gap:10px;flex-wrap:wrap}
+.freshrow{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;
+  margin-top:var(--s-4)}
+.freshnote{color:var(--text-muted);font-size:var(--f-1)}
 .sumcard{
   flex:1 1 150px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel);
   display:flex;flex-direction:column;gap:3px;
@@ -1929,11 +1932,26 @@ function blockStats() {
   return Object.values(m).map(x => Object.assign(x, { rate: x.seen ? x.done / x.seen : 0 })).sort((a, b) => a.rate - b.rate);
 }
 /** consecutive days back from today where everything scheduled got ticked */
+/* ── the streak, and where it is allowed to start ──
+   `S.streakFrom` is a line drawn under the past. The walk back stops there,
+   so the number counts from that day forward and everything older is still in
+   the log, still on the charts, still in the backup. Nothing is deleted.
+
+   Tom, 2026-09-05: "add a button in block, that resets the day we start
+   tracking streaks without removing tracked data. Sometimes it can be
+   overwhelming to see how much wasn't done."
+
+   That is a real reason and it does not conflict with never removing earned
+   progress: the progress is all still there. What moves is where the counting
+   starts, which is a thing you are allowed to decide about your own life. */
 function streak() {
+  const from = S.streakFrom || null;
   let n = 0;
   for (let i = 0; i < 180; i++) {
     const d = new Date(); d.setDate(d.getDate() - i);
-    const e = (S.log || {})[d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())];
+    const key = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    if (from && key < from) break;
+    const e = (S.log || {})[key];
     if (!e || !e.t.length) { if (i === 0) continue; break; }
     if (e.d.length >= e.t.length) n++; else break;
   }
@@ -3401,10 +3419,36 @@ function renderSum() {
   const rates = last14.map(k => { const e = (S.log || {})[k]; return e && e.t.length ? e.d.length / e.t.length : null; });
   const avg = rates.filter(r => r != null);
   const card = (big, label, tip) => { const c = el('div', 'sumcard'); c.innerHTML = '<b>' + big + '</b><span>' + label + '</span>'; if (tip) c.dataset.tip = tip; return c; };
-  cards.appendChild(card(st + (st === 1 ? ' day' : ' days'), 'current streak', 'Days in a row where everything scheduled got ticked'));
+  cards.appendChild(card(st + (st === 1 ? ' day' : ' days'), 'current streak',
+    'Days in a row where everything scheduled got ticked' +
+    (S.streakFrom ? ' — counting from ' + S.streakFrom : '')));
   cards.appendChild(card(avg.length ? Math.round(avg.reduce((a, b) => a + b, 0) / avg.length * 100) + '%' : '—', 'finished, last 14 days'));
   cards.appendChild(card(stats.length ? stats.filter(s => s.rate >= .8 && s.seen >= 3).length : 0, 'blocks you reliably do', 'Done 80%+ of the times they came up'));
   p.appendChild(cards);
+
+  /* Quiet, under the numbers rather than beside them: this is not something to
+     reach for often, and a loud button would invite it. */
+  const fresh = el('div', 'freshrow');
+  const fb = el('button', 'btn');
+  fb.textContent = S.streakFrom ? 'Count from the beginning again' : 'Start the streak from today';
+  fb.dataset.tip = S.streakFrom
+    ? 'Go back to counting from the first day you logged'
+    : 'Draw a line under everything before today. Nothing is deleted — every tick, chart and backup stays exactly as it is';
+  fb.onclick = () => {
+    const was = S.streakFrom || null;
+    S.streakFrom = was ? null : todayKey();
+    save(); render();
+    if (window.UI && UI.undo) {
+      UI.undo(was ? 'Counting from the beginning again' : 'Streak starts from today',
+        () => { S.streakFrom = was; save(); render(); });
+    }
+  };
+  fresh.appendChild(fb);
+  if (S.streakFrom) {
+    fresh.appendChild(el('span', 'freshnote',
+      'Counting from ' + esc(S.streakFrom) + '. Everything before it is still logged.'));
+  }
+  p.appendChild(fresh);
 
   const spark = el('div', 'spark');
   last14.forEach((k, i) => {
