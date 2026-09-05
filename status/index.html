@@ -339,6 +339,10 @@ label.fl:first-child{margin-top:0}
 .setpane > .field > .note{margin-bottom:0}
 .setpane > .seg{margin-bottom:var(--s-2)}
 .seg.wrapseg{flex-wrap:wrap}
+/* The two ways out of the food search. Stacked, full width, and below the list
+   so they never compete with a result you could have just tapped. */
+.foodroutes{display:flex;flex-direction:column;gap:var(--s-2);margin-top:var(--s-3)}
+.foodroutes .btn{min-height:var(--tap)}
 
 /* ── the card, on a photograph ──
    Tom, 2026-09-05: "This card could not be opaque." He is right. An overlay
@@ -2745,44 +2749,126 @@ function spendSheet(existing) {
 /* ══════════════ FOOD ══════════════ */
 
 function foodPicker() {
+  /* ── the point of this screen ──
+     You are standing in a kitchen holding a plate. There are three things it
+     could be: something you eat all the time, something new you will eat
+     again, and something you will never eat again as long as you live.
+
+     The first is a search. The other two both start by typing its NAME, and
+     the old screen threw that name away: you typed "chicken adobo", pressed
+     New food, and got an empty form to type it into again. Tom, 2026-09-05:
+     "Would it be possible to start typing the food name, then when the buttons
+     appear, it continues off of what I already typed?"
+
+     So what you type is the one input, and both routes out of here carry it. */
+  let qRef = null;
   openSheet('Food', body => {
     const q = document.createElement('input');
-    q.type = 'search'; q.placeholder = 'Search foods';
+    q.type = 'search'; q.placeholder = 'What did you eat?';
+    q.autocomplete = 'off';
     body.appendChild(q);
+    qRef = q;
 
     const list = el('div');
     list.style.marginTop = '9px';
+    /* The two ways out. They live under the list and say the words you typed,
+       so it is obvious they are about THIS food and not a fresh start. */
+    const routes = el('div', 'foodroutes');
+
     const paint = () => {
-      const term = q.value.trim().toLowerCase();
+      const raw = q.value.trim();
+      const term = raw.toLowerCase();
       const all = Object.values(foods())
         .filter(f => !term || (f.name + ' ' + (f.brand || '')).toLowerCase().indexOf(term) > -1)
         .sort((a, b) => (b.uses || 0) - (a.uses || 0) || String(a.name).localeCompare(String(b.name)));
       list.innerHTML = '';
       if (!all.length) {
         list.appendChild(el('div', 'empty', Object.keys(foods()).length
-          ? 'Nothing matches, so try fewer letters or add it as a new food.'
+          ? (raw ? 'No match. Either button below keeps what you typed.'
+                 : 'Type a few letters, or photograph a nutrition panel.')
           : 'Photograph a nutrition panel or type one in'));
       }
       all.slice(0, 40).forEach(f => {
         const r = el('div', 'row tap');
         r.innerHTML = '<span class="nm">' + esc(f.name) +
-          '<small>' + esc(f.brand || '') + (f.brand ? ' · ' : '') + r1(num(f.base.amt, 0)) + ' ' + esc(f.base.unit || '') + ' · ' +
-          Math.round(num(f.base.kcal, 0)) + ' kcal · ' + r1(num(f.base.p, 0)) + 'p</small></span>';
+          '<small>' + esc(f.brand || '') + (f.brand ? ' \u00b7 ' : '') + r1(num(f.base.amt, 0)) + ' ' + esc(f.base.unit || '') + ' \u00b7 ' +
+          Math.round(num(f.base.kcal, 0)) + ' kcal \u00b7 ' + r1(num(f.base.p, 0)) + 'p</small></span>';
         r.onclick = () => amountSheet(f);
-        const e = el('button', 'x', '✎');
+        const e = el('button', 'x', '\u270e');
         e.onclick = ev => { ev.stopPropagation(); foodEditor(f); };
         r.appendChild(e);
         list.appendChild(r);
       });
+
+      routes.innerHTML = '';
+      const named = raw ? '\u201c' + esc(raw) + '\u201d' : 'it';
+      const once = el('button', 'btn wide mb-press mb-tap', 'Log ' + named + ' once');
+      once.dataset.tip = 'Numbers only, nothing saved to your foods';
+      once.onclick = () => onceSheet(raw);
+      routes.appendChild(once);
+
+      const add = el('button', 'btn go wide mb-press mb-tap',
+        raw ? 'Save ' + named + ' as a food' : 'New food');
+      add.dataset.tip = 'Keeps it, so next time it is one tap';
+      add.onclick = () => foodEditor(null, raw);
+      routes.appendChild(add);
     };
     q.oninput = paint; paint();
     body.appendChild(list);
-
-    const add = el('button', 'btn go wide', 'New food');
-    add.style.cssText = 'margin-top:var(--s-2);min-height:var(--tap)';
-    add.onclick = () => foodEditor(null);
-    body.appendChild(add);
+    body.appendChild(routes);
   });
+  /* After the sheet is up and still inside the tap — see UI.focusSoon. */
+  UI.focusSoon(qRef);
+}
+
+/* ── a meal with no food behind it ──
+   Restaurant food, a friend's cooking, the thing at the airport. Saving it to
+   your foods would be filing something you will never look up again, and a
+   food list full of those is a food list you stop searching.
+
+   A meal row already carries its own name, calories and protein, so this needs
+   nothing new in the store: it is a meal with an empty `food`. Everything that
+   reads meals already reads the name off the meal. */
+function onceSheet(name) {
+  let kRef = null;
+  openSheet('Log once', body => {
+    body.appendChild(el('div', 'note', 'Logged today and nothing else. It will not be added to your foods.'));
+
+    const nm = document.createElement('input');
+    nm.type = 'text'; nm.placeholder = 'What was it?'; nm.value = name || '';
+    body.appendChild(el('label', 'fl', 'Name'));
+    body.appendChild(nm);
+
+    const g = el('div', 'grid2');
+    const mk = (lbl, ph) => {
+      const w = el('div', 'field');
+      w.appendChild(el('label', 'fl', lbl));
+      const i = document.createElement('input');
+      i.type = 'number'; i.inputMode = 'decimal'; i.min = '0'; i.placeholder = ph;
+      w.appendChild(i); g.appendChild(w); return i;
+    };
+    const kc = mk('Calories', '0');
+    const pr = mk('Protein (g)', '0');
+    body.appendChild(g);
+    kRef = kc;
+
+    body.appendChild(saveBar('Log it', () => {
+      const k = num(kc.value, 0) || 0, p = num(pr.value, 0) || 0;
+      const label = nm.value.trim();
+      if (!label) return UI.toast('What was it?', { bad: true });
+      if (!k && !p) return UI.toast('Calories or protein, at least one', { bad: true });
+      const d = vd();
+      Rec.set('meal', d, uid(), {
+        food: '', name: label, amt: 1, unit: 'serving', serve: 'one off',
+        kcal: k, p: p, c: 0, f: 0, t: Date.now(),
+      });
+      Mobile.feedback('tick');
+      closeSheet(); draw();
+      UI.toast('<b>' + esc(label) + '</b> logged');
+    }));
+  });
+  /* The name is usually already right, so the caret goes where the work is. */
+  UI.focusSoon(name ? kRef : null, true);
 }
 
 /* Which account it came out of. Blank is a real answer and the default: most
@@ -2901,9 +2987,12 @@ function amountSheet(fd) {
 }
 
 /* the food itself: the label as printed, then your own servings on top */
-function foodEditor(fd) {
+function foodEditor(fd, prefillName) {
   const isNew = !fd;
-  const f = fd ? JSON.parse(JSON.stringify(fd)) : { id: uid(), name: '', brand: '', base: { amt: 100, unit: 'g' }, serves: [], uses: 0 };
+  /* Whatever was typed into the search comes with you. Nobody should have to
+     type a food's name twice in the same ten seconds. */
+  const f = fd ? JSON.parse(JSON.stringify(fd))
+    : { id: uid(), name: prefillName || '', brand: '', base: { amt: 100, unit: 'g' }, serves: [], uses: 0 };
   openSheet(isNew ? 'New food' : 'Edit food', body => {
     const inputs = {};
     let shotId = f.shot || null;
@@ -3668,10 +3757,9 @@ function noteSheet(x, d) {
      for it. The old code focused on a 380ms timer, so the caret appeared and
      the keyboard did not - which is what Tom kept seeing. This line is still
      inside the same click, and the sheet is in the document by now. */
-  if (taRef) {
-    taRef.focus();
-    try { taRef.setSelectionRange(taRef.value.length, taRef.value.length); } catch (e) {}
-  }
+  /* One way to do this, in shared/ui.js, so the next app does not have to
+     rediscover that iOS only honours a focus inside the gesture. */
+  UI.focusSoon(taRef, reopening);
 }
 
 function noteMenu(x, d, i, n) {
@@ -4371,11 +4459,14 @@ function rankCard() {
    What is left here is the three decisions that are STATUS's own: which card,
    how wide, and the date on top of it. */
 
-/* id, label, see-through, scrim, what it is for */
+/* Two, because two is the choice. Tom, 2026-09-05: "Stat Island opaque, stat
+   island translucent." Clear - see-through with no gradient - was the third
+   and it was the one that fails: on a bright photo it is unreadable, which is
+   not a style, it is a mistake you can pick.
+   id, label, see-through, gradient behind it, what it is for */
 const SHARE_STYLES = [
-  ['glass', 'Glass',  1, 1, 'See-through, on a soft gradient. Works on almost any photo.'],
-  ['clear', 'Clear',  1, 0, 'See-through and nothing else. Best on a dark, plain photo.'],
-  ['solid', 'Solid',  0, 0, 'A solid card. Nothing shows through, so nothing can fight the numbers.'],
+  ['glass', 'Translucent', 1, 1, 'The photo shows through, on a soft gradient so it reads on anything.'],
+  ['solid', 'Opaque',      0, 0, 'A solid card. Nothing shows through, so nothing can fight the numbers.'],
 ];
 const shareStyle = () => S.get('shareStyle', 'glass');
 const styleDef = () => SHARE_STYLES.filter(x => x[0] === shareStyle())[0] || SHARE_STYLES[0];

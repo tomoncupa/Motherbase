@@ -256,6 +256,37 @@ const UI = {
     return two(Math.floor(pick / 60)) + ':' + two(pick % 60);
   },
 
+  /* ── putting the caret in a field as a panel opens ──
+     Harder than it looks, and it has been got wrong twice here.
+
+     iOS only raises the keyboard when focus() happens INSIDE the gesture that
+     the person made. A focus() in a callback, an animation end, or a plain
+     setTimeout is ignored: the caret appears and the keyboard does not, which
+     looks like the app forgetting what you asked for.
+
+     And a panel builder runs BEFORE the panel is in the document, so focusing
+     from inside one lands on an element on no page at all and does nothing.
+
+     So: call this straight after the panel is open, still inside the tap. It
+     focuses immediately, which is the call iOS honours, and once more after
+     the panel has finished rising, which is the one that survives a transform.
+     Both are harmless twice over. */
+  focusSoon(input, reopening) {
+    if (!input) return input;
+    const go = () => {
+      try {
+        input.focus({ preventScroll: true });
+        if (input.setSelectionRange && typeof input.value === 'string') {
+          const n = input.value.length;
+          input.setSelectionRange(n, n);
+        }
+      } catch (e) {}
+    };
+    go();
+    setTimeout(go, reopening ? 40 : 130);
+    return input;
+  },
+
   /** "09:30" -> "9:30am" */
   clockLabel(v) {
     const p = String(v || '').split(':');
