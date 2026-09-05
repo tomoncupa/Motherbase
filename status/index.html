@@ -3705,12 +3705,21 @@ function drawJournal(m) {
                       String(now.getMinutes()).padStart(2, '0');
         Rec.set('note', own, x.key, Object.assign(bare(x), {
           done: x.done ? 0 : 1,
-          /* The Done field IS the tick time. Ticking writes the real one over
+          /* ── the Done time, and whose it is ──
+             The field IS the tick time: ticking writes the real one over
              whatever you were aiming at, because a field called Done showing a
-             time you did not finish at would be a lie on the row. Un-ticking
-             puts back nothing rather than the old target: it is gone, and
-             pretending otherwise is worse than an empty box. */
-          by: x.done ? null : stamp,
+             time you did not finish at would be a lie on the row.
+
+             But a time you typed is yours. Tom, 2026-09-05: "unticking keeps
+             manually put done time." So the tick puts yours aside rather than
+             over the side, and un-ticking hands it back. Tick, untick, and the
+             4:44 you meant to finish by is still 4:44.
+
+             `byAuto` is how it knows whose the current one is. The sheet
+             clears it whenever you set the field yourself. */
+          by: x.done ? (x.byWas || null) : stamp,
+          byWas: x.done ? null : (x.byAuto ? (x.byWas || null) : (x.by || null)),
+          byAuto: x.done ? 0 : 1,
           doneAt: x.done ? null : stamp,
           /* WHICH DAY you ticked it, so a task written on Monday and finished
              on Thursday shows up on Thursday. Cleared on un-ticking, like the
@@ -3827,6 +3836,9 @@ function noteSheet(x, d) {
           at: pz.at || (kind === 'todo' ? (atVal || null) : null),
           dur: pz.dur,
           by: kind === 'todo' ? (byVal || null) : null,
+          /* You set it, so it is yours: a later tick puts this aside rather
+             than over the side, and un-ticking hands it back. */
+          byAuto: 0,
         }));
       }
       publishNotes(d);
