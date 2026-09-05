@@ -339,6 +339,31 @@ label.fl:first-child{margin-top:0}
 .setpane > .field > .note{margin-bottom:0}
 .setpane > .seg{margin-bottom:var(--s-2)}
 .seg.wrapseg{flex-wrap:wrap}
+
+/* ── the day behind the letter ── */
+.dayhead{display:flex;align-items:center;gap:var(--s-4);margin-bottom:var(--s-4)}
+.dayhead .rk{flex:none;display:grid;place-items:center;width:56px;height:56px;
+  border:2px solid;border-radius:var(--radius-md);font-family:var(--font-mono);
+  font-size:var(--f-6);font-weight:700}
+.dayhead .dhs{font-family:var(--font-mono);font-size:var(--f-4)}
+.dayhead .dhs i{display:block;font-style:normal;font-family:var(--font-ui);
+  font-size:var(--f-1);color:var(--text-muted);margin-top:2px}
+.pillars{display:flex;flex-direction:column;gap:var(--s-2)}
+.pillar{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-2) var(--s-3);
+  background:var(--surface-2);border-radius:var(--radius-sm);min-height:var(--tap)}
+.pillar .pl{flex:1;min-width:0}
+.pillar .pv{font-family:var(--font-mono);color:var(--text-2);text-align:right}
+.pillar .pv i{display:block;font-style:normal;font-size:var(--f-1);color:var(--text-muted)}
+.pillar .pk{flex:none;width:1.6em;text-align:center;font-family:var(--font-mono);
+  font-size:var(--f-4);font-weight:700}
+
+/* One letter per day. A row you can read the shape of a week from. */
+.lrun{display:flex;flex-wrap:wrap;gap:var(--s-1);margin-bottom:var(--s-3)}
+.lrun .ld{flex:1 0 auto;min-width:30px;min-height:36px;padding:0;
+  background:var(--surface-2);border:1px solid transparent;border-radius:var(--radius-sm);
+  font-family:var(--font-mono);font-size:var(--f-3);font-weight:700;
+  color:var(--text-muted);cursor:pointer}
+.lrun .ld.now{border-color:var(--accent)}
 /* The two ways out of the food search. Stacked, full width, and below the list
    so they never compete with a result you could have just tapped. */
 /* The brand, beside the name rather than buried in the small print. A tint
@@ -4328,7 +4353,13 @@ function dayScore(date) {
      as wrong as 400 under. */
   const asScore = k => 1 - rankIndex(k) / (RANKS.length - 1);
 
-  const add = (id, label, letter, monotonic) => {
+  /* ── every pillar keeps its working ──
+     A letter with no number behind it is a verdict you cannot argue with,
+     which is the opposite of useful. Tom, 2026-09-05: "When I click the
+     letter, I wanna see the data for the day." So each part carries what it
+     was measured on, and for calories and protein the accuracy the ladder
+     actually read. */
+  const add = (id, label, letter, monotonic, val, target, unit) => {
     if (letter == null) return;
     /* A pillar that can only go up counts as soon as it is at A or better.
        Hitting your steps at 2pm is done, and waiting until 8pm to admit it is
@@ -4336,13 +4367,18 @@ function dayScore(date) {
        and one that can get worse by eating more, both wait for their hour. */
     const banked = monotonic && rankIndex(letter) <= rankIndex('A');
     if (today && !banked && !settledYet(id)) { pending.push(label); return; }
-    parts.push({ id: id, label: label, letter: letter, score: asScore(letter) });
+    const acc = (id === 'kcal' || id === 'protein')
+      ? accuracy(val, target, id === 'protein' ? 'over' : kcalDir()) : null;
+    parts.push({ id: id, label: label, letter: letter, score: asScore(letter),
+                 val: val, target: target, unit: unit || '', acc: acc });
   };
 
   if (live.indexOf('protein') > -1)
-    add('protein', 'Protein', pillarLetter('protein', ate ? num(tot.p, 0) : null, num(T.p, 0)), false);
+    add('protein', 'Protein', pillarLetter('protein', ate ? num(tot.p, 0) : null, num(T.p, 0)), false,
+        ate ? Math.round(num(tot.p, 0)) : null, Math.round(num(T.p, 0)), 'g');
   if (live.indexOf('kcal') > -1)
-    add('kcal', 'Calories', pillarLetter('kcal', ate ? num(tot.kcal, 0) : null, num(T.kcal, 0)), false);
+    add('kcal', 'Calories', pillarLetter('kcal', ate ? num(tot.kcal, 0) : null, num(T.kcal, 0)), false,
+        ate ? Math.round(num(tot.kcal, 0)) : null, Math.round(num(T.kcal, 0)), '');
 
   /* The ladders for sleep and steps are absolute, so a field with no target
      of its own is still graded - eight hours is an S whatever you aimed at. */
@@ -4350,7 +4386,8 @@ function dayScore(date) {
     if (!f.on || !dueToday(f, date)) return;
     const id = /sleep/i.test(f.id) ? 'sleep' : /step/i.test(f.id) ? 'steps' : f.id;
     if (live.indexOf(id) === -1) return;
-    add(id, f.label, pillarLetter(id, value(date, f.id), num(f.target, 0)), true);
+    add(id, f.label, pillarLetter(id, value(date, f.id), num(f.target, 0)), true,
+        value(date, f.id), num(f.target, 0) || null, f.unit || '');
   });
 
   const scored = parts;
@@ -4455,6 +4492,90 @@ function scoreFor(date) {
 }
 const todayScore = () => scoreFor(Day.today());
 
+/* ══════════════ THE DAY BEHIND THE LETTER ══════════════
+   Tom, 2026-09-05: "When I click the letter, I wanna see the data for the
+   day." The badge used to jump to Trends, which answers a different question -
+   how is the WEEK going - and left today's letter unexplained.
+
+   A grade you cannot see the working of is a grade you argue with. Every
+   pillar shows what it was measured on, what it was measured against, and the
+   letter that came out. Calories and protein also show the accuracy the
+   ladder actually read, because "2,155 against 2,220" and "97%" are the same
+   fact and only one of them explains an S.
+
+   And the things that moved the letter afterwards - the training bump, the
+   rest-day cap, the not-over-yet cap - are named. Those are the parts that
+   surprise you. */
+function daySheet(date) {
+  const sc = date === Day.today() ? todayScore() : scoreFor(date);
+  const k = sc && sc.rank ? sc.rank.k : (sc && sc.letter) || null;
+  openSheet(Day.label(date), body => {
+    const head = el('div', 'dayhead');
+    const col = k ? rankColour(k) : tok('--text-muted');
+    head.innerHTML = '<span class="rk" style="color:' + col + ';border-color:' + col + '">' +
+      (k || '\u2013') + '</span>' +
+      '<span class="dhs">' + (sc && sc.pct != null ? sc.pct + '%' : 'nothing graded') +
+      '<i>' + esc(sc && sc.rank ? sc.rank.say : 'nothing logged on this day') + '</i></span>';
+    body.appendChild(head);
+
+    const parts = (sc && sc.parts) || [];
+    if (parts.length) {
+      const list = el('div', 'pillars');
+      parts.forEach(pt => {
+        const c = rankColour(pt.letter);
+        const shown = pt.val == null ? '\u2013'
+          : (pt.val % 1 ? r1(pt.val) : Math.round(pt.val)).toLocaleString();
+        const against = pt.target ? ' / ' + pt.target.toLocaleString() : '';
+        list.appendChild(el('div', 'pillar',
+          '<span class="pl">' + esc(pt.label) + '</span>' +
+          '<span class="pv">' + shown + against + (pt.unit ? ' ' + esc(pt.unit) : '') +
+          (pt.acc != null ? '<i>' + Math.round(pt.acc) + '% accurate</i>' : '') + '</span>' +
+          '<span class="pk" style="color:' + c + '">' + pt.letter + '</span>'));
+      });
+      body.appendChild(list);
+    }
+
+    /* Still to come, and named, so a middling letter at noon reads as
+       unfinished rather than as a verdict. */
+    if (sc && sc.pending && sc.pending.length) {
+      body.appendChild(el('div', 'note', 'Not counted yet: <b>' +
+        sc.pending.map(esc).join('</b>, <b>') + '</b>. They settle later in the day.'));
+    }
+    const moved = [];
+    if (sc && sc.trained) moved.push('trained, so the letter went up one');
+    if (sc && sc.rest) moved.push('rest day, so it tops out at A');
+    if (sc && sc.partial) moved.push('the day is not over, so it tops out at A');
+    if (moved.length) body.appendChild(el('div', 'note', moved.join(' \u00b7 ')));
+
+    if (!parts.length) {
+      body.appendChild(el('div', 'empty', 'Log a measurement and this fills in.'));
+    }
+  });
+}
+
+/* ── a letter for every day ──
+   "Week trends I wanna see the letter grade for each day, same with month."
+   One letter per day, in its own colour, so a bad patch has a shape. Days you
+   never logged are a dash and not an F - the difference between not doing it
+   and not being there is the difference between a plan failing and a person
+   being on holiday. */
+function letterRun(days) {
+  const wrap = el('div', 'lrun');
+  const today = Day.today();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = Day.shift(today, -i);
+    const sc = d === today ? todayScore() : scoreFor(d);
+    const k = sc && sc.rank ? sc.rank.k : (sc && sc.letter) || null;
+    const b = el('button', 'ld' + (d === today ? ' now' : ''), k || '\u00b7');
+    if (k) b.style.color = rankColour(k);
+    b.dataset.tip = Day.label(d) + (k ? ' \u2014 ' + k + (sc.pct != null ? ' \u00b7 ' + sc.pct + '%' : '') : ' \u2014 nothing logged');
+    b.setAttribute('aria-label', b.dataset.tip);
+    b.onclick = () => daySheet(d);
+    wrap.appendChild(b);
+  }
+  return wrap;
+}
+
 /* ── the badge ── */
 function rankBadge(date) {
   /* The letter beside the calories is the DAY YOU ARE LOOKING AT. It was the
@@ -4483,13 +4604,16 @@ function rankBadge(date) {
      want the working rather than the answer. */
   w.innerHTML =
     '<span class="rk" style="color:' + col + ';border-color:' + col + '">' + mark + '</span>';
-  w.onclick = () => { TAB = 'trends'; Mobile.feedback('nav'); draw(); };
+  /* The day it is showing, not the week. Trends is one tap further on and
+     answers a different question. */
+  w.onclick = () => { Mobile.feedback('open'); daySheet(d); };
   return w;
 }
 
 /* ── the full working, on Trends ── */
 function rankCard() {
   const days = num(S.get('rankDays', 7), 7) || 7;
+  /* Set below; the letter runs read it so the row matches the window. */
   const a = adherence(days);
   const c = card('RANK', a.loggedDays + ' of ' + days + ' days logged');
 
@@ -4509,6 +4633,13 @@ function rankCard() {
     '<div class="rankside"><div class="hero">' + (a.pct == null ? '–' : a.pct + '<span class="u">%</span>') + '</div>' +
     '<div class="lb">' + esc(a.rank ? a.rank.say : 'Nothing to grade yet') + '</div></div>';
   c.appendChild(head);
+
+  /* ── the days themselves ──
+     The big letter is an average and an average hides the shape: four Ss and
+     three Fs average to the same place as seven Cs, and they are not the same
+     week. Tap any day for its working. */
+  c.appendChild(el('label', 'fl', days === 7 ? 'Each day this week' : 'Each day'));
+  c.appendChild(letterRun(days));
 
   /* training, said plainly, because it is the only thing that moves a letter */
   c.appendChild(el('div', 'note',
