@@ -35,6 +35,17 @@ function css() {
    Sits above the home indicator and above the keyboard, never under either.
    An undo action holds it open longer, because a message you might act on is
    not the same as a message you only read. */
+/* The picture, when the system would not take the file. Held rather than
+   downloaded, because a long press is the one route into Photos that needs
+   nobody's permission. */
+.mb-shotveil{position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.86);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:var(--s-4);padding:var(--s-4);padding-bottom:calc(var(--s-4) + env(safe-area-inset-bottom))}
+.mb-shotveil img{max-width:100%;max-height:70vh;object-fit:contain;border-radius:var(--radius-md)}
+.mb-shotsay{color:#fff;font-size:var(--f-2);text-align:center;opacity:.9}
+.mb-shotx{min-height:var(--tap);padding:0 var(--s-5);border-radius:var(--radius-sm);
+  border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;
+  font:inherit;font-size:var(--f-2);cursor:pointer}
 .mb-timefield{display:flex;gap:var(--s-2);align-items:stretch}
 .mb-timefield input{flex:1;min-width:0}
 .mb-ampm{flex:none;min-width:56px;min-height:var(--tap);padding:0 var(--s-3);

@@ -387,15 +387,78 @@ const IO = {
   },
 
   /** IO.shot, then hand it to the person. `name` gets .png put on it. */
+  /* ── handing the picture over ──
+     Tom, 2026-09-06: "I want the export to automatically save to photos,
+     rather than dealing with the share menu."
+
+     A web page CANNOT write to the photo library. That is an iOS rule, not
+     something to code around, and any claim otherwise is wrong. What it can do
+     is hand the file to the operating system, which is what the phone's own
+     share sheet is - and on iOS "Save Image" is the first thing in it.
+
+     That is still better than what was here. `<a download>` is the documented
+     iOS trap: on a phone it can silently do nothing at all, which is the worst
+     of both, and where it works it puts the file in Files rather than Photos.
+
+     The catch is timing. iOS only allows a share inside the gesture that asked
+     for it, and the picture takes a moment to draw - measured at about 40ms,
+     which is inside what Safari allows. If the gesture has expired anyway, the
+     picture is put on screen and a long press adds it to Photos, which needs
+     no permission from anybody. */
   saveShot(node, name, opts) {
+    const file = String(name || 'shot').replace(/\.png$/i, '') + '.png';
     return IO.shot(node, opts).then(png => {
-      const a = el('a');
-      a.download = String(name || 'shot').replace(/\.png$/i, '') + '.png';
-      a.href = png;
-      a.click();
-      toast('Picture saved');
-      return png;
+      return IO.handOver(png, file).then(() => png);
     }, err => { toast(esc(err.message), { bad: true }); throw err; });
+  },
+
+  /** data URL -> Blob, so the file can be handed to the system as a file. */
+  _blobOf(dataUrl) {
+    const parts = String(dataUrl).split(',');
+    const mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/png';
+    const bin = atob(parts[1]);
+    const n = bin.length, u = new Uint8Array(n);
+    for (let i = 0; i < n; i++) u[i] = bin.charCodeAt(i);
+    return new Blob([u], { type: mime });
+  },
+
+  handOver(png, fileName) {
+    let f = null;
+    try { f = new File([IO._blobOf(png)], fileName, { type: 'image/png' }); } catch (e) {}
+
+    if (f && navigator.canShare && navigator.canShare({ files: [f] })) {
+      return navigator.share({ files: [f] })
+        .then(() => { toast('Saved'); },
+              err => {
+                /* A cancel is not a failure and must not nag. Anything else
+                   means the gesture is gone, so fall back to the picture. */
+                if (err && (err.name === 'AbortError' || /abort|cancel/i.test(err.message || ''))) return;
+                return IO._showShot(png, fileName);
+              });
+    }
+
+    /* No share at all: a desktop, where a download is exactly right. */
+    if (!/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      const a = el('a');
+      a.download = fileName; a.href = png; a.click();
+      toast('Picture saved');
+      return Promise.resolve();
+    }
+    return IO._showShot(png, fileName);
+  },
+
+  /** The picture, full screen. Hold it and iOS offers Add to Photos. */
+  _showShot(png, fileName) {
+    const veil = el('div', 'mb-shotveil');
+    const img = el('img');
+    img.src = png; img.alt = fileName;
+    const say = el('div', 'mb-shotsay', 'Press and hold the picture, then <b>Add to Photos</b>');
+    const close = el('button', 'mb-shotx', 'Done');
+    close.onclick = () => veil.remove();
+    veil.onclick = e => { if (e.target === veil) veil.remove(); };
+    veil.appendChild(img); veil.appendChild(say); veil.appendChild(close);
+    document.body.appendChild(veil);
+    return Promise.resolve();
   },
 
   /* ══════════════ EDITABLE TABLES ══════════════

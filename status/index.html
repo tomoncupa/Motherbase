@@ -548,6 +548,9 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
    two more predictions rather than the width of one. */
 .chart .cone{fill:var(--data-4);opacity:.14;stroke:none}
 .chart .now{stroke:var(--border-strong);stroke-width:1;stroke-dasharray:2 3}
+/* What is still in you, over the day it was taken. Its own scale on the right:
+   milligrams and calories share nothing but an axis. */
+.chart .decay{fill:none;stroke:var(--data-6);stroke-width:1.75;opacity:.85}
 .chart .lab{fill:var(--text-muted);font-family:var(--font-mono);font-size:var(--f-1)}
 
 .grid28{display:grid;grid-template-columns:repeat(14,1fr);gap:3px;margin-top:var(--s-2)}
@@ -736,7 +739,17 @@ const LIBRARY = [
   { id: 'creatine',  label: 'Creatine',   unit: 'g',   measure: 'amount', step: 5,   dec: 0, chips: [5, 10, 20] },
   { id: 'potassium', label: 'Potassium',  unit: 'g',   measure: 'amount', step: .5,  dec: 1, chips: [1, 2, 3, 4], from: 'k',    per: .001 },
   { id: 'sodium',    label: 'Sodium',     unit: 'g',   measure: 'amount', step: .5,  dec: 1, chips: [1, 2, 3, 4, 5], from: 'na', per: .001 },
-  { id: 'caffeine',  label: 'Caffeine',   unit: 'mg',  measure: 'amount', step: 50,  dec: 0, chips: [100, 150, 200, 300], from: 'caff', per: 1 },
+  /* ── caffeine wears off, and nobody had told the app ──
+     Found 2026-09-06 while drawing the day's shape: not one field shipped with
+     a half-life, so the whole decay mechanism - the "still in you" line on the
+     tile, the curve over the day - had never once fired for anybody.
+
+     Five hours. Healthy adults sit at four to five, with real spread from
+     genetics, smoking and the pill; one trial's mean is 5.4 with a range of
+     2.3 to 13.9. Five is the middle of where most people are, and it is a
+     starting point rather than a diagnosis - the field's own form has the box,
+     and anybody who knows their own number should put it in. */
+  { id: 'caffeine',  label: 'Caffeine',   unit: 'mg',  measure: 'amount', step: 50,  dec: 0, half: 5, chips: [100, 150, 200, 300], from: 'caff', per: 1 },
   { id: 'calcium',   label: 'Calcium',    unit: 'mg',  measure: 'amount', step: 100, dec: 0, chips: [500, 800, 1000, 1200], from: 'ca', per: 1 },
   { id: 'magnesium', label: 'Magnesium',  unit: 'mg',  measure: 'amount', step: 100, dec: 0, chips: [200, 400, 600] },
   { id: 'zinc',      label: 'Zinc',       unit: 'mg',  measure: 'amount', step: 5,   dec: 0, chips: [15, 30, 50] },
@@ -798,7 +811,7 @@ function linkNutrients() {
    linkNutrients: a number rather than a flag, so a later change runs again
    instead of being locked out by a tick from the previous version. Only the
    library's own fields are touched, and only where nothing was set by hand. */
-const FIELDFIX = 4;   /* 4 adds Sun and Main quest to an install that already exists */
+const FIELDFIX = 6;   /* 6 gives caffeine the half-life it always should have had */
 /* Which kind of thing each library field is, so the form can narrow itself
    without him having to categorise five things by hand first. */
 const SEEDCAT = {
@@ -815,6 +828,15 @@ function fixSeedFields() {
      gets made here, which is how Trained arrives for an existing install. */
   const have = fields();
   SEED.forEach(f => { if (!have[f.id]) Rec.set('field', null, f.id, f); });
+  /* A shipped field that grew a half-life after somebody was already set up
+     would never get one, because the loop above only makes fields that are
+     MISSING. LIBRARY as well as SEED - caffeine is a library field, which is
+     exactly the case this was written for and exactly the one it missed on the
+     first try. Fills a blank and never overwrites: a number he chose is his. */
+  SEED.concat(LIBRARY).forEach(f => {
+    const mine = fields()[f.id];
+    if (f.half && mine && !mine.half) Rec.set('field', null, f.id, Object.assign({}, mine, { half: f.half }));
+  });
   const want = {};
   SEED.concat(LIBRARY).forEach(l => { if (l.bump) want[l.id] = l; });
   Object.values(fields()).forEach(f => {
@@ -3303,7 +3325,12 @@ function dateBar() {
   w.appendChild(back); w.appendChild(mid); w.appendChild(fwd);
   return w;
 }
-const NAV = [['now', '◐', 'Today'], ['food', '◍', 'Food'], ['money', '₱', 'Money'], ['trends', '◭', 'Trends']];
+/* REPORT, not Trends. Tom, 2026-09-06. The screen holds the grade, the working
+   behind it, a letter for every day and the export; only about half of it is a
+   trend, and the name was promising the wrong half. The id stays `trends` -
+   it is in his settings and in saved state, and renaming a stored key to
+   improve a label is how a screen forgets which tab it was on. */
+const NAV = [['now', '◐', 'Today'], ['food', '◍', 'Food'], ['money', '₱', 'Money'], ['trends', '◭', 'Report']];
 
 function drawNav() {
   const n = document.getElementById('nav');
@@ -4623,7 +4650,7 @@ function daySheet(date) {
     });
     body.appendChild(bar);
     body.appendChild(el('div', 'note', 'Style and size are on ' +
-      (TAB === 'trends' ? 'this screen' : 'Trends') + ', under the rank.'));
+      (TAB === 'trends' ? 'this screen' : 'Report') + ', under the rank.'));
   });
 }
 
@@ -4885,7 +4912,172 @@ async function shareCard(a, kind, date) {
   } catch (e) { /* saveShot has already said so */ }
 }
 
+/* ── the report has two halves ──
+   Tom, 2026-09-06: "Add the day tab, so we can get intra day data
+   visualization."
+
+   THE DAY is one day, laid out along its own clock. Nothing else in the suite
+   draws time within a day: everything is a total by bedtime, which hides that
+   you ate two thirds of your calories after eight, or that the coffee was at
+   four. A day has a shape and this is the only place it can be seen.
+
+   THE STRETCH is what the screen was already: the grade, its working, the
+   weight chart, the letters. Weeks and months.
+
+   They are different questions and the tabs say so. */
+let REPTAB = 'stretch';
+
+/* ══════════════ THE SHAPE OF ONE DAY ══════════════
+   Everything else in here is a total by bedtime, and a total hides the two
+   things that decide whether the day worked: WHEN you ate and WHEN you took
+   what keeps you awake.
+
+   Calories run along the clock as bars, and anything with a half-life runs
+   over them as a curve of what is still in you. That pairing is the point.
+   Nobody needs a chart to know they had coffee; they need to see the coffee
+   still at 400mg when they were trying to sleep.
+
+   The bars are cumulative, so the line is the day filling up rather than a
+   row of unrelated meals. A flat morning and a wall after eight is a shape
+   you recognise instantly and cannot see anywhere else in this app. */
+function dayShapeChart(d) {
+  const W = 320, H = 150, PL = 30, PR = 26, PT = 12, PB = 18;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.setAttribute('class', 'chart');
+  svg.style.cssText = 'width:100%;height:auto;display:block';
+  const add = (tag, attrs, cls) => {
+    const n = document.createElementNS(svg.namespaceURI, tag);
+    Object.keys(attrs).forEach(k => n.setAttribute(k, attrs[k]));
+    if (cls) n.setAttribute('class', cls);
+    svg.appendChild(n); return n;
+  };
+
+  const X = mins => PL + (Math.max(0, Math.min(1440, mins)) / 1440) * (W - PL - PR);
+
+  /* the hours, every six, because twenty-four labels is hatching */
+  [0, 360, 720, 1080, 1440].forEach(mn => {
+    add('line', { x1: X(mn), y1: PT, x2: X(mn), y2: H - PB }, 'gl');
+    const t = add('text', { x: X(mn), y: H - 5, 'text-anchor': 'middle' }, 'lab');
+    t.textContent = mn === 1440 ? '12am' : clockLabel(String(Math.floor(mn / 60)).padStart(2, '0') + ':00').replace(':00', '');
+  });
+
+  /* ── calories, as the day filling up ── */
+  const ms = meals(d).slice().sort((a, b) => (a.t || 0) - (b.t || 0));
+  const target = calTarget().v || 0;
+  const total = ms.reduce((a, x) => a + (num(x.kcal, 0) || 0), 0);
+  const top = Math.max(target, total) || 1;
+  const Y = v => PT + (1 - v / top) * (H - PT - PB);
+
+  if (target) {
+    add('line', { x1: PL, y1: Y(target), x2: W - PR, y2: Y(target) }, 'goal');
+    const g = add('text', { x: PL + 2, y: Y(target) - 3 }, 'lab');
+    g.textContent = 'target';
+  }
+
+  let run = 0;
+  const steps = [];
+  ms.forEach(x => {
+    const dt = new Date(x.t || 0);
+    const mn = dt.getHours() * 60 + dt.getMinutes();
+    run += num(x.kcal, 0) || 0;
+    steps.push({ mn: mn, v: run, name: x.name, kcal: num(x.kcal, 0) || 0 });
+  });
+  if (steps.length) {
+    let dstr = 'M' + X(0) + ' ' + Y(0);
+    steps.forEach(p => { dstr += ' L' + X(p.mn) + ' ' + Y(p.v - p.kcal) + ' L' + X(p.mn) + ' ' + Y(p.v); });
+    dstr += ' L' + X(1440) + ' ' + Y(run);
+    add('path', { d: dstr }, 'avg');
+    steps.forEach(p => {
+      const c = add('circle', { cx: X(p.mn), cy: Y(p.v), r: 2.5 }, 'raw');
+      const ttl = document.createElementNS(svg.namespaceURI, 'title');
+      ttl.textContent = clockLabel(String(Math.floor(p.mn / 60)).padStart(2, '0') + ':' +
+        String(p.mn % 60).padStart(2, '0')) + ' \u00b7 ' + p.name + ' \u00b7 ' + Math.round(p.kcal) + ' kcal';
+      c.appendChild(ttl);
+    });
+  }
+
+  /* ── anything that wears off, drawn over the top ──
+     Its own scale, on the right, because milligrams and calories share
+     nothing but an axis. */
+  const decay = liveFields().filter(f => f.half && dueToday(f, d) && entries(d, f.id).length);
+  decay.slice(0, 1).forEach(f => {
+    const es = entries(d, f.id);
+    const peak = es.reduce((a, e) => a + (num(e.v, 0) || 0), 0) || 1;
+    const Y2 = v => PT + (1 - v / peak) * (H - PT - PB);
+    const pts = [];
+    for (let mn = 0; mn <= 1440; mn += 15) {
+      let left = 0;
+      es.forEach(e => {
+        const t = new Date(e.t || 0);
+        const at = t.getHours() * 60 + t.getMinutes();
+        if (mn < at) return;
+        left += (num(e.v, 0) || 0) * Math.pow(0.5, (mn - at) / 60 / f.half);
+      });
+      pts.push([mn, left]);
+    }
+    add('path', { d: pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]) + ' ' + Y2(p[1])).join(' ') }, 'decay');
+    /* Anchored to the right edge, not started at it: "Caffeine" ran off the
+       side, which is a label that has stopped being one. It also says the
+       peak, because the curve's own scale is not the calorie scale beside it
+       and a line with no number is a shape. */
+    const lab = add('text', { x: W - 2, y: PT + 8, 'text-anchor': 'end' }, 'lab');
+    lab.textContent = f.label + ' · ' + Math.round(peak) + (f.unit || '');
+  });
+
+  return svg;
+}
+
+function drawDayShape(m) {
+  const d = vd();
+  const c = card(Day.label(d), 'how the day ran');
+  const ms = meals(d);
+  if (!ms.length) {
+    c.appendChild(el('div', 'empty', 'Log something with a time on it and the day gets a shape.'));
+    m.appendChild(c);
+    return;
+  }
+  c.appendChild(dayShapeChart(d));
+
+  /* The two facts the chart is drawn to expose, said in words underneath,
+     because a shape you have to interpret is a shape you stop looking at. */
+  const total = ms.reduce((a, x) => a + (num(x.kcal, 0) || 0), 0);
+  const late = ms.filter(x => new Date(x.t || 0).getHours() >= 20)
+    .reduce((a, x) => a + (num(x.kcal, 0) || 0), 0);
+  const first = ms.slice().sort((a, b) => a.t - b.t)[0];
+  const bits = [];
+  if (first) bits.push('First food at <b>' + clockLabel(hhmm(first.t)) + '</b>');
+  if (total && late) bits.push('<b>' + Math.round(late / total * 100) + '%</b> of it after 8pm');
+  if (bits.length) c.appendChild(el('div', 'note', bits.join(' \u00b7 ')));
+  m.appendChild(c);
+
+  /* Where the day was spent, if BLOCK published one. Same clock, so the two
+     read together. */
+  const plan = Rec.get('plan', d, 'routine');
+  if (plan && (plan.blocks || []).length) {
+    const c2 = card('Planned', plan.name || '');
+    const list = el('div', 'list');
+    plan.blocks.slice(0, 12).forEach(b => {
+      list.appendChild(el('div', 'note',
+        '<b>' + (b.s == null ? '' : clockLabel(String(Math.floor(b.s / 60)).padStart(2, '0') + ':' +
+          String(b.s % 60).padStart(2, '0'))) + '</b> ' + esc(b.name)));
+    });
+    c2.appendChild(list);
+    m.appendChild(c2);
+  }
+}
+
 function drawTrends(m) {
+  const seg = el('div', 'seg');
+  [['day', 'Day'], ['stretch', 'Stretch']].forEach(t => {
+    const b = el('button', REPTAB === t[0] ? 'on' : '', t[1]);
+    b.onclick = () => { REPTAB = t[0]; Mobile.feedback('nav'); draw(); };
+    seg.appendChild(b);
+  });
+  m.appendChild(seg);
+  if (REPTAB === 'day') return drawDayShape(m);
+
   /* The rank goes first: it is the answer to "how am I doing", and everything
      under it is the working. */
   m.appendChild(rankCard());
