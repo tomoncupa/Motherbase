@@ -2752,6 +2752,37 @@ function spendSheet(existing) {
 <script>
 /* ══════════════ FOOD ══════════════ */
 
+/* ── things you logged once, and might log again ──
+   Tom, 2026-09-05: "Would it be possible to actually log one off meals, and
+   THEN if we're typing the same thing we create the option to turn it into a
+   permanent DB item?"
+
+   Yes, and it is the better shape. The old screen made you PREDICT: is this
+   worth saving? You cannot know that standing at an airport, and nobody can.
+   So it stops being a prediction and becomes an observation - eat it twice and
+   the app is the one that noticed, and it offers to keep it.
+
+   Nothing new is stored. A one-off is already a meal row with an empty food
+   and its own name and numbers, so the history is right there and this reads
+   it back. Grouped by name, most recent numbers win, because the second
+   airport sandwich is the one you remember. */
+function pastOneOffs() {
+  const by = Object.create(null);
+  Rec.all('meal').forEach(r => {
+    const m = r.payload;
+    if (!m || m.food || !m.name) return;          /* a real food is not a one-off */
+    const k = String(m.name).trim().toLowerCase();
+    if (!k) return;
+    const seen = by[k];
+    if (!seen || (m.t || 0) > (seen.t || 0)) {
+      by[k] = { key: k, name: m.name, kcal: num(m.kcal, 0) || 0, p: num(m.p, 0) || 0,
+                c: num(m.c, 0) || 0, f: num(m.f, 0) || 0, t: m.t || 0, n: seen ? seen.n : 0 };
+    }
+    by[k].n = (by[k].n || 0) + 1;
+  });
+  return Object.values(by).sort((a, b) => (b.n - a.n) || (b.t - a.t));
+}
+
 function foodPicker() {
   /* ── the point of this screen ──
      You are standing in a kitchen holding a plate. There are three things it
@@ -2812,6 +2843,21 @@ function foodPicker() {
         list.appendChild(r);
       });
 
+      /* Things you have eaten before and never saved. Under the real foods and
+         marked, because they are a weaker kind of answer: the numbers are
+         whatever you typed that day, not read off a label. */
+      const past = pastOneOffs()
+        .filter(o => !term || o.key.indexOf(term) > -1)
+        .filter(o => !all.some(f => String(f.name).trim().toLowerCase() === o.key));
+      past.slice(0, 12).forEach(o => {
+        const r = el('div', 'row tap');
+        r.innerHTML = '<span class="nm">' + esc(o.name) +
+          '<b class="brand oncebadge">' + o.n + '\u00d7 before</b>' +
+          '<small>' + Math.round(o.kcal) + ' kcal \u00b7 ' + r1(o.p) + 'p \u00b7 not saved</small></span>';
+        r.onclick = () => onceSheet(o.name, o);
+        list.appendChild(r);
+      });
+
       routes.innerHTML = '';
       const named = raw ? '\u201c' + esc(raw) + '\u201d' : 'it';
       const once = el('button', 'btn wide mb-press mb-tap', 'Log ' + named + ' once');
@@ -2841,46 +2887,86 @@ function foodPicker() {
    A meal row already carries its own name, calories and protein, so this needs
    nothing new in the store: it is a meal with an empty `food`. Everything that
    reads meals already reads the name off the meal. */
-function onceSheet(name) {
-  let kRef = null;
-  openSheet('Log once', body => {
-    body.appendChild(el('div', 'note', 'Logged today and nothing else. It will not be added to your foods.'));
+function onceSheet(name, past) {
+  /* `past` is the same thing eaten before, if there is one: its numbers come
+     with it, so the second time is a confirm rather than a retype. */
+  let kRef = null, nameRef = null;
+  const before = past || pastOneOffs().filter(o => o.key === String(name || '').trim().toLowerCase())[0];
+  openSheet(before ? before.name : 'Log once', body => {
+    body.appendChild(el('div', 'note', before
+      ? 'You have logged this ' + before.n + (before.n === 1 ? ' time' : ' times') + ' before. The numbers are from last time.'
+      : 'Logged today and nothing else. It will not be added to your foods.'));
 
     const nm = document.createElement('input');
-    nm.type = 'text'; nm.placeholder = 'What was it?'; nm.value = name || '';
+    nm.type = 'text'; nm.placeholder = 'What was it?';
+    nm.value = (before ? before.name : name) || '';
     body.appendChild(el('label', 'fl', 'Name'));
     body.appendChild(nm);
+    nameRef = nm;
 
     const g = el('div', 'grid2');
-    const mk = (lbl, ph) => {
+    const mk = (lbl, ph, val) => {
       const w = el('div', 'field');
       w.appendChild(el('label', 'fl', lbl));
       const i = document.createElement('input');
       i.type = 'number'; i.inputMode = 'decimal'; i.min = '0'; i.placeholder = ph;
+      if (val != null && val !== '') i.value = String(val);
       w.appendChild(i); g.appendChild(w); return i;
     };
-    const kc = mk('Calories', '0');
-    const pr = mk('Protein (g)', '0');
+    const kc = mk('Calories', '0', before ? Math.round(before.kcal) : '');
+    const pr = mk('Protein (g)', '0', before ? r1(before.p) : '');
     body.appendChild(g);
     kRef = kc;
 
+    const readIt = () => ({
+      label: nm.value.trim(),
+      k: num(kc.value, 0) || 0,
+      p: num(pr.value, 0) || 0,
+    });
+
     body.appendChild(saveBar('Log it', () => {
-      const k = num(kc.value, 0) || 0, p = num(pr.value, 0) || 0;
-      const label = nm.value.trim();
-      if (!label) return UI.toast('What was it?', { bad: true });
-      if (!k && !p) return UI.toast('Calories or protein, at least one', { bad: true });
-      const d = vd();
-      Rec.set('meal', d, uid(), {
-        food: '', name: label, amt: 1, unit: 'serving', serve: 'one off',
-        kcal: k, p: p, c: 0, f: 0, t: Date.now(),
+      const v = readIt();
+      if (!v.label) return UI.toast('What was it?', { bad: true });
+      if (!v.k && !v.p) return UI.toast('Calories or protein, at least one', { bad: true });
+      Rec.set('meal', vd(), uid(), {
+        food: '', name: v.label, amt: 1, unit: 'serving', serve: 'one off',
+        kcal: v.k, p: v.p, c: 0, f: 0, t: Date.now(),
       });
       Mobile.feedback('tick');
       closeSheet(); draw();
-      UI.toast('<b>' + esc(label) + '</b> logged');
+      UI.toast('<b>' + esc(v.label) + '</b> logged');
     }));
+
+    /* ── the offer, and only once it has earned itself ──
+       Twice is the line. Once is a thing that happened; twice is a habit
+       forming, and that is the first moment saving it is obviously worth the
+       tap. Offering on the first log would be the old question - is this worth
+       keeping? - asked again in a new place. */
+    if (before && before.n >= 2) {
+      const keep = el('button', 'btn wide mb-press mb-tap', 'Keep it as a food');
+      keep.style.marginTop = 'var(--s-2)';
+      keep.dataset.tip = 'Adds it to your foods so it is one tap next time. Your logged meals do not change.';
+      keep.onclick = () => {
+        const v = readIt();
+        if (!v.label) return UI.toast('Give it a name first', { bad: true });
+        const id = uid();
+        Rec.set('food', null, id, {
+          id: id, name: v.label, brand: '',
+          base: { amt: 1, unit: 'serving', kcal: v.k, p: v.p, c: 0, f: 0 },
+          serves: [], uses: before.n,
+        });
+        /* `uses` carries over, so something eaten five times sorts where it
+           belongs in the list rather than starting at the bottom. */
+        Mobile.feedback('tick');
+        closeSheet(); draw();
+        UI.toast('<b>' + esc(v.label) + '</b> saved to your foods');
+      };
+      body.appendChild(keep);
+    }
   });
-  /* The name is usually already right, so the caret goes where the work is. */
-  UI.focusSoon(name ? kRef : null, true);
+  /* The name is already right in both cases, so the cursor goes to the first
+     thing that might need changing. */
+  UI.focusSoon((before || name) ? kRef : nameRef, true);
 }
 
 /* Which account it came out of. Blank is a real answer and the default: most
