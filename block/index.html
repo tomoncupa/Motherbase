@@ -4706,14 +4706,43 @@ function pushLib() {
   S.variants.forEach(v => S.lanes.forEach(l => (v.items[l.id] || []).forEach(it => add(it.name, 'routine', it.dur, it.color, it.energy))));
   LifeOS.acts(out);
 }
-function publishToday() {
-  const vid = routineForToday(), d = todayIdx();
+/* ── publishing the plan ──
+   One day's blocks, worked out for a date and written where anything else can
+   read them. The phone cannot work this out for itself: the routines, the
+   lanes and the day rules all live in here.
+
+   AHEAD, not just today. Tom, 2026-09-05: "What if I just open block 1x a week
+   and pre plan it?" That is the right way round, and it costs almost nothing,
+   because everything under this already takes a date - routineForDate(key)
+   picks the routine and pairsFor(vid, key) filters by that date's weekday.
+   Only this function was pinned to today, so a phone opened on a morning the
+   computer had not been touched found nothing and looked broken.
+
+   A fortnight, so a week of pre-planning has a week of slack behind it. */
+const PUBLISH_AHEAD = 14;
+
+/* `quiet` writes the row without telling anyone. LifeOS.publishToday pokes
+   every frame on the page, and a poke makes each one reload the store - fine
+   once, fourteen times per render is fourteen reloads of the home screen while
+   you are dragging a block around. So the fortnight is written quietly and
+   today goes through the shim, which is one poke for the lot. */
+function publishFor(key, quiet) {
+  const vid = routineForDate(key), d = Day.dow(key);
   const blocks = withVariant(vid, () => S.lanes.flatMap(l =>
     schedule(l.id).filter(r => effDays(lane(l.id), r.it)[d]).map(r => ({
       id: r.it.id, actId: actIdOf(r.it), name: r.it.name, s: r.s, dur: r.it.dur,
       color: r.it.color, lane: lane(l.id).name,
     })))).sort((a, b) => a.s - b.s);
-  LifeOS.publishToday({ date: todayKey(), vid: vid, name: (variant(vid) || {}).name || 'routine', blocks: blocks });
+  const plan = { date: key, vid: vid, name: (variant(vid) || {}).name || 'routine', blocks: blocks };
+  if (quiet) Rec.set('plan', key, 'routine', plan);
+  else LifeOS.publishToday(plan);
+}
+
+function publishToday() {
+  /* The days ahead first and quietly, then today through the shim, so exactly
+     one poke goes out and it goes out after everything is written. */
+  for (let i = 1; i < PUBLISH_AHEAD; i++) publishFor(Day.shift(todayKey(), i), true);
+  publishFor(todayKey());
 }
 /** the shared log is the truth about what got done — mirror it onto the blocks */
 let LIFEOS_OK = true;
