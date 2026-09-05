@@ -227,7 +227,7 @@ const UI = {
        930    9:30, same rule          9:30  9.30  9 30   all the same
        9pm    said outright, no guessing
        21 2130 21:30   past twelve, so it can only mean one thing         */
-  smartTime(raw, nowMin) {
+  smartTime(raw, nowMin, prev) {
     let t = String(raw == null ? '' : raw).trim().toLowerCase();
     if (!t) return null;
     const ap = /am\b/.test(t) ? 'am' : /pm\b/.test(t) ? 'pm' : null;
@@ -247,6 +247,20 @@ const UI = {
     if (ap === 'am') return out(h === 12 ? 0 : h);
     if (ap === 'pm') return out(h === 12 ? 12 : h + 12);
     if (h > 12 || h === 0) return out(h);
+
+    /* ── which half of the day a bare hour means ──
+       If the field ALREADY held a time, keep the half it was in. Changing a
+       routine that starts at 07:00 to "930" means half past nine in the
+       MORNING; reading it as the next nine-thirty from now would make it the
+       evening every afternoon, which is wrong in BLOCK every single time.
+
+       Only an empty field falls back to the next time that hour comes round,
+       which is what you want when the question is "when will I do this".
+
+       Either way the AM/PM button next to it settles it in one tap, so
+       neither reading can be a trap. */
+    const pm = /^\d{1,2}/.test(String(prev || '')) ? (+String(prev).split(':')[0] >= 12) : null;
+    if (pm !== null) return out(pm ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h));
 
     const now = nowMin == null ? (new Date().getHours() * 60 + new Date().getMinutes()) : nowMin;
     const a = (h === 12 ? 0 : h) * 60 + m;
@@ -315,7 +329,26 @@ const UI = {
 
     const i = document.createElement('input');
     i.type = 'text'; i.inputMode = 'numeric'; i.autocomplete = 'off';
-    i.placeholder = '9, 930, 9pm';
+    i.placeholder = '930';
+
+    /* ── the colon types itself ──
+       Tom, 2026-09-05: "I dont want to have to manually type a colon."
+       Right - punctuation is the one thing a numeric keypad makes awkward, and
+       a time is the one field where everybody knows the shape already.
+
+       Type 9, 3, 0 and it reads 9:30 as you go. Digits only, four at most, and
+       the colon slides in as soon as there are three. Letters pass straight
+       through untouched so "9pm" still works for anyone who types it, and
+       everyone else never sees a colon key. */
+    i.oninput = () => {
+      const v = i.value;
+      if (/[a-z]/i.test(v)) return;
+      const d = v.replace(/[^0-9]/g, '').slice(0, 4);
+      const shown = d.length >= 3 ? d.slice(0, d.length - 2) + ':' + d.slice(-2) : d;
+      if (shown === i.value) return;
+      i.value = shown;
+      try { i.setSelectionRange(shown.length, shown.length); } catch (e) {}
+    };
     const half = el('button', 'mb-ampm');
     half.type = 'button';
 
@@ -325,7 +358,9 @@ const UI = {
       half.disabled = !val;
     };
     const settle = () => {
-      const v = UI.smartTime(i.value);
+      /* `val` is what the field held before this edit, so a bare hour keeps
+         its half of the day. */
+      const v = UI.smartTime(i.value, null, val);
       if (v) { val = v; onset(val); }
       else if (!i.value.trim()) { val = ''; onset(''); }
       show();
