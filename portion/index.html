@@ -92,6 +92,14 @@ textarea{min-height:calc(var(--tap) * 2.5);resize:vertical;line-height:var(--lh-
 .x{width:var(--tap);height:var(--tap);flex:0 0 auto;cursor:pointer;
   border:0;background:none;color:var(--text-muted);border-radius:var(--radius-sm)}
 
+/* The line the picture is named by. Empty until there is a name, so an
+   untitled card does not carry a blank bar. */
+.shot-title{font-family:var(--font-display);font-size:var(--f-4);font-weight:var(--w-bold);
+  line-height:1.2;margin-bottom:var(--s-3)}
+.shot-title small{display:block;font-family:var(--font-body);font-size:var(--f-1);
+  font-weight:var(--w-body);color:var(--text-muted);letter-spacing:0;margin-top:var(--s-1)}
+.shot-title:empty{display:none}
+
 .warnbox{border-radius:var(--radius-sm);padding:var(--s-3);background:var(--surface-2);
   color:var(--text-2);font-size:var(--f-2);line-height:var(--lh-body)}
 
@@ -186,6 +194,9 @@ IO.register({
 const esc = s => UI.esc(String(s == null ? '' : s));
 const numv = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : (d == null ? null : d); };
 const r1 = n => Math.round(n * 10) / 10;
+/* Pesos, and no decimals. Nothing here is priced to the centavo and a column
+   of two-decimal numbers is harder to compare at a glance. */
+const money = n => '₱' + Math.round(n);
 function el(tag, cls, html) { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; }
 
 /* The clock alone is not a unique key: two rows made in the same millisecond
@@ -204,7 +215,7 @@ const WORD = { p: 'protein', c: 'carbs', f: 'fat', kcal: 'calories', amt: 'of it
    L is the label as typed. PORTIONS is what you want out of it. EDIT is the
    id of the food being changed, or null when this is a new one. */
 const L = { name: '', brand: '', cat: '', amt: '100', unit: 'g',
-  kcal: '', p: '', c: '', f: '', na: '', k: '', ca: '', caff: '', price: '' };
+  kcal: '', p: '', c: '', f: '', na: '', k: '', ca: '', caff: '', price: '', cook: '' };
 let PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
 let EDIT = null;
 const INPUTS = {};
@@ -352,6 +363,7 @@ function unlabel(s, base) {
    being typed into - rebuilding an input takes the cursor with it. */
 const M = document.getElementById('main');
 const ptBox = el('div'), foodBox = el('div'), groupBox = el('div', 'chips');
+const shotArea = el('div'), shotTitle = el('div', 'shot-title');
 
 /* The five groups Tom sorts food into. A fixed list rather than a text box,
    because typing "Protein" and "protein" on two different days is how a list
@@ -434,6 +446,19 @@ function build() {
   g2.appendChild(textField('unit', 'Unit', { text: 1 }));
   c1.appendChild(g2);
 
+  /* ── raw and cooked ──
+     Rice roughly triples. Chicken loses about a quarter. This is the single
+     place a client's numbers go wrong, and the label is nearly always the raw
+     one, so the app has to be able to say which weight it is talking about.
+
+     It is NOT a toggle on one food. Cooked rice is not raw rice displayed
+     differently: 100g of it really does have a third of the calories, because
+     the rest is water it drank. So it becomes its own entry, with its own
+     honest numbers, which is also the one you can weigh on the plate. You
+     type the label once and press a button; the arithmetic is not yours. */
+  c1.appendChild(textField('cook', 'Cooked weight, if the label is raw', {}));
+  c1.appendChild(el('div', 'note', 'What one label serving weighs after cooking. 100 g of dry rice comes out about 300 g. Leave it blank if the label already means cooked.'));
+
   const g3 = el('div', 'grid3');
   g3.appendChild(textField('kcal', 'Calories'));
   g3.appendChild(textField('p', 'Protein g'));
@@ -460,18 +485,50 @@ function build() {
   const c2 = el('div', 'card');
   c2.appendChild(el('h2', null, 'THE AMOUNTS'));
   c2.appendChild(el('div', 'note', 'How much of it you need, and what that comes to. Each one is saved with the food as a serving, so logging it later is one tap.'));
-  c2.appendChild(ptBox);
+  /* What the picture is of: the heading and the amounts, and none of the
+     controls. It is the real element rather than a second drawing of one, so
+     it cannot drift from what is on screen - it just stops short of the
+     buttons, which are not worth photographing. */
+  shotArea.appendChild(shotTitle);
+  shotArea.appendChild(ptBox);
+  c2.appendChild(shotArea);
   c2.appendChild(addRow());
+  c2.appendChild(extraRow(shotArea));
   M.appendChild(c2);
 
   /* ── what is already in there ── */
   const c3 = el('div', 'card');
   c3.appendChild(el('h2', null, 'YOUR FOODS'));
-  c3.appendChild(el('div', 'note', 'The same library STATUS logs from. Tap one to correct it or to add another amount.'));
+  c3.appendChild(el('div', 'note', 'The same library STATUS logs from. Ranked against the first amount above, so this is also the comparison: what it takes, and what it costs, to get the same thing out of each one.'));
+  c3.appendChild(listHead);
   c3.appendChild(foodBox);
   M.appendChild(c3);
 
   paintPortions();
+}
+
+/* The two things that are not about one amount: making the cooked twin, and
+   turning the card into a picture. Both live under the list rather than in
+   the save bar, because neither is the main job. */
+function extraRow(card) {
+  const w = el('div');
+  w.style.marginTop = 'var(--s-3)';
+
+  const cook = el('button', 'btn wide quiet mb-press mb-tap', 'Save the cooked version as its own food');
+  cook.style.marginBottom = 'var(--s-2)';
+  cook.onclick = saveCooked;
+  w.appendChild(cook);
+
+  const share = el('button', 'btn wide quiet mb-press mb-tap', 'Save this as a picture');
+  share.onclick = () => {
+    const name = (L.name.trim() || 'portion').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    /* A photograph of the real card, not a second drawing of one. Change the
+       card and the picture changes with it. */
+    IO.saveShot(card, 'portion-' + name, { scrim: 1 })
+      .then(() => Mobile.feedback('success'), () => {});
+  };
+  w.appendChild(share);
+  return w;
 }
 
 /* Adding an amount. The chip says what you are counting, the box says how
@@ -509,10 +566,39 @@ function addRow() {
   };
   g.appendChild(i); g.appendChild(b);
   w.appendChild(g);
+
+  /* The amounts worth one tap. A teaspoon and a tablespoon are here because
+     nobody weighs 100 g of soy sauce, and a whole group of his foods is
+     seasonings and marinades. The gram figures are the standard ones: 5 ml
+     and 15 ml, which for anything watery is 5 g and 15 g. */
+  const quick = el('div', 'chips');
+  quick.style.marginTop = 'var(--s-2)';
+  [['1 tsp', 5], ['1 tbsp', 15], ['30', 30], ['100', 100], ['200', 200]].forEach(q => {
+    const c = el('button', 'chip mb-press mb-tap', esc(q[0]));
+    c.onclick = () => {
+      PORTIONS = PORTIONS.filter(p => !(p.what === 'amt' && p.v === q[1])).concat([{ what: 'amt', v: q[1] }]);
+      paintPortions(); saveDraft(); Mobile.feedback('select');
+    };
+    quick.appendChild(c);
+  });
+  w.appendChild(el('label', 'fl', 'Or one of these, by weight'));
+  w.appendChild(quick);
   return w;
 }
 
 function paintPortions() {
+  /* The picture needs to say what it is of. On screen this is the same
+     information as the Name box two inches up, so it hides until there is
+     something to say. */
+  const nm = L.name.trim();
+  shotTitle.innerHTML = nm
+    ? esc(nm) + '<small>' + esc([L.brand.trim(),
+        (numv(L.amt) > 0 ? 'label serving ' + r1(numv(L.amt)) + ' ' + (L.unit.trim() || '') : ''),
+        (numv(L.kcal) != null ? Math.round(numv(L.kcal)) + ' kcal' : ''),
+        (numv(L.p) != null ? r1(numv(L.p)) + ' g protein' : '')]
+        .filter(x => String(x).trim()).join(' · ')) + '</small>'
+    : '';
+
   ptBox.innerHTML = '';
   if (!PORTIONS.length) {
     ptBox.appendChild(el('div', 'warnbox', 'Nothing yet. Add one below. 50 g of protein is the usual first question.'));
@@ -545,34 +631,171 @@ function paintPortions() {
       const bits = [];
       if (numv(L.kcal) != null) bits.push(Math.round(numv(L.kcal) * w.mult) + ' kcal');
       ['p', 'c', 'f'].forEach(n => { if (numv(L[n]) != null) bits.push(r1(numv(L[n]) * w.mult) + n); });
+      /* The price is the coaching answer, not a footnote: "50 g of protein
+         costs ₱42 from this and ₱78 from that" is the whole argument about
+         whether eating properly is expensive. */
+      if (numv(L.price)) bits.push(money(numv(L.price) * w.mult));
       bits.push(r1(w.mult) + ' × the label serving');
-      if (numv(L.price)) bits.push(r1(numv(L.price) * w.mult) + ' to buy');
+      /* The cooked weight, where the label is the raw one. Same food, same
+         numbers, the weight you would actually see on the plate. */
+      const ck = numv(L.cook);
+      if (ck > 0 && numv(L.amt) > 0) bits.push(r1(w.mult * ck) + ' ' + (L.unit.trim() || 'units') + ' cooked');
       row.appendChild(el('div', 'pt-m', esc(bits.join(' · '))));
     }
     ptBox.appendChild(row);
     if (window.Icons) Icons.paint(row);
   });
+
+  /* The library below is ranked against the first amount, so it follows when
+     that changes — and stays still while you are only typing a label, which
+     is most of the time and would otherwise re-sort forty rows per keystroke. */
+  const w = JSON.stringify(against());
+  if (w !== lastWant) { lastWant = w; if (Rec.hydrated) paintFoods(); }
+}
+let lastWant = '';
+
+/* ══════════════ THE COOKED TWIN ══════════════
+   Same food, same nutrients, a different weight. Cooking adds or drives off
+   water and nothing else that matters here: a chicken breast that loses a
+   quarter of its weight still has all of its protein, so the numbers do not
+   change, only what one serving of it weighs.
+
+   Matched by name rather than by a stored link, so nothing extra is kept
+   anywhere and nothing for STATUS to drop. Press it twice and the second
+   press corrects the first; the worst it can do is leave a duplicate you can
+   see, which is the right failure for something with no undo. */
+function saveCooked() {
+  const name = L.name.trim();
+  const ck = numv(L.cook), amt = numv(L.amt);
+  if (!name) { INPUTS.name.focus(); return UI.toast('Give it a name first', { bad: true }); }
+  if (!(amt > 0)) { INPUTS.amt.focus(); return UI.toast('The label serving amount is missing', { bad: true }); }
+  if (!(ck > 0)) { INPUTS.cook.focus(); return UI.toast('What does one serving weigh cooked?', { bad: true }); }
+
+  const cname = name + ' (cooked)';
+  const was = Object.values(Rec.map('food')).find(f => f.name === cname);
+  const id = was ? was.id : newId();
+
+  const base = { amt: ck, unit: L.unit.trim() || 'serving' };
+  NUTS.concat(['price']).forEach(n => { const v = numv(L[n]); if (v != null) base[n] = v; });
+
+  /* The amounts are asked again of the cooked entry, so "50 g protein" comes
+     out as a cooked weight rather than the raw one relabelled. */
+  const serves = [];
+  PORTIONS.forEach(pt => {
+    if (pt.frozen) return;
+    const per = pt.what === 'amt' ? amt : numv(L[pt.what]);
+    if (!(per > 0)) return;
+    const mult = pt.what === 'amt' ? pt.v / ck : pt.v / per;
+    const want = pt.what === 'kcal' ? r1(pt.v) + ' kcal'
+      : pt.what === 'amt' ? r1(pt.v) + ' ' + (L.unit.trim() || 'units')
+      : r1(pt.v) + ' g ' + WORD[pt.what];
+    if (!(mult > 0) || serves.some(s => s.label === want)) return;
+    serves.push({ label: want, mult: mult });
+  });
+
+  Rec.set('food', null, id, {
+    id: id, name: cname, brand: L.brand.trim(), cat: L.cat.trim(),
+    base: base, serves: serves,
+    dflt: was ? (was.dflt || 0) : 0, uses: was ? (was.uses || 0) : 0, shot: was ? (was.shot || null) : null,
+  });
+  Mobile.feedback('success');
+  UI.toast('<b>' + esc(cname) + '</b> ' + (was ? 'brought up to date' : 'saved') +
+    ': ' + r1(ck) + ' ' + esc(base.unit) + ' where the raw label says ' + r1(amt) + '.');
 }
 
-/* Everything already in the library, most-used first, because the reason to
-   open this list is almost always to correct something you eat a lot. */
+/* ══════════════ THE LIBRARY, AS A COMPARISON ══════════════
+   This list used to just say what was in there. It is more useful ranked
+   against the amount at the top of the screen: for 50g of protein, what does
+   each food take, cost and come to. That IS the comparison — every food at
+   once, rather than two picked by hand — and it is the answer to the only
+   nutrition argument that ever matters, which is that eating properly is
+   supposed to be expensive.
+
+   A food with no protein figure simply cannot answer the question and drops
+   to the bottom rather than pretending to. */
+let listCat = '', listSort = 'need';
+const listHead = el('div');
+
+function against() {
+  /* The first live amount is the question the list is asked. Whatever is at
+     the top of the amounts card is what you are thinking about. */
+  for (let i = 0; i < PORTIONS.length; i++) if (!PORTIONS[i].frozen) return PORTIONS[i];
+  return { what: 'p', v: 50 };
+}
+function needOf(fd, pt) {
+  const b = fd.base || {};
+  const amt = numv(b.amt, 0) || 0;
+  if (!(amt > 0)) return null;
+  const per = pt.what === 'amt' ? amt : (numv(b[pt.what], 0) || 0);
+  if (!(per > 0)) return null;
+  const mult = pt.v / per;
+  return { mult: mult, amt: mult * amt, unit: b.unit || '',
+    kcal: (numv(b.kcal, 0) || 0) * mult, price: (numv(b.price, 0) || 0) * mult };
+}
+
+function paintList() {
+  listHead.innerHTML = '';
+  const pt = against();
+  const want = pt.what === 'kcal' ? r1(pt.v) + ' kcal'
+    : pt.what === 'amt' ? r1(pt.v) + ' by weight'
+    : r1(pt.v) + ' g of ' + WORD[pt.what];
+  listHead.appendChild(el('label', 'fl', 'What each one takes for ' + esc(want)));
+
+  const cats = el('div', 'chips');
+  [''].concat(GROUPS).forEach(g => {
+    const b = el('button', 'chip mb-press mb-tap' + (listCat === g ? ' on' : ''), esc(g || 'All'));
+    b.onclick = () => { listCat = g; paintList(); paintFoods(); };
+    cats.appendChild(b);
+  });
+  listHead.appendChild(cats);
+
+  const sorts = el('div', 'chips');
+  sorts.style.marginTop = 'var(--s-2)';
+  [['need', 'Least of it'], ['kcal', 'Fewest calories'], ['price', 'Cheapest'], ['uses', 'Most used']].forEach(s => {
+    const b = el('button', 'chip mb-press mb-tap' + (listSort === s[0] ? ' on' : ''), s[1]);
+    b.onclick = () => { listSort = s[0]; paintList(); paintFoods(); };
+    sorts.appendChild(b);
+  });
+  listHead.appendChild(sorts);
+}
+
 function paintFoods() {
-  const all = Object.values(Rec.map('food'))
-    .sort((a, b) => (b.uses || 0) - (a.uses || 0) || String(a.name).localeCompare(String(b.name)));
+  paintList();
+  const pt = against();
+  let all = Object.values(Rec.map('food'));
+  if (listCat) all = all.filter(f => (f.cat || '') === listCat);
+
+  const rows = all.map(fd => ({ fd: fd, need: needOf(fd, pt) }));
+  const key = { need: r => r.need.amt, kcal: r => r.need.kcal, price: r => r.need.price };
+  rows.sort((a, b) => {
+    /* Anything that cannot answer the question goes last, whatever the sort.
+       A food with no price is not the cheapest one. */
+    const ga = a.need && (listSort !== 'price' || a.need.price > 0);
+    const gb = b.need && (listSort !== 'price' || b.need.price > 0);
+    if (ga !== gb) return ga ? -1 : 1;
+    if (listSort === 'uses' || !ga) return (b.fd.uses || 0) - (a.fd.uses || 0) ||
+      String(a.fd.name).localeCompare(String(b.fd.name));
+    return key[listSort](a) - key[listSort](b);
+  });
+
   foodBox.innerHTML = '';
-  if (!all.length) {
-    foodBox.appendChild(el('div', 'warnbox', 'Nothing saved yet. Anything you save here shows up in STATUS as well, because it is the same library.'));
+  if (!rows.length) {
+    foodBox.appendChild(el('div', 'warnbox', listCat
+      ? 'Nothing in ' + esc(listCat) + ' yet.'
+      : 'Nothing saved yet. Anything you save here shows up in STATUS as well, because it is the same library.'));
     return;
   }
-  all.slice(0, 40).forEach(fd => {
-    const per = fd.base || {}, n = (fd.serves || []).length;
-    const b = el('button', 'item mb-press mb-tap');
-    b.innerHTML = '<span class="nm">' + esc(fd.name) + '<small>' +
-      esc([fd.brand, (per.amt == null ? '' : per.amt + ' ' + (per.unit || '')),
-        n + ' serving' + (n === 1 ? '' : 's')].filter(x => String(x).trim()).join(' · ')) +
-      '</small></span><span class="fig">' +
-      (per.kcal == null ? '' : Math.round(per.kcal) + ' kcal<br>') +
-      (per.p == null ? '' : r1(per.p) + 'p') + '</span>';
+  rows.slice(0, 40).forEach(r => {
+    const fd = r.fd, b = el('button', 'item mb-press mb-tap');
+    const sub = [fd.cat, fd.brand, (fd.base.amt == null ? '' : r1(fd.base.amt) + ' ' + (fd.base.unit || '') + ' label')]
+      .filter(x => String(x).trim()).join(' · ');
+    const fig = r.need
+      ? r1(r.need.amt) + ' ' + esc(r.need.unit) + '<br>' +
+        [Math.round(r.need.kcal) + ' kcal', r.need.price > 0 ? money(r.need.price) : '']
+          .filter(Boolean).join(' · ')
+      : '<span style="color:var(--text-muted)">no figure</span>';
+    b.innerHTML = '<span class="nm">' + esc(fd.name) + '<small>' + esc(sub) + '</small></span>' +
+      '<span class="fig">' + fig + '</span>';
     b.onclick = () => loadFood(fd);
     foodBox.appendChild(b);
   });
@@ -583,6 +806,9 @@ function loadFood(fd) {
   setField('name', fd.name || ''); setField('brand', fd.brand || ''); setField('cat', fd.cat || '');
   setField('amt', fd.base.amt); setField('unit', fd.base.unit || 'g');
   NUTS.concat(['price']).forEach(n => setField(n, fd.base[n] == null ? '' : fd.base[n]));
+  /* The cooked weight belongs to the food you were just looking at, not this
+     one, and nothing stores it. Clearing it is the honest default. */
+  setField('cook', '');
   PORTIONS = (fd.serves || []).map(s => unlabel(s, fd.base));
   if (!PORTIONS.length) PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
   paintPortions(); saveDraft(); syncBar();
