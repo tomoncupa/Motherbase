@@ -3098,6 +3098,7 @@ function foodEditor(fd, prefillName) {
     photoBlock(body, 'label', txt => {
       const g = parseLabel(txt);
       Object.keys(g).forEach(k => { if (g[k] != null && inputs[k]) inputs[k].value = String(g[k]); });
+      pmResult();          /* setting .value in code fires no input event */
       UI.toast('Check every number');
     }, id => { shotId = id; });
 
@@ -3154,6 +3155,100 @@ function foodEditor(fd, prefillName) {
       UI.toast('Calories worked out from the macros');
     };
     body.appendChild(calc);
+
+    /* ══ the portion maths ══
+       One sum, read from either end. "How much of this do I eat to get 50g of
+       protein" is how you shop for a protein source; "what is in 50g of this"
+       is how you weigh rice. They are the same multiplier, so they are the
+       same block, and the toggle only says which end you are holding.
+
+       Whatever it works out is saved as an ordinary serving — a label and a
+       multiplier, exactly what the Bottle and the Scoop already are. Nothing
+       new is stored, so logging it, scaling it, costing it and exporting it
+       all work already. */
+    const PM = { p: ['Protein', 50], c: ['Carbs', 50], f: ['Fat', 20], kcal: ['Calories', 500] };
+    let pmDir = 'hit', pmKey = 'p';
+    const pmTyped = {};              /* what was typed, per direction and nutrient, so switching back and forth keeps it */
+    const pmSeg = el('div', 'seg'), pmCtl = el('div'), pmOut = el('div');
+    const pmTk = () => pmDir === 'hit' ? 'hit:' + pmKey : 'has';
+
+    /* The label as it stands right now, not as it was when the sheet opened.
+       Every number here is one he is still typing. */
+    const pmBase = () => {
+      const b = { amt: num(inputs.amt.value, 0) || 0, unit: inputs.unit.value.trim() || 'serving' };
+      NUTS.forEach(n => { b[n] = num(inputs[n].value, 0) || 0; });
+      return b;
+    };
+    function pmWork() {
+      const b = pmBase(), v = num(pmTyped[pmTk()], 0) || 0;
+      if (!(b.amt > 0)) return { bad: 'Put the label serving amount in first — everything below is a multiple of it.' };
+      if (pmDir === 'has') return { base: b, mult: v / b.amt, label: r1(v) + ' ' + b.unit };
+      const per = b[pmKey];
+      if (!(per > 0)) return { bad: 'The label has no ' + PM[pmKey][0].toLowerCase() + ' figure on it yet.' };
+      return { base: b, mult: v / per,
+        label: pmKey === 'kcal' ? r1(v) + ' kcal' : r1(v) + ' g ' + PM[pmKey][0].toLowerCase() };
+    }
+    /* Only the answer is redrawn as he types, never the input he is typing
+       into: rebuilding that would take the caret with it. */
+    function pmResult() {
+      const w = pmWork();
+      pmOut.innerHTML = '';
+      if (w.bad) { pmOut.appendChild(el('div', 'warnbox', w.bad)); return; }
+      const b = w.base, m = w.mult;
+      pmOut.appendChild(el('div', 'row',
+        '<span class="nm">' + r1(m * b.amt) + ' ' + esc(b.unit) +
+        '<small>' + r1(m) + ' × the label serving</small></span>' +
+        '<span class="fig">' + Math.round(b.kcal * m) + ' kcal<br>' +
+        r1(b.p * m) + 'p · ' + r1(b.c * m) + 'c · ' + r1(b.f * m) + 'f</span>'));
+      if (!(m > 0)) return;
+      const save = el('button', 'btn wide', 'Save "' + esc(w.label) + '" as a serving');
+      save.style.marginTop = 'var(--s-2)';
+      save.onclick = () => {
+        /* Same name, same serving. Working it out twice should correct the
+           first answer, not sit next to it. */
+        f.serves = (f.serves || []).filter(s => s.label !== w.label).concat([{ label: w.label, mult: m }]);
+        paintServes();
+        Mobile.feedback('select');
+        UI.toast('<b>' + esc(w.label) + '</b> added below. Save the food to keep it.');
+      };
+      pmOut.appendChild(save);
+    }
+    function pmPaint() {
+      pmSeg.innerHTML = '';
+      [['hit', 'How much for'], ['has', 'What is in']].forEach(d => {
+        const b = el('button', pmDir === d[0] ? 'on' : '', d[1]);
+        b.onclick = () => { pmDir = d[0]; pmPaint(); };
+        pmSeg.appendChild(b);
+      });
+      pmCtl.innerHTML = '';
+      if (pmDir === 'hit') {
+        const cw = el('div', 'chips');
+        Object.keys(PM).forEach(k => {
+          const c = el('button', 'chip' + (pmKey === k ? ' on' : ''), PM[k][0]);
+          c.onclick = () => { pmKey = k; pmPaint(); };
+          cw.appendChild(c);
+        });
+        pmCtl.appendChild(cw);
+      }
+      const tk = pmTk();
+      if (pmTyped[tk] == null) pmTyped[tk] = pmDir === 'hit' ? PM[pmKey][1] : 50;
+      pmCtl.appendChild(el('label', 'fl', pmDir === 'hit'
+        ? (pmKey === 'kcal' ? 'How many calories' : 'How much ' + PM[pmKey][0].toLowerCase() + ', in g')
+        : 'How much of it, in ' + (inputs.unit.value.trim() || 'units')));
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.inputMode = 'decimal'; inp.setAttribute('pattern', '[0-9.]*');
+      inp.value = String(pmTyped[tk]);
+      inp.oninput = () => { pmTyped[tk] = inp.value; pmResult(); };
+      pmCtl.appendChild(inp);
+      pmResult();
+    }
+    body.appendChild(el('label', 'fl', 'Work out a portion'));
+    body.appendChild(el('div', 'note', 'The same sum from either end. Save the answer and it is one tap to log from then on.'));
+    body.appendChild(pmSeg); body.appendChild(pmCtl); body.appendChild(pmOut);
+    /* Setting .value in code fires no event, so the photo reader calls
+       pmResult itself. Everything he types is caught here. */
+    ['amt', 'unit', 'kcal', 'p', 'c', 'f'].forEach(k => inputs[k].addEventListener('input', pmResult));
+    pmPaint();
 
     /* your servings — the whole point. A Cobra bottle is 1.3 label servings. */
     body.appendChild(el('label', 'fl', 'Your servings'));
