@@ -2562,7 +2562,9 @@ function toggleCheck(f, date) {
    The library's list only stands in until you have logged three of your own,
    so a field added this morning still has something on it. After that it is
    entirely yours and it keeps following you as what you take changes.      */
-const DOSE_CHIPS = 3;
+/* Five, because he asked for five and three was a dose-shaped number: a dose
+   has two or three sizes and a measurement has as many as you have had. */
+const DOSE_CHIPS = 5;
 function recentDoses(f) {
   const seen = Object.create(null), out = [];
   const days = Day.last(60);
@@ -2635,9 +2637,24 @@ function numberSheet(f, date) {
       afterLog();
     };
 
-    /* A dose offers what you have actually been taking; everything else offers
-       the list its definition carries. */
-    const chips = dose ? recentDoses(f) : (f.chips || []);
+    /* ── where the quick picks come from ──
+       Tom, 2026-09-05: "Just have an option to enable selecting the last 5
+       entries as a quick pick." The machinery for that already existed and was
+       only ever wired to doses - recentDoses() reads back what you have
+       actually logged. It is the better default for almost everything, because
+       it needs no setting up and it follows you.
+
+       A fixed list still earns its place where the values you WANT offered are
+       not the ones you have been hitting: sleep should offer 7 and 7.5 on the
+       week you have been getting five.
+
+         recent   the last few you logged, newest first. The default.
+         list     exactly what the field says, in that order
+         none     no buttons at all - a step count is read off a watch */
+    const pickMode = f.picks || (dose ? 'recent' : (f.chips && f.chips.length ? 'list' : 'recent'));
+    const chips = pickMode === 'none' ? []
+      : pickMode === 'list' ? (f.chips || [])
+      : recentDoses(f);
     if (chips.length) {
       body.appendChild(chipRow(chips.map(v => ({ label: String(v), value: v })), commit));
     }
@@ -4588,6 +4605,25 @@ function daySheet(date) {
     if (!parts.length) {
       body.appendChild(el('div', 'empty', 'Log a measurement and this fills in.'));
     }
+
+    /* ── sharing the day, from the day ──
+       Tom, 2026-09-06: "i lost access to export the day report." My fault:
+       the letter used to jump to Trends, where the share buttons live, and I
+       changed it to open this without moving them.
+
+       They belong here anyway. The picture IS this day's island, and from
+       here it can be ANY day - the buttons on Trends could only ever share
+       today. Tap back through the week and share the day you actually had. */
+    body.appendChild(el('label', 'fl', 'Share it'));
+    const bar = el('div', 'btns');
+    ['story', 'feed'].forEach(kind => {
+      const b = el('button', 'btn mb-press mb-tap', kind === 'story' ? 'STORY' : 'POST');
+      b.onclick = () => shareCard(sc, kind, date);
+      bar.appendChild(b);
+    });
+    body.appendChild(bar);
+    body.appendChild(el('div', 'note', 'Style and size are on ' +
+      (TAB === 'trends' ? 'this screen' : 'Trends') + ', under the rank.'));
   });
 }
 
@@ -4803,8 +4839,11 @@ const shareSize = () => {
 };
 const styleDef = () => SHARE_STYLES.filter(x => x[0] === shareStyle())[0] || SHARE_STYLES[0];
 
-async function shareCard(a, kind) {
-  const d = vd();
+async function shareCard(a, kind, date) {
+  /* Which day is being pictured. It used to be whatever day the app was
+     showing, which was fine while the only way in was from the Today screen.
+     The day sheet can be opened on any day, so it has to say. */
+  const d = date || vd();
 
   /* The width matters more than it looks. The tile grid is auto-fit at a 92px
      minimum, so a wide stage gives four tiles across where his phone gives
@@ -5739,13 +5778,31 @@ function newFieldForm(pane, existing) {
      no buttons, which is right for a step count - a number you read off a
      watch is not one you pick off a list. */
   const sChips = section('chips');
-  sChips.appendChild(el('label', 'fl', 'Quick amounts, if some numbers come up a lot'));
+  sChips.appendChild(el('label', 'fl', 'Quick buttons when you log it'));
+  let picks = f.picks || (f.chips && f.chips.length ? 'list' : 'recent');
+  const pkSeg = el('div', 'seg');
   const chp = document.createElement('input');
   chp.type = 'text'; chp.inputMode = 'decimal';
   chp.placeholder = '10 20 30';
   chp.value = (f.chips || []).join(' ');
+  const pkNote = el('div', 'note');
+  const paintPicks = () => {
+    pkSeg.innerHTML = '';
+    [['recent', 'Your last few'], ['list', 'A fixed list'], ['none', 'None']].forEach(o => {
+      const b = el('button', picks === o[0] ? 'on' : '', o[1]);
+      b.onclick = () => { picks = o[0]; paintPicks(); };
+      pkSeg.appendChild(b);
+    });
+    chp.style.display = picks === 'list' ? '' : 'none';
+    pkNote.textContent = picks === 'recent'
+      ? 'The last five you logged, newest first. Nothing to keep up to date.'
+      : picks === 'list' ? 'Exactly these, in this order. Spaces or commas.'
+      : 'No buttons. Right for anything you read off a watch.';
+  };
+  paintPicks();
+  sChips.appendChild(pkSeg);
   sChips.appendChild(chp);
-  sChips.appendChild(el('div', 'note', 'They become buttons when you log it. Leave it empty for none.'));
+  sChips.appendChild(pkNote);
   pane.appendChild(sChips);
 
   const sEdges = section('edges');
@@ -5899,10 +5956,12 @@ function newFieldForm(pane, existing) {
 
     /* Quick amounts ride with the target: both are about a number you are
        aiming at, and a check field has neither. */
-    if (on('target')) {
-      const picks = String(chp.value || '').split(/[\s,]+/)
+    if (on('chips')) {
+      spec.picks = picks;
+      const list = String(chp.value || '').split(/[\s,]+/)
         .map(x => num(x)).filter(x => x != null && isFinite(x));
-      if (picks.length) spec.chips = picks.slice(0, 12); else delete spec.chips;
+      if (picks === 'list' && list.length) spec.chips = list.slice(0, 12);
+      else if (picks !== 'list') delete spec.chips;
     }
     if (on('target')) {
       const t = num(tg.value);

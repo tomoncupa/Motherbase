@@ -115,6 +115,12 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .setrow b{font-size:var(--f-4);font-weight:var(--w-bold);color:var(--text-2)}
 .setrow .u{color:var(--text-muted);font-size:var(--f-2)}
 .setrow.pr b{color:var(--accent)}
+/* A warmup happened and does not count. Dimmed rather than hidden: it is part
+   of what you did, just not part of what you did that counts. */
+.setrow.warm{opacity:.55}
+.setrow.warm b{font-weight:400}
+.wtag{font-size:var(--f-1);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--text-muted);margin-left:var(--s-2)}
 
 /* The complete tick, filled when every set in the exercise is done. */
 .tickdot{width:22px;height:22px;flex:0 0 auto;border-radius:50%;
@@ -505,9 +511,12 @@ TRAIN.reindex = function () {
   var all = Rec.all('set');
   for (var i = 0; i < all.length; i++) {
     var r = all[i], p = r.payload;
+    /* Named rather than copied wholesale, so a field added to a set has to be
+       added here too or it silently never reaches anything that reads the
+       index. `warm` was exactly that on the day it was added. */
     var rec = { key: r.key, date: r.date, ex: p.ex, kg: p.kg, r: p.r, u: p.u,
                 done: p.done, pr: p.pr, prf: p.prf, dist: p.dist, dur: p.dur,
-                note: p.note, ord: p.ord };
+                note: p.note, ord: p.ord, warm: p.warm };
     (byDate[r.date] || (byDate[r.date] = [])).push(rec);
     (byEx[p.ex] || (byEx[p.ex] = [])).push(rec);
   }
@@ -1827,8 +1836,10 @@ function drawWorkout(m) {
 
     var sets = UI.el('div', 'sets');
     g.sets.forEach(function (s) {
-      var row = UI.el('div', 'setrow' + (s.pr ? ' pr' : '') + (s.note ? ' has-note' : ''));
+      var row = UI.el('div', 'setrow' + (s.pr ? ' pr' : '') + (s.note ? ' has-note' : '') +
+        (s.warm ? ' warm' : ''));
       row.innerHTML = '<span class="cmt" title="' + UI.esc(s.note || '') + '">' + BUBBLE + '</span>' +
+        (s.warm ? '<span class="wtag">warmup</span>' : '') +
         '<span class="grow"></span>' + setCols(s);
       sets.appendChild(row);
     });
@@ -2144,8 +2155,44 @@ TRAIN.exerciseDialog = function (exId) {
       });
       b.appendChild(UI.row('Rest time', 'Seconds. Blank uses the app default.', rest));
 
+      /* ── what else it works ──
+         Tom, 2026-09-05: "I want the option to attribute a secondary muscle
+         group to a movement, so I can track something like 1 set of pull ups
+         as 1/2 a set of biceps."
+
+         A pull-up is a back exercise and it is also biceps, and counting it as
+         neither-or-both is how a set count stops meaning anything. A fraction
+         is the honest answer: the set happened once and two groups did some of
+         it. Tap to add, tap again to cycle a quarter, a half, three quarters,
+         and off. Nothing here changes what a set IS - only how it is counted
+         up on the summary. */
+      var also = {};
+      if (cur && cur.also) Object.keys(cur.also).forEach(function (k) { also[k] = cur.also[k]; });
+      var SHARES = [0.25, 0.5, 0.75];
+      var aw = UI.el('div', 'chips');
+      var paintAlso = function () {
+        aw.innerHTML = '';
+        catIds.forEach(function (id) {
+          if (id === sel.value) return;          /* the main group is not "also" */
+          var v = also[id] || 0;
+          var b2 = UI.el('button', 'chip' + (v ? ' on' : ''),
+            UI.esc(cats[id].name) + (v ? ' <b>' + v + '</b>' : ''));
+          b2.onclick = function (e) {
+            e.preventDefault();
+            var i = SHARES.indexOf(v);
+            var next = v === 0 ? SHARES[1] : (i === SHARES.length - 1 ? 0 : SHARES[i + 1]);
+            if (next) also[id] = next; else delete also[id];
+            paintAlso(); Mobile.haptic('select');
+          };
+          aw.appendChild(b2);
+        });
+      };
+      paintAlso();
+      sel.addEventListener('change', paintAlso);
+      b.appendChild(UI.row('Also works', 'Tap for a half, again for three quarters, a quarter, then off.', aw));
+
       h.grab = function () {
-        return { name: name.value, cat: sel.value, inc: inc.value, rest: rest.value };
+        return { name: name.value, cat: sel.value, inc: inc.value, rest: rest.value, also: also };
       };
     },
     actions: [
@@ -2164,6 +2211,7 @@ TRAIN.exerciseDialog = function (exId) {
           unit: cur ? cur.unit : null,
           graph: cur ? cur.graph : null,
           fav: cur ? cur.fav : 0,
+          also: Object.keys(v.also || {}).length ? v.also : null,
         });
         Mobile.feedback('success');
         draw();
@@ -2377,6 +2425,18 @@ function trainingSetRow(s, i, date) {
 
 function setMenu(s, date) {
   UI.menu(innerWidth / 2, innerHeight / 2, [
+    /* ── a warmup is not work ──
+       Tom, 2026-09-05: "I should be able to denote a set as a warmup set."
+       It matters for more than tidiness: three empty-bar sets before a heavy
+       triple inflate your volume and your set count, and a bad enough warmup
+       could take a personal best that was never lifted. A warmup is a set that
+       happened and does not count. */
+    { label: s.warm ? 'Not a warmup' : 'Mark as warmup', check: !!s.warm,
+      fn: function () {
+        TRAIN.patchSet(s.key, date, { warm: s.warm ? 0 : 1 });
+        TRAIN.recomputePRs();
+        Mobile.feedback('select'); draw();
+      } },
     { label: s.note ? 'Edit Comment' : 'Add Comment', fn: function () { commentDialog(s, date); } },
     { label: 'Delete Set', kind: 'bad', fn: function () { TRAIN.removeSet(s.key, date); draw(); } },
   ], { title: 'SET' });
@@ -2613,7 +2673,10 @@ TRAIN.recomputePRs = function () {
   Object.keys(exs).forEach(function (id) {
     var hist = TRAIN.historyOf(id), best = 0, first = true;
     hist.forEach(function (s) {
-      var isPr = (s.kg || 0) > best && (s.kg || 0) > 0;
+      /* A warmup cannot take a record. Three empty-bar sets should not be able
+         to rewrite what your best lift was, and a set you did not count as
+         work is not the set that beat it. */
+      var isPr = !s.warm && (s.kg || 0) > best && (s.kg || 0) > 0;
       if (isPr) best = s.kg;
       var wantPr = isPr ? 1 : 0, wantFirst = (isPr && first) ? 1 : 0;
       if (isPr) first = false;
@@ -2630,10 +2693,14 @@ TRAIN.recomputePRs = function () {
 /* Everything the Records screen shows for one exercise. */
 TRAIN.recordsFor = function (exId) {
   var hist = TRAIN.historyOf(exId);
+  /* Working sets, not every set. hist.length counted the warmups, which made
+     "sets" on the records screen disagree with "sets" everywhere else. */
   var r = { maxWeight: null, maxReps: null, maxVolume: null, max1rm: null,
-            byReps: {}, sets: hist.length, workouts: 0 };
+            byReps: {}, sets: 0, workouts: 0 };
   var days = {};
   hist.forEach(function (s) {
+    if (s.warm) return;              /* warmups are not records and not volume */
+    r.sets++;
     days[s.date] = 1;
     var vol = (s.kg || 0) * (s.r || 0), e = TRAIN.e1rm(s.kg, s.r);
     if (s.kg > 0 && (!r.maxWeight || s.kg > r.maxWeight.kg)) r.maxWeight = s;
@@ -2647,16 +2714,44 @@ TRAIN.recordsFor = function (exId) {
 };
 
 /* Totals over a window, grouped however the Analysis screen asks. */
+/* ── the summary, and what counts toward it ──
+   Two things changed here on 2026-09-05, both his.
+
+   WARMUPS ARE NOT WORK. Three empty-bar sets before a heavy triple used to
+   add three sets and their volume to your chest total, which made the number
+   a count of how much you touched a bar rather than how much you worked.
+
+   A MOVEMENT CAN WORK MORE THAN ONE GROUP. "One set of pull ups as 1/2 a set
+   of biceps." So a set adds one to its own group and a fraction to each group
+   the exercise says it also works. Volume follows the same fraction, because
+   half a set of biceps did half the work.
+
+   Sets can be fractional now. That is the honest shape: pretending a pull-up
+   gives biceps a whole set or none of one is the thing that made the number
+   not mean anything. */
 TRAIN.breakdown = function (from, to, by) {
   var exs = TRAIN.exercises(), cats = TRAIN.cats(), out = {}, days = {};
   Object.keys(TRAIN.idx.byDate).forEach(function (d) {
     if (d < from || d > to) return;
     TRAIN.idx.byDate[d].forEach(function (s) {
+      if (s.warm) return;
       var ex = exs[s.ex];
-      var key = by === 'category' ? (ex && ex.cat ? ex.cat : '?') : s.ex;
-      var o = out[key] || (out[key] = { sets: 0, reps: 0, vol: 0, days: {} });
-      o.sets++; o.reps += s.r || 0; o.vol += (s.kg || 0) * (s.r || 0);
-      o.days[d] = 1; days[d] = 1;
+      var vol = (s.kg || 0) * (s.r || 0);
+      var put = function (key, share) {
+        var o = out[key] || (out[key] = { sets: 0, reps: 0, vol: 0, days: {} });
+        o.sets += share; o.reps += (s.r || 0) * share; o.vol += vol * share;
+        o.days[d] = 1;
+      };
+      if (by === 'category') {
+        put(ex && ex.cat ? ex.cat : '?', 1);
+        var also = (ex && ex.also) || null;
+        if (also) Object.keys(also).forEach(function (c) {
+          if (cats[c] && c !== (ex && ex.cat)) put(c, +also[c] || 0);
+        });
+      } else {
+        put(s.ex, 1);
+      }
+      days[d] = 1;
     });
   });
   var rows = Object.keys(out).map(function (k) {
@@ -2664,7 +2759,9 @@ TRAIN.breakdown = function (from, to, by) {
     var name = by === 'category'
       ? (cats[k] ? cats[k].name : 'Uncategorised')
       : (exs[k] ? exs[k].name : k);
-    return { key: k, name: name, sets: o.sets, reps: o.reps, vol: o.vol,
+    /* A whole number stays whole; a half set shows as a half. */
+    return { key: k, name: name, sets: Math.round(o.sets * 10) / 10,
+             reps: Math.round(o.reps), vol: o.vol,
              workouts: Object.keys(o.days).length,
              slot: by === 'category' && cats[k] ? cats[k].slot : null };
   });
