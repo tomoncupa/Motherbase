@@ -4647,17 +4647,39 @@ function weightChart(e) {
       lo = Math.min(lo, goal); hi = Math.max(hi, goal);
     }
     const pad = Math.max(1, (hi - lo) * .12); lo -= pad; hi += pad;
+    /* ── round numbers up the side ──
+       Tom, 2026-09-05: "I can't even tell what the dots mean numerically."
+       The range was the data plus a 12% pad, sliced into quarters, so the
+       labels came out 197, 203, 209 — true, and unreadable. A scale you have
+       to do arithmetic against is not a scale. Snapped to a round step, the
+       same chart reads 190, 200, 210 and a dot has a value you can see.
+
+       Only on auto. A range he set by hand is his and is left alone. */
+    const STEPS = [0.5, 1, 2, 5, 10, 20, 25, 50, 100];
+    const step = STEPS.filter(x => (hi - lo) / x <= 5)[0] || 100;
+    lo = Math.floor(lo / step) * step;
+    hi = Math.ceil(hi / step) * step;
   }
   const Y = v => PT + (1 - (v - lo) / Math.max(.001, hi - lo)) * (H - PT - PB);
   const clamp = v => Math.max(PT, Math.min(H - PB, Y(v)));
   const inView = v => v >= lo && v <= hi;
 
-  /* gridlines and their labels */
-  [0, .25, .5, .75, 1].forEach(t => {
+  /* ── gridlines and their labels ──
+     One line per round step where the scale is automatic, so every label is a
+     number you recognise. A hand-set range keeps the old five slices, because
+     his numbers are his and quartering them is the only honest thing to do
+     with a range somebody chose. */
+  const fixed = (fixLo != null && fixHi != null && fixHi > fixLo);
+  const GSTEPS = [0.5, 1, 2, 5, 10, 20, 25, 50, 100];
+  const gstep = GSTEPS.filter(x => (hi - lo) / x <= 6)[0] || 100;
+  const ticks = fixed ? [0, .25, .5, .75, 1]
+    : (() => { const out = []; for (let v = hi; v >= lo - 0.0001; v -= gstep) out.push((hi - v) / (hi - lo)); return out; })();
+  ticks.forEach(t => {
     const y = PT + t * (H - PT - PB);
     add('line', { x1: PL, y1: y, x2: W - PR, y2: y }, 'gl');
     const lab = add('text', { x: PL - 4, y: y + 3, 'text-anchor': 'end' }, 'lab');
-    lab.textContent = Math.round(hi - t * (hi - lo));
+    const val = hi - t * (hi - lo);
+    lab.textContent = gstep < 1 ? val.toFixed(1) : Math.round(val);
   });
 
   /* today, when the chart runs past it */
@@ -5718,8 +5740,43 @@ function runBacktest() {
   }, 60);
 }
 
+/* ── which copy of the app am I looking at ──
+   Added 2026-09-05 after a real half hour was lost to it. Tom reported the
+   share picture coming out in a shape that had been deleted from the code the
+   day before, and then that it was no longer transparent. Both were true of
+   his phone and neither was true of the app: a browser had cached the page
+   and kept serving it, and there was nothing on screen that could have told
+   him so. The next best thing to never caching is being able to see it.
+
+   BUILT is stamped by tools/build-client.py where it can be; where it cannot
+   — opening the folder straight off disk — it says so rather than lying. */
+function drawFreshness(pane) {
+  pane.appendChild(el('label', 'fl', 'THIS COPY'));
+  const stamp = document.documentElement.getAttribute('data-built') || '';
+  pane.appendChild(el('div', 'note',
+    'Script <b>v' + IO.SCRIPT_V + '</b>' +
+    (stamp ? ' · built <b>' + esc(stamp) + '</b>' : '') +
+    '. If something here does not match what you were told changed, ' +
+    'this is the first thing to check.'));
+
+  const b = el('button', 'btn wide mb-press mb-tap', 'Get the newest version');
+  b.onclick = () => {
+    UI.toast('fetching…');
+    /* Refetch every shared script past the cache, THEN reload the page with a
+       query it has never seen. Either half alone leaves the other stale, which
+       is exactly the state his phone was in. */
+    const srcs = [].map.call(document.querySelectorAll('script[src]'), n => n.src);
+    Promise.all(srcs.map(u => fetch(u, { cache: 'reload' }).catch(() => null)))
+      .then(() => location.replace(location.pathname + '?v=' + Date.now()));
+  };
+  pane.appendChild(b);
+  pane.appendChild(el('div', 'note',
+    'Loads the app again from scratch. Your data is not touched — it lives in this browser, not in the file.'));
+}
+
 function drawSyncTab(pane) {
   settingsPane = pane; pane.classList.add('setpane');
+  drawFreshness(pane);
   pane.appendChild(el('div', 'note', 'Backup creates a file you can restore from. Export creates a spreadsheet you can read, and it restores too. Both are in the DATA tab.'));
   const cfg = Mirror.settings;
 

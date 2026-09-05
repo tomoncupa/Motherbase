@@ -1365,27 +1365,68 @@ const WIDGETS = {
          is a seven day average. The dots are the point: a daily weight jumps
          around for reasons that have nothing to do with fat, and hiding that
          behind a smooth line is its own kind of lie. */
-      const W = 320, H = 96, PAD = 6;
+      /* ── the scale, which is what makes a dot mean anything ──
+         Tom, 2026-09-05: "I can't even tell what the dots mean numerically."
+         He is right, and the fix is the boring one his spreadsheet already
+         does: numbers up the side, lines across, and dates along the bottom.
+
+         The range is rounded out to a round step rather than fitted tight to
+         the data. Fitted tight, every chart fills its box top to bottom and a
+         pound of noise looks like a collapse. Rounded, the same wobble is
+         visibly a wobble. */
+      const W = 320, H = 108;
+      const GL = 34, GR = 6, GT = 8, GB = 16;      /* gutters: labels and dates */
       const vals = pts.map(p => p.v);
-      const lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
-      const span = (hi - lo) || 1;
-      const X = i => PAD + (i / (pts.length - 1)) * (W - PAD * 2);
-      const Y = v => PAD + (1 - (v - lo) / span) * (H - PAD * 2);
+      const rawLo = Math.min.apply(null, vals), rawHi = Math.max.apply(null, vals);
+      const STEPS = [0.5, 1, 2, 5, 10, 20, 25, 50];
+      const want = (rawHi - rawLo) || 1;
+      const step = STEPS.filter(x => want / x <= 4)[0] || 50;
+      const lo = Math.floor(rawLo / step) * step;
+      const hi = Math.ceil(rawHi / step) * step;
+      const span = (hi - lo) || step;
+
+      const X = i => GL + (i / (pts.length - 1)) * (W - GL - GR);
+      const Y = v => GT + (1 - (v - lo) / span) * (H - GT - GB);
 
       const avg = pts.map((p, i) => {
-        let s = 0, n = 0;
-        for (let j = Math.max(0, i - 6); j <= i; j++) { s += pts[j].v; n++; }
-        return s / n;
+        let a = 0, n = 0;
+        for (let j = Math.max(0, i - 6); j <= i; j++) { a += pts[j].v; n++; }
+        return a / n;
       });
+
+      /* One line per step, labelled. Never more than five: past that they stop
+         being a scale and start being hatching. */
+      let grid = '';
+      for (let v = lo; v <= hi + 0.0001; v += step) {
+        const y = Y(v).toFixed(1);
+        grid += '<line x1="' + GL + '" y1="' + y + '" x2="' + (W - GR) + '" y2="' + y +
+          '" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>' +
+          '<text x="' + (GL - 5) + '" y="' + (Y(v) + 3).toFixed(1) +
+          '" text-anchor="end" font-size="8" fill="var(--dim2)">' +
+          (step < 1 ? v.toFixed(1) : Math.round(v)) + '</text>';
+      }
+
+      /* First and last, which is the question a date axis actually answers on
+         something this size: how long a stretch am I looking at. */
+      const shortD = d => { const t = String(d).split('-'); return +t[2] + '/' + +t[1]; };
+      const axis =
+        '<text x="' + GL + '" y="' + (H - 4) + '" font-size="8" fill="var(--dim2)">' +
+          shortD(pts[0].d) + '</text>' +
+        '<text x="' + (W - GR) + '" y="' + (H - 4) + '" text-anchor="end" font-size="8" fill="var(--dim2)">' +
+          shortD(pts[pts.length - 1].d) + '</text>';
+
       const line = avg.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
       const dots = pts.map((p, i) =>
         '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(p.v).toFixed(1) +
-        '" r="2" fill="var(--dim2)"><title>' + esc(p.d) + ' · ' + p.v.toFixed(1) + '</title></circle>').join('');
+        '" r="1.8" fill="var(--dim2)"><title>' + esc(p.d) + ' \u00b7 ' + p.v.toFixed(1) + '</title></circle>').join('');
 
       const svg = el('div');
+      /* No preserveAspectRatio="none": stretching turned every dot into an
+         oval and made the line steeper than the numbers are. */
       svg.innerHTML =
-        '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block" preserveAspectRatio="none">' +
-        dots + '<path d="' + line + '" fill="none" stroke="var(--acc)" stroke-width="2" ' +
+        '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block">' +
+        grid + axis + dots +
+        '<path d="' + line + '" fill="none" stroke="var(--acc)" stroke-width="2" ' +
         'stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
       body.appendChild(svg);
 

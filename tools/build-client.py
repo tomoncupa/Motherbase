@@ -227,7 +227,13 @@ for here, subdirs, found in os.walk(DEST):
         t = io.open(p, encoding='utf-8').read()
         t, n = re.subn(r'(src="(?:\.\./)?shared/[a-z0-9_.-]+\.js)"',
                        r'\1?v=%s"' % stamp, t)
-        if n:
+        # Stamp the page itself too, so the app can SAY which copy it is.
+        # A phone serving a cached page had Tom chasing two bugs that were
+        # not there; STATUS shows this in settings so the next one is one
+        # glance rather than half an hour.
+        t, n2 = re.subn(r'<html lang="en"(?![^>]*data-built)',
+                        '<html lang="en" data-built="%s"' % stamp, t, count=1)
+        if n or n2:
             io.open(p, 'w', encoding='utf-8').write(t)
             stamped += n
 if not stamped:
