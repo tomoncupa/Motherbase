@@ -419,6 +419,8 @@ label.fl:first-child{margin-top:0}
 .lgi i.avg{border-color:var(--accent)}
 .lgi i.reality{border-color:var(--data-5);border-top-style:dashed}
 .lgi i.predict{border-color:var(--data-2);border-top-style:dotted}
+.lgi i.actual{border-color:var(--data-4)}
+.lgi i.cone{border-color:var(--data-4);border-top-width:8px;opacity:.3}
 
 /* ── the wheel ── */
 .wheel{display:flex;flex-direction:column;gap:var(--s-2)}
@@ -503,6 +505,13 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 /* the prediction: where you are actually heading. Thinner and dotted, because
    it is derived from an estimate and should not read as a promise. */
 .chart .predict{stroke:var(--data-2);stroke-width:1.5;stroke-dasharray:1 3;fill:none;opacity:.75}
+/* Where you land on what you have actually been eating. Solid, because unlike
+   the target it is built on something that happened. */
+.chart .actual{stroke:var(--data-4);stroke-width:1.75;fill:none;opacity:.95}
+/* The same projection at both ends of the TDEE error band. It opens with time
+   because the uncertainty does, and no stroke at all: an edge would read as
+   two more predictions rather than the width of one. */
+.chart .cone{fill:var(--data-4);opacity:.14;stroke:none}
 .chart .now{stroke:var(--border-strong);stroke-width:1;stroke-dasharray:2 3}
 .chart .lab{fill:var(--text-muted);font-family:var(--font-mono);font-size:var(--f-1)}
 
@@ -4329,6 +4338,7 @@ function rankCard() {
     c.appendChild(w);
   };
   opt('See-through card', 'shareSeeThru', 1);
+  opt('Darken the photo behind it', 'shareScrim', 1);
   opt('Leave spending out', 'hideSpend', 1);
   return c;
 }
@@ -4378,6 +4388,9 @@ async function shareCard(a, kind) {
   try {
     await IO.saveShot(shot, 'status-' + (a && a.rank ? a.rank.k : 'day') + '-' + kind, {
       w: 1080, h: kind === 'story' ? 1920 : 1350,
+      /* On by default. It is the thing that makes one picture work on a dark
+         photo and a bright one without asking him which he has. */
+      scrim: !!S.get('shareScrim', 1),
       width: Math.max(340, Math.min(440, cardW || 390)),
       /* The reading is sized by measuring, and this copy has never been
          measured - without this a long one clips in the picture while looking
@@ -4445,7 +4458,13 @@ function drawTrends(m) {
   const keys = [['avg', '7-day average']];
   if (ahead) keys.push(['reality', 'to hit ' + r1(goal) + ' by ' + Day.short(goalOn2)]);
   const showPredict = ahead && !!(e.predicted || e.tdee);
-  if (showPredict) keys.push(['predict', 'where you are heading']);
+  /* Three futures, named for the question each answers. "Where you are
+     heading" was doing for one line what now needs three, and the difference
+     between eating your target and eating what you actually eat is the whole
+     point of drawing both. */
+  if (showPredict) keys.push(['predict', 'if you eat your target']);
+  if (ahead && e.intake != null) keys.push(['actual', 'if you keep eating as you have']);
+  if (ahead && e.intake != null && e.err) keys.push(['cone', 'the give-or-take on that']);
   if (keys.length > 1) {
     const lg = el('div', 'legend');
     keys.forEach(k => {
@@ -4591,9 +4610,9 @@ function intakeToReach(w0, goalW, days) {
   return Math.round((lo + hi) / 2);
 }
 
-function predictWeight(w0, days, intakeOver) {
+function predictWeight(w0, days, intakeOver, tdeeOver) {
   const e = TD.estimate();
-  const tdee = e.predicted != null ? e.predicted : e.tdee;
+  const tdee = tdeeOver != null ? tdeeOver : (e.predicted != null ? e.predicted : e.tdee);
   const intake = intakeOver != null ? intakeOver : calTarget().v;
   if (!tdee || !intake || !w0) return null;
 
@@ -4740,20 +4759,64 @@ function weightChart(e) {
     add('line', { x1: X(today), y1: clamp(nowW), x2: X(goalOn), y2: clamp(goal) }, 'reality');
   }
 
-  /* ── the prediction ──
-     Drawn as soon as there is a weight to start from. Bodyweight × 13 is a
+  /* ══════════════ THE THREE LINES AHEAD ══════════════
+     Tom, 2026-09-05, asked for three projections and he is right that they are
+     three different questions:
+
+       REALITY   where you have to travel to arrive on time. A straight line
+                 from today to the goal weight on the goal date. It is not a
+                 prediction, it is the deadline.
+       TARGET    where you land if you eat the calorie target you set. This is
+                 the plan working.
+       ACTUAL    where you land if you keep eating what you have ACTUALLY been
+                 eating. This is the plan as lived, and the gap between it and
+                 TARGET is the whole coaching conversation.
+
+     ACTUAL comes with a cone, because it is the only one built on measurement
+     and measurement has a give-or-take. The cone is the same projection run at
+     the top and bottom of the TDEE error band, so it opens with time exactly
+     as the uncertainty does. A single confident line off an estimate that is
+     itself ±200 kcal is a lie with a nice slope.
+
+     Drawn as soon as there is a weight to start from. Bodyweight x 13 is a
      serviceable opening guess and the estimator moves off it within days of
-     real logging, so withholding the line until it says "measured" hid a
-     useful answer for two months to avoid overstating it by a few per cent.
-     Better to draw it and say what it is standing on. */
+     real logging, so withholding these hid a useful answer for two months to
+     avoid overstating it by a few per cent. */
+  const pathOf = pr => pr && pr.pts.length > 1
+    ? pr.pts.map((q, i) => (i ? 'L' : 'M') + X(Day.shift(today, q.i)) + ' ' + clamp(q.w)).join(' ')
+    : null;
+
+  const shown = { reality: false, target: false, actual: false, cone: false };
   if (aheadDays > 0 && nowW != null) {
-    const pr = predictWeight(nowW, aheadDays);
-    if (pr && pr.pts.length > 1) {
-      const dstr = pr.pts.map((q, i) =>
-        (i ? 'L' : 'M') + X(Day.shift(today, q.i)) + ' ' + clamp(q.w)).join(' ');
-      add('path', { d: dstr }, 'predict');
+    const est = TD.estimate();
+    const baseT = est.predicted != null ? est.predicted : est.tdee;
+    const eaten = est.intake;
+    const err = est.err;
+
+    /* the cone first, so both lines sit on top of it */
+    if (eaten != null && baseT && err) {
+      const hiP = predictWeight(nowW, aheadDays, eaten, baseT - err);   /* burning less -> heavier */
+      const loP = predictWeight(nowW, aheadDays, eaten, baseT + err);
+      if (hiP && loP && hiP.pts.length > 1 && loP.pts.length === hiP.pts.length) {
+        const top = hiP.pts.map((q, i) => (i ? 'L' : 'M') + X(Day.shift(today, q.i)) + ' ' + clamp(q.w));
+        const bot = loP.pts.slice().reverse().map(q => 'L' + X(Day.shift(today, q.i)) + ' ' + clamp(q.w));
+        add('path', { d: top.concat(bot).join(' ') + ' Z' }, 'cone');
+        shown.cone = true;
+      }
     }
+
+    /* what you have actually been eating */
+    if (eaten != null) {
+      const d = pathOf(predictWeight(nowW, aheadDays, eaten));
+      if (d) { add('path', { d: d }, 'actual'); shown.actual = true; }
+    }
+
+    /* what you said you would eat */
+    const dt = pathOf(predictWeight(nowW, aheadDays));
+    if (dt) { add('path', { d: dt }, 'predict'); shown.target = true; }
   }
+  shown.reality = !!(goal != null && aheadDays > 0 && nowW != null);
+  svg.dataset.shown = JSON.stringify(shown);
 
   /* raw weigh-ins. Thinned once they would overlap, or they smear into a grey
      band that hides the average line the chart exists to show. */

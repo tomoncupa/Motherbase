@@ -266,6 +266,8 @@ const IO = {
          fill    how much of the width the component takes, default .88
          anchor  where its middle sits, top to bottom, default .46
          width   CSS width to lay a loose node out at, default 390
+         scrim   paint a soft dark gradient behind it, so the picture reads on
+                 a bright photograph as well as a dark one
          before  run once it is laid out and the fonts have arrived, for
                  anything that has to measure before the picture is taken
        })  ->  Promise of a data URL
@@ -340,8 +342,30 @@ const IO = {
       const sheets = Array.prototype.map.call(document.querySelectorAll('style'),
         n => n.textContent).join(String.fromCharCode(10));
 
+      /* ── the scrim ──
+         A photo can be any brightness, and a see-through card on a white sky
+         is unreadable. The general answer is not a light mode and a dark mode
+         to choose between - it is to put your own darkness underneath, which
+         is what every app that overlays text on a photo does.
+
+         Softest at the top, deepest below the content, so it reads as the
+         picture getting darker towards the bottom rather than as a box. */
+      let scrim = '';
+      if (opts.scrim) {
+        const mid = Math.max(0, Math.min(1, (oy + sh / 2) / H));
+        scrim =
+          '<defs><linearGradient id="mbscrim" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0" stop-color="#000" stop-opacity="0"/>' +
+          '<stop offset="' + Math.max(0.01, mid - 0.34).toFixed(3) + '" stop-color="#000" stop-opacity="0.10"/>' +
+          '<stop offset="' + mid.toFixed(3) + '" stop-color="#000" stop-opacity="0.42"/>' +
+          '<stop offset="1" stop-color="#000" stop-opacity="0.72"/>' +
+          '</linearGradient></defs>' +
+          '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="url(#mbscrim)"/>';
+      }
+
       const svg =
         '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
+        scrim +
         '<foreignObject x="' + ox + '" y="' + oy + '" width="' + sw + '" height="' + sh + '">' +
         '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(stand) + '">' +
         '<style>' + sheets + '</style>' +
