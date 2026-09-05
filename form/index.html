@@ -1143,12 +1143,41 @@ function oneRMset(w,reps){
   return { each:f, median, lo:sorted[0], hi:sorted[sorted.length-1] };
 }
 const RMPCT={1:100,2:95,3:93,5:87,8:80,10:75,12:70};
+/* ===================== work volume =====================
+   Coaches mean two different numbers by "volume", so give both.
+
+   Volume load is reps x weight. It needs nothing but the weight, and it is the
+   number that goes in a training log.
+
+   Mechanical work is real joules, and it needs the ⟺ calibration line, because
+   a joule is a load moved a REAL distance and the clip only knows pixels. Once
+   there is a metres-per-pixel scale every rep carries its travel in metres, so
+   the sum is weight x gravity x distance. It counts the lift only: not the
+   lowering, and not the lifter's own body, which on a squat is most of the mass
+   actually moving. */
+const G=9.80665, LB2KG=0.45359237;
+function setVolume(pane,w,unit){
+  const reps=V[pane].reps||[]; if(!(w>0)||!reps.length) return null;
+  const kg=unit==='lb'?w*LB2KG:w;
+  const v={ n:reps.length, volume:w*reps.length };
+  const rom=reps.filter(r=>r.romM>0);
+  /* every rep or none: one rep missing its distance would quietly undercount
+     the total, and a wrong number is worse than a missing one */
+  if(rom.length===reps.length){
+    v.romTotal=rom.reduce((a,r)=>a+r.romM,0);
+    v.romMean=v.romTotal/rom.length;
+    v.workJ=kg*G*v.romTotal;
+    const timed=rom.filter(r=>r.con>0);
+    if(timed.length) v.powerW=kg*G*timed.reduce((a,r)=>a+r.romM,0)/timed.reduce((a,r)=>a+r.con,0);
+  }
+  return v;
+}
 function renderLoad(pane){
   const host=document.getElementById('rm'+pane); if(!host) return;
   const w=parseFloat((document.querySelector(`[data-weight="${pane}"]`)||{}).value);
   const unit=(document.querySelector(`[data-unit="${pane}"]`)||{}).value||'kg';
   const m=setMetrics(pane), doneReps=(V[pane].reps||[]).length;
-  if(!(w>0)){ host.innerHTML='<span class="muted">Enter the weight used to estimate rep maxes.</span>'; return; }
+  if(!(w>0)){ host.innerHTML='<span class="muted">Enter the weight used for volume and rep maxes.</span>'; return; }
   if(!doneReps){ host.innerHTML='<span class="muted">No reps detected yet — hit ⚡ Analyse.</span>'; return; }
   const rir=m?Math.round(m.rirMid):0;
   const effective=doneReps+rir;                      // reps-to-failure = completed + estimated RIR
@@ -1156,6 +1185,20 @@ function renderLoad(pane){
   const spread=(est.hi-est.lo)/est.median*100;
   let h=`<div class="muted" style="margin-bottom:4px">${doneReps} reps @ ${w}${unit}`+
         (m?` + ~${rir} RIR → <b>${effective}</b> reps to failure`:'')+`</div>`;
+  const vol=setVolume(pane,w,unit);
+  if(vol){
+    const num=x=>x%1?x.toFixed(1):x.toFixed(0);
+    h+='<div class="rmgrid">';
+    h+=`<div class="rmcell hero"><b>${num(vol.volume)}</b><span>${unit} volume</span></div>`;
+    if(vol.workJ!=null){
+      h+=`<div class="rmcell"><b>${(vol.workJ/1000).toFixed(1)}</b><span>kJ work</span></div>`;
+      h+=`<div class="rmcell"><b>${(vol.romMean*100).toFixed(0)}</b><span>cm/rep</span></div>`;
+      h+=`<div class="rmcell"><b>${vol.powerW!=null?Math.round(vol.powerW):'–'}</b><span>W mean</span></div>`;
+    } else {
+      h+='<div class="rmcell" style="grid-column:span 3; text-align:left; padding-left:7px"><span>⟺ Cal a known length for work in joules</span></div>';
+    }
+    h+='</div>';
+  }
   h+='<div class="rmgrid">';
   h+=`<div class="rmcell hero"><b>${est.median.toFixed(1)}</b><span>1RM</span></div>`;
   [3,5,8].forEach(n=>{ h+=`<div class="rmcell"><b>${(est.median*RMPCT[n]/100).toFixed(1)}</b><span>${n}RM</span></div>`; });
@@ -1166,6 +1209,7 @@ function renderLoad(pane){
   h+=`<div class="muted" style="margin-top:5px">Formula spread ${est.lo.toFixed(1)}–${est.hi.toFixed(1)}${unit} (±${(spread/2).toFixed(0)}%)`;
   if(effective>12) h+=` · <span class="warn">${effective} reps — estimates lose accuracy above ~12</span>`;
   if(!m) h+=' · no velocity data, RIR not applied';
+  if(vol&&vol.workJ!=null) h+=' · work is the lift only: tracked travel × load, not the lowering and not your bodyweight';
   h+='</div>';
   host.innerHTML=h;
 }
