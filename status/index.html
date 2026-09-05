@@ -608,7 +608,7 @@ IO.register({
       ['name', 'Name'], ['brand', 'Brand'], ['cat', 'Group'],
       ['base.amt', 'Serving'], ['base.unit', 'Unit'],
       ['base.kcal', 'Calories'], ['base.p', 'Protein'], ['base.c', 'Carbs'], ['base.f', 'Fat'],
-      ['base.na', 'Sodium'], ['base.k', 'Potassium'], ['base.caff', 'Caffeine'],
+      ['base.na', 'Sodium'], ['base.k', 'Potassium'], ['base.ca', 'Calcium'], ['base.caff', 'Caffeine'],
       ['base.price', 'Price'],
     ] },
     { name: 'Meals', type: 'meal', cols: [
@@ -697,6 +697,7 @@ const LIBRARY = [
   { id: 'potassium', label: 'Potassium',  unit: 'g',   measure: 'amount', step: .5,  dec: 1, chips: [1, 2, 3, 4], from: 'k',    per: .001 },
   { id: 'sodium',    label: 'Sodium',     unit: 'g',   measure: 'amount', step: .5,  dec: 1, chips: [1, 2, 3, 4, 5], from: 'na', per: .001 },
   { id: 'caffeine',  label: 'Caffeine',   unit: 'mg',  measure: 'amount', step: 50,  dec: 0, chips: [100, 150, 200, 300], from: 'caff', per: 1 },
+  { id: 'calcium',   label: 'Calcium',    unit: 'mg',  measure: 'amount', step: 100, dec: 0, chips: [500, 800, 1000, 1200], from: 'ca', per: 1 },
   { id: 'magnesium', label: 'Magnesium',  unit: 'mg',  measure: 'amount', step: 100, dec: 0, chips: [200, 400, 600] },
   { id: 'zinc',      label: 'Zinc',       unit: 'mg',  measure: 'amount', step: 5,   dec: 0, chips: [15, 30, 50] },
   { id: 'water',     label: 'Water',      unit: 'L',   measure: 'amount', step: .5,  dec: 1, chips: [.5, 1, 1.5, 2] },
@@ -916,7 +917,7 @@ function evDrop(date, fid, t) {
    edited the meal, and nothing would say which of the two was the real one. */
 const NUT_FROM = [
   ['kcal', 'Calories', 'kcal'], ['p', 'Protein', 'g'], ['c', 'Carbs', 'g'], ['f', 'Fat', 'g'],
-  ['na', 'Sodium', 'mg'], ['k', 'Potassium', 'mg'], ['caff', 'Caffeine', 'mg'],
+  ['na', 'Sodium', 'mg'], ['k', 'Potassium', 'mg'], ['ca', 'Calcium', 'mg'], ['caff', 'Caffeine', 'mg'],
 ];
 
 function fromFood(date, f) {
@@ -952,7 +953,7 @@ const logged = (date, fid) => entries(date, fid).length > 0;
    A `meal` row is one logged serving with its numbers frozen in, so editing
    a food tomorrow never rewrites what you ate today.                       */
 
-const NUTS = ['p', 'c', 'f', 'kcal', 'na', 'k', 'caff'];
+const NUTS = ['p', 'c', 'f', 'kcal', 'na', 'k', 'ca', 'caff'];
 
 /* ══ how sure you are of a meal ══
    A weighed chicken breast and a plate of adobo somebody else cooked are not
@@ -1034,7 +1035,7 @@ function mealSpend(date, key, row) {
 const meals = date => Rec.all('meal', { date: date }).map(r => Object.assign({ key: r.key }, r.payload)).sort((a, b) => a.t - b.t);
 
 function dayTotals(date) {
-  const t = { p: 0, c: 0, f: 0, kcal: 0, na: 0, k: 0, caff: 0, price: 0 };
+  const t = { p: 0, c: 0, f: 0, kcal: 0, na: 0, k: 0, ca: 0, caff: 0, price: 0 };
   meals(date).forEach(m => { Object.keys(t).forEach(n => { t[n] += num(m[n], 0) || 0; }); });
   /* how many of today's calories are guessed rather than read off a label */
   t.kerr = meals(date).reduce((a, m) => a + (num(m.kcal, 0) || 0) * (num(m.err, 0) || 0), 0);
@@ -2070,6 +2071,7 @@ function parseLabel(text) {
   o.f    = grab(text, ['total fat', 'fat'], 'g?');
   o.na   = grab(text, ['sodium'], 'mg?');
   o.k    = grab(text, ['potassium'], 'mg?');
+  o.ca   = grab(text, ['calcium'], 'mg?');
   o.caff = grab(text, ['caffeine'], 'mg?');
   const sz = text.match(/serving size[^0-9\n]{0,20}([0-9]+(?:\.[0-9]+)?)\s*(g|ml|mL|G|ML)/i);
   if (sz) { o.amt = parseFloat(sz[1]); o.unit = sz[2].toLowerCase(); }
@@ -2287,7 +2289,7 @@ function oneOffSheet() {
        still means zero; the difference is that now there is somewhere to type
        it. */
     const g3 = el('div', 'grid3');
-    [['na', 'Sodium mg'], ['k', 'Potassium mg'], ['caff', 'Caffeine mg']].forEach(k => {
+    [['na', 'Sodium mg'], ['k', 'Potassium mg'], ['ca', 'Calcium mg'], ['caff', 'Caffeine mg']].forEach(k => {
       const w = el('div'); w.appendChild(el('label', 'fl', k[1]));
       const i = document.createElement('input');
       i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*');
@@ -2328,7 +2330,8 @@ function oneOffSheet() {
       const kcal = num(f.kcal.value) == null ? derived() : num(f.kcal.value, 0);
       const row = { fid: null, name: name, serve: 'one-off', unit: '', amt: 1, mult: 1, t: Date.now(),
         kcal: kcal, p: num(f.p.value, 0) || 0, c: num(f.c.value, 0) || 0, f: num(f.f.value, 0) || 0,
-        na: num(f.na.value, 0) || 0, k: num(f.k.value, 0) || 0, caff: num(f.caff.value, 0) || 0,
+        na: num(f.na.value, 0) || 0, k: num(f.k.value, 0) || 0,
+        ca: num(f.ca.value, 0) || 0, caff: num(f.caff.value, 0) || 0,
         price: num(f.price.value, 0) || 0, err: err, acct: acct };
       const key = uid();
       Rec.set('meal', d, key, row);
@@ -3142,6 +3145,7 @@ function foodEditor(fd, prefillName) {
     g3.appendChild(mk('f', 'Fat g', f.base.f));
     g3.appendChild(mk('na', 'Sodium mg', f.base.na));
     g3.appendChild(mk('k', 'Potassium mg', f.base.k));
+    g3.appendChild(mk('ca', 'Calcium mg', f.base.ca));
     g3.appendChild(mk('caff', 'Caffeine mg', f.base.caff));
     g3.appendChild(mk('price', 'Price ₱', f.base.price));
     body.appendChild(g3);
@@ -3660,8 +3664,16 @@ function drawJournal(m) {
          2026-09-03: "Bullet time can be beside entry when checked." */
       (x.at ? '<i class="at">' + esc(clockLabel(x.at)) + (x.dur ? ' \u00b7 ' + durLabel(x.dur) : '') + '</i>'
             : (x.dur ? '<i class="at">' + durLabel(x.dur) + '</i>' : '')) +
-      (x.by ? '<i class="at by">by ' + esc(clockLabel(x.by)) + '</i>' : '') +
-      (x.done && x.doneAt ? '<i class="at did">' + esc(clockLabel(x.doneAt)) + '</i>' : '') +
+      /* ── one Done time, not two ──
+         Tom, 2026-09-05: "Todos with a done time should not have a visible
+         seperate ticked time." Right: the row was carrying "by 4:44" AND the
+         moment it was ticked, which is the same question answered twice and
+         made a finished line the busiest thing on the screen.
+
+         `by` is the Done time now and the tick writes into it, so this is the
+         only clock a finished task shows. Still open, it reads "by" because
+         that is what a time in the future means. */
+      (x.by ? '<i class="at by">' + (x.done ? '' : 'by ') + esc(clockLabel(x.by)) + '</i>' : '') +
       /* An entry has no time of its own, so the useful clock is when it was
          written. Only where nothing else is showing, or the row starts
          carrying three times and says nothing. */
@@ -3693,6 +3705,12 @@ function drawJournal(m) {
                       String(now.getMinutes()).padStart(2, '0');
         Rec.set('note', own, x.key, Object.assign(bare(x), {
           done: x.done ? 0 : 1,
+          /* The Done field IS the tick time. Ticking writes the real one over
+             whatever you were aiming at, because a field called Done showing a
+             time you did not finish at would be a lie on the row. Un-ticking
+             puts back nothing rather than the old target: it is gone, and
+             pretending otherwise is worse than an empty box. */
+          by: x.done ? null : stamp,
           doneAt: x.done ? null : stamp,
           /* WHICH DAY you ticked it, so a task written on Monday and finished
              on Thursday shows up on Thursday. Cleared on un-ticking, like the
@@ -3726,7 +3744,21 @@ function noteSheet(x, d) {
      dialog second, so a focus() inside the builder lands on an element that
      is not in the page yet and does nothing at all. */
   let taRef = null;
-  openSheet(noteKind(x.kind).label, body => {
+  /* ── when it was written, in the title ──
+     Tom, 2026-09-05: "'written 9:18' should just be '9:18' beside todo." It
+     was a whole row at the bottom of the sheet for a fact you glance at, and
+     the word "Written" was doing no work that its position does not already
+     do. A date only appears when it is not today, because on today it says
+     nothing. */
+  let stamp = '';
+  if (!isNew && x.t) {
+    const w = new Date(x.t);
+    stamp = clockLabel(String(w.getHours()).padStart(2, '0') + ':' + String(w.getMinutes()).padStart(2, '0'));
+    if (x.date !== Day.today()) {
+      stamp += ' \u00b7 ' + w.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    }
+  }
+  openSheet(noteKind(x.kind).label + (stamp ? '  ' + stamp : ''), body => {
     const seg = el('div', 'seg');
     let kind = x.kind;
     NOTE_KINDS.forEach(k => {
@@ -3752,7 +3784,16 @@ function noteSheet(x, d) {
     let atVal = x.at || '', byVal = x.by || '';
     const times = el('div', 'grid2');
     times.style.display = kind === 'todo' ? '' : 'none';
-    [['Start', 'at', atVal], ['By', 'by', byVal]].forEach(([lbl, key, val]) => {
+    /* ── Start and Done ──
+       "By" was the time you meant to finish. Calling it Done makes it the time
+       you DID, which is the fact worth keeping once the day has happened - and
+       it is the same box, so setting one ahead is still how you say when you
+       mean to be finished.
+
+       Ticking writes the real time over it. That loses the time you were
+       aiming at, and that is the trade: a field called Done that shows a time
+       you did not finish at would be a lie on the row. */
+    [['Start', 'at', atVal], ['Done', 'by', byVal]].forEach(([lbl, key, val]) => {
       const w = el('div', 'field');
       w.appendChild(el('label', 'fl', lbl));
       const i = timeInput(val, v => { if (key === 'at') atVal = v; else byVal = v; });
@@ -3762,18 +3803,6 @@ function noteSheet(x, d) {
     body.appendChild(times);
     /* The picker above can change the kind after this is built. */
     seg.addEventListener('click', () => { times.style.display = kind === 'todo' ? '' : 'none'; });
-
-    /* When you wrote it. Not the time you typed into the line - that is `at`
-       and it already shows on the row - but the moment the line was made.
-       Tom, 2026-08-28: "when I click on a bullet in status should show the
-       time I wrote it." */
-    if (!isNew && x.t) {
-      const w = new Date(x.t);
-      const same = x.date === Day.today();
-      body.appendChild(el('div', 'note', 'Written ' +
-        clockLabel(String(w.getHours()).padStart(2, '0') + ':' + String(w.getMinutes()).padStart(2, '0')) +
-        (same ? '' : ' on ' + w.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))));
-    }
 
     /* `again` reopens an empty line of the same kind instead of closing, which
        is what makes a list a list. */
@@ -6227,28 +6256,28 @@ function exportSheets() {
   const live = Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0));
 
   const daily = [['Date', 'Day'].concat(live.map(f => f.label + (f.unit ? ' (' + f.unit + ')' : '')))
-    .concat(['Calories', 'Calories ±', 'Protein g', 'Carbs g', 'Fat g', 'Sodium mg', 'Potassium mg', 'Caffeine mg', 'Food eaten ₱', 'Spent ₱'])];
+    .concat(['Calories', 'Calories ±', 'Protein g', 'Carbs g', 'Fat g', 'Sodium mg', 'Potassium mg', 'Calcium mg', 'Caffeine mg', 'Food eaten ₱', 'Spent ₱'])];
   days.forEach(d => {
     const t = dayTotals(d), sp = spendTotal(d);
     const any = live.some(f => value(d, f.id) != null) || t.kcal || sp;
     if (!any) return;
     daily.push([d, new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })].concat(live.map(f => { const v = value(d, f.id); return v == null ? '' : r1(v); }))
-      .concat([Math.round(t.kcal), Math.round(t.kerr), r1(t.p), r1(t.c), r1(t.f), Math.round(t.na), Math.round(t.k), Math.round(t.caff),
+      .concat([Math.round(t.kcal), Math.round(t.kerr), r1(t.p), r1(t.c), r1(t.f), Math.round(t.na), Math.round(t.k), Math.round(t.ca), Math.round(t.caff),
         Math.round(t.price), Math.round(sp)]));
   });
 
-  const mealRows = [['Date', 'Time', 'Food', 'Serving', 'Amount', 'Unit', 'Calories', 'Protein', 'Carbs', 'Fat', 'Sodium', 'Potassium', 'Caffeine', 'Price', 'Margin', 'Paid from']];
+  const mealRows = [['Date', 'Time', 'Food', 'Serving', 'Amount', 'Unit', 'Calories', 'Protein', 'Carbs', 'Fat', 'Sodium', 'Potassium', 'Calcium', 'Caffeine', 'Price', 'Margin', 'Paid from']];
   days.forEach(d => meals(d).forEach(x => mealRows.push([d, new Date(x.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    x.name, x.serve || '', r1(x.amt), x.unit || '', Math.round(x.kcal), r1(x.p), r1(x.c), r1(x.f), Math.round(x.na), Math.round(x.k), Math.round(x.caff), Math.round(x.price),
+    x.name, x.serve || '', r1(x.amt), x.unit || '', Math.round(x.kcal), r1(x.p), r1(x.c), r1(x.f), Math.round(x.na), Math.round(x.k), Math.round(x.ca), Math.round(x.caff), Math.round(x.price),
     errTag(x.err), x.acct || ''])));
 
   const spendRows = [['Date', 'Time', 'Amount', 'Account', 'Details']];
   days.forEach(d => spends(d).forEach(s => spendRows.push([d, new Date(s.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     r1(s.amt), s.acct || '', s.note || ''])));
 
-  const foodRows = [['Food', 'Brand', 'Group', 'Serving', 'Unit', 'Calories', 'Protein', 'Carbs', 'Fat', 'Sodium', 'Potassium', 'Caffeine', 'Price', 'Your servings', 'Times logged']];
+  const foodRows = [['Food', 'Brand', 'Group', 'Serving', 'Unit', 'Calories', 'Protein', 'Carbs', 'Fat', 'Sodium', 'Potassium', 'Calcium', 'Caffeine', 'Price', 'Your servings', 'Times logged']];
   Object.values(foods()).forEach(f => foodRows.push([f.name, f.brand || '', f.cat || '', r1(num(f.base.amt, 0)), f.base.unit || '',
-    num(f.base.kcal, ''), num(f.base.p, ''), num(f.base.c, ''), num(f.base.f, ''), num(f.base.na, ''), num(f.base.k, ''), num(f.base.caff, ''), num(f.base.price, ''),
+    num(f.base.kcal, ''), num(f.base.p, ''), num(f.base.c, ''), num(f.base.f, ''), num(f.base.na, ''), num(f.base.k, ''), num(f.base.ca, ''), num(f.base.caff, ''), num(f.base.price, ''),
     (f.serves || []).map(s => s.label + ' = ' + r1(s.mult) + '×').join('; '), f.uses || 0]));
 
   const e = TD.estimate();
