@@ -296,6 +296,12 @@ main{display:flex;flex:1;min-height:0}
 .b-txt{flex:1;min-width:0}
 .b-name{font-size:12.5px;line-height:1.28;outline:none;border-radius:4px;padding:1px 2px;margin-left:-2px;word-break:break-word;cursor:text}
 .b-name:focus{background:var(--bg);box-shadow:0 0 0 1px var(--acc-d)}
+/* A block whose title goes somewhere. Underlined rather than coloured: colour
+   on a brick already says which lane it belongs to, and two meanings on one
+   channel is how a board stops being readable. */
+.b-titlelink{display:block;cursor:pointer;text-decoration:underline;
+  text-underline-offset:2px;text-decoration-color:var(--acc);color:inherit}
+.b-titlelink:hover{text-decoration-thickness:2px}
 .b-note{font-size:10.5px;color:var(--dim);line-height:1.34;outline:none;padding:1px 2px;margin-left:-2px;border-radius:4px;cursor:text}
 .b-note:focus{background:var(--bg);box-shadow:0 0 0 1px var(--acc-d)}
 .b-note:empty:before{content:'note…';color:var(--dim2);opacity:.4}
@@ -3046,6 +3052,29 @@ function brickNode(laneId, it, s, e, meta) {
   ck.oncontextmenu = ev => { ev.preventDefault(); ev.stopPropagation(); setSkippedOn(it, col, vL); };
   main.appendChild(ck);
   const txt = el('div', 'b-txt');
+
+  /* ── a block that goes somewhere ──
+     Tom, 2026-09-05: "I want the title itself to act at the link." He is
+     right. "Todoist Run Through" IS the link — a second line under it saying
+     where it goes is the same fact written twice, and on forty-one blocks
+     that is a wall.
+
+     So a block with a link has a title you click to go there, and renaming it
+     moves to the menu, which is where everything else about a block already
+     lives. A block WITHOUT a link is untouched: the title is still the thing
+     you click to rename, because that is the common case and it should not
+     get worse to serve the rare one. */
+  if (it.link) {
+    const a = el('a', 'b-name b-titlelink');
+    a.textContent = it.name;
+    a.href = it.link;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.title = it.link + '  —  right-click the block to rename it';
+    a.onclick = ev => ev.stopPropagation();
+    txt.appendChild(a);
+  } else {
+
   const nm = el('div', 'b-name', esc(it.name));
   nm.contentEditable = 'true'; nm.spellcheck = false;
   nm.onblur = () => {
@@ -3066,6 +3095,7 @@ function brickNode(laneId, it, s, e, meta) {
   };
   nm.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); nm.blur(); } ev.stopPropagation(); };
   txt.appendChild(nm);
+  }
   if (it.note || it.noteOpen) {
     const no = el('div', 'b-note', linkify(it.note || ''));
     no.contentEditable = 'true'; no.spellcheck = false;
@@ -3209,6 +3239,34 @@ function blockMenu(laneId, it, x, y) {
         ];
       } },
     { sep: 1 },
+    /* ── the link, and the rename it displaces ──
+       A linked block's title opens the link, so renaming has to live here.
+       Only shown on a block that HAS one: an extra line in the menu for every
+       block, to serve the few that go somewhere, is the same clutter in a
+       different place. */
+    { label: it.link ? 'Change where it goes' : 'Make the title a link',
+      fn: () => {
+        const now = prompt(
+          'Paste an address. The title becomes a link to it.' +
+          String.fromCharCode(10) + String.fromCharCode(10) +
+          'Leave it empty to remove the link.' + String.fromCharCode(10) +
+          'https://todoist.com/app/today' + String.fromCharCode(10) +
+          'https://calendar.google.com/calendar/r/day',
+          it.link || 'https://');
+        if (now === null) return;
+        const v = now.trim();
+        if (v && !LINK_OK.test(v)) return toast('Only web addresses, starting <b>http</b> or <b>https</b>');
+        snap();
+        it.link = v || '';
+        syncKin(it, { link: it.link });
+        render();
+        toast(v ? '<b>' + esc(it.name) + '</b> opens that now' : 'link removed');
+      } },
+    ...(it.link ? [{ label: 'Rename', fn: () => {
+        const v = (prompt('Rename this block', it.name) || '').replace(/\s+/g, ' ').trim();
+        if (!v || v === it.name) return;
+        snap(); it.name = v; syncKin(it, { name: v }); ensureInBin(it); render();
+      } }] : []),
     { label: it.note ? 'Edit note' : 'Add note', fn: () => { it.noteOpen = true; it.compact = false; render(); } },
     { label: 'Pin position', check: !!it.pin, fn: () => { snap(); it.pin = !it.pin; render(); } },
     { label: 'Timeless — no clock, just a to-do', check: !!it.timeless,
@@ -4776,9 +4834,11 @@ function publishFor(key, quiet) {
     schedule(l.id).filter(r => effDays(lane(l.id), r.it)[d]).map(r => ({
       id: r.it.id, actId: actIdOf(r.it), name: r.it.name, s: r.s, dur: r.it.dur,
       color: r.it.color, lane: lane(l.id).name,
-      /* The note travels with the block. It is where a link lives — "Open
-         Todoist" is only useful if the thing that opens Todoist is on the
-         screen you are actually following, which is the phone. */
+      /* Where it goes, if it goes anywhere. "Todoist Run Through" is only
+         useful as a link on the screen he is actually following, which is the
+         phone. The note comes too, because a link written in a note before
+         there was a link field should not stop working. */
+      link: r.it.link || '',
       note: r.it.note || '',
     })))).sort((a, b) => a.s - b.s);
   const plan = { date: key, vid: vid, name: (variant(vid) || {}).name || 'routine', blocks: blocks };
