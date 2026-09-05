@@ -177,7 +177,7 @@ IO.register({
       ['name', 'Name'], ['brand', 'Brand'], ['cat', 'Group'],
       ['base.amt', 'Serving'], ['base.unit', 'Unit'],
       ['base.kcal', 'Calories'], ['base.p', 'Protein'], ['base.c', 'Carbs'], ['base.f', 'Fat'],
-      ['base.na', 'Sodium'], ['base.k', 'Potassium'], ['base.caff', 'Caffeine'],
+      ['base.na', 'Sodium'], ['base.k', 'Potassium'], ['base.ca', 'Calcium'], ['base.caff', 'Caffeine'],
       ['base.price', 'Price'],
     ] },
   ],
@@ -197,15 +197,15 @@ const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
 
 /* Every number a food row can carry, in STATUS's own spelling, so what this
    app writes and what that app writes are the same shape. */
-const NUTS = ['kcal', 'p', 'c', 'f', 'na', 'k', 'caff'];
+const NUTS = ['kcal', 'p', 'c', 'f', 'na', 'k', 'ca', 'caff'];
 const WORD = { p: 'protein', c: 'carbs', f: 'fat', kcal: 'calories', amt: 'of it' };
 
 /* ══ what is on screen ══
    L is the label as typed. PORTIONS is what you want out of it. EDIT is the
    id of the food being changed, or null when this is a new one. */
 const L = { name: '', brand: '', cat: '', amt: '100', unit: 'g',
-  kcal: '', p: '', c: '', f: '', na: '', k: '', caff: '', price: '' };
-let PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 50 }];
+  kcal: '', p: '', c: '', f: '', na: '', k: '', ca: '', caff: '', price: '' };
+let PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
 let EDIT = null;
 const INPUTS = {};
 
@@ -219,7 +219,7 @@ const INPUTS = {};
    then "Saturated Fat 2g" two lines later, and a plain search for "fat" picks
    the wrong one about half the time depending on the layout. */
 const AVOID = {
-  p: /$^/, na: /$^/, k: /$^/, caff: /$^/,
+  p: /$^/, na: /$^/, k: /$^/, ca: /$^/, caff: /$^/,
   f: /saturat|trans|mono|poly|unsaturat|of which/i,
   c: /sugar|fibre|fiber|starch|polyol|of which/i,
 };
@@ -301,6 +301,7 @@ function readLabel(raw) {
   o.f = pick(lines, ['total fat', 'fat'], AVOID.f);
   o.na = sodium(lines);
   o.k = pick(lines, ['potassium'], AVOID.k);
+  o.ca = pick(lines, ['calcium'], AVOID.ca);
   o.caff = pick(lines, ['caffeine'], AVOID.caff);
   const s = serving(text, lines);
   if (s) { o.amt = s.amt; o.unit = s.unit; }
@@ -350,7 +351,25 @@ function unlabel(s, base) {
    Built once. Only the two things that change get redrawn, and never the box
    being typed into - rebuilding an input takes the cursor with it. */
 const M = document.getElementById('main');
-const ptBox = el('div'), foodBox = el('div');
+const ptBox = el('div'), foodBox = el('div'), groupBox = el('div', 'chips');
+
+/* The five groups Tom sorts food into. A fixed list rather than a text box,
+   because typing "Protein" and "protein" on two different days is how a list
+   of five groups quietly becomes a list of nine. Tapping the one that is on
+   turns it off, so no group is a real answer too. */
+const GROUPS = ['Protein', 'Carbs', 'Snacks', 'Fruits/Veggies', 'Seasonings/Marinades'];
+function paintGroups() {
+  groupBox.innerHTML = '';
+  /* A food grouped somewhere else - by STATUS, or by an older version of this
+     list - keeps its own chip on the end. Without that, loading it and saving
+     it would silently move it into no group at all. */
+  const list = GROUPS.concat(L.cat && GROUPS.indexOf(L.cat) < 0 ? [L.cat] : []);
+  list.forEach(g => {
+    const b = el('button', 'chip mb-press mb-tap' + (L.cat === g ? ' on' : ''), esc(g));
+    b.onclick = () => { L.cat = L.cat === g ? '' : g; paintGroups(); saveDraft(); Mobile.haptic('select'); };
+    groupBox.appendChild(b);
+  });
+}
 
 function textField(key, label, opts) {
   const w = el('div', 'field');
@@ -370,6 +389,10 @@ function textField(key, label, opts) {
 function setField(key, v) {
   L[key] = v == null ? '' : String(v);
   if (INPUTS[key]) INPUTS[key].value = L[key];
+  /* The group is chips, not a box, so it has to be repainted rather than
+     assigned. Everything that fills the form from outside comes through here,
+     so this is the one place that needs to know. */
+  if (key === 'cat') paintGroups();
 }
 
 function build() {
@@ -400,10 +423,10 @@ function build() {
   c1.appendChild(readBtn);
 
   c1.appendChild(textField('name', 'Name', { text: 1, ph: 'Chicken breast' }));
-  const g1 = el('div', 'grid2');
-  g1.appendChild(textField('brand', 'Brand or place', { text: 1 }));
-  g1.appendChild(textField('cat', 'Group', { text: 1, ph: 'Protein' }));
-  c1.appendChild(g1);
+  c1.appendChild(textField('brand', 'Brand or place', { text: 1 }));
+  c1.appendChild(el('label', 'fl', 'Group'));
+  c1.appendChild(groupBox);
+  paintGroups();
 
   c1.appendChild(el('label', 'fl', 'One serving, as printed'));
   const g2 = el('div', 'grid2');
@@ -418,6 +441,7 @@ function build() {
   g3.appendChild(textField('f', 'Fat g'));
   g3.appendChild(textField('na', 'Sodium mg'));
   g3.appendChild(textField('k', 'Potassium mg'));
+  g3.appendChild(textField('ca', 'Calcium mg'));
   g3.appendChild(textField('caff', 'Caffeine mg'));
   g3.appendChild(textField('price', 'Price'));
   c1.appendChild(g3);
@@ -560,7 +584,7 @@ function loadFood(fd) {
   setField('amt', fd.base.amt); setField('unit', fd.base.unit || 'g');
   NUTS.concat(['price']).forEach(n => setField(n, fd.base[n] == null ? '' : fd.base[n]));
   PORTIONS = (fd.serves || []).map(s => unlabel(s, fd.base));
-  if (!PORTIONS.length) PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 50 }];
+  if (!PORTIONS.length) PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
   paintPortions(); saveDraft(); syncBar();
   Mobile.feedback('open');
   document.querySelector('main').scrollTop = 0;
@@ -570,7 +594,7 @@ function loadFood(fd) {
 function blank() {
   EDIT = null;
   Object.keys(L).forEach(k => setField(k, k === 'amt' ? '100' : k === 'unit' ? 'g' : ''));
-  PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 50 }];
+  PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
   paintPortions(); saveDraft(); syncBar();
 }
 

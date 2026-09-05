@@ -42,11 +42,13 @@ COPY_DIRS = ['shared', 'arc', 'block', 'status', 'train', 'style']
 COPY_FILES = ['index.html', '.nojekyll']
 
 # Left behind on purpose:
-#   form/   client video, and it is Tom's review tool, not theirs
-#   clex/   a personal side app
-#   habits/ a stand-in that STATUS replaced
+#   form/    client video, and it is Tom's review tool, not theirs
+#   portion/ the same reason: a coaching bench for building the food library,
+#            not something a tester should be adding foods with
+#   clex/    a personal side app
+#   habits/  a stand-in that STATUS replaced
 #   quest/ _template/ tools/ and every *.md brief - these are build notes
-DROP_APPS = ['habits', 'form']        # removed from the home screen roster
+DROP_APPS = ['habits', 'form', 'portion']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed
 # STREAKS and NUMBERS were deleted from the main repo on 2026-08-28, and
 # the STREAKS that replaced one of them counts ticks, so it works for a
