@@ -6790,12 +6790,19 @@ function summaryRows() {
 
   /* ── where you are now ── */
   const e = TD.estimate();
-  const back = Day.last(400);
+  /* The latest weigh-in out of the rows already in hand, rather than asking
+     each of the last four hundred days in turn whether it had one. Same
+     answer, and it does not get slower the longer you go without standing on
+     the scales — which is exactly when the old version was slowest, and the
+     only time this line has to work hard. */
   let wNow = null, wDate = null;
-  for (let i = back.length - 1; i >= 0 && wNow == null; i--) {
-    const v = value(back[i], 'weight');
-    if (v != null) { wNow = v; wDate = back[i]; }
-  }
+  evs.forEach(r => {
+    if (r.key !== 'weight' || !r.date) return;
+    if (wDate && r.date <= wDate) return;
+    const list = (r.payload || {}).e || [];
+    if (!list.length) return;
+    wNow = list[list.length - 1].v; wDate = r.date;
+  });
   const wf = field('weight') || {};
   const unit = wf.unit || 'lb';
 
