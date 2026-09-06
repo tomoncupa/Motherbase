@@ -89,10 +89,10 @@ Do not break these. Ask first if you think one needs to change.
    is binding on these two and `_template/index.html` is the working example.
 
    **Everything else is a desktop app**: the home screen, ARC, BLOCK, HABITS,
-   FORM and STYLE. They are used sitting down, with a mouse, to plan, build,
-   review and compare. Hover is allowed, density can be tighter, dialogs may sit
-   in the middle of the screen rather than rising from the bottom, and a layout
-   may assume a wide window.
+   FORM, PORTION and STYLE. They are used sitting down, with a mouse, to plan,
+   build, review and compare. Hover is allowed, density can be tighter, dialogs
+   may sit in the middle of the screen rather than rising from the bottom, and
+   a layout may assume a wide window.
 
    Neither kind may break on the other. A desktop app on a phone should stack
    and stay usable; a phone app on a desktop should not stretch to nonsense. The
@@ -119,8 +119,9 @@ arc/CLAUDE.md      ARC's own brief, governs arc/ only
 habits/index.html  habit tracker (a stand-in, see Debt)
 form/index.html    lift review
 status/index.html  sleep, weight, mood, energy, steps, food and money
-portion/index.html a label in, the amounts you eat out. The second writer of
-                   `food`, deliberately, and the only one in the suite.
+portion/index.html a label in, the amounts you eat out. A desktop app. The
+                   second writer of `food`, deliberately, and the only one
+                   in the suite.
 train/index.html   the training log, a reproduction of FitNotes
 train/CLAUDE.md    TRAIN's own brief, governs train/ only
 style/index.html   the theme workbench. Desktop only, deliberately.
@@ -137,9 +138,10 @@ quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
 
 **Phone or desktop:** `status/` and `train/` are phone apps. Every other app,
 including the home screen, is a desktop app. See hard constraint 10.
-`portion/` is the one that is honestly both: it is built to the phone
-standards, because you use it holding a packet, and its column stops at 640px
-so a wide window does not stretch it.
+`portion/` was called both for a day and Tom settled it as desktop on
+2026-09-06: it is desk work, not kitchen work. It lays out in three columns
+past 1300px, two past 900px and one below that, and it keeps the 44px targets
+and the safe areas because those cost nothing on a mouse.
 
 One folder per app. The home page is `index.html` at the root. `.nojekyll` sits at
 the root so GitHub Pages does not eat underscore folders.
@@ -595,7 +597,7 @@ answer, or take it out.
 | `habits/` | A stand-in, now superseded by `status/`. Harvest the streaks and one-click promote-from-routine if they are still wanted. Do not add to it. |
 | `form/` | Standalone by design. Video never leaves the device. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
-| `portion/` | Built 2026-09-05 and tested in the browser. A bench for building food entries and a viewer over the ones you have. Paste or type a label; it says how much of it hits 50g of protein or any other number, in grams or in pieces, what that comes to and what it costs. Saves the answers as ordinary servings, so STATUS logs them in one tap. Hands the entry over as words to paste into somebody else's tracker or as a spreadsheet row. Ranks the whole library against whatever amount is on screen, which is the comparison. Searches, edits and deletes; refuses to make a second food with a name you already have. Reads Sodium, or converts Salt where a label prints that instead. Kept out of the tester build by `tools/build-client.py`. |
+| `portion/` | Built 2026-09-05, made a desktop app 2026-09-06. Tested in the browser. A bench for building food entries and a viewer over the ones you have. Paste or type a label; it says how much of it hits 50g of protein or any other number, in grams or in pieces, what that comes to and what it costs. Saves the answers as ordinary servings, so STATUS logs them in one tap. Hands the entry over as words to paste into somebody else's tracker or as a spreadsheet row. Ranks the whole library against whatever amount is on screen, which is the comparison. Searches, edits and deletes; refuses to make a second food with a name you already have. Reads Sodium, or converts Salt where a label prints that instead. Kept out of the tester build by `tools/build-client.py`. |
 | `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |

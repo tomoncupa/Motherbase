@@ -41,6 +41,48 @@ header{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
 main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-10) + var(--safe-b))}
 .wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s-3)}
 
+/* ── a desktop app, settled by Tom on 2026-09-06 ──
+   It was built to the phone standards and read as one narrow ribbon down the
+   middle of a monitor. On a wide window it is two columns: the typing on the
+   left, the reading on the right, so the library is beside the label instead
+   of a scroll below it. That matters because the library IS the comparison -
+   it ranks every food against the amount you are looking at, and an answer
+   you have to scroll to find is an answer you stop looking at.
+
+   One column under 900px, unchanged, because a desktop app on a phone still
+   has to stack and stay usable. */
+@media (min-width:900px){
+  .wrap{max-width:1180px;display:grid;align-items:start;
+    grid-template-columns:minmax(0,7fr) minmax(0,8fr)}
+  #cardLabel{grid-column:1;grid-row:1 / span 2}
+  #cardAmounts{grid-column:2;grid-row:1}
+  #cardFoods{grid-column:2;grid-row:2}
+  /* Room to paste a whole label without scrolling inside the box. */
+  textarea{min-height:calc(var(--tap) * 4)}
+}
+
+/* On a real monitor, three. Two columns still put the library under a tall
+   amounts card and off the bottom of a 900px screen, which is the same
+   problem the two columns were meant to fix, moved sideways. Type on the
+   left, read the answer in the middle, compare on the right, all at once. */
+@media (min-width:1300px){
+  .wrap{max-width:1680px;grid-template-columns:minmax(0,5fr) minmax(0,5fr) minmax(0,6fr)}
+  #cardLabel{grid-column:1;grid-row:1}
+  #cardAmounts{grid-column:2;grid-row:1}
+  #cardFoods{grid-column:3;grid-row:1}
+}
+
+/* Hover is allowed here now, and it is the affordance a mouse expects: on a
+   phone app every one of these would be a control you cannot tell is live
+   until you touch it. Guarded so a touch screen never inherits a stuck state. */
+@media (hover:hover){
+  .item:hover{background:var(--surface-3)}
+  .chip:hover{border-color:var(--border-strong);color:var(--text-1)}
+  .chip.on:hover{color:var(--accent-fg)}
+  .btn:hover{border-color:var(--accent)}
+  .x:hover{color:var(--text-1);background:var(--surface-3)}
+}
+
 .card{border-radius:var(--radius-lg);background:var(--surface-1);
   padding:var(--s-4);box-shadow:var(--e-1),var(--rim)}
 h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
@@ -115,7 +157,8 @@ textarea{min-height:calc(var(--tap) * 2.5);resize:vertical;line-height:var(--lh-
 #bar{position:fixed;left:0;right:0;bottom:0;z-index:40;
   padding:var(--s-3) var(--s-4) calc(var(--s-3) + var(--safe-b));
   background:var(--surface-1);box-shadow:var(--e-3)}
-#bar .inner{max-width:640px;margin:0 auto;display:flex;gap:var(--s-2)}
+#bar .inner{max-width:1180px;margin:0 auto;display:flex;gap:var(--s-2)}
+@media (min-width:1300px){ #bar .inner{max-width:1680px} }
 #bar .inner .btn.go{flex:1}
 </style>
 </head>
@@ -433,6 +476,7 @@ function build() {
 
   /* ── the label ── */
   const c1 = el('div', 'card');
+  c1.id = 'cardLabel';
   c1.appendChild(el('h2', null, 'THE LABEL'));
   c1.appendChild(el('div', 'note', 'Paste it off the pack or a website and press READ IT, or just type the numbers. Check every one before you save: reading a label is a guess, not a scan.'));
   const ta = document.createElement('textarea');
@@ -509,6 +553,7 @@ function build() {
 
   /* ── the amounts ── */
   const c2 = el('div', 'card');
+  c2.id = 'cardAmounts';
   c2.appendChild(el('h2', null, 'THE AMOUNTS'));
   c2.appendChild(el('div', 'note', 'How much of it you need, and what that comes to. Each one is saved with the food as a serving, so logging it later is one tap.'));
   /* What the picture is of: the heading and the amounts, and none of the
@@ -525,6 +570,7 @@ function build() {
 
   /* ── what is already in there ── */
   const c3 = el('div', 'card');
+  c3.id = 'cardFoods';
   c3.appendChild(el('h2', null, 'YOUR FOODS'));
   c3.appendChild(el('div', 'note', 'The same library STATUS logs from. Ranked against the first amount above, so this is also the comparison: what it takes, and what it costs, to get the same thing out of each one.'));
   c3.appendChild(searchInput);
@@ -589,8 +635,12 @@ function entryRow(withHead) {
 
 /* Copy, and if the browser will not allow it - a page opened straight from a
    folder often will not - show the text with everything selected so it is one
-   keystroke away instead of a dead button. */
-function handOver(what, text) {
+   keystroke away instead of a dead button.
+
+   Named copyOut and not handOver on purpose: shared/io.js has its own
+   IO.handOver, which hands a PICTURE to the operating system. Two functions
+   with one name doing two jobs is a reading trap for whoever comes next. */
+function copyOut(what, text) {
   const fallback = () => UI.dialog({
     title: what.toUpperCase(), width: 520,
     body: b => {
@@ -620,12 +670,12 @@ function extraRow(card) {
 
   const asText = el('button', 'btn wide quiet mb-press mb-tap', 'Copy the entry, to paste anywhere');
   asText.style.marginBottom = 'var(--s-2)';
-  asText.onclick = guard(() => handOver('The entry', entryText()));
+  asText.onclick = guard(() => copyOut('The entry', entryText()));
   w.appendChild(asText);
 
   const asRow = el('button', 'btn wide quiet mb-press mb-tap', 'Copy it as a spreadsheet row');
   asRow.style.marginBottom = 'var(--s-2)';
-  asRow.onclick = guard(() => handOver('The row', entryRow(1)));
+  asRow.onclick = guard(() => copyOut('The row', entryRow(1)));
   w.appendChild(asRow);
 
   const share = el('button', 'btn wide quiet mb-press mb-tap', 'Save this as a picture');
@@ -1055,6 +1105,23 @@ document.getElementById('btnNew').onclick = () => {
   UI.confirm('Start a new food?', 'What is on screen is cleared. Anything you already saved stays saved.')
     .then(ok => { if (ok) { blank(); Mobile.feedback('nav'); } });
 };
+
+/* ── the keyboard, because this is desk work ──
+   Entering a food is paste, check, save, next, forty times over. Ctrl+Enter
+   saves and Ctrl+Shift+Enter starts the next one, so a batch never needs the
+   mouse. Plain Enter is deliberately left alone: it would fire while you were
+   halfway through correcting a number, which is exactly when you do not want
+   a save.
+
+   Held back while a dialog is open, or the confirm asking whether to update a
+   food you already have would be answered by the shortcut that raised it. */
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key !== 'Enter') return;
+  if (document.querySelector('.mb-dialog, .mb-sheet')) return;
+  e.preventDefault();
+  if (e.shiftKey) document.getElementById('btnNew').click();
+  else saveFood();
+});
 
 build();
 syncBar();
