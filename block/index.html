@@ -4215,6 +4215,29 @@ function selfTest() {
       undo();
       return items(L).length === before || 'expected ' + before + ' got ' + items(L).length;
     });
+    /* ── one level under "Check Ins also ticks Bed" ──
+       The symptom was two named blocks moving together. The mechanism is that
+       a block's tick identity could stop matching its name, and then any two
+       blocks could collide, in any combination, with no clue on screen. So the
+       check is on the mechanism: a rename must move the identity with it. */
+    ok('a renamed block takes its tick identity with it', () => {
+      const it = addItem(L, { name: 'New block', dur: 5, color: '#fff', energy: 1 });
+      const before = actIdOf(it);
+      it.name = 'Check Ins & Online Coaching';
+      const after = actIdOf(it);
+      removeItem(L, it.id);
+      if (before !== 'new-block') return 'placeholder id was ' + before;
+      return after === 'check-ins-online-coaching' || 'stayed ' + after;
+    });
+    ok('no two differently-named blocks share one tick identity', () => {
+      const seen = {}, bad = [];
+      S.variants.forEach(v => S.lanes.forEach(l => (v.items[l.id] || []).forEach(it => {
+        const id = actIdOf(it);
+        if (seen[id] && seen[id] !== it.name) bad.push(seen[id] + ' + ' + it.name + ' = ' + id);
+        seen[id] = it.name;
+      })));
+      return !bad.length || bad.join(', ');
+    });
     ok('week view renders 7 days', () => { S.view = 'week'; render(); const n = document.querySelectorAll('.day').length; S.view = 'day'; render(); return n === 7 || 'got ' + n; });
     ok('week view: a checkbox ticks the block', () => {
       S.week[todayIdx()] = S.current; S.view = 'week'; render();
@@ -4845,7 +4868,76 @@ Rec.on(adoptRows);
      plan     →  today's blocks, published for the home screen to show and tick
    Blocks are matched across apps by slugged NAME: two blocks called the same
    thing are the same thing, which is exactly what makes the ticks agree.  */
-const actIdOf = it => it.actId || (it.actId = LifeOS.slug(it.name));
+/* ── a block's tick identity is its NAME, worked out fresh every time ──
+   This used to be cached: the first time a block was asked for its identity it
+   was stamped with the slug of whatever it was called AT THAT MOMENT, and the
+   stamp was never revisited. Every block starts life called "New block", so a
+   board built the ordinary way — click "+ New block", type the real name over
+   it — left every one of them stamped `new-block`, and the shared log then
+   believed eight different things were one thing. Ticking Check Ins also
+   ticked Bed, Daily Pic and both Meds.
+
+   The guard against exactly that (pullDone's `seen[it.name] > 1`) asks whether
+   two blocks share a NAME. It waved these through, because they don't. The
+   stamp and the guard were using two different ideas of what makes two blocks
+   the same block. Deriving it from the current name every time leaves one
+   idea, which is the one the rest of this file already uses: twins are found
+   by name, the day log is keyed by name, the vocabulary is slugged by name.
+
+   The cost of not caching is that renaming a block moves its shared streak to
+   a new name. That is the right answer anyway — BLOCK's own day log is keyed
+   by name and lane, so a rename already starts a fresh page there. */
+const actIdOf = it => LifeOS.slug(it.name);
+
+/* ── one-off: unstick the blocks that were stamped with a placeholder name ──
+   A board built before the fix above carries a frozen `actId` on every block.
+   Where that stamp disagrees with the block's name, its ticks were filed under
+   something else — usually `new-block`, shared with every other block made by
+   clicking "+ New block" and typing over it. This puts each one's history back
+   under its own name, reading it out of BLOCK's own day log, which was never
+   confused because it is keyed by name and routine rather than by the stamp.
+   Runs once per board. */
+function repairActIds() {
+  if (S.actIdFixed) return 0;
+  S.actIdFixed = 1;
+  const filed = {};                        /* stored id → the names filed under it */
+  const stale = [];                        /* blocks whose stamp outlived their name */
+  const eachBlock = fn => S.variants.forEach(v => S.lanes.forEach(l => (v.items[l.id] || []).forEach(fn)));
+  eachBlock(it => {
+    if (!it.actId) return;
+    const f = filed[it.actId] || (filed[it.actId] = []);
+    if (f.indexOf(it.name) < 0) f.push(it.name);
+    if (it.actId !== LifeOS.slug(it.name)) stale.push(it);
+    delete it.actId;                       /* identity comes from the name now */
+  });
+  if (!stale.length) { saveQuiet(); return 0; }
+
+  const want = {};
+  stale.forEach(it => want[it.name] = 1);
+  let moved = 0;
+  Object.keys(S.log || {}).forEach(date => ((S.log[date] || {}).d || []).forEach(k => {
+    const nm = keyName(k);
+    if (!want[nm]) return;
+    LifeOS.done(LifeOS.slug(nm), date, true, { src: 'block' });
+    moved++;
+  }));
+  /* today has not been closed into the log yet, so it is still in the boxes */
+  stale.forEach(it => { if (it.done) { LifeOS.done(actIdOf(it), todayKey(), true, { src: 'block' }); moved++; } });
+
+  /* then drop the rows that claimed all of them at once. Only where no block
+     answers to that id any more, so one genuinely called "New block" keeps its
+     ticks. */
+  const live = {};
+  eachBlock(it => live[LifeOS.slug(it.name)] = 1);
+  Object.keys(filed).forEach(id => {
+    if (filed[id].length < 2 || live[id]) return;
+    Object.keys(S.log || {}).forEach(date => LifeOS.done(id, date, false, { src: 'block' }));
+    LifeOS.done(id, todayKey(), false, { src: 'block' });
+  });
+  saveQuiet();
+  console.info('[block] ' + stale.length + ' blocks were filed under a name they no longer have; moved ' + moved + ' ticks');
+  return moved;
+}
 
 function pushLib() {
   const seen = {}, out = [];
@@ -4936,7 +5028,7 @@ LifeOS.on(() => {
      laptop used to overwrite the phone. */
   if (pullDone()) { saveQuiet(); render(); }
 });
-LifeOS.ready(() => { pullDone(); render(); });
+LifeOS.ready(() => { repairActIds(); pullDone(); render(); });
 
 render();
 /* keep the now line honest without redrawing the world */
