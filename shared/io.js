@@ -54,7 +54,12 @@ const toast = (h, o) => g.UI ? g.UI.toast(h, o) : console.log(h.replace(/<[^>]+>
    one where somebody typed "todo" in lower case.
 
    Anything not in the map passes through untouched — an unknown value is data,
-   and quietly blanking it would be worse than showing it raw. */
+   and quietly blanking it would be worse than showing it raw.
+
+   A FOURTH element lists the names the column used to have. Columns are matched
+   to the sheet by their heading, so renaming one would otherwise leave every
+   sheet already written unable to find it. Say what it was called and both
+   spellings land in the same field. */
 const colMap = col => {
   /* A function, resolved at export time, so a table spec written near the top
      of a file can name a vocabulary declared further down it without tripping
@@ -601,19 +606,72 @@ const IO = {
   /** Whatever a spreadsheet put in the date column, as YYYY-MM-DD or null. */
   sheetDate: sheetDate,
 
+  /** ── which column of the sheet is which field ──
+
+      The header line, matched by NAME. It used to be counted instead: column
+      three of the sheet was the third field declared, and that held right up
+      until a column was added in the middle of the list.
+
+      When Calcium went in between Potassium and Caffeine, every sheet already
+      written had thirteen food columns and the app went looking for fourteen.
+      So Caffeine read the old Price, Price read the column after it — the
+      `edited` stamp — and a food that cost 180 pesos came back costing 2026,
+      which is not a price, it is the year the row was last touched. The pull
+      runs before the push, so the wreckage went straight back up to the sheet
+      and both copies agreed on it.
+
+      Names cannot drift like that. A column the sheet does not have is left
+      alone rather than guessed at, which is the whole lesson: a reader that
+      cannot find a field must decline to write one, never take whatever is
+      standing in that position.
+
+      Returns null when the grid has no header to read, because a tab whose
+      first line is data is one we have no honest way to interpret. */
+  columns(t, head) {
+    if (!head || !head.length) return null;
+    const norm = v => String(v == null ? '' : v).trim().toLowerCase();
+    const seen = {};
+    head.forEach((h, i) => { const k = norm(h); if (k && !(k in seen)) seen[k] = i; });
+    /* The same guard the Apps Script uses. Without it a tab of pure data would
+       have its first line silently eaten as a header. */
+    if (seen.id !== 0) return null;
+    const find = c => {
+      const names = [c[1]].concat(c[3] || []);   /* the name now, then any it used to have */
+      for (let i = 0; i < names.length; i++) {
+        const at = seen[norm(names[i])];
+        if (at != null) return at;
+      }
+      return -1;
+    };
+    const at = t.cols.map(find);
+    return {
+      id: 0,
+      date: seen.date == null ? 1 : seen.date,
+      at: at,
+      edited: seen.edited == null ? -1 : seen.edited,
+      /* what this sheet has never heard of, so a caller can say so */
+      missing: t.cols.filter((c, i) => at[i] < 0).map(c => c[1]),
+    };
+  },
+
   /** Read one table's grid back and work out what changed.
       Returns {changed, added, removed, clashes} without writing anything, so a
       caller can show the damage before doing it. */
   readTable(appId, tableName, grid) {
     const S = IO.spec(appId), R = g.Rec;
     const t = (S.tables || []).filter(x => x.name === tableName)[0];
-    const out = { changed: [], added: [], removed: [], clashes: [] };
+    const out = { changed: [], added: [], removed: [], clashes: [], missing: [] };
     if (!t || !grid || grid.length < 2) return out;
+    const col = IO.columns(t, grid[0]);
+    /* No header, no reading. Returning nothing leaves the store exactly as it
+       was, and the next full push gives the tab a header it can be read by. */
+    if (!col) { out.noHeader = true; return out; }
+    out.missing = col.missing;
 
     const seen = {};
     grid.slice(1).forEach(line => {
       if (!line || !line.length) return;
-      const id = String(line[0] || '').trim();
+      const id = String(line[col.id] || '').trim();
       /* A date cell reaches us as a Date object turned into an ISO timestamp,
          never as the YYYY-MM-DD the store requires. Left alone it becomes half
          of a second row id for a fact that already has one — see repairDates
@@ -621,8 +679,11 @@ const IO = {
          the boundary, because this is the one place a sheet's idea of a date
          becomes ours. Read back in local time: the sheet meant its own
          midnight, and slicing the string would file it a day early. */
-      const date = sheetDate(line[1]);
-      const blank = t.cols.every((c, i) => String(line[2 + i] == null ? '' : line[2 + i]).trim() === '');
+      const date = sheetDate(line[col.date]);
+      /* Only the columns this sheet actually has can say a line is empty. One
+         it has never heard of is not blank, it is absent. */
+      const blank = t.cols.every((c, i) => col.at[i] < 0 ||
+        String(line[col.at[i]] == null ? '' : line[col.at[i]]).trim() === '');
       if (id) seen[id] = true;
 
       if (id && blank) { out.removed.push({ key: id, date: date }); return; }
@@ -632,7 +693,8 @@ const IO = {
       const payload = prev ? JSON.parse(JSON.stringify(prev.payload)) : {};
       let differs = false;
       t.cols.forEach((c, i) => {
-        let v = line[2 + i];
+        if (col.at[i] < 0) return;               /* not in this sheet, so not ours to change */
+        let v = line[col.at[i]];
         if (typeof v === 'string') v = v.trim();
         v = storedFor(c, v);
         /* a column that held a number keeps holding one */
@@ -658,7 +720,7 @@ const IO = {
       /* updated_at is an ISO string, so both sides get parsed to numbers.
          Comparing a number against the string silently coerced to NaN and no
          clash was ever detected — the sheet always appeared to win. */
-      const sheetAt = Date.parse(line[2 + t.cols.length] || '') || 0;
+      const sheetAt = col.edited < 0 ? 0 : (Date.parse(line[col.edited] || '') || 0);
       const ourAt = Date.parse(prev.updated_at) || 0;
       if (sheetAt && ourAt && sheetAt < ourAt) {
         out.clashes.push({

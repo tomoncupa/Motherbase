@@ -320,6 +320,65 @@ async function run() {
     return Rec.get(stamp, null, 't1') == null && Rec.get(stamp, null, 't2') != null;
   })());
 
+  /* ---- the column a value lands in ----
+
+     One level under a real bug, and the bug was this. A Calcium column was
+     added to the food table between Potassium and Caffeine. Every sheet
+     already written had the old thirteen columns; the reader counted rather
+     than read, so Caffeine took the old Price, Price took the `edited` stamp,
+     and a food that cost 180 pesos came back costing 2026 — the year, not a
+     price. The pull runs before the push, so it went back up to the sheet too.
+
+     Checking that a price is still a price would have caught that one symptom
+     and none of the next ones. The mechanism is the thing: a value belongs to
+     the heading above it. Break that and every column after the change is
+     wrong at once, which is exactly what happened. */
+  IO.register({ app: '__cols', name: 'Cols', types: [stamp],
+    tables: [{ name: 'Grew', type: stamp, cols: [
+      ['name', 'Name'], ['base.mid', 'Middle'], ['base.tail', 'Tail'],
+      ['base.was', 'New Name', null, ['Old Name']],
+    ] }] });
+  Rec.set(stamp, null, 'c1', { name: 'thing', base: { mid: 1, tail: 180, was: 'w' } });
+  /* the sheet as it was written BEFORE Middle existed and before the rename */
+  const oldGrid = () => [
+    ['id', 'date', 'Name', 'Tail', 'Old Name', 'edited', 'by'],
+    ['c1', '', 'thing', 180, 'w', new Date(Date.now() + 60000).toISOString(), 'phone'],
+  ];
+
+  ok('cols: a value lands under its own heading, not in its old position', (() => {
+    const g = oldGrid();
+    g[1][3] = 250;                                  /* Tail edited in the sheet */
+    const d = IO.readTable('__cols', 'Grew', g);
+    return d.changed.length === 1 && d.changed[0].payload.base.tail === 250;
+  })());
+  ok('cols: a column the sheet has never heard of is left alone', (() => {
+    const d = IO.readTable('__cols', 'Grew', oldGrid());
+    /* Middle is absent from that sheet. It must keep the 1 it already had and
+       must NOT be handed whatever sat in its position. */
+    IO.applyTable('__cols', d);
+    const now = Rec.get(stamp, null, 'c1');
+    return now.base.mid === 1 && d.missing.indexOf('Middle') > -1;
+  })());
+  /* The last declared column is the one that ran off the end of the old sheet
+     and landed on the `edited` stamp. That is the step that turned 180 pesos
+     into 2026, so it is the one worth asserting on by name. */
+  ok('cols: the edited stamp is never read as a field', (() => {
+    const d = IO.readTable('__cols', 'Grew', oldGrid());
+    IO.applyTable('__cols', d);
+    const v = Rec.get(stamp, null, 'c1').base.was;
+    return v === 'w' && !/\d{4}-\d{2}-\d{2}T/.test(String(v)) && Number(v) !== 2026;
+  })());
+  ok('cols: a renamed column still finds the heading it used to have', (() => {
+    const g = oldGrid();
+    g[1][4] = 'typed in';
+    const d = IO.readTable('__cols', 'Grew', g);
+    return d.changed.length === 1 && d.changed[0].payload.base.was === 'typed in';
+  })());
+  ok('cols: a grid with no header is refused, not guessed at', (() => {
+    const d = IO.readTable('__cols', 'Grew', [['c1', '', 'thing', 1, 180, 'w'], ['c2', '', 'x', 2, 3, 'y']]);
+    return d.noHeader === true && d.changed.length === 0 && d.added.length === 0 && d.removed.length === 0;
+  })());
+
   /* ---- a backup is everything, or it is not a backup ---- */
   /* These exist because a reinstall gave back every measurement and none of
      the appearance. Rows were only ever half of it: the theme, the palette,
