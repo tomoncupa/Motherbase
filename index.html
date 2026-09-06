@@ -1026,11 +1026,23 @@ function linkIn(x) {
    the question before the list does: what is running, or what is next, and how
    long you have.
 
-   Three states, in the order they are checked:
+   Four states, in the order they are checked:
      RUNNING   something started, has not finished, and is not ticked
-     NEXT      nothing running, so the soonest thing still ahead
+     BEHIND    its slot has been and gone and it is still not ticked
+     NEXT      nothing running or owed, so the soonest thing still ahead
      LOOSE     nothing timed left, so the first thing still undone
-   and when there is nothing in any of them, the day is done and it says so. */
+   and when there is nothing in any of them, the day is done and it says so.
+
+   BEHIND used to sit at the bottom as a fallback, reached only once there was
+   nothing ahead at all. So with four morning blocks unticked at 2pm it stepped
+   over all four and announced Dishes, three hours away. One future block was
+   enough to hide everything owed. The widget is meant to be followable without
+   thinking, and a widget that skips your unfinished work is worse than a list,
+   because a list at least shows you the gap.
+
+   It is checked second now, under RUNNING, so something actually happening
+   still wins. That also bounds how long it can nag: the moment the next block's
+   slot opens, RUNNING takes the band back. */
 function nowNext(items) {
   const d = new Date(), now = d.getHours() * 60 + d.getMinutes();
   const open = items.filter(x => !x.done);
@@ -1040,14 +1052,17 @@ function nowNext(items) {
   const running = timed.filter(x => x.at <= now && now < x.at + (x.dur || 0))[0];
   if (running) return { state: 'running', it: running, mins: running.at + running.dur - now };
 
+  /* Its whole slot has passed and it is still open. Earliest first: the one
+     you dropped soonest is the one to pick back up. */
+  const behind = timed.filter(x => x.at + (x.dur || 0) <= now).sort((a, b) => a.at - b.at);
+  if (behind.length) return { state: 'loose', it: behind[0], missed: behind.length };
+
   const next = timed.filter(x => x.at > now)[0];
   if (next) return { state: 'next', it: next, mins: next.at - now };
 
-  /* Past everything with a time on it. Anything still open and timed is
-     behind you; say so, because "you are behind" is the useful fact. */
-  const missed = timed.length;
-  const loose = open.filter(x => x.at == null)[0] || timed[0];
-  return { state: 'loose', it: loose, missed: missed };
+  /* Nothing timed is running, owed or ahead, so what is left has no clock. */
+  const loose = open.filter(x => x.at == null)[0] || open[0];
+  return { state: 'loose', it: loose, missed: 0 };
 }
 
 /* "in 25m", "in 1h 10m", "for 40m" — short enough to read at a glance. */
