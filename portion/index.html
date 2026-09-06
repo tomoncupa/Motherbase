@@ -182,26 +182,27 @@ textarea{min-height:calc(var(--tap) * 2.5);resize:vertical;line-height:var(--lh-
    of it comes to. Then it saves those answers into the food library as
    ordinary servings, so logging it later is one tap.
 
-   ── the one rule this app knowingly bends ──
-   `food` belongs to STATUS. Two writers for one fact is what the master brief
-   forbids, and it is the rule that killed a previous system, so it is worth
-   saying out loud rather than pretending it is not happening. Tom asked for
-   this as its own app on 2026-09-05, having been offered it inside STATUS.
+   ── it writes food rows, and STATUS does too ──
+   This used to be described here as a rule being bent. It is not one. Tom
+   settled it on 2026-09-06: many writers is fine, and the thing that actually
+   loses data is a writer that REPLACES a payload it did not fully read.
 
-   What makes it survivable:
+   Rec.set overwrites the whole payload, so an app that rebuilds a row out of
+   its own idea of the fields silently deletes everything it does not know
+   about. That has already happened here in one direction: this app wrote
+   base.ca off a label, and STATUS's editor rebuilt base from its own nutrient
+   list, which had no calcium in it, and dropped the figure without a word.
+   One writer would have done the same damage to a field written by a newer
+   build of itself.
 
-     · a food row is a DEFINITION, not a measurement. Nothing adds up two
-       versions of it, so the damage a second writer normally does - two
-       screens disagreeing about one day's number - has no way to happen.
-     · every row this app writes is either brand new with its own id, or one
-       you deliberately loaded and are looking at. It never touches a row it
-       has not shown you.
-     · merges are per row and settled by updated_at, so the worst case across
-       two devices is the newer edit of one food winning, which is exactly
-       what would happen inside STATUS.
+   So the two things this app has to keep doing, and they are the rule rather
+   than an excuse:
 
-   What would break it is this app writing `meal` rows, or reaching a food it
-   never displayed. It does neither, and it should stay that way. */
+     · carry across every field it did not come to change. writeFood merges
+       into the row as it stands rather than rebuilding it, so a field STATUS
+       adds later and this app has never heard of survives a save from here.
+     · never write a row it has not put on screen, and never write `meal`.
+       A meal is a measurement, and measurements are STATUS's alone. */
 
 const APP = {
   id: 'portion',
@@ -1040,8 +1041,27 @@ function saveFood() {
 
 function writeFood() {
   const name = L.name.trim();
-  const base = { amt: numv(L.amt), unit: L.unit.trim() || 'serving' };
-  NUTS.concat(['price']).forEach(n => { const v = numv(L[n]); if (v != null) base[n] = v; });
+  const id = EDIT || newId();
+  const was = EDIT ? Rec.get('food', null, id) : null;
+
+  /* ══ merge into the row, never rebuild it ══
+     Rec.set overwrites the whole payload, so a row built from scratch loses
+     every field this build has not heard of. That is exactly how STATUS
+     dropped the calcium this app had written: it rebuilt `base` from its own
+     list of nutrients and calcium was not on it.
+
+     So the row as it stands is the starting point, and anything a newer
+     STATUS - or a newer version of this app - has put on a food rides along
+     untouched. */
+  const base = Object.assign({}, (was && was.base) || {},
+    { amt: numv(L.amt), unit: L.unit.trim() || 'serving' });
+  /* The fields this app does own come from the form, and a box left blank
+     CLEARS the figure rather than quietly keeping the old one. That is the
+     difference between merging and just never deleting anything. */
+  NUTS.concat(['price']).forEach(n => {
+    const v = numv(L[n]);
+    if (v != null) base[n] = v; else delete base[n];
+  });
 
   /* Only the amounts that actually worked out become servings. One with no
      protein figure behind it is a question with no answer, not a serving. */
@@ -1061,9 +1081,9 @@ function writeFood() {
     serves.unshift({ label: '1 piece', mult: one / numv(L.amt) });
   }
 
-  const id = EDIT || newId();
-  const was = EDIT ? Rec.get('food', null, EDIT) : null;
-  Rec.set('food', null, id, {
+  /* Same rule one level up: the row itself is merged into, so a top-level
+     field some other app added survives a save from here. */
+  Rec.set('food', null, id, Object.assign({}, was || {}, {
     id: id, name: name, brand: L.brand.trim(), cat: L.cat.trim(),
     base: base, serves: serves,
     /* Carried, never reset. `uses` is how STATUS sorts the list and `dflt` is
@@ -1072,7 +1092,7 @@ function writeFood() {
     dflt: was ? (was.dflt || 0) : 0,
     uses: was ? (was.uses || 0) : 0,
     shot: was ? (was.shot || null) : null,
-  });
+  }));
   EDIT = id; syncBar();
   Mobile.feedback('success');
   UI.toast('<b>' + esc(name) + '</b> saved with ' + serves.length +

@@ -119,9 +119,8 @@ arc/CLAUDE.md      ARC's own brief, governs arc/ only
 habits/index.html  habit tracker (a stand-in, see Debt)
 form/index.html    lift review
 status/index.html  sleep, weight, mood, energy, steps, food and money
-portion/index.html a label in, the amounts you eat out. A desktop app. The
-                   second writer of `food`, deliberately, and the only one
-                   in the suite.
+portion/index.html a label in, the amounts you eat out. A desktop app, and
+                   the second writer of `food` alongside STATUS.
 train/index.html   the training log, a reproduction of FitNotes
 train/CLAUDE.md    TRAIN's own brief, governs train/ only
 style/index.html   the theme workbench. Desktop only, deliberately.
@@ -194,8 +193,14 @@ ARC node — lives only there and arrives a few milliseconds later, merged in by
 `updated_at` like any other row.
 
 That is what `Rec.ready()` is for. **An app that draws from the store on load
-must wait on it**, or a big row will be missing from its first paint. STATUS,
-TRAIN and ARC all do.
+must redraw when it lands**, or a big row will be missing from its first paint.
+STATUS, TRAIN and ARC all wait on it.
+
+**Waiting and redrawing are not the same thing, and the difference is a blank
+screen.** An app that puts its FIRST paint behind `Rec.ready` shows nothing at
+all until the store answers, and the store can take minutes or never — see
+"Foundation, found and not acted on", item 1. Paint what localStorage already
+handed you, then redraw when the big half arrives. PORTION does it that way.
 
 **Why this is non-negotiable:** SystemOS, a predecessor, synced one large JSON blob
 with last-write-wins and lost data silently across devices. A Motherbase Excel life
@@ -216,7 +221,7 @@ An app may read any type. It writes only the types it owns.
 | `field` | **status** | field id | the definition of a tracked measure |
 | `ev` | **status** | field id | `{e:[{t,v}]}` — one row per field per day |
 | `day` | **status** | `''` | `{note, rest}` |
-| `food` | **status**, and **portion** — the one deliberate exception below | food id | the label as printed, plus your own servings |
+| `food` | **status** names the shape; **portion** writes it too | food id | the label as printed, plus your own servings |
 | `meal` | **status** | timestamp id | one logged serving, numbers frozen in |
 | `spend` | **status** | timestamp id | `{amt, acct, note, t}` |
 | `acct` | **status** | account id | `{name, order}` |
@@ -234,22 +239,62 @@ An app may read any type. It writes only the types it owns.
 | `node` | **arc** | `mapId\|nodeId` | one node. The addressable fact on a canvas, so moving one node writes one row |
 | `link` | **arc** | `mapId\|linkId` | `{a, b, rel, ord}` — a connection that is not a parent link |
 
-**One writer per fact**, with exactly one deliberate exception: `tick`. Any app may
-tick anything, because one cell per activity per day is one fact and later save
-wins. That exception is what makes a tick in BLOCK show up in the habit tracker.
+### Many writers is fine. Replacing a payload you did not read is not
 
-When a new app takes over a fact, the old writer switches to reading it. Two
-writers for one fact is how numbers start disagreeing.
+Set by Tom on 2026-09-06: *"it's not a crime for multiple things to write the
+same entries, I'm sure we can have it so that it's no problem."* He is right,
+and this section replaces the old "one writer per fact" rule, which named the
+wrong culprit and would have blocked useful work for a bad reason.
 
-**The second exception, `food`, is narrower and was Tom's call on 2026-09-05.**
-PORTION writes food rows as well as STATUS. It survives because a food row is a
-DEFINITION and not a measurement: nothing anywhere adds up two versions of it,
-so the usual damage — two screens disagreeing about one day's number — has no
-way to happen, and a merge between devices is still per row and settled by
-`updated_at`. PORTION writes a brand new row, or a row you loaded and are
-looking at, and nothing else. It must never write `meal`, and it must never
-reach a food it has not put on screen. If either of those changes, this stops
-being an exception and starts being the old bug.
+**The store is already safe for many writers, at row granularity.** Every row
+has an id derived from its own identity, `updated_at` settles conflicts per
+row, deletes are tombstones so they travel, and two apps on one device share
+one live picture of the store, so a food PORTION saves is a food STATUS reads
+in the same instant. Two apps writing two different rows can never collide.
+Two apps writing the SAME row, one after the other, is a comparison, not a
+guess.
+
+**The thing that actually loses data is a writer that replaces a payload it
+did not fully read.** `Rec.set` overwrites the whole payload. So an app that
+rebuilds a row out of its own idea of the fields deletes every field it does
+not know about, silently.
+
+That is not a two-writer bug. It has already happened, and here is the case,
+because it is the clearest teacher in the repo: PORTION wrote `base.ca`, the
+calcium off a label. STATUS's food editor then rebuilt `base` from its own
+list of nutrients, which had no calcium in it, and pressing Update dropped the
+figure with nothing said. **One** writer doing that would do the same damage to
+a field written by a newer build of itself, or restored from a newer backup.
+
+So the rule is not about who writes. It is:
+
+1. **Change a row by merging into what is there, never by rebuilding it.**
+   Read the row, change your fields, write it back whole. An app that owns
+   only some of the fields must carry the rest across untouched.
+2. **Only write what you have shown the person.** A row you have not put on
+   screen is a row you have no business rewriting.
+3. **Types still have an owner**, and it is still a useful thing to say, but
+   it now means *this app is responsible for the shape* — not *no one else may
+   write it*. Ownership names who to ask, not who is allowed.
+
+`tick` has always worked this way on purpose: any app may tick anything,
+because one cell per activity per day is one fact and later save wins. That is
+what makes a tick in BLOCK show up in the habit tracker.
+
+`food` is written by both STATUS and PORTION, and that is fine under the rule
+above rather than an exception to it.
+
+**What the store still cannot do, and it is worth knowing:** a merge between
+two DEVICES is whole-row and newer-wins. If a laptop edits one field of a food
+and a phone edits a different field of the same food before they meet, the
+later write wins entirely and the earlier field change is gone. Rule 1 fixes
+this on one device and does nothing across two. Fixing it properly needs
+per-field timestamps, which is a real design and is on the foundation list
+below rather than pretended away here.
+
+**Why any of this is careful at all:** SystemOS, a predecessor, synced one
+large JSON blob with last-write-wins and lost data silently across devices.
+Rows fixed the blob half. Rule 1 is the other half.
 
 ---
 
@@ -622,6 +667,71 @@ answer, or take it out.
    which the shared layer cannot do for them.
 4. **Commits are unpushed** and the GitHub repo is public. He has not yet said
    push.
+
+### Foundation, found and not acted on
+
+Recorded 2026-09-06 on Tom's instruction: "Save all things that affect
+foundation for now." Every one of these is in `shared/` or at the root, so an
+app session must not touch them. They are written down here because commits and
+this file are the only handoff there is. Each says what was watched, not what
+was suspected.
+
+**1. The store can wait forever, and an app gated on it shows nothing.**
+`IDB.open()` in `shared/records.js` handles `onsuccess` and `onerror`. It has
+no `onblocked` handler and no timeout. If the browser never answers the open
+request, the promise never settles, `hydrate()` never runs, `hydrated` stays
+false and every `Rec.ready` callback waits forever.
+
+Watched on 2026-09-06: a raw `indexedDB.open('motherbase', 1)` in the test
+browser was still pending after three seconds and took minutes to answer.
+`_review.html` failed `status: opens and draws something` on two consecutive
+runs because STATUS puts its whole first paint behind `Rec.ready`. The same
+run passed PORTION, which paints immediately and lets the food list arrive
+late. Intermittent: the same browser was fast the day before.
+
+The fix is small — give up after a couple of seconds, carry on with
+localStorage, and say so — but it is `records.js`, "the one file to be careful
+with", so it wants a session of its own.
+
+**2. First paint should not be behind `Rec.ready`.** Item 1 is what happens
+when the store is slow; this is why it costs so much. STATUS, TRAIN and ARC all
+draw nothing until the store is ready, so a slow store is a blank screen with
+no explanation. Paint what localStorage already has, then fill in the big rows
+when they land. PORTION does it that way and survived the same failure. The
+data model section says an app that draws from the store on load "must wait on
+it" — that should read "must redraw when it lands".
+
+**3. `Rec.patch`, so merging is easier than replacing.** `Rec.set` overwrites
+the whole payload, which is what let STATUS drop the calcium PORTION had
+written. A `patch(type, date, key, changes)` that reads the current payload and
+shallow-merges would make the safe thing the easy thing, and it is what the
+many-writers rule above actually needs to be enforceable rather than a promise.
+
+Two open questions, neither decided: how it reaches a nested object like a
+food's `base`, and what a caller passes to clear a field rather than set it.
+
+**4. A cross-device merge is whole-row.** Two devices editing different fields
+of the same row before they meet: later write wins entirely, earlier field
+change gone. `Rec.patch` does nothing for this. Fixing it properly needs
+per-field timestamps, which is a real design and probably only worth doing if
+hosting and accounts arrive. Written down so it is a known limit rather than a
+surprise.
+
+**5. Cache-busting is inconsistent.** `style/` loads shared at `?v=16`,
+`portion/` and `_template/` at `?v=15`, and the home screen, STATUS, TRAIN,
+BLOCK, ARC, FORM and HABITS have no `?v=` at all. Harmless from a folder, where
+nothing is cached. It matters the day hosting returns, because the known trap
+says "bump the version" and there is no one version to bump. Either every app
+carries the same stamp or none of them do.
+
+**6. `_review.html` reports leftover test rows too eagerly.** The check fails
+above 12 rows left behind, and one run of the 163 foundation checks now writes
+more than that, so several runs back to back trip it while the store catches up
+with the frames' deletions. It failed that way on 2026-09-05. A red check
+nobody believes is the thing this file already warns about.
+
+**7. Still open from 2026-09-04:** the three icon checks that fail on a cold
+store and pass on the second run. Recorded under Testing above; unchanged.
 
 ### Parked, not cancelled
 
