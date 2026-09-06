@@ -3043,6 +3043,16 @@ async function exportPng(){
   }
   ctx.setLineDash([]);
   ctx.globalAlpha=1;
+  // arrows + edge labels, exactly as the screen draws them
+  const FMONO='"IBM Plex Mono",monospace';
+  for(const n of ns){
+    if(!n.parentId||!rects[n.parentId]||!rects[n.id])continue;
+    paintEdgeDecor(ctx,edgeD(rects[n.parentId],rects[n.id],style),1,n.elabel,n.elpos,nodeColor(n),'#0B0E14',FMONO);
+  }
+  for(const l of (M().links||[])){
+    const la=rects[l.a], lb=rects[l.b]; if(!la||!lb)continue;
+    paintEdgeDecor(ctx,linkD(la,lb,l),relDir(l),l.label,l.lpos,CUR_ACC,'#0B0E14',FMONO);
+  }
   const PANEL=[18,24,38], LINE=[34,48,74];
   for(const n of ns){
     const r=rects[n.id]; if(!r)continue;
@@ -3149,6 +3159,18 @@ async function exportChartPng(scope){
     strokeD(linkD(la,lb,l));
   }
   ctx.setLineDash([]); ctx.globalAlpha=1;
+  // arrows + edge labels. the halo behind a label comes from the scheme, not a
+  // hex, so a light colourway does not get a black smudge behind its text
+  const FM=gv(bs,'--f-mono','"IBM Plex Mono",monospace'), HALO=gv(rs,'--bg','#0B0E14');
+  for(const n of ns){
+    if(!n.parentId||!inSet.has(n.parentId)||!rects[n.parentId]||!rects[n.id])continue;
+    paintEdgeDecor(ctx,edgeD(rects[n.parentId],rects[n.id],style),1,n.elabel,n.elpos,nodeColor(n),HALO,FM);
+  }
+  for(const l of (M().links||[])){
+    if(!inSet.has(l.a)||!inSet.has(l.b))continue;
+    const la=rects[l.a], lb=rects[l.b]; if(!la||!lb)continue;
+    paintEdgeDecor(ctx,linkD(la,lb,l),relDir(l),l.label,l.lpos,CUR_ACC,HALO,FM);
+  }
   for(const n of ns){
     const r=rects[n.id]; if(!r)continue;
     const col=nodeColor(n);
@@ -3306,13 +3328,17 @@ function finishConnect(tid){
   if(tid===sid){toast('Pick a different node');return}
   M().links=M().links||[];
   if(M().links.some(l=>(l.a===sid&&l.b===tid)||(l.a===tid&&l.b===sid))){toast('Already connected');return}
-  if(H.isAncestor(tid,sid)){toast('Invalid — would create a cycle');return}
+  // a line back to an ancestor is a real idea — try → learn → try again → try.
+  // it may never join the hierarchy (H would recurse forever, and colour, markdown
+  // and presentation order all read H), so it lands as an EQUAL connection carrying
+  // a direction arrow instead. the tree stays a tree; the drawing gets its loop.
+  const loop=H.isAncestor(tid,sid);
   snap();
-  const l={id:uid(),a:sid,b:tid,rel:'child'};
+  const l=loop?{id:uid(),a:sid,b:tid,rel:'equal',dir:1}:{id:uid(),a:sid,b:tid,rel:'child'};
   M().links.push(l);
   render(); save();
   const p=edgesSvg.querySelector('#l-'+l.id); if(p)pulsePath(p);
-  toast('⤳ Connected');
+  toast(loop?'⟲ Loop connected — direction only, no hierarchy':'⤳ Connected');
 }
 function removeLink(id){
   snap();
@@ -3814,6 +3840,59 @@ function declutter(ids){
 
 /* ===================== edge decor: labels + arrows ===================== */
 const SVGNS='http://www.w3.org/2000/svg';
+/* ONE definition of where an arrowhead and a label sit on an edge. The screen
+   measures the path element it already drew; the PNG exports hold only a `d`
+   string, so they measure an offscreen twin. Same maths either way - which is
+   the point: a saved picture shows the arrows the screen shows. Both exports
+   used to draw the lines and drop the decor, so an exported map said nothing
+   about which way anything flowed. */
+function edgeDecorAt(p,len,dir,label,lpos){
+  const out={tris:[],lab:null};
+  const tri=(fr,back)=>{
+    const pt=p.getPointAtLength(len*fr);
+    const pt2=p.getPointAtLength(len*Math.max(0,Math.min(1,fr+(back?-0.03:0.03))));
+    const ang=Math.atan2(pt2.y-pt.y,pt2.x-pt.x), s=8, a1=ang+2.55, a2=ang-2.55;
+    out.tris.push('M '+(pt.x+Math.cos(ang)*s)+' '+(pt.y+Math.sin(ang)*s)
+      +' L '+(pt.x+Math.cos(a1)*s)+' '+(pt.y+Math.sin(a1)*s)
+      +' L '+(pt.x+Math.cos(a2)*s)+' '+(pt.y+Math.sin(a2)*s)+' Z');
+  };
+  if(dir===1||dir===3)tri(0.84,false);
+  if(dir===2||dir===3)tri(0.16,true);
+  if(label){const q=p.getPointAtLength(len*(lpos==='start'?0.18:lpos==='end'?0.82:0.5));
+    out.lab={x:q.x,y:q.y-7,t:label}}
+  return out;
+}
+let MEASP=null;
+function measureD(d){
+  if(!MEASP){
+    const sv=document.createElementNS(SVGNS,'svg');
+    sv.setAttribute('width','0'); sv.setAttribute('height','0');
+    sv.style.cssText='position:absolute;left:-9999px;top:0;visibility:hidden';
+    MEASP=document.createElementNS(SVGNS,'path');
+    sv.appendChild(MEASP); document.body.appendChild(sv);
+  }
+  MEASP.setAttribute('d',d);
+  let len=0; try{len=MEASP.getTotalLength()}catch(_){return null}
+  return len?{p:MEASP,len}:null;
+}
+/* paints that same decor onto a 2D canvas, for the PNG exports */
+function paintEdgeDecor(ctx,d,dir,label,lpos,color,halo,fmono){
+  if(!dir&&!label)return;
+  const m=measureD(d); if(!m)return;
+  const g=edgeDecorAt(m.p,m.len,dir,label,lpos);
+  const a=ctx.globalAlpha, dash=ctx.getLineDash();
+  ctx.globalAlpha=1; ctx.setLineDash([]); ctx.fillStyle=color;
+  g.tris.forEach(t=>ctx.fill(new Path2D(t)));
+  if(g.lab){
+    ctx.save();
+    ctx.font='10.5px '+fmono; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    ctx.lineJoin='round'; ctx.lineWidth=3.5; ctx.strokeStyle=halo;
+    ctx.strokeText(g.lab.t,g.lab.x,g.lab.y);      // the halo, = paint-order:stroke
+    ctx.fillStyle=color; ctx.fillText(g.lab.t,g.lab.x,g.lab.y);
+    ctx.restore();
+  }
+  ctx.globalAlpha=a; ctx.setLineDash(dash);
+}
 function renderEdgeDecor(){
   edgesSvg.querySelectorAll('.edeco').forEach(e=>e.remove());
   // viewport culling: path measurement (getTotalLength/getPointAtLength) is the hot spot,
@@ -3845,30 +3924,21 @@ function renderEdgeDecor(){
     let len; try{len=it.p.getTotalLength()}catch(_){continue}
     if(!len)continue;
     const dim=it.p.classList.contains('pdim');
-    if(it.label){
-      const frac=it.lpos==='start'?0.18:it.lpos==='end'?0.82:0.5;
-      const pt=it.p.getPointAtLength(len*frac);
+    const g=edgeDecorAt(it.p,len,it.dir,it.label,it.lpos);
+    if(g.lab){
       const t=document.createElementNS(SVGNS,'text');
-      t.setAttribute('x',pt.x); t.setAttribute('y',pt.y-7);
+      t.setAttribute('x',g.lab.x); t.setAttribute('y',g.lab.y);
       t.setAttribute('class','edeco elabel'+(dim?' pdim':''));
       t.setAttribute('fill',it.color);
-      t.textContent=it.label;
+      t.textContent=g.lab.t;
       edgesSvg.appendChild(t);
     }
-    if(it.dir){
-      const mk=(fr,back)=>{
-        const pt=it.p.getPointAtLength(len*fr);
-        const pt2=it.p.getPointAtLength(len*Math.max(0,Math.min(1,fr+(back?-0.03:0.03))));
-        const ang=Math.atan2(pt2.y-pt.y,pt2.x-pt.x), s=8;
-        const a1=ang+2.55, a2=ang-2.55;
-        const tri=document.createElementNS(SVGNS,'path');
-        tri.setAttribute('d',`M ${pt.x+Math.cos(ang)*s} ${pt.y+Math.sin(ang)*s} L ${pt.x+Math.cos(a1)*s} ${pt.y+Math.sin(a1)*s} L ${pt.x+Math.cos(a2)*s} ${pt.y+Math.sin(a2)*s} Z`);
-        tri.setAttribute('fill',it.color);
-        tri.setAttribute('class','edeco'+(dim?' pdim':''));
-        edgesSvg.appendChild(tri);
-      };
-      if(it.dir===1||it.dir===3)mk(0.84,false);
-      if(it.dir===2||it.dir===3)mk(0.16,true);
+    for(const d of g.tris){
+      const tri=document.createElementNS(SVGNS,'path');
+      tri.setAttribute('d',d);
+      tri.setAttribute('fill',it.color);
+      tri.setAttribute('class','edeco'+(dim?' pdim':''));
+      edgesSvg.appendChild(tri);
     }
   }
 }
@@ -3917,17 +3987,22 @@ function openEdgeMenu(pid,x,y){
   const isLink=pid.indexOf('l-')===0, id=pid.slice(2);
   const o=isLink?(M().links||[]).find(l=>l.id===id):M().nodes[id];
   if(!o)return;
-  edgeCtx={isLink,id,snapped:false};
+  edgeCtx={isLink,id,snapped:false,pid,x,y};
   const label=isLink?o.label:o.elabel, lpos=(isLink?o.lpos:o.elpos)||'mid', st=isLink?(o.style||'auto'):null;
   const rel=isLink?(o.rel||'equal'):'child';
   const segBtns=(arr,cur)=>arr.map(a=>'<button data-v="'+a[0]+'" class="'+(String(a[0])===String(cur)?'on':'')+'">'+a[1]+'</button>').join('');
   const relBlock='<div class="mhead">RELATION — direction = meaning</div><div class="epad seg" data-k="rel">'+segBtns([['child','→ child'],['parent','← parent'],['equal','— equal'],['cousin','┄ cousin']],rel)+'</div>';
+  // child/parent already point themselves. equal and cousin carry no hierarchy,
+  // so their arrow is the only thing that says which way the idea flows.
+  const dirBlock=(isLink&&(rel==='equal'||rel==='cousin'))
+    ?'<div class="mhead">ARROW</div><div class="epad seg" data-k="dir">'+segBtns([[0,'— none'],[1,'→'],[2,'←'],[3,'↔']],o.dir||0)+'</div>'
+    :'';
   const m=$('#menu-edge');
   m.innerHTML=`<div class="mhead">CONNECTION</div>
 <div class="epad"><input id="elabel-in" type="text" placeholder="Label this line…" value="${esc(label||'')}"></div>
 <div class="mhead">LABEL POSITION</div>
 <div class="epad seg" data-k="lpos">${['start','mid','end'].map(v=>`<button data-v="${v}" class="${v===lpos?'on':''}">${v}</button>`).join('')}</div>
-${relBlock}`+
+${relBlock}${dirBlock}`+
 (isLink?`<div class="mhead">LINE STYLE</div>
 <div class="epad seg" data-k="style">${[['auto','auto'],['organic','⌇'],['straight','∕'],['octo','90°']].map(a=>`<button data-v="${a[0]}" class="${a[0]===st?'on':''}">${a[1]}</button>`).join('')}</div>
 <hr><button data-eact="del">Remove connection</button>`:`<hr><button data-eact="repick">⤴ Change parent…</button>
@@ -3974,6 +4049,7 @@ $('#menu-edge').addEventListener('click',e=>{
   const k=seg.dataset.k; let v=b.dataset.v;
   if(k==='lpos')setEdgeProp(edgeCtx.isLink?'lpos':'elpos',v==='mid'?null:v);
   else if(k==='style')setEdgeProp('style',v==='auto'?null:v);
+  else if(k==='dir')setEdgeProp('dir',v==='0'?null:+v);
   else if(k==='rel'){
     if(edgeCtx.isLink){
       const o=(M().links||[]).find(l=>l.id===edgeCtx.id);
@@ -3982,6 +4058,7 @@ $('#menu-edge').addEventListener('click',e=>{
         if(H.isAncestor(ch,par)){toast('Invalid — would create a cycle');return}
       }
       setEdgeProp('rel',v);
+      const c=edgeCtx; openEdgeMenu(c.pid,c.x,c.y); edgeCtx.snapped=c.snapped;
     }else{
       closeMenus();
       convertPrimaryEdgeRel(edgeCtx.id,v);
