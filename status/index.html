@@ -6716,6 +6716,133 @@ const Mirror = IO.mirror;
 
 /* ══════════════ EXPORT ══════════════ */
 
+/* ══════════════ THE SUMMARY ══════════════
+
+   The tab the sheet opens on, and the order of it is the whole argument.
+
+   WHAT YOU HAVE DONE goes at the top. Every other read-out in this file
+   describes the current week, which is exactly the wrong thing to hand
+   somebody having a bad one. The strongest reason to believe you can do a
+   thing is having already done it, and nothing in this suite could show that
+   on demand until now. Days trained, sets lifted, meals logged: evidence of
+   getting somewhere, rather than evidence of complying.
+
+   WHERE YOU ARE NOW is the working half underneath. Numbers, and no verdict
+   attached to any of them. Nothing here says a behaviour moved a figure. It
+   states the behaviour, states the figure, and lets him join them up.
+
+   TRAIN's rows are read here and never written. An app may read any type,
+   and both apps share one store on one device, so a set logged this morning
+   is countable from this page the moment it is saved. */
+
+/* A1 notation from a column number, so a sparkline can point at a column
+   whose position depends on how many fields are switched on. */
+function colLetter(n) {
+  let out = '';
+  for (n = n + 1; n > 0; n = Math.floor((n - 1) / 26)) out = String.fromCharCode(65 + (n - 1) % 26) + out;
+  return out;
+}
+
+function summaryRows() {
+  const out = [];
+  const row = (a, b, c) => out.push([a == null ? '' : a, b == null ? '' : b, c == null ? '' : c]);
+  const gap = () => row('', '', '');
+  const int = n => Math.round(n || 0).toLocaleString();
+
+  /* ── what is in the store, counted once ── */
+  const sets = Rec.all('set');
+  const trainDays = {};
+  sets.forEach(r => { if (r.date) trainDays[r.date] = 1; });
+  let lifted = 0, reps = 0;
+  sets.forEach(r => {
+    const p = r.payload || {};
+    const kg = num(p.kg, 0) || 0, rp = num(p.r, 0) || 0;
+    lifted += kg * rp; reps += rp;
+  });
+
+  const allMeals = Rec.all('meal');
+  const evs = Rec.all('ev');
+  const notes = Rec.all('note');
+
+  /* A day counts as logged if anything at all was written against it. The bar
+     is deliberately low, for the same reason the streak rule in the brief is:
+     a day you touched is a day you did not disappear. */
+  const seenDays = {};
+  [evs, allMeals, Rec.all('spend'), Rec.all('day'), sets].forEach(list =>
+    list.forEach(r => { if (r.date) seenDays[r.date] = 1; }));
+  const days = Object.keys(seenDays).sort();
+  const weighDays = {};
+  evs.forEach(r => { if (r.key === 'weight' && r.date) weighDays[r.date] = 1; });
+
+  row('WHAT YOU HAVE DONE', '', '');
+  row('First day recorded', days.length ? days[0] : '',
+    days.length ? new Date(days[0] + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : '');
+  row('Days logged', days.length, days.length ? 'anything written at all counts' : '');
+  row('Days trained', Object.keys(trainDays).length, '');
+  row('Sets lifted', int(sets.length), '');
+  row('Reps', int(reps), '');
+  row('Weight moved, all of it', int(lifted) + ' kg', 'every set, weight times reps');
+  row('Meals logged', int(allMeals.length), '');
+  row('Foods in your library', Object.keys(foods()).length, '');
+  row('Weigh-ins', Object.keys(weighDays).length, '');
+  row('Journal lines', int(notes.length), '');
+  gap();
+
+  /* ── where you are now ── */
+  const e = TD.estimate();
+  const back = Day.last(400);
+  let wNow = null, wDate = null;
+  for (let i = back.length - 1; i >= 0 && wNow == null; i--) {
+    const v = value(back[i], 'weight');
+    if (v != null) { wNow = v; wDate = back[i]; }
+  }
+  const wf = field('weight') || {};
+  const unit = wf.unit || 'lb';
+
+  const wk = Day.last(7);
+  const fed = wk.filter(d => dayTotals(d).kcal > 0);
+  const avg = k => fed.length ? fed.reduce((a, d) => a + (dayTotals(d)[k] || 0), 0) / fed.length : null;
+  const t = TARGETS();
+
+  const month = Day.today().slice(0, 7);
+  const thisMonth = Day.last(400).filter(d => d.slice(0, 7) === month);
+  const spentMonth = thisMonth.reduce((a, d) => a + spendTotal(d), 0);
+  const foodMonth = thisMonth.reduce((a, d) => a + (dayTotals(d).price || 0), 0);
+
+  row('WHERE YOU ARE NOW', '', '');
+  row('Weight', wNow == null ? '' : r1(wNow) + ' ' + unit, wDate ? 'read on ' + wDate : 'no weigh-in yet');
+  row('Trend', e.rate == null ? '' : r1(e.rate) + ' ' + unit + '/week', 'over ' + TD.win() + ' days');
+  row('What you burn', e.tdee == null ? '' : int(e.tdee) + ' kcal',
+    e.tdee == null ? e.basis : 'give or take ' + int(e.err) + ', ' + e.conf + '% confident');
+  row('Eaten, 7-day average', avg('kcal') == null ? '' : int(avg('kcal')) + ' kcal',
+    'target ' + int(t.kcal) + ', on ' + fed.length + ' of 7 days');
+  row('Protein, 7-day average', avg('p') == null ? '' : Math.round(avg('p')) + ' g', 'target ' + int(t.p) + ' g');
+  row('Food this month', '₱' + int(foodMonth), 'what you ate, at label prices');
+  row('Spent this month', '₱' + int(spentMonth), 'money that actually left an account');
+  gap();
+
+  /* ── the shape of it ──
+     Written as formulas, not as pictures. The sheet redraws them itself the
+     moment the Daily tab changes, so they cannot go stale between syncs, and
+     they cost two cells rather than an image. The column is worked out here
+     because which one holds a weight depends on how many fields are on. */
+  const live = Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0));
+  let wIdx = -1;
+  live.forEach((f, i) => { if (f.id === 'weight') wIdx = i; });
+  row('THE SHAPE OF IT', '', '');
+  if (wIdx > -1) {
+    const c = colLetter(2 + wIdx);
+    row('Weight, all of it', '=SPARKLINE(Daily!' + c + '2:' + c + '400)', 'every weigh-in on the Daily tab');
+  }
+  const kc = colLetter(2 + live.length);   /* Calories sits straight after the fields */
+  row('Calories, all of it', '=SPARKLINE(Daily!' + kc + '2:' + kc + '400,{"charttype","column"})',
+    'every day you logged food');
+  gap();
+  row('Worked out by STATUS and rewritten on each full sync. Typing on this tab will not last.', '', '');
+  row('Type into Food, Meals, Spending, Journal and Tracked. Put your own charts on a tab of your own.', '', '');
+  return out;
+}
+
 function exportSheets() {
   const days = Day.last(370);
   const live = Object.values(fields()).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -6757,6 +6884,8 @@ function exportSheets() {
     ['Target intake', TD.targetIntake() == null ? '' : TD.targetIntake()]];
 
   return [
+    /* order 0 puts it leftmost. The sheet script does the moving. */
+    { name: 'Summary', rows: summaryRows(), widths: [34, 20, 44], order: 0 },
     { name: 'Daily', rows: daily, widths: daily[0].map(() => 12) },
     { name: 'Meals', rows: mealRows, widths: mealRows[0].map(() => 12) },
     { name: 'Spending', rows: spendRows, widths: [11, 8, 10, 12, 30] },

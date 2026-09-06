@@ -224,7 +224,7 @@ const IO = {
      own back as `sheetV` when it answers, so the two can be compared and a
      sheet running an old script can say so instead of failing in ways nobody
      can place. */
-  SCRIPT_V: 3,
+  SCRIPT_V: 4,
 
   register(spec) {
     apps[spec.app] = Object.assign({ types: [], sheets: null, tables: null, name: spec.app }, spec);
@@ -842,10 +842,10 @@ const IO = {
          So this tab is matched on the row id and updated in place, always.
          Rows only ever arrive. A row that really was deleted arrives as its own
          tombstone, which is a line to write rather than a line to leave out. */
-      { name: IO.bagName(appId), rows: data, machine: true, key: 1, head: 1, upsert: 1 },
+      { name: IO.bagName(appId), rows: data, machine: true, key: 1, head: 1, upsert: 1, order: 90 },
       /* two columns and a version stamp: cheap enough to send whole every time,
          and it is the tab that says what wrote the file */
-      { name: IO.setName(appId), rows: set, machine: true, whole: true },
+      { name: IO.setName(appId), rows: set, machine: true, whole: true, order: 91 },
     ];
   },
 
@@ -1244,7 +1244,14 @@ const Mirror = {
   tabs(appId, opts) {
     opts = opts || {};
     const since = opts.since || '';
-    const edit = IO.tables(appId, since).map(t => ({ name: t.name, rows: t.rows, editable: true, key: t.key }));
+    /* ── the order the tabs sit in ──
+       A number per tab, not a position, so the sheet can sort what it was
+       given and leave every tab it has never heard of exactly where it is.
+       Ten for the ones you type into, twenty for the read-outs, ninety for
+       the machinery. A read-out may name its own — STATUS's Summary asks for
+       0, which is how it ends up leftmost. */
+    const edit = IO.tables(appId, since).map((t, i) =>
+      ({ name: t.name, rows: t.rows, editable: true, key: t.key, order: 10 + i }));
     const taken = {};
     edit.forEach(t => { taken[t.name.toLowerCase()] = 1; });
 
@@ -1260,7 +1267,8 @@ const Mirror = {
       const key = name.toLowerCase().replace(/s$/, '');
       if (taken[name.toLowerCase()] || taken[key] || taken[key + 's']) return;
       taken[name.toLowerCase()] = 1;
-      read.push({ name: name, rows: s.rows, editable: false, whole: true });
+      read.push({ name: name, rows: s.rows, editable: false, whole: true,
+        order: s.order == null ? 20 + read.length : s.order });
     });
     /* the machinery last, so the sheet is a complete save file rather than a
        pretty view of one */
@@ -1718,7 +1726,12 @@ const Mirror = {
       '   came back down. This is the half that lets the other device read it.',
       '',
       '   It also never clears that tab, so opening the app on a second device',
-      '   cannot empty the sheet. */',
+      '   cannot empty the sheet.',
+      '',
+      '   Version 4 puts the tabs in order, colours them for what they are, and',
+      '   hides the machinery. Green means type in me. Blue means I am worked out',
+      '   for you and I get rewritten. Grey and hidden is the save file. It moves',
+      '   no tab it was not handed, so any tab of your own is left alone. */',
       '',
       'var MB_V = ' + IO.SCRIPT_V + ';',
       '',
@@ -1803,6 +1816,43 @@ const Mirror = {
       '  if (append.length) sh.getRange(last + 1, 1, append.length, w).setValues(append);',
       '}',
       '',
+      '/* ── the tabs, put in order and marked for what they are ──',
+      '',
+      '   Cosmetic, and deliberately so: nothing here reads or writes a single',
+      '   value. It runs only on a full write, which is about once a day, so it',
+      '   costs nothing on the syncs that happen while you are using the app.',
+      '',
+      '   A tab this script was not given is never moved, never coloured and',
+      '   never hidden. Your own tabs are yours. They will end up sitting after',
+      '   the ones the app owns, because the app tabs are moved to the front. */',
+      'function mbTidy(ss, tabs) {',
+      '  var want = [];',
+      '  tabs.forEach(function (t) { if (t.order !== null && t.order !== undefined) want.push(t); });',
+      '  want.sort(function (a, b) { return a.order - b.order; });',
+      '  var pos = 1;',
+      '  want.forEach(function (t) {',
+      '    var sh = ss.getSheetByName(t.name);',
+      '    if (!sh) return;',
+      '    try {',
+      '      /* The machinery goes grey and out of sight. It is the save file and',
+      '         a row of it means nothing to read, so the honest thing is to stop',
+      '         offering it. Hidden, never deleted. */',
+      '      if (t.machine) {',
+      '        sh.setTabColor("#9aa0a6");',
+      '        if (!sh.isSheetHidden()) sh.hideSheet();',
+      '        return;',
+      '      }',
+      '      /* Green means type in me. Blue means I am worked out for you and',
+      '         I will be rewritten, so anything you put here will not last. */',
+      '      sh.setTabColor(t.editable ? "#188038" : "#1a73e8");',
+      '      if (sh.isSheetHidden()) sh.showSheet();',
+      '      ss.setActiveSheet(sh);',
+      '      ss.moveActiveSheet(pos);',
+      '      pos = pos + 1;',
+      '    } catch (err) {}',
+      '  });',
+      '}',
+      '',
       'function doPost(e) {',
       '  var body = JSON.parse(e.postData.contents);',
       '  var ss = SpreadsheetApp.getActiveSpreadsheet();',
@@ -1820,6 +1870,11 @@ const Mirror = {
       '    try { mbWriteTab(ss, t, mode); wrote.push(t.name); }',
       '    catch (err) { failed.push(t.name + ": " + err); }',
       '  });',
+      '',
+      '  /* Order, colour and hide. After the writing, so every tab it wants to',
+      '     move already exists, and only on a full write, because dragging tabs',
+      '     about on every background sync would be work for nothing. */',
+      '  if (mode !== "delta") { try { mbTidy(ss, tabs); } catch (err) {} }',
       '',
       '  /* Tabs written under an older name. Dropped only after the new ones exist,',
       '     so nothing is ever deleted before its replacement is there. */',
