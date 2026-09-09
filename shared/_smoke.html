@@ -489,6 +489,65 @@ async function run() {
       /function onEdit/.test(sc) && /callback/.test(sc);
   })());
 
+  /* ---- is this device still holding work the sheet has not got? ----
+
+     The phone pulled for weeks and never once pushed. Every automatic sync was
+     gated on a flag in memory saying "something changed since this page
+     loaded", and a phone browser freezes a backgrounded tab mid-request and
+     then discards it: the flag went, the rows stayed, and open / becoming
+     visible / the 45s tick only ever pulled.
+
+     The check that earns its keep is not "does a push happen" - it is the one
+     mechanism under every symptom: CAN THIS DEVICE STILL TELL, WITH NOTHING IN
+     MEMORY, THAT IT HAS ROWS THE SHEET HAS NOT CONFIRMED. Both halves of that
+     answer live outside the page: the boundary in localStorage and the rows in
+     the store. */
+  ok('records: newerThan finds a row written after a stamp', (() => {
+    const before = new Date(Date.now() - 60000).toISOString();
+    Rec.set(stamp, null, 'nt-a', { v: 1 });
+    return Rec.newerThan([stamp], before) === true;
+  })());
+  ok('records: newerThan says no once the stamp is ahead of the rows', () =>
+    Rec.newerThan([stamp], new Date(Date.now() + 60000).toISOString()) === false);
+  ok('records: newerThan only looks at the types it was asked for', () =>
+    Rec.newerThan(['type-nobody-owns'], new Date(Date.now() - 60000).toISOString()) === false);
+  ok('records: newerThan with no stamp means everything is outstanding', () =>
+    Rec.newerThan([stamp], '') === true && Rec.newerThan([stamp], null) === true);
+
+  ok('mirror: a device with unsent rows knows it from the store, not from memory', (() => {
+    IO.register({ app: '__out', name: 'Out', types: [stamp] });
+    /* pretend the last confirmed push was a minute ago, which is what a fresh
+       page load reads back out of localStorage */
+    IO.mirror.set({ pushed: { __out: new Date(Date.now() - 60000).toISOString() } });
+    const holding = IO.mirror.outstanding('__out');
+    /* and once the sheet confirms, it goes quiet */
+    IO.mirror.set({ pushed: { __out: new Date(Date.now() + 60000).toISOString() } });
+    const quiet = IO.mirror.outstanding('__out');
+    IO.mirror.set({ pushed: { __out: '' } });
+    return holding === true && quiet === false;
+  })());
+  /* A fresh app id, because the boundaries are deliberately MERGED with what is
+     on disk - every app frame writes that object and none of them owns it, so
+     one frame cannot erase another's line by writing an empty one. */
+  ok('mirror: a device that has never pushed counts as holding everything', () =>
+    IO.mirror.outstanding('__never-pushed-' + Date.now()) === true);
+  /* The bug was not that pushing was broken. It was that the only moment a
+     phone reliably reaches - open, and the tick, and coming back to the app -
+     could not push at all. */
+  ok('mirror: the moment that runs on open sends as well as reads', () =>
+    /Mirror\.push\(/.test(String(IO.mirror.onOpen)) &&
+    /Mirror\.outstanding\(/.test(String(IO.mirror.onOpen)));
+  ok('mirror: nothing automatic is gated on a flag held in memory', () =>
+    !/dirty/.test(String(IO.mirror.watch)) &&
+    /Mirror\.onOpen\(/.test(String(IO.mirror.watch)));
+  /* A lock taken on the way in and cleared on the way out is exactly what a
+     frozen tab loses, so the lock is held as a time and expires by itself
+     rather than blocking every later sync forever. */
+  ok('mirror: one sync at a time, and a frozen one lets go on its own', () => {
+    const src = String(IO.mirror.onOpen);
+    return /busy\(appId\)/.test(src) && /hold\(appId\)/.test(src) && /release\(appId\)/.test(src);
+  });
+
   /* ---- a tab belongs to its data, not to whoever writes it today ---- */
   ok('mirror: a tab is named after its data, not its app', (() => {
     const names = IO.mirror.tabs('__dup').map(t => t.name);

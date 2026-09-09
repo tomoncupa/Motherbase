@@ -1156,6 +1156,22 @@ const IO = {
 
 const MKEY = 'mb.mirror';
 const watching = Object.create(null);
+
+/* ── one attempt at a time, and never a stuck one ──
+
+   Boot, coming back to the app, the forty five second tick and the debounce
+   after a change can all want to sync at once, and two in the air at the same
+   time race for the same boundary. So an app syncs one at a time.
+
+   Held as a TIME rather than as a promise, because on a phone the promise is
+   the thing that goes missing: background the app and the tab is frozen mid
+   request, so nothing resolves, nothing rejects, and a flag set on the way in
+   is never cleared on the way out. A stamp expires on its own. */
+const inflight = Object.create(null);
+const BUSY_MS = 60000;
+const busy = appId => !!inflight[appId] && (Date.now() - inflight[appId]) < BUSY_MS;
+const hold = appId => { inflight[appId] = Date.now(); };
+const release = appId => { inflight[appId] = 0; };
 /* `pushed` is the line between what the sheet has and what it has not: rows
    written after it are the next push, and it only moves when the sheet
    confirms. A failed sync therefore needs no queue and no retry list — the
@@ -1232,6 +1248,29 @@ const Mirror = {
   set(patch) { Object.assign(mcfg, patch || {}); msave(); return Mirror.settings; },
   get url() { return mcfg.url; },
   ready() { return !!mcfg.url; },
+
+  /** Is this device holding rows the sheet has not confirmed?
+
+      `pushed[appId]` is the line: rows written after it have not landed. That
+      line lives in localStorage and only moves when the sheet says it has the
+      rows, so it survives a reload, a discarded tab and a phone that was put
+      in a pocket mid-request. Asking it is what makes a push recoverable
+      without a retry queue — which is what the comment on `watch` always
+      claimed, and was not true while the trigger was a flag in memory.
+
+      No boundary at all means nothing has ever landed, so everything is
+      outstanding. */
+  outstanding(appId) {
+    const R = g.Rec;
+    if (!R || !R.newerThan) return false;
+    const since = mcfg.pushed[appId];
+    if (!since) return true;
+    const S = IO.spec(appId);
+    /* the same set the push sends: what the app owns, the shared vocabulary,
+       and the app's own settings */
+    if (R.newerThan((S.types || []).concat(['tick', 'activity']), since)) return true;
+    return R.newerThan(['setting'], since, appId + '.');
+  },
 
   /** Every tab this app owns: the read-outs, then the ones you can type into.
 
@@ -1641,38 +1680,68 @@ const Mirror = {
 
   /** ── keeping up without being asked ──
 
-      Three moments, and none of them is a button. On open, because the sheet
-      may have been typed in on a laptop since. Half a minute after the last
-      thing he logs, because syncing on every tap would send a set, then the
-      same set with its weight corrected, then again. And the moment the app
-      goes out of view, which is the best one of the three: the work is done,
-      the phone is about to be locked, and nobody is waiting on it.
+      Four moments, and none of them is a button. On open, ten seconds after
+      the last thing he logs, the moment the app goes out of view, and every
+      forty five seconds while he is looking at it.
 
       There is no retry queue, deliberately. What goes next time is decided by
       the boundary in `pushed`, and that only moves when the sheet confirms —
       so a sync that fails leaves the boundary where it was and the same rows
       go again at the next moment. A queue would be a second copy of a fact
-      the store already holds. */
+      the store already holds.
+
+      ── why that was not true, and what it cost ──
+
+      Every one of those moments used to be gated on `dirty`, a flag in memory
+      saying "something changed since this page loaded". That IS a second copy
+      of a fact the store already holds, and it is the copy a phone loses.
+
+      Background a phone browser and the tab is frozen within a fraction of a
+      second, then discarded. So: log a meal, pocket the phone. `dirty` was
+      cleared on the way into the sync, the request froze in mid air, and the
+      handler that would have set it back never ran because a frozen promise
+      neither resolves nor rejects. Come back, and the page is a fresh load
+      with `dirty` at zero — and open, becoming visible and the forty five
+      second tick all only ever PULLED. Nothing pushed until he logged
+      something new, and then that push froze the same way.
+
+      A laptop never showed it: the tab stays alive and visible, so the ten
+      second timer actually fires with the page still running.
+
+      Now every moment asks `Mirror.outstanding`, which reads the boundary in
+      localStorage against the rows in the store. Both survive a reload, so a
+      push that died in a pocket is retried the next time the app is opened
+      rather than being forgotten. */
   watch(appId) {
     if (watching[appId]) return false;
     watching[appId] = 1;
-    let dirty = 0, t = null;
+    let t = null;
+    /* One path for all four moments. `onOpen` reads, then sends whatever the
+       boundary says is still here, and holds the one-at-a-time lock while it
+       does — so the debounce, the tick and coming back to the app cannot end
+       up racing each other for the same boundary. */
     const run = () => {
       clearTimeout(t); t = null;
-      if (!dirty || !mcfg.on || !mcfg.url) return;
-      dirty = 0;
-      Mirror.sync(appId, true).then(ok => { if (!ok) dirty = 1; }, () => { dirty = 1; });
+      if (!mcfg.on || !mcfg.url) return;
+      Mirror.onOpen(appId);
     };
-    if (g.Rec && g.Rec.on) g.Rec.on(() => { dirty = 1; clearTimeout(t); t = setTimeout(run, 30000); });
+    /* Ten seconds, not thirty. The debounce is there so that correcting a
+       weight straight after typing it sends one row and not three, and ten is
+       long enough for that. Thirty was long enough for the phone to be back in
+       a pocket, which made the timer that was meant to be the common case into
+       the one that almost never fired. */
+    if (g.Rec && g.Rec.on) g.Rec.on(() => { clearTimeout(t); t = setTimeout(run, 10000); });
 
-    /* Hidden means the phone is being locked or the tab is being left: push
-       what is waiting before it goes. Visible means you have just come back to
-       this device, which is exactly the moment the other one's work matters,
-       so read first and then send. */
+    /* Hidden means the phone is being locked or the tab is being left: try to
+       push what is waiting before it goes, knowing it may well be frozen
+       before the request lands. That is now a bonus rather than the only
+       chance. Visible means you have just come back to this device, which is
+       exactly the moment the other one's work matters, so read first and then
+       send. */
     if (g.document) g.document.addEventListener('visibilitychange', () => {
       if (g.document.visibilityState === 'hidden') { run(); return; }
       if (!mcfg.on || !mcfg.url) return;
-      Mirror.onOpen(appId).then(() => { if (dirty) run(); });
+      Mirror.onOpen(appId);
     });
 
     /* A pull while you are actually looking at it, so a screen left open on
@@ -1696,16 +1765,38 @@ const Mirror = {
   },
 
   /** on open, quietly. Never blocks anything and never says anything unless
-      it actually brought something back. */
+      it actually brought something back.
+
+      Reads, and then sends anything this device is still holding. It used to
+      only read, which is why a phone could pull for a week and never once
+      push: this is the moment that runs on boot, on coming back to the app and
+      on every forty five second tick, and it was the only reliable moment a
+      phone had. The send is silent and costs nothing when the boundary says
+      there is nothing outstanding, which is the ordinary case.
+
+      Read first, and if the read failed do not write — the same rule the
+      manual button follows, and for the same reason: a push rewrites the
+      readable tabs whole, so writing after a failed read is writing over a
+      sheet we have just proved we cannot see. */
   onOpen(appId) {
     if (!mcfg.url || !mcfg.on) return Promise.resolve(false);
-    return Mirror.index(appId).then(pre => Mirror.pull(appId, pre)).then(got => {
-      if (got && (got.changed || got.added || got.merged)) {
-        toast('<b>' + IO.came(got) + '</b> changes came in from the sheet.');
-        if (g.Rec) g.Rec.reload && g.Rec.reload();
-      }
-      return true;
-    }).catch(() => false);
+    if (busy(appId)) return Promise.resolve(false);
+    hold(appId);
+    let idx = null;
+    const job = Mirror.index(appId)
+      .then(pre => { idx = pre; return Mirror.pull(appId, pre).catch(() => ({ failed: 1 })); })
+      .then(got => {
+        if (got && (got.changed || got.added || got.merged)) {
+          toast('<b>' + IO.came(got) + '</b> changes came in from the sheet.');
+          if (g.Rec) g.Rec.reload && g.Rec.reload();
+        }
+        if (got && got.failed) return false;
+        if (!Mirror.outstanding(appId)) return true;
+        return Mirror.push(appId, true, { index: idx }).then(() => true, () => false);
+      })
+      .catch(() => false);
+    const done = ok => { release(appId); return ok; };
+    return job.then(done, () => done(false));
   },
 
   /** The Apps Script to paste. Generated here so it cannot drift from the

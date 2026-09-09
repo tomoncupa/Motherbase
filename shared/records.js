@@ -428,6 +428,29 @@ const Rec = {
     for (const id in rows) { const r = rows[id]; if (!want || want.indexOf(r.type) > -1) out.push(r); }
     return out.sort((a, b) => a.id.localeCompare(b.id));
   },
+  /** Is anything of these types written after `stamp`?
+
+      The mirror's one question — "is this device still holding work the sheet
+      has not got" — answered off the rows themselves. It used to be answered
+      off a flag in memory, and a phone loses memory: the tab is frozen the
+      moment it goes in a pocket and discarded soon after, so the flag went and
+      the work stayed. The store already knows, and asking it cannot be lost.
+
+      `export` would answer it too and costs a copy of every row and a sort to
+      do it, which is not a thing to run every forty five seconds on a phone
+      with twelve thousand sets on it. This allocates nothing and stops at the
+      first row that qualifies, so the interesting answer is the fast one. */
+  newerThan(types, stamp, keyPrefix) {
+    if (!stamp) return true;
+    const want = types && types.length ? types : null;
+    for (const id in rows) {
+      const r = rows[id];
+      if (want && want.indexOf(r.type) < 0) continue;
+      if (keyPrefix && String(r.key).indexOf(keyPrefix) !== 0) continue;
+      if (r.updated_at > stamp) return true;
+    }
+    return false;
+  },
   types() {
     const t = Object.create(null);
     for (const id in rows) { const r = rows[id]; if (alive(r)) t[r.type] = (t[r.type] || 0) + 1; }
