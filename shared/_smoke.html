@@ -46,10 +46,33 @@ Open it on a phone too: the buttons below should feel like an app, not like this
 
 <script>
 const T = [];
-const ok = (name, cond, note) => T.push({ name, pass: !!cond, note: note || '' });
+const PENDING = [];
+/* ── a check that cannot fail is not a check ──
+
+   `ok` took a VALUE, and nineteen checks in here were written as `() => ...`.
+   A function is truthy, so every one of them passed without ever being run -
+   including three that guard the sync fixes. That is worse than the permanent
+   red this file already warns about: red at least gets read eventually, while
+   a green that never ran is a claim nobody will ever question.
+
+   So a condition may now be a value, a function, or a promise, and all three
+   are actually resolved. A thrown or rejected check FAILS and says so, rather
+   than taking the page down with it. */
+function ok(name, cond, note) {
+  const rec = { name: name, pass: false, note: note || '' };
+  T.push(rec);
+  let v;
+  try { v = (typeof cond === 'function') ? cond() : cond; }
+  catch (e) { rec.note += ' — threw: ' + e.message; return rec; }
+  if (v && typeof v.then === 'function') {
+    PENDING.push(v.then(r => { rec.pass = !!r; },
+                        e => { rec.note += ' — rejected: ' + (e && e.message); }));
+  } else rec.pass = !!v;
+  return rec;
+}
 
 async function run() {
-  T.length = 0;
+  T.length = 0; PENDING.length = 0;
   const stamp = 'smoke-' + Date.now();
 
   /* ---- day ---- */
@@ -547,6 +570,91 @@ async function run() {
     const src = String(IO.mirror.onOpen);
     return /busy\(appId\)/.test(src) && /hold\(appId\)/.test(src) && /release\(appId\)/.test(src);
   });
+
+  /* ---- what the user is told, and what is written down ----
+
+     Two audiences. A red banner is for something the person can fix in ten
+     seconds; everything else self-heals, because the boundary only moves when
+     the sheet confirms. The detail that actually diagnoses a sync lives in the
+     log, where being complete costs nobody any worry. */
+  ok('mirror: a bad link is the user\'s problem and says so', () => {
+    IO.mirror.set({ url: 'https://example.test/notascript' });
+    const a = IO.mirror.fault();
+    IO.mirror.set({ url: 'https://script.google.com/macros/s/X/dev' });
+    const b = IO.mirror.fault();
+    IO.mirror.set({ url: '' });
+    const c = IO.mirror.fault();
+    return a.code === 'bad-link-host' && a.act === true &&
+           b.code === 'bad-link-dev' && b.act === true &&
+           c.code === 'no-link' && c.act === true;
+  });
+  ok('mirror: a sync that will retry itself is not raised as an alarm', () => {
+    IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec' });
+    const f = IO.mirror.fault();
+    IO.mirror.set({ url: '' });
+    /* transient: no signal, a frozen tab, Google being slow. The rows go again
+       on their own, so nothing is asked of the person and nothing is reddened */
+    return f.code === 'unreachable' && f.act === false && !!f.say;
+  });
+  ok('mirror: why() still answers, so nothing that called it broke', () =>
+    typeof IO.mirror.why() === 'string' && IO.mirror.why().length > 0);
+  /* The sync that mattered was the automatic one, and it was silent. A
+     declined sync is as worth a line as a failed one: "nothing happened and I
+     do not know why" is what cost weeks.
+
+     Driven once, in order, and asserted afterwards. These all write to the one
+     log, so running them as separate promises let them interleave and stamp on
+     each other's entries - which is a fine way to write a check that fails for
+     a reason that has nothing to do with the thing it is checking. */
+  const LG = {};
+  IO.mirror.clearLog();
+  IO.mirror.set({ url: '', on: 1 });
+  await IO.mirror.onOpen('__log', 'tick');
+  LG.noLink = IO.mirror.log().slice(-1)[0] || {};
+
+  IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec', on: 0 });
+  await IO.mirror.onOpen('__log', 'open');
+  LG.off = IO.mirror.log().slice(-1)[0] || {};
+
+  IO.mirror.clearLog();
+  IO.mirror.set({ url: '', on: 1 });
+  await IO.mirror.onOpen('__log', 'tick');
+  LG.one = IO.mirror.log().length;
+  LG.asRows = Rec.export().filter(r => /log/i.test(r.type)).length;
+  LG.inStorage = !!localStorage.getItem('mb.mirror.log');
+  LG.text = IO.mirror.logText();
+
+  IO.mirror.clearLog();
+  for (let i = 0; i < 70; i++) await IO.mirror.onOpen('__log', 'tick');
+  LG.ring = IO.mirror.log().length;
+  IO.mirror.clearLog();
+  IO.mirror.set({ url: '', on: 1 });
+
+  ok('mirror: an attempt that declines to run still says why', () =>
+    LG.noLink.r === 'skip' && LG.noLink.y === 'no-link' &&
+    LG.noLink.w === 'tick' && LG.noLink.a === '__log');
+  ok('mirror: the switch being off is recorded, not mistaken for a failure', () =>
+    LG.off.r === 'skip' && LG.off.y === 'switched-off');
+  ok('mirror: the log is a ring, so it cannot grow without end', () => LG.ring === 60);
+  ok('mirror: the log copies out with the device and the link on it', () =>
+    /MOTHERBASE SYNC LOG/.test(LG.text) && /device/.test(LG.text) &&
+    /auto/.test(LG.text) && /app script v/.test(LG.text));
+  /* A diagnostic is not data: it must not sync, must not land in a backup and
+     must not be mistaken for a row. */
+  ok('mirror: the log is not a row and never travels', () =>
+    LG.one === 1 && LG.asRows === 0 && LG.inStorage);
+  /* Sixty lines of "nothing to do" would push the one failure worth reading
+     off the end long before he got round to copying it. */
+  ok('mirror: quiet ticks collapse, so a real failure is not scrolled away', () => {
+    IO.mirror.clearLog();
+    for (let i = 0; i < 8; i++) IO.mirror.logProbe({ a: '__q', w: 'tick', r: 'ok' });
+    IO.mirror.logProbe({ a: '__q', w: 'tick', r: 'fail', y: 'unreachable' });
+    for (let i = 0; i < 8; i++) IO.mirror.logProbe({ a: '__q', w: 'tick', r: 'ok' });
+    const rows = IO.mirror.log();
+    IO.mirror.clearLog();
+    return rows.length === 3 && rows[0].n === 8 && rows[1].y === 'unreachable' && rows[2].n === 8;
+  });
+
 
   /* ---- a tab belongs to its data, not to whoever writes it today ---- */
   ok('mirror: a tab is named after its data, not its app', (() => {
@@ -1201,9 +1309,12 @@ async function run() {
   document.querySelectorAll('.mb-sheet,.mb-veil').forEach(n => n.remove());
   ok('cleanup: no overlay left on the page', !document.querySelector('.mb-sheet,.mb-veil'));
 
+  /* every promised check settles before anything is counted */
+  await Promise.all(PENDING);
+
   const pass = T.filter(t => t.pass).length;
   document.getElementById('out').innerHTML =
-    T.map(t => (t.pass ? '<span class="p">  ok  </span>' : '<span class="f">  FAIL</span>') + '  ' + t.name).join('\n') +
+    T.map(t => (t.pass ? '<span class="p">  ok  </span>' : '<span class="f">  FAIL</span>') + '  ' + t.name + (t.pass ? '' : t.note)).join('\n') +
     '\n\n' + (pass === T.length ? '<span class="p">' : '<span class="f">') + pass + ' / ' + T.length + ' passed</span>';
   return { pass, total: T.length, failed: T.filter(t => !t.pass).map(t => t.name) };
 }
