@@ -1167,6 +1167,68 @@ const watching = Object.create(null);
    the thing that goes missing: background the app and the tab is frozen mid
    request, so nothing resolves, nothing rejects, and a flag set on the way in
    is never cleared on the way out. A stamp expires on its own. */
+/* ── the sync log ──
+
+   Tom, 2026-09-09: "The sync error codes don't actually mean anything or help
+   at all, they just worry the users. Configure them to be useful to you since
+   you're the one actually debugging."
+
+   Right on both halves. A red banner reading "the sheet did not take 3 of 5
+   tabs, which usually means the deployment is running older code" tells a
+   user something is broken, gives them nothing they can do, and is wrong as
+   often as it is right. Meanwhile the sync that mattered - the automatic one,
+   on the phone - was SILENT, so the one failure worth knowing about left no
+   trace at all. That is how a phone went weeks without pushing.
+
+   So the two audiences are split. The person gets plain sentences and only
+   ever gets a red one when there is something they can actually do. Every
+   attempt, silent ones included, writes a line here instead.
+
+   Kept short on purpose, in localStorage rather than in the store, because a
+   diagnostic is not data: it must not sync, must not appear in a backup, and
+   must not grow. Sixty lines is a couple of days of ticks and about 6KB.
+
+   Keys are short because there are sixty of them:
+     t  when, local, to the second      a  which app
+     w  what triggered it: open, tick, edit, hidden, back, manual
+     r  how it ended: ok, skip, fail
+     y  the reason code, when it is not ok
+     ms how long it took                v  the script version the sheet answered with
+     o  was this device holding unsent rows when it started
+     p  the push: state/mode/tabs       g  what the pull brought: changed+added+merged
+   Anything absent was not reached. */
+const LOGKEY = 'mb.mirror.log';
+const LOG_MAX = 60;
+const two = n => (n < 10 ? '0' : '') + n;
+const logRead = () => { try { return JSON.parse(localStorage.getItem(LOGKEY) || '[]'); } catch (e) { return []; } };
+/* An uneventful attempt is one that reached the sheet and found nothing to do
+   in either direction. There are about 1,900 of those a day at one tick every
+   forty five seconds, and sixty lines of "nothing to do" would push the one
+   failure worth reading off the end long before Tom got round to copying it.
+   So a run of identical quiet ones collapses to a single line with a count and
+   the time of the most recent, and anything that actually happened - rows in,
+   rows out, a skip, a failure - always takes a line of its own. */
+const quietLine = l => l && l.r === 'ok' && !l.g && !l.p && !l.c && !l.y;
+const sameKind = (a, b) => a.a === b.a && a.w === b.w && a.r === b.r && a.y === b.y;
+
+function mlog(entry) {
+  try {
+    const d = new Date();
+    const line = Object.assign({
+      t: two(d.getMonth() + 1) + '-' + two(d.getDate()) + ' ' +
+         two(d.getHours()) + ':' + two(d.getMinutes()) + ':' + two(d.getSeconds()),
+    }, entry);
+    const all = logRead();
+    const last = all[all.length - 1];
+    if (last && quietLine(last) && quietLine(line) && sameKind(last, line)) {
+      last.n = (last.n || 1) + 1;
+      last.t = line.t;
+      last.ms = line.ms;
+    } else all.push(line);
+    localStorage.setItem(LOGKEY, JSON.stringify(all.slice(-LOG_MAX)));
+  } catch (e) {}
+}
+
 const inflight = Object.create(null);
 const BUSY_MS = 60000;
 const busy = appId => !!inflight[appId] && (Date.now() - inflight[appId]) < BUSY_MS;
@@ -1591,16 +1653,18 @@ const Mirror = {
       });
     }).catch(() => ({ state: 'unconfirmed', tabs: tabs.length }));
 
+    /* Said plainly, and not in red. None of these is something to do anything
+       about: the boundary has not moved, so whatever did not land goes again
+       by itself. The detail that would actually diagnose it is in the sync
+       log, where it does not have to be frightening to be complete. */
     const speak = res => {
       if (!quiet) {
         if (res.state === 'failed') {
-          toast('The sheet did not take <b>' + res.missing + '</b> of ' + res.of +
-            ' tabs, which usually means the deployment is running older code.', { bad: true, ms: 8000 });
+          toast('Nothing went up this time. It will go again — <b>settings → sync</b> shows what the sheet is running.');
         } else if (res.state === 'unconfirmed') {
-          toast('Sent <b>' + res.tabs + '</b> tabs and the sheet would not confirm, so open it and check.',
-            { bad: true, ms: 8000 });
+          toast('Sent. The sheet did not answer back, which some browsers always do.');
         } else if (res.short) {
-          toast('Synced, though <b>' + res.short + '</b> tabs came out shorter than sent.');
+          toast('Synced <b>' + res.tabs + '</b> tabs.');
         } else {
           toast('Synced <b>' + res.tabs + '</b> tabs, and the sheet confirms it.');
         }
@@ -1619,31 +1683,51 @@ const Mirror = {
         return fetch(mcfg.url, { method: 'POST', mode: 'no-cors', headers: head, body: body })
           .then(() => landed()).then(speak)
           .catch(() => {
-            if (!quiet) toast(Mirror.why(), { bad: true, ms: 7000 });
+            const f = Mirror.fault();
+            if (!quiet) toast(f.say, f.act ? { bad: true, ms: 7000 } : null);
             return { state: 'failed', missing: tabs.length, of: tabs.length };
           });
       });
   },
 
-  /** Why a sync probably failed.
+  /** Why a sync probably failed — split into what to SAY and what to LOG.
 
-      "Could not reach the sheet" is true and useless. Every one of these has
-      the same symptom and a different fix, and the link itself tells us which
-      is likely — so say the likely one rather than making him guess. */
-  why() {
+      `act` is the whole point. Three of these are a thing the person can fix
+      in ten seconds and should be told about in red. The fourth is "it did not
+      go through this time", which is transient far more often than not — no
+      signal, a frozen tab, Google being slow — and self-heals, because the
+      boundary did not move and the same rows go again on the next attempt.
+      Painting that red taught him to ignore red.
+
+      The old text for that case advised redeploying the Apps Script, which is
+      a real fix for a real cause and the wrong thing to say to somebody who
+      walked into a lift. The version line in Settings already reports an out
+      of date deployment, from the sheet's own answer rather than from a
+      guess, so that advice lives where it can be true. */
+  fault() {
     const u = mcfg.url || '';
-    if (!u) return 'Paste the link first.';
+    if (!u) return { code: 'no-link', act: true, say: 'Paste the sheet link in first.' };
     if (u.indexOf('script.google.com') < 0)
-      return 'That link is not an Apps Script web app, so check you copied the one ending in /exec.';
+      return { code: 'bad-link-host', act: true,
+               say: 'That link is not the Apps Script one. Copy the one that ends in /exec.' };
     if (!/\/exec\s*$/.test(u))
-      return 'That link should end in /exec, and a link ending in /dev only works while you are signed in.';
-    return 'Could not reach the sheet, and the usual cause is pasting new code without deploying it again, so try Deploy, Manage deployments, the pencil, Version New version.';
+      return { code: 'bad-link-dev', act: true,
+               say: 'That link should end in /exec. A /dev one only works while you are signed in.' };
+    return { code: 'unreachable', act: false,
+             say: 'Could not reach the sheet just now. Nothing was lost, and it will go again on its own.' };
+  },
+
+  /** kept because callers already say why(); it is the sentence half */
+  why() {
+    return Mirror.fault().say;
   },
 
   /** the whole round trip, in the order that makes it safe */
   sync(appId, quiet, opts) {
-    if (!mcfg.url) return Promise.resolve(false);
+    if (!mcfg.url) { mlog({ a: appId, w: 'manual', r: 'skip', y: 'no-link' }); return Promise.resolve(false); }
     if (!quiet) toast('Syncing…');
+    const t0 = Date.now();
+    const mline = { a: appId, w: quiet ? 'auto' : 'manual', o: Mirror.outstanding(appId) ? 1 : 0 };
     let idx = null;
     return Mirror.index(appId)
       .then(pre => { idx = pre; return Mirror.pull(appId, pre).catch(() => ({ skipped: 'could not read', failed: 1 })); })
@@ -1657,17 +1741,28 @@ const Mirror = {
            next attempt; there is nothing to queue and nothing to lose by
            waiting. */
         if (got && got.failed) {
-          if (!quiet) toast('Could not read the sheet, so nothing was sent. ' + Mirror.why(), { bad: true, ms: 8000 });
+          const f = Mirror.fault();
+          mline.r = 'fail'; mline.y = 'read-failed:' + f.code;
+          mline.ms = Date.now() - t0; mlog(mline);
+          if (!quiet) toast(f.say, f.act ? { bad: true, ms: 8000 } : null);
           return false;
         }
         return Mirror.push(appId, true, Object.assign({ index: idx }, opts || {})).then(res => {
         const ok2 = res && (res.state === 'confirmed' || res.state === 'clean');
+        mline.v = (idx && idx.v) || 0;
+        mline.g = IO.came(got || {}) || 0;
+        mline.p = (res && res.state || '?') + '/' + (res && res.mode || '-') + '/' + (res && res.tabs || 0);
+        mline.r = ok2 ? 'ok' : 'fail';
+        if (!ok2) mline.y = (res && res.state === 'unconfirmed') ? 'no-confirm' : Mirror.fault().code;
+        mline.ms = Date.now() - t0;
+        mlog(mline);
         if (!quiet) {
           if (res && res.state === 'clean') toast('Already up to date.');
-          else if (!res || res.state === 'failed') toast(Mirror.why(), { bad: true, ms: 8000 });
-          else if (res.state === 'unconfirmed') {
-            toast('Sent <b>' + res.tabs + '</b> tabs and the sheet would not confirm, so open it and check.',
-              { bad: true, ms: 8000 });
+          else if (!res || res.state === 'failed') {
+            const f = Mirror.fault();
+            toast(f.say, f.act ? { bad: true, ms: 8000 } : null);
+          } else if (res.state === 'unconfirmed') {
+            toast('Sent. The sheet did not answer back, which some browsers always do.');
           } else if (got && got.clashes) toast('Synced, and <b>' + got.clashes + '</b> older sheet edits were kept aside.');
           else if (got && (got.changed || got.added || got.merged)) toast('Synced, with <b>' + IO.came(got) + '</b> changes from the sheet.');
           else toast('Synced <b>' + res.tabs + '</b> tabs, and the sheet confirms it.');
@@ -1720,17 +1815,17 @@ const Mirror = {
        boundary says is still here, and holds the one-at-a-time lock while it
        does — so the debounce, the tick and coming back to the app cannot end
        up racing each other for the same boundary. */
-    const run = () => {
+    const run = (why) => {
       clearTimeout(t); t = null;
       if (!mcfg.on || !mcfg.url) return;
-      Mirror.onOpen(appId);
+      Mirror.onOpen(appId, why || 'edit');
     };
     /* Ten seconds, not thirty. The debounce is there so that correcting a
        weight straight after typing it sends one row and not three, and ten is
        long enough for that. Thirty was long enough for the phone to be back in
        a pocket, which made the timer that was meant to be the common case into
        the one that almost never fired. */
-    if (g.Rec && g.Rec.on) g.Rec.on(() => { clearTimeout(t); t = setTimeout(run, 10000); });
+    if (g.Rec && g.Rec.on) g.Rec.on(() => { clearTimeout(t); t = setTimeout(() => run('edit'), 10000); });
 
     /* Hidden means the phone is being locked or the tab is being left: try to
        push what is waiting before it goes, knowing it may well be frozen
@@ -1739,9 +1834,9 @@ const Mirror = {
        exactly the moment the other one's work matters, so read first and then
        send. */
     if (g.document) g.document.addEventListener('visibilitychange', () => {
-      if (g.document.visibilityState === 'hidden') { run(); return; }
+      if (g.document.visibilityState === 'hidden') { run('hidden'); return; }
       if (!mcfg.on || !mcfg.url) return;
-      Mirror.onOpen(appId);
+      Mirror.onOpen(appId, 'back');
     });
 
     /* A pull while you are actually looking at it, so a screen left open on
@@ -1759,7 +1854,7 @@ const Mirror = {
       if (!g.document || g.document.visibilityState !== 'visible') return;
       const b = g.document.body;
       if (b && !b.getBoundingClientRect().width) return;
-      Mirror.onOpen(appId);
+      Mirror.onOpen(appId, 'tick');
     }, 45000);
     return true;
   },
@@ -1778,25 +1873,84 @@ const Mirror = {
       manual button follows, and for the same reason: a push rewrites the
       readable tabs whole, so writing after a failed read is writing over a
       sheet we have just proved we cannot see. */
-  onOpen(appId) {
-    if (!mcfg.url || !mcfg.on) return Promise.resolve(false);
-    if (busy(appId)) return Promise.resolve(false);
+  onOpen(appId, why) {
+    const w = why || 'open';
+    /* Logged, not ignored. "Nothing happened and I do not know why" was the
+       whole problem: a sync that declines to run is as worth a line as one
+       that fails, and these three are the difference between "the phone is
+       broken" and "the toggle is off". */
+    if (!mcfg.url) { mlog({ a: appId, w: w, r: 'skip', y: 'no-link' }); return Promise.resolve(false); }
+    if (!mcfg.on) { mlog({ a: appId, w: w, r: 'skip', y: 'switched-off' }); return Promise.resolve(false); }
+    if (busy(appId)) { mlog({ a: appId, w: w, r: 'skip', y: 'already-running' }); return Promise.resolve(false); }
     hold(appId);
-    let idx = null;
+    const t0 = Date.now();
+    const held = Mirror.outstanding(appId);
+    let idx = null, line = { a: appId, w: w, o: held ? 1 : 0 };
     const job = Mirror.index(appId)
-      .then(pre => { idx = pre; return Mirror.pull(appId, pre).catch(() => ({ failed: 1 })); })
+      .then(pre => {
+        idx = pre;
+        line.v = (pre && pre.v) || 0;
+        if (pre && pre.failed) line.y = 'sheet-silent';
+        return Mirror.pull(appId, pre).catch(() => ({ failed: 1 }));
+      })
       .then(got => {
+        line.g = IO.came(got || {}) || 0;
+        if (got && got.clashes) line.c = got.clashes;
         if (got && (got.changed || got.added || got.merged)) {
           toast('<b>' + IO.came(got) + '</b> changes came in from the sheet.');
           if (g.Rec) g.Rec.reload && g.Rec.reload();
         }
-        if (got && got.failed) return false;
-        if (!Mirror.outstanding(appId)) return true;
-        return Mirror.push(appId, true, { index: idx }).then(() => true, () => false);
+        if (got && got.failed) { line.y = line.y || 'read-failed'; return false; }
+        if (!held) return true;
+        return Mirror.push(appId, true, { index: idx }).then(res => {
+          line.p = (res && res.state || '?') + '/' + (res && res.mode || '-') + '/' + (res && res.tabs || 0);
+          if (res && res.state === 'failed') line.y = 'sheet-refused';
+          if (res && res.state === 'unconfirmed') line.y = 'no-confirm';
+          return !!(res && (res.state === 'confirmed' || res.state === 'clean'));
+        }, () => { line.y = 'push-threw'; return false; });
       })
-      .catch(() => false);
-    const done = ok => { release(appId); return ok; };
+      .catch(() => { line.y = line.y || 'threw'; return false; });
+    const done = ok => {
+      release(appId);
+      line.r = ok ? 'ok' : 'fail';
+      line.ms = Date.now() - t0;
+      mlog(line);
+      return ok;
+    };
     return job.then(done, () => done(false));
+  },
+
+  /** The last sixty sync attempts, newest last. Read by the button in
+      Settings that copies them out, and by anyone debugging this. */
+  log() { return logRead(); },
+  /** only so the checks can drive the collapsing without a network */
+  logProbe(entry) { mlog(entry); },
+  clearLog() { try { localStorage.removeItem(LOGKEY); } catch (e) {} },
+
+  /** The log as something Tom can paste into a conversation.
+
+      One line per attempt and a header saying what device wrote it, because
+      the first question about a sync bug is always "which of the two is this"
+      and the second is "what does the sheet think it is running". */
+  logText() {
+    const rows = logRead();
+    const head = [
+      'MOTHERBASE SYNC LOG',
+      'written  ' + new Date().toString(),
+      'device   ' + (g.navigator ? g.navigator.userAgent : 'unknown'),
+      'link     ' + (mcfg.url ? (/\/exec\s*$/.test(mcfg.url) ? 'set, ends /exec' : 'set, DOES NOT end /exec') : 'not set'),
+      'auto     ' + (mcfg.on ? 'on' : 'OFF'),
+      'app script v' + IO.SCRIPT_V + ', sheet answered v' + (mcfg.sheetV || 0),
+      'last confirmed push per app:',
+    ];
+    Object.keys(mcfg.pushed || {}).forEach(a => head.push('  ' + a + '  ' + mcfg.pushed[a]));
+    if (!Object.keys(mcfg.pushed || {}).length) head.push('  (none ever confirmed)');
+    head.push('');
+    head.push('t=when w=what-triggered-it r=result y=why o=had-unsent-rows');
+    head.push('ms=took v=sheet-version g=rows-in p=push(state/mode/tabs)');
+    head.push('');
+    if (!rows.length) return head.concat(['(no attempts recorded yet)']).join('\n');
+    return head.concat(rows.map(r => Object.keys(r).map(k => k + '=' + r[k]).join(' '))).join('\n');
   },
 
   /** The Apps Script to paste. Generated here so it cannot drift from the
