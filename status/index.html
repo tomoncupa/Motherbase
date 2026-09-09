@@ -125,6 +125,12 @@ h2 .sub{margin-left:auto;letter-spacing:0;font-family:var(--font-mono);font-size
 /* the day card's top line: calories on the left, rank on the right */
 .islerow{display:flex;align-items:flex-start;gap:var(--s-3)}
 .islehero{flex:1;min-width:0}
+/* The big number is a button on the live screen, because whatever you made the
+   main number is the thing you log most - and it used to be the one thing on
+   Today you could not open. Reset to nothing so it draws exactly as the plain
+   read-out does; the photographed copy is still a div. */
+button.islehero{background:none;border:0;padding:0;margin:0;color:inherit;
+  font:inherit;text-align:left;cursor:pointer;min-height:var(--tap);display:block}
 /* "609 / 2,220 left" is one reading and it breaks in half if it is allowed to
    wrap: the number on one line and the word under it, which looks like two
    facts. It stays on one line and steps down the type scale instead, because
@@ -3600,7 +3606,38 @@ function islandCard(d, opts) {
      opens and the rank is the one-glance answer to how it is going. The big
      letter is the LAST SEVEN COMPLETED DAYS and does not move during the day. */
   const top = el('div', 'islerow');
-  const heroBox = el('div', 'islehero'); heroBox.appendChild(hero);
+  /* ── the big number opens the thing it is measuring ──
+
+     Tom, 2026-09-09: "If a client makes steps the main number, they're now
+     unable to track steps."
+
+     The tile loop below skips whatever is the hero, on the sound reasoning
+     that the big number should not also be a small one. But the TILE is the
+     only way into a field's logging sheet, and the hero was a plain div with
+     nothing wired to it - so choosing a field as your main number deleted the
+     only way to log it. The + sheet was not a way out either: it lists what is
+     still unlogged, so it carried Steps until the first reading of the day and
+     then dropped it too, leaving no way to correct a number or add to it.
+
+     This was never only about steps. Any field chosen as the hero went the
+     same way: sleep, weight, mood, energy. Calories and protein survived only
+     because the Food tab is a second door.
+
+     So the hero opens what it is showing. The photographed copy stays a plain
+     div, because nothing in a picture is ever going to be pressed. */
+  const heroLive = opts.sortable;
+  const heroBox = el(heroLive ? 'button' : 'div', 'islehero' + (heroLive ? ' mb-press mb-tap' : ''));
+  heroBox.appendChild(hero);
+  if (heroLive) {
+    const hf = liveFields().filter(x => x.id === h.id)[0];
+    heroBox.onclick = () => {
+      Mobile.feedback('open');
+      /* a field opens its own sheet; the two computed ones go where they are
+         actually logged, which is the same place their tiles go */
+      if (hf) fieldSheet(hf, d); else { TAB = 'food'; draw(); }
+    };
+    heroBox.setAttribute('aria-label', h.label + ', log a reading');
+  }
   top.appendChild(heroBox);
   top.appendChild(rankBadge(d));
   top.style.marginBottom = 'var(--s-4)';
@@ -6715,6 +6752,47 @@ function drawSyncTab(pane) {
     } else done(false);
   };
   pane.appendChild(show);
+
+  /* ── the sync log ──
+     Tom, 2026-09-09: the error messages "don't actually mean anything or help
+     at all, they just worry the users. Configure them to be useful to you
+     since you're the one actually debugging."
+
+     So the toasts got plain and this got everything. One button, because the
+     only thing he should ever have to do with a sync problem is hand the
+     record over rather than describe it - "it says it could not reach the
+     sheet" is a symptom, and every cause produces it. */
+  const diag = el('button', 'btn wide mb-press mb-tap', 'Copy the sync log');
+  diag.style.marginTop = 'var(--s-2)';
+  diag.style.minHeight = 'var(--tap)';
+  diag.onclick = () => {
+    const text = Mirror.logText();
+    const t = document.createElement('textarea');
+    t.rows = 12; t.value = text;
+    t.style.fontFamily = 'var(--font-mono)'; t.style.fontSize = 'var(--f-1)';
+    t.setAttribute('readonly', '');
+    const show2 = ok2 => {
+      UI.dialog({
+        title: 'SYNC LOG', width: 560,
+        body: b => {
+          b.appendChild(el('div', 'note', ok2
+            ? 'Copied. Paste it to Claude — it says what tried to sync, when, and how each attempt ended.'
+            : 'Copy this and paste it to Claude.'));
+          b.appendChild(t);
+          if (!ok2) setTimeout(() => { t.select(); }, 50);
+        },
+        actions: [{ label: 'DONE', kind: 'go' }],
+      });
+      if (ok2) Mobile.feedback('success');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => show2(true)).catch(() => show2(false));
+    } else show2(false);
+  };
+  pane.appendChild(diag);
+  pane.appendChild(el('div', 'note',
+    'The last ' + (Mirror.log().length || 'few') + ' sync attempts, the quiet automatic ones included. ' +
+    'It holds no food, weights or journal lines — only times, and whether each attempt worked.'));
 }
 
 /* Repaint one settings pane in place. The pane element is handed to each tab
