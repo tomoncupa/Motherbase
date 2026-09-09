@@ -4385,14 +4385,15 @@ function closeness(v, target, both) {
   return 1 - (d - FULL) / (ZERO - FULL);
 }
 
-/* ── which five, and when each one settles ──
-   The times are the user's. A pillar that has not settled is not counted
-   against today, which is the whole reason today can be scored at all. */
+/* ── which five ──
+   The settle hours went with the model that needed them. A pillar used to be
+   held out of today's average until its hour of the day, so that an unlogged
+   evening meal did not read as a failure at noon. Every pillar is now in from
+   midnight as an F and graded up, so there is no hour to wait for and nothing
+   left to hold back. The `settle` setting is no longer read; a stored one is
+   harmless and is left where it is rather than deleted out from under a
+   backup. */
 const PILLARS = () => S.get('pillars', ['protein', 'sleep', 'steps', 'kcal', 'training']);
-const SETTLE = () => S.get('settle', { sleep: 10, steps: 20, kcal: 21, protein: 21, training: 20 });
-const settledYet = id => {
-  const h = num(SETTLE()[id], 21); return new Date().getHours() >= (h == null ? 21 : h);
-};
 
 /* Training comes from TRAIN if it is there, and from a tracked yes/no in here
    if it is not. Naming a body part is itself a yes. */
@@ -4426,25 +4427,36 @@ function dayScore(date) {
      letter, I wanna see the data for the day." So each part carries what it
      was measured on, and for calories and protein the accuracy the ladder
      actually read. */
-  const add = (id, label, letter, monotonic, val, target, unit) => {
+  /* ── the day starts at F and is graded up ──
+     Tom, 2026-09-09: "Let each day begin at F then be graded up appropriately
+     but always out of the full expectations."
+
+     Every live pillar is in the average from midnight. One with no reading yet
+     is an F, because that is what it is: not done. So the letter opens at F
+     and climbs as the day is actually lived, and it is always out of the whole
+     day rather than out of the bit that has happened so far.
+
+     This replaces holding a pillar back until its hour and averaging only the
+     rest, which sounds fairer and is not. A denominator that grows through the
+     day means the same morning is an S at 9am and a C by teatime with nothing
+     having changed, and it let one good reading stand as the whole grade —
+     nine hours of sleep and nothing else read as an A. `pending` is now only
+     a list to name on the day sheet; it no longer excludes anything. */
+  const add = (id, label, letter, val, target, unit) => {
     if (letter == null) return;
-    /* A pillar that can only go up counts as soon as it is at A or better.
-       Hitting your steps at 2pm is done, and waiting until 8pm to admit it is
-       what made the grade look broken. One still short of an A can improve,
-       and one that can get worse by eating more, both wait for their hour. */
-    const banked = monotonic && rankIndex(letter) <= rankIndex('A');
-    if (today && !banked && !settledYet(id)) { pending.push(label); return; }
     const acc = (id === 'kcal' || id === 'protein')
       ? accuracy(val, target, id === 'protein' ? 'over' : kcalDir()) : null;
+    if (val == null) pending.push(label);
     parts.push({ id: id, label: label, letter: letter, score: asScore(letter),
-                 val: val, target: target, unit: unit || '', acc: acc });
+                 val: val, target: target, unit: unit || '', acc: acc,
+                 waiting: val == null });
   };
 
   if (live.indexOf('protein') > -1)
-    add('protein', 'Protein', pillarLetter('protein', ate ? num(tot.p, 0) : null, num(T.p, 0)), false,
+    add('protein', 'Protein', pillarLetter('protein', ate ? num(tot.p, 0) : null, num(T.p, 0)),
         ate ? Math.round(num(tot.p, 0)) : null, Math.round(num(T.p, 0)), 'g');
   if (live.indexOf('kcal') > -1)
-    add('kcal', 'Calories', pillarLetter('kcal', ate ? num(tot.kcal, 0) : null, num(T.kcal, 0)), false,
+    add('kcal', 'Calories', pillarLetter('kcal', ate ? num(tot.kcal, 0) : null, num(T.kcal, 0)),
         ate ? Math.round(num(tot.kcal, 0)) : null, Math.round(num(T.kcal, 0)), '');
 
   /* The ladders for sleep and steps are absolute, so a field with no target
@@ -4453,7 +4465,7 @@ function dayScore(date) {
     if (!f.on || !dueToday(f, date)) return;
     const id = /sleep/i.test(f.id) ? 'sleep' : /step/i.test(f.id) ? 'steps' : f.id;
     if (live.indexOf(id) === -1) return;
-    add(id, f.label, pillarLetter(id, value(date, f.id), num(f.target, 0)), true,
+    add(id, f.label, pillarLetter(id, value(date, f.id), num(f.target, 0)),
         value(date, f.id), num(f.target, 0) || null, f.unit || '');
   });
 
@@ -4473,7 +4485,10 @@ function dayScore(date) {
      app, and CLAUDE.md is explicit that progress starts above zero and that
      earned progress is never taken away. So a day with nothing on it at all is
      left out of the average rather than counted as a nought, and the card says
-     how many days the number is actually built from. */
+     how many days the number is actually built from.
+
+     This is about the PAST. Today starts at F on purpose, because today is a
+     day you are in the middle of rather than one you were absent for. */
   const used = ate || trainedOn(date) ||
     !!(Rec.get('day', date, '') || {}).note ||
     !!(Rec.get('day', date, '') || {}).rest ||
@@ -4481,7 +4496,7 @@ function dayScore(date) {
 
   return {
     date: date, pct: pct, letter: letter, parts: scored, pending: pending,
-    used: used,
+    used: used, today: today,
     trained: trainedOn(date),
     rest: !!(Rec.get('day', date, '') || {}).rest,
     partial: pending.length > 0,
@@ -4535,7 +4550,7 @@ function adherence(days) {
            worst: worst, scoredDays: scored.length, loggedDays: touched.length };
 }
 
-/* One day on its own, capped at A while it is unfinished or was a rest day.
+/* One day on its own. Today opens at F and is graded up; a rest day tops at A.
 
    Takes a date, because the badge sits on a screen you can step backwards
    through. It used to be today and only today, so stepping back a day left the
@@ -4545,24 +4560,19 @@ function adherence(days) {
 function scoreFor(date) {
   const d = dayScore(date || Day.today());
   if (d.pct == null) return d;
-  /* Same rule as the days behind it: a morning you have not touched yet is not
-     a morning you are failing. It gets a number once it gets a reading. */
-  if (!d.used) { d.pct = null; return d; }
-  /* One reading is not a day. Sleep logged at 11am with protein, calories and
-     steps all still to settle is a single stat in, and capping that at A the
-     way an almost-finished day gets capped reads as a verdict on the day. So
-     while the day is still filling in, it stays a dash until a second pillar
-     has a reading - a training session counts as one. A finished day is never
-     partial and never lands here, and a day whose only live pillar already
-     has its reading is not partial either. */
-  if (d.partial && (d.parts.length + (d.trained ? 1 : 0)) < 2) {
-    d.pct = null; d.letter = null; d.rank = null; return d;
-  }
-  /* The letter now comes off the pillars' own letters rather than being read
-     back out of a percentage, so the two can never disagree. */
+  /* A day in the PAST that was never opened is left out rather than failed -
+     not being there is not the same as not doing it. Today is different: you
+     are in the middle of it, so it starts at F and climbs. */
+  if (!d.used && !d.today) { d.pct = null; return d; }
+  /* The letter comes off the pillars' own letters rather than being read back
+     out of a percentage, so the two can never disagree. */
   let k = d.letter || rankFor(d.pct).k;
   if (d.trained) k = rankFloor(rankUp(k, 1), 'E');
-  if (d.partial) k = rankCap(k, 'A');
+  /* The not-over-yet cap at A is gone. It existed because the average only
+     held the pillars that had settled, so an unfinished day could show an S
+     off one reading and needed holding down. Now every pillar is in from
+     midnight, so the letter is already honest about the whole day - and a day
+     genuinely finished by six in the evening should be allowed to say so. */
   if (d.rest) k = rankCap(k, 'A');
   d.rank = RANKS.find(r => r.k === k);
   return d;
@@ -4592,9 +4602,7 @@ function daySheet(date) {
     head.innerHTML = '<span class="rk" style="color:' + col + ';border-color:' + col + '">' +
       (k || '\u2013') + '</span>' +
       '<span class="dhs">' + (sc && sc.pct != null ? sc.pct + '%' : 'nothing graded') +
-      '<i>' + esc(sc && sc.rank ? sc.rank.say
-                : (sc && sc.parts && sc.parts.length ? 'one reading in, still being graded'
-                                                     : 'nothing logged on this day')) + '</i></span>';
+      '<i>' + esc(sc && sc.rank ? sc.rank.say : 'nothing logged on this day') + '</i></span>';
     body.appendChild(head);
 
     const parts = (sc && sc.parts) || [];
@@ -4624,11 +4632,13 @@ function daySheet(date) {
       body.appendChild(list);
     }
 
-    /* Still to come, and named, so a middling letter at noon reads as
-       unfinished rather than as a verdict. */
+    /* Still to come, and named. They ARE in the letter, as Fs, which is the
+       whole point: the grade says what the day is worth so far out of the
+       whole day, and this says which parts are still worth nothing. */
     if (sc && sc.pending && sc.pending.length) {
-      body.appendChild(el('div', 'note', 'Not counted yet: <b>' +
-        sc.pending.map(esc).join('</b>, <b>') + '</b>. They settle later in the day.'));
+      body.appendChild(el('div', 'note', 'No reading yet: <b>' +
+        sc.pending.map(esc).join('</b>, <b>') +
+        '</b>. Each counts as an F until it has one, so the letter climbs as they come in.'));
     }
     /* ── what NOT to say ──
        "Trained, so the letter went up one" is gone. Tom, 2026-09-05:
@@ -4641,12 +4651,13 @@ function daySheet(date) {
        Training still shows, as a row in the list above, which is a fact about
        the day rather than a prize.
 
-       The two CAPS stay, because they answer a different question: not "what
-       did you earn" but "why can this letter not be higher", and a ceiling you
-       cannot see is the kind of thing you argue with. */
+       The rest-day CAP stays, because it answers a different question: not
+       "what did you earn" but "why can this letter not be higher", and a
+       ceiling you cannot see is the kind of thing you argue with.
+
+       The not-over-yet cap is gone with the machinery that needed it. */
     const capped = [];
     if (sc && sc.rest) capped.push('Rest day, so it tops out at A.');
-    if (sc && sc.partial) capped.push('The day is not over, so it tops out at A.');
     if (capped.length) body.appendChild(el('div', 'note', capped.join(' ')));
 
     if (!parts.length) {
@@ -4792,7 +4803,7 @@ function rankCard() {
   } else {
     c.appendChild(el('div', 'note',
       '<b>' + t.pct + '%</b>' + (t.rank ? ' &middot; ' + t.rank.k : '') +
-      (t.partial ? ' &middot; still going. Waiting on '
+      (t.partial ? ' &middot; still going. No reading yet on '
         + t.pending.map(esc).join(', ') : '') +
       (t.rest ? ' &middot; rest day, tops out at A' : '')));
   }
