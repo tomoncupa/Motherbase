@@ -645,6 +645,46 @@ async function run() {
     LG.one === 1 && LG.asRows === 0 && LG.inStorage);
   /* Sixty lines of "nothing to do" would push the one failure worth reading
      off the end long before he got round to copying it. */
+  /* ---- a read that failed must not mute the device ----
+
+     Four days of logging sat on Tom's iPhone because "do not write after a
+     read you could not complete" was applied to both kinds of push. Only one
+     kind can erase. A delta is matched on row ids: it adds, it updates, and
+     there is no clearing step in it anywhere. */
+  ok('mirror: a delta push has no clearing step to be unsafe with', () => {
+    const src = String(IO.mirror.push);
+    return /clearing = full && wholePicture/.test(src) &&
+      /opts\.delta \? \(!canDelta\)/.test(src);
+  });
+  ok('mirror: a failed read still sends, in the kind that cannot erase', () => {
+    const src = String(IO.mirror.onOpen);
+    return /delta: readFailed/.test(src) && /readFailed/.test(src);
+  });
+  ok('mirror: the button sends what is waiting even when the read fails', () =>
+    /delta: true/.test(String(IO.mirror.sync)) &&
+    /sent-anyway/.test(String(IO.mirror.sync)));
+  /* A device with no boundary has nothing to delta FROM, so it must still
+     refuse — that is the case the rule was written for. */
+  ok('mirror: a device that never pushed cannot delta its way past a bad read', () =>
+    /opts\.delta \? \(!canDelta\)/.test(String(IO.mirror.push)));
+  /* mode:"delta" stops the sheet clearing a tab EXCEPT one the app marks
+     `whole`, and _Settings is marked whole. Rewriting that blind would take the
+     other device's theme and sound with it, so a recovery push drops it. */
+  ok('mirror: a recovery push sends nothing that gets rewritten whole', () =>
+    /opts\.delta\) tabs = tabs\.filter\(t => !t\.whole\)/.test(String(IO.mirror.push)));
+
+  /* ---- a timeout shorter than the thing it waits for is not a guard ----
+     Nine failures in a row at almost exactly 27 seconds, which was 12 plus 15:
+     both calls ran out the clock rather than going wrong. */
+  ok('mirror: the sheet is given long enough to cold-start', () => {
+    const src = String(IO.mirror.index) + String(IO.mirror.pull);
+    return !/, 12000\)/.test(src) && /25000/.test(String(IO.mirror.index));
+  });
+  ok('mirror: a read failure says which kind it was', () => {
+    const src = String(IO.mirror.pull) + String(IO.mirror.index);
+    return /why:/.test(src) && /e\.code/.test(src);
+  });
+
   ok('mirror: quiet ticks collapse, so a real failure is not scrolled away', () => {
     IO.mirror.clearLog();
     for (let i = 0; i < 8; i++) IO.mirror.logProbe({ a: '__q', w: 'tick', r: 'ok' });
@@ -1174,6 +1214,17 @@ async function run() {
   /* Also because it broke: the stamp was written when the button was pressed
      rather than when the file landed, so an iPhone — where the download
      silently does nothing — reported backups that did not exist. */
+  /* Backing up and being told you have not backed up in a fortnight is the app
+     calling you a liar. The line is built by one function so it cannot say one
+     thing on open and another after a backup. */
+  ok('io: the backed-up line is built in one place, so it can be repainted', () =>
+    typeof IO.freshLine === 'function' && /rows/.test(IO.freshLine('__smoke')));
+  ok('io: backing up repaints the line rather than leaving it stale', () =>
+    /repaint\(\)/.test(String(IO.panel)) && /IO\.backup\(appId\)\.then\(repaint\)/.test(String(IO.panel)));
+  /* The careful version of this was in backup() and not in the button beside
+     it, which stamped every app as safe before the share sheet was answered. */
+  ok('io: backing up every app also waits for the file', () =>
+    /if \(!done\)/.test(String(IO.backupAll)) && /return save\(/.test(String(IO.backupAll)));
   ok('io: a backup that saved nothing does not claim to have run', (() => {
     const key = 'mb.backup.__smoke', had = localStorage.getItem(key);
     localStorage.removeItem(key);
