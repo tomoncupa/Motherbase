@@ -123,6 +123,10 @@ portion/index.html a label in, the amounts you eat out. A desktop app, and
                    the second writer of `food` alongside STATUS.
 train/index.html   the training log, a reproduction of FitNotes
 train/CLAUDE.md    TRAIN's own brief, governs train/ only
+wealth/index.html  the money app. Clients, bills, pots, debts and what is
+                   actually left. Desktop. Tom only, dropped from the tester
+                   build. Reads STATUS's spending rather than copying it.
+wealth/CLAUDE.md   WEALTH's own brief, governs wealth/ only
 style/index.html   the theme workbench. Desktop only, deliberately.
 _template/         a working starter app, copied to make a new one
 tools/             not build steps. embed-skins.py re-embeds the factory themes;
@@ -136,7 +140,7 @@ quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
 ```
 
 **Phone or desktop:** `status/` and `train/` are phone apps. Every other app,
-including the home screen, is a desktop app. See hard constraint 10.
+including the home screen and `wealth/`, is a desktop app. See hard constraint 10.
 `portion/` was called both for a day and Tom settled it as desktop on
 2026-09-06: it is desk work, not kitchen work. It lays out in three columns
 past 1300px, two past 900px and one below that, and it keeps the 44px targets
@@ -235,6 +239,11 @@ An app may read any type. It writes only the types it owns.
 | `program` `progday` `progex` | **train** | | routines. Named around BLOCK's `routine` |
 | `goal` | **train** | goal id | a training goal |
 | `skin` | **style** | theme id | a saved or edited theme. A row whose id matches a factory theme in `skins.json` replaces it; deleting the row is the reset |
+| `cat` `rule` `wtag` | **wealth** | | spending categories, the text rules that sort into them, and occasion tags |
+| `mark` | **wealth** | `date\|spendKey` | `{cat, tag, big}` — what WEALTH thinks of one of STATUS's spends. Kept OFF the spend row on purpose |
+| `count` | **wealth** | date + account id | `{bal}` — a counted balance. Kept off `acct` so STATUS cannot wipe it |
+| `client` `paid` | **wealth** | | a coaching client, and money that arrived. A `paid` with no client is a one-off |
+| `bill` `debt` `pot` `move` | **wealth** | | recurring outgoings, what is owed, savings pots and movements into them |
 | `map` | **arc** | map id | `{title, view, snaps, order}` — a mind map, without its nodes |
 | `node` | **arc** | `mapId\|nodeId` | one node. The addressable fact on a canvas, so moving one node writes one row |
 | `link` | **arc** | `mapId\|linkId` | `{a, b, rel, ord}` — a connection that is not a parent link |
@@ -644,6 +653,7 @@ answer, or take it out.
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
 | `portion/` | Built 2026-09-05, made a desktop app 2026-09-06. Tested in the browser. A bench for building food entries and a viewer over the ones you have. Paste or type a label; it says how much of it hits 50g of protein or any other number, in grams or in pieces, what that comes to and what it costs. Saves the answers as ordinary servings, so STATUS logs them in one tap. Hands the entry over as words to paste into somebody else's tracker or as a spreadsheet row. Ranks the whole library against whatever amount is on screen, which is the comparison. Searches, edits and deletes; refuses to make a second food with a name you already have. Reads Sodium, or converts Salt where a label prints that instead. Kept out of the tester build by `tools/build-client.py`. |
 | `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
+| `wealth/` | Built 2026-09-11 and tested in the browser. The money app: three numbers (liquid, allocated, free) and runway. Owns clients on any payment cycle, with expected payments derived from the cycle rather than stored. Reads STATUS's `spend` rows and files them with a `mark` row rather than editing them, so STATUS's price, account, receipt and meal link cannot be dropped. Text rules sort spending retroactively. Big purchases are marked and excluded from every "normal spending" figure. Every name is picked from a list, never typed twice. Tom only, kept out of the tester build. Statement import is designed for and NOT built. Has its own brief. |
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation, passing 152 checks. Every app loads it. |
@@ -732,6 +742,29 @@ nobody believes is the thing this file already warns about.
 
 **7. Still open from 2026-09-04:** the three icon checks that fail on a cold
 store and pass on the second run. Recorded under Testing above; unchanged.
+
+**8. `shared/chart.js` cannot draw money.** Its `STEPS` table, the list of
+gridline intervals a person reads without doing arithmetic, stops at 5000. A
+chart spanning eighty thousand pesos asks for a 20,000 step, finds nothing that
+big, and falls back to the last entry — seventeen gridlines with their labels
+sitting on top of each other.
+
+Watched on 2026-09-11 building WEALTH's six-month chart: five labels expected,
+seventeen drawn, unreadable. Nothing had hit it before because money is the
+first thing in this suite counted in tens of thousands; weight, reps and
+calories all sit under the ceiling.
+
+WEALTH works around it with its own `moneyScale`, which computes a step and
+hands it to `ySet`. The real fix is four more entries on the table, in
+`shared/`, so an app session must not do it. Delete WEALTH's workaround when
+the table grows.
+
+**9. `UI.segmented`'s buttons are 38px, and the rule is 44.** The month picker
+in WEALTH is twelve targets under the minimum, and none of them are WEALTH's —
+they are the shared control at its own height. Every app that uses a segmented
+control has the same twelve. Found 2026-09-11 by measuring at 375px wide.
+Either the control grows to `var(--tap)` or the rule has a stated exception;
+it should not quietly be both.
 
 ### Parked, not cancelled
 
