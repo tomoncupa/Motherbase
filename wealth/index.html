@@ -188,7 +188,7 @@ const APP = {
   /* Types WEALTH owns. `spend` and `acct` are NOT here: STATUS owns their
      shape and WEALTH only merges into them. Declaring them would silence the
      store's warning, which is the one thing keeping the two apps honest. */
-  types: ['cat', 'rule', 'wtag', 'mark', 'count', 'client', 'paid', 'bill', 'pot', 'move', 'debt'],
+  types: ['cat', 'rule', 'wtag', 'mark', 'count', 'client', 'paid', 'sesh', 'bill', 'pot', 'move', 'debt'],
 };
 
 Skins.load('../shared/skins.json?v=13').then(() => { Skins.restore(APP.id);
@@ -431,38 +431,111 @@ function potBal(potId) {
 const potsTotal = () => pots().reduce((a, p) => a + potBal(p.id), 0);
 const debtTotal = () => debts().reduce((a, d) => a + num(d.owed, 0), 0);
 
-/* ══ expected client payments, DERIVED and never stored ══
-   Correcting a rate fixes every future date at once and cannot leave a stale
-   row behind. See brief, client payments.                                  */
+/* == how a client pays ==
+   Four shapes, and a count. Tom, 2026-09-11: "I have a client who pays me
+   every 2 months and 1 who pays every X sessions." So the cycle is no longer
+   a fixed list of four options, it is a KIND plus a number.
+
+     month  every N months, on a day of the month
+     week   every N weeks, counted from the start date
+     sesh   every N sessions delivered, which is not a date at all
+     oneoff once, on the start date
+
+   The old four values are still read, because rows written before this exist
+   and a migration that rewrites them is a migration that can go wrong:
+   `monthly` is month/1, `4wk` is week/4, `session` is sesh/1.              */
+function cycleOf(c) {
+  const raw = c.cycle || 'month';
+  const kind = raw === 'monthly' ? 'month' : raw === '4wk' ? 'week' : raw === 'session' ? 'sesh' : raw;
+  const every = Math.max(1, num(c.every, 0) || (raw === '4wk' ? 4 : 1));
+  return { kind: kind, every: every, day: num(c.day, 0) };
+}
+const cycleWord = c => {
+  const y = cycleOf(c);
+  if (y.kind === 'oneoff') return 'one off';
+  if (y.kind === 'sesh') return y.every === 1 ? 'per session' : 'every ' + y.every + ' sessions';
+  if (y.kind === 'week') return y.every === 1 ? 'a week' : 'every ' + y.every + ' weeks';
+  return y.every === 1 ? 'a month' : 'every ' + y.every + ' months';
+};
+
+/* == sessions delivered ==
+   A session is a row of its own so it can be dated, listed and taken back.
+   A running counter would be one number nobody could audit, and this client
+   is paid off that number. */
+const seshOf = id => Rec.all('sesh').filter(r => r.payload && r.payload.client === id)
+  .map(r => ({ key: r.key, date: r.date }))
+  .sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
+function addSesh(clientId, date) {
+  const key = newId();
+  Rec.set('sesh', date || Day.today(), key, { client: clientId });
+  return key;
+}
+
+/* == expected client payments, DERIVED and never stored ==
+   Correcting a rate or a cycle fixes every future date at once and cannot
+   leave a stale row behind. See brief, client payments.                    */
 function dueDates(c, from, to) {
-  const out = [];
-  if (!c.start || c.status === 'done' || c.cycle === 'session') return out;
-  if (c.cycle === 'oneoff') { if (c.start >= from && c.start <= to) out.push(c.start); return out; }
-  if (c.cycle === '4wk') {
-    for (let d = c.start; d <= to; d = Day.shift(d, 28)) if (d >= from) out.push(d);
+  const out = [], y = cycleOf(c);
+  if (!c.start || c.status === 'done' || y.kind === 'sesh') return out;
+  if (y.kind === 'oneoff') { if (c.start >= from && c.start <= to) out.push(c.start); return out; }
+  if (y.kind === 'week') {
+    const step = 7 * y.every;
+    for (let d = c.start; d <= to; d = Day.shift(d, step)) if (d >= from) out.push(d);
     return out;
   }
-  /* monthly, on the day of the month it started, clamped to short months */
+  /* every N months, on the day of the month it started, clamped so the 31st
+     does not fall out of February */
   const p = c.start.split('-');
-  const wantDay = num(c.day, 0) || +p[2];
-  let y = +p[0], mo = +p[1];
+  const wantDay = y.day || +p[2];
+  let yr = +p[0], mo = +p[1];
   for (let i = 0; i < 400; i++) {
-    const last = new Date(y, mo, 0).getDate();
-    const d = y + '-' + String(mo).padStart(2, '0') + '-' + String(Math.min(wantDay, last)).padStart(2, '0');
+    const last = new Date(yr, mo, 0).getDate();
+    const d = yr + '-' + String(mo).padStart(2, '0') + '-' + String(Math.min(wantDay, last)).padStart(2, '0');
     if (d > to) break;
     if (d >= from && d >= c.start) out.push(d);
-    mo++; if (mo > 12) { mo = 1; y++; }
+    mo += y.every;
+    while (mo > 12) { mo -= 12; yr++; }
   }
   return out;
 }
-/* An expected payment is settled by a `paid` row for that client in a window
-   around the date. The window is generous because people pay late, and a late
-   payment is still that payment rather than a mystery plus a miss. */
+
+/* == a session client's payments ==
+   Not a date, a count. Sessions are walked in order and chunked; every whole
+   chunk is a payment, dated at the session that completed it. Twenty five
+   sessions at ten each is two payments owed and five into the third, which
+   is a thing he can be shown rather than a thing he has to work out. */
+function seshDues(c) {
+  const y = cycleOf(c);
+  const all = seshOf(c.id);
+  const out = [];
+  for (let i = y.every - 1; i < all.length; i += y.every) out.push({ date: all[i].date, n: out.length + 1 });
+  return { dues: out, done: all.length, into: all.length % y.every, every: y.every, total: all.length };
+}
+
+/* An expected payment is settled by a `paid` row for that client. A dated
+   cycle matches on proximity, because people pay late and a late payment is
+   still that payment rather than a mystery plus a miss. A session cycle
+   matches in ORDER instead: the second block of ten is settled by the second
+   payment, whenever it turned up, because there is no date to be near. */
 function expected(from, to) {
   const out = [];
   const got = paidRows({ from: Day.shift(from, -20), to: Day.shift(to, 20) }).filter(p => p.client);
   const used = {};
   clients().forEach(c => {
+    const y = cycleOf(c);
+    if (y.kind === 'sesh') {
+      if (c.status === 'done') return;
+      const mine = paidRows({}).filter(p => p.client === c.id)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      seshDues(c).dues.forEach((d, i) => {
+        if (d.date < from || d.date > to) return;
+        const hit = mine[i] || null;
+        out.push({ client: c, date: d.date, amt: num(c.rate, 0), paid: hit,
+                   late: !hit && d.date < Day.today(),
+                   why: 'session ' + (d.n * y.every) });
+      });
+      return;
+    }
     dueDates(c, from, to).forEach(d => {
       const hit = got.find(p => p.client === c.id && !used[p.date + p.key] &&
         Math.abs(Day.diff(p.date, d)) <= 14);
@@ -661,7 +734,7 @@ function makeAcct(name) {
 function makeClient(name) {
   if (clients().some(c => norm(c.name) === norm(name))) { UI.toast('you already have a client called <b>' + esc(name) + '</b>', { bad: true }); return null; }
   const id = newId();
-  Rec.set('client', null, id, { name: name, rate: 0, cycle: 'monthly', start: Day.today(), status: 'on' });
+  Rec.set('client', null, id, { name: name, rate: 0, cycle: 'month', every: 1, start: Day.today(), status: 'on' });
   return id;
 }
 
@@ -815,7 +888,7 @@ function drawIn(m) {
   /* Coming up. */
   const soon = exp.filter(e => !e.paid && !e.late).slice(0, 12);
   const c1 = card('EXPECTED NEXT');
-  if (!soon.length) c1.appendChild(el('div', 'empty', 'Nothing scheduled. A client with a rate and a cycle fills this in.'));
+  if (!soon.length) c1.appendChild(el('div', 'empty', 'Nothing dated is coming up. Clients paid by the session have no date until the block is finished, so they show under SESSIONS instead.'));
   else {
     const list = el('div', 'list');
     soon.forEach(e => {
@@ -826,6 +899,43 @@ function drawIn(m) {
     c1.appendChild(list);
   }
   m.appendChild(c1);
+
+  /* == clients paid by the session ==
+     Their next payment is not a date, so nothing above can show it. What
+     matters day to day is how close the block is, and the button he presses
+     the moment a session finishes. */
+  const bySesh = clients().filter(c => c.status !== 'done' && cycleOf(c).kind === 'sesh');
+  if (bySesh.length) {
+    const cs = card('SESSIONS');
+    const list = el('div', 'list');
+    bySesh.forEach((c, i) => {
+      const st = seshDues(c);
+      const owed = st.dues.filter((d, n) => !paidRows({}).filter(p => p.client === c.id)[n]).length;
+      const r = itemRow(c.name,
+        st.into + ' of ' + st.every + ' towards the next ' + money(num(c.rate, 0)) +
+        (owed ? ' · <b>' + owed + ' block' + (owed > 1 ? 's' : '') + ' owed</b>' : ''),
+        st.into + '/' + st.every, owed ? 'late' : '');
+      r.onclick = () => clientSheet(c);
+      const bar = el('div', 'bar c' + (1 + (i % 6)));
+      bar.appendChild(el('i')).style.width = (st.into / st.every * 100).toFixed(1) + '%';
+      list.appendChild(stack(r, bar));
+    });
+    cs.appendChild(list);
+    const btns = el('div', 'rowbtns');
+    const add = el('button', 'btn go wide mb-press mb-tap', 'Log a session');
+    add.type = 'button';
+    add.onclick = () => {
+      if (bySesh.length === 1) { addSesh(bySesh[0].id, Day.today()); Mobile.feedback('success');
+        UI.toast('logged a session for <b>' + esc(bySesh[0].name) + '</b>'); draw(); return; }
+      UI.menu(0, 0, bySesh.map(c => ({ label: c.name, note: seshDues(c).into + ' of ' + seshDues(c).every,
+        fn: () => { addSesh(c.id, Day.today()); Mobile.feedback('success');
+          UI.toast('logged a session for <b>' + esc(c.name) + '</b>'); draw(); } })),
+        { title: 'WHOSE SESSION' });
+    };
+    btns.appendChild(add);
+    cs.appendChild(btns);
+    m.appendChild(cs);
+  }
 
   /* Clients, with everything about them. Set by Tom. */
   const c2 = card('CLIENTS', 'full');
@@ -845,7 +955,7 @@ function drawIn(m) {
     ranked.forEach((x, i) => {
       const c = x.c;
       const r = itemRow(c.name + (c.status === 'done' ? ' (finished)' : ''),
-        money(num(c.rate, 0)) + ' ' + cycleWord(c.cycle) + ' · ' + x.n + ' payments · ' +
+        money(num(c.rate, 0)) + ' ' + cycleWord(c) + ' · ' + x.n + (x.n === 1 ? ' payment · ' : ' payments · ') +
         (x.share * 100).toFixed(0) + '% of the year',
         money(x.got));
       if (c.status === 'done') r.classList.add('dim');
@@ -887,8 +997,6 @@ function away(date) {
   if (n === -1) return 'yesterday';
   return n > 0 ? 'in ' + n + ' days' : n * -1 + ' days ago';
 }
-const cycleWord = c => c === '4wk' ? 'every 4 weeks' : c === 'session' ? 'per session' :
-  c === 'oneoff' ? 'one off' : 'a month';
 const acctName = id => (Rec.get('acct', null, id) || {}).name || 'unknown account';
 
 /* ── MONEY OUT ── */
@@ -1285,13 +1393,101 @@ function clientSheet(c) {
       b.appendChild(fld('Name', name));
       const rate = amountField(num(c.rate, 0));
       b.appendChild(fld('They pay', rate));
-      const cycle = chipRow([{ id: 'monthly', name: 'A month' }, { id: '4wk', name: 'Every 4 weeks' },
-        { id: 'session', name: 'Per session' }, { id: 'oneoff', name: 'One off' }], c.cycle || 'monthly');
-      b.appendChild(fld('How often', cycle));
+      /* == how often, as a kind and a number ==
+         A fixed list of four could not say "every two months", so it is a
+         kind plus a count. The count's label follows the kind, because
+         "Every 2" on its own means nothing. */
+      const y0 = cycleOf(c);
+      const cycle = chipRow([{ id: 'month', name: 'Months' }, { id: 'week', name: 'Weeks' },
+        { id: 'sesh', name: 'Sessions' }, { id: 'oneoff', name: 'One off' }], y0.kind,
+        () => { paintEvery(); paintSesh(); });
+      b.appendChild(fld('Paid every', cycle));
+
+      const everyWrap = el('div', 'fld');
+      const everyLbl = el('label', null, '');
+      const every = UI.field('number', { value: String(y0.every) });
+      everyWrap.appendChild(everyLbl); everyWrap.appendChild(every);
+      b.appendChild(everyWrap);
+
+      /* Which day of the month, monthly cycles only. A client on every two
+         months still lands on a day, and it is usually not the day they
+         signed up. */
+      const dayWrap = el('div', 'fld');
+      const dayLbl = el('label', null, 'Day of the month');
+      const dayF = UI.field('number', { placeholder: 'same day as the start date',
+        value: y0.day ? String(y0.day) : '' });
+      dayWrap.appendChild(dayLbl); dayWrap.appendChild(dayF);
+      b.appendChild(dayWrap);
+
+      const hint = el('div', 'note', '');
+      b.appendChild(hint);
+
+      function paintEvery() {
+        const k = cycle.get(), n = Math.max(1, num(every.value, 1)), one = n === 1;
+        everyWrap.style.display = k === 'oneoff' ? 'none' : '';
+        dayWrap.style.display = k === 'month' ? '' : 'none';
+        everyLbl.textContent = k === 'week' ? (one ? 'Week' : 'Weeks')
+          : k === 'sesh' ? (one ? 'Session' : 'Sessions')
+          : (one ? 'Month' : 'Months');
+        hint.innerHTML = k === 'sesh'
+          ? 'Counted, not scheduled. Log a session below and a payment falls due every ' +
+            esc(String(n)) + '.'
+          : k === 'oneoff' ? 'Once, on the start date. Nothing repeats.'
+          : 'Repeats from the start date: ' + esc(money(num(rate.value, 0))) + ' ' +
+            esc(cycleWord({ cycle: k, every: n })) + '.';
+      }
+      every.oninput = () => { paintEvery(); paintSesh(); };
+      rate.addEventListener('input', paintEvery);
+
       const start = dateField(c.start);
       b.appendChild(fld('Started', start));
       const status = chipRow([{ id: 'on', name: 'Active' }, { id: 'done', name: 'Finished' }], c.status || 'on');
       b.appendChild(fld('Status', status));
+
+      /* == sessions, for a client paid by the session ==
+         Only drawn when it applies. A counter on a monthly client is a
+         control that can never do anything. */
+      const seshBox = el('div');
+      b.appendChild(seshBox);
+      function paintSesh() {
+        seshBox.innerHTML = '';
+        if (cycle.get() !== 'sesh') return;
+        /* Built by hand, not through `merge`, because merge strips `id` on
+           purpose and seshDues needs it to find the sessions. */
+        const st = seshDues({ id: c.id, cycle: 'sesh', every: Math.max(1, num(every.value, 1)) });
+        seshBox.appendChild(el('h2', null, 'SESSIONS'));
+        const g2 = el('div', 'grid3');
+        g2.appendChild(tile('DELIVERED', String(st.total), 'all time'));
+        g2.appendChild(tile('TOWARDS NEXT', st.into + ' of ' + st.every,
+          st.into ? String(st.every - st.into) + ' to go' : 'none since the last'));
+        g2.appendChild(tile('BLOCKS OWED', String(st.dues.length), 'completed blocks'));
+        seshBox.appendChild(g2);
+        const btns = el('div', 'rowbtns');
+        const add = el('button', 'btn go wide mb-press mb-tap', 'Log a session today');
+        add.type = 'button';
+        add.onclick = () => { addSesh(c.id, Day.today()); Mobile.feedback('success'); paintSesh(); };
+        btns.appendChild(add);
+        seshBox.appendChild(btns);
+        const all = seshOf(c.id).slice(-8).reverse();
+        if (all.length) {
+          const list = el('div', 'list');
+          list.style.marginTop = 'var(--s-3)';
+          all.forEach(x => {
+            const r = itemRow(Day.label(x.date), 'session', '');
+            r.onclick = () => {
+              Rec.del('sesh', x.date, x.key);
+              Mobile.feedback('untick');
+              UI.undo('took back a session',
+                () => { Rec.set('sesh', x.date, x.key, { client: c.id }); paintSesh(); });
+              paintSesh();
+            };
+            list.appendChild(r);
+          });
+          seshBox.appendChild(list);
+          seshBox.appendChild(el('div', 'note', 'Tap one to take it back. The last eight are shown.'));
+        }
+      }
+      paintEvery(); paintSesh();
 
       if (mine.length) {
         b.appendChild(el('h2', null, 'EVERY PAYMENT'));
@@ -1313,6 +1509,8 @@ function clientSheet(c) {
         /* Merge into what is there, never rebuild it. Root brief, rule 1. */
         Rec.set('client', null, c.id, merge(c, {
           name: n, rate: num(rate.value, 0), cycle: cycle.get(),
+          every: Math.max(1, num(every.value, 1)),
+          day: Math.min(28, Math.max(0, num(dayF.value, 0))),
           start: start.value, status: status.get(),
         }));
         return true;

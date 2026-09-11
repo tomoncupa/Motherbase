@@ -68,7 +68,8 @@ WEALTH writes these types. It may read anything.
 | `wtag` | tag id | `{name}` — an occasion, not a category. `date`, `gift`, `travel` |
 | `mark` | `date\|spendKey` | `{cat, tag, big}` — what WEALTH thinks of one spend row |
 | `count` | date + account id | `{bal}` — a counted balance, on the day it was counted |
-| `client` | client id | `{name, rate, cycle, start, day, status, note}` |
+| `client` | client id | `{name, rate, cycle, every, start, day, status, note}` |
+| `sesh` | date + id | `{client}` — one session delivered, for a client paid by the session |
 | `paid` | date + id | `{amt, acct, client, note, t}` — money in. No client means a one-off |
 | `bill` | bill id | `{name, amt, day, acct, cat, from, until}` — a recurring outgoing |
 | `pot` | pot id | `{name, target, acct, ord}` |
@@ -190,20 +191,56 @@ is steerable, and the fixed half is what runway is calculated against.
 
 ## Client payments
 
-A client carries a rate and a cycle: `monthly`, `4wk`, `session` or `oneoff`.
-Expected payments are **derived from that, never stored**, so correcting a rate
-fixes every future date at once and cannot leave a stale row behind.
+Tom, 2026-09-11: *"I need to be able to add clients with more freedom, I have a
+client who pays me every 2 months and 1 who pays every X sessions."*
 
-A `paid` row settles an expected payment, and it records what actually arrived
-rather than what was expected, because those differ and the difference is the
-useful part.
+So a cycle is **a kind and a number**, not one of a fixed list of four.
+
+| Kind | Number means | Repeats on |
+|---|---|---|
+| `month` | months | a day of the month, defaulting to the start date's |
+| `week` | weeks | the start date, stepped |
+| `sesh` | sessions delivered | nothing. It is a count |
+| `oneoff` | — | once, on the start date |
+
+Expected payments are **derived from that, never stored**, so correcting a rate
+or a cycle fixes every future date at once and cannot leave a stale row behind.
+
+The four older values are still read rather than migrated: `monthly` is
+month/1, `4wk` is week/4, `session` is sesh/1. A migration that rewrites rows is
+a migration that can go wrong, and reading two shapes costs three lines.
+
+### A session is a row, not a counter
+
+A client paid every ten sessions is paid off a number, so that number has to be
+auditable. A running total would be one figure nobody could check or correct.
+Instead every session is a `sesh` row with a date, which can be listed and
+taken back one at a time.
+
+Sessions are walked in order and chunked. Every whole chunk is a payment, dated
+at the session that completed it. Twenty three sessions at ten each is two
+payments owed and three into the third, which is a thing to show him rather
+than a thing he has to work out.
+
+**A session cycle settles in order, not by date.** A dated cycle matches a
+payment that lands within a fortnight, because people pay late and a late
+payment is still that payment. A session cycle has no date to be near, so the
+second block of ten is settled by the second payment, whenever it turned up.
+
+Because a session client's due date is always in the past, they never appear
+under "expected next". They get their own card on MONEY IN, showing how far
+into the block they are and what is owed, with the button he presses the moment
+a session finishes.
+
+### One-offs
 
 A `paid` row with no client is a one-off: a commercial, a workshop, anything.
 Same row, one field empty.
 
 **Everything about a client is visible**, set by Tom: every payment they have
-ever made, when they started, what they are worth per month, how late they
-usually are, and what share of income they represent.
+ever made, when they started, what they are worth, how late they usually are,
+what share of income they represent, and for a session client every session
+delivered.
 
 ---
 
