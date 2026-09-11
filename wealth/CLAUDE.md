@@ -70,6 +70,7 @@ WEALTH writes these types. It may read anything.
 | `count` | date + account id | `{bal}` — a counted balance, on the day it was counted |
 | `client` | client id | `{name, rate, cycle, every, start, day, status, note}` |
 | `sesh` | date + id | `{client}` — one session delivered, for a client paid by the session |
+| `pack` | date + id | `{client, n, price, note}` — sessions sold before they happen |
 | `paid` | date + id | `{amt, acct, client, note, t}` — money in. No client means a one-off |
 | `bill` | bill id | `{name, amt, day, acct, cat, from, until}` — a recurring outgoing |
 | `pot` | pot id | `{name, target, acct, ord}` |
@@ -200,8 +201,20 @@ So a cycle is **a kind and a number**, not one of a fixed list of four.
 |---|---|---|
 | `month` | months | a day of the month, defaulting to the start date's |
 | `week` | weeks | the start date, stepped |
-| `sesh` | sessions delivered | nothing. It is a count |
+| `sesh` | sessions delivered | nothing. It is a count, billed after |
+| `pack` | — | nothing. Sessions are bought before they happen |
 | `oneoff` | — | once, on the start date |
+
+### The 31st
+
+A monthly day is stored as typed, up to 31, and **clamped per month when the
+date is worked out, never when it is saved.** So a client who first paid on
+31 January is due 28 February and then **31 March**, not 28 March. Clamping at
+save time would have quietly turned every 31 into a 28 and no screen would
+have said so.
+
+The same applies to a bill. Rent on the 30th is the 30th in every month that
+has one, and February's last day in the one that does not.
 
 Expected payments are **derived from that, never stored**, so correcting a rate
 or a cycle fixes every future date at once and cannot leave a stale row behind.
@@ -231,6 +244,36 @@ Because a session client's due date is always in the past, they never appear
 under "expected next". They get their own card on MONEY IN, showing how far
 into the block they are and what is owed, with the button he presses the moment
 a session finishes.
+
+### Packages bought up front
+
+Tom, 2026-09-11: *"I want tracking for clients who pay for sessions upfront
+either whole or partial as well as session tracking."*
+
+A `pack` is sessions sold before they are delivered. It asks two questions at
+once and they pull opposite ways:
+
+- **Do they owe me money?** The package price, less what has been paid.
+- **Do I owe them sessions?** What the money actually covers, less what has
+  been delivered.
+
+The second is the one nobody tracks, and it is a real liability: he has been
+paid for work he still has to do. **Both are shown and never netted**, because
+they are not the same kind of thing.
+
+**Payments are applied to packages in order, oldest first, never tagged to
+one.** Partial payment then needs no extra field and no choice anyone can get
+wrong. Pay half of a package and half of it is outstanding. Pay two at once and
+the money runs on into the second.
+
+**"Sessions you owe" counts only what the money covers.** Summing sessions
+remaining would count a package bought and not paid for as work owed, which it
+is not: that is a debt they have. Each package converts its allocated money
+into whole sessions at its own price, because two packages can be priced
+differently.
+
+`sesh` and `pack` are two kinds rather than one with a flag, because they are
+opposite ways round: one bills after the sessions, the other before.
 
 ### One-offs
 
@@ -262,6 +305,44 @@ once and will not be repeated: back tax would be a real claim on the buffer.
 Nothing in the app mentions it.
 
 ---
+
+## Time, days and weeks
+
+Tom, 2026-09-11: *"I also want time tracking for the entries"* and *"I want to
+review individual days and weeks."*
+
+Every money row already carried a `t` millisecond stamp and nothing ever showed
+it, so a day was a bag of amounts in no order. `t` stays the stored fact, since
+it is what STATUS writes and what sorts correctly; the app turns it into
+something a person reads and types.
+
+**A time is typed against the row's own date, never the clock.** Editing
+yesterday's entry must not move it to today.
+
+**Untimed rows sort last, not first.** A pot move carries no clock, and a zero
+stamp put it above a 7:15am coffee, which reads as midnight.
+
+A time is **the one field WEALTH writes INTO a spend** rather than alongside
+it. A time is the fact itself, not a label, so a `mark` would be the wrong
+place and two sources of truth for when something happened is worse than the
+separation is worth. It is safe because it goes through `merge`, which keeps
+every field STATUS put there.
+
+### Three zoom levels, one screen
+
+Day, week and month on the SPENDING screen, not three screens, because it is
+the same question asked at three distances and splitting it would mean three
+places to keep in step. The arrows step by whatever is selected.
+
+- **Day** is a timeline: what was bought, what arrived, a session delivered,
+  money moved into a pot, down the clock. Things that moved money rather than
+  spending it are greyed and carry no amount, because mixing them into a total
+  is how law 2 gets broken.
+- **Week** is seven rows, drawn whether or not anything happened, because an
+  empty day is a fact about the week and a gap in a list is not. Monday first:
+  a week starting Sunday puts a Saturday night out in the same week as the
+  Monday being planned.
+- **Month** is what it was.
 
 ## Device
 

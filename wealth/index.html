@@ -188,7 +188,7 @@ const APP = {
   /* Types WEALTH owns. `spend` and `acct` are NOT here: STATUS owns their
      shape and WEALTH only merges into them. Declaring them would silence the
      store's warning, which is the one thing keeping the two apps honest. */
-  types: ['cat', 'rule', 'wtag', 'mark', 'count', 'client', 'paid', 'sesh', 'bill', 'pot', 'move', 'debt'],
+  types: ['cat', 'rule', 'wtag', 'mark', 'count', 'client', 'paid', 'sesh', 'pack', 'bill', 'pot', 'move', 'debt'],
 };
 
 Skins.load('../shared/skins.json?v=13').then(() => { Skins.restore(APP.id);
@@ -267,6 +267,35 @@ const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 const S = { get: (k, d) => { const v = Rec.setting(APP.id, k); return v == null ? d : v; },
             set: (k, v) => Rec.setting(APP.id, k, v) };
+
+/* == the time of day ==
+   Tom, 2026-09-11: "I also want time tracking for the entries." Every money
+   row already carried a `t` millisecond stamp and nothing ever showed it, so
+   a day was a bag of amounts in no order.
+
+   `t` stays the stored fact, because it is what STATUS writes and what sorts
+   correctly. These turn it into something a person reads and types. */
+const timeOf = row => {
+  const t = num(row && row.t, 0);
+  if (!t || t < 86400000) return '';           /* 0, or a seeded placeholder */
+  const d = new Date(t);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+};
+const clock = row => { const v = timeOf(row); return v ? UI.clockLabel(v) : ''; };
+/* A time typed on a given day, back to a stamp. The date comes from the row,
+   never from the clock, or editing yesterday's entry moves it to today. */
+function stampFor(date, hhmm) {
+  const p = String(date).split('-');
+  if (!hhmm) return new Date(+p[0], +p[1] - 1, +p[2], 12, 0, 0).getTime();
+  const t = hhmm.split(':');
+  return new Date(+p[0], +p[1] - 1, +p[2], +t[0] || 0, +t[1] || 0, 0).getTime();
+}
+/* Untimed rows sort to the END, not the start. A pot move carries no clock,
+   and a zero stamp put it above a 7:15am coffee, which reads as midnight. */
+const byTime = (a, b) => {
+  const x = num(a.t, 0) || Infinity, y = num(b.t, 0) || Infinity;
+  return x - y;
+};
 
 const monthOf = d => String(d).slice(0, 7);
 const monthStart = m => m + '-01';
@@ -450,8 +479,13 @@ function cycleOf(c) {
   const every = Math.max(1, num(c.every, 0) || (raw === '4wk' ? 4 : 1));
   return { kind: kind, every: every, day: num(c.day, 0) };
 }
+/* A `pack` client buys sessions before they happen; a `sesh` client is billed
+   after. Both count sessions, and they are opposite ways round, which is why
+   they are two kinds rather than a flag. */
+const isPack = c => cycleOf(c).kind === 'pack';
 const cycleWord = c => {
   const y = cycleOf(c);
+  if (y.kind === 'pack') return 'by the package, up front';
   if (y.kind === 'oneoff') return 'one off';
   if (y.kind === 'sesh') return y.every === 1 ? 'per session' : 'every ' + y.every + ' sessions';
   if (y.kind === 'week') return y.every === 1 ? 'a week' : 'every ' + y.every + ' weeks';
@@ -469,6 +503,62 @@ function addSesh(clientId, date) {
   const key = newId();
   Rec.set('sesh', date || Day.today(), key, { client: clientId });
   return key;
+}
+
+/* == packages bought up front ==
+   Tom, 2026-09-11: "I want tracking for clients who pay for sessions upfront
+   either whole or partial as well as session tracking."
+
+   A package is sessions sold before they are delivered, which asks two
+   questions at once and they pull opposite ways:
+
+     do they owe me money?     the package value, less what has been paid
+     do I owe them sessions?   what was bought, less what has been delivered
+
+   The second is the one nobody tracks and it is a real liability: he has been
+   paid for work he still has to do. Both are shown, never netted, because
+   they are not the same kind of thing.
+
+   Payments are applied to packages in order rather than tagged to one. Partial
+   payment then needs no extra field and no choice to get wrong: pay half of a
+   package and half of it is outstanding, pay two packages at once and the
+   money runs on into the second. */
+const packsOf = id => Rec.all('pack').filter(r => r.payload && r.payload.client === id)
+  .map(r => Object.assign({ id: r.key, date: r.date }, r.payload))
+  .sort((a, b) => a.date.localeCompare(b.date));
+
+function packState(c) {
+  const list = packsOf(c.id);
+  const bought = list.reduce((a, x) => a + num(x.n, 0), 0);
+  const value = list.reduce((a, x) => a + num(x.price, 0), 0);
+  const delivered = seshOf(c.id).length;
+  const paid = paidRows({}).filter(x => x.client === c.id).reduce((a, x) => a + num(x.amt, 0), 0);
+  /* what is still owed, package by package, oldest first */
+  let pool = paid;
+  const dues = [];
+  list.forEach(x => {
+    const price = num(x.price, 0);
+    const put = Math.min(pool, price);
+    pool -= put;
+    if (price - put > 0.5) dues.push({ pack: x, date: x.date, amt: price - put, part: put > 0 });
+  });
+  /* How many sessions the money actually covers. `left` alone is the wrong
+     answer to "what work do I owe": a package bought and not paid for is a
+     debt they have, not a session he owes. Each package converts the money
+     allocated to it into whole sessions at its own price, because two
+     packages can be priced differently. */
+  let pool2 = paid, paidFor = 0;
+  list.forEach(x => {
+    const price = num(x.price, 0), n = num(x.n, 0);
+    const put = Math.min(pool2, price);
+    pool2 -= put;
+    paidFor += price > 0 ? Math.floor(n * (put / price)) : 0;
+  });
+  return {
+    packs: list, bought: bought, delivered: delivered, left: bought - delivered,
+    value: value, paid: paid, owed: Math.max(0, value - paid), dues: dues,
+    paidFor: paidFor, owedWork: Math.max(0, paidFor - delivered),
+  };
 }
 
 /* == expected client payments, DERIVED and never stored ==
@@ -523,6 +613,16 @@ function expected(from, to) {
   const used = {};
   clients().forEach(c => {
     const y = cycleOf(c);
+    if (y.kind === 'pack') {
+      if (c.status === 'done') return;
+      packState(c).dues.forEach(d => {
+        if (d.date < from || d.date > to) return;
+        out.push({ client: c, date: d.date, amt: d.amt, paid: null,
+                   late: d.date < Day.today(),
+                   why: d.pack.n + ' sessions' + (d.part ? ', part paid' : '') });
+      });
+      return;
+    }
     if (y.kind === 'sesh') {
       if (c.status === 'done') return;
       const mine = paidRows({}).filter(p => p.client === c.id)
@@ -607,8 +707,7 @@ function typicalVariable() {
 /* ══ a month of spending ══
    `big` is separated rather than dropped: law 3 says one laptop must not
    become the story of the month, and every figure that excludes it says so. */
-function monthSpend(m) {
-  const from = monthStart(m), to = monthEnd(m);
+function rangeSpend(from, to) {
   const t = { total: 0, variable: 0, fixed: 0, biz: 0, big: 0, rows: 0, byCat: {}, byTag: {} };
   spendRows({ from: from, to: to }).forEach(s => {
     if (isMove(s)) return;
@@ -622,8 +721,43 @@ function monthSpend(m) {
   });
   return t;
 }
-const monthIn = m => paidRows({ from: monthStart(m), to: monthEnd(m) })
+const monthSpend = m => rangeSpend(monthStart(m), monthEnd(m));
+const rangeIn = (from, to) => paidRows({ from: from, to: to })
   .reduce((a, p) => a + num(p.amt, 0), 0);
+const monthIn = m => rangeIn(monthStart(m), monthEnd(m));
+
+/* == everything that happened on one day, in the order it happened ==
+   Tom, 2026-09-11: "I want to review individual days and weeks." A day is not
+   only spending. Money arrived, sessions were delivered, money moved into a
+   pot. All of it in one column, sorted by the clock, which is the only thing
+   that makes a day readable rather than four separate lists. */
+function dayEvents(date) {
+  const out = [];
+  spendRows({ date: date }).forEach(x => {
+    if (isMove(x)) { out.push({ kind: 'move', t: num(x.t, 0), name: x.note || 'Moved money',
+      note: acctName(x.acct), amt: -num(x.amt, 0), row: x, quiet: 1 }); return; }
+    out.push({ kind: 'out', t: num(x.t, 0), name: x.note || 'No details',
+      note: acctName(x.acct) + (catOf(x) ? ' · ' + catName(catOf(x)) : ' · uncategorised'),
+      amt: -num(x.amt, 0), row: x, big: isBig(x) });
+  });
+  paidRows({ date: date }).forEach(x => {
+    const c = x.client ? Rec.get('client', null, x.client) : null;
+    out.push({ kind: 'in', t: num(x.t, 0), name: c ? c.name : (x.note || 'One-off'),
+      note: acctName(x.acct) + (c && x.note ? ' · ' + x.note : ''), amt: num(x.amt, 0), row: x });
+  });
+  moves({ date: date }).forEach(x => {
+    const pt = Rec.get('pot', null, x.pot);
+    out.push({ kind: 'pot', t: 0, name: pt ? pt.name : 'a pot',
+      note: x.dir === 'out' ? 'taken out of the pot' : 'put into the pot',
+      amt: 0, quiet: 1, fig: (x.dir === 'out' ? '-' : '+') + money(num(x.amt, 0)) });
+  });
+  Rec.all('sesh', { date: date }).forEach(r => {
+    const c = Rec.get('client', null, r.payload.client);
+    out.push({ kind: 'sesh', t: 0, name: c ? c.name : 'a client',
+      note: 'session delivered', amt: 0, quiet: 1, fig: 'session' });
+  });
+  return out.sort(byTime);
+}
 
 /* ══════════════════ the picker: autofill, law 4 ══════════════════
    Typing filters what exists. It never creates by being typed into, because
@@ -904,36 +1038,59 @@ function drawIn(m) {
      Their next payment is not a date, so nothing above can show it. What
      matters day to day is how close the block is, and the button he presses
      the moment a session finishes. */
-  const bySesh = clients().filter(c => c.status !== 'done' && cycleOf(c).kind === 'sesh');
+  const bySesh = clients().filter(c => c.status !== 'done' &&
+    ['sesh', 'pack'].indexOf(cycleOf(c).kind) > -1);
   if (bySesh.length) {
     const cs = card('SESSIONS');
     const list = el('div', 'list');
     bySesh.forEach((c, i) => {
-      const st = seshDues(c);
-      const owed = st.dues.filter((d, n) => !paidRows({}).filter(p => p.client === c.id)[n]).length;
-      const r = itemRow(c.name,
-        st.into + ' of ' + st.every + ' towards the next ' + money(num(c.rate, 0)) +
-        (owed ? ' · <b>' + owed + ' block' + (owed > 1 ? 's' : '') + ' owed</b>' : ''),
-        st.into + '/' + st.every, owed ? 'late' : '');
+      let sub, fig, pct, bad;
+      if (isPack(c)) {
+        /* Bought before delivered, so the bar fills as the package empties
+           and the figure is sessions he still has to give them. */
+        const st = packState(c);
+        sub = st.delivered + ' of ' + st.bought + ' delivered' +
+          (st.owed ? ' · <b>' + esc(money(st.owed)) + ' owed</b>' : ' · paid up');
+        fig = st.left + ' left';
+        pct = st.bought ? (st.delivered / st.bought * 100) : 0;
+        bad = !!st.owed;
+      } else {
+        const st = seshDues(c);
+        const got = paidRows({}).filter(x => x.client === c.id).length;
+        const owed = Math.max(0, st.dues.length - got);
+        sub = st.into + ' of ' + st.every + ' towards the next ' + money(num(c.rate, 0)) +
+          (owed ? ' · <b>' + owed + ' block' + (owed > 1 ? 's' : '') + ' owed</b>' : '');
+        fig = st.into + '/' + st.every;
+        pct = st.into / st.every * 100;
+        bad = !!owed;
+      }
+      const r = itemRow(c.name, sub, fig, bad ? 'late' : '');
       r.onclick = () => clientSheet(c);
       const bar = el('div', 'bar c' + (1 + (i % 6)));
-      bar.appendChild(el('i')).style.width = (st.into / st.every * 100).toFixed(1) + '%';
+      bar.appendChild(el('i')).style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%';
       list.appendChild(stack(r, bar));
     });
     cs.appendChild(list);
     const btns = el('div', 'rowbtns');
     const add = el('button', 'btn go wide mb-press mb-tap', 'Log a session');
     add.type = 'button';
+    const note = c => isPack(c) ? packState(c).left + ' left'
+      : seshDues(c).into + ' of ' + seshDues(c).every;
     add.onclick = () => {
       if (bySesh.length === 1) { addSesh(bySesh[0].id, Day.today()); Mobile.feedback('success');
         UI.toast('logged a session for <b>' + esc(bySesh[0].name) + '</b>'); draw(); return; }
-      UI.menu(0, 0, bySesh.map(c => ({ label: c.name, note: seshDues(c).into + ' of ' + seshDues(c).every,
+      UI.menu(0, 0, bySesh.map(c => ({ label: c.name, note: note(c),
         fn: () => { addSesh(c.id, Day.today()); Mobile.feedback('success');
           UI.toast('logged a session for <b>' + esc(c.name) + '</b>'); draw(); } })),
         { title: 'WHOSE SESSION' });
     };
     btns.appendChild(add);
     cs.appendChild(btns);
+    /* The liability nobody tracks: sessions paid for and not yet given. */
+    const owedWork = bySesh.filter(isPack).reduce((a, c) => a + packState(c).owedWork, 0);
+    if (owedWork) cs.appendChild(el('div', 'note',
+      'You owe <b>' + esc(String(owedWork)) + '</b> session' + (owedWork === 1 ? '' : 's') +
+      ' that are already paid for. That is work booked, not money coming.'));
     m.appendChild(cs);
   }
 
@@ -954,8 +1111,11 @@ function drawIn(m) {
     }).sort((a, b) => b.got - a.got);
     ranked.forEach((x, i) => {
       const c = x.c;
+      /* A package client has no fixed rate, so a rate would print as zero.
+         Their packages are priced one at a time. */
       const r = itemRow(c.name + (c.status === 'done' ? ' (finished)' : ''),
-        money(num(c.rate, 0)) + ' ' + cycleWord(c) + ' · ' + x.n + (x.n === 1 ? ' payment · ' : ' payments · ') +
+        (isPack(c) ? 'Paid ' + cycleWord(c) : money(num(c.rate, 0)) + ' ' + cycleWord(c)) +
+        ' · ' + x.n + (x.n === 1 ? ' payment · ' : ' payments · ') +
         (x.share * 100).toFixed(0) + '% of the year',
         money(x.got));
       if (c.status === 'done') r.classList.add('dim');
@@ -1082,30 +1242,99 @@ function drawOut(m) {
   m.appendChild(c4);
 }
 
-/* ── SPENDING ── */
+/* ── SPENDING ──
+   Tom, 2026-09-11: "I want to review individual days and weeks."
+
+   Three zoom levels on one screen rather than three screens, because it is
+   the same question asked at three distances and splitting it would mean
+   three places to keep in step. The arrows step by whatever is selected, so
+   the control is the same whichever level you are at. */
 let SPMONTH = null;
+let PERIOD = 'month';
+let ANCHOR = null;                      /* a date inside the period being read */
+
+/* Monday first. A week that starts on Sunday puts a Saturday night out in the
+   same week as the Monday you are planning, which is not how anyone thinks
+   about a week. */
+function weekStart(d) { const w = Day.dow(d); return Day.shift(d, -((w + 6) % 7)); }
+function periodRange() {
+  const a = ANCHOR || Day.today();
+  if (PERIOD === 'day') return { from: a, to: a, step: 1,
+    label: Day.isToday(a) ? 'Today' : Day.label(a) };
+  if (PERIOD === 'week') {
+    const f = weekStart(a), t = Day.shift(f, 6);
+    return { from: f, to: t, step: 7,
+      label: Day.short(f) + ' to ' + Day.short(t) +
+        (a >= weekStart(Day.today()) && a <= Day.shift(weekStart(Day.today()), 6) ? ' · this week' : '') };
+  }
+  const f = monthStart(monthOf(a));
+  return { from: f, to: monthEnd(monthOf(a)), step: 0, label: monthName(monthOf(a)) };
+}
+function periodShift(n) {
+  const a = ANCHOR || Day.today();
+  if (PERIOD === 'month') { ANCHOR = monthStart(monthBack(monthOf(a), -n)); return; }
+  ANCHOR = Day.shift(a, n * (PERIOD === 'week' ? 7 : 1));
+}
+/* The same span, one step back, for the comparison. */
+function prevRange() {
+  const r = periodRange();
+  if (PERIOD === 'month') { const pm = monthBack(monthOf(r.from), 1);
+    return { from: monthStart(pm), to: monthEnd(pm), label: monthName(pm) }; }
+  const n = PERIOD === 'week' ? 7 : 1;
+  return { from: Day.shift(r.from, -n), to: Day.shift(r.to, -n),
+    label: PERIOD === 'week' ? 'the week before' : 'the day before' };
+}
+
 function drawSpend(m) {
-  const now = monthOf(Day.today());
-  const mo = SPMONTH || now;
-  const t = monthSpend(mo), prev = monthSpend(monthBack(mo, 1));
+  /* SPMONTH is how this screen used to remember where it was. Honour it once
+     so a bookmarked month still opens, then let ANCHOR take over. */
+  if (SPMONTH && !ANCHOR) { ANCHOR = monthStart(SPMONTH); SPMONTH = null; }
+  const R = periodRange(), P = prevRange();
+  const t = rangeSpend(R.from, R.to), prev = rangeSpend(P.from, P.to);
+  const word = PERIOD === 'day' ? 'day' : PERIOD === 'week' ? 'week' : 'month';
 
   const c0 = card(null, 'full');
-  const picks = []; for (let i = 0; i < 12; i++) picks.push(monthBack(now, i));
-  c0.appendChild(UI.segmented(picks.map(p => ({ id: p, name: monthName(p) })), mo, v => { SPMONTH = v; draw(); }));
+  c0.appendChild(UI.segmented([{ id: 'day', name: 'DAY' }, { id: 'week', name: 'WEEK' },
+    { id: 'month', name: 'MONTH' }], PERIOD, v => { PERIOD = v; S.set('period', v); draw(); }));
+
+  const bar = el('div', 'rowbtns');
+  bar.style.alignItems = 'center';
+  const back = el('button', 'btn mb-press mb-tap', '‹');
+  back.type = 'button'; back.setAttribute('aria-label', 'Previous ' + word);
+  back.onclick = () => { periodShift(-1); Mobile.feedback('nav'); draw(); };
+  const fwd = el('button', 'btn mb-press mb-tap', '›');
+  fwd.type = 'button'; fwd.setAttribute('aria-label', 'Next ' + word);
+  fwd.onclick = () => { periodShift(1); Mobile.feedback('nav'); draw(); };
+  const nowBtn = el('button', 'btn mb-press mb-tap', 'Now');
+  nowBtn.type = 'button';
+  nowBtn.onclick = () => { ANCHOR = Day.today(); Mobile.feedback('nav'); draw(); };
+  const lbl = el('div', null, '<b>' + esc(R.label) + '</b>');
+  lbl.style.flex = '1'; lbl.style.textAlign = 'center';
+  bar.appendChild(back); bar.appendChild(lbl); bar.appendChild(fwd); bar.appendChild(nowBtn);
+  /* Nothing to step forward into. A future month is not a record. */
+  fwd.disabled = R.to >= Day.today();
+  fwd.style.opacity = fwd.disabled ? '.4' : '';
+  c0.appendChild(bar);
+
   const g = el('div', 'grid3');
   g.style.marginTop = 'var(--s-3)';
-  g.appendChild(tile('SPENT', short(t.total), t.rows + ' things'));
-  g.appendChild(tile('NORMAL SPENDING', short(t.total - t.big), t.big ? 'big purchases left out' : 'nothing unusual'));
-  g.appendChild(tile('VS LAST MONTH', (t.total - prev.total >= 0 ? '+' : '') + short(t.total - prev.total),
-    monthName(monthBack(mo, 1)) + ' was ' + short(prev.total),
+  g.appendChild(tile('SPENT', short(t.total), t.rows + (t.rows === 1 ? ' thing' : ' things')));
+  g.appendChild(tile('CAME IN', short(rangeIn(R.from, R.to)), R.label.replace(' · this week', '')));
+  g.appendChild(tile('VS THE ONE BEFORE', (t.total - prev.total >= 0 ? '+' : '') + short(t.total - prev.total),
+    P.label + ' was ' + short(prev.total),
     t.total > prev.total ? 'warn' : 'good'));
   c0.appendChild(g);
+  if (t.big) c0.appendChild(el('div', 'note', 'Normal spending was <b>' + esc(short(t.total - t.big)) +
+    '</b>. ' + esc(short(t.big)) + ' of the total was a big one-off, kept out of every average.'));
   m.appendChild(c0);
+
+  if (PERIOD === 'day') drawOneDay(m, R.from);
+  if (PERIOD === 'week') drawOneWeek(m, R.from, R.to);
 
   /* Groceries against outside food, asked for by name. */
   const gro = t.byCat['groceries'] || 0, out = t.byCat['outside'] || 0;
   const c1 = card('COOKING VS EATING OUT');
-  if (!gro && !out) c1.appendChild(el('div', 'empty', 'Nothing filed as Groceries or Outside food this month.'));
+  if (!gro && !out) c1.appendChild(el('div', 'empty', 'Nothing filed as Groceries or Outside food in this ' + word + '.'));
   else {
     const g2 = el('div', 'grid2');
     g2.appendChild(tile('GROCERIES', money(gro), (gro + out) ? Math.round(gro / (gro + out) * 100) + '% of food money' : ''));
@@ -1116,7 +1345,7 @@ function drawSpend(m) {
     bar.appendChild(el('i')).style.width = ((gro + out) ? gro / (gro + out) * 100 : 0).toFixed(1) + '%';
     c1.appendChild(bar);
     const pg = prev.byCat['groceries'] || 0, po = prev.byCat['outside'] || 0;
-    if (pg || po) c1.appendChild(el('div', 'note', 'Last month: ' + esc(money(pg)) + ' groceries, ' +
+    if (pg || po) c1.appendChild(el('div', 'note', P.label + ': ' + esc(money(pg)) + ' groceries, ' +
       esc(money(po)) + ' outside.'));
   }
   m.appendChild(c1);
@@ -1125,7 +1354,7 @@ function drawSpend(m) {
   const c2 = card('WHERE IT WENT');
   const rows = Object.keys(t.byCat).map(k => ({ id: k, amt: t.byCat[k] }))
     .sort((a, b) => b.amt - a.amt).filter(r => r.amt > 0);
-  if (!rows.length) c2.appendChild(el('div', 'empty', 'Nothing logged this month. Spending comes from STATUS on your phone.'));
+  if (!rows.length) c2.appendChild(el('div', 'empty', 'Nothing logged in this ' + word + '. Spending comes from STATUS on your phone.'));
   else {
     const top = rows[0].amt;
     const list = el('div', 'list');
@@ -1144,7 +1373,7 @@ function drawSpend(m) {
   /* Tags: why, not what. */
   const tg = Object.keys(t.byTag).map(k => ({ id: k, amt: t.byTag[k] })).sort((a, b) => b.amt - a.amt);
   const c3 = card('OCCASIONS');
-  if (!tg.length) c3.appendChild(el('div', 'empty', 'No tags used this month. A tag is why you spent, not what on. Tap anything below to tag it.'));
+  if (!tg.length) c3.appendChild(el('div', 'empty', 'No tags used in this ' + word + '. A tag is why you spent, not what on. Tap anything below to tag it.'));
   else {
     const list = el('div', 'list');
     tg.forEach(r => {
@@ -1158,7 +1387,7 @@ function drawSpend(m) {
   m.appendChild(c3);
 
   /* Big purchases, pulled out. Law 3. */
-  const bigs = spendRows({ from: monthStart(mo), to: monthEnd(mo) }).filter(s => isBig(s) && !isMove(s));
+  const bigs = spendRows({ from: R.from, to: R.to }).filter(s => isBig(s) && !isMove(s));
   if (bigs.length) {
     const c4 = card('BIG ONE-OFFS');
     const list = el('div', 'list');
@@ -1180,7 +1409,7 @@ function drawSpend(m) {
     c5.querySelector('h2').appendChild(el('div', 'spacer'));
     c5.querySelector('h2').appendChild(b);
   }
-  const all = spendRows({ from: monthStart(mo), to: monthEnd(mo) })
+  const all = spendRows({ from: R.from, to: R.to })
     .filter(s => !isMove(s) && (CATFILTER == null || catOf(s) === CATFILTER))
     .sort((a, b) => b.date.localeCompare(a.date) || num(b.t) - num(a.t));
   if (!all.length) c5.appendChild(el('div', 'empty', 'Nothing here.'));
@@ -1203,6 +1432,71 @@ function drawSpend(m) {
   m.appendChild(c5);
 }
 let CATFILTER = null;
+
+/* == one day, in the order it happened ==
+   Not a list of amounts. Everything that happened, down the clock: what you
+   bought, what arrived, a session delivered, money moved into a pot. The
+   quiet ones carry no amount because they are not spending, and mixing them
+   into a total is how law 2 gets broken. */
+function drawOneDay(m, date) {
+  const ev = dayEvents(date);
+  const c = card(Day.label(date).toUpperCase(), 'full');
+  if (!ev.length) {
+    c.appendChild(el('div', 'empty', Day.isToday(date)
+      ? 'Nothing logged today yet. Spending arrives from STATUS on your phone.'
+      : 'Nothing happened on this day, or nothing was logged.'));
+    m.appendChild(c);
+    return;
+  }
+  const list = el('div', 'list');
+  ev.forEach(e => {
+    const time = clock(e.row || e) || '';
+    const r = itemRow(e.name,
+      (time ? '<b>' + esc(time) + '</b> · ' : '') + e.note + (e.big ? ' · big one-off' : ''),
+      e.fig != null ? e.fig : (e.amt > 0 ? '+' : '') + money(e.amt),
+      e.kind === 'in' ? 'in' : '');
+    if (e.quiet) r.classList.add('dim');
+    if (e.kind === 'out' || e.kind === 'move') r.onclick = () => spendSheet(e.row);
+    else if (e.kind === 'in') r.onclick = () => paidSheet(e.row);
+    else r.style.cursor = 'default';
+    list.appendChild(r);
+  });
+  c.appendChild(list);
+  const inn = ev.filter(e => e.kind === 'in').reduce((a, e) => a + e.amt, 0);
+  const outt = ev.filter(e => e.kind === 'out').reduce((a, e) => a - e.amt, 0);
+  c.appendChild(el('div', 'note', '<b>' + esc(money(inn)) + '</b> in, <b>' + esc(money(outt)) +
+    '</b> out. Anything greyed out moved money rather than spending it, so it counts in neither.'));
+  m.appendChild(c);
+}
+
+/* == one week, a day at a time ==
+   Seven rows whether or not anything happened, because an empty day is a
+   fact about the week and a gap in a list is not. */
+function drawOneWeek(m, from, to) {
+  const c = card('DAY BY DAY', 'full');
+  const days = Day.range(from, to);
+  const outs = days.map(d => rangeSpend(d, d).total);
+  const top = Math.max.apply(null, outs.concat([1]));
+  const list = el('div', 'list');
+  days.forEach((d, i) => {
+    if (d > Day.today()) return;
+    const inn = rangeIn(d, d), sp = outs[i];
+    const sesh = Rec.all('sesh', { date: d }).length;
+    const r = itemRow(Day.label(d),
+      (inn ? '<b class="in">' + esc(money(inn)) + ' in</b> · ' : '') +
+      (sp ? esc(rangeSpend(d, d).rows + (rangeSpend(d, d).rows === 1 ? ' purchase' : ' purchases')) : 'nothing spent') +
+      (sesh ? ' · ' + sesh + ' session' + (sesh > 1 ? 's' : '') : ''),
+      sp ? money(sp) : '—');
+    if (Day.isToday(d)) r.style.outline = 'var(--border-width) solid var(--accent)';
+    r.onclick = () => { PERIOD = 'day'; ANCHOR = d; S.set('period', 'day'); draw(); };
+    const bar = el('div', 'bar c' + (1 + (i % 6)));
+    bar.appendChild(el('i')).style.width = (sp / top * 100).toFixed(1) + '%';
+    list.appendChild(stack(r, bar));
+  });
+  c.appendChild(list);
+  c.appendChild(el('div', 'note', 'Tap a day to open it.'));
+  m.appendChild(c);
+}
 
 /* ── POTS ── */
 function drawPots(m) {
@@ -1331,6 +1625,8 @@ function paidSheet(existing, preset) {
       b.appendChild(fld('What was it', note));
       const date = dateField(existing ? existing.date : (preset && preset.date));
       b.appendChild(fld('When', date));
+      let hhmm = existing ? timeOf(existing) : timeOf({ t: Date.now() });
+      b.appendChild(fld('Time', UI.timeField(hhmm, v => { hhmm = v; })));
       h.save = () => {
         const v = num(amt.value, 0);
         if (v <= 0) { amt.focus(); return false; }
@@ -1350,7 +1646,7 @@ function paidSheet(existing, preset) {
         if (existing && existing.date !== date.value) Rec.del('paid', existing.date, existing.key);
         Rec.set('paid', date.value, key, {
           amt: v, acct: acct.get(), client: who.get(), note: note.value.trim(),
-          t: existing ? existing.t : Date.now(), src: 'hand',
+          t: stampFor(date.value, hhmm), src: 'hand',
         });
         S.set('lastAcct', acct.get());
         Mobile.feedback('success');
@@ -1392,16 +1688,18 @@ function clientSheet(c) {
       const name = UI.field('name', { value: c.name });
       b.appendChild(fld('Name', name));
       const rate = amountField(num(c.rate, 0));
-      b.appendChild(fld('They pay', rate));
+      const rateWrap = fld('They pay', rate);
+      b.appendChild(rateWrap);
       /* == how often, as a kind and a number ==
          A fixed list of four could not say "every two months", so it is a
          kind plus a count. The count's label follows the kind, because
          "Every 2" on its own means nothing. */
       const y0 = cycleOf(c);
       const cycle = chipRow([{ id: 'month', name: 'Months' }, { id: 'week', name: 'Weeks' },
-        { id: 'sesh', name: 'Sessions' }, { id: 'oneoff', name: 'One off' }], y0.kind,
+        { id: 'sesh', name: 'Sessions' }, { id: 'pack', name: 'Packages up front' },
+        { id: 'oneoff', name: 'One off' }], y0.kind,
         () => { paintEvery(); paintSesh(); });
-      b.appendChild(fld('Paid every', cycle));
+      b.appendChild(fld('How they pay', cycle));
 
       const everyWrap = el('div', 'fld');
       const everyLbl = el('label', null, '');
@@ -1424,12 +1722,16 @@ function clientSheet(c) {
 
       function paintEvery() {
         const k = cycle.get(), n = Math.max(1, num(every.value, 1)), one = n === 1;
-        everyWrap.style.display = k === 'oneoff' ? 'none' : '';
+        everyWrap.style.display = (k === 'oneoff' || k === 'pack') ? 'none' : '';
         dayWrap.style.display = k === 'month' ? '' : 'none';
+        rateWrap.style.display = k === 'pack' ? 'none' : '';
         everyLbl.textContent = k === 'week' ? (one ? 'Week' : 'Weeks')
           : k === 'sesh' ? (one ? 'Session' : 'Sessions')
           : (one ? 'Month' : 'Months');
-        hint.innerHTML = k === 'sesh'
+        hint.innerHTML = k === 'pack'
+          ? 'They buy sessions before they happen. Each package has its own size and price, ' +
+            'so there is nothing fixed to set here. Sell one below.'
+          : k === 'sesh'
           ? 'Counted, not scheduled. Log a session below and a payment falls due every ' +
             esc(String(n)) + '.'
           : k === 'oneoff' ? 'Once, on the start date. Nothing repeats.'
@@ -1451,6 +1753,7 @@ function clientSheet(c) {
       b.appendChild(seshBox);
       function paintSesh() {
         seshBox.innerHTML = '';
+        if (cycle.get() === 'pack') return paintPack();
         if (cycle.get() !== 'sesh') return;
         /* Built by hand, not through `merge`, because merge strips `id` on
            purpose and seshDues needs it to find the sessions. */
@@ -1487,6 +1790,75 @@ function clientSheet(c) {
           seshBox.appendChild(el('div', 'note', 'Tap one to take it back. The last eight are shown.'));
         }
       }
+      /* == a package client ==
+         Two figures that pull opposite ways, never netted: money they owe,
+         and sessions he owes. */
+      function paintPack() {
+        const st = packState(c);
+        seshBox.appendChild(el('h2', null, 'PACKAGES'));
+        const g2 = el('div', 'grid3');
+        g2.appendChild(tile('SESSIONS LEFT', String(st.left),
+          st.delivered + ' of ' + st.bought + ' delivered' +
+          (st.paidFor < st.bought ? ', ' + st.paidFor + ' paid for' : ''),
+          st.left < 0 ? 'bad' : ''));
+        g2.appendChild(tile('THEY OWE', st.owed ? money(st.owed) : 'nothing',
+          money(st.paid) + ' of ' + money(st.value) + ' paid', st.owed ? 'warn' : 'good'));
+        g2.appendChild(tile('PACKAGES', String(st.packs.length), 'sold all time'));
+        seshBox.appendChild(g2);
+        if (st.left < 0) seshBox.appendChild(el('div', 'note',
+          '<span class="stale">More sessions delivered than bought.</span> Either a package has not been entered, or these were free.'));
+        else if (st.owedWork > 0) seshBox.appendChild(el('div', 'note',
+          'You have been paid for <b>' + esc(String(st.owedWork)) + '</b> session' + (st.owedWork === 1 ? '' : 's') +
+          ' you still have to deliver. That is work owed, not money earned.'));
+        else if (st.left > 0) seshBox.appendChild(el('div', 'note',
+          '<b>' + esc(String(st.left)) + '</b> session' + (st.left === 1 ? '' : 's') + ' left on paper, but only <b>' +
+          esc(String(st.paidFor)) + '</b> paid for. The rest is theirs once the money arrives.'));
+
+        const btns = el('div', 'rowbtns');
+        const sell = el('button', 'btn go mb-press mb-tap', 'Sell a package');
+        sell.type = 'button';
+        sell.onclick = () => { h.close(); packSheet(c); };
+        btns.appendChild(sell);
+        const add = el('button', 'btn wide mb-press mb-tap', 'Log a session today');
+        add.type = 'button';
+        add.onclick = () => { addSesh(c.id, Day.today()); Mobile.feedback('success'); paintSesh(); };
+        btns.appendChild(add);
+        seshBox.appendChild(btns);
+
+        if (st.packs.length) {
+          const list = el('div', 'list');
+          list.style.marginTop = 'var(--s-3)';
+          st.packs.slice().reverse().forEach(x => {
+            const owedHere = st.dues.find(d => d.pack.id === x.id);
+            const r = itemRow(x.n + ' sessions' + (x.note ? ' · ' + x.note : ''),
+              Day.short(x.date) + ' · ' + money(num(x.price, 0)) +
+              (owedHere ? ' · <b>' + esc(money(owedHere.amt)) + ' still owed</b>' : ' · paid'),
+              money(num(x.price, 0)), owedHere ? 'late' : 'in');
+            r.onclick = () => { h.close(); packSheet(c, x); };
+            list.appendChild(r);
+          });
+          seshBox.appendChild(list);
+        }
+        const all = seshOf(c.id).slice(-8).reverse();
+        if (all.length) {
+          seshBox.appendChild(el('h2', null, 'SESSIONS DELIVERED'));
+          const list = el('div', 'list');
+          all.forEach(x => {
+            const r = itemRow(Day.label(x.date), 'session', '');
+            r.onclick = () => {
+              Rec.del('sesh', x.date, x.key);
+              Mobile.feedback('untick');
+              UI.undo('took back a session',
+                () => { Rec.set('sesh', x.date, x.key, { client: c.id }); paintSesh(); });
+              paintSesh();
+            };
+            list.appendChild(r);
+          });
+          seshBox.appendChild(list);
+          seshBox.appendChild(el('div', 'note', 'Tap one to take it back. The last eight are shown.'));
+        }
+      }
+
       paintEvery(); paintSesh();
 
       if (mine.length) {
@@ -1510,7 +1882,11 @@ function clientSheet(c) {
         Rec.set('client', null, c.id, merge(c, {
           name: n, rate: num(rate.value, 0), cycle: cycle.get(),
           every: Math.max(1, num(every.value, 1)),
-          day: Math.min(28, Math.max(0, num(dayF.value, 0))),
+          /* 31 is a real answer. dueDates already clamps per month, so the
+             31st is the 31st in March and the 28th in February, and it does
+             NOT drift down to the 28th forever after one short month.
+             Capping the stored day at 28 threw that away silently. */
+          day: Math.min(31, Math.max(0, num(dayF.value, 0))),
           start: start.value, status: status.get(),
         }));
         return true;
@@ -1521,6 +1897,74 @@ function clientSheet(c) {
       { label: 'LOG A PAYMENT', fn: h => { h.close(); paidSheet(null, { client: c.id, amt: num(c.rate, 0) }); return true; } },
       { label: 'SAVE', kind: 'go', fn: h => { if (h.save() === false) return false; draw(); return true; } },
     ],
+  });
+}
+
+/* == selling a package ==
+   Sold and paid are two facts and they do not have to happen together, which
+   is the whole point of "whole or partial". So the payment is optional here
+   and creates an ordinary `paid` row when it is filled in. */
+function packSheet(c, existing) {
+  UI.dialog({
+    title: existing ? 'EDIT PACKAGE' : 'SELL A PACKAGE', width: 460,
+    body: (b, h) => {
+      const n = UI.field('number', { placeholder: '10', value: existing ? existing.n : '' });
+      b.appendChild(fld('How many sessions', n));
+      const price = amountField(existing ? existing.price : '');
+      b.appendChild(fld('Price for the whole package', price));
+      const date = dateField(existing ? existing.date : Day.today());
+      b.appendChild(fld('Sold on', date));
+      const note = UI.field('text', { placeholder: 'optional', value: existing ? existing.note || '' : '' });
+      b.appendChild(fld('Note', note));
+
+      let payNow = null, payAcct = null;
+      if (!existing) {
+        b.appendChild(el('h2', null, 'PAID NOW'));
+        payNow = amountField('');
+        b.appendChild(fld('How much they handed over', payNow));
+        payAcct = chipRow(accts().map(a => ({ id: a.id, name: a.name })),
+          S.get('lastAcct', (accts()[0] || {}).id || ''), null, {});
+        b.appendChild(fld('Into', payAcct));
+        b.appendChild(el('div', 'note',
+          'Leave it blank if they have not paid yet, or put in part of it. Whatever is left shows as owed until it arrives.'));
+      }
+
+      h.save = () => {
+        const count = Math.max(1, num(n.value, 0));
+        const val = num(price.value, 0);
+        if (!count || val <= 0) { n.focus(); return false; }
+        const id = existing ? existing.id : newId();
+        if (existing && existing.date !== date.value) Rec.del('pack', existing.date, existing.id);
+        Rec.set('pack', date.value, id, merge(existing, {
+          client: c.id, n: count, price: val, note: note.value.trim(),
+        }));
+        if (payNow && num(payNow.value, 0) > 0) {
+          const amt = num(payNow.value, 0);
+          Rec.set('paid', date.value, newId(), {
+            amt: amt, acct: payAcct.get(), client: c.id,
+            note: count + ' session package', t: stampFor(date.value, timeOf({ t: Date.now() })), src: 'hand',
+          });
+          S.set('lastAcct', payAcct.get());
+          UI.toast('sold <b>' + count + ' sessions</b>, took <b>' + esc(money(amt)) + '</b>' +
+            (amt < val ? ', <b>' + esc(money(val - amt)) + '</b> still owed' : ''));
+        } else {
+          UI.toast('sold <b>' + count + ' sessions</b> for ' + esc(money(val)) + ', unpaid');
+        }
+        Mobile.feedback('success');
+        return true;
+      };
+    },
+    actions: [
+      { label: 'CANCEL' },
+      existing ? { label: 'DELETE', kind: 'bad', fn: () => {
+        const keep = Object.assign({}, existing);
+        Rec.del('pack', existing.date, existing.id);
+        UI.undo('removed that package',
+          () => Rec.set('pack', keep.date, keep.id, merge(keep, {})));
+        draw(); return true;
+      } } : null,
+      { label: 'SAVE', kind: 'go', fn: h => { if (h.save() === false) return false; draw(); return true; } },
+    ].filter(Boolean),
   });
 }
 
@@ -1551,7 +1995,10 @@ function billSheet(existing) {
         }
         const id = existing ? existing.id : newId();
         Rec.set('bill', null, id, merge(existing, {
-          name: n, amt: num(amt.value, 0), day: Math.min(28, Math.max(1, num(day.value, 1))),
+          name: n, amt: num(amt.value, 0),
+          /* Same as a client's day: billsDue clamps per month, so rent on the
+             30th stays on the 30th and only moves in February. */
+          day: Math.min(31, Math.max(1, num(day.value, 1))),
           cat: cat.get(), acct: acct.get(),
         }));
         return true;
@@ -1722,8 +2169,19 @@ function spendSheet(s) {
       b.appendChild(fld('Occasion, if it had one', tg));
       const big = UI.toggle(isBig(s));
       b.appendChild(UI.row('A big one-off', 'Kept out of every "normal spending" figure, so one large thing does not become the story of the month', big));
+      /* The one field WEALTH writes INTO a spend rather than alongside it.
+         A time is the fact itself, not a label, so a `mark` would be the
+         wrong place for it and two sources of truth for when something
+         happened is worse than the separation is worth. Safe because it goes
+         through `merge`, which keeps every field STATUS put there. */
+      let hhmm = timeOf(s);
+      b.appendChild(fld('Time', UI.timeField(hhmm, v => { hhmm = v; })));
       h.save = () => {
         setMark(s, { cat: cat.get(), tag: tg.get(), big: big.on ? 1 : 0 });
+        if (hhmm !== timeOf(s)) {
+          const row = Rec.get('spend', s.date, s.key);
+          if (row) Rec.set('spend', s.date, s.key, merge(row, { t: stampFor(s.date, hhmm) }));
+        }
         Mobile.feedback('success');
         return true;
       };
@@ -1913,6 +2371,7 @@ function draw() {
    and shows a blank screen when IndexedDB is slow.                         */
 seed();
 TAB = S.get('tab', 'score');
+PERIOD = S.get('period', 'month');
 draw();
 Rec.ready(() => { seed(); ruleCache = null; draw(); });
 Rec.on(() => { ruleCache = null; draw(); });
