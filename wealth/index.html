@@ -202,7 +202,14 @@ IO.register({ app: APP.id, name: APP.name, types: APP.types.concat(['spend', 'ac
 
 /* ── small tools ── */
 const el = UI.el, esc = UI.esc;
-const num = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : (d == null ? 0 : d); };
+/* `parseFloat('12,000')` is 12. Not 12000, not NaN — twelve, silently, with
+   three zeroes thrown away. Every amount in this app goes through here, so a
+   typed comma was a way to lose money without a single error. Strip the
+   grouping first; this is not optional and never was. */
+const num = (v, d) => {
+  const n = parseFloat(typeof v === 'string' ? v.replace(/,/g, '') : v);
+  return isFinite(n) ? n : (d == null ? 0 : d);
+};
 const money = n => (n < 0 ? '-' : '') + '₱' + Math.round(Math.abs(n)).toLocaleString();
 const short = n => {
   const a = Math.abs(n), sign = n < 0 ? '-' : '';
@@ -432,14 +439,26 @@ function lastCount(acctId) {
   const r = rows[rows.length - 1];        /* Rec.all sorts by date */
   return { date: r.date, bal: num(r.payload.bal, 0) };
 }
+/* Everything logged against an account since a date. Also the answer for an
+   account with no count at all, which is the point of splitting it out.
+
+   Tom, 2026-09-11: "I told it I received money in the bank, it still shows up
+   as never counted." It did, and by the letter of law 1 that was right: a
+   payment is not a count. But the screen threw away a fact he had just given
+   it and offered nothing to do about it, which is a dead end, not a
+   principle. The law stands — the app still never INVENTS a balance — and now
+   what it does know is on the screen, labelled as what it is. */
+function movementSince(acctId, from) {
+  let inn = 0, out = 0;
+  paidRows(from ? { from: from } : {}).forEach(p => { if (p.acct === acctId) inn += num(p.amt, 0); });
+  spendRows(from ? { from: from } : {}).forEach(x => { if (x.acct === acctId) out += num(x.amt, 0); });
+  return { in: inn, out: out, net: inn - out, any: !!(inn || out) };
+}
 function balanceOf(acctId) {
   const c = lastCount(acctId);
   if (!c) return null;
-  const after = Day.shift(c.date, 1);
-  let bal = c.bal;
-  paidRows({ from: after }).forEach(p => { if (p.acct === acctId) bal += num(p.amt, 0); });
-  spendRows({ from: after }).forEach(s => { if (s.acct === acctId) bal -= num(s.amt, 0); });
-  return { bal: bal, counted: c.date, age: Day.diff(Day.today(), c.date) };
+  const mv = movementSince(acctId, Day.shift(c.date, 1));
+  return { bal: c.bal + mv.net, counted: c.date, age: Day.diff(Day.today(), c.date), moved: mv };
 }
 const STALE = 14;
 function liquid() {
@@ -759,6 +778,61 @@ function dayEvents(date) {
   return out.sort(byTime);
 }
 
+/* == a donut of where the money went ==
+   Tom, 2026-09-11: "I want a piechart for money out."
+
+   Drawn here rather than in `shared/chart.js`, which has no pie and which an
+   app session must not touch. Six theme colour slots, no hex anywhere, and a
+   hole in the middle so the total can live in it — a plain pie wastes its
+   best piece of space on nothing.
+
+   Slices are one path each with an arc, and they are `<title>`d so hovering
+   says what they are. Anything under 3% is folded into one "everything else"
+   wedge, because eleven slivers is a decoration, not a chart. */
+function donut(rows, total, size) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const S = size || 220, R = S / 2, INNER = R * 0.62;
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + S + ' ' + S);
+  svg.setAttribute('class', 'mb-chart');
+  svg.style.width = '100%'; svg.style.maxWidth = S + 'px'; svg.style.height = 'auto';
+  if (!total) return svg;
+
+  let angle = -Math.PI / 2;                     /* twelve o'clock */
+  const pt = (a, r) => [(R + r * Math.cos(a)).toFixed(2), (R + r * Math.sin(a)).toFixed(2)];
+  rows.forEach((row, i) => {
+    const frac = row.amt / total;
+    if (frac <= 0) return;
+    /* A full circle drawn as an arc collapses to nothing, because its start
+       and end points are the same. One category is a ring, not a slice. */
+    const end = angle + frac * Math.PI * 2;
+    const node = document.createElementNS(NS, frac >= 0.9999 ? 'circle' : 'path');
+    if (frac >= 0.9999) {
+      node.setAttribute('cx', R); node.setAttribute('cy', R);
+      node.setAttribute('r', (R + INNER) / 2);
+      node.setAttribute('fill', 'none');
+      node.setAttribute('stroke-width', R - INNER);
+      node.setAttribute('stroke', 'var(--data-' + (1 + i % 6) + ')');
+    } else {
+      const big = frac > 0.5 ? 1 : 0;
+      const o1 = pt(angle, R - 1), o2 = pt(end, R - 1);
+      const i2 = pt(end, INNER), i1 = pt(angle, INNER);
+      node.setAttribute('d',
+        'M' + o1[0] + ' ' + o1[1] +
+        'A' + (R - 1) + ' ' + (R - 1) + ' 0 ' + big + ' 1 ' + o2[0] + ' ' + o2[1] +
+        'L' + i2[0] + ' ' + i2[1] +
+        'A' + INNER + ' ' + INNER + ' 0 ' + big + ' 0 ' + i1[0] + ' ' + i1[1] + 'Z');
+      node.setAttribute('fill', 'var(--data-' + (1 + i % 6) + ')');
+    }
+    const ttl = document.createElementNS(NS, 'title');
+    ttl.textContent = row.name + ' — ' + money(row.amt) + ' (' + Math.round(frac * 100) + '%)';
+    node.appendChild(ttl);
+    svg.appendChild(node);
+    angle = end;
+  });
+  return svg;
+}
+
 /* ══════════════════ the picker: autofill, law 4 ══════════════════
    Typing filters what exists. It never creates by being typed into, because
    that is exactly how "Grab" and "grab" become two things. Creating is a
@@ -920,7 +994,30 @@ function drawScore(m) {
   sc.appendChild(el('div', 'big' + (b.free < 0 ? ' bad' : b.free < b.allocated * .2 ? ' low' : ''),
     L.counted ? money(b.free) : '—'));
   if (!L.counted) {
-    sc.appendChild(el('div', 'sub', 'Nothing counted yet. Go to <b>ACCOUNTS</b> and put in what is actually in each one. Until then this app will not guess a number at you.'));
+    /* An empty state that only states a rule is a wall. This one says what it
+       already knows, why that is not the answer, and gives the button. */
+    const moved = accts().reduce((a, x) => {
+      const mv = movementSince(x.id, null); return { in: a.in + mv.in, out: a.out + mv.out }; },
+      { in: 0, out: 0 });
+    sc.appendChild(el('div', 'sub', (moved.in || moved.out)
+      ? 'You have logged <b>' + esc(money(moved.in)) + '</b> in and <b>' + esc(money(moved.out)) +
+        '</b> out, but no account has said what it actually holds. Movement is not a balance: ' +
+        'this app cannot know what was in there before you started, and it will not guess.'
+      : 'Nothing counted yet. Put in what each account actually holds and every number on this screen starts working.'));
+    const go = el('button', 'btn go mb-press mb-tap', 'Count an account');
+    go.type = 'button';
+    go.onclick = () => {
+      const list = accts();
+      if (!list.length) return acctSheet();
+      if (list.length === 1) return countSheet(list[0]);
+      UI.menu(0, 0, list.map(x => ({ label: x.name,
+        note: lastCount(x.id) ? 'counted ' + Day.short(lastCount(x.id).date) : 'never counted',
+        fn: () => countSheet(x) })), { title: 'WHICH ACCOUNT' });
+    };
+    const wrap = el('div', 'rowbtns');
+    wrap.style.justifyContent = 'center';
+    wrap.appendChild(go);
+    sc.appendChild(wrap);
   } else {
     sc.appendChild(el('div', 'sub', money(L.total) + ' in the accounts, ' + money(b.allocated) +
       ' already spoken for between now and ' + Day.short(nextIn()) + '.'));
@@ -935,8 +1032,18 @@ function drawScore(m) {
   g.appendChild(tile('FREE', L.counted ? short(b.free) : '—', 'what is really yours',
     b.free < 0 ? 'bad' : ''));
   c1.appendChild(g);
-  if (L.missing.length) c1.appendChild(el('div', 'note',
-    'Not counted, so not in the total: <b>' + L.missing.map(esc).join(', ') + '</b>'));
+  if (L.missing.length && L.counted) {
+    const note = el('div', 'note',
+      'Not counted, so not in the total: <b>' + L.missing.map(esc).join(', ') + '</b>. ');
+    const a = el('button', 'btn mb-tap', 'Count them');
+    a.type = 'button';
+    a.style.marginTop = 'var(--s-2)';
+    a.onclick = () => UI.menu(0, 0, accts().filter(x => !lastCount(x.id))
+      .map(x => ({ label: x.name, fn: () => countSheet(x) })), { title: 'WHICH ACCOUNT' });
+    note.appendChild(el('br'));
+    note.appendChild(a);
+    c1.appendChild(note);
+  }
   m.appendChild(c1);
 
   /* Runway. The app's real subject. */
@@ -957,15 +1064,29 @@ function drawScore(m) {
   }
   m.appendChild(c2);
 
-  /* This month against last. */
+  /* == monthly net ==
+     Tom, 2026-09-11: "I wanna see monthly net."
+
+     In minus out, which is the one figure that says whether a month paid for
+     itself. Liquid answers "can I?" and net answers "did that work?", and
+     they are different questions — a month can end richer only because a
+     client paid two months at once. */
   const now = monthOf(Day.today()), prev = monthBack(now, 1);
   const tn = monthSpend(now), tp = monthSpend(prev);
+  const netNow = monthIn(now) - tn.total, netPrev = monthIn(prev) - tp.total;
   const c3 = card('THIS MONTH');
-  const g2 = el('div', 'grid2');
+  const sc3 = el('div', 'score');
+  sc3.appendChild(el('div', 'cap', 'NET, ' + monthName(now).toUpperCase()));
+  sc3.appendChild(el('div', 'big' + (netNow < 0 ? ' bad' : ''),
+    (netNow > 0 ? '+' : '') + money(netNow)));
+  sc3.appendChild(el('div', 'sub', money(monthIn(now)) + ' in, ' + money(tn.total) + ' out.' +
+    (tn.big ? ' ' + money(tn.big) + ' of that was one big thing.' : '')));
+  c3.appendChild(sc3);
+  const g2 = el('div', 'grid3');
   g2.appendChild(tile('IN', short(monthIn(now)), monthName(now)));
   g2.appendChild(tile('OUT', short(tn.total), tn.big ? short(tn.big) + ' of it one big thing' : 'nothing unusual'));
-  g2.appendChild(tile('LAST MONTH IN', short(monthIn(prev)), monthName(prev)));
-  g2.appendChild(tile('LAST MONTH OUT', short(tp.total), tp.big ? short(tp.big) + ' of it one big thing' : 'nothing unusual'));
+  g2.appendChild(tile(monthName(prev).toUpperCase() + ' NET', (netPrev > 0 ? '+' : '') + short(netPrev),
+    short(monthIn(prev)) + ' in, ' + short(tp.total) + ' out', netPrev < 0 ? 'bad' : 'good'));
   c3.appendChild(g2);
   m.appendChild(c3);
 
@@ -975,6 +1096,7 @@ function drawScore(m) {
   const ms = []; for (let i = 5; i >= 0; i--) ms.push(monthBack(now, i));
   const ins = ms.map((mm, i) => [i, monthIn(mm)]);
   const outs = ms.map((mm, i) => [i, monthSpend(mm).total]);
+  const nets = ms.map((mm, i) => [i, monthIn(mm) - monthSpend(mm).total]);
   if (window.Chart && (ins.some(p => p[1]) || outs.some(p => p[1]))) {
     const box = el('div', 'chartbox');
     c4.appendChild(box);
@@ -982,11 +1104,15 @@ function drawScore(m) {
     m.appendChild(c4);
     chartInto(box, 170, ch => {
       ch.xLinear(0, 5);
-      moneyScale(ch, ins.map(p => p[1]).concat(outs.map(p => p[1])).concat([0]));
+      /* Zero has to be on the scale or a negative net falls off the bottom. */
+      moneyScale(ch, ins.map(p => p[1]).concat(outs.map(p => p[1]))
+        .concat(nets.map(p => p[1])).concat([0]));
       ch.grid(v => short(v));
       ch.bars(outs, 'mb-bar');
+      ch.rule(0, '', 'mb-rule');
       ch.line(ins, 'mb-line'); ch.dots(ins, 'mb-dot', 3);
-      ch.note('bars out · line in');
+      ch.line(nets, 'mb-rule'); ch.dots(nets, 'mb-dot', 2);
+      ch.note('bars out · line in · flat line net');
     });
     c4.appendChild(el('div', 'note', ms.map(monthName).join(' · ')));
   } else {
@@ -1133,7 +1259,7 @@ function drawIn(m) {
   /* Everything that has arrived. */
   const c3 = card('RECEIVED', 'full');
   const got = paidRows({ from: Day.shift(Day.today(), -120) }).sort((a, b) => b.date.localeCompare(a.date));
-  if (!got.length) c3.appendChild(el('div', 'empty', 'Nothing recorded yet.'));
+  if (!got.length) c3.appendChild(el('div', 'empty', 'Nothing recorded yet. Press <b>+</b> to log a payment or a one-off.'));
   else {
     const list = el('div', 'list');
     got.slice(0, 40).forEach(p => {
@@ -1199,7 +1325,7 @@ function drawOut(m) {
 
   const dl = debts();
   const c3 = card('DEBTS');
-  if (!dl.length) c3.appendChild(el('div', 'empty', 'Nothing owed, or nothing listed. Press <b>+</b> to add one.'));
+  if (!dl.length) c3.appendChild(el('div', 'empty', 'Nothing owed, or nothing listed yet. Press <b>+</b> to add one, and it sits beside your cash rather than being taken off it.'));
   else {
     const list = el('div', 'list');
     dl.forEach(d => {
@@ -1221,7 +1347,7 @@ function drawOut(m) {
   const events = billsDue(Day.today(), to).map(b => ({ date: b.date, name: b.bill.name, amt: -num(b.bill.amt, 0) }))
     .concat(expected(Day.today(), to).filter(e => !e.paid).map(e => ({ date: e.date, name: e.client.name, amt: num(e.amt, 0) })))
     .sort((a, b) => a.date.localeCompare(b.date));
-  if (!events.length) c4.appendChild(el('div', 'empty', 'Nothing scheduled either way.'));
+  if (!events.length) c4.appendChild(el('div', 'empty', 'Nothing scheduled either way. Add a bill above, or a client under MONEY IN, and the next two months fill in.'));
   else {
     const L = liquid();
     let run = L.counted ? L.total : 0, lowest = run, lowDate = Day.today();
@@ -1320,10 +1446,19 @@ function drawSpend(m) {
   g.style.marginTop = 'var(--s-3)';
   g.appendChild(tile('SPENT', short(t.total), t.rows + (t.rows === 1 ? ' thing' : ' things')));
   g.appendChild(tile('CAME IN', short(rangeIn(R.from, R.to)), R.label.replace(' · this week', '')));
-  g.appendChild(tile('VS THE ONE BEFORE', (t.total - prev.total >= 0 ? '+' : '') + short(t.total - prev.total),
-    P.label + ' was ' + short(prev.total),
-    t.total > prev.total ? 'warn' : 'good'));
+  const netHere = rangeIn(R.from, R.to) - t.total;
+  g.appendChild(tile('NET', (netHere > 0 ? '+' : '') + short(netHere),
+    'in, less out', netHere < 0 ? 'bad' : 'good'));
   c0.appendChild(g);
+  const g1b = el('div', 'grid2');
+  g1b.style.marginTop = 'var(--s-2)';
+  g1b.appendChild(tile('VS THE ONE BEFORE', (t.total - prev.total >= 0 ? '+' : '') + short(t.total - prev.total),
+    P.label + ' spent ' + short(prev.total),
+    t.total > prev.total ? 'warn' : 'good'));
+  g1b.appendChild(tile('THEIR NET', (rangeIn(P.from, P.to) - prev.total > 0 ? '+' : '') +
+    short(rangeIn(P.from, P.to) - prev.total), P.label,
+    rangeIn(P.from, P.to) - prev.total < 0 ? 'bad' : 'good'));
+  c0.appendChild(g1b);
   if (t.big) c0.appendChild(el('div', 'note', 'Normal spending was <b>' + esc(short(t.total - t.big)) +
     '</b>. ' + esc(short(t.big)) + ' of the total was a big one-off, kept out of every average.'));
   m.appendChild(c0);
@@ -1350,23 +1485,56 @@ function drawSpend(m) {
   }
   m.appendChild(c1);
 
-  /* Where it went. */
+  /* Where it went, as a donut and a list. The picture ranks them at a glance
+     and the list is what you can actually press. */
   const c2 = card('WHERE IT WENT');
-  const rows = Object.keys(t.byCat).map(k => ({ id: k, amt: t.byCat[k] }))
+  const rows = Object.keys(t.byCat).map(k => ({ id: k, amt: t.byCat[k],
+      name: k ? catName(k) : 'Uncategorised' }))
     .sort((a, b) => b.amt - a.amt).filter(r => r.amt > 0);
-  if (!rows.length) c2.appendChild(el('div', 'empty', 'Nothing logged in this ' + word + '. Spending comes from STATUS on your phone.'));
-  else {
+  if (!rows.length) {
+    c2.appendChild(el('div', 'empty', 'Nothing logged in this ' + word +
+      '. Press <b>+</b> to put one in, or log it on your phone in STATUS.'));
+  } else {
+    const sum = rows.reduce((a, r) => a + r.amt, 0);
+    /* Slivers become one wedge. Eleven of them is decoration. */
+    const shown = [], rest = [];
+    rows.forEach(r => (r.amt / sum >= 0.03 ? shown : rest).push(r));
+    const slices = shown.concat(rest.length
+      ? [{ id: null, name: 'Everything else', amt: rest.reduce((a, r) => a + r.amt, 0) }] : []);
+
+    const ring = el('div');
+    ring.style.position = 'relative';
+    ring.style.display = 'flex';
+    ring.style.justifyContent = 'center';
+    ring.style.marginBottom = 'var(--s-4)';
+    ring.appendChild(donut(slices, sum, 220));
+    const mid = el('div', null, '<div class="k" style="font-family:var(--font-display);' +
+      'font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--text-muted)">OUT</div>' +
+      '<div style="font-family:var(--font-display);font-size:var(--f-5);' +
+      'font-weight:var(--w-bold);line-height:var(--lh-tight)">' + esc(short(sum)) + '</div>');
+    mid.style.position = 'absolute';
+    mid.style.top = '50%'; mid.style.left = '50%';
+    mid.style.transform = 'translate(-50%,-50%)';
+    mid.style.textAlign = 'center';
+    mid.style.pointerEvents = 'none';
+    ring.appendChild(mid);
+    c2.appendChild(ring);
+
     const top = rows[0].amt;
     const list = el('div', 'list');
     rows.forEach((r, i) => {
-      const row = itemRow(r.id ? catName(r.id) : 'Uncategorised',
+      /* The list keeps every category, and its colour matches the wedge it is
+         in, so a sliver folded into "everything else" is still findable. */
+      const slot = i < shown.length ? (1 + i % 6) : (1 + shown.length % 6);
+      const row = itemRow(r.name,
         Math.round(r.amt / (t.total - t.big || 1) * 100) + '% of normal spending', money(r.amt));
       row.onclick = () => { CATFILTER = r.id; draw(); };
-      const bar = el('div', 'bar c' + (1 + (i % 6)));
+      const bar = el('div', 'bar c' + slot);
       bar.appendChild(el('i')).style.width = (r.amt / top * 100).toFixed(1) + '%';
       list.appendChild(stack(row, bar));
     });
     c2.appendChild(list);
+    c2.appendChild(el('div', 'note', 'Tap a category to see only its purchases. Anything under 3% is one wedge in the ring, and still its own line here.'));
   }
   m.appendChild(c2);
 
@@ -1527,7 +1695,7 @@ function drawPots(m) {
 
   const mv = moves({ from: Day.shift(Day.today(), -120) }).sort((a, b) => b.date.localeCompare(a.date));
   const c2 = card('RECENT MOVES');
-  if (!mv.length) c2.appendChild(el('div', 'empty', 'Nothing moved yet.'));
+  if (!mv.length) c2.appendChild(el('div', 'empty', 'Nothing moved yet. Open a pot above and put something in it.'));
   else {
     const list = el('div', 'list');
     mv.slice(0, 30).forEach(v => {
@@ -1546,17 +1714,30 @@ function drawPots(m) {
 function drawAccounts(m) {
   const as = accts();
   const c1 = card('ACCOUNTS', 'full');
-  if (!as.length) c1.appendChild(el('div', 'empty', 'No accounts. Press <b>+</b> to add one.'));
+  if (!as.length) c1.appendChild(el('div', 'empty', 'No accounts yet. Press <b>+</b> and add Cash, GCash, your bank, anything money sits in.'));
   else {
     const list = el('div', 'list');
     as.forEach(a => {
       const b = balanceOf(a.id);
-      const r = itemRow(a.name,
-        b ? (b.age > STALE ? '<span class="stale">counted ' + b.age + ' days ago</span>'
-                           : 'counted ' + (b.age ? b.age + ' days ago' : 'today')) +
-            ', plus everything logged since'
-          : '<span class="stale">never counted</span>',
-        b ? money(b.bal) : '—');
+      let sub, fig, cls = '';
+      if (b) {
+        sub = (b.age > STALE ? '<span class="stale">counted ' + b.age + ' days ago</span>'
+                             : 'counted ' + (b.age ? b.age + ' days ago' : 'today')) +
+              ', plus everything logged since';
+        fig = money(b.bal);
+      } else {
+        const mv = movementSince(a.id, null);
+        /* What he told it, shown rather than binned, and named as movement
+           rather than as a balance. */
+        sub = mv.any
+          ? '<b>' + esc(money(mv.in)) + ' in, ' + esc(money(mv.out)) + ' out</b> logged here. ' +
+            '<span class="stale">Tap to say what is actually in it.</span>'
+          : '<span class="stale">Never counted. Tap to put in what it holds.</span>';
+        fig = mv.any ? (mv.net >= 0 ? '+' : '') + money(mv.net) : '—';
+        cls = 'dim';
+      }
+      const r = itemRow(a.name, sub, fig);
+      if (cls) r.classList.add(cls);
       r.onclick = () => countSheet(a);
       list.appendChild(r);
     });
@@ -1596,7 +1777,39 @@ function drawAccounts(m) {
 }
 
 /* ══════════════════════════ the sheets ══════════════════════════ */
-function amountField(v) { return UI.field('money', { placeholder: '0', value: v == null ? '' : String(v) }); }
+/* == an amount groups itself ==
+   Tom, 2026-09-11: "Numbers should automatically have commas."
+
+   Formatting on every keystroke moves the caret, which is what makes most
+   attempts at this horrible to type into. So the caret is put back by
+   counting DIGITS before it rather than characters: insert a comma to the
+   left of the cursor and the cursor still sits after the same digit. */
+function groupNum(raw) {
+  const cleaned = String(raw).replace(/[^0-9.]/g, '');
+  const bits = cleaned.split('.');
+  const whole = bits[0].replace(/^0+(?=\d)/, '');
+  const frac = bits.length > 1 ? '.' + bits.slice(1).join('').slice(0, 2) : '';
+  return (whole ? Number(whole).toLocaleString('en-US') : (frac ? '0' : '')) + frac;
+}
+function amountField(v) {
+  const i = UI.field('money', { placeholder: '0',
+    value: v == null || v === '' ? '' : groupNum(String(v)) });
+  i.addEventListener('input', () => {
+    const caret = i.selectionStart == null ? i.value.length : i.selectionStart;
+    const digitsBefore = i.value.slice(0, caret).replace(/[^0-9]/g, '').length;
+    const out = groupNum(i.value);
+    if (out === i.value) return;
+    i.value = out;
+    let seen = 0, pos = out.length;
+    if (!digitsBefore) pos = 0;
+    else for (let k = 0; k < out.length; k++) {
+      if (/[0-9]/.test(out[k])) seen++;
+      if (seen >= digitsBefore) { pos = k + 1; break; }
+    }
+    try { i.setSelectionRange(pos, pos); } catch (e) {}
+  });
+  return i;
+}
 function dateField(v) {
   const i = UI.field('text', { value: v || Day.today() });
   i.type = 'date';
@@ -1650,7 +1863,19 @@ function paidSheet(existing, preset) {
         });
         S.set('lastAcct', acct.get());
         Mobile.feedback('success');
-        UI.toast('logged <b>' + esc(money(v)) + '</b> in');
+        /* The moment he has the information is the moment to ask. Telling the
+           app money landed and being shown "never counted" afterwards is the
+           dead end this closes. */
+        const target = acct.get();
+        if (target && !lastCount(target)) {
+          const acc = Rec.get('acct', null, target) || { name: target };
+          UI.toast('logged <b>' + esc(money(v)) + '</b> in. ' + esc(acc.name) +
+            ' has no balance yet, so it is not in your total',
+            { ms: 7000, action: { label: 'SET IT',
+              fn: () => countSheet(Object.assign({ id: target }, acc)) } });
+        } else {
+          UI.toast('logged <b>' + esc(money(v)) + '</b> in');
+        }
         return true;
       };
     },
@@ -2117,10 +2342,15 @@ function countSheet(a) {
   UI.dialog({
     title: a.name.toUpperCase(), width: 460,
     body: (b, h) => {
+      const mv0 = movementSince(a.id, null);
       if (b0) {
         b.appendChild(el('div', 'note', 'Last counted ' + esc(Day.label(b0.counted)) +
           '. Since then this app has added every payment and taken off every spend, which gives <b>' +
           esc(money(b0.bal)) + '</b>. If your bank says something else, the bank is right.'));
+      } else if (mv0.any) {
+        b.appendChild(el('div', 'note', 'Never counted, but <b>' + esc(money(mv0.in)) + '</b> in and <b>' +
+          esc(money(mv0.out)) + '</b> out have been logged against it. That is movement, not a balance: ' +
+          'it cannot know what was in there before you started. Open your banking app and put in what it says now.'));
       } else {
         b.appendChild(el('div', 'note', 'Never counted. Open your banking app and put in what it actually says.'));
       }
@@ -2213,6 +2443,93 @@ function spendSheet(s) {
          on is the point, and it is one press away rather than a trip to the
          rules screen. */
       { label: 'ALWAYS', fn: h => { if (h.always() === false) return false; draw(); return true; } },
+      { label: 'SAVE', kind: 'go', fn: h => { if (h.save() === false) return false; draw(); return true; } },
+    ],
+  });
+}
+
+/* == logging a purchase here ==
+   Tom, 2026-09-11: "I should be able to log spending here."
+
+   STATUS stays the phone in the supermarket queue. This is the desk: putting
+   in the four things off a bank statement, or the purchase you forgot on the
+   day it happened. It writes the same `spend` row STATUS writes, which is
+   allowed and always was — `spend` is shared, and this builds a fresh row
+   rather than rebuilding somebody else's.
+
+   The category goes in a `mark` as usual, never into the spend, so the two
+   apps still cannot tread on each other. */
+function newSpendSheet(preset) {
+  UI.dialog({
+    title: 'LOG SPENDING', width: 460,
+    body: (b, h) => {
+      const amt = amountField('');
+      b.appendChild(fld('How much', amt));
+      const note = UI.field('text', { placeholder: 'Landers, Grab, rent' });
+      b.appendChild(fld('What was it', note));
+      const acct = chipRow(accts().map(a => ({ id: a.id, name: a.name })),
+        S.get('lastAcct', (accts()[0] || {}).id || ''), null, {});
+      b.appendChild(fld('Paid from', acct));
+
+      /* Picked, never typed, and it guesses from the description as he types,
+         because a rule already knows what "Grab" means. */
+      const cat = picker({
+        items: cats().map(c => ({ id: c.id, name: c.name, note: c.grp === 'move' ? 'not spending' : '' })),
+        value: '', placeholder: 'Which category',
+        onCreate: n => makeCat(n, 'var'),
+      });
+      b.appendChild(fld('Category', cat));
+      const guess = el('div', 'note', '');
+      b.appendChild(guess);
+      note.addEventListener('input', () => {
+        const r = ruleFor(note.value);
+        guess.innerHTML = r ? 'A rule already files anything saying <b>' + esc(r.match) +
+          '</b> as <b>' + esc(catName(r.cat)) + '</b>. Leave the category blank to use it.' : '';
+      });
+
+      const tg = picker({
+        items: tags().map(x => ({ id: x.id, name: x.name })),
+        value: '', placeholder: 'Date, gift, travel', onCreate: makeTag,
+      });
+      b.appendChild(fld('Occasion, if it had one', tg));
+      const date = dateField(preset && preset.date);
+      b.appendChild(fld('When', date));
+      let hhmm = timeOf({ t: Date.now() });
+      b.appendChild(fld('Time', UI.timeField(hhmm, v => { hhmm = v; })));
+      const big = UI.toggle(false);
+      b.appendChild(UI.row('A big one-off', 'Kept out of every "normal spending" figure', big));
+
+      h.save = () => {
+        const v = num(amt.value, 0);
+        if (v <= 0) { amt.focus(); return false; }
+        /* Law 4's second half, same as money in: the same amount to the same
+           account on the same day is a question, not a silent second row. */
+        if (!h._forced) {
+          const dupe = spendRows({ date: date.value })
+            .find(x => num(x.amt, 0) === v && x.acct === acct.get());
+          if (dupe) {
+            h._forced = 1;
+            UI.toast('you already logged <b>' + esc(money(v)) + '</b> from that account on that day. Press save again if it really happened twice', { bad: true });
+            return false;
+          }
+        }
+        const key = newId();
+        Rec.set('spend', date.value, key, {
+          amt: v, acct: acct.get(), note: note.value.trim(),
+          t: stampFor(date.value, hhmm), src: 'wealth',
+        });
+        if (cat.get() || tg.get() || big.on) {
+          setMark({ date: date.value, key: key },
+            { cat: cat.get(), tag: tg.get(), big: big.on ? 1 : 0 });
+        }
+        S.set('lastAcct', acct.get());
+        Mobile.feedback('success');
+        UI.toast('logged <b>' + esc(money(v)) + '</b> out');
+        return true;
+      };
+    },
+    actions: [
+      { label: 'CANCEL' },
       { label: 'SAVE', kind: 'go', fn: h => { if (h.save() === false) return false; draw(); return true; } },
     ],
   });
@@ -2323,6 +2640,17 @@ function acctSheet() {
 document.getElementById('fab').onclick = () => {
   Mobile.feedback('open');
   if (TAB === 'in') return paidSheet();
+  if (TAB === 'score') return UI.menu(0, 0, [
+    { label: 'Money in', note: 'a client payment or a one-off', fn: () => paidSheet() },
+    { label: 'Spending', note: 'something you bought', fn: () => newSpendSheet() },
+    { label: 'Count an account', note: 'say what is actually in it', fn: () => {
+      const a = accts()[0];
+      if (!a) return acctSheet();
+      UI.menu(0, 0, accts().map(x => ({ label: x.name,
+        note: lastCount(x.id) ? 'counted ' + Day.short(lastCount(x.id).date) : 'never counted',
+        fn: () => countSheet(x) })), { title: 'WHICH ACCOUNT' });
+    } },
+  ], { title: 'ADD' });
   if (TAB === 'out') return UI.menu(0, 0, [
     { label: 'A bill or rent', fn: () => billSheet() },
     { label: 'A debt', fn: () => debtSheet() },
@@ -2333,7 +2661,7 @@ document.getElementById('fab').onclick = () => {
     { label: 'A category', fn: () => catSheet() },
     { label: 'A sorting rule', fn: () => ruleSheet() },
   ], { title: 'ADD' });
-  if (TAB === 'spend') return UI.toast('spending is logged in STATUS on your phone. Tap anything here to file it');
+  if (TAB === 'spend') return newSpendSheet(ANCHOR && PERIOD === 'day' ? { date: ANCHOR } : null);
   return paidSheet();
 };
 

@@ -86,6 +86,12 @@ writes it back entire.
 
 Two structural decisions keep that from being a promise nobody checks.
 
+**0. WEALTH may CREATE a spend, and does.** Tom, 2026-09-11: *"I should be
+able to log spending here."* STATUS stays the phone in the supermarket queue;
+this is the desk, for putting in a bank statement or a purchase missed on the
+day. It writes a fresh `spend` row, which is a different act from rebuilding
+somebody else's, and the category still goes in a `mark`.
+
 **1. WEALTH never labels a spend by editing the spend.** A category, a tag or a
 big-purchase flag goes in a `mark` row keyed off the spend, not into STATUS's
 payload. So the food price, the account, the receipt photo and the meal link
@@ -114,6 +120,20 @@ balance, not a zero.
 This is the whole reason the app is trustworthy. A money app that guesses is
 worse than a notebook.
 
+**But refusing to guess is not the same as refusing to speak.** Tom,
+2026-09-11: *"I told it I received money in the bank, it still shows up as
+never counted."* It did, and by the letter of this law that was right, because
+a payment is not a count. It was still wrong: he had just handed the app a
+fact and the screen threw it away and offered nothing to do about it.
+
+So an uncounted account now shows **what has been logged against it**, named as
+movement rather than as a balance, with the count one tap away. And logging
+money into an uncounted account offers to set the balance right there, because
+the moment he has the information is the moment to ask.
+
+The law is unchanged: the app still never invents a balance. The correction is
+that **a law is not an excuse for a dead end.**
+
 ### 2. Moving money is not spending it
 
 Paying down a debt, filling a pot, transferring between accounts. None of it is
@@ -128,7 +148,23 @@ drift that is actually worth seeing. Big purchases are marked and pulled out,
 listed on their own, and every "what do I normally spend" figure excludes them
 and says that it does.
 
-### 4. Nothing important is typed twice
+### 4. Numbers group themselves, and reading one survives it
+
+Tom, 2026-09-11: *"Numbers should automatically have commas."* Every amount
+field now groups as it is typed.
+
+This uncovered a live way to lose money. `parseFloat('12,000')` is **12** — not
+12000, not an error, twelve, with three zeroes dropped in silence. Every amount
+in the app went through `num()`, which was a bare `parseFloat`, so a single
+typed comma would have saved a hundredth of what he meant with nothing said.
+`num()` strips grouping before parsing now, and it always should have.
+
+Formatting on every keystroke moves the caret, which is what makes most
+attempts at this horrible to type into. The caret is restored by counting
+**digits** before it rather than characters, so inserting a comma to the left
+of the cursor leaves the cursor after the same digit.
+
+### 5. Nothing important is typed twice
 
 Set by Tom: *"I want a lot of autofills because im scared of typo induced
 duplicates."* He is right to be. A merchant name, a category, a client, an
@@ -144,7 +180,7 @@ There is a second duplicate this catches, and it is not a typo: the same amount
 logged twice to the same account within the hour. That gets a question, not a
 silent second row.
 
-### 5. Show the number, never the verdict
+### 6. Show the number, never the verdict
 
 Client concentration is the case that made this a law. If one client is 34% of
 his income, the app says 34%. It does not say that is dangerous, because the
@@ -153,7 +189,7 @@ vocabulary, never prescription. The root brief's rule about never telling him
 what a behaviour did to a number applies here with full force: no line ever
 reads "you saved more because you cooked".
 
-### 6. Categories are few, and rules do the sorting
+### 7. Categories are few, and rules do the sorting
 
 A category earns its place by being a decision. The starting set is his, in his
 words, and the app ships it as vocabulary rather than growing it on its own.
@@ -343,6 +379,27 @@ places to keep in step. The arrows step by whatever is selected.
   a week starting Sunday puts a Saturday night out in the same week as the
   Monday being planned.
 - **Month** is what it was.
+
+## Pictures
+
+**A donut for money out**, asked for by Tom on 2026-09-11. Drawn in the app,
+not in `shared/chart.js`, which has no pie and which an app session must not
+touch. Six theme colour slots, no hex anywhere, and a hole with the total in
+it, because a plain pie spends its best space on nothing.
+
+Anything under 3% folds into one "everything else" wedge. Eleven slivers is a
+decoration, not a chart. The list beside it still carries every category, and
+a folded one keeps the colour of the wedge it went into so it stays findable.
+
+One category is drawn as a ring rather than a slice: an arc whose start and end
+are the same point collapses to nothing.
+
+**Monthly net** is in minus out, and it answers a different question from
+liquid. Liquid says "can I?". Net says "did that month pay for itself?" A month
+can end richer only because a client paid two months at once, which is why both
+are shown and neither replaces the other. The six-month chart carries net as
+its own line with a rule at zero, and the scale always includes zero or a
+negative month falls off the bottom.
 
 ## Device
 
