@@ -168,7 +168,8 @@ h2 .spacer{flex:1}
 <header>
   <div class="logo">WE<b>ALTH</b></div>
   <div class="spacer"></div>
-  <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
+  <button id="curBtn" class="mb-btn mb-press mb-tap" onclick="toggleCur()"></button>
+  <button class="mb-btn mb-press mb-tap" onclick="openSettings()">SETTINGS</button>
   <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
 </header>
 <nav id="nav"></nav>
@@ -210,13 +211,77 @@ const num = (v, d) => {
   const n = parseFloat(typeof v === 'string' ? v.replace(/,/g, '') : v);
   return isFinite(n) ? n : (d == null ? 0 : d);
 };
-const money = n => (n < 0 ? '-' : '') + '₱' + Math.round(Math.abs(n)).toLocaleString();
+/* ══════════════════════ CURRENCY ══════════════════════
+   Tom, 2026-09-11: "In settings, I want the option to pick currency. Then a
+   toggle to turn all the amounts into usd view, and back."
+
+   THE RULE THAT MAKES THIS SAFE: every amount is STORED in the base currency,
+   always, and the toggle is a VIEW. Nothing in the store ever changes
+   currency, so flipping the switch can never alter a number, and flipping it
+   twice is guaranteed to land back where it started.
+
+   That is also why TYPING stays in the base currency even while the view is
+   in dollars. Convert on the way in and a typed 100 becomes 5,850 becomes
+   99.99 on the way out, and a round trip quietly loses money. The field keeps
+   the currency the money actually is and shows the other one underneath as a
+   live hint, so both are on screen and only one is a fact.
+
+   THE RATE IS HIS NUMBER, not a live one. Fetching it would put a network in
+   the middle of a money app that has to work on a plane, and a rate that
+   silently goes stale is worse than one he set on a day he remembers. So he
+   types it, the app stamps the date, and says how old it is wherever it
+   matters. */
+const CURRENCIES = [
+  ['PHP', '₱', 'Philippine peso'], ['USD', '$', 'US dollar'],
+  ['EUR', '€', 'Euro'], ['GBP', '£', 'Pound sterling'],
+  ['JPY', '¥', 'Japanese yen'], ['AUD', 'A$', 'Australian dollar'],
+  ['CAD', 'C$', 'Canadian dollar'], ['SGD', 'S$', 'Singapore dollar'],
+  ['HKD', 'HK$', 'Hong Kong dollar'], ['NZD', 'NZ$', 'New Zealand dollar'],
+  ['CHF', 'CHF ', 'Swiss franc'], ['AED', 'AED ', 'UAE dirham'],
+  ['INR', '₹', 'Indian rupee'], ['CNY', 'CN¥', 'Chinese yuan'],
+  ['KRW', '₩', 'South Korean won'], ['THB', '฿', 'Thai baht'],
+  ['IDR', 'Rp', 'Indonesian rupiah'], ['MYR', 'RM', 'Malaysian ringgit'],
+  ['VND', '₫', 'Vietnamese dong'], ['TWD', 'NT$', 'Taiwan dollar'],
+];
+const Cur = {
+  base: () => S.get('cur.base', 'PHP'),
+  alt: () => S.get('cur.alt', 'USD'),
+  /* how many BASE units buy one ALT unit. Fifty eight pesos to the dollar. */
+  rate: () => num(S.get('cur.rate', 0), 0),
+  rateOn: () => S.get('cur.rateOn', ''),
+  /* The switch only means anything once there is a rate to switch with. */
+  ready: () => Cur.rate() > 0 && Cur.alt() !== Cur.base(),
+  inAlt: () => S.get('cur.view', 0) === 1 && Cur.ready(),
+  code: () => Cur.inAlt() ? Cur.alt() : Cur.base(),
+  sym: code => { const c = CURRENCIES.find(x => x[0] === (code || Cur.code())); return c ? c[1] : ''; },
+  name: code => { const c = CURRENCIES.find(x => x[0] === code); return c ? c[2] : code; },
+  toAlt: n => Cur.rate() ? n / Cur.rate() : null,
+  age: () => Cur.rateOn() ? Day.diff(Day.today(), Cur.rateOn()) : null,
+  flip(on) {
+    S.set('cur.view', on ? 1 : 0);
+    Mobile.feedback('toggle');
+    drawCurBtn(); draw();
+  },
+};
+const RATE_STALE = 30;
+
+/* Base view rounds to whole units, exactly as it always did. The alt view
+   shows two decimals under a hundred, because ₱180 is $3.10 and "$3" is a
+   different claim. Above that the decimals are noise. */
+function money(n) {
+  const alt = Cur.inAlt();
+  const v = alt ? n / Cur.rate() : n;
+  const a = Math.abs(v);
+  const body = (alt && a < 100 && a > 0) ? a.toFixed(2) : Math.round(a).toLocaleString();
+  return (v < 0 ? '-' : '') + Cur.sym() + body;
+}
 const short = n => {
-  const a = Math.abs(n), sign = n < 0 ? '-' : '';
-  if (a >= 1000000) return sign + '₱' + (a / 1000000).toFixed(1) + 'm';
-  /* From a thousand up, not from ten thousand. The two thresholds put ₱5,000
-     and ₱10k on the same axis, which reads as two different units. */
-  if (a >= 1000) return sign + '₱' + Math.round(a / 1000) + 'k';
+  const v = Cur.inAlt() ? n / Cur.rate() : n;
+  const a = Math.abs(v), sign = v < 0 ? '-' : '';
+  if (a >= 1000000) return sign + Cur.sym() + (a / 1000000).toFixed(1) + 'm';
+  /* From a thousand up, not from ten thousand. The two thresholds put 5,000
+     and 10k on the same axis, which reads as two different units. */
+  if (a >= 1000) return sign + Cur.sym() + Math.round(a / 1000) + 'k';
   return money(n);
 };
 
@@ -910,8 +975,28 @@ function chipRow(items, value, onPick, opts) {
 }
 function fld(label, node) {
   const w = el('div', 'fld');
-  w.appendChild(el('label', null, esc(label)));
+  /* A money field says which currency it is in, because in the alt view every
+     other number on the screen is in the other one and an unlabelled box is a
+     trap. */
+  const isMoney = node && node.dataset && node.dataset.money === '1';
+  w.appendChild(el('label', null, esc(label) +
+    (isMoney && Cur.ready() ? ' <span style="color:var(--accent)">' +
+      esc(Cur.sym(Cur.base()).trim() + ' ' + Cur.base()) + '</span>' : '')));
   w.appendChild(node);
+  if (isMoney && Cur.ready()) {
+    /* Typing stays in the base currency so a round trip cannot lose anything.
+       The other figure sits underneath, live, so both are on screen and only
+       one of them is a fact. */
+    const hint = el('div', 'note', '');
+    const paint = () => {
+      const v = num(node.value, 0);
+      hint.innerHTML = v ? '≈ <b>' + esc(Cur.sym(Cur.alt()) +
+        (v / Cur.rate()).toFixed(2)) + '</b> at your rate' : '';
+    };
+    node.addEventListener('input', paint);
+    paint();
+    w.appendChild(hint);
+  }
   return w;
 }
 
@@ -944,6 +1029,107 @@ function makeClient(name) {
   const id = newId();
   Rec.set('client', null, id, { name: name, rate: 0, cycle: 'month', every: 1, start: Day.today(), status: 'on' });
   return id;
+}
+
+/* == the switch in the header ==
+   In the header rather than buried in settings, because a view you flip to
+   check something and flip straight back is not a setting, it is a control.
+   It shows the code it will switch TO, so the button says what pressing it
+   does rather than where you already are. */
+function drawCurBtn() {
+  const b = document.getElementById('curBtn');
+  if (!b) return;
+  if (!Cur.ready()) { b.style.display = 'none'; return; }
+  b.style.display = '';
+  const to = Cur.inAlt() ? Cur.base() : Cur.alt();
+  b.textContent = Cur.sym(Cur.code()).trim() + ' → ' + to;
+  b.setAttribute('aria-label', 'Show every amount in ' + Cur.name(to));
+  b.title = 'Showing ' + Cur.name(Cur.code()) + '. Press to read everything in ' +
+    Cur.name(to) + '.';
+}
+function toggleCur() {
+  if (!Cur.ready()) return openSettings('money');
+  Cur.flip(!Cur.inAlt());
+  UI.toast('showing every amount in <b>' + esc(Cur.name(Cur.code())) + '</b>' +
+    (Cur.inAlt()
+      ? ' at ' + esc(Cur.sym(Cur.base()) + Cur.rate().toLocaleString()) +
+        ' to one ' + esc(Cur.sym(Cur.alt()).trim())
+      : ''));
+}
+
+/* == the MONEY tab in settings == */
+function openSettings(start) {
+  const h = UI.settings(APP.id, [{ id: 'money', name: 'MONEY', draw: drawMoneyTab }],
+    { order: start === 'money' ? ['money', 'app', 'data'] : ['app', 'money', 'data'] });
+  return h;
+}
+function drawMoneyTab(pane) {
+  const redraw = () => { pane.innerHTML = ''; drawMoneyTab(pane); drawCurBtn(); draw(); };
+  const curList = CURRENCIES.map(c => ({ id: c[0], name: c[0] + '  ' + c[1].trim(), note: c[2] }));
+
+  pane.appendChild(el('h2', null, 'THE MONEY YOU ACTUALLY HOLD'));
+  pane.appendChild(el('div', 'note',
+    'Everything is stored in this one, always. Changing it re-labels what is on screen ' +
+    'and does <b>not</b> convert anything you have already entered, because the app cannot know ' +
+    'which of those amounts were really in another currency.'));
+  const base = picker({
+    items: curList, value: Cur.base(), placeholder: 'Type a code or a name',
+    onPick: v => { S.set('cur.base', v); redraw(); },
+  });
+  pane.appendChild(fld('Currency', base));
+
+  pane.appendChild(el('h2', null, 'THE ONE YOU WANT TO READ IN'));
+  const alt = picker({
+    items: curList.filter(c => c.id !== Cur.base()), value: Cur.alt(),
+    placeholder: 'Type a code or a name',
+    onPick: v => { S.set('cur.alt', v); redraw(); },
+  });
+  pane.appendChild(fld('Second currency', alt));
+
+  const rate = amountField(Cur.rate() || '', true);
+  /* Names as written, not lowercased: "us dollar" is not a currency. */
+  pane.appendChild(fld('How many ' + Cur.name(Cur.base()) + 's to one ' +
+    Cur.name(Cur.alt()), rate));
+  const on = dateField(Cur.rateOn() || Day.today());
+  pane.appendChild(fld('Rate taken on', on));
+
+  const save = el('button', 'btn go wide mb-press mb-tap', 'Save the rate');
+  save.type = 'button';
+  save.onclick = () => {
+    const v = num(rate.value, 0);
+    if (v <= 0) { rate.focus(); UI.toast('put in a rate first', { bad: true }); return; }
+    S.set('cur.rate', v); S.set('cur.rateOn', on.value);
+    Mobile.feedback('success');
+    UI.toast('<b>' + esc(Cur.sym(Cur.base())) + esc(v.toLocaleString()) + '</b> to one ' +
+      esc(Cur.sym(Cur.alt()).trim()));
+    redraw();
+  };
+  const btns = el('div', 'rowbtns');
+  btns.appendChild(save);
+  pane.appendChild(btns);
+
+  /* This is his figure and the app says so, every time, including how old it
+     is. A converted number that looks live and is four months out is exactly
+     the kind of quiet lie law 1 exists to stop. */
+  const age = Cur.age();
+  pane.appendChild(el('div', 'note', Cur.rate()
+    ? 'This is <b>your</b> rate, not a live one. Nothing here goes near a network. ' +
+      (age == null ? '' : age > RATE_STALE
+        ? '<span class="stale">You set it ' + age + ' days ago.</span> Worth checking.'
+        : 'Set ' + (age ? age + ' days ago' : 'today') + '.')
+    : 'Put in a rate and a button appears in the header to read every amount in ' +
+      esc(Cur.name(Cur.alt())) + ' and back again.'));
+
+  if (Cur.ready()) {
+    pane.appendChild(el('h2', null, 'WHICH ONE YOU ARE READING'));
+    pane.appendChild(UI.row('Show everything in ' + Cur.name(Cur.alt()) + 's',
+      'A view only. Nothing is converted in storage, so flipping it twice always lands exactly where it started. ' +
+      'Typing stays in ' + esc(Cur.name(Cur.base())) + 's either way, with the other figure shown underneath as you type.',
+      UI.toggle(Cur.inAlt(), v => { S.set('cur.view', v ? 1 : 0); drawCurBtn(); draw(); })));
+    const ex = 1000;
+    pane.appendChild(el('div', 'note', 'So ' + esc(Cur.sym(Cur.base())) + '1,000 reads as <b>' +
+      esc(Cur.sym(Cur.alt()) + (ex / Cur.rate()).toFixed(2)) + '</b>.'));
+  }
 }
 
 /* ══════════════════════════ the screens ══════════════════════════ */
@@ -1791,9 +1977,13 @@ function groupNum(raw) {
   const frac = bits.length > 1 ? '.' + bits.slice(1).join('').slice(0, 2) : '';
   return (whole ? Number(whole).toLocaleString('en-US') : (frac ? '0' : '')) + frac;
 }
-function amountField(v) {
+/* `plain` is for a number that is grouped but is NOT an amount of money: the
+   exchange rate is a ratio, and labelling it with a currency and offering to
+   convert it is nonsense. */
+function amountField(v, plain) {
   const i = UI.field('money', { placeholder: '0',
     value: v == null || v === '' ? '' : groupNum(String(v)) });
+  if (!plain) i.dataset.money = '1';
   i.addEventListener('input', () => {
     const caret = i.selectionStart == null ? i.value.length : i.selectionStart;
     const digitsBefore = i.value.slice(0, caret).replace(/[^0-9]/g, '').length;
@@ -2698,10 +2888,11 @@ function draw() {
    then redraw when the big half lands. STATUS is the app that got this wrong
    and shows a blank screen when IndexedDB is slow.                         */
 seed();
+drawCurBtn();
 TAB = S.get('tab', 'score');
 PERIOD = S.get('period', 'month');
 draw();
-Rec.ready(() => { seed(); ruleCache = null; draw(); });
+Rec.ready(() => { seed(); ruleCache = null; drawCurBtn(); draw(); });
 Rec.on(() => { ruleCache = null; draw(); });
 Day.on(draw);
 </script>

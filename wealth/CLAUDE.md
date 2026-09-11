@@ -380,6 +380,49 @@ places to keep in step. The arrows step by whatever is selected.
   Monday being planned.
 - **Month** is what it was.
 
+## Currency
+
+Tom, 2026-09-11: *"In settings, I want the option to pick currency. Then a
+toggle to turn all the amounts into usd view, and back."*
+
+**Every amount is stored in the base currency, always. The toggle is a view.**
+Nothing in the store ever changes currency, so flipping the switch cannot
+alter a number and flipping it twice is guaranteed to land exactly where it
+started. That was checked by comparing the whole screen before and after a
+round trip, character for character.
+
+**Typing stays in the base currency even while the view is in dollars.**
+Convert on the way in and a typed 100 becomes 5,850 becomes 99.99 on the way
+out, and a round trip quietly loses money. So an amount field keeps the
+currency the money actually is, says so in its label, and shows the other
+figure underneath as a live hint. Both are on screen and only one is a fact.
+
+**The rate is his number, not a live one.** Fetching it would put a network in
+the middle of a money app that has to work on a plane, and hard constraint 4
+says a dependency the app cannot run without is not allowed. A rate that goes
+stale in silence is also worse than one he set on a day he remembers. So he
+types it, the app stamps the date, and says how old it is. Past thirty days it
+says so in warning colour.
+
+**The switch lives in the header, not in settings.** A view you flip to check
+something and flip straight back is a control, not a preference. It is hidden
+entirely until a rate exists, because a switch that does nothing is worse than
+no switch. The button shows the currency it will switch TO, so it says what
+pressing it does rather than where you already are.
+
+**Changing the base currency re-labels and does not convert.** The app cannot
+know which of the amounts already entered were really in another currency, and
+guessing would corrupt the whole history. The settings panel says this where
+the choice is made.
+
+Rounding: the base view shows whole units, exactly as it always did. The
+second currency shows two decimals below a hundred, because ₱180 is $3.10 and
+"$3" is a different claim, and whole units above that, where the decimals are
+noise.
+
+Currency settings are `setting` rows under the `wealth.` prefix, so the base,
+the second currency, the rate and its date all travel in a backup.
+
 ## Pictures
 
 **A donut for money out**, asked for by Tom on 2026-09-11. Drawn in the app,
