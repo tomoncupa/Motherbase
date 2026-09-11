@@ -76,6 +76,7 @@ WEALTH writes these types. It may read anything.
 | `pot` | pot id | `{name, target, acct, ord}` |
 | `move` | date + id | `{pot, amt, dir}` — money into or out of a pot |
 | `debt` | debt id | `{name, owed, rate, min, day}` |
+| `recon` | a statement line's fingerprint | `{d, amt, acct, kind, spend, sdate, skip}` — this line has been dealt with. What makes reading the same file twice harmless |
 
 ### Shared with STATUS, and the care that needs
 
@@ -180,7 +181,33 @@ There is a second duplicate this catches, and it is not a typo: the same amount
 logged twice to the same account within the hour. That gets a question, not a
 silent second row.
 
-### 6. Show the number, never the verdict
+### 6. A cap is his to write, and it is never a verdict
+
+Tom, 2026-09-11: *"I dont mind budgets per category, for ex I only want to
+spend X amount of outside food."*
+
+Three rules, and they are what stop this becoming the kind of budget nobody
+opens after week two.
+
+**Nothing ships with a cap.** A cap is a claim about how somebody should live,
+which is prescription, and prescription is only ever his to write.
+
+**Show the number, never the verdict.** "3,400 of 5,000, 11 days in" is a fact
+he can act on. "Over budget" is a scolding, and a screen that scolds is a
+screen he stops opening, which costs the data and not just the mood.
+
+**Pace, not just total.** Half the cap on the 5th and half on the 25th are
+opposite situations and one number cannot tell them apart. Every bar carries a
+mark where an even spread would put him today. It is a line to read against,
+never a rule, because nobody spends evenly.
+
+And the doctrine line that earns its keep: a target missed for three weeks is
+not a target, it is furniture. A cap passed three months running offers to
+become the middle of those three months. That is not lowering the bar, it is
+the only way the bar does anything. Offered once, quietly, and never on a
+single bad month.
+
+### 7. Show the number, never the verdict
 
 Client concentration is the case that made this a law. If one client is 34% of
 his income, the app says 34%. It does not say that is dangerous, because the
@@ -189,7 +216,7 @@ vocabulary, never prescription. The root brief's rule about never telling him
 what a behaviour did to a number applies here with full force: no line ever
 reads "you saved more because you cooked".
 
-### 7. Categories are few, and rules do the sorting
+### 8. Categories are few, and rules do the sorting
 
 A category earns its place by being a decision. The starting set is his, in his
 words, and the app ships it as vocabulary rather than growing it on its own.
@@ -323,18 +350,68 @@ delivered.
 
 ---
 
-## Not built yet, and honestly labelled
+## Import, and what it took
 
-**Statement import.** Drop a GCash or bank export and the app sorts it into
-three piles: already known, in the statement but never logged, and logged but
-absent from the statement. The third pile is the real check. Matching is by
-amount within a few days, and it is confirmed rather than guessed.
+**Statement import.** Built 2026-09-11. Tom: *"the purpose of the statement
+import to make sure I have everything correct but we definitely dont want
+duplicates, maybe uncertain cases you can ask me everything whether 2 things
+are the same or not, then we can create a master entry."*
 
-This is designed for and not built. Every money row already records whether it
-came from a thumb or a statement, so the feature can arrive without a
-migration. The reason it is second is that the file format is whatever GCash
-and the bank decided to print, and that cannot be designed from a guess. It
-needs one real export of each.
+The important half is the second half. **An import that only ADDS is worse than
+no import**: the same lunch appears twice, every total is wrong, and the app
+has quietly become less true than the notebook it replaced.
+
+Every line lands in one of four places.
+
+| | |
+|---|---|
+| **known** | reconciled on an earlier import. Silent, and this is what makes reading the same file twice harmless |
+| **certain** | same account, same amount to the peso, within three days of something logged, and only one candidate. Merged without asking |
+| **ask** | close but not certain. He decides one at a time, and the question is always "are these the same thing" |
+| **new** | nothing like it. Offered as something to add |
+
+Certainty is deliberately narrow. A wrong automatic merge is invisible and a
+question costs three seconds.
+
+**Merging makes a master entry, not a second row.** What he knows — the
+category, the note, the receipt, the occasion — stays. What the bank knows
+better — the exact amount, the date it cleared, its own wording — is written
+over the top. The row keeps its identity, so a category set six weeks ago
+survives being reconciled. Watched: a hand-logged ₱5,395 became ₱5,400 and
+kept its Groceries.
+
+**Nothing is written until he presses apply.** The whole run is worked out in
+memory and shown as a tally first, because an import that has already happened
+by the time you see it is not something you can say no to.
+
+**A skipped line is remembered too.** Otherwise the second import asks the same
+question again, and a question you have already answered is how somebody
+learns to click through questions without reading them.
+
+### What the parser had to learn
+
+**The delimiter is decided once for the file, not per line.** Deciding per line
+bit immediately: `5,400.00` made a pasted PDF line look comma separated, so one
+statement was read with three different column counts and came out as a single
+nonsense row. Each candidate is tried and the one giving the same column count
+on the most lines wins. A thousands separator cannot win that, because it only
+appears on the lines with big numbers. Comma is tried last on a tie: a run of
+spaces is never accidental, a comma very often is.
+
+**Columns are found by a header row if there is one, by shape otherwise** — the
+column that parses as a date every time, the one that parses as a number every
+time, and the longest text for the description. Separate debit and credit
+columns are handled.
+
+**Day-first versus month-first is settled once, for the whole file.** A number
+over twelve proves it. If nothing proves it, he is asked — but only if the file
+actually contains a loose date. A file of ISO dates states its own order on
+every line, and asking a question with no doubt behind it is the fastest way to
+teach somebody to click through questions.
+
+**No PDF parsing.** It needs a library from a CDN that the app would then not
+run without, which hard constraint 4 forbids. Selecting the text and pasting it
+works, costs nothing, and cannot break on a plane.
 
 **Tax.** Deliberately absent. Tom is not registered. One factual line was said
 once and will not be repeated: back tax would be a real claim on the buffer.

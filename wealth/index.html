@@ -189,7 +189,7 @@ const APP = {
   /* Types WEALTH owns. `spend` and `acct` are NOT here: STATUS owns their
      shape and WEALTH only merges into them. Declaring them would silence the
      store's warning, which is the one thing keeping the two apps honest. */
-  types: ['cat', 'rule', 'wtag', 'mark', 'count', 'client', 'paid', 'sesh', 'pack', 'bill', 'pot', 'move', 'debt'],
+  types: ['cat', 'rule', 'wtag', 'mark', 'count', 'client', 'paid', 'sesh', 'pack', 'bill', 'pot', 'move', 'debt', 'recon'],
 };
 
 Skins.load('../shared/skins.json?v=13').then(() => { Skins.restore(APP.id);
@@ -416,6 +416,55 @@ function seed() {
 }
 
 /* ── reading ── */
+/* == a monthly cap on a category ==
+   Tom, 2026-09-11: "I dont mind budgets per category, for ex I only want to
+   spend X amount of outside food."
+
+   Three rules, all from DOCTRINE, and they are what stop this becoming the
+   kind of budget nobody opens after week two.
+
+   1. NOTHING SHIPS WITH A CAP. A cap is a claim about how somebody should
+      live, so it is prescription, and prescription is only ever his to write.
+   2. SHOW THE NUMBER, NEVER THE VERDICT. "3,400 of 5,000, 11 days in" is a
+      fact he can act on. "Over budget!" is a scolding, and a screen that
+      scolds is a screen he stops opening — which costs the data, not just the
+      mood.
+   3. PACE, NOT JUST TOTAL. Half the cap on the 5th and half on the 25th are
+      opposite situations and one number cannot tell them apart.
+
+   And the doctrine line that earns its keep here: a target missed for three
+   weeks is not a target, it is furniture. So a cap blown three months running
+   offers to become a real one. That is not lowering the bar, it is the only
+   way the bar does anything. */
+function capState(catId, mo) {
+  const c = Rec.get('cat', null, catId) || {};
+  const cap = num(c.cap, 0);
+  if (!cap) return null;
+  const from = monthStart(mo), to = monthEnd(mo);
+  const spent = rangeSpend(from, to).byCat[catId] || 0;
+  const days = Day.diff(to, from) + 1;
+  const gone = Math.min(days, Day.diff(Day.today(), from) + 1);
+  const done = mo < monthOf(Day.today());
+  /* Where the cap says he should be by today, if it were spread evenly. It is
+     a line to read against, never a rule: nobody spends evenly. */
+  const pace = done ? cap : cap * (gone / days);
+  return { cap: cap, spent: spent, left: cap - spent, days: days, gone: gone,
+           pace: pace, over: spent > cap, ahead: spent > pace, done: done,
+           pct: cap ? spent / cap : 0 };
+}
+/* How many of the last N whole months went past the cap. Three is the number
+   doctrine names, so three is what it takes to offer a change. */
+function capMisses(catId, n) {
+  const now = monthOf(Day.today());
+  let miss = 0;
+  for (let i = 1; i <= (n || 3); i++) {
+    const st = capState(catId, monthBack(now, i));
+    if (st && st.over) miss++;
+  }
+  return miss;
+}
+const capped = () => cats().filter(c => num(c.cap, 0) > 0);
+
 const cats = () => Rec.all('cat').map(r => Object.assign({ id: r.key }, r.payload))
   .sort((a, b) => (a.ord || 0) - (b.ord || 0) || a.name.localeCompare(b.name));
 const catMap = () => Rec.map('cat');
@@ -897,6 +946,306 @@ function donut(rows, total, size) {
   });
   return svg;
 }
+
+/* ══════════════════════ STATEMENT IMPORT ══════════════════════
+   Tom, 2026-09-11: "the purpose of the statement import to make sure I have
+   everything correct but we definitely dont want duplicates, maybe uncertain
+   cases you can ask me everything whether 2 things are the same or not, then
+   we can create a master entry."
+
+   That is the whole design, and the important half of it is the second half.
+   An import that only ADDS is worse than no import: the same lunch appears
+   twice, every total is wrong, and the app has quietly become less true than
+   the notebook it replaced.
+
+   So every line off a statement lands in one of four places:
+
+     KNOWN      already reconciled on an earlier import. Silent, and this is
+                what makes running the same file twice harmless.
+     CERTAIN    same account, same amount to the peso, within three days of
+                something already logged. Merged without asking.
+     ASK        close but not certain. He decides, one at a time, and the
+                question is always "are these the same thing".
+     NEW        nothing like it. Offered as something to add.
+
+   MERGING MAKES A MASTER ENTRY, IT DOES NOT MAKE A SECOND ROW. What he knows
+   (the category, the note, the receipt, the occasion) stays. What the bank
+   knows better (the exact amount, the date it really cleared, its own
+   description) is written over the top. The row keeps its identity, so the
+   category he set six weeks ago survives being reconciled.
+
+   NOTHING IS WRITTEN UNTIL HE PRESSES APPLY. The whole run is worked out in
+   memory and shown as a tally first, because an import that has already
+   happened by the time you see it is not something you can say no to.        */
+
+/* Every statement line gets a fingerprint, so a file read twice is read once.
+   Account, day, amount and the first run of letters in the description —
+   enough to be stable, loose enough to survive a bank re-spacing its own
+   columns. */
+function stmtId(acct, date, amt, desc) {
+  return acct + '|' + date + '|' + Math.round(num(amt, 0) * 100) + '|' +
+    norm(String(desc || '').slice(0, 24));
+}
+const recon = id => Rec.get('recon', null, id);
+
+/* ── reading whatever the bank printed ──
+   CSV, tab separated, or text pasted out of a PDF. No PDF parsing: it needs a
+   library from a CDN that this app would then not run without, and hard
+   constraint 4 forbids that. Selecting the text and pasting it works, costs
+   nothing, and cannot break on a plane. */
+/* == which character is actually the column break ==
+   Deciding this per line is wrong and it bit immediately: "5,400.00" made a
+   pasted PDF line look comma separated, so one statement was read with three
+   different column counts and came out as a single nonsense row.
+
+   So it is decided ONCE for the whole file, by trying each candidate and
+   asking which one gives the same column count on the most lines. A thousands
+   separator cannot win that, because it only appears on the lines with big
+   numbers on them.
+
+   Comma is tried last on a tie for the same reason: a run of spaces is never
+   accidental, a comma very often is. */
+function splitWith(line, d) {
+  if (d === 'ws') return line.split(/\s{2,}/).map(x => x.trim());
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { q = !q; continue; }
+    if (!q && ch === d) { out.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out.map(x => x.trim());
+}
+function delimFor(lines) {
+  let best = null;
+  ['\t', ';', 'ws', ','].forEach(d => {
+    const counts = {};
+    lines.forEach(l => { const n = splitWith(l, d).length; if (n > 1) counts[n] = (counts[n] || 0) + 1; });
+    const top = Object.keys(counts).map(Number).sort((a, b) => counts[b] - counts[a])[0];
+    const score = top ? counts[top] : 0;
+    if (score && (!best || score > best.score)) best = { d: d, score: score, cols: top };
+  });
+  return best ? best.d : 'ws';
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+/* Returns {y, m, d} with m and d NOT yet decided when the format is
+   ambiguous, so the caller can settle 03/04 once for the whole file instead
+   of guessing differently on every line. */
+function readDate(raw) {
+  const t = String(raw || '').trim();
+  let m;
+  if ((m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)))
+    return { y: +m[1], a: +m[2], b: +m[3], sure: 'ymd' };
+  if ((m = t.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/))) {
+    let y = +m[3]; if (y < 100) y += 2000;
+    return { y: y, a: +m[1], b: +m[2], sure: null };
+  }
+  /* 11 Sep 2026, Sep 11 2026, Sep 11, 2026 */
+  if ((m = t.match(/^(\d{1,2})\s*[- ]\s*([A-Za-z]{3,})\.?\,?\s*(\d{2,4})?/))) {
+    const mo = MONTHS.indexOf(m[2].slice(0, 3).toLowerCase());
+    if (mo > -1) return { y: m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : +Day.today().slice(0, 4),
+      a: mo + 1, b: +m[1], sure: 'ymd' };
+  }
+  if ((m = t.match(/^([A-Za-z]{3,})\.?\s+(\d{1,2})\,?\s*(\d{2,4})?/))) {
+    const mo = MONTHS.indexOf(m[1].slice(0, 3).toLowerCase());
+    if (mo > -1) return { y: m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : +Day.today().slice(0, 4),
+      a: mo + 1, b: +m[2], sure: 'ymd' };
+  }
+  return null;
+}
+const isoOf = (p, dayFirst) => {
+  const mo = p.sure === 'ymd' ? p.a : (dayFirst ? p.b : p.a);
+  const dy = p.sure === 'ymd' ? p.b : (dayFirst ? p.a : p.b);
+  if (mo < 1 || mo > 12 || dy < 1 || dy > 31) return null;
+  return p.y + '-' + String(mo).padStart(2, '0') + '-' + String(dy).padStart(2, '0');
+};
+
+/* An amount, however the bank chose to print a minus sign. */
+function readAmt(raw) {
+  let t = String(raw == null ? '' : raw).trim();
+  if (!t) return null;
+  let neg = false;
+  if (/^\(.*\)$/.test(t)) { neg = true; t = t.slice(1, -1); }
+  if (/(^|\s)(dr|db|debit)\b/i.test(t)) neg = true;
+  if (/(^|\s)(cr|credit)\b/i.test(t)) neg = false;
+  t = t.replace(/[^0-9.\-]/g, '');
+  if (t.indexOf('-') === 0) { neg = true; t = t.slice(1); }
+  if (!t || !/[0-9]/.test(t)) return null;
+  const v = parseFloat(t);
+  if (!isFinite(v)) return null;
+  return neg ? -v : v;
+}
+
+/* Which column is which. A header row if there is one, otherwise by shape:
+   the column that parses as a date every time is the date, the one that
+   parses as a number every time is the amount, the longest text is the
+   description. */
+const HEAD = {
+  date: /^(date|txn date|transaction date|posting date|post date|value date|datetime)/i,
+  desc: /^(desc|description|details|particulars|narrative|remarks|merchant|payee|reference|transaction)/i,
+  amt: /^(amount|amt|value|transaction amount)/i,
+  dr: /^(debit|withdrawal|paid out|money out|outflow|dr)/i,
+  cr: /^(credit|deposit|paid in|money in|inflow|cr)/i,
+};
+function parseStatement(text, dayFirst) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return { rows: [], ambiguous: false, skipped: 0 };
+  const delim = delimFor(lines);
+  const grid = lines.map(l => splitWith(l, delim)).filter(c => c.length > 1);
+  if (!grid.length) return { rows: [], ambiguous: false, skipped: lines.length };
+
+  /* a header row names its columns and parses as no dates at all */
+  let cols = null, start = 0;
+  const first = grid[0];
+  if (first.some(c => HEAD.date.test(c)) && !readDate(first[0])) {
+    cols = { date: -1, desc: -1, amt: -1, dr: -1, cr: -1 };
+    first.forEach((c, i) => {
+      Object.keys(HEAD).forEach(k => { if (cols[k] < 0 && HEAD[k].test(c)) cols[k] = i; });
+    });
+    start = 1;
+  }
+  if (!cols) {
+    const n = Math.max.apply(null, grid.map(r => r.length));
+    const hits = [];
+    for (let i = 0; i < n; i++) {
+      let d = 0, a = 0, len = 0;
+      grid.forEach(r => {
+        if (r[i] == null) return;
+        if (readDate(r[i])) d++;
+        if (readAmt(r[i]) != null && /[0-9]/.test(r[i])) a++;
+        len += String(r[i]).length;
+      });
+      hits.push({ i: i, d: d, a: a, len: len });
+    }
+    const dateCol = hits.slice().sort((x, y) => y.d - x.d)[0];
+    const amtCol = hits.filter(h => h.i !== dateCol.i).sort((x, y) => y.a - x.a || y.i - x.i)[0];
+    const descCol = hits.filter(h => h.i !== dateCol.i && h.i !== (amtCol || {}).i)
+      .sort((x, y) => y.len - x.len)[0];
+    cols = { date: dateCol.i, amt: amtCol ? amtCol.i : -1,
+             desc: descCol ? descCol.i : -1, dr: -1, cr: -1 };
+  }
+
+  /* Settle day-first versus month-first ONCE, for the whole file. A number
+     over twelve in one position proves which it is; if nothing proves it, the
+     caller asks him rather than picking. */
+  let proof = null, anyLoose = false;
+  grid.slice(start).forEach(r => {
+    const p = readDate(r[cols.date]);
+    if (!p || p.sure) return;
+    anyLoose = true;                       /* a date whose order is not stated */
+    if (p.a > 12) proof = true;
+    else if (p.b > 12 && proof === null) proof = false;
+  });
+  const df = dayFirst == null ? (proof === null ? false : proof) : dayFirst;
+
+  const rows = []; let skipped = 0;
+  grid.slice(start).forEach(r => {
+    const p = readDate(r[cols.date]);
+    const date = p ? isoOf(p, df) : null;
+    let amt = null;
+    if (cols.dr > -1 || cols.cr > -1) {
+      const dr = readAmt(r[cols.dr]), cr = readAmt(r[cols.cr]);
+      if (dr != null && dr !== 0) amt = -Math.abs(dr);
+      else if (cr != null && cr !== 0) amt = Math.abs(cr);
+    } else if (cols.amt > -1) amt = readAmt(r[cols.amt]);
+    const desc = cols.desc > -1 ? r[cols.desc] : r.filter((_, i) => i !== cols.date && i !== cols.amt).join(' ');
+    if (!date || amt == null || !amt) { skipped++; return; }
+    rows.push({ date: date, amt: amt, desc: String(desc || '').trim() });
+  });
+  /* Only ask when there is something to ask about. A file of ISO dates states
+     its own order on every line, and a question with no doubt behind it is
+     the fastest way to teach somebody to click through questions. */
+  return { rows: rows, ambiguous: anyLoose && proof === null && dayFirst == null,
+           skipped: skipped, dayFirst: df, cols: cols };
+}
+
+/* ── deciding what each line is ──
+   Certainty is deliberately narrow. Anything looser gets asked about, because
+   a wrong automatic merge is invisible and a question costs three seconds. */
+function planImport(rows, acctId) {
+  const out = { known: [], certain: [], ask: [], fresh: [] };
+  const taken = {};
+  rows.forEach(line => {
+    const id = stmtId(acctId, line.date, line.amt, line.desc);
+    const seen = recon(id);
+    if (seen) { out.known.push({ line: line, id: id, was: seen }); return; }
+    const money_ = Math.abs(line.amt), isOut = line.amt < 0;
+    /* Only rows that are not already spoken for, here or on a past import. */
+    const pool = (isOut ? spendRows({ from: Day.shift(line.date, -12), to: Day.shift(line.date, 12) })
+                        : paidRows({ from: Day.shift(line.date, -12), to: Day.shift(line.date, 12) }))
+      .filter(x => !x.stmt && !taken[x.date + '|' + x.key]);
+
+    const score = x => {
+      const gap = Math.abs(Day.diff(x.date, line.date));
+      const d = Math.abs(num(x.amt, 0) - money_);
+      const sameAcct = x.acct === acctId;
+      if (d < 0.005 && gap <= 3 && sameAcct) return { rank: 3, gap: gap, d: d };
+      if (d < 0.005 && gap <= 10) return { rank: 2, gap: gap, d: d };
+      if (d <= Math.max(2, money_ * 0.01) && gap <= 5) return { rank: 1, gap: gap, d: d };
+      return null;
+    };
+    const cands = pool.map(x => ({ row: x, s: score(x) })).filter(x => x.s)
+      .sort((a, b) => b.s.rank - a.s.rank || a.s.gap - b.s.gap || a.s.d - b.s.d);
+
+    if (cands.length && cands[0].s.rank === 3 && !(cands[1] && cands[1].s.rank === 3)) {
+      taken[cands[0].row.date + '|' + cands[0].row.key] = 1;
+      out.certain.push({ line: line, id: id, match: cands[0].row, kind: isOut ? 'out' : 'in' });
+      return;
+    }
+    if (cands.length) {
+      out.ask.push({ line: line, id: id, cands: cands.slice(0, 3).map(c => c.row),
+                     kind: isOut ? 'out' : 'in' });
+      return;
+    }
+    out.fresh.push({ line: line, id: id, kind: isOut ? 'out' : 'in' });
+  });
+  return out;
+}
+
+/* ── writing the master entry ──
+   His fields survive. The bank's version of the facts wins on the facts. */
+function mergeStatement(hit, acctId) {
+  const type = hit.kind === 'out' ? 'spend' : 'paid';
+  const row = Rec.get(type, hit.match.date, hit.match.key);
+  if (!row) return;
+  const want = Math.abs(hit.line.amt);
+  Rec.set(type, hit.match.date, hit.match.key, merge(row, {
+    amt: want, acct: acctId, stmt: hit.id, bank: hit.line.desc,
+  }));
+  /* The bank's date is the date it cleared, and a row's date is its key, so
+     moving it means rewriting it. Only done when they actually differ. */
+  if (hit.match.date !== hit.line.date) {
+    const moved = Rec.get(type, hit.match.date, hit.match.key);
+    const mk = markOf({ date: hit.match.date, key: hit.match.key });
+    Rec.del(type, hit.match.date, hit.match.key);
+    Rec.set(type, hit.line.date, hit.match.key, moved);
+    if (Object.keys(mk).length) {
+      Rec.del('mark', null, hit.match.date + '|' + hit.match.key);
+      Rec.set('mark', null, hit.line.date + '|' + hit.match.key, mk);
+    }
+  }
+  Rec.set('recon', null, hit.id, { d: hit.line.desc, amt: hit.line.amt, acct: acctId,
+    kind: hit.kind, spend: hit.match.key, sdate: hit.line.date });
+}
+function addStatement(hit, acctId) {
+  const key = newId();
+  const amt = Math.abs(hit.line.amt);
+  if (hit.kind === 'out') {
+    Rec.set('spend', hit.line.date, key, { amt: amt, acct: acctId, note: hit.line.desc,
+      t: stampFor(hit.line.date, ''), src: 'stmt', stmt: hit.id, bank: hit.line.desc });
+    const r = ruleFor(hit.line.desc);
+    if (r) setMark({ date: hit.line.date, key: key }, { cat: r.cat });
+  } else {
+    Rec.set('paid', hit.line.date, key, { amt: amt, acct: acctId, client: '',
+      note: hit.line.desc, t: stampFor(hit.line.date, ''), src: 'stmt', stmt: hit.id, bank: hit.line.desc });
+  }
+  Rec.set('recon', null, hit.id, { d: hit.line.desc, amt: hit.line.amt, acct: acctId,
+    kind: hit.kind, spend: key, sdate: hit.line.date });
+}
+const skipStatement = (hit, acctId) => Rec.set('recon', null, hit.id,
+  { d: hit.line.desc, amt: hit.line.amt, acct: acctId, kind: hit.kind, skip: 1 });
 
 /* ══════════════════ the picker: autofill, law 4 ══════════════════
    Typing filters what exists. It never creates by being typed into, because
@@ -1652,6 +2001,12 @@ function drawSpend(m) {
   if (PERIOD === 'day') drawOneDay(m, R.from);
   if (PERIOD === 'week') drawOneWeek(m, R.from, R.to);
 
+  /* == the caps he set ==
+     Only on the month view. A cap is a monthly figure and showing a week
+     against it would need a made-up weekly number, which is the sort of
+     helpful arithmetic that turns into a wrong answer. */
+  if (PERIOD === 'month') drawCaps(m, monthOf(R.from));
+
   /* Groceries against outside food, asked for by name. */
   const gro = t.byCat['groceries'] || 0, out = t.byCat['outside'] || 0;
   const c1 = card('COOKING VS EATING OUT');
@@ -1786,6 +2141,90 @@ function drawSpend(m) {
   m.appendChild(c5);
 }
 let CATFILTER = null;
+
+/* == caps, shown as numbers and never as a verdict ==
+   The bar is the cap. The notch on it is where an even spread would have you
+   today, which is the difference between half of it on the 5th and half of it
+   on the 25th. Nothing here says good or bad; it says where you are and how
+   much month is left, and lets him do the joining up. */
+function drawCaps(m, mo) {
+  const list = capped();
+  const c = card('CAPS');
+  if (!list.length) {
+    c.appendChild(el('div', 'empty',
+      'No caps set. Open a category under <b>ACCOUNTS</b> and put a monthly figure on it, ' +
+      'and it appears here with how much of it is left.'));
+    m.appendChild(c);
+    return;
+  }
+  const rows = el('div', 'list');
+  list.forEach((cat, i) => {
+    const st = capState(cat.id, mo);
+    if (!st) return;
+    const daysLeft = st.days - st.gone;
+    const sub = st.done
+      ? (st.over ? money(st.spent - st.cap) + ' over' : money(st.left) + ' unspent')
+      : money(st.spent) + ' of ' + money(st.cap) + ' · ' +
+        (st.left >= 0
+          ? money(st.left) + ' left' + (daysLeft > 0 ? ' with ' + daysLeft + ' day' +
+            (daysLeft === 1 ? '' : 's') + ' to go' : ' on the last day')
+          : '<b>' + esc(money(-st.left)) + ' past it</b>');
+    const r = itemRow(cat.name, sub, Math.round(st.pct * 100) + '%',
+      st.over ? 'late' : '');
+    r.onclick = () => { CATFILTER = cat.id; draw(); };
+
+    const bar = el('div', 'bar c' + (1 + (i % 6)));
+    bar.style.position = 'relative';
+    bar.appendChild(el('i')).style.width = Math.min(100, st.pct * 100).toFixed(1) + '%';
+    /* Where an even spread would put him today. A line, not a rule. */
+    if (!st.done && st.gone < st.days) {
+      const tick = el('i');
+      tick.style.position = 'absolute';
+      tick.style.left = (st.gone / st.days * 100).toFixed(1) + '%';
+      tick.style.top = '0'; tick.style.bottom = '0';
+      tick.style.width = 'var(--border-width)';
+      tick.style.background = 'var(--text-1)';
+      tick.style.opacity = '.55';
+      bar.appendChild(tick);
+    }
+    rows.appendChild(stack(r, bar));
+  });
+  c.appendChild(rows);
+  c.appendChild(el('div', 'note',
+    'The mark on each bar is where an even spread would put you today. Nobody spends evenly, so it is a line to read against, not a rule.'));
+
+  /* Doctrine: a target missed for three weeks is not a target, it is
+     furniture. Offering to change it is the only way the bar does anything.
+     Offered once, quietly, and only on a cap that has failed three months
+     running — not on a single bad month. */
+  list.forEach(cat => {
+    if (capMisses(cat.id, 3) < 3) return;
+    const st = capState(cat.id, mo);
+    if (!st) return;
+    const real = [1, 2, 3].map(i => {
+      const p2 = capState(cat.id, monthBack(monthOf(Day.today()), i));
+      return p2 ? p2.spent : 0;
+    }).sort((a, b) => a - b)[1];                       /* the middle month */
+    const note = el('div', 'note',
+      '<b>' + esc(cat.name) + '</b> has gone past its cap three months running. ' +
+      'A cap you always pass is furniture. The middle of those three months was ' +
+      esc(money(real)) + '.');
+    const b = el('button', 'btn mb-tap', 'Make it ' + money(Math.ceil(real / 100) * 100));
+    b.type = 'button';
+    b.style.marginTop = 'var(--s-2)';
+    b.onclick = () => {
+      const row = Rec.get('cat', null, cat.id);
+      Rec.set('cat', null, cat.id, merge(row, { cap: Math.ceil(real / 100) * 100 }));
+      Mobile.feedback('success');
+      UI.toast('<b>' + esc(cat.name) + '</b> capped at ' + esc(money(Math.ceil(real / 100) * 100)));
+      draw();
+    };
+    note.appendChild(el('br'));
+    note.appendChild(b);
+    c.appendChild(note);
+  });
+  m.appendChild(c);
+}
 
 /* == one day, in the order it happened ==
    Not a list of amounts. Everything that happened, down the clock: what you
@@ -1928,6 +2367,15 @@ function drawAccounts(m) {
       list.appendChild(r);
     });
     c1.appendChild(list);
+    const ib = el('div', 'rowbtns');
+    const imp = el('button', 'btn go wide mb-press mb-tap', 'Read a statement');
+    imp.type = 'button';
+    imp.onclick = () => importSheet();
+    ib.appendChild(imp);
+    c1.appendChild(ib);
+    const done = Rec.count('recon');
+    if (done) c1.appendChild(el('div', 'note', '<b>' + esc(String(done)) +
+      '</b> statement lines have been reconciled. Reading the same file again is harmless: it recognises what it has already dealt with.'));
     /* Law 1, said out loud where it matters most. */
     c1.appendChild(el('div', 'note',
       'A balance is what you last counted plus everything logged after it. It drifts, because not every peso gets logged. ' +
@@ -1939,7 +2387,10 @@ function drawAccounts(m) {
   const list = el('div', 'list');
   const GRP = { fix: 'Fixed', var: 'Variable', biz: 'Business', move: 'Not spending' };
   cats().forEach(c => {
-    const r = itemRow(c.name, GRP[c.grp] || c.grp, '');
+    const st = capState(c.id, monthOf(Day.today()));
+    const r = itemRow(c.name,
+      (GRP[c.grp] || c.grp) + (st ? ' · capped at ' + money(st.cap) + ' a month' : ''),
+      st ? money(st.spent) : '');
     r.onclick = () => catSheet(c);
     list.appendChild(r);
   });
@@ -2739,11 +3190,33 @@ function catSheet(existing) {
         '<b>Fixed</b> is known a month ahead and is what runway is worked out against. ' +
         '<b>Variable</b> is the only half you can actually steer. ' +
         '<b>Not spending</b> is money changing places, and never counts as an outgoing.'));
+
+      b.appendChild(el('h2', null, 'A MONTHLY CAP'));
+      const cap = amountField(existing && num(existing.cap, 0) ? existing.cap : '');
+      b.appendChild(fld('Most you want to spend on this in a month', cap));
+      const capNote = el('div', 'note', '');
+      const paintCap = () => {
+        const v = num(cap.value, 0);
+        if (!v) { capNote.innerHTML = 'Leave it blank and this category is just counted, never judged.'; return; }
+        const st = existing ? capState(existing.id, monthOf(Day.today())) : null;
+        capNote.innerHTML = 'That is ' + esc(money(v / 4.345)) + ' a week, or ' +
+          esc(money(v / (Day.diff(monthEnd(monthOf(Day.today())), monthStart(monthOf(Day.today()))) + 1))) +
+          ' a day.' + (st ? ' So far this month: <b>' + esc(money(st.spent)) + '</b>.' : '');
+      };
+      cap.addEventListener('input', paintCap);
+      paintCap();
+      b.appendChild(capNote);
       h.save = () => {
         const n = name.value.trim();
         if (!n) { name.focus(); return false; }
-        if (existing) Rec.set('cat', null, existing.id, merge(existing, { name: n, grp: grp.get() }));
-        else if (!makeCat(n, grp.get())) return false;
+        if (existing) Rec.set('cat', null, existing.id,
+          merge(existing, { name: n, grp: grp.get(), cap: num(cap.value, 0) }));
+        else {
+          const id = makeCat(n, grp.get());
+          if (!id) return false;
+          if (num(cap.value, 0)) Rec.set('cat', null, id,
+            merge(Rec.get('cat', null, id), { cap: num(cap.value, 0) }));
+        }
         return true;
       };
     },
@@ -2805,6 +3278,240 @@ function ruleSheet(existing) {
   });
 }
 
+/* ══════════════════ the import screen ══════════════════
+   Three steps, and nothing is written until the third.
+     1  which account, and the statement itself
+     2  the tally, and the questions, one at a time
+     3  apply                                                         */
+function importSheet() {
+  let acct = S.get('lastAcct', (accts()[0] || {}).id || '');
+  let text = '', plan = null, dayFirst = null, parsed = null;
+  let idx = 0, answers = {};
+
+  UI.dialog({
+    title: 'READ A STATEMENT', width: 620,
+    body: (b, h) => {
+      const pane = el('div');
+      b.appendChild(pane);
+
+      /* ── step 1 ── */
+      function stepPaste() {
+        pane.innerHTML = '';
+        pane.appendChild(el('div', 'note',
+          'Export from GCash or your bank as a spreadsheet or CSV and drop the file in, or select the rows and paste them. ' +
+          'A PDF has to be pasted: reading one needs a library this app would then not run without.'));
+        pane.appendChild(fld('Which account is this statement for',
+          chipRow(accts().map(a => ({ id: a.id, name: a.name })), acct, v => { acct = v; })));
+
+        const ta = UI.field('note', { rows: 8, placeholder:
+          '2026-09-03,GRAB *TRIP,-280.00\n2026-09-04,LANDERS SUPERSTORE,-5,400.00\n2026-09-05,FUND TRANSFER,45,000.00' });
+        ta.value = text;
+        ta.oninput = () => { text = ta.value; };
+        pane.appendChild(fld('Paste it here', ta));
+
+        const file = el('input');
+        file.type = 'file';
+        file.accept = '.csv,.txt,.tsv,text/csv,text/plain';
+        file.style.display = 'none';
+        file.onchange = () => {
+          const f = file.files[0];
+          if (!f) return;
+          const fr = new FileReader();
+          fr.onload = () => { text = String(fr.result || ''); ta.value = text;
+            UI.toast('read <b>' + esc(f.name) + '</b>'); };
+          fr.readAsText(f);
+        };
+        pane.appendChild(file);
+
+        const btns = el('div', 'rowbtns');
+        const pickF = el('button', 'btn mb-press mb-tap', 'Choose a file');
+        pickF.type = 'button';
+        pickF.onclick = () => file.click();
+        btns.appendChild(pickF);
+        const go = el('button', 'btn go wide mb-press mb-tap', 'Read it');
+        go.type = 'button';
+        go.onclick = () => {
+          if (!acct) { UI.toast('pick an account first', { bad: true }); return; }
+          if (!text.trim()) { UI.toast('nothing to read yet', { bad: true }); return; }
+          parsed = parseStatement(text, dayFirst);
+          if (!parsed.rows.length) {
+            UI.toast('could not find any dated amounts in that', { bad: true });
+            return;
+          }
+          if (parsed.ambiguous && dayFirst == null) return stepDateAsk();
+          plan = planImport(parsed.rows, acct);
+          idx = 0; answers = {};
+          stepReview();
+        };
+        btns.appendChild(go);
+        pane.appendChild(btns);
+      }
+
+      /* ── the one thing a file cannot tell you ── */
+      function stepDateAsk() {
+        pane.innerHTML = '';
+        const sample = parsed.rows.slice(0, 3).map(r => r.date);
+        pane.appendChild(el('h2', null, 'ONE QUESTION FIRST'));
+        pane.appendChild(el('div', 'note',
+          'Every date in this file has a day and a month under thirteen, so nothing in it proves which way round they are. ' +
+          'Getting it wrong would put months of spending on the wrong days, so it is worth asking rather than guessing.'));
+        pane.appendChild(el('div', 'note', 'The first few read as <b>' + esc(sample.join(', ')) + '</b> the way I have guessed so far.'));
+        const btns = el('div', 'rowbtns');
+        [['Day first', true, '03/04 is the 3rd of April'],
+         ['Month first', false, '03/04 is the 4th of March']].forEach(([lbl, v, note]) => {
+          const btn = el('button', 'btn wide mb-press mb-tap', lbl + ' — ' + note);
+          btn.type = 'button';
+          btn.onclick = () => {
+            dayFirst = v;
+            parsed = parseStatement(text, v);
+            plan = planImport(parsed.rows, acct);
+            idx = 0; answers = {};
+            stepReview();
+          };
+          btns.appendChild(btn);
+        });
+        pane.appendChild(btns);
+      }
+
+      /* ── step 2 ── */
+      function stepReview() {
+        pane.innerHTML = '';
+        const g = el('div', 'grid3');
+        g.appendChild(tile('ALREADY KNOWN', String(plan.known.length + plan.certain.length),
+          plan.certain.length ? plan.certain.length + ' matched just now' : 'nothing new to match'));
+        g.appendChild(tile('NEED YOU', String(plan.ask.length - Object.keys(answers).length),
+          plan.ask.length ? 'close, but not certain' : 'nothing ambiguous'));
+        g.appendChild(tile('NOT IN THE APP', String(plan.fresh.length), 'would be added'));
+        pane.appendChild(g);
+        if (parsed.skipped) pane.appendChild(el('div', 'note',
+          esc(String(parsed.skipped)) + ' line' + (parsed.skipped === 1 ? '' : 's') +
+          ' had no date or no amount and were left alone. Headers and running balances usually look like that.'));
+
+        const pending = plan.ask.filter(x => !answers[x.id]);
+        if (pending.length) {
+          pane.appendChild(el('h2', null, 'ARE THESE THE SAME THING?'));
+          pane.appendChild(askOne(pending[0]));
+          pane.appendChild(el('div', 'note', esc(String(pending.length)) + ' left to decide. ' +
+            'Nothing is written until you press apply at the end.'));
+          return;
+        }
+
+        /* everything decided: show what will happen */
+        const willAdd = plan.fresh.concat(plan.ask.filter(x => answers[x.id] === 'new'));
+        const willMerge = plan.certain.concat(plan.ask.filter(x => answers[x.id] && answers[x.id].row)
+          .map(x => ({ line: x.line, id: x.id, match: answers[x.id].row, kind: x.kind })));
+        const willSkip = plan.ask.filter(x => answers[x.id] === 'skip');
+
+        if (willMerge.length) {
+          pane.appendChild(el('h2', null, 'MATCHED, AND KEPT AS ONE'));
+          const l = el('div', 'list');
+          willMerge.slice(0, 40).forEach(x => {
+            const changed = Math.abs(num(x.match.amt, 0) - Math.abs(x.line.amt)) > 0.005 ||
+              x.match.date !== x.line.date;
+            l.appendChild(itemRow(x.match.note || x.line.desc,
+              Day.short(x.line.date) + ' · ' + esc(x.line.desc) +
+              (changed ? ' · <b>corrected</b>' : ''), money(Math.abs(x.line.amt))));
+          });
+          pane.appendChild(l);
+          pane.appendChild(el('div', 'note',
+            'Your category, note and receipt stay. The amount, the date and the bank\u2019s own wording are written over the top, so there is one entry and it is the right one.'));
+        }
+        if (willAdd.length) {
+          pane.appendChild(el('h2', null, 'WOULD BE ADDED'));
+          const l = el('div', 'list');
+          willAdd.slice(0, 60).forEach(x => {
+            const r = ruleFor(x.line.desc);
+            l.appendChild(itemRow(x.line.desc || 'No details',
+              Day.short(x.line.date) + ' · ' + (x.kind === 'in' ? 'money in'
+                : r ? 'files as ' + esc(catName(r.cat)) : '<span class="stale">uncategorised</span>'),
+              (x.kind === 'in' ? '+' : '') + money(Math.abs(x.line.amt)),
+              x.kind === 'in' ? 'in' : ''));
+          });
+          pane.appendChild(l);
+        }
+        if (willSkip.length) pane.appendChild(el('div', 'note',
+          esc(String(willSkip.length)) + ' line' + (willSkip.length === 1 ? '' : 's') +
+          ' you told me to leave out. They are remembered, so a second import will not ask again.'));
+        if (!willAdd.length && !willMerge.length) pane.appendChild(el('div', 'empty',
+          'Everything in this statement is already in the app and matches. Nothing to do, which is the answer you want.'));
+
+        const btns = el('div', 'rowbtns');
+        const back = el('button', 'btn mb-press mb-tap', 'Start again');
+        back.type = 'button';
+        back.onclick = () => { plan = null; answers = {}; stepPaste(); };
+        btns.appendChild(back);
+        const go = el('button', 'btn go wide mb-press mb-tap',
+          'Apply: ' + willMerge.length + ' merged, ' + willAdd.length + ' added');
+        go.type = 'button';
+        go.disabled = !willAdd.length && !willMerge.length;
+        go.style.opacity = go.disabled ? '.5' : '';
+        go.onclick = () => {
+          willMerge.forEach(x => mergeStatement(x, acct));
+          willAdd.forEach(x => addStatement(x, acct));
+          willSkip.forEach(x => skipStatement(x, acct));
+          Mobile.feedback('complete');
+          UI.toast('<b>' + willMerge.length + '</b> matched, <b>' + willAdd.length + '</b> added');
+          h.close(); draw();
+        };
+        btns.appendChild(go);
+        pane.appendChild(btns);
+      }
+
+      /* ── one question, and only one ── */
+      function askOne(q) {
+        const box = el('div');
+        const c = q.cands[0];
+        const side = el('div', 'grid2');
+        side.appendChild(tile('THE STATEMENT', money(Math.abs(q.line.amt)),
+          Day.short(q.line.date) + '<br>' + esc(q.line.desc || 'no description')));
+        side.appendChild(tile('WHAT YOU LOGGED', money(num(c.amt, 0)),
+          Day.short(c.date) + '<br>' + esc(c.note || 'no details') + '<br>' + esc(acctName(c.acct))));
+        box.appendChild(side);
+
+        const why = [];
+        if (Math.abs(num(c.amt, 0) - Math.abs(q.line.amt)) > 0.005)
+          why.push('the amounts differ by ' + money(Math.abs(num(c.amt, 0) - Math.abs(q.line.amt))));
+        if (c.date !== q.line.date)
+          why.push('they are ' + Math.abs(Day.diff(c.date, q.line.date)) + ' days apart');
+        if (c.acct !== acct) why.push('you logged it against ' + acctName(c.acct));
+        if (why.length) box.appendChild(el('div', 'note', 'Not certain because ' + why.join(', ') + '.'));
+
+        const btns = el('div', 'rowbtns');
+        const yes = el('button', 'btn go mb-press mb-tap', 'Same thing');
+        yes.type = 'button';
+        yes.onclick = () => { answers[q.id] = { row: c }; Mobile.feedback('select'); stepReview(); };
+        btns.appendChild(yes);
+        const no = el('button', 'btn mb-press mb-tap', 'Different, add it');
+        no.type = 'button';
+        no.onclick = () => { answers[q.id] = 'new'; Mobile.feedback('select'); stepReview(); };
+        btns.appendChild(no);
+        const skip = el('button', 'btn mb-press mb-tap', 'Ignore this line');
+        skip.type = 'button';
+        skip.onclick = () => { answers[q.id] = 'skip'; Mobile.feedback('select'); stepReview(); };
+        btns.appendChild(skip);
+        box.appendChild(btns);
+
+        if (q.cands.length > 1) {
+          const other = el('div', 'note', 'Other things it could be:');
+          const l = el('div', 'list');
+          q.cands.slice(1).forEach(x => {
+            const r = itemRow(x.note || 'No details',
+              Day.short(x.date) + ' · ' + esc(acctName(x.acct)), money(num(x.amt, 0)));
+            r.onclick = () => { answers[q.id] = { row: x }; Mobile.feedback('select'); stepReview(); };
+            l.appendChild(r);
+          });
+          box.appendChild(other);
+          box.appendChild(l);
+        }
+        return box;
+      }
+
+      stepPaste();
+    },
+    actions: [{ label: 'CLOSE' }],
+  });
+}
+
 /* an account */
 function acctSheet() {
   UI.dialog({
@@ -2847,6 +3554,7 @@ document.getElementById('fab').onclick = () => {
   ], { title: 'ADD' });
   if (TAB === 'pots') return potSheet();
   if (TAB === 'accounts') return UI.menu(0, 0, [
+    { label: 'Read a statement', note: 'check the app against your bank', fn: () => importSheet() },
     { label: 'An account', fn: () => acctSheet() },
     { label: 'A category', fn: () => catSheet() },
     { label: 'A sorting rule', fn: () => ruleSheet() },
