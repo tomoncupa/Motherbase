@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>YEAR</title>
+<title>LOG</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▤</text></svg>">
 <meta name="theme-color" content="#0B0E14">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,10 +22,10 @@
 
 <style>
 /* Colours and sizes are tokens, never numbers. shared/THEMING.md is the
-   contract this app obeys. The one set of raw pixel values is the block
-   geometry, which the script hands over as --dh (pixels per day): that is a
-   measurement of time, not a spacing decision, the same way a chart's plot
-   coordinates are. */
+   contract this app obeys. The raw pixel values are the block geometry,
+   which the script hands over as --dh (pixels per day) and --line (one line
+   of day text, measured): measurements of time and of the font, not spacing
+   decisions, the same way a chart's plot coordinates are. */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{background:var(--bg);color:var(--text-1);
@@ -44,7 +44,7 @@ header{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-
 .yr b{font-family:var(--font-display);font-size:var(--f-5);font-weight:var(--w-bold);
   min-width:var(--s-9);text-align:center}
 .yr button:disabled{opacity:.35;cursor:default}
-.sample{font-size:var(--f-1);color:var(--text-muted)}
+.quiet{font-size:var(--f-1);color:var(--text-muted)}
 
 /* The only scrolling surface, both ways. The wheel zooms it rather than
    scrolling it, and a drag moves it, like a map. overflow-anchor is off
@@ -53,15 +53,20 @@ main{flex:1;min-height:0;overflow:auto;overflow-anchor:none;padding-bottom:var(-
 main.dragging{cursor:grabbing;user-select:none}
 
 /* ── the bracket ──
-   Five columns. The first four are one sticky group so they stay on the left
-   if the window is ever narrow enough to scroll sideways. Every block is
-   placed at (first day × --dh) and is (days × --dh) tall, so a boundary in
-   one column is the same pixel in every other column by construction. A zoom
-   changes --dh and nothing else is rebuilt. */
+   Three columns: months, weeks, days. Months and weeks are one sticky group
+   so they stay on the left if the window is ever narrow enough to scroll
+   sideways. Every block is placed at (first day × --dh) and is
+   (days × --dh) tall, so a boundary in one column is the same pixel in every
+   other column by construction. A zoom changes --dh and nothing is rebuilt.
+
+   Zoomed in far enough to read a day, months and weeks step aside and the
+   days take the whole width. Tom, 2026-09-13: they are not needed all the
+   time. The lines in the day column carry the weeks and months instead. */
 .cal{min-width:100%;width:max-content}
+.cal.near .agg,.cal.near .heads{display:none}
 .row{display:flex}
 .agg{display:flex;position:sticky;left:0;z-index:2;background:var(--surface-1)}
-.c-h,.c-q,.c-w{width:var(--s-9)}
+.c-w{width:var(--s-9)}
 .c-m{width:var(--s-10)}
 .c-d{flex:1;min-width:var(--s-10)}
 
@@ -82,10 +87,8 @@ main.dragging{cursor:grabbing;user-select:none}
 .blk{position:absolute;left:0;right:0;top:calc(var(--i) * var(--dh));height:calc(var(--n) * var(--dh));
   border-top:var(--border-width) solid var(--border);
   padding:var(--s-1) var(--s-2) 0;line-height:var(--lh-tight);cursor:inherit}
-/* A new year gets the stronger line, in every column. */
-.blk.y0{border-top-color:var(--border-strong)}
 /* The label and totals of a tall block ride down the screen with it, so a
-   quarter that starts far above the view still says which quarter it is. A
+   month that starts far above the view still says which month it is. A
    sticky box only works if no parent clips, which is why aggregate blocks do
    not set overflow and fit() hides what would not fit instead. */
 .stick{position:sticky;top:calc(var(--headh) + var(--s-1))}
@@ -93,15 +96,24 @@ main.dragging{cursor:grabbing;user-select:none}
   overflow:hidden;text-overflow:ellipsis}
 .blk .tot{font-size:var(--f-1);color:var(--text-2);white-space:nowrap}
 .blk.bare{padding:0}
-.blk.bare .stick,.blk.bare .lab,.blk.bare .tot,.blk.lab-only .tot{display:none}
+.blk.bare .stick,.blk.bare .lab,.blk.bare .tot,.blk.bare .b,.blk.lab-only .tot{display:none}
 
-/* A day is one line, centred in its row with no top padding, so its text
-   appears at 16px per day rather than only past 22. */
-.c-d .blk{display:flex;align-items:center;gap:var(--s-2);padding:0 var(--s-2);
-  line-height:1;overflow:hidden}
-.c-d .blk .tot{overflow:hidden;text-overflow:ellipsis}
-/* Too thin for a line of its own: the day column becomes texture. */
-.cal.hair .c-d .blk{border-top-color:var(--surface-2)}
+/* ── a day ──
+   Its label, then its bullets, flowing onto more lines as the row gets
+   taller. A short row centres its one line; a tall one starts near the top.
+   Whatever does not fit is cut, and the full list is on hover until the
+   panel exists. */
+.c-d .blk{display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;
+  column-gap:var(--s-3);row-gap:var(--s-1);overflow:hidden;line-height:1;
+  padding:clamp(0px, calc((var(--dh) - var(--line)) / 2), var(--s-2)) var(--s-2) 0;
+  border-top-color:var(--surface-2)}
+.c-d .blk .lab{min-width:var(--s-9)}
+.c-d .blk .b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-size:var(--f-2)}
+.c-d .blk .b i{font-style:normal;color:var(--text-muted);margin-right:var(--s-1)}
+/* Lines say where a week and a month begin, so the day column still reads
+   when the other two have stepped aside. */
+.c-d .blk.wk{border-top-color:var(--border)}
+.blk.m0,.blk.y0{border-top-color:var(--border-strong)}
 .c-d .blk.today{background:var(--surface-3)}
 .c-d .blk.today .lab{color:var(--accent)}
 .c-d .blk.future .lab{color:var(--text-muted);font-weight:var(--w-body)}
@@ -109,7 +121,7 @@ main.dragging{cursor:grabbing;user-select:none}
 </head>
 <body>
 <header>
-  <div class="logo">YE<b>AR</b></div>
+  <div class="logo">LO<b>G</b></div>
   <div class="yr">
     <button id="prevYr" class="mb-btn mb-press mb-tap" onclick="goYear(-1)" aria-label="Previous year" data-icon="prev"></button>
     <b id="yrLabel"></b>
@@ -117,7 +129,7 @@ main.dragging{cursor:grabbing;user-select:none}
   </div>
   <button class="mb-btn mb-press mb-tap" onclick="goToday()">TODAY</button>
   <button class="mb-btn mb-press mb-tap" onclick="wholeYear()">WHOLE YEAR</button>
-  <span class="sample">Sample data</span>
+  <span class="quiet" id="state"></span>
   <div class="spacer"></div>
   <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
   <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
@@ -125,25 +137,24 @@ main.dragging{cursor:grabbing;user-select:none}
 <main id="scroller" class="mb-scroll"><div class="cal" id="cal"></div></main>
 
 <script>
-/* ═══════════════════════════════ YEAR ═══════════════════════════════
-   The last few weeks, set inside the year around them. See year/CLAUDE.md
-   for what it is for and why each decision was made.
+/* ═══════════════════════════════ LOG ═══════════════════════════════
+   The journal module. The last few weeks of bullets, set inside the year
+   around them. See log/CLAUDE.md for what it is for and why each decision
+   was made.
 
-   BUILD STEP 2 of 5: map-style zoom and drag, on one continuous timeline,
-   opening on the last six weeks. Numbers are still sample numbers, never
-   saved. Nothing here writes to the store yet.                          */
+   It reads STATUS's journal. It owns no row type of its own: a bullet is a
+   `note` row whoever writes it, so a line written here or in STATUS is the
+   same line in both, and on the home screen. Nothing here writes yet; the
+   entry form is build step 5.                                            */
 
 const APP = {
-  id: 'year',
-  name: 'Year',
+  id: 'log',
+  name: 'Log',
   icon: '▤',
-  blurb: 'the last few weeks, inside the year around them',
-  /* One row per entry, keyed by a timestamp id, dated on its day.
-     done  {text}
-     post  {text, platform}
-     One row per entry rather than one per day, so two devices adding to
-     the same day are two rows and cannot overwrite each other. */
-  types: ['done', 'post'],
+  blurb: 'the journal, the last few weeks at a glance',
+  /* Owns nothing. `note` is STATUS's shape and is NOT declared here, so the
+     store keeps warning if this app ever writes one carelessly. */
+  types: [],
 };
 
 Skins.load('../shared/skins.json?v=13').then(() => { Skins.restore(APP.id);
@@ -154,10 +165,14 @@ Skins.load('../shared/skins.json?v=13').then(() => { Skins.restore(APP.id);
 if (window.Icons) Icons.paint();
 Sfx.init(APP.id);
 Rec.declare(APP.id, APP.types);
-IO.register({ app: APP.id, name: APP.name, types: APP.types });
+/* The backup carries the journal, or a restore of LOG is a restore of
+   nothing. */
+IO.register({ app: APP.id, name: APP.name, types: ['note'] });
 
 const esc = UI.esc;
+const attr = s => esc(s).replace(/"/g, '&quot;');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DATE_OK = /^\d{4}-\d{2}-\d{2}$/;
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -177,21 +192,59 @@ let touched = false;         /* once he has zoomed or dragged, a late theme load
 const TODAY = Day.today();
 const THIS_YEAR = +TODAY.slice(0, 4);
 
+/* ══════════════════════ THE JOURNAL ══════════════════════
+   Which bullets count, and on which day. Tom, 2026-09-13: all four kinds
+   count, and a post is an ordinary bullet, so a day has one count.
+
+   The day rules are STATUS's, because a day that reads one way there and
+   another way here is two different days:
+     - an entry, event or idea counts on the day it is written on
+     - a todo counts once it is ticked, on the day it was ticked (`doneOn`),
+       wherever it was first written down. An open todo is an intention,
+       not a thing that happened, and counts nowhere.
+   `para` is the old name for an entry and is read as one. */
+const MARK = { todo: '×', entry: '·', event: '–', idea: '!' };   /* bullet-journal notation, as STATUS draws it; × is a finished task */
+
+let byDay = new Map();       /* date → bullets, in the order the day ran */
+let lineCount = 0;
+
+function indexJournal() {
+  byDay = new Map();
+  lineCount = 0;
+  Rec.all('note', {}).forEach(r => {
+    const p = r.payload;
+    if (!p || p.cancelled) return;
+    const kind = p.kind === 'para' ? 'entry' : p.kind;
+    if (!MARK[kind]) return;
+    let d = r.date;
+    if (kind === 'todo') { if (!p.done) return; d = p.doneOn || r.date; }
+    if (!d || !DATE_OK.test(d)) return;
+    const clock = (kind === 'todo' && p.doneAt) ? p.doneAt : p.at;
+    if (!byDay.has(d)) byDay.set(d, []);
+    byDay.get(d).push({ kind, text: String(p.text || ''), clock: clock || '', t: +p.t || 0 });
+    lineCount++;
+  });
+  /* A line with a time sorts by it; one without falls back to when it was
+     written, so the day is one sequence rather than a timed half and a clump. */
+  const key = x => x.clock ? +String(x.clock).replace(':', '') : 9999;
+  byDay.forEach(list => list.sort((a, b) => key(a) - key(b) || a.t - b.t));
+}
+
 /* ══════════════════════ DATE MATHS ══════════════════════
    Every period is {from, to, i0, n}: its first and last date, the index of
    its first day on the timeline and how many days it holds. The index
-   positions it; n sizes it. All five columns are built from the same list
+   positions it; n sizes it. All three columns are built from the same list
    of days, so they cannot disagree.
 
    ONE TIMELINE, not one year per page. Tom, 2026-09-13: in January the last
    eight weeks are mostly December, and a page break there would cut exactly
    the stretch the app is for. Years stack; December sits on January.     */
 
-/* The timeline starts at the earliest year anything is logged in, and never
-   later than last year, so the weeks before a January are always there. */
+/* The timeline starts at the earliest year anything is written in, and
+   never later than last year, so the weeks before a January are there. */
 function firstYear() {
   let y = THIS_YEAR - 1;
-  APP.types.forEach(t => Rec.all(t, {}).forEach(r => { if (r.date) y = Math.min(y, +r.date.slice(0, 4)); }));
+  byDay.forEach((_, d) => { y = Math.min(y, +d.slice(0, 4)); });
   return y;
 }
 
@@ -202,12 +255,11 @@ function buildTimeline(y0, y1) {
   const mStart = (y, m) => y + '-' + String(m + 1).padStart(2, '0') + '-01';
   const mEnd = (y, m) => Day.shift(m === 11 ? (y + 1) + '-01-01' : mStart(y, m + 1), -1);
 
-  const halves = [], quarters = [], months = [], weeks = [];
+  /* Halves and quarters were removed. Tom, 2026-09-13: "Remove halves and
+     quarters." The year goes on January and nowhere else. */
+  const months = [], weeks = [];
   for (let y = y0; y <= y1; y++) {
-    /* The year goes on the half, the widest label, and nowhere else. */
-    halves.push(span(mStart(y, 0), mEnd(y, 5), { label: 'H1 ' + y }), span(mStart(y, 6), mEnd(y, 11), { label: 'H2 ' + y }));
-    [0, 1, 2, 3].forEach(q => quarters.push(span(mStart(y, q * 3), mEnd(y, q * 3 + 2), { label: 'Q' + (q + 1) })));
-    MONTHS.forEach((nm, m) => months.push(span(mStart(y, m), mEnd(y, m), { label: nm })));
+    MONTHS.forEach((nm, m) => months.push(span(mStart(y, m), mEnd(y, m), { label: m ? nm : nm + ' ' + y })));
   }
 
   /* Weeks start on Monday and are CLIPPED to their month. A real week can
@@ -225,53 +277,50 @@ function buildTimeline(y0, y1) {
     });
   });
 
-  const dayList = days.map(d => span(d, d, { label: Day.label(d, { weekday: 'short' }) + ' ' + +d.slice(8) }));
-  return { y0, y1, first, days, halves, quarters, months, weeks, dayList };
-}
+  /* A day's label names its month on the 1st, and its year on the 1st of
+     January, because with months and weeks stepped aside the day column is
+     the only thing saying where you are. */
+  const dayList = days.map(d => {
+    const md = d.slice(5), day = +d.slice(8), wd = Day.label(d, { weekday: 'short' });
+    const label = md === '01-01' ? wd + ' 1 Jan ' + d.slice(0, 4)
+      : day === 1 ? wd + ' 1 ' + MONTHS[+d.slice(5, 7) - 1] : wd + ' ' + day;
+    return span(d, d, { label });
+  });
 
-/* ── sample numbers, for steps 1 to 4 only ──
-   Deterministic from the date, so the picture is the same every time and a
-   total can be checked by hand. Nothing after today: the future is not a
-   record. Never written to the store. */
-function sample(d) {
-  if (d > TODAY) return { done: 0, posted: 0 };
-  let h = 0;
-  for (let i = 0; i < d.length; i++) h = (h * 31 + d.charCodeAt(i)) | 0;
-  h = Math.abs(h);
-  return { done: h % 7 === 0 ? 0 : h % 5, posted: h % 3 === 0 ? (h >> 3) % 3 : 0 };
+  /* Running totals, so a month's count is two lookups rather than a walk. */
+  const pre = [0];
+  days.forEach((d, i) => { pre.push(pre[i] + (byDay.has(d) ? byDay.get(d).length : 0)); });
+  return { y0, y1, first, days, months, weeks, dayList, pre };
 }
-function totals(p) {
-  let done = 0, posted = 0;
-  Day.range(p.from, p.to).forEach(d => { const s = sample(d); done += s.done; posted += s.posted; });
-  return { done, posted };
-}
+const countOf = p => T.pre[p.i0 + p.n] - T.pre[p.i0];
+const bullets = n => n + (n === 1 ? ' bullet' : ' bullets');
 
 /* ══════════════════════ DRAWING ══════════════════════ */
 let T = null;
 let blocks = [];             /* [{el, n, day, state}] — what fit() walks on every zoom */
-const M = { lab: 20, full: 50, dayLine: 14 };   /* replaced by measure() before first use */
+const M = { lab: 20, full: 36, dayLine: 14 };   /* replaced by measure() before first use */
 
 function blockHTML(p, kind) {
   const cls = ['blk'];
   if (p.from.slice(5) === '01-01') cls.push('y0');
-  const tip = Day.label(p.from) + (p.n > 1 ? ' to ' + Day.label(p.to) : '') + (p.from.slice(0, 4) !== String(THIS_YEAR) ? ' ' + p.from.slice(0, 4) : '');
-  const open = '<div class="' + '%C%' + '" style="--i:' + p.i0 + ';--n:' + p.n + '" title="' + esc(tip) +
-    '" data-from="' + p.from + '" data-to="' + p.to + '">';
+  else if (p.from.slice(8) === '01') cls.push('m0');
   const future = p.from > TODAY;
-  let inner;
+  const style = '--i:' + p.i0 + ';--n:' + p.n;
+  const range = Day.label(p.from) + (p.n > 1 ? ' to ' + Day.label(p.to) : '') + ' ' + p.from.slice(0, 4);
   if (kind === 'd') {
+    if (Day.dow(p.from) === 1) cls.push('wk');
     if (p.from === TODAY) cls.push('today');
     if (future) cls.push('future');
-    const t = future ? null : totals(p);
-    inner = '<span class="lab">' + esc(p.label) + '</span><span class="tot">' +
-      (t && t.posted + t.done ? t.posted + ' posted, ' + t.done + ' done' : '') + '</span>';
-  } else {
-    /* A period that has not started yet has no totals to show, not zeros. */
-    const t = future ? null : totals(p);
-    inner = '<div class="stick"><div class="lab">' + esc(p.label) + '</div>' +
-      (t ? '<div class="tot">' + t.posted + ' posted</div><div class="tot">' + t.done + ' done</div>' : '') + '</div>';
+    const list = byDay.get(p.from) || [];
+    const tip = [range].concat(list.map(x => MARK[x.kind] + ' ' + x.text)).join('\n');
+    return '<div class="' + cls.join(' ') + '" style="' + style + '" title="' + attr(tip) + '" data-from="' + p.from + '">' +
+      '<span class="lab">' + esc(p.label) + '</span>' +
+      list.map(x => '<span class="b"><i>' + MARK[x.kind] + '</i>' + esc(x.text) + '</span>').join('') + '</div>';
   }
-  return open.replace('%C%', cls.join(' ')) + inner + '</div>';
+  /* A period that has not started yet has no count to show, not a zero. */
+  return '<div class="' + cls.join(' ') + '" style="' + style + '" title="' + attr(range) + '" data-from="' + p.from + '" data-to="' + p.to + '">' +
+    '<div class="stick"><div class="lab">' + esc(p.label) + '</div>' +
+    (future ? '' : '<div class="tot">' + bullets(countOf(p)) + '</div>') + '</div></div>';
 }
 
 function build() {
@@ -281,24 +330,26 @@ function build() {
   cal.style.setProperty('--dh', dayHeight + 'px');
   cal.innerHTML =
     '<div class="row heads" id="heads"><div class="agg">' +
-      '<div class="c c-h">Halves</div><div class="c c-q">Quarters</div>' +
       '<div class="c c-m">Months</div><div class="c c-w">Weeks</div></div>' +
       '<div class="c c-d">Days</div></div>' +
     '<div class="row body"><div class="agg">' +
-      col('c-h', T.halves) + col('c-q', T.quarters) + col('c-m', T.months) + col('c-w', T.weeks) +
+      col('c-m', T.months) + col('c-w', T.weeks) +
     '</div>' + col('c-d', T.dayList, 'd') + '</div>';
   blocks = [...cal.querySelectorAll('.body .blk')].map(el => ({
     el, n: +el.style.getPropertyValue('--n'), day: el.parentNode.classList.contains('c-d'), state: '',
   }));
+  /* Nothing written anywhere is worth saying once, quietly. The entry form
+     that fills it is step 5. */
+  $('state').textContent = lineCount ? '' : 'No journal lines';
 }
 
 /* ── what text fits ──
    Measured from sample blocks rather than guessed, because a theme changes
    the font and the font changes how tall a line is. Runs once per theme,
-   not once per zoom. */
+   not once per zoom. The month column has to be showing to be measured. */
 function measure() {
-  const cal = $('cal');
-  cal.style.setProperty('--headh', $('heads').offsetHeight + 'px');
+  const cal = $('cal'), wasNear = cal.classList.contains('near');
+  cal.classList.remove('near');
   const probe = (colSel, html) => {
     const b = document.createElement('div');
     b.className = 'blk';
@@ -309,16 +360,26 @@ function measure() {
     b.remove();
     return h;
   };
-  M.lab = probe('.body .c-q', '<div class="stick"><div class="lab">Q1</div></div>');
-  M.full = probe('.body .c-q', '<div class="stick"><div class="lab">Q1</div><div class="tot">0 posted</div><div class="tot">0 done</div></div>');
-  M.dayLine = probe('.body .c-d', '<span class="lab">Mon 30</span><span class="tot">0 posted</span>');
+  M.lab = probe('.body .c-m', '<div class="stick"><div class="lab">Jan 2026</div></div>');
+  M.full = probe('.body .c-m', '<div class="stick"><div class="lab">Jan 2026</div><div class="tot">0 bullets</div></div>');
+  const d = document.createElement('div');
+  d.className = 'blk';
+  d.style.cssText = 'visibility:hidden;top:0;height:auto;padding:0';
+  d.innerHTML = '<span class="lab">Mon 30</span><span class="b"><i>·</i>Line</span>';
+  cal.querySelector('.body .c-d').appendChild(d);
+  M.dayLine = d.offsetHeight;
+  d.remove();
+  cal.style.setProperty('--line', M.dayLine + 'px');
+  cal.classList.toggle('near', wasNear);
 }
 
-/* A block shows its label and totals, just its label, or nothing. Only the
-   blocks whose answer changed are touched, so a wheel turn stays cheap. */
+/* A block shows its label and count, just its label, or nothing. Only the
+   blocks whose answer changed are touched, so a wheel turn stays cheap.
+   Months and weeks step aside once a day is tall enough to read. */
 function fit() {
-  const h = dayHeight;
-  $('cal').classList.toggle('hair', h < 4);
+  const h = dayHeight, cal = $('cal');
+  cal.classList.toggle('near', h >= M.dayLine);
+  cal.style.setProperty('--headh', headH() + 'px');
   for (const b of blocks) {
     const px = b.n * h, lab = b.day ? M.dayLine : M.lab, need = b.day ? M.dayLine : M.full;
     const s = px < lab ? 'bare' : px < need ? 'lab-only' : '';
@@ -331,7 +392,8 @@ function fit() {
 
 /* ══════════════════════ MOVING AROUND ══════════════════════ */
 const sc = $('scroller');
-const headH = () => $('heads').offsetHeight;
+/* 0 while the headings are stepped aside with months and weeks. */
+const headH = () => { const h = $('heads'); return h ? h.offsetHeight : 0; };
 const bodyH = () => sc.clientHeight - headH();      /* the part of the screen days are drawn in */
 
 function applyDH(dh) {
@@ -341,18 +403,26 @@ function applyDH(dh) {
 }
 
 /* Zoom, keeping the date at `anchorY` (pixels from the top of the scroller)
-   exactly where it was. The date under the pointer is worked out in
-   fractional days before the change and put back under the pointer after. */
+   exactly where it was. The headings can appear or vanish during a zoom, so
+   their height is read before the change for "where was it" and after the
+   change for "put it back". */
 function setZoom(z, anchorY) {
   zoom = clamp(z, MIN_DH, MAX_DH);
   const dh = Math.round(zoom);
   if (dh === dayHeight) return;
-  if (anchorY == null) anchorY = headH() + bodyH() / 2;
-  const hh = headH();
-  const at = (sc.scrollTop + anchorY - hh) / dayHeight;
+  if (anchorY == null) anchorY = sc.clientHeight / 2;
+  const at = (sc.scrollTop + anchorY - headH()) / dayHeight;
   applyDH(dh);
-  sc.scrollTop = at * dh - (anchorY - hh);
+  sc.scrollTop = at * dh - (anchorY - headH());
   showYear();
+}
+
+/* Size the days so `n` of them fill the screen. Twice, because the answer
+   decides whether the headings show, and the headings take room. */
+function fitDays(n) {
+  applyDH(clamp(Math.floor(sc.clientHeight / n), MIN_DH, MAX_DH));
+  applyDH(clamp(Math.floor(bodyH() / n), MIN_DH, MAX_DH));
+  zoom = dayHeight;
 }
 
 /* Put `date` at the top of the drawing area, or with `bottom`, its last
@@ -366,16 +436,14 @@ function scrollToDate(date, bottom) {
 /* The opening view: today on the bottom edge, the six weeks before it
    filling the screen above, and none of the future. */
 function goToday() {
-  zoom = clamp(Math.floor(bodyH() / RECENT_DAYS), MIN_DH, MAX_DH);
-  applyDH(Math.round(zoom));
+  fitDays(RECENT_DAYS);
   scrollToDate(TODAY, true);
 }
 
 function wholeYear() {
-  const y = viewYear(), n = Day.diff(y + '-12-31', y + '-01-01') + 1;
+  const y = viewYear();
   touched = true;
-  zoom = clamp(Math.floor(bodyH() / n), MIN_DH, MAX_DH);
-  applyDH(Math.round(zoom));
+  fitDays(Day.diff(y + '-12-31', y + '-01-01') + 1);
   scrollToDate(y + '-01-01');
 }
 
@@ -446,18 +514,32 @@ window.addEventListener('pointercancel', endDrag);
 sc.addEventListener('click', e => { if (swallowClick) { e.stopPropagation(); e.preventDefault(); } }, true);
 sc.addEventListener('scroll', showYear, { passive: true });
 
-/* ── start ── */
-T = buildTimeline(firstYear(), THIS_YEAR);
-build();
+/* ── start, and keep up ──
+   Paint what localStorage already has; redraw when the store's slower half
+   lands and whenever a line changes anywhere, STATUS included. A rebuild
+   keeps the scroll position, since the timeline is the same height unless a
+   new earliest year arrived. */
+function rebuild() {
+  indexJournal();
+  T = buildTimeline(firstYear(), THIS_YEAR);
+  build();
+  fit();
+  showYear();
+}
+let rebuildT = null;
+const soon = () => { clearTimeout(rebuildT); rebuildT = setTimeout(rebuild, 60); };
+rebuild();
 measure();
 fit();
 goToday();
+Rec.ready(soon);
+Rec.on(soon);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); fit(); if (!touched) goToday(); });
 /* The drawing area changes height after the first paint: the theme and the
    icons land and the header can wrap onto another line. Watched 2026-09-13
    in a narrow window, where that left today 128px below the bottom edge.
    Until he has moved it himself, keep the opening view true to its promise. */
-if (window.ResizeObserver) new ResizeObserver(() => { $('cal').style.setProperty('--headh', headH() + 'px'); if (!touched) goToday(); }).observe(sc);
+if (window.ResizeObserver) new ResizeObserver(() => { fit(); if (!touched) goToday(); }).observe(sc);
 </script>
 </body>
 </html>
