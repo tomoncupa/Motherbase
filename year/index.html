@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>YEAR</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▤</text></svg>">
+<meta name="theme-color" content="#0B0E14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script src="../shared/skins.js?v=16"></script>
+<script src="../shared/day.js?v=16"></script>
+<script src="../shared/records.js?v=16"></script>
+<script src="../shared/mobile.js?v=16"></script>
+<script src="../shared/sound.js?v=16"></script>
+<script src="../shared/ui.js?v=16"></script>
+<script src="../shared/io.js?v=16"></script>
+<script src="../shared/health.js?v=16"></script>
+<script src="../shared/icons.js?v=16"></script>
+
+<style>
+/* Colours and sizes are tokens, never numbers. shared/THEMING.md is the
+   contract this app obeys. The one set of raw pixel values is the block
+   geometry, which is worked out in the script from dayHeight: that is a
+   measurement of time, not a spacing decision, the same way a chart's plot
+   coordinates are. */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text-1);
+  font-family:var(--font-body);font-size:var(--f-3);font-weight:var(--w-body);
+  font-variant-numeric:tabular-nums;
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+
+header{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);
+  background:var(--surface-1);box-shadow:var(--e-1),var(--rim);position:relative;z-index:5}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+.yr{display:flex;align-items:center;gap:var(--s-1)}
+.yr b{font-family:var(--font-display);font-size:var(--f-5);font-weight:var(--w-bold);
+  min-width:var(--s-9);text-align:center}
+.sample{font-size:var(--f-1);color:var(--text-muted)}
+
+/* The only scrolling surface, both ways. Wheel scrolls it up and down. */
+main{flex:1;min-height:0;overflow:auto;padding-bottom:var(--safe-b)}
+
+/* ── the bracket ──
+   Five columns. The first four are one sticky group so they stay on the left
+   if the window is ever narrow enough to scroll sideways. Every block inside
+   a column is positioned absolutely at (first day × dayHeight) and is
+   (days × dayHeight) tall, so a boundary in one column is the same pixel in
+   every other column by construction, not by careful CSS. */
+.cal{min-width:100%;width:max-content}
+.row{display:flex}
+.agg{display:flex;position:sticky;left:0;z-index:2;background:var(--surface-1)}
+.c-h,.c-q,.c-w{width:var(--s-9)}
+.c-m{width:var(--s-10)}
+.c-d{flex:1;min-width:var(--s-10)}
+
+.heads{position:sticky;top:0;z-index:3;background:var(--surface-1);
+  box-shadow:0 var(--border-width) 0 var(--border-strong)}
+.heads .agg{z-index:4}
+.heads .c{padding:var(--s-2);font-family:var(--font-display);font-size:var(--f-1);
+  font-weight:var(--w-bold);letter-spacing:var(--track-cap);color:var(--text-muted);
+  border-right:var(--border-width) solid var(--border)}
+
+.col{position:relative;border-right:var(--border-width) solid var(--border)}
+.body{border-bottom:var(--border-width) solid var(--border)}
+.c-d.col{background:var(--bg)}
+
+/* The line sits on the TOP edge of each block, inside its own height, so the
+   boundary lands exactly on the block's first pixel in every column. */
+.blk{position:absolute;left:0;right:0;overflow:hidden;
+  border-top:var(--border-width) solid var(--border);
+  padding:var(--s-1) var(--s-2) 0;line-height:var(--lh-tight);cursor:default}
+.blk .lab{font-weight:var(--w-bold);font-size:var(--f-2);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.blk .tot{font-size:var(--f-1);color:var(--text-2);white-space:nowrap}
+/* What fits is decided by measuring, in fit(), not by guessing a height. */
+.blk.bare{padding:0}
+.blk.bare .lab,.blk.bare .tot,.blk.lab-only .tot{display:none}
+/* Too thin for a line of its own: the day column becomes texture. */
+.c-d .blk.hair{border-top-color:var(--surface-2)}
+/* A day is one line, centred in its row with no top padding, so its text
+   appears at 16px per day rather than only past 22. */
+.c-d .blk{display:flex;align-items:center;gap:var(--s-2);padding:0 var(--s-2);line-height:1}
+.c-d .blk .tot{overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">YE<b>AR</b></div>
+  <div class="yr">
+    <button class="mb-btn mb-press mb-tap" onclick="goYear(-1)" aria-label="Previous year" data-icon="prev"></button>
+    <b id="yrLabel"></b>
+    <button class="mb-btn mb-press mb-tap" onclick="goYear(1)" aria-label="Next year" data-icon="next"></button>
+  </div>
+  <span class="sample">Sample data</span>
+  <div class="spacer"></div>
+  <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
+  <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
+</header>
+<main id="scroller" class="mb-scroll"><div class="cal" id="cal"></div></main>
+
+<script>
+/* ═══════════════════════════════ YEAR ═══════════════════════════════
+   One year as a nested bracket: halves, quarters, months, weeks, days,
+   side by side, time running down the page. Look at it and see what got
+   done and what got posted.
+
+   BUILD STEP 1 of 5: the date maths and the nesting rule, on sample
+   numbers that are never saved. Nothing here writes to the store yet.   */
+
+const APP = {
+  id: 'year',
+  name: 'Year',
+  icon: '▤',
+  blurb: 'the year at a glance: what got done and what got posted',
+  /* Declared now so the shape is settled before anything is written:
+     one row per entry, keyed by a timestamp id, dated on its day.
+     done  {text}
+     post  {text, platform}
+     One row per entry rather than one per day, so two devices adding to
+     the same day are two rows and cannot overwrite each other. */
+  types: ['done', 'post'],
+};
+
+Skins.load('../shared/skins.json?v=13').then(() => { Skins.restore(APP.id);
+  if (window.Icons) Icons.paint(null, { force: true }); draw(); });
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({ app: APP.id, name: APP.name, types: APP.types });
+
+const esc = UI.esc;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/* ── state ── */
+let year = +Day.today().slice(0, 4);
+/* The one number the whole layout hangs off. Every block is
+   (days it contains) × dayHeight pixels tall. Kept a whole number so
+   every boundary lands on a whole pixel and nothing drifts by rounding. */
+let dayHeight = 4;
+
+/* ══════════════════════ DATE MATHS ══════════════════════
+   Every period is {from, to, i0, n}: its first and last date, the index of
+   its first day in the year (0 = Jan 1) and how many days it holds. The
+   index is what positions it; n is what sizes it. All five columns are
+   built from the same list of days, so they cannot disagree.            */
+
+function buildYear(y) {
+  const first = y + '-01-01', last = y + '-12-31';
+  const days = Day.range(first, last);            /* 365 or 366, leap years for free */
+  const idx = d => Day.diff(d, first);
+  const span = (from, to, extra) => Object.assign({ from, to, i0: idx(from), n: Day.diff(to, from) + 1 }, extra);
+  const monthEnd = m => Day.shift((m === 11 ? (y + 1) + '-01' : y + '-' + String(m + 2).padStart(2, '0')) + '-01', -1);
+  const mStart = m => y + '-' + String(m + 1).padStart(2, '0') + '-01';
+
+  const halves = [
+    span(mStart(0), monthEnd(5), { label: 'H1' }),
+    span(mStart(6), monthEnd(11), { label: 'H2' }),
+  ];
+  const quarters = [0, 1, 2, 3].map(q => span(mStart(q * 3), monthEnd(q * 3 + 2), { label: 'Q' + (q + 1) }));
+  const months = MONTHS.map((nm, m) => span(mStart(m), monthEnd(m), { label: nm }));
+
+  /* Weeks start on Monday and are CLIPPED to their month. A real week can
+     straddle two months, and a block that crossed a month line would break
+     the alignment the whole layout exists for. So the first and last week of
+     a month can be anything from 1 to 7 days, and a month has 4 to 6 rows. */
+  const weeks = [];
+  months.forEach(mo => {
+    let start = mo.from;
+    Day.range(mo.from, mo.to).forEach(d => {
+      const next = Day.shift(d, 1);
+      if (d === mo.to || Day.dow(next) === 1) {
+        weeks.push(span(start, d, { label: +start.slice(8) + (start === d ? '' : '–' + +d.slice(8)) }));
+        start = next;
+      }
+    });
+  });
+
+  const dayList = days.map(d => span(d, d, {
+    label: Day.label(d, { weekday: 'short' }) + ' ' + +d.slice(8),
+  }));
+
+  return { days, halves, quarters, months, weeks, dayList };
+}
+
+/* ── sample numbers, for step 1 only ──
+   Deterministic from the date, so the picture is the same every time it is
+   opened and a total can be checked by hand. Never written to the store. */
+function sample(d) {
+  let h = 0;
+  for (let i = 0; i < d.length; i++) h = (h * 31 + d.charCodeAt(i)) | 0;
+  h = Math.abs(h);
+  return { done: h % 7 === 0 ? 0 : h % 5, posted: h % 3 === 0 ? (h >> 3) % 3 : 0 };
+}
+function totals(p) {
+  let done = 0, posted = 0;
+  Day.range(p.from, p.to).forEach(d => { const s = sample(d); done += s.done; posted += s.posted; });
+  return { done, posted };
+}
+
+/* ══════════════════════ DRAWING ══════════════════════ */
+let Y = buildYear(year);
+
+function blockHTML(p, kind) {
+  const t = totals(p);
+  const top = p.i0 * dayHeight, h = p.n * dayHeight;
+  const tip = Day.label(p.from) + (p.n > 1 ? ' to ' + Day.label(p.to) : '');
+  const hair = kind === 'd' && dayHeight < 4 ? ' hair' : '';
+  const tot = kind === 'd'
+    ? '<span class="tot">' + (t.posted + t.done ? t.posted + ' posted, ' + t.done + ' done' : '') + '</span>'
+    : '<div class="tot">' + t.posted + ' posted</div><div class="tot">' + t.done + ' done</div>';
+  return '<div class="blk' + hair + '" style="top:' + top + 'px;height:' + h + 'px" title="' + esc(tip) +
+    '" data-from="' + p.from + '" data-to="' + p.to + '"><span class="lab">' + esc(p.label) + '</span>' + tot + '</div>';
+}
+
+function draw() {
+  document.getElementById('yrLabel').textContent = year;
+  const H = Y.days.length * dayHeight;
+  const col = (cls, list, kind) => '<div class="col c ' + cls + '" style="height:' + H + 'px">' +
+    list.map(p => blockHTML(p, kind)).join('') + '</div>';
+  document.getElementById('cal').innerHTML =
+    '<div class="row heads"><div class="agg">' +
+      '<div class="c c-h">Halves</div><div class="c c-q">Quarters</div>' +
+      '<div class="c c-m">Months</div><div class="c c-w">Weeks</div></div>' +
+      '<div class="c c-d">Days</div></div>' +
+    '<div class="row body"><div class="agg">' +
+      col('c-h', Y.halves) + col('c-q', Y.quarters) + col('c-m', Y.months) + col('c-w', Y.weeks) +
+    '</div>' + col('c-d', Y.dayList, 'd') + '</div>';
+  fit();
+}
+
+/* ── what text fits ──
+   A block shows its label and totals, just its label, or nothing, by
+   whether that content actually fits its height. Measured from one sample
+   block rather than guessed, because a theme changes the font and the font
+   changes how tall a line is. Reads everything first, then writes, so the
+   page lays out once rather than once per block. */
+function fit() {
+  const cal = document.getElementById('cal');
+  const probe = document.createElement('div');
+  probe.className = 'blk';
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:auto;width:' + getComputedStyle(document.documentElement).getPropertyValue('--s-9');
+  probe.innerHTML = '<span class="lab" style="display:block">Q1</span>';
+  cal.querySelector('.c-q').appendChild(probe);
+  const labOnly = probe.offsetHeight;
+  probe.innerHTML = '<span class="lab" style="display:block">Q1</span><div class="tot">0 posted</div><div class="tot">0 done</div>';
+  const full = probe.offsetHeight;
+  probe.remove();
+  /* A day row is styled differently (one centred line, no padding), so it is
+     measured on its own rather than borrowing the quarter's numbers. */
+  const dprobe = document.createElement('div');
+  dprobe.className = 'blk';
+  dprobe.style.cssText = 'position:absolute;visibility:hidden;height:auto';
+  dprobe.innerHTML = '<span class="lab">Mon 30</span><span class="tot">0 posted</span>';
+  cal.querySelector('.body .c-d').appendChild(dprobe);
+  const dayLine = dprobe.offsetHeight;
+  dprobe.remove();
+
+  cal.querySelectorAll('.body .blk').forEach(b => {
+    const h = parseFloat(b.style.height), isDay = b.parentNode.classList.contains('c-d');
+    /* A day's totals sit on the same line as its label, so a day is either
+       one line or nothing. */
+    const lab = isDay ? dayLine : labOnly, need = isDay ? dayLine : full;
+    b.classList.toggle('bare', h < lab);
+    b.classList.toggle('lab-only', h >= lab && h < need);
+  });
+}
+
+function goYear(n) {
+  year += n;
+  Y = buildYear(year);
+  draw();
+  document.getElementById('scroller').scrollTop = 0;
+}
+
+/* For checking the alignment at other zooms before step 2 exists. */
+function setDayHeight(n) { dayHeight = Math.max(2, Math.min(28, Math.round(n))); draw(); }
+
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+window.addEventListener('resize', fit);
+draw();
+</script>
+</body>
+</html>
