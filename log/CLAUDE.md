@@ -64,6 +64,21 @@ reads one way there and another here:
 
 Cancelled lines show nowhere.
 
+**The summary** next to each date is the `note` field of STATUS's `day` row,
+which nothing else in the suite writes any more. It is merged in, so the
+row's `rest` flag survives. STATUS already counts a day with a note as a day
+you turned up for.
+
+**The day graph** is read from STATUS and never written. Mood and energy are
+STATUS's scale fields: each reading is a dot placed by the time of day it was
+logged, joined into a line, scaled 1 to the field's top. Caffeine is STATUS's
+own half-life model (`remaining()`), copied: every dose, typed or read off a
+meal's label, decays at the field's half-life and the line is what is still
+in you, sampled every 15 minutes, doses from the day before included. Its
+scale tops out at 400mg, the daily ceiling the US FDA and the EU's food safety
+authority give for healthy adults, and stretches past that on a day that goes
+higher. No caffeine field with a half-life in STATUS, no caffeine line.
+
 **The time** on each bullet follows STATUS's row: the time typed into the line;
 a ticked todo's Done time; an open todo's start, or "by" its Done time; and for
 anything else with no time of its own, when it was written, drawn quieter.
@@ -109,6 +124,12 @@ The backup registers `note`, or a restore of LOG would restore nothing.
 | One line per bullet. | Tom, 2026-09-13 |
 | A filter bar at the top: which kinds show, and how a day is sorted (by time, as arranged, newest first). Both remembered. | Tom, 2026-09-13 |
 | Every bullet shows its time. | Tom, 2026-09-13 |
+| Week groups are 1–7, 8–14, 15–21, 22–28, and the rest of the month (29 to the end) as its own small group. Not Monday weeks. | Tom, 2026-09-13 |
+| A summary text field next to each date. | Tom, 2026-09-13 |
+| Behind each day, a mood line and an energy line placed by the time of each reading, and caffeine. | Tom, 2026-09-13 |
+| Caffeine is drawn as what is still in you through the day, with a dot per dose, not as a new way to log it. STATUS already logs it. | Claude, 2026-09-13 |
+| The summary looks like text until pointed at or typed in; the word "Summary" shows only on today, the row under the pointer and the box in use. Enter saves, Escape puts it back. None on future days. A redraw waits while a summary is being typed. | Claude, 2026-09-13 |
+| Graph dots show their time and value on hover. Lines are faint, behind the summary and bullets, midnight to midnight. A Graph group in the filter bar turns each line on or off, with a colour swatch beside each word as the legend. | Claude, 2026-09-13 |
 | Zoomed in, a day is at least `dayHeight` tall and grows to fit its bullets. Only possible because months and weeks have stepped aside by then, so nothing has to line up with it. | Claude, 2026-09-13 |
 | The opening zoom is the largest at which the last 42 days fit, but never less than readable. On a busy stretch it shows fewer days rather than hiding the bullets. | Claude, 2026-09-13 |
 | The time leads each bullet, in its own right-aligned column. STATUS puts it after the words; LOG is read down the clock. | Claude, 2026-09-13 |
@@ -133,7 +154,8 @@ the words.
 
 One number, `dayHeight`, in whole pixels, between 2 and 64. Zoomed out, every
 block in every column is placed at (first day × dayHeight) and is
-(days × dayHeight) tall; weeks start on Monday and are clipped to their month.
+(days × dayHeight) tall; week groups start on the 1st, 8th, 15th, 22nd and
+29th of every month.
 Zoomed in, the day column is ordinary flowing rows with a minimum height, and
 every position (zoom anchor, today on the bottom edge, the year in the header)
 is read off the page rather than calculated.
@@ -145,6 +167,8 @@ is read off the page rather than calculated.
 2b. ~~Read the journal; one count; months and weeks step aside.~~ Done 2026-09-13.
 2c. ~~One line per bullet, times, filter bar, adding, editing, ticking and
    deleting.~~ Done 2026-09-13.
+2d. ~~Week groups by date, a summary per day, and the mood, energy and
+   caffeine graph.~~ Done 2026-09-13.
 3. Colour: one colour, darker as a day's count rises.
 4. The prompt's right-hand panel is worth asking about again before building:
    bullets are now readable and editable in place.

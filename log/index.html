@@ -16,6 +16,7 @@
 <script src="../shared/mobile.js?v=16"></script>
 <script src="../shared/sound.js?v=16"></script>
 <script src="../shared/ui.js?v=16"></script>
+<script src="../shared/chart.js?v=16"></script>
 <script src="../shared/io.js?v=16"></script>
 <script src="../shared/health.js?v=16"></script>
 <script src="../shared/icons.js?v=16"></script>
@@ -25,7 +26,8 @@
    contract this app obeys. The raw pixel values are the block geometry,
    which the script hands over as --dh (pixels per day): a measurement of
    time, not a spacing decision, the same way a chart's plot coordinates
-   are. */
+   are. The stroke widths and opacities on the day graph are the same kind
+   of chart value STATUS's own charts carry. */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{background:var(--bg);color:var(--text-1);
@@ -47,11 +49,18 @@ header{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-
 .quiet{font-size:var(--f-1);color:var(--text-muted)}
 
 /* ── the filter bar ──
-   Its own line under the buttons: which kinds of bullet show, and in what
-   order. Tom, 2026-09-13. */
+   Its own line under the buttons: which kinds of bullet show, in what order,
+   and which lines the day graph draws. Tom, 2026-09-13. */
 .bar{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-3) var(--s-5)}
 .bar .grp{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
 .bar .k{font-size:var(--f-1);color:var(--text-muted);margin-right:var(--s-1)}
+/* The swatch is the legend: each graph chip wears its line's colour, next to
+   the word, so the colour is never the only way to tell them apart. */
+.bar .sw{display:inline-block;width:var(--s-3);height:var(--s-1);border-radius:var(--radius-full);
+  margin-right:var(--s-2);vertical-align:middle}
+.sw.mood,.gr i.mood{background:var(--data-1)}
+.sw.energy,.gr i.energy{background:var(--data-3)}
+.sw.caffeine,.gr i.caffeine{background:var(--data-6)}
 
 /* The only scrolling surface, both ways. The wheel zooms it rather than
    scrolling it, and a drag moves it, like a map. overflow-anchor is off
@@ -71,9 +80,7 @@ main.dragging{cursor:grabbing;user-select:none}
 
    Zoomed in far enough to read, months and weeks step aside and the days
    become a journal: each day at least --dh tall, and taller when it has
-   more bullets than that fits, one line per bullet. Nothing needs to line up
-   with it any more, which is what makes the growing possible. Tom,
-   2026-09-13: "1 line per bullet". */
+   more bullets than that fits, one line per bullet. */
 .cal{min-width:100%;width:max-content}
 .cal.near .agg,.cal.near .heads{display:none}
 .row{display:flex}
@@ -101,9 +108,7 @@ main.dragging{cursor:grabbing;user-select:none}
   border-top:var(--border-width) solid var(--border);
   padding:var(--s-1) var(--s-2) 0;line-height:var(--lh-tight);cursor:inherit}
 /* The label and totals of a tall block ride down the screen with it, so a
-   month that starts far above the view still says which month it is. A
-   sticky box only works if no parent clips, which is why aggregate blocks do
-   not set overflow and fit() hides what would not fit instead. */
+   month that starts far above the view still says which month it is. */
 .stick{position:sticky;top:calc(var(--headh) + var(--s-1))}
 .blk .lab{font-weight:var(--w-bold);font-size:var(--f-2);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
@@ -111,21 +116,36 @@ main.dragging{cursor:grabbing;user-select:none}
 .blk.bare{padding:0}
 .blk.bare .stick,.blk.lab-only .tot{display:none}
 
-/* ── a day ── */
+/* ── a day ──
+   Date, summary, bullets, with the day's graph drawn behind the last two. */
 .c-d .blk{border-top-color:var(--surface-2);overflow:hidden}
 /* Zoomed out, a day is texture: a line and a height, no words. */
 .cal:not(.near) .c-d .blk>*{display:none}
 .cal.near .c-d .blk{position:relative;top:auto;height:auto;min-height:var(--dh);
-  display:grid;grid-template-columns:var(--s-9) minmax(0,1fr);column-gap:var(--s-3);
+  display:grid;grid-template-columns:var(--s-9) minmax(0,1fr) minmax(0,2fr);column-gap:var(--s-3);
   align-content:center;padding:0 var(--s-2);cursor:pointer}
+.cal.near .c-d .blk>:not(.gr){position:relative;z-index:1}
 .cal.near .c-d .blk.future{cursor:inherit}
-/* Lines say where a week and a month begin, so the day column still reads
-   when the other two have stepped aside. */
+/* Lines say where a week group and a month begin, so the day column still
+   reads when the other two have stepped aside. */
 .c-d .blk.wk{border-top-color:var(--border)}
 .blk.m0,.blk.y0{border-top-color:var(--border-strong)}
 .c-d .blk.today{background:var(--surface-3)}
 .c-d .blk.today .lab{color:var(--accent)}
 .c-d .blk.future .lab{color:var(--text-muted);font-weight:var(--w-body)}
+
+/* ── the summary ──
+   A line of text next to the date. It looks like text until it is pointed
+   at or typed in, because a thousand empty boxes down a page is a form, not
+   a journal. The word "Summary" only shows where it is useful: today, the
+   row under the pointer, and the box being typed in. */
+.sum{min-width:0;width:100%;align-self:start;font:inherit;font-size:var(--f-2);
+  line-height:var(--lh-tight);color:var(--text-1);background:none;border:0;border-radius:0;
+  border-bottom:var(--border-width) solid transparent;padding:0;cursor:text}
+.sum::placeholder{color:transparent}
+.blk:hover .sum::placeholder,.blk.today .sum::placeholder,.sum:focus::placeholder{color:var(--text-muted)}
+.sum:hover{border-bottom-color:var(--border)}
+.sum:focus{outline:none;border-bottom-color:var(--accent)}
 
 /* ── a bullet: time, mark, words ──
    The time leads, in its own column, because this screen is read down the
@@ -134,17 +154,30 @@ main.dragging{cursor:grabbing;user-select:none}
 .bl{display:flex;align-items:baseline;gap:var(--s-2);min-width:0;
   font-size:var(--f-2);line-height:var(--lh-tight);cursor:pointer}
 .bl .tm{flex:0 0 auto;min-width:var(--s-8);text-align:right;font-size:var(--f-1);color:var(--text-2);white-space:nowrap}
-/* The time it was written, where nothing better was typed: quieter,
-   because it is when you wrote it down rather than when it happened. */
 .bl .tm.wrote{color:var(--text-muted)}
 .bl .mk{flex:0 0 auto;width:var(--s-3);text-align:center;color:var(--text-muted)}
 .bl .tx{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bl .du{flex:0 0 auto;font-size:var(--f-1);color:var(--text-muted)}
 .bl.open .tx{color:var(--text-2)}
-/* An open todo's box is the one control on the line, and looks like one. */
 .bl .bx{flex:0 0 auto;align-self:center;width:var(--s-3);height:var(--s-3);padding:0;cursor:pointer;
   border:var(--border-width) solid var(--text-2);border-radius:var(--radius-sm);background:none}
 .bl .bx:hover{border-color:var(--accent)}
+
+/* ── the day graph ──
+   Behind the summary and the bullets, midnight on the left to midnight on
+   the right. Faint on purpose: it is the background to what was written,
+   not a chart competing with it. The drawing is stretched to fill the row,
+   so strokes are told not to stretch with it. Dots are page elements rather
+   than svg circles, so they stay round, and each says its time on hover. */
+.gr{position:absolute;top:0;bottom:0;left:calc(var(--s-2) + var(--s-9) + var(--s-3));right:var(--s-2);
+  pointer-events:none;z-index:0}
+.gr svg{position:absolute;left:0;top:0;width:100%;height:100%}
+.gr path{fill:none;stroke-width:1.5;vector-effect:non-scaling-stroke;opacity:.5}
+.gr path.mood{stroke:var(--data-1)}
+.gr path.energy{stroke:var(--data-3)}
+.gr path.caffeine{stroke:var(--data-6);stroke-dasharray:3 3}
+.gr i{position:absolute;width:var(--s-2);height:var(--s-2);margin:calc(var(--s-1) * -1) 0 0 calc(var(--s-1) * -1);
+  border-radius:var(--radius-full);opacity:.8;pointer-events:auto;cursor:default}
 </style>
 </head>
 <body>
@@ -172,17 +205,18 @@ main.dragging{cursor:grabbing;user-select:none}
    around them. See log/CLAUDE.md for what it is for and why each decision
    was made.
 
-   A bullet is a `note` row, the same row STATUS writes, so a line written
-   here or there is the same line in both, and on the home screen. LOG owns
-   no row type of its own.                                                */
+   A bullet is a `note` row and a day's summary is the `note` field of the
+   `day` row, both STATUS's shapes, so a line written here or there is the
+   same line in both. Mood, energy and caffeine are read from STATUS and
+   never written. LOG owns no row type of its own.                        */
 
 const APP = {
   id: 'log',
   name: 'Log',
   icon: '▤',
   blurb: 'the journal, the last few weeks at a glance',
-  /* Owns nothing. `note` is STATUS's shape; LOG writes it by merging into
-     what is there, under the root brief's many-writers rule. */
+  /* Owns nothing. `note` and `day` are STATUS's shapes; LOG writes them by
+     merging into what is there, under the root brief's many-writers rule. */
   types: [],
 };
 
@@ -194,9 +228,9 @@ Skins.load('../shared/skins.json?v=13').then(() => { Skins.restore(APP.id);
 if (window.Icons) Icons.paint();
 Sfx.init(APP.id);
 Rec.declare(APP.id, APP.types);
-/* The backup carries the journal, or a restore of LOG is a restore of
-   nothing. */
-IO.register({ app: APP.id, name: APP.name, types: ['note'] });
+/* The backup carries the journal and the summaries, or a restore of LOG is
+   a restore of nothing. */
+IO.register({ app: APP.id, name: APP.name, types: ['note', 'day'] });
 
 const esc = UI.esc;
 const attr = s => esc(String(s == null ? '' : s)).replace(/"/g, '&quot;');
@@ -232,10 +266,10 @@ const TODAY = Day.today();
 const THIS_YEAR = +TODAY.slice(0, 4);
 
 /* ══════════════════════ STATUS'S JOURNAL, MIRRORED ══════════════════════
-   The kinds, the time parser, the clock labels and the two publish steps
-   below are COPIES of status/index.html as of 2026-09-13, kept to the
-   letter so a line written here is indistinguishable from one written
-   there. Two copies is two things to keep in step; the right home is
+   The kinds, the time parser, the clock labels, the two publish steps and
+   the half-life sum below are COPIES of status/index.html as of 2026-09-13,
+   kept to the letter so LOG and STATUS never disagree about a line or a
+   coffee. Two copies is two things to keep in step; the right home is
    shared/, and an app session may not put it there. Change one, change
    both, until a foundation session moves them.                          */
 
@@ -304,9 +338,7 @@ function clockLabel(at) {
 const durLabel = d => !d ? '' : (d >= 60 ? (d % 60 ? Math.floor(d / 60) + 'h' + String(d % 60).padStart(2, '0') : Math.floor(d / 60) + 'h') : d + 'm');
 
 /* After every write, the same two things STATUS does, or the home screen's
-   journal counters and DAY LOG fall behind a line written here.
-   A timed line that is not done becomes a tick with its time on it; each
-   kind ticks its own counter with how many there are on the day. */
+   journal counters and DAY LOG fall behind a line written here. */
 function publishTimed(d) {
   const want = {};
   Rec.all('note', { date: d }).map(r => r.payload)
@@ -341,8 +373,7 @@ function publishNotes(d) {
      - an entry, event or idea is on the day it is written on
      - a finished todo is on the day it was ticked (`doneOn`)
      - an OPEN todo is on the day it was written, with a box to tick. It is
-       shown so a todo added here does not vanish, and it is not counted:
-       an intention is not a thing that happened.
+       shown so a todo added here does not vanish, and it is not counted.
    `para` is the old name for an entry and is read as one. Cancelled lines
    show nowhere. */
 const shown = () => { const v = S.get('show', null); return Array.isArray(v) ? v : NOTE_KINDS.map(k => k.id); };
@@ -381,8 +412,6 @@ function indexJournal() {
     if (!byDay.has(day)) byDay.set(day, []);
     byDay.get(day).push(x);
   });
-  /* An open task holds the top of its day whatever else is chosen, as in
-     STATUS; everything below follows the chosen order. */
   const mode = sortMode();
   const cmp = (a, b) => {
     if (a.open !== b.open) return a.open ? -1 : 1;
@@ -394,6 +423,102 @@ function indexJournal() {
 }
 const counted = d => (byDay.get(d) || []).filter(x => !x.open).length;
 
+/* ══════════════════════ THE DAY GRAPH ══════════════════════
+   Tom, 2026-09-13: "2 line graphs per day, with time stamps on the entries,
+   I also want caffeine tracking." Read from STATUS, never written.
+
+   MOOD and ENERGY are STATUS's scale fields: every reading has a timestamp
+   and a score from 1 to the field's top (5 unless he changed it). Each is a
+   line across its day, placed by the time of day it was logged, one dot per
+   reading.
+
+   CAFFEINE is STATUS's own model, not a new one: every dose, typed or read
+   off a meal's label, decays on its own clock at the field's half-life, and
+   what is still in you is the sum. Doses from the day before count, which
+   is why an evening coffee shows the next morning. Drawn only if a caffeine
+   field with a half-life exists; STATUS adds one from its library. */
+const graphOn = () => { const v = S.get('graph', null); return Array.isArray(v) ? v : ['mood', 'energy', 'caffeine']; };
+const GRAPH = [{ id: 'mood', name: 'Mood' }, { id: 'energy', name: 'Energy' }, { id: 'caffeine', name: 'Caffeine' }];
+/* The top of the caffeine scale. 400mg a day is the ceiling the US FDA and
+   the EU's food safety authority both give for healthy adults, so a line at
+   the top of a row means that much in you at once. A day that goes past it
+   stretches to fit rather than clipping. */
+const CAF_TOP = 400;
+
+let G = null;                /* { mood, energy, caf, meals: date → [meal] } */
+function indexGraph() {
+  const F = Rec.map('field');
+  const caf = (F.caffeine && +F.caffeine.half > 0) ? F.caffeine
+    : Object.values(F).find(f => f && f.from === 'caff' && +f.half > 0) || null;
+  const meals = new Map();
+  if (caf) Rec.all('meal', {}).forEach(r => {
+    if (!r.payload || !r.date) return;
+    if (!meals.has(r.date)) meals.set(r.date, []);
+    meals.get(r.date).push(r.payload);
+  });
+  G = { mood: F.mood || null, energy: F.energy || null, caf, meals };
+}
+const evList = (date, fid) => { const r = Rec.get('ev', date, fid); return r && r.e ? r.e : []; };
+const minuteOf = t => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
+
+/* STATUS's entries() for a food-fed field: typed doses plus label figures. */
+function cafDoses(date) {
+  const f = G.caf, per = f.per == null ? 1 : f.per;
+  const out = evList(date, f.id).map(e => ({ t: e.t, v: +e.v || 0 }));
+  (G.meals.get(date) || []).forEach(m => {
+    const v = (parseFloat(m[f.from]) || 0) * per;
+    if (v > 0) out.push({ t: m.t, v: v, food: m.name });
+  });
+  return out;
+}
+
+/* One day's graph as markup, or '' when there is nothing to draw. */
+function graphHTML(d) {
+  if (!G || d > TODAY) return '';
+  const on = graphOn(), W = 1440, H = 100, PAD = 6;
+  const yOf = u => PAD + (1 - clamp(u, 0, 1)) * (H - PAD * 2);
+  let svg = '', dots = '';
+  const dot = (cls, m, u, tip) => {
+    dots += '<i class="' + cls + '" style="left:' + (m / W * 100).toFixed(2) + '%;top:' + (yOf(u) / H * 100).toFixed(2) +
+      '%" title="' + attr(tip) + '"></i>';
+  };
+
+  ['mood', 'energy'].forEach(id => {
+    const f = G[id];
+    if (!f || on.indexOf(id) < 0) return;
+    const top = Math.max(2, Math.min(10, f.max || 5));
+    const pts = evList(d, id).map(e => ({ m: minuteOf(e.t), u: ((+e.v || 1) - 1) / (top - 1), e }))
+      .sort((a, b) => a.m - b.m);
+    if (!pts.length) return;
+    if (pts.length > 1) svg += '<path class="' + id + '" d="' + pts.map((p, i) => (i ? 'L' : 'M') + p.m + ' ' + yOf(p.u).toFixed(1)).join(' ') + '"/>';
+    pts.forEach(p => dot(id, p.m, p.u, clockLabel(hhmm(p.e.t)) + ' · ' + (f.label || id) + ' ' + p.e.v + ' of ' + top));
+  });
+
+  if (G.caf && on.indexOf('caffeine') > -1) {
+    const f = G.caf, half = +f.half;
+    const mid = new Date(d + 'T00:00:00').getTime();
+    /* STATUS's window: three half-lives back is 12% left, older is noise. */
+    const span = Math.ceil(half * 4 / 24) + 1;
+    const doses = [];
+    Day.range(Day.shift(d, -(span - 1)), d).forEach(x => cafDoses(x).forEach(e => doses.push(e)));
+    const level = T => doses.reduce((a, e) => { const hrs = (T - e.t) / 3600000; return hrs < 0 ? a : a + e.v * Math.pow(0.5, hrs / half); }, 0);
+    const samples = [];
+    for (let m = 0; m <= W; m += 15) samples.push({ m, v: level(mid + m * 60000) });
+    const peak = samples.reduce((a, s) => Math.max(a, s.v), 0);
+    if (peak >= 1) {
+      const topMg = Math.max(CAF_TOP, peak);
+      svg += '<path class="caffeine" d="' + samples.map((s, i) => (i ? 'L' : 'M') + s.m + ' ' + yOf(s.v / topMg).toFixed(1)).join(' ') + '"/>';
+      doses.filter(e => e.t >= mid && e.t < mid + 86400000).forEach(e => {
+        const m = minuteOf(e.t);
+        dot('caffeine', m, level(e.t + 1000) / topMg,
+          clockLabel(hhmm(e.t)) + ' · ' + Math.round(e.v) + 'mg caffeine' + (e.food ? ' (' + e.food + ')' : ''));
+      });
+    }
+  }
+  if (!svg && !dots) return '';
+  return '<div class="gr" aria-hidden="true"><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + svg + '</svg>' + dots + '</div>';
+}
+
 /* ══════════════════════ DATE MATHS ══════════════════════
    Every period is {from, to, i0, n}: its first and last date, the index of
    its first day on the timeline and how many days it holds.
@@ -402,13 +527,17 @@ const counted = d => (byDay.get(d) || []).filter(x => !x.open).length;
    eight weeks are mostly December, and a page break there would cut exactly
    the stretch the app is for. Years stack; December sits on January.     */
 
-/* The timeline starts at the earliest year anything is written in, and
-   never later than last year, so the weeks before a January are there. */
 function firstYear() {
   let y = THIS_YEAR - 1;
   Rec.all('note', {}).forEach(r => { if (r.date && DATE_OK.test(r.date)) y = Math.min(y, +r.date.slice(0, 4)); });
   return y;
 }
+
+/* Week groups start on these days of every month. Tom, 2026-09-13: "divide
+   the month into 1-7, 8-14, 15-21, 22-28, then show the remaining days as
+   their own little group." Every month has the same four, so the 15th is
+   always in the third, and weeks of one month line up against another. */
+const WEEK_STARTS = [1, 8, 15, 22, 29];
 
 function buildTimeline(y0, y1) {
   const first = y0 + '-01-01', last = y1 + '-12-31';
@@ -424,22 +553,18 @@ function buildTimeline(y0, y1) {
     MONTHS.forEach((nm, m) => months.push(span(mStart(y, m), mEnd(y, m), { label: m ? nm : nm + ' ' + y })));
   }
 
-  /* Weeks start on Monday and are CLIPPED to their month, so no block ever
-     crosses a month line. A month has 4 to 6 week rows. */
+  /* 1–7, 8–14, 15–21, 22–28, and whatever is left: 29, 29–30 or 29–31, or
+     nothing at all in a February that is not a leap year. */
   months.forEach(mo => {
-    let start = mo.from;
-    Day.range(mo.from, mo.to).forEach(d => {
-      const next = Day.shift(d, 1);
-      if (d === mo.to || Day.dow(next) === 1) {
-        weeks.push(span(start, d, { label: +start.slice(8) + (start === d ? '' : '–' + +d.slice(8)) }));
-        start = next;
-      }
+    const ym = mo.from.slice(0, 8), end = +mo.to.slice(8);
+    WEEK_STARTS.forEach((s, i) => {
+      if (s > end) return;
+      const e = i < WEEK_STARTS.length - 1 ? Math.min(WEEK_STARTS[i + 1] - 1, end) : end;
+      const dd = n => ym + String(n).padStart(2, '0');
+      weeks.push(span(dd(s), dd(e), { label: s === e ? String(s) : s + '–' + e }));
     });
   });
 
-  /* A day's label names its month on the 1st, and its year on the 1st of
-     January, because with months and weeks stepped aside the day column is
-     the only thing saying where you are. */
   const dayList = days.map(d => {
     const md = d.slice(5), day = +d.slice(8), wd = Day.label(d, { weekday: 'short' });
     const label = md === '01-01' ? wd + ' 1 Jan ' + d.slice(0, 4)
@@ -447,8 +572,6 @@ function buildTimeline(y0, y1) {
     return span(d, d, { label });
   });
 
-  /* Running totals of what counts under the current filter, so a month's
-     count is two lookups rather than a walk. */
   const pre = [0];
   days.forEach((d, i) => { pre.push(pre[i] + counted(d)); });
   return { y0, y1, first, days, months, weeks, dayList, pre };
@@ -495,15 +618,18 @@ function blockHTML(p, kind) {
   const future = p.from > TODAY;
   const style = '--i:' + p.i0 + ';--n:' + p.n;
   if (kind === 'd') {
-    if (Day.dow(p.from) === 1) cls.push('wk');
+    if (WEEK_STARTS.indexOf(+p.from.slice(8)) > 0) cls.push('wk');
     if (p.from === TODAY) cls.push('today');
     if (future) cls.push('future');
+    const sum = future ? '<span></span>'
+      : '<input class="sum" type="text" maxlength="240" placeholder="Summary" data-d="' + p.from + '" value="' +
+        attr((Rec.get('day', p.from, '') || {}).note || '') + '" aria-label="Summary for ' + attr(p.label) + '">';
     return '<div class="' + cls.join(' ') + '" style="' + style + '" data-from="' + p.from + '">' +
-      '<span class="lab">' + esc(p.label) + '</span>' +
-      '<div class="bls">' + (byDay.get(p.from) || []).map(bulletHTML).join('') + '</div></div>';
+      '<span class="lab">' + esc(p.label) + '</span>' + sum +
+      '<div class="bls">' + (byDay.get(p.from) || []).map(bulletHTML).join('') + '</div>' +
+      graphHTML(p.from) + '</div>';
   }
   const range = Day.label(p.from) + (p.n > 1 ? ' to ' + Day.label(p.to) : '') + ' ' + p.from.slice(0, 4);
-  /* A period that has not started yet has no count to show, not a zero. */
   return '<div class="' + cls.join(' ') + '" style="' + style + '" title="' + attr(range) + '" data-from="' + p.from + '" data-to="' + p.to + '">' +
     '<div class="stick"><div class="lab">' + esc(p.label) + '</div>' +
     (future ? '' : '<div class="tot">' + bullets(countOf(p)) + '</div>') + '</div></div>';
@@ -557,9 +683,6 @@ function measure() {
   cal.classList.toggle('near', wasNear);
 }
 
-/* Months and weeks step aside once a line of a day is readable. A month or
-   week block shows its label and count, just its label, or nothing; only
-   the blocks whose answer changed are touched, so a wheel turn stays cheap. */
 function fit() {
   const h = dayHeight, cal = $('cal');
   cal.classList.toggle('near', h >= M.dayLine);
@@ -575,16 +698,15 @@ function fit() {
 }
 
 /* ══════════════════════ WHERE THINGS ARE ══════════════════════
-   Zoomed in, days are different heights, so a position cannot be worked out
-   as (day × dayHeight). It is read off the page instead, which is also
-   exactly right zoomed out. All positions are in the scroller's own
-   coordinates, so `scrollTop = dayY(i)` puts day i at the top edge. */
+   Zoomed in, days are different heights, so a position is read off the page
+   rather than worked out as (day × dayHeight). All positions are in the
+   scroller's own coordinates, so `scrollTop = dayY(i)` puts day i at the
+   top edge. */
 const sc = $('scroller');
 const headH = () => { const h = $('heads'); return h ? h.offsetHeight : 0; };   /* 0 while stepped aside */
 const bodyH = () => sc.clientHeight - headH();
 const dayY = i => dayCol.offsetTop + dayEls[i].offsetTop;
 const dayHt = i => dayEls[i].offsetHeight;
-/* Which day is at content height y, and how far into it. */
 function dateAt(y) {
   let lo = 0, hi = dayEls.length - 1;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (dayY(mid) <= y) lo = mid; else hi = mid - 1; }
@@ -598,9 +720,6 @@ function applyDH(dh) {
   fit();
 }
 
-/* Zoom, keeping the date at `anchorY` (pixels from the top of the scroller)
-   exactly where it was: which day and how far into it, before the change,
-   put back under the pointer after it. */
 function setZoom(z, anchorY) {
   zoom = clamp(z, MIN_DH, MAX_DH);
   const dh = Math.round(zoom);
@@ -612,8 +731,6 @@ function setZoom(z, anchorY) {
   showYear();
 }
 
-/* Put `date` just under the headings, or with `bottom`, its last pixel on
-   the bottom edge of the screen. */
 function scrollToDate(date, bottom) {
   const i = idx(date);
   sc.scrollTop = bottom ? dayY(i) + dayHt(i) - sc.clientHeight : dayY(i) - headH();
@@ -621,9 +738,7 @@ function scrollToDate(date, bottom) {
 }
 
 /* The opening view: today on the bottom edge, and the largest zoom at which
-   the six weeks before it still fit. Busy weeks take more room, so on a busy
-   stretch it settles at the smallest readable zoom and shows what fits. It
-   never opens zoomed out past readable: the point of opening is to read. */
+   the six weeks before it still fit, never less than readable. */
 function goToday() {
   const iT = idx(TODAY), i0 = Math.max(0, iT - RECENT_DAYS + 1);
   const span = () => dayY(iT) + dayHt(iT) - dayY(i0);
@@ -637,8 +752,6 @@ function goToday() {
   scrollToDate(TODAY, true);
 }
 
-/* Size the days so `n` of them fill the screen, zoomed out. Twice, because
-   the answer decides whether the headings show, and the headings take room. */
 function wholeYear() {
   const y = viewYear(), n = Day.diff(y + '-12-31', y + '-01-01') + 1;
   touched = true;
@@ -648,7 +761,6 @@ function wholeYear() {
   scrollToDate(y + '-01-01');
 }
 
-/* The year shown in the header is the year in the middle of the screen. */
 function viewYear() {
   return +T.days[dateAt(sc.scrollTop + headH() + bodyH() / 2).i].slice(0, 4);
 }
@@ -668,38 +780,55 @@ function goYear(n) {
 function drawBar() {
   const bar = $('bar');
   bar.innerHTML = '';
-  const show = shown();
-  const g1 = UI.el('div', 'grp');
-  g1.appendChild(UI.el('span', 'k', 'Show'));
-  NOTE_KINDS.forEach(k => {
-    const on = show.indexOf(k.id) > -1;
-    const c = UI.el('button', 'mb-chip mb-press mb-tap' + (on ? ' on' : ''), esc(k.plural));
-    c.type = 'button';
-    c.setAttribute('aria-pressed', on ? 'true' : 'false');
-    c.onclick = () => {
-      const cur = shown(), was = cur.indexOf(k.id) > -1;
-      S.set('show', was ? cur.filter(v => v !== k.id) : NOTE_KINDS.map(x => x.id).filter(v => v === k.id || cur.indexOf(v) > -1));
-      Mobile.feedback('toggle');
-      drawBar(); rebuild();
-    };
-    g1.appendChild(c);
-  });
+  const chipGroup = (label, items, isOn, key, all) => {
+    const g = UI.el('div', 'grp');
+    g.appendChild(UI.el('span', 'k', label));
+    items.forEach(it => {
+      const on = isOn().indexOf(it.id) > -1;
+      const c = UI.el('button', 'mb-chip mb-press mb-tap' + (on ? ' on' : ''), (it.sw ? '<span class="sw ' + it.id + '"></span>' : '') + esc(it.name));
+      c.type = 'button';
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+      c.onclick = () => {
+        const cur = isOn(), was = cur.indexOf(it.id) > -1;
+        /* kept in the bar's own order, so the setting reads the same way twice */
+        S.set(key, was ? cur.filter(v => v !== it.id) : all.filter(v => v === it.id || cur.indexOf(v) > -1));
+        Mobile.feedback('toggle');
+        drawBar(); rebuild();
+      };
+      g.appendChild(c);
+    });
+    return g;
+  };
+  bar.appendChild(chipGroup('Show', NOTE_KINDS.map(k => ({ id: k.id, name: k.plural })), shown, 'show', NOTE_KINDS.map(k => k.id)));
   const g2 = UI.el('div', 'grp');
   g2.appendChild(UI.el('span', 'k', 'Sort'));
   g2.appendChild(UI.segmented(SORTS, sortMode(), v => { S.set('sort', v); rebuild(); }));
-  bar.appendChild(g1);
   bar.appendChild(g2);
+  bar.appendChild(chipGroup('Graph', GRAPH.map(g => ({ id: g.id, name: g.name, sw: 1 })), graphOn, 'graph', GRAPH.map(g => g.id)));
 }
 
 /* ══════════════════════ WRITING ══════════════════════
    Every write re-reads the row first and merges into it, never rebuilds it
-   from what is on screen. The root brief's many-writers rule: STATUS keeps
-   fields on a note (`by`, `byWas`, `ord`, and whatever it adds next) that
-   LOG does not show, and a rebuilt row would drop them. */
+   from what is on screen. The root brief's many-writers rule. */
 let reveal = null;           /* a day to keep on screen after the next redraw */
 let heldAt = 0;              /* a hold opens a menu; the click that ends it must not also open a dialog */
 
-/* write or edit one line. `x` is a bullet, or {} for a new one on day d. */
+/* ── a day's summary ──
+   STATUS's `day` row already has a `note` field, one per day, which is
+   exactly this, and which nothing else in the suite writes any more. The
+   row also carries `rest`, the rest-day flag, so the summary is merged in
+   and never replaces the row. STATUS counts a day with a note as a day you
+   turned up for, which is true of a day you summarised. */
+function saveSummary(d, raw) {
+  const v = String(raw || '').trim();
+  const cur = Rec.get('day', d, '') || {};
+  if ((cur.note || '') === v) return;
+  const next = Object.assign({}, cur, { note: v });
+  if (!v) delete next.note;
+  if (Object.keys(next).length) Rec.set('day', d, '', next);
+  else Rec.del('day', d, '');
+}
+
 function noteDialog(x, d) {
   const isNew = !x.key;
   if (isNew && !Day.editable(d)) { UI.toast('Tomorrow isn’t here yet'); return; }
@@ -750,9 +879,7 @@ function noteDialog(x, d) {
         String(p.text || '') + (p.at ? ' ' + clockLabel(p.at) : '') + (p.dur ? ' ' + durLabel(p.dur) : '') });
       ta.style.marginTop = 'var(--s-3)';
       /* A bullet is one line: Enter adds it and leaves the box open for the
-         next, Enter on an empty box closes, Shift+Enter is a new line. The
-         same as STATUS, minus its prose exception, because in LOG every kind
-         is one line. */
+         next, Enter on an empty box closes, Shift+Enter is a new line. */
       ta.onkeydown = e => {
         if (e.key !== 'Enter' || e.shiftKey || e.altKey) return;
         if (e.isComposing || e.keyCode === 229) return;
@@ -801,9 +928,11 @@ function removeLine(x) {
 
 const bulletOf = el => byKey.get(el.dataset.d + '|' + el.dataset.k);
 
-/* Click: the box ticks, a bullet edits, a readable day adds. */
+/* Click: the box ticks, a bullet edits, a readable day adds. The summary box
+   is left alone to be typed in. */
 $('cal').addEventListener('click', e => {
   if (Date.now() - heldAt < 800) return;
+  if (e.target.closest('.sum')) return;
   const box = e.target.closest('.bx');
   if (box) { const x = bulletOf(box.closest('.bl')); if (x) tick(x); return; }
   if (!$('cal').classList.contains('near')) return;
@@ -811,6 +940,26 @@ $('cal').addEventListener('click', e => {
   if (bl) { const x = bulletOf(bl); if (x) noteDialog(x, x.day); return; }
   const day = e.target.closest('.c-d .blk');
   if (day && Day.editable(day.dataset.from)) noteDialog({}, day.dataset.from);
+});
+
+/* The summary saves when Enter is pressed and whenever the box is left;
+   Escape puts back what was there. Saved directly rather than on the
+   browser's change event, which only fires for some kinds of edit: watched
+   2026-09-13, an Enter that did not save. saveSummary does nothing when the
+   text is what is already stored, so saving twice is harmless. */
+const leaveSummary = inp => {
+  saveSummary(inp.dataset.d, inp.value);
+  /* A redraw replaces every box on the page, so one that arrived mid-sentence
+     waited; this is where it stops waiting. */
+  if (pendingRebuild) { pendingRebuild = false; soon(); }
+};
+$('cal').addEventListener('keydown', e => {
+  if (!e.target.classList.contains('sum')) return;
+  if (e.key === 'Enter') { e.preventDefault(); leaveSummary(e.target); e.target.blur(); }
+  else if (e.key === 'Escape') { e.target.value = e.target.defaultValue; e.target.blur(); }
+});
+$('cal').addEventListener('focusout', e => {
+  if (e.target.classList.contains('sum')) leaveSummary(e.target);
 });
 
 /* Right click with a mouse, hold with a finger: the same menu, and only
@@ -832,15 +981,10 @@ Mobile.hold($('cal'), e => {
     const d = day.dataset.from;
     UI.menu(e.clientX, e.clientY, [{ label: 'Add a bullet', fn: () => noteDialog({}, d) }], { title: Day.label(d) });
   }
-});
+}, { skip: '.sum,.bx' });
 
 /* ══════════════════════ MOVING AROUND ══════════════════════ */
 
-/* ── the wheel zooms, toward the pointer ──
-   Map behaviour, Tom's choice on 2026-09-13. A sideways swipe on a trackpad
-   is left alone so a narrow window can still scroll across. A trackpad
-   pinch arrives as a wheel with ctrlKey and lands here too, which also stops
-   the browser zooming the whole page. */
 sc.addEventListener('wheel', e => {
   if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
   e.preventDefault();
@@ -852,10 +996,6 @@ sc.addEventListener('wheel', e => {
   setZoom(zoom * Math.exp(-dy * 0.0025), e.clientY - sc.getBoundingClientRect().top);
 }, { passive: false });
 
-/* ── a drag moves it ──
-   Mouse only: a finger already scrolls natively. Nothing moves until the
-   pointer has travelled a few pixels, and the click that ends a real drag is
-   swallowed, so letting go of a drag never adds or edits a bullet. */
 let drag = null, swallowClick = false;
 sc.addEventListener('pointerdown', e => {
   if (e.pointerType !== 'mouse' || e.button !== 0) return;
@@ -885,13 +1025,14 @@ sc.addEventListener('scroll', showYear, { passive: true });
 
 /* ── start, and keep up ──
    Paint what localStorage already has; redraw when the store's slower half
-   lands and whenever a line changes anywhere, STATUS included. A redraw
+   lands and whenever anything changes anywhere, STATUS included. A redraw
    keeps the date at the top of the screen where it was, and then makes sure
    a day just written to is on screen. */
 function rebuild() {
   let keep = null;
   if (T && touched) { const a = dateAt(sc.scrollTop + headH()); keep = { date: T.days[a.i], f: a.f }; }
   indexJournal();
+  indexGraph();
   T = buildTimeline(firstYear(), THIS_YEAR);
   build();
   fit();
@@ -905,10 +1046,15 @@ function rebuild() {
   }
   showYear();
 }
-let rebuildT = null;
-const soon = () => { clearTimeout(rebuildT); rebuildT = setTimeout(rebuild, 60); };
+let rebuildT = null, pendingRebuild = false;
+const typing = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('sum')); };
+const soon = () => {
+  clearTimeout(rebuildT);
+  rebuildT = setTimeout(() => { if (typing()) { pendingRebuild = true; return; } rebuild(); }, 60);
+};
 
 indexJournal();
+indexGraph();
 T = buildTimeline(firstYear(), THIS_YEAR);
 build();
 drawBar();
@@ -919,9 +1065,8 @@ Rec.ready(soon);
 Rec.on(soon);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); fit(); if (!touched) goToday(); });
 /* The drawing area changes height after the first paint: the theme and the
-   icons land and the header can wrap onto another line. Watched 2026-09-13
-   in a narrow window, where that left today 128px below the bottom edge.
-   Until he has moved it himself, keep the opening view true to its promise. */
+   icons land and the header can wrap onto another line. Until he has moved
+   it himself, keep the opening view true to its promise. */
 if (window.ResizeObserver) new ResizeObserver(() => { fit(); if (!touched) goToday(); }).observe(sc);
 </script>
 </body>
