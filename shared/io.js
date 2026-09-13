@@ -1544,7 +1544,12 @@ const Mirror = {
         out.added += diff.added.length;
         out.clashes += diff.clashes.length;
         IO.applyTable(appId, diff);                 /* never deletes on a pull */
-        diff.clashes.forEach(c => IO.logConflict(appId, c));
+        /* Mirror's, not IO's. It was IO.logConflict, which has not existed since
+           the mirror moved into this file, so the first clash threw here — after
+           this table, before every table after it and before _Data. The PC read
+           the phone's rows, crashed, never stored them, and never moved `seen`,
+           so it crashed on the same clash every forty five seconds. */
+        diff.clashes.forEach(c => Mirror.logConflict(appId, c));
       });
 
       /* ── the rows no table describes ──

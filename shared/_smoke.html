@@ -784,6 +784,63 @@ async function run() {
   ok('mirror: a read that crashes logs what crashed, not a question mark', () =>
     /read-failed:threw:.*smoke-boom/.test(TH.line.y || ''));
 
+  /* ---- a clash must not stop the rows coming in ----
+     The PC, 2026-09-13: "IO.logConflict is not a function" on every sync. A
+     sheet line older than this device's copy is a clash, the clash was logged
+     through a function that did not exist, and the throw came before _Data was
+     merged — so the phone's rows came down and were never stored. Driven
+     through onOpen with a faked sheet holding both: one clashing table line
+     and one new row from the other device. */
+  const CL = {};
+  {
+    IO.register({ app: '__clash', name: 'Clash', types: [stamp],
+      tables: [{ name: 'Clash', type: stamp, cols: [['name', 'Name']] }] });
+    const keepV = IO.mirror.settings.sheetV;
+    Rec.set(stamp, null, 'c1', { name: 'newer-here' });
+    Rec.set(stamp, null, 'from-phone', { name: 'placeholder' });
+    const incoming = Object.assign({}, Rec.row(stamp, null, 'from-phone'),
+      { payload: { name: 'arrived' }, updated_at: '2999-01-01T00:00:00.000Z' });
+    Rec.del(stamp, null, 'from-phone');
+    const bag = IO.bagName('__clash');
+    document.head.appendChild = function (el) {
+      const m = el && el.src && /callback=([^&]+)/.exec(el.src);
+      if (m) {
+        const idx = {}; idx.Clash = { rows: 2, edited: '2999-01-01T00:00:00.000Z' }; idx[bag] = { rows: 2, edited: '' };
+        const tabs = { Clash: [['id', 'date', 'Name', 'edited', 'by'], ['c1', '', 'older-in-sheet', '2000-01-01T00:00:00.000Z', 'sheet']] };
+        tabs[bag] = [['Motherbase rows.'], [JSON.stringify(incoming), incoming.id]];
+        const reply = /want=index/.test(el.src)
+          ? { ok: true, v: 4, index: idx, pushedAt: { __clash: 'OTHER-DEVICE' } }
+          : { ok: true, v: 4, tabs: tabs };
+        setTimeout(() => window[m[1]] && window[m[1]](reply), 0);
+        return el;
+      }
+      return Node.prototype.appendChild.call(this, el);
+    };
+    try {
+      IO.mirror.clearLog();
+      IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec', on: 1,
+        pushed: { __clash: '2999-12-31T00:00:00.000Z' }, seen: { '__clash|Clash': '', '__clash|_Data': '' } });
+      await IO.mirror.onOpen('__clash', 'tick');
+      CL.line = IO.mirror.log().slice(-1)[0] || {};
+      CL.arrived = (Rec.get(stamp, null, 'from-phone') || {}).name;
+      CL.kept = (Rec.get(stamp, null, 'c1') || {}).name;
+      CL.noted = Rec.all('conflict').filter(r => r.payload && r.payload.app === '__clash').length;
+    } catch (e) { CL.err = String(e); }
+    finally {
+      delete document.head.appendChild;
+      IO.mirror.clearLog();
+      IO.mirror.set({ url: '', on: 1, sheetV: keepV, pushed: { __clash: '' }, seen: { '__clash|Clash': '', '__clash|_Data': '' } });
+      Rec.all('conflict').filter(r => r.payload && r.payload.app === '__clash').forEach(r => Rec.del('conflict', r.date, r.key));
+      Rec.del(stamp, null, 'c1');
+      Rec.del(stamp, null, 'from-phone');
+    }
+  }
+  ok('mirror: a sheet line older than ours does not crash the read', () =>
+    CL.line.r === 'ok' && !CL.line.y);
+  ok('mirror: rows from the other device still land when a table clashes', () => CL.arrived === 'arrived');
+  ok('mirror: the clash keeps the newer copy and leaves a note', () =>
+    CL.kept === 'newer-here' && CL.noted === 1);
+
   /* ---- a timeout shorter than the thing it waits for is not a guard ----
      Nine failures in a row at almost exactly 27 seconds, which was 12 plus 15:
      both calls ran out the clock rather than going wrong. */
