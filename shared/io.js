@@ -1379,6 +1379,16 @@ function jsonp(url, params, ms) {
 /* An Apps Script that throws answers with something, just not with tabs. Worth
    telling apart from silence, because one is the script and one is the network
    and they need different people to fix them. */
+/* A read that downloaded fine and then crashed while taking the rows in used
+   to log as "read-failed:?", because the catch threw the error away. The PC
+   logged that fifteen times in a row on 2026-09-13 and it said nothing about
+   which line. The message and where it came from are the whole diagnosis. */
+function threwWhy(e) {
+  const msg = String((e && e.message) || e || 'unknown').replace(/\s+/g, ' ').slice(0, 120);
+  const at = /([\w-]+\.(?:js|html)):(\d+):\d+/.exec(String((e && e.stack) || ''));
+  return 'threw:' + msg + (at ? ' @' + at[1] + ':' + at[2] : '');
+}
+
 function readWhy(reply) {
   if (!reply) return 'no-reply';
   if (reply.error) return 'script-error:' + String(reply.error).slice(0, 80);
@@ -1881,7 +1891,7 @@ const Mirror = {
     const mline = { a: appId, w: quiet ? 'auto' : 'manual', o: Mirror.outstanding(appId) ? 1 : 0 };
     let idx = null;
     return Mirror.index(appId)
-      .then(pre => { idx = pre; return Mirror.pull(appId, pre).catch(() => ({ skipped: 'could not read', failed: 1 })); })
+      .then(pre => { idx = pre; return Mirror.pull(appId, pre).catch(e => ({ skipped: 'could not read', failed: 1, why: threwWhy(e) })); })
       .then(got => {
         /* ── read first, and if the read failed, do not write ──
 
@@ -2066,7 +2076,7 @@ const Mirror = {
         idx = pre;
         line.v = (pre && pre.v) || 0;
         if (pre && pre.failed) line.y = 'sheet-silent';
-        return Mirror.pull(appId, pre).catch(() => ({ failed: 1 }));
+        return Mirror.pull(appId, pre).catch(e => ({ failed: 1, why: threwWhy(e) }));
       })
       .then(got => {
         line.g = IO.came(got || {}) || 0;
@@ -2089,7 +2099,7 @@ const Mirror = {
           return !!(res && (res.state === 'confirmed' || res.state === 'clean'));
         }, () => { line.y = (readFailed ? line.y + '+' : '') + 'push-threw'; return false; });
       })
-      .catch(() => { line.y = line.y || 'threw'; return false; });
+      .catch(e => { line.y = (line.y ? line.y + '+' : '') + threwWhy(e); return false; });
     const done = ok => {
       release(appId);
       line.r = ok ? 'ok' : 'fail';

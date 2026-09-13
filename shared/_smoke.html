@@ -743,6 +743,47 @@ async function run() {
     BG.caught && BG.caught.state === 'confirmed' && BG.caught.next === false);
   ok('mirror: a device that has never read the save file always reads it', () => BG.never === true);
 
+  /* ---- a read that crashes says what crashed ----
+     The PC logged "read-failed:?" fifteen times running: the sheet answered,
+     the rows came down, something threw while taking them in, and the catch
+     dropped the error. Forced here with a table reader that throws. */
+  const TH = {};
+  {
+    IO.register({ app: '__thr', name: 'Thr', types: [stamp],
+      tables: [{ name: 'Boom', type: stamp, cols: [['name', 'Name']] }] });
+    const keepV = IO.mirror.settings.sheetV;
+    const realRead = IO.readTable;
+    IO.readTable = () => { throw new Error('smoke-boom'); };
+    document.head.appendChild = function (el) {
+      const m = el && el.src && /callback=([^&]+)/.exec(el.src);
+      if (m) {
+        const reply = /want=index/.test(el.src)
+          ? { ok: true, v: 4, index: { Boom: { rows: 2, edited: '2999-01-01T00:00:00.000Z' } }, pushedAt: {} }
+          : { ok: true, v: 4, tabs: { Boom: [['id', 'date', 'Name', 'edited', 'by'], ['x', '', 'y', '', '']] } };
+        setTimeout(() => window[m[1]] && window[m[1]](reply), 0);
+        return el;
+      }
+      return Node.prototype.appendChild.call(this, el);
+    };
+    try {
+      IO.mirror.clearLog();
+      /* a boundary in the future, so there is nothing to send and no request
+         can leave this page */
+      IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec', on: 1,
+        pushed: { __thr: '2999-01-01T00:00:00.000Z' } });
+      await IO.mirror.onOpen('__thr', 'tick');
+      TH.line = IO.mirror.log().slice(-1)[0] || {};
+    } catch (e) { TH.err = String(e); }
+    finally {
+      IO.readTable = realRead;
+      delete document.head.appendChild;
+      IO.mirror.clearLog();
+      IO.mirror.set({ url: '', on: 1, sheetV: keepV, pushed: { __thr: '' }, seen: { '__thr|Boom': '' } });
+    }
+  }
+  ok('mirror: a read that crashes logs what crashed, not a question mark', () =>
+    /read-failed:threw:.*smoke-boom/.test(TH.line.y || ''));
+
   /* ---- a timeout shorter than the thing it waits for is not a guard ----
      Nine failures in a row at almost exactly 27 seconds, which was 12 plus 15:
      both calls ran out the clock rather than going wrong. */
