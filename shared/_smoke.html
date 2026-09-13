@@ -452,6 +452,30 @@ async function run() {
     const rows = IO.bagRows(t[0].rows);
     return rows.length > 0 && rows.every(r => r && r.id && r.type);
   })());
+  /* One photo row over the sheet's 50,000-character cell limit made the sheet
+     refuse the whole push, forever, and nothing from the phone reached the
+     laptop again. Asserted on the mechanism — no cell the sheet is handed is
+     over the limit, and the row comes back whole — not on photos. */
+  const BIG = {};
+  {
+    IO.register({ app: '__big', name: 'Big', types: [stamp] });
+    Rec.set(stamp, null, 'big-row', { img: 'data:image/jpeg;base64,' + 'A'.repeat(70000) });
+    const grid = IO.bagTabs('__big')[0].rows;
+    const line = grid.filter(l => l[1] === Rec.row(stamp, null, 'big-row').id)[0] || [];
+    BIG.longest = Math.max.apply(null, grid.map(l => Math.max.apply(null, l.map(c => String(c).length))));
+    BIG.pieces = line.length;
+    const back = IO.bagRows(grid).filter(r => r.key === 'big-row')[0];
+    BIG.whole = !!back && back.payload.img.length === 70000 + 23;
+    /* the same line after the row shrank and was updated in place: the old
+       tail is still sitting to its right */
+    const small = JSON.stringify({ id: 'x', type: stamp, key: 'small', payload: { n: 1 } });
+    BIG.staleTail = IO.bagRows([[small, 'x', 'leftover-from-the-long-version']]).length === 1;
+    Rec.del(stamp, null, 'big-row');
+  }
+  ok('mirror: no cell sent to the sheet is over its character limit', () => BIG.longest <= 32767);
+  ok('mirror: a row too big for one cell goes up in pieces and comes back whole', () =>
+    BIG.pieces > 2 && BIG.whole);
+  ok('mirror: cells left over from a longer version of a row are ignored', () => BIG.staleTail);
   ok('mirror: the sheet hands over a tab that was asked for by name', () =>
     /only && only.indexOf\(name\) > -1/.test(IO.mirror.script()));
   /* A sync that says "no changes" while the weight on screen moves is a sync

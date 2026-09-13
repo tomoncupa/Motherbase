@@ -810,9 +810,25 @@ const IO = {
        written line by line and the script has to know the first line is not
        one of them. */
     const data = [['Motherbase rows. Do not edit by hand, the readable tabs are the ones to look at.']];
+    /* ── a row bigger than a cell ──
+
+       Google Sheets refuses any cell over 50,000 characters, and a 360px photo
+       of a receipt is about 52,000 once it is text. The sheet then refuses the
+       whole batch, the push never confirms, the boundary never moves, and the
+       same batch — photo included — fails again on every sync. Nothing logged
+       on the phone after one photo ever reached the laptop, and the laptop,
+       which takes no photos, synced the other way without a hitch.
+
+       So a long row is cut into pieces: the first in column one where it has
+       always been, the id still in column two, the rest from column three on.
+       Thirty thousand, because a spreadsheet download has a lower limit still
+       (32,767) and this same tab goes into that file. `bagRows` joins them. */
     bag.rows.forEach(r => {
       if (since && !(r.updated_at > since)) return;
-      data.push([JSON.stringify(r), r.id]);
+      const json = JSON.stringify(r);
+      const line = [json.slice(0, CELL_MAX), r.id];
+      for (let i = CELL_MAX; i < json.length; i += CELL_MAX) line.push(json.slice(i, i + CELL_MAX));
+      data.push(line);
     });
 
     const set = [['Setting', 'Value']];
@@ -876,7 +892,17 @@ const IO = {
     (grid || []).forEach(line => {
       const cell = line && line[0];
       if (typeof cell !== 'string' || cell.charAt(0) !== '{') return;
-      try { out.push(JSON.parse(cell)); } catch (e) {}
+      /* Joined a piece at a time, stopping at the first join that parses. A
+         line updated in place keeps whatever cells the old, longer version
+         left to its right, and those are stale — but a whole row parses
+         before it reaches them, so they are never read. */
+      let json = cell;
+      for (let i = 2; ; i++) {
+        try { out.push(JSON.parse(json)); return; } catch (e) {}
+        const more = line[i];
+        if (typeof more !== 'string' || !more) return;
+        json += more;
+      }
     });
     return out;
   },
@@ -1183,6 +1209,8 @@ const IO = {
      GET carries no data out, and the sheet is his own.                      */
 
 const MKEY = 'mb.mirror';
+/* the longest piece of a _Data row one cell is given; see bagTabs */
+const CELL_MAX = 30000;
 const watching = Object.create(null);
 
 /* ── one attempt at a time, and never a stuck one ──
