@@ -189,7 +189,7 @@ const APP = {
   /* Types WEALTH owns. `spend` and `acct` are NOT here: STATUS owns their
      shape and WEALTH only merges into them. Declaring them would silence the
      store's warning, which is the one thing keeping the two apps honest. */
-  types: ['cat', 'rule', 'wtag', 'mark', 'count', 'client', 'paid', 'sesh', 'pack', 'bill', 'pot', 'move', 'debt', 'recon'],
+  types: ['cat', 'rule', 'wtag', 'mark', 'count', 'client', 'paid', 'sesh', 'pack', 'bill', 'pot', 'move', 'debt', 'recon', 'xfer'],
 };
 
 Skins.load('../shared/skins.json?v=13').then(() => { Skins.restore(APP.id);
@@ -566,6 +566,12 @@ function movementSince(acctId, from) {
   let inn = 0, out = 0;
   paidRows(from ? { from: from } : {}).forEach(p => { if (p.acct === acctId) inn += num(p.amt, 0); });
   spendRows(from ? { from: from } : {}).forEach(x => { if (x.acct === acctId) out += num(x.amt, 0); });
+  /* A transfer between his own accounts leaves one and lands in the other.
+     It changes both balances and neither spending nor income. */
+  xfers(from ? { from: from } : {}).forEach(x => {
+    if (x.to === acctId) inn += num(x.amt, 0);
+    if (x.from === acctId) out += num(x.amt, 0);
+  });
   return { in: inn, out: out, net: inn - out, any: !!(inn || out) };
 }
 function balanceOf(acctId) {
@@ -884,6 +890,10 @@ function dayEvents(date) {
       note: x.dir === 'out' ? 'taken out of the pot' : 'put into the pot',
       amt: 0, quiet: 1, fig: (x.dir === 'out' ? '-' : '+') + money(num(x.amt, 0)) });
   });
+  xfers({ date: date }).forEach(x => {
+    out.push({ kind: 'xfer', t: num(x.t, 0), name: acctName(x.from) + ' to ' + acctName(x.to),
+      note: 'your own money moving, not spending', amt: 0, quiet: 1, fig: money(num(x.amt, 0)) });
+  });
   Rec.all('sesh', { date: date }).forEach(r => {
     const c = Rec.get('client', null, r.payload.client);
     out.push({ kind: 'sesh', t: 0, name: c ? c.name : 'a client',
@@ -962,8 +972,8 @@ function donut(rows, total, size) {
 
      KNOWN      already reconciled on an earlier import. Silent, and this is
                 what makes running the same file twice harmless.
-     CERTAIN    same account, same amount to the peso, within three days of
-                something already logged. Merged without asking.
+     CERTAIN    same account, same amount to the peso, on the same day, with
+                no clock or shop name against it. Merged without asking.
      ASK        close but not certain. He decides, one at a time, and the
                 question is always "are these the same thing".
      NEW        nothing like it. Offered as something to add.
@@ -982,17 +992,19 @@ function donut(rows, total, size) {
    Account, day, amount and the first run of letters in the description —
    enough to be stable, loose enough to survive a bank re-spacing its own
    columns. */
-function stmtId(acct, date, amt, desc) {
+function stmtId(acct, date, amt, desc, ref) {
+  /* The bank's own reference when there is one. Without it, two ₱93 Angkas
+     rides on the same day are one fingerprint, and the second would be
+     skipped as already imported. */
   return acct + '|' + date + '|' + Math.round(num(amt, 0) * 100) + '|' +
-    norm(String(desc || '').slice(0, 24));
+    (ref ? 'ref:' + String(ref).trim() : norm(String(desc || '').slice(0, 24)));
 }
 const recon = id => Rec.get('recon', null, id);
 
 /* ── reading whatever the bank printed ──
-   CSV, tab separated, or text pasted out of a PDF. No PDF parsing: it needs a
-   library from a CDN that this app would then not run without, and hard
-   constraint 4 forbids that. Selecting the text and pasting it works, costs
-   nothing, and cannot break on a plane. */
+   CSV, tab separated, or text pasted out of a PDF. Files themselves, PDF and
+   spreadsheet, are opened further down by libraries fetched only when needed;
+   pasting stays as the way in when they will not load. */
 /* == which character is actually the column break ==
    Deciding this per line is wrong and it bit immediately: "5,400.00" made a
    pasted PDF line look comma separated, so one statement was read with three
@@ -1161,21 +1173,465 @@ function parseStatement(text, dayFirst) {
            skipped: skipped, dayFirst: df, cols: cols };
 }
 
+/* ══════════════════ the smart half of import ══════════════════
+   Tom, 2026-09-13, with his real GCash PDF and UnionBank spreadsheet: "please
+   create the smart import tool." Reading those two files taught four things,
+   and each one is a way an honest-looking import puts wrong money in the app.
+
+   1. A PRINTED AMOUNT IS NOT ALWAYS MONEY THAT MOVED. GCash prints ride holds
+      as payments. Two ₱62 Angkas lines three minutes apart, the balance does
+      not move on the second, then a ₱93 line that only takes ₱31. Over two
+      months that was ₱4,261 of "spending" that never left the wallet. The
+      running balance is the only column that tells the truth, so wherever a
+      statement has one, the amount of every line is what the balance did.
+
+   2. A STATEMENT CAN BE CHECKED AGAINST ITSELF. Opening balance plus every
+      movement lands on the closing balance to the centavo, or something is
+      wrong — a missed page, text pulled out of a PDF in the wrong order. When
+      it does not add up, nothing is imported unless he says he has checked.
+
+   3. A REVERSAL CANCELS ITS ORIGINAL. UnionBank sent ₱1,600 to a mistyped
+      GCash number and put it straight back. Both lines are real and together
+      they are nothing, so they are netted out, not imported as a payment and
+      an income.
+
+   4. HIS OWN MONEY SHOWS UP TWICE. ₱5,500 sent from UnionBank to his own
+      GCash is a debit on one statement and a credit on the other. Imported as
+      spending and income it inflates both. So it is recorded once, as a
+      transfer, and the second statement finds the transfer the first one
+      already wrote instead of adding another.
+
+   Only after those four does the old question get asked: is this already
+   something he logged? */
+
+const round2 = n => Math.round(n * 100) / 100;
+const xfers = o => Rec.all('xfer', o).map(r => Object.assign({ key: r.key, date: r.date }, r.payload));
+
+/* == the libraries, fetched only when a file needs one ==
+   Hard constraint 4 allows a CDN dependency that degrades, and SheetJS is
+   already one. The PDF reader is the same deal: nothing in the app waits on
+   it, and if it will not load the import says so and offers pasting. An
+   earlier note in this file ruled PDFs out entirely; that was wrong, it
+   confused "may not depend on" with "may not use". */
+const LIBS = {
+  xlsx: { src: 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', ready: () => window.XLSX },
+  pdf: { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', ready: () => window.pdfjsLib },
+};
+function loadLib(name) {
+  const L = LIBS[name];
+  if (L.ready()) return Promise.resolve(L.ready());
+  if (!L.p) {
+    L.p = new Promise(res => {
+      const s = el('script');
+      s.src = L.src;
+      s.onload = () => res(L.ready() || null);
+      s.onerror = () => res(null);
+      document.head.appendChild(s);
+      setTimeout(() => res(L.ready() || null), 15000);
+    }).then(v => { if (!v) L.p = null; return v; });
+  }
+  return L.p;
+}
+
+function fileKind(f) {
+  const n = String(f.name || '').toLowerCase();
+  if (/\.pdf$/.test(n) || f.type === 'application/pdf') return 'pdf';
+  if (/\.xlsx?$/.test(n)) return 'xlsx';
+  return 'text';
+}
+const readAs = (f, how) => new Promise((res, rej) => {
+  const fr = new FileReader();
+  fr.onload = () => res(fr.result);
+  fr.onerror = () => rej(new Error('that file could not be read'));
+  if (how === 'text') fr.readAsText(f); else fr.readAsArrayBuffer(f);
+});
+
+async function openXlsx(buf) {
+  const X = await loadLib('xlsx');
+  if (!X) throw new Error('The spreadsheet reader would not load, which usually means no internet. Save the file as CSV and choose that instead.');
+  let wb;
+  try { wb = X.read(new Uint8Array(buf), { type: 'array' }); }
+  catch (e) {
+    throw new Error(/password|encrypt/i.test(String(e && e.message))
+      ? 'This spreadsheet has a password on it. Open it, save a copy without the password, and choose that.'
+      : 'That spreadsheet would not open: ' + (e && e.message || e));
+  }
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
+    .map(r => r.map(c => String(c == null ? '' : c)))
+    .filter(r => r.some(c => c.trim()));
+}
+
+/* Text comes out in the order the PDF drew it, which for GCash is one
+   transaction at a time. Rebuilding lines from their positions on the page is
+   what scrambled the first attempt, so positions are deliberately ignored.
+
+   The password is handed to the reader and nowhere else: not a setting, not a
+   row, not the console. */
+async function openPdf(buf, password) {
+  const P = await loadLib('pdf');
+  if (!P) throw new Error('The PDF reader would not load, which usually means no internet. Select the text in the PDF and paste it instead.');
+  P.GlobalWorkerOptions.workerSrc = LIBS.pdf.src.replace('pdf.min.js', 'pdf.worker.min.js');
+  let doc;
+  try {
+    doc = await P.getDocument({ data: new Uint8Array(buf.slice(0)), password: password || undefined }).promise;
+  } catch (e) {
+    if (e && e.name === 'PasswordException') {
+      const err = new Error('password');
+      err.password = e.code === 2 ? 'wrong' : 'needed';
+      throw err;
+    }
+    throw new Error('That PDF would not open: ' + (e && e.message || e));
+  }
+  const lines = [];
+  let cur = '';
+  for (let i = 1; i <= doc.numPages; i++) {
+    const tc = await (await doc.getPage(i)).getTextContent();
+    tc.items.forEach(it => {
+      cur += it.str;
+      if (it.hasEOL) { if (cur.trim()) lines.push(cur.trim()); cur = ''; }
+    });
+    if (cur.trim()) { lines.push(cur.trim()); cur = ''; }
+  }
+  return lines;
+}
+
+/* == GCash's own shape ==
+   A timestamp, a description that can run over two lines, then a reference
+   number, ONE amount with no sign, and the balance after it. Which way the
+   money went is not printed anywhere; only the balance says. */
+const GC_START = /^(\d{4}-\d{2}-\d{2}) (\d{1,2}):(\d{2}) ([AP]M)\s*(.*)$/;
+const GC_TAIL = /^(.*?)\s*(\d{10,16})\s+(-?[\d,]+\.\d{2})\s+(-?[\d,]+\.\d{2})$/;
+const looksGCash = lines => lines.filter(l => GC_START.test(l)).length >= 3 &&
+  lines.some(l => /balance/i.test(l));
+
+function readGCash(lines) {
+  const st = { source: 'gcash', title: lines.find(l => /transaction history/i.test(l)) || 'GCash statement',
+    opening: null, closing: null, lines: [], ids: [], skipped: 0 };
+  let cur = null;
+  lines.forEach(l => {
+    let m;
+    if ((m = l.match(/^STARTING BALANCE\s+(-?[\d,]+\.\d{2})$/i))) { st.opening = num(m[1]); return; }
+    if ((m = l.match(/^ENDING BALANCE\s+(-?[\d,]+\.\d{2})$/i))) { st.closing = num(m[1]); cur = null; return; }
+    if (/^(total debit|total credit|date and time)/i.test(l)) return;
+    if ((m = l.match(GC_START))) {
+      if (cur) st.skipped++;                      /* a record that never found its amount */
+      let hr = +m[2] % 12;
+      if (m[4] === 'PM') hr += 12;
+      cur = { date: m[1], time: String(hr).padStart(2, '0') + ':' + m[3], desc: '', ref: '', printed: null, bal: null, signed: null };
+      l = m[5];
+      if (!l) return;
+    }
+    if (!cur) return;
+    const t = l.match(GC_TAIL);
+    if (t) {
+      if (t[1]) cur.desc += (cur.desc ? ' ' : '') + t[1];
+      cur.ref = t[2];
+      cur.printed = Math.abs(num(t[3], 0));
+      cur.bal = num(t[4], 0);
+      st.lines.push(cur);
+      cur = null;
+    } else {
+      cur.desc += (cur.desc ? ' ' : '') + l;
+    }
+  });
+  /* Whose wallet this is: the number money is most often sent FROM. */
+  const from = {};
+  st.lines.forEach(x => {
+    const m = x.desc.match(/transfer from (\d{10,13}) to/i);
+    if (m) from[m[1]] = (from[m[1]] || 0) + 1;
+  });
+  const own = Object.keys(from).sort((a, b) => from[b] - from[a])[0];
+  if (own) st.ids.push(own);
+  return st;
+}
+
+/* == any statement with a header row ==
+   Columns found by name. Banks also wrap long descriptions at a fixed width
+   inside a cell — UnionBank cuts at twenty characters, mid-word — so the most
+   common wrapped-line length is taken to be the cut, and a line of exactly
+   that length is joined to the next with no space. */
+const HEADS = {
+  date: /^(date|txn date|transaction date|posting date|post date|value date|date and time)$/i,
+  desc: /(desc|particular|detail|narrat|remark|merchant|payee)/i,
+  ref: /(^ref|reference)/i,
+  dr: /^(debit|debits|withdrawals?|paid out|money out|outflow|dr)$/i,
+  cr: /^(credit|credits|deposits?|paid in|money in|inflow|cr)$/i,
+  amt: /^(amount|amt|transaction amount)$/i,
+  bal: /balance/i,
+};
+function readTable(grid, dayFirst) {
+  let head = -1, cols = null;
+  for (let i = 0; i < Math.min(grid.length, 40); i++) {
+    const c = {};
+    grid[i].forEach((v, j) => {
+      const s = String(v).trim();
+      Object.keys(HEADS).forEach(k => { if (c[k] == null && s && HEADS[k].test(s)) c[k] = j; });
+    });
+    if (c.date != null && (c.amt != null || c.dr != null || c.cr != null)) { head = i; cols = c; break; }
+  }
+  if (!cols) return null;
+
+  const st = { source: 'table', title: '', opening: null, closing: null, lines: [], ids: [], skipped: 0 };
+  grid.slice(0, head).forEach(r => {
+    const i = r.findIndex(v => /account\s*(no|number|#)/i.test(v));
+    if (i > -1) {
+      const v = r.slice(i + 1).find(x => /\d{4,}/.test(x));
+      if (v) st.ids.push(v.replace(/\D/g, '').slice(-4));
+    }
+    const n = r.findIndex(v => /account\s*name/i.test(v));
+    if (n > -1) st.title = (r.slice(n + 1).find(x => x.trim()) || '').trim();
+  });
+
+  const body = grid.slice(head + 1);
+  const seg = {};
+  body.forEach(r => {
+    const parts = String(cols.desc != null ? r[cols.desc] : '').split('\n');
+    parts.slice(0, -1).forEach(p => { if (p.length > 8) seg[p.length] = (seg[p.length] || 0) + 1; });
+  });
+  const wrap = +Object.keys(seg).sort((a, b) => seg[b] - seg[a])[0] || 0;
+  const unwrap = d => {
+    const parts = String(d || '').split('\n');
+    let o = '';
+    parts.forEach((p, i) => { o += (wrap && p.length === wrap && i + 1 < parts.length) ? p : p + ' '; });
+    return o.replace(/\s+/g, ' ').trim();
+  };
+
+  let proof = null, loose = false;
+  body.forEach(r => {
+    const p = readDate(r[cols.date]);
+    if (!p || p.sure) return;
+    loose = true;
+    if (p.a > 12) proof = true;
+    else if (p.b > 12 && proof === null) proof = false;
+  });
+  st.ambiguous = loose && proof === null && dayFirst == null;
+  const df = dayFirst != null ? dayFirst : (proof === null ? false : proof);
+
+  body.forEach(r => {
+    const p = readDate(r[cols.date]);
+    const date = p ? isoOf(p, df) : null;
+    let signed = null;
+    if (cols.dr != null || cols.cr != null) {
+      const dr = cols.dr != null ? readAmt(r[cols.dr]) : null;
+      const cr = cols.cr != null ? readAmt(r[cols.cr]) : null;
+      if (dr) signed = -Math.abs(dr);
+      else if (cr) signed = Math.abs(cr);
+    } else if (cols.amt != null) signed = readAmt(r[cols.amt]);
+    const bal = cols.bal != null ? readAmt(r[cols.bal]) : null;
+    if (!date || !signed) {
+      if (bal != null && /opening|beginning|starting|brought forward/i.test(r.join(' '))) st.opening = bal;
+      st.skipped++;
+      return;
+    }
+    const tm = String(r[cols.date]).match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP]M)?/i);
+    let time = '';
+    if (tm) {
+      let hr = +tm[1];
+      if (tm[3]) { hr %= 12; if (/p/i.test(tm[3])) hr += 12; }
+      time = String(hr).padStart(2, '0') + ':' + tm[2];
+    }
+    st.lines.push({ date: date, time: time, desc: unwrap(cols.desc != null ? r[cols.desc] : ''),
+      ref: cols.ref != null ? String(r[cols.ref]).trim() : '', signed: signed, bal: bal });
+  });
+  return st;
+}
+
+/* Pasted text or a CSV: GCash's shape if it looks like it, a table if it has
+   a header row, and the older shape-guessing reader if it has neither. */
+function readText(text, dayFirst) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (looksGCash(lines)) return readGCash(lines);
+  const d = delimFor(lines);
+  const t = readTable(lines.map(l => splitWith(l, d)), dayFirst);
+  if (t && t.lines.length) return t;
+  const old = parseStatement(text, dayFirst);
+  return { source: 'text', title: '', opening: null, closing: null, ids: [], skipped: old.skipped,
+    ambiguous: old.ambiguous,
+    lines: old.rows.map(r => ({ date: r.date, time: '', desc: r.desc, ref: '', signed: r.amt, bal: null })) };
+}
+
+/* == the truth pass ==
+   Everything above only READS. This decides what actually happened. */
+function settle(st) {
+  const L = st.lines.map(x => Object.assign({}, x));
+  /* Oldest first. A bank that prints newest first also chains its balances
+     newest first, so turning the whole list round keeps the chain intact. */
+  if (L.length > 1 && L[0].date > L[L.length - 1].date) L.reverse();
+  const out = { real: [], holds: [], reversals: [], adjusted: 0, combined: 0, check: null };
+
+  const hasBal = L.length > 0 && L.every(x => x.bal != null);
+  if (hasBal) {
+    let open = st.opening;
+    if (open == null && L[0].signed != null) open = round2(L[0].bal - L[0].signed);
+    let prev = open, broken = 0;
+    L.forEach(x => {
+      if (prev == null) { x.gone = true; broken++; prev = x.bal; return; }
+      const moved = round2(x.bal - prev);
+      if (x.signed != null) {
+        if (Math.abs(moved - x.signed) > 0.009) { broken++; x.bad = true; }
+        x.amt = x.signed;
+      } else {
+        x.amt = moved;
+        if (Math.abs(moved) < 0.005) x.hold = true;
+        else if (x.printed != null && Math.abs(Math.abs(moved) - x.printed) > 0.009) x.adjusted = true;
+      }
+      prev = x.bal;
+    });
+    const last = L[L.length - 1].bal;
+    const closingOk = st.closing == null || Math.abs(st.closing - last) < 0.009;
+    out.check = { balanced: true, ok: !broken && closingOk, opening: open,
+      closing: st.closing != null ? st.closing : last, broken: broken + (closingOk ? 0 : 1) };
+  } else {
+    L.forEach(x => { x.amt = x.signed; });
+    out.check = { balanced: false, ok: true };
+  }
+
+  const byRef = {};
+  L.forEach(x => { if (x.ref) byRef[x.ref] = x; });
+  L.forEach(x => {
+    const m = String(x.desc || '').match(/^reversal of\s+(\S+)/i);
+    const o = m && byRef[m[1]];
+    if (o && !o.gone && !x.gone && Math.abs(o.amt + x.amt) < 0.009) {
+      o.gone = x.gone = true;
+      out.reversals.push({ was: o, undo: x });
+    }
+  });
+  L.forEach(x => { if (x.hold && !x.gone) { x.gone = true; out.holds.push(x); } });
+
+  /* A charge the wallet took in pieces is one purchase. An adjusted line folds
+     into the nearest earlier line for the same merchant on the same day, so a
+     ride held at ₱62 and finished at ₱93 is one ₱93 ride, not two entries. */
+  const mins = x => { const t = String(x.time || '').split(':'); return t.length === 2 ? +t[0] * 60 + +t[1] : null; };
+  const kept = [];
+  L.filter(x => !x.gone).forEach(x => {
+    if (x.adjusted) {
+      out.adjusted++;
+      for (let k = kept.length - 1; k >= 0 && k >= kept.length - 8; k--) {
+        const p = kept[k];
+        if (p.date !== x.date || p.desc !== x.desc) continue;
+        const a = mins(p), c = mins(x);
+        if (a != null && c != null && c - a > 90) continue;
+        p.amt = round2(p.amt + x.amt);
+        p.pieces = (p.pieces || 1) + 1;
+        out.combined++;
+        return;
+      }
+    }
+    kept.push(x);
+  });
+  out.real = kept.filter(x => Math.abs(x.amt) >= 0.005);
+  out.heldTotal = round2(out.holds.reduce((a, x) => a + (x.printed || 0), 0));
+  out.outTotal = round2(-out.real.filter(x => x.amt < 0).reduce((a, x) => a + x.amt, 0));
+  out.inTotal = round2(out.real.filter(x => x.amt > 0).reduce((a, x) => a + x.amt, 0));
+  return out;
+}
+
+/* == which accounts are his ==
+   An account is recognised on a statement by a number: a GCash mobile number,
+   the last four digits of a bank account. They live in settings, not on the
+   `acct` row, for the same reason a balance does: STATUS writes that row as
+   {name, order} and would drop anything else on it. */
+const idsOf = acctId => { const v = S.get('ids.' + acctId, []); return Array.isArray(v) ? v : []; };
+const digitsOf = v => String(v == null ? '' : v).replace(/\D/g, '');
+const sameId = (a, b) => {
+  const x = digitsOf(a), y = digitsOf(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  return (x.length === 4 || y.length === 4) && x.slice(-4) === y.slice(-4);
+};
+function ownAcctIn(desc, self, extra) {
+  const d = ' ' + String(desc || '') + ' ';
+  for (const a of accts()) {
+    if (a.id === self) continue;
+    const ids = idsOf(a.id).concat((extra && extra[a.id]) || []);
+    for (const id of ids) {
+      const dg = digitsOf(id);
+      if (dg.length < 4) continue;
+      /* Four digits on their own turn up everywhere, so a short one has to be
+         introduced as an account ending, not merely present. */
+      const hit = dg.length === 4
+        ? new RegExp('ending(?: in)?\\s*' + dg + '(\\D|$)', 'i').test(d)
+        : new RegExp('(^|\\D)' + dg + '(\\D|$)').test(d);
+      if (hit) return a.id;
+    }
+  }
+  return null;
+}
+/* Numbers this statement sends money to or receives it from, that might be
+   his. Offered as a question, once; never assumed. */
+function counterparts(settled, self) {
+  const found = {};
+  const add = (id, label) => {
+    if (!found[id]) found[id] = { id: id, label: label, n: 0 };
+    found[id].n++;
+  };
+  settled.real.forEach(x => {
+    let m;
+    if ((m = x.desc.match(/from (.+?) with account ending in (\d{4})/i))) add(m[2], m[1] + ' ending in ' + m[2]);
+    if ((m = x.desc.match(/to (.+?) with account ending in (\d{4})/i))) add(m[2], m[1] + ' ending in ' + m[2]);
+    if ((m = x.desc.match(/to account:\s*([A-Za-z][A-Za-z .,&\/-]*?)\s+(\d{6,})/i))) add(m[2], m[1].trim() + ' ' + m[2]);
+  });
+  const no = S.get('notmine', []);
+  return Object.values(found)
+    .filter(c => !(Array.isArray(no) && no.indexOf(c.id) > -1) && !idsOf(self).some(i => sameId(i, c.id)))
+    .sort((a, b) => b.n - a.n);
+}
+const escRe = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function preselect(c, cands, self) {
+  const owner = accts().find(a => a.id !== self && idsOf(a.id).some(i => sameId(i, c.id)));
+  if (owner) return owner.id;
+  const named = accts().find(a => a.id !== self && new RegExp('(^|\\W)' + escRe(a.name) + '(\\W|$)', 'i').test(c.label));
+  if (!named) return '';
+  /* The name alone is not enough — a statement also shows the one time money
+     went to a mistyped number. Only the number used most often under that
+     name is suggested, and he can still say no. */
+  const re = new RegExp('(^|\\W)' + escRe(named.name) + '(\\W|$)', 'i');
+  const top = cands.filter(x => re.test(x.label)).sort((a, b) => b.n - a.n)[0];
+  return top && top.id === c.id ? named.id : '';
+}
+function guessAcct(st) {
+  const byId = accts().find(a => idsOf(a.id).some(i => st.ids.some(j => sameId(i, j))));
+  if (byId) return byId.id;
+  if (st.source === 'gcash') { const g = accts().find(a => /gcash/i.test(a.name)); if (g) return g.id; }
+  return '';
+}
+
 /* ── deciding what each line is ──
    Certainty is deliberately narrow. Anything looser gets asked about, because
-   a wrong automatic merge is invisible and a question costs three seconds. */
-function planImport(rows, acctId) {
-  const out = { known: [], certain: [], ask: [], fresh: [] };
+   a wrong automatic merge is invisible and a question costs three seconds.
+   `extra` is the account numbers he has just confirmed but not yet saved:
+   nothing is written until apply, and the plan still has to use them. */
+function planImport(rows, acctId, extra) {
+  const out = { known: [], certain: [], ask: [], fresh: [], xnew: [], xlink: [] };
   const taken = {};
+  const pend = [];
   rows.forEach(line => {
-    const id = stmtId(acctId, line.date, line.amt, line.desc);
+    const id = stmtId(acctId, line.date, line.amt, line.desc, line.ref);
     const seen = recon(id);
     if (seen) { out.known.push({ line: line, id: id, was: seen }); return; }
     const money_ = Math.abs(line.amt), isOut = line.amt < 0;
-    /* Only rows that are not already spoken for, here or on a past import. */
+
+    const other = ownAcctIn(line.desc, acctId, extra);
+    if (other) {
+      const from = isOut ? acctId : other, to = isOut ? other : acctId;
+      const ex = xfers({ from: Day.shift(line.date, -2), to: Day.shift(line.date, 2) }).find(x =>
+        x.from === from && x.to === to && Math.abs(num(x.amt, 0) - money_) < 0.009 &&
+        !(x.stmt && x.stmt[acctId]) && !taken['x|' + x.date + '|' + x.key]);
+      if (ex) {
+        taken['x|' + ex.date + '|' + ex.key] = 1;
+        out.xlink.push({ line: line, id: id, match: ex, from: from, to: to });
+      } else {
+        out.xnew.push({ line: line, id: id, from: from, to: to });
+      }
+      return;
+    }
+
+    /* Rows not already reconciled on a past import. Nothing is claimed yet:
+       that happens below, once every line in the statement has been seen. */
     const pool = (isOut ? spendRows({ from: Day.shift(line.date, -12), to: Day.shift(line.date, 12) })
                         : paidRows({ from: Day.shift(line.date, -12), to: Day.shift(line.date, 12) }))
-      .filter(x => !x.stmt && !taken[x.date + '|' + x.key]);
+      .filter(x => !x.stmt);
 
     const score = x => {
       const gap = Math.abs(Day.diff(x.date, line.date));
@@ -1189,17 +1645,55 @@ function planImport(rows, acctId) {
     const cands = pool.map(x => ({ row: x, s: score(x) })).filter(x => x.s)
       .sort((a, b) => b.s.rank - a.s.rank || a.s.gap - b.s.gap || a.s.d - b.s.d);
 
-    if (cands.length && cands[0].s.rank === 3 && !(cands[1] && cands[1].s.rank === 3)) {
-      taken[cands[0].row.date + '|' + cands[0].row.key] = 1;
-      out.certain.push({ line: line, id: id, match: cands[0].row, kind: isOut ? 'out' : 'in' });
-      return;
-    }
-    if (cands.length) {
-      out.ask.push({ line: line, id: id, cands: cands.slice(0, 3).map(c => c.row),
-                     kind: isOut ? 'out' : 'in' });
-      return;
-    }
-    out.fresh.push({ line: line, id: id, kind: isOut ? 'out' : 'in' });
+    pend.push({ line: line, id: id, kind: isOut ? 'out' : 'in', cands: cands });
+  });
+
+  /* == matches are decided for the whole statement at once ==
+     The first version decided line by line, in date order, and anything with
+     the same account and amount within three days was "certain". On Tom's
+     real GCash file that merged his hand-logged "Angkas home ₱93" on the 6th
+     into a "Bancnet P2M Send ₱93" on the 5th, moved his entry there, and then
+     added the real Angkas ride as a second row. Every total still balanced,
+     which is exactly why no arithmetic check could have caught it.
+
+     So an automatic merge now needs the SAME DAY, and no evidence against it:
+     when both sides know the time, the times agree within 45 minutes or a word
+     of the shop name matches. When several lines want one logged entry, only
+     a line the clock or the name clearly picks may take it. Anything short of
+     that is a question, and a question costs three seconds. */
+  const K = r => r.date + '|' + r.key;
+  const lineMins = l => { const t = String(l.time || '').split(':'); return t.length === 2 ? +t[0] * 60 + +t[1] : null; };
+  const rowMins = r => { const t = num(r.t, 0); if (!t) return null; const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
+  const STOP = ['payment', 'transfer', 'received', 'from', 'with', 'account', 'ending', 'send', 'sent', 'bills', 'gcash', 'visa', 'philippines'];
+  const words = s => String(s || '').toLowerCase().split(/[^a-z]+/).filter(w => w.length >= 4 && STOP.indexOf(w) < 0);
+  const agrees = (l, r) => { const a = words(l.desc), b = words(r.note).concat(words(r.bank)); return a.some(w => b.indexOf(w) > -1); };
+  const clock = (l, r) => { const lm = lineMins(l), rm = rowMins(r); return lm != null && rm != null ? Math.abs(rm - lm) : null; };
+  const strong = (l, r) => { const c = clock(l, r); return (c != null && c <= 45) || agrees(l, r); };
+  const noAgainst = (l, r) => clock(l, r) == null || strong(l, r);
+
+  pend.forEach(p => { p.same = p.cands.filter(c => c.s.rank === 3 && c.s.gap === 0).map(c => c.row); });
+  const wanted = {};
+  pend.forEach((p, i) => p.same.forEach(r => { (wanted[K(r)] = wanted[K(r)] || []).push(i); }));
+  const pickFor = (p, i) => {
+    if (!p.same.length) return null;
+    const fit = p.same.length === 1 ? p.same.filter(r => noAgainst(p.line, r)) : p.same.filter(r => strong(p.line, r));
+    if (fit.length !== 1) return null;
+    const r = fit[0];
+    const rivals = wanted[K(r)].filter(j => j !== i);
+    if (!rivals.length) return r;
+    if (!strong(p.line, r)) return null;
+    return rivals.some(j => strong(pend[j].line, r)) ? null : r;
+  };
+  const claimed = {};
+  pend.forEach((p, i) => {
+    const r = pickFor(p, i);
+    if (r && !claimed[K(r)]) { claimed[K(r)] = 1; p.done = true; out.certain.push({ line: p.line, id: p.id, match: r, kind: p.kind }); }
+  });
+  pend.forEach(p => {
+    if (p.done) return;
+    const open = p.cands.filter(c => !claimed[K(c.row)]).map(c => c.row);
+    if (open.length) out.ask.push({ line: p.line, id: p.id, cands: open.slice(0, 3), kind: p.kind });
+    else out.fresh.push({ line: p.line, id: p.id, kind: p.kind });
   });
   return out;
 }
@@ -1232,20 +1726,41 @@ function mergeStatement(hit, acctId) {
 function addStatement(hit, acctId) {
   const key = newId();
   const amt = Math.abs(hit.line.amt);
+  const t = stampFor(hit.line.date, hit.line.time || '');
   if (hit.kind === 'out') {
     Rec.set('spend', hit.line.date, key, { amt: amt, acct: acctId, note: hit.line.desc,
-      t: stampFor(hit.line.date, ''), src: 'stmt', stmt: hit.id, bank: hit.line.desc });
+      t: t, src: 'stmt', stmt: hit.id, bank: hit.line.desc, ref: hit.line.ref || undefined });
     const r = ruleFor(hit.line.desc);
     if (r) setMark({ date: hit.line.date, key: key }, { cat: r.cat });
   } else {
     Rec.set('paid', hit.line.date, key, { amt: amt, acct: acctId, client: '',
-      note: hit.line.desc, t: stampFor(hit.line.date, ''), src: 'stmt', stmt: hit.id, bank: hit.line.desc });
+      note: hit.line.desc, t: t, src: 'stmt', stmt: hit.id, bank: hit.line.desc, ref: hit.line.ref || undefined });
   }
   Rec.set('recon', null, hit.id, { d: hit.line.desc, amt: hit.line.amt, acct: acctId,
     kind: hit.kind, spend: key, sdate: hit.line.date });
 }
 const skipStatement = (hit, acctId) => Rec.set('recon', null, hit.id,
   { d: hit.line.desc, amt: hit.line.amt, acct: acctId, kind: hit.kind, skip: 1 });
+
+/* One transfer row per real movement, however many statements show it. */
+function writeTransfer(hit, acctId) {
+  const key = newId();
+  const stmt = {};
+  stmt[acctId] = hit.id;
+  Rec.set('xfer', hit.line.date, key, { from: hit.from, to: hit.to, amt: Math.abs(hit.line.amt),
+    note: hit.line.desc, t: stampFor(hit.line.date, hit.line.time || ''), stmt: stmt });
+  Rec.set('recon', null, hit.id, { d: hit.line.desc, amt: hit.line.amt, acct: acctId,
+    kind: 'xfer', spend: key, sdate: hit.line.date });
+}
+function linkTransfer(hit, acctId) {
+  const row = Rec.get('xfer', hit.match.date, hit.match.key);
+  if (!row) return writeTransfer(hit, acctId);
+  const stmt = Object.assign({}, row.stmt || {});
+  stmt[acctId] = hit.id;
+  Rec.set('xfer', hit.match.date, hit.match.key, merge(row, { stmt: stmt }));
+  Rec.set('recon', null, hit.id, { d: hit.line.desc, amt: hit.line.amt, acct: acctId,
+    kind: 'xfer', spend: hit.match.key, sdate: hit.match.date });
+}
 
 /* ══════════════════ the picker: autofill, law 4 ══════════════════
    Typing filters what exists. It never creates by being typed into, because
@@ -3001,8 +3516,18 @@ function countSheet(a) {
       b.appendChild(fld('As of', date));
       const name = UI.field('name', { value: a.name });
       b.appendChild(fld('Name', name));
+      /* How this account is recognised on a statement. Filled in by reading
+         one, and here so a wrong guess can be put right. */
+      const idsF = UI.field('text', { placeholder: 'e.g. 09171234567 or 1234', value: idsOf(a.id).join(', ') });
+      b.appendChild(fld('Numbers that identify it on statements', idsF));
       h.save = () => {
-        if (!bal.value.trim()) { bal.focus(); return false; }
+        const idl = idsF.value.split(/[,\s]+/).map(x => x.trim()).filter(x => digitsOf(x).length >= 4);
+        const idsChanged = idl.join(',') !== idsOf(a.id).join(',');
+        if (idsChanged) S.set('ids.' + a.id, idl);
+        if (!bal.value.trim()) {
+          if (idsChanged) { UI.toast('saved the numbers for <b>' + esc(a.name) + '</b>'); return true; }
+          bal.focus(); return false;
+        }
         Rec.set('count', date.value, a.id, { bal: num(bal.value, 0) });
         const n = name.value.trim();
         /* Merge, never rebuild: STATUS owns this row's shape and may have put
@@ -3279,124 +3804,267 @@ function ruleSheet(existing) {
 }
 
 /* ══════════════════ the import screen ══════════════════
-   Three steps, and nothing is written until the third.
-     1  which account, and the statement itself
-     2  the tally, and the questions, one at a time
-     3  apply                                                         */
+   Four steps, and nothing is written until the last.
+     1  the file, or pasted rows. A locked PDF asks for its password
+     2  what the statement says: does it add up, what was not real money,
+        and which of the numbers in it are his own accounts
+     3  the questions, one at a time
+     4  apply                                                         */
 function importSheet() {
-  let acct = S.get('lastAcct', (accts()[0] || {}).id || '');
-  let text = '', plan = null, dayFirst = null, parsed = null;
-  let idx = 0, answers = {};
+  let acct = '', stmt = null, settled = null, plan = null, answers = {};
+  let dayFirst = null, lastText = '', lastGrid = null, source = 'text';
+  let mine = {}, force = false;
 
   UI.dialog({
-    title: 'READ A STATEMENT', width: 620,
+    title: 'READ A STATEMENT', width: 680,
     body: (b, h) => {
       const pane = el('div');
       b.appendChild(pane);
+      const busy = msg => { pane.innerHTML = ''; pane.appendChild(el('div', 'empty', esc(msg))); };
+      const fail = msg => { stepBring(); UI.toast(esc(msg), { bad: true, ms: 8000 }); };
+      b.addEventListener('dragover', e => e.preventDefault());
+      b.addEventListener('drop', e => {
+        e.preventDefault();
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) takeFile(f);
+      });
 
-      /* ── step 1 ── */
-      function stepPaste() {
+      /* numbers confirmed on this screen, not yet saved */
+      const pendingIds = () => {
+        const m = {};
+        if (acct && stmt) m[acct] = stmt.ids.slice();
+        Object.keys(mine).forEach(id => { if (mine[id]) (m[mine[id]] = m[mine[id]] || []).push(id); });
+        return m;
+      };
+
+      /* ── 1: the file ── */
+      function stepBring() {
         pane.innerHTML = '';
         pane.appendChild(el('div', 'note',
-          'Export from GCash or your bank as a spreadsheet or CSV and drop the file in, or select the rows and paste them. ' +
-          'A PDF has to be pasted: reading one needs a library this app would then not run without.'));
-        pane.appendChild(fld('Which account is this statement for',
-          chipRow(accts().map(a => ({ id: a.id, name: a.name })), acct, v => { acct = v; })));
-
-        const ta = UI.field('note', { rows: 8, placeholder:
-          '2026-09-03,GRAB *TRIP,-280.00\n2026-09-04,LANDERS SUPERSTORE,-5,400.00\n2026-09-05,FUND TRANSFER,45,000.00' });
-        ta.value = text;
-        ta.oninput = () => { text = ta.value; };
-        pane.appendChild(fld('Paste it here', ta));
-
+          'Choose the file GCash or your bank gave you: the PDF, the spreadsheet, or a CSV. ' +
+          'You can also drag it onto this panel, or paste the rows below. Nothing is saved until the last step.'));
         const file = el('input');
         file.type = 'file';
-        file.accept = '.csv,.txt,.tsv,text/csv,text/plain';
+        file.accept = '.pdf,.xlsx,.xls,.csv,.tsv,.txt,application/pdf,text/csv,text/plain';
         file.style.display = 'none';
-        file.onchange = () => {
-          const f = file.files[0];
-          if (!f) return;
-          const fr = new FileReader();
-          fr.onload = () => { text = String(fr.result || ''); ta.value = text;
-            UI.toast('read <b>' + esc(f.name) + '</b>'); };
-          fr.readAsText(f);
-        };
+        file.onchange = () => { if (file.files[0]) takeFile(file.files[0]); };
         pane.appendChild(file);
+        const r1 = el('div', 'rowbtns');
+        const pick = el('button', 'btn go wide mb-press mb-tap', 'Choose a statement file');
+        pick.type = 'button';
+        pick.onclick = () => file.click();
+        r1.appendChild(pick);
+        pane.appendChild(r1);
 
-        const btns = el('div', 'rowbtns');
-        const pickF = el('button', 'btn mb-press mb-tap', 'Choose a file');
-        pickF.type = 'button';
-        pickF.onclick = () => file.click();
-        btns.appendChild(pickF);
-        const go = el('button', 'btn go wide mb-press mb-tap', 'Read it');
+        pane.appendChild(el('h2', null, 'OR PASTE IT'));
+        const ta = UI.field('note', { rows: 6, placeholder: 'Rows copied out of a spreadsheet or a PDF' });
+        ta.value = lastText;
+        pane.appendChild(ta);
+        const r2 = el('div', 'rowbtns');
+        const go = el('button', 'btn wide mb-press mb-tap', 'Read what I pasted');
         go.type = 'button';
         go.onclick = () => {
-          if (!acct) { UI.toast('pick an account first', { bad: true }); return; }
-          if (!text.trim()) { UI.toast('nothing to read yet', { bad: true }); return; }
-          parsed = parseStatement(text, dayFirst);
-          if (!parsed.rows.length) {
-            UI.toast('could not find any dated amounts in that', { bad: true });
-            return;
-          }
-          if (parsed.ambiguous && dayFirst == null) return stepDateAsk();
-          plan = planImport(parsed.rows, acct);
-          idx = 0; answers = {};
-          stepReview();
+          lastText = ta.value;
+          if (!lastText.trim()) { UI.toast('nothing pasted yet', { bad: true }); return; }
+          source = 'text'; dayFirst = null;
+          reread();
         };
-        btns.appendChild(go);
-        pane.appendChild(btns);
+        r2.appendChild(go);
+        pane.appendChild(r2);
+      }
+
+      async function takeFile(f) {
+        dayFirst = null;
+        try {
+          const kind = fileKind(f);
+          if (kind === 'xlsx') {
+            busy('Reading the spreadsheet…');
+            lastGrid = await openXlsx(await readAs(f, 'buf'));
+            source = 'grid';
+            return reread();
+          }
+          if (kind === 'pdf') return openPdfStep(await readAs(f, 'buf'), '');
+          lastText = await readAs(f, 'text');
+          source = 'text';
+          return reread();
+        } catch (e) { fail(e.message || String(e)); }
+      }
+      async function openPdfStep(buf, pw) {
+        busy('Reading the PDF…');
+        try {
+          lastText = (await openPdf(buf, pw)).join('\n');
+          source = 'text';
+          reread();
+        } catch (e) {
+          if (e.password) return stepPassword(buf, e.password === 'wrong');
+          fail(e.message || String(e));
+        }
+      }
+      function stepPassword(buf, wrong) {
+        pane.innerHTML = '';
+        pane.appendChild(el('h2', null, 'THIS PDF IS LOCKED'));
+        pane.appendChild(el('div', 'note', (wrong ? '<span class="stale">That password did not open it.</span> ' : '') +
+          'GCash and most banks lock a statement with a password they tell you when they send it. ' +
+          'It is used once, to open this file on this computer, and it is never saved.'));
+        const pw = el('input', 'mb-input');
+        pw.type = 'password';
+        pw.autocomplete = 'off';
+        pane.appendChild(fld('Password', pw));
+        const r = el('div', 'rowbtns');
+        const go = el('button', 'btn go wide mb-press mb-tap', 'Open it');
+        go.type = 'button';
+        const submit = () => { const v = pw.value; pw.value = ''; openPdfStep(buf, v); };
+        go.onclick = submit;
+        pw.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+        r.appendChild(go);
+        pane.appendChild(r);
+        if (UI.focusSoon) UI.focusSoon(pw); else pw.focus();
+      }
+
+      function reread() {
+        stmt = source === 'grid' ? readTable(lastGrid, dayFirst) : readText(lastText, dayFirst);
+        if (!stmt || !stmt.lines.length) {
+          return fail(source === 'grid'
+            ? 'Could not find a header row with a date and an amount in that spreadsheet.'
+            : 'Could not find any dated amounts in that.');
+        }
+        if (stmt.ambiguous && dayFirst == null) return stepDateAsk();
+        settled = settle(stmt);
+        acct = guessAcct(stmt) || acct;
+        mine = {}; force = false;
+        stepStatement();
       }
 
       /* ── the one thing a file cannot tell you ── */
       function stepDateAsk() {
         pane.innerHTML = '';
-        const sample = parsed.rows.slice(0, 3).map(r => r.date);
         pane.appendChild(el('h2', null, 'ONE QUESTION FIRST'));
         pane.appendChild(el('div', 'note',
           'Every date in this file has a day and a month under thirteen, so nothing in it proves which way round they are. ' +
           'Getting it wrong would put months of spending on the wrong days, so it is worth asking rather than guessing.'));
-        pane.appendChild(el('div', 'note', 'The first few read as <b>' + esc(sample.join(', ')) + '</b> the way I have guessed so far.'));
         const btns = el('div', 'rowbtns');
-        [['Day first', true, '03/04 is the 3rd of April'],
-         ['Month first', false, '03/04 is the 4th of March']].forEach(([lbl, v, note]) => {
-          const btn = el('button', 'btn wide mb-press mb-tap', lbl + ' — ' + note);
+        [['Day first: 03/04 is the 3rd of April', true],
+         ['Month first: 03/04 is the 4th of March', false]].forEach(([lbl, v]) => {
+          const btn = el('button', 'btn wide mb-press mb-tap', lbl);
           btn.type = 'button';
-          btn.onclick = () => {
-            dayFirst = v;
-            parsed = parseStatement(text, v);
-            plan = planImport(parsed.rows, acct);
-            idx = 0; answers = {};
-            stepReview();
-          };
+          btn.onclick = () => { dayFirst = v; reread(); };
           btns.appendChild(btn);
         });
         pane.appendChild(btns);
       }
 
-      /* ── step 2 ── */
+      /* ── 2: what the statement says ── */
+      function stepStatement() {
+        pane.innerHTML = '';
+        const C = settled.check;
+        const days = settled.real.map(x => x.date).sort();
+        pane.appendChild(el('div', 'note', '<b>' + esc(stmt.title || 'Statement') + '</b>' +
+          (days.length ? ' · ' + esc(Day.short(days[0])) + ' to ' + esc(Day.short(days[days.length - 1])) : '') +
+          ' · ' + stmt.lines.length + ' lines read'));
+
+        pane.appendChild(fld('This statement is for', picker({
+          items: accts().map(a => ({ id: a.id, name: a.name })), value: acct,
+          placeholder: 'Which account', none: 'No accounts yet. Type a name to add one.',
+          onPick: v => { acct = v; mine = {}; stepStatement(); }, onCreate: makeAcct,
+        })));
+
+        const g = el('div', 'grid3');
+        if (C.balanced) {
+          g.appendChild(tile('OPENING', money(C.opening == null ? 0 : C.opening), 'the balance it started on'));
+          g.appendChild(tile('CLOSING', money(C.closing), 'the balance it ended on'));
+          g.appendChild(tile('ADDS UP', C.ok ? 'Yes' : 'No',
+            C.ok ? 'every line, to the centavo' : C.broken + ' place' + (C.broken === 1 ? '' : 's') + ' it does not',
+            C.ok ? 'good' : 'bad'));
+        } else {
+          g.appendChild(tile('ADDS UP', 'Cannot tell', 'this file has no balance column to check against', 'warn'));
+        }
+        pane.appendChild(g);
+        const g2 = el('div', 'grid2');
+        g2.style.marginTop = 'var(--s-2)';
+        g2.appendChild(tile('REALLY WENT OUT', money(settled.outTotal),
+          settled.real.filter(x => x.amt < 0).length + ' payments'));
+        g2.appendChild(tile('REALLY CAME IN', money(settled.inTotal),
+          settled.real.filter(x => x.amt > 0).length + ' receipts'));
+        pane.appendChild(g2);
+
+        if (settled.holds.length) pane.appendChild(el('div', 'note', '<b>' + settled.holds.length +
+          ' line' + (settled.holds.length === 1 ? '' : 's') + ' printed as payments that never took money</b>, ' +
+          esc(money(settled.heldTotal)) + ' in total. The balance did not move on them, so they are holds, and they are left out.'));
+        if (settled.combined) pane.appendChild(el('div', 'note', '<b>' + settled.combined +
+          ' part-charge' + (settled.combined === 1 ? '' : 's') + '</b> folded into the payment they finish, so a ride taken in two pieces is one ride at its real price.'));
+        if (settled.reversals.length) pane.appendChild(el('div', 'note', '<b>' + settled.reversals.length +
+          ' payment' + (settled.reversals.length === 1 ? '' : 's') + ' reversed</b> by the bank. Each one and its reversal cancel, so neither is imported.'));
+        if (!C.ok) {
+          pane.appendChild(el('div', 'note', '<span class="stale">The balances do not add up line by line.</span> ' +
+            'That usually means a page is missing, or the text came out of a PDF in the wrong order. Importing it could put wrong amounts in.'));
+          pane.appendChild(UI.row('Import it anyway', 'Only if you have checked it against the statement yourself',
+            UI.toggle(force, v => { force = v; })));
+        }
+
+        const cands = acct ? counterparts(settled, acct).slice(0, 8) : [];
+        if (cands.length) {
+          pane.appendChild(el('h2', null, 'ARE ANY OF THESE YOURS?'));
+          pane.appendChild(el('div', 'note',
+            'Money moving between your own accounts is not spending and not income. Say which of these are yours and ' +
+            'it is recorded once, as a transfer, even when both statements show it. Your answer is remembered.'));
+          cands.forEach(c => {
+            if (!(c.id in mine)) mine[c.id] = preselect(c, cands, acct);
+            const row = el('div', 'fld');
+            row.appendChild(el('label', null, esc(c.label) + ' · ' + c.n + ' time' + (c.n === 1 ? '' : 's')));
+            row.appendChild(chipRow([{ id: '', name: 'Not mine' }].concat(
+              accts().filter(a => a.id !== acct).map(a => ({ id: a.id, name: a.name }))),
+              mine[c.id], v => { mine[c.id] = v; }));
+            pane.appendChild(row);
+          });
+        }
+
+        const btns = el('div', 'rowbtns');
+        const back = el('button', 'btn mb-press mb-tap', 'Start again');
+        back.type = 'button';
+        back.onclick = () => stepBring();
+        btns.appendChild(back);
+        const next = el('button', 'btn go wide mb-press mb-tap', 'Check it against what I logged');
+        next.type = 'button';
+        next.onclick = () => {
+          if (!acct) { UI.toast('say which account this statement is for first', { bad: true }); return; }
+          if (!C.ok && !force) { UI.toast('the balances do not add up. Turn on "import it anyway" only if you have checked it', { bad: true }); return; }
+          plan = planImport(settled.real, acct, pendingIds());
+          answers = {};
+          stepReview();
+        };
+        btns.appendChild(next);
+        pane.appendChild(btns);
+      }
+
+      /* ── 3 and 4: the questions, then what will happen ── */
       function stepReview() {
         pane.innerHTML = '';
-        const g = el('div', 'grid3');
-        g.appendChild(tile('ALREADY KNOWN', String(plan.known.length + plan.certain.length),
+        /* A logged entry already given to an earlier answer is not offered
+           again: two statement lines must never merge into one entry. A
+           question left with nothing to offer is simply a new line. */
+        const used = {};
+        Object.keys(answers).forEach(k => { const a = answers[k]; if (a && a.row) used[a.row.date + '|' + a.row.key] = 1; });
+        plan.ask.forEach(x => { if (!answers[x.id] && !x.cands.some(c => !used[c.date + '|' + c.key])) answers[x.id] = 'new'; });
+        const moves = plan.xnew.length + plan.xlink.length;
+        const g = el('div', 'grid2');
+        g.appendChild(tile('ALREADY IN THE APP', String(plan.known.length + plan.certain.length),
           plan.certain.length ? plan.certain.length + ' matched just now' : 'nothing new to match'));
-        g.appendChild(tile('NEED YOU', String(plan.ask.length - Object.keys(answers).length),
+        g.appendChild(tile('BETWEEN YOUR ACCOUNTS', String(moves),
+          plan.xlink.length ? plan.xlink.length + ' already recorded from the other statement' : 'recorded once, as transfers'));
+        g.appendChild(tile('NEED YOU', String(plan.ask.filter(x => !answers[x.id]).length),
           plan.ask.length ? 'close, but not certain' : 'nothing ambiguous'));
         g.appendChild(tile('NOT IN THE APP', String(plan.fresh.length), 'would be added'));
         pane.appendChild(g);
-        if (parsed.skipped) pane.appendChild(el('div', 'note',
-          esc(String(parsed.skipped)) + ' line' + (parsed.skipped === 1 ? '' : 's') +
-          ' had no date or no amount and were left alone. Headers and running balances usually look like that.'));
 
         const pending = plan.ask.filter(x => !answers[x.id]);
         if (pending.length) {
           pane.appendChild(el('h2', null, 'ARE THESE THE SAME THING?'));
-          pane.appendChild(askOne(pending[0]));
+          pane.appendChild(askOne(pending[0], used));
           pane.appendChild(el('div', 'note', esc(String(pending.length)) + ' left to decide. ' +
             'Nothing is written until you press apply at the end.'));
           return;
         }
 
-        /* everything decided: show what will happen */
         const willAdd = plan.fresh.concat(plan.ask.filter(x => answers[x.id] === 'new'));
         const willMerge = plan.certain.concat(plan.ask.filter(x => answers[x.id] && answers[x.id].row)
           .map(x => ({ line: x.line, id: x.id, match: answers[x.id].row, kind: x.kind })));
@@ -3406,51 +4074,76 @@ function importSheet() {
           pane.appendChild(el('h2', null, 'MATCHED, AND KEPT AS ONE'));
           const l = el('div', 'list');
           willMerge.slice(0, 40).forEach(x => {
-            const changed = Math.abs(num(x.match.amt, 0) - Math.abs(x.line.amt)) > 0.005 ||
-              x.match.date !== x.line.date;
+            const changed = Math.abs(num(x.match.amt, 0) - Math.abs(x.line.amt)) > 0.005 || x.match.date !== x.line.date;
             l.appendChild(itemRow(x.match.note || x.line.desc,
-              Day.short(x.line.date) + ' · ' + esc(x.line.desc) +
-              (changed ? ' · <b>corrected</b>' : ''), money(Math.abs(x.line.amt))));
+              Day.short(x.line.date) + ' · ' + esc(x.line.desc) + (changed ? ' · <b>corrected</b>' : ''),
+              money(Math.abs(x.line.amt))));
           });
           pane.appendChild(l);
           pane.appendChild(el('div', 'note',
-            'Your category, note and receipt stay. The amount, the date and the bank\u2019s own wording are written over the top, so there is one entry and it is the right one.'));
+            'Your category, note and receipt stay. The amount, the date and the bank’s own wording are written over the top, so there is one entry and it is the right one.'));
+        }
+        if (moves) {
+          pane.appendChild(el('h2', null, 'MOVED BETWEEN YOUR ACCOUNTS'));
+          const l = el('div', 'list');
+          plan.xlink.map(x => [x, 1]).concat(plan.xnew.map(x => [x, 0])).slice(0, 40).forEach(([x, linked]) => {
+            const r = itemRow(acctName(x.from) + ' to ' + acctName(x.to),
+              Day.short(x.line.date) + ' · ' + (linked ? 'already recorded from the other statement' : 'not spending, not income'),
+              money(Math.abs(x.line.amt)));
+            r.classList.add('dim');
+            l.appendChild(r);
+          });
+          pane.appendChild(l);
         }
         if (willAdd.length) {
           pane.appendChild(el('h2', null, 'WOULD BE ADDED'));
           const l = el('div', 'list');
-          willAdd.slice(0, 60).forEach(x => {
+          willAdd.slice(0, 80).forEach(x => {
             const r = ruleFor(x.line.desc);
             l.appendChild(itemRow(x.line.desc || 'No details',
-              Day.short(x.line.date) + ' · ' + (x.kind === 'in' ? 'money in'
-                : r ? 'files as ' + esc(catName(r.cat)) : '<span class="stale">uncategorised</span>'),
-              (x.kind === 'in' ? '+' : '') + money(Math.abs(x.line.amt)),
-              x.kind === 'in' ? 'in' : ''));
+              Day.short(x.line.date) + (x.line.time ? ' ' + esc(UI.clockLabel(x.line.time)) : '') + ' · ' +
+              (x.kind === 'in' ? 'money in' : r ? 'files as ' + esc(catName(r.cat)) : '<span class="stale">uncategorised</span>') +
+              (x.line.pieces ? ' · ' + x.line.pieces + ' pieces made one' : ''),
+              (x.kind === 'in' ? '+' : '') + money(Math.abs(x.line.amt)), x.kind === 'in' ? 'in' : ''));
           });
+          if (willAdd.length > 80) l.appendChild(el('div', 'note', 'and ' + (willAdd.length - 80) + ' more.'));
           pane.appendChild(l);
         }
-        if (willSkip.length) pane.appendChild(el('div', 'note',
-          esc(String(willSkip.length)) + ' line' + (willSkip.length === 1 ? '' : 's') +
-          ' you told me to leave out. They are remembered, so a second import will not ask again.'));
-        if (!willAdd.length && !willMerge.length) pane.appendChild(el('div', 'empty',
+        if (willSkip.length) pane.appendChild(el('div', 'note', esc(String(willSkip.length)) + ' line' +
+          (willSkip.length === 1 ? '' : 's') + ' you told me to leave out. They are remembered, so a second import will not ask again.'));
+        const nothing = !willAdd.length && !willMerge.length && !moves;
+        if (nothing) pane.appendChild(el('div', 'empty',
           'Everything in this statement is already in the app and matches. Nothing to do, which is the answer you want.'));
 
         const btns = el('div', 'rowbtns');
-        const back = el('button', 'btn mb-press mb-tap', 'Start again');
+        const back = el('button', 'btn mb-press mb-tap', 'Back');
         back.type = 'button';
-        back.onclick = () => { plan = null; answers = {}; stepPaste(); };
+        back.onclick = () => stepStatement();
         btns.appendChild(back);
         const go = el('button', 'btn go wide mb-press mb-tap',
-          'Apply: ' + willMerge.length + ' merged, ' + willAdd.length + ' added');
+          'Apply: ' + willMerge.length + ' matched, ' + willAdd.length + ' added, ' + moves + ' transfers');
         go.type = 'button';
-        go.disabled = !willAdd.length && !willMerge.length;
-        go.style.opacity = go.disabled ? '.5' : '';
+        go.disabled = nothing;
+        go.style.opacity = nothing ? '.5' : '';
         go.onclick = () => {
           willMerge.forEach(x => mergeStatement(x, acct));
           willAdd.forEach(x => addStatement(x, acct));
           willSkip.forEach(x => skipStatement(x, acct));
+          plan.xnew.forEach(x => writeTransfer(x, acct));
+          plan.xlink.forEach(x => linkTransfer(x, acct));
+          const ids = pendingIds();
+          Object.keys(ids).forEach(a => {
+            const cur = idsOf(a).slice();
+            ids[a].forEach(i => { if (!cur.some(j => digitsOf(j) === digitsOf(i))) cur.push(String(i)); });
+            if (cur.length !== idsOf(a).length) S.set('ids.' + a, cur);
+          });
+          const no = S.get('notmine', []);
+          const nm = Array.isArray(no) ? no.slice() : [];
+          Object.keys(mine).forEach(id => { if (!mine[id] && nm.indexOf(id) < 0) nm.push(id); });
+          S.set('notmine', nm);
+          S.set('lastAcct', acct);
           Mobile.feedback('complete');
-          UI.toast('<b>' + willMerge.length + '</b> matched, <b>' + willAdd.length + '</b> added');
+          UI.toast('<b>' + willMerge.length + '</b> matched, <b>' + willAdd.length + '</b> added, <b>' + moves + '</b> transfers');
           h.close(); draw();
         };
         btns.appendChild(go);
@@ -3458,9 +4151,10 @@ function importSheet() {
       }
 
       /* ── one question, and only one ── */
-      function askOne(q) {
+      function askOne(q, used) {
         const box = el('div');
-        const c = q.cands[0];
+        const list = q.cands.filter(x => !(used && used[x.date + '|' + x.key]));
+        const c = list[0];
         const side = el('div', 'grid2');
         side.appendChild(tile('THE STATEMENT', money(Math.abs(q.line.amt)),
           Day.short(q.line.date) + '<br>' + esc(q.line.desc || 'no description')));
@@ -3471,42 +4165,34 @@ function importSheet() {
         const why = [];
         if (Math.abs(num(c.amt, 0) - Math.abs(q.line.amt)) > 0.005)
           why.push('the amounts differ by ' + money(Math.abs(num(c.amt, 0) - Math.abs(q.line.amt))));
-        if (c.date !== q.line.date)
-          why.push('they are ' + Math.abs(Day.diff(c.date, q.line.date)) + ' days apart');
+        if (c.date !== q.line.date) why.push('they are ' + Math.abs(Day.diff(c.date, q.line.date)) + ' days apart');
         if (c.acct !== acct) why.push('you logged it against ' + acctName(c.acct));
         if (why.length) box.appendChild(el('div', 'note', 'Not certain because ' + why.join(', ') + '.'));
 
         const btns = el('div', 'rowbtns');
-        const yes = el('button', 'btn go mb-press mb-tap', 'Same thing');
-        yes.type = 'button';
-        yes.onclick = () => { answers[q.id] = { row: c }; Mobile.feedback('select'); stepReview(); };
-        btns.appendChild(yes);
-        const no = el('button', 'btn mb-press mb-tap', 'Different, add it');
-        no.type = 'button';
-        no.onclick = () => { answers[q.id] = 'new'; Mobile.feedback('select'); stepReview(); };
-        btns.appendChild(no);
-        const skip = el('button', 'btn mb-press mb-tap', 'Ignore this line');
-        skip.type = 'button';
-        skip.onclick = () => { answers[q.id] = 'skip'; Mobile.feedback('select'); stepReview(); };
-        btns.appendChild(skip);
+        [['Same thing', 'go', () => ({ row: c })], ['Different, add it', '', () => 'new'],
+         ['Ignore this line', '', () => 'skip']].forEach(([lbl, kind, val]) => {
+          const bt = el('button', 'btn ' + kind + ' mb-press mb-tap', lbl);
+          bt.type = 'button';
+          bt.onclick = () => { answers[q.id] = val(); Mobile.feedback('select'); stepReview(); };
+          btns.appendChild(bt);
+        });
         box.appendChild(btns);
 
-        if (q.cands.length > 1) {
-          const other = el('div', 'note', 'Other things it could be:');
+        if (list.length > 1) {
+          box.appendChild(el('div', 'note', 'Other things it could be:'));
           const l = el('div', 'list');
-          q.cands.slice(1).forEach(x => {
-            const r = itemRow(x.note || 'No details',
-              Day.short(x.date) + ' · ' + esc(acctName(x.acct)), money(num(x.amt, 0)));
+          list.slice(1).forEach(x => {
+            const r = itemRow(x.note || 'No details', Day.short(x.date) + ' · ' + esc(acctName(x.acct)), money(num(x.amt, 0)));
             r.onclick = () => { answers[q.id] = { row: x }; Mobile.feedback('select'); stepReview(); };
             l.appendChild(r);
           });
-          box.appendChild(other);
           box.appendChild(l);
         }
         return box;
       }
 
-      stepPaste();
+      stepBring();
     },
     actions: [{ label: 'CLOSE' }],
   });

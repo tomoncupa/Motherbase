@@ -77,6 +77,7 @@ WEALTH writes these types. It may read anything.
 | `move` | date + id | `{pot, amt, dir}` — money into or out of a pot |
 | `debt` | debt id | `{name, owed, rate, min, day}` |
 | `recon` | a statement line's fingerprint | `{d, amt, acct, kind, spend, sdate, skip}` — this line has been dealt with. What makes reading the same file twice harmless |
+| `xfer` | date + id | `{from, to, amt, note, t, stmt}` — his own money moving between two of his accounts. One row however many statements show it; `stmt` maps each account to the statement line that confirmed it |
 
 ### Shared with STATUS, and the care that needs
 
@@ -366,7 +367,7 @@ Every line lands in one of four places.
 | | |
 |---|---|
 | **known** | reconciled on an earlier import. Silent, and this is what makes reading the same file twice harmless |
-| **certain** | same account, same amount to the peso, within three days of something logged, and only one candidate. Merged without asking |
+| **certain** | same account, same amount to the peso, same day, and nothing against it: when both sides know the time it agrees within 45 minutes or the shop name matches. Merged without asking |
 | **ask** | close but not certain. He decides one at a time, and the question is always "are these the same thing" |
 | **new** | nothing like it. Offered as something to add |
 
@@ -409,9 +410,88 @@ actually contains a loose date. A file of ISO dates states its own order on
 every line, and asking a question with no doubt behind it is the fastest way to
 teach somebody to click through questions.
 
-**No PDF parsing.** It needs a library from a CDN that the app would then not
-run without, which hard constraint 4 forbids. Selecting the text and pasting it
-works, costs nothing, and cannot break on a plane.
+**PDFs and spreadsheets are opened directly.** An earlier version of this
+brief said PDF parsing was forbidden because it needs a CDN library. That was
+wrong: hard constraint 4 forbids a dependency the app cannot run WITHOUT, and
+SheetJS was already the precedent. The PDF reader (pdf.js 3.11.174) and the
+spreadsheet reader (SheetJS) load from cdnjs only when a file needs them, and
+if either fails the import says so and pasting still works. Nothing else in
+the app waits on them.
+
+PDF text is taken in the order the file drew it, not rebuilt from positions on
+the page. Rebuilding by position is what scrambled GCash's layout in the first
+attempt, with amounts landing on the wrong rows. Drawing order is one
+transaction at a time.
+
+A locked PDF asks for its password on screen. The password is handed to the
+reader and nowhere else: not a setting, not a row, not the console.
+
+### What his real statements taught
+
+Built 2026-09-13 against Tom's own GCash PDF (249 lines, 15 July to 12
+September) and UnionBank spreadsheet (38 lines, 14 August to 12 September).
+Each lesson is a way an honest-looking import puts wrong money in the app.
+
+**1. A printed amount is not always money that moved.** GCash prints ride
+holds as payments. Two ₱62 Angkas lines three minutes apart, the balance still
+on the second, then a ₱93 line that takes ₱31. Wherever a statement has a
+running balance, **the amount of every line is what the balance did**, not
+what was printed. On the GCash file that removed 19 holds printed at ₱2,685
+and folded 11 part-charges into the purchase they finish, so that ride is one
+₱93 entry. The statement's own "Total Debit" overstates what left the wallet.
+
+**2. A statement checks itself.** Opening plus every movement lands on the
+closing balance to the centavo, or something is wrong: a missing page, text in
+the wrong order. Both real files close exactly. When one does not, apply is
+refused unless he turns on "import it anyway". Watched as the check under the
+bug: the rows the app writes for an account reproduce the statement's closing
+minus opening, not merely look right.
+
+**3. A reversal cancels its original.** UnionBank sent ₱1,600 to a mistyped
+GCash number and put it straight back. A line reading "Reversal of <ref>" and
+the line carrying that reference are netted out together.
+
+**4. His own money appears on both statements.** ₱5,500 from UnionBank to his
+GCash is a debit on one and a credit on the other. Imported as spending and
+income it inflates both. It is one `xfer` row, and the second statement links
+to the row the first one wrote instead of adding another. A transfer changes
+both balances and never touches spending or income.
+
+**5. A match is decided for the whole statement, not line by line.** The first
+build matched in date order, and "same account, same amount, within three
+days" counted as certain. On the real GCash file that merged a hand-logged
+"Angkas home ₱93" on 6 August into a "Bancnet P2M Send ₱93" on 5 August, moved
+the entry there, and added the real ride as a second row. **Every total still
+balanced**, so the self-check could never have caught it: arithmetic proves
+the money is right, not that each entry is the right one.
+
+Now an automatic merge needs the same day and no evidence against it. When
+both sides carry a time they must agree within 45 minutes, or a word of the
+shop name must match. When several lines want one logged entry, only a line
+the clock or the name clearly picks may take it. Everything short of that is
+asked, and a logged entry already given to one answer is never offered to
+another.
+
+### How an account is recognised
+
+By a number: a GCash mobile number, or the last four digits of a bank account.
+They live in settings as `wealth.ids.<account>`, not on the `acct` row, for the
+same reason a balance does: STATUS writes that row as `{name, order}`.
+
+The statement being read supplies its own: UnionBank's header carries the
+account number, and a GCash owner is the number money is most often sent
+FROM. Numbers that money moves to or from are then offered as a question, "are
+any of these yours?", with one suggested only when a number sits under an
+account's name AND is the most used number under that name. The one-off
+mistyped GCash number is left as "not mine". Answers are remembered, and the
+account sheet shows the numbers so a wrong guess can be fixed.
+
+A four-digit number only counts when introduced as an account ending. Four
+digits on their own turn up in every reference number.
+
+**A statement line is fingerprinted by its bank reference when it has one.**
+Two ₱93 rides on one day share a date, an amount and a description; without
+the reference the second would be skipped as already imported.
 
 **Tax.** Deliberately absent. Tom is not registered. One factual line was said
 once and will not be repeated: back tax would be a real claim on the buffer.
