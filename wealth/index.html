@@ -407,7 +407,17 @@ const SEEDRULES = [
   ['netflix', 'subs'], ['spotify', 'subs'], ['youtube', 'subs'],
   ['adobe', 'ops'], ['canva', 'ops'], ['skool', 'ops'],
 ];
+/* Vocabulary added after first launch: a device that was seeded before these
+   existed still needs them, once. A flag rather than a check for the row, so
+   deleting either one keeps it deleted. */
+function seedMore() {
+  if (S.get('seeded2', 0)) return;
+  if (!Rec.has('cat', null, ONETIME)) Rec.set('cat', null, ONETIME, { name: 'One-time transfers', grp: 'var', ord: 99 });
+  if (!Rec.has('wtag', null, UNSURE)) Rec.set('wtag', null, UNSURE, { name: 'Unsure' });
+  S.set('seeded2', 1);
+}
 function seed() {
+  seedMore();
   if (S.get('seeded', 0)) return;
   SEED.forEach(([id, name, grp], i) => { if (!Rec.has('cat', null, id)) Rec.set('cat', null, id, { name: name, grp: grp, ord: i }); });
   SEEDTAGS.forEach(([id, name]) => { if (!Rec.has('wtag', null, id)) Rec.set('wtag', null, id, { name: name }); });
@@ -1597,6 +1607,132 @@ function guessAcct(st) {
   return '';
 }
 
+/* ══════════════════ import setup, asked once ══════════════════
+   Tom, 2026-09-13: "Maybe we should have an import setup, where we can
+   categorize where things like Lawson Acqua Pebbles always get categorized,
+   asked once upon import first time." And: "Gcash will sometimes have
+   transfers to numbers, I wont always remember this. I would like to set an
+   unsure tag incase I remember in the future but treat them as one time
+   transfers."
+
+   So an import finds every payee it has never seen, asks once, and turns the
+   answer into a rule. A rule already files the whole history, so one answer
+   sorts every past and future payment to that name.
+
+   Money sent to a number nobody has named is filed as a One-time transfer,
+   tagged Unsure. It still counts as money out, because it left — leaving it
+   out would make spending look smaller than it was. It waits under STILL
+   UNSURE on the Spending screen until he remembers. */
+const ONETIME = 'onetime', UNSURE = 'unsure';
+const listSetting = k => { const v = S.get(k, []); return Array.isArray(v) ? v.slice() : []; };
+
+/* Who was paid, pulled out of a description, as text a rule can match. The
+   bank's wording is full of branch names, reference numbers and country
+   codes; a rule keyed on "Payment" would file every GCash payment at once,
+   which is exactly what the ALWAYS button used to do. */
+const CITY = /\s+(?:makati|mandaluyong|mandaluyo|pasig|taguig|quezon|manila|pasay|paranaque|parañaque|muntinlupa|marikina|san juan|bgc)\b.*$/i;
+function shopName(raw) {
+  const whole = String(raw || '').trim();
+  /* "GLoan Auto Repayment with Reference No. GL178..." is one payee, not a
+     new one every month. A trailing reference number is not part of a name. */
+  let n = whole.split(/,|\s+merchant transaction number/i)[0]
+    .replace(/\s+with reference no\.?.*$/i, '')
+    .replace(/\s+ref(?:erence)?\.?\s*(?:no\.?|number|#)?:?\s*[A-Z0-9-]{6,}$/i, '');
+  n = n.replace(/\s+(?:city\s+)?(?:ph|us|sg)$/i, '').replace(/\s+pos$/i, '');
+  n = n.replace(CITY, '').replace(/(?:\s+\+?\d[\d-]*)+$/, '').replace(/[-*\s]+$/, '').trim();
+  return { person: false, key: n || whole, label: n || whole };
+}
+function payeeOf(desc) {
+  const d = String(desc || '').replace(/\s+/g, ' ').trim();
+  let m;
+  if ((m = d.match(/^transfer from \d{10,13} to (\d{10,13})/i))) return { person: true, key: m[1], label: m[1] };
+  if ((m = d.match(/^sent to (.+?)\s+([A-Z]{3})\s+\d{3,}.*?to account:\s*(.*?)\s*(\d{6,}|[A-Z0-9]{10,})?(?:\s+purpose:.*)?$/i))) {
+    const name = m[1].trim(), code = m[2].toUpperCase(), no = m[4];
+    /* PPI is a Maya QR payment to a shop. Any other code sends to a person's
+       wallet or bank account, and that account number is who they are: the
+       same number GCash prints when he sends to them from there, so one
+       answer covers both statements. */
+    if (code === 'PPI' && !/\*/.test(name)) return shopName(name);
+    return { person: true, key: no || name, label: name + (no ? ' ' + no : '') };
+  }
+  /* Four digits alone turn up inside every reference number, so a rule keyed
+     on them would file strangers. The words around them are part of the key. */
+  if ((m = d.match(/^sent gcash to (.+?) with account ending in (\d{4})/i))) return { person: true, key: 'ending in ' + m[2], label: m[1] + ' ending in ' + m[2] };
+  if ((m = d.match(/^bills payment to biller:\s*(.+)$/i))) return shopName(m[1]);
+  if ((m = d.match(/^(?:bills )?payment to (.+)$/i))) return shopName(m[1]);
+  if ((m = d.match(/^visae?[- ](.+)$/i))) return shopName(m[1]);
+  if ((m = d.match(/^pos\s+(.+)$/i))) return shopName(m[1]);
+  return shopName(d);
+}
+
+/* The payees in this import that nothing has decided yet: no rule matches
+   them, and he has not already said "leave it" or seen that number. Money in
+   is not asked about; a category is a question about spending. */
+function setupItems(lines) {
+  const skip = listSetting('skipNames'), seen = listSetting('seenNums');
+  const groups = {};
+  lines.forEach(x => {
+    if (!(x.amt < 0) || ruleFor(x.desc)) return;
+    const p = payeeOf(x.desc);
+    const k = norm(p.key);
+    if (!k) return;
+    if ((p.person ? seen : skip).indexOf(k) > -1) return;
+    if (!groups[k]) groups[k] = { k: k, key: p.key, label: p.label, person: p.person, n: 0, total: 0 };
+    groups[k].n++;
+    groups[k].total = round2(groups[k].total - x.amt);
+  });
+  return Object.values(groups).sort((a, b) => b.total - a.total);
+}
+/* What a line will be filed as, counting answers not yet saved. */
+function fileAs(desc, setup) {
+  const p = payeeOf(desc);
+  const ch = setup && setup[norm(p.key)];
+  if (ch && ['later', 'leave', UNSURE].indexOf(ch) < 0) return 'files as ' + esc(catName(ch));
+  const r = ruleFor(desc);
+  if (r) return 'files as ' + esc(catName(r.cat));
+  if (p.person) return 'one-time transfer · <b>unsure</b>';
+  return '<span class="stale">uncategorised</span>';
+}
+/* Written at apply, before anything is added, so the new rules file the new
+   rows. A rule id carries a prefix so it can never replace a rule he wrote. */
+function writeSetup(items, setup) {
+  const skip = listSetting('skipNames'), seen = listSetting('seenNums');
+  items.forEach(it => {
+    const ch = setup[it.k];
+    if (it.person) {
+      if (ch && ch !== UNSURE) Rec.set('rule', null, 'imp-' + it.k, { match: it.key, cat: ch });
+      if (seen.indexOf(it.k) < 0) seen.push(it.k);
+      return;
+    }
+    if (!ch || ch === 'later') return;
+    if (ch === 'leave') { if (skip.indexOf(it.k) < 0) skip.push(it.k); return; }
+    Rec.set('rule', null, 'imp-' + norm(it.key), { match: it.key, cat: ch });
+  });
+  S.set('skipNames', skip);
+  S.set('seenNums', seen);
+  ruleCache = null;
+}
+
+/* == the transfers still waiting for a name == */
+function drawUnsure(m) {
+  const rows = spendRows({}).filter(x => tagOf(x) === UNSURE)
+    .sort((a, b) => b.date.localeCompare(a.date) || num(b.t, 0) - num(a.t, 0));
+  if (!rows.length) return;
+  const c = card('STILL UNSURE');
+  const total = rows.reduce((a, x) => a + num(x.amt, 0), 0);
+  c.appendChild(el('div', 'note', '<b>' + rows.length + '</b> transfer' + (rows.length === 1 ? '' : 's') + ', ' +
+    esc(money(total)) + ', not recognised when they came in. They count as money out. Tap one if you remember what it was.'));
+  const l = el('div', 'list');
+  rows.slice(0, 12).forEach(x => {
+    const r = itemRow(payeeOf(x.bank || x.note).label, Day.short(x.date) + ' · ' + esc(acctName(x.acct)), money(num(x.amt, 0)));
+    r.onclick = () => spendSheet(x);
+    l.appendChild(r);
+  });
+  if (rows.length > 12) l.appendChild(el('div', 'note', 'and ' + (rows.length - 12) + ' more, in the list below.'));
+  c.appendChild(l);
+  m.appendChild(c);
+}
+
 /* ── deciding what each line is ──
    Certainty is deliberately narrow. Anything looser gets asked about, because
    a wrong automatic merge is invisible and a question costs three seconds.
@@ -1732,6 +1868,9 @@ function addStatement(hit, acctId) {
       t: t, src: 'stmt', stmt: hit.id, bank: hit.line.desc, ref: hit.line.ref || undefined });
     const r = ruleFor(hit.line.desc);
     if (r) setMark({ date: hit.line.date, key: key }, { cat: r.cat });
+    /* Money sent to a number nobody has named: a one-time transfer, tagged
+       Unsure, until he remembers. It still counts as money out. */
+    else if (payeeOf(hit.line.desc).person) setMark({ date: hit.line.date, key: key }, { cat: ONETIME, tag: UNSURE });
   } else {
     Rec.set('paid', hit.line.date, key, { amt: amt, acct: acctId, client: '',
       note: hit.line.desc, t: t, src: 'stmt', stmt: hit.id, bank: hit.line.desc, ref: hit.line.ref || undefined });
@@ -2520,7 +2659,7 @@ function drawSpend(m) {
      Only on the month view. A cap is a monthly figure and showing a week
      against it would need a made-up weekly number, which is the sort of
      helpful arithmetic that turns into a wrong answer. */
-  if (PERIOD === 'month') drawCaps(m, monthOf(R.from));
+  if (PERIOD === 'month') { drawUnsure(m); drawCaps(m, monthOf(R.from)); }
 
   /* Groceries against outside food, asked for by name. */
   const gro = t.byCat['groceries'] || 0, out = t.byCat['outside'] || 0;
@@ -3559,9 +3698,12 @@ function spendSheet(s) {
       });
       b.appendChild(fld('Category', cat));
       const tg = picker({
-        items: tags().map(t => ({ id: t.id, name: t.name })),
+        items: [{ id: '', name: 'No occasion' }].concat(tags().map(t => ({ id: t.id, name: t.name }))),
         value: tagOf(s), placeholder: 'Date, gift, travel', onCreate: makeTag,
       });
+      /* Giving an Unsure transfer a real category is remembering it, so the
+         Unsure tag goes with it rather than waiting to be cleared by hand. */
+      const tagNow = () => (tg.get() === UNSURE && cat.get() && cat.get() !== ONETIME ? '' : tg.get());
       b.appendChild(fld('Occasion, if it had one', tg));
       const big = UI.toggle(isBig(s));
       b.appendChild(UI.row('A big one-off', 'Kept out of every "normal spending" figure, so one large thing does not become the story of the month', big));
@@ -3573,7 +3715,7 @@ function spendSheet(s) {
       let hhmm = timeOf(s);
       b.appendChild(fld('Time', UI.timeField(hhmm, v => { hhmm = v; })));
       h.save = () => {
-        setMark(s, { cat: cat.get(), tag: tg.get(), big: big.on ? 1 : 0 });
+        setMark(s, { cat: cat.get(), tag: tagNow(), big: big.on ? 1 : 0 });
         if (hhmm !== timeOf(s)) {
           const row = Rec.get('spend', s.date, s.key);
           if (row) Rec.set('spend', s.date, s.key, merge(row, { t: stampFor(s.date, hhmm) }));
@@ -3584,22 +3726,20 @@ function spendSheet(s) {
       /* "Always" writes a rule off this description, so it files the whole
          history and not just this one purchase.
 
-         The FIRST real word, not the longest. A description reads merchant
-         first and branch last, here and on every bank statement: "Watsons
-         Pharmacy BGC", "Shell Katipunan". Longest-word picked "Pharmacy" out
-         of the first of those, which is not wrong but is not the shop either.
-         Anything under three letters is skipped, so "SM Supermarket" keys off
-         Supermarket rather than off SM, which would match half of Manila. */
+         The rule is keyed on WHO WAS PAID, not on the first word. It used to
+         take the first word of three letters or more, and every GCash payment
+         begins "Payment to": one press on a Lawson purchase would have filed
+         every GCash payment as groceries. A transfer to a number keys on the
+         number. */
       h.always = () => {
         if (!cat.get()) { UI.toast('pick a category first', { bad: true }); return false; }
-        const words = String(s.note || '').split(/[^A-Za-z0-9]+/).filter(w => w.length > 2);
-        const word = words[0];
+        const word = payeeOf(s.bank || s.note).key;
         if (!word) { UI.toast('nothing in the description to make a rule from', { bad: true }); return false; }
-        Rec.set('rule', null, norm(word), { match: word, cat: cat.get() });
+        Rec.set('rule', null, 'imp-' + norm(word), { match: word, cat: cat.get() });
         ruleCache = null;
-        setMark(s, { cat: cat.get(), tag: tg.get(), big: big.on ? 1 : 0 });
+        setMark(s, { cat: cat.get(), tag: tagNow(), big: big.on ? 1 : 0 });
         Mobile.feedback('success');
-        UI.toast('anything saying <b>' + esc(word) + '</b> now files as <b>' + esc(catName(cat.get())) + '</b>, including everything already logged');
+        UI.toast('anything paid to <b>' + esc(word) + '</b> now files as <b>' + esc(catName(cat.get())) + '</b>, including everything already logged');
         return true;
       };
     },
@@ -3813,7 +3953,7 @@ function ruleSheet(existing) {
 function importSheet() {
   let acct = '', stmt = null, settled = null, plan = null, answers = {};
   let dayFirst = null, lastText = '', lastGrid = null, source = 'text';
-  let mine = {}, force = false;
+  let mine = {}, force = false, setup = {}, setupList = [];
 
   UI.dialog({
     title: 'READ A STATEMENT', width: 680,
@@ -4030,8 +4170,67 @@ function importSheet() {
           if (!C.ok && !force) { UI.toast('the balances do not add up. Turn on "import it anyway" only if you have checked it', { bad: true }); return; }
           plan = planImport(settled.real, acct, pendingIds());
           answers = {};
-          stepReview();
+          setupList = setupItems(plan.fresh.concat(plan.ask, plan.certain).map(x => x.line));
+          setupList.forEach(i => { if (!(i.k in setup)) setup[i.k] = i.person ? UNSURE : 'later'; });
+          if (setupList.length) stepSetup(); else stepReview();
         };
+        btns.appendChild(next);
+        pane.appendChild(btns);
+      }
+
+      /* ── import setup, asked once ──
+         Every payee this import has not seen: pick a category and it becomes
+         a rule. The matched text is editable, because a bank's wording does
+         not always cut cleanly where the shop name ends. */
+      function stepSetup() {
+        pane.innerHTML = '';
+        const names = setupList.filter(i => !i.person), people = setupList.filter(i => i.person);
+        const row = (it, first) => {
+          const f = el('div', 'fld');
+          f.appendChild(el('label', null, '<b>' + esc(it.label) + '</b> · ' + it.n + ' payment' +
+            (it.n === 1 ? '' : 's') + ' · ' + esc(money(it.total))));
+          const g = el('div', 'grid2');
+          if (!it.person) {
+            const match = UI.field('text', { value: it.key });
+            match.title = 'The words a description has to contain';
+            match.oninput = () => { if (match.value.trim()) it.key = match.value.trim(); };
+            g.appendChild(match);
+          }
+          const sel = el('select', 'mb-input');
+          first.concat(cats().map(c => [c.id, c.name])).forEach(([v, t]) => {
+            const o = el('option'); o.value = v; o.textContent = t; sel.appendChild(o);
+          });
+          sel.value = setup[it.k];
+          sel.onchange = () => { setup[it.k] = sel.value; };
+          g.appendChild(sel);
+          f.appendChild(g);
+          return f;
+        };
+        if (names.length) {
+          pane.appendChild(el('h2', null, 'SORT WHAT IS NEW'));
+          pane.appendChild(el('div', 'note',
+            'These names are new to this app. Pick a category once and it becomes a rule: every payment to that name, past and future, files itself. ' +
+            'If the matched text on the left caught too much or too little, change it.'));
+          names.slice(0, 40).forEach(it => pane.appendChild(row(it,
+            [['later', 'Not now, ask next time'], ['leave', 'Leave uncategorised, never ask']])));
+          if (names.length > 40) pane.appendChild(el('div', 'note', (names.length - 40) +
+            ' smaller names stay as they are and come up again next time.'));
+        }
+        if (people.length) {
+          pane.appendChild(el('h2', null, 'TRANSFERS TO OTHER PEOPLE'));
+          pane.appendChild(el('div', 'note',
+            'You will not always remember who these were. Unless you pick a category, each is filed as a One-time transfer tagged Unsure. ' +
+            'It still counts as money out, and it waits under STILL UNSURE on the Spending screen until you remember.'));
+          people.forEach(it => pane.appendChild(row(it, [[UNSURE, 'One-time transfer, unsure']])));
+        }
+        const btns = el('div', 'rowbtns');
+        const back = el('button', 'btn mb-press mb-tap', 'Back');
+        back.type = 'button';
+        back.onclick = () => stepStatement();
+        btns.appendChild(back);
+        const next = el('button', 'btn go wide mb-press mb-tap', 'Check it against what I logged');
+        next.type = 'button';
+        next.onclick = () => stepReview();
         btns.appendChild(next);
         pane.appendChild(btns);
       }
@@ -4099,10 +4298,9 @@ function importSheet() {
           pane.appendChild(el('h2', null, 'WOULD BE ADDED'));
           const l = el('div', 'list');
           willAdd.slice(0, 80).forEach(x => {
-            const r = ruleFor(x.line.desc);
             l.appendChild(itemRow(x.line.desc || 'No details',
               Day.short(x.line.date) + (x.line.time ? ' ' + esc(UI.clockLabel(x.line.time)) : '') + ' · ' +
-              (x.kind === 'in' ? 'money in' : r ? 'files as ' + esc(catName(r.cat)) : '<span class="stale">uncategorised</span>') +
+              (x.kind === 'in' ? 'money in' : fileAs(x.line.desc, setup)) +
               (x.line.pieces ? ' · ' + x.line.pieces + ' pieces made one' : ''),
               (x.kind === 'in' ? '+' : '') + money(Math.abs(x.line.amt)), x.kind === 'in' ? 'in' : ''));
           });
@@ -4118,7 +4316,7 @@ function importSheet() {
         const btns = el('div', 'rowbtns');
         const back = el('button', 'btn mb-press mb-tap', 'Back');
         back.type = 'button';
-        back.onclick = () => stepStatement();
+        back.onclick = () => (setupList.length ? stepSetup() : stepStatement());
         btns.appendChild(back);
         const go = el('button', 'btn go wide mb-press mb-tap',
           'Apply: ' + willMerge.length + ' matched, ' + willAdd.length + ' added, ' + moves + ' transfers');
@@ -4126,6 +4324,7 @@ function importSheet() {
         go.disabled = nothing;
         go.style.opacity = nothing ? '.5' : '';
         go.onclick = () => {
+          writeSetup(setupList, setup);
           willMerge.forEach(x => mergeStatement(x, acct));
           willAdd.forEach(x => addStatement(x, acct));
           willSkip.forEach(x => skipStatement(x, acct));

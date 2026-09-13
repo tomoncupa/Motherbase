@@ -489,6 +489,59 @@ account sheet shows the numbers so a wrong guess can be fixed.
 A four-digit number only counts when introduced as an account ending. Four
 digits on their own turn up in every reference number.
 
+### Import setup, asked once
+
+Tom, 2026-09-13: *"Maybe we should have an import setup, where we can
+categorize where things like Lawson Acqua Pebbles always get categorized,
+asked once upon import first time."*
+
+After the statement screen and before the questions, an import lists every
+payee it has never decided: no rule matches it, and he has not already said to
+leave it. He picks a category once and it becomes a rule, and a rule files the
+whole history, so one answer sorts every past and future payment to that name.
+The matched text is editable, because a bank's wording does not always stop
+where the shop name does: "Acqua Pebbles" catches both GCash's "Lawson Acqua
+Pebbles" and UnionBank's "LPI ACQUA PEBBLES".
+
+"Not now" asks again next time. "Leave uncategorised" never asks again, and is
+remembered in the `wealth.skipNames` setting. Rules the setup writes carry an
+`imp-` id prefix so they can never replace a rule he wrote himself. Nothing is
+saved until apply, and the review already shows what each line will be filed
+as, counting the answers not yet saved.
+
+**A payee is who was paid, not the first word.** The ALWAYS button used to key
+its rule on the first word of three letters or more, and every GCash payment
+begins "Payment to": one press on a Lawson purchase would have filed every
+GCash payment as groceries. `payeeOf` now reads the name out of the bank's
+wording, dropping branch cities, country codes, trailing reference numbers and
+"with Reference No." tails, so four GLoan repayments are one payee.
+
+### Transfers to people, and Unsure
+
+Tom, 2026-09-13: *"Gcash will sometimes have transfers to numbers, I wont
+always remember this. I would like to set an unsure tag incase I remember in
+the future but treat them as one time transfers."*
+
+A transfer to a person is recognised by its shape: GCash's "Transfer from X to
+Y", a UnionBank "Sent to" with any code but PPI (PPI is a Maya QR payment to a
+shop), or GCash's "Sent GCash to <bank> with account ending in". The person is
+their account number, which is the same number whichever of his statements
+shows it, so one answer covers both. A four-digit ending is keyed with the
+words "ending in" around it, because four digits alone sit inside every
+reference number.
+
+Unless he picks a category, a transfer to a person is filed as **One-time
+transfers**, tagged **Unsure**. It stays counted as money out, because it left:
+excluding it would make spending look smaller than it was, which law 1
+forbids. Every Unsure transfer waits in a STILL UNSURE card on the Spending
+screen. Giving one a real category is remembering it, so the Unsure tag is
+cleared in the same save. The number is remembered in `wealth.seenNums` so it is
+not asked about again.
+
+The One-time transfers category and the Unsure tag are vocabulary added after
+first launch, so an already-seeded device gets them once, behind a flag rather
+than a check for the row: deleting either keeps it deleted.
+
 **A statement line is fingerprinted by its bank reference when it has one.**
 Two ₱93 rides on one day share a date, an amount and a description; without
 the reference the second would be skipped as already imported.
