@@ -173,6 +173,15 @@ restore nothing.
 | Opening a week group goes to Week, or to 2 or 3 Days for the short groups at the end of a month; a day to Day; a month to Month. The box's first day goes to the top. | Claude, 2026-09-13 |
 | ADD writes to today, or to the open day when the step is Day. A bullet can also be added from any day's right-click menu. | Claude, 2026-09-13 |
 | The written summary on a week or month block also opens its summary box, and the name, count and summary underline under the pointer. | Claude, 2026-09-13 |
+| Days and entries clearly different: a day is a heading band on its own surface, date large in the display face, summary beside it; bullets sit below on the page colour, indented, in the reading face. | Tom asked, Claude designed, 2026-09-13 |
+| Text sized for a PC: bullets and summaries at `--f-4`, dates at `--f-5`, side-column names at `--f-4`. | Tom, 2026-09-13 |
+| A Year view after Quarter. | Tom, 2026-09-13 |
+| Clicking the view that is already on flips the days between oldest first and newest first. A "Newest day first" switch in the bar shows and sets the same thing. Newest first puts today at the top. | Tom asked, Claude added the switch, 2026-09-13 |
+| A day is never cut off and never has to be opened to be read: a busy day grows. Supersedes exact day heights. Each view snaps to start on a whole day. | Tom, 2026-09-13 |
+| Notebook view: the view's days across a left and right page, like a bullet journal notebook, spreads one under another, each at least a screen tall. 2 Days is always a notebook; Day, 3 Days, Week and Weeks follow a Notebook switch, shown only on those views. Day puts the day on the left page. Week is one week group per spread; Weeks is two (1–14, 15–28, then the rest). | Tom, 2026-09-13 |
+| Side columns are every unit bigger than the view: Week and Weeks show weeks; Month months and weeks; Quarter quarters and months; Year the year, quarters and months. None in the notebook. Quarter and year blocks have summaries too. | Tom, 2026-09-13 |
+| A side block is placed from where its first and last day actually are on the page, so it lines up with days of any height, in either order. | Claude, 2026-09-13 |
+| Side column widths drag from the heading's right edge like a spreadsheet, and a double-click puts one back. Remembered per column. | Tom, 2026-09-13 |
 
 ## Found in STATUS, not fixed
 
