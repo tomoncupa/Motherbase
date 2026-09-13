@@ -182,6 +182,17 @@ restore nothing.
 | Side columns are every unit bigger than the view: Week and Weeks show weeks; Month months and weeks; Quarter quarters and months; Year the year, quarters and months. None in the notebook. Quarter and year blocks have summaries too. | Tom, 2026-09-13 |
 | A side block is placed from where its first and last day actually are on the page, so it lines up with days of any height, in either order. | Claude, 2026-09-13 |
 | Side column widths drag from the heading's right edge like a spreadsheet, and a double-click puts one back. Remembered per column. | Tom, 2026-09-13 |
+| TODAY goes to today and never changes the view. In Day it shows today's day. | Tom, 2026-09-13 |
+| The word "Summary" appears nowhere on screen. | Tom, 2026-09-13 |
+| Month names in full. Week groups read "Week 1: 1–7". | Tom, 2026-09-13 |
+| The wheel scrolls. Mouse 4 zooms in one view and Mouse 5 out, toward the pointer, with the browser's Back and Forward stopped. A held left or right button drags the page. Supersedes the wheel zoom. | Tom, 2026-09-13 |
+| A left-button hold no longer opens a menu, because holding is panning. A right click without a drag still does; a right drag swallows its menu. | Claude, 2026-09-13 |
+| Snap: when a scroll or drag stops within a fifth of the screen of an edge, the view glides onto it. The edge is a day in Day to Weeks, a spread in the notebook, a week in Month, a month in Quarter, a quarter in Year. | Tom asked, Claude chose the edges, 2026-09-13 |
+| Everything a day or a block says starts at one left edge: dates take the width of the widest date, measured; block name, count and writing are each on their own line. Day labels no longer carry the month; a month heading sits above the first day of each month. | Tom, 2026-09-13 |
+| The timeline runs from the first record (the earliest dated journal line, day, measurement or meal) to today. Nothing before or after. A start date can be set in Settings. | Tom, 2026-09-13 |
+| Settings has a LOG tab: which view it opens on, when the timeline starts, text size (Normal, Large, Larger), the filter bar on or off, the caffeine scale top, and a column width reset. | Tom asked, Claude chose the settings, 2026-09-13 |
+| Side blocks alternate between two surfaces, bigger units take the stronger line, there is room inside, and the count is quieter than the name. | Claude, 2026-09-13 |
+| Clicking a name (a date, a week, a month, a quarter, a year, or a month heading) opens it. Clicking the space beside or below it is for writing about it: a day's line takes the cursor, anything bigger opens a box. Supersedes the previous click rule. | Tom, 2026-09-13 |
 
 ## Found in STATUS, not fixed
 
