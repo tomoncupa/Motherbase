@@ -1459,6 +1459,35 @@ const Mirror = {
     }).catch(e => ({ v: 0, failed: 1, why: (e && e.code) || 'threw' }));
   },
 
+  /** Has anything gone into _Data that this device has not read?
+
+      `seen[app|_Data]` is the push stamp this device is caught up to. It moves
+      when we read the tab, and when we push having already been caught up —
+      so our own push does not send us back to download what we just sent.
+
+      ── why it is not "was the last push ours?" ──
+
+      It used to be, and that answer hides the other device. The sheet keeps
+      ONE stamp, and whoever pushes last overwrites it. So: the laptop pushes
+      an edit, the phone opens, its read times out on a cold start, it sends
+      its own rows anyway — and now the last push is the phone's. Every sync
+      after that the phone said "that one was mine" and skipped _Data, and the
+      laptop's edit never arrived until the laptop happened to push again.
+      Changes went phone to laptop and stalled laptop to phone.
+
+      Now our own push only counts as read if we had read everything before
+      it. If we had not, `seen` stays behind, the stamp differs, and the next
+      sync reads the tab — our rows and theirs, merged on updated_at, so the
+      extra download costs nothing but time.
+
+      One gap is left, and it is narrow: the other device pushing in the few
+      seconds between our read and our own push landing. Closing it needs the
+      sheet to keep more than one stamp, which is a script change. */
+  bagIsNew(appId, pre) {
+    const stamp = ((pre && pre.pushedAt) || {})[appId] || '';
+    return mcfg.sheetV >= 3 && !!stamp && stamp !== (mcfg.seen[appId + '|_Data'] || '');
+  },
+
   /* ── 1 and 2: pull and resolve ── */
   pull(appId, pre) {
     adoptOldLink(appId);
@@ -1537,15 +1566,8 @@ const Mirror = {
          question we already knew. */
       const stamp = (pre.pushedAt || {})[appId] || '';
       const bagKey = appId + '|_Data';
-      const seenBag = mcfg.seen[bagKey] || '';
-      /* Skipping our own push is only safe once we have read the tab at all.
-         A device that has never read it does not know what else is in there:
-         the laptop's first sync pushed, so the last stamp was its own, and on
-         that reasoning it went on skipping the one tab holding the phone's
-         entire history. Never read means always read. */
-      const mineLast = !!seenBag && stamp === (mcfg.pushed[appId] || '');
       const bagTabsWanted = [];
-      if (mcfg.sheetV >= 3 && stamp && stamp !== seenBag && !mineLast) {
+      if (Mirror.bagIsNew(appId, pre)) {
         bagTabsWanted.push(IO.bagName(appId));
         /* a sheet still carrying the flat tab from before the split */
         if (pre.index['_Data']) bagTabsWanted.push('_Data');
@@ -1626,6 +1648,12 @@ const Mirror = {
        while this push is still in the air is newer than this stamp and goes
        next time; stamping afterwards would step straight over it. */
     const at = new Date().toISOString();
+    /* Were we caught up on _Data when this push began? Only then does our own
+       stamp count as read once it lands. Worked out from the index this sync
+       read just now and the `seen` the pull just moved, never from memory. */
+    const bagKey = appId + '|_Data';
+    const before = ((opts.index && opts.index.pushedAt) || {})[appId] || '';
+    const caughtUp = !!before && before === (mcfg.seen[bagKey] || '');
 
     /* ── sending everything, and clearing nothing ──
 
@@ -1726,6 +1754,7 @@ const Mirror = {
            make the tab twelve lines long. */
         if (((r.pushedAt || {})[appId] || '') === at) {
           mcfg.pushed[appId] = at;
+          if (caughtUp) mcfg.seen[bagKey] = at;
           if (clearing) mcfg.full[appId] = at;
           if (sig) mcfg.sig[appId] = sig;
           mcfg.at = g.Day.today(); msave();

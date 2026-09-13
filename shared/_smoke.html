@@ -471,9 +471,6 @@ async function run() {
   /* A device only gets to rewrite the sheet if it holds what the sheet holds.
      Everything still goes up either way; the difference is whether the tab is
      cleared first. */
-  ok('mirror: a device that has never read the save file always reads it', () =>
-    /never read means always read/i.test(String(IO.mirror.pull)) &&
-    /!!seenBag && stamp ===/.test(String(IO.mirror.pull)));
   ok('mirror: only a device holding the whole picture may clear a tab', () =>
     /wholePicture/.test(String(IO.mirror.push)) &&
     /clearing \? 'full' : 'delta'/.test(String(IO.mirror.push)));
@@ -672,6 +669,55 @@ async function run() {
      other device's theme and sound with it, so a recovery push drops it. */
   ok('mirror: a recovery push sends nothing that gets rewritten whole', () =>
     /opts\.delta\) tabs = tabs\.filter\(t => !t\.whole\)/.test(String(IO.mirror.push)));
+
+  /* ---- our push must not hide the other device's ----
+
+     The sheet keeps one push stamp and the last pusher overwrites it. The
+     laptop pushed, the phone's read timed out, the phone sent anyway — and
+     from then on the phone read "last push was mine" and never pulled _Data,
+     so the laptop's edits stalled. Driven through push itself with the
+     network faked, because a regex on the source would pass on the next way
+     of getting this wrong. The fake sheet echoes whatever stamp it was sent. */
+  const BG = {};
+  {
+    IO.register({ app: '__bag', name: 'Bag', types: [stamp] });
+    Rec.set(stamp, null, 'bag-row', { n: 1 });
+    const keepV = IO.mirror.settings.sheetV;
+    const realFetch = window.fetch;
+    let sentAt = '';
+    window.fetch = (u, o) => { try { sentAt = JSON.parse(o.body).at; } catch (e) {} return Promise.resolve({}); };
+    document.head.appendChild = function (el) {
+      const m = el && el.src && /callback=([^&]+)/.exec(el.src);
+      if (m && /want=index/.test(el.src)) {
+        setTimeout(() => window[m[1]] && window[m[1]]({ ok: true, v: 4, index: {}, pushedAt: { __bag: sentAt } }), 0);
+        return el;
+      }
+      return Node.prototype.appendChild.call(this, el);
+    };
+    const drive = async seen => {
+      IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec', on: 0, sheetV: 4,
+        pushed: { __bag: '2000-01-01T00:00:00.000Z' }, seen: { '__bag|_Data': seen } });
+      const res = await IO.mirror.push('__bag', true,
+        { index: { v: 4, index: {}, pushedAt: { __bag: 'OTHER-DEVICE' } }, delta: true });
+      return { state: res && res.state, next: IO.mirror.bagIsNew('__bag', { pushedAt: { __bag: sentAt } }) };
+    };
+    try {
+      BG.behind = await drive('OLDER');
+      BG.caught = await drive('OTHER-DEVICE');
+      IO.mirror.set({ seen: { '__bag|_Data': '' } });
+      BG.never = IO.mirror.bagIsNew('__bag', { pushedAt: { __bag: 'ANY' } });
+    } catch (e) { BG.err = String(e); }
+    finally {
+      window.fetch = realFetch;
+      delete document.head.appendChild;
+      IO.mirror.set({ url: '', on: 1, sheetV: keepV, pushed: { __bag: '' }, seen: { '__bag|_Data': '' } });
+    }
+  }
+  ok('mirror: pushing after the other device, unread, still reads it next time', () =>
+    BG.behind && BG.behind.state === 'confirmed' && BG.behind.next === true);
+  ok('mirror: pushing while caught up does not re-download what it just sent', () =>
+    BG.caught && BG.caught.state === 'confirmed' && BG.caught.next === false);
+  ok('mirror: a device that has never read the save file always reads it', () => BG.never === true);
 
   /* ---- a timeout shorter than the thing it waits for is not a guard ----
      Nine failures in a row at almost exactly 27 seconds, which was 12 plus 15:
