@@ -127,6 +127,11 @@ wealth/index.html  the money app. Clients, bills, pots, debts and what is
                    actually left. Desktop. Tom only, dropped from the tester
                    build. Reads STATUS's spending rather than copying it.
 wealth/CLAUDE.md   WEALTH's own brief, governs wealth/ only
+log/index.html     the journal module. The last few weeks of STATUS's bullets
+                   inside the year around them, with day, week and month
+                   summaries and a mood, energy and caffeine graph per day.
+                   Desktop. Tom only, dropped from the tester build.
+log/CLAUDE.md      LOG's own brief, governs log/ only
 style/index.html   the theme workbench. Desktop only, deliberately.
 _template/         a working starter app, copied to make a new one
 tools/             not build steps. embed-skins.py re-embeds the factory themes;
@@ -221,10 +226,10 @@ An app may read any type. It writes only the types it owns.
 | `tick` | **shared, every app may write** | activity id | `{src, qty}` |
 | `lane` `item` `routine` | block | | |
 | `plan` | **block** | `routine` | today's published plan, for anything that wants to read it |
-| `note` | **status** | line id | one journal line: a todo, an entry, an event or an idea |
+| `note` | **status** names the shape; **log** writes it too | line id | one journal line: a todo, an entry, an event or an idea |
 | `field` | **status** | field id | the definition of a tracked measure |
 | `ev` | **status** | field id | `{e:[{t,v}]}` — one row per field per day |
-| `day` | **status** | `''` | `{note, rest}` |
+| `day` | **status**; **log** writes `note`, the day's summary | `''` | `{note, rest}` |
 | `food` | **status** names the shape; **portion** writes it too | food id | the label as printed, plus your own servings |
 | `meal` | **status** | timestamp id | one logged serving, numbers frozen in |
 | `spend` | **status** | timestamp id | `{amt, acct, note, t}` |
@@ -250,6 +255,7 @@ An app may read any type. It writes only the types it owns.
 | `map` | **arc** | map id | `{title, view, snaps, order}` — a mind map, without its nodes |
 | `node` | **arc** | `mapId\|nodeId` | one node. The addressable fact on a canvas, so moving one node writes one row |
 | `link` | **arc** | `mapId\|linkId` | `{a, b, rel, ord}` — a connection that is not a parent link |
+| `recap` | **log** | `week` or `month`, dated on the period's first day | `{text}` — the written summary of one week group or month |
 
 ### Many writers is fine. Replacing a payload you did not read is not
 
@@ -657,6 +663,7 @@ answer, or take it out.
 | `portion/` | Built 2026-09-05, made a desktop app 2026-09-06. Tested in the browser. A bench for building food entries and a viewer over the ones you have. Paste or type a label; it says how much of it hits 50g of protein or any other number, in grams or in pieces, what that comes to and what it costs. Saves the answers as ordinary servings, so STATUS logs them in one tap. Hands the entry over as words to paste into somebody else's tracker or as a spreadsheet row. Ranks the whole library against whatever amount is on screen, which is the comparison. Searches, edits and deletes; refuses to make a second food with a name you already have. Reads Sodium, or converts Salt where a label prints that instead. Kept out of the tester build by `tools/build-client.py`. |
 | `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
 | `wealth/` | Built 2026-09-11 and tested in the browser. The money app: three numbers (liquid, allocated, free) and runway. Owns clients on any payment cycle — every N months, every N weeks, every N sessions, packages bought up front, or one off — with expected payments derived from the cycle rather than stored. A monthly day is clamped per month when the date is worked out and never when it is saved, so the 31st stays the 31st in every month that has one. Spending reviews at three zoom levels, day, week and month, with a day drawn as a timeline down the clock. Reads STATUS's `spend` rows and files them with a `mark` row rather than editing them, so STATUS's price, account, receipt and meal link cannot be dropped. Text rules sort spending retroactively. Big purchases are marked and excluded from every "normal spending" figure. Every name is picked from a list, never typed twice, and every amount groups itself with commas as it is typed. Logs spending itself as well as reading STATUS's. A donut for where money went, and monthly net beside liquid. Amounts are stored in one base currency and a header switch reads them all in a second one; the rate is typed and dated rather than fetched, and typing always stays in the base currency so a round trip cannot lose anything. Tom only, kept out of the tester build. Reads a GCash or bank statement and reconciles it: certain matches merge into a master entry keeping his category and taking the bank's amount, uncertain ones are asked about one at a time, and reading the same file twice adds nothing. Optional monthly caps per category, shown as a number and a pace mark rather than a verdict. Has its own brief. |
+| `log/` | Built 2026-09-13 and tested in the browser. The journal module: STATUS's bullets over the last few weeks, inside one continuous timeline of months, week groups (1–7, 8–14, 15–21, 22–28, 29 to the end) and days. The wheel zooms like a map. Zoomed out, months and weeks show counts and written summaries; zoomed in, each day is its date and summary with its bullets below and a faint mood, energy and caffeine graph behind. Writes `note` and the day's `note` summary by merging, owns `recap`. Tom only, kept out of the tester build. Has its own brief. |
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation, passing 152 checks. Every app loads it. |

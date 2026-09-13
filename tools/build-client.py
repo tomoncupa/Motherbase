@@ -47,10 +47,11 @@ COPY_FILES = ['index.html', '.nojekyll']
 #            not something a tester should be adding foods with
 #   wealth/  his money: clients, rates, rent, debts. Tom only, and the one
 #            folder here where a leak would be a real one
+#   log/     his journal with day, week and month summaries over it. Tom only
 #   clex/    a personal side app
 #   habits/  a stand-in that STATUS replaced
 #   quest/ _template/ tools/ and every *.md brief - these are build notes
-DROP_APPS = ['habits', 'form', 'portion', 'wealth']   # removed from the home screen roster
+DROP_APPS = ['habits', 'form', 'portion', 'wealth', 'log']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed
 # STREAKS and NUMBERS were deleted from the main repo on 2026-08-28, and
 # the STREAKS that replaced one of them counts ticks, so it works for a
