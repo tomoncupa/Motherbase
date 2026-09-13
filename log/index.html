@@ -24,10 +24,12 @@
 <style>
 /* Colours and sizes are tokens, never numbers. shared/THEMING.md is the
    contract this app obeys. The raw pixel values are the block geometry,
-   which the script hands over as --dh (pixels per day): a measurement of
-   time, not a spacing decision, the same way a chart's plot coordinates
-   are. The stroke widths and opacities on the day graph are the same kind
-   of chart value STATUS's own charts carry. */
+   which the script hands over as --dh (pixels per day) and --line (one line
+   of a day, measured): measurements of time and of the font, not spacing
+   decisions, the same way a chart's plot coordinates are. The stroke widths
+   and opacities on the day graph are the same kind of chart value STATUS's
+   own charts carry. `ch` widths are lengths of text, which is what they
+   measure. */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{background:var(--bg);color:var(--text-1);
@@ -49,14 +51,18 @@ header{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-
 .quiet{font-size:var(--f-1);color:var(--text-muted)}
 
 /* ── the filter bar ──
-   Its own line under the buttons: which kinds of bullet show, in what order,
-   and which lines the day graph draws. Tom, 2026-09-13. */
-.bar{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-3) var(--s-5)}
-.bar .grp{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2)}
-.bar .k{font-size:var(--f-1);color:var(--text-muted);margin-right:var(--s-1)}
-/* The swatch is the legend: each graph chip wears its line's colour, next to
-   the word, so the colour is never the only way to tell them apart. */
-.bar .sw{display:inline-block;width:var(--s-3);height:var(--s-1);border-radius:var(--radius-full);
+   Every choice is a switch: which kinds of bullet show, and which lines the
+   day graph draws. Tom, 2026-09-13: "have mood, energy, and caffeine be
+   toggles as well." Then how a day is sorted. */
+.bar{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-3) var(--s-6)}
+.bar .grp{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2) var(--s-4)}
+.bar .k{font-size:var(--f-1);color:var(--text-muted)}
+.bar .sep{width:var(--border-width);align-self:stretch;background:var(--border)}
+.tg{display:inline-flex;align-items:center;gap:var(--s-2)}
+.tg .tl{font-size:var(--f-2);color:var(--text-2);cursor:pointer;user-select:none;white-space:nowrap}
+/* The swatch is the legend: each graph switch wears its line's colour, next
+   to the word, so the colour is never the only way to tell them apart. */
+.sw{display:inline-block;width:var(--s-3);height:var(--s-1);border-radius:var(--radius-full);
   margin-right:var(--s-2);vertical-align:middle}
 .sw.mood,.gr i.mood{background:var(--data-1)}
 .sw.energy,.gr i.energy{background:var(--data-3)}
@@ -72,21 +78,22 @@ main{flex:1;min-height:0;overflow:auto;overflow-anchor:none;position:relative;
 main.dragging{cursor:grabbing;user-select:none}
 
 /* ── the bracket ──
-   Three columns: months, weeks, days. Months and weeks are one sticky group
-   so they stay on the left if the window is ever narrow enough to scroll
-   sideways. Zoomed out, every block is placed at (first day × --dh) and is
-   (days × --dh) tall, so a boundary in one column is the same pixel in
-   every other column by construction.
+   Three columns: months, weeks, days. Zoomed out, every block is placed at
+   (first day × --dh) and is (days × --dh) tall, so a boundary in one column
+   is the same pixel in every other column by construction.
 
-   Zoomed in far enough to read, months and weeks step aside and the days
-   become a journal: each day at least --dh tall, and taller when it has
-   more bullets than that fits, one line per bullet. */
+   What a day looks like follows from how tall it is:
+     far    months and weeks with their counts and written summaries; days
+            are texture
+     small  the same, and each day shows its date and summary on one line
+     near   months and weeks step aside; each day is its date and summary,
+            with its bullets underneath, one line each */
 .cal{min-width:100%;width:max-content}
 .cal.near .agg,.cal.near .heads{display:none}
 .row{display:flex}
 .agg{display:flex;position:sticky;left:0;z-index:2;background:var(--surface-1)}
-.c-w{width:var(--s-9)}
-.c-m{width:var(--s-10)}
+/* Wide enough for a summary to be read, and no wider than it needs. */
+.c-m,.c-w{width:clamp(var(--s-10), 15vw, calc(var(--s-10) * 2))}
 .c-d{flex:1;min-width:var(--s-10)}
 
 .heads{position:sticky;top:0;z-index:3;background:var(--surface-1);
@@ -106,40 +113,68 @@ main.dragging{cursor:grabbing;user-select:none}
    boundary lands exactly on the block's first pixel in every column. */
 .blk{position:absolute;left:0;right:0;top:calc(var(--i) * var(--dh));height:calc(var(--n) * var(--dh));
   border-top:var(--border-width) solid var(--border);
-  padding:var(--s-1) var(--s-2) 0;line-height:var(--lh-tight);cursor:inherit}
-/* The label and totals of a tall block ride down the screen with it, so a
-   month that starts far above the view still says which month it is. */
+  padding:var(--s-1) var(--s-2) 0;line-height:var(--lh-tight);cursor:pointer}
+/* Two targets on every box. Tom, 2026-09-13: "Clicking on a box should open
+   it, clicking on the numbers/name is what opens the summary." The name, the
+   count and the summary underline under the pointer, so the second target
+   can be found without being told. */
+.blk .lab:hover,.blk .tot:hover,.agg .blk .ws:hover{text-decoration:underline}
+/* The label, count and summary of a tall block ride down the screen with
+   it, so a month that starts far above the view still says what it is. */
 .stick{position:sticky;top:calc(var(--headh) + var(--s-1))}
 .blk .lab{font-weight:var(--w-bold);font-size:var(--f-2);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 .blk .tot{font-size:var(--f-1);color:var(--text-2);white-space:nowrap}
 .blk.bare{padding:0}
 .blk.bare .stick,.blk.lab-only .tot{display:none}
+/* A week's or month's written summary: as many lines as the block has room
+   for, worked out in fit(). The word "Summary" only shows under the pointer. */
+.ws{margin-top:var(--s-1);font-size:var(--f-1);line-height:var(--lh-tight);color:var(--text-1);
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:var(--ln);overflow:hidden;
+  overflow-wrap:anywhere}
+.ws[hidden]{display:none}
+.ws.add{color:transparent}
+.agg .blk:hover .ws.add{color:var(--text-muted)}
 
-/* ── a day ──
-   Date, summary, bullets, with the day's graph drawn behind the last two. */
-.c-d .blk{border-top-color:var(--surface-2);overflow:hidden}
-/* Zoomed out, a day is texture: a line and a height, no words. */
-.cal:not(.near) .c-d .blk>*{display:none}
-.cal.near .c-d .blk{position:relative;top:auto;height:auto;min-height:var(--dh);
-  display:grid;grid-template-columns:var(--s-9) minmax(0,1fr) minmax(0,2fr);column-gap:var(--s-3);
-  align-content:center;padding:0 var(--s-2);cursor:pointer}
-.cal.near .c-d .blk>:not(.gr){position:relative;z-index:1}
-.cal.near .c-d .blk.future{cursor:inherit}
-/* Lines say where a week group and a month begin, so the day column still
-   reads when the other two have stepped aside. */
+/* ── a day ── */
+.c-d .blk{border-top-color:var(--surface-2);overflow:hidden;padding:0}
+.c-d .blk>.hd,.c-d .blk>.bls,.c-d .blk>.gr{display:none}
+.cal.small .c-d .blk>.hd,.cal.near .c-d .blk>.hd{display:flex}
+.cal.near .c-d .blk>.bls{display:flex}
+.cal.near .c-d .blk>.gr{display:block}
+/* Lines say where a week group and a month begin. */
 .c-d .blk.wk{border-top-color:var(--border)}
 .blk.m0,.blk.y0{border-top-color:var(--border-strong)}
 .c-d .blk.today{background:var(--surface-3)}
 .c-d .blk.today .lab{color:var(--accent)}
 .c-d .blk.future .lab{color:var(--text-muted);font-weight:var(--w-body)}
 
-/* ── the summary ──
-   A line of text next to the date. It looks like text until it is pointed
-   at or typed in, because a thousand empty boxes down a page is a form, not
-   a journal. The word "Summary" only shows where it is useful: today, the
-   row under the pointer, and the box being typed in. */
-.sum{min-width:0;width:100%;align-self:start;font:inherit;font-size:var(--f-2);
+/* The day's first line: its date, then its summary straight after it.
+   Line length is capped near the top of the readable range, 45 to 75
+   characters. */
+.hd{display:flex;align-items:baseline;gap:var(--s-3);min-width:0;max-width:80ch}
+.hd .lab{flex:0 0 auto;min-width:var(--s-8);font-weight:var(--w-bold);font-size:var(--f-2);white-space:nowrap}
+
+/* Zoomed out but tall enough for one small line: date and summary only. */
+.cal:not(.near) .c-d .hd{align-items:center;line-height:1;font-size:var(--f-1)}
+.cal:not(.near) .c-d .hd .lab,.cal:not(.near) .c-d .hd .sum{font-size:var(--f-1);line-height:1}
+.cal:not(.near) .c-d .blk>.hd{height:100%;padding:0 var(--s-2)}
+
+/* Zoomed in: the day is a small stack, from the top. A short day centres its
+   one line in its row; a day as tall as the screen does not float its date
+   halfway down it. A day with bullets gets room below, so the space between
+   two days is larger than the space between two lines inside one. */
+.cal.near .c-d .blk{position:relative;top:auto;height:auto;min-height:var(--dh);
+  display:flex;flex-direction:column;justify-content:flex-start;
+  padding:clamp(0px, calc((var(--dh) - var(--line)) / 2), var(--s-2)) var(--s-2) 0}
+.cal.near .c-d .blk.has{padding-top:var(--s-1);padding-bottom:var(--s-2)}
+.cal.near .c-d .blk>:not(.gr){position:relative;z-index:1}
+
+/* ── the day summary ──
+   A line of text after the date. It looks like text until it is pointed at
+   or typed in, because a thousand empty boxes down a page is a form, not a
+   journal. */
+.sum{flex:1 1 auto;min-width:0;font:inherit;font-size:var(--f-2);
   line-height:var(--lh-tight);color:var(--text-1);background:none;border:0;border-radius:0;
   border-bottom:var(--border-width) solid transparent;padding:0;cursor:text}
 .sum::placeholder{color:transparent}
@@ -147,13 +182,13 @@ main.dragging{cursor:grabbing;user-select:none}
 .sum:hover{border-bottom-color:var(--border)}
 .sum:focus{outline:none;border-bottom-color:var(--accent)}
 
-/* ── a bullet: time, mark, words ──
-   The time leads, in its own column, because this screen is read down the
-   clock. Right-aligned so 9:05am and 12:45pm end in the same place. */
-.bls{display:flex;flex-direction:column;min-width:0}
+/* ── bullets, under the date ──
+   Time, mark, words. The time column is sized so the words start in line
+   with the summary above them: one left edge to read down. */
+.bls{flex-direction:column;gap:var(--s-1);min-width:0;margin-top:var(--s-1);max-width:80ch}
 .bl{display:flex;align-items:baseline;gap:var(--s-2);min-width:0;
   font-size:var(--f-2);line-height:var(--lh-tight);cursor:pointer}
-.bl .tm{flex:0 0 auto;min-width:var(--s-8);text-align:right;font-size:var(--f-1);color:var(--text-2);white-space:nowrap}
+.bl .tm{flex:0 0 auto;min-width:var(--s-7);text-align:right;font-size:var(--f-1);color:var(--text-2);white-space:nowrap}
 .bl .tm.wrote{color:var(--text-muted)}
 .bl .mk{flex:0 0 auto;width:var(--s-3);text-align:center;color:var(--text-muted)}
 .bl .tx{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -164,20 +199,22 @@ main.dragging{cursor:grabbing;user-select:none}
 .bl .bx:hover{border-color:var(--accent)}
 
 /* ── the day graph ──
-   Behind the summary and the bullets, midnight on the left to midnight on
-   the right. Faint on purpose: it is the background to what was written,
-   not a chart competing with it. The drawing is stretched to fill the row,
-   so strokes are told not to stretch with it. Dots are page elements rather
-   than svg circles, so they stay round, and each says its time on hover. */
-.gr{position:absolute;top:0;bottom:0;left:calc(var(--s-2) + var(--s-9) + var(--s-3));right:var(--s-2);
-  pointer-events:none;z-index:0}
+   Behind the whole day, from the day's start on the left to midnight on the
+   right. Faint on purpose, mood and energy most of all (Tom, 2026-09-13:
+   "make mood and energy more transparent"). The drawing is stretched to fill
+   the row, so strokes are told not to stretch with it. Dots are page
+   elements rather than svg circles, so they stay round, and each says its
+   time on hover. */
+.gr{position:absolute;top:0;bottom:0;left:var(--s-2);right:var(--s-2);pointer-events:none;z-index:0}
 .gr svg{position:absolute;left:0;top:0;width:100%;height:100%}
-.gr path{fill:none;stroke-width:1.5;vector-effect:non-scaling-stroke;opacity:.5}
-.gr path.mood{stroke:var(--data-1)}
-.gr path.energy{stroke:var(--data-3)}
-.gr path.caffeine{stroke:var(--data-6);stroke-dasharray:3 3}
+.gr path{fill:none;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.gr path.mood{stroke:var(--data-1);opacity:.22}
+.gr path.energy{stroke:var(--data-3);opacity:.22}
+.gr path.caffeine{stroke:var(--data-6);stroke-dasharray:3 3;opacity:.5}
 .gr i{position:absolute;width:var(--s-2);height:var(--s-2);margin:calc(var(--s-1) * -1) 0 0 calc(var(--s-1) * -1);
-  border-radius:var(--radius-full);opacity:.8;pointer-events:auto;cursor:default}
+  border-radius:var(--radius-full);pointer-events:auto;cursor:default}
+.gr i.mood,.gr i.energy{opacity:.35}
+.gr i.caffeine{opacity:.8}
 </style>
 </head>
 <body>
@@ -188,9 +225,9 @@ main.dragging{cursor:grabbing;user-select:none}
     <b id="yrLabel"></b>
     <button id="nextYr" class="mb-btn mb-press mb-tap" onclick="goYear(1)" aria-label="Next year" data-icon="next"></button>
   </div>
-  <button class="mb-btn mb-press mb-tap" onclick="goToday()">TODAY</button>
-  <button class="mb-btn mb-press mb-tap" onclick="wholeYear()">WHOLE YEAR</button>
-  <button class="mb-btn go mb-press mb-tap" onclick="noteDialog({}, TODAY)">ADD</button>
+  <button class="mb-btn mb-press mb-tap" onclick="touched = false; goToday()">TODAY</button>
+  <div id="levels"></div>
+  <button class="mb-btn go mb-press mb-tap" onclick="noteDialog({}, addTarget())">ADD</button>
   <span class="quiet" id="state"></span>
   <div class="spacer"></div>
   <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
@@ -207,30 +244,32 @@ main.dragging{cursor:grabbing;user-select:none}
 
    A bullet is a `note` row and a day's summary is the `note` field of the
    `day` row, both STATUS's shapes, so a line written here or there is the
-   same line in both. Mood, energy and caffeine are read from STATUS and
-   never written. LOG owns no row type of its own.                        */
+   same line in both. Mood, energy, caffeine, weight and sleep are read from
+   STATUS and never written. The one type LOG owns is `recap`: the written
+   summary of a week group or a month.                                    */
 
 const APP = {
   id: 'log',
   name: 'Log',
   icon: '▤',
   blurb: 'the journal, the last few weeks at a glance',
-  /* Owns nothing. `note` and `day` are STATUS's shapes; LOG writes them by
-     merging into what is there, under the root brief's many-writers rule. */
-  types: [],
+  /* `recap` is LOG's own. `note` and `day` are STATUS's shapes; LOG writes
+     them by merging into what is there, under the root brief's many-writers
+     rule. */
+  types: ['recap'],
 };
 
 Skins.load('../shared/skins.json?v=13').then(() => { Skins.restore(APP.id);
   if (window.Icons) Icons.paint(null, { force: true });
   /* A theme changes the font, and the font changes how tall a line is and
      how tall the column headings are. */
-  measure(); fit(); if (!touched) goToday(); });
+  measure(); fit(); if (!touched) goToday(); else setLevel(level); });
 if (window.Icons) Icons.paint();
 Sfx.init(APP.id);
 Rec.declare(APP.id, APP.types);
-/* The backup carries the journal and the summaries, or a restore of LOG is
+/* The backup carries the journal and every summary, or a restore of LOG is
    a restore of nothing. */
-IO.register({ app: APP.id, name: APP.name, types: ['note', 'day'] });
+IO.register({ app: APP.id, name: APP.name, types: ['note', 'day', 'recap'] });
 
 const esc = UI.esc;
 const attr = s => esc(String(s == null ? '' : s)).replace(/"/g, '&quot;');
@@ -248,18 +287,31 @@ const S = {
 };
 
 /* ── zoom ──
-   dayHeight is the one number the layout hangs off. Zoomed out, every block
-   is (days it contains) × dayHeight pixels tall; zoomed in, it is the least
-   a day can be. Kept a whole number so every boundary lands on a whole
-   pixel. `zoom` is the same thing unrounded, so small trackpad movements add
-   up instead of being rounded away. */
-const MIN_DH = 2;            /* a whole year in about 730px: the glance view */
-const MAX_DH = 64;
-/* Opening view: this many days, ending today, fill the screen, or as many
-   as fit when busy days take more room. Tom, 2026-09-13: the app is mostly
-   for the past three to eight weeks. */
-const RECENT_DAYS = 42;
-let zoom = 4, dayHeight = 4;
+   Seven steps, and nothing in between. Tom, 2026-09-13: "Day, 2 Days, 3 Days,
+   Week, Weeks, Month, Quarter." Each is how many days fill the screen. Weeks
+   is two; Month is 31 and Quarter 92, so the longest month and the longest
+   quarter both fit whole.
+
+   dayHeight is still the one number the layout hangs off: the screen's
+   height divided by the step's days. Zoomed out, every block is (days it
+   contains) × dayHeight tall; zoomed in, it is the least a day can be, and a
+   busy day is taller. */
+const LEVELS = [
+  { id: 'd1', name: 'Day',     n: 1 },
+  { id: 'd2', name: '2 Days',  n: 2 },
+  { id: 'd3', name: '3 Days',  n: 3 },
+  { id: 'w1', name: 'Week',    n: 7 },
+  { id: 'w2', name: 'Weeks',   n: 14 },
+  { id: 'm',  name: 'Month',   n: 31 },
+  { id: 'q',  name: 'Quarter', n: 92 },
+];
+const LV = id => LEVELS.findIndex(l => l.id === id);
+/* Opening view: today on the bottom edge, a month above it. Tom, 2026-09-13:
+   the app is mostly for the past three to eight weeks; Month is the step
+   nearest that. */
+const OPEN_LEVEL = LV('m');
+const MIN_DH = 2;
+let level = OPEN_LEVEL, dayHeight = 4;
 let touched = false;         /* once he has zoomed or dragged, a late theme load must not yank the view */
 
 const TODAY = Day.today();
@@ -382,6 +434,7 @@ const SORTS = [{ id: 'time', name: 'By time' }, { id: 'manual', name: 'As arrang
 
 let byDay = new Map();       /* display date → bullets, sorted */
 let byKey = new Map();       /* row date|key → bullet, for clicks */
+let firstMin = new Map();    /* display date → minute of the day's earliest bullet, whatever the filter */
 let lineCount = 0;           /* every live line, whatever the filter */
 
 /* The clock a line sorts by: a finished task's is when it was ticked, a
@@ -395,7 +448,7 @@ function sortClock(p) {
 }
 
 function indexJournal() {
-  byDay = new Map(); byKey = new Map(); lineCount = 0;
+  byDay = new Map(); byKey = new Map(); firstMin = new Map(); lineCount = 0;
   const show = shown();
   Rec.all('note', {}).forEach(r => {
     const p = r.payload;
@@ -403,10 +456,16 @@ function indexJournal() {
     const kind = p.kind === 'para' ? 'entry' : p.kind;
     if (!MARK[kind]) return;
     lineCount++;
-    if (show.indexOf(kind) < 0) return;
     const open = kind === 'todo' && !p.done;
     const day = kind === 'todo' && p.done ? (p.doneOn || r.date) : r.date;
     if (!day || !DATE_OK.test(day)) return;
+    /* Counted before the filter, so hiding a kind never moves the graph. */
+    const c = sortClock(p);
+    if (c !== 9999) {
+      const m = Math.floor(c / 100) * 60 + c % 100;
+      if (!firstMin.has(day) || m < firstMin.get(day)) firstMin.set(day, m);
+    }
+    if (show.indexOf(kind) < 0) return;
     const x = { key: r.key, date: r.date, day, kind, open, p };
     byKey.set(r.date + '|' + r.key, x);
     if (!byDay.has(day)) byDay.set(day, []);
@@ -427,10 +486,15 @@ const counted = d => (byDay.get(d) || []).filter(x => !x.open).length;
    Tom, 2026-09-13: "2 line graphs per day, with time stamps on the entries,
    I also want caffeine tracking." Read from STATUS, never written.
 
+   WHERE A DAY STARTS. Tom, 2026-09-13: "Check weight, bullets, or sleep -
+   whatever came first, use that as the start of the day for the graphs."
+   So the left edge is the earliest of the day's weigh-ins, sleep entries
+   and bullets, and the right edge is midnight. A day with none of those
+   starts at midnight. Readings logged before the start are not drawn.
+
    MOOD and ENERGY are STATUS's scale fields: every reading has a timestamp
    and a score from 1 to the field's top (5 unless he changed it). Each is a
-   line across its day, placed by the time of day it was logged, one dot per
-   reading.
+   line placed by the time of day it was logged, one dot per reading.
 
    CAFFEINE is STATUS's own model, not a new one: every dose, typed or read
    off a meal's label, decays on its own clock at the field's half-life, and
@@ -444,6 +508,9 @@ const GRAPH = [{ id: 'mood', name: 'Mood' }, { id: 'energy', name: 'Energy' }, {
    the top of a row means that much in you at once. A day that goes past it
    stretches to fit rather than clipping. */
 const CAF_TOP = 400;
+/* However late the first thing happened, a graph spans at least six hours,
+   or a day whose first line was at 11pm would be a graph one hour wide. */
+const MIN_SPAN = 360;
 
 let G = null;                /* { mood, energy, caf, meals: date → [meal] } */
 function indexGraph() {
@@ -461,6 +528,16 @@ function indexGraph() {
 const evList = (date, fid) => { const r = Rec.get('ev', date, fid); return r && r.e ? r.e : []; };
 const minuteOf = t => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
 
+/* The earliest weigh-in, sleep entry or bullet, as a minute of the day. */
+function dayStart(d) {
+  let s = firstMin.has(d) ? firstMin.get(d) : null;
+  ['weight', 'sleep'].forEach(id => evList(d, id).forEach(e => {
+    const m = minuteOf(e.t);
+    if (s == null || m < s) s = m;
+  }));
+  return s == null ? 0 : Math.min(s, 1440 - MIN_SPAN);
+}
+
 /* STATUS's entries() for a food-fed field: typed doses plus label figures. */
 function cafDoses(date) {
   const f = G.caf, per = f.per == null ? 1 : f.per;
@@ -476,10 +553,12 @@ function cafDoses(date) {
 function graphHTML(d) {
   if (!G || d > TODAY) return '';
   const on = graphOn(), W = 1440, H = 100, PAD = 6;
+  const start = dayStart(d);
+  const xOf = m => (m - start) / (W - start) * W;
   const yOf = u => PAD + (1 - clamp(u, 0, 1)) * (H - PAD * 2);
   let svg = '', dots = '';
   const dot = (cls, m, u, tip) => {
-    dots += '<i class="' + cls + '" style="left:' + (m / W * 100).toFixed(2) + '%;top:' + (yOf(u) / H * 100).toFixed(2) +
+    dots += '<i class="' + cls + '" style="left:' + (xOf(m) / W * 100).toFixed(2) + '%;top:' + (yOf(u) / H * 100).toFixed(2) +
       '%" title="' + attr(tip) + '"></i>';
   };
 
@@ -488,9 +567,9 @@ function graphHTML(d) {
     if (!f || on.indexOf(id) < 0) return;
     const top = Math.max(2, Math.min(10, f.max || 5));
     const pts = evList(d, id).map(e => ({ m: minuteOf(e.t), u: ((+e.v || 1) - 1) / (top - 1), e }))
-      .sort((a, b) => a.m - b.m);
+      .filter(p => p.m >= start).sort((a, b) => a.m - b.m);
     if (!pts.length) return;
-    if (pts.length > 1) svg += '<path class="' + id + '" d="' + pts.map((p, i) => (i ? 'L' : 'M') + p.m + ' ' + yOf(p.u).toFixed(1)).join(' ') + '"/>';
+    if (pts.length > 1) svg += '<path class="' + id + '" d="' + pts.map((p, i) => (i ? 'L' : 'M') + xOf(p.m).toFixed(1) + ' ' + yOf(p.u).toFixed(1)).join(' ') + '"/>';
     pts.forEach(p => dot(id, p.m, p.u, clockLabel(hhmm(p.e.t)) + ' · ' + (f.label || id) + ' ' + p.e.v + ' of ' + top));
   });
 
@@ -503,14 +582,14 @@ function graphHTML(d) {
     Day.range(Day.shift(d, -(span - 1)), d).forEach(x => cafDoses(x).forEach(e => doses.push(e)));
     const level = T => doses.reduce((a, e) => { const hrs = (T - e.t) / 3600000; return hrs < 0 ? a : a + e.v * Math.pow(0.5, hrs / half); }, 0);
     const samples = [];
-    for (let m = 0; m <= W; m += 15) samples.push({ m, v: level(mid + m * 60000) });
+    for (let m = start; m < W; m += 15) samples.push({ m, v: level(mid + m * 60000) });
+    samples.push({ m: W, v: level(mid + W * 60000) });
     const peak = samples.reduce((a, s) => Math.max(a, s.v), 0);
     if (peak >= 1) {
       const topMg = Math.max(CAF_TOP, peak);
-      svg += '<path class="caffeine" d="' + samples.map((s, i) => (i ? 'L' : 'M') + s.m + ' ' + yOf(s.v / topMg).toFixed(1)).join(' ') + '"/>';
-      doses.filter(e => e.t >= mid && e.t < mid + 86400000).forEach(e => {
-        const m = minuteOf(e.t);
-        dot('caffeine', m, level(e.t + 1000) / topMg,
+      svg += '<path class="caffeine" d="' + samples.map((s, i) => (i ? 'L' : 'M') + xOf(s.m).toFixed(1) + ' ' + yOf(s.v / topMg).toFixed(1)).join(' ') + '"/>';
+      doses.filter(e => e.t >= mid + start * 60000 && e.t < mid + 86400000).forEach(e => {
+        dot('caffeine', minuteOf(e.t), level(e.t + 1000) / topMg,
           clockLabel(hhmm(e.t)) + ' · ' + Math.round(e.v) + 'mg caffeine' + (e.food ? ' (' + e.food + ')' : ''));
       });
     }
@@ -535,8 +614,7 @@ function firstYear() {
 
 /* Week groups start on these days of every month. Tom, 2026-09-13: "divide
    the month into 1-7, 8-14, 15-21, 22-28, then show the remaining days as
-   their own little group." Every month has the same four, so the 15th is
-   always in the third, and weeks of one month line up against another. */
+   their own little group." */
 const WEEK_STARTS = [1, 8, 15, 22, 29];
 
 function buildTimeline(y0, y1) {
@@ -582,9 +660,9 @@ const idx = date => clamp(Day.diff(date, T.first), 0, T.days.length - 1);
 
 /* ══════════════════════ DRAWING ══════════════════════ */
 let T = null;
-let blocks = [];             /* month and week blocks: [{el, n, state}] — what fit() walks on every zoom */
+let blocks = [];             /* month and week blocks: [{el, n, state, ws, lines}] — what fit() walks on every zoom */
 let dayCol = null, dayEls = [];
-const M = { lab: 20, full: 36, dayLine: 18 };   /* replaced by measure() before first use */
+const M = { lab: 20, full: 36, wsLine: 16, small: 14, dayLine: 18, heads: 32 };   /* replaced by measure() before first use */
 
 /* The time a bullet shows, STATUS's rules: a typed time; a finished todo's
    Done time; an open todo's start, or "by" its Done time; and for anything
@@ -611,33 +689,45 @@ function bulletHTML(x) {
     (x.p.dur ? '<span class="du">' + durLabel(x.p.dur) + '</span>' : '') + '</div>';
 }
 
-function blockHTML(p, kind) {
+/* A week or a month has one written summary, a `recap` row dated on its
+   first day. */
+const recapKind = colCls => colCls === 'c-m' ? 'month' : 'week';
+const recapOf = (kind, from) => (Rec.get('recap', from, kind) || {}).text || '';
+
+function blockHTML(p, kind, colCls) {
   const cls = ['blk'];
   if (p.from.slice(5) === '01-01') cls.push('y0');
   else if (p.from.slice(8) === '01') cls.push('m0');
   const future = p.from > TODAY;
   const style = '--i:' + p.i0 + ';--n:' + p.n;
   if (kind === 'd') {
+    const list = byDay.get(p.from) || [];
     if (WEEK_STARTS.indexOf(+p.from.slice(8)) > 0) cls.push('wk');
     if (p.from === TODAY) cls.push('today');
     if (future) cls.push('future');
-    const sum = future ? '<span></span>'
+    if (list.length) cls.push('has');
+    const note = future ? '' : (Rec.get('day', p.from, '') || {}).note || '';
+    const sum = future ? ''
       : '<input class="sum" type="text" maxlength="240" placeholder="Summary" data-d="' + p.from + '" value="' +
-        attr((Rec.get('day', p.from, '') || {}).note || '') + '" aria-label="Summary for ' + attr(p.label) + '">';
-    return '<div class="' + cls.join(' ') + '" style="' + style + '" data-from="' + p.from + '">' +
-      '<span class="lab">' + esc(p.label) + '</span>' + sum +
-      '<div class="bls">' + (byDay.get(p.from) || []).map(bulletHTML).join('') + '</div>' +
+        attr(note) + '" aria-label="Summary for ' + attr(p.label) + '">';
+    return '<div class="' + cls.join(' ') + '" style="' + style + '" data-from="' + p.from + '"' +
+      (note ? ' title="' + attr(p.label + ': ' + note) + '"' : '') + '>' +
+      '<div class="hd"><span class="lab">' + esc(p.label) + '</span>' + sum + '</div>' +
+      '<div class="bls">' + list.map(bulletHTML).join('') + '</div>' +
       graphHTML(p.from) + '</div>';
   }
+  const rc = future ? '' : recapOf(recapKind(colCls), p.from);
   const range = Day.label(p.from) + (p.n > 1 ? ' to ' + Day.label(p.to) : '') + ' ' + p.from.slice(0, 4);
-  return '<div class="' + cls.join(' ') + '" style="' + style + '" title="' + attr(range) + '" data-from="' + p.from + '" data-to="' + p.to + '">' +
+  return '<div class="' + cls.join(' ') + '" style="' + style + '" title="' + attr(rc || range) + '" data-from="' + p.from + '" data-to="' + p.to + '">' +
     '<div class="stick"><div class="lab">' + esc(p.label) + '</div>' +
-    (future ? '' : '<div class="tot">' + bullets(countOf(p)) + '</div>') + '</div></div>';
+    (future ? '' : '<div class="tot">' + bullets(countOf(p)) + '</div>') +
+    (future ? '' : rc ? '<div class="ws" hidden>' + esc(rc) + '</div>' : '<div class="ws add" hidden>Summary</div>') +
+    '</div></div>';
 }
 
 function build() {
   const cal = $('cal');
-  const col = (cls, list, kind) => '<div class="col c ' + cls + '">' + list.map(p => blockHTML(p, kind)).join('') + '</div>';
+  const col = (cls, list, kind) => '<div class="col c ' + cls + '">' + list.map(p => blockHTML(p, kind, cls)).join('') + '</div>';
   cal.style.setProperty('--days', T.days.length);
   cal.style.setProperty('--dh', dayHeight + 'px');
   cal.innerHTML =
@@ -647,7 +737,9 @@ function build() {
     '<div class="row body"><div class="agg">' +
       col('c-m', T.months) + col('c-w', T.weeks) +
     '</div>' + col('c-d', T.dayList, 'd') + '</div>';
-  blocks = [...cal.querySelectorAll('.body .agg .blk')].map(el => ({ el, n: +el.style.getPropertyValue('--n'), state: '' }));
+  blocks = [...cal.querySelectorAll('.body .agg .blk')].map(el => ({
+    el, n: +el.style.getPropertyValue('--n'), state: '', ws: el.querySelector('.ws'), lines: -1,
+  }));
   dayCol = cal.querySelector('.body .c-d');
   dayEls = [...dayCol.children];
   const show = shown();
@@ -657,43 +749,62 @@ function build() {
 /* ── what text fits ──
    Measured rather than guessed, because a theme changes the font and the
    font changes how tall a line is. Runs once per theme, not once per zoom.
-   The month column has to be showing to be measured. */
+   Months and weeks are measured with the zoomed-out styles, a day's lines
+   with the zoomed-in ones. */
 function measure() {
   const cal = $('cal'), wasNear = cal.classList.contains('near');
-  cal.classList.remove('near');
-  const probe = (html) => {
+  const probe = (parent, cls, html, css) => {
     const b = document.createElement('div');
-    b.className = 'blk';
-    b.style.cssText = 'visibility:hidden;top:0;height:auto';
+    b.className = cls;
+    b.style.cssText = 'visibility:hidden;' + css;
     b.innerHTML = html;
-    cal.querySelector('.body .c-m').appendChild(b);
+    parent.appendChild(b);
     const h = b.offsetHeight;
     b.remove();
     return h;
   };
-  M.lab = probe('<div class="stick"><div class="lab">Jan 2026</div></div>');
-  M.full = probe('<div class="stick"><div class="lab">Jan 2026</div><div class="tot">0 bullets</div></div>');
-  const d = document.createElement('div');
-  d.className = 'bl';
-  d.style.cssText = 'position:absolute;visibility:hidden;left:0;top:0';
-  d.innerHTML = '<span class="tm">12:45pm</span><span class="mk">·</span><span class="tx">Line</span>';
-  dayCol.appendChild(d);
-  M.dayLine = d.offsetHeight;
-  d.remove();
+  const hd = '<span class="lab">Wed 30</span><input class="sum" value="Line">';
+  const bl = '<span class="tm">12:45pm</span><span class="mk">·</span><span class="tx">Line</span>';
+  cal.classList.remove('near');
+  M.heads = $('heads').offsetHeight;
+  const mcol = cal.querySelector('.body .c-m');
+  const agg = html => probe(mcol, 'blk', '<div class="stick">' + html + '</div>', 'top:0;height:auto');
+  M.lab = agg('<div class="lab">Jan 2026</div>');
+  M.full = agg('<div class="lab">Jan 2026</div><div class="tot">0 bullets</div>');
+  M.wsLine = agg('<div class="lab">Jan 2026</div><div class="tot">0 bullets</div><div class="ws" style="--ln:1">Line</div>') - M.full;
+  M.small = probe(dayCol, 'hd', hd, 'position:absolute;left:0;top:0');
+  cal.classList.add('near');
+  M.dayLine = Math.max(probe(dayCol, 'hd', hd, 'position:absolute;left:0;top:0'),
+    probe(dayCol, 'bl', bl, 'position:absolute;left:0;top:0'));
+  cal.style.setProperty('--line', M.dayLine + 'px');
   cal.classList.toggle('near', wasNear);
 }
 
+/* How a day is drawn at this height, and for each month and week block,
+   how much of its label, count and summary fits. Only blocks whose answer
+   changed are touched. */
 function fit() {
   const h = dayHeight, cal = $('cal');
   cal.classList.toggle('near', h >= M.dayLine);
+  cal.classList.toggle('small', h < M.dayLine && h >= M.small);
   cal.style.setProperty('--headh', headH() + 'px');
   for (const b of blocks) {
     const px = b.n * h;
     const s = px < M.lab ? 'bare' : px < M.full ? 'lab-only' : '';
-    if (s === b.state) continue;
-    if (b.state) b.el.classList.remove(b.state);
-    if (s) b.el.classList.add(s);
-    b.state = s;
+    if (s !== b.state) {
+      if (b.state) b.el.classList.remove(b.state);
+      if (s) b.el.classList.add(s);
+      b.state = s;
+    }
+    if (b.ws) {
+      /* Rounded down, so a summary never runs into the block below. */
+      const ln = s ? 0 : Math.max(0, Math.floor((px - M.full) / Math.max(1, M.wsLine)));
+      if (ln !== b.lines) {
+        b.ws.style.setProperty('--ln', ln);
+        b.ws.hidden = ln < 1;
+        b.lines = ln;
+      }
+    }
   }
 }
 
@@ -720,50 +831,69 @@ function applyDH(dh) {
   fit();
 }
 
-function setZoom(z, anchorY) {
-  zoom = clamp(z, MIN_DH, MAX_DH);
-  const dh = Math.round(zoom);
-  if (dh === dayHeight) return;
+/* The day height that puts `n` days on the screen. Zoomed out the headings
+   take room, so that answer is worked out without them. */
+function dhFor(n) {
+  const dh = Math.max(MIN_DH, Math.floor(sc.clientHeight / n));
+  return dh >= M.dayLine ? dh : Math.max(MIN_DH, Math.floor((sc.clientHeight - M.heads) / n));
+}
+
+/* Go to a zoom step, keeping the day at `anchorY` (pixels from the top of the
+   scroller) exactly where it was. */
+function setLevel(i, anchorY) {
+  i = clamp(i, 0, LEVELS.length - 1);
   if (anchorY == null) anchorY = sc.clientHeight / 2;
   const at = dateAt(sc.scrollTop + anchorY);
-  applyDH(dh);
+  level = i;
+  applyDH(dhFor(LEVELS[i].n));
   sc.scrollTop = posOf(at.i, at.f) - anchorY;
+  syncLevels();
   showYear();
 }
 
+/* Put `date` just under the headings, or with `bottom`, its last pixel on
+   the bottom edge of the screen. */
 function scrollToDate(date, bottom) {
   const i = idx(date);
   sc.scrollTop = bottom ? dayY(i) + dayHt(i) - sc.clientHeight : dayY(i) - headH();
   showYear();
 }
 
-/* The opening view: today on the bottom edge, and the largest zoom at which
-   the six weeks before it still fit, never less than readable. */
+/* The opening view: a month, today on the bottom edge. */
 function goToday() {
-  const iT = idx(TODAY), i0 = Math.max(0, iT - RECENT_DAYS + 1);
-  const span = () => dayY(iT) + dayHt(iT) - dayY(i0);
-  let lo = clamp(M.dayLine, MIN_DH, MAX_DH), hi = MAX_DH;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    applyDH(mid);
-    if (span() <= bodyH()) lo = mid; else hi = mid - 1;
-  }
-  applyDH(lo); zoom = lo;
+  level = OPEN_LEVEL;
+  applyDH(dhFor(LEVELS[level].n));
+  syncLevels();
   scrollToDate(TODAY, true);
 }
 
-function wholeYear() {
-  const y = viewYear(), n = Day.diff(y + '-12-31', y + '-01-01') + 1;
+/* Open a box: a day at Day, a week group at Week (or the short end-of-month
+   groups at 2 or 3 Days, their own length), a month at Month. Its first day
+   goes to the top of the screen. */
+function openBox(blk) {
   touched = true;
-  applyDH(clamp(Math.floor(sc.clientHeight / n), MIN_DH, MAX_DH));
-  applyDH(clamp(Math.floor(bodyH() / n), MIN_DH, MAX_DH));
-  zoom = dayHeight;
-  scrollToDate(y + '-01-01');
+  const from = blk.dataset.from;
+  let i = LV('d1');
+  if (blk.closest('.agg')) {
+    if (blk.parentNode.classList.contains('c-m')) i = LV('m');
+    else {
+      const n = +blk.style.getPropertyValue('--n');
+      i = n <= 1 ? LV('d1') : n === 2 ? LV('d2') : n === 3 ? LV('d3') : LV('w1');
+    }
+  }
+  level = i;
+  applyDH(dhFor(LEVELS[i].n));
+  syncLevels();
+  scrollToDate(from);
+  Mobile.feedback('open');
 }
 
-function viewYear() {
-  return +T.days[dateAt(sc.scrollTop + headH() + bodyH() / 2).i].slice(0, 4);
-}
+function viewDay() { return T.days[dateAt(sc.scrollTop + headH() + bodyH() / 2).i]; }
+/* ADD writes to today, unless a single day is open, when it writes to that
+   day. */
+const addTarget = () => LEVELS[level].n === 1 ? viewDay() : TODAY;
+
+function viewYear() { return +viewDay().slice(0, 4); }
 function showYear() {
   const y = viewYear();
   $('yrLabel').textContent = y;
@@ -776,35 +906,57 @@ function goYear(n) {
   scrollToDate(y + '-01-01');
 }
 
+/* ── the zoom steps, on screen ──
+   The wheel moves through them; this strip says which one you are on and is
+   the way to them for somebody who never tries the wheel (DOCTRINE law 6). */
+let levelSeg = null, syncing = false;
+function drawLevels() {
+  const box = $('levels');
+  box.innerHTML = '';
+  levelSeg = UI.segmented(LEVELS.map(l => ({ id: l.id, name: l.name })), LEVELS[level].id, id => {
+    if (syncing) return;
+    touched = true;
+    setLevel(LV(id));
+  });
+  box.appendChild(levelSeg);
+}
+function syncLevels() {
+  if (!levelSeg) return;
+  syncing = true;
+  levelSeg.select(LEVELS[level].id);
+  syncing = false;
+}
+
 /* ══════════════════════ THE FILTER BAR ══════════════════════ */
 function drawBar() {
   const bar = $('bar');
   bar.innerHTML = '';
-  const chipGroup = (label, items, isOn, key, all) => {
-    const g = UI.el('div', 'grp');
-    g.appendChild(UI.el('span', 'k', label));
-    items.forEach(it => {
-      const on = isOn().indexOf(it.id) > -1;
-      const c = UI.el('button', 'mb-chip mb-press mb-tap' + (on ? ' on' : ''), (it.sw ? '<span class="sw ' + it.id + '"></span>' : '') + esc(it.name));
-      c.type = 'button';
-      c.setAttribute('aria-pressed', on ? 'true' : 'false');
-      c.onclick = () => {
-        const cur = isOn(), was = cur.indexOf(it.id) > -1;
-        /* kept in the bar's own order, so the setting reads the same way twice */
-        S.set(key, was ? cur.filter(v => v !== it.id) : all.filter(v => v === it.id || cur.indexOf(v) > -1));
-        Mobile.feedback('toggle');
-        drawBar(); rebuild();
-      };
-      g.appendChild(c);
-    });
-    return g;
+  /* A list setting keeps the bar's own order, so it reads the same way twice. */
+  const setList = (key, all, cur, id, on) => S.set(key, all.filter(v => v === id ? on : cur.indexOf(v) > -1));
+  const toggle = (label, on, onChange, sw) => {
+    const w = UI.el('span', 'tg');
+    const t = UI.toggle(on, onChange);
+    t.classList.add('mb-tap');
+    t.setAttribute('aria-label', label);
+    const l = UI.el('span', 'tl', (sw ? '<span class="sw ' + sw + '"></span>' : '') + esc(label));
+    l.onclick = () => t.click();
+    w.appendChild(l);
+    w.appendChild(t);
+    return w;
   };
-  bar.appendChild(chipGroup('Show', NOTE_KINDS.map(k => ({ id: k.id, name: k.plural })), shown, 'show', NOTE_KINDS.map(k => k.id)));
+  const g = UI.el('div', 'grp');
+  g.appendChild(UI.el('span', 'k', 'Show'));
+  const kinds = NOTE_KINDS.map(k => k.id), lines = GRAPH.map(x => x.id);
+  NOTE_KINDS.forEach(k => g.appendChild(toggle(k.plural, shown().indexOf(k.id) > -1,
+    on => { setList('show', kinds, shown(), k.id, on); rebuild(); })));
+  g.appendChild(UI.el('span', 'sep'));
+  GRAPH.forEach(x => g.appendChild(toggle(x.name, graphOn().indexOf(x.id) > -1,
+    on => { setList('graph', lines, graphOn(), x.id, on); rebuild(); }, x.id)));
+  bar.appendChild(g);
   const g2 = UI.el('div', 'grp');
   g2.appendChild(UI.el('span', 'k', 'Sort'));
   g2.appendChild(UI.segmented(SORTS, sortMode(), v => { S.set('sort', v); rebuild(); }));
   bar.appendChild(g2);
-  bar.appendChild(chipGroup('Graph', GRAPH.map(g => ({ id: g.id, name: g.name, sw: 1 })), graphOn, 'graph', GRAPH.map(g => g.id)));
 }
 
 /* ══════════════════════ WRITING ══════════════════════
@@ -817,8 +969,7 @@ let heldAt = 0;              /* a hold opens a menu; the click that ends it must
    STATUS's `day` row already has a `note` field, one per day, which is
    exactly this, and which nothing else in the suite writes any more. The
    row also carries `rest`, the rest-day flag, so the summary is merged in
-   and never replaces the row. STATUS counts a day with a note as a day you
-   turned up for, which is true of a day you summarised. */
+   and never replaces the row. */
 function saveSummary(d, raw) {
   const v = String(raw || '').trim();
   const cur = Rec.get('day', d, '') || {};
@@ -827,6 +978,50 @@ function saveSummary(d, raw) {
   if (!v) delete next.note;
   if (Object.keys(next).length) Rec.set('day', d, '', next);
   else Rec.del('day', d, '');
+}
+
+/* ── the summary box, for a day, a week or a month ──
+   Opened by clicking a box's name, dates or count. Tom, 2026-09-13. A day's
+   summary is STATUS's day note; a week's or month's is a `recap` row. Enter
+   saves; an empty box removes it. */
+function summaryDialog(blk) {
+  const from = blk.dataset.from, to = blk.dataset.to || from;
+  if (from > TODAY) { UI.toast('Tomorrow isn’t here yet'); return; }
+  const kind = !blk.closest('.agg') ? 'day' : recapKind(blk.parentNode.classList.contains('c-m') ? 'c-m' : 'c-w');
+  const month = MONTHS[+from.slice(5, 7) - 1] + ' ' + from.slice(0, 4);
+  const title = (kind === 'day' ? Day.label(from, { weekday: 'short' }) + ' ' + +from.slice(8) + ' ' + month
+    : kind === 'month' ? month
+    : +from.slice(8) + (from === to ? '' : '–' + +to.slice(8)) + ' ' + month).toUpperCase();
+  const current = kind === 'day' ? ((Rec.get('day', from, '') || {}).note || '') : recapOf(kind, from);
+  let ta = null;
+  const save = h => {
+    const v = ta.value.trim();
+    if (kind === 'day') saveSummary(from, v);
+    else {
+      const cur = Rec.get('recap', from, kind);
+      if (v) Rec.set('recap', from, kind, Object.assign({}, cur || {}, { text: v }));
+      else if (cur) Rec.del('recap', from, kind);
+    }
+    Mobile.feedback('success');
+    h.close();
+  };
+  UI.dialog({
+    title: title, width: 460,
+    body: (b, h) => {
+      ta = UI.field('note', { rows: kind === 'day' ? 2 : 4, value: current });
+      ta.onkeydown = e => {
+        if (e.key !== 'Enter' || e.shiftKey || e.altKey || e.isComposing || e.keyCode === 229) return;
+        e.preventDefault();
+        save(h);
+      };
+      b.appendChild(ta);
+      UI.focusSoon(ta);
+    },
+    actions: [
+      { label: 'CANCEL' },
+      { label: 'SAVE', kind: 'go', fn: h => { save(h); return false; } },
+    ],
+  });
 }
 
 function noteDialog(x, d) {
@@ -928,21 +1123,23 @@ function removeLine(x) {
 
 const bulletOf = el => byKey.get(el.dataset.d + '|' + el.dataset.k);
 
-/* Click: the box ticks, a bullet edits, a readable day adds. The summary box
-   is left alone to be typed in. */
+/* Click. The name, dates, count or written summary of any box opens its
+   summary; a todo's box ticks; a bullet edits; anywhere else on a box opens
+   it. The day summary line is left alone to be typed in. */
 $('cal').addEventListener('click', e => {
   if (Date.now() - heldAt < 800) return;
   if (e.target.closest('.sum')) return;
   const box = e.target.closest('.bx');
   if (box) { const x = bulletOf(box.closest('.bl')); if (x) tick(x); return; }
-  if (!$('cal').classList.contains('near')) return;
+  const blk = e.target.closest('.blk');
+  if (!blk) return;
+  if (e.target.closest('.lab, .tot, .ws')) { summaryDialog(blk); return; }
   const bl = e.target.closest('.bl');
   if (bl) { const x = bulletOf(bl); if (x) noteDialog(x, x.day); return; }
-  const day = e.target.closest('.c-d .blk');
-  if (day && Day.editable(day.dataset.from)) noteDialog({}, day.dataset.from);
+  openBox(blk);
 });
 
-/* The summary saves when Enter is pressed and whenever the box is left;
+/* The day summary saves when Enter is pressed and whenever the box is left;
    Escape puts back what was there. Saved directly rather than on the
    browser's change event, which only fires for some kinds of edit: watched
    2026-09-13, an Enter that did not save. saveSummary does nothing when the
@@ -965,10 +1162,11 @@ $('cal').addEventListener('focusout', e => {
 /* Right click with a mouse, hold with a finger: the same menu, and only
    ever a shortcut to what a click already does (DOCTRINE law 14). */
 Mobile.hold($('cal'), e => {
-  if (!$('cal').classList.contains('near')) return;
   heldAt = Date.now();
-  const bl = e.target.closest('.bl'), day = e.target.closest('.c-d .blk');
-  if (bl) {
+  const blk = e.target.closest('.blk');
+  if (!blk) return;
+  const bl = e.target.closest('.bl');
+  if (bl && $('cal').classList.contains('near')) {
     const x = bulletOf(bl);
     if (!x) return;
     UI.menu(e.clientX, e.clientY, [
@@ -977,23 +1175,37 @@ Mobile.hold($('cal'), e => {
       '-',
       { label: 'Delete', kind: 'bad', fn: () => removeLine(x) },
     ].filter(Boolean), { title: x.p.text || '' });
-  } else if (day && Day.editable(day.dataset.from)) {
-    const d = day.dataset.from;
-    UI.menu(e.clientX, e.clientY, [{ label: 'Add a bullet', fn: () => noteDialog({}, d) }], { title: Day.label(d) });
+    return;
   }
+  const d = blk.dataset.from, isDay = !blk.closest('.agg');
+  const items = [{ label: 'Open', fn: () => openBox(blk) }];
+  if (d <= TODAY) items.push({ label: 'Write summary', fn: () => summaryDialog(blk) });
+  if (isDay && Day.editable(d)) items.push({ label: 'Add a bullet', fn: () => noteDialog({}, d) });
+  const lab = blk.querySelector('.lab');
+  UI.menu(e.clientX, e.clientY, items, { title: lab ? lab.textContent : Day.label(d) });
 }, { skip: '.sum,.bx' });
 
 /* ══════════════════════ MOVING AROUND ══════════════════════ */
 
+/* One zoom step per wheel notch, toward the pointer. A trackpad sends many
+   small movements and a long glide after them, so the small ones add up to
+   a notch's worth, and a short pause after each step keeps one flick from
+   racing straight to Quarter. */
+let wheelAcc = 0, wheelAt = 0;
 sc.addEventListener('wheel', e => {
   if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
   e.preventDefault();
   touched = true;
+  const now = Date.now();
+  if (now - wheelAt < 180) { wheelAcc = 0; return; }
   let dy = e.deltaY;
   if (e.deltaMode === 1) dy *= 16;                   /* lines, on some mice */
   else if (e.deltaMode === 2) dy *= sc.clientHeight; /* pages */
-  /* About a fifth per wheel notch. */
-  setZoom(zoom * Math.exp(-dy * 0.0025), e.clientY - sc.getBoundingClientRect().top);
+  wheelAcc += dy;
+  if (Math.abs(wheelAcc) < 50) return;
+  const step = wheelAcc > 0 ? 1 : -1;
+  wheelAcc = 0; wheelAt = now;
+  setLevel(level + step, e.clientY - sc.getBoundingClientRect().top);
 }, { passive: false });
 
 let drag = null, swallowClick = false;
@@ -1058,16 +1270,17 @@ indexGraph();
 T = buildTimeline(firstYear(), THIS_YEAR);
 build();
 drawBar();
+drawLevels();
 measure();
 fit();
 goToday();
 Rec.ready(soon);
 Rec.on(soon);
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); fit(); if (!touched) goToday(); });
-/* The drawing area changes height after the first paint: the theme and the
-   icons land and the header can wrap onto another line. Until he has moved
-   it himself, keep the opening view true to its promise. */
-if (window.ResizeObserver) new ResizeObserver(() => { fit(); if (!touched) goToday(); }).observe(sc);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); fit(); if (!touched) goToday(); else setLevel(level); });
+/* The screen changes height after the first paint (the theme and icons land,
+   the header can wrap) and whenever the window is resized. A zoom step is a
+   number of days on the screen, so the day height follows the screen. */
+if (window.ResizeObserver) new ResizeObserver(() => { if (!touched) goToday(); else setLevel(level); }).observe(sc);
 </script>
 </body>
 </html>

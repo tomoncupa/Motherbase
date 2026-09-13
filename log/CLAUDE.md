@@ -7,8 +7,8 @@ This brief governs `log/` only. It obeys the master brief at the repo root and
 may add rules but never contradict them. Where the two disagree, the root wins
 and this file is the bug.
 
-**Tom only, and a desktop app.** Goes in `DROP_APPS` in `tools/build-client.py`
-the day it goes on the home screen.
+**Tom only, and a desktop app.** On the home screen since 2026-09-13, and in
+`DROP_APPS` in `tools/build-client.py` so no tester sees it.
 
 **It started life as YEAR**, from a build prompt written in Claude chat for
 React and Vite. Tom, 2026-09-13: *"don't let it override design settings we've
@@ -69,6 +69,12 @@ which nothing else in the suite writes any more. It is merged in, so the
 row's `rest` flag survives. STATUS already counts a day with a note as a day
 you turned up for.
 
+**Week and month summaries** are LOG's own `recap` rows, key `week` or
+`month`, dated on the period's first day. Tom, 2026-09-13: day summaries
+visible zoomed out, "same idea for weeks and months". Written by clicking the
+week or month block, shown under its count with as many lines as the block
+has room for.
+
 **The day graph** is read from STATUS and never written. Mood and energy are
 STATUS's scale fields: each reading is a dot placed by the time of day it was
 logged, joined into a line, scaled 1 to the field's top. Caffeine is STATUS's
@@ -79,14 +85,24 @@ scale tops out at 400mg, the daily ceiling the US FDA and the EU's food safety
 authority give for healthy adults, and stretches past that on a day that goes
 higher. No caffeine field with a half-life in STATUS, no caffeine line.
 
+**Where a day's graph starts.** Tom, 2026-09-13: *"Check weight, bullets, or
+sleep - whatever came first, use that as the start of the day for the
+graphs."* The left edge is the earliest weigh-in, sleep entry or bullet that
+day (whatever the filter shows), the right edge is midnight, and a day with
+none of those starts at midnight. It always spans at least six hours, so a day
+whose first line was at 11pm is not a graph one hour wide. Readings logged
+before the start are not drawn. Mood and energy are drawn fainter than
+caffeine, at his request.
+
 **The time** on each bullet follows STATUS's row: the time typed into the line;
 a ticked todo's Done time; an open todo's start, or "by" its Done time; and for
 anything else with no time of its own, when it was written, drawn quieter.
 
 ## Ownership, and writing
 
-LOG owns **no row types**. It reads and writes `note`, whose shape STATUS owns,
-under the root brief's many-writers rule:
+LOG owns **one row type, `recap`**. It also reads and writes `note` and the
+`note` field of `day`, whose shapes STATUS owns, under the root brief's
+many-writers rule:
 
 - **A new line** is STATUS's `addNote` payload, field for field.
 - **An edit, a tick or a delete re-reads the row and merges into it.** STATUS
@@ -104,10 +120,11 @@ LOG's.
 
 The store's ownership warning is per page: it only fires in an app that has
 declared the type it is being written against. STATUS declares `note`; LOG
-declares nothing, so LOG never sees that warning. The merge rule above is the
-discipline, not the warning.
+declares only `recap`, so LOG never sees that warning. The merge rule above is
+the discipline, not the warning.
 
-The backup registers `note`, or a restore of LOG would restore nothing.
+The backup registers `note`, `day` and `recap`, or a restore of LOG would
+restore nothing.
 
 ---
 
@@ -139,6 +156,23 @@ The backup registers `note`, or a restore of LOG would restore nothing.
 | With months and weeks aside, the day column carries them: a line at each Monday, a stronger line at each 1st, and the label names the month on the 1st and the year on 1 January. | Claude, 2026-09-13 |
 | TODAY and WHOLE YEAR buttons, so zoom is reachable without knowing the wheel does it (DOCTRINE law 6). Text, because `shared/icons.js` has no zoom drawing. | Claude, 2026-09-13 |
 | Weeks are labelled by their dates, `5–11`, never by week number. | Claude, 2026-09-13 |
+| On the home screen. | Tom, 2026-09-13 |
+| Day summaries visible zoomed out, and written summaries for weeks and months too. | Tom, 2026-09-13 |
+| Mood, energy and caffeine are switches, like the bullet kinds. | Tom, 2026-09-13 |
+| Bullets sit below the date and summary, not in a column beside them. | Tom, 2026-09-13 |
+| Mood and energy more transparent. | Tom, 2026-09-13 |
+| A day's graph starts at its first weigh-in, sleep entry or bullet. | Tom, 2026-09-13 |
+| Three zooms: far (months and weeks with counts and summaries, days as texture), small (the same, plus each day's date and summary on one line), near (the journal). | Claude, 2026-09-13 |
+| Every filter is a labelled switch in one Show row, bullet kinds then graph lines, then Sort. Supersedes the chips. | Claude, 2026-09-13 |
+| The day's words start in one left edge: the date column is `--s-8` wide and the time column `--s-7`, so the summary and every bullet's words line up. Lines capped at 80 characters. A day with bullets gets more space above and below than between its own lines. Supersedes the time-first column layout. | Claude, 2026-09-13 |
+| Months and weeks columns are between `--s-10` and twice that, 15% of the window between, so a summary is readable. | Claude, 2026-09-13 |
+| Zoom is seven steps, nothing between: Day, 2 Days, 3 Days, Week, Weeks, Month, Quarter. Supersedes the free zoom. | Tom, 2026-09-13 |
+| Clicking a box opens it; clicking its name, dates or count opens its summary. For days, weeks and months alike. Supersedes "clicking a day adds a bullet". | Tom, 2026-09-13 |
+| A step is how many days fill the screen: Weeks is 2 weeks, Month 31 days, Quarter 92, so the longest month and quarter fit whole. A wheel notch is one step, toward the pointer. A strip of the seven in the header shows the step and is the way to it without the wheel. WHOLE YEAR is gone; Quarter is the furthest out. | Claude, 2026-09-13 |
+| Opens at Month, today on the bottom edge: the step nearest the three to eight weeks the app is for. Supersedes the 42-day opening. | Claude, 2026-09-13 |
+| Opening a week group goes to Week, or to 2 or 3 Days for the short groups at the end of a month; a day to Day; a month to Month. The box's first day goes to the top. | Claude, 2026-09-13 |
+| ADD writes to today, or to the open day when the step is Day. A bullet can also be added from any day's right-click menu. | Claude, 2026-09-13 |
+| The written summary on a week or month block also opens its summary box, and the name, count and summary underline under the pointer. | Claude, 2026-09-13 |
 
 ## Found in STATUS, not fixed
 
@@ -156,6 +190,8 @@ One number, `dayHeight`, in whole pixels, between 2 and 64. Zoomed out, every
 block in every column is placed at (first day × dayHeight) and is
 (days × dayHeight) tall; week groups start on the 1st, 8th, 15th, 22nd and
 29th of every month.
+Between those, while a day is too short for its full journal line but tall
+enough for a small one, each day shows its date and summary only.
 Zoomed in, the day column is ordinary flowing rows with a minimum height, and
 every position (zoom anchor, today on the bottom edge, the year in the header)
 is read off the page rather than calculated.
