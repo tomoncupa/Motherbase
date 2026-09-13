@@ -256,7 +256,8 @@ An app may read any type. It writes only the types it owns.
 | `map` | **arc** | map id | `{title, view, snaps, order}` — a mind map, without its nodes |
 | `node` | **arc** | `mapId\|nodeId` | one node. The addressable fact on a canvas, so moving one node writes one row |
 | `link` | **arc** | `mapId\|linkId` | `{a, b, rel, ord}` — a connection that is not a parent link |
-| `recap` | **log** | `week` or `month`, dated on the period's first day | `{text}` — the written summary of one week group or month |
+| `recap` | **log** | `week`, `month`, `quarter` or `year`, dated on the period's first day | `{text}` — what he wrote about that period |
+| `cell` | **log** | column id (`done`), dated | `{text}` — one day's entry in one of LOG's text columns, such as "What got done today". Kept apart from `day.note` on purpose |
 
 ### Many writers is fine. Replacing a payload you did not read is not
 

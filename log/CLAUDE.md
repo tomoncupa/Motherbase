@@ -193,6 +193,14 @@ restore nothing.
 | Settings has a LOG tab: which view it opens on, when the timeline starts, text size (Normal, Large, Larger), the filter bar on or off, the caffeine scale top, and a column width reset. | Tom asked, Claude chose the settings, 2026-09-13 |
 | Side blocks alternate between two surfaces, bigger units take the stronger line, there is room inside, and the count is quieter than the name. | Claude, 2026-09-13 |
 | Clicking a name (a date, a week, a month, a quarter, a year, or a month heading) opens it. Clicking the space beside or below it is for writing about it: a day's line takes the cursor, anything bigger opens a box. Supersedes the previous click rule. | Tom, 2026-09-13 |
+| Mood, energy and caffeine switches live in Settings (Day graph), not the filter bar. | Tom, 2026-09-13 |
+| Day columns beside the days: "What got done today" (a text box per day, stored as a `cell` row, separate from the day's line), and the day's average Mood and Energy from STATUS. Renamable, resizable, and in his order: drag a heading sideways, or right-click Move left/right. The Days column moves too but cannot be hidden. | Tom, 2026-09-13 |
+| Right-click a column heading to hide or show columns, like Windows Explorer. Side columns are hidden per view (Quarters in Year, say); day columns everywhere. The same switches are in Settings, so the right click is a shortcut, not the only way. | Tom asked, Claude chose per-view for side columns, 2026-09-13 |
+| Right-click the view strip to choose which views are offered. The mouse side buttons skip hidden views, opening a box lands on the nearest offered view, and one view always stays. Also in Settings. | Tom, 2026-09-13 |
+| Blank space on a day adds a bullet. Blank space on a bigger block still opens the box to write about it. Supersedes blank-space-writes for days. | Tom, 2026-09-13 |
+| A new bullet always starts as an Entry; the last kind used is no longer remembered. | Tom, 2026-09-13 |
+| In the notebook, a day's other columns sit under its bullets, each with its name, and an empty mood or energy is not shown. | Claude, 2026-09-13 |
+| The column headings are always drawn on the timeline, because the day columns have names even in views without side columns. | Claude, 2026-09-13 |
 
 ## Found in STATUS, not fixed
 
