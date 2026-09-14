@@ -185,7 +185,11 @@ canvas.draw{position:absolute; inset:0; margin:auto; touch-action:none}
 .srcwrap{position:absolute; top:8px; right:8px; z-index:6}
 .srcbtn{width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:color-mix(in srgb, var(--surface-1) 80%, transparent); color:var(--ink); display:flex; align-items:center; justify-content:center; font-size:15px; backdrop-filter:blur(6px)}
 .srcbtn:hover{border-color:var(--accent-dim)}
-.srcmenu{position:absolute; top:36px; right:0; width:200px; background:color-mix(in srgb, var(--surface-1) 95%, transparent); border:1px solid var(--line2); border-radius:10px; padding:7px;
+.srcmenu select,.srcmenu input[data-lift]{width:140px; background:var(--surface-2); border:1px solid var(--line); color:var(--ink); border-radius:6px; padding:4px 6px; font-size:12px; font-family:inherit}
+/* the video folder, drawn inside the shared dialog */
+.libhd{margin:var(--s-4) 0 var(--s-2); font-size:var(--f-1); letter-spacing:var(--track-cap); text-transform:uppercase; color:var(--text-muted)}
+.libbtns{display:flex; gap:var(--s-2)}
+.srcmenu{position:absolute; top:36px; right:0; width:260px; background:color-mix(in srgb, var(--surface-1) 95%, transparent); border:1px solid var(--line2); border-radius:10px; padding:7px;
   display:none; flex-direction:column; gap:6px; box-shadow:var(--e-4); backdrop-filter:blur(8px)}
 .srcmenu.open{display:flex}
 .srcmenu .row{display:flex; align-items:center; gap:8px; justify-content:space-between}
@@ -338,6 +342,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
     </div>
     <div class="spacer"></div>
     <button class="btn auto" id="autoAll" title="Scan clip(s): motion + pose, then auto-trim, auto-sync and auto-detect reps" data-icon="auto" data-icon-size="15">Analyse</button>
+    <button class="btn ghost" id="libBtn" title="Your video folder, by client and date" data-icon="camera" data-icon-size="15">Videos</button>
     <button class="btn ghost" id="snapBtn" title="A picture of what is on screen, with the lift, the dates and your notes under it, copied ready to paste into Telegram" data-icon="download" data-icon-size="15">Picture</button>
     <button class="btn ghost dual-only" id="swapBtn" title="Swap left / right">⇄ Swap</button>
     <button class="btn ghost" id="drawerBtn" title="Toggle telemetry panel" data-icon="rows" data-icon-size="15">Panel</button>
@@ -445,6 +450,9 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
               <button class="srcbtn" title="Source options" data-icon="settings" data-icon-size="15"></button>
               <div class="srcmenu">
                 <button class="btn" data-load="A" data-icon="import" data-icon-size="14">Load / replace…</button>
+                <div class="row"><span>Client</span><select data-client="A"></select></div>
+                <div class="row"><span>Lift</span><input data-lift="A" list="liftList" placeholder="e.g. Back squat"></div>
+                <button class="btn" data-earlier="A" data-icon="camera" data-icon-size="14">Earlier videos of this</button>
                 <div class="row"><span>Mirror (flip)</span><button class="btn sq" data-mirror="A" data-icon="mirror" data-icon-size="15"></button></div>
                 <div class="row"><span>Frame rate (fps)</span><input type="number" data-fps="A" value="30" min="1" max="240" step="1"></div>
                 <div class="row"><span>Trim</span><button class="btn sq" data-trimreset="A" title="Reset trim" data-icon="refresh" data-icon-size="15"></button></div>
@@ -479,6 +487,9 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
               <button class="srcbtn" title="Source options" data-icon="settings" data-icon-size="15"></button>
               <div class="srcmenu">
                 <button class="btn" data-load="B" data-icon="import" data-icon-size="14">Load / replace…</button>
+                <div class="row"><span>Client</span><select data-client="B"></select></div>
+                <div class="row"><span>Lift</span><input data-lift="B" list="liftList" placeholder="e.g. Back squat"></div>
+                <button class="btn" data-earlier="B" data-icon="camera" data-icon-size="14">Earlier videos of this</button>
                 <div class="row"><span>Mirror (flip)</span><button class="btn sq" data-mirror="B" data-icon="mirror" data-icon-size="15"></button></div>
                 <div class="row"><span>Frame rate (fps)</span><input type="number" data-fps="B" value="30" min="1" max="240" step="1"></div>
                 <div class="row"><span>Trim</span><button class="btn sq" data-trimreset="B" title="Reset trim" data-icon="refresh" data-icon-size="15"></button></div>
@@ -586,6 +597,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
 </div>
 
 <input type="file" id="filePick" accept="video/*" style="display:none">
+<datalist id="liftList"></datalist>
 <div class="hint" id="hint"></div>
 <div id="busy"><div id="busyMsg">Working…</div><div class="bar"><i id="busyBar"></i></div></div>
 
@@ -713,11 +725,21 @@ async function mvhdTime(file){
       return null; }
     pos+=len; }
   return null; }
-async function readShot(pane,file){
-  const url=V[pane].url; let shot=null;
+async function shotOf(file){ let shot=null;
   try{ const d=await mvhdTime(file); if(d) shot={at:d, how:'Filmed'}; }catch(e){}
   if(!shot){ const m=file.name.match(/(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d)/);
     if(m) shot={at:new Date(+m[1],m[2]-1,+m[3],+m[4],+m[5],+m[6]), how:'Sent'}; }
+  return shot; }
+/* "Filmed Thu 10 Sep, 9:03 pm". Month names by hand, because en-GB spells
+   September "Sept" and every other month in three. */
+function shotLabel(shot){ const d=shot.at, now=new Date();
+  const day=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]+' '+d.getDate()+' '+
+    ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+
+    (d.getFullYear()!==now.getFullYear()?' '+d.getFullYear():'');
+  const hr=d.getHours()%12||12, ap=d.getHours()<12?'am':'pm';
+  return `${shot.how} ${day}, ${hr}:${String(d.getMinutes()).padStart(2,'0')} ${ap}`; }
+async function readShot(pane,file){
+  const url=V[pane].url, shot=await shotOf(file);
   if(V[pane].url!==url) return;           // another clip was dropped in meanwhile
   V[pane].shot=shot; renderStamp(pane);
   V[pane].rdate=shot?ymd(shot.at):null; V[pane].key=reviewKey(file,shot);
@@ -769,19 +791,111 @@ function restoreReview(p){ const st=V[p], r=Rec.get('review',st.rdate,st.key); i
     `<span class="muted">${st.reps.length} reps saved from last time. Hit <b>⚡ Analyse</b> to see the full table again.</span>`;
   return true; }
 $('#setBtn').addEventListener('click',()=>UI.settings('form'));
+
+/* ── who and what is in a clip ──
+   The client is picked from WEALTH's clients, the same people COACH will use,
+   so a name is never typed twice. FORM only reads that list. The lift is
+   typed, with TRAIN's exercises and every lift already used offered as you
+   go. Both are saved in the clip's review. */
+function clientList(){ return Rec.all('client').map(r=>Object.assign({id:r.key},r.payload)).filter(c=>c.name)
+  .sort((a,b)=>(a.status==='done'?1:0)-(b.status==='done'?1:0)||a.name.localeCompare(b.name)); }
+function clientName(id){ const c=id&&Rec.get('client',null,id); return c&&c.name?c.name:''; }
+function fillTags(){ const cs=clientList();
+  ['A','B'].forEach(p=>{ const s=document.querySelector(`[data-client="${p}"]`), l=document.querySelector(`[data-lift="${p}"]`);
+    if(s){ s.innerHTML=(cs.length?'<option value="">No client</option>':'<option value="">No clients in WEALTH on this PC</option>')+
+        cs.map(c=>`<option value="${UI.esc(c.id)}">${UI.esc(c.name)}${c.status==='done'?' (finished)':''}</option>`).join('');
+      s.value=V[p].client||''; }
+    if(l) l.value=V[p].lift||''; });
+  /* "Back squat" and "back squat" are one lift, and matching already says so.
+     TRAIN's spelling goes in first, so it is the one offered. */
+  const lifts=new Map(), add=n=>{ n=String(n||'').trim(); if(n&&!lifts.has(n.toLowerCase())) lifts.set(n.toLowerCase(),n); };
+  Rec.all('exercise').forEach(r=>add(r.payload&&r.payload.name));
+  Rec.all('review').forEach(r=>add(r.payload&&r.payload.lift));
+  $('#liftList').innerHTML=[...lifts.values()].sort((a,b)=>a.localeCompare(b)).map(n=>`<option value="${UI.esc(n)}">`).join(''); }
+['A','B'].forEach(p=>{
+  document.querySelector(`[data-client="${p}"]`).addEventListener('change',e=>{ if(!loaded(p)) return; V[p].client=e.target.value||null; });
+  document.querySelector(`[data-lift="${p}"]`).addEventListener('input',e=>{ if(!loaded(p)) return; V[p].lift=e.target.value.trim(); refreshPaneNames(); });
+  document.querySelector(`[data-earlier="${p}"]`).addEventListener('click',()=>{ closeSrcMenus(); openEarlier(p); });
+});
+
+/* ── the video folder ──
+   Tom points FORM at one folder, and every video in it and one level of
+   folders below is listed by client and date. The videos stay ordinary files
+   where they are; FORM reads each one's header for its date and matches it
+   to its review by the same key a dropped file gets.
+
+   The folder itself has to be remembered between visits, and a browser folder
+   permission is not something the row store can hold: it is not data, it
+   cannot travel to another device, and it cannot be put in a backup. So it is
+   the one thing FORM keeps in its own small IndexedDB, with a timeout, because
+   an IndexedDB open can hang. */
+function handleDB(){ return new Promise((res,rej)=>{ const q=indexedDB.open('motherbase-form',1);
+  q.onupgradeneeded=()=>q.result.createObjectStore('h'); q.onsuccess=()=>res(q.result);
+  q.onerror=()=>rej(q.error); q.onblocked=()=>rej(new Error('blocked')); setTimeout(()=>rej(new Error('slow')),3000); }); }
+async function folderGet(){ try{ const db=await handleDB();
+  return await new Promise(r=>{ const q=db.transaction('h').objectStore('h').get('folder'); q.onsuccess=()=>r(q.result||null); q.onerror=()=>r(null); }); }catch(e){ return null; } }
+async function folderPut(h){ try{ const db=await handleDB(); db.transaction('h','readwrite').objectStore('h').put(h,'folder'); }catch(e){} }
+let folder=null;
+async function useFolder(pickNew){
+  if(!window.showDirectoryPicker){ toast('This browser cannot open a folder. Use Chrome or Edge.'); return null; }
+  if(!pickNew){ if(!folder) folder=await folderGet();
+    if(folder){ try{ let ok=await folder.queryPermission({mode:'read'}); if(ok!=='granted') ok=await folder.requestPermission({mode:'read'}); if(ok==='granted') return folder; }catch(e){} } }
+  try{ folder=await showDirectoryPicker({id:'form-videos', mode:'read'}); await folderPut(folder); return folder; }
+  catch(e){ return null; } }
+/* one read per file per visit: a folder of fifty clips is fifty small header reads, once */
+const libSeen=new Map();
+async function scanFolder(dir,depth,out){
+  for await (const [name,h] of dir.entries()){
+    if(h.kind==='directory'){ if(depth<1) await scanFolder(h,depth+1,out); continue; }
+    if(!/\.(mov|mp4|m4v)$/i.test(name)) continue;
+    const file=await h.getFile(), seen=name+'|'+file.size+'|'+file.lastModified;
+    let it=libSeen.get(seen);
+    if(!it){ const shot=await shotOf(file); it={name, handle:h, shot, key:reviewKey(file,shot), rdate:shot?ymd(shot.at):null}; libSeen.set(seen,it); }
+    out.push(it); }
+  return out; }
+async function readFolder(){ const dir=await useFolder(false); if(!dir) return null;
+  busy(true,'Reading your video folder…',0.3);
+  try{ const items=await scanFolder(dir,0,[]); busy(false); return {dir,items}; }
+  catch(e){ busy(false); console.warn(e); toast('Could not read that folder'); return null; } }
+function libButton(label,fn){ const b=document.createElement('button'); b.type='button'; b.className='mb-btn mb-press mb-tap'; b.textContent=label; b.onclick=fn; return b; }
+/* only: which clips to list. into: load straight into that side, one button. */
+function drawLibrary(body,h,lib,only,into,empty){
+  body.innerHTML='';
+  body.appendChild(UI.row(lib.dir.name, `${lib.items.length} video${lib.items.length===1?'':'s'} in this folder. Tag a clip from the gear on the clip.`,
+    libButton('Change folder',async()=>{ h.close(); if(await useFolder(true)) openLibrary(); })));
+  const rows=lib.items.map(it=>{ const r=Rec.get('review',it.rdate,it.key)||{}; return {it, client:r.client||null, lift:r.lift||''}; })
+    .filter(x=>!only||only(x))
+    .sort((a,b)=>(b.it.shot?b.it.shot.at.getTime():0)-(a.it.shot?a.it.shot.at.getTime():0));
+  if(!rows.length){ const e=document.createElement('p'); e.className='libhd'; e.textContent=empty||'No videos in this folder.'; body.appendChild(e); return; }
+  const groups=new Map(); rows.forEach(x=>{ const g=clientName(x.client); if(!groups.has(g)) groups.set(g,[]); groups.get(g).push(x); });
+  [...groups.keys()].sort((a,b)=>(a===''?1:0)-(b===''?1:0)||a.localeCompare(b)).forEach(g=>{
+    const hd=document.createElement('div'); hd.className='libhd'; hd.textContent=g||'No client yet'; body.appendChild(hd);
+    groups.get(g).forEach(x=>{ const ctl=document.createElement('div'); ctl.className='libbtns';
+      (into?[into]:['A','B']).forEach(p=>ctl.appendChild(libButton(into?`Load on the ${sideName(p).toLowerCase()}`:sideName(p), async()=>{
+        h.close(); loadFile(p, await x.it.handle.getFile()); if(into&&view==='solo') setView('side'); })));
+      const note=[x.it.shot?shotLabel(x.it.shot):'No date', x.lift?x.it.name:''].filter(Boolean).map(s=>UI.esc(s)).join(' · ');
+      body.appendChild(UI.row(x.lift||x.it.name.replace(/\.[^.]+$/,''), note, ctl)); }); }); }
+async function openLibrary(){ const lib=await readFolder(); if(!lib) return;
+  UI.dialog({ title:'VIDEOS', width:760, body:(b,h)=>drawLibrary(b,h,lib) }); }
+/* Earlier videos of the same client doing the same lift, oldest last, loaded
+   on the other side. The point is to see what has changed. */
+async function openEarlier(p){ const st=V[p];
+  if(!loaded(p)){ toast('Load a clip first'); return; }
+  if(!st.client){ toast('Pick the client for this clip first, from the gear on the clip'); return; }
+  const lib=await readFolder(); if(!lib) return;
+  const t=st.shot?st.shot.at.getTime():Infinity, lift=(st.lift||'').toLowerCase(), who=clientName(st.client);
+  UI.dialog({ title:'EARLIER VIDEOS', width:760, body:(b,h)=>drawLibrary(b,h,lib,
+    x=>x.client===st.client && (!lift||x.lift.toLowerCase()===lift) && x.it.key!==st.key && x.it.shot && x.it.shot.at.getTime()<t,
+    p==='A'?'B':'A',
+    `No earlier videos of ${st.lift||'this'} for ${who} in this folder. Older clips need tagging too, from the gear on each clip.`) }); }
+$('#libBtn').addEventListener('click',openLibrary);
 function secsLabel(t){ t=Math.round(t); return t<60 ? `${t} s` : `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`; }
 /* The set runs from the start of the first rep to the end of the last. Before
    there are reps, the clip is all there is, and it is called the clip. */
 function renderStamp(pane){ const el=document.querySelector(`[data-stamp="${pane}"]`); if(!el) return;
   const st=V[pane], parts=[]; let tip='';
   if(!loaded(pane)){ el.textContent=''; return; }
-  if(st.shot){ const d=st.shot.at, now=new Date();
-    /* by hand, because en-GB spells September "Sept" and every other month in three */
-    const day=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]+' '+d.getDate()+' '+
-      ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+
-      (d.getFullYear()!==now.getFullYear()?' '+d.getFullYear():'');
-    const hr=d.getHours()%12||12, ap=d.getHours()<12?'am':'pm';
-    parts.push(`${st.shot.how} ${day}, ${hr}:${String(d.getMinutes()).padStart(2,'0')} ${ap}`);
+  if(st.shot){ parts.push(shotLabel(st.shot));
     tip = st.shot.how==='Filmed' ? 'Filming time, read from the video file.'
         : 'This file has no filming time, so this is when it was sent on Telegram, from the file name.'; }
   const reps=st.reps||[];
@@ -808,7 +922,9 @@ function onDurationKnown(pane){ const v=V[pane].video, ready=()=>isFinite(v.dura
   v.addEventListener('durationchange',h);
   setTimeout(()=>{ if(!ready()&&V[pane].url){ try{ v.currentTime=1e6; }catch(e){} } },400); }
 function refreshPaneNames(){ ['A','B'].forEach(p=>{
-  const solo=(view==='solo'), side=sideName(p), nm=V[p].name;
+  /* the lift names a clip better than "video_2026-09-10_21-14-56" does */
+  const solo=(view==='solo'), side=sideName(p),
+        nm=V[p].lift ? V[p].lift+((V[p].name||'').match(/ · rep \d+$/)||[''])[0] : V[p].name;
   const lab=document.querySelector(`[data-panelabel="${p}"]`);
   if(lab) lab.textContent = solo ? (nm||side) : (nm?`${side.toUpperCase()} · ${nm}`:side.toUpperCase());
   const head=nm?`${side} · ${nm}`:side;
@@ -824,7 +940,7 @@ $$('.pane').forEach(p=>{ const pane=p.dataset.pane;
 
 function closeSrcMenus(){ $$('.srcmenu').forEach(m=>m.classList.remove('open')); }
 $$('.srcwrap').forEach(w=>{ const pane=w.dataset.src, menu=w.querySelector('.srcmenu');
-  w.querySelector('.srcbtn').addEventListener('click', e=>{ e.stopPropagation(); const was=menu.classList.contains('open'); closeSrcMenus(); menu.classList.toggle('open',!was); });
+  w.querySelector('.srcbtn').addEventListener('click', e=>{ e.stopPropagation(); fillTags(); const was=menu.classList.contains('open'); closeSrcMenus(); menu.classList.toggle('open',!was); });
   menu.addEventListener('click', e=>e.stopPropagation());
   w.querySelector(`[data-mirror="${pane}"]`).addEventListener('click', e=>{ V[pane].mirrored=!V[pane].mirrored; V[pane].video.classList.toggle('mirror',V[pane].mirrored); e.currentTarget.classList.toggle('on',V[pane].mirrored); });
   w.querySelector(`[data-fps="${pane}"]`).addEventListener('change', e=>{ V[pane].fps=Math.max(1,parseFloat(e.target.value)||30); });
