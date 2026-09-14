@@ -842,7 +842,15 @@ window.LifeOS = (function () {
       else Rec.set('tick', d, actId, Object.assign({ src: '?' }, meta || {}));
       return wrote(doc);
     },
-    isDone: (actId, date) => Rec.has('tick', date || Day.today(), actId),
+    /* True or false, never nothing. Rec.has answers `undefined` for a row that
+       was never written, and three places here compared that against a box's
+       `false` with !==. pullDone called every block with no row "changed" and
+       wrote `undefined` onto it, which also meant a save and a full repaint on
+       every write anywhere in the store. toggleDone's storage check read the
+       same undefined as "the shared log refused the write" and switched the
+       shared log off. It stayed hidden while same-name blocks were skipped
+       wholesale, and surfaced the moment each routine's block got its own row. */
+    isDone: (actId, date) => !!Rec.has('tick', date || Day.today(), actId),
     dayLog: date => (doc.log[date || Day.today()] || {}),
 
     habit(h) { if (!h || !h.id) return Promise.resolve(doc); Rec.set('habit', null, h.id, Object.assign({ created: Day.today(), archived: false, cadence: { type: 'daily', days: [1, 1, 1, 1, 1, 1, 1], target: 7 } }, doc.habits[h.id], h)); return wrote(doc); },
@@ -955,13 +963,14 @@ function isDoneOn(it, col, L) {
   const own = isDoneLogged(it, col, L);
   if (own !== null) return own;
   /* BLOCK has no page for that day, or the page predates this block. A tick
-     made in HABITS or on the home screen is still a tick, so fall back to the
-     shared log. Only where the name is unique in the day, because the shared
-     log is keyed by NAME and cannot tell a morning brush from a night one.
-     Wrapped because the shared log is allowed to be missing entirely. */
+     made in QUESTS or on the home screen is still a tick, so fall back to the
+     shared log, which files each block by name and routine. Not where the same
+     name sits twice in one routine: those two share a row and it cannot say
+     which one was done. Wrapped because the shared log is allowed to be
+     missing entirely. */
   try {
-    if (!LIFEOS_OK || !window.LifeOS || sameNameCount(it) > 1) return false;
-    return !!LifeOS.isDone(actIdOf(it), col.key);
+    if (!LIFEOS_OK || !window.LifeOS || twinsOf(it, L).length > 1) return false;
+    return !!LifeOS.isDone(actIdOf(it, L), col.key);
   } catch (x) { return false; }
 }
 function setDoneOn(it, col, scheduled, L) {
@@ -1013,13 +1022,12 @@ function setSkippedOn(it, col, L) {
     : '<b>' + esc(it.name) + '</b> not needed on ' + dateLabel(col.key) + ' — it will not count against you');
 }
 /* A tick belongs to the whole suite on the date it happened, not only to
-   BLOCK. Same rule as today's: report by name, and only flip it off once
-   EVERY block with that name is unticked, or un-ticking your evening brush
-   would erase the morning one. */
+   BLOCK. Same rule as today's: the row is this block in this routine, and it
+   only flips off once every twin sharing that row is unticked. */
 function shareTick(it, col) {
   try {
     if (!LIFEOS_OK || !window.LifeOS) return;
-    const twins = LANES().flatMap(L => items(L.id)).filter(x => x.name === it.name && !x.hidden);
+    const twins = twinsOf(it);
     LifeOS.done(actIdOf(it), col.key, twins.some(x => isDoneLogged(x, col, null) === true), { src: 'block' });
   } catch (e) {}
 }
@@ -1872,6 +1880,14 @@ function todaysBlocks(vid) { return todaysPairs(vid).map(({ it }) => it); }
  */
 const tickKey = (it, L) => it.name + '||' + ((L && L.name) || '');
 const keyName = k => String(k).split('||')[0];
+/* The shared drawer's name for a tick, built from the same two things the key
+   above carries: the block's name and its routine. "Brush Teeth" in Morning
+   Routine is `brush-teeth.morning-routine`, and the evening one is a different
+   row. BLOCK's own page has always told them apart; the drawer now agrees with
+   it, so the two can never disagree about which brush this was. A key with no
+   routine — the oldest pages, from before routines were written down — stays
+   under the name alone, which is where it already is. */
+const idFromKey = k => { const p = String(k).split('||'); return p[1] ? LifeOS.slug(p[0]) + '.' + LifeOS.slug(p[1]) : LifeOS.slug(p[0]); };
 function laneOf(it) {
   for (const L of LANES()) if (items(L.id).some(x => x.id === it.id)) return L;
   for (const L of S.lanes) if (items(L.id).some(x => x.id === it.id)) return L;
@@ -1908,6 +1924,20 @@ function toggleSkip(it) {
 
 /** every block in the open day sharing this one's name — the reason ticks must not collapse */
 const sameNameCount = it => LANES().reduce((n, L) => n + items(L.id).filter(x => x.name === it.name && !x.hidden).length, 0);
+/* Blocks that are the SAME tick: they land on the same row in the drawer.
+   That is the same name in the same routine, and only that. The same name in
+   two routines is two things, set by Tom on 2026-09-14: "I can't imagine why
+   we need them to sync."
+
+   Judged by the row's id, not by comparing names. The id is slugged, so
+   "Brush teeth" and "Brush Teeth" in one routine share a row, and a guard that
+   compared the raw names called them strangers while the drawer called them
+   one. A tick on either then painted the other. The guard and the drawer have
+   to use the same idea of "same", or this is the stamp bug a third time. */
+function twinsOf(it, L) {
+  const id = actIdOf(it, L || laneOf(it));
+  return LANES().flatMap(M => items(M.id).filter(x => !x.hidden && actIdOf(x, M) === id));
+}
 function clearDone(vid) { withVariant(vid, () => LANES(vid).forEach(l => items(l.id).forEach(it => { it.done = false; it.skipped = false; }))); }
 /** new day → yesterday's ticks are gone, and today's come back from the LifeOS
     log (you may have ticked something in HABITS or on the home screen already) */
@@ -2008,10 +2038,14 @@ function toggleDone(it) {
   /* an explicit tick outranks a post-completion clear */
   if (S.cleared && S.cleared.date === todayKey() && window.LifeOS) delete S.cleared.ids[actIdOf(it)];
   /* the tick is not ours to keep — it goes in the shared day log, which is what
-     HABITS and the home screen read. Same block name = same tick, everywhere. */
-  /* report to the shared log by name, but only flip it off once EVERY block with that
-     name is unticked — otherwise un-ticking your evening brush would erase the morning one */
-  const twins = LANES().flatMap(L => items(L.id)).filter(x => x.name === it.name && !x.hidden);
+     QUESTS and the home screen read. The row is this block in this routine.
+
+     This used to find twins by NAME and write "any of them done". So with the
+     evening brush ticked, unticking the morning one wrote the morning row
+     straight back to true: the box emptied and the drawer kept the tick. Twins
+     are now only the same name in the same routine, which is the only case
+     where two boxes really do share one row. */
+  const twins = twinsOf(it);
   LifeOS.done(actIdOf(it), todayKey(), twins.some(x => x.done), { src: 'block' });
   /* if the shared log can't actually store it (private mode, blocked storage, quota),
      stop mirroring from it — otherwise pullDone would quietly un-tick everything */
@@ -4291,17 +4325,51 @@ function selfTest() {
       it.name = 'Check Ins & Online Coaching';
       const after = actIdOf(it);
       removeItem(L, it.id);
-      if (before !== 'new-block') return 'placeholder id was ' + before;
-      return after === 'check-ins-online-coaching' || 'stayed ' + after;
+      const r = '.' + LifeOS.slug(lane(L).name);
+      if (before !== 'new-block' + r) return 'placeholder id was ' + before;
+      return after === 'check-ins-online-coaching' + r || 'stayed ' + after;
     });
-    ok('no two differently-named blocks share one tick identity', () => {
+    /* One level under both "Check Ins also ticks Bed" and "the two Brush Teeth
+       sync". Both bugs were an identity that stopped meaning what it said: a
+       stamp left over from a placeholder name, and a name that ignored the
+       routine. So: no block carries a stored id, and blocks in two different
+       routines never land on one row. */
+    ok('routines never share a tick row, and no block carries a stored id', () => {
       const seen = {}, bad = [];
       S.variants.forEach(v => S.lanes.forEach(l => (v.items[l.id] || []).forEach(it => {
-        const id = actIdOf(it);
-        if (seen[id] && seen[id] !== it.name) bad.push(seen[id] + ' + ' + it.name + ' = ' + id);
-        seen[id] = it.name;
+        if (it.actId) bad.push(it.name + ' carries a stored id ' + it.actId);
+        const id = actIdOf(it, l);
+        if (seen[id] && seen[id] !== l.id) bad.push(id + ' is shared by two routines');
+        seen[id] = l.id;
       })));
       return !bad.length || bad.join(', ');
+    });
+    /* One level under "the evening brush came back undefined": the shared log
+       has to answer a yes or a no. Anything else compared with !== against a
+       box's false is a phantom change. */
+    ok('the shared log answers yes or no, never nothing', () => {
+      const never = LifeOS.isDone('zz-never-written.nowhere', todayKey());
+      return typeof never === 'boolean' || 'a missing row answered ' + String(never);
+    });
+    /* The second mechanism: twins found by name wrote "any of them done", so
+       unticking the morning brush with the evening one ticked wrote the morning
+       row straight back to true. Driven with real clicks on the real boxes. */
+    ok('the same block in two routines ticks separately, both ways', () => {
+      const R = LANES();
+      if (R.length < 2) return 'skip: needs two routines on this day';
+      const a = addItem(R[0].id, { name: 'zz brush', dur: 5, color: '#fff', energy: 1 });
+      const b = addItem(R[1].id, { name: 'zz brush', dur: 5, color: '#fff', energy: 1 });
+      const ia = actIdOf(a, R[0]), ib = actIdOf(b, R[1]), t = todayKey();
+      const box = x => document.querySelector('[data-id="' + x.id + '"] .b-check');
+      const out = [];
+      box(b).click();                                   /* evening brushed */
+      box(a).click(); box(a).click();                   /* morning ticked, then unticked */
+      out.push(ia !== ib, !LifeOS.isDone(ia, t), !!LifeOS.isDone(ib, t), !a.done, !!b.done);
+      if (b.done) box(b).click();
+      LifeOS.done(ia, t, false, { src: 'test' }); LifeOS.done(ib, t, false, { src: 'test' });
+      removeItem(R[0].id, a.id); removeItem(R[1].id, b.id);
+      return out.every(Boolean) || 'different ids ' + out[0] + ', morning row clear ' + out[1] +
+        ', evening row kept ' + out[2] + ', morning box clear ' + out[3] + ', evening box kept ' + out[4];
     });
     ok('week view renders 7 days', () => { S.view = 'week'; render(); const n = document.querySelectorAll('.day').length; S.view = 'day'; render(); return n === 7 || 'got ' + n; });
     ok('week view: a checkbox ticks the block', () => {
@@ -4309,10 +4377,15 @@ function selfTest() {
       const ck = document.querySelector('.day-ck');
       if (!ck) { S.view = 'day'; render(); return 'no checkbox'; }
       ck.click();
-      const n = S.lanes.flatMap(l => items(l.id)).filter(i => i.done).length;
+      /* The click writes a real row in the shared log, and this check used to
+         leave it there. The next run on the same store then started with that
+         box already on, clicked it off, and reported "nothing ticked". A check
+         that fails only on its second run is a check about its own litter. */
+      const ticked = S.lanes.flatMap(l => items(l.id).filter(i => i.done).map(i => [i, l]));
+      ticked.forEach(([i, l]) => LifeOS.done(actIdOf(i, l), todayKey(), false, { src: 'test' }));
       S.lanes.forEach(l => items(l.id).forEach(i => i.done = false));
       S.view = 'day'; render();
-      return n > 0 || 'nothing ticked';
+      return ticked.length > 0 || 'nothing ticked';
     });
     ok('week: priority mode groups by P, keeps the routine as subtitle', () => {
       const it = LANES().flatMap(l => items(l.id))[0]; it.pri = 1;
@@ -4472,6 +4545,15 @@ function selfTest() {
       ck.click();
       const per = [...document.querySelectorAll('.day')].map(c => c.querySelectorAll('.day-ck.on').length);
       const onlyToday = per.filter(n => n > 0).length === 1;
+      /* The click wrote a real row in the shared log, and this check left it
+         there. On the next run reset() cleared the boxes, the next sync painted
+         them back from the drawer, and "week view: a checkbox ticks the block"
+         found its first box already on and clicked it off: "nothing ticked".
+         Found by recording the call stack of every tick write during a run.
+         It leaked before routines had their own rows too; a guard that skipped
+         any name appearing twice happened to hide it. */
+      S.lanes.flatMap(l => items(l.id).filter(i => i.done).map(i => [i, l]))
+        .forEach(([i, l]) => LifeOS.done(actIdOf(i, l), todayKey(), false, { src: 'test' }));
       S.lanes.forEach(l => items(l.id).forEach(i => i.done = false));
       restore();
       S.view = 'day'; render();
@@ -4952,8 +5034,7 @@ Rec.on(adoptRows);
      library  →  the shared activity vocabulary (so HABITS can promote any of it)
      ticks    →  the shared day log (so a tick here is a tick everywhere)
      plan     →  today's blocks, published for the home screen to show and tick
-   Blocks are matched across apps by slugged NAME: two blocks called the same
-   thing are the same thing, which is exactly what makes the ticks agree.  */
+   Blocks are matched across apps by name AND routine: see actIdOf below.  */
 /* ── a block's tick identity is its NAME, worked out fresh every time ──
    This used to be cached: the first time a block was asked for its identity it
    was stamped with the slug of whatever it was called AT THAT MOMENT, and the
@@ -4972,8 +5053,17 @@ Rec.on(adoptRows);
 
    The cost of not caching is that renaming a block moves its shared streak to
    a new name. That is the right answer anyway — BLOCK's own day log is keyed
-   by name and lane, so a rename already starts a fresh page there. */
-const actIdOf = it => LifeOS.slug(it.name);
+   by name and lane, so a rename already starts a fresh page there.
+
+   ── and then the routine joined it, 2026-09-14 ──
+   Name alone still made morning Brush Teeth and evening Brush Teeth one row,
+   while BLOCK's own page — keyed by name and routine since it was written —
+   said they were two. Same disease as the stamp: two ideas of what makes a
+   block the same block. The id is now built from tickKey, the one BLOCK's page
+   already used, so there is one idea again and it is the one Tom asked for.
+   Renaming a ROUTINE now moves the streaks of everything in it, for the same
+   reason renaming a block does, and BLOCK's page already behaved that way. */
+const actIdOf = (it, L) => idFromKey(tickKey(it, L || laneOf(it)));
 
 /* ── one-off: unstick the blocks that were stamped with a placeholder name ──
    A board built before the fix above carries a frozen `actId` on every block.
@@ -5025,14 +5115,52 @@ function repairActIds() {
   return moved;
 }
 
+/* ── one-off: refile the tick history by routine ──
+   Every past tick BLOCK wrote sits under the name alone. BLOCK's own day pages
+   know the routine for each one, so they are replayed into the new rows and
+   nothing anyone did is lost. The old name-only rows are left where they are:
+   some were written by other apps, all of them are true, and nothing reads
+   them for BLOCK any more.
+
+   The store tells every listener about every write, one at a time, and BLOCK's
+   own listener re-syncs the whole board each time. A year of pages is a
+   thousand writes, so BLOCK stops listening for the length of the replay and
+   syncs once at the end. Runs once per board. */
+let REPLAYING = false;
+function repairTickIds() {
+  if (S.tickIdsByRoutine) return 0;
+  S.tickIdsByRoutine = 1;
+  let n = 0;
+  REPLAYING = true;
+  try {
+    Object.keys(S.log || {}).forEach(date => ((S.log[date] || {}).d || []).forEach(k => {
+      if (String(k).indexOf('||') < 0) return;
+      const id = idFromKey(k);
+      if (!LifeOS.isDone(id, date)) { LifeOS.done(id, date, true, { src: 'block' }); n++; }
+    }));
+    /* today's page is written as you go, but the boxes are the truth for today */
+    S.variants.forEach(v => withVariant(v.id, () => LANES(v.id).forEach(l => items(l.id).forEach(it => {
+      const id = actIdOf(it, l);
+      if (it.done && !LifeOS.isDone(id, todayKey())) { LifeOS.done(id, todayKey(), true, { src: 'block' }); n++; }
+    }))));
+  } finally { REPLAYING = false; }
+  saveQuiet();
+  console.info('[block] tick history refiled by routine: ' + n + ' rows');
+  return n;
+}
+
 function pushLib() {
   const seen = {}, out = [];
-  const add = (name, cat, dur, color, energy) => {
-    const id = LifeOS.slug(name); if (seen[id]) return; seen[id] = 1;
+  const add = (id, name, cat, dur, color, energy) => {
+    if (seen[id]) return; seen[id] = 1;
     out.push({ id: id, name: name, cat: cat || '', dur: dur || 0, color: color || '', energy: energy || 2 });
   };
-  S.lib.forEach(l => add(l.name, l.cat, l.dur, l.color, l.energy));
-  S.variants.forEach(v => S.lanes.forEach(l => (v.items[l.id] || []).forEach(it => add(it.name, 'routine', it.dur, it.color, it.energy))));
+  S.lib.forEach(l => add(LifeOS.slug(l.name), l.name, l.cat, l.dur, l.color, l.energy));
+  /* A block in a routine is offered under the id its ticks are filed under,
+     with the routine as its category, so anything that picks it from this list
+     finds its real history and can tell the morning brush from the evening. */
+  S.variants.forEach(v => S.lanes.forEach(l => (v.items[l.id] || []).forEach(it =>
+    add(actIdOf(it, l), it.name, l.name, it.dur, it.color, it.energy))));
   LifeOS.acts(out);
 }
 /* ── publishing the plan ──
@@ -5059,7 +5187,7 @@ function publishFor(key, quiet) {
   const vid = routineForDate(key), d = Day.dow(key);
   const blocks = withVariant(vid, () => S.lanes.flatMap(l =>
     schedule(l.id).filter(r => effDays(lane(l.id), r.it)[d]).map(r => ({
-      id: r.it.id, actId: actIdOf(r.it), name: r.it.name, s: r.s, dur: r.it.dur,
+      id: r.it.id, actId: actIdOf(r.it, lane(l.id)), name: r.it.name, s: r.s, dur: r.it.dur,
       color: r.it.color, lane: lane(l.id).name,
       /* Where it goes, if it goes anywhere. "Todoist Run Through" is only
          useful as a link on the screen he is actually following, which is the
@@ -5087,13 +5215,15 @@ function pullDone() {
   const date = todayKey(); let changed = 0;
   const cleared = (S.cleared && S.cleared.date === date) ? S.cleared.ids : {};
   S.variants.forEach(v => withVariant(v.id, () => {
-    /* the shared log is keyed by NAME, so it cannot tell a morning brush from an
-       evening one. Where a name appears more than once in a day, local ticks win. */
+    /* the shared log files each block by name and routine. Where two blocks
+       land on one row — the same name twice in ONE routine, capitals aside —
+       the row cannot say which was done, so local ticks win. Counted by row
+       id, the same thing the drawer counts by. */
     const seen = {};
-    LANES(v.id).forEach(l => items(l.id).forEach(it => { seen[it.name] = (seen[it.name] || 0) + 1; }));
+    LANES(v.id).forEach(l => items(l.id).forEach(it => { const k = actIdOf(it, l); seen[k] = (seen[k] || 0) + 1; }));
     LANES(v.id).forEach(l => items(l.id).forEach(it => {
-      if (seen[it.name] > 1) return;
-      const aid = actIdOf(it);
+      const aid = actIdOf(it, l);
+      if (seen[aid] > 1) return;
       if (cleared[aid]) return;            /* boxes deliberately cleared after a full pass — leave them empty */
       const on = LifeOS.isDone(aid, date);
       if (!!it.done !== on) { it.done = on; changed++; }
@@ -5107,6 +5237,7 @@ const _render = render;
 render = function () { _render.apply(this, arguments); clearTimeout(pubT); pubT = setTimeout(() => { pushLib(); publishToday(); }, 400); };
 /* someone ticked something elsewhere — only repaint if it actually moved */
 LifeOS.on(() => {
+  if (REPLAYING) return;                /* repairTickIds syncs once when it is done */
   /* Not while the starter board is only being shown. This fires when rows
      arrive, which is exactly when the other device's board is landing, and
      saving here would write the demo down with this second's clock on it —
@@ -5114,7 +5245,7 @@ LifeOS.on(() => {
      laptop used to overwrite the phone. */
   if (pullDone()) { saveQuiet(); render(); }
 });
-LifeOS.ready(() => { repairActIds(); pullDone(); render(); });
+LifeOS.ready(() => { repairActIds(); repairTickIds(); pullDone(); render(); });
 
 render();
 /* keep the now line honest without redrawing the world */
