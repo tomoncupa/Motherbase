@@ -335,12 +335,19 @@ const UI = {
   /** A time control. The wheel on a phone; a box you type into, plus an
       AM/PM button, on anything with a pointer. `onset` gets "HH:MM" or "". */
   timeField(value, onset) {
+    /* It styles itself. It used to leave its box bare and never load the
+       shared stylesheet, so in an app that had not loaded it some other way
+       (BLOCK) the box was the browser's default white with pale theme text in
+       it, and AM/PM was loose text. Tom, 2026-09-14: "why is the contrast bad
+       in BLOCK". */
+    css();
     let val = value || '';
     const fine = typeof matchMedia === 'function' && matchMedia('(pointer: fine)').matches;
     const wrap = el('div', 'mb-timefield');
 
     if (!fine) {
       const i = document.createElement('input');
+      i.className = 'mb-input';
       i.type = 'time'; i.value = val;
       i.onchange = () => { val = i.value; onset(val); };
       wrap.appendChild(i);
@@ -348,6 +355,7 @@ const UI = {
     }
 
     const i = document.createElement('input');
+    i.className = 'mb-input';
     i.type = 'text'; i.inputMode = 'numeric'; i.autocomplete = 'off';
     i.placeholder = '930';
 
