@@ -884,6 +884,23 @@ function packState(c) {
    earns their latest package's price over its sessions, because a renewal at
    a new price is the price that is true now. A week's worth is that times the
    pace he gave, and it says "about" because the pace is his rough figure. */
+/* == what a client is worth a month, on their current terms ==
+   Tom, 2026-09-14: the CLIENTS bars "aren't fair since they don't count past
+   payments". WEALTH only holds payments since mid July, so a client of a year
+   looked as small as a new one. Worth a month reads the terms instead, which
+   history cannot skew. A dated cycle is exact. A session or package client is
+   only as good as their pace, so without one the answer is null, not zero. */
+function clientMonthly(c) {
+  if (c.status === 'done') return 0;
+  const y = cycleOf(c), weeks = 365.25 / 7 / 12;
+  if (y.kind === 'month') return num(c.rate, 0) * Math.max(1, (y.days || []).length) / Math.max(1, y.every);
+  if (y.kind === 'week') return num(c.rate, 0) * weeks / Math.max(1, y.every);
+  if (y.kind === 'sesh' || y.kind === 'pack') {
+    const pace = num(c.perWeek, 0);
+    return pace ? perSession(c) * pace * weeks : null;
+  }
+  return 0;
+}
 function perSession(c) {
   const y = cycleOf(c);
   if (y.kind === 'sesh') return num(c.rate, 0) / y.every;
@@ -2992,25 +3009,29 @@ function drawClients(m) {
   if (!cl.length) c2.appendChild(el('div', 'empty', 'No clients yet. Press <b>+</b> to add one, then say what they pay and how often.'));
   else {
     const yearIn = paidRows({ from: Day.shift(Day.today(), -365) });
-    const total = yearIn.reduce((a, p) => a + num(p.amt, 0), 0);
     const list = el('div', 'list');
-    /* Biggest share first, because concentration is the thing this list is
-       for and a list sorted by name buries it. */
-    const ranked = cl.map(c => {
-      const mine = yearIn.filter(p => p.client === c.id);
-      const got = mine.reduce((a, p) => a + num(p.amt, 0), 0);
-      return { c: c, n: mine.length, got: got, share: total ? got / total : 0 };
-    }).sort((a, b) => b.got - a.got);
+    /* Biggest first, because concentration is the thing this list is for and
+       a list sorted by name buries it. Measured by what each client is worth a
+       month on their current terms, not by payments logged, which only go back
+       as far as WEALTH does. */
+    const ranked = cl.map(c => ({ c: c, n: yearIn.filter(p => p.client === c.id).length, worth: clientMonthly(c) }));
+    const total = ranked.reduce((a, x) => a + (x.worth || 0), 0);
+    ranked.forEach(x => { x.share = total && x.worth ? x.worth / total : 0; });
+    ranked.sort((a, b) => (b.worth || 0) - (a.worth || 0));
     ranked.forEach((x, i) => {
       const c = x.c;
+      /* A pace is his rough figure, so a worth built on it says "about". */
+      const guess = isPack(c) || cycleOf(c).kind === 'sesh';
       /* A package client has no fixed rate, so a rate would print as zero.
          Their packages are priced one at a time. */
       const r = itemRow(c.name + (c.status === 'done' ? ' (finished)' : ''),
         (isPack(c) ? 'Paid ' + cycleWord(c) : money(num(c.rate, 0)) + ' ' + cycleWord(c)) +
         (perSession(c) ? ' · ' + earnWords(perSession(c), num(c.perWeek, 0)) : '') +
-        ' · ' + x.n + (x.n === 1 ? ' payment · ' : ' payments · ') +
-        (x.share * 100).toFixed(0) + '% of the year' + standing(c),
-        exactMoney(x.got), late[c.id] && c.status !== 'done' ? 'late' : '');
+        ' · ' + x.n + (x.n === 1 ? ' payment logged · ' : ' payments logged · ') +
+        (x.worth == null ? 'put in sessions a week to see a month’s worth'
+          : Math.round(x.share * 100) + '% of what clients are worth a month') + standing(c),
+        x.worth == null ? '—' : (guess ? 'about ' : '') + money(x.worth) + '/mo',
+        late[c.id] && c.status !== 'done' ? 'late' : '');
       if (c.status === 'done') r.classList.add('dim');
       r.onclick = () => clientSheet(c); r.menu = () => clientMenu(c);
       const bar = el('div', 'bar c' + (1 + (i % 6)));
@@ -3019,7 +3040,8 @@ function drawClients(m) {
     });
     c2.appendChild(list);
     /* Law 5: show the number, never the verdict. */
-    c2.appendChild(el('div', 'note', 'Share of the last twelve months, biggest client first. No opinion offered.'));
+    c2.appendChild(el('div', 'note', 'Share of what your clients are worth a month on their current terms, biggest first. ' +
+      'Payments from before WEALTH cannot change it. A session or package client is worth their price times their sessions a week. No opinion offered.'));
   }
   m.appendChild(c2);
 

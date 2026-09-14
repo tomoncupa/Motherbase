@@ -519,6 +519,25 @@ what is due this month and how much of it is paid, what is owed, and the
 session tracker. `+` on that tab adds a client by name and opens their sheet.
 MONEY IN stays about money arriving: owed, next, received.
 
+**The CLIENTS bars measure what each client is worth a month, not what they
+have paid.** Tom, 2026-09-14: *"These bars arent fair since they dont count
+past payments."* They were each client's share of payments logged in the last
+twelve months, and WEALTH only holds payments from mid July, so a client of a
+year looked no bigger than a new one. `clientMonthly` reads the terms instead:
+a monthly client is their rate times their days a month over every how many
+months, a weekly one their rate times the weeks in an average month, and a
+session or package client their price a session times their sessions a week,
+shown as "about" because the pace is his rough figure. Without a pace that
+client's worth is unknown and says so, rather than being counted as zero. The
+list sorts by worth, each row's figure is worth a month, and the payment count
+says "logged" because it only goes back as far as the app. What a client has
+ever paid stays exact on their own sheet.
+
+Watched with six made-up clients shaped like his: a package client at ₱1,500 a
+session and four a week read about ₱26,089 a month and 60%; ₱3,500 on the 1st
+and 15th read ₱7,000; ₱12,000 every three months read ₱4,000; a session client
+with no pace read a dash and asked for sessions a week.
+
 **Card titles say what is on the card, not how to feel about it.** The card
 of bills that renew on their own was called STILL PAYING FOR, and Tom, same
 day, heard it as a complaint about money he chose to spend. It is
