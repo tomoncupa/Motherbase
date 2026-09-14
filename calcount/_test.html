@@ -254,6 +254,35 @@
     const png = new Uint8Array(await (await fetch(fresh('icon-512.png'))).arrayBuffer());
     check('the 512px icon is a real 512 by 512 PNG', png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47 && ((png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19]) === 512);
 
+    /* ── the public calories page ─────────────────────────────────── */
+    // One level under "both pages find chickenjoy": there is only one search, so they cannot disagree.
+    const appSrc = await (await fetch(fresh('index.html'))).text();
+    check('the app has no search of its own, so it and the calories page can never rank food differently', !/function scoreFood/.test(appSrc) && /CC_SEARCH\(/.test(appSrc));
+    const pf = document.createElement('iframe');
+    pf.title = 'calories page under test';
+    pf.style.cssText = 'width:375px;height:812px';
+    document.body.appendChild(pf);
+    pf.src = fresh('calories.html') + '&brand=' + encodeURIComponent('Mang Inasal');
+    await new Promise(r => { pf.onload = r; });
+    const pw = pf.contentWindow, pd = pw.document;
+    check('calories page: a ?brand= link opens already filtered to that brand',
+      pw.CC_PAGE.filter === 'brand:Mang Inasal' && pd.querySelectorAll('.row-name').length === FOODS.filter(f => f.brand === 'Mang Inasal').length);
+    pd.querySelector('[data-f=""]').click();
+    const pq = pd.getElementById('q');
+    pq.value = 'chickenjoy with rice'; pq.dispatchEvent(new pw.Event('input'));
+    pd.querySelector('[data-add="jb-c1"]').click(); pd.querySelector('[data-add="jb-c1"]').click();
+    const want = FOOD['jb-c1'].per.kcal * 2;
+    check('calories page: adding the same meal twice doubles the total', pd.getElementById('total').textContent === want.toLocaleString('en-US'), pd.getElementById('total').textContent + ' vs ' + want);
+    pd.getElementById('toggle').click();
+    const psmall = [];
+    pd.querySelectorAll('button, select, a.btn').forEach(el => { const r = el.getBoundingClientRect(); if (r.width && (r.height < 44 || r.width < 44)) psmall.push((el.getAttribute('aria-label') || el.textContent.trim()).slice(0, 24) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)); });
+    check('calories page: every control is at least 44px both ways', !psmall.length, psmall);
+    const ctaBg = pw.getComputedStyle(pd.querySelector('.cta')).backgroundColor;
+    check('calories page: Track every meal is drawn as a button, not bare text', ctaBg !== 'rgba(0, 0, 0, 0)' && ctaBg !== 'transparent', ctaBg);
+    check('calories page: no em dash on the page, in its title or in its description', !/—/.test(pd.body.innerText + pd.title + pd.querySelector('meta[name=description]').content));
+    check('calories page: it stores nothing on the phone', !Object.keys(localStorage).some(k => k.startsWith('cc.') && !k.startsWith('cc.row.')));
+    pf.remove();
+
     /* ── the screen, at phone width ──────────────────────────────── */
     S.set('profile', null, '', { goal: 'lose', sex: 'f', age: 30, cm: 157.48, kg: 70, act: 'sit', rate: 0.5 });
     const ob = d.querySelector('.onboard'); if (ob) ob.remove();

@@ -454,50 +454,15 @@ function recentFoods(limit) {
    Every word typed must start a word somewhere in the name, brand or aka
    list. Name matches outrank aka matches; food eaten before and the
    popular list break ties; a plain food edges out a branded one.      */
-const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .replace(/&/g, ' and ').replace(/[’'`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-const idx = new WeakMap();
-function indexOf(f) {
-  let x = idx.get(f);
-  if (!x) {
-    const nameN = norm(f.name);
-    x = { nameN, words: norm(f.name + ' ' + (f.brand || '')).split(' '), akaN: (f.aka || []).map(norm), akaWords: norm((f.aka || []).join(' ')).split(' ') };
-    idx.set(f, x);
-  }
-  return x;
-}
-function scoreFood(f, q, toks) {
-  const x = indexOf(f);
-  let s = 0;
-  if (x.nameN === q) s += 100; else if (x.nameN.startsWith(q)) s += 50;
-  // The aka list is what people actually type, so typing one exactly outranks a name that merely starts the same.
-  if (x.akaN.includes(q)) s += 70;
-  for (const t of toks) {
-    if (x.words.includes(t)) s += 30;
-    else if (x.words.some(w => w.startsWith(t))) s += 20;
-    else if (x.akaWords.includes(t)) s += 15;
-    else if (x.akaWords.some(w => w.startsWith(t))) s += 10;
-    else return 0;
-  }
-  return s;
-}
+// The matching itself lives in foods.js and is shared with the public calories
+// page, so the two can never rank food differently. The app adds only its own
+// lift: food this person has eaten before, then the popular list.
+const norm = window.CC_NORM;
 function allFoods() { return window.CC_FOODS.concat(myFoods()); }
 function searchFoods(query, brand) {
-  const q = norm(query), toks = q ? q.split(' ') : [];
   const recent = new Set(recentFoods(30).map(f => f.id));
   const popular = new Set(window.CC_POPULAR);
-  const out = [];
-  allFoods().forEach(f => {
-    if (brand && f.brand !== brand) return;
-    let s = toks.length ? scoreFood(f, q, toks) : 1;
-    if (!s) return;
-    if (recent.has(f.id)) s += 8;
-    if (popular.has(f.id)) s += 4;
-    if (!f.brand) s += 2;
-    out.push([s, f]);
-  });
-  out.sort((a, b) => b[0] - a[0] || a[1].name.length - b[1].name.length);
-  return out.map(p => p[1]);
+  return window.CC_SEARCH(allFoods(), query, { brand, boost: f => (recent.has(f.id) ? 8 : 0) + (popular.has(f.id) ? 4 : 0) });
 }
 
 /* ══ snackbar ════════════════════════════════════════════════════════ */

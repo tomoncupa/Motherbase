@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mb-version" content="1.0.0, 2026-09-15">
+<meta name="theme-color" content="#F7F4EF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131110" media="(prefers-color-scheme: dark)">
+<title>Calories in Filipino food: Jollibee, Mang Inasal, silog and more | CALCOUNT</title>
+<meta name="description" content="Tap what you ate and see the calories. Chickenjoy, Mang Inasal, tapsilog, sinigang, milk tea and hundreds more Filipino foods and drinks. Free, no sign up.">
+<meta property="og:title" content="How many calories are in your order?">
+<meta property="og:description" content="Tap what you ate and see the total. Jollibee to sinigang, free, no sign up.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<!-- CALCOUNT's free public page: the calorie counter as a one-page calculator.
+     It is the marketing test in calcount/CLAUDE.md: if people use and share
+     this, the app is worth building out. Same food list and the same search
+     as the app, both from foods.js. Stores nothing. -->
+<style>
+:root{
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;
+  --r:16px;--tap:48px;--tap-min:44px;
+  --bg:#F7F4EF;--surface:#FFFFFF;--chip:#EFEAE2;--line:#E6DFD5;
+  --press:rgba(60,40,20,.07);
+  --ink:#1E1A15;--mut:#665E54;
+  --acc:#1C7A4A;--on-acc:#FFFFFF;--acc-tint:#E1F3E8;--acc-ink:#16603A;--focus:#1C7A4A;
+  --sh1:0 1px 3px rgba(40,28,16,.08),0 1px 2px rgba(40,28,16,.10);
+  --sh4:0 15px 25px rgba(40,28,16,.16),0 5px 10px rgba(40,28,16,.06);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#131110;--surface:#1D1A17;--chip:#2A2622;--line:#34302A;
+    --press:rgba(255,240,220,.08);
+    --ink:#F2EDE6;--mut:#B3AA9F;
+    --acc:#43C383;--on-acc:#0C2317;--acc-tint:#1D3527;--acc-ink:#7FDDA9;--focus:#7FDDA9;
+    --sh1:0 1px 3px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.5);
+    --sh4:0 15px 25px rgba(0,0,0,.5),0 5px 10px rgba(0,0,0,.3);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1rem/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;touch-action:manipulation}
+/* Links get no background here. Setting one on "a.btn" outranked .btn-primary and drew the main button as bare text. */
+a{color:inherit;text-decoration:none;touch-action:manipulation}
+input,select{font:inherit;font-size:1rem;color:inherit}
+h1,h2,p{margin:0}
+[hidden]{display:none!important}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.ic{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic-sm{width:16px;height:16px}
+.mut{color:var(--mut)}
+.small{font-size:.875rem}
+.num{font-variant-numeric:tabular-nums}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.wrap{max-width:720px;margin:0 auto;padding:calc(var(--s5) + env(safe-area-inset-top)) var(--s4) calc(120px + env(safe-area-inset-bottom))}
+.brand{display:flex;align-items:center;gap:var(--s2);font-weight:700;letter-spacing:.12em;color:var(--acc-ink)}
+.brand img{width:32px;height:32px;border-radius:8px}
+h1{font-size:1.875rem;line-height:1.2;margin-top:var(--s5)}
+.lede{font-size:1.125rem;color:var(--mut);margin-top:var(--s2)}
+.search{display:flex;align-items:center;gap:var(--s2);min-height:var(--tap);padding:0 var(--s4);margin-top:var(--s5);border-radius:var(--r);background:var(--surface);box-shadow:var(--sh1)}
+.search input{flex:1;min-width:0;border:0;background:none;outline:none;min-height:var(--tap)}
+.chips{display:flex;gap:var(--s2);overflow-x:auto;scrollbar-width:none;margin:var(--s4) calc(-1 * var(--s4)) 0;padding:var(--s1) var(--s4)}
+.chips::-webkit-scrollbar{display:none}
+.chip{min-height:var(--tap-min);padding:0 var(--s4);border-radius:var(--r);background:var(--chip);white-space:nowrap}
+.chip.is-on{background:var(--acc);color:var(--on-acc);font-weight:700}
+.count{font-size:.875rem;font-weight:700;color:var(--mut);margin:var(--s5) var(--s1) var(--s2)}
+.list{background:var(--surface);border-radius:var(--r);box-shadow:var(--sh1);overflow:hidden}
+.row{display:flex;align-items:center;gap:var(--s3);min-height:64px;padding:var(--s2) var(--s2) var(--s2) var(--s4)}
+.row + .row{border-top:1px solid var(--line)}
+.row-main{flex:1;min-width:0}
+.row-name{overflow-wrap:anywhere}
+.row-sub{font-size:.875rem;color:var(--mut)}
+.kcal{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.plus{width:var(--tap);height:var(--tap);display:grid;place-items:center;border-radius:50%;background:var(--acc-tint);color:var(--acc-ink);flex:none}
+.plus:active,.btn:active{transform:scale(.96)}
+.plus.is-done{background:var(--acc);color:var(--on-acc)}
+.empty{padding:var(--s6) var(--s4);text-align:center;color:var(--mut)}
+
+.about{margin-top:var(--s6);color:var(--mut);font-size:.875rem}
+.about summary{min-height:var(--tap-min);display:flex;align-items:center;cursor:pointer;font-weight:700}
+.about p{margin-top:var(--s2)}
+
+.tray{position:fixed;left:0;right:0;bottom:0;z-index:5}
+.tray-in{max-width:720px;margin:0 auto;background:var(--surface);box-shadow:var(--sh4);border-radius:var(--r) var(--r) 0 0;padding:var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom))}
+.tray-bar{display:flex;align-items:center;gap:var(--s3);min-height:var(--tap)}
+.tray-total{flex:1}
+.tray-total b{font-size:1.5rem;font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:var(--tap);padding:0 var(--s4);border-radius:var(--r);font-weight:700;text-align:center}
+.btn-primary{background:var(--acc);color:var(--on-acc)}
+.btn-soft{background:var(--acc-tint);color:var(--acc-ink)}
+.btn-ghost{color:var(--acc-ink)}
+.order{max-height:50dvh;overflow:auto;overscroll-behavior:contain;margin-top:var(--s3);border-top:1px solid var(--line)}
+.oi{display:grid;grid-template-columns:1fr auto;gap:var(--s2) var(--s3);align-items:center;padding:var(--s3) 0;border-bottom:1px solid var(--line)}
+.oi-ctrl{grid-column:1 / -1;display:flex;align-items:center;gap:var(--s2)}
+.oi select{min-height:var(--tap-min);flex:1;min-width:0;border-radius:var(--r);border:2px solid var(--line);background:var(--surface);padding:0 var(--s3)}
+.step{width:var(--tap-min);height:var(--tap-min);border-radius:50%;background:var(--chip);display:grid;place-items:center;flex:none}
+.qty{min-width:32px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.tray-actions{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2);margin-top:var(--s3)}
+.cta{grid-column:1 / -1}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <a class="brand" href="index.html"><img src="icon.svg" alt="">CALCOUNT</a>
+  <h1>How many calories are in your order?</h1>
+  <p class="lede" id="lede">Tap what you ate and see the total.</p>
+
+  <label class="search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><span class="sr">Search food</span>
+    <input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Search, like chickenjoy or tapsilog"></label>
+  <div class="chips" id="chips" role="group" aria-label="Filter"></div>
+
+  <p class="count" id="count" aria-live="polite"></p>
+  <div id="list"></div>
+
+  <details class="about">
+    <summary>Where the numbers come from</summary>
+    <div id="sources"></div>
+  </details>
+</main>
+
+<div class="tray" id="tray" hidden>
+  <div class="tray-in">
+    <div class="tray-bar">
+      <div class="tray-total"><b id="total">0</b> <span class="mut">calories</span><div class="small mut" id="items"></div></div>
+      <button class="btn btn-soft" id="toggle" aria-expanded="false" aria-controls="order">See order</button>
+    </div>
+    <div id="order-wrap" hidden>
+      <div class="order" id="order"></div>
+      <div class="tray-actions">
+        <button class="btn btn-ghost" id="clear">Clear</button>
+        <button class="btn btn-soft" id="share">Share my order</button>
+        <a class="btn btn-primary cta" href="index.html">Track every meal, free</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+</svg>
+
+<script src="foods.js"></script>
+<script>
+(function () {
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => Math.round(n || 0).toLocaleString('en-US');
+const ic = (n, cls) => '<svg class="ic' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + n + '"/></svg>';
+const FOOD = window.CC_FOOD, SRC = window.CC_SRC;
+const kcalOf = (f, si, qty) => Math.round(f.per.kcal * f.serves[si].m * (qty || 1));
+
+// Filters: every restaurant, then the kinds of food that are not a restaurant's.
+const FILTERS = [['', 'All']].concat(window.CC_BRANDS.map(b => ['brand:' + b, b]),
+  [['cat:rice', 'Rice and silog'], ['cat:ulam', 'Ulam'], ['cat:street', 'Street food'], ['cat:noodles', 'Noodles and soup'], ['cat:drinks', 'Drinks'], ['cat:packaged', 'Packaged']]);
+
+const params = new URLSearchParams(location.search);
+let filter = params.get('brand') ? 'brand:' + params.get('brand') : params.get('cat') ? 'cat:' + params.get('cat') : '';
+if (!FILTERS.some(([v]) => v === filter)) filter = '';
+$('q').value = params.get('q') || '';
+const order = [];   // { id, si, qty }
+
+$('lede').textContent = 'Tap what you ate and see the total. ' + window.CC_FOODS.length + ' Filipino foods and drinks, from Chickenjoy to sinigang.';
+$('chips').innerHTML = FILTERS.map(([v, l]) => '<button class="chip" data-f="' + esc(v) + '">' + esc(l) + '</button>').join('');
+$('sources').innerHTML = Object.keys(SRC).filter(k => !['mine', 'ai', 'off'].includes(k)).map(k => '<p><b>' + esc(SRC[k].label) + '.</b> ' + esc(SRC[k].about) + '</p>').join('') +
+  '<p>The Official (US) figures are from Jollibee USA’s nutrition sheet dated 1 July 2026. Everything marked Estimate is worked out from a typical recipe and portion, and will be checked.</p>';
+
+function drawList() {
+  document.querySelectorAll('[data-f]').forEach(b => { const on = b.dataset.f === filter; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', on); });
+  const [kind, val] = filter ? [filter.slice(0, filter.indexOf(':')), filter.slice(filter.indexOf(':') + 1)] : ['', ''];
+  const found = window.CC_SEARCH(window.CC_FOODS, $('q').value, { brand: kind === 'brand' ? val : null, cat: kind === 'cat' ? val : null });
+  const q = $('q').value.trim();
+  $('count').textContent = found.length ? (found.length === 1 ? '1 food' : found.length + ' foods') : '';
+  $('list').innerHTML = found.length
+    ? '<div class="list">' + found.map(f => {
+        const tag = SRC[f.src].label;
+        const sub = [f.brand, f.serves[0].l, tag === 'Estimate' ? '' : tag].filter(Boolean).join(' · ');
+        return '<div class="row"><div class="row-main"><div class="row-name">' + esc(f.name) + '</div><div class="row-sub">' + esc(sub) + '</div></div>' +
+          '<span class="kcal">' + fmt(kcalOf(f, 0)) + '</span><button class="plus" data-add="' + esc(f.id) + '" aria-label="Add ' + esc(f.name) + '">' + ic('plus') + '</button></div>';
+      }).join('') + '</div>'
+    : '<p class="empty">Nothing matches “' + esc(q) + '” yet. Try a shorter word, like “chicken”.</p>';
+}
+
+function drawOrder() {
+  const total = order.reduce((a, o) => a + kcalOf(FOOD[o.id], o.si, o.qty), 0);
+  const count = order.reduce((a, o) => a + o.qty, 0);
+  $('tray').hidden = !order.length;
+  $('total').textContent = fmt(total);
+  $('items').textContent = count === 1 ? '1 item' : fmt(count) + ' items';
+  $('order').innerHTML = order.map((o, i) => {
+    const f = FOOD[o.id];
+    return '<div class="oi"><div>' + esc(f.name) + (f.brand ? '<div class="small mut">' + esc(f.brand) + '</div>' : '') + '</div><span class="kcal">' + fmt(kcalOf(f, o.si, o.qty)) + '</span>' +
+      '<div class="oi-ctrl">' + (f.serves.length > 1
+        ? '<select data-serve="' + i + '" aria-label="Serving">' + f.serves.map((s, j) => '<option value="' + j + '"' + (j === o.si ? ' selected' : '') + '>' + esc(s.l) + '</option>').join('') + '</select>'
+        : '<span class="small mut" style="flex:1">' + esc(f.serves[0].l) + '</span>') +
+      '<button class="step" data-less="' + i + '" aria-label="' + (o.qty === 1 ? 'Remove ' : 'One less ') + esc(f.name) + '">' + ic('minus', 'ic-sm') + '</button><span class="qty">' + o.qty + '</span>' +
+      '<button class="step" data-more="' + i + '" aria-label="One more ' + esc(f.name) + '">' + ic('plus', 'ic-sm') + '</button></div></div>';
+  }).join('');
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.dataset.f !== undefined) { filter = filter === t.dataset.f ? '' : t.dataset.f; drawList(); return; }
+  if (t.dataset.add) {
+    const hit = order.find(o => o.id === t.dataset.add && o.si === 0);
+    if (hit) hit.qty++; else order.push({ id: t.dataset.add, si: 0, qty: 1 });
+    t.classList.add('is-done'); t.innerHTML = ic('check');
+    setTimeout(() => { t.classList.remove('is-done'); t.innerHTML = ic('plus'); }, 900);
+    drawOrder(); return;
+  }
+  if (t.dataset.more) { order[+t.dataset.more].qty++; drawOrder(); return; }
+  if (t.dataset.less) { const o = order[+t.dataset.less]; if (--o.qty < 1) order.splice(+t.dataset.less, 1); drawOrder(); if (!order.length) setOpen(false); return; }
+});
+document.addEventListener('change', e => { if (e.target.dataset.serve) { order[+e.target.dataset.serve].si = +e.target.value; drawOrder(); } });
+$('q').addEventListener('input', drawList);
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+
+function setOpen(open) { $('order-wrap').hidden = !open; $('toggle').textContent = open ? 'Hide order' : 'See order'; $('toggle').setAttribute('aria-expanded', open); }
+$('toggle').onclick = () => setOpen($('order-wrap').hidden);
+$('clear').onclick = () => { order.length = 0; drawOrder(); setOpen(false); };
+$('share').onclick = async () => {
+  const lines = order.map(o => { const f = FOOD[o.id]; return (o.qty > 1 ? o.qty + ' × ' : '') + f.name + ' (' + f.serves[o.si].l + '): ' + fmt(kcalOf(f, o.si, o.qty)); });
+  const total = order.reduce((a, o) => a + kcalOf(FOOD[o.id], o.si, o.qty), 0);
+  const text = 'My order:\n' + lines.join('\n') + '\nTotal: ' + fmt(total) + ' calories\n\nCounted with CALCOUNT';
+  const url = location.origin + location.pathname;
+  try {
+    if (navigator.share) { await navigator.share({ title: 'My order', text, url }); return; }
+    await navigator.clipboard.writeText(text + ': ' + url);
+    $('share').textContent = 'Copied';
+    setTimeout(() => { $('share').textContent = 'Share my order'; }, 1500);
+  } catch (err) { /* the person closed the share sheet */ }
+};
+
+drawList();
+drawOrder();
+window.CC_PAGE = { order, drawList, drawOrder, get filter() { return filter; } };   // for _test.html only
+})();
+</script>
+</body>
+</html>

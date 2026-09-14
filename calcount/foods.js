@@ -397,6 +397,58 @@
     bread: 'Bread', basics: 'Eggs, meat and basics', extras: 'Extras and condiments'
   };
 
+  /* ── search, shared by the app and the public calories page ─────────
+     Every word typed must start a word somewhere in the name, brand or aka
+     list. A name typed exactly wins; an aka typed exactly comes next, because
+     the aka list is what people really type; then a name that starts the
+     same. A plain food edges out a branded one. `boost` lets the app lift
+     foods the person has eaten before.                                    */
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/&/g, ' and ').replace(/[’'`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const idx = new WeakMap();
+  function indexOf(food) {
+    let x = idx.get(food);
+    if (!x) {
+      x = { nameN: norm(food.name), words: norm(food.name + ' ' + (food.brand || '')).split(' '),
+        akaN: (food.aka || []).map(norm), akaWords: norm((food.aka || []).join(' ')).split(' ') };
+      idx.set(food, x);
+    }
+    return x;
+  }
+  function scoreFood(food, q, toks) {
+    const x = indexOf(food);
+    let s = 0;
+    if (x.nameN === q) s += 100; else if (x.nameN.startsWith(q)) s += 50;
+    if (x.akaN.includes(q)) s += 70;
+    for (const t of toks) {
+      if (x.words.includes(t)) s += 30;
+      else if (x.words.some(w => w.startsWith(t))) s += 20;
+      else if (x.akaWords.includes(t)) s += 15;
+      else if (x.akaWords.some(w => w.startsWith(t))) s += 10;
+      else return 0;
+    }
+    return s;
+  }
+  function search(foods, query, opts) {
+    opts = opts || {};
+    const q = norm(query), toks = q ? q.split(' ') : [];
+    const out = [];
+    foods.forEach(food => {
+      if (opts.brand && food.brand !== opts.brand) return;
+      if (opts.cat && food.cat !== opts.cat) return;
+      let s = toks.length ? scoreFood(food, q, toks) : 1;
+      if (!s) return;
+      if (opts.boost) s += opts.boost(food);
+      if (!food.brand) s += 2;
+      out.push([s, food]);
+    });
+    // With nothing typed, the list keeps its written order, which groups like with like.
+    if (toks.length) out.sort((a, b) => b[0] - a[0] || a[1].name.length - b[1].name.length);
+    return out.map(p => p[1]);
+  }
+
+  window.CC_NORM = norm;
+  window.CC_SEARCH = search;
   window.CC_FOODS = FOODS;
   window.CC_FOOD = BY_ID;
   window.CC_SRC = SRC;

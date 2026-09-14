@@ -249,7 +249,8 @@ choice rather than inherited:
 | `worker/scan.js` | Written 2026-09-15 and checked in the browser with the network faked: request shape, key handling, the monthly cap, refusals, outages and bad answers. **Never called the real Claude API**, because that spends Tom's money. The first real scan is the real test. |
 | `worker/SETUP.md` | Written 2026-09-15. Tom has not deployed it. |
 | `sw.js`, `manifest.json`, icons | Offline copy and home-screen install, 2026-09-15. Watched on the test server: the offline copy registers, takes over the page and stores all five files. **Loading with the network actually cut has not been watched.** It is off on a test server unless the address has `?sw`, and it steps aside for any `?cb=` address, so tests are never answered from an old copy. The icons are drawn by a short Python script with no libraries, because Pillow is not installed here. |
-| `_test.html` | 90 checks, all passing in light and dark, 2026-09-15. It sets the browser's own CALCOUNT data aside and puts it back exactly. |
+| `calories.html` | The free public page, 2026-09-15: "How many calories are in your order?" Tap foods into an order, change servings, share it. No account, stores nothing. A link can open it filtered, `calories.html?brand=Mang Inasal` or `?cat=drinks` or `?q=chickenjoy`, which is what a post or a reel links to. Tested in the browser at 375px. It is the cheapest test of demand: if people use and share this, the app earns the months. |
+| `_test.html` | 97 checks, all passing, 2026-09-15. It sets the browser's own CALCOUNT data aside and puts it back exactly. |
 
 ### Releasing a new version
 
