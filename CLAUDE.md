@@ -82,14 +82,20 @@ Do not break these. Ask first if you think one needs to change.
    replaces the old "phone first, and literally" rule that applied to
    everything.
 
-   **STATUS and TRAIN are phone apps.** They are used standing up, one-handed,
-   at the gym or in a kitchen. Every control is at least a 44px target, nothing
-   important hides behind hover, panels come up from the bottom, and the back
-   gesture closes what is open rather than leaving the app. `shared/STANDARDS.md`
-   is binding on these two and `_template/index.html` is the working example.
+   **TRAIN is a phone app, and STATUS is built like one.** They are used
+   standing up, one-handed, at the gym or in a kitchen. Every control is at
+   least a 44px target, nothing important hides behind hover, panels come up
+   from the bottom, and the back gesture closes what is open rather than
+   leaving the app. `shared/STANDARDS.md` is binding on these two and
+   `_template/index.html` is the working example.
 
-   **Everything else is a desktop app**: the home screen, ARC, BLOCK, HABITS,
-   FORM, PORTION and STYLE. They are used sitting down, with a mouse, to plan,
+   **STATUS and QUESTS are for everywhere.** Tom, 2026-09-14. Built to the
+   phone rules, because those are the harder ones, and also good at a desk.
+   Not just "does not break" there.
+
+   **Everything else is a desktop app**: the home screen, ARC, BLOCK, FORM,
+   FOODDÉX, LOG, WEALTH and STYLE. Tom calls ARC, BLOCK and STYLE desktop
+   *only*. They are used sitting down, with a mouse, to plan,
    build, review and compare. Hover is allowed, density can be tighter, dialogs
    may sit in the middle of the screen rather than rising from the bottom, and
    a layout may assume a wide window.
@@ -116,7 +122,6 @@ shared/            the foundation, loaded by every app
 block/index.html   routine builder
 arc/index.html     mind canvas
 arc/CLAUDE.md      ARC's own brief, governs arc/ only
-habits/index.html  habit tracker (a stand-in, see Debt)
 form/index.html    lift review
 status/index.html  sleep, weight, mood, energy, steps, food and money
 portion/index.html FOODDÉX, called PORTION until 2026-09-14. A label in, the
@@ -154,8 +159,10 @@ quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
                    on repo layout and testing by this file.
 ```
 
-**Phone or desktop:** `status/` and `train/` are phone apps. Every other app,
-including the home screen and `wealth/`, is a desktop app. See hard constraint 10.
+**Phone or desktop:** `train/` is a phone app. `status/` and `quest/` are for
+everywhere. Every other app, including the home screen and `wealth/`, is a
+desktop app. See hard constraint 10. What each one is for, in Tom's words, is
+the table at the top of "The apps" in `DOCTRINE.md`.
 `portion/` was called both for a day and Tom settled it as desktop on
 2026-09-06: it is desk work, not kitchen work. It lays out in three columns
 past 1300px, two past 900px and one below that, and it keeps the 44px targets
@@ -670,9 +677,8 @@ answer, or take it out.
 | `index.html` | Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab bar on a phone, sheets instead of its own modal. Widget grid still drags and resizes with a mouse; a phone gets a REARRANGE mode instead. |
 | `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. |
 | `arc/` | Tom's build, with its own brief. On the shared foundation as of 2026-08-27: the store, the theme engine, the icon set, the settings sheet and the standard backup. Owns `map`, `node` and `link`. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. |
-| `habits/` | A stand-in, now superseded by `status/`. Harvest the streaks and one-click promote-from-routine if they are still wanted. Do not add to it. |
 | `quest/` | QUESTS, built 2026-09-14 and tested in the browser at desktop width; phone width not measured, because the test pane reported no width. Todoist's Inbox, Today, Upcoming and projects over STATUS's todo rows. Reads dates, times, P1 to P3, #projects and repeats from anywhere in the line, highlighted as typed, with a chip to give the words back. Todoist's date menu and overdue Reschedule. Ticking a repeat writes a finished copy and moves the todo on; STATUS does the same. Today also lists BLOCK's published plan with Now and Next, every row says whether it came from QUESTS, STATUS or BLOCK, and Date, Priority, Move to and More are visible buttons on each row. STATUS's journal keeps showing todos, on their due date. A clock with no am or pm is the next time it comes round today, in QUESTS, STATUS and LOG, for every kind of line; on another day 1 to 6 is the afternoon. Each app carries its own copy of the rule. LOG's copy of `notes()` does not know `due` yet, so LOG still shows those todos on the day written. |
-| `form/` | Standalone by design. Video never leaves the device. |
+| `form/` | Standalone by design. Video never leaves the device. Tom only, kept out of the tester build. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
 | `portion/` | FOODDÉX on screen since 2026-09-14; the folder and id are still `portion`. Built 2026-09-05, made a desktop app 2026-09-06. Tested in the browser. A bench for building food entries and a viewer over the ones you have. Paste or type a label; it says how much of it hits 50g of protein or any other number, in grams or in pieces, what that comes to and what it costs. Saves the answers as ordinary servings, so STATUS logs them in one tap. Hands the entry over as words to paste into somebody else's tracker or as a spreadsheet row. Ranks the whole library against whatever amount is on screen, which is the comparison. Searches, edits and deletes; refuses to make a second food with a name you already have. Reads Sodium, or converts Salt where a label prints that instead. Kept out of the tester build by `tools/build-client.py`. |
 | `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
@@ -690,8 +696,7 @@ answer, or take it out.
 2. ~~ARC carries its own copy of the theme engine~~ **Done 2026-08-26.** It
    reads `shared/skins.js` and went from ten themes to eighteen, keeping its
    own per-theme colour editing. BLOCK and FORM went onto it the same day.
-   HABITS is the only app not on the theme system, deliberately: it is a
-   placeholder.
+   HABITS was the only app left off it, and was deleted on 2026-09-14.
 3. **The apps still carry their own settings, themes and sounds** instead of using
    `shared/ui.js`, `skins.js` and `sound.js`. `_template/` and `arc/` are fully
    on them; the rest are not.
@@ -753,7 +758,7 @@ surprise.
 
 **5. Cache-busting is inconsistent.** `style/` loads shared at `?v=16`,
 `portion/` and `_template/` at `?v=15`, and the home screen, STATUS, TRAIN,
-BLOCK, ARC, FORM and HABITS have no `?v=` at all. Harmless from a folder, where
+BLOCK, ARC and FORM have no `?v=` at all. Harmless from a folder, where
 nothing is cached. It matters the day hosting returns, because the known trap
 says "bump the version" and there is no one version to bump. Either every app
 carries the same stamp or none of them do.
@@ -825,6 +830,16 @@ mouse: the test pane's emulated window sends real clicks to the wrong place.
 LOG works around it by stopping a press inside the menu from bubbling
 (`menuAt()` in `log/index.html`). The real fix is one line in `menu()`:
 ignore presses inside `box`. Delete LOG's wrapper when that lands.
+
+**12. `shared/` still names HABITS.** HABITS was deleted on 2026-09-14 by a
+root session that stayed out of `shared/`. Four leftovers, none of them
+breaking anything: `_smoke.html`'s "every app in the dock has one" still lists
+`habits`, and still passes because `icons.js` still carries the `app.habits`
+role; `THEMING.md`'s app table has a `habits/` row; `STANDARDS.md`'s opening
+lists `habits/` among the desktop apps. Remove them together. Taking the role
+out of `icons.js` without the smoke check fails that check, and if nothing
+else points at the `repeat` drawing, "no drawing is carried for nothing" fails
+too.
 
 ### Parked, not cancelled
 

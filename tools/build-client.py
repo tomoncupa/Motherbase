@@ -3,7 +3,7 @@
 
 WHY THIS EXISTS
   Beta testers get a smaller suite than Tom does: no FORM (client video), no
-  CLEX (a personal side app), no HABITS (superseded by STATUS), and five
+  CLEX (a personal side app), none of Tom's own apps, and five
   themes instead of eighteen.
 
   The obvious way to do that is to copy the folder and delete things. Do not.
@@ -23,7 +23,7 @@ THIS IS NOT A BUILD STEP
 IT FAILS LOUDLY
   Every patch below asserts that it actually changed something. If a future
   edit renames a line this script looks for, you get an error naming the
-  patch, not a client build that quietly still has HABITS in the menu.
+  patch, not a client build that quietly still has WEALTH in the menu.
 
 USAGE
   py -3 tools/build-client.py                  -> ../Motherbase-Client
@@ -50,9 +50,8 @@ COPY_FILES = ['index.html', '.nojekyll']
 #   log/     his journal with day, week and month summaries over it. Tom only
 #   quest/   his todolist, until he says testers get it
 #   clex/    a personal side app
-#   habits/  a stand-in that STATUS replaced
 #   _template/ tools/ and every *.md brief - these are build notes
-DROP_APPS = ['habits', 'form', 'portion', 'wealth', 'log', 'quest']   # removed from the home screen roster
+DROP_APPS = ['form', 'portion', 'wealth', 'log', 'quest']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed
 # STREAKS and NUMBERS were deleted from the main repo on 2026-08-28, and
 # the STREAKS that replaced one of them counts ticks, so it works for a

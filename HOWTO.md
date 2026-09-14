@@ -7,7 +7,7 @@ Motherbase/
   index.html        the home screen
   shared/           the foundation every app uses — don't edit these
   block/            one folder per app, each with an index.html
-  arc/  habits/  form/
+  arc/  form/  status/  train/  and the rest
   _template/        the starter app you copy
 ```
 

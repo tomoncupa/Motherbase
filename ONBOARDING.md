@@ -20,7 +20,7 @@ That writes `../Motherbase-Client`, a complete working suite with:
 | | |
 |---|---|
 | **Apps** | HOME, ARC, BLOCK, STATUS, TRAIN, STYLE |
-| **Not included** | FORM (client video), CLEX (personal), HABITS (superseded by STATUS) |
+| **Not included** | FORM (client video), FOODDÉX, WEALTH, LOG and QUESTS (Tom only), CLEX (personal) |
 | **Themes** | Default, System, Chalkboard, Sketch, Doodle — five, from eighteen |
 | **Added** | `guide.html`, the tester's five-minute setup page |
 
@@ -40,7 +40,7 @@ lives in `tools/client/`.
 
 The script fails loudly rather than quietly shipping something wrong. If a
 future edit renames a line it looks for, you get an error naming the patch, not
-a client build that still has HABITS in the menu.
+a client build that still has WEALTH in the menu.
 
 ---
 

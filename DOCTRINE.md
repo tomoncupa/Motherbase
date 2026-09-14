@@ -260,6 +260,28 @@ the person, cut that part. What is left is the copy.
 Each is: what it is for, who is holding it and when, what good looks like, and
 what it must never become.
 
+### The suite at a glance
+
+Set by Tom on 2026-09-14, in his words where possible. Where a section below
+disagrees with this on device or on what an app is for, this wins. "Testers"
+is what `tools/build-client.py` ships today.
+
+| App | Folder | Device | Testers | What it is for |
+|---|---|---|---|---|
+| HOME | `index.html` | desktop | yes | The hub for everything. |
+| BLOCK | `block/` | desktop only | yes | Routines, mostly daily. **Still to build:** a way to run routines that are not daily. |
+| STATUS | `status/` | everywhere | yes | The tracker, built for fast input. |
+| LOG | `log/` | desktop | no | The journal module. Brings every bullet type together. |
+| QUESTS | `quest/` | everywhere | no | Todo bullets, pulled from STATUS and BLOCK. Answers "what's next to be done". |
+| WEALTH | `wealth/` | desktop | no, Tom only | Money. Reads spending, and the statements that matter. |
+| ARC | `arc/` | desktop only | yes | Mind mapping, and presentations. **Planned:** a teach mode that builds skill trees out of actionable steps. Those steps are todo bullets, so it works with QUESTS. |
+| FORM | `form/` | desktop | no, Tom only | Form review, and presentations and social media content made from it. |
+| TRAIN | `train/` | phone | yes | The training tracker. An evolved FitNotes. |
+| STYLE | `style/` | desktop only | yes | The theme and look for every other app. |
+| FOODDÉX | `portion/` | desktop | no | Food database input and overview. Works with STATUS. **To be expanded.** |
+
+HABITS is not on the list. Tom deleted it on 2026-09-14.
+
 ### MAIN MENU — `index.html`
 
 **Function.** Choose an app, and see whether today needs anything.
@@ -273,11 +295,12 @@ better. It is a hallway. Nobody should want to stay in it.
 **Never:** a dashboard that grows features. Anything worth doing here is worth
 doing in the app that owns it.
 
-### STATUS — `status/` · phone
+### STATUS — `status/` · everywhere
 
 **Function.** Record what happened to your body and your money today.
 
-**In hand:** standing up, one-handed, several times a day, often mid-task.
+**In hand:** standing up, one-handed, several times a day, often mid-task. And
+at a desk: Tom uses it everywhere, so the desk is not an afterthought.
 
 **Good looks like:** a measurement takes one tap to reach and one to enter. The
 box is focused when it opens. What is offered comes from what he actually logs,
@@ -317,7 +340,7 @@ error message.
 **Never:** a programming tool. Building the plan is BLOCK's job and the coach's
 job. This records what was lifted.
 
-### BLOCK — `block/` · desktop
+### BLOCK — `block/` · desktop only
 
 **Function.** Build a day out of blocks, and see whether it held.
 
@@ -339,7 +362,10 @@ blocks.
 
 **Never:** a calendar. It does not own time, it owns intent.
 
-### ARC — `arc/` · desktop
+**Still to build:** routines that are not daily. It is mostly daily routines
+today.
+
+### ARC — `arc/` · desktop only
 
 **Function.** Think on a canvas until the shape of the idea appears.
 
@@ -349,11 +375,17 @@ blocks.
 idea — parent, link, rank, collapse — is one gesture. It carries images because
 thinking is not only words.
 
+**Also:** presentations.
+
+**Planned:** a teach mode that turns a map into a skill tree of actionable
+steps. The steps are todo bullets, so they show up in QUESTS.
+
 **Never:** a note-taking app. The value is the *shape*, not the text.
 
-### FORM — `form/` · desktop
+### FORM — `form/` · desktop · Tom only
 
-**Function.** Watch two lifts side by side and say what is different.
+**Function.** Watch two lifts side by side and say what is different. Also for
+presentations and social media content.
 
 **In hand:** at a desk, reviewing a client's video against a reference.
 
@@ -375,11 +407,10 @@ app obeys.
 
 **Never:** a per-app settings screen. It sets the system.
 
-### HABITS — `habits/`
+### HABITS — deleted
 
-Excluded. Tom's call on 2026-08-27: leave it exactly as it is. It remains the
-placeholder `CLAUDE.md` describes, superseded by STATUS. Do not build to this
-doctrine here, and do not add to it.
+Deleted on 2026-09-14 on Tom's instruction. STATUS replaced it. The `habit`
+rows it wrote were not touched: they stay on the device and in every backup.
 
 ---
 
