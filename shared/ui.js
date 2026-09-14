@@ -46,6 +46,18 @@ function css() {
 .mb-shotx{min-height:var(--tap);padding:0 var(--s-5);border-radius:var(--radius-sm);
   border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;
   font:inherit;font-size:var(--f-2);cursor:pointer}
+/* ── a fold in a settings tab (UI.more) ── */
+.mb-more{margin-top:var(--s-4,16px);border-top:1px solid var(--border,#1e2a38)}
+.mb-more-h{display:flex;align-items:center;justify-content:space-between;width:100%;
+  min-height:var(--tap,44px);padding:0;background:none;border:0;cursor:pointer;
+  color:var(--text-2,#b8c9d8);font:inherit;font-size:var(--f-1,12px);
+  letter-spacing:var(--track-cap,.08em);text-transform:uppercase}
+.mb-more-h i{width:var(--s-2,8px);height:var(--s-2,8px);margin-right:var(--s-2,8px);
+  border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+  transform:rotate(45deg);transition:transform var(--dur-fast,120ms)}
+.mb-more.open .mb-more-h i{transform:rotate(-135deg)}
+.mb-more-b{display:none}
+.mb-more.open .mb-more-b{display:block}
 /* ── the share panel (IO.share) ──
    The picture on a checkerboard, so what is see-through reads as see-through. */
 .mb-sharepv{display:flex;justify-content:center;margin-bottom:var(--s-2)}
@@ -240,6 +252,9 @@ let toastEl, toastT;
 const M = () => g.Mobile;
 let menuAway = null;   /* the listener that closes an open desktop menu */
 const buzz = (kind, opts) => { const m = M(); if (m) m.feedback(kind, opts); else if (g.Sfx) g.Sfx.play(kind === 'warn' ? 'error' : 'drop'); };
+
+/* which UI.more folds are open, by key, so a tab that redraws keeps them open */
+const MORE_OPEN = {};
 
 const UI = {
   el: el, esc: esc,
@@ -592,6 +607,32 @@ const UI = {
     return r;
   },
 
+  /** A fold-away part of a settings tab, closed until opened, so a tab leads
+      with what gets changed. Tom, 2026-09-15: settings are intuitive and never
+      overwhelming. `fill(box)` draws what is inside, the first time it opens.
+      `key` keeps it open while the tab redraws. */
+  more(title, fill, key) {
+    css();
+    const wrap = el('div', 'mb-more');
+    const head = el('button', 'mb-more-h mb-press', '<span>' + esc(title) + '</span><i aria-hidden="true"></i>');
+    head.type = 'button';
+    const body = el('div', 'mb-more-b');
+    let drawn = false;
+    const set = open => {
+      wrap.classList.toggle('open', open);
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open && !drawn) { drawn = true; fill(body); }
+    };
+    head.onclick = () => {
+      const open = !wrap.classList.contains('open');
+      if (key) MORE_OPEN[key] = open;
+      set(open); buzz('select');
+    };
+    wrap.appendChild(head); wrap.appendChild(body);
+    set(!!(key && MORE_OPEN[key]));
+    return wrap;
+  },
+
   /** an input that already knows which keyboard it wants */
   field(kind, opts) {
     css();
@@ -634,7 +675,11 @@ const UI = {
     /* The app's own tabs first: they are what make this panel this app's,
        and APP and DATA are the same everywhere. `order` still wins. */
     const tabs = (extraTabs || []).slice();
-    if (g.Skins || g.Sfx || g.Mobile) tabs.push({ id: 'app', name: 'APP', draw: drawApp.bind(null, appId) });
+    /* Theme and sound are chosen in STYLE and nowhere else. Tom, 2026-09-15:
+       "remove theme picking from everything except from STYLE, simply the
+       data screen". STYLE keeps this tab; opts.look puts it back anywhere. */
+    if ((appId === 'style' || opts.look) && (g.Skins || g.Sfx || g.Mobile))
+      tabs.push({ id: 'app', name: 'APP', draw: drawApp.bind(null, appId) });
     if (g.IO) tabs.push({ id: 'data', name: 'DATA', draw: el2 => g.IO.panel(el2, appId) });
 
     /* Every app with data gets the short sheet section under DATA: the link

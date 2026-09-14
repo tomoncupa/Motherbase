@@ -16,9 +16,12 @@ to improve FitNotes. It is to rebuild it closely enough that moving is not a
 decision, and then let it share a brain with the rest of the suite and wear the
 same skins.
 
-**Fidelity is the base.** When a choice comes up between what FitNotes does and
-what would be nicer, FitNotes wins, unless Tom has said otherwise. A
-disagreement goes in Deliberate departures below, never in the code quietly.
+**FitNotes is where TRAIN started, not a rule.** Tom, 2026-09-15: *"Lets stop
+with matching fitnotes as a hard rule."* Until then FitNotes won every choice
+unless he said otherwise. Now it is a good first answer, not the last one: when
+a choice comes up, what makes TRAIN better for training him wins, and a change
+from FitNotes still goes in Deliberate departures below, so the record stays
+whole.
 
 **"I don't workout, I train."** Tom, 2026-09-14. A workout is a selection of
 exercises, maybe random, maybe copied. A training session is designed, personal,
@@ -397,7 +400,9 @@ category immediately. Verified 2026-09-14 by switching skins with a calendar ope
 
 ## Deliberate departures
 
-Only these. Anything else is a bug.
+The ones made so far. Until 2026-09-15 anything not listed here was a bug;
+since Tom lifted FitNotes as a hard rule, this is the record of what changed,
+not a fence.
 
 | FitNotes | TRAIN | Why |
 |---|---|---|

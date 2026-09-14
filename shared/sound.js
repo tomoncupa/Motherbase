@@ -208,6 +208,19 @@ const Sfx = {
   volume(v) { if (v == null) return cfg.vol; Sfx.set({ vol: v }); return Sfx; },
   mute(on) { if (on == null) return cfg.mute; Sfx.set({ mute: !!on }); return Sfx; },
 
+  /** Another app's sound, for STYLE's one screen of every app: read it, or
+      merge a change into it. The app hears it the next time it opens. Tom,
+      2026-09-15: theme and sound are picked in STYLE, not in each app. */
+  forApp(appId, patch) {
+    let c = {};
+    try { c = JSON.parse(localStorage.getItem(KEY(appId)) || '{}') || {}; } catch (e) {}
+    if (!patch) return c;
+    Object.assign(c, patch);
+    try { localStorage.setItem(KEY(appId), JSON.stringify(c)); } catch (e) {}
+    if (appId === cfg.app) Sfx.set(patch);
+    return c;
+  },
+
   play(cue, opts) {
     if (cfg.mute) return;
     const make = CUES[cue]; if (!make) return;

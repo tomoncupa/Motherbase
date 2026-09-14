@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.5, 2026-09-15">
+<meta name="mb-version" content="1.0.6, 2026-09-15">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2358,9 +2358,11 @@ function recost(row, before) {
    database entry, and then offers to push the corrected numbers back through
    every serving that used it. The offer is explicit and says how many rows it
    would touch, because rewriting history should never be a side effect. */
-function mealMenu(x, d) {
+function mealMenu(x, d, e) {
   const fd = foods()[x.fid];
-  UI.menu(0, 0, [
+  /* where the mouse was: Tom, 2026-09-15, "right clicks in STATUS are not
+     creating the menu where my mouse is". A phone gets a sheet either way. */
+  UI.menu(e ? e.clientX : 0, e ? e.clientY : 0, [
     { label: 'Edit this serving', note: 'Only this one row', icon: '✎', fn: () => mealSheet(x, d) },
     fd ? { label: 'Edit ' + fd.name, note: 'The food itself, everywhere', icon: '◈', fn: () => foodEditor(fd) } : null,
     '-',
@@ -3710,7 +3712,7 @@ function drawJournal(m) {
       box.style.cursor = 'inherit';
     }
     r.onclick = () => noteSheet(x, x.date || d);
-    Mobile.hold(r, () => noteMenu(x, d, i, list.length));
+    Mobile.hold(r, e => noteMenu(x, d, i, list.length, e));
     wrap.appendChild(r);
   });
   c.appendChild(wrap);
@@ -3877,10 +3879,10 @@ function noteSheet(x, d) {
   UI.focusSoon(taRef, reopening);
 }
 
-function noteMenu(x, d, i, n) {
+function noteMenu(x, d, i, n, e) {
   const manual = S.get('noteSort', 'manual') === 'manual';
   const own = x.date || d;
-  UI.menu(0, 0, [
+  UI.menu(e ? e.clientX : 0, e ? e.clientY : 0, [
     { label: 'Edit', icon: '✎', fn: () => noteSheet(x, own) },
     /* Move to tomorrow, and Cancel it or Put it back, are Journal.menuItems
        in shared/journal.js, so LOG and QUESTS offer the same ones in the same
@@ -3984,7 +3986,7 @@ function drawFood(m) {
        what I ate" and "change what this food is" are genuinely different, and
        one of them rewrites history. */
     r.onclick = () => mealSheet(x, d);
-    Mobile.hold(r, () => mealMenu(x, d), { skip: '.x' });
+    Mobile.hold(r, e => mealMenu(x, d, e), { skip: '.x' });
     c2.appendChild(r);
   });
   const b = el('button', 'btn go wide', 'Log food');
@@ -4023,7 +4025,7 @@ function drawMoney(m) {
     r.onclick = () => spendSheet(Object.assign({ date: d }, s));
     /* Tap edits it. Hold asks what else — the same split as a logged meal, so
        the gesture means one thing across the app rather than one per screen. */
-    Mobile.hold(r, () => UI.menu(0, 0, [
+    Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, [
       { label: 'Edit', icon: '✎', fn: () => spendSheet(Object.assign({ date: d }, s)) },
       s.viaMeal ? { label: 'Not paid for today', note: 'Keeps the meal, drops the payment', icon: '⊘', fn: () => {
         const m = Rec.get('meal', d, s.viaMeal);
@@ -4615,6 +4617,61 @@ function rankBadge(date) {
   return w;
 }
 
+/* ── a good day ──
+   Tom, 2026-09-15, picking it from three: a strong day from the last one to
+   three months, with what was written that day. DOCTRINE's positive psychology
+   note: nothing in the suite ever brought back what went well, and a good day
+   from a month ago costs one query. It sits on Report for when it is looked
+   for, never pops up, and says what happened without praising it. The five
+   best days of weeks 2 to 13 take turns. */
+let goodPick = 0;
+function goodDays() {
+  const t = Day.today(), out = [];
+  for (let i = 14; i <= 92; i++) {
+    const d = Day.shift(t, -i), s = scoreFor(d);
+    /* B or better: the best of a thin month can be a C, and a C is not a good day */
+    if (s && s.pct != null && s.rank && rankIndex(s.rank.k) <= rankIndex('B')) out.push({ d: d, s: s });
+  }
+  return out.sort((a, b) => b.s.pct - a.s.pct || (a.d < b.d ? 1 : -1)).slice(0, 5);
+}
+function goodDayCard() {
+  const list = goodDays();
+  if (!list.length) return null;
+  const g = list[goodPick % list.length];
+  const ago = Day.diff(Day.today(), g.d);
+  const c = card('A GOOD DAY', Day.label(g.d) + ', ' + Math.round(ago / 7) + ' weeks ago');
+  const col = rankColour(g.s.rank.k);
+  const head = el('div', 'rankrow');
+  head.innerHTML =
+    '<div class="rankmark" style="color:' + col + ';border-color:' + col + '">' + g.s.rank.k + '</div>' +
+    '<div class="rankside"><div class="hero">' + g.s.pct + '<span class="u">%</span></div></div>';
+  c.appendChild(head);
+  /* what was written: entries, events, ideas and what got done, not what was
+     only meant to happen */
+  const lines = notes(g.d).filter(x => !x.cancelled && !x.movedAway && (x.kind !== 'todo' || x.done));
+  if (lines.length) {
+    lines.slice(0, 8).forEach(x => {
+      const r = el('div', 'mb-bullet' + (x.done ? ' done' : ''));
+      r.innerHTML = '<span class="tx">' + Journal.textHTML(x, g.d) + '</span>';
+      c.appendChild(r);
+    });
+    if (lines.length > 8) c.appendChild(el('div', 'note', 'and ' + (lines.length - 8) + ' more'));
+  } else {
+    c.appendChild(el('div', 'note', 'Nothing written that day.'));
+  }
+  const bar = el('div', 'btns');
+  const open = el('button', 'btn mb-press mb-tap', 'OPEN THE DAY');
+  open.onclick = () => { Mobile.feedback('open'); daySheet(g.d); };
+  bar.appendChild(open);
+  if (list.length > 1) {
+    const next = el('button', 'btn mb-press mb-tap', 'ANOTHER');
+    next.onclick = () => { goodPick++; Mobile.feedback('select'); draw(); };
+    bar.appendChild(next);
+  }
+  c.appendChild(bar);
+  return c;
+}
+
 /* ── the full working, on Trends ── */
 function rankCard() {
   const days = num(S.get('rankDays', 7), 7) || 7;
@@ -4901,6 +4958,8 @@ function drawTrends(m) {
   /* The rank goes first: it is the answer to "how am I doing", and everything
      under it is the working. */
   m.appendChild(rankCard());
+  const good = goodDayCard();
+  if (good) m.appendChild(good);
   const e = TD.estimate();
   const c = card('TDEE', e.basis === 'measured' ? 'measured' : 'starting estimate');
   if (e.tdee == null) {
@@ -5376,7 +5435,9 @@ function fieldRow(pane, label, key, val, hint) {
 
 function openSettings() {
   UI.settings(APP.id, [
-    { id: 'quests', name: 'QUESTS', draw: drawQuestsTab },
+    /* It holds what each letter needs, so it says so. The id stays `quests`,
+       which drawSettingsPane and the tab order use. Tom, 2026-09-15. */
+    { id: 'quests', name: 'GRADES', draw: drawQuestsTab },
     { id: 'track', name: 'TRACK', draw: drawTrackTab },
     { id: 'goals', name: 'GOALS', draw: drawGoalsTab },
   ], {
@@ -5617,7 +5678,7 @@ function drawTrackTab(pane) {
     x.onclick = e => { e.stopPropagation(); removeAcct(a); };
     r.appendChild(x);
     r.onclick = () => renameAcct(a);
-    Mobile.hold(r, () => UI.menu(0, 0, [
+    Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, [
       { label: 'Rename', icon: '✎', fn: () => renameAcct(a) },
       i > 0 ? { label: 'Move up', icon: '↑', fn: () => moveAcct(i, -1) } : null,
       i < all.length - 1 ? { label: 'Move down', icon: '↓', fn: () => moveAcct(i, 1) } : null,
@@ -6275,32 +6336,36 @@ function drawGoalsTab(pane) {
   pane.appendChild(el('div', 'note',
     'Blank fits the data'));
 
-  pane.appendChild(el('label', 'fl', 'The estimator'));
-  pane.appendChild(el('div', 'note', 'Backtest before changing these'));
-  fieldRow(pane, 'Half-life (days)', 'halfLife', S.get('halfLife', 21), 'How fast old data stops counting');
-  fieldRow(pane, 'Adaptation rate', 'alpha', TD.alpha(), 'How far the estimate moves toward each new reading');
-  fieldRow(pane, 'Trend window (days)', 'win', TD.win(), 'How far back the weight trend line looks');
+  /* The estimator's own numbers, folded away. Tom, 2026-09-15: settings a
+     client opens are intuitive and never overwhelming, and "Brake (kcal)" is
+     neither. All of it is still here for whoever opens the fold. */
+  pane.appendChild(UI.more('The estimator', box => {
+    box.appendChild(el('div', 'note', 'Backtest before changing these'));
+    fieldRow(box, 'Half-life (days)', 'halfLife', S.get('halfLife', 21), 'How fast old data stops counting');
+    fieldRow(box, 'Adaptation rate', 'alpha', TD.alpha(), 'How far the estimate moves toward each new reading');
+    fieldRow(box, 'Trend window (days)', 'win', TD.win(), 'How far back the weight trend line looks');
 
-  /* "History read" used to be here. It is on the weight chart on Trends now,
-     which is the only place anybody wants it, and it is the same setting
-     rather than a second one. */
+    /* "History read" used to be here. It is on the weight chart on Trends now,
+       which is the only place anybody wants it, and it is the same setting
+       rather than a second one. */
 
-  /* Still stated per pound, because that is what the number IS and changing
-     its meaning per user would make one saved setting mean two things. What it
-     says underneath is the sum she will actually see. */
-  fieldRow(pane, 'Starting guess (kcal per lb)', 'perLb', TD.perLb(),
-    TD.lbPer() === 1 ? 'Before there is data: weight × this'
-      : 'Before there is data. You log in ' + esc(TD.unit()) + ', so that is weight × ' + r1(TD.perUnit()));
-  fieldRow(pane, 'Brake (kcal)', 'guard', TD.guard(), 'The most one update may move the estimate');
+    /* Still stated per pound, because that is what the number IS and changing
+       its meaning per user would make one saved setting mean two things. What it
+       says underneath is the sum she will actually see. */
+    fieldRow(box, 'Starting guess (kcal per lb)', 'perLb', TD.perLb(),
+      TD.lbPer() === 1 ? 'Before there is data: weight × this'
+        : 'Before there is data. You log in ' + esc(TD.unit()) + ', so that is weight × ' + r1(TD.perUnit()));
+    fieldRow(box, 'Brake (kcal)', 'guard', TD.guard(), 'The most one update may move the estimate');
 
-  const bt = el('button', 'btn wide', 'Backtest the settings');
-  bt.style.marginTop = 'var(--s-3)';
-  bt.onclick = () => runBacktest();
-  pane.appendChild(bt);
+    const bt = el('button', 'btn wide', 'Backtest the settings');
+    bt.style.marginTop = 'var(--s-3)';
+    bt.onclick = () => runBacktest();
+    box.appendChild(bt);
 
-  const rc = el('button', 'btn wide quiet', 'Recalculate from scratch');
-  rc.onclick = () => { S.set('tdeeState', null); TD._dirty = true; TD.tick(); draw(); drawSettingsPane('goals'); UI.toast('Recalculated'); };
-  pane.appendChild(rc);
+    const rc = el('button', 'btn wide quiet', 'Recalculate from scratch');
+    rc.onclick = () => { S.set('tdeeState', null); TD._dirty = true; TD.tick(); draw(); drawSettingsPane('goals'); UI.toast('Recalculated'); };
+    box.appendChild(rc);
+  }, 'status-estimator'));
 }
 
 /* score the current settings against history, then sweep for better ones */
@@ -6505,6 +6570,9 @@ function drawSettingsPane(which) {
   pane.innerHTML = '';
   if (which === 'track') drawTrackTab(pane);
   else if (which === 'goals') drawGoalsTab(pane);
+  /* Missing until 2026-09-15, so choosing how a calorie miss counts or the
+     sessions a week redrew the grades tab as the sheet setup. */
+  else if (which === 'quests') drawQuestsTab(pane);
   else drawSyncTab(pane);
 }
 

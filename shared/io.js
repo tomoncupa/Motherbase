@@ -1259,6 +1259,11 @@ const IO = {
        So the LINE is repainted, not the pane. It is one text node that owns no
        handlers, so rewriting it cannot pull the ground out from under the
        button that asked for it. */
+    /* Export, import, sync, and nothing else. Tom, 2026-09-15: "simply the
+       data screen. Export, import, Sync - Then Build from there when
+       relevant". Rewind and Delete this app's data came off the screen;
+       IO.restore(bag, 'replace') and Rec.clear are still there to put back. */
+    pane.appendChild(el('div', 'mb-group', 'EXPORT'));
     const fresh = el('p', null, IO.freshLine(appId));
     pane.appendChild(fresh);
     const repaint = () => { try { fresh.innerHTML = IO.freshLine(appId); } catch (e) {} };
@@ -1270,24 +1275,16 @@ const IO = {
     };
 
     opt('⭳', 'Back up', 'The file that can be restored.', () => IO.backup(appId).then(repaint));
+    opt('▦', 'Export a spreadsheet', 'Every tab, readable, and it restores too.', () => IO.export(appId));
+    opt('▤', 'Export one tab as CSV', 'Works with no internet. Pick which.', () => IO.exportCsv(appId));
+
+    pane.appendChild(el('div', 'mb-group', 'IMPORT'));
     opt('⭱', 'Restore', 'From a backup or an exported spreadsheet. Fills in what is missing, never overwrites newer.',
       () => IO.pick(f => IO.readAny(f).then(bag => {
         const c = IO.restore(bag, 'merge');
         toast(c ? '<b>' + c + '</b> rows restored' : 'nothing to restore — this device is already up to date');
         repaint();   /* the row count moved even when the backup date did not */
       }).catch(e => toast(esc(e.message), { bad: true }))));
-    opt('⟲', 'Rewind', 'Replaces everything with the file. Discards anything newer.',
-      () => IO.pick(f => IO.readAny(f).then(bag =>
-        (g.UI ? g.UI.confirm('Rewind to the backup from ' + (bag.at || '?') + '?', 'Anything newer than the file is discarded.', { yes: 'REWIND', danger: true }) : Promise.resolve(confirm('Rewind?')))
-          .then(ok => { if (!ok) return; const c = IO.restore(bag, 'replace'); toast('<b>' + c + '</b> rows restored'); repaint(); })
-      ).catch(e => toast(esc(e.message), { bad: true }))), 'bad');
-
-    opt('▦', 'Export a spreadsheet', 'Every tab, readable, and it restores too.', () => IO.export(appId));
-    opt('▤', 'Export one tab as CSV', 'Works with no internet. Pick which.', () => IO.exportCsv(appId));
-
-    opt('⌫', 'Delete this app’s data', 'Ticks and activities are shared and stay.',
-      () => (g.UI ? g.UI.confirm('Delete all of ' + IO.spec(appId).name + '’s data?', 'Back up first. This cannot be undone.', { yes: 'DELETE', danger: true }) : Promise.resolve(confirm('Delete?')))
-        .then(ok => { if (!ok) return; const c = g.Rec.clear(IO.spec(appId).types); toast('<b>' + c + '</b> rows deleted'); repaint(); }), 'bad');
   },
 
   /* ── the sheet, as one app sees it ──
@@ -1300,7 +1297,7 @@ const IO = {
     const M = IO.mirror;
     if (!M) return;
     const cfg = M.adopt(appId);
-    pane.appendChild(el('div', 'mb-group', 'GOOGLE SHEET'));
+    pane.appendChild(el('div', 'mb-group', 'SYNC'));
     const line = el('p');
     const say = () => {
       const c = M.settings;

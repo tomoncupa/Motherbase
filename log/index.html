@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.6, 2026-09-15">
+<meta name="mb-version" content="1.0.7, 2026-09-15">
 <title>LOG</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▤</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -1375,6 +1375,22 @@ function viewsMenu(e) {
 }
 $('levels').addEventListener('contextmenu', e => { e.preventDefault(); viewsMenu(e); });
 Mobile.hold($('levels'), e => { if (e.type !== 'contextmenu' && e.pointerType !== 'mouse') viewsMenu(e); });
+/* The rest of the header had nothing on a right click. Tom, 2026-09-15:
+   "header right click in LOG no functionality." Everything the header does,
+   in one menu. The view strip keeps its own. */
+document.querySelector('header').addEventListener('contextmenu', e => {
+  if (e.target.closest('#levels, #bar')) return;
+  e.preventDefault();
+  UI.menu(e.clientX, e.clientY, [
+    { label: 'Go to today', fn: toToday },
+    { label: 'Add a bullet', fn: () => noteDialog({}, addTarget()) },
+    { label: 'Filters', fn: () => openFilters(true) },
+    { label: 'Choose views', fn: () => viewsMenu(e) },
+    { label: 'Show or hide columns', fn: columnsDialog },
+    '-',
+    { label: 'Settings', fn: openSettings },
+  ], { title: 'LOG' });
+});
 
 /* ══════════════════════ COLUMNS ══════════════════════
    Tom, 2026-09-13: "Right click functionality to hide and show columns ala
@@ -1520,16 +1536,9 @@ function drawLogSettings(pane) {
   sel.onchange = () => S.set('open', sel.value);
   grp.appendChild(UI.row('Opens on', 'The view LOG starts in', sel));
 
-  const views = opts();
-  LEVELS.forEach((l, i) => views.appendChild(toggleEl(l.name, viewOn(i), () => toggleView(l.id))));
-  grp.appendChild(UI.row('Views', 'Which views the strip offers', views));
-
-  const first = firstRecord();
-  const di = document.createElement('input');
-  di.type = 'date'; di.className = 'mb-input'; di.max = TODAY;
-  di.value = S.get('start', '') || '';
-  di.onchange = () => { S.set('start', di.value && di.value <= TODAY ? di.value : ''); touched = false; };
-  grp.appendChild(UI.row('Timeline starts', 'Blank starts at your first record, ' + Day.label(first) + ' ' + first.slice(0, 4), di));
+  grp.appendChild(UI.row('Text size', 'Dates, bullets and blocks',
+    UI.segmented([{ id: 'normal', name: 'Normal' }, { id: 'large', name: 'Large' }, { id: 'larger', name: 'Larger' }],
+      S.get('text', 'large'), v => { S.set('text', v); applyText(); measure(); applySizes(); })));
 
   /* Moved here from the filter bar. Tom, 2026-09-13: "Move caffeine, mood,
      energy to settings." */
@@ -1542,43 +1551,56 @@ function drawLogSettings(pane) {
   xKeys().forEach(k => xs.appendChild(toggleEl(colName(k), isXOn(k), () => toggleX(k))));
   grp.appendChild(UI.row('Day columns', 'Your STATUS entries beside the days, in every view', xs));
 
-  const side = opts();
-  LEVELS.filter(l => l.cols.length).forEach(l => {
-    const line = UI.el('div', 'line');
-    line.appendChild(UI.el('span', 'k', l.name));
-    l.cols.forEach(k => line.appendChild(toggleEl(COL_NAMES[k], hiddenSide(l.id).indexOf(k) < 0, () => toggleSide(l.id, k))));
-    side.appendChild(line);
-  });
-  grp.appendChild(UI.row('Side columns', 'The bigger units shown in each view', side));
+  /* The rest, folded away. Tom, 2026-09-15: settings are intuitive and never
+     overwhelming. Opens on, text size, the day graph and the day columns are
+     what gets changed; everything else here is set once. */
+  grp.appendChild(UI.more('More', box => {
+    const views = opts();
+    LEVELS.forEach((l, i) => views.appendChild(toggleEl(l.name, viewOn(i), () => toggleView(l.id))));
+    box.appendChild(UI.row('Views', 'Which views the strip offers', views));
 
-  /* What each day is called, with today's name shown as it will read. */
-  const labels = opts(), preview = UI.el('div', 'line k');
-  const showPreview = () => { preview.textContent = 'Today reads: ' + dayLabel(TODAY); };
-  LABEL_PARTS.forEach(pt => labels.appendChild(toggleEl(pt.name, labelParts().indexOf(pt.id) > -1, on => {
-    setInList('dlabel', LABEL_PARTS.map(p => p.id), labelParts(), pt.id, on);
+    const first = firstRecord();
+    const di = document.createElement('input');
+    di.type = 'date'; di.className = 'mb-input'; di.max = TODAY;
+    di.value = S.get('start', '') || '';
+    di.onchange = () => { S.set('start', di.value && di.value <= TODAY ? di.value : ''); touched = false; };
+    box.appendChild(UI.row('Timeline starts', 'Blank starts at your first record, ' + Day.label(first) + ' ' + first.slice(0, 4), di));
+
+    const side = opts();
+    LEVELS.filter(l => l.cols.length).forEach(l => {
+      const line = UI.el('div', 'line');
+      /* "In Month" rather than "Month", or the list read Week, Weeks, Weeks */
+      line.appendChild(UI.el('span', 'k', 'In ' + l.name));
+      l.cols.forEach(k => line.appendChild(toggleEl(COL_NAMES[k], hiddenSide(l.id).indexOf(k) < 0, () => toggleSide(l.id, k))));
+      side.appendChild(line);
+    });
+    box.appendChild(UI.row('Side columns', 'The bigger units shown beside each view', side));
+
+    /* What each day is called, with today's name shown as it will read. */
+    const labels = opts(), preview = UI.el('div', 'line k');
+    const showPreview = () => { preview.textContent = 'Today reads: ' + dayLabel(TODAY); };
+    LABEL_PARTS.forEach(pt => labels.appendChild(toggleEl(pt.name, labelParts().indexOf(pt.id) > -1, on => {
+      setInList('dlabel', LABEL_PARTS.map(p => p.id), labelParts(), pt.id, on);
+      showPreview();
+    })));
+    labels.appendChild(toggleEl('Out of', labelTotals(), on => { S.set('dltot', !!on); showPreview(); }));
+    labels.appendChild(preview);
     showPreview();
-  })));
-  labels.appendChild(toggleEl('Out of', labelTotals(), on => { S.set('dltot', !!on); showPreview(); }));
-  labels.appendChild(preview);
-  showPreview();
-  grp.appendChild(UI.row('Day label', 'The parts each day is named with', labels));
+    box.appendChild(UI.row('Day label', 'The parts each day is named with', labels));
 
-  grp.appendChild(UI.row('Weeks of the year', 'January 1 in sevens, or Monday to Sunday',
-    UI.segmented([{ id: 'jan1', name: 'From January 1' }, { id: 'iso', name: 'Monday start' }], weekMode(),
-      v => { S.set('wkmode', v); showPreview(); })));
+    box.appendChild(UI.row('Weeks of the year', 'January 1 in sevens, or Monday to Sunday',
+      UI.segmented([{ id: 'jan1', name: 'From January 1' }, { id: 'iso', name: 'Monday start' }], weekMode(),
+        v => { S.set('wkmode', v); showPreview(); })));
 
-  grp.appendChild(UI.row('Text size', 'Dates, bullets and blocks',
-    UI.segmented([{ id: 'normal', name: 'Normal' }, { id: 'large', name: 'Large' }, { id: 'larger', name: 'Larger' }],
-      S.get('text', 'large'), v => { S.set('text', v); applyText(); measure(); applySizes(); })));
+    const ci = UI.field('decimal', { value: cafTop() });
+    ci.onchange = () => S.set('caftop', Math.max(50, Math.round(+ci.value) || 400));
+    box.appendChild(UI.row('Caffeine scale', 'Milligrams at the top of a day’s graph', ci));
 
-  const ci = UI.field('decimal', { value: cafTop() });
-  ci.onchange = () => S.set('caftop', Math.max(50, Math.round(+ci.value) || 400));
-  grp.appendChild(UI.row('Caffeine scale', 'Milligrams at the top of a day’s graph', ci));
-
-  const rb = UI.el('button', 'mb-btn mb-press mb-tap', 'RESET');
-  rb.type = 'button';
-  rb.onclick = () => { S.set('colw', {}); applyColW(); applySizes(); UI.toast('Column widths reset'); };
-  grp.appendChild(UI.row('Column widths', 'Back to the starting widths', rb));
+    const rb = UI.el('button', 'mb-btn mb-press mb-tap', 'RESET');
+    rb.type = 'button';
+    rb.onclick = () => { S.set('colw', {}); applyColW(); applySizes(); UI.toast('Column widths reset'); };
+    box.appendChild(UI.row('Column widths', 'Back to the starting widths', rb));
+  }, 'log-more'));
 
   pane.appendChild(grp);
 }

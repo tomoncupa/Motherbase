@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.1, 2026-09-15">
+<meta name="mb-version" content="1.0.2, 2026-09-15">
 <!-- The browser was serving a STYLE from eight commits ago, and there is no
      way to tell by looking: an old theme is still a theme. This stops the page
      itself being cached, so from the first fresh load onwards what is on
@@ -2056,29 +2056,50 @@ example + '\n';
 
 /* ---- which app wears what ----
    The theme is chosen per app on purpose, so ARC can be Doodle while BLOCK is
-   Ice. This is the one place you can see all of them at once. */
+   Ice. Tom, 2026-09-15: themes are picked in STYLE and nowhere else, and each
+   app's settings are down to its data. So this one screen holds every app's
+   theme and sound. BLOCK makes its own sounds and keeps them in its settings. */
 const SUITE = [
-  ['home', 'HOME'], ['arc', 'ARC'], ['block', 'BLOCK'],
-  ['form', 'FORM'], ['status', 'STATUS'], ['train', 'TRAIN'], ['style', 'STYLE'],
+  ['home', 'MAIN MENU'], ['block', 'BLOCK'], ['status', 'STATUS'], ['log', 'LOG'],
+  ['quest', 'QUESTS'], ['train', 'TRAIN'], ['checkin', 'CHECK IN'], ['style', 'STYLE'],
+  ['arc', 'ARC'], ['wealth', 'WEALTH'], ['form', 'FORM'], ['portion', 'FOODDÉX'],
 ];
 function assignApps() {
   UI.dialog({
-    title: 'WHICH APP WEARS WHAT', width: 460,
+    title: 'EACH APP', width: 540,
     body: b => {
       const list = Skins.list();
       b.innerHTML = '<p class="note" style="margin-bottom:var(--s-3)">Each app keeps its own '
-        + 'theme. ARC still carries its own copy of the theme engine, so it will '
-        + 'ignore this until that is changed.</p>';
+        + 'theme and sound. An app picks up a change the next time it opens.</p>';
       SUITE.forEach(([id, nm]) => {
         const cur = localStorage.getItem('suite_skin.' + id) || '';
+        const snd = Sfx.forApp ? Sfx.forApp(id) : {};
         const row = document.createElement('div');
         row.className = 'fld';
-        row.innerHTML = '<label>' + nm + '</label><select data-app="' + id + '">'
-          + '<option value="">(first theme)</option>'
+        row.innerHTML = '<label>' + esc(nm) + '</label>'
+          + '<div style="display:flex;gap:var(--s-2)">'
+          + '<select class="mb-sel" data-app="' + id + '" aria-label="' + esc(nm) + ' theme" style="flex:1;min-width:0">'
+          + '<option value="">Default (' + esc(list[0].name) + ')</option>'
           + list.map(s => '<option value="' + esc(s.id) + '"' + (s.id === cur ? ' selected' : '') + '>'
               + esc(s.name) + '</option>').join('')
-          + '</select>';
-        row.querySelector('select').onchange = e => {
+          + '</select>'
+          + (id === 'block' || !Sfx.forApp ? '' :
+            '<select class="mb-sel" data-sound="' + id + '" aria-label="' + esc(nm) + ' sound" style="flex:1;min-width:0">'
+            + '<option value="">Default sound</option>'
+            + '<option value="__off"' + (snd.mute ? ' selected' : '') + '>No sound</option>'
+            + Sfx.PACKS.map(p => '<option value="' + esc(p.id) + '"'
+                + (!snd.mute && snd.pack === p.id ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('')
+            + '</select>')
+          + '</div>';
+        const ss = row.querySelector('[data-sound]');
+        if (ss) ss.onchange = () => {
+          const v = ss.value;
+          Sfx.forApp(id, v === '__off' ? { mute: true } : { mute: false, pack: v || undefined });
+          if (id === APP.id && v !== '__off') Sfx.play('done');
+          UI.toast(nm + (v === '__off' ? ' makes no sound'
+            : ' sounds like <b>' + esc(v ? Sfx.PACKS.filter(p => p.id === v)[0].name : 'the default') + '</b>'));
+        };
+        row.querySelector('[data-app]').onchange = e => {
           const v = e.target.value;
           if (v) localStorage.setItem('suite_skin.' + id, v);
           else localStorage.removeItem('suite_skin.' + id);

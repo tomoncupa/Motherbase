@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.2, 2026-09-15">
+<meta name="mb-version" content="1.0.3, 2026-09-15">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='28' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='55' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='16' y='34' width='68' height='46' rx='9' fill='%237EE8FA'/></svg>">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -5047,11 +5047,13 @@ function selfTest() {
     });
     ok('settings apply without a Save button', () => {
       const keep = S.doneRoutines;
-      setTab = 'board'; openSettings();
-      const n = $('#sDone'); if (!n) { closeModal(); return 'no control'; }
+      const h = openSettings();
+      const row = [...document.querySelectorAll('.mb-sheet .mb-row')].find(r => /A routine fully ticked/.test(r.textContent));
+      const n = row && row.querySelector('select');
+      if (!n) { if (h) h.close(); return 'no control'; }
       n.value = 'hide'; n.onchange();
       const applied = S.doneRoutines === 'hide';
-      S.doneRoutines = keep; closeModal(); setTab = 'general';
+      S.doneRoutines = keep; save(); render(); if (h) h.close();
       return applied || 'not applied';
     });
     ok('multi-select: ctrl-click selects, bulk menu opens', () => {
@@ -5477,107 +5479,99 @@ function tzList() {
   if (!zones.includes(S.tz)) zones = [S.tz].concat(zones);
   return zones;
 }
-let setTab = 'general';
+/* ── settings ──
+   On the shared panel since 2026-09-15, like every other app, instead of a
+   modal of its own that looked like nothing else. Tom: "Block yes". BLOCK's
+   own tab, an EXPORT tab for the calendar file and Todoist, and the suite's
+   DATA tab. Its theme is picked in STYLE. BLOCK's sounds are its own synth,
+   so they stay here. The self-test and the resets are folded under More.
+   Everything applies as it is touched; there is no Save to forget. */
 function openSettings() {
-  const tabs = [['general', 'General'], ['board', 'Board'], ['sound', 'Sound'], ['export', 'Calendar + Todoist'], ['data', 'Data']];
-  const sel = (id, opts, val) => '<select id="' + id + '">' + opts.map(([v, l]) =>
-    '<option value="' + esc(v) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + esc(l) + '</option>').join('') + '</select>';
-  const chk = (id, on) => '<input type="checkbox" id="' + id + '" ' + (on ? 'checked' : '') + '>';
-
-  let body = '';
-  if (setTab === 'general') {
-    body = '<div class="set">' +
-      '<label>What this is called<span>Used as the calendar name on export</span></label><input type="text" id="sCal" value="' + esc(S.calName) + '">' +
-      '<label>Timezone<span>Times are written as local wall-clock in this zone</span></label>' +
-      sel('sTz', tzList().map(z => [z, z]), S.tz) +
-      '<label>Clock<span></span></label>' + sel('sH24', [['0', '12-hour — 6:30am'], ['1', '24-hour — 06:30']], S.h24 ? '1' : '0') +
-      '<label>Week starts on<span>Also sets the order of the Week tab</span></label>' +
-      sel('sWS', [['today', 'Today (rolling 7 days)'], ['0', 'Sunday'], ['1', 'Monday'], ['6', 'Saturday']], S.weekStart) +
-      '</div>';
-  } else if (setTab === 'board') {
-    body = '<div class="set">' +
-      '<label>Buffer between blocks<span>Dead time inserted after every block</span></label><input type="number" id="sGap" min="0" max="60" step="5" value="' + S.gap + '">' +
-      '<label>When a routine is fully ticked<span></span></label>' +
-      sel('sDone', [['stay', 'Leave it where it is'], ['right', 'Slide it to the far right'], ['hide', 'Hide it until tomorrow']], S.doneRoutines) +
-      '<label>Fit blocks to their length<span>Draw an hour as an hour, scaled to fit without scrolling</span></label>' + chk('sProp', S.proportional) +
-      '<label>Moving “now” line<span>A red line at the current minute, only in routines it passes through</span></label>' + chk('sNow', S.nowline) +
-      '<label>Keep finished blocks in the Week tab<span>Off hides them as you tick</span></label>' + chk('sKeep', S.keepDone) +
-      '</div>';
-  } else if (setTab === 'sound') {
-    body = '<div class="set">' +
-      '<label>Sounds<span>Synthesised in the browser — no files, no network</span></label>' + chk('sSnd', S.sound) +
-      '<label>Sound set<span>Ticks rise in pitch as you get closer to finishing</span></label>' +
-      sel('sTheme', Object.keys(THEMES).map(k => [k, THEMES[k].name]), S.soundTheme) +
-      '<label>Volume<span></span></label><input type="range" id="sVol" min="0" max="1" step="0.05" value="' + (S.volume == null ? .6 : S.volume) + '">' +
-      '</div>' +
-      '<div class="row"><button class="btn" id="tTick" data-icon="play">Hear a tick</button><button class="btn" id="tDone" data-icon="play">Hear a finished day</button></div>' +
-      '<div class="hint" style="margin-top:12px">The tick climbs a pentatonic scale as your list empties, so the last one of the day sounds like the last one. Finishing everything plays a short fanfare.</div>';
-  } else if (setTab === 'export') {
-    body = '<div class="set">' +
-      '<label>Todoist project tag<span>Appended as #Tag on quick-add lines</span></label><input type="text" id="sProj" value="' + esc(S.tdProject) + '">' +
-      '<label>Todoist priority for blocks with no P<span>4 = urgent, 1 = normal</span></label><input type="number" id="sPri" min="1" max="4" value="' + S.tdPriority + '">' +
-      '<label>Default export scope<span></span></label>' +
-      sel('sScope', [['variant', 'Just the open day'], ['week', 'The whole week']], S.exportScope) +
-      '</div>' +
-      '<div class="row"><button class="btn acc" id="goExport" data-icon="next" data-icon-after>Open export</button><button class="btn" id="goPrint" data-icon="next" data-icon-after>Print / client sheet</button></div>';
-  } else {
-    const days = Object.keys(S.log || {}).length;
-    const blocks = S.variants.reduce((a, v) => a + S.lanes.reduce((b, l) => b + ((v.items[l.id] || []).length), 0), 0);
-    body = '<div class="hint">' + S.variants.length + ' days · ' + S.lanes.length + ' routines · ' + blocks + ' blocks · ' +
-      S.lib.length + ' in the bin · ' + S.templates.length + ' templates · ' + days + ' days of history</div>' +
-      '<div class="row"><button class="btn acc" id="sBackup">⤓ Backup everything</button><button class="btn" id="sTest">Run self-test</button></div>' +
-      '<div class="row"><button class="btn" id="sClear">Reset today’s ticks</button>' +
-      '<button class="btn" id="sWipeLog">Clear history</button>' +
-      '<button class="btn" id="sReset" style="color:var(--bad)">Reset everything</button></div>' +
-      '<div class="hint" style="margin-top:12px">Everything lives in this browser. The backup is a single JSON file you can restore on another machine from <b>Export → Backup</b>.</div>';
-  }
-
-  openModal(
-    '<div class="modal-head"><h3>SETTINGS</h3><button class="btn sm" id="mX" aria-label="Close" data-icon="close"></button></div>' +
-    '<div class="mtabs">' + tabs.map(([k, l]) => '<button class="mtab' + (k === setTab ? ' on' : '') + '" data-k="' + k + '">' + l + '</button>').join('') + '</div>' +
-    '<div class="modal-body">' + body +
-    /* which version of BLOCK this is, the line every app's settings end with */
-    ((window.UI && UI.version()) ? '<p style="color:var(--text-muted);font-size:var(--f-1);margin-top:var(--s-5)">BLOCK ' +
-      UI.version().v + (UI.version().dateText ? ', updated ' + UI.version().dateText : '') + '</p>' : '') + '</div>'
-  );
-  $('#mX').onclick = closeModal;
-  $('#modal').querySelectorAll('.mtab').forEach(b => b.onclick = () => { saveSettings(); setTab = b.dataset.k; openSettings(); });
-
-  const on = (id, fn) => { const n = $(id); if (n) n.onclick = fn; };
-  on('#tTick', () => { saveSettings(); beep('done'); });
-  on('#tDone', () => { saveSettings(); beep('complete'); });
-  on('#goExport', () => { saveSettings(); closeModal(); openExport(); });
-  on('#goPrint', ev => { saveSettings(); closeModal(); openPrintMenu(innerWidth / 2 - 100, 120); });
-  on('#sBackup', () => { saveSettings(); closeModal(); expTab = 'json'; openExport(); });
-  on('#sTest', () => { saveSettings(); selfTest(); });
-  on('#sClear', () => { snap(); S.variants.forEach(v => clearDone(v.id)); render(); toast('ticks cleared'); });
-  on('#sWipeLog', () => { if (confirm('Delete the completion history? Your routines stay.')) { snap(); S.log = {}; render(); toast('history cleared'); } });
-  on('#sReset', () => { if (confirm('Wipe all blocks, routines, days, templates and rules?')) { snap(); S = seedState(); closeModal(); render(); } });
-  const vol = $('#sVol'); if (vol) vol.onchange = () => { S.volume = parseFloat(vol.value); beep('done'); };
-  ['#sSnd', '#sTheme', '#sNow', '#sProp', '#sKeep', '#sDone', '#sH24', '#sWS', '#sTz', '#sScope'].forEach(id => {
-    const n = $(id); if (n) n.onchange = () => { saveSettings(); render(); };
-  });
+  return UI.settings('block', [
+    { id: 'block', name: 'BLOCK', draw: drawBlockSettings },
+    { id: 'export', name: 'EXPORT', draw: drawBlockExport },
+  ], { order: ['block', 'export', 'data'] });
 }
-/** settings apply as you touch them — no Save button to forget */
-function saveSettings() {
-  const val = (id, d) => { const n = $(id); return n ? n.value : d; };
-  const on = id => { const n = $(id); return n ? n.checked : null; };
-  if ($('#sCal')) S.calName = val('#sCal', S.calName).trim() || 'Routine';
-  if ($('#sTz')) S.tz = val('#sTz', S.tz);
-  if ($('#sH24')) S.h24 = val('#sH24', '0') === '1';
-  if ($('#sWS')) { const w = val('#sWS', '1'); S.weekStart = w === 'today' ? 'today' : parseInt(w); }
-  if ($('#sGap')) S.gap = clamp(parseInt(val('#sGap', S.gap)) || 0, 0, 60);
-  if ($('#sDone')) S.doneRoutines = val('#sDone', 'stay');
-  if (on('#sProp') != null) S.proportional = on('#sProp');
-  if (on('#sNow') != null) S.nowline = on('#sNow');
-  if (on('#sKeep') != null) S.keepDone = on('#sKeep');
-  if (on('#sSnd') != null) S.sound = on('#sSnd');
-  if ($('#sTheme')) S.soundTheme = val('#sTheme', S.soundTheme);
-  if ($('#sVol')) S.volume = parseFloat(val('#sVol', S.volume));
-  if ($('#sProj')) S.tdProject = val('#sProj', S.tdProject).trim() || 'Routine';
-  if ($('#sPri')) S.tdPriority = clamp(parseInt(val('#sPri', S.tdPriority)) || 1, 1, 4);
-  if ($('#sScope')) S.exportScope = val('#sScope', S.exportScope);
-  save();
+function setSelect(opts, val, onPick) {
+  const s = document.createElement('select');
+  s.className = 'mb-sel';
+  s.innerHTML = opts.map(([v, l]) =>
+    '<option value="' + esc(v) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + esc(l) + '</option>').join('');
+  s.onchange = () => onPick(s.value);
+  return s;
+}
+function drawBlockSettings(pane, h) {
+  const put = (k, v) => { S[k] = v; save(); render(); };
+  const sw = (label, note, k) => pane.appendChild(UI.row(label, note, UI.toggle(!!S[k], v => put(k, v))));
+  pane.appendChild(UI.row('Clock', null,
+    setSelect([['0', '12-hour, 6:30am'], ['1', '24-hour, 06:30']], S.h24 ? '1' : '0', v => put('h24', v === '1'))));
+  pane.appendChild(UI.row('Week starts on', 'Also the order of the Week tab',
+    setSelect([['today', 'Today, a rolling 7 days'], ['0', 'Sunday'], ['1', 'Monday'], ['6', 'Saturday']], S.weekStart,
+      v => put('weekStart', v === 'today' ? 'today' : parseInt(v)))));
+  const gap = UI.field('number', { value: String(S.gap || 0) });
+  gap.style.maxWidth = '6em';
+  gap.onchange = () => put('gap', clamp(parseInt(gap.value) || 0, 0, 60));
+  pane.appendChild(UI.row('Buffer between blocks', 'Minutes of dead time after every block', gap));
+  pane.appendChild(UI.row('A routine fully ticked', null,
+    setSelect([['stay', 'Stays where it is'], ['right', 'Slides to the far right'], ['hide', 'Hides until tomorrow']],
+      S.doneRoutines, v => put('doneRoutines', v))));
+  sw('Fit blocks to their length', 'An hour drawn as an hour', 'proportional');
+  sw('Moving now line', 'A red line at the current minute', 'nowline');
+  sw('Keep finished blocks in the Week tab', 'Off hides them as you tick', 'keepDone');
+
+  pane.appendChild(el('div', 'mb-group', 'SOUND'));
+  sw('Sounds', null, 'sound');
+  pane.appendChild(UI.row('Sound set', 'Ticks rise in pitch as the list empties',
+    setSelect(Object.keys(THEMES).map(k => [k, THEMES[k].name]), S.soundTheme, v => { put('soundTheme', v); beep('done'); })));
+  const vol = document.createElement('input');
+  vol.type = 'range'; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.className = 'mb-range';
+  vol.value = S.volume == null ? 0.6 : S.volume;
+  vol.onchange = () => { S.volume = parseFloat(vol.value); save(); beep('done'); };
+  pane.appendChild(UI.row('Volume', null, vol));
+
+  pane.appendChild(UI.more('More', box => {
+    const blocks = S.variants.reduce((a, v) => a + S.lanes.reduce((b, l) => b + ((v.items[l.id] || []).length), 0), 0);
+    box.appendChild(el('p', 'hint', S.variants.length + ' days · ' + S.lanes.length + ' routines · ' + blocks + ' blocks · ' +
+      S.lib.length + ' in the bin · ' + S.templates.length + ' templates · ' + Object.keys(S.log || {}).length + ' days of history'));
+    const btn = (label, fn, bad) => {
+      const b = el('button', 'mb-btn mb-press mb-tap' + (bad ? ' bad' : ''), esc(label));
+      b.type = 'button';
+      b.style.cssText = 'width:100%;margin-top:var(--s-2)';
+      b.onclick = fn;
+      box.appendChild(b);
+    };
+    btn('Run self-test', () => { h.close(); selfTest(); });
+    btn('Reset today’s ticks', () => { snap(); S.variants.forEach(v => clearDone(v.id)); render(); toast('ticks cleared'); });
+    btn('Clear history', () => { if (confirm('Delete the completion history? Your routines stay.')) { snap(); S.log = {}; render(); toast('history cleared'); } }, true);
+    btn('Reset everything', () => { if (confirm('Wipe all blocks, routines, days, templates and rules?')) { snap(); S = seedState(); h.close(); render(); } }, true);
+  }, 'block-more'));
+}
+function drawBlockExport(pane, h) {
+  const txt = (label, note, k, fallback) => {
+    const f = UI.field('text', { value: S[k] || '' });
+    f.onchange = () => { S[k] = f.value.trim() || fallback; save(); };
+    pane.appendChild(UI.row(label, note, f));
+  };
+  txt('Calendar name', 'What the calendar file is called', 'calName', 'Routine');
+  pane.appendChild(UI.row('Timezone', 'Times are written as clock time in this zone',
+    setSelect(tzList().map(z => [z, z]), S.tz, v => { S.tz = v; save(); })));
+  pane.appendChild(UI.row('Export', null,
+    setSelect([['variant', 'Just the open day'], ['week', 'The whole week']], S.exportScope, v => { S.exportScope = v; save(); })));
+  pane.appendChild(el('div', 'mb-group', 'TODOIST'));
+  txt('Project tag', 'Added as #Tag on each line', 'tdProject', 'Routine');
+  const pri = UI.field('number', { value: String(S.tdPriority || 1) });
+  pri.style.maxWidth = '6em';
+  pri.onchange = () => { S.tdPriority = clamp(parseInt(pri.value) || 1, 1, 4); save(); };
+  pane.appendChild(UI.row('Priority for blocks with none', '4 is urgent, 1 is normal', pri));
+  const go = (label, fn, cls) => {
+    const b = el('button', 'mb-btn mb-press mb-tap' + (cls ? ' ' + cls : ''), esc(label));
+    b.type = 'button';
+    b.style.cssText = 'width:100%;margin-top:var(--s-3)';
+    b.onclick = () => { h.close(); fn(); };
+    pane.appendChild(b);
+  };
+  go('Open export', openExport, 'go');
+  go('Print or a client sheet', () => openPrintMenu(innerWidth / 2 - 100, 120));
 }
 
 /* ============================ wiring ============================ */

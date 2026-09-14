@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.5, 2026-09-15">
+<meta name="mb-version" content="1.0.6, 2026-09-15">
 <title>TRAIN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛭</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -7143,18 +7143,19 @@ TRAIN.settings = function () {
     id: 'train', name: 'TRAIN',
     draw: function (pane) {
       var get = function (key, dflt) { var v = Rec.setting(APP.id, key); return v == null ? dflt : v; };
-      var group = function (name) { var g = UI.el('div', 'mb-group'); g.textContent = name; pane.appendChild(g); };
-      var sw = function (label, note, key, dflt, after) {
-        pane.appendChild(UI.row(label, note, UI.toggle(!!get(key, dflt), function (v) {
+      /* `t` is where a row goes: the tab, or the More fold */
+      var group = function (name, t) { var g = UI.el('div', 'mb-group'); g.textContent = name; (t || pane).appendChild(g); };
+      var sw = function (label, note, key, dflt, after, t) {
+        (t || pane).appendChild(UI.row(label, note, UI.toggle(!!get(key, dflt), function (v) {
           Rec.setting(APP.id, key, v ? 1 : 0);
           if (after) after(v);
         })));
       };
-      var num = function (label, note, key, dflt) {
+      var num = function (label, note, key, dflt, t) {
         var f = UI.field('decimal', { value: String(get(key, dflt)) });
         f.style.maxWidth = '6em';
         f.onchange = function () { var v = parseFloat(f.value); if (!isNaN(v)) Rec.setting(APP.id, key, v); };
-        pane.appendChild(UI.row(label, note, f));
+        (t || pane).appendChild(UI.row(label, note, f));
       };
       var seg = function (label, note, key, items, dflt) {
         pane.appendChild(UI.row(label, note, UI.segmented(items, String(get(key, dflt)), function (v) {
@@ -7186,32 +7187,14 @@ TRAIN.settings = function () {
       group('REST TIMER');
       num('Rest Time', 'Seconds', 'restSeconds', 120);
       sw('Auto Start', 'When a set is saved', 'restAuto', 1);
-      sw('Vibrate', '(Android only)', 'restVibrate', 1);
+      /* Only where a web page can buzz. An iPhone will not let one and a
+         computer has no motor, so there the switch did nothing. */
+      if (navigator.vibrate && window.matchMedia && matchMedia('(pointer: coarse)').matches)
+        sw('Vibrate', 'When the timer is done', 'restVibrate', 1);
       sw('Sound', 'Beep when timer is done', 'restSound', 1);
       var only = UI.el('div', 'empty');
       only.textContent = 'Runs while TRAIN is open. Keep Screen On keeps it open.';
       pane.appendChild(only);
-
-      group('SESSION TIMER');
-      sw('Auto Start', 'On the first set of the day', 'workoutTimerAuto', 1);
-      sw('Auto Stop', 'When the final set is complete', 'workoutTimerStop', 0);
-
-      group('GRAPHS');
-      sw('Graph Points', 'A dot for each session', 'graphPoints', 1);
-      sw('Trend Line', 'A straight line through the points', 'graphTrend', 0);
-      sw('Y-Axis From 0', 'Scale starts at zero', 'graphZero', 0);
-
-      group('PERSONAL RECORDS');
-      num('Estimated 1RM Max Reps', 'Sets above this are left out. 0 uses all', 'e1rmMaxReps', 0);
-      var rc = UI.el('button', 'mb-btn mb-press mb-tap');
-      rc.style.width = '100%';
-      rc.textContent = 'RE-CALCULATE PERSONAL RECORDS';
-      rc.onclick = function () {
-        var n = TRAIN.recomputePRs();
-        draw();
-        UI.toast(n ? n + ' sets re-flagged' : 'Records already correct');
-      };
-      pane.appendChild(rc);
 
       group('GYM');
       var gym = UI.el('button', 'mb-btn mb-press mb-tap');
@@ -7226,26 +7209,52 @@ TRAIN.settings = function () {
       cats.onclick = function () { TRAIN.categoriesDialog(); };
       pane.appendChild(cats);
 
-      group('TRAINING DATA');
-      var dh = UI.el('button', 'mb-btn bad mb-press mb-tap');
-      dh.style.width = '100%';
-      dh.textContent = 'DELETE TRAINING HISTORY';
-      dh.onclick = function () { TRAIN.deleteHistoryDialog(); };
-      pane.appendChild(dh);
+      /* Set once and rarely touched again, so folded away. Tom, 2026-09-15:
+         settings intuitive and never overwhelming, and FitNotes' layout is no
+         longer a rule ("Lets stop with matching fitnotes as a hard rule"). */
+      pane.appendChild(UI.more('More', function (box) {
+        group('SESSION TIMER', box);
+        sw('Auto Start', 'On the first set of the day', 'workoutTimerAuto', 1, null, box);
+        sw('Auto Stop', 'When the final set is complete', 'workoutTimerStop', 0, null, box);
 
-      group('COMING FROM ANOTHER APP');
-      var b = UI.el('button', 'mb-btn mb-press mb-tap');
-      b.style.width = '100%';
-      b.textContent = 'IMPORT A TRAINING LOG';
-      b.onclick = function () { TRAIN.importPanel(); };
-      pane.appendChild(b);
-      var n = UI.el('div', 'empty');
-      n.style.marginTop = 'var(--s-3)';
-      var have = Object.keys(TRAIN.idx.byDate).length;
-      n.textContent = have
-        ? Rec.count('set').toLocaleString() + ' sets across ' + have + ' days. Importing a file twice changes nothing.'
-        : 'Nothing imported.';
-      pane.appendChild(n);
+        group('GRAPHS', box);
+        sw('Graph Points', 'A dot for each session', 'graphPoints', 1, null, box);
+        sw('Trend Line', 'A straight line through the points', 'graphTrend', 0, null, box);
+        sw('Y-Axis From 0', 'Scale starts at zero', 'graphZero', 0, null, box);
+
+        group('PERSONAL RECORDS', box);
+        num('Estimated 1RM Max Reps', 'Sets above this are left out. 0 uses all', 'e1rmMaxReps', 0, box);
+        var rc = UI.el('button', 'mb-btn mb-press mb-tap');
+        rc.style.width = '100%';
+        rc.textContent = 'RE-CALCULATE PERSONAL RECORDS';
+        rc.onclick = function () {
+          var n2 = TRAIN.recomputePRs();
+          draw();
+          UI.toast(n2 ? n2 + ' sets re-flagged' : 'Records already correct');
+        };
+        box.appendChild(rc);
+
+        group('COMING FROM ANOTHER APP', box);
+        var b = UI.el('button', 'mb-btn mb-press mb-tap');
+        b.style.width = '100%';
+        b.textContent = 'IMPORT A TRAINING LOG';
+        b.onclick = function () { TRAIN.importPanel(); };
+        box.appendChild(b);
+        var n = UI.el('div', 'empty');
+        n.style.marginTop = 'var(--s-3)';
+        var have = Object.keys(TRAIN.idx.byDate).length;
+        n.textContent = have
+          ? Rec.count('set').toLocaleString() + ' sets across ' + have + ' days. Importing a file twice changes nothing.'
+          : 'Nothing imported.';
+        box.appendChild(n);
+
+        group('TRAINING DATA', box);
+        var dh = UI.el('button', 'mb-btn bad mb-press mb-tap');
+        dh.style.width = '100%';
+        dh.textContent = 'DELETE TRAINING HISTORY';
+        dh.onclick = function () { TRAIN.deleteHistoryDialog(); };
+        box.appendChild(dh);
+      }, 'train-more'));
     },
   }]);
 };
