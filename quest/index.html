@@ -865,9 +865,12 @@ function rowEl(x, info) {
    BLOCK and on the home screen too. */
 const hm = m => pad(Math.floor(m / 60) % 24) + ':' + pad(m % 60);
 function blockRow(b, d, mins, next) {
-  const s = b.s || 0, end = s + (b.dur || 0), today = d === T();
+  /* A block with no start time is a real thing in BLOCK: a routine set to no
+     set time, or an Every or Anytime habit. It has no clock, so it is never
+     Now, never past, and never drawn at midnight. */
+  const timed = b.s != null, s = b.s || 0, end = s + (b.dur || 0), today = d === T();
   const on = !!(b.actId && Rec.has('tick', d, b.actId));
-  const now = today && mins >= s && mins < end, past = today && mins >= end;
+  const now = timed && today && mins >= s && mins < end, past = timed && today && mins >= end;
   const r = el('div', 'row blk' + (on ? ' done' : '') + (now ? ' now' : '') + (past && !on ? ' past' : ''));
   const tk = el('button', 'tk', '<i></i>');
   tk.setAttribute('aria-label', on ? 'Mark not done' : 'Complete');
@@ -880,7 +883,8 @@ function blockRow(b, d, mins, next) {
   const body = el('div', 'body');
   body.appendChild(el('div', 'tt', esc(b.name)));
   const meta = el('div', 'meta');
-  meta.appendChild(el('span', now ? 'soon' : '', ico('timer') + esc(clock12(hm(s)) + (b.dur ? ' to ' + clock12(hm(end)) : ''))));
+  if (timed) meta.appendChild(el('span', now ? 'soon' : '', ico('timer') + esc(clock12(hm(s)) + (b.dur ? ' to ' + clock12(hm(end)) : ''))));
+  if (b.why) meta.appendChild(el('span', null, esc(b.why)));
   if (now) meta.appendChild(el('span', 'soon', 'Now'));
   else if (next === b) meta.appendChild(el('span', null, 'Next'));
   meta.appendChild(el('span', 'src', 'BLOCK' + (b.lane ? ' · ' + esc(b.lane) : '')));

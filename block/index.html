@@ -431,6 +431,17 @@ main{display:flex;flex:1;min-height:0}
 .rhdots{display:flex;gap:var(--s-1)}
 .rhdots i{width:var(--s-2);height:var(--s-2);border-radius:50%;border:1px solid var(--line2)}
 .rhdots i.on{background:var(--good);border-color:var(--good)}
+/* the Day's column for Every and Anytime: not a routine, so dashed and not draggable */
+.alsoday{flex:0 0 264px;align-self:flex-start;display:flex;flex-direction:column;gap:var(--s-1);
+  padding:var(--s-2);border:1px dashed var(--line);border-radius:var(--radius-sm);background:var(--panel)}
+.also-head{display:flex;flex-direction:column;padding:var(--s-1) var(--s-2) var(--s-2)}
+.also-head b{font-family:var(--f1);letter-spacing:.05em}
+.also-head span{color:var(--text-muted);font-size:var(--f-1)}
+.also-row{display:flex;align-items:center;gap:var(--s-1);min-height:var(--tap);padding-right:var(--s-2);
+  border-left:3px solid var(--c);border-radius:var(--radius-sm);background:var(--surface-1)}
+.also-txt{flex:1;min-width:0;display:flex;flex-direction:column}
+.also-txt .rhs{overflow:hidden;text-overflow:ellipsis}
+.also-row.isdone .rhn{color:var(--text-muted)}
 .sumcards{display:flex;gap:10px;flex-wrap:wrap}
 .freshrow{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;
   margin-top:var(--s-4)}
@@ -636,7 +647,7 @@ footer .sp{flex:1}
 <body>
 <div id="app">
   <header>
-    <div class="logo">BLO<b>CK</b></div>
+    <div class="logo"><span>BLO<b>CK</b></span></div>
     <div class="views">
       <button id="vDay" class="on" data-tip="<b>Day</b> — build one routine out of blocks">Day</button>
       <button id="vWeek" data-tip="<b>Week</b> — which <b>day</b> runs on which weekday">Week</button>
@@ -2572,6 +2583,8 @@ function renderBoard() {
   const b = $('#board'); b.innerHTML = '';
   /* finished routines can stay put, slide to the end, or get out of the way entirely */
   const bcol = viewCol();
+  const also = alsoToday(bcol);
+  if (also) b.appendChild(also);
   const isDoneLane = L => { const a = items(L.id).filter(x => !x.hidden); return a.length > 0 && a.every(x => isDoneOn(x, bcol, L)); };
   let lanes = LANES();
   /* Getting out of the way is about DOING the day, so it only happens on
@@ -3867,6 +3880,54 @@ function rhEdit(r) {
   };
 }
 
+/* ── what Every and Anytime put on one day ──
+   Tom, 2026-09-14, "Build everything", answering whether an owed Every block
+   should also show on the Day. They still live on their own tabs; this reads
+   those tabs for one date, for the Day board and for the published plan:
+   what is owed or due, what is still to do this week, and what was ticked
+   that day. Counted only from ticks up to that day, so a date you step back
+   to reads as it stood then. */
+function rhFor(day, log) {
+  const out = [];
+  rhythms('every').forEach(r => {
+    const s = everyState(r, (log[rhTick(r)] || []).filter(d => d <= day), day);
+    if (s.st === 'owed') out.push({ r: r, done: false, tone: 'owed', why: 'owed since ' + rhDate(s.due) });
+    else if (s.st === 'due') out.push({ r: r, done: false, tone: 'due', why: 'due' });
+    else if (s.st === 'done') out.push({ r: r, done: true, why: 'done, next ' + rhDate(s.next) });
+  });
+  rhythms('anytime').forEach(r => {
+    const s = anytimeState(r, (log[rhTick(r)] || []).filter(d => d <= day), day, S.weekStart);
+    if (s.today || !s.met) out.push({ r: r, done: s.today, why: s.n + ' of ' + s.of + ' this week' });
+  });
+  return out;
+}
+
+/* The column on the Day. Not a routine, so nothing in it drags, and a future
+   date shows none of it: the future is a plan, and these are counted from
+   what was actually done. */
+function alsoToday(col) {
+  if (col.isFuture || !(S.rhythms || []).length) return null;
+  const day = col.key, rows = rhFor(day, rhLog());
+  if (!rows.length) return null;
+  const box = el('div', 'alsoday');
+  box.appendChild(el('div', 'also-head', '<b>Also ' + (col.isToday ? 'today' : 'this day') + '</b><span>from Every and Anytime</span>'));
+  rows.forEach(x => {
+    const row = el('div', 'also-row' + (x.done ? ' isdone' : ''));
+    row.style.setProperty('--c', x.r.color || PAL[0]);
+    const ck = el('button', 'rhck' + (x.done ? ' on' : ''));
+    ck.setAttribute('aria-label', x.done ? 'Untick' : 'Tick');
+    const bx = el('span', 'rhbox');
+    if (x.done) { bx.dataset.icon = 'done'; bx.dataset.iconSize = '12'; }
+    ck.appendChild(bx);
+    ck.onclick = e => { e.stopPropagation(); rhToggle(x.r, day); };
+    row.appendChild(ck);
+    row.appendChild(el('div', 'also-txt', '<span class="rhn">' + esc(x.r.name) + '</span><span class="rhs' + (x.tone ? ' ' + x.tone : '') + '">' + esc(x.why) + '</span>'));
+    row.oncontextmenu = e => { e.preventDefault(); rhMenu(x.r, e.clientX, e.clientY); };
+    box.appendChild(row);
+  });
+  return box;
+}
+
 /* ---------- summary: what the record says about your routine ---------- */
 function renderSum() {
   const p = $('#sum'); p.innerHTML = '';
@@ -5012,6 +5073,25 @@ function selfTest() {
       S.rhythms = []; S.view = 'day'; render();
       return (ticked && moved && unticked) || JSON.stringify({ ticked: ticked, moved: moved, unticked: unticked });
     });
+    ok('day: an owed Every block shows on today, and goes into the plan with no clock', () => {
+      if (!window.LifeOS) return 'skip: the shared tick log did not load';
+      S.rhythms = [{ id: 'zzowed', kind: 'every', name: 'Zz Rhythm Test', n: 1, unit: 'week', from: Day.shift(todayKey(), -3), color: PAL[0] }];
+      S.view = 'day'; S.viewDate = null; render();
+      const col = $('#board .alsoday'), text = col ? col.textContent : '';
+      publishFor(todayKey(), true);
+      const plan = Rec.get('plan', todayKey(), 'routine');
+      const hit = plan && plan.blocks.filter(x => x.name === 'Zz Rhythm Test')[0];
+      S.rhythms = []; render();
+      return (!!col && /owed since/.test(text) && !!hit && hit.s === null && /owed since/.test(hit.why) && hit.actId === LifeOS.slug('Zz Rhythm Test')) ||
+        JSON.stringify({ col: !!col, text: text, hit: hit || null });
+    });
+    ok('day: nothing from Every or Anytime on a future date', () => {
+      S.rhythms = [{ id: 'zzfut', kind: 'anytime', name: 'Zz Rhythm Test', times: 3, color: PAL[0] }];
+      S.view = 'day'; S.viewDate = Day.shift(todayKey(), 2); render();
+      const col = $('#board .alsoday');
+      S.viewDate = null; S.rhythms = []; render();
+      return !col || 'a column was drawn on a future date';
+    });
     ok('anytime tab: right-click on a row opens its menu', () => {
       S.rhythms = [{ id: uid(), kind: 'anytime', name: 'Zz Rhythm Test', times: 2 }]; S.view = 'anytime'; render();
       const row = $('#anytime .rhrow');
@@ -5531,7 +5611,7 @@ const PUBLISH_AHEAD = 14;
    once, fourteen times per render is fourteen reloads of the home screen while
    you are dragging a block around. So the fortnight is written quietly and
    today goes through the shim, which is one poke for the lot. */
-function publishFor(key, quiet) {
+function publishFor(key, quiet, log) {
   const vid = routineForDate(key), d = Day.dow(key);
   const blocks = withVariant(vid, () => S.lanes.flatMap(l =>
     schedule(l.id).filter(r => effDays(lane(l.id), r.it)[d]).map(r => ({
@@ -5544,7 +5624,16 @@ function publishFor(key, quiet) {
       link: r.it.link || '',
       note: r.it.note || '',
     })))).sort((a, b) => a.s - b.s);
-  const plan = { date: key, vid: vid, name: (variant(vid) || {}).name || 'routine', blocks: blocks };
+  /* Every and Anytime ride along at the end, with no clock (`s: null`, which
+     every reader already handles for an untimed routine) and `why`, the few
+     words that say where each one stands. Their tick is the ordinary tick
+     under the name, so ticking one on the home screen or in QUESTS ticks it
+     here. */
+  const extra = rhFor(key, log || rhLog()).map(x => ({
+    id: x.r.id, actId: rhTick(x.r), name: x.r.name, s: null, dur: 0, color: x.r.color || '',
+    lane: x.r.kind === 'every' ? 'Every' : 'Anytime', why: x.why, link: '', note: '',
+  }));
+  const plan = { date: key, vid: vid, name: (variant(vid) || {}).name || 'routine', blocks: blocks.concat(extra) };
   if (quiet) Rec.set('plan', key, 'routine', plan);
   else LifeOS.publishToday(plan);
 }
@@ -5552,8 +5641,9 @@ function publishFor(key, quiet) {
 function publishToday() {
   /* The days ahead first and quietly, then today through the shim, so exactly
      one poke goes out and it goes out after everything is written. */
-  for (let i = 1; i < PUBLISH_AHEAD; i++) publishFor(Day.shift(todayKey(), i), true);
-  publishFor(todayKey());
+  const log = rhLog();
+  for (let i = 1; i < PUBLISH_AHEAD; i++) publishFor(Day.shift(todayKey(), i), true, log);
+  publishFor(todayKey(), false, log);
 }
 /** the shared log is the truth about what got done — mirror it onto the blocks */
 let LIFEOS_OK = true;
