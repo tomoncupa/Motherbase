@@ -245,6 +245,7 @@ An app may read any type. It writes only the types it owns.
 | `activity` | the shared vocabulary | slug of the name | `{name, cat, dur, color}` |
 | `tick` | **shared, every app may write** | activity id | `{src, qty}` |
 | `lane` `item` `routine` | block | | |
+| `rhythm` | **block** | rhythm id | `{kind, name, color, n, unit, from, times}` — a Block on BLOCK's Every tab (`kind: 'every'`, every `n` days, weeks or months, first due `from`) or Anytime tab (`kind: 'anytime'`, `times` a week). What got done is ordinary `tick` rows under the slug of the name, with no routine |
 | `plan` | **block** | `routine` | today's published plan, for anything that wants to read it |
 | `note` | **status** names the shape; **log** and **quest** write it too | line id | one journal line: a todo, an entry, an event or an idea. A todo may carry `due`, `pri`, `proj` and `rep` from QUESTS; see `quest/CLAUDE.md` |
 | `field` | **status** | field id | the definition of a tracked measure |
@@ -678,7 +679,7 @@ answer, or take it out.
 | App | State |
 |---|---|
 | `index.html` | Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab bar on a phone, sheets instead of its own modal. Widget grid still drags and resizes with a mouse; a phone gets a REARRANGE mode instead. |
-| `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. |
+| `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. Every and Anytime tabs added 2026-09-14 and driven in the browser: 53 of 53 self-test checks, six of them new, and a real add, tick and reload. Owns `rhythm`. Neither tab publishes into today's plan yet, so an owed Every block does not reach the home screen or QUESTS. |
 | `arc/` | Tom's build, with its own brief. On the shared foundation as of 2026-08-27: the store, the theme engine, the icon set, the settings sheet and the standard backup. Owns `map`, `node` and `link`. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. |
 | `quest/` | QUESTS, built 2026-09-14 and tested in the browser at desktop width; phone width not measured, because the test pane reported no width. Todoist's Inbox, Today, Upcoming and projects over STATUS's todo rows. Reads dates, times, P1 to P3, #projects and repeats from anywhere in the line, highlighted as typed, with a chip to give the words back. Todoist's date menu and overdue Reschedule. Ticking a repeat writes a finished copy and moves the todo on; STATUS does the same. Today also lists BLOCK's published plan with Now and Next, every row says whether it came from QUESTS, STATUS or BLOCK, and Date, Priority, Move to and More are visible buttons on each row. STATUS's journal keeps showing todos, on their due date. A clock with no am or pm is the next time it comes round today, in QUESTS, STATUS and LOG, for every kind of line; on another day 1 to 6 is the afternoon. Each app carries its own copy of the rule. LOG's copy of `notes()` does not know `due` yet, so LOG still shows those todos on the day written. |
 | `form/` | Standalone by design. Video never leaves the device. Tom only, kept out of the tester build. |

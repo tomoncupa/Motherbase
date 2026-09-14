@@ -269,7 +269,7 @@ is what `tools/build-client.py` ships today.
 | App | Folder | Device | Testers | What it is for |
 |---|---|---|---|---|
 | HOME | `index.html` | desktop | yes | The hub for everything. |
-| BLOCK | `block/` | desktop only | yes | Routines, mostly daily. **Still to build:** a way to run routines that are not daily. |
+| BLOCK | `block/` | desktop only | yes | Routines, mostly daily. Since 2026-09-14, an Every tab for Blocks that repeat every few days, weeks or months, and an Anytime tab for habits done a number of times a week on any day. |
 | STATUS | `status/` | everywhere | yes | The tracker, built for fast input. |
 | LOG | `log/` | desktop | no | The journal module. Brings every bullet type together. |
 | QUESTS | `quest/` | everywhere | no | Todo bullets, pulled from STATUS and BLOCK. Answers "what's next to be done". |
@@ -279,8 +279,8 @@ is what `tools/build-client.py` ships today.
 | TRAIN | `train/` | phone | yes | The training tracker. An evolved FitNotes. |
 | STYLE | `style/` | desktop only | yes | The theme and look for every other app. |
 | FOODDÉX | `portion/` | desktop | no | Food database input and overview. Works with STATUS. **To be expanded.** |
-| CHECK IN | not built | everywhere | not decided | Physique check-ins. **Planned.** |
-| COACH | not built | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. **Planned.** |
+| CHECK IN | not built | everywhere | yes | Physique check-ins, for Tom and for his clients. Reads weight from STATUS rather than asking for it twice. A client's check-in reaches Tom the same way a TRAIN log reaches COACH. **Planned.** |
+| COACH | not built | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. A separate app, with TRAIN as its core file. A profile is the same client as in WEALTH, so a 1:1 logged here is a session WEALTH counts. A log arrives as a file the client sends from TRAIN's share menu; sending again only adds what is new. **Planned, after Tom is happy with TRAIN.** |
 
 ARC, BLOCK and STYLE are not meant to work on a phone. Tom, 2026-09-14.
 
@@ -366,8 +366,18 @@ blocks.
 
 **Never:** a calendar. It does not own time, it owns intent.
 
-**Still to build:** routines that are not daily. It is mostly daily routines
-today.
+**Two rhythms beyond the week** (Tom, 2026-09-14). Each has its own tab.
+
+- **Every.** A Block that repeats every so many days, weeks or months: a
+  deload, a monthly review, a haircut. Missed, it stays **owed** and keeps
+  showing until it is done. The next one is counted from the day it was done.
+- **Anytime.** A habit done a number of times a week, on any day, at no set
+  time: gym three times, read four. It shows how many of this week's are done
+  and stops asking once the week's count is met. It counts ticks, so a tick
+  from anywhere in the suite counts.
+
+A habit being built belongs here. A chore that repeats, like rent, is a QUESTS
+todo.
 
 ### ARC — `arc/` · desktop only
 
