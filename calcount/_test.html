@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CALCOUNT checks</title>
+<style>
+  body{font:14px/1.5 system-ui,sans-serif;margin:16px;background:#fff;color:#111}
+  h1{font-size:18px;margin:0 0 4px}
+  .tally{font-size:16px;font-weight:700;margin:8px 0 16px}
+  .ok{color:#15603a}.bad{color:#a12}
+  li{margin:2px 0}
+  .why{color:#555;font-size:13px;margin-left:18px}
+  iframe{width:375px;height:812px;border:1px solid #ccc;display:block;margin-top:16px}
+</style>
+</head>
+<body>
+<h1>CALCOUNT checks</h1>
+<p>Loads the real app in a frame at phone width and checks the data, the maths, the store and the screen. Your own CALCOUNT data on this browser is set aside first and put back exactly at the end.</p>
+<div class="tally" id="tally">Running…</div>
+<ol id="out"></ol>
+<iframe id="app" title="CALCOUNT under test"></iframe>
+<script>
+(async function () {
+  'use strict';
+  const out = document.getElementById('out');
+  let pass = 0, fail = 0;
+  function check(name, ok, why) {
+    const li = document.createElement('li');
+    li.className = ok ? 'ok' : 'bad';
+    li.textContent = (ok ? 'PASS ' : 'FAIL ') + name;
+    if (!ok && why !== undefined) { const d = document.createElement('div'); d.className = 'why'; d.textContent = typeof why === 'string' ? why : JSON.stringify(why); li.appendChild(d); }
+    out.appendChild(li);
+    ok ? pass++ : fail++;
+  }
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  /* ── set the person's own data aside, and put it back afterwards ──
+     A test that writes into the same store it is judging must never
+     leave a trace. A crashed run is recovered on the next load.       */
+  const BK = 'cc.testbackup';
+  const ownKeys = () => Object.keys(localStorage).filter(k => k.startsWith('cc.'));
+  if (sessionStorage.getItem(BK)) restore();
+  const saved = {};
+  ownKeys().forEach(k => { saved[k] = localStorage.getItem(k); });
+  sessionStorage.setItem(BK, JSON.stringify(saved));
+  ownKeys().forEach(k => localStorage.removeItem(k));
+  function restore() {
+    const data = JSON.parse(sessionStorage.getItem(BK) || '{}');
+    ownKeys().forEach(k => localStorage.removeItem(k));
+    Object.keys(data).forEach(k => localStorage.setItem(k, data[k]));
+    sessionStorage.removeItem(BK);
+  }
+
+  try {
+    const frame = document.getElementById('app');
+    frame.src = 'index.html?cb=' + Date.now();
+    await new Promise(r => { frame.onload = r; });
+    const w = frame.contentWindow, d = w.document;
+    const A = w.CC_APP, FOODS = w.CC_FOODS, FOOD = w.CC_FOOD, SRC = w.CC_SRC;
+    check('the app loaded and exposed its test handle', !!(A && FOODS && FOODS.length));
+
+    /* ── the database ─────────────────────────────────────────────── */
+    const ids = new Set(), dup = [];
+    FOODS.forEach(f => { if (ids.has(f.id)) dup.push(f.id); ids.add(f.id); });
+    check('every food id is unique (' + FOODS.length + ' foods)', !dup.length, dup);
+
+    const shapeBad = FOODS.filter(f => !f.name || !w.CC_CATS[f.cat] || !SRC[f.src] || !f.serves.length ||
+      f.serves.some(s => !(s.m > 0) || !s.l) || !(f.per.kcal >= 0) || !(f.per.g >= 0) || ['p', 'c', 'f'].some(k => !(f.per[k] >= 0)));
+    check('every food has a name, a category, a source and a usable serving', !shapeBad.length, shapeBad.map(f => f.id));
+
+    // One level under "the calories are right": do a food's calories agree with its own macros?
+    const energy = f => 4 * f.per.p + 4 * f.per.c + 9 * f.per.f + 7 * (f.per.alc || 0);
+    const drift = FOODS.filter(f => f.per.kcal >= 20 && Math.abs(f.per.kcal - energy(f)) / f.per.kcal > 0.15);
+    check('no food’s calories are more than 15% away from its protein, carbs and fat', !drift.length,
+      drift.map(f => f.id + ' ' + f.per.kcal + ' vs ' + Math.round(energy(f))));
+
+    const combos = FOODS.filter(f => f.parts);
+    const comboBad = combos.filter(f => Math.abs(f.per.kcal - f.parts.reduce((a, [id, m]) => a + FOOD[id].per.kcal * m, 0)) > 1);
+    check('every combo is the sum of its parts (' + combos.length + ' combos)', !comboBad.length, comboBad.map(f => f.id));
+    const comboSrc = combos.filter(f => f.parts.some(([id]) => SRC[FOOD[id].src].err > SRC[f.src].err));
+    check('a combo is never marked surer than its least certain part', !comboSrc.length, comboSrc.map(f => f.id));
+
+    check('every Popular food exists', w.CC_POPULAR.every(id => FOOD[id]), w.CC_POPULAR.filter(id => !FOOD[id]));
+    check('every brand chip has foods behind it', w.CC_BRANDS.every(b => FOODS.some(f => f.brand === b)), w.CC_BRANDS.filter(b => !FOODS.some(f => f.brand === b)));
+
+    const texts = [];
+    FOODS.forEach(f => { texts.push(f.name, f.note || ''); f.serves.forEach(s => texts.push(s.l)); });
+    Object.values(SRC).forEach(s => texts.push(s.label, s.about));
+    check('no em dash anywhere a user reads in the database', !texts.some(t => t.includes('—')), texts.filter(t => t.includes('—')));
+
+    const pubUs = FOODS.filter(f => f.src === 'pub-us');
+    check('every US-published figure says so in its note', pubUs.every(f => /US/.test(f.note || '')), pubUs.filter(f => !/US/.test(f.note || '')).map(f => f.id));
+    check('nothing claims to be an official Philippine figure yet', !FOODS.some(f => f.src === 'pub'), FOODS.filter(f => f.src === 'pub').map(f => f.id));
+
+    /* ── search ───────────────────────────────────────────────────── */
+    const top = (q, n, brand) => A.searchFoods(q, brand).slice(0, n).map(f => f.id);
+    check('"kanin" finds plain rice first', top('kanin', 1)[0] === 'rice', top('kanin', 3));
+    check('"rice" puts plain rice before any brand’s rice', top('rice', 1)[0] === 'rice', top('rice', 3));
+    check('"chickenjoy" puts Chickenjoy in the top three', top('chickenjoy', 3).every(id => /^jb-/.test(id)), top('chickenjoy', 3));
+    check('"coke" finds the softdrink first', top('coke', 1)[0] === 'softdrink', top('coke', 3));
+    check('"snr" finds S&R food', top('snr', 3).some(id => /^sr-/.test(id)), top('snr', 3));
+    check('"s&r" finds S&R food too', top('s&r', 3).some(id => /^sr-/.test(id)), top('s&r', 3));
+    check('"pm2" finds the Mang Inasal PM2 first', top('pm2', 1)[0] === 'mi-pm2', top('pm2', 3));
+    check('"sinigang" shows sinigang first', /^sinigang/.test(top('sinigang', 1)[0]), top('sinigang', 3));
+    check('"lucky me" finds instant noodles', top('lucky me', 2).some(id => /^pk-/.test(id)), top('lucky me', 3));
+    check('"mcdo chicken" finds Chicken McDo', top('mcdo chicken', 2).includes('mc-chicken'), top('mcdo chicken', 3));
+    check('"manok" finds chicken', top('manok', 5).length >= 3, top('manok', 5));
+    check('a word that matches nothing returns nothing', A.searchFoods('xyzzyq').length === 0);
+    check('the Jollibee chip alone lists only Jollibee', A.searchFoods('', 'Jollibee').every(f => f.brand === 'Jollibee') && A.searchFoods('', 'Jollibee').length > 5);
+
+    /* ── targets ──────────────────────────────────────────────────── */
+    // Worked by hand: 10 x 70 + 6.25 x 157.48 - 5 x 30 - 161 = 1373.3; x 1.2 = 1647.9; minus 550 = 1097.9, under the 1,200 floor.
+    const woman = A.targets({ sex: 'f', age: 30, cm: 157.48, kg: 70, act: 'sit', goal: 'lose', rate: 0.5 });
+    check('a woman whose pace dips under 1,200 is held at 1,200 and told why', woman.kcal === 1200 && woman.floored, woman);
+    // 850 + 1079.5 - 175 + 5 = 1759.5; x 1.375 = 2419.3; minus 550 = 1869.3.
+    const man = A.targets({ sex: 'm', age: 35, cm: 172.72, kg: 85, act: 'feet', goal: 'lose', rate: 0.5 });
+    check('a man losing half a kilo a week gets 1,870', man.kcal === 1870 && !man.floored, man);
+    const teen = A.targets({ sex: 'f', age: 16, cm: 160, kg: 60, act: 'sit', goal: 'lose', rate: 0.75 });
+    check('under 18 never gets a deficit', teen.teen && teen.kcal === teen.tdee, teen);
+    const keep = A.targets({ sex: 'm', age: 40, cm: 170, kg: 80, act: 'hard', goal: 'keep', rate: 0 });
+    check('keeping weight means eating maintenance', keep.kcal === keep.tdee, keep);
+    const gain = A.targets({ sex: 'm', age: 25, cm: 175, kg: 60, act: 'feet', goal: 'gain', rate: 0.25 });
+    check('gaining a quarter kilo a week adds 275', gain.kcal === Math.round((gain.tdee + 275) / 10) * 10 || Math.abs(gain.kcal - gain.tdee - 275) <= 10, gain);
+
+    /* ── numbers, entries and quantities ──────────────────────────── */
+    check('a Philippine Jolly Spaghetti solo works out at 366', A.numbersFor(FOOD['jb-spaghetti'], 0, 1).kcal === 366, A.numbersFor(FOOD['jb-spaghetti'], 0, 1));
+    check('two cups of rice is 410', A.numbersFor(FOOD.rice, 0, 2).kcal === 410);
+    check('"1/2" reads as a half', A.parseQty('1/2') === 0.5);
+    check('"½" reads as a half', A.parseQty('½') === 0.5);
+    check('"1,5" reads as one and a half', A.parseQty('1,5') === 1.5);
+    check('nonsense is not a quantity', A.parseQty('abc') === null && A.parseQty('0') === null);
+    check('quantities are written the way people say them', A.fracText(1.5) === '1½' && A.fracText(0.5) === '½' && A.fracText(0.25) === '¼' && A.fracText(2) === '2' && A.fracText(0.33) === '0.33',
+      [A.fracText(1.5), A.fracText(0.5), A.fracText(0.25), A.fracText(2), A.fracText(0.33)]);
+
+    const day = '2026-01-15';
+    const mine = { id: 'my-test', name: 'Test turon', brand: '', src: 'mine', per: { g: 0, kcal: 200, p: 2, c: 34, f: 8 }, serves: [{ l: '1 pc', m: 1 }] };
+    A.Store.set('food', null, mine.id, mine);
+    const key = A.logFood(day, mine, 0, 2, 'm');
+    A.Store.set('food', null, mine.id, Object.assign({}, mine, { per: Object.assign({}, mine.per, { kcal: 999 }) }));
+    const e = A.entries(day)[0];
+    check('an entry keeps the numbers it was logged with after its food changes', e && e.kcal === 400 && e.qty === 2 && e.meal === 'm', e);
+
+    /* ── the store ────────────────────────────────────────────────── */
+    const S = A.Store;
+    const row = S.set('entry', day, 'merge1', { kcal: 100, t: 1 });
+    check('an older copy of a row does not overwrite a newer one', S.merge([Object.assign({}, row, { payload: { kcal: 5, t: 1 }, updated_at: row.updated_at - 1000 })]) === 0 && S.get('entry', day, 'merge1').kcal === 100);
+    check('a newer copy of a row does', S.merge([Object.assign({}, row, { payload: { kcal: 150, t: 1 }, updated_at: row.updated_at + 1000 })]) === 1 && S.get('entry', day, 'merge1').kcal === 150);
+    // Two phones: each changed a different entry. Both changes survive, because they are different rows.
+    const a = S.set('entry', day, 'phoneA', { kcal: 1, t: 2 }), b = S.set('entry', day, 'phoneB', { kcal: 2, t: 3 });
+    S.merge([Object.assign({}, a, { payload: { kcal: 11, t: 2 }, updated_at: a.updated_at + 5 }), Object.assign({}, b, { updated_at: b.updated_at - 5, payload: { kcal: 99, t: 3 } })]);
+    check('two phones editing different entries keep both edits', S.get('entry', day, 'phoneA').kcal === 11 && S.get('entry', day, 'phoneB').kcal === 2);
+    S.del('entry', day, 'merge1');
+    const tomb = S.dump().find(r => r.id === 'entry|' + day + '|merge1');
+    check('a delete is kept as a marker so it can travel in a backup', tomb && tomb.deleted === true && S.get('entry', day, 'merge1') === null);
+    const before = JSON.stringify(A.entries(day));
+    const dumped = JSON.parse(JSON.stringify(S.dump()));
+    S.wipe();
+    check('wiping empties the store', A.entries(day).length === 0);
+    S.merge(dumped);
+    check('a backup restores every entry exactly', JSON.stringify(A.entries(day)) === before);
+    check('a backup brings the deletion back with it', S.get('entry', day, 'merge1') === null);
+    check('rows are stored one per localStorage entry', Object.keys(localStorage).filter(k => k.startsWith('cc.row.entry|' + day)).length >= 3);
+
+    /* ── photo scan and barcode, without the network ─────────────── */
+    /* ── the photo scan server, with the network faked ─────────────
+       The real Claude API is never called and nothing is charged: fetch is
+       swapped out for these checks only, and handed what the API would say. */
+    const worker = (await import('./worker/scan.js?cb=' + Date.now())).default;
+    const realFetch = window.fetch;
+    const sent = [];
+    let answer = null;
+    window.fetch = async (url, init) => { sent.push({ url, init, body: JSON.parse(init.body) }); return answer(); };
+    const apiReply = (obj, status) => () => new Response(JSON.stringify(obj), { status: status || 200 });
+    const kv = { data: {}, async get(k) { return this.data[k] || null; }, async put(k, v) { this.data[k] = v; } };
+    const env = { ANTHROPIC_API_KEY: 'sk-test', USAGE: kv };
+    const post = (b, e) => worker.fetch(new Request('https://w.test/', { method: 'POST', body: JSON.stringify(b) }), e || env);
+    const good = { device: '0123456789abcdef', image: '/9j/4AAQSkZJRgABAQ', catalog: A.catalog() };
+    try {
+      const pre = await worker.fetch(new Request('https://w.test/', { method: 'OPTIONS' }), env);
+      check('scan server: answers the browser’s permission check', pre.status === 204 && pre.headers.get('access-control-allow-origin') === '*');
+      check('scan server: refuses anything but a POST', (await worker.fetch(new Request('https://w.test/'), env)).status === 405);
+      check('scan server: says so plainly when no key is set', (await (await post(good, { USAGE: kv })).json()).error === 'not_configured');
+      check('scan server: turns away a bad device id', (await post(Object.assign({}, good, { device: 'x' }))).status === 400);
+      check('scan server: turns away an oversized photo', (await post(Object.assign({}, good, { image: 'A'.repeat(1500001) }))).status === 413);
+
+      answer = apiReply({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ is_food: true, note: 'Looks good — enjoy.', items: [
+        { match_id: 'rice', name: 'Rice', serving: '1 cup', grams: 160, kcal: 208, protein_g: 4, carbs_g: 45, fat_g: 0.4, confidence: 'high' },
+        { match_id: 'made-up-id', name: 'Pork adobo', serving: '1 cup', grams: 150, kcal: -5, protein_g: 26, carbs_g: 5, fat_g: 34, confidence: 'sure' }] }) }] });
+      sent.length = 0;
+      const res1 = await post(good), j1 = await res1.json();
+      const req = sent[0] && sent[0].body, hdr = sent[0] && sent[0].init.headers;
+      check('scan server: a photo of food comes back as items', res1.status === 200 && j1.is_food && j1.items.length === 2, j1);
+      check('scan server: an id that is not in the app’s food list becomes a guess', j1.items[1].match_id === '' && j1.items[0].match_id === 'rice');
+      check('scan server: a negative number and an unknown confidence are made safe', j1.items[1].kcal === 0 && j1.items[1].confidence === 'low', j1.items[1]);
+      check('scan server: no em dash reaches the phone', !/—/.test(j1.note), j1.note);
+      check('scan server: a scan that found food uses one of the month’s scans', Object.values(kv.data)[0] === '1' && j1.remaining === 9, { kv: kv.data, remaining: j1.remaining });
+      check('scan server: by default it asks Opus 5, at low effort, with the fallback on',
+        req.model === 'claude-opus-5' && req.output_config.effort === 'low' && req.fallbacks === 'default' && hdr['anthropic-beta'] === 'server-side-fallback-2026-07-01', req && { model: req.model, effort: req.output_config.effort, fb: req.fallbacks });
+      check('scan server: the key goes in a header and never in the body', hdr['x-api-key'] === 'sk-test' && !JSON.stringify(req).includes('sk-test'));
+      check('scan server: the photo goes as a JPEG, the answer is held to a schema, the food list is cached',
+        req.messages[0].content[0].source.media_type === 'image/jpeg' && req.output_config.format.type === 'json_schema' && req.system[1].cache_control.type === 'ephemeral');
+
+      sent.length = 0;
+      await post(good, { ANTHROPIC_API_KEY: 'sk-test', MODEL: 'claude-haiku-4-5' });
+      const hq = sent[0].body;
+      check('scan server: Haiku is sent no effort and no fallback, both of which it would reject',
+        hq.model === 'claude-haiku-4-5' && !('effort' in hq.output_config) && !('fallbacks' in hq) && !sent[0].init.headers['anthropic-beta']);
+
+      const kvBefore = JSON.stringify(kv.data);
+      answer = apiReply({ stop_reason: 'refusal', content: [] });
+      const j2 = await (await post(good)).json();
+      check('scan server: a declined request comes back as not food and uses no scan', j2.is_food === false && JSON.stringify(kv.data) === kvBefore, j2);
+      answer = apiReply({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ is_food: false, items: [], note: '' }) }] });
+      const j3 = await (await post(good)).json();
+      check('scan server: a photo with no food in it uses no scan', j3.is_food === false && JSON.stringify(kv.data) === kvBefore);
+      answer = apiReply({ type: 'error' }, 529);
+      check('scan server: an API outage is reported as trouble, not a crash', (await post(good)).status === 502);
+      kv.data['scans:' + good.device + ':' + new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 7)] = '10';
+      sent.length = 0;
+      const res4 = await post(good);
+      check('scan server: the eleventh scan of the month is refused without calling the API', res4.status === 429 && (await res4.json()).error === 'limit' && sent.length === 0);
+    } finally { window.fetch = realFetch; }
+
+    // One level under "picked the right serving": whatever serving it picks, the portion must come out the same.
+    const c1 = A.candidateFrom({ match_id: 'rice', name: 'Rice', serving: '2 cups', grams: 316, kcal: 400, protein_g: 8, carbs_g: 90, fat_g: 1, confidence: 'high' });
+    check('a matched photo item uses the database food at the photo’s portion', c1.food.id === 'rice' && A.numbersFor(c1.food, c1.si, c1.qty).kcal === 410,
+      { id: c1.food.id, serve: c1.food.serves[c1.si].l, qty: c1.qty });
+    const c2 = A.candidateFrom({ match_id: 'jb-spaghetti', name: 'Spaghetti', serving: '1 solo', grams: 250, kcal: 360, protein_g: 14, carbs_g: 46, fat_g: 14, confidence: 'medium' });
+    check('a photo portion snaps to the nearest named serving', c2.food.id === 'jb-spaghetti' && c2.food.serves[c2.si].l === '1 solo' && c2.qty === 1, { serve: c2.food.serves[c2.si].l, qty: c2.qty });
+    const c3 = A.candidateFrom({ match_id: 'not-a-food', name: 'Kakanin', serving: '1 slice', grams: 90, kcal: 230, protein_g: 2, carbs_g: 45, fat_g: 5, confidence: 'low' });
+    check('an unmatched photo item is kept as a photo guess', c3.food.id === null && c3.food.src === 'ai' && c3.food.per.kcal === 230 && c3.conf === 'low');
+    const off1 = A.foodFromOpenFoodFacts('4800016644504', { product_name: 'Pancit Canton', brands: 'Lucky Me!,Monde', serving_size: '60 g', serving_quantity: 60,
+      nutriments: { 'energy-kcal_100g': 480, 'energy-kcal_serving': 288, proteins_100g: 9, carbohydrates_100g: 63, fat_100g: 21 } });
+    check('an Open Food Facts product with a serving becomes that serving', off1.per.kcal === 288 && off1.per.g === 60 && off1.brand === 'Lucky Me!' && off1.serves[0].l === '60 g' && off1.src === 'off', off1);
+    const off2 = A.foodFromOpenFoodFacts('123456789', { product_name: 'Crackers', nutriments: { energy_100g: 1900, proteins_100g: 10, carbohydrates_100g: 70, fat_100g: 15 } });
+    check('a product with only kilojoules per 100g is converted to calories', off2.per.g === 100 && off2.per.kcal === Math.round(1900 / 4.184), off2);
+    check('a product with no energy at all is not made into a food', A.foodFromOpenFoodFacts('1', { product_name: 'Water', nutriments: {} }) === null);
+    const lines = A.catalog().split('\n');
+    check('the photo scan’s food list has one line per food', lines.length === FOODS.length && lines.every(l => l.split(' | ').length >= 3), lines.length);
+
+    /* ── the screen, at phone width ──────────────────────────────── */
+    S.set('profile', null, '', { goal: 'lose', sex: 'f', age: 30, cm: 157.48, kg: 70, act: 'sit', rate: 0.5 });
+    const ob = d.querySelector('.onboard'); if (ob) ob.remove();
+    A.render();
+    d.getElementById('addBtn').click();
+    await wait(450);
+    const small = [];
+    d.querySelectorAll('button, label.btn, input.field').forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (!r.width || el.closest('[hidden]')) return;
+      if (r.height < 44 || r.width < 44) small.push((el.getAttribute('aria-label') || el.textContent.trim() || el.className).slice(0, 30) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height));
+    });
+    check('every control on Today and Add food is at least 44px both ways', !small.length, small);
+    const body = d.querySelector('.sheet-body');
+    check('Add food opens with the search box focused, ready to type', d.activeElement && d.activeElement.type === 'search');
+    check('Add food shows Popular before anything is typed', /Popular/.test(body.textContent));
+    check('the page itself never scrolls sideways', d.documentElement.scrollWidth <= w.innerWidth, d.documentElement.scrollWidth + ' > ' + w.innerWidth);
+    w.history.back();
+    await wait(450);
+    check('the back gesture closes Add food instead of leaving the app', !d.querySelector('.layer') && w.location.pathname.endsWith('index.html'));
+
+    // Contrast is computed, never eyeballed. These are the pairs text actually sits on.
+    const css = w.getComputedStyle(d.documentElement);
+    const tok = n => css.getPropertyValue(n).trim();
+    const lum = h => { const c = [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+    const ratio = (x, y) => { const [p, q] = [lum(x), lum(y)].sort((m, n) => n - m); return (p + 0.05) / (q + 0.05); };
+    const scheme = w.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    [['--ink', '--surface'], ['--ink', '--bg'], ['--mut', '--surface'], ['--mut', '--bg'], ['--mut', '--chip'], ['--on-acc', '--acc'], ['--acc-ink', '--acc-tint'], ['--acc-ink', '--surface'], ['--bg', '--ink']].forEach(([fg, bg]) => {
+      const r = ratio(tok(fg), tok(bg));
+      check('contrast of ' + fg + ' on ' + bg + ' is at least 4.5 (' + scheme + '): ' + r.toFixed(2), r >= 4.5, r.toFixed(2));
+    });
+  } catch (err) {
+    check('the run finished without an error', false, String(err && err.stack || err));
+  } finally {
+    restore();
+  }
+  const t = document.getElementById('tally');
+  t.textContent = pass + ' of ' + (pass + fail) + ' passed';
+  t.className = 'tally ' + (fail ? 'bad' : 'ok');
+  document.title = 'CALCOUNT checks: ' + pass + '/' + (pass + fail);
+})();
+</script>
+</body>
+</html>
