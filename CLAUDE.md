@@ -197,7 +197,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `io.js` | Per-app backup, restore, and the readable spreadsheet export. |
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
-| `_smoke.html` | 64 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 214 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -582,8 +582,8 @@ because it runs the real thing rather than only parsing it:
    draws and every tab works, runs `shared/_smoke.html` inside itself and folds
    the result in, and looks over whatever rows are on the device. One page,
    one tally. `shared/_smoke.html` on its own is still there for when you are
-   working on the foundation and want the 163 without the apps.
-   It must say 163 of 163, or more once you add checks.
+   working on the foundation and want the 214 without the apps.
+   It must say 214 of 214, or more once you add checks.
    **Load it with a `?cb=<something new>` on the end.** The browser caches these
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks
@@ -701,7 +701,7 @@ answer, or take it out.
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `checkin/` | CHECK IN, built 2026-09-14 from `_template/`. Everywhere, and in the client build. One photo question ships, Front (Tom, 2026-09-14); any other pose is added with Settings, Add a new pose. Weight read from and written to STATUS's `ev` row, a waist and three 1 to 5 questions by default, all editable in Settings. Any two check-ins side by side with the change and no verdict, and a list of every one. Send to coach makes a `motherbase-checkin` file and hands it to the share menu, or downloads it. Opening a client's files shows them and saves nothing: keeping clients apart is COACH's job, and COACH is not built. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
-| `shared/` | The foundation, passing 152 checks. Every app loads it. |
+| `shared/` | The foundation, passing 214 checks at desktop and phone width on 2026-09-14. Every app loads it. |
 
 ### Debt, in the order it should be paid
 
@@ -730,30 +730,28 @@ app session must not touch them. They are written down here because commits and
 this file are the only handoff there is. Each says what was watched, not what
 was suspected.
 
-**1. The store can wait forever, and an app gated on it shows nothing.**
-`IDB.open()` in `shared/records.js` handles `onsuccess` and `onerror`. It has
-no `onblocked` handler and no timeout. If the browser never answers the open
-request, the promise never settles, `hydrate()` never runs, `hydrated` stays
-false and every `Rec.ready` callback waits forever.
+**2026-09-14: a foundation session worked through this list.** Items 1, 6, 8,
+9, 10, 11 and 12 are fixed, plus three things TRAIN found (13). A fixed item
+keeps a short entry, because most of them left a workaround in an app that an
+app session now has to delete. Item 14 lists those.
 
-Watched on 2026-09-06: a raw `indexedDB.open('motherbase', 1)` in the test
-browser was still pending after three seconds and took minutes to answer.
-`_review.html` failed `status: opens and draws something` on two consecutive
-runs because STATUS puts its whole first paint behind `Rec.ready`. The same
-run passed PORTION, which paints immediately and lets the food list arrive
-late. Intermittent: the same browser was fast the day before.
-
-The fix is small — give up after a couple of seconds, carry on with
-localStorage, and say so — but it is `records.js`, "the one file to be careful
-with", so it wants a session of its own.
+**1. ~~The store can wait forever~~ Fixed 2026-09-14.** `hydrate()` in
+`records.js` stops waiting after 2.5 seconds: `Rec.ready` fires on what
+localStorage had, `Rec.stats().idbSlow` says so, and the big rows merge in and
+announce whenever IndexedDB does answer. Writes are untouched; they queue on
+the same open and land when it does. Watched: a frame whose `indexedDB.open`
+never answers fired ready at 2514ms with its localStorage rows. Not a smoke
+check, because proving it costs two and a half seconds per run. There is still
+no `onblocked` handler; nothing has been seen to need one.
 
 **2. First paint should not be behind `Rec.ready`.** Item 1 is what happens
 when the store is slow; this is why it costs so much. STATUS, TRAIN and ARC all
 draw nothing until the store is ready, so a slow store is a blank screen with
 no explanation. Paint what localStorage already has, then fill in the big rows
 when they land. PORTION does it that way and survived the same failure. The
-data model section says an app that draws from the store on load "must wait on
-it" — that should read "must redraw when it lands".
+data model section now says "must redraw when it lands". Item 1's fix caps the
+blank screen at 2.5 seconds and does not remove it. What is left is app work,
+in STATUS, TRAIN and ARC.
 
 **3. `Rec.patch`, so merging is easier than replacing.** `Rec.set` overwrites
 the whole payload, which is what let STATUS drop the calcium PORTION had
@@ -771,90 +769,77 @@ per-field timestamps, which is a real design and probably only worth doing if
 hosting and accounts arrive. Written down so it is a known limit rather than a
 surprise.
 
-**5. Cache-busting is inconsistent.** `style/` loads shared at `?v=16`,
-`portion/` and `_template/` at `?v=15`, and the home screen, STATUS, TRAIN,
-BLOCK, ARC and FORM have no `?v=` at all. Harmless from a folder, where
+**5. Cache-busting is inconsistent.** Counted 2026-09-14: `log/`, `style/`
+and `wealth/` load shared at `?v=16`; `_template/`, `checkin/`, `clex/`,
+`portion/` and `quest/` at `?v=15`; the home screen, STATUS, TRAIN, BLOCK, ARC
+and FORM carry none. Fixing it touches every app folder, so it wants a moment
+when no app session is live. Harmless from a folder, where
 nothing is cached. It matters the day hosting returns, because the known trap
 says "bump the version" and there is no one version to bump. Either every app
 carries the same stamp or none of them do.
 
-**6. `_review.html` reports leftover test rows too eagerly.** The check fails
-above 12 rows left behind, and one run of the 163 foundation checks now writes
-more than that, so several runs back to back trip it while the store catches up
-with the frames' deletions. It failed that way on 2026-09-05. A red check
-nobody believes is the thing this file already warns about.
+**6. ~~`_review.html` reports leftover test rows too eagerly~~ Fixed
+2026-09-14.** It counted rows, and one run writes more than its limit of 12.
+It now asks about age instead: a test row still live ten minutes after it was
+written was left behind, and the failure names the types.
 
 **7. Still open from 2026-09-04:** the three icon checks that fail on a cold
 store and pass on the second run. Recorded under Testing above; unchanged.
 
-**8. `shared/chart.js` cannot draw money.** Its `STEPS` table, the list of
-gridline intervals a person reads without doing arithmetic, stops at 5000. A
-chart spanning eighty thousand pesos asks for a 20,000 step, finds nothing that
-big, and falls back to the last entry — seventeen gridlines with their labels
-sitting on top of each other.
+**8. ~~`shared/chart.js` cannot draw money~~ Fixed 2026-09-14.** Its step
+table stopped at 5000, so eighty thousand pesos drew seventeen gridlines. Past
+the table the step now carries on as 1, 2, 2.5 and 5 times each power of ten.
+Smoke check: "money in the tens of thousands still gets a readable scale".
 
-Watched on 2026-09-11 building WEALTH's six-month chart: five labels expected,
-seventeen drawn, unreadable. Nothing had hit it before because money is the
-first thing in this suite counted in tens of thousands; weight, reps and
-calories all sit under the ceiling.
+**9. ~~`UI.segmented`'s buttons are 38px~~ Fixed 2026-09-14.** They are
+`var(--tap)`. Every segmented strip in every app is 6px taller, which nobody
+has looked at on a real screen yet.
 
-WEALTH works around it with its own `moneyScale`, which computes a step and
-hands it to `ySet`. The real fix is four more entries on the table, in
-`shared/`, so an app session must not do it. Delete WEALTH's workaround when
-the table grows.
+**10. ~~The review checks a purchase's account against the wrong form~~ Fixed
+2026-09-14.** It accepts an account's key or its name, since STATUS writes the
+name.
 
-**9. `UI.segmented`'s buttons are 38px, and the rule is 44.** The month picker
-in WEALTH is twelve targets under the minimum, and none of them are WEALTH's —
-they are the shared control at its own height. Every app that uses a segmented
-control has the same twelve. Found 2026-09-11 by measuring at 375px wide.
-Either the control grows to `var(--tap)` or the rule has a stated exception;
-it should not quietly be both.
+**11. ~~A desktop menu closes before its item can be clicked~~ Fixed
+2026-09-14.** Written down twice the same day, by WEALTH and by LOG. The
+listener now ignores presses inside `.mb-menu` and is removed when the menu
+closes. The smoke check presses an item and then clicks it; with the old
+listener put back, that check fails, which was tried. Not watched with a real
+mouse.
 
-**10. The review checks a purchase's account against the wrong form.**
-`_review.html`'s "every payment still knows its account" compares
-`spend.acct` with `acct` row KEYS ("gcash"). STATUS, which owns `spend`,
-writes the account's NAME ("GCash"), and so does its own rename and delete. On
-a device with real STATUS purchases that check fails on every one of them; it
-has only passed because the test browser holds none. Found 2026-09-14 by
-WEALTH, which had the same bug and now reads either form. The check should
-accept a key or a name, since the home screen already does.
+**12. ~~`shared/` still names HABITS~~ Fixed 2026-09-14.** All four leftovers
+are gone. The dock check now lists the twelve apps on the home screen, and
+LOG, QUESTS, CHECK IN, WEALTH and FOODDÉX have app icons for the first time: a
+book, a tick, a camera, a banknote and a bowl. Until now the dock drew a plain
+character for each. Claude picked those five; change the role in `icons.js`
+if one reads wrong.
 
-**11. A menu on a wide window cannot be chosen from with a mouse.**
-`UI.menu` in `shared/ui.js`, when not `sheetish`, adds
-`document.addEventListener('pointerdown', UI.closeMenus, { once: true })`.
-The next press anywhere closes the menu, and a press on one of the menu's own
-buttons is a press anywhere: the button is removed on pointerdown, so its click
-never fires. Watched 2026-09-14 in Chrome at 1424px wide: pointerdown on the
-item, mousedown on BODY, no click. It has been there since the foundation's
-first commit, so every app's desktop menu has it. A narrow window gets
-`Mobile.actions` instead and works, which is how Tom found it: *"Input does
-not work on desktop unless I make the window narrow."* The fix is to ignore
-presses inside `.mb-menu` in that listener. WEALTH works around it with its own
-`menu()` wrapper, to be deleted when this is fixed.
+**13. Found by TRAIN, fixed 2026-09-14.** One: `icons.js` has `minus`,
+`trophy` and `burger` drawings, under the roles `minus`/`less`,
+`record`/`best`/`pr` and `nav`/`drawer`. Two: a `UI.row` whose control is a
+text box or a select puts the label above it, instead of squeezing the label
+to 0px at every width. A box with its own `max-width` stays beside its label.
+Settings rows with a select change in LOG, STYLE, WEALTH and TRAIN. Three:
+sheets use `svh` after `vh`, so on iPhone Safari they stop at the visible
+screen rather than under the toolbar. Not seen on a phone.
 
-**10. A desktop `UI.menu` closes before its items can be clicked.** `menu()`
-in `shared/ui.js` adds `document.addEventListener('pointerdown',
-UI.closeMenus, {once: true})` after opening. A press on one of the menu's own
-buttons bubbles to that listener, which removes the menu, so the click that
-would run the item never reaches it. Every right-click menu in every app is
-affected on a PC; a phone gets an action sheet and is not.
+**14. Workarounds an app session can now delete.** Each still works beside
+the fix, so none is urgent, but each is a second copy of a foundation job:
 
-Found 2026-09-14 when Tom reported LOG's Hide column and Rename doing
-nothing. Reasoned from the code and the event order, not watched with a real
-mouse: the test pane's emulated window sends real clicks to the wrong place.
-LOG works around it by stopping a press inside the menu from bubbling
-(`menuAt()` in `log/index.html`). The real fix is one line in `menu()`:
-ignore presses inside `box`. Delete LOG's wrapper when that lands.
+- LOG: `menuAt()` in `log/index.html`.
+- TRAIN: `menuAt()`, `bigStep()`, the `MINUS`, `TROPHY` and `BURGER` strings,
+  and the `.mb-row:has(...)` rules for `.mb-input` and `.mb-sel`. Keep the ones
+  for `.swatches` and `.mb-chips`, which the shared rule does not cover.
+- WEALTH: `menu()` and `moneyScale()`.
+- CHECK IN: `menu()`.
+- CLEX, STATUS and TRAIN: stepper buttons drawn with a `−` character can use
+  the `minus` role.
 
-**12. `shared/` still names HABITS.** HABITS was deleted on 2026-09-14 by a
-root session that stayed out of `shared/`. Four leftovers, none of them
-breaking anything: `_smoke.html`'s "every app in the dock has one" still lists
-`habits`, and still passes because `icons.js` still carries the `app.habits`
-role; `THEMING.md`'s app table has a `habits/` row; `STANDARDS.md`'s opening
-lists `habits/` among the desktop apps. Remove them together. Taking the role
-out of `icons.js` without the smoke check fails that check, and if nothing
-else points at the `repeat` drawing, "no drawing is carried for nothing" fails
-too.
+**15. STATUS's journal code lives in several copies.** LOG copies STATUS's time
+parser, clock labels, line kinds and publish steps. QUESTS and the home screen
+copy `tickTodo` and `repeatAfter`. Each is marked as a copy, and "change all of
+them" is a rule that fails the first time somebody forgets. The fix is one
+shared file for journal lines. That is a real design, touches four apps, and
+wants its own session and Tom's go-ahead.
 
 ### Parked, not cancelled
 

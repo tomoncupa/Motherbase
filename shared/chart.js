@@ -56,7 +56,15 @@
   function niceStep(span, want) {
     const target = span / Math.max(1, want || 4);
     for (let i = 0; i < STEPS.length; i++) if (STEPS[i] >= target) return STEPS[i];
-    return STEPS[STEPS.length - 1];
+    /* Past the table the same 1, 2, 2.5, 5 pattern carries on by tens. Money
+       is the first thing here counted in tens of thousands, and stopping at
+       5000 drew seventeen gridlines with their labels on top of each other
+       (root brief, foundation item 8). */
+    if (!(target < Infinity)) return STEPS[STEPS.length - 1];
+    for (let p = 10000; ; p *= 10) {
+      const m = [1, 2, 2.5, 5].filter(k => k * p >= target)[0];
+      if (m) return m * p;
+    }
   }
 
   /* ── looked up, not captured ──

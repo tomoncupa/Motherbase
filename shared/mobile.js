@@ -147,6 +147,10 @@ body{overscroll-behavior-y:none}
 .mb-veil.on{opacity:1}
 .mb-sheet{position:fixed;left:0;right:0;bottom:0;z-index:8901;
   display:flex;flex-direction:column;max-height:min(92vh,var(--mb-h,92vh));
+  /* vh on an iPhone is the screen with Safari's toolbars hidden, so 92vh runs
+     under them. svh is the screen as it actually is; older browsers keep the
+     line above. Found by TRAIN. */
+  max-height:min(92svh,var(--mb-h,92svh));
   margin:0 auto;width:100%;max-width:var(--mb-w,560px);
   background:var(--surface-1,#0e141d);color:var(--text-1,#dbe7f0);
   border-top:1px solid var(--border-strong,#2b3a4d);

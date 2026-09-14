@@ -75,6 +75,14 @@ function css() {
   min-height:var(--tap,44px);border-bottom:1px solid var(--border,#1e2a38)}
 .mb-row:last-child{border-bottom:0}
 .mb-row .lbl{flex:1;min-width:0}
+/* A text box or a select is width:100%, so beside a label it claimed the
+   whole row and squeezed the label to 0px, at every width. A row holding one
+   stacks instead: label, then the field under it. A short box given its own
+   max-width stays beside its label. Found by TRAIN, which did this itself. */
+.mb-row:has(> .mb-input:not([style*="max-width"])),
+.mb-row:has(> .mb-sel){flex-direction:column;align-items:stretch;gap:var(--s-2,8px)}
+.mb-row:has(> .mb-input:not([style*="max-width"])) > .lbl,
+.mb-row:has(> .mb-sel) > .lbl{flex:none}
 .mb-row .lbl b{display:block;font-weight:var(--w-bold,700);font-size:var(--f-2,14px);color:var(--text-1,#dbe7f0)}
 .mb-row .lbl span{display:block;color:var(--text-muted,#5b6d80);font-size:var(--f-1,12px);line-height:1.5;margin-top:2px}
 /* No border here on purpose. Two background colours already separate the row
@@ -105,7 +113,7 @@ function css() {
 .mb-seg i.ind{position:absolute;top:3px;bottom:3px;left:0;border-radius:calc(var(--radius-md,10px) - 3px);
   background:var(--surface-1,#0e141d);box-shadow:var(--e-1,0 1px 3px rgba(0,0,0,.3));pointer-events:none;
   transition:transform var(--dur-med,240ms) var(--ease-out,ease),width var(--dur-med,240ms) var(--ease-out,ease)}
-.mb-seg button{position:relative;z-index:1;flex:1 0 auto;min-height:38px;padding:0 var(--s-3,12px);
+.mb-seg button{position:relative;z-index:1;flex:1 0 auto;min-height:var(--tap,44px);padding:0 var(--s-3,12px);
   border:0;background:none;cursor:pointer;white-space:nowrap;
   font-family:var(--font-display,system-ui);font-size:var(--f-1,12px);font-weight:var(--w-bold,700);
   letter-spacing:.1em;color:var(--text-muted,#5b6d80);
@@ -190,7 +198,7 @@ function css() {
 .mb-btn:focus-visible{outline:2px solid var(--focus,#7ee8fa);outline-offset:2px}
 .mb-veil{position:fixed;inset:0;z-index:8900;display:flex;align-items:center;justify-content:center;padding:20px;
   background:var(--overlay,rgba(4,7,11,.72));backdrop-filter:blur(3px)}
-.mb-sheet{position:relative;width:min(var(--mb-w,520px),96vw);max-height:88vh;display:flex;flex-direction:column;
+.mb-sheet{position:relative;width:min(var(--mb-w,520px),96vw);max-height:88vh;max-height:88svh;display:flex;flex-direction:column;
   background:var(--surface-1,#0e141d);color:var(--text-1,#dbe7f0);
   border:1px solid var(--border-strong,#2b3a4d);border-radius:var(--radius-md,14px);
   box-shadow:0 30px 80px -30px #000;font-family:var(--font-body,system-ui);font-size:13px;overflow:hidden}
@@ -215,6 +223,7 @@ let toastEl, toastT;
    card on a laptop. Without mobile.js these fall back to the plain versions,
    so nothing that already calls UI breaks. */
 const M = () => g.Mobile;
+let menuAway = null;   /* the listener that closes an open desktop menu */
 const buzz = (kind, opts) => { const m = M(); if (m) m.feedback(kind, opts); else if (g.Sfx) g.Sfx.play(kind === 'warn' ? 'error' : 'drop'); };
 
 const UI = {
@@ -474,10 +483,22 @@ const UI = {
     const r = box.getBoundingClientRect();
     box.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
     box.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
-    setTimeout(() => document.addEventListener('pointerdown', UI.closeMenus, { once: true }), 0);
+    /* The next press anywhere closes it — except a press on the menu itself.
+       That one used to close it too, removing the item before its click could
+       land, so on a wide window nothing in a menu could be chosen with a mouse
+       (root brief, foundation item 11). */
+    const away = e => {
+      if (e.target && e.target.closest && e.target.closest('.mb-menu')) return;
+      UI.closeMenus();
+    };
+    menuAway = away;
+    setTimeout(() => { if (menuAway === away) document.addEventListener('pointerdown', away); }, 0);
     return box;
   },
-  closeMenus() { document.querySelectorAll('.mb-menu').forEach(n => n.remove()); },
+  closeMenus() {
+    if (menuAway) { document.removeEventListener('pointerdown', menuAway); menuAway = null; }
+    document.querySelectorAll('.mb-menu').forEach(n => n.remove());
+  },
 
   /* ── components ──
      Small, and deliberately so. An app that needs a control that is not here

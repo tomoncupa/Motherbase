@@ -274,6 +274,42 @@ async function run() {
     return sw.on === true && got === true && sw.getAttribute('aria-checked') === 'true';
   })());
 
+  /* Three foundation fixes from 2026-09-14, each checked at the mechanism an
+     app session found by working around it. */
+  ok('ui: a desktop menu item survives the press that picks it, and a press elsewhere closes it', () => {
+    /* A narrow window gets an action sheet, which never had this bug. */
+    if (window.Mobile && Mobile.sheetish && Mobile.sheetish()) return true;
+    let hit = 0;
+    const box = UI.menu(-9999, -9999, [{ label: 'pick me', fn: () => { hit++; } }]);
+    return new Promise(res => setTimeout(() => {
+      const b = box.querySelector('button');
+      b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      const stayed = b.isConnected;
+      b.click();
+      UI.menu(-9999, -9999, [{ label: 'x', fn: () => {} }]);
+      setTimeout(() => {
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        res(stayed && hit === 1 && !document.querySelector('.mb-menu'));
+      }, 10);
+    }, 10));
+  });
+  ok('ui: every segment is a full tap target', (() => {
+    const seg = UI.segmented([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], 'a', () => {});
+    document.body.appendChild(seg);
+    const h = seg.querySelector('button').getBoundingClientRect().height;
+    seg.remove();
+    return h >= parseFloat(tok('--tap'));
+  })());
+  ok('ui: a row keeps its label when its control is a field', (() => {
+    const box = document.createElement('div');
+    box.style.width = '360px';
+    const r = UI.row('A label', null, UI.field('text'));
+    box.appendChild(r); document.body.appendChild(box);
+    const w = r.querySelector('.lbl').getBoundingClientRect().width;
+    box.remove();
+    return w > 100;
+  })());
+
   /* ---- tables you can type into ---- */
   IO.register({ app: '__tbl', name: 'Tbl', types: [stamp],
     tables: [{ name: 'Things', type: stamp, cols: [['name', 'Name'], ['base.n', 'N']] }] });
@@ -1170,8 +1206,11 @@ async function run() {
   ok('icons: buttons outnumber drawings, which is the point',
     Icons.reuse().perDrawing >= 2);
   ok('icons: every app in the dock has one',
-    ['home', 'arc', 'block', 'habits', 'form', 'status', 'train', 'style']
+    ['home', 'block', 'status', 'log', 'quest', 'train', 'checkin', 'style',
+     'arc', 'wealth', 'form', 'portion']
       .every(a => !!Icons.iconFor('app.' + a)));
+  ok('icons: the minus, trophy and three lines TRAIN drew for itself are in the set',
+    ['minus', 'record', 'nav'].every(r => !!Icons.svg(r)));
   ok('icons: it renders currentColor svg, so it takes the colour beside it', (() => {
     const svg = Icons.svg('add');
     return /^<svg/.test(svg) && /stroke="currentColor"/.test(svg) && /viewBox="0 0 24 24"/.test(svg);
@@ -1481,6 +1520,14 @@ async function run() {
     let dates = 0;
     for (let i = 0; i < labs.length; i++) if (labs[i].textContent.indexOf('/') > -1) dates++;
     return dates >= 3;
+  })());
+
+  ok('chart: money in the tens of thousands still gets a readable scale', (() => {
+    const c = Chart.make({ w: 320, h: 150 });
+    c.yFit([0, 80000]);
+    /* the step table stopped at 5000, which drew this as seventeen lines */
+    const lines = (c.hi - c.lo) / c.step;
+    return lines >= 2 && lines <= 8;
   })());
 
   ok('chart: it names no colours of its own', (() => {

@@ -1,11 +1,16 @@
 # STANDARDS — what every app in the suite does the same way
 
-> **Who this governs.** `status/` and `train/` are the phone apps, and every
-> rule below is binding on them. The home screen, `arc/`, `block/`, `habits/`,
-> `form/` and `style/` are desktop apps: they may use hover, tighter density and
-> centred dialogs, and they are not bound by the one-handed rules. Two things
-> hold everywhere regardless, because they cost nothing with a mouse — the 44px
-> tap target and the safe-area insets. Set by Tom on 2026-08-22.
+> **Who this governs.** `train/` is the phone app, and every rule below is
+> binding on it. `status/`, `quest/` and `checkin/` are for everywhere: built to
+> these rules, because they are the harder ones, and also good at a desk. The
+> home screen, `form/`, `portion/`, `log/` and `wealth/` are desktop apps: they
+> may use hover, tighter density and centred dialogs, and they are not bound by
+> the one-handed rules, but they must still stack and stay usable on a phone.
+> `arc/`, `block/` and `style/` are desktop only and are not meant to work on a
+> phone at all. Two things hold everywhere regardless, because they cost
+> nothing with a mouse — the 44px tap target and the safe-area insets. Set by
+> Tom on 2026-08-22 and 2026-09-14; the root brief's hard constraint 10 is the
+> source.
 
 
 This is the house style. It governs how the apps **feel**, the way `CLAUDE.md`

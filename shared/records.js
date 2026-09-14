@@ -290,10 +290,27 @@ function loadFast() {
 }
 
 /* The big half, straight after. Merged rather than assigned, so anything the
-   app has already written in the meantime keeps its place by updated_at. */
+   app has already written in the meantime keeps its place by updated_at.
+
+   It does not get to hold the page hostage. An IndexedDB open has been watched
+   going unanswered for minutes (root brief, foundation item 1), and an app
+   waiting on Rec.ready shows nothing for that long. So after IDBWAIT the
+   waiting stops: ready fires on what localStorage had, and the big rows still
+   merge in whenever the browser does answer, announced like any other change.
+   Writes are unaffected — they queue on the same open and land when it does. */
+const IDBWAIT = 2500;
+let idbSlow = false;
 function hydrate() {
   if (!IDB.available) { hydrated = true; flushReady(); return; }
+  let settled = false;
+  const slow = setTimeout(() => {
+    if (settled) return;
+    idbSlow = true;
+    console.warn('[records] indexeddb has not answered in ' + IDBWAIT + 'ms; carrying on with localStorage, and big rows will merge in when it does');
+    hydrated = true; flushReady();
+  }, IDBWAIT);
   IDB.all().then(list => {
+    settled = true; clearTimeout(slow); idbSlow = false;
     let changed = 0;
     (list || []).forEach(r => {
       if (!r || !r.id) return;
@@ -304,6 +321,7 @@ function hydrate() {
     if (changed) { repairDates(); announce([], false); }
     hydrated = true; flushReady();
   }).catch(e => {
+    settled = true; clearTimeout(slow); idbSlow = false;
     console.warn('[records] indexeddb unavailable, localStorage only', e);
     hydrated = true; flushReady();
   });
@@ -469,6 +487,8 @@ const Rec = {
       /* how many rows are too big for the fast half, and whether the big half
          is actually there to hold them */
       big: big, idb: IDB.available, hydrated: hydrated,
+      /* true while ready has fired without the big half, because it was slow */
+      idbSlow: idbSlow,
     };
   },
   /** re-read everything from storage. Frames on file:// share the storage but not

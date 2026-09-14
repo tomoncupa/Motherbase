@@ -30,7 +30,7 @@
 <h1>Motherbase review</h1>
 <p class="lede">
   Opens every app the way you would, checks each one draws and every tab works, runs the
-  163 foundation checks, and looks over your rows for anything broken.
+  foundation checks, and looks over your rows for anything broken.
   <b>It does not change your data.</b> It reads it. The only thing it ever writes is a
   made-up row type no app owns, which it removes again.
   Run it on the machine you actually use — the more real data it has, the more it can see.
@@ -246,7 +246,7 @@ async function reviewFoundation() {
       await wait(250);
     }
     const m = text.match(/(\d+) \/ (\d+) passed/);
-    if (!m) { ok('foundation: the 163 shared checks ran', false, 'never finished'); return; }
+    if (!m) { ok('foundation: the shared checks ran', false, 'never finished'); return; }
     const fails = (text.match(/FAIL[^\n]*/g) || []).map(s => s.replace(/^FAIL\s*/, '').trim());
     ok('foundation: ' + m[2] + ' shared checks, all passing', m[1] === m[2],
       fails.slice(0, 3).join(' | '));
@@ -321,7 +321,10 @@ function reviewRows(Rec, Health) {
   ok('data: every logged set still knows its exercise',
     !badSets.length, badSets.length ? badSets.length + ' point at an exercise that is gone' : '');
 
+  /* STATUS, which owns `spend`, writes the account's NAME ("GCash"), not its
+     row key ("gcash"). Checking keys alone failed every real purchase. */
   const accts = idsOf('acct');
+  live('acct').forEach(r => { if (r.payload && r.payload.name) accts[r.payload.name] = 1; });
   const badSpend = live('spend').filter(r => r.payload && r.payload.acct && !accts[r.payload.acct]);
   ok('data: every payment still knows its account',
     !badSpend.length, badSpend.length ? badSpend.length + ' point at an account that is gone' : '');
@@ -382,12 +385,18 @@ function reviewRows(Rec, Health) {
 
   /* The foundation checks tidy up after themselves. If they stop, this is
      where it shows, rather than as a slow drift nobody attributes to anything.
-     One run's worth is expected — this page ran them a moment ago and the
-     store here has not caught up with the frame's deletions yet. */
-  const leftovers = rows.filter(r => !r.deleted && /^smoke|^__/.test(r.type));
-  if (leftovers.length > 12) {
+     A count of 12 was the old test, and one run now writes more than that, so
+     runs back to back tripped it. The question is really age: a test row
+     still live ten minutes after it was written was left behind. */
+  const stale = Date.now() - 10 * 60 * 1000;
+  const leftovers = rows.filter(r => !r.deleted && /^smoke|^__/.test(r.type) &&
+    Date.parse(r.updated_at) < stale);
+  if (leftovers.length) {
+    const kinds = {};
+    leftovers.forEach(r => { kinds[r.type] = (kinds[r.type] || 0) + 1; });
     ok('data: the checks tidied up after themselves', false,
-      leftovers.length + ' test rows left behind across previous runs');
+      leftovers.length + ' test rows left behind by earlier runs: ' +
+      Object.keys(kinds).map(k => k + ' ' + kinds[k]).join(', '));
   } else {
     ok('data: the checks tidied up after themselves', true);
   }

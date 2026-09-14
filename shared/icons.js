@@ -105,6 +105,10 @@ const PATHS = {
   gauge:       'M3.5 18a8.5 8.5 0 1117 0M12 14l4.5-4.5',
   book:        'M4 4h7a2 2 0 012 2v14a2 2 0 00-2-2H4zM20 4h-7a2 2 0 00-2 2v14a2 2 0 012-2h7z',
   drop:        'M12 3c0 0 6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z',
+  /* the three TRAIN and CLEX drew for themselves, moved in 2026-09-14 */
+  minus:       'M5 12h14',
+  trophy:      'M7 4h10v5a5 5 0 01-10 0zM7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3M12 14v4M8 21h8',
+  burger:      'M4 6h16M4 12h16M4 18h16',
 };
 
 /* ── the roles ──
@@ -118,6 +122,8 @@ const PATHS = {
 const ROLES = {
   /* the universal verbs */
   add: 'plus', new: 'plus', create: 'plus',
+  minus: 'minus', less: 'minus', decrease: 'minus', fewer: 'minus',
+  nav: 'burger', drawer: 'burger', sidebar: 'burger', hamburger: 'burger',
   close: 'x', cancel: 'x', clear: 'x', dismiss: 'x',
   done: 'check', tick: 'check', save: 'check', confirm: 'check', complete: 'check',
   del: 'trash', 'delete': 'trash', remove: 'trash',
@@ -169,6 +175,7 @@ const ROLES = {
   set: 'list', log: 'list', rows: 'list',
   chart: 'chart', graph: 'chart', stats: 'chart', progress: 'chart', volume: 'chart',
   goal: 'target', target: 'target',
+  record: 'trophy', best: 'trophy', pr: 'trophy', trophy: 'trophy',
   streak: 'flame', fire: 'flame',
   body: 'person', profile: 'person', person: 'person',
 
@@ -176,15 +183,21 @@ const ROLES = {
   play: 'play', start: 'play', video: 'play',
   pause: 'pause', stop: 'pause',
 
-  /* the apps themselves */
+  /* the apps themselves, in the home screen's order. HABITS left 2026-09-14;
+     LOG, QUESTS, CHECK IN, WEALTH and FOODDÉX had no icon until then, and the
+     dock drew a plain character for each */
   'app.home': 'home',
-  'app.arc': 'nodes',
   'app.block': 'grid',
-  'app.habits': 'repeat',
-  'app.form': 'play',
   'app.status': 'gauge',
+  'app.log': 'book',
+  'app.quest': 'check',
   'app.train': 'dumbbell',
+  'app.checkin': 'camera',
   'app.style': 'palette',
+  'app.arc': 'nodes',
+  'app.wealth': 'cash',
+  'app.form': 'play',
+  'app.portion': 'bowl',
 
   /* structure */
   routine: 'repeat', repeat: 'repeat', cycle: 'repeat',
@@ -202,6 +215,8 @@ const NOTES = {
   drop: 'a water drop',
   flame: 'a streak that is still alive',
   cash: 'a note, not a coin: a coin reads as a full stop at 20px',
+  trophy: 'a personal record, for TRAIN',
+  burger: 'three lines, for a drawer of screens',
 };
 
 /* ── how a theme draws them ──

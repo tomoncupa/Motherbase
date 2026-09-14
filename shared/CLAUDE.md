@@ -3,7 +3,7 @@
 Governs `shared/` only. The repo-root `CLAUDE.md` governs everything else and
 still applies here.
 
-**Every app depends on these ten files.** A mistake in an app breaks one app. A
+**Every app depends on these files.** A mistake in an app breaks one app. A
 mistake here breaks all of them and can lose data. Work slowly.
 
 `THEMING.md`, next to this file, is the contract between STYLE and every app:
@@ -13,9 +13,11 @@ and you have changed that contract for all of them — so read it first.
 
 `STANDARDS.md`, next to this file, is the house style for how the apps feel. It
 is binding the same way this file is, and it is written for Tom rather than for
-you — read it before changing anything anybody touches. **It governs `status/`
-and `train/` only:** those are the phone apps. Everything else in the suite is a
-desktop app. Set by Tom on 2026-08-22, and the top of `STANDARDS.md` says so.
+you — read it before changing anything anybody touches. **It binds `train/`,
+the phone app, and `status/`, `quest/` and `checkin/`, which are for
+everywhere.** Everything else in the suite is a desktop app, and `arc/`,
+`block/` and `style/` are desktop only. Set by Tom on 2026-08-22 and
+2026-09-14; the top of `STANDARDS.md` says so.
 
 ## The one-session rule
 
@@ -36,17 +38,17 @@ are holding a stale copy of whatever you just changed.
 | `mobile.js` | The touch layer: sheets, swipes, keyboard, back stack, haptics, safe areas. | Medium. Every app's feel. |
 | `sound.js` | Sound themes and instruments, synthesised. | Low. |
 | `ui.js` | Snackbars, dialogs, menus, switches, the Settings panel. **Build app screens out of these, never a private copy of them.** | Medium. |
-| `icons.js` | The icon master set: ~52 drawings carrying ~144 buttons, plus the packs. | Medium. Every button in the suite. |
+| `icons.js` | The icon master set: ~55 drawings carrying ~160 buttons, plus the packs. | Medium. Every button in the suite. |
 | `io.js` | Backup, restore, spreadsheet export. | High. It is the safety net. |
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 167 checks over all of it. | Run it every time. |
+| `_smoke.html` | 214 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
 
-1. **Never break the API an app already calls.** Add, do not rename. Three apps
-   plus the kernel are calling into these.
+1. **Never break the API an app already calls.** Add, do not rename. Every app
+   in the suite is calling into these.
 2. **`records.js` is append-thinking.** Rows are addressable and merge by
    `updated_at`. Any change that makes state whole-document again is wrong,
    whatever it saves in code.

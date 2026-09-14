@@ -334,7 +334,6 @@ Measured 2026-08-22. Every number is a place a theme cannot reach.
 | `style/` | yes | 1 | 11 |
 | `status/` | yes | 8 | 1 |
 | `index.html` | yes | 10 | 3 |
-| `habits/` | **no** | 17 | 46 |
 | `form/` | **no** | 23 | 86 |
 | `arc/` | **no** | 49 | 167 |
 | `block/` | **no** | 77 | 120 |
