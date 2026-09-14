@@ -481,6 +481,35 @@ Watched: a ₱1,040 bill every 6.5 days from 4 September, made through the bill
 sheet with its own buttons, was due 17, 24 and 30 September, then 7 and 13
 October, and showed in the list and the upcoming dates exactly so.
 
+### Three cards on MONEY OUT
+
+Tom, 2026-09-14, asked for these as separate cards, in his words:
+
+| Card | Bills filed as |
+|---|---|
+| **BILLS & UTILITIES** | everything not below: Rent, Utility Bills, uncategorised |
+| **SUBSCRIPTIONS, MEMBERSHIPS & OPERATING COSTS** | Subscriptions, Gym, or any `biz` category |
+| **GROCERIES, WATER & REGULAR SPENDING** | Drinking Water, or any `var` category |
+
+Every bill is in exactly one card, and the card follows its category, so
+re-filing a bill moves it. Before this, the subscriptions card repeated bills
+already listed above it and led with the yearly figure. Now every row's
+figure is **what it comes to a month**, a bill every few days says what each
+payment is underneath, and each card totals a month. The subscriptions card
+alone adds the year after it, unbolded, because he asked for the monthly
+cost to lead, not for the year to go.
+
+**A bill filed as everyday spending is left out of runway.** Runway is the
+bills plus a normal month of everyday spending, measured from what was
+actually spent. A Groceries bill added on top would count groceries twice.
+FREE still holds back its dates, because the money still goes out on them,
+and the note under runway says when bills were left out.
+
+Watched: nine made-up bills, one per category, landed one each in the right
+card with ₱24,870, ₱6,749 and ₱11,600 a month. With ₱20,000 rent and an
+₱8,000 Groceries bill, runway counted ₱20,000 of bills and FREE held back
+₱28,000.
+
 ## Import, and what it took
 
 **Statement import.** Built 2026-09-11. Tom: *"the purpose of the statement
@@ -629,6 +658,12 @@ Apply pressed twice back to back, saved two purchases, not four. Made-up
 copies with and without a reference: only the referenced pairs were listed,
 the copy re-filed later kept its new category, and undo put every row, mark
 and record back.
+
+Removed on his device the same day, at his request, after checking that the
+two copies of every one of the 200 pairs were identical, category included.
+Rows from statements went from 369 purchases, 20 payments and 30 transfers to
+194, 10 and 15, with no pair left and no "already imported" record pointing
+at a row that is gone.
 
 ### How an account is recognised
 

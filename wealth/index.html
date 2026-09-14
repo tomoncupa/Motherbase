@@ -1025,6 +1025,11 @@ function billDates(b, from, to) {
 const billMonthly = b => b.cycle === 'days'
   ? num(b.amt, 0) * (365.25 / 12) / Math.max(1, num(b.every, 7)) : num(b.amt, 0);
 const monthlyFixed = () => bills().reduce((a, b) => a + billMonthly(b), 0);
+/* The bills runway counts. A bill filed under an everyday category, Groceries
+   say, is left out: a normal month of everyday spending is already measured
+   from what was actually spent, and adding the bill too counts it twice. */
+const standingBills = () => bills().filter(b => catGrp(b.cat) !== 'var')
+  .reduce((a, b) => a + billMonthly(b), 0);
 
 /* ══ the three numbers ══ */
 function board() {
@@ -1037,7 +1042,7 @@ function board() {
    tomorrow. The app's real subject — liquid moves for boring reasons, this
    only moves when something structural did. */
 function runway() {
-  const burn = monthlyFixed() + typicalVariable();
+  const burn = standingBills() + typicalVariable();
   const L = liquid();
   if (!burn || !L.counted) return null;
   return { months: L.total / burn, burn: burn };
@@ -2562,7 +2567,8 @@ function drawScore(m) {
        forbids telling him what a behaviour did to a figure. */
     sc2.appendChild(el('div', 'sub', 'At ' + money(rw.burn) + ' a month standing cost, if every client left tomorrow.'));
     c2.appendChild(sc2);
-    c2.appendChild(el('div', 'note', money(monthlyFixed()) + ' of that is bills you have listed. ' +
+    c2.appendChild(el('div', 'note', money(standingBills()) + ' of that is bills you have listed' +
+      (standingBills() < monthlyFixed() ? ', not counting bills filed as everyday spending' : '') + '. ' +
       money(typicalVariable()) + ' is a normal month of everything else, big purchases left out.'));
   }
   m.appendChild(c2);
@@ -2836,46 +2842,43 @@ function drawClients(m) {
 /* ── MONEY OUT ── */
 function drawOut(m) {
   const bl = bills();
-  const c1 = card('BILLS AND RENT');
-  if (!bl.length) c1.appendChild(el('div', 'empty', 'Nothing listed. Press <b>+</b> and add your rent first. Runway cannot be worked out without these.'));
-  else {
-    const list = el('div', 'list');
-    bl.forEach(b => {
-      /* Tom, 2026-09-14: "Change 'Day X of the month' to just the number." */
-      const r = itemRow(b.name, (b.cycle === 'days'
-          ? 'every ' + num(b.every, 7) + ' days, about ' + money(billMonthly(b)) + ' a month'
-          : num(b.day, 1)) + ' · ' + catName(b.cat) +
-        (b.acct ? ' · ' + esc(acctName(b.acct)) : ''), money(num(b.amt, 0)));
-      r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
-      list.appendChild(r);
-    });
-    c1.appendChild(list);
-    c1.appendChild(el('div', 'note', '<b>' + esc(money(monthlyFixed())) + '</b> a month, ' +
-      esc(money(monthlyFixed() * 12)) + ' a year.'));
-  }
-  m.appendChild(c1);
-
-  /* Recurring: the view he asked for. Not a category, a question — what
-     leaves without me deciding again. Subscriptions, gym, software. */
-  const rec = bl.filter(b => ['subs', 'gym', 'ops'].indexOf(b.cat) > -1);
-  /* Named by Tom, 2026-09-14: "still paying for" read as a complaint about
-     money he chose to spend. A card title says what is on it, not how to
-     feel about it. */
-  const c2 = card('SUBSCRIPTIONS AND MEMBERSHIPS');
-  if (!rec.length) c2.appendChild(el('div', 'empty', 'Nothing here yet. Bills filed as Subscriptions, Gym or Operating costs show up here, with what each comes to in a year.'));
-  else {
-    const list = el('div', 'list');
-    rec.forEach(b => {
-      const r = itemRow(b.name, catName(b.cat) + ' · ' + money(billMonthly(b)) + ' a month',
-        money(billMonthly(b) * 12) + '/yr');
-      r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
-      list.appendChild(r);
-    });
-    c2.appendChild(list);
-    c2.appendChild(el('div', 'note', 'Everything that renews on its own: <b>' +
-      esc(money(rec.reduce((a, b) => a + billMonthly(b) * 12, 0))) + '</b> a year between them.'));
-  }
-  m.appendChild(c2);
+  /* Tom, 2026-09-14: three cards, every bill in exactly one. Bills and
+     utilities; subscriptions, memberships and operating costs, "emphasise the
+     monthly cost not the annual"; and groceries, water and regular spending.
+     The card follows the bill's category, so re-filing a bill moves it. A
+     card title says what is on it, not how to feel about it. */
+  const shelf = b => ['subs', 'gym'].indexOf(b.cat) > -1 || catGrp(b.cat) === 'biz' ? 'subs'
+    : b.cat === 'water' || catGrp(b.cat) === 'var' ? 'regular' : 'bills';
+  const billRow = b => {
+    /* Tom, 2026-09-14: "Change 'Day X of the month' to just the number." */
+    const r = itemRow(b.name, (b.cycle === 'days'
+        ? 'every ' + num(b.every, 7) + ' days, ' + money(num(b.amt, 0)) + ' each'
+        : num(b.day, 1)) + ' · ' + catName(b.cat) +
+      (b.acct ? ' · ' + esc(acctName(b.acct)) : ''), money(billMonthly(b)) + '/mo');
+    r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
+    return r;
+  };
+  const shelfCard = (id, title, empty, more) => {
+    const list = bl.filter(b => shelf(b) === id);
+    const c = card(title);
+    if (!list.length) c.appendChild(el('div', 'empty', empty));
+    else {
+      const l = el('div', 'list');
+      list.forEach(b => l.appendChild(billRow(b)));
+      c.appendChild(l);
+      const mo = list.reduce((a, b) => a + billMonthly(b), 0);
+      c.appendChild(el('div', 'note', '<b>' + esc(money(mo)) + '</b> a month' + (more ? more(mo) : '') + '.'));
+    }
+    m.appendChild(c);
+  };
+  shelfCard('bills', 'BILLS & UTILITIES', bl.length
+    ? 'Nothing here yet. Rent, electricity and other bills show here.'
+    : 'Nothing listed. Press <b>+</b> and add your rent first. Runway cannot be worked out without these.');
+  shelfCard('subs', 'SUBSCRIPTIONS, MEMBERSHIPS & OPERATING COSTS',
+    'Nothing here yet. Bills filed as Subscriptions, Gym, Operating costs or Marketing show here.',
+    mo => ', ' + esc(money(mo * 12)) + ' over a year');
+  shelfCard('regular', 'GROCERIES, WATER & REGULAR SPENDING',
+    'Nothing here yet. Bills filed as Groceries, Drinking Water or another everyday category, Transport say, show here.');
 
   const dl = debts();
   const c3 = card('DEBTS');
