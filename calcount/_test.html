@@ -207,6 +207,25 @@
     A.Store.all('entry').filter(r => r.key.startsWith('gc')).forEach(r => A.Store.del('entry', r.date, r.key));
     A.Store.all('weight').forEach(r => A.Store.del('weight', r.date, ''));
 
+    /* ── the backup reminder ─────────────────────────────────────── */
+    const bkNow = Date.UTC(2026, 0, 31), DAY = 864e5;
+    A.S.set('lastBackup', 0); A.S.set('backupSnooze', 0);
+    const bkBase = new Set(A.Store.all('entry').map(r => r.date)).size;
+    const bkAdd = n => A.Store.set('entry', '2025-05-' + String(n + 1).padStart(2, '0'), 'bk' + n, { name: 'Test', serve: '1', qty: 1, kcal: 100, meal: 'b', t: n });
+    let bkN = 0;
+    while (bkBase + bkN < 6) bkAdd(bkN++);
+    check('backup reminder: not before someone has 7 days of logging worth losing', !A.backupDue(bkNow), (bkBase + bkN) + ' days');
+    bkAdd(bkN++);
+    check('backup reminder: shows once there are 7 days logged and no backup yet', A.backupDue(bkNow), (bkBase + bkN) + ' days');
+    A.S.set('lastBackup', bkNow - 3 * DAY);
+    check('backup reminder: stays quiet for 14 days after a backup is saved', !A.backupDue(bkNow));
+    A.S.set('lastBackup', bkNow - 15 * DAY);
+    check('backup reminder: comes back once the last backup is over 14 days old', A.backupDue(bkNow));
+    A.S.set('backupSnooze', bkNow - 2 * DAY);
+    check('backup reminder: Not now keeps it away for a week, and no longer', !A.backupDue(bkNow) && A.backupDue(bkNow + 6 * DAY));
+    A.Store.all('entry').filter(r => r.key.startsWith('bk')).forEach(r => A.Store.del('entry', r.date, r.key));
+    A.S.set('lastBackup', 0); A.S.set('backupSnooze', 0);
+
     /* ── the store ────────────────────────────────────────────────── */
     const S = A.Store;
     const row = S.set('entry', day, 'merge1', { kcal: 100, t: 1 });

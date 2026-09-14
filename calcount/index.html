@@ -598,6 +598,8 @@ function renderToday() {
   const week = viewDate === today() ? weekLine() : '';
   if (week) html += '<p class="small mut">' + week + '</p>';
   html += '</section>';
+  if (viewDate === today() && backupDue()) html += '<section class="card"><p>Your log lives only on this phone, so save a backup now and then.</p>' +
+    '<div class="btns" style="grid-template-columns:auto 1fr;margin-top:12px"><button class="btn btn-ghost" data-snooze>Not now</button><button class="btn btn-soft" data-backup>Save a backup</button></div></section>';
 
   if (!es.length) {
     html += viewDate === today()
@@ -613,12 +615,24 @@ function renderToday() {
   el.innerHTML = html;
   $$('[data-entry]', el).forEach(b => { b.onclick = () => editEntry(viewDate, b.dataset.entry); });
   const add = $('[data-add]', el); if (add) add.onclick = openAdd;
+  const snooze = $('[data-snooze]', el); if (snooze) snooze.onclick = () => { S.set('backupSnooze', Date.now()); render(); };
+  const backup = $('[data-backup]', el); if (backup) backup.onclick = () => { exportBackup(); render(); };
 }
 function weekLine() {
   if (Store.all('entry').length < 3) return '';
   let n = 0;
   for (let i = 0; i < 7; i++) if (Store.all('entry', addDays(today(), -i)).length) n++;
   return 'You logged ' + n + ' of the last 7 days.';
+}
+
+/* The log lives only on this phone, and a lost phone or a cleared browser takes
+   all of it. So once someone has a week of logging worth losing, Today asks
+   for a backup: never before that, at most once a week after "Not now", and
+   not again for 14 days after one is saved.                                */
+function backupDue(now) {
+  now = now || Date.now();
+  if (new Set(Store.all('entry').map(r => r.date)).size < 7) return false;
+  return now - S.get('lastBackup', 0) > 14 * 864e5 && now - S.get('backupSnooze', 0) > 7 * 864e5;
 }
 
 function editEntry(date, key) {
@@ -1369,7 +1383,7 @@ render();
 if (!profile()) onboarding(false);
 
 // For _test.html only. Nothing in the app reads this.
-window.CC_APP = { Store, S, goalCheck, recentMeals, repeatMeal, targets, goal, searchFoods, numbersFor, logFood, entries, candidateFrom, foodFromOpenFoodFacts, parseQty, fracText, norm, catalog, render };
+window.CC_APP = { Store, S, backupDue, goalCheck, recentMeals, repeatMeal, targets, goal, searchFoods, numbersFor, logFood, entries, candidateFrom, foodFromOpenFoodFacts, parseQty, fracText, norm, catalog, render };
 })();
 </script>
 </body>

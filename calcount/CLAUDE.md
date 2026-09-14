@@ -134,7 +134,7 @@ photo is shrunk, sent, and dropped.
 | `food` | food id | a food the person made themselves, same shape as `foods.js`. May carry a `barcode` |
 | `weight` | `''`, dated | `{kg}`, one per day, last one wins |
 | `usage` | `YYYY-MM` | `{scans}`, AI scans used that month |
-| `setting` | name | `{v}`. `goalOverride` is a goal the person set by hand or accepted from the goal check; `macros`, `hUnit`, `wUnit`, `scanUrl` and `device` are the rest |
+| `setting` | name | `{v}`. `goalOverride` is a goal the person set by hand or accepted from the goal check; `lastBackup` and `backupSnooze` are when a backup was last saved and when the reminder was last put off; `macros`, `hUnit`, `wUnit`, `scanUrl` and `device` are the rest |
 
 **The scan cap is enforced on the device until accounts exist.** A determined
 person can clear it. That is known and accepted for a Skool beta. The Worker
@@ -273,12 +273,12 @@ Two consequences, both written up for Tom:
 |---|---|
 | `CLAUDE.md` | Written 2026-09-15. |
 | `foods.js` | 220 foods, 17 of them combos, counted from the loaded file 2026-09-15. 19 are Jollibee USA's own published figures, 28 are standard reference values, and 173 are estimates that give their macros so they cannot contradict themselves. Chains: Jollibee, McDonald's, Mang Inasal, Chowking, Andok's, Greenwich, 7-Eleven, Lawson, Ministop, S&R. "SM" in Tom's first list was read as SM Supermarket, so it is covered by the packaged goods rather than a brand of its own. Nothing is `pub` yet. |
-| `index.html` | Built and tested in the browser 2026-09-15 at 375px, light and dark. Setup, Today, Add food with Tagalog search and one-tap add, Eat this again (a meal of two or more foods from an earlier day, re-added in one tap, because Filipino breakfasts and lunches repeat), servings, quick calories, make a food, barcode (the phone's own reader on Android Chrome, typing everywhere else, then Open Food Facts), photo scan with a confirm list, weight and the last 7 days, settings, backup and restore. **Not seen on a real phone.** The barcode camera and the photo picker cannot be driven from a desktop browser, so both are reasoned, not watched. |
+| `index.html` | Built and tested in the browser 2026-09-15 at 375px, light and dark. Setup, Today, Add food with Tagalog search and one-tap add, Eat this again (a meal of two or more foods from an earlier day, re-added in one tap, because Filipino breakfasts and lunches repeat), servings, quick calories, make a food, barcode (the phone's own reader on Android Chrome, typing everywhere else, then Open Food Facts), photo scan with a confirm list, weight and the last 7 days, the goal check, settings, backup and restore, and a backup reminder on Today once there are 7 days of logging worth losing (at most weekly after Not now, and quiet for 14 days after a backup). **Not seen on a real phone.** The barcode camera and the photo picker cannot be driven from a desktop browser, so both are reasoned, not watched. |
 | `worker/scan.js` | Written 2026-09-15 and checked in the browser with the network faked: request shape, key handling, the monthly cap, refusals, outages and bad answers. **Never called the real Claude API**, because that spends Tom's money. The first real scan is the real test. |
 | `worker/SETUP.md` | Written 2026-09-15. Tom has not deployed it. |
 | `sw.js`, `manifest.json`, icons | Offline copy and home-screen install, 2026-09-15. Watched on the test server: the offline copy registers, takes over the page and stores all five files. **Loading with the network actually cut has not been watched.** It is off on a test server unless the address has `?sw`, and it steps aside for any `?cb=` address, so tests are never answered from an old copy. The icons are drawn by a short Python script with no libraries, because Pillow is not installed here. |
 | `calories.html` | The free public page, 2026-09-15: "How many calories are in your order?" Tap foods into an order, change servings, share it. No account, stores nothing. A link can open it filtered, `calories.html?brand=Mang Inasal` or `?cat=drinks` or `?q=chickenjoy`, which is what a post or a reel links to. Tested in the browser at 375px. It is the cheapest test of demand: if people use and share this, the app earns the months. |
-| `_test.html` | 109 checks, all passing, 2026-09-15. It sets the browser's own CALCOUNT data aside and puts it back exactly. |
+| `_test.html` | 114 checks, all passing, 2026-09-15. It sets the browser's own CALCOUNT data aside and puts it back exactly. |
 
 ### Releasing a new version
 
