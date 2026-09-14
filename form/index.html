@@ -193,6 +193,13 @@ canvas.draw{position:absolute; inset:0; margin:auto; touch-action:none}
 .srcmenu input[type=number]{width:56px; background:var(--surface-2); border:1px solid var(--line); color:var(--ink); border-radius:6px; padding:4px 6px; font-family:var(--font-mono); font-size:12px}
 .dropzone{position:absolute; inset:0; z-index:3; display:flex; flex-direction:column; gap:10px; align-items:center; justify-content:center; color:var(--dim); text-align:center; padding:20px; pointer-events:none}
 .dropzone.hidden{display:none}
+/* A video the browser cannot draw. Without this the pane just stays blank,
+   which looks like FORM is broken rather than the file. */
+.cantplay{position:absolute; inset:0; z-index:5; display:none; align-items:center; justify-content:center;
+  padding:20px; background:var(--bg); color:var(--text-2); text-align:center; line-height:1.55; font-size:14px}
+.cantplay.on{display:flex}
+.cantplay div{max-width:420px}
+.cantplay b{color:var(--text-1)}
 .dropzone .big{font-size:15px; color:var(--ink)}
 .dropzone button{pointer-events:auto}
 
@@ -436,6 +443,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
             </div>
             <video data-pane="A" playsinline></video>
             <canvas class="draw" data-pane="A"></canvas>
+            <div class="cantplay" data-cantplay="A"></div>
             <div class="dropzone" data-pane="A"><div class="big">Drop a video here</div><div>or</div><button class="btn" data-load="A">Choose file…</button></div>
           </div>
           <div class="transport" data-pane="A">
@@ -469,6 +477,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
             </div>
             <video data-pane="B" playsinline></video>
             <canvas class="draw" data-pane="B"></canvas>
+            <div class="cantplay" data-cantplay="B"></div>
             <div class="dropzone" data-pane="B"><div class="big">Drop a video here</div><div>or</div><button class="btn" data-load="B">Choose file…</button></div>
           </div>
           <div class="transport" data-pane="B">
@@ -645,7 +654,7 @@ function loadFile(pane,file){
   if(!file.type.startsWith('video/')){ toast('Not a video file'); return; }
   const st=V[pane]; if(st.url) URL.revokeObjectURL(st.url);
   st.url=URL.createObjectURL(file); st.name=file.name.replace(/\.[^.]+$/,'');
-  st.video.src=st.url; st.video.load();
+  st.video.src=st.url; st.video.load(); watchPlayable(pane);
   st.strokes=[]; st.path=[]; st.marks=[]; st.scale=null; st.series=[]; st.motion=null; st.reps=[]; st.notes=[];
   st.pose=null; st.smooth=null; st.lastPoseT=null;
   st.trim={start:0,end:null};
@@ -715,6 +724,20 @@ function renderStamp(pane){ const el=document.querySelector(`[data-stamp="${pane
   if(reps.length) parts.push(`Set ${secsLabel(reps[reps.length-1].t1-reps[0].t0)}`);
   else { const {s,e}=trimOf(pane); if(isFinite(e-s)&&e-s<1e8) parts.push(`Clip ${secsLabel(e-s)}`); }
   el.textContent=parts.join(' · '); el.title=tip; }
+/* ── a video that will not play ──
+   Two ways it shows: the browser refuses the file outright, or it opens it
+   and finds no picture it can draw (sound only, width zero). The usual cause
+   from an iPhone is its High Efficiency format. Every clip in Tom's Telegram
+   folder on 2026-09-14 was the common format, so this is a safety net. */
+function watchPlayable(pane){ const st=V[pane], v=st.video, url=st.url, el=document.querySelector(`[data-cantplay="${pane}"]`);
+  if(!el) return; el.classList.remove('on');
+  const bad=()=>{ if(V[pane].url!==url) return;
+    el.innerHTML='<div><b>This video will not play here.</b><br>It was probably filmed in the iPhone\'s High Efficiency format, which this browser cannot show.<br><br>'+
+      '<b>For next time:</b> on the iPhone, Settings, Camera, Formats, Most Compatible.<br>'+
+      '<b>For this video:</b> send it on Telegram as a normal video, download that copy, and drop it in here.</div>';
+    el.classList.add('on'); };
+  v.addEventListener('error',bad,{once:true});
+  v.addEventListener('loadedmetadata',()=>{ if(!v.videoWidth) bad(); },{once:true}); }
 function onDurationKnown(pane){ const v=V[pane].video, ready=()=>isFinite(v.duration)&&v.duration>0;
   if(ready()){ buildFilmstrip(pane); updateTrimVisual(pane); return; }
   const h=()=>{ if(ready()){ v.removeEventListener('durationchange',h); try{v.currentTime=0;}catch(e){} buildFilmstrip(pane); updateTrimVisual(pane); } };
