@@ -91,6 +91,9 @@ nav button.dead{color:#43535f}
 nav button[draggable]{cursor:grab}
 nav button.dragging{opacity:.4;cursor:grabbing}
 nav button.dropinto{box-shadow:inset 2px 0 0 var(--acc)}
+/* the line in front of Tom's own apps */
+.navsep{align-self:center;margin-left:var(--s-1);padding-left:var(--s-2);border-left:1px solid var(--line);
+  font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--dim);white-space:nowrap}
 .spacer{flex:1}
 .clock{font-family:var(--f1);font-size:12px;letter-spacing:.1em;color:var(--dim);text-align:right;line-height:1.35}
 .clock b{display:block;color:var(--txt);font-size:14px;letter-spacing:.14em}
@@ -573,15 +576,15 @@ const APPS = [
   { id: 'home',   nm: 'HOME',   ic: '◈', file: null,                ds: 'today, streaks, everything at a glance' },
   { id: 'arc',    nm: 'ARC',    ic: '◇', file: 'arc/index.html',    ds: 'mind canvas — think, map, plan',            solo: 1 },
   { id: 'block',  nm: 'BLOCK',  ic: '▦', file: 'block/index.html',  ds: 'build the day out of blocks',               shares: 'routine + ticks' },
-  { id: 'form',   nm: 'FORM',   ic: '▶', file: 'form/index.html',   ds: 'side-by-side lift review',                  solo: 1 },
+  { id: 'form',   nm: 'FORM',   ic: '▶', file: 'form/index.html',   ds: 'side-by-side lift review',                  solo: 1, mine: 1 },
   { id: 'status', nm: 'STATUS', ic: '◐', file: 'status/index.html', ds: 'sleep, weight, mood, food and money',        shares: 'the daily measurements' },
-  { id: 'log',    nm: 'LOG',    ic: '▤', file: 'log/index.html',    ds: 'the journal, the last few weeks at a glance', shares: 'the journal' },
-  { id: 'quest',  nm: 'QUESTS', ic: '◆', file: 'quest/index.html',  ds: 'todos, when they are due, and projects', shares: 'the journal todos' },
-  { id: 'portion', nm: 'FOODDÉX', ic: '◪', file: 'portion/index.html', ds: 'a label in, the amounts you eat out', shares: 'the food library' },
+  { id: 'log',    nm: 'LOG',    ic: '▤', file: 'log/index.html',    ds: 'the journal, the last few weeks at a glance', shares: 'the journal', mine: 1 },
+  { id: 'quest',  nm: 'QUESTS', ic: '◆', file: 'quest/index.html',  ds: 'todos, when they are due, and projects', shares: 'the journal todos', mine: 1 },
+  { id: 'portion', nm: 'FOODDÉX', ic: '◪', file: 'portion/index.html', ds: 'a label in, the amounts you eat out', shares: 'the food library', mine: 1 },
   { id: 'train',  nm: 'TRAIN',  ic: '⛭', file: 'train/index.html',  ds: 'the training log — sets, reps, records',     shares: 'the training log + ticks' },
   { id: 'checkin', nm: 'CHECK IN', ic: '◎', file: 'checkin/index.html', ds: 'photos, weight and how the week went', shares: 'weight, with STATUS' },
   { id: 'style',  nm: 'STYLE',  ic: '◧', file: 'style/index.html',  ds: 'pick, compare, edit and add themes',         shares: 'the themes every app wears' },
-  { id: 'wealth', nm: 'WEALTH', ic: '▩', file: 'wealth/index.html', ds: 'clients, bills, pots and what is actually left', shares: 'spending and accounts' },
+  { id: 'wealth', nm: 'WEALTH', ic: '▩', file: 'wealth/index.html', ds: 'clients, bills, pots and what is actually left', shares: 'spending and accounts', mine: 1 },
 ];
 const app = id => APPS.find(a => a.id === id);
 
@@ -603,7 +606,11 @@ function dockOrder() {
   const out = [];
   saved.forEach(id => { if (known[id] && out.indexOf(id) < 0) out.push(id); });
   APPS.forEach(a => { if (out.indexOf(a.id) < 0) out.push(a.id); });
-  return out;
+  /* Tom's own apps, the ones flagged `mine` above, are their own group after
+     the rest (Tom, 2026-09-14). The order he set is kept inside each group
+     and never carries an app across the line. The tester build drops every
+     one of them, so a tester's dock has one group and no line. */
+  return out.filter(id => !known[id].mine).concat(out.filter(id => known[id].mine));
 }
 const dockApps = () => dockOrder().map(app).filter(Boolean);
 function saveDock(ids) {
@@ -615,6 +622,7 @@ function moveApp(id, d) {
   const ids = dockOrder();
   const i = ids.indexOf(id), j = i + d;
   if (i < 0 || j < 0 || j >= ids.length) return;
+  if (!!app(ids[i]).mine !== !!app(ids[j]).mine) return;      /* the groups do not mix */
   ids.splice(j, 0, ids.splice(i, 1)[0]);
   saveDock(ids);
   if (typeof Mobile !== 'undefined') Mobile.feedback('select');
@@ -718,6 +726,7 @@ function drawNav() {
       saveDock(ids);
     });
     b.oncontextmenu = ev => { ev.preventDefault(); dockMenu(a, i, order.length, ev.clientX, ev.clientY); };
+    if (a.mine && !(order[i - 1] || {}).mine) n.appendChild(el('span', 'navsep', 'TOM ONLY'));
     n.appendChild(b);
 
     /* the same button again, for the thumb. Icon over label, because at this
@@ -734,10 +743,14 @@ function drawNav() {
 
 /* Move it, or put the whole dock back the way it shipped. */
 function dockMenu(a, i, total, x, y) {
+  /* the ends of its own group, not of the whole dock */
+  const order = dockApps();
+  const first = i === 0 || !!order[i - 1].mine !== !!a.mine;
+  const last = i === total - 1 || !!order[i + 1].mine !== !!a.mine;
   UI.menu(x, y, [
-    i > 0 ? { label: 'Move left', icon: '\u2190', fn: () => moveApp(a.id, -1) } : null,
-    i < total - 1 ? { label: 'Move right', icon: '\u2192', fn: () => moveApp(a.id, 1) } : null,
-    i > 0 ? { label: 'Move to the front', fn: () => {
+    !first ? { label: 'Move left', icon: '\u2190', fn: () => moveApp(a.id, -1) } : null,
+    !last ? { label: 'Move right', icon: '\u2192', fn: () => moveApp(a.id, 1) } : null,
+    !first ? { label: 'Move to the front', fn: () => {
         const ids = dockOrder();
         ids.splice(0, 0, ids.splice(ids.indexOf(a.id), 1)[0]);
         saveDock(ids);

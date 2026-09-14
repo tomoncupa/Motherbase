@@ -442,6 +442,12 @@ main{display:flex;flex:1;min-height:0}
 .also-txt{flex:1;min-width:0;display:flex;flex-direction:column}
 .also-txt .rhs{overflow:hidden;text-overflow:ellipsis}
 .also-row.isdone .rhn{color:var(--text-muted)}
+/* export, for someone else: one tickable line per thing to hand over */
+.shr{display:flex;align-items:center;gap:var(--s-2);min-height:var(--tap);padding:0 var(--s-2);margin-bottom:var(--s-1);
+  border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel);cursor:pointer}
+.shr input{width:auto;flex:0 0 auto}
+.shr span{margin-left:auto;color:var(--text-muted);font-size:var(--f-1)}
+#shWho{flex:1;min-width:0}
 .sumcards{display:flex;gap:10px;flex-wrap:wrap}
 .freshrow{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;
   margin-top:var(--s-4)}
@@ -4377,7 +4383,7 @@ $('#veil').onclick = e => { if (e.target.id === 'veil') closeModal(); };
 
 let expTab = 'ics';
 function openExport() {
-  const tabs = [['ics', 'Google Calendar (.ics)'], ['gl', 'GCal links'], ['csv', 'Todoist CSV'], ['qa', 'Todoist quick-add'], ['md', 'Plain text'], ['json', 'Backup']];
+  const tabs = [['ics', 'Google Calendar (.ics)'], ['gl', 'GCal links'], ['csv', 'Todoist CSV'], ['qa', 'Todoist quick-add'], ['md', 'Plain text'], ['share', 'For someone else'], ['json', 'Backup']];
   const assigned = S.week.some(Boolean);
   openModal(
     '<div class="modal-head"><h3>EXPORT</h3>' +
@@ -4397,7 +4403,7 @@ function openExport() {
 function paintExport() {
   const body = $('#mBody');
   const rows = allRows();
-  if (!rows.length && expTab !== 'json') { body.innerHTML = '<div class="hint">Nothing to export yet — drag some blocks in first.</div>'; return; }
+  if (!rows.length && expTab !== 'json' && expTab !== 'share') { body.innerHTML = '<div class="hint">Nothing to export yet — drag some blocks in first.</div>'; return; }
   const scopeNote = S.exportScope === 'week' && S.week.some(Boolean)
     ? '<div class="hint">Exporting the <b>full week</b>: each routine only fires on the days you assigned it in the Week tab, further narrowed by each block’s own day toggles.</div>' : '';
   if (expTab === 'ics') {
@@ -4431,6 +4437,8 @@ function paintExport() {
     body.innerHTML = '<textarea readonly>' + esc(t) + '</textarea><div class="row"><button class="btn acc" id="cp">Copy</button><button class="btn" id="dl">⤓ Download .md</button></div>';
     $('#cp').onclick = () => copy(t);
     $('#dl').onclick = () => download('routine.md', t);
+  } else if (expTab === 'share') {
+    paintShare(body);
   } else {
     const t = JSON.stringify(S, null, 1);
     body.innerHTML = '<div class="hint">Everything: blocks, routines, routines, templates, rules, week plan. Paste one back in and hit Restore to move it to another machine.</div>' +
@@ -4447,6 +4455,183 @@ function paintExport() {
       } catch (e) { toast('that isn’t valid BLOCK JSON'); }
     };
   }
+}
+
+/* ── for someone else: a start, not a backup ──
+   Tom, 2026-09-14: "Sometimes I'll help people start up." Backup is the whole
+   board, history and all, and restoring it replaces everything on the other
+   end: right for moving your own board, wrong for handing somebody a start.
+   This carries only what was ticked: the days, the routines on them, their
+   blocks, which weekdays each runs on, and any Every or Anytime habits. No
+   ticks, no history, no settings, no rules.
+
+   Importing ADDS. Every id is made new. A routine or day whose name is taken
+   gets a number after it. A weekday that already has a day keeps it. An Every
+   or Anytime habit whose name is taken is skipped, because its ticks are
+   filed by name. The one exception is a board that is still the untouched
+   starter: nobody built it, so it is replaced. */
+let SHARE = null;
+const starterCopy = o => JSON.parse(JSON.stringify(o));
+
+function buildStarter(dayIds, rhIds, withBin) {
+  const days = S.variants.filter(v => dayIds.indexOf(v.id) >= 0);
+  const used = {}, src = {};
+  days.forEach(v => LANES(v.id).forEach(l => { used[l.id] = 1; }));
+  const outDays = days.map(v => {
+    const d = starterCopy(v);
+    delete d.date;
+    d.routines = LANES(v.id).map(l => l.id);
+    d.items = {};
+    d.routines.forEach(lid => {
+      d.items[lid] = (v.items[lid] || []).map(it => {
+        src[it.srcId] = 1;
+        const c = starterCopy(it);
+        c.done = false; delete c.skipped;
+        return c;
+      });
+    });
+    d.weekdays = [0, 1, 2, 3, 4, 5, 6].filter(k => S.week[k] === v.id);
+    return d;
+  });
+  return {
+    kind: 'motherbase-block-starter', v: 1, at: new Date().toISOString(),
+    lanes: S.lanes.filter(l => used[l.id]).map(l => starterCopy(l)),
+    lib: (S.lib || []).filter(b => withBin || src[b.id]).map(b => starterCopy(b)),
+    days: outDays,
+    /* the first due date is the giver's, so the other end starts from its own today */
+    rhythms: (S.rhythms || []).filter(r => rhIds.indexOf(r.id) >= 0).map(r => { const c = starterCopy(r); delete c.from; return c; }),
+  };
+}
+
+function importStarter(pack) {
+  if (pack && pack.lanes && pack.variants && !pack.kind) throw new Error('That is a full backup, not a file made for someone else. Restore it from Export, Backup.');
+  if (!pack || pack.kind !== 'motherbase-block-starter') throw new Error('That is not a BLOCK file made for someone else.');
+  snap();
+  const days = pack.days || [];
+  /* Untouched means nobody built anything on it. A tick is not building: the
+     starter's blocks pick up a tick from the shared log the moment somebody
+     with a "Brush teeth" of their own opens BLOCK, so ticks are left out of
+     the comparison. */
+  const bare = st => {
+    const c = starterCopy(st);
+    (c.variants || []).forEach(v => Object.keys(v.items || {}).forEach(k => v.items[k].forEach(it => { it.done = false; delete it.skipped; })));
+    return boardShape(c);
+  };
+  const fresh = days.length > 0 && (showingDemo || bare(S) === bare(seedState()));
+  if (fresh) { S.lanes = []; S.variants = []; S.lib = []; S.week = [null, null, null, null, null, null, null]; }
+  const low = s => String(s || '').toLowerCase();
+  const uniq = (name, taken) => { let n = name, k = 2; while (taken[low(n)]) n = name + ' (' + (k++) + ')'; taken[low(n)] = 1; return n; };
+  const got = { days: 0, routines: 0, rhythms: 0, skipped: 0, busy: 0 };
+
+  /* A day with no list of its own runs every routine there is, so it would
+     quietly pick up the new ones. Written down first, so it keeps exactly
+     the routines it had. */
+  S.variants.forEach(v => { if (!v.routines) v.routines = S.lanes.map(l => l.id); });
+
+  const laneTaken = {}, laneMap = {};
+  S.lanes.forEach(l => { laneTaken[low(l.name)] = 1; });
+  (pack.lanes || []).forEach(l => {
+    const id = uid();
+    laneMap[l.id] = id;
+    S.lanes.push(Object.assign(starterCopy(l), { id: id, name: uniq(l.name, laneTaken) }));
+    S.variants.forEach(v => { v.items[id] = []; });
+    got.routines++;
+  });
+
+  /* a bin block with a name already on the shelf is that block, not a second one */
+  const libByName = {}, libMap = {};
+  S.lib.forEach(b => { libByName[low(b.name)] = b.id; });
+  (pack.lib || []).forEach(b => {
+    if (libByName[low(b.name)]) { libMap[b.id] = libByName[low(b.name)]; return; }
+    const id = uid();
+    libMap[b.id] = id; libByName[low(b.name)] = id;
+    S.lib.push(Object.assign(starterCopy(b), { id: id }));
+  });
+
+  const dayTaken = {};
+  S.variants.forEach(v => { dayTaken[low(v.name)] = 1; });
+  days.forEach(d => {
+    const v = starterCopy(d), wd = v.weekdays || [];
+    delete v.weekdays;
+    v.id = uid(); v.name = uniq(d.name, dayTaken);
+    v.routines = (d.routines || []).map(id => laneMap[id]).filter(Boolean);
+    v.items = {};
+    S.lanes.forEach(l => { v.items[l.id] = []; });
+    Object.keys(d.items || {}).forEach(old => {
+      if (!laneMap[old]) return;
+      v.items[laneMap[old]] = d.items[old].map(it => Object.assign(starterCopy(it), { id: uid(), srcId: libMap[it.srcId] || uid(), done: false }));
+    });
+    S.variants.push(v);
+    wd.forEach(k => { if (S.week[k]) got.busy++; else S.week[k] = v.id; });
+    got.days++;
+  });
+
+  S.rhythms = S.rhythms || [];
+  (pack.rhythms || []).forEach(r => {
+    if (S.rhythms.some(x => low(x.name) === low(r.name))) { got.skipped++; return; }
+    const c = Object.assign(starterCopy(r), { id: uid() });
+    if (c.kind === 'every') c.from = todayKey();
+    S.rhythms.push(c);
+    got.rhythms++;
+  });
+
+  if ((fresh || !variant(S.current)) && S.variants.length) S.current = S.variants[0].id;
+  save(); render();
+  return got;
+}
+
+function pickStarter() {
+  const i = document.createElement('input');
+  i.type = 'file'; i.accept = '.json,application/json';
+  i.onchange = () => {
+    const f = i.files && i.files[0];
+    if (!f) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try {
+        const got = importStarter(JSON.parse(fr.result));
+        closeModal();
+        const n = (k, one, many) => got[k] + ' ' + (got[k] === 1 ? one : many);
+        toast('Added ' + n('days', 'day', 'days') + ', ' + n('routines', 'routine', 'routines') +
+          (got.rhythms ? ' and ' + n('rhythms', 'habit', 'habits') : '') +
+          (got.busy ? '. ' + n('busy', 'weekday', 'weekdays') + ' already had a day, so kept it' : '') +
+          (got.skipped ? '. ' + n('skipped', 'habit was', 'habits were') + ' already here, so skipped' : ''));
+      } catch (e) { toast(esc(e && e.message ? e.message : 'That file could not be read.')); }
+    };
+    fr.readAsText(f);
+  };
+  i.click();
+}
+
+function paintShare(body) {
+  const days = S.variants.filter(v => !isOneOff(v)), rh = S.rhythms || [];
+  if (!SHARE) SHARE = { days: {}, rh: {}, bin: false, who: '' };
+  if (!Object.keys(SHARE.days).length && M()) SHARE.days[M().id] = 1;
+  const wds = v => weekOrd().filter(k => S.week[k] === v.id).map(k => DSHORT[k]).join(' ');
+  const line = (attr, id, on, name, note) => '<label class="shr"><input type="checkbox" ' + attr + '="' + id + '"' + (on ? ' checked' : '') + '><b>' + esc(name) + '</b><span>' + esc(note) + '</span></label>';
+  body.innerHTML =
+    '<div class="hint">For helping somebody start. Tick what to hand over and send them the file. It carries those days, the routines and blocks on them, and which weekdays they run. Your ticks, history, settings and rules stay here.</div>' +
+    '<div class="sumh">Days</div>' +
+    days.map(v => line('data-day', v.id, SHARE.days[v.id], v.name, LANES(v.id).length + (LANES(v.id).length === 1 ? ' routine' : ' routines') + (wds(v) ? ', ' + wds(v) : ''))).join('') +
+    (rh.length ? '<div class="sumh">Every and Anytime</div>' + rh.map(r => line('data-rh', r.id, SHARE.rh[r.id], r.name, r.kind === 'every' ? rhEvery(r) : rhTimes(r))).join('') : '') +
+    '<label class="shr"><input type="checkbox" id="shBin"' + (SHARE.bin ? ' checked' : '') + '>Include the whole Block bin<span>not only the blocks these days use</span></label>' +
+    '<div class="row"><input id="shWho" placeholder="Who is it for? (optional)" value="' + esc(SHARE.who) + '"><button class="btn acc" id="shDl">Download the file</button></div>' +
+    '<div class="sumh">On their computer</div>' +
+    '<div class="hint">They open BLOCK, press the <b>⋯</b> button, then <b>Import routines from a file</b>. It adds to their board and changes nothing already on it.</div>' +
+    '<div class="row"><button class="btn" id="shIn">Import routines from a file</button></div>';
+  body.querySelectorAll('[data-day]').forEach(c => { c.onchange = () => { if (c.checked) SHARE.days[c.dataset.day] = 1; else delete SHARE.days[c.dataset.day]; }; });
+  body.querySelectorAll('[data-rh]').forEach(c => { c.onchange = () => { if (c.checked) SHARE.rh[c.dataset.rh] = 1; else delete SHARE.rh[c.dataset.rh]; }; });
+  $('#shBin').onchange = e => { SHARE.bin = e.target.checked; };
+  $('#shWho').oninput = e => { SHARE.who = e.target.value; };
+  $('#shDl').onclick = () => {
+    const ids = Object.keys(SHARE.days).filter(id => variant(id));
+    const rids = Object.keys(SHARE.rh).filter(id => rh.some(r => r.id === id));
+    if (!ids.length && !rids.length) return toast('tick at least one day or habit first');
+    const pack = buildStarter(ids, rids, SHARE.bin), who = SHARE.who.trim();
+    if (who) pack.for = who;
+    download('block-for-' + (who ? who.replace(/\W+/g, '-').toLowerCase() : 'someone') + '.json', JSON.stringify(pack, null, 1), 'application/json');
+  };
+  $('#shIn').onclick = pickStarter;
 }
 
 function openCompare() {
@@ -5092,6 +5277,38 @@ function selfTest() {
       S.viewDate = null; S.rhythms = []; render();
       return !col || 'a column was drawn on a future date';
     });
+    /* ── for someone else ── */
+    ok('share: a file carries the chosen day, its routines and weekdays, and no history', () => {
+      const v = M(), L0 = LANES()[0];
+      if (!L0) return 'no routine on the test day';
+      items(L0.id).push(mkItem({ name: 'Zz Share', dur: 10, color: PAL[0] }));
+      items(L0.id).forEach(it => { it.done = true; });
+      const wk = S.week.slice(); S.week[1] = v.id;
+      const pack = buildStarter([v.id], [], false);
+      S.week = wk;
+      const d = pack.days[0], all = [].concat.apply([], Object.keys(d.items).map(k => d.items[k]));
+      return (pack.kind === 'motherbase-block-starter' && pack.days.length === 1 && d.weekdays.indexOf(1) >= 0 &&
+        pack.lanes.length === LANES().length && all.length > 0 && all.every(it => !it.done) && !('log' in pack) && !('date' in d)) ||
+        JSON.stringify({ days: pack.days.length, wd: d.weekdays, lanes: pack.lanes.length, n: all.length });
+    });
+    ok('share: importing adds to a board, renames clashes, and overwrites nothing', () => {
+      const v = M();
+      const before = { lanes: S.lanes.length, variants: S.variants.length, routines: JSON.stringify(v.routines || S.lanes.map(l => l.id)) };
+      S.week[1] = v.id;
+      const pack = buildStarter([v.id], [], false), got = importStarter(pack);
+      const nv = S.variants[S.variants.length - 1];
+      const good = S.variants.length === before.variants + 1 && S.lanes.length === before.lanes + pack.lanes.length &&
+        JSON.stringify(v.routines) === before.routines && S.week[1] === v.id && got.busy >= 1 &&
+        nv.name !== v.name && LANES(nv.id).length === pack.lanes.length && LANES(nv.id).every(l => / \(\d+\)$/.test(l.name));
+      return good || JSON.stringify({ got: got, lanes: S.lanes.map(l => l.name), nv: nv.name, kept: S.week[1] === v.id });
+    });
+    ok('share: importing into an untouched starter board replaces the starter', () => {
+      const pack = buildStarter([M().id], [], false);
+      S = seedState(); S.view = 'day'; render();
+      const got = importStarter(pack);
+      return (S.variants.length === pack.days.length && S.lanes.length === pack.lanes.length && !!M()) ||
+        JSON.stringify({ got: got, v: S.variants.length, l: S.lanes.length });
+    });
     ok('anytime tab: right-click on a row opens its menu', () => {
       S.rhythms = [{ id: uid(), kind: 'anytime', name: 'Zz Rhythm Test', times: 2 }]; S.view = 'anytime'; render();
       const row = $('#anytime .rhrow');
@@ -5313,6 +5530,8 @@ $('#bMore').onclick = ev => {
     { label: 'Rules' + (RULECHK.count ? '  ⚠ ' + RULECHK.count : (S.rules.length ? '  ✓' : '')), fn: openRules },
     { sep: 1 },
     { label: 'Print or make a client sheet', fn: () => openPrintMenu(r.left - 120, r.bottom + 5) },
+    { label: 'Make a file for someone else', fn: () => { expTab = 'share'; openExport(); } },
+    { label: 'Import routines from a file', fn: pickStarter },
     { label: 'How BLOCK works', fn: openHelp },
     { sep: 1 },
     { label: 'Settings', fn: openSettings },

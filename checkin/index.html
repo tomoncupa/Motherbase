@@ -112,14 +112,15 @@ table.nums td:first-child,table.nums th:first-child{text-align:left;white-space:
 /* ══════════════ CHECK IN ══════════════
    Physique check-ins, for Tom and for his clients. Set by Tom on 2026-09-14.
 
-   A check-in is a date with three photos, a weight and a few answers. The
-   change between two of them is the point, so the first one is kept as the
-   one every later one can be put beside.
+   A check-in is a date with a front photo (more if switched on), a weight and
+   a few answers. The change between two of them is the point, so the first
+   one is kept as the one every later one can be put beside.
 
    Rows, one fact each:
      cfield   key: field id          what a check-in asks {label, kind, unit, ord, on}
+                                     kind: photo, number, scale or text
      cval     date, key: field id    one answer on one day {v}
-     cphoto   date, key: pose        one shrunk photo {img, w, h}. Big, so it lives
+     cphoto   date, key: field id    one shrunk photo {img, w, h}. Big, so it lives
                                      in IndexedDB and arrives after first paint
      checkin  date, key: ''          {sent} when this day was sent to a coach
 
@@ -147,7 +148,6 @@ const esc = UI.esc;
 const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
 const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) ? v : null; };
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'client';
-const POSES = [['front', 'Front'], ['side', 'Side'], ['back', 'Back']];
 const MAXPX = 1280;          /* long edge of a stored photo: sharp on a phone, ~200KB */
 
 /* ── what a check-in asks ──
@@ -155,6 +155,12 @@ const MAXPX = 1280;          /* long edge of a stored photo: sharp on a phone, ~
    and written down the first time anything in it is, so a coach's own
    questions become data rather than something this file decides. */
 const DEFAULTS = [
+  /* Photos are questions too. One by default, Front, Tom's call on
+     2026-09-14; Side and Back are a switch away in Settings, and any other
+     pose can be added there. */
+  { id: 'front', label: 'Front', kind: 'photo', on: 1 },
+  { id: 'side', label: 'Side', kind: 'photo', on: 0 },
+  { id: 'back', label: 'Back', kind: 'photo', on: 0 },
   { id: 'waist', label: 'Waist', kind: 'number', unit: 'cm', on: 1 },
   { id: 'hips', label: 'Hips', kind: 'number', unit: 'cm', on: 0 },
   { id: 'chest', label: 'Chest', kind: 'number', unit: 'cm', on: 0 },
@@ -166,21 +172,22 @@ const DEFAULTS = [
   { id: 'note', label: 'Anything else', kind: 'text', on: 1 },
 ].map((f, i) => Object.assign({ ord: i }, f));
 
+/* A saved row wins over its default, and a default fills in wherever there
+   is no row. So a question added to this list later still reaches somebody
+   who had already changed a different one. */
 function fieldMap() {
-  const rows = Rec.map('cfield');
-  if (Object.keys(rows).length) return rows;
   const m = {};
   DEFAULTS.forEach(f => { const p = Object.assign({}, f); delete p.id; m[f.id] = p; });
+  const rows = Rec.map('cfield');
+  Object.keys(rows).forEach(id => { m[id] = Object.assign(m[id] || {}, rows[id]); });
   return m;
 }
 const fieldList = () => Object.entries(fieldMap()).map(([id, f]) => Object.assign({ id: id }, f))
   .sort((a, b) => (a.ord || 0) - (b.ord || 0));
+const photoFields = () => fieldList().filter(f => f.kind === 'photo');
 /* Merged into what is there, never rebuilt: root brief, many writers. */
 function saveField(id, patch) {
-  if (!Object.keys(Rec.map('cfield')).length) {
-    DEFAULTS.forEach(f => { const p = Object.assign({}, f); delete p.id; Rec.set('cfield', null, f.id, p); });
-  }
-  Rec.set('cfield', null, id, Object.assign(Rec.get('cfield', null, id) || {}, patch));
+  Rec.set('cfield', null, id, Object.assign({}, fieldMap()[id] || {}, patch));
 }
 
 /* ── weight, which is STATUS's ── */
@@ -274,13 +281,18 @@ function drawForm() {
   hd.appendChild(d);
   c.appendChild(hd);
 
-  const shots = el('div', 'shots');
-  POSES.forEach(([pose, name]) => shots.appendChild(slot(pose, name)));
-  c.appendChild(shots);
+  const pf = photoFields().filter(f => f.on);
+  if (pf.length) {
+    const shots = el('div', 'shots');
+    /* never wider than half the card, so one photo is not a poster */
+    shots.style.gridTemplateColumns = 'repeat(' + Math.max(2, Math.min(3, pf.length)) + ',minmax(0,1fr))';
+    pf.forEach(f => shots.appendChild(slot(f.id, f.label)));
+    c.appendChild(shots);
+  }
 
   const w = weightOn(day);
   c.appendChild(numRow('Weight', w, wUnit(), w != null ? 'the same number STATUS has' : 'saved in STATUS too', v => setWeight(day, v)));
-  fieldList().filter(f => f.on).forEach(f => {
+  fieldList().filter(f => f.on && f.kind !== 'photo').forEach(f => {
     if (f.kind === 'number') c.appendChild(numRow(f.label, valOf(day, f.id), f.unit || '', '', v => setVal(day, f.id, v)));
     else if (f.kind === 'scale') c.appendChild(scaleRow(f));
     else c.appendChild(textRow(f));
@@ -394,7 +406,7 @@ function drawCompare() {
   pick.appendChild(sel(b, v => { cmpB = v; }, 'Later check-in'));
   c.appendChild(pick);
 
-  POSES.forEach(([pose, name]) => {
+  photoFields().forEach(({ id: pose, label: name }) => {
     const pa = photoOf(a, pose), pb = photoOf(b, pose);
     if (!pa && !pb) return;
     const g = el('div', 'pair');
@@ -405,7 +417,7 @@ function drawCompare() {
   /* The numbers and the difference, and nothing about whether the difference
      is good. Root brief: show the number, never tell him what it means. */
   const rows = [['Weight', weightOn(a), weightOn(b), wUnit()]]
-    .concat(fieldList().filter(f => f.kind !== 'text').map(f => [f.label, valOf(a, f.id), valOf(b, f.id), f.kind === 'scale' ? '' : (f.unit || '')]))
+    .concat(fieldList().filter(f => f.kind !== 'text' && f.kind !== 'photo').map(f => [f.label, valOf(a, f.id), valOf(b, f.id), f.kind === 'scale' ? '' : (f.unit || '')]))
     .filter(r => r[1] != null || r[2] != null);
   if (rows.length) {
     const wrap = el('div', 'tbl'), t = el('table', 'nums');
@@ -437,7 +449,7 @@ function drawHistory() {
   const list = el('div', 'list');
   dates.forEach(d => {
     const r = el('div', 'item' + (d === day ? ' on' : ''));
-    const n = POSES.filter(([p]) => photoOf(d, p)).length, w = weightOn(d);
+    const n = photoFields().filter(f => photoOf(d, f.id)).length, w = weightOn(d);
     r.appendChild(el('span', 'nm', esc(Day.label(d)) + '<small>' + (n ? n + (n === 1 ? ' photo' : ' photos') : 'no photos') +
       (w != null ? ', ' + esc(w + ' ' + wUnit()) : '') + '</small>'));
     const more = el('button', 'mb-btn mb-press mb-tap flat');
@@ -577,7 +589,11 @@ function showClient(bags, skipped) {
         card.appendChild(el('h2', null, esc(((names.length > 1 ? (bag.name || 'Client') + ', ' : '') + Day.label(bag.date)).toUpperCase())));
         const got = (t, k) => { const r = bag.rows.filter(x => x.type === t && x.key === k)[0]; return r ? r.payload : null; };
         const g = el('div', 'gallery');
-        POSES.forEach(([pose, name]) => g.appendChild(figure(got('cphoto', pose), name)));
+        /* the file's own photo questions, or the three every early file had */
+        const own = (bag.fields || []).filter(f => f.kind === 'photo').map(f => [f.id, f.label]);
+        (own.length ? own : [['front', 'Front'], ['side', 'Side'], ['back', 'Back']])
+          .filter(([pose]) => got('cphoto', pose))
+          .forEach(([pose, name]) => g.appendChild(figure(got('cphoto', pose), name)));
         card.appendChild(g);
         const ev = got('ev', 'weight'), lines = [];
         if (ev && ev.e && ev.e.length) lines.push(['Weight', ev.e[ev.e.length - 1].v + ' ' + (bag.unit || '')]);
@@ -613,7 +629,7 @@ function drawQuestions(p) {
   const redraw = () => { p.innerHTML = ''; drawQuestions(p); draw(); };
   p.appendChild(el('p', 'muted', 'What a check-in asks. Switching one off hides it and keeps every answer already given. Hold or right-click one to rename it.'));
   fieldList().forEach(f => {
-    const note = f.kind === 'number' ? 'a number' + (f.unit ? ', in ' + esc(f.unit) : '') : f.kind === 'scale' ? '1 to 5' : 'words';
+    const note = f.kind === 'photo' ? 'a photo' : f.kind === 'number' ? 'a number' + (f.unit ? ', in ' + esc(f.unit) : '') : f.kind === 'scale' ? '1 to 5' : 'words';
     const row = UI.row(f.label, note, UI.toggle(!!f.on, on => { saveField(f.id, { on: on ? 1 : 0 }); draw(); }));
     Mobile.hold(row, e => menu(e.clientX, e.clientY, [{ label: 'Rename', fn: () => renameField(f, redraw) }], { title: f.label.toUpperCase() }), { skip: '.mb-sw' });
     p.appendChild(row);
@@ -632,7 +648,7 @@ function addField(redraw) {
       const name = UI.field('text', { placeholder: 'Stress this week, hunger, steps' });
       name.classList.add('qname');
       b.appendChild(name);
-      b.appendChild(UI.segmented([{ id: 'scale', name: '1 to 5' }, { id: 'number', name: 'A number' }, { id: 'text', name: 'Words' }], kind,
+      b.appendChild(UI.segmented([{ id: 'scale', name: '1 to 5' }, { id: 'number', name: 'A number' }, { id: 'text', name: 'Words' }, { id: 'photo', name: 'A photo' }], kind,
         k => { kind = k; unit.style.display = k === 'number' ? '' : 'none'; }));
       unit = UI.field('text', { placeholder: 'Unit, like cm' });
       unit.style.display = 'none';

@@ -379,6 +379,10 @@ blocks.
 A habit being built belongs here. A chore that repeats, like rent, is a QUESTS
 todo.
 
+**Handing someone a start** (Tom, 2026-09-14). He helps people set up. Export,
+For someone else, makes a file of the days he ticks; importing it adds to their
+board and never overwrites what is already there.
+
 ### ARC — `arc/` · desktop only
 
 **Function.** Think on a canvas until the shape of the idea appears.
@@ -417,7 +421,8 @@ numbers.
 **In hand:** once a week or so, standing at a mirror with a phone, then a
 minute to send it. The coach opens it at a desk.
 
-**Good looks like:** three photos and a weight in under two minutes. Any two
+**Good looks like:** a front photo and a weight in under a minute, with
+side, back or any other pose switched on only by someone who wants it. Any two
 check-ins sit side by side, the first one included, because the change is the
 point. Weight is STATUS's number, never a second copy. What it asks is
 editable: the defaults are vocabulary, and a coach's own questions are data.
