@@ -627,10 +627,9 @@ body.theme-doodle .elabel{font-family:'Caveat',cursive;font-size:15px}
 </div>
 <div class="menu" id="menu-layout" style="min-width:250px">
   <div class="mhead">AUTO-ARRANGE — selection or whole map</div>
-  <button data-lay="tidy">⌂ Tidy<span class="msub">gentle nudge — shortens connections &amp; aligns lines without restructuring</span></button>
-  <button data-lay="radial">✳ Radial<span class="msub">spokes fan around each branch — freeform thinking &amp; brainstorms</span></button>
-  <button data-lay="bilateral">⇋ Bilateral<span class="msub">children balanced left &amp; right of the root — the classic mind map</span></button>
-  <button data-lay="tree">⇓ Tree<span class="msub">top-down tiers — org charts, funnels &amp; RPG skill trees</span></button>
+  <button data-lay="level" data-icon="rows" data-icon-size="14">Clean<span class="msub">every level on one line. Nothing moves sideways, so your layout stays yours</span></button>
+  <button data-lay="tree" data-icon="map" data-icon-size="14">Tree<span class="msub">rebuilds it top-down with even spacing, every level on one line</span></button>
+  <button data-lay="tidy" data-icon="layout" data-icon-size="14">Tidy<span class="msub">gentle nudge. Pulls in far-flung nodes and straightens near-straight lines</span></button>
 </div>
 <div id="marq"></div>
 <div id="crumb"></div>
@@ -736,7 +735,7 @@ body.theme-doodle .elabel{font-family:'Caveat',cursive;font-size:15px}
   </div>
   <div class="kg"><h4>ARRANGE</h4>
     <div class="kr"><span>8-dir snap mode</span><span><kbd>G</kbd> · <kbd>Shift</kbd> inverts</span></div>
-    <div class="kr"><span>Layouts: radial/bilateral/tree</span><kbd>✳ menu · L</kbd></div>
+    <div class="kr"><span>Arrange: clean/tree/tidy</span><kbd>✳ menu · L</kbd></div>
     <div class="kr"><span>Re-parent</span><span>drop onto node</span></div>
     <div class="kr"><span>Multi-select</span><span>drag canvas · <kbd>Shift</kbd>+click</span></div>
   </div>
@@ -775,7 +774,7 @@ let DB, view={x:0,y:0,k:1}, sel=null, editing=null, undoStack=[], redoStack=[];
 let presenting=false, presOrder=[], presIdx=0;
 const newIds=new Set();
 let connecting=null, linkSel=null, snapOn=(pref('arc_snap')==='1');
-const msel=new Set(); let focusId=null, focusExpanded=false, focusRoots=null, lastLayout='radial', GRAD=null, highlightDim=false;
+const msel=new Set(); let focusId=null, focusExpanded=false, focusRoots=null, lastLayout='level', GRAD=null, highlightDim=false;
 let ctrlASeed=null, ctrlAStage=0, pathPick=false, navQuiet=false;
 const DEFKEYS={present:'p',fit:'f',snap:'g',layout:'l',slide:'s',notes:'n',connect:'x',state:'d',focus:'o',rpg:'r',collapse:'c',minimize:'m',highlight:'h'};
 let KEYS={...DEFKEYS}; try{KEYS={...DEFKEYS,...JSON.parse(pref('arc_keys')||'{}')}}catch(_){}
@@ -4142,33 +4141,48 @@ function restoreSnapshot(i){
   render(); save(); fitView(); toast('Restored: '+s.name);
 }
 
-/* ===================== layouts: bilateral + tree ===================== */
+/* ===================== layouts: clean + tree ===================== */
 function rootOf(id){let n=M().nodes[id];while(n&&n.parentId)n=M().nodes[n.parentId];return n?n.id:null}
-function nH(id){const r=nodeRect(id);return (r?r.h:44)+30*SPACE()}
-function subH(id){const ks=children(id);if(!ks.length)return nH(id);return Math.max(nH(id),ks.reduce((s,k)=>s+subH(k.id),0))}
-function layoutBilateral(rootId,skipSnap){
+/* The Arrange menu. Radial and Bilateral were dropped 2026-09-14: Tom never used
+   either. layoutBranch (the old Radial) stays, because a markdown import fans with it. */
+function layoutFn(kind){return({level:layoutLevel,tree:layoutTree,tidy:layoutTidy})[kind]||layoutLevel}
+function layoutName(kind){return({level:'Clean',tree:'Tree',tidy:'Tidy'})[kind]||'Clean'}
+/* CLEAN. Tom, 2026-09-14: "I don't like how the branches aren't on the same level."
+   An ortho elbow bends halfway between a parent's bottom and its child's top, so two
+   siblings at different heights bend at two different heights. Every node at the same
+   depth goes on one row, tops aligned, and every elbow under one parent lines up.
+   Sideways positions are his and are kept: a node only slides right if levelling
+   would drop it onto its neighbour. Rows keep the gap he already uses between a
+   parent and its children (the median at that depth, never under 40), so a roomy map
+   stays roomy. The root does not move. A collapsed branch is left alone. */
+function layoutLevel(rootId,skipSnap){
   const root=M().nodes[rootId]; if(!root)return;
   if(!skipSnap)snap();
-  const DX=310*SPACE();
-  const ks=layoutKids(rootId);
-  const L=[],R=[]; let lw=0,rw=0;
-  for(const k of ks){const w=subH(k.id); if(lw<=rw){L.push(k);lw+=w}else{R.push(k);rw+=w}}
-  const stackSide=(kids,side)=>{
-    const total=kids.reduce((s,k)=>s+subH(k.id),0);
-    let y=root.y-total/2;
-    const placeH=(k,x,y0,hgt)=>{
-      const n=M().nodes[k.id];
-      n.x=Math.round(x); n.y=Math.round(y0+hgt/2); n.pinned=false;
-      const kk=layoutKids(k.id);
-      if(!kk.length)return;
-      const tt=kk.reduce((s,c)=>s+subH(c.id),0);
-      let cy=y0+hgt/2-tt/2;
-      for(const c of kk){const ch=subH(c.id); placeH(c,x+side*DX,cy,ch); cy+=ch}
-    };
-    for(const k of kids){const hgt=subH(k.id); placeH(k,root.x+side*(DX+20),y,hgt); y+=hgt}
-  };
-  stackSide(R,1); stackSide(L,-1);
-  if(!skipSnap){render();save();toast('Bilateral layout')}
+  const rows=[];
+  (function walk(id,d){
+    (rows[d]=rows[d]||[]).push(id);
+    if(!M().nodes[id].collapsed)layoutKids(id).forEach(k=>walk(k.id,d+1));
+  })(rootId,0);
+  const sz={};
+  rows.flat().forEach(id=>{const r=nodeRect(id);sz[id]=r?{w:r.w,h:r.h}:{w:180,h:44}});
+  // measure every gap before anything moves
+  const gap=rows.map((ids,d)=>{
+    if(!d)return 0;
+    const g=ids.map(id=>{const n=M().nodes[id],pp=M().nodes[n.parentId];return n.y-(pp.y+sz[pp.id].h)}).sort((a,b)=>a-b);
+    return Math.max(40*SPACE(),g[g.length>>1]);
+  });
+  const MIN=24*SPACE();
+  let top=root.y;
+  rows.forEach((ids,d)=>{
+    if(d)top+=Math.max(...rows[d-1].map(id=>sz[id].h))+gap[d];
+    let edge=-Infinity;
+    ids.slice().sort((a,b)=>M().nodes[a].x-M().nodes[b].x).forEach(id=>{
+      const n=M().nodes[id];
+      if(d){n.y=Math.round(top); if(n.x<edge)n.x=Math.round(edge)}
+      edge=n.x+sz[id].w+MIN;
+    });
+  });
+  if(!skipSnap){render();save();toast('Clean layout')}
 }
 function nW(id){const r=nodeRect(id);return (r?r.w:180)+50*SPACE()}
 function subW(id){const ks=children(id);if(!ks.length)return nW(id);return Math.max(nW(id),ks.reduce((s,k)=>s+subW(k.id),0))}
@@ -4278,7 +4292,7 @@ function enforceNo(id){
   resolveOverlaps(id);render();
 }
 function applyLayoutCore(kind,target){
-  const scope=target?[kind==='radial'?target:(rootOf(target)||target)]:roots().map(r=>r.id);
+  const scope=target?[rootOf(target)||target]:roots().map(r=>r.id);
   // far-node exemption: a child dragged way off from its parent (deliberate long-range
   // synthesis) keeps its position — its whole subtree is left out of the arrangement
   LAYOUT_SKIP=new Set();
@@ -4300,7 +4314,7 @@ function applyLayoutCore(kind,target){
   });
   // anchor: the selected node must not move — remember which arranged tree holds it
   const anchor=(sel&&M().nodes[sel])?{id:sel,x:M().nodes[sel].x,y:M().nodes[sel].y}:null;
-  const fn=kind==='bilateral'?layoutBilateral:(kind==='tree'?layoutTree:(kind==='tidy'?layoutTidy:layoutBranch));
+  const fn=layoutFn(kind);
   scope.forEach(r=>fn(r,true));
   if(anchor){
     const n=M().nodes[anchor.id];
@@ -4329,20 +4343,20 @@ function runLayout(kind,target){
     const stash={};
     Object.values(M().nodes).forEach(n=>{if(!only.has(n.id))stash[n.id]=[n.x,n.y]});
     const tops=[...only].filter(id=>M().nodes[id]&&!ancestors(id).some(a=>only.has(a)));
-    const fn=kind==='bilateral'?layoutBilateral:(kind==='tree'?layoutTree:(kind==='tidy'?layoutTidy:layoutBranch));
+    const fn=layoutFn(kind);
     tops.forEach(id=>fn(id,true));
     for(const id in stash){const n=M().nodes[id];if(n){n.x=stash[id][0];n.y=stash[id][1]}}
     LAYOUT_ONLY=only;
     render(); resolveOverlaps(null,true); render();
     LAYOUT_ONLY=null;
     save();
-    toast(kind.charAt(0).toUpperCase()+kind.slice(1)+' layout — '+only.size+' selected nodes only');
+    toast(layoutName(kind)+' layout — '+only.size+' selected nodes only');
     return;
   }
   const{skipped,anchor}=applyLayoutCore(kind,target);
   save();
   if(!target&&!anchor)fitView();
-  toast(kind.charAt(0).toUpperCase()+kind.slice(1)+' layout'+(skipped?' — '+skipped+' far branch'+(skipped>1?'es':'')+' left in place':' — overlaps resolved'));
+  toast(layoutName(kind)+' layout'+(skipped?' — '+skipped+' far branch'+(skipped>1?'es':'')+' left in place':' — overlaps resolved'));
 }
 /* arrange preview: hover a layout option to see the result; move away to undo; click to keep */
 let previewStash=null, previewKind=null;
