@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.4, 2026-09-14">
+<meta name="mb-version" content="1.0.5, 2026-09-15">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1861,7 +1861,12 @@ function chipRow(vals, onPick, cls) {
 }
 function numberInput(v, step, dec) {
   const w = el('div', 'stepper');
-  const minus = el('button', null, '−'), plus = el('button', null, '+');
+  /* Drawn from the icon set, not typed: a character renders differently on
+     every phone and cannot take the theme's stroke. */
+  const minus = el('button'), plus = el('button');
+  minus.dataset.icon = 'minus'; minus.setAttribute('aria-label', 'Less');
+  plus.dataset.icon = 'add'; plus.setAttribute('aria-label', 'More');
+  if (window.Icons) { minus.innerHTML = Icons.svg('minus'); plus.innerHTML = Icons.svg('add'); }
   const i = document.createElement('input');
   i.className = 'num';
   Mobile.field(i, dec ? 'decimal' : 'number');
@@ -6708,7 +6713,17 @@ Rec.onfull = () => UI.toast('<b>Storage is full.</b> Photos are not being saved.
    and those are different paths rather than a different colour. */
 if (window.Icons) Icons.paint();
 
+/* ── the first paint does not wait for the store ──
+   Rec.ready waits for the big half of the store, IndexedDB, which can take up
+   to 2.5 seconds before the store gives up on it, and STATUS showed nothing
+   until then. Fields, readings and the journal are small rows, already here
+   from localStorage. So if the store has not answered in a moment and there
+   is anything to show, show it. Seeding still waits: it must see every row,
+   or it would add fields a slow store was about to hand over. */
+let booted = false;
+setTimeout(() => { if (!booted && Rec.count('field')) draw(); }, 300);
 Rec.ready(() => {
+  booted = true;
   seedFields();
   linkNutrients();
   fixSeedFields();

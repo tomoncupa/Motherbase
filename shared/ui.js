@@ -852,5 +852,11 @@ function drawApp(appId, pane) {
   }
 }
 
+/* The stylesheet goes in as soon as this file loads, not the first time a
+   component draws. A page that used the shared classes before drawing one got
+   bare browser controls: TRAIN's Add Setup was a white system button, and
+   BLOCK's start time was a white box. */
+css();
+
 g.UI = UI;
 })(window);
