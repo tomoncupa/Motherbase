@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.3, 2026-09-14">
+<meta name="mb-version" content="1.0.4, 2026-09-14">
 <title>LOG</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▤</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -695,7 +695,11 @@ function graphHTML(d) {
   const start = dayStart(d);
   const xOf = m => (m - start) / (W - start) * W;
   const yOf = u => PAD + (1 - clamp(u, 0, 1)) * (H - PAD * 2);
-  let svg = '', dots = '';
+  let drew = false, dots = '';
+  /* The lines are shared/chart.js, stretched to the day's row; the dots stay
+     HTML so they stay round at any row size. */
+  const c = Chart.make({ w: W, h: H, pad: { l: 0, r: 0, t: PAD, b: PAD }, stretch: true });
+  c.xLinear(start, W).ySet(0, 1, 1);
   const dot = (cls, m, u, tip) => {
     dots += '<i class="' + cls + '" style="left:' + (xOf(m) / W * 100).toFixed(2) + '%;top:' + (yOf(u) / H * 100).toFixed(2) +
       '%" title="' + attr(tip) + '"></i>';
@@ -707,7 +711,7 @@ function graphHTML(d) {
     const pts = evList(d, id).map(e => ({ m: minuteOf(e.t), u: ((+e.v || 1) - 1) / (top - 1), e }))
       .filter(p => p.m >= start).sort((a, b) => a.m - b.m);
     if (!pts.length) return;
-    if (pts.length > 1) svg += '<path class="' + id + '" d="' + pts.map((p, i) => (i ? 'L' : 'M') + xOf(p.m).toFixed(1) + ' ' + yOf(p.u).toFixed(1)).join(' ') + '"/>';
+    if (pts.length > 1) { c.line(pts.map(p => [p.m, p.u]), id); drew = true; }
     pts.forEach(p => dot(id, p.m, p.u, clockLabel(hhmm(p.e.t)) + ' · ' + (f.label || id) + ' ' + p.e.v + ' of ' + top));
   });
   if (G.caf && on.indexOf('caffeine') > -1) {
@@ -723,15 +727,16 @@ function graphHTML(d) {
     const peak = samples.reduce((a, s) => Math.max(a, s.v), 0);
     if (peak >= 1) {
       const topMg = Math.max(cafTop(), peak);
-      svg += '<path class="caffeine" d="' + samples.map((s, i) => (i ? 'L' : 'M') + xOf(s.m).toFixed(1) + ' ' + yOf(s.v / topMg).toFixed(1)).join(' ') + '"/>';
+      c.line(samples.map(s => [s.m, s.v / topMg]), 'caffeine');
+      drew = true;
       doses.filter(e => e.t >= mid + start * 60000 && e.t < mid + 86400000).forEach(e => {
         dot('caffeine', minuteOf(e.t), level(e.t + 1000) / topMg,
           clockLabel(hhmm(e.t)) + ' · ' + Math.round(e.v) + 'mg caffeine' + (e.food ? ' (' + e.food + ')' : ''));
       });
     }
   }
-  if (!svg && !dots) return '';
-  return '<div class="gr" aria-hidden="true"><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + svg + '</svg>' + dots + '</div>';
+  if (!drew && !dots) return '';
+  return '<div class="gr" aria-hidden="true">' + (drew ? c.el.outerHTML : '') + dots + '</div>';
 }
 
 /* ══════════════════════ DATE MATHS ══════════════════════

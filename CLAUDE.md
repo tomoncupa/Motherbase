@@ -190,6 +190,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 |---|---|
 | `records.js` | The store. Rows, merging, subscriptions. The one file to be careful with. |
 | `day.js` | One definition of "today" for the whole suite. |
+| `chart.js` | Every chart. Answer first (`Chart.header`), drawn at the box's real size (`Chart.mount`), latest value marked, one bar lit, drag to explore (`c.scrub`), ranked shares instead of donuts, rings, sparklines and legends. Theme tokens only. |
 | `journal.js` | The bullet system. One journal line: its kinds, which day it shows on, the time typed into it, how it is drawn (mark, words, then "7:00pm - 7:31pm"), time order by its start, ticking, Move to tomorrow, Cancel it, and a repeat's next round. STATUS names the `note` shape and wins any disagreement; STATUS, LOG, QUESTS and the home screen all read this, so a todo bullet looks and behaves the same in each. |
 | `skins.js` + `skins.json` | Themes, and the colour layer on top of them. |
 | `sound.js` | Sound themes and instruments, synthesised, no audio files. |
@@ -198,7 +199,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `io.js` | Per-app backup, restore, and the readable spreadsheet export. |
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
-| `_smoke.html` | 234 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 242 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -592,8 +593,8 @@ because it runs the real thing rather than only parsing it:
    draws and every tab works, runs `shared/_smoke.html` inside itself and folds
    the result in, and looks over whatever rows are on the device. One page,
    one tally. `shared/_smoke.html` on its own is still there for when you are
-   working on the foundation and want the 234 without the apps.
-   It must say 234 of 234, or more once you add checks.
+   working on the foundation and want the 242 without the apps.
+   It must say 242 of 242, or more once you add checks.
    **Load it with a `?cb=<something new>` on the end.** The browser caches these
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks
@@ -711,7 +712,7 @@ answer, or take it out.
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `checkin/` | CHECK IN, built 2026-09-14 from `_template/`. Everywhere, and in the client build. One photo question ships, Front (Tom, 2026-09-14); any other pose is added with Settings, Add a new pose. Weight read from and written to STATUS's `ev` row, a waist and three 1 to 5 questions by default, all editable in Settings. Any two check-ins side by side with the change and no verdict, and a list of every one. Send to coach makes a `motherbase-checkin` file and hands it to the share menu, or downloads it. Opening a client's files shows them and saves nothing: keeping clients apart is COACH's job, and COACH is not built. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
-| `shared/` | The foundation, passing 234 checks on 2026-09-14 (214 of them also at phone width). Every app loads it. |
+| `shared/` | The foundation, passing 242 checks on 2026-09-14 (214 of them also at phone width). Every app loads it. |
 
 ### Debt, in the order it should be paid
 
@@ -839,7 +840,7 @@ the fix, so none is urgent, but each is a second copy of a foundation job:
 - TRAIN: `menuAt()`, `bigStep()`, the `MINUS`, `TROPHY` and `BURGER` strings,
   and the `.mb-row:has(...)` rules for `.mb-input` and `.mb-sel`. Keep the ones
   for `.swatches` and `.mb-chips`, which the shared rule does not cover.
-- WEALTH: `menu()` and `moneyScale()`.
+- WEALTH: `menu()`. (`moneyScale()` went with the chart rewrite, 2026-09-14.)
 - CHECK IN: `menu()`.
 - CLEX, STATUS and TRAIN: stepper buttons drawn with a `−` character can use
   the `minus` role.

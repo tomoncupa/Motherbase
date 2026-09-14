@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.0, 2026-09-14">
+<meta name="mb-version" content="1.0.1, 2026-09-14">
 <title>Form Review</title>
 <!-- No font link. skins.js fetches whatever face the chosen theme asks for and
      falls back to a system stack when the network is not there. A hard-coded
@@ -246,7 +246,13 @@ body.view-overlay #overlayWrap{display:flex}
   transform:translateX(100%); transition:transform .18s var(--ease-out)}
 #drawer:not(.collapsed){transform:none}
 /* set analysis: chart + RIR + load */
-canvas.repchart{width:100%; height:132px; display:block; margin:7px 0 4px; border:1px solid var(--line); border-radius:7px; background:var(--bg)}
+.repchart{width:100%; height:132px; display:block; margin:7px 0 4px; border:1px solid var(--line); border-radius:7px; background:var(--bg); overflow:hidden}
+/* the rep chart is shared/chart.js: a bar a rep coloured by what is left in the tank */
+.repchart .rir4{fill:var(--success)} .repchart .rir3{fill:var(--accent)}
+.repchart .rir2{fill:var(--warn)} .repchart .rir1{fill:var(--danger)}
+.repchart .repfail{stroke:var(--danger); stroke-width:1; stroke-dasharray:4 3; opacity:.6; fill:none; vector-effect:non-scaling-stroke}
+.repchart .repvl{fill:none; stroke:var(--text-1); stroke-width:1.5; vector-effect:non-scaling-stroke}
+.repchart .repempty{height:100%; display:flex; align-items:center; justify-content:center}
 .rirbox{display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:7px; background:var(--surface-2); margin-bottom:6px}
 .rirbig{font-family:var(--font-mono); font-size:19px; font-weight:600; line-height:1}
 .rirmeta{font-size:12px; color:var(--dim2); line-height:1.45}
@@ -321,6 +327,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
 <script src="../shared/records.js"></script>
 <script src="../shared/sound.js"></script>
 <script src="../shared/ui.js"></script>
+<script src="../shared/chart.js"></script>
 <script src="../shared/io.js"></script>
 </head>
 <body class="view-solo solo-A">
@@ -534,7 +541,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
       <div class="drawerbody">
         <div class="dsec"><h4 data-hd="repA">Reps · Left</h4>
           <div id="repTableA"><span class="muted">Hit ⚡ Analyse.</span></div>
-          <canvas class="repchart" data-chart="A"></canvas>
+          <div class="repchart" data-chart="A"></div>
           <div class="rirbox" id="rirA"><span class="muted">Rep-speed chart and RIR estimate appear once reps are detected.</span></div>
           <div class="loadrow">
             <input type="number" data-weight="A" placeholder="weight" min="0" step="0.5">
@@ -548,7 +555,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
         </div>
         <div class="dsec"><h4 data-hd="repB">Reps · Right</h4>
           <div id="repTableB"><span class="muted">—</span></div>
-          <canvas class="repchart" data-chart="B"></canvas>
+          <div class="repchart" data-chart="B"></div>
           <div class="rirbox" id="rirB"><span class="muted">—</span></div>
           <div class="loadrow">
             <input type="number" data-weight="B" placeholder="weight" min="0" step="0.5">
@@ -1487,38 +1494,29 @@ function renderLoad(pane){
   h+='</div>';
   host.innerHTML=h;
 }
+/* The rep chart, on shared/chart.js since 2026-09-14: a bar a rep for its
+   speed as a share of the fastest, coloured by how much is left in the tank
+   (plenty, comfortable, getting close, at the wall), the velocity loss as a
+   line over them, the failure level as a dashed rule, and a drag across to
+   read any rep. */
 function drawRepChart(pane){
-  const cv=document.querySelector(`[data-chart="${pane}"]`); if(!cv) return;
-  const wCSS=cv.clientWidth||300, hCSS=132, dpr=window.devicePixelRatio||1;
-  cv.width=Math.round(wCSS*dpr); cv.height=Math.round(hCSS*dpr);
-  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0);
-  c.clearRect(0,0,wCSS,hCSS); c.fillStyle=tok('--bg'); c.fillRect(0,0,wCSS,hCSS);
+  const box=document.querySelector(`[data-chart="${pane}"]`); if(!box) return;
   const m=setMetrics(pane);
-  if(!m||m.rows.length<1){ c.fillStyle=tok('--text-muted'); c.font='11px "Chakra Petch",sans-serif'; c.textAlign='center';
-    c.fillText('No rep-speed data yet', wCSS/2, hCSS/2); return; }
-  const padL=26,padR=8,padT=12,padB=18, W=wCSS-padL-padR, H=hCSS-padT-padB;
-  // gridlines = velocity loss %
-  c.strokeStyle=tok('--border'); c.fillStyle=tok('--text-muted'); c.font='9px "IBM Plex Mono",monospace'; c.textAlign='right'; c.lineWidth=1;
-  [0,25,50,75,100].forEach(pct=>{ const y=padT+H*(1-pct/100); c.beginPath(); c.moveTo(padL,y); c.lineTo(padL+W,y); c.stroke();
-    c.fillText(pct+'%', padL-4, y+3); });
-  // failure threshold line
-  const fy=padT+H*(1-(1-m.ex.vlFail/100));
-  c.strokeStyle=mix(tok('--danger'), .53); c.setLineDash([4,3]); c.beginPath(); c.moveTo(padL,fy); c.lineTo(padL+W,fy); c.stroke(); c.setLineDash([]);
-  c.fillStyle=mix(tok('--danger'), .67); c.textAlign='left'; c.fillText('failure zone', padL+3, fy-3);
-  // bars = velocity as % of fastest rep
-  const n=m.rows.length, bw=Math.max(4, Math.min(30, W/n*0.68)), gap=W/n;
-  m.rows.forEach((r,i)=>{ const pctV=(r.vNorm/m.ref)*100, x=padL+gap*i+(gap-bw)/2, bh=H*(pctV/100), y=padT+H-bh;
-    /* four meanings, four tokens: plenty left, comfortable, getting close,
-       at the wall */
-    const col=r.rir>=4?tok('--success'):r.rir>=2.5?tok('--accent'):r.rir>=1?tok('--warn'):tok('--danger');
-    c.fillStyle=col; c.fillRect(x,y,bw,bh);
-    c.fillStyle=tok('--text-2'); c.font='9px "IBM Plex Mono",monospace'; c.textAlign='center';
-    c.fillText(String(r.i), x+bw/2, hCSS-6);
-    if(bw>=14){ c.fillStyle='var(--accent-fg)'; c.font='bold 9px "IBM Plex Mono",monospace';
-      if(bh>14) c.fillText(Math.round(pctV), x+bw/2, y+11); } });
-  // velocity-loss trend
-  c.strokeStyle=tok('--text-1'); c.lineWidth=1.5; c.beginPath();
-  m.rows.forEach((r,i)=>{ const x=padL+gap*i+gap/2, y=padT+H*(1-(1-r.vl/100)); i?c.lineTo(x,y):c.moveTo(x,y); }); c.stroke();
+  if(!m||m.rows.length<1){ box.innerHTML='<div class="repempty muted">No rep-speed data yet</div>'; return; }
+  const rows=m.rows.map((r,i)=>({ r, x:i+1, pct:(r.vNorm/m.ref)*100 }));
+  const tank=r=>r.rir>=4?'rir4':r.rir>=2.5?'rir3':r.rir>=1?'rir2':'rir1';
+  Chart.mount(box,{h:130,label:'Rep speed, clip '+pane},c=>{
+    const n=rows.length;
+    c.xLinear(0.5,n+0.5).ySet(0,100,25);
+    c.grid(v=>v+'%');
+    const bw=Math.max(4,Math.min(24,(c.W-c.P.l-c.P.r)/n*0.62));
+    ['rir4','rir3','rir2','rir1'].forEach(k=>c.bars(rows.filter(o=>tank(o.r)===k)
+      .map(o=>[o.x,o.pct,'Rep '+o.r.i+': '+Math.round(o.pct)+'% of the fastest']),k,bw));
+    c.rule(100-m.ex.vlFail,'failure zone','repfail');
+    c.line(rows.map(o=>[o.x,100-o.r.vl]),'repvl');
+    c.labels(rows.map(o=>[o.x,String(o.r.i)]));
+    c.scrub(rows.map(o=>[o.x,o.pct]),{fmt:p=>'rep '+rows[p[0]-1].r.i+' · '+Math.round(p[1])+'%'});
+  });
 }
 function renderRIR(pane){
   const host=document.getElementById('rir'+pane); if(!host) return;

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.1, 2026-09-14">
+<meta name="mb-version" content="1.0.2, 2026-09-14">
 <title>TRAIN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛭</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -2946,7 +2946,7 @@ function drawGraph(m) {
   var card = UI.el('div', 'exblock pad');
   card.innerHTML = '<div class="fieldlabel">' + UI.esc(g.name.toUpperCase()) + ' (' + UI.esc(g.u) + ')</div>';
   var box = UI.el('div', 'chartbox');
-  box.appendChild(graphChart(pts, g, 320, 170));
+  graphChart(box, pts, g);
   /* FitNotes: double tap the graph to expand it. One tap here, since a
      double tap on a phone is also a zoom. */
   box.onclick = function () {
@@ -2954,8 +2954,8 @@ function drawGraph(m) {
       title: g.name.toUpperCase(), width: 900,
       body: function (b) {
         var big = UI.el('div', 'chartbox big');
-        big.appendChild(graphChart(pts, g, 360, 300));
         b.appendChild(big);
+        graphChart(big, pts, g);
       },
       actions: [{ label: 'CLOSE' }],
     });
@@ -2989,18 +2989,20 @@ function drawGraph(m) {
 }
 
 /* One graph, drawn by chart.js with his three graph settings: points, a trend
-   line, and whether the scale starts at zero. */
-function graphChart(pts, g, w, h) {
-  var c = Chart.make({ w: w, h: h });
+   line, and whether the scale starts at zero. Drawn at the size of its box,
+   with a wash under the line, the latest value marked, and a drag along it
+   to read any session (shared/chart.js, 2026-09-14). */
+function graphChart(box, pts, g) {
+  var line = pts.map(function (p) { return [p[0], p[1], Day.label(p[0]) + ': ' + fmt1(p[1]) + ' ' + g.u]; });
+  return Chart.mount(box, { label: g.name + ' (' + g.u + ')' }, function (c) {
   var values = pts.map(function (p) { return p[1]; });
   c.xTime(pts[0][0], pts[pts.length - 1][0]);
   fitY(c, values, Rec.setting(APP.id, 'graphZero') === 1);
   c.grid(function (v) { return v >= 10000 ? Math.round(v / 1000) + 'k' : (c.step < 1 ? v.toFixed(1) : Math.round(v).toLocaleString()); });
   c.timeAxis();
-  c.line(pts.map(function (p) { return [p[0], p[1]]; }));
-  if (Rec.setting(APP.id, 'graphPoints') !== 0) {
-    c.dots(pts.map(function (p) { return [p[0], p[1], Day.label(p[0]) + ': ' + fmt1(p[1]) + ' ' + g.u]; }), 'mb-dot', 2.5);
-  }
+  c.area(line);
+  c.line(line);
+  if (Rec.setting(APP.id, 'graphPoints') !== 0) c.dots(line, 'mb-dot', 3);
   if (Rec.setting(APP.id, 'graphTrend') === 1 && pts.length > 2) {
     var n = pts.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
     pts.forEach(function (p) {
@@ -3014,7 +3016,10 @@ function graphChart(pts, g, w, h) {
       c.line([[pts[0][0], icpt], [pts[n - 1][0], icpt + slope * last]], 'trend');
     }
   }
-  return c.el;
+  var end = line[line.length - 1];
+  c.end(end, fmt1(end[1]));
+  c.scrub(line, { fmt: function (p) { return fmt1(p[1]) + ' ' + g.u + ', ' + Day.label(p[0]); } });
+  });
 }
 
 /* ═════════════════ THE DAY'S EXERCISES DRAWER ═════════════════ */
@@ -5801,15 +5806,29 @@ function drawWorkoutGraphs(m) {
   var perWord = { week: 'week', month: 'month', year: 'year' }[by];
   card.innerHTML = '<div class="fieldlabel">' + UI.esc(metric === 'workouts' ? 'SESSIONS' : metric.toUpperCase()) + ' PER ' + perWord.toUpperCase() + '</div>';
   var box = UI.el('div', 'chartbox');
-  var c = Chart.make({ w: 320, h: 170 });
-  c.xTime(series[0][0], series[series.length - 1][0]);
-  fitY(c, values, true);
-  c.grid(function (v) { return v >= 10000 ? Math.round(v / 1000) + 'k' : Math.round(v).toLocaleString(); });
-  c.timeAxis({ ticks: false });
-  c.bars(series.map(function (p) { return [p[0], p[1]]; }));
-  box.appendChild(c.el);
   card.appendChild(box);
   var avg = total / series.length;
+  /* Bars from shared/chart.js: this period lit and the rest quiet, the
+     average as a line, and a drag to read any period. */
+  var MONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var shortOf = function (d) {
+    var p = d.split('-');
+    return by === 'year' ? p[0] : by === 'month' ? MONS[+p[1] - 1] : +p[2] + ' ' + MONS[+p[1] - 1];
+  };
+  Chart.mount(box, { label: unitWord + ' per ' + perWord }, function (c) {
+    c.xLinear(-0.5, series.length - 0.5);
+    fitY(c, values, true);
+    c.grid(function (v) { return v >= 10000 ? Math.round(v / 1000) + 'k' : Math.round(v).toLocaleString(); });
+    var every = Math.max(1, Math.ceil(series.length / Math.max(2, Math.floor((c.W - c.P.l - c.P.r) / 64))));
+    c.labels(series.map(function (p, i) { return [i, shortOf(p[0]), i === series.length - 1]; })
+      .filter(function (l, i) { return (series.length - 1 - i) % every === 0; }));
+    c.bars(series.map(function (p, i) { return [i, p[1], shortOf(p[0]) + ': ' + Math.round(p[1]).toLocaleString() + ' ' + unitWord]; }),
+      null, null, { highlight: 'last' });
+    c.rule(avg, 'average');
+    c.scrub(series.map(function (p, i) { return [i, p[1]]; }), {
+      fmt: function (p) { return Math.round(p[1]).toLocaleString() + ' ' + unitWord + ', ' + shortOf(series[p[0]][0]); },
+    });
+  });
   var foot = UI.el('div', 'lasttime');
   foot.innerHTML = '<b>' + Math.round(avg).toLocaleString() + '</b> ' + unitWord + ' per ' + perWord +
     ' over the last <b>' + series.length + '</b>';

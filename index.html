@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.2, 2026-09-14">
+<meta name="mb-version" content="1.0.3, 2026-09-14">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -210,7 +210,9 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
    so, and the chart takes what is left rather than taking what it likes. */
 .w-body{flex:1;padding:0 13px 13px;min-height:0;overflow:visible;
   display:flex;flex-direction:column;gap:8px}
-.w-body > .fits{flex:1 1 auto;min-height:0}
+/* A chart takes the room that is left, but never less than a readable strip:
+   with the answer on top of it, a small widget left it no room at all. */
+.w-body > .fits{flex:1 1 auto;min-height:var(--s-9,96px)}
 .w-body > .fits > svg{width:100%;height:100%;display:block}
 @media (hover:hover) and (pointer:fine){ .w-body{overflow:auto} }
 /* Resize is a mouse affordance and nothing else — a phone card is as wide as
@@ -284,7 +286,7 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .tag{font-size:9px;font-family:var(--f1);letter-spacing:.1em;color:var(--dim2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
 .ringwrap{display:flex;align-items:center;gap:16px;margin-bottom:11px}
 .ring{position:relative;width:70px;height:70px;flex:0 0 auto}
-.ring svg{transform:rotate(-90deg)}
+/* the ring itself comes from shared/chart.js, already turned to start at twelve o'clock */
 .ring .num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;font-family:var(--f1);font-size:16px;letter-spacing:.04em;color:var(--acc)}
 .ring .num i{font-style:normal;font-size:9px;color:var(--dim2);letter-spacing:.14em}
 .stats{display:flex;gap:16px;flex-wrap:wrap}
@@ -794,16 +796,28 @@ const DUR = d => d >= 60 ? (d % 60 ? Math.floor(d / 60) + 'h' + String(d % 60).p
 const DLET = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const clock12 = ts => new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
+/* A ring from shared/chart.js, with its number in the middle. */
 function ring(pct, big, small) {
-  const R = 30, C = 2 * Math.PI * R;
   const w = el('div', 'ring');
-  w.innerHTML =
-    '<svg width="70" height="70" viewBox="0 0 70 70">' +
-      '<circle cx="35" cy="35" r="' + R + '" fill="none" stroke="var(--surface-3)" stroke-width="6"></circle>' +
-      '<circle cx="35" cy="35" r="' + R + '" fill="none" stroke="var(--accent)" stroke-width="6" stroke-linecap="round"' +
-      ' stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - pct)).toFixed(1) + '"></circle>' +
-    '</svg><div class="num">' + esc(big) + '<i>' + esc(small) + '</i></div>';
+  w.appendChild(Chart.ring(pct, { size: 70, stroke: 6 }));
+  w.appendChild(el('div', 'num', esc(big) + '<i>' + esc(small) + '</i>'));
   return w;
+}
+/* The weight widget's line: a reading, when, and how far it has moved since
+   the first reading on the chart. The widget's head shows it for today, and
+   dragging across the chart shows it for any day. */
+function weightSaid(pts, v, d) {
+  const n = Day.diff(d, pts[0].d), m = v - pts[0].v;
+  const move = !n ? '' : ', ' + (Math.abs(m) < 0.05 ? 'no change' : (m < 0 ? 'down ' : 'up ') + Math.abs(m).toFixed(1)) + ' in ' + n + ' days';
+  return v.toFixed(1) + ' ' + (d === LifeOS.day() ? 'today' : Day.label(d)) + move;
+}
+/* The sleep widget's line: the average night this week, and how many met the target. */
+function sleepSaid() {
+  const f = Rec.map('field').sleep, target = f && f.target ? Number(f.target) : 0, got = [];
+  for (let i = 6; i >= 0; i--) { const v = evValue(LifeOS.shift(LifeOS.day(), -i), 'sleep'); if (v != null) got.push(v); }
+  if (!got.length) return 'last 7 nights';
+  const mean = got.reduce((a, v) => a + v, 0) / got.length;
+  return mean.toFixed(1) + ' hrs a night' + (target ? ', ' + got.filter(v => v >= target).length + ' of ' + got.length + ' on target' : '');
 }
 function cadenceText(c) {
   if (!c) return 'daily';
@@ -886,14 +900,8 @@ function macroWidget(body, key, unit, label) {
   const pct = Math.max(0, Math.min(100, Math.round((got / target) * 100)));
   const wrap = el('div', 'ringwrap');
   const ring = el('div', 'ring');
-  const C = 2 * Math.PI * 30;
-  ring.innerHTML =
-    '<svg width="70" height="70" viewBox="0 0 70 70">' +
-    '<circle cx="35" cy="35" r="30" fill="none" stroke="var(--panel2)" stroke-width="7"/>' +
-    '<circle cx="35" cy="35" r="30" fill="none" stroke="var(--acc)" stroke-width="7" ' +
-    'stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" ' +
-    'stroke-dashoffset="' + (C * (1 - pct / 100)).toFixed(1) + '"/></svg>' +
-    '<div class="num">' + pct + '<i>%</i></div>';
+  ring.appendChild(Chart.ring(pct / 100, { size: 70, stroke: 7 }));
+  ring.appendChild(el('div', 'num', pct + '<i>%</i>'));
   wrap.appendChild(ring);
   const st = el('div', 'stats');
   st.appendChild(el('div', 'stat acc', '<b>' + Math.round(got) + unit + '</b><span>SO FAR</span>'));
@@ -1427,7 +1435,7 @@ const WIDGETS = {
       const r = weightSeries((cfg && cfg.days) || 90);
       if (!r.length) return 'nothing logged yet';
       const last = r[r.length - 1];
-      return last.v.toFixed(1) + ' on ' + (last.d === LifeOS.day() ? 'today' : esc(last.d));
+      return weightSaid(r, last.v, last.d);
     },
     draw(body, cfg) {
       cfg = cfg || {};
@@ -1458,38 +1466,32 @@ const WIDGETS = {
          data than trends." The line goes through every reading as it was
          taken, and there is no average on the chart. Supersedes the seven-day
          average line described above. */
-      const c = Chart.make({ w: 320, h: 132 });
-      c.xTime(pts[0].d, pts[pts.length - 1].d);
-      c.yFit(pts.map(p => p.v));
-      c.grid();
-      c.timeAxis();
-      c.line(pts.map(p => [p.d, p.v]));
-      c.dots(pts.map(p => [p.d, p.v, p.d + ' \u00b7 ' + p.v.toFixed(1)]), 'mb-dot', 1.8);
-
-      const svg = el('div', 'fits');
-      svg.appendChild(c.el);
-      body.appendChild(svg);
-
-      /* ── what the two numbers are for ──
-         The dots are every time you stood on the scale and they jump around
-         for reasons that are not fat. The LINE is the seven-day average, which
-         is the only one of the two you can act on, so the big number is that
-         and not today's reading.
-
-         Beside it, how far the average has actually moved. It used to say
-         "over 91 readings", which is not a length of time anybody thinks in -
-         it is the count of times he weighed himself. Days, and the days are
-         the ones on the chart. */
-      const st = el('div', 'stats');
-      /* Both numbers are readings too: the last weigh-in, and how far it is
-         from the first one on the chart. */
-      const first = pts[0].v, last = pts[pts.length - 1].v, move = last - first;
-      /* `span` is taken in this scope by the chart's y-range. */
-      const overDays = Day.diff(pts[pts.length - 1].d, pts[0].d) + 1;
-      st.appendChild(el('div', 'stat acc', '<b>' + last.toFixed(1) + '</b><span>LATEST</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + (move >= 0 ? '+' : '') + move.toFixed(1) +
-        '</b><span>IN ' + overDays + ' DAYS</span>'));
-      body.appendChild(st);
+      /* ── answer first ──
+         Tom, 2026-09-14: "Graphs must be useful and feel cool, they must convey
+         data quick." The answer is the widget's own line at the top: the latest
+         weigh-in and how far it has moved. Drag across the chart and that line
+         follows the day under the finger. A second header inside the widget
+         left a small one no room for the chart. The line goes through every
+         reading as it was taken, with no average. */
+      const last = pts[pts.length - 1].v, lastD = pts[pts.length - 1].d;
+      const subOf = () => { const w = body.closest('.w'); return w && w.querySelector('.w-head .sub'); };
+      let kept = null;
+      const box = el('div', 'fits');
+      body.appendChild(box);
+      const line = pts.map(p => [p.d, p.v]);
+      Chart.mount(box, { label: 'Weight, ' + pts.length + ' weigh-ins' }, c => {
+        c.xTime(pts[0].d, lastD);
+        c.yFit(pts.map(p => p.v));
+        c.grid();
+        c.timeAxis();
+        c.area(line);
+        c.line(line);
+        c.end(line[line.length - 1], last.toFixed(1));
+        c.scrub(line, {
+          onMove: p => { const s = subOf(); if (!s) return; if (kept == null) kept = s.textContent; s.textContent = weightSaid(pts, p[1], p[0]); },
+          onLeave: () => { const s = subOf(); if (s && kept != null) s.textContent = kept; kept = null; },
+        });
+      });
     },
   },
 
@@ -1513,7 +1515,8 @@ const WIDGETS = {
 
   sleep: {
     nm: 'SLEEP', w: 4, h: 2,
-    sub: () => 'last 7 nights',
+    /* the answer, in the widget's own line: the average night and nights on target */
+    sub: () => sleepSaid(),
     draw(body) {
       const f = Rec.map('field').sleep;
       const target = f && f.target ? Number(f.target) : 0;
@@ -1527,28 +1530,27 @@ const WIDGETS = {
           'No sleep logged'));
         return;
       }
-      const max = Math.max(target || 0, ...days.map(x => x.v || 0)) || 1;
-      const wrap = el('div');
-      wrap.style.cssText = 'display:flex;align-items:flex-end;gap:6px;height:70px;padding-top:4px';
-      days.forEach(x => {
-        const col = el('div');
-        col.style.cssText = 'flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%';
-        const bar = el('div');
-        const hit = target && x.v != null && x.v >= target;
-        bar.style.cssText = 'width:100%;border-radius:3px;min-height:3px;background:' +
-          (x.v == null ? 'var(--panel2)' : hit ? 'var(--acc)' : 'var(--dim2)') +
-          ';height:' + Math.round(((x.v || 0) / max) * 100) + '%';
-        bar.title = x.d + (x.v == null ? ' · nothing logged' : ' · ' + x.v + ' hrs');
-        col.appendChild(bar); wrap.appendChild(col);
-      });
-      body.appendChild(wrap);
+      /* On shared/chart.js: the week's average on top, a bar a night with the
+         nights that met the target lit, the target as a line, and a drag to
+         read any night. */
       const got = days.filter(x => x.v != null);
-      const mean = got.length ? got.reduce((a, x) => a + x.v, 0) / got.length : 0;
-      const st = el('div', 'stats');
-      st.appendChild(el('div', 'stat acc', '<b>' + mean.toFixed(1) + '</b><span>AVERAGE HRS</span>'));
-      if (target) st.appendChild(el('div', 'stat',
-        '<b>' + got.filter(x => x.v >= target).length + '/' + got.length + '</b><span>ON TARGET</span>'));
-      body.appendChild(st);
+      const subOf = () => { const w = body.closest('.w'); return w && w.querySelector('.w-head .sub'); };
+      let kept = null;
+      const box = el('div', 'fits');
+      body.appendChild(box);
+      const bars = days.map((x, i) => [i, x.v, Day.label(x.d) + (x.v == null ? ', nothing logged' : ', ' + x.v + ' hrs')]);
+      Chart.mount(box, { label: 'Sleep, the last 7 nights' }, c => {
+        c.xLinear(-0.5, 6.5);
+        c.yFit(got.map(x => x.v).concat(target ? [target] : []), { min: 0 });
+        c.grid();
+        c.labels(days.map((x, i) => [i, DLET[new Date(x.d + 'T12:00:00').getDay()], i === 6]));
+        c.bars(bars, null, null, { highlight: target ? (p => p[1] != null && p[1] >= target) : 'last' });
+        if (target) c.rule(target);
+        c.scrub(bars.filter(b => b[1] != null), {
+          onMove: p => { const s = subOf(); if (!s) return; if (kept == null) kept = s.textContent; s.textContent = Number(p[1]).toFixed(1) + ' hrs, ' + Day.label(days[p[0]].d); },
+          onLeave: () => { const s = subOf(); if (s && kept != null) s.textContent = kept; kept = null; },
+        });
+      });
     },
   },
 
@@ -1573,31 +1575,16 @@ const WIDGETS = {
         body.appendChild(el('div', 'empty', 'Nothing spent in the last two weeks.'));
         return;
       }
+      /* On shared/chart.js: this week's total and how it compares on top, in
+         words, and where it went ranked underneath, each bar against the
+         biggest. */
       const diff = now.total - prev.total;
-      const st = el('div', 'stats');
-      st.appendChild(el('div', 'stat acc', '<b>' + Math.round(now.total).toLocaleString() + '</b><span>THIS WEEK</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + Math.round(prev.total).toLocaleString() + '</b><span>LAST WEEK</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + (diff >= 0 ? '+' : '') + Math.round(diff).toLocaleString() +
-        '</b><span>DIFFERENCE</span>'));
-      body.appendChild(st);
-
+      body.appendChild(Chart.header({ size: 'sm', value: Math.round(now.total).toLocaleString(), unit: 'this week',
+        sub: Math.abs(diff) < 1 ? 'the same as last week'
+          : Math.round(Math.abs(diff)).toLocaleString() + (diff > 0 ? ' more' : ' less') + ' than last week' }).el);
       const accts = Rec.map('acct');
-      const rows = Object.keys(now.by).sort((a, b) => now.by[b] - now.by[a]).slice(0, 5);
-      if (!rows.length) return;
-      const max = now.by[rows[0]] || 1;
-      const list = el('div', 'rowlist');
-      rows.forEach(k => {
-        const r = el('div', 'row');
-        const pct = Math.round((now.by[k] / max) * 100);
-        r.innerHTML = '<span class="n">' + esc(accts[k] ? accts[k].name : k) + '</span>' +
-          '<span class="d">' + Math.round(now.by[k]).toLocaleString() + '</span>';
-        const bar = el('div', 'bar');
-        bar.style.width = Math.max(2, pct) + '%';
-        bar.style.cssText += ';top:auto;bottom:2px;height:2px;opacity:.5';
-        r.appendChild(bar);
-        list.appendChild(r);
-      });
-      body.appendChild(list);
+      const rows = Object.keys(now.by).map(k => ({ name: accts[k] ? accts[k].name : k, amt: now.by[k] }));
+      if (rows.length) body.appendChild(Chart.shares(rows, { max: 5, total: now.total }));
     },
   },
 

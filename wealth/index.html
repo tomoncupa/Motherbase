@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.0, 2026-09-14">
+<meta name="mb-version" content="1.0.1, 2026-09-14">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -158,6 +158,10 @@ h2 .spacer{flex:1}
   letter-spacing:var(--track-cap);color:var(--text-muted)}
 
 .chartbox{height:170px}
+/* the six-month chart: money out as quiet bars with this month lit, net as a dashed line */
+.wout{fill:var(--text-muted);opacity:.28}
+.mb-emph .wout.on{opacity:.62}
+.wnet{fill:none;stroke:var(--text-2);stroke-width:1.5;stroke-dasharray:4 4;vector-effect:non-scaling-stroke}
 
 /* A row you can rearrange carries a grip you can see (law 6), and a row being
    carried lifts off the list. */
@@ -293,52 +297,6 @@ const short = n => {
   return money(n);
 };
 
-/* ══ the y-axis step this app needs and the foundation does not have ══
-   `shared/chart.js` picks its own step from a table that stops at 5000, so a
-   chart of eighty thousand pesos asks for a 20,000 step, finds nothing that
-   big, and falls back to 5000 — seventeen gridlines with their labels sitting
-   on top of each other.
-
-   Money is the first thing in this suite counted in tens of thousands, so
-   nothing had hit it before. The table is in `shared/`, which an app session
-   must not touch, so the step is worked out here and handed to `ySet`.
-   Reported to Tom for a foundation session; delete this when the table
-   grows.                                                                  */
-function moneyScale(ch, values) {
-  const vs = values.filter(v => v != null && isFinite(v));
-  const hi = Math.max(1, vs.length ? Math.max.apply(null, vs) : 1);
-  const lo = Math.min(0, vs.length ? Math.min.apply(null, vs) : 0);
-  const span = hi - lo;
-  let step = Math.pow(10, Math.floor(Math.log10(span / 4)));
-  [1, 2, 2.5, 5, 10].some(m => { if (step * m >= span / 4) { step *= m; return true; } return false; });
-  return ch.ySet(Math.floor(lo / step) * step, Math.ceil(hi / step) * step, step);
-}
-
-/* A chart drawn at the width its box actually turned out to be.
-   The svg keeps its aspect ratio, so one drawn 640 wide inside a 1360px card
-   letterboxes into the middle and looks like a mistake.
-
-   Measured synchronously, and NOT from a frame callback. `requestAnimationFrame`
-   never fires in a tab the browser is not painting, so the first version of
-   this drew nothing at all whenever the window was behind something else —
-   which is also how it was found. `shared/ui.js` says the same thing about its
-   segmented control: a frame callback is not guaranteed to run.
-
-   The box must already be in the document, or it measures zero. The timeout is
-   the second chance for the case where it is not.                          */
-function chartInto(box, h, fn) {
-  const go = () => {
-    const w = Math.round(box.getBoundingClientRect().width);
-    if (!w) return false;
-    box.innerHTML = '';
-    const ch = Chart.make({ w: w, h: h });
-    fn(ch, w);
-    box.appendChild(ch.el);
-    return true;
-  };
-  if (!go()) setTimeout(go, 0);
-  return box;
-}
 let seq = 0;
 const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
   (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
@@ -1242,61 +1200,6 @@ function dayEvents(date) {
       note: 'session delivered', amt: 0, quiet: 1, fig: 'session' });
   });
   return out.sort(byTime);
-}
-
-/* == a donut of where the money went ==
-   Tom, 2026-09-11: "I want a piechart for money out."
-
-   Drawn here rather than in `shared/chart.js`, which has no pie and which an
-   app session must not touch. Six theme colour slots, no hex anywhere, and a
-   hole in the middle so the total can live in it — a plain pie wastes its
-   best piece of space on nothing.
-
-   Slices are one path each with an arc, and they are `<title>`d so hovering
-   says what they are. Anything under 3% is folded into one "everything else"
-   wedge, because eleven slivers is a decoration, not a chart. */
-function donut(rows, total, size) {
-  const NS = 'http://www.w3.org/2000/svg';
-  const S = size || 220, R = S / 2, INNER = R * 0.62;
-  const svg = document.createElementNS(NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 ' + S + ' ' + S);
-  svg.setAttribute('class', 'mb-chart');
-  svg.style.width = '100%'; svg.style.maxWidth = S + 'px'; svg.style.height = 'auto';
-  if (!total) return svg;
-
-  let angle = -Math.PI / 2;                     /* twelve o'clock */
-  const pt = (a, r) => [(R + r * Math.cos(a)).toFixed(2), (R + r * Math.sin(a)).toFixed(2)];
-  rows.forEach((row, i) => {
-    const frac = row.amt / total;
-    if (frac <= 0) return;
-    /* A full circle drawn as an arc collapses to nothing, because its start
-       and end points are the same. One category is a ring, not a slice. */
-    const end = angle + frac * Math.PI * 2;
-    const node = document.createElementNS(NS, frac >= 0.9999 ? 'circle' : 'path');
-    if (frac >= 0.9999) {
-      node.setAttribute('cx', R); node.setAttribute('cy', R);
-      node.setAttribute('r', (R + INNER) / 2);
-      node.setAttribute('fill', 'none');
-      node.setAttribute('stroke-width', R - INNER);
-      node.setAttribute('stroke', 'var(--data-' + (1 + i % 6) + ')');
-    } else {
-      const big = frac > 0.5 ? 1 : 0;
-      const o1 = pt(angle, R - 1), o2 = pt(end, R - 1);
-      const i2 = pt(end, INNER), i1 = pt(angle, INNER);
-      node.setAttribute('d',
-        'M' + o1[0] + ' ' + o1[1] +
-        'A' + (R - 1) + ' ' + (R - 1) + ' 0 ' + big + ' 1 ' + o2[0] + ' ' + o2[1] +
-        'L' + i2[0] + ' ' + i2[1] +
-        'A' + INNER + ' ' + INNER + ' 0 ' + big + ' 0 ' + i1[0] + ' ' + i1[1] + 'Z');
-      node.setAttribute('fill', 'var(--data-' + (1 + i % 6) + ')');
-    }
-    const ttl = document.createElementNS(NS, 'title');
-    ttl.textContent = row.name + ' — ' + money(row.amt) + ' (' + Math.round(frac * 100) + '%)';
-    node.appendChild(ttl);
-    svg.appendChild(node);
-    angle = end;
-  });
-  return svg;
 }
 
 /* ══════════════════════ STATEMENT IMPORT ══════════════════════
@@ -2874,23 +2777,39 @@ function drawScore(m) {
   const outs = ms.map((mm, i) => [i, monthSpend(mm).total]);
   const nets = ms.map((mm, i) => [i, monthIn(mm) - monthSpend(mm).total]);
   if (window.Chart && (ins.some(p => p[1]) || outs.some(p => p[1]))) {
+    /* On shared/chart.js, answer first: the average month's net over the six,
+       then the chart. Drag across it and the number becomes that month's net,
+       with what came in and went out beneath it. This month's bar is lit. */
+    const avgNet = nets.reduce((a, p) => a + p[1], 0) / nets.length;
+    const signed = v => (v > 0 ? '+' : '') + money(v);
+    const head = Chart.header({ label: 'Average month', value: signed(Math.round(avgNet)),
+      sub: 'net, over the last six months' });
+    c4.appendChild(head.el);
     const box = el('div', 'chartbox');
     c4.appendChild(box);
     /* In the document before it is measured, or it measures zero. */
     m.appendChild(c4);
-    chartInto(box, 170, ch => {
-      ch.xLinear(0, 5);
-      /* Zero has to be on the scale or a negative net falls off the bottom. */
-      moneyScale(ch, ins.map(p => p[1]).concat(outs.map(p => p[1]))
-        .concat(nets.map(p => p[1])).concat([0]));
+    Chart.mount(box, { label: 'Six months of money in and out' }, ch => {
+      ch.xLinear(-0.5, 5.5);
+      ch.yFit(ins.map(p => p[1]).concat(outs.map(p => p[1]), nets.map(p => p[1]), [0]));
       ch.grid(v => short(v));
-      ch.bars(outs, 'mb-bar');
-      ch.rule(0, '', 'mb-rule');
-      ch.line(ins, 'mb-line'); ch.dots(ins, 'mb-dot', 3);
-      ch.line(nets, 'mb-rule'); ch.dots(nets, 'mb-dot', 2);
-      ch.note('bars out · line in · flat line net');
+      ch.labels(ms.map((mm, i) => [i, String(monthName(mm)).slice(0, 3), i === 5]));
+      ch.bars(outs.map((p, i) => [p[0], p[1], monthName(ms[i]) + ' out: ' + money(p[1])]), 'wout', null, { highlight: 'last' });
+      ch.add('line', { x1: ch.P.l, y1: ch.Y(0), x2: ch.W - ch.P.r, y2: ch.Y(0) }, 'mb-gl');
+      ch.line(nets, 'wnet');
+      ch.area(ins, null, 0);
+      ch.line(ins);
+      ch.end(ins[ins.length - 1], short(ins[ins.length - 1][1]));
+      ch.scrub(ins, {
+        onMove: (p, i) => head.set(signed(nets[i][1]), money(ins[i][1]) + ' in, ' + money(outs[i][1]) + ' out', monthName(ms[i])),
+        onLeave: head.reset,
+      });
     });
-    c4.appendChild(el('div', 'note', ms.map(monthName).join(' · ')));
+    c4.appendChild(Chart.legend([
+      { name: 'In', kind: 'line' },
+      { name: 'Out', kind: 'bar', color: 'var(--text-muted)' },
+      { name: 'Net', kind: 'dash', color: 'var(--text-2)' },
+    ]));
   } else {
     c4.appendChild(el('div', 'empty', 'Nothing logged yet. This fills in as payments and spending arrive.'));
     m.appendChild(c4);
@@ -3353,8 +3272,7 @@ function drawSpend(m) {
   }
   m.appendChild(c1);
 
-  /* Where it went, as a donut and a list. The picture ranks them at a glance
-     and the list is what you can actually press. */
+  /* Where it went, ranked. */
   const c2 = card('WHERE IT WENT');
   const rows = Object.keys(t.byCat).map(k => ({ id: k, amt: t.byCat[k],
       name: k ? catName(k) : 'Uncategorised' }))
@@ -3363,46 +3281,16 @@ function drawSpend(m) {
     c2.appendChild(el('div', 'empty', 'Nothing logged in this ' + word +
       '. Press <b>+</b> to put one in, or log it on your phone in STATUS.'));
   } else {
+    /* On shared/chart.js: the total on top with the biggest share said in
+       words, and every category ranked by a bar against the biggest one. It
+       replaced a donut on 2026-09-14: lengths on one baseline compare at a
+       glance, and slices of a ring do not. A row still filters the purchases. */
     const sum = rows.reduce((a, r) => a + r.amt, 0);
-    /* Slivers become one wedge. Eleven of them is decoration. */
-    const shown = [], rest = [];
-    rows.forEach(r => (r.amt / sum >= 0.03 ? shown : rest).push(r));
-    const slices = shown.concat(rest.length
-      ? [{ id: null, name: 'Everything else', amt: rest.reduce((a, r) => a + r.amt, 0) }] : []);
-
-    const ring = el('div');
-    ring.style.position = 'relative';
-    ring.style.display = 'flex';
-    ring.style.justifyContent = 'center';
-    ring.style.marginBottom = 'var(--s-4)';
-    ring.appendChild(donut(slices, sum, 220));
-    const mid = el('div', null, '<div class="k" style="font-family:var(--font-display);' +
-      'font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--text-muted)">OUT</div>' +
-      '<div style="font-family:var(--font-display);font-size:var(--f-5);' +
-      'font-weight:var(--w-bold);line-height:var(--lh-tight)">' + esc(short(sum)) + '</div>');
-    mid.style.position = 'absolute';
-    mid.style.top = '50%'; mid.style.left = '50%';
-    mid.style.transform = 'translate(-50%,-50%)';
-    mid.style.textAlign = 'center';
-    mid.style.pointerEvents = 'none';
-    ring.appendChild(mid);
-    c2.appendChild(ring);
-
-    const top = rows[0].amt;
-    const list = el('div', 'list');
-    rows.forEach((r, i) => {
-      /* The list keeps every category, and its colour matches the wedge it is
-         in, so a sliver folded into "everything else" is still findable. */
-      const slot = i < shown.length ? (1 + i % 6) : (1 + shown.length % 6);
-      const row = itemRow(r.name,
-        Math.round(r.amt / (t.total - t.big || 1) * 100) + '% of normal spending', money(r.amt));
-      row.onclick = () => { CATFILTER = r.id; draw(); };
-      const bar = el('div', 'bar c' + slot);
-      bar.appendChild(el('i')).style.width = (r.amt / top * 100).toFixed(1) + '%';
-      list.appendChild(stack(row, bar));
-    });
-    c2.appendChild(list);
-    c2.appendChild(el('div', 'note', 'Tap a category to see only its purchases. Anything under 3% is one wedge in the ring, and still its own line here.'));
+    c2.appendChild(Chart.header({ value: money(sum),
+      sub: rows[0].name + ' is the biggest, ' + Math.round(rows[0].amt / sum * 100) + '% of it' }).el);
+    c2.appendChild(Chart.shares(rows, { fmt: money, total: (t.total - t.big) || sum,
+      onPick: r => { CATFILTER = r.id; draw(); } }));
+    c2.appendChild(el('div', 'note', 'Tap a category to see only its purchases.'));
   }
   m.appendChild(c2);
 

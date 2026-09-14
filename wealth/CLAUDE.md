@@ -1031,17 +1031,18 @@ the second currency, the rate and its date all travel in a backup.
 
 ## Pictures
 
-**A donut for money out**, asked for by Tom on 2026-09-11. Drawn in the app,
-not in `shared/chart.js`, which has no pie and which an app session must not
-touch. Six theme colour slots, no hex anywhere, and a hole with the total in
-it, because a plain pie spends its best space on nothing.
+**Where it went is ranked bars**, since 2026-09-14, replacing the donut Tom
+asked for on 2026-09-11. Tom: "rewrite everything to follow the chart engine.
+Make charts beautiful and useful." Lengths on one baseline compare at a glance
+and slices of a ring do not, so `Chart.shares` in `shared/chart.js` draws the
+total on top with the biggest category said in words, then every category
+ranked, its share of normal spending beside it. Tapping one still filters the
+purchases below.
 
-Anything under 3% folds into one "everything else" wedge. Eleven slivers is a
-decoration, not a chart. The list beside it still carries every category, and
-a folded one keeps the colour of the wedge it went into so it stays findable.
-
-One category is drawn as a ring rather than a slice: an arc whose start and end
-are the same point collapses to nothing.
+**The six-month chart** leads with the average month's net, and dragging across
+it shows that month's net with what came in and went out. Money in is the
+line, money out the quiet bars with this month lit, net the dashed line, with a
+legend beneath. `moneyScale` and `chartInto` are gone: the engine does both.
 
 **Monthly net** is in minus out, and it answers a different question from
 liquid. Liquid says "can I?". Net says "did that month pay for itself?" A month

@@ -43,7 +43,7 @@ are holding a stale copy of whatever you just changed.
 | `io.js` | Backup, restore, spreadsheet export. | High. It is the safety net. |
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 234 checks over all of it. | Run it every time. |
+| `_smoke.html` | 242 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -68,8 +68,14 @@ are holding a stale copy of whatever you just changed.
    the same three bugs kept being fixed separately: a scale landing on 197 and
    203, a drawing that grows taller as its box grows wider until it pushes
    everything else out, and a "time axis" that is the first date and the last.
-   The apps are not all moved over yet — the weight widget is, and the rest
-   should follow one at a time rather than in a sweep.
+   Since 2026-09-14 every chart in the suite is drawn with it, and it does
+   more than axes. Tom: "Graphs must be useful and feel cool, they must convey
+   data quick." So a chart leads with `Chart.header` (the number and what
+   changed, in words), draws at its box's real size through `Chart.mount`,
+   marks its latest value with `c.end`, lights one bar and quietens the rest,
+   and lets a finger or mouse drag across it with `c.scrub`. Part of a whole
+   is `Chart.shares`, ranked bars, not a donut. Two scales on one plot is two
+   charts.
 5b. **An app screen is built out of `ui.js`, not beside it.** `UI.row`,
    `UI.field`, `UI.toggle`, `UI.segmented` and the `.mb-group`, `.mb-swatch`,
    `.mb-opt` classes. A private copy of a component inherits nothing: not the
