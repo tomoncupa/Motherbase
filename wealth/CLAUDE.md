@@ -96,7 +96,7 @@ WEALTH writes these types. It may read anything.
 | `sesh` | date + id | `{client}` — one session delivered, for a client paid by the session |
 | `pack` | date + id | `{client, n, price, note, parts, when}` — sessions sold before they happen; `parts` splits the price, `when` is `before` or `after` each block |
 | `paid` | date + id | `{amt, acct, client, note, t}` — money in. No client means a one-off |
-| `bill` | bill id | `{name, amt, day, acct, cat, from, until}` — a recurring outgoing |
+| `bill` | bill id | `{name, amt, day, acct, cat, from, until, cycle, every, start}` — a recurring outgoing. `cycle` is `month`, or `days` for one due every `every` days after `start`, the day it was last paid. No `cycle` reads as monthly |
 | `pot` | pot id | `{name, target, acct, ord}` |
 | `move` | date + id | `{pot, amt, dir}` — money into or out of a pot |
 | `debt` | debt id | `{name, owed, rate, min, day}` |
@@ -458,6 +458,29 @@ SUBSCRIPTIONS AND MEMBERSHIPS now.
 
 ---
 
+## Bills every few days
+
+Tom, 2026-09-14: *"I pay Meralco roughly 1040 every 6-7 days, how do I put
+this in monthly bills?"* Prepaid electricity has no day of the month, so a
+bill that could only say "the 17th" could not hold it.
+
+A bill is now **once a month** on a day, or **every few days**: a number of
+days and the day it was last paid. The amount is per payment. The number may
+be a fraction, and that is the point: 6.5 gives dates 6 and 7 days apart in
+turn. Each date is rounded from the start, never from the date before, so the
+rounding cannot drift. The day it was last paid is not itself due.
+
+What it comes to in a month is the amount times 30.44, the days in an average
+month, over the number: ₱1,040 every 6.5 days is ₱4,870. Runway, the monthly
+total and the subscriptions card all use that figure; FREE and the list of
+bills coming up use the real dates. The bills list reads "every 6.5 days,
+about ₱4,870 a month", and a monthly bill shows its day as just the number,
+"17", as Tom asked the same day.
+
+Watched: a ₱1,040 bill every 6.5 days from 4 September, made through the bill
+sheet with its own buttons, was due 17, 24 and 30 September, then 7 and 13
+October, and showed in the list and the upcoming dates exactly so.
+
 ## Import, and what it took
 
 **Statement import.** Built 2026-09-11. Tom: *"the purpose of the statement
@@ -578,6 +601,34 @@ shop name must match. When several lines want one logged entry, only a line
 the clock or the name clearly picks may take it. Everything short of that is
 asked, and a logged entry already given to one answer is never offered to
 another.
+
+**6. Apply runs once, and a statement saved twice can be undone.** Tom,
+2026-09-14: *"Why am I seeing duplicate transactions?"* Read off his own
+device: every line of his first GCash import was saved twice on 13 September,
+175 purchases, 10 payments in and 15 transfers. Both copies of each line
+carried the same fingerprint and were written about 24 seconds apart, which is
+how long the first save took. It was not two imports, because a second import
+would have recognised every line as already imported.
+
+The cause was one level under the button. Every saved row announces itself,
+and WEALTH redrew the whole app on each announcement, so a thousand rows was a
+thousand redraws and the page froze. A second press on Apply queued during the
+freeze and saved the statement again the moment the first finished. WEALTH
+now redraws once per burst of saves, which took 300 saves from a freeze to 10
+milliseconds and one redraw, and Apply ignores every press after the first.
+
+The copies already saved are listed on SPENDING as **SAVED TWICE**, with a
+button that removes them after a confirm and can be undone. Only copies that
+share a fingerprint holding the bank's reference number are counted, because
+that names one real line; two ₱93 rides with no reference can share a
+fingerprint and both be real. The copy kept is the one changed most recently,
+its category included, and the "already imported" record is pointed at it.
+
+Watched: a pasted two-line statement driven through every import screen, with
+Apply pressed twice back to back, saved two purchases, not four. Made-up
+copies with and without a reference: only the referenced pairs were listed,
+the copy re-filed later kept its new category, and undo put every row, mark
+and record back.
 
 ### How an account is recognised
 

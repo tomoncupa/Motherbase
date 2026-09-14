@@ -498,7 +498,12 @@ const pots = () => Rec.all('pot').map(r => Object.assign({ id: r.key }, r.payloa
 const debts = () => Rec.all('debt').map(r => Object.assign({ id: r.key }, r.payload))
   .sort((a, b) => (a.ord || 0) - (b.ord || 0));
 const bills = () => Rec.all('bill').map(r => Object.assign({ id: r.key }, r.payload))
-  .sort((a, b) => (a.day || 0) - (b.day || 0));
+  .sort((a, b) => billOrder(a) - billOrder(b));
+/* A monthly bill sits at its day. A bill every few days sits at the day of
+   the month it is next due, so the list still reads in due-date order. */
+const billOrder = b => b.cycle === 'days'
+  ? +String(billDates(b, Day.today(), Day.shift(Day.today(), Math.ceil(num(b.every, 7)) + 1))[0] || '').slice(8) || 0
+  : (b.day || 0);
 /* == an account, however it was written ==
    STATUS writes a purchase's account as its NAME ("GCash"), and STATUS owns
    that row's shape. WEALTH looked accounts up by KEY ("gcash"), so every
@@ -981,21 +986,45 @@ function freeWindow() {
 /* ── bills falling due in a window ── */
 function billsDue(from, to) {
   const out = [];
-  bills().forEach(b => {
-    const day = num(b.day, 1);
-    let d = new Date(from.slice(0, 4), +from.slice(5, 7) - 1, 1);
-    for (let i = 0; i < 24; i++) {
-      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-      const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
-        '-' + String(Math.min(day, last)).padStart(2, '0');
-      if (iso > to) break;
-      if (iso >= from && (!b.from || iso >= b.from) && (!b.until || iso <= b.until)) out.push({ bill: b, date: iso });
-      d.setMonth(d.getMonth() + 1);
-    }
-  });
+  bills().forEach(b => billDates(b, from, to).forEach(d => out.push({ bill: b, date: d })));
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
-const monthlyFixed = () => bills().reduce((a, b) => a + num(b.amt, 0), 0);
+/* One bill's due dates in a window.
+   Tom, 2026-09-14: "I pay Meralco roughly 1040 every 6-7 days." A bill is
+   monthly on a day, or every N days counted from the day it was last paid.
+   N may be a fraction: 6.5 gives dates 6 and 7 days apart in turn. Each date
+   is rounded from the start, never from the date before, so the rounding
+   cannot build up into drift. The day it was last paid is not itself due. */
+function billDates(b, from, to) {
+  const out = [];
+  const inRange = iso => iso >= from && (!b.from || iso >= b.from) && (!b.until || iso <= b.until);
+  if (b.cycle === 'days') {
+    const n = Math.max(1, num(b.every, 7)), s = b.start || from;
+    let i = Math.max(1, Math.floor(Day.diff(from, s) / n) - 1);
+    for (let guard = 0; guard < 500; guard++, i++) {
+      const iso = Day.shift(s, Math.round(i * n));
+      if (iso > to) break;
+      if (inRange(iso)) out.push(iso);
+    }
+    return out;
+  }
+  const day = num(b.day, 1);
+  let d = new Date(from.slice(0, 4), +from.slice(5, 7) - 1, 1);
+  for (let i = 0; i < 24; i++) {
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+      '-' + String(Math.min(day, last)).padStart(2, '0');
+    if (iso > to) break;
+    if (inRange(iso)) out.push(iso);
+    d.setMonth(d.getMonth() + 1);
+  }
+  return out;
+}
+/* What a bill comes to in an average month: its amount, or for a bill every
+   N days, its amount times the 30.44 days of an average month over N. */
+const billMonthly = b => b.cycle === 'days'
+  ? num(b.amt, 0) * (365.25 / 12) / Math.max(1, num(b.every, 7)) : num(b.amt, 0);
+const monthlyFixed = () => bills().reduce((a, b) => a + billMonthly(b), 0);
 
 /* ══ the three numbers ══ */
 function board() {
@@ -1889,6 +1918,101 @@ function writeSetup(items, setup) {
   ruleCache = null;
 }
 
+/* == lines a statement saved twice ==
+   Tom, 2026-09-14: "Why am I seeing duplicate transactions?" Because Apply
+   ran twice on his first GCash import (see the guard on that button). Every
+   copy carries the statement line's fingerprint, and a fingerprint holding
+   the bank's reference number names one real line, so two rows with it are
+   one payment. Lines with no reference are left alone: two ₱93 rides on one
+   day can share a fingerprint and both be real.
+
+   The copy kept is the one changed most recently, counting its category, so
+   anything he fixed by hand survives. The "already imported" record is
+   pointed at it, so the next import still recognises the line. */
+function savedTwice() {
+  const groups = {};
+  ['spend', 'paid', 'xfer'].forEach(type => Rec.all(type, {}).forEach(r => {
+    const p = r.payload || {};
+    (type === 'xfer' ? Object.values(p.stmt || {}) : [p.stmt]).forEach(fp => {
+      if (!fp || String(fp).indexOf('|ref:') < 0) return;
+      const k = type + '#' + fp;
+      (groups[k] = groups[k] || []).push({ type: type, date: r.date, key: r.key, fp: fp, amt: num(p.amt, 0) });
+    });
+  }));
+  return Object.values(groups).filter(g => g.length > 1);
+}
+function removeSavedTwice(groups) {
+  const gone = [], recons = [], kept = {}, dropped = {};
+  const id = x => x.type + '|' + x.date + '|' + x.key;
+  const touched = x => {
+    const a = (Rec.row(x.type, x.date, x.key) || {}).updated_at || 0;
+    const m = (Rec.row('mark', null, x.date + '|' + x.key) || {}).updated_at || 0;
+    return a > m ? a : m;
+  };
+  groups.forEach(g => {
+    const rc = recon(g[0].fp);
+    const live = g.filter(x => !dropped[id(x)]);
+    if (live.length < 2) return;
+    const keep = live.slice().sort((a, b) => {
+      const ta = touched(a), tb = touched(b);
+      if (ta !== tb) return tb > ta ? 1 : -1;
+      return (rc && rc.spend === b.key ? 1 : 0) - (rc && rc.spend === a.key ? 1 : 0);
+    })[0];
+    kept[id(keep)] = 1;
+    if (rc && rc.spend !== keep.key) {
+      recons.push({ fp: g[0].fp, was: rc });
+      Rec.set('recon', null, g[0].fp, merge(rc, { spend: keep.key }));
+    }
+    live.forEach(x => {
+      if (x === keep || kept[id(x)]) return;
+      const row = Rec.get(x.type, x.date, x.key);
+      if (!row) return;
+      const mk = Rec.get('mark', null, x.date + '|' + x.key);
+      gone.push({ x: x, row: row, mk: mk });
+      dropped[id(x)] = 1;
+      Rec.del(x.type, x.date, x.key);
+      if (mk) Rec.del('mark', null, x.date + '|' + x.key);
+    });
+  });
+  return {
+    n: gone.length,
+    undo: () => {
+      gone.forEach(g => {
+        Rec.set(g.x.type, g.x.date, g.x.key, g.row);
+        if (g.mk) Rec.set('mark', null, g.x.date + '|' + g.x.key, g.mk);
+      });
+      recons.forEach(r => Rec.set('recon', null, r.fp, r.was));
+      draw();
+    },
+  };
+}
+function drawTwice(m) {
+  const groups = savedTwice();
+  if (!groups.length) return;
+  const extra = groups.reduce((a, g) => a + g.length - 1, 0);
+  const out = groups.filter(g => g[0].type === 'spend').reduce((a, g) => a + g[0].amt * (g.length - 1), 0);
+  const c = card('SAVED TWICE', 'full');
+  c.appendChild(el('div', 'note', '<b>' + extra + '</b> line' + (extra === 1 ? '' : 's') +
+    ' from a statement ' + (extra === 1 ? 'was' : 'were') + ' saved more than once' +
+    (out ? ', adding <b>' + esc(money(out)) + '</b> of spending that did not happen' : '') +
+    '. Each copy has the same bank reference number, so they are one payment, not two. ' +
+    'The copy you changed most recently is kept, with its category.'));
+  const go = el('button', 'btn go mb-press mb-tap', 'Remove the extra copies');
+  go.type = 'button';
+  go.onclick = () => UI.confirm('Remove ' + extra + ' extra cop' + (extra === 1 ? 'y' : 'ies') + '?',
+    'One copy of each stays. You can undo this straight after.', { yes: 'REMOVE' }).then(ok => {
+    if (!ok) return;
+    const res = removeSavedTwice(savedTwice());
+    Mobile.feedback('success');
+    UI.undo('removed <b>' + res.n + '</b> extra cop' + (res.n === 1 ? 'y' : 'ies'), res.undo, { ms: 15000 });
+    draw();
+  });
+  const btns = el('div', 'rowbtns');
+  btns.appendChild(go);
+  c.appendChild(btns);
+  m.appendChild(c);
+}
+
 /* == the transfers still waiting for a name == */
 function drawUnsure(m) {
   const rows = spendRows({}).filter(x => tagOf(x) === UNSURE)
@@ -2717,7 +2841,10 @@ function drawOut(m) {
   else {
     const list = el('div', 'list');
     bl.forEach(b => {
-      const r = itemRow(b.name, 'day ' + num(b.day, 1) + ' of the month · ' + catName(b.cat) +
+      /* Tom, 2026-09-14: "Change 'Day X of the month' to just the number." */
+      const r = itemRow(b.name, (b.cycle === 'days'
+          ? 'every ' + num(b.every, 7) + ' days, about ' + money(billMonthly(b)) + ' a month'
+          : num(b.day, 1)) + ' · ' + catName(b.cat) +
         (b.acct ? ' · ' + esc(acctName(b.acct)) : ''), money(num(b.amt, 0)));
       r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
       list.appendChild(r);
@@ -2739,14 +2866,14 @@ function drawOut(m) {
   else {
     const list = el('div', 'list');
     rec.forEach(b => {
-      const r = itemRow(b.name, catName(b.cat) + ' · ' + money(num(b.amt, 0)) + ' a month',
-        money(num(b.amt, 0) * 12) + '/yr');
+      const r = itemRow(b.name, catName(b.cat) + ' · ' + money(billMonthly(b)) + ' a month',
+        money(billMonthly(b) * 12) + '/yr');
       r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
       list.appendChild(r);
     });
     c2.appendChild(list);
     c2.appendChild(el('div', 'note', 'Everything that renews on its own: <b>' +
-      esc(money(rec.reduce((a, b) => a + num(b.amt, 0) * 12, 0))) + '</b> a year between them.'));
+      esc(money(rec.reduce((a, b) => a + billMonthly(b) * 12, 0))) + '</b> a year between them.'));
   }
   m.appendChild(c2);
 
@@ -2846,6 +2973,7 @@ function drawSpend(m) {
   const R = periodRange(), P = prevRange();
   const t = rangeSpend(R.from, R.to), prev = rangeSpend(P.from, P.to);
   const word = PERIOD === 'day' ? 'day' : PERIOD === 'week' ? 'week' : 'month';
+  drawTwice(m);
 
   const c0 = card(null, 'full');
   c0.appendChild(UI.segmented([{ id: 'day', name: 'DAY' }, { id: 'week', name: 'WEEK' },
@@ -3834,9 +3962,35 @@ function billSheet(existing) {
       const name = UI.field('name', { placeholder: 'Rent', value: existing ? existing.name : '' });
       b.appendChild(fld('What', name));
       const amt = amountField(existing ? existing.amt : '');
-      b.appendChild(fld('How much a month', amt));
+      b.appendChild(fld('How much each time', amt));
+      /* Prepaid electricity has no day of the month. So a bill is monthly on
+         a day, or every N days from when it was last paid. */
+      const often = chipRow([{ id: 'month', name: 'Once a month' }, { id: 'days', name: 'Every few days' }],
+        existing && existing.cycle === 'days' ? 'days' : 'month', () => paintOften());
+      b.appendChild(fld('How often', often));
       const day = UI.field('number', { placeholder: '1', value: existing ? existing.day : '' });
-      b.appendChild(fld('Which day of the month', day));
+      const dayF = fld('Which day of the month', day);
+      b.appendChild(dayF);
+      const every = UI.field('decimal', { placeholder: '7', value: existing && existing.every ? String(existing.every) : '' });
+      const everyF = fld('Every how many days', every);
+      b.appendChild(everyF);
+      const start = dateField(existing && existing.start);
+      const startF = fld('Last paid on', start);
+      b.appendChild(startF);
+      const oftenHint = el('div', 'note', '');
+      b.appendChild(oftenHint);
+      function paintOften() {
+        const d = often.get() === 'days';
+        dayF.style.display = d ? 'none' : '';
+        everyF.style.display = startF.style.display = oftenHint.style.display = d ? '' : 'none';
+        const a = num(amt.value, 0);
+        oftenHint.innerHTML = 'For every 6 or 7 days, put <b>6.5</b> and the dates take turns.' +
+          (a ? ' That comes to about <b>' + esc(money(billMonthly({ cycle: 'days', amt: a, every: every.value || 7 }))) +
+            '</b> a month.' : '');
+      }
+      every.addEventListener('input', paintOften);
+      amt.addEventListener('input', paintOften);
+      paintOften();
       const cat = picker({
         items: cats().filter(c => c.grp !== 'move').map(c => ({ id: c.id, name: c.name })),
         value: existing ? existing.cat : '', placeholder: 'Rent, Utility Bills, Subscriptions',
@@ -3857,6 +4011,9 @@ function billSheet(existing) {
           /* Same as a client's day: billsDue clamps per month, so rent on the
              30th stays on the 30th and only moves in February. */
           day: Math.min(31, Math.max(1, num(day.value, 1))),
+          cycle: often.get(),
+          every: often.get() === 'days' ? Math.max(1, num(every.value, 7)) : (existing ? existing.every : undefined),
+          start: often.get() === 'days' ? (start.value || Day.today()) : (existing ? existing.start : undefined),
           cat: cat.get(), acct: acct.get(),
         }));
         return true;
@@ -4669,7 +4826,13 @@ function importSheet() {
         go.type = 'button';
         go.disabled = nothing;
         go.style.opacity = nothing ? '.5' : '';
+        /* Once. Tom's first GCash import ran twice on 2026-09-13: the page
+           froze while saving, a second press queued, and every line was
+           saved again 24 seconds later with the same fingerprint. */
+        let applied = false;
         go.onclick = () => {
+          if (applied) return;
+          applied = true; go.disabled = true;
           writeSetup(setupList, setup);
           willMerge.forEach(x => mergeStatement(x, acct));
           willAdd.forEach(x => addStatement(x, acct));
@@ -5207,7 +5370,12 @@ TAB = S.get('tab', 'score');
 PERIOD = S.get('period', 'month');
 draw();
 Rec.ready(() => { seed(); ruleCache = null; drawCurBtn(); draw(); });
-Rec.on(() => { ruleCache = null; draw(); });
+/* Every saved row announces itself, one at a time. Redrawing the whole app on
+   each one made reading a statement a 22 second freeze, long enough that a
+   second press on Apply queued up and saved the whole statement again. One
+   redraw per burst of saves. */
+let drawT = null;
+Rec.on(() => { ruleCache = null; if (!drawT) drawT = setTimeout(() => { drawT = null; draw(); }, 0); });
 Day.on(draw);
 </script>
 </body>
