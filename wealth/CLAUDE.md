@@ -68,7 +68,7 @@ WEALTH writes these types. It may read anything.
 | `wtag` | tag id | `{name}` — an occasion, not a category. `date`, `gift`, `travel` |
 | `mark` | `date\|spendKey` | `{cat, tag, big}` — what WEALTH thinks of one spend row |
 | `count` | date + account id | `{bal}` — a counted balance, on the day it was counted |
-| `client` | client id | `{name, rate, cycle, every, start, day, status, note}` |
+| `client` | client id | `{name, rate, cycle, every, start, days, day, status, note}` — `days` is a list of days of the month; `day` is its first, kept for rows written before the list |
 | `sesh` | date + id | `{client}` — one session delivered, for a client paid by the session |
 | `pack` | date + id | `{client, n, price, note}` — sessions sold before they happen |
 | `paid` | date + id | `{amt, acct, client, note, t}` — money in. No client means a one-off |
@@ -263,11 +263,35 @@ So a cycle is **a kind and a number**, not one of a fixed list of four.
 
 | Kind | Number means | Repeats on |
 |---|---|---|
-| `month` | months | a day of the month, defaulting to the start date's |
+| `month` | months | one or several days of the month, defaulting to the start date's |
 | `week` | weeks | the start date, stepped |
 | `sesh` | sessions delivered | nothing. It is a count, billed after |
 | `pack` | — | nothing. Sessions are bought before they happen |
 | `oneoff` | — | once, on the start date |
+
+### Several days a month
+
+Tom, 2026-09-14: *"I have a client who pays me 3500 every 1st and 15th."* One
+day a month could not say that, and two client entries would split one
+person's history in two.
+
+A monthly client carries `days`, a list: `[1, 15]`. The rate is **per
+payment**, so that client is ₱3,500 on each date and the sheet says it comes
+to ₱7,000 a month. Each date is its own expected payment, so a missed 15th
+shows as late on its own. Days are typed as "1, 15" and cleaned to sorted,
+unique, real days. A client written before the list existed carries one `day`
+and is read as a list of one, not migrated.
+
+**A payment settles the nearest date, within half the gap to the next one.**
+The old rule was "the first unclaimed payment within 14 days", which is right
+for a monthly client and wrong for one paid twice a month: a client who missed
+the 1st and paid on the 14th would have that payment settle the 1st, and the
+15th would show as late. The reach is now 14 days or half the smallest gap
+between that client's dates, whichever is smaller, and the nearest unclaimed
+payment wins. That also tightens weekly clients, which had the same flaw.
+
+Two days that clamp to the same date in a short month, the 30th and 31st in
+February, are one payment, not two.
 
 ### The 31st
 

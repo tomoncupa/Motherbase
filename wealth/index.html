@@ -622,11 +622,21 @@ const debtTotal = () => debts().reduce((a, d) => a + num(d.owed, 0), 0);
    The old four values are still read, because rows written before this exist
    and a migration that rewrites them is a migration that can go wrong:
    `monthly` is month/1, `4wk` is week/4, `session` is sesh/1.              */
+/* Days of the month, as typed: "1, 15" or "1 15" or "15,1". Sorted, unique,
+   and only real days. Tom, 2026-09-14: "I have a client who pays me 3500
+   every 1st and 15th." One day a month could not say that. */
+const parseDays = v => [...new Set((Array.isArray(v) ? v : String(v || '').split(/[^0-9]+/))
+  .map(x => Math.round(num(x, 0))).filter(x => x >= 1 && x <= 31))].sort((a, b) => a - b);
+const ordinal = n => n + ((n % 100 >= 11 && n % 100 <= 13) ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] || 'th'));
+const andList = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
 function cycleOf(c) {
   const raw = c.cycle || 'month';
   const kind = raw === 'monthly' ? 'month' : raw === '4wk' ? 'week' : raw === 'session' ? 'sesh' : raw;
   const every = Math.max(1, num(c.every, 0) || (raw === '4wk' ? 4 : 1));
-  return { kind: kind, every: every, day: num(c.day, 0) };
+  /* `days` is a list. A client written before it existed carries one `day`,
+     and is read as a list of one rather than migrated. */
+  const days = parseDays(Array.isArray(c.days) && c.days.length ? c.days : (num(c.day, 0) ? [c.day] : []));
+  return { kind: kind, every: every, day: days[0] || 0, days: days };
 }
 /* A `pack` client buys sessions before they happen; a `sesh` client is billed
    after. Both count sessions, and they are opposite ways round, which is why
@@ -638,6 +648,8 @@ const cycleWord = c => {
   if (y.kind === 'oneoff') return 'one off';
   if (y.kind === 'sesh') return y.every === 1 ? 'per session' : 'every ' + y.every + ' sessions';
   if (y.kind === 'week') return y.every === 1 ? 'a week' : 'every ' + y.every + ' weeks';
+  if (y.days.length > 1) return 'each, on the ' + andList(y.days.map(ordinal)) +
+    (y.every === 1 ? ' of every month' : ' of every ' + y.every + ' months');
   return y.every === 1 ? 'a month' : 'every ' + y.every + ' months';
 };
 
@@ -722,16 +734,23 @@ function dueDates(c, from, to) {
     for (let d = c.start; d <= to; d = Day.shift(d, step)) if (d >= from) out.push(d);
     return out;
   }
-  /* every N months, on the day of the month it started, clamped so the 31st
-     does not fall out of February */
+  /* every N months, on each of its days, or on the day of the month it
+     started. Clamped so the 31st does not fall out of February, and two days
+     that clamp to the same date in a short month are one payment, not two. */
   const p = c.start.split('-');
-  const wantDay = y.day || +p[2];
+  const want = y.days.length ? y.days : [+p[2]];
   let yr = +p[0], mo = +p[1];
   for (let i = 0; i < 400; i++) {
     const last = new Date(yr, mo, 0).getDate();
-    const d = yr + '-' + String(mo).padStart(2, '0') + '-' + String(Math.min(wantDay, last)).padStart(2, '0');
-    if (d > to) break;
-    if (d >= from && d >= c.start) out.push(d);
+    const ym = yr + '-' + String(mo).padStart(2, '0') + '-';
+    if (ym + '01' > to) break;
+    const seen = {};
+    want.forEach(dd => {
+      const d = ym + String(Math.min(dd, last)).padStart(2, '0');
+      if (seen[d] || d > to || d < from || d < c.start) return;
+      seen[d] = 1;
+      out.push(d);
+    });
     mo += y.every;
     while (mo > 12) { mo -= 12; yr++; }
   }
@@ -785,9 +804,22 @@ function expected(from, to) {
       });
       return;
     }
+    /* How far a payment may land from its date and still be that payment:
+       a fortnight for a monthly client, but never more than half the gap to
+       the next due. Otherwise a client paid on the 1st and the 15th could
+       have the 15th's payment settle the 1st, and the wrong date shows as
+       late. The nearest unclaimed payment wins, not the first one found. */
+    const wide = dueDates(c, Day.shift(from, -40), Day.shift(to, 40));
+    let gap = 28;
+    for (let i = 1; i < wide.length; i++) gap = Math.min(gap, Day.diff(wide[i], wide[i - 1]));
+    const reach = Math.max(1, Math.min(14, Math.floor(gap / 2)));
     dueDates(c, from, to).forEach(d => {
-      const hit = got.find(p => p.client === c.id && !used[p.date + p.key] &&
-        Math.abs(Day.diff(p.date, d)) <= 14);
+      let hit = null, best = 99;
+      got.forEach(p => {
+        if (p.client !== c.id || used[p.date + p.key]) return;
+        const g = Math.abs(Day.diff(p.date, d));
+        if (g <= reach && g < best) { best = g; hit = p; }
+      });
       if (hit) used[hit.date + hit.key] = 1;
       out.push({ client: c, date: d, amt: num(c.rate, 0), paid: hit || null,
                  late: !hit && d < Day.today() });
@@ -3227,13 +3259,14 @@ function clientSheet(c) {
       everyWrap.appendChild(everyLbl); everyWrap.appendChild(every);
       b.appendChild(everyWrap);
 
-      /* Which day of the month, monthly cycles only. A client on every two
-         months still lands on a day, and it is usually not the day they
-         signed up. */
+      /* Which days of the month, monthly cycles only. Usually one, and not
+         always the day they signed up; sometimes two, for a client paid on
+         the 1st and the 15th. Each day is its own payment, so a missed 15th
+         shows as late on its own. */
       const dayWrap = el('div', 'fld');
-      const dayLbl = el('label', null, 'Day of the month');
-      const dayF = UI.field('number', { placeholder: 'same day as the start date',
-        value: y0.day ? String(y0.day) : '' });
+      const dayLbl = el('label', null, 'Days of the month');
+      const dayF = UI.field('text', { placeholder: 'e.g. 1, 15. Blank uses the start date',
+        value: y0.days.join(', ') });
       dayWrap.appendChild(dayLbl); dayWrap.appendChild(dayF);
       b.appendChild(dayWrap);
 
@@ -3255,11 +3288,17 @@ function clientSheet(c) {
           ? 'Counted, not scheduled. Log a session below and a payment falls due every ' +
             esc(String(n)) + '.'
           : k === 'oneoff' ? 'Once, on the start date. Nothing repeats.'
-          : 'Repeats from the start date: ' + esc(money(num(rate.value, 0))) + ' ' +
-            esc(cycleWord({ cycle: k, every: n })) + '.';
+          : (() => {
+              const ds = k === 'month' ? parseDays(dayF.value) : [];
+              const per = num(rate.value, 0);
+              return 'Repeats from the start date: ' + esc(money(per)) + ' ' +
+                esc(cycleWord({ cycle: k, every: n, days: ds })) + '.' +
+                (ds.length > 1 ? ' That is ' + esc(money(per * ds.length / n)) + ' a month.' : '');
+            })();
       }
       every.oninput = () => { paintEvery(); paintSesh(); };
       rate.addEventListener('input', paintEvery);
+      dayF.addEventListener('input', paintEvery);
 
       const start = dateField(c.start);
       b.appendChild(fld('Started', start));
@@ -3406,7 +3445,8 @@ function clientSheet(c) {
              31st is the 31st in March and the 28th in February, and it does
              NOT drift down to the 28th forever after one short month.
              Capping the stored day at 28 threw that away silently. */
-          day: Math.min(31, Math.max(0, num(dayF.value, 0))),
+          days: parseDays(dayF.value),
+          day: parseDays(dayF.value)[0] || 0,
           start: start.value, status: status.get(),
         }));
         return true;
