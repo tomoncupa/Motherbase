@@ -263,22 +263,23 @@ what it must never become.
 ### The suite at a glance
 
 Set by Tom on 2026-09-14, in his words where possible. Where a section below
-disagrees with this on device or on what an app is for, this wins. "Testers"
-is what `tools/build-client.py` ships today.
+disagrees with this on device or on what an app is for, this wins. "Clients"
+is what `tools/build-client.py` ships today: the people Tom gives the suite to,
+called testers until 2026-09-14, and not the coaching clients in WEALTH.
 
-| App | Folder | Device | Testers | What it is for |
+| App | Folder | Device | Clients | What it is for |
 |---|---|---|---|---|
 | HOME | `index.html` | desktop | yes | The hub for everything. |
 | BLOCK | `block/` | desktop only | yes | Routines, mostly daily. Since 2026-09-14, an Every tab for Blocks that repeat every few days, weeks or months, and an Anytime tab for habits done a number of times a week on any day. |
 | STATUS | `status/` | everywhere | yes | The tracker, built for fast input. |
-| LOG | `log/` | desktop | no | The journal module. Brings every bullet type together. |
-| QUESTS | `quest/` | everywhere | no | Todo bullets, pulled from STATUS and BLOCK. Answers "what's next to be done". |
+| LOG | `log/` | desktop | yes, since 2026-09-14 | The journal module. Brings every bullet type together. |
+| QUESTS | `quest/` | everywhere | yes, since 2026-09-14 | Todo bullets, pulled from STATUS and BLOCK. Answers "what's next to be done". |
 | WEALTH | `wealth/` | desktop | no, Tom only | Money. Reads spending, and the statements that matter. |
 | ARC | `arc/` | desktop only | yes | Mind mapping, and presentations. **Planned:** a teach mode that builds skill trees out of actionable steps. Those steps are todo bullets, so it works with QUESTS. |
 | FORM | `form/` | desktop | no, Tom only | Form review, and presentations and social media content made from it. Takes a client's unclipped video: cut the start and end off. |
 | TRAIN | `train/` | phone | yes | The training tracker. An evolved FitNotes. |
 | STYLE | `style/` | desktop only | yes | The theme and look for every other app. |
-| FOODDÉX | `portion/` | desktop | no | Food database input and overview. Works with STATUS. **To be expanded.** |
+| FOODDÉX | `portion/` | desktop | no, Tom only | Food database input and overview. Works with STATUS. **To be expanded.** |
 | CHECK IN | `checkin/` | everywhere | yes | Physique check-ins, for Tom and for his clients. Reads weight from STATUS rather than asking for it twice. A client's check-in reaches Tom as a file, the same way a TRAIN log will reach COACH. |
 | COACH | not built | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. A separate app, with TRAIN as its core file. A profile is the same client as in WEALTH, so a 1:1 logged here is a session WEALTH counts. A log arrives as a file the client sends from TRAIN's share menu; sending again only adds what is new. **Planned, after Tom is happy with TRAIN.** |
 
@@ -380,8 +381,9 @@ A habit being built belongs here. A chore that repeats, like rent, is a QUESTS
 todo.
 
 **Handing someone a start** (Tom, 2026-09-14). He helps people set up. Export,
-For someone else, makes a file of the days he ticks; importing it adds to their
-board and never overwrites what is already there.
+For someone else, makes a file of the day on screen, which he names after the
+person; importing it adds to their board and never overwrites what is already
+there.
 
 ### ARC — `arc/` · desktop only
 
@@ -422,7 +424,7 @@ numbers.
 minute to send it. The coach opens it at a desk.
 
 **Good looks like:** a front photo and a weight in under a minute, with
-side, back or any other pose switched on only by someone who wants it. Any two
+any other pose added only by someone who wants it. Any two
 check-ins sit side by side, the first one included, because the change is the
 point. Weight is STATUS's number, never a second copy. What it asks is
 editable: the defaults are vocabulary, and a coach's own questions are data.

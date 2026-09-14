@@ -2,14 +2,14 @@
 """Builds the CLIENT copy of Motherbase out of this repo.
 
 WHY THIS EXISTS
-  Beta testers get a smaller suite than Tom does: no FORM (client video), no
+  Clients get a smaller suite than Tom does: no FORM (client video), no
   CLEX (a personal side app), none of Tom's own apps, and five
   themes instead of eighteen.
 
   The obvious way to do that is to copy the folder and delete things. Do not.
   A hand-made copy is a fork, and a fork of `shared/` drifts: a fix Tom makes
   in the store, the themes or the sheet layer reaches his apps and silently
-  never reaches his testers. The two would disagree within a fortnight, and
+  never reaches his clients. The two would disagree within a fortnight, and
   the bug reports would be about a version that no longer exists.
 
   So the client folder is GENERATED. This repo stays the only place anything
@@ -18,7 +18,7 @@ WHY THIS EXISTS
 THIS IS NOT A BUILD STEP
   Same rule as tools/embed-skins.py. Nothing here has to run for the suite to
   work - the repo as it stands is always deployable. This runs only when you
-  are publishing to testers.
+  are publishing to clients.
 
 IT FAILS LOUDLY
   Every patch below asserts that it actually changed something. If a future
@@ -35,32 +35,30 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEST = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 \
     else os.path.join(os.path.dirname(ROOT), 'Motherbase-Client')
 
-# ── what a tester gets ────────────────────────────────────────────────────
+# ── what a client gets ────────────────────────────────────────────────────
 # Folders copied whole. Everything not named here is left behind, which is
 # the safe direction: a new app has to be added deliberately.
-COPY_DIRS = ['shared', 'arc', 'block', 'status', 'train', 'style', 'checkin']
+COPY_DIRS = ['shared', 'arc', 'block', 'status', 'train', 'style', 'checkin', 'log', 'quest']
 COPY_FILES = ['index.html', '.nojekyll']
 
 # Left behind on purpose:
 #   form/    client video, and it is Tom's review tool, not theirs
 #   portion/ the same reason: a coaching bench for building the food library,
-#            not something a tester should be adding foods with
+#            not something a client should be adding foods with
 #   wealth/  his money: clients, rates, rent, debts. Tom only, and the one
 #            folder here where a leak would be a real one
-#   log/     his journal with day, week and month summaries over it. Tom only
-#   quest/   his todolist, until he says testers get it
 #   clex/    a personal side app
 #   _template/ tools/ and every *.md brief - these are build notes
-DROP_APPS = ['form', 'portion', 'wealth', 'log', 'quest']   # removed from the home screen roster
+DROP_APPS = ['form', 'portion', 'wealth']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed
 # STREAKS and NUMBERS were deleted from the main repo on 2026-08-28, and
 # the STREAKS that replaced one of them counts ticks, so it works for a
-# tester with no HABITS just as well as it does for Tom.
+# client with no HABITS just as well as it does for Tom.
 DROP_WIDGETS = []
 
 # ── the five themes ───────────────────────────────────────────────────────
 # Order matters: skins.js falls back to skins[0] when nothing is saved, so
-# whatever sits first here is what a tester sees on their very first open.
+# whatever sits first here is what a client sees on their very first open.
 KEEP_THEMES = ['block', 'ice', 'chalkboard', 'sketch', 'doodle']
 RENAME_THEMES = {'block': 'Default', 'ice': 'System'}
 
@@ -107,7 +105,7 @@ for f in COPY_FILES:
 
 # Strip the dev-facing files out of the folders we just copied whole. Briefs,
 # fixtures and the smoke page are notes to whoever is building this - shipping
-# them to a tester is clutter at best and a wrong instruction at worst.
+# them to a client is clutter at best and a wrong instruction at worst.
 for d in COPY_DIRS:
     here = os.path.join(DEST, d)
     for name in os.listdir(here):
@@ -135,7 +133,7 @@ io.open(sj, 'w', encoding='utf-8').write(
     json.dumps(data, ensure_ascii=False, indent=2) + '\n')
 
 # skins.js carries the same set embedded, because a page opened straight off
-# the disk cannot fetch skins.json. Both halves must agree or a tester who
+# the disk cannot fetch skins.json. Both halves must agree or a client who
 # opens the folder gets a different theme list from one who opens the link.
 sjs = os.path.join(DEST, 'shared', 'skins.js')
 js = io.open(sjs, encoding='utf-8').read()
@@ -176,7 +174,7 @@ io.open(ih, 'w', encoding='utf-8').write(html)
 # ── STYLE's icon audit ────────────────────────────────────────────────────
 # It fetches every app in the suite and reports which still use a Unicode
 # character where an icon belongs. Its list is hard-coded and names apps a
-# tester does not have. It survives a 404 - it just prints "unreachable" -
+# client does not have. It survives a 404 - it just prints "unreachable" -
 # but three rows of that read as three broken things. Point it at what ships.
 sh = os.path.join(DEST, 'style', 'index.html')
 style = io.open(sh, encoding='utf-8').read()
@@ -191,7 +189,7 @@ io.open(sh, 'w', encoding='utf-8').write(style)
 # ── ARC's own default ─────────────────────────────────────────────────────
 # ARC picks its opening theme by name rather than taking skins[0], and the
 # name it holds is 'ice'. Every other app opens on whatever sits first in
-# skins.json. Leave it and a tester's very first visit to ARC is a different
+# skins.json. Leave it and a client's very first visit to ARC is a different
 # skin from the five screens either side of it, which reads as a bug.
 FIRST = KEEP_THEMES[0]
 ah = os.path.join(DEST, 'arc', 'index.html')
@@ -200,14 +198,14 @@ arc = patch(arc, r"let THEME_NAME='[a-z0-9]+';", "let THEME_NAME='%s';" % FIRST,
             "ARC's opening theme")
 io.open(ah, 'w', encoding='utf-8').write(arc)
 
-# Anything still pointing at an app a tester does not have is a dead link,
+# Anything still pointing at an app a client does not have is a dead link,
 # and a dead link is worse than a missing feature because it looks like a bug.
 for gone in DROP_APPS:
     if ("go('%s')" % gone) in html or ('%s/index.html' % gone) in html:
         fail('index.html still links to %s - patch it above' % gone)
 
 # ── cache stamp ───────────────────────────────────────────────────────────
-# GitHub Pages caches hard, and a tester who added this to their home screen
+# GitHub Pages caches hard, and a client who added this to their home screen
 # is the most cached reader there is. Without a stamp they can end up running
 # a NEW index.html against an OLD shared/records.js - a half-updated app,
 # which is exactly the silent breakage nobody can diagnose over a message.

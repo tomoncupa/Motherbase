@@ -155,12 +155,10 @@ const MAXPX = 1280;          /* long edge of a stored photo: sharp on a phone, ~
    and written down the first time anything in it is, so a coach's own
    questions become data rather than something this file decides. */
 const DEFAULTS = [
-  /* Photos are questions too. One by default, Front, Tom's call on
-     2026-09-14; Side and Back are a switch away in Settings, and any other
-     pose can be added there. */
+  /* Photos are questions too, and one ships: Front. Tom, 2026-09-14: "No
+     need to specify side and back, just make it a clean Add a new Pose."
+     Every other pose is added in Settings. */
   { id: 'front', label: 'Front', kind: 'photo', on: 1 },
-  { id: 'side', label: 'Side', kind: 'photo', on: 0 },
-  { id: 'back', label: 'Back', kind: 'photo', on: 0 },
   { id: 'waist', label: 'Waist', kind: 'number', unit: 'cm', on: 1 },
   { id: 'hips', label: 'Hips', kind: 'number', unit: 'cm', on: 0 },
   { id: 'chest', label: 'Chest', kind: 'number', unit: 'cm', on: 0 },
@@ -634,10 +632,34 @@ function drawQuestions(p) {
     Mobile.hold(row, e => menu(e.clientX, e.clientY, [{ label: 'Rename', fn: () => renameField(f, redraw) }], { title: f.label.toUpperCase() }), { skip: '.mb-sw' });
     p.appendChild(row);
   });
+  const acts = el('div', 'acts');
+  const pose = el('button', 'mb-btn mb-press mb-tap', 'Add a new pose');
+  pose.dataset.icon = 'photo';
+  pose.onclick = () => addPose(redraw);
   const add = el('button', 'mb-btn mb-press mb-tap', 'Add a question');
   add.dataset.icon = 'add';
   add.onclick = () => addField(redraw);
-  p.appendChild(add);
+  acts.appendChild(pose); acts.appendChild(add);
+  p.appendChild(acts);
+}
+
+function addPose(redraw) {
+  const h = UI.dialog({
+    title: 'ADD A NEW POSE', width: 420,
+    body: b => {
+      b.appendChild(el('p', 'muted', 'Another photo every check-in asks for, like Side, Back or Front flexed.'));
+      b.appendChild(UI.field('name', { placeholder: 'Side' }));
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'ADD', kind: 'go', fn: hh => {
+      const i = hh.body.querySelector('input'), n = i.value.trim();
+      if (!n) { i.focus(); return false; }
+      /* just after the last photo, so the photos stay together in the list */
+      const last = photoFields().reduce((m, f) => Math.max(m, f.ord || 0), 0);
+      saveField(slug(n) + '-' + Date.now().toString(36), { label: n, kind: 'photo', ord: last + 0.01, on: 1 });
+      redraw();
+    } }],
+  });
+  if (h && h.body) UI.focusSoon(h.body.querySelector('input'));
 }
 
 function addField(redraw) {
@@ -648,7 +670,7 @@ function addField(redraw) {
       const name = UI.field('text', { placeholder: 'Stress this week, hunger, steps' });
       name.classList.add('qname');
       b.appendChild(name);
-      b.appendChild(UI.segmented([{ id: 'scale', name: '1 to 5' }, { id: 'number', name: 'A number' }, { id: 'text', name: 'Words' }, { id: 'photo', name: 'A photo' }], kind,
+      b.appendChild(UI.segmented([{ id: 'scale', name: '1 to 5' }, { id: 'number', name: 'A number' }, { id: 'text', name: 'Words' }], kind,
         k => { kind = k; unit.style.display = k === 'number' ? '' : 'none'; }));
       unit = UI.field('text', { placeholder: 'Unit, like cm' });
       unit.style.display = 'none';

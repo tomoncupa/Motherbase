@@ -7,8 +7,8 @@ This brief governs `log/` only. It obeys the master brief at the repo root and
 may add rules but never contradict them. Where the two disagree, the root wins
 and this file is the bug.
 
-**Tom only, and a desktop app.** On the home screen since 2026-09-13, and in
-`DROP_APPS` in `tools/build-client.py` so no tester sees it.
+**A desktop app, and in the client build since 2026-09-14.** Tom: *"LOG and
+QUESTS are for clients as well."* On the home screen since 2026-09-13.
 
 **It started life as YEAR**, from a build prompt written in Claude chat for
 React and Vite. Tom, 2026-09-13: *"don't let it override design settings we've

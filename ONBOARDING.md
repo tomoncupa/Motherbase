@@ -1,6 +1,9 @@
 # ONBOARDING
 
-How a beta tester gets the suite, and what happens after.
+How a client gets the suite, and what happens after.
+
+**Clients**, since 2026-09-14, are the people who get the client build. They
+were called clients until then. They are not the coaching clients in WEALTH.
 
 `CLAUDE.md` says what the suite is. `DOCTRINE.md` says what each app is for.
 This says how it reaches somebody who is not you.
@@ -9,7 +12,7 @@ This says how it reaches somebody who is not you.
 
 ## The shape of it
 
-Testers get a **separate, generated copy** of the suite. Not this folder.
+Clients get a **separate, generated copy** of the suite. Not this folder.
 
 ```
 py -3 tools/build-client.py
@@ -19,10 +22,10 @@ That writes `../Motherbase-Client`, a complete working suite with:
 
 | | |
 |---|---|
-| **Apps** | HOME, ARC, BLOCK, STATUS, TRAIN, STYLE, CHECK IN |
-| **Not included** | FORM (client video), FOODDÉX, WEALTH, LOG and QUESTS (Tom only), CLEX (personal) |
+| **Apps** | HOME, BLOCK, STATUS, LOG, QUESTS, TRAIN, CHECK IN, ARC, STYLE |
+| **Not included** | FORM (client video), FOODDÉX and WEALTH (Tom only), CLEX (personal) |
 | **Themes** | Default, System, Chalkboard, Sketch, Doodle — five, from eighteen |
-| **Added** | `guide.html`, the tester's five-minute setup page |
+| **Added** | `guide.html`, the client's five-minute setup page |
 
 `Default` is Block renamed, `System` is Ice renamed. The ids underneath are
 unchanged, so nothing a theme is saved against breaks.
@@ -31,7 +34,7 @@ unchanged, so nothing a theme is saved against breaks.
 
 A hand-made client folder is a fork, and a fork of `shared/` drifts. A fix you
 make to the store, the themes or the sheet layer reaches your apps and silently
-never reaches your testers — and then a bug report describes a version that no
+never reaches your clients — and then a bug report describes a version that no
 longer exists. Generating it means there is one place anything is edited: here.
 
 **Never edit anything inside `Motherbase-Client` by hand.** The next build
@@ -69,21 +72,21 @@ cd "C:/Users/user/Downloads/Motherbase-Client" && git add -A && git commit -m "u
 ```
 
 The build stamps every shared script with a hash of `shared/` — `?v=ef908823`
-— so a fix actually reaches a tester's cached home-screen icon instead of
+— so a fix actually reaches a client's cached home-screen icon instead of
 sitting behind a stale copy. That stamp only changes when `shared/` changes.
 
 ---
 
-## What to send a tester
+## What to send a client
 
 Paste this. Fill in the link.
 
-> Hey — here's the tracking setup I've been building. It's free, there's no
+> Hey, here's the tracking setup I've been building. It's free, there's no
 > account and no sign-up, and nothing you type leaves your phone.
 >
 > **1.** Open this on your phone: `https://tomoncupa.github.io/Mainmenu-client/`
 >
-> **2.** Read the "Start here" page first — it's 5 minutes and step 1 stops you
+> **2.** Read the "Start here" page first. It's 5 minutes and step 1 stops you
 > losing your data: `https://tomoncupa.github.io/Mainmenu-client/guide.html`
 >
 > **3.** Use it for two weeks. TRAIN for your sessions, STATUS for everything
@@ -108,7 +111,7 @@ it is the single largest risk in the whole arrangement.
 So:
 
 - Step 1 of `guide.html` is the home-screen step, before anything else.
-- **Watch them do it.** If a tester is in the room or on a call, do not send
+- **Watch them do it.** If a client is in the room or on a call, do not send
   the link and hope. Four taps, thirty seconds, and it is the difference
   between a two-week test and a two-week test that evaporates on day eight.
 - Ask on day 3: *"is it on your home screen?"* Not *"did you add it?"* — one
@@ -149,10 +152,10 @@ Question 4 is the only one whose answer matters.
 
 **These apps have never been used by anyone but you.** Every layout judgement in
 them was made without ever seeing them on the phone they will run on. Assume
-the first tester finds something obviously broken in the first ten minutes, and
+the first client finds something obviously broken in the first ten minutes, and
 treat that as the beta working rather than the beta failing.
 
-One tester first, not five. Five testers finding the same broken thing is four
+One client first, not five. Five clients finding the same broken thing is four
 wasted people and one signal.
 
 ---
@@ -184,11 +187,11 @@ remembering to press a button. Two ways out, in order of cost:
 **4. A starting point that is not empty.** DOCTRINE law 1 forbids shipping a
 routine, and it is right. But there is a difference between prescribing a life
 and demonstrating a shape, and BLOCK already walks that line with its one
-skeleton routine. If testers stall on an empty TRAIN, the fix is a skeleton,
+skeleton routine. If clients stall on an empty TRAIN, the fix is a skeleton,
 not a program.
 
-**5. Onboarding that is per-tester rather than per-batch.** Not a feature —
-a decision. The first ten testers should each cost you a fifteen-minute call.
+**5. Onboarding that is per-client rather than per-batch.** Not a feature —
+a decision. The first ten clients should each cost you a fifteen-minute call.
 When that stops teaching you anything new, the guide is finally good enough to
 send on its own.
 
@@ -199,6 +202,6 @@ send on its own.
 | | |
 |---|---|
 | `tools/build-client.py` | Generates the client copy. Run it, never edit the output. |
-| `tools/client/guide.html` | The tester's setup page. Ships as `guide.html`. |
+| `tools/client/guide.html` | The client's setup page. Ships as `guide.html`. |
 | `tools/client/README.md` | The client repo's front page. |
 | `ONBOARDING.md` | This. |

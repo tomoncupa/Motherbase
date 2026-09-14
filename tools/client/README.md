@@ -10,11 +10,14 @@ step 1 is the one that stops you losing your data.
 
 | | |
 |---|---|
+| **BLOCK** | Plan a day as blocks and tick them off. For a computer. |
+| **STATUS** | Sleep, weight, steps, mood, food, spending, and a grade for the day. Phone or computer. |
+| **LOG** | Your journal. Every STATUS entry on one timeline, with weekly and monthly summaries. For a computer. |
+| **QUESTS** | Your todo list. Dates, priorities, projects and repeats, typed in plain words. Phone or computer. |
 | **TRAIN** | Training log. Exercises, sets, reps, records. Built for a phone. |
-| **STATUS** | Sleep, weight, steps, mood, food, spending, and a grade for the day. Built for a phone. |
-| **BLOCK** | Plan a day as blocks and tick them off. |
-| **ARC** | A canvas for thinking. Notes joined by lines. |
-| **STYLE** | Change how everything looks. |
+| **CHECK IN** | Progress photos, weight and a few questions, and a file to send your coach. Phone or computer. |
+| **ARC** | A canvas for thinking. Notes joined by lines. For a computer. |
+| **STYLE** | Change how everything looks. For a computer. |
 
 ## How your data works
 

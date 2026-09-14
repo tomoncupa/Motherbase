@@ -4521,7 +4521,11 @@ function importStarter(pack) {
   if (fresh) { S.lanes = []; S.variants = []; S.lib = []; S.week = [null, null, null, null, null, null, null]; }
   const low = s => String(s || '').toLowerCase();
   const uniq = (name, taken) => { let n = name, k = 2; while (taken[low(n)]) n = name + ' (' + (k++) + ')'; taken[low(n)] = 1; return n; };
-  const got = { days: 0, routines: 0, rhythms: 0, skipped: 0, busy: 0 };
+  const got = { days: 0, routines: 0, rhythms: 0, skipped: 0, busy: 0, filled: 0 };
+  /* A day made for one person usually runs on no weekday on the giver's
+     board, whose week is the giver's own. Arriving like that it would run on
+     nothing, so the first day takes every weekday that has no day yet. */
+  const noWeek = !days.some(d => (d.weekdays || []).length);
 
   /* A day with no list of its own runs every routine there is, so it would
      quietly pick up the new ones. Written down first, so it keeps exactly
@@ -4563,6 +4567,7 @@ function importStarter(pack) {
     });
     S.variants.push(v);
     wd.forEach(k => { if (S.week[k]) got.busy++; else S.week[k] = v.id; });
+    if (noWeek && got.days === 0) for (let k = 0; k < 7; k++) { if (!S.week[k]) { S.week[k] = v.id; got.filled++; } }
     got.days++;
   });
 
@@ -4595,6 +4600,7 @@ function pickStarter() {
         toast('Added ' + n('days', 'day', 'days') + ', ' + n('routines', 'routine', 'routines') +
           (got.rhythms ? ' and ' + n('rhythms', 'habit', 'habits') : '') +
           (got.busy ? '. ' + n('busy', 'weekday', 'weekdays') + ' already had a day, so kept it' : '') +
+          (got.filled ? '. It runs on the ' + n('filled', 'weekday', 'weekdays') + ' that had nothing on them' : '') +
           (got.skipped ? '. ' + n('skipped', 'habit was', 'habits were') + ' already here, so skipped' : ''));
       } catch (e) { toast(esc(e && e.message ? e.message : 'That file could not be read.')); }
     };
@@ -4603,33 +4609,33 @@ function pickStarter() {
   i.click();
 }
 
+/* The day on screen, and nothing to pick. Tom, 2026-09-14: "When I set someone
+   up, I open up a new day with that person's name, export function should
+   work with the day currently being viewed anyway." So the day's name is
+   the person, and it names the file. */
 function paintShare(body) {
-  const days = S.variants.filter(v => !isOneOff(v)), rh = S.rhythms || [];
-  if (!SHARE) SHARE = { days: {}, rh: {}, bin: false, who: '' };
-  if (!Object.keys(SHARE.days).length && M()) SHARE.days[M().id] = 1;
-  const wds = v => weekOrd().filter(k => S.week[k] === v.id).map(k => DSHORT[k]).join(' ');
+  const v = M(), rh = S.rhythms || [];
+  if (!v) { body.innerHTML = '<div class="hint">Open a day first.</div>'; return; }
+  if (!SHARE) SHARE = { rh: {}, bin: false };
+  const wds = weekOrd().filter(k => S.week[k] === v.id).map(k => DSHORT[k]).join(' ');
+  const n = LANES(v.id).length, file = 'block-' + (v.name.replace(/\W+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'day') + '.json';
   const line = (attr, id, on, name, note) => '<label class="shr"><input type="checkbox" ' + attr + '="' + id + '"' + (on ? ' checked' : '') + '><b>' + esc(name) + '</b><span>' + esc(note) + '</span></label>';
   body.innerHTML =
-    '<div class="hint">For helping somebody start. Tick what to hand over and send them the file. It carries those days, the routines and blocks on them, and which weekdays they run. Your ticks, history, settings and rules stay here.</div>' +
-    '<div class="sumh">Days</div>' +
-    days.map(v => line('data-day', v.id, SHARE.days[v.id], v.name, LANES(v.id).length + (LANES(v.id).length === 1 ? ' routine' : ' routines') + (wds(v) ? ', ' + wds(v) : ''))).join('') +
-    (rh.length ? '<div class="sumh">Every and Anytime</div>' + rh.map(r => line('data-rh', r.id, SHARE.rh[r.id], r.name, r.kind === 'every' ? rhEvery(r) : rhTimes(r))).join('') : '') +
-    '<label class="shr"><input type="checkbox" id="shBin"' + (SHARE.bin ? ' checked' : '') + '>Include the whole Block bin<span>not only the blocks these days use</span></label>' +
-    '<div class="row"><input id="shWho" placeholder="Who is it for? (optional)" value="' + esc(SHARE.who) + '"><button class="btn acc" id="shDl">Download the file</button></div>' +
+    '<div class="hint">For helping somebody start. This is the day on screen, <b>' + esc(v.name) + '</b>: ' + n + (n === 1 ? ' routine' : ' routines') +
+      ' and their blocks' + (wds ? ', running on ' + esc(wds) : '') + '. Your ticks, history, settings and rules stay here. To hand over a different day, open that one first.</div>' +
+    (rh.length ? '<div class="sumh">Every and Anytime to go with it</div>' + rh.map(r => line('data-rh', r.id, SHARE.rh[r.id], r.name, r.kind === 'every' ? rhEvery(r) : rhTimes(r))).join('') : '') +
+    '<label class="shr"><input type="checkbox" id="shBin"' + (SHARE.bin ? ' checked' : '') + '>Include the whole Block bin<span>not only the blocks this day uses</span></label>' +
+    '<div class="row"><button class="btn acc" id="shDl">Download ' + esc(file) + '</button></div>' +
     '<div class="sumh">On their computer</div>' +
     '<div class="hint">They open BLOCK, press the <b>⋯</b> button, then <b>Import routines from a file</b>. It adds to their board and changes nothing already on it.</div>' +
     '<div class="row"><button class="btn" id="shIn">Import routines from a file</button></div>';
-  body.querySelectorAll('[data-day]').forEach(c => { c.onchange = () => { if (c.checked) SHARE.days[c.dataset.day] = 1; else delete SHARE.days[c.dataset.day]; }; });
   body.querySelectorAll('[data-rh]').forEach(c => { c.onchange = () => { if (c.checked) SHARE.rh[c.dataset.rh] = 1; else delete SHARE.rh[c.dataset.rh]; }; });
   $('#shBin').onchange = e => { SHARE.bin = e.target.checked; };
-  $('#shWho').oninput = e => { SHARE.who = e.target.value; };
   $('#shDl').onclick = () => {
-    const ids = Object.keys(SHARE.days).filter(id => variant(id));
     const rids = Object.keys(SHARE.rh).filter(id => rh.some(r => r.id === id));
-    if (!ids.length && !rids.length) return toast('tick at least one day or habit first');
-    const pack = buildStarter(ids, rids, SHARE.bin), who = SHARE.who.trim();
-    if (who) pack.for = who;
-    download('block-for-' + (who ? who.replace(/\W+/g, '-').toLowerCase() : 'someone') + '.json', JSON.stringify(pack, null, 1), 'application/json');
+    const pack = buildStarter([v.id], rids, SHARE.bin);
+    pack.for = v.name;
+    download(file, JSON.stringify(pack, null, 1), 'application/json');
   };
   $('#shIn').onclick = pickStarter;
 }
@@ -5308,6 +5314,13 @@ function selfTest() {
       const got = importStarter(pack);
       return (S.variants.length === pack.days.length && S.lanes.length === pack.lanes.length && !!M()) ||
         JSON.stringify({ got: got, v: S.variants.length, l: S.lanes.length });
+    });
+    ok('share: a day that runs on no weekday takes the empty ones when it arrives', () => {
+      const pack = buildStarter([M().id], [], false);
+      pack.days.forEach(d => { d.weekdays = []; });
+      S = seedState(); S.view = 'day'; render();
+      const got = importStarter(pack);
+      return (got.filled === 7 && S.week.every(w => w === S.variants[0].id)) || JSON.stringify({ got: got, week: S.week });
     });
     ok('anytime tab: right-click on a row opens its menu', () => {
       S.rhythms = [{ id: uid(), kind: 'anytime', name: 'Zz Rhythm Test', times: 2 }]; S.view = 'anytime'; render();
