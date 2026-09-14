@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.1, 2026-09-14">
+<meta name="mb-version" content="1.0.2, 2026-09-14">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -1147,7 +1147,7 @@ function typicalVariable() {
    `big` is separated rather than dropped: law 3 says one laptop must not
    become the story of the month, and every figure that excludes it says so. */
 function rangeSpend(from, to) {
-  const t = { total: 0, variable: 0, fixed: 0, biz: 0, big: 0, rows: 0, byCat: {}, byTag: {} };
+  const t = { total: 0, variable: 0, fixed: 0, biz: 0, big: 0, rows: 0, byCat: {}, byTag: {}, byGrp: {}, byAcct: {} };
   spendRows({ from: from, to: to }).forEach(s => {
     if (isMove(s)) return;
     const amt = num(s.amt, 0), c = catOf(s), g = catGrp(c);
@@ -1156,6 +1156,8 @@ function rangeSpend(from, to) {
     t.total += amt;
     if (g === 'fix') t.fixed += amt; else if (g === 'biz') t.biz += amt; else t.variable += amt;
     t.byCat[c || ''] = (t.byCat[c || ''] || 0) + amt;
+    t.byGrp[g || ''] = (t.byGrp[g || ''] || 0) + amt;
+    t.byAcct[s.acct || ''] = (t.byAcct[s.acct || ''] || 0) + amt;
     const tg = tagOf(s); if (tg) t.byTag[tg] = (t.byTag[tg] || 0) + amt;
   });
   return t;
@@ -1164,6 +1166,29 @@ const monthSpend = m => rangeSpend(monthStart(m), monthEnd(m));
 const rangeIn = (from, to) => paidRows({ from: from, to: to })
   .reduce((a, p) => a + num(p.amt, 0), 0);
 const monthIn = m => rangeIn(monthStart(m), monthEnd(m));
+
+/* == pie or bars ==
+   Tom, 2026-09-14: "I would like some pie charts in WEALTH, perhaps give me
+   more viewing options there." Wherever money splits into shares, a pie and
+   ranked bars are both on offer, and the choice is remembered per card. Both
+   are shared/chart.js. The pie's middle says the total, and pointing at a
+   slice says that slice; the bars lead with the total and the biggest share. */
+const VIEWS = [{ id: 'pie', name: 'PIE' }, { id: 'bars', name: 'BARS' }];
+function shareView(host, rows, view, o) {
+  o = o || {};
+  const sum = rows.reduce((a, r) => a + r.amt, 0);
+  if (view === 'pie') {
+    const wrap = el('div');
+    wrap.style.marginTop = 'var(--s-4)';
+    wrap.appendChild(Chart.pie(rows, { fmt: money, label: o.label || 'total', onPick: o.onPick }));
+    host.appendChild(wrap);
+    return;
+  }
+  const top = rows.slice().sort((a, b) => b.amt - a.amt)[0];
+  host.appendChild(Chart.header({ value: money(sum),
+    sub: top.name + ' is the biggest, ' + Math.round(top.amt / sum * 100) + '% of it' }).el);
+  host.appendChild(Chart.shares(rows, { fmt: money, total: o.total || sum, onPick: o.onPick }));
+}
 
 /* == everything that happened on one day, in the order it happened ==
    Tom, 2026-09-11: "I want to review individual days and weeks." A day is not
@@ -2856,6 +2881,29 @@ function drawIn(m) {
   }
   m.appendChild(c1);
 
+  /* Where it came from: who paid, as a pie or ranked bars, over this month,
+     three months or a year. Tom, 2026-09-14: "I would like some pie charts in
+     WEALTH, perhaps give me more viewing options there." */
+  const IN_SPANS = [{ id: '1', name: 'THIS MONTH' }, { id: '3', name: '3 MONTHS' }, { id: '12', name: 'A YEAR' }];
+  const inSpan = ['1', '3', '12'].indexOf(String(S.get('inSpan', '1'))) > -1 ? String(S.get('inSpan', '1')) : '1';
+  const inView = S.get('inView', 'pie') === 'bars' ? 'bars' : 'pie';
+  const c2 = card('WHERE IT CAME FROM', 'full');
+  const inCtl = el('div', 'rowbtns');
+  inCtl.style.flexWrap = 'wrap';
+  inCtl.appendChild(UI.segmented(IN_SPANS, inSpan, v => { S.set('inSpan', v); draw(); }));
+  inCtl.appendChild(UI.segmented(VIEWS, inView, v => { S.set('inView', v); draw(); }));
+  c2.appendChild(inCtl);
+  const byWho = {};
+  paidRows({ from: monthStart(monthBack(now, +inSpan - 1)), to: Day.today() }).forEach(p => {
+    const c = p.client ? Rec.get('client', null, p.client) : null;
+    const k = c && c.name ? c.name : 'One-offs';
+    byWho[k] = (byWho[k] || 0) + num(p.amt, 0);
+  });
+  const inRows = Object.keys(byWho).map(k => ({ id: k, name: k, amt: byWho[k] })).filter(r => r.amt > 0);
+  if (!inRows.length) c2.appendChild(el('div', 'empty', 'Nothing came in over this stretch.'));
+  else shareView(c2, inRows, inView, { label: 'came in' });
+  m.appendChild(c2);
+
   /* Everything that has arrived. */
   const c3 = card('RECEIVED', 'full');
   const got = paidRows({ from: Day.shift(Day.today(), -120) }).sort((a, b) => b.date.localeCompare(a.date));
@@ -3272,25 +3320,39 @@ function drawSpend(m) {
   }
   m.appendChild(c1);
 
-  /* Where it went, ranked. */
+  /* Where it went: a pie or ranked bars, split by category, group, account
+     or occasion. Tom, 2026-09-14: "I would like some pie charts in WEALTH,
+     perhaps give me more viewing options there." Both choices are remembered. */
+  const OUT_BY = [{ id: 'cat', name: 'CATEGORY' }, { id: 'grp', name: 'GROUP' },
+    { id: 'acct', name: 'ACCOUNT' }, { id: 'tag', name: 'OCCASION' }];
+  const outBy = OUT_BY.some(o => o.id === S.get('outBy', 'cat')) ? S.get('outBy', 'cat') : 'cat';
+  const outView = S.get('outView', 'pie') === 'bars' ? 'bars' : 'pie';
   const c2 = card('WHERE IT WENT');
-  const rows = Object.keys(t.byCat).map(k => ({ id: k, amt: t.byCat[k],
-      name: k ? catName(k) : 'Uncategorised' }))
-    .sort((a, b) => b.amt - a.amt).filter(r => r.amt > 0);
+  const outCtl = el('div', 'rowbtns');
+  outCtl.style.flexWrap = 'wrap';
+  outCtl.appendChild(UI.segmented(OUT_BY, outBy, v => { S.set('outBy', v); draw(); }));
+  outCtl.appendChild(UI.segmented(VIEWS, outView, v => { S.set('outView', v); draw(); }));
+  c2.appendChild(outCtl);
+  const split = { cat: t.byCat, grp: t.byGrp, acct: t.byAcct, tag: t.byTag }[outBy] || {};
+  const GRP_NAME = { fix: 'Fixed costs', biz: 'Business', var: 'Everyday', '': 'Everyday' };
+  const nameOf = k => outBy === 'cat' ? (k ? catName(k) : 'Uncategorised')
+    : outBy === 'grp' ? (GRP_NAME[k] || k)
+    : outBy === 'acct' ? (!k ? 'No account' : acctName(k) === 'unknown account' ? k : acctName(k))
+    : ((Rec.get('wtag', null, k) || {}).name || k);
+  const rows = Object.keys(split).map(k => ({ id: k, amt: split[k], name: nameOf(k) })).filter(r => r.amt > 0);
   if (!rows.length) {
-    c2.appendChild(el('div', 'empty', 'Nothing logged in this ' + word +
-      '. Press <b>+</b> to put one in, or log it on your phone in STATUS.'));
+    c2.appendChild(el('div', 'empty', outBy === 'tag'
+      ? 'No occasions tagged in this ' + word + '. A tag is why you spent, not what on.'
+      : 'Nothing logged in this ' + word + '. Press <b>+</b> to put one in, or log it on your phone in STATUS.'));
   } else {
-    /* On shared/chart.js: the total on top with the biggest share said in
-       words, and every category ranked by a bar against the biggest one. It
-       replaced a donut on 2026-09-14: lengths on one baseline compare at a
-       glance, and slices of a ring do not. A row still filters the purchases. */
-    const sum = rows.reduce((a, r) => a + r.amt, 0);
-    c2.appendChild(Chart.header({ value: money(sum),
-      sub: rows[0].name + ' is the biggest, ' + Math.round(rows[0].amt / sum * 100) + '% of it' }).el);
-    c2.appendChild(Chart.shares(rows, { fmt: money, total: (t.total - t.big) || sum,
-      onPick: r => { CATFILTER = r.id; draw(); } }));
-    c2.appendChild(el('div', 'note', 'Tap a category to see only its purchases.'));
+    shareView(c2, rows, outView, {
+      label: 'spent',
+      total: outBy === 'tag' ? null : ((t.total - t.big) || null),
+      onPick: outBy === 'cat' ? (r => { CATFILTER = r.id; draw(); }) : null,
+    });
+    c2.appendChild(el('div', 'note', outBy === 'cat' ? 'Tap a category to see only its purchases.'
+      : outBy === 'tag' ? 'Only spending with an occasion tag is counted here.'
+      : 'Big one-offs are left out, as they are everywhere.'));
   }
   m.appendChild(c2);
 

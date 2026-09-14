@@ -402,12 +402,14 @@ async function run() {
     return J.sortClock({ kind: 'todo', done: 1, doneAt: '21:00', t: eight.getTime() }) === 2100 &&
       J.sortClock({ kind: 'todo', done: 0, t: eight.getTime() }) === 800;
   })());
-  ok('journal: a moved todo stays as > where it sat and where it left, not on skipped days, and is to be done on its new day', (() => {
-    const t = Day.today(), tm = Day.shift(t, 1), w = Day.shift(t, -2);
-    const r = { key: 'k', date: w, payload: { kind: 'todo', text: 'x', done: 0, due: tm, moved: [{ from: w, to: t }] } };
-    const here = J.place(r, t), sat = J.place(r, w), skipped = J.place(r, Day.shift(t, -1)), next = J.place(r, tm);
-    return !!here && here.movedAway === true && !!sat && sat.movedAway === true && !skipped &&
-      !!next && !next.movedAway && !J.onDay(r, t) && J.onDay(r, tm) && !J.place(r, Day.shift(t, -3));
+  ok('journal: a moved todo is > on every day it touched, nothing on the days it skipped, and to be done on its new day', (() => {
+    const t = Day.today(), w = Day.shift(t, -2), due = Day.shift(t, 3);
+    const r = { key: 'k', date: w, payload: { kind: 'todo', text: 'x', done: 0, due: due, moved: [{ from: w, to: t }] } };
+    const moved = d => { const x = J.place(r, d); return !!x && x.movedAway === true; };
+    const onDue = J.place(r, due);
+    return moved(w) && moved(Day.shift(t, -1)) && moved(t) &&
+      !J.place(r, Day.shift(t, 1)) && !J.place(r, Day.shift(t, 2)) &&
+      !!onDue && !onDue.movedAway && !J.onDay(r, t) && J.onDay(r, due) && !J.place(r, Day.shift(t, -3));
   })());
   ok('journal: rescheduling a week ahead records one move, and rescheduling a todo not yet due records none', (() => {
     const t = Day.today(), w = Day.shift(t, -3), wk = Day.shift(t, 7);
@@ -1715,6 +1717,18 @@ async function run() {
     const line = c.el.querySelector('.mb-line');
     return !!c.el.querySelector('.mb-end') && c.el.querySelector('.mb-endlab').textContent === '3' &&
       !!c.el.querySelector('.mb-area') && line.getAttribute('pathLength') === '1' && c.el.classList.contains('mb-anim');
+  })());
+  ok('chart: a pie keys every slice, folds past six into Other, and says the slice pointed at', (() => {
+    const rows = [1, 2, 3, 4, 5, 6, 7, 8].map(i => ({ name: 'r' + i, amt: i * 10 }));
+    const p = Chart.pie(rows, { label: 'spent' });
+    const keys = p.querySelectorAll('.mb-key'), slices = p.querySelectorAll('.mb-slice');
+    const other = keys[keys.length - 1].querySelector('.n').textContent;
+    slices[0].dispatchEvent(new PointerEvent('pointerenter'));
+    const lit = p.classList.contains('focus') && p.querySelector('.mid b').textContent === '80' &&
+      p.querySelector('.mid span').textContent === 'r8' && slices[0].classList.contains('on');
+    slices[0].dispatchEvent(new PointerEvent('pointerleave'));
+    const back = !p.classList.contains('focus') && p.querySelector('.mid b').textContent === '360';
+    return keys.length === 6 && slices.length === 6 && other === 'Other' && lit && back;
   })());
   ok('chart: shares put the biggest first, the header shows a point and returns to its own value', (() => {
     const s = Chart.shares([{ name: 'small', amt: 10 }, { name: 'big', amt: 40 }]);

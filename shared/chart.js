@@ -580,6 +580,106 @@
     return box;
   }
 
+  /** Part of a whole, as a ring. Tom, 2026-09-14: "I would like some pie
+      charts in WEALTH." Every slice is also a row in the key beside it, with
+      its amount and share, so no slice is known by its colour alone. Pointing
+      at a slice or its row lights it and dims the rest, and the middle says
+      its amount, name and share; let go and the middle says the total again.
+      Past `o.max` slices (six) the smallest fold into one Other, because a
+      seventh colour cannot be told from its neighbours.
+      rows: [{name, amt, id}]. o.fmt formats an amount; o.label is the word
+      under the total; o.onPick(row) makes each row a button; o.size in px. */
+  function pie(rows, o) {
+    css();
+    o = o || {};
+    const fmt = o.fmt || (v => Math.round(v).toLocaleString());
+    const all = (rows || []).filter(r => r && r.amt > 0).slice().sort((a, b) => b.amt - a.amt);
+    const total = all.reduce((a, r) => a + r.amt, 0) || 1;
+    const max = o.max || 6;
+    const list = all.length <= max ? all : all.slice(0, max - 1).concat([{
+      name: o.other || 'Other', amt: all.slice(max - 1).reduce((a, r) => a + r.amt, 0), other: true,
+    }]);
+    const S = o.size || 200, R = S / 2, IN = R * 0.6, RO = R - 1;
+
+    const box = document.createElement('div');
+    box.className = 'mb-pie';
+    const ringBox = document.createElement('div');
+    ringBox.className = 'ring';
+    ringBox.style.width = S + 'px';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + S + ' ' + S);
+    svg.setAttribute('class', 'mb-piesvg');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', (o.label || 'total') + ' ' + fmt(total) + ': ' +
+      list.map(r => r.name + ' ' + Math.round(r.amt / total * 100) + '%').join(', '));
+    const mid = document.createElement('div');
+    mid.className = 'mid';
+    const mv = document.createElement('b'), mk = document.createElement('span'), mp = document.createElement('span');
+    mp.className = 'pc';
+    mid.appendChild(mv); mid.appendChild(mk); mid.appendChild(mp);
+    const keys = document.createElement('div');
+    keys.className = 'keys';
+
+    const pt = (a, r) => (R + r * Math.cos(a)).toFixed(2) + ' ' + (R + r * Math.sin(a)).toFixed(2);
+    const arc = (a0, a1) => {
+      const big = a1 - a0 > Math.PI ? 1 : 0;
+      return 'M' + pt(a0, RO) + ' A' + RO + ' ' + RO + ' 0 ' + big + ' 1 ' + pt(a1, RO) +
+        ' L' + pt(a1, IN) + ' A' + IN + ' ' + IN + ' 0 ' + big + ' 0 ' + pt(a0, IN) + ' Z';
+    };
+    const say = r => {
+      mv.textContent = fmt(r ? r.amt : total);
+      mk.textContent = r ? r.name : (o.label || 'total');
+      mp.textContent = r ? Math.round(r.amt / total * 100) + '%' : '';
+    };
+    const parts = [];
+    const light = i => {
+      box.classList.toggle('focus', i >= 0);
+      parts.forEach((p, j) => { p.slice.classList.toggle('on', j === i); p.key.classList.toggle('on', j === i); });
+      say(i >= 0 ? list[i] : null);
+    };
+
+    let a = -Math.PI / 2;
+    list.forEach((r, i) => {
+      const frac = r.amt / total, a1 = a + frac * Math.PI * 2;
+      const slot = r.other ? 's0' : 's' + (i % 6 + 1);
+      const slice = document.createElementNS(NS, 'path');
+      /* one slice that is the whole ring is two halves: an arc that starts
+         and ends at the same point draws nothing */
+      slice.setAttribute('d', frac >= 0.9999 ? arc(-Math.PI / 2, Math.PI / 2) + ' ' + arc(Math.PI / 2, Math.PI * 1.5) : arc(a, a1));
+      slice.setAttribute('class', 'mb-slice ' + slot);
+      svg.appendChild(slice);
+
+      const pickable = !!o.onPick && !r.other;
+      const key = document.createElement(pickable ? 'button' : 'div');
+      key.className = 'mb-key' + (pickable ? ' mb-press' : '');
+      if (pickable) { key.type = 'button'; key.onclick = () => o.onPick(r); }
+      const sw = document.createElement('i'); sw.className = slot;
+      const n = document.createElement('span'); n.className = 'n'; n.textContent = r.name;
+      const v = document.createElement('span'); v.className = 'v'; v.textContent = fmt(r.amt);
+      const p = document.createElement('span'); p.className = 'p'; p.textContent = Math.round(frac * 100) + '%';
+      key.appendChild(sw); key.appendChild(n); key.appendChild(v); key.appendChild(p);
+      keys.appendChild(key);
+      parts.push({ slice: slice, key: key });
+
+      const on = () => light(i), off = () => light(-1);
+      slice.addEventListener('pointerenter', on);
+      slice.addEventListener('pointerdown', on);
+      slice.addEventListener('pointerleave', off);
+      if (pickable) slice.addEventListener('click', () => o.onPick(r));
+      key.addEventListener('pointerenter', on);
+      key.addEventListener('pointerleave', off);
+      key.addEventListener('focus', on);
+      key.addEventListener('blur', off);
+      a = a1;
+    });
+    say(null);
+    ringBox.appendChild(svg);
+    ringBox.appendChild(mid);
+    box.appendChild(ringBox);
+    box.appendChild(keys);
+    return box;
+  }
+
   /** Which mark is which, for a chart with more than one series. items:
       [{name, kind: 'line' | 'dash' | 'bar' | 'dot', color: 'var(--data-2)'}] */
   function legend(items) {
@@ -662,6 +762,33 @@
       '.mb-share .t{grid-column:1 / -1;display:block;height:var(--s-2);border-radius:var(--radius-full);background:var(--surface-3);overflow:hidden}' +
       '.mb-share .t i{display:block;height:100%;border-radius:inherit;background:var(--accent)}' +
       '.mb-share:not(:first-child) .t i{opacity:.55}' +
+      /* a pie: the ring, the answer in its middle, and a key of every slice */
+      '.mb-pie{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-5)}' +
+      '.mb-pie .ring{position:relative;flex:0 0 auto;max-width:100%}' +
+      '.mb-piesvg{display:block;width:100%;height:auto;animation:mb-fade var(--dur-slow,700ms) var(--ease-out,ease) both}' +
+      '.mb-slice{stroke:var(--chart-bg,var(--surface-1));stroke-width:2;cursor:pointer;transition:opacity var(--dur-fast,140ms) linear}' +
+      '.mb-pie.focus .mb-slice:not(.on){opacity:.25}' +
+      '.mb-slice.s1{fill:var(--data-1)}.mb-slice.s2{fill:var(--data-2)}.mb-slice.s3{fill:var(--data-3)}' +
+      '.mb-slice.s4{fill:var(--data-4)}.mb-slice.s5{fill:var(--data-5)}.mb-slice.s6{fill:var(--data-6)}' +
+      '.mb-slice.s0{fill:var(--text-muted)}' +
+      '.mb-pie .mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+        'text-align:center;pointer-events:none;padding:0 22%}' +
+      '.mb-pie .mid b{font-family:var(--font-display);font-size:var(--f-5);font-weight:var(--w-bold);line-height:var(--lh-tight);color:var(--text-1)}' +
+      '.mb-pie .mid span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--f-1);color:var(--text-muted)}' +
+      '.mb-pie .keys{flex:1 1 220px;min-width:0;display:flex;flex-direction:column}' +
+      '.mb-key{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;column-gap:var(--s-3);' +
+        'width:100%;min-height:var(--tap);padding:0 var(--s-2);border:0;border-radius:var(--radius-sm);background:none;' +
+        'color:inherit;font:inherit;text-align:left}' +
+      'button.mb-key{cursor:pointer}' +
+      '.mb-key.on{background:var(--surface-3)}' +
+      '.mb-key i{display:block;width:var(--s-3);height:var(--s-3);border-radius:var(--radius-sm)}' +
+      '.mb-key i.s1{background:var(--data-1)}.mb-key i.s2{background:var(--data-2)}.mb-key i.s3{background:var(--data-3)}' +
+      '.mb-key i.s4{background:var(--data-4)}.mb-key i.s5{background:var(--data-5)}.mb-key i.s6{background:var(--data-6)}' +
+      '.mb-key i.s0{background:var(--text-muted)}' +
+      '.mb-key .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-1)}' +
+      '.mb-key .v{font-variant-numeric:tabular-nums;color:var(--text-1)}' +
+      '.mb-key .p{min-width:4ch;text-align:right;font-size:var(--f-1);color:var(--text-muted)}' +
+      '@media (prefers-reduced-motion:reduce){.mb-piesvg{animation:none}.mb-slice{transition:none}}' +
       /* legend */
       '.mb-legend{display:flex;flex-wrap:wrap;gap:var(--s-1) var(--s-4);font-size:var(--f-1);color:var(--text-2);margin-top:var(--s-2)}' +
       '.mb-legend span{display:inline-flex;align-items:center;gap:var(--s-2)}' +
@@ -679,6 +806,7 @@
     spark: spark,
     ring: ring,
     shares: shares,
+    pie: pie,
     legend: legend,
     niceStep: niceStep,
   };

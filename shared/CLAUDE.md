@@ -74,8 +74,8 @@ are holding a stale copy of whatever you just changed.
    changed, in words), draws at its box's real size through `Chart.mount`,
    marks its latest value with `c.end`, lights one bar and quietens the rest,
    and lets a finger or mouse drag across it with `c.scrub`. Part of a whole
-   is `Chart.shares`, ranked bars, not a donut. Two scales on one plot is two
-   charts.
+   is `Chart.pie` (every slice keyed, six at most, pointing says a slice) or
+   `Chart.shares`, ranked bars. Two scales on one plot is two charts.
 5b. **An app screen is built out of `ui.js`, not beside it.** `UI.row`,
    `UI.field`, `UI.toggle`, `UI.segmented` and the `.mb-group`, `.mb-swatch`,
    `.mb-opt` classes. A private copy of a component inherits nothing: not the

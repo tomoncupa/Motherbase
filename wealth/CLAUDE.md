@@ -1031,13 +1031,18 @@ the second currency, the rate and its date all travel in a backup.
 
 ## Pictures
 
-**Where it went is ranked bars**, since 2026-09-14, replacing the donut Tom
-asked for on 2026-09-11. Tom: "rewrite everything to follow the chart engine.
-Make charts beautiful and useful." Lengths on one baseline compare at a glance
-and slices of a ring do not, so `Chart.shares` in `shared/chart.js` draws the
-total on top with the biggest category said in words, then every category
-ranked, its share of normal spending beside it. Tapping one still filters the
-purchases below.
+**Where it went is a pie or ranked bars**, Tom's choice, remembered. Tom,
+2026-09-14: "I would like some pie charts in WEALTH, perhaps give me more
+viewing options there." It splits by category, group (fixed costs, business,
+everyday), account or occasion. The pie is `Chart.pie`: the total in the
+middle, a key of every slice with its amount and share, anything past six
+folded into Other, and pointing at a slice or its row says that slice. The
+bars are `Chart.shares`: the total on top with the biggest share in words.
+By category, tapping one still filters the purchases below. Big one-offs stay
+out of both, as everywhere.
+
+**Where it came from**, on MONEY IN, is the same pair of views over who paid,
+for this month, three months or a year, with one-offs as their own slice.
 
 **The six-month chart** leads with the average month's net, and dragging across
 it shows that month's net with what came in and went out. Money in is the

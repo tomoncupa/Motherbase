@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.4, 2026-09-14">
+<meta name="mb-version" content="1.0.5, 2026-09-14">
 <title>LOG</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▤</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -582,14 +582,15 @@ function indexJournal() {
        spans are `moved`, written by Journal.moveToTomorrow. */
     if (kind === 'todo' && Array.isArray(p.moved)) p.moved.forEach(m => {
       if (!m || !DATE_OK.test(m.from || '') || !DATE_OK.test(m.to || '')) return;
-      /* the day it sat on and the day it was moved from, never the days
-         between or skipped (Tom, 2026-09-14) */
-      [m.from, m.to].filter((dd, i, a) => a.indexOf(dd) === i).forEach(dd => {
-        if (dd === day || (p.due && dd >= p.due) || (p.done && p.doneOn === dd)) return;
+      /* every day it touched and was not done on, from the day it sat on to
+         the day it was moved from; never the days it skipped after the move
+         (Tom, 2026-09-14) */
+      for (let dd = m.from, n = 0; dd <= m.to && n < 400; dd = Day.shift(dd, 1), n++) {
+        if (dd === day || (p.due && dd >= p.due) || (p.done && p.doneOn === dd)) continue;
         if (!byDay.has(dd)) byDay.set(dd, []);
-        if (byDay.get(dd).some(y => y.key === r.key && y.movedAway)) return;
+        if (byDay.get(dd).some(y => y.key === r.key && y.movedAway)) continue;
         byDay.get(dd).push({ key: r.key, date: r.date, day: dd, kind, open: false, p, movedAway: true });
-      });
+      }
     });
   });
   const mode = sortMode();

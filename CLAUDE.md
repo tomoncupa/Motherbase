@@ -190,7 +190,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 |---|---|
 | `records.js` | The store. Rows, merging, subscriptions. The one file to be careful with. |
 | `day.js` | One definition of "today" for the whole suite. |
-| `chart.js` | Every chart. Answer first (`Chart.header`), drawn at the box's real size (`Chart.mount`), latest value marked, one bar lit, drag to explore (`c.scrub`), ranked shares instead of donuts, rings, sparklines and legends. Theme tokens only. |
+| `chart.js` | Every chart. Answer first (`Chart.header`), drawn at the box's real size (`Chart.mount`), latest value marked, one bar lit, drag to explore (`c.scrub`), pies with a key and ranked shares for part of a whole, rings, sparklines and legends. Theme tokens only. |
 | `journal.js` | The bullet system. One journal line: its kinds, which day it shows on, the time typed into it, how it is drawn (mark, words, then "7:00pm - 7:31pm"), time order by its start, ticking, Move to tomorrow, Cancel it, and a repeat's next round. STATUS names the `note` shape and wins any disagreement; STATUS, LOG, QUESTS and the home screen all read this, so a todo bullet looks and behaves the same in each. |
 | `skins.js` + `skins.json` | Themes, and the colour layer on top of them. |
 | `sound.js` | Sound themes and instruments, synthesised, no audio files. |

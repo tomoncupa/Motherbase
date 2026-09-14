@@ -152,6 +152,13 @@ unity for the sake of it at the cost of more important things."*
 An app's own settings are its own. What is shared is shared because sharing it
 is genuinely better, never because symmetry is tidy.
 
+Settings are not limited to what an app asks you to decide. Tom, 2026-09-14,
+called that limit arbitrary: a setting earns its place by being useful. What
+does hold is this. **In an app clients use, settings are intuitive and never
+overwhelming**: plain names that say what a thing does, the choices most
+people want first, and anything advanced out of the way until it is looked
+for. Tom's own apps may be denser.
+
 ### 10. Setup, not a walkthrough
 
 An app may ask what it genuinely cannot infer — TRAIN cannot guess kilograms or

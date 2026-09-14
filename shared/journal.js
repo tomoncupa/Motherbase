@@ -57,16 +57,17 @@ function place(r, d) {
   const p = r && r.payload;
   if (!p) return null;
   const D = Day();
-  /* MOVED AWAY from this day. Tom, 2026-09-14: "A moved todo is still shown
-     as >, but moved to the bottom of the list", and then "if a todo is
-     rescheduled to the future then it doesn't show up on skipped dates".
-     Each entry in `moved` is one move: `from` the day it sat on, `to` the day
-     it was moved from. It shows as > on those two days only, flagged
-     `movedAway`; the days it was carried through between them, and the days
-     it skips before its new date, show nothing. A todo finished on one of
-     those days shows as finished there instead. */
+  /* MOVED AWAY from this day. Tom, 2026-09-14: a moved todo "is still shown
+     as >, but moved to the bottom of the list"; "if a todo is rescheduled to
+     the future then it doesn't show up on skipped dates"; and "> should
+     appear on every date the todo touched but wasn't done on". Each entry in
+     `moved` is one move: `from` the first day it sat on, `to` the day it was
+     moved from. It shows as > on every day from one to the other, the days it
+     was carried through included, flagged `movedAway`. The days after the
+     move and before its new date were skipped, never touched, and show
+     nothing. A todo finished on one of those days shows as finished there. */
   if (p.kind === 'todo' && Array.isArray(p.moved) && (!p.due || d < p.due) && !(p.done && p.doneOn === d) &&
-      p.moved.some(m => m && (d === m.from || d === m.to)))
+      p.moved.some(m => m && m.from <= d && d <= m.to))
     return Object.assign({ key: r.key, date: r.date }, p, { movedAway: true });
   if (p.kind === 'todo' && p.due !== undefined && !p.done && !p.cancelled) {
     if (!p.due || p.due > d) return null;
