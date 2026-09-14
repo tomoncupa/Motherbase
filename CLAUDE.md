@@ -143,6 +143,11 @@ tools/             not build steps. embed-skins.py re-embeds the factory themes;
                    build-client.py generates the tester copy of the suite into
                    ../Motherbase-Client. Its output is never edited by hand —
                    client-only files live in tools/client/. See ONBOARDING.md.
+quest/index.html   QUESTS, the todolist, copied from Todoist. The same todo rows
+                   as STATUS's journal, with a due date, priority, project and
+                   repeat added. Desktop and phone. Tom only, dropped from the
+                   tester build.
+quest/CLAUDE.md    QUESTS's own brief, governs quest/ only
 quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
                    status/ on 2026-08-20; what is left of it is a todolist.
                    Its data model and design system still govern. Superseded
@@ -231,7 +236,7 @@ An app may read any type. It writes only the types it owns.
 | `tick` | **shared, every app may write** | activity id | `{src, qty}` |
 | `lane` `item` `routine` | block | | |
 | `plan` | **block** | `routine` | today's published plan, for anything that wants to read it |
-| `note` | **status** names the shape; **log** writes it too | line id | one journal line: a todo, an entry, an event or an idea |
+| `note` | **status** names the shape; **log** and **quest** write it too | line id | one journal line: a todo, an entry, an event or an idea. A todo may carry `due`, `pri`, `proj` and `rep` from QUESTS; see `quest/CLAUDE.md` |
 | `field` | **status** | field id | the definition of a tracked measure |
 | `ev` | **status** | field id | `{e:[{t,v}]}` — one row per field per day |
 | `day` | **status**; **log** writes `note`, the day's summary | `''` | `{note, rest}` |
@@ -241,6 +246,7 @@ An app may read any type. It writes only the types it owns.
 | `acct` | **status** | account id | `{name, order}` |
 | `shot` | **status** | photo id | a shrunk photo of a label or receipt |
 | `habit` | quest, later | | a todolist, once STATUS took the measurements |
+| `project` | **quest** | slug of the hashtag | `{name, slot, ord}` — a Todoist project. `slot` is a theme colour slot, never a hex |
 | `excat` | **train** | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
 | `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph}` |
 | `set` | **train** | timestamp id | one logged set, weight stored in kg with the unit it was typed in |
@@ -665,6 +671,7 @@ answer, or take it out.
 | `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. |
 | `arc/` | Tom's build, with its own brief. On the shared foundation as of 2026-08-27: the store, the theme engine, the icon set, the settings sheet and the standard backup. Owns `map`, `node` and `link`. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. |
 | `habits/` | A stand-in, now superseded by `status/`. Harvest the streaks and one-click promote-from-routine if they are still wanted. Do not add to it. |
+| `quest/` | QUESTS, built 2026-09-14 and tested in the browser at desktop width; phone width not measured, because the test pane reported no width. Todoist's Inbox, Today, Upcoming and projects over STATUS's todo rows. Reads dates, times, P1 to P3, #projects and repeats from anywhere in the line, highlighted as typed, with a chip to give the words back. Todoist's date menu and overdue Reschedule. Ticking a repeat writes a finished copy and moves the todo on; STATUS does the same. STATUS now shows a todo with a due date on that date. LOG's copy of `notes()` does not know `due` yet, so LOG still shows those todos on the day written. |
 | `form/` | Standalone by design. Video never leaves the device. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
 | `portion/` | FOODDÉX on screen since 2026-09-14; the folder and id are still `portion`. Built 2026-09-05, made a desktop app 2026-09-06. Tested in the browser. A bench for building food entries and a viewer over the ones you have. Paste or type a label; it says how much of it hits 50g of protein or any other number, in grams or in pieces, what that comes to and what it costs. Saves the answers as ordinary servings, so STATUS logs them in one tap. Hands the entry over as words to paste into somebody else's tracker or as a spreadsheet row. Ranks the whole library against whatever amount is on screen, which is the comparison. Searches, edits and deletes; refuses to make a second food with a name you already have. Reads Sodium, or converts Salt where a label prints that instead. Kept out of the tester build by `tools/build-client.py`. |
