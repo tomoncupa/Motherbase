@@ -239,6 +239,21 @@
     const lines = A.catalog().split('\n');
     check('the photo scan’s food list has one line per food', lines.length === FOODS.length && lines.every(l => l.split(' | ').length >= 3), lines.length);
 
+    /* ── installing, and working offline ─────────────────────────── */
+    const fresh = f => f + (f.includes('?') ? '&' : '?') + 'cb=' + Date.now();
+    const manifest = await (await fetch(fresh('manifest.json'))).json();
+    check('the install file names the app and opens it full screen', manifest.name === 'CALCOUNT' && manifest.display === 'standalone' && manifest.start_url === './', manifest);
+    const iconOk = await Promise.all(manifest.icons.map(async i => (await fetch(fresh(i.src))).ok));
+    check('every icon the install file names is really there', iconOk.every(Boolean), manifest.icons.map((i, n) => i.src + ' ' + iconOk[n]));
+    const swText = await (await fetch(fresh('sw.js'))).text();
+    const swFiles = ((swText.match(/const FILES = \[(.*?)\]/) || [])[1] || '').split(',').map(s => s.trim().replace(/'/g, '')).filter(Boolean);
+    const swOk = await Promise.all(swFiles.map(async f => (await fetch(fresh(f))).ok));
+    check('every file the offline copy keeps is really there', swFiles.length >= 4 && swOk.every(Boolean), swFiles.map((f, n) => f + ' ' + swOk[n]));
+    check('the offline copy steps aside for a fresh ?cb= test copy', /searchParams\.has\('cb'\)\) return/.test(swText));
+    check('the app links its install file', !!d.querySelector('link[rel="manifest"]'));
+    const png = new Uint8Array(await (await fetch(fresh('icon-512.png'))).arrayBuffer());
+    check('the 512px icon is a real 512 by 512 PNG', png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47 && ((png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19]) === 512);
+
     /* ── the screen, at phone width ──────────────────────────────── */
     S.set('profile', null, '', { goal: 'lose', sex: 'f', age: 30, cm: 157.48, kg: 70, act: 'sit', rate: 0.5 });
     const ob = d.querySelector('.onboard'); if (ob) ob.remove();

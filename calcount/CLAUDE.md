@@ -248,6 +248,14 @@ choice rather than inherited:
 | `index.html` | Built and tested in the browser 2026-09-15 at 375px, light and dark. Setup, Today, Add food with Tagalog search and one-tap add, servings, quick calories, make a food, barcode (the phone's own reader on Android Chrome, typing everywhere else, then Open Food Facts), photo scan with a confirm list, weight and the last 7 days, settings, backup and restore. **Not seen on a real phone.** The barcode camera and the photo picker cannot be driven from a desktop browser, so both are reasoned, not watched. |
 | `worker/scan.js` | Written 2026-09-15 and checked in the browser with the network faked: request shape, key handling, the monthly cap, refusals, outages and bad answers. **Never called the real Claude API**, because that spends Tom's money. The first real scan is the real test. |
 | `worker/SETUP.md` | Written 2026-09-15. Tom has not deployed it. |
-| `_test.html` | 84 checks, all passing in light and dark, 2026-09-15. It sets the browser's own CALCOUNT data aside and puts it back exactly. |
+| `sw.js`, `manifest.json`, icons | Offline copy and home-screen install, 2026-09-15. Watched on the test server: the offline copy registers, takes over the page and stores all five files. **Loading with the network actually cut has not been watched.** It is off on a test server unless the address has `?sw`, and it steps aside for any `?cb=` address, so tests are never answered from an old copy. The icons are drawn by a short Python script with no libraries, because Pillow is not installed here. |
+| `_test.html` | 90 checks, all passing in light and dark, 2026-09-15. It sets the browser's own CALCOUNT data aside and puts it back exactly. |
+
+### Releasing a new version
+
+1. Change `mb-version` and `VERSION` in `index.html`.
+2. Change `CACHE` in `sw.js` to match. **Without this, phones keep the old
+   copy**, because the offline copy only clears itself when that name changes.
+3. Run `_test.html` with a new `?cb=`.
 </content>
 </invoke>
