@@ -141,6 +141,20 @@
     const e = A.entries(day)[0];
     check('an entry keeps the numbers it was logged with after its food changes', e && e.kcal === 400 && e.qty === 2 && e.meal === 'm', e);
 
+    // Eat this again: the same two-food breakfast on two days, then a new day to offer it on.
+    const d1 = '2026-01-10', d2 = '2026-01-11', d3 = '2026-01-12';
+    [d1, d2].forEach(dd => { A.logFood(dd, FOOD.pandesal, 0, 2, 'b'); A.logFood(dd, FOOD['coffee-3in1'], 0, 1, 'b'); });
+    A.logFood(d2, FOOD.rice, 0, 1, 'l');
+    const again = A.recentMeals(d3, 3);
+    const breakfasts = again.filter(g => g.meal === 'b');
+    check('eat this again: the same breakfast on two days is offered once, from the latest day', breakfasts.length === 1 && breakfasts[0].date === d2, again.map(g => g.date + ' ' + g.meal + ' ' + g.items.length));
+    check('eat this again: a meal of just one food is left to Recent', !again.some(g => g.items.length < 2), again.map(g => g.items.length));
+    const copied = A.repeatMeal(breakfasts[0], d3, 'b');
+    const d3e = A.entries(d3);
+    check('eat this again: one tap copies every food at the same serving and amount',
+      copied.length === 2 && d3e.length === 2 && d3e.reduce((a, x) => a + x.kcal, 0) === breakfasts[0].kcal && d3e.some(x => x.food === 'pandesal' && x.qty === 2), d3e);
+    check('eat this again: a day never offers its own meals back to itself', !A.recentMeals(d2, 3).some(g => g.date === d2));
+
     /* ── the store ────────────────────────────────────────────────── */
     const S = A.Store;
     const row = S.set('entry', day, 'merge1', { kcal: 100, t: 1 });

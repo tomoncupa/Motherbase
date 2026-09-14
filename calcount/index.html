@@ -450,6 +450,42 @@ function recentFoods(limit) {
   return out;
 }
 
+/* A meal eaten before, as one tap. Filipino breakfasts and lunches repeat, so
+   the same pandesal and coffee should not be two searches every morning. A
+   group is one meal on one day; the same foods eaten on two days show once,
+   at the latest. One food on its own is left to Recent, which already has it. */
+function recentMeals(date, limit) {
+  const groups = new Map();
+  Store.all('entry').forEach(r => {
+    if (r.date === date) return;
+    const meal = r.payload.meal || 'd', k = r.date + '|' + meal;
+    if (!groups.has(k)) groups.set(k, { date: r.date, meal, items: [], t: 0 });
+    const g = groups.get(k);
+    g.items.push(Object.assign({ key: r.key }, r.payload));
+    g.t = Math.max(g.t, r.payload.t || 0);
+  });
+  const seen = new Set(), out = [];
+  Array.from(groups.values())
+    .sort((a, b) => a.date > b.date ? -1 : a.date < b.date ? 1 : b.t - a.t)
+    .forEach(g => {
+      if (out.length >= limit || g.items.length < 2) return;
+      const sig = g.items.map(e => (e.food || e.name) + '|' + e.serve + '|' + e.qty).sort().join(',');
+      if (seen.has(sig)) return;
+      seen.add(sig);
+      g.items.sort((a, b) => a.t - b.t);
+      g.kcal = g.items.reduce((a, e) => a + e.kcal, 0);
+      out.push(g);
+    });
+  return out;
+}
+function repeatMeal(g, date, meal) {
+  return g.items.map(e => { const { food, si } = foodForEntry(e); return logFood(date, food, si, e.qty, meal); });
+}
+function mealTitle(g) {
+  const when = g.date === today() ? 'today' : g.date === addDays(today(), -1) ? 'yesterday' : 'on ' + dayLabel(g.date);
+  return MEAL_NAME[g.meal] + ' ' + when;
+}
+
 /* ══ search ══════════════════════════════════════════════════════════
    Every word typed must start a word somewhere in the name, brand or aka
    list. Name matches outrank aka matches; food eaten before and the
@@ -679,6 +715,7 @@ function openAdd() {
     '<div class="chips scroll brands" role="group" aria-label="Restaurants">' + window.CC_BRANDS.map(b => '<button class="chip" data-brand="' + esc(b) + '" aria-pressed="false">' + esc(b) + '</button>').join('') + '</div>' +
     '<div data-results></div>';
   const out = $('[data-results]', sh.body);
+  let meals = [];
 
   $('[data-act="photo"]', sh.body).onclick = () => scanSheet(date);
   $('[data-act="barcode"]', sh.body).onclick = () => barcodeSheet(date);
@@ -700,7 +737,13 @@ function openAdd() {
   function draw() {
     const q = input.value.trim();
     let html = '';
+    meals = [];
     if (!q && !brand) {
+      meals = recentMeals(date, 3);
+      if (meals.length) html += '<h3 class="list-title">Eat this again</h3><div class="list">' + meals.map((g, i) =>
+        '<div class="row food-row"><div class="row-main"><span class="row-name">' + esc(mealTitle(g)) + '</span>' +
+        '<span class="row-sub">' + esc(g.items.map(e => e.name).join(', ') + ' \u00b7 ' + fmt(g.kcal) + ' cal') + '</span></div>' +
+        '<button class="plus" data-again="' + i + '" aria-label="Add all of ' + esc(mealTitle(g)) + '">' + ic('plus') + '</button></div>').join('') + '</div>';
       const recent = recentFoods(8);
       if (recent.length) html += '<h3 class="list-title">Recent</h3><div class="list">' + recent.map(foodRow).join('') + '</div>';
       const pop = window.CC_POPULAR.map(id => window.CC_FOOD[id]).filter(f => f && !recent.includes(f));
@@ -722,6 +765,16 @@ function openAdd() {
         b.classList.add('is-done'); b.innerHTML = ic('check');
         setTimeout(() => { b.classList.remove('is-done'); b.innerHTML = ic('plus'); }, 1200);
         toast('Added ' + f.name + (date !== today() ? ' to ' + dayLabel(date) : '') + '.', 'Undo', () => Store.del('entry', date, key));
+      };
+    });
+    $$('[data-again]', out).forEach(b => {
+      b.onclick = () => {
+        const g = meals[+b.dataset.again];
+        const keys = repeatMeal(g, date, mealNow());
+        buzz();
+        b.classList.add('is-done'); b.innerHTML = ic('check');
+        setTimeout(() => { b.classList.remove('is-done'); b.innerHTML = ic('plus'); }, 1200);
+        toast('Added ' + g.items.length + ' foods, ' + fmt(g.kcal) + ' calories.', 'Undo', () => keys.forEach(k => Store.del('entry', date, k)));
       };
     });
     const nq = $('[data-none="quick"]', out); if (nq) nq.onclick = () => quickSheet(date, q);
@@ -1263,7 +1316,7 @@ render();
 if (!profile()) onboarding(false);
 
 // For _test.html only. Nothing in the app reads this.
-window.CC_APP = { Store, S, targets, goal, searchFoods, numbersFor, logFood, entries, candidateFrom, foodFromOpenFoodFacts, parseQty, fracText, norm, catalog, render };
+window.CC_APP = { Store, S, recentMeals, repeatMeal, targets, goal, searchFoods, numbersFor, logFood, entries, candidateFrom, foodFromOpenFoodFacts, parseQty, fracText, norm, catalog, render };
 })();
 </script>
 </body>
