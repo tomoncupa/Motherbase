@@ -220,6 +220,7 @@ Spent) is read and never written.
 | The arrows step through dates, not years: Day, 2 Days and 3 Days by that many days, Week by a week group, Weeks by two (1–14, 15–28, the rest), Month, Quarter and Year by one. Between them, what is in focus, as a date range or a month, quarter or year. | Tom asked, Claude chose the steps, 2026-09-14 |
 | The notebook is one stream of days read down the left page and on down the right, so a day leaving the top of the right page shows up at the bottom of the left. Scrolls and snaps to days like the timeline. A day is at least its share of both pages: Day fills the spread, 2 Days a page each. Supersedes spreads of fixed days. | Tom, 2026-09-14: *"If something leaves the upper right area it shows up in the lower left again"* |
 | A bullet is deleted with DELETE in its edit box, by saving it empty, or from its right-click menu. Each has an undo. | Tom reported he could not, Claude added the first two, 2026-09-14 |
+| The time rule is the suite's, copied from STATUS: a clock with no am or pm on today is the next time it comes round ("at 8" at 7:55 AM is 8 AM, at 8:01 AM is 8 PM); on any other day 1 to 6 is the afternoon. "at 8" and ranges like "2-4:30" are read at the end of a line. The line's own day decides which, so a bullet added to last Tuesday uses the other-day rule. | Tom, 2026-09-14: *"Make the time rules universal for STATUS, QUEST, and LOG"* |
 
 ## Found in STATUS, not fixed
 

@@ -521,11 +521,35 @@ const NOTE_KINDS = [
 ];
 const MARK = { todo: '×', entry: '·', event: '–', idea: '!' };
 
-const TIME_RE = /\s+(?:at\s+)?(\d{1,2})(?::|\.)(\d{2})\s*(am|pm)?$/i;
-const HOUR_RE = /\s+(?:at\s+)?(\d{1,2})\s*(am|pm)$/i;
+/* The time parser, copied from STATUS on 2026-09-14, clock rule and all.
+   Tom: "Make the time rules universal" for STATUS, QUESTS and LOG. A clock
+   with no am or pm on today is the next time it comes round; on any other
+   day 1 to 6 is the afternoon. `date` is the day the line is on. */
+const TIME_RE  = /\s+(?:at\s+|@\s*)?(\d{1,2})(?::|\.)(\d{2})\s*(am|pm)?$/i;
+const HOUR_RE  = /\s+(?:at\s+|@\s*)?(\d{1,2})\s*(am|pm)$/i;
+const BARE_RE  = /\s+(?:at|@)\s*(\d{1,2})$/i;
+const RANGE_RE = /\s+(?:(at|from)\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i;
 const DUR_RE  = /\s+(?:for\s+)?(?:(\d+)\s*h(?:rs?|ours?)?\s*(\d{1,2})?|(\d+)\s*(m|min|mins|minutes?))$/i;
 
-function parseLine(raw) {
+function clockMins(h, mm, ap, date) {
+  if (h > 23 || mm > 59) return null;
+  if (ap) {
+    ap = ap.toLowerCase();
+    if (h < 1 || h > 12) return null;
+    if (ap === 'pm' && h < 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    return h * 60 + mm;
+  }
+  if (h === 0 || h >= 12) return h * 60 + mm;
+  if (!date || date === Day.today()) {
+    const n = new Date();
+    return n.getHours() * 60 + n.getMinutes() <= h * 60 + mm ? h * 60 + mm : (h + 12) * 60 + mm;
+  }
+  return (h <= 6 ? h + 12 : h) * 60 + mm;
+}
+const minsHM = v => String(Math.floor(v / 60) % 24).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
+
+function parseLine(raw, date) {
   let text = String(raw == null ? '' : raw).trim();
   let at = null, dur = null;
   const d = text.match(DUR_RE);
@@ -533,28 +557,32 @@ function parseLine(raw) {
     dur = d[1] != null ? (+d[1] * 60 + (+d[2] || 0)) : +d[3];
     if (!(dur > 0)) dur = null; else text = text.slice(0, d.index).trim();
   }
-  let m = text.match(TIME_RE);
-  if (m) {
-    let h = +m[1], mm = +m[2];
-    if (mm <= 59 && h <= 23) {
-      const ap = (m[3] || '').toLowerCase();
-      if (ap === 'pm' && h < 12) h += 12;
-      else if (ap === 'am' && h === 12) h = 0;
-      else if (!ap && h >= 1 && h <= 6) h += 12;
-      at = String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  let m;
+  if (!dur && (m = text.match(RANGE_RE)) && (m[1] || m[3] || m[4] || m[6] || m[7])) {
+    const smm = m[3] ? +m[3] : 0, eh = +m[5], emm = m[6] ? +m[6] : 0;
+    let s = clockMins(+m[2], smm, m[4] || m[7] || null, date);
+    if (s != null && !m[4] && m[7]) {
+      const e0 = clockMins(eh, emm, m[7]);
+      if (e0 != null && s > e0) s = clockMins(+m[2], smm, m[7].toLowerCase() === 'pm' ? 'am' : 'pm');
+    }
+    let e = m[7] ? clockMins(eh, emm, m[7]) : (eh > 23 || emm > 59 ? null : eh * 60 + emm);
+    if (s != null && e != null) {
+      if (e <= s) e += (e + 720 > s) ? 720 : 1440;
+      at = minsHM(s); dur = e - s;
       text = text.slice(0, m.index).trim();
     }
-  } else {
-    m = text.match(HOUR_RE);
-    if (m) {
-      let h = +m[1];
-      if (h >= 1 && h <= 12) {
-        if (m[2].toLowerCase() === 'pm' && h < 12) h += 12;
-        if (m[2].toLowerCase() === 'am' && h === 12) h = 0;
-        at = String(h).padStart(2, '0') + ':00';
-        text = text.slice(0, m.index).trim();
-      }
-    }
+  }
+  if (!at && (m = text.match(TIME_RE))) {
+    const v = clockMins(+m[1], +m[2], m[3] || null, date);
+    if (v != null) { at = minsHM(v); text = text.slice(0, m.index).trim(); }
+  }
+  if (!at && (m = text.match(HOUR_RE))) {
+    const v = clockMins(+m[1], 0, m[2], date);
+    if (v != null) { at = minsHM(v); text = text.slice(0, m.index).trim(); }
+  }
+  if (!at && (m = text.match(BARE_RE))) {
+    const v = +m[1] >= 1 && +m[1] <= 12 ? clockMins(+m[1], 0, null, date) : null;
+    if (v != null) { at = minsHM(v); text = text.slice(0, m.index).trim(); }
   }
   if (!text) return { text: String(raw).trim(), at: null, dur: null };
   return { text: text, at: at, dur: dur };
@@ -1800,7 +1828,7 @@ function noteDialog(x, d) {
        saving it deletes it, with an undo, as well as the DELETE button. */
     if (!raw && !isNew) { h.close(); removeLine(x); return; }
     if (!raw) { UI.toast('Nothing to save', { bad: true }); return; }
-    const pz = parseLine(raw);
+    const pz = parseLine(raw, isNew ? d : (x.day || x.date));
     let own = d;
     if (isNew) {
       const list = Rec.all('note', { date: d });
