@@ -1188,22 +1188,28 @@ const IO = {
     const line = el('p');
     const say = () => {
       const c = M.settings;
-      line.innerHTML = !c.url ? 'No link on this device yet. The sheet is set up on the home screen, under DATA.'
-        : c.at ? 'Last synced <b>' + esc(c.at) + '</b>.' : 'Linked, and not synced yet.';
+      line.innerHTML = !c.url ? 'No link on this device yet. Paste it once and every app has it.'
+        : c.at ? 'Linked on this device. Last synced <b>' + esc(c.at) + '</b>.' : 'Linked on this device, and not synced yet.';
     };
     say();
     pane.appendChild(line);
-    const u = el('input', 'mb-input');
-    u.type = 'text'; u.placeholder = 'Paste the sync link'; u.value = cfg.url || '';
-    u.setAttribute('aria-label', 'Sync link');
-    /* on input, not change: pasting and then pressing Sync now closes nothing,
-       but pasting and then pressing DONE would lose a change event */
-    u.oninput = () => { M.set({ url: u.value.trim() }); say(); };
-    pane.appendChild(u);
+    /* The link is kept once per device and every app reads it, so the box
+       only shows on a device that has none. Tom, 2026-09-14: "No need to
+       paste per app." Changing a link already there is the home screen's. */
+    let u = null;
+    if (!cfg.url) {
+      u = el('input', 'mb-input');
+      u.type = 'text'; u.placeholder = 'Paste the sync link';
+      u.setAttribute('aria-label', 'Sync link');
+      /* on input, not change: pressing DONE straight after pasting would lose
+         a change event */
+      u.oninput = () => { M.set({ url: u.value.trim() }); say(); };
+      pane.appendChild(u);
+    }
     const b = el('button', 'mb-btn go mb-press mb-tap', 'Sync now');
     b.style.cssText = 'width:100%;margin-top:var(--s-2,8px)';
     b.onclick = () => {
-      M.set({ url: u.value.trim() });
+      if (u) M.set({ url: u.value.trim() });
       if (!M.ready()) return toast('Paste the link first', { bad: true });
       M.sync(appId).then(say);
     };

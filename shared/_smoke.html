@@ -310,11 +310,24 @@ async function run() {
     box.remove();
     return w > 100;
   })());
-  ok('io: an app gets the sync link and a Sync now button, and none of the setup', (() => {
-    const p = document.createElement('div');
-    IO.syncRow(p, 'smoke');
-    const btns = [].slice.call(p.querySelectorAll('button')).map(b => b.textContent);
-    return !!p.querySelector('input') && btns.length === 1 && /sync now/i.test(btns[0]) && !/script/i.test(p.textContent);
+  ok('io: an app asks for the sync link only on a device without one, and never shows the setup', (() => {
+    const had = IO.mirror.settings.url || '';
+    const draw = () => { const p = document.createElement('div'); IO.syncRow(p, 'smoke'); return p; };
+    IO.mirror.set({ url: '' }); const bare = draw();
+    IO.mirror.set({ url: 'https://example.invalid/exec' }); const linked = draw();
+    IO.mirror.set({ url: had });
+    const btns = p => [].slice.call(p.querySelectorAll('button')).map(b => b.textContent);
+    return !!bare.querySelector('input') && !linked.querySelector('input') &&
+      btns(bare).length === 1 && btns(linked).length === 1 && /sync now/i.test(btns(linked)[0]) &&
+      !/script/i.test(bare.textContent + linked.textContent);
+  })());
+  ok('ui: an app reads its own version off its page', (() => {
+    const m = document.createElement('meta');
+    m.name = 'mb-version'; m.content = '1.4, 2026-09-14';
+    document.head.appendChild(m);
+    const v = UI.version();
+    m.remove();
+    return !!v && v.v === '1.4' && v.date === '2026-09-14' && /14 Sep 2026/.test(v.dateText) && UI.version() === null;
   })());
 
   /* ---- changing part of a row ----

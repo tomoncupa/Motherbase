@@ -585,15 +585,34 @@ const UI = {
   /* ── settings ──
      Two tabs. Look, sound and feel are all "how this app comes across", which
      is one idea and does not need three places to live. */
+  /** This page's own version, from <meta name="mb-version" content="1.4, 2026-09-14">.
+      Tom, 2026-09-14: each app has a version of its own, because one app goes
+      three weeks untouched while another changes three times in a day. The
+      commit that changes an app bumps it (root CLAUDE.md, Commits). */
+  version() {
+    const m = document.querySelector('meta[name="mb-version"]');
+    const hit = m && /^\s*(\d+(?:\.\d+)*)\s*(?:,\s*(\d{4}-\d{2}-\d{2}))?/.exec(m.content || '');
+    if (!hit) return null;
+    const date = hit[2] || '';
+    /* spelled out here, not by the browser: Chrome's British short month is
+       "Sept" and other browsers say "Sep", and the line should read the same
+       on every device */
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const bits = date.split('-').map(Number);
+    const dateText = date ? bits[2] + ' ' + MON[bits[1] - 1] + ' ' + bits[0] : '';
+    return { v: hit[1], date: date, dateText: dateText };
+  },
+
   /** opts.order names the tab ids in the order they should appear.
       opts.append bolts extra drawing onto a tab the foundation owns. */
   settings(appId, extraTabs, opts) {
     css();
     opts = opts || {};
-    const tabs = [];
+    /* The app's own tabs first: they are what make this panel this app's,
+       and APP and DATA are the same everywhere. `order` still wins. */
+    const tabs = (extraTabs || []).slice();
     if (g.Skins || g.Sfx || g.Mobile) tabs.push({ id: 'app', name: 'APP', draw: drawApp.bind(null, appId) });
     if (g.IO) tabs.push({ id: 'data', name: 'DATA', draw: el2 => g.IO.panel(el2, appId) });
-    (extraTabs || []).forEach(t => tabs.push(t));
 
     /* Every app with data gets the short sheet section under DATA: the link
        and a Sync now button. The home screen and STATUS set the sheet up, and
@@ -616,6 +635,7 @@ const UI = {
       t.draw = (pane, h) => { was(pane, h); more(pane, h); };
     });
 
+    const appName = (g.IO && g.IO.spec(appId).name !== appId) ? String(g.IO.spec(appId).name) : String(appId);
     let active = tabs[0] && tabs[0].id;
     return UI.dialog({
       /* the app's own name on it, so it is plain which app these settings change */
@@ -637,6 +657,13 @@ const UI = {
           h.box.insertBefore(bar, body);
         }
         body.appendChild(pane);
+        /* which version of this app is open, under every tab */
+        const ver = UI.version();
+        if (ver) {
+          const p = el('p', null, esc(appName.toUpperCase() + ' ' + ver.v + (ver.dateText ? ', updated ' + ver.dateText : '')));
+          p.style.cssText = 'color:var(--text-muted,#5b6d80);font-size:var(--f-1,12px);margin:var(--s-5,24px) 0 0';
+          body.appendChild(p);
+        }
         show(active);
       },
       actions: [{ label: 'DONE', kind: 'go' }],
@@ -792,10 +819,13 @@ function drawApp(appId, pane) {
     pane.appendChild(UI.row('Volume', null, r));
   }
 
-  if (M) {
-    const canBuzz = !!navigator.vibrate;
-    pane.appendChild(UI.row('Vibrate', canBuzz ? null : 'This device cannot vibrate. iPhones never can.',
-      UI.toggle(M.haptics && canBuzz, on => { M.setHaptics(on); if (on) M.haptic('success'); })));
+  /* Only where it does something. A computer has no motor and an iPhone will
+     not let a web page use one, so on either the row was a switch that did
+     nothing. Tom, 2026-09-14: settings should affect what is relevant. */
+  const canBuzz = !!navigator.vibrate && !!(g.matchMedia && g.matchMedia('(pointer: coarse)').matches);
+  if (M && canBuzz) {
+    pane.appendChild(UI.row('Vibrate', null,
+      UI.toggle(M.haptics, on => { M.setHaptics(on); if (on) M.haptic('success'); })));
   }
 }
 
