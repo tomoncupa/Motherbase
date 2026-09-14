@@ -263,6 +263,10 @@ Two consequences, both written up for Tom:
 
 - `BETA.md` runs the Skool beta from that link: a draft post, install steps,
   what to report, and how to choose the 12 Google Play testers.
+- `PLAY-DRAFTS.md` holds the Play Store listing text and a draft privacy
+  policy, written from what the app does on 2026-09-15. Tom rewrites both; the
+  policy is not legal advice, and it becomes wrong the day accounts, sync or
+  payment arrive.
 - `PUBLISH.md` is the route to Google Play. The one real obstacle: Android's
   ownership file must sit at `https://tomoncupa.github.io/.well-known/`, and
   nothing is served at that root today. Tom either creates a repository named
