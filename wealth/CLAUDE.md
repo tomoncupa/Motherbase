@@ -42,7 +42,7 @@ Three numbers, in this order, at the top of the first screen:
 | | |
 |---|---|
 | **LIQUID** | what is actually in the accounts |
-| **ALLOCATED** | pots, plus every bill due before the next money lands |
+| **ALLOCATED** | pots, plus every bill due in the window he picks, by default before the next money lands |
 | **FREE** | liquid minus allocated. The only number that answers "can I?" |
 
 And under them, **RUNWAY**: how many months he could keep paying himself and
@@ -54,6 +54,30 @@ tells him whether the business is getting safer or not. It is also, in the
 language of the root brief's psychology section, a **competence** signal rather
 than a compliance one: it is evidence the thing is working, not a scolding
 about a budget he missed.
+
+### How far ahead FREE looks
+
+Tom, 2026-09-14: *"Let me adjust the window for what's free to spend."*
+
+FREE holds money back for the bills due between today and a date. That date
+used to be fixed: the next unpaid client payment, or 30 days out if none was
+expected. The default is still that. But a client due tomorrow shrinks the
+window to one day, rent on the 30th stops counting, and free looks biggest in
+exactly the good week this brief warns about.
+
+So "Change how far ahead", under the big number, picks one of: until the next
+client payment, until the end of this month, or the next 7, 14, 30 or 90 days.
+It is the `wealth.freeTo` setting, so it travels in a backup, and anything
+unrecognised reads as the default. Pots count whatever the window. **The
+screen always says in words which window it is using**, and the ALLOCATED tile
+names its end date, because a number whose rules changed without the screen
+saying so is the quiet lie law 1 forbids.
+
+Watched: a ₱100,000 count, rent ₱20,000 on the 17th, internet ₱2,000 on the
+28th, gym ₱1,500 on the 10th and a client due on the 20th, on 14 September.
+All six windows gave what was worked out by hand, from ₱20,000 allocated for
+the next payment to ₱70,500 for 90 days. Picking 30 days from the menu saved
+the setting and moved FREE from ₱80,000 to ₱76,500.
 
 ---
 

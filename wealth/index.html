@@ -933,12 +933,49 @@ function expected(from, to) {
   });
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
-/* When does the next money realistically land? Everything allocated is
-   measured against this, because a bill after your next payment is not a
-   claim on today's cash. */
+/* When does the next money realistically land? A bill after your next payment
+   is not a claim on today's cash, so this is where FREE stops looking unless
+   he picks otherwise. The expected payment itself, or null when none is due
+   in the next 60 days. */
 function nextIn() {
   const soon = expected(Day.today(), Day.shift(Day.today(), 60)).filter(e => !e.paid);
-  return soon.length ? soon[0].date : Day.shift(Day.today(), 30);
+  return soon.length ? soon[0] : null;
+}
+/* How far ahead FREE holds money back for bills.
+   Tom, 2026-09-14: "Let me adjust the window for what's free to spend."
+
+   The next client payment stays the default. But a client paying tomorrow
+   shrinks that to one day and rent on the 30th stops counting, so free looks
+   biggest in exactly the good week the brief warns about. The window is his
+   to pick, a setting so it travels in a backup, and the screen always says
+   in words which one it is using. Pots count whatever the window. */
+const FREE_WINDOWS = [
+  ['next', 'Until the next client payment'],
+  ['month', 'Until the end of this month'],
+  ['7', 'The next 7 days'],
+  ['14', 'The next 14 days'],
+  ['30', 'The next 30 days'],
+  ['90', 'The next 90 days'],
+];
+function freeWindow() {
+  const t = Day.today();
+  let w = String(S.get('freeTo', 'next'));
+  if (!FREE_WINDOWS.some(x => x[0] === w)) w = 'next';
+  if (w === 'month') {
+    const last = new Date(+t.slice(0, 4), +t.slice(5, 7), 0).getDate();
+    const to = t.slice(0, 8) + String(last).padStart(2, '0');
+    return { id: w, to: to, words: 'by the end of the month, ' + Day.short(to) };
+  }
+  if (w === 'next') {
+    const n = nextIn();
+    if (n) return { id: w, to: n.date,
+      words: 'up to your next client payment, ' + (n.est ? 'about ' : '') + Day.short(n.date) };
+    const to = Day.shift(t, 30);
+    return { id: w, to: to,
+      words: 'in the next 30 days, to ' + Day.short(to) + ', because no client payment is expected' };
+  }
+  const to = Day.shift(t, +w);
+  return { id: w, to: to, words: 'in the next ' + w + ' days, to ' + Day.short(to) };
 }
 
 /* ── bills falling due in a window ── */
@@ -963,8 +1000,9 @@ const monthlyFixed = () => bills().reduce((a, b) => a + num(b.amt, 0), 0);
 /* ══ the three numbers ══ */
 function board() {
   const L = liquid();
-  const alloc = potsTotal() + billsDue(Day.today(), nextIn()).reduce((a, b) => a + num(b.bill.amt, 0), 0);
-  return { liquid: L, allocated: alloc, free: L.total - alloc };
+  const win = freeWindow();
+  const alloc = potsTotal() + billsDue(Day.today(), win.to).reduce((a, b) => a + num(b.bill.amt, 0), 0);
+  return { liquid: L, allocated: alloc, free: L.total - alloc, win: win };
 }
 /* Runway: how many months at the current standing cost, if every client left
    tomorrow. The app's real subject — liquid moves for boring reasons, this
@@ -2347,8 +2385,21 @@ function drawScore(m) {
     wrap.appendChild(go);
     sc.appendChild(wrap);
   } else {
-    sc.appendChild(el('div', 'sub', money(L.total) + ' in the accounts, ' + money(b.allocated) +
-      ' already spoken for between now and ' + Day.short(nextIn()) + '.'));
+    sc.appendChild(el('div', 'sub', money(L.total) + ' in the accounts. ' + money(b.allocated) +
+      ' already spoken for: your pots, and bills due ' + b.win.words + '.'));
+    const pick = el('button', 'btn mb-press mb-tap', 'Change how far ahead');
+    pick.type = 'button';
+    pick.onclick = () => menu(pick, FREE_WINDOWS.map(x => ({
+      label: x[1] + (x[0] === b.win.id ? ' (now)' : ''),
+      fn: () => {
+        S.set('freeTo', x[0]);
+        UI.toast('free now holds back bills due <b>' + esc(freeWindow().words) + '</b>');
+        draw();
+      } })), { title: 'HOLD BACK BILLS DUE' });
+    const wrap = el('div', 'rowbtns');
+    wrap.style.justifyContent = 'center';
+    wrap.appendChild(pick);
+    sc.appendChild(wrap);
   }
   c1.appendChild(sc);
 
@@ -2356,7 +2407,7 @@ function drawScore(m) {
   g.appendChild(tile('LIQUID', L.counted ? short(L.total) : '—',
     L.counted ? (L.age > STALE ? '<span class="stale">counted ' + L.age + ' days ago</span>' : 'counted ' + (L.age ? L.age + ' days ago' : 'today')) : 'no counts yet',
     L.age > STALE ? 'warn' : ''));
-  g.appendChild(tile('ALLOCATED', short(b.allocated), 'pots and bills due'));
+  g.appendChild(tile('ALLOCATED', short(b.allocated), 'pots, and bills due to ' + Day.short(b.win.to)));
   g.appendChild(tile('FREE', L.counted ? short(b.free) : '—', 'what is really yours',
     b.free < 0 ? 'bad' : ''));
   c1.appendChild(g);
