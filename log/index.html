@@ -110,7 +110,13 @@ main.dragging{cursor:grabbing;user-select:none}
 .heads .c.c-d{flex:1 1 auto;min-width:calc(var(--s-10) * 2)}
 /* A day column's heading drags sideways to rearrange. */
 .heads .c[data-x]{cursor:grab}
-.heads .c.drop{background:var(--surface-3);color:var(--text-1)}
+.heads .c.lift{opacity:.4}
+.heads .c.drop-l::before,.heads .c.drop-r::after{content:'';position:absolute;top:0;bottom:0;width:var(--s-1);background:var(--accent)}
+.heads .c.drop-l::before{left:0}
+.heads .c.drop-r::after{right:0}
+.ghost{position:fixed;z-index:50;pointer-events:none;padding:var(--s-2) var(--s-3);background:var(--surface-3);
+  color:var(--text-1);border:var(--border-width) solid var(--accent);border-radius:var(--radius-sm);box-shadow:var(--e-3);
+  font-family:var(--font-display);font-size:var(--f-2);font-weight:var(--w-bold);letter-spacing:var(--track-cap);white-space:nowrap}
 /* The drag handle on a column heading's right edge, as in Sheets. A
    double-click puts the width back. */
 .rz{position:absolute;top:0;bottom:0;right:0;width:var(--s-2);cursor:col-resize;z-index:5}
@@ -775,6 +781,68 @@ function startDate() {
 
 const WEEK_STARTS = [1, 8, 15, 22, 29];
 
+/* ── what a day is called ──
+   Tom, 2026-09-14: "I want to see things like 2026, M9, Week 37, Day 256",
+   configured in Settings, since sometimes just "Day 256" or "Week 37" or
+   "Week 37/52" or "Week 37 Day 2" is what he wants. So a label is built from
+   parts he switches on, always in this order: the year, the month's number,
+   the week of the year with the day's place in that week, the day of the
+   year, then the date in words. "Out of" adds the totals.
+
+   WEEKS OF THE YEAR count from January 1 in sevens by default, the same way
+   his week groups count from the 1st of a month, so week 1 is January 1 to 7
+   and Day 2 of a week is its second day. Settings can switch to ISO weeks
+   instead: Monday to Sunday, week 1 holding the year's first Thursday, Day 1
+   a Monday. Either way a 365-day year has 53 weeks, the last one short. */
+const LABEL_PARTS = [
+  { id: 'yr', name: 'Year' },
+  { id: 'mn', name: 'Month number' },
+  { id: 'wk', name: 'Week of year' },
+  { id: 'wn', name: 'Day of week' },
+  { id: 'dy', name: 'Day of year' },
+  { id: 'wd', name: 'Weekday' },
+  { id: 'dt', name: 'Date' },
+  { id: 'mo', name: 'Month' },
+];
+const labelParts = () => {
+  const v = S.get('dlabel', null);
+  const ok = Array.isArray(v) ? LABEL_PARTS.map(p => p.id).filter(id => v.indexOf(id) > -1) : [];
+  return ok.length ? ok : ['wd', 'dt'];
+};
+const labelTotals = () => !!S.get('dltot', false);
+const weekMode = () => S.get('wkmode', 'jan1') === 'iso' ? 'iso' : 'jan1';
+const labelKey = () => labelParts().join() + '|' + labelTotals() + '|' + weekMode();
+const yearLen = y => Day.diff(y + '-12-31', y + '-01-01') + 1;
+function isoWeek(d) {
+  const t = new Date(d + 'T12:00:00'), wd = (t.getDay() + 6) % 7;
+  t.setDate(t.getDate() - wd + 3);
+  const jan4 = new Date(t.getFullYear(), 0, 4, 12);
+  return { week: 1 + Math.round(((t - jan4) / 86400000 - 3 + (jan4.getDay() + 6) % 7) / 7), year: t.getFullYear() };
+}
+function dayLabel(d) {
+  const parts = labelParts(), tot = labelTotals(), has = id => parts.indexOf(id) > -1;
+  const y = +d.slice(0, 4), doy = Day.diff(d, y + '-01-01') + 1, out = [];
+  if (has('yr')) out.push(String(y));
+  if (has('mn')) out.push('M' + +d.slice(5, 7));
+  let week = '';
+  if (weekMode() === 'iso') {
+    const w = isoWeek(d);
+    if (has('wk')) week = 'Week ' + w.week + (tot ? '/' + isoWeek(w.year + '-12-28').week : '');
+    if (has('wn')) week += (week ? ' ' : '') + 'Day ' + ((Day.dow(d) + 6) % 7 + 1) + (tot ? '/7' : '');
+  } else {
+    if (has('wk')) week = 'Week ' + Math.ceil(doy / 7) + (tot ? '/' + Math.ceil(yearLen(y) / 7) : '');
+    if (has('wn')) week += (week ? ' ' : '') + 'Day ' + ((doy - 1) % 7 + 1) + (tot ? '/7' : '');
+  }
+  if (week) out.push(week);
+  if (has('dy')) out.push('Day ' + doy + (tot ? '/' + yearLen(y) : ''));
+  const words = [];
+  if (has('wd')) words.push(Day.label(d, { weekday: 'short' }));
+  if (has('dt')) words.push(String(+d.slice(8)));
+  if (has('mo')) words.push(MONTHS[+d.slice(5, 7) - 1]);
+  if (words.length) out.push(words.join(' '));
+  return out.join(', ');
+}
+
 function buildTimeline(first, last) {
   const days = Day.range(first, last);
   const span = (from, to, extra) => {
@@ -808,7 +876,7 @@ function buildTimeline(first, last) {
   }
 
   const dayList = days.map(d => {
-    const lab = Day.label(d, { weekday: 'short' }) + ' ' + +d.slice(8);
+    const lab = dayLabel(d);
     const month = d.slice(8) === '01' || d === first ? MONTHS[+d.slice(5, 7) - 1] + ' ' + d.slice(0, 4) : '';
     return span(d, d, { label: lab, month });
   });
@@ -977,7 +1045,12 @@ function render(force) {
   $('state').textContent = !lineCount ? 'No journal lines' : !shown().length ? 'No bullet types selected' : '';
 }
 
+/* Every different day name on the timeline, so the date column is as wide
+   as the widest one the chosen label actually makes. */
+let measuredLabel = '';
+const labelSamples = () => T ? [...new Set(T.dayList.map(p => p.label))] : ['Wed 30'];
 function measure() {
+  measuredLabel = labelKey();
   const pr = $('probe');
   const h = (cls, html) => { pr.innerHTML = '<div class="' + cls + '">' + html + '</div>'; return pr.firstChild.offsetHeight; };
   const hd = '<span class="lab">Wed 30</span><input class="sum" value="Line">';
@@ -987,7 +1060,7 @@ function measure() {
   M.small = pr.querySelector('.hd').offsetHeight;
   const widest = (ctx) => {
     pr.innerHTML = '<div class="cal ' + ctx + '"><div class="day"><div class="xd"><div class="hd" style="display:block">' +
-      ['Wed 30', 'Thu 28', 'Mon 31', 'Sat 22', 'Tue 20', 'Fri 29', 'Sun 30'].map(l => '<span class="lab" style="display:inline-block">' + l + '</span>').join('') +
+      labelSamples().map(l => '<span class="lab" style="display:inline-block">' + esc(l) + '</span>').join('') +
       '</div></div></div></div>';
     return Math.ceil(Math.max.apply(null, [...pr.querySelectorAll('.lab')].map(s => s.getBoundingClientRect().width)));
   };
@@ -1280,11 +1353,25 @@ function toggleX(k) {
   v[k] = !isXOn(k);
   S.set('xvis', v);
 }
-function moveCol(k, dir) {
-  const o = xOrder(), i = o.indexOf(k), j = i + dir;
-  if (i < 0 || j < 0 || j >= o.length) return;
-  o.splice(j, 0, o.splice(i, 1)[0]);
-  S.set('xorder', o);
+/* Every column this view can show, as switches, in one box. */
+function columnsDialog() {
+  const L = LEVELS[level];
+  UI.dialog({
+    title: 'COLUMNS', width: 560,
+    body: b => {
+      const grp = UI.el('div', 'mb-group');
+      if (L.cols.length) {
+        const s = UI.el('div', 'opts');
+        L.cols.forEach(k => s.appendChild(toggleEl(COL_NAMES[k], hiddenSide(L.id).indexOf(k) < 0, () => toggleSide(L.id, k))));
+        grp.appendChild(UI.row('In ' + L.name, 'The bigger units beside the days', s));
+      }
+      const x = UI.el('div', 'opts');
+      xKeys().forEach(k => x.appendChild(toggleEl(colName(k), isXOn(k), () => toggleX(k))));
+      grp.appendChild(UI.row('Day columns', 'Your STATUS entries beside the days', x));
+      b.appendChild(grp);
+    },
+    actions: [{ label: 'DONE', kind: 'go' }],
+  });
 }
 function renameCol(k) {
   let inp = null;
@@ -1305,22 +1392,16 @@ function renameCol(k) {
     actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: h => { save(h); return false; } }],
   });
 }
+/* Tom, 2026-09-14: "Right click menu is too populated." So the menu is about
+   the column clicked, and every other column lives in one box behind
+   "Show or hide columns". Moving is a drag, as in Sheets. */
 function columnsMenu(e, head) {
-  const L = LEVELS[level], items = [];
-  L.cols.forEach(k => items.push({
-    label: (hiddenSide(L.id).indexOf(k) > -1 ? 'Show ' : 'Hide ') + COL_NAMES[k] + ' in ' + L.name,
-    fn: () => toggleSide(L.id, k),
-  }));
-  if (L.cols.length) items.push('-');
-  xKeys().forEach(k => items.push({ label: (isXOn(k) ? 'Hide ' : 'Show ') + colName(k), fn: () => toggleX(k) }));
-  const k = head && head.dataset.x;
-  if (k) {
-    items.push('-');
-    items.push({ label: 'Rename', fn: () => renameCol(k) });
-    items.push({ label: 'Move left', fn: () => moveCol(k, -1) });
-    items.push({ label: 'Move right', fn: () => moveCol(k, 1) });
-  }
-  UI.menu(e.clientX, e.clientY, items, { title: 'Columns' });
+  const items = [], side = head && head.dataset.side, k = head && head.dataset.x;
+  if (side) items.push({ label: 'Hide column', fn: () => toggleSide(LEVELS[level].id, side) });
+  if (k && k !== 'd') items.push({ label: 'Hide column', fn: () => toggleX(k) });
+  if (k) items.push({ label: 'Rename', fn: () => renameCol(k) });
+  items.push({ label: 'Show or hide columns', fn: columnsDialog });
+  UI.menu(e.clientX, e.clientY, items, { title: head ? head.textContent : 'Columns' });
 }
 
 /* A day column's heading drags sideways to a new place. */
@@ -1329,7 +1410,7 @@ $('cal').addEventListener('pointerdown', e => {
   const head = e.target.closest('.heads .c[data-x]');
   if (!head || e.target.closest('.rz') || e.button !== 0) return;
   e.stopPropagation();
-  mv = { k: head.dataset.x, x: e.clientX, moved: false, over: null };
+  mv = { k: head.dataset.x, x: e.clientX, moved: false, over: null, head: head, ghost: null };
 }, true);
 
 /* ══════════════════════ THE FILTER BAR ══════════════════════ */
@@ -1423,6 +1504,22 @@ function drawLogSettings(pane) {
   });
   grp.appendChild(UI.row('Side columns', 'The bigger units shown in each view', side));
 
+  /* What each day is called, with today's name shown as it will read. */
+  const labels = opts(), preview = UI.el('div', 'line k');
+  const showPreview = () => { preview.textContent = 'Today reads: ' + dayLabel(TODAY); };
+  LABEL_PARTS.forEach(pt => labels.appendChild(toggleEl(pt.name, labelParts().indexOf(pt.id) > -1, on => {
+    setInList('dlabel', LABEL_PARTS.map(p => p.id), labelParts(), pt.id, on);
+    showPreview();
+  })));
+  labels.appendChild(toggleEl('Out of', labelTotals(), on => { S.set('dltot', !!on); showPreview(); }));
+  labels.appendChild(preview);
+  showPreview();
+  grp.appendChild(UI.row('Day label', 'The parts each day is named with', labels));
+
+  grp.appendChild(UI.row('Weeks of the year', 'January 1 in sevens, or Monday to Sunday',
+    UI.segmented([{ id: 'jan1', name: 'From January 1' }, { id: 'iso', name: 'Monday start' }], weekMode(),
+      v => { S.set('wkmode', v); showPreview(); })));
+
   grp.appendChild(UI.row('Text size', 'Dates, bullets and blocks',
     UI.segmented([{ id: 'normal', name: 'Normal' }, { id: 'large', name: 'Large' }, { id: 'larger', name: 'Larger' }],
       S.get('text', 'large'), v => { S.set('text', v); applyText(); measure(); applySizes(); })));
@@ -1470,12 +1567,22 @@ window.addEventListener('pointermove', e => {
   }
   if (mv) {
     if (!mv.moved && Math.abs(e.clientX - mv.x) < 6) return;
-    mv.moved = true;
-    document.body.classList.add('moving');
+    /* As in Sheets: the heading being moved fades where it was, a copy of
+       it follows the pointer, and a bar shows where it will land. */
+    if (!mv.moved) {
+      mv.moved = true;
+      document.body.classList.add('moving');
+      mv.head.classList.add('lift');
+      mv.ghost = UI.el('div', 'ghost', esc(mv.head.textContent));
+      document.body.appendChild(mv.ghost);
+    }
+    mv.ghost.style.left = (e.clientX + 12) + 'px';
+    mv.ghost.style.top = (e.clientY + 12) + 'px';
     const over = [...document.querySelectorAll('.heads .c[data-x]')].find(c => { const r = c.getBoundingClientRect(); return e.clientX >= r.left && e.clientX < r.right; });
-    document.querySelectorAll('.heads .c.drop').forEach(c => { if (c !== over) c.classList.remove('drop'); });
-    if (over && over.dataset.x !== mv.k) over.classList.add('drop');
-    mv.over = over ? { k: over.dataset.x, after: e.clientX > over.getBoundingClientRect().left + over.getBoundingClientRect().width / 2 } : null;
+    const after = over ? e.clientX > over.getBoundingClientRect().left + over.getBoundingClientRect().width / 2 : false;
+    document.querySelectorAll('.heads .c.drop-l, .heads .c.drop-r').forEach(c => c.classList.remove('drop-l', 'drop-r'));
+    if (over && over.dataset.x !== mv.k) over.classList.add(after ? 'drop-r' : 'drop-l');
+    mv.over = over ? { k: over.dataset.x, after: after } : null;
   }
 });
 window.addEventListener('pointerup', () => {
@@ -1491,7 +1598,9 @@ window.addEventListener('pointerup', () => {
     const m = mv;
     mv = null;
     document.body.classList.remove('moving');
-    document.querySelectorAll('.heads .c.drop').forEach(c => c.classList.remove('drop'));
+    if (m.ghost) m.ghost.remove();
+    m.head.classList.remove('lift');
+    document.querySelectorAll('.heads .c.drop-l, .heads .c.drop-r').forEach(c => c.classList.remove('drop-l', 'drop-r'));
     if (m.moved && m.over && m.over.k !== m.k) {
       const o = xOrder().filter(k => k !== m.k);
       let j = o.indexOf(m.over.k);
@@ -1710,7 +1819,7 @@ Mobile.hold($('cal'), e => {
   if (e.type !== 'contextmenu' && e.pointerType === 'mouse') return;
   heldAt = Date.now();
   const head = e.target.closest('.heads .c');
-  if (head || e.target.closest('.heads')) { columnsMenu(e, head && head.dataset.x ? head : null); return; }
+  if (head || e.target.closest('.heads')) { columnsMenu(e, head || null); return; }
   const bl = e.target.closest('.bl');
   if (bl) {
     const x = bulletOf(bl);
@@ -1794,6 +1903,7 @@ function rebuild() {
   indexJournal();
   indexGraph();
   T = buildTimeline(startDate(), TODAY);
+  if (labelKey() !== measuredLabel) measure();
   dayCache = new Map();
   applyColW();
   const was = level;

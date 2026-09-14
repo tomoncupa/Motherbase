@@ -208,6 +208,9 @@ restore nothing.
 | Every STATUS measure is a day column, read off STATUS's field list, so a measure added in STATUS appears here unasked; plus Calories and Protein from meals and Spent from purchases. Each day's figure follows STATUS's own rule (last, average or total, food-label amounts included) and its tile's formatting. Supersedes the separate mood and energy averages. | Tom, 2026-09-14 |
 | What got done, Mood and Energy show until hidden; every other column starts hidden and is shown by right-clicking a heading or in Settings. Earlier mood and energy settings carry over. | Tom asked to see them sometimes, Claude chose the defaults, 2026-09-14 |
 | Mouse 4 zooms out and Mouse 5 zooms in. Supersedes the reverse. | Tom, 2026-09-14 |
+| A day's name is built in Settings from parts: year, month number (M9), week of year, day of week, day of year, weekday, date, month, with "Out of" adding totals. Always in that order, numbers first, joined with commas: "2026, M9, Week 37, Day 256". Default stays "Sun 13". A preview shows today's name. | Tom, 2026-09-14 |
+| Weeks of the year count from January 1 in sevens by default, matching his month week groups; Settings switches to ISO weeks (Monday start). Either way a 365-day year has 53 weeks, so the total reads 53, not 52. | Claude, 2026-09-14 |
+| The column right click is only about the column clicked: Hide column, Rename, and "Show or hide columns", which opens one box of switches. Move left and right are gone; moving is the heading drag, which now fades the heading, carries a copy under the pointer and shows a bar where it will land. Supersedes the long menu. | Tom, 2026-09-14 |
 
 ## Found in STATUS, not fixed
 
