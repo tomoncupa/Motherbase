@@ -381,6 +381,52 @@
   f('gata', 'Coconut milk', '', 'extras', [60, null, 1.4, 2, 14], [['¼ cup', 1]], 'est', ['gata', 'kakang gata', 'coconut milk']);
   f('whey', 'Protein shake', '', 'extras', [30, null, 24, 3, 1.5], [['1 scoop', 1], ['2 scoops', 2]], 'est', ['whey', 'protein powder', 'protein shake'], { note: 'With water. Check your tub’s label.' });
 
+  /* ── everyday foods the first list missed ──────────────────────────
+     Added 2026-09-15 so the beta's first "not found" complaints are about
+     rarer food. All estimates, except oatmeal, a plain reference food.    */
+  f('galunggong', 'Fried galunggong', '', 'ulam', [80, null, 16, 0, 8], [['1 fish', 1], ['2 fish', 2]], 'est', ['galunggong', 'gg', 'round scad', 'pritong isda', 'fried fish']);
+  f('tinapa', 'Tinapa', '', 'ulam', [60, null, 14, 0, 5], [['1 fish', 1], ['2 fish', 2]], 'est', ['tinapa', 'smoked fish']);
+  f('ginataang-gulay', 'Ginataang gulay', '', 'ulam', [200, null, 5, 16, 18], cup, 'est', ['ginataan', 'ginataang kalabasa', 'ginataang sitaw', 'gata']);
+  f('paksiw-isda', 'Paksiw na isda', '', 'ulam', [200, null, 26, 4, 8], cup, 'est', ['paksiw', 'paksiw na bangus', 'fish paksiw']);
+  f('escabeche', 'Escabeche', '', 'ulam', [200, null, 22, 20, 12], cup, 'est', ['escabeche', 'sweet and sour fish']);
+  f('sweet-sour-pork', 'Sweet and sour pork', '', 'ulam', [200, null, 18, 30, 20], cup, 'est', ['sweet and sour pork', 'sweet sour pork']);
+  f('embutido', 'Embutido', '', 'ulam', [80, null, 10, 6, 14], [['2 slices', 1], ['4 slices', 2]], 'est', ['embotido', 'embutido', 'filipino meatloaf']);
+  f('okoy', 'Okoy', '', 'street', [80, null, 6, 18, 12], [['1 pc', 1], ['2 pcs', 2]], 'est', ['ukoy', 'okoy', 'shrimp fritter']);
+  f('tokwat-baboy', 'Tokwa’t baboy', '', 'ulam', [200, null, 22, 6, 20], cup, 'est', ['tokwat baboy', 'tokwa baboy', 'tokwa at baboy']);
+  f('pancit-malabon', 'Pancit Malabon', '', 'noodles', [300, null, 18, 58, 16], one('1 plate'), 'est', ['malabon', 'pancit malabon']);
+  f('oatmeal', 'Oatmeal (cooked)', '', 'basics', [234, 166, 5.9, 28, 3.6], [['1 cup', 1], ['½ cup', 0.5]], 'ref', ['oatmeal', 'oats', 'quaker'], { note: 'Cooked with water, no sugar.' });
+
+  f('pan-de-coco', 'Pan de coco', '', 'bread', [60, null, 4, 32, 7], [['1 pc', 1], ['2 pcs', 2]], 'est', ['pan de coco', 'coconut bread']);
+  f('hopia', 'Hopia', '', 'bread', [50, null, 3, 26, 7], [['1 pc', 1], ['2 pcs', 2]], 'est', ['hopia', 'hopia mongo', 'hopia ube', 'hopiang baboy']);
+  f('polvoron', 'Polvoron', '', 'street', [20, null, 1.5, 11, 5], [['1 pc', 1], ['3 pcs', 3]], 'est', ['polvoron']);
+  f('ube-halaya', 'Ube halaya', '', 'street', [80, null, 2, 40, 6], [['½ cup', 1]], 'est', ['ube jam', 'halayang ube', 'ube halaya']);
+  f('buko-pandan', 'Buko pandan', '', 'street', [150, null, 3, 36, 10], one('1 cup'), 'est', ['buko pandan']);
+  f('cassava-cake', 'Cassava cake', '', 'street', [100, null, 2, 46, 9], one('1 slice'), 'est', ['cassava cake', 'bibingkang kamoteng kahoy', 'kamoteng kahoy']);
+  f('mais-con-yelo', 'Mais con yelo', '', 'street', [300, null, 5, 60, 6], one('1 glass'), 'est', ['mais con yelo', 'corn ice']);
+  f('ice-candy', 'Ice candy', '', 'street', [100, null, 1, 22, 1], [['1 pc', 1], ['2 pcs', 2]], 'est', ['ice candy', 'ice pop', 'ice buko']);
+  f('cake-slice', 'Cake (1 slice)', '', 'bread', [100, null, 5, 50, 18], one('1 slice'), 'est', ['goldilocks', 'red ribbon', 'chocolate cake', 'black forest', 'mocha cake', 'cake', 'birthday cake']);
+  f('budget-burger', 'Budget burger', '', 'fastfood', [90, null, 8, 26, 10], [['1 pc', 1], ['Buy 1 take 1', 2]], 'est', ['minute burger', 'angels burger', 'angel’s burger', 'buy one take one', 'b1t1', 'burger']);
+
+  f('gulaman', 'Sago’t gulaman', '', 'drinks', [350, null, 0, 40, 0], [['1 glass', 1], ['Large', 1.5]], 'est', ['sagot gulaman', 'sago gulaman', 'samalamig', 'palamig', 'gulaman']);
+  f('calamansi-juice', 'Calamansi juice', '', 'drinks', [250, null, 0, 26, 0], one('1 glass'), 'est', ['calamansi', 'kalamansi juice', 'calamansi juice']);
+  f('energy-drink', 'Energy drink', '', 'drinks', [350, null, 0, 40, 0], one('1 bottle'), 'est', ['cobra', 'sting', 'extra joss', 'red bull', 'energy drink'], { note: PACK });
+  f('soy-milk', 'Soy milk', '', 'drinks', [300, null, 7, 24, 5], one('1 bottle'), 'est', ['vitamilk', 'soya', 'soy milk'], { note: PACK });
+  f('canned-coffee', 'Canned coffee', '', 'drinks', [240, null, 3, 24, 3], one('1 can'), 'est', ['nescafe can', 'kopiko lucky day', 'bottled coffee', 'canned coffee'], { note: PACK });
+  f('pk-cornick', 'Cornick (small pack)', '', 'packaged', [30, null, 2, 18, 7], [['1 small pack', 1], ['1 big pack', 3]], 'est', ['boy bawang', 'cornick', 'corn nuts'], { note: PACK });
+  f('pk-cracker-nuts', 'Cracker nuts (small pack)', '', 'packaged', [30, null, 5, 12, 12], [['1 small pack', 1], ['1 big pack', 3]], 'est', ['nagaraya', 'cracker nuts', 'coated peanuts'], { note: PACK });
+
+  const KFC = 'KFC';
+  f('kfc-chicken', 'Original Recipe Chicken (1 pc)', KFC, 'fastfood', [120, null, 22, 8, 18], [['1 pc', 1], ['2 pcs', 2]], 'est', ['kfc', 'kentucky', 'fried chicken']);
+  f('kfc-gravy', 'Gravy', KFC, 'fastfood', [30, null, 0.5, 3, 1], one('1 cup'), 'est', ['kfc gravy', 'gravy']);
+  f('kfc-bowl', 'Famous Bowl', KFC, 'fastfood', [300, null, 20, 60, 28], one('1 bowl'), 'est', ['famous bowl', 'kfc bowl']);
+  mix('kfc-c1', 'Chicken with Rice (1 pc)', KFC, 'fastfood', [['kfc-chicken', 1], ['rice', 1], ['kfc-gravy', 1]], one('1 meal'), ['kfc meal', 'kfc chicken rice']);
+  const SH = 'Shakey’s';
+  f('sh-pizza', 'Pizza (1 slice)', SH, 'fastfood', [100, null, 11, 28, 11], [['1 slice', 1], ['2 slices', 2]], 'est', ['shakeys', 'managers choice', 'pizza']);
+  f('sh-mojos', 'Mojos', SH, 'fastfood', [200, null, 6, 50, 22], [['Regular', 1], ['Large', 1.6]], 'est', ['mojos', 'mojo potatoes', 'shakeys potatoes']);
+  f('pc-fries', 'Flavored Fries', 'Potato Corner', 'fastfood', [120, null, 4, 44, 18], [['Regular', 1], ['Large', 1.6], ['Mega', 2.4]], 'est', ['potato corner', 'flavored fries', 'cheese fries', 'bbq fries']);
+  f('mx-chicken', 'Fried Chicken (¼ chicken)', 'Max’s', 'fastfood', [180, null, 40, 4, 26], [['¼ chicken', 1], ['½ chicken', 2], ['Whole', 4]], 'est', ['maxs', 'max restaurant', 'max chicken', 'max fried chicken']);
+  f('tt-bento', 'Chicken Teriyaki Bento', 'Tokyo Tokyo', 'fastfood', [350, null, 26, 80, 16], one('1 meal'), 'est', ['tokyo tokyo', 'teriyaki', 'bento', 'beef misono']);
+
   /* ── lists the app uses ─────────────────────────────────────────────── */
 
   // Shown before anything is typed, until the person has recents of their own.
@@ -388,8 +434,8 @@
     'adobo-chicken', 'sinigang-pork', 'tapsilog', 'pk-canton', 'banana', 'milktea'];
 
   // The brand chips, in the order a Filipino would look for them.
-  const BRANDS = ['Jollibee', 'Mang Inasal', 'McDonald’s', 'Chowking', 'Andok’s',
-    'Greenwich', '7-Eleven', 'Lawson', 'Ministop', 'S&R'];
+  const BRANDS = ['Jollibee', 'Mang Inasal', 'McDonald’s', 'Chowking', 'KFC', 'Andok’s',
+    'Greenwich', 'Shakey’s', 'Max’s', 'Potato Corner', 'Tokyo Tokyo', '7-Eleven', 'Lawson', 'Ministop', 'S&R'];
 
   const CATS = {
     rice: 'Rice and silog', ulam: 'Ulam', noodles: 'Noodles and soup', street: 'Street food and merienda',
