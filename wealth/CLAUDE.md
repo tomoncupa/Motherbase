@@ -373,6 +373,17 @@ ever made, when they started, what they are worth, how late they usually are,
 what share of income they represent, and for a session client every session
 delivered.
 
+Clients have their own tab, **CLIENTS**, set by Tom on 2026-09-14: every client
+with where they stand today (the oldest unpaid date, or the next one coming),
+what is due this month and how much of it is paid, what is owed, and the
+session tracker. `+` on that tab adds a client by name and opens their sheet.
+MONEY IN stays about money arriving: owed, next, received.
+
+**Card titles say what is on the card, not how to feel about it.** The card
+of bills that renew on their own was called STILL PAYING FOR, and Tom, same
+day, heard it as a complaint about money he chose to spend. It is
+SUBSCRIPTIONS AND MEMBERSHIPS now.
+
 ---
 
 ## Import, and what it took

@@ -2169,7 +2169,7 @@ function drawMoneyTab(pane) {
 
 /* ══════════════════════════ the screens ══════════════════════════ */
 let TAB = 'score';
-const TABS = [['score', 'SCORE'], ['in', 'MONEY IN'], ['out', 'MONEY OUT'],
+const TABS = [['score', 'SCORE'], ['in', 'MONEY IN'], ['clients', 'CLIENTS'], ['out', 'MONEY OUT'],
               ['spend', 'SPENDING'], ['pots', 'POTS'], ['accounts', 'ACCOUNTS']];
 
 function card(title, cls) {
@@ -2351,7 +2351,7 @@ function drawIn(m) {
   const c0 = card('OWED TO YOU');
   if (!late.length) {
     c0.appendChild(el('div', 'empty', clients().length ? 'Nobody is late. Everything expected so far has arrived.'
-      : 'No clients yet. Press <b>+</b> to add one, with what they pay and how often.'));
+      : 'No clients yet. Add them under <b>CLIENTS</b>, with what they pay and how often.'));
   } else {
     const list = el('div', 'list');
     late.forEach(e => {
@@ -2369,7 +2369,7 @@ function drawIn(m) {
   /* Coming up. */
   const soon = exp.filter(e => !e.paid && !e.late).slice(0, 12);
   const c1 = card('EXPECTED NEXT');
-  if (!soon.length) c1.appendChild(el('div', 'empty', 'Nothing dated is coming up. Clients paid by the session have no date until the block is finished, so they show under SESSIONS instead.'));
+  if (!soon.length) c1.appendChild(el('div', 'empty', 'Nothing dated is coming up. Clients paid by the session have no date until the block is finished, so they show under <b>CLIENTS</b> instead.'));
   else {
     const list = el('div', 'list');
     soon.forEach(e => {
@@ -2380,6 +2380,111 @@ function drawIn(m) {
     c1.appendChild(list);
   }
   m.appendChild(c1);
+
+  /* Everything that has arrived. */
+  const c3 = card('RECEIVED', 'full');
+  const got = paidRows({ from: Day.shift(Day.today(), -120) }).sort((a, b) => b.date.localeCompare(a.date));
+  if (!got.length) c3.appendChild(el('div', 'empty', 'Nothing recorded yet. Press <b>+</b> to log a payment or a one-off.'));
+  else {
+    const list = el('div', 'list');
+    got.slice(0, 40).forEach(p => {
+      const c = p.client ? Rec.get('client', null, p.client) : null;
+      const r = itemRow(c ? c.name : (p.note || 'One-off'),
+        Day.short(p.date) + ' · ' + esc(acctName(p.acct)) + (c && p.note ? ' · ' + esc(p.note) : ''),
+        money(num(p.amt, 0)), 'in');
+      r.onclick = () => paidSheet(p);
+      list.appendChild(r);
+    });
+    c3.appendChild(list);
+  }
+  m.appendChild(c3);
+}
+/* How far off a day is, in words. One function, because "in 0 days" and
+   "in 1 days" are the kind of thing that comes back one screen at a time. */
+function away(date) {
+  const n = Day.diff(date, Day.today());
+  if (n === 0) return 'today';
+  if (n === 1) return 'tomorrow';
+  if (n === -1) return 'yesterday';
+  return n > 0 ? 'in ' + n + ' days' : n * -1 + ' days ago';
+}
+const acctName = id => (Rec.get('acct', null, id) || {}).name || 'unknown account';
+
+/* ── CLIENTS ──
+   Tom, 2026-09-14: "Can I get a dedicated clients tab?" Everything about a
+   client in one place: who they are, how they pay, where each one stands
+   today, and the session tracker for the ones paid by the session. MONEY IN
+   stays about money arriving: what is owed, what is next, what came in. */
+function drawClients(m) {
+  const today = Day.today();
+  const exp = expected(Day.shift(today, -90), Day.shift(today, 70));
+  const late = {}, next = {};
+  exp.forEach(e => {
+    const id = e.client.id;
+    if (e.late && (!late[id] || e.date < late[id].date)) late[id] = e;
+    if (!e.paid && !e.late && (!next[id] || e.date < next[id].date)) next[id] = e;
+  });
+  /* Where a client stands, in a few words on their own row: the oldest date
+     still unpaid, or else the next one coming. */
+  const standing = c => {
+    if (c.status === 'done') return '';
+    if (late[c.id]) return ' · <b>late since ' + esc(Day.short(late[c.id].date)) + '</b>';
+    if (next[c.id]) return ' · next ' + esc(Day.short(next[c.id].date));
+    return '';
+  };
+
+  const all = clients(), active = all.filter(c => c.status !== 'done');
+  const due = exp.filter(e => monthOf(e.date) === monthOf(today));
+  const owed = exp.filter(e => e.late).reduce((t, e) => t + num(e.amt, 0), 0);
+  const lateCount = Object.keys(late).length;
+  const c0 = card(null, 'full');
+  const g = el('div', 'grid3');
+  g.appendChild(tile('ACTIVE', String(active.length),
+    all.length > active.length ? (all.length - active.length) + ' finished' : (active.length === 1 ? 'client' : 'clients')));
+  g.appendChild(tile('DUE THIS MONTH', short(due.reduce((t, e) => t + num(e.amt, 0), 0)),
+    due.filter(e => e.paid).length + ' of ' + due.length + ' paid'));
+  g.appendChild(tile('OWED', owed ? short(owed) : 'Nothing',
+    owed ? 'across ' + lateCount + ' client' + (lateCount === 1 ? '' : 's') : 'everyone is up to date',
+    owed ? 'warn' : 'good'));
+  c0.appendChild(g);
+  m.appendChild(c0);
+
+  /* Clients, with everything about them. Set by Tom. */
+  const c2 = card('EVERY CLIENT', 'full');
+  const cl = clients();
+  if (!cl.length) c2.appendChild(el('div', 'empty', 'No clients yet. Press <b>+</b> to add one, then say what they pay and how often.'));
+  else {
+    const yearIn = paidRows({ from: Day.shift(Day.today(), -365) });
+    const total = yearIn.reduce((a, p) => a + num(p.amt, 0), 0);
+    const list = el('div', 'list');
+    /* Biggest share first, because concentration is the thing this list is
+       for and a list sorted by name buries it. */
+    const ranked = cl.map(c => {
+      const mine = yearIn.filter(p => p.client === c.id);
+      const got = mine.reduce((a, p) => a + num(p.amt, 0), 0);
+      return { c: c, n: mine.length, got: got, share: total ? got / total : 0 };
+    }).sort((a, b) => b.got - a.got);
+    ranked.forEach((x, i) => {
+      const c = x.c;
+      /* A package client has no fixed rate, so a rate would print as zero.
+         Their packages are priced one at a time. */
+      const r = itemRow(c.name + (c.status === 'done' ? ' (finished)' : ''),
+        (isPack(c) ? 'Paid ' + cycleWord(c) : money(num(c.rate, 0)) + ' ' + cycleWord(c)) +
+        ' · ' + x.n + (x.n === 1 ? ' payment · ' : ' payments · ') +
+        (x.share * 100).toFixed(0) + '% of the year' + standing(c),
+        money(x.got), late[c.id] && c.status !== 'done' ? 'late' : '');
+      if (c.status === 'done') r.classList.add('dim');
+      r.onclick = () => clientSheet(c);
+      const bar = el('div', 'bar c' + (1 + (i % 6)));
+      bar.appendChild(el('i')).style.width = (x.share * 100).toFixed(1) + '%';
+      list.appendChild(stack(r, bar));
+    });
+    c2.appendChild(list);
+    /* Law 5: show the number, never the verdict. */
+    c2.appendChild(el('div', 'note', 'Share of the last twelve months, biggest client first. No opinion offered.'));
+  }
+  m.appendChild(c2);
+
 
   /* == clients paid by the session ==
      Their next payment is not a date, so nothing above can show it. What
@@ -2441,70 +2546,7 @@ function drawIn(m) {
     m.appendChild(cs);
   }
 
-  /* Clients, with everything about them. Set by Tom. */
-  const c2 = card('CLIENTS', 'full');
-  const cl = clients();
-  if (!cl.length) c2.appendChild(el('div', 'empty', 'No clients yet.'));
-  else {
-    const yearIn = paidRows({ from: Day.shift(Day.today(), -365) });
-    const total = yearIn.reduce((a, p) => a + num(p.amt, 0), 0);
-    const list = el('div', 'list');
-    /* Biggest share first, because concentration is the thing this list is
-       for and a list sorted by name buries it. */
-    const ranked = cl.map(c => {
-      const mine = yearIn.filter(p => p.client === c.id);
-      const got = mine.reduce((a, p) => a + num(p.amt, 0), 0);
-      return { c: c, n: mine.length, got: got, share: total ? got / total : 0 };
-    }).sort((a, b) => b.got - a.got);
-    ranked.forEach((x, i) => {
-      const c = x.c;
-      /* A package client has no fixed rate, so a rate would print as zero.
-         Their packages are priced one at a time. */
-      const r = itemRow(c.name + (c.status === 'done' ? ' (finished)' : ''),
-        (isPack(c) ? 'Paid ' + cycleWord(c) : money(num(c.rate, 0)) + ' ' + cycleWord(c)) +
-        ' · ' + x.n + (x.n === 1 ? ' payment · ' : ' payments · ') +
-        (x.share * 100).toFixed(0) + '% of the year',
-        money(x.got));
-      if (c.status === 'done') r.classList.add('dim');
-      r.onclick = () => clientSheet(c);
-      const bar = el('div', 'bar c' + (1 + (i % 6)));
-      bar.appendChild(el('i')).style.width = (x.share * 100).toFixed(1) + '%';
-      list.appendChild(stack(r, bar));
-    });
-    c2.appendChild(list);
-    /* Law 5: show the number, never the verdict. */
-    c2.appendChild(el('div', 'note', 'Share of the last twelve months, biggest client first. No opinion offered.'));
-  }
-  m.appendChild(c2);
-
-  /* Everything that has arrived. */
-  const c3 = card('RECEIVED', 'full');
-  const got = paidRows({ from: Day.shift(Day.today(), -120) }).sort((a, b) => b.date.localeCompare(a.date));
-  if (!got.length) c3.appendChild(el('div', 'empty', 'Nothing recorded yet. Press <b>+</b> to log a payment or a one-off.'));
-  else {
-    const list = el('div', 'list');
-    got.slice(0, 40).forEach(p => {
-      const c = p.client ? Rec.get('client', null, p.client) : null;
-      const r = itemRow(c ? c.name : (p.note || 'One-off'),
-        Day.short(p.date) + ' · ' + esc(acctName(p.acct)) + (c && p.note ? ' · ' + esc(p.note) : ''),
-        money(num(p.amt, 0)), 'in');
-      r.onclick = () => paidSheet(p);
-      list.appendChild(r);
-    });
-    c3.appendChild(list);
-  }
-  m.appendChild(c3);
 }
-/* How far off a day is, in words. One function, because "in 0 days" and
-   "in 1 days" are the kind of thing that comes back one screen at a time. */
-function away(date) {
-  const n = Day.diff(date, Day.today());
-  if (n === 0) return 'today';
-  if (n === 1) return 'tomorrow';
-  if (n === -1) return 'yesterday';
-  return n > 0 ? 'in ' + n + ' days' : n * -1 + ' days ago';
-}
-const acctName = id => (Rec.get('acct', null, id) || {}).name || 'unknown account';
 
 /* ── MONEY OUT ── */
 function drawOut(m) {
@@ -2528,8 +2570,11 @@ function drawOut(m) {
   /* Recurring: the view he asked for. Not a category, a question — what
      leaves without me deciding again. Subscriptions, gym, software. */
   const rec = bl.filter(b => ['subs', 'gym', 'ops'].indexOf(b.cat) > -1);
-  const c2 = card('STILL PAYING FOR');
-  if (!rec.length) c2.appendChild(el('div', 'empty', 'Nothing here. Anything filed as Subscriptions, Gym or Operating costs shows up in this list with what it costs you a year.'));
+  /* Named by Tom, 2026-09-14: "still paying for" read as a complaint about
+     money he chose to spend. A card title says what is on it, not how to
+     feel about it. */
+  const c2 = card('SUBSCRIPTIONS AND MEMBERSHIPS');
+  if (!rec.length) c2.appendChild(el('div', 'empty', 'Nothing here yet. Bills filed as Subscriptions, Gym or Operating costs show up here, with what each comes to in a year.'));
   else {
     const list = el('div', 'list');
     rec.forEach(b => {
@@ -2539,7 +2584,7 @@ function drawOut(m) {
       list.appendChild(r);
     });
     c2.appendChild(list);
-    c2.appendChild(el('div', 'note', 'Everything that leaves your account without you deciding again. <b>' +
+    c2.appendChild(el('div', 'note', 'Everything that renews on its own: <b>' +
       esc(money(rec.reduce((a, b) => a + num(b.amt, 0) * 12, 0))) + '</b> a year between them.'));
   }
   m.appendChild(c2);
@@ -3221,6 +3266,33 @@ function paidSheet(existing, preset) {
 function payFor(e) { paidSheet(null, { client: e.client.id, amt: e.amt, date: Day.today() }); }
 
 /* a client, and everything about them */
+/* A new client: the name first, refused if it is already taken, then
+   straight into the full sheet to say how they pay. Until now a client could
+   only be created by typing a new name while logging a payment. */
+function newClientSheet() {
+  UI.dialog({
+    title: 'NEW CLIENT', width: 420, focus: true,
+    body: (b, h) => {
+      const name = UI.field('name', { placeholder: 'Their name' });
+      b.appendChild(fld('Name', name));
+      h.add = () => {
+        const n = name.value.trim();
+        if (!n) { name.focus(); return null; }
+        return makeClient(n);
+      };
+    },
+    actions: [
+      { label: 'CANCEL' },
+      { label: 'ADD', kind: 'go', fn: h => {
+        const id = h.add();
+        if (!id) return false;
+        draw();
+        setTimeout(() => clientSheet(Object.assign({ id: id }, Rec.get('client', null, id))), 350);
+        return true;
+      } },
+    ],
+  });
+}
 function clientSheet(c) {
   UI.dialog({
     title: c.name.toUpperCase(), width: 520,
@@ -4461,6 +4533,7 @@ function acctSheet() {
 /* ── the + button knows which screen you are on ── */
 document.getElementById('fab').onclick = () => {
   Mobile.feedback('open');
+  if (TAB === 'clients') return newClientSheet();
   if (TAB === 'in') return paidSheet();
   if (TAB === 'score') return UI.menu(0, 0, [
     { label: 'Money in', note: 'a client payment or a one-off', fn: () => paidSheet() },
@@ -4505,6 +4578,7 @@ function draw() {
   try {
     if (TAB === 'score') drawScore(m);
     else if (TAB === 'in') drawIn(m);
+    else if (TAB === 'clients') drawClients(m);
     else if (TAB === 'out') drawOut(m);
     else if (TAB === 'spend') drawSpend(m);
     else if (TAB === 'pots') drawPots(m);
