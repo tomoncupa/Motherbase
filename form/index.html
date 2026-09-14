@@ -177,6 +177,11 @@ canvas.draw{position:absolute; inset:0; margin:auto; touch-action:none}
   /* on footage rather than on the page, so it stays dark in every theme:
      a cream plate over a dark gym floor would not be readable */
   border-radius:var(--radius-full); background:rgba(0,0,0,.67); color:var(--accent); border:1px solid var(--accent-dim); max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+/* When the set was filmed, and how long it ran. Under the name, on the same
+   dark plate, so it reads over a gym floor in every theme. Near-white rather
+   than the accent: the name is the thing to find, this is the thing to read. */
+.label.stamp{top:40px; max-width:calc(100% - 16px); font-family:var(--font-mono); font-weight:600; letter-spacing:0; color:rgba(255,255,255,.92); border-color:rgba(255,255,255,.18)}
+.label.stamp:empty{display:none}
 .srcwrap{position:absolute; top:8px; right:8px; z-index:6}
 .srcbtn{width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:color-mix(in srgb, var(--surface-1) 80%, transparent); color:var(--ink); display:flex; align-items:center; justify-content:center; font-size:15px; backdrop-filter:blur(6px)}
 .srcbtn:hover{border-color:var(--accent-dim)}
@@ -419,6 +424,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
         <div class="pane" data-pane="A">
           <div class="vwrap">
             <span class="label" data-panelabel="A">A</span>
+            <span class="label stamp" data-stamp="A"></span>
             <div class="srcwrap" data-src="A">
               <button class="srcbtn" title="Source options" data-icon="settings" data-icon-size="15"></button>
               <div class="srcmenu">
@@ -451,6 +457,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
         <div class="pane" data-pane="B">
           <div class="vwrap">
             <span class="label" data-panelabel="B">B</span>
+            <span class="label stamp" data-stamp="B"></span>
             <div class="srcwrap" data-src="B">
               <button class="srcbtn" title="Source options" data-icon="settings" data-icon-size="15"></button>
               <div class="srcmenu">
@@ -642,11 +649,72 @@ function loadFile(pane,file){
   st.strokes=[]; st.path=[]; st.marks=[]; st.scale=null; st.series=[]; st.motion=null; st.reps=[]; st.notes=[];
   st.pose=null; st.smooth=null; st.lastPoseT=null;
   st.trim={start:0,end:null};
+  st.shot=null; readShot(pane,file);
   redraw(pane); renderNotes(pane); renderReps(pane);
   document.querySelector(`.dropzone[data-pane="${pane}"]`).classList.add('hidden');
   st.video.addEventListener('loadedmetadata', ()=>{ sizeCanvas(pane); updateTime(pane); updateTrimVisual(pane); onDurationKnown(pane); },{once:true});
   refreshPaneNames(); toast(`Loaded ${st.name} into ${pane}`);
 }
+/* ── when the set happened ──
+   An iPhone writes the moment it started saving the clip into the file's
+   header (the "mvhd" box, in seconds since 1904). Telegram's shrinking keeps
+   it: two clips sent as normal videos still said 11 and 89 minutes before
+   they were sent, so it is the filming and not the shrinking.
+
+   When a file has no usable time, Telegram Desktop's own file name carries
+   the moment the message was sent. That is labelled Sent, never Filmed. The
+   file's modified date is not used at all: for a download it is the download.
+
+   Only the header is read, a few kilobytes, wherever in the file it sits.
+   Nothing leaves the device. */
+const MAC_EPOCH=2082844800;               // seconds from 1904 to 1970
+async function mvhdTime(file){
+  const tag=(dv,o)=>String.fromCharCode(dv.getUint8(o),dv.getUint8(o+1),dv.getUint8(o+2),dv.getUint8(o+3));
+  let pos=0;
+  for(let n=0;n<64&&pos+8<=file.size;n++){
+    const h=new DataView(await file.slice(pos,pos+16).arrayBuffer()); if(h.byteLength<8) return null;
+    let len=h.getUint32(0), hl=8; const typ=tag(h,4);
+    if(len===1){ if(h.byteLength<16) return null; len=h.getUint32(8)*4294967296+h.getUint32(12); hl=16; }
+    else if(len===0) len=file.size-pos;
+    if(len<hl) return null;
+    if(typ==='moov'){
+      const m=new DataView(await file.slice(pos+hl,pos+Math.min(len,hl+1048576)).arrayBuffer());
+      for(let p=0;p+20<=m.byteLength;){ const l=m.getUint32(p);
+        if(tag(m,p+4)==='mvhd'){ const v=m.getUint8(p+8);
+          const secs=v===1?m.getUint32(p+12)*4294967296+m.getUint32(p+16):m.getUint32(p+12);
+          const d=new Date((secs-MAC_EPOCH)*1000);
+          /* zero means the camera left it blank; the future means a wrong clock */
+          return (d.getFullYear()>=2005&&d.getTime()<Date.now()+864e5)?d:null; }
+        if(l<8) break; p+=l; }
+      return null; }
+    pos+=len; }
+  return null; }
+async function readShot(pane,file){
+  const url=V[pane].url; let shot=null;
+  try{ const d=await mvhdTime(file); if(d) shot={at:d, how:'Filmed'}; }catch(e){}
+  if(!shot){ const m=file.name.match(/(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d)/);
+    if(m) shot={at:new Date(+m[1],m[2]-1,+m[3],+m[4],+m[5],+m[6]), how:'Sent'}; }
+  if(V[pane].url!==url) return;           // another clip was dropped in meanwhile
+  V[pane].shot=shot; renderStamp(pane); }
+function secsLabel(t){ t=Math.round(t); return t<60 ? `${t} s` : `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`; }
+/* The set runs from the start of the first rep to the end of the last. Before
+   there are reps, the clip is all there is, and it is called the clip. */
+function renderStamp(pane){ const el=document.querySelector(`[data-stamp="${pane}"]`); if(!el) return;
+  const st=V[pane], parts=[]; let tip='';
+  if(!loaded(pane)){ el.textContent=''; return; }
+  if(st.shot){ const d=st.shot.at, now=new Date();
+    /* by hand, because en-GB spells September "Sept" and every other month in three */
+    const day=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]+' '+d.getDate()+' '+
+      ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+
+      (d.getFullYear()!==now.getFullYear()?' '+d.getFullYear():'');
+    const hr=d.getHours()%12||12, ap=d.getHours()<12?'am':'pm';
+    parts.push(`${st.shot.how} ${day}, ${hr}:${String(d.getMinutes()).padStart(2,'0')} ${ap}`);
+    tip = st.shot.how==='Filmed' ? 'Filming time, read from the video file.'
+        : 'This file has no filming time, so this is when it was sent on Telegram, from the file name.'; }
+  const reps=st.reps||[];
+  if(reps.length) parts.push(`Set ${secsLabel(reps[reps.length-1].t1-reps[0].t0)}`);
+  else { const {s,e}=trimOf(pane); if(isFinite(e-s)&&e-s<1e8) parts.push(`Clip ${secsLabel(e-s)}`); }
+  el.textContent=parts.join(' · '); el.title=tip; }
 function onDurationKnown(pane){ const v=V[pane].video, ready=()=>isFinite(v.duration)&&v.duration>0;
   if(ready()){ buildFilmstrip(pane); updateTrimVisual(pane); return; }
   const h=()=>{ if(ready()){ v.removeEventListener('durationchange',h); try{v.currentTime=0;}catch(e){} buildFilmstrip(pane); updateTrimVisual(pane); } };
@@ -803,7 +871,7 @@ function updateTrimVisual(pane){ const v=V[pane].video, track=document.querySele
   track.querySelector('[data-handle="end"]').style.left=rp+'%';
   track.querySelector('.tshade.left').style.width=lp+'%';
   track.querySelector('.tshade.right').style.width=(100-rp)+'%';
-  renderRepMarks(pane); }
+  renderRepMarks(pane); renderStamp(pane); }
 function renderRepMarks(pane){ const v=V[pane].video, track=document.querySelector(`[data-timeline="${pane}"]`); if(!track||!isFinite(v.duration)||v.duration<=0) return;
   track.querySelectorAll('.trepmark').forEach(n=>n.remove());
   V[pane].reps.forEach(r=>{ const d=document.createElement('div'); d.className='trepmark'; d.style.left=(r.t0/v.duration*100)+'%'; track.appendChild(d); }); }
@@ -1104,7 +1172,7 @@ function analyzeReps(pane){ const firstEcc=$('#repFirst').value==='ecc';
         const withA=win.filter(p=>p.a); if(withA.length){ const pick=k=>{ const vals=withA.map(p=>p.a[k]).filter(x=>x!=null); return vals.length?{min:Math.min(...vals),max:Math.max(...vals)}:null; };
           r.ang={ knee:pick('knee'), hip:pick('hip'), elbow:pick('elbow') }; } } }
     reps.push(r); }
-  V[pane].reps=reps; renderRepMarks(pane); return {reps,src}; }
+  V[pane].reps=reps; renderRepMarks(pane); renderStamp(pane); return {reps,src}; }
 
 /* ===================== velocity loss · RIR · 1RM =====================
    Velocity loss within a set tracks proximity to failure. The loss at which a
@@ -1385,7 +1453,7 @@ $('#snapBtn').addEventListener('click',()=>{
 
 $('#swapBtn').addEventListener('click',()=>{ const a=V.A,b=V.B;
   [a.url,b.url]=[b.url,a.url]; a.video.src=a.url||''; b.video.src=b.url||'';
-  ['name','mirrored','fps','strokes','path','marks','scale','notes','series','motion','reps','trim'].forEach(k=>{ const t=a[k]; a[k]=b[k]; b[k]=t; });
+  ['name','mirrored','fps','strokes','path','marks','scale','notes','series','motion','reps','trim','shot'].forEach(k=>{ const t=a[k]; a[k]=b[k]; b[k]=t; });
   ['A','B'].forEach(p=>{ const has=loaded(p); document.querySelector(`.dropzone[data-pane="${p}"]`).classList.toggle('hidden',has);
     V[p].video.classList.toggle('mirror',!!V[p].mirrored);
     if(has) V[p].video.addEventListener('loadedmetadata',()=>{ sizeCanvas(p); updateTime(p); updateTrimVisual(p); onDurationKnown(p); },{once:true});
