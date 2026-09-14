@@ -495,20 +495,19 @@ const RULES = [
   /* A range: "2-4:30", "9-11am", "from 7 to 9". Needs a colon, an am or pm,
      or "at" or "from", so "3-5 reps" stays words. */
   { kind: 'time', src: '(?:(?:at|from)\\s+)?\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?\\s*(?:-|–|to)\\s*\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?',
-    fn: w => {
+    fn: (w, out) => {
       const m = w.toLowerCase().match(/^(?:(at|from)\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
       if (!m || !(m[1] || m[3] || m[4] || m[6] || m[7])) return null;
-      const mk = (h, mm, ap) => {
-        if (h > 23 || mm > 59) return null;
-        if (ap) { if (h < 1 || h > 12) return null; if (ap === 'pm' && h < 12) h += 12; if (ap === 'am' && h === 12) h = 0; }
-        else if (h >= 1 && h <= 6) h += 12;
-        return h * 60 + mm;
-      };
-      const smm = m[3] ? +m[3] : 0;
-      let e = mk(+m[5], m[6] ? +m[6] : 0, m[7] || null);
-      let s = mk(+m[2], smm, m[4] || m[7] || null);
-      if (s == null || e == null) return null;
-      if (!m[4] && m[7] && s > e) s = mk(+m[2], smm, m[7] === 'pm' ? 'am' : 'pm');
+      const smm = m[3] ? +m[3] : 0, eh = +m[5], emm = m[6] ? +m[6] : 0;
+      let s = clockMins(+m[2], smm, m[4] || m[7] || null, out.due);
+      if (s == null) return null;
+      if (!m[4] && m[7]) {
+        const e0 = clockMins(eh, emm, m[7]);
+        if (e0 != null && s > e0) s = clockMins(+m[2], smm, m[7] === 'pm' ? 'am' : 'pm');
+      }
+      /* the end is the first time that clock comes round after the start */
+      let e = m[7] ? clockMins(eh, emm, m[7]) : (eh > 23 || emm > 59 ? null : eh * 60 + emm);
+      if (e == null) return null;
       if (e <= s) e += (e + 720 > s) ? 720 : 1440;
       return { at: hm(s), dur: e - s };
     } },
@@ -522,21 +521,40 @@ const RULES = [
       return pad(h) + ':' + pad(mm);
     } },
   { kind: 'time', src: '(?:at\\s+|@\\s*)?\\d{1,2}:\\d{2}',
-    fn: w => {
+    fn: (w, out) => {
       const m = w.match(/(\d{1,2}):(\d{2})$/);
-      let h = +m[1]; const mm = +m[2];
-      if (h > 23 || mm > 59) return null;
-      if (h >= 1 && h <= 6) h += 12;   /* STATUS's rule: 2:45 means the afternoon */
-      return pad(h) + ':' + pad(mm);
+      const v = clockMins(+m[1], +m[2], null, out.due);
+      return v == null ? null : hm(v);
     } },
-  /* "at 6": a bare hour after "at", read by STATUS's rule, 1 to 6 is the
-     afternoon. */
+  /* "at 8": a bare hour after "at", read by clockMins. */
   { kind: 'time', src: '(?:at|@)\\s*\\d{1,2}',
-    fn: w => { let h = +w.match(/(\d{1,2})$/)[1]; if (h < 1 || h > 12) return null; if (h <= 6) h += 12; return pad(h) + ':00'; } },
+    fn: (w, out) => { const h = +w.match(/(\d{1,2})$/)[1]; if (h < 1 || h > 12) return null; return hm(clockMins(h, 0, null, out.due)); } },
   { kind: 'time', src: '(?:at\\s+)?(?:noon|midday)', fn: () => '12:00' },
   { kind: 'pri', src: 'p[1-4]', fn: w => { const n = +w.slice(1); return n === 4 ? 0 : n; } },
   { kind: 'proj', src: '#[^\\s#]+', fn: w => w.slice(1).replace(/[.,;:!?)]+$/, '') || null },
 ];
+/* A clock as minutes past midnight. Tom, 2026-09-14: "at 8 on 7:55AM means
+   8AM, past that then it means 8PM." With no am or pm, on today (or no date
+   yet, which becomes today), it is the next time that clock comes round; once
+   both have gone it stays the evening one rather than moving the day. On any
+   other day there is no now to go by, so STATUS's rule stands: 1 to 6 is the
+   afternoon. 12 is noon. */
+function clockMins(h, mm, ap, due) {
+  if (h > 23 || mm > 59) return null;
+  if (ap) {
+    if (h < 1 || h > 12) return null;
+    if (ap === 'pm' && h < 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    return h * 60 + mm;
+  }
+  if (h === 0 || h >= 12) return h * 60 + mm;
+  if (!due || due === T()) {
+    const n = new Date();
+    return n.getHours() * 60 + n.getMinutes() <= h * 60 + mm ? h * 60 + mm : (h + 12) * 60 + mm;
+  }
+  return (h <= 6 ? h + 12 : h) * 60 + mm;
+}
+
 const slug = s => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
 
 function parseQuest(raw, ignore) {
@@ -554,7 +572,7 @@ function parseQuest(raw, ignore) {
       const start = m.index + m[1].length, word = m[2], end = start + word.length;
       if (re.lastIndex <= m.index) re.lastIndex = m.index + 1;
       if (ig.indexOf(word.toLowerCase()) > -1 || !free(start, end)) continue;
-      const v = rule.fn(word);
+      const v = rule.fn(word, out);
       if (v == null || v === '') continue;
       taken.push([start, end]);
       spans.push({ start: start, end: end, kind: rule.kind, word: word });

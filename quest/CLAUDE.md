@@ -99,11 +99,12 @@ beside the pointer on a wide window and up from the bottom on a phone.
 | A quest is STATUS's `note` todo row with fields added, not a new type. | Claude, 2026-09-14 |
 | Old todos with no `due` are due the day they were written, so nothing he already has changes where it shows. | Claude, 2026-09-14 |
 | P1 is `--danger`, P2 `--warn`, P3 `--info`. | Claude, 2026-09-14 |
-| Todos no longer show in STATUS's journal, and its Todo button is gone. Same rows; QUESTS and LOG show them. Supersedes carried todos showing `>` in STATUS. | Tom, 2026-09-14 |
+| Todos stay in STATUS's journal, Todo button and all. Tom: *"Keep Todos in STATUS."* Reverses a request made the same hour to hide them. | Tom, 2026-09-14 |
 | Today lists what BLOCK planned, from its `plan` row, under the day's tasks: Now and Next marked, ticked with the shared tick. | Tom asked, Claude placed it, 2026-09-14 |
 | Every row says where it came from: QUESTS, STATUS or BLOCK and its lane. QUESTS stamps `src`; an older row counts as QUESTS's if it has `pri`, `proj` and `rep`. | Tom asked, Claude chose the rule, 2026-09-14 |
 | Date, Priority, Move to and More are buttons on every row, always visible. Right click and hold still open the menu. On a phone only More shows. | Tom, 2026-09-14 |
-| "at 6" is a time by STATUS's rule (1 to 6 is afternoon, so "at 8" is 8 AM). Ranges like "2-4:30" set a start and a length, and need a colon, am or pm, "at" or "from", so "3-5 reps" stays words. | Claude, 2026-09-14 |
+| A clock with no am or pm ("at 8", "8:30", "2-4:30") is the next time it comes round today: at 7:55 AM "at 8" is 8 AM, from 8:01 AM it is 8 PM. Once both have passed it stays PM. On another day STATUS's rule stands, 1 to 6 is afternoon. STATUS reads todos the same way; its entries keep the afternoon rule, being written after the fact. Supersedes the fixed afternoon rule for todos. | Tom, 2026-09-14 |
+| Ranges like "2-4:30" set a start and a length, and need a colon, am or pm, "at" or "from", so "3-5 reps" stays words. | Claude, 2026-09-14 |
 
 ## Not here, and where it went
 

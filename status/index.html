@@ -1334,7 +1334,11 @@ const TIME_RE = /\s+(?:at\s+)?(\d{1,2})(?::|\.)(\d{2})\s*(am|pm)?$/i;
 const HOUR_RE = /\s+(?:at\s+)?(\d{1,2})\s*(am|pm)$/i;
 const DUR_RE  = /\s+(?:for\s+)?(?:(\d+)\s*h(?:rs?|ours?)?\s*(\d{1,2})?|(\d+)\s*(m|min|mins|minutes?))$/i;
 
-function parseLine(raw) {
+/* `soon` is true for a todo on today. Tom, 2026-09-14: "at 8 on 7:55AM means
+   8AM, past that then it means 8PM." A todo is about to happen, so a clock
+   with no am or pm is the next time it comes round. An entry is usually
+   written after the fact, so it keeps the afternoon rule below. */
+function parseLine(raw, soon) {
   let text = String(raw == null ? '' : raw).trim();
   let at = null, dur = null;
 
@@ -1353,6 +1357,10 @@ function parseLine(raw) {
       const ap = (m[3] || '').toLowerCase();
       if (ap === 'pm' && h < 12) h += 12;
       else if (ap === 'am' && h === 12) h = 0;
+      else if (!ap && soon && h >= 1 && h <= 11) {
+        const n = new Date();
+        if (n.getHours() * 60 + n.getMinutes() > h * 60 + mm) h += 12;
+      }
       else if (!ap && h >= 1 && h <= 6) h += 12;   /* 2:45 means the afternoon */
       at = String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
       text = text.slice(0, m.index).trim();
@@ -1396,7 +1404,7 @@ const durLabel = d => !d ? '' : (d >= 60 ? (d % 60 ? Math.floor(d / 60) + 'h' + 
 
 const addNote = (date, kind, text) => {
   const list = Rec.all('note', { date: date });
-  const parsed = parseLine(text);
+  const parsed = parseLine(text, kind === 'todo' && date === Day.today());
   Rec.set('note', date, uid(), {
     /* `t` is when it was written, which is not the same as the day it belongs
        to — a task logged at midnight for tomorrow, or a line backfilled a week
@@ -3806,10 +3814,7 @@ function seamButton(m) {
    makes one of those days awkward forever. */
 function drawJournal(m) {
   const d = vd();
-  /* Todos live in QUESTS. Tom, 2026-09-14: "I don't want daily tasks to show
-     up in status." Hidden here, not changed: the rows are the same ones, and
-     QUESTS and LOG still show them. */
-  const list = notes(d).filter(x => x.kind !== 'para' && x.kind !== 'todo');
+  const list = notes(d).filter(x => x.kind !== 'para');
 
   /* No prose in this card at all. The four buttons sit on the heading line and
      say what they do by being pressed; an empty journal that explains itself
@@ -3840,7 +3845,7 @@ function drawJournal(m) {
       UI.toast(says[next]);
     };
     const row = el('div', 'jbtns');
-    NOTE_KINDS.filter(k => k.id !== 'todo').forEach(k => {
+    NOTE_KINDS.forEach(k => {
       const b = el('button', 'jb mb-press mb-tap', noteSvg(k.id));
       b.setAttribute('aria-label', k.label);
       b.title = k.label;
@@ -3979,7 +3984,7 @@ function noteSheet(x, d) {
   openSheet(noteKind(x.kind).label + (stamp ? '  ' + stamp : ''), body => {
     const seg = el('div', 'seg');
     let kind = x.kind;
-    NOTE_KINDS.filter(k => k.id !== 'todo' || x.kind === 'todo').forEach(k => {
+    NOTE_KINDS.forEach(k => {
       const b = el('button', kind === k.id ? 'on' : '', noteSvg(k.id) + '<span>' + k.label + '</span>');
       b.setAttribute('aria-label', k.label);
       b.onclick = () => { kind = k.id; [].forEach.call(seg.children, n => n.className = ''); b.className = 'on'; };
@@ -4037,7 +4042,7 @@ function noteSheet(x, d) {
             Object.assign({}, list[0].payload, { at: atVal || list[0].payload.at, by: byVal || null }));
         }
       } else {
-        const pz = parseLine(text);
+        const pz = parseLine(text, kind === 'todo' && (x.date || d) === Day.today());
         Rec.set('note', x.date || d, x.key, Object.assign(bare(x), {
           kind: kind, text: pz.text,
           /* A time typed into the line still wins: it is the more recent thing
