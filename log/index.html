@@ -50,8 +50,8 @@ header{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-
 .logo b{color:var(--accent)}
 .spacer{flex:1}
 .yr{display:flex;align-items:center;gap:var(--s-1)}
-.yr b{font-family:var(--font-display);font-size:var(--f-6);font-weight:var(--w-bold);
-  min-width:var(--s-9);text-align:center}
+.yr b{font-family:var(--font-display);font-size:var(--f-4);font-weight:var(--w-bold);
+  min-width:calc(var(--s-10) * 2);text-align:center;white-space:nowrap}
 .yr button:disabled{opacity:.35;cursor:default}
 .quiet{font-size:var(--f-2);color:var(--text-muted)}
 
@@ -247,15 +247,20 @@ main.dragging{cursor:grabbing;user-select:none}
 .gr i.caffeine{opacity:.8}
 
 /* ══════════ THE NOTEBOOK ══════════
+   Tom, 2026-09-14: "Scrolling down - If something leaves the upper right
+   area it shows up in the lower left again." One stream of days, read down
+   the left page and on down the right. Both pages hold the same stream and
+   stay on screen; the script slides the left one by the scroll and the right
+   one by the scroll plus a page, so the stream wraps from one to the other.
+   `clip`, not `hidden`, so focusing a box on a page cannot scroll the page
+   itself. The pad under the pages is what gives the scroller its length.
    There are no column headings on a page, so a day's other cells sit under
    its bullets, each with its name. */
-.book{display:flex;flex-direction:column}
-.spread{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:var(--sh);
-  border-bottom:calc(var(--border-width) * 3) solid var(--border-strong)}
-.page{display:flex;flex-direction:column;min-width:0}
+.cal.book{width:100%}
+.pages{position:sticky;top:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);height:var(--sh)}
+.page{position:relative;min-width:0;overflow:clip}
 .page+.page{border-left:calc(var(--border-width) * 2) solid var(--border-strong)}
-.page>.day,.page>.filler{flex:1 1 0}
-.filler{border-top:var(--border-width) solid var(--border)}
+.flow{position:absolute;left:0;right:0;top:0}
 .cal.book .drow{flex-direction:column}
 .cal.book .xc{border-right:0}
 .cal.book .xt,.cal.book .xn{width:auto}
@@ -273,9 +278,9 @@ main.dragging{cursor:grabbing;user-select:none}
 <header>
   <div class="logo">LO<b>G</b></div>
   <div class="yr">
-    <button id="prevYr" class="mb-btn mb-press mb-tap" onclick="goYear(-1)" aria-label="Previous year" data-icon="prev"></button>
-    <b id="yrLabel"></b>
-    <button id="nextYr" class="mb-btn mb-press mb-tap" onclick="goYear(1)" aria-label="Next year" data-icon="next"></button>
+    <button id="prevBtn" class="mb-btn mb-press mb-tap" onclick="goStep(-1)" aria-label="Back" data-icon="prev"></button>
+    <b id="focusLabel"></b>
+    <button id="nextBtn" class="mb-btn mb-press mb-tap" onclick="goStep(1)" aria-label="Forward" data-icon="next"></button>
   </div>
   <button class="mb-btn mb-press mb-tap" onclick="toToday()">TODAY</button>
   <div id="levels"></div>
@@ -365,11 +370,10 @@ const setInList = (key, all, cur, id, on) => S.set(key, all.filter(v => v === id
    Each is how many days fill the screen; Weeks is two, Month 31 and Quarter
    92 so the longest of each fits whole, Year 366.
 
-   `cols` are the side columns, every unit bigger than the view. `spread` is
-   how the view falls into notebook spreads: a number of days, or `w` for a
-   week group and `ww` for two. 2 Days is always a notebook; the others that
-   have a spread follow the Notebook switch. `snap` is the edge a scroll
-   settles on: a day, or the named side block. */
+   `cols` are the side columns, every unit bigger than the view. `spread`
+   marks a view that can be a notebook. 2 Days is always a notebook; the
+   others that have a spread follow the Notebook switch. `snap` is the edge a
+   scroll settles on: a day, or the named side block. */
 const LEVELS = [
   { id: 'd1', name: 'Day',     n: 1,   cols: [],              spread: 1 },
   { id: 'd2', name: '2 Days',  n: 2,   cols: [],              spread: 2, book: true },
@@ -912,7 +916,7 @@ let T = null;
 let blocks = [];
 let aggCols = [];
 let dayCol = null, dayEls = [];
-let spreads = [];
+let flows = [];              /* the notebook's two copies of the stream, left page then right */
 let dayCache = new Map();    /* date → markup, cleared whenever the data or the columns change */
 const M = { near: 40, small: 18, lab: 24, full: 44, wsLine: 18 };
 
@@ -995,22 +999,6 @@ function aggHTML(p, col) {
     '</div></div>';
 }
 
-function spreadGroups(kind) {
-  const L = T.dayList, out = [];
-  if (typeof kind === 'number') {
-    for (let i = 0; i < L.length; i += kind) out.push(L.slice(i, i + kind));
-  } else {
-    let cur = null;
-    T.weeks.forEach(w => {
-      const g = L.slice(w.i0, w.i0 + w.n), s = +w.from.slice(8);
-      const second = s >= 8 && s < 15 || s >= 22 && s < 29;
-      if (kind === 'ww' && second && cur && cur[0].from.slice(0, 7) === w.from.slice(0, 7)) cur.push.apply(cur, g);
-      else { cur = g.slice(); out.push(cur); }
-    });
-  }
-  return out;
-}
-
 let renderedKey = '';
 function render(force) {
   const key = level + '|' + isBook() + '|' + desc();
@@ -1018,21 +1006,15 @@ function render(force) {
   renderedKey = key;
   const cal = $('cal'), book = isBook();
   cal.classList.toggle('book', book);
+  cal.style.height = '';
   if (book) {
-    const L = LEVELS[level];
-    let groups = spreadGroups(L.spread);
-    if (desc()) groups = groups.reverse().map(g => g.slice().reverse());
-    cal.innerHTML = '<div class="book">' + groups.map(g => {
-      const half = L.spread === 1 ? g.length : Math.ceil(g.length / 2);
-      const left = g.slice(0, half), right = g.slice(half);
-      const pad = L.spread === 1 ? '' : '<div class="filler"></div>'.repeat(Math.max(0, half - right.length));
-      const dates = g.map(p => p.from).sort();
-      return '<div class="spread" data-from="' + dates[0] + '" data-to="' + dates[dates.length - 1] + '">' +
-        '<div class="page">' + left.map(dayHTML).join('') + '</div>' +
-        '<div class="page">' + right.map(dayHTML).join('') + pad + '</div></div>';
-    }).join('') + '</div>';
-    spreads = [...cal.querySelectorAll('.spread')];
-    blocks = []; aggCols = []; dayCol = null; dayEls = [];
+    const stream = (desc() ? T.dayList.slice().reverse() : T.dayList).map(dayHTML).join('');
+    cal.innerHTML = '<div class="pages"><div class="page"><div class="flow">' + stream + '</div></div>' +
+      '<div class="page"><div class="flow">' + stream + '</div></div></div>';
+    flows = [...cal.querySelectorAll('.flow')];
+    blocks = []; aggCols = []; dayCol = null;
+    /* Places are measured on the left copy; the right one is the same stream. */
+    dayEls = [...flows[0].children];
   } else {
     const c = colsNow(), sets = { y: T.years, q: T.quarters, m: T.months, w: T.weeks };
     const order = desc() ? T.dayList.slice().reverse() : T.dayList;
@@ -1057,7 +1039,7 @@ function render(force) {
     }));
     dayCol = cal.querySelector('.body .c-d');
     dayEls = [...dayCol.children];
-    spreads = [];
+    flows = [];
   }
   $('state').textContent = !lineCount ? 'No journal lines' : !shown().length ? 'No bullet types selected' : '';
 }
@@ -1102,11 +1084,18 @@ const nearAt = () => Math.min(M.near, M.small * 2);
 
 function applySizes() {
   const cal = $('cal');
+  /* In the notebook the screen is two pages, so a day is at least its share
+     of both: Day fills the spread, 2 Days a page each. */
   if (isBook()) {
+    const H = sc.clientHeight;
     cal.classList.add('near');
     cal.classList.remove('small', 'tiny');
-    cal.style.setProperty('--dh', '0px');
-    cal.style.setProperty('--sh', sc.clientHeight + 'px');
+    cal.style.setProperty('--sh', H + 'px');
+    cal.style.setProperty('--dh', Math.floor(2 * H / LEVELS[level].n) + 'px');
+    /* The pages stay put; the notebook's own height is what scrolls, one
+       screen plus as far as the stream runs past two pages. */
+    if (flows.length) cal.style.height = (H + Math.max(0, flows[0].offsetHeight - 2 * H)) + 'px';
+    flowBook();
     return;
   }
   dayHeight = dhFor(LEVELS[level].n);
@@ -1146,38 +1135,49 @@ function layoutAgg() {
   }
 }
 
-const dayY = i => dayCol.offsetTop + dayEls[i].offsetTop;
+/* A day's place on the scroller. In the notebook that is its place in the
+   stream, which is what the scroll position means there. */
+const dayY = i => (dayCol ? dayCol.offsetTop : 0) + dayEls[i].offsetTop;
 const dayHt = i => dayEls[i].offsetHeight;
+/* How much of the stream is on screen: one screen, or two pages. */
+const screenH = () => isBook() ? 2 * sc.clientHeight : sc.clientHeight;
 function dateAt(y) {
   let lo = 0, hi = dayEls.length - 1;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (dayY(mid) <= y) lo = mid; else hi = mid - 1; }
   return { i: lo, f: clamp((y - dayY(lo)) / Math.max(1, dayHt(lo)), 0, 1) };
 }
-function spreadAt(y) {
-  let lo = 0, hi = spreads.length - 1;
-  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (spreads[mid].offsetTop <= y) lo = mid; else hi = mid - 1; }
-  return spreads[lo];
-}
 function anchorAt(y) {
-  if (spreads.length) { const s = spreadAt(y); return { date: desc() ? s.dataset.to : s.dataset.from, f: 0 }; }
   if (!dayEls.length) return { date: TODAY, f: 0 };
   const a = dateAt(y);
   return { date: dayEls[a.i].dataset.from, f: a.f };
 }
-function spreadOf(date) { return spreads.find(s => s.dataset.from <= date && s.dataset.to >= date) || spreads[0]; }
 
-let progAt = 0;
-function setTop(y) { progAt = Date.now(); sc.scrollTop = y; }
+/* Slide the notebook's pages to the scroll: the left page shows the stream
+   from the scroll down, the right page the page after it. */
+function flowBook() {
+  if (flows.length < 2) return;
+  const s = sc.scrollTop, H = sc.clientHeight;
+  flows[0].style.transform = 'translateY(' + (-s) + 'px)';
+  flows[1].style.transform = 'translateY(' + (-(s + H)) + 'px)';
+}
 
-function snapTop() {
-  if (!dayEls.length) return;
-  const a = dateAt(sc.scrollTop + headH());
-  const i = a.f > 0.5 ? Math.min(a.i + 1, dayEls.length - 1) : a.i;
-  setTop(dayY(i) - headH());
+/* A scroll the app made itself is remembered, so it is not mistaken for his
+   own and does not move the day in focus. */
+let progAt = 0, setAt = -1;
+/* When he last scrolled, dragged or pressed a key. Only a scroll close
+   behind one of those moves the focus: the page moving because a view got
+   shorter is the browser, not him. */
+let userAt = 0;
+function setTop(y) {
+  progAt = Date.now();
+  userAt = 0;
+  const was = sc.scrollTop;
+  sc.scrollTop = y;
+  setAt = sc.scrollTop === was ? -1 : sc.scrollTop;
+  flowBook();
 }
 
 function restore(an, y) {
-  if (isBook()) { setTop(spreadOf(an.date).offsetTop); return; }
   const i = domIdx(an.date);
   setTop(dayY(i) + an.f * dayHt(i) - y);
 }
@@ -1190,21 +1190,41 @@ function redrawInPlace() {
   render(true);
   applySizes();
   restore(an, headH());
-  showYear();
+  showFocus();
 }
 
-function setLevel(i, anchorY) {
-  i = clamp(i, 0, LEVELS.length - 1);
-  if (anchorY == null) anchorY = sc.clientHeight / 2;
-  const an = anchorAt(sc.scrollTop + anchorY);
-  level = i;
-  render();
-  applySizes();
-  syncLevels();
-  restore(an, anchorY);
-  snapTop();
-  showYear();
+/* ── the day in focus ──
+   Tom, 2026-09-14: "Changing the view group should never change the date
+   focused on." One date, kept apart from the scroll position: his own
+   scrolling, the arrows, TODAY and opening a box move it; changing the view,
+   the order or the notebook only puts it back at the top. It is the top day
+   on screen, or at the far end of the timeline the last day, so a Month
+   showing the last four weeks is focused on today, not four weeks ago. */
+let focus = TODAY;
+function readFocus() {
+  if (!T || !dayEls.length) return;
+  const max = sc.scrollHeight - sc.clientHeight;
+  if (max > 0 && sc.scrollTop >= max - 1) { focus = desc() ? T.first : T.last; return; }
+  const a = dateAt(sc.scrollTop + headH());
+  focus = dayEls[a.f > 0.5 ? Math.min(a.i + 1, dayEls.length - 1) : a.i].dataset.from;
+}
+function placeFocus() {
+  if (!T || !dayEls.length) return;
+  if (focus < T.first) focus = T.first;
+  if (focus > T.last) focus = T.last;
+  setTop(dayY(domIdx(focus)) - headH());
+}
+
+/* The bar and the label first: either can change the header's height, and
+   the sizes are measured off what is left of the screen. */
+function setLevel(i) {
+  level = clamp(i, 0, LEVELS.length - 1);
   drawBar();
+  render();
+  syncLevels();
+  showFocus();
+  applySizes();
+  placeFocus();
 }
 /* One offered view in or out from the current one. */
 function stepLevel(dir) {
@@ -1215,10 +1235,9 @@ function stepLevel(dir) {
 /* TODAY goes to today, in the view that is on. */
 function toToday() {
   if (!T) return;
-  if (isBook()) { setTop(spreadOf(TODAY).offsetTop); showYear(); return; }
-  const i = domIdx(TODAY);
-  setTop(desc() || LEVELS[level].n === 1 ? dayY(i) - headH() : dayY(i) + dayHt(i) - sc.clientHeight);
-  showYear();
+  focus = TODAY;
+  placeFocus();
+  showFocus();
 }
 
 /* Open a box: a day at Day; a week group at Week, or at 2 or 3 Days for the
@@ -1234,54 +1253,118 @@ function openBox(box) {
       : n <= 1 ? 'd1' : n === 2 ? 'd2' : n === 3 ? 'd3' : 'w1';
   }
   level = nearestView(LV(id), -1);
-  render();
-  applySizes();
-  syncLevels();
-  if (isBook()) setTop(spreadOf(from).offsetTop);
-  else setTop(dayY(domIdx(desc() ? to : from)) - headH());
-  showYear();
+  focus = desc() ? to : from;
   drawBar();
+  render();
+  syncLevels();
+  showFocus();
+  applySizes();
+  placeFocus();
   Mobile.feedback('open');
 }
 
-function viewDay() { return anchorAt(sc.scrollTop + headH() + bodyH() / 2).date; }
-const addTarget = () => LEVELS[level].n === 1 ? viewDay() : TODAY;
+const addTarget = () => LEVELS[level].n === 1 ? focus : TODAY;
 
-function viewYear() { return +viewDay().slice(0, 4); }
-function showYear() {
-  if (!T) return;
-  const y = viewYear();
-  $('yrLabel').textContent = y;
-  $('prevYr').disabled = y <= T.y0;
-  $('nextYr').disabled = y >= T.y1;
+/* ── the arrows ──
+   Tom, 2026-09-14: "The arrows should change between dates, not the year."
+   One step is what the view shows: Day, 2 Days and 3 Days move that many
+   days; Week one week group; Weeks two (1–14, 15–28, the rest); Month a
+   month; Quarter a quarter; Year a year. Between them, what is in focus. */
+const p2 = n => String(n).padStart(2, '0');
+const monthOn = (d, k) => { const t = new Date(+d.slice(0, 4), +d.slice(5, 7) - 1 + k, 1, 12); return t.getFullYear() + '-' + p2(t.getMonth() + 1) + '-01'; };
+const STEP_STARTS = { w1: WEEK_STARTS, w2: [1, 15, 29] };
+function unitStart(d) {
+  const id = LEVELS[level].id, m = +d.slice(5, 7);
+  if (id === 'y') return d.slice(0, 4) + '-01-01';
+  if (id === 'q') return d.slice(0, 5) + p2(m - (m - 1) % 3) + '-01';
+  if (id === 'm') return d.slice(0, 8) + '01';
+  return d.slice(0, 8) + p2(STEP_STARTS[id].filter(s => s <= +d.slice(8)).pop());
 }
-function goYear(n) {
-  const y = clamp(viewYear() + n, T.y0, T.y1);
-  let d = desc() ? y + '-12-31' : y + '-01-01';
-  if (d < T.first) d = T.first;
-  if (d > T.last) d = T.last;
+function nextStart(u) {
+  const id = LEVELS[level].id;
+  if (id === 'y') return (+u.slice(0, 4) + 1) + '-01-01';
+  if (id === 'q') return monthOn(u, 3);
+  if (id === 'm') return monthOn(u, 1);
+  const len = new Date(+u.slice(0, 4), +u.slice(5, 7), 0).getDate();
+  const s = STEP_STARTS[id].find(v => v > +u.slice(8));
+  return s && s <= len ? u.slice(0, 8) + p2(s) : monthOn(u, 1);
+}
+/* Where an arrow would put the focus. The same date back means it cannot go. */
+function arrowTarget(dir) {
+  if (!T) return focus;
+  const n = LEVELS[level].n;
+  if (n <= 3) {
+    if (!desc()) {
+      const base = focus === T.last ? Day.shift(T.last, 1 - n) : focus;
+      const t = Day.shift(base, dir * n);
+      if (Day.shift(t, n - 1) >= T.last) return T.last;
+      return t < T.first ? T.first : t;
+    }
+    const base = focus === T.first ? Day.shift(T.first, n - 1) : focus;
+    const t = Day.shift(base, dir * n);
+    if (Day.shift(t, 1 - n) <= T.first) return T.first;
+    return t > T.last ? T.last : t;
+  }
+  const cur = unitStart(focus);
+  if (dir < 0 && cur <= T.first) return focus;
+  const u = dir > 0 ? nextStart(cur) : unitStart(Day.shift(cur, -1));
+  if (u > T.last) return focus;
+  const end = Day.shift(nextStart(u), -1);
+  if (desc()) return end > T.last ? T.last : end;
+  if (end >= T.last) return T.last;
+  return u < T.first ? T.first : u;
+}
+function goStep(dir) {
+  const t = arrowTarget(dir);
+  if (t === focus) return;
   touched = true;
-  if (isBook()) setTop(spreadOf(d).offsetTop);
-  else setTop(dayY(domIdx(d)) - headH());
-  showYear();
+  focus = t;
+  placeFocus();
+  showFocus();
+}
+function focusLabel() {
+  const id = LEVELS[level].id, f = focus, n = LEVELS[level].n;
+  const mon = d => MONTHS[+d.slice(5, 7) - 1], yr = d => d.slice(0, 4);
+  const range = (a, b) => a === b
+    ? Day.label(a, { weekday: 'short' }) + ' ' + +a.slice(8) + ' ' + mon(a) + ' ' + yr(a)
+    : +a.slice(8) + (a.slice(0, 7) === b.slice(0, 7) ? '' : ' ' + mon(a) + (yr(a) === yr(b) ? '' : ' ' + yr(a))) +
+      '–' + +b.slice(8) + ' ' + mon(b) + ' ' + yr(b);
+  if (id === 'y') return yr(f);
+  if (id === 'q') return 'Q' + (Math.floor((+f.slice(5, 7) - 1) / 3) + 1) + ' ' + yr(f);
+  if (id === 'm') return mon(f) + ' ' + yr(f);
+  if (n > 3) { const u = unitStart(f); return range(u, Day.shift(nextStart(u), -1)); }
+  if (!desc()) {
+    let a = focus === T.last ? Day.shift(T.last, 1 - n) : f;
+    if (a < T.first) a = T.first;
+    const b = Day.shift(a, n - 1);
+    return range(a, b > T.last ? T.last : b);
+  }
+  let b = focus === T.first ? Day.shift(T.first, n - 1) : f;
+  if (b > T.last) b = T.last;
+  const a = Day.shift(b, 1 - n);
+  return range(a < T.first ? T.first : a, b);
+}
+function showFocus() {
+  if (!T) return;
+  $('focusLabel').textContent = focusLabel();
+  $('prevBtn').disabled = arrowTarget(-1) === focus;
+  $('nextBtn').disabled = arrowTarget(1) === focus;
 }
 
 function setDesc(on) {
-  const an = anchorAt(sc.scrollTop + sc.clientHeight / 2);
   touched = true;
   S.set('desc', !!on);
   render(true);
   applySizes();
-  restore(an, sc.clientHeight / 2);
-  snapTop();
-  showYear();
+  placeFocus();
+  showFocus();
   drawBar();
   Mobile.feedback('toggle');
 }
 
 /* ── snap ── */
 function snapEdges() {
-  if (isBook()) return spreads.map(s => s.offsetTop);
+  if (isBook()) return null;
   const unit = LEVELS[level].snap;
   if (unit && blocks.length) return blocks.filter(b => b.col === unit).map(b => dayCol.offsetTop + b.top).sort((a, b) => a - b);
   return null;
@@ -1465,10 +1548,9 @@ function drawBar() {
   const g3 = UI.el('div', 'grp');
   g3.hidden = !L.spread || !!L.book;
   g3.appendChild(toggleEl('Notebook', notebookOn(), on => {
-    const an = anchorAt(sc.scrollTop + sc.clientHeight / 2);
     touched = true;
     S.set('notebook', !!on);
-    render(); applySizes(); restore(an, sc.clientHeight / 2); snapTop(); showYear();
+    render(); applySizes(); placeFocus(); showFocus();
   }));
   bar.appendChild(g3);
 }
@@ -1714,6 +1796,9 @@ function noteDialog(x, d) {
 
   const commit = (h, again) => {
     const raw = ta.value.trim();
+    /* Tom, 2026-09-14: "Im unable to delete a bullet?" Emptying a line and
+       saving it deletes it, with an undo, as well as the DELETE button. */
+    if (!raw && !isNew) { h.close(); removeLine(x); return; }
     if (!raw) { UI.toast('Nothing to save', { bad: true }); return; }
     const pz = parseLine(raw);
     let own = d;
@@ -1753,16 +1838,17 @@ function noteDialog(x, d) {
         if (e.key !== 'Enter' || e.shiftKey || e.altKey) return;
         if (e.isComposing || e.keyCode === 229) return;
         e.preventDefault();
-        if (!ta.value.trim()) { h.close(); return; }
+        if (!ta.value.trim() && isNew) { h.close(); return; }
         commit(h, isNew);
       };
       b.appendChild(ta);
       UI.focusSoon(ta);
     },
     actions: [
+      isNew ? null : { label: 'DELETE', kind: 'bad', fn: h => { h.close(); removeLine(x); return false; } },
       { label: 'CANCEL' },
       { label: isNew ? 'ADD' : 'SAVE', kind: 'go', fn: h => { commit(h, false); return false; } },
-    ],
+    ].filter(Boolean),
   });
 }
 
@@ -1869,12 +1955,15 @@ window.addEventListener('mouseup', e => {
   if (!sideButton(e)) return;
   e.preventDefault();
   touched = true;
-  const r = sc.getBoundingClientRect();
-  setLevel(stepLevel(e.button === 3 ? 1 : -1), clamp(e.clientY - r.top, 0, sc.clientHeight));
+  setLevel(stepLevel(e.button === 3 ? 1 : -1));
 });
 
 let drag = null, swallowClick = false, swallowMenuAt = 0;
+sc.addEventListener('wheel', () => { userAt = Date.now(); }, { passive: true });
+sc.addEventListener('touchmove', () => { userAt = Date.now(); }, { passive: true });
+window.addEventListener('keydown', e => { if (!typingIn(e.target)) userAt = Date.now(); });
 sc.addEventListener('pointerdown', e => {
+  userAt = Date.now();
   if (e.pointerType !== 'mouse' || (e.button !== 0 && e.button !== 2)) return;
   if (e.target.closest('button,input,select,textarea,a,.rz')) return;
   drag = { x: e.clientX, y: e.clientY, top: sc.scrollTop, left: sc.scrollLeft, moved: false, button: e.button };
@@ -1887,6 +1976,7 @@ window.addEventListener('pointermove', e => {
     drag.moved = true; touched = true;
     sc.classList.add('dragging');
   }
+  userAt = Date.now();
   sc.scrollTop = drag.top - dy;
   sc.scrollLeft = drag.left - dx;
 });
@@ -1909,7 +1999,10 @@ sc.addEventListener('contextmenu', e => {
   if (Date.now() - swallowMenuAt < 800) { e.preventDefault(); e.stopPropagation(); }
 }, true);
 sc.addEventListener('scroll', () => {
-  showYear();
+  flowBook();
+  if (sc.scrollTop === setAt) setAt = -1;
+  else if (Date.now() - userAt < 1000) readFocus();
+  showFocus();
   if (drag && drag.moved) return;
   snapSoon();
 }, { passive: true });
@@ -1934,16 +2027,11 @@ function rebuild() {
   if (reveal) {
     const d = reveal;
     reveal = null;
-    if (isBook()) {
-      const s = spreadOf(d);
-      if (s.offsetTop + s.offsetHeight <= sc.scrollTop || s.offsetTop >= sc.scrollTop + sc.clientHeight) setTop(s.offsetTop);
-    } else {
-      const i = domIdx(d), top = dayY(i), bot = top + dayHt(i);
-      if (bot > sc.scrollTop + sc.clientHeight) setTop(bot - sc.clientHeight);
-      if (top < sc.scrollTop + headH()) setTop(top - headH());
-    }
+    const i = domIdx(d), top = dayY(i), bot = top + dayHt(i);
+    if (bot > sc.scrollTop + screenH()) setTop(bot - screenH());
+    if (top < sc.scrollTop + headH()) setTop(top - headH());
   }
-  showYear();
+  showFocus();
 }
 let rebuildT = null, pendingRebuild = false;
 const typing = () => typingIn(document.activeElement);
