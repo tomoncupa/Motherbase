@@ -38,7 +38,7 @@ DEST = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 \
 # ── what a tester gets ────────────────────────────────────────────────────
 # Folders copied whole. Everything not named here is left behind, which is
 # the safe direction: a new app has to be added deliberately.
-COPY_DIRS = ['shared', 'arc', 'block', 'status', 'train', 'style']
+COPY_DIRS = ['shared', 'arc', 'block', 'status', 'train', 'style', 'checkin']
 COPY_FILES = ['index.html', '.nojekyll']
 
 # Left behind on purpose:

@@ -19,7 +19,7 @@ That writes `../Motherbase-Client`, a complete working suite with:
 
 | | |
 |---|---|
-| **Apps** | HOME, ARC, BLOCK, STATUS, TRAIN, STYLE |
+| **Apps** | HOME, ARC, BLOCK, STATUS, TRAIN, STYLE, CHECK IN |
 | **Not included** | FORM (client video), FOODDÉX, WEALTH, LOG and QUESTS (Tom only), CLEX (personal) |
 | **Themes** | Default, System, Chalkboard, Sketch, Doodle — five, from eighteen |
 | **Added** | `guide.html`, the tester's five-minute setup page |

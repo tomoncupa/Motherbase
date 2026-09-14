@@ -89,7 +89,7 @@ Do not break these. Ask first if you think one needs to change.
    leaving the app. `shared/STANDARDS.md` is binding on these two and
    `_template/index.html` is the working example.
 
-   **STATUS and QUESTS are for everywhere.** Tom, 2026-09-14. Built to the
+   **STATUS, QUESTS and CHECK IN are for everywhere.** Tom, 2026-09-14. Built to the
    phone rules, because those are the harder ones, and also good at a desk.
    Not just "does not break" there.
 
@@ -145,6 +145,9 @@ log/index.html     the journal module: STATUS's entries en masse. One timeline
                    mood, energy and caffeine graph per day.
                    Desktop. Tom only, dropped from the tester build.
 log/CLAUDE.md      LOG's own brief, governs log/ only
+checkin/index.html CHECK IN, physique check-ins for Tom and his clients: three
+                   photos, weight (STATUS's row) and a few answers, two check-ins
+                   side by side, and a file to send a coach. Everywhere.
 style/index.html   the theme workbench. Desktop only, deliberately.
 _template/         a working starter app, copied to make a new one
 tools/             not build steps. embed-skins.py re-embeds the factory themes;
@@ -162,7 +165,7 @@ quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
                    on repo layout and testing by this file.
 ```
 
-**Phone or desktop:** `train/` is a phone app. `status/` and `quest/` are for
+**Phone or desktop:** `train/` is a phone app. `status/`, `quest/` and `checkin/` are for
 everywhere. Every other app, including the home screen and `wealth/`, is a
 desktop app. See hard constraint 10. What each one is for, in Tom's words, is
 the table at the top of "The apps" in `DOCTRINE.md`.
@@ -249,7 +252,11 @@ An app may read any type. It writes only the types it owns.
 | `plan` | **block** | `routine` | today's published plan, for anything that wants to read it |
 | `note` | **status** names the shape; **log** and **quest** write it too | line id | one journal line: a todo, an entry, an event or an idea. A todo may carry `due`, `pri`, `proj` and `rep` from QUESTS; see `quest/CLAUDE.md` |
 | `field` | **status** | field id | the definition of a tracked measure |
-| `ev` | **status** | field id | `{e:[{t,v}]}` — one row per field per day |
+| `ev` | **status**; **checkin** writes `weight` too, the way STATUS's `evAdd` does | field id | `{e:[{t,v}]}` — one row per field per day |
+| `cfield` | **checkin** | field id | `{label, kind, unit, ord, on}` — what a check-in asks. `kind` is `number`, `scale` (1 to 5) or `text`. Not written until the list is first changed |
+| `cval` | **checkin** | field id, dated | `{v}` — one answer on one check-in day |
+| `cphoto` | **checkin** | pose (`front`, `side`, `back`), dated | `{img, w, h}` — a JPEG shrunk to 1280px on its long edge. Big, so it lives in IndexedDB |
+| `checkin` | **checkin** | `''`, dated | `{sent}` — when that day's check-in was sent to a coach |
 | `day` | **status**; **log** writes `note`, the day's summary | `''` | `{note, rest}` |
 | `food` | **status** names the shape; **portion** writes it too | food id | the label as printed, plus your own servings |
 | `meal` | **status** | timestamp id | one logged serving, numbers frozen in |
@@ -679,7 +686,7 @@ answer, or take it out.
 | App | State |
 |---|---|
 | `index.html` | Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab bar on a phone, sheets instead of its own modal. Widget grid still drags and resizes with a mouse; a phone gets a REARRANGE mode instead. |
-| `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. Every and Anytime tabs added 2026-09-14 and driven in the browser: 53 of 53 self-test checks, six of them new, and a real add, tick and reload. Owns `rhythm`. Neither tab publishes into today's plan yet, so an owed Every block does not reach the home screen or QUESTS. |
+| `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. Every and Anytime tabs added 2026-09-14 and driven in the browser: 53 of 53 self-test checks, six of them new, and a real add, tick and reload. Owns `rhythm`. What is owed or due, and Anytime habits not yet met this week, also show in an Also today column on the Day (today and past days, never the future) and go into the published plan with `s: null` and a `why`, so the home screen and QUESTS show them. |
 | `arc/` | Tom's build, with its own brief. On the shared foundation as of 2026-08-27: the store, the theme engine, the icon set, the settings sheet and the standard backup. Owns `map`, `node` and `link`. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. |
 | `quest/` | QUESTS, built 2026-09-14 and tested in the browser at desktop width; phone width not measured, because the test pane reported no width. Todoist's Inbox, Today, Upcoming and projects over STATUS's todo rows. Reads dates, times, P1 to P3, #projects and repeats from anywhere in the line, highlighted as typed, with a chip to give the words back. Todoist's date menu and overdue Reschedule. Ticking a repeat writes a finished copy and moves the todo on; STATUS does the same. Today also lists BLOCK's published plan with Now and Next, every row says whether it came from QUESTS, STATUS or BLOCK, and Date, Priority, Move to and More are visible buttons on each row. STATUS's journal keeps showing todos, on their due date. A clock with no am or pm is the next time it comes round today, in QUESTS, STATUS and LOG, for every kind of line; on another day 1 to 6 is the afternoon. Each app carries its own copy of the rule. LOG's copy of `notes()` does not know `due` yet, so LOG still shows those todos on the day written. |
 | `form/` | Standalone by design. Video never leaves the device. Tom only, kept out of the tester build. |
@@ -689,6 +696,7 @@ answer, or take it out.
 | `wealth/` | Built 2026-09-11 and tested in the browser. The money app: three numbers (liquid, allocated, free) and runway. Owns clients on any payment cycle — every N months on one or several days, every N weeks, every N sessions, packages bought up front, or one off — with expected payments derived from the cycle rather than stored. A monthly day is clamped per month when the date is worked out and never when it is saved, so the 31st stays the 31st in every month that has one. Spending reviews at three zoom levels, day, week and month, with a day drawn as a timeline down the clock. Reads STATUS's `spend` rows and files them with a `mark` row rather than editing them, so STATUS's price, account, receipt and meal link cannot be dropped. Text rules sort spending retroactively. Big purchases are marked and excluded from every "normal spending" figure. Every name is picked from a list, never typed twice, and every amount groups itself with commas as it is typed. Logs spending itself as well as reading STATUS's. A donut for where money went, and monthly net beside liquid. Amounts are stored in one base currency and a header switch reads them all in a second one; the rate is typed and dated rather than fetched, and typing always stays in the base currency so a round trip cannot lose anything. Tom only, kept out of the tester build. Opens a GCash PDF (asking for its password, never storing it) or a bank spreadsheet directly, with pasting as the fallback. Trusts the running balance over the printed amount, so ride holds GCash prints as payments are dropped and part-charges fold into one purchase; checks every statement against its own closing balance; nets reversals; and records money between his own accounts once, as a transfer, even when both statements show it. An import setup asks once what each new payee is and turns the answer into a rule; transfers to people nobody named are filed as One-time transfers tagged Unsure, still counted as money out. Then reconciles it: certain matches merge into a master entry keeping his category and taking the bank's amount, uncertain ones are asked about one at a time, and reading the same file twice adds nothing. Optional monthly caps per category, shown as a number and a pace mark rather than a verdict. Has its own brief. |
 | `log/` | Built 2026-09-13 and tested in the browser. The journal module: a way to view STATUS's entries en masse. One continuous timeline from the first record to today, in eight views from Day to Year; the wheel scrolls, the mouse side buttons change view, a held button drags. Days show the day's line and STATUS's bullets, with a faint mood, energy and caffeine graph behind; beside them, day columns for "What got done today" and every STATUS measure, reorderable, resizable and hideable; beside those, weeks, months, quarters and the year with written summaries. A notebook view lays days out as two-page spreads. Writes `note` and the day's `note` by merging, owns `recap` and `cell`. Never watched with a real mouse or real data. Tom only, kept out of the tester build. Has its own brief. |
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
+| `checkin/` | CHECK IN, built 2026-09-14 from `_template/`. Everywhere, and in the tester build. Front, side and back photos, weight read from and written to STATUS's `ev` row, a waist and three 1 to 5 questions by default, all editable in Settings. Any two check-ins side by side with the change and no verdict, and a list of every one. Send to coach makes a `motherbase-checkin` file and hands it to the share menu, or downloads it. Opening a client's files shows them and saves nothing: keeping clients apart is COACH's job, and COACH is not built. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation, passing 152 checks. Every app loads it. |
 
