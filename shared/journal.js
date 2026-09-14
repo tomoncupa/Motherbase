@@ -37,7 +37,7 @@ const KINDS = [
    does not remove them, so they are deleted properly. */
 function bare(x) {
   const o = Object.assign({}, x);
-  delete o.key; delete o.date; delete o.carried; delete o.from;
+  delete o.key; delete o.date; delete o.carried; delete o.from; delete o.movedAway;
   return o;
 }
 
@@ -57,6 +57,14 @@ function place(r, d) {
   const p = r && r.payload;
   if (!p) return null;
   const D = Day();
+  /* MOVED AWAY from this day. Tom, 2026-09-14: "A moved todo is still shown
+     as >, but moved to the bottom of the list." `moved` holds the spans of
+     days it showed on before each move; on those days it is the same row,
+     seen where it used to be, flagged `movedAway`. A todo finished on one of
+     those days shows as finished there instead. */
+  if (p.kind === 'todo' && Array.isArray(p.moved) && (!p.due || d < p.due) && !(p.done && p.doneOn === d) &&
+      p.moved.some(m => m && m.from <= d && d <= m.to))
+    return Object.assign({ key: r.key, date: r.date }, p, { movedAway: true });
   if (p.kind === 'todo' && p.due !== undefined && !p.done && !p.cancelled) {
     if (!p.due || p.due > d) return null;
     return Object.assign({ key: r.key, date: r.date }, p, p.due < d ? { carried: D.diff(d, p.due) } : {});
@@ -69,7 +77,8 @@ function place(r, d) {
     return Object.assign({ key: r.key, date: r.date, from: r.date }, p);
   return null;
 }
-const onDay = (r, d) => !!place(r, d);
+/* whether a line is on this day to be done: a todo that moved away is not */
+const onDay = (r, d) => { const x = place(r, d); return !!x && !x.movedAway; };
 function notes(date) {
   const d = date || Day().today();
   return Rec().all('note').map(r => place(r, d)).filter(Boolean);
@@ -417,12 +426,14 @@ function timeText(x) {
   return { s: '', wrote: false };
 }
 
-/* The clock a line sorts by in time order: its start. Tom, 2026-09-14: "use
-   the start time for time sorting", replacing sorting a done todo by when it
-   was ticked. A line with no start sorts by when it was written, so a list is
-   one sequence rather than a timed half and an untimed clump. */
+/* The clock a line sorts by in time order. Tom, 2026-09-14: its start, "use
+   the start time for time sorting"; and "a timeless todo is ordered according
+   to tick time, not created time". So: the start if it has one; a ticked todo
+   with no start, when it was ticked; anything else, when it was written. One
+   sequence, rather than a timed half and an untimed clump. */
 function sortClock(x) {
   if (x && x.at) return +String(x.at).replace(':', '');
+  if (x && x.kind === 'todo' && x.done && x.doneAt) return +String(x.doneAt).replace(':', '');
   if (x && x.t) return +hhmm(x.t).replace(':', '');
   return 9999;
 }
@@ -453,8 +464,18 @@ function patchNote(date, key, changes, src) {
    The row stays on the day it was written. Its `due` becomes tomorrow, which
    is the day rule every app already reads, so it leaves today everywhere at
    once and is waiting tomorrow. */
-function moveToTomorrow(date, key, src) {
-  return patchNote(date, key, { due: Day().shift(Day().today(), 1) }, src);
+/* `from` is the day it was being looked at when moved, today by default. The
+   days it was showing on up to then are kept in `moved`, so it stays on them
+   as > at the bottom. It was showing from its old due day, or from the day it
+   was written if it had none; with No date it was showing nowhere. */
+function moveToTomorrow(date, key, src, from) {
+  const D = Day(), cur = Rec().get('note', date, key);
+  if (!cur) return null;
+  const to = D.shift(D.today(), 1), on = from || D.today();
+  const start = cur.due === undefined ? date : (cur.due || null);
+  const moved = Array.isArray(cur.moved) ? cur.moved.slice() : [];
+  if (start && start <= on && on < to) moved.push({ from: start, to: on });
+  return patchNote(date, key, { due: to, moved: moved }, src);
 }
 /* Cancelled is not deleted. A task you decided not to do is a real outcome,
    and deleting it pretends it was never planned. */
@@ -474,8 +495,8 @@ function menuItems(x, after, src) {
     if (back && g.UI && g.UI.undo) g.UI.undo(say, () => { back(); if (after) after(); });
   };
   const out = [];
-  if (!x.done && !x.cancelled) out.push({ label: 'Move to tomorrow', icon: ico('next'),
-    fn: run(() => moveToTomorrow(x.date, x.key, src), 'Moved to tomorrow') });
+  if (!x.done && !x.cancelled && !x.movedAway) out.push({ label: 'Move to tomorrow', icon: ico('next'),
+    fn: run(() => moveToTomorrow(x.date, x.key, src, x.day), 'Moved to tomorrow') });
   out.push(x.cancelled
     ? { label: 'Put it back', icon: ico('undo'), fn: run(() => cancel(x.date, x.key, false, src), 'Put back') }
     : { label: 'Cancel it', note: 'Kept, but stops following you', icon: ico('cancel'),

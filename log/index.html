@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.1, 2026-09-14">
+<meta name="mb-version" content="1.0.2, 2026-09-14">
 <title>LOG</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▤</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -577,9 +577,22 @@ function indexJournal() {
     byKey.set(r.date + '|' + r.key, x);
     if (!byDay.has(day)) byDay.set(day, []);
     byDay.get(day).push(x);
+    /* A todo moved to another day still shows on the days it was moved from,
+       as > at the bottom, the way STATUS shows it (Tom, 2026-09-14). The
+       spans are `moved`, written by Journal.moveToTomorrow. */
+    if (kind === 'todo' && Array.isArray(p.moved)) p.moved.forEach(m => {
+      if (!m || !DATE_OK.test(m.from || '') || !DATE_OK.test(m.to || '')) return;
+      for (let dd = m.from, n = 0; dd <= m.to && n < 400; dd = Day.shift(dd, 1), n++) {
+        if (dd === day || (p.due && dd >= p.due) || (p.done && p.doneOn === dd)) continue;
+        if (!byDay.has(dd)) byDay.set(dd, []);
+        if (byDay.get(dd).some(y => y.key === r.key && y.movedAway)) continue;
+        byDay.get(dd).push({ key: r.key, date: r.date, day: dd, kind, open: false, p, movedAway: true });
+      }
+    });
   });
   const mode = sortMode();
   const cmp = (a, b) => {
+    if (!!a.movedAway !== !!b.movedAway) return a.movedAway ? 1 : -1;
     if (a.open !== b.open) return a.open ? -1 : 1;
     if (mode === 'manual') return (a.p.ord || 0) - (b.p.ord || 0) || (a.p.t || 0) - (b.p.t || 0);
     if (mode === 'newest') return (b.p.t || 0) - (a.p.t || 0);
@@ -587,7 +600,7 @@ function indexJournal() {
   };
   byDay.forEach(list => list.sort(cmp));
 }
-const counted = d => (byDay.get(d) || []).filter(x => !x.open && !x.p.cancelled).length;
+const counted = d => (byDay.get(d) || []).filter(x => !x.open && !x.p.cancelled && !x.movedAway).length;
 
 /* ══════════════════════ THE DAY GRAPH ══════════════════════
    Read from STATUS, never written. The left edge is the earliest weigh-in,
@@ -864,10 +877,10 @@ const M = { near: 40, small: 18, lab: 24, full: 44, wsLine: 18 };
    todo on a day that has gone shows > as it does in STATUS, and still ticks. */
 function bulletHTML(x) {
   const p = x.p, line = Object.assign({}, p, { kind: x.kind });
-  const cls = 'bl mb-bullet' + (x.open ? ' open' : '') + (p.done ? ' done' : '') + (p.cancelled ? ' cancelled' : '');
+  const cls = 'bl mb-bullet' + (x.open ? ' open' : '') + (p.done && !x.movedAway ? ' done' : '') + (p.cancelled ? ' cancelled' : '');
   return '<div class="' + cls + '" data-k="' + attr(x.key) + '" data-d="' + x.date + '" title="' + attr(p.text || '') + '">' +
     (x.kind === 'todo'
-      ? '<button class="k mb-tap" type="button" aria-label="' + (p.done ? 'Untick' : 'Tick') + '">' + Journal.markHTML('todo', x.day !== TODAY) + '</button>'
+      ? '<button class="k mb-tap" type="button" aria-label="' + (p.done ? 'Untick' : 'Tick') + '">' + Journal.markHTML('todo', x.day !== TODAY || !!x.movedAway) + '</button>'
       : '<span class="k" aria-hidden="true">' + Journal.markHTML(x.kind) + '</span>') +
     '<span class="tx">' + Journal.textHTML(line) + '</span></div>';
 }

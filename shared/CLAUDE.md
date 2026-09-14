@@ -43,7 +43,7 @@ are holding a stale copy of whatever you just changed.
 | `io.js` | Backup, restore, spreadsheet export. | High. It is the safety net. |
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 232 checks over all of it. | Run it every time. |
+| `_smoke.html` | 234 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules

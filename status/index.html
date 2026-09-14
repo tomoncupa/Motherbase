@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.1, 2026-09-14">
+<meta name="mb-version" content="1.0.2, 2026-09-14">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1229,7 +1229,9 @@ function noteOrder(a, b) {
      line you need to see without looking for it. A DONE one does not - it has
      stopped being a task and gone back to being a thing that happened, which
      is exactly what everything else on this list is. */
-  const top = x => (x.kind === 'todo' && !x.done && !x.cancelled) ? 0 : 1;
+  /* A todo moved to another day sinks to the bottom of the day it left, as >
+     (Tom, 2026-09-14). */
+  const top = x => x.movedAway ? 2 : (x.kind === 'todo' && !x.done && !x.cancelled) ? 0 : 1;
   if (top(a) !== top(b)) return top(a) - top(b);
   const mode = S.get('noteSort', 'manual');
   if (mode === 'manual') return (a.ord || 0) - (b.ord || 0);
@@ -3654,7 +3656,7 @@ function drawJournal(m) {
 
   const wrap = el('div', 'list');
   list.forEach((x, i) => {
-    const r = el('div', 'note-row mb-bullet' + (x.done ? ' done' : '') + (x.cancelled ? ' cancelled' : ''));
+    const r = el('div', 'note-row mb-bullet' + (x.done && !x.movedAway ? ' done' : '') + (x.cancelled ? ' cancelled' : ''));
     /* ── two targets, two meanings ──
        The line used to do one thing: tapping anywhere ticked it, and the only
        way to fix a typo was to hold. That is backwards. A written line is text
@@ -3673,7 +3675,7 @@ function drawJournal(m) {
        is something to do today; an arrow is something that has moved on. Tom,
        2026-08-28: "To do Bullets should only show as > on past days, and as
        check boxes on the present day." */
-    box.innerHTML = noteSvg(x.kind, d !== Day.today());
+    box.innerHTML = noteSvg(x.kind, d !== Day.today() || !!x.movedAway);
     box.setAttribute('aria-label', x.kind === 'todo' ? (x.done ? 'Untick' : 'Tick') : noteKind(x.kind).label);
     if (x.kind === 'todo') {
       box.onclick = e => {
@@ -3877,7 +3879,7 @@ function noteMenu(x, d, i, n) {
        in shared/journal.js, so LOG and QUESTS offer the same ones in the same
        words. Cancelled is not deleted: a task you decided not to do is a real
        outcome, and deleting it pretends you never planned it. */
-    ...Journal.menuItems(Object.assign({}, x, { date: own }), draw, APP.id),
+    ...Journal.menuItems(Object.assign({}, x, { date: own, day: d }), draw, APP.id),
     manual && i > 0 ? { label: 'Move up', icon: '↑', fn: () => moveNote(d, x, -1) } : null,
     manual && i < n - 1 ? { label: 'Move down', icon: '↓', fn: () => moveNote(d, x, 1) } : null,
     '-',

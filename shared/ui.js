@@ -585,7 +585,7 @@ const UI = {
   /* ── settings ──
      Two tabs. Look, sound and feel are all "how this app comes across", which
      is one idea and does not need three places to live. */
-  /** This page's own version, from <meta name="mb-version" content="1.4, 2026-09-14">.
+  /** This page's own version, from <meta name="mb-version" content="1.0.4, 2026-09-14">.
       Tom, 2026-09-14: each app has a version of its own, because one app goes
       three weeks untouched while another changes three times in a day. The
       commit that changes an app bumps it (root CLAUDE.md, Commits). */

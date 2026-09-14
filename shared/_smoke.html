@@ -323,11 +323,11 @@ async function run() {
   })());
   ok('ui: an app reads its own version off its page', (() => {
     const m = document.createElement('meta');
-    m.name = 'mb-version'; m.content = '1.4, 2026-09-14';
+    m.name = 'mb-version'; m.content = '1.4.2, 2026-09-14';
     document.head.appendChild(m);
     const v = UI.version();
     m.remove();
-    return !!v && v.v === '1.4' && v.date === '2026-09-14' && /14 Sep 2026/.test(v.dateText) && UI.version() === null;
+    return !!v && v.v === '1.4.2' && v.date === '2026-09-14' && /14 Sep 2026/.test(v.dateText) && UI.version() === null;
   })());
 
   /* ---- changing part of a row ----
@@ -397,6 +397,18 @@ async function run() {
   })());
   ok('journal: time order is the start, not when it was ticked',
     J.sortClock({ kind: 'todo', at: '08:00', done: 1, doneAt: '21:00', by: '21:00' }) === 800);
+  ok('journal: a todo with no start sorts by when it was ticked, or else when it was written', (() => {
+    const eight = new Date(); eight.setHours(8, 0, 0, 0);
+    return J.sortClock({ kind: 'todo', done: 1, doneAt: '21:00', t: eight.getTime() }) === 2100 &&
+      J.sortClock({ kind: 'todo', done: 0, t: eight.getTime() }) === 800;
+  })());
+  ok('journal: a moved todo stays on the days it left as moved, and is only to be done on its new day', (() => {
+    const t = Day.today(), tm = Day.shift(t, 1), w = Day.shift(t, -2);
+    const r = { key: 'k', date: w, payload: { kind: 'todo', text: 'x', done: 0, due: tm, moved: [{ from: w, to: t }] } };
+    const here = J.place(r, t), before = J.place(r, Day.shift(t, -1)), next = J.place(r, tm);
+    return !!here && here.movedAway === true && !!before && before.movedAway === true &&
+      !!next && !next.movedAway && !J.onDay(r, t) && J.onDay(r, tm) && !J.place(r, Day.shift(t, -3));
+  })());
   ok('journal: the box, the past-day arrow and their stylesheet come from one place', (() =>
     /nm-box/.test(J.markHTML('todo')) && /&gt;/.test(J.markHTML('todo', true)) &&
     !!document.getElementById('mb-journal-css'))());
