@@ -1048,6 +1048,55 @@ function showCandidates(data, image, date, sh) {
   draw();
 }
 
+/* ══ checking the goal against real weight ════════════════════════════
+   The equation is a first guess. Enough logging and weighing says what this
+   body really burns: the average eaten on logged days, minus the weight trend
+   at 7,700 kcal per kg. People forget food far more often than they invent it,
+   so a lower number is never trusted on its own: it comes with the easy
+   things to miss, and it only ever steps down 150 at a time. Going up is one
+   step of at most 300. Nothing changes until the person taps.            */
+const CHECK_DAYS = 21, CHECK_LOGGED = 14, CHECK_WEEKS = 3;
+function goalCheck(asOf) {
+  const start = addDays(asOf, -CHECK_DAYS), end = addDays(asOf, -1);
+  let logged = 0, total = 0;
+  for (let i = 1; i <= CHECK_DAYS; i++) {
+    const k = entries(addDays(asOf, -i)).reduce((a, e) => a + e.kcal, 0);
+    if (k > 0) { logged++; total += k; }
+  }
+  const ws = Store.all('weight').filter(r => r.date >= start && r.date <= end)
+    .map(r => ({ x: Math.round((dateOf(r.date) - dateOf(start)) / 864e5), kg: r.payload.kg }));
+  const weeks = new Set(ws.map(w => Math.floor(w.x / 7))).size;
+  const p = profile(), t = targets(p), cur = goal();
+  const kind = !p || (t && t.teen) ? 'keep' : p.goal;
+  const out = { ready: logged >= CHECK_LOGGED && weeks >= CHECK_WEEKS, logged, weeks, kind, cur };
+  if (!out.ready) return out;
+  const n = ws.length, mx = ws.reduce((a, w) => a + w.x, 0) / n, my = ws.reduce((a, w) => a + w.kg, 0) / n;
+  const slope = ws.reduce((a, w) => a + (w.x - mx) * (w.kg - my), 0) / ws.reduce((a, w) => a + (w.x - mx) * (w.x - mx), 0);
+  const burn = total / logged - slope * 7700;
+  const delta = kind === 'keep' ? 0 : (p.rate || 0) * 7700 / 7;
+  const floor = p && p.sex === 'm' ? 1500 : 1200;
+  const raw = kind === 'lose' ? burn - delta : kind === 'gain' ? burn + delta : burn;
+  const want = Math.max(floor, Math.round(raw / 10) * 10);
+  Object.assign(out, { intake: Math.round(total / logged), perWeek: Math.round(slope * 700) / 100, burn: Math.round(burn / 10) * 10, want });
+  if (raw < floor && cur <= floor + 50) out.verdict = 'floor';
+  else if (Math.abs(want - cur) < 100) out.verdict = 'right';
+  else if (want > cur) { out.verdict = 'more'; out.offer = Math.min(want, cur + 300); }
+  else { out.verdict = 'less'; out.offer = Math.max(floor, cur - 150); }
+  return out;
+}
+function goalCheckHtml(gc) {
+  const para = (text, cls) => '<p class="' + (cls || '') + '" style="margin-top:8px">' + text + '</p>';
+  if (!gc.ready) return para('Once you have logged 14 days and weighed in each week for 3 weeks, CALCOUNT checks this goal against your real weight.', 'small mut') +
+    para('So far: ' + Math.min(gc.logged, CHECK_LOGGED) + ' of ' + CHECK_LOGGED + ' days, and ' + gc.weeks + ' of ' + CHECK_WEEKS + ' weeks.', 'small mut');
+  if (gc.verdict === 'right') return para('Going by your log and your weigh-ins, this is the right goal for your body.');
+  if (gc.verdict === 'more') return para('Your body burns more than the first guess, so you can eat ' + fmt(gc.offer) + ' a day and ' +
+    (gc.kind === 'lose' ? 'still lose at your pace.' : gc.kind === 'gain' ? 'gain at your pace.' : 'keep your weight.'));
+  const pace = gc.kind === 'lose' ? 'You are losing slower than planned' : gc.kind === 'gain' ? 'You are gaining faster than planned' : 'You are slowly gaining weight';
+  const missed = para('Before eating less, check the easy ones to miss: extra rice, drinks, sauces and cooking oil.', 'small mut');
+  if (gc.verdict === 'floor') return para(pace + ', and your goal is already the lowest that is safe without a coach.') + missed;
+  return para(pace + ', so a goal of ' + fmt(gc.offer) + ' may suit your body better.') + missed;
+}
+
 /* ══ progress ════════════════════════════════════════════════════════ */
 const wUnit = () => S.get('wUnit', 'kg');
 const showW = kg => r1(wUnit() === 'lb' ? kg * 2.20462 : kg);
@@ -1077,7 +1126,9 @@ function renderProgress() {
   } else html += '<p class="mut">Nothing logged this week yet. Your days show up here as you log them.</p>';
   html += '</section>';
 
-  html += '<section class="card"><h2 class="card-title">Daily goal</h2><p>Your goal is <b>' + fmt(goal()) + '</b> calories a day.</p><br><div class="btns">' +
+  const gc = goalCheck(today());
+  html += '<section class="card"><h2 class="card-title">Daily goal</h2><p>Your goal is <b>' + fmt(goal()) + '</b> calories a day.</p>' + goalCheckHtml(gc) + '<br><div class="btns">' +
+    (gc.offer ? '<button class="btn ' + (gc.verdict === 'more' ? 'btn-primary' : 'btn-soft') + '" id="useOffer">' + (gc.verdict === 'more' ? 'Use ' : 'Lower my goal to ') + fmt(gc.offer) + '</button>' : '') +
     '<button class="btn btn-soft" id="editDetails">Change my details</button></div></section>';
 
   const el = $('#screen-progress');
@@ -1093,6 +1144,8 @@ function renderProgress() {
   $('#wSave', el).onclick = save;
   wIn.onkeydown = e => { if (e.key === 'Enter') save(); };
   $('#editDetails', el).onclick = () => onboarding(true);
+  const useOffer = $('#useOffer', el);
+  if (useOffer) useOffer.onclick = () => { S.set('goalOverride', gc.offer); buzz(); render(); toast('Daily goal set to ' + fmt(gc.offer) + '.'); };
 }
 function weightChart(ws) {
   if (ws.length < 2) return '';
@@ -1316,7 +1369,7 @@ render();
 if (!profile()) onboarding(false);
 
 // For _test.html only. Nothing in the app reads this.
-window.CC_APP = { Store, S, recentMeals, repeatMeal, targets, goal, searchFoods, numbersFor, logFood, entries, candidateFrom, foodFromOpenFoodFacts, parseQty, fracText, norm, catalog, render };
+window.CC_APP = { Store, S, goalCheck, recentMeals, repeatMeal, targets, goal, searchFoods, numbersFor, logFood, entries, candidateFrom, foodFromOpenFoodFacts, parseQty, fracText, norm, catalog, render };
 })();
 </script>
 </body>

@@ -98,7 +98,9 @@ that deploys by copying is a file that cannot fail to build.
 | `foods.js` | The Philippine food database. Loaded by the app with a plain script tag. |
 | `worker/scan.js` | The AI scan's server half. A Cloudflare Worker that holds the API key, so the key is never inside a file anyone can download. |
 | `worker/SETUP.md` | How Tom turns the scan on, in plain language. |
-| `_test.html` | Checks over the maths and the data. Run it after touching either. |
+| `calories.html` | The free public page: tap foods into an order and see the total. The marketing test. |
+| `sw.js`, `manifest.json`, `icon*.` | Working with no signal, and installing to a home screen. |
+| `_test.html` | Checks over the maths, the data, the store, the screen and the scan server. Run it after touching anything, with a new `?cb=`. |
 
 ### Why the AI needs a server
 
@@ -127,13 +129,12 @@ photo is shrunk, sent, and dropped.
 
 | Type | Key | Payload |
 |---|---|---|
-| `profile` | `''` | `{sex, age, cm, kg, act, rate, goalKg}` |
+| `profile` | `''` | `{goal, sex, age, cm, kg, act, rate}`. `goal` is `lose`, `keep` or `gain`; `act` is `sit`, `feet` or `hard`; `rate` is kg a week |
 | `entry` | timestamp id, dated | one thing eaten: `{food, name, brand, serve, qty, kcal, p, c, f, meal, src, err, t}`. Numbers are frozen in, so fixing a food later never rewrites what was eaten |
 | `food` | food id | a food the person made themselves, same shape as `foods.js`. May carry a `barcode` |
 | `weight` | `''`, dated | `{kg}`, one per day, last one wins |
-| `fav` | food id | `{on}` |
 | `usage` | `YYYY-MM` | `{scans}`, AI scans used that month |
-| `setting` | name | `{v}` |
+| `setting` | name | `{v}`. `goalOverride` is a goal the person set by hand or accepted from the goal check; `macros`, `hUnit`, `wUnit`, `scanUrl` and `device` are the rest |
 
 **The scan cap is enforced on the device until accounts exist.** A determined
 person can clear it. That is known and accepted for a Skool beta. The Worker
@@ -144,7 +145,7 @@ has its own per-device monthly count as the real limit once it is deployed.
 `foods.js` defines `CC_FOODS`. One food:
 
 ```js
-{ id: 'jb-cj-thigh', name: 'Chickenjoy Thigh', brand: 'Jollibee', cat: 'chicken',
+{ id: 'jb-cj-thigh', name: 'Chickenjoy Thigh', brand: 'Jollibee', cat: 'fastfood',
   aka: ['chicken joy', 'cj'],
   per: { g: 125, kcal: 380, p: 27, c: 5, f: 28, na: 400 },
   serves: [{ l: '1 pc', m: 1 }],
@@ -203,9 +204,21 @@ figure was read from something the chain published, and the commit says where.
 - **A floor**: never below 1,200 kcal for women or 1,500 for men, the common
   guideline for eating without supervision. If the rate asks for less, the
   target sits at the floor and the app says the rate is not reachable.
-- **After two weeks of weigh-ins**, the trend weight against logged intake says
-  what maintenance really is. That beats any equation, and it is the feature
-  that makes a coach's app worth more than a calculator. Not built yet.
+- **The goal check.** Once someone has logged 14 of the last 21 days and
+  weighed in during each of the last 3 weeks, Progress compares the goal with
+  what their weight really did: average calories on logged days, minus the
+  weight trend at 7,700 kcal per kg, gives what this body actually burns. That
+  beats any equation, and it is what makes a coach's app worth more than a
+  calculator.
+  - Within 100 of the goal, it says the goal is right. That sentence is the
+    confidence Tom asked for, earned from their own numbers.
+  - If they can eat more, it offers up to 300 more, one step at a time.
+  - If the numbers say eat less, it does not believe them straight away.
+    People forget food far more often than they invent it, so it names the
+    easy things to miss first (extra rice, drinks, sauces, oil) and offers
+    only 150 less. At the safety floor it offers nothing.
+  - Under 18 is never steered toward a deficit, here or anywhere.
+  - It only suggests. Nothing changes until the person taps the button.
 
 ## Behaviour
 
@@ -250,7 +263,7 @@ choice rather than inherited:
 | `worker/SETUP.md` | Written 2026-09-15. Tom has not deployed it. |
 | `sw.js`, `manifest.json`, icons | Offline copy and home-screen install, 2026-09-15. Watched on the test server: the offline copy registers, takes over the page and stores all five files. **Loading with the network actually cut has not been watched.** It is off on a test server unless the address has `?sw`, and it steps aside for any `?cb=` address, so tests are never answered from an old copy. The icons are drawn by a short Python script with no libraries, because Pillow is not installed here. |
 | `calories.html` | The free public page, 2026-09-15: "How many calories are in your order?" Tap foods into an order, change servings, share it. No account, stores nothing. A link can open it filtered, `calories.html?brand=Mang Inasal` or `?cat=drinks` or `?q=chickenjoy`, which is what a post or a reel links to. Tested in the browser at 375px. It is the cheapest test of demand: if people use and share this, the app earns the months. |
-| `_test.html` | 101 checks, all passing, 2026-09-15. It sets the browser's own CALCOUNT data aside and puts it back exactly. |
+| `_test.html` | 109 checks, all passing, 2026-09-15. It sets the browser's own CALCOUNT data aside and puts it back exactly. |
 
 ### Releasing a new version
 

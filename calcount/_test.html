@@ -155,6 +155,58 @@
       copied.length === 2 && d3e.length === 2 && d3e.reduce((a, x) => a + x.kcal, 0) === breakfasts[0].kcal && d3e.some(x => x.food === 'pandesal' && x.qty === 2), d3e);
     check('eat this again: a day never offers its own meals back to itself', !A.recentMeals(d2, 3).some(g => g.date === d2));
 
+    /* ── the goal check, against planted weeks ──────────────────────
+       21 days before 30 June 2025. Worked by hand: eating 2,000 a day while
+       losing exactly half a kilo a week means burning 2,000 + 7,700 / 14 = 2,550. */
+    const asOf = '2025-06-30';
+    const daysBefore = n => { const x = new Date(2025, 5, 30); x.setDate(x.getDate() - n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+    const plant = (kcal, weighs) => {
+      A.Store.all('entry').filter(r => r.key.startsWith('gc')).forEach(r => A.Store.del('entry', r.date, r.key));
+      A.Store.all('weight').forEach(r => A.Store.del('weight', r.date, ''));
+      for (let i = 1; i <= 21; i++) A.Store.set('entry', daysBefore(i), 'gc' + i, { name: 'Test', serve: '1', qty: 1, kcal, meal: 'l', t: i });
+      weighs.forEach(([i, kg]) => A.Store.set('weight', daysBefore(i), '', { kg }));
+    };
+    const losingHalf = [[21, 80], [14, 79.5], [7, 79], [1, 80 - 20 / 14]];
+    const flat = [[21, 80], [14, 80], [7, 80], [1, 80]];
+    A.Store.set('profile', null, '', { goal: 'lose', sex: 'm', age: 35, cm: 175, kg: 80, act: 'sit', rate: 0.5 });
+
+    plant(2000, [[1, 80]]);
+    let gc = A.goalCheck(asOf);
+    check('goal check: one weigh-in is not enough to judge, and it says how far along they are', !gc.ready && gc.logged === 21 && gc.weeks === 1, gc);
+
+    plant(2000, losingHalf);
+    A.S.set('goalOverride', 2000);
+    gc = A.goalCheck(asOf);
+    check('goal check: 2,000 a day while losing half a kilo a week means burning 2,550', gc.ready && gc.burn === 2550 && gc.intake === 2000 && gc.perWeek === -0.5, gc);
+    check('goal check: when the goal already fits, it says the goal is right and offers nothing', gc.verdict === 'right' && !gc.offer, gc);
+
+    A.S.set('goalOverride', 1600);
+    gc = A.goalCheck(asOf);
+    check('goal check: when they can eat more, it offers one step of at most 300', gc.verdict === 'more' && gc.offer === 1900 && gc.want === 2000, gc);
+
+    plant(2000, flat);
+    A.S.set('goalOverride', 2000);
+    gc = A.goalCheck(asOf);
+    check('goal check: when the numbers say eat less, it only offers 150 less', gc.verdict === 'less' && gc.offer === 1850, gc);
+
+    plant(1400, flat);
+    A.S.set('goalOverride', 1500);
+    gc = A.goalCheck(asOf);
+    check('goal check: at the safety floor it offers nothing lower', gc.verdict === 'floor' && !gc.offer, gc);
+
+    A.Store.set('profile', null, '', { goal: 'lose', sex: 'f', age: 16, cm: 160, kg: 60, act: 'sit', rate: 0.75 });
+    A.S.set('goalOverride', null);
+    plant(2000, losingHalf);
+    gc = A.goalCheck(asOf);
+    check('goal check: under 18 is judged as keeping weight, never steered to a deficit', gc.kind === 'keep' && gc.want === gc.burn, gc);
+
+    // One level under "the goal did not change": running the check writes nothing at all.
+    const rowsBefore = JSON.stringify(A.Store.dump());
+    A.goalCheck(asOf); A.goalCheck(asOf);
+    check('goal check: checking writes nothing, so nothing changes until the person taps', JSON.stringify(A.Store.dump()) === rowsBefore);
+    A.Store.all('entry').filter(r => r.key.startsWith('gc')).forEach(r => A.Store.del('entry', r.date, r.key));
+    A.Store.all('weight').forEach(r => A.Store.del('weight', r.date, ''));
+
     /* ── the store ────────────────────────────────────────────────── */
     const S = A.Store;
     const row = S.set('entry', day, 'merge1', { kcal: 100, t: 1 });
