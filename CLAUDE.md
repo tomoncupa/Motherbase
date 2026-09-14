@@ -252,7 +252,7 @@ An app may read any type. It writes only the types it owns.
 | `count` | **wealth** | date + account id | `{bal}` — a counted balance. Kept off `acct` so STATUS cannot wipe it |
 | `client` `paid` | **wealth** | | a coaching client, and money that arrived. A `paid` with no client is a one-off |
 | `sesh` | **wealth** | date + id | `{client}` — one session delivered. A client paid every N sessions is paid off a count, so the count has to be auditable |
-| `pack` | **wealth** | date + id | `{client, n, price, note}` — sessions sold before they happen. Payments apply to packages oldest first, so partial payment needs no extra field |
+| `pack` | **wealth** | date + id | `{client, n, price, note, parts, when}` — sessions sold before they happen, whole or in parts due as blocks of sessions start or end. Payments apply to packages oldest first, so partial payment needs no extra field |
 | `bill` `debt` `pot` `move` | **wealth** | | recurring outgoings, what is owed, savings pots and movements into them |
 | `recon` | **wealth** | a statement line's fingerprint | `{d, amt, acct, kind, spend, sdate, skip}` — this statement line has been dealt with. What makes re-importing the same file harmless |
 | `xfer` | **wealth** | date + id | `{from, to, amt, note, t, stmt}` — his own money moving between two of his accounts. Recorded once even when both statements show it; changes both balances, never spending or income |

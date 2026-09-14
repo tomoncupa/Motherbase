@@ -720,17 +720,59 @@ function packState(c) {
   const list = packsOf(c.id);
   const bought = list.reduce((a, x) => a + num(x.n, 0), 0);
   const value = list.reduce((a, x) => a + num(x.price, 0), 0);
-  const delivered = seshOf(c.id).length;
+  const sess = seshOf(c.id);
+  const delivered = sess.length;
   const paid = paidRows({}).filter(x => x.client === c.id).reduce((a, x) => a + num(x.amt, 0), 0);
-  /* what is still owed, package by package, oldest first */
-  let pool = paid;
-  const dues = [];
+  const pace = num((Rec.get('client', null, c.id) || c).perWeek, 0);
+  const today = Day.today();
+
+  /* == a package paid in parts ==
+     Tom, 2026-09-14: "45k for 30 sessions but we split it into 22.5 every 15
+     sessions at roughly 4x a week." One package, two parts, and the second is
+     not owed until its turn: before this, a package was owed in full from the
+     day it was sold, so that ₱22,500 would have read as late from day one.
+
+     A package's `parts` split its price evenly. With `when` 'before' (the
+     default) a part is due at the start of its block: the first when it is
+     sold, the next when the session ending the previous block is done. With
+     'after' a part is due when its own block ends. Sessions belong to
+     packages oldest first.
+
+     A part not reached yet has no real date. If the client has a pace, the
+     date is guessed from it and marked as a guess; without one it has none.
+     A guessed part is expected, never late. A package with one part behaves
+     exactly as it always did. */
+  let start = 0;
+  const parts = [];
   list.forEach(x => {
-    const price = num(x.price, 0);
-    const put = Math.min(pool, price);
-    pool -= put;
-    if (price - put > 0.5) dues.push({ pack: x, date: x.date, amt: price - put, part: put > 0 });
+    const n = Math.max(1, num(x.n, 0)), price = num(x.price, 0);
+    const p = Math.max(1, Math.min(n, Math.round(num(x.parts, 1)) || 1));
+    const after = x.when === 'after';
+    const mine = sess.slice(start, start + n);
+    const each = Math.floor(price / p * 100) / 100;
+    for (let k = 0; k < p; k++) {
+      const at = after ? Math.round(n * (k + 1) / p) : Math.round(n * k / p);
+      const amt = k === p - 1 ? round2(price - each * (p - 1)) : each;
+      let date = null, reached = false, est = false;
+      if (at === 0) { date = x.date; reached = true; }
+      else if (mine.length >= at) { date = mine[at - 1].date; reached = true; }
+      else if (pace > 0) {
+        const base = [x.date].concat(delivered ? [sess[delivered - 1].date] : []).sort().pop();
+        const remaining = Math.max(1, start + at - delivered);
+        date = Day.shift(base, Math.ceil(remaining * 7 / pace));
+        if (date < today) date = today;
+        est = true;
+      }
+      parts.push({ pack: x, k: k, of: p, at: at, after: after, amt: amt, date: date, reached: reached, est: est });
+    }
+    start += n;
   });
+  let pool = paid;
+  parts.forEach(pt => { const put = Math.min(pool, pt.amt); pool = round2(pool - put); pt.put = put; pt.left = round2(pt.amt - put); });
+  const shape = pt => ({ pack: pt.pack, date: pt.date, amt: pt.left, part: pt.put > 0, k: pt.k, of: pt.of,
+    at: pt.at, after: pt.after, est: pt.est });
+  const dues = parts.filter(pt => pt.left > 0.5 && pt.reached).map(shape);
+  const coming = parts.filter(pt => pt.left > 0.5 && !pt.reached).map(shape);
   /* How many sessions the money actually covers. `left` alone is the wrong
      answer to "what work do I owe": a package bought and not paid for is a
      debt they have, not a session he owes. Each package converts the money
@@ -745,10 +787,41 @@ function packState(c) {
   });
   return {
     packs: list, bought: bought, delivered: delivered, left: bought - delivered,
-    value: value, paid: paid, owed: Math.max(0, value - paid), dues: dues,
+    value: value, paid: paid, dues: dues, coming: coming, pace: pace,
+    owed: round2(dues.reduce((t, d) => t + d.amt, 0)),
+    toCome: round2(coming.reduce((t, d) => t + d.amt, 0)),
     paidFor: paidFor, owedWork: Math.max(0, paidFor - delivered),
   };
 }
+
+/* == what a session earns ==
+   Tom, 2026-09-14: "For session clients, I'd like to show me how much I make
+   per session, and also a setting for sessions per week, which also lets me
+   see how much I earn per week for that client."
+
+   A client paid every N sessions earns their rate over N. A package client
+   earns their latest package's price over its sessions, because a renewal at
+   a new price is the price that is true now. A week's worth is that times the
+   pace he gave, and it says "about" because the pace is his rough figure. */
+function perSession(c) {
+  const y = cycleOf(c);
+  if (y.kind === 'sesh') return num(c.rate, 0) / y.every;
+  if (y.kind === 'pack') {
+    const ps = packsOf(c.id);
+    if (!ps.length) return 0;
+    const last = ps[ps.length - 1];
+    return num(last.price, 0) / Math.max(1, num(last.n, 0));
+  }
+  return 0;
+}
+const earnWords = (per, pace) => per
+  ? money(per) + ' a session' + (pace > 0 ? ' · about ' + money(per * pace) + ' a week' : '')
+  : '';
+
+/* A package part, in words, for the rows that list it. */
+const partWhy = d => d.of > 1
+  ? 'part ' + (d.k + 1) + ' of ' + d.of + (d.at ? ', when session ' + d.at + ' is done' : ', when sold')
+  : d.pack.n + ' sessions' + (d.part ? ', part paid' : '');
 
 /* == expected client payments, DERIVED and never stored ==
    Correcting a rate or a cycle fixes every future date at once and cannot
@@ -811,11 +884,16 @@ function expected(from, to) {
     const y = cycleOf(c);
     if (y.kind === 'pack') {
       if (c.status === 'done') return;
-      packState(c).dues.forEach(d => {
+      const st = packState(c);
+      st.dues.forEach(d => {
         if (d.date < from || d.date > to) return;
         out.push({ client: c, date: d.date, amt: d.amt, paid: null,
-                   late: d.date < Day.today(),
-                   why: d.pack.n + ' sessions' + (d.part ? ', part paid' : '') });
+                   late: d.date < Day.today(), why: partWhy(d) });
+      });
+      /* Not reached yet: expected on its guessed date, never late. */
+      st.coming.forEach(d => {
+        if (!d.date || d.date < from || d.date > to) return;
+        out.push({ client: c, date: d.date, amt: d.amt, paid: null, late: false, est: true, why: partWhy(d) });
       });
       return;
     }
@@ -2385,7 +2463,7 @@ function drawIn(m) {
     const list = el('div', 'list');
     late.forEach(e => {
       const r = itemRow(e.client.name, 'due ' + Day.short(e.date) + ' · ' +
-        away(e.date), money(e.amt), 'late');
+        away(e.date) + (e.why ? ' · ' + esc(e.why) : ''), money(e.amt), 'late');
       r.onclick = () => payFor(e); r.menu = () => dueMenu(e);
       list.appendChild(r);
     });
@@ -2402,7 +2480,8 @@ function drawIn(m) {
   else {
     const list = el('div', 'list');
     soon.forEach(e => {
-      const r = itemRow(e.client.name, Day.short(e.date) + ' · ' + away(e.date), money(e.amt));
+      const r = itemRow(e.client.name, (e.est ? 'about ' : '') + Day.short(e.date) + ' · ' + away(e.date) +
+        (e.why ? ' · ' + esc(e.why) : ''), money(e.amt));
       r.onclick = () => payFor(e); r.menu = () => dueMenu(e);
       list.appendChild(r);
     });
@@ -2458,7 +2537,7 @@ function drawClients(m) {
   const standing = c => {
     if (c.status === 'done') return '';
     if (late[c.id]) return ' · <b>late since ' + esc(Day.short(late[c.id].date)) + '</b>';
-    if (next[c.id]) return ' · next ' + esc(Day.short(next[c.id].date));
+    if (next[c.id]) return ' · next ' + (next[c.id].est ? 'about ' : '') + esc(Day.short(next[c.id].date));
     return '';
   };
 
@@ -2499,6 +2578,7 @@ function drawClients(m) {
          Their packages are priced one at a time. */
       const r = itemRow(c.name + (c.status === 'done' ? ' (finished)' : ''),
         (isPack(c) ? 'Paid ' + cycleWord(c) : money(num(c.rate, 0)) + ' ' + cycleWord(c)) +
+        (perSession(c) ? ' · ' + earnWords(perSession(c), num(c.perWeek, 0)) : '') +
         ' · ' + x.n + (x.n === 1 ? ' payment · ' : ' payments · ') +
         (x.share * 100).toFixed(0) + '% of the year' + standing(c),
         money(x.got), late[c.id] && c.status !== 'done' ? 'late' : '');
@@ -2531,7 +2611,8 @@ function drawClients(m) {
            and the figure is sessions he still has to give them. */
         const st = packState(c);
         sub = st.delivered + ' of ' + st.bought + ' delivered' +
-          (st.owed ? ' · <b>' + esc(money(st.owed)) + ' owed</b>' : ' · paid up');
+          (st.owed ? ' · <b>' + esc(money(st.owed)) + ' owed</b>'
+            : st.toCome ? ' · ' + esc(money(st.toCome)) + ' to come' : ' · paid up');
         fig = st.left + ' left';
         pct = st.bought ? (st.delivered / st.bought * 100) : 0;
         bad = !!st.owed;
@@ -3364,6 +3445,16 @@ function clientSheet(c) {
       everyWrap.appendChild(everyLbl); everyWrap.appendChild(every);
       b.appendChild(everyWrap);
 
+      /* Roughly how many sessions a week, for any client paid by the session.
+         It gives what the client is worth in a week, and guesses when a
+         package part falls due. Everything worked out from it says "about". */
+      const paceWrap = el('div', 'fld');
+      paceWrap.appendChild(el('label', null, 'Sessions a week, roughly'));
+      const pace = UI.field('decimal', { placeholder: 'e.g. 4', value: num(c.perWeek, 0) ? String(c.perWeek) : '' });
+      paceWrap.appendChild(pace);
+      b.appendChild(paceWrap);
+      pace.addEventListener('input', () => paintSesh());
+
       /* Which days of the month, monthly cycles only. Usually one, and not
          always the day they signed up; sometimes two, for a client paid on
          the 1st and the 15th. Each day is its own payment, so a missed 15th
@@ -3381,6 +3472,7 @@ function clientSheet(c) {
       function paintEvery() {
         const k = cycle.get(), n = Math.max(1, num(every.value, 1)), one = n === 1;
         everyWrap.style.display = (k === 'oneoff' || k === 'pack') ? 'none' : '';
+        paceWrap.style.display = (k === 'pack' || k === 'sesh') ? '' : 'none';
         dayWrap.style.display = k === 'month' ? '' : 'none';
         rateWrap.style.display = k === 'pack' ? 'none' : '';
         everyLbl.textContent = k === 'week' ? (one ? 'Week' : 'Weeks')
@@ -3429,6 +3521,11 @@ function clientSheet(c) {
           st.into ? String(st.every - st.into) + ' to go' : 'none since the last'));
         g2.appendChild(tile('BLOCKS OWED', String(st.dues.length), 'completed blocks'));
         seshBox.appendChild(g2);
+        /* Worked out from what is typed right now, so changing the rate or
+           the block size shows its effect before saving. */
+        const perS = num(rate.value, 0) / Math.max(1, num(every.value, 1));
+        if (perS) seshBox.appendChild(el('div', 'note', '<b>' + esc(earnWords(perS, num(pace.value, 0))) + '</b>' +
+          (num(pace.value, 0) ? '' : '. Put in sessions a week to see a week\u2019s worth.')));
         const btns = el('div', 'rowbtns');
         const add = el('button', 'btn go wide mb-press mb-tap', 'Log a session today');
         add.type = 'button';
@@ -3469,6 +3566,15 @@ function clientSheet(c) {
           money(st.paid) + ' of ' + money(st.value) + ' paid', st.owed ? 'warn' : 'good'));
         g2.appendChild(tile('PACKAGES', String(st.packs.length), 'sold all time'));
         seshBox.appendChild(g2);
+        if (st.coming.length) {
+          const nx = st.coming[0];
+          seshBox.appendChild(el('div', 'note', 'Next part: <b>' + esc(money(nx.amt)) + '</b>' +
+            (nx.at ? ' when session ' + nx.at + ' is done' : '') +
+            (nx.date ? ', about ' + esc(Day.short(nx.date)) : st.pace ? '' : '. Put in sessions a week to see roughly when') + '.'));
+        }
+        const perP = perSession(c);
+        if (perP) seshBox.appendChild(el('div', 'note', '<b>' + esc(earnWords(perP, num(pace.value, 0))) + '</b>' +
+          (num(pace.value, 0) ? '' : '. Put in sessions a week to see a week\u2019s worth.')));
         if (st.left < 0) seshBox.appendChild(el('div', 'note',
           '<span class="stale">More sessions delivered than bought.</span> Either a package has not been entered, or these were free.'));
         else if (st.owedWork > 0) seshBox.appendChild(el('div', 'note',
@@ -3493,11 +3599,14 @@ function clientSheet(c) {
           const list = el('div', 'list');
           list.style.marginTop = 'var(--s-3)';
           st.packs.slice().reverse().forEach(x => {
-            const owedHere = st.dues.find(d => d.pack.id === x.id);
+            const owedHere = st.dues.filter(d => d.pack.id === x.id).reduce((t, d) => t + d.amt, 0);
+            const comeHere = st.coming.filter(d => d.pack.id === x.id).reduce((t, d) => t + d.amt, 0);
             const r = itemRow(x.n + ' sessions' + (x.note ? ' · ' + x.note : ''),
               Day.short(x.date) + ' · ' + money(num(x.price, 0)) +
-              (owedHere ? ' · <b>' + esc(money(owedHere.amt)) + ' still owed</b>' : ' · paid'),
-              money(num(x.price, 0)), owedHere ? 'late' : 'in');
+              (num(x.parts, 1) > 1 ? ' in ' + x.parts + ' parts' : '') +
+              (owedHere ? ' · <b>' + esc(money(owedHere)) + ' owed</b>'
+                : comeHere ? ' · ' + esc(money(comeHere)) + ' to come' : ' · paid'),
+              money(num(x.price, 0)), owedHere ? 'late' : comeHere ? '' : 'in');
             r.onclick = () => { h.close(); packSheet(c, x); };
             list.appendChild(r);
           });
@@ -3546,6 +3655,7 @@ function clientSheet(c) {
         Rec.set('client', null, c.id, merge(c, {
           name: n, rate: num(rate.value, 0), cycle: cycle.get(),
           every: Math.max(1, num(every.value, 1)),
+          perWeek: Math.max(0, num(pace.value, 0)),
           /* 31 is a real answer. dueDates already clamps per month, so the
              31st is the 31st in March and the 28th in February, and it does
              NOT drift down to the 28th forever after one short month.
@@ -3578,6 +3688,35 @@ function packSheet(c, existing) {
       b.appendChild(fld('How many sessions', n));
       const price = amountField(existing ? existing.price : '');
       b.appendChild(fld('Price for the whole package', price));
+
+      /* Paid in parts: 30 sessions at ₱45,000 in two parts is ₱22,500 when it
+         is sold and ₱22,500 when session 15 is done. */
+      const partsF = UI.field('number', { value: String(existing ? Math.max(1, num(existing.parts, 1)) : 1) });
+      b.appendChild(fld('Paid in how many parts', partsF));
+      let when = existing && existing.when === 'after' ? 'after' : 'before';
+      const whenWrap = fld('Each part is paid', chipRow([{ id: 'before', name: 'At the start of its sessions' },
+        { id: 'after', name: 'At the end of its sessions' }], when, v => { when = v; paintParts(); }));
+      b.appendChild(whenWrap);
+      const partsHint = el('div', 'note', '');
+      b.appendChild(partsHint);
+      const partsOf = () => {
+        const cnt = Math.max(1, num(n.value, 0));
+        return Math.max(1, Math.min(cnt, Math.round(num(partsF.value, 1)) || 1));
+      };
+      function paintParts() {
+        const cnt = Math.max(1, num(n.value, 0)), val = num(price.value, 0), p = partsOf();
+        whenWrap.style.display = p > 1 ? '' : 'none';
+        if (!val || !num(n.value, 0)) { partsHint.innerHTML = ''; return; }
+        if (p === 1) { partsHint.innerHTML = 'All ' + esc(money(val)) + ' is due when it is sold.'; return; }
+        const list = [];
+        for (let k = 0; k < p; k++) {
+          const at = when === 'after' ? Math.round(cnt * (k + 1) / p) : Math.round(cnt * k / p);
+          list.push(esc(money(val / p)) + (at ? ' when session ' + at + ' is done' : ' when it is sold'));
+        }
+        partsHint.innerHTML = list[0].charAt(0).toUpperCase() === list[0].charAt(0) ? andList(list) + '.' : andList(list) + '.';
+      }
+      [n, price, partsF].forEach(f => f.addEventListener('input', paintParts));
+      paintParts();
       const date = dateField(existing ? existing.date : Day.today());
       b.appendChild(fld('Sold on', date));
       const note = UI.field('text', { placeholder: 'optional', value: existing ? existing.note || '' : '' });
@@ -3592,7 +3731,7 @@ function packSheet(c, existing) {
           S.get('lastAcct', (accts()[0] || {}).id || ''), null, {});
         b.appendChild(fld('Into', payAcct));
         b.appendChild(el('div', 'note',
-          'Leave it blank if they have not paid yet, or put in part of it. Whatever is left shows as owed until it arrives.'));
+          'Leave it blank if they have not paid yet, or put in part of it. Each part shows as owed only once it is due.'));
       }
 
       h.save = () => {
@@ -3601,8 +3740,10 @@ function packSheet(c, existing) {
         if (!count || val <= 0) { n.focus(); return false; }
         const id = existing ? existing.id : newId();
         if (existing && existing.date !== date.value) Rec.del('pack', existing.date, existing.id);
+        const p = partsOf();
         Rec.set('pack', date.value, id, merge(existing, {
           client: c.id, n: count, price: val, note: note.value.trim(),
+          parts: p, when: p > 1 ? when : 'before',
         }));
         if (payNow && num(payNow.value, 0) > 0) {
           const amt = num(payNow.value, 0);
@@ -3612,7 +3753,7 @@ function packSheet(c, existing) {
           });
           S.set('lastAcct', payAcct.get());
           UI.toast('sold <b>' + count + ' sessions</b>, took <b>' + esc(money(amt)) + '</b>' +
-            (amt < val ? ', <b>' + esc(money(val - amt)) + '</b> still owed' : ''));
+            (amt < val ? ', <b>' + esc(money(val - amt)) + '</b> ' + (p > 1 ? 'to come in parts' : 'still owed') : ''));
         } else {
           UI.toast('sold <b>' + count + ' sessions</b> for ' + esc(money(val)) + ', unpaid');
         }

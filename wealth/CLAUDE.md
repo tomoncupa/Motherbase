@@ -68,9 +68,9 @@ WEALTH writes these types. It may read anything.
 | `wtag` | tag id | `{name}` — an occasion, not a category. `date`, `gift`, `travel` |
 | `mark` | `date\|spendKey` | `{cat, tag, big}` — what WEALTH thinks of one spend row |
 | `count` | date + account id | `{bal}` — a counted balance, on the day it was counted |
-| `client` | client id | `{name, rate, cycle, every, start, days, day, status, note}` — `days` is a list of days of the month; `day` is its first, kept for rows written before the list |
+| `client` | client id | `{name, rate, cycle, every, start, days, day, perWeek, status, note}` — `days` is a list of days of the month; `day` is its first, kept for rows written before the list; `perWeek` is his rough pace for a client paid by the session |
 | `sesh` | date + id | `{client}` — one session delivered, for a client paid by the session |
-| `pack` | date + id | `{client, n, price, note}` — sessions sold before they happen |
+| `pack` | date + id | `{client, n, price, note, parts, when}` — sessions sold before they happen; `parts` splits the price, `when` is `before` or `after` each block |
 | `paid` | date + id | `{amt, acct, client, note, t}` — money in. No client means a one-off |
 | `bill` | bill id | `{name, amt, day, acct, cat, from, until}` — a recurring outgoing |
 | `pot` | pot id | `{name, target, acct, ord}` |
@@ -372,6 +372,44 @@ differently.
 
 `sesh` and `pack` are two kinds rather than one with a flag, because they are
 opposite ways round: one bills after the sessions, the other before.
+
+### Packages paid in parts
+
+Tom, 2026-09-14: *"I have a live online client, 45k for 30 sessions but we
+split it into 22.5 every 15 sessions at roughly 4x a week."*
+
+Before this a package was owed in full the day it was sold, so the second
+₱22,500 would have read as late from day one. A package now carries `parts`
+and `when`. The price splits evenly, with the last part taking any rounding.
+With `when` set to `before`, the default, a part is due at the start of its
+block: the first when the package is sold, the next when the session that
+ends the previous block is done. With `after`, a part is due when its own
+block ends. Sessions belong to packages oldest first. A package with one part
+behaves exactly as it always did.
+
+**Money that is not due yet is not owed.** A part that is reached and unpaid
+is owed, and late the day after. A part not reached yet is "to come", and
+payments still apply oldest part first.
+
+**A guessed date says it is a guess.** A client can carry `perWeek`, roughly
+how many sessions a week. From it, a part not reached yet gets an estimated
+date: the latest session or the sale date, plus the sessions still to go at
+that pace. It is never earlier than today. It appears under Expected next as
+"about" that date and is never counted late. Without a pace, the part has no
+date and the sheet says what would give it one.
+
+### What a session earns
+
+Tom, 2026-09-14: *"For session clients, I'd like to show me how much I make
+per session, and also a setting for sessions per week, which also lets me see
+how much I earn per week for that client."*
+
+A client paid every N sessions earns their rate over N. A package client earns
+their latest package's price over its sessions, since a renewal at a new price
+is the price that is true now. With a pace, a week's worth is that times the
+pace, shown as "about", because the pace is his rough figure. It sits on the
+client's row in CLIENTS and in their sheet, where it follows what is typed
+before it is saved.
 
 ### One-offs
 
