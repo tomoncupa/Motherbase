@@ -340,6 +340,23 @@ const S = {
   get: (k, d) => { const v = Rec.setting(APP.id, k); return v == null ? d : v; },
   set: (k, v) => Rec.setting(APP.id, k, v),
 };
+
+/* ── a menu whose items can be clicked ──
+   shared/ui.js closes a desktop menu on the next press anywhere on the page,
+   and "anywhere" includes the menu's own items: the press removes the menu,
+   so the click that would have run "Hide column" or "Rename" never lands.
+   Tom, 2026-09-14: "Rename function not working, hide column not working."
+   A press inside the menu is kept from reaching that listener; a press
+   anywhere else still closes it. The shared file is a foundation session's
+   to fix, and root CLAUDE.md lists it. On a phone UI.menu is a sheet and
+   this does nothing. */
+function menuAt(x, y, items, opts) {
+  const box = UI.menu(x, y, items, opts);
+  if (box && box.classList && box.classList.contains('mb-menu')) {
+    box.addEventListener('pointerdown', e => e.stopPropagation());
+  }
+  return box;
+}
 /* A setting that is a list, kept in a fixed order so it reads the same way
    twice. */
 const setInList = (key, all, cur, id, on) => S.set(key, all.filter(v => v === id ? on : cur.indexOf(v) > -1));
@@ -1335,7 +1352,7 @@ function toggleView(id) {
   if (level !== was) setLevel(level); else syncLevels();
 }
 function viewsMenu(e) {
-  UI.menu(e.clientX, e.clientY, LEVELS.map((l, i) => ({
+  menuAt(e.clientX, e.clientY, LEVELS.map((l, i) => ({
     label: (viewOn(i) ? 'Hide ' : 'Show ') + l.name, fn: () => toggleView(l.id),
   })), { title: 'Views' });
 }
@@ -1401,7 +1418,7 @@ function columnsMenu(e, head) {
   if (k && k !== 'd') items.push({ label: 'Hide column', fn: () => toggleX(k) });
   if (k) items.push({ label: 'Rename', fn: () => renameCol(k) });
   items.push({ label: 'Show or hide columns', fn: columnsDialog });
-  UI.menu(e.clientX, e.clientY, items, { title: head ? head.textContent : 'Columns' });
+  menuAt(e.clientX, e.clientY, items, { title: head ? head.textContent : 'Columns' });
 }
 
 /* A day column's heading drags sideways to a new place. */
@@ -1824,7 +1841,7 @@ Mobile.hold($('cal'), e => {
   if (bl) {
     const x = bulletOf(bl);
     if (!x) return;
-    UI.menu(e.clientX, e.clientY, [
+    menuAt(e.clientX, e.clientY, [
       { label: 'Edit', fn: () => noteDialog(x, x.day) },
       x.kind === 'todo' ? { label: x.p.done ? 'Untick' : 'Tick', fn: () => tick(x) } : null,
       '-',
@@ -1838,7 +1855,7 @@ Mobile.hold($('cal'), e => {
   const items = [{ label: 'Open', fn: () => openBox(box) }, { label: 'Write about it', fn: () => summaryDialog(box) }];
   if (box.classList.contains('day') && Day.editable(d)) items.push({ label: 'Add a bullet', fn: () => noteDialog({}, d) });
   const lab = box.querySelector('.lab');
-  UI.menu(e.clientX, e.clientY, items, { title: lab ? lab.textContent : Day.label(d) });
+  menuAt(e.clientX, e.clientY, items, { title: lab ? lab.textContent : Day.label(d) });
 }, { skip: '.sum,.cell,.bx,.rz' });
 
 /* ══════════════════════ MOVING AROUND ══════════════════════

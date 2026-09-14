@@ -778,6 +778,20 @@ control has the same twelve. Found 2026-09-11 by measuring at 375px wide.
 Either the control grows to `var(--tap)` or the rule has a stated exception;
 it should not quietly be both.
 
+**10. A desktop `UI.menu` closes before its items can be clicked.** `menu()`
+in `shared/ui.js` adds `document.addEventListener('pointerdown',
+UI.closeMenus, {once: true})` after opening. A press on one of the menu's own
+buttons bubbles to that listener, which removes the menu, so the click that
+would run the item never reaches it. Every right-click menu in every app is
+affected on a PC; a phone gets an action sheet and is not.
+
+Found 2026-09-14 when Tom reported LOG's Hide column and Rename doing
+nothing. Reasoned from the code and the event order, not watched with a real
+mouse: the test pane's emulated window sends real clicks to the wrong place.
+LOG works around it by stopping a press inside the menu from bubbling
+(`menuAt()` in `log/index.html`). The real fix is one line in `menu()`:
+ignore presses inside `box`. Delete LOG's wrapper when that lands.
+
 ### Parked, not cancelled
 
 Hosting, accounts and phone sign-in. The plan is in `ARCHITECTURE.md` with a banner
