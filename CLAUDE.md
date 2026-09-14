@@ -94,13 +94,16 @@ Do not break these. Ask first if you think one needs to change.
    Not just "does not break" there.
 
    **Everything else is a desktop app**: the home screen, ARC, BLOCK, FORM,
-   FOODDÉX, LOG, WEALTH and STYLE. Tom calls ARC, BLOCK and STYLE desktop
-   *only*. They are used sitting down, with a mouse, to plan,
+   FOODDÉX, LOG, WEALTH and STYLE.
+
+   **ARC, BLOCK and STYLE are desktop only.** Tom, 2026-09-14: they are not
+   meant to work on a phone. Do not spend work making them stack or fit a
+   thumb, and a phone-width failure in one of them is not a bug. They are used sitting down, with a mouse, to plan,
    build, review and compare. Hover is allowed, density can be tighter, dialogs
    may sit in the middle of the screen rather than rising from the bottom, and
    a layout may assume a wide window.
 
-   Neither kind may break on the other. A desktop app on a phone should stack
+   Apart from those three, neither kind may break on the other. A desktop app on a phone should stack
    and stay usable; a phone app on a desktop should not stretch to nonsense. The
    44px target and the safe-area insets stay everywhere, because they cost
    nothing on a mouse and they are the difference between usable and not on a

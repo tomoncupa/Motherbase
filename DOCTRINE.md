@@ -275,10 +275,14 @@ is what `tools/build-client.py` ships today.
 | QUESTS | `quest/` | everywhere | no | Todo bullets, pulled from STATUS and BLOCK. Answers "what's next to be done". |
 | WEALTH | `wealth/` | desktop | no, Tom only | Money. Reads spending, and the statements that matter. |
 | ARC | `arc/` | desktop only | yes | Mind mapping, and presentations. **Planned:** a teach mode that builds skill trees out of actionable steps. Those steps are todo bullets, so it works with QUESTS. |
-| FORM | `form/` | desktop | no, Tom only | Form review, and presentations and social media content made from it. |
+| FORM | `form/` | desktop | no, Tom only | Form review, and presentations and social media content made from it. Takes a client's unclipped video: cut the start and end off. |
 | TRAIN | `train/` | phone | yes | The training tracker. An evolved FitNotes. |
 | STYLE | `style/` | desktop only | yes | The theme and look for every other app. |
 | FOODDÉX | `portion/` | desktop | no | Food database input and overview. Works with STATUS. **To be expanded.** |
+| CHECK IN | not built | everywhere | not decided | Physique check-ins. **Planned.** |
+| COACH | not built | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. **Planned.** |
+
+ARC, BLOCK and STYLE are not meant to work on a phone. Tom, 2026-09-14.
 
 HABITS is not on the list. Tom deleted it on 2026-09-14.
 
