@@ -1607,6 +1607,60 @@ async function run() {
   ok('io: a picture comes back the size that was asked for', shotSize);
   ok('io: a picture keeps what the page was handing down — ' + shotWhy, shotKept);
 
+  /* ---- the story frame and the share panel ----
+     Tom, 2026-09-14: one shape, a story, with the card kept where the story's
+     own buttons do not cover it. The check is where the paint lands, not how
+     the picture looks: inside the box painted, outside it untouched. */
+  let boxIn = false, boxOut = false, boxWhy = '';
+  const sq = document.createElement('div');
+  sq.style.cssText = 'position:fixed;left:-9999px;top:0;width:40px;height:40px;background:var(--accent)';
+  document.body.appendChild(sq);
+  try {
+    const png = await IO.shot(sq, { w: 100, h: 100, box: { x: 60, y: 10, w: 30, h: 80 }, fill: 1 });
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = png; });
+    const cv = document.createElement('canvas'); cv.width = 100; cv.height = 100;
+    const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
+    const a = (x, y) => cx.getImageData(x, y, 1, 1).data[3];
+    /* 40px square, 30px box: 30 by 30, from x 60 to 90, centred on y 50 */
+    boxIn = a(75, 50) > 200;
+    boxOut = a(20, 50) === 0 && a(75, 20) === 0 && a(75, 80) === 0;
+    boxWhy = [a(75, 50), a(20, 50), a(75, 20), a(75, 80)].join(' ');
+  } catch (e) { boxWhy = e.message; }
+  sq.remove();
+  ok('io: a picture given a box stays inside it — alpha ' + boxWhy, boxIn && boxOut);
+
+  let panelDrawn = false, panelKept = false, panelWhy = '';
+  try {
+    Rec.setting('smoke', 'shareStyle', null);
+    const h = IO.share({ app: 'smoke', name: 'smoke', build: o => {
+      const n = document.createElement('div');
+      n.style.cssText = 'width:120px;height:80px;background:var(--accent)';
+      n.dataset.glass = o.glass ? 1 : 0;
+      return n;
+    } });
+    const t0 = performance.now();
+    let pv = null;
+    while (performance.now() - t0 < 3000) {
+      pv = h.panel.querySelector('.mb-sharepv img');
+      if (pv && !pv.classList.contains('wait') && /^data:image\/png/.test(pv.src)) break;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    panelDrawn = !!pv && /^data:image\/png/.test(pv.src);
+    const opaque = [].find.call(h.panel.querySelectorAll('.mb-seg button'), b => b.textContent === 'Opaque');
+    if (opaque) opaque.click();
+    panelKept = Rec.setting('smoke', 'shareStyle') === 'solid';
+    panelWhy = (pv ? pv.src.slice(0, 22) : 'no preview') + ', style ' + Rec.setting('smoke', 'shareStyle');
+    h.close();
+    Rec.setting('smoke', 'shareStyle', null);
+  } catch (e) { panelWhy = e.message; }
+  ok('io: the share panel draws the picture before SHARE is pressed — ' + panelWhy, panelDrawn);
+  ok('io: the share panel remembers the style chosen', panelKept);
+
+  ok('skins: Block is the theme an app opens in when none is chosen', (() => {
+    const first = Skins.data.skins[0];
+    return (first.id === 'block' && /^#f0b323$/i.test(first.base.accent)) || first.id + ' ' + first.base.accent;
+  })());
+
   /* ---- the chart layer ----
      Added with chart.js on 2026-09-06. The three checks are the three bugs it
      exists to stop, each of which had been fixed separately in a different

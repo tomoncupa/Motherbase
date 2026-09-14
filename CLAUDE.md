@@ -196,10 +196,10 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `sound.js` | Sound themes and instruments, synthesised, no audio files. |
 | `mobile.js` | The touch layer. Sheets, swipes, safe areas, keyboard, back stack, haptics. |
 | `ui.js` | Snackbars, dialogs, confirms, menus, switches, and the standard Settings panel. |
-| `io.js` | Per-app backup, restore, and the readable spreadsheet export. |
+| `io.js` | Per-app backup, restore, and the readable spreadsheet export. And the Share picture panel, `IO.share`: a card as a 1080 x 1920 story picture, kept clear of the story's own buttons, with Transparent, Translucent or Opaque and Big, Medium or Small remembered per app, and one SHARE. STATUS and TRAIN use it. |
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
-| `_smoke.html` | 242 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 247 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -394,7 +394,10 @@ prove an app obeyed — the first of which is STYLE's own measured highlight,
 which cannot flatter you. Read it before touching any app's CSS.
 
 **Theme:** structure, fonts, corner shape, texture, and the colours it ships with.
-Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. Seventeen of them, in
+Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. **Block is the
+default** (Tom, 2026-09-14): an app with no theme chosen opens in Block, with a
+gold accent, `#F0B323`. It sits first in `skins.json` because first is what
+`Skins.restore` falls back to, so keep it first. Seventeen of them, in
 `skins.json`, and every one differs by more than its colours. Ember, Violet,
 Matrix and Mono were dropped on 2026-08-21: they were Ice with a different
 accent hex and nothing else. Changing one colour is an edit in STYLE, not a
@@ -593,8 +596,8 @@ because it runs the real thing rather than only parsing it:
    draws and every tab works, runs `shared/_smoke.html` inside itself and folds
    the result in, and looks over whatever rows are on the device. One page,
    one tally. `shared/_smoke.html` on its own is still there for when you are
-   working on the foundation and want the 242 without the apps.
-   It must say 242 of 242, or more once you add checks.
+   working on the foundation and want the 247 without the apps.
+   It must say 247 of 247, or more once you add checks.
    **Load it with a `?cb=<something new>` on the end.** The browser caches these
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks

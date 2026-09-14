@@ -264,9 +264,13 @@ measured against. Records are what was a record on the day it was lifted, all-ti
 or in the block; the first time an exercise is done, or done in a block, is not a
 record, and a record the same session beat is dropped.
 
-SHARE PICTURE draws the card at 390px with `IO.saveShot` and hands it to the share
-sheet. **Not watched on the iPhone.** The picture is the card on a clear
-background.
+SHARE PICTURE opens the shared Share panel (`IO.share`): the picture, Transparent,
+Translucent or Opaque, Big, Medium or Small, all remembered, and one SHARE that hands
+it to the share sheet. Tom, 2026-09-14: every option, "without it being a whole
+process". The picture is always a 1080 x 1920 story, the card drawn at 390px and kept
+clear of the story's own buttons, with the TRAIN mark taken off ("no small
+branding"). It is on the session card, the week, Profile, an exercise's Personal
+Records, and GRAPH. **Not watched on the iPhone.**
 
 ### The week
 

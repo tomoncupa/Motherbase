@@ -270,6 +270,9 @@ const IO = {
          w, h    the picture, default 1080 x 1920
          fill    how much of the width the component takes, default .88
          anchor  where its middle sits, top to bottom, default .46
+         box     {x, y, w, h}: keep it inside this part of the picture instead.
+                 It takes `fill` of the box's width, less if that would run
+                 past the box's bottom, and sits in the box's middle
          width   CSS width to lay a loose node out at, default 390
          scrim   paint a soft dark gradient behind it, so the picture reads on
                  a bright photograph as well as a dark one
@@ -315,6 +318,9 @@ const IO = {
          leaving it on would shift the drawing off the size just measured. */
       const flat = n => {
         const c = n.cloneNode(true);
+        /* A chart draws its line in on its first paint. Pictured, it is
+           caught at the start of that, with the line not drawn yet. */
+        c.querySelectorAll('.mb-anim').forEach(x => x.classList.remove('mb-anim'));
         c.style.position = 'static';
         c.style.inset = 'auto';
         c.style.left = c.style.top = c.style.right = c.style.bottom = 'auto';
@@ -324,10 +330,11 @@ const IO = {
       };
       /* Scaled up whole rather than blown up afterwards: everything inside
          renders at the final size, so the type stays sharp. */
-      const scale = (W * fill) / cw;
+      const B = opts.box;
+      const scale = B ? Math.min(B.w * fill / cw, B.h / ch) : (W * fill) / cw;
       const sw = cw * scale, sh = ch * scale;
-      const ox = (W - sw) / 2;
-      const oy = Math.max(0, H * anchor - sh / 2);
+      const ox = B ? B.x + (B.w - sw) / 2 : (W - sw) / 2;
+      const oy = B ? B.y + (B.h - sh) / 2 : Math.max(0, H * anchor - sh / 2);
 
       /* ── the page, stood in for ── */
       const bcs = getComputedStyle(document.body);
@@ -464,6 +471,115 @@ const IO = {
     veil.appendChild(img); veil.appendChild(say); veil.appendChild(close);
     document.body.appendChild(veil);
     return Promise.resolve();
+  },
+
+  /* ══════════════ SHARE PICTURE ══════════════
+     One panel for every app that makes a picture to lay over a story.
+     Tom, 2026-09-14: "Mostly the sharing is to produce social media ready PNG
+     Overlays. Itll be used in Train and STATUS." Then: one shape only, "no one
+     is posting generated images as posts anymore", so every picture is a
+     1080 x 1920 story; no small branding; and it must not be "a whole process
+     whenever they want to export something".
+
+     So: press Share, see the picture, press SHARE. Style and size sit on the
+     same panel, already set to what that app used last, and never need
+     touching.
+
+       IO.share({
+         app      the app id the choices are remembered under
+         name     the file name, .png added
+         build    (o) -> a fresh element to picture. o.glass is true for the
+                  two see-through styles, o[id] for each of `options`
+         width    CSS width to lay it out at, default 390
+         before   as IO.shot
+         options  [{id, label, def}], extra switches, like STATUS's
+                  "Leave spending out"
+       })
+
+     The picture is drawn when the panel opens, so SHARE hands over a file
+     that already exists. iOS only lets a page share inside the tap that
+     asked, and a picture still being drawn can miss that window. */
+  SHARE_STYLES: [
+    /* his three names, from STATUS, 2026-09-05 */
+    { id: 'clear', name: 'Transparent', glass: 1, scrim: 0 },
+    { id: 'glass', name: 'Translucent', glass: 1, scrim: 1 },
+    { id: 'solid', name: 'Opaque', glass: 0, scrim: 0 },
+  ],
+  SHARE_SIZES: [
+    { id: 'big', name: 'Big', fill: 1 },
+    { id: 'mid', name: 'Medium', fill: 0.78 },
+    { id: 'small', name: 'Small', fill: 0.6 },
+  ],
+  /* The part of a story nothing is drawn over. Instagram lays the name and
+     the progress bars across the top 250 pixels and the reply box across the
+     bottom 340, and a card under either cannot be read. 90 either side keeps
+     even a Big card off the edges. The card sits in the middle of what is
+     left, and a tall one shrinks to fit it rather than running under. */
+  STORY: { w: 1080, h: 1920, safe: { x: 90, y: 250, w: 900, h: 1330 } },
+
+  share(o) {
+    o = o || {};
+    const R = g.Rec, U = g.UI;
+    if (!U || !U.dialog) return null;
+    const app = o.app || '';
+    const get = (k, d) => { const v = R && R.setting ? R.setting(app, k) : null; return v == null ? d : v; };
+    const put = (k, v) => { if (R && R.setting) R.setting(app, k, v); };
+    const on = v => v === true || +v === 1;
+    const pick = (list, id) => list.filter(x => x.id === id)[0] || list[0];
+    const file = String(o.name || 'picture').replace(/\.png$/i, '') + '.png';
+    let img = null, gen = 0, ready = null;
+
+    const draw = () => {
+      const my = ++gen;
+      const st = pick(IO.SHARE_STYLES, get('shareStyle', 'glass'));
+      const sz = pick(IO.SHARE_SIZES, get('shareSize', 'mid'));
+      const opt = { glass: !!st.glass };
+      (o.options || []).forEach(x => { opt[x.id] = on(get(x.id, x.def ? 1 : 0)); });
+      if (img) img.classList.add('wait');
+      ready = new Promise((res, rej) => {
+        const node = o.build(opt);
+        if (!node) return rej(new Error('There is nothing to share'));
+        if (opt.glass) node.classList.add('mb-glass');
+        const stage = el('div', 'mb-shotstage');
+        stage.style.width = (o.width || 390) + 'px';
+        stage.appendChild(node);
+        document.body.appendChild(stage);
+        /* a chart measures its box once the box is in the page, a tick later */
+        setTimeout(() => {
+          IO.shot(node, { w: IO.STORY.w, h: IO.STORY.h, box: IO.STORY.safe,
+            fill: sz.fill, scrim: !!st.scrim, before: o.before })
+            .then(png => { stage.remove(); res(png); }, err => { stage.remove(); rej(err); });
+        }, 60);
+      });
+      ready.then(png => { if (my === gen && img) { img.src = png; img.classList.remove('wait'); } }, () => {});
+      return ready;
+    };
+
+    return U.dialog({
+      title: o.title || 'SHARE PICTURE', width: 440,
+      body: b => {
+        const pv = el('div', 'mb-sharepv');
+        img = el('img', 'wait');
+        img.alt = 'The picture';
+        img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+        pv.appendChild(img);
+        b.appendChild(pv);
+        const seg = (label, key, list, def) => {
+          b.appendChild(el('div', 'mb-sharelbl', esc(label)));
+          b.appendChild(U.segmented(list, pick(list, get(key, def)).id, v => { put(key, v); draw(); }));
+        };
+        seg('Style', 'shareStyle', IO.SHARE_STYLES, 'glass');
+        seg('Size', 'shareSize', IO.SHARE_SIZES, 'mid');
+        (o.options || []).forEach(x => {
+          b.appendChild(U.row(x.label, null,
+            U.toggle(on(get(x.id, x.def ? 1 : 0)), v => { put(x.id, v ? 1 : 0); draw(); })));
+        });
+        draw().catch(err => toast(esc(err.message), { bad: true }));
+      },
+      actions: [{ label: 'SHARE', kind: 'go', fn: () => {
+        (ready || draw()).then(png => IO.handOver(png, file), err => toast(esc(err.message), { bad: true }));
+      } }],
+    });
   },
 
   /* ══════════════ EDITABLE TABLES ══════════════

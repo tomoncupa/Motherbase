@@ -46,6 +46,21 @@ function css() {
 .mb-shotx{min-height:var(--tap);padding:0 var(--s-5);border-radius:var(--radius-sm);
   border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;
   font:inherit;font-size:var(--f-2);cursor:pointer}
+/* ── the share panel (IO.share) ──
+   The picture on a checkerboard, so what is see-through reads as see-through. */
+.mb-sharepv{display:flex;justify-content:center;margin-bottom:var(--s-2)}
+.mb-sharepv img{height:44vh;height:44svh;max-width:100%;aspect-ratio:9/16;object-fit:contain;
+  border-radius:var(--radius-md);border:var(--border-width,1px) solid var(--border);
+  background:repeating-conic-gradient(var(--surface-3) 0 25%,var(--surface-2) 0 50%) 0 0/var(--s-4) var(--s-4);
+  transition:opacity var(--dur-fast,120ms)}
+.mb-sharepv img.wait{opacity:.45}
+.mb-sharelbl{font-size:var(--f-1);letter-spacing:var(--track-cap);text-transform:uppercase;
+  color:var(--text-muted);margin:var(--s-3) 0 var(--s-2)}
+.mb-shotstage{position:fixed;left:-99999px;top:0;pointer-events:none}
+/* See-through, for the Transparent and Translucent pictures: the card itself.
+   An app can go further for its own inner surfaces. */
+.mb-glass{background:color-mix(in srgb,var(--surface-1) 32%,transparent)!important;box-shadow:none!important}
+.mb-glass,.mb-glass *{text-shadow:0 1px 2px rgba(0,0,0,.45)}
 .mb-timefield{display:flex;gap:var(--s-2);align-items:stretch}
 .mb-timefield input{flex:1;min-width:0}
 .mb-ampm{flex:none;min-width:56px;min-height:var(--tap);padding:0 var(--s-3);

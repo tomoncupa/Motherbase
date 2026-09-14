@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.3, 2026-09-14">
+<meta name="mb-version" content="1.0.4, 2026-09-14">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4545,16 +4545,11 @@ function daySheet(date) {
        They belong here anyway. The picture IS this day's island, and from
        here it can be ANY day - the buttons on Trends could only ever share
        today. Tap back through the week and share the day you actually had. */
-    body.appendChild(el('label', 'fl', 'Share it'));
     const bar = el('div', 'btns');
-    ['story', 'feed'].forEach(kind => {
-      const b = el('button', 'btn mb-press mb-tap', kind === 'story' ? 'STORY' : 'POST');
-      b.onclick = () => shareCard(sc, kind, date);
-      bar.appendChild(b);
-    });
+    const shb = el('button', 'btn mb-press mb-tap', 'SHARE PICTURE');
+    shb.onclick = () => shareCard(date);
+    bar.appendChild(shb);
     body.appendChild(bar);
-    body.appendChild(el('div', 'note', 'Style and size are on ' +
-      (TAB === 'trends' ? 'this screen' : 'Report') + ', under the rank.'));
   });
 }
 
@@ -4681,50 +4676,13 @@ function rankCard() {
       (t.rest ? ' &middot; rest day, tops out at A' : '')));
   }
 
+  /* Style, size and Leave spending out moved into the share panel itself
+     (IO.share, shared/io.js), 2026-09-14, so one press shows them all. */
   const bar = el('div', 'btns');
-  const story = el('button', 'btn', 'STORY');
-  const feed = el('button', 'btn', 'POST');
-  story.onclick = () => shareCard(a, 'story');
-  feed.onclick = () => shareCard(a, 'feed');
-  bar.appendChild(story); bar.appendChild(feed);
-  c.appendChild(el('label', 'fl', 'Share it'));
+  const shb = el('button', 'btn mb-press mb-tap', 'SHARE PICTURE');
+  shb.onclick = () => shareCard();
+  bar.appendChild(shb);
   c.appendChild(bar);
-  /* The picture is the Today card, so if the Spent tile is on your Today it is
-     in the picture too. It starts hidden: what you spend is nobody's business
-     and a default that leaks it is the wrong default. */
-  /* ── one choice, not three switches ──
-     Tom, 2026-09-05: "strava leads you to a swipe menu of setting styles, so
-     it can be transparent or a solid block." Right, and three checkboxes was
-     me exposing the machinery instead of the choice. See-through and darken
-     are not two decisions, they are one look, and nobody wants a transparent
-     card with no scrim - that is the unreadable combination. */
-  const nowStyle = shareStyle();
-  c.appendChild(el('label', 'fl', 'Style'));
-  const sseg = el('div', 'seg');
-  SHARE_STYLES.forEach(st => {
-    const sb = el('button', st[0] === nowStyle ? 'on' : '', esc(st[1]));
-    sb.onclick = () => { S.set('shareStyle', st[0]); Mobile.feedback('select'); draw(); };
-    sseg.appendChild(sb);
-  });
-  c.appendChild(sseg);
-  c.appendChild(el('div', 'note', esc(styleDef()[4])));
-
-  const nowSize = shareSize()[0];
-  c.appendChild(el('label', 'fl', 'Island size'));
-  const zseg = el('div', 'seg');
-  SHARE_SIZES.forEach(z => {
-    const zb = el('button', z[0] === nowSize ? 'on' : '', esc(z[1]));
-    zb.onclick = () => { S.set('shareSize', z[0]); Mobile.feedback('select'); draw(); };
-    zseg.appendChild(zb);
-  });
-  c.appendChild(zseg);
-
-  const w = el('label', 'shopt');
-  const b = document.createElement('input');
-  b.type = 'checkbox'; b.checked = !!S.get('hideSpend', 1);
-  b.onchange = () => S.set('hideSpend', b.checked ? 1 : 0);
-  w.appendChild(b); w.appendChild(el('span', null, 'Leave spending out'));
-  c.appendChild(w);
   return c;
 }
 
@@ -4744,33 +4702,12 @@ function rankCard() {
    What is left here is the three decisions that are STATUS's own: which card,
    how wide, and the date on top of it. */
 
-/* Three, his names. I cut Transparent as "a mistake you can pick" and he put
-   it back, which is his call to make: on a dark plain photo it is the best of
-   the three and the gradient is the thing in the way.
-   id, label, see-through, gradient behind it, what it is for */
-const SHARE_STYLES = [
-  ['clear', 'Transparent', 1, 0, 'Just the card, nothing behind it. Best on a dark, plain photo.'],
-  ['glass', 'Translucent', 1, 1, 'The photo shows through, on a soft gradient so it reads on anything.'],
-  ['solid', 'Opaque',      0, 0, 'A solid card. Nothing shows through, so nothing can fight the numbers.'],
-];
-const shareStyle = () => S.get('shareStyle', 'glass');
-
-/* ── how big the island sits in the frame ──
-   Tom, 2026-09-05: "We might want the gradient to be bigger than the island,
-   allowing us to have the island be smaller on the actual story post."
-
-   The gradient always covers the whole frame; what changes is the card. At
-   88% the card IS the post and the photo is a border. Smaller, the photo is
-   the post and the numbers are an overlay on it, which is what a story
-   usually wants. */
-const SHARE_SIZES = [['big', 'Big', 0.88], ['mid', 'Medium', 0.68], ['small', 'Small', 0.52]];
-const shareSize = () => {
-  const id = S.get('shareSize', 'mid');
-  return SHARE_SIZES.filter(x => x[0] === id)[0] || SHARE_SIZES[1];
-};
-const styleDef = () => SHARE_STYLES.filter(x => x[0] === shareStyle())[0] || SHARE_STYLES[0];
-
-async function shareCard(a, kind, date) {
+/* Transparent, Translucent and Opaque, and Big, Medium and Small, live in
+   the shared panel since 2026-09-14 (IO.share), which TRAIN uses too. They
+   are read from the same settings, so a choice made here before carries over.
+   One shape: a story. Tom: "no one is posting generated images as posts
+   anymore". */
+function shareCard(date) {
   /* Which day is being pictured. It used to be whatever day the app was
      showing, which was fine while the only way in was from the Today screen.
      The day sheet can be opened on any day, so it has to say. */
@@ -4784,36 +4721,30 @@ async function shareCard(a, kind, date) {
   const onScreen = document.querySelector('#main .card');
   const cardW = onScreen ? Math.round(onScreen.getBoundingClientRect().width) : 0;
 
-  const shot = islandCard(d, {
-    /* On by default: the point of a transparent PNG is that the photo is part
-       of the picture, and a solid panel over your own body is a sticker. Off
-       is there for a busy photo, where see-through costs you the numbers. */
-    seethru: !!styleDef()[2],
-    /* The picture is the card, so if the Spent tile is on your Today it is in
-       the picture. hideSpend keeps it out, and starts on. */
-    money: !S.get('hideSpend', 1),
-    /* On screen the date is in the app's header a few pixels above this card.
-       A picture leaves the header behind, so the card takes the date itself,
-       in the shape every other card in here uses for a heading. */
-    title: new Date(d + 'T12:00:00').toLocaleDateString(undefined,
-      { weekday: 'long', day: 'numeric', month: 'long' }),
+  IO.share({
+    app: APP.id,
+    name: 'status-' + d,
+    width: Math.max(340, Math.min(440, cardW || 390)),
+    build: o => islandCard(d, {
+      /* the two see-through styles: the photo is part of the picture */
+      seethru: o.glass,
+      /* The picture is the card, so if the Spent tile is on your Today it is
+         in the picture. Leave spending out keeps it out, and starts on: what
+         you spend is nobody's business and a default that leaks it is the
+         wrong default. */
+      money: !o.hideSpend,
+      /* On screen the date is in the app's header a few pixels above this card.
+         A picture leaves the header behind, so the card takes the date itself,
+         in the shape every other card in here uses for a heading. */
+      title: new Date(d + 'T12:00:00').toLocaleDateString(undefined,
+        { weekday: 'long', day: 'numeric', month: 'long' }),
+    }),
+    options: [{ id: 'hideSpend', label: 'Leave spending out', def: 1 }],
+    /* The reading is sized by measuring, and this copy has never been
+       measured - without this a long one clips in the picture while looking
+       fine on the screen it was copied from. */
+    before: n => fitHero(n),
   });
-
-  try {
-    await IO.saveShot(shot, 'status-' + (a && a.rank ? a.rank.k : 'day') + '-' + kind, {
-      w: 1080, h: kind === 'story' ? 1920 : 1350,
-      /* The gradient still fills the frame; only the card shrinks. */
-      fill: shareSize()[2],
-      /* On by default. It is the thing that makes one picture work on a dark
-         photo and a bright one without asking him which he has. */
-      scrim: !!styleDef()[3],
-      width: Math.max(340, Math.min(440, cardW || 390)),
-      /* The reading is sized by measuring, and this copy has never been
-         measured - without this a long one clips in the picture while looking
-         fine on the screen it was copied from. */
-      before: n => fitHero(n),
-    });
-  } catch (e) { /* saveShot has already said so */ }
 }
 
 /* ── the report has two halves ──
@@ -5099,6 +5030,27 @@ function drawTrends(m) {
   c2.appendChild(el('div', 'note', (w ? r1(w) + ' lb' : 'nothing logged') +
     (goal != null && w ? ' · ' + r1(Math.abs(w - goal)) + ' lb to go' : '') +
     (e.rate != null ? ' · ' + (e.rate > 0 ? '+' : '') + r1(e.rate) + ' ' + esc(TD.unit()) + ' a week' : '')));
+
+  /* The weight chart as a picture, from its own card. Tom, 2026-09-14, on
+     what STATUS shares: "It depends on where the share button was pressed."
+     Drawn fresh, with its key, on the shared panel. */
+  const wbar = el('div', 'btns');
+  const wsh = el('button', 'btn mb-press mb-tap', 'SHARE PICTURE');
+  wsh.onclick = () => IO.share({
+    app: APP.id,
+    name: 'status-weight-' + Day.today(),
+    width: 390,
+    build: o => {
+      const pc = card('Weight', plotted + ' days');
+      if (o.glass) pc.classList.add('seethru');
+      pc.appendChild(weightChart(e));
+      const lg = c2.querySelector('.legend');
+      if (lg) pc.appendChild(lg.cloneNode(true));
+      return pc;
+    },
+  });
+  wbar.appendChild(wsh);
+  c2.appendChild(wbar);
   m.appendChild(c2);
 
   if (e.basis === 'measured' && e.learn && e.learn.steps) {

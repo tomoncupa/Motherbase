@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.2, 2026-09-14">
+<meta name="mb-version" content="1.0.3, 2026-09-14">
 <title>TRAIN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛭</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -2978,6 +2978,26 @@ function drawGraph(m) {
     UI.toast('Default graph saved');
   };
   card.appendChild(dflt);
+  var shg = UI.el('button', 'mb-btn mb-press mb-tap');
+  shg.style.width = '100%';
+  shg.style.marginTop = 'var(--s-2)';
+  shg.textContent = 'SHARE PICTURE';
+  shg.onclick = function () {
+    var pname = (TRAIN.PERIODS.filter(function (p) { return p.id === per; })[0] || {}).name || '';
+    shareCard(function () {
+      var c = UI.el('div', 'recap');
+      c.innerHTML = '<div class="eyebrow"><span>' + UI.esc(g.name) + '</span><b>' + UI.esc(pname) + '</b></div>' +
+        '<div class="title">' + UI.esc(ex.name) + '</div><div class="rule"></div>';
+      var bx = UI.el('div', 'chartbox');
+      c.appendChild(bx);
+      graphChart(bx, pts, g);
+      c.insertAdjacentHTML('beforeend', '<div class="big4">' +
+        '<div><span>Best</span><b>' + num(best) + ' <small>' + UI.esc(g.u) + '</small></b></div>' +
+        '<div><span>Latest</span><b>' + num(latest) + ' <small>' + UI.esc(g.u) + '</small></b></div></div>');
+      return c;
+    }, 'train-graph-' + gid);
+  };
+  card.appendChild(shg);
   m.appendChild(card);
 
   /* The points themselves, newest first: FitNotes' "tap a point to view more
@@ -4831,6 +4851,41 @@ function distTimeRecords(exId) {
   return out;
 }
 
+/* An exercise's records as a card made to be shared: its best four and when
+   the latest record was set. Tom, 2026-09-14, wanted a picture of a new record
+   alongside the session, the week and a graph. */
+TRAIN.recordsCard = function (exId) {
+  var ex = TRAIN.exercises()[exId];
+  if (!ex) return null;
+  var rec = TRAIN.recordsFor(exId), kind = TRAIN.kindOf(exId), U = TRAIN.unitLabel(), esc = UI.esc;
+  if (!rec.sets) return null;
+  var today = Day.today(), ph = TRAIN.phaseOn(today), cells = [];
+  var cell = function (label, val, unit, d) {
+    cells.push('<div><span>' + label + '</span><b>' + val + (unit ? ' <small>' + unit + '</small>' : '') + '</b>' +
+      (d ? '<em>' + esc(Day.label(d, { day: 'numeric', month: 'short', year: 'numeric' })) + '</em>' : '') + '</div>');
+  };
+  if (kind === 'dt' || kind === 'rd' || kind === 'rt') {
+    var dt = distTimeRecords(exId), du = TRAIN.distUnit();
+    if (dt.dist) cell('Max distance', TRAIN.showDist(dt.dist.dist), du, dt.dist.date);
+    if (dt.dur) cell('Max time', fmtSecs(dt.dur.dur), '', dt.dur.date);
+  }
+  if (rec.maxWeight) cell('Max weight', TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u), U + ' × ' + rec.maxWeight.r, rec.maxWeight.date);
+  if (rec.max1rm) cell('Estimated 1RM', fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), TRAIN.unit())), U, rec.max1rm.date);
+  if (rec.maxReps) cell('Max reps', rec.maxReps.r, 'reps', rec.maxReps.date);
+  if (rec.maxVolume) cell('Max set volume',
+    Math.round(TRAIN.toUnit(rec.maxVolume.kg * rec.maxVolume.r, TRAIN.unit())).toLocaleString(), U, rec.maxVolume.date);
+  var last = TRAIN.historyOf(exId).filter(function (s) { return s.pr; }).slice(-1)[0];
+  var card = UI.el('div', 'recap');
+  card.innerHTML =
+    '<div class="eyebrow"><span>Personal records</span>' + (ph ? '<b>' + esc(TRAIN.phaseLine(ph, today)) + '</b>' : '') + '</div>' +
+    '<div class="title">' + esc(ex.name) + '</div>' +
+    '<div class="rule"></div>' +
+    (cells.length ? '<div class="big4">' + cells.slice(0, 4).join('') + '</div>' : '') +
+    (last && (last.kg || last.r) ? '<div class="sub">Latest record ' + esc(Day.label(last.date)) + ': ' +
+      (last.kg ? TRAIN.showWeight(last.kg, last.u) + ' ' + U + ' × ' : '') + (last.r || 0) + ' reps</div>' : '');
+  return card;
+};
+
 TRAIN.recordsSheet = function (exId) {
   var ex = TRAIN.exercises()[exId];
   if (!ex) return;
@@ -4860,6 +4915,12 @@ TRAIN.recordsSheet = function (exId) {
       if (rec.max1rm) body.appendChild(recLine('Estimated 1RM',
         fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), TRAIN.unit())) + ' ' + U, rec.max1rm.date));
       b.appendChild(body);
+      var shr = UI.el('button', 'mb-btn mb-press mb-tap');
+      shr.style.width = '100%';
+      shr.style.marginTop = 'var(--s-3)';
+      shr.textContent = 'SHARE PICTURE';
+      shr.onclick = function () { shareCard(function () { return TRAIN.recordsCard(exId); }, 'train-records-' + exId); };
+      b.appendChild(shr);
 
       /* The block's own records, which started again when it did. */
       var ph = TRAIN.phaseOn(Day.today());
@@ -6436,17 +6497,23 @@ TRAIN.recapCard = function (date, cmp) {
   return card;
 };
 
-/* A picture of a card, handed to the phone's share sheet, where Save Image
-   is. Drawn from a fresh copy at phone width, so it looks the same whatever
-   the window. See IO.shot in shared/io.js. */
-function shareCard(card, name) {
-  if (!card) return UI.toast('There is nothing to share', { bad: true });
-  if (!window.IO || !IO.saveShot) return UI.toast('Pictures are not available here', { bad: true });
-  IO.saveShot(card, name, { width: 390, fill: 0.9 }).catch(function () {});
+/* A card as a picture for a story, through the shared panel (IO.share in
+   shared/io.js): the picture, its style and size already set to the last ones
+   used, and one SHARE. `build` makes a fresh card each time a choice changes.
+   Drawn at phone width, so it looks the same whatever the window. The TRAIN
+   mark comes off the picture: Tom, 2026-09-14, "no small branding". */
+function shareCard(build, name) {
+  if (!window.IO || !IO.share) return UI.toast('Pictures are not available here', { bad: true });
+  if (!build()) return UI.toast('There is nothing to share', { bad: true });
+  IO.share({ app: APP.id, name: name, width: 390, build: function () {
+    var c = build(), mk = c && c.querySelector('.mark');
+    if (mk) mk.remove();
+    return c;
+  } });
 }
 TRAIN.shareRecap = function (date) {
   date = date || TRAIN.date;
-  shareCard(TRAIN.recapCard(date), 'train-' + date);
+  shareCard(function () { return TRAIN.recapCard(date); }, 'train-' + date);
 };
 
 /* ── the week ──
@@ -6499,7 +6566,7 @@ function drawWeek(m) {
   var sh = UI.el('button', 'mb-btn mb-press mb-tap');
   sh.style.width = '100%';
   sh.textContent = 'SHARE PICTURE';
-  sh.onclick = function () { shareCard(TRAIN.weekCard(start), 'train-week-' + start); };
+  sh.onclick = function () { shareCard(function () { return TRAIN.weekCard(start); }, 'train-week-' + start); };
   m.appendChild(sh);
   m.appendChild(weekHeat(start, cur));
 }
@@ -6573,7 +6640,7 @@ function drawProfile(m) {
   var shp = UI.el('button', 'mb-btn mb-press mb-tap');
   shp.style.width = '100%';
   shp.textContent = 'SHARE PICTURE';
-  shp.onclick = function () { shareCard(hero.cloneNode(true), 'train-profile'); };
+  shp.onclick = function () { shareCard(function () { return hero.cloneNode(true); }, 'train-profile'); };
   m.appendChild(shp);
 
   var ph = TRAIN.phaseOn(today);
