@@ -497,9 +497,21 @@ A `paid` row with no client is a one-off: a commercial, a workshop, anything.
 Same row, one field empty.
 
 **Everything about a client is visible**, set by Tom: every payment they have
-ever made, when they started, what they are worth, how late they usually are,
-what share of income they represent, and for a session client every session
-delivered.
+ever made, when they started, what they are worth, what share of income they
+represent, and for a session client every session delivered.
+
+**What a client paid is shown exactly, never rounded.** Tom, 2026-09-14:
+*"Don't round up client ever paid."* EVER PAID on the client's sheet and each
+client's total on CLIENTS show centavos when there are any, through
+`exactMoney`. The second-currency view keeps its own rounding, because it is a
+view and not the money.
+
+**There is no average lateness.** Tom, same day: *"I don't need to know if a
+client pays on time on average, I've logged 8 sessions with [a client] But
+WEALTH was only born recently."* Most of a client's history happened before
+the app did, so "pays +3d on average" described the app's age, not the client.
+The PAYS tile is gone. A single payment that is late today still shows as
+late, because that is a fact about today.
 
 Clients have their own tab, **CLIENTS**, set by Tom on 2026-09-14: every client
 with where they stand today (the oldest unpaid date, or the next one coming),
@@ -536,6 +548,21 @@ about ₱4,870 a month", and a monthly bill shows its day as just the number,
 Watched: a ₱1,040 bill every 6.5 days from 4 September, made through the bill
 sheet with its own buttons, was due 17, 24 and 30 September, then 7 and 13
 October, and showed in the list and the upcoming dates exactly so.
+
+### A loan's payments are bills, with an end
+
+A debt says what is owed and is never taken off cash. It does not hold its
+payments back. So when Tom added two GLoans on 2026-09-14 and said *"add them
+in bills"*, each payment went in as a bill as well, filed as Debt payment and
+paid from GCash, so FREE holds it back before its date. A loan ends, so its
+bill carries `until`, the date of its last payment; a loan with one payment
+left carries `from` and `until` on the same day, or it would repeat every
+month for ever. Neither field is on the bill sheet yet, so set by hand, and
+the Debt payment category is not in the sheet's picker either; editing such a
+bill keeps both, because the sheet merges.
+
+Debt payment is in the `move` group, so an imported GLoan repayment filed
+there is never counted as spending, and the bill is counted once, in runway.
 
 ### Three cards on MONEY OUT
 

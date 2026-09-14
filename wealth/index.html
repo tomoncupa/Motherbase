@@ -698,6 +698,13 @@ function addSesh(clientId, date) {
   Rec.set('sesh', date || Day.today(), key, { client: clientId });
   return key;
 }
+/* Money a client actually paid, exactly. Tom, 2026-09-14: "Don't round up
+   client ever paid." Centavos when there are any, in the currency the money
+   is; the second-currency view keeps its own rounding, since it is a view. */
+function exactMoney(v) {
+  if (Cur.inAlt()) return money(v);
+  return Cur.sym(Cur.base()) + v.toLocaleString(undefined, { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
+}
 
 /* == sessions as boxes ==
    Tom, 2026-09-14: "For clients on session, I want to be able to check boxes.
@@ -2860,7 +2867,7 @@ function drawClients(m) {
         (perSession(c) ? ' · ' + earnWords(perSession(c), num(c.perWeek, 0)) : '') +
         ' · ' + x.n + (x.n === 1 ? ' payment · ' : ' payments · ') +
         (x.share * 100).toFixed(0) + '% of the year' + standing(c),
-        money(x.got), late[c.id] && c.status !== 'done' ? 'late' : '');
+        exactMoney(x.got), late[c.id] && c.status !== 'done' ? 'late' : '');
       if (c.status === 'done') r.classList.add('dim');
       r.onclick = () => clientSheet(c); r.menu = () => clientMenu(c);
       const bar = el('div', 'bar c' + (1 + (i % 6)));
@@ -3725,13 +3732,11 @@ function clientSheet(c) {
       const mine = paidRows({}).filter(p => p.client === c.id).sort((a, b2) => b2.date.localeCompare(a.date));
       const got = mine.reduce((a, p) => a + num(p.amt, 0), 0);
       const g = el('div', 'grid3');
-      g.appendChild(tile('EVER PAID', short(got), mine.length + ' payments'));
+      g.appendChild(tile('EVER PAID', exactMoney(got), mine.length + ' payments'));
       g.appendChild(tile('SINCE', c.start ? Day.short(c.start) : '—', ''));
-      /* Lateness, measured rather than felt. */
-      const exps = expected(c.start || Day.shift(Day.today(), -365), Day.today()).filter(x => x.client.id === c.id && x.paid);
-      const lateAvg = exps.length ? exps.reduce((a, x) => a + Day.diff(x.paid.date, x.date), 0) / exps.length : null;
-      g.appendChild(tile('PAYS', lateAvg == null ? '—' : (lateAvg <= 0.5 ? 'on time' : '+' + lateAvg.toFixed(0) + 'd'),
-        lateAvg == null ? 'not enough yet' : 'on average'));
+      /* No average lateness. Tom, 2026-09-14: "I don't need to know if a
+         client pays on time on average." Most of a client's history happened
+         before WEALTH did, so the figure described the app, not the client. */
       b.appendChild(g);
 
       const name = UI.field('name', { value: c.name });
