@@ -254,6 +254,21 @@ choice rather than inherited:
 
 ## Current state
 
+**It is live, and public.** GitHub Pages serves this repo, so every push to
+`main` publishes the app at https://tomoncupa.github.io/Motherbase/calcount/
+within minutes. Checked 15 September 2026. Anyone with the link can use it.
+Treat a push as a release: never push a half-working app.
+
+Two consequences, both written up for Tom:
+
+- `BETA.md` runs the Skool beta from that link: a draft post, install steps,
+  what to report, and how to choose the 12 Google Play testers.
+- `PUBLISH.md` is the route to Google Play. The one real obstacle: Android's
+  ownership file must sit at `https://tomoncupa.github.io/.well-known/`, and
+  nothing is served at that root today. Tom either creates a repository named
+  `tomoncupa.github.io` (free) or buys a domain. Until then the Play app works
+  but shows an address bar, which is acceptable for a closed test.
+
 | Part | State |
 |---|---|
 | `CLAUDE.md` | Written 2026-09-15. |
