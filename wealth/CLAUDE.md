@@ -748,6 +748,61 @@ Rows from statements went from 369 purchases, 20 payments and 30 transfers to
 194, 10 and 15, with no pair left and no "already imported" record pointing
 at a row that is gone.
 
+### A PDF that is only a picture of the pages
+
+Tom, 2026-09-14, with his UnionBank history saved through Microsoft's Print to
+PDF: *"Wealth cant handle this current. Handle the data integration and update
+the import feature."* Printing turned every letter into a drawn shape. The
+file has four pages, no fonts and one image, the bank's logo, so the text
+reader found nothing and the import said it could find no dated amounts.
+
+**Such a PDF is now read the way a person reads it.** When a PDF gives no text,
+each page is drawn and read by Tesseract, loaded from jsDelivr only then, the
+same way the PDF and spreadsheet readers already are. If it will not load, the
+import says so and suggests the spreadsheet. A word's column is decided by
+where it starts against that page's header row; a line with a date starts a
+transaction; a line whose words all sit in the description column carries on
+the one above; anything else, footers and shading included, is skipped. What
+comes out is an ordinary table for `readTable`, so everything after it is the
+path a spreadsheet already takes.
+
+**A misread figure cannot slip through quietly.** Every UnionBank line carries
+its running balance, and the statement screen refuses a chain that does not
+add up unless he turns on "import it anyway". Reference numbers are tidied,
+because the reading returned `$41055193` and `S§39436773` for `S41055193` and
+`S39436773`; a wrong reference would change a line's fingerprint, not its
+money, but it would make reading the same file twice add it twice.
+
+**His own account, known by the name he saved it under.** The spreadsheet
+prints where money went, "to account: … 09…". The printed history does not:
+"Sent to Tomm GXI 860671", where the digits are a trace number that changes
+every time. So a recipient name and bank code is offered under "are any of
+these yours?" like a number is, labelled "via GCash" for GXI so the most used
+one is suggested, and kept in `wealth.ids.<account>` as `to:tomm:gxi`. Every
+later line with that name and code is a transfer between his accounts, never
+spending. A code read off a picture can come back as GX1, so digits in a bank
+code are read back as letters. `payeeOf` also reads the short wording, so a
+PPI line is the shop and any other code is a person, keyed by name and code
+instead of a trace number that would make every payment a new payee.
+
+**A same-day charge and refund cancel.** UnionBank printed an Angkas ride as
+a ₱60 debit and a ₱60 credit on the same day with the same wording. Kept, it is
+₱60 of spending and ₱60 of income that were neither. `settle` now cancels such
+a pair like a reversal, for every statement.
+
+Watched on his real file, in the test browser's own store and never his:
+all 49 lines from 16 August to 14 September were read, the running balance
+chained from ₱4,534.66 to ₱29,694.14 with nothing broken, which proves every
+amount was read exactly, and multi-line descriptions came out whole. The
+first pass returned two card references with the S read as an 8; `cleanRef`
+now restores them, and every reference in the finished run was clean.
+Dropped onto the import sheet, the account number ending 5046 chose Bank,
+"Tomm via GCash · 7 times" was offered with GCash already picked and seven
+other recipients left as not mine, and Apply read 38 added and 7 transfers:
+exactly the seven "Sent to Tomm" lines. The Angkas ₱60 pair and the ₱1,600
+reversal were not imported. Reading the four pages took about 15 seconds
+with the page in view and 79 with it hidden, where the browser slows it.
+
 ### Seeing a statement, and commenting on it
 
 Tom, 2026-09-14, sure a UnionBank line had been imported when it had not:

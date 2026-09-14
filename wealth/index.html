@@ -1540,6 +1540,8 @@ const xfers = o => Rec.all('xfer', o).map(r => Object.assign({ key: r.key, date:
 const LIBS = {
   xlsx: { src: 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', ready: () => window.XLSX },
   pdf: { src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', ready: () => window.pdfjsLib },
+  /* Reads a PDF that is only a picture of the page. Loaded only then. */
+  ocr: { src: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js', ready: () => window.Tesseract },
 };
 function loadLib(name) {
   const L = LIBS[name];
@@ -1618,6 +1620,107 @@ async function openPdf(buf, password) {
     if (cur.trim()) { lines.push(cur.trim()); cur = ''; }
   }
   return lines;
+}
+
+/* == a PDF that is only a picture of the pages ==
+   Tom, 2026-09-14, with his UnionBank history saved through Microsoft's Print
+   to PDF: "Wealth cant handle this." Printing turned every letter into a
+   drawn shape, so there is no text to take and openPdf finds none.
+
+   So each page is drawn and read the way a person reads it, by Tesseract,
+   fetched only when a PDF needs it. A word's column is decided by where it
+   starts, against the header row on that page. A line with a date starts a
+   transaction; a line whose words all sit in the description column carries
+   on the one above; anything else, footers included, is skipped. What comes
+   out is an ordinary table for readTable, exactly like a spreadsheet.
+
+   A misread figure cannot slip through quietly: every line carries a running
+   balance, and settle() refuses a chain that does not add up. Watched on his
+   real four pages: every date and amount read exactly, and two reference
+   numbers came back with S read as $ or with a stray §, which cleanRef fixes. */
+function cleanRef(s) {
+  let r = String(s || '').replace(/[$§]/g, 'S').replace(/[^A-Za-z0-9]/g, '').replace(/^S{2,}/, 'S');
+  /* A card reference is S and eight digits; the reading also returned the S
+     as an 8, which makes nine digits no reference of this bank has. */
+  if (/^8\d{8}$/.test(r)) r = 'S' + r.slice(1);
+  const m = r.match(/^(UB|U8|S)([0-9OIl]+)$/i);
+  if (m) r = (m[1].toUpperCase() === 'U8' ? 'UB' : m[1].toUpperCase()) + m[2].replace(/O/g, '0').replace(/[Il]/g, '1');
+  return r;
+}
+async function ocrPdf(buf, password, say) {
+  const P = await loadLib('pdf');
+  const T = P ? await loadLib('ocr') : null;
+  if (!P || !T) throw new Error('This PDF is a picture of the pages, and the reader for pictures would not load, which usually means no internet. Download the statement as a spreadsheet instead.');
+  const doc = await P.getDocument({ data: new Uint8Array(buf.slice(0)), password: password || undefined }).promise;
+  const worker = await T.createWorker('eng');
+  const grid = [];
+  let cols = null;
+  try {
+    for (let n = 1; n <= doc.numPages; n++) {
+      say('Reading page ' + n + ' of ' + doc.numPages + ' as a picture…');
+      const page = await doc.getPage(n);
+      const vp = page.getViewport({ scale: 3 });
+      const cv = document.createElement('canvas');
+      cv.width = vp.width; cv.height = vp.height;
+      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+      const words = (await worker.recognize(cv)).data.words
+        .map(w => ({ t: String(w.text || '').trim(), x: w.bbox.x0, y: (w.bbox.y0 + w.bbox.y1) / 2, h: w.bbox.y1 - w.bbox.y0, c: w.confidence }))
+        .filter(w => w.t).sort((a, b) => a.y - b.y);
+      const lines = [];
+      words.forEach(w => {
+        const L = lines[lines.length - 1];
+        if (L && Math.abs(w.y - L.y) < Math.max(L.h, w.h) * 0.6) { L.w.push(w); L.h = Math.max(L.h, w.h); }
+        else lines.push({ y: w.y, h: w.h, w: [w] });
+      });
+      lines.forEach(L => L.w.sort((a, b) => a.x - b.x));
+      const pad = vp.width * 0.008;
+      let head = false, row = null, lastY = 0;
+      lines.forEach(L => {
+        const text = L.w.map(w => w.t).join(' ');
+        const at = re => (L.w.find(w => re.test(w.t)) || {}).x;
+        if (/\bdate\b/i.test(text) && /\bbalance\b/i.test(text) && /\b(debit|credit|amount)\b/i.test(text)) {
+          const x = { date: at(/^date$/i), ref: at(/^ref/i), desc: at(/^(description|particulars|details)$/i),
+            dr: at(/^debit$/i), cr: at(/^credit$/i), bal: at(/^balance$/i) };
+          if (x.date != null && x.desc != null && x.bal != null && x.dr != null && x.cr != null) {
+            cols = x;
+            if (!grid.some(r => r[0] === 'Date')) grid.push(['Date', 'Ref. No.', 'Description', 'Debit', 'Credit', 'Balance']);
+          }
+          head = true; row = null;
+          return;
+        }
+        if (!cols || !head) {
+          const m = text.match(/^(.*?account\s*(?:no\.?|number|#))\s*[:.]?\s*(.*\d.*)$/i);
+          if (m) grid.push([m[1].trim(), m[2].trim()]);
+          return;
+        }
+        const b1 = (cols.ref != null ? cols.ref : cols.desc) - pad, b2 = cols.desc - pad,
+              b3 = cols.dr - pad, b4 = cols.cr - pad, b5 = (cols.cr + cols.bal) / 2;
+        const cell = w => w.x < b1 ? 0 : w.x < b2 ? 1 : w.x < b3 ? 2 : w.x < b4 ? 3 : w.x < b5 ? 4 : 5;
+        const first = L.w[0];
+        if (cell(first) === 0 && /^\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}$/.test(first.t)) {
+          row = ['', '', '', '', '', ''];
+          L.w.forEach(w => { const i = cell(w); row[i] = row[i] ? row[i] + ' ' + w.t : w.t; });
+          row[1] = cleanRef(row[1]);
+          grid.push(row);
+          lastY = L.y;
+          return;
+        }
+        /* Noise Tesseract is unsure of, like the edge of a shaded bar, is
+           neither a line of its own nor the end of the one above. */
+        const good = L.w.filter(w => w.c >= 40);
+        if (!good.length) return;
+        if (row && good.every(w => cell(w) === 2) && L.y - lastY < L.h * 3) {
+          row[2] = (row[2] + ' ' + good.map(w => w.t).join(' ')).trim();
+          lastY = L.y;
+          return;
+        }
+        row = null;
+      });
+    }
+  } finally {
+    await worker.terminate();
+  }
+  return grid;
 }
 
 /* == GCash's own shape ==
@@ -1821,6 +1924,15 @@ function settle(st) {
       out.reversals.push({ was: o, undo: x });
     }
   });
+  /* A charge and its refund on the same day, from the same place, for the same
+     amount, never happened as far as money is concerned. UnionBank prints an
+     Angkas ride cancelled at ₱60 as a ₱60 debit and a ₱60 credit; kept, it is
+     ₱60 of spending and ₱60 of income that were neither. */
+  L.forEach((x, i) => {
+    if (x.gone || !(x.amt > 0)) return;
+    const o = L.find((y, j) => j !== i && !y.gone && y.date === x.date && y.desc === x.desc && Math.abs(y.amt + x.amt) < 0.009);
+    if (o) { o.gone = x.gone = true; out.reversals.push({ was: o, undo: x }); }
+  });
   L.forEach(x => { if (x.hold && !x.gone) { x.gone = true; out.holds.push(x); } });
 
   /* A charge the wallet took in pieces is one purchase. An adjusted line folds
@@ -1859,17 +1971,35 @@ function settle(st) {
 const idsOf = acctId => { const v = S.get('ids.' + acctId, []); return Array.isArray(v) ? v : []; };
 const digitsOf = v => String(v == null ? '' : v).replace(/\D/g, '');
 const sameId = (a, b) => {
+  if (a != null && b != null && String(a) === String(b)) return true;
   const x = digitsOf(a), y = digitsOf(b);
   if (!x || !y) return false;
   if (x === y) return true;
   return (x.length === 4 || y.length === 4) && x.slice(-4) === y.slice(-4);
 };
+/* == his own account, known by the name he saved it under ==
+   UnionBank's printed history says "Sent to Tomm GXI 860671": no number to
+   recognise, only the name he gave that recipient and the bank's code, GXI
+   for GCash. Once he says that name is his GCash, it is kept like a number,
+   as "to:tomm:gxi", and every later line with it is a transfer, not spending.
+   A code read off a picture can come back as GX1, so letters are restored. */
+const UB_SHORT = /^(sent to|received from)\s+(.+?)\s+([A-Z0-9]{3})\s+\d{3,}\s*$/i;
+const bankCode = c => String(c || '').toUpperCase().replace(/1/g, 'I').replace(/0/g, 'O');
+function recipKey(desc) {
+  const d = String(desc || '').replace(/\s+/g, ' ').trim();
+  const m = d.match(UB_SHORT);
+  if (!m || !/^sent/i.test(m[1]) || /to account:/i.test(d)) return null;
+  const code = bankCode(m[3]);
+  return code === 'PPI' ? null : 'to:' + norm(m[2]) + ':' + code.toLowerCase();
+}
 function ownAcctIn(desc, self, extra) {
   const d = ' ' + String(desc || '') + ' ';
+  const rk = recipKey(desc);
   for (const a of accts()) {
     if (a.id === self) continue;
     const ids = idsOf(a.id).concat((extra && extra[a.id]) || []);
     for (const id of ids) {
+      if (String(id).indexOf('to:') === 0) { if (rk && rk === String(id)) return a.id; continue; }
       const dg = digitsOf(id);
       if (dg.length < 4) continue;
       /* Four digits on their own turn up everywhere, so a short one has to be
@@ -1895,6 +2025,11 @@ function counterparts(settled, self) {
     if ((m = x.desc.match(/from (.+?) with account ending in (\d{4})/i))) add(m[2], m[1] + ' ending in ' + m[2]);
     if ((m = x.desc.match(/to (.+?) with account ending in (\d{4})/i))) add(m[2], m[1] + ' ending in ' + m[2]);
     if ((m = x.desc.match(/to account:\s*([A-Za-z][A-Za-z .,&\/-]*?)\s+(\d{6,})/i))) add(m[2], m[1].trim() + ' ' + m[2]);
+    const rk = recipKey(x.desc);
+    if (rk && (m = x.desc.replace(/\s+/g, ' ').trim().match(UB_SHORT))) {
+      const code = bankCode(m[3]);
+      add(rk, m[2].trim() + (code === 'GXI' ? ' via GCash' : ' via ' + code));
+    }
   });
   const no = S.get('notmine', []);
   return Object.values(found)
@@ -1968,6 +2103,14 @@ function payeeOf(desc) {
        answer covers both statements. */
     if (code === 'PPI' && !/\*/.test(name)) return shopName(name);
     return { person: true, key: no || name, label: name + (no ? ' ' + no : '') };
+  }
+  /* UnionBank's printed history cuts the line short: "Sent to Tomm GXI 860671",
+     no account number, and the digits are a trace number that changes every
+     time. So the name and the bank code are who it is. */
+  if ((m = d.match(UB_SHORT))) {
+    const name = m[2].trim(), code = bankCode(m[3]);
+    if (/^received/i.test(m[1]) || (code === 'PPI' && !/\*/.test(name))) return shopName(name);
+    return { person: true, key: name + ' ' + code, label: name + ' ' + code };
   }
   /* Four digits alone turn up inside every reference number, so a rule keyed
      on them would file strangers. The words around them are part of the key. */
@@ -4748,8 +4891,15 @@ function importSheet() {
       async function openPdfStep(buf, pw) {
         busy('Reading the PDF…');
         try {
-          lastText = (await openPdf(buf, pw)).join('\n');
-          source = 'text';
+          const text = await openPdf(buf, pw);
+          if (text.length) {
+            lastText = text.join('\n');
+            source = 'text';
+            return reread();
+          }
+          /* No text at all: a picture of the pages. Read it as one. */
+          lastGrid = await ocrPdf(buf, pw, busy);
+          source = 'picture';
           reread();
         } catch (e) {
           if (e.password) return stepPassword(buf, e.password === 'wrong');
@@ -4778,9 +4928,11 @@ function importSheet() {
       }
 
       function reread() {
-        stmt = source === 'grid' ? readTable(lastGrid, dayFirst) : readText(lastText, dayFirst);
+        stmt = source === 'grid' || source === 'picture' ? readTable(lastGrid, dayFirst) : readText(lastText, dayFirst);
         if (!stmt || !stmt.lines.length) {
-          return fail(source === 'grid'
+          return fail(source === 'picture'
+            ? 'Read the pages as pictures, but could not find a table with a date, a description and a balance on them.'
+            : source === 'grid'
             ? 'Could not find a header row with a date and an amount in that spreadsheet.'
             : 'Could not find any dated amounts in that.');
         }
@@ -5055,7 +5207,7 @@ function importSheet() {
           const ids = pendingIds();
           Object.keys(ids).forEach(a => {
             const cur = idsOf(a).slice();
-            ids[a].forEach(i => { if (!cur.some(j => digitsOf(j) === digitsOf(i))) cur.push(String(i)); });
+            ids[a].forEach(i => { if (!cur.some(j => sameId(j, i))) cur.push(String(i)); });
             if (cur.length !== idsOf(a).length) S.set('ids.' + a, cur);
           });
           const no = S.get('notmine', []);
