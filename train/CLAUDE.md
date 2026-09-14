@@ -306,7 +306,20 @@ except where a row says otherwise.
 
 ## The phone
 
-The target is a **Samsung Galaxy A10**, his gym phone: 2019, 2 GB of RAM.
+TRAIN runs and is tested on Tom's **iPhone 13 Pro**, in Safari: 390 by 844 points,
+about 390 by 664 with Safari's toolbars showing, a 47px notch and a 34px home bar.
+The Galaxy A10 gym phone cannot install apps and is not a target (Tom,
+2026-09-14). Earlier versions of this brief designed for the A10; anything below
+that still reads as Android-first is out of date.
+
+What iPhone Safari changes:
+
+- **`vh` is the screen with the toolbars hidden**, so anything sized in `vh` is too
+  tall whenever they show. Use flex to fill space, or `svh`.
+- **No vibration.** Vibrate does nothing on an iPhone; the sound still plays.
+- **localStorage stops near 5MB.** His history is about 2.8MB of text, stored as
+  about 5.6MB. The store writes every row to IndexedDB as well, so an import that
+  fills localStorage should still land whole. **Not yet watched on the phone.**
 
 - Load `shared/mobile.js` and build from `shared/ui.js`. Do not re-solve tap
   delay, keyboards, sheets or the back stack here.
@@ -333,6 +346,19 @@ and says so here rather than editing it.
 4. **`chart.js` steps stop at 5000.** Root brief item 8. TRAIN's `bigStep()` works a
    step out past the table for volume graphs. Delete it when the table grows.
 5. The root brief's Current state row for `train/` still says build in progress.
+6. **`UI.row` squeezes its label to nothing when the control is a field.** The label
+   is `flex:1; min-width:0` and `.mb-input` and `.mb-sel` are `width:100%`, so a text
+   box, date or select in a row claims the whole row. Measured on TRAIN's Add Goal
+   sheet at 390px: row 358px, box 346px, label **0px**, its words spilling out under
+   the box. It happens at every width, and LOG, STYLE and WEALTH also put selects in
+   rows. Nothing in `_smoke.html` or `_review.html` checks that a label keeps any
+   width. TRAIN stacks such rows itself with `:has()`; delete that when `ui.js`
+   either stacks a row whose control is a field or gives the label a floor.
+7. **`vh` on an iPhone is the screen with Safari's toolbars hidden.** TRAIN's empty
+   day asked for 52vh and was 130px too tall with the toolbars showing. The same
+   unit sits in `mobile.js`: a sheet's `max-height` is `min(92vh, ...)`, which can
+   run under the toolbar on iPhone Safari. Not observed yet; `svh` is the unit that
+   means the visible screen. A token, or a rule in THEMING.md, would stop the next app.
 
 ---
 
