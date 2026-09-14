@@ -14,6 +14,7 @@
 <script src="../shared/skins.js?v=15"></script>
 <script src="../shared/day.js?v=15"></script>
 <script src="../shared/records.js?v=15"></script>
+<script src="../shared/journal.js?v=15"></script>
 <script src="../shared/mobile.js?v=15"></script>
 <script src="../shared/sound.js?v=15"></script>
 <script src="../shared/ui.js?v=15"></script>
@@ -252,74 +253,14 @@ const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
 const narrow = () => (window.Mobile && typeof Mobile.sheetish === 'function') ? Mobile.sheetish() : innerWidth <= 900;
 const nowHHMM = () => { const n = new Date(); return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); };
 
-/* ══════════════ COPIED FROM STATUS ══════════════
-   `NOTE_KINDS`, `bare`, `notes`, `publishTimed` and `publishNotes` are copies
-   of STATUS's, in `status/index.html`, the same way LOG carries them. Two
-   copies is two things to keep in step: change STATUS's, change this.
-
-   `notes` here includes the due-date rule STATUS gained on 2026-09-14: a todo
-   with a `due` shows on that day and follows you forward from it, not from the
-   day it was written.                                                        */
-const NOTE_KINDS = [
-  { id: 'todo',  label: 'Todo',  rank: 0, to: 'QUEST' },
-  { id: 'entry', label: 'Entry', rank: 1, to: 'LOG' },
-  { id: 'event', label: 'Event', rank: 2, to: 'LOG' },
-  { id: 'idea',  label: 'Idea',  rank: 3, to: 'LOG,SPARK' },
-];
-function bare(x) {
-  const o = Object.assign({}, x);
-  delete o.key; delete o.date; delete o.carried; delete o.from;
-  return o;
-}
-function notes(date) {
-  const d = date || Day.today();
-  const out = [];
-  Rec.all('note').forEach(r => {
-    const p = r.payload;
-    if (!p) return;
-    if (p.kind === 'todo' && p.due !== undefined && !p.done && !p.cancelled) {
-      if (!p.due || p.due > d) return;
-      out.push(Object.assign({ key: r.key, date: r.date }, p, p.due < d ? { carried: Day.diff(d, p.due) } : {}));
-      return;
-    }
-    if (r.date === d) { out.push(Object.assign({ key: r.key, date: d }, p)); return; }
-    if (!r.date) return;
-    if (p.kind === 'todo' && !p.done && !p.cancelled && r.date < d) {
-      out.push(Object.assign({ key: r.key, date: r.date, carried: Day.diff(d, r.date) }, p));
-      return;
-    }
-    if (p.kind === 'todo' && p.done && p.doneOn === d) {
-      out.push(Object.assign({ key: r.key, date: r.date, from: r.date }, p));
-    }
-  });
-  return out;
-}
-function publishTimed(d) {
-  const want = {};
-  notes(d).filter(x => x.date === d && x.at && !x.done && !x.cancelled && (!x.due || x.due === d)).forEach(x => {
-    const id = 'note-at-' + String(x.text).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
-    if (!id || id === 'note-at-') return;
-    want[id] = 1;
-    Rec.set('activity', null, id, { name: x.text, cat: 'journal' });
-    Rec.set('tick', d, id, { src: APP.id, qty: 1, at: x.at, dur: x.dur || 0 });
-  });
-  Rec.all('tick', { date: d }).forEach(r => {
-    if (r.key.indexOf('note-at-') === 0 && !want[r.key]) Rec.del('tick', d, r.key);
-  });
-}
-function publishNotes(date) {
-  const d = date || Day.today();
-  publishTimed(d);
-  NOTE_KINDS.forEach(k => {
-    const n = Rec.all('note', { date: d })
-      .filter(r => r.payload && r.payload.kind === k.id && !(k.id === 'todo' && r.payload.done)).length;
-    const id = 'note-' + k.id;
-    Rec.set('activity', null, id, { name: k.label + 's', cat: 'journal' });
-    if (n) Rec.set('tick', d, id, { src: APP.id, qty: n, to: k.to });
-    else Rec.del('tick', d, id);
-  });
-}
-/* ══════════════ end of the copy ══════════════ */
+/* ══════════════ STATUS'S JOURNAL ══════════════
+   `NOTE_KINDS`, `bare`, `notes` and `publishNotes` are shared/journal.js, the
+   same rules STATUS, LOG and the home screen read, including the due-date
+   rule: a todo with a `due` shows on that day and follows you forward.       */
+const NOTE_KINDS = Journal.KINDS;
+function bare(x) { return Journal.bare(x); }
+function notes(date) { return Journal.notes(date || Day.today()); }
+function publishNotes(date) { return Journal.publishNotes(date || Day.today(), APP.id); }
 
 /* ══════════════ DATES ══════════════
    Everything is a plain calendar date through day.js, so "today" here is the
@@ -366,47 +307,11 @@ const whenLabel = (due, at) => due ? dayWord(due) + (at ? ' ' + clock12(at) : ''
    `rep` is {unit, every, days, dom, from, txt}. `from` is the first due date,
    so "every 2 weeks" keeps its own rhythm rather than drifting to whenever
    it was ticked.                                                            */
-function occursAfter(rep, anchor, after) {
-  const n = Math.max(1, rep.every || 1);
-  if (rep.unit === 'day') {
-    if (anchor > after) return anchor;
-    return Day.shift(anchor, (Math.floor(Day.diff(after, anchor) / n) + 1) * n);
-  }
-  if (rep.unit === 'weekday') {
-    let d = Day.shift(after, 1);
-    while (Day.dow(d) === 0 || Day.dow(d) === 6) d = Day.shift(d, 1);
-    return d;
-  }
-  if (rep.unit === 'week') {
-    if (rep.days && rep.days.length) {
-      for (let i = 1; i <= 7 * n + 7; i++) {
-        const d = Day.shift(after, i);
-        if (rep.days.indexOf(Day.dow(d)) < 0) continue;
-        if (n === 1 || Math.round(Day.diff(weekStart(d), weekStart(anchor)) / 7) % n === 0) return d;
-      }
-    }
-    if (anchor > after) return anchor;
-    return Day.shift(anchor, (Math.floor(Day.diff(after, anchor) / (7 * n)) + 1) * 7 * n);
-  }
-  if (rep.unit === 'month') {
-    const dom = rep.dom || partsOf(anchor).d;
-    for (let k = 0; k < 1200; k += n) { const d = addMonths(anchor, k, dom); if (d > after) return d; }
-  }
-  if (rep.unit === 'year') {
-    const p = partsOf(anchor);
-    for (let k = 0; k < 200; k += n) { const y = p.y + k, d = ymd(y, p.m, Math.min(p.d, lastDay(y, p.m))); if (d > after) return d; }
-  }
-  return null;
-}
+/* When a repeat comes round next is Journal.occursAfter in shared/journal.js,
+   which STATUS and the home screen use to tick one. */
+function occursAfter(rep, anchor, after) { return Journal.occursAfter(rep, anchor, after); }
 /* The first round on or after today. */
 const firstDue = rep => occursAfter(rep, T(), Day.shift(T(), -1));
-/* The round after this one: after whichever is later, its due day or today,
-   so ticking a week-late daily todo does not leave six rounds overdue. */
-function nextRound(x) {
-  const due = x.due || x.date || T();
-  const base = due > T() ? due : T();
-  return occursAfter(x.rep, x.rep.from || due, base);
-}
 function repLabel(rep) {
   if (!rep) return '';
   const n = rep.every || 1;
@@ -648,41 +553,16 @@ function addQuest(p) {
   Mobile.feedback('success');
 }
 
-/* Ticking is STATUS's tick, copied, with one addition: a repeating todo is
-   not finished, it has done a round. The round becomes a finished copy on
-   today, so STATUS and LOG show it happened today, and the todo moves on. */
+/* Ticking is Journal.tick in shared/journal.js, the tick STATUS and the home
+   screen use. A plain todo flips. A repeating todo is not finished, it has
+   done a round: a finished copy on today, so STATUS and LOG show it happened
+   today, and the todo moves on to its next date. */
 function tick(x) {
-  const own = x.date, now = nowHHMM(), d = T();
-  const cur = Object.assign({}, Rec.get('note', own, x.key) || bare(x));
-  if (!cur.done && cur.rep) {
-    const copyKey = newId();
-    Rec.set('note', d, copyKey, Object.assign({}, cur, {
-      t: Date.now(), made: d, ord: Rec.all('note', { date: d }).length,
-      done: 1, doneAt: now, doneOn: d, by: now, byAuto: 1, byWas: null,
-      due: dueOf(Object.assign({ date: own }, cur)) || d, rep: null, of: x.key,
-    }));
-    const next = nextRound(Object.assign({ date: own }, cur));
-    Rec.set('note', own, x.key, Object.assign({}, cur, { due: next }));
-    publishNotes(d); if (own !== d) publishNotes(own);
-    Mobile.feedback('tick');
-    UI.undo('Next: <b>' + esc(whenLabel(next, cur.at)) + '</b>', () => {
-      Rec.del('note', d, copyKey); Rec.set('note', own, x.key, cur);
-      publishNotes(d); if (own !== d) publishNotes(own);
-    });
-    return;
-  }
-  const was = cur.done;
-  Rec.set('note', own, x.key, Object.assign({}, cur, {
-    done: was ? 0 : 1,
-    by: was ? (cur.byWas || null) : now,
-    byWas: was ? null : (cur.byAuto ? (cur.byWas || null) : (cur.by || null)),
-    byAuto: was ? 0 : 1,
-    doneAt: was ? null : now,
-    doneOn: was ? null : d,
-  }));
-  publishNotes(own);
-  Mobile.feedback(was ? 'untick' : 'tick');
-  if (!was) UI.undo('Completed <b>' + esc(cur.text) + '</b>', () => { Rec.set('note', own, x.key, cur); publishNotes(own); });
+  const res = Journal.tick(x.date, x.key, { day: T(), stamp: nowHHMM(), row: x, src: APP.id });
+  if (!res) return;
+  Mobile.feedback(res.done ? 'tick' : 'untick');
+  if (res.round) UI.undo('Next: <b>' + esc(whenLabel(res.next, res.at)) + '</b>', res.undo);
+  else if (res.done) UI.undo('Completed <b>' + esc(res.text) + '</b>', res.undo);
 }
 
 function removeQuest(x) {

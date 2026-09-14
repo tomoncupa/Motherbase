@@ -119,10 +119,9 @@ under the root brief's many-writers rule:
   journal counters and DAY LOG see a line written here.
 
 The time parser, the clock labels, the kinds and the two publish steps are
-**copies of STATUS's code**, marked as such in `log/index.html`. Two copies is
-two things to keep in step. Their right home is `shared/`, which only a
-foundation session may touch. Until one moves them: change STATUS's, change
-LOG's.
+**`shared/journal.js`** since 2026-09-14, the one copy STATUS, QUESTS and the
+home screen read too. LOG's names for them are one-line pointers. The caffeine
+half-life sum is still a copy of STATUS's: change both.
 
 The store's ownership warning is per page: it only fires in an app that has
 declared the type it is being written against. STATUS declares `note`; LOG

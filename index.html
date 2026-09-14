@@ -18,6 +18,7 @@
 <script src="shared/skins.js"></script>
 <script src="shared/day.js"></script>
 <script src="shared/records.js"></script>
+<script src="shared/journal.js"></script>
 <script src="shared/chart.js"></script>
 <script src="shared/mobile.js"></script>
 <script src="shared/sound.js"></script>
@@ -915,67 +916,12 @@ function openTodos() {
     .sort((a, b) => String(todoFrom(a) || '9999').localeCompare(String(todoFrom(b) || '9999')));
 }
 
-/* Which day a journal line shows on. STATUS's `notes()` rule, copied: change
-   both. A todo with a `due` (QUESTS writes one) shows from its due day on, and
-   `due: ''` (No date) shows nowhere until done. Otherwise: written that day,
-   a todo still open from before, or a todo finished that day. */
-function noteOnDay(r, day) {
-  const n = r.payload;
-  if (n.kind === 'todo' && n.due !== undefined && !n.done && !n.cancelled) return !!n.due && n.due <= day;
-  if (r.date === day) return true;
-  if (!r.date || n.kind !== 'todo') return false;
-  if (!n.done && !n.cancelled && r.date < day) return true;
-  return !!(n.done && n.doneOn === day);
-}
-
-/* Ticking a todo the way STATUS and QUESTS do, so the three never disagree:
-   the Done time in `by` (a typed one put aside and handed back), and the day.
-   A repeating todo from QUESTS does a round instead: a finished copy today,
-   and the todo moves to its next date. COPIED from QUESTS's `tick` and
-   `occursAfter` in quest/index.html: change all copies. */
-function repeatAfter(rep, anchor, after) {
-  const n = Math.max(1, rep.every || 1), p2 = x => String(x).padStart(2, '0');
-  const parts = s => s.split('-').map(Number);
-  const last = (y, m) => new Date(y, m + 1, 0).getDate();
-  const monthsOn = (s, k, dom) => { const a = parts(s), t = new Date(a[0], a[1] - 1 + k, 1);
-    return t.getFullYear() + '-' + p2(t.getMonth() + 1) + '-' + p2(Math.min(dom || a[2], last(t.getFullYear(), t.getMonth()))); };
-  const wk = s => Day.shift(s, -((Day.dow(s) + 6) % 7));
-  if (rep.unit === 'day') return anchor > after ? anchor : Day.shift(anchor, (Math.floor(Day.diff(after, anchor) / n) + 1) * n);
-  if (rep.unit === 'weekday') { let d = Day.shift(after, 1); while (Day.dow(d) === 0 || Day.dow(d) === 6) d = Day.shift(d, 1); return d; }
-  if (rep.unit === 'week') {
-    if (rep.days && rep.days.length) for (let i = 1; i <= 7 * n + 7; i++) {
-      const d = Day.shift(after, i);
-      if (rep.days.indexOf(Day.dow(d)) > -1 && (n === 1 || Math.round(Day.diff(wk(d), wk(anchor)) / 7) % n === 0)) return d;
-    }
-    return anchor > after ? anchor : Day.shift(anchor, (Math.floor(Day.diff(after, anchor) / (7 * n)) + 1) * 7 * n);
-  }
-  if (rep.unit === 'month') { const dom = rep.dom || parts(anchor)[2]; for (let k = 0; k < 1200; k += n) { const d = monthsOn(anchor, k, dom); if (d > after) return d; } }
-  if (rep.unit === 'year') { for (let k = 0; k < 200 * 12; k += 12 * n) { const d = monthsOn(anchor, k); if (d > after) return d; } }
-  return null;
-}
-function tickTodo(r) {
-  const today = LifeOS.day(), cur = Rec.get('note', r.date, r.key);
-  if (!cur) return;
-  const now = new Date();
-  const stamp = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-  if (!cur.done && cur.rep) {
-    const due = cur.due === undefined ? r.date : (cur.due || today);
-    const next = repeatAfter(cur.rep, cur.rep.from || due, due > today ? due : today);
-    Rec.set('note', today, Rec.USER + '-' + Date.now().toString(36) + '-h' + Math.random().toString(36).slice(2, 6),
-      Object.assign({}, cur, { t: Date.now(), made: today, done: 1, doneAt: stamp, doneOn: today,
-        by: stamp, byAuto: 1, byWas: null, due: due, rep: null, of: r.key }));
-    if (next) Rec.set('note', r.date, r.key, Object.assign({}, cur, { due: next }));
-    return;
-  }
-  Rec.set('note', r.date, r.key, Object.assign({}, cur, {
-    done: cur.done ? 0 : 1,
-    by: cur.done ? (cur.byWas || null) : stamp,
-    byWas: cur.done ? null : (cur.byAuto ? (cur.byWas || null) : (cur.by || null)),
-    byAuto: cur.done ? 0 : 1,
-    doneAt: cur.done ? null : stamp,
-    doneOn: cur.done ? null : today,
-  }));
-}
+/* Which day a journal line shows on, and ticking a todo, are shared/journal.js:
+   the same rules STATUS, LOG and QUESTS read. A todo with a `due` shows from
+   its due day; a repeating todo does a round instead of finishing. The home
+   screen leaves the journal counters to STATUS and QUESTS, as it always has. */
+function noteOnDay(r, day) { return Journal.onDay(r, day); }
+function tickTodo(r) { Journal.tick(r.date, r.key, { day: LifeOS.day(), publish: false }); }
 const notesOfKind = k => noteRows()
   .filter(r => r.payload.kind === k)
   .sort((a, b) => String(b.date).localeCompare(String(a.date)));

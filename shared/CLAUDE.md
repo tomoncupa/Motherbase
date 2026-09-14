@@ -34,6 +34,7 @@ are holding a stale copy of whatever you just changed.
 |---|---|---|
 | `records.js` | The store. Rows, merge, subscriptions. | Highest. Holds his history. |
 | `day.js` | One definition of "today" for the whole suite. | High. Everything dates through it. |
+| `journal.js` | One journal line: kinds, the day it shows on, typed times, ticking and repeats. Read by STATUS, LOG, QUESTS and the home screen. | High. It writes STATUS's `note` rows. |
 | `skins.js` `skins.json` | Themes, and the colour layer on top. | Medium. Cosmetic but wide. |
 | `mobile.js` | The touch layer: sheets, swipes, keyboard, back stack, haptics, safe areas. | Medium. Every app's feel. |
 | `sound.js` | Sound themes and instruments, synthesised. | Low. |

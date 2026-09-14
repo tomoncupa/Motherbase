@@ -190,6 +190,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 |---|---|
 | `records.js` | The store. Rows, merging, subscriptions. The one file to be careful with. |
 | `day.js` | One definition of "today" for the whole suite. |
+| `journal.js` | One journal line: its kinds, which day it shows on, the time typed into it, ticking a todo and a repeat's next round. STATUS names the `note` shape; STATUS, LOG, QUESTS and the home screen all read this. |
 | `skins.js` + `skins.json` | Themes, and the colour layer on top of them. |
 | `sound.js` | Sound themes and instruments, synthesised, no audio files. |
 | `mobile.js` | The touch layer. Sheets, swipes, safe areas, keyboard, back stack, haptics. |
@@ -321,7 +322,8 @@ a field written by a newer build of itself, or restored from a newer backup.
 So the rule is not about who writes. It is:
 
 1. **Change a row by merging into what is there, never by rebuilding it.**
-   Read the row, change your fields, write it back whole. An app that owns
+   Read the row, change your fields, write it back whole. `Rec.patch` does
+   exactly that in one call. An app that owns
    only some of the fields must carry the rest across untouched.
 2. **Only write what you have shown the person.** A row you have not put on
    screen is a row you have no business rewriting.
@@ -753,14 +755,14 @@ data model section now says "must redraw when it lands". Item 1's fix caps the
 blank screen at 2.5 seconds and does not remove it. What is left is app work,
 in STATUS, TRAIN and ARC.
 
-**3. `Rec.patch`, so merging is easier than replacing.** `Rec.set` overwrites
-the whole payload, which is what let STATUS drop the calcium PORTION had
-written. A `patch(type, date, key, changes)` that reads the current payload and
-shallow-merges would make the safe thing the easy thing, and it is what the
-many-writers rule above actually needs to be enforceable rather than a promise.
-
-Two open questions, neither decided: how it reaches a nested object like a
-food's `base`, and what a caller passes to clear a field rather than set it.
+**3. ~~`Rec.patch`, so merging is easier than replacing~~ Built 2026-09-14,
+Tom said yes.** `Rec.patch(type, date, key, changes)` reads the row, changes
+only the fields it is given and writes it back. The two open questions,
+decided by Claude: a dotted name reaches into a nested object
+(`{'base.ca': 120}` leaves the rest of `base` alone), and a value of
+`undefined` removes a field. A row that is not there is made; a patch that
+changes nothing writes nothing. Five smoke checks. No app calls it yet: moving
+the apps that rebuild rows by hand onto it is each app's own job.
 
 **4. A cross-device merge is whole-row.** Two devices editing different fields
 of the same row before they meet: later write wins entirely, earlier field
@@ -834,12 +836,14 @@ the fix, so none is urgent, but each is a second copy of a foundation job:
 - CLEX, STATUS and TRAIN: stepper buttons drawn with a `−` character can use
   the `minus` role.
 
-**15. STATUS's journal code lives in several copies.** LOG copies STATUS's time
-parser, clock labels, line kinds and publish steps. QUESTS and the home screen
-copy `tickTodo` and `repeatAfter`. Each is marked as a copy, and "change all of
-them" is a rule that fails the first time somebody forgets. The fix is one
-shared file for journal lines. That is a real design, touches four apps, and
-wants its own session and Tom's go-ahead.
+**15. ~~STATUS's journal code lives in several copies~~ Moved 2026-09-14, Tom
+said yes.** `shared/journal.js` holds the kinds, the day rule, the time parser,
+the clock labels, the publish steps, repeats and the tick. STATUS, LOG, QUESTS
+and the home screen keep their old function names as one-line pointers to it,
+so nothing that called them changed. LOG's copy had drifted: it published a
+todo due next week as an event on the day it was written, and now it does not.
+Two things stay per app on purpose: QUESTS's reader for dates typed anywhere in
+a line, and LOG's caffeine half-life sum, still a copy of STATUS's.
 
 ### Parked, not cancelled
 

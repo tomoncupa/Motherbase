@@ -13,6 +13,7 @@
 <script src="../shared/skins.js?v=16"></script>
 <script src="../shared/day.js?v=16"></script>
 <script src="../shared/records.js?v=16"></script>
+<script src="../shared/journal.js?v=16"></script>
 <script src="../shared/mobile.js?v=16"></script>
 <script src="../shared/sound.js?v=16"></script>
 <script src="../shared/ui.js?v=16"></script>
@@ -525,126 +526,18 @@ function applyText() {
   b.setProperty('--tl', 'var(' + t[3] + ')');
 }
 
-/* ══════════════════════ STATUS'S JOURNAL, MIRRORED ══════════════════════
-   The kinds, the time parser, the clock labels, the two publish steps and
-   the half-life sum below are COPIES of status/index.html as of 2026-09-13,
-   kept to the letter so LOG and STATUS never disagree about a line or a
-   coffee. Two copies is two things to keep in step; the right home is
-   shared/, and an app session may not put it there. Change one, change
-   both, until a foundation session moves them.                          */
+/* ══════════════════════ STATUS'S JOURNAL ══════════════════════
+   The kinds, the time parser, the clock labels and the two publish steps are
+   shared/journal.js, the one set of rules STATUS, QUESTS and the home screen
+   read too. The half-life sum below is still a copy of STATUS's: change both. */
 
-const NOTE_KINDS = [
-  { id: 'todo',  label: 'Todo',  plural: 'Todos',   to: 'QUEST' },
-  { id: 'entry', label: 'Entry', plural: 'Entries', to: 'LOG' },
-  { id: 'event', label: 'Event', plural: 'Events',  to: 'LOG' },
-  { id: 'idea',  label: 'Idea',  plural: 'Ideas',   to: 'LOG,SPARK' },
-];
+const NOTE_KINDS = Journal.KINDS;
 const MARK = { todo: '×', entry: '·', event: '–', idea: '!' };
-
-/* The time parser, copied from STATUS on 2026-09-14, clock rule and all.
-   Tom: "Make the time rules universal" for STATUS, QUESTS and LOG. A clock
-   with no am or pm on today is the next time it comes round; on any other
-   day 1 to 6 is the afternoon. `date` is the day the line is on. */
-const TIME_RE  = /\s+(?:at\s+|@\s*)?(\d{1,2})(?::|\.)(\d{2})\s*(am|pm)?$/i;
-const HOUR_RE  = /\s+(?:at\s+|@\s*)?(\d{1,2})\s*(am|pm)$/i;
-const BARE_RE  = /\s+(?:at|@)\s*(\d{1,2})$/i;
-const RANGE_RE = /\s+(?:(at|from)\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i;
-const DUR_RE  = /\s+(?:for\s+)?(?:(\d+)\s*h(?:rs?|ours?)?\s*(\d{1,2})?|(\d+)\s*(m|min|mins|minutes?))$/i;
-
-function clockMins(h, mm, ap, date) {
-  if (h > 23 || mm > 59) return null;
-  if (ap) {
-    ap = ap.toLowerCase();
-    if (h < 1 || h > 12) return null;
-    if (ap === 'pm' && h < 12) h += 12;
-    if (ap === 'am' && h === 12) h = 0;
-    return h * 60 + mm;
-  }
-  if (h === 0 || h >= 12) return h * 60 + mm;
-  if (!date || date === Day.today()) {
-    const n = new Date();
-    return n.getHours() * 60 + n.getMinutes() <= h * 60 + mm ? h * 60 + mm : (h + 12) * 60 + mm;
-  }
-  return (h <= 6 ? h + 12 : h) * 60 + mm;
-}
-const minsHM = v => String(Math.floor(v / 60) % 24).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
-
-function parseLine(raw, date) {
-  let text = String(raw == null ? '' : raw).trim();
-  let at = null, dur = null;
-  const d = text.match(DUR_RE);
-  if (d) {
-    dur = d[1] != null ? (+d[1] * 60 + (+d[2] || 0)) : +d[3];
-    if (!(dur > 0)) dur = null; else text = text.slice(0, d.index).trim();
-  }
-  let m;
-  if (!dur && (m = text.match(RANGE_RE)) && (m[1] || m[3] || m[4] || m[6] || m[7])) {
-    const smm = m[3] ? +m[3] : 0, eh = +m[5], emm = m[6] ? +m[6] : 0;
-    let s = clockMins(+m[2], smm, m[4] || m[7] || null, date);
-    if (s != null && !m[4] && m[7]) {
-      const e0 = clockMins(eh, emm, m[7]);
-      if (e0 != null && s > e0) s = clockMins(+m[2], smm, m[7].toLowerCase() === 'pm' ? 'am' : 'pm');
-    }
-    let e = m[7] ? clockMins(eh, emm, m[7]) : (eh > 23 || emm > 59 ? null : eh * 60 + emm);
-    if (s != null && e != null) {
-      if (e <= s) e += (e + 720 > s) ? 720 : 1440;
-      at = minsHM(s); dur = e - s;
-      text = text.slice(0, m.index).trim();
-    }
-  }
-  if (!at && (m = text.match(TIME_RE))) {
-    const v = clockMins(+m[1], +m[2], m[3] || null, date);
-    if (v != null) { at = minsHM(v); text = text.slice(0, m.index).trim(); }
-  }
-  if (!at && (m = text.match(HOUR_RE))) {
-    const v = clockMins(+m[1], 0, m[2], date);
-    if (v != null) { at = minsHM(v); text = text.slice(0, m.index).trim(); }
-  }
-  if (!at && (m = text.match(BARE_RE))) {
-    const v = +m[1] >= 1 && +m[1] <= 12 ? clockMins(+m[1], 0, null, date) : null;
-    if (v != null) { at = minsHM(v); text = text.slice(0, m.index).trim(); }
-  }
-  if (!text) return { text: String(raw).trim(), at: null, dur: null };
-  return { text: text, at: at, dur: dur };
-}
-
-function hhmm(ms) {
-  const d = new Date(ms);
-  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-}
-function clockLabel(at) {
-  if (!at) return '';
-  const [h, m] = at.split(':').map(Number);
-  const ap = h < 12 ? 'am' : 'pm', hh = h % 12 === 0 ? 12 : h % 12;
-  return hh + ':' + String(m).padStart(2, '0') + ap;
-}
-const durLabel = d => !d ? '' : (d >= 60 ? (d % 60 ? Math.floor(d / 60) + 'h' + String(d % 60).padStart(2, '0') : Math.floor(d / 60) + 'h') : d + 'm');
-
-function publishTimed(d) {
-  const want = {};
-  Rec.all('note', { date: d }).map(r => r.payload)
-    .filter(x => x && x.at && !x.done && !x.cancelled).forEach(x => {
-      const id = 'note-at-' + String(x.text).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
-      if (!id || id === 'note-at-') return;
-      want[id] = 1;
-      Rec.set('activity', null, id, { name: x.text, cat: 'journal' });
-      Rec.set('tick', d, id, { src: APP.id, qty: 1, at: x.at, dur: x.dur || 0 });
-    });
-  Rec.all('tick', { date: d }).forEach(r => {
-    if (r.key.indexOf('note-at-') === 0 && !want[r.key]) Rec.del('tick', d, r.key);
-  });
-}
-function publishNotes(d) {
-  publishTimed(d);
-  NOTE_KINDS.forEach(k => {
-    const n = Rec.all('note', { date: d })
-      .filter(r => r.payload && r.payload.kind === k.id && !(k.id === 'todo' && r.payload.done)).length;
-    const id = 'note-' + k.id;
-    Rec.set('activity', null, id, { name: k.label + 's', cat: 'journal' });
-    if (n) Rec.set('tick', d, id, { src: APP.id, qty: n, to: k.to });
-    else Rec.del('tick', d, id);
-  });
-}
+function parseLine(raw, date) { return Journal.parseLine(raw, date); }
+function hhmm(ms) { return Journal.hhmm(ms); }
+function clockLabel(at) { return Journal.clockLabel(at); }
+function durLabel(d) { return Journal.durLabel(d); }
+function publishNotes(d) { return Journal.publishNotes(d, APP.id); }
 
 /* ══════════════════════ WHAT SHOWS, AND ON WHICH DAY ══════════════════════
    The day rules are STATUS's: an entry, event or idea is on the day it is

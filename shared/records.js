@@ -384,6 +384,34 @@ const Rec = {
     write(r); announce([r], true);
     return r;
   },
+  /** Change some fields of a row and keep every other one.
+
+      Rec.set replaces the whole payload, which is how STATUS once dropped the
+      calcium PORTION had written: it rebuilt the row from the fields it knew.
+      This reads the row, changes only what it is given, and writes it back.
+
+      `changes` is {field: value}. A dotted name reaches into a nested object,
+      so {'base.ca': 120} changes the calcium and leaves the rest of `base`.
+      A value of undefined removes the field. A row that does not exist yet is
+      made from the changes. Changing nothing writes nothing. */
+  patch(type, date, key, changes) {
+    const was = Rec.get(type, date, key);
+    const cur = (was && typeof was === 'object' && !Array.isArray(was)) ? was : {};
+    Object.keys(changes || {}).forEach(path => {
+      const bits = path.split('.');
+      let o = cur;
+      for (let i = 0; i < bits.length - 1; i++) {
+        const v = o[bits[i]];
+        if (!v || typeof v !== 'object' || Array.isArray(v)) o[bits[i]] = {};
+        o = o[bits[i]];
+      }
+      const last = bits[bits.length - 1];
+      if (changes[path] === undefined) delete o[last]; else o[last] = changes[path];
+    });
+    return Rec.set(type, date, key, cur);
+  },
+  /** the app that declared itself on this page, for anything writing on its behalf */
+  get appId() { return me; },
   /** names the brief uses */
   recSet(type, date, key, payload) { return Rec.set(type, date, key, payload); },
   recDel(type, date, key) { return Rec.del(type, date, key); },

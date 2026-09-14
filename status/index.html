@@ -17,6 +17,7 @@
 <script src="../shared/skins.js"></script>
 <script src="../shared/day.js"></script>
 <script src="../shared/records.js"></script>
+<script src="../shared/journal.js"></script>
 <script src="../shared/mobile.js"></script>
 <script src="../shared/sound.js"></script>
 <script src="../shared/ui.js"></script>
@@ -1162,12 +1163,9 @@ function calTarget() {
    An Entry is prose — what used to be its own paragraph mode is simply a
    longer kind of line, which removes a whole switch from the screen.       */
 
-const NOTE_KINDS = [
-  { id: 'todo',  label: 'Todo',  rank: 0, to: 'QUEST' },
-  { id: 'entry', label: 'Entry', rank: 1, to: 'LOG' },
-  { id: 'event', label: 'Event', rank: 2, to: 'LOG' },
-  { id: 'idea',  label: 'Idea',  rank: 3, to: 'LOG,SPARK' },
-];
+/* The four kinds, and every other rule for a journal line, are in
+   shared/journal.js, which LOG, QUESTS and the home screen read too. */
+const NOTE_KINDS = Journal.KINDS;
 
 /* The marks, in bullet-journal notation rather than pictures. A dash, a dot
    and a bang are faster to read than any icon, they cannot render differently
@@ -1229,40 +1227,11 @@ const kindLabels = () => {
    Only tasks migrate. An entry, an event and an idea are records of a
    particular day and belong to that day. */
 function notes(date) {
-  const d = date || vd();
-  const out = [];
-  Rec.all('note').forEach(r => {
-    const p = r.payload;
-    if (!p) return;
-    /* A todo with a due date follows the due date, not the day it was written.
-       Set in QUESTS (quest/CLAUDE.md), 2026-09-14. It shows on the day it is
-       due and follows you forward from there, drawn > on past days like any
-       carried todo. `due: ''` is Todoist's No date and shows nowhere until it
-       is done. A row with no `due` at all behaves exactly as before. LOG
-       carries a copy of this function: change it there too. */
-    if (p.kind === 'todo' && p.due !== undefined && !p.done && !p.cancelled) {
-      if (!p.due || p.due > d) return;
-      out.push(Object.assign({ key: r.key, date: r.date }, p, p.due < d ? { carried: Day.diff(d, p.due) } : {}));
-      return;
-    }
-    /* written on this day */
-    if (r.date === d) { out.push(Object.assign({ key: r.key, date: d }, p)); return; }
-    if (!r.date) return;
-    /* still open, written before this day: it follows you forward */
-    if (p.kind === 'todo' && !p.done && !p.cancelled && r.date < d) {
-      out.push(Object.assign({ key: r.key, date: r.date, carried: Day.diff(d, r.date) }, p));
-      return;
-    }
-    /* DONE ON this day, written on another. Tom, 2026-09-04: "I want done
-       tasks to show up on the day I did them, so I know that I did them on
-       that day." The row does not move - it stays on the day it was written,
-       which is what keeps the history honest - but the day you finished it
-       shows it too, marked with where it came from. */
-    if (p.kind === 'todo' && p.done && p.doneOn === d) {
-      out.push(Object.assign({ key: r.key, date: r.date, from: r.date }, p));
-    }
-  });
-  return out.sort(noteOrder);
+  /* Which day a line shows on is Journal.place in shared/journal.js: a todo
+     with a `due` follows its due date (set in QUESTS, 2026-09-14), an open
+     todo follows you forward, and a done one also shows on the day it was
+     done. LOG, QUESTS and the home screen read the same rule. */
+  return Journal.notes(date || vd()).sort(noteOrder);
 }
 
 /* Sorting. To-dos hold the top whatever else is chosen, because an open task
@@ -1277,11 +1246,7 @@ function notes(date) {
    `key: undefined`, so the very next read overwrites the real key with
    nothing, and the row after that gets written to a fresh id called
    "undefined". Delete them properly. */
-function bare(x) {
-  const o = Object.assign({}, x);
-  delete o.key; delete o.date; delete o.carried; delete o.from;
-  return o;
-}
+function bare(x) { return Journal.bare(x); }
 
 /* The clock a line sorts by, which is not the same question as the clock it
    shows. A finished task happened when you ticked it, not when you wrote it
@@ -1336,77 +1301,9 @@ function noteOrder(a, b) {
    rules universal." A clock with no am or pm on today is the next time it
    comes round; once both have gone it stays the evening one. On any other
    day there is no now to go by, so 1 to 6 is the afternoon and 7 to 11 the
-   morning. 12 is noon. Every kind of line, entries included. LOG and QUESTS
-   carry copies: change all three.                                           */
-const TIME_RE  = /\s+(?:at\s+|@\s*)?(\d{1,2})(?::|\.)(\d{2})\s*(am|pm)?$/i;
-const HOUR_RE  = /\s+(?:at\s+|@\s*)?(\d{1,2})\s*(am|pm)$/i;
-const BARE_RE  = /\s+(?:at|@)\s*(\d{1,2})$/i;
-const RANGE_RE = /\s+(?:(at|from)\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i;
-const DUR_RE  = /\s+(?:for\s+)?(?:(\d+)\s*h(?:rs?|ours?)?\s*(\d{1,2})?|(\d+)\s*(m|min|mins|minutes?))$/i;
-
-/* minutes past midnight, by the clock rule above; `date` is the line's day */
-function clockMins(h, mm, ap, date) {
-  if (h > 23 || mm > 59) return null;
-  if (ap) {
-    ap = ap.toLowerCase();
-    if (h < 1 || h > 12) return null;
-    if (ap === 'pm' && h < 12) h += 12;
-    if (ap === 'am' && h === 12) h = 0;
-    return h * 60 + mm;
-  }
-  if (h === 0 || h >= 12) return h * 60 + mm;
-  if (!date || date === Day.today()) {
-    const n = new Date();
-    return n.getHours() * 60 + n.getMinutes() <= h * 60 + mm ? h * 60 + mm : (h + 12) * 60 + mm;
-  }
-  return (h <= 6 ? h + 12 : h) * 60 + mm;
-}
-const minsHM = v => String(Math.floor(v / 60) % 24).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
-
-function parseLine(raw, date) {
-  let text = String(raw == null ? '' : raw).trim();
-  let at = null, dur = null;
-
-  /* duration first: "1h30" would otherwise look like nothing, and stripping it
-     leaves a clean end for the time to match against */
-  const d = text.match(DUR_RE);
-  if (d) {
-    dur = d[1] != null ? (+d[1] * 60 + (+d[2] || 0)) : +d[3];
-    if (!(dur > 0)) dur = null; else text = text.slice(0, d.index).trim();
-  }
-
-  let m;
-  if (!dur && (m = text.match(RANGE_RE)) && (m[1] || m[3] || m[4] || m[6] || m[7])) {
-    const smm = m[3] ? +m[3] : 0, eh = +m[5], emm = m[6] ? +m[6] : 0;
-    let s = clockMins(+m[2], smm, m[4] || m[7] || null, date);
-    if (s != null && !m[4] && m[7]) {
-      const e0 = clockMins(eh, emm, m[7]);
-      if (e0 != null && s > e0) s = clockMins(+m[2], smm, m[7].toLowerCase() === 'pm' ? 'am' : 'pm');
-    }
-    /* the end is the first time that clock comes round after the start */
-    let e = m[7] ? clockMins(eh, emm, m[7]) : (eh > 23 || emm > 59 ? null : eh * 60 + emm);
-    if (s != null && e != null) {
-      if (e <= s) e += (e + 720 > s) ? 720 : 1440;
-      at = minsHM(s); dur = e - s;
-      text = text.slice(0, m.index).trim();
-    }
-  }
-  if (!at && (m = text.match(TIME_RE))) {
-    const v = clockMins(+m[1], +m[2], m[3] || null, date);
-    if (v != null) { at = minsHM(v); text = text.slice(0, m.index).trim(); }
-  }
-  if (!at && (m = text.match(HOUR_RE))) {
-    const v = clockMins(+m[1], 0, m[2], date);
-    if (v != null) { at = minsHM(v); text = text.slice(0, m.index).trim(); }
-  }
-  if (!at && (m = text.match(BARE_RE))) {
-    const v = +m[1] >= 1 && +m[1] <= 12 ? clockMins(+m[1], 0, null, date) : null;
-    if (v != null) { at = minsHM(v); text = text.slice(0, m.index).trim(); }
-  }
-  /* Nothing left but a time is not a line, it is a time. Give the text back. */
-  if (!text) return { text: String(raw).trim(), at: null, dur: null };
-  return { text: text, at: at, dur: dur };
-}
+   morning. 12 is noon. Every kind of line, entries included. The parser is
+   Journal.parseLine in shared/journal.js, the one LOG reads too.            */
+function parseLine(raw, date) { return Journal.parseLine(raw, date); }
 
 /** "14:45" as "2:45pm", the way it is read back on screen. */
 /** a timestamp as the HH:MM the clock label wants */
@@ -1416,17 +1313,9 @@ function parseLine(raw, date) {
 const smartTime = (raw, nowMin) => UI.smartTime(raw, nowMin);
 const timeInput = (val, onset) => UI.timeField(val, onset);
 
-function hhmm(ms) {
-  const d = new Date(ms);
-  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-}
-function clockLabel(at) {
-  if (!at) return '';
-  const [h, m] = at.split(':').map(Number);
-  const ap = h < 12 ? 'am' : 'pm', hh = h % 12 === 0 ? 12 : h % 12;
-  return hh + ':' + String(m).padStart(2, '0') + ap;
-}
-const durLabel = d => !d ? '' : (d >= 60 ? (d % 60 ? Math.floor(d / 60) + 'h' + String(d % 60).padStart(2, '0') : Math.floor(d / 60) + 'h') : d + 'm');
+function hhmm(ms) { return Journal.hhmm(ms); }
+function clockLabel(at) { return Journal.clockLabel(at); }
+function durLabel(d) { return Journal.durLabel(d); }
 
 const addNote = (date, kind, text) => {
   const list = Rec.all('note', { date: date });
@@ -1464,89 +1353,8 @@ const addNote = (date, kind, text) => {
 
    Keyed on the text, so editing the line updates its entry instead of leaving
    the old one behind, and writing the same thing twice is one row.          */
-function publishTimed(d) {
-  const want = {};
-  /* a todo due another day is not an event on the day it was written */
-  notes(d).filter(x => x.date === d && x.at && !x.done && !x.cancelled && (!x.due || x.due === d)).forEach(x => {
-    const id = 'note-at-' + String(x.text).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
-    if (!id || id === 'note-at-') return;
-    want[id] = 1;
-    Rec.set('activity', null, id, { name: x.text, cat: 'journal' });
-    Rec.set('tick', d, id, { src: APP.id, qty: 1, at: x.at, dur: x.dur || 0 });
-  });
-  /* anything that used to be a timed line here and is not any more */
-  Rec.all('tick', { date: d }).forEach(r => {
-    if (r.key.indexOf('note-at-') === 0 && !want[r.key]) Rec.del('tick', d, r.key);
-  });
-}
-
-/* ── a round of a repeating todo ──
-   COPIED FROM QUESTS (`occursAfter`, `nextRound` and `tick` in
-   quest/index.html). Change both. Wrapped so none of its names can collide
-   with this file's. Ticking a repeat writes a finished copy on the day it was
-   ticked, pointing back with `of`, and moves the todo's `due` to its next
-   round, measured from `rep.from` so an every-2-weeks keeps its rhythm. */
-const QROUND = (() => {
-  const pad = n => String(n).padStart(2, '0');
-  const parts = s => { const a = s.split('-').map(Number); return { y: a[0], m: a[1] - 1, d: a[2] }; };
-  const ymd = (y, m, d) => y + '-' + pad(m + 1) + '-' + pad(d);
-  const lastDay = (y, m) => new Date(y, m + 1, 0).getDate();
-  const addMonths = (s, n, dom) => { const p = parts(s), t = new Date(p.y, p.m + n, 1);
-    return ymd(t.getFullYear(), t.getMonth(), Math.min(dom || p.d, lastDay(t.getFullYear(), t.getMonth()))); };
-  const weekStart = s => Day.shift(s, -((Day.dow(s) + 6) % 7));
-  function occursAfter(rep, anchor, after) {
-    const n = Math.max(1, rep.every || 1);
-    if (rep.unit === 'day') { if (anchor > after) return anchor; return Day.shift(anchor, (Math.floor(Day.diff(after, anchor) / n) + 1) * n); }
-    if (rep.unit === 'weekday') { let d = Day.shift(after, 1); while (Day.dow(d) === 0 || Day.dow(d) === 6) d = Day.shift(d, 1); return d; }
-    if (rep.unit === 'week') {
-      if (rep.days && rep.days.length) {
-        for (let i = 1; i <= 7 * n + 7; i++) {
-          const d = Day.shift(after, i);
-          if (rep.days.indexOf(Day.dow(d)) < 0) continue;
-          if (n === 1 || Math.round(Day.diff(weekStart(d), weekStart(anchor)) / 7) % n === 0) return d;
-        }
-      }
-      if (anchor > after) return anchor;
-      return Day.shift(anchor, (Math.floor(Day.diff(after, anchor) / (7 * n)) + 1) * 7 * n);
-    }
-    if (rep.unit === 'month') { const dom = rep.dom || parts(anchor).d; for (let k = 0; k < 1200; k += n) { const d = addMonths(anchor, k, dom); if (d > after) return d; } }
-    if (rep.unit === 'year') { const p = parts(anchor); for (let k = 0; k < 200; k += n) { const y = p.y + k, d = ymd(y, p.m, Math.min(p.d, lastDay(y, p.m))); if (d > after) return d; } }
-    return null;
-  }
-  function tick(x, own, d, stamp) {
-    const cur = Object.assign({}, Rec.get('note', own, x.key) || bare(x));
-    const due = cur.due === undefined ? own : (cur.due || Day.today());
-    const base = due > Day.today() ? due : Day.today();
-    const next = occursAfter(cur.rep, cur.rep.from || due, base);
-    const copyKey = uid();
-    Rec.set('note', d, copyKey, Object.assign({}, cur, {
-      t: Date.now(), made: d, ord: Rec.all('note', { date: d }).length,
-      done: 1, doneAt: stamp, doneOn: d, by: stamp, byAuto: 1, byWas: null,
-      due: due, rep: null, of: x.key,
-    }));
-    if (next) Rec.set('note', own, x.key, Object.assign({}, cur, { due: next }));
-    publishNotes(d); if (own !== d) publishNotes(own);
-    Mobile.feedback('tick');
-    UI.undo('next round ' + (next || ''), () => {
-      Rec.del('note', d, copyKey); Rec.set('note', own, x.key, cur);
-      publishNotes(d); if (own !== d) publishNotes(own); draw();
-    });
-  }
-  return { occursAfter: occursAfter, tick: tick };
-})();
-
-function publishNotes(date) {
-  const d = date || Day.today();
-  publishTimed(d);
-  NOTE_KINDS.forEach(k => {
-    const n = Rec.all('note', { date: d })
-      .filter(r => r.payload && r.payload.kind === k.id && !(k.id === 'todo' && r.payload.done)).length;
-    const id = 'note-' + k.id;
-    Rec.set('activity', null, id, { name: k.label + 's', cat: 'journal' });
-    if (n) Rec.set('tick', d, id, { src: APP.id, qty: n, to: k.to });
-    else Rec.del('tick', d, id);
-  });
-}
+function publishTimed(d) { return Journal.publishTimed(d, APP.id); }
+function publishNotes(date) { return Journal.publishNotes(date || Day.today(), APP.id); }
 
 /* ══════════════ MONEY ══════════════ */
 const accts = () => Object.values(Rec.map('acct')).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -3941,33 +3749,15 @@ function drawJournal(m) {
         const now = new Date();
         const stamp = String(now.getHours()).padStart(2, '0') + ':' +
                       String(now.getMinutes()).padStart(2, '0');
-        /* A repeating todo from QUESTS does a round instead of finishing. */
-        if (x.rep && !x.done) { QROUND.tick(x, own, d, stamp); draw(); return; }
-        Rec.set('note', own, x.key, Object.assign(bare(x), {
-          done: x.done ? 0 : 1,
-          /* ── the Done time, and whose it is ──
-             The field IS the tick time: ticking writes the real one over
-             whatever you were aiming at, because a field called Done showing a
-             time you did not finish at would be a lie on the row.
-
-             But a time you typed is yours. Tom, 2026-09-05: "unticking keeps
-             manually put done time." So the tick puts yours aside rather than
-             over the side, and un-ticking hands it back. Tick, untick, and the
-             4:44 you meant to finish by is still 4:44.
-
-             `byAuto` is how it knows whose the current one is. The sheet
-             clears it whenever you set the field yourself. */
-          by: x.done ? (x.byWas || null) : stamp,
-          byWas: x.done ? null : (x.byAuto ? (x.byWas || null) : (x.by || null)),
-          byAuto: x.done ? 0 : 1,
-          doneAt: x.done ? null : stamp,
-          /* WHICH DAY you ticked it, so a task written on Monday and finished
-             on Thursday shows up on Thursday. Cleared on un-ticking, like the
-             time is, because a day that outlives the tick lies the same way. */
-          doneOn: x.done ? null : d,
-        }));
-        Mobile.feedback(x.done ? 'untick' : 'tick');
-        publishNotes(own); draw();
+        /* Journal.tick in shared/journal.js, the tick QUESTS and the home
+           screen use. A plain todo flips, keeping the Done time (a typed one
+           put aside and handed back) and the day it was done. A repeating
+           todo from QUESTS does a round instead of finishing. */
+        const res = Journal.tick(own, x.key, { day: d, stamp: stamp, row: x, src: APP.id });
+        if (!res) return;
+        Mobile.feedback(res.done ? 'tick' : 'untick');
+        if (res.round) UI.undo('next round ' + (res.next || ''), () => { res.undo(); draw(); });
+        draw();
       };
     } else {
       box.tabIndex = -1;

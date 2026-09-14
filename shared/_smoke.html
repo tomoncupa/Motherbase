@@ -9,6 +9,7 @@
 <script src="chart.js"></script>
 <script src="day.js"></script>
 <script src="records.js"></script>
+<script src="journal.js"></script>
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
@@ -308,6 +309,65 @@ async function run() {
     const w = r.querySelector('.lbl').getBoundingClientRect().width;
     box.remove();
     return w > 100;
+  })());
+
+  /* ---- changing part of a row ----
+     Rec.patch exists so an app that knows some of a row's fields cannot drop
+     the rest. Each check is one promise it makes. */
+  Rec.set(stamp, null, 'p1', { name: 'oats', base: { kcal: 380, ca: 50 }, keep: 1 });
+  Rec.patch(stamp, null, 'p1', { name: 'rolled oats', 'base.kcal': 375, keep: undefined });
+  const patched = Rec.get(stamp, null, 'p1');
+  ok('records: a patch keeps every field it was not given', patched.base.ca === 50);
+  ok('records: a patch reaches a nested field by its dotted name', patched.base.kcal === 375 && patched.name === 'rolled oats');
+  ok('records: a patch of undefined removes the field', !('keep' in patched));
+  ok('records: a patch that changes nothing writes nothing', (() => {
+    let heard = 0;
+    const off = Rec.on(() => { heard++; });
+    Rec.patch(stamp, null, 'p1', { name: 'rolled oats' });
+    off();
+    return heard === 0;
+  })());
+  ok('records: a patch on a row that is not there makes it', (() => {
+    Rec.patch(stamp, null, 'p2', { 'base.n': 1 });
+    const v = Rec.get(stamp, null, 'p2');
+    return !!v && v.base.n === 1;
+  })());
+  Rec.del(stamp, null, 'p1'); Rec.del(stamp, null, 'p2');
+
+  /* ---- the journal ----
+     shared/journal.js is STATUS's rules for a journal line, which LOG, QUESTS
+     and the home screen used to carry copies of. Pure checks: none of these
+     write a note, because a note is STATUS's data. */
+  const J = window.Journal;
+  ok('journal: loaded, with the four kinds', !!J && J.KINDS.map(k => k.id).join() === 'todo,entry,event,idea');
+  ok('journal: a time at the end of a line is read, one in the middle stays words', (() => {
+    const a = J.parseLine('Train 2:45pm'), b = J.parseLine('Call Dan about the 2:45 train');
+    return a.text === 'Train' && a.at === '14:45' && b.at === null && b.text === 'Call Dan about the 2:45 train';
+  })());
+  ok('journal: on another day 3 is the afternoon, and a length needs a unit', (() => {
+    const past = Day.shift(Day.today(), -3);
+    const a = J.parseLine('Run at 3', past), b = J.parseLine('Squat 3-5', past), c = J.parseLine('Walk 45m', past);
+    return a.at === '15:00' && b.at === null && b.text === 'Squat 3-5' && c.dur === 45 && c.text === 'Walk';
+  })());
+  ok('journal: a todo due later is not on today, and follows you from its due day', (() => {
+    const t = Day.today(), tm = Day.shift(t, 1);
+    const r = { key: 'k', date: t, payload: { kind: 'todo', text: 'x', due: tm, done: 0 } };
+    return !J.onDay(r, t) && J.onDay(r, tm) && J.place(r, Day.shift(t, 3)).carried === 2;
+  })());
+  ok('journal: a todo done on another day shows on the day it was done', (() => {
+    const t = Day.today(), y = Day.shift(t, -2);
+    const r = { key: 'k', date: y, payload: { kind: 'todo', text: 'x', done: 1, doneOn: t } };
+    return J.onDay(r, y) && J.onDay(r, t) && J.place(r, t).from === y && !J.onDay(r, Day.shift(t, -1));
+  })());
+  ok('journal: every 2 weeks keeps its rhythm, and the 31st is clamped per month', (() => {
+    const two = J.occursAfter({ unit: 'week', every: 2 }, '2026-01-05', '2026-01-20');
+    const feb = J.occursAfter({ unit: 'month', every: 1, dom: 31 }, '2026-01-31', '2026-01-31');
+    const mar = J.occursAfter({ unit: 'month', every: 1, dom: 31 }, '2026-01-31', feb);
+    return two === '2026-02-02' && feb === '2026-02-28' && mar === '2026-03-31';
+  })());
+  ok('journal: a week-late daily todo moves to tomorrow, not to six rounds ago', (() => {
+    const past = Day.shift(Day.today(), -7);
+    return J.nextRound({ rep: { unit: 'day', every: 1, from: past }, due: past }, past) === Day.shift(Day.today(), 1);
   })());
 
   /* ---- tables you can type into ---- */
