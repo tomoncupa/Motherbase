@@ -7,6 +7,10 @@ win if this disagrees with them.
 Also presentations and social media content made from it. Desktop, Tom only,
 kept out of the tester build.
 
+**Opens on one clip.** Tom, 2026-09-14: single video by default, side by side
+when he asks for it (the Side button or the 2 key). 1 vs last and Earlier
+videos switch to side by side themselves, because comparing is their job.
+
 **How it gets used, as of 2026-09-14.** Tom and his clients film on iPhones.
 Clients send clips on Telegram as normal videos, which Telegram shrinks, and
 Tom downloads them with Telegram Desktop. Tom is often on camera beside FORM,
