@@ -22,8 +22,12 @@ journal module" before this app existed.
 
 ## FUNCTION, in one sentence
 
-**It shows the bullets you wrote over the last few weeks, so you can see
-whether you kept going.**
+**It shows your STATUS entries en masse, over weeks and months, so you can
+see whether you kept going.**
+
+Tom, 2026-09-14: *"LOG is like a way to view my STATUS entries en masse."*
+STATUS records one day at a time; LOG lays the days side by side: the
+bullets, the day's line, and every measure STATUS tracks as a column.
 
 Tom, 2026-09-13: *"it's really meant to focus more on the past 3-8 weeks for
 the most part ... it's to increase personal continuity and accountability."*
@@ -201,6 +205,9 @@ restore nothing.
 | A new bullet always starts as an Entry; the last kind used is no longer remembered. | Tom, 2026-09-13 |
 | In the notebook, a day's other columns sit under its bullets, each with its name, and an empty mood or energy is not shown. | Claude, 2026-09-13 |
 | The column headings are always drawn on the timeline, because the day columns have names even in views without side columns. | Claude, 2026-09-13 |
+| Every STATUS measure is a day column, read off STATUS's field list, so a measure added in STATUS appears here unasked; plus Calories and Protein from meals and Spent from purchases. Each day's figure follows STATUS's own rule (last, average or total, food-label amounts included) and its tile's formatting. Supersedes the separate mood and energy averages. | Tom, 2026-09-14 |
+| What got done, Mood and Energy show until hidden; every other column starts hidden and is shown by right-clicking a heading or in Settings. Earlier mood and energy settings carry over. | Tom asked to see them sometimes, Claude chose the defaults, 2026-09-14 |
+| Mouse 4 zooms out and Mouse 5 zooms in. Supersedes the reverse. | Tom, 2026-09-14 |
 
 ## Found in STATUS, not fixed
 

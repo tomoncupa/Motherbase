@@ -97,9 +97,9 @@ main.dragging{cursor:grabbing;user-select:none}
 .c-q{width:var(--w-q, var(--s-10))}
 .c-m{width:var(--w-m, clamp(var(--s-10), 14vw, calc(var(--s-10) * 2)))}
 .c-w{width:var(--w-w, clamp(var(--s-10), 14vw, calc(var(--s-10) * 2)))}
-.cw-done{width:var(--w-done, calc(var(--s-10) * 2.5))}
-.cw-mood{width:var(--w-mood, var(--s-9))}
-.cw-energy{width:var(--w-energy, var(--s-9))}
+/* A day column's width comes from its own --w-<key> once dragged, else its
+   starting width; the script hands both over as --cw. */
+.heads .c.cx,.xt,.xn{width:var(--cw, var(--s-9))}
 
 .heads{position:sticky;top:0;z-index:3;background:var(--surface-1);
   box-shadow:0 var(--border-width) 0 var(--border-strong)}
@@ -222,8 +222,9 @@ main.dragging{cursor:grabbing;user-select:none}
 /* ── the day's average mood and energy ── */
 .xn{display:flex;justify-content:flex-end;align-items:flex-start}
 .xv{padding:var(--s-2) var(--s-3);font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--tb, var(--f-4))}
-.xn.mood .xv{color:var(--data-1)}
-.xn.energy .xv{color:var(--data-3)}
+.xn.f-mood .xv{color:var(--data-1)}
+.xn.f-energy .xv{color:var(--data-3)}
+.xv .xu{margin-left:var(--s-1);font-family:var(--font-body);font-weight:var(--w-body);font-size:var(--ts, var(--f-2));color:var(--text-muted)}
 .cal.small:not(.near) .xn{align-items:center}
 .cal.small:not(.near) .xv{padding:0 var(--s-3);font-size:var(--ts, var(--f-2))}
 
@@ -251,7 +252,7 @@ main.dragging{cursor:grabbing;user-select:none}
 .filler{border-top:var(--border-width) solid var(--border)}
 .cal.book .drow{flex-direction:column}
 .cal.book .xc{border-right:0}
-.cal.book .cw-done,.cal.book .cw-mood,.cal.book .cw-energy{width:auto}
+.cal.book .xt,.cal.book .xn{width:auto}
 .cal.book .xt,.cal.book .xn{border-top:var(--border-width) solid var(--border)}
 .cal.book .xl{display:block;padding:var(--s-2) var(--s-4) 0;font-size:var(--ts, var(--f-2));color:var(--text-muted)}
 .cal.book .xn{justify-content:space-between;align-items:baseline}
@@ -388,20 +389,71 @@ function toggleSide(id, k) {
 }
 
 /* ── the day columns ──
-   The days themselves (`d`), and next to them, in his order: what got done,
-   the day's average mood, its average energy. Tom, 2026-09-13. Each can be
-   renamed; each but the days can be hidden and resized; all can be moved. */
-const XCOLS = ['done', 'mood', 'energy'];
-const X_DEFAULT_NAMES = { d: 'Days', done: 'What got done today', mood: 'Mood', energy: 'Energy' };
-const colName = k => { const n = S.get('colnames', null); return (n && n[k]) || X_DEFAULT_NAMES[k] || COL_NAMES[k] || k; };
-const xHidden = () => { const v = S.get('xhide', null); return Array.isArray(v) ? v : []; };
+   The days themselves (`d`), and beside them, in his order: what got done,
+   then every measure STATUS tracks, then calories, protein and spending
+   from its meals and purchases.
+
+   Tom, 2026-09-14: "Pair LOG closer to STATUS, so I don't have to ask for a
+   manual weight column. Sometimes I will want to see it, sometimes I won't.
+   LOG is like a way to view my STATUS entries en masse." So the columns are
+   read off STATUS's own field list: a measure added in STATUS is a column
+   here without anyone asking. Each can be shown or hidden, renamed, resized
+   and moved. What got done, mood and energy show until hidden; everything
+   else waits to be shown. */
+const X_EXTRA = [
+  { key: 'kcal',    kind: 'meal',  prop: 'kcal', name: 'Calories' },
+  { key: 'protein', kind: 'meal',  prop: 'p',    name: 'Protein', unit: 'g' },
+  { key: 'spent',   kind: 'spend',               name: 'Spent' },
+];
+const X_SHOWN_FIRST = ['done', 'f-mood', 'f-energy'];
+let xDefCache = null;        /* cleared whenever the store changes, since a field can be added in STATUS */
+function xDefs() {
+  if (xDefCache) return xDefCache;
+  const fields = Object.values(Rec.map('field')).filter(f => f && f.id)
+    .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.label || '').localeCompare(String(b.label || '')));
+  xDefCache = [{ key: 'done', kind: 'text', name: 'What got done today' }]
+    .concat(fields.map(f => ({ key: 'f-' + String(f.id).replace(/[^a-zA-Z0-9_-]/g, '_'), kind: 'field', name: f.label || f.id, unit: f.unit || '', f })))
+    .concat(X_EXTRA);
+  return xDefCache;
+}
+const xDef = k => xDefs().find(x => x.key === k) || null;
+const xKeys = () => xDefs().map(x => x.key);
+const defaultName = k => { const d = xDef(k); return d ? d.name : k === 'd' ? 'Days' : COL_NAMES[k] || k; };
+const colName = k => { const n = S.get('colnames', null); return (n && n[k]) || defaultName(k); };
+const isXOn = k => { const v = S.get('xvis', null) || {}; return k in v ? !!v[k] : X_SHOWN_FIRST.indexOf(k) > -1; };
+const xWidth = k => 'var(--w-' + k + ', ' + (xDef(k) && xDef(k).kind === 'text' ? 'calc(var(--s-10) * 2.5)' : 'var(--s-9)') + ')';
 function xOrder() {
-  const all = ['d'].concat(XCOLS), saved = S.get('xorder', null);
+  const all = ['d'].concat(xKeys()), saved = S.get('xorder', null);
   const out = (Array.isArray(saved) ? saved : []).filter(k => all.indexOf(k) > -1);
   all.forEach(k => { if (out.indexOf(k) < 0) out.push(k); });
   return out;
 }
-const visibleX = () => xOrder().filter(k => k === 'd' || xHidden().indexOf(k) < 0);
+const visibleX = () => xOrder().filter(k => k === 'd' || isXOn(k));
+
+/* Columns saved before 2026-09-14 were called `mood` and `energy` and were
+   hidden by a list; they are STATUS's fields now, `f-mood` and `f-energy`,
+   shown or hidden by a map. Carried across once, in place, so nothing he
+   set is lost. */
+(function migrateColumns() {
+  const ren = k => k === 'mood' ? 'f-mood' : k === 'energy' ? 'f-energy' : k;
+  const order = S.get('xorder', null);
+  if (Array.isArray(order) && order.some(k => k !== ren(k))) S.set('xorder', order.map(ren));
+  const hide = S.get('xhide', null);
+  if (Array.isArray(hide)) {
+    const vis = Object.assign({}, S.get('xvis', null) || {});
+    hide.forEach(k => { vis[ren(k)] = false; });
+    S.set('xvis', vis);
+    S.set('xhide', null);
+  }
+  ['colnames', 'colw'].forEach(key => {
+    const o = S.get(key, null);
+    if (o && typeof o === 'object' && ('mood' in o || 'energy' in o)) {
+      const n = {};
+      Object.keys(o).forEach(k => { n[ren(k)] = o[k]; });
+      S.set(key, n);
+    }
+  });
+})();
 
 /* Newest days first, or oldest first. A re-click on the view that is on
    flips it, and the "Newest day first" switch shows and sets the same. */
@@ -591,21 +643,53 @@ function indexGraph() {
   const F = Rec.map('field');
   const caf = (F.caffeine && +F.caffeine.half > 0) ? F.caffeine
     : Object.values(F).find(f => f && f.from === 'caff' && +f.half > 0) || null;
-  const meals = new Map();
-  if (caf) Rec.all('meal', {}).forEach(r => {
-    if (!r.payload || !r.date) return;
-    if (!meals.has(r.date)) meals.set(r.date, []);
-    meals.get(r.date).push(r.payload);
-  });
-  G = { mood: F.mood || null, energy: F.energy || null, caf, meals };
+  /* Meals and purchases by day, for caffeine off a label and for the
+     calories, protein and spending columns. */
+  const byDate = type => {
+    const m = new Map();
+    Rec.all(type, {}).forEach(r => {
+      if (!r.payload || !r.date) return;
+      if (!m.has(r.date)) m.set(r.date, []);
+      m.get(r.date).push(r.payload);
+    });
+    return m;
+  };
+  G = { mood: F.mood || null, energy: F.energy || null, caf, meals: byDate('meal'), spends: byDate('spend') };
+  xDefCache = null;
 }
 const evList = (date, fid) => { const r = Rec.get('ev', date, fid); return r && r.e ? r.e : []; };
 const minuteOf = t => { const d = new Date(t); return d.getHours() * 60 + d.getMinutes(); };
-/* The day's average, as STATUS works it out for a scale field. */
-function dayAvg(d, fid) {
-  const e = evList(d, fid);
-  if (!e.length) return null;
-  return e.reduce((a, x) => a + (+x.v || 0), 0) / e.length;
+/* A day's figure for a column, as STATUS shows it on its tile. A measure is
+   STATUS's value(): typed entries plus any food-label amount it is fed by,
+   then the last reading, the average or the total, as the field says. A
+   check is a tick; a scale or a decimal field has one decimal; anything
+   else is a whole number. Calories and protein are the day's meals added
+   up; Spent is the day's purchases. Blank when there is nothing. */
+const r1 = v => String(Math.round(v * 10) / 10);
+const money = v => Math.round(v).toLocaleString();
+function xValue(def, d) {
+  if (def.kind === 'meal') {
+    const s = (G.meals.get(d) || []).reduce((a, m) => a + (parseFloat(m[def.prop]) || 0), 0);
+    return s ? Math.round(s).toLocaleString() : '';
+  }
+  if (def.kind === 'spend') {
+    const s = (G.spends.get(d) || []).reduce((a, x) => a + (parseFloat(String(x.amt).replace(/,/g, '')) || 0), 0);
+    return s ? money(s) : '';
+  }
+  const f = def.f, per = f.per == null ? 1 : f.per;
+  const e = evList(d, f.id).map(x => ({ t: +x.t || 0, v: +x.v || 0 }));
+  if (f.from) (G.meals.get(d) || []).forEach(m => {
+    const v = (parseFloat(m[f.from]) || 0) * per;
+    if (v > 0) e.push({ t: +m.t || 0, v: v });
+  });
+  if (!e.length) return '';
+  e.sort((a, b) => a.t - b.t);
+  const v = f.agg === 'sum' ? e.reduce((a, x) => a + x.v, 0)
+    : f.agg === 'avg' ? e.reduce((a, x) => a + x.v, 0) / e.length
+    : e[e.length - 1].v;
+  if (f.measure === 'check') return v ? '✓' : '';
+  if (f.measure === 'scale' || f.dec) return r1(v);
+  return Math.round(v).toLocaleString();
 }
 
 function dayStart(d) {
@@ -679,7 +763,7 @@ function graphHTML(d) {
    inside it. */
 function firstRecord() {
   let s = TODAY;
-  ['note', 'day', 'ev', 'meal', 'cell'].forEach(t => Rec.all(t, {}).forEach(r => {
+  ['note', 'day', 'ev', 'meal', 'spend', 'cell'].forEach(t => Rec.all(t, {}).forEach(r => {
     if (r.date && DATE_OK.test(r.date) && r.date < s) s = r.date;
   }));
   return s;
@@ -789,14 +873,18 @@ function dayHTML(p) {
           '" aria-label="' + attr(p.label) + '"></div>' +
         '<div class="bw">' + graphHTML(p.from) + '<div class="bls">' + list.map(bulletHTML).join('') + '</div></div></div>';
     }
-    if (k === 'done') {
-      return '<div class="xc xt cw-done" data-col="done"><span class="xl">' + esc(colName('done')) + '</span>' +
-        '<textarea class="cell" rows="1" data-d="' + p.from + '" data-col="done" aria-label="' + attr(colName('done') + ', ' + p.label) + '">' +
-        esc(cellOf(p.from, 'done')) + '</textarea></div>';
+    const def = xDef(k);
+    if (!def) return '';
+    const cw = ' style="--cw:' + xWidth(k) + '"';
+    if (def.kind === 'text') {
+      return '<div class="xc xt" data-col="' + k + '"' + cw + '><span class="xl">' + esc(colName(k)) + '</span>' +
+        '<textarea class="cell" rows="1" data-d="' + p.from + '" data-col="' + k + '" aria-label="' + attr(colName(k) + ', ' + p.label) + '">' +
+        esc(cellOf(p.from, k)) + '</textarea></div>';
     }
-    const v = dayAvg(p.from, k);
-    return '<div class="xc xn cw-' + k + ' ' + k + (v == null ? ' empty' : '') + '" data-col="' + k + '">' +
-      '<span class="xl">' + esc(colName(k)) + '</span><span class="xv">' + (v == null ? '' : v.toFixed(1)) + '</span></div>';
+    const v = xValue(def, p.from);
+    return '<div class="xc xn ' + k + (v ? '' : ' empty') + '" data-col="' + k + '"' + cw + '>' +
+      '<span class="xl">' + esc(colName(k)) + '</span><span class="xv">' +
+      (v ? esc(v) + (def.unit && v !== '✓' ? '<span class="xu">' + esc(def.unit) + '</span>' : '') : '') + '</span></div>';
   }).join('');
   const html = '<div class="' + cls.join(' ') + '" data-from="' + p.from + '"' +
     (note ? ' title="' + attr(p.label + ': ' + note) + '"' : '') + '>' +
@@ -869,7 +957,8 @@ function render(force) {
       '<div class="row heads" id="heads">' +
         (c.length ? '<div class="agg">' + c.map(k => '<div class="c c-' + k + '" data-side="' + k + '">' + COL_NAMES[k] +
           '<span class="rz" data-col="' + k + '" title="Drag to resize"></span></div>').join('') + '</div>' : '') +
-        visibleX().map(k => '<div class="c ' + (k === 'd' ? 'c-d' : 'cw-' + k) + '" data-x="' + k + '">' + esc(colName(k)) +
+        visibleX().map(k => '<div class="c ' + (k === 'd' ? 'c-d' : 'cx') + '" data-x="' + k + '"' +
+          (k === 'd' ? '' : ' style="--cw:' + xWidth(k) + '"') + ' title="' + attr(colName(k)) + '">' + esc(colName(k)) +
           (k === 'd' ? '' : '<span class="rz" data-col="' + k + '" title="Drag to resize"></span>') + '</div>').join('') +
       '</div>' +
       '<div class="row body">' +
@@ -1187,8 +1276,9 @@ Mobile.hold($('levels'), e => { if (e.type !== 'contextmenu' && e.pointerType !=
    Rename and Move. Side columns are hidden per view; the day columns
    everywhere. Settings has the same switches. */
 function toggleX(k) {
-  const cur = xHidden();
-  S.set('xhide', cur.indexOf(k) > -1 ? cur.filter(x => x !== k) : cur.concat(k));
+  const v = Object.assign({}, S.get('xvis', null) || {});
+  v[k] = !isXOn(k);
+  S.set('xvis', v);
 }
 function moveCol(k, dir) {
   const o = xOrder(), i = o.indexOf(k), j = i + dir;
@@ -1200,7 +1290,7 @@ function renameCol(k) {
   let inp = null;
   const save = h => {
     const v = inp.value.trim(), n = Object.assign({}, S.get('colnames', null) || {});
-    if (v && v !== X_DEFAULT_NAMES[k]) n[k] = v; else delete n[k];
+    if (v && v !== defaultName(k)) n[k] = v; else delete n[k];
     S.set('colnames', n);
     h.close();
   };
@@ -1222,7 +1312,7 @@ function columnsMenu(e, head) {
     fn: () => toggleSide(L.id, k),
   }));
   if (L.cols.length) items.push('-');
-  XCOLS.forEach(k => items.push({ label: (xHidden().indexOf(k) > -1 ? 'Show ' : 'Hide ') + colName(k), fn: () => toggleX(k) }));
+  xKeys().forEach(k => items.push({ label: (isXOn(k) ? 'Hide ' : 'Show ') + colName(k), fn: () => toggleX(k) }));
   const k = head && head.dataset.x;
   if (k) {
     items.push('-');
@@ -1321,8 +1411,8 @@ function drawLogSettings(pane) {
   grp.appendChild(UI.row('Day graph', 'Lines drawn behind each day’s bullets', lines));
 
   const xs = opts();
-  XCOLS.forEach(k => xs.appendChild(toggleEl(colName(k), xHidden().indexOf(k) < 0, () => toggleX(k))));
-  grp.appendChild(UI.row('Day columns', 'Beside the days, in every view', xs));
+  xKeys().forEach(k => xs.appendChild(toggleEl(colName(k), isXOn(k), () => toggleX(k))));
+  grp.appendChild(UI.row('Day columns', 'Your STATUS entries beside the days, in every view', xs));
 
   const side = opts();
   LEVELS.filter(l => l.cols.length).forEach(l => {
@@ -1354,11 +1444,13 @@ function drawLogSettings(pane) {
 }
 
 /* ══════════════════════ COLUMN WIDTHS ══════════════════════ */
-const WIDTH_KEYS = ['y', 'q', 'm', 'w'].concat(XCOLS);
 const colW = () => { const v = S.get('colw', null); return v && typeof v === 'object' ? v : {}; };
+let widthsSet = [];
 function applyColW() {
   const w = colW(), cal = $('cal');
-  WIDTH_KEYS.forEach(k => { if (w[k]) cal.style.setProperty('--w-' + k, w[k] + 'px'); else cal.style.removeProperty('--w-' + k); });
+  widthsSet.forEach(k => { if (!w[k]) cal.style.removeProperty('--w-' + k); });
+  widthsSet = Object.keys(w).filter(k => w[k]);
+  widthsSet.forEach(k => cal.style.setProperty('--w-' + k, w[k] + 'px'));
 }
 let rz = null, rzT = null;
 $('cal').addEventListener('pointerdown', e => {
@@ -1641,8 +1733,9 @@ Mobile.hold($('cal'), e => {
 }, { skip: '.sum,.cell,.bx,.rz' });
 
 /* ══════════════════════ MOVING AROUND ══════════════════════
-   The wheel scrolls. Mouse 4 zooms in and Mouse 5 out, toward the pointer,
-   through the offered views. A held left or right button drags the page. */
+   The wheel scrolls. Mouse 4 zooms out and Mouse 5 in, toward the pointer,
+   through the offered views (Tom, 2026-09-14: "Flip mouse 4 and 5"). A held
+   left or right button drags the page. */
 const sideButton = e => e.button === 3 || e.button === 4;
 window.addEventListener('mousedown', e => { if (sideButton(e)) e.preventDefault(); });
 window.addEventListener('auxclick', e => { if (sideButton(e)) e.preventDefault(); });
@@ -1651,7 +1744,7 @@ window.addEventListener('mouseup', e => {
   e.preventDefault();
   touched = true;
   const r = sc.getBoundingClientRect();
-  setLevel(stepLevel(e.button === 3 ? -1 : 1), clamp(e.clientY - r.top, 0, sc.clientHeight));
+  setLevel(stepLevel(e.button === 3 ? 1 : -1), clamp(e.clientY - r.top, 0, sc.clientHeight));
 });
 
 let drag = null, swallowClick = false, swallowMenuAt = 0;
