@@ -974,6 +974,8 @@ const liveFields = () => Object.values(fields()).filter(f => f.on)
 function evList(date, fid) { const r = Rec.get('ev', date, fid); return r && r.e ? r.e : []; }
 
 function evAdd(date, fid, v) {
+  /* how many were still to log before this one, for afterLog's Day complete */
+  LEFT_WAS = outstanding().length;
   const f = field(fid) || {};
   const e = f.once ? [] : evList(date, fid).slice();
   e.push({ t: Date.now(), v: v });
@@ -2843,11 +2845,17 @@ function scaleSheet(f, date) {
 }
 
 /* after any log: if that was the last outstanding once-a-day thing, say so */
+let LEFT_WAS = 0;
 function afterLog() {
-  const left = outstanding().length;
+  const left = outstanding().length, was = LEFT_WAS;
+  LEFT_WAS = 0;
   closeSheet();
   draw();
-  if (!left) { Mobile.feedback('complete'); UI.toast('Day complete'); }
+  /* Only on the log that cleared the last one. Tom, 2026-09-14: "Day
+     Complete coming up too early." It fired on every log once nothing was
+     left, so a mood logged at 8am after the morning weigh-in said the day
+     was complete. */
+  if (!left && was > 0) { Mobile.feedback('complete'); UI.toast('Day complete'); }
 }
 
 /* ══════════════ SPENDING ══════════════
@@ -3798,7 +3806,10 @@ function seamButton(m) {
    makes one of those days awkward forever. */
 function drawJournal(m) {
   const d = vd();
-  const list = notes(d).filter(x => x.kind !== 'para');
+  /* Todos live in QUESTS. Tom, 2026-09-14: "I don't want daily tasks to show
+     up in status." Hidden here, not changed: the rows are the same ones, and
+     QUESTS and LOG still show them. */
+  const list = notes(d).filter(x => x.kind !== 'para' && x.kind !== 'todo');
 
   /* No prose in this card at all. The four buttons sit on the heading line and
      say what they do by being pressed; an empty journal that explains itself
@@ -3829,7 +3840,7 @@ function drawJournal(m) {
       UI.toast(says[next]);
     };
     const row = el('div', 'jbtns');
-    NOTE_KINDS.forEach(k => {
+    NOTE_KINDS.filter(k => k.id !== 'todo').forEach(k => {
       const b = el('button', 'jb mb-press mb-tap', noteSvg(k.id));
       b.setAttribute('aria-label', k.label);
       b.title = k.label;
@@ -3968,7 +3979,7 @@ function noteSheet(x, d) {
   openSheet(noteKind(x.kind).label + (stamp ? '  ' + stamp : ''), body => {
     const seg = el('div', 'seg');
     let kind = x.kind;
-    NOTE_KINDS.forEach(k => {
+    NOTE_KINDS.filter(k => k.id !== 'todo' || x.kind === 'todo').forEach(k => {
       const b = el('button', kind === k.id ? 'on' : '', noteSvg(k.id) + '<span>' + k.label + '</span>');
       b.setAttribute('aria-label', k.label);
       b.onclick = () => { kind = k.id; [].forEach.call(seg.children, n => n.className = ''); b.className = 'on'; };
