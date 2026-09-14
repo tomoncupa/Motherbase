@@ -38,7 +38,7 @@ DEST = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 \
 # ── what a client gets ────────────────────────────────────────────────────
 # Folders copied whole. Everything not named here is left behind, which is
 # the safe direction: a new app has to be added deliberately.
-COPY_DIRS = ['shared', 'arc', 'block', 'status', 'train', 'style', 'checkin', 'log', 'quest']
+COPY_DIRS = ['shared', 'block', 'status', 'train', 'style', 'checkin', 'log', 'quest']
 COPY_FILES = ['index.html', '.nojekyll']
 
 # Left behind on purpose:
@@ -47,9 +47,10 @@ COPY_FILES = ['index.html', '.nojekyll']
 #            not something a client should be adding foods with
 #   wealth/  his money: clients, rates, rent, debts. Tom only, and the one
 #            folder here where a leak would be a real one
+#   arc/     Tom's own, since 2026-09-14
 #   clex/    a personal side app
 #   _template/ tools/ and every *.md brief - these are build notes
-DROP_APPS = ['form', 'portion', 'wealth']   # removed from the home screen roster
+DROP_APPS = ['form', 'portion', 'wealth', 'arc']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed
 # STREAKS and NUMBERS were deleted from the main repo on 2026-08-28, and
 # the STREAKS that replaced one of them counts ticks, so it works for a
@@ -186,17 +187,8 @@ style = patch(style, r'const AUDIT_FILES = \[.*?\n\];',
               'AUDIT_FILES in style/index.html', re.S)
 io.open(sh, 'w', encoding='utf-8').write(style)
 
-# ── ARC's own default ─────────────────────────────────────────────────────
-# ARC picks its opening theme by name rather than taking skins[0], and the
-# name it holds is 'ice'. Every other app opens on whatever sits first in
-# skins.json. Leave it and a client's very first visit to ARC is a different
-# skin from the five screens either side of it, which reads as a bug.
-FIRST = KEEP_THEMES[0]
-ah = os.path.join(DEST, 'arc', 'index.html')
-arc = io.open(ah, encoding='utf-8').read()
-arc = patch(arc, r"let THEME_NAME='[a-z0-9]+';", "let THEME_NAME='%s';" % FIRST,
-            "ARC's opening theme")
-io.open(ah, 'w', encoding='utf-8').write(arc)
+# ARC used to be patched here to open on the first kept theme. ARC is Tom's
+# own since 2026-09-14 and no longer ships, so there is nothing to patch.
 
 # Anything still pointing at an app a client does not have is a dead link,
 # and a dead link is worse than a missing feature because it looks like a bug.

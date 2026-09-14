@@ -16,7 +16,6 @@ step 1 is the one that stops you losing your data.
 | **QUESTS** | Your todo list. Dates, priorities, projects and repeats, typed in plain words. Phone or computer. |
 | **TRAIN** | Training log. Exercises, sets, reps, records. Built for a phone. |
 | **CHECK IN** | Progress photos, weight and a few questions, and a file to send your coach. Phone or computer. |
-| **ARC** | A canvas for thinking. Notes joined by lines. For a computer. |
 | **STYLE** | Change how everything looks. For a computer. |
 
 ## How your data works

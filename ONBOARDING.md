@@ -22,8 +22,8 @@ That writes `../Motherbase-Client`, a complete working suite with:
 
 | | |
 |---|---|
-| **Apps** | HOME, BLOCK, STATUS, LOG, QUESTS, TRAIN, CHECK IN, ARC, STYLE |
-| **Not included** | FORM (client video), FOODDÉX and WEALTH (Tom only), CLEX (personal) |
+| **Apps** | HOME, BLOCK, STATUS, LOG, QUESTS, TRAIN, CHECK IN, STYLE |
+| **Not included** | FORM (client video), ARC, FOODDÉX and WEALTH (Tom's own), CLEX (personal) |
 | **Themes** | Default, System, Chalkboard, Sketch, Doodle — five, from eighteen |
 | **Added** | `guide.html`, the client's five-minute setup page |
 

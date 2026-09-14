@@ -275,7 +275,7 @@ called testers until 2026-09-14, and not the coaching clients in WEALTH.
 | LOG | `log/` | desktop | yes, since 2026-09-14 | The journal module. Brings every bullet type together. |
 | QUESTS | `quest/` | everywhere | yes, since 2026-09-14 | Todo bullets, pulled from STATUS and BLOCK. Answers "what's next to be done". |
 | WEALTH | `wealth/` | desktop | no, Tom only | Money. Reads spending, and the statements that matter. |
-| ARC | `arc/` | desktop only | yes | Mind mapping, and presentations. **Planned:** a teach mode that builds skill trees out of actionable steps. Those steps are todo bullets, so it works with QUESTS. |
+| ARC | `arc/` | desktop only | no, Tom only since 2026-09-14 | Mind mapping, and presentations. **Planned:** a teach mode that builds skill trees out of actionable steps. Those steps are todo bullets, so it works with QUESTS. |
 | FORM | `form/` | desktop | no, Tom only | Form review, and presentations and social media content made from it. Takes a client's unclipped video: cut the start and end off. |
 | TRAIN | `train/` | phone | yes | The training tracker. An evolved FitNotes. |
 | STYLE | `style/` | desktop only | yes | The theme and look for every other app. |
