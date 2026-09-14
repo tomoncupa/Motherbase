@@ -2338,7 +2338,7 @@ function drawScore(m) {
       const list = accts();
       if (!list.length) return acctSheet();
       if (list.length === 1) return countSheet(list[0]);
-      UI.menu(0, 0, list.map(x => ({ label: x.name,
+      menu(go, list.map(x => ({ label: x.name,
         note: lastCount(x.id) ? 'counted ' + Day.short(lastCount(x.id).date) : 'never counted',
         fn: () => countSheet(x) })), { title: 'WHICH ACCOUNT' });
     };
@@ -2366,7 +2366,7 @@ function drawScore(m) {
     const a = el('button', 'btn mb-tap', 'Count them');
     a.type = 'button';
     a.style.marginTop = 'var(--s-2)';
-    a.onclick = () => UI.menu(0, 0, accts().filter(x => !lastCount(x.id))
+    a.onclick = () => menu(a, accts().filter(x => !lastCount(x.id))
       .map(x => ({ label: x.name, fn: () => countSheet(x) })), { title: 'WHICH ACCOUNT' });
     note.appendChild(el('br'));
     note.appendChild(a);
@@ -2641,7 +2641,7 @@ function drawClients(m) {
     add.onclick = () => {
       if (bySesh.length === 1) { addSesh(bySesh[0].id, Day.today()); Mobile.feedback('success');
         UI.toast('logged a session for <b>' + esc(bySesh[0].name) + '</b>'); draw(); return; }
-      UI.menu(0, 0, bySesh.map(c => ({ label: c.name, note: note(c),
+      menu(add, bySesh.map(c => ({ label: c.name, note: note(c),
         fn: () => { addSesh(c.id, Day.today()); Mobile.feedback('success');
           UI.toast('logged a session for <b>' + esc(c.name) + '</b>'); draw(); } })),
         { title: 'WHOSE SESSION' });
@@ -4737,10 +4737,50 @@ function attachMenus(scope) {
     r.menuWired = true;
     Mobile.hold(r, e => {
       const items = r.menu();
-      if (items && items.length) UI.menu(e.clientX || 0, e.clientY || 0, items, { title: r.menuTitle });
+      if (items && items.length) menu(e, items, { title: r.menuTitle });
     }, { skip: '.grip' });
   });
   if (window.Icons) Icons.paint(scope);
+}
+
+/* == a menu a mouse can choose from ==
+   Tom, 2026-09-14: "Input does not work on desktop unless I make the window
+   narrow." What did not work was every menu. On a wide window UI.menu draws a
+   floating list and closes it on the next press anywhere, and a press on one
+   of its own items counts: the list is gone before the click lands, so
+   choosing does nothing. A narrow window gets a sheet instead, which is why
+   narrowing fixed it. Watched in Chrome at 1424px wide: pointerdown on
+   "Money in", mousedown on the page body, no click, no sheet.
+
+   The fault is in shared/ui.js, which an app session does not touch; it is
+   item 11 on the root brief's foundation list. Until it is fixed there, this
+   swaps that listener for one that ignores presses inside a menu. It also puts
+   the menu beside what opened it, instead of the top-left corner. `at` is the
+   button that opened it, or the pointer event of a right click or a hold.
+   Delete the swap when ui.js is fixed; keep the placing. */
+function menu(at, items, opts) {
+  let x = 0, y = 0, near = null;
+  if (at && at.getBoundingClientRect) { near = at.getBoundingClientRect(); x = near.left; y = near.bottom + 4; }
+  else if (at) { x = at.clientX || 0; y = at.clientY || 0; }
+  const box = UI.menu(x, y, items, opts);
+  if (!box || !box.classList || !box.classList.contains('mb-menu')) return box;
+  if (near) {
+    const h = box.offsetHeight, w = box.offsetWidth;
+    const below = near.bottom + 4 + h <= innerHeight - 8;
+    box.style.top = (below ? near.bottom + 4 : Math.max(8, near.top - h - 4)) + 'px';
+    box.style.left = Math.max(8, Math.min(near.left, innerWidth - w - 8)) + 'px';
+  }
+  setTimeout(() => {
+    document.removeEventListener('pointerdown', UI.closeMenus);
+    const away = e => {
+      if (!box.isConnected) return document.removeEventListener('pointerdown', away, true);
+      if (e.target.closest && e.target.closest('.mb-menu')) return;
+      document.removeEventListener('pointerdown', away, true);
+      UI.closeMenus();
+    };
+    document.addEventListener('pointerdown', away, true);
+  }, 0);
+  return box;
 }
 
 function orderOf(kind) {
@@ -5046,26 +5086,27 @@ function doDeleteAcct(a, refs, target) {
 
 /* ── the + button knows which screen you are on ── */
 document.getElementById('fab').onclick = () => {
+  const at = document.getElementById('fab');
   Mobile.feedback('open');
   if (TAB === 'clients') return newClientSheet();
   if (TAB === 'in') return paidSheet();
-  if (TAB === 'score') return UI.menu(0, 0, [
+  if (TAB === 'score') return menu(at, [
     { label: 'Money in', note: 'a client payment or a one-off', fn: () => paidSheet() },
     { label: 'Spending', note: 'something you bought', fn: () => newSpendSheet() },
     { label: 'Count an account', note: 'say what is actually in it', fn: () => {
       const a = accts()[0];
       if (!a) return acctSheet();
-      UI.menu(0, 0, accts().map(x => ({ label: x.name,
+      menu(at, accts().map(x => ({ label: x.name,
         note: lastCount(x.id) ? 'counted ' + Day.short(lastCount(x.id).date) : 'never counted',
         fn: () => countSheet(x) })), { title: 'WHICH ACCOUNT' });
     } },
   ], { title: 'ADD' });
-  if (TAB === 'out') return UI.menu(0, 0, [
+  if (TAB === 'out') return menu(at, [
     { label: 'A bill or rent', fn: () => billSheet() },
     { label: 'A debt', fn: () => debtSheet() },
   ], { title: 'ADD' });
   if (TAB === 'pots') return potSheet();
-  if (TAB === 'accounts') return UI.menu(0, 0, [
+  if (TAB === 'accounts') return menu(at, [
     { label: 'Read a statement', note: 'check the app against your bank', fn: () => importSheet() },
     { label: 'An account', fn: () => acctSheet() },
     { label: 'A category', fn: () => catSheet() },

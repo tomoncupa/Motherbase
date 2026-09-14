@@ -790,6 +790,19 @@ has only passed because the test browser holds none. Found 2026-09-14 by
 WEALTH, which had the same bug and now reads either form. The check should
 accept a key or a name, since the home screen already does.
 
+**11. A menu on a wide window cannot be chosen from with a mouse.**
+`UI.menu` in `shared/ui.js`, when not `sheetish`, adds
+`document.addEventListener('pointerdown', UI.closeMenus, { once: true })`.
+The next press anywhere closes the menu, and a press on one of the menu's own
+buttons is a press anywhere: the button is removed on pointerdown, so its click
+never fires. Watched 2026-09-14 in Chrome at 1424px wide: pointerdown on the
+item, mousedown on BODY, no click. It has been there since the foundation's
+first commit, so every app's desktop menu has it. A narrow window gets
+`Mobile.actions` instead and works, which is how Tom found it: *"Input does
+not work on desktop unless I make the window narrow."* The fix is to ignore
+presses inside `.mb-menu` in that listener. WEALTH works around it with its own
+`menu()` wrapper, to be deleted when this is fixed.
+
 **10. A desktop `UI.menu` closes before its items can be clicked.** `menu()`
 in `shared/ui.js` adds `document.addEventListener('pointerdown',
 UI.closeMenus, {once: true})` after opening. A press on one of the menu's own
