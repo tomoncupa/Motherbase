@@ -287,7 +287,7 @@ called testers until 2026-09-14, and not the coaching clients in WEALTH.
 | TRAIN | `train/` | phone | yes | The training tracker. An evolved FitNotes. |
 | STYLE | `style/` | desktop only | yes | The theme and look for every other app. |
 | FOODDÉX | `portion/` | desktop | no, Tom only | Food database input and overview. Works with STATUS. **To be expanded.** |
-| CHECK IN | `checkin/` | everywhere | yes | Physique check-ins, for Tom and for his clients. Reads weight from STATUS rather than asking for it twice. A client's check-in reaches Tom as a file, the same way a TRAIN log will reach COACH. |
+| CHECK IN | `checkin/` | everywhere | yes | Physique check-ins, for Tom and for his clients: a goal, photos measured into neutral numbers, and a timelapse. Reads weight from STATUS rather than asking for it twice. A client's check-in reaches Tom as a file and is kept under their name, in rows a later COACH can read. |
 | COACH | not built | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. A separate app, with TRAIN as its core file. A profile is the same client as in WEALTH, so a 1:1 logged here is a session WEALTH counts. A log arrives as a file the client sends from TRAIN's share menu; sending again only adds what is new. **Planned, after Tom is happy with TRAIN.** |
 
 ARC, BLOCK and STYLE are not meant to work on a phone. Tom, 2026-09-14.
@@ -432,20 +432,24 @@ body is not something to upload.
 
 ### CHECK IN — `checkin/` · everywhere
 
-**Function.** See a body change, check-in to check-in, in photos and a few
-numbers.
+**Function.** See how far a body is from its goal, and how it has changed, in
+photos and numbers.
 
-**In hand:** once a week or so, standing at a mirror with a phone, then a
+**In hand:** once a week or so, a phone propped up across a room, then a
 minute to send it. The coach opens it at a desk.
 
 **Good looks like:** a front photo and a weight in under a minute, with
-any other pose added only by someone who wants it. Any two
-check-ins sit side by side, the first one included, because the change is the
-point. Weight is STATUS's number, never a second copy. What it asks is
-editable: the defaults are vocabulary, and a coach's own questions are data.
+any other pose added in one tap by someone who wants it. This week's photo is
+the same photo as last week's, because the camera lines it up and says how.
+The goal, the first and the latest sit together with three measured ratios,
+because the change is the point. Weight is STATUS's number, never a second
+copy. What it asks is editable: the defaults are vocabulary, and a coach's own
+questions are data.
 
-**Never:** a verdict. It shows two check-ins and the difference, and says
-nothing about whether the difference is good.
+**Never:** a verdict. It shows the numbers and the change, and says nothing
+about whether either is good (Tom, 2026-09-15: "just give neutral numbers").
+Words about a body happen in Claude, when he pastes the bundle in, never on
+screen here.
 
 ### STYLE — `style/` · desktop, deliberately
 
