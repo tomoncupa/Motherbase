@@ -104,9 +104,11 @@ anything else with no time of its own, when it was written, drawn quieter.
 
 ## Ownership, and writing
 
-LOG owns **one row type, `recap`**. It also reads and writes `note` and the
-`note` field of `day`, whose shapes STATUS owns, under the root brief's
-many-writers rule:
+LOG owns **two row types**: `recap`, what he wrote about a week, month,
+quarter or year, and `cell`, one day's entry in one of LOG's own text columns
+("What got done today"), kept apart from `day.note` on purpose. It also reads
+and writes `note` and the `note` field of `day`, whose shapes STATUS owns,
+under the root brief's many-writers rule:
 
 - **A new line** is STATUS's `addNote` payload, field for field.
 - **An edit, a tick or a delete re-reads the row and merges into it.** STATUS
@@ -124,11 +126,14 @@ LOG's.
 
 The store's ownership warning is per page: it only fires in an app that has
 declared the type it is being written against. STATUS declares `note`; LOG
-declares only `recap`, so LOG never sees that warning. The merge rule above is
-the discipline, not the warning.
+declares only `recap` and `cell`, so LOG never sees that warning. The merge
+rule above is the discipline, not the warning.
 
-The backup registers `note`, `day` and `recap`, or a restore of LOG would
-restore nothing.
+The backup registers `note`, `day`, `recap` and `cell`, or a restore of LOG
+would restore nothing.
+
+Every other STATUS figure in the day columns (each measure, Calories, Protein,
+Spent) is read and never written.
 
 ---
 
@@ -224,25 +229,35 @@ the words.
 
 ## The layout rule
 
-One number, `dayHeight`, in whole pixels, between 2 and 64. Zoomed out, every
-block in every column is placed at (first day × dayHeight) and is
-(days × dayHeight) tall; week groups start on the 1st, 8th, 15th, 22nd and
-29th of every month.
-Between those, while a day is too short for its full journal line but tall
-enough for a small one, each day shows its date and summary only.
-Zoomed in, the day column is ordinary flowing rows with a minimum height, and
-every position (zoom anchor, today on the bottom edge, the year in the header)
-is read off the page rather than calculated.
+Each view is a number of days that fill the screen (Day 1, 2 Days, 3 Days,
+Week 7, Weeks 14, Month 31, Quarter 92, Year 366). That sets `dayHeight`, the
+least a day may be. A day grows past it to fit its bullets, so no day is ever
+cut off. Side blocks (weeks, months, quarters, the year) are not calculated
+from `dayHeight`: each is placed by measuring where its first and last day
+actually sit on the page, which is what lets them line up with days of any
+height, oldest or newest first. Week groups start on the 1st, 8th, 15th, 22nd
+and 29th of every month. Every position the mouse or TODAY needs is read off
+the page, not worked out.
 
 ## Build steps
 
-1. ~~Date maths and the nesting rule.~~ Done 2026-09-13.
-2. ~~Zoom and move.~~ Done 2026-09-13.
-2b. ~~Read the journal; one count; months and weeks step aside.~~ Done 2026-09-13.
-2c. ~~One line per bullet, times, filter bar, adding, editing, ticking and
-   deleting.~~ Done 2026-09-13.
-2d. ~~Week groups by date, a summary per day, and the mood, energy and
-   caffeine graph.~~ Done 2026-09-13.
-3. Colour: one colour, darker as a day's count rises.
-4. The prompt's right-hand panel is worth asking about again before building:
-   bullets are now readable and editable in place.
+Everything planned is built. Two ideas from the first prompt were dropped,
+not postponed:
+
+- **Colour by count** (one colour, darker as a day's count rises). Superseded
+  once days became readable: the bullets themselves show a busy day, and a
+  busy day grows.
+- **The right-hand panel** for reading a day. Superseded by bullets that are
+  read, added and edited in place, and by the Day view.
+
+Open, and not LOG's to fix:
+
+- `menuAt()` in `log/index.html` works around the shared menu closing before
+  its items can be clicked on a PC (root brief, Foundation item 10). Delete it
+  when `shared/ui.js` is fixed.
+- `shared/icons.js` has no `app.log` drawing, so the home screen dock shows a
+  plain character for LOG.
+
+Never watched, only driven from code: a real wheel scroll stopping and
+snapping, real Mouse 4 and 5 presses, real mouse clicks on menus, and LOG
+against Tom's real data.
