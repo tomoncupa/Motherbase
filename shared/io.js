@@ -1173,6 +1173,42 @@ const IO = {
       () => (g.UI ? g.UI.confirm('Delete all of ' + IO.spec(appId).name + '’s data?', 'Back up first. This cannot be undone.', { yes: 'DELETE', danger: true }) : Promise.resolve(confirm('Delete?')))
         .then(ok => { if (!ok) return; const c = g.Rec.clear(IO.spec(appId).types); toast('<b>' + c + '</b> rows deleted'); repaint(); }), 'bad');
   },
+
+  /* ── the sheet, as one app sees it ──
+     Tom, 2026-09-14: setting the sheet up is the home screen's and STATUS's
+     job, and every other app needs "a manual sync button and a field to
+     manually paste the sync link". So this is that and nothing else: no
+     script, no switch. The link belongs to the suite, so pasting it here
+     pastes it for every app on this device. */
+  syncRow(pane, appId) {
+    const M = IO.mirror;
+    if (!M) return;
+    const cfg = M.adopt(appId);
+    pane.appendChild(el('div', 'mb-group', 'GOOGLE SHEET'));
+    const line = el('p');
+    const say = () => {
+      const c = M.settings;
+      line.innerHTML = !c.url ? 'No link on this device yet. The sheet is set up on the home screen, under DATA.'
+        : c.at ? 'Last synced <b>' + esc(c.at) + '</b>.' : 'Linked, and not synced yet.';
+    };
+    say();
+    pane.appendChild(line);
+    const u = el('input', 'mb-input');
+    u.type = 'text'; u.placeholder = 'Paste the sync link'; u.value = cfg.url || '';
+    u.setAttribute('aria-label', 'Sync link');
+    /* on input, not change: pasting and then pressing Sync now closes nothing,
+       but pasting and then pressing DONE would lose a change event */
+    u.oninput = () => { M.set({ url: u.value.trim() }); say(); };
+    pane.appendChild(u);
+    const b = el('button', 'mb-btn go mb-press mb-tap', 'Sync now');
+    b.style.cssText = 'width:100%;margin-top:var(--s-2,8px)';
+    b.onclick = () => {
+      M.set({ url: u.value.trim() });
+      if (!M.ready()) return toast('Paste the link first', { bad: true });
+      M.sync(appId).then(say);
+    };
+    pane.appendChild(b);
+  },
 };
 
 

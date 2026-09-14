@@ -595,6 +595,14 @@ const UI = {
     if (g.IO) tabs.push({ id: 'data', name: 'DATA', draw: el2 => g.IO.panel(el2, appId) });
     (extraTabs || []).forEach(t => tabs.push(t));
 
+    /* Every app with data gets the short sheet section under DATA: the link
+       and a Sync now button. The home screen and STATUS set the sheet up, and
+       STATUS passes sync:false because it draws the whole setup itself. */
+    if (g.IO && g.IO.syncRow && opts.sync !== false && (g.IO.spec(appId).types || []).length) {
+      const dt = tabs.filter(x => x.id === 'data')[0];
+      if (dt) { const was = dt.draw; dt.draw = (pane, h) => { was(pane, h); g.IO.syncRow(pane, appId); }; }
+    }
+
     if (opts.order) {
       const rank = id => { const i = opts.order.indexOf(id); return i < 0 ? 99 : i; };
       tabs.sort((a, b) => rank(a.id) - rank(b.id));
@@ -610,7 +618,10 @@ const UI = {
 
     let active = tabs[0] && tabs[0].id;
     return UI.dialog({
-      title: 'SETTINGS', width: 560,
+      /* the app's own name on it, so it is plain which app these settings change */
+      title: opts.title || (g.IO && g.IO.spec(appId).name !== appId
+        ? String(g.IO.spec(appId).name).toUpperCase() + ' SETTINGS' : 'SETTINGS'),
+      width: 560,
       body: (body, h) => {
         const pane = el('div');
         const show = id => {

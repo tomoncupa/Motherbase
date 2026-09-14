@@ -198,7 +198,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `io.js` | Per-app backup, restore, and the readable spreadsheet export. |
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
-| `_smoke.html` | 214 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 227 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -482,6 +482,14 @@ for pivots. SheetJS if it loads, CSV if it does not.
 The Data button turns amber once a backup is 14 days old. Local-only data has no
 other safety net.
 
+**Where the sheet is set up.** Tom, 2026-09-14: the Google Sheet setup (the
+script, the automatic switch, syncing every app) lives on the home screen and
+in STATUS only. Every other app's DATA tab ends with a box to paste the sync
+link and a Sync now button, drawn by `IO.syncRow`, and nothing more. The link
+belongs to the suite, so pasting it in one app pastes it for every app on that
+device. An app that draws its own full setup passes `sync: false` to
+`UI.settings`.
+
 **Phase 2, when he asks for it:** a Google Sheet mirror. The phone stays the save
 file. The app pushes a copy into a Sheet he owns whenever there is signal, retries
 silently on failure, and never becomes a dependency. Setup must be: create a blank
@@ -584,8 +592,8 @@ because it runs the real thing rather than only parsing it:
    draws and every tab works, runs `shared/_smoke.html` inside itself and folds
    the result in, and looks over whatever rows are on the device. One page,
    one tally. `shared/_smoke.html` on its own is still there for when you are
-   working on the foundation and want the 214 without the apps.
-   It must say 214 of 214, or more once you add checks.
+   working on the foundation and want the 227 without the apps.
+   It must say 227 of 227, or more once you add checks.
    **Load it with a `?cb=<something new>` on the end.** The browser caches these
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks
@@ -703,7 +711,7 @@ answer, or take it out.
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `checkin/` | CHECK IN, built 2026-09-14 from `_template/`. Everywhere, and in the client build. One photo question ships, Front (Tom, 2026-09-14); any other pose is added with Settings, Add a new pose. Weight read from and written to STATUS's `ev` row, a waist and three 1 to 5 questions by default, all editable in Settings. Any two check-ins side by side with the change and no verdict, and a list of every one. Send to coach makes a `motherbase-checkin` file and hands it to the share menu, or downloads it. Opening a client's files shows them and saves nothing: keeping clients apart is COACH's job, and COACH is not built. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
-| `shared/` | The foundation, passing 214 checks at desktop and phone width on 2026-09-14. Every app loads it. |
+| `shared/` | The foundation, passing 227 checks on 2026-09-14 (214 of them also at phone width). Every app loads it. |
 
 ### Debt, in the order it should be paid
 
