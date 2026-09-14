@@ -803,6 +803,25 @@ exactly the seven "Sent to Tomm" lines. The Angkas ₱60 pair and the ₱1,600
 reversal were not imported. Reading the four pages took about 15 seconds
 with the page in view and 79 with it hidden, where the browser slows it.
 
+Imported on his device the same day, with his answers. The account chose
+itself, the recipient name was confirmed as GCash, and apply read 6 matched,
+32 added and 7 transfers. Six of the transfers linked to rows his GCash
+statement had already written, so each is now confirmed by both statements
+and counted once; the seventh, on the last day, is new. Three lines were
+asked about. A client's package payment he had logged into GCash arrived in
+UnionBank, and was the same payment, so it moved to Bank and kept its client.
+Two purchases of the same price six days apart were different. A ₱77 7-Eleven
+line and a ₱79 entry four days later were the same, and the merge took the
+bank's ₱77 and date.
+
+That last answer came with a rule, and it is the rule the merge already
+follows: *"Obey the numbers from the actual files rather than whats from
+STATUS."* The bank's amount and date win; his category, note and client stay.
+
+His Bank count had been taken partway through the statement's last day, and
+lines dated on a count's own day do not come off it, so the count was
+corrected to the statement's closing balance, ₱29,694.14, at his word.
+
 ### Seeing a statement, and commenting on it
 
 Tom, 2026-09-14, sure a UnionBank line had been imported when it had not:
