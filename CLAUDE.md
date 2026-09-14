@@ -781,6 +781,15 @@ control has the same twelve. Found 2026-09-11 by measuring at 375px wide.
 Either the control grows to `var(--tap)` or the rule has a stated exception;
 it should not quietly be both.
 
+**10. The review checks a purchase's account against the wrong form.**
+`_review.html`'s "every payment still knows its account" compares
+`spend.acct` with `acct` row KEYS ("gcash"). STATUS, which owns `spend`,
+writes the account's NAME ("GCash"), and so does its own rename and delete. On
+a device with real STATUS purchases that check fails on every one of them; it
+has only passed because the test browser holds none. Found 2026-09-14 by
+WEALTH, which had the same bug and now reads either form. The check should
+accept a key or a name, since the home screen already does.
+
 **10. A desktop `UI.menu` closes before its items can be clicked.** `menu()`
 in `shared/ui.js` adds `document.addEventListener('pointerdown',
 UI.closeMenus, {once: true})` after opening. A press on one of the menu's own

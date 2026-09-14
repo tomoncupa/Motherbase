@@ -158,6 +158,13 @@ h2 .spacer{flex:1}
 
 .chartbox{height:170px}
 
+/* A row you can rearrange carries a grip you can see (law 6), and a row being
+   carried lifts off the list. */
+.grip{flex:0 0 auto;align-self:stretch;display:flex;align-items:center;justify-content:center;
+  width:var(--s-5);margin-left:calc(-1 * var(--s-2));color:var(--text-muted);cursor:grab;touch-action:none}
+.list[data-sort] .item{user-select:none;-webkit-user-select:none}
+.list[data-sort] > .dragging, .list[data-sort] > .dragging .item{position:relative;z-index:2;
+  background:var(--surface-3);box-shadow:var(--e-3);cursor:grabbing}
 #fab{position:fixed;right:var(--s-4);bottom:calc(var(--s-4) + var(--safe-b));z-index:40;
   width:58px;height:58px;border:0;border-radius:50%;cursor:pointer;
   background:var(--accent);color:var(--accent-fg);font-size:28px;line-height:1;
@@ -488,11 +495,32 @@ const clients = () => Rec.all('client').map(r => Object.assign({ id: r.key }, r.
   .sort((a, b) => (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0) || a.name.localeCompare(b.name));
 const pots = () => Rec.all('pot').map(r => Object.assign({ id: r.key }, r.payload))
   .sort((a, b) => (a.ord || 0) - (b.ord || 0));
-const debts = () => Rec.all('debt').map(r => Object.assign({ id: r.key }, r.payload));
+const debts = () => Rec.all('debt').map(r => Object.assign({ id: r.key }, r.payload))
+  .sort((a, b) => (a.ord || 0) - (b.ord || 0));
 const bills = () => Rec.all('bill').map(r => Object.assign({ id: r.key }, r.payload))
   .sort((a, b) => (a.day || 0) - (b.day || 0));
-const paidRows = o => Rec.all('paid', o).map(r => Object.assign({ key: r.key, date: r.date }, r.payload));
-const spendRows = o => Rec.all('spend', o).map(r => Object.assign({ key: r.key, date: r.date }, r.payload));
+/* == an account, however it was written ==
+   STATUS writes a purchase's account as its NAME ("GCash"), and STATUS owns
+   that row's shape. WEALTH looked accounts up by KEY ("gcash"), so every
+   purchase logged day to day in STATUS was "unknown account" here and never
+   came off a balance: GCash counted at ₱1,000 with a ₱250 STATUS lunch read
+   ₱900 instead of ₱650. Found 2026-09-14 while working out what deleting an
+   account would orphan. Reads now accept either form, and a purchase WEALTH
+   writes carries the name, the way STATUS does. */
+function acctKey(v) {
+  if (v == null || v === '') return '';
+  const raw = String(v);
+  if (Rec.has('acct', null, raw)) return raw;
+  const low = raw.toLowerCase();
+  if (Rec.has('acct', null, low)) return low;
+  const hit = Rec.all('acct').find(r => r.payload && String(r.payload.name || '').toLowerCase() === low);
+  return hit ? hit.key : raw;
+}
+const acctLabel = id => (Rec.get('acct', null, acctKey(id)) || {}).name || String(id || '');
+const paidRows = o => Rec.all('paid', o).map(r => Object.assign({ key: r.key, date: r.date }, r.payload,
+  { acct: acctKey(r.payload && r.payload.acct) }));
+const spendRows = o => Rec.all('spend', o).map(r => Object.assign({ key: r.key, date: r.date }, r.payload,
+  { acct: acctKey(r.payload && r.payload.acct) }));
 const moves = o => Rec.all('move', o).map(r => Object.assign({ key: r.key, date: r.date }, r.payload));
 
 /* == merge, never rebuild ==
@@ -1757,7 +1785,7 @@ function drawUnsure(m) {
   const l = el('div', 'list');
   rows.slice(0, 12).forEach(x => {
     const r = itemRow(payeeOf(x.bank || x.note).label, Day.short(x.date) + ' · ' + esc(acctName(x.acct)), money(num(x.amt, 0)));
-    r.onclick = () => spendSheet(x);
+    r.onclick = () => spendSheet(x); r.menu = () => spendMenu(x);
     l.appendChild(r);
   });
   if (rows.length > 12) l.appendChild(el('div', 'note', 'and ' + (rows.length - 12) + ' more, in the list below.'));
@@ -1874,7 +1902,7 @@ function mergeStatement(hit, acctId) {
   if (!row) return;
   const want = Math.abs(hit.line.amt);
   Rec.set(type, hit.match.date, hit.match.key, merge(row, {
-    amt: want, acct: acctId, stmt: hit.id, bank: hit.line.desc,
+    amt: want, acct: type === 'spend' ? acctLabel(acctId) : acctId, stmt: hit.id, bank: hit.line.desc,
   }));
   /* The bank's date is the date it cleared, and a row's date is its key, so
      moving it means rewriting it. Only done when they actually differ. */
@@ -1896,7 +1924,7 @@ function addStatement(hit, acctId) {
   const amt = Math.abs(hit.line.amt);
   const t = stampFor(hit.line.date, hit.line.time || '');
   if (hit.kind === 'out') {
-    Rec.set('spend', hit.line.date, key, { amt: amt, acct: acctId, note: hit.line.desc,
+    Rec.set('spend', hit.line.date, key, { amt: amt, acct: acctLabel(acctId), note: hit.line.desc,
       t: t, src: 'stmt', stmt: hit.id, bank: hit.line.desc, ref: hit.line.ref || undefined });
     const r = ruleFor(hit.line.desc);
     if (r) setMark({ date: hit.line.date, key: key }, { cat: r.cat });
@@ -2195,6 +2223,7 @@ function stack(row, bar) {
 function itemRow(title, sub, fig, figCls) {
   const r = el('button', 'item mb-press mb-tap');
   r.type = 'button';
+  r.menuTitle = String(title || '');
   const nm = el('div', 'nm');
   nm.appendChild(el('b', null, esc(title)));
   if (sub) nm.appendChild(el('small', null, sub));
@@ -2357,7 +2386,7 @@ function drawIn(m) {
     late.forEach(e => {
       const r = itemRow(e.client.name, 'due ' + Day.short(e.date) + ' · ' +
         away(e.date), money(e.amt), 'late');
-      r.onclick = () => payFor(e);
+      r.onclick = () => payFor(e); r.menu = () => dueMenu(e);
       list.appendChild(r);
     });
     c0.appendChild(list);
@@ -2374,7 +2403,7 @@ function drawIn(m) {
     const list = el('div', 'list');
     soon.forEach(e => {
       const r = itemRow(e.client.name, Day.short(e.date) + ' · ' + away(e.date), money(e.amt));
-      r.onclick = () => payFor(e);
+      r.onclick = () => payFor(e); r.menu = () => dueMenu(e);
       list.appendChild(r);
     });
     c1.appendChild(list);
@@ -2392,7 +2421,7 @@ function drawIn(m) {
       const r = itemRow(c ? c.name : (p.note || 'One-off'),
         Day.short(p.date) + ' · ' + esc(acctName(p.acct)) + (c && p.note ? ' · ' + esc(p.note) : ''),
         money(num(p.amt, 0)), 'in');
-      r.onclick = () => paidSheet(p);
+      r.onclick = () => paidSheet(p); r.menu = () => paidMenu(p);
       list.appendChild(r);
     });
     c3.appendChild(list);
@@ -2408,7 +2437,7 @@ function away(date) {
   if (n === -1) return 'yesterday';
   return n > 0 ? 'in ' + n + ' days' : n * -1 + ' days ago';
 }
-const acctName = id => (Rec.get('acct', null, id) || {}).name || 'unknown account';
+const acctName = id => (Rec.get('acct', null, acctKey(id)) || {}).name || 'unknown account';
 
 /* ── CLIENTS ──
    Tom, 2026-09-14: "Can I get a dedicated clients tab?" Everything about a
@@ -2474,7 +2503,7 @@ function drawClients(m) {
         (x.share * 100).toFixed(0) + '% of the year' + standing(c),
         money(x.got), late[c.id] && c.status !== 'done' ? 'late' : '');
       if (c.status === 'done') r.classList.add('dim');
-      r.onclick = () => clientSheet(c);
+      r.onclick = () => clientSheet(c); r.menu = () => clientMenu(c);
       const bar = el('div', 'bar c' + (1 + (i % 6)));
       bar.appendChild(el('i')).style.width = (x.share * 100).toFixed(1) + '%';
       list.appendChild(stack(r, bar));
@@ -2517,7 +2546,7 @@ function drawClients(m) {
         bad = !!owed;
       }
       const r = itemRow(c.name, sub, fig, bad ? 'late' : '');
-      r.onclick = () => clientSheet(c);
+      r.onclick = () => clientSheet(c); r.menu = () => clientMenu(c);
       const bar = el('div', 'bar c' + (1 + (i % 6)));
       bar.appendChild(el('i')).style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%';
       list.appendChild(stack(r, bar));
@@ -2558,7 +2587,7 @@ function drawOut(m) {
     bl.forEach(b => {
       const r = itemRow(b.name, 'day ' + num(b.day, 1) + ' of the month · ' + catName(b.cat) +
         (b.acct ? ' · ' + esc(acctName(b.acct)) : ''), money(num(b.amt, 0)));
-      r.onclick = () => billSheet(b);
+      r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
       list.appendChild(r);
     });
     c1.appendChild(list);
@@ -2580,7 +2609,7 @@ function drawOut(m) {
     rec.forEach(b => {
       const r = itemRow(b.name, catName(b.cat) + ' · ' + money(num(b.amt, 0)) + ' a month',
         money(num(b.amt, 0) * 12) + '/yr');
-      r.onclick = () => billSheet(b);
+      r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
       list.appendChild(r);
     });
     c2.appendChild(list);
@@ -2594,11 +2623,12 @@ function drawOut(m) {
   if (!dl.length) c3.appendChild(el('div', 'empty', 'Nothing owed, or nothing listed yet. Press <b>+</b> to add one, and it sits beside your cash rather than being taken off it.'));
   else {
     const list = el('div', 'list');
+    list.dataset.sort = 'debt';
     dl.forEach(d => {
       const r = itemRow(d.name, (num(d.rate, 0) ? num(d.rate, 0) + '% · ' : '') +
         (num(d.min, 0) ? money(num(d.min, 0)) + ' minimum, day ' + num(d.day, 1) : 'no minimum set'),
         money(num(d.owed, 0)), 'late');
-      r.onclick = () => debtSheet(d);
+      r.onclick = () => debtSheet(d); r.menu = () => debtMenu(d); r.dataset.id = d.id;
       list.appendChild(r);
     });
     c3.appendChild(list);
@@ -2833,7 +2863,7 @@ function drawSpend(m) {
     const list = el('div', 'list');
     bigs.forEach(s => {
       const r = itemRow(s.note || 'No details', Day.short(s.date) + ' · ' + esc(acctName(s.acct)), money(num(s.amt, 0)));
-      r.onclick = () => spendSheet(s);
+      r.onclick = () => spendSheet(s); r.menu = () => spendMenu(s);
       list.appendChild(r);
     });
     c4.appendChild(list);
@@ -2863,7 +2893,7 @@ function drawSpend(m) {
         (tgg ? ' · ' + esc((Rec.get('wtag', null, tgg) || {}).name || tgg) : '') +
         (isBig(s) ? ' · big' : ''),
         money(num(s.amt, 0)));
-      r.onclick = () => spendSheet(s);
+      r.onclick = () => spendSheet(s); r.menu = () => spendMenu(s);
       list.appendChild(r);
     });
     c5.appendChild(list);
@@ -2980,8 +3010,8 @@ function drawOneDay(m, date) {
       e.fig != null ? e.fig : (e.amt > 0 ? '+' : '') + money(e.amt),
       e.kind === 'in' ? 'in' : '');
     if (e.quiet) r.classList.add('dim');
-    if (e.kind === 'out' || e.kind === 'move') r.onclick = () => spendSheet(e.row);
-    else if (e.kind === 'in') r.onclick = () => paidSheet(e.row);
+    if (e.kind === 'out' || e.kind === 'move') { r.onclick = () => spendSheet(e.row); r.menu = () => spendMenu(e.row); }
+    else if (e.kind === 'in') { r.onclick = () => paidSheet(e.row); r.menu = () => paidMenu(e.row); }
     else r.style.cursor = 'default';
     list.appendChild(r);
   });
@@ -3032,13 +3062,14 @@ function drawPots(m) {
       'taking money out of a pot you named breaks a rule you set, and being under a target does not feel like anything. Press <b>+</b>.'));
   } else {
     const list = el('div', 'list');
+    list.dataset.sort = 'pot';
     ps.forEach((p, i) => {
       const bal = potBal(p.id), tgt = num(p.target, 0);
       const row = itemRow(p.name,
         (tgt ? money(bal) + ' of ' + money(tgt) + ' · ' + Math.round(bal / tgt * 100) + '%' : 'no target set') +
         (p.acct ? ' · ' + esc(acctName(p.acct)) : ''),
         money(bal), 'in');
-      row.onclick = () => potSheet(p);
+      row.onclick = () => potSheet(p); row.menu = () => potMenu(p); row.dataset.id = p.id;
       const bar = el('div', 'bar c' + (1 + (i % 6)));
       bar.appendChild(el('i')).style.width = (tgt ? Math.min(100, bal / tgt * 100) : 0).toFixed(1) + '%';
       list.appendChild(stack(row, bar));
@@ -3073,6 +3104,7 @@ function drawAccounts(m) {
   if (!as.length) c1.appendChild(el('div', 'empty', 'No accounts yet. Press <b>+</b> and add Cash, GCash, your bank, anything money sits in.'));
   else {
     const list = el('div', 'list');
+    list.dataset.sort = 'acct';
     as.forEach(a => {
       const b = balanceOf(a.id);
       let sub, fig, cls = '';
@@ -3094,7 +3126,7 @@ function drawAccounts(m) {
       }
       const r = itemRow(a.name, sub, fig);
       if (cls) r.classList.add(cls);
-      r.onclick = () => countSheet(a);
+      r.onclick = () => countSheet(a); r.menu = () => acctMenu(a); r.dataset.id = a.id;
       list.appendChild(r);
     });
     c1.appendChild(list);
@@ -3116,13 +3148,14 @@ function drawAccounts(m) {
 
   const c2 = card('CATEGORIES');
   const list = el('div', 'list');
+  list.dataset.sort = 'cat';
   const GRP = { fix: 'Fixed', var: 'Variable', biz: 'Business', move: 'Not spending' };
   cats().forEach(c => {
     const st = capState(c.id, monthOf(Day.today()));
     const r = itemRow(c.name,
       (GRP[c.grp] || c.grp) + (st ? ' · capped at ' + money(st.cap) + ' a month' : ''),
       st ? money(st.spent) : '');
-    r.onclick = () => catSheet(c);
+    r.onclick = () => catSheet(c); r.menu = () => catMenu(c); r.dataset.id = c.id;
     list.appendChild(r);
   });
   c2.appendChild(list);
@@ -3134,7 +3167,7 @@ function drawAccounts(m) {
   const rl = el('div', 'list');
   rs.forEach(r => {
     const row = itemRow('“' + r.match + '”', 'files as ' + catName(r.cat), '');
-    row.onclick = () => ruleSheet(r);
+    row.onclick = () => ruleSheet(r); row.menu = () => ruleMenu(r);
     rl.appendChild(row);
   });
   c3.appendChild(rl);
@@ -3526,6 +3559,7 @@ function clientSheet(c) {
     },
     actions: [
       { label: 'CANCEL' },
+      { label: 'DELETE', kind: 'bad', fn: () => deleteClient(c) },
       { label: 'LOG A PAYMENT', fn: h => { h.close(); paidSheet(null, { client: c.id, amt: num(c.rate, 0) }); return true; } },
       { label: 'SAVE', kind: 'go', fn: h => { if (h.save() === false) return false; draw(); return true; } },
     ],
@@ -3737,6 +3771,7 @@ function potSheet(existing) {
     },
     actions: [
       { label: 'CANCEL' },
+      existing ? { label: 'DELETE', kind: 'bad', fn: () => { deletePot(existing); return true; } } : null,
       existing ? { label: 'MOVE', fn: h => { if (h.move() === false) return false; draw(); return true; } } : null,
       { label: 'SAVE', kind: 'go', fn: h => { if (h.save() === false) return false; draw(); return true; } },
     ].filter(Boolean),
@@ -3771,6 +3806,12 @@ function countSheet(a) {
          one, and here so a wrong guess can be put right. */
       const idsF = UI.field('text', { placeholder: 'e.g. 09171234567 or 1234', value: idsOf(a.id).join(', ') });
       b.appendChild(fld('Numbers that identify it on statements', idsF));
+      const delRow = el('div', 'rowbtns');
+      const del = el('button', 'btn mb-press mb-tap', 'Delete this account');
+      del.type = 'button';
+      del.onclick = () => { h.close(); setTimeout(() => deleteAcct(a), 350); };
+      delRow.appendChild(del);
+      b.appendChild(delRow);
       h.save = () => {
         const idl = idsF.value.split(/[,\s]+/).map(x => x.trim()).filter(x => digitsOf(x).length >= 4);
         const idsChanged = idl.join(',') !== idsOf(a.id).join(',');
@@ -3860,6 +3901,7 @@ function spendSheet(s) {
       /* Filing one purchase is a chore. Filing every purchase like it from now
          on is the point, and it is one press away rather than a trip to the
          rules screen. */
+      { label: 'DELETE', kind: 'bad', fn: () => { deleteSpend(s); return true; } },
       { label: 'ALWAYS', fn: h => { if (h.always() === false) return false; draw(); return true; } },
       { label: 'SAVE', kind: 'go', fn: h => { if (h.save() === false) return false; draw(); return true; } },
     ],
@@ -3933,7 +3975,7 @@ function newSpendSheet(preset) {
         }
         const key = newId();
         Rec.set('spend', date.value, key, {
-          amt: v, acct: acct.get(), note: note.value.trim(),
+          amt: v, acct: acctLabel(acct.get()), note: note.value.trim(),
           t: stampFor(date.value, hhmm), src: 'wealth',
         });
         if (cat.get() || tg.get() || big.on) {
@@ -4530,6 +4572,337 @@ function acctSheet() {
   });
 }
 
+/* ══════════════ right click, hold, rearranging, deleting ══════════════
+   Tom, 2026-09-14: "add right click functionality, let me rearrange with
+   holding, How do I delete an account?"
+
+   DOCTRINE law 14: anything movable or removable offers a menu on right
+   click AND on a hold, both the same list. Law 6: the menu is a shortcut,
+   never the only route, so every item in it also exists in that thing's own
+   sheet, and every list that can be rearranged shows a grip you can see.
+
+   A row opts in by carrying `r.menu`, a function returning its items, set
+   beside its `onclick`. One pass after each draw wires every row, so a list
+   only has to say what its menu is.
+
+   Rearranging is for lists whose order is yours to choose: accounts, pots,
+   categories and debts. Not clients, which are ranked biggest earner first on
+   purpose, and not bills, which run in due-date order. */
+function attachMenus(scope) {
+  if (typeof Mobile === 'undefined' || !Mobile.hold) return;
+  scope.querySelectorAll('.list[data-sort]').forEach(sortable);
+  scope.querySelectorAll('.item').forEach(r => {
+    if (!r.menu || r.menuWired) return;
+    r.menuWired = true;
+    Mobile.hold(r, e => {
+      const items = r.menu();
+      if (items && items.length) UI.menu(e.clientX || 0, e.clientY || 0, items, { title: r.menuTitle });
+    }, { skip: '.grip' });
+  });
+  if (window.Icons) Icons.paint(scope);
+}
+
+function orderOf(kind) {
+  return kind === 'acct' ? accts() : kind === 'pot' ? pots() : kind === 'cat' ? cats() : kind === 'debt' ? debts() : [];
+}
+/* STATUS sorts accounts by `order`, so that is the field an account keeps its
+   place in; everything WEALTH owns uses `ord`. Merged, never rebuilt. */
+function saveOrder(kind, ids) {
+  const field = kind === 'acct' ? 'order' : 'ord';
+  ids.forEach((id, n) => {
+    const row = Rec.get(kind, null, id);
+    if (!row || row[field] === n) return;
+    const patch = {};
+    patch[field] = n;
+    Rec.set(kind, null, id, merge(row, patch));
+  });
+}
+function nudge(kind, id, dir) {
+  const ids = orderOf(kind).map(x => x.id);
+  const i = ids.indexOf(id), j = i + dir;
+  if (i < 0 || j < 0 || j >= ids.length) return;
+  ids.splice(j, 0, ids.splice(i, 1)[0]);
+  saveOrder(kind, ids);
+  Mobile.feedback('select');
+  draw();
+}
+const moveItems = (kind, id) => {
+  const ids = orderOf(kind).map(x => x.id), i = ids.indexOf(id);
+  return [
+    i > 0 ? { label: 'Move up', fn: () => nudge(kind, id, -1) } : null,
+    i > -1 && i < ids.length - 1 ? { label: 'Move down', fn: () => nudge(kind, id, 1) } : null,
+  ].filter(Boolean);
+};
+
+/* == dragging a row somewhere else ==
+   A mouse presses a row and drags it. A thumb drags by the grip, because on
+   a narrow window pressing a row and moving is how you scroll. The new order
+   is read back off the page when the row is dropped, so what you see is what
+   is saved. */
+function sortable(list) {
+  if (list.sortWired) return;
+  list.sortWired = true;
+  const kind = list.dataset.sort;
+  list.querySelectorAll('.item[data-id]').forEach(r => {
+    const grip = el('span', 'grip');
+    grip.setAttribute('data-icon', 'drag');
+    grip.setAttribute('aria-hidden', 'true');
+    r.insertBefore(grip, r.firstChild);
+  });
+  const unitOf = row => { let n = row; while (n.parentElement && n.parentElement !== list) n = n.parentElement; return n; };
+  const order = () => [].slice.call(list.children)
+    .map(k => (k.matches('.item[data-id]') ? k : k.querySelector('.item[data-id]')))
+    .filter(Boolean).map(k => k.dataset.id);
+  let drag = null;
+  list.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    const row = e.target.closest('.item[data-id]');
+    if (!row || !list.contains(row)) return;
+    const onGrip = !!e.target.closest('.grip');
+    if (e.pointerType !== 'mouse' && !onGrip) return;
+    drag = { row: row, unit: unitOf(row), sy: e.clientY, id: e.pointerId, live: false, grip: onGrip, was: order() };
+  });
+  list.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.live) {
+      if (Math.abs(e.clientY - drag.sy) < (drag.grip ? 3 : 6)) return;
+      drag.live = true;
+      try { list.setPointerCapture(e.pointerId); } catch (x) {}
+      drag.unit.classList.add('dragging');
+    }
+    e.preventDefault();
+    const others = [].slice.call(list.children).filter(k => k !== drag.unit);
+    const over = others.find(k => { const b = k.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+    if (over) { if (drag.unit.nextSibling !== over) list.insertBefore(drag.unit, over); }
+    else if (list.lastChild !== drag.unit) list.appendChild(drag.unit);
+  });
+  const end = e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    if (!d.live) return;
+    d.unit.classList.remove('dragging');
+    /* The click that ends a drag is not a tap on the row. */
+    const eat = ev => { ev.stopPropagation(); ev.preventDefault(); };
+    list.addEventListener('click', eat, true);
+    const now = order();
+    if (now.join('|') !== d.was.join('|')) { saveOrder(kind, now); Mobile.feedback('select'); }
+    setTimeout(() => { list.removeEventListener('click', eat, true); draw(); }, 40);
+  };
+  list.addEventListener('pointerup', end);
+  list.addEventListener('pointercancel', end);
+}
+
+/* == the menus == */
+function removeWithUndo(type, date, key, label) {
+  const keep = Rec.get(type, date, key);
+  if (!keep) return;
+  Rec.del(type, date, key);
+  if (type === 'rule') ruleCache = null;
+  Mobile.haptic('warn');
+  draw();
+  UI.undo('removed <b>' + esc(label) + '</b>', () => {
+    Rec.set(type, date, key, keep);
+    if (type === 'rule') ruleCache = null;
+    draw();
+  });
+}
+function acctMenu(a) {
+  return [{ label: 'Count what is in it', fn: () => countSheet(a) }]
+    .concat(moveItems('acct', a.id), ['-', { label: 'Delete account', kind: 'bad', fn: () => deleteAcct(a) }]);
+}
+function potMenu(p) {
+  return [{ label: 'Open, or move money', fn: () => potSheet(p) }]
+    .concat(moveItems('pot', p.id), ['-', { label: 'Delete pot', kind: 'bad', fn: () => deletePot(p) }]);
+}
+function catMenu(c) {
+  return [{ label: 'Edit', fn: () => catSheet(c) }]
+    .concat(moveItems('cat', c.id), ['-', { label: 'Delete category', kind: 'bad', fn: () => deleteCat(c) }]);
+}
+function debtMenu(d) {
+  return [{ label: 'Edit', fn: () => debtSheet(d) }]
+    .concat(moveItems('debt', d.id), ['-', { label: 'Delete debt', kind: 'bad', fn: () => removeWithUndo('debt', null, d.id, d.name) }]);
+}
+function billMenu(b) {
+  return [{ label: 'Edit', fn: () => billSheet(b) }, '-',
+    { label: 'Delete bill', kind: 'bad', fn: () => removeWithUndo('bill', null, b.id, b.name) }];
+}
+function ruleMenu(r) {
+  return [{ label: 'Edit', fn: () => ruleSheet(r) }, '-',
+    { label: 'Delete rule', kind: 'bad', fn: () => removeWithUndo('rule', null, r.id, '\u201c' + r.match + '\u201d') }];
+}
+function clientMenu(c) {
+  const k = cycleOf(c).kind;
+  const live = Rec.get('client', null, c.id) || c;
+  return [
+    { label: 'Open', fn: () => clientSheet(c) },
+    { label: 'Log a payment', fn: () => paidSheet(null, { client: c.id, amt: num(c.rate, 0) }) },
+    k === 'sesh' || k === 'pack' ? { label: 'Log a session today', fn: () => {
+      addSesh(c.id, Day.today()); Mobile.feedback('success');
+      UI.toast('logged a session for <b>' + esc(c.name) + '</b>'); draw(); } } : null,
+    k === 'pack' ? { label: 'Sell a package', fn: () => packSheet(c) } : null,
+    { label: live.status === 'done' ? 'Mark active' : 'Mark finished', fn: () => {
+      Rec.set('client', null, c.id, merge(Rec.get('client', null, c.id), { status: live.status === 'done' ? 'on' : 'done' }));
+      Mobile.feedback('select'); draw(); } },
+    '-',
+    { label: 'Delete client', kind: 'bad', fn: () => deleteClient(c) },
+  ].filter(Boolean);
+}
+function dueMenu(e) {
+  return [{ label: 'Log this payment', fn: () => payFor(e) }, { label: 'Open ' + e.client.name, fn: () => clientSheet(e.client) }];
+}
+function paidMenu(p) {
+  return [{ label: 'Edit', fn: () => paidSheet(p) }, '-',
+    { label: 'Delete payment', kind: 'bad', fn: () => removeWithUndo('paid', p.date, p.key, money(num(p.amt, 0)) + ' in') }];
+}
+function spendMenu(x) {
+  return [
+    { label: 'File it', fn: () => spendSheet(x) },
+    { label: isBig(x) ? 'Not a big one-off' : 'Mark as a big one-off', fn: () => { setMark(x, { big: isBig(x) ? 0 : 1 }); draw(); } },
+    '-',
+    { label: 'Delete purchase', kind: 'bad', fn: () => deleteSpend(x) },
+  ];
+}
+
+/* A purchase STATUS made from a restaurant meal is removed the way STATUS
+   removes it: the meal loses its account, or saving the meal again would
+   bring the purchase straight back. */
+function deleteSpend(x) {
+  const keep = Rec.get('spend', x.date, x.key);
+  if (!keep) return;
+  const mk = Rec.get('mark', null, markKey(x));
+  const meal = keep.viaMeal ? Rec.get('meal', x.date, keep.viaMeal) : null;
+  Rec.del('spend', x.date, x.key);
+  if (mk) Rec.del('mark', null, markKey(x));
+  if (meal) Rec.set('meal', x.date, keep.viaMeal, merge(meal, { acct: '' }));
+  Mobile.haptic('warn');
+  draw();
+  UI.undo('removed <b>' + esc(keep.note || money(num(keep.amt, 0))) + '</b>', () => {
+    Rec.set('spend', x.date, x.key, keep);
+    if (mk) Rec.set('mark', null, markKey(x), mk);
+    if (meal) Rec.set('meal', x.date, keep.viaMeal, meal);
+    draw();
+  });
+}
+function deletePot(p) {
+  const bal = potBal(p.id);
+  const go = () => removeWithUndo('pot', null, p.id, p.name);
+  if (!bal) return go();
+  UI.confirm('Delete ' + p.name + '?', money(bal) + ' is set aside in it. The money stays in whatever account it is really in; the pot and its target go.',
+    { danger: true, yes: 'DELETE' }).then(ok => { if (ok) go(); });
+}
+function deleteCat(c) {
+  UI.confirm('Delete ' + c.name + '?', 'Anything filed under it becomes uncategorised.', { danger: true, yes: 'DELETE' })
+    .then(ok => { if (ok) { ruleCache = null; removeWithUndo('cat', null, c.id, c.name); } });
+}
+/* A client with history is not deleted: their payments would point at
+   nobody. Finished keeps the history and takes them off every list that
+   expects money. */
+function deleteClient(c) {
+  const pays = paidRows({}).filter(p => p.client === c.id).length;
+  const ses = seshOf(c.id).length, pk = packsOf(c.id).length;
+  if (pays || ses || pk) {
+    const has = [[pays, 'payment'], [ses, 'session'], [pk, 'package']].filter(x => x[0])
+      .map(x => x[0] + ' ' + x[1] + (x[0] === 1 ? '' : 's'));
+    const live = Rec.get('client', null, c.id) || c;
+    UI.toast('<b>' + esc(c.name) + '</b> has ' + esc(andList(has)) + '. Mark finished instead.', {
+      bad: true, ms: 7000,
+      action: live.status !== 'done' ? { label: 'MARK FINISHED', fn: () => {
+        Rec.set('client', null, c.id, merge(Rec.get('client', null, c.id), { status: 'done' })); draw(); } } : undefined,
+    });
+    return false;
+  }
+  removeWithUndo('client', null, c.id, c.name);
+  return true;
+}
+
+/* == deleting an account ==
+   Every purchase, payment, transfer, bill and pot that names the account is
+   moved to another one first, so nothing is left pointing at an account that
+   is gone. A transfer between the two becomes money moving to itself, which is
+   no movement, so it goes. Balance counts go with the account: a count of one
+   account is not a count of another. The whole move is one undo. */
+function acctRefs(id) {
+  return {
+    spend: Rec.all('spend').filter(r => r.payload && acctKey(r.payload.acct) === id),
+    paid: Rec.all('paid').filter(r => r.payload && acctKey(r.payload.acct) === id),
+    xfer: Rec.all('xfer').filter(r => r.payload && (r.payload.from === id || r.payload.to === id)),
+    bill: Rec.all('bill').filter(r => r.payload && r.payload.acct === id),
+    pot: Rec.all('pot').filter(r => r.payload && r.payload.acct === id),
+    count: Rec.all('count').filter(r => r.key === id),
+  };
+}
+function deleteAcct(a) {
+  const refs = acctRefs(a.id);
+  const parts = [[refs.spend.length, 'purchase', 'purchases'], [refs.paid.length, 'payment in', 'payments in'],
+    [refs.xfer.length, 'transfer', 'transfers'], [refs.bill.length, 'bill', 'bills'], [refs.pot.length, 'pot', 'pots']]
+    .filter(x => x[0]).map(x => x[0] + ' ' + (x[0] === 1 ? x[1] : x[2]));
+  const others = accts().filter(x => x.id !== a.id);
+  let target = others[0] ? others[0].id : '';
+  UI.dialog({
+    title: 'DELETE ' + a.name.toUpperCase(), width: 480,
+    body: b => {
+      if (!parts.length) {
+        b.appendChild(el('div', 'note', 'Nothing is recorded against <b>' + esc(a.name) + '</b>' +
+          (refs.count.length ? ' except its balance counts, which go with it' : '') + '.'));
+        return;
+      }
+      b.appendChild(el('div', 'note', '<b>' + esc(a.name) + '</b> has ' + esc(andList(parts)) +
+        '. They move to another account first, so none of them is left without one.'));
+      if (!others.length) {
+        b.appendChild(el('div', 'note', '<span class="stale">There is no other account to move them to. Add one first.</span>'));
+        return;
+      }
+      b.appendChild(fld('Move them to', chipRow(others.map(x => ({ id: x.id, name: x.name })), target, v => { target = v; })));
+      if (refs.xfer.length) b.appendChild(el('div', 'note',
+        'A transfer between ' + esc(a.name) + ' and the account they move to would be money moving to itself, so it is removed.'));
+      if (refs.count.length) b.appendChild(el('div', 'note', 'Its balance counts go with it.'));
+    },
+    actions: [
+      { label: 'CANCEL' },
+      { label: parts.length ? 'MOVE AND DELETE' : 'DELETE', kind: 'bad', fn: () => {
+        if (parts.length && !target) return false;
+        doDeleteAcct(a, refs, target);
+        draw();
+        return true;
+      } },
+    ],
+  });
+}
+function doDeleteAcct(a, refs, target) {
+  const undo = [];
+  const put = (type, date, key, payload) => {
+    undo.push([type, date, key, Rec.get(type, date, key)]);
+    if (payload) Rec.set(type, date, key, payload); else Rec.del(type, date, key);
+  };
+  const tName = target ? acctLabel(target) : '';
+  let moved = 0, dropped = 0;
+  refs.spend.forEach(r => { put('spend', r.date, r.key, merge(r.payload, { acct: tName })); moved++; });
+  refs.paid.forEach(r => { put('paid', r.date, r.key, merge(r.payload, { acct: target })); moved++; });
+  refs.xfer.forEach(r => {
+    const p = Object.assign({}, r.payload);
+    if (p.from === a.id) p.from = target;
+    if (p.to === a.id) p.to = target;
+    put('xfer', r.date, r.key, p.from === p.to ? null : p);
+    if (p.from === p.to) dropped++; else moved++;
+  });
+  refs.bill.forEach(r => { put('bill', r.date, r.key, merge(r.payload, { acct: target })); moved++; });
+  refs.pot.forEach(r => { put('pot', r.date, r.key, merge(r.payload, { acct: target })); moved++; });
+  refs.count.forEach(r => put('count', r.date, r.key, null));
+  const hadIds = Rec.get('setting', null, 'wealth.ids.' + a.id);
+  if (hadIds) Rec.del('setting', null, 'wealth.ids.' + a.id);
+  put('acct', null, a.id, null);
+  Mobile.haptic('warn');
+  UI.undo('deleted <b>' + esc(a.name) + '</b>' + (moved ? ', ' + moved + ' moved to ' + esc(tName) : '') +
+    (dropped ? ', ' + dropped + ' transfer' + (dropped === 1 ? '' : 's') + ' to itself removed' : ''), () => {
+    undo.slice().reverse().forEach(([type, date, key, payload]) => {
+      if (payload) Rec.set(type, date, key, payload); else Rec.del(type, date, key);
+    });
+    if (hadIds) Rec.set('setting', null, 'wealth.ids.' + a.id, hadIds);
+    draw();
+  }, { ms: 10000 });
+}
+
 /* ── the + button knows which screen you are on ── */
 document.getElementById('fab').onclick = () => {
   Mobile.feedback('open');
@@ -4588,6 +4961,7 @@ function draw() {
     m.appendChild(el('div', 'card', '<b>Something went wrong drawing this screen.</b><div class="note">' +
       esc(String(e && e.message || e)) + '</div>'));
   }
+  attachMenus(m);
 }
 
 /* ══ first paint does not wait for the store ══

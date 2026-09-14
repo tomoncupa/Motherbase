@@ -105,6 +105,16 @@ This is the calcium bug, designed out rather than remembered.
 is a `count` row of its own, keyed by the day it was counted. That also makes
 balance history free, which is what the reconciliation screen reads.
 
+**3. A purchase's account is its NAME, because STATUS writes it that way.**
+STATUS stores `spend.acct` as the account's display name, "GCash", and STATUS
+owns that row's shape. WEALTH looked accounts up by key, "gcash", so until
+2026-09-14 every purchase logged day to day in STATUS was "unknown account"
+here and never came off a balance. Watched: GCash counted at ₱1,000 with a
+₱250 lunch logged the STATUS way read ₱900 instead of ₱650. Every read now
+goes through `acctKey`, which accepts either form, and every purchase WEALTH
+writes or corrects carries the name. Rows WEALTH owns (`paid`, `xfer`, `bill`,
+`pot`, `count`) keep using the key.
+
 Both decisions cost one extra row and buy immunity from the one failure mode
 the root brief says has already happened here.
 
@@ -688,6 +698,41 @@ can end richer only because a client paid two months at once, which is why both
 are shown and neither replaces the other. The six-month chart carries net as
 its own line with a rule at zero, and the scale always includes zero or a
 negative month falls off the bottom.
+
+## Menus, rearranging and deleting
+
+Tom, 2026-09-14: *"add right click functionality, let me rearrange with
+holding, How do I delete an account?"*
+
+Every row that opens something has a menu on right click and on a hold,
+through `Mobile.hold`, which wires both from one call (DOCTRINE law 14). A row
+opts in by carrying `r.menu` beside its `onclick`, and one pass after each
+draw wires them. Every menu item also exists in that thing's own sheet, so
+the menu is a shortcut and never the only route (law 6).
+
+**Rearranging** is for lists whose order is his to choose: accounts, pots,
+categories and debts. A mouse presses a row and drags it; a thumb drags by the
+grip, since on a narrow window pressing and moving is scrolling. The order is
+read back off the page on drop. Accounts keep their place in `order`, the
+field STATUS sorts by, so the order he sets shows in STATUS too; WEALTH's own
+lists use `ord`. Clients are not draggable, because they are ranked biggest
+earner first on purpose, and bills are not, because they run in due-date order.
+
+**Deleting an account** moves everything that names it first: purchases (by
+name), payments, transfers, bills and pots go to the account he picks. A
+transfer between the two becomes money moving to itself and is removed.
+Balance counts go with the account, because a count of one account is not a
+count of another. The whole move is one undo. Nothing is ever left pointing at
+an account that no longer exists.
+
+**A client with history is not deleted.** Payments, sessions or packages would
+point at nobody, so deleting one offers "mark finished" instead. A pot with
+money set aside asks first, and says the money itself stays in its real
+account.
+
+**A purchase made from a restaurant meal** is removed the way STATUS removes
+it: the meal loses its account, or saving the meal again would bring the
+purchase back.
 
 ## Device
 
