@@ -16,9 +16,18 @@ to improve FitNotes. It is to rebuild it closely enough that moving is not a
 decision, and then let it share a brain with the rest of the suite and wear the
 same skins.
 
-**Fidelity is the feature.** When a choice comes up between what FitNotes does and
-what would be nicer, FitNotes wins. A disagreement goes in Deliberate departures
-below, never in the code quietly.
+**Fidelity is the base.** When a choice comes up between what FitNotes does and
+what would be nicer, FitNotes wins, unless Tom has said otherwise. A
+disagreement goes in Deliberate departures below, never in the code quietly.
+
+**"I don't workout, I train."** Tom, 2026-09-14. A workout is a selection of
+exercises, maybe random, maybe copied. A training session is designed, personal,
+and meant to move him towards a goal. That is what TRAIN adds on top of
+FitNotes: a session has a name and a training block, a repeat says set by set how
+much stronger it was, a session adds itself up at the end, a week counts sets per
+muscle, and records start again with each block. See "Training, not working out"
+below. The same day he lifted the rule that TRAIN must use FitNotes' words: it
+says session and training, never workout.
 
 ## Provenance
 
@@ -49,9 +58,10 @@ see the root brief on many writers. Every edit merges into the row as it is
 | Type | Key | Payload |
 |---|---|---|
 | `excat` | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
-| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef}` |
-| `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, pr, prf, dist, dur, note, ord, warm}` — **one row per set** |
-| `session` | `''` | `{start, end, note, from, order}` — the day's timer, comment, the day it was copied from, and the exercise order he set |
+| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup}` |
+| `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
+| `session` | `''` | `{start, end, note, from, order, name, vs}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, and a day he picked to compare it with |
+| `phase` | phase id | `{name, start, end}` — a training block. `end` is optional |
 | `sgroup` | group id, dated | `{name, slot, ex:[ids], jump, resthold}` — a superset |
 | `program` | program id | `{name, ord}` — a routine |
 | `progday` | id | `{program, name, ord}` — a day within a routine |
@@ -63,6 +73,10 @@ Plus one shared write: **`tick`**, covered below.
 
 **Why `program` and not `routine`:** BLOCK already owns `routine`.
 
+**Why `phase` and not `block`:** BLOCK is another app in the suite, and it has
+nothing to do with training beyond a training block ticking when TRAIN has data
+(Tom, 2026-09-14). On screen it is a training block.
+
 **Plates and bars live in `setting`** (`train.plates`, `train.bars`): they
 describe the gym, not the training.
 
@@ -70,7 +84,14 @@ describe the gym, not the training.
 
 - `set.kg` is always kilograms. `set.u` is the unit it was typed in.
 - `set.dist` is always **kilometres**. `set.dur` is always **seconds**.
-- `set.warm` marks a warmup: dimmed, never a record, never counted in volume or set totals.
+- `set.warm` marks a warmup by hand: dimmed, never a record, never counted in volume or
+  set totals. **A set is also a warmup when its comment says so**, worked out when the
+  index is built and never written back; a stored `warm` of 1 or 0 beats the comment.
+- **A split set is read from its comment only**, never stored. See "What a comment says".
+- `set.su` is the setup that set was done with, `{fieldId: 1 or "value"}`.
+  `exercise.setup` is the list of fields, `[{id, name, kind}]`, `kind` `toggle` or `value`.
+- `session.name` is how a repeat is recognised. `session.vs` is a day he picked to
+  compare with, and beats every automatic choice.
 - `set.pr` is recalculated, never trusted from the moment of saving. See Personal records.
 - `exercise.kind` is one of `wr` `dt` `wd` `wt` `rd` `rt`. See Exercise types.
 - `exercise.also` maps other category ids to a fraction: a pull-up is half a set of biceps.
@@ -83,7 +104,8 @@ describe the gym, not the training.
 `increment` `autoNext` `trackPRs` `keepAwake` `restSeconds` `restAuto`
 `restVibrate` `restSound` `rest` (a running timer) `workoutTimerAuto`
 `workoutTimerStop` `graphPoints` `graphTrend` `graphZero` `e1rmMaxReps`
-`repCounts` `exSort` `catSort` `plates` `bars` `seen`.
+`repCounts` `exSort` `catSort` `plates` `bars` `seen` `prRule` (2 once records
+have been worked out under the rule that keeps split sets apart).
 
 A setting that is on by default is read as `!== 0`; one that is off by default
 as `=== 1`. Mixing those up turns a default the wrong way for everyone who never
@@ -161,6 +183,122 @@ the way there, so nobody tries them again:
 | Still standing, weights at two decimals | 537 | 536 |
 | **Still standing, weights at three decimals** | **537** | **537** |
 
+**Split sets keep records of their own** (Tom, 2026-09-14). The still-standing
+rule runs twice per exercise, once over straight sets and once over split sets,
+so a set with a rest in it can neither take a straight record nor lose one to it.
+This is where TRAIN stops matching FitNotes on purpose: his file now carries
+**688** flags, and Re-calculate changes **0**. Straight records, rep maxes and the
+estimated 1RM leave split sets out; the records sheet lists them separately.
+
+**Records start again with each training block**, and the all-time ones stay. The
+stored `pr` flag is still the all-time, still-standing rule. Block records are
+worked out when shown.
+
+## Training, not working out
+
+Built 2026-09-14 from Tom's answers. All of it sits on top of FitNotes; none of
+it replaces a FitNotes screen.
+
+### What a comment says
+
+Warmups and split sets are read out of a set's comment, **and only out of the
+comment** (Tom: "make it happen automatically due to comments and ONLY due to
+comments"). Nothing is written back, so editing a comment changes what the set is.
+
+- **A warmup** is a comment with "warmup", "warm up" or "wu" in it. **161** of his
+  sets. A warmup marked by hand, or unmarked by hand, beats the comment, which is
+  how "start having a dedicated warmup set" stops being a warmup.
+- **A split set** is his rep notation, when the numbers add up to the set's reps:
+
+  | Comment | Means |
+  |---|---|
+  | `10 5` | a short rest, about three breaths |
+  | `10,5` | under thirty seconds |
+  | `10+5` | a long rest, still the same set |
+
+  A partial rep rounds down: `5 1.5` is 6 reps. The numbers can sit inside other
+  words: "Height 11, 10 5" on 15 reps is 10 and 5. Numbers that do not add up are
+  not a split: "5 5 4 4" on a 9-rep curl is per side, "2 10s" is plates. **610** of
+  his sets: 430 short rests, 112 under thirty seconds, 68 long.
+
+### What counts
+
+A set counts once it is ticked. **A past day counts as it was logged**: 1,099 of
+his FitNotes sets were never ticked, and Analysis has always counted them. Today,
+a copied or planned set is not work until it is ticked. Warmups never count.
+
+### Training blocks
+
+A `phase` row: a name, a start, and an optional end. A block runs until the next
+one starts, or until its own end. The session strip under the date shows the
+block and its week number. Deleting a block keeps every session in it.
+
+### Names, and how much stronger
+
+A session can have a name. Earlier names are offered as chips, and **a copy
+carries the name**. A name locks nothing: two Back days can share no exercises.
+
+**Each exercise** is measured against, first match wins:
+
+1. a day he picked for this session (Compare With A Day)
+2. the last session with the same name, inside the current block first
+3. the day it was copied from
+4. the last time that exercise was done
+
+**Working set N against working set N**, warmups left out of both sides, so a
+change in how many warmups he did moves nothing. The change is the estimated 1RM
+as a percentage when the weight changed, the reps when it did not. A split set
+against a straight one is not like for like and gets no direction. A date from
+another year shows its year.
+
+It shows on each set in the day's cards and under each set on TRACK, where the
+line above the steppers lists the sets being compared against.
+
+### The session card
+
+At the end of every day with work in it: date, block and week, name, volume, sets,
+reps and time, set by set as a count and a row of squares, sets per muscle, and
+any records. **Totals are set against another day only when that day is the same
+session**: named the same, picked, copied from, or the one day every exercise was
+measured against. Records are what was a record on the day it was lifted, all-time
+or in the block; the first time an exercise is done, or done in a block, is not a
+record, and a record the same session beat is dropped.
+
+SHARE PICTURE draws the card at 390px with `IO.saveShot` and hands it to the share
+sheet. **Not watched on the iPhone.** The picture is the card on a clear
+background.
+
+### The week
+
+Analysis opens on WEEKLY: sessions, sets, reps and volume, then sets per muscle
+(half a set for a muscle an exercise also works) and HIT, the number of sessions
+that trained it. Below it, eight weeks of sets per muscle. **No targets**, at Tom's
+request: "I'd rather be told how many times I hit a muscle, I'll know if I need to
+hit more."
+
+### Profile
+
+Menu, Profile, or the menu's header. How long he has trained, all-time sessions,
+sets, reps and volume, the current block, All-Time Records, Block Records, and
+every block with its sessions. Records screen: THIS BLOCK and ALL TIME, shown once
+a block exists.
+
+### Setup
+
+An exercise carries the setup it needs, named by him, each a **toggle** (Straps)
+or a **setting** (Seat height, Back pad). **Each set records its own**, because
+straps go on after a couple of working sets. A new set takes the setup of the set
+before it today; the first set of a session takes the first set of the last
+session. TRACK shows it above the steppers and under each set. Edit Setup is in
+the training screen's More.
+
+### Asked about, and turned down
+
+Plateau notices, weekly set targets, and goals tied to sessions. Tom said no to
+each on 2026-09-14. Do not add them back.
+
+---
+
 ## Which day a week starts on
 
 FitNotes stores Java's `Calendar` constant: **1 is Sunday, 2 is Monday.** His file
@@ -199,29 +337,36 @@ target was wrong.
 
 ## Where things live on screen
 
-FitNotes' screen layout is the reference.
+FitNotes' screen layout is the reference, in Tom's words: session and training
+where FitNotes says workout.
 
-- **Workout screen bar:** menu, title, calendar, add, more.
+- **Training log bar:** menu, title, calendar, add, more. Under the date, the
+  session strip: its name, or "Name this session", and its block and week.
 - **Training screen bar:** today's exercises, exercise name, rest timer, personal
   records, exercise overview, more. Tabs TRACK, HISTORY, GRAPH.
 - **One card per exercise** on the day: name, hairline, two right-aligned columns.
   No set numbers on the day view. A comment is a marker at the left of its set.
-- **More on the workout screen:** Settings, Copy Workout, Copy This Workout, Move
-  Workout, Comment Workout, Time Workout, Supersets, Share Workout, Analysis.
+- **More on the training log:** Settings, Name Session, Compare With A Day, Copy
+  Session, Copy This Session, Move Session, Comment Session, Time Session,
+  Supersets, Share Picture, Share As Text, New or Edit Training Block, Analysis.
 - **More on the training screen:** Copy Previous Sets, Plate Calculator, Set
   Calculator, Estimated 1RM Calculator, Add To Superset, Replace Exercise, Add Goal,
-  Edit Exercise, Settings, Remove Exercise.
+  Edit Exercise, Edit Setup, Settings, Remove Exercise.
 - **More on the exercise list:** Create New Exercise, Add New Category, Edit
   Categories, Sort By Last Used.
-- **The menu** (hamburger, off the training screen): Workout, Calendar, Exercises,
-  Workout Routines, Personal Records, Analysis, Goals.
-- **The empty day:** "Workout Log Empty", Start New Workout, Copy Previous Workout.
+- **The menu** (hamburger, off the training screen): Training Log, Calendar,
+  Exercises, Training Routines, Personal Records, Analysis, Goals, Profile. Its
+  header opens Profile too.
+- **The empty day:** "Training Log Empty", Start New Session, Copy Past Session.
+- **Analysis:** WEEKLY first, then BREAKDOWN and GRAPHS.
 
 **Every row that can be changed has a menu**, on a long press and a right click
 both (DOCTRINE law 14), and every one of those menus also has a visible way in —
 a ⋮ button on the row, a Reorder button, or the screen's More (law 6).
 
-**No invented summaries.** Totals live in Analysis.
+**Summaries are facts, never verdicts.** The end of a session and the week add
+themselves up because Tom asked for both. Neither praises, sets a target, or
+points out a plateau: he asked for none of that.
 
 **Importing is in Settings only.** It is done once; it does not get furniture.
 
@@ -254,6 +399,10 @@ Only these. Anything else is a bug.
 | Android back button | `shared/mobile.js` back stack | No hardware button in a browser |
 | Its own themes | Motherbase skins | The whole point |
 | `routine` | `program` | BLOCK owns `routine` |
+| "Workout" | "Session" and "Training": Training Log Empty, Copy Past Session, Training Routines | Tom, 2026-09-14: he trains |
+| One set of records per exercise | Straight sets and split sets each keep their own | A set with a rest in it is not the same lift |
+| Records never start again | Each training block has its own; all-time ones stay | Tom, 2026-09-14 |
+| No session names, blocks, weekly view, session summary or profile | All five | Tom, 2026-09-14 |
 
 ### The rest timer
 
@@ -268,12 +417,16 @@ browser does not support it.
 
 ## What is built, as of 2026-09-14
 
-Everything below was driven in the browser at 375px against his real backup,
-except where a row says otherwise.
+Everything below was driven in the browser against his real backup, at 375px
+until 2026-09-14 and at 390px since, except where a row says otherwise.
 
 | Area | Built |
 |---|---|
-| Workout log | Cards, comments, warmups, timer card, repeat comparison, category shown as nothing, a name, or name and colour, set limit, superset tags, skip empty dates |
+| Training log | Session strip, cards, comments, warmups, timer card, set by set change on every set, category shown as nothing, a name, or name and colour, set limit, superset tags, skip empty dates, session card with SHARE PICTURE |
+| Blocks and names | Blocks created, edited, ended and deleted with an undo; names offered, carried by a copy, compared by name inside the block first; a day picked to compare with |
+| Weekly | This week and any before it, sets per muscle and sessions that hit it, eight weeks side by side, SHARE PICTURE |
+| Profile | All-time totals, the current block, all blocks, All-Time and Block Records |
+| Setup | Toggles and settings per exercise, recorded per set, carried forward |
 | Exercise list | Favourites, categories in his order, search, sort by last used, create, edit, delete with its sets and an undo, categories created, edited, recoloured, reordered and deleted |
 | Exercise editor | Name, category, new category, all six types, weight increment, rest time, second muscle groups, delete |
 | TRACK | Steppers for whichever two fields the type logs, SAVE keeps the numbers, UPDATE, CLEAR, tick box, comments, warmups, copy set, delete, last time, auto-select next set |
@@ -298,7 +451,6 @@ except where a row says otherwise.
   of his exercises use the default, so nothing of his depends on it.
 - Showing body weight above the workout log. Off in his FitNotes; would read STATUS.
 - Saved graph favourites beyond one default per exercise.
-- Sharing a workout as a picture. Share Workout shares text.
 - The calendar's detail panel under the grid. Off in his FitNotes.
 - A confirmation when an exercise's type is changed. The data is kept either way.
 
@@ -333,32 +485,35 @@ What iPhone Safari changes:
 
 ## For the foundation
 
-Found while building TRAIN. All of it is in `shared/`, so TRAIN works around it
-and says so here rather than editing it.
+Found while building TRAIN. TRAIN never edits `shared/` or the root; it works
+around what it finds and writes it here.
 
-1. **`shared/icons.js` has no minus, trophy or hamburger.** TRAIN draws those three
-   in the same stroke style (`MINUS`, `TROPHY`, `BURGER`). Move them when the set has them.
-2. **`UI.segmented` buttons are 38px tall.** Root brief foundation item 9. TRAIN
-   uses it on seven screens and cannot fix it from here.
-3. **A desktop `UI.menu` cannot be clicked with a mouse.** Root brief items 10 and
-   11. TRAIN's `menuAt()` stops the press inside the menu from bubbling, the same
-   workaround as LOG. Delete it when `ui.js` is fixed.
-4. **`chart.js` steps stop at 5000.** Root brief item 8. TRAIN's `bigStep()` works a
-   step out past the table for volume graphs. Delete it when the table grows.
-5. The root brief's Current state row for `train/` still says build in progress.
-6. **`UI.row` squeezes its label to nothing when the control is a field.** The label
-   is `flex:1; min-width:0` and `.mb-input` and `.mb-sel` are `width:100%`, so a text
-   box, date or select in a row claims the whole row. Measured on TRAIN's Add Goal
-   sheet at 390px: row 358px, box 346px, label **0px**, its words spilling out under
-   the box. It happens at every width, and LOG, STYLE and WEALTH also put selects in
-   rows. Nothing in `_smoke.html` or `_review.html` checks that a label keeps any
-   width. TRAIN stacks such rows itself with `:has()`; delete that when `ui.js`
-   either stacks a row whose control is a field or gives the label a floor.
-7. **`vh` on an iPhone is the screen with Safari's toolbars hidden.** TRAIN's empty
-   day asked for 52vh and was 130px too tall with the toolbars showing. The same
-   unit sits in `mobile.js`: a sheet's `max-height` is `min(92vh, ...)`, which can
-   run under the toolbar on iPhone Safari. Not observed yet; `svh` is the unit that
-   means the visible screen. A token, or a rule in THEMING.md, would stop the next app.
+**Fixed by the foundation session of 2026-09-14, and TRAIN's workarounds deleted
+the same day:** the minus, trophy and hamburger icons (TRAIN's `MINUS`, `TROPHY`
+and `BURGER` drawings are gone), 38px segmented buttons, the desktop menu that
+could not be clicked (`menuAt()` no longer stops the press), chart steps past
+5000 (`bigStep()` is gone), `UI.row` squeezing a text box's label to 0px (TRAIN's
+`:has()` rules for `.mb-input` and `.mb-sel` are gone; the ones for its own
+swatches and chips stay), and sheets in `vh`.
+
+**Still open:**
+
+1. **`ui.js` adds its stylesheet only when one of its components draws.** A page
+   that uses `.mb-chip`, `.mb-chips` or `.mb-group` before calling `UI.row`,
+   `UI.toggle`, `UI.segmented`, `UI.field` or `UI.dialog` gets bare browser
+   buttons. Seen 2026-09-14 on TRAIN's exercise screen, opened straight after a
+   reload: Add Setup was a white system button. TRAIN draws a throwaway switch at
+   boot. The fix is `ui.js` adding its stylesheet when it loads.
+2. **DOCTRINE.md, TRAIN's entry, is out of date.** Its Never line says TRAIN is not
+   a programming tool and "building the plan is BLOCK's job". Tom, 2026-09-14:
+   "BLOCK has nothing to do with actual TRAINING apart from a train block being
+   ticked when TRAIN has data." Its Good looks like says a repeat compares against
+   the day it was copied from, per exercise; it now compares set by set, by name
+   first. Only a session allowed to edit the root can change it.
+3. **The root brief's ownership table** does not list `phase`, `session.name`,
+   `session.vs`, `exercise.setup` or `set.su`.
+4. **The root brief's Current state row for `train/`** still says build in progress,
+   for a Galaxy A10.
 
 ---
 
@@ -380,7 +535,9 @@ straight from the file:
 | Comments on sets / comments on deleted sets | 2,240 / 2,057 |
 | Workout timings | 550 |
 | Supersets | 55 across 40 days |
-| Personal record flags | 537, and **0 changed** by Re-calculate |
+| Personal record flags | 688 with split sets kept apart (FitNotes flagged 537), and **0 changed** by Re-calculate |
+| Warmups read from comments | 161 |
+| Split sets read from comments | 610: 430 short rests, 112 under thirty seconds, 68 long |
 | Entered in kg / lb | 7,886 / 4,484 |
 | Starter movements removed | 111 |
 
@@ -388,7 +545,10 @@ straight from the file:
 imported; importing twice writes nothing; a weight typed in pounds reads back in
 pounds; copying a day keeps its `from` after the day's comment is edited; moving a
 day moves its ticks; a hold and a right click both open a row's menu; a theme
-change recolours category dots; delete and undo both land.
+change recolours category dots; delete and undo both land; a copy carries its
+name and is compared by it, set by set; a "wu" comment makes a warmup and a hand
+mark beats it; a set saved with setup keeps it and the next session starts with
+it; the session card, the week and Profile fit 390px without scrolling sideways.
 
 Never claim it works because it should. Claim it because you watched it.
 
