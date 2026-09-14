@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0, 2026-09-14">
+<meta name="mb-version" content="1.1, 2026-09-14">
 <title>LOG</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▤</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -226,15 +226,10 @@ main.dragging{cursor:grabbing;user-select:none}
 .bls:empty{padding:0}
 .bl{display:flex;align-items:baseline;gap:var(--s-3);min-width:0;
   font-size:var(--tb, var(--f-4));line-height:var(--lh-tight);cursor:pointer}
-.bl .tm{flex:0 0 auto;min-width:var(--s-8);text-align:right;font-size:var(--ts, var(--f-2));color:var(--text-2);white-space:nowrap}
-.bl .tm.wrote{color:var(--text-muted)}
-.bl .mk{flex:0 0 auto;width:var(--s-4);text-align:center;color:var(--text-muted)}
+/* The mark, the words and the time are shared/journal.js, drawn the way
+   STATUS draws them (Tom, 2026-09-14). LOG keeps the line to one row. */
+.bl .k{align-self:center}
 .bl .tx{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bl .du{flex:0 0 auto;font-size:var(--ts, var(--f-2));color:var(--text-muted)}
-.bl.open .tx{color:var(--text-2)}
-.bl .bx{flex:0 0 auto;align-self:center;width:var(--s-4);height:var(--s-4);padding:0;cursor:pointer;
-  border:var(--border-width) solid var(--text-2);border-radius:var(--radius-sm);background:none}
-.bl .bx:hover{border-color:var(--accent)}
 
 /* ── what got done ──
    Tom, 2026-09-13: a column for "What got done today", functionally
@@ -554,24 +549,23 @@ let byKey = new Map();
 let firstMin = new Map();
 let lineCount = 0;
 
-function sortClock(p) {
-  const s = (p.kind === 'todo' && p.done && p.doneAt) ? p.doneAt : p.at;
-  if (s) return +String(s).replace(':', '');
-  if (p.t) return +hhmm(p.t).replace(':', '');
-  return 9999;
-}
+/* Time order is the start, the same as STATUS: Journal.sortClock. */
+function sortClock(p) { return Journal.sortClock(p); }
 
 function indexJournal() {
   byDay = new Map(); byKey = new Map(); firstMin = new Map(); lineCount = 0;
   const show = shown();
   Rec.all('note', {}).forEach(r => {
     const p = r.payload;
-    if (!p || p.cancelled) return;
+    if (!p) return;
     const kind = p.kind === 'para' ? 'entry' : p.kind;
     if (!MARK[kind]) return;
     lineCount++;
-    const open = kind === 'todo' && !p.done;
-    const day = kind === 'todo' && p.done ? (p.doneOn || r.date) : r.date;
+    /* A cancelled todo shows faded and is not counted, the way STATUS shows
+       it. An open todo with a due date sits on its due day, so Move to
+       tomorrow moves it here too. (Tom, 2026-09-14: no differences.) */
+    const open = kind === 'todo' && !p.done && !p.cancelled;
+    const day = kind === 'todo' && p.done ? (p.doneOn || r.date) : (open && p.due ? p.due : r.date);
     if (!day || !DATE_OK.test(day)) return;
     const c = sortClock(p);
     if (c !== 9999) {
@@ -593,7 +587,7 @@ function indexJournal() {
   };
   byDay.forEach(list => list.sort(cmp));
 }
-const counted = d => (byDay.get(d) || []).filter(x => !x.open).length;
+const counted = d => (byDay.get(d) || []).filter(x => !x.open && !x.p.cancelled).length;
 
 /* ══════════════════════ THE DAY GRAPH ══════════════════════
    Read from STATUS, never written. The left edge is the earliest weigh-in,
@@ -865,26 +859,17 @@ let flows = [];              /* the notebook's two copies of the stream, left pa
 let dayCache = new Map();    /* date → markup, cleared whenever the data or the columns change */
 const M = { near: 40, small: 18, lab: 24, full: 44, wsLine: 18 };
 
-function timeOf(x) {
-  const p = x.p;
-  if (x.kind === 'todo') {
-    if (p.done) return { s: clockLabel(p.by || p.doneAt), wrote: false };
-    if (p.at) return { s: clockLabel(p.at), wrote: false };
-    return { s: p.by ? 'by ' + clockLabel(p.by) : '', wrote: false };
-  }
-  if (p.at) return { s: clockLabel(p.at), wrote: false };
-  if (!p.dur && p.t) return { s: clockLabel(hhmm(p.t)), wrote: true };
-  return { s: '', wrote: false };
-}
-
+/* A bullet is shared/journal.js: STATUS's mark, then the words, then the time
+   after them. Tom, 2026-09-14: "I don't want differences", STATUS winning. A
+   todo on a day that has gone shows > as it does in STATUS, and still ticks. */
 function bulletHTML(x) {
-  const tm = timeOf(x), text = String(x.p.text || '');
-  return '<div class="bl' + (x.open ? ' open' : '') + '" data-k="' + attr(x.key) + '" data-d="' + x.date + '">' +
-    '<span class="tm' + (tm.wrote ? ' wrote' : '') + '">' + esc(tm.s) + '</span>' +
-    (x.open ? '<button class="bx mb-tap" type="button" aria-label="Tick"></button>'
-            : '<span class="mk">' + MARK[x.kind] + '</span>') +
-    '<span class="tx" title="' + attr(text) + '">' + esc(text) + '</span>' +
-    (x.p.dur ? '<span class="du">' + durLabel(x.p.dur) + '</span>' : '') + '</div>';
+  const p = x.p, line = Object.assign({}, p, { kind: x.kind });
+  const cls = 'bl mb-bullet' + (x.open ? ' open' : '') + (p.done ? ' done' : '') + (p.cancelled ? ' cancelled' : '');
+  return '<div class="' + cls + '" data-k="' + attr(x.key) + '" data-d="' + x.date + '" title="' + attr(p.text || '') + '">' +
+    (x.kind === 'todo'
+      ? '<button class="k mb-tap" type="button" aria-label="' + (p.done ? 'Untick' : 'Tick') + '">' + Journal.markHTML('todo', x.day !== TODAY) + '</button>'
+      : '<span class="k" aria-hidden="true">' + Journal.markHTML(x.kind) + '</span>') +
+    '<span class="tx">' + Journal.textHTML(line) + '</span></div>';
 }
 
 const recapOf = (kind, from) => (Rec.get('recap', from, kind) || {}).text || '';
@@ -1806,22 +1791,14 @@ function noteDialog(x, d) {
   });
 }
 
+/* Journal.tick, the tick STATUS and QUESTS use: done today, the Done time
+   kept, and a repeating todo doing a round instead of finishing. */
 function tick(x) {
-  const cur = Rec.get('note', x.date, x.key);
-  if (!cur) return;
-  const now = new Date(), was = !!cur.done;
-  const stamp = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-  Rec.set('note', x.date, x.key, Object.assign({}, cur, {
-    done: was ? 0 : 1,
-    by: was ? (cur.byWas || null) : stamp,
-    byWas: was ? null : (cur.byAuto ? (cur.byWas || null) : (cur.by || null)),
-    byAuto: was ? 0 : 1,
-    doneAt: was ? null : stamp,
-    doneOn: was ? null : TODAY,
-  }));
-  reveal = was ? x.date : TODAY;
-  Mobile.feedback(was ? 'untick' : 'tick');
-  publishNotes(x.date);
+  const res = Journal.tick(x.date, x.key, { day: TODAY, src: APP.id });
+  if (!res) return;
+  reveal = res.done ? TODAY : x.date;
+  Mobile.feedback(res.done ? 'tick' : 'untick');
+  if (res.round) UI.undo('next round ' + (res.next || ''), res.undo);
 }
 
 function removeLine(x) {
@@ -1843,7 +1820,7 @@ const bulletOf = el => byKey.get(el.dataset.d + '|' + el.dataset.k);
 $('cal').addEventListener('click', e => {
   if (Date.now() - heldAt < 800) return;
   if (e.target.closest('.sum, .cell, .rz, .heads')) return;
-  const tickBox = e.target.closest('.bx');
+  const tickBox = e.target.closest('button.k');
   if (tickBox) { const x = bulletOf(tickBox.closest('.bl')); if (x) tick(x); return; }
   const box = e.target.closest('.day, .agg .blk');
   if (!box) return;
@@ -1884,6 +1861,8 @@ Mobile.hold($('cal'), e => {
     menuAt(e.clientX, e.clientY, [
       { label: 'Edit', fn: () => noteDialog(x, x.day) },
       x.kind === 'todo' ? { label: x.p.done ? 'Untick' : 'Tick', fn: () => tick(x) } : null,
+      /* Move to tomorrow and Cancel it, the same as STATUS and QUESTS */
+      ...Journal.menuItems(Object.assign({}, x.p, { kind: x.kind, date: x.date, key: x.key }), null, APP.id),
       '-',
       { label: 'Delete', kind: 'bad', fn: () => removeLine(x) },
     ].filter(Boolean), { title: x.p.text || '' });
@@ -1896,7 +1875,7 @@ Mobile.hold($('cal'), e => {
   if (box.classList.contains('day') && Day.editable(d)) items.push({ label: 'Add a bullet', fn: () => noteDialog({}, d) });
   const lab = box.querySelector('.lab');
   menuAt(e.clientX, e.clientY, items, { title: lab ? lab.textContent : Day.label(d) });
-}, { skip: '.sum,.cell,.bx,.rz' });
+}, { skip: '.sum,.cell,button.k,.rz' });
 
 /* ══════════════════════ MOVING AROUND ══════════════════════
    The wheel scrolls. Mouse 4 zooms out and Mouse 5 in, toward the pointer,

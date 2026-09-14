@@ -337,6 +337,152 @@ function tick(date, key, opts) {
     undo() { R.set('note', date, key, cur); pub([date]); } };
 }
 
+/* ══════════════ A BULLET, DRAWN ══════════════
+   Tom, 2026-09-14: "I want the bullet system in the shared foundation", and
+   "I don't want differences between the two when it comes to todo bullets,
+   same goes for QUESTS", with STATUS winning where they disagreed. So the
+   mark, the words, the time and the done and cancelled looks are drawn here,
+   and STATUS, LOG and QUESTS each put them inside a row of their own. The
+   row's size and spacing stay the app's, because a line in LOG's timeline is
+   not a card in STATUS. A row holding a bullet carries `mb-bullet`, plus
+   `done` or `cancelled`; the mark goes in a `.k`, the words in a `.tx`. */
+
+const MARKS = { entry: '·', event: '–', idea: '!' };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* STATUS's values, carried across as they were. The box is 13px of ink and a
+   full finger of target: growing the ink would make a list shout, growing the
+   reach costs nothing on screen. Done is struck through, you did it; cancelled
+   is faded with the box dashed, you decided not to, which is still worth
+   keeping. The mark classes are not scoped, because STATUS also draws them on
+   its kind buttons. Injected first, so an app's own row rules come after. */
+const CSS =
+  '.nm-box{width:13px;height:13px;border:1.5px solid currentColor;border-radius:3px;display:block}' +
+  '.nm-ch{display:block;font-weight:700}' +
+  '.nm-mig{line-height:13px}' +
+  '.mb-bullet .k{flex:0 0 auto;width:16px;display:flex;align-items:center;justify-content:center;' +
+    'color:var(--accent);font-size:var(--f-3);line-height:1.5;font-family:var(--font-mono);' +
+    'position:relative;background:none;border:0;padding:0;cursor:pointer}' +
+  '.mb-bullet .k::after{content:"";position:absolute;left:50%;top:50%;' +
+    'width:var(--tap);height:var(--tap);transform:translate(-50%,-50%)}' +
+  '.mb-bullet .tx{min-width:0;line-height:var(--lh-body);overflow-wrap:anywhere}' +
+  '.mb-bullet.done .tx{text-decoration:line-through;color:var(--text-muted)}' +
+  '.mb-bullet.done .k{color:var(--text-muted)}' +
+  '.mb-bullet.done .nm-box{background:var(--text-muted);border-color:var(--text-muted)}' +
+  '.mb-bullet.cancelled{opacity:.45}' +
+  '.mb-bullet.cancelled .tx{text-decoration:line-through;text-decoration-style:double}' +
+  '.mb-bullet.cancelled .nm-box{border-style:dashed}' +
+  '.mb-bullet .at{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);' +
+    'color:var(--accent);margin-left:var(--s-2);white-space:nowrap}' +
+  '.mb-bullet .at.wrote{opacity:.6}';
+let cssDone = false;
+function css() {
+  if (cssDone || typeof document === 'undefined' || !document.head) return;
+  cssDone = true;
+  const s = document.createElement('style');
+  s.id = 'mb-journal-css';
+  s.textContent = CSS;
+  document.head.insertBefore(s, document.head.firstChild);
+}
+
+/* The mark says WHEN you are looking, not where the row came from. A box is
+   something to do today; `>` is a todo seen on a day that has gone. Tom,
+   2026-08-28: "To do Bullets should only show as > on past days." */
+function markHTML(kind, past) {
+  css();
+  if (kind !== 'todo') return '<span class="nm-ch" aria-hidden="true">' + (MARKS[kind] || '·') + '</span>';
+  return past ? '<span class="nm-ch nm-mig" aria-hidden="true">&gt;</span>'
+              : '<span class="nm-box" aria-hidden="true"></span>';
+}
+
+/* The time a line shows. A todo has a start, `at`, and a finish, `by`, which
+   the tick writes (`doneAt` on rows from before that). It reads as a span,
+   "7:00pm - 7:31pm". Tom, 2026-09-14: no "by". A start alone, or a finish
+   alone, shows just that one; a start with no finish carries its length.
+   Anything else shows the time typed into it, or else when it was written,
+   marked `wrote` so it reads quieter. */
+function timeText(x) {
+  if (!x) return { s: '', wrote: false };
+  const dur = x.dur ? durLabel(x.dur) : '';
+  if (x.kind === 'todo') {
+    const end = x.by || (x.done ? x.doneAt : null) || null;
+    if (x.at && end) return { s: clockLabel(x.at) + ' - ' + clockLabel(end), wrote: false };
+    if (x.at) return { s: clockLabel(x.at) + (dur ? ' · ' + dur : ''), wrote: false };
+    if (end) return { s: clockLabel(end), wrote: false };
+    return { s: dur, wrote: false };
+  }
+  if (x.at) return { s: clockLabel(x.at) + (dur ? ' · ' + dur : ''), wrote: false };
+  if (dur) return { s: dur, wrote: false };
+  if (x.t) return { s: clockLabel(hhmm(x.t)), wrote: true };
+  return { s: '', wrote: false };
+}
+
+/* The clock a line sorts by in time order: its start. Tom, 2026-09-14: "use
+   the start time for time sorting", replacing sorting a done todo by when it
+   was ticked. A line with no start sorts by when it was written, so a list is
+   one sequence rather than a timed half and an untimed clump. */
+function sortClock(x) {
+  if (x && x.at) return +String(x.at).replace(':', '');
+  if (x && x.t) return +hhmm(x.t).replace(':', '');
+  return 9999;
+}
+
+/* The words, then the time, then how long a todo has followed you. The time
+   sits after the words because the words are what you scan for. `day` is the
+   day being looked at, for a todo finished there but written earlier. */
+function textHTML(x, day) {
+  css();
+  const tm = timeText(x);
+  return esc(x.text) +
+    (tm.s ? '<i class="at' + (tm.wrote ? ' wrote' : '') + '">' + esc(tm.s) + '</i>' : '') +
+    (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') +
+    (x.from && day ? '<i class="carried">' + Day().diff(day, x.from) + 'd</i>' : '');
+}
+
+/* ══════════════ WHAT YOU CAN DO TO A TODO ══════════════
+   Each returns a function that puts the row back, or null if there was no
+   row. They merge into the row, so fields another app wrote survive. */
+function patchNote(date, key, changes, src) {
+  const R = Rec(), was = R.get('note', date, key);
+  if (!was) return null;
+  R.patch('note', date, key, changes);
+  publishNotes(date, src);
+  return () => { R.set('note', date, key, was); publishNotes(date, src); };
+}
+/* Tom, 2026-09-14: "Move to tomorrow", in STATUS and LOG and QUESTS alike.
+   The row stays on the day it was written. Its `due` becomes tomorrow, which
+   is the day rule every app already reads, so it leaves today everywhere at
+   once and is waiting tomorrow. */
+function moveToTomorrow(date, key, src) {
+  return patchNote(date, key, { due: Day().shift(Day().today(), 1) }, src);
+}
+/* Cancelled is not deleted. A task you decided not to do is a real outcome,
+   and deleting it pretends it was never planned. */
+function cancel(date, key, on, src) {
+  return patchNote(date, key, on ? { cancelled: 1, done: 0 } : { cancelled: 0 }, src);
+}
+
+/* The todo actions every app's menu carries, in the same words: Move to
+   tomorrow, and Cancel it or Put it back. `x` is the line with its own
+   `date` and `key`; `after` redraws; each offers an undo. */
+function menuItems(x, after, src) {
+  if (!x || x.kind !== 'todo') return [];
+  const ico = role => (g.Icons && g.Icons.svg) ? g.Icons.svg(role, { size: 18 }) : '';
+  const run = (act, say) => () => {
+    const back = act();
+    if (after) after();
+    if (back && g.UI && g.UI.undo) g.UI.undo(say, () => { back(); if (after) after(); });
+  };
+  const out = [];
+  if (!x.done && !x.cancelled) out.push({ label: 'Move to tomorrow', icon: ico('next'),
+    fn: run(() => moveToTomorrow(x.date, x.key, src), 'Moved to tomorrow') });
+  out.push(x.cancelled
+    ? { label: 'Put it back', icon: ico('undo'), fn: run(() => cancel(x.date, x.key, false, src), 'Put back') }
+    : { label: 'Cancel it', note: 'Kept, but stops following you', icon: ico('cancel'),
+        fn: run(() => cancel(x.date, x.key, true, src), 'Cancelled') });
+  return out;
+}
+
 g.Journal = {
   KINDS: KINDS,
   bare: bare, place: place, onDay: onDay, notes: notes,
@@ -344,5 +490,7 @@ g.Journal = {
   hhmm: hhmm, clockLabel: clockLabel, durLabel: durLabel,
   publishTimed: publishTimed, publishNotes: publishNotes,
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,
+  css: css, markHTML: markHTML, timeText: timeText, sortClock: sortClock, textHTML: textHTML,
+  moveToTomorrow: moveToTomorrow, cancel: cancel, menuItems: menuItems,
 };
 })(window);

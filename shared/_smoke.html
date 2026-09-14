@@ -389,6 +389,23 @@ async function run() {
     return J.nextRound({ rep: { unit: 'day', every: 1, from: past }, due: past }, past) === Day.shift(Day.today(), 1);
   })());
 
+  ok('journal: a todo reads start to finish, with no "by"', (() => {
+    const a = J.timeText({ kind: 'todo', at: '19:00', by: '19:31', done: 1 });
+    const b = J.timeText({ kind: 'todo', by: '16:44' });
+    const c = J.timeText({ kind: 'todo', at: '07:00', dur: 45 });
+    return a.s === '7:00pm - 7:31pm' && b.s === '4:44pm' && c.s === '7:00am · 45m';
+  })());
+  ok('journal: time order is the start, not when it was ticked',
+    J.sortClock({ kind: 'todo', at: '08:00', done: 1, doneAt: '21:00', by: '21:00' }) === 800);
+  ok('journal: the box, the past-day arrow and their stylesheet come from one place', (() =>
+    /nm-box/.test(J.markHTML('todo')) && /&gt;/.test(J.markHTML('todo', true)) &&
+    !!document.getElementById('mb-journal-css'))());
+  ok('journal: an open todo offers Move to tomorrow and Cancel it, a done one does not move', (() => {
+    const open = J.menuItems({ kind: 'todo', date: '2026-01-01', key: 'k' }).map(i => i.label).join();
+    const done = J.menuItems({ kind: 'todo', done: 1, date: '2026-01-01', key: 'k' }).map(i => i.label).join();
+    return open === 'Move to tomorrow,Cancel it' && done === 'Cancel it' && J.menuItems({ kind: 'entry' }).length === 0;
+  })());
+
   /* ---- tables you can type into ---- */
   IO.register({ app: '__tbl', name: 'Tbl', types: [stamp],
     tables: [{ name: 'Things', type: stamp, cols: [['name', 'Name'], ['base.n', 'N']] }] });

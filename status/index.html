@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0, 2026-09-14">
+<meta name="mb-version" content="1.1, 2026-09-14">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -496,35 +496,10 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 
 .note-row{display:flex;align-items:flex-start;gap:var(--s-2);padding:var(--s-2);
   min-height:var(--tap);border-radius:var(--radius-md);background:var(--surface-2);cursor:pointer}
-.note-row .k{flex:0 0 auto;width:16px;display:flex;align-items:center;justify-content:center;
-  color:var(--accent);font-size:var(--f-3);line-height:1.5;font-family:var(--font-mono);
-  position:relative;background:none;border:0;padding:0;cursor:pointer}
-/* The box is 13px of ink and a full finger of target. Growing the ink would
-   make the list shout; growing the reach costs nothing on screen. */
-.note-row .k::after{content:'';position:absolute;left:50%;top:50%;
-  width:var(--tap);height:var(--tap);transform:translate(-50%,-50%)}
-/* the open box, the only mark you tick */
-.nm-box{width:13px;height:13px;border:1.5px solid currentColor;border-radius:3px;display:block}
-.nm-ch{display:block;font-weight:700}
-.note-row .tx{flex:1;min-width:0;line-height:var(--lh-body);overflow-wrap:anywhere}
-/* Done and cancelled are different outcomes and must not look the same. Done
-   is struck through — you did it. Cancelled is faded with the mark crossed —
-   you decided not to, which is still a decision worth keeping. */
-.note-row.done .tx{text-decoration:line-through;color:var(--text-muted)}
-.note-row.done .k{color:var(--text-muted)}
-.note-row.done .nm-box{background:var(--text-muted);border-color:var(--text-muted)}
-.note-row.cancelled{opacity:.45}
-.note-row.cancelled .tx{text-decoration:line-through;text-decoration-style:double}
-.note-row.cancelled .nm-box{border-style:dashed}
-.nm-mig{line-height:13px}
-/* how many days it has been following you */
-.note-row .at{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);
-  color:var(--accent);margin-left:var(--s-2);white-space:nowrap}
-/* `by` is a deadline and `did` is what happened, so they read differently:
-   one is a warning colour waiting to be earned, the other is spent. */
-.tx .at.by{color:var(--warn)}
-.tx .at.did{color:var(--ok,var(--accent))}
-.tx .at.wrote{opacity:.6}
+/* The mark, the words, the time, done and cancelled are drawn by
+   shared/journal.js, the same in STATUS, LOG and QUESTS (Tom, 2026-09-14).
+   Only the row's own shape is here. */
+.note-row .tx{flex:1}
 /* The journal heading is the biggest word on its card because it is also the
    control that sorts it, and a heading nobody reads as pressable is a control
    nobody presses. */
@@ -1179,7 +1154,7 @@ const NOTE_KINDS = Journal.KINDS;
 
    Drawn as one glyph each so they take the theme's colour and scale with the
    text around them. */
-const NOTE_MARK = { todo: '', entry: '·', event: '–', idea: '!' };
+/* the marks themselves are Journal.markHTML in shared/journal.js */
 /* A task that has followed you here is drawn `>`, not as a box.
 
    That is what the notation already means — migrated — and it is the whole
@@ -1187,12 +1162,7 @@ const NOTE_MARK = { todo: '', entry: '·', event: '–', idea: '!' };
    `>` is something you have now decided to do four times. Same row, same tick,
    different glyph, so the list tells you which is which at a glance instead of
    making you read the little age badge on the right. */
-const noteSvg = (id, migrated) =>
-  id !== 'todo'
-    ? '<span class="nm-ch" aria-hidden="true">' + (NOTE_MARK[id] || '·') + '</span>'
-    : migrated
-      ? '<span class="nm-ch nm-mig" aria-hidden="true">&gt;</span>'
-      : '<span class="nm-box" aria-hidden="true"></span>';
+const noteSvg = (id, migrated) => Journal.markHTML(id, migrated);
 
 const noteKind = id => NOTE_KINDS.filter(k => k.id === id)[0] || NOTE_KINDS[1];
 /* ── what a Kind column says in the spreadsheet ──
@@ -1249,18 +1219,10 @@ function notes(date) {
    "undefined". Delete them properly. */
 function bare(x) { return Journal.bare(x); }
 
-/* The clock a line sorts by, which is not the same question as the clock it
-   shows. A finished task happened when you ticked it, not when you wrote it
-   down - Tom, 2026-09-04: "done tasks sort with the journal bullet types,
-   according to the time I checked them." A line with no clock at all falls
-   back to when it was written, so the list is one real sequence rather than a
-   timed half and an untimed clump. */
-function noteClock(x) {
-  const s = (x.kind === 'todo' && x.done && x.doneAt) ? x.doneAt : x.at;
-  if (s) return +String(s).replace(':', '');
-  if (x.t) { const w = hhmm(x.t); return w ? +w.replace(':', '') : 9999; }
-  return 9999;
-}
+/* The clock a line sorts by: its start. Tom, 2026-09-14: "use the start time
+   for time sorting", replacing 2026-09-04's sorting a done task by when it was
+   ticked. Journal.sortClock in shared/journal.js, which LOG uses too. */
+function noteClock(x) { return Journal.sortClock(x); }
 
 function noteOrder(a, b) {
   /* An open task holds the top whatever else is chosen: it is the one kind of
@@ -3692,7 +3654,7 @@ function drawJournal(m) {
 
   const wrap = el('div', 'list');
   list.forEach((x, i) => {
-    const r = el('div', 'note-row' + (x.done ? ' done' : '') + (x.cancelled ? ' cancelled' : ''));
+    const r = el('div', 'note-row mb-bullet' + (x.done ? ' done' : '') + (x.cancelled ? ' cancelled' : ''));
     /* ── two targets, two meanings ──
        The line used to do one thing: tapping anywhere ticked it, and the only
        way to fix a typo was to hold. That is backwards. A written line is text
@@ -3701,37 +3663,11 @@ function drawJournal(m) {
 
        It is also what every list app already does, which means it needs no
        explaining. */
+    /* The words, the time after them ("7:00pm - 7:31pm" for a todo, Tom,
+       2026-09-14) and how long it has followed you: Journal.textHTML in
+       shared/journal.js, the same line LOG and QUESTS draw. */
     r.innerHTML = '<button class="k" type="button"></button>' +
-      '<span class="tx">' + esc(x.text) +
-      /* The time you typed, given back in the shape you typed it. It sits
-         after the words rather than before them because the words are what
-         you scan for; the clock is the detail. */
-      /* Times, in the order a task moves through them: when it starts, how
-         long it takes, when it is due, and when it was actually done. Tom,
-         2026-09-03: "Bullet time can be beside entry when checked." */
-      (x.at ? '<i class="at">' + esc(clockLabel(x.at)) + (x.dur ? ' \u00b7 ' + durLabel(x.dur) : '') + '</i>'
-            : (x.dur ? '<i class="at">' + durLabel(x.dur) + '</i>' : '')) +
-      /* ── one Done time, not two ──
-         Tom, 2026-09-05: "Todos with a done time should not have a visible
-         seperate ticked time." Right: the row was carrying "by 4:44" AND the
-         moment it was ticked, which is the same question answered twice and
-         made a finished line the busiest thing on the screen.
-
-         `by` is the Done time now and the tick writes into it, so this is the
-         only clock a finished task shows. Still open, it reads "by" because
-         that is what a time in the future means. */
-      (x.by ? '<i class="at by">' + (x.done ? '' : 'by ') + esc(clockLabel(x.by)) + '</i>' : '') +
-      /* An entry has no time of its own, so the useful clock is when it was
-         written. Only where nothing else is showing, or the row starts
-         carrying three times and says nothing. */
-      (x.kind !== 'todo' && !x.at && !x.dur && x.t
-        ? '<i class="at wrote">' + esc(clockLabel(hhmm(x.t))) + '</i>' : '') +
-      /* how long it has been following you — quiet, but it should sting a bit */
-      (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') +
-      /* Finished here, written earlier. Says how long it sat, so a task you
-         finally cleared reads as cleared rather than as a line you wrote
-         today. */
-      (x.from ? '<i class="carried">' + Day.diff(d, x.from) + 'd</i>' : '') + '</span>';
+      '<span class="tx">' + Journal.textHTML(x, d) + '</span>';
     const box = r.querySelector('.k');
     /* The mark says WHEN you are looking, not where the row came from. A box
        is something to do today; an arrow is something that has moved on. Tom,
@@ -3935,19 +3871,13 @@ function noteSheet(x, d) {
 function noteMenu(x, d, i, n) {
   const manual = S.get('noteSort', 'manual') === 'manual';
   const own = x.date || d;
-  const isTask = x.kind === 'todo';
-  const save = patch => {
-    Rec.set('note', own, x.key, Object.assign(bare(x), patch));
-    Mobile.feedback('select'); publishNotes(own); draw();
-  };
   UI.menu(0, 0, [
     { label: 'Edit', icon: '✎', fn: () => noteSheet(x, own) },
-    /* Cancelled is not deleted. A task you decided not to do is a real
-       outcome and worth keeping — deleting it pretends you never planned it,
-       which is the one thing a log should never do. */
-    isTask && !x.cancelled ? { label: 'Cancel it', note: 'Kept, but stops following you', icon: '⊘',
-      fn: () => save({ cancelled: 1, done: 0 }) } : null,
-    isTask && x.cancelled ? { label: 'Put it back', icon: '↺', fn: () => save({ cancelled: 0 }) } : null,
+    /* Move to tomorrow, and Cancel it or Put it back, are Journal.menuItems
+       in shared/journal.js, so LOG and QUESTS offer the same ones in the same
+       words. Cancelled is not deleted: a task you decided not to do is a real
+       outcome, and deleting it pretends you never planned it. */
+    ...Journal.menuItems(Object.assign({}, x, { date: own }), draw, APP.id),
     manual && i > 0 ? { label: 'Move up', icon: '↑', fn: () => moveNote(d, x, -1) } : null,
     manual && i < n - 1 ? { label: 'Move down', icon: '↓', fn: () => moveNote(d, x, 1) } : null,
     '-',

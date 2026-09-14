@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0, 2026-09-14">
+<meta name="mb-version" content="1.1, 2026-09-14">
 <title>QUESTS</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -115,9 +115,9 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
   display:flex;align-items:center;justify-content:center;border:0;background:none;cursor:pointer}
 .tk i{display:block;width:var(--s-5);height:var(--s-5);border-radius:var(--radius-full);
   border:2px solid var(--border-strong);transition:background-color var(--dur-fast) var(--ease-out)}
-.row.p1 .tk i{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 14%,transparent)}
-.row.p2 .tk i{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
-.row.p3 .tk i{border-color:var(--info);background:color-mix(in srgb,var(--info) 14%,transparent)}
+/* A todo's tick box is STATUS's box from shared/journal.js, with no priority
+   colour (Tom, 2026-09-14: no differences, STATUS wins). The round .tk below
+   is left for BLOCK's plan rows. Priority still shows on the Priority button. */
 .tk:hover i{background:color-mix(in srgb,var(--text-muted) 30%,transparent)}
 .row.done .tk i{background:var(--text-muted);border-color:var(--text-muted)}
 .row .body{flex:1;min-width:0}
@@ -705,15 +705,20 @@ function draw() {
 }
 function rowEl(x, info) {
   const due = dueOf(x), late = !x.done && due && due < T();
-  const r = el('div', 'row' + (x.pri ? ' p' + x.pri : '') + (x.done ? ' done' : ''));
-  const tk = el('button', 'tk', '<i></i>');
+  /* The todo itself is shared/journal.js: STATUS's box, the words and the
+     time after them, the same as STATUS and LOG (Tom, 2026-09-14). What is
+     QUESTS's own sits around it: the due day, the repeat, where it came
+     from, the project and the buttons. */
+  const r = el('div', 'row mb-bullet' + (x.pri ? ' p' + x.pri : '') + (x.done ? ' done' : ''));
+  const tk = el('button', 'k', Journal.markHTML('todo', false));
+  tk.type = 'button';
   tk.setAttribute('aria-label', x.done ? 'Mark not done' : 'Complete');
   tk.onclick = e => { e.stopPropagation(); tick(x); };
   const body = el('div', 'body');
-  body.appendChild(el('div', 'tt', esc(x.text)));
+  body.appendChild(el('div', 'tx', Journal.textHTML(x)));
   const meta = el('div', 'meta');
-  if (due || x.at) {
-    const s = el('span', late ? 'late' : (due === T() ? 'soon' : ''), ico('calendar') + esc(whenLabel(due, x.at) + (x.dur ? ' · ' + durTxt(x.dur) : '')));
+  if (due) {
+    const s = el('span', late ? 'late' : (due === T() ? 'soon' : ''), ico('calendar') + esc(whenLabel(due)));
     meta.appendChild(s);
   }
   if (x.rep) meta.appendChild(el('span', null, ico('repeat') + esc(repLabel(x.rep))));
@@ -1133,6 +1138,8 @@ function rowMenu(x, anchor) {
     { label: 'Move to', icon: '<span class="hash">#</span>', rt: x.proj ? projName(x.proj) : 'Inbox', fn: () =>
       choose(anchor, 'Move to', projItems(x.proj, pr => saveRow(x, pr ? { proj: pr.key, projName: pr.name } : { proj: '' }))) },
     { label: x.done ? 'Mark not done' : 'Complete', icon: ico('done'), fn: () => tick(x) },
+    /* Move to tomorrow and Cancel it, the same as STATUS and LOG */
+    ...Journal.menuItems(x, null, APP.id),
     { label: 'Delete', icon: ico('delete'), cls: 'bad', kind: 'bad', fn: () => removeQuest(x) },
   ]);
 }
