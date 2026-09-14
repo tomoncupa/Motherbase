@@ -128,11 +128,21 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .row .meta .soon{color:var(--success)}
 .row .meta svg{width:var(--f-2);height:var(--f-2)}
 .row .pj{margin-left:auto;font-size:var(--f-1);color:var(--text-muted);white-space:nowrap}
-.row .more{flex:0 0 auto;width:var(--tap);height:var(--tap);margin:calc(var(--s-3) * -1) 0;
-  border:0;background:none;cursor:pointer;color:var(--text-muted);opacity:0;
-  display:flex;align-items:center;justify-content:center}
-.row:hover .more,.row .more:focus-visible{opacity:1}
-@media (hover:none){.row .more{opacity:1}}
+/* The row's own buttons, always showing. Tom, 2026-09-14: "I don't want to
+   have to right click to show the menu, there's so much space on the right
+   side." The right click and the hold still open the same menu. */
+.row .acts{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-1);margin:calc(var(--s-3) * -1) 0}
+.row .acts button{width:var(--tap);height:var(--tap);border:0;background:none;cursor:pointer;
+  color:var(--text-muted);border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center}
+.row .acts button:hover,.row .acts button:focus-visible{background:var(--surface-3);color:var(--text-1);outline:none}
+.row .acts button.on{color:var(--accent)}
+.row .acts button.p1{color:var(--danger)} .row .acts button.p2{color:var(--warn)} .row .acts button.p3{color:var(--info)}
+@media (max-width:600px){.row .acts button.wide{display:none}}
+.src{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);text-transform:uppercase;
+  color:var(--text-muted);border:var(--border-width) solid var(--border);border-radius:var(--radius-sm);padding:0 var(--s-1)}
+.row.blk.past .tt{color:var(--text-muted)}
+.row.blk.now{background:color-mix(in srgb,var(--success) 8%,transparent)}
+.tk:disabled{cursor:default;opacity:.4}
 .empty{color:var(--text-muted);padding:var(--s-6) 0;text-align:center}
 
 /* ── the popover: Todoist's date menu, and the small lists ── */
@@ -482,6 +492,26 @@ const RULES = [
       const m = w.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
       return m ? dayMonth(+m[1] - 1, +m[2], m[3] ? +m[3] : 0) : null;
     } },
+  /* A range: "2-4:30", "9-11am", "from 7 to 9". Needs a colon, an am or pm,
+     or "at" or "from", so "3-5 reps" stays words. */
+  { kind: 'time', src: '(?:(?:at|from)\\s+)?\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?\\s*(?:-|–|to)\\s*\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?',
+    fn: w => {
+      const m = w.toLowerCase().match(/^(?:(at|from)\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+      if (!m || !(m[1] || m[3] || m[4] || m[6] || m[7])) return null;
+      const mk = (h, mm, ap) => {
+        if (h > 23 || mm > 59) return null;
+        if (ap) { if (h < 1 || h > 12) return null; if (ap === 'pm' && h < 12) h += 12; if (ap === 'am' && h === 12) h = 0; }
+        else if (h >= 1 && h <= 6) h += 12;
+        return h * 60 + mm;
+      };
+      const smm = m[3] ? +m[3] : 0;
+      let e = mk(+m[5], m[6] ? +m[6] : 0, m[7] || null);
+      let s = mk(+m[2], smm, m[4] || m[7] || null);
+      if (s == null || e == null) return null;
+      if (!m[4] && m[7] && s > e) s = mk(+m[2], smm, m[7] === 'pm' ? 'am' : 'pm');
+      if (e <= s) e += (e + 720 > s) ? 720 : 1440;
+      return { at: hm(s), dur: e - s };
+    } },
   { kind: 'time', src: '(?:at\\s+|@\\s*)?\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)',
     fn: w => {
       const m = w.toLowerCase().match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
@@ -499,6 +529,10 @@ const RULES = [
       if (h >= 1 && h <= 6) h += 12;   /* STATUS's rule: 2:45 means the afternoon */
       return pad(h) + ':' + pad(mm);
     } },
+  /* "at 6": a bare hour after "at", read by STATUS's rule, 1 to 6 is the
+     afternoon. */
+  { kind: 'time', src: '(?:at|@)\\s*\\d{1,2}',
+    fn: w => { let h = +w.match(/(\d{1,2})$/)[1]; if (h < 1 || h > 12) return null; if (h <= 6) h += 12; return pad(h) + ':00'; } },
   { kind: 'time', src: '(?:at\\s+)?(?:noon|midday)', fn: () => '12:00' },
   { kind: 'pri', src: 'p[1-4]', fn: w => { const n = +w.slice(1); return n === 4 ? 0 : n; } },
   { kind: 'proj', src: '#[^\\s#]+', fn: w => w.slice(1).replace(/[.,;:!?)]+$/, '') || null },
@@ -507,7 +541,7 @@ const slug = s => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').repla
 
 function parseQuest(raw, ignore) {
   const text = String(raw || ''), ig = (ignore || []).map(s => s.toLowerCase());
-  const taken = [], spans = [], out = { text: '', due: null, at: null, pri: null, proj: null, projName: null, rep: null, spans: spans };
+  const taken = [], spans = [], out = { text: '', due: null, at: null, dur: null, pri: null, proj: null, projName: null, rep: null, spans: spans };
   const free = (a, b) => !taken.some(t => a < t[1] && b > t[0]);
   RULES.forEach(rule => {
     /* the kind a rule reads is not always the field it fills */
@@ -524,7 +558,8 @@ function parseQuest(raw, ignore) {
       if (v == null || v === '') continue;
       taken.push([start, end]);
       spans.push({ start: start, end: end, kind: rule.kind, word: word });
-      if (rule.kind === 'date' || rule.kind === 'time') out[field] = v;
+      if (rule.kind === 'time' && typeof v === 'object') { out.at = v.at; out.dur = v.dur; }
+      else if (rule.kind === 'date' || rule.kind === 'time') out[field] = v;
       else if (rule.kind === 'proj') { out.proj = slug(v); out.projName = v; if (!out.proj) { taken.pop(); spans.pop(); continue; } }
       else if (rule.kind === 'rep') out.rep = Object.assign(v, { txt: word });
       else out[rule.kind] = v;
@@ -551,6 +586,14 @@ const quests = () => Rec.all('note')
 /* A row from before QUESTS has no `due`: it is due the day it was written,
    which is exactly where STATUS already shows it. `''` is No date. */
 const dueOf = x => x.due === undefined ? (x.date || null) : (x.due || null);
+/* Where a todo came from. Tom, 2026-09-14: "Possible for QUEST to show where
+   a task is from?" QUESTS stamps `src` on what it writes. A row from before
+   the stamp is QUESTS's if it carries all three fields only QUESTS writes on
+   creation, and STATUS's otherwise. LOG writes STATUS's payload, so a line
+   added in LOG reads STATUS too. */
+const SRC_NAME = { quest: 'QUESTS', status: 'STATUS', block: 'BLOCK' };
+const srcOf = x => SRC_NAME[x.src] ? x.src : (('pri' in x && 'proj' in x && 'rep' in x) ? 'quest' : 'status');
+const durTxt = m => (m >= 60 ? Math.floor(m / 60) + 'h' : '') + (m % 60 ? (m % 60) + (m >= 60 ? '' : 'm') : '');
 
 const projects = () => Object.entries(Rec.map('project'))
   .map(e => Object.assign({ key: e[0] }, e[1])).sort((a, b) => (a.ord || 0) - (b.ord || 0));
@@ -579,8 +622,8 @@ function addQuest(p) {
   const d = T();
   if (p.proj) ensureProject(p.proj, p.projName);
   Rec.set('note', d, newId(), {
-    kind: 'todo', text: p.text, t: Date.now(), made: d,
-    at: p.at || null, dur: null, ord: Rec.all('note', { date: d }).length, done: 0, cancelled: 0,
+    kind: 'todo', src: 'quest', text: p.text, t: Date.now(), made: d,
+    at: p.at || null, dur: p.dur || null, ord: Rec.all('note', { date: d }).length, done: 0, cancelled: 0,
     due: p.due || '', pri: p.pri || 0, proj: p.proj || '', rep: p.rep || null,
   });
   publishNotes(d);
@@ -681,6 +724,11 @@ function viewInfo(v) {
   const groups = [];
   if (over.length) groups.push({ id: 'over', title: 'Overdue', over: true, items: over });
   groups.push({ id: t, title: dayTitle(t), day: t, items: now });
+  /* What BLOCK planned for today. Tom, 2026-09-14: "Daily tasks, and whats
+     next from BLOCK is what QUEST is for." Read from BLOCK's published plan,
+     never written. */
+  const plan = Rec.get('plan', t, 'routine');
+  if (plan && (plan.blocks || []).length) groups.push({ id: 'block', title: 'BLOCK · ' + (plan.name || 'Today'), block: true, day: t, items: plan.blocks });
   if (done.length) groups.push({ id: 'done', title: 'Completed', items: done, quiet: true });
   return { title: 'Today', sub: asDate(t).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
     groups: groups, due: t, proj: '', showProj: true };
@@ -747,7 +795,11 @@ function draw() {
       head.appendChild(r);
     }
     box.appendChild(head);
-    g.items.slice().sort(sortQ).forEach(x => box.appendChild(rowEl(x, info)));
+    if (g.block) {
+      const n = new Date(), mins = n.getHours() * 60 + n.getMinutes();
+      const next = g.items.filter(b => (b.s || 0) > mins)[0];
+      g.items.forEach(b => box.appendChild(blockRow(b, g.day, mins, next)));
+    } else g.items.slice().sort(sortQ).forEach(x => box.appendChild(rowEl(x, info)));
     list.appendChild(box);
   });
   if (!any) list.appendChild(el('div', 'empty', VIEW === 'today' ? 'Nothing due today' : 'No tasks'));
@@ -762,22 +814,68 @@ function rowEl(x, info) {
   body.appendChild(el('div', 'tt', esc(x.text)));
   const meta = el('div', 'meta');
   if (due || x.at) {
-    const s = el('span', late ? 'late' : (due === T() ? 'soon' : ''), ico('calendar') + esc(whenLabel(due, x.at)));
+    const s = el('span', late ? 'late' : (due === T() ? 'soon' : ''), ico('calendar') + esc(whenLabel(due, x.at) + (x.dur ? ' · ' + durTxt(x.dur) : '')));
     meta.appendChild(s);
   }
-  if (x.rep) meta.appendChild(el('span', null, ico('repeat')));
+  if (x.rep) meta.appendChild(el('span', null, ico('repeat') + esc(repLabel(x.rep))));
+  meta.appendChild(el('span', 'src', SRC_NAME[srcOf(x)]));
   if (x.proj && info.showProj) meta.appendChild(el('span', 'pj', '<span class="hash" style="color:var(--data-' +
     ((Rec.get('project', null, x.proj) || {}).slot || 1) + ')">#</span> ' + esc(projName(x.proj))));
-  if (meta.children.length) body.appendChild(meta);
-  const more = el('button', 'more', ico('more'));
-  more.setAttribute('aria-label', 'More');
-  more.onclick = e => { e.stopPropagation(); rowMenu(x, more); };
-  r.appendChild(tk); r.appendChild(body); r.appendChild(more);
+  body.appendChild(meta);
+  const acts = el('div', 'acts');
+  const act = (icon, label, cls, fn) => {
+    const b = el('button', cls, icon);
+    b.type = 'button'; b.title = label; b.setAttribute('aria-label', label);
+    b.onclick = e => { e.stopPropagation(); fn(b); };
+    acts.appendChild(b);
+  };
+  act(ico('calendar'), 'Due date', 'wide' + (due ? ' on' : ''), b =>
+    dateMenu(b, { due: due || '', at: x.at, rep: x.rep }, v => saveRow(x, { due: v.due || '', at: v.at || null, rep: v.rep || null })));
+  act(ico('pin'), x.pri ? 'Priority ' + x.pri : 'Priority', 'wide' + (x.pri ? ' p' + x.pri : ''), b =>
+    choose(b, 'Priority', priItems(x.pri, n => saveRow(x, { pri: n }))));
+  act('<span class="hash">#</span>', 'Move to', 'wide' + (x.proj ? ' on' : ''), b =>
+    choose(b, 'Move to', projItems(x.proj, pr => saveRow(x, pr ? { proj: pr.key, projName: pr.name } : { proj: '' }))));
+  act(ico('more'), 'More', '', b => rowMenu(x, b));
+  r.appendChild(tk); r.appendChild(body); r.appendChild(acts);
   r.onclick = () => editSheet(x);
   r.oncontextmenu = e => { e.preventDefault(); rowMenu(x, { x: e.clientX, y: e.clientY }); };
   holdMenu(r, pt => rowMenu(x, pt));
   return r;
 }
+/* ── a block from BLOCK's plan ──
+   Ticking one writes the shared tick, which any app may, so it is ticked in
+   BLOCK and on the home screen too. */
+const hm = m => pad(Math.floor(m / 60) % 24) + ':' + pad(m % 60);
+function blockRow(b, d, mins, next) {
+  const s = b.s || 0, end = s + (b.dur || 0), today = d === T();
+  const on = !!(b.actId && Rec.has('tick', d, b.actId));
+  const now = today && mins >= s && mins < end, past = today && mins >= end;
+  const r = el('div', 'row blk' + (on ? ' done' : '') + (now ? ' now' : '') + (past && !on ? ' past' : ''));
+  const tk = el('button', 'tk', '<i></i>');
+  tk.setAttribute('aria-label', on ? 'Mark not done' : 'Complete');
+  tk.disabled = !b.actId;
+  tk.onclick = e => {
+    e.stopPropagation();
+    if (on) { Rec.del('tick', d, b.actId); Mobile.feedback('untick'); }
+    else { Rec.set('tick', d, b.actId, { src: APP.id }); Mobile.feedback('tick'); }
+  };
+  const body = el('div', 'body');
+  body.appendChild(el('div', 'tt', esc(b.name)));
+  const meta = el('div', 'meta');
+  meta.appendChild(el('span', now ? 'soon' : '', ico('timer') + esc(clock12(hm(s)) + (b.dur ? ' to ' + clock12(hm(end)) : ''))));
+  if (now) meta.appendChild(el('span', 'soon', 'Now'));
+  else if (next === b) meta.appendChild(el('span', null, 'Next'));
+  meta.appendChild(el('span', 'src', 'BLOCK' + (b.lane ? ' · ' + esc(b.lane) : '')));
+  body.appendChild(meta);
+  const acts = el('div', 'acts');
+  const open = el('button', '', ico('forward'));
+  open.type = 'button'; open.title = 'Open in BLOCK'; open.setAttribute('aria-label', 'Open in BLOCK');
+  open.onclick = e => { e.stopPropagation(); location.href = '../block/index.html'; };
+  acts.appendChild(open);
+  r.appendChild(tk); r.appendChild(body); r.appendChild(acts);
+  return r;
+}
+
 /* Hold on a touch screen opens the same menu a right click does. */
 function holdMenu(node, fn) {
   let timer = null, start = null;
@@ -957,7 +1055,7 @@ function dateMenu(anchor, cur, pick, opts) {
   if (!opts.bulk) {
     const foot = el('div', 'dm-foot');
     const tbar = el('div', 'bar');
-    tbar.appendChild(el('span', 'ic', ico('clock')));
+    tbar.appendChild(el('span', 'ic', ico('timer')));
     tbar.appendChild(UI.timeField(st.at || '', v => apply({ at: v || null, due: st.due || (v ? T() : '') }, true)));
     const tx = el('button', 'x', ico('clear'));
     tx.setAttribute('aria-label', 'No time');
@@ -1049,7 +1147,7 @@ function ensureAddBar() {
   };
   function final() {
     const p = parseQuest(inp.value, ignore);
-    const o = { text: p.text, due: p.due, at: p.at, pri: p.pri, proj: p.proj, projName: p.projName, rep: p.rep, p: p };
+    const o = { text: p.text, due: p.due, at: p.at, dur: p.dur, pri: p.pri, proj: p.proj, projName: p.projName, rep: p.rep, p: p };
     if (o.due == null) {
       if (set.date) { o.due = set.date.due; o.at = o.at || set.date.at; o.rep = set.date.rep; }
       else o.due = o.at ? T() : (view.due || '');
@@ -1181,6 +1279,7 @@ function editSheet(x) {
     const patch = { text: p.text, due: st.due, at: st.at, rep: st.rep, pri: st.pri, proj: st.proj };
     if (p.due) { patch.due = p.due; patch.at = p.at || null; patch.rep = p.rep || null; }
     else if (p.at) patch.at = p.at;
+    if (p.at) patch.dur = p.dur || null;
     if (p.pri != null) patch.pri = p.pri;
     if (p.proj) { patch.proj = p.proj; patch.projName = p.projName; }
     else if (st.projName) patch.projName = st.projName;
@@ -1244,6 +1343,8 @@ Rec.on(draw);
 Day.on(draw);
 draw();
 Rec.ready(draw);
+/* Now and Next on BLOCK's rows move with the clock. */
+setInterval(() => { if (!POP) draw(); }, 60000);
 if (location.hash === '#add' && ADD) UI.focusSoon(ADD.input);
 </script>
 </body>
