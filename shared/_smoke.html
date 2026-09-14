@@ -402,12 +402,18 @@ async function run() {
     return J.sortClock({ kind: 'todo', done: 1, doneAt: '21:00', t: eight.getTime() }) === 2100 &&
       J.sortClock({ kind: 'todo', done: 0, t: eight.getTime() }) === 800;
   })());
-  ok('journal: a moved todo stays on the days it left as moved, and is only to be done on its new day', (() => {
+  ok('journal: a moved todo stays as > where it sat and where it left, not on skipped days, and is to be done on its new day', (() => {
     const t = Day.today(), tm = Day.shift(t, 1), w = Day.shift(t, -2);
     const r = { key: 'k', date: w, payload: { kind: 'todo', text: 'x', done: 0, due: tm, moved: [{ from: w, to: t }] } };
-    const here = J.place(r, t), before = J.place(r, Day.shift(t, -1)), next = J.place(r, tm);
-    return !!here && here.movedAway === true && !!before && before.movedAway === true &&
+    const here = J.place(r, t), sat = J.place(r, w), skipped = J.place(r, Day.shift(t, -1)), next = J.place(r, tm);
+    return !!here && here.movedAway === true && !!sat && sat.movedAway === true && !skipped &&
       !!next && !next.movedAway && !J.onDay(r, t) && J.onDay(r, tm) && !J.place(r, Day.shift(t, -3));
+  })());
+  ok('journal: rescheduling a week ahead records one move, and rescheduling a todo not yet due records none', (() => {
+    const t = Day.today(), w = Day.shift(t, -3), wk = Day.shift(t, 7);
+    const carried = J.movedAfter({ kind: 'todo', done: 0 }, w, wk, t);
+    const notYet = J.movedAfter({ kind: 'todo', done: 0, due: Day.shift(t, 2) }, w, wk, t);
+    return carried.length === 1 && carried[0].from === w && carried[0].to === t && notYet.length === 0;
   })());
   ok('journal: the box, the past-day arrow and their stylesheet come from one place', (() =>
     /nm-box/.test(J.markHTML('todo')) && /&gt;/.test(J.markHTML('todo', true)) &&

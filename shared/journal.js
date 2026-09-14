@@ -58,12 +58,15 @@ function place(r, d) {
   if (!p) return null;
   const D = Day();
   /* MOVED AWAY from this day. Tom, 2026-09-14: "A moved todo is still shown
-     as >, but moved to the bottom of the list." `moved` holds the spans of
-     days it showed on before each move; on those days it is the same row,
-     seen where it used to be, flagged `movedAway`. A todo finished on one of
+     as >, but moved to the bottom of the list", and then "if a todo is
+     rescheduled to the future then it doesn't show up on skipped dates".
+     Each entry in `moved` is one move: `from` the day it sat on, `to` the day
+     it was moved from. It shows as > on those two days only, flagged
+     `movedAway`; the days it was carried through between them, and the days
+     it skips before its new date, show nothing. A todo finished on one of
      those days shows as finished there instead. */
   if (p.kind === 'todo' && Array.isArray(p.moved) && (!p.due || d < p.due) && !(p.done && p.doneOn === d) &&
-      p.moved.some(m => m && m.from <= d && d <= m.to))
+      p.moved.some(m => m && (d === m.from || d === m.to)))
     return Object.assign({ key: r.key, date: r.date }, p, { movedAway: true });
   if (p.kind === 'todo' && p.due !== undefined && !p.done && !p.cancelled) {
     if (!p.due || p.due > d) return null;
@@ -464,18 +467,23 @@ function patchNote(date, key, changes, src) {
    The row stays on the day it was written. Its `due` becomes tomorrow, which
    is the day rule every app already reads, so it leaves today everywhere at
    once and is waiting tomorrow. */
-/* `from` is the day it was being looked at when moved, today by default. The
-   days it was showing on up to then are kept in `moved`, so it stays on them
-   as > at the bottom. It was showing from its old due day, or from the day it
-   was written if it had none; with No date it was showing nowhere. */
+/* The `moved` list after rescheduling a todo to `to`, seen on day `on`. It
+   sat on its old due day, or the day it was written if it had none (with No
+   date it sat nowhere); a move later than that day records where it sat and
+   where it was moved from. Any app that changes a todo's due date to a later
+   day uses this, so the > rule is the same wherever the date was changed. */
+function movedAfter(cur, date, to, on) {
+  const moved = Array.isArray(cur && cur.moved) ? cur.moved.slice() : [];
+  const start = !cur ? null : cur.due === undefined ? date : (cur.due || null);
+  if (to && start && start <= on && on < to) moved.push({ from: start, to: on });
+  return moved;
+}
+/* `from` is the day it was being looked at when moved, today by default. */
 function moveToTomorrow(date, key, src, from) {
   const D = Day(), cur = Rec().get('note', date, key);
   if (!cur) return null;
-  const to = D.shift(D.today(), 1), on = from || D.today();
-  const start = cur.due === undefined ? date : (cur.due || null);
-  const moved = Array.isArray(cur.moved) ? cur.moved.slice() : [];
-  if (start && start <= on && on < to) moved.push({ from: start, to: on });
-  return patchNote(date, key, { due: to, moved: moved }, src);
+  const to = D.shift(D.today(), 1);
+  return patchNote(date, key, { due: to, moved: movedAfter(cur, date, to, from || D.today()) }, src);
 }
 /* Cancelled is not deleted. A task you decided not to do is a real outcome,
    and deleting it pretends it was never planned. */
@@ -512,6 +520,6 @@ g.Journal = {
   publishTimed: publishTimed, publishNotes: publishNotes,
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,
   css: css, markHTML: markHTML, timeText: timeText, sortClock: sortClock, textHTML: textHTML,
-  moveToTomorrow: moveToTomorrow, cancel: cancel, menuItems: menuItems,
+  moveToTomorrow: moveToTomorrow, movedAfter: movedAfter, cancel: cancel, menuItems: menuItems,
 };
 })(window);
