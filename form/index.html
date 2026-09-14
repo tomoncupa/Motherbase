@@ -338,7 +338,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
     </div>
     <div class="spacer"></div>
     <button class="btn auto" id="autoAll" title="Scan clip(s): motion + pose, then auto-trim, auto-sync and auto-detect reps" data-icon="auto" data-icon-size="15">Analyse</button>
-    <button class="btn ghost" id="snapBtn" title="Save current view as PNG" data-icon="download" data-icon-size="15">Snapshot</button>
+    <button class="btn ghost" id="snapBtn" title="A picture of what is on screen, with the lift, the dates and your notes under it, copied ready to paste into Telegram" data-icon="download" data-icon-size="15">Picture</button>
     <button class="btn ghost dual-only" id="swapBtn" title="Swap left / right">⇄ Swap</button>
     <button class="btn ghost" id="drawerBtn" title="Toggle telemetry panel" data-icon="rows" data-icon-size="15">Panel</button>
     <button class="btn ghost" id="setBtn" title="Theme, sound and backups" data-icon="settings" data-icon-size="15">Settings</button>
@@ -579,6 +579,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
       <span class="pill mono" id="repNow">rep –</span>
       <button class="btn sq" id="repNext" title="Next rep (→)" data-icon="next" data-icon-size="15"></button>
       <button class="btn" id="repLoop" title="Loop the current rep" data-icon="refresh" data-icon-size="14">Rep</button>
+      <button class="btn" id="repPair" title="Rep 1 on the left, the last rep of the same set on the right, playing together">1 vs last</button>
       <button class="btn" id="uLoopClear" title="Clear loop" data-icon="close" data-icon-size="14"></button>
     </div>
   </div>
@@ -1481,6 +1482,43 @@ $('#repLoop').addEventListener('click',()=>{ const p=repPane(); if(!V[p].reps.le
   updateRepPill(); });
 $('#uLoopClear').addEventListener('click',()=>{ loop={a:null,b:null,on:false}; $('#repLoop').classList.remove('on'); toast('Loop cleared'); });
 
+/* ── rep 1 against the last rep ──
+   Fatigue is the difference between the first rep and the last, and seeing it
+   meant loading the same video twice and lining it up by hand. This puts the
+   same clip on both sides, rep 1 left and the last rep right, linked and
+   looping for as long as the slower of the two takes.
+
+   The right side is a copy for looking at and saves nothing, so a clip still
+   has exactly one review, on the left. */
+function copyClip(src,dst){ const s=V[src], d=V[dst];
+  if(d.url) URL.revokeObjectURL(d.url);
+  d.url=URL.createObjectURL(s.file); d.video.src=d.url; d.video.load(); watchPlayable(dst);
+  ['name','fps','mirrored','scale','series','motion','shot','file','client','lift'].forEach(k=>{ d[k]=s[k]; });
+  d.reps=s.reps.slice(); d.marks=s.marks.slice(); d.trim={start:s.trim.start, end:s.trim.end};
+  d.strokes=[]; d.path=[]; d.notes=[]; d.pose=null; d.smooth=null; d.lastPoseT=null; d.cur=null;
+  d.key=null; d.rdate=null;
+  d.video.classList.toggle('mirror',!!d.mirrored);
+  document.querySelector(`.dropzone[data-pane="${dst}"]`).classList.add('hidden');
+  d.video.addEventListener('loadedmetadata',()=>{ sizeCanvas(dst); updateTime(dst); updateTrimVisual(dst); onDurationKnown(dst); },{once:true});
+  redraw(dst); renderNotes(dst); renderRepMarks(dst); renderStamp(dst); renderSetAnalysis(dst);
+  document.getElementById('repTable'+dst).innerHTML='<span class="muted">A copy of the left clip, for comparing its reps. Nothing drawn here is saved.</span>'; }
+async function firstVsLast(){ let p=repPane();
+  if(!loaded(p)||V[p].reps.length<2){ toast('Needs at least two reps. Hit <b>⚡ Analyse</b> first.'); return; }
+  if(!V[p].file){ toast('Drop the clip in again first'); return; }
+  if(p==='B'){ $('#swapBtn').click(); await new Promise(r=>setTimeout(r,300)); }
+  const reps=V.A.reps, r1=reps[0], rn=reps[reps.length-1], n=rn.i||reps.length;
+  const base=V.A.name.replace(/ · rep \d+$/,'');
+  copyClip('A','B');
+  V.A.name=`${base} · rep 1`; V.B.name=`${base} · rep ${n}`;
+  if(view!=='side') setView('side');
+  pauseAll();
+  loop={a:r1.t0, b:r1.t0+Math.max(r1.t1-r1.t0, rn.t1-rn.t0), on:true}; $('#repLoop').classList.add('on');
+  repCursor=0; setOffset(rn.t0-r1.t0,'rep 1 against the last rep');
+  V.A.video.currentTime=r1.t0;
+  V.B.video.addEventListener('loadeddata',()=>{ V.B.video.currentTime=rn.t0; playAll(); toast(`Rep 1 on the left, rep ${n} on the right, on a loop`); },{once:true});
+  refreshPaneNames(); updateRepPill(); }
+$('#repPair').addEventListener('click',firstVsLast);
+
 /* master: one button that does everything */
 async function runAnalyse(repsOnly){
   const ps=activePanes(); if(!ps.length){ toast('Load a clip first'); return; }
@@ -1516,6 +1554,47 @@ function renderNotes(p){ const host=document.getElementById('notes'+p); host.inn
 function openDrawer(){ $('#drawer').classList.remove('collapsed'); }
 $('#drawerBtn').addEventListener('click',()=>{ $('#drawer').classList.toggle('collapsed'); setTimeout(()=>{ ['A','B'].forEach(sizeCanvas); ['A','B'].forEach(drawRepChart); },60); });
 $('#drawerClose').addEventListener('click',()=>{ $('#drawer').classList.add('collapsed'); setTimeout(()=>['A','B'].forEach(sizeCanvas),60); });
+/* ── the picture to send ──
+   What is on screen, and under each clip the lift, which rep, when it was
+   filmed and the notes, so the picture explains itself in a chat without a
+   message typed beside it. Never the client's name: the same picture may end
+   up in a post.
+
+   Copied rather than downloaded, so it goes straight into Telegram with
+   Ctrl+V. If the browser will not copy, it saves the file instead. The band
+   under the frames sits on the page, so it takes the theme's colours. */
+function withCaption(img, cols){
+  const pad=28, gap=12, colW=cols.length>1?(img.width-gap)/2:img.width, font=tok('--font-body')||'sans-serif';
+  const T=`700 26px ${font}`, S=`500 22px ${font}`, N=`400 22px ${font}`;
+  const m=document.createElement('canvas').getContext('2d');
+  const wrap=(txt,f,w)=>{ m.font=f; const out=[]; let line='';
+    String(txt).split(/\s+/).forEach(wd=>{ const t=line?line+' '+wd:wd; if(line&&m.measureText(t).width>w){ out.push(line); line=wd; } else line=t; });
+    if(line) out.push(line); return out; };
+  const blocks=cols.map(ps=>{ const L=[];
+    ps.filter(p=>loaded(p)&&V[p].video.videoWidth).forEach(p=>{ const st=V[p];
+      const rep=(st.name.match(/· rep (\d+)$/)||[])[1];
+      const title=[st.lift, rep?`Rep ${rep}`:''].filter(Boolean).join(' · ') || (view!=='solo'&&panes().length>1?sideName(p):'');
+      if(L.length) L.push({gap:18});
+      if(title) wrap(title,T,colW-pad*2).forEach(t=>L.push({t,f:T,c:'--text-1',h:36}));
+      const stamp=(document.querySelector(`[data-stamp="${p}"]`)||{}).textContent;
+      if(stamp) L.push({t:stamp,f:S,c:'--text-2',h:34});
+      st.notes.slice(0,6).forEach(n=>wrap(`${fmt(n.t).replace(/\.\d+$/,'')}  ${n.txt}`,N,colW-pad*2).forEach(t=>L.push({t,f:N,c:'--text-1',h:31})));
+    });
+    return L; });
+  const bandH=Math.max(0,...blocks.map(L=>L.reduce((a,l)=>a+(l.gap||l.h),0)));
+  if(!bandH) return img;
+  const out=document.createElement('canvas'); out.width=img.width; out.height=img.height+bandH+pad*2;
+  const c=out.getContext('2d'); c.fillStyle=tok('--bg'); c.fillRect(0,0,out.width,out.height); c.drawImage(img,0,0);
+  c.textBaseline='top';
+  blocks.forEach((L,i)=>{ let y=img.height+pad; const x=i*(colW+gap)+pad;
+    L.forEach(l=>{ if(l.gap){ y+=l.gap; return; } c.font=l.f; c.fillStyle=tok(l.c); c.fillText(l.t,x,y); y+=l.h; }); });
+  return out; }
+async function sendPicture(cv,filename){
+  try{ const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+    toast('Picture copied. Paste it into Telegram with <kbd>Ctrl</kbd>+<kbd>V</kbd>'); }
+  catch(e){ const a=document.createElement('a'); a.download=filename; a.href=cv.toDataURL('image/png'); a.click();
+    toast('Could not copy, so the picture was saved to Downloads instead'); } }
 function paintPane(ctx,p,x,y,w,h){ const v=V[p].video; ctx.save();
   if(V[p].mirrored){ ctx.translate(x+w,y); ctx.scale(-1,1); ctx.drawImage(v,0,0,w,h); } else ctx.drawImage(v,x,y,w,h); ctx.restore();
   ctx.save(); ctx.translate(x,y); const src=srcOf(p); V[p].strokes.forEach(s=>drawStroke(ctx,s,w,h,src)); drawPath(ctx,p,w,h); drawPose(ctx,p,w,h); ctx.restore(); }
@@ -1527,7 +1606,7 @@ $('#snapBtn').addEventListener('click',()=>{
     const v=V[p].video, w=base, h=Math.round(w*v.videoHeight/v.videoWidth);
     const o=document.createElement('canvas'); o.width=w; o.height=h; const c=o.getContext('2d'); c.fillStyle=tok('--bg'); c.fillRect(0,0,w,h);
     paintPane(c,p,0,0,w,h);
-    const a=document.createElement('a'); a.download=`formreview-${paneName(p).replace(/\s+/g,'_')}-${Date.now()}.png`; a.href=o.toDataURL('image/png'); a.click(); toast('Snapshot saved'); return; }
+    sendPicture(withCaption(o,[[p]]),`formreview-${Date.now()}.png`); return; }
   const gap=12, stack=(view==='stack');
   const cells=['A','B'].map(p=>{ const v=V[p].video, has=loaded(p)&&v.videoWidth, vw=has?v.videoWidth:16, vh=has?v.videoHeight:9;
     return {p,has,w:base,h:Math.round(base*vh/vw)}; });
@@ -1535,7 +1614,7 @@ $('#snapBtn').addEventListener('click',()=>{
   else { const H=Math.max(cells[0].h,cells[1].h); cw=base*2+gap; ch=H; pos=[{x:0,y:(H-cells[0].h)/2},{x:base+gap,y:(H-cells[1].h)/2}]; }
   const out=document.createElement('canvas'); out.width=cw; out.height=ch; const ctx=out.getContext('2d'); ctx.fillStyle=tok('--bg'); ctx.fillRect(0,0,cw,ch);
   cells.forEach((c,i)=>{ if(c.has) paintPane(ctx,c.p,pos[i].x,pos[i].y,c.w,c.h); });
-  const a=document.createElement('a'); a.download=`formreview-${Date.now()}.png`; a.href=out.toDataURL('image/png'); a.click(); toast('Snapshot saved'); });
+  sendPicture(withCaption(out, stack?[['A','B']]:[['A'],['B']]),`formreview-${Date.now()}.png`); });
 
 $('#swapBtn').addEventListener('click',()=>{ const a=V.A,b=V.B;
   [a.url,b.url]=[b.url,a.url]; a.video.src=a.url||''; b.video.src=b.url||'';
