@@ -9,242 +9,233 @@ and this file is the bug.
 
 ## The mission, stated plainly
 
-Tom has used FitNotes for four and a half years. 12,370 sets, 631 workout days,
-4,297 set comments. It is the only app in his life he has never abandoned. The
-job is not to improve it. The job is to rebuild it so exactly that moving is not
-a decision he has to think about, and then let it share a brain with the rest of
-the suite and wear the same skins.
+Tom has used FitNotes for four and a half years: 12,370 sets across 631 workout
+days. It is the only app in his life he has never abandoned. **He will not move
+until TRAIN does everything FitNotes does** (Tom, 2026-09-14). So the job is not
+to improve FitNotes. It is to rebuild it closely enough that moving is not a
+decision, and then let it share a brain with the rest of the suite and wear the
+same skins.
 
 **Fidelity is the feature.** When a choice comes up between what FitNotes does and
-what would be nicer, FitNotes wins. Log the disagreement in Deliberate departures
-below rather than quietly improving something.
+what would be nicer, FitNotes wins. A disagreement goes in Deliberate departures
+below, never in the code quietly.
 
 ## Provenance
 
-Everything about how FitNotes behaves was read out of the app itself:
-`com.github.jamesgay.fitnotes` v25.1, from the APK. What was taken:
+Everything about how FitNotes behaves was read out of the app itself,
+`com.github.jamesgay.fitnotes` v25.1, and out of Tom's own backup file:
 
 - the full SQLite schema, 20 tables, column by column
-- all 44 columns of the `settings` table, which is the settings screen in order
-- every user-facing string in the app, several thousand
-- the SQL FitNotes uses for personal records and routine loading, which fixes the
-  exact sort and tie-break rules
-- the default categories and exercise names
+- all 44 columns of the `settings` table, which is its settings screen
+- every user-facing string, several thousand
+- the SQL FitNotes uses for personal records and routine loading
+- nine screenshots of FitNotes on his phone (no longer in Downloads)
+- **his file's own answers**, where the app could not be read: which records it
+  flags, which day a week starts on, what happens to a deleted set's comment
 
-What was **not** taken, and must never be: FitNotes' compiled code, and its image
-files. The APK contains no source, only obfuscated Android bytecode, and the
-target here is one HTML file of plain JavaScript, so there was nothing
-transferable in it anyway. Every line in `train/index.html` is written here.
-Every icon is drawn here.
+What was **not** taken, and must never be: FitNotes' compiled code and its image
+files. The APK holds obfuscated Android bytecode and the target is one HTML file
+of plain JavaScript, so nothing in it would have transferred anyway. Every line
+in `train/index.html` is written here.
 
 ---
 
 ## Ownership
 
-TRAIN writes these types and no others. It may read anything.
+TRAIN writes these types. Ownership means TRAIN is responsible for the shape;
+see the root brief on many writers. Every edit merges into the row as it is
+(`TRAIN.patchRow`), never rebuilds it from a list of fields.
 
 | Type | Key | Payload |
 |---|---|---|
 | `excat` | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
-| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph}` |
-| `set` | timestamp id | `{ex, kg, r, u, done, pr, prf, dist, dur, note, grp, ord}` — **one row per set** |
-| `session` | `''` | `{start, end, note}` — the day's start and end time, and the day comment |
-| `sgroup` | group id | `{name, slot, jump, resthold}` — a superset |
+| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef}` |
+| `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, pr, prf, dist, dur, note, ord, warm}` — **one row per set** |
+| `session` | `''` | `{start, end, note, from, order}` — the day's timer, comment, the day it was copied from, and the exercise order he set |
+| `sgroup` | group id, dated | `{name, slot, ex:[ids], jump, resthold}` — a superset |
 | `program` | program id | `{name, ord}` — a routine |
-| `progday` | `<program>.<n>` | `{name, ord}` — a day within a routine |
-| `progex` | `<progday>.<n>` | `{ex, ord, fill, sets:[…]}` — an exercise in a routine day, and its predefined sets |
+| `progday` | id | `{program, name, ord}` — a day within a routine |
+| `progex` | id | `{day, ex, ord, fill, sets:[{kg, r, u}]}` — an exercise in a routine day |
 | `goal` | goal id | `{kind, ex, kg, r, u, title, from, to, ord}` |
-| `setting` | `train.*` | app config, including the plate and barbell tables |
+| `setting` | `train.*` | configuration; the full list is below |
 
 Plus one shared write: **`tick`**, covered below.
 
-**Why `program` and not `routine`:** BLOCK already owns `routine`. Two apps
-writing one type is exactly the collision the master brief forbids, and BLOCK got
-there first. TRAIN's routines are `program` / `progday` / `progex`.
+**Why `program` and not `routine`:** BLOCK already owns `routine`.
 
-**Why plates and barbells live in `setting`:** they are configuration, not
-records. 23 plate rows and 2 bar weights that describe the gym, not the training.
-They ride in `train.plates` and `train.bars` the same way skins palettes ride in
-their own key. If plate history ever matters, they graduate to their own type.
+**Plates and bars live in `setting`** (`train.plates`, `train.bars`): they
+describe the gym, not the training.
+
+### Fields worth knowing
+
+- `set.kg` is always kilograms. `set.u` is the unit it was typed in.
+- `set.dist` is always **kilometres**. `set.dur` is always **seconds**.
+- `set.warm` marks a warmup: dimmed, never a record, never counted in volume or set totals.
+- `set.pr` is recalculated, never trusted from the moment of saving. See Personal records.
+- `exercise.kind` is one of `wr` `dt` `wd` `wt` `rd` `rt`. See Exercise types.
+- `exercise.also` maps other category ids to a fraction: a pull-up is half a set of biceps.
+- `exercise.gdef` is `{type, per}`, its default graph and period.
+- `session.order` is only present once he has moved an exercise within that day.
+
+### Settings (`train.*`)
+
+`unit` `distUnit` `weekStart` `catShow` `setLimit` `skipEmpty` `markComplete`
+`increment` `autoNext` `trackPRs` `keepAwake` `restSeconds` `restAuto`
+`restVibrate` `restSound` `rest` (a running timer) `workoutTimerAuto`
+`workoutTimerStop` `graphPoints` `graphTrend` `graphZero` `e1rmMaxReps`
+`repCounts` `exSort` `catSort` `plates` `bars` `seen`.
+
+A setting that is on by default is read as `!== 0`; one that is off by default
+as `=== 1`. Mixing those up turns a default the wrong way for everyone who never
+opened Settings.
 
 ### What TRAIN does not own
 
-**Body weight and measurements.** STATUS owns every daily measurement and TRAIN
-must never write one. TRAIN may *display* body weight above the workout log, the
-way FitNotes does, reading it from STATUS. That display is off by default.
-
-The Body Tracker screen is not built. If it is ever wanted it belongs in STATUS,
-not here.
+**Body weight and measurements.** STATUS owns every daily measurement. TRAIN does
+not build FitNotes' Body Tracker.
 
 ---
 
-## The tick, and what "TRAIN says so" means
+## The tick
 
-Logging a workout writes a shared `tick`, so BLOCK, the habit tracker and the home
-screen all know he trained. `tick` is the one type the master brief lets any app
-write, because one cell per activity per day is one fact and the later save wins.
+Logging a workout writes a shared `tick` for the activity `training`, so BLOCK,
+the habit tracker and the home screen know he trained.
 
-Tom's rule: **if TRAIN says a training day is ticked, it is ticked.** Another app
-may tick it, but it may not un-tick it behind TRAIN's back.
+Tom's rule: **if TRAIN says a training day is ticked, it is ticked.** TRAIN
+re-asserts rather than argues: every time a day's sets change it rewrites that
+day's tick from the truth — ticked if the day has a set, not if it has none —
+and TRAIN's write is always the newer one. Payload `{src:'train', qty:<sets>}`.
 
-That is implemented without breaking last-write-wins, by making TRAIN re-assert
-rather than argue:
-
-1. Whenever a set is added, edited or deleted, TRAIN immediately rewrites that
-   day's tick from the truth on disk: ticked if the day has at least one set, not
-   ticked if it has none.
-2. On open, TRAIN re-asserts every day currently on screen.
-
-So a stale or contradicting tick survives only until TRAIN next looks at that day,
-and TRAIN's write is always the newer one. Payload is `{src:'train', qty:<set
-count>}`, so a reader can tell a TRAIN tick from a manual one.
-
-Never special-case TRAIN inside `records.js` to win a merge. The store stays
-dumb; TRAIN stays loud.
+Moving or deleting a workout re-asserts both days. Verified 2026-09-14.
 
 ---
 
-## Weight, and why it is stored in kilograms
+## Weight, distance and time
 
-Every set stores `kg`, the true weight in kilograms, and `u`, the unit it was
-typed in. Display converts. This is exactly what FitNotes does and it is the
-reason his history survives a units change.
+Every set stores the true value and display converts. His file is why this
+matters: 7,886 sets entered in kilograms and 4,484 in pounds in one continuous
+log, and 500 lb is on disk as 226.79645 kg.
 
-His file proves why it matters: 7,886 sets entered in kilograms, 4,484 in pounds,
-in one continuous log. 500 lb is on disk as 226.79645 kg. Convert the stored
-number and you corrupt four years of training; convert only the display and
-nothing moves.
+- **Everything on screen reads in the unit chosen in Settings**, never in the unit a
+  set was typed in. Two units never appear on one screen.
+- **One decimal and the unit plural**: `4.0 kgs`. That is how FitNotes prints it.
+- A workout's length **truncates**: 72m 56s is `1h 12m`.
+- Rounding is display-only. Never write a rounded value back.
+- Distance shows in km or mi; time as `m:ss` or `h:mm:ss`. A bare number typed into
+  a time field is seconds.
+- FitNotes stores distance in an INTEGER column. TRAIN reads it as **metres**.
+  **Unverified**: his file has no distances in it to check against.
 
-- **Default display unit is pounds**, set in the first-run sequence.
-- **Everything on screen reads in the currently chosen unit**, not the unit each
-  set was typed in. This was wrong in the first version of `index.html`, which
-  showed each set in its entry unit and so put kilograms and pounds on one
-  screen. FitNotes does not do that: its `Change Weight Unit ▸ Convert Existing
-  Values / Just Change Unit` dialog only makes sense if the stored kilograms are
-  the truth and the setting decides how they read.
-- The entry unit is still recorded per set, and it earns its place: a set typed
-  as 500 lb is stored as 226.79645 kg, and knowing it was typed in pounds is
-  what lets it read back as exactly 500 rather than 500.0000001.
-- **One decimal, always, and the unit plural**: `4.0 kgs`, `12.5 kgs`. That is
-  how FitNotes prints a weight in the log.
-- A workout's length **truncates** rather than rounds. His 5 August session ran
-  72m 56s and FitNotes calls it `1h 12m`, not `1h 13m`.
-- Rounding is display-only. Never write a rounded value back over a stored one.
-- Old FitNotes versions stored some weights at lower float precision, so the file
-  contains both 226.79645471781987 and 226.79644775390625 for the same 500 lb.
-  Import must round to a sane number of decimals for display without altering the
-  stored value.
+## Exercise types
 
-## Where things live on screen
+FitNotes has six, and TRAIN stores each as the two fields it logs:
+`wr` weight and reps, `dt` distance and time, `wd` weight and distance,
+`wt` weight and time, `rd` reps and distance, `rt` reps and time.
 
-The screenshots in `Downloads/Fitnotes Screen Shots/` are the reference. Match
-them. Some of what they settle, because the first version of this file guessed
-and guessed wrong:
+Older rows carry what came before: `0` and `2` from the starter list and
+`'weight_reps'` from the importer are `wr`; `1` and `'distance_time'` are `dt`.
+FitNotes' own type numbers could only be pinned down for weight-and-reps and
+cardio, so any other imported exercise is **read off what was logged against it**
+(`TRAIN.kindOf`). From his file: Hang is `wt`, Vacuum is `rt`, Plank has no
+sets and falls back to `wr`. He can change any of them in the exercise editor.
 
-- **The top bar is drawer, title, calendar, add, overflow.** Nothing else ever
-  goes in it.
-- **The overflow menu** is Settings, Copy Workout, Comment Workout, Time
-  Workout, Share Workout, Analysis. FitNotes also lists Body Tracker; TRAIN does
-  not, because it does not have one.
-- **One card per exercise**: the name across the top, a hairline under it, the
-  sets below. Weight and reps are two right-aligned columns of bold numbers with
-  a small unit after each. **No set numbers in the day view** — those appear on
-  the training screen, where you are editing one of them.
-- **A set comment shows as a small marker at the left of its row**, not as a
-  line of text under the set. Four thousand of his sets carry one; a line each
-  would triple the length of every workout.
-- **A filled tick on the exercise card** means every set in it is complete.
-- **The workout's start and end** sit in their own card above the first
-  exercise, and only when a time was recorded.
-- **The empty day** says "Workout Log Empty" in the middle, with Start New
-  Workout and Copy Previous Workout near the bottom where the thumb is.
+## Personal records
 
-**No invented summaries.** The first version put a sets/reps/volume strip at the
-top of every workout. FitNotes has no such thing: those numbers live in
-Analysis, and inventing a widget is not reproducing an app.
+**A set is a record while nothing has ever been heavier at that many reps or
+more.** Ties go to more reps, then to the earlier set. So a record can stop
+being one, and `recomputePRs` walks a whole exercise rather than asking whether
+the newest set was the heaviest.
 
-## A once-ever action does not get permanent furniture
+Weights are compared at **three decimal places**: old FitNotes versions stored
+one weight as two floats a millionth apart, and at two places a 22.05 lb lunge
+tied with a 10 kg one that FitNotes had told apart.
 
-The importer had a button in the top bar of every screen. It is used once.
+**Verified against his file, 2026-09-14:** FitNotes flagged 537 sets. After
+importing, recalculating with this rule changed **0** flags. The rules tried on
+the way there, so nobody tries them again:
 
-The rule this is an instance of: **weight in the interface follows frequency of
-use, not difficulty of build.** The import was the hard part to write, which is
-exactly why it was tempting to give it a permanent home, and that reasoning is
-backwards. It now lives in Settings, and appears on the empty screen only while
-the store has nothing in it at all — the one moment it is the next thing he
-would want.
+| Rule | Flagged | Agreeing with FitNotes |
+|---|---|---|
+| Heavier than every earlier set | 819 | 263 |
+| Heavier than anything at these reps or more, at the time | 1,555 | 537, plus 1,018 extra |
+| Still standing, weights at two decimals | 537 | 536 |
+| **Still standing, weights at three decimals** | **537** | **537** |
 
-Apply the same test to everything still unbuilt. The rest timer, the plate
-calculator and the set editor are touched many times per session and belong
-within a thumb's reach. Routines, goals and the analysis screens are touched
-occasionally and belong behind the drawer or the overflow menu.
+## Which day a week starts on
 
-## First run
-
-FitNotes shows a short setup on first launch and so does TRAIN, in this order:
-
-1. Units. Pounds or kilograms. Pounds preselected.
-2. Import. Offer the FitNotes importer straight away, because for Tom this is the
-   first thing that should happen, not something buried in settings.
-3. Nothing else. Every other setting has a working default and can wait.
-
----
-
-## Category colours
-
-Nine categories, and skins carry six chart colours. So a category stores a
-**slot**, not a colour: six theme colours, each available in a light and a dark
-tint, twelve distinct choices, all derived from the active theme.
-
-- A category never stores a hex. It stores a slot index.
-- Changing skin recolours every category automatically and correctly.
-- Tom assigns which category sits in which slot. That assignment is his data and
-  survives a theme change.
-- Import maps his nine existing FitNotes colours to their nearest slot, then he
-  reassigns any he dislikes. His current setting has category colours switched
-  **off**, so this is not urgent on day one.
-
-This is the master brief's no-hex rule kept intact: the colours are tokens, the
-assignment is data.
+FitNotes stores Java's `Calendar` constant: **1 is Sunday, 2 is Monday.** His file
+says 1 and his calendar starts on SUN. An earlier version of this file read 1 as
+Monday.
 
 ---
 
 ## The importer
 
-`FitNotes_Backup_*.fitnotes` is a plain SQLite database with the extension
-changed. Confirmed: the file begins `SQLite format 3`.
+A `.fitnotes` backup is a plain SQLite database. The reader is written here, in
+plain JavaScript, with no library, so the importer works offline.
 
-The reader is written here, in plain JavaScript, no library. Reading a handful of
-tables out of a SQLite file means walking its b-tree pages, which is a documented
-format and a few hundred lines. **No CDN dependency**, because an importer that
-needs the network breaks the offline-first rule on the one job that matters most.
+- **It merges.** Every row carries a stable id from the FitNotes row and an
+  `updated_at` from the training date, so importing twice changes nothing and
+  nothing logged in TRAIN since can be overwritten.
+- **It writes in chunks of 400**, with the screen redrawn once at the end. His
+  whole file imports in about 0.6 seconds on a desktop.
+- **It clears the starter list.** A fresh TRAIN seeds 111 movements. A FitNotes
+  backup brings its own complete list, so seeded movements with no sets and in no
+  routine are removed, along with starter categories left empty. Anything he made
+  or logged stays.
+- **One way.** There is no export back into FitNotes.
+- A spreadsheet from Strong, Hevy, JEFIT or FitNotes' own CSV export also imports.
+- Body weight and measurements are not imported.
 
-Rules:
+### Set comments: 4,297 in the file, 2,240 on sets
 
-- **Import merges, it does not replace.** Same rule as restore. Every imported row
-  carries `updated_at`, so importing the same backup twice changes nothing.
-- **One-way.** There is no export back into FitNotes. Writing a valid SQLite file
-  from the browser is far harder than reading one, and FitNotes has no CSV import.
-  The panel must say so, in those words. Treat the move as a move, not a sync.
-- **CSV is the fallback**, carrying date, exercise, category, weight, reps,
-  distance, time and comment, but no routines and no settings.
-- The 11 body weight readings from 2021 are not TRAIN's to keep. Offer them to
-  STATUS as a one-time migration, or skip them. Never store them here.
+FitNotes keeps a comment after its set is deleted. Of his 4,297 set comments,
+**2,057 point at sets that no longer exist**, some dated 2019, before his log
+starts. **All 2,240 comments that have a set come across.** The import screen
+shows both numbers. Earlier versions of this brief expected 4,297 on sets; that
+target was wrong.
 
-### What the importer must reproduce
+---
 
-`Comment` rows with `owner_type_id = 1` are **set comments**, and there are 4,297
-of them against 12,370 sets. Roughly one set in three. They are not metadata, they
-are a third of the record. An import that drops them has failed regardless of how
-many sets it moved.
+## Where things live on screen
 
-### Exercise kinds
+FitNotes' screen layout is the reference.
 
-`exercise_type_id` in his file: 258 exercises are weight and reps, 8 are cardio
-(Cycling, Walking, Running, Rowing, Swimming, Elliptical, Stationary Bike), 2 are
-time-only (Plank, Side Plank), and 2 more sit in kinds used once each (Vacuum,
-Hang). All kinds are built. All are unlocked. FitNotes puts some behind its paid
-Supporter app; TRAIN has no paywall and never will.
+- **Workout screen bar:** menu, title, calendar, add, more.
+- **Training screen bar:** today's exercises, exercise name, rest timer, personal
+  records, exercise overview, more. Tabs TRACK, HISTORY, GRAPH.
+- **One card per exercise** on the day: name, hairline, two right-aligned columns.
+  No set numbers on the day view. A comment is a marker at the left of its set.
+- **More on the workout screen:** Settings, Copy Workout, Copy This Workout, Move
+  Workout, Comment Workout, Time Workout, Supersets, Share Workout, Analysis.
+- **More on the training screen:** Copy Previous Sets, Plate Calculator, Set
+  Calculator, Estimated 1RM Calculator, Add To Superset, Replace Exercise, Add Goal,
+  Edit Exercise, Settings, Remove Exercise.
+- **More on the exercise list:** Create New Exercise, Add New Category, Edit
+  Categories, Sort By Last Used.
+- **The menu** (hamburger, off the training screen): Workout, Calendar, Exercises,
+  Workout Routines, Personal Records, Analysis, Goals.
+- **The empty day:** "Workout Log Empty", Start New Workout, Copy Previous Workout.
+
+**Every row that can be changed has a menu**, on a long press and a right click
+both (DOCTRINE law 14), and every one of those menus also has a visible way in —
+a ⋮ button on the row, a Reorder button, or the screen's More (law 6).
+
+**No invented summaries.** Totals live in Analysis.
+
+**Importing is in Settings only.** It is done once; it does not get furniture.
+
+## First run
+
+One question: pounds or kilograms, pounds preselected, changeable in Settings.
+Everything else has a working default.
+
+## Category colours
+
+A category stores a **slot**, not a colour: six theme chart colours, each in two
+tints, twelve choices. `TRAIN.slotColor` returns a reference to the token
+(`var(--data-3)`), not the colour it held, so switching theme recolours every
+category immediately. Verified 2026-09-14 by switching skins with a calendar open.
 
 ---
 
@@ -254,118 +245,124 @@ Only these. Anything else is a bug.
 
 | FitNotes | TRAIN | Why |
 |---|---|---|
-| Body Tracker | Not built | STATUS owns measurements. One writer per fact |
+| Body Tracker | Not built | STATUS owns measurements |
 | Google Drive backup | Not built | Local only, per the master brief |
 | Supporter paywall | Everything unlocked | It is his app |
-| Rest timer fires with the screen off | Fires only while the app is open | A backgrounded browser tab is suspended. See below |
-| Android back button | Handled by `shared/mobile.js` back stack | No hardware button in a browser |
-| Its own theme setting | Motherbase skins | The whole point |
+| Deleting a category deletes its exercises and every set under them | Its exercises move to another category he picks | Four years of sets should not ride on a tidy-up |
+| Rest timer rings with the screen off | Rings only while TRAIN is open. **Keep Screen On** keeps it open | A backgrounded browser tab is suspended |
+| Double tap a graph to expand | One tap | A double tap on a phone is also a zoom |
+| Android back button | `shared/mobile.js` back stack | No hardware button in a browser |
+| Its own themes | Motherbase skins | The whole point |
 | `routine` | `program` | BLOCK owns `routine` |
 
-### The rest timer, stated honestly
+### The rest timer
 
-This is the one place TRAIN is worse than FitNotes and it cannot be engineered
-around from a page in a browser. A phone browser suspends a tab that is not on
-screen. The timer counts correctly while he is looking at it. It will not buzz in
-his pocket.
+It **recovers rather than pretends.** The moment it started is stored (in
+`train.rest`, through the store), and the time left is always recomputed from the
+clock, so coming back to a suspended tab shows "+0:40" over rather than resuming
+where it froze. With Keep Screen On the tab is never suspended, so it rings.
+Keep Screen On uses the browser's Wake Lock and says so in Settings where the
+browser does not support it.
 
-It must therefore **recover rather than pretend**: store the wall-clock time the
-timer started, and on returning to the app show the true elapsed time, including
-"you're 40 seconds over" rather than resuming from where it froze. Never show a
-timer that silently stopped counting.
+---
 
-Fixing this properly needs the wrapper app. See below.
+## What is built, as of 2026-09-14
+
+Everything below was driven in the browser at 375px against his real backup,
+except where a row says otherwise.
+
+| Area | Built |
+|---|---|
+| Workout log | Cards, comments, warmups, timer card, repeat comparison, category shown as nothing, a name, or name and colour, set limit, superset tags, skip empty dates |
+| Exercise list | Favourites, categories in his order, search, sort by last used, create, edit, delete with its sets and an undo, categories created, edited, recoloured, reordered and deleted |
+| Exercise editor | Name, category, new category, all six types, weight increment, rest time, second muscle groups, delete |
+| TRACK | Steppers for whichever two fields the type logs, SAVE keeps the numbers, UPDATE, CLEAR, tick box, comments, warmups, copy set, delete, last time, auto-select next set |
+| HISTORY | Newest first, 100 workouts at a time |
+| GRAPH | `chart.js`, per type: estimated 1RM, max weight, volume, max reps, reps, distance, time; five periods; points, trend line and y from zero as settings; expand; graph points listed; default graph per exercise |
+| Records | Actual and estimated records, rep max grid with his rep counts and a favourites filter, per-exercise record sheet with record history |
+| Overview | Totals, first and last date, notes |
+| Calculators | Estimated 1RM with rep maxes and percentages; set calculator rounded to the increment; plate calculator one unit system at a time |
+| Timers | Rest timer bar and sheet, per-exercise rest time, auto start; workout timer auto start and auto stop |
+| Supersets | Create, rename, delete, jump to next exercise, rest held until the round ends |
+| Calendar | Months to scroll through, category dots, category filter, workout count, pick mode for copy and move |
+| Copy and move | Copy Previous Workout, Copy Workout, Copy This Workout, Move Workout, each with FitNotes' options |
+| Routines | Routines, days, exercises; don't populate, copy previous sets, or predefined sets with blanks copied from last time; LOG ALL; tap to log one; rename, copy, reorder, delete |
+| Goals | Weight for reps, end date, progress from the best set at those reps, edit, reorder, delete |
+| Analysis | Breakdown by category or exercise over five periods; workout graphs per week, month and year for workouts, sets, reps, volume and time |
+| Settings | Every FitNotes setting TRAIN has an equivalent for, plates and bars, categories, re-calculate records, delete workout history, import |
+| Keep screen on | Wake Lock, re-requested when the tab comes back. **Not verified**: the test page was hidden, and a browser grants the lock only to a page on screen. Tom's phone is the test |
+
+### Not built
+
+- A per-exercise weight unit (FitNotes Supporter's "custom weight units"). All 270
+  of his exercises use the default, so nothing of his depends on it.
+- Showing body weight above the workout log. Off in his FitNotes; would read STATUS.
+- Saved graph favourites beyond one default per exercise.
+- Sharing a workout as a picture. Share Workout shares text.
+- The calendar's detail panel under the grid. Off in his FitNotes.
+- A confirmation when an exercise's type is changed. The data is kept either way.
 
 ---
 
 ## The phone
 
-The target device is a **Samsung Galaxy A10**, his dedicated gym phone. It is a
-low-end 2019 handset with 2 GB of RAM. Chrome on it is current, but the hardware
-is not.
+The target is a **Samsung Galaxy A10**, his gym phone: 2019, 2 GB of RAM.
 
-- **Phone first.** Desktop is the development surface, not the target.
-- **Load `shared/mobile.js`.** Another session built it for exactly this. Do not
-  re-solve tap delay, keyboard overlap, safe areas or the back stack here.
-- One-handed. The controls he touches most, the weight and reps steppers and the
-  add button, sit in the bottom third.
-- Never render 12,370 sets. Render the day. The history and graph screens page.
-
-### Storage, measured
-
-12,370 sets come to about 2.78 MB of text across 12,370 localStorage entries,
-one per set, as the master brief requires.
-
-Measured in Chrome on 2026-08-20: 20,000 entries totalling 19.5 MB wrote in
-127 ms and read back in 16 ms, with no quota error. So one row per set fits, and
-the row-per-set model is kept.
-
-Two limits that are **not** verified and must not be claimed:
-
-- This was measured on a desktop, not on the A10.
-- iOS Safari still caps localStorage near 5 MB. At 2.78 MB of text, stored as
-  UTF-16, this data would not fit on an iPhone. TRAIN is an Android target.
+- Load `shared/mobile.js` and build from `shared/ui.js`. Do not re-solve tap
+  delay, keyboards, sheets or the back stack here.
+- **Redraw once per burst of writes.** One SAVE is up to four writes; each used to
+  reindex every set. `Rec.on` now schedules one redraw.
+- **Two maps are cached** (`TRAIN.exercises()`, `TRAIN.cats()`), dropped on every
+  store announcement.
+- Never render 12,370 sets. History pages by 100, records by 60, rep max by 40.
 
 ---
 
-## What is built, as of 2026-08-20
+## For the foundation
 
-| Screen | State |
-|---|---|
-| Workout (the day) | Built. Matches the screenshots line for line |
-| Exercise picker | Built. Categories, drill-down, and search across all 270 |
-| Training ▸ TRACK | Built. Steppers, SAVE/UPDATE, CLEAR, set list, tap to edit, tick to complete, hold to delete, comments |
-| Training ▸ HISTORY | Built. Newest first, 100 workouts at a time |
-| Training ▸ GRAPH | Built, max weight only. The other graph types are not in yet |
-| Day's exercises drawer | Built. Add Exercise and Home; Add To Superset is not in yet |
-| Importer | Built and verified against his real backup |
-| Settings | The shared panel plus a TRAIN tab holding the unit and the importer |
+Found while building TRAIN. All of it is in `shared/`, so TRAIN works around it
+and says so here rather than editing it.
 
-Not built: calendar, analysis and breakdown, records and the rep-max grid,
-routines, supersets, goals, plate calculator, custom barbells, rest timer,
-workout timer, copy and move workout, share, the app-level navigation drawer,
-and the first-run sequence.
+1. **`shared/icons.js` has no minus, trophy or hamburger.** TRAIN draws those three
+   in the same stroke style (`MINUS`, `TROPHY`, `BURGER`). Move them when the set has them.
+2. **`UI.segmented` buttons are 38px tall.** Root brief foundation item 9. TRAIN
+   uses it on seven screens and cannot fix it from here.
+3. **A desktop `UI.menu` cannot be clicked with a mouse.** Root brief items 10 and
+   11. TRAIN's `menuAt()` stops the press inside the menu from bubbling, the same
+   workaround as LOG. Delete it when `ui.js` is fixed.
+4. **`chart.js` steps stop at 5000.** Root brief item 8. TRAIN's `bigStep()` works a
+   step out past the table for volume graphs. Delete it when the table grows.
+5. The root brief's Current state row for `train/` still says build in progress.
 
-Two known problems worth fixing before he trains with it on the phone:
-
-1. **The import blocks the screen for about ten seconds** on a desktop, and it
-   is one synchronous block, so the progress bar cannot paint. On a Galaxy A10
-   that could be half a minute of a frozen screen, which reads as a crash.
-2. **`health.js` warns above 4.2MB** on the basis that localStorage caps at
-   about 5MB. His training data alone is 4.16MB. That cap was measured in
-   Chrome on 2026-08-20 and is wrong: 20,000 entries and 19.5MB wrote without
-   an error. The threshold is in `shared/`, so it is not TRAIN's to change.
+---
 
 ## Testing
 
-There is no test framework and Tom cannot test code. Node is not installed here
-as of 2026-08-20; check before relying on it. Use the browser.
+Serve a folder that holds both the repo and his backup (it is in
+`Documents/FitNotes_Backup_2026_08_20_06_36_24.fitnotes`), open TRAIN with a
+fresh `?cb=`, drive it with JavaScript, read the console. Then `_review.html`.
+Clear the store and stop the server afterwards.
 
-1. `py -3 -m http.server 8777 -d "<repo>"`
-2. Drive it with the browser tool, read the console.
-3. `shared/_smoke.html` must still pass every check.
-4. Clean up test data, stop the server.
-
-**The import test is the one that counts.** Import his real backup and assert,
-against the numbers read straight out of the file:
+**The import test.** Import his real backup and check, against numbers read
+straight from the file:
 
 | Check | Expected |
 |---|---|
 | Sets | 12,370 |
-| Workout days | 631 |
-| Date range | 2022-01-01 to 2026-08-05 |
-| Exercises | 270 |
-| Categories | 9 |
-| Set comments | 4,297 |
+| Workout days | 631, 2022-01-01 to 2026-08-05 |
+| Exercises / categories | 270 / 9 |
+| Comments on sets / comments on deleted sets | 2,240 / 2,057 |
 | Workout timings | 550 |
 | Supersets | 55 across 40 days |
-| Personal record sets | 537 |
-| Sets stored in kg / entered in lb | 7,886 / 4,484 |
+| Personal record flags | 537, and **0 changed** by Re-calculate |
+| Entered in kg / lb | 7,886 / 4,484 |
+| Starter movements removed | 111 |
 
-Also always test: importing twice changes nothing, a set logged before the day
-start hour lands on the day before, personal records recompute to the same 537,
-a weight entered in pounds redisplays in pounds after switching the default to
-kilograms, and category colours stay readable after switching skin.
+**Always test:** an empty install can create an exercise and log a set with nothing
+imported; importing twice writes nothing; a weight typed in pounds reads back in
+pounds; copying a day keeps its `from` after the day's comment is edited; moving a
+day moves its ticks; a hold and a right click both open a row's menu; a theme
+change recolours category dots; delete and undo both land.
 
 Never claim it works because it should. Claim it because you watched it.
 
@@ -373,14 +370,6 @@ Never claim it works because it should. Claim it because you watched it.
 
 ## Parked
 
-**The wrapper app.** Tom wants Motherbase to live on the A10, and an Android
-wrapper is the only thing that fixes the rest timer. It is a small Android project
-whose only job is to open this HTML file full screen and hold a wake lock.
-
-It is parked, not cancelled, for one reason: it introduces a build step, and the
-master brief says the file he uploads is the file that runs. That is a decision
-about the whole suite, not about TRAIN, so it does not get made here.
-
-This machine has no Java, no Android SDK and no Gradle. Roughly 3 to 5 GB of
-tooling would need installing first. There is no Android device or emulator here,
-so the resulting APK could not be tested by anyone but Tom.
+**The wrapper app.** An Android wrapper would let the rest timer ring with the
+screen off. It is parked because it introduces a build step, which is a decision
+about the whole suite. Keep Screen On covers most of what it would have fixed.
