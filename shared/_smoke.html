@@ -117,6 +117,76 @@ async function run() {
   ok('rec: newer row wins the merge', Rec.get(stamp, d, 'a').v === 42);
   ok('rec: merge is idempotent', n1 === 1 && n2 === 0);
 
+  /* ---- two devices, one row, different fields ----
+     Tom, 2026-09-15: a phone and a laptop each change a different part of the
+     same thing before they sync, and both changes have to survive. The check is
+     Rec.merge itself, the one door a sync, a restore and another tab all come
+     through, so it covers every way two versions can meet. Devices are built as
+     the rows each one would hold. */
+  const idOf = k => Rec.USER + '|' + stamp + '|' + d + '|' + k;
+  const iso = ms => new Date(ms).toISOString();
+  Rec.set(stamp, d, 'f1', { name: 'Chicken', p: 30, kcal: 165 });
+  ok('rec: a row never edited carries no field times', !Rec.row(stamp, d, 'f1').ft);
+  Rec.set(stamp, d, 'f1', { name: 'Chicken', p: 31, kcal: 165 });
+  const laptop = Rec.row(stamp, d, 'f1');
+  ok('rec: an edit remembers only the field it changed',
+    !!laptop.ft && Object.keys(laptop.ft).join() === 'p' && laptop.fb > 0);
+  /* the phone started from the same row, before the laptop's edit, and renamed it */
+  const tPhone = Date.parse(laptop.updated_at) + 1000;
+  const phone = Object.assign({}, laptop, {
+    payload: { name: 'Chicken breast', p: 30, kcal: 165 },
+    ft: { name: tPhone }, fb: laptop.fb, updated_at: iso(tPhone),
+  });
+  Rec.merge([phone]);
+  const got = Rec.get(stamp, d, 'f1');
+  ok('rec: two devices editing different fields keep both edits — ' + JSON.stringify(got),
+    got.name === 'Chicken breast' && got.p === 31 && got.kcal === 165);
+  ok('rec: a field merge is idempotent', Rec.merge([phone]) === 0 && Rec.merge([laptop]) === 0);
+
+  /* the same two versions arriving the other way round land on the same row */
+  const f2a = Object.assign({}, laptop, { id: idOf('f2'), key: 'f2' });
+  const f2b = Object.assign({}, phone, { id: idOf('f2'), key: 'f2' });
+  Rec.merge([f2b]); Rec.merge([f2a]);
+  const got2 = Rec.get(stamp, d, 'f2');
+  ok('rec: the order two devices meet in does not change the result',
+    got2 && got2.name === 'Chicken breast' && got2.p === 31);
+
+  /* a stale copy from a device on the old whole-row rule still loses */
+  const old = Object.assign({}, laptop, { payload: { name: 'Old', p: 20, kcal: 100 }, updated_at: iso(laptop.fb - 5000) });
+  delete old.ft; delete old.fb;
+  Rec.merge([old]);
+  const got3 = Rec.get(stamp, d, 'f1');
+  ok('rec: an older copy with no field times still loses every field', got3.name === 'Chicken breast' && got3.p === 31);
+
+  /* a delete wins only when it is newer than the row it deletes */
+  const live = Rec.row(stamp, d, 'f1');
+  Rec.merge([Object.assign({}, live, { payload: null, deleted: true, updated_at: iso(Date.parse(live.updated_at) - 1000) })]);
+  const keptAlive = !!Rec.get(stamp, d, 'f1');
+  Rec.merge([Object.assign({}, live, { payload: null, deleted: true, updated_at: iso(Date.parse(live.updated_at) + 1000) })]);
+  ok('rec: a delete wins only when it is newer than the edit', keptAlive && !Rec.get(stamp, d, 'f1'));
+
+  /* a day's readings: both devices add one, and one removed stays removed */
+  const evKey = 'smoke-' + stamp;
+  Rec.set('ev', d, evKey, { e: [{ t: 1, v: 80 }] });
+  Rec.set('ev', d, evKey, { e: [{ t: 1, v: 80 }, { t: 2, v: 81 }] });
+  const evA = Rec.row('ev', d, evKey);
+  const tB = Date.parse(evA.updated_at) + 1000;
+  const evB = Object.assign({}, evA, {
+    payload: { e: [{ t: 3, v: 82 }] }, ft: { e: tB }, fb: evA.fb, gone: { 1: tB }, updated_at: iso(tB),
+  });
+  Rec.merge([evB]);
+  const evGot = (Rec.get('ev', d, evKey) || {}).e || [];
+  ok('rec: two devices adding readings keep both, and a removed one stays removed — ' + JSON.stringify(evGot),
+    evGot.map(x => x.t).join() === '2,3');
+  Rec.del('ev', d, evKey);
+
+  /* the types kept whole stay whole, and carry nothing extra */
+  const setKey = 'smoke-' + stamp;
+  Rec.set('set', d, setKey, { kg: 1 });
+  Rec.set('set', d, setKey, { kg: 2 });
+  ok('rec: a TRAIN set stays a whole row with no field times', !Rec.row('set', d, setKey).ft);
+  Rec.del('set', d, setKey);
+
   Rec.set(stamp, null, 'undated', { v: 'x' });
   ok('rec: undated rows work', Rec.get(stamp, null, 'undated').v === 'x');
   Rec.setting('smoke', 'colour', 'blue');

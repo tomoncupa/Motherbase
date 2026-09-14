@@ -10,7 +10,9 @@
 
    • `id` is derived from user+type+date+key, so the same fact written on two
      devices is the same row and a merge is a comparison, not a guess.
-   • `updated_at` decides conflicts: the newer write wins, per row.
+   • `updated_at` decides conflicts: the newer write wins, per row. A row that
+     has been edited also knows when each field changed, and two versions of
+     it merge a field at a time. See FIELD TIMES below.
    • `deleted` is a tombstone. Rows are never removed, or a deletion cannot
      travel anywhere.
    • one row per field per day. Finer is theatre; coarser is a blob.
@@ -145,6 +147,131 @@ const now = () => new Date().toISOString();
 const clean = s => String(s == null ? '' : s).replace(/\|/g, '-');
 const rowId = (type, date, key) => USER + '|' + clean(type) + '|' + clean(date || '') + '|' + clean(key);
 const alive = r => r && !r.deleted;
+
+/* ══════════════ FIELD TIMES ══════════════
+
+   Tom, 2026-09-15, on two devices each changing a different part of the same
+   thing before they meet: "go". Until then the newer ROW won whole, so a phone
+   that changed a food's protein and a laptop that renamed it kept one of the
+   two edits and quietly lost the other.
+
+   So a row that is EDITED after it was made remembers when each top-level
+   field last changed: `ft` {field: ms}, and `fb`, the moment the row stood at
+   before its first edit, which is the time of every field `ft` does not name.
+   Two versions of one row then merge a field at a time, the newer field
+   winning, and both edits survive. A row never edited carries neither, so an
+   ordinary logged meal costs nothing extra, and two rows with no field times
+   still merge whole exactly as they always have.
+
+   Lists join. An `ev` row keeps a day's readings as one list, and two devices
+   each adding a weigh-in would otherwise be two edits of one field. Entries
+   are matched on their `t`, and an entry taken out leaves `gone` {t: ms}
+   behind, so joining two lists cannot bring a deleted reading back. A copy of
+   the app from before this leaves no `gone`, so a reading it removed can come
+   back once; the next removal on a current copy sticks.
+
+   What stays whole. A deleted row against a live one is the newer row
+   winning, as before. `tick` is one cell and one fact. `set` is twelve
+   thousand rows the record pass rewrites together, where a time per field
+   would cost more storage than two phones editing one set could ever save.
+
+   The Google Sheet needs nothing new: its save tab keeps each row whole, times
+   and all, and every merge happens here. */
+const WHOLE_ROW = { tick: 1, set: 1 };
+const LISTS = { ev: { field: 'e', id: 't' } };
+const msOf = iso => Date.parse(iso) || 0;
+const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+/* JSON with keys in order, so the same content always compares equal */
+function canon(v) {
+  if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';
+  if (isObj(v)) return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';
+  return JSON.stringify(v === undefined ? null : v);
+}
+const fieldTime = (r, k) => r.ft ? (r.ft[k] != null ? r.ft[k] : (r.fb || 0)) : msOf(r.updated_at);
+
+/* What a write changed, as field times to put on the row. `was` is the
+   payload as last written, from the snapshot, because a caller can have
+   mutated the live object in place. null when the row stays whole. */
+function stampFields(prev, was, type, payload, at) {
+  if (WHOLE_ROW[type] || !prev || prev.deleted || !isObj(was) || !isObj(payload)) return null;
+  const t = msOf(at);
+  const ft = Object.assign({}, prev.ft || null);
+  let moved = false;
+  Object.keys(was).concat(Object.keys(payload)).forEach(k => {
+    if (canon(was[k]) !== canon(payload[k])) { ft[k] = t; moved = true; }
+  });
+  if (!moved) return null;
+  const out = { ft: ft, fb: prev.ft ? (prev.fb || 0) : msOf(prev.updated_at) };
+  const L = LISTS[type];
+  let gone = prev.gone ? Object.assign({}, prev.gone) : null;
+  if (L && Array.isArray(was[L.field])) {
+    const still = {};
+    (Array.isArray(payload[L.field]) ? payload[L.field] : []).forEach(x => { if (x && x[L.id] != null) still[x[L.id]] = 1; });
+    was[L.field].forEach(x => {
+      if (x && x[L.id] != null && !still[x[L.id]]) { gone = gone || {}; gone[x[L.id]] = t; }
+    });
+  }
+  if (gone) out.gone = gone;
+  return out;
+}
+
+/* Two live versions of one row, a field at a time. null when the whole-row
+   rule applies: a deleted side, a type kept whole, no field times on either
+   side, or a payload that is not an object. */
+function combine(a, b) {
+  if (a.deleted || b.deleted || WHOLE_ROW[a.type]) return null;
+  if (!a.ft && !b.ft) return null;
+  if (!isObj(a.payload) || !isObj(b.payload)) return null;
+  const ta = msOf(a.updated_at), tb = msOf(b.updated_at);
+  /* A tie is settled by content, so both devices settle it the same way and
+     end up holding the same row. */
+  const newer = ta !== tb ? (ta > tb ? a : b) : (canon(a.payload) >= canon(b.payload) ? a : b);
+  /* The newer field wins. At the same millisecond, a side that edited the field
+     beats a side that only carries it from before its first edit; the smoke
+     check that makes and edits a row inside one millisecond found this. */
+  const named = (r, k) => !!(r.ft && r.ft[k] != null);
+  const pick = k => {
+    const x = fieldTime(a, k), y = fieldTime(b, k);
+    if (x !== y) return x > y ? a : b;
+    if (named(a, k) !== named(b, k)) return named(a, k) ? a : b;
+    return newer;
+  };
+  const keys = {};
+  [a, b].forEach(r => Object.keys(r.payload).concat(Object.keys(r.ft || {})).forEach(k => { keys[k] = 1; }));
+  const payload = {}, ft = {};
+  Object.keys(keys).forEach(k => {
+    const win = pick(k);
+    if (own(win.payload, k)) payload[k] = win.payload[k];
+    ft[k] = Math.max(fieldTime(a, k), fieldTime(b, k));
+  });
+  let gone = null;
+  [a, b].forEach(r => {
+    if (r.gone) Object.keys(r.gone).forEach(id => { gone = gone || {}; gone[id] = Math.max(gone[id] || 0, r.gone[id]); });
+  });
+  const L = LISTS[a.type];
+  if (L && (Array.isArray(a.payload[L.field]) || Array.isArray(b.payload[L.field]))) {
+    const win = pick(L.field), lose = win === a ? b : a, byId = {}, loose = [];
+    [lose, win].forEach(r => (Array.isArray(r.payload[L.field]) ? r.payload[L.field] : []).forEach(x => {
+      if (x && x[L.id] != null) byId[x[L.id]] = x;
+      else if (r === win) loose.push(x);
+    }));
+    payload[L.field] = Object.keys(byId)
+      .filter(id => !(gone && gone[id] != null))
+      .map(id => byId[id])
+      .sort((x, y) => (x[L.id] > y[L.id] ? 1 : x[L.id] < y[L.id] ? -1 : 0))
+      .concat(loose);
+  }
+  const out = Object.assign({}, newer, {
+    payload: payload, ft: ft,
+    fb: Math.max(a.ft ? (a.fb || 0) : ta, b.ft ? (b.fb || 0) : tb),
+  });
+  if (gone) out.gone = gone; else delete out.gone;
+  return out;
+}
+const sameRow = (x, y) =>
+  canon([x.payload, x.ft || null, x.fb || 0, x.gone || null, x.updated_at]) ===
+  canon([y.payload, y.ft || null, y.fb || 0, y.gone || null, y.updated_at]);
 
 /* What each row's payload looked like the last time it was written.
 
@@ -374,6 +501,11 @@ const Rec = {
     /* an identical write is not a write — this is what keeps updated_at honest
        and stops a repaint loop from touching every row it renders */
     if (prev && !prev.deleted && serial[id] === JSON.stringify(payload)) return prev;
+    /* an edit remembers which fields it changed, and when */
+    let was = null;
+    try { was = serial[id] != null ? JSON.parse(serial[id]) : null; } catch (e) {}
+    const times = stampFields(prev, was, type, payload, r.updated_at);
+    if (times) Object.assign(r, times);
     write(r); announce([r], true);
     return r;
   },
@@ -455,12 +587,27 @@ const Rec = {
 
   /* ── merging: the whole point of rows ── */
   /** idempotent by construction: same rows in twice changes nothing the second
-      time, because the comparison is on updated_at, not on arrival */
+      time, because the comparison is on the times, not on arrival */
   merge(incoming) {
     const changed = [];
     (incoming || []).forEach(r => {
       if (!r || !r.id || !r.type) return;
       const prev = rows[r.id];
+      /* two live versions with field times: a field at a time (FIELD TIMES) */
+      const both = prev ? combine(prev, r) : null;
+      if (both) {
+        /* A row that is neither side's, but both joined, is new to both
+           devices. It takes the time now, so it is sent on and the other
+           device and the sheet get the joined version, not just half. */
+        const joined = canon(both.payload);
+        if (joined !== canon(prev.payload) && joined !== canon(r.payload)) {
+          const t = now();
+          if (t > both.updated_at) both.updated_at = t;
+        }
+        if (sameRow(both, prev)) return;
+        write(both); changed.push(both);
+        return;
+      }
       if (prev && prev.updated_at >= r.updated_at) return;
       write(r); changed.push(r);
     });
