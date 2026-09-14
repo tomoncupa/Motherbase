@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.3, 2026-09-14">
+<meta name="mb-version" content="1.0.4, 2026-09-15">
 <title>TRAIN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛭</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -432,6 +432,13 @@ div.prow{padding:0}
 .tset .tmeta{display:block;text-align:right;font-size:var(--f-1);color:var(--text-muted);
   line-height:var(--lh-tight);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tset .tmeta .dl{margin-left:0}
+.setrow{flex-wrap:wrap}
+.setrow .smeta{flex-basis:100%;text-align:right;line-height:var(--lh-tight)}
+.setrow .smeta .dl{margin-left:0}
+.recap .gain{font-family:var(--font-display);font-size:var(--f-4);font-weight:var(--w-bold);
+  color:var(--text-2);font-variant-numeric:tabular-nums}
+.recap .gain.up{color:var(--success)}
+.recap .gain.down{color:var(--warn)}
 .tset .grow{min-width:0}
 
 /* Setup: straps, seat height, pads. Toggles are chips, settings are small boxes. */
@@ -2026,7 +2033,8 @@ function drawWorkout(m) {
     if (cr && cr.vs && cr.up + cr.down + cr.same) {
       var line = UI.el('div', 'vsline');
       line.innerHTML = '<span>vs <b>' + UI.esc(dayY(cr.vs.date, date)) + '</b></span><span>' +
-        [cr.up ? cr.up + ' stronger' : '', cr.same ? cr.same + ' same' : '', cr.down ? cr.down + ' weaker' : '']
+        [cr.up ? cr.up + ' stronger' : '', cr.same ? cr.same + ' same' : '', cr.down ? cr.down + ' weaker' : '',
+         gainText(cr.reps, cr.pctSum, cr.pctN)]
           .filter(Boolean).join(' · ') + '</span>';
       block.appendChild(line);
     }
@@ -2038,7 +2046,9 @@ function drawWorkout(m) {
         (s.warm ? ' warm' : ''));
       row.innerHTML = '<span class="cmt" title="' + UI.esc(s.note || '') + '">' + BUBBLE + '</span>' +
         (s.warm ? '<span class="wtag">warmup</span>' : '') +
-        '<span class="grow"></span>' + deltaChip(cr && cr.bySet[s.key]) + setCols(s, g.ex);
+        '<span class="grow"></span>' + setCols(s, g.ex) +
+        /* its own line: weight, reps and a percentage do not fit beside the numbers at 390px */
+        (cr && cr.bySet[s.key] ? '<span class="smeta">' + deltaChip(cr.bySet[s.key]) + '</span>' : '');
       sets.appendChild(row);
     });
     if (shown.length < g.sets.length) {
@@ -6256,38 +6266,68 @@ TRAIN.vsFor = function (date, exId, ctx) {
   return null;
 };
 
-/* One set against the same set last time. Stronger is the estimated 1RM,
-   which is what lets the same bar for two more reps count, shown as a
-   percentage because a percentage reads the same in pounds and kilograms.
-   The same weight shows the reps instead, which says it plainly. A split set
-   against a straight one is not like for like and gets no direction. */
+/* One set against the same set last time. Tom, 2026-09-15: "I want to see how
+   much more reps AND % increases." So the change names every part that moved:
+   the weight if it moved, the reps if they moved, and how much stronger the set
+   was as a percentage of its estimated 1RM. The 1RM is what lets the same bar
+   for two more reps count, and a percentage reads the same in pounds and
+   kilograms. A set with no weight has no 1RM, so its percentage is of its reps.
+   A split set against a straight one is not like for like and gets no direction.
+
+   The numbers come back too, so a card can add them up: `dr` the change in
+   reps, `pct` the change in strength, `e1` when that is a 1RM percentage. */
 TRAIN.setDelta = function (a, b, kind) {
   if (!b) return { dir: 0, text: 'new' };
   if (!!a.split !== !!b.split) return { dir: 0, text: a.split ? 'split' : 'straight' };
   var f = KIND_FIELDS[kind] || KIND_FIELDS.wr;
   var val = function (s, k) { return +({ w: s.kg, r: s.r, d: s.dist, t: s.dur }[k]) || 0; };
   var same = function (x, y, k) { return k === 'w' ? Math.abs(x - y) < 0.005 : k === 'd' ? Math.abs(x - y) < 0.0005 : x === y; };
-  if (f[0] === 'w' && f[1] === 'r' && a.kg > 0 && b.kg > 0 && !same(a.kg, b.kg, 'w')) {
+  var sign = function (v) { return v > 0 ? '+' : '−'; };
+  var repWord = function (n) { return sign(n) + Math.abs(n) + (Math.abs(n) === 1 ? ' rep' : ' reps'); };
+  var out = { dir: 0, dr: f.indexOf('r') > -1 ? val(a, 'r') - val(b, 'r') : null, pct: null, e1: false };
+  var parts = [];
+  if (f[0] === 'w' && f[1] === 'r') {
+    var dk = val(a, 'w') - val(b, 'w'), moved = !same(val(a, 'w'), val(b, 'w'), 'w');
+    if (moved) parts.push(sign(dk) + fmt1(TRAIN.toUnit(Math.abs(dk), TRAIN.unit())) + ' ' + TRAIN.unit());
+    if (out.dr) parts.push(repWord(out.dr));
     var ea = TRAIN.e1rm(a.kg, a.r), eb = TRAIN.e1rm(b.kg, b.r);
-    if (ea > 0 && eb > 0) {
-      var pct = (ea / eb - 1) * 100;
-      if (Math.abs(pct) < 0.05) return { dir: 0, text: 'same' };
-      return { dir: pct > 0 ? 1 : -1, text: (pct > 0 ? '+' : '−') + Math.abs(pct).toFixed(1) + '%' };
+    if (ea > 0 && eb > 0) { out.pct = (ea / eb - 1) * 100; out.e1 = true; }
+    else if (!moved && !a.kg && b.r > 0) out.pct = (val(a, 'r') / b.r - 1) * 100;
+    if (out.pct != null && Math.abs(out.pct) < 0.05) out.pct = 0;
+    if (out.pct) parts.push(sign(out.pct) + Math.abs(out.pct).toFixed(1) + '%');
+    out.dir = out.pct ? (out.pct > 0 ? 1 : -1) : moved ? (dk > 0 ? 1 : -1) : out.dr ? (out.dr > 0 ? 1 : -1) : 0;
+  } else {
+    for (var i = 0; i < f.length; i++) {
+      var k = f[i], x = val(a, k), y = val(b, k);
+      if (same(x, y, k)) continue;
+      var dv = Math.abs(x - y);
+      parts.push(k === 'w' ? sign(x - y) + fmt1(TRAIN.toUnit(dv, TRAIN.unit())) + ' ' + TRAIN.unit()
+        : k === 'r' ? repWord(x - y)
+        : k === 'd' ? sign(x - y) + TRAIN.showDist(dv) + ' ' + TRAIN.distUnit()
+        : sign(x - y) + fmtSecs(dv));
+      /* over a distance, less time is the better run */
+      if (!out.dir) out.dir = (kind === 'dt' && k === 't' ? x < y : x > y) ? 1 : -1;
+    }
+    var y0 = val(b, f[0]);
+    if (y0 > 0 && !same(val(a, f[0]), y0, f[0])) {
+      out.pct = (val(a, f[0]) / y0 - 1) * 100;
+      if (Math.abs(out.pct) >= 0.05) parts.push(sign(out.pct) + Math.abs(out.pct).toFixed(1) + '%');
     }
   }
-  for (var i = 0; i < f.length; i++) {
-    var k = f[i], x = val(a, k), y = val(b, k);
-    if (same(x, y, k)) continue;
-    /* over a distance, less time is the better run */
-    var up = kind === 'dt' && k === 't' ? x < y : x > y, dv = Math.abs(x - y), sign = x > y ? '+' : '−';
-    var text = k === 'w' ? sign + fmt1(TRAIN.toUnit(dv, TRAIN.unit())) + ' ' + TRAIN.unit()
-      : k === 'r' ? sign + dv + (dv === 1 ? ' rep' : ' reps')
-      : k === 'd' ? sign + TRAIN.showDist(dv) + ' ' + TRAIN.distUnit()
-      : sign + fmtSecs(dv);
-    return { dir: up ? 1 : -1, text: text };
-  }
-  return { dir: 0, text: 'same' };
+  out.text = parts.length ? parts.join(' · ') : 'same';
+  return out;
 };
+/* What a run of sets added up to: reps gained, and the average percentage of
+   the sets that have a 1RM on both sides. */
+function gainText(reps, pctSum, pctN) {
+  var parts = [];
+  if (reps) parts.push((reps > 0 ? '+' : '−') + Math.abs(reps) + (Math.abs(reps) === 1 ? ' rep' : ' reps'));
+  if (pctN) {
+    var p = pctSum / pctN;
+    if (Math.abs(p) >= 0.05) parts.push((p > 0 ? '+' : '−') + Math.abs(p).toFixed(1) + '% average');
+  }
+  return parts.join(' · ');
+}
 function deltaChip(d) {
   if (!d) return '';
   return '<span class="dl' + (d.dir > 0 ? ' up' : d.dir < 0 ? ' down' : '') + '">' + UI.esc(d.text) + '</span>';
@@ -6297,9 +6337,10 @@ TRAIN.dayCompare = function (date) {
   var groups = TRAIN.dayGroups(date);
   if (!groups.length) return null;
   var ctx = TRAIN.compareCtx(date);
-  var out = { byEx: {}, up: 0, down: 0, same: 0, fresh: 0, marks: [], vs: null, vsDays: {}, whyOf: {} };
+  var out = { byEx: {}, up: 0, down: 0, same: 0, fresh: 0, marks: [], vs: null, vsDays: {}, whyOf: {},
+              reps: 0, pctSum: 0, pctN: 0 };
   groups.forEach(function (g) {
-    var row = { vs: TRAIN.vsFor(date, g.ex, ctx), bySet: {}, up: 0, down: 0, same: 0 };
+    var row = { vs: TRAIN.vsFor(date, g.ex, ctx), bySet: {}, up: 0, down: 0, same: 0, reps: 0, pctSum: 0, pctN: 0 };
     out.byEx[g.ex] = row;
     if (!row.vs) return;
     var then = workOn(row.vs.date, g.ex), kind = TRAIN.kindOf(g.ex), n = 0;
@@ -6311,6 +6352,8 @@ TRAIN.dayCompare = function (date) {
       var mk = !b ? 'new' : d.dir > 0 ? 'up' : d.dir < 0 ? 'down' : 'same';
       if (mk === 'new') out.fresh++; else { row[mk]++; out[mk]++; }
       out.marks.push(mk);
+      if (b && d.dr != null) { row.reps += d.dr; out.reps += d.dr; }
+      if (b && d.e1 && d.pct != null) { row.pctSum += d.pct; row.pctN++; out.pctSum += d.pct; out.pctN++; }
     });
     if (row.up + row.down + row.same) {
       out.vsDays[row.vs.date] = (out.vsDays[row.vs.date] || 0) + 1;
@@ -6476,6 +6519,10 @@ TRAIN.recapCard = function (date, cmp) {
       (days > 1 ? ' and ' + (days - 1) + ' other day' + (days > 2 ? 's' : '') : ''));
     h += '<div><h3>SET BY SET</h3>' +
       '<div class="strong"><b>' + cmp.up + ' of ' + n + '</b> sets stronger</div>' +
+      (gainText(cmp.reps, cmp.pctSum, cmp.pctN)
+        ? '<div class="gain' + (cmp.pctN && cmp.pctSum / cmp.pctN >= 0.05 ? ' up'
+            : cmp.pctN && cmp.pctSum / cmp.pctN <= -0.05 ? ' down' : '') + '">' +
+          esc(gainText(cmp.reps, cmp.pctSum, cmp.pctN)) + '</div>' : '') +
       '<div class="sub">' + esc(sub.join(' · ')) + '</div>' +
       '<div class="ticks">' + cmp.marks.map(function (k) { return '<i class="' + k + '"></i>'; }).join('') + '</div></div>';
   }

@@ -339,9 +339,15 @@ the capture rate falls and every downstream estimate degrades with it.
 
 **Good looks like:** a full movement list on first open, editable and
 extendable, and no dependence on having come from anywhere else. Weight and
-reps are two taps. A repeated session says how it went against the one it was
-copied from, per exercise and overall — because that is the entire reason for
+reps are two taps. A repeated session says, set by set, how many more reps and
+what percentage stronger each working set was than the same set last time, and
+the session adds itself up at the end — because that is the entire reason for
 repeating it.
+
+**He trains; he does not work out.** Tom, 2026-09-14. A session is designed and
+personal, so it can have a name and belong to a training block, records start
+again with each block while the all-time ones stay, and a week counts the sets
+each muscle got. The app says session and training, never workout.
 
 **It takes your history from wherever it is.** FitNotes' own backup file, and a
 spreadsheet from anything else — Strong, Hevy, JEFIT all export a row per set
@@ -349,8 +355,10 @@ and only disagree about column names. Whatever it cannot match it says so and
 imports the rest, because a log 90% across beats a log 0% across with a tidy
 error message.
 
-**Never:** a programming tool. Building the plan is BLOCK's job and the coach's
-job. This records what was lifted.
+**Never:** an app that tells him how to train. No set targets, no plateau
+warnings, no praise: it states what was lifted and what changed, and he joins
+it up (Tom, 2026-09-14). BLOCK has nothing to do with training beyond a training
+block ticking when TRAIN has data.
 
 ### BLOCK — `block/` · desktop only
 

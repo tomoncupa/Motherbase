@@ -271,9 +271,10 @@ An app may read any type. It writes only the types it owns.
 | `habit` | quest, later | | a todolist, once STATUS took the measurements |
 | `project` | **quest** | slug of the hashtag | `{name, slot, ord}` — a Todoist project. `slot` is a theme colour slot, never a hex |
 | `excat` | **train** | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
-| `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph}` |
-| `set` | **train** | timestamp id | one logged set, weight stored in kg with the unit it was typed in |
-| `session` | **train** | `''` | `{start, end, note}` — the day's workout timing and comment |
+| `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup}` — `setup` is the setup fields he names for it, each a toggle or a setting |
+| `set` | **train** | timestamp id | one logged set, weight stored in kg with the unit it was typed in; `warm` a warmup marked by hand, `su` the setup it was done with. Warmups and split sets are also read from its comment, never stored |
+| `session` | **train** | `''` | `{start, end, note, from, order, name, vs}` — the day's timing and comment, the day it was copied from, its exercise order, its name, and a day picked to compare it with |
+| `phase` | **train** | phase id | `{name, start, end}` — a training block. Not `block`: BLOCK is another app and has nothing to do with training beyond a tick. `end` is optional |
 | `sgroup` | **train** | group id | a superset |
 | `program` `progday` `progex` | **train** | | routines. Named around BLOCK's `routine` |
 | `goal` | **train** | goal id | a training goal |
@@ -709,7 +710,7 @@ answer, or take it out.
 | `form/` | Standalone by design. Video never leaves the device. Tom only, kept out of the client build. |
 | `status/` | Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. |
 | `portion/` | FOODDÉX on screen since 2026-09-14; the folder and id are still `portion`. Built 2026-09-05, made a desktop app 2026-09-06. Tested in the browser. A bench for building food entries and a viewer over the ones you have. Paste or type a label; it says how much of it hits 50g of protein or any other number, in grams or in pieces, what that comes to and what it costs. Saves the answers as ordinary servings, so STATUS logs them in one tap. Hands the entry over as words to paste into somebody else's tracker or as a spreadsheet row. Ranks the whole library against whatever amount is on screen, which is the comparison. Searches, edits and deletes; refuses to make a second food with a name you already have. Reads Sodium, or converts Salt where a label prints that instead. Tom only, kept out of the client build by `tools/build-client.py`. |
-| `train/` | Brief written 2026-08-20, build in progress. A 1:1 reproduction of FitNotes v25.1 on the shared foundation, phone first, for a Galaxy A10. Owns the training log. Imports Tom's real 12,370-set FitNotes backup. Has its own brief. |
+| `train/` | Built, and tested in the browser at 390px against Tom's real 12,370-set FitNotes backup; the phone itself is his iPhone 13 Pro, and nothing has been watched on it yet. A reproduction of FitNotes v25.1 on the shared foundation, plus Tom's own idea of training (2026-09-14): sessions with names and training blocks, each working set compared with the same set last time in reps and percentage, a session card and a weekly card that share as story pictures, sets per muscle per week, a Profile with all-time and block records, and setup recorded per set. Warmups and split sets are read from comments. Says session and training, never workout. Owns the training log. Has its own brief. |
 | `wealth/` | Built 2026-09-11 and tested in the browser. The money app: three numbers (liquid, allocated, free) and runway. Owns clients on any payment cycle — every N months on one or several days, every N weeks, every N sessions, packages bought up front, or one off — with expected payments derived from the cycle rather than stored. A monthly day is clamped per month when the date is worked out and never when it is saved, so the 31st stays the 31st in every month that has one. Spending reviews at three zoom levels, day, week and month, with a day drawn as a timeline down the clock. Reads STATUS's `spend` rows and files them with a `mark` row rather than editing them, so STATUS's price, account, receipt and meal link cannot be dropped. Text rules sort spending retroactively. Big purchases are marked and excluded from every "normal spending" figure. Every name is picked from a list, never typed twice, and every amount groups itself with commas as it is typed. Logs spending itself as well as reading STATUS's. A donut for where money went, and monthly net beside liquid. Amounts are stored in one base currency and a header switch reads them all in a second one; the rate is typed and dated rather than fetched, and typing always stays in the base currency so a round trip cannot lose anything. Tom only, kept out of the client build. Opens a GCash PDF (asking for its password, never storing it) or a bank spreadsheet directly, with pasting as the fallback. Trusts the running balance over the printed amount, so ride holds GCash prints as payments are dropped and part-charges fold into one purchase; checks every statement against its own closing balance; nets reversals; and records money between his own accounts once, as a transfer, even when both statements show it. An import setup asks once what each new payee is and turns the answer into a rule; transfers to people nobody named are filed as One-time transfers tagged Unsure, still counted as money out. Then reconciles it: certain matches merge into a master entry keeping his category and taking the bank's amount, uncertain ones are asked about one at a time, and reading the same file twice adds nothing. Optional monthly caps per category, shown as a number and a pace mark rather than a verdict. Has its own brief. |
 | `log/` | Built 2026-09-13 and tested in the browser. The journal module: a way to view STATUS's entries en masse. One continuous timeline from the first record to today, in eight views from Day to Year; the wheel scrolls, the mouse side buttons change view, a held button drags. Days show the day's line and STATUS's bullets, with a faint mood, energy and caffeine graph behind; beside them, day columns for "What got done today" and every STATUS measure, reorderable, resizable and hideable; beside those, weeks, months, quarters and the year with written summaries. A notebook view lays days out as two-page spreads. Writes `note` and the day's `note` by merging, owns `recap` and `cell`. Never watched with a real mouse or real data. In the client build since 2026-09-14 (Tom: "LOG and QUESTS are for clients as well"). Has its own brief. |
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
@@ -840,13 +841,13 @@ screen rather than under the toolbar. Not seen on a phone.
 the fix, so none is urgent, but each is a second copy of a foundation job:
 
 - LOG: `menuAt()` in `log/index.html`.
-- TRAIN: `menuAt()`, `bigStep()`, the `MINUS`, `TROPHY` and `BURGER` strings,
-  and the `.mb-row:has(...)` rules for `.mb-input` and `.mb-sel`. Keep the ones
-  for `.swatches` and `.mb-chips`, which the shared rule does not cover.
+- ~~TRAIN: `menuAt()`'s press workaround, `bigStep()`, the `MINUS`, `TROPHY`
+  and `BURGER` strings, and the `.mb-row:has(...)` rules for `.mb-input` and
+  `.mb-sel`~~ Deleted 2026-09-14. Its rules for `.swatches` and `.mb-chips` stay.
 - WEALTH: `menu()`. (`moneyScale()` went with the chart rewrite, 2026-09-14.)
 - CHECK IN: `menu()`.
-- CLEX, STATUS and TRAIN: stepper buttons drawn with a `−` character can use
-  the `minus` role.
+- CLEX and STATUS: stepper buttons drawn with a `−` character can use the
+  `minus` role. TRAIN's have since 2026-09-14.
 
 **15. ~~STATUS's journal code lives in several copies~~ Moved 2026-09-14, Tom
 said yes.** `shared/journal.js` holds the kinds, the day rule, the time parser,

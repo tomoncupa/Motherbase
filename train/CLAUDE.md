@@ -246,10 +246,17 @@ carries the name**. A name locks nothing: two Back days can share no exercises.
 4. the last time that exercise was done
 
 **Working set N against working set N**, warmups left out of both sides, so a
-change in how many warmups he did moves nothing. The change is the estimated 1RM
-as a percentage when the weight changed, the reps when it did not. A split set
+change in how many warmups he did moves nothing. **The change names every part
+that moved** (Tom, 2026-09-15: "I want to see how much more reps AND %
+increases"): the weight if it moved, the reps if they moved, and the percentage
+change in estimated 1RM, as in `+5 lb · −1 rep · +1.5%` or `+2 reps · +7.4%`.
+A set with no weight has no 1RM, so its percentage is of its reps. A split set
 against a straight one is not like for like and gets no direction. A date from
 another year shows its year.
+
+Each exercise's line and the session card add it up: reps gained over every
+compared set, and the average percentage of the sets with a 1RM on both sides,
+as in `+14 reps · +2.3% average`.
 
 It shows on each set in the day's cards and under each set on TRACK, where the
 line above the steppers lists the sets being compared against.
@@ -500,24 +507,13 @@ could not be clicked (`menuAt()` no longer stops the press), chart steps past
 `:has()` rules for `.mb-input` and `.mb-sel` are gone; the ones for its own
 swatches and chips stay), and sheets in `vh`.
 
-**Still open:**
+**Settled 2026-09-15:** `ui.js` adds its stylesheet when it loads, so the chip
+that came up as a bare browser button on the exercise screen is styled and
+TRAIN's throwaway switch at boot is gone. DOCTRINE's TRAIN entry, the root
+ownership table and the root Current state row were brought up to date by a
+session Tom sent to the root.
 
-1. **`ui.js` adds its stylesheet only when one of its components draws.** A page
-   that uses `.mb-chip`, `.mb-chips` or `.mb-group` before calling `UI.row`,
-   `UI.toggle`, `UI.segmented`, `UI.field` or `UI.dialog` gets bare browser
-   buttons. Seen 2026-09-14 on TRAIN's exercise screen, opened straight after a
-   reload: Add Setup was a white system button. TRAIN draws a throwaway switch at
-   boot. The fix is `ui.js` adding its stylesheet when it loads.
-2. **DOCTRINE.md, TRAIN's entry, is out of date.** Its Never line says TRAIN is not
-   a programming tool and "building the plan is BLOCK's job". Tom, 2026-09-14:
-   "BLOCK has nothing to do with actual TRAINING apart from a train block being
-   ticked when TRAIN has data." Its Good looks like says a repeat compares against
-   the day it was copied from, per exercise; it now compares set by set, by name
-   first. Only a session allowed to edit the root can change it.
-3. **The root brief's ownership table** does not list `phase`, `session.name`,
-   `session.vs`, `exercise.setup` or `set.su`.
-4. **The root brief's Current state row for `train/`** still says build in progress,
-   for a Galaxy A10.
+**Still open:** nothing.
 
 ---
 
