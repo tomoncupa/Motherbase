@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.1, 2026-09-14">
+<meta name="mb-version" content="1.0.2, 2026-09-14">
 <title>QUESTS</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -510,6 +510,13 @@ const quests = () => Rec.all('note')
 /* A row from before QUESTS has no `due`: it is due the day it was written,
    which is exactly where STATUS already shows it. `''` is No date. */
 const dueOf = x => x.due === undefined ? (x.date || null) : (x.due || null);
+/* Todos moved away from a day, still shown on it as > at the bottom. Tom,
+   2026-09-14: "Yes do that for QUESTS", the rule STATUS and LOG read from
+   Journal.place in shared/journal.js. Not counted and not to be done there. */
+const movedFrom = d => quests().filter(x => {
+  const p = Journal.place({ key: x.key, date: x.date, payload: x }, d);
+  return p && p.movedAway;
+}).map(x => Object.assign({}, x, { movedAway: true }));
 /* Where a todo came from. Tom, 2026-09-14: "Possible for QUEST to show where
    a task is from?" QUESTS stamps `src` on what it writes. A row from before
    the stamp is QUESTS's if it carries all three fields only QUESTS writes on
@@ -580,6 +587,8 @@ function removeQuest(x) {
    (the next fortnight a day at a time), and one per project.               */
 let VIEW = S.get('view', 'today');
 function sortQ(a, b) {
+  /* a todo moved to another day sinks to the bottom of the day it left */
+  if (!!a.movedAway !== !!b.movedAway) return a.movedAway ? 1 : -1;
   const pa = a.pri || 4, pb = b.pri || 4;
   if (pa !== pb) return pa - pb;
   const ta = a.at || '99', tb = b.at || '99';
@@ -607,7 +616,7 @@ function viewInfo(v) {
     const over = open.filter(x => dueOf(x) && dueOf(x) < t), groups = [];
     if (over.length) groups.push({ id: 'over', title: 'Overdue', over: true, items: over });
     for (let i = 0; i < 14; i++) {
-      const d = Day.shift(t, i), items = open.filter(x => dueOf(x) === d);
+      const d = Day.shift(t, i), items = open.filter(x => dueOf(x) === d).concat(movedFrom(d));
       if (items.length || i < 2) groups.push({ id: d, title: dayTitle(d), day: d, items: items });
     }
     const later = open.filter(x => dueOf(x) && dueOf(x) > Day.shift(t, 13));
@@ -622,7 +631,7 @@ function viewInfo(v) {
   const done = all.filter(x => x.done && x.doneOn === t);
   const groups = [];
   if (over.length) groups.push({ id: 'over', title: 'Overdue', over: true, items: over });
-  groups.push({ id: t, title: dayTitle(t), day: t, items: now });
+  groups.push({ id: t, title: dayTitle(t), day: t, items: now.concat(movedFrom(t)) });
   /* What BLOCK planned for today. Tom, 2026-09-14: "Daily tasks, and whats
      next from BLOCK is what QUEST is for." Read from BLOCK's published plan,
      never written. */
@@ -685,7 +694,7 @@ function draw() {
   info.groups.forEach(g => {
     if (!g.items.length && g.id !== T() && !g.day) return;
     const box = el('section', 'grp');
-    const head = el('div', 'gh' + (g.over ? ' over' : ''), '<b>' + esc(g.title) + '</b><span class="n">' + (g.items.length || '') + '</span>');
+    const head = el('div', 'gh' + (g.over ? ' over' : ''), '<b>' + esc(g.title) + '</b><span class="n">' + (g.items.filter(x => !x.movedAway).length || '') + '</span>');
     if (g.over) {
       const r = el('button', 'lnk', 'Reschedule');
       r.onclick = e => dateMenu(r, { due: null, at: null, rep: null, bulk: true }, v => {
@@ -709,8 +718,8 @@ function rowEl(x, info) {
      time after them, the same as STATUS and LOG (Tom, 2026-09-14). What is
      QUESTS's own sits around it: the due day, the repeat, where it came
      from, the project and the buttons. */
-  const r = el('div', 'row mb-bullet' + (x.pri ? ' p' + x.pri : '') + (x.done ? ' done' : ''));
-  const tk = el('button', 'k', Journal.markHTML('todo', false));
+  const r = el('div', 'row mb-bullet' + (x.pri ? ' p' + x.pri : '') + (x.done && !x.movedAway ? ' done' : ''));
+  const tk = el('button', 'k', Journal.markHTML('todo', !!x.movedAway));
   tk.type = 'button';
   tk.setAttribute('aria-label', x.done ? 'Mark not done' : 'Complete');
   tk.onclick = e => { e.stopPropagation(); tick(x); };

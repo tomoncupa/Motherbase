@@ -100,6 +100,7 @@ beside the pointer on a wide window and up from the bottom on a phone.
 | Old todos with no `due` are due the day they were written, so nothing he already has changes where it shows. | Claude, 2026-09-14 |
 | P1 is `--danger`, P2 `--warn`, P3 `--info`, on the Priority button. | Claude, 2026-09-14 |
 | A todo is drawn by `shared/journal.js`, exactly as STATUS draws it: STATUS's square box with no priority colour, the words, then the time after them ("7:00pm - 7:31pm"). The row keeps the due day, repeat, source, project and buttons. The menu adds Move to tomorrow and Cancel it. Supersedes Todoist's round priority circle. | Tom, 2026-09-14: *"same goes for Quest"*, STATUS wins |
+| A todo moved to another day stays on the day it left as >, at the bottom of that day in Today and Upcoming, not counted in the group. Read from `Journal.place`, the rule STATUS and LOG use. | Tom, 2026-09-14: *"Yes do that for quests"* |
 | Todos stay in STATUS's journal, Todo button and all. Tom: *"Keep Todos in STATUS."* Reverses a request made the same hour to hide them. | Tom, 2026-09-14 |
 | Today lists what BLOCK planned, from its `plan` row, under the day's tasks: Now and Next marked, ticked with the shared tick. | Tom asked, Claude placed it, 2026-09-14 |
 | Every row says where it came from: QUESTS, STATUS or BLOCK and its lane. QUESTS stamps `src`; an older row counts as QUESTS's if it has `pri`, `proj` and `rep`. | Tom asked, Claude chose the rule, 2026-09-14 |
