@@ -236,6 +236,36 @@ opposite situations and one number cannot tell them apart. Every bar carries a
 mark where an even spread would put him today. It is a line to read against,
 never a rule, because nobody spends evenly.
 
+**A cap is called an allowance on screen, and it holds money back.** Tom,
+2026-09-14: *"If I allot 9k for groceries, how does that work when it shows
+up in my union bank import?"* and *"I also want it to show if I went over
+groceries."* His word is allot, so every screen says allowance; the field is
+still `cap` on the `cat` row, so nothing was migrated.
+
+Every purchase filed under the category counts against it, from any account
+and however it arrived: logged in STATUS, typed here, or read off a statement,
+because the import files a line through the same rules. A UnionBank grocery
+line is Groceries the moment a rule says so, and it comes off the allowance
+like any other.
+
+What is not spent yet is money already spoken for, so **FREE holds back what
+is left of each allowance**: this month's remainder, never below zero, and the
+whole allowance for each later month that starts inside the window. Going over
+holds back nothing extra, because what was spent has already left the
+account. A bill filed under a category with an allowance is not held back on
+its own, or the same groceries would be held twice.
+
+MONEY OUT lists each allowance in the card its category belongs to, as spent
+of allotted this month with a bar, then how much is left or how much over. Over
+is a number, as law 7 says, and it is in the warning colour because he asked
+to see it. The groceries card carries "Allot a monthly amount", which opens the
+category's own sheet.
+
+Watched: a ₱9,000 Groceries allowance with ₱3,000 bought from a bank account
+read "₱3,000 of ₱9,000 spent this month, ₱6,000 left", and FREE held back
+₱6,000 plus October's ₱9,000 inside a 30 day window. ₱7,200 more from GCash
+read "₱10,200 of ₱9,000, ₱1,200 over", and FREE held back only October's.
+
 And the doctrine line that earns its keep: a target missed for three weeks is
 not a target, it is furniture. A cap passed three months running offers to
 become the middle of those three months. That is not lowering the bar, it is
@@ -421,6 +451,32 @@ date: the latest session or the sale date, plus the sessions still to go at
 that pace. It is never earlier than today. It appears under Expected next as
 "about" that date and is never counted late. Without a pace, the part has no
 date and the sheet says what would give it one.
+
+### Sessions as boxes
+
+Tom, 2026-09-14: *"For clients on session, I want to be able to check boxes.
+Upon opening the client profile let me input the date of each session."*
+
+A block is the sessions one payment covers: every N for a session client, a
+package's size for a package client. The client's sheet shows one box per
+session in the block being worked through. A ticked box is a `sesh` row, the
+same row as always, and shows its date, which can be changed right there. An
+empty box ticks as today. A date in the future is refused, because the future
+is not a record. Unticking takes the session back, with undo. "Show earlier
+sessions" draws every block.
+
+Boxes follow the sessions in date order, so moving a date can move a session
+to another box, and the count can never disagree with the rows. For a package
+client the block shown is the oldest package not yet full, because sessions
+belong to packages oldest first; sessions past every package bought show as
+their own block. "Log a session today" stays on the CLIENTS tab and in the
+client's menu, where one tap is the point.
+
+Watched: a client paid every 10 with 12 sessions opened on sessions 11 to 20
+with two ticked and dated. Ticking 13 added a session dated today; changing its
+date moved the row and kept 13; a 2027 date was refused and put back;
+unticking 11 left 12 sessions with the rest moved up a box. A package of 5 with
+2 delivered showed five boxes, two ticked.
 
 ### What a session earns
 

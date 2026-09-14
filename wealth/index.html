@@ -699,6 +699,75 @@ function addSesh(clientId, date) {
   return key;
 }
 
+/* == sessions as boxes ==
+   Tom, 2026-09-14: "For clients on session, I want to be able to check boxes.
+   Upon opening the client profile let me input the date of each session."
+
+   A block is the sessions one payment covers: every N for a session client,
+   a package's size for a package client. One box per session. A ticked box
+   is a `sesh` row and shows its date, editable in place; an empty box ticks
+   as today. Boxes follow the sessions in date order, so changing a date can
+   move a session to another box, and the count can never go wrong. */
+function seshBlocks(clientId, every) {
+  const all = seshOf(clientId), n = Math.max(1, every), out = [];
+  for (let s = Math.floor(all.length / n) * n; s >= 0; s -= n)
+    out.push({ first: s + 1, size: n, sessions: all.slice(s, s + n) });
+  return out;                                            /* newest first */
+}
+function packBlocks(clientId) {
+  const all = seshOf(clientId), out = [];
+  let off = 0;
+  packsOf(clientId).forEach(p => {
+    const n = Math.max(0, num(p.n, 0));
+    out.push({ first: off + 1, size: n, sessions: all.slice(off, off + n), pack: p });
+    off += n;
+  });
+  if (all.length > off) out.push({ first: off + 1, size: all.length - off, sessions: all.slice(off), extra: true });
+  return out.reverse();                                  /* newest first */
+}
+function seshBoxes(box, clientId, block, repaint) {
+  const wrap = el('div', 'list');
+  for (let i = 0; i < block.size; i++) {
+    const x = block.sessions[i];
+    const row = el('div', 'rowbtns');
+    row.style.alignItems = 'center';
+    row.style.marginTop = 'var(--s-2)';
+    const tick = el('button', 'chip mb-tap' + (x ? ' on' : ''), 'Session ' + (block.first + i));
+    tick.type = 'button';
+    tick.setAttribute('aria-pressed', x ? 'true' : 'false');
+    tick.onclick = () => {
+      if (!x) { addSesh(clientId, Day.today()); Mobile.feedback('tick'); return repaint(); }
+      const keep = Rec.get('sesh', x.date, x.key);
+      Rec.del('sesh', x.date, x.key);
+      Mobile.feedback('untick');
+      UI.undo('took back a session', () => { Rec.set('sesh', x.date, x.key, keep); repaint(); });
+      repaint();
+    };
+    row.appendChild(tick);
+    if (x) {
+      const d = dateField(x.date);
+      d.max = Day.today();
+      d.style.flex = '1';
+      d.setAttribute('aria-label', 'Date of session ' + (block.first + i));
+      d.onchange = () => {
+        const v = d.value;
+        if (!v || v === x.date) return;
+        /* The future is not a record and cannot be ticked. */
+        if (v > Day.today()) { d.value = x.date; UI.toast('that session has not happened yet', { bad: true }); return; }
+        const p = Rec.get('sesh', x.date, x.key) || { client: clientId };
+        Rec.del('sesh', x.date, x.key);
+        Rec.set('sesh', v, x.key, p);
+        repaint();
+      };
+      row.appendChild(d);
+    } else if (i === block.sessions.length) {
+      row.appendChild(el('span', 'note', 'tick it when it is done, then fix the date if it was not today'));
+    }
+    wrap.appendChild(row);
+  }
+  box.appendChild(wrap);
+}
+
 /* == packages bought up front ==
    Tom, 2026-09-11: "I want tracking for clients who pay for sessions upfront
    either whole or partial as well as session tracking."
@@ -1035,8 +1104,36 @@ const standingBills = () => bills().filter(b => catGrp(b.cat) !== 'var')
 function board() {
   const L = liquid();
   const win = freeWindow();
-  const alloc = potsTotal() + billsDue(Day.today(), win.to).reduce((a, b) => a + num(b.bill.amt, 0), 0);
-  return { liquid: L, allocated: alloc, free: L.total - alloc, win: win };
+  const allot = allottedLeft(win.to);
+  /* A bill filed under a category with an allowance is not held back on its
+     own. The allowance already covers that spending, and both would hold the
+     same money twice. */
+  const due = billsDue(Day.today(), win.to)
+    .filter(x => !(num((Rec.get('cat', null, x.bill.cat) || {}).cap, 0) > 0))
+    .reduce((a, x) => a + num(x.bill.amt, 0), 0);
+  const alloc = potsTotal() + allot + due;
+  return { liquid: L, allocated: alloc, free: L.total - alloc, win: win, allot: allot };
+}
+/* == what is left of each monthly allowance ==
+   Tom, 2026-09-14: "If I allot 9k for groceries, how does that work when it
+   shows up in my union bank import?" An allowance is a monthly figure on a
+   category, the `cap` field. Every purchase filed under that category counts
+   against it, from any account and however it arrived: logged in STATUS,
+   typed here, or read off a statement, whose rules file it the same way.
+
+   What is not spent yet is money already spoken for, so FREE holds it back:
+   this month's remainder, never below zero, and the whole allowance for each
+   later month that starts inside the window. Going over holds back nothing
+   extra, because what was spent has already left the account. */
+function allottedLeft(to) {
+  const mo = monthOf(Day.today());
+  let total = 0;
+  capped().forEach(c => {
+    const st = capState(c.id, mo);
+    if (st) total += Math.max(0, st.left);
+    for (let s = Day.shift(monthEnd(mo), 1); s <= to; s = Day.shift(monthEnd(monthOf(s)), 1)) total += num(c.cap, 0);
+  });
+  return total;
 }
 /* Runway: how many months at the current standing cost, if every client left
    tomorrow. The app's real subject — liquid moves for boring reasons, this
@@ -2515,7 +2612,8 @@ function drawScore(m) {
     sc.appendChild(wrap);
   } else {
     sc.appendChild(el('div', 'sub', money(L.total) + ' in the accounts. ' + money(b.allocated) +
-      ' already spoken for: your pots, and bills due ' + b.win.words + '.'));
+      ' already spoken for: your pots, ' + (b.allot ? 'what is left of your monthly allowances, ' : '') +
+      'and bills due ' + b.win.words + '.'));
     const pick = el('button', 'btn mb-press mb-tap', 'Change how far ahead');
     pick.type = 'button';
     pick.onclick = () => menu(pick, FREE_WINDOWS.map(x => ({
@@ -2536,7 +2634,7 @@ function drawScore(m) {
   g.appendChild(tile('LIQUID', L.counted ? short(L.total) : '—',
     L.counted ? (L.age > STALE ? '<span class="stale">counted ' + L.age + ' days ago</span>' : 'counted ' + (L.age ? L.age + ' days ago' : 'today')) : 'no counts yet',
     L.age > STALE ? 'warn' : ''));
-  g.appendChild(tile('ALLOCATED', short(b.allocated), 'pots, and bills due to ' + Day.short(b.win.to)));
+  g.appendChild(tile('ALLOCATED', short(b.allocated), (b.allot ? 'pots, allowances, and bills due to ' : 'pots, and bills due to ') + Day.short(b.win.to)));
   g.appendChild(tile('FREE', L.counted ? short(b.free) : '—', 'what is really yours',
     b.free < 0 ? 'bad' : ''));
   c1.appendChild(g);
@@ -2847,8 +2945,23 @@ function drawOut(m) {
      monthly cost not the annual"; and groceries, water and regular spending.
      The card follows the bill's category, so re-filing a bill moves it. A
      card title says what is on it, not how to feel about it. */
-  const shelf = b => ['subs', 'gym'].indexOf(b.cat) > -1 || catGrp(b.cat) === 'biz' ? 'subs'
-    : b.cat === 'water' || catGrp(b.cat) === 'var' ? 'regular' : 'bills';
+  const shelfOf = id => ['subs', 'gym'].indexOf(id) > -1 || catGrp(id) === 'biz' ? 'subs'
+    : id === 'water' || catGrp(id) === 'var' ? 'regular' : 'bills';
+  const shelf = b => shelfOf(b.cat);
+  const hasAllowance = id => num((Rec.get('cat', null, id) || {}).cap, 0) > 0;
+  /* An allowance sits in the card its category belongs to, with what has
+     gone against it this month from every account. Over is said as a number,
+     because he asked to see it: "I also want it to show if I went over". */
+  const allowRow = cat => {
+    const st = capState(cat.id, monthOf(Day.today()));
+    const r = itemRow(cat.name, esc(money(st.spent)) + ' of ' + esc(money(st.cap)) + ' spent this month · ' +
+      (st.left >= 0 ? esc(money(st.left)) + ' left' : '<b>' + esc(money(-st.left)) + ' over</b>'),
+      money(st.cap) + '/mo', st.over ? 'late' : '');
+    r.onclick = () => catSheet(cat); r.menu = () => catMenu(cat);
+    const bar = el('div', 'bar c1');
+    bar.appendChild(el('i')).style.width = Math.min(100, st.pct * 100).toFixed(1) + '%';
+    return stack(r, bar);
+  };
   const billRow = b => {
     /* Tom, 2026-09-14: "Change 'Day X of the month' to just the number." */
     const r = itemRow(b.name, (b.cycle === 'days'
@@ -2858,17 +2971,23 @@ function drawOut(m) {
     r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
     return r;
   };
-  const shelfCard = (id, title, empty, more) => {
+  const shelfCard = (id, title, empty, more, extra) => {
     const list = bl.filter(b => shelf(b) === id);
+    const allow = capped().filter(x => shelfOf(x.id) === id);
     const c = card(title);
-    if (!list.length) c.appendChild(el('div', 'empty', empty));
+    if (!list.length && !allow.length) c.appendChild(el('div', 'empty', empty));
     else {
       const l = el('div', 'list');
       list.forEach(b => l.appendChild(billRow(b)));
+      allow.forEach(x => l.appendChild(allowRow(x)));
       c.appendChild(l);
-      const mo = list.reduce((a, b) => a + billMonthly(b), 0);
+      /* A bill under a category with an allowance is inside that allowance,
+         so it is not added to the month a second time. */
+      const mo = list.filter(b => !hasAllowance(b.cat)).reduce((a, b) => a + billMonthly(b), 0) +
+        allow.reduce((a, x) => a + num(x.cap, 0), 0);
       c.appendChild(el('div', 'note', '<b>' + esc(money(mo)) + '</b> a month' + (more ? more(mo) : '') + '.'));
     }
+    if (extra) extra(c);
     m.appendChild(c);
   };
   shelfCard('bills', 'BILLS & UTILITIES', bl.length
@@ -2878,7 +2997,17 @@ function drawOut(m) {
     'Nothing here yet. Bills filed as Subscriptions, Gym, Operating costs or Marketing show here.',
     mo => ', ' + esc(money(mo * 12)) + ' over a year');
   shelfCard('regular', 'GROCERIES, WATER & REGULAR SPENDING',
-    'Nothing here yet. Bills filed as Groceries, Drinking Water or another everyday category, Transport say, show here.');
+    'Nothing here yet. Allot a monthly amount to Groceries, or add a bill filed as Drinking Water or another everyday category.',
+    null, c => {
+      const open = cats().filter(x => shelfOf(x.id) === 'regular' && !hasAllowance(x.id));
+      if (!open.length) return;
+      const b = el('button', 'btn mb-press mb-tap', 'Allot a monthly amount');
+      b.type = 'button';
+      b.onclick = () => menu(b, open.map(x => ({ label: x.name, fn: () => catSheet(x) })), { title: 'ALLOT TO' });
+      const r = el('div', 'rowbtns');
+      r.appendChild(b);
+      c.appendChild(r);
+    });
 
   const dl = debts();
   const c3 = card('DEBTS');
@@ -3173,10 +3302,10 @@ let CATFILTER = null;
    much month is left, and lets him do the joining up. */
 function drawCaps(m, mo) {
   const list = capped();
-  const c = card('CAPS');
+  const c = card('ALLOWANCES');
   if (!list.length) {
     c.appendChild(el('div', 'empty',
-      'No caps set. Open a category under <b>ACCOUNTS</b> and put a monthly figure on it, ' +
+      'No allowances set. Allot a monthly amount on <b>MONEY OUT</b>, or open a category under <b>ACCOUNTS</b>, ' +
       'and it appears here with how much of it is left.'));
     m.appendChild(c);
     return;
@@ -3192,7 +3321,7 @@ function drawCaps(m, mo) {
         (st.left >= 0
           ? money(st.left) + ' left' + (daysLeft > 0 ? ' with ' + daysLeft + ' day' +
             (daysLeft === 1 ? '' : 's') + ' to go' : ' on the last day')
-          : '<b>' + esc(money(-st.left)) + ' past it</b>');
+          : '<b>' + esc(money(-st.left)) + ' over</b>');
     const r = itemRow(cat.name, sub, Math.round(st.pct * 100) + '%',
       st.over ? 'late' : '');
     r.onclick = () => { CATFILTER = cat.id; draw(); };
@@ -3230,8 +3359,8 @@ function drawCaps(m, mo) {
       return p2 ? p2.spent : 0;
     }).sort((a, b) => a - b)[1];                       /* the middle month */
     const note = el('div', 'note',
-      '<b>' + esc(cat.name) + '</b> has gone past its cap three months running. ' +
-      'A cap you always pass is furniture. The middle of those three months was ' +
+      '<b>' + esc(cat.name) + '</b> has gone over its allowance three months running. ' +
+      'An allowance you always go over is furniture. The middle of those three months was ' +
       esc(money(real)) + '.');
     const b = el('button', 'btn mb-tap', 'Make it ' + money(Math.ceil(real / 100) * 100));
     b.type = 'button';
@@ -3240,7 +3369,7 @@ function drawCaps(m, mo) {
       const row = Rec.get('cat', null, cat.id);
       Rec.set('cat', null, cat.id, merge(row, { cap: Math.ceil(real / 100) * 100 }));
       Mobile.feedback('success');
-      UI.toast('<b>' + esc(cat.name) + '</b> capped at ' + esc(money(Math.ceil(real / 100) * 100)));
+      UI.toast('<b>' + esc(cat.name) + '</b> allowance set to ' + esc(money(Math.ceil(real / 100) * 100)));
       draw();
     };
     note.appendChild(el('br'));
@@ -3708,29 +3837,24 @@ function clientSheet(c) {
         const perS = num(rate.value, 0) / Math.max(1, num(every.value, 1));
         if (perS) seshBox.appendChild(el('div', 'note', '<b>' + esc(earnWords(perS, num(pace.value, 0))) + '</b>' +
           (num(pace.value, 0) ? '' : '. Put in sessions a week to see a week\u2019s worth.')));
-        const btns = el('div', 'rowbtns');
-        const add = el('button', 'btn go wide mb-press mb-tap', 'Log a session today');
-        add.type = 'button';
-        add.onclick = () => { addSesh(c.id, Day.today()); Mobile.feedback('success'); paintSesh(); };
-        btns.appendChild(add);
-        seshBox.appendChild(btns);
-        const all = seshOf(c.id).slice(-8).reverse();
-        if (all.length) {
-          const list = el('div', 'list');
-          list.style.marginTop = 'var(--s-3)';
-          all.forEach(x => {
-            const r = itemRow(Day.label(x.date), 'session', '');
-            r.onclick = () => {
-              Rec.del('sesh', x.date, x.key);
-              Mobile.feedback('untick');
-              UI.undo('took back a session',
-                () => { Rec.set('sesh', x.date, x.key, { client: c.id }); paintSesh(); });
-              paintSesh();
-            };
-            list.appendChild(r);
-          });
-          seshBox.appendChild(list);
-          seshBox.appendChild(el('div', 'note', 'Tap one to take it back. The last eight are shown.'));
+        const blocks = seshBlocks(c.id, Math.max(1, num(every.value, 1)));
+        drawBlocks(blocks, blocks[0], bk => 'SESSIONS ' + bk.first + ' TO ' + (bk.first + bk.size - 1));
+      }
+      /* The block being worked through, and the rest behind one button. */
+      let allBlocks = false;
+      function drawBlocks(blocks, current, label) {
+        if (!blocks.length) return;
+        (allBlocks ? blocks : [current]).forEach(bk => {
+          seshBox.appendChild(el('h2', null, esc(label(bk))));
+          seshBoxes(seshBox, c.id, bk, paintSesh);
+        });
+        if (blocks.length > 1) {
+          const more = el('button', 'btn mb-press mb-tap', allBlocks ? 'Show only this block' : 'Show earlier sessions');
+          more.type = 'button';
+          more.onclick = () => { allBlocks = !allBlocks; paintSesh(); };
+          const r = el('div', 'rowbtns');
+          r.appendChild(more);
+          seshBox.appendChild(r);
         }
       }
       /* == a package client ==
@@ -3771,10 +3895,6 @@ function clientSheet(c) {
         sell.type = 'button';
         sell.onclick = () => { h.close(); packSheet(c); };
         btns.appendChild(sell);
-        const add = el('button', 'btn wide mb-press mb-tap', 'Log a session today');
-        add.type = 'button';
-        add.onclick = () => { addSesh(c.id, Day.today()); Mobile.feedback('success'); paintSesh(); };
-        btns.appendChild(add);
         seshBox.appendChild(btns);
 
         if (st.packs.length) {
@@ -3794,24 +3914,12 @@ function clientSheet(c) {
           });
           seshBox.appendChild(list);
         }
-        const all = seshOf(c.id).slice(-8).reverse();
-        if (all.length) {
-          seshBox.appendChild(el('h2', null, 'SESSIONS DELIVERED'));
-          const list = el('div', 'list');
-          all.forEach(x => {
-            const r = itemRow(Day.label(x.date), 'session', '');
-            r.onclick = () => {
-              Rec.del('sesh', x.date, x.key);
-              Mobile.feedback('untick');
-              UI.undo('took back a session',
-                () => { Rec.set('sesh', x.date, x.key, { client: c.id }); paintSesh(); });
-              paintSesh();
-            };
-            list.appendChild(r);
-          });
-          seshBox.appendChild(list);
-          seshBox.appendChild(el('div', 'note', 'Tap one to take it back. The last eight are shown.'));
-        }
+        /* Sessions belong to packages oldest first, so the package being
+           worked through is the oldest one not yet full. */
+        const blocks = packBlocks(c.id);
+        const current = blocks.slice().reverse().find(bk => !bk.extra && bk.sessions.length < bk.size) || blocks[0];
+        drawBlocks(blocks, current, bk => bk.extra ? 'SESSIONS NOT IN A PACKAGE'
+          : 'PACKAGE OF ' + bk.size + ', SOLD ' + Day.short(bk.pack.date).toUpperCase());
       }
 
       paintEvery(); paintSesh();
@@ -4362,9 +4470,9 @@ function catSheet(existing) {
         '<b>Variable</b> is the only half you can actually steer. ' +
         '<b>Not spending</b> is money changing places, and never counts as an outgoing.'));
 
-      b.appendChild(el('h2', null, 'A MONTHLY CAP'));
+      b.appendChild(el('h2', null, 'A MONTHLY ALLOWANCE'));
       const cap = amountField(existing && num(existing.cap, 0) ? existing.cap : '');
-      b.appendChild(fld('Most you want to spend on this in a month', cap));
+      b.appendChild(fld('How much you allot to this a month', cap));
       const capNote = el('div', 'note', '');
       const paintCap = () => {
         const v = num(cap.value, 0);
