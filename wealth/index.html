@@ -3534,10 +3534,22 @@ function drawAccounts(m) {
     imp.type = 'button';
     imp.onclick = () => importSheet();
     ib.appendChild(imp);
+    const withLines = as.filter(a => stmtLines(a.id).length);
+    if (withLines.length) {
+      const see = el('button', 'btn mb-press mb-tap', 'See statement lines');
+      see.type = 'button';
+      see.onclick = () => withLines.length === 1 ? stmtSheet(withLines[0].id)
+        : menu(see, withLines.map(a => ({ label: a.name, fn: () => stmtSheet(a.id) })), { title: 'WHICH ACCOUNT' });
+      ib.appendChild(see);
+    }
     c1.appendChild(ib);
     const done = Rec.count('recon');
+    /* Per account, so an account nothing was ever read from says 0 out loud
+       instead of hiding inside a total. */
     if (done) c1.appendChild(el('div', 'note', '<b>' + esc(String(done)) +
-      '</b> statement lines have been reconciled. Reading the same file again is harmless: it recognises what it has already dealt with.'));
+      '</b> statement lines have been reconciled: ' +
+      as.map(a => esc(a.name) + ' ' + stmtLines(a.id).length).join(', ') +
+      '. Reading the same file again is harmless: it recognises what it has already dealt with.'));
     /* Law 1, said out loud where it matters most. */
     c1.appendChild(el('div', 'note',
       'A balance is what you last counted plus everything logged after it. It drifts, because not every peso gets logged. ' +
@@ -3625,6 +3637,8 @@ function paidSheet(existing, preset) {
   UI.dialog({
     title: existing ? 'EDIT PAYMENT' : 'MONEY IN', width: 460,
     body: (b, h) => {
+      const rc = existing && existing.stmt ? recon(existing.stmt) : null;
+      if (rc && rc.comment) b.appendChild(el('div', 'note', 'Your comment on the statement line: <b>' + esc(rc.comment) + '</b>'));
       const amt = amountField(existing ? existing.amt : (preset && preset.amt) || '');
       b.appendChild(fld('Amount', amt));
       const who = picker({
@@ -4244,6 +4258,86 @@ function potSheet(existing) {
 }
 
 /* counting an account: law 1, the only honest way to know a balance */
+/* == a statement, line by line, with comments ==
+   Tom, 2026-09-14: "I also want to be able to view this and add comments."
+
+   Every line read off a statement is a `recon` row. This lists one account's
+   lines as the bank wrote them, newest first and grouped by month, says what
+   the app did with each, and takes a comment. The comment is merged into the
+   line's own `recon` row, so it stays with that line however often the file
+   is read again, and it shows on the purchase or payment the line became.
+   The line's date is the one in its fingerprint: a skipped line stores no
+   other. */
+function stmtLines(acctId) {
+  return Rec.all('recon', {}).filter(r => r.payload && r.payload.acct === acctId)
+    .map(r => Object.assign({ id: r.key, date: String(r.key).split('|')[1] || r.payload.sdate || '' }, r.payload))
+    .sort((a, b) => b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id)));
+}
+function stmtSheet(acctId) {
+  const lines = stmtLines(acctId);
+  const rows = { spend: {}, paid: {}, xfer: {} };
+  spendRows({}).forEach(x => { rows.spend[x.key] = x; });
+  paidRows({}).forEach(x => { rows.paid[x.key] = x; });
+  xfers({}).forEach(x => { rows.xfer[x.key] = x; });
+  UI.dialog({
+    title: acctName(acctId).toUpperCase() + ' STATEMENT LINES', width: 680,
+    body: b => {
+      b.appendChild(el('div', 'note', '<b>' + lines.length + '</b> line' + (lines.length === 1 ? '' : 's') +
+        ' read from ' + esc(acctName(acctId)) + ' statements, in the bank’s own words. ' +
+        'A comment saves when you leave its box. Tap a line to open what it became.'));
+      const q = UI.field('search', { placeholder: 'Find a line by its wording, amount or comment' });
+      b.appendChild(q);
+      const box = el('div');
+      b.appendChild(box);
+      const paint = () => {
+        box.innerHTML = '';
+        const n = norm(q.value);
+        const shown = lines.filter(l => !n || norm(l.d).indexOf(n) > -1 ||
+          String(Math.abs(num(l.amt, 0))).indexOf(n) > -1 || norm(l.comment).indexOf(n) > -1);
+        if (!shown.length) {
+          box.appendChild(el('div', 'empty', lines.length ? 'No line matches that.'
+            : 'Nothing has been read from a statement for this account yet. <b>Read a statement</b> on ACCOUNTS brings its lines in.'));
+          return;
+        }
+        let mo = '', list = null;
+        shown.forEach(l => {
+          if (monthOf(l.date) !== mo) {
+            mo = monthOf(l.date);
+            box.appendChild(el('h2', null, esc(monthName(mo).toUpperCase())));
+            list = el('div', 'list');
+            box.appendChild(list);
+          }
+          const type = l.kind === 'xfer' ? 'xfer' : l.kind === 'in' ? 'paid' : 'spend';
+          const row = l.skip ? null : rows[type][l.spend];
+          const what = l.skip ? 'left out' : !row ? 'no longer in the app'
+            : type === 'xfer' ? 'a transfer between your accounts'
+            : row.src === 'stmt' ? 'added from the statement' : 'matched to what you logged';
+          const amt = num(l.amt, 0);
+          const r = itemRow(l.d || 'No wording', esc(Day.short(l.date)) + ' · ' + what,
+            (amt > 0 ? '+' : '') + money(amt), amt > 0 ? 'in' : '');
+          if (row && type === 'spend') r.onclick = () => spendSheet(row);
+          else if (row && type === 'paid') r.onclick = () => paidSheet(row);
+          const c = UI.field('text', { placeholder: 'Add a comment', value: l.comment || '' });
+          c.setAttribute('aria-label', 'Comment on ' + (l.d || 'this line'));
+          c.onchange = () => {
+            const cur = Rec.get('recon', null, l.id);
+            if (!cur) return;
+            const v = c.value.trim();
+            if ((cur.comment || '') === v) return;
+            Rec.set('recon', null, l.id, merge(cur, { comment: v || undefined }));
+            l.comment = v;
+            Mobile.feedback('tick');
+          };
+          list.appendChild(stack(r, c));
+        });
+      };
+      q.addEventListener('input', paint);
+      paint();
+    },
+    actions: [{ label: 'DONE', kind: 'go' }],
+  });
+}
+
 function countSheet(a) {
   const b0 = balanceOf(a.id);
   UI.dialog({
@@ -4309,6 +4403,9 @@ function spendSheet(s) {
     body: (b, h) => {
       b.appendChild(el('div', 'note', esc(money(num(s.amt, 0))) + ' · ' + esc(Day.label(s.date)) +
         ' · ' + esc(acctName(s.acct)) + '. This row belongs to STATUS. WEALTH files it without touching it.'));
+      /* A comment left on the statement line this came from. */
+      const rc = s.stmt ? recon(s.stmt) : null;
+      if (rc && rc.comment) b.appendChild(el('div', 'note', 'Your comment on the statement line: <b>' + esc(rc.comment) + '</b>'));
       const cat = picker({
         items: cats().map(c => ({ id: c.id, name: c.name, note: c.grp === 'move' ? 'not spending' : '' })),
         value: catOf(s), placeholder: 'Which category',
@@ -5220,6 +5317,7 @@ function removeWithUndo(type, date, key, label) {
 }
 function acctMenu(a) {
   return [{ label: 'Count what is in it', fn: () => countSheet(a) }]
+    .concat(stmtLines(a.id).length ? [{ label: 'See its statement lines', fn: () => stmtSheet(a.id) }] : [])
     .concat(moveItems('acct', a.id), ['-', { label: 'Delete account', kind: 'bad', fn: () => deleteAcct(a) }]);
 }
 function potMenu(p) {

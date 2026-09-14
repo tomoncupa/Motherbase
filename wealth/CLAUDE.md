@@ -100,7 +100,7 @@ WEALTH writes these types. It may read anything.
 | `pot` | pot id | `{name, target, acct, ord}` |
 | `move` | date + id | `{pot, amt, dir}` — money into or out of a pot |
 | `debt` | debt id | `{name, owed, rate, min, day}` |
-| `recon` | a statement line's fingerprint | `{d, amt, acct, kind, spend, sdate, skip}` — this line has been dealt with. What makes reading the same file twice harmless |
+| `recon` | a statement line's fingerprint | `{d, amt, acct, kind, spend, sdate, skip, comment}` — this line has been dealt with. What makes reading the same file twice harmless. `comment` is his, typed on the statement viewer |
 | `xfer` | date + id | `{from, to, amt, note, t, stmt}` — his own money moving between two of his accounts. One row however many statements show it; `stmt` maps each account to the statement line that confirmed it |
 
 ### Shared with STATUS, and the care that needs
@@ -747,6 +747,33 @@ two copies of every one of the 200 pairs were identical, category included.
 Rows from statements went from 369 purchases, 20 payments and 30 transfers to
 194, 10 and 15, with no pair left and no "already imported" record pointing
 at a row that is gone.
+
+### Seeing a statement, and commenting on it
+
+Tom, 2026-09-14, sure a UnionBank line had been imported when it had not:
+*"I also want to be able to view this and add comments."*
+
+ACCOUNTS has **See statement lines**, and each account's menu has the same.
+It lists every line read for that account in the bank's own words, newest
+first and grouped by month, with a search over wording, amount and comment.
+Each line says what the app did with it: added from the statement, matched to
+what he logged, a transfer between his accounts, left out, or no longer in
+the app. Tapping a line opens the purchase or payment it became.
+
+**A comment belongs to the statement line**, merged into its `recon` row, so
+it survives the file being read again, and it shows on the purchase or
+payment that line became. The line's date is read from its fingerprint,
+because a skipped line stores no other date.
+
+**The reconciled count is said per account**, "GCash 219, Bank 0". The total
+alone hid the fact that nothing had ever been read from his bank, which is
+exactly the question he could not answer from the screen.
+
+Watched: four made-up lines on one account showed under September and August
+as added, matched, left out and a transfer. A comment typed on the added line
+saved into its `recon` row with every other field kept, was found by search,
+and showed on that purchase's sheet. An account with no lines had no menu
+item for them.
 
 ### How an account is recognised
 
