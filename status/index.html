@@ -1232,6 +1232,17 @@ function notes(date) {
   Rec.all('note').forEach(r => {
     const p = r.payload;
     if (!p) return;
+    /* A todo with a due date follows the due date, not the day it was written.
+       Set in QUESTS (quest/CLAUDE.md), 2026-09-14. It shows on the day it is
+       due and follows you forward from there, drawn > on past days like any
+       carried todo. `due: ''` is Todoist's No date and shows nowhere until it
+       is done. A row with no `due` at all behaves exactly as before. LOG
+       carries a copy of this function: change it there too. */
+    if (p.kind === 'todo' && p.due !== undefined && !p.done && !p.cancelled) {
+      if (!p.due || p.due > d) return;
+      out.push(Object.assign({ key: r.key, date: r.date }, p, p.due < d ? { carried: Day.diff(d, p.due) } : {}));
+      return;
+    }
     /* written on this day */
     if (r.date === d) { out.push(Object.assign({ key: r.key, date: d }, p)); return; }
     if (!r.date) return;
@@ -1419,7 +1430,8 @@ const addNote = (date, kind, text) => {
    the old one behind, and writing the same thing twice is one row.          */
 function publishTimed(d) {
   const want = {};
-  notes(d).filter(x => x.date === d && x.at && !x.done && !x.cancelled).forEach(x => {
+  /* a todo due another day is not an event on the day it was written */
+  notes(d).filter(x => x.date === d && x.at && !x.done && !x.cancelled && (!x.due || x.due === d)).forEach(x => {
     const id = 'note-at-' + String(x.text).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
     if (!id || id === 'note-at-') return;
     want[id] = 1;
@@ -1431,6 +1443,61 @@ function publishTimed(d) {
     if (r.key.indexOf('note-at-') === 0 && !want[r.key]) Rec.del('tick', d, r.key);
   });
 }
+
+/* ── a round of a repeating todo ──
+   COPIED FROM QUESTS (`occursAfter`, `nextRound` and `tick` in
+   quest/index.html). Change both. Wrapped so none of its names can collide
+   with this file's. Ticking a repeat writes a finished copy on the day it was
+   ticked, pointing back with `of`, and moves the todo's `due` to its next
+   round, measured from `rep.from` so an every-2-weeks keeps its rhythm. */
+const QROUND = (() => {
+  const pad = n => String(n).padStart(2, '0');
+  const parts = s => { const a = s.split('-').map(Number); return { y: a[0], m: a[1] - 1, d: a[2] }; };
+  const ymd = (y, m, d) => y + '-' + pad(m + 1) + '-' + pad(d);
+  const lastDay = (y, m) => new Date(y, m + 1, 0).getDate();
+  const addMonths = (s, n, dom) => { const p = parts(s), t = new Date(p.y, p.m + n, 1);
+    return ymd(t.getFullYear(), t.getMonth(), Math.min(dom || p.d, lastDay(t.getFullYear(), t.getMonth()))); };
+  const weekStart = s => Day.shift(s, -((Day.dow(s) + 6) % 7));
+  function occursAfter(rep, anchor, after) {
+    const n = Math.max(1, rep.every || 1);
+    if (rep.unit === 'day') { if (anchor > after) return anchor; return Day.shift(anchor, (Math.floor(Day.diff(after, anchor) / n) + 1) * n); }
+    if (rep.unit === 'weekday') { let d = Day.shift(after, 1); while (Day.dow(d) === 0 || Day.dow(d) === 6) d = Day.shift(d, 1); return d; }
+    if (rep.unit === 'week') {
+      if (rep.days && rep.days.length) {
+        for (let i = 1; i <= 7 * n + 7; i++) {
+          const d = Day.shift(after, i);
+          if (rep.days.indexOf(Day.dow(d)) < 0) continue;
+          if (n === 1 || Math.round(Day.diff(weekStart(d), weekStart(anchor)) / 7) % n === 0) return d;
+        }
+      }
+      if (anchor > after) return anchor;
+      return Day.shift(anchor, (Math.floor(Day.diff(after, anchor) / (7 * n)) + 1) * 7 * n);
+    }
+    if (rep.unit === 'month') { const dom = rep.dom || parts(anchor).d; for (let k = 0; k < 1200; k += n) { const d = addMonths(anchor, k, dom); if (d > after) return d; } }
+    if (rep.unit === 'year') { const p = parts(anchor); for (let k = 0; k < 200; k += n) { const y = p.y + k, d = ymd(y, p.m, Math.min(p.d, lastDay(y, p.m))); if (d > after) return d; } }
+    return null;
+  }
+  function tick(x, own, d, stamp) {
+    const cur = Object.assign({}, Rec.get('note', own, x.key) || bare(x));
+    const due = cur.due === undefined ? own : (cur.due || Day.today());
+    const base = due > Day.today() ? due : Day.today();
+    const next = occursAfter(cur.rep, cur.rep.from || due, base);
+    const copyKey = uid();
+    Rec.set('note', d, copyKey, Object.assign({}, cur, {
+      t: Date.now(), made: d, ord: Rec.all('note', { date: d }).length,
+      done: 1, doneAt: stamp, doneOn: d, by: stamp, byAuto: 1, byWas: null,
+      due: due, rep: null, of: x.key,
+    }));
+    if (next) Rec.set('note', own, x.key, Object.assign({}, cur, { due: next }));
+    publishNotes(d); if (own !== d) publishNotes(own);
+    Mobile.feedback('tick');
+    UI.undo('next round ' + (next || ''), () => {
+      Rec.del('note', d, copyKey); Rec.set('note', own, x.key, cur);
+      publishNotes(d); if (own !== d) publishNotes(own); draw();
+    });
+  }
+  return { occursAfter: occursAfter, tick: tick };
+})();
 
 function publishNotes(date) {
   const d = date || Day.today();
@@ -3832,6 +3899,8 @@ function drawJournal(m) {
         const now = new Date();
         const stamp = String(now.getHours()).padStart(2, '0') + ':' +
                       String(now.getMinutes()).padStart(2, '0');
+        /* A repeating todo from QUESTS does a round instead of finishing. */
+        if (x.rep && !x.done) { QROUND.tick(x, own, d, stamp); draw(); return; }
         Rec.set('note', own, x.key, Object.assign(bare(x), {
           done: x.done ? 0 : 1,
           /* ── the Done time, and whose it is ──
