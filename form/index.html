@@ -309,6 +309,14 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
      the observer that catches anything added later. -->
 <script>addEventListener('DOMContentLoaded', function () { if (window.Icons) Icons.paint(); });</script>
 <script src="../shared/mobile.js"></script>
+<!-- The store, and what hangs off it: a review is saved so it comes back
+     when the same clip is dropped in again, and the standard Settings panel
+     backs it up. mobile.js stays before ui.js, as everywhere. -->
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="../shared/io.js"></script>
 </head>
 <body class="view-side solo-A">
 <div id="app">
@@ -333,6 +341,7 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
     <button class="btn ghost" id="snapBtn" title="Save current view as PNG" data-icon="download" data-icon-size="15">Snapshot</button>
     <button class="btn ghost dual-only" id="swapBtn" title="Swap left / right">⇄ Swap</button>
     <button class="btn ghost" id="drawerBtn" title="Toggle telemetry panel" data-icon="rows" data-icon-size="15">Panel</button>
+    <button class="btn ghost" id="setBtn" title="Theme, sound and backups" data-icon="settings" data-icon-size="15">Settings</button>
     <button class="btn ghost" id="helpBtn" title="Shortcuts">? Keys</button>
   </header>
 
@@ -592,6 +601,9 @@ const V = {
    while STATUS wears Ice. Nothing else in the file changed to get this: every
    rule already asked for a colour by its job. */
 Skins.load('../shared/skins.json').then(() => Skins.restore('form'));
+/* FORM owns one type: a review, one row per clip. The video is never in it. */
+Rec.declare('form',['review']);
+IO.register({ app:'form', name:'FORM', types:['review'] });
 
 /* ── where the theme stops, and why ──
    Two kinds of drawing happen in this app and only one of them is chrome.
@@ -658,6 +670,8 @@ function loadFile(pane,file){
   st.strokes=[]; st.path=[]; st.marks=[]; st.scale=null; st.series=[]; st.motion=null; st.reps=[]; st.notes=[];
   st.pose=null; st.smooth=null; st.lastPoseT=null;
   st.trim={start:0,end:null};
+  st.file=file; st.key=null; st.rdate=null; st.client=null; st.lift='';
+  ['weight'].forEach(a=>{ const el=document.querySelector(`[data-${a}="${pane}"]`); if(el) el.value=''; });
   st.shot=null; readShot(pane,file);
   redraw(pane); renderNotes(pane); renderReps(pane);
   document.querySelector(`.dropzone[data-pane="${pane}"]`).classList.add('hidden');
@@ -704,7 +718,56 @@ async function readShot(pane,file){
   if(!shot){ const m=file.name.match(/(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d)/);
     if(m) shot={at:new Date(+m[1],m[2]-1,+m[3],+m[4],+m[5],+m[6]), how:'Sent'}; }
   if(V[pane].url!==url) return;           // another clip was dropped in meanwhile
-  V[pane].shot=shot; renderStamp(pane); }
+  V[pane].shot=shot; renderStamp(pane);
+  V[pane].rdate=shot?ymd(shot.at):null; V[pane].key=reviewKey(file,shot);
+  if(restoreReview(pane)) toast(`Your review of ${paneName(pane)} is back`); }
+
+/* ── saved reviews ──
+   One row per clip, keyed by the file's size and its filming time, so the
+   same video is recognised whatever it has been renamed to. The video itself
+   is never saved: a client's body stays a file on this computer.
+
+   Saving is a check once a second rather than a call from every place that
+   changes something. Twenty call sites is twenty chances to forget one; the
+   store already ignores a write identical to the last, so an unchanged
+   review costs nothing. */
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function reviewKey(file,shot){ return file.size+'-'+(shot?shot.at.getTime():file.name); }
+const r4=n=>Math.round(n*1e4)/1e4;
+const slimPts=pts=>(pts||[]).map(p=>Object.assign({},p,{x:r4(p.x),y:r4(p.y)}));
+function fieldOf(a,p){ const el=document.querySelector(`[data-${a}="${p}"]`); return el?el.value:''; }
+function reviewOf(p){ const st=V[p];
+  return { file:st.file?st.file.name:'', size:st.file?st.file.size:0,
+    filmed:st.shot&&st.shot.how==='Filmed'?st.shot.at.getTime():null,
+    client:st.client||null, lift:st.lift||'',
+    trim:{start:st.trim.start||0, end:st.trim.end==null?null:st.trim.end},
+    notes:st.notes, marks:st.marks, reps:st.reps, mirrored:!!st.mirrored, fps:st.fps,
+    strokes:st.strokes.map(s=>s.pts?Object.assign({},s,{pts:slimPts(s.pts)}):s),
+    path:slimPts(st.path), scale:st.scale,
+    weight:fieldOf('weight',p), unit:fieldOf('unit',p), ex:fieldOf('ex',p) }; }
+function blankReview(r){ return !r.client&&!r.lift&&!r.notes.length&&!r.marks.length&&!r.reps.length&&!r.strokes.length&&
+  !r.path.length&&!r.scale&&!r.mirrored&&!r.weight&&!r.trim.start&&r.trim.end==null; }
+function saveReview(p){ const st=V[p]; if(!loaded(p)||!st.key) return;
+  const mine=reviewOf(p), had=Rec.get('review',st.rdate,st.key);
+  if(!had&&blankReview(mine)) return;      // looking at a clip is not reviewing it
+  /* merge, never replace: a field a newer FORM adds survives this one */
+  Rec.set('review',st.rdate,st.key,Object.assign({},had||{},mine)); }
+setInterval(()=>['A','B'].forEach(saveReview),1000);
+addEventListener('pagehide',()=>['A','B'].forEach(saveReview));
+function restoreReview(p){ const st=V[p], r=Rec.get('review',st.rdate,st.key); if(!r) return false;
+  if(r.trim) st.trim={start:+r.trim.start||0, end:r.trim.end==null?null:+r.trim.end};
+  st.notes=r.notes||[]; st.marks=r.marks||[]; st.reps=r.reps||[]; st.strokes=r.strokes||[];
+  st.path=r.path||[]; st.scale=r.scale||null; st.client=r.client||null; st.lift=r.lift||'';
+  st.mirrored=!!r.mirrored; st.video.classList.toggle('mirror',st.mirrored);
+  const mb=document.querySelector(`[data-mirror="${p}"]`); if(mb) mb.classList.toggle('on',st.mirrored);
+  if(r.fps){ st.fps=r.fps; const f=document.querySelector(`[data-fps="${p}"]`); if(f) f.value=r.fps; }
+  ['weight','unit','ex'].forEach(a=>{ const el=document.querySelector(`[data-${a}="${p}"]`); if(el&&r[a]) el.value=r[a]; });
+  redraw(p); renderNotes(p); updateTrimVisual(p); renderSetAnalysis(p); refreshPaneNames(); updateRepPill();
+  /* the rep table is worked out from the scan, which is not saved */
+  if(st.reps.length) document.getElementById('repTable'+p).innerHTML=
+    `<span class="muted">${st.reps.length} reps saved from last time. Hit <b>⚡ Analyse</b> to see the full table again.</span>`;
+  return true; }
+$('#setBtn').addEventListener('click',()=>UI.settings('form'));
 function secsLabel(t){ t=Math.round(t); return t<60 ? `${t} s` : `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`; }
 /* The set runs from the start of the first rep to the end of the last. Before
    there are reps, the clip is all there is, and it is called the clip. */
@@ -1476,7 +1539,9 @@ $('#snapBtn').addEventListener('click',()=>{
 
 $('#swapBtn').addEventListener('click',()=>{ const a=V.A,b=V.B;
   [a.url,b.url]=[b.url,a.url]; a.video.src=a.url||''; b.video.src=b.url||'';
-  ['name','mirrored','fps','strokes','path','marks','scale','notes','series','motion','reps','trim','shot'].forEach(k=>{ const t=a[k]; a[k]=b[k]; b[k]=t; });
+  ['name','mirrored','fps','strokes','path','marks','scale','notes','series','motion','reps','trim','shot','file','key','rdate','client','lift'].forEach(k=>{ const t=a[k]; a[k]=b[k]; b[k]=t; });
+  /* the weight boxes belong to a clip too, so they cross with it */
+  ['weight','unit','ex'].forEach(x=>{ const ea=document.querySelector(`[data-${x}="A"]`), eb=document.querySelector(`[data-${x}="B"]`); if(ea&&eb){ const t=ea.value; ea.value=eb.value; eb.value=t; } });
   ['A','B'].forEach(p=>{ const has=loaded(p); document.querySelector(`.dropzone[data-pane="${p}"]`).classList.toggle('hidden',has);
     V[p].video.classList.toggle('mirror',!!V[p].mirrored);
     if(has) V[p].video.addEventListener('loadedmetadata',()=>{ sizeCanvas(p); updateTime(p); updateTrimVisual(p); onDurationKnown(p); },{once:true});
@@ -1499,6 +1564,7 @@ function drawOverlayFrame(){ const dpr=window.devicePixelRatio||1, W=ovCanvas.wi
 
 /* ============================== keyboard ============================== */
 window.addEventListener('keydown', e=>{ if(['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName)) return;
+  if(document.querySelector('.mb-sheet.on')) return;       // Settings is open: the keys are its, not the lifts'
   switch(e.key){
     case ' ': e.preventDefault(); uPlay.click(); break;
     /* Q and E step a frame, A and D scrub. The left hand sits on them and
@@ -1589,6 +1655,7 @@ setTimeout(()=>toast('Load a clip, then hit <b>⚡ Analyse</b> — it trims, syn
 
   addEventListener('keydown', e => {
     if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target.tagName || '')) || e.metaKey || e.ctrlKey) return;
+    if (document.querySelector('.mb-sheet.on')) return;
     const k = e.key.toLowerCase();
     /* Tab is the tool panel, Shift+Tab the set analysis. Symmetric, and it
        needs no letter - every letter near the left hand is spoken for now. */
