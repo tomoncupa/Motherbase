@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.5, 2026-09-15">
+<meta name="mb-version" content="1.0.6, 2026-09-15">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -1300,6 +1300,112 @@ const WIDGETS = {
     },
   },
 
+  /* ══════════════ BESIDE ══════════════
+     Two or three measures on one date axis. Tom, 2026-09-15: "the
+     synthesizing of data and the interaction between modules is where the
+     suite will shine", and, on the review's joining widget: "what about
+     joining 3 things". So up to three strips, one under the other, sharing
+     the same days across the bottom and each on its own scale, because two
+     scales on one plot invent a relationship and chart.js refuses to draw
+     one. Nothing here says what one line did to another (root brief, "Never
+     tell him what a behaviour did to a number"). It puts them beside each
+     other and he joins them.
+
+     The measures are STATUS's fields, the day's training volume from
+     TRAIN's sets, the day's spending, and how much got logged at all. Picked
+     from the widget's own menu; a fourth pick drops the oldest. */
+  beside: {
+    nm: 'BESIDE', w: 6, h: 4,
+    days: [[30, '30 days'], [90, '90 days'], [365, 'a year']],
+    measures() {
+      const fields = Rec.map('field'), seen = {}, out = [];
+      const put = (id, label, unit, kind, read) => { if (!seen[id]) { seen[id] = 1; out.push({ id: id, label: label, unit: unit, kind: kind, read: read }); } };
+      /* every field with a row, and every field that has ever been logged,
+         so a fresh install with no field rows still finds its weight */
+      const ids = Object.keys(fields).filter(k => fields[k].on !== 0);
+      Rec.all('ev').forEach(r => { if (ids.indexOf(r.key) < 0) ids.push(r.key); });
+      ids.forEach(id => {
+        const f = fields[id] || {};
+        put(id, f.label || id.charAt(0).toUpperCase() + id.slice(1), f.unit || '', 'line', d => evValue(d, id));
+      });
+      put('trainvol', 'Training volume', 'kg', 'bar', d => {
+        const rows = Rec.all('set', { date: d });
+        return rows.length ? Math.round(rows.reduce((a, r) => a + (r.payload.kg || 0) * (r.payload.r || 0), 0)) : null;
+      });
+      put('spend', 'Spending', '', 'bar', d => {
+        const rows = Rec.all('spend', { date: d });
+        return rows.length ? Math.round(rows.reduce((a, r) => a + (Number(r.payload.amt) || 0), 0)) : null;
+      });
+      put('logged', 'Logged', '', 'bar', d => Rec.all('tick', { date: d }).length || null);
+      return out;
+    },
+    chosen(cfg) {
+      const all = WIDGETS.beside.measures(), have = all.map(m => m.id);
+      const want = (cfg.m && cfg.m.length ? cfg.m : ['sleep', 'trainvol']).filter(id => have.indexOf(id) >= 0).slice(0, 3);
+      return want.map(id => all.filter(m => m.id === id)[0]);
+    },
+    sub: cfg => {
+      const names = WIDGETS.beside.chosen(cfg || {}).map(m => m.label.toLowerCase());
+      if (!names.length) return 'pick measures from the menu';
+      return names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.slice(-1) : names[0];
+    },
+    menu(cfg, redraw) {
+      const on = cfg.m && cfg.m.length ? cfg.m : ['sleep', 'trainvol'];
+      return [{ label: 'Measures', sub: WIDGETS.beside.measures().map(m => ({
+        label: m.label, check: on.indexOf(m.id) >= 0,
+        fn: () => {
+          let next = on.slice();
+          if (next.indexOf(m.id) >= 0) next = next.filter(x => x !== m.id);
+          else { next.push(m.id); if (next.length > 3) next.shift(); }
+          cfg.m = next; redraw();
+        } })) }];
+    },
+    draw(body, cfg) {
+      cfg = cfg || {};
+      const days = cfg.days || 30, today = LifeOS.day(), from = LifeOS.shift(today, -(days - 1));
+      const picked = WIDGETS.beside.chosen(cfg);
+      if (!picked.length) {
+        body.appendChild(el('div', 'empty', 'Nothing to show yet. Log in <span class="link" onclick="go(\'status\')">STATUS</span> or ' +
+          '<span class="link" onclick="go(\'train\')">TRAIN</span>, then pick measures from this widget\'s menu.'));
+        return;
+      }
+      body.style.gap = '0';
+      const fmt = v => Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 });
+      const when = d => d === today ? 'today' : Day.short(d);
+      picked.forEach((m, i) => {
+        const pts = [];
+        for (let k = 0; k < days; k++) { const d = LifeOS.shift(from, k); const v = m.read(d); if (v != null) pts.push([d, v]); }
+        const strip = el('div', 'strip');
+        /* a real floor, because on a phone the card is as tall as its
+           contents and three strips sharing nothing would be three lines */
+        strip.style.cssText = 'flex:1 1 0;min-height:112px;display:flex;flex-direction:column;min-width:0';
+        const last = pts.length ? pts[pts.length - 1] : null;
+        const head = Chart.header({ size: 'sm', label: m.label, value: last ? fmt(last[1]) : '—', unit: m.unit,
+          when: last ? when(last[0]) : 'nothing in ' + days + ' days' });
+        strip.appendChild(head.el);
+        const box = el('div', 'fits');
+        box.style.cssText = 'flex:1 1 auto;min-height:72px';
+        strip.appendChild(box);
+        body.appendChild(strip);
+        if (pts.length < 2) return;
+        const lastStrip = i === picked.length - 1;
+        /* the same left margin on every strip, so the days line up */
+        Chart.mount(box, { pad: { l: 46, r: 12, t: 8, b: lastStrip ? 22 : 6 }, label: m.label + ', ' + days + ' days' }, c => {
+          c.xTime(from, today);
+          c.yFit(pts.map(p => p[1]), m.kind === 'bar' ? { min: 0, lines: 2 } : { lines: 2 });
+          c.grid();
+          if (lastStrip) c.timeAxis();
+          if (m.kind === 'bar') {
+            /* a bar a day wide, whatever days are missing */
+            const bw = Math.max(2, Math.min(24, ((c.W - c.P.l - c.P.r) / days) * .62));
+            c.bars(pts, null, bw, { highlight: 'last' });
+          } else { c.area(pts); c.line(pts); c.end(pts[pts.length - 1]); }
+          c.scrub(pts, { onMove: p => head.set(fmt(p[1]), '', when(p[0])), onLeave: head.reset });
+        });
+      });
+    },
+  },
+
   momentum: {
     nm: 'MOMENTUM', w: 7, h: 3,
     sub: () => 'everything logged',
@@ -1936,6 +2042,8 @@ function widgetMenu(i, x, y) {
     W.days ? { label: 'Show', sub: W.days.map(d => ({
         label: d[1], check: (cfg.days || 90) === d[0],
         fn: () => { cfg.days = d[0]; saveLayout(); drawHome(); } })) } : null,
+    /* a widget with choices of its own puts them here, the same menu */
+    ...(W.menu ? W.menu(cfg, () => { saveLayout(); drawHome(); }) : []),
     '-',
     { label: 'Add another widget', icon: '+', fn: widgetPicker },
     { label: 'Remove', icon: '\u2715', kind: 'bad', fn: () => {

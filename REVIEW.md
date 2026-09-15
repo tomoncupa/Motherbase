@@ -164,6 +164,16 @@ No levels, no XP, no praise, no streak pressure: those rules stand. Nothing
 here tells him what a behaviour did to a number. Every widget states the
 behaviour and shows the number, and the joining is his.
 
+## What happened next, the same day
+
+Tom said yes to all five. Items 1, 2 and 3 are built and committed, and
+the first of item 4's widgets, BESIDE, is on the home screen with up to
+three measures rather than two, on his ask. Item 5 is not built: he
+worries it breeds complacency, and the answer to that is a design choice
+he should make first (see the session's report). The material layer's
+first try tinted whole cards and he said it looked worse; BLOCK tints
+rows, not cards, and the layer now does the same.
+
 ## Recommended order
 
 1, then 2, then 3. Those three are foundation and STYLE work, make every app
