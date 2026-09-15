@@ -4,13 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CLEX — rules engine check</title>
-<!-- The row store and the latch, in the order the app loads them, so the
-     read-only guarantee can be tested rather than believed. -->
-<script src="../shared/skins.js"></script>
-<script src="../shared/day.js"></script>
-<script src="../shared/records.js"></script>
-<script src="../shared/icons.js"></script>
-<script src="readonly.js"></script>
+<!-- CLEX's own kit, and nothing from Motherbase: the standalone checks near
+     the end prove it. -->
+<script src="kit.js"></script>
 
 <script src="data.js"></script>
 <script src="engine.js"></script>
@@ -46,7 +42,7 @@ function creature(st, name, counters) {
   return S.addPermanent(st, name, { sick: false, counters: counters || {} });
 }
 
-function run() {
+async function run() {
   T.length = 0;
 
   /* ---------------------------------------------------------- data ---- */
@@ -441,72 +437,39 @@ function run() {
   ok('scenario: and Kalonian Hydra itself goes 10 -> 34',
     S.countersOn(kh, S.P1) === 34, '10 + (10+1+1)x2');
 
-  /* ------------------------------------------------- the read-only latch */
-  /* CLEX may read everything Motherbase knows and change none of it. These
-     checks write to the real row store, or try to, and confirm nothing lands. */
-  ok('readonly: the row store IS loaded, so CLEX can read the suite',
-    typeof Rec === 'object' && typeof Rec.all === 'function');
-
-  const v = ClexReadOnly.verify();
-  ok('readonly: every row writer is latched', v.latched && v.reading,
-    v.open && v.open.length ? 'still open: ' + v.open.join(', ') : '');
-
-  const probeType = 'clex_probe';
-  const beforeRows = Rec.all(probeType).length;
-  Rec.set(probeType, null, 'x', { v: 1 });
-  ok('readonly: Rec.set writes nothing', Rec.all(probeType).length === beforeRows);
-
-  Rec.declare('clex', [probeType]);
-  ok('readonly: Rec.declare is refused', Rec.all(probeType).length === beforeRows);
-
-  /* A real row must survive a delete attempt. The latch keeps the original
-     writer on the side, so the test can plant a genuine row the way another
-     app would, prove CLEX cannot remove it, then clean up after itself. */
-  Rec.set.blockedOriginal.call(Rec, probeType, null, 'victim', { v: 42 });
-  const planted = !!Rec.row(probeType, null, 'victim');
-  Rec.del(probeType, null, 'victim');
-  ok('readonly: a real row survives Rec.del',
-    planted && !!Rec.row(probeType, null, 'victim') &&
-    Rec.get(probeType, null, 'victim').v === 42);
-
-  Rec.set(probeType, null, 'victim', { v: 99 });
-  ok('readonly: and survives being overwritten',
-    Rec.get(probeType, null, 'victim').v === 42);
-
-  /* Clean up properly. Rec.del would only write a tombstone, which is correct
-     for the suite (a deletion has to travel between devices) but would leave
-     CLEX's test litter in Tom's real storage forever. Remove the raw keys. */
-  (function purgeProbe() {
-    const doomed = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.indexOf(probeType) > -1) doomed.push(k);
-    }
-    doomed.forEach(k => localStorage.removeItem(k));
-    if (typeof Rec.reload === 'function') Rec.reload();
-  })();
-  ok('readonly: the latch test leaves no litter in the real store',
-    Rec.all(probeType).length === 0 &&
-    !Object.keys(localStorage).some(k => k.indexOf(probeType) > -1));
-
-  ok('readonly: Rec.setting still READS with two arguments',
-    Rec.setting('clex', 'nothing-here') === null);
-  ok('readonly: Rec.setting REFUSES to write with three',
-    Rec.setting('clex', 'nothing-here', 'x') === null &&
-    Rec.setting('clex', 'nothing-here') === null);
-
-  ok('readonly: Rec.merge and Rec.clear are latched',
-    Rec.merge.isClexLatch === true && Rec.clear.isClexLatch === true);
-
-  ok('readonly: suite-wide theme and icon editing is latched',
-    Skins.savePalette.isClexLatch === true && Skins.saveCustom.isClexLatch === true &&
-    Icons.savePack.isClexLatch === true);
-
-  ok('readonly: reading a theme still works',
-    Array.isArray(Skins.list()) && Skins.list().length > 0);
-
-  ok('readonly: every refusal was recorded for anyone auditing this',
-    ClexReadOnly.blocked.length > 0);
+  /* ------------------------------------------------------ standalone --- */
+  /* Tom, 2026-09-15: "Take Clex out of the eco system completely." These prove
+     it: nothing from Motherbase is on this page, none of its globals exist, the
+     app page loads and calls none of it, and CLEX's own kit does the jobs the
+     suite used to. */
+  const suiteGlobals = ['Rec', 'Records', 'Skins', 'UI', 'Mobile', 'Sfx', 'Icons', 'IO', 'Day', 'Journal', 'ClexReadOnly'];
+  ok('standalone: no Motherbase script is on this page',
+    ![].some.call(document.scripts, s => /\/shared\//.test(s.src)));
+  ok('standalone: none of the suite\'s globals exist here',
+    suiteGlobals.every(n => typeof window[n] === 'undefined'),
+    suiteGlobals.filter(n => typeof window[n] !== 'undefined').join(', '));
+  let appPage = '';
+  try { appPage = await fetch('index.html', { cache: 'no-store' }).then(r => r.text()); } catch (e) {}
+  ok('standalone: the app page loads nothing from the suite and calls none of it',
+    !!appPage && appPage.indexOf('../shared/') < 0 && appPage.indexOf('readonly.js') < 0 &&
+    !/\b(UI|Mobile|Sfx|Skins|Icons|Rec)\.[A-Za-z]/.test(appPage),
+    appPage ? '' : 'could not read index.html: serve the folder over http');
+  ok('standalone: the kit paints the theme CLEX wears',
+    getComputedStyle(document.documentElement).getPropertyValue('--accent').trim().toUpperCase() === '#F0B323');
+  ok('standalone: the kit draws the icons it knows, and nothing for one it does not',
+    / d="M5 12h14"/.test(Kit.svg('minus')) && Kit.svg('not-an-icon') === '');
+  Kit.toast('smoke');
+  ok('standalone: a toast shows', !!document.querySelector('.kit-toast.on'));
+  let picked = '';
+  Kit.actions('SMOKE', [{ label: 'Pick me', fn: () => { picked = 'yes'; } }]);
+  const act = document.querySelector('.kit-sheet .kit-act');
+  if (act) act.click();
+  await new Promise(r => setTimeout(r, 150));
+  ok('standalone: an action sheet opens and runs the item chosen', !!act && picked === 'yes');
+  const asked = Kit.confirm('Smoke?', 'detail');
+  const yes = [].filter.call(document.querySelectorAll('.kit-sheet .kit-btn'), b => b.textContent === 'YES').pop();
+  if (yes) yes.click();
+  ok('standalone: a confirm answers yes when YES is pressed', !!yes && (await asked) === true);
 
   /* ---------------------------------------------------------- render -- */
   const pass = T.filter(t => t.pass).length;

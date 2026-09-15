@@ -3,34 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.2, 2026-09-15">
+<meta name="mb-version" content="1.0.3, 2026-09-15">
 <title>CLEX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>">
 <meta name="theme-color" content="#0B0E14">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<!-- CLEX reads Motherbase and never writes it.
-
-     records.js is loaded so the themes and icon packs Tom made in STYLE show
-     up here. readonly.js loads straight after it and replaces every write
-     entry point with a refusal, so reading works and writing cannot. That
-     latch is tested in _smoke.html rather than trusted.
-
-     io.js and health.js stay out on purpose: io.js is the backup and export
-     registry, and CLEX is not part of the suite's backup. A game in progress
-     is scratch state, not a record.
+<!-- CLEX stands on its own. Tom, 2026-09-15: "Take Clex out of the eco
+     system completely." It loads nothing from Motherbase's shared folder and
+     reads and writes none of the suite's data. kit.js is the little it used
+     to borrow: the theme values, six icons, a toast, a sheet, a confirm, the
+     back gesture and a tick.
 
      CLEX's own state lives under its own localStorage key. See save() below. -->
-<script src="../shared/skins.js"></script>
-<script src="../shared/day.js"></script>
-<script src="../shared/records.js"></script>
-<script src="../shared/mobile.js"></script>
-<script src="../shared/sound.js"></script>
-<script src="../shared/ui.js"></script>
-<script src="../shared/icons.js"></script>
-<script src="readonly.js?v=1"></script>
+<script src="kit.js?v=1"></script>
 
 <script src="data.js?v=1"></script>
 <script src="engine.js?v=1"></script>
@@ -225,7 +213,7 @@ details summary{
   <h1>CLEX</h1>
   <!-- Drawings, not characters: a glyph renders differently on every device,
        cannot take a theme colour, and disappears with the font. The steppers
-       below draw the shared minus and add icons too. -->
+       below draw minus and add icons too, from kit.js. -->
   <button class="iconbtn" id="deckBtn" aria-label="Switch deck" data-icon="cycle"></button>
   <span class="grow"></span>
   <button class="iconbtn" id="undoBtn" aria-label="Undo" data-icon="undo"></button>
@@ -300,34 +288,12 @@ details summary{
 /* ------------------------------------------------------------------ boot */
 const APP = { id: 'clex', name: 'CLEX' };
 
-/* Skins.restore names the app first, so the theme choice is written to
-   suite_skin.clex and never to the suite-wide key. Sfx does the same with its
-   own namespaced key. Neither goes near a Motherbase data row. */
-Skins.load('../shared/skins.json').then(() => {
-  Skins.restore(APP.id);
-  if (window.Icons) Icons.paint(null, { force: true });
-});
-if (window.Icons) Icons.paint();
-Sfx.init(APP.id);
-
-/* The guarantee, checked out loud rather than assumed. If a later edit loads
-   the row store without the latch, this says so on the way in. */
-(function () {
-  const v = window.ClexReadOnly && ClexReadOnly.verify();
-  if (!v || (window.Rec && !v.latched)) {
-    console.warn('CLEX: the read-only latch is not in place' +
-      (v && v.open ? ' (' + v.open.join(', ') + ' still writable)' : '') +
-      '. CLEX must never write Motherbase data.');
-  }
-})();
-
 const C = window.Clex;
 const $ = id => document.getElementById(id);
 
 /* ------------------------------------------------------------- game state
  *
- * The board lives in rows, one per permanent, so it survives a reload and
- * rides along in the backup like everything else in the suite. Undo is a
+ * The board is saved under CLEX's own key, so it survives a reload. Undo is a
  * session-only stack of snapshots — history of a game in progress is not a
  * fact worth keeping once the game is over.                                */
 
@@ -371,16 +337,16 @@ function snap() { past.push(JSON.stringify(G)); if (past.length > 60) past.shift
 function commit(msg) { if (msg) G.log.push(msg); save(); render(); }
 
 function undo() {
-  if (!past.length) return UI.toast('Nothing to undo');
+  if (!past.length) return Kit.toast('Nothing to undo');
   future.push(JSON.stringify(G));
   G = JSON.parse(past.pop());
-  save(); render(); UI.toast('Undone');
+  save(); render(); Kit.toast('Undone');
 }
 function redo() {
-  if (!future.length) return UI.toast('Nothing to redo');
+  if (!future.length) return Kit.toast('Nothing to redo');
   past.push(JSON.stringify(G));
   G = JSON.parse(future.pop());
-  save(); render(); UI.toast('Redone');
+  save(); render(); Kit.toast('Redone');
 }
 
 /* --------------------------------------------------------------- helpers */
@@ -424,7 +390,7 @@ function toggleEngine(name) {
     r.permanent.sick = false;
     commit('Added ' + name);
   }
-  Sfx.play && Sfx.play('tick');
+  Kit.play();
 }
 
 /* --------------------------------------------------------------- render */
@@ -532,7 +498,7 @@ function renderStack(wrap, group) {
 function stackMenu(group) {
   const p = group.perms[0];
   const n = group.perms.length;
-  Mobile.actions(p.name + ' ×' + n, [
+  Kit.actions(p.name + ' ×' + n, [
     { label: p.tapped ? 'Untap all ' + n : 'Tap all ' + n,
       fn: () => { snap(); const t = !p.tapped;
         group.perms.forEach(q => q.tapped = t); commit(); } },
@@ -615,13 +581,13 @@ function permMenu(p) {
     items.splice(1, 0, { label: 'Level ' + ((p.level || 1) >= 3 ? '1' : '3'),
       fn: () => { snap(); p.level = (p.level || 1) >= 3 ? 1 : 3; commit(); } });
   }
-  Mobile.actions(p.name, items);
+  Kit.actions(p.name, items);
 }
 
 function moveDialog(from) {
   const others = G.field.filter(q => q.uid !== from.uid && C.isType(q.name, 'creature'));
-  if (!others.length) return UI.toast('No other creature to move them to');
-  Mobile.actions('Move counters to', others.map(q => ({
+  if (!others.length) return Kit.toast('No other creature to move them to');
+  Kit.actions('Move counters to', others.map(q => ({
     label: q.name,
     fn: () => {
       snap();
@@ -736,7 +702,7 @@ function quickAction(text) {
 
   if ((m = /^(?:put\s+)?(\d+)\s*(?:\+1\/\+1\s*)?counters?\s+on\s+(.+)$/.exec(s))) {
     const p = matchPermanent(m[2]);
-    if (!p) { UI.toast('No permanent matching "' + m[2] + '"'); return true; }
+    if (!p) { Kit.toast('No permanent matching "' + m[2] + '"'); return true; }
     snap();
     const r = C.putCounters(G, p, C.P1, parseInt(m[1], 10));
     commit('Put ' + r.placed + ' counters on ' + p.name);
@@ -746,7 +712,7 @@ function quickAction(text) {
 
   if ((m = /^move\s+(?:(\d+)\s+)?counters?\s+from\s+(.+?)\s+to\s+(.+)$/.exec(s))) {
     const a = matchPermanent(m[2]), b = matchPermanent(m[3]);
-    if (!a || !b) { UI.toast('Could not find both permanents'); return true; }
+    if (!a || !b) { Kit.toast('Could not find both permanents'); return true; }
     snap();
     const r = C.moveCounters(G, a, b, C.P1, m[1] ? parseInt(m[1], 10) : null);
     commit('Moved ' + r.moved + ' from ' + a.name + ' → ' + r.placed + ' on ' + b.name);
@@ -769,7 +735,7 @@ function quickAction(text) {
       targets = G.field.filter(q => q.controller === 'you' && C.isType(q.name, 'creature') &&
                                     C.countersOn(q, C.P1) > 0);
     }
-    if (!targets.length) { UI.toast('Nothing with counters to double'); return true; }
+    if (!targets.length) { Kit.toast('Nothing with counters to double'); return true; }
     const res = C.doubleCounters(G, targets);
     commit('Doubled counters on ' + targets.length + ' creature' + (targets.length === 1 ? '' : 's'));
     outHTML('<h3>Counters doubled</h3>' +
@@ -782,7 +748,7 @@ function quickAction(text) {
 
   if ((m = /^(?:cast|play)\s+(.+)$/.exec(s))) {
     const hit = C.search(m[1], { pool: pool(), boost: [commander()], limit: 1 })[0];
-    if (!hit) { UI.toast('No card matching "' + m[1] + '"'); return true; }
+    if (!hit) { Kit.toast('No card matching "' + m[1] + '"'); return true; }
     snap();
     const r = C.enterWithCounters(G, hit.n, null);
     r.permanent.sick = C.isType(hit.n, 'creature');
@@ -793,7 +759,7 @@ function quickAction(text) {
     return true;
   }
 
-  UI.toast('Not understood. Try "proliferate 5", "put 12 counters on Ancient", or "Kalonian Hydra attacks".');
+  Kit.toast('Not understood. Try "proliferate 5", "put 12 counters on Ancient", or "Kalonian Hydra attacks".');
   return false;
 }
 
@@ -860,7 +826,7 @@ function boardSummary() {
 
 $('calcBtn').onclick = () => {
   const creatures = G.field.filter(p => p.controller === 'you' && C.isType(p.name, 'creature'));
-  if (!creatures.length) return UI.toast('Put something on the battlefield first');
+  if (!creatures.length) return Kit.toast('Put something on the battlefield first');
 
   const mods = G.field.filter(p => C.REPLACE[p.name]).map(p => p.name);
   const probe = creatures.reduce((best, p) =>
@@ -947,7 +913,7 @@ $('optBtn').onclick = () => {
     G.hand = G.hand || [];
     G.mana.total = b.remaining;
     commit('Applied optimizer line');
-    UI.toast('Line applied');
+    Kit.toast('Line applied');
   };
 };
 
@@ -974,10 +940,10 @@ function comboHTML(combos) {
 
 $('undoBtn').onclick = undo;
 $('redoBtn').onclick = redo;
-$('setBtn').onclick = () => UI.settings(APP.id);
+$('setBtn').onclick = () => Kit.settings();
 
 $('deckBtn').onclick = () => {
-  Mobile.actions('Deck', (C.DATA.decks || []).map(d => ({
+  Kit.actions('Deck', (C.DATA.decks || []).map(d => ({
     label: d.name + (d.id === G.deck ? '  ✓' : ''),
     note: C.commanderOf(d.id),
     fn: () => {
@@ -990,7 +956,7 @@ $('deckBtn').onclick = () => {
 };
 
 $('resetBtn').onclick = async () => {
-  const yes = await UI.confirm('Reset the game?', 'Clears the battlefield, your hand and the mana. Undo can still bring it back.');
+  const yes = await Kit.confirm('Reset the game?', 'Clears the battlefield, your hand and the mana. Undo can still bring it back.');
   if (!yes) return;
   snap();
   const deck = G.deck;
@@ -999,7 +965,7 @@ $('resetBtn').onclick = async () => {
 };
 
 /* Android back closes what is open rather than leaving the app. */
-if (window.Mobile && Mobile.trap) Mobile.trap(() => {
+Kit.trap(() => {
   const r = document.querySelector('.results:not([hidden])');
   if (r) { r.hidden = true; return true; }
   return false;

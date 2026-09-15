@@ -2,9 +2,8 @@
 """Builds the CLIENT copy of Motherbase out of this repo.
 
 WHY THIS EXISTS
-  Clients get a smaller suite than Tom does: no FORM (client video), no
-  CLEX (a personal side app), none of Tom's own apps, and five
-  themes instead of eighteen.
+  Clients get a smaller suite than Tom does: no FORM (client video),
+  none of Tom's own apps, and five themes instead of eighteen.
 
   The obvious way to do that is to copy the folder and delete things. Do not.
   A hand-made copy is a fork, and a fork of `shared/` drifts: a fix Tom makes
@@ -50,7 +49,6 @@ COPY_FILES = ['index.html', '.nojekyll']
 #   arc/     Tom's own, since 2026-09-14
 #   speak/   Tom's own, since 2026-09-15: his content practice
 #   system/  Tom's own, since 2026-09-15: his own posts, not a client's
-#   clex/    a personal side app
 #   _template/ tools/ and every *.md brief - these are build notes
 DROP_APPS = ['form', 'portion', 'wealth', 'arc', 'speak', 'system']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed

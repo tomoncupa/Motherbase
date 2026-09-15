@@ -157,6 +157,12 @@ checkin/index.html CHECK IN, physique check-ins for Tom and his clients: a goal
                    (STATUS's row) and a few answers, and a file to send a coach
                    that the coach keeps. Everywhere.
 checkin/CLAUDE.md  CHECK IN's own brief, governs checkin/ only
+clex/              NOT part of the suite, since 2026-09-15: Tom's Commander deck
+                   aid, kept in the repo only so it stays published. Tom: "Take
+                   Clex out of the eco system completely." It loads nothing from
+                   shared/, reads and writes no suite data, and is in no dock,
+                   review, backup or client build. Its own brief governs it.
+                   Never change anything in shared/ for CLEX's sake.
 style/index.html   the theme workbench. Desktop only, deliberately.
 _template/         a working starter app, copied to make a new one
 tools/             not build steps. embed-skins.py re-embeds the factory themes;
@@ -824,7 +830,7 @@ laptop's rename and a phone's protein edit both survive. See FIELD TIMES in
 `records.js`. This entry stayed open by mistake.
 
 **5. ~~Cache-busting is inconsistent~~ Settled, found 2026-09-15: no app carries a `?v=` stamp any more, the "none of them do" half of the choice below, and the client build stamps its own.** Counted 2026-09-14: `log/`, `style/`
-and `wealth/` load shared at `?v=16`; `_template/`, `checkin/`, `clex/`,
+and `wealth/` load shared at `?v=16`; `_template/`, `checkin/`,
 `portion/` and `quest/` at `?v=15`; the home screen, STATUS, TRAIN, BLOCK, ARC
 and FORM carry none. Fixing it touches every app folder, so it wants a moment
 when no app session is live. Harmless from a folder, where
@@ -878,8 +884,8 @@ screen rather than under the toolbar. Not seen on a phone.
 
 **14. ~~Workarounds an app session can now delete~~ Closed 2026-09-15.** LOG's
 `menuAt()` and CHECK IN's `menu()` were already gone; WEALTH's `menu()` now only
-places the menu beside what opened it, which is its own job. The stepper minus in CLEX
-and STATUS was found already drawn with the shared `minus` icon when Tom asked
+places the menu beside what opened it, which is its own job. The stepper minus in STATUS
+was found already drawn with the shared `minus` icon when Tom asked
 for it on 2026-09-15.
 
 **15. ~~STATUS's journal code lives in several copies~~ Moved 2026-09-14, Tom

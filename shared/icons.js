@@ -105,7 +105,7 @@ const PATHS = {
   gauge:       'M3.5 18a8.5 8.5 0 1117 0M12 14l4.5-4.5',
   book:        'M4 4h7a2 2 0 012 2v14a2 2 0 00-2-2H4zM20 4h-7a2 2 0 00-2 2v14a2 2 0 012-2h7z',
   drop:        'M12 3c0 0 6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z',
-  /* the three TRAIN and CLEX drew for themselves, moved in 2026-09-14 */
+  /* the three TRAIN drew for itself, moved in 2026-09-14 */
   minus:       'M5 12h14',
   trophy:      'M7 4h10v5a5 5 0 01-10 0zM7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3M12 14v4M8 21h8',
   burger:      'M4 6h16M4 12h16M4 18h16',

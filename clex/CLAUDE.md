@@ -1,38 +1,36 @@
 # CLEX
 
-**A personal side app that reads Motherbase and never writes it.** It is in the
-repo and on GitHub like every other app. What it may not do is change any data
-that belongs to the suite.
+**A personal side app. Not part of Motherbase.** It lives in the repo only so it
+stays published at the same web address.
 
-Governs `clex/` only.
+Governs `clex/` only. The root brief's rules for suite apps do not apply here,
+except the ones every file in the repo keeps: vanilla JavaScript, plain
+`<script src>`, no build step, opens from a folder.
 
-## Read yes, write no
+## Standalone
 
-Set by Tom on 2026-08-26: CLEX "should only be able to read".
+Set by Tom on 2026-09-15: "Take Clex out of the eco system completely." Until
+then CLEX loaded seven of the suite's shared files, read the row store for its
+themes, and carried a latch (`readonly.js`) to stop itself writing there. Both
+are gone.
 
 | | |
 |---|---|
-| **Reads** | The whole row store. That is how the themes and icon packs made in STYLE show up here. |
-| **Writes** | Nothing. Not a row, not a setting, not a palette, not an icon pack. |
-| **Its own state** | `clex.game` for the board, `suite_skin.clex` for which theme it wears. Both are CLEX's own keys. |
-| **Backups** | Not registered with `IO`, so CLEX never appears in a Motherbase backup or export. A game in progress is scratch state, not a record. |
+| **Loads from `shared/`** | Nothing. |
+| **Reads or writes suite data** | Nothing. No rows, no settings, no themes, no sounds. |
+| **Its own state** | One localStorage key, `clex.game`, the board. |
+| **Look** | Block's theme, with its values fixed in `kit.js`. STYLE no longer reaches CLEX. |
+| **Backups, dock, review, client build** | Not in any of them. |
 
-**`readonly.js` is the enforcement**, and it is a latch rather than a
-convention. It loads straight after `records.js` and replaces every mutating
-entry point with a refusal that logs itself: `Rec.set`, `del`, `merge`, `clear`,
-`purge`, `vacuum`, `declare`, the three-argument write form of `Rec.setting`,
-plus `Skins.savePalette`, `Skins.saveCustom`, `Icons.savePack` and friends.
-Every reader is left alone. The original writers are kept on
-`.blockedOriginal` purely so the tests can plant a real row and prove CLEX
-cannot remove it.
+**`kit.js` is the little CLEX used to borrow**, and no more: the theme values,
+six icon drawings, a toast, a sheet of choices, a yes-or-no confirm, the
+version line in settings, the back gesture and a tick sound. If CLEX needs
+something new, add it there. Never load a suite file, and never change
+`shared/` for CLEX's sake.
 
-Eleven checks in `_smoke.html` prove this end to end: a genuine row is planted
-the way another app would write it, CLEX fails to delete it, fails to overwrite
-it, and the test removes its own key afterwards rather than leaving a tombstone
-in Tom's real storage.
-
-**If something here refuses you, do not loosen the latch.** CLEX has its own
-localStorage key. Put the state there.
+Eight checks at the end of `_smoke.html` prove it: no suite script on the page,
+none of the suite's globals, the app page loads and calls none of it, and the
+kit's theme, icons, toast, sheet and confirm work.
 
 ## What this is
 
@@ -51,9 +49,8 @@ knows these two decks.
 | `krenko` | Krenko, Mob Boss | `gJOfAVLX5nuAeyg8VIvX0w` |
 
 **This is a phone app.** It is used standing at a table with one hand while
-three other people wait. It follows `shared/STANDARDS.md` by choice rather than
-obligation, because those standards are right for a phone and there is no
-reason to invent different ones.
+three other people wait. It keeps the suite's phone habits by choice: 44px
+targets, sheets from the bottom, the back gesture closing what is open.
 
 ## Files
 
@@ -64,8 +61,8 @@ reason to invent different ones.
 | `combos.js` | Combo detection, and the infinite/finite judgement. |
 | `optimizer.js` | Legal play generation and line scoring. |
 | `data.js` | Generated. 186 cards with real Oracle text, plus both decklists. |
-| `readonly.js` | The read-only latch. Blocks every write into Motherbase. |
-| `_smoke.html` | 104 checks, including 11 that prove the latch holds. |
+| `kit.js` | Theme values, icons, toast, sheet, confirm, back gesture, tick. No suite code. |
+| `_smoke.html` | 99 checks, including 8 that prove CLEX stands on its own. |
 | `tools/build-data.py` | Rebuilds `data.js` from Moxfield and Scryfall. |
 
 **`engine.js` has no DOM and never will.** That is what lets `_smoke.html`
@@ -197,7 +194,7 @@ There is no Node on this machine. Use the browser:
 py -3 -m http.server 8787 -d "<repo>"
 ```
 
-Open `clex/_smoke.html`. It must say **104 of 104**, or more once you add checks.
+Open `clex/_smoke.html`. It must say **99 of 99**, or more once you add checks.
 Every expected number in it was worked out by hand from the printed Oracle text
 before the engine was run, so a red line means the engine is wrong, not the test.
 
@@ -206,9 +203,6 @@ between this app and confidently telling Tom a wrong number at a table.
 
 ## Known gaps, stated plainly
 
-- Stepper buttons use `−` and `+` characters. `status/` and `train/` do the
-  same, and there is no minus drawing in `shared/icons.js` yet. Adding one means
-  editing the suite, which is a foundation job and not this app's to do.
 - Mana is a single number by default. Colour requirements are not enforced, so
   the optimizer can propose a line that needs more green than you have. It was
   built for speed at a table, which is what was asked for.
