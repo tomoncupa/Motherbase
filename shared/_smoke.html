@@ -109,6 +109,23 @@ async function run() {
      waits 60ms for company. A neighbour's poke inside that window used to
      drop the picture and re-read IndexedDB before the put had landed, and the
      row was gone until the next page load. */
+  /* all(type) walks an index of that type now, not the whole store. The
+     index is only worth having if it never disagrees with the rows, so this
+     compares it against a walk of every row after a write, a delete, a merge
+     and a reload. */
+  ok('rec: the type index agrees with a walk of every row, live and dead', (() => {
+    const walk = {};
+    Object.keys(Rec._rows).forEach(id => { const r = Rec._rows[id]; (walk[r.type] = walk[r.type] || []).push(id); });
+    const byDay = {};
+    Object.keys(Rec._rows).forEach(id => { const r = Rec._rows[id]; if (!r.deleted && r.date) (byDay[r.type + '|' + r.date] = byDay[r.type + '|' + r.date] || []).push(id); });
+    return Object.keys(walk).every(t => {
+      const got = Rec.all(t).map(r => r.id).concat(Rec.tombstones(t).map(r => r.id)).sort().join();
+      return got === walk[t].slice().sort().join();
+    }) && Object.keys(byDay).every(k => {
+      const [t, dd] = k.split('|');
+      return Rec.all(t, { date: dd }).map(r => r.id).sort().join() === byDay[k].slice().sort().join();
+    }) && Rec.export().length === Object.keys(Rec._rows).length;
+  })());
   /* Waited for here, not left pending: a reload re-reads IndexedDB, and the
      rest of this run should start after that answer has landed rather than
      have it arrive in the middle of some later check. */

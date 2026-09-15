@@ -140,6 +140,37 @@ function idbPush(r, deleting) {
 }
 
 const rows = Object.create(null);      /* id -> row, the live picture */
+/* type -> {id: 1}, kept in step with `rows` by keep() and drop() below, so a
+   read of one type walks that type and not the whole store. Rec.all(type)
+   used to visit every row in memory to find one type; the home screen calls
+   it hundreds of times a draw, and TRAIN's twelve thousand sets made each
+   call a scan of twelve thousand rows. Every write here goes through the two
+   helpers, and nothing else touches `rows` directly. */
+const byType = Object.create(null);
+/* and type -> date -> {id: 1}, because "this type on this day" is the read
+   the widgets make most: a week of sets, a day of spends, a day of ticks */
+const byDay = Object.create(null);
+function unindex(r) {
+  if (byType[r.type]) delete byType[r.type][r.id];
+  const d = byDay[r.type] && byDay[r.type][r.date || ''];
+  if (d) delete d[r.id];
+}
+function keep(r) {
+  const was = rows[r.id];
+  if (was && (was.type !== r.type || (was.date || '') !== (r.date || ''))) unindex(was);
+  rows[r.id] = r;
+  (byType[r.type] || (byType[r.type] = Object.create(null)))[r.id] = 1;
+  const days = byDay[r.type] || (byDay[r.type] = Object.create(null));
+  (days[r.date || ''] || (days[r.date || ''] = Object.create(null)))[r.id] = 1;
+}
+function drop(id) {
+  const r = rows[id];
+  if (!r) return;
+  unindex(r);
+  delete rows[id];
+}
+const idsOf = type => byType[type] ? Object.keys(byType[type]) : [];
+const idsOn = (type, date) => (byDay[type] && byDay[type][date || '']) ? Object.keys(byDay[type][date || '']) : [];
 const owners = Object.create(null);    /* type -> app id, so a bug is a warning not a mystery */
 let me = 'app', subs = [], bc = null, booted = false, hydrated = false;
 
@@ -298,7 +329,7 @@ const serial = {};
 const LS_MAX = 64 * 1024;
 
 function write(r) {
-  rows[r.id] = r;
+  keep(r);
   serial[r.id] = JSON.stringify(r.payload);
   idbPush(r, false);
   const j = JSON.stringify(r);
@@ -399,7 +430,7 @@ function repairDates() {
        still a row, and guessing at it would lose it for good */
     if (!isFinite(ms)) return;
     const to = rowId(r.type, localDate(ms), r.key);
-    delete rows[r.id]; Store.del(PREFIX + r.id); delete serial[r.id];
+    drop(r.id); Store.del(PREFIX + r.id); delete serial[r.id];
     const have = rows[to];
     if (have && have.updated_at >= r.updated_at) { fixed++; return; }
     write(Object.assign({}, r, { id: to, date: localDate(ms) }));
@@ -411,7 +442,7 @@ function repairDates() {
 
 function loadFast() {
   Store.keys().forEach(k => {
-    try { const r = JSON.parse(Store.get(k)); if (r && r.id) { rows[r.id] = r; serial[r.id] = JSON.stringify(r.payload); } }
+    try { const r = JSON.parse(Store.get(k)); if (r && r.id) { keep(r); serial[r.id] = JSON.stringify(r.payload); } }
     catch (e) { console.warn('[records] unreadable row', k); }
   });
 }
@@ -443,7 +474,7 @@ function hydrate() {
       if (!r || !r.id) return;
       const prev = rows[r.id];
       if (prev && prev.updated_at >= r.updated_at) return;
-      rows[r.id] = r; serial[r.id] = JSON.stringify(r.payload); changed++;
+      keep(r); serial[r.id] = JSON.stringify(r.payload); changed++;
     });
     if (changed) { repairDates(); announce([], false); }
     hydrated = true; flushReady();
@@ -558,10 +589,10 @@ const Rec = {
   tombstone(type, date, key) { const r = rows[rowId(type, date, key)]; return r && r.deleted ? r : null; },
   /** every tombstone of a type, or only the ones written after `since` */
   tombstones(type, since) {
-    const out = [];
-    for (const id in rows) {
-      const r = rows[id];
-      if (!r.deleted || r.type !== type) continue;
+    const out = [], ids = idsOf(type);
+    for (let i = 0; i < ids.length; i++) {
+      const r = rows[ids[i]];
+      if (!r.deleted) continue;
       if (since && !(r.updated_at > since)) continue;
       out.push(r);
     }
@@ -571,10 +602,10 @@ const Rec = {
   /** every live row of a type, optionally narrowed by date or a date window */
   all(type, opt) {
     opt = opt || {};
-    const out = [];
-    for (const id in rows) {
-      const r = rows[id];
-      if (!alive(r) || r.type !== type) continue;
+    const out = [], ids = opt.date != null ? idsOn(type, opt.date) : idsOf(type);
+    for (let i = 0; i < ids.length; i++) {
+      const r = rows[ids[i]];
+      if (!alive(r)) continue;
       if (opt.date != null && r.date !== opt.date) continue;
       if (opt.from && (!r.date || r.date < opt.from)) continue;
       if (opt.to && (!r.date || r.date > opt.to)) continue;
@@ -631,9 +662,9 @@ const Rec = {
   },
   /** rows for backup. `types` narrows it to one app's own data. */
   export(types) {
-    const want = types && types.length ? types : null;
+    const want = types && types.length ? types : Object.keys(byType);
     const out = [];
-    for (const id in rows) { const r = rows[id]; if (!want || want.indexOf(r.type) > -1) out.push(r); }
+    want.forEach(type => idsOf(type).forEach(id => out.push(rows[id])));
     return out.sort((a, b) => a.id.localeCompare(b.id));
   },
   /** Is anything of these types written after `stamp`?
@@ -650,18 +681,23 @@ const Rec = {
       first row that qualifies, so the interesting answer is the fast one. */
   newerThan(types, stamp, keyPrefix) {
     if (!stamp) return true;
-    const want = types && types.length ? types : null;
-    for (const id in rows) {
-      const r = rows[id];
-      if (want && want.indexOf(r.type) < 0) continue;
-      if (keyPrefix && String(r.key).indexOf(keyPrefix) !== 0) continue;
-      if (r.updated_at > stamp) return true;
+    const want = types && types.length ? types : Object.keys(byType);
+    for (let t = 0; t < want.length; t++) {
+      const ids = idsOf(want[t]);
+      for (let i = 0; i < ids.length; i++) {
+        const r = rows[ids[i]];
+        if (keyPrefix && String(r.key).indexOf(keyPrefix) !== 0) continue;
+        if (r.updated_at > stamp) return true;
+      }
     }
     return false;
   },
   types() {
     const t = Object.create(null);
-    for (const id in rows) { const r = rows[id]; if (alive(r)) t[r.type] = (t[r.type] || 0) + 1; }
+    Object.keys(byType).forEach(type => {
+      const n = idsOf(type).filter(id => alive(rows[id])).length;
+      if (n) t[type] = n;
+    });
     return t;
   },
   stats() {
@@ -692,7 +728,7 @@ const Rec = {
        before the read on the same connection, and the browser keeps them in
        that order. */
     Rec.flush();
-    Object.keys(rows).forEach(k => delete rows[k]);
+    Object.keys(rows).forEach(drop);
     loadFast();
     repairDates();
     /* The fast half alone is not the store any more, so a reload that stopped
@@ -709,7 +745,7 @@ const Rec = {
     for (const id in rows) {
       const r = rows[id];
       if (r.type !== type || !r.date || r.date >= beforeDate) continue;
-      delete rows[id]; Store.del(PREFIX + id); idbPush(r, true); n++;
+      drop(id); Store.del(PREFIX + id); idbPush(r, true); n++;
     }
     return n;
   },
@@ -719,7 +755,7 @@ const Rec = {
     let n = 0;
     for (const id in rows) {
       const r = rows[id];
-      if (r.deleted && r.updated_at < cut) { delete rows[id]; Store.del(PREFIX + id); idbPush(r, true); n++; }
+      if (r.deleted && r.updated_at < cut) { drop(id); Store.del(PREFIX + id); idbPush(r, true); n++; }
     }
     return n;
   },
@@ -730,7 +766,7 @@ const Rec = {
     for (const id in rows) {
       const r = rows[id];
       if (types && types.indexOf(r.type) === -1) continue;
-      delete rows[id]; Store.del(PREFIX + id);
+      drop(id); Store.del(PREFIX + id);
       if (!wipeAll) idbPush(r, true);
       n++;
     }
