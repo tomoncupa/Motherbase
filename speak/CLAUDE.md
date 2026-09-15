@@ -29,6 +29,15 @@ up, or a laptop at a desk. Built to the phone rules.
 from the client build. Nothing in it assumes Tom, so it can be given to
 clients later by removing it from `DROP_APPS` and adding it to `COPY_DIRS`.
 
+**It runs on his machine.** Tom, 2026-09-15: *"make it local on my machine."*
+Every number is read on the device. The browser's recogniser is the only thing
+in here that could send his voice anywhere, so it is **off by default** and he
+turns it on for a take he wants his crutch phrases counted in. With it off a
+take makes no network request of any kind; the only one left on the page is
+Google Fonts, which every app in the suite makes and which falls back to the
+system face when it fails. The face finder is about 15MB fetched once and kept
+in the browser's cache, and the picture itself never leaves the machine.
+
 ## How Duolingo was read
 
 What was taken, and what the root brief forbids:
@@ -88,10 +97,21 @@ same counts as on the file.
 | On the lens | share of looks with eyes and head inside a band around the reading taken during the count, when the screen says to look at the lens | Google's face landmarker. Tells the lens zone from the screen or the room; cannot tell two degrees. Not watched on a live face |
 
 **Two things need a signal, and both are switches.** The transcript is the
-browser's own recogniser, which sends the sound to Apple or Google. The face
-finder is about 15MB fetched once and kept in the browser's cache, the way
-CHECK IN keeps its body finder. Everything else works offline, and the drills
-run without either: a take then says which numbers were not measured.
+browser's own recogniser, which sends the sound to Apple or Google, and it is
+off until he turns it on. The face finder is about 15MB fetched once and kept
+in the browser's cache, the way CHECK IN keeps its body finder. Everything
+else works offline, and the drills run without either: a take then says which
+numbers were not measured.
+
+**A drill nothing can measure does not pretend.** `blocked(d)` names the
+switch a drill's goals need and finds it off: No crutch phrases reads words,
+and every EYES step reads the camera. Such a step is left out of TODAY, drawn
+locked on PATH with the reason in its tooltip, and its sheet offers the switch
+in one tap instead of a START it could not honour. It also **never blocks the
+step after it**, or turning the camera off would wall off the rest of EYES
+with nothing on screen saying why. Turn the switch back on and it gates
+normally again, which was watched both ways. A goal that could not be read
+says *no reading* and *not measured*, never *not met*.
 
 **Nothing is recorded.** The microphone feeds the ear and is dropped. The
 transcript, when on, is kept on the take, capped at 4,000 characters.

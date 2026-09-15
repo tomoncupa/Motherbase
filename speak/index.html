@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.0, 2026-09-15">
+<meta name="mb-version" content="1.0.1, 2026-09-15">
 <title>SPEAK</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◍</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -415,6 +415,12 @@ function Ear(sr) {
    that comes from it says so. Chrome's transcript usually drops um and uh, so
    the ear's held sounds stand in for those; the crutch phrases are read here. */
 const ASR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+/* OFF by default, and the one place that decides. Tom, 2026-09-15: "make it
+   local on my machine". The recogniser is the only thing in SPEAK that sends
+   his voice anywhere, so it is off until he turns it on for a take he wants
+   the crutch phrases counted in. Everything else is measured on the device. */
+const asrOn = () => !!(ASR && optOn('asr', 0));
+const camOn = () => optOn('cam', 1);
 function Listener(lang) {
   const out = { chunks: [], words: 0, state: ASR ? 'idle' : 'none', error: '' };
   let rec = null, live = false;
@@ -652,7 +658,7 @@ const DRILLS = [
     goals: t => [{ m: 'fpm', op: 'le', v: t.fpmLow }],
     why: 'One percent of words is where a coach means "one or two a minute".',
     how: 'Ninety seconds. Slower buys fewer fillers.' },
-  { id: 'clean-crutch', skill: 'clean', step: 4, name: 'No crutch phrases', style: 'long', kind: 'bullets', dur: 90, asr: true,
+  { id: 'clean-crutch', skill: 'clean', step: 4, name: 'No crutch phrases', style: 'long', kind: 'bullets', dur: 90, asr: true, needsAsr: true,
     goals: t => [{ m: 'crutch', op: 'le', v: 0 }],
     why: '"You know what I mean" and "right" ask the viewer to agree. A video cannot answer.',
     how: 'Your list is in Settings. End the sentence where the phrase would have gone.' },
@@ -832,12 +838,23 @@ function saveTake(t) {
   if (!Rec.has('tick', Day.today(), 'speak')) Rec.set('tick', Day.today(), 'speak', { src: APP.id });
   return key;
 }
-/* step state: passed, now (the first not passed), or locked (a step after now) */
+/* A drill the switches cannot measure at all: its goals read a number that is
+   not being taken. The EYES drills need the camera, and No crutch phrases
+   needs the words. It is never MET and never NOT MET, it simply cannot run,
+   and DOCTRINE law 5 says do not offer what does not apply. */
+function blocked(d) {
+  if (d.needsAsr && !asrOn()) return 'the transcript';
+  if (d.cam && !camOn()) return 'the camera';
+  return '';
+}
+/* step state: passed, now (the first not passed), or locked (a step after now).
+   A step that cannot be measured never blocks the one after it, or switching
+   the camera off would wall off the rest of EYES with no way to see why. */
 function stepState(d) {
   if (passedEver(d.id)) return 'passed';
   const before = DRILLS.filter(x => x.skill === d.skill && x.step < d.step);
   const skipped = opt('open', []) || [];
-  if (before.every(b => passedEver(b.id)) || skipped.indexOf(d.id) >= 0) return 'now';
+  if (before.every(b => passedEver(b.id) || blocked(b)) || skipped.indexOf(d.id) >= 0) return 'now';
   return 'locked';
 }
 const nowStep = skill => DRILLS.filter(d => d.skill === skill && stepState(d) === 'now')[0] || null;
@@ -874,10 +891,9 @@ function streakInfo() {
    Three, one per skill, from the skills furthest from their target: no take
    yet counts as furthest. Eyes needs a camera and is skipped while it is off. */
 function todaysDrills() {
-  const camOn = optOn('cam', 1);
   const rank = SKILLS.map(s => {
     const d = nowStep(s.id); if (!d) return null;
-    if (d.cam && !camOn) return null;
+    if (blocked(d)) return null;
     const last = lastTake(d.id);
     let dist = 2;
     if (last) { const gs = last.goals || []; dist = gs.length ? gs.filter(g => !g.ok).length / gs.length : 0.5; if (last.pass) dist = 0; }
@@ -953,11 +969,14 @@ function drillRow(d) {
   r.innerHTML = '<span class="ic">' + ICN(today ? (last && last.pass ? 'done' : 'target') : 'play') + '</span>' +
     '<span class="tx"><span class="nm">' + esc(skill.name + ' · ' + d.name) + '</span>' +
     '<span class="sub">' + esc(goals.length ? 'Goal: ' + goals.map(goalText).join(', ') : 'Goal: a count to start from') + '</span></span>' +
-    '<span class="num">' + (last ? '<b>' + esc(mainNumber(d, last)) + '</b>' + (today ? (last.pass ? 'met' : 'not met') : 'last') : '<b>' + mmss(d.dur) + '</b>new') + '</span>';
+    '<span class="num">' + (last ? '<b>' + esc(mainNumber(d, last)) + '</b>' +
+      (today ? (last.pass ? 'met' : unmeasured(last) ? 'no reading' : 'not met') : 'last') : '<b>' + mmss(d.dur) + '</b>new') + '</span>';
   r.onclick = () => openDrill(d);
   Mobile.hold(r, e => drillMenu(d, e));
   return r;
 }
+/* a take where a goal could not be read at all: not a miss, no reading */
+const unmeasured = t => (t.goals || []).some(g => g.got == null);
 function mainNumber(d, t) {
   const g = (t.goals && t.goals[0]) || null;
   if (!g) { if (t.m && t.m.fpm != null) return r1(t.m.fpm) + '/min'; return t.m && t.m.wpm != null ? Math.round(t.m.wpm) + ' wpm' : '·'; }
@@ -972,7 +991,8 @@ function takeRow(t) {
   const when = new Date(t.at || 0);
   r.innerHTML = '<span class="ic">' + ICN(t.pass ? 'done' : 'mic') + '</span><span class="tx"><span class="nm">' + esc(d ? d.name : 'Warm-up') + '</span>' +
     '<span class="sub">' + esc(when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · ' + mmss(t.dur || 0) + (t.asr ? ' · transcript' : '') + (t.cam ? ' · camera' : '')) + '</span></span>' +
-    '<span class="num"><b>' + esc(d ? mainNumber(d, t) : warmLine(t)) + '</b>' + (d ? (t.pass ? 'met' : 'not met') : '') + '</span>';
+    '<span class="num"><b>' + esc(d ? mainNumber(d, t) : warmLine(t)) + '</b>' +
+      (d ? (t.pass ? 'met' : unmeasured(t) ? 'no reading' : 'not met') : '') + '</span>';
   r.onclick = () => showTake(t);
   Mobile.hold(r, e => takeMenu(t, e));
   return r;
@@ -1007,10 +1027,11 @@ function drawPath(m) {
     c.appendChild(el('div', 'why', esc(s.why)));
     const list = el('div', 'list');
     DRILLS.filter(d => d.skill === s.id).forEach(d => {
-      const st = stepState(d);
-      const b = el('button', 'step mb-plate mb-press ' + st);
+      const st = stepState(d), need = blocked(d);
+      const b = el('button', 'step mb-plate mb-press ' + (need && st !== 'passed' ? 'locked' : st));
+      if (need) b.title = 'Measured with ' + need + ', which is off';
       b.innerHTML = '<span class="n">' + d.step + '</span><span class="nm">' + esc(d.name) + '</span>' +
-        '<span class="st">' + ICN(st === 'passed' ? 'done' : st === 'now' ? 'play' : 'lock') + '</span>';
+        '<span class="st">' + ICN(st === 'passed' ? 'done' : need ? 'settings' : st === 'now' ? 'play' : 'lock') + '</span>';
       b.onclick = () => openDrill(d);
       Mobile.hold(b, e => drillMenu(d, e));
       list.appendChild(b);
@@ -1147,26 +1168,40 @@ function openDrill(d) {
   const st = stepState(d);
   UI.dialog({
     title: skill.name + ' · ' + d.name.toUpperCase(), width: 520,
-    body: b => {
+    body: (b, h) => {
+      const need = blocked(d);
       const g = el('div', 'goal');
       g.innerHTML = '<b>Goal</b><span class="g">' + esc(goals.length ? goals.map(goalText).join(', and ') : 'finish, and see the count') + '</span>' +
         '<b>Why</b><span>' + esc(d.why) + '</span>' +
         '<b>How</b><span>' + esc(d.how) + '</span>' +
-        '<b>Time</b><span>' + mmss(d.dur) + (d.cam ? ', camera on' : '') + (d.asr ? ', transcript on' : '') + (d.beat ? ', beat on' : '') + '</span>' +
+        '<b>Time</b><span>' + mmss(d.dur) + (d.cam && camOn() ? ', camera on' : '') +
+          (d.asr && asrOn() ? ', transcript on' : '') + (d.beat && optOn('beat', 1) ? ', beat on' : '') + '</span>' +
         (last ? '<b>Last</b><span>' + esc(lastLine(d, last)) + '</span>' : '') +
         (st === 'locked' ? '<b>Locked</b><span>Opens when step ' + (d.step - 1) + ' is met. Hold it on PATH to open it anyway.</span>' : '');
       b.appendChild(g);
-      if (d.cam && !optOn('cam', 1)) b.appendChild(el('p', 'muted', 'The camera is off in Settings, so the eyes will not be measured.'));
-      if (d.asr && (!ASR || !optOn('asr', 1))) b.appendChild(el('p', 'muted', ASR ? 'The transcript is off in Settings, so only held sounds count as fillers.' : 'This browser cannot make a transcript, so only held sounds count as fillers.'));
+      /* A drill nothing can measure says so, and the switch it wants is right
+         here rather than three taps away in Settings (DOCTRINE law 6). */
+      if (need) {
+        b.appendChild(el('p', 'muted', 'This one is measured with ' + need + ', which is off. Nothing here can be counted until it is on.'));
+        const acts = el('div', 'acts');
+        const on = el('button', 'mb-btn go mb-press mb-tap', 'Turn ' + need + ' on');
+        on.onclick = () => { Rec.setting(APP.id, need === 'the camera' ? 'cam' : 'asr', 1); h.close(); openDrill(d); };
+        acts.appendChild(on);
+        b.appendChild(acts);
+      }
+      if (!need && d.cam && !camOn()) b.appendChild(el('p', 'muted', 'The camera is off, so the eyes will not be measured.'));
+      if (!need && d.asr && !asrOn()) b.appendChild(el('p', 'muted', ASR ? 'The transcript is off, so ums are counted by sound and your crutch phrases are not counted at all.' : 'This browser cannot make a transcript, so ums are counted by sound and your crutch phrases are not counted at all.'));
       if (d.crisp && crispRef() == null) b.appendChild(el('p', 'muted', 'No warm-up today, so crispness has nothing to be measured against. The warm-up sets it.'));
     },
-    actions: [{ label: 'CLOSE' }, { label: 'START', kind: 'go', fn: () => { startTake(d); } }],
+    actions: blocked(d) ? [{ label: 'CLOSE' }]
+      : [{ label: 'CLOSE' }, { label: 'START', kind: 'go', fn: () => { startTake(d); } }],
   });
 }
 function lastLine(d, t) {
   const gs = t.goals || [];
   const bits = gs.map(g => METRICS[g.m].name.toLowerCase() + ' ' + (g.got == null ? '·' : METRICS[g.m].fmt(g.got) + METRICS[g.m].unit));
-  return (bits.length ? bits.join(', ') + '. ' : '') + (t.pass ? 'Met' : gs.length ? 'Not met' : 'Done') + ', ' + Day.label(t.date);
+  const said = t.pass ? 'Met' : !gs.length ? 'Done' : unmeasured(t) ? 'Not measured' : 'Not met';
+  return (bits.length ? bits.join(', ') + '. ' : '') + said + ', ' + Day.label(t.date);
 }
 
 /* ══════════════ the take ══════════════
@@ -1176,8 +1211,8 @@ function lastLine(d, t) {
 const T = { live: false };
 async function startTake(d, warmStep) {
   if (T.live) return;
-  const wantCam = !!(d && d.cam && optOn('cam', 1));
-  const wantAsr = !!(d && optOn('asr', 1) && ASR);
+  const wantCam = !!(d && d.cam && camOn());
+  const wantAsr = !!(d && asrOn());
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -1428,13 +1463,17 @@ function showTake(t, html) {
   const d = t.drill === 'warm' ? null : drillById(t.drill);
   const m = t.m || {};
   UI.dialog({
-    title: (d ? d.name : 'Warm-up').toUpperCase() + ' · ' + (t.pass ? 'MET' : (t.goals && t.goals.length ? 'NOT MET' : 'DONE')), width: 560,
+    title: (d ? d.name : 'Warm-up').toUpperCase() + ' · ' +
+      (t.pass ? 'MET' : !(t.goals && t.goals.length) ? 'DONE'
+        : t.goals.some(g => g.got == null) ? 'NOT MEASURED' : 'NOT MET'), width: 560,
     body: b => {
       if (d) {
         const gs = el('div', 'stats');
         (t.goals || []).forEach(g => {
           const mt = METRICS[g.m];
-          stat(gs, mt.name, g.got == null ? '·' : mt.fmt(g.got) + (mt.unit ? ' ' + mt.unit : ''), 'goal ' + goalText(g).replace(mt.name.toLowerCase() + ' ', ''), g.got == null ? '' : g.ok ? 'met' : 'miss');
+          stat(gs, mt.name, g.got == null ? '·' : mt.fmt(g.got) + (mt.unit ? ' ' + mt.unit : ''),
+            g.got == null ? 'not measured' : 'goal ' + goalText(g).replace(mt.name.toLowerCase() + ' ', ''),
+            g.got == null ? '' : g.ok ? 'met' : 'miss');
         });
         if (!(t.goals || []).length) b.appendChild(el('p', 'muted', 'A count to start from. Nothing to meet.'));
         b.appendChild(gs);
@@ -1531,15 +1570,16 @@ function drawCrutch(p) {
   acts.appendChild(reset); p.appendChild(acts);
 }
 function drawGear(p) {
-  p.appendChild(UI.row('Transcript', ASR ? 'The browser\'s own recogniser. Needs a signal; sound goes to Apple or Google for the words. (Off means offline)' : 'This browser cannot make one', ASR ? UI.toggle(optOn('asr', 1), on => Rec.setting(APP.id, 'asr', on ? 1 : 0)) : null));
+  p.appendChild(el('p', 'muted', 'Everything is measured on this machine. The transcript is the one exception, and it is off.'));
+  p.appendChild(UI.row('Transcript', ASR ? 'Off, your voice stays on this machine. On, it goes to Apple or Google for the words, which is what counts your crutch phrases' : 'This browser cannot make one', ASR ? UI.toggle(asrOn(), on => Rec.setting(APP.id, 'asr', on ? 1 : 0)) : null));
   const lang = el('select', 'mb-sel');
   ['en-US', 'en-GB', 'en-AU', 'en-PH', 'fil-PH'].forEach(l => { const o = el('option', null, l); o.value = l; if (l === opt('lang', 'en-US')) o.selected = true; lang.appendChild(o); });
   lang.onchange = () => Rec.setting(APP.id, 'lang', lang.value);
   p.appendChild(UI.row('Transcript language', 'what the recogniser listens for', lang));
-  p.appendChild(UI.row('Camera', 'On for the EYES drills. About 15MB of face finder, fetched once', UI.toggle(optOn('cam', 1), on => Rec.setting(APP.id, 'cam', on ? 1 : 0))));
+  p.appendChild(UI.row('Camera', 'On for the EYES drills. About 15MB of face finder, fetched once and then kept. The picture never leaves this machine', UI.toggle(camOn(), on => Rec.setting(APP.id, 'cam', on ? 1 : 0))));
   p.appendChild(UI.row('Which camera', 'front is the one you talk to', UI.segmented([{ id: 'user', name: 'Front' }, { id: 'environment', name: 'Back' }], opt('facing', 'user'), v => Rec.setting(APP.id, 'facing', v))));
   p.appendChild(UI.row('Pace beat', 'a click per syllable on the To the beat drill', UI.toggle(optOn('beat', 1), on => Rec.setting(APP.id, 'beat', on ? 1 : 0))));
-  p.appendChild(el('p', 'muted', 'Sound is measured on this device and never leaves it, apart from the transcript when that is on. Nothing is recorded.'));
+  p.appendChild(el('p', 'muted', 'Nothing is recorded. The sound is counted as it arrives and dropped.'));
 }
 
 /* ══════════════ nav and boot ══════════════ */
