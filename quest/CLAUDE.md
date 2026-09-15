@@ -108,6 +108,7 @@ beside the pointer on a wide window and up from the bottom on a phone.
 | Date, Priority, Move to and More are buttons on every row, always visible. Right click and hold still open the menu. On a phone only More shows. | Tom, 2026-09-14 |
 | A clock with no am or pm ("at 8", "8:30", "2-4:30") is the next time it comes round today: at 7:55 AM "at 8" is 8 AM, from 8:01 AM it is 8 PM. Once both have passed it stays PM. On another day STATUS's rule stands, 1 to 6 is afternoon. STATUS and LOG read every line the same way, entries included, and also read "at 8" and ranges at the end of a line. Tom: *"Make the time rules universal for STATUS, QUEST, and LOG."* Supersedes the afternoon rule everywhere on today. | Tom, 2026-09-14 |
 | Ranges like "2-4:30" set a start and a length, and need a colon, am or pm, "at" or "from", so "3-5 reps" stays words. | Claude, 2026-09-14 |
+| ARC writes todos for skill trees: a daily repeating todo for each skill in training and a one-off todo for each review due, in a project named after the map, stamped `src: 'arc'` and `arc: {m, n, k}`. Ticking one is a hit in ARC. QUESTS shows them as from ARC and otherwise treats them as its own. | Tom asked for skill trees in ARC, Claude placed the todos, 2026-09-16 |
 
 ## Not here, and where it went
 
