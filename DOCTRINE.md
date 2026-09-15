@@ -288,7 +288,7 @@ called testers until 2026-09-14, and not the coaching clients in WEALTH.
 | STYLE | `style/` | desktop only | yes | The theme and look for every other app. |
 | FOODDÉX | `portion/` | desktop | no, Tom only | Food database input and overview. Works with STATUS. **To be expanded.** |
 | CHECK IN | `checkin/` | everywhere | yes | Physique check-ins, for Tom and for his clients: a goal, photos measured into neutral numbers, and a timelapse. Reads weight from STATUS rather than asking for it twice. A client's check-in reaches Tom as a file and is kept under their name, in rows a later COACH can read. |
-| SYSTEM | `system/` | everywhere | yes | Text in, a status window out. A game notice or quest window as a picture, for a post or a story. Built 2026-09-15. |
+| NOTICE | `system/` | everywhere | no, Tom only | Text in, a status window out. A game notice or quest window as a picture, for a post or a story. Built 2026-09-15. |
 | COACH | not built | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. A separate app, with TRAIN as its core file. A profile is the same client as in WEALTH, so a 1:1 logged here is a session WEALTH counts. A log arrives as a file the client sends from TRAIN's share menu; sending again only adds what is new. **Planned, after Tom is happy with TRAIN.** |
 
 ARC, BLOCK and STYLE are not meant to work on a phone. Tom, 2026-09-14.
@@ -452,7 +452,7 @@ about whether either is good (Tom, 2026-09-15: "just give neutral numbers").
 Words about a body happen in Claude, when he pastes the bundle in, never on
 screen here.
 
-### SYSTEM — `system/` · everywhere
+### NOTICE — `system/` · everywhere · Tom only
 
 **Function.** Turn a few lines of text into a picture of a game status window.
 
@@ -466,6 +466,10 @@ setting up first. The picture is 1080 wide and reads on a photo.
 **The picture is not themed.** A Hunter window is blue in every theme, the way
 a photo is not repainted by the theme. The app's own chrome obeys STYLE like
 every other app.
+
+**Tom only.** Set 2026-09-15. It makes the pictures he posts, so it is behind
+the dock's line with his other own apps and `tools/build-client.py` leaves the
+folder out.
 
 **Never:** a real reward. The EXP, titles and items are flavour for a picture,
 made up from the text. Nothing here reads or writes a tick, a streak or a

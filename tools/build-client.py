@@ -48,9 +48,10 @@ COPY_FILES = ['index.html', '.nojekyll']
 #   wealth/  his money: clients, rates, rent, debts. Tom only, and the one
 #            folder here where a leak would be a real one
 #   arc/     Tom's own, since 2026-09-14
+#   system/  Tom's own, since 2026-09-15: his own posts, not a client's
 #   clex/    a personal side app
 #   _template/ tools/ and every *.md brief - these are build notes
-DROP_APPS = ['form', 'portion', 'wealth', 'arc']   # removed from the home screen roster
+DROP_APPS = ['form', 'portion', 'wealth', 'arc', 'system']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed
 # STREAKS and NUMBERS were deleted from the main repo on 2026-08-28, and
 # the STREAKS that replaced one of them counts ticks, so it works for a
@@ -207,9 +208,16 @@ for gone in DROP_APPS:
 # is refetched.
 import hashlib
 h = hashlib.sha1()
-for name in sorted(os.listdir(os.path.join(DEST, 'shared'))):
-    h.update(name.encode('utf-8'))
-    h.update(io.open(os.path.join(DEST, 'shared', name), 'rb').read())
+# Every file under shared/, not just the top level: shared/icons/ arrived on
+# 2026-09-15 and listdir handed this a directory to read, which threw and left
+# the client copy unstamped. Walked, so a new folder in there cannot do it
+# again, and sorted at every level so the hash does not depend on disk order.
+for here, subdirs, found in os.walk(os.path.join(DEST, 'shared')):
+    subdirs.sort()
+    for name in sorted(found):
+        full = os.path.join(here, name)
+        h.update(os.path.relpath(full, DEST).replace(os.sep, '/').encode('utf-8'))
+        h.update(io.open(full, 'rb').read())
 stamp = h.hexdigest()[:8]
 
 stamped = 0
