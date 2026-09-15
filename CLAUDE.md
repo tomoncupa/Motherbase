@@ -878,9 +878,9 @@ screen rather than under the toolbar. Not seen on a phone.
 
 **14. ~~Workarounds an app session can now delete~~ Closed 2026-09-15.** LOG's
 `menuAt()` and CHECK IN's `menu()` were already gone; WEALTH's `menu()` now only
-places the menu beside what opened it, which is its own job. The one left, a
-stepper drawn with a `−` character in CLEX and STATUS, is a change to how an app
-looks, and Tom tabled every such change on 2026-09-15 (item 19).
+places the menu beside what opened it, which is its own job. The stepper minus in CLEX
+and STATUS was found already drawn with the shared `minus` icon when Tom asked
+for it on 2026-09-15.
 
 **15. ~~STATUS's journal code lives in several copies~~ Moved 2026-09-14, Tom
 said yes.** `shared/journal.js` holds the kinds, the day rule, the time parser,
@@ -944,8 +944,7 @@ Fixed the same day, on Tom's yes, as `reads` (item 19): an app's sync read only 
 own `_Data · <app>` tab, so a LOG opened on its own never got STATUS's bullets.
 
 Tabled by Tom on 2026-09-15, "don't touch any apps looks yet": adopting
-`mb-card` and `mb-plate` in apps other than the home screen, and the stepper
-icons in item 14.
+`mb-card` and `mb-plate` in apps other than the home screen.
 
 **19. Sync reads the apps a view depends on, 2026-09-15, `io.js` 0.1.14.** Tom:
 "yes fix LOG's sync". A pull read only the app's own `_Data · <app>` tab, and
