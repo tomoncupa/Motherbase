@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
+<meta name="mb-version" content="1.0.0, 2026-09-15">
+<title>SYSTEM</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▣</text></svg>">
+<meta name="theme-color" content="#0B0E14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Chakra Petch and Inter Tight are the suite's. Rajdhani and Cinzel are for
+     the PICTURE only: the Hunter window wants a tech face and the Legend
+     window an engraved one. If Google Fonts does not load, the picture is
+     drawn in the system face and still works. -->
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&family=Rajdhani:wght@600;700&family=Cinzel:wght@600;700&display=swap" rel="stylesheet">
+
+<script src="../shared/skins.js?v=16"></script>
+<script src="../shared/day.js?v=16"></script>
+<script src="../shared/records.js?v=16"></script>
+<script src="../shared/mobile.js?v=16"></script>
+<script src="../shared/sound.js?v=16"></script>
+<script src="../shared/ui.js?v=16"></script>
+<script src="../shared/io.js?v=16"></script>
+<script src="../shared/health.js?v=16"></script>
+<script src="../shared/icons.js?v=16"></script>
+
+<style>
+/* SYSTEM: text in, a status window out. Built to the phone rules and used at
+   a desk too. The app's own chrome obeys the theme, tokens only. The PICTURE
+   it makes is a canvas drawing with its own fixed palettes, in the script
+   below: a Solo Leveling window is blue whatever theme the app wears, the
+   same way a photo is not repainted by the theme. */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);background-image:var(--tex-image);background-size:var(--tex-size);
+  color:var(--text-1);font-family:var(--font-body);font-size:var(--f-3);font-weight:var(--w-body);
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+}
+header{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);
+  background:var(--surface-1);box-shadow:var(--e-1),var(--rim);
+}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+
+main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-7) + var(--safe-b))}
+.wrap{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s-4)}
+/* On a phone the window comes first: it is the thing being made, and the
+   text box under it is one thumb-flick away. At a desk the two sit side by
+   side and the window stays put while the text scrolls. */
+@media (min-width:900px){
+  .wrap{grid-template-columns:minmax(0,5fr) minmax(0,6fr);align-items:start}
+  .see{order:1;position:sticky;top:var(--s-4)}
+}
+.card{border-radius:var(--radius-lg);padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-3)}
+h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted)}
+.lbl{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted);margin-top:var(--s-1)}
+textarea.mb-input{width:100%;min-height:calc(var(--tap) * 4);resize:vertical;
+  font:inherit;line-height:var(--lh-body);font-family:var(--font-mono)}
+.hint{color:var(--text-muted);font-size:var(--f-2);line-height:var(--lh-body)}
+.hint code{font-family:var(--font-mono);color:var(--text-2)}
+
+.stage{display:flex;justify-content:center;align-items:flex-start;padding:var(--s-3);
+  border-radius:var(--radius-md);background:var(--surface-2);min-height:calc(var(--tap) * 3)}
+.stage canvas{display:block;max-width:100%;max-height:72vh;width:auto;height:auto}
+.empty{color:var(--text-muted);line-height:var(--lh-body);padding:var(--s-3) 0}
+
+.acts{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.acts .mb-btn{flex:1 1 auto}
+.seg{display:flex;flex-direction:column;gap:var(--s-1)}
+.hide{display:none!important}
+
+/* the RECENT list */
+.hist{display:flex;flex-direction:column;gap:var(--s-2)}
+.hrow{display:flex;align-items:center;gap:var(--s-2);min-height:var(--tap);border-radius:var(--radius-md)}
+.hrow .pick{flex:1;min-width:0;text-align:left;padding:var(--s-2) var(--s-3);min-height:var(--tap);
+  background:none;border:0;color:var(--text-1);font:inherit;cursor:pointer;border-radius:var(--radius-md)}
+.hrow .pick b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrow .pick small{color:var(--text-muted);font-size:var(--f-1)}
+.hrow .del{flex:0 0 auto;width:var(--tap);height:var(--tap);border:0;background:none;color:var(--text-muted);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-md)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">SYS<b>TEM</b></div>
+  <div class="spacer"></div>
+  <button class="mb-btn mb-press mb-tap" id="btnRecent" aria-label="Recent windows" title="Recent windows" data-icon="history"></button>
+  <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
+  <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
+</header>
+<main class="mb-scroll"><div class="wrap">
+  <section class="card mb-card see">
+    <h2>WINDOW</h2>
+    <div class="stage" id="stage">
+      <canvas id="cv" aria-label="The status window"></canvas>
+      <div class="empty" id="empty">Type a line and the window draws here.</div>
+    </div>
+    <div class="seg"><div class="lbl">FRAME</div><div id="segFrame"></div></div>
+    <div class="seg" id="rowBack"><div class="lbl">BACKDROP</div><div id="segBack"></div></div>
+    <div class="seg" id="rowSize"><div class="lbl">SIZE</div><div id="segSize"></div></div>
+    <div class="acts">
+      <button class="mb-btn go mb-press mb-tap" id="btnSave">SAVE PICTURE</button>
+      <button class="mb-btn mb-press mb-tap" id="btnCopy">COPY</button>
+    </div>
+  </section>
+  <section class="card mb-card edit">
+    <h2>TEXT</h2>
+    <div id="txt"></div>
+    <div class="hint">One line is one message. Start lines with <code>-</code> and it becomes a quest.
+      <code>Rewards:</code> and <code>Penalty:</code> are optional. <code>#</code> sets the heading.
+      <code>[x]</code> ticks a goal, <code>40/100</code> shows progress.</div>
+    <div class="seg"><div class="lbl">WINDOW</div><div id="segKind"></div></div>
+    <div class="seg"><div class="lbl">STYLE</div><div id="segStyle"></div></div>
+    <div class="acts"><button class="mb-btn mb-press mb-tap" id="btnRoll">REROLL REWARDS</button></div>
+  </section>
+</div></main>
+
+<script>
+const APP = {
+  id: 'system',
+  name: 'System',
+  icon: '▣',
+  blurb: 'text in, a status window out',
+  types: ['msg'],   // one made window: its text and the choices it was drawn with
+};
+
+Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
+  if (window.Icons) Icons.paint(null, { force: true }); });
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({ app: APP.id, name: APP.name, types: APP.types,
+  tables: [{ name: 'Windows', type: 'msg', cols: [['text', 'Text'], ['kind', 'Window'], ['style', 'Style']] }] });
+
+let seq = 0;
+const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
+  (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
+
+/* ══════════════ what is on screen ══════════════
+   Every choice is a setting, so the app opens the way it was left. The text
+   is a draft, saved as you type; a window is only a row once SAVE or COPY
+   was pressed. */
+const KINDS = [{ id: 'auto', name: 'AUTO' }, { id: 'notice', name: 'NOTICE' }, { id: 'quest', name: 'QUEST' }];
+const FRAMES = [{ id: 'window', name: 'WINDOW' }, { id: 'story', name: 'STORY' }, { id: 'post', name: 'POST' }];
+const BACKS = [{ id: 'clear', name: 'CLEAR' }, { id: 'dark', name: 'DARK' }];
+const SIZES = IO.SHARE_SIZES.map(s => ({ id: s.id, name: s.name.toUpperCase(), fill: s.fill }));
+const pick = (list, id) => list.filter(x => x.id === id)[0] || list[0];
+const get = (k, d) => { const v = Rec.setting(APP.id, k); return v == null ? d : v; };
+const put = (k, v) => Rec.setting(APP.id, k, v);
+
+const S = {
+  text: get('draft', ''),
+  kind: get('kind', 'auto'),
+  style: get('style', 'hunter'),
+  frame: get('frame', 'window'),
+  back: get('back', 'dark'),
+  size: get('size', 'mid'),
+  seed: +get('seed', 0) || 0,
+};
+
+/* ══════════════ the picture's palettes ══════════════
+   Fixed on purpose. These are the art, the way a photo is: a Hunter window
+   is blue whichever theme the app wears. Nothing here reaches the app's own
+   CSS, which stays on tokens. */
+const STYLES = {
+  hunter: { name: 'HUNTER', face: 'Rajdhani', body: 'Inter Tight',
+    panel: 'rgba(3,14,32,0.88)', panel2: 'rgba(8,36,72,0.62)',
+    line: '#5FD3FF', glow: 'rgba(95,211,255,0.85)', ink: '#EAF7FF', mute: '#8FC7E6',
+    acc: '#5FD3FF', warn: '#FF6B6B', bgA: '#05070D', bgB: '#0A1830',
+    cut: 10, icon: 'circle', notice: 'NOTIFICATION', quest: 'QUEST INFO', brackets: true },
+  legend: { name: 'LEGEND', face: 'Cinzel', body: 'Inter Tight',
+    panel: 'rgba(28,21,10,0.92)', panel2: 'rgba(52,40,16,0.72)',
+    line: '#E1B94A', glow: 'rgba(225,185,74,0.6)', ink: '#FBF3DC', mute: '#C9B27A',
+    acc: '#F2D27A', warn: '#FF8A65', bgA: '#0B0906', bgB: '#241A0A',
+    cut: 0, icon: 'diamond', notice: 'NOTICE', quest: 'QUEST', brackets: true },
+  void: { name: 'VOID', face: 'Chakra Petch', body: 'Inter Tight',
+    panel: 'rgba(16,4,26,0.9)', panel2: 'rgba(40,8,60,0.66)',
+    line: '#C77DFF', glow: 'rgba(199,125,255,0.85)', ink: '#F4E9FF', mute: '#B08AD1',
+    acc: '#E0AAFF', warn: '#FF5C8A', bgA: '#06030A', bgB: '#1A0828',
+    cut: 6, icon: 'triangle', notice: 'SYSTEM MESSAGE', quest: 'QUEST', brackets: true, scan: true },
+};
+const STYLE_LIST = Object.keys(STYLES).map(id => ({ id: id, name: STYLES[id].name }));
+
+/* ══════════════ reading the text ══════════════ */
+const BUL = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
+const CHK = /^\[( |x|X|✓|✔)\]\s*(.*)$/;
+const HEAD = /^\s*(rewards?|loot|penalty|penalties|failure|fail|warning)\s*:\s*(.*)$/i;
+const PROG = /^(.*?)\s*\[?(\d+)\s*\/\s*(\d+)\]?\s*$/;
+const strip = s => s.replace(/^\[\s*/, '').replace(/\s*\]$/, '');
+
+function parse(text, kind) {
+  const q = { head: '', title: '', desc: [], goals: [], rewards: [], penalty: [], lines: [] };
+  let section = 'goal', anyBullet = false;
+  String(text || '').split(/\r?\n/).forEach(raw => {
+    const line = raw.trim();
+    if (!line) return;
+    if (/^#/.test(line)) { q.head = line.replace(/^#+\s*/, ''); return; }
+    const h = HEAD.exec(line);
+    if (h) {
+      section = /^(reward|loot)/i.test(h[1]) ? 'reward' : 'penalty';
+      if (h[2]) h[2].split(/\s*,\s*/).forEach(x => { if (x) q[section === 'reward' ? 'rewards' : 'penalty'].push(x); });
+      return;
+    }
+    const b = BUL.exec(line);
+    const body = b ? b[1] : line;
+    if (b) anyBullet = true;
+    q.lines.push(body);
+    if (section === 'reward') { q.rewards.push(body); return; }
+    if (section === 'penalty') { q.penalty.push(body); return; }
+    if (b) {
+      const c = CHK.exec(body);
+      let done = !!(c && c[1] !== ' '), label = c ? c[2] : body, cur = null, max = null;
+      const p = PROG.exec(label);
+      if (p && +p[3] > 0) { label = p[1] || label; cur = +p[2]; max = +p[3]; if (cur >= max) done = true; }
+      q.goals.push({ label: label, done: done, cur: cur, max: max });
+    } else if (!q.title) q.title = body;
+    else q.desc.push(body);
+  });
+  q.kind = kind === 'auto' ? ((anyBullet || q.rewards.length) ? 'quest' : 'notice') : kind;
+  /* QUEST chosen by hand with no bullets: the first line is the title and
+     the rest are the goals. NOTICE chosen by hand: every line is a message. */
+  if (q.kind === 'quest' && !q.goals.length && q.desc.length) { q.goals = q.desc.map(d => ({ label: d, done: false })); q.desc = []; }
+  if (q.kind === 'notice') {
+    q.msgs = q.lines.map(l => strip(l.replace(CHK, '$2')));
+    q.rewards.forEach(r => q.msgs.push(r)); q.penalty.forEach(r => q.msgs.push(r));
+  }
+  q.typedRewards = q.rewards.length > 0;
+  return q;
+}
+
+/* ══════════════ pseudo rewards ══════════════
+   Made up, and steady: the same quest text gives the same rewards until
+   REROLL is pressed. Bigger quests pay more. The stat matches the words. */
+function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rng(seed) { return () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const STAT_WORDS = [
+  ['STR', /train|gym|lift|squat|bench|deadlift|press|push|pull|row|curl|rep|set/i],
+  ['AGI', /run|walk|steps|sprint|cardio|bike|cycle|swim|jump|stretch|mobility/i],
+  ['VIT', /sleep|rest|recover|nap|bed|water|protein|meal|eat|cook|vegetable/i],
+  ['INT', /read|study|learn|course|write|plan|review|book|research|budget/i],
+  ['CHA', /post|content|film|record|video|call|client|community|coach|reply|message|reel/i],
+  ['WILL', /meditat|journal|breath|pray|fast|no sugar|no alcohol|cold|early|wake/i],
+];
+const TITLES = ['Early Riser', 'Iron Will', 'The One Who Shows Up', 'Relentless', 'Quiet Grinder',
+  'Shadow of Discipline', 'Protagonist', 'Unbroken', 'Night Owl Slayer', 'Keeper of the Routine',
+  'Stone Legs', 'Steady Hand'];
+const ITEMS = ['Potion of Recovery (Rare)', 'Random Box (C-Rank)', 'Key to an Instant Dungeon',
+  'Elixir of Focus ×1', 'Skill Book: Concentration', 'Ring of Small Steps (Uncommon)',
+  'Scroll of Second Wind', 'Boots of the Long Walk', 'Cloak of No Excuses', 'Stamina Tonic ×3',
+  'Bag of Gold Dust', 'Rune of Consistency'];
+function pseudoRewards(q, seed) {
+  const all = [q.title].concat(q.goals.map(g => g.label)).join(' ');
+  const n = Math.max(1, q.goals.length);
+  const words = all.split(/\s+/).filter(Boolean).length;
+  const r = rng(hash(all) + seed * 7919);
+  const exp = Math.round((120 * n + 8 * words) * (1 + Math.floor(r() * 5) / 10) / 10) * 10;
+  let stat = null;
+  STAT_WORDS.forEach(s => { if (!stat && s[1].test(all)) stat = s[0]; });
+  if (!stat) stat = ['STR', 'AGI', 'VIT', 'INT', 'SENSE', 'WILL'][Math.floor(r() * 6)];
+  const amt = 1 + (n > 3 ? 1 : 0) + (r() < 0.3 ? 1 : 0);
+  const out = [exp.toLocaleString('en') + ' EXP', stat + ' +' + amt];
+  if (n >= 3 || r() < 0.5) out.push('Title: ' + TITLES[Math.floor(r() * TITLES.length)]);
+  if (r() < 0.5) out.push(((1 + Math.floor(r() * 9)) * 50 * n).toLocaleString('en') + ' Gold');
+  else out.push('Item: ' + ITEMS[Math.floor(r() * ITEMS.length)]);
+  return out.slice(0, 4);
+}
+
+/* ══════════════ drawing the window ══════════════
+   Everything is laid out in logical units on a 360-wide window and drawn at
+   three times that, so the file is 1080 wide and the type is sharp. */
+const T = 360, M = 24, W = T - 2 * M, P = 22, SC = 3;
+const cv = document.getElementById('cv');
+let fontsIn = false;
+
+function faceOf(st, px, w) { return (w || 700) + ' ' + px + 'px "' + st.face + '", "Chakra Petch", sans-serif'; }
+function bodyOf(st, px, w) { return (w || 500) + ' ' + px + 'px "' + st.body + '", system-ui, sans-serif'; }
+
+function wrapText(ctx, text, maxW) {
+  const words = String(text).split(/\s+/).filter(Boolean), lines = [];
+  let cur = '';
+  words.forEach(w => {
+    const t = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t;
+  });
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+
+/* the box outline: cut corners for Hunter and Void, square for Legend */
+function frame(ctx, x, y, w, h, cut) {
+  ctx.beginPath();
+  if (!cut) { ctx.rect(x, y, w, h); return; }
+  ctx.moveTo(x + cut, y); ctx.lineTo(x + w - cut, y); ctx.lineTo(x + w, y + cut);
+  ctx.lineTo(x + w, y + h - cut); ctx.lineTo(x + w - cut, y + h); ctx.lineTo(x + cut, y + h);
+  ctx.lineTo(x, y + h - cut); ctx.lineTo(x, y + cut); ctx.closePath();
+}
+
+/* spaced-out capitals, drawn a letter at a time so every browser agrees */
+function spaced(ctx, text, cx, y, gap, align) {
+  const chars = String(text).toUpperCase().split('');
+  const widths = chars.map(c => ctx.measureText(c).width);
+  const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
+  let x = align === 'left' ? cx : cx - total / 2;
+  ctx.textAlign = 'left';
+  chars.forEach((c, i) => { ctx.fillText(c, x, y); x += widths[i] + gap; });
+  return total;
+}
+
+/* Two passes over the same list of steps: the first only measures, so the
+   canvas can be sized to the content; the second draws. */
+function layout(q, st, ctx, draw) {
+  const ink = st.ink, X = M + P, CW = W - 2 * P, CX = M + W / 2;
+  let y = M + P;
+  const glowOn = (c, b) => { if (!draw) return; ctx.shadowColor = c; ctx.shadowBlur = b * SC; };
+  const glowOff = () => { if (!draw) return; ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; };
+  const text = (s, x, yy, font, color, align, glow) => {
+    ctx.font = font;
+    if (!draw) return;
+    ctx.fillStyle = color; ctx.textAlign = align || 'left'; ctx.textBaseline = 'top';
+    if (glow) { glowOn(st.glow, 8); ctx.fillText(s, x, yy); }
+    ctx.fillText(s, x, yy);
+    glowOff();
+  };
+  const para = (lines, font, color, align, lh, glow) => {
+    lines.forEach(l => { text(l, align === 'center' ? CX : X, y, font, color, align, glow); y += lh; });
+  };
+  const label = (s, color) => {
+    ctx.font = faceOf(st, 11, 700);
+    if (draw) { ctx.fillStyle = color; ctx.textBaseline = 'top'; spaced(ctx, s, X, y, 2.6, 'left'); }
+    y += 18;
+  };
+
+  /* header: the mark, the heading, the rule */
+  if (draw) {
+    ctx.strokeStyle = st.acc; ctx.fillStyle = st.acc; ctx.lineWidth = 1.8;
+    glowOn(st.glow, 12);
+    const cy = y + 15;
+    ctx.beginPath();
+    if (st.icon === 'circle') ctx.arc(CX, cy, 14, 0, Math.PI * 2);
+    else if (st.icon === 'diamond') { ctx.moveTo(CX, cy - 15); ctx.lineTo(CX + 15, cy); ctx.lineTo(CX, cy + 15); ctx.lineTo(CX - 15, cy); ctx.closePath(); }
+    else { ctx.moveTo(CX, cy - 14); ctx.lineTo(CX + 16, cy + 13); ctx.lineTo(CX - 16, cy + 13); ctx.closePath(); }
+    ctx.stroke();
+    ctx.font = faceOf(st, st.icon === 'triangle' ? 17 : 21, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('!', CX, cy + (st.icon === 'triangle' ? 2 : 0.5));
+    glowOff();
+  }
+  y += 38;
+  ctx.font = faceOf(st, 11, 700);
+  if (draw) { ctx.fillStyle = st.mute; ctx.textBaseline = 'top'; spaced(ctx, q.head || st[q.kind], CX, y, 3, 'center'); }
+  y += 20;
+  if (draw) {
+    glowOn(st.glow, 8); ctx.strokeStyle = st.line; ctx.globalAlpha = 0.7; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X, y); ctx.lineTo(X + CW, y); ctx.stroke();
+    if (st.icon === 'diamond') { ctx.fillStyle = st.acc; ctx.beginPath(); ctx.moveTo(CX, y - 4); ctx.lineTo(CX + 4, y); ctx.lineTo(CX, y + 4); ctx.lineTo(CX - 4, y); ctx.fill(); }
+    ctx.globalAlpha = 1; glowOff();
+  }
+  y += 18;
+
+  if (q.kind === 'notice') {
+    ctx.font = bodyOf(st, 15, 500);
+    q.msgs.forEach(m => {
+      const s = st.brackets ? '[' + m + ']' : m;
+      para(wrapText(ctx, s, CW), bodyOf(st, 15, 500), ink, 'center', 22, false);
+      y += 10;
+    });
+    y -= 10;
+  } else {
+    if (q.title) {
+      ctx.font = faceOf(st, 20, 700);
+      const s = st.brackets ? '[' + q.title + ']' : q.title;
+      para(wrapText(ctx, s, CW), faceOf(st, 20, 700), st.acc, 'center', 26, true);
+      y += 6;
+    }
+    if (q.desc.length) {
+      ctx.font = bodyOf(st, 13, 500);
+      q.desc.forEach(d => para(wrapText(ctx, d, CW), bodyOf(st, 13, 500), st.mute, 'center', 19, false));
+      y += 8;
+    }
+    if (q.goals.length) {
+      y += 6; label('GOAL', st.mute);
+      q.goals.forEach(g => {
+        const hasP = g.cur != null;
+        ctx.font = bodyOf(st, 15, 500);
+        const pw = hasP ? 62 : 0;
+        const lines = wrapText(ctx, g.label, CW - 24 - pw);
+        if (draw) {
+          const bx = X, by = y + 3;
+          ctx.lineWidth = 1.5; ctx.strokeStyle = st.acc; ctx.fillStyle = st.acc;
+          if (g.done) {
+            ctx.fillRect(bx, by, 13, 13);
+            ctx.strokeStyle = st.panel; ctx.lineWidth = 2; ctx.beginPath();
+            ctx.moveTo(bx + 3, by + 7); ctx.lineTo(bx + 5.5, by + 10); ctx.lineTo(bx + 10.5, by + 3.5); ctx.stroke();
+          } else ctx.strokeRect(bx + 0.5, by + 0.5, 12, 12);
+          if (hasP) text('[' + g.cur + '/' + g.max + ']', X + CW, y, faceOf(st, 14, 700), g.done ? st.acc : st.mute, 'right', false);
+        }
+        lines.forEach(l => { text(l, X + 24, y, bodyOf(st, 15, 500), ink, 'left', false); y += 21; });
+        y += 5;
+      });
+    }
+    const rewards = q.typedRewards ? q.rewards : pseudoRewards(q, S.seed);
+    if (rewards.length) {
+      y += 10; label('REWARDS', st.mute);
+      rewards.forEach(rw => {
+        ctx.font = bodyOf(st, 14, 600);
+        const lines = wrapText(ctx, rw, CW - 20);
+        if (draw) { ctx.fillStyle = st.acc; ctx.beginPath(); ctx.moveTo(X + 6, y + 5); ctx.lineTo(X + 11, y + 10); ctx.lineTo(X + 6, y + 15); ctx.lineTo(X + 1, y + 10); ctx.fill(); }
+        lines.forEach(l => { text(l, X + 20, y, bodyOf(st, 14, 600), st.acc, 'left', false); y += 21; });
+        y += 3;
+      });
+    }
+    if (q.penalty.length) {
+      y += 10; label('WARNING', st.warn);
+      ctx.font = bodyOf(st, 13, 500);
+      q.penalty.forEach(p => para(wrapText(ctx, p, CW), bodyOf(st, 13, 500), st.warn, 'left', 19, false));
+    }
+  }
+  y += P + 2;
+  return y + M - M; // bottom of the box, in logical units
+}
+
+/* the window alone, on a clear canvas, 1080 wide */
+function drawWindow(q, st) {
+  const c = document.createElement('canvas');
+  const ctx = c.getContext('2d');
+  ctx.scale(SC, SC);
+  const bottom = layout(q, st, ctx, false);
+  const H = bottom - M;                     // box height
+  c.width = T * SC; c.height = (H + 2 * M) * SC;
+  ctx.setTransform(SC, 0, 0, SC, 0, 0);
+
+  /* the plate */
+  const g = ctx.createLinearGradient(0, M, 0, M + H);
+  g.addColorStop(0, st.panel2); g.addColorStop(1, st.panel);
+  frame(ctx, M, M, W, H, st.cut);
+  ctx.fillStyle = g; ctx.fill();
+  if (st.scan) {
+    ctx.save(); ctx.clip(); ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+    for (let yy = M + 2; yy < M + H; yy += 4) { ctx.beginPath(); ctx.moveTo(M, yy); ctx.lineTo(M + W, yy); ctx.stroke(); }
+    ctx.restore();
+  }
+  /* the glowing edge: once with the light, once crisp on top of it */
+  ctx.shadowColor = st.glow; ctx.shadowBlur = 14 * SC;
+  ctx.strokeStyle = st.line; ctx.lineWidth = 2;
+  frame(ctx, M, M, W, H, st.cut); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+  ctx.stroke();
+  /* the inner hairline */
+  ctx.globalAlpha = st.icon === 'diamond' ? 0.6 : 0.35; ctx.lineWidth = 1;
+  frame(ctx, M + 5, M + 5, W - 10, H - 10, st.cut ? Math.max(0, st.cut - 4) : 0); ctx.stroke();
+  ctx.globalAlpha = 1;
+  if (st.icon === 'diamond') {
+    ctx.fillStyle = st.acc;
+    [[M, M], [M + W, M], [M, M + H], [M + W, M + H]].forEach(pt => {
+      ctx.beginPath(); ctx.moveTo(pt[0], pt[1] - 5); ctx.lineTo(pt[0] + 5, pt[1]); ctx.lineTo(pt[0], pt[1] + 5); ctx.lineTo(pt[0] - 5, pt[1]); ctx.fill();
+    });
+  }
+  layout(q, st, ctx, true);
+  return c;
+}
+
+/* the whole picture: the window alone, or laid on a story or a post */
+const FRAME_BOX = {
+  story: { w: IO.STORY.w, h: IO.STORY.h, safe: IO.STORY.safe },
+  post: { w: 1080, h: 1350, safe: { x: 60, y: 90, w: 960, h: 1170 } },
+};
+function render() {
+  const q = parse(S.text, S.kind);
+  const st = STYLES[S.style] || STYLES.hunter;
+  const has = q.kind === 'notice' ? q.msgs.length : (q.title || q.goals.length);
+  document.getElementById('empty').classList.toggle('hide', !!has);
+  cv.classList.toggle('hide', !has);
+  document.getElementById('btnRoll').classList.toggle('hide', !(has && q.kind === 'quest' && !q.typedRewards));
+  document.getElementById('rowBack').classList.toggle('hide', S.frame === 'window');
+  document.getElementById('rowSize').classList.toggle('hide', S.frame === 'window');
+  if (!has) return null;
+  const win = drawWindow(q, st);
+  const fb = FRAME_BOX[S.frame];
+  const ctx = cv.getContext('2d');
+  if (!fb) {
+    cv.width = win.width; cv.height = win.height;
+    ctx.drawImage(win, 0, 0);
+  } else {
+    cv.width = fb.w; cv.height = fb.h;
+    ctx.clearRect(0, 0, fb.w, fb.h);
+    if (S.back === 'dark') {
+      const g = ctx.createLinearGradient(0, 0, 0, fb.h);
+      g.addColorStop(0, st.bgB); g.addColorStop(1, st.bgA);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, fb.w, fb.h);
+      const v = ctx.createRadialGradient(fb.w / 2, fb.h / 2, fb.h * 0.2, fb.w / 2, fb.h / 2, fb.h * 0.75);
+      v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+      ctx.fillStyle = v; ctx.fillRect(0, 0, fb.w, fb.h);
+    }
+    const fill = pick(SIZES, S.size).fill;
+    const sc = Math.min(fb.safe.w * fill / win.width, fb.safe.h / win.height);
+    const sw = win.width * sc, sh = win.height * sc;
+    ctx.drawImage(win, fb.safe.x + (fb.safe.w - sw) / 2, fb.safe.y + (fb.safe.h - sh) / 2, sw, sh);
+  }
+  return q;
+}
+
+/* ══════════════ the controls ══════════════ */
+const $ = id => document.getElementById(id);
+function seg(id, list, key, after) {
+  const box = $(id); box.innerHTML = '';
+  box.appendChild(UI.segmented(list, S[key], v => { S[key] = v; put(key, v); Mobile.feedback('select'); render(); if (after) after(); }));
+}
+seg('segKind', KINDS, 'kind');
+seg('segStyle', STYLE_LIST, 'style');
+seg('segFrame', FRAMES, 'frame');
+seg('segBack', BACKS, 'back');
+seg('segSize', SIZES, 'size');
+
+const ta = UI.field('note', { rows: 8, value: S.text,
+  placeholder: 'Daily quest: Preparation\n- 100 push-ups\n- 100 sit-ups\n- 10 km run\nPenalty: 4 hours in the penalty zone' });
+$('txt').appendChild(ta);
+let saveT = null;
+ta.addEventListener('input', () => {
+  S.text = ta.value;
+  render();
+  clearTimeout(saveT); saveT = setTimeout(() => put('draft', S.text), 400);
+});
+
+$('btnRoll').onclick = () => { S.seed = S.seed + 1; put('seed', S.seed); Mobile.feedback('select'); render(); };
+
+const fileName = q => {
+  const first = (q.title || (q.msgs && q.msgs[0]) || 'window').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  return 'system-' + (first || 'window') + '-' + Day.today();
+};
+function keep(q) {
+  Rec.set('msg', Day.today(), newId(), { text: S.text, kind: q.kind, style: S.style, seed: S.seed, t: Date.now() });
+}
+/* The picture on screen IS the file, already drawn, so the share sheet is
+   asked for inside the tap that pressed SAVE. iOS allows nothing later. */
+$('btnSave').onclick = () => {
+  const q = render();
+  if (!q) { UI.toast('Nothing to save', { bad: true }); return; }
+  let png;
+  try { png = cv.toDataURL('image/png'); } catch (e) { UI.toast('Could not draw the picture', { bad: true }); return; }
+  keep(q);
+  Mobile.feedback('success');
+  IO.handOver(png, fileName(q) + '.png');
+};
+const canCopy = !!(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem);
+$('btnCopy').classList.toggle('hide', !canCopy);
+$('btnCopy').onclick = () => {
+  const q = render();
+  if (!q) { UI.toast('Nothing to copy', { bad: true }); return; }
+  try {
+    const item = new ClipboardItem({ 'image/png': new Promise(res => cv.toBlob(res, 'image/png')) });
+    navigator.clipboard.write([item]).then(() => { keep(q); Mobile.feedback('success'); UI.toast('Copied'); },
+      () => UI.toast('Copy did not work', { bad: true }));
+  } catch (e) { UI.toast('Copy did not work', { bad: true }); }
+};
+
+/* ── RECENT: every window saved or copied, newest first ── */
+$('btnRecent').onclick = () => {
+  Mobile.feedback('open');
+  UI.dialog({
+    title: 'RECENT', width: 460,
+    body: (b, h) => {
+      const rows = Rec.all('msg').filter(r => !r.deleted)
+        .sort((a, c) => (c.payload.t || 0) - (a.payload.t || 0)).slice(0, 40);
+      if (!rows.length) { b.innerHTML = '<div class="empty">No windows saved yet.</div>'; return; }
+      const list = document.createElement('div'); list.className = 'hist';
+      rows.forEach(r => {
+        const p = r.payload;
+        const first = String(p.text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean)[0] || 'window';
+        const row = document.createElement('div'); row.className = 'hrow mb-plate';
+        const go = document.createElement('button'); go.className = 'pick mb-press';
+        go.innerHTML = '<b>' + UI.esc(first) + '</b><small>' + UI.esc((STYLES[p.style] || STYLES.hunter).name + ' · ' +
+          (p.kind === 'quest' ? 'quest' : 'notice') + ' · ' + Day.label(r.date || Day.today())) + '</small>';
+        go.onclick = () => {
+          S.text = p.text || ''; S.style = STYLES[p.style] ? p.style : S.style; S.seed = +p.seed || 0;
+          ta.value = S.text; put('draft', S.text); put('style', S.style); put('seed', S.seed);
+          seg('segStyle', STYLE_LIST, 'style');
+          render(); h.close(); Mobile.feedback('select');
+        };
+        const del = document.createElement('button'); del.className = 'del mb-press';
+        del.setAttribute('aria-label', 'Delete');
+        del.innerHTML = (window.Icons && Icons.svg('del', { size: 18 })) || '✕';
+        del.onclick = () => {
+          Rec.del('msg', r.date, r.key); row.remove(); Mobile.haptic('warn');
+          UI.undo('deleted <b>' + UI.esc(first) + '</b>', () => Rec.set('msg', r.date, r.key, p));
+        };
+        row.appendChild(go); row.appendChild(del); list.appendChild(row);
+      });
+      b.appendChild(list);
+    },
+    actions: [{ label: 'DONE' }],
+  });
+};
+
+/* The picture is drawn once now in whatever face is loaded, and again when
+   the real faces land, so a slow font never leaves a wrong picture up. */
+render();
+if (document.fonts) {
+  const faces = ['700 30px "Rajdhani"', '700 30px "Cinzel"', '700 30px "Chakra Petch"', '500 30px "Inter Tight"', '600 30px "Inter Tight"'];
+  Promise.all(faces.map(f => document.fonts.load(f).catch(() => {}))).then(() => { fontsIn = true; render(); });
+  document.fonts.ready.then(() => render()).catch(() => {});
+}
+Rec.ready(() => {
+  /* the big half of the store may carry a newer draft than the fast half did */
+  const d = get('draft', null);
+  if (d != null && d !== S.text && !ta.value) { S.text = d; ta.value = d; render(); }
+});
+</script>
+</body>
+</html>
