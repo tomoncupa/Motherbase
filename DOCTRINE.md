@@ -414,8 +414,14 @@ thinking is not only words.
 
 **Also:** presentations.
 
-**Planned:** a teach mode that turns a map into a skill tree of actionable
-steps. The steps are todo bullets, so they show up in QUESTS.
+**Skill trees** (built 2026-09-16, Tom: "Give ARC everything it needs, don't
+let doctrine get in the way"). A node can be a skill with a test. Its children
+are what it needs; it opens when they pass, passes on hits on separate days,
+and comes back for reviews. A skill in training is a daily QUESTS todo, and
+ticking it is a hit. The rules come from the skill tree.exe skill, and the
+tree is built with Claude through the clipboard. That makes ARC a tracker as
+well as a canvas, which the Never line below did not foresee; Tom said so on
+purpose.
 
 **Never:** a note-taking app. The value is the *shape*, not the text.
 
