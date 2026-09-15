@@ -496,6 +496,10 @@ What iPhone Safari changes:
 - **Two maps are cached** (`TRAIN.exercises()`, `TRAIN.cats()`), dropped on every
   store announcement.
 - Never render 12,370 sets. History pages by 100, records by 60, rep max by 40.
+- **The first paint does not wait for the store.** If `Rec.ready` has not fired
+  after 300ms and there are sets or exercises in localStorage, TRAIN draws them;
+  seeding and the record pass still wait for ready. Watched 2026-09-15 in a frame
+  whose IndexedDB never answers. TRAIN 1.0.7.
 
 ---
 
