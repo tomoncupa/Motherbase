@@ -205,6 +205,7 @@ const ROLES = {
   'app.wealth': 'cash',
   'app.form': 'frames',
   'app.portion': 'bowl',
+  'app.system': 'info',
   quest: 'flag', flag: 'flag',
   pose: 'pose', physique: 'pose', checkin: 'pose',
   compare: 'frames', frames: 'frames',
