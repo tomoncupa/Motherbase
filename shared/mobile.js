@@ -255,6 +255,38 @@ function chrome() {
     doc.head.appendChild(s);
   }
 
+  /* ── the icon on an iPhone's home screen ──
+     Tom, 2026-09-15: "what about icons for the Home Screen on iOS". Add to
+     Home Screen takes a PNG named by this link and nothing else: no SVG, no
+     favicon, and without it iOS uses a screenshot of the page. The pictures
+     live in shared/icons, one per app id, drawn from the master set at
+     180px on the app's own plate colour (2026-09-15; redraw them the same
+     way when a drawing changes). The app is what it declared to the store,
+     or its folder before it has, and the home screen carries its own link.
+     Only put in where the page has not said otherwise. Nothing here is a
+     web app install: that needs a web address, and from a folder the link
+     is simply unused. Done once the page has loaded, so the app has
+     declared itself by then. */
+  const here = (doc.currentScript && doc.currentScript.src) || '';
+  const sharedDir = here.replace(/[^\/]*$/, '');
+  const homeIcon = () => {
+    const folder = (location.pathname.match(/\/([^\/]+)\/[^\/]*$/) || [])[1];
+    const declared = g.Rec && g.Rec.appId && g.Rec.appId !== 'app' ? g.Rec.appId : '';
+    const appId = declared || (folder && folder !== 'shared' && folder.indexOf('.') < 0 && folder.indexOf('%') < 0 ? folder : 'home');
+    if (sharedDir && !doc.querySelector('link[rel="apple-touch-icon"]')) {
+      const l = doc.createElement('link');
+      l.rel = 'apple-touch-icon'; l.href = sharedDir + 'icons/' + appId + '.png';
+      doc.head.appendChild(l);
+    }
+    if (!doc.querySelector('meta[name="apple-mobile-web-app-title"]')) {
+      const t = doc.createElement('meta');
+      t.name = 'apple-mobile-web-app-title';
+      t.content = (doc.title || appId).replace(/\s*[—–-].*$/, '').trim() || appId;
+      doc.head.appendChild(t);
+    }
+  };
+  if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', homeIcon); else homeIcon();
+
   root.classList.toggle('mb-ios', ios);
   root.classList.toggle('mb-android', android);
   root.classList.toggle('mb-touch', touch);

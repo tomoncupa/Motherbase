@@ -3,9 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.4, 2026-09-15">
+<meta name="mb-version" content="1.0.5, 2026-09-15">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
+<!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
+     the root names its own, because from a folder this file's folder is not
+     an app id -->
+<link rel="apple-touch-icon" href="shared/icons/home.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <meta name="theme-color" content="#0B0E14">
@@ -91,9 +95,16 @@ nav button{
    the tooltip. Tom, 2026-09-14: "the header now takes up too much space". */
 @media (min-width:821px) and (max-width:1400px){ nav button .nm{display:none} nav button{padding:5px 8px} }
 @media (hover:hover) and (pointer:fine){ nav button:hover{color:var(--txt)} }
-nav button.on{background:color-mix(in srgb,var(--accent) 14%,var(--surface-2));color:var(--acc);box-shadow:0 0 0 1px var(--acc-d)}
+/* Each app has a colour, --c, its slot in the theme's chart ramp: the icon
+   wears it always, and the whole button wears it when the app is open. Tom,
+   2026-09-15: the icons "are currently just plain letters". Drawn a step
+   heavier and a size up as well, in appIco. */
+nav button > span:first-child{display:flex;color:var(--c,var(--dim))}
+nav button.on{background:color-mix(in srgb,var(--c,var(--accent)) 14%,var(--surface-2));color:var(--c,var(--acc));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--c,var(--accent)) 34%,var(--bg))}
 nav button .k{font-size:9px;opacity:.5}
-nav button.dead{color:#43535f}
+nav button.dead{color:var(--dim2)}
+nav button.dead > span:first-child{color:var(--dim2)}
 /* dragging the dock into the order you want */
 nav button[draggable]{cursor:grab}
 nav button.dragging{opacity:.4;cursor:grabbing}
@@ -158,8 +169,11 @@ nav button.dropinto{box-shadow:inset 2px 0 0 var(--acc)}
 @media(max-width:820px){ #grid{grid-template-columns:repeat(4,1fr)} }
 .w{
   grid-column:span var(--cw,4);
-  border-radius:var(--radius-lg,14px);background:var(--panel);
-  box-shadow:var(--e-2),var(--rim);
+  /* The material layer (shared/THEMING.md, Material): a card carries
+     `mb-card`, the dark glass BLOCK's lanes are; its rows carry `mb-plate`
+     and --c, the colour of the block or of the app the widget draws for,
+     set in drawHome. No background, border or shadow written here. */
+  border-radius:var(--radius-lg,14px);
   position:relative;overflow:hidden;display:flex;flex-direction:column;
   height:calc(var(--ch,3) * 84px);min-height:120px;
 }
@@ -233,8 +247,10 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 
 /* ---------- shared widget bits ---------- */
 .rowlist{display:flex;flex-direction:column;gap:5px}
+/* a row is a plate in its own colour, the way a block is in BLOCK: drawHome
+   puts mb-plate on it, and --c is the block's colour or the widget's app's */
 .row{display:flex;align-items:center;gap:10px;padding:8px 9px;min-height:var(--tap,44px);
-  border-radius:var(--radius-md,10px);background:var(--panel2);position:relative}
+  border-radius:var(--radius-md,10px);position:relative}
 @media (hover:hover) and (pointer:fine){ .row:hover{background:var(--surface-3)} }
 .row .bar{position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:3px;background:var(--acc)}
 .row .t{font-family:var(--f1);font-size:11px;letter-spacing:.06em;color:var(--dim);width:60px;flex:0 0 auto;padding-left:8px}
@@ -318,13 +334,13 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .legend{display:flex;align-items:center;gap:5px;margin-top:8px;font-size:10px;color:var(--dim2);font-family:var(--f1);letter-spacing:.1em}
 .legend b{width:10px;height:10px;border-radius:3px;display:block}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:9px}
-.tile{border-radius:var(--radius-md,11px);background:var(--panel2);padding:var(--s-3,12px);
+.tile{border-radius:var(--radius-md,11px);padding:var(--s-3,12px);   /* a plate: mb-plate draws it */
   min-height:var(--tap,44px);text-align:left;display:flex;flex-direction:column;gap:4px;
   transition:transform var(--dur-tap,90ms) var(--ease-out,ease),box-shadow var(--dur-fast,140ms)}
 @media (hover:hover) and (pointer:fine){
   .tile:hover{transform:translateY(-2px);box-shadow:var(--e-2)}
 }
-.tile .ic{font-size:17px;line-height:1;color:var(--acc)}
+.tile .ic{font-size:17px;line-height:1;color:var(--c,var(--acc))}
 .tile .nm{font-family:var(--f1);font-size:12px;letter-spacing:.16em}
 .tile .ds{font-size:10px;color:var(--dim2);line-height:1.4}
 .tile.missing{opacity:.45}
@@ -590,18 +606,22 @@ IDB.get('doc').then(raw => {
 /* The order here is the default dock, set by Tom on 2026-09-14. Tom's own
    apps, flagged `mine`, come last and sit behind a line. */
 const APPS = [
+  /* `slot` is the app's colour: which of the theme's six chart colours it
+     wears, in the dock, on its tile and on every widget that draws for it.
+     Six slots for twelve apps, so two apps share one where they never sit
+     side by side; STYLE and HOME wear the accent. */
   { id: 'home',   nm: 'HOME',   ic: '◈', file: null,                ds: 'today, streaks, everything at a glance' },
-  { id: 'block',  nm: 'BLOCK',  ic: '▦', file: 'block/index.html',  ds: 'build the day out of blocks',               shares: 'routine + ticks' },
-  { id: 'status', nm: 'STATUS', ic: '◐', file: 'status/index.html', ds: 'sleep, weight, mood, food and money',        shares: 'the daily measurements' },
-  { id: 'log',    nm: 'LOG',    ic: '▤', file: 'log/index.html',    ds: 'the journal, the last few weeks at a glance', shares: 'the journal' },
-  { id: 'quest',  nm: 'QUESTS', ic: '◆', file: 'quest/index.html',  ds: 'todos, when they are due, and projects', shares: 'the journal todos' },
-  { id: 'train',  nm: 'TRAIN',  ic: '⛭', file: 'train/index.html',  ds: 'the training log — sets, reps, records',     shares: 'the training log + ticks' },
-  { id: 'checkin', nm: 'CHECK IN', ic: '◎', file: 'checkin/index.html', ds: 'photos, weight and how the week went', shares: 'weight, with STATUS' },
+  { id: 'block',  nm: 'BLOCK',  ic: '▦', file: 'block/index.html',  ds: 'build the day out of blocks',               shares: 'routine + ticks', slot: 1 },
+  { id: 'status', nm: 'STATUS', ic: '◐', file: 'status/index.html', ds: 'sleep, weight, mood, food and money',        shares: 'the daily measurements', slot: 2 },
+  { id: 'log',    nm: 'LOG',    ic: '▤', file: 'log/index.html',    ds: 'the journal, the last few weeks at a glance', shares: 'the journal', slot: 4 },
+  { id: 'quest',  nm: 'QUESTS', ic: '◆', file: 'quest/index.html',  ds: 'todos, when they are due, and projects', shares: 'the journal todos', slot: 5 },
+  { id: 'train',  nm: 'TRAIN',  ic: '⛭', file: 'train/index.html',  ds: 'the training log — sets, reps, records',     shares: 'the training log + ticks', slot: 3 },
+  { id: 'checkin', nm: 'CHECK IN', ic: '◎', file: 'checkin/index.html', ds: 'photos, weight and how the week went', shares: 'weight, with STATUS', slot: 6 },
   { id: 'style',  nm: 'STYLE',  ic: '◧', file: 'style/index.html',  ds: 'pick, compare, edit and add themes',         shares: 'the themes every app wears' },
-  { id: 'arc',    nm: 'ARC',    ic: '◇', file: 'arc/index.html',    ds: 'mind canvas — think, map, plan',            solo: 1, mine: 1 },
-  { id: 'wealth', nm: 'WEALTH', ic: '▩', file: 'wealth/index.html', ds: 'clients, bills, pots and what is actually left', shares: 'spending and accounts', mine: 1 },
-  { id: 'form',   nm: 'FORM',   ic: '▶', file: 'form/index.html',   ds: 'side-by-side lift review',                  solo: 1, mine: 1 },
-  { id: 'portion', nm: 'FOODDÉX', ic: '◪', file: 'portion/index.html', ds: 'a label in, the amounts you eat out', shares: 'the food library', mine: 1 },
+  { id: 'arc',    nm: 'ARC',    ic: '◇', file: 'arc/index.html',    ds: 'mind canvas — think, map, plan',            solo: 1, mine: 1, slot: 4 },
+  { id: 'wealth', nm: 'WEALTH', ic: '▩', file: 'wealth/index.html', ds: 'clients, bills, pots and what is actually left', shares: 'spending and accounts', mine: 1, slot: 5 },
+  { id: 'form',   nm: 'FORM',   ic: '▶', file: 'form/index.html',   ds: 'side-by-side lift review',                  solo: 1, mine: 1, slot: 3 },
+  { id: 'portion', nm: 'FOODDÉX', ic: '◪', file: 'portion/index.html', ds: 'a label in, the amounts you eat out', shares: 'the food library', mine: 1, slot: 2 },
 ];
 const app = id => APPS.find(a => a.id === id);
 
@@ -656,8 +676,12 @@ if (typeof Icons !== 'undefined') addEventListener('DOMContentLoaded', () => {
    device, cannot take a colour and vanish when a font does. These are drawn.
    The old glyph stays as the fallback so a missing icons.js is a plain dock
    rather than an empty one. */
+/* A step heavier than a button's icon and a size up from where it was: at
+   16px in a 1.75 stroke a row of app icons read as a row of letters. */
 const appIco = (a, size) => (typeof Icons !== 'undefined' &&
-  Icons.svg('app.' + a.id, { size: size || 18 })) || a.ic;
+  Icons.svg('app.' + a.id, { size: size || 20, weight: 2.1 })) || a.ic;
+/* the app's colour: its slot in the theme's chart ramp, as a CSS value */
+const appTint = a => a && a.slot ? 'var(--data-' + a.slot + ')' : '';
 const frames = {};      /* id -> iframe. Built on first visit, then kept alive. */
 const missing = {};     /* id -> true once a HEAD check says the file is not there */
 let view = 'home';
@@ -711,7 +735,8 @@ function drawNav() {
       ? toast('<b>' + esc(a.file) + '</b> is missing from this folder', { bad: true })
       : (Mobile.feedback('select'), go(a.id));
 
-    const b = el('button', state, '<span>' + appIco(a, 16) + '</span><span class="nm">' + a.nm + '</span>');
+    const b = el('button', state, '<span>' + appIco(a, 20) + '</span><span class="nm">' + a.nm + '</span>');
+    if (appTint(a)) b.style.setProperty('--c', appTint(a));
     /* The number key is in the tooltip rather than on the button. Twelve
        badges were a good part of a header that had run out of room. */
     b.title = missing[a.id] ? a.file + ' is not in this folder' : a.nm + ': ' + a.ds + (i < 9 ? ' (key ' + (i + 1) + ')' : '');
@@ -755,6 +780,7 @@ function drawNav() {
     /* the same button again, for the thumb. Icon over label, because at this
        size the icon is what is actually read. */
     const t = el('button', state + ' mb-press mb-tap', '<span class="g">' + appIco(a, 22) + '</span>' + a.nm);
+    if (appTint(a)) t.style.setProperty('--c', appTint(a));
     t.setAttribute('aria-label', a.nm + ' — ' + a.ds);
     if (view === a.id) t.setAttribute('aria-current', 'page');
     t.onclick = open;
@@ -1129,7 +1155,7 @@ const WIDGETS = {
      because an unscheduled task is still a task and an entry is a note about
      something that already happened. */
   today: {
-    nm: 'TODAY', w: 5, h: 5,
+    nm: 'TODAY', w: 5, h: 5,          /* spans every app, so it wears the accent: the board's one hero card */
     sub: () => {
       const it = todayItems();
       if (!it.length) return 'nothing scheduled';
@@ -1229,7 +1255,9 @@ const WIDGETS = {
         const r = el('div', 'row' + (x.done ? ' done' : '') +
           (x === mark ? ' here' : '') + (late ? ' late' : ''));
         if (x === mark) here = r;
-        if (x.colour) { const bar = el('div', 'bar'); bar.style.background = x.colour; r.appendChild(bar); }
+        /* the block's own colour is the row's plate, the way it is in BLOCK;
+           a bullet has none and takes the widget's */
+        if (x.colour) r.style.setProperty('--c', x.colour);
         r.appendChild(el('div', 't', x.at == null ? '' : MIN2(x.at)));
         /* Two targets, two meanings, the same split as everywhere else: the
            box ticks it, the words take you to the thing. */
@@ -1334,7 +1362,7 @@ const WIDGETS = {
      and `session`; nothing here writes any of them, which is what lets the
      home screen show the training log without becoming a second author of it. */
   training: {
-    nm: 'TRAINING', w: 5, h: 3,
+    nm: 'TRAINING', w: 5, h: 3, app: 'train',
     sub: () => {
       const d = trainLastDay();
       if (!d) return 'nothing logged yet';
@@ -1379,7 +1407,7 @@ const WIDGETS = {
   },
 
   trainvol: {
-    nm: 'TRAINING VOLUME', w: 4, h: 2,
+    nm: 'TRAINING VOLUME', w: 4, h: 2, app: 'train',
     sub: () => 'last 8 weeks',
     draw(body) {
       const weeks = 8, bars = [];
@@ -1420,7 +1448,7 @@ const WIDGETS = {
      one: STATUS owns every measurement and this screen only looks at them. */
 
   weight: {
-    nm: 'WEIGHT', w: 5, h: 3,
+    nm: 'WEIGHT', w: 5, h: 3, app: 'status',
     /* ── the range is a property of THIS widget ──
        Tom, 2026-09-05: "I'd rather have different charts if we're in Main
        Menu and different tabs if we're in STATUS." Right, and it follows from
@@ -1496,7 +1524,7 @@ const WIDGETS = {
   },
 
   protein: {
-    nm: 'PROTEIN', w: 3, h: 2,
+    nm: 'PROTEIN', w: 3, h: 2, app: 'status',
     sub: () => {
       const t = statusTargets();
       return t.p ? 'target ' + Math.round(t.p) + 'g' : 'no target set';
@@ -1505,7 +1533,7 @@ const WIDGETS = {
   },
 
   calories: {
-    nm: 'CALORIES', w: 3, h: 2,
+    nm: 'CALORIES', w: 3, h: 2, app: 'status',
     sub: () => {
       const t = statusTargets();
       return t.kcal ? 'target ' + Math.round(t.kcal) : 'no target set';
@@ -1514,7 +1542,7 @@ const WIDGETS = {
   },
 
   sleep: {
-    nm: 'SLEEP', w: 4, h: 2,
+    nm: 'SLEEP', w: 4, h: 2, app: 'status',
     /* the answer, in the widget's own line: the average night and nights on target */
     sub: () => sleepSaid(),
     draw(body) {
@@ -1555,7 +1583,7 @@ const WIDGETS = {
   },
 
   spend: {
-    nm: 'SPEND', w: 4, h: 3,
+    nm: 'SPEND', w: 4, h: 3, app: 'status',
     sub: () => 'this week against last',
     draw(body) {
       const week = start => {
@@ -1594,7 +1622,7 @@ const WIDGETS = {
      a todo and what you want from an idea are different questions. */
 
   todo: {
-    nm: 'TODO', w: 4, h: 4,
+    nm: 'TODO', w: 4, h: 4, app: 'quest',
     sub: () => {
       const n = openTodos().length;
       return n ? n + ' open' : 'nothing open';
@@ -1623,13 +1651,13 @@ const WIDGETS = {
   },
 
   ideas: {
-    nm: 'IDEAS', w: 4, h: 3,
+    nm: 'IDEAS', w: 4, h: 3, app: 'status',
     sub: () => notesOfKind('idea').length + ' kept',
     draw(body) { bulletList(body, 'idea', 'No ideas yet. They are the <b>!</b> lines in STATUS.'); },
   },
 
   events: {
-    nm: 'EVENTS', w: 4, h: 3,
+    nm: 'EVENTS', w: 4, h: 3, app: 'status',
     sub: () => 'what happened',
     draw(body) { bulletList(body, 'event', 'Nothing logged. They are the <b>–</b> lines in STATUS.'); },
   },
@@ -1819,8 +1847,9 @@ const WIDGETS = {
     draw(body) {
       const tiles = el('div', 'tiles');
       APPS.filter(a => a.file).forEach(a => {
-        const b = el('button', 'tile' + (missing[a.id] ? ' missing' : ''));
-        b.innerHTML = '<span class="ic">' + appIco(a, 18) + '</span><span class="nm">' + a.nm + '</span><span class="ds">' +
+        const b = el('button', 'tile mb-plate' + (missing[a.id] ? ' missing' : ''));
+        if (appTint(a)) b.style.setProperty('--c', appTint(a));
+        b.innerHTML = '<span class="ic">' + appIco(a, 22) + '</span><span class="nm">' + a.nm + '</span><span class="ds">' +
           (missing[a.id] ? '<span style="color:var(--bad)">' + esc(a.file) + ' not found</span>' : esc(a.ds)) + '</span>';
         b.onclick = () => missing[a.id] ? toast('<b>' + esc(a.file) + '</b> is missing') : go(a.id);
         tiles.appendChild(b);
@@ -1923,9 +1952,14 @@ function drawHome() {
   document.body.classList.toggle('editing', editing);
   layout.forEach((cfg, i) => {
     const W = WIDGETS[cfg.t]; if (!W) return;
-    const n = el('div', 'w');
+    const n = el('div', 'w mb-card');
     n.style.setProperty('--cw', cfg.w); n.style.setProperty('--ch', cfg.h);
     n.dataset.i = i;
+    /* the widget wears the colour of the app it draws for, which is what
+       ties a card to an app without a label; a widget with no app wears the
+       accent, which is what the material layer does with no --c */
+    const tint = W.app ? appTint(app(W.app)) : '';
+    if (tint) n.style.setProperty('--c', tint);
 
     const head = el('div', 'w-head');
     const title = W.title ? W.title() : '';
@@ -1970,6 +2004,10 @@ function drawHome() {
 
     const body = el('div', 'w-body');
     try { W.draw(body, cfg); } catch (e) { body.appendChild(el('div', 'empty', 'widget error: ' + esc(e.message))); }
+    /* the rows inside are the plates, in their own colour or the widget's.
+       Only the card-shaped rows: a ruled list line (.hrow, .logline) is a
+       line, and a plate on it would be a border on a border. */
+    body.querySelectorAll('.row').forEach(r => r.classList.add('mb-plate'));
     n.appendChild(body);
 
     /* Right click with a mouse, hold with a thumb, same menu either way. */

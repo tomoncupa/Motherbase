@@ -16,6 +16,31 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.12 — 2026-09-15
+
+**The material layer, the type index, three app icons, and an icon for an
+iPhone's home screen.** Tom said yes to REVIEW.md items 1 to 3.
+
+- `Rec.all(type)` walks an index of that type, and of that type on one
+  day, instead of every row in memory. Twelve thousand sets, fifty-six
+  day reads: 164ms to 10ms.
+- A theme now says how a card and a row are drawn. `mb-card` is BLOCK's
+  lane, a dark glass over the page's wash; `mb-plate` is BLOCK's block, a
+  plate in its own colour, `--c`. Ten tokens carry the amounts; Block, the
+  default theme, asks for `plate`; every other theme is `flat` and draws
+  exactly as before. The home screen wears it: cards are glass, rows are
+  plates in the block's colour or the app's. The first try tinted whole
+  cards and Tom said it looked worse; BLOCK tints rows, not cards.
+- Every app has a colour, its slot in the theme's chart ramp: the dock
+  icon wears it, the open app's button wears it, a widget's rows wear it.
+  App icons are drawn a size up and a step heavier. QUESTS is a flag,
+  CHECK IN a figure in a frame, FORM two frames, instead of the tick, the
+  camera and play that ordinary buttons already use.
+- `shared/icons/<app>.png`, twelve 180px pictures drawn from the master
+  set on each app's plate colour, and `mobile.js` names the right one on
+  every page for Add to Home Screen on an iPhone. Needs a web address to
+  mean anything; from a folder the link is unused.
+
 ## 0.1.11 — 2026-09-15
 
 **A sweep of every shared module, five fixes.** Tom: "do a sweep of all our

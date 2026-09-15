@@ -71,7 +71,7 @@ old theme is still a theme.
 
 ## The tokens
 
-Ninety-two of them. An app may use any. An app may define none of its own.
+A hundred and two of them. An app may use any. An app may define none of its own.
 
 ### Colour — 19
 
@@ -127,6 +127,47 @@ A theme picks one of four families — **soft** (shadows), **flat** (none),
 **bevel** (a plate with thickness), **glow** (light coming off it) — and every
 one of these tokens changes accordingly. An app that writes its own
 `box-shadow` opts out of all four.
+
+### Material — 10
+
+How a card and a row are drawn. Two classes, and which goes where matters,
+because BLOCK is the reference and BLOCK does it one way round: the CARD
+(its lane) is `mb-card`, a dark translucent glass over the page's wash
+with a hairline; the ROWS inside it are `mb-plate`, each a small plate in
+its own colour. Put the class on and write no background, border or shadow
+of your own (`mb-glass` is a different thing: the share picture's
+see-through card, in `ui.js`):
+
+```html
+<div class="card mb-card">
+  <div class="row mb-plate" style="--c: var(--data-3)">
+```
+
+`--c` is the plate's tint. Set it on the row, or on the card so every row
+inside inherits it; leave it off and the plate takes the accent. BLOCK's
+rows carry their block's colour; a home widget's rows carry its app's.
+Tinting a whole card was tried on 2026-09-15 and reads as a wash; Tom:
+"looks worse".
+
+A theme picks one of three materials. **flat** is a card exactly as it was
+before these existed: the card fill, the hairline, the depth family's own
+shadow. **plate** is BLOCK's tinted block, measured from it: a gradient from
+the tint down to the card, a lit top line, a border and a contact shadow all
+mixed from the tint. **glass** is a thinner tint with a lit rim. A theme that
+says nothing is flat, so nothing changes until a theme asks. Block, the
+default, asks for plate.
+
+The tokens are the amounts, in percent of tint: `--plate-tint` and
+`--plate-tint-2` (the top and bottom of the gradient), `--plate-edge` (the
+border), `--plate-rim` (the lit top line), `--plate-under` (the contact
+shadow), and `--plate-shadow` (the drop shadow, a whole value).
+`--card-solid` and `--card-solid-2` are how solid the card is, top and
+bottom, in percent of the card colour over the page (100 and 100 on flat,
+75 and 55 on plate), and `--card-shadow` is the depth family's shadow and
+rim as one value that is never the word `none`. `--material` holds the
+material's name, for STYLE. The drawing itself is one rule that
+`skins.js` puts in, because a token cannot hold `var(--c)`: a token is
+resolved where it is declared, on the root, where there is no `--c`.
 
 ### Spacing — 10, and a theme may NEVER change them
 

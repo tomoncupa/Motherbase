@@ -340,6 +340,12 @@ async function run() {
      about the moment the hold timer fires, so one hold opened the menu twice.
      Whichever of the two gets there first is the one that counts, and a mouse
      right-click still works. */
+  /* Add to Home Screen on an iPhone takes a PNG named by this link and
+     nothing else, so every page carries one, named after the app. */
+  ok('mobile: the page carries an iOS home-screen icon and title', (() => {
+    const l = document.querySelector('link[rel="apple-touch-icon"]'), t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    return !!l && /\/icons\/[a-z]+\.png$/.test(l.getAttribute('href')) && !!t && !!t.content;
+  })());
   ok('mobile: a touch hold opens its menu once, whichever way the browser orders it, and right-click still works', (() => {
     const box = document.createElement('div');
     document.body.appendChild(box);
@@ -381,6 +387,34 @@ async function run() {
     ([1,2,3,4].every(i => (tok('--e-' + i).match(/rgba/g) || []).length === 2) &&
      (tok('--e-5').match(/rgba/g) || []).length === 1));
   ok('tokens: the touch target is at least 44px', parseFloat(tok('--tap')) >= 44);
+  /* The material layer. A theme that says nothing is flat and resolves to a
+     card exactly as it was; Block asks for plate and gets BLOCK's recipe,
+     tinted by --c and by the accent when there is no --c. */
+  ok('tokens: material is flat unless a theme asks, and plate is BLOCK\'s amounts', (() => {
+    const flat = Skins.tokensFor({ id: '_m', base: Skins.get('ice').base, mode: 'dark' });
+    const plate = Skins.tokensFor(Skins.get('block'));
+    return flat['--material'] === 'flat' && flat['--plate-tint'] === '0%' && flat['--plate-edge'] === '0%' &&
+      !/none/.test(flat['--plate-shadow']) && !/none/.test(plate['--card-shadow']) &&
+      flat['--card-solid'] === '100%' && flat['--card-solid-2'] === '100%' &&
+      plate['--material'] === 'plate' && plate['--plate-tint'] === '26%' && plate['--plate-tint-2'] === '13%' &&
+      plate['--plate-edge'] === '40%' && plate['--plate-rim'] === '62%' && plate['--plate-under'] === '22%' &&
+      plate['--card-solid'] === '75%' && plate['--card-solid-2'] === '55%';
+  })());
+  /* One level under the bug this layer shipped with: a token holding var(--c)
+     is resolved on the root, where there is no --c, so every plate came out
+     in the accent. The rule has to read --c on the element. So: two plates,
+     one carrying a tint, must not be the same colour. */
+  ok('tokens: a plate takes the --c of the element it is on, not the root\'s', (() => {
+    const was = Skins.current;
+    Skins.apply('block');
+    const a = document.createElement('div'), b = document.createElement('div');
+    a.className = b.className = 'mb-plate'; b.style.setProperty('--c', '#00ff00');
+    document.body.appendChild(a); document.body.appendChild(b);
+    const ga = getComputedStyle(a).backgroundImage, gb = getComputedStyle(b).backgroundImage;
+    a.remove(); b.remove();
+    if (was) Skins.apply(was);
+    return /gradient/.test(ga) && /gradient/.test(gb) && ga !== gb;
+  })());
   ok('tokens: safe areas are tokens, so no app writes env() itself',
     /safe-area-inset/.test(Skins.tokensFor(Skins.current)['--safe-b']));
   ok('tokens: measurement survives a palette edit', (() => {

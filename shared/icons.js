@@ -109,6 +109,13 @@ const PATHS = {
   minus:       'M5 12h14',
   trophy:      'M7 4h10v5a5 5 0 01-10 0zM7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3M12 14v4M8 21h8',
   burger:      'M4 6h16M4 12h16M4 18h16',
+  /* Three apps were wearing a common button's drawing, so in a dock QUESTS
+     was the tick, CHECK IN was the camera and FORM was play. Tom,
+     2026-09-15: the app icons "are currently just plain letters". Each app
+     gets a shape of its own; FOODDÉX keeps the bowl because it IS food. */
+  flag:        'M6 21V3M6 4h12l-3.5 4 3.5 4H6',
+  pose:        'M5 3h14v18H5zM12 7.5a2.2 2.2 0 100 4.4 2.2 2.2 0 000-4.4M8 18c0-3 1.8-5 4-5s4 2 4 5',
+  frames:      'M3 5h8v14H3zM13 5h8v14h-8zM6.5 9.5v5l3.5-2.5z',
 };
 
 /* ── the roles ──
@@ -190,14 +197,17 @@ const ROLES = {
   'app.block': 'grid',
   'app.status': 'gauge',
   'app.log': 'book',
-  'app.quest': 'check',
+  'app.quest': 'flag',
   'app.train': 'dumbbell',
-  'app.checkin': 'camera',
+  'app.checkin': 'pose',
   'app.style': 'palette',
   'app.arc': 'nodes',
   'app.wealth': 'cash',
-  'app.form': 'play',
+  'app.form': 'frames',
   'app.portion': 'bowl',
+  quest: 'flag', flag: 'flag',
+  pose: 'pose', physique: 'pose', checkin: 'pose',
+  compare: 'frames', frames: 'frames',
 
   /* structure */
   routine: 'repeat', repeat: 'repeat', cycle: 'repeat',
@@ -217,6 +227,9 @@ const NOTES = {
   cash: 'a note, not a coin: a coin reads as a full stop at 20px',
   trophy: 'a personal record, for TRAIN',
   burger: 'three lines, for a drawer of screens',
+  flag: 'a flag on a pole, for QUESTS',
+  pose: 'a figure in a frame, for CHECK IN',
+  frames: 'two frames side by side, for FORM',
 };
 
 /* ── how a theme draws them ──
