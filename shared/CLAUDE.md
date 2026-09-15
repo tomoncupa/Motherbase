@@ -127,3 +127,8 @@ work. Clean up any test data you write, and stop the server when you are done.
 - **The browser caches a changed shared file hard.** Every test this session
   needed a new port. Apps carry `?v=N` on their script tags; bump it when you
   change something here, or the app will not see it.
+- **The sheet mirror's settings merge on save, so a deleted key comes back.**
+  `IO.mirror.set` writes through `msave`, which merges `pushed`, `seen` and
+  the other boundary maps with what is on disk. Deleting a key from `seen`
+  does nothing; set it to `''` instead. A smoke check that deleted its own
+  mark passed once per device and failed every run after (2026-09-15).

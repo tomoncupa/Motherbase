@@ -684,7 +684,10 @@ and none of it was the app's fault.
 It has no `<script src>` of its own now. Every row it reads, it reads out of a
 frame. A thing that watches must not also be a thing that writes.
 
-### Open: three icon checks fail on a cold store
+### Closed: three icon checks failed on a cold store
+
+Closed 2026-09-15: all three pass on a store wiped empty first. See foundation
+item 7. Kept for the history.
 
 Found 2026-09-04 by `_review.html`, which opens `_smoke.html` in a fresh frame
 every run and so always runs it cold. `icons: a dropped pack installs`, `a
@@ -779,8 +782,9 @@ answer, or take it out.
    loads it and every viewport covers the safe area. What is left is per-app:
    auditing each one's own CSS for hover-only controls and sub-44px targets,
    which the shared layer cannot do for them.
-4. **Commits are unpushed** and the GitHub repo is public. He has not yet said
-   push.
+4. ~~Commits are unpushed~~ **Settled 2026-08-26.** Tom: "push - always push
+   without me asking". The main repo is pushed after every commit. See the
+   end of this file for the client copy.
 
 ### Foundation, found and not acted on
 
@@ -920,7 +924,8 @@ future-dated tick. Three smoke checks. Read and found sound: `day.js`,
 `sound.js`, `chart.js`, `icons.js`, `skins.js` (one unescaped theme name in
 the picker, fixed), `ui.js`. Left alone on purpose: `UI.smartTime` reads a
 bare "12" typed over a morning time as midnight, which is arguable either
-way; and the three cold-store icon checks (item 7) are still open.
+way. The three cold-store icon checks (item 7) were still open that
+morning; item 18 found them closed.
 
 **18. Finishing the list, 2026-09-15, `io.js` 0.1.13.** Tom: "Finish all the
 foundation work". What was done, each watched in the browser:
@@ -991,6 +996,12 @@ Two consequences, both of which have already cost work here:
 - **`CLAUDE.md` is read once, at session start.** A session that began before a
   structural change has never seen it.
 
+**Tom, 2026-09-16: from now on he works on Motherbase in one session at a
+time.** That session may touch the foundation and any app. The rules below
+still hold, because an old session or another tool can still be running:
+still commit each app and the foundation separately, and still stop and say
+so when you find changes you did not make.
+
 So:
 
 1. **Stay in your folder.** An app session touches its own folder. Only a session
@@ -1025,4 +1036,8 @@ end with the line, for example "QUESTS 1.0.4, updated 14 Sep 2026", and
 script tags, which only tells a browser to fetch shared files again and which
 the client build stamps by itself.
 
-Do not push without being asked. The repo is public.
+**Push the main repo after committing, without asking.** Tom, 2026-08-26:
+"always push without me asking". The repo is public, so nothing personal
+ever goes in it: no bank statements, no health notes, no workbook data.
+**Never push the client copy** (`../Motherbase-Client`) unless Tom says so,
+because a push there lands on clients' phones. Building it is fine.
