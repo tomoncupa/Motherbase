@@ -16,6 +16,27 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.10 — 2026-09-15
+
+**A row you deleted stays deleted across the sheet.** Tom: "deleting bullets
+not getting saved." Deleting worked on the device and survived a reload. The
+Google Sheet brought the bullet back.
+
+A delta push updates a tab's lines in place and never takes one out, so the
+deleted bullet's line stayed on the Journal tab. The next pull that read the
+tab found a line with no live row behind it and filed it as something typed
+into the sheet, wrote it back alive with a fresh stamp, and the push after
+that sent it up again. The same happened to a deleted food, meal, spend or
+tracked field, and it happened on the second device too, because the pull
+applied the tables before the save file that carried the tombstone.
+
+Three changes. A line whose row is a tombstone on this device is the deleted
+thing, and stays deleted unless somebody typed into the line after the
+delete. A delta push sends each deletion up as an emptied line, which is
+already what "deleted in the sheet" looks like. And a pull merges the save
+file before it reads the tables. No change to the Apps Script. Three smoke
+checks, one level under the symptom.
+
 ## 0.1.9 — 2026-08-26
 
 **A date is YYYY-MM-DD, and the Google Sheet stops saying otherwise.** This one

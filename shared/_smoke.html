@@ -564,6 +564,31 @@ async function run() {
     IO.applyTable('__tbl', d, { allowDelete: true });
     return Rec.get(stamp, null, 't1') == null && Rec.get(stamp, null, 't2') != null;
   })());
+  /* One level under "deleting bullets not getting saved" (2026-09-15). The
+     sheet's tab keeps a line until a full push, and a pull read that line as
+     something new and wrote the row back alive. The mechanism: a line whose
+     row is a tombstone here is the deleted thing, not a new one. */
+  ok('tables: a line you deleted does not come back from the sheet', (() => {
+    Rec.set(stamp, null, 't3', { name: 'gone soon', base: { n: 3 } });
+    const g = IO.tables('__tbl')[0].rows.map(r => r.slice());   /* the sheet, with t3 on it */
+    Rec.del(stamp, null, 't3');
+    const d = IO.readTable('__tbl', 'Things', g);
+    IO.applyTable('__tbl', d);
+    return d.added.length === 0 && d.deleted.some(x => x.key === 't3') && Rec.get(stamp, null, 't3') == null;
+  })());
+  ok('tables: a line typed into after you deleted it does come back', (() => {
+    const g = IO.tables('__tbl')[0].rows.map(r => r.slice());
+    g.push(['t3', '', 'typed later', 4, new Date(Date.now() + 60000).toISOString(), 'sheet']);
+    const d = IO.readTable('__tbl', 'Things', g);
+    return d.added.length === 1 && d.added[0].key === 't3' && d.added[0].payload.name === 'typed later';
+  })());
+  ok('tables: a delta push sends a delete as an emptied line', (() => {
+    const since = new Date(Date.now() - 60000).toISOString();
+    const rows = IO.tables('__tbl', since)[0].rows;
+    const line = rows.filter(r => r[0] === 't3')[0];
+    const full = IO.tables('__tbl')[0].rows.filter(r => r[0] === 't3');
+    return !!line && line[2] === '' && line[3] === '' && !!line[4] && full.length === 0;
+  })());
 
   /* ---- the column a value lands in ----
 

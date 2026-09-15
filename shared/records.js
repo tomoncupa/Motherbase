@@ -552,6 +552,21 @@ const Rec = {
   get(type, date, key) { const r = rows[rowId(type, date, key)]; return alive(r) ? copy(r.payload) : null; },
   has(type, date, key) { return alive(rows[rowId(type, date, key)]); },
   row(type, date, key) { const r = rows[rowId(type, date, key)]; return alive(r) ? r : null; },
+  /** the tombstone of a row that was deleted, or null when it is alive or was
+      never there. The mirror asks, so a line the sheet still carries for a
+      row this device deleted is not mistaken for something new. */
+  tombstone(type, date, key) { const r = rows[rowId(type, date, key)]; return r && r.deleted ? r : null; },
+  /** every tombstone of a type, or only the ones written after `since` */
+  tombstones(type, since) {
+    const out = [];
+    for (const id in rows) {
+      const r = rows[id];
+      if (!r.deleted || r.type !== type) continue;
+      if (since && !(r.updated_at > since)) continue;
+      out.push(r);
+    }
+    return out;
+  },
 
   /** every live row of a type, optionally narrowed by date or a date window */
   all(type, opt) {

@@ -203,7 +203,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `io.js` | Per-app backup, restore, and the readable spreadsheet export. And the Share picture panel, `IO.share`: a card as a 1080 x 1920 story picture, kept clear of the story's own buttons, with Transparent, Translucent or Opaque and Big, Medium or Small remembered per app, and one SHARE. STATUS and TRAIN use it. |
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
-| `_smoke.html` | 247 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 259 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -604,8 +604,8 @@ because it runs the real thing rather than only parsing it:
    draws and every tab works, runs `shared/_smoke.html` inside itself and folds
    the result in, and looks over whatever rows are on the device. One page,
    one tally. `shared/_smoke.html` on its own is still there for when you are
-   working on the foundation and want the 247 without the apps.
-   It must say 247 of 247, or more once you add checks.
+   working on the foundation and want the 259 without the apps.
+   It must say 259 of 259, or more once you add checks.
    **Load it with a `?cb=<something new>` on the end.** The browser caches these
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks
@@ -723,7 +723,7 @@ answer, or take it out.
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `checkin/` | CHECK IN, built 2026-09-14 from `_template/`, grown 2026-09-15 into Tom's first ask: a goal physique, regular check-in photos, how far off, and a timelapse. Everywhere, and in the client build. Has its own brief, and one master conversation. Front ships; any other pose is one tap with no name. Every photo is measured on the device by Google's MediaPipe (fetched once, about 20MB, kept for offline; the dots start in the middle if it cannot load) into three ratios, with dots anyone can drag. PROGRESS shows goal, first and latest with the numbers and the change and no verdict. The Check In camera: last time's ghost, a body match, directions spoken and beeped, tilt, light, an automatic three-beat shutter and an optional setup photo. TIMELAPSE lines every photo up on the body, as a flipbook or a before-and-after wipe, with the face shown, blurred or covered by the person's own animal, saved as MP4 or WebM. Saves photos named by date and pose (a zip on a desktop), reads them back from files or a folder, and makes a Copy for Claude picture and question. Opening a client's file now KEEPS it under their id. Tested in the browser 2026-09-15 at 1280px and 390px with a fake camera and a CC BY 1865 photograph: camera directions, auto-shutter, measuring, client files opened twice, zip, MP4. Not tested on a phone. Hips measure unsteadily when a hand is near them (see the brief). |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
-| `shared/` | The foundation, passing 242 checks on 2026-09-14 (214 of them also at phone width). Every app loads it. |
+| `shared/` | The foundation, passing 259 checks on 2026-09-15 (214 of them also at phone width, counted 2026-09-14). Every app loads it. |
 
 ### Debt, in the order it should be paid
 
@@ -864,6 +864,20 @@ so nothing that called them changed. LOG's copy had drifted: it published a
 todo due next week as an event on the day it was written, and now it does not.
 Two things stay per app on purpose: QUESTS's reader for dates typed anywhere in
 a line, and LOG's caffeine half-life sum, still a copy of STATUS's.
+
+**16. ~~A row deleted on the device came back from the sheet~~ Fixed
+2026-09-15, `io.js` 0.1.10.** Tom: "deleting bullets not getting saved". The
+delete itself was fine and survived a reload. A delta push never takes a line
+off a tab, so the deleted bullet's line stayed on the Journal tab, and the
+next pull that read the tab took it for something typed into the sheet and
+wrote it back alive. Same for a deleted food, meal, spend or tracked field,
+and on the second device too, because the tables were applied before the
+save file carrying the tombstone. Now a line whose row is a tombstone here
+stays deleted unless it was typed into after the delete, a delta push sends
+a delete up as an emptied line, and a pull merges the save file first.
+`Rec.tombstone` and `Rec.tombstones` are new. Three smoke checks. Watched in
+the browser against STATUS's real Journal table; not watched against the
+real sheet.
 
 ### Parked, not cancelled
 

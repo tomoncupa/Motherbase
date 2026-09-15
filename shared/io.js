@@ -31,7 +31,7 @@
    Bumped by hand, and only when something changed that a person would notice
    or that changes the shape of stored data. VERSIONS.md says what each one
    did. */
-const VERSION = '0.1.9';
+const VERSION = '0.1.10';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
@@ -712,6 +712,21 @@ const IO = {
         line.push(new Date(r.updated_at).toISOString(), r.by || 'phone');
         rows.push(line);
       });
+      /* ── a delete goes up as an emptied line ──
+
+         A delta push updates lines in place and never takes one out, so a
+         row deleted here stayed on the sheet's tab until the next full push,
+         and a pull in between read it back as new (2026-09-15: "deleting
+         bullets not getting saved"). So each row deleted since the last push
+         goes up with its id, its date and its stamp and every other cell
+         blank, which is already what "deleted in the sheet" looks like to
+         readTable. A full push clears the tab and needs none of this. */
+      if (since && R.tombstones) R.tombstones(t.type, since).forEach(r => {
+        const line = [r.key, r.date || ''];
+        t.cols.forEach(() => line.push(''));
+        line.push(new Date(r.updated_at).toISOString(), r.by || 'phone');
+        rows.push(line);
+      });
       /* `key` is which column the sheet matches on to update a line in place.
          Column one is the id, so a changed set updates the line it is already
          on instead of the tab being rewritten around it. */
@@ -776,7 +791,7 @@ const IO = {
   readTable(appId, tableName, grid) {
     const S = IO.spec(appId), R = g.Rec;
     const t = (S.tables || []).filter(x => x.name === tableName)[0];
-    const out = { changed: [], added: [], removed: [], clashes: [], missing: [] };
+    const out = { changed: [], added: [], removed: [], clashes: [], missing: [], deleted: [] };
     if (!t || !grid || grid.length < 2) return out;
     const col = IO.columns(t, grid[0]);
     /* No header, no reading. Returning nothing leaves the store exactly as it
@@ -806,6 +821,22 @@ const IO = {
       if (blank) return;
 
       const prev = id ? R.row(t.type, date, id) : null;
+      /* ── a line for a row this device deleted ──
+
+         The sheet keeps a line until a full push rewrites the tab, so a line
+         whose row is a tombstone here is not new: it is what was deleted,
+         still standing on the sheet. Reading it as new wrote the row back
+         alive with a fresh stamp, and the next push sent it up again, which is
+         how a deleted bullet came back on the next sync (2026-09-15). The
+         tombstone wins unless somebody typed into the line AFTER the delete,
+         which is the same newest-wins rule every other line follows. */
+      if (!prev && id && R.tombstone) {
+        const dead = R.tombstone(t.type, date, id);
+        if (dead) {
+          const typedAt = col.edited < 0 ? 0 : (Date.parse(line[col.edited] || '') || 0);
+          if (!(typedAt > (Date.parse(dead.updated_at) || 0))) { out.deleted.push({ key: id, date: date }); return; }
+        }
+      }
       const payload = prev ? JSON.parse(JSON.stringify(prev.payload)) : {};
       let differs = false;
       t.cols.forEach((c, i) => {
@@ -1688,6 +1719,18 @@ const Mirror = {
     const S = IO.spec(appId);
     const apply = tabs => {
       const out = { changed: 0, added: 0, clashes: 0 };
+      /* The save file first, then the tables. A row the other device deleted
+         arrives here as its tombstone. Read the tables first and the line
+         still standing on the tab would go in alive with a fresh stamp, and
+         the tombstone, older, would lose. "The rows no table describes"
+         below says what this tab is; it was applied last until 2026-09-15. */
+      if (g.Rec) {
+        let rows = [];
+        [IO.bagName(appId)].concat(IO.OLDBAG).forEach(n => {
+          if (tabs[n]) rows = rows.concat(IO.bagRows(tabs[n]));
+        });
+        if (rows.length) out.merged = g.Rec.merge(rows);
+      }
       (S.tables || []).forEach(t => {
         /* the old prefixed name too: anything typed into it before the
            rename is still real, and the pull runs before the push that
@@ -1726,16 +1769,10 @@ const Mirror = {
          a restore follows and the reason a stale sheet cannot overwrite work
          done since. Tombstones come through it too, so a reading deleted on
          the phone is deleted on the laptop instead of quietly returning. */
-      if (g.Rec) {
-        /* Ours first, then the flat _Data an older sheet still holds — rows
-           written before the tabs were split per app are real rows, and one
-           merge salvages them instead of stranding them. */
-        let rows = [];
-        [IO.bagName(appId)].concat(IO.OLDBAG).forEach(n => {
-          if (tabs[n]) rows = rows.concat(IO.bagRows(tabs[n]));
-        });
-        if (rows.length) out.merged = g.Rec.merge(rows);
-      }
+      /* Merged at the top of this function, before the tables, since
+         2026-09-15. Ours first, then the flat _Data an older sheet still
+         holds — rows written before the tabs were split per app are real
+         rows, and one merge salvages them instead of stranding them. */
       return out;
     };
 
