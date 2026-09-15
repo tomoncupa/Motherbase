@@ -119,6 +119,8 @@ Do not break these. Ask first if you think one needs to change.
 ```
 CLAUDE.md          this file
 DOCTRINE.md        what each app is FOR, and the laws every app obeys
+REVIEW.md          the suite reviewed on 2026-09-15: what would make it better,
+                   ranked. Proposals, nothing built. Tom picks.
 HOWTO.md           how Tom adds an app or a theme, in plain language
 ONBOARDING.md      how a client gets the suite, and what happens after
 index.html         the home screen: widget grid, app dock, data authority
