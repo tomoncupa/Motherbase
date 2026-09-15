@@ -1073,10 +1073,13 @@ does not work on desktop unless I make the window narrow."* On a wide window
 press on its own item, so the item was gone before its click landed. A narrow
 window gets a sheet, which is why narrowing fixed it. The + button, "Count an
 account", "Log a session" and every right-click menu were dead at desk width.
-Every menu now opens through WEALTH's `menu(at, items, opts)`, which swaps that
-listener for one that ignores presses inside a menu and places the menu beside
-what opened it. The cause is in `shared/ui.js` and is item 11 on the root
-brief's foundation list; delete the swap when that is fixed.
+Every menu opens through WEALTH's `menu(at, items, opts)`. The cause was fixed in
+`shared/ui.js` (root foundation item 11) and the swap is gone; `menu()` only
+places the menu beside what opened it.
+
+**Sync reads STATUS's spending.** `spend` and `acct` come from STATUS's tab on the
+sheet as well as WEALTH's own (`reads`, root foundation item 19), so a purchase
+logged on the phone reaches WEALTH on a desk where STATUS is not open. WEALTH 1.0.5.
 
 **Rearranging** is for lists whose order is his to choose: accounts, pots,
 categories and debts. A mouse presses a row and drags it; a thumb drags by the

@@ -221,7 +221,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `import.js` | Bringing in a spreadsheet the suite did not write: ticks from a month grid, weigh-ins, foods and money out, read by shape. Never overwrites, never reads a formula as a record, one batch, one undo. |
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
-| `_smoke.html` | 273 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 274 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -367,6 +367,11 @@ what makes a tick in BLOCK show up in the habit tracker.
 
 `food` is written by both STATUS and PORTION, and that is fine under the rule
 above rather than an exception to it.
+
+**Many writers means many tabs.** Each app pushes the rows it registers into
+its own `_Data · <app>` tab on the sheet, so an app that shows rows another app
+writes names that app in `IO.register`'s `reads`, with the types, or on a device
+where the other app is not open it never sees them (foundation item 19).
 
 **What the store could not do until 2026-09-15:** merge two DEVICES' edits to
 different fields of one row. It can now: FIELD TIMES in `records.js` merges a
@@ -632,8 +637,8 @@ because it runs the real thing rather than only parsing it:
    draws and every tab works, runs `shared/_smoke.html` inside itself and folds
    the result in, and looks over whatever rows are on the device. One page,
    one tally. `shared/_smoke.html` on its own is still there for when you are
-   working on the foundation and want the 273 without the apps.
-   It must say 273 of 273, or more once you add checks.
+   working on the foundation and want the 274 without the apps.
+   It must say 274 of 274, or more once you add checks.
    **Load it with a `?cb=<something new>` on the end.** The browser caches these
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks
@@ -753,7 +758,7 @@ answer, or take it out.
 | `speak/` | SPEAK, built 2026-09-15 from `_template/`. Tom: "Speech improvement app to help me with YT and short form content", based on Duolingo, objective feedback, a guided game, daily warm-up drills, and every drill saying its goal and why. Five skills (PACE, CLEAN, FLOW, CLEAR, EYES) of five steps each, a step opening when the one before is met; three drills a day picked from the skills furthest from target; a three-step warm-up that sets the day's crispness reference; a streak with a silent freeze; no XP, no levels, no verdicts. The ear counts syllables after de Jong & Wempe, tuned on four clips with 97 counted syllables; pauses at 250ms; held sounds as the um proxy; a spectral-tilt proxy for crispness; pitch spread; the browser's own recogniser for words and crutch phrases where it exists and is switched on; Google's face landmarker for time on the lens, calibrated during the count. Driven in headless Chromium at 1280px and 390px with a fake microphone (a synthetic clip with known counts, read exactly) and a fake camera (a still face, read 100% on the lens). Tom, 2026-09-15, "make it local on my machine": the recogniser is the only thing that could send his voice out and it is off by default, so a take makes no network request at all and the page's only one is the fonts every app fetches. A drill whose goals need a switch that is off is left out of TODAY, drawn locked with the reason, offers the switch in one tap, and never blocks the step after it; a goal nothing could read says no reading, never not met. Not run on a phone, and no real voice has been through it. Has its own brief and a research file. |
 | `system/` | NOTICE on screen since 2026-09-15; the folder and id are still `system`, for the reason FOODDÉX's are still `portion`. Built 2026-09-15 from `_template/`. Text in, a status window out: a 1080px-wide PNG of a game window in the Solo Leveling and Overgeared manner. Plain lines make a NOTIFICATION window, one bracketed message per line; lines starting with `-` make a QUEST INFO window with a title, goals as tick boxes (`[x]` ticked, `40/100` as progress), REWARDS and an optional WARNING from a `Penalty:` line. Rewards are typed under `Rewards:` or, if not, made up from the text, steady until REROLL: EXP from the number of goals and words, a stat matched to the words (train is STR, run is AGI, sleep is VIT, read is INT, post is CHA, meditate is WILL), a title, and gold or an item. Three window styles, HUNTER (blue), LEGEND (gold) and VOID (violet), drawn on a canvas with fixed palettes of their own: the picture is the art, and the app's own chrome stays on tokens. Three frames: the window alone on a clear background, a 1080 x 1920 story or a 1080 x 1350 post, either clear or on a dark wash, at IO's three sizes. SAVE PICTURE hands the file over through `IO.handOver` inside the tap; COPY puts it on the clipboard where the browser allows. RECENT lists what was saved and reopens it. Owns `msg`. Tom only, kept out of the client build: it makes his posts, not a client's. Tested headless in Chromium 2026-09-15 at 1280px and 390px: both modes, three styles, three frames, typed and made-up rewards, reload, save, recent, no target under 44px, no sideways scroll. Google Fonts is blocked in the test sandbox, so the faces were fetched separately and served to the page: every style was then watched in its real face, Rajdhani in HUNTER and Cinzel in LEGEND, and the picture's corners come back fully transparent with the card at about 80% opacity, which is what makes it sit on a photo. Not opened on a phone. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
-| `shared/` | The foundation, passing 273 checks on 2026-09-15 (214 of them also at phone width, counted 2026-09-14). Every app loads it. |
+| `shared/` | The foundation, passing 274 checks on 2026-09-15 (214 of them also at phone width, counted 2026-09-14). Every app loads it. |
 
 ### Debt, in the order it should be paid
 
@@ -796,14 +801,12 @@ never answers fired ready at 2514ms with its localStorage rows. Not a smoke
 check, because proving it costs two and a half seconds per run. There is still
 no `onblocked` handler; nothing has been seen to need one.
 
-**2. First paint should not be behind `Rec.ready`.** Item 1 is what happens
-when the store is slow; this is why it costs so much. STATUS, TRAIN and ARC all
-draw nothing until the store is ready, so a slow store is a blank screen with
-no explanation. Paint what localStorage already has, then fill in the big rows
-when they land. PORTION does it that way and survived the same failure. The
-data model section now says "must redraw when it lands". Item 1's fix caps the
-blank screen at 2.5 seconds and does not remove it. What is left is app work,
-in STATUS, TRAIN and ARC.
+**2. ~~First paint should not be behind `Rec.ready`~~ Closed 2026-09-15.**
+STATUS draws what localStorage already holds after 300ms and ARC loads the fast
+half synchronously, both done earlier by their own sessions; TRAIN was the last,
+and now does the same: if the store has not answered in 300ms and there is a
+log, it draws, and seeding and the record pass still wait for ready. Watched in a
+frame whose IndexedDB never answers: TRAIN had drawn at 900ms, ready came at 2.5s.
 
 **3. ~~`Rec.patch`, so merging is easier than replacing~~ Built 2026-09-14,
 Tom said yes.** `Rec.patch(type, date, key, changes)` reads the row, changes
@@ -873,17 +876,11 @@ Settings rows with a select change in LOG, STYLE, WEALTH and TRAIN. Three:
 sheets use `svh` after `vh`, so on iPhone Safari they stop at the visible
 screen rather than under the toolbar. Not seen on a phone.
 
-**14. Workarounds an app session can now delete.** Each still works beside
-the fix, so none is urgent, but each is a second copy of a foundation job:
-
-- LOG: `menuAt()` in `log/index.html`.
-- ~~TRAIN: `menuAt()`'s press workaround, `bigStep()`, the `MINUS`, `TROPHY`
-  and `BURGER` strings, and the `.mb-row:has(...)` rules for `.mb-input` and
-  `.mb-sel`~~ Deleted 2026-09-14. Its rules for `.swatches` and `.mb-chips` stay.
-- WEALTH: `menu()`. (`moneyScale()` went with the chart rewrite, 2026-09-14.)
-- CHECK IN: `menu()`.
-- CLEX and STATUS: stepper buttons drawn with a `−` character can use the
-  `minus` role. TRAIN's have since 2026-09-14.
+**14. ~~Workarounds an app session can now delete~~ Closed 2026-09-15.** LOG's
+`menuAt()` and CHECK IN's `menu()` were already gone; WEALTH's `menu()` now only
+places the menu beside what opened it, which is its own job. The one left, a
+stepper drawn with a `−` character in CLEX and STATUS, is a change to how an app
+looks, and Tom tabled every such change on 2026-09-15 (item 19).
 
 **15. ~~STATUS's journal code lives in several copies~~ Moved 2026-09-14, Tom
 said yes.** `shared/journal.js` holds the kinds, the day rule, the time parser,
@@ -943,17 +940,28 @@ foundation work". What was done, each watched in the browser:
   (`Icons.appSlot`) so the dock and the pictures cannot disagree.
 - Items 4, 5 and 7 found closed and marked so.
 
-Found and NOT acted on, because it changes what sync does and Tom asked why
-rather than for a fix: an app's sync reads only its own `_Data · <app>` tab.
-LOG writes `note` rows, but STATUS's bullets from the phone are in
-`_Data · status`, so a copy of LOG opened on its own, with no STATUS open in
-the same browser, never gets them. The local copy only has them because STATUS
-runs in the same browser. The fix is for a pull to also read the tabs of the
-apps that own the types this app registers.
+Fixed the same day, on Tom's yes, as `reads` (item 19): an app's sync read only its
+own `_Data · <app>` tab, so a LOG opened on its own never got STATUS's bullets.
 
-Still app work, not foundation: STATUS, TRAIN and ARC paint nothing until the
-store is ready (item 2), the menu workarounds in item 14, and adopting
-`mb-card` and `mb-plate` in apps other than the home screen.
+Tabled by Tom on 2026-09-15, "don't touch any apps looks yet": adopting
+`mb-card` and `mb-plate` in apps other than the home screen, and the stepper
+icons in item 14.
+
+**19. Sync reads the apps a view depends on, 2026-09-15, `io.js` 0.1.14.** Tom:
+"yes fix LOG's sync". A pull read only the app's own `_Data · <app>` tab, and
+every app pushes into its own, so any app showing another app's rows missed
+them on a device where that other app was not open. `IO.register` takes
+`reads: { status: ['note', 'day'] }`: whose tab, which types. The tab is
+downloaded when that app has pushed since this one last looked, by the push
+receipt the sheet already keeps, and only the named types are merged. No
+change to the Apps Script. Wired: LOG reads STATUS and QUESTS; QUESTS reads
+STATUS, LOG and BLOCK's plan; STATUS reads QUESTS, LOG, FOODDÉX and WEALTH;
+WEALTH and CHECK IN and FOODDÉX read STATUS; BLOCK reads ticks from STATUS,
+QUESTS, LOG, TRAIN and SPEAK.
+
+Found on the way: BLOCK registered `lane`, `item` and `routine` but not
+`rhythm` or `plan`, so an Every or Anytime habit and the published plan had
+never gone to the sheet. Both are registered now.
 
 ### Parked, not cancelled
 

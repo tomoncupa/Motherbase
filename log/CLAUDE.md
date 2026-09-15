@@ -257,13 +257,15 @@ not postponed:
 - **The right-hand panel** for reading a day. Superseded by bullets that are
   read, added and edited in place, and by the Day view.
 
-Open, and not LOG's to fix:
+Closed, 2026-09-15: `menuAt()` is gone, because `shared/ui.js` fixed the menu it
+worked around, and the dock draws LOG as a book.
 
-- `menuAt()` in `log/index.html` works around the shared menu closing before
-  its items can be clicked on a PC (root brief, Foundation item 10). Delete it
-  when `shared/ui.js` is fixed.
-- `shared/icons.js` has no `app.log` drawing, so the home screen dock shows a
-  plain character for LOG.
+**Sync reads STATUS and QUESTS.** Tom, 2026-09-15: the GitHub copy of LOG never
+showed STATUS's bullets from the phone. Every app pushes into its own tab on
+the sheet and a pull read only LOG's, so a LOG opened where STATUS was not open
+never got them. `IO.register` now carries `reads`: `note`, `day`, `ev` and
+`field` from STATUS's tab and `note` from QUESTS's, downloaded when that app has
+pushed since LOG last looked. LOG 1.0.8.
 
 Never watched, only driven from code: a real wheel scroll stopping and
 snapping, real Mouse 4 and 5 presses, real mouse clicks on menus, and LOG

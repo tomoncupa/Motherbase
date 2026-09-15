@@ -16,6 +16,18 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.14 — 2026-09-15
+
+**An app reads the other apps' sheet tabs it depends on.** Tom: "Why does my
+local copy of LOG sync properly but not my github copy?" Every app pushes
+into its own tab, and a pull read only its own, so LOG on a device without
+STATUS open never got the phone's bullets. `IO.register` takes `reads`,
+naming whose tab and which types; that tab is downloaded when its app has
+pushed since last time, and only those types are kept. Wired for LOG,
+QUESTS, STATUS, WEALTH, CHECK IN, FOODDÉX and BLOCK. BLOCK's Every and
+Anytime habits and its published plan now go to the sheet at all. TRAIN
+draws before the store has finished loading.
+
 ## 0.1.13 — 2026-09-15
 
 **An importer, working submenus, a Material switch in STYLE, and home-screen

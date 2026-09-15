@@ -1292,6 +1292,49 @@ async function run() {
   ok('mirror: the clash keeps the newer copy and leaves a note', () =>
     CL.kept === 'newer-here' && CL.noted === 1);
 
+  /* ---- reading another app's save tab ----
+     One level under "LOG on GitHub never shows the phone's bullets": a pull
+     read only its own _Data tab, and STATUS's rows live in STATUS's. An app
+     naming another in `reads` downloads that tab when that app has pushed
+     since it last looked, and keeps only the types it named. */
+  const RD = {};
+  {
+    const bag = IO.bagName('__writer'), asked = [];
+    IO.register({ app: '__reader', name: 'Reader', types: [stamp + 'r'], reads: { __writer: [stamp] } });
+    const incoming = { id: Rec.USER + '|' + stamp + '||from-writer', user_id: Rec.USER, type: stamp, date: null,
+      key: 'from-writer', payload: { name: 'arrived' }, updated_at: '2999-01-01T00:00:00.000Z', deleted: false };
+    const photo = Object.assign({}, incoming, { id: Rec.USER + '|shot||not-mine', type: 'shot', key: 'not-mine' });
+    const keep = IO.mirror.settings, keepSeen = JSON.parse(JSON.stringify(keep.seen || {}));
+    document.head.appendChild = function (el) {
+      const m = el && el.src && /callback=([^&]+)/.exec(el.src);
+      if (m) {
+        asked.push(decodeURIComponent((/only=([^&]*)/.exec(el.src) || [])[1] || ''));
+        const tabs = {}; tabs[bag] = [['Motherbase rows.'], [JSON.stringify(incoming)], [JSON.stringify(photo)]];
+        setTimeout(() => window[m[1]] && window[m[1]]({ ok: true, v: 4, tabs: tabs }), 0);
+        return el;
+      }
+      return Node.prototype.appendChild.call(this, el);
+    };
+    try {
+      IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec', on: 1, sheetV: 4 });
+      const idx = {}; idx[bag] = { rows: 3, edited: '' };
+      const pre = { v: 4, index: idx, pushedAt: { __writer: 'W1' } };
+      await IO.mirror.pull('__reader', pre);
+      RD.arrived = (Rec.get(stamp, null, 'from-writer') || {}).name;
+      RD.photo = Rec.get('shot', null, 'not-mine');
+      RD.again = await IO.mirror.pull('__reader', pre);
+      RD.asked = asked.slice();
+    } catch (e) { RD.err = String(e); }
+    finally {
+      delete document.head.appendChild;
+      IO.mirror.set({ url: keep.url || '', on: keep.on, sheetV: keep.sheetV, seen: keepSeen });
+      Rec.del(stamp, null, 'from-writer');
+    }
+  }
+  ok('mirror: an app reads another app\'s save tab for the types it names, and only when that app has pushed', () =>
+    RD.arrived === 'arrived' && RD.photo === null && RD.again && RD.again.skipped === 'nothing new' &&
+    RD.asked.length === 1 && RD.asked[0] === IO.bagName('__writer'), RD.err);
+
   /* ---- a timeout shorter than the thing it waits for is not a guard ----
      Nine failures in a row at almost exactly 27 seconds, which was 12 plus 15:
      both calls ran out the clock rather than going wrong. */

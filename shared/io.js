@@ -31,7 +31,7 @@
    Bumped by hand, and only when something changed that a person would notice
    or that changes the shape of stored data. VERSIONS.md says what each one
    did. */
-const VERSION = '0.1.13';
+const VERSION = '0.1.14';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
@@ -1719,6 +1719,21 @@ const Mirror = {
     adoptOldLink(appId);
     if (!mcfg.url) return Promise.resolve({ skipped: 'no link' });
     const S = IO.spec(appId);
+    /* ── the rows other apps write ──
+       Tom, 2026-09-15: "Why does my local copy of LOG sync properly but not
+       my github copy?" A pull read only this app's own _Data tab, and every
+       app pushes into its own. STATUS's bullets from the phone go into
+       _Data · status, so a LOG opened on its own never saw them; the local
+       copy only did because STATUS was open in the same browser, pulling them
+       into the store both apps share.
+
+       So an app says whose tabs hold the rows it shows, and which types:
+       `reads: { status: ['note', 'day'] }`. The tab is downloaded when that
+       app has pushed since this app last looked at it, by the same receipt
+       that decides our own tab, and only the named types are kept, so LOG
+       does not take in STATUS's label photographs on its way to a bullet. */
+    const reads = S.reads || {};
+    const readApps = Object.keys(reads).filter(a => a !== appId && Array.isArray(reads[a]) && reads[a].length);
     const apply = tabs => {
       const out = { changed: 0, added: 0, clashes: 0 };
       /* The save file first, then the tables. A row the other device deleted
@@ -1732,6 +1747,12 @@ const Mirror = {
           if (tabs[n]) rows = rows.concat(IO.bagRows(tabs[n]));
         });
         if (rows.length) out.merged = g.Rec.merge(rows);
+        readApps.forEach(a => {
+          const grid = tabs[IO.bagName(a)];
+          if (!grid) return;
+          const theirs = IO.bagRows(grid).filter(r => r && reads[a].indexOf(r.type) > -1);
+          if (theirs.length) out.merged = (out.merged || 0) + g.Rec.merge(theirs);
+        });
       }
       (S.tables || []).forEach(t => {
         /* the old prefixed name too: anything typed into it before the
@@ -1810,6 +1831,14 @@ const Mirror = {
         if (pre.index['_Data']) bagTabsWanted.push('_Data');
         bagTabsWanted.forEach(n => { if (want.indexOf(n) < 0) want.push(n); });
       }
+      /* another app's tab, when that app has pushed since we last read it */
+      const readWanted = {};
+      readApps.forEach(a => {
+        const n = IO.bagName(a), at = (pre.pushedAt || {})[a] || '';
+        if (mcfg.sheetV < 3 || !pre.index[n] || !at || at === (mcfg.seen[appId + '|' + n] || '')) return;
+        readWanted[n] = at;
+        if (want.indexOf(n) < 0) want.push(n);
+      });
 
       /* Nobody has typed in the sheet since we last looked, so there is
          nothing to read. This is the ordinary case and it now costs nothing. */
@@ -1820,7 +1849,8 @@ const Mirror = {
         /* moved only after the rows are in, so a failure half way through
            means we read the tab again rather than skip it forever */
         want.forEach(n => {
-          if (bagTabsWanted.indexOf(n) > -1) mcfg.seen[bagKey] = stamp;
+          if (readWanted[n] != null) mcfg.seen[appId + '|' + n] = readWanted[n];
+          else if (bagTabsWanted.indexOf(n) > -1) mcfg.seen[bagKey] = stamp;
           else mcfg.seen[appId + '|' + n] = pre.index[n].edited;
         });
         msave();
