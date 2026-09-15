@@ -16,6 +16,7 @@
 <script src="io.js"></script>
 <script src="health.js"></script>
 <script src="icons.js"></script>
+<script src="import.js"></script>
 <style>
 body{background:var(--bg,#080b10);color:var(--text-1,#dbe7f0);font-family:var(--font-body,system-ui);
   margin:0;padding:24px;font-size:14px;line-height:1.6}
@@ -344,7 +345,19 @@ async function run() {
      nothing else, so every page carries one, named after the app. */
   ok('mobile: the page carries an iOS home-screen icon and title', (() => {
     const l = document.querySelector('link[rel="apple-touch-icon"]'), t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-    return !!l && /\/icons\/[a-z]+\.png$/.test(l.getAttribute('href')) && !!t && !!t.content;
+    return !!l && /\/icons\/([a-z0-9]+\/)?[a-z]+\.png$/.test(l.getAttribute('href')) && !!t && !!t.content;
+  })());
+  /* The icon follows the theme, and the picture it names is really there:
+     a link to a missing file is a screenshot of the page on a home screen. */
+  ok('mobile: the home-screen icon follows the theme, to a picture that exists', await (async () => {
+    const l = document.querySelector('link[rel="apple-touch-icon"][data-mb-app]');
+    if (!l) return false;
+    const was = Skins.current;
+    Skins.apply(Skins.get('ice'));
+    const ice = l.getAttribute('href');
+    const there = await fetch(l.href, { method: 'HEAD', cache: 'no-store' }).then(r => r.ok, () => false);
+    if (was) Skins.apply(was);
+    return /\/icons\/ice\/[a-z]+\.png$/.test(ice) && there;
   })());
   ok('mobile: a touch hold opens its menu once, whichever way the browser orders it, and right-click still works', (() => {
     const box = document.createElement('div');
@@ -599,6 +612,92 @@ async function run() {
     const open = J.menuItems({ kind: 'todo', date: '2026-01-01', key: 'k' }).map(i => i.label).join();
     const done = J.menuItems({ kind: 'todo', done: 1, date: '2026-01-01', key: 'k' }).map(i => i.label).join();
     return open === 'Move to tomorrow,Cancel it' && done === 'Cancel it' && J.menuItems({ kind: 'entry' }).length === 0;
+  })());
+
+  /* ---- a menu item with a list of its own ----
+     One level under "Show and Measures did nothing": UI.menu drew only a
+     label and a fn, so `sub` and `check` were silently dropped. Awaited, so
+     the menus it opens are gone before the next check looks at the page. */
+  ok('ui: a menu item with a sub opens it, marks the checked one, and runs the one chosen', await (async () => {
+    let hit = '';
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const btn = label => [].find.call(document.querySelectorAll('.mb-menu button, .mb-act'), b => b.textContent.trim() === label);
+    UI.menu(10, 10, [{ label: 'Smoke show', sub: [{ label: 'Sub A', check: true, fn: () => { hit = 'a'; } }, { label: 'Sub B', fn: () => { hit = 'b'; } }] }]);
+    await wait(60);
+    const show = btn('Smoke show');
+    if (!show) return false;
+    show.click(); await wait(450);
+    const a = btn('Sub A'), b = btn('Sub B');
+    const marked = !!a && a.classList.contains('on') && !!b && !b.classList.contains('on');
+    if (b) b.click();
+    await wait(450);
+    UI.closeMenus();
+    document.querySelectorAll('.mb-sheet .mb-x').forEach(x => x.click());
+    await wait(400);
+    return marked && hit === 'b';
+  })());
+
+  /* ---- bringing in a spreadsheet ---- */
+  const IM = window.Import;
+  ok('import: a month grid ticks the 1s, reads a Weight row, and leaves out rows that are not 1 and 0', (() => {
+    if (!IM) return false;
+    const days = Array.from({ length: 25 }, (_, i) => 46023 + i);          /* 1 Jan 2026 on */
+    const grid = [[20].concat(days), [null].concat(days),
+      ['Weight', 215.1, null, 217.9],
+      ['Brush Teeth', 1, 0, 1],
+      ['Meds', 'AM', 1, 'PM'],
+      ['Day Rating', 'S', 'A']];
+    const m = IM.shapes.monthGrid(grid);
+    return m.weights.length === 2 && m.weights[0].date === '2026-01-01' && m.weights[1].v === 217.9 &&
+      m.ticks.length === 2 && m.ticks.every(t => t.key === 'brush-teeth') && m.ticks[1].date === '2026-01-03';
+  })());
+  ok('import: spending keeps money out only, carries a date down, and names the account as written', (() => {
+    if (!IM) return false;
+    const grid = [['Date', 'Transactions', 'Details', 'GCash', 'Union Bank', 'Wallet'],
+      [null, null, null, -3133, -2958, 686, null, 'Current Balance'],
+      [36893, 'Outside Food', 'Lawson', null, null, -200],
+      [null, 'Income', 'Pay', null, 3500],
+      [null, 'Snack', 'Gum', -15]];
+    const s = IM.shapes.spendTable(grid, 'Spending Tracker');
+    return s.length === 2 && s[0].date === '2001-01-02' && s[0].amt === 200 && s[0].acct === 'Wallet' &&
+      s[1].date === '2001-01-02' && s[1].acct === 'GCash' && s[1].note === 'Gum';
+  })());
+  ok('import: a food table reads a label, and a weight table reads Date and Actual Weight', (() => {
+    if (!IM) return false;
+    const f = IM.shapes.foodTable([[null, 'Multiplier', 'Amt', 'Unit', 'Item', 'Protein', 'Carb', 'Fat', 'Cals'],
+      ['Protein', null, null, null, 'Cooked unless stated'],
+      [null, 1, 1, 'kg', 'Chicken Leg qtr', 175.94, 0, 105.65, 1654.6]]);
+    const w = IM.shapes.weightTable([['Day', 'Date', 'Actual Weight'], [1, 36893, 220.5], [2, 36894, 'x'], [3, 36895, 219.9]]);
+    return f.length === 1 && f[0].base.unit === 'kg' && f[0].base.p === 175.94 && f[0].base.kcal === 1654.6 &&
+      w.length === 2 && w[1].date === '2001-01-04' && w[1].v === 219.9;
+  })());
+  /* Three found on Tom's own workbook: a column of formulas posing as
+     weigh-ins, a figure in a header posing as an account, and spends typed
+     five years early. */
+  ok('import: a formula is not a record, a number is not an account, and a date years off its sheet is left out', (() => {
+    if (!IM) return false;
+    const w = [['Date', 'Actual Weight'], [36893, 220.5], [36894, 221.8]];
+    w.isFormula = (r, c) => r === 2 && c === 1;
+    const typedOnly = IM.shapes.weightTable(w);
+    const s = IM.shapes.spendTable([['Date', 'Details', 'GCash', '8200'], [36893, 'Gum', -15, -20]], 'S');
+    const rows = [['Date', 'Actual Weight']].concat([0, 1, 2, 3, 4].map(i => [36893 + i, 200 + i])).concat([[33893, 199]]);
+    const p = IM.plan({ W: rows });
+    return typedOnly.length === 1 && typedOnly[0].v === 220.5 && s.length === 1 && s[0].acct === 'GCash' &&
+      p.odd === 1 && p.weights.length === 5;
+  })());
+  ok('import: what is already here is left alone, and apply then undo takes back exactly what came in', (() => {
+    if (!IM) return false;
+    Rec.set('ev', '2001-01-03', 'weight', { e: [{ t: 1, v: 199 }] });
+    const p = IM.plan({ Weights: [['Date', 'Actual Weight'], [36893, 200.5], [36894, 201], ['2999-01-01', 202]] });
+    const planned = p.weights.length === 1 && p.kept.weights === 1;
+    const done = IM.apply(p, { weights: true });
+    const came = (Rec.get('ev', '2001-01-02', 'weight') || { e: [{}] }).e[0].v === 200.5 &&
+      Rec.get('ev', '2001-01-03', 'weight').e[0].v === 199;
+    const again = IM.plan({ Weights: [['Date', 'Actual Weight'], [36893, 200.5]] }).weights.length === 0;
+    done.undo();
+    const gone = Rec.get('ev', '2001-01-02', 'weight') === null && Rec.get('ev', '2001-01-03', 'weight').e[0].v === 199;
+    Rec.del('ev', '2001-01-03', 'weight');
+    return planned && came && again && gone && done.total === 1;
   })());
 
   /* ---- tables you can type into ---- */

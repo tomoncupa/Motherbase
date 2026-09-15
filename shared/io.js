@@ -31,7 +31,7 @@
    Bumped by hand, and only when something changed that a person would notice
    or that changes the shape of stored data. VERSIONS.md says what each one
    did. */
-const VERSION = '0.1.12';
+const VERSION = '0.1.13';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
@@ -219,6 +219,8 @@ const IO = {
   /** an app describes itself once: which types it owns, and any sheets of its
       own it wants in the spreadsheet */
   VERSION: VERSION,
+  /** SheetJS, fetched once, or null offline. For shared/import.js. */
+  loadXLSX: loadXLSX,
 
   /* Which version of the Apps Script this build writes. The sheet reports its
      own back as `sheetV` when it answers, so the two can be compared and a

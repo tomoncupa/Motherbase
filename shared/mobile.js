@@ -274,8 +274,14 @@ function chrome() {
     const declared = g.Rec && g.Rec.appId && g.Rec.appId !== 'app' ? g.Rec.appId : '';
     const appId = declared || (folder && folder !== 'shared' && folder.indexOf('.') < 0 && folder.indexOf('%') < 0 ? folder : 'home');
     if (sharedDir && !doc.querySelector('link[rel="apple-touch-icon"]')) {
+      /* in the theme already in force, if the theme got there first; skins.js
+         moves it on every theme change after this */
+      const S = g.Skins, cur = S && S.current;
+      const th = cur && S.factory && S.factory(cur.id) ? cur.id + '/' : '';
       const l = doc.createElement('link');
-      l.rel = 'apple-touch-icon'; l.href = sharedDir + 'icons/' + appId + '.png';
+      l.rel = 'apple-touch-icon';
+      l.setAttribute('data-mb-app', appId); l.setAttribute('data-mb-dir', sharedDir);
+      l.href = sharedDir + 'icons/' + th + appId + '.png';
       doc.head.appendChild(l);
     }
     if (!doc.querySelector('meta[name="apple-mobile-web-app-title"]')) {

@@ -186,8 +186,10 @@ function css() {
   background:var(--surface-1,#0e141d);border:1px solid var(--border-strong,#2b3a4d);
   border-radius:var(--radius-md,10px);box-shadow:var(--e-3,0 10px 20px rgba(0,0,0,.3));
   font-family:var(--font-body,system-ui);font-size:var(--f-2,14px)}
-.mb-menu button{display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:none;
+.mb-menu button{display:flex;align-items:center;gap:var(--s-2,8px);width:100%;text-align:left;padding:8px 10px;border:0;background:none;
   cursor:pointer;color:var(--text-2,#7f93a8);border-radius:var(--radius-sm,6px);font:inherit}
+.mb-menu button > span{flex:1;min-width:0}
+.mb-menu button.on{color:var(--accent,#7ee8fa)}
 .mb-menu button.bad{color:var(--danger,#ff6b81)}
 .mb-menu hr{border:0;border-top:1px solid var(--border,#1e2a38);margin:4px 2px}
 
@@ -507,13 +509,25 @@ const UI = {
       the bottom, which is where a thumb already is. */
   menu(x, y, items, opts) {
     css(); UI.closeMenus();
+    /* An item may carry `sub`, a list of its own, and `check`, which marks
+       the one in force. Neither was drawn until 2026-09-15: WEIGHT's range
+       and BESIDE's measures offered a Show and a Measures that did nothing
+       when chosen, which is a bug reported as a missing feature (DOCTRINE,
+       law 3). A sub opens as a menu of its own in the same place; on a
+       phone that is a second sheet. */
+    items = (items || []).map(it => (!it || it === '-' || typeof it !== 'object') ? it : Object.assign({}, it, {
+      on: !!(it.on || it.check),
+      fn: it.sub ? () => UI.menu(x, y, it.sub, Object.assign({}, opts, { title: it.label })) : it.fn,
+    })).filter(Boolean);
     const m = M();
     if (m && m.sheetish()) return m.actions((opts && opts.title) || '', items, opts);
 
+    const ico = role => (g.Icons && g.Icons.svg) ? g.Icons.svg(role, { size: 14 }) : '';
     const box = el('div', 'mb-menu');
     items.forEach(it => {
       if (it === '-') return box.appendChild(el('hr'));
-      const b = el('button', it.kind || '', esc(it.label));
+      const b = el('button', (it.kind || '') + (it.on ? ' on' : ''),
+        '<span>' + esc(it.label) + '</span>' + (it.on ? ico('done') : '') + (it.sub ? ico('next') : ''));
       b.onclick = () => { UI.closeMenus(); buzz('select'); it.fn && it.fn(); };
       box.appendChild(b);
     });

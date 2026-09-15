@@ -16,6 +16,26 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.13 — 2026-09-15
+
+**An importer, working submenus, a Material switch in STYLE, and home-screen
+icons that follow the theme.** Tom: "Finish all the foundation work", "Yes
+chart the cut", "Put sleep, mood and energy on one screen."
+
+- `shared/import.js` brings in a spreadsheet the suite did not write, by
+  shape: a month grid of 1 and 0 as ticks, weigh-ins, foods, money out. The
+  home screen's DATA panel has "Bring in an old spreadsheet". It skips what
+  is already here, formulas, numeric headers posing as accounts, and rows
+  dated years from the rest of their sheet, and one undo takes it all back.
+- `UI.menu` draws a `sub` list and a `check` mark. Both were silently
+  dropped, so WEIGHT's Show range never worked.
+- STYLE's editor has a Material switch.
+- `shared/icons/<theme>/<app>.png` for every factory theme, and the iPhone
+  icon link moves with the theme. Drawn by `tools/make-icons.html`.
+- The home screen's WEIGHT widget draws a cut: a goal, two dates and a
+  dashed plan line, with what the plan says today in its header. BESIDE is
+  offered ready-made as Sleep, mood and energy.
+
 ## 0.1.12 — 2026-09-15
 
 **The material layer, the type index, three app icons, and an icon for an

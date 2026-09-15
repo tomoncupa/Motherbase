@@ -155,7 +155,7 @@ shadow. **plate** is BLOCK's tinted block, measured from it: a gradient from
 the tint down to the card, a lit top line, a border and a contact shadow all
 mixed from the tint. **glass** is a thinner tint with a lit rim. A theme that
 says nothing is flat, so nothing changes until a theme asks. Block, the
-default, asks for plate.
+default, asks for plate. STYLE's editor sets it, under FEEL.
 
 The tokens are the amounts, in percent of tint: `--plate-tint` and
 `--plate-tint-2` (the top and bottom of the gradient), `--plate-edge` (the

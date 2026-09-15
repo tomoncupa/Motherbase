@@ -42,8 +42,9 @@ are holding a stale copy of whatever you just changed.
 | `icons.js` | The icon master set: ~55 drawings carrying ~160 buttons, plus the packs. | Medium. Every button in the suite. |
 | `io.js` | Backup, restore, spreadsheet export, and the Share picture panel (`IO.share`). | High. It is the safety net. |
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
+| `import.js` | Bringing in an outside spreadsheet by shape: ticks, weigh-ins, foods, money out. | High. It writes rows many apps own. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 266 checks over all of it. | Run it every time. |
+| `_smoke.html` | 273 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules

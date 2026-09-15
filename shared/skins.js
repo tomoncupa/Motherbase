@@ -670,6 +670,13 @@ const Skins={
        cannot simply be recoloured like everything else. Done here rather than
        in each app, because every app would otherwise have to remember. */
     if(g.Icons&&g.Icons.paint)try{g.Icons.paint(null,{force:true})}catch(e){}
+    /* The iPhone home-screen icon follows the theme. mobile.js makes the link
+       and says which app it is; shared/icons/<theme>/ holds a picture per
+       factory theme (tools/make-icons.html draws them), and a theme of your
+       own keeps the default one. iOS reads the link when Add to Home Screen
+       is pressed, so it is the theme in force at that moment. */
+    try{const l=document.querySelector('link[rel="apple-touch-icon"][data-mb-app]');
+      if(l)l.setAttribute('href',(l.getAttribute('data-mb-dir')||'')+'icons/'+(this.factory(s.id)?s.id+'/':'')+l.getAttribute('data-mb-app')+'.png')}catch(e){}
     this.current=s;
     try{localStorage.setItem(skinKey(),s.id);if(s.custom)this.saveCustom(s)}catch(e){}
     return s;

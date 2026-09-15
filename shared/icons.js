@@ -221,6 +221,14 @@ const ROLES = {
   brief: 'book', docs: 'book', read: 'book',
 };
 
+/* ── each app's colour ──
+   Which of the theme's six chart colours an app wears: its dock icon, its
+   tile, its widgets' rows and its iPhone home-screen icon. One table, here,
+   so the home screen and tools/make-icons.html cannot disagree. Six slots
+   for twelve apps, so two share a slot where they never sit side by side;
+   HOME and STYLE wear the accent. */
+const APP_SLOT = { block: 1, status: 2, portion: 2, train: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6 };
+
 /* Plain words for the ones that are not obvious from the name. Shown in
    STYLE so the database explains itself. */
 const NOTES = {
@@ -357,6 +365,9 @@ const Icons = {
   PATHS: PATHS,
   ROLES: ROLES,
   NOTES: NOTES,
+  APP_SLOT: APP_SLOT,
+  /** the chart colour an app wears, 1 to 6, or 0 for the accent */
+  appSlot(id) { return APP_SLOT[id] || 0; },
 
   /* Every drawing, and every role that points at it. */
   list() { return Object.keys(PATHS).sort(); },
