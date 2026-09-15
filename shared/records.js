@@ -175,6 +175,27 @@ const owners = Object.create(null);    /* type -> app id, so a bug is a warning 
 let me = 'app', subs = [], bc = null, booted = false, hydrated = false;
 
 const now = () => new Date().toISOString();
+/* A new version of a row is always LATER than the version it replaces.
+
+   Found 2026-09-16, watched: ARC wrote a map row and deleted it inside one
+   millisecond, so the live row and its tombstone carried the same updated_at.
+   Another page on the origin heard the live row first and wrote it into the
+   storage every page shares, then heard the tombstone, saw an equal time and
+   kept what it had. The deleted map came back, in both halves, for every page.
+   A person cannot save and delete inside a millisecond; code does it all the
+   time, and the home screen keeps every app it has opened in a frame, so there
+   is nearly always another page listening.
+
+   So a write is stamped at least one millisecond past the row's own previous
+   time. One writer's versions of one row are then in order however fast they
+   come, and a delete followed by a re-create inside a millisecond keeps the
+   re-create too. The clock only moves ahead for that one row, and only by the
+   milliseconds that were actually crowded. */
+function later(prev) {
+  const t = now();
+  const p = prev ? Date.parse(prev.updated_at) : NaN;
+  return isFinite(p) && p >= Date.parse(t) ? new Date(p + 1).toISOString() : t;
+}
 const clean = s => String(s == null ? '' : s).replace(/\|/g, '-');
 const rowId = (type, date, key) => USER + '|' + clean(type) + '|' + clean(date || '') + '|' + clean(key);
 const alive = r => r && !r.deleted;
@@ -304,6 +325,26 @@ const sameRow = (x, y) =>
   canon([x.payload, x.ft || null, x.fb || 0, x.gone || null, x.updated_at]) ===
   canon([y.payload, y.ft || null, y.fb || 0, y.gone || null, y.updated_at]);
 
+/* Does `r` replace `prev`, when the two are versions of one row kept whole?
+
+   The newer time wins. At the SAME time the answer used to be "keep what you
+   have", which makes it depend on arrival order: two pages hearing the same
+   two versions in a different order each kept a different one, and whichever
+   wrote last put its answer in the shared storage. later() stops one writer
+   ever making a tie, but two tabs or two devices really can write one row in
+   the same millisecond, so a tie is decided by the rows themselves. A deletion
+   beats a live row. Between two live rows, the same content comparison
+   combine() settles its ties with. Every page and every device reaches the same
+   answer whichever order the rows came in. Used by merge, by the read-back from
+   IndexedDB, and by the date repair: every place a stored row can lose. */
+function wins(r, prev) {
+  if (!prev) return true;
+  if (r.updated_at !== prev.updated_at) return r.updated_at > prev.updated_at;
+  if (!!r.deleted !== !!prev.deleted) return !!r.deleted;
+  if (r.deleted) return false;
+  return canon(r.payload) > canon(prev.payload);
+}
+
 /* What each row's payload looked like the last time it was written.
 
    The "identical write is not a write" check used to compare against
@@ -432,7 +473,7 @@ function repairDates() {
     const to = rowId(r.type, localDate(ms), r.key);
     drop(r.id); Store.del(PREFIX + r.id); delete serial[r.id];
     const have = rows[to];
-    if (have && have.updated_at >= r.updated_at) { fixed++; return; }
+    if (have && !wins(r, have)) { fixed++; return; }
     write(Object.assign({}, r, { id: to, date: localDate(ms) }));
     fixed++;
   });
@@ -473,7 +514,7 @@ function hydrate() {
     (list || []).forEach(r => {
       if (!r || !r.id) return;
       const prev = rows[r.id];
-      if (prev && prev.updated_at >= r.updated_at) return;
+      if (!wins(r, prev)) return;
       keep(r); serial[r.id] = JSON.stringify(r.payload); changed++;
     });
     if (changed) { repairDates(); announce([], false); }
@@ -526,7 +567,7 @@ const Rec = {
     const id = rowId(type, date, key), prev = rows[id];
     const r = {
       id: id, user_id: USER, type: type, date: date || null, key: String(key),
-      payload: payload, updated_at: now(), deleted: false,
+      payload: payload, updated_at: later(prev), deleted: false,
       by: me,
     };
     /* an identical write is not a write — this is what keeps updated_at honest
@@ -543,7 +584,7 @@ const Rec = {
   del(type, date, key) {
     const id = rowId(type, date, key), prev = rows[id];
     if (!prev || prev.deleted) return null;
-    const r = Object.assign({}, prev, { payload: null, deleted: true, updated_at: now(), by: me });
+    const r = Object.assign({}, prev, { payload: null, deleted: true, updated_at: later(prev), by: me });
     write(r); announce([r], true);
     return r;
   },
@@ -654,7 +695,7 @@ const Rec = {
         write(both); changed.push(both);
         return;
       }
-      if (prev && prev.updated_at >= r.updated_at) return;
+      if (!wins(r, prev)) return;
       write(r); changed.push(r);
     });
     if (changed.length) announce(changed, false);

@@ -202,6 +202,45 @@ async function run() {
   Rec.merge([Object.assign({}, live, { payload: null, deleted: true, updated_at: iso(Date.parse(live.updated_at) + 1000) })]);
   ok('rec: a delete wins only when it is newer than the edit', keptAlive && !Rec.get(stamp, d, 'f1'));
 
+  /* ---- a deleted row must not come back ----
+     2026-09-16, watched: ARC wrote a row and deleted it inside one millisecond,
+     so both versions carried the same updated_at. Another page on the origin
+     heard the live one first, wrote it into the shared storage, then heard the
+     delete, saw an equal time, and kept the live row. It came back in both
+     halves, for every page.
+
+     These do not test "a deleted map stays deleted" — that is one symptom. They
+     test the two things underneath every version of it: one writer's versions
+     of a row are always in time order, and two versions at the same time settle
+     the same way whichever one arrives first. */
+  ok('rec: every new version of a row is later than the one before, however fast', (() => {
+    const times = [];
+    for (let i = 0; i < 40; i++) {
+      times.push(Rec.set(stamp, d, 'burst', { v: i }).updated_at);
+      times.push(Rec.del(stamp, d, 'burst').updated_at);
+    }
+    for (let i = 1; i < times.length; i++) if (!(times[i] > times[i - 1])) return false;
+    return true;
+  })());
+  ok('rec: a live row and its delete at the same moment end deleted, in either order', (() => {
+    const at = iso(Date.now() - 3600000);
+    const mk = (k, dead) => ({ id: idOf(k), user_id: Rec.USER, type: stamp, date: d, key: k,
+      payload: dead ? null : { v: 1 }, updated_at: at, deleted: !!dead, by: 'smoke' });
+    Rec.merge([mk('tie-a', false)]); Rec.merge([mk('tie-a', true)]);
+    Rec.merge([mk('tie-b', true)]); Rec.merge([mk('tie-b', false)]);
+    return Rec.get(stamp, d, 'tie-a') === null && Rec.get(stamp, d, 'tie-b') === null
+      && !!Rec.tombstone(stamp, d, 'tie-a') && !!Rec.tombstone(stamp, d, 'tie-b');
+  })());
+  ok('rec: two live versions at the same moment pick the same winner, in either order', (() => {
+    const at = iso(Date.now() - 3600000);
+    const mk = (k, v) => ({ id: idOf(k), user_id: Rec.USER, type: stamp, date: d, key: k,
+      payload: { v: v }, updated_at: at, deleted: false, by: 'smoke' });
+    Rec.merge([mk('tie-c', 'one')]); Rec.merge([mk('tie-c', 'two')]);
+    Rec.merge([mk('tie-d', 'two')]); Rec.merge([mk('tie-d', 'one')]);
+    const c = Rec.get(stamp, d, 'tie-c'), e = Rec.get(stamp, d, 'tie-d');
+    return !!c && !!e && c.v === e.v;
+  })());
+
   /* a day's readings: both devices add one, and one removed stays removed */
   const evKey = 'smoke-' + stamp;
   Rec.set('ev', d, evKey, { e: [{ t: 1, v: 80 }] });
