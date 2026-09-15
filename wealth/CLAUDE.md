@@ -73,6 +73,35 @@ screen always says in words which window it is using**, and the ALLOCATED tile
 names its end date, because a number whose rules changed without the screen
 saying so is the quiet lie law 1 forbids.
 
+### A bill already paid is not held back
+
+Tom, 2026-09-16, yes to the fix. A bill due today and paid this morning had
+come off liquid and was still held back, so FREE counted it twice until
+midnight. `billsOwed` drops a due date once a purchase logged from three days
+before it up to today names the bill, or is filed under the bill's category at
+between half and one and a half times its amount, on the same account when
+both say one. The reach is never more than half the gap between the bill's
+dates, so last round's payment cannot settle this round, and one purchase
+settles one date. FREE and THE NEXT 60 DAYS both read it.
+
+Watched: ₱100,000 counted yesterday, a ₱1,000 bill due today and a ₱1,000
+"Meralco" purchase logged today. Liquid ₱99,000, allocated ₱1,000 (next
+month's date only), FREE ₱98,000. The old way held ₱2,000 back and read
+₱97,000.
+
+### Count clients as paying on time
+
+Tom, 2026-09-16: *"I want a toggle assuming everyone pays on time."* A switch
+under "Change how far ahead", off by default, the `wealth.onTime` setting.
+Off, FREE counts no money that has not arrived, which is law 1. On, it adds
+every client payment due from today to the end of the window that has not
+been paid. One already late is left out, because on time is the assumption
+and a late payment has already broken it. A package part on a guessed date
+counts. The line under the big number says how much was added and to when.
+
+Watched: the same setup with a ₱5,000 client due on the 21st and a 30 day
+window read FREE ₱103,000 with the switch on.
+
 Watched: a ₱100,000 count, rent ₱20,000 on the 17th, internet ₱2,000 on the
 28th, gym ₱1,500 on the 10th and a client due on the 20th, on 14 September.
 All six windows gave what was worked out by hand, from ₱20,000 allocated for
@@ -591,7 +620,11 @@ Tom, 2026-09-14, asked for these as separate cards, in his words:
 |---|---|
 | **BILLS & UTILITIES** | everything not below: Rent, Utility Bills, uncategorised |
 | **SUBSCRIPTIONS, MEMBERSHIPS & OPERATING COSTS** | Subscriptions, Gym, or any `biz` category |
-| **GROCERIES, WATER & REGULAR SPENDING** | Drinking Water, or any `var` category |
+| **GROCERIES, WATER & REGULAR SPENDING** | Groceries, Drinking Water, or any `var` category |
+
+Groceries is named by id, like Drinking Water, so its allowance sits in the
+card named after it whatever its kind. Tom, 2026-09-16: *"Groceries doesnt
+show up in groceries"*: his ₱15,000 allowance was drawn under BILLS.
 
 Every bill is in exactly one card, and the card follows its category, so
 re-filing a bill moves it. Before this, the subscriptions card repeated bills

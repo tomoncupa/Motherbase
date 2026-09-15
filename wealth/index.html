@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.5, 2026-09-15">
+<meta name="mb-version" content="1.0.6, 2026-09-16">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -1043,6 +1043,34 @@ function billsDue(from, to) {
   bills().forEach(b => billDates(b, from, to).forEach(d => out.push({ bill: b, date: d })));
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
+/* Bills still to pay: billsDue less any date already paid.
+   Tom, 2026-09-16, yes to the fix: a bill due today and paid this morning had
+   come off liquid AND was still held back, so FREE showed it twice until
+   midnight. A date counts as paid when a purchase logged from three days
+   before it up to today names the bill, or is filed under the bill's category
+   at roughly its amount, on the same account when both say one. Never more
+   than half the gap between the bill's dates, so last round's payment cannot
+   settle this round, and one purchase settles one date. */
+function billsOwed(from, to) {
+  const t = Day.today(), used = {};
+  const all = billsDue(from, to);
+  return all.filter(x => {
+    if (x.date > Day.shift(t, 3)) return true;
+    const b = x.bill;
+    const gap = b.cycle === 'days' ? Math.max(1, num(b.every, 7)) : 28;
+    const reach = Math.max(0, Math.min(3, Math.floor(gap / 2)));
+    const amt = num(b.amt, 0), name = norm(b.name);
+    const hit = spendRows({ from: Day.shift(x.date, -reach), to: t }).find(s => {
+      if (used[s.date + s.key] || isMove(s) && catOf(s) !== b.cat) return false;
+      if (b.acct && s.acct && s.acct !== b.acct) return false;
+      if (name.length > 2 && norm(s.note).indexOf(name) > -1) return true;
+      const a = num(s.amt, 0);
+      return !!b.cat && catOf(s) === b.cat && a >= amt * .5 && a <= amt * 1.5;
+    });
+    if (hit) { used[hit.date + hit.key] = 1; return false; }
+    return true;
+  });
+}
 /* One bill's due dates in a window.
    Tom, 2026-09-14: "I pay Meralco roughly 1040 every 6-7 days." A bill is
    monthly on a day, or every N days counted from the day it was last paid.
@@ -1093,12 +1121,21 @@ function board() {
   /* A bill filed under a category with an allowance is not held back on its
      own. The allowance already covers that spending, and both would hold the
      same money twice. */
-  const due = billsDue(Day.today(), win.to)
+  const due = billsOwed(Day.today(), win.to)
     .filter(x => !(num((Rec.get('cat', null, x.bill.cat) || {}).cap, 0) > 0))
     .reduce((a, x) => a + num(x.bill.amt, 0), 0);
   const alloc = potsTotal() + allot + due;
-  return { liquid: L, allocated: alloc, free: L.total - alloc, win: win, allot: allot };
+  /* Tom, 2026-09-16: "I want a toggle assuming everyone pays on time." Off,
+     FREE counts no money that has not arrived. On, it adds every client
+     payment due from today to the end of the window and not yet paid.
+     Already late is left out, because on time is the assumption and a late
+     one has already broken it. A package part on a guessed date counts too. */
+  const coming = onTime() ? expected(Day.today(), win.to).filter(e => !e.paid && !e.late)
+    .reduce((a, e) => a + num(e.amt, 0), 0) : 0;
+  return { liquid: L, allocated: alloc, free: L.total - alloc + coming, coming: coming,
+           win: win, allot: allot };
 }
+const onTime = () => !!S.get('onTime', 0);
 /* == what is left of each monthly allowance ==
    Tom, 2026-09-14: "If I allot 9k for groceries, how does that work when it
    shows up in my union bank import?" An allowance is a monthly figure on a
@@ -2710,7 +2747,9 @@ function drawScore(m) {
   } else {
     sc.appendChild(el('div', 'sub', money(L.total) + ' in the accounts. ' + money(b.allocated) +
       ' already spoken for: your pots, ' + (b.allot ? 'what is left of your monthly allowances, ' : '') +
-      'and bills due ' + b.win.words + '.'));
+      'and bills due ' + b.win.words + '.' +
+      (onTime() ? ' Plus ' + money(b.coming) + ' from clients due by ' + Day.short(b.win.to) +
+        ', counted as if they pay on time.' : '')));
     const pick = el('button', 'btn mb-press mb-tap', 'Change how far ahead');
     pick.type = 'button';
     pick.onclick = () => menu(pick, FREE_WINDOWS.map(x => ({
@@ -2724,6 +2763,9 @@ function drawScore(m) {
     wrap.style.justifyContent = 'center';
     wrap.appendChild(pick);
     sc.appendChild(wrap);
+    sc.appendChild(UI.row('Count clients as paying on time',
+      'Adds client payments due by ' + esc(Day.short(b.win.to)) + ' that have not arrived. Late ones stay out.',
+      UI.toggle(onTime(), v => { S.set('onTime', v ? 1 : 0); draw(); })));
   }
   c1.appendChild(sc);
 
@@ -2732,7 +2774,8 @@ function drawScore(m) {
     L.counted ? (L.age > STALE ? '<span class="stale">counted ' + L.age + ' days ago</span>' : 'counted ' + (L.age ? L.age + ' days ago' : 'today')) : 'no counts yet',
     L.age > STALE ? 'warn' : ''));
   g.appendChild(tile('ALLOCATED', short(b.allocated), (b.allot ? 'pots, allowances, and bills due to ' : 'pots, and bills due to ') + Day.short(b.win.to)));
-  g.appendChild(tile('FREE', L.counted ? short(b.free) : '—', 'what is really yours',
+  g.appendChild(tile('FREE', L.counted ? short(b.free) : '—',
+    onTime() ? 'if clients pay on time' : 'what is really yours',
     b.free < 0 ? 'bad' : ''));
   c1.appendChild(g);
   if (L.missing.length && L.counted) {
@@ -3086,8 +3129,12 @@ function drawOut(m) {
      monthly cost not the annual"; and groceries, water and regular spending.
      The card follows the bill's category, so re-filing a bill moves it. A
      card title says what is on it, not how to feel about it. */
+  /* Groceries is named, like Drinking Water. Tom, 2026-09-16: "Groceries
+     doesnt show up in groceries". His Groceries was not Variable, so it
+     followed its kind into BILLS. A card named after it holds it whatever
+     its kind says. */
   const shelfOf = id => ['subs', 'gym'].indexOf(id) > -1 || catGrp(id) === 'biz' ? 'subs'
-    : id === 'water' || catGrp(id) === 'var' ? 'regular' : 'bills';
+    : id === 'water' || id === 'groceries' || catGrp(id) === 'var' ? 'regular' : 'bills';
   const shelf = b => shelfOf(b.cat);
   const hasAllowance = id => num((Rec.get('cat', null, id) || {}).cap, 0) > 0;
   /* An allowance sits in the card its category belongs to, with what has
@@ -3172,7 +3219,7 @@ function drawOut(m) {
   /* The month ahead as dates, because timing is what bounces a payment. */
   const c4 = card('THE NEXT 60 DAYS', 'full');
   const to = Day.shift(Day.today(), 60);
-  const events = billsDue(Day.today(), to).map(b => ({ date: b.date, name: b.bill.name, amt: -num(b.bill.amt, 0) }))
+  const events = billsOwed(Day.today(), to).map(b => ({ date: b.date, name: b.bill.name, amt: -num(b.bill.amt, 0) }))
     .concat(expected(Day.today(), to).filter(e => !e.paid).map(e => ({ date: e.date, name: e.client.name, amt: num(e.amt, 0) })))
     .sort((a, b) => a.date.localeCompare(b.date));
   if (!events.length) c4.appendChild(el('div', 'empty', 'Nothing scheduled either way. Add a bill above, or a client under MONEY IN, and the next two months fill in.'));
