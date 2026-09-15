@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mb-version" content="1.0.0, 2026-09-15">
+<title>SPEAK</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◍</text></svg>">
+<meta name="theme-color" content="#0B0E14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- The shared foundation. speak/CLAUDE.md is this app's brief. -->
+<script src="../shared/skins.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/mobile.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="../shared/io.js"></script>
+<script src="../shared/health.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/chart.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--text-1);
+  background-image:var(--tex-image);background-size:var(--tex-size);
+  font-family:var(--font-body);font-size:var(--f-3);font-weight:var(--w-body);
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit}
+header{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);
+  background:var(--surface-1);box-shadow:var(--e-1),var(--rim);position:relative;z-index:2;
+}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+/* the streak, as a number beside a flame. It says the state and nothing else */
+.streak{display:inline-flex;align-items:center;gap:var(--s-1);font-family:var(--font-mono);
+  font-size:var(--f-2);color:var(--text-2);min-height:var(--tap);padding:0 var(--s-2)}
+.streak.zero{color:var(--text-muted)}
+.streak [data-icon]{display:inline-flex}
+#nav{flex:0 0 auto;display:flex;gap:var(--s-1);padding:var(--s-2) var(--s-4);background:var(--surface-1);overflow-x:auto}
+#nav button{flex:1;min-height:var(--tap);border:0;border-radius:var(--radius-md);background:none;color:var(--text-muted);
+  font-family:var(--font-display);letter-spacing:var(--track-cap);cursor:pointer;white-space:nowrap;padding:0 var(--s-3)}
+#nav button.on{background:var(--surface-2);color:var(--text-1)}
+main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--safe-b))}
+.wrap{max-width:calc(var(--s-10) * 6);margin:0 auto;display:flex;flex-direction:column;gap:var(--s-4)}
+/* a card, and the rows inside it. mb-card and mb-plate draw them; the app
+   writes no background, border or shadow of its own */
+.card{border-radius:var(--radius-lg);padding:var(--s-4)}
+.card h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted);margin-bottom:var(--s-3);text-transform:uppercase;
+  display:flex;align-items:center;gap:var(--s-3)}
+.card h2 .r{margin-left:auto;font-family:var(--font-mono);letter-spacing:0;text-transform:none}
+.muted{color:var(--text-muted);line-height:var(--lh-body);font-size:var(--f-2)}
+.list{display:flex;flex-direction:column;gap:var(--s-2)}
+.row{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);min-height:var(--tap);
+  border-radius:var(--radius-md);cursor:pointer;text-align:left;width:100%;border:0}
+.row .ic{flex:0 0 auto;width:var(--s-6);height:var(--s-6);display:flex;align-items:center;justify-content:center;
+  border-radius:var(--radius-full);color:var(--text-muted)}
+.row.done .ic{color:var(--success)}
+.row.now .ic{color:var(--accent)}
+.row.locked{opacity:.55}
+.row .tx{flex:1;min-width:0}
+.row .nm{display:block;font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-body)}
+.row .sub{display:block;font-size:var(--f-2);color:var(--text-2);line-height:var(--lh-body);margin-top:var(--s-1)}
+.row .num{font-family:var(--font-mono);font-size:var(--f-2);color:var(--text-2);white-space:nowrap;flex:0 0 auto;text-align:right}
+.row .num b{display:block;font-size:var(--f-4);color:var(--text-1);font-weight:var(--w-bold)}
+.row.done .num b{color:var(--success)}
+.row.miss .num b{color:var(--warn)}
+/* the skill columns on PATH */
+.path{display:grid;grid-template-columns:repeat(auto-fit,minmax(calc(var(--s-10) * 2),1fr));gap:var(--s-4)}
+.skill h3{font-family:var(--font-display);font-size:var(--f-3);font-weight:var(--w-bold);letter-spacing:var(--track-cap);
+  display:flex;align-items:center;gap:var(--s-2);margin-bottom:var(--s-1)}
+.skill h3 i{display:inline-block;width:var(--s-3);height:var(--s-3);border-radius:var(--radius-full);background:var(--c)}
+.skill .why{font-size:var(--f-2);color:var(--text-muted);line-height:var(--lh-body);margin-bottom:var(--s-3)}
+.step{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-2) var(--s-3);min-height:var(--tap);
+  border-radius:var(--radius-md);cursor:pointer;width:100%;border:0;text-align:left;--c:var(--c)}
+.step .n{font-family:var(--font-mono);font-size:var(--f-1);color:var(--text-muted);width:var(--s-5);flex:0 0 auto}
+.step .nm{flex:1;min-width:0;font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-body)}
+.step .st{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:var(--s-6);height:var(--s-6);
+  border-radius:var(--radius-full);color:var(--text-muted)}
+.step.passed .st{color:var(--success)}
+.step.now .st{color:var(--accent)}
+.step.locked{opacity:.5}
+/* the numbers: label, value, unit */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(var(--s-10),1fr));gap:var(--s-3)}
+.stat{padding:var(--s-3);border-radius:var(--radius-md)}
+.stat .k{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--text-muted);text-transform:uppercase}
+.stat .v{font-family:var(--font-mono);font-size:var(--f-6);font-weight:var(--w-bold);line-height:var(--lh-tight);margin-top:var(--s-1)}
+.stat .v small{font-size:var(--f-2);color:var(--text-muted);margin-left:var(--s-1);font-weight:var(--w-body)}
+.stat .d{font-size:var(--f-2);color:var(--text-2);margin-top:var(--s-1);line-height:var(--lh-body)}
+.stat.met .v{color:var(--success)}
+.stat.miss .v{color:var(--warn)}
+.acts{display:flex;gap:var(--s-2);flex-wrap:wrap;margin-top:var(--s-3)}
+.acts .mb-btn{display:inline-flex;align-items:center;gap:var(--s-2)}
+.chartbox{margin-top:var(--s-2)}
+/* the goal and the why, on a drill sheet and on a today card */
+.goal{display:grid;grid-template-columns:var(--s-9) 1fr;gap:var(--s-2) var(--s-3);align-items:baseline;
+  font-size:var(--f-2);line-height:var(--lh-body);margin:var(--s-3) 0}
+.goal b{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--text-muted);text-transform:uppercase}
+.goal .g{color:var(--text-1);font-weight:var(--w-bold)}
+.prompt{font-size:var(--f-4);line-height:var(--lh-loose);padding:var(--s-3);border-radius:var(--radius-md);background:var(--surface-2)}
+.prompt ul{padding-left:var(--s-5)}
+.prompt.read{font-size:var(--f-3);max-height:calc(var(--s-10) * 3);overflow:auto}
+.tx mark{background:color-mix(in srgb,var(--warn) 35%,transparent);color:inherit;border-radius:var(--radius-sm);padding:0 var(--s-1)}
+.tx mark.c{background:color-mix(in srgb,var(--danger) 35%,transparent)}
+.tx{font-size:var(--f-2);line-height:var(--lh-loose);color:var(--text-2)}
+/* ── the take screen: the whole window while a take runs ── */
+#take{position:fixed;inset:0;z-index:60;display:none;flex-direction:column;background:var(--bg);
+  background-image:var(--tex-image);background-size:var(--tex-size);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) calc(var(--s-4) + var(--safe-b))}
+#take.on{display:flex}
+#take .top{display:flex;align-items:center;gap:var(--s-3);flex:0 0 auto}
+#take .top .nm{font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-cap);flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#take .clock{font-family:var(--font-mono);font-size:var(--f-5);font-weight:var(--w-bold);font-variant-numeric:tabular-nums}
+#take .mid{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:var(--s-4);max-width:calc(var(--s-10) * 5);
+  width:100%;margin:0 auto;overflow:auto}
+#take .count{font-family:var(--font-display);font-size:var(--f-9);font-weight:var(--w-bold);text-align:center;color:var(--accent)}
+#take .say{font-family:var(--font-display);font-size:var(--f-4);text-align:center;color:var(--text-2);letter-spacing:var(--track-cap)}
+#take .meters{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-3);max-width:calc(var(--s-10) * 5);width:100%;margin:0 auto}
+#take .meter{padding:var(--s-3);border-radius:var(--radius-md);text-align:center}
+#take .meter .k{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--text-muted);text-transform:uppercase}
+#take .meter .v{font-family:var(--font-mono);font-size:var(--f-5);font-weight:var(--w-bold);margin-top:var(--s-1);font-variant-numeric:tabular-nums}
+#take .meter.in .v{color:var(--success)}
+#take .meter.out .v{color:var(--warn)}
+#take .meter.off .v{color:var(--text-muted)}
+#take .level{height:var(--s-2);border-radius:var(--radius-full);background:var(--surface-2);overflow:hidden;margin-top:var(--s-2)}
+#take .level i{display:block;height:100%;width:0;background:var(--accent);transition:width var(--dur-tap) linear}
+#take .foot{flex:0 0 auto;display:flex;justify-content:center;gap:var(--s-3);margin-top:var(--s-4)}
+#take .foot .mb-btn{min-width:calc(var(--s-10) + var(--s-6));display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2)}
+#cam{position:absolute;right:var(--s-4);top:calc(var(--s-3) + var(--safe-t) + var(--tap) + var(--s-3));width:calc(var(--s-10) + var(--s-4));
+  aspect-ratio:3/4;object-fit:cover;border-radius:var(--radius-md);transform:scaleX(-1);display:none;box-shadow:var(--e-2)}
+#cam.on{display:block}
+/* the breath ring on the warm-up */
+.ring{display:flex;flex-direction:column;align-items:center;gap:var(--s-3)}
+.ring .big{font-family:var(--font-display);font-size:var(--f-8);font-weight:var(--w-bold);color:var(--accent)}
+@media (max-width:640px){
+  .path{grid-template-columns:1fr}
+  #take .meters{grid-template-columns:repeat(3,1fr)}
+  #take .count{font-size:var(--f-8)}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">SPE<b>AK</b></div>
+  <div class="streak zero" id="streak" title="days in a row with a take"></div>
+  <div class="spacer"></div>
+  <button class="mb-btn mb-press mb-tap" id="bSet" aria-label="Settings" data-icon="settings"></button>
+  <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
+</header>
+<nav id="nav">
+  <button type="button" data-v="today" class="mb-press on">TODAY</button>
+  <button type="button" data-v="path" class="mb-press">PATH</button>
+  <button type="button" data-v="progress" class="mb-press">PROGRESS</button>
+</nav>
+<main class="mb-scroll"><div class="wrap" id="main"></div></main>
+
+<div id="take" role="dialog" aria-modal="true">
+  <div class="top">
+    <span class="nm" id="tkName"></span>
+    <span class="clock" id="tkClock">0:00</span>
+    <button class="mb-btn mb-press mb-tap" id="tkStop" aria-label="Stop" data-icon="stop"></button>
+  </div>
+  <video id="cam" muted playsinline></video>
+  <div class="mid" id="tkMid"></div>
+  <div class="meters" id="tkMeters"></div>
+  <div class="foot" id="tkFoot"></div>
+</div>
+
+<script>
+/* ══════════════ SPEAK ══════════════
+   Practice for talking to a camera, measured. Tom, 2026-09-15: pace, filler
+   words, stream of consciousness and bullet points, mumbling and stuttering,
+   eye contact, "you know what I mean" and "right". Built like Duolingo: a
+   path of short drills, a daily warm-up, a streak, and every drill says its
+   goal and why. speak/CLAUDE.md is the brief; speak/RESEARCH.md is where
+   every number below came from.
+
+   Nothing on screen judges. It counts, shows the target, and says met or not
+   met against a target he can change. */
+
+const APP = {
+  id: 'speak',
+  name: 'Speak',
+  icon: '◍',
+  blurb: 'talk to the camera, measured: pace, fillers, flow, clarity, eyes',
+  types: ['take', 'topic'],
+};
+
+Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
+  if (window.Icons) Icons.paint(null, { force: true }); });
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({ app: APP.id, name: APP.name, types: APP.types });
+
+const $ = s => document.querySelector(s);
+const esc = UI.esc;
+const el = (t, c, h) => { const n = document.createElement(t); if (c) n.className = c; if (h != null) n.innerHTML = h; return n; };
+const ICN = role => '<span data-icon="' + role + '"></span>';
+const paintIcons = n => { if (window.Icons) Icons.paint(n || document.body); };
+const r1 = v => Math.round(v * 10) / 10;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const opt = (k, def) => { const v = Rec.setting(APP.id, k); return v == null ? def : v; };
+const optOn = (k, def) => { const v = opt(k, def); return v === true || +v === 1; };
+let seq = 0;
+const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' + (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
+const mmss = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+
+/* ══════════════ the ear ══════════════
+   Everything measured from sound, in one object, so it can be tested on a
+   buffer with known counts as well as fed live from the microphone.
+
+   It works in 10ms frames: loudness in dB, how much of the energy is
+   high-frequency (consonants live at 2 to 4kHz, so this is the crispness
+   proxy), and every second frame a pitch reading if the frame is voiced. The
+   summary follows de Jong & Wempe (2009): a syllable is a voiced peak in
+   loudness with a dip on either side; a silence of 250ms or more is a pause.
+   Tuned 2026-09-15 on four clips with counted syllables (97 in all): 29 of
+   29, 13 of 14, 3 of 3 and 51 of 51. Held sounds and stammered starts are
+   proxies and are named as such on screen. */
+function Ear(sr) {
+  const HOP = Math.round(sr * 0.01);
+  const PW = Math.round(sr * 0.03);
+  const DS = Math.max(1, Math.round(sr / 12000));
+  const lagLo = Math.round(sr / DS / 400), lagHi = Math.round(sr / DS / 70);
+  const keep = new Float32Array(PW);
+  let kept = 0;
+  const frames = [];
+  let carry = new Float32Array(0);
+  let prev = 0;
+
+  function pitchOf() {
+    const n = Math.floor(PW / DS);
+    const x = new Float32Array(n);
+    let mean = 0;
+    for (let i = 0; i < n; i++) { x[i] = keep[i * DS]; mean += x[i]; }
+    mean /= n;
+    let e0 = 0;
+    for (let i = 0; i < n; i++) { x[i] -= mean; e0 += x[i] * x[i]; }
+    if (e0 < 1e-9) return 0;
+    let best = 0, bestLag = 0;
+    for (let lag = lagLo; lag <= Math.min(lagHi, n - 8); lag++) {
+      let s = 0, e1 = 0, e2 = 0;
+      for (let i = 0; i + lag < n; i++) { s += x[i] * x[i + lag]; e1 += x[i] * x[i]; e2 += x[i + lag] * x[i + lag]; }
+      const r = s / Math.sqrt(e1 * e2 + 1e-12);
+      if (r > best) { best = r; bestLag = lag; }
+    }
+    if (best < 0.62 || !bestLag) return 0;
+    for (let lag = lagLo; lag < bestLag; lag++) {
+      let s = 0, e1 = 0, e2 = 0;
+      for (let i = 0; i + lag < n; i++) { s += x[i] * x[i + lag]; e1 += x[i] * x[i]; e2 += x[i + lag] * x[i + lag]; }
+      const r = s / Math.sqrt(e1 * e2 + 1e-12);
+      if (r > best * 0.95 && Math.abs(lag * 2 - bestLag) <= 2) { bestLag = lag; break; }
+    }
+    return sr / DS / bestLag;
+  }
+  function frame(buf, at) {
+    let e = 0, d = 0, p = prev;
+    for (let i = 0; i < HOP; i++) { const v = buf[at + i]; e += v * v; const df = v - p; d += df * df; p = v; }
+    prev = p;
+    const rms = Math.sqrt(e / HOP);
+    const db = 20 * Math.log10(rms + 1e-7);
+    const hf = e > 1e-9 ? d / (e * 2) : 0;
+    const room = PW - HOP;
+    keep.copyWithin(0, HOP); keep.set(buf.subarray(at, at + HOP), room);
+    kept = Math.min(PW, kept + HOP);
+    let f0 = -1;
+    if (frames.length % 2 === 0 && kept >= PW) f0 = db > -50 ? pitchOf() : 0;
+    frames.push({ db: db, hf: hf, f0: f0 });
+  }
+  const ear = {
+    sr: sr, frames: frames,
+    feed(chunk) {
+      let buf = chunk;
+      if (carry.length) { buf = new Float32Array(carry.length + chunk.length); buf.set(carry); buf.set(chunk, carry.length); }
+      let at = 0;
+      while (at + HOP <= buf.length) { frame(buf, at); at += HOP; }
+      carry = buf.slice(at);
+    },
+    seconds() { return frames.length * 0.01; },
+    /** the loudness of the last 100ms, 0 to 1, for a level bar */
+    level() {
+      const n = frames.length; if (!n) return 0;
+      let m = -100; for (let i = Math.max(0, n - 10); i < n; i++) m = Math.max(m, frames[i].db);
+      return clamp((m + 60) / 55, 0, 1);
+    },
+    /** everything counted so far. o.from limits it to frames after a time in seconds */
+    summary(o) {
+      o = o || {};
+      const from = Math.max(0, Math.round((o.from || 0) * 100));
+      const N = frames.length - from;
+      if (N < 20) return null;
+      const F = i => frames[from + i];
+      const dbs = []; for (let i = 0; i < N; i++) dbs.push(F(i).db);
+      const sorted = dbs.slice().sort((a, b) => a - b);
+      const q = p => sorted[Math.min(N - 1, Math.floor(p * N))];
+      const floor = q(0.1), peak = q(0.98);
+      const speakAt = Math.max(floor + 10, peak - 25);
+      const f0 = new Array(N);
+      for (let i = 0; i < N; i++) f0[i] = F(i).f0 >= 0 ? F(i).f0 : (i ? f0[i - 1] : 0);
+      const voiced = f0.map((v, i) => v > 0 && dbs[i] > speakAt);
+      const SM = 1, DIP = 1, GAP = 8;
+      const sm = dbs.map((v, i) => { let s = 0, n = 0; for (let k = -SM; k <= SM; k++) { const j = i + k; if (j >= 0 && j < N) { s += dbs[j]; n++; } } return s / n; });
+      const on = dbs.map(v => v > speakAt);
+      const runs = []; let a = 0;
+      for (let i = 1; i <= N; i++) if (i === N || on[i] !== on[a]) { runs.push({ on: on[a], a: a, b: i }); a = i; }
+      const PAUSE = 25, LONG = 150;                       /* 250ms is a pause; 1.5s is a long one */
+      const pauses = [], longs = [];
+      let speechFrames = 0, first = -1, last = -1;
+      runs.forEach(r => {
+        const len = r.b - r.a;
+        if (r.on) { speechFrames += len; if (first < 0) first = r.a; last = r.b; }
+        else if (len >= PAUSE) { pauses.push(len); if (len >= LONG) longs.push(len); }
+        else speechFrames += len;
+      });
+      if (first >= 0) {
+        const lead = runs[0].on ? 0 : runs[0].b, tail = runs[runs.length - 1].on ? 0 : N - runs[runs.length - 1].a;
+        if (!runs[0].on && lead >= PAUSE) { pauses.shift(); if (lead >= LONG) longs.shift(); }
+        if (!runs[runs.length - 1].on && tail >= PAUSE && pauses.length) { pauses.pop(); if (tail >= LONG) longs.pop(); }
+        speechFrames -= (lead < PAUSE ? lead : 0) + (tail < PAUSE ? tail : 0);
+      }
+      const spoken = first < 0 ? 0 : (last - first) * 0.01;
+      const phon = Math.max(0, speechFrames) * 0.01;
+      const pauseSec = pauses.reduce((s, v) => s + v, 0) * 0.01;
+      /* syllables */
+      let syll = 0, lastPeak = -100, i = 0, valley = 1e9;
+      const peaksAt = [];
+      for (i = 0; i < N; i++) {
+        if (!on[i]) { valley = 1e9; continue; }
+        valley = Math.min(valley, sm[i]);
+        const isMax = sm[i] >= sm[i - 1 | 0] && sm[i] >= (i + 1 < N ? sm[i + 1] : -1e9) &&
+          (i < 2 || sm[i] >= sm[i - 2]) && (i + 2 >= N || sm[i] >= sm[i + 2]);
+        if (!isMax || sm[i] < speakAt) continue;
+        if (sm[i] - valley < DIP && i - lastPeak < 40) continue;
+        let after = 1e9, j = i + 1;
+        while (j < N && on[j] && j - i < 40) { after = Math.min(after, sm[j]); if (sm[j] > sm[i]) break; j++; }
+        if (j < N && on[j] && j - i < 40 && sm[j] > sm[i] && sm[i] - after < DIP) continue;
+        if (i - lastPeak < GAP) continue;
+        if (!(voiced[i] || voiced[i - 1] || voiced[i + 1])) continue;
+        syll++; peaksAt.push(i); lastPeak = i; valley = sm[i];
+      }
+      /* held sounds: 300ms+ voiced, pitch and loudness barely moving. An um,
+         an uh, or a vowel drawn out; the screen calls them held sounds */
+      const held = [];
+      let h0 = -1;
+      const sd = xs => { const m = xs.reduce((s, v) => s + v, 0) / xs.length; return Math.sqrt(xs.reduce((s, v) => s + (v - m) * (v - m), 0) / xs.length); };
+      const flush = end => {
+        if (h0 < 0) return;
+        const len = end - h0;
+        if (len >= 30) {
+          const st = [], ls = [];
+          for (let k = h0 + 4; k < end - 4; k++) { st.push(12 * Math.log2(f0[k] / 100)); ls.push(dbs[k]); }
+          if (st.length > 4) {
+            const range = Math.max.apply(null, ls) - Math.min.apply(null, ls);
+            if (sd(st) <= 1.2 && range <= 8) held.push({ at: (from + h0) * 0.01, dur: len * 0.01 });
+          }
+        }
+        h0 = -1;
+      };
+      for (i = 0; i < N; i++) {
+        if (voiced[i]) { if (h0 < 0) h0 = i; }
+        else if (h0 >= 0 && !(voiced[i + 1] || voiced[i + 2])) flush(i);
+      }
+      flush(N);
+      /* stammered starts: three or more bursts of 40 to 150ms with gaps under 150ms */
+      let restarts = 0, streak = 0;
+      runs.forEach(r => {
+        const len = r.b - r.a;
+        if (r.on) { if (len >= 4 && len <= 15) streak++; else { if (streak >= 3) restarts++; streak = 0; } }
+        else if (len > 15) { if (streak >= 3) restarts++; streak = 0; }
+      });
+      if (streak >= 3) restarts++;
+      /* pitch spread in semitones: the 10th to the 90th percentile of voiced frames */
+      const st = [];
+      for (i = 0; i < N; i++) if (voiced[i] && F(i).f0 > 0) st.push(12 * Math.log2(F(i).f0 / 100));
+      st.sort((x, y) => x - y);
+      const pv = st.length > 10 ? st[Math.floor(st.length * 0.9)] - st[Math.floor(st.length * 0.1)] : null;
+      const f0med = st.length ? 100 * Math.pow(2, st[Math.floor(st.length / 2)] / 12) : null;
+      let hfs = 0, hfn = 0, dbS = 0, dbN = 0, longestOn = 0;
+      for (i = 0; i < N; i++) if (on[i]) { hfs += F(i).hf; hfn++; dbS += dbs[i]; dbN++; }
+      runs.forEach(r => { if (r.on) longestOn = Math.max(longestOn, r.b - r.a); });
+      const heldPauses = pauses.filter(p => p >= 80 && p <= 200).length;   /* 0.8 to 2s: a pause held on purpose */
+      return {
+        total: N * 0.01, spoken: spoken, phon: phon,
+        syll: syll, peaks: peaksAt.map(p => (from + p) * 0.01),
+        sps: spoken > 0 ? syll / spoken : 0, art: phon > 0 ? syll / phon : 0,
+        wpmEst: spoken > 0 ? (syll / 1.4) / (spoken / 60) : 0,
+        pauses: pauses.length, longPauses: longs.length, heldPauses: heldPauses, pauseSec: pauseSec,
+        longestPause: pauses.length ? Math.max.apply(null, pauses) * 0.01 : 0,
+        ratio: spoken > 0 ? phon / spoken : 0,
+        held: held.length, heldSec: held.reduce((s, h) => s + h.dur, 0), heldAt: held,
+        restarts: restarts,
+        pitchSpread: pv, f0: f0med,
+        crisp: hfn ? hfs / hfn : 0,
+        loud: dbN ? dbS / dbN : null, floor: floor, speakAt: speakAt,
+        longestSound: longestOn * 0.01,
+      };
+    },
+  };
+  return ear;
+}
+
+/* ══════════════ the transcript, where the browser can make one ══════════════
+   The browser's own speech recogniser. It sends the sound to Apple or Google
+   and needs a signal, so it is a switch, off means offline, and every count
+   that comes from it says so. Chrome's transcript usually drops um and uh, so
+   the ear's held sounds stand in for those; the crutch phrases are read here. */
+const ASR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+function Listener(lang) {
+  const out = { chunks: [], words: 0, state: ASR ? 'idle' : 'none', error: '' };
+  let rec = null, live = false;
+  function start() {
+    if (!ASR || live) return;
+    rec = new ASR();
+    rec.continuous = true; rec.interimResults = false; rec.lang = lang || 'en-US'; rec.maxAlternatives = 1;
+    rec.onresult = e => {
+      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) {
+        const t = String(e.results[i][0].transcript || '').trim();
+        if (t) { out.chunks.push(t); out.words += t.split(/\s+/).length; }
+      }
+      out.state = 'on';
+    };
+    rec.onerror = e => { out.error = e.error || 'error'; if (e.error === 'not-allowed' || e.error === 'service-not-allowed' || e.error === 'network') { out.state = 'failed'; live = false; } };
+    rec.onend = () => { if (live && out.state !== 'failed') { try { rec.start(); } catch (e) {} } };
+    try { rec.start(); live = true; out.state = 'on'; } catch (e) { out.state = 'failed'; out.error = e.message; }
+  }
+  return {
+    out: out, start: start,
+    stop() { live = false; try { rec && rec.stop(); } catch (e) {} },
+    text() { return out.chunks.join(' | '); },
+  };
+}
+/* Fillers and crutch phrases in a transcript. Um, uh and their cousins count
+   always. A word that also carries meaning, like `right` or `like`, counts
+   when it starts or ends a chunk or sits beside a plain joining word: that is
+   where it is a crutch and not a word. Counts are per phrase, and each one is
+   marked in the text. */
+const FILLERS = ['um', 'uh', 'er', 'erm', 'ah', 'hmm', 'mm', 'uhm', 'umm'];
+const DEFAULT_CRUTCH = ['you know what i mean', 'you know', 'right', 'like', 'basically', 'literally', 'actually', 'kind of', 'sort of', 'i mean', 'okay so', 'so yeah'];
+const AMBIGUOUS = { right: 1, like: 1, so: 1, okay: 1, actually: 1 };
+const JOINERS = /^(so|and|but|because|okay|ok|now|like|i|you|we|it|that|this|then|yeah|um|uh)$/;
+function crutchList() { const v = opt('crutch', null); return Array.isArray(v) ? v : DEFAULT_CRUTCH.slice(); }
+function scan(chunks) {
+  const hits = {}, marked = [];
+  let fillers = 0, crutch = 0, repeats = 0;
+  const list = crutchList().map(p => p.toLowerCase().trim()).filter(Boolean).sort((a, b) => b.length - a.length);
+  chunks.forEach(chunk => {
+    const words = chunk.toLowerCase().replace(/[^a-z' ]+/g, ' ').split(/\s+/).filter(Boolean);
+    const flag = new Array(words.length).fill(0);
+    /* the same word twice running: "I I think", "the the" */
+    for (let i = 1; i < words.length; i++) if (words[i] === words[i - 1] && words[i].length > 1) { repeats++; flag[i] = 3; }
+    words.forEach((w, i) => { if (FILLERS.indexOf(w) >= 0) { fillers++; flag[i] = 1; hits[w] = (hits[w] || 0) + 1; } });
+    list.forEach(p => {
+      const pw = p.split(' ');
+      for (let i = 0; i + pw.length <= words.length; i++) {
+        let ok = true;
+        for (let k = 0; k < pw.length; k++) if (words[i + k] !== pw[k] || flag[i + k]) { ok = false; break; }
+        if (!ok) continue;
+        if (pw.length === 1 && AMBIGUOUS[p]) {
+          const edge = i === 0 || i === words.length - 1;
+          const beside = (i > 0 && JOINERS.test(words[i - 1])) || (i + 1 < words.length && JOINERS.test(words[i + 1]));
+          if (!edge && !beside) continue;
+        }
+        crutch++; hits[p] = (hits[p] || 0) + 1;
+        for (let k = 0; k < pw.length; k++) flag[i + k] = 2;
+      }
+    });
+    marked.push(words.map((w, i) => flag[i] ? '<mark' + (flag[i] === 2 ? ' class="c"' : '') + '>' + esc(w) + '</mark>' : esc(w)).join(' '));
+  });
+  const asrUms = FILLERS.reduce((s, w) => s + (hits[w] || 0), 0);
+  return { fillers: fillers, crutch: crutch, repeats: repeats, asrUms: asrUms, hits: hits, html: marked.join(' <span class="muted">|</span> ') };
+}
+
+/* ══════════════ the eyes, where the face finder loads ══════════════
+   Google's MediaPipe face landmarker, the way CHECK IN loads its body finder:
+   engine from jsDelivr, model from Google's storage, kept in the browser's
+   Cache API so it works with no signal afterwards. It runs on the processor.
+   If it cannot load, the drill runs and says eyes were not measured.
+
+   On the lens is decided against a reading taken during the three-second
+   count, when the screen says to look at the lens: the eyes' own look
+   direction (the landmarker's blendshapes) and the head's turn and tilt (the
+   nose against the face's edges) each within a band of that reading. It can
+   tell the lens zone from the screen or the room; it cannot tell two degrees.
+   Not watched on a real face yet. */
+const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const ENGINE_CACHE = 'speak-face-finder-1';
+let engineP = null, engineState = 'idle';
+async function grab(url) {
+  let c = null;
+  try { c = window.caches ? await caches.open(ENGINE_CACHE) : null; } catch (e) { c = null; }
+  if (c) { const hit = await c.match(url); if (hit) return hit; }
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status + ' for ' + url);
+  if (c) { try { await c.put(url, r.clone()); } catch (e) {} }
+  return r;
+}
+async function blobUrl(url, type) {
+  const r = await grab(url);
+  return URL.createObjectURL(new Blob([await r.arrayBuffer()], { type: type }));
+}
+function faceEngine() {
+  if (engineP) return engineP;
+  engineState = 'loading';
+  engineP = (async () => {
+    const mod = await import(await blobUrl(MP + '/vision_bundle.mjs', 'text/javascript'));
+    const simd = mod.FilesetResolver.isSimdSupported ? await mod.FilesetResolver.isSimdSupported() : true;
+    const base = MP + '/wasm/vision_wasm_' + (simd ? '' : 'nosimd_') + 'internal';
+    const files = {
+      wasmLoaderPath: await blobUrl(base + '.js', 'text/javascript'),
+      wasmBinaryPath: await blobUrl(base + '.wasm', 'application/wasm'),
+    };
+    const model = new Uint8Array(await (await grab(FACE_MODEL)).arrayBuffer());
+    const fl = await mod.FaceLandmarker.createFromOptions(files, {
+      baseOptions: { modelAssetBuffer: model, delegate: 'CPU' },
+      runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: false,
+    });
+    engineState = 'ready';
+    return fl;
+  })();
+  engineP.catch(e => { console.warn('[speak] the face finder did not load', e); engineState = 'failed'; engineP = null; });
+  return engineP;
+}
+/* one look: where the eyes and the head point, from one video frame */
+function lookAt(fl, video, t) {
+  let res = null;
+  try { res = fl.detectForVideo(video, t); } catch (e) { return null; }
+  const L = res && res.faceLandmarks && res.faceLandmarks[0];
+  if (!L) return null;
+  const bs = {};
+  const cats = res.faceBlendshapes && res.faceBlendshapes[0] && res.faceBlendshapes[0].categories;
+  (cats || []).forEach(c => { bs[c.categoryName] = c.score; });
+  const g = k => bs[k] || 0;
+  const nose = L[1], le = L[234], re = L[454], chin = L[152], eyeMid = { y: (L[33].y + L[263].y) / 2 };
+  return {
+    gh: ((g('eyeLookInLeft') - g('eyeLookOutLeft')) + (g('eyeLookOutRight') - g('eyeLookInRight'))) / 2,
+    gv: ((g('eyeLookUpLeft') - g('eyeLookDownLeft')) + (g('eyeLookUpRight') - g('eyeLookDownRight'))) / 2,
+    yaw: (nose.x - le.x) / ((re.x - le.x) || 1) - 0.5,
+    pitch: (nose.y - eyeMid.y) / ((chin.y - eyeMid.y) || 1),
+    blink: Math.max(g('eyeBlinkLeft'), g('eyeBlinkRight')) > 0.5,
+  };
+}
+const EYE_BAND = { gh: 0.18, gv: 0.18, yaw: 0.07, pitch: 0.08 };
+function onLens(look, base) {
+  if (!look || !base || look.blink) return null;
+  return Math.abs(look.gh - base.gh) <= EYE_BAND.gh && Math.abs(look.gv - base.gv) <= EYE_BAND.gv &&
+    Math.abs(look.yaw - base.yaw) <= EYE_BAND.yaw && Math.abs(look.pitch - base.pitch) <= EYE_BAND.pitch;
+}
+
+/* ══════════════ targets ══════════════
+   Every number here is his to change in Settings. The defaults and where
+   each came from are in speak/RESEARCH.md; the bands are words a minute. */
+const STYLES = [
+  { id: 'long',  name: 'Talking head',  note: 'explainers, the long video',        band: [140, 160] },
+  { id: 'short', name: 'Short-form',    note: 'Reels, Shorts, TikTok',              band: [160, 180] },
+  { id: 'teach', name: 'Teaching',      note: 'a tutorial, step by step',           band: [120, 140] },
+  { id: 'story', name: 'Story',         note: 'slower at the line that matters',    band: [120, 150] },
+  { id: 'live',  name: 'Live',          note: 'a stream, thinking out loud',        band: [140, 170] },
+  { id: 'read',  name: 'Read aloud',    note: 'a passage, no thinking',             band: [140, 160] },
+];
+const DEFAULT_TGT = { fpm: 4, fpmLow: 2, eye: 80, eyeStart: 60, crispPct: 85, pitch: 6 };
+function targets() { return Object.assign({}, DEFAULT_TGT, opt('tgt', {}) || {}); }
+function band(style) {
+  const t = targets(), s = STYLES.filter(x => x.id === style)[0] || STYLES[0];
+  const b = (t.bands && t.bands[s.id]) || s.band;
+  return [+b[0], +b[1]];
+}
+
+/* ══════════════ the metrics ══════════════
+   id, name, unit, and how to read one from a take's numbers. `fmt` is what
+   the screen prints; `better` says which way the drill goals point. */
+const METRICS = {
+  wpm:     { name: 'Pace', unit: 'wpm', fmt: v => Math.round(v), note: 'words a minute. From the transcript when there is one, else syllables divided by 1.4' },
+  fpm:     { name: 'Fillers', unit: '/min', fmt: v => r1(v), note: 'ums, crutch phrases and held sounds, a minute' },
+  crutch:  { name: 'Crutch phrases', unit: '', fmt: v => Math.round(v), note: 'your own list, from the transcript' },
+  held:    { name: 'Held sounds', unit: '', fmt: v => Math.round(v), note: 'a steady voiced sound over 300ms: um, uh, or a vowel drawn out' },
+  pauses:  { name: 'Pauses', unit: '', fmt: v => Math.round(v), note: 'silences of 250ms or more' },
+  longP:   { name: 'Long pauses', unit: '', fmt: v => Math.round(v), note: '1.5 seconds or more' },
+  heldP:   { name: 'Held pauses', unit: '', fmt: v => Math.round(v), note: 'pauses of 0.8 to 2 seconds' },
+  ratio:   { name: 'Sound share', unit: '%', fmt: v => Math.round(v), note: 'how much of the take had sound in it' },
+  restarts:{ name: 'Stammered starts', unit: '', fmt: v => Math.round(v), note: 'three or more short bursts in a row' },
+  repeats: { name: 'Repeated words', unit: '', fmt: v => Math.round(v), note: 'the same word twice running, from the transcript' },
+  crisp:   { name: 'Crispness', unit: '%', fmt: v => Math.round(v), note: 'high-frequency share of the sound, against today\'s warm-up reading' },
+  pitch:   { name: 'Pitch spread', unit: 'st', fmt: v => r1(v), note: 'semitones between the low and high tenth of your voice' },
+  eye:     { name: 'On the lens', unit: '%', fmt: v => Math.round(v), note: 'share of the take with eyes and head in the lens zone' },
+  eyeAway: { name: 'Longest look away', unit: 's', fmt: v => r1(v), note: '' },
+  hiss:    { name: 'Longest sound', unit: 's', fmt: v => r1(v), note: 'one breath, one sound' },
+};
+const OPS = { in: (v, t) => v >= t[0] && v <= t[1], le: (v, t) => v <= t, ge: (v, t) => v >= t };
+function goalText(g) {
+  const m = METRICS[g.m];
+  if (g.op === 'in') return m.name.toLowerCase() + ' ' + g.v[0] + ' to ' + g.v[1] + ' ' + m.unit;
+  if (g.op === 'le') return m.name.toLowerCase() + ' ' + g.v + m.unit + ' or under';
+  if (g.op === 'ge') return m.name.toLowerCase() + ' ' + g.v + m.unit + ' or over';
+  return m.name.toLowerCase();
+}
+
+/* ══════════════ the path ══════════════
+   Five skills, five steps each, in the order they open. A step opens when the
+   one before it has been met once; nothing closes again. Each says its GOAL
+   as a number and its WHY in one sentence, with the source in RESEARCH.md.
+   `goals` is a function of the targets so a changed target moves the goal. */
+const SKILLS = [
+  { id: 'pace',  name: 'PACE',  slot: 1, why: 'Words a minute. Each style of video has a band; the drills find yours and move it.' },
+  { id: 'clean', name: 'CLEAN', slot: 2, why: 'Fillers and crutch phrases. First counted, then cut, then replaced with silence.' },
+  { id: 'flow',  name: 'FLOW',  slot: 3, why: 'Talking from bullets, from nothing, and for longer, without dead air or false starts.' },
+  { id: 'clear', name: 'CLEAR', slot: 4, why: 'Consonants and a voice that moves. The opposite of mumbling, measured.' },
+  { id: 'eyes',  name: 'EYES',  slot: 5, why: 'Time on the lens, with the camera on. The lens gets nothing by default.' },
+];
+const DRILLS = [
+  /* PACE */
+  { id: 'pace-read', skill: 'pace', step: 1, name: 'Read the band', style: 'read', kind: 'read', dur: 45,
+    goals: t => [{ m: 'wpm', op: 'in', v: band('read') }],
+    why: 'A read passage takes the thinking out, so what is left is the speed your mouth defaults to.',
+    how: 'Read it at the speed that feels slightly slow.' },
+  { id: 'pace-free', skill: 'pace', step: 2, name: 'Hold the band', style: 'long', kind: 'topic', dur: 60,
+    goals: t => [{ m: 'wpm', op: 'in', v: band('long') }],
+    why: 'Explainers that keep viewers sit around 140 to 160; thinking while talking pushes most people faster, or into gaps.',
+    how: 'One minute on the topic. Watch the pace number; it reads the last ten seconds.' },
+  { id: 'pace-beat', skill: 'pace', step: 3, name: 'To the beat', style: 'long', kind: 'topic', dur: 60, beat: true,
+    goals: t => { const b = band('long'); const mid = (b[0] + b[1]) / 2; return [{ m: 'wpm', op: 'in', v: [Math.round(mid * 0.9), Math.round(mid * 1.1)] }]; },
+    why: 'Speaking to a beat cuts the variation in how each word is formed, in typical speakers and in people who stutter.',
+    how: 'A click plays at one syllable a beat, in the middle of your band. Land a syllable on each click.' },
+  { id: 'pace-short', skill: 'pace', step: 4, name: 'Short-form gear', style: 'short', kind: 'hook', dur: 30,
+    goals: t => [{ m: 'wpm', op: 'in', v: band('short') }],
+    why: 'Short-form is dense: guides put it at 140 to 180 with the pauses cut in the edit.',
+    how: 'Thirty seconds. Start on the hook line, no run-up.' },
+  { id: 'pace-teach', skill: 'pace', step: 5, name: 'Teaching gear', style: 'teach', kind: 'bullets', dur: 60,
+    goals: t => [{ m: 'wpm', op: 'in', v: band('teach') }, { m: 'pauses', op: 'ge', v: 3 }],
+    why: 'A step lands when there is a pause after it; tutorials run 120 to 140.',
+    how: 'Three steps. Say one, stop, then the next.' },
+  /* CLEAN */
+  { id: 'clean-count', skill: 'clean', step: 1, name: 'Count them', style: 'long', kind: 'topic', dur: 60, asr: true,
+    goals: t => [],
+    why: 'Untrained speakers average 2 to 6 fillers per 100 words and do not hear them. The count is the starting line.',
+    how: 'Talk for the minute. Nothing to hit; the numbers are the point.' },
+  { id: 'clean-four', skill: 'clean', step: 2, name: 'Under four a minute', style: 'long', kind: 'topic', dur: 60, asr: true,
+    goals: t => [{ m: 'fpm', op: 'le', v: t.fpm }],
+    why: 'Three percent of words at 150 a minute is four and a half fillers a minute, the line the feedback tools call clean.',
+    how: 'When a filler is coming, close your mouth instead.' },
+  { id: 'clean-two', skill: 'clean', step: 3, name: 'Under two a minute', style: 'long', kind: 'topic', dur: 90, asr: true,
+    goals: t => [{ m: 'fpm', op: 'le', v: t.fpmLow }],
+    why: 'One percent of words is where a coach means "one or two a minute".',
+    how: 'Ninety seconds. Slower buys fewer fillers.' },
+  { id: 'clean-crutch', skill: 'clean', step: 4, name: 'No crutch phrases', style: 'long', kind: 'bullets', dur: 90, asr: true,
+    goals: t => [{ m: 'crutch', op: 'le', v: 0 }],
+    why: '"You know what I mean" and "right" ask the viewer to agree. A video cannot answer.',
+    how: 'Your list is in Settings. End the sentence where the phrase would have gone.' },
+  { id: 'clean-pause', skill: 'clean', step: 5, name: 'Silence instead', style: 'long', kind: 'topic', dur: 90, asr: true,
+    goals: t => [{ m: 'fpm', op: 'le', v: 1 }, { m: 'pauses', op: 'ge', v: 3 }],
+    why: 'A silent pause costs the listener the same time as a filler and does not lower what they think you know.',
+    how: 'Every filler becomes a pause. Three of them at least.' },
+  /* FLOW */
+  { id: 'flow-bullets', skill: 'flow', step: 1, name: 'Bullets to sentences', style: 'long', kind: 'bullets', dur: 60,
+    goals: t => [{ m: 'longP', op: 'le', v: 2 }, { m: 'restarts', op: 'le', v: 1 }],
+    why: 'An outline sounds more natural than a script, once the gaps between the bullets close.',
+    how: 'Three bullets. Join them into one piece without stopping to read.' },
+  { id: 'flow-stream', skill: 'flow', step: 2, name: 'Stream', style: 'live', kind: 'topic', dur: 90,
+    goals: t => [{ m: 'longP', op: 'le', v: 1 }, { m: 'restarts', op: 'le', v: 0 }],
+    why: 'Dead air is what a live viewer leaves on. A pause under 1.5 seconds reads as thought.',
+    how: 'Say whatever comes. Keep the sound going while the next thought arrives.' },
+  { id: 'flow-hook', skill: 'flow', step: 3, name: 'Hook, point, close', style: 'short', kind: 'hook', dur: 30,
+    goals: t => [{ m: 'ratio', op: 'ge', v: 80 }, { m: 'longP', op: 'le', v: 0 }],
+    why: '63% of the short videos with the highest click-through hook inside three seconds.',
+    how: 'The hook, one point, a close. Thirty seconds and no gap over 1.5 seconds.' },
+  { id: 'flow-story', skill: 'flow', step: 4, name: 'Story in ninety', style: 'story', kind: 'story', dur: 90,
+    goals: t => [{ m: 'heldP', op: 'ge', v: 2 }, { m: 'restarts', op: 'le', v: 0 }],
+    why: 'A dramatic pause runs one to two seconds, before and after the line that matters.',
+    how: 'Tell it. Hold a pause before the payoff and another after it.' },
+  { id: 'flow-live', skill: 'flow', step: 5, name: 'Three minutes live', style: 'live', kind: 'topic', dur: 180,
+    goals: t => [{ m: 'longP', op: 'le', v: 2 }, { m: 'restarts', op: 'le', v: 1 }],
+    why: 'A stream is decided at minute three, not minute one.',
+    how: 'Three minutes on one topic. Change angle rather than stop.' },
+  /* CLEAR */
+  { id: 'clear-over', skill: 'clear', step: 1, name: 'Over-articulate', style: 'read', kind: 'twister', dur: 30,
+    goals: t => [],
+    why: 'Exaggerating every consonant is the drill every clinic uses for mumbling. Today\'s warm-up reading is the reference.',
+    how: 'Each twister three times, every consonant too much.' },
+  { id: 'clear-read', skill: 'clear', step: 2, name: 'Crisp, reading', style: 'read', kind: 'read', dur: 45, crisp: true,
+    goals: t => [{ m: 'crisp', op: 'ge', v: t.crispPct }],
+    why: 'Consonants live at 2 to 4kHz. Mumbling is that band going quiet.',
+    how: 'Read at a normal pace and keep the consonants from the warm-up.' },
+  { id: 'clear-free', skill: 'clear', step: 3, name: 'Crisp while thinking', style: 'long', kind: 'topic', dur: 60, crisp: true,
+    goals: t => [{ m: 'crisp', op: 'ge', v: t.crispPct }],
+    why: 'Articulation drops first when the mind is on the next sentence.',
+    how: 'A topic, one minute, consonants kept.' },
+  { id: 'clear-fast', skill: 'clear', step: 4, name: 'Crisp and fast', style: 'short', kind: 'hook', dur: 30, crisp: true,
+    goals: t => [{ m: 'crisp', op: 'ge', v: t.crispPct }, { m: 'wpm', op: 'in', v: band('short') }],
+    why: 'Speed is where articulation collapses. Short-form asks for both.',
+    how: 'Thirty seconds at short-form pace, consonants kept.' },
+  { id: 'clear-voice', skill: 'clear', step: 5, name: 'Voice moves', style: 'story', kind: 'story', dur: 60,
+    goals: t => [{ m: 'pitch', op: 'ge', v: t.pitch }],
+    why: 'Clear speech has a wider pitch range, and reading from a script flattens it.',
+    how: 'Tell it as if to one person across a table. Let the voice rise and fall.' },
+  /* EYES */
+  { id: 'eyes-find', skill: 'eyes', step: 1, name: 'Find the lens', style: 'long', kind: 'topic', dur: 30, cam: true,
+    goals: t => [{ m: 'eye', op: 'ge', v: t.eyeStart }],
+    why: 'Face to face, people hold eye contact about 60% of the time. The lens gets none of it by default.',
+    how: 'Look at the lens during the count. That is the zone. Thirty seconds in it.' },
+  { id: 'eyes-hold', skill: 'eyes', step: 2, name: 'Hold it', style: 'long', kind: 'topic', dur: 60, cam: true,
+    goals: t => [{ m: 'eye', op: 'ge', v: 75 }],
+    why: 'A minute is long enough for the eyes to drift to the screen without you noticing.',
+    how: 'One minute. The preview is for framing, not for looking at.' },
+  { id: 'eyes-80', skill: 'eyes', step: 3, name: 'Eighty percent', style: 'long', kind: 'bullets', dur: 60, cam: true,
+    goals: t => [{ m: 'eye', op: 'ge', v: t.eye }, { m: 'eyeAway', op: 'le', v: 2 }],
+    why: 'About 80% on the lens is the working norm for a talking head. The other 20% is thinking.',
+    how: 'Bullets, not read from. Glance away to think, under two seconds each time.' },
+  { id: 'eyes-think', skill: 'eyes', step: 4, name: 'Eyes while thinking', style: 'live', kind: 'topic', dur: 90, cam: true,
+    goals: t => [{ m: 'eye', op: 'ge', v: 75 }, { m: 'eyeAway', op: 'le', v: 3 }],
+    why: 'Eyes leave the lens when the next sentence is being found.',
+    how: 'Ninety seconds unplanned. Find the next thought with the eyes still on the lens.' },
+  { id: 'eyes-all', skill: 'eyes', step: 5, name: 'All at once', style: 'long', kind: 'topic', dur: 60, cam: true, asr: true,
+    goals: t => [{ m: 'eye', op: 'ge', v: t.eye }, { m: 'fpm', op: 'le', v: t.fpmLow }, { m: 'wpm', op: 'in', v: band('long') }],
+    why: 'A take is all of it at once.',
+    how: 'One minute, everything on.' },
+];
+const drillById = id => DRILLS.filter(d => d.id === id)[0] || null;
+
+/* the daily warm-up: three steps, about three minutes, each measured */
+const WARM = [
+  { id: 'warm-breath', name: 'Breath', dur: 50, kind: 'hiss',
+    goal: 'one hiss of 15 seconds or over', why: 'Pauses and volume both run on breath. A hiss on "sss" is the breath drill every voice coach starts with.',
+    how: 'Breathe in low, then hiss on "sss" as long and steady as you can. Three times.', m: 'hiss', op: 'ge', v: 15 },
+  { id: 'warm-siren', name: 'Hum and siren', dur: 40, kind: 'siren',
+    goal: 'a spread of 10 semitones or over', why: 'Humming and sirens warm the folds with less load on the muscles around the voice box.',
+    how: 'Hum, then slide the hum from your lowest note to your highest and back. Lips closed.', m: 'pitch', op: 'ge', v: 10 },
+  { id: 'warm-twist', name: 'Twisters, too much', dur: 45, kind: 'twister',
+    goal: 'sets today\'s crispness reference', why: 'Every consonant said too clearly is the articulation drill for mumbling, and it gives the day a reading to measure the drills against.',
+    how: 'Three twisters, each three times, every consonant exaggerated.', m: 'crisp', op: null },
+];
+
+/* ══════════════ the words ══════════════
+   Vocabulary, not prescription: topics anyone could talk about, bullets that
+   describe nothing about him, public-domain passages, and classic twisters.
+   His own topics are `topic` rows. */
+const TOPICS = [
+  'The last thing you changed your mind about', 'A skill that took longer to learn than it should have', 'What a good morning looks like',
+  'Something everybody gets wrong about your job', 'The best advice you ignored', 'A habit you dropped and why', 'What you would tell a beginner',
+  'The most useful thing you own', 'A place you keep going back to', 'What you do when you cannot sleep', 'The difference between busy and productive',
+  'A rule you follow that nobody told you', 'What made you good at the thing you are good at', 'A mistake that turned out fine',
+  'What you would do with one free hour a day', 'Why people quit things in week three', 'The last conversation that changed something',
+  'What you notice first about a new place', 'Something you used to believe about food', 'How you decide what to do first', 'A thing worth paying more for',
+  'What you would remove from your week', 'How you explain your work to a child', 'A question you get asked too often', 'The part nobody sees',
+  'What you have stopped apologising for', 'A small thing that fixed a big thing', 'The next thing you want to get better at',
+  'Why the simple version wins', 'Something you would do differently starting again',
+];
+const BULLETS = [
+  ['why the first week is easy', 'what changes in week three', 'the one thing that gets people through it'],
+  ['pick the smallest version', 'attach it to something you already do', 'let it grow back on its own'],
+  ['what most people measure', 'what actually moves', 'how to tell the difference'],
+  ['the mistake', 'what it cost', 'the rule that came out of it'],
+  ['warm up', 'the main set', 'the thing everyone skips at the end'],
+  ['what to buy', 'what to skip', 'what to borrow'],
+  ['the question I was asked', 'the short answer', 'the longer answer'],
+  ['before', 'the change', 'after, honestly'],
+  ['the myth', 'where it came from', 'what the evidence says'],
+  ['the plan', 'where it broke', 'the fix'],
+  ['morning', 'the middle of the day', 'the last hour'],
+  ['the tool', 'how I use it', 'when I do not'],
+];
+const HOOKS = [
+  'Stop doing this in the morning.', 'Nobody tells you this part.', 'You are doing it right and it still is not working.',
+  'This took me three years to learn.', 'The cheap version is better.', 'Here is the one question to ask.',
+  'Most people quit here.', 'You do not need more time.', 'I was wrong about this for a decade.', 'Do less. Here is what.',
+];
+const STORIES = [
+  'A time you were sure and were wrong.', 'The day something finally clicked.', 'The worst advice you ever followed, and what happened.',
+  'A stranger who changed your plans.', 'The moment you decided to stop.', 'The first time you taught someone something.',
+  'A small win nobody saw.', 'The night before something big.',
+];
+const PASSAGES = [
+  { name: 'The North Wind and the Sun', text: 'The North Wind and the Sun were disputing which was the stronger, when a traveler came along wrapped in a warm cloak. They agreed that the one who first succeeded in making the traveler take his cloak off should be considered stronger than the other. Then the North Wind blew as hard as he could, but the more he blew the more closely did the traveler fold his cloak around him; and at last the North Wind gave up the attempt. Then the Sun shone out warmly, and immediately the traveler took off his cloak. And so the North Wind was obliged to confess that the Sun was the stronger of the two.' },
+  { name: 'Harvard sentences, list one', text: 'The birch canoe slid on the smooth planks. Glue the sheet to the dark blue background. It is easy to tell the depth of a well. These days a chicken leg is a rare dish. Rice is often served in round bowls. The juice of lemons makes fine punch. The box was thrown beside the parked truck. The hogs were fed chopped corn and garbage. Four hours of steady work faced us. A large size in stockings is hard to sell. The boy was there when the sun rose. A rod is used to catch pink salmon. The source of the huge river is the clear spring. Kick the ball straight and follow through. Help the woman get back to her feet. A pot of tea helps to pass the evening. Smoky fires lack flame and heat. The soft cushion broke the man\'s fall. The salt breeze came across from the sea. The girl at the booth sold fifty bonds.' },
+  { name: 'Marcus Aurelius, translated by George Long', text: 'Begin the morning by saying to thyself, I shall meet with the busybody, the ungrateful, arrogant, deceitful, envious, unsocial. All these things happen to them by reason of their ignorance of what is good and evil. But I who have seen the nature of the good that it is beautiful, and of the bad that it is ugly, and the nature of him who does wrong, that it is akin to me, not only of the same blood or seed, but that it participates in the same intelligence and the same portion of the divinity, I can neither be injured by any of them, for no one can fix on me what is ugly, nor can I be angry with my kinsman, nor hate him. For we are made for cooperation, like feet, like hands, like eyelids, like the rows of the upper and lower teeth.' },
+];
+const TWISTERS = [
+  'Red leather, yellow leather.', 'Unique New York, unique New York.', 'The big black bug bled black blood.',
+  'She sells sea shells by the sea shore.', 'Peter Piper picked a peck of pickled peppers.', 'Toy boat, toy boat, toy boat.',
+  'Six thick thistle sticks.', 'The lips, the teeth, the tip of the tongue.', 'Good blood, bad blood.',
+  'A proper copper coffee pot.', 'Betty bought a bit of butter but the butter was bitter.', 'Fresh fried fish, fish fresh fried.',
+];
+const pick = (list, n) => { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a.slice(0, n); };
+function myTopics() { return Object.entries(Rec.map('topic')).map(([k, v]) => Object.assign({ key: k }, v)); }
+function promptFor(kind) {
+  const mine = myTopics();
+  if (kind === 'topic') {
+    const own = mine.filter(t => !t.kind || t.kind === 'topic');
+    const pool = own.length && Math.random() < 0.5 ? own.map(t => t.text) : TOPICS;
+    return { kind: 'topic', text: pick(pool, 1)[0] };
+  }
+  if (kind === 'story') { const own = mine.filter(t => t.kind === 'story'); return { kind: 'story', text: pick(own.length && Math.random() < 0.5 ? own.map(t => t.text) : STORIES, 1)[0] }; }
+  if (kind === 'hook') return { kind: 'hook', text: pick(HOOKS, 1)[0] };
+  if (kind === 'bullets') { const own = mine.filter(t => t.kind === 'bullets'); const set = own.length && Math.random() < 0.5 ? own.map(t => t.text.split('|').map(s => s.trim())) : BULLETS; return { kind: 'bullets', items: pick(set, 1)[0] }; }
+  if (kind === 'read') { const p = pick(PASSAGES, 1)[0]; return { kind: 'read', name: p.name, text: p.text }; }
+  if (kind === 'twister') return { kind: 'twister', items: pick(TWISTERS, 3) };
+  return { kind: 'free', text: '' };
+}
+function promptEl(p) {
+  const box = el('div', 'prompt' + (p.kind === 'read' ? ' read mb-scroll' : ''));
+  if (p.kind === 'bullets') box.innerHTML = '<ul>' + p.items.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
+  else if (p.kind === 'twister') box.innerHTML = p.items.map(i => '<div>' + esc(i) + '</div>').join('');
+  else if (p.kind === 'read') box.innerHTML = '<div class="muted">' + esc(p.name) + '</div>' + esc(p.text);
+  else if (p.kind === 'hook') box.innerHTML = '<div class="muted">Start on this line</div>' + esc(p.text);
+  else box.textContent = p.text;
+  return box;
+}
+
+/* ══════════════ takes ══════════════
+   One row per take: the drill, its numbers, the goals as they were, the
+   transcript if there was one, and met or not. Dated on the day. */
+const takes = () => Rec.all('take').map(r => Object.assign({ key: r.key, date: r.date }, r.payload)).sort((a, b) => (a.at || 0) - (b.at || 0));
+const takesOn = d => takes().filter(t => t.date === d);
+const passedEver = id => takes().some(t => t.drill === id && t.pass);
+const doneToday = id => takesOn(Day.today()).some(t => t.drill === id);
+const lastTake = id => { const l = takes().filter(t => t.drill === id); return l[l.length - 1] || null; };
+function warmToday() { const w = takesOn(Day.today()).filter(t => t.drill === 'warm'); return w[w.length - 1] || null; }
+function crispRef() { const w = warmToday(); return w && w.m && w.m.crispRaw ? w.m.crispRaw : null; }
+function saveTake(t) {
+  const key = newId();
+  Rec.set('take', Day.today(), key, Object.assign({ at: Date.now() }, t));
+  Rec.set('activity', null, 'speak', { name: 'Speak', cat: 'mind' });
+  if (!Rec.has('tick', Day.today(), 'speak')) Rec.set('tick', Day.today(), 'speak', { src: APP.id });
+  return key;
+}
+/* step state: passed, now (the first not passed), or locked (a step after now) */
+function stepState(d) {
+  if (passedEver(d.id)) return 'passed';
+  const before = DRILLS.filter(x => x.skill === d.skill && x.step < d.step);
+  const skipped = opt('open', []) || [];
+  if (before.every(b => passedEver(b.id)) || skipped.indexOf(d.id) >= 0) return 'now';
+  return 'locked';
+}
+const nowStep = skill => DRILLS.filter(d => d.skill === skill && stepState(d) === 'now')[0] || null;
+
+/* ── the streak ──
+   Days in a row with a take, counted back from today or yesterday. A single
+   missed day is bridged by a freeze: one is earned per five practised days,
+   two can be held, and one is spent without being asked (root brief,
+   behaviour rules). Worked out from the takes every time, so there is nothing
+   to keep in step. */
+function streakInfo() {
+  const days = {}; takes().forEach(t => { days[t.date] = 1; });
+  const list = Object.keys(days).sort();
+  if (!list.length) return { n: 0, freezes: 0, practised: 0 };
+  let earned = 0, held = 0, run = 0, prev = null, practised = 0;
+  list.forEach(d => {
+    practised++;
+    if (prev) {
+      const gap = Day.diff(d, prev);
+      if (gap === 1) run++;
+      else if (gap === 2 && held > 0) { held--; run++; }
+      else run = 1;
+    } else run = 1;
+    earned = Math.floor(practised / 5);
+    held = Math.min(2, held + (earned > Math.floor((practised - 1) / 5) ? 1 : 0));
+    prev = d;
+  });
+  const today = Day.today(), since = Day.diff(today, prev);
+  if (since > 2 || (since === 2 && held < 1)) return { n: 0, freezes: held, practised: practised };
+  return { n: run, freezes: held, practised: practised };
+}
+
+/* ══════════════ which drills today ══════════════
+   Three, one per skill, from the skills furthest from their target: no take
+   yet counts as furthest. Eyes needs a camera and is skipped while it is off. */
+function todaysDrills() {
+  const camOn = optOn('cam', 1);
+  const rank = SKILLS.map(s => {
+    const d = nowStep(s.id); if (!d) return null;
+    if (d.cam && !camOn) return null;
+    const last = lastTake(d.id);
+    let dist = 2;
+    if (last) { const gs = last.goals || []; dist = gs.length ? gs.filter(g => !g.ok).length / gs.length : 0.5; if (last.pass) dist = 0; }
+    return { d: d, dist: dist + (doneToday(d.id) ? -3 : 0) };
+  }).filter(Boolean).sort((a, b) => b.dist - a.dist);
+  const done = rank.filter(r => doneToday(r.d.id)).map(r => r.d);
+  const todo = rank.filter(r => !doneToday(r.d.id)).map(r => r.d);
+  return done.concat(todo).slice(0, Math.max(3, done.length));
+}
+
+/* ══════════════ drawing ══════════════ */
+let view = 'today';
+function draw() {
+  const m = $('#main'); m.innerHTML = '';
+  drawStreak();
+  if (view === 'today') drawToday(m);
+  else if (view === 'path') drawPath(m);
+  else drawProgress(m);
+  paintIcons(m); paintIcons($('header'));
+}
+function drawStreak() {
+  const s = streakInfo(), b = $('#streak');
+  b.className = 'streak' + (s.n ? '' : ' zero');
+  b.innerHTML = ICN('streak') + '<span>' + s.n + '</span>';
+  b.title = s.n + ' day' + (s.n === 1 ? '' : 's') + ' in a row' + (s.freezes ? ', ' + s.freezes + ' freeze' + (s.freezes === 1 ? '' : 's') + ' held' : '');
+}
+function card(title, right) {
+  const c = el('div', 'card mb-card');
+  if (title) c.appendChild(el('h2', null, esc(title) + (right ? '<span class="r">' + esc(right) + '</span>' : '')));
+  return c;
+}
+function drawToday(m) {
+  const today = Day.today();
+  const done = takesOn(today);
+  const w = warmToday();
+  const wc = card('WARM-UP', w ? 'done' : 'about 3 min');
+  const wrow = el('button', 'row mb-plate mb-press' + (w ? ' done' : ' now'));
+  wrow.style.setProperty('--c', 'var(--accent)');
+  wrow.innerHTML = '<span class="ic">' + ICN(w ? 'done' : 'play') + '</span><span class="tx"><span class="nm">Breath, siren, twisters</span>' +
+    '<span class="sub">' + (w ? warmLine(w) : 'Three steps. Each says what it is for.') + '</span></span>';
+  wrow.onclick = () => openWarm();
+  wc.appendChild(wrow);
+  m.appendChild(wc);
+
+  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm').length + ' done');
+  const list = el('div', 'list');
+  todaysDrills().forEach(d => list.appendChild(drillRow(d)));
+  if (!list.children.length) list.appendChild(el('p', 'muted', 'Every step is met. Pick any drill on PATH to run it again.'));
+  dc.appendChild(list);
+  m.appendChild(dc);
+
+  if (done.length) {
+    const tc = card('TAKES TODAY');
+    const tl = el('div', 'list');
+    done.slice().reverse().forEach(t => tl.appendChild(takeRow(t)));
+    tc.appendChild(tl);
+    m.appendChild(tc);
+  }
+}
+function warmLine(w) {
+  const bits = [];
+  if (w.m.hiss != null) bits.push('hiss ' + r1(w.m.hiss) + 's');
+  if (w.m.pitch != null) bits.push('siren ' + r1(w.m.pitch) + ' st');
+  if (w.m.crispRaw != null) bits.push('crispness set');
+  return bits.join(' · ') || 'done';
+}
+function drillRow(d) {
+  const skill = SKILLS.filter(s => s.id === d.skill)[0];
+  const last = lastTake(d.id), today = doneToday(d.id);
+  const r = el('button', 'row mb-plate mb-press' + (today ? (last && last.pass ? ' done' : ' miss') : ' now'));
+  r.style.setProperty('--c', 'var(--data-' + skill.slot + ')');
+  const goals = d.goals(targets());
+  r.innerHTML = '<span class="ic">' + ICN(today ? (last && last.pass ? 'done' : 'target') : 'play') + '</span>' +
+    '<span class="tx"><span class="nm">' + esc(skill.name + ' · ' + d.name) + '</span>' +
+    '<span class="sub">' + esc(goals.length ? 'Goal: ' + goals.map(goalText).join(', ') : 'Goal: a count to start from') + '</span></span>' +
+    '<span class="num">' + (last ? '<b>' + esc(mainNumber(d, last)) + '</b>' + (today ? (last.pass ? 'met' : 'not met') : 'last') : '<b>' + mmss(d.dur) + '</b>new') + '</span>';
+  r.onclick = () => openDrill(d);
+  Mobile.hold(r, e => drillMenu(d, e));
+  return r;
+}
+function mainNumber(d, t) {
+  const g = (t.goals && t.goals[0]) || null;
+  if (!g) { if (t.m && t.m.fpm != null) return r1(t.m.fpm) + '/min'; return t.m && t.m.wpm != null ? Math.round(t.m.wpm) + ' wpm' : '·'; }
+  const mt = METRICS[g.m];
+  return g.got == null ? '·' : mt.fmt(g.got) + (mt.unit === '%' || mt.unit === '' ? mt.unit : ' ' + mt.unit);
+}
+function takeRow(t) {
+  const d = t.drill === 'warm' ? null : drillById(t.drill);
+  const skill = d ? SKILLS.filter(s => s.id === d.skill)[0] : null;
+  const r = el('button', 'row mb-plate mb-press' + (t.pass ? ' done' : (d ? ' miss' : '')));
+  r.style.setProperty('--c', skill ? 'var(--data-' + skill.slot + ')' : 'var(--accent)');
+  const when = new Date(t.at || 0);
+  r.innerHTML = '<span class="ic">' + ICN(t.pass ? 'done' : 'mic') + '</span><span class="tx"><span class="nm">' + esc(d ? d.name : 'Warm-up') + '</span>' +
+    '<span class="sub">' + esc(when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · ' + mmss(t.dur || 0) + (t.asr ? ' · transcript' : '') + (t.cam ? ' · camera' : '')) + '</span></span>' +
+    '<span class="num"><b>' + esc(d ? mainNumber(d, t) : warmLine(t)) + '</b>' + (d ? (t.pass ? 'met' : 'not met') : '') + '</span>';
+  r.onclick = () => showTake(t);
+  Mobile.hold(r, e => takeMenu(t, e));
+  return r;
+}
+function takeMenu(t, e) {
+  const x = e && e.clientX || 0, y = e && e.clientY || 0;
+  UI.menu(x, y, [
+    { label: 'Open', fn: () => showTake(t) },
+    { label: 'Delete', kind: 'bad', fn: () => {
+      const was = Object.assign({}, t); delete was.key; delete was.date;
+      Rec.del('take', t.date, t.key);
+      Mobile.haptic('warn');
+      UI.undo('deleted a take', () => Rec.set('take', t.date, t.key, was));
+    } },
+  ], { title: 'TAKE' });
+}
+function drillMenu(d, e) {
+  const x = e && e.clientX || 0, y = e && e.clientY || 0;
+  const st = stepState(d);
+  const items = [{ label: 'Start', fn: () => openDrill(d) }];
+  if (st === 'locked') items.push({ label: 'Open this step now', fn: () => { const o = opt('open', []) || []; if (o.indexOf(d.id) < 0) o.push(d.id); Rec.setting(APP.id, 'open', o); } });
+  UI.menu(x, y, items, { title: d.name.toUpperCase() });
+}
+
+function drawPath(m) {
+  const wrap = el('div', 'path');
+  SKILLS.forEach(s => {
+    const c = card();
+    c.classList.add('skill');
+    c.style.setProperty('--c', 'var(--data-' + s.slot + ')');
+    c.appendChild(el('h3', null, '<i></i>' + esc(s.name)));
+    c.appendChild(el('div', 'why', esc(s.why)));
+    const list = el('div', 'list');
+    DRILLS.filter(d => d.skill === s.id).forEach(d => {
+      const st = stepState(d);
+      const b = el('button', 'step mb-plate mb-press ' + st);
+      b.innerHTML = '<span class="n">' + d.step + '</span><span class="nm">' + esc(d.name) + '</span>' +
+        '<span class="st">' + ICN(st === 'passed' ? 'done' : st === 'now' ? 'play' : 'lock') + '</span>';
+      b.onclick = () => openDrill(d);
+      Mobile.hold(b, e => drillMenu(d, e));
+      list.appendChild(b);
+    });
+    c.appendChild(list);
+    wrap.appendChild(c);
+  });
+  m.appendChild(wrap);
+  const t = card('YOUR TOPICS', myTopics().length + '');
+  t.appendChild(el('p', 'muted', 'Content ideas to talk about. A topic, a story, or three bullets split with |.'));
+  const tl = el('div', 'list');
+  myTopics().forEach(tp => {
+    const r = el('button', 'row mb-plate mb-press');
+    r.innerHTML = '<span class="tx"><span class="nm">' + esc(tp.text) + '</span><span class="sub">' + esc(tp.kind || 'topic') + '</span></span>';
+    const del = () => { Rec.del('topic', null, tp.key); UI.undo('deleted <b>' + esc(tp.text) + '</b>', () => Rec.set('topic', null, tp.key, { text: tp.text, kind: tp.kind })); };
+    r.onclick = e => UI.menu(e.clientX, e.clientY, [{ label: 'Delete', kind: 'bad', fn: del }], { title: 'TOPIC' });
+    Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, [{ label: 'Delete', kind: 'bad', fn: del }], { title: 'TOPIC' }));
+    tl.appendChild(r);
+  });
+  t.appendChild(tl);
+  const acts = el('div', 'acts');
+  const add = el('button', 'mb-btn mb-press mb-tap', ICN('add') + '<span>Add a topic</span>');
+  add.onclick = addTopic;
+  acts.appendChild(add);
+  t.appendChild(acts);
+  m.appendChild(t);
+}
+function addTopic() {
+  let kind = 'topic';
+  const h = UI.dialog({
+    title: 'ADD A TOPIC', width: 460, focus: true,
+    body: b => {
+      const i = UI.field('text', { placeholder: 'What to talk about' }); i.classList.add('tpx'); b.appendChild(i);
+      b.appendChild(UI.segmented([{ id: 'topic', name: 'Topic' }, { id: 'story', name: 'Story' }, { id: 'bullets', name: 'Bullets' }], kind, k => { kind = k; i.placeholder = k === 'bullets' ? 'first | second | third' : 'What to talk about'; }));
+      Mobile.form(b, () => h.box.querySelector('.go') && h.box.querySelector('.go').click());
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'ADD', kind: 'go', fn: hh => {
+      const v = hh.body.querySelector('.tpx').value.trim();
+      if (!v) { hh.body.querySelector('.tpx').focus(); return false; }
+      Rec.set('topic', null, newId(), { text: v, kind: kind });
+      UI.toast('added <b>' + esc(v) + '</b>');
+    } }],
+  });
+}
+
+/* PROGRESS: a chart per measure over the last 30 days, the target as a rule,
+   the latest value marked, and what he has already done. No verdicts. */
+function drawProgress(m) {
+  const all = takes().filter(t => t.drill !== 'warm');
+  const done = card('ALREADY DONE');
+  const st = el('div', 'stats');
+  const mins = takes().reduce((s, t) => s + (t.dur || 0), 0) / 60;
+  const days = {}; takes().forEach(t => { days[t.date] = 1; });
+  const words = all.reduce((s, t) => s + ((t.m && t.m.words) || 0), 0);
+  const passed = DRILLS.filter(d => passedEver(d.id)).length;
+  stat(st, 'Takes', takes().length, '');
+  stat(st, 'Minutes', Math.round(mins), '');
+  stat(st, 'Days', Object.keys(days).length, '');
+  stat(st, 'Steps met', passed, 'of ' + DRILLS.length);
+  if (words) stat(st, 'Words', words.toLocaleString(), 'in transcripts');
+  done.appendChild(st);
+  m.appendChild(done);
+  if (!all.length) { const c = card('MEASURES'); c.appendChild(el('p', 'muted', 'No takes yet. The first drill on TODAY starts the record.')); m.appendChild(c); return; }
+
+  const bests = card('BESTS');
+  const bs = el('div', 'stats');
+  const best = (id, dir) => { const vs = all.filter(t => t.m && t.m[id] != null).map(t => t.m[id]); if (!vs.length) return null; return dir === 'low' ? Math.min.apply(null, vs) : Math.max.apply(null, vs); };
+  const bFpm = best('fpm', 'low'), bEye = best('eye', 'high'), bCrisp = best('crisp', 'high'), bPitch = best('pitch', 'high');
+  const longest = all.filter(t => t.m && t.m.fpm === 0).reduce((s, t) => Math.max(s, t.dur || 0), 0);
+  if (bFpm != null) stat(bs, 'Fewest fillers', r1(bFpm), '/min');
+  if (longest) stat(bs, 'Longest clean take', mmss(longest), 'no fillers');
+  if (bEye != null) stat(bs, 'Most on the lens', Math.round(bEye), '%');
+  if (bPitch != null) stat(bs, 'Widest pitch', r1(bPitch), 'st');
+  if (bCrisp != null) stat(bs, 'Crispest', Math.round(bCrisp), '% of ref');
+  const inBand = all.filter(t => (t.goals || []).some(g => g.m === 'wpm' && g.ok)).length;
+  if (inBand) stat(bs, 'Takes in the band', inBand, 'pace');
+  bests.appendChild(bs);
+  m.appendChild(bests);
+
+  const from = Day.shift(Day.today(), -29), to = Day.today();
+  const recent = all.filter(t => t.date >= from);
+  [['wpm', 'Pace', 'wpm'], ['fpm', 'Fillers a minute', '/min'], ['eye', 'On the lens', '%'], ['crisp', 'Crispness', '%'], ['longP', 'Long pauses', ''], ['pitch', 'Pitch spread', 'st']].forEach(([id, name, unit]) => {
+    const pts = recent.filter(t => t.m && t.m[id] != null).map(t => [t.date, t.m[id], t.at]);
+    if (pts.length < 2) return;
+    const c = card();
+    const last = pts[pts.length - 1], first = pts[0];
+    const delta = last[1] - first[1];
+    const head = Chart.header({ label: name, value: METRICS[id].fmt(last[1]), unit: unit, sub: (delta >= 0 ? 'up ' : 'down ') + METRICS[id].fmt(Math.abs(delta)) + ' since ' + Day.short(first[0]), when: Day.label(last[0]) });
+    c.appendChild(head.el);
+    const box = el('div', 'chartbox');
+    c.appendChild(box);
+    const tg = targetFor(id);
+    Chart.mount(box, { h: 150, cls: 'chart', label: name }, ch => {
+      const byDay = {}; pts.forEach(p => { (byDay[p[0]] = byDay[p[0]] || []).push(p[1]); });
+      const series = Object.keys(byDay).sort().map(d => [d, byDay[d].reduce((s, v) => s + v, 0) / byDay[d].length]);
+      ch.xTime(from, to);
+      ch.yFit(series.map(p => p[1]).concat(tg == null ? [] : [].concat(tg)), { min: 0 });
+      ch.grid(); ch.timeAxis();
+      if (Array.isArray(tg)) ch.band([[from, tg[1]], [to, tg[1]]], [[from, tg[0]], [to, tg[0]]]);
+      else if (tg != null) ch.rule(tg, 'target ' + tg);
+      ch.area(series); ch.line(series); ch.dots(series);
+      ch.end(series[series.length - 1], METRICS[id].fmt(series[series.length - 1][1]));
+      ch.scrub(series, { onMove: p => head.set(METRICS[id].fmt(p[1]), '', Day.label(p[0])), onLeave: head.reset });
+    });
+    m.appendChild(c);
+  });
+  const hist = card('ALL TAKES', all.length + '');
+  const hl = el('div', 'list');
+  all.slice().reverse().slice(0, 30).forEach(t => hl.appendChild(takeRow(t)));
+  hist.appendChild(hl);
+  m.appendChild(hist);
+}
+function targetFor(id) {
+  const t = targets();
+  if (id === 'wpm') return band('long');
+  if (id === 'fpm') return t.fpmLow;
+  if (id === 'eye') return t.eye;
+  if (id === 'crisp') return t.crispPct;
+  if (id === 'pitch') return t.pitch;
+  return null;
+}
+function stat(box, k, v, d, cls) {
+  const s = el('div', 'stat mb-plate' + (cls ? ' ' + cls : ''));
+  s.innerHTML = '<div class="k">' + esc(k) + '</div><div class="v">' + esc(String(v)) + '</div>' + (d ? '<div class="d">' + esc(d) + '</div>' : '');
+  box.appendChild(s);
+  return s;
+}
+
+/* ══════════════ a drill's sheet: goal, why, how, start ══════════════ */
+function openDrill(d) {
+  const skill = SKILLS.filter(s => s.id === d.skill)[0];
+  const goals = d.goals(targets());
+  const last = lastTake(d.id);
+  const st = stepState(d);
+  UI.dialog({
+    title: skill.name + ' · ' + d.name.toUpperCase(), width: 520,
+    body: b => {
+      const g = el('div', 'goal');
+      g.innerHTML = '<b>Goal</b><span class="g">' + esc(goals.length ? goals.map(goalText).join(', and ') : 'finish, and see the count') + '</span>' +
+        '<b>Why</b><span>' + esc(d.why) + '</span>' +
+        '<b>How</b><span>' + esc(d.how) + '</span>' +
+        '<b>Time</b><span>' + mmss(d.dur) + (d.cam ? ', camera on' : '') + (d.asr ? ', transcript on' : '') + (d.beat ? ', beat on' : '') + '</span>' +
+        (last ? '<b>Last</b><span>' + esc(lastLine(d, last)) + '</span>' : '') +
+        (st === 'locked' ? '<b>Locked</b><span>Opens when step ' + (d.step - 1) + ' is met. Hold it on PATH to open it anyway.</span>' : '');
+      b.appendChild(g);
+      if (d.cam && !optOn('cam', 1)) b.appendChild(el('p', 'muted', 'The camera is off in Settings, so the eyes will not be measured.'));
+      if (d.asr && (!ASR || !optOn('asr', 1))) b.appendChild(el('p', 'muted', ASR ? 'The transcript is off in Settings, so only held sounds count as fillers.' : 'This browser cannot make a transcript, so only held sounds count as fillers.'));
+      if (d.crisp && crispRef() == null) b.appendChild(el('p', 'muted', 'No warm-up today, so crispness has nothing to be measured against. The warm-up sets it.'));
+    },
+    actions: [{ label: 'CLOSE' }, { label: 'START', kind: 'go', fn: () => { startTake(d); } }],
+  });
+}
+function lastLine(d, t) {
+  const gs = t.goals || [];
+  const bits = gs.map(g => METRICS[g.m].name.toLowerCase() + ' ' + (g.got == null ? '·' : METRICS[g.m].fmt(g.got) + METRICS[g.m].unit));
+  return (bits.length ? bits.join(', ') + '. ' : '') + (t.pass ? 'Met' : gs.length ? 'Not met' : 'Done') + ', ' + Day.label(t.date);
+}
+
+/* ══════════════ the take ══════════════
+   Mic on, camera on if the drill wants it and it is switched on, a three
+   count while the eyes are read at the lens, then the drill's seconds. Stop
+   early with the button. Then the numbers, the goals, met or not, saved. */
+const T = { live: false };
+async function startTake(d, warmStep) {
+  if (T.live) return;
+  const wantCam = !!(d && d.cam && optOn('cam', 1));
+  const wantAsr = !!(d && optOn('asr', 1) && ASR);
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      video: wantCam ? { facingMode: opt('facing', 'user'), width: { ideal: 640 }, height: { ideal: 480 } } : false,
+    });
+  } catch (e) {
+    if (wantCam) { try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); UI.toast('No camera. Eyes not measured.', { bad: true }); } catch (e2) { UI.toast('No microphone.', { bad: true }); return; } }
+    else { UI.toast('No microphone.', { bad: true }); return; }
+  }
+  T.live = true; T.d = d; T.warm = warmStep || null; T.stream = stream;
+  T.cam = !!(wantCam && stream.getVideoTracks().length);
+  T.ac = new (window.AudioContext || window.webkitAudioContext)();
+  try { await T.ac.resume(); } catch (e) {}
+  T.ear = Ear(T.ac.sampleRate);
+  T.src = T.ac.createMediaStreamSource(stream);
+  T.proc = T.ac.createScriptProcessor(1024, 1, 1);
+  T.proc.onaudioprocess = e => { if (T.live) T.ear.feed(e.inputBuffer.getChannelData(0).slice()); };
+  T.mute = T.ac.createGain(); T.mute.gain.value = 0;
+  T.src.connect(T.proc); T.proc.connect(T.mute); T.mute.connect(T.ac.destination);
+  T.listener = wantAsr ? Listener(opt('lang', 'en-US')) : null;
+  T.eye = { looks: [], base: null, calib: [] };
+  T.prompt = warmStep ? null : promptFor(d.kind);
+  T.beat = !!(d && d.beat && optOn('beat', 1));
+  const screen = $('#take');
+  $('#tkName').textContent = warmStep ? 'WARM-UP · ' + warmStep.name.toUpperCase() : d.name.toUpperCase();
+  const cam = $('#cam');
+  if (T.cam) { cam.srcObject = stream; cam.classList.add('on'); try { await cam.play(); } catch (e) {} } else cam.classList.remove('on');
+  screen.classList.add('on');
+  T.release = Mobile.trap(() => stopTake(true));
+  $('#tkStop').onclick = () => stopTake(false);
+  Mobile.feedback('open');
+  /* the face finder, started now so it is warm by the count */
+  if (T.cam) faceEngine().catch(() => {});
+  await countIn();
+  if (!T.live) return;
+  runTake();
+}
+function countIn() {
+  return new Promise(res => {
+    const mid = $('#tkMid'); mid.innerHTML = '';
+    const n = el('div', 'count', '3'); mid.appendChild(n);
+    mid.appendChild(el('div', 'say', T.cam ? 'LOOK AT THE LENS' : (T.warm ? T.warm.how.toUpperCase() : 'READY')));
+    $('#tkMeters').innerHTML = ''; $('#tkFoot').innerHTML = '';
+    let k = 3;
+    /* the eyes are read every quarter second through the count: that is the
+       lens zone the whole take is measured against */
+    if (T.cam) T.eyeTick = setInterval(() => readEye(true), 250);
+    const tick = () => {
+      if (!T.live) { clearInterval(T.eyeTick); return res(); }
+      Sfx.play('blip');
+      k--;
+      if (k <= 0) { clearInterval(T.eyeTick); T.calibrated = true; return res(); }
+      n.textContent = String(k);
+      setTimeout(tick, 1000);
+    };
+    setTimeout(tick, 1000);
+  });
+}
+async function readEye(calib) {
+  if (!T.live || !T.cam) return;
+  let fl = null;
+  try { fl = await faceEngine(); } catch (e) { fl = null; }
+  if (!fl || !T.live) return;
+  const look = lookAt(fl, $('#cam'), performance.now());
+  if (calib) { if (look && !look.blink) T.eye.calib.push(look); return; }
+  const on = onLens(look, T.eye.base);
+  T.eye.looks.push({ t: performance.now(), on: on, seen: !!look });
+}
+function runTake() {
+  const d = T.d, mid = $('#tkMid'), meters = $('#tkMeters');
+  mid.innerHTML = '';
+  if (T.warm) {
+    mid.appendChild(el('div', 'say', T.warm.name.toUpperCase()));
+    if (T.warm.kind === 'twister') mid.appendChild(promptEl({ kind: 'twister', items: pick(TWISTERS, 3) }));
+    else mid.appendChild(el('p', 'muted', T.warm.how));
+  } else mid.appendChild(promptEl(T.prompt));
+  /* the eye reading taken during the count becomes the lens zone */
+  if (T.cam && T.eye.calib.length) {
+    const c = T.eye.calib, avg = k => c.reduce((s, x) => s + x[k], 0) / c.length;
+    T.eye.base = { gh: avg('gh'), gv: avg('gv'), yaw: avg('yaw'), pitch: avg('pitch') };
+  }
+  meters.innerHTML = '';
+  const mk = (id, k) => { const m = el('div', 'meter mb-plate off'); m.id = id; m.innerHTML = '<div class="k">' + k + '</div><div class="v">·</div>'; meters.appendChild(m); return m; };
+  const mPace = mk('mPace', T.warm ? (T.warm.kind === 'hiss' ? 'sound' : T.warm.kind === 'siren' ? 'spread' : 'crisp') : 'pace');
+  const mLvl = mk('mLvl', 'time'); mLvl.innerHTML += '<div class="level"><i></i></div>';
+  const mEye = mk('mEye', T.cam ? 'lens' : T.listener ? 'transcript' : 'time');
+  $('#tkFoot').innerHTML = '';
+  const stop = el('button', 'mb-btn go mb-press mb-tap', ICN('stop') + '<span>STOP</span>');
+  stop.onclick = () => stopTake(false);
+  $('#tkFoot').appendChild(stop);
+  paintIcons($('#take'));
+  T.t0 = performance.now(); T.from = T.ear.seconds();
+  if (T.listener) T.listener.start();
+  Sfx.play('start');
+  if (T.beat) startBeat();
+  const dur = T.warm ? T.warm.dur : d.dur;
+  const band_ = !T.warm && d.goals(targets()).filter(g => g.m === 'wpm')[0];
+  T.timer = setInterval(() => {
+    if (!T.live) return;
+    const s = (performance.now() - T.t0) / 1000;
+    $('#tkClock').textContent = mmss(Math.max(0, dur - s));
+    $('#mLvl .level i').style.width = Math.round(T.ear.level() * 100) + '%';
+    $('#mLvl .v').textContent = mmss(s);
+    if (s >= dur) { stopTake(false); return; }
+    if (Math.round(s * 10) % 10 === 0) {
+      const m = T.ear.summary({ from: Math.max(T.from, T.ear.seconds() - 10) });
+      if (T.warm) {
+        const all = T.ear.summary({ from: T.from });
+        if (T.warm.kind === 'hiss') setMeter(mPace, all ? r1(all.longestSound) + 's' : '·', all && all.longestSound >= T.warm.v ? 'in' : 'out');
+        else if (T.warm.kind === 'siren') setMeter(mPace, all && all.pitchSpread != null ? r1(all.pitchSpread) + ' st' : '·', all && all.pitchSpread >= T.warm.v ? 'in' : 'out');
+        else setMeter(mPace, all ? Math.round(all.crisp * 100) : '·', '');
+      } else if (m) {
+        const wpm = Math.round(m.wpmEst);
+        setMeter(mPace, m.spoken > 3 ? wpm : '·', band_ ? (OPS.in(wpm, band_.v) ? 'in' : 'out') : '');
+      }
+      if (T.cam) {
+        const recent = T.eye.looks.slice(-10), on = recent.filter(x => x.on).length, seen = recent.filter(x => x.seen).length;
+        setMeter(mEye, seen ? Math.round(on / seen * 100) + '%' : (engineState === 'failed' ? 'off' : '…'), seen ? (on / seen >= 0.8 ? 'in' : 'out') : 'off');
+      } else if (T.listener) setMeter(mEye, T.listener.out.state === 'failed' ? 'off' : T.listener.out.words + ' w', T.listener.out.state === 'failed' ? 'off' : '');
+      else setMeter(mEye, mmss(dur), '');
+    }
+  }, 100);
+  if (T.cam) T.eyeTimer = setInterval(() => readEye(false), 100);
+}
+function setMeter(m, v, cls) { m.querySelector('.v').textContent = v; m.className = 'meter mb-plate ' + (cls || ''); }
+/* the pace beat: one click per syllable at the middle of the band, scheduled
+   on the audio clock so it does not drift */
+function startBeat() {
+  const b = band(T.d.style), mid = (b[0] + b[1]) / 2;
+  const per = 60 / (mid * 1.4 / 60) / 60;              /* seconds per syllable */
+  let next = T.ac.currentTime + 0.5;
+  T.beatTimer = setInterval(() => {
+    while (next < T.ac.currentTime + 0.15) {
+      const o = T.ac.createOscillator(), g = T.ac.createGain();
+      o.frequency.value = 1200; o.connect(g); g.connect(T.ac.destination);
+      g.gain.setValueAtTime(0.0001, next); g.gain.exponentialRampToValueAtTime(0.25, next + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, next + 0.04);
+      o.start(next); o.stop(next + 0.05);
+      next += per;
+    }
+  }, 40);
+}
+function stopTake(cancel) {
+  if (!T.live) return;
+  T.live = false;
+  clearInterval(T.timer); clearInterval(T.eyeTimer); clearInterval(T.beatTimer); clearInterval(T.eyeTick);
+  if (T.listener) T.listener.stop();
+  try { T.proc.disconnect(); T.src.disconnect(); } catch (e) {}
+  try { T.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+  const ac = T.ac; setTimeout(() => { try { ac.close(); } catch (e) {} }, 400);
+  if (T.release) { const r = T.release; T.release = null; r(); }
+  $('#take').classList.remove('on'); $('#cam').classList.remove('on');
+  const secs = (performance.now() - (T.t0 || performance.now())) / 1000;
+  if (cancel || !T.calibrated || secs < 3) { Mobile.feedback('close'); return; }
+  const m = T.ear.summary({ from: T.from });
+  if (!m) { UI.toast('Nothing heard.', { bad: true }); return; }
+  /* the ASR's last chunk can land a moment after stop */
+  setTimeout(() => finishTake(m, secs), 600);
+}
+function finishTake(m, secs) {
+  if (T.warm) return finishWarm(m, secs);
+  const d = T.d;
+  const tx = T.listener ? scan(T.listener.out.chunks) : null;
+  const asrOn = !!(T.listener && T.listener.out.state !== 'failed' && T.listener.out.words > 0);
+  const minutes = Math.max(0.1, m.spoken / 60);
+  const words = asrOn ? T.listener.out.words : 0;
+  const ums = asrOn ? Math.max(tx.asrUms, m.held) : m.held;
+  const fillers = ums + (asrOn ? tx.crutch : 0);
+  const eyes = T.eye.looks.filter(x => x.seen);
+  let eye = null, eyeAway = null;
+  if (T.cam && eyes.length >= 10) {
+    eye = eyes.filter(x => x.on).length / eyes.length * 100;
+    let away = 0, run = 0, last = null;
+    T.eye.looks.forEach(x => { if (x.seen && !x.on) { if (last != null) run += (x.t - last); away = Math.max(away, run); } else run = 0; last = x.t; });
+    eyeAway = away / 1000;
+  }
+  const ref = crispRef();
+  const out = {
+    wpm: asrOn && words >= 10 ? words / minutes : m.wpmEst, wpmEst: m.wpmEst, words: words, syll: m.syll,
+    fpm: fillers / minutes, fillers: fillers, crutch: asrOn ? tx.crutch : null, held: m.held, repeats: asrOn ? tx.repeats : null,
+    pauses: m.pauses, longP: m.longPauses, heldP: m.heldPauses, longestPause: r1(m.longestPause), ratio: m.ratio * 100,
+    restarts: m.restarts, pitch: m.pitchSpread == null ? null : r1(m.pitchSpread), f0: m.f0 == null ? null : Math.round(m.f0),
+    crispRaw: r1(m.crisp * 1000) / 1000, crisp: ref ? m.crisp / ref * 100 : null,
+    eye: eye == null ? null : r1(eye), eyeAway: eyeAway == null ? null : r1(eyeAway),
+    spoken: r1(m.spoken), loud: m.loud == null ? null : r1(m.loud),
+  };
+  const goals = d.goals(targets()).map(g => {
+    const got = out[g.m];
+    const ok = got == null ? false : OPS[g.op](got, g.v);
+    return { m: g.m, op: g.op, v: g.v, got: got == null ? null : r1(got), ok: ok };
+  });
+  const pass = goals.length ? goals.every(g => g.ok) : true;
+  const take = { drill: d.id, skill: d.skill, style: d.style, dur: Math.round(secs), m: out, goals: goals, pass: pass ? 1 : 0,
+    asr: asrOn ? 1 : 0, cam: eye != null ? 1 : 0, tx: asrOn ? T.listener.text().slice(0, 4000) : '', hits: asrOn ? tx.hits : null,
+    prompt: T.prompt && (T.prompt.text || (T.prompt.items || []).join(' | ')) };
+  saveTake(take);
+  Mobile.feedback(pass ? 'complete' : 'done');
+  showTake(take, tx && tx.html);
+}
+function finishWarm(m, secs) {
+  const step = T.warm;
+  const w = warmToday();
+  const was = w ? Object.assign({}, w) : { drill: 'warm', dur: 0, m: {}, steps: [] };
+  delete was.key; delete was.date;
+  was.dur = (was.dur || 0) + Math.round(secs);
+  was.steps = (was.steps || []).filter(s => s !== step.id).concat([step.id]);
+  if (step.kind === 'hiss') was.m.hiss = r1(m.longestSound);
+  else if (step.kind === 'siren') was.m.pitch = m.pitchSpread == null ? null : r1(m.pitchSpread);
+  else was.m.crispRaw = r1(m.crisp * 1000) / 1000;
+  was.pass = was.steps.length >= WARM.length ? 1 : 0;
+  if (w) Rec.set('take', w.date, w.key, Object.assign({ at: w.at }, was));
+  else saveTake(was);
+  Mobile.feedback('done');
+  const v = step.kind === 'hiss' ? r1(m.longestSound) + 's' : step.kind === 'siren' ? (m.pitchSpread == null ? 'no pitch heard' : r1(m.pitchSpread) + ' semitones') : 'reference ' + Math.round(m.crisp * 1000);
+  UI.toast(esc(step.name) + ': <b>' + esc(v) + '</b>');
+  openWarm();
+}
+
+/* the warm-up sheet: three steps, each with its goal and why, each measured */
+function openWarm() {
+  const w = warmToday();
+  UI.dialog({
+    title: 'WARM-UP', width: 520,
+    body: b => {
+      b.appendChild(el('p', 'muted', 'About three minutes. Each step is measured, and the last one sets today\'s crispness reference for the CLEAR drills.'));
+      const list = el('div', 'list');
+      WARM.forEach(s => {
+        const done = w && (w.steps || []).indexOf(s.id) >= 0;
+        const got = w && w.m ? (s.kind === 'hiss' ? w.m.hiss : s.kind === 'siren' ? w.m.pitch : w.m.crispRaw) : null;
+        const r = el('button', 'row mb-plate mb-press' + (done ? ' done' : ' now'));
+        r.style.setProperty('--c', 'var(--accent)');
+        r.innerHTML = '<span class="ic">' + ICN(done ? 'done' : 'play') + '</span><span class="tx"><span class="nm">' + esc(s.name) + '</span>' +
+          '<span class="sub">Goal: ' + esc(s.goal) + '</span><span class="sub">Why: ' + esc(s.why) + '</span></span>' +
+          '<span class="num"><b>' + (got == null ? mmss(s.dur) : esc(s.kind === 'crisp' || s.kind === 'twister' ? Math.round(got * 1000) : r1(got) + (s.kind === 'hiss' ? 's' : ' st'))) + '</b>' + (done ? 'done' : '') + '</span>';
+        r.onclick = () => { UI.closeMenus(); startTake(null, s); };
+        list.appendChild(r);
+      });
+      b.appendChild(list);
+      paintIcons(b);
+    },
+    actions: [{ label: 'CLOSE' }],
+    onClose: () => draw(),
+  });
+}
+
+/* the numbers of one take, every goal met or not, the transcript marked */
+function showTake(t, html) {
+  const d = t.drill === 'warm' ? null : drillById(t.drill);
+  const m = t.m || {};
+  UI.dialog({
+    title: (d ? d.name : 'Warm-up').toUpperCase() + ' · ' + (t.pass ? 'MET' : (t.goals && t.goals.length ? 'NOT MET' : 'DONE')), width: 560,
+    body: b => {
+      if (d) {
+        const gs = el('div', 'stats');
+        (t.goals || []).forEach(g => {
+          const mt = METRICS[g.m];
+          stat(gs, mt.name, g.got == null ? '·' : mt.fmt(g.got) + (mt.unit ? ' ' + mt.unit : ''), 'goal ' + goalText(g).replace(mt.name.toLowerCase() + ' ', ''), g.got == null ? '' : g.ok ? 'met' : 'miss');
+        });
+        if (!(t.goals || []).length) b.appendChild(el('p', 'muted', 'A count to start from. Nothing to meet.'));
+        b.appendChild(gs);
+      }
+      const rows = el('div', 'stats');
+      rows.style.marginTop = 'var(--s-3)';
+      const put = (id, v, note) => { if (v == null) return; const mt = METRICS[id]; stat(rows, mt.name, mt.fmt(v) + (mt.unit ? ' ' + mt.unit : ''), note || mt.note); };
+      if (d) {
+        put('wpm', m.wpm, t.asr ? m.words + ' words in ' + r1(m.spoken) + 's' : 'estimated from ' + m.syll + ' syllables');
+        put('fpm', m.fpm, (m.held || 0) + ' held' + (m.crutch != null ? ', ' + m.crutch + ' crutch' : ''));
+        put('crutch', m.crutch); put('held', m.held); put('repeats', m.repeats);
+        put('pauses', m.pauses, 'longest ' + (m.longestPause || 0) + 's'); put('longP', m.longP); put('heldP', m.heldP);
+        put('ratio', m.ratio); put('restarts', m.restarts);
+        put('crisp', m.crisp, 'against today\'s warm-up'); put('pitch', m.pitch, m.f0 ? 'around ' + m.f0 + ' Hz' : '');
+        put('eye', m.eye); put('eyeAway', m.eyeAway);
+        if (m.crisp == null && m.crispRaw != null) stat(rows, 'Crispness, raw', Math.round(m.crispRaw * 1000), 'no warm-up to measure against');
+        if (m.eye == null && d.cam) stat(rows, 'On the lens', '·', 'not measured');
+      } else {
+        put('hiss', m.hiss); put('pitch', m.pitch, 'the siren');
+        if (m.crispRaw != null) stat(rows, 'Crispness reference', Math.round(m.crispRaw * 1000), 'what today\'s CLEAR drills are measured against');
+      }
+      b.appendChild(rows);
+      if (t.prompt) b.appendChild(el('p', 'muted', 'Prompt: ' + esc(t.prompt)));
+      if (t.tx || html) {
+        const h = el('h2', null, 'TRANSCRIPT'); h.style.cssText = 'font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--text-muted);margin:var(--s-4) 0 var(--s-2)';
+        b.appendChild(h);
+        b.appendChild(el('div', 'tx', html || esc(t.tx)));
+        b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
+      } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
+    },
+    actions: d ? [{ label: 'CLOSE' }, { label: 'AGAIN', kind: 'go', fn: () => { startTake(d); } }] : [{ label: 'CLOSE' }],
+  });
+}
+
+/* ══════════════ settings ══════════════ */
+function openSettings() {
+  UI.settings(APP.id, [
+    { id: 'targets', name: 'TARGETS', draw: drawTargets },
+    { id: 'crutch', name: 'CRUTCHES', draw: drawCrutch },
+    { id: 'gear', name: 'MIC & CAMERA', draw: drawGear },
+  ], { order: ['targets', 'crutch', 'gear', 'data'] });
+}
+$('#bSet').onclick = openSettings;
+function numField(v, on) {
+  const i = UI.field('number', { value: v }); i.style.maxWidth = 'calc(var(--s-9) + var(--s-4))';
+  i.onchange = () => { const n = parseFloat(i.value); if (isFinite(n)) on(n); };
+  return i;
+}
+function drawTargets(p) {
+  const t = targets();
+  p.appendChild(el('p', 'muted', 'Words a minute, by the kind of video. The defaults are from the research in speak/RESEARCH.md.'));
+  STYLES.forEach(s => {
+    const b = band(s.id);
+    const box = el('div'); box.style.cssText = 'display:flex;gap:var(--s-2);align-items:center';
+    box.appendChild(numField(b[0], n => setBand(s.id, [n, b[1]])));
+    box.appendChild(el('span', 'muted', 'to'));
+    box.appendChild(numField(b[1], n => setBand(s.id, [b[0], n])));
+    p.appendChild(UI.row(s.name, s.note, box));
+  });
+  p.appendChild(UI.row('Fillers a minute', 'the first CLEAN goal', numField(t.fpm, n => setTgt('fpm', n))));
+  p.appendChild(UI.row('Fillers, the lower goal', 'the later CLEAN goals', numField(t.fpmLow, n => setTgt('fpmLow', n))));
+  p.appendChild(UI.row('On the lens, %', 'the EYES goal', numField(t.eye, n => setTgt('eye', n))));
+  p.appendChild(UI.row('First EYES goal, %', 'for finding the lens', numField(t.eyeStart, n => setTgt('eyeStart', n))));
+  p.appendChild(UI.row('Crispness, % of warm-up', 'the CLEAR goal', numField(t.crispPct, n => setTgt('crispPct', n))));
+  p.appendChild(UI.row('Pitch spread, semitones', 'the Voice moves goal', numField(t.pitch, n => setTgt('pitch', n))));
+  const acts = el('div', 'acts');
+  const reset = el('button', 'mb-btn mb-press mb-tap', 'Reset targets');
+  reset.onclick = () => { Rec.setting(APP.id, 'tgt', {}); p.innerHTML = ''; drawTargets(p); };
+  acts.appendChild(reset); p.appendChild(acts);
+}
+function setTgt(k, v) { const t = opt('tgt', {}) || {}; t[k] = v; Rec.setting(APP.id, 'tgt', t); }
+function setBand(id, b) { const t = opt('tgt', {}) || {}; t.bands = t.bands || {}; t.bands[id] = [Math.min(b[0], b[1]), Math.max(b[0], b[1])]; Rec.setting(APP.id, 'tgt', t); }
+function drawCrutch(p) {
+  const redraw = () => { p.innerHTML = ''; drawCrutch(p); };
+  p.appendChild(el('p', 'muted', 'Phrases counted as crutches in the transcript. Um, uh and their cousins always count. Hold or right-click one to remove it.'));
+  const list = el('div', 'list');
+  crutchList().forEach(c => {
+    const r = el('div', 'row mb-plate');
+    r.innerHTML = '<span class="tx"><span class="nm">' + esc(c) + '</span>' + (AMBIGUOUS[c] ? '<span class="sub">counted when it starts or ends a phrase, or sits beside a joining word</span>' : '') + '</span>';
+    const del = () => { Rec.setting(APP.id, 'crutch', crutchList().filter(x => x !== c)); redraw(); };
+    r.oncontextmenu = e => { e.preventDefault(); UI.menu(e.clientX, e.clientY, [{ label: 'Remove', kind: 'bad', fn: del }], { title: c.toUpperCase() }); };
+    Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, [{ label: 'Remove', kind: 'bad', fn: del }], { title: c.toUpperCase() }));
+    list.appendChild(r);
+  });
+  p.appendChild(list);
+  const box = el('div'); box.style.cssText = 'display:flex;gap:var(--s-2);margin-top:var(--s-3)';
+  const i = UI.field('text', { placeholder: 'a phrase' }); i.style.flex = '1';
+  const add = el('button', 'mb-btn mb-press mb-tap', 'Add');
+  add.onclick = () => { const v = i.value.trim().toLowerCase(); if (!v) return; const l = crutchList(); if (l.indexOf(v) < 0) l.push(v); Rec.setting(APP.id, 'crutch', l); redraw(); };
+  box.appendChild(i); box.appendChild(add); p.appendChild(box);
+  const acts = el('div', 'acts');
+  const reset = el('button', 'mb-btn mb-press mb-tap', 'Reset the list');
+  reset.onclick = () => { Rec.setting(APP.id, 'crutch', null); redraw(); };
+  acts.appendChild(reset); p.appendChild(acts);
+}
+function drawGear(p) {
+  p.appendChild(UI.row('Transcript', ASR ? 'The browser\'s own recogniser. Needs a signal; sound goes to Apple or Google for the words. (Off means offline)' : 'This browser cannot make one', ASR ? UI.toggle(optOn('asr', 1), on => Rec.setting(APP.id, 'asr', on ? 1 : 0)) : null));
+  const lang = el('select', 'mb-sel');
+  ['en-US', 'en-GB', 'en-AU', 'en-PH', 'fil-PH'].forEach(l => { const o = el('option', null, l); o.value = l; if (l === opt('lang', 'en-US')) o.selected = true; lang.appendChild(o); });
+  lang.onchange = () => Rec.setting(APP.id, 'lang', lang.value);
+  p.appendChild(UI.row('Transcript language', 'what the recogniser listens for', lang));
+  p.appendChild(UI.row('Camera', 'On for the EYES drills. About 15MB of face finder, fetched once', UI.toggle(optOn('cam', 1), on => Rec.setting(APP.id, 'cam', on ? 1 : 0))));
+  p.appendChild(UI.row('Which camera', 'front is the one you talk to', UI.segmented([{ id: 'user', name: 'Front' }, { id: 'environment', name: 'Back' }], opt('facing', 'user'), v => Rec.setting(APP.id, 'facing', v))));
+  p.appendChild(UI.row('Pace beat', 'a click per syllable on the To the beat drill', UI.toggle(optOn('beat', 1), on => Rec.setting(APP.id, 'beat', on ? 1 : 0))));
+  p.appendChild(el('p', 'muted', 'Sound is measured on this device and never leaves it, apart from the transcript when that is on. Nothing is recorded.'));
+}
+
+/* ══════════════ nav and boot ══════════════ */
+document.querySelectorAll('#nav button').forEach(b => {
+  b.onclick = () => { view = b.dataset.v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b)); Mobile.feedback('nav'); draw(); };
+});
+let soonT = null;
+const soon = () => { clearTimeout(soonT); soonT = setTimeout(draw, 30); };
+Rec.on(soon);
+Day.on(soon);
+/* paint what localStorage has, then again when the big half lands */
+draw();
+Rec.ready(draw);
+</script>
+</body>
+</html>
