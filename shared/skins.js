@@ -645,7 +645,7 @@ const Skins={
         return `<button class="skin-chip${this.current&&this.current.id===s.id?' on':''}" data-skin-id="${s.id}"
           style="--sw-bg:${t['--bg']};--sw-panel:${t['--surface-1']};--sw-acc:${t['--accent']}">
           <span class="skin-dots"><i style="background:${t['--bg']}"></i><i style="background:${t['--surface-1']}"></i><i style="background:${t['--accent']}"></i></span>
-          <span class="skin-name" style="font-family:${t['--font-display']}">${s.name}</span></button>`}).join('')
+          <span class="skin-name" style="font-family:${t['--font-display']}">${String(s.name==null?'':s.name).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}</span></button>`}).join('')
         +(o.custom===false?'':`<button class="skin-chip" data-skin-id="__custom"><span class="skin-dots">
           <i style="background:var(--surface-2)"></i><i style="background:var(--surface-3)"></i><i style="background:var(--accent)"></i></span>
           <span class="skin-name">Custom</span></button>`);

@@ -14,6 +14,10 @@
 'use strict';
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/* Rows that are allowed to sit on a day that has not come: a bill due, a
+   package sold ahead, a plan. Everything else is a record of something that
+   happened, and a future date on one of those is a clock or a timezone slip. */
+const AHEAD = { bill: 1, debt: 1, pot: 1, move: 1, pack: 1, paid: 1, sesh: 1, count: 1, xfer: 1, recon: 1, plan: 1, rhythm: 1, cval: 1, cphoto: 1, cmark: 1, checkin: 1 };
 
 const Health = {
   check() {
@@ -30,7 +34,7 @@ const Health = {
     rows.forEach(r => {
       if (!r.id || !r.type || !r.updated_at) { bad++; return; }
       if (r.date && !DATE.test(r.date)) bad++;
-      if (r.date && r.date > today) futures++;
+      if (r.date && r.date > today && !r.deleted && !AHEAD[r.type]) futures++;
       if (r.deleted) tombs++;
       if (seen[r.id]) dupes++; else seen[r.id] = 1;
       if (r.type === 'tick' && !r.deleted && Object.keys(acts).length && !acts[r.key]) orphans++;
@@ -38,7 +42,7 @@ const Health = {
 
     if (bad) add('bad', bad + ' rows are malformed and were skipped.', bad);
     if (dupes) add('bad', dupes + ' duplicate rows — two records claim the same fact.', dupes);
-    if (futures) add('warn', futures + ' ticks are dated in the future. Usually a clock or timezone slip.', futures);
+    if (futures) add('warn', futures + ' rows are dated in the future. Usually a clock or timezone slip.', futures);
     if (orphans) add('warn', orphans + ' ticks point at an activity that no longer exists. They still count, they just show as an id.', orphans);
     if (tombs > rows.length * 0.4 && tombs > 50) add('warn', 'Most of your rows are deleted leftovers. Tidying would speed things up.', tombs);
 

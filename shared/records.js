@@ -685,6 +685,13 @@ const Rec = {
       always the change events, so a sibling can ask us to look again. */
   reload() {
     const before = JSON.stringify(Object.keys(rows).map(k => rows[k].updated_at));
+    /* A row too big for the fast half lives only in IndexedDB, and a write
+       there waits 60ms for company. Dropping the picture inside that window
+       and re-reading IndexedDB before the put has landed loses the row until
+       the next page load, so what is queued goes first. The put is started
+       before the read on the same connection, and the browser keeps them in
+       that order. */
+    Rec.flush();
     Object.keys(rows).forEach(k => delete rows[k]);
     loadFast();
     repairDates();

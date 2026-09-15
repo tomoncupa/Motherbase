@@ -564,15 +564,15 @@ function hold(el, fn, opts) {
   base();
   opts = opts || {};
   const delay = opts.delay || 500;
-  let timer = null, sx = 0, sy = 0, fired = false, id = null;
+  let timer = null, sx = 0, sy = 0, fired = false, firedAt = 0, id = null;
   const cancel = () => { clearTimeout(timer); timer = null; id = null; };
 
   el.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;  /* right-click has its own path */
     if (opts.skip && e.target.closest(opts.skip)) return;
-    id = e.pointerId; sx = e.clientX; sy = e.clientY; fired = false;
+    id = e.pointerId; sx = e.clientX; sy = e.clientY; fired = false; firedAt = 0;
     timer = setTimeout(() => {
-      fired = true; timer = null;
+      fired = true; firedAt = Date.now(); timer = null;
       /* The buzz is the only signal that the hold registered. Without it you
          cannot tell a working long-press from a dead one until the menu
          appears, by which point you have already held too long. */
@@ -599,6 +599,13 @@ function hold(el, fn, opts) {
   el.addEventListener('contextmenu', e => {
     if (opts.skip && e.target.closest(opts.skip)) return;
     e.preventDefault();
+    /* Android Chrome raises its own contextmenu at the end of a long press,
+       at about the same moment the timer above fires, so one hold opened the
+       menu twice (a sheet on top of a sheet). A pointer still down, or a hold
+       that has already fired, means the timer owns this one; a mouse's
+       right-click never reached pointerdown (its button is not 0) and still
+       lands here. */
+    if (id !== null || (firedAt && Date.now() - firedAt < 700)) return;
     fn(e);
   });
 
@@ -654,8 +661,14 @@ function swipe(row, opts) {
     live = false;
   }, { passive: true });
 
-  /* one row open at a time, and a tap anywhere else puts it away */
-  doc.addEventListener('pointerdown', e => { if (on && !row.contains(e.target)) reset(); }, { passive: true });
+  /* one row open at a time, and a tap anywhere else puts it away. The
+     listener lets go of itself once the row has left the page: a list that
+     redraws on every tick was leaving one of these behind per row per draw. */
+  const away = e => {
+    if (!row.isConnected) { doc.removeEventListener('pointerdown', away); return; }
+    if (on && !row.contains(e.target)) reset();
+  };
+  doc.addEventListener('pointerdown', away, { passive: true });
   return { reset: reset, face: face };
 }
 

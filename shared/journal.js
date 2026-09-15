@@ -198,8 +198,12 @@ const durLabel = d => !d ? '' : (d >= 60 ? (d % 60 ? Math.floor(d / 60) + 'h' + 
 function publishTimed(d, src) {
   const R = Rec(), want = {};
   src = src || R.appId;
-  /* a todo due another day is not an event on the day it was written */
-  notes(d).filter(x => x.date === d && x.at && !x.done && !x.cancelled && (!x.due || x.due === d)).forEach(x => {
+  /* A todo with a due day is timed on THAT day: not on the day it was written,
+     and not on the days it is carried past. Until 2026-09-15 it also had to be
+     written on the day, so "Call Dan 3pm" written today for tomorrow reached
+     the home screen's day log on neither day. A line with no due day is timed
+     on the day it was written, as it always was. */
+  notes(d).filter(x => x.at && !x.done && !x.cancelled && (x.due ? x.due === d : x.date === d)).forEach(x => {
     const id = 'note-at-' + String(x.text).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
     if (!id || id === 'note-at-') return;
     want[id] = 1;

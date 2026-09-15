@@ -16,6 +16,26 @@ changing, that is 1.0.
 
 ---
 
+## 0.1.11 — 2026-09-15
+
+**A sweep of every shared module, five fixes.** Tom: "do a sweep of all our
+modules for bugfixes."
+
+- A long press on Android opened a menu twice: the hold timer and the
+  browser's own context-menu event both fired it. One hold, one menu, and a
+  mouse right-click still works.
+- A row you can swipe left a page-wide listener behind every time its list
+  redrew. It lets go of itself once the row is off the page.
+- A neighbour's reload could lose a big row, a photo or a pasted image,
+  that was still queued for IndexedDB. Queued writes go first now.
+- A timed todo written today for tomorrow, "Call Dan 3pm", reached the home
+  screen's day log on neither day. It is timed on its due day.
+- The health check counted a bill due next month as "a tick dated in the
+  future". Rows that are meant to sit ahead no longer count, and the warning
+  says rows, not ticks.
+
+Three smoke checks, one level under each of the first, third and fourth.
+
 ## 0.1.10 — 2026-09-15
 
 **A row you deleted stays deleted across the sheet.** Tom: "deleting bullets
