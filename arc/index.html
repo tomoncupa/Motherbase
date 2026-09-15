@@ -925,15 +925,43 @@ function rowsToDB(){
   return { maps: maps, currentId: cur, ts: Date.now() };
 }
 
+/* Everything a map carries besides its title, view, snapshots and place in the
+   list. Each one is a choice made about that one map, set on M() and read back
+   from it.
+
+   Found 2026-09-15: from the move onto the store on 2026-08-27 until this fix,
+   the map row was REBUILT from title, view, snaps and order alone, so every one
+   of these was written nowhere. They held for the session and reset on
+   reopening: the line style went back to organic, colour by position or by
+   rank went back to plain, hidden cousin lines came back, the all-lines dash
+   setting was forgotten, a planned presentation path was emptied, and Teach
+   mode lost which topic it had built. The same rebuild dropped them from every
+   map brought across from the old blob. Loading was always fine: rowsToDB
+   copies the whole payload back. */
+const MAP_FIELDS = ['edgeStyle', 'posGrad', 'rankColors', 'hideCousins',
+                    'lineDash', 'presPath', 'teachTopic', 'teachStart'];
+
 /** Write the workspace back out, one row per thing, and tombstone what went. */
 function dbToRows(){
   const keptMap = {}, keptNode = {}, keptLink = {};
   DB.maps.forEach((m, i) => {
     keptMap[m.id] = 1;
-    Rec.set('map', null, m.id, {
+    /* Merge into the map row, never rebuild it (the root brief's many-writers
+       rule). ARC's own fields are set to what the map holds, and a field the
+       map no longer has is removed, so turning a setting OFF is saved too. A
+       field on the row that ARC does not know about is left alone, and one
+       that only the map has (an old blob can carry one) is carried across. */
+    const stored = Rec.get('map', null, m.id);
+    const changes = {
       title: m.title, view: m.view || { x: 0, y: 0, k: 1 },
       snaps: m.snaps || [], order: i,
+    };
+    MAP_FIELDS.forEach(f => { changes[f] = m[f] === undefined ? undefined : m[f]; });
+    Object.keys(m).forEach(f => {
+      if (f === 'id' || f === 'nodes' || f === 'links' || f in changes) return;
+      if (!stored || !Object.prototype.hasOwnProperty.call(stored, f)) changes[f] = m[f];
     });
+    Rec.patch('map', null, m.id, changes);
     Object.keys(m.nodes || {}).forEach(nid => {
       const k = rowKey(m.id, nid);
       keptNode[k] = 1;
