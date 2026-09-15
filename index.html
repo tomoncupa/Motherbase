@@ -9,7 +9,7 @@
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
      the root names its own, because from a folder this file's folder is not
      an app id -->
-<link rel="apple-touch-icon" href="shared/icons/home.png">
+<link rel="apple-touch-icon" href="shared/icons/home.png" data-mb-app="home" data-mb-dir="shared/">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <meta name="theme-color" content="#0B0E14">
@@ -30,6 +30,7 @@
 <script src="shared/ui.js"></script>
 <script src="shared/io.js"></script>
 <script src="shared/icons.js"></script>
+<script src="shared/import.js"></script>
 <style>
 :root{
   /* ── the bridge ──
@@ -386,6 +387,7 @@ kbd{font-family:var(--f1);font-size:10px;border:1px solid var(--line2);border-ra
 <div id="ghost"></div>
 <div id="modal"></div>
 <input type="file" id="fileIn" accept="application/json" style="display:none">
+<input type="file" id="xlsxIn" accept=".xlsx,.xls,.xlsm" style="display:none">
 
 <script>
 /* ══════════════════════════ LIFEOS KERNEL v2 ══════════════════════════
@@ -682,8 +684,12 @@ if (typeof Icons !== 'undefined') addEventListener('DOMContentLoaded', () => {
    16px in a 1.75 stroke a row of app icons read as a row of letters. */
 const appIco = (a, size) => (typeof Icons !== 'undefined' &&
   Icons.svg('app.' + a.id, { size: size || 20, weight: 2.1 })) || a.ic;
-/* the app's colour: its slot in the theme's chart ramp, as a CSS value */
-const appTint = a => a && a.slot ? 'var(--data-' + a.slot + ')' : '';
+/* the app's colour: its slot in the theme's chart ramp, as a CSS value. The
+   table is in shared/icons.js, so the iPhone icons are drawn from the same one. */
+const appTint = a => {
+  const slot = a && typeof Icons !== 'undefined' && Icons.appSlot ? Icons.appSlot(a.id) : 0;
+  return slot ? 'var(--data-' + slot + ')' : '';
+};
 const frames = {};      /* id -> iframe. Built on first visit, then kept alive. */
 const missing = {};     /* id -> true once a HEAD check says the file is not there */
 let view = 'home';
@@ -839,6 +845,61 @@ function weightSaid(pts, v, d) {
   const move = !n ? '' : ', ' + (Math.abs(m) < 0.05 ? 'no change' : (m < 0 ? 'down ' : 'up ') + Math.abs(m).toFixed(1)) + ' in ' + n + ' days';
   return v.toFixed(1) + ' ' + (d === LifeOS.day() ? 'today' : Day.label(d)) + move;
 }
+/* ── the cut's plan ──
+   {from, to, goal, start} in the setting lifeos.weightPlan. A blank start is
+   the weigh-in nearest the start day, within a fortnight either side, read
+   at draw time and never saved as though it had been typed (DOCTRINE, law 4). */
+function weightPlan() {
+  const p = Rec.setting('lifeos', 'weightPlan');
+  if (!p || !p.from || !p.to || !(Number(p.goal) > 0) || p.to <= p.from) return null;
+  let start = Number(p.start) > 0 ? Number(p.start) : null;
+  for (let i = 0; i <= 14 && start == null; i++) {
+    const before = evValue(LifeOS.shift(p.from, -i), 'weight');
+    start = before != null ? before : (i ? evValue(LifeOS.shift(p.from, i), 'weight') : null);
+  }
+  return start == null ? null : { from: p.from, to: p.to, goal: Number(p.goal), start: start };
+}
+const planAt = (p, d) => d <= p.from ? p.start : d >= p.to ? p.goal
+  : p.start + (p.goal - p.start) * Day.diff(d, p.from) / Day.diff(p.to, p.from);
+function planSaid(p) {
+  const t = LifeOS.day();
+  if (t < p.from) return ' · plan starts ' + Day.short(p.from);
+  if (t > p.to) return ' · plan ended ' + Day.short(p.to) + ' at ' + p.goal.toFixed(1);
+  return ' · plan ' + planAt(p, t).toFixed(1) + ' today, ' + p.goal.toFixed(1) + ' by ' + Day.short(p.to);
+}
+function weightPlanSheet() {
+  const was = Rec.setting('lifeos', 'weightPlan') || {};
+  const dateBox = v => { const i = document.createElement('input'); i.type = 'date'; i.className = 'mb-input'; i.value = v || ''; return i; };
+  let goal, to, from, start;
+  UI.dialog({
+    title: 'PLAN A CUT', width: 440,
+    body: b => {
+      goal = UI.field('decimal', { placeholder: 'e.g. 180', value: was.goal != null ? was.goal : '' });
+      to = dateBox(was.to);
+      from = dateBox(was.from || LifeOS.day());
+      start = UI.field('decimal', { placeholder: 'the weigh-in nearest the start day', value: was.start != null ? was.start : '' });
+      b.appendChild(UI.row('Goal weight', 'Same unit as your weigh-ins', goal));
+      b.appendChild(UI.row('By', 'The day the plan ends', to));
+      b.appendChild(UI.row('Starting', 'The day the plan starts', from));
+      b.appendChild(UI.row('Starting weight', 'Blank uses the weigh-in nearest the start day', start));
+    },
+    actions: [
+      { label: 'CANCEL' },
+      { label: 'SAVE', kind: 'go', fn: () => {
+        const g = parseFloat(goal.value), s = start.value.trim() === '' ? null : parseFloat(start.value);
+        if (!(g > 0)) { UI.toast('Needs a goal weight', { bad: true }); return false; }
+        if (!to.value || !from.value || to.value <= from.value) { UI.toast('The end has to be after the start', { bad: true }); return false; }
+        if (s != null && !(s > 0)) { UI.toast('Starting weight is not a number', { bad: true }); return false; }
+        const next = { goal: g, to: to.value, from: from.value };
+        if (s != null) next.start = s;
+        Rec.setting('lifeos', 'weightPlan', next);
+        drawHome();
+        if (!weightPlan()) UI.toast('No weigh-in near the start day. Add a starting weight.', { bad: true });
+      } },
+    ],
+  });
+}
+
 /* The sleep widget's line: the average night this week, and how many met the target. */
 function sleepSaid() {
   const f = Rec.map('field').sleep, target = f && f.target ? Number(f.target) : 0, got = [];
@@ -1318,6 +1379,11 @@ const WIDGETS = {
      from the widget's own menu; a fourth pick drops the oldest. */
   beside: {
     nm: 'BESIDE', w: 6, h: 4,
+    nmFor: cfg => cfg.nm || 'BESIDE',
+    /* Offered in ADD A WIDGET as a ready-made BESIDE. Tom, 2026-09-15: "Put
+       sleep, mood and energy on one screen." His protocol watches sleep
+       falling while mood rises, and these three strips are that picture. */
+    presets: [{ nm: 'SLEEP · MOOD · ENERGY', note: 'three strips on one date axis', cfg: { nm: 'SLEEP · MOOD · ENERGY', m: ['sleep', 'mood', 'energy'], days: 30, w: 12, h: 5 } }],
     days: [[30, '30 days'], [90, '90 days'], [365, 'a year']],
     measures() {
       const fields = Rec.map('field'), seen = {}, out = [];
@@ -1569,14 +1635,34 @@ const WIDGETS = {
     nmFor: cfg => 'WEIGHT · ' + (WIDGETS.weight.days.filter(d => d[0] === (cfg.days || 90))[0] || [0, ''])[1],
     sub: cfg => {
       const r = weightSeries((cfg && cfg.days) || 90);
-      if (!r.length) return 'nothing logged yet';
+      const plan = weightPlan();
+      const said = plan ? planSaid(plan) : (Rec.setting('lifeos', 'weightPlan') ? ' · plan needs a starting weight' : '');
+      if (!r.length) return said ? said.replace(/^ · /, '') : 'nothing logged yet';
       const last = r[r.length - 1];
-      return weightSaid(r, last.v, last.d);
+      return weightSaid(r, last.v, last.d) + said;
+    },
+    /* ── the cut ──
+       Tom, 2026-09-15: "Yes chart the cut". A plan is a start, a goal and
+       two dates, drawn as a dashed line from one to the other under the
+       weigh-ins. It is a setting rather than part of the layout, so it is in
+       the backup and on every device, and every WEIGHT widget shows the same
+       one. The line says what the plan says on a day; nothing here says
+       whether a weigh-in is good. */
+    menu(cfg, redraw) {
+      const has = !!Rec.setting('lifeos', 'weightPlan');
+      return ['-', { label: has ? 'Change the plan' : 'Plan a cut', fn: weightPlanSheet },
+        has ? { label: 'Clear the plan', fn: () => {
+          const was = Rec.setting('lifeos', 'weightPlan');
+          Rec.setting('lifeos', 'weightPlan', null); redraw();
+          UI.undo('Plan cleared', () => { Rec.setting('lifeos', 'weightPlan', was); redraw(); });
+        } } : null];
     },
     draw(body, cfg) {
       cfg = cfg || {};
-      const pts = weightSeries(cfg.days || 90);
-      if (pts.length < 2) {
+      const today = LifeOS.day(), plan = weightPlan();
+      const back = plan ? Math.max(cfg.days || 90, Day.diff(today, plan.from)) : (cfg.days || 90);
+      const pts = weightSeries(back);
+      if (pts.length < 2 && !plan) {
         body.appendChild(el('div', 'empty',
           'Log a weight in <span class="link" onclick="go(\'status\')">STATUS</span> twice and the line starts.'));
         return;
@@ -1609,22 +1695,29 @@ const WIDGETS = {
          follows the day under the finger. A second header inside the widget
          left a small one no room for the chart. The line goes through every
          reading as it was taken, with no average. */
-      const last = pts[pts.length - 1].v, lastD = pts[pts.length - 1].d;
+      const last = pts.length ? pts[pts.length - 1].v : null, lastD = pts.length ? pts[pts.length - 1].d : today;
       const subOf = () => { const w = body.closest('.w'); return w && w.querySelector('.w-head .sub'); };
       let kept = null;
       const box = el('div', 'fits');
       body.appendChild(box);
       const line = pts.map(p => [p.d, p.v]);
-      Chart.mount(box, { label: 'Weight, ' + pts.length + ' weigh-ins' }, c => {
-        c.xTime(pts[0].d, lastD);
-        c.yFit(pts.map(p => p.v));
+      const from = plan ? (pts.length && pts[0].d < plan.from ? pts[0].d : plan.from) : pts[0].d;
+      const to = plan && plan.to > lastD ? plan.to : lastD;
+      Chart.mount(box, { label: 'Weight, ' + pts.length + ' weigh-ins' + (plan ? ', and a plan to ' + plan.goal + ' by ' + plan.to : '') }, c => {
+        c.xTime(from, to);
+        c.yFit(pts.map(p => p.v).concat(plan ? [plan.start, plan.goal] : []));
         c.grid();
         c.timeAxis();
-        c.area(line);
-        c.line(line);
-        c.end(line[line.length - 1], last.toFixed(1));
+        if (plan) {
+          c.line([[plan.from, plan.start], [plan.to, plan.goal]], 'mb-rule');
+          const gl = c.add('text', { x: c.X(plan.to) - 4, y: c.Y(plan.goal) + 16, 'text-anchor': 'end' }, 'mb-lab');
+          gl.textContent = plan.goal.toFixed(1);
+        }
+        if (line.length > 1) { c.area(line); c.line(line); } else if (line.length) c.dots(line);
+        if (line.length) c.end(line[line.length - 1], last.toFixed(1));
         c.scrub(line, {
-          onMove: p => { const s = subOf(); if (!s) return; if (kept == null) kept = s.textContent; s.textContent = weightSaid(pts, p[1], p[0]); },
+          onMove: p => { const s = subOf(); if (!s) return; if (kept == null) kept = s.textContent;
+            s.textContent = weightSaid(pts, p[1], p[0]) + (plan && p[0] >= plan.from && p[0] <= plan.to ? ' · plan ' + planAt(plan, p[0]).toFixed(1) : ''); },
           onLeave: () => { const s = subOf(); if (s && kept != null) s.textContent = kept; kept = null; },
         });
       });
@@ -2220,6 +2313,13 @@ function widgetPicker() {
       (n ? 'already on the home screen — add another' : 'not on the home screen') + '</span></span>';
     b.onclick = () => { layout.push({ t: k, w: W.w, h: W.h }); saveLayout(); closeModal(); drawHome(); toast('<b>' + esc(W.nm) + '</b> added'); };
     mo.appendChild(b);
+    /* a widget may offer ready-made versions of itself */
+    (W.presets || []).forEach(ps => {
+      const pb = el('button', 'opt');
+      pb.innerHTML = '<span class="ic">▤</span><span class="t"><b>' + esc(ps.nm) + '</b><span>' + esc(ps.note || '') + '</span></span>';
+      pb.onclick = () => { layout.push(Object.assign({ t: k, w: W.w, h: W.h }, ps.cfg)); saveLayout(); closeModal(); drawHome(); toast('<b>' + esc(ps.nm) + '</b> added'); };
+      mo.appendChild(pb);
+    });
   });
   mo.appendChild(el('div', 'mgroup', 'LAYOUT'));
   if (!FINE) {
@@ -2505,6 +2605,51 @@ function mirrorSection(mo) {
   });
 }
 
+/* ══════════════ bringing in an old spreadsheet ══════════════
+   shared/import.js reads it; this asks which parts to bring in. Nothing is
+   written until BRING IN, and the undo takes back exactly what came in. */
+function importSheet(file) {
+  if (typeof Import === 'undefined') return toast('<b>import.js</b> is missing', { bad: true });
+  toast('Reading <b>' + esc(file.name) + '</b>');
+  Import.read(file).then(sheets => {
+    const p = Import.plan(sheets);
+    const unit = ((Rec.map('field').weight || {}).unit) || '';
+    const kinds = [
+      ['weights', 'Weigh-ins', unit ? 'Read as ' + unit : ''],
+      ['ticks', 'Daily ticks', ''],
+      ['foods', 'Foods', ''],
+      ['spends', 'Spending', 'Money out only'],
+    ];
+    const pick = {};
+    UI.dialog({
+      title: 'BRING IN A SPREADSHEET', width: 520,
+      body: b => {
+        b.appendChild(el('p', null, esc(file.name)));
+        kinds.forEach(([k, label, extra]) => {
+          const n = p[k].length, kept = p.kept[k];
+          pick[k] = n > 0;
+          const note = (n ? n.toLocaleString() + ' new' + (p.span[k] ? ', ' + p.span[k] : '') : (kept ? 'All already here' : 'None found')) +
+            (n && kept ? '. ' + kept.toLocaleString() + ' already here, left alone' : '') + (extra && n ? '. ' + extra : '');
+          const t = UI.toggle(pick[k], on => { pick[k] = on; });
+          if (!n) t.disabled = true;
+          b.appendChild(UI.row(label, esc(note), t));
+        });
+        if (p.odd) b.appendChild(el('p', null, esc(p.odd.toLocaleString() + ' dated years away from the rest of their sheet, left out.')));
+        if (p.skipped.length) b.appendChild(el('p', null, 'Not read: ' + esc(p.skipped.join(', '))));
+      },
+      actions: [
+        { label: 'CANCEL' },
+        { label: 'BRING IN', kind: 'go', fn: () => {
+          const done = Import.apply(p, pick);
+          if (!done.total) { toast('Nothing brought in'); return; }
+          drawHome();
+          UI.undo('<b>' + done.total.toLocaleString() + '</b> rows brought in', () => { done.undo(); drawHome(); });
+        } },
+      ],
+    });
+  }, e => toast(esc((e && e.message) || 'Could not read that file'), { bad: true }));
+}
+
 function dataPanel() {
   const mo = $('#modal'); mo.innerHTML = '';
   const n = daysSinceBackup();
@@ -2542,6 +2687,10 @@ function dataPanel() {
   rs.innerHTML = '<span class="ic">⭱</span><span class="t"><b>Restore from a backup</b><span>Replaces everything on this device with the contents of a backup file.</span></span>';
   rs.onclick = () => $('#fileIn').click();
   mo.appendChild(rs);
+  const im = el('button', 'opt');
+  im.innerHTML = '<span class="ic">▦</span><span class="t"><b>Bring in an old spreadsheet</b><span>Weigh-ins, daily ticks, foods and spending from a workbook.</span></span>';
+  im.onclick = () => $('#xlsxIn').click();
+  mo.appendChild(im);
 
   mirrorSection(mo);
 
@@ -2587,6 +2736,7 @@ function clock() {
 $('#btnData').onclick = dataPanel;
 $('#btnWidget').onclick = widgetPicker;
 $('#fileIn').onchange = e => { if (e.target.files[0]) restore(e.target.files[0]); e.target.value = ''; };
+$('#xlsxIn').onchange = e => { if (e.target.files[0]) importSheet(e.target.files[0]); e.target.value = ''; };
 window.addEventListener('keydown', e => {
   if (e.target.matches('input,textarea,[contenteditable]')) return;
   /* ui.js closes its own sheet on Escape, so by the time this runs there is
