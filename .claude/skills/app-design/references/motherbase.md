@@ -145,7 +145,7 @@ afterwards is `Rec.del` plus `Rec.vacuum(0)`.
 ## Checking work
 
 ```bash
-py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Claude Code"
+py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Motherbase"
 ```
 
 Open `shared/_smoke.html`. It must pass at its current count or higher, at

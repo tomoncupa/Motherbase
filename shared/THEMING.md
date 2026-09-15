@@ -334,7 +334,7 @@ screen looks broadly the same in all three, it is not obeying.
 ### 3. The smoke suite
 
 ```
-py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Claude Code"
+py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Motherbase"
 ```
 
 Open `shared/_smoke.html`. It must say **152 of 152** or better, and it must be

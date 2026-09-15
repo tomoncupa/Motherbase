@@ -221,7 +221,7 @@ A working example of all of it, with the reasoning written into the comments:
 ## How to check it
 
 ```
-py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Claude Code"
+py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Motherbase"
 ```
 
 Open `http://127.0.0.1:8777/shared/_smoke.html`. It must say **64 of 64**, or

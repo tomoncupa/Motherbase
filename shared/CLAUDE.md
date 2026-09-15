@@ -93,7 +93,7 @@ are holding a stale copy of whatever you just changed.
 ## Testing
 
 ```
-py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Claude Code"
+py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Motherbase"
 ```
 
 Then open `http://127.0.0.1:8777/shared/_smoke.html` in a browser and read the
