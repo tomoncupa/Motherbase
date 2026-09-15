@@ -116,6 +116,8 @@ const PATHS = {
   flag:        'M6 21V3M6 4h12l-3.5 4 3.5 4H6',
   pose:        'M5 3h14v18H5zM12 7.5a2.2 2.2 0 100 4.4 2.2 2.2 0 000-4.4M8 18c0-3 1.8-5 4-5s4 2 4 5',
   frames:      'M3 5h8v14H3zM13 5h8v14h-8zM6.5 9.5v5l3.5-2.5z',
+  /* a microphone on a stand, for SPEAK: a capsule, the cradle, the stem */
+  mic:         'M12 3a3 3 0 013 3v6a3 3 0 01-6 0V6a3 3 0 013-3zM6 11a6 6 0 0012 0M12 17v4M8.5 21h7',
 };
 
 /* ── the roles ──
@@ -205,9 +207,11 @@ const ROLES = {
   'app.wealth': 'cash',
   'app.form': 'frames',
   'app.portion': 'bowl',
+  'app.speak': 'mic',
   quest: 'flag', flag: 'flag',
   pose: 'pose', physique: 'pose', checkin: 'pose',
   compare: 'frames', frames: 'frames',
+  mic: 'mic', microphone: 'mic', speak: 'mic', talk: 'mic',
 
   /* structure */
   routine: 'repeat', repeat: 'repeat', cycle: 'repeat',
@@ -230,6 +234,7 @@ const NOTES = {
   flag: 'a flag on a pole, for QUESTS',
   pose: 'a figure in a frame, for CHECK IN',
   frames: 'two frames side by side, for FORM',
+  mic: 'a microphone on a stand, for SPEAK',
 };
 
 /* ── how a theme draws them ──

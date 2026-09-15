@@ -288,6 +288,7 @@ called testers until 2026-09-14, and not the coaching clients in WEALTH.
 | STYLE | `style/` | desktop only | yes | The theme and look for every other app. |
 | FOODDÉX | `portion/` | desktop | no, Tom only | Food database input and overview. Works with STATUS. **To be expanded.** |
 | CHECK IN | `checkin/` | everywhere | yes | Physique check-ins, for Tom and for his clients: a goal, photos measured into neutral numbers, and a timelapse. Reads weight from STATUS rather than asking for it twice. A client's check-in reaches Tom as a file and is kept under their name, in rows a later COACH can read. |
+| SPEAK | `speak/` | everywhere | no, Tom only | Talking to a camera, measured. A path of drills for pace, fillers, flow, clarity and eyes, a daily warm-up, a streak. Numbers against his own targets, never a verdict. |
 | COACH | not built | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. A separate app, with TRAIN as its core file. A profile is the same client as in WEALTH, so a 1:1 logged here is a session WEALTH counts. A log arrives as a file the client sends from TRAIN's share menu; sending again only adds what is new. **Planned, after Tom is happy with TRAIN.** |
 
 ARC, BLOCK and STYLE are not meant to work on a phone. Tom, 2026-09-14.
@@ -450,6 +451,22 @@ questions are data.
 about whether either is good (Tom, 2026-09-15: "just give neutral numbers").
 Words about a body happen in Claude, when he pastes the bundle in, never on
 screen here.
+
+### SPEAK — `speak/` · everywhere · Tom only
+
+**Function.** Practise talking to a camera and see, in numbers, whether it is
+getting cleaner.
+
+**In hand:** a few minutes a day, a phone propped up or a laptop at a desk,
+before recording content.
+
+**Good looks like:** the warm-up and three drills in under ten minutes, each
+drill saying its goal as a number and why in one sentence, the take stopping
+and the numbers appearing at once, and the same numbers a month later showing
+which way they moved.
+
+**Never:** a verdict, a score, a level, or praise. It counts, shows the target,
+and says met or not met. The target is his.
 
 ### STYLE — `style/` · desktop, deliberately
 

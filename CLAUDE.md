@@ -168,13 +168,19 @@ quest/index.html   QUESTS, the todolist, copied from Todoist. The same todo rows
                    repeat added. Desktop and phone. In the client build since
                    2026-09-14.
 quest/CLAUDE.md    QUESTS's own brief, governs quest/ only
+speak/index.html   SPEAK, talking to a camera, measured: pace, fillers and
+                   crutch phrases, flow, crispness, eyes on the lens. A path
+                   of drills built like Duolingo, a daily warm-up, a streak.
+                   Everywhere. Tom only, dropped from the client build.
+speak/CLAUDE.md    SPEAK's own brief, governs speak/ only
+speak/RESEARCH.md  where every number in SPEAK came from, with sources
 quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
                    status/ on 2026-08-20; what is left of it is a todolist.
                    Its data model and design system still govern. Superseded
                    on repo layout and testing by this file.
 ```
 
-**Phone or desktop:** `train/` is a phone app. `status/`, `quest/` and `checkin/` are for
+**Phone or desktop:** `train/` is a phone app. `status/`, `quest/`, `checkin/` and `speak/` are for
 everywhere. Every other app, including the home screen and `wealth/`, is a
 desktop app. See hard constraint 10. What each one is for, in Tom's words, is
 the table at the top of "The apps" in `DOCTRINE.md`.
@@ -302,6 +308,8 @@ An app may read any type. It writes only the types it owns.
 | `link` | **arc** | `mapId\|linkId` | `{a, b, rel, ord}` — a connection that is not a parent link |
 | `recap` | **log** | `week`, `month`, `quarter` or `year`, dated on the period's first day | `{text}` — what he wrote about that period |
 | `cell` | **log** | column id (`done`), dated | `{text}` — one day's entry in one of LOG's text columns, such as "What got done today". Kept apart from `day.note` on purpose |
+| `take` | **speak** | timestamp id, dated | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, prompt}` — one practice take: every number the ear read, each goal as it stood with `got` and `ok`, and the transcript if there was one. The day's warm-up is one `take` with `drill: 'warm'` |
+| `topic` | **speak** | id | `{text, kind}` — his own prompt: a topic, a story, or three bullets |
 
 ### Many writers is fine. Replacing a payload you did not read is not
 
@@ -733,6 +741,7 @@ answer, or take it out.
 | `log/` | Built 2026-09-13 and tested in the browser. The journal module: a way to view STATUS's entries en masse. One continuous timeline from the first record to today, in eight views from Day to Year; the wheel scrolls, the mouse side buttons change view, a held button drags. Days show the day's line and STATUS's bullets, with a faint mood, energy and caffeine graph behind; beside them, day columns for "What got done today" and every STATUS measure, reorderable, resizable and hideable; beside those, weeks, months, quarters and the year with written summaries. A notebook view lays days out as two-page spreads. Writes `note` and the day's `note` by merging, owns `recap` and `cell`. Never watched with a real mouse or real data. In the client build since 2026-09-14 (Tom: "LOG and QUESTS are for clients as well"). Has its own brief. |
 | `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
 | `checkin/` | CHECK IN, built 2026-09-14 from `_template/`, grown 2026-09-15 into Tom's first ask: a goal physique, regular check-in photos, how far off, and a timelapse. Everywhere, and in the client build. Has its own brief, and one master conversation. Front ships; any other pose is one tap with no name. Every photo is measured on the device by Google's MediaPipe (fetched once, about 20MB, kept for offline; the dots start in the middle if it cannot load) into three ratios, with dots anyone can drag. PROGRESS shows goal, first and latest with the numbers and the change and no verdict. The Check In camera: last time's ghost, a body match, directions spoken and beeped, tilt, light, an automatic three-beat shutter and an optional setup photo. TIMELAPSE lines every photo up on the body, as a flipbook or a before-and-after wipe, with the face shown, blurred or covered by the person's own animal, saved as MP4 or WebM. Saves photos named by date and pose (a zip on a desktop), reads them back from files or a folder, and makes a Copy for Claude picture and question. Opening a client's file now KEEPS it under their id. Tested in the browser 2026-09-15 at 1280px and 390px with a fake camera and a CC BY 1865 photograph: camera directions, auto-shutter, measuring, client files opened twice, zip, MP4. Not tested on a phone. Hips measure unsteadily when a hand is near them (see the brief). |
+| `speak/` | SPEAK, built 2026-09-15 from `_template/`. Tom: "Speech improvement app to help me with YT and short form content", based on Duolingo, objective feedback, a guided game, daily warm-up drills, and every drill saying its goal and why. Five skills (PACE, CLEAN, FLOW, CLEAR, EYES) of five steps each, a step opening when the one before is met; three drills a day picked from the skills furthest from target; a three-step warm-up that sets the day's crispness reference; a streak with a silent freeze; no XP, no levels, no verdicts. The ear counts syllables after de Jong & Wempe, tuned on four clips with 97 counted syllables; pauses at 250ms; held sounds as the um proxy; a spectral-tilt proxy for crispness; pitch spread; the browser's own recogniser for words and crutch phrases where it exists and is switched on; Google's face landmarker for time on the lens, calibrated during the count. Driven in headless Chromium at 1280px and 390px with a fake microphone (a synthetic clip with known counts, read exactly) and a fake camera (a still face, read 100% on the lens). Not run on a phone, and no real voice has been through it. Has its own brief and a research file. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation, passing 266 checks on 2026-09-15 (214 of them also at phone width, counted 2026-09-14). Every app loads it. |
 
