@@ -157,12 +157,9 @@ checkin/index.html CHECK IN, physique check-ins for Tom and his clients: a goal
                    (STATUS's row) and a few answers, and a file to send a coach
                    that the coach keeps. Everywhere.
 checkin/CLAUDE.md  CHECK IN's own brief, governs checkin/ only
-clex/              NOT part of the suite, since 2026-09-15: Tom's Commander deck
-                   aid, kept in the repo only so it stays published. Tom: "Take
-                   Clex out of the eco system completely." It loads nothing from
-                   shared/, reads and writes no suite data, and is in no dock,
-                   review, backup or client build. Its own brief governs it.
-                   Never change anything in shared/ for CLEX's sake.
+clex/              GONE from the repo, 2026-09-16. Tom's Commander deck aid
+                   left the suite on 2026-09-15 and the repo the next day. It
+                   lives in Downloads/clex, outside Motherbase, unpublished.
 style/index.html   the theme workbench. Desktop only, deliberately.
 _template/         a working starter app, copied to make a new one
 tools/             not build steps. embed-skins.py re-embeds the factory themes;
