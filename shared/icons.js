@@ -227,7 +227,7 @@ const ROLES = {
    so the home screen and tools/make-icons.html cannot disagree. Six slots
    for twelve apps, so two share a slot where they never sit side by side;
    HOME and STYLE wear the accent. */
-const APP_SLOT = { block: 1, status: 2, portion: 2, train: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6 };
+const APP_SLOT = { block: 1, system: 1, status: 2, portion: 2, train: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6, speak: 6 };
 
 /* Plain words for the ones that are not obvious from the name. Shown in
    STYLE so the database explains itself. */
