@@ -1,4 +1,4 @@
-/* ══════════════ MAIN MENU ══════════════
+﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â• MAIN MENU â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    The suite as a Windows program. Tom, 2026-09-17: "No Only Status needs a
    stand alone widget. The Main Menu can be its own program."
 
@@ -33,6 +33,8 @@ class Menu : Form
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
     [DllImport("user32.dll")] static extern IntPtr FindWindowW(string cls, string win);
+    [DllImport("user32.dll")] static extern short GetKeyState(int k);
+    const int VK_MENU = 0x12;
     const int SW_RESTORE = 9;
     const string TITLE = "Motherbase";
 
@@ -127,6 +129,19 @@ class Menu : Form
         c.NavigationCompleted += (s2, e2) =>
             Log("page loaded: " + (e2.IsSuccess ? "yes" : "NO, " + e2.WebErrorStatus));
         c.Navigate(pageUrl);
+
+        /* â”€â”€ never a one way trip â”€â”€
+           Tom, 2026-09-17: "same bug happens in other version, 1 way home
+           layer loop." A window with no browser chrome has no Back, so any
+           page that does not draw its own way out is a dead end. The mouse's
+           back button and Alt+Left work here the way they do everywhere else,
+           and Home always returns to the home screen whatever happened. */
+        /* The browser's own keys stay ON in this program, unlike the widget
+           where they are off, so Alt+Left goes back and the mouse's back
+           button works the way it does everywhere else. Everything the suite
+           navigates to with location.href leaves history behind it, so there
+           is always something to go back to. */
+        c.Settings.AreBrowserAcceleratorKeysEnabled = true;
     }
 
     Icon AppIcon()
@@ -141,7 +156,7 @@ class Menu : Form
         return SystemIcons.Application;
     }
 
-    /* ── where it was last time ──
+    /* â”€â”€ where it was last time â”€â”€
        A desktop app that opens somewhere else every morning is a small daily
        annoyance, and remembering costs one line each way. */
     void Restore()
