@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.10, 2026-09-16">
+<meta name="mb-version" content="1.0.11, 2026-09-16">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -2184,7 +2184,45 @@ function savedTwice() {
       (groups[k] = groups[k] || []).push({ type: type, date: r.date, key: r.key, fp: fp, amt: num(p.amt, 0) });
     });
   }));
-  return Object.values(groups).filter(g => g.length > 1);
+  return Object.values(groups).filter(g => g.length > 1).concat(savedTwiceBare());
+}
+/* == the same accident, with only one copy carrying its reference ==
+   Found on Tom's device 2026-09-16: 174 purchases between 15 July and 11
+   September existed twice, 64,599 pesos of spending that never happened. The
+   detector above could not see one of them, because it pairs rows by a shared
+   bank reference and only ONE copy of each pair had one. The other carried no
+   statement link and no time at all, which is what the earliest import wrote.
+
+   So this pass groups by what a person would use: same day, same amount, same
+   wording. It only claims a group when exactly one copy carries a statement
+   link and every other copy carries neither a link nor a clock. That last
+   condition is what keeps it narrow: two real rides of the same price on one
+   day are either both off the statement or both typed, and a purchase logged
+   in STATUS carries the time it was logged.
+
+   The linked copy is kept, whatever the clock says about which row was
+   touched last. "Obey the numbers from the actual files rather than whats
+   from STATUS", Tom, 2026-09-14, and his categories ride on that copy anyway:
+   156 of them against one on the bare copies. */
+function savedTwiceBare() {
+  const g = {}, out = [];
+  Rec.all('spend', {}).forEach(r => {
+    const p = r.payload || {};
+    const k = r.date + '|' + num(p.amt, 0) + '|' + String(p.note || '').trim().toLowerCase();
+    (g[k] = g[k] || []).push({ type: 'spend', date: r.date, key: r.key, fp: p.stmt || '',
+      amt: num(p.amt, 0), bare: !p.stmt && !p.t });
+  });
+  Object.keys(g).forEach(k => {
+    const a = g[k];
+    if (a.length < 2) return;
+    const linked = a.filter(x => x.fp), bare = a.filter(x => x.bare);
+    if (linked.length !== 1 || bare.length !== a.length - 1) return;
+    const grp = [linked[0]].concat(bare);
+    grp.prefer = linked[0].key;
+    grp.bareKind = 1;
+    out.push(grp);
+  });
+  return out;
 }
 function removeSavedTwice(groups) {
   const gone = [], recons = [], kept = {}, dropped = {};
@@ -2198,7 +2236,9 @@ function removeSavedTwice(groups) {
     const rc = recon(g[0].fp);
     const live = g.filter(x => !dropped[id(x)]);
     if (live.length < 2) return;
-    const keep = live.slice().sort((a, b) => {
+    /* A group that names its keeper keeps that one, full stop: for the bare
+       kind the copy carrying the bank's own link is the true one. */
+    const keep = g.prefer ? (live.find(x => x.key === g.prefer) || live[0]) : live.slice().sort((a, b) => {
       const ta = touched(a), tb = touched(b);
       if (ta !== tb) return tb > ta ? 1 : -1;
       return (rc && rc.spend === b.key ? 1 : 0) - (rc && rc.spend === a.key ? 1 : 0);
@@ -2237,11 +2277,14 @@ function drawTwice(m) {
   const extra = groups.reduce((a, g) => a + g.length - 1, 0);
   const out = groups.filter(g => g[0].type === 'spend').reduce((a, g) => a + g[0].amt * (g.length - 1), 0);
   const c = card('SAVED TWICE', 'full');
+  const bareKind = groups.filter(x => x.bareKind).length;
   c.appendChild(el('div', 'note', '<b>' + extra + '</b> line' + (extra === 1 ? '' : 's') +
     ' from a statement ' + (extra === 1 ? 'was' : 'were') + ' saved more than once' +
     (out ? ', adding <b>' + esc(money(out)) + '</b> of spending that did not happen' : '') +
-    '. Each copy has the same bank reference number, so they are one payment, not two. ' +
-    'The copy you changed most recently is kept, with its category.'));
+    '. ' + (bareKind
+      ? 'Each one is the same purchase twice: one copy carries the bank\u2019s own reference, the other carries nothing, not even a time. The copy with the reference is kept, with its category, because the bank\u2019s numbers win.'
+      : 'Each copy has the same bank reference number, so they are one payment, not two. ' +
+        'The copy you changed most recently is kept, with its category.')));
   const go = el('button', 'btn go mb-press mb-tap', 'Remove the extra copies');
   go.type = 'button';
   go.onclick = () => UI.confirm('Remove ' + extra + ' extra cop' + (extra === 1 ? 'y' : 'ies') + '?',
@@ -3664,7 +3707,7 @@ function quickFile() {
            never match anything again and clutter the list that sorts his
            history. */
         const p = payeeOf(s.bank || s.note), fromBank = !!(s.bank || s.stmt);
-        if (alwaysOn.on && fromBank && p && p.key) {
+        if (alwaysOn.on && fromBank && p && p.key && !isRail(p.key)) {
           Rec.set('rule', null, 'imp-' + norm(p.key), { match: p.key, cat: cid });
           ruleCache = null; ruled++;
         }
@@ -3718,6 +3761,19 @@ let pendingBill = [];
 /* Rent, the utilities, a subscription, the gym, the water, and anything run
    as a business cost. These are the categories a recurring bill lives in. */
 const isBillish = id => ['rent', 'utilities', 'subs', 'gym', 'water'].indexOf(id) > -1 || catGrp(id) === 'biz';
+/* BANCNET, InstaPay, PesoNet, P2M, QRPH: the pipe the money went down, not
+   who was paid. Tom, 2026-09-16: "bancnet is a type of payment service or
+   whatever that banks use, its not just for gym." A rule on one of these
+   files every future purchase that happens to travel the same way, and his
+   run had already written BANCNET as Gym and "Bancnet P2M Send" as Outside
+   food, which between them claimed 34 purchases nobody had looked at. A rail
+   can never be a payee, so it can never become a rule. */
+const RAILS = ['bancnet', 'instapay', 'pesonet', 'p2m', 'qrph', 'ppi'];
+const isRail = name => {
+  const n = norm(name);
+  if (!n) return true;
+  return RAILS.some(w => n === w || n.indexOf(w) === 0 && n.length <= w.length + 10);
+};
 const billNameFor = s => {
   const p = payeeOf(s.bank || s.note);
   return String((p && (p.label || p.key)) || s.note || 'A bill').slice(0, 40);
@@ -4996,6 +5052,10 @@ function spendSheet(s) {
         if (!cat.get()) { UI.toast('pick a category first', { bad: true }); return false; }
         const word = payeeOf(s.bank || s.note).key;
         if (!word) { UI.toast('nothing in the description to make a rule from', { bad: true }); return false; }
+        if (isRail(word)) {
+          UI.toast('<b>' + esc(word) + '</b> is how the money travelled, not who was paid. A rule on it would file everything that went the same way', { bad: true, ms: 6000 });
+          return false;
+        }
         Rec.set('rule', null, 'imp-' + norm(word), { match: word, cat: cat.get() });
         ruleCache = null;
         setMark(s, { cat: cat.get(), tag: tagNow(), big: big.on ? 1 : 0 });

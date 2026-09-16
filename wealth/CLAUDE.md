@@ -968,6 +968,45 @@ Rows from statements went from 369 purchases, 20 payments and 30 transfers to
 194, 10 and 15, with no pair left and no "already imported" record pointing
 at a row that is gone.
 
+### The copies with no reference at all
+
+Found on his device 2026-09-16, while looking at something else: **174
+purchases between 15 July and 11 September existed twice, ₱64,599 of spending
+that never happened.** SAVED TWICE could not see a single one of them.
+
+Its finder pairs rows by a shared bank reference, and only one copy of each
+pair had one. The other carried no statement link and no time: what the
+earliest import wrote, before either was recorded. So the card that exists
+precisely for this stayed silent while a quarter of his spending was double
+counted, which is the failure the root brief means by a check that names a
+symptom.
+
+`savedTwiceBare` pairs on what a person would use, same day, same amount, same
+wording, and claims a group **only when exactly one copy carries a statement
+link and every other copy carries neither a link nor a clock**. That condition
+is the whole safety: two real rides of the same price on one day are either
+both off the statement or both typed, and anything logged in STATUS carries
+the time it was logged. The linked copy is kept whatever the clock says about
+which row was touched last, because the bank's numbers win and his categories
+ride on that copy anyway, 156 of them against one.
+
+Watched on seeded rows: a linked copy plus a bare copy was claimed and the
+bare one removed, keeping the category; two real rides with different
+references were left alone; a purchase typed with a time beside its bank line
+was left alone; undo put everything back.
+
+### A payment rail is not a shop
+
+Tom, 2026-09-16: *"bancnet is a type of payment service or whatever that banks
+use, its not just for gym."* He is right, and the quick run had already
+written **BANCNET → Gym** and **Bancnet P2M Send → Outside food**, which
+between them claimed 34 purchases nobody had ever looked at.
+
+BANCNET, InstaPay, PesoNet, P2M, QRPH and PPI are the pipe the money went
+down. `isRail` knows them, and a rule can never be written on one: not from a
+quick run, and not from the ALWAYS button, which says why. Such a line has no
+payee, so it files one purchase and nothing else.
+
 ### A PDF that is only a picture of the pages
 
 Tom, 2026-09-14, with his UnionBank history saved through Microsoft's Print to
