@@ -567,6 +567,41 @@ pace, shown as "about", because the pace is his rough figure. It sits on the
 client's row in CLIENTS and in their sheet, where it follows what is typed
 before it is saved.
 
+### Who sent it, when it arrived as a number
+
+Tom, 2026-09-16: *"someone sends me 2k every so often and 1k recently, that's
+Arturo he borrows my parking slot sometimes."* Money from a person arrives as
+"Transfer from 09267390244 to 09565330105", the same number every time, and
+MONEY IN used that wording as the payment's name. A payment he could recognise
+in one second read as a mystery every month.
+
+`payerOf` reads the sender out of the bank's wording: a GCash number, a bank
+and the last four digits, or a name and a bank code. The name he gives it
+lives in the `wealth.payers` setting, keyed on that, so **every payment from
+that sender, past and future, wears the name**. The name is typed on the
+payment's own sheet under "Who sent it", and the row's menu is a shortcut to
+the same field rather than a second copy of it. A sender with no name still
+shows the bank's wording, because that is the truth rather than a blank.
+
+**A payer is not a client, deliberately.** A client is somebody he coaches,
+with a cycle and payments the app expects. Arturo pays for a parking slot when
+he uses it, and inventing a client for that would put a made-up schedule in the
+one place that has to stay honest about what is owed.
+
+Watched: all three wordings read correctly, "Pillows Renewal Pt. 1" and a
+purchase read as no payer at all, and naming 09267390244 made his three
+payments, ₱2,000 in July, ₱2,000 in August and ₱1,000 in September, read
+Arturo.
+
+### A payment sheet must merge, like everything else
+
+Found while adding the above, and older than it: `paidSheet` rebuilt the whole
+payload on save, so editing an imported payment dropped `stmt`, the link to
+the statement line it came from. The "already imported" record then pointed at
+a row with no link, and reading that file again would have added the payment a
+second time. It merges now. The calcium bug, in the money app, found by
+reading rather than by anybody noticing.
+
 ### One-offs
 
 A `paid` row with no client is a one-off: a commercial, a workshop, anything.

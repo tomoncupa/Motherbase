@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.11, 2026-09-16">
+<meta name="mb-version" content="1.0.12, 2026-09-16">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -3033,8 +3033,10 @@ function drawIn(m) {
     const list = el('div', 'list');
     got.slice(0, 40).forEach(p => {
       const c = p.client ? Rec.get('client', null, p.client) : null;
-      const r = itemRow(c ? c.name : (p.note || 'One-off'),
-        Day.short(p.date) + ' · ' + esc(acctName(p.acct)) + (c && p.note ? ' · ' + esc(p.note) : ''),
+      const named = !c && payerName(p.note);
+      const r = itemRow(paidTitle(p),
+        Day.short(p.date) + ' · ' + esc(acctName(p.acct)) +
+        ((c || named) && p.note ? ' · ' + esc(p.note) : ''),
         money(num(p.amt, 0)), 'in');
       r.onclick = () => paidSheet(p); r.menu = () => paidMenu(p);
       list.appendChild(r);
@@ -3761,6 +3763,58 @@ let pendingBill = [];
 /* Rent, the utilities, a subscription, the gym, the water, and anything run
    as a business cost. These are the categories a recurring bill lives in. */
 const isBillish = id => ['rent', 'utilities', 'subs', 'gym', 'water'].indexOf(id) > -1 || catGrp(id) === 'biz';
+/* == who sent it ==
+   Tom, 2026-09-16: "someone sends me 2k every so often and 1k recently,
+   that's Arturo he borrows my parking slot sometimes." Money in from a person
+   arrives as a number: "Transfer from 09267390244 to 09565330105", the same
+   number every time, and MONEY IN showed that wording as the name of the
+   payment. So a payment he could recognise in one second read as a mystery
+   every month.
+
+   A name book fixes it once: the key is whatever the bank prints about the
+   sender, the value is the name he gives it, and every past and future
+   payment from that sender wears the name. The book is a setting, so it
+   travels in a backup. Nothing is guessed: a sender with no name in the book
+   still shows the bank's own wording, which is the truth rather than a blank.
+
+   This is deliberately NOT a client. A client is somebody he coaches, with a
+   cycle and expected payments; Arturo pays for a parking slot when he uses
+   it, and inventing a client for that would put a made-up schedule in the one
+   place that has to stay honest about what is owed. */
+function payerOf(note) {
+  const d = String(note || '').replace(/\s+/g, ' ').trim();
+  let m;
+  if ((m = d.match(/transfer from (\d{10,13}) to \d{10,13}/i))) return { key: m[1], label: m[1] };
+  if ((m = d.match(/received (?:gcash )?from (.+?) with account ending in (\d{4})/i)))
+    return { key: norm(m[1]) + ':' + m[2], label: m[1].trim() + ' ' + m[2] };
+  if ((m = d.match(/received from ([A-Za-z][A-Za-z .'-]{2,60}?) ([A-Za-z]{2,6}) \d{4,}/i)))
+    return { key: norm(m[1]) + ':' + norm(m[2]), label: m[1].trim() + ' ' + m[2] };
+  return null;
+}
+const payerBook = () => S.get('payers', {}) || {};
+function payerName(note) {
+  const p = payerOf(note);
+  if (!p) return '';
+  return payerBook()[p.key] || '';
+}
+function namePayer(note, name) {
+  const p = payerOf(note);
+  if (!p) return false;
+  const book = Object.assign({}, payerBook());
+  if (name) book[p.key] = name; else delete book[p.key];
+  S.set('payers', book);
+  return true;
+}
+/* What a payment should be called: the client, else the name he gave the
+   sender, else what he typed, else the bank's own wording. */
+function paidTitle(p) {
+  const c = p.client ? Rec.get('client', null, p.client) : null;
+  if (c) return c.name;
+  const nm = payerName(p.note);
+  if (nm) return nm;
+  return p.note || 'One-off';
+}
+
 /* BANCNET, InstaPay, PesoNet, P2M, QRPH: the pipe the money went down, not
    who was paid. Tom, 2026-09-16: "bancnet is a type of payment service or
    whatever that banks use, its not just for gym." A rule on one of these
@@ -4245,6 +4299,16 @@ function paidSheet(existing, preset) {
       b.appendChild(fld('Into', acct));
       const note = UI.field('text', { placeholder: 'Commercial, workshop, anything', value: existing ? existing.note || '' : '' });
       b.appendChild(fld('What was it', note));
+      /* A payment that arrived as an account number can be given a name, once,
+         and every other payment from that sender wears it too. */
+      const pr = existing ? payerOf(existing.note) : null;
+      let payer = null;
+      if (pr) {
+        payer = UI.field('name', { placeholder: 'Arturo', value: payerBook()[pr.key] || '' });
+        b.appendChild(fld('Who sent it', payer));
+        b.appendChild(el('div', 'note', 'The bank calls this sender <b>' + esc(pr.label) +
+          '</b>. Give it a name and every payment from them, past and future, is called that.'));
+      }
       const date = dateField(existing ? existing.date : (preset && preset.date));
       b.appendChild(fld('When', date));
       let hhmm = existing ? timeOf(existing) : timeOf({ t: Date.now() });
@@ -4266,10 +4330,16 @@ function paidSheet(existing, preset) {
         const key = existing ? existing.key : newId();
         const d = existing ? existing.date : date.value;
         if (existing && existing.date !== date.value) Rec.del('paid', existing.date, existing.key);
-        Rec.set('paid', date.value, key, {
+        /* Merge, never rebuild. An imported payment carries `stmt`, the link
+           to the statement line it came from, and rebuilding the payload
+           dropped it: the "already imported" record then pointed at a row
+           with no link, and reading the same file again would have added the
+           payment a second time. The calcium bug, in the money app. */
+        Rec.set('paid', date.value, key, merge(existing, {
           amt: v, acct: acct.get(), client: who.get(), note: note.value.trim(),
-          t: stampFor(date.value, hhmm), src: 'hand',
-        });
+          t: stampFor(date.value, hhmm), src: existing ? existing.src || 'hand' : 'hand',
+        }));
+        if (payer) namePayer(existing.note, payer.value.trim());
         S.set('lastAcct', acct.get());
         Mobile.feedback('success');
         /* The moment he has the information is the moment to ask. Telling the
@@ -5964,8 +6034,14 @@ function dueMenu(e) {
   return [{ label: 'Log this payment', fn: () => payFor(e) }, { label: 'Open ' + e.client.name, fn: () => clientSheet(e.client) }];
 }
 function paidMenu(p) {
-  return [{ label: 'Edit', fn: () => paidSheet(p) }, '-',
-    { label: 'Delete payment', kind: 'bad', fn: () => removeWithUndo('paid', p.date, p.key, money(num(p.amt, 0)) + ' in') }];
+  const pr = payerOf(p.note);
+  return [{ label: 'Edit', fn: () => paidSheet(p) },
+    /* The sheet is where the name is typed; the menu is a shortcut to it, so
+       there is one route and no second copy of the same field (law 6). */
+    pr ? { label: payerBook()[pr.key] ? 'Rename ' + payerBook()[pr.key] : 'Name who sent this',
+      fn: () => paidSheet(p) } : null,
+    '-',
+    { label: 'Delete payment', kind: 'bad', fn: () => removeWithUndo('paid', p.date, p.key, money(num(p.amt, 0)) + ' in') }].filter(Boolean);
 }
 function spendMenu(x) {
   return [
