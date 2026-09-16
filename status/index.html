@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.24, 2026-09-17">
+<meta name="mb-version" content="1.0.25, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -599,7 +599,7 @@ body.deskmini nav { display: none; }
    backup reminder is raised again the moment the whole app is open. */
 body.deskmini .mb-toast { display: none; }
 body.deskmini #deskbar {
-  display: flex; flex-direction: column; gap: var(--s-3);
+  display: flex; flex-direction: column; gap: var(--s-2);
   height: 100vh; padding: var(--s-3); background: var(--surface-1);
   position: relative; z-index: 4;
 }
@@ -626,11 +626,15 @@ html.deskhost header { padding-right: var(--s-7); }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.deskopen {
+  display: block; width: 100%; text-align: left; padding: 0;
+  background: none; border: 0; color: inherit; font: inherit; cursor: pointer;
+}
 .deskwhen { font-size: var(--f-1); color: var(--text-muted); margin-top: var(--s-1); }
 .deskempty { font-size: var(--f-2); color: var(--text-muted); line-height: var(--lh-body); }
 
 /* one row of controls, along the bottom */
-.deskfoot { display: flex; align-items: flex-end; gap: var(--s-1); }
+.deskfoot { display: flex; align-items: center; gap: var(--s-1); }
 .deskchips { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-1); }
 .deskchip { justify-content: space-between; min-width: 92px; }
 .deskfoot { min-height: var(--tap); }
@@ -7288,11 +7292,34 @@ function deskBtn(role, label, fn) {
 
 /* ── the widget ──
    One primary thing and one row of controls. */
+/* ── one bullet sheet, everywhere ──
+   Tom, 2026-09-17: "Why is the Todo Bullet entry different from the fullsize
+   version? Todo bullet must be the same everywhere." It was different because
+   the widget had a quick capture of its own, which was already missing the
+   times and repeats and would have drifted further every time STATUS's sheet
+   grew a field. Two of anything is two things to keep in step.
+
+   So there is one sheet, STATUS's own, and writing from the widget opens the
+   whole app to show it and drops back to the widget when it closes. */
+let deskAfterSheet = 0;   /* 0 idle, 1 waiting for it to open, 2 for it to close */
+
+function deskWrite(x) {
+  const was = deskSmall;
+  if (was) { deskSetSmall(false); deskAfterSheet = 1; }
+  /* the window has to finish becoming the whole app before the sheet rises */
+  setTimeout(() => noteSheet(x, x.date || vd()), was ? 220 : 0);
+}
+
+function deskSheetWatch() {
+  if (!deskAfterSheet) return;
+  if (deskAfterSheet === 1) { if (sheetH) deskAfterSheet = 2; return; }
+  if (!sheetH) { deskAfterSheet = 0; deskSetSmall(true); }
+}
+
 function deskBar() {
   const bar = document.getElementById('deskbar');
   if (!bar) return;
   if (deskPanel === 'ask') return deskAskPanel(bar);
-  if (deskPanel === 'bullet') return deskBulletPanel(bar);
   bar.innerHTML = '';
 
   const last = deskLast();
@@ -7300,8 +7327,12 @@ function deskBar() {
     bar.appendChild(el('div', 'deskempty', 'Nothing written yet'));
   } else {
     const p = last.payload;
-    const box = el('div');
+    /* Tom asked to be able to edit it, and the thing on screen is the obvious
+       place to press. Same sheet as everywhere else. */
+    const box = el('button', 'deskopen');
+    box.title = 'Edit this';
     box.innerHTML = '<div class="deskline">' + esc(p.text) + '</div>';
+    box.onclick = () => deskWrite(Object.assign({}, p, { key: last.key, date: last.date }));
     if (p.t) {
       const w = new Date(p.t);
       let when = clockLabel(String(w.getHours()).padStart(2, '0') + ':' +
@@ -7343,7 +7374,7 @@ function deskBar() {
     const b = el('button', 'deskbtn', noteSvg(k.id));
     b.setAttribute('aria-label', k.label);
     b.title = k.label;
-    b.onclick = () => { S.set('desk.kind', k.id); deskOpen('bullet'); };
+    b.onclick = () => { S.set('desk.kind', k.id); deskWrite({ kind: k.id, text: '' }); };
     pair.appendChild(b);
   });
   foot.appendChild(pair);
@@ -7434,62 +7465,6 @@ function deskAskPanel(bar) {
   deskTitle();
 }
 
-/* Quick capture, not the journal editor. STATUS's own sheet keeps the times,
-   the repeats and the rest; this is for getting a line down without leaving
-   the widget, and it opens on Entry because that is what Tom writes from
-   here. Anything more is one click away in the whole app. */
-function deskBulletPanel(bar) {
-  bar.innerHTML = '';
-  const d = vd();
-  let kind = S.get('desk.kind', 'entry');
-
-  deskPanelHead(bar, 'NEW BULLET', deskClose);
-
-  const body = el('div', 'deskask');
-  const kinds = el('div', 'deskkinds');
-  NOTE_KINDS.forEach(k => {
-    const b = el('button', kind === k.id ? 'on' : '', noteSvg(k.id));
-    b.setAttribute('aria-label', k.label);
-    b.title = k.label;
-    b.onclick = () => {
-      kind = k.id;
-      S.set('desk.kind', kind);
-      [].forEach.call(kinds.children, c => { c.className = ''; });
-      b.className = 'on';
-      Mobile.feedback('select');
-    };
-    kinds.appendChild(b);
-  });
-  body.appendChild(kinds);
-
-  const box = UI.field('note', { rows: 3 });
-  body.appendChild(box);
-  bar.appendChild(body);
-
-  const save = () => {
-    const t = String(box.value || '').trim();
-    if (!t) return deskClose();
-    addNote(d, kind, t);
-    Mobile.feedback('success');
-    deskClose();
-  };
-  /* One line down and away. Shift+Enter is the newline, the way it is
-     everywhere else in the suite. */
-  box.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
-  });
-
-  const foot = el('div', 'deskfoot');
-  foot.appendChild(el('div', 'deskchips'));
-  const go = el('button', 'deskgo', 'SAVE');
-  go.onclick = save;
-  foot.appendChild(go);
-  bar.appendChild(foot);
-
-  if (window.Icons && Icons.paint) Icons.paint(bar);
-  deskTitle();
-  if (UI.focusSoon) UI.focusSoon(box); else setTimeout(() => box.focus(), 60);
-}
 
 /* ── the check in ──
    Mood and Energy are looked up rather than assumed, exactly as QUICK does,
@@ -7578,8 +7553,7 @@ function deskSetSmall(v) {
    STATUS's journal sheet, on Entry. */
 function deskBullet() {
   deskRaise();
-  if (deskSmall) { deskOpen('bullet'); return; }
-  noteSheet({ kind: S.get('desk.kind', 'entry'), text: '' }, vd());
+  deskWrite({ kind: S.get('desk.kind', 'entry'), text: '' });
 }
 
 function drawDeskTab(pane) {
@@ -7622,6 +7596,9 @@ if (DESK) {
      throttles a minimised window's timers to about once a minute anyway, so
      a check in is never more than a minute late. */
   setInterval(deskTick, 20000);
+  /* noteSheet has no way to tell us it closed, so this watches for it and
+     puts the widget back when the sheet it opened has gone. */
+  setInterval(deskSheetWatch, 250);
   deskRoll();
   document.addEventListener('keydown', e => {
     if (!e.ctrlKey || e.altKey || e.metaKey) return;
@@ -7633,14 +7610,21 @@ if (DESK) {
      a real Windows drag. Buttons and boxes are left alone. */
   if (HOSTED) {
     const bar = document.getElementById('deskbar');
-    if (bar) bar.addEventListener('mousedown', e => {
-      if (e.button !== 0 || !deskSmall) return;
-      if (e.target.closest('button, input, textarea, a, label')) return;
-      /* Stop the press turning into a text selection, or Windows never gets
-         the chance to start moving the window. */
-      e.preventDefault();
-      deskSend('drag');
-    });
+    /* The whole app has no title bar either, so it needs a handle of its own:
+       its header. Tom, 2026-09-17: "still cant move full version." */
+    const handle = n => {
+      if (!n) return;
+      n.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        if (e.target.closest('button, input, textarea, select, a, label')) return;
+        /* Stop the press turning into a text selection, or Windows never gets
+           the chance to start moving the window. */
+        e.preventDefault();
+        deskSend('drag');
+      });
+    };
+    handle(bar);
+    handle(document.querySelector('header'));
   }
   Rec.on(() => { if (deskSmall && !deskPanel) deskBar(); });
   /* It opens as the widget, because that is the thing he asked for. The
