@@ -49,6 +49,8 @@ COPY_FILES = ['index.html', '.nojekyll']
 #   arc/     Tom's own, since 2026-09-14
 #   speak/   Tom's own, since 2026-09-15: his content practice
 #   system/  Tom's own, since 2026-09-15: his own posts, not a client's
+#   desktop/ the Windows launcher for STATUS. Tom's machine only, and a
+#            .exe is not something to hand a client on a phone
 #   _template/ tools/ and every *.md brief - these are build notes
 DROP_APPS = ['form', 'portion', 'wealth', 'arc', 'speak', 'system']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed
