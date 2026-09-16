@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.7, 2026-09-16">
+<meta name="mb-version" content="1.0.8, 2026-09-16">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -21,6 +21,7 @@
 <script src="../shared/io.js"></script>
 <script src="../shared/health.js"></script>
 <script src="../shared/icons.js"></script>
+<script src="../shared/journal.js"></script>
 
 <style>
 /* Colours and sizes are tokens, never numbers. shared/THEMING.md is the
@@ -2669,6 +2670,25 @@ function drawMoneyTab(pane) {
     pane.appendChild(el('div', 'note', 'So ' + esc(Cur.sym(Cur.base())) + '1,000 reads as <b>' +
       esc(Cur.sym(Cur.alt()) + (ex / Cur.rate()).toFixed(2)) + '</b>.'));
   }
+
+  pane.appendChild(el('h2', null, 'BILLS AS BULLETS'));
+  pane.appendChild(UI.row('A todo bullet for every bill coming up',
+    'Written as an ordinary journal line, so it shows in STATUS on the day it is due, in QUESTS under Today and Upcoming, and in LOG. Loan repayments never get one. Paying a bill takes its bullet back.',
+    UI.toggle(billTodosOn(), v => {
+      S.set('billTodos', v ? 1 : 0);
+      if (!v) {
+        /* Off means off: every bullet it wrote and he has not ticked goes. */
+        const made = S.get('billMade', {}) || {}, hit = {};
+        Object.keys(made).forEach(k => {
+          const cur = Rec.get('note', made[k], k);
+          if (cur && !cur.done) { Rec.del('note', made[k], k); hit[made[k]] = 1; }
+        });
+        S.set('billMade', {});
+        Object.keys(hit).forEach(d => { try { Journal.publishNotes(d, 'wealth'); } catch (e) {} });
+      }
+      draw();
+    })));
+  pane.appendChild(el('div', 'note', 'Bills are read ' + BILL_TODO_DAYS + ' days ahead.'));
 }
 
 /* ══════════════════════════ the screens ══════════════════════════ */
@@ -3339,6 +3359,26 @@ function drawSpend(m) {
     '</b>. ' + esc(short(t.big)) + ' of the total was a big one-off, kept out of every average.'));
   m.appendChild(c0);
 
+  /* Uncategorised is a quarter of his spending, and the purchase sheet is
+     the wrong tool for that. Tom, 2026-09-16: "Let me categorize things
+     quick." The count is every purchase ever logged, not this period's, since
+     that is the pile the button clears. */
+  const unf = spendRows({}).filter(x => !catOf(x) && !isMove(x));
+  if (unf.length) {
+    const cu = card('UNCATEGORISED');
+    cu.appendChild(el('div', 'note', '<b>' + esc(String(unf.length)) + '</b> purchase' +
+      (unf.length === 1 ? '' : 's') + ' with no category, worth <b>' +
+      esc(money(unf.reduce((a, x) => a + num(x.amt, 0), 0))) + '</b>. ' +
+      'They are counted in every total, and they are the biggest nameless slice of your pie.'));
+    const qb = el('button', 'btn go mb-press mb-tap', 'File them quickly');
+    qb.type = 'button';
+    qb.onclick = () => quickFile();
+    const qr = el('div', 'rowbtns');
+    qr.appendChild(qb);
+    cu.appendChild(qr);
+    m.appendChild(cu);
+  }
+
   if (PERIOD === 'day') drawOneDay(m, R.from);
   if (PERIOD === 'week') drawOneWeek(m, R.from, R.to);
 
@@ -3401,7 +3441,11 @@ function drawSpend(m) {
       : outBy === 'tag' ? 'Only spending with an occasion tag is counted here.'
       : 'Big one-offs are left out, as they are everywhere.'));
   }
-  m.appendChild(c2);
+  /* Tom, 2026-09-16: "I have to scroll too much to see my pie charts." The
+     pie is the answer to "where did it go", so it sits directly under the
+     totals rather than below the allowances, the day and the food split. It
+     is built here because it needs this screen's totals, and moved up. */
+  m.insertBefore(c2, c0.nextSibling);
 
   /* Tags: why, not what. */
   const tg = Object.keys(t.byTag).map(k => ({ id: k, amt: t.byTag[k] })).sort((a, b) => b.amt - a.amt);
@@ -3465,6 +3509,166 @@ function drawSpend(m) {
   m.appendChild(c5);
 }
 let CATFILTER = null;
+
+/* ══ a bill coming up is a todo bullet ══
+   Tom, 2026-09-16: "Put the upcoming bills, aside from loans, as TODO
+   Bullets, which should automatically show up in Status and Quests and Log."
+   They do: a bullet is a `note` row, the shape STATUS owns, so STATUS shows
+   it on its due day, QUESTS lists it under Today and Upcoming, and LOG puts
+   it on the day it was written. ARC writes its skill todos the same way.
+
+   Aside from loans: a bill filed under a `move` category, which is where
+   Debt payment lives, never becomes a bullet. A GLoan repayment leaves on
+   its own and a bullet telling him to pay it is noise.
+
+   Three rules keep this from becoming a machine that fights him:
+   1. One bullet per bill per due date, written once. The day it was written
+      on is remembered in a setting, the way ARC remembers its own, so a row
+      is never written twice on two different days.
+   2. A bullet he deleted stays deleted, by its tombstone.
+   3. A bill that is paid or gone loses its bullet, unless he has ticked it.
+      Paying the bill is the thing that clears it, which is `billsOwed`, the
+      same reading FREE uses. */
+const BILL_TODO_DAYS = 30;
+const billTodosOn = () => !!S.get('billTodos', 1);
+function billTodoSync() {
+  if (!billTodosOn() || !window.Journal) return;
+  const t = Day.today(), made = S.get('billMade', {}) || {}, want = {}, touched = {};
+  let dirty = false;
+  billsOwed(t, Day.shift(t, BILL_TODO_DAYS)).forEach(x => {
+    if (catGrp(x.bill.cat) === 'move') return;
+    const k = 'wealth-bill-' + x.bill.id + '-' + x.date;
+    want[k] = 1;
+    if (made[k] || Rec.tombstone('note', t, k)) return;
+    const row = { kind: 'todo', src: 'wealth', text: 'Pay ' + x.bill.name + ', ' + money(num(x.bill.amt, 0)),
+      t: Date.now(), made: t, at: null, dur: null, ord: Rec.all('note', { date: t }).length,
+      done: 0, cancelled: 0, due: x.date, pri: 0, proj: null, rep: null };
+    Rec.set('note', t, k, row);
+    made[k] = t; dirty = true; touched[t] = 1;
+  });
+  /* Paid, or the bill is gone: take the bullet back, unless he ticked it. */
+  Object.keys(made).forEach(k => {
+    if (want[k]) return;
+    const d = made[k], cur = Rec.get('note', d, k);
+    if (cur && !cur.done) { Rec.del('note', d, k); touched[d] = 1; }
+    delete made[k]; dirty = true;
+  });
+  if (dirty) S.set('billMade', made);
+  Object.keys(touched).forEach(d => { try { Journal.publishNotes(d, 'wealth'); } catch (e) { console.warn('[wealth] journal', e); } });
+}
+
+/* ══ filing, quickly ══
+   Tom, 2026-09-16: "Let me categorize things quick." The purchase sheet asks
+   five questions and is right for one purchase; a quarter of his spending was
+   uncategorised, which is a different job. This is that job: one purchase at
+   a time, every category one tap away, and nothing else on screen.
+
+   The payee switch is one decision for the whole run rather than a question
+   per purchase, because a rule files the whole history back to the beginning
+   and that is what makes this quick rather than merely fast. */
+function quickFile() {
+  const queue = spendRows({}).filter(s => !catOf(s) && !isMove(s))
+    .sort((a, b) => b.date.localeCompare(a.date) || num(b.t, 0) - num(a.t, 0));
+  if (!queue.length) { UI.toast('nothing left to file'); return; }
+  let i = 0, filed = 0, ruled = 0;
+  UI.dialog({
+    title: 'FILE QUICKLY', width: 560,
+    body: (b, h) => {
+      const alwaysOn = { on: !!S.get('quickAlways', 1) };
+      b.appendChild(UI.row('Also file everything else from the same payee',
+        'Writes a rule, which sorts every purchase you have ever logged from that name, not just this one',
+        UI.toggle(alwaysOn.on, v => { alwaysOn.on = v; S.set('quickAlways', v ? 1 : 0); })));
+      const head = el('div', 'note', '');
+      const who = el('div', 'score');
+      const chips = el('div', 'chips');
+      b.appendChild(head); b.appendChild(who); b.appendChild(chips);
+      const done = el('div', 'empty', '');
+      done.style.display = 'none';
+      b.appendChild(done);
+      const file = cid => {
+        const s = queue[i];
+        setMark(s, { cat: cid });
+        filed++;
+        const p = payeeOf(s.bank || s.note);
+        if (alwaysOn.on && p && p.key) {
+          Rec.set('rule', null, 'imp-' + norm(p.key), { match: p.key, cat: cid });
+          ruleCache = null; ruled++;
+        }
+        Mobile.feedback('select');
+        const seedFrom = s, seedCat = cid;
+        i++;
+        paint();
+        /* The prompt into bill entry waits until the run is over, so it never
+           interrupts the rhythm this screen exists for. */
+        if (isBillish(cid)) pendingBill.push({ s: seedFrom, cat: seedCat });
+      };
+      const paint = () => {
+        if (i >= queue.length) {
+          head.innerHTML = '';
+          who.innerHTML = '';
+          chips.innerHTML = '';
+          done.style.display = '';
+          done.innerHTML = '<b>' + esc(String(filed)) + '</b> filed' +
+            (ruled ? ', and <b>' + esc(String(ruled)) + '</b> of them wrote a rule that sorted the rest of that payee’s history' : '') +
+            '. Nothing left uncategorised.';
+          return;
+        }
+        const s = queue[i];
+        head.innerHTML = '<b>' + esc(String(i + 1)) + '</b> of ' + esc(String(queue.length)) +
+          ' · ' + esc(String(filed)) + ' filed so far';
+        who.innerHTML = '<div class="cap">' + esc(Day.short(s.date)) + ' · ' + esc(acctName(s.acct)) + '</div>' +
+          '<div class="big">' + esc(money(num(s.amt, 0))) + '</div>' +
+          '<div class="sub">' + esc(s.note || 'No details') + '</div>';
+        chips.innerHTML = '';
+        cats().forEach(c => {
+          const btn = el('button', 'btn mb-press mb-tap', esc(c.name));
+          btn.type = 'button';
+          if (c.grp === 'move') btn.style.opacity = '.75';
+          btn.onclick = () => file(c.id);
+          chips.appendChild(btn);
+        });
+        const skip = el('button', 'btn mb-press mb-tap', 'Skip');
+        skip.type = 'button';
+        skip.onclick = () => { i++; paint(); };
+        chips.appendChild(skip);
+      };
+      paint();
+    },
+    actions: [{ label: 'DONE', kind: 'go', fn: () => { draw(); askBills(); return true; } }],
+    onClose: () => { draw(); askBills(); },
+  });
+}
+/* Purchases filed into a bill-shaped category during a run, asked about once
+   the run is over. Emptied as they are asked. */
+let pendingBill = [];
+/* Rent, the utilities, a subscription, the gym, the water, and anything run
+   as a business cost. These are the categories a recurring bill lives in. */
+const isBillish = id => ['rent', 'utilities', 'subs', 'gym', 'water'].indexOf(id) > -1 || catGrp(id) === 'biz';
+const billNameFor = s => {
+  const p = payeeOf(s.bank || s.note);
+  return String((p && (p.label || p.key)) || s.note || 'A bill').slice(0, 40);
+};
+/* Tom, 2026-09-16: "If I categorize something into a bill/subscription then
+   prompt me into that entry mode." Asked, never assumed: a one-off from a
+   shop that happens to be a subscription category is a real thing, and a bill
+   written behind his back would hold money back from FREE for ever. */
+function offerBill(s, cid) {
+  if (!isBillish(cid)) return Promise.resolve(false);
+  const nm = billNameFor(s);
+  if (bills().some(x => norm(x.name) === norm(nm))) return Promise.resolve(false);
+  return UI.confirm('Is ' + nm + ' a regular bill?',
+    money(num(s.amt, 0)) + ' filed as ' + catName(cid) + '. A bill is held back from FREE before it is due and comes up as a todo bullet. Every detail is yours to change on the next screen.',
+    { yes: 'SET IT UP', no: 'JUST THIS ONE' })
+    .then(ok => { if (ok) billSheet(null, {
+      name: nm, amt: num(s.amt, 0), cat: cid, acct: acctKey(s.acct),
+      day: +s.date.slice(8), cycle: 'month',
+    }); return ok; });
+}
+function askBills() {
+  const next = pendingBill.shift();
+  if (!next) return;
+  offerBill(next.s, next.cat).then(() => setTimeout(askBills, 200));
+}
 
 /* ══ BUDGETS ══
    Tom, 2026-09-16: "Give me a budgets panel." An allowance could only be
@@ -4317,26 +4521,32 @@ function packSheet(c, existing) {
 }
 
 /* a bill */
-function billSheet(existing) {
+function billSheet(existing, seed) {
+  /* `seed` fills a NEW bill in from something that already happened: a
+     purchase just filed as rent, a subscription or a utility. Tom,
+     2026-09-16: "If I categorize something into a bill/subscription then
+     prompt me into that entry mode." Only the boxes are filled; the row is
+     still new and nothing is written until SAVE. */
+  const init = existing || seed || {};
   UI.dialog({
     title: existing ? 'EDIT BILL' : 'A BILL', width: 460,
     body: (b, h) => {
-      const name = UI.field('name', { placeholder: 'Rent', value: existing ? existing.name : '' });
+      const name = UI.field('name', { placeholder: 'Rent', value: init.name || '' });
       b.appendChild(fld('What', name));
-      const amt = amountField(existing ? existing.amt : '');
+      const amt = amountField(init.amt || '');
       b.appendChild(fld('How much each time', amt));
       /* Prepaid electricity has no day of the month. So a bill is monthly on
          a day, or every N days from when it was last paid. */
       const often = chipRow([{ id: 'month', name: 'Once a month' }, { id: 'days', name: 'Every few days' }],
-        existing && existing.cycle === 'days' ? 'days' : 'month', () => paintOften());
+        init.cycle === 'days' ? 'days' : 'month', () => paintOften());
       b.appendChild(fld('How often', often));
-      const day = UI.field('number', { placeholder: '1', value: existing ? existing.day : '' });
+      const day = UI.field('number', { placeholder: '1', value: init.day || '' });
       const dayF = fld('Which day of the month', day);
       b.appendChild(dayF);
-      const every = UI.field('decimal', { placeholder: '7', value: existing && existing.every ? String(existing.every) : '' });
+      const every = UI.field('decimal', { placeholder: '7', value: init.every ? String(init.every) : '' });
       const everyF = fld('Every how many days', every);
       b.appendChild(everyF);
-      const start = dateField(existing && existing.start);
+      const start = dateField(init.start);
       const startF = fld('Last paid on', start);
       b.appendChild(startF);
       const oftenHint = el('div', 'note', '');
@@ -4355,11 +4565,11 @@ function billSheet(existing) {
       paintOften();
       const cat = picker({
         items: cats().filter(c => c.grp !== 'move').map(c => ({ id: c.id, name: c.name })),
-        value: existing ? existing.cat : '', placeholder: 'Rent, Utility Bills, Subscriptions',
+        value: init.cat || '', placeholder: 'Rent, Utility Bills, Subscriptions',
         onCreate: n => makeCat(n, 'fix'),
       });
       b.appendChild(fld('Category', cat));
-      const acct = chipRow(accts().map(a => ({ id: a.id, name: a.name })), existing ? existing.acct : '', null, { blank: 'Not set' });
+      const acct = chipRow(accts().map(a => ({ id: a.id, name: a.name })), init.acct || '', null, { blank: 'Not set' });
       b.appendChild(fld('Paid from', acct));
       h.save = () => {
         const n = name.value.trim();
@@ -4661,6 +4871,7 @@ function spendSheet(s) {
          through `merge`, which keeps every field STATUS put there. */
       let hhmm = timeOf(s);
       b.appendChild(fld('Time', UI.timeField(hhmm, v => { hhmm = v; })));
+      const was = catOf(s);
       h.save = () => {
         setMark(s, { cat: cat.get(), tag: tagNow(), big: big.on ? 1 : 0 });
         if (hhmm !== timeOf(s)) {
@@ -4668,6 +4879,10 @@ function spendSheet(s) {
           if (row) Rec.set('spend', s.date, s.key, merge(row, { t: stampFor(s.date, hhmm) }));
         }
         Mobile.feedback('success');
+        /* Filing something as rent, a utility or a subscription is the moment
+           to ask whether it is a bill. After the sheet has closed, so the
+           question is not stacked on top of the answer. */
+        if (cat.get() && cat.get() !== was) setTimeout(() => offerBill(s, cat.get()), 250);
         return true;
       };
       /* "Always" writes a rule off this description, so it files the whole
@@ -5795,6 +6010,10 @@ function draw() {
   drawNav();
   const m = document.getElementById('main');
   m.innerHTML = '';
+  /* The bullets follow the bills, so they are brought into step here rather
+     than only at boot: filing a purchase can pay a bill off, and the bullet
+     should go with it. */
+  try { billTodoSync(); } catch (e) { console.warn('[wealth] bill bullets', e); }
   try {
     if (TAB === 'score') drawScore(m);
     else if (TAB === 'in') drawIn(m);

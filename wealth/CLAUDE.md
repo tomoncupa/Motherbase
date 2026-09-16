@@ -666,6 +666,71 @@ card with ₱24,870, ₱6,749 and ₱11,600 a month. With ₱20,000 rent and an
 ₱8,000 Groceries bill, runway counted ₱20,000 of bills and FREE held back
 ₱28,000.
 
+## A bill coming up is a todo bullet
+
+Tom, 2026-09-16: *"Put the upcoming bills, aside from loans, as TODO Bullets,
+which should automatically show up in Status and Quests and Log."* They do,
+because a bullet is a `note` row, the shape STATUS owns. WEALTH writes one per
+bill per due date, 30 days ahead, the way ARC writes its skill todos. STATUS
+shows it on its due day, QUESTS lists it under Today and Upcoming, LOG shows
+it on the day it was written, since LOG's reader does not know `due` yet.
+
+**Aside from loans** means a bill under a `move` category, which is where Debt
+payment lives, never gets one. A GLoan repayment leaves on its own.
+
+Three rules stop it fighting him. One bullet per bill per due date, and the
+day it was written on is kept in the `wealth.billMade` setting, the way ARC
+keeps its own, so it cannot be written twice on two days. A bullet he deleted
+stays deleted, by its tombstone. A bill that is paid or gone loses its bullet
+unless he has ticked it, and paid means `billsOwed`, the same reading FREE
+uses. The switch is in settings under BILLS AS BULLETS; turning it off takes
+back every bullet it wrote and he has not ticked.
+
+Watched: a utility bill due in three days got "Pay ZT Internet, ₱1,699" due on
+that day; a GLoan bill on the same day got nothing; QUESTS showed it under
+Upcoming and not Today; `Journal.notes` had it on the due day, which is what
+STATUS reads; logging a matching purchase took the bullet back.
+
+## Filing, quickly
+
+Tom, 2026-09-16: *"Let me categorize things quick."* A quarter of his spending
+was uncategorised, ₱18,867 of September, the second biggest slice of his own
+pie. The purchase sheet asks five questions and is right for one purchase.
+
+UNCATEGORISED on SPENDING counts every purchase with no category, ever, not
+just this period's, and **File them quickly** runs them newest first: one
+purchase, every category one tap away, a Skip, and nothing else. The payee
+switch at the top is one decision for the whole run rather than a question per
+purchase, because a rule sorts that payee's whole history and that is what
+makes it quick rather than merely fast. It is remembered in `wealth.quickAlways`.
+
+### Filing something as a bill offers to make it one
+
+Tom, same day: *"If I categorize something into a bill/subscription then prompt
+me into that entry mode."* Filing a purchase into Rent, Utility Bills,
+Subscriptions, Gym, Drinking Water or any business category asks whether it is
+a regular bill, and **SET IT UP** opens the bill sheet with the name, the
+amount, the category, the account and the day of the month already in it.
+`billSheet(null, seed)` fills the boxes; the row is still new and nothing is
+written until SAVE.
+
+Asked, never assumed: a one-off from a shop in a subscription category is a
+real thing, and a bill written behind his back would hold money back from FREE
+for ever. In a quick run the questions wait until the run is over, so they
+never interrupt its rhythm. A bill whose name already exists is not asked
+about again.
+
+Watched: a ₱320 purchase filed as Subscriptions asked, and SET IT UP opened
+the sheet with its name, ₱320, and day 15, the day it was bought.
+
+## Where it went sits under the totals
+
+Tom, 2026-09-16: *"I have to scroll too much to see my pie charts."* The pie
+is the answer to "where did it go", so WHERE IT WENT is now the first card
+under the totals on SPENDING, above the allowances, the day and the food
+split. It is still built where it was, because it needs that screen's totals,
+and moved up with one `insertBefore`.
+
 ## Import, and what it took
 
 **Statement import.** Built 2026-09-11. Tom: *"the purpose of the statement
