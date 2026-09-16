@@ -221,6 +221,11 @@ class App : Form
             if (mode == "widget") { posX = Left; posY = Top; SaveCfg(); }
             Activate();
             if (ready) web.Focus();
+            /* Handing the focus back was not enough: the drag still went stiff
+               until Tom maximised and minimised, which told us what does work.
+               A resize is what puts the web view's input back, so this does the
+               smallest one there is. */
+            Jog();
             return;
         }
         if (verb == "quit") { Quit(); return; }
@@ -241,9 +246,9 @@ class App : Form
                where the widget already is, and only moves as far as it must
                to stay on the screen. */
             mode = "app";
-            int wasX = Left, wasY = Top;
+            int right = Left + Width, top = Top;
             ClientSize = new Size(w, h);
-            Nudge(wasX, wasY);
+            KeepCorner(right, top);
             Round();
         }
         else if (verb == "checkin")
@@ -283,15 +288,29 @@ class App : Form
         Location = new Point(x, y);
     }
 
-    /* Stay where you were, and only move to get back on the screen. */
-    void Nudge(int x, int y)
+    /* One resize, one pixel, there and back. Nothing else reliably wakes the
+       web view's input up after Windows' move loop has had it. */
+    void Jog()
     {
-        var wa = Screen.FromPoint(new Point(x + 20, y + 20)).WorkingArea;
-        if (x + Width > wa.Right) x = wa.Right - Width;
-        if (y + Height > wa.Bottom) y = wa.Bottom - Height;
+        var was = ClientSize;
+        ClientSize = new Size(was.Width, was.Height + 1);
+        ClientSize = was;
+    }
+
+    /* ── the chevron never moves ──
+       Tom, 2026-09-17: "I want the resize button to never change location,
+       let the max view clip through the bottom of the screen if needed." It
+       lives in the window's top right corner, so keeping THAT corner still
+       keeps the button still, whatever size the window becomes. The bottom is
+       deliberately not clamped: he would rather the app ran off the screen
+       than have the button jump. */
+    void KeepCorner(int right, int top)
+    {
+        var wa = Screen.FromPoint(new Point(right - 20, top + 20)).WorkingArea;
+        int x = right - Width;
         if (x < wa.Left) x = wa.Left;
-        if (y < wa.Top) y = wa.Top;
-        Location = new Point(x, y);
+        if (top < wa.Top) top = wa.Top;
+        Location = new Point(x, top);
     }
 
     void Centre()
