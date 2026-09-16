@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.13, 2026-09-17">
+<meta name="mb-version" content="1.0.15, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -7044,7 +7044,23 @@ Day.on(() => { TD.tick(); draw(); });
 
 const DESK = /[?&]desktop=1/.test(location.search);
 const DESK_NAME = 'STATUS Desktop tracker';
-const DESK_W = 320;
+/* STATUS.exe hosts this page itself, so there is a proper channel to it and
+   the window title is no longer a message pipe. The old Chrome launcher had
+   only the title, and both are spoken while it still exists. */
+const HOSTED = !!(window.chrome && window.chrome.webview);
+/* The widget sits in a corner and is glanced at. The check in is meant to be
+   in the way, so it is wider as well as centred. */
+const DESK_WIDE = 460;
+function deskW() { return deskPanel === 'ask' ? DESK_WIDE : 320; }
+let deskSaid = '';
+function deskSend(m) {
+  if (!HOSTED || m === deskSaid) return;
+  /* Saying the same thing twice is a window resize for nothing. Seeding the
+     fields on a first run redrew the widget twenty times in one second, and
+     every one of those was an identical message. */
+  deskSaid = m;
+  try { window.chrome.webview.postMessage(m); } catch (e) {}
+}
 /* how often a check in comes round, and between which hours */
 const DESK_DEF = { on: 1, min: 60, max: 90, from: 8, to: 21 };
 
@@ -7082,18 +7098,22 @@ function deskSize() {
     h += k.offsetHeight + (n ? gap : 0);
     n++;
   });
-  return { w: DESK_W, h: Math.max(80, Math.ceil(h)) };
+  return { w: deskW(), h: Math.max(80, Math.ceil(h)) };
 }
 
 function deskTitle() {
   if (!DESK) return;
   let t = DESK_NAME;
-  if (deskSmall) {
-    const s = deskSize();
-    t += ' · small' + (s ? ' ' + s.w + 'x' + s.h : '');
-  }
+  const s = deskSmall ? deskSize() : null;
+  if (deskSmall) t += ' · small' + (s ? ' ' + s.w + 'x' + s.h : '');
   if (deskShowing) t += ' · show';
   document.title = t;
+  if (!HOSTED) return;
+  /* `checkin` is the one that interrupts: the host centres it, brings it in
+     front of whatever he is doing and takes the focus, so answering is the
+     easy path rather than something to notice and come back to. */
+  if (deskSmall && s) deskSend((deskPanel === 'ask' ? 'checkin' : 'widget') + '|' + s.w + '|' + s.h);
+  else if (!deskSmall) deskSend('app|660|920');
 }
 
 function deskRaise() {
@@ -7114,6 +7134,19 @@ function deskRoll() {
   deskNext = Date.now() + (lo + Math.random() * (hi - lo)) * 60000;
 }
 
+/* ── one at night ──
+   Tom, 2026-09-17: "It can fire outside quite hours, but just once - I leave
+   my pc on all night." So the quiet hours are not silent any more, they are
+   once. The small hours belong to the night before, or he would get one at
+   half eleven and another at half twelve and call that a stream.            */
+function deskNightKey(now) {
+  const c = deskCfg();
+  const d = new Date(now);
+  if (now.getHours() < c.from) d.setDate(d.getDate() - 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+         String(d.getDate()).padStart(2, '0');
+}
+
 /* Inside the hours he set. A window whose end is before its start runs
    through midnight, so 22 to 6 means the night. */
 function deskAwake(now) {
@@ -7128,7 +7161,12 @@ function deskTick() {
   if (!deskNext) { deskRoll(); return; }
   if (Date.now() < deskNext) return;
   deskRoll();
-  if (!deskAwake(new Date())) return;      /* silent outside the hours */
+  const now = new Date();
+  if (!deskAwake(now)) {
+    const night = deskNightKey(now);
+    if (S.get('desk.night', '') === night) return;   /* already had its one */
+    S.set('desk.night', night);
+  }
   /* A question left unanswered used to block every one after it for ever,
      because nothing cleared the flag unless he pressed something. Fifteen
      minutes and it stops holding the door. */
@@ -7476,7 +7514,6 @@ function drawDeskTab(pane) {
 }
 
 if (DESK) {
-  deskTitle();
   /* The whole app needs a way INTO Mini mode; the widget carries its own way
      out. One button in the header, and only when the launcher opened the
      page. */
@@ -7501,15 +7538,27 @@ if (DESK) {
     e.preventDefault();
     deskBullet();
   });
+  /* The host owns the window, so a press on the widget's background starts
+     a real Windows drag. Buttons and boxes are left alone. */
+  if (HOSTED) {
+    const bar = document.getElementById('deskbar');
+    if (bar) bar.addEventListener('mousedown', e => {
+      if (e.button !== 0 || !deskSmall) return;
+      if (e.target.closest('button, input, textarea, a, label')) return;
+      deskSend('drag');
+    });
+  }
   Rec.on(() => { if (deskSmall && !deskPanel) deskBar(); });
   /* It opens as the widget, because that is the thing he asked for. The
      whole app is one click away, and the choice is remembered. */
+  /* Decide before saying anything. Telling the host what to be while the
+     answer is still the default made a 660x920 window flash up and shrink. */
   if (S.get('desk.small', 1)) {
     deskSmall = true;
     document.body.classList.add('deskmini');
     deskBar();
     Rec.ready(() => { if (deskSmall && !deskPanel) deskBar(); });
-  }
+  } else deskTitle();
 }
 </script>
 </body>
