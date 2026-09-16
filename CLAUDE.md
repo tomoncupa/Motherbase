@@ -154,10 +154,19 @@ desktop/           STATUS Desktop tracker, built 2026-09-16: STATUS as a
                    window and puts its own back when it repaints, and asks
                    Windows for rounded corners and no border, which it logs
                    as accepted or refused rather than assuming. The widget's
-                   size comes from the page, which measures itself. A
-                   window left frameless by a launcher that was killed gets
-                   its frame back next time one starts. Windows only, Tom
-                   only, left out of the client build. See desktop/README.md.
+                   size comes from the page, which measures itself, and is
+                   applied to the CLIENT area rather than the window, so a
+                   frame appearing for any reason can never clip the page.
+                   One copy at a time: a second launch raises the widget
+                   instead of starting another launcher, because the second
+                   one's orphan repair could not tell a window left behind by
+                   a dead launcher from the widget a live one was holding, and
+                   put the title bar back on it. A window left frameless by a
+                   launcher that was killed still gets its frame back next
+                   time one starts. The bullet shortcut is any combination he
+                   presses into the tray menu's Choose my own, not one of a
+                   list. Windows only, Tom only, left out of the client build.
+                   See desktop/README.md.
 portion/index.html FOODDÉX, called PORTION until 2026-09-14. A label in, the
                    amounts you eat out. A desktop app, and the second writer
                    of `food` alongside STATUS. The folder and the app id stay
