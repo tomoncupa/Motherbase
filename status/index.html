@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.11, 2026-09-16">
+<meta name="mb-version" content="1.0.12, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -588,7 +588,7 @@ body.deskmini nav { display: none; }
    backup reminder is raised again the moment the whole app is open. */
 body.deskmini .mb-toast { display: none; }
 body.deskmini #deskbar {
-  display: flex; flex-direction: column; gap: var(--s-3);
+  display: flex; flex-direction: column; gap: var(--s-5);
   height: 100vh; padding: var(--s-4); background: var(--surface-1);
   position: relative; z-index: 4;
 }
@@ -605,8 +605,13 @@ body.deskmini #deskbar {
 
 /* one row of controls, along the bottom */
 .deskfoot { display: flex; align-items: center; gap: var(--s-1); }
-.deskchips { display: flex; align-items: center; gap: var(--s-3); margin-right: auto; }
-.deskchip { display: flex; align-items: center; gap: var(--s-1); font-size: var(--f-2); color: var(--text-2); }
+.deskchips { display: flex; align-items: baseline; gap: var(--s-4); margin-right: auto; }
+.deskchip { display: flex; align-items: baseline; gap: var(--s-1); }
+.deskchip span {
+  font-size: var(--f-1); color: var(--text-muted);
+  letter-spacing: var(--track-cap); text-transform: uppercase;
+}
+.deskchip b { font-size: var(--f-2); color: var(--text-2); font-weight: var(--w-bold); }
 .deskbtn {
   min-width: var(--tap); min-height: var(--tap); flex: none;
   display: flex; align-items: center; justify-content: center;
@@ -619,7 +624,9 @@ body.deskmini #deskbar {
   display: flex; align-items: center; justify-content: center;
   border: 0; border-radius: var(--radius-full); cursor: pointer;
   background: var(--accent); color: var(--accent-fg);
+  transition: background var(--dur-fast) var(--ease-out);
 }
+.deskfab:hover { background: var(--accent-hover); }
 
 /* the two panels the widget turns into. Spacing says what belongs together:
    4 between a label and its control, 16 between one question and the next. */
@@ -3359,7 +3366,11 @@ function drawNav() {
   /* Two switches, not one. Tom, 2026-09-03: the tile off, the tab on. Wanting
      the number off your main screen is a different wish from not tracking
      money at all, and one toggle for both made you choose between them. */
-  NAV.filter(t => t[0] !== 'money' || S.get('moneyTab', 1)).forEach(t => {
+  /* Food goes with counting rather than having a switch of its own. Every
+     screen behind that tab is a way of counting something, so leaving it up
+     while nothing is counted is a door onto the thing you just turned off. */
+  NAV.filter(t => (t[0] !== 'money' || S.get('moneyTab', 1))
+                  && (t[0] !== 'food' || countCal())).forEach(t => {
     const b = el('button', TAB === t[0] ? 'on' : '', '<span class="g">' + t[1] + '</span>' + t[2]);
     b.onclick = () => {
       if (TAB === t[0]) return;
@@ -3536,12 +3547,28 @@ function statReading(id, d) {
 /* Everything that could be the big one. Calories first because it is the
    default and the one most people mean. */
 function heroChoices() {
-  return [{ id: '@kcal', label: 'Calories' }, { id: '@protein', label: 'Protein' }]
+  /* Not counting: neither is a reading any more, so neither is on offer. */
+  return (countCal() ? [{ id: '@kcal', label: 'Calories' },
+                        { id: '@protein', label: 'Protein' }] : [])
     .concat(liveFields().map(f => ({ id: f.id, label: f.label })));
 }
 const heroPick = () => S.get('heroStat', '@kcal');
 function heroReading(d) {
-  return statReading(heroPick(), d) || statReading('@kcal', d);
+  const pick = heroPick();
+  /* A stored pick of calories or protein has to give way when counting goes
+     off, or the top of Today is a number nothing can change any more. Steps
+     takes over where it is tracked, because it is the one that moves all day
+     and it is already the second thing most people look at. */
+  if (!countCal() && (pick === '@kcal' || pick === '@protein')) {
+    const live = liveFields();
+    const stand = live.filter(f => /step/i.test(f.id))[0] || live[0];
+    /* Every field off and nothing counted is a screen with no reading on it
+       at all. Vanishingly unlikely, and still not a reason to throw. */
+    return stand ? statReading(stand.id, d)
+                 : { id: '', label: 'Today', now: null, target: null, unit: '', word: '' };
+  }
+  return statReading(pick, d) || statReading(countCal() ? '@kcal' : pick, d)
+      || { id: '', label: 'Today', now: null, target: null, unit: '', word: '' };
 }
 
 /* Which pillar a field is. The names in PILLARS are the ideas - sleep, steps,
@@ -3661,7 +3688,11 @@ function islandCard(d, opts) {
   const live = PILLARS();
   const isPillar = id => live.indexOf(pillarKey(id)) > -1;
   /* Whatever is the big number at the top does not also need a tile. */
-  const heroId = heroPick();
+  /* What the hero ACTUALLY turned out to be, not what was stored. The two can
+     differ now: a client who had calories at the top and then stopped counting
+     gets steps up there instead, and filtering the tiles on the stored pick
+     left steps on screen twice, once big and once small. */
+  const heroId = h.id || heroPick();
 
   liveFields().filter(f => dueToday(f, d) && f.id !== heroId).forEach(f => {
     const v = value(d, f.id);
@@ -3680,7 +3711,7 @@ function islandCard(d, opts) {
     made.push({ key: f.id, node: tile(f.label, tileValue(f, v), f.unit, cls, () => fieldSheet(f, d), pct,
       lf != null && lf >= 1 ? Math.round(lf) + (f.unit || '') + ' left' : null) });
   });
-  if (heroId !== '@protein') {
+  if (countCal() && heroId !== '@protein') {
     made.push({ key: '@protein', node: tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', 'pillar' + (t.p ? '' : ' todo'), () => { TAB = 'food'; draw(); }, t.p / (TARGETS().p || 1)) });
   }
   /* Two different questions, and both have to say yes. `opts.money` is the
@@ -4333,6 +4364,10 @@ function accuracy(v, target, free) {
 
 /** the letter for one pillar on one day, or null if it does not apply */
 function pillarLetter(id, v, target) {
+  /* Sent or not sent, and nothing in between. Answered here rather than as a
+     rung in STANDARDS, because STANDARDS is a stored setting: anyone who had
+     already edited theirs would never see a key added to the default later. */
+  if (id === SENT) return v ? 'S' : 'F';
   const st = STANDARDS();
   if (id === 'kcal' || id === 'protein') {
     /* Protein is always free above the target. Calories are whichever way
@@ -4389,7 +4424,46 @@ function closeness(v, target, both) {
    left to hold back. The `settle` setting is no longer read; a stored one is
    harmless and is left where it is rather than deleted out from under a
    backup. */
-const PILLARS = () => S.get('pillars', ['protein', 'sleep', 'steps', 'kcal', 'training']);
+/* ── counting, or just sending ──
+   Tom, 2026-09-17: "Sometimes my clients don't want to track calories at
+   all... just have it be sent food."
+
+   A client who ate well and never opened the food screen was graded as though
+   she had eaten nothing. Calories and protein both read zero, which is the
+   bottom of both ladders, so two of the four scored pillars were an F for a
+   reason that was never about food: seven hours of sleep and a real day's
+   eating came out as E, "barely there". The letter was reporting on logging
+   and calling it adherence.
+
+   Off, the two counted pillars leave the grade and one plain question takes
+   their place: was the food sent today. That is an ordinary check field, so
+   it gets a tile, a logging sheet, a chart, the spreadsheet and LOG's column
+   for nothing, and turning counting back on keeps every day already answered.
+
+   It is a setting per device, because there is no server to set it from. Tom
+   turns it off on a client's phone when he sets them up. */
+const countCal = () => !!S.get('countCal', 1);
+const SENT = 'sentfood';
+
+const PILLARS = () => {
+  const set = S.get('pillars', ['protein', 'sleep', 'steps', 'kcal', 'training']);
+  if (countCal()) return set;
+  return set.filter(k => k !== 'protein' && k !== 'kcal').concat(SENT);
+};
+
+/* The field behind the question. Made the first time counting goes off, and
+   only ever turned OFF after that: a field turned off keeps its data, and
+   deleting it would throw away every day already answered. Safe to call on
+   every boot, because a patch that changes nothing writes nothing. */
+function syncSentField() {
+  const have = fields()[SENT];
+  if (!countCal()) {
+    if (!have) addField({ id: SENT, label: 'Sent food', unit: '', measure: 'check' });
+    else if (!have.on) Rec.patch('field', null, SENT, { on: 1 });
+  } else if (have && have.on) {
+    Rec.patch('field', null, SENT, { on: 0 });
+  }
+}
 
 /* Training comes from TRAIN if it is there, and from a tracked yes/no in here
    if it is not. Naming a body part is itself a yes. */
@@ -5751,6 +5825,17 @@ function drawTrackTab(pane) {
      Turning it off hides the tile and nothing else: the Money tab, the
      Spending button and every payment already logged stay exactly where they
      are, and turning it back on brings the tile back with them. */
+  pane.appendChild(el('label', 'fl', 'Food'));
+  pane.appendChild(toggleRow('Count calories',
+    'Off, the day asks whether you sent your food instead of what it added up to.',
+    countCal(), on => {
+      S.set('countCal', on ? 1 : 0);
+      syncSentField();
+      /* Standing on a tab that has just been hidden strands you there. */
+      if (!on && TAB === 'food') TAB = 'now';
+      drawSettingsPane('track'); draw();
+    }));
+
   pane.appendChild(el('label', 'fl', 'Money'));
   pane.appendChild(toggleRow('Spent tile on Today', 'Off by default. Your payments stay either way.',
     !!S.get('spendTile', 0), on => { S.set('spendTile', on ? 1 : 0); drawSettingsPane('track'); draw(); }));
@@ -6919,6 +7004,7 @@ Rec.ready(() => {
   seedFields();
   linkNutrients();
   fixSeedFields();
+  syncSentField();
   TD.tick();
   /* On open, quietly: pull anything typed into the sheet since last time.
      Never blocks, never speaks unless it actually brought something back. */
@@ -6964,6 +7050,7 @@ let deskWipe = 0;
 let deskShowing = 0;     /* asking the launcher to bring the window forward */
 let deskNagged = 0;      /* the backup reminder, held back while the widget is up */
 let deskPanel = '';      /* '', 'ask' or 'bullet': what the widget has turned into */
+let deskAskedAt = 0;     /* when the open one was put up */
 
 function deskCfg() {
   return {
@@ -7037,6 +7124,10 @@ function deskTick() {
   if (Date.now() < deskNext) return;
   deskRoll();
   if (!deskAwake(new Date())) return;      /* silent outside the hours */
+  /* A question left unanswered used to block every one after it for ever,
+     because nothing cleared the flag unless he pressed something. Fifteen
+     minutes and it stops holding the door. */
+  if (deskAsking && Date.now() - deskAskedAt > 15 * 60000) deskAsking = false;
   if (deskAsking || deskPanel || sheetH) return;  /* never interrupt something open */
   deskAsk();
 }
@@ -7109,7 +7200,7 @@ function deskBar() {
     const v = deskShow(f);
     if (v == null) return;
     const c = el('div', 'deskchip');
-    c.innerHTML = '<i data-icon="' + pair[1] + '" data-icon-size="16"></i><span>' + esc(v) + '</span>';
+    c.innerHTML = '<span>' + esc(String(f.label || f.id).slice(0, 6)) + '</span><b>' + esc(v) + '</b>';
     c.title = String(f.label || f.id);
     chips.appendChild(c);
   });
@@ -7269,6 +7360,7 @@ function deskBulletPanel(bar) {
    already read.                                                           */
 function deskAsk() {
   deskAsking = true;
+  deskAskedAt = Date.now();
   deskRaise();
   if (deskSmall) { deskOpen('ask'); return; }
   const d = Day.today();
@@ -7366,6 +7458,12 @@ function drawDeskTab(pane) {
       'number in both for a fixed interval.'));
     fieldRow(pane, 'Not before', 'desk.from', c.from, 'hour of the day, 0 to 23');
     fieldRow(pane, 'Not after', 'desk.to', c.to, 'hour of the day, 0 to 23');
+  }
+  if (c.on && DESK) {
+    const mins = deskNext ? Math.round((deskNext - Date.now()) / 60000) : null;
+    pane.appendChild(el('div', 'note', mins == null ? 'Working out when the next one is.'
+      : mins <= 0 ? 'The next one is due now.'
+      : 'The next one is about <b>' + mins + '</b> minute' + (mins === 1 ? '' : 's') + ' away.'));
   }
   pane.appendChild(el('div', 'note',
     'Mini mode is the chevron in the top bar. Ctrl+B writes a bullet from ' +
