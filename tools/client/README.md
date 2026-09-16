@@ -1,33 +1,30 @@
 # Motherbase
 
-A small suite of training and daily-tracking apps. No account, no password,
-nothing uploaded.
+Training and daily tracking apps. No account, no password, no sign-up.
 
-**New here? Read [Start here](guide.html) first.** It takes five minutes and
-step 1 is the one that stops you losing your data.
+**Start here: [the setup](guide.html).** Nine steps, phone first.
 
 ## The apps
 
 | | |
 |---|---|
-| **BLOCK** | Plan a day as blocks and tick them off. For a computer. |
-| **STATUS** | Sleep, weight, steps, mood, food, spending, and a grade for the day. Phone or computer. |
-| **LOG** | Your journal. Every STATUS entry on one timeline, with weekly and monthly summaries. For a computer. |
-| **QUESTS** | Your todo list. Dates, priorities, projects and repeats, typed in plain words. Phone or computer. |
-| **TRAIN** | Training log. Exercises, sets, reps, records. Built for a phone. |
-| **CHECK IN** | Progress photos, weight and a few questions, and a file to send your coach. Phone or computer. |
-| **STYLE** | Change how everything looks. For a computer. |
+| [STATUS](status/) | Sleep, weight, steps, mood, food, spending and notes. Phone or computer. |
+| [TRAIN](train/) | Training log. Exercises, sets, reps, records. For a phone. |
+| [CHECK IN](checkin/) | Progress photos, weight, and a file to send your coach. Phone or computer. |
+| [BLOCK](block/) | Plan a day as blocks and tick them off. For a computer. |
+| [QUESTS](quest/) | Todo list. Dates, priorities and repeats, typed in plain words. Phone or computer. |
+| [LOG](log/) | Your journal. Every STATUS entry on one timeline. For a computer. |
+| [STYLE](style/) | Change how everything looks. For a computer. |
 
-## How your data works
+[MAIN MENU](./) opens all of them.
 
-Everything is saved by your browser, on your device. There is no server holding
-a copy, so nobody else can see it, and nobody else can get it back for you.
+## Your data
 
-Back up every week: **MAIN MENU → DATA → Back up everything**, then keep the
-file somewhere other than the device. The DATA button starts showing a warning
-triangle once two weeks have passed since your last backup.
+It is saved on your own device, and copied to a Google Sheet you own once you
+set that up in [the setup](guide.html). Paste the same sync address on each
+device and they hold the same thing.
 
 ## Where this comes from
 
-This folder is generated from the main Motherbase repo and is not edited by
-hand. Bug reports and ideas go to Tom, not into this repo.
+Generated from the main Motherbase repo, and not edited by hand. Bug reports
+and ideas go to Tom, not into this repo.
