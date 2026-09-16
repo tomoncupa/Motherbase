@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.8, 2026-09-16">
+<meta name="mb-version" content="1.0.9, 2026-09-16">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -1055,7 +1055,14 @@ function billsDue(from, to) {
 function billsOwed(from, to) {
   const t = Day.today(), used = {};
   const all = billsDue(from, to);
+  /* A bullet he ticked wrote its purchase with a key made of the bill and the
+     due date, so that pairing is known rather than guessed. It is checked
+     first, and it works however far ahead the due date is and whatever day he
+     actually paid on. */
+  const paid = {};
+  Rec.all('spend').forEach(r => { if (r.key.indexOf('bill-') === 0) paid[r.key] = 1; });
   return all.filter(x => {
+    if (paid['bill-' + x.bill.id + '-' + x.date]) return false;
     if (x.date > Day.shift(t, 3)) return true;
     const b = x.bill;
     const gap = b.cycle === 'days' ? Math.max(1, num(b.every, 7)) : 28;
@@ -2673,7 +2680,7 @@ function drawMoneyTab(pane) {
 
   pane.appendChild(el('h2', null, 'BILLS AS BULLETS'));
   pane.appendChild(UI.row('A todo bullet for every bill coming up',
-    'Written as an ordinary journal line, so it shows in STATUS on the day it is due, in QUESTS under Today and Upcoming, and in LOG. Loan repayments never get one. Paying a bill takes its bullet back.',
+    'Written as an ordinary journal line, so it shows in STATUS on the day it is due, in QUESTS under Today and Upcoming, and in LOG. Ticking one logs the payment here; unticking takes it back. Loan repayments never get one, and paying a bill takes its bullet back.',
     UI.toggle(billTodosOn(), v => {
       S.set('billTodos', v ? 1 : 0);
       if (!v) {
@@ -3535,6 +3542,15 @@ function billTodoSync() {
   if (!billTodosOn() || !window.Journal) return;
   const t = Day.today(), made = S.get('billMade', {}) || {}, want = {}, touched = {};
   let dirty = false;
+  /* What he ticked or unticked since last time, FIRST. A tick writes the
+     purchase and an untick takes it back, and both have to happen before the
+     bills are read: otherwise an unticked bullet is taken away as already
+     paid, by the very purchase its own tick had written. */
+  Object.keys(made).forEach(k => {
+    const cur = Rec.get('note', made[k], k);
+    if (!cur) { delete made[k]; dirty = true; return; }
+    billTick(k, made[k], cur);
+  });
   billsOwed(t, Day.shift(t, BILL_TODO_DAYS)).forEach(x => {
     if (catGrp(x.bill.cat) === 'move') return;
     const k = 'wealth-bill-' + x.bill.id + '-' + x.date;
@@ -3546,15 +3562,58 @@ function billTodoSync() {
     Rec.set('note', t, k, row);
     made[k] = t; dirty = true; touched[t] = 1;
   });
-  /* Paid, or the bill is gone: take the bullet back, unless he ticked it. */
+  /* Paid, or the bill is gone: take the bullet back, unless he ticked it. A
+     ticked one is kept and kept tracked, because a tick is an answer and
+     because unticking it has to be able to undo what the tick did. */
   Object.keys(made).forEach(k => {
     if (want[k]) return;
     const d = made[k], cur = Rec.get('note', d, k);
-    if (cur && !cur.done) { Rec.del('note', d, k); touched[d] = 1; }
-    delete made[k]; dirty = true;
+    if (!cur) { delete made[k]; dirty = true; return; }
+    if (cur.done) return;
+    Rec.del('note', d, k); touched[d] = 1; delete made[k]; dirty = true;
   });
   if (dirty) S.set('billMade', made);
   Object.keys(touched).forEach(d => { try { Journal.publishNotes(d, 'wealth'); } catch (e) { console.warn('[wealth] journal', e); } });
+}
+
+/* Ticking the bullet pays the bill. Tom, 2026-09-16: "can clicking the bullet
+   mark it as paid?" It can, and a tick anywhere does it: the bullet is one
+   `note` row, so ticking it in STATUS, in QUESTS or on the home screen is the
+   same tick, and WEALTH acts on it the next time it is open.
+
+   Paid means a purchase, because that is the only thing that moves money in
+   this app: one `spend` row on the bill's own due date, for its amount, from
+   its account, filed under its category with a `mark` like any other. Its key
+   is worked out from the bill and the date, so ticking twice cannot write it
+   twice, and FREE stops holding the bill back the moment it exists.
+
+   Unticking takes it back, but only while it is still exactly what was
+   written. Once the amount has been edited it is his row, not ours, and a
+   tick box has no business deleting it. A purchase he deleted stays deleted,
+   by its tombstone, even with the bullet still ticked. */
+function billTick(k, d, note) {
+  const bid = k.slice(12, k.length - 11), due = k.slice(-10);
+  const b = Rec.get('bill', null, bid);
+  if (!b) return false;
+  const sk = 'bill-' + bid + '-' + due;
+  /* The key carries the due date, the row carries the day he paid. They are
+     different whenever he ticks early or late, and both matter: the key is
+     what tells FREE this bill is dealt with, the date is when the money
+     actually left the account. */
+  const has = Rec.all('spend').find(r => r.key === sk);
+  if (note.done && !has) {
+    const payDay = note.doneOn || Day.today();
+    if (Rec.tombstone('spend', payDay, sk)) return false;
+    Rec.set('spend', payDay, sk, { amt: num(b.amt, 0), acct: b.acct ? acctLabel(b.acct) : '',
+      note: b.name, t: stampFor(payDay), src: 'wealth-bill' });
+    if (b.cat) Rec.set('mark', null, payDay + '|' + sk, { cat: b.cat });
+    return false;
+  }
+  if (!note.done && has && has.payload.src === 'wealth-bill' && num(has.payload.amt, 0) === num(b.amt, 0)) {
+    Rec.del('spend', has.date, sk);
+    Rec.del('mark', null, has.date + '|' + sk);
+  }
+  return false;
 }
 
 /* ══ filing, quickly ══

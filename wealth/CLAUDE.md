@@ -691,6 +691,38 @@ that day; a GLoan bill on the same day got nothing; QUESTS showed it under
 Upcoming and not Today; `Journal.notes` had it on the due day, which is what
 STATUS reads; logging a matching purchase took the bullet back.
 
+### Ticking the bullet pays the bill
+
+Tom, 2026-09-16: *"can clicking the bullet mark it as paid?"* It does, and a
+tick anywhere counts, because the bullet is one `note` row: ticking it in
+STATUS, in QUESTS or on the home screen is the same tick, and WEALTH acts on
+it the next time it is open.
+
+Paid means a purchase, since that is the only thing that moves money here. One
+`spend` row keyed `bill-<bill id>-<due date>`, for the bill's amount, from its
+account, filed under its category with a `mark` like any other purchase.
+**The key carries the due date and the row carries the day he ticked**, which
+are different whenever he pays early or late, and both matter: the key is what
+tells FREE the bill is dealt with, the date is when the money left. `billsOwed`
+checks that key before it checks anything else, so a bill paid this way is
+known rather than matched by shape.
+
+Unticking takes the purchase back, but only while it is still exactly what was
+written: once the amount has been edited it is his row and a tick box has no
+business deleting it. A purchase he deleted stays deleted, by its tombstone.
+
+**Ticks are read before the bills are, and that ordering is the whole bug.**
+The first build read the bills first, so unticking a bullet had it taken away
+as already paid, by the very purchase its own tick had written. `billTodoSync`
+now settles every tick, then reads `billsOwed`, then adds and removes bullets.
+
+Watched: a ₱500 bill due in four days, ₱50,000 counted. Made: allocated
+₱2,199, FREE ₱47,801. Ticked: a ₱500 purchase dated today from the bill's
+account, filed as Utility Bills, liquid ₱49,500, allocated ₱1,699, **FREE
+unchanged at ₱47,801**, which is the point: paying something already held back
+cannot change what is free. Unticked: purchase gone, bullet back, every figure
+where it started.
+
 ## Filing, quickly
 
 Tom, 2026-09-16: *"Let me categorize things quick."* A quarter of his spending
