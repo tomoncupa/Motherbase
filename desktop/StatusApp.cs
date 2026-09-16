@@ -1,4 +1,4 @@
-/* ══════════════ STATUS ══════════════
+﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â• STATUS â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    The standalone app. Tom, 2026-09-17: "I think the chrome environment is
    too limiting", after the title bar came back for the fourth time.
 
@@ -17,13 +17,13 @@
 
    What that buys, and none of it was reachable before:
 
-     · no title bar, ever, because we never ask for one
-     · the window is exactly the page, and cannot be clipped by furniture
-     · the check in is a real interruption: centre screen, in front, focused
-     · the page and the host talk by passing messages, not through the title
-     · Ctrl+B calls the page's own function rather than typing a keystroke
+     Â· no title bar, ever, because we never ask for one
+     Â· the window is exactly the page, and cannot be clipped by furniture
+     Â· the check in is a real interruption: centre screen, in front, focused
+     Â· the page and the host talk by passing messages, not through the title
+     Â· Ctrl+B calls the page's own function rather than typing a keystroke
        at it and hoping the focus landed
-     · closing it is quitting it, so it cannot sit there switched off
+     Â· closing it is quitting it, so it cannot sit there switched off
 
    Its data is its own, the way any program's is, and it fills from the sync
    code the same way a second device would.
@@ -56,8 +56,13 @@ class App : Form
     [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool attach);
     [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int val, int size);
+    [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int k);
+    [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
 
-    const int WM_HOTKEY = 0x0312, WM_NCLBUTTONDOWN = 0x00A1, HTCAPTION = 2;
+    const int WM_HOTKEY = 0x0312;
+    const int WM_MOUSEACTIVATE = 0x0021, MA_ACTIVATE = 1;
+    const int VK_LBUTTON = 0x01;
     const int HOTKEY_ID = 0xB01;
     const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_SHIFT = 0x4, MOD_WIN = 0x8;
     const int DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2;
@@ -71,8 +76,10 @@ class App : Form
     string mode = "widget";
     int posX = int.MinValue, posY = int.MinValue;   /* where he left the widget */
     bool ready;
-    string said = "";        /* each kind of request logged once, not every time */
     string pageUrl;
+    Timer dragT;             /* follows the cursor while he is moving the window */
+    bool dragging;
+    int grabX, grabY;
 
     /* A few lines beside the program saying what happened, so a thing that
        goes quiet can be asked why instead of guessed at. Fresh every run. */
@@ -130,6 +137,10 @@ class App : Form
 
         BuildTray();
         RegisterTheHotkey();
+
+        dragT = new Timer();
+        dragT.Interval = 12;
+        dragT.Tick += (s, e) => DragTick();
 
         web = new WebView2();
         web.Dock = DockStyle.Fill;
@@ -193,7 +204,7 @@ class App : Form
         c.Navigate(pageUrl);
     }
 
-    /* ── what the page asks for ──
+    /* â”€â”€ what the page asks for â”€â”€
        A proper channel at last. The page says what it wants to be and how big
        it needs to be, in a message, instead of writing words into the window
        title and hoping something was reading. */
@@ -210,22 +221,23 @@ class App : Form
 
         if (verb == "drag")
         {
-            /* We own the window, so dragging is the real thing Windows does
-               for a title bar, minus the title bar. */
-            ReleaseCapture();
-            /* This runs Windows' own move loop and does not return until he
-               lets go. The web view never sees the mouse come back up, so
-               without handing it the focus again the next press is eaten
-               re-activating the window and the widget feels stuck. */
-            SendMessage(Handle, WM_NCLBUTTONDOWN, new IntPtr(HTCAPTION), IntPtr.Zero);
-            if (mode == "widget") { posX = Left; posY = Top; SaveCfg(); }
-            Activate();
-            if (ready) web.Focus();
-            /* Handing the focus back was not enough: the drag still went stiff
-               until Tom maximised and minimised, which told us what does work.
-               A resize is what puts the web view's input back, so this does the
-               smallest one there is. */
-            Jog();
+            /* â”€â”€ moving the window without handing Windows the mouse â”€â”€
+               This used to be WM_NCLBUTTONDOWN with HTCAPTION, which runs
+               Windows' own modal move loop. That loop takes the mouse for its
+               whole duration and eats the button coming back up, so the web
+               view was left believing a button was still held and every press
+               after it went nowhere. Handing the focus back did not fix it and
+               nor did a resize; the loop itself was the problem.
+
+               So the move is ours: note where on the window he grabbed, then
+               follow the cursor on a timer until the button is released. The
+               page keeps receiving its own mouse events throughout, including
+               the one that ends the drag. */
+            POINT c0;
+            if (!GetCursorPos(out c0)) return;
+            grabX = c0.X - Left; grabY = c0.Y - Top;
+            dragging = true;
+            dragT.Start();
             return;
         }
         if (verb == "quit") { Quit(); return; }
@@ -253,7 +265,7 @@ class App : Form
         }
         else if (verb == "checkin")
         {
-            /* ── intrusive on purpose ──
+            /* â”€â”€ intrusive on purpose â”€â”€
                Tom: "I also want the check in prompt to be intrusive and
                prominent." A panel in a 320px box in the corner is neither. It
                goes to the middle of the screen, in front of whatever he is
@@ -288,16 +300,22 @@ class App : Form
         Location = new Point(x, y);
     }
 
-    /* One resize, one pixel, there and back. Nothing else reliably wakes the
-       web view's input up after Windows' move loop has had it. */
-    void Jog()
+    void DragTick()
     {
-        var was = ClientSize;
-        ClientSize = new Size(was.Width, was.Height + 1);
-        ClientSize = was;
+        if (!dragging) { dragT.Stop(); return; }
+        if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0)
+        {
+            dragging = false;
+            dragT.Stop();
+            if (mode == "widget") { posX = Left; posY = Top; SaveCfg(); }
+            return;
+        }
+        POINT c;
+        if (!GetCursorPos(out c)) return;
+        Location = new Point(c.X - grabX, c.Y - grabY);
     }
 
-    /* ── the chevron never moves ──
+    /* â”€â”€ the chevron never moves â”€â”€
        Tom, 2026-09-17: "I want the resize button to never change location,
        let the max view clip through the bottom of the screen if needed." It
        lives in the window's top right corner, so keeping THAT corner still
@@ -353,7 +371,7 @@ class App : Form
         Log("brought to the front: " + (GetForegroundWindow() == Handle ? "yes" : "no"));
     }
 
-    /* ── the widget remembers where he put it ── */
+    /* â”€â”€ the widget remembers where he put it â”€â”€ */
     protected override void OnResizeEnd(EventArgs e)
     {
         base.OnResizeEnd(e);
@@ -366,7 +384,7 @@ class App : Form
         if (mode == "widget" && ready) { posX = Left; posY = Top; }
     }
 
-    /* ── settings, one line each, beside the program ── */
+    /* â”€â”€ settings, one line each, beside the program â”€â”€ */
     void LoadCfg()
     {
         try
@@ -529,6 +547,15 @@ class App : Form
 
     protected override void WndProc(ref Message m)
     {
+        /* ── the click that only woke the window up ──
+           When the widget is not the window in front, Windows asks what to do
+           with the click that is about to land on it, and the default answer
+           throws that click away once the window is focused. So the first
+           press after looking at anything else moved nothing, and the second
+           worked, which is most of what "hard to drag" was. MA_ACTIVATE says
+           focus it AND let the click through. */
+        if (m.Msg == WM_MOUSEACTIVATE) { m.Result = new IntPtr(MA_ACTIVATE); return; }
+
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID)
         {
             Front();
