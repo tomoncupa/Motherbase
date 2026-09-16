@@ -826,11 +826,67 @@ const Mobile = {
   },
 };
 
+/* ── the offline cache ──
+   Opened from a folder the suite never needed a connection. Opened from an
+   address it needed one every time, just to fetch the page, and with no
+   signal the browser drew a blank page. Seen on two phones on 2026-09-16.
+
+   sw.js at the top of the suite is the cache itself and carries the long
+   version of why it can never go stale. This is only the line that turns it
+   on. It lives here because every app already loads this file, so no app had
+   to be edited and a new app gets it for nothing.
+
+   Three things it refuses to do:
+     · From a folder, nothing. A cache like this only runs on a real address,
+       which is exactly the case that does not need one.
+     · Inside a frame, nothing. _review.html drives every app in frames, and a
+       thing that watches must not also change what it is watching.
+     · With ?nosw=1 on the address, it takes itself off again. That is the
+       message to send if this ever misbehaves on a phone nobody here holds. */
+function offline() {
+  var nav = g.navigator;
+  var ok = nav && 'serviceWorker' in nav &&
+    (g.location.protocol === 'https:' || g.location.hostname === 'localhost');
+  if (/[?&]nosw=1/.test(g.location.search)) {
+    if (ok) nav.serviceWorker.getRegistrations()
+      .then(function (rs) { rs.forEach(function (r) { r.unregister(); }); })
+      .catch(function () {});
+    return;
+  }
+  if (!ok || g.top !== g) return;
+
+  /* Where sw.js is, worked out from where THIS file is, so it is right at the
+     root of the suite whatever folder the suite itself sits in and whichever
+     app is asking. A guessed '/sw.js' would be wrong on GitHub Pages, where
+     everything hangs off a repo name. */
+  var me = document.currentScript && document.currentScript.src;
+  if (!me) {
+    var tags = document.getElementsByTagName('script');
+    for (var i = 0; i < tags.length; i++) {
+      if (/\/shared\/mobile\.js(\?|$)/.test(tags[i].src)) { me = tags[i].src; break; }
+    }
+  }
+  if (!me) return;
+  var root = me.replace(/shared\/mobile\.js.*$/, '');
+
+  /* Said once per phone, on the open that first saves it. */
+  var first = !nav.serviceWorker.controller;
+  nav.serviceWorker.addEventListener('controllerchange', function () {
+    if (!first) return;
+    first = false;
+    if (g.UI && g.UI.toast) g.UI.toast('saved on this phone. it opens now with no signal');
+  });
+  nav.serviceWorker.register(root + 'sw.js', { scope: root, updateViaCache: 'none' })
+    .then(function (reg) { try { reg.update(); } catch (e) {} })
+    .catch(function () {});
+}
+
 /* ── boot ── */
 base();
 chrome();
 wirePress();
 wireKeyboard();
+offline();
 
 g.Mobile = Mobile;
 })(window);

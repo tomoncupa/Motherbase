@@ -198,6 +198,13 @@ for gone in DROP_APPS:
     if ("go('%s')" % gone) in html or ('%s/index.html' % gone) in html:
         fail('index.html still links to %s - patch it above' % gone)
 
+# ── client-only files ─────────────────────────────────────────────────────
+for src, dst in CLIENT_ONLY.items():
+    p = os.path.join(ROOT, 'tools', 'client', src)
+    if not os.path.isfile(p):
+        fail('missing tools/client/' + src)
+    shutil.copy2(p, os.path.join(DEST, dst))
+
 # ── cache stamp ───────────────────────────────────────────────────────────
 # GitHub Pages caches hard, and a client who added this to their home screen
 # is the most cached reader there is. Without a stamp they can end up running
@@ -243,12 +250,55 @@ for here, subdirs, found in os.walk(DEST):
 if not stamped:
     fail('stamped no script tags - the <script src="shared/..."> shape changed')
 
-# ── client-only files ─────────────────────────────────────────────────────
-for src, dst in CLIENT_ONLY.items():
-    p = os.path.join(ROOT, 'tools', 'client', src)
-    if not os.path.isfile(p):
-        fail('missing tools/client/' + src)
-    shutil.copy2(p, os.path.join(DEST, dst))
+# ── the offline cache ─────────────────────────────────────────────────────
+# sw.js in the repo root is the cache, and it works as it stands: Tom's own
+# copy is hosted too and registers the same file. It is copied rather than
+# forked for the reason at the top of this script - a fork of shared drifts.
+#
+# Two things are replaced on the way through, and both only matter here:
+#
+#   the stamp    names the cache, so a new build's copy replaces the last
+#                one on the phone instead of sitting beside it
+#   the list     is what is taken at install. The repo's own list is short on
+#                purpose, because naming every app there would be a second
+#                place to remember to edit. Here the list is generated, so a
+#                client who has only ever opened the home screen still has
+#                every app the first time they are somewhere with no signal.
+#
+# The shared files go in at the exact address the pages ask for, stamp and
+# all: a cache is keyed by the whole address, so shared/records.js and
+# shared/records.js?v=abc are two different entries and only one is asked for.
+#
+# The theme pictures under shared/icons/ are left out. They are three
+# megabytes, they are the icon you get when you add the app to a home screen,
+# and adding it to a home screen needs a connection anyway.
+pre = []
+for here, subdirs, found in os.walk(DEST):
+    subdirs[:] = [d for d in subdirs if d != '.git']
+    for name in sorted(found):
+        rel = os.path.relpath(os.path.join(here, name), DEST).replace(os.sep, '/')
+        if rel.endswith('.html'):
+            pre.append(rel)
+            if rel.endswith('index.html'):
+                # The address a person opens is the folder, not the file:
+                # ".../status/", and "./" for the home screen. Those are
+                # different cache keys from the file itself.
+                pre.append(rel[:-len('index.html')] or './')
+        elif rel == 'shared/skins.json':
+            pre.append(rel)
+        elif rel.startswith('shared/') and rel.endswith('.js'):
+            pre.append(rel + '?v=' + stamp)
+
+sw = io.open(os.path.join(ROOT, 'sw.js'), encoding='utf-8').read()
+for old, new in (("const STAMP = 'live';", "const STAMP = '%s';" % stamp),
+                 ('const PRECACHE = [', 'const PRECACHE = [')):
+    if old not in sw:
+        fail('sw.js changed shape: expected %r' % old)
+sw = sw.replace("const STAMP = 'live';", "const STAMP = '%s';" % stamp, 1)
+head, _, rest = sw.partition('const PRECACHE = [')
+_, _, tail = rest.partition('\n];')
+sw = head + 'const PRECACHE = ' + json.dumps(sorted(pre), indent=2) + ';' + tail
+io.open(os.path.join(DEST, 'sw.js'), 'w', encoding='utf-8').write(sw)
 
 # ── report ────────────────────────────────────────────────────────────────
 files = 0
@@ -260,5 +310,6 @@ print('  apps    : %s' % ', '.join(['home'] + [d for d in COPY_DIRS if d != 'sha
 print('  themes  : %s' % ', '.join(names))
 print('  files   : %d' % files)
 print('  cache   : %d script tags stamped ?v=%s' % (stamped, stamp))
+print('  offline : %d files kept on the phone' % len(pre))
 print('')
 print('next: cd into it, then  git add -A  and  git commit')

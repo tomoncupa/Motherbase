@@ -77,6 +77,12 @@ Do not break these. Ask first if you think one needs to change.
    dependency the app cannot run without.
 5. **Offline first.** Every tap saves locally and instantly. Nothing in the logging
    loop may require a network, an account or a login.
+   **This covered everything after the page was open, and nothing before it.**
+   Both Tom and his clients open the suite from an address rather than a
+   folder, so until 2026-09-16 every open needed a connection just to fetch
+   the page, and with no signal they got a blank screen. `sw.js` fixes that.
+   A change that stops a page opening with no signal breaks this rule as
+   surely as one that puts a login in front of a tick.
 6. **Storage goes through the store.** Never call `localStorage` directly from app
    code. `shared/records.js` is the only door.
 7. **Rows, never one blob.** See below. This is the rule that has already killed
@@ -131,6 +137,18 @@ ONBOARDING.md      how a client gets the suite, and what happens after
 index.html         the home screen: widget grid, app dock, data authority
 _review.html       the review: opens every app, folds in the foundation checks,
                    and looks over the rows. Read-only. Run it on a real device
+sw.js              the offline cache, added 2026-09-16. Opened from a folder
+                   the suite never needed a connection. Opened from an ADDRESS
+                   it needed one every time, just to fetch the page, and with
+                   no signal the browser drew a blank page and the app looked
+                   broken. This keeps a copy of each page on the phone. It can
+                   never serve a stale one: anything without a `?v=` stamp goes
+                   to the network first and only falls back to the copy when
+                   the network fails, and anything with one is at an address
+                   that changes when the file does. Registered by
+                   `shared/mobile.js`, so no app had to be edited. Does nothing
+                   from a folder and nothing inside a frame. `?nosw=1` on the
+                   address takes it off again
 shared/            the foundation, loaded by every app
 block/index.html   routine builder
 arc/index.html     mind canvas, skill trees and flashcards since 2026-09-16.
@@ -1019,6 +1037,14 @@ there is no texting company to sign up with and no carrier paperwork.
 Installable phone apps. They need a web address, so they do not work from a folder,
 and the caching failure mode is exactly the kind of silent breakage he cannot
 diagnose. Revisit only if hosting returns.
+
+**`sw.js` is not that, and the difference is the whole reason it was allowed.**
+Added 2026-09-16. The objection above is to a cached copy going stale in
+silence. This one cannot: everything unstamped is fetched from the network
+first and the copy is only reached for when the network fails, so with signal
+you are always on the newest code and there is no stale window to be in. It
+also changes nothing about how the suite is opened. It is still a folder or a
+link, never an install.
 
 ---
 
