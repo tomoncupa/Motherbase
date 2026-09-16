@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.9, 2026-09-17">
+<meta name="mb-version" content="1.0.10, 2026-09-17">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -259,6 +259,14 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .row .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .d{font-size:10px;color:var(--dim2);font-family:var(--f1);letter-spacing:.06em;flex:0 0 auto}
 .row.done{opacity:.5}
+/* LINKS: the open-in-a-new-tab button on a link row. A full 44px target that
+   does not make the row 60px tall — the negative margins eat the row's own
+   padding, so the button fills the row rather than stretching it. */
+.row .lopen{flex:0 0 auto;width:var(--tap,44px);height:var(--tap,44px);margin:-8px -9px -8px 0;
+  display:flex;align-items:center;justify-content:center;
+  background:none;border:0;color:var(--dim2);cursor:pointer;border-radius:var(--radius-md,10px)}
+@media (hover:hover) and (pointer:fine){ .row .lopen:hover{color:var(--acc);background:var(--surface-3)} }
+.mb-group .lwhere{color:var(--dim2);letter-spacing:0;text-transform:none;font-family:var(--f1)}
 
 /* ── the now band ──
    The one line that answers "what am I doing", above the list rather than in
@@ -2039,6 +2047,111 @@ const WIDGETS = {
     },
   },
 
+  links: {
+    /* ══════════════ LINKS ══════════════
+       Tom, 2026-09-17: "Create a TOM ONLY Widget of all the app links, both
+       for me and for clients."
+
+       Every app's address on the web, in two groups: the full suite, which is
+       his, and the client suite, which is the seven apps a client gets.
+       Tapping one copies it, because the job this does is handing a link to
+       somebody — a client in Skool, or himself on another machine. The button
+       beside it opens it in a new tab, for when the job is looking rather
+       than sending.
+
+       It is not called TOM ONLY and nothing on it says so. That follows the
+       dock, where his own apps sit behind a thin line with no label and no
+       tooltip — Tom, 2026-09-14: "I don't want a Tom Only... I know who I
+       am." What makes it his is that `DROP_WIDGETS` in tools/build-client.py
+       takes it out of the client copy altogether, so a client never gets a
+       screen listing apps they do not have and addresses that are not theirs.
+
+       This comment sits INSIDE the object on purpose. DROP_WIDGETS matches
+       from `  links: {` to the first `  },`, so anything written above the
+       widget would survive into the client build with the widget itself gone
+       — which for this one would mean shipping the reasoning for hiding it.
+
+       The two lists are read off the APPS roster rather than typed out, so an
+       app added later appears in both without anybody remembering this file,
+       and an app flagged `mine` is in his list and not in the client one by
+       the same flag the dock already uses. The folder name comes off
+       `a.file`, so nothing here writes a path the client build has to patch.
+
+       The addresses are the one thing written down. They are two published
+       sites and both were checked live on 2026-09-17. Deriving them from
+       `location` would be wrong: the point of this widget is the address you
+       give somebody else, which has nothing to do with where this page
+       happens to be open from. */
+    nm: 'LINKS', w: 5, h: 6,
+    sub: () => 'tap a link to copy it',
+    sites: [
+      { nm: 'MINE', base: 'https://tomoncupa.github.io/Motherbase/', all: () => APPS.filter(a => a.file) },
+      { nm: 'CLIENTS', base: 'https://tomoncupa.github.io/Mainmenu-client/', all: () => APPS.filter(a => a.file && !a.mine) },
+    ],
+    /* Copied, or shown so it can be copied by hand. A page opened straight
+       from a folder has no clipboard in some browsers, and an address nobody
+       can get at is the one failure this widget is not allowed to have. */
+    copy(url, label) {
+      const done = () => toast('<b>' + esc(label) + '</b> copied');
+      const byHand = () => {
+        try {
+          const t = document.createElement('textarea');
+          t.value = url;
+          t.setAttribute('readonly', '');
+          t.style.position = 'fixed';
+          t.style.top = '-1000px';
+          document.body.appendChild(t);
+          t.select();
+          const ok = document.execCommand('copy');
+          t.remove();
+          if (ok) { done(); return; }
+        } catch (e) {}
+        toast(esc(url), { ms: 8000 });
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, byHand);
+      else byHand();
+    },
+    row(list, label, url, tint, icon, tail) {
+      const r = el('div', 'row');
+      if (tint) r.style.setProperty('--c', tint);
+      r.style.cursor = 'pointer';
+      r.setAttribute('role', 'button');
+      r.tabIndex = 0;
+      r.title = url;
+      r.innerHTML = (icon ? '<span class="t" style="width:auto;padding-left:0">' + icon + '</span>' : '') +
+        '<span class="n">' + esc(label) + '</span>' +
+        (tail ? '<span class="d">' + esc(tail) + '</span>' : '');
+      const copy = () => WIDGETS.links.copy(url, label);
+      r.onclick = copy;
+      r.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); copy(); } };
+      const open = el('button', 'lopen mb-press mb-tap',
+        (typeof Icons !== 'undefined' && Icons.svg('link', { size: 14 })) || '&rarr;');
+      open.title = 'Open ' + label + ' in a new tab';
+      open.setAttribute('aria-label', 'Open ' + label + ' in a new tab');
+      open.onclick = ev => { ev.stopPropagation(); window.open(url, '_blank', 'noopener'); };
+      r.appendChild(open);
+      list.appendChild(r);
+      return r;
+    },
+    draw(body) {
+      const L = WIDGETS.links, list = el('div', 'rowlist');
+      L.sites.forEach(site => {
+        /* The address goes on the heading, not on the row under it. It was on
+           the row first, and at phone width it squeezed "The whole suite"
+           down to an ellipsis: the tail is fixed width and the name is what
+           gives way. A heading has the whole card to itself and can wrap. */
+        const where = site.base.replace(/^https?:\/\//, '').replace(/\/$/, '');
+        list.appendChild(el('div', 'mb-group', esc(site.nm) + ' <span class="lwhere">' + esc(where) + '</span>'));
+        L.row(list, 'The whole suite', site.base, '', '', '');
+        site.all().forEach(a => {
+          const folder = String(a.file).split('/')[0];
+          L.row(list, a.nm, site.base + folder + '/', appTint(a), appIco(a, 16), folder);
+        });
+      });
+      body.appendChild(list);
+    },
+  },
+
   apps: {
     nm: 'APPS', w: 5, h: 3,
     sub: () => 'press 1–' + APPS.length,
@@ -2085,6 +2198,7 @@ const DEFAULT_LAYOUT = [
   { t: 'today', w: 5, h: 5 }, { t: 'todo', w: 4, h: 5 }, { t: 'clock', w: 3, h: 2 },
   { t: 'weight', w: 5, h: 3 }, { t: 'protein', w: 3, h: 2 }, { t: 'calories', w: 3, h: 2 },
   { t: 'momentum', w: 7, h: 3 }, { t: 'apps', w: 5, h: 3 }, { t: 'log', w: 4, h: 3 },
+  { t: 'links', w: 5, h: 6 },
 ];
 let layout;
 try { layout = JSON.parse(localStorage.getItem(LKEY)); } catch (e) {}
@@ -2547,14 +2661,31 @@ function pushToSheet(on, asked) {
 function copyMirrorScript() {
   const code = IO.mirror.script();
   const show = copied => UI.dialog({
-    title: 'SYNC SCRIPT', width: 560,
+    title: 'APPS SYNC SCRIPT', width: 560,
     body: b => {
-      /* "Apps Script" here is Google's own menu and editor, spelled their way
-         so it can be found. Ours is the Sync Script, and the link it hands
-         back is the personal sync code. Tom named both, 2026-09-17. */
+      /* "Apps Script" inside the steps is Google's own menu, spelled their way
+         so it can be found on screen. Ours is the Apps Sync Script, and the
+         link it hands back is the personal sync code. Tom named both,
+         2026-09-17.
+
+         The steps were one run-on sentence of eight instructions. Somebody
+         following it on a second screen loses their place at "then", so it is
+         a numbered list they can count down. A setup that happens once is a
+         setup, not the tour DOCTRINE law 10 forbids. */
       b.appendChild(el('div', 'lede', copied
-        ? 'Copied. In the sheet: Extensions, Apps Script, paste it over everything, then Deploy, New deployment, Web app, execute as <b>me</b>, access <b>anyone</b>. The link it gives you is your personal sync code. Paste it into the box on the DATA panel.'
-        : 'Copy this and paste it over everything in the Apps Script editor'));
+        ? 'Copied. Now, in your sheet:' : 'Copy this, then in your sheet:'));
+      const steps = el('ol', 'lede');
+      steps.style.paddingLeft = 'var(--s-4)';
+      ['<b>Extensions</b>, then <b>Apps Script</b>',
+       'Select everything in the editor, delete it, paste, save',
+       '<b>Deploy</b>, then <b>New deployment</b>',
+       'The gear beside Select type, then <b>Web app</b>',
+       'Execute as <b>me</b>, access <b>anyone</b>, then <b>Deploy</b>',
+       'Allow it when Google asks',
+       'Copy the link it gives you. That is your <b>personal sync code</b>',
+       'Paste it into the box on the DATA panel',
+      ].forEach(s => { const li = el('li'); li.innerHTML = s; steps.appendChild(li); });
+      b.appendChild(steps);
       const t = el('textarea', 'mb-input');
       t.rows = 12; t.value = code; t.setAttribute('readonly', '');
       t.style.fontFamily = 'var(--font-mono, monospace)';
@@ -2585,7 +2716,15 @@ function mirrorSection(mo) {
   /* on input, not change. change only fires when the box loses focus, and
      pasting a link then tapping sync closes the panel before that happens —
      so the link was silently never saved. */
-  u.oninput = () => IO.mirror.set({ url: u.value.trim() });
+  /* What gets pasted here is usually not a bare link: it comes out of Telegram
+     with the rest of a message around it, or off Google with a newline on the
+     end. IO.mirror.code takes the code out of whatever arrived, and the box
+     shows what was actually saved rather than what was dropped on it. */
+  u.oninput = () => {
+    const found = IO.mirror.code(u.value);
+    if (found && found !== u.value.trim()) u.value = found;
+    IO.mirror.set({ url: found || u.value.trim() });
+  };
   mo.appendChild(u);
 
   /* The switch that makes it stop being a button. With this on, every app on
@@ -2597,7 +2736,7 @@ function mirrorSection(mo) {
     UI.toggle(!!cfg.on, on => { IO.mirror.set({ on: on ? 1 : 0 }); toast(on ? 'The sheet will keep itself up to date.' : 'Automatic syncing off.'); })));
 
   [['⟳', 'Sync every app now', 'Reads the sheet first, then writes back everything, including the calendar views. The automatic ones only send what changed.', () => { IO.mirror.set({ url: u.value.trim() }); syncEveryApp(); }],
-   ['⧉', 'Copy the Sync Script', 'The bit that goes in the sheet once, before any of this works.', copyMirrorScript],
+   ['⧉', 'Copy the Apps Sync Script', 'The bit that goes in the sheet once, before any of this works.', copyMirrorScript],
   ].forEach(([ic, t, d, fn]) => {
     const b = el('button', 'opt');
     b.innerHTML = '<span class="ic">' + ic + '</span><span class="t"><b>' + t + '</b><span>' + d + '</span></span>';
