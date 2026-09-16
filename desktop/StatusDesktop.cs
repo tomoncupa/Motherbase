@@ -114,6 +114,9 @@ class Launcher : Form
     bool small = false;
     bool shown = false;          /* already answered this "show" */
     bool softLogged = false;     /* whether Windows took the rounded corners */
+    bool everHad = false;        /* a window has existed at least once */
+    int missing = 0;             /* polls in a row with no window */
+    string chrome;
     int savedStyle = 0;          /* the frame, while it is off */
     int posX = int.MinValue, posY = int.MinValue;   /* where he put the widget */
     string hotkey = "ctrl+b";
@@ -179,7 +182,7 @@ class Launcher : Form
             Environment.Exit(1);
         }
 
-        string chrome = FindChrome();
+        chrome = FindChrome();
         if (chrome == null)
         {
             MessageBox.Show("Could not find Chrome.\n\nSTATUS Desktop tracker opens STATUS in " +
@@ -192,11 +195,10 @@ class Launcher : Form
         RegisterTheHotkey();
         RepairOrphans();
 
-        string url = new Uri(page).AbsoluteUri + "?desktop=1";
-        try { Process.Start(chrome, "--app=" + url); }
-        catch (Exception e)
+        pageUrl = new Uri(page).AbsoluteUri + "?desktop=1";
+        if (!OpenPage())
         {
-            MessageBox.Show("Chrome would not start.\n\n" + e.Message, TITLE);
+            MessageBox.Show("Chrome would not start.", TITLE);
             Environment.Exit(1);
         }
 
@@ -210,6 +212,14 @@ class Launcher : Form
         drag = new Timer();
         drag.Interval = 15;
         drag.Tick += (s, e) => DragTick();
+    }
+
+    string pageUrl;
+
+    bool OpenPage()
+    {
+        try { Process.Start(chrome, "--app=" + pageUrl); return true; }
+        catch (Exception e) { Log("could not start Chrome: " + e.Message); return false; }
     }
 
     /* a form that is never shown */
@@ -283,7 +293,11 @@ class Launcher : Form
     void BuildTray()
     {
         var menu = new ContextMenu();
-        menu.MenuItems.Add(new MenuItem("Open STATUS", (s, e) => Raise()));
+        menu.MenuItems.Add(new MenuItem("Open STATUS", (s, e) =>
+        {
+            if (!IsWindow(win) && !IsWindow(Find())) OpenPage();
+            else Raise();
+        }));
         menu.MenuItems.Add("-");
         miTop = new MenuItem("Always on top", (s, e) =>
         {
@@ -330,7 +344,7 @@ class Launcher : Form
 
         tray = new NotifyIcon();
         tray.Icon = TrayIcon();
-        tray.Text = TITLE;
+        tray.Text = TITLE + " \u2014 starting";
         tray.ContextMenu = menu;
         tray.Visible = true;
         tray.DoubleClick += (s, e) => Raise();
@@ -353,6 +367,16 @@ class Launcher : Form
             mi.Text = known ? "Choose my own..." : "Choose my own...  (" + PrettyHotkey(hotkey) + ")";
             mi.Checked = !known;
         }
+    }
+
+    /* What the tray icon says when you hover it. A thing whose whole job is
+       to be there has to be able to say whether it is. */
+    void Tip(string state)
+    {
+        if (tray == null) return;
+        string s = TITLE + " \u2014 " + state;
+        if (s.Length > 62) s = s.Substring(0, 62);
+        tray.Text = s;
     }
 
     Icon TrayIcon()
@@ -533,7 +557,32 @@ class Launcher : Form
             win = Find();
             if (IsWindow(win)) { small = false; savedStyle = 0; }
         }
-        if (!IsWindow(win)) return;
+        if (!IsWindow(win))
+        {
+            /* ── the thing that made it useless ──
+               The check in timer lives in the page, because that is where the
+               settings and the rows are. So a closed window is not a cosmetic
+               problem: it is the whole app silently switched off, with a tray
+               icon still sitting there looking alive. It ran a full day like
+               that and Tom got nothing.
+
+               Three seconds of grace, because a window being replaced blinks,
+               then open it again. Every thirty seconds after that if it still
+               has not come back. */
+            if (everHad)
+            {
+                missing++;
+                if (missing == 6 || (missing > 6 && missing % 60 == 0))
+                {
+                    Log("the window was gone, opening it again");
+                    Tip("reopening the widget");
+                    OpenPage();
+                }
+            }
+            return;
+        }
+        if (!everHad || missing > 0) Tip("widget open");
+        everHad = true; missing = 0;
 
         if (onTop)
             SetWindowPos(win, TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
