@@ -17,6 +17,7 @@
 <script src="health.js"></script>
 <script src="icons.js"></script>
 <script src="import.js"></script>
+<script src="measure.js"></script>
 <style>
 body{background:var(--bg,#080b10);color:var(--text-1,#dbe7f0);font-family:var(--font-body,system-ui);
   margin:0;padding:24px;font-size:14px;line-height:1.6}
@@ -2193,6 +2194,51 @@ async function run() {
     }
     return marks.length > 0;
   })());
+
+  /* ---- one reader for a tracked measure ----
+
+     Three apps carried their own copy of "what is this field's number for
+     this day", and the home screen's copy had lost SUM and had never counted
+     a measure that comes off a food label. The checks that matter are the
+     mechanism, not any one app's screen: the rule, the half-life sum, and
+     whether food is counted at all. If those hold, the three apps agree
+     because they now ask the same function. */
+  const mf = id => ({ id: id, label: id, agg: null });
+  ok('measure: with no rule, the day is the latest reading',
+    Measure.dayValue(mf('m'), [{ t: 1, v: 70 }, { t: 2, v: 71.4 }]) === 71.4);
+  ok('measure: a summed field adds its readings up',
+    Measure.dayValue({ id: 'w', agg: 'sum' }, [{ t: 1, v: 2 }, { t: 2, v: 3 }, { t: 3, v: 5 }]) === 10);
+  ok('measure: an averaged field averages them',
+    Measure.dayValue({ id: 'mood', agg: 'avg' }, [{ t: 1, v: 3 }, { t: 2, v: 5 }]) === 4);
+  ok('measure: nothing logged is nothing, not zero',
+    Measure.dayValue(mf('m'), []) === null,
+    'a zero would be a reading nobody took');
+  ok('measure: one half-life leaves half the dose',
+    Math.abs(Measure.decay([{ t: 0, v: 200 }], 5, 5 * 3600000) - 100) < 0.001);
+  ok('measure: a dose not taken yet is not in you',
+    Measure.decay([{ t: 10 * 3600000, v: 200 }], 5, 0) === 0);
+  ok('measure: a five hour half-life reaches back two days',
+    Measure.span(5) === 2);
+
+  /* The bug itself, one level under the screen it showed on: a field fed by
+     a food label, summed. Typed 50, ate 80, and the answer is 130 rather than
+     the last one of them. Rows go in and come straight back out. */
+  (() => {
+    const fid = '__smoke_caf', today = Day.today();
+    Rec.set('field', null, fid, { id: fid, label: 'Smoke caffeine', agg: 'sum', from: 'caff', per: 1, half: 5 });
+    Rec.set('ev', today, fid, { e: [{ t: Date.parse(today + 'T08:00:00'), v: 50 }] });
+    Rec.set('meal', today, '__smoke_meal', { t: Date.parse(today + 'T13:00:00'), name: 'Smoke coffee', caff: 80 });
+    ok('measure: a field fed by food counts the meal',
+      Measure.entries(today, fid).length === 2);
+    ok('measure: a summed field fed by food totals both',
+      Measure.value(today, fid) === 130,
+      'the home screen answered 50 here, because its own copy had no sum and no food');
+    ok('measure: what is left decays from both',
+      Measure.remaining(today, fid, Date.parse(today + 'T18:00:00')) < 130);
+    Rec.del('field', null, fid); Rec.del('ev', today, fid); Rec.del('meal', today, '__smoke_meal');
+    ok('measure: its own rows are gone again',
+      !Rec.row('field', null, fid) || Rec.row('field', null, fid).deleted);
+  })();
 
   /* ---- clean up after ourselves ---- */
   Rec.clear([stamp]);
