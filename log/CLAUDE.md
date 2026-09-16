@@ -82,7 +82,7 @@ has room for.
 **The day graph** is read from STATUS and never written. Mood and energy are
 STATUS's scale fields: each reading is a dot placed by the time of day it was
 logged, joined into a line, scaled 1 to the field's top. Caffeine is STATUS's
-own half-life model (`remaining()`), copied: every dose, typed or read off a
+own half-life model (`Measure.decay`, shared): every dose, typed or read off a
 meal's label, decays at the field's half-life and the line is what is still
 in you, sampled every 15 minutes, doses from the day before included. Its
 scale tops out at 400mg, the daily ceiling the US FDA and the EU's food safety
@@ -121,7 +121,11 @@ under the root brief's many-writers rule:
 The time parser, the clock labels, the kinds and the two publish steps are
 **`shared/journal.js`** since 2026-09-14, the one copy STATUS, QUESTS and the
 home screen read too. LOG's names for them are one-line pointers. The caffeine
-half-life sum is still a copy of STATUS's: change both.
+half-life sum and the rule for a day's one number are **`shared/measure.js`**
+since 2026-09-16, so LOG, STATUS and the home screen cannot answer
+differently. LOG still gathers the readings itself, because the calendar draws
+a year at a time off its own indexes and going back to the store per day per
+column would be slow; what is shared is the rule, not the reading.
 
 The store's ownership warning is per page: it only fires in an app that has
 declared the type it is being written against. STATUS declares `note`; LOG
