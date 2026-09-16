@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.4, 2026-09-15">
+<meta name="mb-version" content="1.0.5, 2026-09-17">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='28' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='55' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='16' y='34' width='68' height='46' rx='9' fill='%237EE8FA'/></svg>">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -1551,7 +1551,17 @@ function blockState() {
   Object.keys(sets).forEach(k => {
     if (k.indexOf('block.') === 0) st[k.slice(6)] = sets[k].v;
   });
-  const ord = (a, b) => (a.ord || 0) - (b.ord || 0);
+  /* ── two things at the same position keep the same order every time ──
+     Position is a number on the row, and two devices can easily land on the
+     same one: add a block at the end of a lane here and another at the end of
+     the same lane there, and both are written as position 2. The merge keeps
+     both rows, correctly, and then this sort had nothing left to separate
+     them — so which came first was whatever order the store happened to hand
+     them over in, and that changes when rows are rewritten. The pair swapped
+     places on a repaint, which is a board rearranging itself for no reason
+     anybody could see. Falling back to the id settles it, and settles it the
+     same way on every device, because the id is the same string on both. */
+  const ord = (a, b) => ((a.ord || 0) - (b.ord || 0)) || String(a.id).localeCompare(String(b.id));
   st.lanes = Object.keys(lanes).map(id => Object.assign({ id: id }, lanes[id])).sort(ord);
   st.lib = Object.keys(items).filter(k => k.indexOf('lib|') === 0)
     .map(k => Object.assign({ id: k.slice(4) }, items[k])).sort(ord);
@@ -5696,10 +5706,71 @@ IO.register({ app: 'block', name: 'BLOCK', types: ['lane', 'item', 'routine', 'r
    Two guards. `touched` means an edit is still on its way to the store, and
    that edit is the newer one, so it is left alone. And a rebuild that comes
    out identical to what is already on screen is dropped without a repaint,
-   which is what makes this cost nothing when the row that moved was our own. */
+   which is what makes this cost nothing when the row that moved was our own.
+
+   ── and then a third, 2026-09-17: the board does not move under your hands ──
+
+   Those two guards covered a quarter of a second each. `touched` is only the
+   gap between changing something and it reaching the store, and `drag` is
+   only while the mouse button is actually down. Everything else about
+   building a board was unprotected, and the sheet is read every forty five
+   seconds while the app is on screen, so ten minutes of laying out a week
+   took thirteen full repaints. Each one throws away the board object, builds
+   a new one, and redraws: the menu you had open closes, the name you were
+   halfway through typing goes, what you had selected clears, and the scroll
+   jumps. Tom, 2026-09-16: "Things get missarranged, I don't want block to
+   update so much."
+
+   Nothing about the sync changed. It still pulls on the same clock and rows
+   still merge the moment they land, so no edit of yours and none of another
+   device's is lost or delayed by this. What waits is the REPAINT. While you
+   are working the board on screen is left exactly as it is, and the rebuild
+   is taken the first moment you are not: twenty seconds with no click and no
+   key, nothing open, nothing focused.
+
+   Working means any of these, and the clock is the last of them on purpose —
+   a menu left open or a cursor left in a text box is someone mid-thought, and
+   no amount of sitting still makes it a good moment to redraw. */
+const QUIET_MS = 20000;
+let lastTouch = 0;
+let quietT = null;
+/* Any press or key anywhere counts, taken in the capture phase so it is seen
+   whatever the target does with the event afterwards. */
+['pointerdown', 'keydown', 'wheel'].forEach(ev =>
+  document.addEventListener(ev, () => { lastTouch = Date.now(); }, true));
+
+/** Why now is a bad moment to redraw, or null when it is a fine one. */
+function boardBusy() {
+  if (touched) return 'saving';
+  if (typeof drag !== 'undefined' && drag) return 'dragging';
+  /* BLOCK's own modal, its right-click menu and its popovers, plus the shared
+     layer's menus and sheets. All four are put into the page when they open
+     and taken out when they close, so being there is being open. */
+  if (document.querySelector('#veil.on, .ctxmenu, .pop, .mb-menu, .mb-sheet')) return 'open';
+  const a = document.activeElement;
+  if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return 'typing';
+  if (Date.now() - lastTouch < QUIET_MS) return 'working';
+  return null;
+}
+
+/** Turned away for now. Ask again once the reason has had time to pass.
+    Re-arms itself if you are still busy when it fires, so an update can never
+    be dropped for good — it only ever waits. */
+function adoptSoon() {
+  pendingAdopt = true;
+  clearTimeout(quietT);
+  quietT = setTimeout(() => {
+    quietT = null;
+    if (!pendingAdopt) return;
+    pendingAdopt = false;
+    adoptRows();
+  }, QUIET_MS + 500);
+}
+
 function adoptRows() {
-  if (touched) { pendingAdopt = true; return false; }          /* an edit is still on its way down */
-  if (typeof drag !== 'undefined' && drag) { pendingAdopt = true; return false; }   /* mid-drag, hands off */
+  const why = boardBusy();
+  if (why) { adoptSoon(); return false; }
+  clearTimeout(quietT); quietT = null;
   const fresh = blockState();
   if (!fresh) return false;
 
