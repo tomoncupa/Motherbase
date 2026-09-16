@@ -213,7 +213,14 @@ class App : Form
             /* We own the window, so dragging is the real thing Windows does
                for a title bar, minus the title bar. */
             ReleaseCapture();
+            /* This runs Windows' own move loop and does not return until he
+               lets go. The web view never sees the mouse come back up, so
+               without handing it the focus again the next press is eaten
+               re-activating the window and the widget feels stuck. */
             SendMessage(Handle, WM_NCLBUTTONDOWN, new IntPtr(HTCAPTION), IntPtr.Zero);
+            if (mode == "widget") { posX = Left; posY = Top; SaveCfg(); }
+            Activate();
+            if (ready) web.Focus();
             return;
         }
         if (verb == "quit") { Quit(); return; }
@@ -227,7 +234,18 @@ class App : Form
         if (w < 120 || h < 60) return;
 
         if (verb == "widget") { mode = "widget"; ClientSize = new Size(w, h); PlaceWidget(); Round(); }
-        else if (verb == "app") { mode = "app"; ClientSize = new Size(w, h); Centre(); Round(); }
+        else if (verb == "app")
+        {
+            /* Opening the whole app used to throw the window into the middle
+               of the screen, which is not where he was looking. It grows from
+               where the widget already is, and only moves as far as it must
+               to stay on the screen. */
+            mode = "app";
+            int wasX = Left, wasY = Top;
+            ClientSize = new Size(w, h);
+            Nudge(wasX, wasY);
+            Round();
+        }
         else if (verb == "checkin")
         {
             /* ── intrusive on purpose ──
@@ -262,6 +280,17 @@ class App : Form
         int y = posY != int.MinValue ? posY : wa.Top + 24;
         if (x < wa.Left - 40 || x > wa.Right - 80) x = wa.Right - Width - 24;
         if (y < wa.Top - 10 || y > wa.Bottom - 40) y = wa.Top + 24;
+        Location = new Point(x, y);
+    }
+
+    /* Stay where you were, and only move to get back on the screen. */
+    void Nudge(int x, int y)
+    {
+        var wa = Screen.FromPoint(new Point(x + 20, y + 20)).WorkingArea;
+        if (x + Width > wa.Right) x = wa.Right - Width;
+        if (y + Height > wa.Bottom) y = wa.Bottom - Height;
+        if (x < wa.Left) x = wa.Left;
+        if (y < wa.Top) y = wa.Top;
         Location = new Point(x, y);
     }
 

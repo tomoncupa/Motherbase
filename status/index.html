@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.19, 2026-09-17">
+<meta name="mb-version" content="1.0.20, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -602,15 +602,23 @@ body.deskmini #deskbar {
   height: 100vh; padding: var(--s-3); background: var(--surface-1);
   position: relative; z-index: 4;
 }
-/* The chevron sits where the whole app's chevron sits, so one corner of the
-   screen toggles between them instead of two. */
-.deskx { position: absolute; top: var(--s-1); right: var(--s-1); }
-.deskpair { display: flex; align-items: center; gap: var(--s-1); margin-left: auto; }
+.deskrow { display: flex; align-items: stretch; gap: var(--s-3); }
+.deskmain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+/* the readings fall to the bottom of their column, level with the pair */
+.deskmain .deskchips { margin-top: auto; padding-top: var(--s-2); }
+/* The chevron at the top, where the whole app's chevron is, and the writing
+   controls at the bottom. In the column rather than floating over it, so it
+   cannot land on the smiley. */
+.deskstack {
+  display: flex; flex-direction: column; align-items: flex-end;
+  justify-content: space-between; gap: var(--s-2); flex: none;
+}
+.deskgrp { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s-1); }
+.deskpair { display: flex; gap: var(--s-1); }
 
 /* the last thing he wrote: the one primary thing in the box */
 .deskline {
   font-size: var(--f-3); line-height: var(--lh-body); color: var(--text-1);
-  padding-right: var(--s-6);
   /* three lines, so a long bullet cannot make the window grow without end */
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden;
@@ -7246,13 +7254,14 @@ function deskBar() {
   if (deskPanel === 'bullet') return deskBulletPanel(bar);
   bar.innerHTML = '';
 
-  const chev = deskBtn('expand', 'Open the whole app', () => deskSetSmall(false));
-  chev.className = 'deskbtn deskx';
-  bar.appendChild(chev);
+  const row = el('div', 'deskrow');
+  const main = el('div', 'deskmain');
+  row.appendChild(main);
+  bar.appendChild(row);
 
   const last = deskLast();
   if (!last) {
-    bar.appendChild(el('div', 'deskempty', 'Nothing written yet'));
+    main.appendChild(el('div', 'deskempty', 'Nothing written yet'));
   } else {
     const p = last.payload;
     const box = el('div');
@@ -7264,10 +7273,8 @@ function deskBar() {
       if (last.date !== Day.today()) when += ' · ' + Day.label(last.date);
       box.appendChild(el('div', 'deskwhen', esc(when)));
     }
-    bar.appendChild(box);
+    main.appendChild(box);
   }
-
-  const foot = el('div', 'deskfoot');
   /* Today's readings, and only once there are some. An icon and a number
      rather than MOOD 4, because the face and the bolt already say it. */
   const chips = el('div', 'deskchips');
@@ -7281,10 +7288,14 @@ function deskBar() {
     c.title = String(f.label || f.id);
     chips.appendChild(c);
   });
-  foot.appendChild(chips);
+  main.appendChild(chips);
 
-  /* The smiley comes before the two ways of writing a line, which is the
-     order Tom asked for: how you are, then what you are doing. */
+  const stack = el('div', 'deskstack');
+  stack.appendChild(deskBtn('expand', 'Open the whole app', () => deskSetSmall(false)));
+
+  /* The smiley above the two ways of writing a line: how you are, then what
+     you are doing. */
+  const grp = el('div', 'deskgrp');
   const pair = el('div', 'deskpair');
   const fab = el('button', 'deskfab');
   fab.setAttribute('data-icon', 'mood');
@@ -7292,7 +7303,7 @@ function deskBar() {
   fab.setAttribute('aria-label', 'Mood and energy');
   fab.title = 'How are you';
   fab.onclick = () => deskOpen('ask');
-  pair.appendChild(fab);
+  grp.appendChild(fab);
 
   NOTE_KINDS.filter(k => k.id === 'todo' || k.id === 'entry').forEach(k => {
     const b = el('button', 'deskbtn', noteSvg(k.id));
@@ -7301,8 +7312,9 @@ function deskBar() {
     b.onclick = () => { S.set('desk.kind', k.id); deskOpen('bullet'); };
     pair.appendChild(b);
   });
-  foot.appendChild(pair);
-  bar.appendChild(foot);
+  grp.appendChild(pair);
+  stack.appendChild(grp);
+  row.appendChild(stack);
 
   if (window.Icons && Icons.paint) Icons.paint(bar);
   deskTitle();
