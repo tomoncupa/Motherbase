@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
-<meta name="mb-version" content="1.0.1, 2026-09-15">
+<meta name="mb-version" content="1.0.2, 2026-09-17">
 <title>NOTICE</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▣</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -77,6 +77,11 @@ textarea.mb-input{width:100%;min-height:calc(var(--tap) * 4);resize:vertical;
 .seg{display:flex;flex-direction:column;gap:var(--s-1)}
 .hide{display:none!important}
 
+/* what the maker made, as words, before it becomes a picture */
+.mk-pre{margin-top:var(--s-3);padding:var(--s-3);border-radius:var(--radius-md);
+  background:var(--surface-2);color:var(--text-1);font-family:var(--font-mono);
+  font-size:var(--f-2);line-height:var(--lh-body);white-space:pre-wrap;word-break:break-word}
+
 /* the RECENT list */
 .hist{display:flex;flex-direction:column;gap:var(--s-2)}
 .hrow{display:flex;align-items:center;gap:var(--s-2);min-height:var(--tap);border-radius:var(--radius-md)}
@@ -115,9 +120,11 @@ textarea.mb-input{width:100%;min-height:calc(var(--tap) * 4);resize:vertical;
     <h2>TEXT</h2>
     <div id="txt"></div>
     <div class="hint">One line is one message. Start lines with <code>-</code> and it becomes a quest.
-      <code>Rewards:</code> and <code>Penalty:</code> are optional. <code>#</code> sets the heading.
-      <code>[x]</code> ticks a goal, <code>40/100</code> shows progress.</div>
+      <code>Rewards:</code>, <code>Effect:</code>, <code>Rank:</code> and <code>Penalty:</code> are optional.
+      <code>#</code> sets the heading. <code>[x]</code> ticks a goal, <code>40/100</code> shows progress.</div>
+    <div class="acts"><button class="mb-btn go mb-press mb-tap" id="btnMake">MAKE ONE FOR ME</button></div>
     <div class="seg"><div class="lbl">WINDOW</div><div id="segKind"></div></div>
+    <div class="seg"><div class="lbl">HEADING</div><div id="segHead"></div></div>
     <div class="seg"><div class="lbl">STYLE</div><div id="segStyle"></div></div>
     <div class="acts"><button class="mb-btn mb-press mb-tap" id="btnRoll">REROLL REWARDS</button></div>
   </section>
@@ -149,7 +156,18 @@ const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
    Every choice is a setting, so the app opens the way it was left. The text
    is a draft, saved as you type; a window is only a row once SAVE or COPY
    was pressed. */
-const KINDS = [{ id: 'auto', name: 'AUTO' }, { id: 'notice', name: 'NOTICE' }, { id: 'quest', name: 'QUEST' }];
+const KINDS = [{ id: 'auto', name: 'AUTO' }, { id: 'notice', name: 'NOTICE' },
+  { id: 'quest', name: 'QUEST' }, { id: 'item', name: 'ITEM' }];
+/* The line across the top of the window. It used to come from the style, so
+   picking HUNTER also picked the word NOTIFICATION and there was no way to
+   have one without the other. Tom, 2026-09-17: unpair them. It is its own
+   choice now, and a `#` line in the text still beats it. */
+const HEADS = [{ id: 'auto', name: 'AUTO' },
+  { id: 'notification', name: 'NOTIFICATION', text: 'NOTIFICATION' },
+  { id: 'quest', name: 'QUEST', text: 'QUEST' },
+  { id: 'system', name: 'SYSTEM MESSAGE', text: 'SYSTEM MESSAGE' },
+  { id: 'notice', name: 'NOTICE', text: 'NOTICE' }];
+const AUTO_HEAD = { notice: 'NOTIFICATION', quest: 'QUEST', item: 'ITEM ACQUIRED' };
 const FRAMES = [{ id: 'window', name: 'WINDOW' }, { id: 'story', name: 'STORY' }, { id: 'post', name: 'POST' }];
 const BACKS = [{ id: 'clear', name: 'CLEAR' }, { id: 'dark', name: 'DARK' }];
 const SIZES = IO.SHARE_SIZES.map(s => ({ id: s.id, name: s.name.toUpperCase(), fill: s.fill }));
@@ -160,7 +178,8 @@ const put = (k, v) => Rec.setting(APP.id, k, v);
 const S = {
   text: get('draft', ''),
   kind: get('kind', 'auto'),
-  style: get('style', 'hunter'),
+  head: get('head', 'auto'),
+  style: get('style', 'block'),
   frame: get('frame', 'window'),
   back: get('back', 'dark'),
   size: get('size', 'mid'),
@@ -172,41 +191,64 @@ const S = {
    is blue whichever theme the app wears. Nothing here reaches the app's own
    CSS, which stays on tokens. */
 const STYLES = {
+  /* BLOCK is the suite's own look, wearing the colours of the Block theme in
+     shared/skins.json: the flat dark plate, the gold accent, Chakra Petch. It
+     is first here, so it is the default (Skins.restore falls back to first
+     for the same reason). No glow, because Block's depth is flat, and no
+     brackets, because the square brackets are a Solo Leveling habit and this
+     one is his. */
+  block: { name: 'BLOCK', face: 'Chakra Petch', body: 'Inter Tight',
+    panel: 'rgba(14,20,29,0.94)', panel2: 'rgba(27,38,52,0.9)',
+    line: '#2B3A4D', glow: 'rgba(0,0,0,0)', ink: '#DBE7F0', mute: '#7F93A8',
+    acc: '#F0B323', warn: '#FF6B81', bgA: '#05070A', bgB: '#131B26',
+    cut: 6, icon: 'square', brackets: false },
   hunter: { name: 'HUNTER', face: 'Rajdhani', body: 'Inter Tight',
     panel: 'rgba(3,14,32,0.88)', panel2: 'rgba(8,36,72,0.62)',
     line: '#5FD3FF', glow: 'rgba(95,211,255,0.85)', ink: '#EAF7FF', mute: '#8FC7E6',
     acc: '#5FD3FF', warn: '#FF6B6B', bgA: '#05070D', bgB: '#0A1830',
-    cut: 10, icon: 'circle', notice: 'NOTIFICATION', quest: 'QUEST INFO', brackets: true },
+    cut: 10, icon: 'circle', brackets: true },
   legend: { name: 'LEGEND', face: 'Cinzel', body: 'Inter Tight',
     panel: 'rgba(28,21,10,0.92)', panel2: 'rgba(52,40,16,0.72)',
     line: '#E1B94A', glow: 'rgba(225,185,74,0.6)', ink: '#FBF3DC', mute: '#C9B27A',
     acc: '#F2D27A', warn: '#FF8A65', bgA: '#0B0906', bgB: '#241A0A',
-    cut: 0, icon: 'diamond', notice: 'NOTICE', quest: 'QUEST', brackets: true },
+    cut: 0, icon: 'diamond', brackets: true },
   void: { name: 'VOID', face: 'Chakra Petch', body: 'Inter Tight',
     panel: 'rgba(16,4,26,0.9)', panel2: 'rgba(40,8,60,0.66)',
     line: '#C77DFF', glow: 'rgba(199,125,255,0.85)', ink: '#F4E9FF', mute: '#B08AD1',
     acc: '#E0AAFF', warn: '#FF5C8A', bgA: '#06030A', bgB: '#1A0828',
-    cut: 6, icon: 'triangle', notice: 'SYSTEM MESSAGE', quest: 'QUEST', brackets: true, scan: true },
+    cut: 6, icon: 'triangle', brackets: true, scan: true },
 };
 const STYLE_LIST = Object.keys(STYLES).map(id => ({ id: id, name: STYLES[id].name }));
+
+/* The word across the top. A `#` line in the text beats this; AUTO follows
+   the kind of window; anything else is what was picked. */
+function headText(q) {
+  const h = pick(HEADS, S.head);
+  return h.text || AUTO_HEAD[q.kind] || 'NOTIFICATION';
+}
 
 /* ══════════════ reading the text ══════════════ */
 const BUL = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
 const CHK = /^\[( |x|X|✓|✔)\]\s*(.*)$/;
-const HEAD = /^\s*(rewards?|loot|penalty|penalties|failure|fail|warning)\s*:\s*(.*)$/i;
+const HEAD = /^\s*(rewards?|loot|effects?|penalty|penalties|failure|fail|warning|rank|grade)\s*:\s*(.*)$/i;
 const PROG = /^(.*?)\s*\[?(\d+)\s*\/\s*(\d+)\]?\s*$/;
 const strip = s => s.replace(/^\[\s*/, '').replace(/\s*\]$/, '');
 
 function parse(text, kind) {
-  const q = { head: '', title: '', desc: [], goals: [], rewards: [], penalty: [], lines: [] };
-  let section = 'goal', anyBullet = false;
+  const q = { head: '', title: '', rank: '', desc: [], goals: [], rewards: [], penalty: [], lines: [] };
+  let section = 'goal', anyBullet = false, anyItem = false;
   String(text || '').split(/\r?\n/).forEach(raw => {
     const line = raw.trim();
     if (!line) return;
     if (/^#/.test(line)) { q.head = line.replace(/^#+\s*/, ''); return; }
     const h = HEAD.exec(line);
     if (h) {
-      section = /^(reward|loot)/i.test(h[1]) ? 'reward' : 'penalty';
+      /* Rank: and Effect: are an item's two markers. Effects are kept in the
+         same list as rewards, because they are drawn the same way and only
+         the label over them differs. */
+      if (/^(rank|grade)/i.test(h[1])) { q.rank = h[2]; anyItem = true; return; }
+      if (/^effect/i.test(h[1])) anyItem = true;
+      section = /^(reward|loot|effect)/i.test(h[1]) ? 'reward' : 'penalty';
       if (h[2]) h[2].split(/\s*,\s*/).forEach(x => { if (x) q[section === 'reward' ? 'rewards' : 'penalty'].push(x); });
       return;
     }
@@ -225,10 +267,18 @@ function parse(text, kind) {
     } else if (!q.title) q.title = body;
     else q.desc.push(body);
   });
-  q.kind = kind === 'auto' ? ((anyBullet || q.rewards.length) ? 'quest' : 'notice') : kind;
+  q.kind = kind === 'auto'
+    ? (anyItem ? 'item' : (anyBullet || q.rewards.length) ? 'quest' : 'notice')
+    : kind;
   /* QUEST chosen by hand with no bullets: the first line is the title and
      the rest are the goals. NOTICE chosen by hand: every line is a message. */
   if (q.kind === 'quest' && !q.goals.length && q.desc.length) { q.goals = q.desc.map(d => ({ label: d, done: false })); q.desc = []; }
+  /* ITEM: the first line is the item's name, anything listed is an effect,
+     and the rest is what it reads like in the hand. Nothing is ticked. */
+  if (q.kind === 'item' && q.goals.length) {
+    q.goals.forEach(g => q.rewards.push(g.label));
+    q.goals = [];
+  }
   if (q.kind === 'notice') {
     q.msgs = q.lines.map(l => strip(l.replace(CHK, '$2')));
     q.rewards.forEach(r => q.msgs.push(r)); q.penalty.forEach(r => q.msgs.push(r));
@@ -272,6 +322,21 @@ function pseudoRewards(q, seed) {
   if (r() < 0.5) out.push(((1 + Math.floor(r() * 9)) * 50 * n).toLocaleString('en') + ' Gold');
   else out.push('Item: ' + ITEMS[Math.floor(r() * ITEMS.length)]);
   return out.slice(0, 4);
+}
+/* An item window with nothing listed still needs something under EFFECTS, and
+   it is made the same steady way a quest's rewards are. */
+function pseudoEffects(q, seed) {
+  const all = (q.title + ' ' + q.desc.join(' ')).trim() || 'item';
+  const r = rng(hash(all) + seed * 7919);
+  let stat = null;
+  STAT_WORDS.forEach(s => { if (!stat && s[1].test(all)) stat = s[0]; });
+  if (!stat) stat = ['STR', 'AGI', 'VIT', 'INT', 'CHA', 'WILL'][Math.floor(r() * 6)];
+  const out = ['+' + (1 + Math.floor(r() * 3)) + ' ' + stat + ' for ' + (2 + Math.floor(r() * 10)) + ' hours'];
+  out.push(['Recovery is ' + (10 + Math.floor(r() * 4) * 5) + '% faster until you next sleep',
+    'The first set costs nothing', 'Fatigue is halved for one session',
+    'One missed day does not break the chain'][Math.floor(r() * 4)]);
+  if (r() < 0.6) out.push('Cannot be used twice in one day');
+  return out;
 }
 
 /* ══════════════ drawing the window ══════════════
@@ -347,6 +412,7 @@ function layout(q, st, ctx, draw) {
     ctx.beginPath();
     if (st.icon === 'circle') ctx.arc(CX, cy, 14, 0, Math.PI * 2);
     else if (st.icon === 'diamond') { ctx.moveTo(CX, cy - 15); ctx.lineTo(CX + 15, cy); ctx.lineTo(CX, cy + 15); ctx.lineTo(CX - 15, cy); ctx.closePath(); }
+    else if (st.icon === 'square') frame(ctx, CX - 13, cy - 13, 26, 26, 5);
     else { ctx.moveTo(CX, cy - 14); ctx.lineTo(CX + 16, cy + 13); ctx.lineTo(CX - 16, cy + 13); ctx.closePath(); }
     ctx.stroke();
     ctx.font = faceOf(st, st.icon === 'triangle' ? 17 : 21, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -355,7 +421,7 @@ function layout(q, st, ctx, draw) {
   }
   y += 38;
   ctx.font = faceOf(st, 11, 700);
-  if (draw) { ctx.fillStyle = st.mute; ctx.textBaseline = 'top'; spaced(ctx, q.head || st[q.kind], CX, y, 3, 'center'); }
+  if (draw) { ctx.fillStyle = st.mute; ctx.textBaseline = 'top'; spaced(ctx, q.head || headText(q), CX, y, 3, 'center'); }
   y += 20;
   if (draw) {
     glowOn(st.glow, 8); ctx.strokeStyle = st.line; ctx.globalAlpha = 0.7; ctx.lineWidth = 1;
@@ -379,6 +445,11 @@ function layout(q, st, ctx, draw) {
       const s = st.brackets ? '[' + q.title + ']' : q.title;
       para(wrapText(ctx, s, CW), faceOf(st, 20, 700), st.acc, 'center', 26, true);
       y += 6;
+    }
+    if (q.kind === 'item' && q.rank) {
+      ctx.font = faceOf(st, 11, 700);
+      if (draw) { ctx.fillStyle = st.mute; ctx.textBaseline = 'top'; spaced(ctx, 'RANK ' + q.rank, CX, y, 3, 'center'); }
+      y += 22;
     }
     if (q.desc.length) {
       ctx.font = bodyOf(st, 13, 500);
@@ -406,9 +477,10 @@ function layout(q, st, ctx, draw) {
         y += 5;
       });
     }
-    const rewards = q.typedRewards ? q.rewards : pseudoRewards(q, S.seed);
+    const rewards = q.typedRewards ? q.rewards
+      : (q.kind === 'item' ? pseudoEffects(q, S.seed) : pseudoRewards(q, S.seed));
     if (rewards.length) {
-      y += 10; label('REWARDS', st.mute);
+      y += 10; label(q.kind === 'item' ? 'EFFECTS' : 'REWARDS', st.mute);
       rewards.forEach(rw => {
         ctx.font = bodyOf(st, 14, 600);
         const lines = wrapText(ctx, rw, CW - 20);
@@ -474,11 +546,13 @@ const FRAME_BOX = {
 };
 function render() {
   const q = parse(S.text, S.kind);
-  const st = STYLES[S.style] || STYLES.hunter;
-  const has = q.kind === 'notice' ? q.msgs.length : (q.title || q.goals.length);
+  const st = STYLES[S.style] || STYLES.block;
+  const has = q.kind === 'notice' ? q.msgs.length : (q.title || q.goals.length || q.rewards.length);
   document.getElementById('empty').classList.toggle('hide', !!has);
   cv.classList.toggle('hide', !has);
-  document.getElementById('btnRoll').classList.toggle('hide', !(has && q.kind === 'quest' && !q.typedRewards));
+  const roll = document.getElementById('btnRoll');
+  roll.classList.toggle('hide', !(has && q.kind !== 'notice' && !q.typedRewards));
+  roll.textContent = q.kind === 'item' ? 'REROLL EFFECTS' : 'REROLL REWARDS';
   document.getElementById('rowBack').classList.toggle('hide', S.frame === 'window');
   document.getElementById('rowSize').classList.toggle('hide', S.frame === 'window');
   if (!has) return null;
@@ -507,6 +581,278 @@ function render() {
   return q;
 }
 
+/* ══════════════ the maker ══════════════
+   Windows he does not have to write. Every word here is a table in this file
+   and every choice is a seeded shuffle, so it works with no signal, costs
+   nothing, and the same settings give the same window until SPIN AGAIN is
+   pressed. It writes the ordinary text the app already reads, into the same
+   box, so anything it makes can be edited by hand afterwards. */
+
+const MAKE_KINDS = [
+  { id: 'daily', name: 'DAILY QUEST' },
+  { id: 'urgent', name: 'URGENT QUEST' },
+  { id: 'penalty', name: 'PENALTY QUEST' },
+  { id: 'item', name: 'ITEM' },
+  { id: 'title', name: 'TITLE' },
+  { id: 'skill', name: 'SKILL' },
+  { id: 'level', name: 'LEVEL UP' },
+  { id: 'msg', name: 'MESSAGE' },
+];
+/* The rank scales two things and nothing else: how many goals there are and
+   how big the numbers in them get. E is a day you are ill; S is a day you
+   will remember. */
+const RANKS = [
+  { id: 'E', name: 'E', mult: 0.4, goals: 2 },
+  { id: 'D', name: 'D', mult: 0.7, goals: 3 },
+  { id: 'C', name: 'C', mult: 1, goals: 3 },
+  { id: 'B', name: 'B', mult: 1.4, goals: 4 },
+  { id: 'A', name: 'A', mult: 2, goals: 4 },
+  { id: 'S', name: 'S', mult: 3, goals: 5 },
+];
+/* Each topic: countable goals as [words, the C-rank number, a sane ceiling],
+   goals with no number in them, and its own names. */
+const TOPICS = [
+  { id: 'train', name: 'TRAINING', stat: 'STR',
+    reps: [['push-ups', 100], ['sit-ups', 100], ['squats', 100], ['walking lunges', 60],
+      ['pull-ups', 20], ['dips', 40], ['burpees', 50], ['minutes under the bar', 45]],
+    flat: ['Finish every working set', 'Beat last session on one lift', 'Warm up before the first set',
+      'Log every set in TRAIN', 'No phone between sets', 'One set past the point it stops being fun'],
+    titles: ['Stone Legs', 'Iron Will', 'The One Who Shows Up', 'Unbroken'],
+    items: ['Belt of the Third Set', 'Chalk of the Certain Grip', 'Bar of Unbending Iron'] },
+  { id: 'cardio', name: 'CARDIO', stat: 'AGI',
+    reps: [['km run', 10], ['minutes in zone 2', 45], ['flights of stairs', 30],
+      ['minutes on the bike', 40], ['minutes skipping', 15], ['thousand steps', 12, 25]],
+    flat: ['Out of the door before you think about it', 'Keep it slow enough to talk',
+      'Same route, one minute faster', 'Walk the last kilometre home'],
+    titles: ['Long Distance', 'Relentless', 'Night Runner'],
+    items: ['Boots of the Long Walk', 'Second Wind in a Bottle', 'Lungs of the Marathon'] },
+  { id: 'food', name: 'FOOD', stat: 'VIT',
+    reps: [['g of protein', 180, 260], ['litres of water', 3, 5], ['portions of vegetables', 5, 9],
+      ['meals cooked at home', 3, 5]],
+    flat: ['No sugar until the sun goes down', 'Eat before you are starving',
+      'Weigh one meal honestly', 'Nothing after 9pm', 'Log every bite in STATUS'],
+    titles: ['Clean Plate', 'The Disciplined Fork'],
+    items: ['Protein of the Ancients', 'Flask of Still Water', 'Ration of the Steady Hand'] },
+  { id: 'sleep', name: 'SLEEP', stat: 'VIT',
+    reps: [['hours in bed', 8, 9], ['minutes of wind-down', 30, 60], ['nights before midnight', 5, 7]],
+    flat: ['Phone out of the room', 'Lights down an hour before bed',
+      'Same wake time as yesterday', 'No caffeine after midday'],
+    titles: ['Night Owl Slayer', 'Early Riser', 'Keeper of the Hour'],
+    items: ['Draught of Deep Sleep', 'Curtain of True Dark', 'Pillow of the Quiet Hour'] },
+  { id: 'content', name: 'CONTENT', stat: 'CHA',
+    reps: [['posts written', 3, 7], ['reels filmed', 2, 5], ['comments answered', 20, 60],
+      ['minutes on camera', 20, 60]],
+    flat: ['Publish before you are ready', 'One hook rewritten five ways',
+      'Film it in one take', 'Reply to everyone who wrote in', 'Say the useful thing first'],
+    titles: ['Protagonist', 'The Voice', 'Shipped It Anyway'],
+    items: ['Lens of the First Take', 'Ring Light of Small Courage', 'Script of No Rambling'] },
+  { id: 'study', name: 'STUDY', stat: 'INT',
+    reps: [['pages read', 40, 120], ['minutes of deep work', 90, 240], ['notes written', 10, 30]],
+    flat: ['One chapter, no skimming', 'Teach it back out loud',
+      'Close every other tab', 'Write down what you did not understand'],
+    titles: ['Quiet Grinder', 'Student of the System'],
+    items: ['Skill Book: Concentration', 'Lens of Slow Reading', 'Elixir of Focus'] },
+  { id: 'money', name: 'MONEY', stat: 'INT',
+    reps: [['invoices sent', 3, 8], ['calls made', 5, 12], ['spends logged', 10, 40]],
+    flat: ['Count every account', 'Chase the oldest unpaid one', 'Put something in a pot',
+      'Open the statement you have been avoiding'],
+    titles: ['Ledger Keeper', 'Steady Hand'],
+    items: ['Purse of the Honest Count', 'Ledger That Cannot Lie'] },
+  { id: 'coach', name: 'COACHING', stat: 'CHA',
+    reps: [['check-ins answered', 6, 20], ['programs written', 2, 6], ['clients called', 4, 10]],
+    flat: ['Send the hard message', 'Review one client properly',
+      'Write one thing worth keeping', 'Answer before the day ends'],
+    titles: ['The Coach', 'Keeper of the Routine'],
+    items: ['Whistle of Plain Speaking', 'Clipboard of the Long View'] },
+  { id: 'will', name: 'DISCIPLINE', stat: 'WILL',
+    reps: [['minutes of cold water', 3, 10], ['minutes of stillness', 20, 45],
+      ['hours without the phone', 4, 10]],
+    flat: ['No scrolling before the work', 'Do it at the hour you said',
+      'Say no once, out loud', 'Finish what is half-done first', 'Make the bed'],
+    titles: ['Shadow of Discipline', 'Iron Will', 'Unbroken'],
+    items: ['Cloak of No Excuses', 'Rune of Consistency', 'Chain That Does Not Break'] },
+];
+const MIXED = { id: 'mix', name: 'ANYTHING', stat: null,
+  reps: [].concat.apply([], TOPICS.map(t => t.reps)),
+  flat: [].concat.apply([], TOPICS.map(t => t.flat)),
+  titles: [].concat.apply([], TOPICS.map(t => t.titles)),
+  items: [].concat.apply([], TOPICS.map(t => t.items)) };
+const TOPIC_LIST = [{ id: 'mix', name: 'ANYTHING' }].concat(TOPICS.map(t => ({ id: t.id, name: t.name })));
+const topicOf = id => (id === 'mix' ? MIXED : (TOPICS.filter(t => t.id === id)[0] || MIXED));
+
+const QUEST_TITLE = ['Preparation', 'The Daily Grind', 'Nothing Fancy', 'Show Up Anyway',
+  'The Work Before The Work', 'Ordinary Heroics', 'Keep The Chain', 'No Zero Days',
+  'Before The Day Starts', 'The Long Game'];
+const QUEST_DESC = ['This quest has been assigned. It cannot be refused.',
+  'Issued daily. Failure carries a penalty.', 'The system has judged this necessary.',
+  'You accepted this the moment you woke up.', 'No extensions. No substitutions.',
+  'Nobody is coming to do it for you.'];
+const PENALTIES = ['{h} hours in the penalty zone', 'Tomorrow’s quest is doubled',
+  'The chain resets to zero', '{e} EXP removed', 'Rank falls one step',
+  'No rest day this week'];
+const URGENT = ['Time remaining: {h} hours', 'Expires at midnight',
+  'Time remaining: {m} minutes', 'This window closes when the sun does'];
+const ITEM_HEAD = ['Elixir', 'Potion', 'Draught', 'Rune', 'Charm', 'Scroll', 'Sigil', 'Band',
+  'Cloak', 'Token', 'Key', 'Lens', 'Boots', 'Ring', 'Tonic', 'Mantle'];
+const ITEM_OF = ['Focus', 'the Second Wind', 'the Long Walk', 'No Excuses', 'Quiet Hours',
+  'the Early Rise', 'Steady Hands', 'the Clean Plate', 'Deep Sleep', 'the Empty Inbox',
+  'Small Steps', 'the Unbroken Chain', 'the Sixth Rep', 'Warm Muscle', 'the Hard Message'];
+const ITEM_FLAV = ['Warm to hold. It hums faintly while the work is unfinished.',
+  'Light as paper, and nobody who owns one says where it came from.',
+  'The guild sells these by the crate. Nobody has one when they need it.',
+  'Whoever carries this finds the first set easier than the last.',
+  'It works once a day, and never twice on the same excuse.',
+  'Older than the system. It remembers every morning you got up.',
+  'Cracked down one side. It has been used, and it worked.',
+  'It smells of chalk and cold air.',
+  'Worthless in a shop. Priceless at five in the morning.',
+  'The instructions are one word long: begin.'];
+const SKILLS = [['Consistency', 'Passive', 'One missed day no longer breaks the chain.'],
+  ['Early Rise', 'Passive', 'The first hour of the day costs no willpower.'],
+  ['Second Wind', 'Active', 'Once per session, fatigue is halved for five minutes.'],
+  ['Plain Speech', 'Passive', 'The hard message is sent on the first attempt.'],
+  ['Deep Work', 'Active', 'Ninety minutes pass without a single notification.'],
+  ['Hunger Control', 'Passive', 'Cravings after dark lose half their weight.'],
+  ['Cold Start', 'Active', 'The warm-up is no longer needed to begin.']];
+const MSGS = ['The player has not logged a session in {d} days.',
+  'A pattern has been detected. Sleep is down {p}% this week.',
+  'The daily quest has not been completed. A warning has been issued.',
+  'Your chain has reached {d} days. It has never been longer.',
+  'A new window has opened. It will not stay open.',
+  'The system has nothing to report. Carry on.',
+  'You are being watched by the person you will be in a year.'];
+
+function makeText(o) {
+  const t = topicOf(o.topic);
+  const rk = pick(RANKS, o.rank);
+  const seedText = (o.about || '') + '|' + o.kind + '|' + o.topic + '|' + o.rank;
+  const r = rng(hash(seedText) + o.spin * 7919);
+  const one = a => a[Math.floor(r() * a.length)];
+  const some = (a, n) => { const c = a.slice(), out = []; while (out.length < n && c.length) out.push(c.splice(Math.floor(r() * c.length), 1)[0]); return out; };
+  const round = v => v >= 50 ? Math.round(v / 10) * 10 : v >= 20 ? Math.round(v / 5) * 5 : Math.max(1, Math.round(v));
+  const rep = spec => {
+    const cap = spec[2] || spec[1] * 4;
+    return round(Math.min(cap, spec[1] * rk.mult)) + ' ' + spec[0];
+  };
+  const fill = s => s.replace('{h}', 1 + Math.floor(r() * 8)).replace('{m}', (2 + Math.floor(r() * 5)) * 15)
+    .replace('{e}', ((1 + Math.floor(r() * 9)) * 100).toLocaleString('en'))
+    .replace('{d}', 2 + Math.floor(r() * 12)).replace('{p}', (2 + Math.floor(r() * 5)) * 5);
+  const about = String(o.about || '').trim();
+  const L = [];
+
+  if (o.kind === 'item') {
+    const name = about || (r() < 0.45 && t.items.length ? one(t.items)
+      : one(ITEM_HEAD) + ' of ' + one(ITEM_OF));
+    L.push('# ITEM ACQUIRED', name, 'Rank: ' + rk.id, one(ITEM_FLAV));
+    if (o.spell) {
+      const stat = t.stat || one(['STR', 'AGI', 'VIT', 'INT', 'CHA', 'WILL']);
+      L.push('Effect: +' + Math.max(1, Math.round(rk.mult * 2)) + ' ' + stat + ' for ' + (2 + Math.floor(r() * 10)) + ' hours');
+      L.push('Effect: ' + one(['Recovery is ' + (10 + Math.floor(r() * 4) * 5) + '% faster until you next sleep',
+        'The first set costs nothing', 'Fatigue is halved for one session',
+        'One missed day does not break the chain']));
+      if (r() < 0.5) L.push('Effect: Cannot be used twice in one day');
+    }
+    return { text: L.join('\n'), kind: 'item' };
+  }
+  if (o.kind === 'title') {
+    const name = about || one(t.titles.concat(TITLES));
+    L.push('# TITLE EARNED', 'You have earned the title: ' + name,
+      one(['Granted for finishing what was started, ' + (10 + Math.floor(r() * 50)) + ' days running.',
+        'Nobody handed this over. It was taken.',
+        'Awarded by the system. It does not award many.',
+        'Earned on the days nobody was watching.']));
+    if (o.spell) L.push('Effect: ' + (t.stat || 'WILL') + ' +' + Math.max(1, Math.round(rk.mult)) + ' while the title is worn.');
+    return { text: L.join('\n'), kind: 'notice' };
+  }
+  if (o.kind === 'skill') {
+    const s = about ? [about, r() < 0.5 ? 'Passive' : 'Active', one(SKILLS)[2]] : one(SKILLS);
+    L.push('# SKILL UNLOCKED', s[0] + ' (' + s[1] + ') has been acquired.', s[2]);
+    if (o.spell) L.push('Effect: ' + (t.stat || 'WILL') + ' +' + Math.max(1, Math.round(rk.mult)) + ' while it is in use.');
+    return { text: L.join('\n'), kind: 'notice' };
+  }
+  if (o.kind === 'level') {
+    const lv = 5 + Math.floor(r() * 60);
+    L.push('# LEVEL UP', 'You have reached Level ' + lv + '.',
+      'All stats +' + Math.max(1, Math.round(rk.mult)) + '.',
+      (1 + Math.floor(r() * 5)) + ' points available.');
+    if (about) L.push(about);
+    return { text: L.join('\n'), kind: 'notice' };
+  }
+  if (o.kind === 'msg') {
+    L.push('# SYSTEM MESSAGE');
+    if (about) L.push(about);
+    some(MSGS, about ? 1 : 2).forEach(m => L.push(fill(m)));
+    return { text: L.join('\n'), kind: 'notice' };
+  }
+
+  /* the three quests */
+  const head = o.kind === 'urgent' ? 'URGENT QUEST' : o.kind === 'penalty' ? 'PENALTY QUEST' : 'DAILY QUEST';
+  const n = o.kind === 'penalty' ? Math.max(1, rk.goals - 1) : rk.goals;
+  const reps = some(t.reps, Math.min(t.reps.length, Math.max(1, n - (r() < 0.6 ? 1 : 0))));
+  const goals = reps.map(rep).concat(some(t.flat, Math.max(0, n - reps.length)));
+  L.push('# ' + head);
+  /* the quest's own name. The topic's titles are awards, not quest names:
+     "Protagonist" is a thing you are called, not a thing you are set. */
+  L.push(about || one(QUEST_TITLE));
+  /* an urgent quest always says how long is left: that is the whole point of
+     calling it urgent */
+  if (o.kind === 'urgent') L.push(fill(one(URGENT)));
+  else if (r() < 0.7) L.push(one(QUEST_DESC));
+  goals.forEach(g => L.push('- ' + g));
+  if (o.spell) {
+    const q = parse(L.join('\n'), 'quest');
+    L.push('Rewards: ' + pseudoRewards(q, Math.floor(r() * 1000)).join(', '));
+  }
+  if (o.kind !== 'daily' || r() < 0.5) L.push('Penalty: ' + fill(one(PENALTIES)));
+  return { text: L.join('\n'), kind: 'quest' };
+}
+
+/* The panel. It shows the words it made, not the picture: the picture is one
+   press away and the words are what he will want to change. */
+const MK = {
+  kind: get('mk.kind', 'daily'), topic: get('mk.topic', 'mix'),
+  rank: get('mk.rank', 'C'), spell: !!get('mk.spell', false), about: '',
+};
+function makePanel() {
+  Mobile.feedback('open');
+  let spin = 0, out = null, draw = () => {};
+  UI.dialog({
+    title: 'MAKE ONE', width: 520,
+    body: (b, h) => {
+      const pre = document.createElement('pre'); pre.className = 'mk-pre';
+      draw = () => { out = makeText(Object.assign({ spin: spin }, MK)); pre.textContent = out.text; };
+      const seg = (lbl, list, key) => {
+        const wrap = document.createElement('div'); wrap.className = 'seg';
+        wrap.appendChild(Object.assign(document.createElement('div'), { className: 'lbl', textContent: lbl }));
+        wrap.appendChild(UI.segmented(list, MK[key], v => { MK[key] = v; put('mk.' + key, v); draw(); }));
+        b.appendChild(wrap);
+      };
+      seg('WHAT', MAKE_KINDS, 'kind');
+      seg('ABOUT', TOPIC_LIST, 'topic');
+      seg('RANK', RANKS, 'rank');
+      const f = UI.field('text', { value: MK.about, placeholder: 'or name it yourself (optional)' });
+      f.addEventListener('input', () => { MK.about = f.value; draw(); });
+      b.appendChild(UI.row('In your own words', 'A quest title, an item name, a line to say', null));
+      b.appendChild(f);
+      b.appendChild(UI.row('Write the rewards in', 'Off, and NOTICE makes them up and REROLL respins them',
+        UI.toggle(MK.spell, v => { MK.spell = v; put('mk.spell', v); draw(); })));
+      b.appendChild(pre);
+      draw();
+    },
+    actions: [
+      { label: 'SPIN AGAIN', fn: () => { spin++; draw(); Mobile.feedback('select'); return false; } },
+      { label: 'USE IT', kind: 'go', fn: () => {
+        if (!out) return;
+        S.text = out.text; ta.value = out.text; put('draft', S.text);
+        S.kind = out.kind; put('kind', S.kind);
+        S.head = 'auto'; put('head', 'auto');   // the made text carries its own `#`
+        seg('segKind', KINDS, 'kind'); seg('segHead', HEADS, 'head');
+        Mobile.feedback('success'); render();
+      } },
+    ],
+  });
+}
+
 /* ══════════════ the controls ══════════════ */
 const $ = id => document.getElementById(id);
 function seg(id, list, key, after) {
@@ -514,6 +860,7 @@ function seg(id, list, key, after) {
   box.appendChild(UI.segmented(list, S[key], v => { S[key] = v; put(key, v); Mobile.feedback('select'); render(); if (after) after(); }));
 }
 seg('segKind', KINDS, 'kind');
+seg('segHead', HEADS, 'head');
 seg('segStyle', STYLE_LIST, 'style');
 seg('segFrame', FRAMES, 'frame');
 seg('segBack', BACKS, 'back');
@@ -530,13 +877,14 @@ ta.addEventListener('input', () => {
 });
 
 $('btnRoll').onclick = () => { S.seed = S.seed + 1; put('seed', S.seed); Mobile.feedback('select'); render(); };
+$('btnMake').onclick = makePanel;
 
 const fileName = q => {
   const first = (q.title || (q.msgs && q.msgs[0]) || 'window').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
   return 'notice-' + (first || 'window') + '-' + Day.today();
 };
 function keep(q) {
-  Rec.set('msg', Day.today(), newId(), { text: S.text, kind: q.kind, style: S.style, seed: S.seed, t: Date.now() });
+  Rec.set('msg', Day.today(), newId(), { text: S.text, kind: q.kind, head: S.head, style: S.style, seed: S.seed, t: Date.now() });
 }
 /* The picture on screen IS the file, already drawn, so the share sheet is
    asked for inside the tap that pressed SAVE. iOS allows nothing later. */
@@ -549,16 +897,65 @@ $('btnSave').onclick = () => {
   Mobile.feedback('success');
   IO.handOver(png, fileName(q) + '.png');
 };
-const canCopy = !!(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem);
+/* ── COPY ──
+   It used to be one attempt with one message. The modern clipboard needs a
+   permission the browser refuses outright in places the suite genuinely runs
+   from: a page opened straight out of a folder has no proper address, so
+   Chrome answers "Write permission denied" before it looks at the picture,
+   and all NOTICE said was "Copy did not work". Watched on 2026-09-17: the
+   permission came back `denied` and every attempt, promise form or blob
+   form, was refused with the document focused and a real press behind it.
+
+   So there are two ways now. The new one first, with the promise made inside
+   the tap because iOS will not take a picture handed over later. If the
+   browser refuses that, the old selection copy, which is not permission
+   gated and is what still works from a folder. If both fail, it says which
+   of the two things is wrong instead of shrugging. */
+const canCopy = !!((navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) ||
+  document.queryCommandSupported);
 $('btnCopy').classList.toggle('hide', !canCopy);
+
+/* the old way: the picture in a box nobody can see, selected, and the
+   browser's own Copy run over it. No permission, but it needs the press. */
+function copyOldWay() {
+  let box = null;
+  try {
+    const url = cv.toDataURL('image/png');
+    box = document.createElement('div');
+    box.contentEditable = 'true';
+    box.setAttribute('aria-hidden', 'true');
+    box.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;opacity:0';
+    const img = new Image();
+    img.src = url; img.width = cv.width; img.height = cv.height;
+    box.appendChild(img);
+    document.body.appendChild(box);
+    const r = document.createRange(); r.selectNodeContents(box);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    const ok = document.execCommand('copy');
+    sel.removeAllRanges();
+    return ok;
+  } catch (e) { return false; }
+  finally { if (box) box.remove(); }
+}
+
 $('btnCopy').onclick = () => {
   const q = render();
   if (!q) { UI.toast('Nothing to copy', { bad: true }); return; }
+  const won = () => { keep(q); Mobile.feedback('success'); UI.toast('Copied'); };
+  const fellBack = () => {
+    if (copyOldWay()) { won(); return; }
+    /* Nothing worked. Say which thing is in the way, and offer the picture,
+       which always works. */
+    const folder = location.protocol === 'file:';
+    UI.toast(folder
+      ? 'This browser will not let a page opened from a folder copy a picture. SAVE PICTURE still works.'
+      : 'This browser refused the clipboard. SAVE PICTURE still works.', { bad: true });
+  };
+  if (!(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem)) { fellBack(); return; }
   try {
     const item = new ClipboardItem({ 'image/png': new Promise(res => cv.toBlob(res, 'image/png')) });
-    navigator.clipboard.write([item]).then(() => { keep(q); Mobile.feedback('success'); UI.toast('Copied'); },
-      () => UI.toast('Copy did not work', { bad: true }));
-  } catch (e) { UI.toast('Copy did not work', { bad: true }); }
+    navigator.clipboard.write([item]).then(won, fellBack);
+  } catch (e) { fellBack(); }
 };
 
 /* ── RECENT: every window saved or copied, newest first ── */
@@ -576,12 +973,13 @@ $('btnRecent').onclick = () => {
         const first = String(p.text || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean)[0] || 'window';
         const row = document.createElement('div'); row.className = 'hrow mb-plate';
         const go = document.createElement('button'); go.className = 'pick mb-press';
-        go.innerHTML = '<b>' + UI.esc(first) + '</b><small>' + UI.esc((STYLES[p.style] || STYLES.hunter).name + ' · ' +
+        go.innerHTML = '<b>' + UI.esc(first) + '</b><small>' + UI.esc((STYLES[p.style] || STYLES.block).name + ' · ' +
           (p.kind === 'quest' ? 'quest' : 'notice') + ' · ' + Day.label(r.date || Day.today())) + '</small>';
         go.onclick = () => {
           S.text = p.text || ''; S.style = STYLES[p.style] ? p.style : S.style; S.seed = +p.seed || 0;
+          if (p.head && pick(HEADS, p.head).id === p.head) { S.head = p.head; put('head', S.head); }
           ta.value = S.text; put('draft', S.text); put('style', S.style); put('seed', S.seed);
-          seg('segStyle', STYLE_LIST, 'style');
+          seg('segStyle', STYLE_LIST, 'style'); seg('segHead', HEADS, 'head');
           render(); h.close(); Mobile.feedback('select');
         };
         const del = document.createElement('button'); del.className = 'del mb-press';
