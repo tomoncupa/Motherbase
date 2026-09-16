@@ -103,6 +103,27 @@ self.addEventListener('activate', e => {
 
 /* Only a real answer is worth keeping. An error page cached is an error page
    served back forever. */
+/* ── the network half has to actually reach the network ──
+   `fetch()` inside a worker goes through the browser's OWN http cache, so
+   "newest copy whenever the network can give one" could still be answered
+   out of a copy the browser had lying about, with no request leaving the
+   machine and nothing saying so.
+
+   Measured here on 2026-09-17, which is how it was found: the worker handed
+   the page a 139,373 byte shared/io.js while the file on disk was 140,046
+   and carried a function the old one did not have. Every foundation check
+   threw on it, and on a phone it would have been a client silently running
+   last week's code.
+
+   `no-cache` does not mean no caching. It means ask the server first: the
+   request still goes, the server still answers 304 when nothing changed, and
+   the copy is still kept for when there is no signal. It costs a round trip,
+   not a download, and only on the unstamped half. */
+const fresh = req => {
+  try { return new Request(req, { cache: 'no-cache' }); }
+  catch (e) { return req; }
+};
+
 const keep = (req, res) => {
   if (res && res.ok && res.type === 'basic') {
     const copy = res.clone();
@@ -155,7 +176,7 @@ self.addEventListener('fetch', e => {
      here because this half is the unstamped half: nothing in it uses the
      query to say which version it wants. */
   e.respondWith(
-    fetch(req)
+    fetch(fresh(req))
       .then(r => keep(req, r))
       .catch(() => caches.match(req, { ignoreSearch: true }).then(hit => {
         if (hit) return hit;
