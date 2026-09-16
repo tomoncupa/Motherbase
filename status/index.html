@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.21, 2026-09-17">
+<meta name="mb-version" content="1.0.24, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -433,8 +433,9 @@ label.fl:first-child{margin-top:0}
 .seg button.on{background:var(--surface-1);color:var(--text-1)}
 
 /* ── switches ── */
+/* the whole row answers a press, so it says so under a mouse too */
 .sw{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);border-radius:var(--radius-md);
-  background:var(--surface-2);margin-bottom:var(--s-2);min-height:var(--tap)}
+  background:var(--surface-2);margin-bottom:var(--s-2);min-height:var(--tap);cursor:pointer}
 .sw .nm{flex:1;min-width:0;font-size:var(--f-3)}
 .sw .nm small{display:block;color:var(--text-muted);font-size:var(--f-1);margin-top:1px}
 .sw .tg{width:48px;height:28px;border-radius:14px;background:var(--surface-3);
@@ -602,9 +603,19 @@ body.deskmini #deskbar {
   height: 100vh; padding: var(--s-3); background: var(--surface-1);
   position: relative; z-index: 4;
 }
-/* The chevron never moves, in either mode, so it is parked out of the flow
-   in the top corner and the window keeps that corner still when it grows. */
-.deskx { position: absolute; top: var(--s-1); right: var(--s-1); }
+/* The chevron never moves, in either mode: one button, fixed to the window's
+   top right corner, which is the corner the host holds still while the window
+   changes size. */
+.deskx {
+  position: fixed; top: var(--s-1); right: var(--s-1); z-index: 60;
+  min-width: var(--tap); min-height: var(--tap);
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; border-radius: var(--radius-sm);
+  color: var(--text-muted); cursor: pointer;
+}
+.deskx:hover { background: var(--surface-2); color: var(--text-1); }
+/* room for it, so it does not sit on top of the header's own buttons */
+html.deskhost header { padding-right: var(--s-7); }
 .deskpair { display: flex; align-items: center; gap: var(--s-1); margin-left: auto; }
 
 /* the last thing he wrote: the one primary thing in the box */
@@ -620,7 +631,8 @@ body.deskmini #deskbar {
 
 /* one row of controls, along the bottom */
 .deskfoot { display: flex; align-items: flex-end; gap: var(--s-1); }
-.deskchips { display: flex; align-items: baseline; gap: var(--s-4); }
+.deskchips { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-1); }
+.deskchip { justify-content: space-between; min-width: 92px; }
 .deskfoot { min-height: var(--tap); }
 .deskchip { display: flex; align-items: baseline; gap: var(--s-1); }
 .deskchip span {
@@ -5625,12 +5637,31 @@ addEventListener('resize', () => { try { fitHero(); } catch (e) {} });
 <script>
 /* ══════════════ SETTINGS ══════════════ */
 
+/* ── the whole row is the switch ──
+   Found 2026-09-17 while measuring something else, and it had been this way
+   since the first commit on 2026-08-20. The row is already 44px tall, which
+   is the target the standards ask for, but only the 48x28 switch on the end
+   of it answered a press. So the hit area was 28px on a screen you use with
+   a thumb, and every switch in here had it: the fields, the spent tile, the
+   money tab, counting calories.
+
+   The row listens now rather than the switch. Nothing moves and nothing
+   changes size; the part of it that was already big enough is simply the part
+   that responds.
+
+   A press that landed on a real control inside the row is that control's, not
+   the switch's. The field rows carry up and down arrows, and without this an
+   arrow would reorder the field AND flip it off in the same tap. The switch
+   itself is a div rather than a button, so pressing it still reaches here. */
 function toggleRow(label, sub, on, fn) {
   const r = el('div', 'sw');
   r.innerHTML = '<span class="nm">' + esc(label) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>';
   const t = el('div', 'tg' + (on ? ' on' : ''), '<i></i>');
-  t.onclick = () => fn(!on);
   r.appendChild(t);
+  r.onclick = e => {
+    if (e.target.closest('button, a, input, select, textarea')) return;
+    fn(!on);
+  };
   return r;
 }
 function fieldRow(pane, label, key, val, hint) {
@@ -7073,7 +7104,14 @@ const DESK_WIDE = 460;
 function deskW() { return deskPanel === 'ask' ? DESK_WIDE : 320; }
 let deskSaid = '';
 function deskSend(m) {
-  if (!HOSTED || m === deskSaid) return;
+  if (!HOSTED) return;
+  /* `drag` is an EVENT, not a state, so it must never be deduped. It was,
+     and that is the whole drag bug: the first press sent one, every press
+     after it looked like a repeat and was dropped, and maximising cleared the
+     way only because it put a different message in between. Tom found it by
+     noticing max-then-min made dragging work again. */
+  if (m === 'drag') { try { window.chrome.webview.postMessage(m); } catch (e) {} return; }
+  if (m === deskSaid) return;
   /* Saying the same thing twice is a window resize for nothing. Seeding the
      fields on a first run redrew the widget twenty times in one second, and
      every one of those was an identical message. */
@@ -7092,6 +7130,17 @@ let deskNagged = 0;      /* the backup reminder, held back while the widget is u
 let deskPanel = '';      /* '', 'ask' or 'bullet': what the widget has turned into */
 let deskAskedAt = 0;     /* when the open one was put up */
 let deskAskedNight = ''; /* the night it went up on, if it was outside hours */
+let deskChev = null;     /* the one chevron, in the corner, for both views */
+
+function deskPointChev() {
+  if (!deskChev) return;
+  const role = deskSmall ? 'expand' : 'collapse';
+  const name = deskSmall ? 'Open the whole app' : 'Mini mode';
+  deskChev.setAttribute('data-icon', role);
+  deskChev.setAttribute('aria-label', name);
+  deskChev.title = name;
+  if (window.Icons && Icons.paint) Icons.paint(deskChev.parentNode || document.body);
+}
 
 function deskCfg() {
   return {
@@ -7245,10 +7294,6 @@ function deskBar() {
   if (deskPanel === 'ask') return deskAskPanel(bar);
   if (deskPanel === 'bullet') return deskBulletPanel(bar);
   bar.innerHTML = '';
-
-  const chev = deskBtn('expand', 'Open the whole app', () => deskSetSmall(false));
-  chev.className = 'deskbtn deskx';
-  bar.appendChild(chev);
 
   const last = deskLast();
   if (!last) {
@@ -7509,6 +7554,7 @@ function deskAsk() {
 function deskSetSmall(v) {
   deskSmall = !!v;
   if (!deskSmall) deskPanel = '';
+  deskPointChev();
   document.body.classList.toggle('deskmini', deskSmall);
   S.set('desk.small', deskSmall ? 1 : 0);
   if (deskSmall) { deskBar(); return; }
@@ -7566,19 +7612,12 @@ function drawDeskTab(pane) {
 }
 
 if (DESK) {
-  /* The whole app needs a way INTO Mini mode; the widget carries its own way
-     out. One button in the header, and only when the launcher opened the
-     page. */
-  const hdr = document.querySelector('header');
-  if (hdr) {
-    const shrink = el('button', 'hbtn');
-    shrink.setAttribute('data-icon', 'collapse');
-    shrink.setAttribute('aria-label', 'Mini mode');
-    shrink.title = 'Mini mode';
-    shrink.onclick = () => deskSetSmall(true);
-    hdr.insertBefore(shrink, hdr.querySelector('.hbtn'));
-    if (window.Icons && Icons.paint) Icons.paint(hdr);
-  }
+  /* One button for both directions, pinned to the corner, made once and
+     never moved. */
+  deskChev = el('button', 'deskx');
+  deskChev.onclick = () => deskSetSmall(!deskSmall);
+  document.body.appendChild(deskChev);
+  deskPointChev();
   /* 20 seconds is far finer than the shortest gap he can set, and Windows
      throttles a minimised window's timers to about once a minute anyway, so
      a check in is never more than a minute late. */
