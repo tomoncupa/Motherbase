@@ -57,7 +57,12 @@ DROP_APPS = ['form', 'portion', 'wealth', 'arc', 'speak', 'system']   # removed 
 # STREAKS and NUMBERS were deleted from the main repo on 2026-08-28, and
 # the STREAKS that replaced one of them counts ticks, so it works for a
 # client with no HABITS just as well as it does for Tom.
-DROP_WIDGETS = []
+#   links  Tom's own, 2026-09-17: every app's web address, his suite and the
+#          client suite side by side. A client has no use for a list of apps
+#          they do not have, and no business with the addresses of Tom's.
+#          Its comment sits inside the object so that it goes with it - the
+#          patch below matches from the widget's first line to its last.
+DROP_WIDGETS = ['links']
 
 # ── the five themes ───────────────────────────────────────────────────────
 # Order matters: skins.js falls back to skins[0] when nothing is saved, so
