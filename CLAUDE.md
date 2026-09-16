@@ -1095,5 +1095,24 @@ the client build stamps by itself.
 **Push the main repo after committing, without asking.** Tom, 2026-08-26:
 "always push without me asking". The repo is public, so nothing personal
 ever goes in it: no bank statements, no health notes, no workbook data.
-**Never push the client copy** (`../Motherbase-Client`) unless Tom says so,
-because a push there lands on clients' phones. Building it is fine.
+**Rebuild and push the client copy after every change clients can see**, and
+do it without asking. Tom, 2026-09-17: *"Features should be at par always."*
+This replaces "never push unless Tom says so", which was written to stop a
+half-finished thing reaching a phone and instead quietly stopped everything:
+six builds stacked up unpushed over two days, and clients sat on STATUS 1.0.7
+from 15 September while 1.0.19 waited on this machine. A client running code
+twelve versions old cannot be supported over a message, which is the failure
+the old rule was trying to prevent.
+
+**One condition, and it is not optional: `_review.html` passes first.** A push
+there lands on clients' phones in about a minute and cannot be taken back, only
+pushed over. The review opens every app, checks each draws and every tab works,
+and folds in the foundation checks. It costs one page load. If it fails, fix
+the failure or leave the client copy unpushed and say so.
+
+Then: `py -3 tools/build-client.py`, commit the generated folder with what
+changed and why, and push. Nothing in that folder is ever edited by hand.
+
+A change clients cannot see is one to an app they do not have (`wealth/`,
+`arc/`, `speak/`, `system/`, `form/`, `portion/`), to `tools/`, to
+`desktop/`, or to a brief. Those need no rebuild. Building it is fine.
