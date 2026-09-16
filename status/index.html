@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.8, 2026-09-16">
+<meta name="mb-version" content="1.0.9, 2026-09-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -573,6 +573,11 @@ body.deskmini #deskbar {
   height: 100vh; padding: 0 var(--s-3); background: var(--surface-1);
   position: relative; z-index: 4;
 }
+/* A snackbar is taller than the whole widget and sits on top of it, so the
+   widget covers the strip completely and says nothing. They are hidden here
+   and the one that matters, the backup reminder, is raised again the moment
+   the whole app is open. Found at 470x56, covering every number. */
+body.deskmini .mb-toast { display: none; }
 .deskname {
   font-size: var(--f-1); letter-spacing: .08em;
   color: var(--text-muted); font-family: var(--font-display);
@@ -6885,12 +6890,14 @@ Day.on(() => { TD.tick(); draw(); });
 const DESK = /[?&]desktop=1/.test(location.search);
 const DESK_NAME = 'STATUS Desktop tracker';
 /* how often a check in comes round, and between which hours */
-const DESK_DEF = { on: 1, min: 60, max: 120, from: 8, to: 21 };
+const DESK_DEF = { on: 1, min: 60, max: 90, from: 8, to: 21 };
 
 let deskSmall = false;   /* showing the strip rather than the whole app */
 let deskNext = 0;        /* when the next check in is due, ms */
 let deskAsking = false;  /* one check in at a time, never a pile of them */
 let deskWipe = 0;
+let deskShowing = 0;   /* asking the launcher to bring the window forward */
+let deskNagged = 0;    /* the backup reminder, held back while the widget is up */
 
 function deskCfg() {
   return {
@@ -6902,12 +6909,24 @@ function deskCfg() {
   };
 }
 
-/* ── the one word the launcher reads ── */
-function deskMark(m) {
+/* ── what the launcher reads ──
+   The title is a STATE, not a message. It says what the page wants to be,
+   over and over, because the launcher only finds the window a second or two
+   after Chrome opens it, and a one-off announcement would be over before
+   anything was listening. Said continuously, the two agree whenever the
+   launcher joins, and a word that gets missed fixes itself on the next poll
+   instead of leaving the window the wrong size.
+
+   `show` is the one real event, so it is the only part that clears itself. */
+function deskTitle() {
   if (!DESK) return;
-  document.title = DESK_NAME + (m ? ' · ' + m : '');
+  document.title = DESK_NAME + (deskSmall ? ' · small' : '') + (deskShowing ? ' · show' : '');
+}
+function deskRaise() {
+  if (!DESK) return;
+  deskShowing = 1; deskTitle();
   clearTimeout(deskWipe);
-  if (m) deskWipe = setTimeout(() => { document.title = DESK_NAME; }, 1000);
+  deskWipe = setTimeout(() => { deskShowing = 0; deskTitle(); }, 1200);
 }
 
 /* ── when the next one lands ──
@@ -6947,7 +6966,7 @@ function deskTick() {
    and nothing another app cannot already read.                            */
 function deskAsk() {
   deskAsking = true;
-  deskMark('show');
+  deskRaise();
   const d = Day.today();
   const mood = quickField('mood'), energy = quickField('energy');
   let mv = null, ev = null;
@@ -7056,8 +7075,18 @@ function deskSetSmall(v) {
   deskSmall = !!v;
   document.body.classList.toggle('deskmini', deskSmall);
   S.set('desk.small', deskSmall ? 1 : 0);
-  deskMark(deskSmall ? 'small' : 'big');
-  if (deskSmall) deskBar(); else draw();
+  deskTitle();
+  if (deskSmall) { deskBar(); return; }
+  draw();
+  /* The widget hides snackbars because it has no room for one. The backup
+     reminder is the one that must not be lost, so it waits for the whole
+     app instead of being swallowed. Once a session is enough. */
+  if (!deskNagged && IO.isStale(APP.id)) {
+    deskNagged = 1;
+    const d = IO.staleDays(APP.id);
+    setTimeout(() => UI.toast('no backup in ' + (d == null ? 'a while' : d + ' days') +
+      ' \u2014 <b>settings \u2192 data</b>'), 900);
+  }
 }
 
 /* ── Ctrl+B ──
@@ -7066,7 +7095,7 @@ function deskSetSmall(v) {
 function deskBullet() {
   const was = deskSmall;
   if (was) deskSetSmall(false);
-  deskMark('show');
+  deskRaise();
   setTimeout(() => noteSheet({ kind: 'todo', text: '' }, vd()), was ? 160 : 0);
 }
 
@@ -7096,7 +7125,7 @@ function drawDeskTab(pane) {
 }
 
 if (DESK) {
-  document.title = DESK_NAME;
+  deskTitle();
   /* The whole app needs a way INTO Mini mode; the strip already carries
      its own way out. One button in the header, and only when the launcher
      is what opened the page. */
@@ -7122,7 +7151,12 @@ if (DESK) {
     deskBullet();
   });
   Rec.on(() => { if (deskSmall) deskBar(); });
-  if (S.get('desk.small', 0)) Rec.ready(() => deskSetSmall(true));
+  /* It opens as the widget, because that is the thing he actually asked
+     for. The whole app is one click away, and the choice is remembered. */
+  if (S.get('desk.small', 1)) {
+    deskSmall = true; deskTitle();
+    Rec.ready(() => deskSetSmall(true));
+  }
 }
 </script>
 </body>
