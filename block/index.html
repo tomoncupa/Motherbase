@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.5, 2026-09-17">
+<meta name="mb-version" content="1.0.6, 2026-09-17">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='28' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='55' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='16' y='34' width='68' height='46' rx='9' fill='%237EE8FA'/></svg>">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -5811,8 +5811,35 @@ function adoptRows() {
   try { render(); } catch (e) {}
   return true;
 }
+/* ── the board is taken once, when you open it ──
+
+   Tom, 2026-09-17: "BLock never really have to update because I only use it
+   on my pc, once instance at a time."
+
+   That is the whole case for a live subscription gone. `Rec.on(adoptRows)`
+   existed so that a board arriving from somewhere else — another device, the
+   sheet, a second tab — would appear without a reload. Nobody is on the other
+   end of it. What it actually did was hand BLOCK a reason to rebuild and
+   redraw the board every forty five seconds, which is the sheet's clock, in
+   the middle of the one job this app has.
+
+   So the board is read out of the store when the app opens and it is yours
+   until you open it again. `Rec.ready` stays, and it is not the same thing: a
+   row over 64KB lives only in IndexedDB and lands a few milliseconds after
+   boot, so without it a pasted note on a block would be missing from the first
+   paint. That is still the opening, not an interruption.
+
+   Nothing about the sync changed. BLOCK still pushes every edit up and still
+   pulls everything down; the rows are in the store either way and no work is
+   lost in either direction. What no longer happens is the SCREEN changing
+   while you are looking at it. If a board ever does arrive from elsewhere, it
+   is on screen the next time BLOCK is opened.
+
+   The guards above are not dead with this gone. `Rec.ready` can answer up to
+   two and a half seconds after boot, by which time you may already be
+   clicking, and writeRows still asks for a rebuild it had to defer. Both go
+   through the same door. */
 Rec.ready(adoptRows);
-Rec.on(adoptRows);
 
 /* ══════════════════════ LifeOS bridge ══════════════════════
    BLOCK owns the schedule. LifeOS owns what actually got done. Three wires:
