@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.6, 2026-09-16">
+<meta name="mb-version" content="1.0.7, 2026-09-16">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -2674,7 +2674,7 @@ function drawMoneyTab(pane) {
 /* ══════════════════════════ the screens ══════════════════════════ */
 let TAB = 'score';
 const TABS = [['score', 'SCORE'], ['in', 'MONEY IN'], ['clients', 'CLIENTS'], ['out', 'MONEY OUT'],
-              ['spend', 'SPENDING'], ['pots', 'POTS'], ['accounts', 'ACCOUNTS']];
+              ['budget', 'BUDGETS'], ['spend', 'SPENDING'], ['pots', 'POTS'], ['accounts', 'ACCOUNTS']];
 
 function card(title, cls) {
   const c = el('div', 'card' + (cls ? ' ' + cls : ''));
@@ -3465,6 +3465,74 @@ function drawSpend(m) {
   m.appendChild(c5);
 }
 let CATFILTER = null;
+
+/* ══ BUDGETS ══
+   Tom, 2026-09-16: "Give me a budgets panel." An allowance could only be
+   reached from a month on SPENDING or from the category's own sheet, so what
+   he had allotted, what was left of it, and what he spends on with no budget
+   at all could never be seen together.
+
+   His word is budgets on the tab. The row still says allowance, because the
+   category sheet says allot and two names for one thing in one screen is
+   worse than one name he did not pick. Numbers and a pace mark, never a
+   verdict (laws 6 and 7), and it says what FREE does with the money. */
+function drawBudget(m) {
+  const mo = monthOf(Day.today());
+  const list = capped();
+  const c0 = card('THIS MONTH');
+  const allot = list.reduce((a, c) => a + num(c.cap, 0), 0);
+  const st = id => capState(id, mo);
+  const spent = list.reduce((a, c) => a + ((st(c.id) || {}).spent || 0), 0);
+  const left = list.reduce((a, c) => a + Math.max(0, (st(c.id) || {}).left || 0), 0);
+  if (!list.length) {
+    c0.appendChild(el('div', 'empty',
+      'Nothing budgeted yet. Pick a category below and say what you allot it a month. ' +
+      'Every purchase filed under it counts against that, whichever account it came from.'));
+  } else {
+    const g = el('div', 'grid3');
+    g.appendChild(tile('ALLOTTED', short(allot), list.length + (list.length === 1 ? ' category' : ' categories')));
+    g.appendChild(tile('SPENT', short(spent), 'against those budgets'));
+    g.appendChild(tile('LEFT', short(left), 'and FREE holds it back'));
+    c0.appendChild(g);
+    c0.appendChild(el('div', 'note',
+      'FREE holds back what is left of each budget, plus a whole month of each one for every later month inside its window. ' +
+      'Going over holds back nothing extra, because that money has already gone.'));
+  }
+  m.appendChild(c0);
+
+  if (list.length) drawCaps(m, mo);
+
+  /* What he spends on with no budget on it. The typical month is the middle
+     of the last three, so one bad month cannot define it, and it is labelled
+     as what it is rather than offered as a number to adopt. */
+  const open = cats().filter(c => c.grp !== 'move' && !(num(c.cap, 0) > 0))
+    .map(c => ({ cat: c, typ: typicalCat(c.id) }))
+    .sort((a, b) => b.typ - a.typ);
+  const c2 = card('NOT BUDGETED');
+  if (!open.length) c2.appendChild(el('div', 'empty', 'Every category has a budget.'));
+  else {
+    const rows = el('div', 'list');
+    open.forEach(o => {
+      const r = itemRow(o.cat.name,
+        o.typ ? 'about ' + money(o.typ) + ' a month over the last three' : 'nothing logged in the last three months',
+        o.typ ? money(o.typ) : '—');
+      r.onclick = () => catSheet(o.cat); r.menu = () => catMenu(o.cat);
+      rows.appendChild(r);
+    });
+    c2.appendChild(rows);
+    c2.appendChild(el('div', 'note',
+      'Tap one to allot it a monthly amount. A budget is yours to write: nothing here suggests one, and the middle month is what you actually spent, not a target.'));
+  }
+  m.appendChild(c2);
+}
+/* The middle of the last three whole months for one category. A median, so a
+   Christmas cannot become the definition of normal — the same reason
+   typicalVariable uses one. */
+function typicalCat(id) {
+  const now = monthOf(Day.today());
+  const v = [1, 2, 3].map(i => monthSpend(monthBack(now, i)).byCat[id] || 0).sort((a, b) => a - b);
+  return v[1];
+}
 
 /* == caps, shown as numbers and never as a verdict ==
    The bar is the cap. The notch on it is where an even spread would have you
@@ -5694,6 +5762,14 @@ document.getElementById('fab').onclick = () => {
     { label: 'A bill or rent', fn: () => billSheet() },
     { label: 'A debt', fn: () => debtSheet() },
   ], { title: 'ADD' });
+  if (TAB === 'budget') {
+    const open = cats().filter(c => c.grp !== 'move' && !(num(c.cap, 0) > 0));
+    if (!open.length) return catSheet();
+    return menu(at, open.map(c => ({ label: c.name,
+      note: typicalCat(c.id) ? 'about ' + money(typicalCat(c.id)) + ' a month' : 'nothing logged',
+      fn: () => catSheet(c) })).concat([{ label: 'A new category', fn: () => catSheet() }]),
+      { title: 'BUDGET WHICH' });
+  }
   if (TAB === 'pots') return potSheet();
   if (TAB === 'accounts') return menu(at, [
     { label: 'Read a statement', note: 'check the app against your bank', fn: () => importSheet() },
@@ -5724,6 +5800,7 @@ function draw() {
     else if (TAB === 'in') drawIn(m);
     else if (TAB === 'clients') drawClients(m);
     else if (TAB === 'out') drawOut(m);
+    else if (TAB === 'budget') drawBudget(m);
     else if (TAB === 'spend') drawSpend(m);
     else if (TAB === 'pots') drawPots(m);
     else drawAccounts(m);

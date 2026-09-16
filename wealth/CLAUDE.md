@@ -7,9 +7,18 @@ This brief governs `wealth/` only. It obeys the master brief at the repo root
 and may add rules but never contradict them. Where the two disagree, the root
 wins and this file is the bug.
 
-**Tom only.** It is in `DROP_APPS` in `tools/build-client.py`, like PORTION and
-FORM. No tester ever sees it. That is not squeamishness about money, it is that
-the app is built around one person's clients and one person's rent.
+**Tom only, forever.** It is in `DROP_APPS` in `tools/build-client.py`, like
+PORTION and FORM. No client ever sees it, and that is settled rather than
+current: Tom, 2026-09-16, *"WEALTH is a forever Tom only app that I'm directly
+working on you with."* That is not squeamishness about money, it is that the
+app is built around one person's clients and one person's rent. Build nothing
+here for a stranger, and no onboarding for one.
+
+**His own data may be written when he asks for it.** The copy he opens from
+the folder cannot be reached from a session, so a change he asks to be made
+for him goes into the website copy in his Chrome and reaches the folder copy
+through the Google Sheet, once that copy is opened again. Say so when doing
+it, and say what was changed to what.
 
 ---
 
@@ -283,6 +292,18 @@ whole allowance for each later month that starts inside the window. Going over
 holds back nothing extra, because what was spent has already left the
 account. A bill filed under a category with an allowance is not held back on
 its own, or the same groceries would be held twice.
+
+**BUDGETS is the panel that holds them all.** Tom, 2026-09-16: *"Give me a
+budgets panel."* An allowance could only be reached from a month on SPENDING
+or from its category's own sheet, so what was allotted, what was left of it,
+and what he spends on with no budget at all were never in one place. The tab
+sits after MONEY OUT: THIS MONTH (allotted, spent, left, and what FREE does
+with the left), the ALLOWANCES card with its pace marks, and NOT BUDGETED,
+every category with no budget and the middle of its last three months. The
+`+` picks a category to budget. His word is budgets on the tab and allowance
+on the row, because the category sheet says allot and two names for one thing
+on one screen is worse than one name he did not pick. Nothing suggests an
+amount: the middle month is what he spent, not a target.
 
 MONEY OUT lists each allowance in the card its category belongs to, as spent
 of allotted this month with a bar, then how much is left or how much over. Over
