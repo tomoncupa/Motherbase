@@ -4,10 +4,23 @@ STATUS as a Windows app: its own window with no browser bars, sitting above
 everything else, a Mini mode that shrinks it to one strip, a check in that
 comes round on its own, and Ctrl+B from anywhere.
 
+## How to open it
+
+Double click **STATUS** on your desktop. That shortcut points at
+`STATUS Desktop tracker.exe` in this folder, and you can make another anywhere
+by right clicking the exe and choosing Send to, Desktop.
+
+To have it always one click away, open it once, then right click its icon in
+the taskbar and choose **Pin to taskbar**. To have it start with Windows,
+press Windows and R together, type `shell:startup`, press Enter, and drop a
+copy of the shortcut in the folder that opens.
+
+Opening it a second time while it is already running does not start a second
+copy. It brings the widget you already have to the front.
+
 ## Using it
 
-Double click **STATUS Desktop tracker.exe**. That is it. An icon appears in the
-tray next to the clock; right click it for the menu.
+An icon appears in the tray next to the clock; right click it for the menu.
 
 **It opens as the widget**, because that is the part you wanted. The whole app
 is one click away and it remembers which you were last in.
@@ -32,9 +45,12 @@ is one click away and it remembers which you were last in.
   **Settings → DESKTOP**. It only asks between the hours you choose, it never
   stacks up, and Skip writes nothing. If the window is minimised it brings
   itself back to ask.
-- **Ctrl+B** opens a bullet, even when you are in another program. If something
-  else on your machine already owns Ctrl+B, the tray menu has Ctrl+Alt+B and
-  Ctrl+Shift+B.
+- **Ctrl+B** opens a bullet, even when you are in another program. To change
+  it, right click the tray icon, **Bullet shortcut**, then **Choose my own**,
+  and press the keys you want. It has to include Ctrl, Alt or Shift, because
+  Windows will not hand a bare letter to a program that is not in front. If
+  something else already owns the keys you picked, a message says so instead
+  of it quietly not working.
 
 ## Why it opens Chrome
 

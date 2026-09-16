@@ -30,7 +30,11 @@ using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
+/* System.Threading has a Timer of its own, and every Timer in here is the
+   Windows Forms one, which ticks on the UI thread. */
+using Timer = System.Windows.Forms.Timer;
 
 class Launcher : Form
 {
@@ -51,6 +55,7 @@ class Launcher : Form
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr h, StringBuilder s, int n);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr p);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int i, int v);
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int k);
@@ -80,7 +85,7 @@ class Launcher : Form
     const int SW_RESTORE = 9;
     const int WM_HOTKEY = 0x0312;
     const int HOTKEY_ID = 0xB01;
-    const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_SHIFT = 0x4;
+    const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_SHIFT = 0x4, MOD_WIN = 0x8;
 
     /* The title the page sets. Matching on the front of it, because the
        instruction word is stuck on the end. */
@@ -122,11 +127,37 @@ class Launcher : Form
     bool dragOn, dragArmed, wasDown;
     int grabX, grabY, anchorX, anchorY;
 
+    static Mutex only;
+
     [STAThread]
     static void Main()
     {
+        /* One copy at a time. Starting a second was not harmless: the new one
+           runs RepairOrphans, which cannot tell a window left behind by a
+           launcher that died from the widget a launcher that is ALIVE is
+           holding, so it put the title bar back on the running widget. The
+           window stayed the same height, the bar took 31px off the bottom,
+           and the controls were cut in half. That is what Tom photographed.
+
+           So a second launch does what he meant by it: brings the widget he
+           already has to the front. */
+        bool fresh;
+        only = new Mutex(true, "Motherbase.STATUSDesktopTracker", out fresh);
+        if (!fresh)
+        {
+            RaiseExisting();
+            return;
+        }
         Application.EnableVisualStyles();
         Application.Run(new Launcher());
+    }
+
+    static void RaiseExisting()
+    {
+        IntPtr h = Find();
+        if (h == IntPtr.Zero) return;
+        if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+        SetForegroundWindow(h);
     }
 
     public Launcher()
@@ -268,24 +299,32 @@ class Launcher : Form
 
         /* Ctrl+B is bold in every program that has bold. Taking it here takes
            it everywhere, so the other two are one click away. */
-        var keys = new MenuItem("Bullet hotkey");
+        var keys = new MenuItem("Bullet shortcut");
         string[] opts = { "ctrl+b", "ctrl+alt+b", "ctrl+shift+b" };
         string[] names = { "Ctrl+B", "Ctrl+Alt+B", "Ctrl+Shift+B" };
         for (int i = 0; i < opts.Length; i++)
         {
             string opt = opts[i];
             var mi = new MenuItem(names[i]);
-            mi.Checked = (hotkey == opt);
-            mi.Click += (s, e) =>
-            {
-                hotkey = opt;
-                SaveCfg();
-                foreach (MenuItem sib in keys.MenuItems) sib.Checked = (sib == mi);
-                RegisterTheHotkey();
-            };
+            mi.Click += (s, e) => { hotkey = opt; SaveCfg(); RegisterTheHotkey(); MarkKeys(keys); };
             keys.MenuItems.Add(mi);
         }
+        keys.MenuItems.Add("-");
+        var custom = new MenuItem("Choose my own...");
+        custom.Click += (s, e) =>
+        {
+            using (var box = new KeyBox(hotkey))
+            {
+                if (box.ShowDialog() != DialogResult.OK || box.Chosen == null) return;
+                hotkey = box.Chosen;
+                SaveCfg();
+                RegisterTheHotkey();
+                MarkKeys(keys);
+            }
+        };
+        keys.MenuItems.Add(custom);
         menu.MenuItems.Add(keys);
+        MarkKeys(keys);
         menu.MenuItems.Add("-");
         menu.MenuItems.Add(new MenuItem("Quit", (s, e) => Quit()));
 
@@ -295,6 +334,25 @@ class Launcher : Form
         tray.ContextMenu = menu;
         tray.Visible = true;
         tray.DoubleClick += (s, e) => Raise();
+    }
+
+    /* A tick beside whichever one is in use, and the one he typed himself
+       shown by name rather than as "Custom". */
+    void MarkKeys(MenuItem keys)
+    {
+        bool known = false;
+        foreach (MenuItem mi in keys.MenuItems)
+        {
+            if (mi.Text == "-" || mi.Text.StartsWith("Choose")) continue;
+            mi.Checked = string.Equals(PrettyHotkey(hotkey), mi.Text, StringComparison.OrdinalIgnoreCase);
+            if (mi.Checked) known = true;
+        }
+        foreach (MenuItem mi in keys.MenuItems)
+        {
+            if (!mi.Text.StartsWith("Choose")) continue;
+            mi.Text = known ? "Choose my own..." : "Choose my own...  (" + PrettyHotkey(hotkey) + ")";
+            mi.Checked = !known;
+        }
     }
 
     Icon TrayIcon()
@@ -323,22 +381,68 @@ class Launcher : Form
         catch { }
     }
 
+    /* "ctrl+shift+k" both ways, so the setting is a line he could read. */
+    static bool ParseHotkey(string s, out uint mod, out uint vk)
+    {
+        mod = 0; vk = 0;
+        string key = null;
+        foreach (string raw in (s ?? "").ToLowerInvariant().Split('+'))
+        {
+            string p = raw.Trim();
+            if (p.Length == 0) continue;
+            if (p == "ctrl" || p == "control") mod |= MOD_CONTROL;
+            else if (p == "alt") mod |= MOD_ALT;
+            else if (p == "shift") mod |= MOD_SHIFT;
+            else if (p == "win" || p == "windows") mod |= MOD_WIN;
+            else key = p;
+        }
+        if (key == null || mod == 0) return false;
+        try
+        {
+            Keys k = (Keys)Enum.Parse(typeof(Keys), key, true);
+            vk = (uint)k;
+            return vk != 0;
+        }
+        catch { return false; }
+    }
+
+    static string PrettyHotkey(string s)
+    {
+        var bits = new List<string>();
+        string key = null;
+        foreach (string raw in (s ?? "").ToLowerInvariant().Split('+'))
+        {
+            string p = raw.Trim();
+            if (p.Length == 0) continue;
+            if (p == "ctrl" || p == "control") bits.Add("Ctrl");
+            else if (p == "alt") bits.Add("Alt");
+            else if (p == "shift") bits.Add("Shift");
+            else if (p == "win" || p == "windows") bits.Add("Win");
+            else key = p.Length == 1 ? p.ToUpperInvariant() : char.ToUpperInvariant(p[0]) + p.Substring(1);
+        }
+        if (key != null) bits.Add(key);
+        return string.Join("+", bits.ToArray());
+    }
+
     void RegisterTheHotkey()
     {
         UnregisterHotKey(Handle, HOTKEY_ID);
-        uint mod = MOD_CONTROL;
-        if (hotkey.Contains("alt")) mod |= MOD_ALT;
-        if (hotkey.Contains("shift")) mod |= MOD_SHIFT;
-        bool ok = RegisterHotKey(Handle, HOTKEY_ID, mod, (uint)Keys.B);
+        uint mod, vk;
+        if (!ParseHotkey(hotkey, out mod, out vk))
+        {
+            hotkey = "ctrl+b";
+            ParseHotkey(hotkey, out mod, out vk);
+        }
+        bool ok = RegisterHotKey(Handle, HOTKEY_ID, mod, vk);
         if (!ok)
         {
-            Log("could not take " + hotkey + " — another program already has it");
+            Log("could not take " + hotkey + ", another program already has it");
             if (tray != null)
                 tray.ShowBalloonTip(6000, TITLE,
-                    "Another program already uses " + hotkey.ToUpperInvariant().Replace("+", "+") +
+                    "Another program already uses " + PrettyHotkey(hotkey) +
                     ". Pick a different one from the tray menu.", ToolTipIcon.Warning);
         }
-        else Log("hotkey " + hotkey + " registered");
+        else Log("hotkey " + PrettyHotkey(hotkey) + " registered");
     }
 
     /* ── finding the window ── */
@@ -448,6 +552,8 @@ class Launcher : Form
                 SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, 0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
                 Soften(true);
+                Refit();
+                Log("a frame came back on the widget and was taken off again");
             }
         }
 
@@ -496,8 +602,11 @@ class Launcher : Form
         if (x < wa.Left || x > wa.Right - 80) x = wa.Right - smallW - 24;
         if (y < wa.Top || y > wa.Bottom - 40) y = wa.Top + 24;
 
-        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, x, y, smallW, smallH,
-            SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        /* The style change lands first, so the client rect measured next is
+           the one this window is actually going to have. */
+        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        SetClient(x, y, smallW, smallH);
         Soften(true);
         if (drag != null) drag.Start();
     }
@@ -509,9 +618,34 @@ class Launcher : Form
         if (!small || !IsWindow(win)) return;
         RECT r;
         if (!GetWindowRect(win, out r)) return;
-        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, r.L, r.T, smallW, smallH,
-            SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        SetClient(r.L, r.T, smallW, smallH);
         Soften(true);
+    }
+
+    /* ── size what is INSIDE the window, not the window ──
+       The page measures the box it drew, so that number is a client size. It
+       was being applied to the outer window, so anything Windows put round
+       the edge came out of the page instead of being added to it: a title bar
+       that reappeared for any reason ate 31px off the bottom and cut the
+       controls in half. Measuring the difference and adding it back means the
+       page gets the height it asked for whether there is a frame or not, so
+       this cannot clip again even if every other guard fails. */
+    void SetClient(int x, int y, int w, int h)
+    {
+        if (!IsWindow(win)) return;
+        RECT wr, cr;
+        if (!GetWindowRect(win, out wr) || !GetClientRect(win, out cr))
+        {
+            SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, x, y, w, h,
+                SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            return;
+        }
+        int padW = (wr.R - wr.L) - (cr.R - cr.L);
+        int padH = (wr.B - wr.T) - (cr.B - cr.T);
+        if (padW < 0) padW = 0;
+        if (padH < 0) padH = 0;
+        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, x, y, w + padW, h + padH,
+            SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 
     /* Rounded corners and no hairline border while it is the widget; back to
@@ -652,6 +786,8 @@ class Launcher : Form
                    hotkey and the two go round for ever. Found by pressing
                    Ctrl+B once and watching it never stop. */
                 UnregisterHotKey(Handle, HOTKEY_ID);
+                /* The page listens for Ctrl+B, so that is what gets typed, no
+                   matter which keys he chose to summon it with. */
                 try { SendKeys.SendWait("^b"); Log("typed Ctrl+B into the page"); }
                 catch (Exception ex) { Log("could not type it: " + ex.Message); }
                 RegisterTheHotkey();
@@ -676,5 +812,91 @@ class Launcher : Form
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
         if (tray != null) { tray.Visible = false; tray.Dispose(); }
         base.OnFormClosed(e);
+    }
+}
+
+
+/* ── "press the keys you want" ──
+   Tom: "Give me a setting to program my own shortcut." A list of three was
+   not a setting, it was three guesses. This takes whatever he presses, as
+   long as it has a Ctrl, Alt, Shift or Windows in it, because Windows will
+   not give a bare letter to a program that is not in front. */
+class KeyBox : Form
+{
+    public string Chosen;
+    Label shown;
+    Button use;
+
+    public KeyBox(string current)
+    {
+        Text = "Bullet shortcut";
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        StartPosition = FormStartPosition.CenterScreen;
+        MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        ClientSize = new Size(380, 172);
+        KeyPreview = true;
+
+        var tell = new Label
+        {
+            Text = "Press the keys you want to use for writing a bullet.\r\n" +
+                   "It has to include Ctrl, Alt, Shift or the Windows key.",
+            Bounds = new Rectangle(20, 16, 340, 40),
+        };
+        shown = new Label
+        {
+            Text = PrettyOf(current),
+            Bounds = new Rectangle(20, 62, 340, 44),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font(FontFamily.GenericSansSerif, 15, FontStyle.Bold),
+            BorderStyle = BorderStyle.FixedSingle,
+        };
+        use = new Button { Text = "Use it", Bounds = new Rectangle(196, 122, 80, 30), DialogResult = DialogResult.OK };
+        var no = new Button { Text = "Cancel", Bounds = new Rectangle(284, 122, 80, 30), DialogResult = DialogResult.Cancel };
+        Controls.Add(tell); Controls.Add(shown); Controls.Add(use); Controls.Add(no);
+        AcceptButton = use; CancelButton = no;
+        Chosen = current;
+        KeyDown += Caught;
+    }
+
+    static string PrettyOf(string s)
+    {
+        var bits = new List<string>();
+        string key = null;
+        foreach (string raw in (s ?? "").ToLowerInvariant().Split('+'))
+        {
+            string p = raw.Trim();
+            if (p.Length == 0) continue;
+            if (p == "ctrl") bits.Add("Ctrl");
+            else if (p == "alt") bits.Add("Alt");
+            else if (p == "shift") bits.Add("Shift");
+            else if (p == "win") bits.Add("Win");
+            else key = p.Length == 1 ? p.ToUpperInvariant() : char.ToUpperInvariant(p[0]) + p.Substring(1);
+        }
+        if (key != null) bits.Add(key);
+        return string.Join("+", bits.ToArray());
+    }
+
+    void Caught(object sender, KeyEventArgs e)
+    {
+        Keys k = e.KeyCode;
+        /* the modifiers on their own are not a shortcut yet */
+        if (k == Keys.ControlKey || k == Keys.Menu || k == Keys.ShiftKey ||
+            k == Keys.LWin || k == Keys.RWin || k == Keys.None) return;
+        e.Handled = true; e.SuppressKeyPress = true;
+
+        var bits = new List<string>();
+        if (e.Control) bits.Add("ctrl");
+        if (e.Alt) bits.Add("alt");
+        if (e.Shift) bits.Add("shift");
+        if (bits.Count == 0)
+        {
+            shown.Text = "Add Ctrl, Alt or Shift";
+            use.Enabled = false;
+            return;
+        }
+        bits.Add(k.ToString().ToLowerInvariant());
+        Chosen = string.Join("+", bits.ToArray());
+        shown.Text = PrettyOf(Chosen);
+        use.Enabled = true;
     }
 }
