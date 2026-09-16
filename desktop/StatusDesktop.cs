@@ -80,7 +80,12 @@ class Launcher : Form
        column: opened at 1905 wide it was a narrow strip of content with six
        hundred pixels of empty either side. Its window is sized to the
        interface now rather than to whatever Chrome felt like. */
-    const int SMALL_W = 470, SMALL_H = 56;
+    /* Squarish, and sized by measurement rather than taste: the question has
+       to fit inside the widget, and two 44px scales, their labels, the line
+       for what he is up to and SAVE measured 392 in the browser. At 300 and
+       again at 360 the text box was there but clipped out of sight, which is
+       worse than not having it at all. */
+    const int SMALL_W = 360, SMALL_H = 400;
     const int BIG_W = 660, BIG_H = 920;
 
     string root;                 /* the Motherbase folder */
@@ -411,6 +416,22 @@ class Launcher : Form
 
         if (onTop)
             SetWindowPos(win, TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+        /* Chrome owns this window and can put its own frame back when it
+           repaints. Thirty pixels of title bar on a three hundred pixel
+           widget is most of a row, so this holds the frame off rather than
+           taking it away once and hoping it stays away. savedStyle keeps the
+           original, so quitting still puts the real frame back. */
+        if (small)
+        {
+            int st = GetWindowLong(win, GWL_STYLE);
+            if ((st & (WS_CAPTION | WS_THICKFRAME)) != 0)
+            {
+                SetWindowLong(win, GWL_STYLE, st & ~(WS_CAPTION | WS_THICKFRAME));
+                SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            }
+        }
 
         string t = TextOf(win);
         bool wantSmall = t.IndexOf("\u00b7 small", StringComparison.Ordinal) > -1;

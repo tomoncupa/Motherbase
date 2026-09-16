@@ -12,11 +12,15 @@ tray next to the clock; right click it for the menu.
 **It opens as the widget**, because that is the part you wanted. The whole app
 is one click away and it remembers which you were last in.
 
-- **Mini mode** is the widget: a strip exactly 470 by 56 in the top right,
-  showing Mood, Energy and the next two measures you have switched on. It has
-  no title bar, so the window is the strip and nothing around it. **Push it
-  anywhere with the mouse** and it stays there next time. The chevron on the
-  right opens the whole app; the chevron in the app's top bar shrinks it back.
+- **Mini mode** is the widget: a square 360 by 400, with no title bar, so the
+  window is the widget and nothing around it. **Push it anywhere with the
+  mouse** and it stays there next time. It shows:
+  - **the last bullet you wrote**, whenever you wrote it, with its time
+  - **a round button** that asks Mood and Energy. Answering also pushes the
+    next automatic check in back, so the button you pressed yourself is not
+    followed by the same question ten minutes later
+  - today's mood and energy along the bottom, so you can see the button work
+  - **+** writes a bullet, and the chevron opens the whole app
 - **The check in** asks mood, energy and what you are up to, on a gap that is
   different every time, 60 to 90 minutes by default. Set the range in
   **Settings → DESKTOP**. It only asks between the hours you choose, it never
