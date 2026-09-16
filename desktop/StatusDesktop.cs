@@ -8,21 +8,23 @@
    It does the three things a web page is not allowed to do for itself:
 
      · keeps the window above everything else
-     · resizes it down to the strip when the page asks
+     · sizes it to the widget, rounds its corners and takes its border off
      · catches Ctrl+B while another program is in front
 
    It cannot see inside the page, and the page cannot move its own window,
    so the two talk through the window title. The page puts a word on the
    end of its title and this reads it twice a second. The title is a state
    rather than a message: the page keeps saying what it wants to be, so the
-   two agree no matter when this found the window. Two words: `small` while
-   Mini mode is up, and `show` to be brought to the front.
+   two agree no matter when this found the window. `small 320x170` while the
+   widget is up, carrying the size the page measured itself at, and `show` to
+   be brought to the front.
 
    Built by build.ps1 with the C# compiler that ships inside Windows, so
    there is nothing to install and nothing to download.                    */
 
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -53,6 +55,7 @@ class Launcher : Form
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int i, int v);
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int k);
     [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int val, int size);
     delegate bool EnumProc(IntPtr h, IntPtr p);
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
     [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
@@ -64,6 +67,16 @@ class Launcher : Form
     const int GWL_STYLE = -16;
     const int WS_CAPTION = 0x00C00000, WS_THICKFRAME = 0x00040000;
     const int VK_LBUTTON = 0x01;
+    /* Windows 11 draws a square hairline border on a window with no frame,
+       and squares its corners. Tom: "What is this ugly grey border, round the
+       corners a bit". These two attributes are the only way to reach either,
+       because the window is Chrome's and not ours. On Windows 10 the calls
+       return an error code and nothing changes, which is the right outcome. */
+    const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    const int DWMWA_BORDER_COLOR = 34;
+    const int DWMWCP_DEFAULT = 0, DWMWCP_ROUND = 2;
+    const int DWMWA_COLOR_NONE = unchecked((int)0xFFFFFFFE);
+    const int DWMWA_COLOR_DEFAULT = unchecked((int)0xFFFFFFFF);
     const int SW_RESTORE = 9;
     const int WM_HOTKEY = 0x0312;
     const int HOTKEY_ID = 0xB01;
@@ -72,20 +85,21 @@ class Launcher : Form
     /* The title the page sets. Matching on the front of it, because the
        instruction word is stuck on the end. */
     const string TITLE = "STATUS Desktop tracker";
-    /* Mini mode takes Chrome's title bar off, so the window IS the strip and
+    /* Mini mode takes Chrome's title bar off, so the window IS the widget and
        nothing else. Tom, 2026-09-16: "I don't like how the window can be
        bigger than the actual app interface."
 
        The same thought applies to the whole app, which lays out in a 620px
        column: opened at 1905 wide it was a narrow strip of content with six
        hundred pixels of empty either side. Its window is sized to the
-       interface now rather than to whatever Chrome felt like. */
-    /* Squarish, and sized by measurement rather than taste: the question has
-       to fit inside the widget, and two 44px scales, their labels, the line
-       for what he is up to and SAVE measured 392 in the browser. At 300 and
-       again at 360 the text box was there but clipped out of sight, which is
-       worse than not having it at all. */
-    const int SMALL_W = 360, SMALL_H = 400;
+       interface now rather than to whatever Chrome felt like.
+
+       The widget's size is not decided here at all. The page measures what
+       it has drawn and puts it in the title, and this matches it, so the
+       window is exactly the box and a layout change in STATUS never needs
+       this program rebuilt. These are only the fallback for the moment
+       before the first title arrives. */
+    int smallW = 320, smallH = 170;
     const int BIG_W = 660, BIG_H = 920;
 
     string root;                 /* the Motherbase folder */
@@ -94,12 +108,15 @@ class Launcher : Form
     bool onTop = true;
     bool small = false;
     bool shown = false;          /* already answered this "show" */
+    bool softLogged = false;     /* whether Windows took the rounded corners */
     int savedStyle = 0;          /* the frame, while it is off */
     int posX = int.MinValue, posY = int.MinValue;   /* where he put the widget */
     string hotkey = "ctrl+b";
     NotifyIcon tray;
     Timer poll, tap, drag;
     MenuItem miTop;
+
+    static readonly Regex SIZE = new Regex(@"\u00b7 small (\d{2,4})x(\d{2,4})");
 
     /* dragging the widget, which has no title bar to drag by */
     bool dragOn, dragArmed, wasDown;
@@ -430,12 +447,27 @@ class Launcher : Form
                 SetWindowLong(win, GWL_STYLE, st & ~(WS_CAPTION | WS_THICKFRAME));
                 SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, 0, 0, 0, 0,
                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                Soften(true);
             }
         }
 
         string t = TextOf(win);
         bool wantSmall = t.IndexOf("\u00b7 small", StringComparison.Ordinal) > -1;
         bool wantShow = t.IndexOf("\u00b7 show", StringComparison.Ordinal) > -1;
+
+        /* The page says how big it wants to be, every time it draws. Opening
+           the question makes the widget taller and closing it shrinks it back
+           without a word from here. */
+        Match m = SIZE.Match(t);
+        if (m.Success)
+        {
+            int w = int.Parse(m.Groups[1].Value), h = int.Parse(m.Groups[2].Value);
+            if (w != smallW || h != smallH)
+            {
+                smallW = w; smallH = h;
+                if (small) Refit();
+            }
+        }
 
         if (wantSmall && !small) GoSmall();
         else if (!wantSmall && small) GoBig();
@@ -458,15 +490,53 @@ class Launcher : Form
         SetWindowLong(win, GWL_STYLE, savedStyle & ~(WS_CAPTION | WS_THICKFRAME));
 
         var wa = Screen.PrimaryScreen.WorkingArea;
-        int x = posX != int.MinValue ? posX : wa.Right - SMALL_W - 24;
+        int x = posX != int.MinValue ? posX : wa.Right - smallW - 24;
         int y = posY != int.MinValue ? posY : wa.Top + 24;
         /* if the screen changed since last time, put it back on it */
-        if (x < wa.Left || x > wa.Right - 80) x = wa.Right - SMALL_W - 24;
+        if (x < wa.Left || x > wa.Right - 80) x = wa.Right - smallW - 24;
         if (y < wa.Top || y > wa.Bottom - 40) y = wa.Top + 24;
 
-        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, x, y, SMALL_W, SMALL_H,
+        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, x, y, smallW, smallH,
             SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        Soften(true);
         if (drag != null) drag.Start();
+    }
+
+    /* Same corner, same place, new height. Used when the widget turns into
+       the question and back. */
+    void Refit()
+    {
+        if (!small || !IsWindow(win)) return;
+        RECT r;
+        if (!GetWindowRect(win, out r)) return;
+        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, r.L, r.T, smallW, smallH,
+            SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        Soften(true);
+    }
+
+    /* Rounded corners and no hairline border while it is the widget; back to
+       whatever Chrome wants when it is the whole app. */
+    void Soften(bool on)
+    {
+        if (!IsWindow(win)) return;
+        int corner = on ? DWMWCP_ROUND : DWMWCP_DEFAULT;
+        int border = on ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT;
+        try
+        {
+            int a = DwmSetWindowAttribute(win, DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, 4);
+            int b = DwmSetWindowAttribute(win, DWMWA_BORDER_COLOR, ref border, 4);
+            /* Said once, because "it should be rounded" and "Windows accepted
+               the request" are different claims and only one is checkable
+               from here. 0 is S_OK; anything else means this build of Windows
+               does not have the attribute and the corners stay square. */
+            if (!softLogged)
+            {
+                softLogged = true;
+                Log("rounded corners: " + (a == 0 ? "accepted" : "refused, hresult " + a) +
+                    "; border off: " + (b == 0 ? "accepted" : "refused, hresult " + b));
+            }
+        }
+        catch (Exception ex) { Log("could not soften the window: " + ex.Message); }
     }
 
     void GoBig()
@@ -475,6 +545,7 @@ class Launcher : Form
         small = false;
         if (drag != null) drag.Stop();
         dragOn = dragArmed = wasDown = false;
+        Soften(false);
         RestoreFrame();
 
         var wa = Screen.PrimaryScreen.WorkingArea;

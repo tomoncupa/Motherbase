@@ -12,15 +12,21 @@ tray next to the clock; right click it for the menu.
 **It opens as the widget**, because that is the part you wanted. The whole app
 is one click away and it remembers which you were last in.
 
-- **Mini mode** is the widget: a square 360 by 400, with no title bar, so the
-  window is the widget and nothing around it. **Push it anywhere with the
-  mouse** and it stays there next time. It shows:
+- **Mini mode** is the widget: about 320 by 135, with no title bar and rounded
+  corners, so the window is the widget and nothing around it. **Push it
+  anywhere with the mouse** and it stays there next time. It shows:
   - **the last bullet you wrote**, whenever you wrote it, with its time
   - **a round button** that asks Mood and Energy. Answering also pushes the
     next automatic check in back, so the button you pressed yourself is not
     followed by the same question ten minutes later
-  - today's mood and energy along the bottom, so you can see the button work
-  - **+** writes a bullet, and the chevron opens the whole app
+  - today's mood and energy, once there are any, as a face and a bolt
+  - **the pencil** writes a bullet without leaving the widget. It opens on
+    Entry; Enter saves, Shift and Enter makes a new line. For a bullet with a
+    time or a repeat on it, the chevron opens the whole app.
+
+  The window is always exactly the size of what is inside it, because the page
+  measures itself and the launcher matches. Opening the question makes the
+  window taller and closing it shrinks it back.
 - **The check in** asks mood, energy and what you are up to, on a gap that is
   different every time, 60 to 90 minutes by default. Set the range in
   **Settings → DESKTOP**. It only asks between the hours you choose, it never
