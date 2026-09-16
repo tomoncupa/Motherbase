@@ -825,6 +825,38 @@ of the same amount, which ₱699 against a ₱699 Subscriptions bill always is.
 same question again next month is how somebody learns to click through
 questions without reading them.
 
+### A rule written in a run clears the rest of the pile
+
+Tom, 2026-09-16: *"let those rules also apply to the pile already."* A rule
+sorts the whole history the moment it is written, but the run's queue was read
+before it existed, so the same payee kept coming round to be answered a second
+and third time.
+
+Everything still waiting that the new rule covers now drops out of the queue as
+it is written, a toast says how many, and the header carries a running count of
+what his own rules took care of without asking. One answer is one answer.
+
+Watched: four purchases, three from one payee. Filing the first wrote the rule
+and the header went straight past the others to the odd one out, reading "3 of
+4 · 1 filed so far · 1 sorted by your rules", with all three filed.
+
+### Borrowed money is not income
+
+Tom, 2026-09-17: *"09088190310 is someone who I borrow from sometimes."* Money
+he borrows lands in the account exactly like money he earned, and counting it
+as income says the month paid for itself when it did not. Law 2 in another
+costume: moving money is not making it.
+
+A `paid` row carries `loan`. It still lands in the account and still shows on
+MONEY IN, marked **borrowed**, and it is out of every income total, every net
+figure and the picture of who pays him. The switch is on the payment's own
+sheet. What he owes stays his to write under DEBTS: the app will not invent a
+debt row from a transfer, because it cannot know the terms or whether he has
+already paid it back.
+
+His ₱2,000 from 23 August 2026 is flagged. A lender's name is not in the book
+yet, only Arturo's number and Lawrence.
+
 ### A rule is only written from a bank's own wording
 
 Found on his device on 2026-09-16, the day the quick run shipped: it had

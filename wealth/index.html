@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.12, 2026-09-16">
+<meta name="mb-version" content="1.0.13, 2026-09-17">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -1210,7 +1210,18 @@ function rangeSpend(from, to) {
   return t;
 }
 const monthSpend = m => rangeSpend(monthStart(m), monthEnd(m));
-const rangeIn = (from, to) => paidRows({ from: from, to: to })
+/* == borrowed money is not income ==
+   Tom, 2026-09-17: "09088190310 is someone who I borrow from sometimes."
+   Money he borrows lands in his account exactly like money he earned, and
+   counting it as income says the month paid for itself when it did not. Law 2
+   in another costume: moving money is not making it.
+
+   A `paid` row flagged `loan` stays money that arrived, so it still moves the
+   account's balance and still shows on MONEY IN, and it is left out of every
+   income total, every net figure and the picture of who pays him. WEALTH owns
+   `paid`, so the flag is one more field on a row it already writes. */
+const isLoanIn = p => !!(p && p.loan);
+const rangeIn = (from, to) => paidRows({ from: from, to: to }).filter(p => !isLoanIn(p))
   .reduce((a, p) => a + num(p.amt, 0), 0);
 const monthIn = m => rangeIn(monthStart(m), monthEnd(m));
 
@@ -3036,12 +3047,17 @@ function drawIn(m) {
       const named = !c && payerName(p.note);
       const r = itemRow(paidTitle(p),
         Day.short(p.date) + ' · ' + esc(acctName(p.acct)) +
+        (isLoanIn(p) ? ' · <b>borrowed</b>' : '') +
         ((c || named) && p.note ? ' · ' + esc(p.note) : ''),
-        money(num(p.amt, 0)), 'in');
+        money(num(p.amt, 0)), isLoanIn(p) ? '' : 'in');
       r.onclick = () => paidSheet(p); r.menu = () => paidMenu(p);
       list.appendChild(r);
     });
     c3.appendChild(list);
+    const borrowed = got.filter(isLoanIn).reduce((a, x) => a + num(x.amt, 0), 0);
+    if (borrowed) c3.appendChild(el('div', 'note', '<b>' + esc(money(borrowed)) +
+      '</b> of this was borrowed, not earned. It is in your accounts and out of every income figure. ' +
+      'What you owe is yours to write down under DEBTS.'));
   }
   m.appendChild(c3);
 }
@@ -3684,7 +3700,13 @@ function quickFile() {
   const queue = spendRows({}).filter(s => !catOf(s) && !isMove(s))
     .sort((a, b) => b.date.localeCompare(a.date) || num(b.t, 0) - num(a.t, 0));
   if (!queue.length) { UI.toast('nothing left to file'); return; }
-  let i = 0, filed = 0, ruled = 0;
+  let i = 0, filed = 0, ruled = 0, sorted = 0;
+  /* Marked as dealt with by a rule written during this run. Kept beside the
+     queue rather than rebuilt from it, so the numbers on screen stay put. */
+  const skip = {};
+  const step = () => {
+    while (i < queue.length && (skip[i] || catOf(queue[i]))) { i++; sorted++; }
+  };
   UI.dialog({
     title: 'FILE QUICKLY', width: 560,
     body: (b, h) => {
@@ -3709,9 +3731,23 @@ function quickFile() {
            never match anything again and clutter the list that sorts his
            history. */
         const p = payeeOf(s.bank || s.note), fromBank = !!(s.bank || s.stmt);
+        let swept = 0;
         if (alwaysOn.on && fromBank && p && p.key && !isRail(p.key)) {
           Rec.set('rule', null, 'imp-' + norm(p.key), { match: p.key, cat: cid });
           ruleCache = null; ruled++;
+          /* Tom, 2026-09-16: "let those rules also apply to the pile already."
+             A rule already sorts the whole history the moment it is written,
+             but this run's queue was read before it existed, so the same payee
+             kept coming round to be answered again. Everything still waiting
+             that the new rule covers is taken out of the queue here and
+             counted, so one answer really is one answer. */
+          for (let j = i + 1; j < queue.length; j++) {
+            if (skip[j] || catOf(queue[j])) continue;
+            const r = ruleFor(queue[j].note || '');
+            if (r && r.cat) { skip[j] = 1; swept++; }
+          }
+          if (swept) UI.toast('<b>' + swept + '</b> more from <b>' + esc(p.label || p.key) +
+            '</b> filed by the same rule');
         }
         Mobile.feedback('select');
         const seedFrom = s, seedCat = cid;
@@ -3722,6 +3758,7 @@ function quickFile() {
         if (isBillish(cid)) pendingBill.push({ s: seedFrom, cat: seedCat });
       };
       const paint = () => {
+        step();
         if (i >= queue.length) {
           head.innerHTML = '';
           who.innerHTML = '';
@@ -3729,12 +3766,14 @@ function quickFile() {
           done.style.display = '';
           done.innerHTML = '<b>' + esc(String(filed)) + '</b> filed' +
             (ruled ? ', and <b>' + esc(String(ruled)) + '</b> of them wrote a rule that sorted the rest of that payee’s history' : '') +
+            (sorted ? ', which took care of <b>' + esc(String(sorted)) + '</b> more without asking' : '') +
             '. Nothing left uncategorised.';
           return;
         }
         const s = queue[i];
         head.innerHTML = '<b>' + esc(String(i + 1)) + '</b> of ' + esc(String(queue.length)) +
-          ' · ' + esc(String(filed)) + ' filed so far';
+          ' · ' + esc(String(filed)) + ' filed so far' +
+          (sorted ? ' · <b>' + esc(String(sorted)) + '</b> sorted by your rules' : '');
         who.innerHTML = '<div class="cap">' + esc(Day.short(s.date)) + ' · ' + esc(acctName(s.acct)) + '</div>' +
           '<div class="big">' + esc(money(num(s.amt, 0))) + '</div>' +
           '<div class="sub">' + esc(s.note || 'No details') + '</div>';
@@ -4309,6 +4348,10 @@ function paidSheet(existing, preset) {
         b.appendChild(el('div', 'note', 'The bank calls this sender <b>' + esc(pr.label) +
           '</b>. Give it a name and every payment from them, past and future, is called that.'));
       }
+      const loan = UI.toggle(existing ? isLoanIn(existing) : false);
+      b.appendChild(UI.row('Borrowed, not income',
+        'For money somebody lent you. It still lands in the account, and it stays out of what you earned, your net, and who pays you.',
+        loan));
       const date = dateField(existing ? existing.date : (preset && preset.date));
       b.appendChild(fld('When', date));
       let hhmm = existing ? timeOf(existing) : timeOf({ t: Date.now() });
@@ -4338,6 +4381,7 @@ function paidSheet(existing, preset) {
         Rec.set('paid', date.value, key, merge(existing, {
           amt: v, acct: acct.get(), client: who.get(), note: note.value.trim(),
           t: stampFor(date.value, hhmm), src: existing ? existing.src || 'hand' : 'hand',
+          loan: loan.on ? 1 : 0,
         }));
         if (payer) namePayer(existing.note, payer.value.trim());
         S.set('lastAcct', acct.get());
