@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.15, 2026-09-17">
+<meta name="mb-version" content="1.0.19, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -578,6 +578,16 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
    than what is inside it.                                                 */
 #deskbar { display: none; }
 body.deskmini { overflow: hidden; height: 100vh; }
+/* Anywhere that is not a control is a handle. Without this the press starts
+   selecting the bullet instead of picking the window up, which is what made
+   it hard to move. */
+body.deskmini #deskbar { cursor: move; -webkit-user-select: none; user-select: none; }
+body.deskmini button, body.deskmini input, body.deskmini textarea { cursor: auto; }
+body.deskmini button { cursor: pointer; }
+/* It is a program, not a web page: no scrollbar anywhere in it. Scrolling
+   still works, the bar is simply not drawn. */
+html.deskhost, html.deskhost * { scrollbar-width: none; -ms-overflow-style: none; }
+html.deskhost ::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
 body.deskmini header,
 body.deskmini #datebar,
 body.deskmini main,
@@ -588,14 +598,19 @@ body.deskmini nav { display: none; }
    backup reminder is raised again the moment the whole app is open. */
 body.deskmini .mb-toast { display: none; }
 body.deskmini #deskbar {
-  display: flex; flex-direction: column; gap: var(--s-5);
-  height: 100vh; padding: var(--s-4); background: var(--surface-1);
+  display: flex; flex-direction: column; gap: var(--s-3);
+  height: 100vh; padding: var(--s-3); background: var(--surface-1);
   position: relative; z-index: 4;
 }
+/* The chevron sits where the whole app's chevron sits, so one corner of the
+   screen toggles between them instead of two. */
+.deskx { position: absolute; top: var(--s-1); right: var(--s-1); }
+.deskpair { display: flex; align-items: center; gap: var(--s-1); margin-left: auto; }
 
 /* the last thing he wrote: the one primary thing in the box */
 .deskline {
   font-size: var(--f-3); line-height: var(--lh-body); color: var(--text-1);
+  padding-right: var(--s-6);
   /* three lines, so a long bullet cannot make the window grow without end */
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden;
@@ -604,8 +619,9 @@ body.deskmini #deskbar {
 .deskempty { font-size: var(--f-2); color: var(--text-muted); line-height: var(--lh-body); }
 
 /* one row of controls, along the bottom */
-.deskfoot { display: flex; align-items: center; gap: var(--s-1); }
-.deskchips { display: flex; align-items: baseline; gap: var(--s-4); margin-right: auto; }
+.deskfoot { display: flex; align-items: flex-end; gap: var(--s-1); }
+.deskchips { display: flex; align-items: baseline; gap: var(--s-4); }
+.deskfoot { min-height: var(--tap); }
 .deskchip { display: flex; align-items: baseline; gap: var(--s-1); }
 .deskchip span {
   font-size: var(--f-1); color: var(--text-muted);
@@ -619,6 +635,8 @@ body.deskmini #deskbar {
   color: var(--text-muted); cursor: pointer;
 }
 .deskbtn:hover { background: var(--surface-2); color: var(--text-1); }
+.deskpair .deskbtn { background: var(--surface-2); color: var(--text-2); }
+.deskpair .deskbtn:hover { background: var(--surface-3); color: var(--text-1); }
 .deskfab {
   width: var(--tap); height: var(--tap); flex: none; margin-left: var(--s-1);
   display: flex; align-items: center; justify-content: center;
@@ -7048,6 +7066,7 @@ const DESK_NAME = 'STATUS Desktop tracker';
    the window title is no longer a message pipe. The old Chrome launcher had
    only the title, and both are spoken while it still exists. */
 const HOSTED = !!(window.chrome && window.chrome.webview);
+if (HOSTED) document.documentElement.classList.add('deskhost');
 /* The widget sits in a corner and is glanced at. The check in is meant to be
    in the way, so it is wider as well as centred. */
 const DESK_WIDE = 460;
@@ -7072,6 +7091,7 @@ let deskShowing = 0;     /* asking the launcher to bring the window forward */
 let deskNagged = 0;      /* the backup reminder, held back while the widget is up */
 let deskPanel = '';      /* '', 'ask' or 'bullet': what the widget has turned into */
 let deskAskedAt = 0;     /* when the open one was put up */
+let deskAskedNight = ''; /* the night it went up on, if it was outside hours */
 
 function deskCfg() {
   return {
@@ -7094,7 +7114,11 @@ function deskSize() {
   let h = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
   let n = 0;
   [].forEach.call(bar.children, k => {
-    if (getComputedStyle(k).display === 'none') return;
+    const cs2 = getComputedStyle(k);
+    if (cs2.display === 'none') return;
+    /* The chevron is parked in the corner, out of the flow, so it takes no
+       height of its own. Counting it added 44px of window to nothing. */
+    if (cs2.position === 'absolute' || cs2.position === 'fixed') return;
     h += k.offsetHeight + (n ? gap : 0);
     n++;
   });
@@ -7113,7 +7137,7 @@ function deskTitle() {
      front of whatever he is doing and takes the focus, so answering is the
      easy path rather than something to notice and come back to. */
   if (deskSmall && s) deskSend((deskPanel === 'ask' ? 'checkin' : 'widget') + '|' + s.w + '|' + s.h);
-  else if (!deskSmall) deskSend('app|660|920');
+  else if (!deskSmall) deskSend('app|390|844');
 }
 
 function deskRaise() {
@@ -7162,15 +7186,17 @@ function deskTick() {
   if (Date.now() < deskNext) return;
   deskRoll();
   const now = new Date();
-  if (!deskAwake(now)) {
-    const night = deskNightKey(now);
-    if (S.get('desk.night', '') === night) return;   /* already had its one */
-    S.set('desk.night', night);
+  /* Tom, 2026-09-17: "Let it fire outside hours UNTIL I stop answering it."
+     So the night keeps the ordinary pace while he is answering, and stops at
+     the first one he lets go past. */
+  if (!deskAwake(now) && S.get('desk.nightOff', '') === deskNightKey(now)) return;
+  /* One he walked away from used to block every one after it for ever. After
+     fifteen minutes it stops holding the door, and at night that silence is
+     the answer: no more until morning. */
+  if (deskAsking && Date.now() - deskAskedAt > 15 * 60000) {
+    deskAsking = false;
+    if (deskAskedNight) { S.set('desk.nightOff', deskAskedNight); deskAskedNight = ''; }
   }
-  /* A question left unanswered used to block every one after it for ever,
-     because nothing cleared the flag unless he pressed something. Fifteen
-     minutes and it stops holding the door. */
-  if (deskAsking && Date.now() - deskAskedAt > 15 * 60000) deskAsking = false;
   if (deskAsking || deskPanel || sheetH) return;  /* never interrupt something open */
   deskAsk();
 }
@@ -7179,10 +7205,14 @@ function deskTick() {
    Whenever it was. A widget showing only today's bullets would be empty
    every morning, which is exactly when he opens it.                      */
 function deskLast() {
+  const today = Day.today();
   let best = null;
   Rec.all('note').forEach(r => {
     const p = r.payload;
     if (!p || !p.text || p.cancelled) return;
+    /* A todo dated for next Tuesday is not the last thing he wrote, it is a
+       thing he decided not to think about yet. Tom, 2026-09-17. */
+    if (p.kind === 'todo' && p.due && p.due > today) return;
     if (!best || (p.t || 0) > (best.payload.t || 0)) best = r;
   });
   return best;
@@ -7216,9 +7246,13 @@ function deskBar() {
   if (deskPanel === 'bullet') return deskBulletPanel(bar);
   bar.innerHTML = '';
 
+  const chev = deskBtn('expand', 'Open the whole app', () => deskSetSmall(false));
+  chev.className = 'deskbtn deskx';
+  bar.appendChild(chev);
+
   const last = deskLast();
   if (!last) {
-    bar.appendChild(el('div', 'deskempty', 'Nothing written yet. The pencil starts one.'));
+    bar.appendChild(el('div', 'deskempty', 'Nothing written yet'));
   } else {
     const p = last.payload;
     const box = el('div');
@@ -7248,15 +7282,26 @@ function deskBar() {
     chips.appendChild(c);
   });
   foot.appendChild(chips);
-  foot.appendChild(deskBtn('edit', 'Write a bullet', () => deskOpen('bullet')));
-  foot.appendChild(deskBtn('expand', 'Open the whole app', () => deskSetSmall(false)));
+
+  /* The smiley comes before the two ways of writing a line, which is the
+     order Tom asked for: how you are, then what you are doing. */
+  const pair = el('div', 'deskpair');
   const fab = el('button', 'deskfab');
   fab.setAttribute('data-icon', 'mood');
   fab.setAttribute('data-icon-size', '22');
   fab.setAttribute('aria-label', 'Mood and energy');
   fab.title = 'How are you';
   fab.onclick = () => deskOpen('ask');
-  foot.appendChild(fab);
+  pair.appendChild(fab);
+
+  NOTE_KINDS.filter(k => k.id === 'todo' || k.id === 'entry').forEach(k => {
+    const b = el('button', 'deskbtn', noteSvg(k.id));
+    b.setAttribute('aria-label', k.label);
+    b.title = k.label;
+    b.onclick = () => { S.set('desk.kind', k.id); deskOpen('bullet'); };
+    pair.appendChild(b);
+  });
+  foot.appendChild(pair);
   bar.appendChild(foot);
 
   if (window.Icons && Icons.paint) Icons.paint(bar);
@@ -7273,7 +7318,12 @@ function deskOpen(which) {
   deskBar();
 }
 
-function deskClose() {
+function deskClose(answered) {
+  /* Answering keeps the night going; waving it away ends it. */
+  if (deskAskedNight) {
+    if (!answered) S.set('desk.nightOff', deskAskedNight);
+    deskAskedNight = '';
+  }
   deskPanel = ''; deskAsking = false;
   deskBar();
 }
@@ -7330,7 +7380,7 @@ function deskAskPanel(bar) {
        pressed himself is followed by the same question ten minutes later,
        which is how a prompt stops being worth reading. */
     deskRoll();
-    deskClose();
+    deskClose(true);
   };
   foot.appendChild(go);
   bar.appendChild(foot);
@@ -7404,6 +7454,8 @@ function deskBulletPanel(bar) {
 function deskAsk() {
   deskAsking = true;
   deskAskedAt = Date.now();
+  const now = new Date();
+  deskAskedNight = deskAwake(now) ? '' : deskNightKey(now);
   deskRaise();
   if (deskSmall) { deskOpen('ask'); return; }
   const d = Day.today();
@@ -7545,6 +7597,9 @@ if (DESK) {
     if (bar) bar.addEventListener('mousedown', e => {
       if (e.button !== 0 || !deskSmall) return;
       if (e.target.closest('button, input, textarea, a, label')) return;
+      /* Stop the press turning into a text selection, or Windows never gets
+         the chance to start moving the window. */
+      e.preventDefault();
       deskSend('drag');
     });
   }
