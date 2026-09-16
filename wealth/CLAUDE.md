@@ -64,6 +64,32 @@ language of the root brief's psychology section, a **competence** signal rather
 than a compliance one: it is evidence the thing is working, not a scolding
 about a budget he missed.
 
+### It is called UNALLOCATED on screen
+
+Tom, 2026-09-16, having asked what FREE was and then chosen between two names:
+*"Name it, Unallocated or Liquid?"* It is **UNALLOCATED**, on the big number
+and on its tile, because LIQUID is already the tile beside it and one word
+cannot mean two things on one screen. Having to ask what a figure means is the
+figure's fault, not his.
+
+The code still calls it `free`, and this brief still says FREE where it is
+talking about the mechanism. Only the words on screen changed.
+
+### An accidental second click writes nothing
+
+Tom, 2026-09-16: *"my mouth has a glitch where it accidentally double taps."*
+His mouse fires twice. In an app that writes rows that means two bills, two
+payments, or the NEXT purchase in a quick run filed into the category he meant
+for this one.
+
+A second press of the same button within 400ms is dropped in the capture
+phase, before any handler sees it, and a toast says so at most once every four
+seconds. Anything marked `data-rapid` is left alone: the arrows that step
+through days and months are meant to be pressed quickly. The switch is in
+settings under CLICKS, on by default, because it is his hardware rather than a
+taste. Watched: two clicks 60ms apart counted once, the same on an arrow
+counted twice, and two clicks 700ms apart counted twice.
+
 ### How far ahead FREE looks
 
 Tom, 2026-09-14: *"Let me adjust the window for what's free to spend."*
@@ -749,8 +775,32 @@ written until SAVE.
 Asked, never assumed: a one-off from a shop in a subscription category is a
 real thing, and a bill written behind his back would hold money back from FREE
 for ever. In a quick run the questions wait until the run is over, so they
-never interrupt its rhythm. A bill whose name already exists is not asked
-about again.
+never interrupt its rhythm.
+
+**It does not ask about a bill he already wrote.** Tom, 2026-09-16: *"I
+manually set up an itunes payment as a subscription, but the tool just now
+made me double set up an itunes payment that was already set up."* The first
+build compared the payee with each bill's name, and his bill is called
+**iCloud+** while the bank calls the line **APPLE.COM/BILL ITUNES.COM IE**, so
+names could never have matched them. `billCovers` now says yes when either
+name contains the other, **or** when a bill in the same category is within 5%
+of the same amount, which ₱699 against a ₱699 Subscriptions bill always is.
+
+**"Just this one" is remembered**, per payee, in `wealth.billAsked`. Asking the
+same question again next month is how somebody learns to click through
+questions without reading them.
+
+### A rule is only written from a bank's own wording
+
+Found on his device on 2026-09-16, the day the quick run shipped: it had
+written rules for "Lawson Cobra and Vitamilk", "Cheesy Beef Gyudon" and
+"Gym Drinks". Those are sentences he typed into STATUS, not payees, so each
+rule can only ever match the one purchase it came from, and they clutter the
+list that sorts his whole history.
+
+A rule is now written only when the purchase came off a statement, where the
+wording is the bank's and `payeeOf` can find the shop in it. A note he typed
+himself files just itself, and the switch says so.
 
 Watched: a ₱320 purchase filed as Subscriptions asked, and SET IT UP opened
 the sheet with its name, ₱320, and day 15, the day it was bought.

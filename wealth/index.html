@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.9, 2026-09-16">
+<meta name="mb-version" content="1.0.10, 2026-09-16">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -2696,6 +2696,11 @@ function drawMoneyTab(pane) {
       draw();
     })));
   pane.appendChild(el('div', 'note', 'Bills are read ' + BILL_TODO_DAYS + ' days ahead.'));
+
+  pane.appendChild(el('h2', null, 'CLICKS'));
+  pane.appendChild(UI.row('Ignore an accidental second click',
+    'For a mouse that fires twice. A second press of the same button within 400 milliseconds is dropped, so one press cannot write two bills or file two purchases. The arrows that step through days and months are left alone.',
+    UI.toggle(doubleGuardOn(), v => { S.set('noDoubleTap', v ? 1 : 0); })));
 }
 
 /* ══════════════════════════ the screens ══════════════════════════ */
@@ -2741,7 +2746,10 @@ function drawScore(m) {
 
   const c1 = card(null, 'full');
   const sc = el('div', 'score');
-  sc.appendChild(el('div', 'cap', 'FREE TO SPEND'));
+  /* Tom, 2026-09-16, asked to pick between Unallocated and Liquid: it is
+     UNALLOCATED, because LIQUID is already the tile beside it and one word
+     cannot mean two things on one screen. The code still says free. */
+  sc.appendChild(el('div', 'cap', 'UNALLOCATED'));
   /* One primary thing per screen. FREE is the answer to "can I", so it is the
      only figure at display size and liquid and allocated are its working. */
   sc.appendChild(el('div', 'big' + (b.free < 0 ? ' bad' : b.free < b.allocated * .2 ? ' low' : ''),
@@ -2783,7 +2791,7 @@ function drawScore(m) {
       label: x[1] + (x[0] === b.win.id ? ' (now)' : ''),
       fn: () => {
         S.set('freeTo', x[0]);
-        UI.toast('free now holds back bills due <b>' + esc(freeWindow().words) + '</b>');
+        UI.toast('unallocated now holds back bills due <b>' + esc(freeWindow().words) + '</b>');
         draw();
       } })), { title: 'HOLD BACK BILLS DUE' });
     const wrap = el('div', 'rowbtns');
@@ -2801,7 +2809,7 @@ function drawScore(m) {
     L.counted ? (L.age > STALE ? '<span class="stale">counted ' + L.age + ' days ago</span>' : 'counted ' + (L.age ? L.age + ' days ago' : 'today')) : 'no counts yet',
     L.age > STALE ? 'warn' : ''));
   g.appendChild(tile('ALLOCATED', short(b.allocated), (b.allot ? 'pots, allowances, and bills due to ' : 'pots, and bills due to ') + Day.short(b.win.to)));
-  g.appendChild(tile('FREE', L.counted ? short(b.free) : '—',
+  g.appendChild(tile('UNALLOCATED', L.counted ? short(b.free) : '—',
     onTime() ? 'if clients pay on time' : 'what is really yours',
     b.free < 0 ? 'bad' : ''));
   c1.appendChild(g);
@@ -3330,9 +3338,11 @@ function drawSpend(m) {
   bar.style.alignItems = 'center';
   const back = el('button', 'btn mb-press mb-tap', '‹');
   back.type = 'button'; back.setAttribute('aria-label', 'Previous ' + word);
+  back.dataset.rapid = '1';
   back.onclick = () => { periodShift(-1); Mobile.feedback('nav'); draw(); };
   const fwd = el('button', 'btn mb-press mb-tap', '›');
   fwd.type = 'button'; fwd.setAttribute('aria-label', 'Next ' + word);
+  fwd.dataset.rapid = '1';
   fwd.onclick = () => { periodShift(1); Mobile.feedback('nav'); draw(); };
   const nowBtn = el('button', 'btn mb-press mb-tap', 'Now');
   nowBtn.type = 'button';
@@ -3635,7 +3645,7 @@ function quickFile() {
     body: (b, h) => {
       const alwaysOn = { on: !!S.get('quickAlways', 1) };
       b.appendChild(UI.row('Also file everything else from the same payee',
-        'Writes a rule, which sorts every purchase you have ever logged from that name, not just this one',
+        'Writes a rule, which sorts every purchase you have ever logged from that name. Only lines read from a bank statement: a note you typed yourself files just itself',
         UI.toggle(alwaysOn.on, v => { alwaysOn.on = v; S.set('quickAlways', v ? 1 : 0); })));
       const head = el('div', 'note', '');
       const who = el('div', 'score');
@@ -3648,8 +3658,13 @@ function quickFile() {
         const s = queue[i];
         setMark(s, { cat: cid });
         filed++;
-        const p = payeeOf(s.bank || s.note);
-        if (alwaysOn.on && p && p.key) {
+        /* Only a bank's own wording makes a rule. A note he typed himself is
+           a sentence, not a payee: on 2026-09-16 a run wrote rules for
+           "Lawson Cobra and Vitamilk" and "Cheesy Beef Gyudon", which can
+           never match anything again and clutter the list that sorts his
+           history. */
+        const p = payeeOf(s.bank || s.note), fromBank = !!(s.bank || s.stmt);
+        if (alwaysOn.on && fromBank && p && p.key) {
           Rec.set('rule', null, 'imp-' + norm(p.key), { match: p.key, cat: cid });
           ruleCache = null; ruled++;
         }
@@ -3711,17 +3726,42 @@ const billNameFor = s => {
    prompt me into that entry mode." Asked, never assumed: a one-off from a
    shop that happens to be a subscription category is a real thing, and a bill
    written behind his back would hold money back from FREE for ever. */
+/* Does a bill he already wrote cover this purchase? Names first, either way
+   round, then the money: the same category at within 5% of the same amount is
+   the same thing under another name. Tom, 2026-09-16: "I manually set up an
+   itunes payment as a subscription, but the tool just now made me double set
+   up an itunes payment that was already set up." His bill is called iCloud+
+   and the bank calls the line APPLE.COM/BILL ITUNES.COM IE, so comparing
+   names alone could never have matched them, and ₱699 filed as Subscriptions
+   against a ₱699 Subscriptions bill always could. */
+function billCovers(s, cid) {
+  const a = num(s.amt, 0), nm = norm(billNameFor(s));
+  return bills().some(b => {
+    const bn = norm(b.name);
+    if (bn && nm && (bn.indexOf(nm) > -1 || nm.indexOf(bn) > -1)) return true;
+    return !!b.cat && b.cat === cid && !!a && Math.abs(num(b.amt, 0) - a) <= a * 0.05;
+  });
+}
 function offerBill(s, cid) {
   if (!isBillish(cid)) return Promise.resolve(false);
   const nm = billNameFor(s);
-  if (bills().some(x => norm(x.name) === norm(nm))) return Promise.resolve(false);
+  /* Asked once per payee. "Just this one" is an answer, and asking it again
+     next month is how somebody learns to click through questions. */
+  const asked = S.get('billAsked', []) || [];
+  const who = norm(nm);
+  if (asked.indexOf(who) > -1) return Promise.resolve(false);
+  if (billCovers(s, cid)) return Promise.resolve(false);
   return UI.confirm('Is ' + nm + ' a regular bill?',
-    money(num(s.amt, 0)) + ' filed as ' + catName(cid) + '. A bill is held back from FREE before it is due and comes up as a todo bullet. Every detail is yours to change on the next screen.',
+    money(num(s.amt, 0)) + ' filed as ' + catName(cid) + '. A bill is held back from your unallocated money before it is due, and comes up as a todo bullet. Every detail is yours to change on the next screen.',
     { yes: 'SET IT UP', no: 'JUST THIS ONE' })
-    .then(ok => { if (ok) billSheet(null, {
-      name: nm, amt: num(s.amt, 0), cat: cid, acct: acctKey(s.acct),
-      day: +s.date.slice(8), cycle: 'month',
-    }); return ok; });
+    .then(ok => {
+      if (ok) billSheet(null, {
+        name: nm, amt: num(s.amt, 0), cat: cid, acct: acctKey(s.acct),
+        day: +s.date.slice(8), cycle: 'month',
+      });
+      else S.set('billAsked', asked.concat([who]));
+      return ok;
+    });
 }
 function askBills() {
   const next = pendingBill.shift();
@@ -3755,10 +3795,10 @@ function drawBudget(m) {
     const g = el('div', 'grid3');
     g.appendChild(tile('ALLOTTED', short(allot), list.length + (list.length === 1 ? ' category' : ' categories')));
     g.appendChild(tile('SPENT', short(spent), 'against those budgets'));
-    g.appendChild(tile('LEFT', short(left), 'and FREE holds it back'));
+    g.appendChild(tile('LEFT', short(left), 'and UNALLOCATED holds it back'));
     c0.appendChild(g);
     c0.appendChild(el('div', 'note',
-      'FREE holds back what is left of each budget, plus a whole month of each one for every later month inside its window. ' +
+      'UNALLOCATED holds back what is left of each budget, plus a whole month of each one for every later month inside its window. ' +
       'Going over holds back nothing extra, because that money has already gone.'));
   }
   m.appendChild(c0);
@@ -3970,7 +4010,7 @@ function drawPots(m) {
     });
     c1.appendChild(list);
     c1.appendChild(el('div', 'note', '<b>' + esc(money(potsTotal())) +
-      '</b> put aside. This comes off your free figure, which is the whole reason it works.'));
+      '</b> put aside. This comes off your unallocated figure, which is the whole reason it works.'));
   }
   m.appendChild(c1);
 
@@ -6065,6 +6105,35 @@ function drawNav() {
     n.appendChild(b);
   });
 }
+/* ══ an accidental second click ══
+   Tom, 2026-09-16: "my mouth has a glitch where it accidentally double taps."
+   A mouse that fires twice turns one press into two, and in an app that
+   writes rows that means two bills, two payments, or the NEXT purchase filed
+   into the category he meant for this one.
+
+   So a second press of the same button within 400ms is dropped in the
+   capture phase, before anything sees it. Left out: anything marked
+   `data-rapid`, which is the arrows that step through days and months and
+   the steppers, because pressing those quickly is how they are meant to be
+   used. A real double-click on a button is not a thing this app has. On by
+   default, with a switch, because it is his hardware and not a taste. */
+const doubleGuardOn = () => !!S.get('noDoubleTap', 1);
+let lastPress = { el: null, at: 0, said: 0 };
+document.addEventListener('click', e => {
+  if (!doubleGuardOn()) return;
+  const b = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (!b || b.dataset.rapid === '1') return;
+  const now = Date.now();
+  if (lastPress.el === b && now - lastPress.at < 400) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    lastPress.at = now;
+    if (now - lastPress.said > 4000) { lastPress.said = now; UI.toast('ignored a second click'); }
+    return;
+  }
+  lastPress = { el: b, at: now, said: lastPress.said };
+}, true);
+
 function draw() {
   drawNav();
   const m = document.getElementById('main');
