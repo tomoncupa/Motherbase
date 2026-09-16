@@ -177,6 +177,22 @@ class App : Form
         c.Settings.AreBrowserAcceleratorKeysEnabled = false;
         c.Settings.IsStatusBarEnabled = false;
         c.WebMessageReceived += Message;
+        /* ── this program is STATUS ──
+           Its Home button used to navigate the widget's own window to the home
+           screen, and the window was then stranded: the home screen has none
+           of STATUS's desktop code, so nothing could size it, shrink it or get
+           back. Seen at 03:16 on 2026-09-17, a 390x844 window showing the
+           dock with no way out of it.
+
+           The home screen is its own program now, so Home opens that and this
+           window stays what it is. */
+        c.NavigationStarting += (s2, e2) =>
+        {
+            if (e2.Uri.StartsWith(pageUrl.Split('?')[0], StringComparison.OrdinalIgnoreCase)) return;
+            e2.Cancel = true;
+            Log("stayed put rather than leaving STATUS for " + e2.Uri);
+            OpenMenu();
+        };
         c.NavigationCompleted += (s2, e2) =>
         {
             Log("page loaded: " + (e2.IsSuccess ? "yes" : "NO, " + e2.WebErrorStatus));
@@ -288,6 +304,18 @@ class App : Form
         if (!ready) return;
         web.CoreWebView2.ExecuteScriptAsync(
             "window.deskAsk && (deskPanel='', deskAsking=false, deskAsk())");
+    }
+
+    /* The home screen is its own program. Starting it twice does nothing, so
+       this is safe to call whenever he presses Home. */
+    void OpenMenu()
+    {
+        try
+        {
+            string exe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Main Menu.exe");
+            if (File.Exists(exe)) System.Diagnostics.Process.Start(exe);
+        }
+        catch (Exception ex) { Log("could not open the Main Menu: " + ex.Message); }
     }
 
     void PlaceWidget()

@@ -1,4 +1,4 @@
-# Builds STATUS.exe, the desktop app.
+﻿# Builds STATUS.exe, the desktop app.
 #
 # There is nothing to install. This uses the C# compiler that is already
 # inside Windows, in the .NET Framework folder, which has shipped with every
@@ -43,7 +43,18 @@ foreach ($f in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinFo
   Copy-Item (Join-Path $lib $f) $dir -Force
 }
 
+# ── the Main Menu, the suite in an ordinary window ──
+$menu = Join-Path $dir 'Main Menu.exe'
+& $csc -nologo -target:winexe -out:"$menu" `
+  -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
+  -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
+  -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
+  (Join-Path $dir 'MenuApp.cs')
+
+if ($LASTEXITCODE -ne 0) { Write-Output "Main Menu build failed."; exit $LASTEXITCODE }
+
 Write-Output "Built:"
 Write-Output "  $out"
+Write-Output "  $menu"
 Write-Output ""
 Write-Output "Double click it. It puts an icon in the tray, next to the clock."
