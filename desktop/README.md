@@ -9,13 +9,19 @@ comes round on its own, and Ctrl+B from anywhere.
 Double click **STATUS Desktop tracker.exe**. That is it. An icon appears in the
 tray next to the clock; right click it for the menu.
 
-- **Mini mode** is the chevron in the top bar. STATUS shrinks to a strip about
-  470 by 118 in the top right corner, showing Mood, Energy and the next two
-  measures you have switched on. The chevron on the strip opens it back up.
+**It opens as the widget**, because that is the part you wanted. The whole app
+is one click away and it remembers which you were last in.
+
+- **Mini mode** is the widget: a strip exactly 470 by 56 in the top right,
+  showing Mood, Energy and the next two measures you have switched on. It has
+  no title bar, so the window is the strip and nothing around it. **Push it
+  anywhere with the mouse** and it stays there next time. The chevron on the
+  right opens the whole app; the chevron in the app's top bar shrinks it back.
 - **The check in** asks mood, energy and what you are up to, on a gap that is
-  different every time. Set the range in **Settings → DESKTOP**. It only asks
-  between the hours you choose, it never stacks up, and Skip writes nothing.
-  If the window is minimised it brings itself back to ask.
+  different every time, 60 to 90 minutes by default. Set the range in
+  **Settings → DESKTOP**. It only asks between the hours you choose, it never
+  stacks up, and Skip writes nothing. If the window is minimised it brings
+  itself back to ask.
 - **Ctrl+B** opens a bullet, even when you are in another program. If something
   else on your machine already owns Ctrl+B, the tray menu has Ctrl+Alt+B and
   Ctrl+Shift+B.
@@ -42,8 +48,17 @@ page is not allowed to do for itself:
 
 It cannot see inside the page and the page cannot move its own window, so the
 two talk through the window title: the page puts a word on the end of its
-title, this reads it twice a second and acts on it. The words are `small`,
-`big` and `show`.
+title and this reads it twice a second. The title says what the page wants to
+be rather than announcing a change, so the two agree no matter when the
+launcher found the window. The words are `small` and `show`.
+
+## If it ever gets stuck
+
+Quitting from the tray always puts the window's title bar back. If the
+launcher is killed outright instead, by Task Manager or a crash, the widget is
+left with no title bar and no close button. Two ways out: **Alt+F4** closes it,
+or just start the launcher again, which puts the frame back on anything it
+finds left over.
 
 ## Building it
 

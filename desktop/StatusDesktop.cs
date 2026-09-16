@@ -13,13 +13,16 @@
 
    It cannot see inside the page, and the page cannot move its own window,
    so the two talk through the window title. The page puts a word on the
-   end of its title, this reads it twice a second and acts on it. The page
-   wipes the word a second later. Three words: small, big, show.
+   end of its title and this reads it twice a second. The title is a state
+   rather than a message: the page keeps saying what it wants to be, so the
+   two agree no matter when this found the window. Two words: `small` while
+   Mini mode is up, and `show` to be brought to the front.
 
    Built by build.ps1 with the C# compiler that ships inside Windows, so
    there is nothing to install and nothing to download.                    */
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -46,12 +49,21 @@ class Launcher : Form
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr h, StringBuilder s, int n);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr p);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
+    [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr h, int i, int v);
+    [DllImport("user32.dll")] static extern short GetAsyncKeyState(int k);
+    [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
     delegate bool EnumProc(IntPtr h, IntPtr p);
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
+    [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
 
     static readonly IntPtr TOPMOST = new IntPtr(-1);
     static readonly IntPtr NOTOPMOST = new IntPtr(-2);
-    const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040;
+    const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010,
+               SWP_FRAMECHANGED = 0x0020, SWP_SHOWWINDOW = 0x0040;
+    const int GWL_STYLE = -16;
+    const int WS_CAPTION = 0x00C00000, WS_THICKFRAME = 0x00040000;
+    const int VK_LBUTTON = 0x01;
     const int SW_RESTORE = 9;
     const int WM_HOTKEY = 0x0312;
     const int HOTKEY_ID = 0xB01;
@@ -60,21 +72,33 @@ class Launcher : Form
     /* The title the page sets. Matching on the front of it, because the
        instruction word is stuck on the end. */
     const string TITLE = "STATUS Desktop tracker";
-    /* The strip, in pixels. Chrome keeps its own slim title bar on an app
-       window, so this is a little taller than the strip the page draws. */
-    const int SMALL_W = 470, SMALL_H = 118;
+    /* Mini mode takes Chrome's title bar off, so the window IS the strip and
+       nothing else. Tom, 2026-09-16: "I don't like how the window can be
+       bigger than the actual app interface."
+
+       The same thought applies to the whole app, which lays out in a 620px
+       column: opened at 1905 wide it was a narrow strip of content with six
+       hundred pixels of empty either side. Its window is sized to the
+       interface now rather than to whatever Chrome felt like. */
+    const int SMALL_W = 470, SMALL_H = 56;
+    const int BIG_W = 660, BIG_H = 920;
 
     string root;                 /* the Motherbase folder */
     string cfgPath;
     IntPtr win = IntPtr.Zero;    /* the STATUS window, once it exists */
     bool onTop = true;
     bool small = false;
-    RECT bigRect;                /* where it was before it went small */
-    bool haveBig = false;
+    bool shown = false;          /* already answered this "show" */
+    int savedStyle = 0;          /* the frame, while it is off */
+    int posX = int.MinValue, posY = int.MinValue;   /* where he put the widget */
     string hotkey = "ctrl+b";
     NotifyIcon tray;
-    Timer poll, tap;
+    Timer poll, tap, drag;
     MenuItem miTop;
+
+    /* dragging the widget, which has no title bar to drag by */
+    bool dragOn, dragArmed, wasDown;
+    int grabX, grabY, anchorX, anchorY;
 
     [STAThread]
     static void Main()
@@ -113,6 +137,7 @@ class Launcher : Form
 
         BuildTray();
         RegisterTheHotkey();
+        RepairOrphans();
 
         string url = new Uri(page).AbsoluteUri + "?desktop=1";
         try { Process.Start(chrome, "--app=" + url); }
@@ -126,6 +151,12 @@ class Launcher : Form
         poll.Interval = 500;
         poll.Tick += (s, e) => Poll();
         poll.Start();
+
+        /* fast, because it is following a cursor, and stopped whenever the
+           widget is not up */
+        drag = new Timer();
+        drag.Interval = 15;
+        drag.Tick += (s, e) => DragTick();
     }
 
     /* a form that is never shown */
@@ -144,6 +175,13 @@ class Launcher : Form
                 string k = line.Substring(0, eq).Trim(), v = line.Substring(eq + 1).Trim();
                 if (k == "hotkey") hotkey = v.ToLowerInvariant();
                 if (k == "ontop") onTop = (v != "0");
+                if (k == "pos")
+                {
+                    string[] xy = v.Split(',');
+                    int px, py;
+                    if (xy.Length == 2 && int.TryParse(xy[0], out px) && int.TryParse(xy[1], out py))
+                    { posX = px; posY = py; }
+                }
             }
         }
         catch { }
@@ -156,7 +194,8 @@ class Launcher : Form
             File.WriteAllText(cfgPath,
                 "# STATUS Desktop tracker. Delete this file to go back to the defaults.\r\n" +
                 "hotkey=" + hotkey + "\r\n" +
-                "ontop=" + (onTop ? "1" : "0") + "\r\n");
+                "ontop=" + (onTop ? "1" : "0") + "\r\n" +
+                (posX == int.MinValue ? "" : "pos=" + posX + "," + posY + "\r\n"));
         }
         catch { }
     }
@@ -295,6 +334,42 @@ class Launcher : Form
         return sb.ToString();
     }
 
+    /* ── a window left frameless by a run that was killed ──
+       Quitting from the tray puts the frame back. Being killed outright, by
+       Task Manager or a crash, does not run any of that, and what is left on
+       screen is a strip with no title bar, no close button and nothing to
+       drag. Alt+F4 still closes it, but nobody should have to know that.
+       So: anything found frameless at startup gets its frame back. */
+    void RepairOrphans()
+    {
+        foreach (IntPtr h in FindAll())
+        {
+            int st = GetWindowLong(h, GWL_STYLE);
+            if ((st & WS_CAPTION) == WS_CAPTION) continue;
+            SetWindowLong(h, GWL_STYLE, st | WS_CAPTION | WS_THICKFRAME);
+            SetWindowPos(h, NOTOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            Log("put the frame back on a window left over from a run that was killed");
+        }
+    }
+
+    static List<IntPtr> FindAll()
+    {
+        var all = new List<IntPtr>();
+        EnumWindows((h, p) =>
+        {
+            if (!IsWindowVisible(h)) return true;
+            if (ClassOf(h).IndexOf("Chrome_WidgetWin", StringComparison.Ordinal) != 0) return true;
+            if (!TextOf(h).StartsWith(TITLE, StringComparison.Ordinal)) return true;
+            RECT rr;
+            if (!GetWindowRect(h, out rr)) return true;
+            if (rr.R - rr.L < 240 || rr.B - rr.T < 40) return true;
+            all.Add(h);
+            return true;
+        }, IntPtr.Zero);
+        return all;
+    }
+
     static IntPtr Find()
     {
         IntPtr hit = IntPtr.Zero;
@@ -309,60 +384,138 @@ class Launcher : Form
                and never sat on top. Anything this small is not the app. */
             RECT r;
             if (!GetWindowRect(h, out r)) return true;
-            if (r.R - r.L < 240 || r.B - r.T < 80) return true;
+            /* The width is what tells the app apart from Chrome's little
+               helper windows. The height cannot help: the widget is 56 tall
+               on purpose, so a floor of 80 here would lose the window the
+               moment Mini mode was up. */
+            if (r.R - r.L < 240 || r.B - r.T < 40) return true;
             hit = h;
             return false;
         }, IntPtr.Zero);
         return hit;
     }
 
-    /* ── twice a second ── */
+    /* ── twice a second ──
+       The title is a state, not a message, so this compares rather than
+       reacts: whatever the page says it wants to be, make it that. A word
+       that arrived before this had found the window is not lost, and a
+       window knocked out of shape by anything else comes back. */
     void Poll()
     {
-        if (!IsWindow(win)) { win = Find(); haveBig = false; }
+        if (!IsWindow(win))
+        {
+            win = Find();
+            if (IsWindow(win)) { small = false; savedStyle = 0; }
+        }
         if (!IsWindow(win)) return;
 
         if (onTop)
             SetWindowPos(win, TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
         string t = TextOf(win);
-        int dot = t.IndexOf('\u00b7');
-        if (dot < 0) return;
-        string word = t.Substring(dot + 1).Trim();
+        bool wantSmall = t.IndexOf("\u00b7 small", StringComparison.Ordinal) > -1;
+        bool wantShow = t.IndexOf("\u00b7 show", StringComparison.Ordinal) > -1;
 
-        if (word == "small") GoSmall();
-        else if (word == "big") GoBig();
-        else if (word == "show") Raise();
+        if (wantSmall && !small) GoSmall();
+        else if (!wantSmall && small) GoBig();
+
+        /* once per asking, not once per poll, or it takes the focus three
+           times over while the word is still up */
+        if (wantShow && !shown) { shown = true; Raise(); }
+        else if (!wantShow) shown = false;
     }
 
+    /* ── the widget ──
+       The title bar and the resize edge come off, so what is on screen is the
+       strip and nothing around it. It goes back where he last left it. */
     void GoSmall()
     {
         if (small || !IsWindow(win)) return;
-        RECT r;
-        if (GetWindowRect(win, out r)) { bigRect = r; haveBig = true; }
         small = true;
+
+        savedStyle = GetWindowLong(win, GWL_STYLE);
+        SetWindowLong(win, GWL_STYLE, savedStyle & ~(WS_CAPTION | WS_THICKFRAME));
+
         var wa = Screen.PrimaryScreen.WorkingArea;
-        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST,
-            wa.Right - SMALL_W - 24, wa.Top + 24, SMALL_W, SMALL_H, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+        int x = posX != int.MinValue ? posX : wa.Right - SMALL_W - 24;
+        int y = posY != int.MinValue ? posY : wa.Top + 24;
+        /* if the screen changed since last time, put it back on it */
+        if (x < wa.Left || x > wa.Right - 80) x = wa.Right - SMALL_W - 24;
+        if (y < wa.Top || y > wa.Bottom - 40) y = wa.Top + 24;
+
+        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, x, y, SMALL_W, SMALL_H,
+            SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        if (drag != null) drag.Start();
     }
 
     void GoBig()
     {
         if (!small || !IsWindow(win)) return;
         small = false;
-        int x, y, w, h;
-        if (haveBig)
+        if (drag != null) drag.Stop();
+        dragOn = dragArmed = wasDown = false;
+        RestoreFrame();
+
+        var wa = Screen.PrimaryScreen.WorkingArea;
+        int w = Math.Min(BIG_W, wa.Width - 80), h = Math.Min(BIG_H, wa.Height - 80);
+        int x = wa.Left + (wa.Width - w) / 2, y = wa.Top + (wa.Height - h) / 2;
+        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, x, y, w, h,
+            SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+
+    /* Always put the frame back. A window left borderless by a launcher that
+       died would have no way to be closed or moved. */
+    void RestoreFrame()
+    {
+        if (savedStyle == 0 || !IsWindow(win)) return;
+        SetWindowLong(win, GWL_STYLE, savedStyle);
+        savedStyle = 0;
+        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+
+    /* ── moving the widget ──
+       It has no title bar left to drag by, so this does it: while Mini mode
+       is up, a press that STARTS on the widget and then travels more than a
+       few pixels moves the window with the cursor. The few pixels of slack
+       are what keep a click on + a click, instead of a one pixel drag that
+       swallows it. Only runs while the widget is up. */
+    void DragTick()
+    {
+        if (!small || !IsWindow(win)) { dragOn = dragArmed = wasDown = false; return; }
+
+        bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        if (!down)
         {
-            x = bigRect.L; y = bigRect.T;
-            w = bigRect.R - bigRect.L; h = bigRect.B - bigRect.T;
+            if (dragOn) SaveCfg();          /* remember where he put it */
+            dragOn = dragArmed = wasDown = false;
+            return;
         }
-        else
+
+        POINT c;
+        RECT r;
+        if (!GetCursorPos(out c) || !GetWindowRect(win, out r)) return;
+
+        if (!wasDown)
         {
-            var wa = Screen.PrimaryScreen.WorkingArea;
-            w = Math.Min(1180, wa.Width - 120); h = Math.Min(900, wa.Height - 120);
-            x = wa.Left + (wa.Width - w) / 2; y = wa.Top + (wa.Height - h) / 2;
+            wasDown = true;
+            if (c.X >= r.L && c.X < r.R && c.Y >= r.T && c.Y < r.B)
+            {
+                dragArmed = true;
+                anchorX = c.X; anchorY = c.Y;
+                grabX = c.X - r.L; grabY = c.Y - r.T;
+            }
+            return;
         }
-        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, x, y, w, h, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+        if (!dragArmed) return;
+        if (!dragOn)
+        {
+            if (Math.Abs(c.X - anchorX) + Math.Abs(c.Y - anchorY) < 5) return;
+            dragOn = true;
+        }
+        posX = c.X - grabX; posY = c.Y - grabY;
+        SetWindowPos(win, onTop ? TOPMOST : NOTOPMOST, posX, posY, 0, 0,
+            SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     /* ── bringing it to the front ──
@@ -419,6 +572,7 @@ class Launcher : Form
 
     void Quit()
     {
+        RestoreFrame();
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
         if (tray != null) { tray.Visible = false; tray.Dispose(); }
         Application.Exit();
@@ -426,6 +580,7 @@ class Launcher : Form
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
+        RestoreFrame();
         try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { }
         if (tray != null) { tray.Visible = false; tray.Dispose(); }
         base.OnFormClosed(e);
