@@ -1590,6 +1590,21 @@ const Mirror = {
   get settings() { return Object.assign({}, mcfg); },
   set(patch) { Object.assign(mcfg, patch || {}); msave(); return Mirror.settings; },
   get url() { return mcfg.url; },
+
+  /** The personal sync code out of whatever was pasted.
+
+      What a person actually pastes is rarely the bare link. It arrives from
+      Telegram with the rest of a message around it, from Google with a
+      trailing newline, or wrapped in quotes, and a box that only accepts the
+      link exactly answers "that is not your sync code" to somebody who has
+      the right thing in their hand. So: find the code inside the paste, and
+      leave anything else alone. Returns '' when there is none. */
+  code(text) {
+    const m = String(text == null ? '' : text)
+      .match(/https:\/\/script\.google\.com\/[^\s"'<>]*\/exec\b/);
+    return m ? m[0] : '';
+  },
+
   ready() { return !!mcfg.url; },
 
   /** Is this device holding rows the sheet has not confirmed?
@@ -2099,7 +2114,7 @@ const Mirror = {
     if (!u) return { code: 'no-link', act: true, say: 'Paste the sheet link in first.' };
     if (u.indexOf('script.google.com') < 0)
       return { code: 'bad-link-host', act: true,
-               say: 'That link is not the Apps Script one. Copy the one that ends in /exec.' };
+               say: 'That is not your sync code. Copy the link that ends in /exec.' };
     if (!/\/exec\s*$/.test(u))
       return { code: 'bad-link-dev', act: true,
                say: 'That link should end in /exec. A /dev one only works while you are signed in.' };
