@@ -306,7 +306,7 @@ An app may read any type. It writes only the types it owns.
 | `lane` `item` `routine` | block | | |
 | `rhythm` | **block** | rhythm id | `{kind, name, color, n, unit, from, times}` — a Block on BLOCK's Every tab (`kind: 'every'`, every `n` days, weeks or months, first due `from`) or Anytime tab (`kind: 'anytime'`, `times` a week). What got done is ordinary `tick` rows under the slug of the name, with no routine |
 | `plan` | **block** | `routine` | today's published plan, for anything that wants to read it |
-| `note` | **status** names the shape; **log** and **quest** write it too, and **arc** writes a todo per skill in training and per review due, `src: 'arc'` | line id | one journal line: a todo, an entry, an event or an idea. A todo may carry `due`, `pri`, `proj` and `rep` from QUESTS; see `quest/CLAUDE.md` |
+| `note` | **status** names the shape; **log** and **quest** write it too, and **arc** writes a todo per skill in training and per review due, `src: 'arc'`; **wealth** writes one per bill coming up, `src: 'wealth'`, never for a loan | line id | one journal line: a todo, an entry, an event or an idea. A todo may carry `due`, `pri`, `proj` and `rep` from QUESTS; see `quest/CLAUDE.md` |
 | `field` | **status** | field id | the definition of a tracked measure |
 | `ev` | **status**; **checkin** writes `weight` too, the way STATUS's `evAdd` does | field id | `{e:[{t,v}]}` — one row per field per day |
 | `cfield` | **checkin** | field id | `{label, kind, unit, ord, on}` — what a check-in asks. `kind` is `photo`, `number`, `scale` (1 to 5) or `text`. A default is shown until changed; a row wins over its default |
