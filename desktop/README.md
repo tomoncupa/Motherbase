@@ -1,111 +1,87 @@
-# STATUS Desktop tracker
+# STATUS
 
-STATUS as a Windows app: its own window with no browser bars, sitting above
-everything else, a Mini mode that shrinks it to one strip, a check in that
-comes round on its own, and Ctrl+B from anywhere.
+STATUS as a real Windows program: its own window with no browser anything, a
+small widget that sits above your work, and a check in that interrupts you on
+purpose.
 
 ## How to open it
 
-Double click **STATUS** on your desktop. That shortcut points at
-`STATUS Desktop tracker.exe` in this folder, and you can make another anywhere
-by right clicking the exe and choosing Send to, Desktop.
+Double click **STATUS** on your desktop.
 
-To have it always one click away, open it once, then right click its icon in
-the taskbar and choose **Pin to taskbar**. To have it start with Windows,
-press Windows and R together, type `shell:startup`, press Enter, and drop a
-copy of the shortcut in the folder that opens.
+To keep it handy, open it once, right click its taskbar icon and choose **Pin
+to taskbar**. To have it start with Windows: hold the Windows key and press R,
+type `shell:startup`, press Enter, and drop a copy of the desktop shortcut in
+the folder that opens.
 
-Opening it a second time while it is already running does not start a second
-copy. It brings the widget you already have to the front.
+Opening it twice does nothing. There is only ever one.
 
-## Using it
+## What it does
 
-An icon appears in the tray next to the clock; right click it for the menu.
+- **The widget** is the resting state: about 320 wide, no title bar, rounded
+  corners, above your other windows. It shows the last bullet you wrote with
+  its time, today's mood and energy once there are any, and three controls.
+  **Drag it anywhere** by its background and it stays there.
+- **The check in** is meant to be in the way. It goes to the middle of the
+  screen you are working on, in front of whatever you are doing, takes the
+  focus and makes a sound. Mood, energy, save, done. Answering it also pushes
+  the next one back, so the one you answered yourself is not followed by
+  another ten minutes later.
+- **Ctrl+B** writes a bullet from anywhere, even from inside another program.
+  Change it from the tray: **Bullet shortcut**, **Choose my own**, then press
+  the keys you want. It needs Ctrl, Alt or Shift in it, because Windows will
+  not give a plain letter to a program that is not in front.
+- **The pencil** writes a bullet without leaving the widget. It opens on
+  Entry. Enter saves, Shift and Enter makes a new line.
+- **The chevron** opens the whole of STATUS. The chevron in its top bar takes
+  you back to the widget.
 
-**It opens as the widget**, because that is the part you wanted. The whole app
-is one click away and it remembers which you were last in.
+Right click the tray icon next to the clock for **Open STATUS**, **Check in
+now**, always on top, the shortcut, and **Quit**.
 
-- **Mini mode** is the widget: about 320 by 135, with no title bar and rounded
-  corners, so the window is the widget and nothing around it. **Push it
-  anywhere with the mouse** and it stays there next time. It shows:
-  - **the last bullet you wrote**, whenever you wrote it, with its time
-  - **a round button** that asks Mood and Energy. Answering also pushes the
-    next automatic check in back, so the button you pressed yourself is not
-    followed by the same question ten minutes later
-  - today's mood and energy, once there are any, as a face and a bolt
-  - **the pencil** writes a bullet without leaving the widget. It opens on
-    Entry; Enter saves, Shift and Enter makes a new line. For a bullet with a
-    time or a repeat on it, the chevron opens the whole app.
+## Its data is its own
 
-  The window is always exactly the size of what is inside it, because the page
-  measures itself and the launcher matches. Opening the question makes the
-  window taller and closing it shrinks it back.
-- **The check in** asks mood, energy and what you are up to, on a gap that is
-  different every time, 60 to 90 minutes by default. Set the range in
-  **Settings → DESKTOP**. It only asks between the hours you choose, it never
-  stacks up, and Skip writes nothing. If the window is minimised it brings
-  itself back to ask.
-- **Ctrl+B** opens a bullet, even when you are in another program. To change
-  it, right click the tray icon, **Bullet shortcut**, then **Choose my own**,
-  and press the keys you want. It has to include Ctrl, Alt or Shift, because
-  Windows will not hand a bare letter to a program that is not in front. If
-  something else already owns the keys you picked, a message says so instead
-  of it quietly not working.
+This is a real program, so it has its own store, the way any program does. It
+opens **empty** the first time and fills up from your sync code, exactly as a
+second device would. Set the sync up in STATUS under Settings, DATA, and give
+it a minute.
 
-## Why it opens Chrome
+That is the one real cost of not being inside Chrome any more, and it buys the
+end of every window bug we had: the title bar that kept coming back, the page
+being clipped underneath it, and the window being closeable out from under the
+app so the check ins silently stopped.
 
-This is not a separate copy of STATUS. It is your STATUS, in a Chrome window
-with the browser furniture taken off, using your ordinary Chrome profile.
+## How it works
 
-That matters more than it sounds. A browser keeps a page's data per profile, so
-a standalone program with its own built in browser would have its own separate
-store and would open **empty**: no weigh ins, no foods, no spending, no
-bullets. Opening the one you already have is what makes today's numbers be
-there the first time you run it.
+It is the same STATUS. `status/index.html` is unchanged and still opens in a
+browser on its own. This program is only the frame around it: it runs the page
+inside Microsoft's WebView2, the engine that already ships with Windows, and
+the page tells it what to be through a proper message channel.
 
-## What it actually does
-
-STATUS is still one HTML file. This program only does the three things a web
-page is not allowed to do for itself:
-
-1. keeps the window above other windows
-2. resizes it down to the strip and back
-3. catches Ctrl+B while another program is in front
-
-It cannot see inside the page and the page cannot move its own window, so the
-two talk through the window title: the page puts a word on the end of its
-title and this reads it twice a second. The title says what the page wants to
-be rather than announcing a change, so the two agree no matter when the
-launcher found the window. The words are `small` and `show`.
-
-## If it ever gets stuck
-
-Quitting from the tray always puts the window's title bar back. If the
-launcher is killed outright instead, by Task Manager or a crash, the widget is
-left with no title bar and no close button. Two ways out: **Alt+F4** closes it,
-or just start the launcher again, which puts the frame back on anything it
-finds left over.
+Closing the window quits the program, so it can never sit in the tray switched
+off.
 
 ## Building it
 
-Only needed if `StatusDesktop.cs` changes. Editing STATUS never needs a
-rebuild.
+Only needed if the `.cs` files change. Editing STATUS never needs a rebuild.
 
 ```
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-There is nothing to install. It uses the C# compiler that is already inside
-Windows, at `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`.
+Nothing to install: it uses the C# compiler already inside Windows, and the
+three Microsoft WebView2 files in `lib\`.
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `STATUS Desktop tracker.exe` | the launcher, double click this |
-| `StatusDesktop.cs` | its source |
-| `build.ps1` | rebuilds the exe |
-| `launcher.txt` | your hotkey and always on top choice. Delete it to reset |
-| `launcher.log` | what happened on the last run, for when something misbehaves |
+| `STATUS.exe` | the program |
+| `StatusApp.cs` `KeyBox.cs` | its source |
+| `build.ps1` | rebuilds it |
+| `lib\` | Microsoft's WebView2 files, so there is nothing to download |
+| `data\` | its store. Deleting this empties it; it refills from sync |
+| `status-app.txt` | your shortcut, always-on-top and widget position |
+| `status-app.log` | what happened on the last run, for when something misbehaves |
+| `StatusDesktop.cs` | the old Chrome launcher, kept until the new one has earned its place |
 
-Windows only, and Tom's machine only. It is not in the client build.
+Windows only, Tom only. Not in the client build.
