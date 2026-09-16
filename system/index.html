@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
-<meta name="mb-version" content="1.0.2, 2026-09-17">
+<meta name="mb-version" content="1.0.3, 2026-09-17">
 <title>NOTICE</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▣</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -194,14 +194,14 @@ const STYLES = {
   /* BLOCK is the suite's own look, wearing the colours of the Block theme in
      shared/skins.json: the flat dark plate, the gold accent, Chakra Petch. It
      is first here, so it is the default (Skins.restore falls back to first
-     for the same reason). No glow, because Block's depth is flat, and no
-     brackets, because the square brackets are a Solo Leveling habit and this
-     one is his. */
+     for the same reason). No glow, because Block's depth is flat. It keeps
+     the square brackets: they went out on the first build and Tom put them
+     back the same day. */
   block: { name: 'BLOCK', face: 'Chakra Petch', body: 'Inter Tight',
     panel: 'rgba(14,20,29,0.94)', panel2: 'rgba(27,38,52,0.9)',
     line: '#2B3A4D', glow: 'rgba(0,0,0,0)', ink: '#DBE7F0', mute: '#7F93A8',
     acc: '#F0B323', warn: '#FF6B81', bgA: '#05070A', bgB: '#131B26',
-    cut: 6, icon: 'square', brackets: false },
+    cut: 6, icon: 'square', brackets: true },
   hunter: { name: 'HUNTER', face: 'Rajdhani', body: 'Inter Tight',
     panel: 'rgba(3,14,32,0.88)', panel2: 'rgba(8,36,72,0.62)',
     line: '#5FD3FF', glow: 'rgba(95,211,255,0.85)', ink: '#EAF7FF', mute: '#8FC7E6',
@@ -888,7 +888,7 @@ function keep(q) {
 }
 /* The picture on screen IS the file, already drawn, so the share sheet is
    asked for inside the tap that pressed SAVE. iOS allows nothing later. */
-$('btnSave').onclick = () => {
+function savePicture() {
   const q = render();
   if (!q) { UI.toast('Nothing to save', { bad: true }); return; }
   let png;
@@ -896,7 +896,8 @@ $('btnSave').onclick = () => {
   keep(q);
   Mobile.feedback('success');
   IO.handOver(png, fileName(q) + '.png');
-};
+}
+$('btnSave').onclick = savePicture;
 /* ── COPY ──
    It used to be one attempt with one message. The modern clipboard needs a
    permission the browser refuses outright in places the suite genuinely runs
@@ -911,51 +912,72 @@ $('btnSave').onclick = () => {
    browser refuses that, the old selection copy, which is not permission
    gated and is what still works from a folder. If both fail, it says which
    of the two things is wrong instead of shrugging. */
-const canCopy = !!((navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) ||
-  document.queryCommandSupported);
-$('btnCopy').classList.toggle('hide', !canCopy);
+/* The picture on screen IS the file, already drawn. Two ways are tried, and
+   if neither is allowed the app stops pretending: it opens a panel that says
+   what happened in the browser's own words and points at the one way that
+   cannot be refused, which is the browser's own Copy image over the picture
+   already on the page.
 
-/* the old way: the picture in a box nobody can see, selected, and the
-   browser's own Copy run over it. No permission, but it needs the press. */
-function copyOldWay() {
-  let box = null;
-  try {
-    const url = cv.toDataURL('image/png');
-    box = document.createElement('div');
-    box.contentEditable = 'true';
-    box.setAttribute('aria-hidden', 'true');
-    box.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;opacity:0';
-    const img = new Image();
-    img.src = url; img.width = cv.width; img.height = cv.height;
-    box.appendChild(img);
-    document.body.appendChild(box);
-    const r = document.createRange(); r.selectNodeContents(box);
-    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
-    const ok = document.execCommand('copy');
-    sel.removeAllRanges();
-    return ok;
-  } catch (e) { return false; }
-  finally { if (box) box.remove(); }
+   2026-09-17: there was a third way before this, the old selection copy
+   (a hidden box holding the picture, and document.execCommand('copy')). It
+   returned true and NOTICE said "Copied", and nothing was on the clipboard:
+   what it puts there is a scrap of HTML holding the picture as text, which
+   most places refuse to paste. A fallback that lies is worse than no
+   fallback, so it is gone. */
+const blobOf = () => new Promise(res => cv.toBlob(res, 'image/png'));
+
+/* Pulled out so it can be asked directly in a test: the browser pane serves a
+   file:// address over http, so the folder case cannot be reached by opening
+   one. */
+const openedFromFolder = p => (p || location.protocol) === 'file:';
+
+function copyTrouble(err, proto) {
+  const folder = openedFromFolder(proto);
+  const touch = window.matchMedia && matchMedia('(hover: none)').matches;
+  const why = err ? ((err.name || 'Error') + ': ' + (err.message || '')) : 'The browser gave no reason.';
+  UI.dialog({
+    title: 'COPY', width: 460,
+    body: b => {
+      const p = s => { const d = document.createElement('p'); d.style.lineHeight = 'var(--lh-body)';
+        d.style.marginBottom = 'var(--s-3)'; d.innerHTML = s; b.appendChild(d); };
+      if (folder) {
+        p('<b>NOTICE was opened straight from a folder.</b> A page opened that way has no ' +
+          'web address, and no browser will let it reach the clipboard. Open the suite at ' +
+          '<b>tomoncupa.github.io/Motherbase/</b> and COPY works.');
+      } else {
+        p('<b>This browser would not hand the picture over.</b>');
+      }
+      p(touch
+        ? 'Press and hold the window above and choose <b>Copy image</b>. That is the browser’s own copy and it cannot be refused.'
+        : 'Right-click the window above and choose <b>Copy image</b>. That is the browser’s own copy and it cannot be refused.');
+      const small = document.createElement('div');
+      small.className = 'hint'; small.textContent = why;
+      b.appendChild(small);
+    },
+    actions: [
+      { label: 'SAVE PICTURE INSTEAD', kind: 'go', fn: () => savePicture() },
+      { label: 'DONE' },
+    ],
+  });
 }
 
 $('btnCopy').onclick = () => {
   const q = render();
   if (!q) { UI.toast('Nothing to copy', { bad: true }); return; }
   const won = () => { keep(q); Mobile.feedback('success'); UI.toast('Copied'); };
-  const fellBack = () => {
-    if (copyOldWay()) { won(); return; }
-    /* Nothing worked. Say which thing is in the way, and offer the picture,
-       which always works. */
-    const folder = location.protocol === 'file:';
-    UI.toast(folder
-      ? 'This browser will not let a page opened from a folder copy a picture. SAVE PICTURE still works.'
-      : 'This browser refused the clipboard. SAVE PICTURE still works.', { bad: true });
-  };
-  if (!(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem)) { fellBack(); return; }
+  if (!(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem)) {
+    copyTrouble({ name: 'Unsupported', message: 'This browser has no clipboard for pictures.' });
+    return;
+  }
+  /* First the promise form, because iOS will not take a picture handed over
+     after the tap has ended. Then the plain blob, because a browser that
+     cannot take a promise may still take that. */
+  const plain = err => blobOf()
+    .then(blob => navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]))
+    .then(won, () => copyTrouble(err));
   try {
-    const item = new ClipboardItem({ 'image/png': new Promise(res => cv.toBlob(res, 'image/png')) });
-    navigator.clipboard.write([item]).then(won, fellBack);
-  } catch (e) { fellBack(); }
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': blobOf() })]).then(won, plain);
+  } catch (e) { plain(e); }
 };
 
 /* ── RECENT: every window saved or copied, newest first ── */
