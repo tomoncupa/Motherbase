@@ -1326,6 +1326,39 @@ const IO = {
      manually paste the sync link". So this is that and nothing else: no
      script, no switch. The link belongs to the suite, so pasting it here
      pastes it for every app on this device. */
+  /** A bar that says what a sync is doing. Returns { show, at, fail }. */
+  progress(host) {
+    const wrap = el('div');
+    wrap.style.cssText = 'margin-top:var(--s-3);display:none';
+    const lab = el('div');
+    lab.style.cssText = 'font-size:var(--f-1);color:var(--text-2);margin-bottom:var(--s-1)';
+    const track = el('div');
+    track.style.cssText = 'height:var(--s-1);border-radius:var(--radius-full);' +
+      'background:var(--surface-2);overflow:hidden';
+    const fill = el('div');
+    fill.style.cssText = 'height:100%;width:0;border-radius:var(--radius-full);' +
+      'background:var(--accent);transition:width var(--dur-med) var(--ease-out)';
+    track.appendChild(fill);
+    wrap.appendChild(lab);
+    wrap.appendChild(track);
+    host.appendChild(wrap);
+    return {
+      show(on) {
+        wrap.style.display = on ? '' : 'none';
+        if (on) { fill.style.background = 'var(--accent)'; fill.style.width = '0'; }
+      },
+      at(done, total, note) {
+        lab.textContent = note || '';
+        fill.style.width = Math.max(0, Math.min(100, Math.round(100 * (total ? done / total : 0)))) + '%';
+      },
+      fail(why) {
+        lab.textContent = why || 'It did not go through';
+        fill.style.background = 'var(--danger)';
+        fill.style.width = '100%';
+      },
+    };
+  },
+
   syncRow(pane, appId) {
     const M = IO.mirror;
     if (!M) return;
@@ -1354,12 +1387,33 @@ const IO = {
     }
     const b = el('button', 'mb-btn go mb-press mb-tap', 'Sync now');
     b.style.cssText = 'width:100%;margin-top:var(--s-2,8px)';
+    pane.appendChild(b);
+    const bar = IO.progress(pane);
+    let running = false;
     b.onclick = () => {
       if (u) M.set({ url: u.value.trim() });
       if (!M.ready()) return toast('Paste the link first', { bad: true });
-      M.sync(appId).then(say);
+      if (running) return;
+      running = true;
+      bar.show(true);
+      bar.at(0, 4, 'Starting');
+      /* Only while this button's sync is in the air, and only its own steps:
+         a quiet sync on open must not drive somebody else's bar. */
+      const off = M.onStep(s => { if (!s.quiet) bar.at(s.done, s.total, s.note); });
+      const end = ok => {
+        off(); running = false;
+        if (ok) {
+          bar.at(4, 4, 'Done');
+          setTimeout(() => bar.show(false), 1600);
+        } else {
+          /* The toast already says what went wrong in its own words; the bar
+             only has to stop claiming to be working. */
+          bar.fail('Stopped. See the message above.');
+        }
+        say();
+      };
+      M.sync(appId).then(end, () => end(false));
     };
-    pane.appendChild(b);
   },
 };
 
@@ -1583,7 +1637,34 @@ function readWhy(reply) {
   return 'no-tabs';
 }
 
+/* -- saying how far along a sync is --
+   Tom, 2026-09-17: "I want a progress bar visualization for sync." Pressing
+   Sync now did nothing visible until it finished, so a slow sync and a stuck
+   one looked exactly the same, and the only way to answer "is it working"
+   was to wait and find out.
+
+   Four steps, and they are the real boundaries rather than a number invented
+   to keep a bar moving: ask the sheet what it has, download it, save what
+   came back, send ours up. The download is ONE request, so there is no
+   truthful fraction inside it and the bar does not pretend there is.
+
+   Listeners go on around a manual sync and come off after, so a quiet sync
+   on open does not drive a bar nobody is watching. */
+let msteps = [];
+const mstep = (done, total, note, quiet) => {
+  for (let i = 0; i < msteps.length; i++) {
+    try { msteps[i]({ done: done, total: total, note: note, quiet: !!quiet }); } catch (e) {}
+  }
+};
+
 const Mirror = {
+  /** Listen while a sync runs. Returns the function that stops listening. */
+  onStep(fn) {
+    if (typeof fn !== 'function') return () => {};
+    msteps.push(fn);
+    return () => { msteps = msteps.filter(x => x !== fn); };
+  },
+
   /** an app asking for the settings is the first chance to carry an old link
       across, so do it here too */
   adopt(appId) { adoptOldLink(appId); return Mirror.settings; },
@@ -2131,12 +2212,18 @@ const Mirror = {
   sync(appId, quiet, opts) {
     if (!mcfg.url) { mlog({ a: appId, w: 'manual', r: 'skip', y: 'no-link' }); return Promise.resolve(false); }
     if (!quiet) toast('Syncing…');
+    mstep(0, 4, 'Reading the sheet', quiet);
     const t0 = Date.now();
     const mline = { a: appId, w: quiet ? 'auto' : 'manual', o: Mirror.outstanding(appId) ? 1 : 0 };
     let idx = null;
     return Mirror.index(appId)
-      .then(pre => { idx = pre; return Mirror.pull(appId, pre).catch(e => ({ skipped: 'could not read', failed: 1, why: threwWhy(e) })); })
+      .then(pre => {
+        idx = pre;
+        mstep(1, 4, 'Downloading', quiet);
+        return Mirror.pull(appId, pre).catch(e => ({ skipped: 'could not read', failed: 1, why: threwWhy(e) }));
+      })
       .then(got => {
+        mstep(2, 4, got && got.failed ? 'Could not read it' : 'Saving what came back', quiet);
         /* ── read first, and if the read failed, do not write ──
 
            A push rewrites the readable tabs whole. Doing that straight after a
@@ -2156,6 +2243,7 @@ const Mirror = {
             if (!quiet) toast(f.say, f.act ? { bad: true, ms: 8000 } : null);
             return false;
           }
+          mstep(3, 4, 'Sending what was waiting', quiet);
           return Mirror.push(appId, true, { index: idx, delta: true }).then(res => {
             const sent = !!(res && (res.state === 'confirmed' || res.state === 'clean'));
             mline.r = sent ? 'ok' : 'fail';
@@ -2176,6 +2264,7 @@ const Mirror = {
             return false;
           });
         }
+        mstep(3, 4, 'Sending', quiet);
         return Mirror.push(appId, true, Object.assign({ index: idx }, opts || {})).then(res => {
         const ok2 = res && (res.state === 'confirmed' || res.state === 'clean');
         mline.v = (idx && idx.v) || 0;
