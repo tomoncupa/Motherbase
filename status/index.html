@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.7, 2026-09-15">
+<meta name="mb-version" content="1.0.8, 2026-09-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -553,6 +553,56 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
 .k{font-family:var(--font-mono);font-size:var(--f-6);font-weight:600;line-height:1.1}
 .kl{font-size:var(--f-1);color:var(--text-muted);margin-top:2px}
 
+
+/* ── STATUS Desktop tracker ────────────────────────────────────────────
+   Mini mode collapses the whole app into one strip the height of a
+   toolbar. Only the launcher can make the window that size; these rules
+   are what makes the page fit it once it has. In an ordinary browser tab
+   the body never gets .deskmini, so none of this ever matches.           */
+#deskbar { display: none; }
+body.deskmini { overflow: hidden; height: 100vh; }
+body.deskmini header,
+body.deskmini #datebar,
+body.deskmini main,
+/* At strip width STATUS is narrow enough that mobile.js puts up the
+   phone tab bar, which is fixed and painted straight over the strip.
+   Found at 470x86, which is the size the launcher actually makes. */
+body.deskmini nav { display: none; }
+body.deskmini #deskbar {
+  display: flex; align-items: center; gap: var(--s-3);
+  height: 100vh; padding: 0 var(--s-3); background: var(--surface-1);
+  position: relative; z-index: 4;
+}
+.deskname {
+  font-size: var(--f-1); letter-spacing: .08em;
+  color: var(--text-muted); font-family: var(--font-display);
+}
+.deskval {
+  display: flex; align-items: center; gap: var(--s-1);
+  min-height: var(--tap); padding: 0 var(--s-1);
+  background: none; border: 0; cursor: pointer; color: var(--text-1);
+  font-family: inherit;
+}
+.deskval span { font-size: var(--f-1); color: var(--text-muted); }
+.deskval b { font-size: var(--f-3); font-weight: 600; }
+.deskgap { flex: 1; }
+.deskbtn {
+  min-width: var(--tap); min-height: var(--tap);
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; border-radius: var(--radius-sm);
+  color: var(--text-1); cursor: pointer;
+}
+.deskbtn:hover { background: var(--surface-2); }
+
+/* the check in, on its interval */
+.deskscale { display: flex; gap: var(--s-2); margin-bottom: var(--s-4); }
+.deskscale button {
+  flex: 1; min-height: var(--tap);
+  background: var(--surface-2); border: 0; border-radius: var(--radius-sm);
+  color: var(--text-2); font-size: var(--f-3); font-family: inherit;
+  cursor: pointer;
+}
+.deskscale button.on { background: var(--accent); color: var(--accent-fg); }
 </style>
 </head>
 <body>
@@ -568,6 +618,9 @@ textarea:focus{outline:2px solid var(--focus);outline-offset:-1px}
      which is exactly the thing that reads as a web page. -->
 <div id="datebar"></div>
 <main class="mb-scroll"><div class="wrap" id="main"></div></main>
+<!-- STATUS Desktop tracker's small mode. Hidden, and empty,
+     until the launcher is what opened the page. -->
+<div id="deskbar"></div>
 
 
 
@@ -5443,8 +5496,16 @@ function openSettings() {
     { id: 'quests', name: 'GRADES', draw: drawQuestsTab },
     { id: 'track', name: 'TRACK', draw: drawTrackTab },
     { id: 'goals', name: 'GOALS', draw: drawGoalsTab },
-  ], {
-    order: ['quests', 'track', 'goals', 'app', 'data'],
+    /* STATUS Desktop tracker: how often it asks, and what Ctrl+B does.
+       Drawn in an ordinary browser tab as well, saying plainly that it
+       needs the launcher, rather than hiding until the right window is
+       open and looking like nothing was ever built. */
+    { id: 'desk', name: 'DESKTOP', draw: drawDeskTab },
+    /* STATUS goes out to clients too, on a phone, where there is no
+       launcher and never will be. The tab is there when the launcher
+       opened the page and nowhere else. */
+  ].filter(t => t.id !== 'desk' || DESK), {
+    order: ['quests', 'track', 'goals', 'desk', 'app', 'data'],
     /* the sheet mirror is a way of getting data out, so it belongs under DATA
        with the backup and the export rather than in a tab of its own */
     append: { data: drawSyncTab },
@@ -6808,6 +6869,261 @@ Rec.ready(() => {
 wireDaySwipe();
 Rec.on(draw);
 Day.on(() => { TD.tick(); draw(); });
+
+/* ══════════════ STATUS DESKTOP TRACKER ══════════════
+   Everything below only runs when the desktop launcher opened the page,
+   which it says by putting ?desktop=1 on the address. In an ordinary
+   browser tab DESK is false and none of this does anything.
+
+   The launcher is a small Windows program. It cannot see inside the page,
+   and the page cannot resize or raise its own window, so the two talk
+   through the only thing Windows lets a program read from outside: the
+   window title. A word on the end of the title is an instruction. The
+   launcher polls the title twice a second, acts on the word, and the page
+   wipes it a second later so the same word can be said again.             */
+
+const DESK = /[?&]desktop=1/.test(location.search);
+const DESK_NAME = 'STATUS Desktop tracker';
+/* how often a check in comes round, and between which hours */
+const DESK_DEF = { on: 1, min: 60, max: 120, from: 8, to: 21 };
+
+let deskSmall = false;   /* showing the strip rather than the whole app */
+let deskNext = 0;        /* when the next check in is due, ms */
+let deskAsking = false;  /* one check in at a time, never a pile of them */
+let deskWipe = 0;
+
+function deskCfg() {
+  return {
+    on:   S.get('desk.on', DESK_DEF.on) ? 1 : 0,
+    min:  +S.get('desk.min',  DESK_DEF.min)  || DESK_DEF.min,
+    max:  +S.get('desk.max',  DESK_DEF.max)  || DESK_DEF.max,
+    from: +S.get('desk.from', DESK_DEF.from) || 0,
+    to:   +S.get('desk.to',   DESK_DEF.to)   || 0,
+  };
+}
+
+/* ── the one word the launcher reads ── */
+function deskMark(m) {
+  if (!DESK) return;
+  document.title = DESK_NAME + (m ? ' · ' + m : '');
+  clearTimeout(deskWipe);
+  if (m) deskWipe = setTimeout(() => { document.title = DESK_NAME; }, 1000);
+}
+
+/* ── when the next one lands ──
+   Tom asked for a range rather than one number, so it is a different gap
+   every time. A check in you cannot predict is one you answer honestly
+   rather than brace for.                                                 */
+function deskRoll() {
+  const c = deskCfg();
+  const lo = Math.max(1, Math.min(c.min, c.max));
+  const hi = Math.max(lo, Math.max(c.min, c.max));
+  deskNext = Date.now() + (lo + Math.random() * (hi - lo)) * 60000;
+}
+
+/* Inside the hours he set. A window whose end is before its start runs
+   through midnight, so 22 to 6 means the night. */
+function deskAwake(now) {
+  const c = deskCfg(), h = now.getHours() + now.getMinutes() / 60;
+  if (c.from === c.to) return true;
+  return c.from < c.to ? (h >= c.from && h < c.to) : (h >= c.from || h < c.to);
+}
+
+function deskTick() {
+  if (!DESK) return;
+  if (!deskCfg().on) { deskNext = 0; return; }
+  if (!deskNext) { deskRoll(); return; }
+  if (Date.now() < deskNext) return;
+  deskRoll();
+  if (!deskAwake(new Date())) return;      /* silent outside the hours */
+  if (deskAsking || sheetH) return;        /* never interrupt something open */
+  deskAsk();
+}
+
+/* ── the check in ──
+   Mood and Energy are looked up rather than assumed, exactly as QUICK does,
+   so turning one off in TRACK takes it out of here too. The answer goes in
+   as an ordinary reading and an ordinary journal line: no new kind of row,
+   and nothing another app cannot already read.                            */
+function deskAsk() {
+  deskAsking = true;
+  deskMark('show');
+  const d = Day.today();
+  const mood = quickField('mood'), energy = quickField('energy');
+  let mv = null, ev = null;
+  const done = () => { deskAsking = false; };
+  UI.dialog({
+    title: 'Quick check in', width: 360, focus: true,
+    onClose: done,
+    body: (b, h) => {
+      const scale = (f, set) => {
+        if (!f) return;
+        b.appendChild(el('label', 'fl', esc(f.label || f.id)));
+        const row = el('div', 'deskscale');
+        const max = f.max || 5;
+        for (let i = 1; i <= max; i++) {
+          const btn = el('button', '', String(i));
+          btn.onclick = (n => () => {
+            set(n);
+            [].forEach.call(row.children, x => { x.className = ''; });
+            btn.className = 'on';
+            Mobile.feedback('tick');
+          })(i);
+          row.appendChild(btn);
+        }
+        b.appendChild(row);
+      };
+      scale(mood, v => { mv = v; });
+      scale(energy, v => { ev = v; });
+      b.appendChild(el('label', 'fl', 'What are you up to'));
+      b.appendChild(UI.field('text', { value: '' }));
+    },
+    actions: [
+      { label: 'SKIP', fn: done },
+      { label: 'SAVE', kind: 'go', fn: h => {
+        done();
+        let n = 0;
+        if (mood && mv != null)   { evAdd(d, mood.id, mv); n++; }
+        if (energy && ev != null) { evAdd(d, energy.id, ev); n++; }
+        const box = h.body.querySelector('input.mb-input, textarea.mb-input');
+        const t = box ? String(box.value || '').trim() : '';
+        if (t) { addNote(d, 'entry', t); n++; }
+        if (n) Mobile.feedback('success');
+        if (deskSmall) deskBar();
+        draw();
+      } },
+    ],
+  });
+}
+
+/* ── the strip ──
+   Mood and Energy first, because they are what the check in asks about, then
+   whatever else he has switched on, in his own order, up to four. Reading his
+   own list rather than a list in here means turning a field off takes it off
+   the strip too, with no second setting to remember.                        */
+function deskFields() {
+  const out = [], seen = {};
+  const push = f => { if (f && f.on && !seen[f.id]) { seen[f.id] = 1; out.push(f); } };
+  push(quickField('mood'));
+  push(quickField('energy'));
+  groupedFields().forEach(push);
+  return out.slice(0, 4);
+}
+
+function deskShow(f) {
+  const e = evList(Day.today(), f.id);
+  if (!e.length) return '–';
+  let v;
+  if (f.measure === 'amount') { v = 0; e.forEach(x => { v += (+x.v || 0); }); }
+  else v = +e[e.length - 1].v;
+  if (!isFinite(v)) return '–';
+  return (Math.round(v * 10) / 10).toLocaleString();
+}
+
+function deskBar() {
+  const bar = document.getElementById('deskbar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  bar.appendChild(el('div', 'deskname', 'STATUS'));
+  deskFields().forEach(f => {
+    const b = el('button', 'deskval');
+    b.innerHTML = '<span>' + esc(String(f.label || f.id).slice(0, 4).toUpperCase()) +
+                  '</span><b>' + esc(deskShow(f)) + '</b>';
+    b.title = String(f.label || f.id);
+    /* The strip is for reading. Logging needs the whole app, so a click on a
+       number leaves Mini mode rather than pretending a 56px window can hold
+       a form. */
+    b.onclick = () => deskSetSmall(false);
+    bar.appendChild(b);
+  });
+  bar.appendChild(el('div', 'deskgap'));
+  const add = el('button', 'deskbtn');
+  add.setAttribute('data-icon', 'add');
+  add.setAttribute('aria-label', 'Add a bullet');
+  add.title = 'Add a bullet (Ctrl+B)';
+  add.onclick = () => deskBullet();
+  bar.appendChild(add);
+  const up = el('button', 'deskbtn');
+  up.setAttribute('data-icon', 'expand');
+  up.setAttribute('aria-label', 'Leave Mini mode');
+  up.title = 'Leave Mini mode';
+  up.onclick = () => deskSetSmall(false);
+  bar.appendChild(up);
+  if (window.Icons && Icons.paint) Icons.paint(bar);
+}
+
+function deskSetSmall(v) {
+  deskSmall = !!v;
+  document.body.classList.toggle('deskmini', deskSmall);
+  S.set('desk.small', deskSmall ? 1 : 0);
+  deskMark(deskSmall ? 'small' : 'big');
+  if (deskSmall) deskBar(); else draw();
+}
+
+/* ── Ctrl+B ──
+   The launcher catches it when STATUS is not the window in front, raises the
+   window and types it again, so this one handler covers both cases. */
+function deskBullet() {
+  const was = deskSmall;
+  if (was) deskSetSmall(false);
+  deskMark('show');
+  setTimeout(() => noteSheet({ kind: 'todo', text: '' }, vd()), was ? 160 : 0);
+}
+
+function drawDeskTab(pane) {
+  settingsPane = pane; pane.classList.add('setpane');
+  const c = deskCfg();
+  pane.appendChild(el('div', 'note',
+    'The check in asks how you are and what you are doing, then gets out of ' +
+    'the way. What you answer goes in as an ordinary reading and an ordinary ' +
+    'journal line, so the rest of STATUS sees it straight away.'));
+  pane.appendChild(toggleRow('Check in on a timer', '', !!c.on, v => {
+    S.set('desk.on', v ? 1 : 0); deskNext = 0; drawSettingsPane('desk');
+  }));
+  if (c.on) {
+    fieldRow(pane, 'No sooner than', 'desk.min', c.min, 'minutes');
+    fieldRow(pane, 'No later than', 'desk.max', c.max, 'minutes');
+    pane.appendChild(el('div', 'note',
+      'A different gap every time, somewhere between those two. Put the same ' +
+      'number in both for a fixed interval.'));
+    fieldRow(pane, 'Not before', 'desk.from', c.from, 'hour of the day, 0 to 23');
+    fieldRow(pane, 'Not after', 'desk.to', c.to, 'hour of the day, 0 to 23');
+  }
+  pane.appendChild(el('div', 'note',
+    'Mini mode is the chevron in the top bar: STATUS shrinks to one strip that ' +
+    'stays above your other windows. Ctrl+B opens a bullet from anywhere, even ' +
+    'when STATUS is behind something else.'));
+}
+
+if (DESK) {
+  document.title = DESK_NAME;
+  /* The whole app needs a way INTO Mini mode; the strip already carries
+     its own way out. One button in the header, and only when the launcher
+     is what opened the page. */
+  const hdr = document.querySelector('header');
+  if (hdr) {
+    const shrink = el('button', 'hbtn');
+    shrink.setAttribute('data-icon', 'collapse');
+    shrink.setAttribute('aria-label', 'Mini mode');
+    shrink.title = 'Mini mode';
+    shrink.onclick = () => deskSetSmall(true);
+    hdr.insertBefore(shrink, hdr.querySelector('.hbtn'));
+    if (window.Icons && Icons.paint) Icons.paint(hdr);
+  }
+  /* 20 seconds is far finer than the shortest gap he can set, and Windows
+     throttles a minimised window's timers to about once a minute anyway, so
+     a check in is never more than a minute late. */
+  setInterval(deskTick, 20000);
+  deskRoll();
+  document.addEventListener('keydown', e => {
+    if (!e.ctrlKey || e.altKey || e.metaKey) return;
+    if (String(e.key).toLowerCase() !== 'b') return;
+    e.preventDefault();
+    deskBullet();
+  });
+  Rec.on(() => { if (deskSmall) deskBar(); });
+  if (S.get('desk.small', 0)) Rec.ready(() => deskSetSmall(true));
+}
 </script>
 </body>
 </html>
