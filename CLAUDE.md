@@ -156,35 +156,27 @@ arc/index.html     mind canvas, skill trees and flashcards since 2026-09-16.
 arc/CLAUDE.md      ARC's own brief, governs arc/ only
 form/index.html    lift review
 status/index.html  sleep, weight, mood, energy, steps, food and money
-desktop/           STATUS Desktop tracker, built 2026-09-16: STATUS as a
-                   Windows app. A small launcher opens STATUS in a Chrome
-                   window with no browser bars, on his ordinary profile so it
-                   is the data he already has rather than a second empty
-                   store. It keeps the window on top, shrinks it to Mini mode
-                   and back, and catches Ctrl+B while another program is in
-                   front. The page and the launcher talk through the window
-                   title, which is the only channel Windows gives them.
-                   Compiled by build.ps1 with the C# compiler already inside
-                   Windows, so there is nothing to install. In Mini mode it
-                   takes Chrome's title bar off, so the window is the widget
-                   and nothing around it, and it drags by being pushed. It
-                   holds the frame off every poll, because Chrome owns the
-                   window and puts its own back when it repaints, and asks
-                   Windows for rounded corners and no border, which it logs
-                   as accepted or refused rather than assuming. The widget's
-                   size comes from the page, which measures itself, and is
-                   applied to the CLIENT area rather than the window, so a
-                   frame appearing for any reason can never clip the page.
-                   One copy at a time: a second launch raises the widget
-                   instead of starting another launcher, because the second
-                   one's orphan repair could not tell a window left behind by
-                   a dead launcher from the widget a live one was holding, and
-                   put the title bar back on it. A window left frameless by a
-                   launcher that was killed still gets its frame back next
-                   time one starts. The bullet shortcut is any combination he
-                   presses into the tray menu's Choose my own, not one of a
-                   list. Windows only, Tom only, left out of the client build.
-                   See desktop/README.md.
+desktop/           STATUS, the Windows app, since 2026-09-17. STATUS.exe
+                   runs status/index.html inside Microsoft's WebView2, the
+                   engine already in Windows, in a window the program owns.
+                   Tom, 2026-09-17: "I think the chrome environment is too
+                   limiting." The Chrome launcher before it could not stop
+                   Chrome putting its title bar back, clipping the page under
+                   it, or the window being closed out from under the app,
+                   which silently stopped a whole day of check ins. None of
+                   those are reachable from outside a window you do not own.
+                   The page says what it wants to be over a real message
+                   channel, so the window is exactly the page: a widget in a
+                   corner, or the check in centred, in front and focused,
+                   because Tom asked for that to be intrusive. Ctrl+B calls
+                   the page's own function rather than typing a key at it.
+                   Its store is its own and fills from the sync code the way
+                   a second device would, which Tom accepted as a good thing.
+                   Compiled by build.ps1 with the C# compiler inside Windows;
+                   the three WebView2 files live in desktop/lib. The old
+                   launcher, StatusDesktop.cs, is kept until the new one has
+                   earned its place. Windows only, Tom only, left out of the
+                   client build. See desktop/README.md.
 portion/index.html FOODDÉX, called PORTION until 2026-09-14. A label in, the
                    amounts you eat out. A desktop app, and the second writer
                    of `food` alongside STATUS. The folder and the app id stay
