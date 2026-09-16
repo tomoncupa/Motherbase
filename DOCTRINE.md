@@ -423,6 +423,12 @@ tree is built with Claude through the clipboard. That makes ARC a tracker as
 well as a canvas, which the Never line below did not foresee; Tom said so on
 purpose.
 
+**Cards** (the same day). Tom: "for learning flash cardable portions of the
+skill knowledge." The facts inside what a tree teaches get their own tab and
+their own schedule: asked, graded, and put back for the day they are nearly
+forgotten. Separate from the skill schedule on purpose. A skill is something
+you can do; a card is something you can say.
+
 **Never:** a note-taking app. The value is the *shape*, not the text.
 
 ### FORM — `form/` · desktop · Tom only
