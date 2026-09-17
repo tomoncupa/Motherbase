@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.4, 2026-09-17">
+<meta name="mb-version" content="1.0.5, 2026-09-17">
 <title>CHECK IN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◎</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -1498,6 +1498,44 @@ const Cam = (() => {
   function stopStream() {
     if (stream) stream.getTracks().forEach(t => t.stop());
     stream = null;
+  }
+
+  /* ══════════════ the little bluetooth button ══════════════
+     Tom, 2026-09-17: "Bluetooth camera remote should work in check in." The
+     whole point of standing back from the phone is that you cannot reach it,
+     and the auto-shutter's three beats only help when the timing suits.
+
+     A camera remote is not a camera. It pairs as a KEYBOARD and its one button
+     sends a keypress, so this is a key handler and nothing more exotic. Which
+     key depends on the remote and the mode it is switched to:
+       · Android mode sends Enter, and sometimes Space or a bare letter.
+       · iOS mode sends Volume Up, which arrives as AudioVolumeUp where the
+         browser passes it on at all.
+     All of them are taken, because a remote costs a few hundred pesos and
+     which one he has is not knowable from here.
+
+     Known limit, and it is the browser's rather than this code's: iOS Safari
+     does not hand a web page the volume keys, so on an iPhone a remote has to
+     be in its Android mode to reach this. That is a physical switch on the
+     remote; nothing on this page can set it.
+
+     It only listens while the camera is open, and it stands down when the
+     press belongs to something being typed into. */
+  const REMOTE_KEYS = {
+    Enter: 1, ' ': 1, Spacebar: 1, Space: 1,
+    AudioVolumeUp: 1, AudioVolumeDown: 1, VolumeUp: 1, VolumeDown: 1,
+    ArrowUp: 1, ArrowDown: 1, k: 1, K: 1,
+  };
+  function onRemote(e) {
+    if (!alive) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (!REMOTE_KEYS[e.key]) return;
+    e.preventDefault();
+    /* The same thing the big round button does, so the setup shot, the count
+       and the retake all behave exactly as they do under a thumb. */
+    if (shutter) shutter.click();
   }
 
   function close(fromBack) {
