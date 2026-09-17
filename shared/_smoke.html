@@ -18,6 +18,7 @@
 <script src="icons.js"></script>
 <script src="import.js"></script>
 <script src="measure.js"></script>
+<script src="notice.js"></script>
 <style>
 body{background:var(--bg,#080b10);color:var(--text-1,#dbe7f0);font-family:var(--font-body,system-ui);
   margin:0;padding:24px;font-size:14px;line-height:1.6}
@@ -1695,6 +1696,51 @@ async function run() {
   })());
   ok('skins: a theme with no font asks for nothing',
     Skins.fontLinks({}) === '' && Skins.fontLinks(null) === '');
+  /* ---- the status window look ----
+     One table of palettes and one cut-corner shape, read by NOTICE to draw a
+     picture and by STATUS to dress the status check. The check that earns its
+     keep is not "is BLOCK gold": it is that both readers get the SAME shape out
+     of it, because a shape that drifts is the only way these two can disagree
+     about what a status window looks like. */
+  ok('notice: four windows, each with its own palette', (() => {
+    const l = Notice.list();
+    if (l.length < 4) return false;
+    const accs = l.map(x => Notice.get(x.id).acc);
+    return new Set(accs).size === accs.length;
+  })());
+  ok('notice: every palette carries everything both readers need',
+    Notice.list().every(x => {
+      const st = Notice.get(x.id);
+      return ['panel', 'line', 'ink', 'mute', 'acc', 'bgA', 'bgB', 'face', 'body'].every(k => !!st[k])
+        && typeof st.cut === 'number';
+    }));
+  ok('notice: an id nobody has falls back to a real window rather than to nothing',
+    Notice.get('no-such-window') === Notice.get(Notice.list()[0].id));
+  ok('notice: the canvas path and the CSS clip describe the same octagon', (() => {
+    /* Eight corners either way, and a cut of zero is a plain rectangle in both.
+       This is the one that fails if somebody edits one and forgets the other. */
+    const c = document.createElement('canvas').getContext('2d');
+    let pts = 0;
+    const spy = { beginPath(){ pts = 0; }, rect(){ pts = 4; }, moveTo(){ pts++; }, lineTo(){ pts++; }, closePath(){} };
+    Notice.frame(spy, 0, 0, 100, 100, 10);
+    const cut = pts;
+    Notice.frame(spy, 0, 0, 100, 100, 0);
+    const square = pts;
+    const css = Notice.clipPath(10);
+    const cssPts = css.split(',').length;
+    return cut === 8 && square === 4 && cssPts === 8 && Notice.clipPath(0) === 'none' && !!c;
+  })());
+  ok('notice: wearing a palette sets the variables the panel reads, and only those', (() => {
+    const n = document.createElement('div');
+    Notice.wear(n, 'hunter');
+    const acc = n.style.getPropertyValue('--nw-acc').trim();
+    const clip = n.style.getPropertyValue('--nw-clip').trim();
+    /* --nw-*, never a theme token: an app's own chrome must stay themable. */
+    const names = [].slice.call(n.style);
+    return acc === Notice.get('hunter').acc && /^polygon/.test(clip) &&
+      names.length > 0 && names.every(k => k.indexOf('--nw-') === 0);
+  })());
+
   /* ---- the icon master set ----
      The whole design is that one drawing serves many buttons. These checks are
      what keep that true: a suite with one drawing per button is a suite where
