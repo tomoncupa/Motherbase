@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.28, 2026-09-17">
+<meta name="mb-version" content="1.0.29, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,6 +26,7 @@
 <script src="../shared/io.js"></script>
 <script src="../shared/icons.js"></script>
 <script src="../shared/health.js"></script>
+<script src="../shared/notice.js"></script>
 
 <style>
 /* ── the system, decided once ──────────────────────────────────────────
@@ -645,6 +646,89 @@ body.deskmini #deskbar {
   height: 100vh; padding: var(--s-3); background: var(--surface-1);
   position: relative; z-index: 4;
 }
+/* ══════════════ the status check ══════════════
+   Tom, 2026-09-17: "I want the notif to be HUGE and IMMEDIATE. Our tools are
+   made to consider people at their lowest selves - it should never go away
+   until answered."
+
+   So it is the whole window, not a panel in the corner of one, and the only
+   way past it is two taps. There is no close button and no SKIP, on purpose.
+
+   It wears a NOTICE window: the palette and the cut-corner shape both come
+   from shared/notice.js, so the status check and a NOTICE picture cannot drift
+   apart. The `--nw-*` variables are set on the overlay by `Notice.wear`. This
+   is the one place in STATUS that paints from something other than the theme
+   tokens, and the reason is the same one NOTICE has: the window is the art.
+
+   Everything sizes off `min(vw, vh)` so the same rule serves a 3840px monitor
+   and a 320px widget window without a second layout. */
+#statuscheck { display: none; }
+body.checking #statuscheck {
+  display: flex; align-items: center; justify-content: center;
+  position: fixed; inset: 0; z-index: 200;
+  padding: clamp(8px, 3vmin, 40px);
+  background: radial-gradient(120% 100% at 50% 0%, var(--nw-bg-b), var(--nw-bg-a));
+  -webkit-user-select: none; user-select: none;
+}
+/* Nothing underneath is reachable while it is up, including the chevron that
+   turns the widget into the whole app. */
+body.checking .deskx { display: none; }
+.nwin {
+  /* Grows with the screen rather than stopping at a fixed 720px, because on a
+     3840px monitor a 720px box is not the "HUGE" he asked for. Off vmin, so a
+     short window cannot make it taller than the screen. */
+  width: min(100%, clamp(300px, 70vmin, 1200px)); max-height: 100%;
+  display: flex; flex-direction: column; gap: clamp(6px, 1.6vmin, 18px);
+  padding: clamp(12px, 3.4vmin, 34px);
+  background: var(--nw-panel);
+  border: 1px solid var(--nw-line);
+  clip-path: var(--nw-clip);
+  box-shadow: 0 0 clamp(10px, 4vmin, 44px) var(--nw-glow);
+  overflow: auto;
+}
+.nwhead {
+  font-family: var(--nw-face); font-weight: 700; text-align: center;
+  color: var(--nw-mute); letter-spacing: .34em;
+  font-size: clamp(11px, 2.1vmin, 18px);
+}
+.nwrule { height: 1px; background: var(--nw-line); opacity: .7; }
+.nwask {
+  font-family: var(--nw-body); text-align: center; color: var(--nw-ink);
+  font-size: clamp(15px, 3.4vmin, 30px); line-height: 1.25;
+}
+.nwlabel {
+  font-family: var(--nw-face); font-weight: 700; color: var(--nw-acc);
+  letter-spacing: .22em; font-size: clamp(10px, 1.9vmin, 15px);
+}
+/* Five across, always, however wide the window is. A square target that grows
+   with the screen is the "HUGE" half of what he asked for. */
+.nwscale { display: grid; grid-template-columns: repeat(5, 1fr); gap: clamp(5px, 1.4vmin, 14px); }
+.nwscale button {
+  min-height: max(var(--tap), clamp(44px, 11vmin, 132px));
+  font-family: var(--nw-face); font-weight: 700;
+  font-size: clamp(16px, 4.5vmin, 46px);
+  color: var(--nw-ink); background: var(--nw-panel2);
+  border: 1px solid var(--nw-line); cursor: pointer;
+}
+.nwscale button.on {
+  background: var(--nw-acc); border-color: var(--nw-acc);
+  color: var(--nw-bg-a); box-shadow: 0 0 clamp(6px, 2vmin, 22px) var(--nw-glow);
+}
+.nwgo {
+  min-height: max(var(--tap), clamp(48px, 8vmin, 76px));
+  font-family: var(--nw-face); font-weight: 700; letter-spacing: .2em;
+  font-size: clamp(13px, 2.6vmin, 22px);
+  background: var(--nw-acc); color: var(--nw-bg-a);
+  border: 1px solid var(--nw-acc); cursor: pointer;
+}
+/* Stuck to the bottom of the window. In a window too short for the whole
+   thing the way out has to be the one part that is always on screen, and the
+   desktop app draws no scrollbar to tell you there is more below. */
+.nwgo { position: sticky; bottom: 0; }
+/* Not disabled: a dead button tells you nothing. It stays pressable and says
+   what is still missing, which is the only thing worth knowing at that point. */
+.nwgo.waiting { background: var(--nw-panel); color: var(--nw-mute); border-color: var(--nw-line); }
+
 /* The chevron never moves, in either mode: one button, fixed to the window's
    top right corner, which is the corner the host holds still while the window
    changes size. */
@@ -769,6 +853,9 @@ body.deskmini .mb-input { width: 100%; }
 <!-- STATUS Desktop tracker's small mode. Hidden, and empty,
      until the launcher is what opened the page. -->
 <div id="deskbar"></div>
+<!-- the status check. Fills the window when it is up, and there is no way
+     out of it but answering. Empty until then. -->
+<div id="statuscheck"></div>
 
 
 
@@ -7190,7 +7277,7 @@ if (HOSTED) document.documentElement.classList.add('deskhost');
 /* The widget sits in a corner and is glanced at. The check in is meant to be
    in the way, so it is wider as well as centred. */
 const DESK_WIDE = 460;
-function deskW() { return deskPanel === 'ask' ? DESK_WIDE : 320; }
+function deskW() { return 320; }
 let deskSaid = '';
 function deskSend(m) {
   if (!HOSTED) return;
@@ -7212,14 +7299,13 @@ const DESK_DEF = { on: 1, min: 60, max: 90, from: 8, to: 21 };
 
 let deskSmall = false;   /* showing the widget rather than the whole app */
 let deskNext = 0;        /* when the next check in is due, ms */
-let deskAsking = false;  /* one check in at a time, never a pile of them */
+let deskAsking = false;  /* one status check at a time, never a pile of them */
 let deskWipe = 0;
 let deskShowing = 0;     /* asking the launcher to bring the window forward */
 let deskNagged = 0;      /* the backup reminder, held back while the widget is up */
-let deskPanel = '';      /* '', 'ask' or 'bullet': what the widget has turned into */
+let deskPanel = '';      /* '' or 'bullet': what the widget has turned into */
 let deskAskedAt = 0;     /* when the open one was put up */
 let deskAskedNight = ''; /* the night it went up on, if it was outside hours */
-let deskDlg = null;      /* the whole app's status check, while one is up */
 let deskChev = null;     /* the one chevron, in the corner, for both views */
 
 function deskPointChev() {
@@ -7272,10 +7358,14 @@ function deskTitle() {
   if (deskShowing) t += ' · show';
   document.title = t;
   if (!HOSTED) return;
-  /* `checkin` is the one that interrupts: the host centres it, brings it in
-     front of whatever he is doing and takes the focus, so answering is the
-     easy path rather than something to notice and come back to. */
-  if (deskSmall && s) deskSend((deskPanel === 'ask' ? 'checkin' : 'widget') + '|' + s.w + '|' + s.h);
+  /* `takeover` is the one that interrupts, and it means the whole screen
+     rather than a bigger box: Tom, 2026-09-17, "I want the notif to be HUGE
+     and IMMEDIATE". The host fills the monitor the cursor is on, comes to the
+     front and takes the focus, so answering is the path of least resistance
+     rather than something to notice and come back to. The numbers are the
+     window it is leaving, which is what it goes back to afterwards. */
+  if (checkOn) { deskSend('takeover|' + (s ? s.w : 390) + '|' + (s ? s.h : 844)); return; }
+  if (deskSmall && s) deskSend('widget|' + s.w + '|' + s.h);
   else if (!deskSmall) deskSend('app|390|844');
 }
 
@@ -7318,38 +7408,22 @@ function deskAwake(now) {
   return c.from < c.to ? (h >= c.from && h < c.to) : (h >= c.from || h < c.to);
 }
 
-/* ── one he walked away from ──
-   A status check nobody answers used to sit on the widget for ever, and the
-   guard below reads `deskPanel`, so one unanswered question switched the whole
-   feature off. Tom's log for 2026-09-17: one at 05:02, nothing again all day,
-   because the panel it put up was still on screen at 08:55. After fifteen
-   minutes it now packs itself away, and walking away is still what tells the
-   night it has stopped being answered.
-
-   This runs on every tick rather than only on a due one. The old recovery sat
-   below the night gate and below the `deskNext` return, so the two states that
-   most needed clearing were the two it could not reach. */
-function deskStale() {
-  if (!deskAsking) return;
-  if (Date.now() - deskAskedAt <= 15 * 60000) return;
-  const d = deskDlg; deskDlg = null;
-  if (d) { try { d.close(); } catch (e) {} }
-  deskClose(false);
-}
-
 function deskTick() {
   if (!DESK) return;
   if (!deskCfg().on) { deskNext = 0; return; }
-  deskStale();
   if (!deskNext) { deskRoll(); return; }
   if (Date.now() < deskNext) return;
   deskRoll();
   const now = new Date();
-  /* Tom, 2026-09-17: "Let it fire outside hours UNTIL I stop answering it."
-     So the night keeps the ordinary pace while he is answering, and stops at
-     the first one he lets go past. */
+  /* One outside hours, and answering it is what closes the night. This was
+     "until I stop answering it", which worked while a check could be waved
+     away; it cannot be any more, so the same intent is one per night. */
   if (!deskAwake(now) && S.get('desk.nightOff', '') === deskNightKey(now)) return;
-  if (deskAsking || deskPanel || sheetH) return;  /* never interrupt something open */
+  /* Never two at once, and never over something else that is open. There is no
+     fifteen minute give-up any more: Tom, 2026-09-17, "it should never go away
+     until answered", so one still on the screen is not a jam to recover from,
+     it is the thing working. */
+  if (checkOn || deskAsking || deskPanel || sheetH) return;
   deskAsk();
 }
 
@@ -7418,7 +7492,6 @@ function deskSheetWatch() {
 function deskBar() {
   const bar = document.getElementById('deskbar');
   if (!bar) return;
-  if (deskPanel === 'ask') return deskAskPanel(bar);
   bar.innerHTML = '';
 
   const last = deskLast();
@@ -7464,9 +7537,9 @@ function deskBar() {
   const fab = el('button', 'deskfab');
   fab.setAttribute('data-icon', 'mood');
   fab.setAttribute('data-icon-size', '22');
-  fab.setAttribute('aria-label', 'Mood and energy');
-  fab.title = 'How are you';
-  fab.onclick = () => deskOpen('ask');
+  fab.setAttribute('aria-label', 'Status check');
+  fab.title = 'Status check';
+  fab.onclick = () => deskAsk();
   pair.appendChild(fab);
 
   NOTE_KINDS.filter(k => k.id === 'todo' || k.id === 'entry').forEach(k => {
@@ -7512,13 +7585,10 @@ function deskOpen(which) {
   deskBar();
 }
 
-function deskClose(answered) {
-  /* Answering keeps the night going; waving it away ends it. */
-  if (deskAskedNight) {
-    if (!answered) S.set('desk.nightOff', deskAskedNight);
-    deskAskedNight = '';
-  }
-  deskPanel = ''; deskAsking = false;
+/* Only the bullet panel closes now. The status check has no close of its own,
+   so the night bookkeeping that used to live here moved into `checkSave`. */
+function deskClose() {
+  deskPanel = '';
   deskBar();
 }
 
@@ -7532,129 +7602,125 @@ function deskPanelHead(bar, title, onX) {
   bar.appendChild(h);
 }
 
-function deskAskPanel(bar) {
-  bar.innerHTML = '';
-  const d = Day.today();
-  const mood = quickField('mood'), energy = quickField('energy');
-  let mv = null, ev = null;
+/* ══════════════ the status check ══════════════
+   One screen for both modes. It used to be two: a panel inside the widget and
+   a UI.dialog when the whole app was open, which meant two copies of the same
+   question and two ways for one of them to be wrong. It is now a full-window
+   overlay that works the same in the widget, in the whole app, and in a plain
+   browser tab with no launcher at all.
 
-  deskPanelHead(bar, 'STATUS CHECK', deskClose);
+   Mood and Energy are looked up rather than assumed, exactly as QUICK does, so
+   turning one off in TRACK takes it out of here too. What it writes is an
+   ordinary reading: no new kind of row, and nothing another app cannot already
+   read. */
 
-  const body = el('div', 'deskask');
-  const scale = (f, set) => {
-    if (!f) return;
-    body.appendChild(el('label', 'fl', esc(f.label || f.id)));
-    const row = el('div', 'deskscale');
+let checkOn = false;     /* a status check is on the screen */
+let checkVals = {};      /* field id -> what has been pressed, this time round */
+
+function checkStyle() { return S.get('desk.style', 'block'); }
+
+function checkFields() {
+  return [quickField('mood'), quickField('energy')].filter(Boolean);
+}
+
+/* ── the only way out is through ──
+   Tom: "it should never go away until answered." So there is no close button,
+   no SKIP, and nothing underneath is reachable. SAVE is the exit, and until
+   every scale has been pressed it says what is still missing rather than going
+   dead, because a dead button explains nothing. */
+function checkDraw() {
+  const box = document.getElementById('statuscheck');
+  if (!box) return;
+  const st = Notice.wear(box, checkStyle());
+  box.innerHTML = '';
+
+  const win = el('div', 'nwin');
+  win.appendChild(el('div', 'nwhead', esc(Notice.bracket(st, 'STATUS CHECK'))));
+  win.appendChild(el('div', 'nwrule'));
+  win.appendChild(el('div', 'nwask', 'How are you?'));
+
+  const fs = checkFields();
+  fs.forEach(f => {
+    win.appendChild(el('div', 'nwlabel', esc(String(f.label || f.id).toUpperCase())));
+    const row = el('div', 'nwscale');
     const max = f.max || 5;
     for (let i = 1; i <= max; i++) {
-      const b = el('button', '', String(i));
-      b.onclick = (n => () => {
-        set(n);
+      const btn = el('button', checkVals[f.id] === i ? 'on' : '', String(i));
+      btn.onclick = (n => () => {
+        checkVals[f.id] = n;
         [].forEach.call(row.children, c => { c.className = ''; });
-        b.className = 'on';
+        btn.className = 'on';
         Mobile.feedback('tick');
+        paintGo();
       })(i);
-      row.appendChild(b);
+      row.appendChild(btn);
     }
-    body.appendChild(row);
-  };
-  scale(mood, v => { mv = v; });
-  scale(energy, v => { ev = v; });
-  bar.appendChild(body);
+    win.appendChild(row);
+  });
 
-  const foot = el('div', 'deskfoot');
-  foot.appendChild(el('div', 'deskchips'));
-  const go = el('button', 'deskgo', 'SAVE');
+  const go = el('button', 'nwgo');
+  const left = () => fs.filter(f => checkVals[f.id] == null);
+  function paintGo() {
+    const l = left();
+    go.className = 'nwgo' + (l.length ? ' waiting' : '');
+    go.textContent = l.length
+      ? String(l[0].label || l[0].id).toUpperCase() + '?'
+      : 'SAVE';
+  }
   go.onclick = () => {
-    let n = 0;
-    if (mood && mv != null)   { evAdd(d, mood.id, mv); n++; }
-    if (energy && ev != null) { evAdd(d, energy.id, ev); n++; }
-    if (n) Mobile.feedback('success');
-    /* Answering by hand puts the next one off. Without this the button he
-       pressed himself is followed by the same question ten minutes later,
-       which is how a prompt stops being worth reading. */
-    deskRoll();
-    deskClose(true);
+    if (left().length) { Mobile.feedback('warn'); return; }
+    checkSave();
   };
-  foot.appendChild(go);
-  bar.appendChild(foot);
+  paintGo();
+  win.appendChild(go);
 
-  if (window.Icons && Icons.paint) Icons.paint(bar);
-  /* The check in is the panel most likely to change height after it is drawn:
-     the answer buttons light up as they are pressed. */
-  deskWatchBox(bar);
+  box.appendChild(win);
+}
+
+/** put it up, and tell the launcher to give it the screen */
+function checkOpen() {
+  checkOn = true;
+  checkVals = {};
+  /* Nothing to ask means nothing to hold him with: both scales switched off in
+     TRACK is a legitimate state and must not leave a screen he cannot leave. */
+  if (!checkFields().length) { checkOn = false; deskAsking = false; deskRoll(); return; }
+  document.body.classList.add('checking');
+  checkDraw();
   deskTitle();
 }
 
+function checkSave() {
+  const d = Day.today();
+  let n = 0;
+  checkFields().forEach(f => {
+    if (checkVals[f.id] != null) { evAdd(d, f.id, checkVals[f.id]); n++; }
+  });
+  if (n) Mobile.feedback('success');
+  /* Answering by hand puts the next one off. Without this the question he just
+     answered comes back ten minutes later, which is how a prompt stops being
+     worth reading. */
+  deskRoll();
+  /* Tom leaves the machine on all night and asked for one outside hours. One,
+     not a stream: answering the night one is what closes the night. It used to
+     be walking away that closed it, and walking away is no longer something
+     this can be done to. */
+  if (deskAskedNight) { S.set('desk.nightOff', deskAskedNight); deskAskedNight = ''; }
+  checkOn = false;
+  document.body.classList.remove('checking');
+  deskAsking = false;
+  deskTitle();
+  deskBar();
+  draw();
+}
 
-/* ── the check in ──
-   Mood and Energy are looked up rather than assumed, exactly as QUICK does,
-   so turning one off in TRACK takes it out of here too. What it writes is an
-   ordinary reading: no new kind of row, and nothing another app cannot
-   already read.                                                           */
 function deskAsk() {
+  if (checkOn) return;
   deskAsking = true;
   deskAskedAt = Date.now();
   const now = new Date();
   deskAskedNight = deskAwake(now) ? '' : deskNightKey(now);
   deskRaise();
-  if (deskSmall) { deskOpen('ask'); return; }
-  const d = Day.today();
-  const mood = quickField('mood'), energy = quickField('energy');
-  let mv = null, ev = null;
-  /* The same bookkeeping `deskClose` does for the widget's panel: skipping one
-     at night is what ends the night. The handle is kept so a stale one can be
-     shut from `deskStale` rather than waiting for a press that never comes. */
-  const done = answered => {
-    deskDlg = null;
-    if (deskAskedNight) {
-      if (!answered) S.set('desk.nightOff', deskAskedNight);
-      deskAskedNight = '';
-    }
-    deskAsking = false;
-  };
-  deskDlg = UI.dialog({
-    title: 'Status check', width: 360, focus: true,
-    onClose: () => done(false),
-    body: (b) => {
-      const scale = (f, set) => {
-        if (!f) return;
-        b.appendChild(el('label', 'fl', esc(f.label || f.id)));
-        const row = el('div', 'deskscale');
-        const max = f.max || 5;
-        for (let i = 1; i <= max; i++) {
-          const btn = el('button', '', String(i));
-          btn.onclick = (n => () => {
-            set(n);
-            [].forEach.call(row.children, x => { x.className = ''; });
-            btn.className = 'on';
-            Mobile.feedback('tick');
-          })(i);
-          row.appendChild(btn);
-        }
-        b.appendChild(row);
-      };
-      scale(mood, v => { mv = v; });
-      scale(energy, v => { ev = v; });
-      b.appendChild(el('label', 'fl', 'What are you up to'));
-      b.appendChild(UI.field('text', { value: '' }));
-    },
-    actions: [
-      { label: 'SKIP', fn: () => done(false) },
-      { label: 'SAVE', kind: 'go', fn: h => {
-        done(true);
-        let n = 0;
-        if (mood && mv != null)   { evAdd(d, mood.id, mv); n++; }
-        if (energy && ev != null) { evAdd(d, energy.id, ev); n++; }
-        const box = h.body.querySelector('input.mb-input, textarea.mb-input');
-        const t = box ? String(box.value || '').trim() : '';
-        if (t) { addNote(d, 'entry', t); n++; }
-        if (n) Mobile.feedback('success');
-        deskRoll();
-        draw();
-      } },
-    ],
-  });
+  checkOpen();
 }
 
 function deskSetSmall(v) {
@@ -7683,6 +7749,7 @@ function deskSetSmall(v) {
    widget it opens the widget's own quick capture; in the whole app it opens
    STATUS's journal sheet, on Entry. */
 function deskBullet() {
+  if (checkOn) return;   /* nothing gets behind a status check */
   deskRaise();
   deskWrite({ kind: S.get('desk.kind', 'entry'), text: '' });
 }
@@ -7691,9 +7758,10 @@ function drawDeskTab(pane) {
   settingsPane = pane; pane.classList.add('setpane');
   const c = deskCfg();
   pane.appendChild(el('div', 'note',
-    'The status check asks how you are, then gets out of the way. What you ' +
-    'answer goes in as an ordinary reading, so the rest of STATUS sees it ' +
-    'straight away. One left unanswered puts itself away after 15 minutes.'));
+    'The status check asks how you are and fills the screen until you answer ' +
+    'it. There is no way past it but answering, which is the point of it. ' +
+    'What you answer goes in as an ordinary reading, so the rest of STATUS ' +
+    'sees it straight away.'));
   pane.appendChild(toggleRow('Status check on a timer', '', !!c.on, v => {
     S.set('desk.on', v ? 1 : 0); deskNext = 0; drawSettingsPane('desk');
   }));
@@ -7712,6 +7780,18 @@ function drawDeskTab(pane) {
       : mins <= 0 ? 'The next one is due now.'
       : 'The next one is about <b>' + mins + '</b> minute' + (mins === 1 ? '' : 's') + ' away.'));
   }
+  /* The same four windows NOTICE draws, off the same table in
+     shared/notice.js, so a style added there turns up here too. */
+  pane.appendChild(UI.row('Window', '', UI.segmented(
+    Notice.list(),
+    checkStyle(),
+    v => { S.set('desk.style', v); if (checkOn) checkDraw(); })));
+  pane.appendChild(el('div', 'note',
+    'The same four windows NOTICE makes its pictures out of.'));
+  const demo = el('button', 'mb-btn mb-press mb-tap', 'SHOW ME ONE');
+  demo.onclick = () => deskAsk();
+  pane.appendChild(demo);
+
   pane.appendChild(el('div', 'note',
     'Mini mode is the chevron in the top bar. Ctrl+B writes a bullet from ' +
     'anywhere, even when STATUS is behind another window.'));

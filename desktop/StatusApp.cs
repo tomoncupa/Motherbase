@@ -65,7 +65,7 @@ class App : Form
     const int VK_LBUTTON = 0x01;
     const int HOTKEY_ID = 0xB01;
     const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_SHIFT = 0x4, MOD_WIN = 0x8;
-    const int DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2;
+    const int DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_ROUND = 2, DWMWCP_DONOTROUND = 1;
 
     WebView2 web;
     NotifyIcon tray;
@@ -279,19 +279,40 @@ class App : Form
             KeepCorner(right, top);
             Round();
         }
-        else if (verb == "checkin")
+        else if (verb == "checkin" || verb == "takeover")
         {
             /* â”€â”€ intrusive on purpose â”€â”€
                Tom: "I also want the check in prompt to be intrusive and
-               prominent." A panel in a 320px box in the corner is neither. It
-               goes to the middle of the screen, in front of whatever he is
-               doing, with the focus, so answering it is the path of least
-               resistance rather than something to notice and come back to. */
-            mode = "checkin";
-            ClientSize = new Size(w, h);
-            Centre();
-            Round();
-            Front();
+               prominent", and then, on 2026-09-17: "I want the notif to be
+               HUGE and IMMEDIATE. Our tools are made to consider people at
+               their lowest selves - it should never go away until answered."
+
+               `checkin` centred a box on the screen, which is the first half
+               of that and not the second. `takeover` is the whole screen: the
+               window becomes the monitor the pointer is on, corners square,
+               in front, with the focus. The page has no close button on it,
+               so the only way back to the desktop is to answer.
+
+               Nothing here remembers the size it was: the page says
+               `widget` again the moment the check is answered, and that is
+               what puts the window back where it was. */
+            if (verb == "takeover")
+            {
+                mode = "checkin";
+                var scr = Screen.FromPoint(Cursor.Position).Bounds;
+                Square();
+                Bounds = scr;
+                Front();
+                Log("took the screen at " + scr.Left + "," + scr.Top + " " + scr.Width + "x" + scr.Height);
+            }
+            else
+            {
+                mode = "checkin";
+                ClientSize = new Size(w, h);
+                Centre();
+                Round();
+                Front();
+            }
             try { System.Media.SystemSounds.Exclamation.Play(); } catch { }
         }
     }
@@ -375,6 +396,15 @@ class App : Form
     void Round()
     {
         int pref = DWMWCP_ROUND;
+        try { DwmSetWindowAttribute(Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, 4); }
+        catch { }
+    }
+
+    /* A window that is the whole screen with rounded corners shows four
+       notches of desktop through them. */
+    void Square()
+    {
+        int pref = DWMWCP_DONOTROUND;
         try { DwmSetWindowAttribute(Handle, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, 4); }
         catch { }
     }
