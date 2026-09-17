@@ -226,7 +226,14 @@ const IO = {
      own back as `sheetV` when it answers, so the two can be compared and a
      sheet running an old script can say so instead of failing in ways nobody
      can place. */
-  SCRIPT_V: 4,
+  /* ── a calendar of its own, never yours ──
+     Everything written goes into a calendar named this and nothing else. Two
+     reasons, and both matter more than the convenience of using the default
+     one: an event this did not write can never be changed or deleted by it,
+     and switching the whole thing off is one tick in Google Calendar's own
+     sidebar rather than a hunt for what it left behind. */
+  CAL_NAME: 'Motherbase',
+  SCRIPT_V: 5,
 
   register(spec) {
     apps[spec.app] = Object.assign({ types: [], sheets: null, tables: null, name: spec.app }, spec);
@@ -1550,7 +1557,10 @@ const release = appId => { inflight[appId] = 0; };
    `full` is when the derived tabs (Calendar, Log) were last rebuilt, `seen`
    is the last edit we have read out of each tab, and `sheetV` is which
    version of the script the sheet is running. */
-let mcfg = { url: '', on: 0, at: null, pushed: {}, seen: {}, full: {}, sig: {}, sheetV: 0 };
+/* `cal` is the Google Calendar push, off until asked for. It belongs to the
+   suite rather than to one app, the same way the link does: the calendar is
+   one place and turning it on twice would mean turning it off twice. */
+let mcfg = { url: '', on: 0, at: null, pushed: {}, seen: {}, full: {}, sig: {}, sheetV: 0, cal: 0 };
 const mread = () => { try { Object.assign(mcfg, JSON.parse(localStorage.getItem(MKEY) || '{}')); } catch (e) {} };
 mread();
 
@@ -2099,8 +2109,21 @@ const Mirror = {
     /* Tabs this app wrote under the old prefixed name. The sheet drops them
        after writing the new ones, because a rename that leaves the old tab
        behind is how you end up reading last month's data and believing it. */
-    const body = JSON.stringify({ app: appId, at: at, mode: clearing ? 'full' : 'delta',
-      tabs: tabs, retire: IO.oldPrefix(appId) });
+    /* ── the calendar, when an app has one ──
+       An app that says `calendar()` in its register gets its events carried on
+       the same push as its rows. One journey, one link, one thing to set up.
+       An empty list is left out entirely rather than sent as nothing, so the
+       script only ever touches the calendar when there is something to say. */
+    let cal = null;
+    try {
+      const spec = apps[appId];
+      if (spec && typeof spec.calendar === 'function' && IO.mirror.settings.cal) {
+        const ev = spec.calendar() || [];
+        if (ev.length) cal = { name: IO.CAL_NAME, from: ev[0].date, to: ev[ev.length - 1].date, events: ev };
+      }
+    } catch (e) {}
+    const body = JSON.stringify(Object.assign({ app: appId, at: at, mode: clearing ? 'full' : 'delta',
+      tabs: tabs, retire: IO.oldPrefix(appId) }, cal ? { cal: cal } : {}));
     /* text/plain sidesteps the CORS preflight Apps Script cannot answer */
     const head = { 'Content-Type': 'text/plain;charset=utf-8' };
 
@@ -2684,6 +2707,80 @@ const Mirror = {
       '  });',
       '}',
       '',
+      '/* \u2500\u2500 the calendar \u2500\u2500',
+      '   One event per routine per day, with its blocks written into the',
+      '   description. Tom, 2026-09-17: "I think I just want to push the routines',
+      '   and not the individual blocks. Can you write the blocks as details IN',
+      '   the routines?"',
+      '',
+      '   Everything lives in a calendar of its own, made on first use. Nothing',
+      '   outside it is ever read, changed or deleted, so a bug in here cannot',
+      '   reach a real appointment.',
+      '',
+      '   Re-pushing the same day must not double it up, and a Google event has',
+      '   no id you can choose. It carries a TAG instead: every event this writes',
+      '   is tagged with the key the app gave it, and a push clears the window it',
+      '   is about by tag before writing it again. An event you made by hand in',
+      '   that calendar has no tag and is left alone. */',
+      'function mbCalId(name) {',
+      '  var all = CalendarApp.getCalendarsByName(name);',
+      '  if (all && all.length) return all[0];',
+      '  return CalendarApp.createCalendar(name);',
+      '}',
+      '',
+      'function mbCalendar(cal) {',
+      '  /* Written the long way round on purpose: the script must carry no',
+      '     double pipe, because it is copied by hand through a text box and that',
+      '     is one of the things such a trip loses. `_smoke.html` fails on it. */',
+      '  if (!cal) return { ok: true, wrote: 0 };',
+      '  if (!cal.events) return { ok: true, wrote: 0 };',
+      '  if (!cal.events.length) return { ok: true, wrote: 0 };',
+      '  var nm = cal.name;',
+      '  if (!nm) nm = "Motherbase";',
+      '  var c = mbCalId(nm);',
+      '  /* The window this push is about, as whole days. */',
+      '  var from = new Date(cal.from + "T00:00:00");',
+      '  var to = new Date(cal.to + "T00:00:00");',
+      '  to.setDate(to.getDate() + 1);',
+      '  var had = c.getEvents(from, to);',
+      '  var mine = {};',
+      '  had.forEach(function (ev) {',
+      '    var tag = "";',
+      '    try { tag = ev.getTag("mb"); } catch (err) { tag = ""; }',
+      '    if (tag) mine[tag] = ev;',
+      '  });',
+      '  var wrote = 0, kept = {};',
+      '  cal.events.forEach(function (x) {',
+      '    var s = new Date(x.date + "T" + x.start + ":00");',
+      '    var e = new Date(x.date + "T" + x.end + ":00");',
+      '    /* A routine that runs past midnight ends the next day. */',
+      '    if (e <= s) e.setDate(e.getDate() + 1);',
+      '    kept[x.key] = 1;',
+      '    var ev = mine[x.key];',
+      '    if (ev) {',
+      '      /* Moved or renamed rather than remade, so an invitation or a colour',
+      '         set by hand on the event survives the next push. */',
+      '      if (ev.getTitle() !== x.title) ev.setTitle(x.title);',
+      '      if (ev.getDescription() !== x.details) ev.setDescription(x.details);',
+      '      var moved = ev.getStartTime().getTime() !== s.getTime();',
+      '      if (!moved) moved = ev.getEndTime().getTime() !== e.getTime();',
+      '      if (moved) ev.setTime(s, e);',
+      '    } else {',
+      '      ev = c.createEvent(x.title, s, e, { description: x.details });',
+      '      ev.setTag("mb", x.key);',
+      '    }',
+      '    wrote++;',
+      '  });',
+      '  /* A routine taken off the board, or a day whose routines changed: the',
+      '     event this wrote for it goes with it. Only ones IT wrote, only inside',
+      '     the window it was told about. */',
+      '  Object.keys(mine).forEach(function (k) {',
+      '    if (kept[k]) return;',
+      '    try { mine[k].deleteEvent(); } catch (err) {}',
+      '  });',
+      '  return { ok: true, wrote: wrote };',
+      '}',
+      '',
       'function doPost(e) {',
       '  var body = JSON.parse(e.postData.contents);',
       '  var ss = SpreadsheetApp.getActiveSpreadsheet();',
@@ -2723,7 +2820,13 @@ const Mirror = {
       '     twelve lines long. */',
       '  if (!failed.length && body.app && body.at) mbProps().setProperty("mb.at." + body.app, body.at);',
       '',
-      '  return ContentService.createTextOutput(JSON.stringify({ ok: failed.length === 0, v: MB_V, wrote: wrote, failed: failed }))',
+      '  /* The calendar last, and never allowed to fail the rows. A sheet that',
+      '     saved your data and could not reach the calendar is a good outcome',
+      '     reported honestly; losing the rows over it would not be. */',
+      '  var calOut = null;',
+      '  if (body.cal) { try { calOut = mbCalendar(body.cal); } catch (err) { calOut = { ok: false, why: String(err) }; } }',
+      '',
+      '  return ContentService.createTextOutput(JSON.stringify({ ok: failed.length === 0, v: MB_V, wrote: wrote, failed: failed, cal: calOut }))',
       '    .setMimeType(ContentService.MimeType.JSON);',
       '}',
       '',
