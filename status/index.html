@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.27, 2026-09-17">
+<meta name="mb-version" content="1.0.28, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -7219,6 +7219,7 @@ let deskNagged = 0;      /* the backup reminder, held back while the widget is u
 let deskPanel = '';      /* '', 'ask' or 'bullet': what the widget has turned into */
 let deskAskedAt = 0;     /* when the open one was put up */
 let deskAskedNight = ''; /* the night it went up on, if it was outside hours */
+let deskDlg = null;      /* the whole app's status check, while one is up */
 let deskChev = null;     /* the one chevron, in the corner, for both views */
 
 function deskPointChev() {
@@ -7317,9 +7318,29 @@ function deskAwake(now) {
   return c.from < c.to ? (h >= c.from && h < c.to) : (h >= c.from || h < c.to);
 }
 
+/* ── one he walked away from ──
+   A status check nobody answers used to sit on the widget for ever, and the
+   guard below reads `deskPanel`, so one unanswered question switched the whole
+   feature off. Tom's log for 2026-09-17: one at 05:02, nothing again all day,
+   because the panel it put up was still on screen at 08:55. After fifteen
+   minutes it now packs itself away, and walking away is still what tells the
+   night it has stopped being answered.
+
+   This runs on every tick rather than only on a due one. The old recovery sat
+   below the night gate and below the `deskNext` return, so the two states that
+   most needed clearing were the two it could not reach. */
+function deskStale() {
+  if (!deskAsking) return;
+  if (Date.now() - deskAskedAt <= 15 * 60000) return;
+  const d = deskDlg; deskDlg = null;
+  if (d) { try { d.close(); } catch (e) {} }
+  deskClose(false);
+}
+
 function deskTick() {
   if (!DESK) return;
   if (!deskCfg().on) { deskNext = 0; return; }
+  deskStale();
   if (!deskNext) { deskRoll(); return; }
   if (Date.now() < deskNext) return;
   deskRoll();
@@ -7328,13 +7349,6 @@ function deskTick() {
      So the night keeps the ordinary pace while he is answering, and stops at
      the first one he lets go past. */
   if (!deskAwake(now) && S.get('desk.nightOff', '') === deskNightKey(now)) return;
-  /* One he walked away from used to block every one after it for ever. After
-     fifteen minutes it stops holding the door, and at night that silence is
-     the answer: no more until morning. */
-  if (deskAsking && Date.now() - deskAskedAt > 15 * 60000) {
-    deskAsking = false;
-    if (deskAskedNight) { S.set('desk.nightOff', deskAskedNight); deskAskedNight = ''; }
-  }
   if (deskAsking || deskPanel || sheetH) return;  /* never interrupt something open */
   deskAsk();
 }
@@ -7524,7 +7538,7 @@ function deskAskPanel(bar) {
   const mood = quickField('mood'), energy = quickField('energy');
   let mv = null, ev = null;
 
-  deskPanelHead(bar, 'HOW ARE YOU', deskClose);
+  deskPanelHead(bar, 'STATUS CHECK', deskClose);
 
   const body = el('div', 'deskask');
   const scale = (f, set) => {
@@ -7588,10 +7602,20 @@ function deskAsk() {
   const d = Day.today();
   const mood = quickField('mood'), energy = quickField('energy');
   let mv = null, ev = null;
-  const done = () => { deskAsking = false; };
-  UI.dialog({
-    title: 'Quick check in', width: 360, focus: true,
-    onClose: done,
+  /* The same bookkeeping `deskClose` does for the widget's panel: skipping one
+     at night is what ends the night. The handle is kept so a stale one can be
+     shut from `deskStale` rather than waiting for a press that never comes. */
+  const done = answered => {
+    deskDlg = null;
+    if (deskAskedNight) {
+      if (!answered) S.set('desk.nightOff', deskAskedNight);
+      deskAskedNight = '';
+    }
+    deskAsking = false;
+  };
+  deskDlg = UI.dialog({
+    title: 'Status check', width: 360, focus: true,
+    onClose: () => done(false),
     body: (b) => {
       const scale = (f, set) => {
         if (!f) return;
@@ -7616,9 +7640,9 @@ function deskAsk() {
       b.appendChild(UI.field('text', { value: '' }));
     },
     actions: [
-      { label: 'SKIP', fn: done },
+      { label: 'SKIP', fn: () => done(false) },
       { label: 'SAVE', kind: 'go', fn: h => {
-        done();
+        done(true);
         let n = 0;
         if (mood && mv != null)   { evAdd(d, mood.id, mv); n++; }
         if (energy && ev != null) { evAdd(d, energy.id, ev); n++; }
@@ -7667,9 +7691,10 @@ function drawDeskTab(pane) {
   settingsPane = pane; pane.classList.add('setpane');
   const c = deskCfg();
   pane.appendChild(el('div', 'note',
-    'The check in asks how you are, then gets out of the way. What you answer ' +
-    'goes in as an ordinary reading, so the rest of STATUS sees it straight away.'));
-  pane.appendChild(toggleRow('Check in on a timer', '', !!c.on, v => {
+    'The status check asks how you are, then gets out of the way. What you ' +
+    'answer goes in as an ordinary reading, so the rest of STATUS sees it ' +
+    'straight away. One left unanswered puts itself away after 15 minutes.'));
+  pane.appendChild(toggleRow('Status check on a timer', '', !!c.on, v => {
     S.set('desk.on', v ? 1 : 0); deskNext = 0; drawSettingsPane('desk');
   }));
   if (c.on) {
