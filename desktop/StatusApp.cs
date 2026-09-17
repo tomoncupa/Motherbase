@@ -264,7 +264,9 @@ class App : Form
             int.TryParse(bits[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out w);
             int.TryParse(bits[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out h);
         }
-        if (w < 120 || h < 60) return;
+        /* `takeover` carries no size worth having: it fills the screen. Every
+           other verb is a size and a size under this is a misread message. */
+        if (verb != "takeover" && (w < 120 || h < 60)) return;
 
         if (verb == "widget") { mode = "widget"; ClientSize = new Size(w, h); PlaceWidget(); Round(); }
         else if (verb == "app")
@@ -298,6 +300,14 @@ class App : Form
                what puts the window back where it was. */
             if (verb == "takeover")
             {
+                /* Once. Tom, 2026-09-17: "Just have the Status Check pop up
+                   once and then I'll always answer it when im back in my
+                   desk." Already being the check means the screen was already
+                   taken, and taking it again is a grab at a desk he is not
+                   sitting at. The page sends one fixed message for the same
+                   reason; this is the half that holds if anything ever sends
+                   a second. */
+                if (mode == "checkin") return;
                 mode = "checkin";
                 var scr = Screen.FromPoint(Cursor.Position).Bounds;
                 Square();

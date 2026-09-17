@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.30, 2026-09-17">
+<meta name="mb-version" content="1.0.31, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1347,9 +1347,26 @@ function scale(fd, mult) {
   o.amt = (num(fd.base.amt, 0) || 0) * mult;
   return o;
 }
-function logMeal(fd, mult, serveLabel, extra) {
+/* ── how many of them ──
+   Tom, 2026-09-17: "Status Food multiples entry needs polishing, shows up as
+   just 1 serving but other numbers are correct." The How many box multiplied
+   `mult`, so the calories and the protein were right for three, and the label
+   went in as whatever the serving chip said, which is "1 serving" whether you
+   had one or five. The row was correct and only the words on it lied.
+
+   A leading "1 " is dropped when a count goes in front, so three of a "1
+   scoop" serve reads `3 x scoop` and not `3 x 1 scoop`. */
+function serveLabel(serve, mult) {
+  const label = String((serve && serve.label) || '');
+  const per = num(serve && serve.mult, 1) || 1;
+  const qty = mult / per;
+  if (!(qty > 0) || Math.abs(qty - 1) < 0.001) return label;
+  return r1(qty) + ' × ' + label.replace(/^1\s+/, '');
+}
+
+function logMeal(fd, mult, label, extra) {
   const s = scale(fd, mult);
-  const row = { fid: fd.id, name: fd.name, serve: serveLabel, unit: fd.base.unit, t: Date.now() };
+  const row = { fid: fd.id, name: fd.name, serve: label, unit: fd.base.unit, t: Date.now() };
   NUTS.forEach(n => { row[n] = s[n]; });
   row.price = s.price; row.amt = s.amt; row.mult = mult;
   Object.assign(row, extra || {});
@@ -1728,8 +1745,13 @@ const TD = {
       d: d, i: i, age: last - i,
       rw: Math.exp(-Math.LN2 * (last - i) / P.halfLife),
       w: value(d, 'weight'),
-      kcal: dayKcal(d),
-      kerr: dayKerr(d),
+      /* A day he marked as not fully tracked has no usable intake, so it is
+         null here and every reader already knows what null means: the day is
+         skipped for intake and its weigh-in still counts toward the trend.
+         Done at the frame rather than at each reader, so a rule added later
+         cannot forget it. */
+      kcal: dayUntracked(d) ? null : dayKcal(d),
+      kerr: dayUntracked(d) ? null : dayKerr(d),
       steps: value(d, 'steps'),
       sleep: value(d, 'sleep'),
       train: value(d, 'train'),
@@ -2977,6 +2999,12 @@ function spendSheet(existing) {
     const amt = numberInput(existing ? existing.amt : null, 50, 1);
     body.appendChild(el('label', 'fl', 'Amount'));
     body.appendChild(amt);
+    /* STANDARDS rule 14: a screen you came to type into opens with the
+       keyboard up. This one did not, which is what Tom meant by "text entry in
+       spending not auto selected" — the box was there and the cursor was not.
+       An amount already in it comes up selected, because `UI.focusSoon` reads
+       the box and this one is a number. */
+    UI.focusSoon(amt.input, !!existing);
 
     body.appendChild(el('label', 'fl', 'Account'));
     const aw = el('div', 'chips');
@@ -3354,7 +3382,7 @@ function amountSheet(fd) {
 
     body.appendChild(saveBar('Log it', () => {
       if (!mult || mult <= 0) return UI.toast('How much?', { bad: true });
-      logMeal(fd, mult, mode === 'serve' ? serves[si].label : (mode === 'unit' ? r1(mult * num(fd.base.amt, 0)) + ' ' + (fd.base.unit || '') : 'to target'),
+      logMeal(fd, mult, mode === 'serve' ? serveLabel(serves[si], mult) : (mode === 'unit' ? r1(mult * num(fd.base.amt, 0)) + ' ' + (fd.base.unit || '') : 'to target'),
         { err: err, acct: acct });
       Mobile.feedback('tick');
       closeSheet(); draw();
@@ -3902,14 +3930,41 @@ function islandCard(d, opts) {
    at the desk is the order it stacks in on the phone. */
 function isleFirst() { return S.get('isleFirst', 'day') === 'journal' ? 'journal' : 'day'; }
 
+/* ══════════════ a day you did not fully log ══════════════
+   Tom, 2026-09-17: "option to denote a day in status as not fully tracked so
+   don't count it for TDEE calcs."
+
+   A day where you ate out and logged half of it is not a low-calorie day, it
+   is an unknown one, and the difference matters: measured TDEE is intake
+   against the weight trend, so a day that under-reports intake drags the
+   estimate down and quietly tells you to eat less. Leaving it out is the only
+   honest reading, and it is the reading the maths already has a word for,
+   because a day with no food logged at all is skipped the same way.
+
+   The weight still counts. The scale did not lie that morning; only the food
+   diary did. So the flag nulls the intake and touches nothing else.
+
+   Stored on the `day` row STATUS already owns, patched rather than rebuilt so
+   LOG's note on the same day survives it. */
+function dayUntracked(date) { return !!(Rec.get('day', date, '') || {}).untracked; }
+function setDayUntracked(date, on) {
+  Rec.patch('day', date, '', { untracked: on ? 1 : undefined });
+  if (window.TD) TD._dirty = true;
+}
+
 function isleOrderMenu(node) {
   const open = e => {
     const now = isleFirst();
     const pick = v => { S.set('isleFirst', v); Mobile.feedback('select'); draw(); };
+    const d = vd(), un = dayUntracked(d);
     UI.menu(e.clientX || 0, e.clientY || 0, [
+      { label: 'Not fully tracked', check: un, fn: () => {
+        setDayUntracked(d, !un); Mobile.feedback('select'); draw();
+      } },
+      '-',
       { label: 'The day first',     check: now === 'day',     fn: () => pick('day') },
       { label: 'The journal first', check: now === 'journal', fn: () => pick('journal') },
-    ], { title: 'ORDER' });
+    ], { title: Day.label(d).toUpperCase() });
   };
   /* Tiles and journal lines have a hold of their own — a drag and an edit —
      so the card's hold stays off them or one press would do two things. */
@@ -3929,6 +3984,13 @@ function drawNow(m) {
   const isle = islandCard(d, { sortable: true });
   isle.classList.add('isle');
   isleOrderMenu(isle);
+  /* A flag nothing on screen mentions is a flag you set once and then spend a
+     month wondering about. It says what it does to the maths, because that is
+     the only reason to set it. */
+  if (dayUntracked(d)) {
+    isle.appendChild(el('div', 'note',
+      'Marked <b>not fully tracked</b>. The weigh-in still counts; what you ate is left out of TDEE.'));
+  }
   m.appendChild(isle);
 
   /* "Through the day" used to repeat every multi-entry field underneath the
@@ -4318,7 +4380,14 @@ function drawFood(m) {
   if (!list.length) c2.appendChild(el('div', 'empty', 'Nothing yet.'));
   list.forEach(x => {
     const r = el('div', 'row tap');
-    const marks = [esc(x.serve || ''), r1(x.amt) + ' ' + esc(x.unit || '')]
+    /* A meal logged before serveLabel existed carries the right `mult` and a
+       label that forgot it. The number on the row is the record, so the count
+       is read back off it rather than trusted from the words. */
+    const mult = num(x.mult, 1) || 1;
+    const said = String(x.serve || '');
+    const serveText = (Math.abs(mult - 1) > 0.001 && said && !/×/.test(said) && !/^to target$/.test(said) && !/^[\d.]/.test(said))
+      ? r1(mult) + ' × ' + said.replace(/^1\s+/, '') : said;
+    const marks = [esc(serveText), r1(x.amt) + ' ' + esc(x.unit || '')]
       .concat(errTag(x.err) ? [errTag(x.err)] : []).concat(x.acct ? [esc(x.acct)] : []);
     r.innerHTML = '<span class="nm">' + esc(x.name) + '<small>' + marks.filter(Boolean).join(' · ') + '</small></span>' +
       '<span class="fig">' + Math.round(x.kcal) + '<small>' + r1(x.p) + 'g protein</small></span>';
@@ -7364,7 +7433,15 @@ function deskTitle() {
      front and takes the focus, so answering is the path of least resistance
      rather than something to notice and come back to. The numbers are the
      window it is leaving, which is what it goes back to afterwards. */
-  if (checkOn) { deskSend('takeover|' + (s ? s.w : 390) + '|' + (s ? s.h : 844)); return; }
+  /* One message, the same every time, so the host cannot be asked twice.
+     Tom, 2026-09-17: "Just have the Status Check pop up once and then I'll
+     always answer it when im back in my desk." The host answers `takeover` by
+     seizing the screen, taking the focus and playing a sound, and it is the
+     PAGE's job not to ask for that more than once: the numbers used to be the
+     widget's measured size, so any redraw that changed the box by a pixel made
+     a new message, and a new message is another grab at a screen he is not
+     sitting at. It carries a fixed size the host ignores anyway. */
+  if (checkOn) { deskSend('takeover|1|1'); return; }
   if (deskSmall && s) deskSend('widget|' + s.w + '|' + s.h);
   else if (!deskSmall) deskSend('app|390|844');
 }
