@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.9, 2026-09-17">
+<meta name="mb-version" content="1.0.10, 2026-09-17">
 <title>QUESTS</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -88,6 +88,22 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 /* A tag is not the accent, because a line can carry several and they would
    read as one long highlight against one project. */
 .qin .hl mark.tag{background:color-mix(in srgb,var(--data-3) 30%,transparent)}
+/* ── the labels you already have ──
+   Tom, 2026-09-17: "How can we ensure labels get used correctly?" The thing
+   that ruins a label set is not misuse, it is SPRAWL: @phone, @Phone and
+   @calls all meaning one condition, after which no label view is complete and
+   you stop trusting them. Case is already dealt with, since a label is
+   slugged. This is the rest of it — the moment you type @, the ones you
+   already use are in front of you, so picking an existing label is less work
+   than inventing a new one. */
+.sug{display:flex;flex-wrap:wrap;gap:var(--s-1);margin-top:var(--s-1)}
+.sug button{
+  min-height:var(--tap);padding:0 var(--s-3);border-radius:var(--radius-md);
+  border:var(--border-width) solid var(--border);background:var(--surface-2);
+  color:var(--text-2);font-size:var(--f-2);cursor:pointer;
+}
+.sug button:hover,.sug button.on{border-color:color-mix(in srgb,var(--data-3) 55%,transparent);color:var(--text-1)}
+.sug .new{color:var(--text-muted)}
 .at{color:var(--data-3);font-family:var(--f1)}
 .chips{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-2);align-items:center}
 .chip{display:inline-flex;align-items:center;gap:var(--s-1);min-height:var(--tap);
@@ -1132,7 +1148,8 @@ function ensureAddBar() {
   inp.placeholder = 'Add a task';
   q.appendChild(hl); q.appendChild(inp);
   const chips = el('div', 'chips');
-  box.appendChild(q); box.appendChild(chips);
+  const sug = el('div', 'sug');
+  box.appendChild(q); box.appendChild(sug); box.appendChild(chips);
   const list = el('div'); list.id = 'list';
   m.appendChild(box); m.appendChild(list);
 
@@ -1170,6 +1187,52 @@ function ensureAddBar() {
     }
     chips.appendChild(c);
   }
+  /* The @word the caret is sitting in, or null. Read off the caret rather than
+     off the whole line, so typing a second label does not offer suggestions
+     for the first one. */
+  function tagBeingTyped(v) {
+    const caret = inp.selectionStart == null ? v.length : inp.selectionStart;
+    const before = v.slice(0, caret);
+    const m = /(^|\s)@([^\s@]*)$/.exec(before);
+    if (!m) return null;
+    return { word: m[2], start: caret - m[2].length };
+  }
+
+  function paintSug(v) {
+    sug.innerHTML = '';
+    const t = tagBeingTyped(v);
+    if (!t) return;
+    const typed = slug(t.word);
+    const already = (parseQuest(v, ignore).tags) || [];
+    /* What he already uses, narrowed by what he has typed so far, and never
+       offering one this line already carries. */
+    const near = tagsInUse()
+      .filter(x => already.indexOf(x) < 0)
+      .filter(x => !typed || x.indexOf(typed) === 0)
+      .slice(0, 8);
+    const put = (label, cls, onPick) => {
+      const b = el('button', cls || '', label);
+      b.type = 'button';
+      /* mousedown, not click: a click would land after the input has already
+         lost focus and the caret position this reads would be gone. */
+      b.onmousedown = e => { e.preventDefault(); onPick(); };
+      sug.appendChild(b);
+    };
+    near.forEach(x => put('<span class="at">@</span> ' + esc(x), '', () => {
+      const caret = inp.selectionStart == null ? v.length : inp.selectionStart;
+      inp.value = v.slice(0, t.start) + x + v.slice(caret) + ' ';
+      inp.focus();
+      const end = t.start + x.length + 1;
+      try { inp.setSelectionRange(end, end); } catch (e) {}
+      paint();
+    }));
+    /* Only once there is something typed, and only when it is genuinely new.
+       Saying "new label" over an empty @ would be noise on every single @. */
+    if (typed && tagsInUse().indexOf(typed) < 0) {
+      put('<span class="at">@</span> ' + esc(typed) + ' &middot; new label', 'new', () => { inp.focus(); });
+    }
+  }
+
   function paint() {
     const o = final(), p = o.p, v = inp.value;
     let html = '', at = 0;
@@ -1180,6 +1243,7 @@ function ensureAddBar() {
     });
     hl.innerHTML = html + esc(v.slice(at)) + ' ';
     hl.scrollLeft = inp.scrollLeft;
+    paintSug(v);
     chips.innerHTML = '';
     const typedDate = words(p, ['date', 'time', 'rep']);
     chip(ico('calendar') + ' ' + esc(o.due || o.at ? whenLabel(o.due, o.at) : 'Date') + (o.rep ? ' · ' + esc(repLabel(o.rep)) : ''),
@@ -1215,6 +1279,11 @@ function ensureAddBar() {
     inp.focus();
   }
   inp.addEventListener('input', paint);
+  /* Moving the caret changes which @word you are in, and that changes what is
+     worth offering, so the strip follows the caret and not only the typing. */
+  inp.addEventListener('keyup', e => { if (/^Arrow|^Home$|^End$/.test(e.key)) paint(); });
+  inp.addEventListener('click', paint);
+  inp.addEventListener('blur', () => setTimeout(() => { sug.innerHTML = ''; }, 120));
   inp.addEventListener('scroll', () => { hl.scrollLeft = inp.scrollLeft; });
   inp.addEventListener('keyup', () => { hl.scrollLeft = inp.scrollLeft; });
   inp.addEventListener('keydown', e => {
