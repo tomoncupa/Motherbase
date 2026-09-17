@@ -481,7 +481,7 @@ which cannot flatter you. Read it before touching any app's CSS.
 Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. **Block is the
 default** (Tom, 2026-09-14): an app with no theme chosen opens in Block, with a
 gold accent, `#F0B323`. It sits first in `skins.json` because first is what
-`Skins.restore` falls back to, so keep it first. Seventeen of them, in
+`Skins.restore` falls back to, so keep it first. Eighteen of them, in
 `skins.json`, and every one differs by more than its colours. Ember, Violet,
 Matrix and Mono were dropped on 2026-08-21: they were Ice with a different
 accent hex and nothing else. Changing one colour is an edit in STYLE, not a

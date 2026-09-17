@@ -3,7 +3,7 @@
 How a client gets the suite, and what happens after.
 
 **Clients**, since 2026-09-14, are the people who get the client build. They
-were called clients until then. They are not the coaching clients in WEALTH.
+were called testers until then. They are not the coaching clients in WEALTH.
 
 `CLAUDE.md` says what the suite is. `DOCTRINE.md` says what each app is for.
 This says how it reaches somebody who is not you.
@@ -23,9 +23,9 @@ That writes `../Motherbase-Client`, a complete working suite with:
 | | |
 |---|---|
 | **Apps** | HOME, BLOCK, STATUS, LOG, QUESTS, TRAIN, CHECK IN, STYLE |
-| **Not included** | FORM (client video), ARC, FOODDÉX and WEALTH (Tom's own) |
+| **Not included** | FORM, ARC, FOODDÉX, WEALTH, SPEAK and NOTICE (Tom's own), and the LINKS widget |
 | **Themes** | Default, System, Chalkboard, Sketch, Doodle — five, from eighteen |
-| **Added** | `guide.html`, the client's five-minute setup page |
+| **Added** | `guide.html`, the client's setup page: nine steps, about ten minutes |
 
 `Default` is Block renamed, `System` is Ice renamed. The ids underneath are
 unchanged, so nothing a theme is saved against breaks.
@@ -79,21 +79,28 @@ sitting behind a stale copy. That stamp only changes when `shared/` changes.
 
 ## What to send a client
 
-Paste this. Fill in the link.
+Paste this.
 
-> Hey, here's the tracking setup I've been building. It's free, there's no
-> account and no sign-up, and nothing you type leaves your phone.
+> Hey, here's the tracking setup. It's free, there's no account and no sign-up.
 >
-> **1.** Open this on your phone: `https://tomoncupa.github.io/Mainmenu-client/`
+> **1.** Start here, on your phone:
+> `https://tomoncupa.github.io/Mainmenu-client/guide.html`
 >
-> **2.** Read the "Start here" page first. It's 5 minutes and step 1 stops you
-> losing your data: `https://tomoncupa.github.io/Mainmenu-client/guide.html`
+> **2.** Nine steps, about ten minutes. Step 2 is the one that matters, adding
+> it to your home screen. Skip it and your phone deletes everything after a
+> week.
 >
-> **3.** Use it for two weeks. TRAIN for your sessions, STATUS for everything
-> else.
+> **3.** Steps 4 to 7 hook it up to a Google Sheet you own. That's your backup,
+> and it's what keeps your phone and your computer holding the same thing.
+>
+> **4.** Then use it for two weeks. TRAIN for your sessions, STATUS for
+> everything else, CHECK IN for your photos.
 >
 > Tell me anything that confused you, looked wrong, or that you stopped using.
 > Screenshots are gold. Nothing is too small.
+
+The link is the guide, not the menu. The guide's first step opens the app;
+sending the menu instead is how a client ends up in a browser tab with no icon.
 
 Send it in the evening before a training day, not on a Sunday. The first thing
 they do should be a real session, not a poke around an empty app.
@@ -117,8 +124,37 @@ So:
 - Ask on day 3: *"is it on your home screen?"* Not *"did you add it?"* — one
   is a question, the other invites a yes.
 
-Second most likely: **they log on their laptop as well and expect it to sync.**
-It does not. Two devices are two separate copies. Say this once, up front.
+Second most likely: **they stop at step 3 and never do the computer half.**
+The phone works on its own, so nothing is visibly wrong, and they have no
+backup and no second device. Until steps 4 to 7 are done, one cleared browser
+is the whole history gone. Ask on day 3 whether the sheet is filling up.
+
+---
+
+## The Windows widget, and why clients do not have it
+
+STATUS on Windows is also a real program: a small widget that sits above your
+work with your last bullet in it, Ctrl+B to write one from anywhere, and a
+status check that takes the whole screen until you answer it. `desktop/`, and
+`desktop/README.md` explains it.
+
+Clients get none of it. `tools/build-client.py` leaves `desktop/` out, and
+three things stand in the way of putting it in:
+
+- **It is Windows only.** A client on a Mac gets nothing.
+- **The program is not signed.** Windows shows "Windows protected your PC" on
+  an unsigned download and most people press Don't run. Signing costs money a
+  year and an identity check.
+- **It is a download, not a link.** About 900KB across four files, and the
+  whole pitch to a client so far is that there is nothing to install.
+
+What it would take, if it is worth it: add `desktop/` to the build script as a
+zip, a tenth step in `guide.html` for Windows only, and a line telling them
+what the warning looks like and how to get past it. That last line is the one
+that decides whether it works.
+
+Their own devices already hold the same data through the sheet, so nobody is
+missing anything except the widget itself.
 
 ---
 
@@ -162,7 +198,7 @@ wasted people and one signal.
 
 ## Making this easier later
 
-Ranked by what it costs against what it removes. Nothing here is built.
+Ranked by what it costs against what it removes.
 
 **1. A QR code on the link.** Ten minutes. Removes the worst step in the whole
 flow — typing a URL into a phone keyboard. Print it, put it on your phone
@@ -175,14 +211,18 @@ a browser tab, one dismissible bar at the top saying why it matters. This is
 not a walkthrough and does not break DOCTRINE law 10 — it is one fact stated
 once, about the one thing that loses data.
 
-**3. Backup that does not need a human.** Right now the safety net is a person
-remembering to press a button. Two ways out, in order of cost:
+**3. ~~Backup that does not need a human.~~ Built.** The Google Sheet mirror
+is steps 4 to 7 of the guide: they paste a script into a blank sheet once, and
+the app pushes a copy whenever there is signal. No accounts, no keys, and it
+degrades to nothing on failure. It is also what makes two devices hold the
+same thing.
 
-   - The Sheets mirror already sketched in `CLAUDE.md` — they paste a script
-     into a blank Google Sheet once, and the app pushes a copy whenever there
-     is signal. No accounts, no keys, and it degrades to nothing on failure.
-   - Real hosting and accounts, parked in `ARCHITECTURE.md`. Solves it properly
-     and costs everything else.
+   What is left is the setting up. Six clicks in Apps Script and a Google
+   permission screen is the hardest part of the whole guide, and the one a
+   client is most likely to abandon halfway. Doing it on a call with them is
+   worth more than any wording. Real hosting and accounts, parked in
+   `ARCHITECTURE.md`, is the only thing that removes it, and it costs
+   everything else.
 
 **4. A starting point that is not empty.** DOCTRINE law 1 forbids shipping a
 routine, and it is right. But there is a difference between prescribing a life

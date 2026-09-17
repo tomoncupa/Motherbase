@@ -21,11 +21,14 @@ Opening it twice does nothing. There is only ever one.
   corners, above your other windows. It shows the last bullet you wrote with
   its time, today's mood and energy once there are any, and three controls.
   **Drag it anywhere** by its background and it stays there.
-- **The check in** is meant to be in the way. It goes to the middle of the
-  screen you are working on, in front of whatever you are doing, takes the
-  focus and makes a sound. Mood, energy, save, done. Answering it also pushes
-  the next one back, so the one you answered yourself is not followed by
-  another ten minutes later.
+- **The status check** is meant to be in the way, and since 17 September it
+  takes the **whole screen**. It comes up in front of whatever you are doing,
+  takes the focus and makes a sound. There is no close button and no skip:
+  SAVE is the only way out, and until every scale is pressed it names the one
+  still missing. It wears a status window, and which one is in Settings,
+  DESKTOP. Answering it pushes the next one back, so the one you answered
+  yourself is not followed by another ten minutes later. Walking away from one
+  at night ends the night: you get one, and it closes when you answer it.
 - **Ctrl+B** writes a bullet from anywhere, even from inside another program.
   Change it from the tray: **Bullet shortcut**, **Choose my own**, then press
   the keys you want. It needs Ctrl, Alt or Shift in it, because Windows will
