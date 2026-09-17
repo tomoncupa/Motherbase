@@ -31,7 +31,7 @@
    Bumped by hand, and only when something changed that a person would notice
    or that changes the shape of stored data. VERSIONS.md says what each one
    did. */
-const VERSION = '0.1.14';
+const VERSION = '0.1.15';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
@@ -1365,10 +1365,21 @@ const IO = {
     const cfg = M.adopt(appId);
     pane.appendChild(el('div', 'mb-group', 'SYNC'));
     const line = el('p');
+    /* "Linked on this device, and not synced yet" is what Tom's phone said
+       through four failed syncs on 2026-09-17, and it is true of a link that
+       has just been pasted and of one that has never worked. The second is
+       something to go and fix, so once an attempt has actually failed the
+       line says which. */
     const say = () => {
       const c = M.settings;
+      let never = false;
+      if (c.url && !c.at && M.neverAnswered()) {
+        try { never = (M.log() || []).some(e => e && e.r === 'fail'); } catch (e) {}
+      }
       line.innerHTML = !c.url ? 'No link on this device yet. Paste it once and every app has it.'
-        : c.at ? 'Linked on this device. Last synced <b>' + esc(c.at) + '</b>.' : 'Linked on this device, and not synced yet.';
+        : c.at ? 'Linked on this device. Last synced <b>' + esc(c.at) + '</b>.'
+        : never ? M.fault().say
+        : 'Linked on this device, and not synced yet.';
     };
     say();
     pane.appendChild(line);
@@ -2148,7 +2159,13 @@ const Mirror = {
         if (res.state === 'failed') {
           toast('Nothing went up this time. It will go again — <b>settings → sync</b> shows what the sheet is running.');
         } else if (res.state === 'unconfirmed') {
-          toast('Sent. The sheet did not answer back, which some browsers always do.');
+          /* "Some browsers always do" is true of a sheet that answers reads and
+             goes quiet on the confirm. It is a lie when the sheet has never
+             answered anything: the POST went to whatever the /exec link really
+             serves, and nothing landed. */
+          const f0 = Mirror.fault();
+          if (f0.code === 'never-answered') toast(f0.say, { bad: true, ms: 9000 });
+          else toast('Sent. The sheet did not answer back, which some browsers always do.');
         } else if (res.short) {
           toast('Synced <b>' + res.tabs + '</b> tabs.');
         } else {
@@ -2189,7 +2206,24 @@ const Mirror = {
       a real fix for a real cause and the wrong thing to say to somebody who
       walked into a lift. The version line in Settings already reports an out
       of date deployment, from the sheet's own answer rather than from a
-      guess, so that advice lives where it can be true. */
+      guess, so that advice lives where it can be true.
+
+      ── a link that has NEVER worked is not a blip ──
+
+      Added 2026-09-17 off a sync log from Tom's phone. The link was pasted,
+      it ends in /exec, and four manual syncs in two minutes each failed at
+      about 3.3 seconds with `unreachable` — far too fast to be a timeout, so
+      the request went out and came back as something that is not our script.
+      The sheet had answered v0 and no app had ever confirmed a push.
+
+      Every one of those attempts was told "nothing was lost, and it will go
+      again on its own", which is true of a blip and false of a deployment
+      that has never once answered. Pressing the button again cannot fix it,
+      and the app was the only thing that knew that.
+
+      So: never answered AND nothing ever confirmed is its own fault, and it
+      is actionable. A link that has worked before and goes quiet still reads
+      as transient, which is what that wording is for. */
   fault() {
     const u = mcfg.url || '';
     if (!u) return { code: 'no-link', act: true, say: 'Paste the sheet link in first.' };
@@ -2199,8 +2233,29 @@ const Mirror = {
     if (!/\/exec\s*$/.test(u))
       return { code: 'bad-link-dev', act: true,
                say: 'That link should end in /exec. A /dev one only works while you are signed in.' };
+    if (Mirror.neverAnswered())
+      return { code: 'never-answered', act: true,
+               say: 'That link has never once answered. In the sheet: <b>Extensions → Apps Script → ' +
+                    'Deploy → New deployment → Web app</b>, execute as <b>me</b>, access <b>anyone</b>, ' +
+                    'then paste the new /exec link here.' };
     return { code: 'unreachable', act: false,
              say: 'Could not reach the sheet just now. Nothing was lost, and it will go again on its own.' };
+  },
+
+  /** Has this link ever worked, on this device?
+
+      Two marks, and both have to be empty. `sheetV` is set the moment the
+      sheet answers an index with a version, from anywhere in here; `pushed`
+      is the per-app stamp the sheet echoes back, which is the only proof rows
+      landed. Either one filled in means the deployment is reachable and this
+      is a bad moment rather than a bad setup. */
+  neverAnswered() {
+    /* An EMPTY stamp does not count. `msave` merges these maps, so the way to
+       clear one is to set it to '' rather than delete it, and the key stays
+       behind. Counting keys would read a cleared app as proof of a push that
+       never happened. */
+    const p = mcfg.pushed || {};
+    return !(mcfg.sheetV > 0) && !Object.keys(p).some(k => !!p[k]);
   },
 
   /** kept because callers already say why(); it is the sentence half */
@@ -2280,7 +2335,9 @@ const Mirror = {
             const f = Mirror.fault();
             toast(f.say, f.act ? { bad: true, ms: 8000 } : null);
           } else if (res.state === 'unconfirmed') {
-            toast('Sent. The sheet did not answer back, which some browsers always do.');
+            const f1 = Mirror.fault();
+            if (f1.code === 'never-answered') toast(f1.say, { bad: true, ms: 9000 });
+            else toast('Sent. The sheet did not answer back, which some browsers always do.');
           } else if (got && got.clashes) toast('Synced, and <b>' + got.clashes + '</b> older sheet edits were kept aside.');
           else if (got && (got.changed || got.added || got.merged)) toast('Synced, with <b>' + IO.came(got) + '</b> changes from the sheet.');
           else toast('Synced <b>' + res.tabs + '</b> tabs, and the sheet confirms it.');

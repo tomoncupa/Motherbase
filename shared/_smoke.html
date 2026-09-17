@@ -1164,12 +1164,49 @@ async function run() {
            c.code === 'no-link' && c.act === true;
   });
   ok('mirror: a sync that will retry itself is not raised as an alarm', () => {
-    IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec' });
+    const hadV = IO.mirror.settings.sheetV || 0;
+    /* the sheet HAS answered this device before, which is what makes this
+       failure a moment rather than a setup */
+    IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec', sheetV: 4 });
     const f = IO.mirror.fault();
-    IO.mirror.set({ url: '' });
+    IO.mirror.set({ url: '', sheetV: hadV });
     /* transient: no signal, a frozen tab, Google being slow. The rows go again
        on their own, so nothing is asked of the person and nothing is reddened */
     return f.code === 'unreachable' && f.act === false && !!f.say;
+  });
+  /* 2026-09-17, off a sync log from Tom's phone: the link was pasted, it ended
+     in /exec, and four manual syncs in two minutes each failed at about 3.3
+     seconds while the app said "nothing was lost, and it will go again on its
+     own". The sheet had answered v0 and no push had ever been confirmed, so
+     pressing the button again could not have worked. A never-worked link is a
+     setup to fix, not a blip to wait out. */
+  ok('mirror: a link that has NEVER answered is the user\'s problem', () => {
+    const hadV = IO.mirror.settings.sheetV || 0;
+    IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec', sheetV: 0 });
+    const f = IO.mirror.fault();
+    IO.mirror.set({ url: '', sheetV: hadV });
+    return f.code === 'never-answered' && f.act === true && /access/.test(f.say);
+  });
+  ok('mirror: an emptied push stamp is not proof the sheet ever answered', () => {
+    const hadV = IO.mirror.settings.sheetV || 0;
+    IO.mirror.set({ sheetV: 0, pushed: { __never: '' } });
+    const blank = IO.mirror.neverAnswered();
+    IO.mirror.set({ pushed: { __never: new Date().toISOString() } });
+    const stamped = IO.mirror.neverAnswered();
+    IO.mirror.set({ pushed: { __never: '' }, sheetV: hadV });
+    return blank === true && stamped === false;
+  });
+  ok('mirror: the sync pane stops saying "not synced yet" about a link that cannot work', () => {
+    const src = String(IO.syncRow);
+    /* the line the person reads without pressing anything, which is the only
+       place a never-worked link shows up on its own */
+    return /neverAnswered\(\)/.test(src) && /fault\(\)\.say/.test(src);
+  });
+  ok('mirror: an unconfirmed push stops calling itself normal when nothing ever landed', () => {
+    const src = String(IO.mirror.push) + String(IO.mirror.sync);
+    /* both the push's own words and the manual button's have to ask, or one of
+       them goes on saying "some browsers always do" over a broken deployment */
+    return (src.match(/never-answered/g) || []).length >= 2;
   });
   ok('mirror: why() still answers, so nothing that called it broke', () =>
     typeof IO.mirror.why() === 'string' && IO.mirror.why().length > 0);
