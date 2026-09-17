@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.15, 2026-09-17">
+<meta name="mb-version" content="1.0.16, 2026-09-17">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -310,6 +310,15 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .row .bar{position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:3px;background:var(--acc)}
 .row .t{font-family:var(--f1);font-size:11px;letter-spacing:.06em;color:var(--dim);width:60px;flex:0 0 auto;padding-left:8px}
 .row .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* A bullet on the home screen is the same bullet as everywhere else: the mark
+   in a .k, the words in a .tx, both dressed by shared/journal.js. The widget
+   only says how much room each gets inside a card this narrow. */
+.row.mb-bullet{align-items:flex-start}
+.row.mb-bullet .k{flex:0 0 auto;background:none;border:0;padding:0;margin-top:2px;
+  min-width:var(--tap,44px);min-height:var(--tap,44px);display:flex;align-items:center;
+  justify-content:center;color:var(--dim);cursor:pointer}
+.row.mb-bullet .k:hover{color:var(--acc)}
+.row.mb-bullet .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .d{font-size:10px;color:var(--dim2);font-family:var(--f1);letter-spacing:.06em;flex:0 0 auto}
 .row.done{opacity:.5}
 /* LINKS: the open-in-a-new-tab button on a link row. A full 44px target that
@@ -1174,14 +1183,37 @@ const notesOfKind = k => noteRows()
   .filter(r => r.payload.kind === k)
   .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
+/* ── one bullet, drawn one way ──
+   Tom, 2026-09-17: "All bullet entries should look the same regardless of
+   where." STATUS, LOG and QUESTS already drew one through shared/journal.js;
+   the home screen was the odd one out, building its own row out of a plain
+   span, so the same line wore a different face depending on which screen you
+   were looking at.
+
+   `mb-bullet` with a `.k` for the mark and a `.tx` for the words is the shared
+   contract, and asking journal.js for either half brings its stylesheet with
+   it. The mark says WHEN you are looking, not where the line came from: a box
+   is something to do today, an arrow is something that has moved on. */
+function bulletRow(r, day) {
+  const p = r.payload || {};
+  const row = el('div', 'row mb-bullet' +
+    (p.done && !p.movedAway ? ' done' : '') + (p.cancelled ? ' cancelled' : ''));
+  const k = el('button', 'k');
+  k.type = 'button';
+  k.innerHTML = Journal.markHTML(p.kind, day !== r.date || !!p.movedAway);
+  k.setAttribute('aria-label', p.kind === 'todo' ? (p.done ? 'Untick' : 'Tick') : (p.kind || 'bullet'));
+  row.appendChild(k);
+  row.appendChild(el('span', 'tx', Journal.textHTML(p, day)));
+  return row;
+}
+
 function bulletList(body, kind, empty) {
   const rows = notesOfKind(kind);
   if (!rows.length) { body.appendChild(el('div', 'empty', empty)); return; }
   const wrap = el('div', 'rowlist');
   rows.slice(0, 10).forEach(r => {
-    const row = el('div', 'row');
-    row.innerHTML = '<span class="t">' + esc(String(r.date || '').slice(5)) + '</span>' +
-      '<span class="n">' + esc(r.payload.text || '') + '</span>';
+    const row = bulletRow(r, r.date);
+    row.insertBefore(el('span', 't', esc(String(r.date || '').slice(5))), row.firstChild);
     wrap.appendChild(row);
   });
   body.appendChild(wrap);
@@ -1990,17 +2022,12 @@ const WIDGETS = {
       }
       const wrap = el('div', 'rowlist');
       list.slice(0, 12).forEach(x => {
-        const r = el('div', 'row');
         const age = todoFrom(x) ? daysBetween(todoFrom(x), LifeOS.day()) : 0;
         const from = todoSource(x);
-        r.innerHTML =
-          '<span class="n">' + esc(x.payload.text || '') + '</span>' +
-          (from ? '<span class="tag">' + esc(from) + '</span>' : '') +
-          (age > 0 ? '<span class="d">' + age + 'd</span>' : '');
-        const ck = el('button', 'chk', (typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '✓');
-        ck.setAttribute('aria-label', 'Tick it off');
-        ck.onclick = () => { tickTodo(x); drawHome(); };
-        r.insertBefore(ck, r.firstChild);
+        const r = bulletRow(x, LifeOS.day());
+        if (from) r.appendChild(el('span', 'tag', esc(from)));
+        if (age > 0) r.appendChild(el('span', 'd', age + 'd'));
+        r.querySelector('.k').onclick = e => { e.stopPropagation(); tickTodo(x); drawHome(); };
         wrap.appendChild(r);
       });
       body.appendChild(wrap);
