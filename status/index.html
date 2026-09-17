@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.25, 2026-09-17">
+<meta name="mb-version" content="1.0.26, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -109,6 +109,32 @@ main{
   padding:var(--s-3) var(--s-3) calc(70px + env(safe-area-inset-bottom));
 }
 .wrap{max-width:620px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s-3)}
+
+/* ── wide: the day beside the journal ──
+   Tom, 2026-09-17: "in wide view, can we have stats island and journal island
+   be side by side in the status app".
+
+   One column is the right answer on the phone this app was built for, and it
+   is what happens below 1024px, in the desktop widget at 320px and in the
+   check in at phone proportions — none of them ever reach this rule. What a
+   desk window has is a second column's worth of width going spare, and the
+   cost of not using it is that the day's numbers scroll off the top the
+   moment the journal has a few lines in it. The two things he is looking at
+   stop being visible at the same time.
+
+   Only the Today tab, which is the only screen that has these two cards; Food,
+   Money and Trends keep the 620px column they were laid out in. The add
+   button stays under the day card because the day card is what it adds to. */
+@media (min-width:1024px){
+  .wrap.beside{
+    max-width:1180px;
+    display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    align-items:start;column-gap:var(--s-4);
+  }
+  .wrap.beside > .isle{grid-column:1;grid-row:1}
+  .wrap.beside > .seam{grid-column:1;grid-row:2}
+  .wrap.beside > .jcard{grid-column:2;grid-row:1 / span 2}
+}
 
 /* ── cards: background does the separating ── */
 .card{background:var(--surface-1);border-radius:var(--radius-md);padding:var(--s-4);box-shadow:var(--e-1)}
@@ -3764,7 +3790,12 @@ function islandCard(d, opts) {
 
 function drawNow(m) {
   const d = vd();
-  m.appendChild(islandCard(d, { sortable: true }));
+  /* Named so the wide layout can place them. It places by class rather than by
+     position, so a card added to this screen later lands in the column it is
+     put in instead of silently taking the journal's place. */
+  const isle = islandCard(d, { sortable: true });
+  isle.classList.add('isle');
+  m.appendChild(isle);
 
   /* "Through the day" used to repeat every multi-entry field underneath the
      tiles, with its running total on the right — the same number the tile
@@ -3809,6 +3840,7 @@ function drawJournal(m) {
      say what they do by being pressed; an empty journal that explains itself
      is a journal that has decided you cannot read. */
   const c = card('Journal');
+  c.classList.add('jcard');
   const head = c.querySelector('h2');
   if (head) {
     /* The heading is the sort control. Tom, 2026-09-03: "Let the journal word
@@ -5625,6 +5657,9 @@ function draw() {
   db.style.display = chrome ? '' : 'none';
   if (chrome) { db.innerHTML = ''; db.appendChild(dateBar()); }
   document.getElementById('hdate').textContent = Day.short(Day.today());
+  /* Two columns are only ever right on Today, and only when there is room;
+     the media query decides the room and this decides the screen. */
+  m.classList.toggle('beside', TAB === 'now');
   if (TAB === 'now') drawNow(m);
   else if (TAB === 'food') drawFood(m);
   else if (TAB === 'money') drawMoney(m);
