@@ -593,6 +593,42 @@ purchase read as no payer at all, and naming 09267390244 made his three
 payments, ₱2,000 in July, ₱2,000 in August and ₱1,000 in September, read
 Arturo.
 
+### Net is on both money screens
+
+Tom, 2026-09-17: *"Money in and Money out should both immediately show me net
+amounts."* Net lived on SCORE only, so standing on MONEY OUT he could see
+every bill he pays and not whether the month paid for itself, and standing on
+MONEY IN he could see every payment and not what it was up against.
+
+`netCard` is the first card on both: in, out and net for this calendar month,
+with last month's net under it. The same card on both screens, so the figure
+cannot mean two things. Borrowed money is not in it, for the reason it is in
+no income figure.
+
+It answers a different question from UNALLOCATED and does not replace it: that
+one says "can I", this one says "did this month pay for itself".
+
+### Bills have a handle
+
+Tom, 2026-09-17: *"Put handles on things so I can rearrange."* Accounts, pots,
+categories and debts already had one. Bills were the longest list in the app
+without one, at eighteen rows.
+
+A bill carries `ord`, and one with none sorts after the ones that have it, by
+its next due date, so a card he has never dragged in reads exactly as it
+always did and one drag settles that whole card. Each of the three cards is
+its own list, so a drag never reaches across into another card, and the
+allowances now sit in a list of their own beneath the bills: they are
+categories, they are rearranged where categories are, and a row that cannot be
+dropped has no business inside a list that can.
+
+No Move up and Move down in the bill's menu, unlike the other four. Those read
+one flat order and bills are drawn in three cards, so a nudge could step a bill
+past one in another card and look like it did nothing.
+
+Watched: three bills, the last dragged by its handle to the top, `ord` written
+0, 1, 2 and the new order still standing after a redraw.
+
 ### A payment sheet must merge, like everything else
 
 Found while adding the above, and older than it: `paidSheet` rebuilt the whole

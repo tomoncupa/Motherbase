@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.14, 2026-09-17">
+<meta name="mb-version" content="1.0.15, 2026-09-17">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -459,8 +459,15 @@ const pots = () => Rec.all('pot').map(r => Object.assign({ id: r.key }, r.payloa
   .sort((a, b) => (a.ord || 0) - (b.ord || 0));
 const debts = () => Rec.all('debt').map(r => Object.assign({ id: r.key }, r.payload))
   .sort((a, b) => (a.ord || 0) - (b.ord || 0));
+/* Bills run in due-date order until he drags one, and then they run in his.
+   Tom, 2026-09-17: "Put handles on things so I can rearrange." Accounts, pots,
+   categories and debts already had a handle; bills were the longest list in
+   the app without one, at eighteen rows. A bill with no `ord` sorts after the
+   ones that have it, by its next due date, so a card he has never touched
+   reads exactly as it always did and one drag settles that whole card. */
 const bills = () => Rec.all('bill').map(r => Object.assign({ id: r.key }, r.payload))
-  .sort((a, b) => billOrder(a) - billOrder(b));
+  .sort((a, b) => (a.ord == null ? 900 + billOrder(a) : a.ord) -
+                  (b.ord == null ? 900 + billOrder(b) : b.ord));
 /* A monthly bill sits at its day. A bill every few days sits at the day of
    the month it is next due, so the list still reads in due-date order. */
 const billOrder = b => b.cycle === 'days'
@@ -2973,8 +2980,39 @@ function drawScore(m) {
   }
 }
 
+/* == in, out and net, at the top of both money screens ==
+   Tom, 2026-09-17: "Money in and Money out should both immediately show me
+   net amounts." Net lived on SCORE only, so standing on MONEY OUT he could
+   see every bill he pays and not whether the month paid for itself, and
+   standing on MONEY IN he could see every payment and not what it was up
+   against. The same card is drawn first on both, so the figure means the same
+   thing whichever screen he is standing on.
+
+   Net is what arrived less what went out, this calendar month. Borrowed money
+   is not in it, for the reason it is not in any income figure. It answers a
+   different question from UNALLOCATED: that one says "can I", this one says
+   "did this month pay for itself". */
+function netCard() {
+  const now = monthOf(Day.today()), prev = monthBack(now, 1);
+  const inNow = monthIn(now), outNow = monthSpend(now).total, net = inNow - outNow;
+  const inPrev = monthIn(prev), outPrev = monthSpend(prev).total, netPrev = inPrev - outPrev;
+  const c = card(monthName(now).toUpperCase());
+  const g = el('div', 'grid3');
+  g.appendChild(tile('IN', short(inNow), 'received this month'));
+  g.appendChild(tile('OUT', short(outNow), 'spent this month'));
+  g.appendChild(tile('NET', (net > 0 ? '+' : '') + short(net),
+    net >= 0 ? 'the month paid for itself' : 'more went out than came in',
+    net < 0 ? 'bad' : 'good'));
+  c.appendChild(g);
+  if (inPrev || outPrev) c.appendChild(el('div', 'note', monthName(prev) + ': <b>' +
+    esc((netPrev > 0 ? '+' : '') + money(netPrev)) + '</b> net, ' + esc(money(inPrev)) + ' in and ' +
+    esc(money(outPrev)) + ' out.'));
+  return c;
+}
+
 /* ── MONEY IN ── */
 function drawIn(m) {
+  m.appendChild(netCard());
   const now = monthOf(Day.today());
   const exp = expected(monthStart(monthBack(now, 1)), monthEnd(monthBack(now, -2)));
   const late = exp.filter(e => e.late);
@@ -3219,6 +3257,7 @@ function drawClients(m) {
 
 /* ── MONEY OUT ── */
 function drawOut(m) {
+  m.appendChild(netCard());
   const bl = bills();
   /* Tom, 2026-09-14: three cards, every bill in exactly one. Bills and
      utilities; subscriptions, memberships and operating costs, "emphasise the
@@ -3253,6 +3292,7 @@ function drawOut(m) {
         : num(b.day, 1)) + ' · ' + catName(b.cat) +
       (b.acct ? ' · ' + esc(acctName(b.acct)) : ''), money(billMonthly(b)) + '/mo');
     r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
+    r.dataset.id = b.id;
     return r;
   };
   const shelfCard = (id, title, empty, more, extra) => {
@@ -3262,9 +3302,19 @@ function drawOut(m) {
     if (!list.length && !allow.length) c.appendChild(el('div', 'empty', empty));
     else {
       const l = el('div', 'list');
+      /* One card is one list, so a drag settles the order inside the card it
+         happened in and leaves the other two alone. The allowances sit in a
+         list of their own: they are categories, they are rearranged where
+         categories are, and a row that cannot be dropped has no business
+         inside a list that can. */
+      if (list.length > 1) l.dataset.sort = 'bill';
       list.forEach(b => l.appendChild(billRow(b)));
-      allow.forEach(x => l.appendChild(allowRow(x)));
       c.appendChild(l);
+      if (allow.length) {
+        const al = el('div', 'list');
+        allow.forEach(x => al.appendChild(allowRow(x)));
+        c.appendChild(al);
+      }
       /* A bill under a category with an allowance is inside that allowance,
          so it is not added to the month a second time. */
       const mo = list.filter(b => !hasAllowance(b.cat)).reduce((a, b) => a + billMonthly(b), 0) +
