@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.7, 2026-09-16">
+<meta name="mb-version" content="1.0.8, 2026-09-17">
 <title>QUESTS</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -537,9 +537,18 @@ const movedFrom = d => quests().filter(x => {
    the stamp is QUESTS's if it carries all three fields only QUESTS writes on
    creation, and STATUS's otherwise. LOG writes STATUS's payload, so a line
    added in LOG reads STATUS too. ARC writes a todo for a skill in training
-   and for a review that is due (2026-09-16), stamped `arc`. */
-const SRC_NAME = { quest: 'QUESTS', status: 'STATUS', block: 'BLOCK', arc: 'ARC' };
-const srcOf = x => SRC_NAME[x.src] ? x.src : (('pri' in x && 'proj' in x && 'rep' in x) ? 'quest' : 'status');
+   and for a review that is due (2026-09-16), stamped `arc`.
+
+   WEALTH writes one per bill coming up, stamped `wealth`, and those were
+   reading STATUS. The bug was not the missing name: it was that an app this
+   list had never heard of was quietly called STATUS, so the next writer to
+   arrive would have been mislabelled the same way and nothing would have
+   said so. A src that is not in the table now names itself. */
+const SRC_NAME = { quest: 'QUESTS', status: 'STATUS', block: 'BLOCK', arc: 'ARC', wealth: 'WEALTH' };
+/* A row from before the stamp carries no src at all: QUESTS's if it has the
+   three fields only QUESTS writes on creation, STATUS's otherwise. */
+const srcOf = x => x.src || (('pri' in x && 'proj' in x && 'rep' in x) ? 'quest' : 'status');
+const srcName = x => { const s = srcOf(x); return SRC_NAME[s] || String(s).toUpperCase(); };
 const durTxt = m => (m >= 60 ? Math.floor(m / 60) + 'h' : '') + (m % 60 ? (m % 60) + (m >= 60 ? '' : 'm') : '');
 
 const projects = () => Object.entries(Rec.map('project'))
@@ -752,7 +761,7 @@ function rowEl(x, info) {
     meta.appendChild(s);
   }
   if (x.rep) meta.appendChild(el('span', null, ico('repeat') + esc(repLabel(x.rep))));
-  meta.appendChild(el('span', 'src', SRC_NAME[srcOf(x)]));
+  meta.appendChild(el('span', 'src', esc(srcName(x))));
   if (x.proj && info.showProj) meta.appendChild(el('span', 'pj', '<span class="hash" style="color:var(--data-' +
     ((Rec.get('project', null, x.proj) || {}).slot || 1) + ')">#</span> ' + esc(projName(x.proj))));
   body.appendChild(meta);
