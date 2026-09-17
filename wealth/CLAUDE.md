@@ -593,6 +593,61 @@ purchase read as no payer at all, and naming 09267390244 made his three
 payments, ₱2,000 in July, ₱2,000 in August and ₱1,000 in September, read
 Arturo.
 
+### The month has a finish line
+
+Tom, 2026-09-17: *"I don't want to play month to month, I want to make money
+and save per month, Give me a goal line not just break even."*
+
+THIS MONTH on SCORE: what has been earned, against what the month costs plus
+what he says he puts away. Costs are the two numbers runway is built from, so
+the goal line and runway can never disagree. The bar carries the same pace
+mark an allowance wears.
+
+**The app never picks the savings figure.** A savings target is a claim about
+how somebody should live, and law 6 already says nothing ships with a cap;
+this is a cap in the other direction. The sheet shows what a month costs and
+what three months would be, because those are facts he owns, then leaves the
+box empty. It is `wealth.saveGoal`.
+
+**Put away means money moved into a pot**, not money left over. Money still in
+the account at the end of the month is unspent, not saved, and the difference
+is why the pots exist at all.
+
+Watched: costs ₱20,000 and a ₱10,000 target read "₱29,000 of ₱30,000", ₱1,000
+to go with 13 days left, and put away ₱4,000 of ₱10,000 from one pot move.
+
+### Recurring and one-off are not the same money
+
+Tom, 2026-09-17, said yes to splitting them. Client money and one-off money
+behave differently and MONEY IN treated them the same, so a month carried by
+one commercial read exactly like a month carried by his clients.
+
+RECURRING AND ONE-OFF, under net on MONEY IN: what came from clients this
+month, what came from everything else, and underneath, what his clients are
+worth a month on their terms against what the month costs. When the clients do
+not cover it, the difference is named as what one-off work has to find.
+
+`clientMonthly` returns null for a client the app cannot value, a session
+client with no pace, so those are counted apart rather than as zero. **A
+client whose worth is unknown is not a client worth nothing.**
+
+Watched: ₱20,000 from clients and ₱9,000 one-off, against ₱25,000 of client
+worth and ₱20,000 of costs.
+
+### What losing one client would do
+
+Tom, 2026-09-17, said yes. Concentration was a bar on the CLIENTS tab and
+nowhere near the client himself, so the one screen where he is thinking about
+one person never said what losing them would cost.
+
+The client's own sheet says what they are worth a month, their share of client
+income, and what that income would be without them, against the month's costs.
+Numbers, no advice, law 7. A client the app cannot value says so and points at
+the sessions-a-week box below it.
+
+Watched: a ₱20,000 client of a ₱25,000 book read 80%, and ₱5,000 a month
+without them against ₱20,000 of costs.
+
 ### Net is on both money screens
 
 Tom, 2026-09-17: *"Money in and Money out should both immediately show me net

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.15, 2026-09-17">
+<meta name="mb-version" content="1.0.16, 2026-09-17">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -2739,6 +2739,12 @@ function drawMoneyTab(pane) {
       esc(Cur.sym(Cur.alt()) + (ex / Cur.rate()).toFixed(2)) + '</b>.'));
   }
 
+  pane.appendChild(el('h2', null, 'WHAT YOU PUT AWAY'));
+  pane.appendChild(UI.row('Every month, put away',
+    'Added to what the month costs to make the goal line on SCORE. Counted from money you move into a pot.',
+    (() => { const btn = el('button', 'btn mb-tap', saveGoal() ? money(saveGoal()) : 'Not set');
+      btn.type = 'button'; btn.onclick = () => goalSheet(); return btn; })()));
+
   pane.appendChild(el('h2', null, 'BILLS AS BULLETS'));
   pane.appendChild(UI.row('A todo bullet for every bill coming up',
     'Written as an ordinary journal line, so it shows in STATUS on the day it is due, in QUESTS under Today and Upcoming, and in LOG. Ticking one logs the payment here; unticking takes it back. Loan repayments never get one, and paying a bill takes its bullet back.',
@@ -2888,6 +2894,8 @@ function drawScore(m) {
   }
   m.appendChild(c1);
 
+  m.appendChild(goalCard());
+
   /* Runway. The app's real subject. */
   const c2 = card('RUNWAY');
   if (!rw) {
@@ -2992,6 +3000,133 @@ function drawScore(m) {
    is not in it, for the reason it is not in any income figure. It answers a
    different question from UNALLOCATED: that one says "can I", this one says
    "did this month pay for itself". */
+/* == the month has a finish line ==
+   Tom, 2026-09-17: "I don't want to play month to month, I want to make money
+   and save per month, Give me a goal line not just break even."
+
+   So the line is what the month COSTS plus what he says he wants to put aside,
+   and the app never picks the second number. A savings figure is a claim about
+   how somebody should live, which is law 6: nothing ships with a cap, and this
+   is a cap in the other direction.
+
+   Costs are the same two numbers runway is built from, so the goal line and
+   runway can never disagree: the bills he has listed, plus the middle of his
+   last six months of everyday spending, big one-offs left out.
+
+   Put aside means money he actually moved into a pot this month. Money left
+   over at the end of a month is not saved, it is unspent, and the difference
+   is the whole reason the pots exist. */
+const costsMonthly = () => standingBills() + typicalVariable();
+const saveGoal = () => Math.max(0, num(S.get('saveGoal', 0), 0));
+const putAside = mo => moves({ from: monthStart(mo), to: monthEnd(mo) })
+  .reduce((a, x) => a + (x.dir === 'out' ? -num(x.amt, 0) : num(x.amt, 0)), 0);
+function goalCard() {
+  const mo = monthOf(Day.today()), t = Day.today();
+  const costs = costsMonthly(), save = saveGoal(), need = costs + save;
+  const got = monthIn(mo), aside = putAside(mo);
+  const days = Day.diff(monthEnd(mo), monthStart(mo)) + 1;
+  const gone = Day.diff(t, monthStart(mo)) + 1;
+  const c = card('THIS MONTH');
+  const sc = el('div', 'score');
+  sc.appendChild(el('div', 'cap', save ? 'EARNED OF YOUR GOAL' : 'EARNED OF WHAT THE MONTH COSTS'));
+  sc.appendChild(el('div', 'big' + (need && got >= need ? ' good' : ''), money(got)));
+  sc.appendChild(el('div', 'sub', 'of ' + money(need) + '. ' + money(costs) + ' to cover the month' +
+    (save ? ', and ' + money(save) + ' to put away' : '') + '.'));
+  c.appendChild(sc);
+
+  /* The same bar an allowance wears, and the same mark: where an even month
+     would have you today. A line to read against, never a rule. */
+  const bar = el('div', 'bar c2');
+  bar.style.position = 'relative';
+  bar.appendChild(el('i')).style.width = Math.min(100, need ? got / need * 100 : 0).toFixed(1) + '%';
+  if (gone < days) {
+    const tick = el('i');
+    tick.style.position = 'absolute';
+    tick.style.left = (gone / days * 100).toFixed(1) + '%';
+    tick.style.top = '0'; tick.style.bottom = '0';
+    tick.style.width = 'var(--border-width)';
+    tick.style.background = 'var(--text-1)';
+    tick.style.opacity = '.55';
+    bar.appendChild(tick);
+  }
+  c.appendChild(bar);
+  c.appendChild(el('div', 'note', (got >= need
+    ? '<b>' + esc(money(got - need)) + '</b> past it'
+    : '<b>' + esc(money(need - got)) + '</b> to go') +
+    ', with ' + (days - gone) + ' day' + (days - gone === 1 ? '' : 's') + ' left. ' +
+    'The mark is where an even month would put you today.'));
+
+  if (save) c.appendChild(el('div', 'note', 'Put away so far: <b>' + esc(money(aside)) +
+    '</b> of ' + esc(money(save)) + (aside < save
+      ? '. Money that is still in your account at the end of the month is unspent, not saved.'
+      : '. That is this month done.')));
+  const btn = el('button', 'btn mb-press mb-tap', save ? 'Change what you put away' : 'Say what you want to put away');
+  btn.type = 'button';
+  btn.onclick = () => goalSheet();
+  const w = el('div', 'rowbtns');
+  w.style.justifyContent = 'center';
+  w.appendChild(btn);
+  c.appendChild(w);
+  return c;
+}
+/* His number, never the app's. The sheet shows what a month costs and what
+   three months of it would be, because those are facts he already owns, and
+   then leaves the box empty. */
+function goalSheet() {
+  UI.dialog({
+    title: 'WHAT YOU PUT AWAY', width: 460,
+    body: (b, h) => {
+      const amt = amountField(saveGoal() || '');
+      b.appendChild(fld('Every month, put away', amt));
+      b.appendChild(el('div', 'note', 'A month of your standing costs is <b>' + esc(money(costsMonthly())) +
+        '</b>, so three months of cover is <b>' + esc(money(costsMonthly() * 3)) +
+        '</b>. Those are facts about your money, not a target: the target is whatever you type here.'));
+      b.appendChild(el('div', 'note', 'It is counted from money you actually move into a pot, under <b>POTS</b>.'));
+      h.save = () => { S.set('saveGoal', num(amt.value, 0)); return true; };
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: h => { h.save(); draw(); return true; } }],
+  });
+}
+
+/* == what is recurring, and what is not ==
+   Tom, 2026-09-17, said yes to splitting them. Client money and one-off money
+   behave differently and the app was treating them the same, so a month
+   carried by one commercial read exactly like a month carried by his clients.
+
+   `clientMonthly` returns null for a client the app cannot value, a session
+   client with no pace, so those are counted separately rather than as zero. A
+   client whose worth is unknown is not a client worth nothing. */
+function recurringIn() {
+  let known = 0, unknown = 0;
+  clients().forEach(c => {
+    if (c.status === 'done') return;
+    const v = clientMonthly(c);
+    if (v == null) unknown++; else known += v;
+  });
+  return { known: known, unknown: unknown };
+}
+function shapeCard() {
+  const mo = monthOf(Day.today());
+  const rows = paidRows({ from: monthStart(mo), to: monthEnd(mo) }).filter(x => !isLoanIn(x));
+  const fromClients = rows.filter(x => x.client).reduce((a, x) => a + num(x.amt, 0), 0);
+  const oneOff = rows.filter(x => !x.client).reduce((a, x) => a + num(x.amt, 0), 0);
+  const rec = recurringIn(), costs = costsMonthly();
+  const gap = costs - rec.known;
+  const c = card('RECURRING AND ONE-OFF');
+  const g = el('div', 'grid2');
+  g.appendChild(tile('FROM CLIENTS', short(fromClients), monthName(mo)));
+  g.appendChild(tile('ONE-OFF', short(oneOff), 'commercials, workshops, anything'));
+  c.appendChild(g);
+  c.appendChild(el('div', 'note', 'Your clients are worth about <b>' + esc(money(rec.known)) +
+    '</b> a month on their terms' + (rec.unknown
+      ? ', and ' + rec.unknown + ' more cannot be valued until you set their sessions a week'
+      : '') + '. The month costs <b>' + esc(money(costs)) + '</b>.' +
+    (gap > 0
+      ? ' The difference, <b>' + esc(money(gap)) + '</b>, is what one-off work has to cover every month.'
+      : ' Your clients cover it.')));
+  return c;
+}
+
 function netCard() {
   const now = monthOf(Day.today()), prev = monthBack(now, 1);
   const inNow = monthIn(now), outNow = monthSpend(now).total, net = inNow - outNow;
@@ -3013,6 +3148,7 @@ function netCard() {
 /* ── MONEY IN ── */
 function drawIn(m) {
   m.appendChild(netCard());
+  m.appendChild(shapeCard());
   const now = monthOf(Day.today());
   const exp = expected(monthStart(monthBack(now, 1)), monthEnd(monthBack(now, -2)));
   const late = exp.filter(e => e.late);
@@ -4524,6 +4660,21 @@ function clientSheet(c) {
          client pays on time on average." Most of a client's history happened
          before WEALTH did, so the figure described the app, not the client. */
       b.appendChild(g);
+      /* Tom, 2026-09-17, said yes to "if this client left". Concentration was
+         a number on the CLIENTS bars and nowhere near the client himself, so
+         the one screen where he is thinking about one person never said what
+         losing them would do. Numbers only: what the recurring income is with
+         them and without, and their share of it. No advice, per law 7. */
+      const worth = clientMonthly(c), rec = recurringIn();
+      if (worth != null && worth > 0 && rec.known > 0) {
+        const without = Math.max(0, rec.known - worth);
+        b.appendChild(el('div', 'note', 'Worth about <b>' + esc(money(worth)) +
+          '</b> a month, <b>' + Math.round(worth / rec.known * 100) + '%</b> of your client income. ' +
+          'Without them it would be ' + esc(money(without)) + ' a month against ' +
+          esc(money(costsMonthly())) + ' of costs.'));
+      } else if (worth == null) {
+        b.appendChild(el('div', 'note', 'Worth a month is unknown until you set their sessions a week, below.'));
+      }
 
       const name = UI.field('name', { value: c.name });
       b.appendChild(fld('Name', name));
