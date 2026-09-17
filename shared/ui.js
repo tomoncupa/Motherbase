@@ -368,6 +368,11 @@ const UI = {
      Read off the box rather than set per call site, so an app gets it without
      being edited and cannot forget. A box that genuinely wants the caret left
      alone says so with `data-keep-caret`. */
+  /** Blur whatever is focused, so a field that commits on blur commits now.
+      Called for you when the page is hidden or going; exposed for an app that
+      needs to do it at another moment, such as before it writes. */
+  commitFocused() { commitFocused(); },
+
   isNumberBox(n) {
     if (!n || n.tagName !== 'INPUT') return false;
     if (n.hasAttribute('data-keep-caret')) return false;
@@ -775,6 +780,46 @@ const UI = {
     });
   },
 };
+
+/* ══════════════ nothing half-typed is lost ══════════════
+   Tom, 2026-09-17: "I want my changes to persist even after I refresh right
+   after making them."
+
+   A field that commits on blur has not committed anything while the cursor is
+   still in it, and reloading a page does not reliably blur what was focused
+   first. So a time typed into BLOCK's routine start and then refreshed was
+   never handed to the app at all: not a save that lost a race, a value the app
+   had never been told about.
+
+   Blurring the focused element here runs whatever that field does on blur, in
+   the ordinary way, before anything goes. `pagehide` and a hidden document
+   both count, because a phone gets the second and rarely the first.
+
+   Apps that hold work in memory still have to write it; this only makes sure
+   the last thing typed has reached them. BLOCK does the writing half itself. */
+function commitFocused() {
+  const n = document.activeElement;
+  if (!n || n === document.body || typeof n.blur !== 'function') return;
+  /* A browser does not always DISPATCH blur while the document itself is not
+     focused, and a page being hidden or closed is exactly that moment. It will
+     still take the focus away, so "is it still the active element" answers the
+     wrong question: the field loses focus and its handler never runs, which is
+     the case that loses the edit.
+
+     So the event is watched for rather than guessed at, and fired by hand only
+     when the real one did not arrive. Watched in the capture phase, because a
+     blur does not bubble. */
+  let fired = false;
+  const mark = () => { fired = true; };
+  n.addEventListener('blur', mark, true);
+  try { n.blur(); } catch (e) {}
+  n.removeEventListener('blur', mark, true);
+  if (!fired) { try { n.dispatchEvent(new FocusEvent('blur')); } catch (e) {} }
+}
+addEventListener('pagehide', commitFocused);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') commitFocused();
+});
 
 /* ── and the same rule wherever focus lands, not only where focusSoon put it ──
    Tapping into an amount by hand is the common case and it never went through

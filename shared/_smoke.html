@@ -1820,6 +1820,39 @@ async function run() {
     return ['number', 'decimal', 'money'].every(k => UI.isNumberBox(M.field(document.createElement('input'), k))) &&
       !UI.isNumberBox(M.field(document.createElement('input'), 'text'));
   })());
+  /* ---- nothing half-typed is lost ----
+     One level under "my change to the base time did not survive a refresh".
+     The bug was never about BLOCK or about times: it is that a field which
+     commits on BLUR has told the app nothing while the cursor is still in it,
+     and a page going away does not reliably blur it first. So the thing to
+     check is that asking for a commit runs the field's own blur handler, even
+     when the document is not focused and the real event never fires — which
+     is exactly the state a test runs in, so this cannot pass by luck. */
+  ok('ui: committing the focused field runs its blur handler', (() => {
+    const n = document.createElement('input');
+    n.type = 'text';
+    let ran = 0, saw = '';
+    n.onblur = () => { ran++; saw = n.value; };
+    document.body.appendChild(n);
+    n.focus();
+    n.value = '8:15';
+    UI.commitFocused();
+    const out = { ran: ran, saw: saw };
+    n.remove();
+    return out.ran === 1 && out.saw === '8:15';
+  })());
+  ok('ui: committing with nothing focused does nothing at all', (() => {
+    const n = document.createElement('input');
+    let ran = 0;
+    n.onblur = () => { ran++; };
+    document.body.appendChild(n);
+    n.blur();
+    if (document.activeElement === n) { n.remove(); return true; }   /* could not unfocus; not the case being asked about */
+    UI.commitFocused();
+    n.remove();
+    return ran === 0;
+  })());
+
   ok('ui: a box that asks to keep its caret is left alone', (() => {
     const n = document.createElement('input');
     n.type = 'number'; n.setAttribute('data-keep-caret', '1');
