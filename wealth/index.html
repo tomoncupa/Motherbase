@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.13, 2026-09-17">
+<meta name="mb-version" content="1.0.14, 2026-09-17">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -3603,6 +3603,16 @@ let CATFILTER = null;
    1. One bullet per bill per due date, written once. The day it was written
       on is remembered in a setting, the way ARC remembers its own, so a row
       is never written twice on two different days.
+   1b. And only the EARLIEST outstanding date per bill. Tom, 2026-09-17: "Why
+      does pay skool show up twice in my todo widget? meralco too." They were
+      not duplicates: they were the next occurrences of one recurring bill,
+      each a real row with its own due date. Meralco is every 6 to 7 days
+      (Tom, 2026-09-14) and bills are read 30 days ahead, so four or five of
+      them are in the window at once, and every one that has gone unmatched is
+      overdue and therefore on today's list. Two lines reading `Pay Meralco,
+      1,040` with nothing to tell them apart is a bug however true they both
+      are. You cannot pay next week's before this week's, so the list carries
+      the one you can act on and the next appears when it is cleared.
    2. A bullet he deleted stays deleted, by its tombstone.
    3. A bill that is paid or gone loses its bullet, unless he has ticked it.
       Paying the bill is the thing that clears it, which is `billsOwed`, the
@@ -3622,8 +3632,15 @@ function billTodoSync() {
     if (!cur) { delete made[k]; dirty = true; return; }
     billTick(k, made[k], cur);
   });
+  const firstPerBill = {};
   billsOwed(t, Day.shift(t, BILL_TODO_DAYS)).forEach(x => {
     if (catGrp(x.bill.cat) === 'move') return;
+    /* `billsOwed` comes back in date order per bill, so the first one seen is
+       the earliest. A later one is skipped rather than written, and any that
+       was written before this rule existed falls out of `want` below and is
+       taken back on the next pass. A ticked one is kept, as ever. */
+    if (firstPerBill[x.bill.id]) return;
+    firstPerBill[x.bill.id] = x.date;
     const k = 'wealth-bill-' + x.bill.id + '-' + x.date;
     want[k] = 1;
     if (made[k] || Rec.tombstone('note', t, k)) return;
