@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.3, 2026-09-15">
+<meta name="mb-version" content="1.0.4, 2026-09-17">
 <title>CHECK IN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◎</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -224,7 +224,11 @@ const APP = {
   name: 'CHECK IN',
   icon: '◎',
   blurb: 'photos, weight and how the week went',
-  types: ['cfield', 'cval', 'cphoto', 'checkin', 'cmark', 'cref', 'cperson'],
+  /* `phase` is TRAIN's type and CHECK IN writes it too, since a project here
+     IS a training block. Registered so the ones added from this screen reach
+     the sheet, and read back from TRAIN below so a device where TRAIN has
+     never been opened still sees the blocks (foundation item 19). */
+  types: ['cfield', 'cval', 'cphoto', 'checkin', 'cmark', 'cref', 'cperson', 'phase'],
 };
 
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
@@ -233,7 +237,8 @@ if (window.Icons) Icons.paint();
 Sfx.init(APP.id);
 Rec.declare(APP.id, APP.types);
 /* `reads`: the weigh-ins, which are STATUS's rows, from STATUS's sheet tab */
-IO.register({ app: APP.id, name: APP.name, types: APP.types, reads: { status: ['ev', 'field'] } });
+IO.register({ app: APP.id, name: APP.name, types: APP.types,
+  reads: { status: ['ev', 'field'], train: ['phase'] } });
 
 const $ = s => document.querySelector(s);
 const esc = UI.esc;
@@ -373,6 +378,38 @@ function checkinDates(pid) {
   return Array.from(s).sort();
 }
 const poseDates = (pose, pid) => checkinDates(pid).filter(d => Rec.has('cphoto', d, K(pid == null ? who : pid, pose)));
+
+/* ══════════════ projects ══════════════
+   Tom, 2026-09-17: "be able to denote projects in check in", and a project is
+   a training phase: a cut, a bulk, a prep. A named stretch with a start and
+   maybe an end.
+
+   These are TRAIN's `phase` rows, not a second list of the same thing. A
+   training block is a training block whichever app you are standing in, and
+   two lists would mean naming his cut twice and watching them disagree. The
+   ownership rule permits this: an owner is who is responsible for the SHAPE,
+   not who is allowed to write (root brief, "Many writers is fine"). So this
+   reads them all and, when it adds one, patches rather than rebuilds, which is
+   the rule that actually protects a row.
+
+   `proj` is the chosen one, or '' for all time. Kept per device as a setting,
+   because which block you are looking at is a view and not a record. */
+const phases = () => Rec.all('phase')
+  .filter(r => !r.deleted && r.payload && r.payload.start)
+  .map(r => ({ key: r.key, name: r.payload.name || 'Block', start: r.payload.start, end: r.payload.end || null }))
+  .sort((a, b) => String(b.start).localeCompare(String(a.start)));
+const phaseByKey = k => phases().filter(x => x.key === k)[0] || null;
+/* A day is inside a block from its start, and up to its end when it has one.
+   A block with no end is still running, so today is inside it. */
+const inPhase = (d, ph) => !!ph && d >= ph.start && (!ph.end || d <= ph.end);
+function projNow() {
+  const k = opt('proj', '');
+  return k && phaseByKey(k) ? k : '';
+}
+function projDates(dates) {
+  const ph = phaseByKey(projNow());
+  return ph ? dates.filter(d => inPhase(d, ph)) : dates;
+}
 
 function loadImg(src) {
   return new Promise((res, rej) => {
@@ -1044,12 +1081,17 @@ function drawProgress() {
   note.hidden = !engineLine();
   c.appendChild(note);
 
+  c.appendChild(projChips());
+
   const pose = progPose, label = poseLabel(who, pose);
-  const dates = poseDates(pose, who);
+  const allDates = poseDates(pose, who);
+  const dates = projDates(allDates);
+  const ph = phaseByKey(projNow());
   const first = dates[0], latest = dates.length > 1 ? dates[dates.length - 1] : null;
   const cols = [
     { name: 'Goal', ph: goalOf(pose), m: goalMarkOf(pose), open: () => goalMenu(pose, label) },
-    { name: first ? 'First, ' + Day.short(first) : 'First', ph: first ? photoOf(first, pose) : null, m: first ? markOf(first, pose) : null,
+    { name: first ? (ph ? 'Block start, ' : 'First, ') + Day.short(first) : (ph ? 'Block start' : 'First'),
+      ph: first ? photoOf(first, pose) : null, m: first ? markOf(first, pose) : null,
       open: first ? () => Dots.open({ src: 'cphoto', date: first, key: K(who, pose), title: label + ', ' + Day.label(first) }) : null },
     { name: latest ? 'Latest, ' + Day.short(latest) : 'Latest', ph: latest ? photoOf(latest, pose) : null, m: latest ? markOf(latest, pose) : null,
       open: latest ? () => Dots.open({ src: 'cphoto', date: latest, key: K(who, pose), title: label + ', ' + Day.label(latest) }) : null },
@@ -1069,7 +1111,8 @@ function drawProgress() {
   const R = cols.map(col => ratiosOf(col.m));
   if (R.some(Boolean)) {
     const wrap = el('div', 'tbl'), t = el('table', 'nums');
-    t.innerHTML = '<tr><th></th><th>Goal</th><th>First</th><th>Latest</th><th>Since first</th></tr>' +
+    t.innerHTML = '<tr><th></th><th>Goal</th><th>' + (ph ? 'Block start' : 'First') + '</th><th>Latest</th><th>' +
+      (ph ? 'This block' : 'Since first') + '</th></tr>' +
       RATIOS.map(([k, name]) => {
         const g = R[0] && R[0][k], a = R[1] && R[1][k], b = R[2] && R[2][k];
         /* rounded before the sign is chosen, or a change of -0.001 reads as "−0.00" */
@@ -1083,6 +1126,9 @@ function drawProgress() {
       c.appendChild(el('p', 'muted', 'Some dots are the app&#8217;s guesses, where an arm touches the body. Tap a photo to check them.'));
   } else if (dates.length) {
     c.appendChild(el('p', 'muted', 'The photos are being measured.'));
+  } else if (ph && allDates.length) {
+    c.appendChild(el('p', 'muted', 'No check-in for this pose inside ' + esc(ph.name) + ' yet. ' +
+      allDates.length + ' outside it.'));
   } else {
     c.appendChild(el('p', 'muted', 'Once this pose has a photo, its measurements appear here.'));
   }
@@ -1095,6 +1141,85 @@ function drawProgress() {
   acts.appendChild(cl); acts.appendChild(sv);
   c.appendChild(acts);
   return c;
+}
+
+/* ── ALL TIME, then one chip per block ──
+   The same row of chips the poses already use, so there is one way to narrow
+   this screen rather than two. The chip says the dates because a block called
+   CUT means nothing six months later without them. */
+function projChips() {
+  const box = el('div', 'chips');
+  const cur = projNow();
+  const pick = k => { Rec.setting(APP.id, 'proj', k); draw(); };
+
+  const all = el('button', 'mb-btn mb-press mb-tap' + (cur ? '' : ' on'), 'ALL TIME');
+  all.type = 'button';
+  all.onclick = () => pick('');
+  box.appendChild(all);
+
+  phases().forEach(ph => {
+    const b = el('button', 'mb-btn mb-press mb-tap' + (ph.key === cur ? ' on' : ''),
+      esc(ph.name) + ' <small>' + esc(Day.short(ph.start)) + (ph.end ? '\u2013' + esc(Day.short(ph.end)) : '') + '</small>');
+    b.type = 'button';
+    b.onclick = () => pick(ph.key);
+    b.oncontextmenu = ev => { ev.preventDefault(); projMenu(ph, ev.clientX, ev.clientY); };
+    if (window.Mobile && Mobile.hold) Mobile.hold(b, () => projMenu(ph, 0, 0));
+    box.appendChild(b);
+  });
+
+  const add = el('button', 'mb-btn mb-press mb-tap', '+ BLOCK');
+  add.type = 'button';
+  add.onclick = () => projSheet(null);
+  box.appendChild(add);
+  return box;
+}
+
+function projMenu(ph, x, y) {
+  UI.menu(x, y, [
+    { label: 'Edit', fn: () => projSheet(ph) },
+    { label: 'End it today', fn: () => {
+      Rec.patch('phase', null, ph.key, { end: Day.today() });
+      draw();
+    } },
+  ], { title: ph.name.toUpperCase() });
+}
+
+/* Patched, never rebuilt: TRAIN writes these rows too and may know fields this
+   screen has never heard of. */
+function projSheet(ph) {
+  UI.dialog({
+    title: ph ? 'Training block' : 'New training block', width: 320,
+    body: b => {
+      b.appendChild(el('label', 'fl', 'Name'));
+      const nm = UI.field('name', { value: ph ? ph.name : '' });
+      b.appendChild(nm);
+      b.appendChild(el('label', 'fl', 'Started'));
+      const st = document.createElement('input');
+      st.type = 'date'; st.className = 'mb-input'; st.style.width = '100%';
+      st.value = ph ? ph.start : Day.today();
+      b.appendChild(st);
+      b.appendChild(el('label', 'fl', 'Ended, if it has'));
+      const en = document.createElement('input');
+      en.type = 'date'; en.className = 'mb-input'; en.style.width = '100%';
+      en.value = ph && ph.end ? ph.end : '';
+      b.appendChild(en);
+      UI.focusSoon(nm.querySelector ? (nm.querySelector('input') || nm) : nm);
+    },
+    actions: [
+      { label: 'CANCEL' },
+      { label: 'SAVE', kind: 'go', fn: h => {
+        const ins = h.body.querySelectorAll('input');
+        const name = String(ins[0].value || '').trim();
+        const start = ins[1].value, end = ins[2].value;
+        if (!name || !start) return false;
+        if (end && end < start) { UI.toast('It cannot end before it started', { bad: true }); return false; }
+        const key = ph ? ph.key : 'ci-' + Date.now().toString(36);
+        Rec.patch('phase', null, key, { name: name, start: start, end: end || undefined });
+        Rec.setting(APP.id, 'proj', key);
+        draw();
+      } },
+    ],
+  });
 }
 
 function goalMenu(pose, label) {
@@ -1130,8 +1255,13 @@ function goalMenu(pose, label) {
 function drawPoseList() {
   const c = el('div', 'card');
   const label = poseLabel(who, progPose);
-  c.appendChild(el('h2', null, 'EVERY ' + esc(label.toUpperCase()) + ' PHOTO'));
-  const dates = poseDates(progPose, who).reverse();
+  /* Narrowed by the same block as the card above it. A screen where the
+     summary says "this block" and the list under it quietly says "everything"
+     is a screen that means two things at once. */
+  const ph = phaseByKey(projNow());
+  c.appendChild(el('h2', null, (ph ? esc(ph.name.toUpperCase()) + ', EVERY ' : 'EVERY ') +
+    esc(label.toUpperCase()) + ' PHOTO'));
+  const dates = projDates(poseDates(progPose, who)).reverse();
   if (!dates.length) { c.appendChild(el('p', 'muted', 'None yet.')); return c; }
   c.appendChild(el('p', 'muted', 'Shoulders to waist, shoulders to hips and waist to hips, then how well the photo lined up with the one before.'));
   const list = el('div', 'list');
@@ -1311,6 +1441,9 @@ const Cam = (() => {
       return pickPhoto(o.poses[o.start || 0].id, 'camera');
     }
     askTilt();
+    /* Capture phase, so a remote's press reaches this before anything on the
+       page can treat Enter as "press the focused button". */
+    window.addEventListener('keydown', onRemote, true);
     build();
     const cs = getComputedStyle(document.body);
     ['--success', '--accent', '--text-1', '--warn'].forEach(k => { colours[k] = cs.getPropertyValue(k).trim() || 'white'; });
@@ -1374,6 +1507,7 @@ const Cam = (() => {
     stopStream();
     try { speechSynthesis.cancel(); } catch (e) {}
     window.removeEventListener('deviceorientation', onTilt);
+    window.removeEventListener('keydown', onRemote, true);
     root.classList.remove('on');
     review.classList.remove('on');
     if (release && !fromBack) release();
