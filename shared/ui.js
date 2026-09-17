@@ -343,14 +343,37 @@ const UI = {
       try {
         input.focus({ preventScroll: true });
         if (input.setSelectionRange && typeof input.value === 'string') {
-          const n = input.value.length;
-          input.setSelectionRange(n, n);
+          /* A number already in the box is a thing you REPLACE, so it comes up
+             selected; words are a thing you carry on writing, so the caret
+             goes to the end. See `isNumberBox` below for why that line and not
+             another one. */
+          if (UI.isNumberBox(input)) input.select();
+          else { const n = input.value.length; input.setSelectionRange(n, n); }
         }
       } catch (e) {}
     };
     go();
     setTimeout(go, reopening ? 40 : 130);
     return input;
+  },
+
+  /* ── a number is replaced, words are edited ──
+     Tom, 2026-09-17: "text entry in spending not auto selected - I want a
+     foundational fix where relevant", and `where relevant` is the whole
+     question. The line that holds everywhere: a box holding an AMOUNT is one
+     you retype, and a box holding WORDS is one you add to. Nobody edits
+     "1,040" into "1,050" character by character, and nobody wants a note they
+     were halfway through wiped by the next keypress.
+
+     Read off the box rather than set per call site, so an app gets it without
+     being edited and cannot forget. A box that genuinely wants the caret left
+     alone says so with `data-keep-caret`. */
+  isNumberBox(n) {
+    if (!n || n.tagName !== 'INPUT') return false;
+    if (n.hasAttribute('data-keep-caret')) return false;
+    if (n.type === 'number') return true;
+    const im = n.inputMode || n.getAttribute('inputmode') || '';
+    return /^(numeric|decimal)$/.test(im);
   },
 
   /** "09:30" -> "9:30am" */
@@ -752,6 +775,25 @@ const UI = {
     });
   },
 };
+
+/* ── and the same rule wherever focus lands, not only where focusSoon put it ──
+   Tapping into an amount by hand is the common case and it never went through
+   `focusSoon`. One listener on the document covers every box in every app,
+   including ones written before this existed.
+
+   The mouseup half is not optional: a click lands focus first and THEN puts
+   the caret where the pointer was, so a selection taken on focus is thrown
+   away a moment later by the very click that asked for it. Taking it again on
+   the way up is what makes clicking behave like tabbing in. */
+document.addEventListener('focusin', e => {
+  const n = e.target;
+  if (!UI.isNumberBox(n)) return;
+  const sel = () => { try { n.select(); } catch (err) {} };
+  sel();
+  const up = () => { sel(); n.removeEventListener('mouseup', up); };
+  n.addEventListener('mouseup', up);
+  setTimeout(() => n.removeEventListener('mouseup', up), 400);
+});
 
 /* ── the plain dialog ──
    Reached only when mobile.js is not loaded. Same markup as the sheet so the

@@ -483,12 +483,23 @@ function movedAfter(cur, date, to, on) {
   if (to && start && start <= on && on < to) moved.push({ from: start, to: on });
   return moved;
 }
-/* `from` is the day it was being looked at when moved, today by default. */
-function moveToTomorrow(date, key, src, from) {
+/* `from` is the day it was being looked at when moved, today by default.
+   `to` is any day at all: Tom, 2026-09-17, "Option to manually delegate a task
+   to tomorrow status or even a future date. Make this part of the foundational
+   bullet functions so it should show up in LOG and QUESTS."
+
+   It is one function because it was always one idea. Tomorrow was a shortcut
+   for a date, and a shortcut that is the only way in is a limit. Changing the
+   `due` is the whole move: every app reads the same day rule, so the line
+   leaves today everywhere at once and is waiting on the day named. */
+function moveTo(date, key, src, from, to) {
   const D = Day(), cur = Rec().get('note', date, key);
-  if (!cur) return null;
-  const to = D.shift(D.today(), 1);
+  if (!cur || !to) return null;
   return patchNote(date, key, { due: to, moved: movedAfter(cur, date, to, from || D.today()) }, src);
+}
+function moveToTomorrow(date, key, src, from) {
+  const D = Day();
+  return moveTo(date, key, src, from, D.shift(D.today(), 1));
 }
 /* Cancelled is not deleted. A task you decided not to do is a real outcome,
    and deleting it pretends it was never planned. */
@@ -496,9 +507,41 @@ function cancel(date, key, on, src) {
   return patchNote(date, key, on ? { cancelled: 1, done: 0 } : { cancelled: 0 }, src);
 }
 
+/* ── which day ──
+   One dialog for every app, so the question is asked in one voice. It opens on
+   tomorrow, because that is the answer most of the time and the one already on
+   the menu above it; anything earlier than today is refused, since the past is
+   not somewhere a task can be sent. */
+function askDay(x, then) {
+  const D = Day(), UIx = g.UI;
+  const start = D.shift(D.today(), 1);
+  if (!UIx || !UIx.dialog) return then(start);
+  UIx.dialog({
+    title: 'Move to', width: 300,
+    body: b => {
+      const i = document.createElement('input');
+      i.type = 'date';
+      i.className = 'mb-input';
+      i.value = start;
+      i.min = D.today();
+      i.style.width = '100%';
+      b.appendChild(i);
+      setTimeout(() => { try { i.focus(); } catch (e) {} }, 40);
+    },
+    actions: [
+      { label: 'CANCEL' },
+      { label: 'MOVE', kind: 'go', fn: h => {
+        const v = h.body.querySelector('input').value;
+        if (!v || v < D.today()) return false;
+        then(v);
+      } },
+    ],
+  });
+}
+
 /* The todo actions every app's menu carries, in the same words: Move to
-   tomorrow, and Cancel it or Put it back. `x` is the line with its own
-   `date` and `key`; `after` redraws; each offers an undo. */
+   tomorrow, Move to a day, and Cancel it or Put it back. `x` is the line with
+   its own `date` and `key`; `after` redraws; each offers an undo. */
 function menuItems(x, after, src) {
   if (!x || x.kind !== 'todo') return [];
   const ico = role => (g.Icons && g.Icons.svg) ? g.Icons.svg(role, { size: 18 }) : '';
@@ -508,8 +551,19 @@ function menuItems(x, after, src) {
     if (back && g.UI && g.UI.undo) g.UI.undo(say, () => { back(); if (after) after(); });
   };
   const out = [];
-  if (!x.done && !x.cancelled && !x.movedAway) out.push({ label: 'Move to tomorrow', icon: ico('next'),
-    fn: run(() => moveToTomorrow(x.date, x.key, src, x.day), 'Moved to tomorrow') });
+  if (!x.done && !x.cancelled && !x.movedAway) {
+    out.push({ label: 'Move to tomorrow', icon: ico('next'),
+      fn: run(() => moveToTomorrow(x.date, x.key, src, x.day), 'Moved to tomorrow') });
+    /* A plain item rather than a submenu, because not every app's menu draws
+       one and a menu entry that silently does nothing is the bug DOCTRINE law
+       3 names. The dialog is the same everywhere this is used. */
+    out.push({ label: 'Move to a day', icon: ico('today'),
+      fn: () => askDay(x, d => {
+        const back = moveTo(x.date, x.key, src, x.day, d);
+        if (after) after();
+        if (back && g.UI && g.UI.undo) g.UI.undo('Moved to ' + Day().label(d), () => { back(); if (after) after(); });
+      }) });
+  }
   out.push(x.cancelled
     ? { label: 'Put it back', icon: ico('undo'), fn: run(() => cancel(x.date, x.key, false, src), 'Put back') }
     : { label: 'Cancel it', note: 'Kept, but stops following you', icon: ico('cancel'),
@@ -525,6 +579,7 @@ g.Journal = {
   publishTimed: publishTimed, publishNotes: publishNotes,
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,
   css: css, markHTML: markHTML, timeText: timeText, sortClock: sortClock, textHTML: textHTML,
-  moveToTomorrow: moveToTomorrow, movedAfter: movedAfter, cancel: cancel, menuItems: menuItems,
+  moveTo: moveTo, moveToTomorrow: moveToTomorrow, movedAfter: movedAfter,
+  cancel: cancel, menuItems: menuItems, askDay: askDay,
 };
 })(window);
