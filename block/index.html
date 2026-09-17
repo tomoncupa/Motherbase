@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.7, 2026-09-17">
+<meta name="mb-version" content="1.0.8, 2026-09-17">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='28' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='55' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='16' y='34' width='68' height='46' rx='9' fill='%237EE8FA'/></svg>">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -626,6 +626,20 @@ footer .sp{flex:1}
 .ctxmenu .mi.danger:hover{background:color-mix(in srgb, var(--danger) 18%, var(--bg));color:var(--danger)}
 .ctxmenu .mi .k{margin-left:auto;color:var(--dim2);font-size:10.5px;font-family:var(--f1);padding-left:14px}
 .ctxmenu .sep{height:1px;background:var(--line);margin:4px 6px}
+/* ── the colour palette ──
+   Tom, 2026-09-17: "Block color menu should be a palette." It was ten rows of
+   words, so picking Amber over Gold meant reading two names and knowing which
+   was which. A colour is the one thing that cannot be described faster than it
+   can be shown. The swatch keeps the name in its tooltip, so nothing is lost.
+   The colours themselves are the ten in PAL, which are written onto the row
+   and deliberately not themed — see the note beside PAL. */
+.ctxmenu .pal{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:6px 9px 8px}
+.ctxmenu .pal button{
+  width:100%;aspect-ratio:1;min-width:26px;border-radius:6px;cursor:pointer;
+  border:2px solid transparent;padding:0;
+}
+.ctxmenu .pal button:hover{border-color:var(--text-1,#fff)}
+.ctxmenu .pal button.on{border-color:var(--text-1,#fff);box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--text-1,#fff)}
 .ctxmenu .hd{padding:4px 9px 6px;font-family:var(--f1);font-size:10px;letter-spacing:.14em;color:var(--dim2);text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;max-width:230px}
 .pop{
   position:fixed;z-index:1300;background:var(--surface-1);border:1px solid var(--acc-d);border-radius:9px;padding:10px;
@@ -1189,6 +1203,21 @@ function buildMenu(m, list, gen) {
   list.forEach(it => {
     if (it.sep) return m.appendChild(el('div', 'sep'));
     if (it.head) return m.appendChild(el('div', 'hd', esc(it.head)));
+    /* a grid of swatches rather than a list of colour names */
+    if (it.pal) {
+      const g = el('div', 'pal');
+      it.pal.forEach(c => {
+        const b = el('button', c.on ? 'on' : '');
+        b.type = 'button';
+        b.style.background = c.color;
+        b.title = c.label;
+        b.setAttribute('aria-label', c.label);
+        b.dataset.tip = c.label;
+        b.onclick = ev => { ev.stopPropagation(); closeMenu(); if (c.fn) c.fn(); };
+        g.appendChild(b);
+      });
+      return m.appendChild(g);
+    }
     const d = el('div', 'mi' + (it.danger ? ' danger' : ''),
       (it.check ? '✓ ' : '') + esc(it.label) + (it.sub ? '<span class="k">▸</span>' : (it.k ? '<span class="k">' + esc(it.k) + '</span>' : '')));
     if (it.sub) {
@@ -2387,7 +2416,10 @@ function selMenu(x, y) {
     { head: picks.length + ' blocks selected' },
     { label: 'Effort', sub: [1, 2, 3].map(k => ({ label: EGLYPH[k] + ' ' + ENAME[k], fn: () => each(it => { it.energy = k; syncKin(it, { energy: k }); }) })) },
     { label: 'Priority', sub: [0, 1, 2, 3].map(k => ({ label: k ? 'P' + k : 'none', fn: () => each(it => it.pri = k) })) },
-    { label: 'Colour', sub: PAL.map((c, i) => ({ label: PALNAME[i], fn: () => each(it => { it.color = c; syncKin(it, { color: c }); }) })) },
+    { label: 'Colour', sub: [{ pal: PAL.map((c, i) => ({
+      color: c, label: PALNAME[i],
+      fn: () => each(it => { it.color = c; syncKin(it, { color: c }); }),
+    })) }] },
     { sep: 1 },
     { label: 'Tick them all off', fn: () => {
         const col = viewCol();
@@ -3458,7 +3490,10 @@ function blockMenu(laneId, it, x, y) {
     { sep: 1 },
     { label: 'Effort', sub: [1, 2, 3].map(k => ({ label: EGLYPH[k] + ' ' + ENAME[k], check: energyOf(it) === k, fn: () => { snap(); it.energy = k; syncKin(it, { energy: k }); render(); } })) },
     { label: 'Priority', sub: [0, 1, 2, 3].map(k => ({ label: k ? 'P' + k : 'none', check: (it.pri || 0) === k, fn: () => { snap(); it.pri = k; render(); } })) },
-    { label: 'Colour', sub: PAL.map((c, i) => ({ label: PALNAME[i], check: it.color === c, fn: () => { snap(); it.color = c; syncKin(it, { color: c }); render(); } })) },
+    { label: 'Colour', sub: [{ pal: PAL.map((c, i) => ({
+      color: c, label: PALNAME[i], on: it.color === c,
+      fn: () => { snap(); it.color = c; syncKin(it, { color: c }); render(); },
+    })) }] },
     { label: 'Days', sub: () => {
         const L = lane(laneId);
         const rd = (L.days || [1, 1, 1, 1, 1, 1, 1]);
