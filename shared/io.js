@@ -31,7 +31,7 @@
    Bumped by hand, and only when something changed that a person would notice
    or that changes the shape of stored data. VERSIONS.md says what each one
    did. */
-const VERSION = '0.1.15';
+const VERSION = '0.1.16';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
@@ -1690,7 +1690,19 @@ const Mirror = {
       across, so do it here too */
   adopt(appId) { adoptOldLink(appId); return Mirror.settings; },
   get settings() { return Object.assign({}, mcfg); },
-  set(patch) { Object.assign(mcfg, patch || {}); msave(); return Mirror.settings; },
+  /* Pasting a link and leaving the daily push off is nobody's intention, and
+     it is the one step in the setup with no visible consequence when it is
+     missed: everything works, and nothing is ever backed up. His first
+     client's log, 2026-09-17: link set, `auto OFF`, nothing ever confirmed.
+     So the FIRST link switches it on. `onSet` remembers that a person moved
+     the switch themselves, and one they turned off is never turned back on. */
+  set(patch) {
+    const p = patch || {}, hadUrl = !!mcfg.url;
+    if ('on' in p) mcfg.onSet = 1;
+    Object.assign(mcfg, p);
+    if (!hadUrl && mcfg.url && !mcfg.onSet) mcfg.on = 1;
+    msave(); return Mirror.settings;
+  },
   get url() { return mcfg.url; },
 
   /** The personal sync code out of whatever was pasted.
