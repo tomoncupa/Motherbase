@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.12, 2026-09-17">
+<meta name="mb-version" content="1.0.13, 2026-09-17">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -1983,32 +1983,30 @@ const WIDGETS = {
       show();
       const bar = el('div');
       bar.style.cssText = 'display:flex;gap:6px;margin-top:8px;flex-wrap:wrap';
-      /* Tom, 2026-09-17: "Clicking 3m Should set it to 3 minutes, maybe make
-         it have to be a double click."
+      /* Tom, 2026-09-17: "Click Xm = X minutes, but make it need a double tap
+         if we want it to override a currently running timer."
 
          These used to ADD, so 3m pressed on a timer showing 4:12 gave 7:12 and
-         there was no way at all to simply ask for three minutes \u2014 the one
-         thing the button says on it. A press SETS it to that length.
+         there was no way at all to ask for the one thing the button has
+         written on it. 3m is three minutes now.
 
-         Adding is not gone, it has become the deliberate one: press the same
-         button again within about three quarters of a second and it stacks, so
-         3m twice is six minutes and three times is nine. That is exactly what
-         adding was ever used for, and now it is a gesture you meant rather
-         than the thing that happens when you wanted three minutes. */
-      const STACK_MS = 750;
+         The double tap is a guard, not a second meaning. Nothing is running,
+         so nothing can be lost: one press. Something IS running, so one press
+         would throw away a count you are in the middle of: it says what it is
+         about to do and waits to be told twice. The second press has to land
+         within about three quarters of a second, which is a double click, and
+         a lone press is a message rather than a change. */
+      const AGAIN_MS = 750;
       [[60, '1m'], [180, '3m'], [300, '5m']].forEach(([n, lbl]) => {
         const b = el('button', 'tag', lbl);
         b.style.cursor = 'pointer';
-        b.title = lbl + ' \u00b7 press again to stack';
-        let hits = 0, last = 0;
+        b.title = lbl + ' \u00b7 twice to replace a running timer';
+        let asked = 0;
         b.onclick = () => {
           const now = Date.now();
-          hits = (now - last < STACK_MS) ? hits + 1 : 1;
-          last = now;
-          /* Counted from the button rather than added to what is left, so the
-             second press lands on a whole 6:00 instead of on 5:59 \u2014 the
-             second the running clock ate between the two presses. */
-          left = n * hits; show(); run();
+          if (id && now - asked > AGAIN_MS) { asked = now; return toast('Again to make it ' + lbl); }
+          asked = 0;
+          left = n; show(); run();
         };
         bar.appendChild(b);
       });
