@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.14, 2026-09-17">
+<meta name="mb-version" content="1.0.15, 2026-09-17">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -1135,6 +1135,26 @@ const noteRows = () => Rec.all('note');
     A todo QUESTS has dated for later is not open yet; one with No date sorts
     last. */
 const todoFrom = r => r.payload.due === undefined ? r.date : (r.payload.due || '');
+/* ── who wrote this task ──
+   Tom, 2026-09-17: "I want the todo widget to show task source", asked in the
+   same breath as "why does pay skool show up twice". They are one question:
+   two rows reading the same are two different apps' idea of the same job, and
+   with nothing on the row saying so they look like a bug in one list.
+
+   `src` is what the writer stamped on itself. A row without one was typed by
+   hand, and a hand-written bullet lives in STATUS's journal however it was
+   opened, so that is what it says. A project, when there is one, beats the app
+   name: #bills is more use than QUESTS. */
+const TODO_SRC = { wealth: 'WEALTH', arc: 'ARC', block: 'BLOCK', quest: 'QUESTS', log: 'LOG' };
+function todoSource(r) {
+  const p = (r && r.payload) || {};
+  if (p.proj) {
+    const pr = Rec.get('project', null, p.proj);
+    return String((pr && pr.payload && pr.payload.name) || p.proj).toUpperCase();
+  }
+  return TODO_SRC[p.src] || 'STATUS';
+}
+
 function openTodos() {
   const today = LifeOS.day();
   return noteRows()
@@ -1461,11 +1481,15 @@ const WIDGETS = {
         if (x.tag) r.appendChild(el('div', 'tag', esc(x.tag)));
         if (x.dur) r.appendChild(el('div', 'd', DUR(x.dur)));
         if (x.tick) {
+          /* Tom, 2026-09-17: "Today widget has the check at the right, why not
+             the left". It is the first thing you do to a row, it is where TODO
+             already puts it, and a box at the ragged right edge of a list moves
+             with every row's length. */
           const ck = el('button', 'chk' + (x.done ? ' on' : ''), (typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '✓');
           ck.title = x.done ? 'done — click to undo' : 'check it off';
           ck.setAttribute('aria-label', x.done ? 'Mark not done' : 'Tick it off');
           ck.onclick = x.tick;
-          r.appendChild(ck);
+          r.insertBefore(ck, r.firstChild);
         }
         list.appendChild(r);
       });
@@ -1967,8 +1991,10 @@ const WIDGETS = {
       list.slice(0, 12).forEach(x => {
         const r = el('div', 'row');
         const age = todoFrom(x) ? daysBetween(todoFrom(x), LifeOS.day()) : 0;
+        const from = todoSource(x);
         r.innerHTML =
           '<span class="n">' + esc(x.payload.text || '') + '</span>' +
+          (from ? '<span class="tag">' + esc(from) + '</span>' : '') +
           (age > 0 ? '<span class="d">' + age + 'd</span>' : '');
         const ck = el('button', 'chk', (typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '✓');
         ck.setAttribute('aria-label', 'Tick it off');
@@ -2222,29 +2248,82 @@ const WIDGETS = {
       }
       const age = ageNow(born);
       /* Tom, 2026-09-17: "Life widget - right click menu to denote Youth and
-         Old Age." Two ages, set by right clicking the year you mean, which is
-         the only place the answer is obvious. The years you have lived stay
-         solid and the ones ahead stay faint, so the phase is a hue and the
-         living is the weight: two facts on one square without either hiding
-         the other. */
+         Old Age", then, the same day: "Set Age, Set Colors and a legend I want
+         to denote when I was young and when im gonna be too old for a lot of
+         things."
+
+         So the two ages were already here, and the three things missing were
+         the ways to change them. The years lived stay solid and the ones ahead
+         stay faint, so the band is a hue and the living is the weight: two
+         facts on one square without either hiding the other.
+
+         The colours are theme slots, 1 to 6, never hex. Hard constraint 8, and
+         it is the reason this can be recoloured at all: a hex here would be a
+         life that looks right in exactly one skin. */
       const youth = Number(Rec.setting('lifeos', 'youth') || 0);
       const old = Number(Rec.setting('lifeos', 'old') || 0);
-      const phaseOf = i => (youth && i < youth) ? 'var(--data-2)'
-                         : (old && i >= old) ? 'var(--data-5)'
-                         : 'var(--data-4)';
+      const slotOf = (k, dflt) => Number(Rec.setting('lifeos', 'life' + k) || dflt);
+      const cols = { youth: slotOf('Youth', 2), mid: slotOf('Mid', 4), old: slotOf('Old', 5) };
+      const tint = n => 'var(--data-' + n + ')';
+      const bandOf = i => (youth && i < youth) ? 'youth' : (old && i >= old) ? 'old' : 'mid';
+
       const head = el('div');
       head.style.cssText = 'font-family:var(--f1);font-size:28px;color:var(--txt);letter-spacing:.04em;margin-bottom:8px';
       head.innerHTML = age + '<span style="color:var(--dim2);font-size:16px"> / ' + span + '</span>';
       body.appendChild(head);
+
+      /* ── setting it ──
+         On the card, not on a year. Changing your birth year by right clicking
+         the square for age 31 is not a thing anyone would find. The year's own
+         menu stays for the two boundaries, where the year IS the answer. */
+      const askNum = (title, now, lo, hi, save) => UI.dialog({
+        title: title, width: 280,
+        body: b2 => {
+          const f = UI.field('number', { value: now || '' });
+          b2.appendChild(f);
+          const i = f.querySelector ? (f.querySelector('input') || f) : f;
+          setTimeout(() => { if (i.focus) i.focus(); if (i.select) i.select(); }, 40);
+        },
+        actions: [{ label: 'CANCEL' }, { label: 'SET', kind: 'go', fn: h => {
+          const i = h.body.querySelector('input');
+          const v = parseInt(i && i.value, 10);
+          if (v >= lo && v <= hi) { save(v); drawHome(); }
+        } }],
+      });
+      const capital = w => w.charAt(0).toUpperCase() + w.slice(1);
+      const colourItems = which => [1, 2, 3, 4, 5, 6].map(n => ({
+        label: 'Colour ' + n, check: cols[which] === n,
+        fn: () => { Rec.setting('lifeos', 'life' + capital(which), n); drawHome(); },
+      }));
+      const lifeMenu = (x, y) => UI.menu(x, y, [
+        { label: 'Set age', fn: () => askNum('How old are you', age, 0, 120,
+            v => Rec.setting('lifeos', 'born', new Date().getFullYear() - v)) },
+        { label: 'Set birth year', fn: () => askNum('Born', born, 1900, 2100,
+            v => Rec.setting('lifeos', 'born', v)) },
+        { label: 'Set how many years', fn: () => askNum('Years on the square', span, 10, 120,
+            v => Rec.setting('lifeos', 'span', v)) },
+        '-',
+        { label: 'Youth ends at', fn: () => askNum('Youth ends at', youth, 0, span,
+            v => Rec.setting('lifeos', 'youth', v)) },
+        { label: 'Old age starts at', fn: () => askNum('Old age starts at', old, 0, span,
+            v => Rec.setting('lifeos', 'old', v)) },
+        '-',
+        { label: 'Youth colour', sub: colourItems('youth') },
+        { label: 'Middle colour', sub: colourItems('mid') },
+        { label: 'Old age colour', sub: colourItems('old') },
+      ], { title: 'LIFE' });
+      body.oncontextmenu = ev => { ev.preventDefault(); ev.stopPropagation(); lifeMenu(ev.clientX, ev.clientY); };
+      if (typeof Mobile !== 'undefined' && Mobile.hold) Mobile.hold(body, () => lifeMenu(0, 0));
+
       const grid = el('div');
       grid.style.cssText = 'display:grid;grid-template-columns:repeat(20,1fr);gap:3px';
       for (let i = 0; i < span; i++) {
         const b = el('i');
-        const phase = (youth && i < youth) ? 'youth' : (old && i >= old) ? 'old age' : '';
-        b.title = 'age ' + i + (phase ? ' \u00b7 ' + phase : '');
-        const tint = (youth || old) ? phaseOf(i) : 'var(--acc)';
+        const band = bandOf(i);
+        const name = band === 'youth' ? 'youth' : band === 'old' ? 'old age' : '';
+        b.title = 'age ' + i + (name ? ' \u00b7 ' + name : '');
         b.style.cssText = 'display:block;aspect-ratio:1;border-radius:2px;cursor:context-menu;' +
-          'background:' + (i === age ? 'var(--warn)' : tint) +
+          'background:' + (i === age ? 'var(--warn)' : ((youth || old) ? tint(cols[band]) : 'var(--acc)')) +
           ';opacity:' + (i <= age ? '1' : '.22');
         b.oncontextmenu = ev => {
           ev.preventDefault();
@@ -2263,6 +2342,29 @@ const WIDGETS = {
         grid.appendChild(b);
       }
       body.appendChild(grid);
+
+      /* ── the legend ──
+         What he asked the bands FOR: "when I was young and when im gonna be
+         too old for a lot of things". Without it the square is three hues and
+         no statement. Drawn only once a boundary is set, because three chips
+         naming nothing is worse than no chips. */
+      if (youth || old) {
+        const key = el('div');
+        key.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--s-2,8px);margin-top:var(--s-2,8px)';
+        const chip = (which, label, range) => {
+          const c = el('div');
+          c.style.cssText = 'display:flex;align-items:center;gap:5px;font-family:var(--f1);' +
+            'font-size:9px;letter-spacing:.1em;color:var(--dim);white-space:nowrap';
+          c.innerHTML = '<i style="width:9px;height:9px;border-radius:2px;flex:0 0 auto;background:' +
+            tint(cols[which]) + '"></i>' + esc(label) +
+            (range ? '<span style="color:var(--dim2)">' + esc(range) + '</span>' : '');
+          key.appendChild(c);
+        };
+        if (youth) chip('youth', 'YOUNG', 'to ' + youth);
+        chip('mid', 'MIDDLE', (youth || 0) + (old ? '\u2013' + old : '+'));
+        if (old) chip('old', 'TOO OLD FOR A LOT', 'from ' + old);
+        body.appendChild(key);
+      }
     },
   },
 
