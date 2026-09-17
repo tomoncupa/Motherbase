@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.13, 2026-09-17">
+<meta name="mb-version" content="1.0.14, 2026-09-17">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -94,8 +94,45 @@ nav button{
   display:flex;align-items:center;gap:6px;white-space:nowrap;flex:0 0 auto;
 }
 /* A narrower desktop window keeps the icons and drops the names, which are in
-   the tooltip. Tom, 2026-09-14: "the header now takes up too much space". */
-@media (min-width:821px) and (max-width:1400px){ nav button .nm{display:none} nav button{padding:5px 8px} }
+   the tooltip. Tom, 2026-09-14: "the header now takes up too much space".
+
+   This was a fixed 821-to-1400 band, and the band was the bug. Outside it the
+   names came back, the row grew past the window, and `overflow-x:auto` with a
+   hidden scrollbar quietly slid the LAST apps off the right edge with nothing
+   on screen saying so. NOTICE is thirteenth of fourteen, so NOTICE is the one
+   that vanished. Tom, 2026-09-17: "NOTICE goes missing from my motherbase main
+   menu under certain desktop window sizes."
+
+   It is measured now, by `fitNav`, so the names are dropped exactly when they
+   do not fit and at no other width. `.scrolly` is the last resort: if the row
+   still does not fit with the names off, the right edge fades, which is the
+   only honest thing a hidden scrollbar can be replaced with. */
+/* Fourteen names measure 1237px of dock and the rest of the header takes
+   about 400, so the names fit from about 1640px up and not below it. A ceiling
+   with no floor under it, which is the difference from the 821-to-1400 band
+   this replaced: that one handed the names BACK above 1400, where they did not
+   fit, and the overflow went out of sight behind a hidden scrollbar. */
+@media (max-width:1700px){
+  nav button .nm{display:none}
+  nav button{padding:5px 8px}
+}
+/* Everything in the header that is not an app gives way before an app does:
+   the wordmark goes down to its mark, the clock goes, and WIDGET and DATA go
+   down to the icons they already carry for a phone. The apps are what the
+   header is FOR.
+
+   A plain width rule, unlike the names above. Fourteen icons need about 550px
+   and the wordmark, clock and two worded buttons take about 400, so under
+   1150 there is no arrangement where all three fit and no measuring to do. */
+@media (max-width:1150px){
+  header .logo .wm{display:none}
+  header .clock{display:none}
+  header .hbtn .lg{display:none}
+  header .hbtn .sm{display:inline}
+  header .hbtn{padding:0 var(--s-2,8px)}
+}
+nav.scrolly{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);
+  mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
 @media (hover:hover) and (pointer:fine){ nav button:hover{color:var(--txt)} }
 /* Each app has a colour, --c, its slot in the theme's chart ramp: the icon
    wears it always, and the whole button wears it when the app is open. Tom,
@@ -396,7 +433,7 @@ kbd{font-family:var(--f1);font-size:10px;border:1px solid var(--line2);border-ra
   <header>
     <!-- What this screen is, said plainly. It is the thing you land on and
          pick an app from; "LifeOS" was a project name, not a label. -->
-    <div class="logo" onclick="go('home')"><span class="mark">◈</span>MAIN <b>MENU</b></div>
+    <div class="logo" onclick="go('home')"><span class="mark">◈</span><span class="wm">MAIN <b>MENU</b></span></div>
     <nav id="nav"></nav>
     <div class="spacer"></div>
     <div class="clock"><b id="cDate">—</b><span id="cSub">—</span></div>
@@ -636,20 +673,25 @@ const APPS = [
   /* An app's colour, which of the theme's six chart colours it wears in the
      dock, on its tile, on its widgets and on its iPhone icon, is APP_SLOT in
      shared/icons.js: one table, so the dock and the pictures cannot disagree. */
-  { id: 'home',   nm: 'HOME',   ic: '◈', file: null,                ds: 'today, streaks, everything at a glance' },
+  /* `phone` is hard constraint 10 written down: which apps are for a thumb.
+     The bottom bar is built from these and the top dock from all of them, so
+     a phone shows STATUS, QUESTS, TRAIN, CHECK IN, NOTICE and SPEAK and not
+     the desk work. Tom, 2026-09-17: "Main Menu on phone should only show
+     Phone apps." HOME carries it because HOME is the screen the bar is on. */
+  { id: 'home',   nm: 'HOME',   ic: '◈', file: null,                ds: 'today, streaks, everything at a glance', phone: 1 },
   { id: 'block',  nm: 'BLOCK',  ic: '▦', file: 'block/index.html',  ds: 'build the day out of blocks',               shares: 'routine + ticks' },
-  { id: 'status', nm: 'STATUS', ic: '◐', file: 'status/index.html', ds: 'sleep, weight, mood, food and money',        shares: 'the daily measurements' },
+  { id: 'status', nm: 'STATUS', ic: '◐', file: 'status/index.html', ds: 'sleep, weight, mood, food and money',        shares: 'the daily measurements', phone: 1 },
   { id: 'log',    nm: 'LOG',    ic: '▤', file: 'log/index.html',    ds: 'the journal, the last few weeks at a glance', shares: 'the journal' },
-  { id: 'quest',  nm: 'QUESTS', ic: '◆', file: 'quest/index.html',  ds: 'todos, when they are due, and projects', shares: 'the journal todos' },
-  { id: 'train',  nm: 'TRAIN',  ic: '⛭', file: 'train/index.html',  ds: 'the training log — sets, reps, records',     shares: 'the training log + ticks' },
-  { id: 'checkin', nm: 'CHECK IN', ic: '◎', file: 'checkin/index.html', ds: 'photos, weight and how the week went', shares: 'weight, with STATUS' },
+  { id: 'quest',  nm: 'QUESTS', ic: '◆', file: 'quest/index.html',  ds: 'todos, when they are due, and projects', shares: 'the journal todos', phone: 1 },
+  { id: 'train',  nm: 'TRAIN',  ic: '⛭', file: 'train/index.html',  ds: 'the training log — sets, reps, records',     shares: 'the training log + ticks', phone: 1 },
+  { id: 'checkin', nm: 'CHECK IN', ic: '◎', file: 'checkin/index.html', ds: 'photos, weight and how the week went', shares: 'weight, with STATUS', phone: 1 },
   { id: 'style',  nm: 'STYLE',  ic: '◧', file: 'style/index.html',  ds: 'pick, compare, edit and add themes',         shares: 'the themes every app wears' },
   { id: 'arc',    nm: 'ARC',    ic: '◇', file: 'arc/index.html',    ds: 'mind canvas — think, map, plan',            solo: 1, mine: 1 },
   { id: 'wealth', nm: 'WEALTH', ic: '▩', file: 'wealth/index.html', ds: 'clients, bills, pots and what is actually left', shares: 'spending and accounts', mine: 1 },
   { id: 'form',   nm: 'FORM',   ic: '▶', file: 'form/index.html',   ds: 'side-by-side lift review',                  solo: 1, mine: 1 },
   { id: 'portion', nm: 'FOODDÉX', ic: '◪', file: 'portion/index.html', ds: 'a label in, the amounts you eat out', shares: 'the food library', mine: 1 },
-  { id: 'system', nm: 'NOTICE', ic: '▣', file: 'system/index.html', ds: 'text in, a status window out', mine: 1 },
-  { id: 'speak',  nm: 'SPEAK',  ic: '◍', file: 'speak/index.html',  ds: 'talk to the camera, measured',               shares: 'ticks', mine: 1 },
+  { id: 'system', nm: 'NOTICE', ic: '▣', file: 'system/index.html', ds: 'text in, a status window out', mine: 1, phone: 1 },
+  { id: 'speak',  nm: 'SPEAK',  ic: '◍', file: 'speak/index.html',  ds: 'talk to the camera, measured',               shares: 'ticks', mine: 1, phone: 1 },
 ];
 const app = id => APPS.find(a => a.id === id);
 
@@ -809,8 +851,10 @@ function drawNav() {
     if (a.mine && !(order[i - 1] || {}).mine) n.appendChild(el('span', 'navsep'));
     n.appendChild(b);
 
-    /* the same button again, for the thumb. Icon over label, because at this
-       size the icon is what is actually read. */
+    /* the same button again, for the thumb, and only for the apps meant to be
+       used on one. ARC, BLOCK and STYLE are desk work by hard constraint 10,
+       and a bottom bar carrying all fourteen gave each of them 27px. */
+    if (!a.phone) return;
     const t = el('button', state + ' mb-press mb-tap', '<span class="g">' + appIco(a, 22) + '</span>' + a.nm);
     if (appTint(a)) t.style.setProperty('--c', appTint(a));
     t.setAttribute('aria-label', a.nm + ' — ' + a.ds);
@@ -820,7 +864,71 @@ function drawNav() {
     if (typeof Mobile !== 'undefined' && Mobile.hold) Mobile.hold(t, () => dockMenu(a, i, order.length, 0, 0));
     tabs.appendChild(t);
   });
+  fitNav();
 }
+
+/* ── the names come off when they stop fitting ──
+   Measured rather than guessed at a width, because the guess is what lost
+   NOTICE off the end of the row. Names first: if the row overflows with them
+   on, they go, and if it still overflows the right edge fades so there is
+   something on screen saying to scroll. Reads two numbers and sets at most
+   two classes, so calling it on every resize is free. */
+let fitGen = 0;
+function fitNav() {
+  const n = $('#nav'), h = n && n.parentNode;
+  if (!n || !h) return;
+  /* ── the belt and braces ──
+     The two width rules above are what actually keep the dock inside the
+     window. This only asks whether they were enough, and if they were not it
+     fades the right edge, because a hidden scrollbar hiding NOTICE with
+     nothing on screen saying so is the bug this whole thing was.
+
+     Read in a zero timeout, not straight away: nav is a flex item with its own
+     scroll box and the browser does not re-resolve that layout in the middle
+     of a task, so an immediate read is of the layout one class ago. Not
+     requestAnimationFrame either — a window minimised, covered or on a hidden
+     tab gets no frames, and a dock that only checks itself when someone is
+     looking is wrong every time it is uncovered.
+
+     The counter drops a check whose width has already been replaced. */
+  const gen = ++fitGen;
+  const over = () => n.scrollWidth > n.clientWidth + 1;
+  n.classList.remove('scrolly');
+  setTimeout(() => {
+    if (gen === fitGen && over()) n.classList.add('scrolly');
+  }, 0);
+}
+
+/* Run again as the window settles: a measurement taken mid-drag is of a width
+   nobody is going to stop at. */
+let navFit2 = 0;
+function fitNavSoon() {
+  fitNav();
+  clearTimeout(navFit2);
+  navFit2 = setTimeout(fitNav, 250);
+}
+
+addEventListener('resize', fitNavSoon);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitNav).catch(() => {});
+/* The window's own resize event is not enough: it does not fire for every way
+   a header can change width, and one that is missed leaves the dock compact on
+   a wide screen or clipped on a narrow one. The box itself is the thing that
+   changed, so the box is what to watch. Only a WIDTH change refits, so the
+   class changes this makes cannot feed back into it. */
+/* Set up here and not on DOMContentLoaded: this script is at the end of the
+   body, so that event has already gone by and a listener for it never runs.
+   The header is on the page by now, so watch it now. */
+(function watchHeader() {
+  const h = document.querySelector('header');
+  if (!h || !window.ResizeObserver) return;
+  let was = 0;
+  new ResizeObserver(() => {
+    const w = h.clientWidth;
+    if (w === was) return;
+    was = w;
+    fitNavSoon();
+  }).observe(h);
+})();
 
 /* Move it, or put the whole dock back the way it shipped. */
 function dockMenu(a, i, total, x, y) {
