@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.11, 2026-09-17">
+<meta name="mb-version" content="1.0.12, 2026-09-17">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -1983,10 +1983,33 @@ const WIDGETS = {
       show();
       const bar = el('div');
       bar.style.cssText = 'display:flex;gap:6px;margin-top:8px;flex-wrap:wrap';
+      /* Tom, 2026-09-17: "Clicking 3m Should set it to 3 minutes, maybe make
+         it have to be a double click."
+
+         These used to ADD, so 3m pressed on a timer showing 4:12 gave 7:12 and
+         there was no way at all to simply ask for three minutes \u2014 the one
+         thing the button says on it. A press SETS it to that length.
+
+         Adding is not gone, it has become the deliberate one: press the same
+         button again within about three quarters of a second and it stacks, so
+         3m twice is six minutes and three times is nine. That is exactly what
+         adding was ever used for, and now it is a gesture you meant rather
+         than the thing that happens when you wanted three minutes. */
+      const STACK_MS = 750;
       [[60, '1m'], [180, '3m'], [300, '5m']].forEach(([n, lbl]) => {
         const b = el('button', 'tag', lbl);
         b.style.cursor = 'pointer';
-        b.onclick = () => { left += n; show(); run(); };
+        b.title = lbl + ' \u00b7 press again to stack';
+        let hits = 0, last = 0;
+        b.onclick = () => {
+          const now = Date.now();
+          hits = (now - last < STACK_MS) ? hits + 1 : 1;
+          last = now;
+          /* Counted from the button rather than added to what is left, so the
+             second press lands on a whole 6:00 instead of on 5:59 \u2014 the
+             second the running clock ate between the two presses. */
+          left = n * hits; show(); run();
+        };
         bar.appendChild(b);
       });
       /* Tom, 2026-09-17: "Timer widget - let me manually set". Three presets
@@ -1999,7 +2022,7 @@ const WIDGETS = {
             b2.appendChild(el('label', 'fl', 'Minutes, or minutes and seconds'));
             const i = UI.field('text', { value: left ? Math.floor(left / 60) + ':' +
               String(left % 60).padStart(2, '0') : '' });
-            i.placeholder = '10  or  1:30';
+            i.placeholder = '10   2.5   or   1:30';
             b2.appendChild(i);
           },
           actions: [{ label: 'CANCEL' }, { label: 'START', kind: 'go', fn: h => {
@@ -2007,10 +2030,16 @@ const WIDGETS = {
             const t = String((box && box.value) || '').trim();
             if (!t) return;
             /* "10" is ten minutes, "1:30" is a minute and a half, "0:45" is
-               forty five seconds. Anything else is left alone. */
-            const m = t.match(/^(\d+)(?::([0-5]?\d))?$/);
-            if (!m) return toast('Try 10, or 1:30', { bad: true });
-            const secs = parseInt(m[1], 10) * (m[2] == null ? 60 : 60) + (m[2] ? parseInt(m[2], 10) : 0);
+               forty five seconds, and "2.5" is two and a half \u2014 Tom, 2026-09-17,
+               "Should be able to set 2.5 Minutes". Half a minute is a thing you
+               say out loud and it was the one shape this box refused: it read
+               minutes as whole numbers only and turned 2.5 away. Anything else
+               is left alone. */
+            const m = t.match(/^(\d+):([0-5]?\d)$/);
+            let secs = 0;
+            if (m) secs = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+            else if (/^\d+(?:\.\d+)?$/.test(t)) secs = Math.round(parseFloat(t) * 60);
+            else return toast('Try 10, 2.5, or 1:30', { bad: true });
             if (!secs) return;
             left = secs; show(); run();
           } }],
