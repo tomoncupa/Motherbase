@@ -373,6 +373,52 @@ const UI = {
       needs to do it at another moment, such as before it writes. */
   commitFocused() { commitFocused(); },
 
+  /* ══════════════ an amount, in whatever unit it was typed in ══════════════
+     Tom, 2026-09-17: "how possible is intelligent food entry? 1000mg - 1 gram".
+     Very: a label prints sodium in mg and protein in g, and which one a box
+     wants is a fact the box already knows. So the person types what the packet
+     says and the box does the arithmetic.
+
+     `want` is the unit the caller stores in. A number with no unit after it is
+     taken to already be in that unit, which is what every existing box does,
+     so nothing that worked before changes. An unknown unit is ignored for the
+     same reason: guessing at "1000 scoops" is worse than taking the 1000.
+
+     Returns null for nothing usable, exactly as a bare parse would. */
+  /* Each unit says what KIND of thing it measures and how many of the base it
+     is. The kind is not decoration: grams and millilitres are both 1 of their
+     base, so without it "5g" typed into a millilitre box would convert 1 to 1
+     and look right, which is a density question this has no business
+     answering. Same kind converts; anything else stands as typed. */
+  UNITS: {
+    mcg: ['m', 0.000001], ug: ['m', 0.000001], '\u00b5g': ['m', 0.000001],
+    microgram: ['m', 0.000001], micrograms: ['m', 0.000001],
+    mg: ['m', 0.001], milligram: ['m', 0.001], milligrams: ['m', 0.001],
+    g: ['m', 1], gr: ['m', 1], gm: ['m', 1], gram: ['m', 1], grams: ['m', 1],
+    kg: ['m', 1000], kilo: ['m', 1000], kilos: ['m', 1000], kilogram: ['m', 1000], kilograms: ['m', 1000],
+    oz: ['m', 28.349523125], ounce: ['m', 28.349523125], ounces: ['m', 28.349523125],
+    lb: ['m', 453.59237], lbs: ['m', 453.59237], pound: ['m', 453.59237], pounds: ['m', 453.59237],
+    ml: ['v', 1], milliliter: ['v', 1], milliliters: ['v', 1], millilitre: ['v', 1], millilitres: ['v', 1],
+    cl: ['v', 10], dl: ['v', 100],
+    l: ['v', 1000], litre: ['v', 1000], litres: ['v', 1000], liter: ['v', 1000], liters: ['v', 1000],
+  },
+  amount(text, want) {
+    const raw = String(text == null ? '' : text).trim().toLowerCase().replace(/,/g, '');
+    if (!raw) return null;
+    const m = raw.match(/^([+-]?[0-9]*\.?[0-9]+)\s*([a-z\u00b5]*)$/);
+    if (!m) return null;
+    const n = parseFloat(m[1]);
+    if (!isFinite(n)) return null;
+    const typed = m[2];
+    if (!typed) return n;
+    const from = UI.UNITS[typed], to = UI.UNITS[String(want || '').trim().toLowerCase()];
+    /* A unit nobody knows, a box with no unit of its own, or two different
+       kinds of thing: the number stands as typed, which is what every box did
+       before this existed. */
+    if (!from || !to || from[0] !== to[0]) return n;
+    return n * from[1] / to[1];
+  },
+
   isNumberBox(n) {
     if (!n || n.tagName !== 'INPUT') return false;
     if (n.hasAttribute('data-keep-caret')) return false;

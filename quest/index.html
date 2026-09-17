@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.8, 2026-09-17">
+<meta name="mb-version" content="1.0.9, 2026-09-17">
 <title>QUESTS</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -85,6 +85,10 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .qin .hl{position:absolute;inset:0;color:transparent;overflow:hidden;pointer-events:none}
 .qin .hl mark{color:transparent;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--accent) 28%,transparent)}
+/* A tag is not the accent, because a line can carry several and they would
+   read as one long highlight against one project. */
+.qin .hl mark.tag{background:color-mix(in srgb,var(--data-3) 30%,transparent)}
+.at{color:var(--data-3);font-family:var(--f1)}
 .chips{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-2);align-items:center}
 .chip{display:inline-flex;align-items:center;gap:var(--s-1);min-height:var(--tap);
   padding:0 var(--s-3);border-radius:var(--radius-md);border:var(--border-width) solid var(--border);
@@ -453,6 +457,16 @@ const RULES = [
   { kind: 'time', src: '(?:at\\s+)?(?:noon|midday)', fn: () => '12:00' },
   { kind: 'pri', src: 'p[1-4]', fn: w => { const n = +w.slice(1); return n === 4 ? 0 : n; } },
   { kind: 'proj', src: '#[^\\s#]+', fn: w => w.slice(1).replace(/[.,;:!?)]+$/, '') || null },
+  /* ── @tag ──
+     Todoist's labels. A todo has ONE project and ANY NUMBER of tags, which is
+     the whole difference between the two: a project is where a job lives, a
+     tag is a condition it needs. #house is where "fix the tap" belongs; @phone
+     and @15min are what has to be true before you can do it.
+
+     It sits after the time rules on purpose, so "@8" is still eight o'clock,
+     which is what it has always meant here. A tag therefore cannot be only
+     digits, and that is a fair trade: nobody labels a task @8. */
+  { kind: 'tag', src: '@[^\\s@]+', fn: w => w.slice(1).replace(/[.,;:!?)]+$/, '') || null },
 ];
 /* A clock as minutes past midnight. Tom, 2026-09-14: "at 8 on 7:55AM means
    8AM, past that then it means 8PM." With no am or pm, on today (or no date
@@ -480,7 +494,7 @@ const slug = s => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').repla
 
 function parseQuest(raw, ignore) {
   const text = String(raw || ''), ig = (ignore || []).map(s => s.toLowerCase());
-  const taken = [], spans = [], out = { text: '', due: null, at: null, dur: null, pri: null, proj: null, projName: null, rep: null, spans: spans };
+  const taken = [], spans = [], out = { text: '', due: null, at: null, dur: null, pri: null, proj: null, projName: null, tags: [], rep: null, spans: spans };
   const free = (a, b) => !taken.some(t => a < t[1] && b > t[0]);
   RULES.forEach(rule => {
     /* the kind a rule reads is not always the field it fills */
@@ -500,9 +514,19 @@ function parseQuest(raw, ignore) {
       if (rule.kind === 'time' && typeof v === 'object') { out.at = v.at; out.dur = v.dur; }
       else if (rule.kind === 'date' || rule.kind === 'time') out[field] = v;
       else if (rule.kind === 'proj') { out.proj = slug(v); out.projName = v; if (!out.proj) { taken.pop(); spans.pop(); continue; } }
+      /* Every one of them, in the order typed, and never the same twice. */
+      else if (rule.kind === 'tag') {
+        const t2 = slug(v);
+        if (!t2) { taken.pop(); spans.pop(); continue; }
+        if (out.tags.indexOf(t2) < 0) out.tags.push(t2);
+      }
       else if (rule.kind === 'rep') out.rep = Object.assign(v, { txt: word });
       else out[rule.kind] = v;
-      break;
+      /* A line has one date, one priority and one project, so every other rule
+         takes the first it finds and stops. Labels are the exception and that
+         is the point of them: @phone @15min is two conditions on one job, not
+         a second attempt at naming one. */
+      if (rule.kind !== 'tag') break;
     }
   });
   spans.sort((a, b) => a.start - b.start);
@@ -585,7 +609,7 @@ function addQuest(p) {
   Rec.set('note', d, newId(), {
     kind: 'todo', src: 'quest', text: p.text, t: Date.now(), made: d,
     at: p.at || null, dur: p.dur || null, ord: Rec.all('note', { date: d }).length, done: 0, cancelled: 0,
-    due: p.due || '', pri: p.pri || 0, proj: p.proj || '', rep: p.rep || null,
+    due: p.due || '', pri: p.pri || 0, proj: p.proj || '', tags: p.tags && p.tags.length ? p.tags : undefined, rep: p.rep || null,
   });
   publishNotes(d);
   Mobile.feedback('success');
@@ -657,6 +681,11 @@ function viewInfo(v) {
     const k = v.slice(2);
     return { title: projName(k), hash: true, groups: byDate(open.filter(x => x.proj === k)), due: '', proj: k, showProj: false };
   }
+  if (v.indexOf('t:') === 0) {
+    const tg = v.slice(2);
+    return { title: tg, at: true, groups: byDate(open.filter(x => (x.tags || []).indexOf(tg) > -1)),
+      due: '', proj: '', tag: tg, showProj: true };
+  }
   const over = open.filter(x => dueOf(x) && dueOf(x) < t), now = open.filter(x => dueOf(x) === t);
   const done = all.filter(x => x.done && x.doneOn === t);
   const groups = [];
@@ -678,8 +707,19 @@ function counts() {
     if (!x.proj) c.inbox++;
     if (d && d <= t) c.today++;
     if (x.proj) c['p:' + x.proj] = (c['p:' + x.proj] || 0) + 1;
+    (x.tags || []).forEach(t2 => { c['t:' + t2] = (c['t:' + t2] || 0) + 1; });
   });
   return c;
+}
+/* Every tag in use, most-used first. Tags have no rows of their own: a tag is
+   a word on a todo and nothing else, so the list is read from the todos rather
+   than kept beside them, and a tag nobody uses any more simply stops being
+   listed. Projects have rows because they carry a colour and an order; a tag
+   carries neither. */
+function tagsInUse() {
+  const n = {};
+  quests().filter(x => !x.done).forEach(x => (x.tags || []).forEach(t2 => { n[t2] = (n[t2] || 0) + 1; }));
+  return Object.keys(n).sort((a, b) => n[b] - n[a] || a.localeCompare(b));
 }
 
 /* ══════════════ DRAWING ══════════════
@@ -708,16 +748,22 @@ function drawSide() {
     b.oncontextmenu = e => { e.preventDefault(); projectMenu(p, { x: e.clientX, y: e.clientY }); };
     holdMenu(b, pt => projectMenu(p, pt));
   });
+  const ts = tagsInUse();
+  if (ts.length) side.appendChild(el('h3', null, 'Labels'));
+  ts.forEach(t2 => nav('t:' + t2, '<span class="at">@</span>', t2));
 }
 function draw() {
   if (!$('#main')) return;
   if (VIEW.indexOf('p:') === 0 && !Rec.get('project', null, VIEW.slice(2))) VIEW = 'today';
+  /* A label with nothing left on it is not a place you can stand. */
+  if (VIEW.indexOf('t:') === 0 && tagsInUse().indexOf(VIEW.slice(2)) < 0) VIEW = 'today';
   drawSide();
   const info = viewInfo(VIEW);
   ensureAddBar();
   ADD.setView(info);
   const h = $('#vtitle');
-  h.innerHTML = (info.hash ? '<span class="hash">#</span> ' : '') + esc(info.title) + (info.sub ? '<small>' + esc(info.sub) + '</small>' : '');
+  h.innerHTML = (info.hash ? '<span class="hash">#</span> ' : info.at ? '<span class="at">@</span> ' : '') +
+    esc(info.title) + (info.sub ? '<small>' + esc(info.sub) + '</small>' : '');
   const list = $('#list');
   list.innerHTML = '';
   const any = info.groups.some(g => g.items.length);
@@ -764,6 +810,12 @@ function rowEl(x, info) {
   meta.appendChild(el('span', 'src', esc(srcName(x))));
   if (x.proj && info.showProj) meta.appendChild(el('span', 'pj', '<span class="hash" style="color:var(--data-' +
     ((Rec.get('project', null, x.proj) || {}).slot || 1) + ')">#</span> ' + esc(projName(x.proj))));
+  /* Every label the line carries, except the one you are already standing in:
+     a list of @phone jobs does not need @phone written on each of them. */
+  (x.tags || []).forEach(t2 => {
+    if (info.tag === t2) return;
+    meta.appendChild(el('span', 'pj', '<span class="at">@</span> ' + esc(t2)));
+  });
   body.appendChild(meta);
   const acts = el('div', 'acts');
   const act = (icon, label, cls, fn) => {
@@ -1121,7 +1173,11 @@ function ensureAddBar() {
   function paint() {
     const o = final(), p = o.p, v = inp.value;
     let html = '', at = 0;
-    p.spans.forEach(s => { html += esc(v.slice(at, s.start)) + '<mark>' + esc(s.word) + '</mark>'; at = s.end; });
+    p.spans.forEach(s => {
+      html += esc(v.slice(at, s.start)) +
+        '<mark' + (s.kind === 'tag' ? ' class="tag"' : '') + '>' + esc(s.word) + '</mark>';
+      at = s.end;
+    });
     hl.innerHTML = html + esc(v.slice(at)) + ' ';
     hl.scrollLeft = inp.scrollLeft;
     chips.innerHTML = '';
@@ -1139,6 +1195,13 @@ function ensureAddBar() {
     chip(o.proj ? '<span class="hash">#</span> ' + esc(o.projName || projName(o.proj)) : 'Inbox', o.proj ? 'set' : '',
       c => choose(c, 'Project', projItems(o.proj, pr => { dropWords(parseQuest(inp.value, ignore), ['proj']); set.proj = pr; paint(); })),
       typedProj.length ? () => { ignore = ignore.concat(typedProj); paint(); } : (set.proj !== undefined ? () => { delete set.proj; paint(); } : null));
+    /* One chip per tag typed, each giving its own word back. A single chip
+       saying "3 labels" would leave no way to take one of them off. */
+    (o.tags || []).forEach(t2 => {
+      const typedTag = words(p, ['tag']).filter(w => slug(w.slice(1)) === t2);
+      chip('<span class="at">@</span> ' + esc(t2), 'set', null,
+        typedTag.length ? () => { ignore = ignore.concat(typedTag); paint(); } : null);
+    });
     const addB = el('button', 'mb-btn mb-press mb-tap go', 'ADD');
     addB.onclick = submit;
     chips.appendChild(addB);

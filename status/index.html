@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.31, 2026-09-17">
+<meta name="mb-version" content="1.0.32, 2026-09-17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1263,6 +1263,16 @@ function evDrop(date, fid, t) {
    No copying. The meal row stays the only record of the coffee; the caffeine
    figure is read out of it every time. A copy would double up the moment you
    edited the meal, and nothing would say which of the two was the real one. */
+/* ── what unit each box on a label holds ──
+   Tom, 2026-09-17: "how possible is intelligent food entry? 1000mg - 1 gram".
+   A label prints sodium in milligrams and protein in grams, and mixing them up
+   is the easiest mistake there is to make while copying one. The box knows
+   which it wants, so typing the packet's own words is enough: 1000mg into a
+   gram box is 1, 1.5g into a milligram box is 1500. `UI.amount` does the
+   arithmetic and leaves a bare number alone, so nothing that worked before
+   this changes. Calories and price have no unit and take what they are given. */
+const NUT_UNIT = { p: 'g', c: 'g', f: 'g', na: 'mg', k: 'mg', ca: 'mg', caff: 'mg', kcal: '', price: '' };
+
 const NUT_FROM = [
   ['kcal', 'Calories', 'kcal'], ['p', 'Protein', 'g'], ['c', 'Carbs', 'g'], ['f', 'Fat', 'g'],
   ['na', 'Sodium', 'mg'], ['k', 'Potassium', 'mg'], ['ca', 'Calcium', 'mg'], ['caff', 'Caffeine', 'mg'],
@@ -3424,6 +3434,18 @@ function foodEditor(fd, prefillName) {
         i.setAttribute('list', dl.id);
       }
       i.value = val == null ? '' : String(val);
+      /* Rewritten when you leave the box, so the conversion is something you
+         SEE rather than something you hope happened. `amt` converts against
+         whatever unit the serving is in, which is the box next to it. */
+      if (!TEXTY[key]) {
+        i.addEventListener('blur', () => {
+          const want = key === 'amt' ? (inputs.unit ? inputs.unit.value : '') : NUT_UNIT[key];
+          const v = UI.amount(i.value, want);
+          if (v == null) return;
+          const shown = Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : String(Math.round(v * 1000) / 1000);
+          if (shown !== i.value) i.value = shown;
+        });
+      }
       inputs[key] = i; w.appendChild(i);
       if (wide) w.style.gridColumn = '1 / -1';
       return w;
@@ -3456,7 +3478,8 @@ function foodEditor(fd, prefillName) {
     const calc = el('button', 'btn wide quiet', 'Work calories out from the macros');
     calc.style.marginTop = '8px';
     calc.onclick = () => {
-      const k = (num(inputs.p.value, 0) || 0) * 4 + (num(inputs.c.value, 0) || 0) * 4 + (num(inputs.f.value, 0) || 0) * 9;
+      const gOf = key => UI.amount(inputs[key].value, 'g') || 0;
+      const k = gOf('p') * 4 + gOf('c') * 4 + gOf('f') * 9;
       inputs.kcal.value = String(Math.round(k));
       UI.toast('Calories worked out from the macros');
     };
@@ -3500,8 +3523,12 @@ function foodEditor(fd, prefillName) {
     body.appendChild(saveBar(isNew ? 'Save' : 'Update', () => {
       const name = inputs.name.value.trim();
       if (!name) return UI.toast('Needs a name', { bad: true });
-      const base = { amt: num(inputs.amt.value, 1) || 1, unit: inputs.unit.value.trim() || 'serving' };
-      NUTS.concat(['price']).forEach(n => { const v = num(inputs[n].value); if (v != null) base[n] = v; });
+      const unit = inputs.unit.value.trim() || 'serving';
+      const base = { amt: UI.amount(inputs.amt.value, unit) || 1, unit: unit };
+      NUTS.concat(['price']).forEach(n => {
+        const v = UI.amount(inputs[n].value, NUT_UNIT[n]);
+        if (v != null) base[n] = v;
+      });
       const row = { id: f.id, name: name, brand: inputs.brand.value.trim(), cat: inputs.cat.value.trim(),
         base: base, serves: f.serves || [], dflt: f.dflt || 0, uses: f.uses || 0, shot: shotId };
       Rec.set('food', null, f.id, row);
