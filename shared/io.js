@@ -31,7 +31,7 @@
    Bumped by hand, and only when something changed that a person would notice
    or that changes the shape of stored data. VERSIONS.md says what each one
    did. */
-const VERSION = '0.1.16';
+const VERSION = '0.1.17';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
@@ -233,7 +233,7 @@ const IO = {
      and switching the whole thing off is one tick in Google Calendar's own
      sidebar rather than a hunt for what it left behind. */
   CAL_NAME: 'Motherbase',
-  SCRIPT_V: 5,
+  SCRIPT_V: 6,
 
   register(spec) {
     apps[spec.app] = Object.assign({ types: [], sheets: null, tables: null, name: spec.app }, spec);
@@ -2298,6 +2298,22 @@ const Mirror = {
     return Mirror.fault().say;
   },
 
+  /** Events moved by hand in the app's calendar, handed to its `calmoves`.
+      Tom, 2026-09-18: a routine dragged in Google Calendar moves that routine
+      on that date only. Asked before the push, so the push already carries the
+      new start and the script has nothing to put back. Never fails a sync: a
+      script older than 6 is not asked at all, because it answers an unknown
+      question with every tab in the sheet. */
+  calMoves(appId) {
+    const spec = apps[appId];
+    if (!spec || typeof spec.calmoves !== 'function' || !IO.mirror.settings.cal || !(mcfg.sheetV >= 6)) return Promise.resolve(0);
+    return jsonp(mcfg.url, { app: appId, want: 'calmoves', cal: IO.CAL_NAME }, 25000).then(r => {
+      const list = (r && Array.isArray(r.moves)) ? r.moves : [];
+      if (list.length) { try { spec.calmoves(list); } catch (e) {} }
+      return list.length;
+    }).catch(() => 0);
+  },
+
   /** the whole round trip, in the order that makes it safe */
   sync(appId, quiet, opts) {
     if (!mcfg.url) { mlog({ a: appId, w: 'manual', r: 'skip', y: 'no-link' }); return Promise.resolve(false); }
@@ -2310,7 +2326,8 @@ const Mirror = {
       .then(pre => {
         idx = pre;
         mstep(1, 4, 'Downloading', quiet);
-        return Mirror.pull(appId, pre).catch(e => ({ skipped: 'could not read', failed: 1, why: threwWhy(e) }));
+        return Mirror.calMoves(appId).then(() =>
+          Mirror.pull(appId, pre).catch(e => ({ skipped: 'could not read', failed: 1, why: threwWhy(e) })));
       })
       .then(got => {
         mstep(2, 4, got && got.failed ? 'Could not read it' : 'Saving what came back', quiet);
@@ -2769,17 +2786,32 @@ const Mirror = {
       '    if (e <= s) e.setDate(e.getDate() + 1);',
       '    kept[x.key] = 1;',
       '    var ev = mine[x.key];',
+      '    var want = s.getTime() + "|" + e.getTime();',
       '    if (ev) {',
       '      /* Moved or renamed rather than remade, so an invitation or a colour',
       '         set by hand on the event survives the next push. */',
       '      if (ev.getTitle() !== x.title) ev.setTitle(x.title);',
       '      if (ev.getDescription() !== x.details) ev.setDescription(x.details);',
-      '      var moved = ev.getStartTime().getTime() !== s.getTime();',
-      '      if (!moved) moved = ev.getEndTime().getTime() !== e.getTime();',
-      '      if (moved) ev.setTime(s, e);',
+      '      /* Version 6: mbAt is the time this last wrote. An event whose time',
+      '         is not that was moved by hand in the calendar, and is left where',
+      '         it was put until the app has read the move back and sends the',
+      '         same start. Moving it back would undo the one thing asked for. */',
+      '      var lastAt = null;',
+      '      try { lastAt = ev.getTag("mbAt"); } catch (err) { lastAt = null; }',
+      '      var cur = ev.getStartTime().getTime() + "|" + ev.getEndTime().getTime();',
+      '      var byHand = false;',
+      '      if (lastAt) byHand = cur !== lastAt;',
+      '      if (byHand) byHand = ev.getStartTime().getTime() !== s.getTime();',
+      '      /* Dragged to another day is not taken, so it goes back. */',
+      '      if (byHand) byHand = Utilities.formatDate(ev.getStartTime(), Session.getScriptTimeZone(), "yyyy-MM-dd") === x.date;',
+      '      if (!byHand) {',
+      '        if (cur !== want) ev.setTime(s, e);',
+      '        ev.setTag("mbAt", want);',
+      '      }',
       '    } else {',
       '      ev = c.createEvent(x.title, s, e, { description: x.details });',
       '      ev.setTag("mb", x.key);',
+      '      ev.setTag("mbAt", want);',
       '    }',
       '    wrote++;',
       '  });',
@@ -2864,6 +2896,34 @@ const Mirror = {
       '      if (k.indexOf("mb.at.") === 0) pushedAt[k.substring(6)] = all[k];',
       '    });',
       '    return mbReply(e, { ok: true, v: MB_V, index: index, pushedAt: pushedAt });',
+      '  }',
+      '',
+      '  /* Version 6: events moved by hand in the calendar this script writes.',
+      '     Moved means its time is not the one this last wrote (mbAt), and the',
+      '     app takes each one as that routine starting then on that day only. */',
+      '  if (want === "calmoves") {',
+      '    var moves = [];',
+      '    var cn = e.parameter.cal;',
+      '    if (!cn) cn = "Motherbase";',
+      '    var cs = CalendarApp.getCalendarsByName(cn);',
+      '    if (cs && cs.length) {',
+      '      var ctz = Session.getScriptTimeZone();',
+      '      var from = new Date();',
+      '      from.setHours(0, 0, 0, 0);',
+      '      var to = new Date(from.getTime());',
+      '      to.setDate(to.getDate() + 60);',
+      '      cs[0].getEvents(from, to).forEach(function (ev) {',
+      '        var tag = null, at = null;',
+      '        try { tag = ev.getTag("mb"); at = ev.getTag("mbAt"); } catch (err) { tag = null; }',
+      '        if (!tag) return;',
+      '        if (!at) return;',
+      '        if (ev.getStartTime().getTime() + "|" + ev.getEndTime().getTime() === at) return;',
+      '        var md = Utilities.formatDate(ev.getStartTime(), ctz, "yyyy-MM-dd");',
+      '        if (md !== String(tag).split("|")[0]) return;',
+      '        moves.push({ key: tag, date: md, start: Utilities.formatDate(ev.getStartTime(), ctz, "HH:mm") });',
+      '      });',
+      '    }',
+      '    return mbReply(e, { ok: true, v: MB_V, moves: moves });',
       '  }',
       '',
       '  /* A receipt in the old shape, kept so an app running older code than this',
