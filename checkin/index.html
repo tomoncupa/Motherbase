@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.5, 2026-09-17">
+<meta name="mb-version" content="1.0.6, 2026-09-18">
 <title>CHECK IN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◎</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -76,6 +76,12 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .slot.has .lab{position:absolute;left:var(--s-1);bottom:var(--s-1);padding:0 var(--s-1);
   border-radius:var(--radius-sm);background:var(--surface-1);color:var(--text-1)}
 .slot.add{border:var(--border-width) dashed var(--border-strong);background:none}
+/* the iPhone import: a tile per photo, its date on top, its pose below */
+.slot .when{position:absolute;left:var(--s-1);top:var(--s-1);padding:0 var(--s-1);border-radius:var(--radius-sm);
+  background:var(--surface-1);color:var(--text-1);font-size:var(--f-1)}
+.slot .when.guess{color:var(--warn)}
+.slot.out img{opacity:.3}
+.impgrid{max-height:60svh;overflow:auto}
 
 .frow{display:flex;align-items:center;gap:var(--s-3);min-height:var(--tap)}
 .frow .lbl{flex:1;min-width:0}
@@ -1031,7 +1037,7 @@ function drawHistory() {
     acts.appendChild(fold);
   }
   c.appendChild(acts);
-  c.appendChild(el('p', 'muted', 'Photos saved from Check In are named with their date and pose, so a folder of them lands on the right days.'));
+  c.appendChild(el('p', 'muted', 'Photos saved from Check In land on their own day and pose. Photos from your phone’s library are dated from inside the photo, and you tap each one to pick its pose.'));
   return c;
 }
 
@@ -2376,16 +2382,18 @@ function addFromFiles(folder) {
   i.type = 'file'; i.multiple = true; i.accept = 'image/*';
   if (folder) i.setAttribute('webkitdirectory', '');
   i.onchange = async () => {
-    const files = Array.from(i.files || []).filter(f => /\.(jpe?g|png|webp|heic)$/i.test(f.name));
+    const files = Array.from(i.files || []).filter(f => /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name) || /^image\//.test(f.type));
     if (!files.length) return;
     const pid = who, poses = posesOf(pid);
     let added = 0, kept = 0, skipped = 0, unread = 0;
+    const loose = [];
     for (const f of files) {
       const m = /^(\d{4}-\d{2}-\d{2})\s+(.+)\.[a-z]+$/i.exec(f.name);
       const words = m ? m[2].toLowerCase() : '';
       const pose = m && poses.filter(p => words === p.label.toLowerCase() || words.endsWith(' ' + p.label.toLowerCase()))
         .sort((a, b) => b.label.length - a.label.length)[0];
-      if (!pose) { skipped++; continue; }
+      /* not one of ours: a photo straight off the phone, named IMG_4821 */
+      if (!pose) { loose.push(f); continue; }
       const key = K(pid, pose.id);
       if (Rec.has('cphoto', m[1], key)) { kept++; continue; }
       try {
@@ -2399,10 +2407,115 @@ function addFromFiles(folder) {
     if (kept) bits.push(kept + ' already there');
     if (skipped) bits.push(skipped + ' without a date and pose in the name');
     if (unread) bits.push(unread + ' this browser could not open');
-    UI.toast(esc(bits.join(', ')) + '.');
-    draw();
+    if (added || kept || unread) { UI.toast(esc(bits.join(', ')) + '.'); draw(); }
+    if (loose.length) importLoose(loose, pid);
   };
   i.click();
+}
+
+/* ── photos straight off an iPhone ──
+   Tom, 2026-09-18: "optimize Checkin for mass photo import from IOS". The
+   Photos picker hands over IMG_4821.jpeg, a name with nothing in it, so the
+   date comes from inside the photo, where the camera wrote when it was taken.
+   The file's own date is the fallback, drawn in the warning colour because on
+   an iPhone it can be the day it was picked rather than the day it was taken.
+   The pose is not in a photo at all: every tile starts as Front and a tap
+   moves it to the next pose, then to Leave out. Two photos on one day in one
+   pose keep the later (Tom's pick); a day and pose already holding a photo
+   keeps it, the same as every other import here. */
+async function photoTaken(f) {
+  try {
+    const b = new DataView(await f.slice(0, 256 * 1024).arrayBuffer());
+    if (b.getUint16(0) !== 0xFFD8) return null;
+    let o = 2;
+    while (o + 4 < b.byteLength) {
+      const mk = b.getUint16(o), len = b.getUint16(o + 2);
+      if (mk === 0xFFE1 && b.getUint32(o + 4) === 0x45786966) {
+        const t = o + 10, le = b.getUint16(t) === 0x4949;
+        const u16 = p => b.getUint16(t + p, le), u32 = p => b.getUint32(t + p, le);
+        const ifd = (at, want) => {
+          const n = u16(at), out = {};
+          for (let k = 0; k < n; k++) {
+            const e = at + 2 + k * 12, tag = u16(e);
+            if (want.indexOf(tag) >= 0) out[tag] = u32(e + 8);
+          }
+          return out;
+        };
+        const str = p => { let s = ''; for (let k = 0; k < 19; k++) s += String.fromCharCode(b.getUint8(t + p + k)); return s; };
+        const zero = ifd(u32(4), [0x8769, 0x0132]);
+        let s = null;
+        if (zero[0x8769]) { const ex = ifd(zero[0x8769], [0x9003]); if (ex[0x9003]) s = str(ex[0x9003]); }
+        if (!s && zero[0x0132]) s = str(zero[0x0132]);
+        const m = s && /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2})/.exec(s);
+        return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]).getTime() : null;
+      }
+      if ((mk & 0xFF00) !== 0xFF00) return null;
+      o += 2 + len;
+    }
+  } catch (e) {}
+  return null;
+}
+const dayOf = ms => { const d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+async function importLoose(files, pid) {
+  const poses = posesOf(pid);
+  const tiles = [];
+  for (const f of files) {
+    const at = await photoTaken(f);
+    tiles.push({ f: f, t: at || f.lastModified || Date.now(), guess: !at, pose: 0, url: URL.createObjectURL(f) });
+  }
+  tiles.sort((a, b) => a.t - b.t);
+  const opts = poses.map(p => p.label).concat(['Leave out']);
+  const free = () => tiles.forEach(x => URL.revokeObjectURL(x.url));
+  UI.dialog({
+    title: 'ADD ' + tiles.length + (tiles.length === 1 ? ' PHOTO' : ' PHOTOS'), width: 720,
+    body: b => {
+      b.appendChild(el('p', 'muted', 'Tap a photo to change its pose. Every one starts as ' + esc(opts[0]) + '. A date in ' +
+        'the warning colour was not written inside the photo, so check it.'));
+      const g = el('div', 'shots impgrid');
+      tiles.forEach(x => {
+        const s = el('button', 'slot has');
+        const paint = () => {
+          s.className = 'slot has' + (x.pose === poses.length ? ' out' : '');
+          s.innerHTML = '<img alt="" src="' + x.url + '"><span class="when' + (x.guess ? ' guess' : '') + '">' +
+            esc(Day.label(dayOf(x.t))) + '</span><span class="lab">' + esc(opts[x.pose].toUpperCase()) + '</span>';
+          s.setAttribute('aria-label', Day.label(dayOf(x.t)) + ', ' + opts[x.pose] + '. Tap to change the pose.');
+        };
+        s.onclick = () => { x.pose = (x.pose + 1) % opts.length; paint(); };
+        paint();
+        g.appendChild(s);
+      });
+      b.appendChild(g);
+    },
+    actions: [
+      { label: 'CANCEL', fn: () => { free(); } },
+      { label: 'IMPORT', kind: 'go', fn: () => { saveLoose(tiles, poses, pid).then(free); } },
+    ],
+  });
+}
+
+async function saveLoose(tiles, poses, pid) {
+  /* the later photo wins a day and pose: tiles are in time order, so the
+     last one written for a slot is the one kept */
+  const pick = {};
+  tiles.forEach(x => { if (x.pose < poses.length) pick[dayOf(x.t) + '|' + poses[x.pose].id] = x; });
+  let added = 0, kept = 0, unread = 0;
+  for (const slot of Object.keys(pick)) {
+    const x = pick[slot], d = dayOf(x.t), key = K(pid, poses[x.pose].id);
+    if (Rec.has('cphoto', d, key)) { kept++; continue; }
+    try {
+      const ph = await shrink(x.f);
+      ph.t = x.t;
+      Rec.set('cphoto', d, key, ph);
+      queueMeasure('cphoto', d, key);
+      added++;
+    } catch (e) { unread++; }
+  }
+  const bits = [added + (added === 1 ? ' photo added' : ' photos added')];
+  if (kept) bits.push(kept + ' already had a photo that day');
+  if (unread) bits.push(unread + ' this browser could not open');
+  UI.toast(esc(bits.join(', ')) + '.');
+  draw();
 }
 
 /* ══════════════ copy for Claude ══════════════
