@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.10, 2026-09-17">
+<meta name="mb-version" content="1.0.11, 2026-09-18">
 <title>QUESTS</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -166,6 +166,25 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .row.blk.now{background:color-mix(in srgb,var(--success) 8%,transparent)}
 .tk:disabled{cursor:default;opacity:.4}
 .empty{color:var(--text-muted);padding:var(--s-6) 0;text-align:center}
+/* the month grid: Tom, 2026-09-18 */
+.calbar{display:flex;align-items:center;gap:var(--s-2);margin-bottom:var(--s-3)}
+.calbar b{font-family:var(--font-display);font-size:var(--f-3);flex:1}
+.calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:var(--s-1)}
+.calgrid .wd{font-size:var(--f-1);color:var(--text-muted);text-align:center;padding-bottom:var(--s-1)}
+.calgrid .cd{min-height:calc(var(--tap) * 2);border:0;border-radius:var(--radius-sm);background:var(--surface-1);
+  color:var(--text-1);font:inherit;text-align:left;padding:var(--s-1);cursor:pointer;min-width:0;
+  display:flex;flex-direction:column;gap:var(--s-1);overflow:hidden}
+.calgrid .cd.out{opacity:.4}
+.calgrid .cd.today{box-shadow:inset 0 0 0 var(--border-width) var(--accent)}
+.calgrid .cd .dn{font-family:var(--font-mono);font-size:var(--f-1);color:var(--text-muted)}
+.calgrid .cd.today .dn{color:var(--accent)}
+.calgrid .ct{font-size:var(--f-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  border-radius:var(--radius-sm);padding:0 var(--s-1);background:var(--surface-2)}
+.calgrid .ct.done{text-decoration:line-through;color:var(--text-muted)}
+.calgrid .ct.late{color:var(--danger)}
+.calgrid .more{font-size:var(--f-1);color:var(--text-muted)}
+@media (max-width:700px){.calgrid .ct{display:none}.calgrid .cd .n{font-size:var(--f-1);color:var(--accent)}}
+@media (min-width:701px){.calgrid .cd .n{display:none}}
 
 /* ── the popover: Todoist's date menu, and the small lists ── */
 .pop{position:fixed;z-index:1000;background:var(--surface-1);color:var(--text-1);
@@ -679,8 +698,23 @@ function byDate(list) {
   if (none.length) out.push({ id: 'none', title: 'No date', items: none });
   return out;
 }
+/* ── Calendar: a month grid, Tom 2026-09-18 ──
+   Each square lists the todos due that day, and the ones finished on it.
+   Tapping a todo opens it; tapping the square opens that day as a list, where
+   the add bar writes to that day. `calDay` is the day open, if any. */
+let calMonth = T().slice(0, 7), calDay = '';
+function onDay(d) {
+  const all = quests();
+  return all.filter(x => (!x.done && dueOf(x) === d) || (x.done && x.doneOn === d));
+}
 function viewInfo(v) {
   const t = T(), all = quests(), open = all.filter(x => !x.done);
+  if (v === 'cal') {
+    const d = calDay || t;
+    return { title: 'Calendar', sub: calDay ? dayTitle(d) : '', back: !!calDay,
+      groups: calDay ? [{ id: d, title: dayTitle(d), day: d, items: onDay(d).concat(movedFrom(d)) }] : [],
+      due: d, proj: '', showProj: true };
+  }
   if (v === 'inbox') return { title: 'Inbox', groups: byDate(open.filter(x => !x.proj)), due: '', proj: '', showProj: false };
   if (v === 'upcoming') {
     const over = open.filter(x => dueOf(x) && dueOf(x) < t), groups = [];
@@ -757,6 +791,7 @@ function drawSide() {
   nav('inbox', ico('rows'), 'Inbox');
   nav('today', ico('today'), 'Today');
   nav('upcoming', ico('schedule'), 'Upcoming');
+  nav('cal', ico('calendar'), 'Calendar').addEventListener('click', () => { calDay = ''; calMonth = T().slice(0, 7); draw(); });
   const ps = projects();
   if (ps.length) side.appendChild(el('h3', null, 'Projects'));
   ps.forEach(p => {
@@ -782,6 +817,12 @@ function draw() {
     esc(info.title) + (info.sub ? '<small>' + esc(info.sub) + '</small>' : '');
   const list = $('#list');
   list.innerHTML = '';
+  if (VIEW === 'cal') {
+    if (!calDay) { drawMonth(list); return; }
+    const bk = el('button', 'mb-btn mb-press mb-tap flat', ico('back') + '<span>' + esc(monthName(calDay.slice(0, 7))) + '</span>');
+    bk.onclick = () => { calDay = ''; draw(); };
+    list.appendChild(bk);
+  }
   const any = info.groups.some(g => g.items.length);
   info.groups.forEach(g => {
     if (!g.items.length && g.id !== T() && !g.day) return;
@@ -803,6 +844,41 @@ function draw() {
     list.appendChild(box);
   });
   if (!any) list.appendChild(el('div', 'empty', VIEW === 'today' ? 'Nothing due today' : 'No tasks'));
+}
+const monthName = ym => asDate(ym + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+function drawMonth(list) {
+  const bar = el('div', 'calbar');
+  const step = n => { const [y, m] = calMonth.split('-').map(Number), d = new Date(y, m - 1 + n, 1);
+    calMonth = d.getFullYear() + '-' + pad(d.getMonth() + 1); draw(); };
+  const prev = el('button', 'mb-btn mb-press mb-tap flat', ico('back')); prev.setAttribute('aria-label', 'Last month'); prev.onclick = () => step(-1);
+  const next = el('button', 'mb-btn mb-press mb-tap flat', ico('next')); next.setAttribute('aria-label', 'Next month'); next.onclick = () => step(1);
+  const now = el('button', 'mb-btn mb-press mb-tap flat', 'Today'); now.onclick = () => { calMonth = T().slice(0, 7); draw(); };
+  bar.appendChild(el('b', null, esc(monthName(calMonth))));
+  bar.appendChild(prev); bar.appendChild(now); bar.appendChild(next);
+  list.appendChild(bar);
+  const g = el('div', 'calgrid');
+  /* Sunday first, as the date menu's month calendar is */
+  ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(w => g.appendChild(el('div', 'wd', w)));
+  const first = calMonth + '-01', start = Day.shift(first, -Day.dow(first)), t = T();
+  for (let i = 0; i < 42; i++) {
+    const d = Day.shift(start, i);
+    if (i === 35 && d.slice(0, 7) !== calMonth) break;
+    const items = onDay(d).sort(sortQ), open = items.filter(x => !x.done).length;
+    const c = el('button', 'cd' + (d.slice(0, 7) !== calMonth ? ' out' : '') + (d === t ? ' today' : ''));
+    c.type = 'button';
+    c.setAttribute('aria-label', dayTitle(d) + ', ' + (open ? open + ' to do' : 'nothing due'));
+    c.appendChild(el('span', 'dn', String(+d.slice(8))));
+    if (open) c.appendChild(el('span', 'n', String(open)));
+    items.slice(0, 3).forEach(x => {
+      const s = el('span', 'ct' + (x.done ? ' done' : (d < t ? ' late' : '')), esc(x.text || ''));
+      s.onclick = e => { e.stopPropagation(); editSheet(x); };
+      c.appendChild(s);
+    });
+    if (items.length > 3) c.appendChild(el('span', 'more', '+' + (items.length - 3) + ' more'));
+    c.onclick = () => { calDay = d; draw(); };
+    g.appendChild(c);
+  }
+  list.appendChild(g);
 }
 function rowEl(x, info) {
   const due = dueOf(x), late = !x.done && due && due < T();
