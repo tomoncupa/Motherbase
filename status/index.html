@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.38, 2026-09-18">
+<meta name="mb-version" content="1.0.39, 2026-09-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -642,6 +642,12 @@ body.deskmini nav { display: none; }
    backup reminder is raised again the moment the whole app is open. */
 body.deskmini .mb-toast { display: none; }
 .deskdoing { width: 100%; min-width: 0; min-height: var(--tap); }
+/* a label and one or two short boxes on one line */
+.frow { display: flex; align-items: center; gap: var(--s-2); min-height: var(--tap); margin-bottom: var(--s-2); }
+.frow .lbl { flex: 1; min-width: 0; }
+.frow .lbl small { display: block; color: var(--text-muted); font-size: var(--f-1); }
+.frow input { width: 5em; min-width: 0; text-align: center; }
+.frow input.wide { width: auto; flex: 2; text-align: left; }
 body.deskmini #deskbar {
   display: flex; flex-direction: column; gap: var(--s-2);
   height: 100vh; padding: var(--s-3); background: var(--surface-1);
@@ -1094,12 +1100,12 @@ function linkNutrients() {
    linkNutrients: a number rather than a flag, so a later change runs again
    instead of being locked out by a tick from the previous version. Only the
    library's own fields are touched, and only where nothing was set by hand. */
-const FIELDFIX = 7;   /* 7 moves caffeine to the six hours Tom asked for */
+const FIELDFIX = 8;   /* 7 moves caffeine to the six hours Tom asked for; 8 files the pillars */
 /* Which kind of thing each library field is, so the form can narrow itself
    without him having to categorise five things by hand first. */
 const SEEDCAT = {
-  weight: 'body', rhr: 'body', sleep: 'body',
-  steps: 'activity',
+  weight: 'body', rhr: 'body', sleep: 'pillar',
+  steps: 'pillar', trained: 'pillar',
   mood: 'feeling', energy: 'feeling',
   creatine: 'intake', potassium: 'intake', sodium: 'intake', caffeine: 'intake',
   magnesium: 'intake', zinc: 'intake', water: 'intake',
@@ -1141,8 +1147,11 @@ function fixSeedFields() {
          rather than picked from */
       if (!lib.chips) delete next.chips;
     }
-    /* Only where he has not chosen one himself. */
-    if (kind && !f.cat) next.cat = kind;
+    /* Only where he has not chosen one himself. Sleep, Steps and Trained sat
+       in the group the app gave them before Pillars existed; that was never
+       his choice, so they move (2026-09-18). */
+    const WAS = { sleep: 'body', steps: 'activity', trained: '' };
+    if (kind && (!f.cat || (f.id in WAS && (f.cat || '') === WAS[f.id]))) next.cat = kind;
     /* A body measurement does not wear off, so a half-life on one is a
        leftover that would decay a number that does not decay. */
     if (next.cat && catOf(next.cat).has.indexOf('half') < 0) delete next.half;
@@ -1196,17 +1205,23 @@ const whenRank = f => {
 
 /* `has` lists the controls this kind of thing actually has. Anything not
    listed is not drawn and not stored. */
+/* Tom, 2026-09-18, the groups: Pillars (what the grade is made of), Physical
+   stats, Mental stats, Intake. The ids of the old three stay, so nothing
+   anyone filed moves by itself: Body is Physical stats, Feeling is Mental
+   stats. Only Intake has a half-life. */
 const CATS = [
-  { id: 'body',     label: 'Body',     note: 'weight, resting heart rate',
+  { id: 'pillar',   label: 'Pillars',        note: 'sleep, steps, training: what the grade is made of',
     has: ['target', 'chips', 'edges', 'days', 'when'] },
-  { id: 'intake',   label: 'Intake',   note: 'anything you take or drink',
-    has: ['target', 'chips', 'half', 'from', 'days', 'when'] },
-  { id: 'activity', label: 'Activity', note: 'steps, minutes moved',
+  { id: 'body',     label: 'Physical stats', note: 'weight, resting heart rate',
     has: ['target', 'chips', 'edges', 'days', 'when'] },
-  { id: 'feeling',  label: 'Feeling',  note: 'mood, energy, soreness',
+  { id: 'feeling',  label: 'Mental stats',   note: 'mood, energy, focus',
     has: ['scale', 'days', 'when'] },
-  { id: 'other',    label: 'Other',    note: 'everything else',
-    has: ['target', 'chips', 'edges', 'half', 'from', 'days', 'when'] },
+  { id: 'intake',   label: 'Intake',         note: 'anything you take or drink, daily or now and then',
+    has: ['target', 'chips', 'half', 'from', 'days', 'when'] },
+  { id: 'activity', label: 'Activity',       note: 'minutes moved',
+    has: ['target', 'chips', 'edges', 'days', 'when'] },
+  { id: 'other',    label: 'Other',          note: 'everything else',
+    has: ['target', 'chips', 'edges', 'from', 'days', 'when'] },
 ];
 const catOf = id => CATS.filter(c => c.id === id)[0] || CATS[CATS.length - 1];
 const catLabel = id => (CATS.filter(c => c.id === id)[0] || {}).label || '';
@@ -1232,8 +1247,12 @@ function groupedFields() {
     if (!byCat[c]) { byCat[c] = []; order.push(c); }
     byCat[c].push(f);
   });
-  const out = (byCat[''] || []).slice();
-  order.forEach(c => { if (c) byCat[c].forEach(f => out.push(f)); });
+  /* The groups in CATS's order (2026-09-18), anything else after, and a field
+     with no group last, where a stray copy is easy to see. */
+  const out = [];
+  CATS.forEach(c => (byCat[c.id] || []).forEach(f => out.push(f)));
+  order.forEach(c => { if (c && !CATS.some(k => k.id === c)) byCat[c].forEach(f => out.push(f)); });
+  (byCat[''] || []).forEach(f => out.push(f));
   return out;
 }
 
@@ -1623,6 +1642,17 @@ const timeInput = (val, onset) => UI.timeField(val, onset);
 function hhmm(ms) { return Journal.hhmm(ms); }
 function clockLabel(at) { return Journal.clockLabel(at); }
 function durLabel(d) { return Journal.durLabel(d); }
+/* A length typed by hand, in minutes: 45, 45m, 1h, 1h30, 1.5h, 1:30. */
+function readDur(s) {
+  s = String(s || '').trim().toLowerCase();
+  if (!s) return null;
+  let m = /^(\d+):(\d{1,2})$/.exec(s);
+  if (m) return +m[1] * 60 + +m[2] || null;
+  m = /^(\d+(?:\.\d+)?)\s*h(?:rs?|ours?)?\s*(?:(\d+)\s*m?(?:in)?)?$/.exec(s);
+  if (m) return Math.round(+m[1] * 60 + (+m[2] || 0)) || null;
+  m = /^(\d+(?:\.\d+)?)\s*m?(?:in(?:ute)?s?)?$/.exec(s);
+  return m ? Math.round(+m[1]) || null : null;
+}
 
 /* The one creator in shared/journal.js since 2026-09-18, which writes this
    payload for every app. `t` is when it was written, `at` the time the thing
@@ -2470,6 +2500,13 @@ const outstanding = () => inTileOrder(
    line to change to pick a different two. */
 const QUICK = ['mood', 'energy'];
 
+/* In the + sheet: its own switch if it has one, else Mood and Energy. */
+function fabOn(f) {
+  if (!f) return false;
+  if (f.fab != null) return !!f.fab;
+  return QUICK.indexOf(f.id) > -1 || QUICK.indexOf(String(f.label || '').toLowerCase()) > -1;
+}
+
 function quickField(key) {
   const all = Object.values(fields());
   return all.filter(f => f.on && (f.id === key || String(f.label).toLowerCase() === key))[0] || null;
@@ -2504,10 +2541,9 @@ function fastInput() {
       b.onclick = fn;
       row.appendChild(b);
     };
-    QUICK.forEach(key => {
-      const f = quickField(key);
-      if (f) big(f.label, () => fieldSheet(f, vd()));
-    });
+    /* The ones set to appear here, in tile order. Mood and Energy until
+       somebody says otherwise. */
+    inTileOrder(liveFields().filter(fabOn), f => f.id).forEach(f => big(f.label, () => fieldSheet(f, vd())));
     big('Food', foodPicker);
     big('Spending', () => spendSheet());
     body.appendChild(row);
@@ -2981,21 +3017,32 @@ function entryRow(f, d, e) {
   return r;
 }
 
+/* ── a scale's range and its words ──
+   Tom, 2026-09-18: "let people manually set their ranges and put text fields
+   if they want to denote what the ranges mean for them". `lo` is where it
+   starts (1 unless set, 0 allowed), `max` where it ends, at most eleven
+   values, and `names` the words he gave any number. */
+function scaleLo(f) { return f && f.lo != null && isFinite(f.lo) ? Math.round(f.lo) : 1; }
+function scaleHi(f) { const lo = scaleLo(f); return Math.max(lo + 1, Math.min(lo + 10, Math.round((f && f.max) || 5))); }
+function scaleName(f, v) { return (f && f.names && f.names[v]) ? String(f.names[v]) : ''; }
+
 function scaleSheet(f, date) {
   const d = date || vd();
   /* A scale runs 1..max, and max is whatever the field says — 3, 5, 10. The
      words are stretched over whatever range that is rather than assuming five,
      so a 1-to-3 scale reads bad / ok / great and a 1-to-10 still labels its
      ends. */
-  const hi = Math.max(2, Math.min(10, f.max || 5));
+  const lo = scaleLo(f), hi = scaleHi(f);
+  /* His own words for a number win; the stretched ones fill the rest. */
   const WORDS = v => {
-    const t = (v - 1) / (hi - 1);
+    if (scaleName(f, v)) return scaleName(f, v);
+    const t = (v - lo) / (hi - lo);
     return t === 0 ? 'bad' : t === 1 ? 'great' : t < .34 ? 'low' : t > .66 ? 'good' : 'ok';
   };
   openSheet(f.label, body => {
     const w = el('div', 'chips');
-    for (let v = 1; v <= hi; v++) {
-      const b = el('button', 'chip big', v + '<small>' + WORDS(v) + '</small>');
+    for (let v = lo; v <= hi; v++) {
+      const b = el('button', 'chip big', v + '<small>' + esc(WORDS(v)) + '</small>');
       b.onclick = (n => () => { evAdd(d, f.id, n); Mobile.feedback('tick'); afterLog(); })(v);
       w.appendChild(b);
     }
@@ -3853,7 +3900,7 @@ function halfLine(f) {
   const now = remaining(f);
   if (now == null || now < 1) return null;
   const gone = clearsAt(f, Math.max(1, (f.target || 0) * .25 || 25));
-  return Math.round(now) + (f.unit || '') + ' still in you' +
+  return Math.round(now) + (f.unit || '') + ' still in body' +
     (gone ? ', down to a trace by ' + new Date(gone).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '');
 }
 
@@ -3960,7 +4007,7 @@ function islandCard(d, opts) {
        total you took today stops being the interesting number by mid-afternoon */
     const lf = (f.half && Day.isToday(d)) ? remaining(f) : null;
     made.push({ key: f.id, node: tile(f.label, tileValue(f, v), f.unit, cls, () => fieldSheet(f, d), pct,
-      lf != null && lf >= 1 ? Math.round(lf) + (f.unit || '') + ' left' : null) });
+      lf != null && lf >= 1 ? Math.round(lf) + (f.unit || '') + ' still in body' : null) });
   });
   if (countCal() && heroId !== '@protein') {
     made.push({ key: '@protein', node: tile('Protein', Math.round(t.p) + '/' + Math.round(TARGETS().p), 'g', 'pillar' + (t.p ? '' : ' todo'), () => { TAB = 'food'; draw(); }, t.p / (TARGETS().p || 1)) });
@@ -4223,8 +4270,9 @@ function noteSheet(x, d) {
     body.appendChild(seg);
 
     const ta = document.createElement('textarea');
-    /* An entry is prose and wants room; the others are a line. */
-    ta.rows = x.kind === 'entry' ? 6 : 3;
+    /* One line per bullet is the habit worth building (Tom, 2026-09-18), so
+       every kind opens as a short box; Shift+Enter still makes a second line. */
+    ta.rows = 2;
     ta.value = x.text || '';
     ta.placeholder = '';
     ta.setAttribute('autocapitalize', 'sentences');
@@ -4254,8 +4302,34 @@ function noteSheet(x, d) {
       times.appendChild(w);
     });
     body.appendChild(times);
+
+    /* ── an entry's time and how long it took ──
+       Tom, 2026-09-18: "Add manual duration tracking fields beside entry time,
+       Let entry time be modified as well." For an entry or an event: when it
+       happened (blank is when it was written) and how long it ran, typed as
+       45, 45m, 1h30 or 1.5h. */
+    let durVal = x.dur || null;
+    const span = el('div', 'grid2');
+    const tw = el('div', 'field');
+    tw.appendChild(el('label', 'fl', 'Time'));
+    tw.appendChild(timeInput(atVal || (isNew ? '' : (x.t ? Journal.hhmm(x.t) : '')), v => { atVal = v; }));
+    span.appendChild(tw);
+    const dw = el('div', 'field');
+    dw.appendChild(el('label', 'fl', 'Duration'));
+    const di = document.createElement('input');
+    di.type = 'text'; di.className = 'mb-input'; di.placeholder = '45m or 1h30';
+    di.value = durVal ? durLabel(durVal) : '';
+    di.onchange = () => { durVal = readDur(di.value); di.value = durVal ? durLabel(durVal) : ''; };
+    dw.appendChild(di);
+    span.appendChild(dw);
+    const timed = () => kind === 'entry' || kind === 'event';
+    span.style.display = timed() ? '' : 'none';
+    body.appendChild(span);
     /* The picker above can change the kind after this is built. */
-    seg.addEventListener('click', () => { times.style.display = kind === 'todo' ? '' : 'none'; });
+    seg.addEventListener('click', () => {
+      times.style.display = kind === 'todo' ? '' : 'none';
+      span.style.display = timed() ? '' : 'none';
+    });
 
     /* `again` reopens an empty line of the same kind instead of closing, which
        is what makes a list a list. */
@@ -4263,7 +4337,10 @@ function noteSheet(x, d) {
       const text = ta.value.trim();
       if (!text) return UI.toast('Nothing to save', { bad: true });
       if (isNew) {
-        addNote(d, kind, text);
+        const ex = {};
+        if (timed() && atVal) ex.at = atVal;
+        if (timed() && durVal) ex.dur = durVal;
+        addNote(d, kind, text, ex);
         /* addNote made the row; the two clocks go on straight after it. */
         if (kind === 'todo' && (atVal || byVal)) {
           const list = Rec.all('note', { date: d })
@@ -4273,12 +4350,17 @@ function noteSheet(x, d) {
         }
       } else {
         const pz = parseLine(text, d);
+        /* a range typed on a todo is its start and its end */
+        if (kind === 'todo' && pz.at && pz.dur) {
+          const hm = pz.at.split(':');
+          byVal = Journal.minsHM(+hm[0] * 60 + (+hm[1] || 0) + pz.dur); pz.dur = null;
+        }
         Rec.set('note', x.date || d, x.key, Object.assign(bare(x), {
           kind: kind, text: pz.text,
           /* A time typed into the line still wins: it is the more recent thing
              the person did. */
-          at: pz.at || (kind === 'todo' ? (atVal || null) : null),
-          dur: pz.dur,
+          at: pz.at || ((kind === 'todo' || timed()) ? (atVal || null) : null),
+          dur: pz.dur || (timed() ? durVal : null),
           by: kind === 'todo' ? (byVal || null) : null,
           /* You set it, so it is yours: a later tick puts this aside rather
              than over the side, and un-ticking hands it back. */
@@ -4302,13 +4384,17 @@ function noteSheet(x, d) {
        entry is prose and genuinely has paragraphs. Shift+Enter forces a
        newline anywhere, and an empty line closes the sheet — that is the
        gesture for "done making these".                                     */
+    /* Tom, 2026-09-18: "Enter should close bullet entry, Shift enter can
+       create a new line but generally we want to promote 1 line per bullet."
+       Every kind now, entries included. On the desk, where the widget is
+       waiting, Enter saves and closes; elsewhere it carries on the list. */
     ta.onkeydown = e => {
-      if (e.key !== 'Enter' || e.shiftKey || e.altKey || kind === 'entry') return;
+      if (e.key !== 'Enter' || e.shiftKey || e.altKey) return;
       /* mid-composition on an IME, Enter is choosing a candidate, not a line */
       if (e.isComposing || e.keyCode === 229) return;
       e.preventDefault();
       if (!ta.value.trim()) { closeSheet(); draw(); return; }
-      commit(true);
+      commit(!DESK);
     };
 
     body.appendChild(saveBar(isNew ? 'Add' : 'Save', () => commit(false)));
@@ -5419,7 +5505,7 @@ function dayShapeChart(d) {
       pts.push([mn, left]);
     }
     const peak = pts.reduce((a, p) => Math.max(a, p[1]), 0);
-    wrap.appendChild(el('div', 'note', esc(decay.label) + ' still in you, at most <b>' + Math.round(peak) + esc(decay.unit || '') + '</b>'));
+    wrap.appendChild(el('div', 'note', esc(decay.label) + ' still in body, at most <b>' + Math.round(peak) + esc(decay.unit || '') + '</b>'));
     const box2 = el('div');
     wrap.appendChild(box2);
     Chart.mount(box2, { h: 96, cls: 'chart', label: decay.label + ' through the day' }, c => {
@@ -6102,16 +6188,20 @@ function drawTrackTab(pane) {
     const c = f.cat || '';
     if (c !== lastCat) {
       lastCat = c;
-      if (c) pane.appendChild(el('label', 'fl', esc(catLabel(c) || c)));
+      pane.appendChild(el('label', 'fl', esc(c ? (catLabel(c) || c) : 'Not grouped')));
+      if (c === 'pillar' && countCal()) pane.appendChild(el('div', 'note',
+        'Calories and Protein are pillars too. They come from Food, and their targets are in GRADES.'));
     }
-    const kind = { number: 'once a day', amount: 'a dose, added up', scale: '1 to ' + (f.max || 5), check: 'done or not' }[f.measure] || '';
+    const kind = { number: 'once a day', amount: 'a dose, cumulative', scale: scaleLo(f) + ' to ' + scaleHi(f), check: 'done or not' }[f.measure] || '';
     const bits = [kind];
     if (f.unit) bits.push(f.unit);
     if (f.target) bits.push((f.dir === 'lte' ? '\u2264' : '\u2265') + ' ' + f.target);
     if (f.days && f.days.length) bits.push(f.days.map(i => DOW[i]).join(' '));
     if (f.slot) bits.push(whenLabel(f.slot) || f.slot);
-    if (f.min != null) bits.push('\u2265 ' + f.min);
-    if (f.max != null) bits.push('\u2264 ' + f.max);
+    /* On a scale `max` is where it ends, already said as "1 to 5"; printing it
+       again as a ceiling is what made Godforce read "at most 5" (2026-09-18). */
+    if (f.min != null && f.measure !== 'scale') bits.push('\u2265 ' + f.min);
+    if (f.max != null && f.measure !== 'scale') bits.push('\u2264 ' + f.max);
     if (f.half) bits.push('half-life ' + f.half + 'h');
     /* Whether it is fed by food, said out loud. Without this a tile that
        ignores what you ate looks identical to one that counts it, and the
@@ -6306,7 +6396,8 @@ function newFieldForm(pane, existing) {
 
   pane.appendChild(el('label', 'fl', 'Kind'));
   let measure = f.measure || 'amount';
-  let hi = f.max || 5;
+  let lo = scaleLo(f), hi = f.measure === 'scale' ? scaleHi(f) : 5;
+  const names = Object.assign({}, f.names || {});
   const seg = el('div', 'seg');
   const extra = el('div');
   const paint = () => {
@@ -6321,14 +6412,43 @@ function newFieldForm(pane, existing) {
     if (measure === 'scale') {
       extra.appendChild(el('label', 'fl', 'How far it runs'));
       const w = el('div', 'chips');
-      /* Tom, 2026-09-18: 1-3, 1-5, 1-7 and 1-10. A field already on 1 to 4
-         keeps it; the chip just is not offered for a new one. */
+      /* Tom, 2026-09-18: 1-3, 1-5, 1-7 and 1-10 as quick picks, and any
+         range typed into the two boxes, at most eleven numbers. */
       [3, 5, 7, 10].forEach(n => {
-        const b = el('button', 'chip' + (hi === n ? ' on' : ''), '1 to ' + n);
-        b.onclick = () => { hi = n; paint(); };
+        const b = el('button', 'chip' + (lo === 1 && hi === n ? ' on' : ''), '1 to ' + n);
+        b.onclick = () => { lo = 1; hi = n; paint(); };
         w.appendChild(b);
       });
       extra.appendChild(w);
+      const rg = el('div', 'grid2');
+      [['From', () => lo, v => { lo = v; }], ['To', () => hi, v => { hi = v; }]].forEach(([lbl, get, put]) => {
+        const c = el('div', 'field');
+        c.appendChild(el('label', 'fl', lbl));
+        const i = document.createElement('input');
+        i.type = 'text'; i.inputMode = 'numeric'; i.className = 'mb-input'; i.value = String(get());
+        i.onchange = () => {
+          const v = Math.round(num(i.value));
+          if (isFinite(v)) put(v);
+          if (hi <= lo) hi = lo + 1;
+          if (hi - lo > 10) hi = lo + 10;
+          paint();
+        };
+        c.appendChild(i); rg.appendChild(c);
+      });
+      extra.appendChild(rg);
+      /* What each number means, in his own words. Optional. */
+      extra.appendChild(el('label', 'fl', 'What each number means'));
+      extra.appendChild(el('div', 'note', 'To help with consistency and to clarify with your future self what each number means.'));
+      for (let v = lo; v <= hi; v++) {
+        const r = el('div', 'frow');
+        r.appendChild(el('span', 'lbl', '<b>' + v + '</b>'));
+        const i = document.createElement('input');
+        i.type = 'text'; i.className = 'mb-input wide'; i.placeholder = 'optional';
+        i.value = names[v] || '';
+        i.oninput = (n => () => { if (i.value.trim()) names[n] = i.value.trim(); else delete names[n]; })(v);
+        r.appendChild(i);
+        extra.appendChild(r);
+      }
     }
   };
   paint();
@@ -6491,7 +6611,9 @@ function newFieldForm(pane, existing) {
      a category it never chose. */
   const gate = () => {
     Object.keys(sect).forEach(k => {
-      sect[k].style.display = (!cat || catOf(cat).has.indexOf(k) > -1) ? '' : 'none';
+      /* Only Intake wears off (Tom, 2026-09-18). */
+      const show = k === 'half' ? cat === 'intake' : (!cat || catOf(cat).has.indexOf(k) > -1);
+      sect[k].style.display = show ? '' : 'none';
     });
   };
   const paintCat = () => {
@@ -6535,6 +6657,10 @@ function newFieldForm(pane, existing) {
   let viz = f.viz == null ? 1 : (f.viz ? 1 : 0);
   const vizRow = toggleRow('Show in the visualiser', 'The 28-day grid on Trends', !!viz, v => { viz = v ? 1 : 0; });
   pane.appendChild(vizRow);
+  /* Tom, 2026-09-18: "Let people configure the FAB". A big button in the +
+     sheet, for something logged now and then rather than every day. */
+  let fab = fabOn(f);
+  pane.appendChild(toggleRow('In the + button', 'One tap to log it from the + on Today', fab, v => { fab = !!v; }));
 
   const save = el('button', 'btn go wide', existing ? 'Save' : 'Add it');
   save.style.marginTop = 'var(--s-4)';
@@ -6562,7 +6688,7 @@ function newFieldForm(pane, existing) {
       const t = num(tg.value);
       if (t != null) { spec.target = t; if (!spec.dir) spec.dir = 'gte'; } else { delete spec.target; }
     }
-    if (on('half')) {
+    if (cat === 'intake') {
       const h = num(hl.value);
       if (h != null && h > 0) spec.half = h; else delete spec.half;
     } else {
@@ -6585,9 +6711,17 @@ function newFieldForm(pane, existing) {
        scale it is how far the scale runs, everywhere else it is the ceiling
        typed into Edges. Setting the ceiling and then deleting it on the next
        line meant "at most" never saved for anything. */
-    if (measure === 'scale') spec.max = hi;
+    if (measure === 'scale') {
+      spec.max = hi;
+      if (lo !== 1) spec.lo = lo; else delete spec.lo;
+      const nm2 = {};
+      Object.keys(names).forEach(k => { if (+k >= lo && +k <= hi && names[k]) nm2[k] = names[k]; });
+      if (Object.keys(nm2).length) spec.names = nm2; else delete spec.names;
+    }
     else if (hv != null) spec.max = hv;
     else delete spec.max;
+    if (measure !== 'scale') { delete spec.lo; delete spec.names; }
+    spec.fab = fab ? 1 : 0;
 
     if (days.length && days.length < 7) spec.days = days.slice().sort(); else delete spec.days;
     if (on('when') && slot) spec.slot = slot; else delete spec.slot;
@@ -6603,6 +6737,22 @@ function newFieldForm(pane, existing) {
   const back = el('button', 'btn wide quiet', 'Cancel');
   back.onclick = () => drawSettingsPane('track');
   pane.appendChild(back);
+
+  /* ── a stray copy can go ──
+     Tom, 2026-09-18: Godforce turned up three times. A copy with nothing
+     logged against it can be deleted; one with readings cannot, because that
+     would hide earned history, and turning it off does the same job safely. */
+  if (existing) {
+    const n = Rec.all('ev').filter(r => r.key === f.id).length;
+    const del = el('button', 'btn wide quiet', n ? 'Has ' + n + ' day' + (n === 1 ? '' : 's') + ' of readings, so turn it off instead' : 'Delete this field');
+    del.disabled = !!n;
+    del.onclick = () => UI.confirm('Delete ' + f.label + '?', 'Nothing has been logged against it.').then(ok => {
+      if (!ok) return;
+      Rec.del('field', null, f.id);
+      drawSettingsPane('track'); draw();
+    });
+    pane.appendChild(del);
+  }
 }
 
 function drawTargets(pane) {
@@ -7556,8 +7706,11 @@ function deskNightKey(now) {
    through midnight, so 22 to 6 means the night. */
 function deskAwake(now) {
   const c = deskCfg(), h = now.getHours() + now.getMinutes() / 60;
-  if (c.from === c.to) return true;
-  return c.from < c.to ? (h >= c.from && h < c.to) : (h >= c.from || h < c.to);
+  /* Tom, 2026-09-18: "If I set 0 in the ask window then assume whole day."
+     0 in Until is the end of the day, and 0 in both is all day. */
+  const to = c.to === 0 ? 24 : c.to;
+  if (c.from === to || (c.from === 0 && to === 24)) return true;
+  return c.from < to ? (h >= c.from && h < to) : (h >= c.from || h < to);
 }
 
 function deskTick() {
@@ -7782,9 +7935,21 @@ function checkStyle() { return S.get('desk.style', 'block'); }
 /* Every scale switched on in TRACK, in its order. Tom, 2026-09-18, wanted
    Willpower asked here: a scale is a reading of right now, which is exactly
    this question, so a scale made in TRACK joins without anything else to set. */
-function checkFields() {
-  return Object.values(fields()).filter(f => f.on && f.measure === 'scale')
+/* Tom, 2026-09-18: "Let me select which stats get included in the forced
+   interval prompt, if it's a binary prompt like trained then remove from the
+   next ask." The pick is `desk.fields`; until one is made it is every scale.
+   A done-or-not, or a once-a-day number, already logged today is not asked
+   again. */
+function checkPickable(f) { return f && f.on && ['scale', 'check', 'number', 'amount'].indexOf(f.measure) > -1; }
+function checkChosen() {
+  const pick = S.get('desk.fields', null);
+  return Object.values(fields()).filter(f => checkPickable(f) &&
+    (Array.isArray(pick) ? pick.indexOf(f.id) > -1 : f.measure === 'scale'))
     .sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+function checkFields() {
+  const d = Day.today();
+  return checkChosen().filter(f => !((f.measure === 'check' || (f.measure === 'number' && f.once)) && logged(d, f.id)));
 }
 let checkDoing = '';     /* "what are you doing now", as typed */
 
@@ -7807,19 +7972,36 @@ function checkDraw() {
   const fs = checkFields();
   fs.forEach(f => {
     win.appendChild(el('div', 'nwlabel', esc(String(f.label || f.id).toUpperCase())));
+    /* A number is typed, and optional: it is a reading you may not have. */
+    if (f.measure === 'number' || f.measure === 'amount') {
+      const i = document.createElement('input');
+      i.type = 'text'; i.inputMode = 'decimal'; i.className = 'nwdoing';
+      i.placeholder = f.unit || ''; i.value = checkVals[f.id] != null ? String(checkVals[f.id]) : '';
+      i.oninput = () => { const v = num(i.value); if (v == null) delete checkVals[f.id]; else checkVals[f.id] = v; };
+      win.appendChild(i);
+      return;
+    }
     const row = el('div', 'nwscale');
-    const max = f.max || 5;
-    for (let i = 1; i <= max; i++) {
-      const btn = el('button', checkVals[f.id] === i ? 'on' : '', String(i));
-      btn.onclick = (n => () => {
+    /* Done or not is two answers; a scale is its own range, with his words. */
+    const opts = f.measure === 'check' ? [[1, 'YES'], [0, 'NOT YET']]
+      : Array.from({ length: scaleHi(f) - scaleLo(f) + 1 }, (_, k) => {
+        const v = scaleLo(f) + k, w = scaleName(f, v);
+        return [v, String(v) + (w ? '<small>' + esc(w) + '</small>' : '')];
+      });
+    /* one row up to seven, two rows past that */
+    const cols = opts.length <= 7 ? opts.length : Math.ceil(opts.length / 2);
+    row.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+    opts.forEach(([n, lbl]) => {
+      const btn = el('button', checkVals[f.id] === n ? 'on' : '', lbl);
+      btn.onclick = () => {
         checkVals[f.id] = n;
         [].forEach.call(row.children, c => { c.className = ''; });
         btn.className = 'on';
         Mobile.feedback('tick');
         paintGo();
-      })(i);
+      };
       row.appendChild(btn);
-    }
+    });
     win.appendChild(row);
   });
 
@@ -7834,7 +8016,7 @@ function checkDraw() {
   win.appendChild(doing);
 
   const go = el('button', 'nwgo');
-  const left = () => fs.filter(f => checkVals[f.id] == null);
+  const left = () => fs.filter(f => (f.measure === 'scale' || f.measure === 'check') && checkVals[f.id] == null);
   function paintGo() {
     const l = left();
     go.className = 'nwgo' + (l.length ? ' waiting' : '');
@@ -7877,7 +8059,11 @@ function checkSave() {
   const d = Day.today();
   let n = 0;
   checkFields().forEach(f => {
-    if (checkVals[f.id] != null) { evAdd(d, f.id, checkVals[f.id]); n++; }
+    const v = checkVals[f.id];
+    if (v == null) return;
+    /* NOT YET writes nothing, so it is asked again next time */
+    if (f.measure === 'check' && !v) return;
+    evAdd(d, f.id, v); n++;
   });
   const doing = checkDoing.trim();
   checkDoing = '';
@@ -7953,14 +8139,37 @@ function drawDeskTab(pane) {
     S.set('desk.on', v ? 1 : 0); deskNext = 0; drawSettingsPane('desk');
   }));
   if (c.on) {
-    fieldRow(pane, 'No sooner than', 'desk.min', c.min, 'minutes');
-    fieldRow(pane, 'No later than', 'desk.max', c.max, 'minutes');
-    pane.appendChild(el('div', 'note',
-      'A different gap every time, somewhere between those two. Put the same ' +
-      'number in both for a fixed interval.'));
-    fieldRow(pane, 'Not before', 'desk.from', c.from, 'hour of the day, 0 to 23');
-    fieldRow(pane, 'Not after', 'desk.to', c.to, 'hour of the day, 0 to 23');
+    /* Two boxes to a line (Tom, 2026-09-18: "just be 2 boxes on the same
+       line, currently takes too much real estate"). */
+    const pair = (label, a, b, unit) => {
+      const r = el('div', 'frow');
+      r.appendChild(el('span', 'lbl', esc(label) + '<small>' + esc(unit) + '</small>'));
+      [a, b].forEach(([key, val, ph], k) => {
+        if (k) r.appendChild(el('span', 'muted', 'to'));
+        const i = document.createElement('input');
+        i.type = 'text'; i.inputMode = 'numeric'; i.className = 'mb-input'; i.placeholder = ph;
+        i.value = val == null ? '' : String(val);
+        i.onchange = () => { const v = num(i.value); if (v != null) { S.set(key, v); deskNext = 0; } };
+        r.appendChild(i);
+      });
+      pane.appendChild(r);
+    };
+    pair('Every', ['desk.min', c.min, 'min'], ['desk.max', c.max, 'max'], 'minutes, a different gap each time');
+    pair('Between', ['desk.from', c.from, '0'], ['desk.to', c.to, '0'], 'hours, 0 to 23. 0 and 0 is all day');
   }
+
+  /* Which stats it asks. Until one is picked, every scale. */
+  pane.appendChild(el('div', 'mb-group', 'WHAT IT ASKS'));
+  const chosen = checkChosen().map(f => f.id);
+  Object.values(fields()).filter(checkPickable).sort((a, b) => (a.order || 0) - (b.order || 0)).forEach(f => {
+    pane.appendChild(toggleRow(f.label,
+      f.measure === 'check' ? 'Done or not; once done today it stops asking' : f.measure === 'scale' ? scaleLo(f) + ' to ' + scaleHi(f) : 'a number, optional',
+      chosen.indexOf(f.id) > -1, on => {
+        const now = checkChosen().map(x => x.id).filter(id => id !== f.id);
+        if (on) now.push(f.id);
+        S.set('desk.fields', now);
+      }));
+  });
   if (c.on && DESK) {
     const mins = deskNext ? Math.round((deskNext - Date.now()) / 60000) : null;
     pane.appendChild(el('div', 'note', mins == null ? 'Working out when the next one is.'
