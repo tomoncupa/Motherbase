@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.35, 2026-09-18">
+<meta name="mb-version" content="1.0.36, 2026-09-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1613,22 +1613,11 @@ function hhmm(ms) { return Journal.hhmm(ms); }
 function clockLabel(at) { return Journal.clockLabel(at); }
 function durLabel(d) { return Journal.durLabel(d); }
 
-const addNote = (date, kind, text) => {
-  const list = Rec.all('note', { date: date });
-  const parsed = parseLine(text, date);
-  Rec.set('note', date, uid(), {
-    /* `t` is when it was written, which is not the same as the day it belongs
-       to — a task logged at midnight for tomorrow, or a line backfilled a week
-       later, both need the two kept apart. `at` is different again: it is the
-       time the thing happens, which is the one you typed. */
-    kind: kind, text: parsed.text, t: Date.now(), made: date,
-    at: parsed.at, dur: parsed.dur,
-    ord: list.length, done: 0, cancelled: 0,
-  });
-  /* published here rather than at the call site, so a line reaches the hub
-     however it was written */
-  publishNotes(date);
-};
+/* The one creator in shared/journal.js since 2026-09-18, which writes this
+   payload for every app. `t` is when it was written, `at` the time the thing
+   happens, and it publishes, so a line reaches the hub however it was
+   written. Returns the new key. */
+const addNote = (date, kind, text, extra) => Journal.add(date, kind, text, extra, APP.id);
 
 /* A tick is the one row every app may write, which makes it the only way to
    tell the rest of the suite something happened without the other end knowing
@@ -7837,12 +7826,7 @@ function checkSave() {
   });
   const doing = checkDoing.trim();
   checkDoing = '';
-  if (doing) {
-    addNote(d, 'entry', doing);
-    const mine = Rec.all('note', { date: d }).sort((a, b) => (b.payload.t || 0) - (a.payload.t || 0))[0];
-    const now = new Date(), hm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-    if (mine && !mine.payload.at) { Rec.patch('note', d, mine.key, { at: hm }); publishNotes(d); }
-  }
+  if (doing) addNote(d, 'entry', doing, { now: true });
   if (n) Mobile.feedback('success');
   /* Answering by hand puts the next one off. Without this the question he just
      answered comes back ten minutes later, which is how a prompt stops being
