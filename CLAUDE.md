@@ -260,7 +260,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `records.js` | The store. Rows, merging, subscriptions. The one file to be careful with. |
 | `day.js` | One definition of "today" for the whole suite. |
 | `chart.js` | Every chart. Answer first (`Chart.header`), drawn at the box's real size (`Chart.mount`), latest value marked, one bar lit, drag to explore (`c.scrub`), pies with a key and ranked shares for part of a whole, rings, sparklines and legends. Theme tokens only. |
-| `journal.js` | The bullet system. `moveTo` sends a todo to any day and `moveToTomorrow` is that with one date filled in; the menu carries both, so LOG and QUESTS got it without being edited. One journal line: its kinds, which day it shows on, the time typed into it, how it is drawn (mark, words, then "7:00pm - 7:31pm"), time order by its start, ticking, Move to tomorrow, Cancel it, and a repeat's next round. STATUS names the `note` shape and wins any disagreement; STATUS, LOG, QUESTS and the home screen all read this, so a todo bullet looks and behaves the same in each. |
+| `journal.js` | The bullet system. `Journal.add` is the one way to write a new line, since 2026-09-18: STATUS, LOG, QUESTS, the home screen's DOING box and the status check all call it, so every line carries when it was written. `moveTo` sends a todo to any day and `moveToTomorrow` is that with one date filled in; the menu carries both, so LOG and QUESTS got it without being edited. One journal line: its kinds, which day it shows on, the time typed into it, how it is drawn (mark, words, then "7:00pm - 7:31pm"), time order by its start, ticking, Move to tomorrow, Cancel it, and a repeat's next round. STATUS names the `note` shape and wins any disagreement; STATUS, LOG, QUESTS and the home screen all read this, so a todo bullet looks and behaves the same in each. |
 | `skins.js` + `skins.json` | Themes, and the colour layer on top of them. |
 | `sound.js` | Sound themes and instruments, synthesised, no audio files. |
 | `mobile.js` | The touch layer. Sheets, swipes, safe areas, keyboard, back stack, haptics. |
@@ -270,7 +270,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
 | `notice.js` | The status window LOOK: four palettes and the cut-corner shape. NOTICE strokes it on a canvas to make a picture, STATUS clips a real panel to it for the status check. The one place in the suite that carries hex colours on purpose, for the reason NOTICE always had: the window is the art, not the furniture, so a Hunter window is blue in every theme. Nothing here reaches an app's own chrome. |
-| `_smoke.html` | 314 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 315 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 

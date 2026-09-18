@@ -634,6 +634,20 @@ async function run() {
     try { J.publishTimed(t, 'smoke'); J.publishTimed(tm, 'smoke'); } finally { window.Rec = real; }
     return wrote.indexOf('tick|' + t + '|note-at-call-dan') < 0 && wrote.indexOf('tick|' + tm + '|note-at-call-dan') >= 0;
   })());
+  /* The one creator. Through a stand-in store, so nothing real is written. The
+     check under it: every line carries when it was written, whoever wrote it. */
+  ok('journal: add writes STATUS\'s full line, with when it was written and a time on request', (() => {
+    const t = Day.today(), real = window.Rec, rows = {};
+    window.Rec = { appId: 'smoke', all: () => [], set: (ty, dd, k, p) => { if (ty === 'note') rows[k] = p; }, del: () => {} };
+    let a, b, c;
+    try {
+      a = J.add(t, 'entry', 'Walk 45m'); b = J.add(t, 'entry', 'Editing', { now: true });
+      c = J.add(t, 'todo', 'at 8 is words here', { parsed: true, pri: 2 });
+    } finally { window.Rec = real; }
+    const A = rows[a], B = rows[b], C = rows[c];
+    return a !== b && A && A.t > 0 && A.made === t && A.dur === 45 && A.text === 'Walk' && A.at === null &&
+      B && /^\d\d:\d\d$/.test(B.at) && C && C.text === 'at 8 is words here' && C.pri === 2 && C.kind === 'todo';
+  })());
   ok('journal: a todo done on another day shows on the day it was done', (() => {
     const t = Day.today(), y = Day.shift(t, -2);
     const r = { key: 'k', date: y, payload: { kind: 'todo', text: 'x', done: 1, doneOn: t } };

@@ -228,6 +228,33 @@ function publishNotes(date, src) {
   });
 }
 
+/* ── one way to write a new line ──
+   Tom, 2026-09-18: "Why is it not running on the universal bullet creation
+   engine?" It was not, because there was none: STATUS, LOG and QUESTS each
+   built the row themselves, field by field, and a field one of them forgot
+   was a field that line never had. This is STATUS's `addNote` payload, the
+   shape STATUS names, written once. `extra` adds fields (QUESTS's due,
+   priority and project); `now: true` stamps the minute it was written as its
+   time, for a line that is about right now. Returns the new row's key. */
+let addN = 0;
+function add(date, kind, text, extra, src) {
+  const R = Rec(), d = date || Day().today();
+  const ex = Object.assign({}, extra || {});
+  const now = !!ex.now; delete ex.now;
+  /* `parsed`: the caller has already read the time out of the words (QUESTS
+     has its own reader), so the words are taken as they are */
+  const pz = ex.parsed ? { text: String(text == null ? '' : text).trim(), at: null, dur: null } : parseLine(text, d);
+  delete ex.parsed;
+  const key = 'j' + Date.now().toString(36) + (addN++).toString(36) + Math.random().toString(36).slice(2, 5);
+  R.set('note', d, key, Object.assign({
+    kind: kind || 'entry', text: pz.text, t: Date.now(), made: d,
+    at: pz.at || (now ? hhmm(Date.now()) : null), dur: pz.dur,
+    ord: R.all('note', { date: d }).length, done: 0, cancelled: 0,
+  }, ex));
+  publishNotes(d, src);
+  return key;
+}
+
 /* ══════════════ REPEATS ══════════════
    `rep` is {unit, every, days, dom, from, txt}, written by QUESTS. `from` is
    the first due date, so "every 2 weeks" keeps its own rhythm rather than
@@ -576,7 +603,7 @@ g.Journal = {
   bare: bare, place: place, onDay: onDay, notes: notes,
   parseLine: parseLine, clockMins: clockMins, minsHM: minsHM,
   hhmm: hhmm, clockLabel: clockLabel, durLabel: durLabel,
-  publishTimed: publishTimed, publishNotes: publishNotes,
+  publishTimed: publishTimed, publishNotes: publishNotes, add: add,
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,
   css: css, markHTML: markHTML, timeText: timeText, sortClock: sortClock, textHTML: textHTML,
   moveTo: moveTo, moveToTomorrow: moveToTomorrow, movedAfter: movedAfter,
