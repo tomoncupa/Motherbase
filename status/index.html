@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.33, 2026-09-17">
+<meta name="mb-version" content="1.0.34, 2026-09-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -714,6 +714,12 @@ body.checking .deskx { display: none; }
   background: var(--nw-acc); border-color: var(--nw-acc);
   color: var(--nw-bg-a); box-shadow: 0 0 clamp(6px, 2vmin, 22px) var(--nw-glow);
 }
+.nwdoing {
+  width: 100%; min-height: max(var(--tap), clamp(44px, 9vmin, 110px)); resize: none;
+  font-family: var(--nw-face); font-size: clamp(14px, 2.6vmin, 24px);
+  color: var(--nw-ink); background: var(--nw-panel2); border: 1px solid var(--nw-line);
+  padding: clamp(6px, 1.4vmin, 14px);
+}
 .nwgo {
   min-height: max(var(--tap), clamp(48px, 8vmin, 76px));
   font-family: var(--nw-face); font-weight: 700; letter-spacing: .2em;
@@ -907,7 +913,7 @@ IO.register({
   app: APP.id, name: APP.name, types: APP.types,
   /* the rows STATUS shows that other apps write, from their own sheet tabs:
      todos from QUESTS and LOG, foods from FOODDÉX, spending from WEALTH */
-  reads: { quest: ['note'], log: ['note', 'day'], portion: ['food'], wealth: ['spend', 'acct'] },
+  reads: { quest: ['note'], log: ['note', 'day'], portion: ['food'], wealth: ['spend', 'acct'], train: ['session'] },
   sheets: function () { return exportSheets(); },
   tables: [
     { name: 'Food', type: 'food', cols: [
@@ -1303,7 +1309,12 @@ function value(date, fid) {
   if (f.agg === 'avg') return e.reduce((a, x) => a + x.v, 0) / e.length;
   return e[e.length - 1].v;
 }
-const logged = (date, fid) => entries(date, fid).length > 0;
+/* A session in TRAIN ticks Trained. Tom, 2026-09-18: "Data in TRAIN should
+   toggle TRAIN in STATUS". Read, not written: the grade already counted TRAIN's
+   rows, and now the tile says what the grade knew. */
+const trainField = fid => fid === 'trained' || /^train/i.test(fid);
+const trainLogged = date => !!Rec.get('session', date, '') || Rec.all('set', { date: date }).length > 0;
+const logged = (date, fid) => entries(date, fid).length > 0 || (trainField(fid) && trainLogged(date));
 
 /* ══════════════ FOOD ══════════════
    A `food` row is the label as printed, plus your own serving sizes on top
@@ -3305,7 +3316,10 @@ function acctChips(cur, onPick) {
 function amountSheet(fd) {
   openSheet(fd.name, body => {
     const serves = foodServes(fd);
-    let mode = 'serve', si = Math.min(fd.dflt || 0, serves.length - 1), mult = serves[si].mult;
+    /* Opens the way this food was last logged: Tom, 2026-09-18, "remember
+       last unit per food". A food never logged opens on Servings, the count. */
+    let mode = /^(serve|unit|hit)$/.test(fd.lastMode || '') ? fd.lastMode : 'serve';
+    let si = Math.min(fd.lastServe != null ? fd.lastServe : (fd.dflt || 0), serves.length - 1), mult = serves[si].mult;
 
     const seg = el('div', 'seg');
     const out = el('div');
@@ -3394,6 +3408,8 @@ function amountSheet(fd) {
       if (!mult || mult <= 0) return UI.toast('How much?', { bad: true });
       logMeal(fd, mult, mode === 'serve' ? serveLabel(serves[si], mult) : (mode === 'unit' ? r1(mult * num(fd.base.amt, 0)) + ' ' + (fd.base.unit || '') : 'to target'),
         { err: err, acct: acct });
+      /* after logMeal, which rewrites the row with its use count */
+      Rec.patch('food', null, fd.id, { lastMode: mode, lastServe: si });
       Mobile.feedback('tick');
       closeSheet(); draw();
     }));
@@ -3418,7 +3434,9 @@ function foodEditor(fd, prefillName) {
     }, id => { shotId = id; });
 
     const TEXTY = { name: 1, brand: 1, unit: 1, cat: 1 };
-    const groups = [];
+    /* Offered first, Tom's list from 2026-09-18; any other group already in
+       use follows, and a new one can still be typed. */
+    const groups = ['Protein', 'Carbs', 'Fats', 'Vegetables', 'Fruit', 'Drinks', 'Snacks', 'Other'];
     Object.values(foods()).forEach(x => { if (x.cat && groups.indexOf(x.cat) < 0) groups.push(x.cat); });
     const mk = (key, label, val, wide) => {
       const w = el('div', 'field');
@@ -7715,9 +7733,14 @@ let checkVals = {};      /* field id -> what has been pressed, this time round *
 
 function checkStyle() { return S.get('desk.style', 'block'); }
 
+/* Every scale switched on in TRACK, in its order. Tom, 2026-09-18, wanted
+   Willpower asked here: a scale is a reading of right now, which is exactly
+   this question, so a scale made in TRACK joins without anything else to set. */
 function checkFields() {
-  return [quickField('mood'), quickField('energy')].filter(Boolean);
+  return Object.values(fields()).filter(f => f.on && f.measure === 'scale')
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
+let checkDoing = '';     /* "what are you doing now", as typed */
 
 /* ── the only way out is through ──
    Tom: "it should never go away until answered." So there is no close button,
@@ -7754,6 +7777,16 @@ function checkDraw() {
     win.appendChild(row);
   });
 
+  /* What he is up to, saved as an entry bullet at this minute. Optional: the
+     scales are the check, this is the line that says what they were read in
+     the middle of. */
+  win.appendChild(el('div', 'nwlabel', 'WHAT ARE YOU DOING NOW?'));
+  const doing = document.createElement('textarea');
+  doing.className = 'nwdoing'; doing.rows = 2; doing.value = checkDoing;
+  doing.setAttribute('aria-label', 'What are you doing now');
+  doing.oninput = () => { checkDoing = doing.value; };
+  win.appendChild(doing);
+
   const go = el('button', 'nwgo');
   const left = () => fs.filter(f => checkVals[f.id] == null);
   function paintGo() {
@@ -7777,6 +7810,7 @@ function checkDraw() {
 function checkOpen() {
   checkOn = true;
   checkVals = {};
+  checkDoing = '';
   /* Nothing to ask means nothing to hold him with: both scales switched off in
      TRACK is a legitimate state and must not leave a screen he cannot leave. */
   if (!checkFields().length) { checkOn = false; deskAsking = false; deskRoll(); return; }
@@ -7799,6 +7833,14 @@ function checkSave() {
   checkFields().forEach(f => {
     if (checkVals[f.id] != null) { evAdd(d, f.id, checkVals[f.id]); n++; }
   });
+  const doing = checkDoing.trim();
+  checkDoing = '';
+  if (doing) {
+    addNote(d, 'entry', doing);
+    const mine = Rec.all('note', { date: d }).sort((a, b) => (b.payload.t || 0) - (a.payload.t || 0))[0];
+    const now = new Date(), hm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    if (mine && !mine.payload.at) { Rec.patch('note', d, mine.key, { at: hm }); publishNotes(d); }
+  }
   if (n) Mobile.feedback('success');
   /* Answering by hand puts the next one off. Without this the question he just
      answered comes back ten minutes later, which is how a prompt stops being
