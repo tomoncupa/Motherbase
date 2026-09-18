@@ -246,11 +246,20 @@ function add(date, kind, text, extra, src) {
   const pz = ex.parsed ? { text: String(text == null ? '' : text).trim(), at: null, dur: null } : parseLine(text, d);
   delete ex.parsed;
   const key = 'j' + Date.now().toString(36) + (addN++).toString(36) + Math.random().toString(36).slice(2, 5);
-  R.set('note', d, key, Object.assign({
+  const row = Object.assign({
     kind: kind || 'entry', text: pz.text, t: Date.now(), made: d,
     at: pz.at || (now ? hhmm(Date.now()) : null), dur: pz.dur,
     ord: R.all('note', { date: d }).length, done: 0, cancelled: 0,
-  }, ex));
+  }, ex);
+  /* Tom, 2026-09-18: a range on a todo is its start and its end ("Train
+     8-11" starts at 8 and is done by 11); on anything else it stays a start
+     and a length. */
+  if (row.kind === 'todo' && row.at && row.dur && !row.by) {
+    const hm = String(row.at).split(':');
+    row.by = minsHM(+hm[0] * 60 + (+hm[1] || 0) + row.dur);
+    row.dur = null;
+  }
+  R.set('note', d, key, row);
   publishNotes(d, src);
   return key;
 }
