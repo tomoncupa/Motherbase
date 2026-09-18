@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.36, 2026-09-18">
+<meta name="mb-version" content="1.0.37, 2026-09-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -641,6 +641,7 @@ body.deskmini nav { display: none; }
 /* A snackbar is taller than the whole widget and covers it completely. The
    backup reminder is raised again the moment the whole app is open. */
 body.deskmini .mb-toast { display: none; }
+.deskdoing { width: 100%; min-width: 0; min-height: var(--tap); }
 body.deskmini #deskbar {
   display: flex; flex-direction: column; gap: var(--s-2);
   height: 100vh; padding: var(--s-3); background: var(--surface-1);
@@ -1383,6 +1384,16 @@ function serveLabel(serve, mult) {
   const qty = mult / per;
   if (!(qty > 0) || Math.abs(qty - 1) < 0.001) return label;
   return r1(qty) + ' × ' + label.replace(/^1\s+/, '');
+}
+
+/* The serving a logged meal was counted in, found by its words among its
+   food's serving sizes. Null for a one-off, a food since deleted, or a meal
+   logged by weight or to a target. */
+function meal1Serve(x) {
+  const fd = x && x.fid && foods()[x.fid];
+  if (!fd || !fd.base) return null;
+  const said = String(x.serve || '').replace(/^[\d.]+\s*×\s*/, '1 ').trim();
+  return foodServes(fd).find(s => s.label === said || s.label === String(x.serve || '')) || null;
 }
 
 function logMeal(fd, mult, label, extra) {
@@ -2711,6 +2722,12 @@ function mealSheet(x, d) {
     amt.setAttribute('pattern', '[0-9.]*'); amt.value = String(r1(x.amt));
     body.appendChild(amt);
 
+    /* When it was eaten. Starts as when it was logged; a meal logged late is
+       put back where it happened. */
+    let atv = x.at || (x.t ? Journal.hhmm(x.t) : '');
+    body.appendChild(el('label', 'fl', 'Time eaten'));
+    body.appendChild(timeInput(atv, v => { atv = v || ''; }));
+
     let err = num(x.err, 0) || 0, acct = x.acct || '';
     body.appendChild(el('label', 'fl', 'How sure'));
     body.appendChild(errChips(err, v => { err = v; }));
@@ -2768,6 +2785,10 @@ function mealSheet(x, d) {
         if (c > 0) row.price = c; else delete row.price;
       } else if (row.price != null) row.price = row.price * k;
       row.amt = v; row.mult = (x.mult || 1) * k;
+      /* the words follow the new count, where they name a serving */
+      const sv = meal1Serve(x);
+      if (sv) row.serve = serveLabel(sv, row.mult);
+      if (atv) row.at = atv; else delete row.at;
       /* a fraction, so it survives a rescale untouched */
       row.err = err; row.acct = acct;
       Rec.set('meal', d, x.key, row);
@@ -4419,9 +4440,17 @@ function drawFood(m) {
        is read back off it rather than trusted from the words. */
     const mult = num(x.mult, 1) || 1;
     const said = String(x.serve || '');
-    const serveText = (Math.abs(mult - 1) > 0.001 && said && !/×/.test(said) && !/^to target$/.test(said) && !/^[\d.]/.test(said))
-      ? r1(mult) + ' × ' + said.replace(/^1\s+/, '') : said;
-    const marks = [esc(serveText), r1(x.amt) + ' ' + esc(x.unit || '')]
+    /* Tom, 2026-09-18: "1 Serving bug still persists". A row whose amount was
+       edited kept its old words, and "1 serving" starts with a digit so the
+       rule below trusted it. The count is worked out from the food's own
+       serving sizes wherever the words name one of them. */
+    const own = meal1Serve(x);
+    const serveText = own ? serveLabel(own, mult)
+      : (Math.abs(mult - 1) > 0.001 && said && !/×/.test(said) && !/^to target$/.test(said) && !/^[\d.]/.test(said))
+        ? r1(mult) + ' × ' + said.replace(/^1\s+/, '') : said;
+    /* when it was eaten: Tom, 2026-09-18, "Food entry should have a time stamp" */
+    const when = x.at || (x.t ? Journal.hhmm(x.t) : '');
+    const marks = [when ? clockLabel(when) : '', esc(serveText), r1(x.amt) + ' ' + esc(x.unit || '')]
       .concat(errTag(x.err) ? [errTag(x.err)] : []).concat(x.acct ? [esc(x.acct)] : []);
     r.innerHTML = '<span class="nm">' + esc(x.name) + '<small>' + marks.filter(Boolean).join(' · ') + '</small></span>' +
       '<span class="fig">' + Math.round(x.kcal) + '<small>' + r1(x.p) + 'g protein</small></span>';
@@ -7612,6 +7641,7 @@ function deskSheetWatch() {
   if (!sheetH) { deskAfterSheet = 0; deskSetSmall(true); }
 }
 
+let deskDoing = '';      /* the widget's half-typed "what are you doing" */
 function deskBar() {
   const bar = document.getElementById('deskbar');
   if (!bar) return;
@@ -7637,6 +7667,31 @@ function deskBar() {
     }
     bar.appendChild(box);
   }
+
+  /* ── what are you doing ──
+     Tom, 2026-09-18: the DOING box is for this widget. One line; Enter saves
+     it as an entry bullet at this minute, through the suite's one creator, and
+     it becomes the line above. What is half typed survives a redraw. */
+  const hadFocus = document.activeElement && document.activeElement.classList.contains('deskdoing');
+  const doing = document.createElement('input');
+  doing.type = 'text'; doing.className = 'deskdoing mb-input';
+  doing.placeholder = 'What are you doing?'; doing.value = deskDoing;
+  doing.setAttribute('aria-label', 'What are you doing now');
+  doing.oninput = () => { deskDoing = doing.value; };
+  doing.onkeydown = e => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    const text = doing.value.trim();
+    if (!text) return;
+    deskDoing = '';
+    addNote(Day.today(), 'entry', text, { now: true });
+    Mobile.feedback('success');
+    deskBar();
+    const again = document.querySelector('#deskbar .deskdoing');
+    if (again) again.focus();
+  };
+  bar.appendChild(doing);
+  if (hadFocus) setTimeout(() => { doing.focus(); doing.setSelectionRange(doing.value.length, doing.value.length); }, 0);
 
   const foot = el('div', 'deskfoot');
   /* Today's readings, and only once there are some. An icon and a number
