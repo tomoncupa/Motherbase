@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.39, 2026-09-18">
+<meta name="mb-version" content="1.0.40, 2026-09-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -642,6 +642,9 @@ body.deskmini nav { display: none; }
    backup reminder is raised again the moment the whole app is open. */
 body.deskmini .mb-toast { display: none; }
 .deskdoing { width: 100%; min-width: 0; min-height: var(--tap); }
+/* Add and Track, 4 to 1 */
+.trackbar { display: grid; grid-template-columns: 4fr 1fr; gap: var(--s-2); }
+.trackbar.one { grid-template-columns: 1fr; }
 /* a label and one or two short boxes on one line */
 .frow { display: flex; align-items: center; gap: var(--s-2); min-height: var(--tap); margin-bottom: var(--s-2); }
 .frow .lbl { flex: 1; min-width: 0; }
@@ -4333,13 +4336,15 @@ function noteSheet(x, d) {
 
     /* `again` reopens an empty line of the same kind instead of closing, which
        is what makes a list a list. */
-    const commit = again => {
+    const commit = (again, track) => {
       const text = ta.value.trim();
       if (!text) return UI.toast('Nothing to save', { bad: true });
       if (isNew) {
         const ex = {};
         if (timed() && atVal) ex.at = atVal;
         if (timed() && durVal) ex.dur = durVal;
+        /* Track: the clock runs from now, and the time is now unless set */
+        if (track) { ex.run = Date.now(); delete ex.dur; if (!ex.at) ex.now = true; }
         addNote(d, kind, text, ex);
         /* addNote made the row; the two clocks go on straight after it. */
         if (kind === 'todo' && (atVal || byVal)) {
@@ -4397,7 +4402,30 @@ function noteSheet(x, d) {
       commit(!DESK);
     };
 
-    body.appendChild(saveBar(isNew ? 'Add' : 'Save', () => commit(false)));
+    /* ── Add, and Track beside it ──
+       Tom, 2026-09-18: "reshape the add button to also have a Track button to
+       the right of it, 4:1". Track saves the entry with the clock running from
+       now; opening it again offers Stop, which fills in how long it ran. */
+    const bar = el('div', 'trackbar');
+    bar.appendChild(saveBar(isNew ? 'Add' : 'Save', () => commit(false)));
+    if (isNew) {
+      const tr = saveBar('Track', () => commit(false, true));
+      tr.className = 'btn wide';
+      tr.title = 'Start the clock now';
+      bar.appendChild(tr);
+      const showTrack = () => { tr.style.display = timed() ? '' : 'none'; bar.classList.toggle('one', !timed()); };
+      showTrack();
+      seg.addEventListener('click', showTrack);
+    } else bar.classList.add('one');
+    body.appendChild(bar);
+    if (!isNew && x.run && !x.dur) {
+      const mins = () => Math.max(1, Math.round((Date.now() - x.run) / 60000));
+      const stop = saveBar('Stop, ' + durLabel(mins()), () => {
+        Rec.patch('note', x.date || d, x.key, { dur: mins(), run: undefined });
+        publishNotes(d); Mobile.feedback('success'); closeSheet(); draw();
+      });
+      body.appendChild(stop);
+    }
 
     /* ── the cursor starts in the box ──
        This used to look the textarea up as `#sheet textarea`. Nothing on the
