@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.11, 2026-09-17">
+<meta name="mb-version" content="1.0.12, 2026-09-18">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='28' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='55' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='16' y='34' width='68' height='46' rx='9' fill='%237EE8FA'/></svg>">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -1528,17 +1528,23 @@ function blockRows(st) {
      starter demo is recognised without having to load it first. */
   st = st || S;
   const out = { lane: {}, routine: {}, item: {}, rhythm: {}, setting: {} };
-  (st.lanes || []).forEach((l, i) => { out.lane[l.id] = Object.assign({}, l, { ord: i }); });
-  (st.rhythms || []).forEach((r, i) => { out.rhythm[r.id] = Object.assign({}, r, { ord: i }); });
-  (st.lib || []).forEach((b, i) => { out.item['lib|' + b.id] = Object.assign({}, b, { ord: i, bin: 1 }); });
-  (st.variants || []).forEach((v, i) => {
-    const r = Object.assign({}, v, { ord: i });
+  const live = st === S;
+  const O = (list, type, keyOf) => placeOrds(list, type, keyOf, live);
+  const lanes = st.lanes || [], rhs = st.rhythms || [], lib = st.lib || [], vs = st.variants || [];
+  const oL = O(lanes, 'lane', l => l.id), oR = O(rhs, 'rhythm', r => r.id);
+  const oB = O(lib, 'item', b => 'lib|' + b.id), oV = O(vs, 'routine', v => v.id);
+  lanes.forEach((l, i) => { out.lane[l.id] = Object.assign({}, l, { ord: oL[i] }); });
+  rhs.forEach((r, i) => { out.rhythm[r.id] = Object.assign({}, r, { ord: oR[i] }); });
+  lib.forEach((b, i) => { out.item['lib|' + b.id] = Object.assign({}, b, { ord: oB[i], bin: 1 }); });
+  vs.forEach((v, i) => {
+    const r = Object.assign({}, v, { ord: oV[i] });
     delete r.items;
     out.routine[v.id] = r;
     Object.keys(v.items || {}).forEach(laneId => {
-      (v.items[laneId] || []).forEach((it, j) => {
-        out.item[v.id + '|' + laneId + '|' + it.id] =
-          Object.assign({}, it, { ord: j, lane: laneId, rt: v.id });
+      const arr = v.items[laneId] || [], key = it => v.id + '|' + laneId + '|' + it.id;
+      const o = O(arr, 'item', key);
+      arr.forEach((it, j) => {
+        out.item[key(it)] = Object.assign({}, it, { ord: o[j], lane: laneId, rt: v.id });
       });
     });
   });
@@ -1546,6 +1552,61 @@ function blockRows(st) {
      rather than listed, so a field added later is carried without anybody
      remembering to add it here. */
   Object.keys(st).forEach(k => { if (!NOT_A_ROW[k]) out.setting[k] = st[k]; });
+  return out;
+}
+
+/* ── a move writes the block that moved, and nothing else ──
+   Tom, 2026-09-18: "Something is rearranging my blocks", in Motherbase.exe.
+   A position used to be the block's index, so dragging one block to the top
+   renumbered every block it passed and wrote all of them. The exe, the web
+   copy and the folder copy each keep a store and meet through the sheet, and
+   a copy still showing the old order renumbered from THAT order on its next
+   edit and stamped every number newer. The merge then held some numbers from
+   one order and some from the other, and blocks swapped places.
+
+   Now each block keeps the number it was read with. The longest run already
+   in order keeps its numbers, and only the blocks out of place get a new one
+   between their neighbours. A drag writes one row, so two copies moving two
+   different blocks cannot overwrite each other.
+
+   ORD remembers the number each object was read with. A board rebuilt from
+   undo has fresh objects, so the live board falls back to what was last
+   written under the same key. */
+const ORD = new WeakMap();
+function placeOrds(list, type, keyOf, live) {
+  const n = list.length, p = new Array(n), out = new Array(n);
+  list.forEach((x, i) => {
+    let v = ORD.get(x);
+    if (v == null && live && lastRows) {
+      const s = lastRows[type + '::' + keyOf(x)];
+      if (s) { try { v = JSON.parse(s).ord; } catch (e) {} }
+    }
+    p[i] = (typeof v === 'number' && isFinite(v)) ? v : null;
+  });
+  /* longest strictly increasing run of the numbers we have */
+  const tails = [], tailAt = [], back = new Array(n).fill(-1), keep = new Array(n).fill(false);
+  for (let i = 0; i < n; i++) {
+    if (p[i] == null) continue;
+    let lo = 0, hi = tails.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (tails[m] < p[i]) lo = m + 1; else hi = m; }
+    tails[lo] = p[i]; tailAt[lo] = i; back[i] = lo > 0 ? tailAt[lo - 1] : -1;
+  }
+  for (let i = tails.length ? tailAt[tails.length - 1] : -1; i >= 0; i = back[i]) keep[i] = true;
+  let tight = false;
+  for (let i = 0; i < n; ) {
+    if (keep[i]) { out[i] = p[i]; i++; continue; }
+    let j = i; while (j < n && !keep[j]) j++;
+    const L = i > 0 ? out[i - 1] : null, R = j < n ? p[j] : null, m = j - i;
+    for (let k = 0; k < m; k++) {
+      out[i + k] = L != null && R != null ? L + (R - L) * (k + 1) / (m + 1)
+        : L != null ? L + k + 1 : R != null ? R - (m - k) : k;
+    }
+    if (L != null && R != null && (R - L) / (m + 1) < 1e-6) tight = true;
+    i = j;
+  }
+  /* numbers squeezed too close to tell apart: renumber once, in order */
+  if (tight) for (let i = 0; i < n; i++) out[i] = i;
+  if (live) list.forEach((x, i) => ORD.set(x, out[i]));
   return out;
 }
 
@@ -1614,15 +1675,18 @@ function blockState() {
     (v.items[laneId] = v.items[laneId] || []).push(Object.assign({ id: cut[2] }, items[k]));
   });
   st.variants.forEach(v => Object.keys(v.items).forEach(l => v.items[l].sort(ord)));
-  st.lanes.forEach(l => delete l.ord);
-  st.lib.forEach(b => { delete b.ord; delete b.bin; });
+  /* the number each was read with stays with it, off the object, so a move
+     can leave everyone else's alone (see placeOrds) */
+  const keepOrd = x => { if (typeof x.ord === 'number') ORD.set(x, x.ord); delete x.ord; };
+  st.lanes.forEach(keepOrd);
+  st.lib.forEach(b => { keepOrd(b); delete b.bin; });
   const rh = Rec.map('rhythm');
   st.rhythms = Object.keys(rh).map(id => Object.assign({ id: id }, rh[id])).sort(ord);
-  st.rhythms.forEach(r => { delete r.ord; });
+  st.rhythms.forEach(keepOrd);
   st.variants.forEach(v => {
-    delete v.ord;
+    keepOrd(v);
     Object.keys(v.items).forEach(l => v.items[l].forEach(it => {
-      delete it.ord; delete it.lane; delete it.rt;
+      keepOrd(it); delete it.lane; delete it.rt;
     }));
   });
   return st;
@@ -1662,8 +1726,19 @@ function writeRows() {
   const now = blockRows(), was = lastRows || {}, snap = rowSnap(now);
   ['lane', 'routine', 'item', 'rhythm'].forEach(type => {
     const pre = type + '::';
+    /* Only the fields that changed here, patched into what the store holds.
+       Writing the whole row put back every field this board had not caught up
+       on: tick a block before the sheet's newer order has been taken, and the
+       old position went out stamped newer than the new one. */
     Object.keys(now[type]).forEach(k => {
-      if (was[pre + k] !== snap[pre + k]) Rec.set(type, null, k, now[type][k]);
+      if (was[pre + k] === snap[pre + k]) return;
+      let old = null;
+      try { old = was[pre + k] ? JSON.parse(was[pre + k]) : null; } catch (e) {}
+      if (!old || Rec.get(type, null, k) == null) { Rec.set(type, null, k, now[type][k]); return; }
+      const row = now[type][k], ch = {};
+      Object.keys(row).forEach(f => { if (JSON.stringify(row[f]) !== JSON.stringify(old[f])) ch[f] = row[f]; });
+      Object.keys(old).forEach(f => { if (!(f in row)) ch[f] = undefined; });
+      Rec.patch(type, null, k, ch);
     });
     /* A tombstone, never a removal, or the deletion cannot travel. */
     Object.keys(was).forEach(id => {
