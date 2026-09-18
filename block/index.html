@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.12, 2026-09-18">
+<meta name="mb-version" content="1.0.13, 2026-09-18">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='28' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='55' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='16' y='34' width='68' height='46' rx='9' fill='%237EE8FA'/></svg>">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -1764,7 +1764,7 @@ function writeRows() {
 /* BLOCK owns these three. Said before the first write, because it is what
    stamps each row with the app that wrote it and what makes the store warn if
    another app starts writing them. */
-Rec.declare('block', ['lane', 'item', 'routine', 'rhythm']);
+Rec.declare('block', ['lane', 'item', 'routine', 'rhythm', 'shift']);
 
 /* ── the demo is shown, not saved ──
 
@@ -1965,11 +1965,22 @@ const todayKey = () => Day.today();
  * Blocks flow from the lane start (buffer between them) EXCEPT anchored ones
  * (it.at = 'HH:MM'), which own their start; the flow resumes from there.
  */
+/* ── a routine moved for one date ──
+   Tom, 2026-09-18: dragging a routine in Google Calendar moves it on that
+   date only. That is a `shift` row, dated, keyed by the routine, holding the
+   start. Every other week keeps the routine's own time. `schedAt` is the date
+   being worked out, for anything that walks dates rather than showing one;
+   otherwise it is the date on screen. */
+let schedAt = null;
+const shiftOf = (L, key) => { const r = Rec.get('shift', key || schedAt || viewKey(), L.id); return r && r.start ? r.start : null; };
+const startOf = (L, key) => L.start == null ? null : (shiftOf(L, key) || L.start);
+function atDate(key, fn) { const p = schedAt; schedAt = key; try { return fn(); } finally { schedAt = p; } }
+
 function schedule(laneId) {
   const L = lane(laneId);
   /* an untimed routine is just an ordered list — no clock, no anchors, no now line */
   if (L.start == null) return items(laneId).map(it => ({ it, s: null, e: null, gap: 0, clash: 0, hidden: !!it.hidden, untimed: true }));
-  let cur = hm2min(L.start); const out = [];
+  let cur = hm2min(startOf(L)); const out = [];
   items(laneId).forEach((it, i) => {
     if (it.hidden) { out.push({ it, s: cur, e: cur, gap: 0, clash: 0, hidden: true }); return; }
     if (i) cur += S.gap;
@@ -1999,7 +2010,7 @@ const laneEnd = laneId => {
   const L = lane(laneId);
   if (L.start == null) return null;
   const sc = schedule(laneId).filter(r => !r.hidden);
-  return sc.length ? sc[sc.length - 1].e : hm2min(L.start);
+  return sc.length ? sc[sc.length - 1].e : hm2min(startOf(L));
 };
 const laneMins = laneId => items(laneId).filter(x => !x.hidden).reduce((a, b) => a + b.dur, 0);
 /** duration sets a FLOOR — content decides the real height, so nothing can ever overlap */
@@ -2880,10 +2891,20 @@ function renderBoard() {
       /* UI.timeField, not a raw time input: on a PC that is a box you type
          into with an AM/PM button beside it, instead of three little spinners
          you have to tab between. The phone still gets its wheel. */
-      const st = UI.timeField(L.start, v => { snap(); L.start = v || '00:00'; render(); });
-      st.dataset.tip = 'When this routine starts — everything below flows from here.<br>Right-click for “no set time”.';
-      st.oncontextmenu = ev => { ev.preventDefault(); snap(); L.start = null; render(); toast('<b>' + esc(L.name) + '</b> is now untimed'); };
+      /* Moved for this date in the calendar: the box edits that date's time,
+         and right-click puts it back on the usual one. */
+      const moved = shiftOf(L);
+      const st = moved
+        ? UI.timeField(moved, v => { Rec.set('shift', viewKey(), L.id, { start: v || '00:00' }); render(); })
+        : UI.timeField(L.start, v => { snap(); L.start = v || '00:00'; render(); });
+      st.dataset.tip = moved
+        ? 'Moved in Google Calendar, for ' + dateLabel(viewKey()) + ' only. Usually ' + fmt(hm2min(L.start)) + '.<br>Right-click to put it back.'
+        : 'When this routine starts — everything below flows from here.<br>Right-click for “no set time”.';
+      st.oncontextmenu = moved
+        ? ev => { ev.preventDefault(); Rec.del('shift', viewKey(), L.id); render(); toast('<b>' + esc(L.name) + '</b> is back on its usual time'); }
+        : ev => { ev.preventDefault(); snap(); L.start = null; render(); toast('<b>' + esc(L.name) + '</b> is now untimed'); };
       row.appendChild(st);
+      if (moved) row.appendChild(el('span', 'tag', 'this day'));
       row.appendChild(el('span', null, '→'));
       row.appendChild(el('span', 'end', fmt(laneEnd(L.id))));
     }
@@ -2909,9 +2930,9 @@ function renderBoard() {
       meta.appendChild(c);
     }
     /* routines are independent clocks — say so when two of them cover the same wall time */
-    const mySpan = L.start == null ? null : [hm2min(L.start), laneEnd(L.id)];
+    const mySpan = L.start == null ? null : [hm2min(startOf(L)), laneEnd(L.id)];
     const bump = !mySpan ? [] : S.lanes.filter(O => O.id !== L.id && O.start != null && items(O.id).length)
-      .filter(O => mySpan[0] < laneEnd(O.id) && hm2min(O.start) < mySpan[1]).map(O => O.name);
+      .filter(O => mySpan[0] < laneEnd(O.id) && hm2min(startOf(O)) < mySpan[1]).map(O => O.name);
     if (sc.length && bump.length) {
       /* This chip used to carry the other routine's name, and a routine can be
          called "Deep Work/ Main Quest Work". In a 278px column that one chip
@@ -3019,7 +3040,7 @@ function renderBoard() {
     if (!sc.length) body.appendChild(el('div', 'lane-empty', 'Drag a block here<br><span style="opacity:.6">or click one in the bin</span>'));
     const nowM = nowMin();
     /* only where the clock actually is: the routine has to cover this minute */
-    const covers = L.start != null && sc.length && nowM >= hm2min(L.start) && nowM <= laneEnd(L.id);
+    const covers = L.start != null && sc.length && nowM >= hm2min(startOf(L)) && nowM <= laneEnd(L.id);
     const showNow = S.nowline && L.nowline !== false && covers && !L.byPri;
     /* view-only priority ordering: the clock times stay attached to the real order */
     const view = L.byPri ? sc.slice().sort((a, b) => ((a.it.pri || 9) - (b.it.pri || 9)) || (a.s - b.s)) : sc;
@@ -5889,7 +5910,7 @@ function calEvents() {
     if (!vid) continue;
     const v = variant(vid);
     if (!v) continue;
-    withVariant(vid, () => {
+    withVariant(vid, () => atDate(key, () => {
       LANES(vid).forEach(L => {
         if (!dayHas(v, L.id)) return;
         if (L.start == null) return;
@@ -5908,13 +5929,13 @@ function calEvents() {
         out.push({
           key: key + '|' + L.id,
           date: key,
-          start: hhmm(hm2min(L.start)),
+          start: hhmm(hm2min(startOf(L))),
           end: hhmm(end),
           title: String(L.name || 'Routine').trim(),
           details: lines.join('\n') + (note ? '\n\n' + note : ''),
         });
       });
-    });
+    }));
   }
   /* In date order, because the script clears the window between the first and
      the last before writing, and a window read off an unsorted list is wrong. */
@@ -5922,8 +5943,25 @@ function calEvents() {
   return out;
 }
 
-IO.register({ app: 'block', name: 'BLOCK', types: ['lane', 'item', 'routine', 'rhythm', 'plan'],
-  calendar: calEvents,
+/* What the sheet hands back: each routine event moved by hand, keyed
+   date|routine as calEvents wrote it. A move onto the usual time is no move,
+   and a drag to another day is not taken (the script puts it back). */
+function takeCalMoves(list) {
+  let n = 0;
+  list.forEach(m => {
+    const bits = String(m.key || '').split('|'), d = bits[0], L = lane(bits[1]);
+    if (!L || L.start == null || m.date !== d || !/^\d{2}:\d{2}$/.test(m.start || '')) return;
+    if (startOf(L, d) === m.start) return;
+    if (m.start === L.start) Rec.del('shift', d, L.id);
+    else Rec.set('shift', d, L.id, { start: m.start });
+    n++;
+  });
+  if (n && !boardBusy()) render();
+  return n;
+}
+
+IO.register({ app: 'block', name: 'BLOCK', types: ['lane', 'item', 'routine', 'rhythm', 'plan', 'shift'],
+  calendar: calEvents, calmoves: takeCalMoves,
   reads: { status: ['tick', 'activity'], quest: ['tick', 'activity'], log: ['tick', 'activity'],
     train: ['tick', 'activity'], speak: ['tick', 'activity'] } });
 
@@ -6259,7 +6297,9 @@ const PUBLISH_AHEAD = 14;
    once, fourteen times per render is fourteen reloads of the home screen while
    you are dragging a block around. So the fortnight is written quietly and
    today goes through the shim, which is one poke for the lot. */
-function publishFor(key, quiet, log) {
+/* worked out for its own date, so a routine moved that day publishes moved */
+function publishFor(key, quiet, log) { return atDate(key, () => publishDay(key, quiet, log)); }
+function publishDay(key, quiet, log) {
   const vid = routineForDate(key), d = Day.dow(key);
   /* "Not needed" leaves the day's scheduled set, so it leaves the plan too.
      Tom, 2026-09-14: "If I put a block as not needed today in BLOCK, it still
