@@ -141,11 +141,13 @@ sw.js              the offline cache, added 2026-09-16. Opened from a folder
                    the suite never needed a connection. Opened from an ADDRESS
                    it needed one every time, just to fetch the page, and with
                    no signal the browser drew a blank page and the app looked
-                   broken. This keeps a copy of each page on the phone. It can
-                   never serve a stale one: anything without a `?v=` stamp goes
-                   to the network first and only falls back to the copy when
-                   the network fails, and anything with one is at an address
-                   that changes when the file does. Registered by
+                   broken. This keeps a copy of each page on the phone. Since
+                   2026-09-18 it answers from that copy AT ONCE and fetches the
+                   newer one in the background for the next open (Tom: "Always
+                   open from the phone copy IMMEDIATELY... Fast input is our
+                   pillar"). A pushed change lands on the second open after it;
+                   data is never involved, only code. A stamped file is at an
+                   address that changes when the file does. Registered by
                    `shared/mobile.js`, so no app had to be edited. Does nothing
                    from a folder and nothing inside a frame. `?nosw=1` on the
                    address takes it off again

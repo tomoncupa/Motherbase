@@ -21,10 +21,12 @@
      out of the cache while there is a connection that could fetch something
      newer. Two rules:
 
-       · Anything WITHOUT a ?v= stamp goes to the NETWORK first, and only
-         falls back to the cache when the network fails. Every page and every
-         shared file in Tom's own copy is in this half. With signal you are
-         always on the newest copy. There is no stale window to be in.
+       · Anything WITHOUT a ?v= stamp is answered from the kept copy at once
+         and refreshed from the network in the background, for the next open.
+         Every page and every shared file in Tom's own copy is in this half.
+         Until 2026-09-18 this half asked the network FIRST, which made a weak
+         signal a ten second open; Tom chose speed. The stale window is one
+         open, and it only ever holds code, never data.
 
        · Anything WITH a ?v= stamp is answered from the cache first. Only the
          client copy stamps, and its stamp is a hash of shared/ itself, so a
@@ -32,7 +34,8 @@
          something different. Answering one from the cache cannot hand back
          the wrong thing, and it is what makes an offline open quick.
 
-     Together: with signal, never stale. With no signal, still opens.
+     Together: always opens at once, signal or none, and is never more than
+     one open behind.
 
    WHAT IS KEPT
      PRECACHE below is taken at install. In this repo that is the shared
@@ -175,18 +178,25 @@ self.addEventListener('fetch', e => {
      the not-saved-yet page while the page it wanted sat right there. Safe
      here because this half is the unstamped half: nothing in it uses the
      query to say which version it wants. */
-  e.respondWith(
-    fetch(fresh(req))
-      .then(r => keep(req, r))
-      .catch(() => caches.match(req, { ignoreSearch: true }).then(hit => {
-        if (hit) return hit;
-        /* A folder address, ".../status/", against a kept index.html. */
-        if (req.mode === 'navigate') {
-          return caches.match(url.pathname.replace(/\/$/, '/index.html'),
-                              { ignoreSearch: true })
-            .then(h2 => h2 || offline());
-        }
-        return offline();
-      }))
-  );
+  /* ── the phone's copy first, always ──
+     Tom, 2026-09-18: "Always open from the phone copy IMMEDIATELY then let
+     data filter in, Fast input is our pillar." STATUS took over ten seconds
+     to open on weak signal, because this used to ask the network first for
+     every file and waited however long a bad connection took to fail.
+
+     So a kept copy is answered at once, and the network is asked in the
+     background; what it brings is kept for the NEXT open. That is the trade,
+     and it is made on purpose: a change pushed today reaches the phone on the
+     second open after it, not the first. Nothing is ever lost by it, because
+     data is rows in the store and never comes from here. Only the app's own
+     code arrives one open late. With nothing kept yet, the network answers,
+     exactly as before. */
+  const bg = fetch(fresh(req)).then(r => keep(req, r));
+  e.waitUntil(bg.catch(() => {}));
+  /* A folder address, ".../status/", also finds a kept index.html. */
+  const kept = caches.match(req, { ignoreSearch: true }).then(hit => hit ||
+    (req.mode === 'navigate'
+      ? caches.match(url.pathname.replace(/\/$/, '/index.html'), { ignoreSearch: true })
+      : undefined));
+  e.respondWith(kept.then(hit => hit || bg.catch(() => offline())));
 });
