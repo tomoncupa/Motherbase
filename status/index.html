@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.37, 2026-09-18">
+<meta name="mb-version" content="1.0.38, 2026-09-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#0B0E14">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 
 <script src="../shared/skins.js"></script>
 <script src="../shared/day.js"></script>
@@ -7641,7 +7641,7 @@ function deskSheetWatch() {
   if (!sheetH) { deskAfterSheet = 0; deskSetSmall(true); }
 }
 
-let deskDoing = '';      /* the widget's half-typed "what are you doing" */
+var deskDoing = '';      /* the widget's half-typed "what are you doing" */
 function deskBar() {
   const bar = document.getElementById('deskbar');
   if (!bar) return;
@@ -7675,7 +7675,7 @@ function deskBar() {
   const hadFocus = document.activeElement && document.activeElement.classList.contains('deskdoing');
   const doing = document.createElement('input');
   doing.type = 'text'; doing.className = 'deskdoing mb-input';
-  doing.placeholder = 'What are you doing?'; doing.value = deskDoing;
+  doing.placeholder = doingAsk(); doing.value = deskDoing;
   doing.setAttribute('aria-label', 'What are you doing now');
   doing.oninput = () => { deskDoing = doing.value; };
   doing.onkeydown = e => {
@@ -7684,7 +7684,7 @@ function deskBar() {
     const text = doing.value.trim();
     if (!text) return;
     deskDoing = '';
-    addNote(Day.today(), 'entry', text, { now: true });
+    addNote(Day.today(), doingKind(), text, { now: true });
     Mobile.feedback('success');
     deskBar();
     const again = document.querySelector('#deskbar .deskdoing');
@@ -7826,7 +7826,7 @@ function checkDraw() {
   /* What he is up to, saved as an entry bullet at this minute. Optional: the
      scales are the check, this is the line that says what they were read in
      the middle of. */
-  win.appendChild(el('div', 'nwlabel', 'WHAT ARE YOU DOING NOW?'));
+  win.appendChild(el('div', 'nwlabel', esc(doingAsk().toUpperCase())));
   const doing = document.createElement('textarea');
   doing.className = 'nwdoing'; doing.rows = 2; doing.value = checkDoing;
   doing.setAttribute('aria-label', 'What are you doing now');
@@ -7881,7 +7881,7 @@ function checkSave() {
   });
   const doing = checkDoing.trim();
   checkDoing = '';
-  if (doing) addNote(d, 'entry', doing, { now: true });
+  if (doing) addNote(d, doingKind(), doing, { now: true });
   if (n) Mobile.feedback('success');
   /* Answering by hand puts the next one off. Without this the question he just
      answered comes back ten minutes later, which is how a prompt stops being
@@ -7979,10 +7979,29 @@ function drawDeskTab(pane) {
   demo.onclick = () => deskAsk();
   pane.appendChild(demo);
 
+  /* ── the widget's own line ──
+     Tom, 2026-09-18: "Give me options in settings to adjust what it says".
+     The question it asks and the kind of bullet it writes. The status check
+     asks the same question, so the two cannot drift apart. */
+  pane.appendChild(el('div', 'mb-group', 'THE LINE UNDER YOUR LAST BULLET'));
+  const q = document.createElement('input');
+  q.type = 'text'; q.className = 'mb-input'; q.value = doingAsk();
+  q.placeholder = 'What are you doing?';
+  q.onchange = () => { S.set('desk.ask', q.value.trim() || ''); deskBar(); };
+  pane.appendChild(UI.row('What it asks', '', q));
+  pane.appendChild(UI.row('Saves it as', '', UI.segmented(
+    NOTE_KINDS.map(k => ({ id: k.id, name: k.label })),
+    doingKind(),
+    v => { S.set('desk.doingKind', v); })));
+  pane.appendChild(el('div', 'note',
+    'Enter saves it as that kind of bullet, at that minute. The status check asks the same question.'));
+
   pane.appendChild(el('div', 'note',
     'Mini mode is the chevron in the top bar. Ctrl+B writes a bullet from ' +
     'anywhere, even when STATUS is behind another window.'));
 }
+function doingAsk() { return String(S.get('desk.ask', '') || '').trim() || 'What are you doing?'; }
+function doingKind() { const k = S.get('desk.doingKind', 'entry'); return NOTE_KINDS.some(x => x.id === k) ? k : 'entry'; }
 
 if (DESK) {
   /* One button for both directions, pinned to the corner, made once and
