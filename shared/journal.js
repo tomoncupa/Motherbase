@@ -140,7 +140,9 @@ function parseLine(raw, date) {
   }
 
   let m;
-  if (!dur && (m = text.match(RANGE_RE)) && (m[1] || m[3] || m[4] || m[6] || m[7])) {
+  /* A bare "8-11" at the end of a line is a time too, since 2026-09-18. Tom:
+     "We don't track reps with bullets anyway", so "Squat 3-5" is 3 to 5. */
+  if (!dur && (m = text.match(RANGE_RE))) {
     const smm = m[3] ? +m[3] : 0, eh = +m[5], emm = m[6] ? +m[6] : 0;
     let s = clockMins(+m[2], smm, m[4] || m[7] || null, date);
     if (s != null && !m[4] && m[7]) {
@@ -260,8 +262,29 @@ function add(date, kind, text, extra, src) {
     row.dur = null;
   }
   R.set('note', d, key, row);
+  spentFrom(d, key, row);
   publishNotes(d, src);
   return key;
+}
+
+/* ── "Paid 250 - lunch" is money out ──
+   Tom, 2026-09-18: "if I put 'just Paid XXX - XXX' can we auto track that as
+   spending?" A line that starts with paid (or just paid) and an amount also
+   writes STATUS's `spend` row, keyed off the line, so the money screen needs
+   nothing new. No account is guessed; it waits as "not now" until he picks
+   one on the money screen. A todo is not a payment, so only the other kinds. */
+const PAID_RE = /^(?:just\s+)?paid\s+(?:₱|php\s*|p(?=\d))?\s*(\d[\d,]*(?:\.\d+)?)\s*(?:[-–—:]\s*|for\s+|on\s+|at\s+)?(.*)$/i;
+function paidOf(text) {
+  const m = PAID_RE.exec(String(text || '').trim());
+  if (!m) return null;
+  const amt = parseFloat(m[1].replace(/,/g, ''));
+  return amt > 0 ? { amt: amt, note: m[2].trim() } : null;
+}
+function spentFrom(d, key, row) {
+  if (!row || row.kind === 'todo') return;
+  const p = paidOf(row.text);
+  if (!p) return;
+  Rec().set('spend', d, 'note-' + key, { amt: p.amt, acct: '', note: p.note || row.text, t: row.t || Date.now() });
 }
 
 /* ══════════════ REPEATS ══════════════
@@ -464,6 +487,8 @@ function timeText(x) {
     if (end) return { s: clockLabel(end), wrote: false };
     return { s: dur, wrote: false };
   }
+  /* Tracked and not stopped yet (STATUS's Track, 2026-09-18) */
+  if (x.run && !x.dur) return { s: (x.at ? clockLabel(x.at) + ' · ' : '') + 'running', wrote: false };
   if (x.at) return { s: clockLabel(x.at) + (dur ? ' · ' + dur : ''), wrote: false };
   if (dur) return { s: dur, wrote: false };
   if (x.t) return { s: clockLabel(hhmm(x.t)), wrote: true };
@@ -612,7 +637,7 @@ g.Journal = {
   bare: bare, place: place, onDay: onDay, notes: notes,
   parseLine: parseLine, clockMins: clockMins, minsHM: minsHM,
   hhmm: hhmm, clockLabel: clockLabel, durLabel: durLabel,
-  publishTimed: publishTimed, publishNotes: publishNotes, add: add,
+  publishTimed: publishTimed, publishNotes: publishNotes, add: add, paidOf: paidOf,
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,
   css: css, markHTML: markHTML, timeText: timeText, sortClock: sortClock, textHTML: textHTML,
   moveTo: moveTo, moveToTomorrow: moveToTomorrow, movedAfter: movedAfter,
