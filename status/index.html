@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.40, 2026-09-18">
+<meta name="mb-version" content="1.0.41, 2026-09-19">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#0B0E14">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link href="../shared/fonts/fonts.css" rel="stylesheet">
 
 <script src="../shared/skins.js"></script>
 <script src="../shared/day.js"></script>
@@ -4328,6 +4328,36 @@ function noteSheet(x, d) {
     const timed = () => kind === 'entry' || kind === 'event';
     span.style.display = timed() ? '' : 'none';
     body.appendChild(span);
+
+    /* ── how it felt ──
+       Tom, 2026-09-19: mood on entries and events, "not just a 1-5 number but
+       a text field", with five options drawn from what he writes most. Off
+       until switched on in BULLETS, and never required. */
+    let feelVal = x.feel || '';
+    const feelOn = S.get('bulletFeel', 0) === 1;
+    const fw = el('div', 'field');
+    if (feelOn) {
+      fw.appendChild(el('label', 'fl', 'How it felt'));
+      const fi = document.createElement('input');
+      fi.type = 'text'; fi.className = 'mb-input'; fi.placeholder = 'optional'; fi.value = feelVal;
+      fi.oninput = () => { feelVal = fi.value.trim(); paintFeel(); };
+      fw.appendChild(fi);
+      const chips = el('div', 'chips');
+      const paintFeel = () => {
+        chips.innerHTML = '';
+        topFeels().forEach(w => {
+          const c = el('button', 'chip' + (feelVal.toLowerCase() === w ? ' on' : ''), esc(w));
+          c.type = 'button';
+          c.onclick = () => { feelVal = feelVal.toLowerCase() === w ? '' : w; fi.value = feelVal; paintFeel(); Mobile.haptic('select'); };
+          chips.appendChild(c);
+        });
+      };
+      paintFeel();
+      fw.appendChild(chips);
+      fw.style.display = timed() ? '' : 'none';
+      seg.addEventListener('click', () => { fw.style.display = timed() ? '' : 'none'; });
+      body.appendChild(fw);
+    }
     /* The picker above can change the kind after this is built. */
     seg.addEventListener('click', () => {
       times.style.display = kind === 'todo' ? '' : 'none';
@@ -4343,6 +4373,7 @@ function noteSheet(x, d) {
         const ex = {};
         if (timed() && atVal) ex.at = atVal;
         if (timed() && durVal) ex.dur = durVal;
+        if (feelOn && timed() && feelVal) ex.feel = feelVal;
         /* Track: the clock runs from now, and the time is now unless set */
         if (track) { ex.run = Date.now(); delete ex.dur; if (!ex.at) ex.now = true; }
         addNote(d, kind, text, ex);
@@ -4366,6 +4397,8 @@ function noteSheet(x, d) {
              the person did. */
           at: pz.at || ((kind === 'todo' || timed()) ? (atVal || null) : null),
           dur: pz.dur || (timed() ? durVal : null),
+          /* switched off, a feeling already on the line is left as it was */
+          feel: feelOn ? (timed() && feelVal ? feelVal : null) : (x.feel || null),
           by: kind === 'todo' ? (byVal || null) : null,
           /* You set it, so it is yours: a later tick puts this aside rather
              than over the side, and un-ticking hands it back. */
@@ -4408,7 +4441,7 @@ function noteSheet(x, d) {
        now; opening it again offers Stop, which fills in how long it ran. */
     const bar = el('div', 'trackbar');
     bar.appendChild(saveBar(isNew ? 'Add' : 'Save', () => commit(false)));
-    if (isNew) {
+    if (isNew && S.get('bulletTrack', 1) !== 0) {
       const tr = saveBar('Track', () => commit(false, true));
       tr.className = 'btn wide';
       tr.title = 'Start the clock now';
@@ -6106,6 +6139,8 @@ function openSettings() {
     { id: 'quests', name: 'GRADES', draw: drawQuestsTab },
     { id: 'track', name: 'TRACK', draw: drawTrackTab },
     { id: 'goals', name: 'GOALS', draw: drawGoalsTab },
+    /* Tom, 2026-09-19: "I think Bullets merit their own settings menu". */
+    { id: 'bullets', name: 'BULLETS', draw: drawBulletsTab },
     /* STATUS Desktop tracker: how often it asks, and what Ctrl+B does.
        Drawn in an ordinary browser tab as well, saying plainly that it
        needs the launcher, rather than hiding until the right window is
@@ -6115,7 +6150,7 @@ function openSettings() {
        launcher and never will be. The tab is there when the launcher
        opened the page and nowhere else. */
   ].filter(t => t.id !== 'desk' || DESK), {
-    order: ['quests', 'track', 'goals', 'desk', 'app', 'data'],
+    order: ['quests', 'track', 'goals', 'bullets', 'desk', 'app', 'data'],
     /* the sheet mirror is a way of getting data out, so it belongs under DATA
        with the backup and the export rather than in a tab of its own */
     append: { data: drawSyncTab },
@@ -8153,6 +8188,36 @@ function deskBullet() {
   if (checkOn) return;   /* nothing gets behind a status check */
   deskRaise();
   deskWrite({ kind: S.get('desk.kind', 'entry'), text: '' });
+}
+
+/* ── BULLETS ──
+   Everything about writing a line, in one place. Each is a switch, and the
+   ones that add a step (Track, the feeling) can be turned off entirely. */
+function drawBulletsTab(pane) {
+  settingsPane = pane; pane.classList.add('setpane');
+  pane.appendChild(toggleRow('Track button beside Add',
+    'On an entry or event: starts the clock now, and Stop fills in how long',
+    S.get('bulletTrack', 1) !== 0, v => { S.set('bulletTrack', v ? 1 : 0); }));
+  pane.appendChild(toggleRow('"Paid 250 - lunch" logs spending',
+    'A line starting with paid and an amount also goes on the money screen',
+    S.get('bulletPaid', 1) !== 0, v => { S.set('bulletPaid', v ? 1 : 0); }));
+  pane.appendChild(toggleRow('Ask how it felt',
+    'On entries and events: a word or two, with your five most used as buttons',
+    S.get('bulletFeel', 0) === 1, v => { S.set('bulletFeel', v ? 1 : 0); }));
+  pane.appendChild(el('div', 'note',
+    'Enter saves a bullet and Shift+Enter starts a new line. A range like 8-11 at the end of a line is its time.'));
+}
+/* The five feelings he writes most, from the last 90 days; plain ones until
+   he has written any. */
+function topFeels() {
+  const n = {}, from = Day.shift(Day.today(), -90);
+  Rec.all('note', { from: from }).forEach(r => {
+    const f = r.payload && String(r.payload.feel || '').trim().toLowerCase();
+    if (f) n[f] = (n[f] || 0) + 1;
+  });
+  const mine = Object.keys(n).sort((a, b) => n[b] - n[a]);
+  ['good', 'focused', 'calm', 'tired', 'stressed'].forEach(w => { if (mine.indexOf(w) < 0) mine.push(w); });
+  return mine.slice(0, 5);
 }
 
 function drawDeskTab(pane) {
