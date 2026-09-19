@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.12, 2026-09-19">
+<meta name="mb-version" content="1.0.13, 2026-09-19">
 <title>LOG</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▤</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -446,6 +446,9 @@ function xDefs() {
   const fields = Object.values(Rec.map('field')).filter(f => f && f.id)
     .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.label || '').localeCompare(String(b.label || '')));
   xDefCache = [{ key: 'done', kind: 'text', name: 'What got done today' }]
+    /* Tom, 2026-09-19: "Give me the option to add columns in LOG". Text
+       columns of his own, each day's box a `cell` row like What got done. */
+    .concat(myCols().map(c => ({ key: c.k, kind: 'text', name: c.name, mine: true })))
     .concat(fields.map(f => ({ key: 'f-' + String(f.id).replace(/[^a-zA-Z0-9_-]/g, '_'), kind: 'field', name: f.label || f.id, unit: f.unit || '', f })))
     .concat(X_EXTRA);
   return xDefCache;
@@ -1428,7 +1431,42 @@ function columnsDialog() {
       grp.appendChild(UI.row('Day columns', 'Your STATUS entries beside the days', x));
       b.appendChild(grp);
     },
-    actions: [{ label: 'DONE', kind: 'go' }],
+    actions: [{ label: 'ADD A COLUMN', fn: () => { setTimeout(addCol, 0); } }, { label: 'DONE', kind: 'go' }],
+  });
+}
+/* His own columns, in the setting `xcols`: [{k, name}]. A deleted one leaves
+   its days' writing in the store, so bringing a column back by the same name
+   is not possible, but nothing he wrote is destroyed. */
+function myCols() { const v = S.get('xcols', null); return Array.isArray(v) ? v.filter(c => c && c.k && c.name) : []; }
+function addCol() {
+  let inp = null;
+  const save = h => {
+    const name = inp.value.trim();
+    if (!name) { inp.focus(); return; }
+    const k = 't' + Date.now().toString(36);
+    S.set('xcols', myCols().concat([{ k: k, name: name }]));
+    const vis = Object.assign({}, S.get('xvis', null) || {}); vis[k] = true; S.set('xvis', vis);
+    xDefCache = null; dayCache.clear(); h.close(); render();
+  };
+  UI.dialog({
+    title: 'ADD A COLUMN', width: 420,
+    body: (b, h) => {
+      b.appendChild(UI.el('p', 'muted', 'A box beside every day to write in, like What got done today.'));
+      inp = UI.field('text', { placeholder: 'What I learned today' });
+      inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); save(h); } };
+      b.appendChild(inp);
+      UI.focusSoon(inp);
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'ADD', kind: 'go', fn: h => { save(h); return false; } }],
+  });
+}
+function deleteCol(k) {
+  const c = myCols().find(x => x.k === k);
+  if (!c) return;
+  UI.confirm('Delete ' + c.name + '?', 'The column goes. What you wrote in it stays saved.').then(ok => {
+    if (!ok) return;
+    S.set('xcols', myCols().filter(x => x.k !== k));
+    xDefCache = null; dayCache.clear(); render();
   });
 }
 function renameCol(k) {
@@ -1458,6 +1496,8 @@ function columnsMenu(e, head) {
   if (side) items.push({ label: 'Hide column', fn: () => toggleSide(LEVELS[level].id, side) });
   if (k && k !== 'd') items.push({ label: 'Hide column', fn: () => toggleX(k) });
   if (k) items.push({ label: 'Rename', fn: () => renameCol(k) });
+  if (k && xDef(k) && xDef(k).mine) items.push({ label: 'Delete column', fn: () => deleteCol(k) });
+  items.push({ label: 'Add a column', fn: addCol });
   items.push({ label: 'Show or hide columns', fn: columnsDialog });
   UI.menu(e.clientX, e.clientY, items, { title: head ? head.textContent : 'Columns' });
 }
