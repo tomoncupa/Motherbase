@@ -78,6 +78,12 @@ const PRECACHE = [
   'shared/icons.js',
   'shared/health.js',
   'shared/import.js',
+  'shared/fonts/fonts.css',
+  'shared/fonts/chakra-petch-400.woff2',
+  'shared/fonts/chakra-petch-500.woff2',
+  'shared/fonts/chakra-petch-600.woff2',
+  'shared/fonts/chakra-petch-700.woff2',
+  'shared/fonts/inter-tight.woff2',
 ];
 
 /* ── install: take a copy ──

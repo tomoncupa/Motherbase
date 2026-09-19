@@ -589,7 +589,12 @@ const Skins={
     /* One face or two: a theme may set a display font and a body font, so
        `font` takes a string or a list of Google font specs. */
     const want=Array.isArray(skin.font)?skin.font:[skin.font];
+    /* Chakra Petch and Inter Tight live in shared/fonts since 2026-09-19; a
+       page carrying that stylesheet has them already and asks Google for
+       nothing. */
+    const local=!!document.querySelector('link[href*="fonts/fonts.css"]');
     want.filter(Boolean).forEach(spec=>{
+      if(local&&/^(Chakra\+Petch|Inter\+Tight)(:|$)/.test(String(spec)))return;
       const id='mb-font-'+String(spec).replace(/[^a-z0-9]/gi,'');
       if(document.getElementById(id))return;
       const l=document.createElement('link');

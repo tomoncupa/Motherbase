@@ -282,6 +282,8 @@ function paidOf(text) {
 }
 function spentFrom(d, key, row) {
   if (!row || row.kind === 'todo') return;
+  /* STATUS's BULLETS tab can switch this off (2026-09-19) */
+  try { if (Rec().setting('status', 'bulletPaid') === 0) return; } catch (e) {}
   const p = paidOf(row.text);
   if (!p) return;
   Rec().set('spend', d, 'note-' + key, { amt: p.amt, acct: '', note: p.note || row.text, t: row.t || Date.now() });
@@ -450,7 +452,8 @@ const CSS =
   '.mb-bullet.cancelled .nm-box{border-style:dashed}' +
   '.mb-bullet .at{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);' +
     'color:var(--accent);margin-left:var(--s-2);white-space:nowrap}' +
-  '.mb-bullet .at.wrote{opacity:.6}';
+  '.mb-bullet .at.wrote{opacity:.6}' +
+  '.mb-bullet .feel{font-size:var(--f-1);color:var(--text-muted);margin-left:var(--s-2);white-space:nowrap}';
 let cssDone = false;
 function css() {
   if (cssDone || typeof document === 'undefined' || !document.head) return;
@@ -515,6 +518,8 @@ function textHTML(x, day) {
   const tm = timeText(x);
   return esc(x.text) +
     (tm.s ? '<i class="at' + (tm.wrote ? ' wrote' : '') + '">' + esc(tm.s) + '</i>' : '') +
+    /* how it felt, when STATUS's BULLETS switch asked (2026-09-19) */
+    (x.feel ? '<i class="feel">' + esc(x.feel) + '</i>' : '') +
     (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') +
     (x.from && day ? '<i class="carried">' + Day().diff(day, x.from) + 'd</i>' : '');
 }
