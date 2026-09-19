@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mb-version" content="1.0.0, 2026-09-18">
+<title>RECKON</title>
+<meta name="theme-color" content="#0B0E14">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%230B0E14'/><text x='50' y='72' font-size='58' font-family='monospace' font-weight='700' fill='%23F0B323' text-anchor='middle'>x</text></svg>">
+
+<!--  RECKON is a guest in this repo, like calcount/. It loads nothing from
+      ../shared: no store, no themes, no icons, no sounds. Every line it needs
+      is in this file, so the folder lifts out into its own repo with nothing
+      to untangle. Its storage keys all start "rk." and it never reads or
+      writes Motherbase's rows. See reckon/CLAUDE.md.                        -->
+
+<style>
+/* ─────────────────────────── the system ───────────────────────────
+   Spacing and type are fixed scales, no two adjacent steps within ~25%,
+   so there is never a choice between 13 and 14. One accent, one job:
+   gold means "this is the live thing". Greys lean cool blue, saturation
+   raised at both ends so the ramp does not go chalky.                 */
+:root{
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px;
+  --f1:12px; --f2:14px; --f3:16px; --f4:18px; --f5:20px; --f6:24px; --f7:30px; --f8:36px; --f9:48px; --f10:60px;
+
+  --bg:#0B0E14;
+  --s-1:#121823;          /* a card */
+  --s-2:#1A2230;          /* a row on a card */
+  --s-3:#232D3D;          /* a key */
+  --line:#2B3746;
+  --line-2:#5C7189;      /* a line that carries meaning, so 3:1 against a row */
+
+  /* Three text steps, each measured against the darkest surface it is
+     ever drawn on. 12.8, 8.3 and 5.3 to one on a row: three legible
+     steps, not one legible step and two apologies for it. The tertiary
+     was 3.95 and failed, and the fix is lifting the colour rather than
+     shrinking the text, because that was a legibility problem. */
+  --t1:#DFE7F1;           /* primary text */
+  --t2:#ADBCCE;           /* secondary */
+  --t3:#8496AC;           /* tertiary */
+
+  --acc:#F0B323;
+  --acc-fg:#17120A;
+  --good:#5BD98A;
+  --bad:#FF7A7A;
+
+  --r1:8px; --r2:12px; --r3:18px; --r4:999px;
+  --tap:44px;
+  --e1:0 1px 2px rgba(0,0,0,.5), 0 1px 3px rgba(0,0,0,.35);
+  --e2:0 4px 12px rgba(0,0,0,.45), 0 2px 4px rgba(0,0,0,.35);
+  --e3:0 12px 32px rgba(0,0,0,.55);
+  --rim:inset 0 1px 0 rgba(255,255,255,.05);
+
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+
+  --fast:120ms; --med:220ms; --sheet:360ms;
+  --out:cubic-bezier(.2,.8,.3,1);
+}
+
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{height:100%}
+body{
+  min-height:100dvh;background:var(--bg);color:var(--t1);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',system-ui,sans-serif;
+  font-size:var(--f3);line-height:1.5;-webkit-font-smoothing:antialiased;
+  overscroll-behavior-y:none;
+  display:flex;flex-direction:column;
+}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.num{font-family:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+
+/* Pressed state. transform and opacity only, so it cannot drop a frame. */
+.press{transition:transform var(--fast) var(--out),background-color var(--fast) linear}
+.press:active{transform:scale(.96)}
+@media (hover:hover) and (pointer:fine){
+  .hov:hover{background:var(--s-3)}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
+@media (pointer:coarse){
+  .scroll::-webkit-scrollbar{display:none}
+}
+
+/* ─────────────────────────── shell ─────────────────────────── */
+header{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--s3);
+  padding:calc(var(--s3) + var(--safe-t)) calc(var(--s4) + var(--safe-r)) var(--s3) calc(var(--s4) + var(--safe-l));
+  background:var(--s-1);box-shadow:var(--e1),var(--rim);
+}
+.mark{font-size:var(--f4);font-weight:700;letter-spacing:.2em}
+.mark b{color:var(--acc);font-weight:700}
+.grow{flex:1}
+.hbtn{min-width:var(--tap);min-height:var(--tap);display:flex;align-items:center;justify-content:center;
+  border-radius:var(--r1);color:var(--t2);font-size:var(--f2);letter-spacing:.08em;padding:0 var(--s2)}
+.streak{display:flex;align-items:baseline;gap:var(--s1);font-size:var(--f2);color:var(--t2);
+  min-height:var(--tap);padding:0 var(--s2);border-radius:var(--r1)}
+.streak b{font-size:var(--f4);color:var(--acc);font-weight:700}
+.streak.off b{color:var(--t3)}
+
+main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.wrap{max-width:640px;margin:0 auto;
+  padding:var(--s5) calc(var(--s4) + var(--safe-r)) calc(var(--s7) + var(--safe-b)) calc(var(--s4) + var(--safe-l));
+  display:flex;flex-direction:column;gap:var(--s5)}
+
+/* ─────────────────────────── the path ─────────────────────────── */
+/* One primary thing on this screen: the level you are on. Everything
+   else is deliberately quieter, which is what makes it findable. */
+.next{background:var(--s-1);border-radius:var(--r3);padding:var(--s5);
+  box-shadow:var(--e2),var(--rim);border-top:2px solid var(--acc)}
+.next .kick{font-size:var(--f1);letter-spacing:.16em;color:var(--acc);font-weight:600}
+.next h1{font-size:var(--f7);line-height:1.15;font-weight:700;margin:var(--s2) 0 var(--s2)}
+.next p{color:var(--t2);font-size:var(--f3)}
+.next .aim{margin-top:var(--s4);color:var(--t2);font-size:var(--f2)}
+.next .aim b{color:var(--t1);font-weight:600}
+.go{margin-top:var(--s5);width:100%;min-height:56px;border-radius:var(--r2);
+  background:var(--acc);color:var(--acc-fg);font-size:var(--f4);font-weight:700;letter-spacing:.1em;
+  box-shadow:var(--e2)}
+.go.ghost{background:none;color:var(--t1);box-shadow:none;border:1px solid var(--line-2);margin-top:var(--s3)}
+
+.belt{display:flex;flex-direction:column;gap:var(--s2)}
+.belt h2{font-size:var(--f1);letter-spacing:.16em;color:var(--t3);font-weight:600;
+  margin-bottom:var(--s1);display:flex;align-items:baseline;gap:var(--s2)}
+.belt h2 span{color:var(--t3);letter-spacing:0;font-weight:400}
+
+.lvl{display:flex;align-items:center;gap:var(--s3);width:100%;text-align:left;
+  min-height:var(--tap);padding:var(--s3);border-radius:var(--r2);background:var(--s-2)}
+.lvl .no{flex:0 0 28px;height:28px;border-radius:var(--r4);display:flex;align-items:center;justify-content:center;
+  font-size:var(--f1);font-weight:700;background:var(--s-3);color:var(--t2)}
+.lvl.done .no{background:var(--good);color:#06240F}
+.lvl.now .no{background:var(--acc);color:var(--acc-fg)}
+.lvl .txt{flex:1;min-width:0}
+.lvl .nm{font-size:var(--f3);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lvl .sub{font-size:var(--f2);color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lvl.lock{opacity:.5}
+.lvl.lock .nm{font-weight:400}
+.lvl.now{background:var(--s-1);box-shadow:var(--e1),var(--rim)}
+.lvl .due{flex:0 0 auto;font-size:var(--f1);letter-spacing:.1em;color:var(--acc);font-weight:600}
+.spark{flex:0 0 auto;width:52px;height:20px;display:block}
+
+/* ─────────────────────────── the drill ─────────────────────────── */
+.drill{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column}
+.dtop{flex:0 0 auto;display:flex;align-items:center;gap:var(--s3);
+  padding:calc(var(--s3) + var(--safe-t)) calc(var(--s4) + var(--safe-r)) var(--s3) calc(var(--s4) + var(--safe-l))}
+.quit{min-width:var(--tap);min-height:var(--tap);display:flex;align-items:center;justify-content:center;
+  font-size:var(--f5);color:var(--t2);border-radius:var(--r1)}
+.dots{flex:1;display:flex;gap:4px;align-items:center}
+.dot{flex:1;height:4px;border-radius:2px;background:var(--s-3);transition:background-color var(--med) linear}
+.dot.ok{background:var(--good)} .dot.no{background:var(--bad)} .dot.at{background:var(--acc)}
+.clock{flex:0 0 auto;font-size:var(--f2);color:var(--t3);min-width:52px;text-align:right}
+.clock.over{color:var(--acc)}
+
+.stage{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:var(--s4);padding:var(--s4);text-align:center}
+.qtext{font-size:var(--f9);font-weight:700;line-height:1.1;letter-spacing:-.01em;
+  overflow-wrap:anywhere;max-width:100%}
+.qtext.long{font-size:var(--f6);font-weight:600;line-height:1.3;max-width:20em}
+.qnote{font-size:var(--f2);color:var(--t3)}
+.ans{min-height:64px;min-width:140px;padding:var(--s2) var(--s4);border-radius:var(--r2);
+  background:var(--s-1);box-shadow:var(--rim);display:flex;align-items:center;justify-content:center;
+  font-size:var(--f8);font-weight:700;letter-spacing:.02em;border-bottom:2px solid var(--line-2);
+  transition:border-color var(--fast) linear,background-color var(--fast) linear}
+.ans.empty{color:var(--t3)}
+.ans.ok{border-bottom-color:var(--good);background:rgba(91,217,138,.1)}
+.ans.no{border-bottom-color:var(--bad);background:rgba(255,122,122,.1)}
+.truth{min-height:26px;font-size:var(--f3);color:var(--bad);font-weight:600}
+.truth.ok{color:var(--good)}
+
+/* The pad sits in the thumb arc, on the bottom, always. */
+.pad{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s2);
+  padding:var(--s3) calc(var(--s4) + var(--safe-r)) calc(var(--s3) + var(--safe-b)) calc(var(--s4) + var(--safe-l));
+  max-width:520px;width:100%;margin:0 auto}
+.key{min-height:56px;border-radius:var(--r2);background:var(--s-3);color:var(--t1);
+  font-size:var(--f6);font-weight:600;box-shadow:var(--e1),var(--rim);
+  display:flex;align-items:center;justify-content:center}
+.key.dim{background:var(--s-2);color:var(--t2);font-size:var(--f5)}
+.key.void{background:none;box-shadow:none;pointer-events:none}
+.key.enter{grid-column:1 / -1;background:var(--acc);color:var(--acc-fg);font-size:var(--f4);
+  font-weight:700;letter-spacing:.12em}
+.key.enter[disabled]{background:var(--s-2);color:var(--t3);box-shadow:none}
+
+/* ─────────────────────────── the result ─────────────────────────── */
+.sheet-bg{position:fixed;inset:0;z-index:60;background:rgba(4,7,11,.72);
+  display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;transition:opacity var(--med) linear}
+.sheet-bg.up{opacity:1}
+.sheet{width:100%;max-width:560px;background:var(--s-1);
+  border-radius:var(--r3) var(--r3) 0 0;box-shadow:var(--e3);
+  max-height:92dvh;overflow-y:auto;overscroll-behavior:contain;
+  padding:var(--s3) calc(var(--s5) + var(--safe-r)) calc(var(--s5) + var(--safe-b)) calc(var(--s5) + var(--safe-l));
+  transform:translateY(100%);transition:transform var(--sheet) cubic-bezier(.32,.72,0,1)}
+.sheet-bg.up .sheet{transform:none}
+@media (min-width:640px){
+  .sheet-bg{align-items:center}
+  .sheet{border-radius:var(--r3);max-height:88dvh;transform:translateY(16px) scale(.98);opacity:0;
+    transition:transform var(--med) var(--out),opacity var(--med) linear}
+  .sheet-bg.up .sheet{transform:none;opacity:1}
+}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--line-2);margin:0 auto var(--s4)}
+.sheet h3{font-size:var(--f6);font-weight:700;margin-bottom:var(--s2)}
+.sheet .lede{color:var(--t2);margin-bottom:var(--s5)}
+.scores{display:flex;gap:var(--s3);margin-bottom:var(--s5)}
+.score{flex:1;background:var(--s-2);border-radius:var(--r2);padding:var(--s4);min-width:0}
+.score .v{font-size:var(--f7);font-weight:700;line-height:1.1}
+.score .v.ok{color:var(--good)} .score .v.no{color:var(--acc)}
+.score .k{font-size:var(--f2);color:var(--t3);margin-top:var(--s1)}
+.misses{display:flex;flex-direction:column;gap:var(--s2);margin-bottom:var(--s5)}
+.miss{display:flex;align-items:center;gap:var(--s3);padding:var(--s3);border-radius:var(--r1);
+  background:var(--s-2);font-size:var(--f3)}
+.miss .q{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.miss .a{color:var(--good);font-weight:700}
+.miss .q{flex:1}
+.miss .yours{color:var(--t3);font-size:var(--f2)}
+.teach{background:var(--s-2);border-radius:var(--r2);padding:var(--s4);margin-bottom:var(--s5);
+  color:var(--t1);line-height:1.6}
+.teach h4{font-size:var(--f1);letter-spacing:.16em;color:var(--acc);font-weight:600;margin-bottom:var(--s2)}
+.teach code{font-family:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;
+  background:var(--s-3);border-radius:4px;padding:1px 5px;font-size:.92em}
+.rows{display:flex;flex-direction:column;gap:var(--s1)}
+.srow{display:flex;align-items:center;gap:var(--s3);min-height:var(--tap);
+  padding:var(--s2) 0;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:0}
+.srow .l{flex:1;min-width:0}
+.srow .n{font-size:var(--f2);color:var(--t3)}
+.sw{flex:0 0 auto;width:52px;height:30px;border-radius:var(--r4);background:var(--s-3);
+  position:relative;transition:background-color var(--med) linear}
+.sw.on{background:var(--acc)}
+.sw::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;
+  background:#fff;transition:transform var(--med) var(--out)}
+.sw.on::after{transform:translateX(22px)}
+.seg{display:flex;gap:var(--s1);background:var(--s-3);border-radius:var(--r1);padding:3px}
+.seg button{min-height:38px;padding:0 var(--s3);border-radius:6px;font-size:var(--f2);color:var(--t2)}
+.seg button.on{background:var(--s-1);color:var(--t1);font-weight:600;box-shadow:var(--e1)}
+.foot{margin-top:var(--s5);font-size:var(--f2);color:var(--t3);text-align:center}
+
+.toast{position:fixed;left:50%;bottom:calc(var(--s6) + var(--safe-b));transform:translate(-50%,12px);
+  z-index:80;background:var(--s-3);color:var(--t1);border-radius:var(--r1);box-shadow:var(--e2);
+  padding:var(--s3) var(--s4);font-size:var(--f2);opacity:0;pointer-events:none;
+  transition:opacity var(--med) linear,transform var(--med) var(--out);max-width:88vw;text-align:center}
+.toast.up{opacity:1;transform:translate(-50%,0)}
+
+@media (max-height:620px){
+  .qtext{font-size:var(--f7)}
+  .ans{min-height:52px;font-size:var(--f7)}
+  .key{min-height:var(--tap)}
+  .stage{gap:var(--s3)}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark">RECK<b>ON</b></div>
+  <div class="grow"></div>
+  <button class="streak press" id="streak" aria-label="Streak"></button>
+  <button class="hbtn press hov" id="setBtn">SETTINGS</button>
+</header>
+
+<main class="scroll"><div class="wrap" id="path"></div></main>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   RECKON — mental arithmetic, worked up a ladder.
+
+   Nothing here talks to Motherbase. Storage is localStorage under keys
+   beginning "rk.", one key per row rather than one blob, because a blob
+   is the failure mode that has already cost Tom a system: a writer that
+   rebuilds the whole object drops every field it does not know about.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── storage: one key, one fact ───────────────────────────────── */
+const DB = {
+  get(k, dflt) {
+    try { const raw = localStorage.getItem('rk.' + k); return raw == null ? dflt : JSON.parse(raw); }
+    catch (e) { return dflt; }
+  },
+  set(k, v) {
+    try { localStorage.setItem('rk.' + k, JSON.stringify(v)); } catch (e) { /* full or private mode */ }
+  },
+  /* merge, never replace: read what is there, change the named fields,
+     write it back whole. The one rule that stops a silent data loss. */
+  patch(k, changes) {
+    const now = Object.assign({}, DB.get(k, {}), changes);
+    DB.set(k, now); return now;
+  },
+  keys(prefix) {
+    const out = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.indexOf('rk.' + prefix) === 0) out.push(k.slice(3));
+      }
+    } catch (e) { /* nothing readable */ }
+    return out;
+  },
+};
+
+const today = () => {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+};
+const daysBetween = (a, b) => Math.round((new Date(b + 'T00:00') - new Date(a + 'T00:00')) / 86400000);
+
+/* ── little helpers ───────────────────────────────────────────── */
+const R = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const el = (tag, cls, html) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html != null) n.innerHTML = html;
+  return n;
+};
+const round2 = n => Math.round(n * 100) / 100;
+
+/* Three drawings, because a character is not an icon: it renders
+   differently on every device, cannot take a colour, and disappears when
+   a font does. These are strokes, so they inherit the text colour and
+   scale with it. */
+const SVG = {
+  back: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7z"/><path d="M15 10l-4 4M11 10l4 4"/></svg>',
+  close: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  tick: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>',
+};
+const fmt = n => String(n);
+
+/* ══════════════════ THE LADDER ══════════════════
+   Nineteen levels in four belts. Each carries:
+     nm     what it is called
+     one    one line, what it actually teaches
+     how    the method, because drilling without a method is just
+            being timed at being slow
+     need   {a: right out of 12, s: median seconds on the ones you got
+            right}. Both have to be met.
+     make   a question: {q, a}, plus tol for an estimate, dec if the
+            answer can have a decimal point, neg if it can be negative
+   The seconds are ESTIMATES, not measured on anyone. Settings has a
+   pace control and a level eases itself if the clock is the only thing
+   in the way three attempts running.                                   */
+
+const BELTS = [
+  { nm: 'GROUND',  sub: 'the sums everything else is built out of' },
+  { nm: 'TRICKS',  sub: 'the shortcuts that make big numbers small' },
+  { nm: 'PARTS',   sub: 'division, percentages, fractions, estimates' },
+  { nm: 'LETTERS', sub: 'where the number is the thing you are looking for' },
+];
+
+const LEVELS = [
+/* ── belt 0: ground ────────────────────────────────────────────── */
+{ id: 'bonds', belt: 0, nm: 'Pairs to ten',
+  one: 'What is missing to make 10 and 20',
+  how: 'To make ten, ask what is missing rather than counting up. There are only five pairs: <code>1+9 2+8 3+7 4+6 5+5</code>. Every sum you will ever do leans on those five, so they have to be instant rather than worked out.',
+  need: { a: 11, s: 2.5 },
+  make() {
+    const k = R(1, 4);
+    if (k === 1) { const a = R(1, 9); return { q: a + ' + ? = 10', a: 10 - a }; }
+    if (k === 2) { const a = R(1, 19); return { q: '? + ' + a + ' = 20', a: 20 - a }; }
+    if (k === 3) { const a = R(2, 9), b = R(2, 9); return { q: a + ' + ' + b, a: a + b }; }
+    const a = R(11, 18), b = R(2, 9); return { q: a + ' − ' + b, a: a - b };
+  } },
+
+{ id: 'bridge', belt: 0, nm: 'Crossing a ten',
+  one: 'Two digits plus or minus one, over the ten',
+  how: 'Fill the ten first, then spend what is left. <code>47 + 8</code>: three of the eight gets you to 50, five left over, 55. Subtracting is the same in reverse: <code>63 − 7</code> is down to 60, then 3 more, 56.',
+  need: { a: 11, s: 3.5 },
+  make() {
+    if (Math.random() < .5) { const a = R(2, 9) * 10 + R(2, 9), b = R(2, 9); return { q: a + ' + ' + b, a: a + b }; }
+    const a = R(2, 9) * 10 + R(1, 6), b = R(a % 10 + 1, 9); return { q: a + ' − ' + b, a: a - b };
+  } },
+
+{ id: 'tables', belt: 0, nm: 'Times tables',
+  one: 'Everything up to twelve twelves',
+  how: 'The only ones people actually stumble on are 6, 7, 8 and 12, so those come up most here. Two worth pinning: <code>7 × 8 = 56</code> and <code>6 × 7 = 42</code>. Nine is ten of them minus one of them, always.',
+  need: { a: 11, s: 3 },
+  make() {
+    const hard = [6, 7, 8, 9, 12];
+    const a = Math.random() < .65 ? pick(hard) : R(2, 12);
+    const b = Math.random() < .65 ? pick(hard) : R(2, 12);
+    return { q: a + ' × ' + b, a: a * b };
+  } },
+
+{ id: 'twodig', belt: 0, nm: 'Two digits, added',
+  one: 'Two-digit addition and subtraction, left to right',
+  how: 'Left to right, never right to left. <code>46 + 38</code>: forty and thirty is seventy, six and eight is fourteen, 84. Carrying backwards works on paper because you can see it; in your head it makes you hold a digit you cannot check.',
+  need: { a: 10, s: 5 },
+  make() {
+    if (Math.random() < .5) { const a = R(13, 89), b = R(13, 89); return { q: a + ' + ' + b, a: a + b }; }
+    const a = R(31, 98), b = R(12, a - 5); return { q: a + ' − ' + b, a: a - b };
+  } },
+
+{ id: 'dbl', belt: 0, nm: 'Double and halve',
+  one: 'Doubling and halving up to three digits',
+  how: 'Double in parts, biggest first. <code>137</code> doubled is 200, then 60, then 14, so 274. Halving is the same walk backwards. This is the engine under ×5, ÷5, ×50 and ×25, so it pays for itself four times over.',
+  need: { a: 10, s: 4 },
+  make() {
+    if (Math.random() < .5) { const a = R(37, 480); return { q: 'double ' + a, a: a * 2 }; }
+    const a = R(19, 240) * 2; return { q: 'half of ' + a, a: a / 2 };
+  } },
+
+/* ── belt 1: tricks ────────────────────────────────────────────── */
+{ id: 'near10', belt: 1, nm: 'Elevens, nines, fives',
+  one: 'The three that have a shortcut worth knowing',
+  how: '<code>× 11</code>: add the two digits and drop the answer in the middle. <code>43 × 11</code> is 4, then 4+3, then 3, so 473. Carry if the middle goes past nine. <code>× 9</code> is ten of them minus one of them. <code>× 5</code> is halve it, then times ten.',
+  need: { a: 10, s: 5 },
+  make() {
+    const k = R(1, 3);
+    if (k === 1) { const a = R(12, 89); return { q: a + ' × 11', a: a * 11 }; }
+    if (k === 2) { const a = R(12, 89); return { q: a + ' × 9', a: a * 9 }; }
+    const a = R(14, 98) * 2; return { q: a + ' × 5', a: a * 5 };
+  } },
+
+{ id: 'quarter', belt: 1, nm: 'Quarters and halves',
+  one: 'Times 25, times 50, times 15',
+  how: '<code>× 25</code> is divide by four, then times a hundred. <code>36 × 25</code>: 36 ÷ 4 is 9, so 900. <code>× 50</code> is halve it and times a hundred. <code>× 15</code> is ten of them plus half of that again.',
+  need: { a: 10, s: 6 },
+  make() {
+    const k = R(1, 3);
+    if (k === 1) { const a = R(3, 24) * 4; return { q: a + ' × 25', a: a * 25 }; }
+    if (k === 2) { const a = R(6, 49) * 2; return { q: a + ' × 50', a: a * 50 }; }
+    const a = R(6, 48) * 2; return { q: a + ' × 15', a: a * 15 };
+  } },
+
+{ id: 'mul1', belt: 1, nm: 'Two digits by one',
+  one: 'Two-digit times single-digit, in two pieces',
+  how: 'Split the big number and go left first. <code>34 × 7</code>: thirty sevens is 210, four sevens is 28, add them, 238. Two pieces is all it ever is, and the tens piece is the one that carries the size of the answer.',
+  need: { a: 10, s: 5.5 },
+  make() { const a = R(13, 98), b = R(3, 9); return { q: a + ' × ' + b, a: a * b }; } },
+
+{ id: 'sq', belt: 1, nm: 'Squares',
+  one: 'Squares to thirty, and anything ending in five',
+  how: 'Anything ending in 5: take the front digit, times the next number up, then stick 25 on the end. <code>35²</code> is 3 × 4 = 12, so 1225. <code>85²</code> is 8 × 9 = 72, so 7225. Squares up to 30 are worth learning flat, because half the tricks in the next level are built on them.',
+  need: { a: 10, s: 5.5 },
+  make() {
+    if (Math.random() < .45) { const a = R(1, 9) * 10 + 5; return { q: a + '²', a: a * a }; }
+    const a = R(11, 30); return { q: a + '²', a: a * a };
+  } },
+
+{ id: 'diffsq', belt: 1, nm: 'Either side of a round number',
+  one: 'When the two numbers straddle something easy',
+  how: 'Both the same distance from a round number? Square the round one and take off the gap squared. <code>47 × 53</code> is <code>50² − 3²</code>, so 2500 − 9 = 2491. It looks like a party trick and it is really the fastest way to multiply anything near a ten.',
+  need: { a: 10, s: 8 },
+  make() {
+    const base = pick([20, 30, 40, 50, 60, 70, 80, 90, 100]);
+    const d = R(1, Math.min(8, base / 10 + 2));
+    return { q: (base - d) + ' × ' + (base + d), a: base * base - d * d };
+  } },
+
+{ id: 'mul2', belt: 1, nm: 'Two digits by two',
+  one: 'The full thing, in three pieces',
+  how: 'Break the easier number and keep a running total. <code>34 × 27</code>: thirty 27s is 810, four 27s is 108, add, 918. Always break the number that leaves you multiplying by a round ten, and say the running total out loud in your head so you cannot lose it.',
+  need: { a: 9, s: 14 },
+  make() { const a = R(13, 89), b = R(13, 89); return { q: a + ' × ' + b, a: a * b }; } },
+
+/* ── belt 2: parts ─────────────────────────────────────────────── */
+{ id: 'div', belt: 2, nm: 'Divide',
+  one: 'Short division, and what is left over',
+  how: 'Chunk it rather than long-dividing. <code>147 ÷ 7</code>: 140 is twenty sevens, the last 7 is one more, 21. For a remainder, find the nearest multiple underneath and take it off: <code>146 ÷ 7</code> is 20 sevens (140) with 6 left.',
+  need: { a: 10, s: 6 },
+  make() {
+    const b = R(3, 9);
+    if (Math.random() < .55) { const q = R(11, 60); return { q: (b * q) + ' ÷ ' + b, a: q }; }
+    const q = R(11, 60), r = R(1, b - 1);
+    return { q: (b * q + r) + ' ÷ ' + b, sub: 'the remainder only', a: r };
+  } },
+
+{ id: 'pct', belt: 2, nm: 'Percentages',
+  one: 'Any percent of anything, built out of ten',
+  how: 'Build every percentage out of 10%, 5% and 1%. Ten per cent is the decimal point moved once, five is half of that, one is moved twice. <code>18% of 250</code> = 25 + 12.5 + 7.5 = 45. And they swap freely: <code>8% of 50</code> is the same as <code>50% of 8</code>, which is 4.',
+  need: { a: 9, s: 9 }, dec: true,
+  make() {
+    const k = R(1, 3);
+    if (k === 1) { const p = pick([5, 10, 15, 20, 25, 30, 40, 60, 75]), n = R(2, 40) * 10; return { q: p + '% of ' + n, a: round2(n * p / 100) }; }
+    if (k === 2) { const p = pick([12, 18, 22, 35, 45, 65]), n = R(1, 12) * 100; return { q: p + '% of ' + n, a: round2(n * p / 100) }; }
+    const n = R(2, 30) * 20, p = pick([10, 20, 25, 50]);
+    return { q: n + ' plus ' + p + '%', a: round2(n * (100 + p) / 100) };
+  } },
+
+{ id: 'frac', belt: 2, nm: 'Fractions, decimals, percents',
+  one: 'The same number said three ways',
+  how: 'Learn the eighths and the rest come free: <code>1/8</code> is 12.5% and every eighth adds 12.5. Thirds are 33.3 and 66.7. A fraction OF a number is divide by the bottom, times the top: <code>5/8 of 240</code> is 30 × 5 = 150.',
+  need: { a: 9, s: 7 }, dec: true,
+  make() {
+    const k = R(1, 3);
+    if (k === 1) { const f = pick([[1, 8, 12.5], [3, 8, 37.5], [5, 8, 62.5], [7, 8, 87.5], [1, 4, 25], [3, 4, 75], [1, 5, 20], [2, 5, 40], [3, 5, 60], [1, 2, 50], [1, 10, 10], [3, 10, 30]]);
+      return { q: f[0] + '/' + f[1] + ' as a percent', sub: 'the number only', a: f[2] }; }
+    if (k === 2) { const d = pick([.05, .12, .25, .4, .625, .75, .875, .9, 1.25]); return { q: d + ' as a percent', sub: 'the number only', a: round2(d * 100) }; }
+    const f = pick([[1, 4], [3, 4], [1, 8], [3, 8], [5, 8], [1, 5], [2, 5], [3, 5], [1, 3], [2, 3], [1, 6]]);
+    const n = f[1] * R(3, 20);
+    return { q: f[0] + '/' + f[1] + ' of ' + n, a: n / f[1] * f[0] };
+  } },
+
+{ id: 'est', belt: 2, nm: 'Estimate',
+  one: 'Close enough, fast, and knowing how big the answer is',
+  how: 'Round both numbers to one digit, multiply, then count the zeros. <code>412 × 19</code> is about <code>400 × 20 = 8000</code>, which is within 5% of the real 7828. This is the check that catches a wrong answer everywhere else: if you know the size, a slipped digit is obvious.',
+  need: { a: 9, s: 8 },
+  make() {
+    if (Math.random() < .5) {
+      const a = R(110, 950), b = R(11, 95);
+      return { q: 'roughly, ' + a + ' × ' + b, sub: 'within 5% counts', a: a * b, tol: .05 };
+    }
+    const a = R(11, 99) * 100, b = R(11, 99) * 10;
+    return { q: 'how many digits in ' + a.toLocaleString() + ' × ' + b.toLocaleString() + '?', a: String(a * b).length };
+  } },
+
+/* ── belt 3: letters ───────────────────────────────────────────── */
+{ id: 'solve', belt: 3, nm: 'Solve for x',
+  one: 'One and two-step equations, in your head',
+  how: 'Undo in the reverse order it was built. <code>3x + 7 = 22</code>: the 7 went on last, so it comes off first, leaving <code>3x = 15</code>, then divide, <code>x = 5</code>. Check by putting it back in, which takes a second and catches a sign error.',
+  need: { a: 9, s: 8 }, neg: true,
+  make() {
+    const k = R(1, 3);
+    if (k === 1) { const a = R(2, 12), x = R(-9, 12), b = R(2, 30); return { q: a + 'x + ' + b + ' = ' + (a * x + b), sub: 'x =', a: x }; }
+    if (k === 2) { const a = R(2, 12), x = R(-9, 12), b = R(2, 30); return { q: a + 'x − ' + b + ' = ' + (a * x - b), sub: 'x =', a: x }; }
+    const x = R(-20, 40), b = R(2, 40); return { q: 'x + ' + b + ' = ' + (x + b), sub: 'x =', a: x };
+  } },
+
+{ id: 'ratio', belt: 3, nm: 'Ratios',
+  one: 'Scaling one side and reading off the other',
+  how: 'Find the one, then scale. Four kilos costs 260, so one kilo is 65, so seven kilos is 455. When the numbers do not divide cleanly, scale both sides by the same multiplier instead: <code>3 : 5 = 12 : ?</code> is four times bigger, so 20.',
+  need: { a: 9, s: 9 },
+  make() {
+    if (Math.random() < .5) {
+      const a = R(2, 9), b = R(2, 12), m = R(2, 9);
+      return { q: a + ' : ' + b + '  =  ' + (a * m) + ' : ?', a: b * m };
+    }
+    const unit = R(6, 60), n1 = R(2, 9), n2 = R(2, 12);
+    return { q: n1 + ' costs ' + (unit * n1) + '. What do ' + n2 + ' cost?', long: true, a: unit * n2 };
+  } },
+
+{ id: 'pow', belt: 3, nm: 'Powers and roots',
+  one: 'Powers of two and three, and roots back out of them',
+  how: 'Powers of two to 4096 are worth knowing cold, because they turn up everywhere: <code>2 4 8 16 32 64 128 256 512 1024 2048 4096</code>. A square root works backwards through the squares you already learnt. A cube root of a four-digit number: the last digit of the answer is given away by the last digit of the number.',
+  need: { a: 10, s: 5 },
+  make() {
+    const k = R(1, 4);
+    if (k === 1) { const n = R(2, 12); return { q: '2' + sup(n), a: Math.pow(2, n) }; }
+    if (k === 2) { const n = R(2, 6); return { q: '3' + sup(n), a: Math.pow(3, n) }; }
+    if (k === 3) { const n = R(4, 30); return { q: '√' + (n * n), a: n }; }
+    const n = R(2, 10); return { q: '∛' + (n * n * n), a: n };
+  } },
+
+{ id: 'seq', belt: 3, nm: 'Sequences',
+  one: 'Reading the gap and jumping ahead',
+  how: 'Take the gaps first. Same gap every time and it is adding: the nth term is the start plus the gap times one fewer than n. Gaps that grow by the same multiple and it is multiplying. Getting this wrong is nearly always reading the gap off the wrong pair.',
+  need: { a: 9, s: 9 },
+  make() {
+    const k = R(1, 3);
+    if (k === 1) { const s = R(2, 14), d = R(3, 12), t = [0, 1, 2, 3].map(i => s + d * i); return { q: t.join(', ') + ', ?', a: s + d * 4 }; }
+    if (k === 2) { const s = R(2, 8), m = pick([2, 3]), t = [0, 1, 2, 3].map(i => s * Math.pow(m, i)); return { q: t.join(', ') + ', ?', a: s * Math.pow(m, 4) }; }
+    const s = R(2, 20), d = R(3, 12), n = R(6, 14);
+    return { q: 'starts at ' + s + ', adds ' + d + ' each time. The ' + n + 'th?', long: true, a: s + d * (n - 1) };
+  } },
+];
+
+const SUPS = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+function sup(n) { return String(n).split('').map(d => SUPS[+d]).join(''); }
+const LV = id => LEVELS.find(l => l.id === id);
+const idx = id => LEVELS.findIndex(l => l.id === id);
+const ROUND = 12;
+const REVIEW_AFTER = 7;   /* days before a passed level is flagged for review */
+
+/* ══════════════════ STATE ══════════════════
+   Every level is its own row. rk.lvl.<id> holds:
+     pass  the date it was first passed, or null
+     best  {acc, med, on}  the best round ever played on it
+     runs  [{on, acc, med}]  the last ten, for the little line on the row
+     tries how many rounds since it was last passed (drives the easing offer)
+     ease  a per-level seconds target he accepted, overriding need.s
+     seen  the method card has been read once
+     last  the date it was last played                                     */
+
+/* The defaults are laid UNDER whatever is stored, not used instead of it.
+   A row written by an early version, or by a patch that only set one
+   field, comes back complete either way. Reading a row and trusting it to
+   hold every field it once held is the mistake that has already cost Tom
+   a system, and it costs the same whether one app writes it or six. */
+const LVL0 = { pass: null, best: null, runs: [], tries: 0, ease: 0, seen: false, last: null };
+const lvl = id => Object.assign({}, LVL0, DB.get('lvl.' + id, {}));
+const setLvl = (id, changes) => DB.patch('lvl.' + id, changes);
+
+const PACE = { easy: 1.4, normal: 1, fast: .75 };
+const settings = () => DB.get('set', { pace: 'normal', sound: true, auto: true });
+const target = l => {
+  const s = settings();
+  const st = lvl(l.id);
+  return round2((st.ease || l.need.s) * (PACE[s.pace] || 1));
+};
+
+/* A level is open when the one before it has been passed. The first is
+   always open — an app you cannot start is not an app. */
+function open(id) {
+  const i = idx(id);
+  if (i === 0) return true;
+  return !!lvl(LEVELS[i - 1].id).pass;
+}
+const passed = () => LEVELS.filter(l => lvl(l.id).pass);
+function current() {
+  for (const l of LEVELS) if (!lvl(l.id).pass) return l;
+  return null;   /* the whole ladder is done */
+}
+function dueForReview(l) {
+  const st = lvl(l.id);
+  if (!st.pass || !st.last) return false;
+  return daysBetween(st.last, today()) >= REVIEW_AFTER;
+}
+
+/* ── streak ──────────────────────────────────────────────────────
+   It continues if he played at all, not if he passed. Freezes are
+   granted quietly, capped at three, and spent without being offered:
+   someone about to lose a streak is by definition not looking at the
+   app, so asking them is asking nobody.                              */
+const streak = () => DB.get('streak', { n: 0, last: null, freeze: 0, best: 0 });
+function touchStreak() {
+  const s = streak(), t = today();
+  if (s.last === t) return s;
+  let n = s.n, freeze = s.freeze;
+  if (s.last) {
+    const gap = daysBetween(s.last, t);
+    if (gap > 1) {
+      const missed = gap - 1;
+      if (freeze >= missed) freeze -= missed;      /* spent silently */
+      else n = 0;
+    }
+  }
+  n += 1;
+  if (n > 0 && n % 7 === 0 && freeze < 3) freeze += 1;   /* one a week, capped */
+  const out = { n: n, last: t, freeze: freeze, best: Math.max(s.best || 0, n) };
+  DB.set('streak', out);
+  DB.patch('day.' + t, { rounds: (DB.get('day.' + t, {}).rounds || 0) + 1 });
+  return out;
+}
+/* Read-only view of the streak: what it is worth TODAY, without writing.
+   A streak shown as alive when the last play was three days ago is a lie. */
+function streakNow() {
+  const s = streak();
+  if (!s.last) return 0;
+  const gap = daysBetween(s.last, today());
+  if (gap === 0 || gap === 1) return s.n;
+  return (s.freeze >= gap - 1) ? s.n : 0;
+}
+
+/* ── sound: synthesised, short, no files ─────────────────────── */
+let AC = null;
+function beep(freq, ms, kind, vol) {
+  if (!settings().sound) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+    o.type = kind || 'sine'; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol == null ? .07 : vol, t + .006);
+    g.gain.exponentialRampToValueAtTime(.0001, t + ms / 1000);
+    o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + ms / 1000 + .02);
+  } catch (e) { /* no audio here, and that is fine */ }
+}
+/* Sound and haptic are one call: on Android you feel it, on an iPhone you
+   hear it, and on both the app answered. iPhone Safari has no vibration
+   and there is no workaround. */
+const cue = {
+  key:  () => { beep(880, 28, 'square', .022); buzz(4); },
+  right:() => { beep(740, 55, 'sine', .07); setTimeout(() => beep(1108, 80, 'sine', .06), 45); buzz(8); },
+  wrong:() => { beep(150, 150, 'sawtooth', .05); buzz([14, 50, 14]); },
+  pass: () => { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 260, 'triangle', .07), i * 105)); buzz([10, 40, 10, 40, 22]); },
+  fail: () => { beep(330, 180, 'sine', .05); buzz(12); },
+};
+function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+
+/* ── toast ───────────────────────────────────────────────────── */
+let toastT = null;
+function toast(msg) {
+  let n = document.querySelector('.toast');
+  if (!n) { n = el('div', 'toast'); document.body.appendChild(n); }
+  n.innerHTML = msg;
+  requestAnimationFrame(() => n.classList.add('up'));
+  clearTimeout(toastT);
+  toastT = setTimeout(() => n.classList.remove('up'), 2600);
+}
+
+/* ══════════════════ THE PATH ══════════════════ */
+function drawPath() {
+  const wrap = document.getElementById('path');
+  wrap.innerHTML = '';
+  drawStreak();
+
+  const cur = current();
+  const done = passed().length;
+
+  /* The one primary thing on the screen. */
+  const card = el('div', 'next');
+  if (cur) {
+    const t = target(cur);
+    const st = lvl(cur.id);
+    card.appendChild(el('div', 'kick', st.tries > 0 ? 'ATTEMPT ' + (st.tries + 1) : 'LEVEL ' + (idx(cur.id) + 1) + ' OF ' + LEVELS.length));
+    card.appendChild(el('h1', null, esc(cur.nm)));
+    card.appendChild(el('p', null, esc(cur.one)));
+    card.appendChild(el('div', 'aim', 'To pass: <b>' + cur.need.a + ' of ' + ROUND + '</b> right, at a median of <b>' + t + 's</b> or better.'));
+    const go = el('button', 'go press', st.seen ? 'START' : 'LEARN IT');
+    go.onclick = () => st.seen ? startRound(cur.id) : showMethod(cur.id, () => startRound(cur.id));
+    card.appendChild(go);
+  } else {
+    card.appendChild(el('div', 'kick', 'THE WHOLE LADDER'));
+    card.appendChild(el('h1', null, 'All nineteen passed'));
+    card.appendChild(el('p', null, 'Nothing left to unlock. The warm-up keeps them from going stale, and any level replays for a better time.'));
+  }
+  /* Review only exists once there is something to review. An empty
+     button that explains why it is empty is worse than no button. */
+  if (done >= 3) {
+    const due = LEVELS.filter(dueForReview).length;
+    const w = el('button', 'go ghost press', 'WARM UP' + (due ? '  ·  ' + due + ' DUE' : ''));
+    w.onclick = () => startRound('__warm');
+    card.appendChild(w);
+  }
+  wrap.appendChild(card);
+
+  /* Then the ladder itself, quiet. */
+  BELTS.forEach((b, bi) => {
+    const box = el('div', 'belt');
+    const nPass = LEVELS.filter(l => l.belt === bi && lvl(l.id).pass).length;
+    const nAll = LEVELS.filter(l => l.belt === bi).length;
+    box.appendChild(el('h2', null, esc(b.nm) + ' <span>' + nPass + '/' + nAll + '</span>'));
+    LEVELS.filter(l => l.belt === bi).forEach(l => box.appendChild(levelRow(l)));
+    wrap.appendChild(box);
+  });
+
+  const s = streak();
+  if (s.best > 0) {
+    wrap.appendChild(el('div', 'foot', 'Longest run of days: ' + s.best +
+      (s.freeze ? '. ' + s.freeze + ' rest ' + (s.freeze === 1 ? 'day' : 'days') + ' banked.' : '')));
+  }
+}
+
+function levelRow(l) {
+  const st = lvl(l.id), isOpen = open(l.id), isDone = !!st.pass, cur = current();
+  const row = el('button', 'lvl press hov' + (isDone ? ' done' : '') +
+    (cur && cur.id === l.id ? ' now' : '') + (!isOpen ? ' lock' : ''));
+  row.appendChild(el('span', 'no', isDone ? SVG.tick : String(idx(l.id) + 1)));
+
+  const txt = el('div', 'txt');
+  txt.appendChild(el('div', 'nm', esc(l.nm)));
+  let sub;
+  /* Only the first locked one says what opens it. Repeating that line down
+     twelve rows says nothing twelve times; the rest are more useful showing
+     what they teach, so the ladder can be read ahead. */
+  if (!isOpen && cur && idx(l.id) === idx(cur.id) + 1) sub = 'Opens when ' + esc(cur.nm.toLowerCase()) + ' is passed';
+  else if (!isOpen) sub = esc(l.one);
+  else if (isDone) sub = 'Best ' + st.best.acc + '/' + ROUND + ' at ' + st.best.med + 's';
+  else if (st.tries) sub = st.tries + (st.tries === 1 ? ' round played' : ' rounds played');
+  else sub = esc(l.one);
+  txt.appendChild(el('div', 'sub', sub));
+  row.appendChild(txt);
+
+  if (isDone && dueForReview(l)) row.appendChild(el('span', 'due', 'REVIEW'));
+  else if (isDone && st.runs.length >= 3) row.appendChild(spark(st.runs, target(l)));
+
+  row.onclick = () => {
+    if (!isOpen) { toast('Pass <b>' + esc(LEVELS[idx(l.id) - 1].nm) + '</b> first.'); cue.fail(); return; }
+    showMethod(l.id, () => startRound(l.id));
+  };
+  return row;
+}
+
+/* The last ten medians as a line, with the target drawn across it. Not
+   decoration: it is the only thing on the screen that shows getting
+   better rather than keeping up. */
+function spark(runs, tgt) {
+  const v = runs.slice(-10).map(r => r.med);
+  const lo = Math.min.apply(null, v.concat([tgt])), hi = Math.max.apply(null, v.concat([tgt]));
+  const span = (hi - lo) || 1, W = 52, H = 20;
+  const x = i => (v.length === 1 ? W / 2 : i / (v.length - 1) * (W - 2) + 1);
+  const y = t => H - 2 - (t - lo) / span * (H - 4);
+  const d = v.map((t, i) => (i ? 'L' : 'M') + round2(x(i)) + ' ' + round2(y(t))).join(' ');
+  const ty = round2(y(tgt));
+  const svg = el('span', 'spark');
+  svg.innerHTML = '<svg width="52" height="20" viewBox="0 0 52 20" aria-hidden="true">' +
+    '<line x1="0" y1="' + ty + '" x2="52" y2="' + ty + '" stroke="var(--line-2)" stroke-width="1" stroke-dasharray="2 2"/>' +
+    '<path d="' + d + '" fill="none" stroke="var(--acc)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<circle cx="' + round2(x(v.length - 1)) + '" cy="' + round2(y(v[v.length - 1])) + '" r="2" fill="var(--acc)"/></svg>';
+  svg.setAttribute('title', 'Last ' + v.length + ' rounds, median seconds. The dashed line is the target.');
+  return svg;
+}
+
+function drawStreak() {
+  const n = streakNow(), b = document.getElementById('streak');
+  b.className = 'streak press' + (n ? '' : ' off');
+  b.innerHTML = '<b>' + n + '</b> <span>' + (n === 1 ? 'day' : 'days') + '</span>';
+  b.setAttribute('aria-label', n + ' day run');
+  b.onclick = () => toast(n
+    ? 'Played ' + n + ' ' + (n === 1 ? 'day' : 'days') + ' running. Any round keeps it, passing is not required.'
+    : 'Play one round today and the run starts.');
+}
+
+/* ══════════════════ THE METHOD CARD ══════════════════
+   Shown before a level's first round and reachable from the row after.
+   Drilling without the method is being timed at being slow. */
+function showMethod(id, then) {
+  const l = LV(id), st = lvl(id);
+  sheet(h => {
+    h.appendChild(el('h3', null, esc(l.nm)));
+    h.appendChild(el('p', 'lede', esc(l.one)));
+    const t = el('div', 'teach');
+    t.appendChild(el('h4', null, 'HOW TO DO IT'));
+    t.appendChild(el('div', null, l.how));
+    h.appendChild(t);
+    h.appendChild(el('div', 'aim', ''));
+    const go = el('button', 'go press', st.pass ? 'PLAY IT AGAIN' : 'START');
+    go.onclick = () => { setLvl(id, { seen: true }); h.close(); then(); };
+    h.appendChild(go);
+    if (st.best) h.appendChild(el('div', 'foot', 'Best so far: ' + st.best.acc + '/' + ROUND +
+      ' at a median of ' + st.best.med + 's. Target is ' + target(l) + 's.'));
+  });
+}
+
+/* ══════════════════ A ROUND ══════════════════ */
+let run = null;
+
+function makeQuestions(id) {
+  const out = [], seen = {};
+  if (id === '__warm') {
+    /* Interleaved and spaced: the levels longest since played come up
+       most, and no two questions in a row come from the same level. */
+    const pool = passed();
+    const weight = l => {
+      const st = lvl(l.id);
+      const age = st.last ? Math.min(daysBetween(st.last, today()), 30) : 30;
+      return 1 + age;
+    };
+    let last = null;
+    for (let i = 0; i < ROUND; i++) {
+      let choices = pool.filter(l => l.id !== last);
+      if (!choices.length) choices = pool;
+      const total = choices.reduce((s, l) => s + weight(l), 0);
+      let r = Math.random() * total, got = choices[0];
+      for (const l of choices) { r -= weight(l); if (r <= 0) { got = l; break; } }
+      last = got.id;
+      const q = got.make(); q.from = got.id;
+      out.push(q);
+    }
+    return out;
+  }
+  const l = LV(id);
+  let guard = 0;
+  while (out.length < ROUND && guard++ < 400) {
+    const q = l.make();
+    if (seen[q.q]) continue;          /* no question twice in one round */
+    seen[q.q] = 1; q.from = id;
+    out.push(q);
+  }
+  while (out.length < ROUND) out.push(Object.assign(l.make(), { from: id }));  /* a small pool, e.g. pairs to ten */
+  return out;
+}
+
+function startRound(id, fixOnly) {
+  const qs = fixOnly || makeQuestions(id);
+  run = {
+    id: id, qs: qs, i: 0, typed: '', t0: 0,
+    results: [], fix: !!fixOnly, locked: false,
+    lvl: id === '__warm' ? null : LV(id),
+  };
+  drawDrill();
+  guardOpen();   /* one guard covers the round and its result sheet */
+  nextQ();
+}
+
+function drillBox() {
+  let d = document.querySelector('.drill');
+  if (!d) { d = el('div', 'drill'); document.body.appendChild(d); }
+  return d;
+}
+
+function drawDrill() {
+  const d = drillBox();
+  d.innerHTML = '';
+
+  const top = el('div', 'dtop');
+  const quit = el('button', 'quit press', SVG.close);
+  quit.setAttribute('aria-label', 'Stop this round');
+  quit.onclick = () => endDrill();
+  top.appendChild(quit);
+
+  const dots = el('div', 'dots');
+  dots.id = 'dots';
+  top.appendChild(dots);
+  const clock = el('div', 'clock num');
+  clock.id = 'clock'; clock.textContent = '0.0s';
+  top.appendChild(clock);
+  d.appendChild(top);
+
+  const stage = el('div', 'stage');
+  stage.innerHTML = '<div class="qtext num" id="q"></div><div class="qnote" id="qn"></div>' +
+    '<div class="ans num empty" id="ans">—</div><div class="truth" id="truth"></div>';
+  d.appendChild(stage);
+
+  d.appendChild(buildPad());
+  paintDots();
+}
+
+function buildPad() {
+  const pad = el('div', 'pad');
+  const l = run.lvl;
+  /* Only the keys that can be needed. A dead key is a question about
+     whether the answer could have a decimal point in it. */
+  /* For one level that is what the level declares. For a warm-up it is
+     whatever the levels this round drew from declare, so a mixed round
+     of tables and squares never shows a minus key nobody can use. */
+  const drew = l ? [l] : run.qs.map(q => LV(q.from));
+  const wantDec = drew.some(x => x && x.dec);
+  const wantNeg = drew.some(x => x && x.neg);
+  const extra = wantNeg ? '−' : (wantDec ? '.' : '');
+  const keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3', extra, '0', 'back'];
+  keys.forEach(k => {
+    if (!k) { pad.appendChild(el('div', 'key void')); return; }
+    const dim = (k === 'back' || k === '−' || k === '.');
+    const b = el('button', 'key press' + (dim ? ' dim' : ''), k === 'back' ? SVG.back : k);
+    b.setAttribute('aria-label', k === 'back' ? 'Backspace' : k === '−' ? 'Minus' : k);
+    b.onclick = () => type(k === 'back' ? '⌫' : k);
+    pad.appendChild(b);
+  });
+  /* Both keys can appear at once in a warm-up, where the questions come
+     from several levels. The minus takes the corner; the point rides
+     with ENTER so the grid does not reflow between questions. */
+  if (wantDec && wantNeg) {
+    const dot = el('button', 'key dim press', '.');
+    dot.onclick = () => type('.');
+    dot.setAttribute('aria-label', 'Decimal point');
+    pad.appendChild(dot);
+    pad.appendChild(el('div', 'key void'));
+    pad.appendChild(el('div', 'key void'));
+  }
+  const ent = el('button', 'key enter press', 'CHECK');
+  ent.id = 'enter'; ent.disabled = true;
+  ent.onclick = () => submit();
+  pad.appendChild(ent);
+  return pad;
+}
+
+function paintDots() {
+  const box = document.getElementById('dots');
+  if (!box) return;
+  box.innerHTML = '';
+  for (let i = 0; i < run.qs.length; i++) {
+    const r = run.results[i];
+    box.appendChild(el('div', 'dot' + (r ? (r.ok ? ' ok' : ' no') : (i === run.i ? ' at' : ''))));
+  }
+}
+
+let tick = null;
+function nextQ() {
+  if (run.i >= run.qs.length) return finish();
+  const q = run.qs[run.i];
+  run.typed = ''; run.locked = false; run.t0 = performance.now();
+
+  const qn = document.getElementById('q');
+  qn.textContent = q.q;
+  qn.className = 'qtext num' + (q.long ? ' long' : '');
+  document.getElementById('qn').textContent = q.sub || (run.id === '__warm' ? LV(q.from).nm : '');
+  document.getElementById('truth').textContent = '';
+  document.getElementById('truth').className = 'truth';
+  paintAns();
+  paintDots();
+
+  clearInterval(tick);
+  const t = target(run.lvl || LV(q.from));
+  tick = setInterval(() => {
+    const c = document.getElementById('clock');
+    if (!c) return clearInterval(tick);
+    const s = (performance.now() - run.t0) / 1000;
+    c.textContent = s.toFixed(1) + 's';
+    c.className = 'clock num' + (s > t ? ' over' : '');
+  }, 100);
+}
+
+function type(k) {
+  if (run.locked) return;
+  cue.key();
+  if (k === '⌫') run.typed = run.typed.slice(0, -1);
+  else if (k === '−') run.typed = run.typed.charAt(0) === '-' ? run.typed.slice(1) : '-' + run.typed;
+  else if (k === '.') { if (run.typed.indexOf('.') < 0) run.typed += (run.typed === '' || run.typed === '-' ? '0.' : '.'); }
+  else if (run.typed.replace(/[-.]/g, '').length < 9) run.typed += k;
+  paintAns();
+
+  /* Auto-check the instant the typed number IS the answer. It can never
+     be wrong to accept a right answer, and it saves a tap on every
+     question. Switchable, because it does credit a right answer typed
+     on the way to a wrong one. */
+  if (settings().auto && run.typed !== '' && run.typed !== '-' && check(run.typed, run.qs[run.i])) submit();
+}
+
+function paintAns() {
+  const a = document.getElementById('ans');
+  if (!a) return;
+  a.textContent = run.typed === '' ? '—' : run.typed;
+  a.className = 'ans num' + (run.typed === '' ? ' empty' : '');
+  const e = document.getElementById('enter');
+  if (e) e.disabled = (run.typed === '' || run.typed === '-' || run.typed.slice(-1) === '.');
+}
+
+function check(v, q) {
+  const n = parseFloat(v);
+  if (!isFinite(n)) return false;
+  if (q.tol) return Math.abs(n - q.a) <= Math.abs(q.a) * q.tol;
+  return Math.abs(n - q.a) < 1e-9;
+}
+
+function submit() {
+  if (run.locked || run.typed === '' || run.typed === '-') return;
+  run.locked = true;
+  clearInterval(tick);
+  const q = run.qs[run.i];
+  const secs = round2((performance.now() - run.t0) / 1000);
+  const ok = check(run.typed, q);
+  run.results[run.i] = { ok: ok, secs: secs, typed: run.typed, q: q };
+
+  const a = document.getElementById('ans'), t = document.getElementById('truth');
+  a.className = 'ans num ' + (ok ? 'ok' : 'no');
+  if (ok) {
+    t.className = 'truth ok';
+    t.textContent = q.tol ? 'close enough, it is ' + q.a.toLocaleString() : secs.toFixed(1) + 's';
+    cue.right();
+  } else {
+    t.className = 'truth';
+    t.textContent = q.a.toLocaleString() + (q.tol ? ', within 5% was ' + Math.round(q.a * .95).toLocaleString() + ' to ' + Math.round(q.a * 1.05).toLocaleString() : '');
+    cue.wrong();
+  }
+  paintDots();
+  /* A wrong answer stays up longer, because the answer is the teaching. */
+  /* The round can be walked out of during this pause, so it is checked
+     rather than assumed. A silent `if (!run) return` on a lookup that
+     was supposed to find something hides a bug; here the round really
+     can be gone, and that is the whole reason for the test. */
+  setTimeout(() => { if (run) { run.i++; nextQ(); } }, ok ? 420 : 1500);
+}
+
+function endDrill() {
+  clearInterval(tick);
+  const d = document.querySelector('.drill');
+  if (d) d.remove();
+  run = null;
+  guardClose();
+  drawPath();
+}
+
+/* ══════════════════ THE RESULT ══════════════════ */
+function median(a) {
+  if (!a.length) return 0;
+  const s = a.slice().sort((x, y) => x - y), m = s.length >> 1;
+  return round2(s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2);
+}
+
+function finish() {
+  clearInterval(tick);
+  const right = run.results.filter(r => r.ok);
+  const acc = right.length;
+  const med = median(right.map(r => r.secs));
+  const misses = run.results.filter(r => !r.ok);
+  const id = run.id, isWarm = id === '__warm', isFix = run.fix;
+  const total = run.qs.length, results = run.results;
+  const l = isWarm ? null : LV(id);
+  /* The round is over, so nothing typed can land in it any more. The
+     keyboard listener reads this, and without it a key pressed while the
+     result is on screen would be scored into a drill that is gone. */
+  run = null;
+
+  const d = document.querySelector('.drill');
+  if (d) d.remove();
+
+  touchStreak();
+  drawPath();   /* the screen behind the result is already right when it closes */
+
+  let unlocked = false, eased = null;
+  if (!isWarm && !isFix) {
+    const st = lvl(id), tgt = target(l);
+    const hitAcc = acc >= l.need.a, hitTime = med > 0 && med <= tgt;
+    const won = hitAcc && hitTime;
+    const best = (!st.best || acc > st.best.acc || (acc === st.best.acc && med < st.best.med))
+      ? { acc: acc, med: med, on: today() } : st.best;
+    const runs = st.runs.concat([{ on: today(), acc: acc, med: med }]).slice(-10);
+    setLvl(id, {
+      best: best, runs: runs, last: today(),
+      pass: st.pass || (won ? today() : null),
+      tries: won ? 0 : st.tries + 1,
+    });
+    unlocked = won && !st.pass;
+    /* A target missed three times running, where only the clock is in the
+       way, has stopped being a target and become furniture. Offer the
+       easier one once. Lowering it is the only way the bar does anything. */
+    if (!won && hitAcc && !hitTime && st.tries + 1 >= 3 && !st.ease) eased = round2(med + .5);
+  } else if (isWarm) {
+    /* A warm-up counts as practice on every level it drew from, which is
+       what stops review coming due on a level he has just done. */
+    const touched = {};
+    results.forEach(r => { touched[r.q.from] = 1; });
+    Object.keys(touched).forEach(k => setLvl(k, { last: today() }));
+  }
+  DB.set('run.' + Date.now(), { lvl: id, n: total, right: acc, med: med, on: today() });
+
+  if (unlocked) cue.pass(); else if (!isFix) cue.fail();
+
+  sheet(h => {
+    const tgt = l ? target(l) : 0;
+    if (isFix) {
+      h.appendChild(el('h3', null, acc + ' of ' + total + ' second time round'));
+      h.appendChild(el('p', 'lede', 'Not scored. The level keeps the round you played before this one.'));
+    } else if (isWarm) {
+      h.appendChild(el('h3', null, 'Warm-up done'));
+      h.appendChild(el('p', 'lede', 'Mixed from the ' + passed().length + ' levels you have passed, weighted to the ones you have not touched for longest.'));
+    } else if (unlocked) {
+      const nx = LEVELS[idx(id) + 1];
+      h.appendChild(el('h3', null, 'Passed ' + l.nm.toLowerCase()));
+      h.appendChild(el('p', 'lede', nx ? esc(nx.nm) + ' is open.' : 'That was the last one on the ladder.'));
+    } else if (lvl(id).pass) {
+      h.appendChild(el('h3', null, 'Played again'));
+      h.appendChild(el('p', 'lede', med > 0 && med <= tgt && acc >= l.need.a
+        ? 'Still inside the target.'
+        : 'Below the target this time, and the pass stands. Nothing you have earned comes off.'));
+    } else {
+      const accShort = acc < l.need.a, timeShort = !(med > 0 && med <= tgt);
+      h.appendChild(el('h3', null, 'Not yet'));
+      h.appendChild(el('p', 'lede',
+        accShort && timeShort ? 'Both the accuracy and the clock are short of the target.'
+        : accShort ? 'The clock is fine, so it is the accuracy holding this up.'
+        : 'You are getting them right, so it is only the clock.'));
+    }
+
+    const sc = el('div', 'scores');
+    const a1 = el('div', 'score');
+    a1.innerHTML = '<div class="v num ' + (l && acc >= l.need.a ? 'ok' : (l ? 'no' : '')) + '">' + acc + '/' + total + '</div>' +
+      '<div class="k">right' + (l ? ', need ' + l.need.a : '') + '</div>';
+    sc.appendChild(a1);
+    const a2 = el('div', 'score');
+    a2.innerHTML = '<div class="v num ' + (l && med > 0 && med <= tgt ? 'ok' : (l ? 'no' : '')) + '">' + (med || '—') + 's</div>' +
+      '<div class="k">median when right' + (l ? ', need ' + tgt + 's' : '') + '</div>';
+    sc.appendChild(a2);
+    h.appendChild(sc);
+
+    if (misses.length) {
+      const box = el('div', 'misses');
+      misses.forEach(r => {
+        const m = el('div', 'miss');
+        m.innerHTML = '<span class="q num">' + esc(r.q.q) + ' = <b class="a">' +
+          r.q.a.toLocaleString() + '</b></span>' +
+          '<span class="yours num">you said ' + esc(r.typed) + '</span>';
+        box.appendChild(m);
+      });
+      h.appendChild(box);
+    }
+
+    if (eased) {
+      const t = el('div', 'teach');
+      t.appendChild(el('h4', null, 'THE TARGET'));
+      t.appendChild(el('div', null, 'Three rounds running you have had the accuracy and missed the clock. ' +
+        'A target you keep missing has stopped being a target. Move this level to <b>' + eased + 's</b>?'));
+      const b = el('button', 'go ghost press', 'MOVE IT TO ' + eased + 'S');
+      b.onclick = () => { setLvl(id, { ease: eased }); b.remove(); toast('Target moved to ' + eased + 's.'); };
+      t.appendChild(b);
+      h.appendChild(t);
+    }
+
+    if (misses.length && !isFix) {
+      const b = el('button', 'go ghost press', 'DRILL THE ' + misses.length + ' YOU MISSED');
+      b.onclick = () => { h.close(); startRound(id, misses.map(r => r.q)); };
+      h.appendChild(b);
+    }
+    if (!isWarm && !unlocked) {
+      const m = el('button', 'go ghost press', 'READ THE METHOD AGAIN');
+      m.onclick = () => { h.close(); showMethod(id, () => startRound(id)); };
+      h.appendChild(m);
+    }
+    const again = el('button', 'go press', isWarm ? 'DONE' : (unlocked ? 'NEXT LEVEL' : 'GO AGAIN'));
+    again.onclick = () => {
+      h.close();
+      if (isWarm) return;
+      if (unlocked) { const nx = LEVELS[idx(id) + 1]; if (nx) showMethod(nx.id, () => startRound(nx.id)); return; }
+      startRound(id);
+    };
+    h.appendChild(again);
+  });
+}
+
+/* ══════════════════ SHEET ══════════════════
+   One component, two shapes: up from the bottom on a phone, centred on a
+   desktop, so the two cannot drift apart. Back closes it. */
+function sheet(fill, opts) {
+  opts = opts || {};
+  const bg = el('div', 'sheet-bg');
+  const s = el('div', 'sheet');
+  s.setAttribute('role', 'dialog');
+  s.setAttribute('aria-modal', 'true');
+  s.appendChild(el('div', 'grab'));
+  bg.appendChild(s);
+  document.body.appendChild(bg);
+  s.close = fromBack => close(fromBack);
+  fill(s);
+  requestAnimationFrame(() => bg.classList.add('up'));
+  guardOpen();
+  bg.onclick = e => { if (e.target === bg) close(); };
+
+  let closed = false;
+  function close() {
+    if (closed) return; closed = true;
+    bg.dataset.gone = '1';          /* so the back handler stops seeing it at once */
+    bg.classList.remove('up');
+    setTimeout(() => bg.remove(), 340);
+    const at = stack.indexOf(close);
+    if (at >= 0) stack.splice(at, 1);
+    guardClose();
+    if (opts.onClose) opts.onClose();
+    drawPath();
+  }
+  stack.push(close);
+  return s;
+}
+
+/* ── the back gesture ────────────────────────────────────────────
+   Back closes what is open. Only when nothing is open does it leave
+   the app. One guard covers the whole flow, however many screens deep
+   it goes, so back never strands you halfway through a round.
+
+   The deferred check in guardClose is doing real work. Closing a
+   result sheet and starting the next round are two statements in a
+   row: without the wait the guard would be dropped between them and
+   back would exit the app mid-round. The counter exists because
+   history.back() is asynchronous, so the popstate it causes has to be
+   told apart from the one a real back press causes.                 */
+const stack = [];
+let depth = 0, popping = 0;
+const anythingOpen = () =>
+  !!document.querySelector('.sheet-bg:not([data-gone])') || !!document.querySelector('.drill');
+
+function guardOpen() {
+  if (depth === 0) { depth = 1; history.pushState({ rk: 1 }, ''); }
+}
+function guardClose() {
+  setTimeout(() => {
+    if (depth === 1 && !anythingOpen()) { popping++; history.back(); }
+  }, 0);
+}
+addEventListener('popstate', () => {
+  if (popping > 0) { popping--; depth = 0; return; }   /* our own back */
+  depth = 0;
+  const top = stack[stack.length - 1];
+  if (top) { top(); return; }
+  if (document.querySelector('.drill')) endDrill(true);
+});
+
+/* ══════════════════ KEYBOARD ══════════════════ */
+addEventListener('keydown', e => {
+  if (!run) return;
+  if (e.key >= '0' && e.key <= '9') { type(e.key); e.preventDefault(); return; }
+  if (e.key === 'Backspace') { type('⌫'); e.preventDefault(); return; }
+  if (e.key === 'Enter' || e.key === '=') { submit(); e.preventDefault(); return; }
+  if (e.key === '-') { type('−'); e.preventDefault(); return; }
+  if (e.key === '.') { type('.'); e.preventDefault(); return; }
+  if (e.key === 'Escape') { endDrill(); e.preventDefault(); }
+});
+
+/* ══════════════════ SETTINGS ══════════════════ */
+document.getElementById('setBtn').onclick = () => {
+  sheet(h => {
+    h.appendChild(el('h3', null, 'Settings'));
+    const rows = el('div', 'rows');
+
+    const s = settings();
+    rows.appendChild(row('Pace', 'Every target time moves together. Relaxed adds 40%, quick takes 25% off.',
+      seg([['easy', 'RELAXED'], ['normal', 'STANDARD'], ['fast', 'QUICK']], s.pace, v => {
+        DB.patch('set', { pace: v }); toast('Targets set to ' + v + '.');
+      })));
+    rows.appendChild(row('Submit as soon as it is right', 'Saves a tap. It does credit a right answer typed on the way to a longer wrong one.',
+      sw(s.auto, v => DB.patch('set', { auto: v }))));
+    rows.appendChild(row('Sound', 'Synthesised, nothing downloaded.', sw(s.sound, v => {
+      DB.patch('set', { sound: v }); if (v) cue.right();
+    })));
+    h.appendChild(rows);
+
+    const ease = LEVELS.filter(l => lvl(l.id).ease);
+    if (ease.length) {
+      const t = el('div', 'teach');
+      t.appendChild(el('h4', null, 'EASED TARGETS'));
+      t.appendChild(el('div', null, ease.map(l => esc(l.nm) + ' at ' + lvl(l.id).ease + 's').join(', ') + '.'));
+      const b = el('button', 'go ghost press', 'PUT THEM BACK');
+      b.onclick = () => { ease.forEach(l => setLvl(l.id, { ease: 0 })); t.remove(); toast('Targets back where they started.'); };
+      t.appendChild(b);
+      h.appendChild(t);
+    }
+
+    const wipe = el('button', 'go ghost press', 'ERASE EVERYTHING');
+    wipe.onclick = () => {
+      /* Nothing here is backed up anywhere, so it asks twice in effect:
+         once by naming exactly what goes, once by needing a second tap. */
+      if (wipe.dataset.sure !== '1') {
+        wipe.dataset.sure = '1';
+        wipe.textContent = 'TAP AGAIN TO ERASE ' + passed().length + ' PASSED LEVELS';
+        return;
+      }
+      DB.keys('').forEach(k => { try { localStorage.removeItem('rk.' + k); } catch (e) {} });
+      h.close(); toast('Erased. Back to level one.');
+    };
+    h.appendChild(wipe);
+    h.appendChild(el('div', 'foot', 'RECKON 1.0.0, 18 Sep 2026. Everything is saved on this device only, in this browser.'));
+  });
+};
+
+function row(title, note, control) {
+  const r = el('div', 'srow');
+  const l = el('div', 'l');
+  l.appendChild(el('div', null, esc(title)));
+  if (note) l.appendChild(el('div', 'n', esc(note)));
+  r.appendChild(l);
+  r.appendChild(control);
+  return r;
+}
+function sw(on, fn) {
+  const b = el('button', 'sw' + (on ? ' on' : ''));
+  b.setAttribute('role', 'switch');
+  b.setAttribute('aria-checked', on ? 'true' : 'false');
+  b.onclick = () => {
+    on = !on;
+    b.className = 'sw' + (on ? ' on' : '');
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+    fn(on);
+  };
+  return b;
+}
+function seg(items, value, fn) {
+  const box = el('div', 'seg');
+  items.forEach(([id, nm]) => {
+    const b = el('button', id === value ? 'on' : '', nm);
+    b.onclick = () => {
+      value = id;
+      [].forEach.call(box.children, c => c.className = '');
+      b.className = 'on';
+      fn(id);
+    };
+    box.appendChild(b);
+  });
+  return box;
+}
+
+/* ══════════════════ GO ══════════════════ */
+drawPath();
+</script>
+</body>
+</html>
