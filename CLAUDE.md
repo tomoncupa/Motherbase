@@ -45,8 +45,8 @@ line in this file.
 - **Complete truth only.** If something is untested, say so. If a number is a
   guess, label it. Never assert a figure, formula or price without a real basis.
 - **No hedging and no corporate filler.** Be precise. Give numbers.
-- **No em dashes in anything he publishes** (posts, client-facing copy). Docs and
-  code comments in this repo are fine.
+- **Brand rules for anything he publishes:** the [Brand Master Guide](https://claude.ai/code/artifact/7c0036f3-9564-4c4d-89fb-811cad106780)
+  Claude Doc. Docs and code comments in this repo are exempt.
 - **End substantive replies with a confidence assessment and one concrete next
   action.**
 - He is the device test. You cannot open anything on his iPhone. Say so plainly
