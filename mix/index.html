@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.2, 2026-09-21">
+<meta name="mb-version" content="1.0.3, 2026-09-21">
 <title>MIX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◉</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -91,8 +91,12 @@ details>.grid,details>.note{margin-top:var(--s-3)}
   box-shadow:var(--e-1),var(--rim);border:2px solid transparent;display:flex;flex-direction:column}
 .vessel.over{border-color:var(--accent)}
 .vessel.no{border-color:var(--danger)}
+.vtop{display:flex;align-items:center;gap:var(--s-2)}
 .vname{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
-  letter-spacing:var(--track-cap);text-transform:uppercase}
+  letter-spacing:var(--track-cap);text-transform:uppercase;flex:1;min-width:0}
+.voff{flex:0 0 auto;min-width:var(--tap);min-height:var(--tap);margin:calc(var(--s-2) * -1) calc(var(--s-2) * -1) 0 0;
+  background:none;border:0;cursor:pointer;color:var(--text-muted);font-size:var(--f-4);line-height:1}
+.voff:hover{color:var(--danger)}
 .vsize{font-size:var(--f-2);color:var(--text-muted);margin-bottom:var(--s-3)}
 .dose{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s-3);
   padding:var(--s-3) 0;border-top:var(--border-width) solid var(--border);cursor:grab}
@@ -135,6 +139,12 @@ th:first-child,td:first-child{text-align:left}
 .flag.info{background:var(--surface-2);color:var(--text-muted);
   border-left:3px solid var(--border-strong)}
 .src{font-size:var(--f-2);color:var(--text-muted)}
+.fact{border-radius:var(--radius-md);background:var(--surface-2);padding:var(--s-4)}
+.frow{padding:var(--s-3) 0;border-top:var(--border-width) solid var(--border)}
+.frow:first-of-type{border-top:0}
+.fk{font-size:var(--f-2);color:var(--accent);letter-spacing:var(--track-cap);text-transform:uppercase;margin-bottom:var(--s-1)}
+.ft{font-size:var(--f-2);color:var(--text-1);line-height:var(--lh-body)}
+.note a{color:var(--accent)}
 .row{display:flex;gap:var(--s-2);flex-wrap:wrap;align-items:center}
 </style>
 </head>
@@ -556,14 +566,79 @@ function compute() {
   };
 }
 
+/* ══════════════ IS THIS FOOD UP TO DATE ══════════════
+
+   Tom, 2026-09-21: "Put the sync time on MIX so I know its reading up to
+   date food data."
+
+   It is the only app in the suite where the question has teeth. Everywhere
+   else a stale read shows you yesterday's screen and you notice. Here it
+   comes out as a number of grams to put in your mouth, and a MIX reading
+   a store that last heard from the phone this morning will confidently tell
+   you to add salt for food you already ate.
+
+   So it says the time, and it says it in the header where the answer is,
+   not buried in a settings panel. Both roads are named because they fail
+   separately: the sheet is the slow one everything rides on, live sync is
+   the fast one that only exists once a config is pasted. */
+function syncLine() {
+  const out = [];
+  let stale = 1;
+  try {
+    const m = IO.mirror && IO.mirror.settings;
+    if (!m || !m.url) out.push('<b>no sync link on this device</b>');
+    else if (!m.at) out.push('<b>linked, never synced</b>');
+    else { out.push('sheet ' + esc(m.at)); stale = 0; }
+  } catch (e) { out.push('sheet unknown'); }
+  try {
+    const c = window.Cloud && Cloud.state();
+    if (c && c.has) {
+      if (c.live && c.ok) { out.push('live sync on'); stale = 0; }
+      else if (c.live) out.push('live sync connecting');
+      else out.push('<b>live sync off</b>');
+    }
+  } catch (e) {}
+  return { html: out.join(' · '), stale: stale };
+}
+
+/* ══════════════ WHICH DRINKS EXIST TODAY ══════════════
+
+   Tom, 2026-09-21: "Put toggles to disable certain drinks."
+
+   A drink switched off does not make its dose disappear, because the dose
+   is what his body is short of and the card is only furniture. It moves to
+   the first drink that is on and is allowed to hold it, which for salt is
+   never the night drink. Nothing is ever silently dropped. */
+const offSet = () => S.get('off', {}) || {};
+const slotOn = id => !offSet()[id];
+function setSlotOn(id, on) {
+  const o = Object.assign({}, offSet());
+  if (on) delete o[id]; else o[id] = 1;
+  S.set('off', o);
+}
+
 /* ══════════════ LAYOUT ══════════════
    Which card each dose sits in. Kept as a setting row rather than in
    localStorage, because a setting row is in the backup and reaches the
    laptop; localStorage is one browser on one machine and is silently
    emptied by iOS after a week of not visiting. */
 const layout = () => S.get('layout', {}) || {};
-const slotOf = (d, L) => (L[d.id] || d.home);
-const SLOTS = c => {
+const legal = (d, id) => !(d.nut === 'na' && id === 'night');
+/* where a dose actually lands: where he dragged it, or its home, and then
+   the first live drink that will take it if that one is switched off */
+function slotOf(d, L, live) {
+  const want = L[d.id] || d.home;
+  if (!live) return want;
+  const ids = live.map(x => x.id);
+  if (ids.indexOf(want) > -1 && legal(d, want)) return want;
+  const from = Math.max(0, ids.indexOf(want));
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[(from + i) % ids.length];
+    if (legal(d, id)) return id;
+  }
+  return ids[0];
+}
+const ALL_SLOTS = c => {
   const s = [];
   for (let i = 1; i <= c.pitchers; i++) s.push({ id: 'pitcher' + i, nm: 'DAY PITCHER ' + i, sub: r1(v('litres')) + ' L' });
   if (c.trained) s.push({ id: 'pre', nm: 'PRE-WORKOUT', sub: '30 to 60 minutes before' });
@@ -575,6 +650,12 @@ const SLOTS = c => {
   s.push({ id: 'meal', nm: 'WITH FOOD', sub: 'whichever meal you are eating' });
   s.push({ id: 'night', nm: 'NIGHT DRINK', sub: 'no sodium, ever' });
   return s;
+};
+/* the ones actually on. Never empty: with every drink switched off there is
+   nowhere for a dose to go, so the last one standing cannot be switched off. */
+const SLOTS = c => {
+  const on = ALL_SLOTS(c).filter(x => slotOn(x.id));
+  return on.length ? on : ALL_SLOTS(c).slice(-1);
 };
 
 /* ══════════════ DRAWING ══════════════ */
@@ -595,6 +676,7 @@ function draw() {
   m.appendChild(tableCard(C));
   m.appendChild(inputsCard());
   m.appendChild(microsCard(C));
+  m.appendChild(factsCard());
   if (window.Icons) Icons.paint();
 }
 
@@ -763,12 +845,15 @@ function cardsBlock(c) {
   const head = el('div', 'card');
   head.appendChild(el('h2', null, 'WHAT TO WEIGH'));
   const n = c.store.n;
-  head.appendChild(el('p', 'src', 'Read from your store at <b>'
+  const sy = syncLine();
+  head.appendChild(el('p', 'src', 'Drawn at <b>'
     + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</b> · '
     + n + ' meal' + (n === 1 ? '' : 's') + ' logged today'
     + (c.kg != null ? ' · ' + r1(c.kg * 2.20462) + ' lb' : ' · no weight found')
-    + (c.trained ? ' · trained' : ' · rest day')
-    + '. Change anything in WHAT TODAY IS, below.'));
+    + (c.trained ? ' · trained' : ' · rest day')));
+  const sl = el('p', sy.stale ? 'flag warn' : 'src', (sy.stale ? 'Food may be out of date: ' : 'Food is up to date: ') + sy.html
+    + (sy.stale ? '. Press SYNC, above.' : '.'));
+  head.appendChild(sl);
   head.appendChild(el('p', 'note', 'Drag any line into another card. Salt can never go in the night drink.'));
   const row = el('div', 'row');
   row.style.marginTop = 'var(--s-3)';
@@ -788,14 +873,39 @@ function cardsBlock(c) {
   box.appendChild(head);
 
   const L = layout();
+  const live = SLOTS(c);
+  const gone = ALL_SLOTS(c).filter(x => live.indexOf(x) < 0);
+  if (gone.length) {
+    const chips = el('div', 'row');
+    chips.style.marginTop = 'var(--s-3)';
+    chips.appendChild(el('span', 'src', 'SWITCHED OFF:'));
+    gone.forEach(x => {
+      const b = el('button', 'mb-btn mb-press mb-tap', esc(x.nm) + ' +');
+      b.setAttribute('aria-label', 'Switch ' + x.nm + ' back on');
+      b.onclick = () => { setSlotOn(x.id, true); Mobile.feedback('success'); draw(); };
+      chips.appendChild(b);
+    });
+    head.appendChild(chips);
+  }
   const grid = el('div', 'cards');
   grid.style.marginTop = 'var(--s-3)';
-  SLOTS(c).forEach(s => {
+  live.forEach(s => {
     const card = el('div', 'vessel');
     card.dataset.slot = s.id;
-    card.appendChild(el('div', 'vname', esc(s.nm)));
+    const top = el('div', 'vtop');
+    top.appendChild(el('div', 'vname', esc(s.nm)));
+    /* One drink must stay on, or a dose has nowhere to land. The last one
+       says so rather than going dead under the finger. */
+    const x = el('button', 'voff mb-tap', '×');
+    x.setAttribute('aria-label', 'Switch off ' + s.nm);
+    x.onclick = () => {
+      if (live.length < 2) { UI.toast('One drink has to stay on'); return; }
+      setSlotOn(s.id, false); Mobile.feedback('open'); draw();
+    };
+    top.appendChild(x);
+    card.appendChild(top);
     card.appendChild(el('div', 'vsize', esc(s.sub)));
-    const mine = c.doses.filter(d => slotOf(d, L) === s.id && d.mg > 0.5);
+    const mine = c.doses.filter(d => slotOf(d, L, live) === s.id && d.mg > 0.5);
     if (!mine.length) {
       card.appendChild(el('div', 'vnil', s.id === 'bottle' ? 'Plain water' : 'Nothing here'));
     }
@@ -808,7 +918,7 @@ function cardsBlock(c) {
       if (!id) return;
       const d = c.doses.filter(x => x.id === id)[0];
       if (!d) return;
-      if (d.nut === 'na' && s.id === 'night') { card.classList.add('no'); return; }
+      if (!legal(d, s.id)) { card.classList.add('no'); return; }
       e.preventDefault();
       card.classList.add('over');
     };
@@ -818,7 +928,7 @@ function cardsBlock(c) {
       card.classList.remove('over', 'no');
       const d = c.doses.filter(x => x.id === DRAG)[0];
       if (!d) return;
-      if (d.nut === 'na' && s.id === 'night') { UI.toast('No sodium in the night drink, ever'); Mobile.haptic('warn'); return; }
+      if (!legal(d, s.id)) { UI.toast('No sodium in the night drink, ever'); Mobile.haptic('warn'); return; }
       const L2 = Object.assign({}, layout());
       L2[d.id] = s.id;
       S.set('layout', L2);
@@ -920,12 +1030,12 @@ function warnings(c) {
      the shorter fuse. Warned rather than moved: the cards are his to
      arrange, and a dose that shuffles itself out of the drink he put it in
      is the app arguing with the drag he just did. */
-  const L = layout();
+  const L = layout(), live = SLOTS(c);
   const perSlot = {};
-  c.doses.forEach(d => { if (d.nut === 'k' && d.mg > 0) { const sl = slotOf(d, L); perSlot[sl] = (perSlot[sl] || 0) + d.mg; } });
+  c.doses.forEach(d => { if (d.nut === 'k' && d.mg > 0) { const sl = slotOf(d, L, live); perSlot[sl] = (perSlot[sl] || 0) + d.mg; } });
   const over = Object.keys(perSlot).filter(k2 => perSlot[k2] > v('capK1'));
   if (over.length) {
-    const names = {}; SLOTS(c).forEach(x => { names[x.id] = x.nm; });
+    const names = {}; live.forEach(x => { names[x.id] = x.nm; });
     w.appendChild(el('div', 'flag warn', 'One drink is carrying ' + r0(Math.max.apply(null, over.map(k2 => perSlot[k2])))
       + ' mg of potassium, over your ' + r0(v('capK1')) + ' mg single dose cap: '
       + esc(over.map(k2 => names[k2] || k2).join(', ')) + '. Add a pitcher, or drag some of it into one.'));
@@ -1008,6 +1118,88 @@ function microsCard(c) {
   return w;
 }
 
+/* ══════════════ THE NUMBERS BEHIND THIS ══════════════
+
+   Tom, 2026-09-21: the facts at the bottom, with timing, how much of each
+   one actually gets in, and how long it lasts.
+
+   Two numbers get confused constantly and this app uses both, so the section
+   opens by separating them. The percentage in the powder settings is how
+   much of the POWDER is the mineral. That is chemistry, and it is on the
+   label. Bioavailability is how much of that mineral crosses the gut wall.
+   That is biology, and it is on no label. 1.000g of zinc glycinate at 28%
+   puts 280mg of zinc in the glass; what reaches him is a third number.
+
+   The zinc figures are the one place a source changes what he should DO, so
+   they carry the study's own conditions rather than being rounded into a
+   claim. Everything here says where it came from, and what is a measurement
+   against what is a range.                                                 */
+const FACTS = [
+  { nm: 'SODIUM', sub: 'table salt, 39.3% sodium', rows: [
+    ['How much gets in', 'Effectively all of it. Sodium chloride is absorbed almost completely, which is why the maths here treats a milligram eaten as a milligram taken.'],
+    ['How long it acts', 'Plasma volume lifts within 30 to 60 minutes when it goes down with fluid. Your kidneys take about 2 to 3 days to re-set to a new level of intake, which is the water swing this app warns about.'],
+    ['When to take it', '30 to 60 minutes before training for the pre-workout dose. Nothing after about 6 PM if facial bloat is the thing being protected, and never in the night drink.'],
+  ] },
+  { nm: 'POTASSIUM', sub: 'potassium citrate, 36.2% potassium', rows: [
+    ['How much gets in', 'About 90% or more. Potassium from food and from soluble salts is well absorbed. The limit is your gut tolerating it, not your gut taking it up.'],
+    ['How long it acts', 'Blood level peaks 1 to 2 hours after a dose and is back near baseline in 3 to 4 hours as it moves into cells and out through the kidneys. A dose is cleared inside about 12 hours, so spreading it across the day wastes nothing.'],
+    ['When to take it', 'Spread it. 10 to 20 mEq is a normal single prescription dose, which is 390 to 780mg of potassium, and 1,000mg is about 26 mEq. Always a full glass or a full pitcher, never a small amount of water.'],
+    ['The 99mg thing', 'The 99mg limit on shop-bought potassium is about solid TABLETS, which can sit undissolved against the gut wall and injure it. Dissolved in water that is not the same risk. It was never a statement about the dose.'],
+  ] },
+  { nm: 'ZINC', sub: 'zinc glycinate, 28% zinc', rows: [
+    ['How much gets in', 'It saturates, and this is the number worth knowing. In Tran and Miller\u2019s dose study, 20.3mg of zinc gave 11.0mg absorbed and 30.1mg gave 11.2mg. Going from 20mg to 30mg in one go bought 0.2mg. The curve they fitted tops out near 13mg however much you take.'],
+    ['The catch in that', 'Those doses were zinc sulfate in water taken after a meal. Out of an ordinary plate with grains in it the fraction absorbed is lower, roughly 20 to 40%, because phytate binds zinc. The ceiling is real, and your own number sits under theirs.'],
+    ['How long it acts', 'Blood zinc peaks 2 to 3 hours after a dose and is back down within 6 to 8 hours. There is no large store to draw on, which is why it is a daily job rather than a weekly one.'],
+    ['When to take it', 'Two separate doses beat one big one, because each gets its own run at the absorption curve. That is why anything over the single dose cap goes on the food instead of stacking at night. Keep it about 2 hours away from calcium and iron, which compete with it.'],
+  ] },
+  { nm: 'MAGNESIUM', sub: 'magnesium glycinate, 11% magnesium', rows: [
+    ['How much gets in', 'Roughly 20 to 25% for glycinate, against about 4 to 12% for magnesium oxide, which is the cheap form and mostly passes through. As with zinc, the fraction absorbed falls as the dose rises.'],
+    ['How long it acts', 'Peaks 2 to 3 hours after a dose. Your kidneys clear the excess within a day, so it does not stack up.'],
+    ['When to take it', 'Split doses beat one, for the same reason as zinc. Evening is the common choice because glycine itself is mildly calming. Whatever is not absorbed pulls water into the gut, which is exactly what loose stools are telling you.'],
+  ] },
+  { nm: 'VITAMIN A AND COPPER', sub: 'from beef liver', rows: [
+    ['How much gets in', 'Preformed vitamin A from liver is 70 to 90% absorbed and needs fat in the meal to get there. Copper runs around 30 to 40%, and falls as the dose rises.'],
+    ['How long it acts', 'This is the one that is different. Vitamin A is stored in your liver with a half-life measured in months, not hours. That is why it is read as an average over 21 days instead of scored on the day you ate it, and why a kilo of liver over three weeks is a different thing from a kilo in one.'],
+    ['Why copper is here', 'Zinc induces a protein in the gut wall that traps copper, so a high zinc intake pushes copper down over months. Liver is the cheapest way back. The gap between the 2.0mg target and the 10mg ceiling is deliberately wide.'],
+  ] },
+];
+const SOURCES = [
+  ['Tran and Miller, zinc absorbed against dose, American Journal of Clinical Nutrition', 'https://ajcn.nutrition.org/article/S0002-9165(22)03742-X/fulltext'],
+  ['Zinc, Dietary Reference Intakes, National Academies', 'https://www.ncbi.nlm.nih.gov/books/NBK222317/'],
+  ['Bioavailability of magnesium food supplements, a systematic review', 'https://www.sciencedirect.com/science/article/abs/pii/S0899900721001568'],
+  ['Magnesium diglycinate against oxide', 'https://pubmed.ncbi.nlm.nih.gov/7815675/'],
+  ['WHO guidance on sodium and potassium intake', 'https://www.who.int/news/item/31-01-2013-who-issues-new-guidance-on-dietary-salt-and-potassium'],
+];
+function factsCard() {
+  const w = el('div', 'card');
+  const d = el('details');
+  d.open = !!S.get('factsOpen', 0);
+  d.ontoggle = () => S.set('factsOpen', d.open ? 1 : 0);
+  d.appendChild(el('summary', null, 'The numbers behind this'));
+  d.appendChild(el('p', 'note', 'Two percentages, and they are not the same thing. The one in the powder settings is how much of the POWDER is the mineral, which is chemistry and is printed on your label. Bioavailability below is how much of that mineral crosses the gut wall, which is biology and is on no label. This app doses the first one, because it is the one you can weigh.'));
+  const grid = el('div', 'grid g2');
+  FACTS.forEach(f => {
+    const box = el('div', 'fact');
+    box.appendChild(el('div', 'vname', esc(f.nm)));
+    box.appendChild(el('div', 'vsize', esc(f.sub)));
+    f.rows.forEach(pair => {
+      const r = el('div', 'frow');
+      r.appendChild(el('div', 'fk', esc(pair[0])));
+      r.appendChild(el('div', 'ft', esc(pair[1])));
+      box.appendChild(r);
+    });
+    grid.appendChild(box);
+  });
+  d.appendChild(grid);
+  const src = el('p', 'note');
+  src.innerHTML = 'Where these came from: ' + SOURCES.map(x =>
+    '<a href="' + x[1] + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>').join(' \u00b7 ')
+    + '. The zinc figures are that study\u2019s own measured numbers. The magnesium and copper percentages are ranges from the literature rather than one measurement, and the timings are typical values, not yours.';
+  d.appendChild(src);
+  w.appendChild(d);
+  return w;
+}
+
 /* ══════════════ LOGGING IT BACK ══════════════
 
    Three writes, and each one is a row keyed so that pressing the button twice
@@ -1022,9 +1214,9 @@ function microsCard(c) {
      sodium base takes back out again, by key.                                */
 function logDoses(c) {
   if (!S.get('writeBack', 1)) { UI.toast('Writing back to STATUS is switched off'); return; }
-  const d = today(), L = layout();
+  const d = today(), L = layout(), live = SLOTS(c);
   c.doses.filter(x => x.mg > 0.5).forEach(x => {
-    Rec.set('dose', d, x.id, { nut: x.nut, mg: Math.round(x.mg), g: +x.g.toFixed(3), slot: slotOf(x, L), t: Date.now() });
+    Rec.set('dose', d, x.id, { nut: x.nut, mg: Math.round(x.mg), g: +x.g.toFixed(3), slot: slotOf(x, L, live), t: Date.now() });
   });
 
   /* zinc and magnesium: read, drop what we wrote before, append one entry */
