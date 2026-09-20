@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.4, 2026-09-20">
+<meta name="mb-version" content="1.0.5, 2026-09-20">
 <title>FOODDÉX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◪</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -242,7 +242,7 @@ IO.register({
       ['base.amt', 'Serving'], ['base.unit', 'Unit'],
       ['base.kcal', 'Calories'], ['base.p', 'Protein'], ['base.c', 'Carbs'], ['base.f', 'Fat'],
       ['base.na', 'Sodium'], ['base.k', 'Potassium'], ['base.ca', 'Calcium'], ['base.caff', 'Caffeine'],
-      ['base.price', 'Price'],
+      ['base.price', 'Price'], ['base.src', 'Source'],
     ] },
   ],
 });
@@ -270,8 +270,30 @@ const WORD = { p: 'protein', c: 'carbs', f: 'fat', kcal: 'calories', amt: 'of it
 /* ══ what is on screen ══
    L is the label as typed. PORTIONS is what you want out of it. EDIT is the
    id of the food being changed, or null when this is a new one. */
+/* ══ where the numbers came from ══
+   Two foods can carry the same figures and not deserve the same trust: one was
+   read off the pack in your hand, the other is a database's idea of the
+   average of that food. Six months later nothing on the row says which, and
+   that is when a figure gets believed more than it has earned.
+
+   So the food remembers. It is set by whatever filled the boxes, and a figure
+   changed by hand afterwards says so rather than quietly passing as the
+   source's own. `fix` is that second state, kept in the same one field so
+   there is nowhere for the two halves to disagree. */
+const SRCS = {
+  usda:         { tag: 'from the USDA', say: 'These came from the USDA food database, which publishes an average for the food, not for your pack.' },
+  'usda-fixed': { tag: 'USDA, corrected', say: 'From the USDA food database, with at least one figure changed by hand since.' },
+  label:        { tag: 'from a label', say: 'These were read off a nutrition label, so they are the pack you had in your hand.' },
+  'label-fixed':{ tag: 'label, corrected', say: 'Read off a nutrition label, with at least one figure changed by hand since.' },
+  typed:        { tag: 'typed in', say: 'These were typed in by hand.' },
+};
+const srcOf = fd => SRCS[(fd && fd.base && fd.base.src) || ''] || null;
+
 const L = { name: '', brand: '', cat: '', amt: '100', unit: 'g',
-  kcal: '', p: '', c: '', f: '', na: '', k: '', ca: '', caff: '', price: '', pc: '' };
+  kcal: '', p: '', c: '', f: '', na: '', k: '', ca: '', caff: '', price: '', pc: '',
+  /* Not a box on screen. It rides in here so the draft, the save and the
+     load all carry it without a second place to keep it. */
+  src: '' };
 let PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
 let EDIT = null;
 const INPUTS = {};
@@ -523,6 +545,7 @@ function fillFromUsda(fd, nums) {
   setField('amt', 100);
   setField('unit', 'g');
   NUTS.forEach(k => setField(k, nums[k] == null ? '' : nums[k]));
+  L.src = 'usda';
   paintLook([]);
   paintPortions(); saveDraft();
   Mobile.feedback('success');
@@ -605,6 +628,7 @@ function pieceOf(fd) {
 const M = document.getElementById('main');
 const ptBox = el('div'), foodBox = el('div'), groupBox = el('div', 'chips');
 const shotArea = el('div'), shotTitle = el('div', 'shot-title');
+const srcNote = el('div', 'note');
 const dupNote = el('div', 'warnbox');
 
 /* The five groups Tom sorts food into. A fixed list rather than a text box,
@@ -633,7 +657,13 @@ function textField(key, label, opts) {
   if (!(opts && opts.text)) { i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*'); }
   if (opts && opts.ph) i.placeholder = opts.ph;
   i.value = L[key] == null ? '' : String(L[key]);
-  i.addEventListener('input', () => { L[key] = i.value; paintPortions(); saveDraft(); });
+  i.addEventListener('input', () => {
+    L[key] = i.value;
+    /* Only the figures. Renaming a food or grouping it does not touch where
+       its numbers came from. */
+    if (NUTS.indexOf(key) > -1 || key === 'amt') handTyped();
+    paintPortions(); saveDraft();
+  });
   INPUTS[key] = i;
   w.appendChild(i);
   return w;
@@ -647,6 +677,13 @@ function setField(key, v) {
      assigned. Everything that fills the form from outside comes through here,
      so this is the one place that needs to know. */
   if (key === 'cat') paintGroups();
+}
+
+/* A figure changed by hand: the first one on an empty form makes this a typed
+   food, and one on top of a lookup or a label marks that source corrected. */
+function handTyped() {
+  if (!L.src) { L.src = 'typed'; return; }
+  if (L.src === 'usda' || L.src === 'label') L.src = L.src + '-fixed';
 }
 
 function build() {
@@ -687,6 +724,9 @@ function build() {
   readBtn.onclick = () => {
     const got = readLabel(ta.value);
     let n = 0;
+    /* Read before the fields are filled: setField does not count as typing,
+       but this label IS now where the numbers come from. */
+    if (Object.keys(got).some(k => got[k] != null && k !== 'name')) L.src = 'label';
     Object.keys(got).forEach(k => {
       if (got[k] == null) return;
       if (k === 'name' && L.name.trim()) return;
@@ -740,6 +780,12 @@ function build() {
   g3.appendChild(textField('caff', 'Caffeine mg'));
   g3.appendChild(textField('price', 'Price'));
   c1.appendChild(g3);
+
+  /* Under the figures, because it is about the figures above it and nothing
+     else on the card. Empty until something has filled them, so a blank form
+     does not claim a source it has not got. */
+  srcNote.style.marginTop = 'var(--s-2)';
+  c1.appendChild(srcNote);
 
   const kcalBtn = el('button', 'btn wide quiet mb-press mb-tap', 'Work calories out from the macros');
   kcalBtn.style.marginTop = 'var(--s-2)';
@@ -958,6 +1004,10 @@ function paintPortions() {
         .filter(x => String(x).trim()).join(' · ')) + '</small>'
     : '';
 
+  const src = SRCS[L.src] || null;
+  srcNote.innerHTML = src ? esc(src.say) : '';
+  srcNote.style.display = src ? '' : 'none';
+
   /* The same name as something you already have, said before you have typed
      a label into a row that is about to become a second copy of one. */
   const dup = Rec.hydrated && nm ? twinOf(nm) : null;
@@ -1138,9 +1188,11 @@ function paintFoods() {
   rows.forEach(r => {
     const fd = r.fd, b = el('div', 'item mb-press mb-tap');
     const one = pieceOf(fd);
+    const src = srcOf(fd);
     const sub = [fd.cat, fd.brand,
       (fd.base.amt == null ? '' : r1(fd.base.amt) + ' ' + (fd.base.unit || '') + ' label'),
-      (one ? 'a piece is ' + one + ' ' + (fd.base.unit || '') : '')]
+      (one ? 'a piece is ' + one + ' ' + (fd.base.unit || '') : ''),
+      (src ? src.tag : '')]
       .filter(x => String(x).trim()).join(' · ');
     const fig = r.need
       ? r1(r.need.amt) + ' ' + esc(r.need.unit) + '<br>' +
@@ -1181,6 +1233,9 @@ function loadFood(fd) {
   setField('name', fd.name || ''); setField('brand', fd.brand || ''); setField('cat', fd.cat || '');
   setField('amt', fd.base.amt); setField('unit', fd.base.unit || 'g');
   NUTS.concat(['price']).forEach(n => setField(n, fd.base[n] == null ? '' : fd.base[n]));
+  /* Carried, not re-derived. Loading a food to correct one figure is exactly
+     when the row would otherwise forget that the rest came off a pack. */
+  L.src = fd.base.src || '';
   /* The piece weight, on the other hand, IS stored - as the "1 piece"
      serving - so it comes back with the food. */
   setField('pc', pieceOf(fd) == null ? '' : pieceOf(fd));
@@ -1264,6 +1319,7 @@ function writeFood() {
     const v = numv(L[n]);
     if (v != null) base[n] = v; else delete base[n];
   });
+  if (L.src) base.src = L.src; else delete base.src;
 
   /* Only the amounts that actually worked out become servings. One with no
      protein figure behind it is a question with no answer, not a serving. */
