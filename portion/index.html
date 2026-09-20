@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.3, 2026-09-19">
+<meta name="mb-version" content="1.0.4, 2026-09-20">
 <title>FOODDÉX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◪</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -105,6 +105,12 @@ textarea{min-height:calc(var(--tap) * 2.5);resize:vertical;line-height:var(--lh-
    content and the last column goes off the side of a phone. */
 .grid2 > *,.grid3 > *{min-width:0}
 
+/* The lookup line: the box you type into, and the button beside it. The button
+   keeps its own width, so a long word in the box cannot squeeze it away. */
+.look{display:flex;gap:var(--s-2)}
+.look input{flex:1}
+.look .btn{flex:0 0 auto}
+
 .chips{display:flex;flex-wrap:wrap;gap:var(--s-2)}
 .chip{min-height:var(--tap);padding:0 var(--s-3);cursor:pointer;
   border:1px solid var(--border);border-radius:var(--radius-full);
@@ -167,7 +173,7 @@ textarea{min-height:calc(var(--tap) * 2.5);resize:vertical;line-height:var(--lh-
 <header>
   <div class="logo">FOOD<b>DÉX</b></div>
   <div class="spacer"></div>
-  <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
+  <button class="mb-btn mb-press mb-tap" onclick="openSettings()">SETTINGS</button>
   <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
 </header>
 <main class="mb-scroll"><div class="wrap" id="main"></div></main>
@@ -378,6 +384,171 @@ function readLabel(raw) {
   return o;
 }
 
+
+/* ══════════════ LOOKING IT UP ══════════════
+   The United States Department of Agriculture publishes the food composition
+   figures most reference tables are copied from, and its search is open to
+   anybody. For a plain food - rice, chicken breast, a banana - that is faster
+   than hunting for a pack, and most plain food has no pack to read.
+
+   It is a convenience, never a requirement. It needs a signal, and every box
+   under it still works typed or pasted with none. What comes back is American:
+   a branded pack in there is not the pack on your table, and the Philippine
+   label wins whenever there is one in your hand. */
+const USDA_URL = 'https://api.nal.usda.gov/fdc/v1/foods/search';
+/* Their demo key, shared by everyone who has not asked for one: about ten
+   lookups an hour from one connection. A free key of your own is a thousand,
+   and goes in Settings. */
+const USDA_DEMO = 'DEMO_KEY';
+const usdaKey = () => String(Rec.setting(APP.id, 'usdaKey') || '').trim() || USDA_DEMO;
+
+/* Where a result came from, in words. Their own names for these are initials
+   and a table number, which tell you nothing about how much to trust it.
+   The list is also the order: most trustworthy first, and the search below
+   sorts by it. */
+const USDA_WHERE = [
+  ['Foundation', 'Measured in a lab'],
+  ['SR Legacy', 'Standard reference'],
+  ['Survey', 'A typical American dish'],
+  ['Branded', 'Off a US pack'],
+];
+const usdaWhere = t => (USDA_WHERE.filter(w => String(t || '').indexOf(w[0]) === 0)[0] || [0, t || ''])[1];
+function usdaRank(t) {
+  for (let i = 0; i < USDA_WHERE.length; i++) if (String(t || '').indexOf(USDA_WHERE[i][0]) === 0) return i;
+  return USDA_WHERE.length;
+}
+
+/* The ids each figure can arrive under, best first. Carbohydrate is worked out
+   by difference on most foods and by summation on a few; energy is Atwater on
+   some of the newer ones. Taking the first that is there beats picking one and
+   leaving the food blank. */
+const USDA_NUT = { kcal: [1008, 2048, 2047], p: [1003], c: [1005, 1050], f: [1004],
+  na: [1093], k: [1092], ca: [1087], caff: [1057] };
+/* Every figure they return is per 100 g, whatever serving a pack prints, so
+   that is what goes in the serving boxes. */
+function usdaNums(food) {
+  const by = {};
+  (food.foodNutrients || []).forEach(n => { if (by[n.nutrientId] == null) by[n.nutrientId] = n; });
+  const out = {};
+  Object.keys(USDA_NUT).forEach(key => {
+    USDA_NUT[key].some(id => {
+      const n = by[id];
+      if (!n || typeof n.value !== 'number') return false;
+      let v = n.value;
+      /* A few of their energy rows are in kilojoules. Read as calories that is
+         a food four times more expensive than it is. */
+      if (key === 'kcal' && /kj/i.test(n.unitName || '')) v = v / 4.184;
+      out[key] = (key === 'p' || key === 'c' || key === 'f') ? r1(v) : Math.round(v);
+      return true;
+    });
+  });
+  return out;
+}
+/* "Chicken, breast, boneless, skinless, raw" is how a catalogue writes a name
+   and not how anybody says one. The commas go; the words and their order stay,
+   because they are what tells two entries apart. You can type over it. */
+const usdaName = d => String(d || '').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+
+/* The search box, the button and the results under them. The list is kept out
+   of build() so it can redraw itself without redrawing the card. */
+const lookBox = el('div');
+let lookRun = 0;
+function paintLook(kids) {
+  lookBox.innerHTML = '';
+  (kids || []).forEach(k => lookBox.appendChild(k));
+  lookBox.style.marginTop = kids && kids.length ? 'var(--s-2)' : '';
+}
+function lookUp(q, btn) {
+  q = String(q || '').trim();
+  if (!q) return;
+  /* Two searches in a row and the slow one can land last. The run number is
+     what stops an answer to a question you have moved on from. */
+  const run = ++lookRun;
+  const said = btn.innerHTML;
+  btn.innerHTML = '...'; btn.disabled = true;
+  const done = () => { if (run === lookRun) { btn.innerHTML = said; btn.disabled = false; } };
+  fetch(USDA_URL + '?api_key=' + encodeURIComponent(usdaKey()) +
+        '&pageSize=10&query=' + encodeURIComponent(q))
+    .then(r => {
+      /* Out of lookups is not a broken app, and saying which it is decides
+         whether you put a key in or give up on the button. */
+      if (r.status === 429) throw new Error('rate');
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.json();
+    })
+    .then(d => {
+      if (run !== lookRun) return;
+      const foods = (d && d.foods) || [];
+      if (!foods.length) {
+        paintLook([el('div', 'note', 'Nothing came back for that. Try fewer words, and in English.')]);
+        return Mobile.feedback('warn');
+      }
+      /* Their own ranking scores words rather than what you meant: "oats
+         rolled" comes back led by a dinner roll. The lab figures for a plain
+         food go to the top, in the order they arrived, because inside one kind
+         their order IS relevance and this is not. */
+      /* Ten come back and six are shown: a list long enough to scroll past
+         pushes the paste box off the card, and the seventh guess at what you
+         meant is not an answer anybody reads. */
+      paintLook(foods.slice().sort((a, b) => usdaRank(a.dataType) - usdaRank(b.dataType)).slice(0, 6).map(fd => {
+        const nums = usdaNums(fd);
+        const b = el('button', 'item mb-press mb-tap');
+        b.type = 'button';
+        b.appendChild(el('div', 'nm', '<b>' + esc(usdaName(fd.description)) + '</b><small>' +
+          esc([fd.brandOwner || fd.brandName || '', usdaWhere(fd.dataType)].filter(Boolean).join(' · ')) + '</small>'));
+        b.appendChild(el('div', 'fig', nums.kcal == null ? '' : esc(nums.kcal + ' kcal') + '<br>per 100 g'));
+        b.onclick = () => fillFromUsda(fd, nums);
+        return b;
+      }));
+      Mobile.feedback('select');
+    })
+    .catch(e => {
+      if (run !== lookRun) return;
+      paintLook([]);
+      Mobile.feedback('warn');
+      UI.toast(String(e && e.message) === 'rate'
+        ? 'That key is out of lookups for this hour. Settings has room for one of your own.'
+        : 'Could not reach the food database. Paste the label instead.', { bad: true });
+    })
+    .then(done, done);
+}
+/* Tapping a result fills the label the way READ IT does, except that here the
+   tap IS the choice, so a name you typed is replaced: you just picked a
+   different food. A figure they do not carry is cleared rather than left
+   behind, because a leftover number belongs to the food before this one. */
+function fillFromUsda(fd, nums) {
+  setField('name', usdaName(fd.description));
+  const brand = fd.brandOwner || fd.brandName || '';
+  if (brand) setField('brand', brand);
+  setField('amt', 100);
+  setField('unit', 'g');
+  NUTS.forEach(k => setField(k, nums[k] == null ? '' : nums[k]));
+  paintLook([]);
+  paintPortions(); saveDraft();
+  Mobile.feedback('success');
+  UI.toast('Filled from the USDA, per 100 g. Check the numbers, and use the pack if you have one.');
+}
+
+/* ══ settings ══
+   One tab of this app's own, for the key the lookup uses. */
+function openSettings() {
+  UI.settings(APP.id, [{ id: 'look', name: 'LOOKUP', draw: drawLookSettings }], { order: ['look', 'app', 'data'] });
+}
+function drawLookSettings(pane) {
+  pane.innerHTML = '';
+  const key = document.createElement('input');
+  key.type = 'text';
+  key.className = 'mb-input';
+  key.placeholder = USDA_DEMO;
+  key.value = String(Rec.setting(APP.id, 'usdaKey') || '');
+  key.onchange = () => { Rec.setting(APP.id, 'usdaKey', key.value.trim()); UI.toast('Key saved'); };
+  pane.appendChild(UI.row('Your USDA key', 'Leave it blank and the lookup uses the shared demo key.', key));
+  pane.appendChild(el('div', 'note',
+    'LOOK IT UP asks the United States Department of Agriculture for its figures. ' +
+    'The shared key everybody starts on runs out after about ten lookups an hour. ' +
+    'A free key of your own is a thousand an hour: ask for one at fdc.nal.usda.gov and it arrives by email.'));
+}
+
 /* ══════════════ THE SUM ══════════════
    One multiplier of the label serving, read from either end. "How much for
    50g of protein" divides the target by what one serving carries. "What is in
@@ -485,6 +656,28 @@ function build() {
   const c1 = el('div', 'card');
   c1.id = 'cardLabel';
   c1.appendChild(el('h2', null, 'THE LABEL'));
+
+  /* -- looking it up --
+     First in the card because it is the shorter road: for a plain food it
+     fills every box below without a pack in your hand. Pasting sits under it,
+     unchanged, and is the one that still works with no signal. */
+  c1.appendChild(el('div', 'note', 'Look up a plain food, or paste a label. The lookup asks the United States Department of Agriculture and answers per 100 g, so it needs a signal, and what it knows is American.'));
+  const lookRow = el('div', 'look');
+  const lookIn = document.createElement('input');
+  lookIn.type = 'text';
+  lookIn.placeholder = 'Chicken breast raw';
+  const lookBtn = el('button', 'btn mb-press mb-tap', 'LOOK IT UP');
+  lookBtn.type = 'button';
+  lookBtn.onclick = () => lookUp(lookIn.value, lookBtn);
+  /* Enter searches. Typing a food and then reaching for the mouse is a step
+     this box does not need, and on a phone it is the key the keyboard offers. */
+  lookIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lookUp(lookIn.value, lookBtn); } });
+  lookRow.appendChild(lookIn);
+  lookRow.appendChild(lookBtn);
+  c1.appendChild(lookRow);
+  c1.appendChild(lookBox);
+
+  c1.appendChild(el('label', 'fl', 'Or paste the label'));
   c1.appendChild(el('div', 'note', 'Paste it off the pack or a website and press READ IT, or just type the numbers. Check every one before you save: reading a label is a guess, not a scan.'));
   const ta = document.createElement('textarea');
   ta.placeholder = 'Serving size 100 g\nEnergy 165 kcal\nProtein 31 g\nTotal Carbohydrate 0 g\nTotal Fat 3.6 g';
@@ -1004,6 +1197,9 @@ function loadFood(fd) {
 
 function blank() {
   EDIT = null;
+  /* Results from the last food go with it. Leaving them there is a list that
+     looks like it belongs to the empty form in front of you. */
+  paintLook([]);
   Object.keys(L).forEach(k => setField(k, k === 'amt' ? '100' : k === 'unit' ? 'g' : ''));
   PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
   paintPortions(); saveDraft(); syncBar();
