@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.0, 2026-09-20">
+<meta name="mb-version" content="1.0.1, 2026-09-21">
 <title>MIX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◉</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -287,6 +287,7 @@ const IN = [
   ['capZn1', 20,   'Zinc single-dose cap, mg'],
   ['capZnT', 40,   'Zinc total ceiling, mg'],
   ['capMg',  350,  'Magnesium supplement cap, mg'],
+  ['win',    21,   'Micro window, days'],
   ['pitch',  2,    'Number of day pitchers'],
   ['litres', 1.0,  'Litres per pitcher'],
   ['splitK', 50,   'Potassium, % in day pitchers'],
@@ -411,16 +412,54 @@ const sessionMin = () => {
   return DEF.sess;
 };
 
-/* liver eaten over the last seven days, for the vitamin A ceiling */
-function liverWeek() {
-  let g = 0;
-  for (let i = 0; i < 7; i++) {
+/* ══════════════ THE STORED MICROS ══════════════
+
+   Tom, 2026-09-20: a kilo of beef liver over three weeks.
+
+   Preformed vitamin A and copper are not spent the way sodium is. They are
+   stored, mostly in the liver, so what matters is the average over weeks and
+   not what any one day looked like. Measuring them against a daily ceiling
+   makes the gauge say two things and neither is true: on a liver day it reads
+   five times over, and on the other twenty days it reads almost nothing. One
+   of those is a red line nobody should act on and the other is a green line
+   that has not been earned.
+
+   A kilo of liver over 21 days is the case. That is 49,700 mcg of vitamin A,
+   which is 2,367 a day, under the 3,000 ceiling. Read one day at a time, the
+   day he ate 330 g of it reads 16,400 and the gauge screams. Same food, same
+   three weeks, opposite answers - so the window is the honest unit and the
+   day is not.
+
+   The window is his, default 21 days, because that is the rhythm he actually
+   eats it on. Calcium and choline stay on the day, because those are spent
+   daily and a three-week average would hide a week of missing both.
+
+   One limit, said on the screen rather than hidden: the window reads STATUS's
+   meals only. Anything typed into "Food not in STATUS" counts for today and
+   cannot count for a day that has gone.                                     */
+function windowRead() {
+  const days = Math.max(1, Math.round(v('win')));
+  const t = { zn: 0, mg: 0, cu: 0, ch: 0, va: 0, ca: 0 };
+  let liver = 0, seen = 0;
+  for (let i = 0; i < days; i++) {
     const d = Day.shift(today(), -i);
-    mealsOn(d).forEach(m => {
-      if (matchFood(m.name) === 'liver' && m.unit === 'g') g += num(m.amt, 0) || 0;
+    const ms = mealsOn(d).filter(m => !isMixMeal(m.key));
+    if (ms.length) seen++;
+    ms.forEach(m => {
+      t.ca += num(m.ca, 0) || 0;
+      const key = matchFood(m.name);
+      const grams = (m.unit === 'g' || m.unit === 'ml') ? (num(m.amt, 0) || 0) : 0;
+      if (!key || !(grams > 0)) return;
+      ['zn', 'mg', 'cu', 'ch', 'va'].forEach(n => { t[n] += F[key][n] * grams / 100; });
+      if (key === 'liver') liver += grams;
     });
   }
-  return g + mv('liver');
+  /* today's typed-in food is one day inside the window, counted once */
+  const man = fromManual();
+  ['zn', 'mg', 'cu', 'ch', 'va', 'ca'].forEach(n => { t[n] += man[n]; });
+  liver += mv('liver');
+  const per = {}; Object.keys(t).forEach(n => { per[n] = t[n] / days; });
+  return { days: days, per: per, liver: liver, seen: seen };
 }
 
 /* ══════════════ THE MATHS ══════════════ */
@@ -471,8 +510,8 @@ function compute() {
   /* ---- zinc ----
      The gap can be bigger than one dose is allowed to be. Rather than stop at
      the single-dose cap and quietly miss the target, the rest goes with the
-     chicken meal: zinc on food is better tolerated than zinc fasted, and the
-     total still stops at the ceiling. */
+     food: zinc on a full stomach is better tolerated than zinc fasted, and
+     the total still stops at the ceiling. */
   const znRoom = clamp0(v('capZnT') - food.zn);
   const znWant = Math.min(clamp0(znGoal - food.zn), znRoom);
   const znNight = Math.min(v('capZn1'), znWant);
@@ -528,7 +567,11 @@ const SLOTS = c => {
   for (let i = 1; i <= c.pitchers; i++) s.push({ id: 'pitcher' + i, nm: 'DAY PITCHER ' + i, sub: r1(v('litres')) + ' L' });
   if (c.trained) s.push({ id: 'pre', nm: 'PRE-WORKOUT', sub: '30 to 60 minutes before' });
   if (c.trained) s.push({ id: 'bottle', nm: 'TRAINING BOTTLE', sub: 'sipped through the session' });
-  s.push({ id: 'meal', nm: 'WITH CHICKEN MEAL', sub: 'on the food, with the plate' });
+  /* Tom, 2026-09-20: "I don't want it to assume any meals." It used to say
+     WITH CHICKEN MEAL, which is a guess about what is on the plate, and a
+     card that guesses wrong every time he eats something else is a card he
+     has to translate before he can use it. It names the moment instead. */
+  s.push({ id: 'meal', nm: 'WITH FOOD', sub: 'whichever meal you are eating' });
   s.push({ id: 'night', nm: 'NIGHT DRINK', sub: 'no sodium, ever' });
   return s;
 };
@@ -651,6 +694,7 @@ function inputsCard() {
   g4.appendChild(field('capZn1', 'Zinc single-dose cap, mg', { step: 1 }));
   g4.appendChild(field('capZnT', 'Zinc total ceiling, mg', { step: 1 }));
   g4.appendChild(field('capMg', 'Magnesium supplement cap, mg', { step: 25 }));
+  g4.appendChild(field('win', 'Micro window, days', { step: 1, hint: 'vitamin A, copper and liver are averaged over this many days' }));
   g4.appendChild(field('pitch', 'Number of day pitchers', { step: 1, hint: '0 means no pitchers and the day potassium becomes one mix' }));
   g4.appendChild(field('litres', 'Litres per pitcher', { step: .1 }));
   g4.appendChild(field('splitK', 'Potassium, % in day pitchers', { step: 5 }));
@@ -878,23 +922,35 @@ function microsCard(c) {
   d.appendChild(el('summary', null, 'Micros and ceilings'));
   const grid = el('div', 'grid g2');
 
+  const W = windowRead();
+  const wd = W.days + ' days';
+  /* ── a target and a ceiling are opposite things ──
+     Six rows drawn one way said the wrong thing three times: 4.7 mg of
+     copper against a 2.0 mg TARGET came out red, which is the colour for
+     danger, when it is the number doing its job. A row now says which kind
+     it is. Under a target is the problem; over a ceiling is the problem. */
   const rows = [
-    ['ca', 'Calcium', c.food.ca, 1000, 'mg', 0, '1,000 mg/day · target'],
-    ['cu', 'Copper', c.food.cu, 2.0, 'mg', 1, '2.0 mg/day · target'],
-    ['ch', 'Choline', c.food.ch, 550, 'mg', 0, '550 mg/day · target'],
-    ['va', 'Vitamin A, preformed', c.food.va, 3000, 'mcg', 0, '3,000 mcg/day · liver is the only real source'],
-    ['cuC', 'Copper ceiling', c.food.cu, 10, 'mg', 1, '10 mg/day · you cannot monitor this without panels'],
-    ['liver', 'Beef liver, this week', liverWeek(), 420, 'g', 0, '420 g/week · vitamin A binds before copper does'],
+    ['ca', 'Calcium, today', 'target', c.food.ca, 1000, 'mg', 0, '1,000 mg/day · spent daily, so read daily'],
+    ['ch', 'Choline, today', 'target', c.food.ch, 550, 'mg', 0, '550 mg/day · spent daily, so read daily'],
+    ['cu', 'Copper, ' + wd, 'target', W.per.cu, 2.0, 'mg', 1, '2.0 mg/day on average · the floor zinc keeps pushing you under'],
+    ['va', 'Vitamin A, preformed, ' + wd, 'ceiling', W.per.va, 3000, 'mcg', 0,
+      '3,000 mcg/day on average · today alone was ' + r0(c.food.va) + ' mcg · liver is the only real source'],
+    ['cuC', 'Copper ceiling, ' + wd, 'ceiling', W.per.cu, 10, 'mg', 1, '10 mg/day on average · you cannot monitor this without panels'],
+    ['liver', 'Beef liver, ' + wd, 'ceiling', W.liver, 60 * W.days, 'g', 0,
+      '60 g/day on average, ' + r0(60 * W.days) + ' g over ' + wd + ' · vitamin A binds before copper does'],
   ];
-  rows.forEach(([id, label, val, lim, unit, dec, sub]) => {
+  rows.forEach(([id, label, kind, val, lim, unit, dec, sub]) => {
     const on = microOn(id);
+    const p = lim ? val / lim : 1;
+    const bad = kind === 'ceiling' ? p > 1 : p < .7;
+    const soso = kind === 'ceiling' ? p > .85 : p < .95;
     const g = el('div', 'gauge');
     const head = el('div', 'grow');
     const lbl = el('span', null, esc(label));
     head.appendChild(lbl);
     const right = el('span', 'row');
     if (on) {
-      const cls = val > lim ? 'badc' : val > lim * .85 ? 'warnc' : '';
+      const cls = bad ? 'badc' : soso ? 'warnc' : 'ok';
       right.appendChild(el('span', cls, (dec ? r1(val) : r0(val)) + ' ' + unit));
     } else right.appendChild(el('span', 'src', 'hidden'));
     const eye = el('button', 'eye mb-tap' + (on ? '' : ' off'), on ? '◉' : '○');
@@ -909,7 +965,7 @@ function microsCard(c) {
     g.appendChild(head);
     if (on) {
       const track = el('div', 'gtrack');
-      const fill = el('div', 'gfill' + (val > lim ? ' over' : val > lim * .85 ? ' warn' : ''));
+      const fill = el('div', 'gfill' + (bad ? ' over' : soso ? ' warn' : ''));
       fill.style.width = Math.min(val / lim * 75, 100) + '%';
       track.appendChild(fill);
       const lm = el('div', 'glimit'); lm.style.left = '75%';
@@ -920,6 +976,9 @@ function microsCard(c) {
     grid.appendChild(g);
   });
   d.appendChild(grid);
+  d.appendChild(el('p', 'note', 'Vitamin A, copper and liver are stored rather than spent, so they are read as a daily average over ' + wd
+    + ', set in Caps, pitchers and splits. The window reads STATUS meals only: food typed in by hand counts for today and cannot count for a day that has gone.'
+    + (W.seen < W.days ? ' <b>' + W.seen + ' of ' + W.days + ' days have food logged</b>, so the average is over a thinner week than it looks.' : '')));
   d.appendChild(el('div', 'flag info', 'Zinc at ' + v('znT') + ' mg daily suppresses copper absorption. Early deficiency looks like fatigue, which reads as overtraining. Beef liver covers it. Do not skip it more than two weeks running.'));
   w.appendChild(d);
   return w;
