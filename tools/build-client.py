@@ -64,6 +64,17 @@ DROP_APPS = ['form', 'portion', 'wealth', 'arc', 'speak', 'system']   # removed 
 #          patch below matches from the widget's first line to its last.
 DROP_WIDGETS = ['links']
 
+# ── shared files a client does not get ────────────────────────────────────
+#   cloud.js  LIVE SYNC, the Firebase sync beside the sheet, added
+#             2026-09-20. Tom, on the handoff: him first, clients after. A
+#             client has no Firebase project, so all the settings row could
+#             tell them is to paste a config they do not have and cannot get.
+#             Leaving the FILE out is the whole switch: io.js draws that row
+#             only when Cloud is there, so a client build has no LIVE SYNC
+#             section at all rather than a dead one. Delete this line the day
+#             clients get it, and nothing else has to change.
+DROP_SHARED = ['cloud.js']
+
 # ── the five themes ───────────────────────────────────────────────────────
 # Order matters: skins.js falls back to skins[0] when nothing is saved, so
 # whatever sits first here is what a client sees on their very first open.
@@ -120,6 +131,23 @@ for d in COPY_DIRS:
         low = name.lower()
         if low.endswith('.md') or low == '_smoke.html' or low == 'placeholder.txt':
             os.remove(os.path.join(here, name))
+        elif d == 'shared' and name in DROP_SHARED:
+            os.remove(os.path.join(here, name))
+
+# io.js fetches cloud.js by itself, so removing the file alone would leave
+# every app asking for it once per open and getting a 404. Harmless - the
+# loader swallows it - but it is a wasted request on a phone, every open,
+# forever. So the loader is switched off in the client copy too. Asserted
+# rather than attempted: if this line ever changes shape the build stops,
+# instead of quietly shipping the 404 back.
+iojs = os.path.join(DEST, 'shared', 'io.js')
+if os.path.isfile(iojs) and 'cloud.js' in DROP_SHARED:
+    txt = io.open(iojs, encoding='utf-8').read()
+    mark = "  if (g.Cloud || document.getElementById('mb-cloud-js')) return;"
+    if txt.count(mark) != 1:
+        fail('io.js cloud loader has changed shape - update DROP_SHARED handling')
+    txt = txt.replace(mark, "  return;   /* client build: no live sync, see tools/build-client.py */", 1)
+    io.open(iojs, 'w', encoding='utf-8').write(txt)
 
 # ── themes ────────────────────────────────────────────────────────────────
 sj = os.path.join(DEST, 'shared', 'skins.json')

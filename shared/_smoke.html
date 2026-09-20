@@ -13,6 +13,7 @@
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
+<script src="cloud.js"></script>
 <script src="io.js"></script>
 <script src="health.js"></script>
 <script src="icons.js"></script>
@@ -566,10 +567,14 @@ async function run() {
     IO.mirror.set({ url: '' }); const bare = draw();
     IO.mirror.set({ url: 'https://example.invalid/exec' }); const linked = draw();
     IO.mirror.set({ url: had });
-    const btns = p => [].slice.call(p.querySelectorAll('button')).map(b => b.textContent);
-    return !!bare.querySelector('input') && !linked.querySelector('input') &&
-      btns(bare).length === 1 && btns(linked).length === 1 && /sync now/i.test(btns(linked)[0]) &&
-      !/script/i.test(bare.textContent + linked.textContent);
+    /* The sheet's own section only. The live sync draws its own controls into
+       .mb-live-sync underneath, and this check is about the sheet. */
+    const sheet = p => { const c = p.cloneNode(true); const x = c.querySelector('.mb-live-sync'); if (x) x.remove(); return c; };
+    const b2 = sheet(bare), l2 = sheet(linked);
+    const btns = n => [].slice.call(n.querySelectorAll('button')).map(b => b.textContent);
+    return !!b2.querySelector('input') && !l2.querySelector('input') &&
+      btns(b2).length === 1 && btns(l2).length === 1 && /sync now/i.test(btns(l2)[0]) &&
+      !/script/i.test(b2.textContent + l2.textContent);
   })());
   ok('ui: an app reads its own version off its page', (() => {
     const m = document.createElement('meta');
@@ -2555,6 +2560,81 @@ async function run() {
   }, 1500);
   document.querySelectorAll('.mb-sheet,.mb-veil').forEach(n => n.remove());
   ok('cleanup: no overlay left on the page', !document.querySelector('.mb-sheet,.mb-veil'));
+
+  /* ---- cloud: the second sync ----
+
+     Nobody here has Tom's Firebase project, so none of this talks to a
+     database. What it checks is the part that does not need one and is the
+     part that goes wrong quietly: the key encoding, reading the config he
+     pastes, and where the push boundary lands. */
+  const CROW = (id, at, pay) => ({ id: id, type: 'x', date: null, key: 'k', updated_at: at, payload: pay });
+
+  ok('cloud: it loaded and io.js exposes its settings row',
+    !!window.Cloud && typeof IO.cloudRow === 'function');
+
+  /* A setting's key is `appid.name`, so a dot in a row id is the normal case,
+     not the odd one, and a dot is illegal in a database key. */
+  ok('cloud: a row id with a dot round-trips through the key encoding', () => {
+    const id = 'local|setting||status.countCals';
+    return Cloud._dec(Cloud._enc(id)) === id;
+  });
+  ok('cloud: an encoded key carries nothing the database forbids', () => {
+    const k = Cloud._enc('local|setting||a.b$c#d[e]f/g');
+    return !/[.$#\[\]\/]/.test(k) && Cloud._dec(k) === 'local|setting||a.b$c#d[e]f/g';
+  });
+
+  /* Firebase hands him JavaScript, not JSON. Both have to read. */
+  ok('cloud: the config block Firebase gives you is read as pasted', () => {
+    const c = Cloud._parse([
+      'const firebaseConfig = {',
+      '  apiKey: "AIzaSyTEST",',
+      '  authDomain: "mb.firebaseapp.com",',
+      '  databaseURL: "https://mb-default-rtdb.firebaseio.com",',
+      '  projectId: "mb"',
+      '};'].join('\n'));
+    return c && c.apiKey === 'AIzaSyTEST' && c.projectId === 'mb' && Cloud._missing(c) === '';
+  });
+  ok('cloud: plain JSON is read too', () => {
+    const c = Cloud._parse('{"apiKey":"k","authDomain":"a","databaseURL":"d"}');
+    return c && c.apiKey === 'k' && Cloud._missing(c) === '';
+  });
+  /* The one that actually catches people: databaseURL is absent from the
+     config block until the Realtime Database exists. */
+  ok('cloud: a config with no databaseURL is refused, and says which', () => {
+    const c = Cloud._parse('{"apiKey":"k","authDomain":"a"}');
+    return /databaseURL/.test(Cloud._missing(c));
+  });
+  ok('cloud: something that is not a config at all is refused',
+    () => !!Cloud._missing(Cloud._parse('hello')));
+
+  /* ── the boundary, which is the whole ball game ──
+
+     A row too big to send must still be PASSED by the boundary. If it is not,
+     the first check-in photo jams the sync and every bullet written after it
+     silently never leaves the device. This is the check one level under that
+     bug: it asks where the edge landed, not whether a photo arrived. */
+  ok('cloud: an oversized row is skipped and the boundary still passes it', () => {
+    const small = CROW('local|note||a', '2026-01-01T00:00:01.000Z', { t: 'hi' });
+    const huge  = CROW('local|cphoto|2026-01-01|front', '2026-01-01T00:00:02.000Z',
+      { img: new Array(Cloud._big + 500).join('x') });
+    const p = Cloud._plan([small, huge], '', 'u/u1/rows/');
+    return p.sent === 1 && p.skipped === 1 && p.edge === '2026-01-01T00:00:02.000Z';
+  });
+  ok('cloud: a row that fits goes up under its encoded key', () => {
+    const r = CROW('local|setting||status.x', '2026-01-02T00:00:00.000Z', { v: 1 });
+    const p = Cloud._plan([r], '', 'u/u1/rows/');
+    return p.patch['u/u1/rows/' + Cloud._enc(r.id)] === r && p.sent === 1 && p.skipped === 0;
+  });
+  ok('cloud: the boundary never goes backwards', () => {
+    const r = CROW('local|note||b', '2026-01-01T00:00:00.000Z', { t: 'old' });
+    return Cloud._plan([r], '2026-06-01T00:00:00.000Z', 'u/u1/rows/').edge === '2026-06-01T00:00:00.000Z';
+  });
+
+  /* Until a config is pasted this file must be inert: no state, no network. */
+  ok('cloud: nothing is set up until a config is pasted', () => {
+    const st = Cloud.state();
+    return typeof st.has === 'boolean' && (st.has || (!st.live && !st.on));
+  });
 
   /* every promised check settles before anything is counted */
   await Promise.all(PENDING);

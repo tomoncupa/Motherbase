@@ -133,6 +133,14 @@ DOCTRINE.md        what each app is FOR, and the laws every app obeys
 REVIEW.md          the suite reviewed on 2026-09-15: what would make it better,
                    ranked. Proposals, nothing built. Tom picks.
 HOWTO.md           how Tom adds an app or a theme, in plain language
+CLOUD.md           LIVE SYNC: the Firebase sync that sits BESIDE the Google
+                   sheet, added 2026-09-20. What Tom does once to set it up,
+                   the database rules to paste, and what it deliberately does
+                   not carry. The sheet is untouched and still does everything
+                   it did; this answers the one thing the sheet is slow at,
+                   which is two devices agreeing in a second rather than a
+                   minute. Off until a config is pasted, so a client who never
+                   sets it up never makes a request from it
 ONBOARDING.md      how a client gets the suite, and what happens after
 index.html         the home screen: widget grid, app dock, data authority
 _review.html       the review: opens every app, folds in the foundation checks,
@@ -272,7 +280,8 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
 | `notice.js` | The status window LOOK: four palettes and the cut-corner shape. NOTICE strokes it on a canvas to make a picture, STATUS clips a real panel to it for the status check. The one place in the suite that carries hex colours on purpose, for the reason NOTICE always had: the window is the art, not the furniture, so a Hunter window is blue in every theme. Nothing here reaches an app's own chrome. |
-| `_smoke.html` | 317 checks over all of the above. Run it after touching any of them. |
+| `cloud.js` | LIVE SYNC: Firebase beside the sheet, added 2026-09-20. One row per row at `/u/<uid>/rows/<id>`, pushed on change and listened for by `updated_at`, merged through `Rec.merge` like anything else. Fetched by `io.js` rather than by a tag in every app, the way `mobile.js` fetches `sw.js`, so no app was edited. Only the TOP document connects, because `records.js` already shares merged rows across the origin and fourteen frames would be fourteen connections. A row over 64KB is skipped AND THE BOUNDARY STILL PASSES IT, or one photo would jam every sync after it. Does nothing until a config is pasted. See `CLOUD.md`. |
+| `_smoke.html` | 328 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 

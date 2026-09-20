@@ -1432,6 +1432,104 @@ const IO = {
       };
       M.sync(appId).then(end, () => end(false));
     };
+    IO.cloudRow(pane);
+  },
+
+  /** The second sync, under the sheet's own row.
+
+      It draws nothing at all until `cloud.js` is there, so a device where the
+      file failed to arrive shows the sheet exactly as it always did. */
+  cloudRow(pane) {
+    const C = g.Cloud;
+    if (!C) return;
+    /* Everything this draws goes inside one wrapper, so the sheet's own row
+       above stays exactly the DOM it has always been and anything measuring
+       either section can address the one it means. The wrapper is a plain
+       block and changes no layout. */
+    const wrap = el('div', 'mb-live-sync');
+    pane.appendChild(wrap);
+    wrap.appendChild(el('div', 'mb-group', 'LIVE SYNC'));
+    const line = el('p');
+    const box = el('div');
+    wrap.appendChild(line);
+    wrap.appendChild(box);
+
+    const draw = () => {
+      const s = C.state();
+      box.innerHTML = '';
+      /* A folder page cannot sign in to Google, and saying "sign in failed"
+         to somebody who did nothing wrong is worse than saying nothing. */
+      if (s.file) {
+        line.innerHTML = 'This page was opened from a folder, so live sync cannot sign in here. The hosted copy can. The sheet sync above works either way.';
+        return;
+      }
+      if (!s.has) {
+        line.innerHTML = 'Not set up on this device. Paste the Firebase config once and every app here has it.';
+        const t = el('textarea', 'mb-input');
+        t.rows = 3;
+        t.placeholder = 'Paste the Firebase config';
+        t.setAttribute('aria-label', 'Firebase config');
+        t.oninput = () => {
+          const v = t.value.trim();
+          if (v.length < 40) return;
+          const bad = C.paste(v);
+          if (!bad) { toast('Config saved. Sign in next.'); draw(); }
+        };
+        box.appendChild(t);
+        const b = el('button', 'mb-btn mb-press mb-tap', 'Check what I pasted');
+        b.style.cssText = 'width:100%;margin-top:var(--s-2,8px)';
+        b.onclick = () => {
+          const bad = C.paste(t.value.trim());
+          bad ? toast(bad, { bad: true }) : (toast('Config saved. Sign in next.'), draw());
+        };
+        box.appendChild(b);
+        return;
+      }
+
+      line.innerHTML = s.live
+        ? 'Live as <b>' + esc(s.email || 'signed in') + '</b>.' + (s.at ? ' Last synced <b>' + esc(s.at) + '</b>.' : '')
+        : s.why ? esc(s.why)
+        : 'Set up on this device, and not signed in yet.';
+
+      const btn = (label, cls, fn) => {
+        const b = el('button', 'mb-btn ' + cls + ' mb-press mb-tap', label);
+        b.style.cssText = 'width:100%;margin-top:var(--s-2,8px)';
+        b.onclick = fn;
+        box.appendChild(b);
+        return b;
+      };
+
+      if (!s.live) {
+        btn('Sign in with Google', 'go', e => {
+          const b = e.currentTarget;
+          b.disabled = true;
+          C.signIn().then(() => { toast('Live sync is on'); draw(); },
+            err => { b.disabled = false; toast(err && err.message ? err.message : 'could not sign in', { bad: true }); draw(); });
+        });
+      } else {
+        btn('Sync now', 'go', e => {
+          const b = e.currentTarget;
+          b.disabled = true;
+          C.sync().then(() => { b.disabled = false; toast('Sent'); draw(); },
+            () => { b.disabled = false; toast('Nothing went up this time', { bad: true }); draw(); });
+        });
+        btn('Sign out', '', () => { C.signOut().then(() => { toast('Live sync is off'); draw(); }); });
+      }
+      /* Said only once it has happened, because "0 rows were too big" is a
+         sentence nobody needs to read. */
+      if (s.skipped) {
+        const p = el('p');
+        p.innerHTML = '<b>' + s.skipped + '</b> rows were too big for live sync, such as photos. Those travel by backup and by the sheet.';
+        box.appendChild(p);
+      }
+    };
+    draw();
+    /* The settings sheet is thrown away and rebuilt every time it opens, so a
+       listener held on the old pane would pile up one per open and redraw a
+       node nobody can see. It takes itself off the first time it notices the
+       pane has left the document, which needs no cooperation from whoever
+       closed it. */
+    const off = C.on(() => { pane.isConnected ? draw() : off(); });
   },
 };
 
@@ -3032,6 +3130,40 @@ g.addEventListener('message', e => {
   Promise.all(ids.map(id => Mirror.sync(id, true, { full: !!m.full }).then(ok => !!ok, () => false)))
     .then(res => back({ app: ids.join(','), ok: res.every(Boolean), why: res.every(Boolean) ? '' : Mirror.why() }));
 });
+
+/* ── the second sync ──
+
+   `shared/cloud.js` is fetched from here rather than from a tag in every app,
+   for the same reason `mobile.js` registers the service worker: fifteen app
+   files would each need editing, and under the versioning rule that means
+   fifteen version bumps for a file none of them actually changed. Every app
+   already loads this one.
+
+   Where it is, worked out from where THIS file is, so it is right whichever
+   folder the suite sits in and whichever app is asking. A guessed path would
+   be wrong on GitHub Pages, where everything hangs off a repo name.
+
+   It is added even inside a frame and even from a folder, because the settings
+   row has to be drawable everywhere. Whether anything CONNECTS is cloud.js's
+   own decision, and from a folder or inside a frame the answer is no.      */
+(function loadCloud() {
+  if (g.Cloud || document.getElementById('mb-cloud-js')) return;
+  var me = document.currentScript && document.currentScript.src;
+  if (!me) {
+    var tags = document.getElementsByTagName('script');
+    for (var i = 0; i < tags.length; i++) {
+      if (/\/shared\/io\.js(\?|$)/.test(tags[i].src)) { me = tags[i].src; break; }
+    }
+  }
+  if (!me) return;
+  var t = document.createElement('script');
+  t.id = 'mb-cloud-js';
+  t.src = me.replace(/io\.js.*$/, 'cloud.js');
+  /* A missing or broken cloud.js must cost nothing: no error, no retry, and
+     the sheet sync carries on exactly as it did. */
+  t.onerror = function () { t.remove(); };
+  document.head.appendChild(t);
+})();
 
 g.IO = IO;
 })(window);
