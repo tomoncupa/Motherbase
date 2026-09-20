@@ -141,6 +141,13 @@ CLOUD.md           LIVE SYNC: the Firebase sync that sits BESIDE the Google
                    which is two devices agreeing in a second rather than a
                    minute. Off until a config is pasted, so a client who never
                    sets it up never makes a request from it
+RECEIPTS.md        THE RECEIPT PIPE, added 2026-09-21. A photo of a receipt on
+                   the phone becomes a spending row and a record of what was
+                   bought. Reading happens on the PC through the claude.exe
+                   inside the desktop app, so it needs no key and costs
+                   nothing; confirming happens in RECEIPTS, because only
+                   Motherbase knows which FOODDEX food a shop's wording means.
+                   What Tom sets up once, and what it asks him
 ONBOARDING.md      how a client gets the suite, and what happens after
 index.html         the home screen: widget grid, app dock, data authority
 _review.html       the review: opens every app, folds in the foundation checks,

@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mb-version" content="1.0.0, 2026-09-21">
+<title>RECEIPTS</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
+<meta name="theme-color" content="#0B0E14">
+<link href="../shared/fonts/fonts.css" rel="stylesheet">
+
+<script src="../shared/skins.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/mobile.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="../shared/io.js"></script>
+<script src="../shared/health.js"></script>
+<script src="../shared/icons.js"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text-1);
+  font-family:var(--font-body);font-size:var(--f-3);font-weight:var(--w-body);
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+
+header{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);
+  background:var(--surface-1);box-shadow:var(--e-1),var(--rim)}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+
+main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--safe-b))}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s-3)}
+
+.card{border-radius:var(--radius-lg);background:var(--surface-1);
+  padding:var(--s-4);box-shadow:var(--e-1),var(--rim)}
+h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted);margin-bottom:var(--s-3)}
+.empty{color:var(--text-muted);line-height:var(--lh-body)}
+.muted{color:var(--text-muted)}
+
+/* The head of one receipt: who, when, how much. The amount is the thing he
+   is checking, so it is the biggest thing on the card. */
+.top{display:flex;align-items:baseline;gap:var(--s-3);flex-wrap:wrap}
+.who{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-4);
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.amt{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);
+  color:var(--accent);white-space:nowrap}
+.amt.in{color:var(--good,var(--accent))}
+.when{color:var(--text-muted);font-size:var(--f-2)}
+
+/* Anything the reader could not make out. Never a colour alone: the words
+   say what is wrong and what he has to do about it. */
+.warn{margin-top:var(--s-3);padding:var(--s-3);border-radius:var(--radius-md);
+  background:var(--surface-2);border-left:3px solid var(--warn,var(--accent));
+  line-height:var(--lh-body);font-size:var(--f-2)}
+.warn b{display:block;margin-bottom:var(--s-2)}
+.warn ul{margin:0;padding-left:var(--s-4)}
+
+.lines{display:flex;flex-direction:column;gap:var(--s-2);margin-top:var(--s-3)}
+.line{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);
+  min-height:var(--tap);border-radius:var(--radius-md);background:var(--surface-2)}
+.line .txt{flex:1;min-width:0}
+.line .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.line .sub{font-size:var(--f-1);color:var(--text-muted);margin-top:2px}
+.line .pes{white-space:nowrap;color:var(--text-2)}
+.line.off .nm{color:var(--text-muted);text-decoration:line-through}
+
+/* The match button carries the whole answer to "which food is this", so it
+   says the food's name when it knows and asks when it does not. */
+.match{flex:0 0 auto;max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.match.ask{border-color:var(--warn,var(--border-strong))}
+
+.acts{display:flex;gap:var(--s-2);margin-top:var(--s-4);flex-wrap:wrap}
+.acts .spacer{flex:1}
+.filed{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-2) var(--s-3);
+  border-radius:var(--radius-md);background:var(--surface-2);font-size:var(--f-2)}
+.filed .pes{margin-left:auto;color:var(--text-muted);white-space:nowrap}
+
+.pick{display:flex;flex-direction:column;gap:var(--s-2);max-height:46vh;overflow:auto}
+.pick button{display:flex;align-items:center;gap:var(--s-3);width:100%;text-align:left;
+  padding:var(--s-3);min-height:var(--tap);border:0;border-radius:var(--radius-md);
+  background:var(--surface-2);color:inherit;font:inherit;cursor:pointer}
+.pick button .why{margin-left:auto;font-size:var(--f-1);color:var(--text-muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">RE<b>CEIPTS</b></div>
+  <div class="spacer"></div>
+  <!-- Three worded buttons do not fit a phone's header, and this app's own
+       button is the one a stranger would not guess, so it keeps the label in
+       its title and the two that every app has become icons. -->
+  <button class="mb-btn mb-press mb-tap" id="folder" aria-label="Receipts folder" title="Receipts folder" data-icon="import"></button>
+  <button class="mb-btn mb-press mb-tap" aria-label="Settings" title="Settings" data-icon="settings" onclick="UI.settings(APP.id)"></button>
+  <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
+</header>
+<main class="mb-scroll"><div class="wrap" id="main"></div></main>
+<input type="file" id="files" accept=".json,application/json" multiple hidden>
+
+<script>
+/* ══════════════════════════ RECEIPTS ══════════════════════════
+
+   The confirming half of the receipt pipe. `tools/receipts/read_receipt.py`
+   reads the photo on the PC and leaves one JSON file per receipt; this reads
+   those files and writes the rows.
+
+   Tom, 2026-09-20: "I never asked for receipt desk, I want a system that
+   directly feeds data into Motherbase". So this app stores nothing of its own
+   that another app would have wanted. Money becomes a `spend` row, which is
+   the same row STATUS writes when he types "paid 250 - lunch" and the same row
+   WEALTH counts. Money in becomes a `paid` row with no client, which is what
+   WEALTH already calls a one-off. The only rows that are this app's own are
+   the receipt itself — the proof of purchase, which had no home before — what
+   was bought, and what a shop's wording turned out to mean.
+
+   ── the one hard part ──
+
+   Two shops name the same product differently. PUREGOLD prints CHKN BRST FRZ,
+   S&R prints CHICKEN BREAST BONELESS, and FOODDÉX holds one food called
+   "Chicken breast, raw". Nothing out on the PC can resolve that, because the
+   foods live in here. So the reader copies the wording exactly, this app
+   ranks his real foods against it, and Tom taps the right one ONCE. That tap
+   is kept as an `alias` row, so the same wording from the same shop never
+   asks again. A guess is always shown as a guess and never saves itself.
+
+   ── why a folder rather than a cloud ──
+
+   The photos land on this PC through iCloud and the browser can read a folder
+   he points it at, so nothing needs an account, a key or a server, and the
+   suite's "everything is local" line stays true. The folder handle is kept in
+   IndexedDB rather than in the store because it is a permission rather than
+   data: it belongs to this browser on this machine, it must not sync to his
+   phone, and it must not appear in a backup. Same argument io.js makes for
+   keeping the sync log out of the store.
+
+   Safari and a page opened straight from a folder have no such API. They get
+   the same screen with a file picker instead, and every other part works the
+   same way, because a pipe that only works in one browser is not a pipe.   */
+
+const APP = {
+  id: 'receipts',
+  name: 'Receipts',
+  icon: '🧾',
+  blurb: 'photos of receipts, turned into rows',
+  types: ['receipt', 'buy', 'alias'],
+};
+
+Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
+  if (window.Icons) Icons.paint(null, { force: true }); });
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({ app: APP.id, name: APP.name, types: APP.types });
+
+const esc = UI.esc;
+const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+let seq = 0;
+const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
+  (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
+const peso = v => (v == null ? '—' : '₱' + Number(v).toLocaleString('en-PH',
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+/* ── the folder ───────────────────────────────────────────────────────────
+
+   One handle, kept in a database of its own. IndexedDB is the only place a
+   directory handle survives a reload — it cannot be turned into text, so
+   localStorage and the store are both out even if they were allowed.
+
+   Chrome hands the permission back as "ask" after the tab is closed, so the
+   first poll of a session asks once and quietly stops if he says no. It never
+   asks on its own: an app that throws a permission box at you on open is an
+   app you stop opening.                                                    */
+
+const DB = 'mb.receipts.dir', STORE = 'h';
+function idb(fn) {
+  return new Promise((ok, no) => {
+    let rq;
+    try { rq = indexedDB.open(DB, 1); } catch (e) { return no(e); }
+    rq.onupgradeneeded = () => rq.result.createObjectStore(STORE);
+    rq.onerror = () => no(rq.error);
+    rq.onsuccess = () => {
+      const tx = rq.result.transaction(STORE, 'readwrite');
+      const out = fn(tx.objectStore(STORE));
+      tx.oncomplete = () => { rq.result.close(); ok(out && out.result); };
+      tx.onerror = () => no(tx.error);
+    };
+  });
+}
+const saveDir = h => idb(s => s.put(h, 'dir'));
+const loadDir = () => idb(s => s.get('dir')).catch(() => null);
+const forgetDir = () => idb(s => s.delete('dir')).catch(() => null);
+
+const canFolder = () => typeof window.showDirectoryPicker === 'function';
+let dir = null, dirName = '', asking = false;
+
+async function askFolder() {
+  if (!canFolder()) { document.getElementById('files').click(); return; }
+  let h;
+  try { h = await window.showDirectoryPicker({ id: 'mb-receipts', mode: 'readwrite' }); }
+  catch (e) { return; }                       /* he closed the picker; say nothing */
+  dir = h; dirName = h.name;
+  await saveDir(h);
+  UI.toast('watching <b>' + esc(h.name) + '</b>');
+  poll(true);
+}
+
+/** True when we may read the folder. Asks at most once per call and never
+    more than one box at a time. */
+async function allowed(ask) {
+  if (!dir) return false;
+  const opts = { mode: 'readwrite' };
+  try {
+    if ((await dir.queryPermission(opts)) === 'granted') return true;
+    if (!ask || asking) return false;
+    asking = true;
+    const ok = (await dir.requestPermission(opts)) === 'granted';
+    asking = false;
+    return ok;
+  } catch (e) { asking = false; return false; }
+}
+
+/* ── taking a record in ───────────────────────────────────────────────────
+
+   The file name is the key, so the same receipt read twice is the same row
+   rather than two. A receipt already filed is not brought back: the JSON is
+   deleted on filing, but iCloud can put a file back and a rerun of the reader
+   can write one again, and neither should un-file money he has already
+   confirmed.                                                               */
+
+function take(rec, name) {
+  const file = rec.file || name;
+  const key = file.replace(/\.[a-z0-9]+$/i, '');
+  const had = Rec.get('receipt', null, key);
+  if (had && had.state && had.state !== 'new') return 0;
+  if (had) return 0;
+  Rec.set('receipt', null, key, {
+    file: file, src: rec.src || 'receipt', merchant: rec.merchant || '',
+    date: rec.date || Day.today(), time: rec.time || '',
+    total: num(rec.total, null), currency: rec.currency || 'PHP',
+    direction: rec.direction === 'in' ? 'in' : 'out',
+    account: rec.account || '', ref: rec.ref || '', note: rec.note || '',
+    /* The reader says `food: true` for "a person could eat this". This app
+       needs `food` to mean WHICH food, so the reader's answer is renamed on
+       the way in and the name is free for the id it becomes. */
+    lines: (Array.isArray(rec.lines) ? rec.lines : []).map(ln => ({
+      text: String(ln.text || ''), qty: num(ln.qty, null), unit: ln.unit || '',
+      each: num(ln.each, null), amount: num(ln.amount, null),
+      edible: ln.food !== false, food: null,
+    })),
+    unsure: Array.isArray(rec.unsure) ? rec.unsure : [],
+    check: !!rec.check, read_at: rec.read_at || '', state: 'new',
+  });
+  return 1;
+}
+
+let polling = false;
+async function poll(ask) {
+  if (polling || !dir) return;
+  polling = true;
+  try {
+    if (!(await allowed(!!ask))) return;
+    let got = 0;
+    for await (const [name, h] of dir.entries()) {
+      if (h.kind !== 'file' || !/\.json$/i.test(name)) continue;
+      try { got += take(JSON.parse(await (await h.getFile()).text()), name); }
+      catch (e) { /* half-written by the reader; the next poll gets it whole */ }
+    }
+    if (got) { Mobile.feedback('success'); UI.toast(got + (got === 1 ? ' receipt' : ' receipts') + ' came in'); }
+  } finally { polling = false; }
+}
+
+document.getElementById('folder').onclick = askFolder;
+document.getElementById('files').onchange = async e => {
+  let got = 0;
+  for (const f of e.target.files) {
+    try { got += take(JSON.parse(await f.text()), f.name); } catch (err) {}
+  }
+  e.target.value = '';
+  UI.toast(got ? got + ' brought in' : 'nothing new in those files', { bad: !got });
+};
+
+/* ── matching a line to a food ────────────────────────────────────────────
+
+   Shop wording is upper case, abbreviated, and carries a pack size the food
+   itself does not have: OATS QUAKER 800G against "Oats, rolled". So the size,
+   the count and the units come off before anything is compared, and what is
+   left is scored word against word. A word he already taught us is worth more
+   than one we matched ourselves, which is the whole point of the alias.
+
+   The threshold is deliberately high. A wrong food saved quietly is worse
+   than a question, and the question is one tap.                            */
+
+const SIZE = /\b\d+(\.\d+)?\s*(kg|g|gr|grams?|l|ml|lt|liters?|litres?|pcs?|pc|s|x)\b/gi;
+const NOISE = /\b(frz|frozen|fresh|chilled|pack|packs|packet|asstd|assorted|brand|the|and|of|w)\b/gi;
+const norm = t => String(t || '').toLowerCase()
+  .replace(SIZE, ' ').replace(/[^a-z0-9 ]+/g, ' ')
+  .replace(NOISE, ' ').replace(/\s+/g, ' ').trim();
+const words = t => norm(t).split(' ').filter(w => w.length > 2);
+
+const foods = () => Rec.map('food');
+const aliases = () => Rec.map('alias');
+
+/** How well a food's name answers a shop's wording, 0 to 1. */
+function score(text, food) {
+  const a = words(text), b = words((food.name || '') + ' ' + (food.brand || ''));
+  if (!a.length || !b.length) return 0;
+  let hit = 0;
+  a.forEach(w => {
+    if (b.some(x => x === w || (x.length > 4 && w.length > 4 && (x.startsWith(w) || w.startsWith(x))))) hit++;
+  });
+  /* Both directions count. Matched against the shop's wording alone,
+     "Gatorade" answers GATORADE BLUE 500ML only half as well as it should,
+     because BLUE is on one side and nothing balances it. Matched against the
+     food's name alone, a food called "Egg" answers every line with the word
+     egg in it. So the score is the pair: how much of each side the other one
+     explains. */
+  return (2 * hit) / (a.length + b.length);
+}
+
+/** What this line probably is: a taught answer, a guess, or nothing. */
+function guess(text) {
+  const key = norm(text);
+  const al = aliases()[key];
+  if (al) return al.food === null ? { food: null, taught: true, off: true }
+                                  : { food: al.food, taught: true };
+  let best = null, bs = 0;
+  Object.entries(foods()).forEach(([id, f]) => {
+    const s = score(text, f);
+    if (s > bs) { bs = s; best = id; }
+  });
+  /* A guess is offered, never applied. `taught` is what makes a line save, and
+     only his own tap sets it. */
+  return bs >= 0.5 ? { food: best, taught: false, sure: bs } : { food: null, taught: false };
+}
+
+const foodName = id => { const f = foods()[id]; return f ? (f.name || id) : ''; };
+const teach = (text, foodId) => Rec.set('alias', null, norm(text), {
+  text: text, food: foodId, at: Date.now() });
+
+/* ── the screen ───────────────────────────────────────────────────────────  */
+
+const pending = () => Rec.all('receipt')
+  .map(r => Object.assign({ key: r.key }, r.payload))
+  .filter(r => r.state === 'new')
+  .sort((a, b) => String(b.date + b.time).localeCompare(String(a.date + a.time)));
+
+const filedLately = () => Rec.all('receipt')
+  .map(r => Object.assign({ key: r.key }, r.payload))
+  .filter(r => r.state === 'filed')
+  .sort((a, b) => (b.filed_at || 0) - (a.filed_at || 0)).slice(0, 8);
+
+/* what he is about to save, per receipt, while the card is open */
+const draft = Object.create(null);
+function draftFor(r) {
+  if (draft[r.key]) return draft[r.key];
+  return draft[r.key] = {
+    acct: r.account || '',
+    /* Dishwashing liquid is not a question. It is money, it is already in the
+       total, and asking which food it is would be the app being stupid at
+       him. Only an edible line gets looked up. */
+    lines: r.lines.map(ln => {
+      if (!ln.edible) return { food: null, off: true, taught: true, sure: 0 };
+      if (ln.food) return { food: ln.food, off: false, taught: true, sure: 1 };
+      const g = guess(ln.text);
+      return { food: g.food || null, off: !!g.off, taught: !!g.taught, sure: g.sure || 0 };
+    }),
+  };
+}
+
+const accts = () => Rec.all('acct').map(r => r.payload).filter(Boolean)
+  .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+function acctName(guessed) {
+  const list = accts();
+  const want = String(guessed || '').toLowerCase();
+  const hit = list.find(a => String(a.name).toLowerCase() === want);
+  return hit ? hit.name : (list[0] ? list[0].name : 'Cash');
+}
+
+function draw() {
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+
+  const wait = pending();
+  if (!wait.length) {
+    const c = document.createElement('div');
+    c.className = 'card';
+    c.innerHTML = '<h2>NOTHING WAITING</h2><div class="empty">' +
+      (dir ? 'Watching <b>' + esc(dirName) + '</b>. Send a receipt photo to the Receipts folder and it turns up here.'
+           : (canFolder()
+              ? 'Press <b>FOLDER</b> once and point it at <b>Receipts/out</b>. Every receipt the reader finishes shows up here on its own.'
+              : 'This browser cannot watch a folder, so press <b>FOLDER</b> and pick the finished receipt files by hand. Chrome on the PC can watch it instead.')) +
+      '</div>';
+    m.appendChild(c);
+  }
+  wait.forEach(r => m.appendChild(card(r)));
+
+  const done = filedLately();
+  if (done.length) {
+    const c = document.createElement('div');
+    c.className = 'card';
+    c.innerHTML = '<h2>FILED</h2>';
+    done.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'filed';
+      row.innerHTML = '<span>' + esc(r.merchant || r.src) + '</span>' +
+        '<span class="pes">' + Day.label(r.date) + ' · ' + peso(r.total) + '</span>';
+      c.appendChild(row);
+    });
+    m.appendChild(c);
+  }
+}
+
+function card(r) {
+  const d = draftFor(r);
+  const c = document.createElement('div');
+  c.className = 'card';
+
+  const top = document.createElement('div');
+  top.className = 'top';
+  top.innerHTML = '<span class="who">' + esc(r.merchant || (r.src === 'gcash' ? 'GCash' : 'Receipt')) + '</span>' +
+    '<span class="amt' + (r.direction === 'in' ? ' in' : '') + '">' +
+    (r.direction === 'in' ? '+' : '') + peso(r.total) + '</span>';
+  c.appendChild(top);
+
+  const when = document.createElement('div');
+  when.className = 'when';
+  when.innerHTML = Day.label(r.date) + (r.time ? ' · ' + esc(r.time) : '') +
+    (r.ref ? ' · ' + esc(r.ref) : '') + (r.note ? ' · ' + esc(r.note) : '');
+  c.appendChild(when);
+
+  /* A figure the reader refused to guess at. He has the photo and the app
+     does not, so this is the one place he types rather than taps. */
+  if (r.total == null) {
+    const amt = UI.field('amount', { placeholder: 'What did it come to?', value: d.total || '' });
+    amt.oninput = () => {
+      d.total = parseFloat(String(amt.value).replace(/[^0-9.]/g, ''));
+      if (!isFinite(d.total)) d.total = null;
+      top.querySelector('.amt').textContent = peso(d.total);
+    };
+    const row = UI.row('Amount', 'the reader could not read it', amt);
+    row.style.marginTop = 'var(--s-3)';
+    c.appendChild(row);
+  }
+
+  if (r.unsure && r.unsure.length) {
+    const w = document.createElement('div');
+    w.className = 'warn';
+    w.innerHTML = '<b>Check this one against the photo.</b><ul>' +
+      r.unsure.map(u => '<li>' + esc(u) + '</li>').join('') + '</ul>';
+    c.appendChild(w);
+  }
+
+  /* Which account it left. The reader's guess is only a guess, and money in
+     the wrong account is money WEALTH counts twice. */
+  d.acct = d.acct ? acctName(d.acct) : acctName(r.account);
+  const list = accts();
+  if (list.length) {
+    const seg = UI.segmented(list.map(a => ({ id: a.name, name: a.name })), d.acct, v => { d.acct = v; });
+    const row = UI.row(r.direction === 'in' ? 'Into' : 'Paid from', '', seg);
+    row.style.marginTop = 'var(--s-3)';
+    c.appendChild(row);
+  }
+
+  if (r.lines.length) {
+    const box = document.createElement('div');
+    box.className = 'lines';
+    r.lines.forEach((ln, i) => box.appendChild(lineRow(r, ln, i, d)));
+    c.appendChild(box);
+  }
+
+  const acts = document.createElement('div');
+  acts.className = 'acts';
+  const save = document.createElement('button');
+  save.className = 'mb-btn go mb-press mb-tap';
+  save.textContent = r.direction === 'in' ? 'SAVE AS MONEY IN' : 'SAVE';
+  save.onclick = () => file(r, d);
+  acts.appendChild(save);
+  const sp = document.createElement('div'); sp.className = 'spacer'; acts.appendChild(sp);
+  const skip = document.createElement('button');
+  skip.className = 'mb-btn mb-press mb-tap';
+  skip.textContent = 'NOT MONEY';
+  skip.title = 'Keep the receipt, write no rows';
+  skip.onclick = () => drop(r);
+  acts.appendChild(skip);
+  c.appendChild(acts);
+  return c;
+}
+
+function lineRow(r, ln, i, d) {
+  const st = d.lines[i];
+  const row = document.createElement('div');
+  row.className = 'line' + (st.off ? ' off' : '');
+
+  const txt = document.createElement('div');
+  txt.className = 'txt';
+  const qty = ln.qty != null ? ln.qty + (ln.unit && ln.unit !== 'pc' ? ln.unit : (ln.qty > 1 ? '×' : '')) : '';
+  txt.innerHTML = '<div class="nm">' + esc(ln.text) + '</div>' +
+    (qty ? '<div class="sub">' + esc(qty) + (ln.each != null ? ' at ' + peso(ln.each) : '') + '</div>' : '');
+  row.appendChild(txt);
+
+  const pes = document.createElement('div');
+  pes.className = 'pes';
+  pes.textContent = peso(ln.amount);
+  row.appendChild(pes);
+
+  const b = document.createElement('button');
+  b.className = 'mb-btn mb-press mb-tap match';
+  const paint = () => {
+    row.className = 'line' + (st.off ? ' off' : '');
+    b.classList.toggle('ask', !st.off && !st.food);
+    b.textContent = st.off ? 'NOT FOOD'
+      : st.food ? (st.taught ? '' : '? ') + foodName(st.food)
+      : 'WHICH FOOD?';
+  };
+  b.onclick = () => pickFood(ln, st, paint);
+  paint();
+  row.appendChild(b);
+  return row;
+}
+
+/** The question, when it cannot resolve. Ranked by how well each food answers
+    the wording, so the right one is usually the first thing under his thumb. */
+function pickFood(ln, st, paint) {
+  Mobile.feedback('open');
+  UI.dialog({
+    title: ln.text.toUpperCase(), width: 460,
+    body: (body, h) => {
+      const search = UI.field('name', { placeholder: 'Search foods' });
+      body.appendChild(search);
+      const box = document.createElement('div');
+      box.className = 'pick';
+      body.appendChild(box);
+
+      const fill = () => {
+        box.innerHTML = '';
+        const typed = (search.value || '').toLowerCase().trim();
+        const ranked = Object.entries(foods()).map(([id, f]) => ({
+          id: id, f: f,
+          s: typed ? (String(f.name || '').toLowerCase().includes(typed) ? 1 : 0) : score(ln.text, f),
+        })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 12);
+
+        const opt = (label, why, fn) => {
+          const bt = document.createElement('button');
+          bt.className = 'mb-press mb-tap';
+          bt.innerHTML = '<span>' + esc(label) + '</span>' +
+            (why ? '<span class="why">' + esc(why) + '</span>' : '');
+          bt.onclick = fn;
+          box.appendChild(bt);
+        };
+        ranked.forEach(x => opt(x.f.name || x.id, x.f.brand || '', () => {
+          st.food = x.id; st.off = false; st.taught = true;
+          teach(ln.text, x.id);
+          paint(); h.close();
+          UI.toast('<b>' + esc(ln.text) + '</b> is ' + esc(x.f.name || x.id) + ' from now on');
+        }));
+        if (!ranked.length) {
+          const p = document.createElement('div');
+          p.className = 'empty';
+          p.innerHTML = typed ? 'No food by that name yet. Add it in FOODDÉX and it appears here.'
+                              : 'No food here looks like this. Type a few letters of the one you mean.';
+          box.appendChild(p);
+        }
+        opt('This is not food', 'never ask again', () => {
+          st.off = true; st.food = null; st.taught = true;
+          teach(ln.text, null);
+          paint(); h.close();
+        });
+      };
+      search.oninput = fill;
+      fill();
+    },
+    actions: [{ label: 'CANCEL' }],
+  });
+}
+
+/* ── writing the rows ─────────────────────────────────────────────────────
+
+   One press, everything it implies, and one undo that takes all of it back.
+   The money row is written first: if anything below it fails, he has the
+   spend he was actually confirming rather than half a receipt.             */
+
+function file(r, d) {
+  const total = r.total != null ? r.total : num(d.total, null);
+  if (total == null || total <= 0) {
+    return UI.toast('How much was it? Type the amount first.', { bad: true });
+  }
+  const back = [];
+  const when = r.date || Day.today();
+  const clock = (() => {
+    const t = new Date(when + 'T' + (r.time || '12:00') + ':00');
+    return isNaN(t.getTime()) ? Date.now() : t.getTime();
+  })();
+  const note = [r.merchant, r.note].filter(Boolean).join(' · ') || 'Receipt';
+  const mkey = newId();
+
+  if (r.direction === 'in') {
+    Rec.set('paid', when, mkey, { amt: total, acct: d.acct, client: '', note: note, t: clock });
+    back.push(() => Rec.del('paid', when, mkey));
+  } else {
+    Rec.set('spend', when, mkey, { amt: total, acct: d.acct, note: note, t: clock, via: 'receipt' });
+    back.push(() => Rec.del('spend', when, mkey));
+  }
+
+  let bought = 0, asked = 0;
+  r.lines.forEach((ln, i) => {
+    const st = d.lines[i];
+    if (!st || st.off) return;
+    /* A guess he has not looked at is not an answer. The money still files —
+       that is the row he came to confirm — and the food simply is not claimed
+       to be anything. */
+    if (!st.food || !st.taught) { if (ln.edible) asked++; return; }
+    const key = r.key + '-' + i;
+    Rec.set('buy', when, key, {
+      food: st.food, text: ln.text, qty: num(ln.qty, null), unit: ln.unit || '',
+      each: num(ln.each, null), amount: num(ln.amount, null),
+      shop: r.merchant || '', receipt: r.key,
+    });
+    back.push(() => Rec.del('buy', when, key));
+    bought++;
+  });
+
+  const was = Rec.get('receipt', null, r.key);
+  const now = Object.assign({}, was, {
+    state: 'filed', filed_at: Date.now(), acct: d.acct, spend: mkey, total: total,
+    lines: r.lines.map((ln, i) => Object.assign({}, ln, {
+      food: (d.lines[i] && d.lines[i].food) || null,
+      off: !!(d.lines[i] && d.lines[i].off),
+    })),
+  });
+  Rec.set('receipt', null, r.key, now);
+  back.push(() => Rec.set('receipt', null, r.key, was));
+  delete draft[r.key];
+  binFile(r.file);
+
+  Mobile.feedback('success');
+  UI.undo(peso(total) + ' ' + (r.direction === 'in' ? 'in' : 'out') +
+    (bought ? ', ' + bought + (bought === 1 ? ' food' : ' foods') : '') +
+    (asked ? ', ' + asked + ' left unnamed' : ''),
+    () => { back.reverse().forEach(f => f()); draw(); });
+}
+
+/** Keep the receipt, write nothing. A parking receipt is proof of purchase and
+    still not a row he wants counted twice. */
+function drop(r) {
+  const was = Rec.get('receipt', null, r.key);
+  Rec.set('receipt', null, r.key, Object.assign({}, was, { state: 'skipped', filed_at: Date.now() }));
+  delete draft[r.key];
+  binFile(r.file);
+  Mobile.haptic('warn');
+  UI.undo('kept the receipt, wrote nothing', () => { Rec.set('receipt', null, r.key, was); draw(); });
+}
+
+/** The JSON was the transit copy. The photo stays in done/ as the proof, and
+    the row now holds everything the JSON held, so the transit copy goes. */
+async function binFile(file) {
+  if (!dir || !file) return;
+  const name = String(file).replace(/\.[a-z0-9]+$/i, '') + '.json';
+  try { if (await allowed(false)) await dir.removeEntry(name); } catch (e) {}
+}
+
+/* ── living ───────────────────────────────────────────────────────────────  */
+
+loadDir().then(h => {
+  if (!h) return;
+  dir = h; dirName = h.name || 'the receipts folder';
+  draw();
+  poll(false);
+});
+
+/* Coming back to the window is the moment a new receipt is most likely to be
+   waiting: he photographed it, walked home, and the reader has been and gone.
+   The timer is the quiet second pass for a window left open all day. */
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(false); });
+window.addEventListener('focus', () => poll(false));
+setInterval(() => { if (!document.hidden) poll(false); }, 60000);
+
+Rec.on(draw);
+Day.on(draw);
+draw();
+</script>
+</body>
+</html>

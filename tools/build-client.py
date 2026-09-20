@@ -49,10 +49,13 @@ COPY_FILES = ['index.html', '.nojekyll']
 #   arc/     Tom's own, since 2026-09-14
 #   speak/   Tom's own, since 2026-09-15: his content practice
 #   system/  Tom's own, since 2026-09-15: his own posts, not a client's
+#   receipts/ Tom's own, 2026-09-21: it reads a folder on HIS pc that the
+#            receipt reader writes into, and it writes his spending. A
+#            client has neither the folder nor the reader
 #   desktop/ the Windows launcher for STATUS. Tom's machine only, and a
 #            .exe is not something to hand a client on a phone
 #   _template/ tools/ and every *.md brief - these are build notes
-DROP_APPS = ['form', 'portion', 'wealth', 'arc', 'speak', 'system', 'mix']   # removed from the home screen roster
+DROP_APPS = ['form', 'portion', 'wealth', 'arc', 'speak', 'system', 'mix', 'receipts']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed
 # STREAKS and NUMBERS were deleted from the main repo on 2026-08-28, and
 # the STREAKS that replaced one of them counts ticks, so it works for a
