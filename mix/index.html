@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.1, 2026-09-21">
+<meta name="mb-version" content="1.0.2, 2026-09-21">
 <title>MIX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◉</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -284,6 +284,7 @@ const IN = [
   ['pctZn',  28,   'Zinc glycinate, % zinc'],
   ['pctMg',  11,   'Magnesium glycinate, % magnesium'],
   ['capK',   5.0,  'Potassium citrate max per day, g'],
+  ['capK1',  1000, 'Potassium single dose cap, mg'],
   ['capZn1', 20,   'Zinc single-dose cap, mg'],
   ['capZnT', 40,   'Zinc total ceiling, mg'],
   ['capMg',  350,  'Magnesium supplement cap, mg'],
@@ -583,10 +584,16 @@ function draw() {
   C = compute();
   const m = $('#main');
   m.innerHTML = '';
-  m.appendChild(inputsCard());
-  m.appendChild(goalsCard(C));
+  /* Tom, 2026-09-21: "I want the pitchers near the top."
+     The first spec said every input at the top and every result below it,
+     which is the right shape for a form you fill in and the wrong one for a
+     screen you open to be told a number. He opens this to find out what to
+     weigh, and the inputs are a thing he touches once a week. So the answer
+     is first and the working is underneath it. */
   m.appendChild(cardsBlock(C));
+  m.appendChild(goalsCard(C));
   m.appendChild(tableCard(C));
+  m.appendChild(inputsCard());
   m.appendChild(microsCard(C));
   if (window.Icons) Icons.paint();
 }
@@ -630,14 +637,6 @@ function field(k, label, opts) {
 function inputsCard() {
   const c = el('div', 'card');
   c.appendChild(el('h2', null, 'WHAT TODAY IS'));
-
-  const read = el('p', 'src');
-  const n = C.store.n;
-  read.innerHTML = 'Read from your store at <b>' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</b> · '
-    + n + ' meal' + (n === 1 ? '' : 's') + ' logged today'
-    + (C.kg != null ? ' · ' + r1(C.kg * 2.20462) + ' lb' : ' · no weight found')
-    + '. Type over anything and yours wins.';
-  c.appendChild(read);
 
   /* --- sweat --- */
   const d1 = el('details'); d1.open = true;
@@ -691,6 +690,7 @@ function inputsCard() {
   d4.appendChild(el('summary', null, 'Caps, pitchers and splits'));
   const g4 = el('div', 'grid g4');
   g4.appendChild(field('capK', 'Potassium citrate max per day, g', { step: .5 }));
+  g4.appendChild(field('capK1', 'Potassium single dose cap, mg', { step: 100, hint: '1,000 mg is about 26 mEq. A prescription potassium dose is usually 10 to 20 mEq, taken dissolved.' }));
   g4.appendChild(field('capZn1', 'Zinc single-dose cap, mg', { step: 1 }));
   g4.appendChild(field('capZnT', 'Zinc total ceiling, mg', { step: 1 }));
   g4.appendChild(field('capMg', 'Magnesium supplement cap, mg', { step: 25 }));
@@ -762,6 +762,13 @@ function cardsBlock(c) {
   const box = el('div');
   const head = el('div', 'card');
   head.appendChild(el('h2', null, 'WHAT TO WEIGH'));
+  const n = c.store.n;
+  head.appendChild(el('p', 'src', 'Read from your store at <b>'
+    + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + '</b> · '
+    + n + ' meal' + (n === 1 ? '' : 's') + ' logged today'
+    + (c.kg != null ? ' · ' + r1(c.kg * 2.20462) + ' lb' : ' · no weight found')
+    + (c.trained ? ' · trained' : ' · rest day')
+    + '. Change anything in WHAT TODAY IS, below.'));
   head.appendChild(el('p', 'note', 'Drag any line into another card. Salt can never go in the night drink.'));
   const row = el('div', 'row');
   row.style.marginTop = 'var(--s-3)';
@@ -907,6 +914,23 @@ function warnings(c) {
       + ' mg of potassium short. Potato instead of rice closes about '
       + r0(Math.min(c.kShort, 300 * (F.pot.k - F.rice.k) / 100)) + ' mg per 300 g swapped.'));
   }
+  /* ── one mouthful, not one day ──
+     The daily cap answers the gut over a whole day and says nothing about
+     how much lands at once, which is the other question and the one with
+     the shorter fuse. Warned rather than moved: the cards are his to
+     arrange, and a dose that shuffles itself out of the drink he put it in
+     is the app arguing with the drag he just did. */
+  const L = layout();
+  const perSlot = {};
+  c.doses.forEach(d => { if (d.nut === 'k' && d.mg > 0) { const sl = slotOf(d, L); perSlot[sl] = (perSlot[sl] || 0) + d.mg; } });
+  const over = Object.keys(perSlot).filter(k2 => perSlot[k2] > v('capK1'));
+  if (over.length) {
+    const names = {}; SLOTS(c).forEach(x => { names[x.id] = x.nm; });
+    w.appendChild(el('div', 'flag warn', 'One drink is carrying ' + r0(Math.max.apply(null, over.map(k2 => perSlot[k2])))
+      + ' mg of potassium, over your ' + r0(v('capK1')) + ' mg single dose cap: '
+      + esc(over.map(k2 => names[k2] || k2).join(', ')) + '. Add a pitcher, or drag some of it into one.'));
+  }
+  w.appendChild(el('div', 'flag info', 'Potassium goes in a full glass or a full pitcher, never a small amount of water. Dilution is the whole margin: the 99 mg limit on shop-bought potassium is about undissolved tablets sitting against the gut wall, not about the dose.'));
   w.appendChild(el('div', 'flag info', 'If stools loosen, your powder is stronger than the % set. Raise the magnesium %.'));
   return w;
 }
