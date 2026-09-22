@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.15, 2026-09-22">
+<meta name="mb-version" content="1.0.16, 2026-09-22">
 <title>TRAIN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛭</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -14,6 +14,88 @@
 <script src="../shared/skins.js"></script>
 <script src="../shared/day.js"></script>
 <script src="../shared/records.js"></script>
+<script>
+/* ═══════════════════ A CLIENT'S TRAIN ═══════════════════
+   Tom, 2026-09-22: COACH "should act exactly like train just on their
+   profile". So COACH opens this same file as train/index.html?client=<pid>,
+   and before a line of TRAIN runs, the store is pointed at that client:
+   every TRAIN type is read and written as COACH's type for it, with the
+   client's id in front of the key, which is exactly how COACH already keeps
+   the file a client sends. TRAIN below is not told, and needs no second
+   copy of itself.
+     set cset · exercise cex · phase cphase · session csession
+     excat cexcat · sgroup csgroup · goal cgoal
+     program cprogram · progday cprogday · progex cprogex
+   Tom's own ticks are not the client's, so a tick is neither read nor
+   written. Three settings are the client's and not the app's (whether TRAIN
+   has greeted them, the record rule, a running rest timer); every other
+   setting, the unit and the theme among them, stays Tom's. Rec.patch, map,
+   keys, count and setting all go through the calls replaced here, so they
+   follow without being touched. */
+(function () {
+  var m = /[?&]client=([^&#]+)/.exec(location.search);
+  if (!m) return;
+  var pid = decodeURIComponent(m[1]), pre = pid + '|';
+  var T = { set: 'cset', exercise: 'cex', phase: 'cphase', session: 'csession', excat: 'cexcat',
+    sgroup: 'csgroup', goal: 'cgoal', program: 'cprogram', progday: 'cprogday', progex: 'cprogex' };
+  var B = {}; Object.keys(T).forEach(function (k) { B[T[k]] = k; });
+  var MINE = { 'train.seen': 1, 'train.prRule': 1, 'train.rest': 1 };
+  var DROP = { tick: 1, activity: 1 };
+  var raw = {};
+  ['get', 'set', 'del', 'has', 'row', 'all', 'tombstone', 'tombstones', 'idOf', 'merge', 'export', 'on'].forEach(function (f) { raw[f] = Rec[f]; });
+  function to(type, key) {
+    if (T[type]) return [T[type], pre + (key == null ? '' : key)];
+    if (type === 'setting' && MINE[key]) return [type, 'train.' + pre + key.slice(6)];
+    return [type, key];
+  }
+  /* a stored row back as TRAIN wrote it, or null when it is someone else's */
+  function back(r) {
+    if (!r || !B[r.type]) return r;
+    if (String(r.key).indexOf(pre) !== 0) return null;
+    return Object.assign({}, r, { type: B[r.type], key: String(r.key).slice(pre.length) });
+  }
+  function wrap(f, none) {
+    return function (type, date, key, x) {
+      if (DROP[type]) return none;
+      var a = to(type, key);
+      return f.call(Rec, a[0], date, a[1], x);
+    };
+  }
+  Rec.client = pid;
+  Rec.get = wrap(raw.get, null);
+  Rec.set = wrap(raw.set, null);
+  Rec.del = wrap(raw.del, null);
+  Rec.has = wrap(raw.has, false);
+  Rec.tombstone = wrap(function (t, d, k) { return back(raw.tombstone(t, d, k)); }, null);
+  Rec.row = wrap(function (t, d, k) { return back(raw.row(t, d, k)); }, null);
+  Rec.idOf = wrap(raw.idOf, null);
+  Rec.all = function (type, opt) {
+    if (DROP[type]) return [];
+    if (!T[type]) return raw.all(type, opt);
+    return raw.all(T[type], opt).map(back).filter(Boolean);
+  };
+  Rec.tombstones = function (type, since) {
+    return T[type] ? raw.tombstones(T[type], since).map(back).filter(Boolean) : raw.tombstones(type, since);
+  };
+  Rec.export = function (types) {
+    return raw.export((types || Object.keys(T)).map(function (t) { return T[t] || t; })).map(back).filter(Boolean);
+  };
+  /* Not Rec.merge itself: that is how rows from the other tabs and frames
+     arrive, already in their own types, and they must land as they are. An
+     import into a client's profile asks for this one by name. */
+  Rec.mergeClient = function (rows) {
+    return raw.merge((rows || []).filter(function (r) { return r && !DROP[r.type]; }).map(function (r) {
+      if (!T[r.type]) return r;
+      var a = to(r.type, r.key);
+      return Object.assign({}, r, { type: a[0], key: a[1], id: raw.idOf(a[0], r.date || null, a[1]) });
+    }));
+  };
+  /* what changed, told the way TRAIN would have written it */
+  Rec.on = function (f) {
+    return raw.on(function (rows) { f(rows && rows.map(function (r) { return back(r) || r; })); });
+  };
+})();
+</script>
 <script src="../shared/mobile.js"></script>
 <script src="../shared/sound.js"></script>
 <script src="../shared/ui.js"></script>
@@ -600,8 +682,14 @@ var APP = {
 Skins.load('../shared/skins.json').then(function () { Skins.restore(APP.id); });
 Sfx.init(APP.id);
 Rec.declare(APP.id, APP.types);
-IO.register({ app: APP.id, name: APP.name, types: APP.types,
+/* On a client's profile (see A CLIENT'S TRAIN, at the top) TRAIN never
+   registers with the sheet: its rows are COACH's, and COACH sends them. */
+var CLIENT = Rec.client || null;
+if (!CLIENT) IO.register({ app: APP.id, name: APP.name, types: APP.types,
   sheets: function () { return exportSheets(); } });
+/* and the bar says whose training this is, where TRAIN's name would be */
+var CLIENT_NAME = CLIENT ? String((Rec.get('cperson', null, CLIENT) || {}).name || 'Client').toUpperCase() : '';
+if (CLIENT) document.title = CLIENT_NAME + ' · TRAIN';
 
 /* Everything hangs off one global on purpose. `var` at the top level of a
    classic script is a property of window; `let` and `const` are not, and the
@@ -664,8 +752,12 @@ TRAIN.slotColor = function (slot) {
    the same row id and the second silently replaces the first. Counter for
    this session, random tail for two devices in the same millisecond. */
 var seq = 0;
+/* An import on a client's profile lands in the client's rows */
+TRAIN.mergeImport = function (rows) { return CLIENT ? Rec.mergeClient(rows) : Rec.merge(rows); };
 TRAIN.newId = function () {
-  return Rec.USER + '-' + Date.now().toString(36) + '-' +
+  /* `k-` on a client's profile is COACH's mark for a set Tom logged, which
+     is the one kind WEALTH may bill as a session */
+  return (CLIENT ? 'k-' : '') + Rec.USER + '-' + Date.now().toString(36) + '-' +
     (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
 };
 
@@ -819,6 +911,8 @@ TRAIN.seedCats = function () {
          ids each copy made its own hundred, the sheet merged them, and a
          client saw every move three times. With a fixed id, seeding twice is
          the same rows twice, which the store already treats as one. */
+      /* A client's file can carry its own copy of a starter; theirs stands */
+      if (Rec.has('exercise', null, TRAIN.seedId(name))) return;
       Rec.set('exercise', null, TRAIN.seedId(name), {
         name: name, cat: catId, kind: kind,
         /* 2.5 on a bar, 1 on anything you hold or hang from */
@@ -1535,7 +1629,7 @@ TRAIN.importFitNotes = function (buf, onProgress, opts) {
     stats.rowsWritten = 0;
     return { rows: rows, stats: stats, days: days, finish: finishImport };
   }
-  stats.rowsWritten = Rec.merge(rows);
+  stats.rowsWritten = TRAIN.mergeImport(rows);
   return finishImport();
 
   function applySettings() {
@@ -1590,7 +1684,7 @@ TRAIN.importFitNotesAsync = function (buf, onStep) {
           held.stats.rowsWritten = written;
           return Promise.resolve(held.finish());
         }
-        written += Rec.merge(rows.slice(i, i + CHUNK));
+        written += TRAIN.mergeImport(rows.slice(i, i + CHUNK));
         i += CHUNK;
         var pos = Math.min(steps.length - 1, Math.floor((i / rows.length) * steps.length));
         return step(steps[pos]).then(slice);
@@ -2048,7 +2142,7 @@ function drawChrome() {
     title = SCREEN_TITLE[scr];
   }
   if (title == null) {
-    logo.innerHTML = 'TRA<b>IN</b>';
+    if (CLIENT) logo.textContent = CLIENT_NAME; else logo.innerHTML = 'TRA<b>IN</b>';
     logo.style.cssText = '';
   } else {
     logo.textContent = title;
@@ -7406,7 +7500,9 @@ document.getElementById('moreBtn').onclick = function (e) {
       { label: 'Send To Coach', fn: function () { TRAIN.sendToCoach(); } },
       { label: 'Settings', fn: function () { TRAIN.settings(); } },
     ];
-  } else {
+  }
+  /* inside COACH already: there is no coach to send a client's rows to */
+  if (CLIENT) items = items.filter(function (it) { return it.label !== 'Send To Coach'; }); else {
     items = [{ label: 'Settings', fn: function () { TRAIN.settings(); } }];
   }
   menuAt(at, items, 'MORE');
@@ -7516,6 +7612,14 @@ TRAIN.openExercise = function (exId) {
    under a heading that says what it is for, because after the first week it
    is the last thing he ever needs to reach. */
 TRAIN.settings = function () {
+  /* A client's profile has no DATA tab: TRAIN is not registered there, so a
+     backup from it would be the whole store, and the client's rows are
+     COACH's to back up. The tab is only added while IO is in reach. */
+  var io = window.IO;
+  if (CLIENT) window.IO = null;
+  try { TRAIN.settingsPanel(); } finally { window.IO = io; }
+};
+TRAIN.settingsPanel = function () {
   UI.settings(APP.id, [{
     id: 'train', name: 'TRAIN',
     draw: function (pane) {
@@ -7740,6 +7844,10 @@ function boot() {
      Anyone who has ever logged anything, or imported a FitNotes backup, has a
      list already and must not find a hundred strangers mixed into it. */
   if (!Rec.count('excat') && !Rec.count('exercise') && !Rec.count('set')) TRAIN.seedCats();
+  /* A client COACH made by hand, or whose file came before COACH kept
+     categories, has exercises and no muscle groups, and TRAIN cannot add an
+     exercise without one. The starter list fills in round what they have. */
+  else if (CLIENT && !Rec.count('excat')) TRAIN.seedCats();
   if (TRAIN.foldSeeds()) TRAIN.recomputePRs();
   /* and again whenever exercises or sets arrive from another copy */
   var foldT = null;
@@ -7757,7 +7865,7 @@ function boot() {
     Rec.setting(APP.id, 'prRule', 2);
   }
   draw();
-  if (!Rec.setting(APP.id, 'seen') && !Rec.count('set')) {
+  if (!CLIENT && !Rec.setting(APP.id, 'seen') && !Rec.count('set')) {
     Rec.setting(APP.id, 'seen', 1);
     setTimeout(TRAIN.firstRun, 400);
   }
