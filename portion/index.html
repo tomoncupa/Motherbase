@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.7, 2026-09-22">
+<meta name="mb-version" content="1.0.8, 2026-09-22">
 <title>FOODDÉX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◪</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -304,6 +304,13 @@ const L = { name: '', brand: '', cat: '', amt: '100', unit: 'g',
    of, re-read every time the numbers change, until he picks one himself. It
    is also the serving a new food offers first in STATUS. */
 const leadMacro = () => ((numv(L.c) || 0) > (numv(L.p) || 0) ? 'c' : 'p');
+/* Tom, the same day: "Some foods are just snacks or drinks, obviously those
+   won't fall into the 50g rule." Nobody eats 50 g of carbs of crisps on
+   purpose. A snack or a drink opens on one serving as the label prints it.
+   A drink is known by its unit as well as its group, because a carton in
+   millilitres is a drink whatever group it was filed under. */
+const isSnackOrDrink = () => /^(ml|l|cl|fl ?oz)$/i.test(String(L.unit || '').trim())
+  || /snack|drink|beverage/i.test(String(L.cat || ''));
 const firstAmounts = () => [{ what: 'p', v: 50, auto: 1 }, { what: 'amt', v: 100 }];
 let PORTIONS = firstAmounts();
 let EDIT = null;
@@ -650,7 +657,7 @@ const dupNote = el('div', 'warnbox');
    because typing "Protein" and "protein" on two different days is how a list
    of five groups quietly becomes a list of nine. Tapping the one that is on
    turns it off, so no group is a real answer too. */
-const GROUPS = ['Protein', 'Carbs', 'Snacks', 'Fruits/Veggies', 'Seasonings/Marinades'];
+const GROUPS = ['Protein', 'Carbs', 'Snacks', 'Drinks', 'Fruits/Veggies', 'Seasonings/Marinades'];
 function paintGroups() {
   groupBox.innerHTML = '';
   /* A food grouped somewhere else - by STATUS, or by an older version of this
@@ -941,6 +948,45 @@ function extraRow(card) {
   asRow.onclick = guard(() => copyOut('The row', entryRow(1)));
   w.appendChild(asRow);
 
+  /* ── one food, as a file a client can open ──
+     Tom, 2026-09-22: "Possible to export an entry as a file that I can send
+     to a client?" Clients have STATUS and not this app, so the file is the
+     shape STATUS already knows how to take in: a backup holding one row. On
+     their side it is Settings, DATA, Restore, which fills in what is missing
+     and never overwrites anything newer. No new importer, so nothing new to
+     break on a phone nobody here can test.
+
+     It is the food as saved, so it is saved first. What is his rather than
+     the food's stays behind: how often he eats it, his receipt photo, when
+     he last logged it, and what he paid. Sending the same food again after
+     correcting it updates their copy, because it is the same row. */
+  const asFile = el('button', 'btn wide quiet mb-press mb-tap', 'Save as a file to send a client');
+  asFile.style.marginBottom = 'var(--s-2)';
+  asFile.onclick = guard(() => {
+    saveFood();
+    if (!EDIT) return;
+    const row = (Rec.export(['food']) || []).filter(r => r.key === EDIT)[0];
+    if (!row) return UI.toast('Save it first', { bad: true });
+    const pay = JSON.parse(JSON.stringify(row.payload));
+    pay.uses = 0; pay.shot = null;
+    ['last', 'lastMode', 'lastServe'].forEach(k => { delete pay[k]; });
+    if (pay.base) delete pay.base.price;
+    const bag = {
+      kind: 'motherbase-backup', v: 1, app: 'status', at: new Date().toISOString(), types: ['food'],
+      about: 'One food for STATUS. Open STATUS, Settings, DATA, Restore, and pick this file. It adds the food and changes nothing else.',
+      rows: [Object.assign({}, row, { payload: pay })],
+    };
+    const name = (pay.name || 'food').replace(/[\/:*?"<>|]+/g, ' ').trim() + ' - food for STATUS.json';
+    const a = el('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(bag, null, 1)], { type: 'application/json' }));
+    a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000);
+    Mobile.feedback('success');
+    UI.toast('Saved <b>' + esc(name) + '</b>. On their phone: STATUS, Settings, DATA, Restore.');
+  });
+  w.appendChild(asFile);
+
   const share = el('button', 'btn wide quiet mb-press mb-tap', 'Save this as a picture');
   share.onclick = () => {
     const name = (L.name.trim() || 'portion').toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -1009,7 +1055,11 @@ function addRow() {
 }
 
 function paintPortions() {
-  PORTIONS.forEach(pt => { if (pt.auto) pt.what = leadMacro(); });
+  PORTIONS.forEach(pt => {
+    if (!pt.auto) return;
+    if (isSnackOrDrink()) { pt.what = 'amt'; pt.v = numv(L.amt) > 0 ? numv(L.amt) : 100; }
+    else { pt.what = leadMacro(); pt.v = 50; }
+  });
   /* The picture needs to say what it is of. On screen this is the same
      information as the Name box two inches up, so it hides until there is
      something to say. */
