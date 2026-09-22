@@ -77,3 +77,10 @@ download it is the download.
 - Real clips for testing are in `Downloads/Telegram Desktop` and
   `Downloads/CLIP/1_inbox`. Serve `Downloads` rather than the repo to reach them.
 - Clean up `review` rows, and any `client` rows written for a test.
+
+## History, moved from the root brief on 2026-09-22
+
+What was built and watched, newest last. Moved here verbatim so the root brief
+stays small enough for per-module sessions.
+
+Standalone by design. Video never leaves the device. Tom only, kept out of the client build.

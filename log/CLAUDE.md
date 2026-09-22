@@ -276,3 +276,10 @@ pushed since LOG last looked. LOG 1.0.8.
 Never watched, only driven from code: a real wheel scroll stopping and
 snapping, real Mouse 4 and 5 presses, real mouse clicks on menus, and LOG
 against Tom's real data.
+
+## History, moved from the root brief on 2026-09-22
+
+What was built and watched, newest last. Moved here verbatim so the root brief
+stays small enough for per-module sessions.
+
+Built 2026-09-13 and tested in the browser. The journal module: a way to view STATUS's entries en masse. One continuous timeline from the first record to today, in eight views from Day to Year; the wheel scrolls, the mouse side buttons change view, a held button drags. Days show the day's line and STATUS's bullets, with a faint mood, energy and caffeine graph behind; beside them, day columns for "What got done today" and every STATUS measure, reorderable, resizable and hideable; beside those, weeks, months, quarters and the year with written summaries. A notebook view lays days out as two-page spreads. Writes `note` and the day's `note` by merging, owns `recap` and `cell`. Never watched with a real mouse or real data. In the client build since 2026-09-14 (Tom: "LOG and QUESTS are for clients as well"). Has its own brief.

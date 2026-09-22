@@ -1,0 +1,11 @@
+# ELEMENT (CLAUDE.md)
+
+Governs `mix/` only. The repo-root `CLAUDE.md` and `DOCTRINE.md` still apply
+and win any disagreement.
+
+## History, moved from the root brief on 2026-09-22
+
+What was built and watched, newest last. Moved here verbatim so the root brief
+stays small enough for per-module sessions.
+
+MIX, built 2026-09-20 and driven in the browser. Tom, 2026-09-20: "this is meant to COMPLETELY replace protocol HTML, that one came out wrong." What to weigh out today in grams, from goals that move with the day. Four things it does that the old file could not. It reads today's food out of STATUS rather than asking for it twice, and works out the five nutrients STATUS does not keep — zinc, magnesium, copper, choline, preformed vitamin A — from a food table by matching the meal's name; a meal it cannot name, or one not logged in grams, is listed by name under the totals rather than silently counted as zero. The sodium base is the seven-day average of FOOD sodium, with MIX's own salt taken back out by key: without that subtraction today's added salt lands in STATUS, tomorrow reads it as food, and the base ratchets upward for ever, which is the exact opposite of the "keep what I retain the same every day" it exists for. Potassium is scaled against the base plus 200mg per litre sweated, not against the sweat-inflated sodium goal, because a litre of sweat costs about 200mg of potassium and about 830mg of sodium, and scaling by the goal asked for roughly five times what was lost and put the GI cap in the way of every training day. And zinc past the single-dose cap goes with the chicken meal instead of stopping short of the target, since the target is the thing priority 3 protects. Every dose line drags between cards, salt refuses the night drink, and the layout is a setting row rather than localStorage so it is in the backup and reaches the laptop. Watched on the test case Tom set: 1.667 L of sweat, a 4,038mg sodium goal, 0.071g of zinc glycinate, and logging twice writing one row rather than two. Never opened on a phone, and it is a desktop app. The swing warning measures the sodium KEPT, total minus what came straight back from sweat, because against the total it fired on every training day by design and a warning that is always on is one nobody reads.

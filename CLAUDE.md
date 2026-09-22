@@ -128,155 +128,23 @@ Do not break these. Ask first if you think one needs to change.
 ## Layout
 
 ```
-CLAUDE.md          this file
-DOCTRINE.md        what each app is FOR, and the laws every app obeys
-REVIEW.md          the suite reviewed on 2026-09-15: what would make it better,
-                   ranked. Proposals, nothing built. Tom picks.
-HOWTO.md           how Tom adds an app or a theme, in plain language
-CLOUD.md           LIVE SYNC: the Firebase sync that sits BESIDE the Google
-                   sheet, added 2026-09-20. What Tom does once to set it up,
-                   the database rules to paste, and what it deliberately does
-                   not carry. The sheet is untouched and still does everything
-                   it did; this answers the one thing the sheet is slow at,
-                   which is two devices agreeing in a second rather than a
-                   minute. Off until a config is pasted, so a client who never
-                   sets it up never makes a request from it
-RECEIPTS.md        THE RECEIPT PIPE, added 2026-09-21. A photo of a receipt on
-                   the phone becomes a spending row and a record of what was
-                   bought. Reading happens on the PC through the claude.exe
-                   inside the desktop app, so it needs no key and costs
-                   nothing; confirming happens in RECEIPTS, because only
-                   Motherbase knows which FOODDEX food a shop's wording means.
-                   What Tom sets up once, and what it asks him
-ONBOARDING.md      how a client gets the suite, and what happens after
-index.html         the home screen: widget grid, app dock, data authority
-_review.html       the review: opens every app, folds in the foundation checks,
-                   and looks over the rows. Read-only. Run it on a real device
-sw.js              the offline cache, added 2026-09-16. Opened from a folder
-                   the suite never needed a connection. Opened from an ADDRESS
-                   it needed one every time, just to fetch the page, and with
-                   no signal the browser drew a blank page and the app looked
-                   broken. This keeps a copy of each page on the phone. Since
-                   2026-09-18 it answers from that copy AT ONCE and fetches the
-                   newer one in the background for the next open (Tom: "Always
-                   open from the phone copy IMMEDIATELY... Fast input is our
-                   pillar"). A pushed change lands on the second open after it;
-                   data is never involved, only code. A stamped file is at an
-                   address that changes when the file does. Registered by
-                   `shared/mobile.js`, so no app had to be edited. Does nothing
-                   from a folder and nothing inside a frame. `?nosw=1` on the
-                   address takes it off again
-shared/            the foundation, loaded by every app
-block/index.html   routine builder
-arc/index.html     mind canvas, skill trees and flashcards since 2026-09-16.
-                   Tom only since 2026-09-14, dropped from the client build
-arc/CLAUDE.md      ARC's own brief, governs arc/ only
-form/index.html    lift review
-status/index.html  sleep, weight, mood, energy, steps, food and money
-desktop/           STATUS, the Windows app, since 2026-09-17. STATUS.exe
-                   runs status/index.html inside Microsoft's WebView2, the
-                   engine already in Windows, in a window the program owns.
-                   Tom, 2026-09-17: "I think the chrome environment is too
-                   limiting." The Chrome launcher before it could not stop
-                   Chrome putting its title bar back, clipping the page under
-                   it, or the window being closed out from under the app,
-                   which silently stopped a whole day of check ins. None of
-                   those are reachable from outside a window you do not own.
-                   The page says what it wants to be over a real message
-                   channel, so the window is exactly the page: a widget in a
-                   corner, or the check in centred, in front and focused,
-                   because Tom asked for that to be intrusive. Ctrl+B calls
-                   the page's own function rather than typing a key at it.
-                   Its store is its own and fills from the sync code the way
-                   a second device would, which Tom accepted as a good thing.
-                   Compiled by build.ps1 with the C# compiler inside Windows;
-                   the three WebView2 files live in desktop/lib. The old
-                   launcher, StatusDesktop.cs, is kept until the new one has
-                   earned its place. Windows only, Tom only, left out of the
-                   client build. See desktop/README.md.
-portion/index.html FOODDÉX, called PORTION until 2026-09-14. A label in, the
-                   amounts you eat out. A desktop app, and the second writer
-                   of `food` alongside STATUS. The folder and the app id stay
-                   `portion`: theme, sound, draft and settings are saved
-                   under the id, and renaming it would drop them.
-train/index.html   the training log, a reproduction of FitNotes
-train/CLAUDE.md    TRAIN's own brief, governs train/ only
-wealth/index.html  the money app. Clients, bills, pots, debts and what is
-                   actually left. Desktop. Tom only, dropped from the client
-                   build. Reads STATUS's spending rather than copying it.
-wealth/CLAUDE.md   WEALTH's own brief, governs wealth/ only
-log/index.html     the journal module: STATUS's entries en masse. One timeline
-                   from the first record to today, in views from Day to Year,
-                   with STATUS's bullets, the day's line, every STATUS measure
-                   as a column, written summaries for weeks up to years, and a
-                   mood, energy and caffeine graph per day.
-                   Desktop. In the client build since 2026-09-14.
-log/CLAUDE.md      LOG's own brief, governs log/ only
-checkin/index.html CHECK IN, physique check-ins for Tom and his clients: a goal
-                   photo, a front photo and any pose added, each measured on the
-                   device into three neutral ratios, a camera that lines this
-                   week's photo up with last week's, a timelapse, weight
-                   (STATUS's row) and a few answers, and a file to send a coach
-                   that the coach keeps. Everywhere.
-checkin/CLAUDE.md  CHECK IN's own brief, governs checkin/ only
-clex/              GONE from the repo, 2026-09-16. Tom's Commander deck aid
-                   left the suite on 2026-09-15 and the repo the next day. It
-                   lives in Downloads/clex, outside Motherbase, unpublished.
-style/index.html   the theme workbench. Desktop only, deliberately.
-_template/         a working starter app, copied to make a new one
-tools/             not build steps. embed-skins.py re-embeds the factory themes;
-                   make-icons.html and save-icons.py redraw the iPhone icons;
-                   build-client.py generates the client copy of the suite into
-                   ../Motherbase-Client. Its output is never edited by hand —
-                   client-only files live in tools/client/. See ONBOARDING.md.
-coach/index.html   COACH, built 2026-09-22. Tom's clients in a Pokémon PC
-                   box: three boxes (1:1, ONLINE, PAST) of thirty slots, each
-                   client drawn as the Pokémon CHECK IN gave them. A client's
-                   training arrives as the file TRAIN's Send To Coach makes and
-                   is kept under COACH's own types, so it never lands in Tom's
-                   own TRAIN. Strength, recent sessions and the range per
-                   client, and FIRST SETS: the weight and reps of each
-                   exercise's first set, sent back as a program file the
-                   client opens in TRAIN, where the rest of their sets fill
-                   from their last session. A PROGRAMS library holds programs
-                   to send to anyone or sell. One column on a phone, two on an
-                   upright iPad, three from 1180px. Tom only, dropped from the
-                   client build. LOG A 1:1 on a client writes their sets as `cset` and one
-                   WEALTH `sesh` per day, and every COACH client is a WEALTH
-                   client and the other way round (`cperson.wc`, `client.cp`)
-quest/index.html   QUESTS, the todolist, copied from Todoist. The same todo rows
-                   as STATUS's journal, with a due date, priority, project and
-                   repeat added. Desktop and phone. In the client build since
-                   2026-09-14.
-quest/CLAUDE.md    QUESTS's own brief, governs quest/ only
-speak/index.html   SPEAK, talking to a camera, measured: pace, fillers and
-                   crutch phrases, flow, crispness, eyes on the lens. A path
-                   of drills built like Duolingo, a daily warm-up, a streak.
-                   Everywhere. Tom only, dropped from the client build.
-speak/CLAUDE.md    SPEAK's own brief, governs speak/ only
-speak/RESEARCH.md  where every number in SPEAK came from, with sources
-mix/index.html     ELEMENT, called MIX until 2026-09-22; the folder and the app
-                   id stay `mix`, the way FOODDÉX's stayed `portion`. The electrolyte bench. What to weigh out today, in
-                   grams, on a 0.001g scale: salt, potassium citrate, zinc
-                   glycinate, magnesium glycinate. It replaces `protocol.html`,
-                   which lived in Downloads, asked for every food by hand and
-                   measured him against fixed targets. The targets move here:
-                   sodium against what he actually sweated, magnesium against
-                   what he actually weighs, and the food comes from STATUS.
-                   Desktop. Tom only, dropped from the client build. Owns
-                   `dose`
-quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
-                   status/ on 2026-08-20; what is left of it is a todolist.
-                   Its data model and design system still govern. Superseded
-                   on repo layout and testing by this file.
-system/index.html  NOTICE, called SYSTEM for a few hours on the day it was
-                   built. Text in and a status window out: a PNG of a game
-                   notice or quest window in the Solo Leveling and Overgeared
-                   manner, for posts and stories. The folder and the app id
-                   stay `system`, the way FOODDÉX's stayed `portion`: theme,
-                   sound, draft and settings are saved under the id, and
-                   renaming it would drop them. Everywhere. Tom only since
-                   2026-09-15, dropped from the client build. Built 2026-09-15.
+CLAUDE.md          this file: rules, data model, one line per app
+DOCTRINE.md        what each app is FOR. Read before building a feature
+LAYOUT.md          the long version of this list, with the why of each file
+HOME.md            the home screen's history. Read before touching index.html
+REVIEW.md          the suite reviewed 2026-09-15, ranked proposals
+HOWTO.md           how Tom adds an app or a theme
+CLOUD.md           LIVE SYNC, Firebase beside the Google sheet
+RECEIPTS.md        the receipt pipe: phone photo to spending row, read on the PC
+ONBOARDING.md      how a client gets the suite
+index.html         the home screen
+_review.html       the review every client push must pass
+sw.js              the offline cache. `?nosw=1` turns it off
+shared/            the foundation. Its own brief holds the debt and findings
+desktop/           STATUS.exe and Main Menu.exe, Windows, Tom only. README.md
+tools/             build-client.py and helpers. Not build steps
+_template/         the starter app to copy
+<app>/index.html   one app per folder; <app>/CLAUDE.md is that app's brief
 ```
 
 **Phone or desktop:** `train/` is a phone app. `status/`, `quest/`, `checkin/`, `system/` and `speak/` are for
@@ -847,229 +715,33 @@ answer, or take it out.
 
 ## Current state
 
+One line per app. What was built, watched and left open lives in each app's
+own brief since 2026-09-22.
+
 | App | State |
 |---|---|
-| `index.html` | Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab bar on a phone, sheets instead of its own modal. Widget grid still drags and resizes with a mouse; a phone gets a REARRANGE mode instead. Since 2026-09-14 the roster's order is the default dock, set by Tom: HOME, BLOCK, STATUS, LOG, QUESTS, TRAIN, CHECK IN, STYLE, then Tom's own apps (ARC, WEALTH, FORM, FOODDÉX, flagged `mine`) behind a thin line with no label and no tooltip. Tom, 2026-09-14: "I don't want a Tom Only... I know who I am." Nothing on screen names the group. The order is kept inside each group and nothing moves across. A saved order lives under the setting `dockOrder`; the older `dock` is ignored, because it was the old default rearranged. Buttons carry icon and name with the number key in the tooltip, and a window from 821 to 1400px wide shows icons only. Also 2026-09-14: the grid packs densely, so a short widget beside a tall one leaves no empty band; WEIGHT draws its line through the actual weigh-ins with no average, and its big number is the latest reading; TODAY and TODO follow STATUS's day rule including QUESTS's `due` (a todo dated for later is not on today, No date is not on today) and tick the way STATUS and QUESTS do, a repeat doing a round (`tickTodo`, `repeatAfter` are copies: change all of them); the tick buttons draw the shared `done` icon with a 44px target. Since 2026-09-15 (1.0.5): cards are `mb-card` and rows `mb-plate` in the block's colour or the widget's app's; every app has a colour slot from the chart ramp, worn by its dock icon, its tile and its widgets; app icons are 20px at a heavier stroke; `shared/icons/<app>.png` is the iPhone home-screen icon, linked by mobile.js. BESIDE (1.0.6, 2026-09-15): up to three measures on one date axis, one strip each on its own scale, picked from the widget's menu: STATUS's fields, the day's training volume, the day's spending, and how much got logged. No verdict. LINKS (2026-09-17): every app's address on the web, in two groups — MINE, the full suite, and CLIENTS, the seven apps a client gets. Tapping a row copies that address and the button beside it opens it. Both lists come off the APPS roster and the `mine` flag, so an app added later is in both without editing it. Tom's own: `DROP_WIDGETS` in tools/build-client.py takes it out of the client copy, and nothing on it says Tom Only, the way the dock's line has no label. TIMER (1.0.13, 2026-09-17): a preset SETS the timer rather than adding to it, because "Clicking 3m Should set it to 3 minutes" and adding meant there was no way to ask for the one thing written on the button. With nothing running one press does it; with a count in progress one press only says what it is about to do and a second inside three quarters of a second carries it out, which is Tom's "make it need a double tap if we want it to override a currently running timer". 1.0.12 stacked on the second press instead, which was Claude's idea and protected nothing. SET reads half minutes: 10, 2.5, 0.5 and 1:30. 1.0.14, 2026-09-17, two Tom reported together. NOTICE went missing from the dock at some window widths: the names came back above 1400px, the row grew past the window, and `overflow-x:auto` with a hidden scrollbar slid the last apps off the right edge with nothing on screen saying so. NOTICE is thirteenth of fourteen, so NOTICE is what vanished. The 821-to-1400 band was the bug, because it had a floor: it is a ceiling now, names under 1700px only, and under 1150px the wordmark, the clock and the words on WIDGET and DATA go too, so everything that is not an app gives way before an app does. `fitNav` stays as the belt and braces and fades the right edge if a future app overflows even the icons; it reads in a zero timeout rather than straight away, because nav is a flex item with its own scroll box and an immediate read is of the layout one class ago, and never on requestAnimationFrame, because a minimised or covered window gets no frames. Watched with nothing cut off at 830, 1000, 1100, 1150, 1300, 1400, 1700, 1800 and 1920. And "Main Menu on phone should only show Phone apps": the roster carries a `phone` flag now, which is hard constraint 10 written down, so the thumb bar is HOME, STATUS, QUESTS, TRAIN, CHECK IN, NOTICE and SPEAK and the desk work is left to the desk. At 375px that is seven buttons of at least 47x54 with no label clipped, against fourteen of 26px before. 1.0.15, the same day, three more Tom reported together. The TODO widget names each task's source, which was asked for in the same breath as "why does pay skool show up twice" and is half the answer to it: two rows reading alike are two apps' idea of one job, and nothing on the row said so. A project name beats the app name where there is one. The TODAY widget's tick moved to the left, where TODO already had it and where a box does not drift with the length of the row above. And LIFE got the three things it was missing: Set age, Set birth year and Set how many years on the card's own menu (not on a year square, which nobody would find), a colour per band picked from the theme's six chart slots, and a legend saying what the bands are FOR — YOUNG, MIDDLE, TOO OLD FOR A LOT, each with its range. Watched at 1400px: the menu, the colour submenu, a colour change landing, and the legend reading back. 1.0.16, the same day: bullets are drawn through `shared/journal.js` like everywhere else. Tom: "All bullet entries should look the same regardless of where." STATUS, LOG and QUESTS all drew one through the shared renderer and the home screen was the odd one out, building its own row out of a plain span, so the same line wore a different face depending on which screen you looked at. TODO, IDEAS and EVENTS now use `bulletRow`, which is `mb-bullet` with the mark in a `.k` and the words in a `.tx` — the same contract, and asking journal.js for either half brings its stylesheet with it. Watched: the mark and the words come out byte for byte identical to what STATUS builds for the same row, and a todo two days old draws the `>` arrow rather than a box, which is the rule STATUS has always followed and the home screen never did. |
-| `block/` | Working. Publishes today's plan, reads and writes shared ticks. Actively edited in other sessions. Every and Anytime tabs added 2026-09-14 and driven in the browser: 53 of 53 self-test checks, six of them new, and a real add, tick and reload. Owns `rhythm`. What is owed or due, and Anytime habits not yet met this week, also show in an Also today column on the Day (today and past days, never the future) and go into the published plan with `s: null` and a `why`, so the home screen and QUESTS show them. Export has a For someone else tab (2026-09-14): a `motherbase-block-starter` file of the day on screen (Tom names a day after the person he is setting up) with its routines, blocks and weekdays, and any chosen Every and Anytime habits, with no ticks, history, settings or rules. Importing it (also under ⋯) adds to a board with new ids, numbers clashing names, overwrites no weekday, skips a habit whose name is taken, and replaces only an untouched starter board. A day that runs on no weekday takes every empty one when it arrives. 1.0.5, 2026-09-17: the board stops changing under your hands. It used to rebuild and redraw whenever a row moved, which while the app is open is every forty five seconds, guarded only by a quarter of a second either side of a save and by a drag in progress. It now holds the repaint while you are working and takes it the first quiet moment: twenty seconds with no click, key or wheel, nothing open, nothing focused. The sync itself is untouched, so rows still merge the instant they land; only the drawing waits, and a held update re-arms itself rather than being dropped. Also: two rows sharing an `ord` are settled by id, so blocks added at the end of one lane on two devices cannot swap places on a repaint. Self-test 57 of 58, the one failure pre-existing and time-dependent. 1.0.6, the same day, went further on Tom's "BLock never really have to update because I only use it on my pc, once instance at a time" and cut the live subscription, so the board was read once at open and was yours until you opened it again. **1.0.7, the next day, put it back, and 1.0.6 was a mistake worth keeping written down.** Tom: "Block, my local file is syncing supposedly, my web page version isnt getting it." He has at least two copies, the folder on this machine and the one on the web with the sheet between them, so rows arrived, merged and sat in the store while the screen showed the board it read at boot. Nothing said so, which is what makes a working sync look broken. The subscription was the wrong half to cut: what he complained about, "Things get missarranged", was already answered by 1.0.5's quiet rule, and the subscription only ever decides WHETHER the screen catches up while the guards decide when. An arriving row asks `adoptSoon`, not `adoptRows`, so forty rows ask for one quiet moment rather than forty. Watched both ways: a lane written into the store from outside is absent at 12 seconds and on screen by 24; a second one, with the board poked every three seconds for 27, does not move through any of it and lands once the poking stops. 1.0.8, 2026-09-17: the colour menu is a palette. Tom: "Block color menu should be a palette." It was ten rows of colour names, so choosing Amber over Gold meant reading two words and knowing which was which, and a colour is the one thing that cannot be described faster than it can be shown. Ten swatches in a grid, the current one ringed, each name kept in its tooltip. `buildMenu` grew a `pal` item kind, which is the only way a menu built out of text rows could hold one. Self-test 59 of 59. 1.0.9, the same day: an edit survives a refresh made straight after it. Tom: "I want my changes to persist even after I refresh right after making them." Two things stood between the edit and the store. A routine's start time is a field that commits on BLUR, so a time typed and then refreshed had never reached the board at ALL — not a save that lost a race, a value the app was never told about. And `save()` batches for 250ms, which a refresh inside that window took with it. `flushRows` on `pagehide` and on the document going hidden answers both: it asks `UI.commitFocused` for the typed value first, then cancels the timer and writes at once. `touched` guards it, so a device that only ever looked at the starter board still does not write it. Watched: a time typed with the cursor still in the box reached the store on pagehide, and a committed change still inside the 250ms batch did too. Self-test 59 of 59. 1.0.10, the same day: routines go to Google Calendar. Tom: "I think I just want to push the routines and not the individual blocks. Can you write the blocks as details IN the routines?" So ONE event per routine per day, running from its start to where its last block ends, with the blocks listed inside it — a calendar of forty entries a day is one nobody opens, four is a day you can read at a glance. Left out: a routine with no start time (a list with no clock has nowhere to sit), a hidden block, a routine not running that day, and anything before today. 14 days ahead, because a weekday template is the same every week and a year of it would be a year to clean up. The key is date plus routine, so a second push updates rather than duplicates. Rides the sheet link and the same push as the rows, with one switch in BLOCK's own settings, off until asked. Watched: 28 events across two routines and 14 days, an untimed routine left out, a timeless block written with no clock, a routine stretched to its anchored last block, keys stable across calls, and the payload on the real push body with the switch off sending none. **The calendar write itself is NOT watched — it needs his sheet and his Google account. The script half is verified only as far as it can be here: it parses as a whole program and carries the calendar functions.** Self-test 59 of 59. |
-| `arc/` | Tom's build, with its own brief. On the shared foundation as of 2026-08-27: the store, the theme engine, the icon set, the settings sheet and the standard backup. Owns `map`, `node`, `link`, `attempt`, `card` and `crev`. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. Tom only since 2026-09-14: behind the dock's line with his other own apps, and dropped from the client build. Skill trees since 2026-09-16 (1.0.1), replacing AI Teach Mode: a node can be a skill with a test; it opens when the skills under it pass, passes on hits on separate days, comes back for reviews, and while in training is a daily QUESTS todo whose tick is a hit. Four in training, stuck skills split, trophies. Built with Claude through the clipboard, and the skill tree.exe skill carries the format. Watched in the browser on test data; not with a real tick from a phone. Cards the same day (1.0.2): a Cards tab over the canvas for the fact-shaped parts of what a tree teaches, on their own SM-2-style schedule that never touches the skill schedule, made from a node or pasted in as `front :: back` lines, graded with the keyboard, and exportable as a spreadsheet. See `arc/CLAUDE.md`. |
-| `quest/` | QUESTS, built 2026-09-14 and tested in the browser at desktop width; phone width not measured, because the test pane reported no width. Todoist's Inbox, Today, Upcoming and projects over STATUS's todo rows. Reads dates, times, P1 to P3, #projects and repeats from anywhere in the line, highlighted as typed, with a chip to give the words back. Todoist's date menu and overdue Reschedule. Ticking a repeat writes a finished copy and moves the todo on; STATUS does the same. In the client build since 2026-09-14. Today also lists BLOCK's published plan with Now and Next, every row says whether it came from QUESTS, STATUS or BLOCK, and Date, Priority, Move to and More are visible buttons on each row. STATUS's journal keeps showing todos, on their due date. A clock with no am or pm is the next time it comes round today, in QUESTS, STATUS and LOG, for every kind of line; on another day 1 to 6 is the afternoon. Each app carries its own copy of the rule. LOG's copy of `notes()` does not know `due` yet, so LOG still shows those todos on the day written. 1.0.9, 2026-09-17: @labels, beside the #projects that were already there. Tom: "Can we copy Todoists #Project and @Tag system on Quests?" A todo has ONE project and ANY NUMBER of labels, which is the whole difference between them: a project is where a job lives, a label is a condition it needs before it can be done. Typed anywhere in the line and highlighted as typed, one chip each so a single one can be given back, a Labels section in the side listing every one in use with its count, and a view per label. Labels have no rows: a label is a word on a todo and nothing else, so the list is read off the todos and one nobody uses stops being listed — projects have rows because they carry a colour and an order, and a label carries neither. Two details worth keeping: the label rule sits AFTER the time rules so `@8` and `at 8` still mean eight o'clock, and it is the one rule allowed to match more than once per line, since `@phone @15min` is two conditions rather than a second attempt at naming one. Watched: both labels off one line, a repeat ignored, `@8` still a time, the side counting, the view filtering, and the label you are standing in left off its own rows. 1.0.10, the same day: typing @ offers the labels already in use. Tom: "How can we ensure labels get used correctly?" What ruins a label set is not misuse, it is SPRAWL — @phone, @Phone and @calls all meaning one condition, after which no label view is complete and you stop trusting them. Case was already dealt with, since a label is slugged. This is the rest: the moment you type @, the ones you already use sit under the box, narrowed as you type, so picking an existing label is less work than inventing one, and a word that matches nothing says `new label` rather than letting you make a fourth synonym without noticing. Read off the CARET, not the line, so a second @ offers a list that leaves out the label already on the row. Watched: no @ offers nothing, a bare @ offers all three, @d narrows, @zzz offers only new label, and a pick completes both at the end of a line and mid-line. |
-| `form/` | Standalone by design. Video never leaves the device. Tom only, kept out of the client build. |
-| `status/` | **Counting calories is a switch since 2026-09-17** (Settings, Track, Count calories). Off, the calorie and protein pillars leave the grade and one check takes their place, `sentfood`, "Sent food", an ordinary field so it gets a tile, a sheet, a chart, the export and LOG's column for nothing. The Food tab, the Protein tile and both as choices for the big number go with them; a client who had calories at the top gets steps. It is per device, because there is no server to set it from. Why: a client who eats well and never opens the food screen scored zero on both counted pillars, so the letter was reporting on logging and calling it adherence. Built 2026-08-20 and tested in the browser. On the shared foundation. Owns every daily measurement. 1.0.8, 2026-09-16 adds the desktop half, which only exists when `desktop/`'s launcher opened the page (`?desktop=1`): Mini mode, one strip showing Mood, Energy and the next two measures switched on; a check in on a gap that is different every time between a low and a high he sets, inside hours he sets, writing an ordinary `ev` reading and an ordinary `entry` bullet and nothing new; and Ctrl+B for a bullet. In a plain browser tab none of it exists, so a client on a phone sees no DESKTOP tab and no Mini button. Driven in the browser: the hour boundaries, an overnight window, 200 rolls all inside the range, reversed and equal min and max, Skip writing nothing, no stacking, and the strip at 470x86 with every target 44px. The launcher watched on this machine end to end. 1.0.9, the same day, on Tom's "I don't like how the window can be bigger than the actual app interface" and "I just wanted the widget": it opens as the widget, the gap is 60 to 90, the title is a state the launcher compares against rather than an event it can miss, and snackbars are hidden in the widget because one is taller than the whole thing, with the backup reminder held back until the whole app is open so it cannot be lost. 1.0.10, the same day, is Mini mode as Tom described it: "My last Bullet, a FAB that asks me Mood and Energy which also resets the interval. More of a square form factor." So the widget is 360x400 rather than a strip, it shows the last line he wrote whenever he wrote it, today's mood and energy sit along the bottom so the button is visibly doing something, and the round button turns the widget into the question rather than opening a dialog wider than the window. Answering by hand rolls the next automatic ask forward. The height was measured, not chosen: the question needs 392px, and at 300 and at 360 the text box was present but clipped out of sight. 1.0.11, the same day, on "I'd like it smaller, More compact, minimalist": three things came OFF rather than shrinking, which is what actually made it small. The STATUS wordmark went (it is his widget, on his screen, above his bullet), the header row it sat in went with it, and MOOD - ENERGY - only appears once there is a reading, as a face and a bolt with a number. What is left is the bullet and one row of controls, 320x135 at rest against 360x400 before, with no type made smaller. The page now MEASURES itself and puts the size in its title, so the window is exactly the box and a layout change in here never needs the launcher rebuilt; opening a panel grows the window and closing it shrinks it back. The pencil is quick capture in the widget, opening on Entry (Tom: "Default entry mode should be entry bullets not to do"), Enter saves and Shift+Enter is a newline; STATUS's own journal sheet still has the times and repeats and is one click away. 1.0.26, 2026-09-17, Tom: "in wide view, can we have stats island and journal island be side by side". Past 1024px the Today tab is two columns, the day's card on the left with the add button under it and the journal on the right; below that, and in the desktop widget at 320px and the check in at phone proportions, it is the one column it always was, and Food, Money and Trends never change. 1.0.27, the same day, three more. The day's card is 366px, what it measures at 390, because half of 1180 fitted five tiles across where a phone fits three and the same day looked like two screens: "have stats island follow phone width - I want the grids to be similar". Right click or hold either card to swap them, one setting kept as a row, meaning which column at the desk and which card on top on the phone. And the widget stopped cutting the bullet off: five lines rather than two, and the size it reports is re-sent whenever a child of the box changes height. That second one is the clipping Tom reported. The measurement went out once, at the end of the draw, so anything changing a height afterwards left the window at the old size with the box hanging out of it and nothing saying so — watched at 320x138 reported against a box already 225 tall. A ResizeObserver on the box's children answers every cause of it at once. 1.0.28, the same day, is the check in, now called a STATUS CHECK on screen because that is what Tom calls it. It had stopped arriving at all: one left unanswered stayed on the widget as `deskPanel = 'ask'`, and the tick's own guard reads `deskPanel`, so a single ignored question switched the feature off for good. His log for the day shows one at 05:02 and none after, with the panel it put up still on screen at 08:55. The fifteen minute recovery that was meant to catch this cleared `deskAsking` and left the panel, and it sat below both the `deskNext` return and the quiet hours gate, so the two states most needing clearing were the two it could not reach. It now runs on every tick, closes whatever is up, widget panel or whole app dialog, and walking away still ends the night. Driven in the browser: an ask, sixteen minutes, the widget back, the next one arriving; the same for the dialog; and a night one ignored going quiet until the waking hours. 1.0.29, the same day, is the status check as Tom actually wants it: "I want the notif to be HUGE and IMMEDIATE... it should never go away until answered." It is the whole screen now rather than a box in the corner, it wears a NOTICE window, and it has no close button, no SKIP and nothing reachable underneath it. SAVE is the only exit, and until every scale is pressed it names the one still missing rather than going dead. The two old paths, a panel inside the widget and a UI.dialog in the whole app, became one overlay that works the same in the widget, in the whole app and in a plain browser tab with no launcher. The 15 minute give-up shipped in 1.0.28 is gone with them: a check still on the screen is no longer a jam to recover from, it is the thing working. The quiet-hours rule was "until I stop answering it", which needed a way to walk away, so it is now one per night closed by answering it. The look comes from `shared/notice.js` and the window is chosen in Settings, Desktop; BLOCK is the default. Driven in the browser at 320x240, 390x844, 1280x720 and 1920x1080: all four windows paint in their own palette, Escape and a click on the backdrop do nothing, a due tick cannot stack a second, Ctrl+B cannot open a bullet behind it, SAVE is on screen even in a 240px-tall window, every target is at least 44px and 119px on a desktop, and answering writes ordinary `ev` readings and closes the night. The launcher half, `takeover`, compiles and is NOT watched running: only Tom's machine can do that, and STATUS.exe has to be rebuilt for it because a launcher built before it ignores a verb it does not know. 1.0.30 covers that gap: the page sends the old `checkin` verb once first, so an unrebuilt launcher still centres a 900x700 window instead of cramming a full-screen question into a 320px widget, and the new verb overrides it a moment later on a launcher that has one. 1.0.32, 2026-09-17: a food label is read in the unit it is PRINTED in. Tom: "how possible is intelligent food entry? 1000mg - 1 gram." A label prints sodium in milligrams and protein in grams and mixing them up is the easiest mistake there is to make while copying one, so every box on the food form now takes the packet's own words and converts: 1.2g into Sodium mg is 1200, 25000mg into Protein g is 25, 0.1kg into a gram serving is 100. The box is rewritten when you leave it, so the conversion is something you SEE rather than something you hope happened. `UI.amount` does the arithmetic, `NUT_UNIT` says which unit each box holds, and a bare number still means what it always did, so nothing that worked before changes. The status check also asks the launcher for the screen once and once only: the message used to carry the widget's measured size, so any redraw that moved it by a pixel was a new message and another grab at a screen he was not sitting at (Tom: "Just have the Status Check pop up once and then I'll always answer it when im back in my desk"). The host refuses a second `takeover` while it is already the check, which is the same rule held from the other end. |
-| `portion/` | FOODDÉX on screen since 2026-09-14; the folder and id are still `portion`. Built 2026-09-05, made a desktop app 2026-09-06. Tested in the browser. A bench for building food entries and a viewer over the ones you have. Paste or type a label; it says how much of it hits 50g of protein or any other number, in grams or in pieces, what that comes to and what it costs. Saves the answers as ordinary servings, so STATUS logs them in one tap. Hands the entry over as words to paste into somebody else's tracker or as a spreadsheet row. Ranks the whole library against whatever amount is on screen, which is the comparison. Searches, edits and deletes; refuses to make a second food with a name you already have. Reads Sodium, or converts Salt where a label prints that instead. Tom only, kept out of the client build by `tools/build-client.py`. |
-| `train/` | Built, and tested in the browser at 390px against Tom's real 12,370-set FitNotes backup; the phone itself is his iPhone 13 Pro, and nothing has been watched on it yet. A reproduction of FitNotes v25.1 on the shared foundation, plus Tom's own idea of training (2026-09-14): sessions with names and training blocks, each working set compared with the same set last time in reps and percentage, a session card and a weekly card that share as story pictures, sets per muscle per week, a Profile with all-time and block records, and setup recorded per set. Warmups and split sets are read from comments. Says session and training, never workout. Owns the training log. Has its own brief. |
-| `wealth/` | Built 2026-09-11 and tested in the browser. The money app: three numbers (liquid, allocated, free) and runway. Owns clients on any payment cycle — every N months on one or several days, every N weeks, every N sessions, packages bought up front, or one off — with expected payments derived from the cycle rather than stored. A monthly day is clamped per month when the date is worked out and never when it is saved, so the 31st stays the 31st in every month that has one. Spending reviews at three zoom levels, day, week and month, with a day drawn as a timeline down the clock. Reads STATUS's `spend` rows and files them with a `mark` row rather than editing them, so STATUS's price, account, receipt and meal link cannot be dropped. Text rules sort spending retroactively. Big purchases are marked and excluded from every "normal spending" figure. Every name is picked from a list, never typed twice, and every amount groups itself with commas as it is typed. Logs spending itself as well as reading STATUS's. A donut for where money went, and monthly net beside liquid. Amounts are stored in one base currency and a header switch reads them all in a second one; the rate is typed and dated rather than fetched, and typing always stays in the base currency so a round trip cannot lose anything. Tom only, kept out of the client build. Opens a GCash PDF (asking for its password, never storing it) or a bank spreadsheet directly, with pasting as the fallback. Trusts the running balance over the printed amount, so ride holds GCash prints as payments are dropped and part-charges fold into one purchase; checks every statement against its own closing balance; nets reversals; and records money between his own accounts once, as a transfer, even when both statements show it. An import setup asks once what each new payee is and turns the answer into a rule; transfers to people nobody named are filed as One-time transfers tagged Unsure, still counted as money out. Then reconciles it: certain matches merge into a master entry keeping his category and taking the bank's amount, uncertain ones are asked about one at a time, and reading the same file twice adds nothing. Optional monthly caps per category, shown as a number and a pace mark rather than a verdict. Has its own brief. 1.0.14, 2026-09-17: one bill bullet at a time. Tom: "Why does pay skool show up twice in my todo widget? meralco too." They were not duplicates. Bills are read 30 days ahead and Meralco is every 6 to 7 days, so four or five of its dates sit in the window at once and every one not matched to a payment is overdue and therefore on today's list — four real rows, all reading `Pay Meralco, 1,040`. You cannot pay next week's before this week's, so only the earliest outstanding date per bill gets a bullet and the next appears when that one is cleared. Rows written under the old rule fall out of `want` and are taken back on the next pass, so his existing ones clear themselves; a ticked one is kept, as ever. Watched: six owed dates across two bills became two bullets, and two extra rows seeded by hand were removed on the next sync. |
-| `log/` | Built 2026-09-13 and tested in the browser. The journal module: a way to view STATUS's entries en masse. One continuous timeline from the first record to today, in eight views from Day to Year; the wheel scrolls, the mouse side buttons change view, a held button drags. Days show the day's line and STATUS's bullets, with a faint mood, energy and caffeine graph behind; beside them, day columns for "What got done today" and every STATUS measure, reorderable, resizable and hideable; beside those, weeks, months, quarters and the year with written summaries. A notebook view lays days out as two-page spreads. Writes `note` and the day's `note` by merging, owns `recap` and `cell`. Never watched with a real mouse or real data. In the client build since 2026-09-14 (Tom: "LOG and QUESTS are for clients as well"). Has its own brief. |
-| `style/` | Built 2026-08-21. Pick, compare, edit and add themes, and holds the icon master set. A desktop app, like most of the suite: comparing themes honestly means several real screens side by side. Built out of `shared/ui.js` components rather than its own chrome. Owns `skin`. |
-| `checkin/` | CHECK IN, built 2026-09-14 from `_template/`, grown 2026-09-15 into Tom's first ask: a goal physique, regular check-in photos, how far off, and a timelapse. Everywhere, and in the client build. Has its own brief, and one master conversation. Front ships; any other pose is one tap with no name. Every photo is measured on the device by Google's MediaPipe (fetched once, about 20MB, kept for offline; the dots start in the middle if it cannot load) into three ratios, with dots anyone can drag. PROGRESS shows goal, first and latest with the numbers and the change and no verdict. The Check In camera: last time's ghost, a body match, directions spoken and beeped, tilt, light, an automatic three-beat shutter and an optional setup photo. TIMELAPSE lines every photo up on the body, as a flipbook or a before-and-after wipe, with the face shown, blurred or covered by the person's own animal, saved as MP4 or WebM. Saves photos named by date and pose (a zip on a desktop), reads them back from files or a folder, and makes a Copy for Claude picture and question. Opening a client's file now KEEPS it under their id. Tested in the browser 2026-09-15 at 1280px and 390px with a fake camera and a CC BY 1865 photograph: camera directions, auto-shutter, measuring, client files opened twice, zip, MP4. Not tested on a phone. Hips measure unsteadily when a hand is near them (see the brief). 1.0.4, 2026-09-17, two of Tom's. Projects: "be able to denote projects in check in", and a project is a training phase — a cut, a bulk, a prep. PROGRESS carries an ALL TIME chip and one per block, and inside a block First becomes Block start, Since first becomes This block, and the photo list under it narrows to match, so the screen means one thing rather than two. These are TRAIN's own `phase` rows and not a second list of the same idea: a training block is a training block whichever app you stand in, and two lists would mean naming his cut twice and watching them disagree. Ownership names who is responsible for the SHAPE, not who may write, so CHECK IN patches rather than rebuilds and registers `phase` both ways, reading TRAIN's tab so a device where TRAIN was never opened still sees the blocks. Watched: date filtering across an ended block and a running one, and shoulders-to-waist reading 2.13 to 2.50, +0.37 inside the block against 1.88 to 2.50, +0.62 all time. And the bluetooth camera remote: "Bluetooth camera remote should work in check in." A remote is not a camera, it pairs as a KEYBOARD, so this is a key handler on the camera screen — Enter, Space, the arrows, k and the volume keys, because which one a remote sends depends on the remote and the mode it is switched to. It presses the same shutter a thumb does, so the setup shot, the count and the retake behave identically, and it is attached in the capture phase and detached when the camera closes. **Known limit, the browser's not ours: iOS Safari does not hand a web page the volume keys, so on his iPhone the remote has to be in its Android mode.** The remote itself is NOT tested — there is no remote here, only Tom has one. |
-| `speak/` | SPEAK, built 2026-09-15 from `_template/`. Tom: "Speech improvement app to help me with YT and short form content", based on Duolingo, objective feedback, a guided game, daily warm-up drills, and every drill saying its goal and why. Five skills (PACE, CLEAN, FLOW, CLEAR, EYES) of five steps each, a step opening when the one before is met; three drills a day picked from the skills furthest from target; a three-step warm-up that sets the day's crispness reference; a streak with a silent freeze; no XP, no levels, no verdicts. The ear counts syllables after de Jong & Wempe, tuned on four clips with 97 counted syllables; pauses at 250ms; held sounds as the um proxy; a spectral-tilt proxy for crispness; pitch spread; the browser's own recogniser for words and crutch phrases where it exists and is switched on; Google's face landmarker for time on the lens, calibrated during the count. Driven in headless Chromium at 1280px and 390px with a fake microphone (a synthetic clip with known counts, read exactly) and a fake camera (a still face, read 100% on the lens). Tom, 2026-09-15, "make it local on my machine": the recogniser is the only thing that could send his voice out and it is off by default, so a take makes no network request at all and the page's only one is the fonts every app fetches. A drill whose goals need a switch that is off is left out of TODAY, drawn locked with the reason, offers the switch in one tap, and never blocks the step after it; a goal nothing could read says no reading, never not met. Not run on a phone, and no real voice has been through it. Has its own brief and a research file. |
-| `system/` | NOTICE on screen since 2026-09-15; the folder and id are still `system`, for the reason FOODDÉX's are still `portion`. Built 2026-09-15 from `_template/`. Text in, a status window out: a 1080px-wide PNG of a game window in the Solo Leveling and Overgeared manner. Plain lines make a NOTIFICATION window, one bracketed message per line; lines starting with `-` make a QUEST INFO window with a title, goals as tick boxes (`[x]` ticked, `40/100` as progress), REWARDS and an optional WARNING from a `Penalty:` line. Rewards are typed under `Rewards:` or, if not, made up from the text, steady until REROLL: EXP from the number of goals and words, a stat matched to the words (train is STR, run is AGI, sleep is VIT, read is INT, post is CHA, meditate is WILL), a title, and gold or an item. Three window styles, HUNTER (blue), LEGEND (gold) and VOID (violet), drawn on a canvas with fixed palettes of their own: the picture is the art, and the app's own chrome stays on tokens. Three frames: the window alone on a clear background, a 1080 x 1920 story or a 1080 x 1350 post, either clear or on a dark wash, at IO's three sizes. SAVE PICTURE hands the file over through `IO.handOver` inside the tap; COPY puts it on the clipboard where the browser allows. RECENT lists what was saved and reopens it. Owns `msg`. Tom only, kept out of the client build: it makes his posts, not a client's. Tested headless in Chromium 2026-09-15 at 1280px and 390px: both modes, three styles, three frames, typed and made-up rewards, reload, save, recent, no target under 44px, no sideways scroll. Google Fonts is blocked in the test sandbox, so the faces were fetched separately and served to the page: every style was then watched in its real face, Rajdhani in HUNTER and Cinzel in LEGEND, and the picture's corners come back fully transparent with the card at about 80% opacity, which is what makes it sit on a photo. Not opened on a phone. 1.0.2, 2026-09-17: the heading is no longer part of the style. It used to come off the style, so HUNTER also meant the word NOTIFICATION and LEGEND meant NOTICE with no way to have one without the other; it is its own HEADING control now, AUTO or one of NOTIFICATION, QUEST, SYSTEM MESSAGE and NOTICE, and a `#` line still beats it. BLOCK is a fourth style and the default: the suite's own theme as a picture, flat, gold and no glow. It kept the square brackets round each line, which came off in the first build and Tom put back the same day (1.0.3). A third window, ITEM, reads `Rank:` and `Effect:` and draws a name, a rank, what it reads like in the hand and EFFECTS, made up and rerollable the way a quest's rewards are. MAKE ONE FOR ME writes the window: eight kinds (daily, urgent and penalty quests, item, title, skill, level up, message), ten topics or ANYTHING, ranks E to S scaling how many goals and how big the numbers are, his own words as the title or item name, and a switch for whether the rewards are written in or left to the app. Word tables and a seeded shuffle, no network and no model, and it writes the ordinary text so anything it makes can be edited by hand. COPY was one attempt with one message: the modern clipboard is refused outright where the suite genuinely runs (a page opened from a folder has no proper address, and Chrome answers "Write permission denied" before it looks at the picture). It tries the modern clipboard two ways, and when neither is allowed it stops pretending: a COPY panel says what happened in the browser’s own words, names the folder as the cause when that is the cause, points at right-click Copy image over the picture already on the page, which cannot be refused, and offers SAVE PICTURE. 1.0.3, 2026-09-17: the old selection copy that sat in between is gone. It returned true and NOTICE said "Copied" and nothing was on the clipboard, because what it puts there is a scrap of HTML holding the picture as text that most places refuse to paste. A fallback that lies is worse than no fallback. Driven in the browser 2026-09-17: 960 combinations of the maker parsed and drew with no failures, the heading came out the same under all four styles, ITEM read its rank and effects, and both arms of the COPY panel were read back with the browser’s real error in them. What lands on the operating system’s clipboard cannot be read back from the sandbox, so whether the modern clipboard succeeds on his machine is still his test, and it is not opened on a phone. 1.0.4, 2026-09-17: the four palettes and the cut-corner shape moved to `shared/notice.js`, because STATUS's status check now wears one. NOTICE's parser, its made-up rewards and its canvas layout stayed here, since they exist to turn typed text into a picture and nothing else wants that. Watched after the move: the four palettes come off the shared table, and a Hunter window still draws with its corners cut away and its body filled. |
-| `mix/` | MIX, built 2026-09-20 and driven in the browser. Tom, 2026-09-20: "this is meant to COMPLETELY replace protocol HTML, that one came out wrong." What to weigh out today in grams, from goals that move with the day. Four things it does that the old file could not. It reads today's food out of STATUS rather than asking for it twice, and works out the five nutrients STATUS does not keep — zinc, magnesium, copper, choline, preformed vitamin A — from a food table by matching the meal's name; a meal it cannot name, or one not logged in grams, is listed by name under the totals rather than silently counted as zero. The sodium base is the seven-day average of FOOD sodium, with MIX's own salt taken back out by key: without that subtraction today's added salt lands in STATUS, tomorrow reads it as food, and the base ratchets upward for ever, which is the exact opposite of the "keep what I retain the same every day" it exists for. Potassium is scaled against the base plus 200mg per litre sweated, not against the sweat-inflated sodium goal, because a litre of sweat costs about 200mg of potassium and about 830mg of sodium, and scaling by the goal asked for roughly five times what was lost and put the GI cap in the way of every training day. And zinc past the single-dose cap goes with the chicken meal instead of stopping short of the target, since the target is the thing priority 3 protects. Every dose line drags between cards, salt refuses the night drink, and the layout is a setting row rather than localStorage so it is in the backup and reaches the laptop. Watched on the test case Tom set: 1.667 L of sweat, a 4,038mg sodium goal, 0.071g of zinc glycinate, and logging twice writing one row rather than two. Never opened on a phone, and it is a desktop app. The swing warning measures the sodium KEPT, total minus what came straight back from sweat, because against the total it fired on every training day by design and a warning that is always on is one nobody reads. |
+| `index.html` | Home screen: widget grid, app dock, data authority. History in `HOME.md`, read it first. |
+| `block/` | Routine builder. Publishes today's plan, owns `rhythm`. Brief: `block/CLAUDE.md`. |
+| `arc/` | Mind canvas, skill trees, flashcards. Tom only. Brief: `arc/CLAUDE.md`. |
+| `quest/` | QUESTS, the todolist. Client build. Brief: `quest/CLAUDE.md`. |
+| `form/` | Lift review. Tom only. Brief: `form/CLAUDE.md`. |
+| `status/` | Every daily measure, food, money, the journal, the desktop widget. Brief: `status/CLAUDE.md`. |
+| `portion/` | FOODDÉX, the food label bench. Tom only. Brief: `portion/CLAUDE.md`. |
+| `train/` | The training log, FitNotes reproduced. Phone. Brief: `train/CLAUDE.md`. |
+| `wealth/` | The money app. Tom only, forever. Brief: `wealth/CLAUDE.md`. |
+| `log/` | The journal en masse. Client build. Brief: `log/CLAUDE.md`. |
+| `style/` | The theme workbench and icon master set. Brief: `style/CLAUDE.md`. |
+| `checkin/` | Physique check-ins. Client build. Brief: `checkin/CLAUDE.md`. |
+| `speak/` | Talking to camera, measured. Tom only. Brief: `speak/CLAUDE.md`. |
+| `system/` | NOTICE, status window pictures. Tom only. Brief: `system/CLAUDE.md`. |
+| `mix/` | ELEMENT, the electrolyte bench. Tom only. Brief: `mix/CLAUDE.md`. |
+| `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation, passing 314 checks on 2026-09-17 at BOTH desktop and phone width. Every app loads it. |
 
-### Debt, in the order it should be paid
+### Debt and foundation findings
 
-1. ~~The old blob kernel~~ **Done 2026-08-20.** Kernel v2 is a view over
-   `records.js`; the apps kept their API and did not move. First load copies the
-   old `lifeos_v1` blob into rows and leaves it in place as its own backup.
-2. ~~ARC carries its own copy of the theme engine~~ **Done 2026-08-26.** It
-   reads `shared/skins.js` and went from ten themes to eighteen, keeping its
-   own per-theme colour editing. BLOCK and FORM went onto it the same day.
-   HABITS was the only app left off it, and was deleted on 2026-09-14.
-3. ~~The apps still carry their own settings, themes and sounds~~ **Done
-   2026-09-22.** Every app uses `UI.settings` and `skins.js`; BLOCK was the last
-   on its own sound and moved to `sound.js` in 1.0.16.
-3b. ~~Apps not loading `shared/mobile.js`~~ **Done 2026-08-20.** Every app
-   loads it and every viewport covers the safe area. What is left is per-app:
-   auditing each one's own CSS for hover-only controls and sub-44px targets,
-   which the shared layer cannot do for them.
-4. ~~Commits are unpushed~~ **Settled 2026-08-26.** Tom: "push - always push
-   without me asking". The main repo is pushed after every commit. See the
-   end of this file for the client copy.
-
-### Foundation, found and not acted on
-
-Recorded 2026-09-06 on Tom's instruction: "Save all things that affect
-foundation for now." Every one of these is in `shared/` or at the root, so an
-app session must not touch them. They are written down here because commits and
-this file are the only handoff there is. Each says what was watched, not what
-was suspected.
-
-**2026-09-14: a foundation session worked through this list.** Items 1, 6, 8,
-9, 10, 11 and 12 are fixed, plus three things TRAIN found (13). A fixed item
-keeps a short entry, because most of them left a workaround in an app that an
-app session now has to delete. Item 14 lists those.
-
-**1. ~~The store can wait forever~~ Fixed 2026-09-14.** `hydrate()` in
-`records.js` stops waiting after 2.5 seconds: `Rec.ready` fires on what
-localStorage had, `Rec.stats().idbSlow` says so, and the big rows merge in and
-announce whenever IndexedDB does answer. Writes are untouched; they queue on
-the same open and land when it does. Watched: a frame whose `indexedDB.open`
-never answers fired ready at 2514ms with its localStorage rows. Not a smoke
-check, because proving it costs two and a half seconds per run. There is still
-no `onblocked` handler; nothing has been seen to need one.
-
-**2. ~~First paint should not be behind `Rec.ready`~~ Closed 2026-09-15.**
-STATUS draws what localStorage already holds after 300ms and ARC loads the fast
-half synchronously, both done earlier by their own sessions; TRAIN was the last,
-and now does the same: if the store has not answered in 300ms and there is a
-log, it draws, and seeding and the record pass still wait for ready. Watched in a
-frame whose IndexedDB never answers: TRAIN had drawn at 900ms, ready came at 2.5s.
-
-**3. ~~`Rec.patch`, so merging is easier than replacing~~ Built 2026-09-14,
-Tom said yes.** `Rec.patch(type, date, key, changes)` reads the row, changes
-only the fields it is given and writes it back. The two open questions,
-decided by Claude: a dotted name reaches into a nested object
-(`{'base.ca': 120}` leaves the rest of `base` alone), and a value of
-`undefined` removes a field. A row that is not there is made; a patch that
-changes nothing writes nothing. Five smoke checks. No app calls it yet: moving
-the apps that rebuild rows by hand onto it is each app's own job.
-
-**4. ~~A cross-device merge is whole-row~~ Closed, found 2026-09-15.** It was
-fixed on 2026-09-15 by `9d55433`: a row that has been edited remembers when
-each field changed, and two devices' copies merge a field at a time, so a
-laptop's rename and a phone's protein edit both survive. See FIELD TIMES in
-`records.js`. This entry stayed open by mistake.
-
-**5. ~~Cache-busting is inconsistent~~ Settled, found 2026-09-15: no app carries a `?v=` stamp any more, the "none of them do" half of the choice below, and the client build stamps its own.** Counted 2026-09-14: `log/`, `style/`
-and `wealth/` load shared at `?v=16`; `_template/`, `checkin/`,
-`portion/` and `quest/` at `?v=15`; the home screen, STATUS, TRAIN, BLOCK, ARC
-and FORM carry none. Fixing it touches every app folder, so it wants a moment
-when no app session is live. Harmless from a folder, where
-nothing is cached. It matters the day hosting returns, because the known trap
-says "bump the version" and there is no one version to bump. Either every app
-carries the same stamp or none of them do.
-
-**6. ~~`_review.html` reports leftover test rows too eagerly~~ Fixed
-2026-09-14.** It counted rows, and one run writes more than its limit of 12.
-It now asks about age instead: a test row still live ten minutes after it was
-written was left behind, and the failure names the types.
-
-**7. ~~Still open from 2026-09-04~~ Closed 2026-09-15: all three pass on a store wiped empty first.** the three icon checks that fail on a cold
-store and pass on the second run. Recorded under Testing above; unchanged.
-
-**8. ~~`shared/chart.js` cannot draw money~~ Fixed 2026-09-14.** Its step
-table stopped at 5000, so eighty thousand pesos drew seventeen gridlines. Past
-the table the step now carries on as 1, 2, 2.5 and 5 times each power of ten.
-Smoke check: "money in the tens of thousands still gets a readable scale".
-
-**9. ~~`UI.segmented`'s buttons are 38px~~ Fixed 2026-09-14.** They are
-`var(--tap)`. Every segmented strip in every app is 6px taller, which nobody
-has looked at on a real screen yet.
-
-**10. ~~The review checks a purchase's account against the wrong form~~ Fixed
-2026-09-14.** It accepts an account's key or its name, since STATUS writes the
-name.
-
-**11. ~~A desktop menu closes before its item can be clicked~~ Fixed
-2026-09-14.** Written down twice the same day, by WEALTH and by LOG. The
-listener now ignores presses inside `.mb-menu` and is removed when the menu
-closes. The smoke check presses an item and then clicks it; with the old
-listener put back, that check fails, which was tried. Not watched with a real
-mouse.
-
-**12. ~~`shared/` still names HABITS~~ Fixed 2026-09-14.** All four leftovers
-are gone. The dock check now lists the twelve apps on the home screen, and
-LOG, QUESTS, CHECK IN, WEALTH and FOODDÉX have app icons for the first time: a
-book, a tick, a camera, a banknote and a bowl. Until now the dock drew a plain
-character for each. Claude picked those five; change the role in `icons.js`
-if one reads wrong.
-
-**13. Found by TRAIN, fixed 2026-09-14.** One: `icons.js` has `minus`,
-`trophy` and `burger` drawings, under the roles `minus`/`less`,
-`record`/`best`/`pr` and `nav`/`drawer`. Two: a `UI.row` whose control is a
-text box or a select puts the label above it, instead of squeezing the label
-to 0px at every width. A box with its own `max-width` stays beside its label.
-Settings rows with a select change in LOG, STYLE, WEALTH and TRAIN. Three:
-sheets use `svh` after `vh`, so on iPhone Safari they stop at the visible
-screen rather than under the toolbar. Not seen on a phone.
-
-**14. ~~Workarounds an app session can now delete~~ Closed 2026-09-15.** LOG's
-`menuAt()` and CHECK IN's `menu()` were already gone; WEALTH's `menu()` now only
-places the menu beside what opened it, which is its own job. The stepper minus in STATUS
-was found already drawn with the shared `minus` icon when Tom asked
-for it on 2026-09-15.
-
-**15. ~~STATUS's journal code lives in several copies~~ Moved 2026-09-14, Tom
-said yes.** `shared/journal.js` holds the kinds, the day rule, the time parser,
-the clock labels, the publish steps, repeats and the tick. STATUS, LOG, QUESTS
-and the home screen keep their old function names as one-line pointers to it,
-so nothing that called them changed. LOG's copy had drifted: it published a
-todo due next week as an event on the day it was written, and now it does not.
-Two things stay per app on purpose: QUESTS's reader for dates typed anywhere in
-a line, and LOG's caffeine half-life sum, still a copy of STATUS's.
-
-**16. ~~A row deleted on the device came back from the sheet~~ Fixed
-2026-09-15, `io.js` 0.1.10.** Tom: "deleting bullets not getting saved". The
-delete itself was fine and survived a reload. A delta push never takes a line
-off a tab, so the deleted bullet's line stayed on the Journal tab, and the
-next pull that read the tab took it for something typed into the sheet and
-wrote it back alive. Same for a deleted food, meal, spend or tracked field,
-and on the second device too, because the tables were applied before the
-save file carrying the tombstone. Now a line whose row is a tombstone here
-stays deleted unless it was typed into after the delete, a delta push sends
-a delete up as an emptied line, and a pull merges the save file first.
-`Rec.tombstone` and `Rec.tombstones` are new. Three smoke checks. Watched in
-the browser against STATUS's real Journal table; not watched against the
-real sheet.
-
-**17. A sweep of every shared module, 2026-09-15, `io.js` 0.1.11.** Tom:
-"do a sweep of all our modules for bugfixes." Every file in `shared/` was
-read end to end. Five fixes, each watched in the browser: `Mobile.hold`
-opened a menu twice on Android (the timer and the browser's own context-menu
-event); `Mobile.swipe` left a page-wide listener behind per row per redraw;
-`Rec.reload` could lose a big row still queued for IndexedDB (queued writes
-go first now); `Journal.publishTimed` timed a todo on the day it was written
-and never on its due day; `Health.check` counted a bill due next month as a
-future-dated tick. Three smoke checks. Read and found sound: `day.js`,
-`sound.js`, `chart.js`, `icons.js`, `skins.js` (one unescaped theme name in
-the picker, fixed), `ui.js`. Left alone on purpose: `UI.smartTime` reads a
-bare "12" typed over a morning time as midnight, which is arguable either
-way. The three cold-store icon checks (item 7) were still open that
-morning; item 18 found them closed.
-
-**18. Finishing the list, 2026-09-15, `io.js` 0.1.13.** Tom: "Finish all the
-foundation work". What was done, each watched in the browser:
-
-- `shared/import.js`, new. Brings in a spreadsheet the suite did not write, by
-  shape, not by name: a month grid of 1 and 0 becomes ticks, a Weight row or a
-  Date and Actual Weight table becomes weigh-ins, a food table becomes foods, a
-  spend table becomes money out. It never overwrites, never guesses an
-  account, never reads a formula as a record, and leaves out a row dated years
-  from the rest of its sheet. One `Rec.merge`, one undo. The home screen's
-  DATA panel has "Bring in an old spreadsheet". Tried on Tom's own Excel life
-  OS: its calorie tracker's "Actual Weight" column turned out to be formulas,
-  a projection, and three spends were typed as 2020 in a 2025 sheet.
-- `UI.menu` draws `sub` and `check`. It silently dropped both, so WEIGHT's
-  Show range had never done anything when chosen.
-- STYLE's editor has a Material switch under FEEL.
-- The iPhone home-screen icon follows the theme: a picture per factory theme
-  in `shared/icons/<theme>/`, drawn by `tools/make-icons.html` with
-  `tools/save-icons.py`, and each app's colour slot now lives in `icons.js`
-  (`Icons.appSlot`) so the dock and the pictures cannot disagree.
-- Items 4, 5 and 7 found closed and marked so.
-
-Fixed the same day, on Tom's yes, as `reads` (item 19): an app's sync read only its
-own `_Data · <app>` tab, so a LOG opened on its own never got STATUS's bullets.
-
-Tabled by Tom on 2026-09-15, "don't touch any apps looks yet": adopting
-`mb-card` and `mb-plate` in apps other than the home screen.
-
-**19. Sync reads the apps a view depends on, 2026-09-15, `io.js` 0.1.14.** Tom:
-"yes fix LOG's sync". A pull read only the app's own `_Data · <app>` tab, and
-every app pushes into its own, so any app showing another app's rows missed
-them on a device where that other app was not open. `IO.register` takes
-`reads: { status: ['note', 'day'] }`: whose tab, which types. The tab is
-downloaded when that app has pushed since this one last looked, by the push
-receipt the sheet already keeps, and only the named types are merged. No
-change to the Apps Script. Wired: LOG reads STATUS and QUESTS; QUESTS reads
-STATUS, LOG and BLOCK's plan; STATUS reads QUESTS, LOG, FOODDÉX and WEALTH;
-WEALTH and CHECK IN and FOODDÉX read STATUS; BLOCK reads ticks from STATUS,
-QUESTS, LOG, TRAIN and SPEAK.
-
-Found on the way: BLOCK registered `lane`, `item` and `routine` but not
-`rhythm` or `plan`, so an Every or Anytime habit and the published plan had
-never gone to the sheet. Both are registered now.
+Moved to `shared/CLAUDE.md` on 2026-09-22, verbatim. Read it before touching `shared/` or the root.
 
 ### Parked, not cancelled
 
@@ -1105,11 +777,23 @@ Two consequences, both of which have already cost work here:
 - **`CLAUDE.md` is read once, at session start.** A session that began before a
   structural change has never seen it.
 
-**Tom, 2026-09-16: from now on he works on Motherbase in one session at a
-time.** That session may touch the foundation and any app. The rules below
-still hold, because an old session or another tool can still be running:
-still commit each app and the foundation separately, and still stop and say
-so when you find changes you did not make.
+**Tom, 2026-09-22: one session per module.** "Motherbase is getting pretty
+big, its optimal to wrap at around 200k. I think we should split work per
+module now." This replaces the one-session rule of 2026-09-16.
+
+A module is one of: an app folder; the home screen (`index.html`, `HOME.md`);
+or the foundation (`shared/`, `sw.js`, `_review.html`, `tools/`, the root
+briefs). A session works on one module:
+
+- **Read at the start:** this file (loaded for you), the module's own brief
+  (`<app>/CLAUDE.md`, or `HOME.md`, or `shared/CLAUDE.md`), and that app's
+  section of `DOCTRINE.md`. Nothing else unless the task needs it.
+- **Write history to the module's brief, never here.** The root keeps one line
+  per app. A new app gets its own `CLAUDE.md` on the day it is built.
+- **An app session never edits `shared/` or another app.** If it needs a
+  foundation change, it writes the need under "Needs from the foundation" in
+  its own brief and tells Tom, and a foundation session picks it up.
+- **Wrap at around 200k tokens**, or when the module's task is done.
 
 So:
 

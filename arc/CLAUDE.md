@@ -64,3 +64,10 @@ Focus stash-restore vs. mid-focus saves; multi-parent node deleted via its prima
 ## Deferred backlog (Tom-approved order of interest)
 
 Edge routing that avoids crossing nodes · pixel-1:1 PNG export via DOM capture · todo-node aggregation views · "emptiest space" placement solver · true DAG layouts. Style: dark status-window aesthetic (Solo Leveling), Chakra Petch/IBM Plex, ice-cyan default accent — keep it.
+
+## History, moved from the root brief on 2026-09-22
+
+What was built and watched, newest last. Moved here verbatim so the root brief
+stays small enough for per-module sessions.
+
+Tom's build, with its own brief. On the shared foundation as of 2026-08-27: the store, the theme engine, the icon set, the settings sheet and the standard backup. Owns `map`, `node`, `link`, `attempt`, `card` and `crev`. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. Tom only since 2026-09-14: behind the dock's line with his other own apps, and dropped from the client build. Skill trees since 2026-09-16 (1.0.1), replacing AI Teach Mode: a node can be a skill with a test; it opens when the skills under it pass, passes on hits on separate days, comes back for reviews, and while in training is a daily QUESTS todo whose tick is a hit. Four in training, stuck skills split, trophies. Built with Claude through the clipboard, and the skill tree.exe skill carries the format. Watched in the browser on test data; not with a real tick from a phone. Cards the same day (1.0.2): a Cards tab over the canvas for the fact-shaped parts of what a tree teaches, on their own SM-2-style schedule that never touches the skill schedule, made from a node or pasted in as `front :: back` lines, graded with the keyboard, and exportable as a spreadsheet. See `arc/CLAUDE.md`.
