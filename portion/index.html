@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.5, 2026-09-20">
+<meta name="mb-version" content="1.0.7, 2026-09-22">
 <title>FOODDÉX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◪</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -18,6 +18,7 @@
 <script src="../shared/sound.js"></script>
 <script src="../shared/ui.js"></script>
 <script src="../shared/io.js"></script>
+<script src="../shared/nutrients.js"></script>
 <script src="../shared/health.js"></script>
 <script src="../shared/icons.js"></script>
 
@@ -294,7 +295,17 @@ const L = { name: '', brand: '', cat: '', amt: '100', unit: 'g',
   /* Not a box on screen. It rides in here so the draft, the save and the
      load all carry it without a second place to keep it. */
   src: '' };
-let PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
+/* ── the first amount follows the food ──
+   Tom, 2026-09-22: "The default entry for something should deliver either
+   50 grams of protein or 50 grams of carbs whichever relevant." Asking how
+   much rice hits 50 g of protein is a question with a silly answer (1.9 kg),
+   and it used to be the question every food opened on. The first amount is
+   now `auto`: 50 g of whichever of protein and carbs the food carries more
+   of, re-read every time the numbers change, until he picks one himself. It
+   is also the serving a new food offers first in STATUS. */
+const leadMacro = () => ((numv(L.c) || 0) > (numv(L.p) || 0) ? 'c' : 'p');
+const firstAmounts = () => [{ what: 'p', v: 50, auto: 1 }, { what: 'amt', v: 100 }];
+let PORTIONS = firstAmounts();
 let EDIT = null;
 const INPUTS = {};
 
@@ -546,6 +557,10 @@ function fillFromUsda(fd, nums) {
   setField('unit', 'g');
   NUTS.forEach(k => setField(k, nums[k] == null ? '' : nums[k]));
   L.src = 'usda';
+  /* Everything else the USDA sent, which until 2026-09-22 was downloaded and
+     dropped. It has no boxes on this form and needs none: it rides in the
+     draft beside the eight and lands on the row when the food is saved. */
+  L.more = window.Nutrients ? Nutrients.fromUsda(fd.foodNutrients) : {};
   paintLook([]);
   paintPortions(); saveDraft();
   Mobile.feedback('success');
@@ -726,7 +741,9 @@ function build() {
     let n = 0;
     /* Read before the fields are filled: setField does not count as typing,
        but this label IS now where the numbers come from. */
-    if (Object.keys(got).some(k => got[k] != null && k !== 'name')) L.src = 'label';
+    /* A label's numbers replace the USDA's, so the USDA's extra figures no
+       longer describe this food and go with them. */
+    if (Object.keys(got).some(k => got[k] != null && k !== 'name')) { L.src = 'label'; L.more = {}; }
     Object.keys(got).forEach(k => {
       if (got[k] == null) return;
       if (k === 'name' && L.name.trim()) return;
@@ -992,6 +1009,7 @@ function addRow() {
 }
 
 function paintPortions() {
+  PORTIONS.forEach(pt => { if (pt.auto) pt.what = leadMacro(); });
   /* The picture needs to say what it is of. On screen this is the same
      information as the Name box two inches up, so it hides until there is
      something to say. */
@@ -1236,6 +1254,9 @@ function loadFood(fd) {
   /* Carried, not re-derived. Loading a food to correct one figure is exactly
      when the row would otherwise forget that the rest came off a pack. */
   L.src = fd.base.src || '';
+  /* A loaded food already carries its extra figures on the row, and the save
+     merges into the row, so there is nothing to carry here. */
+  L.more = {};
   /* The piece weight, on the other hand, IS stored - as the "1 piece"
      serving - so it comes back with the food. */
   setField('pc', pieceOf(fd) == null ? '' : pieceOf(fd));
@@ -1243,7 +1264,7 @@ function loadFood(fd) {
   /* "1 piece" is not an amount you asked for, it is how the piece weight is
      kept. It goes back in the box above rather than into the list. */
   PORTIONS = (fd.serves || []).filter(s => !/^1 piece$/.test(s.label)).map(s => unlabel(s, fd.base));
-  if (!PORTIONS.length) PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
+  if (!PORTIONS.length) PORTIONS = firstAmounts();
   paintPortions(); saveDraft(); syncBar();
   Mobile.feedback('open');
   document.querySelector('main').scrollTop = 0;
@@ -1256,7 +1277,7 @@ function blank() {
      looks like it belongs to the empty form in front of you. */
   paintLook([]);
   Object.keys(L).forEach(k => setField(k, k === 'amt' ? '100' : k === 'unit' ? 'g' : ''));
-  PORTIONS = [{ what: 'p', v: 50 }, { what: 'amt', v: 100 }];
+  PORTIONS = firstAmounts();
   paintPortions(); saveDraft(); syncBar();
 }
 
@@ -1320,6 +1341,8 @@ function writeFood() {
     if (v != null) base[n] = v; else delete base[n];
   });
   if (L.src) base.src = L.src; else delete base.src;
+  /* the USDA's other figures, the ones with no box on this form */
+  if (L.more && typeof L.more === 'object') Object.assign(base, L.more);
 
   /* Only the amounts that actually worked out become servings. One with no
      protein figure behind it is a question with no answer, not a serving. */
@@ -1347,7 +1370,7 @@ function writeFood() {
     /* Carried, never reset. `uses` is how STATUS sorts the list and `dflt` is
        which serving it offers first: correcting a label is not a reason to
        forget that you eat this every day. */
-    dflt: was ? (was.dflt || 0) : 0,
+    dflt: was ? (was.dflt || 0) : leadServe(serves),
     uses: was ? (was.uses || 0) : 0,
     shot: was ? (was.shot || null) : null,
   }));
@@ -1355,6 +1378,15 @@ function writeFood() {
   Mobile.feedback('success');
   UI.toast('<b>' + esc(name) + '</b> saved with ' + serves.length +
     ' serving' + (serves.length === 1 ? '' : 's') + '. It is in STATUS too.');
+}
+
+/* which saved serving is the 50 g one, so a new food opens on it in STATUS */
+function leadServe(serves) {
+  const lead = PORTIONS.filter(pt => pt.auto)[0];
+  if (!lead) return 0;
+  const w = work(lead);
+  const i = w ? serves.findIndex(s2 => s2.label === w.want) : -1;
+  return i < 0 ? 0 : i;
 }
 
 /* ══ the draft ══
