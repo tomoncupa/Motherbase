@@ -240,7 +240,8 @@ speak/index.html   SPEAK, talking to a camera, measured: pace, fillers and
                    Everywhere. Tom only, dropped from the client build.
 speak/CLAUDE.md    SPEAK's own brief, governs speak/ only
 speak/RESEARCH.md  where every number in SPEAK came from, with sources
-mix/index.html     MIX, the electrolyte bench. What to weigh out today, in
+mix/index.html     ELEMENT, called MIX until 2026-09-22; the folder and the app
+                   id stay `mix`, the way FOODDÉX's stayed `portion`. The electrolyte bench. What to weigh out today, in
                    grams, on a 0.001g scale: salt, potassium citrate, zinc
                    glycinate, magnesium glycinate. It replaces `protocol.html`,
                    which lived in Downloads, asked for every food by hand and
@@ -297,6 +298,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `health.js` | Answers "is my data okay" without a test suite. |
 | `notice.js` | The status window LOOK: four palettes and the cut-corner shape. NOTICE strokes it on a canvas to make a picture, STATUS clips a real panel to it for the status check. The one place in the suite that carries hex colours on purpose, for the reason NOTICE always had: the window is the art, not the furniture, so a Hunter window is blue in every theme. Nothing here reaches an app's own chrome. |
 | `cloud.js` | LIVE SYNC: Firebase beside the sheet, added 2026-09-20. One row per row at `/u/<uid>/rows/<id>`, pushed on change and listened for by `updated_at`, merged through `Rec.merge` like anything else. Fetched by `io.js` rather than by a tag in every app, the way `mobile.js` fetches `sw.js`, so no app was edited. Only the TOP document connects, because `records.js` already shares merged rows across the origin and fourteen frames would be fourteen connections. A row over 64KB is skipped AND THE BOUNDARY STILL PASSES IT, or one photo would jam every sync after it. Does nothing until a config is pasted. See `CLOUD.md`. |
+| `nutrients.js` | The full nutrient list a food can carry beyond the eight, added 2026-09-22: fibre, sugar, the fats, EPA and DHA, cholesterol, eleven minerals and the vitamins, thirty-one in all. One list, three readers: FOODDÉX fills them from its USDA lookup (found by the USDA's printed NAME and unit, never its numeric id, and International Units skipped), STATUS gives each one a column on the sheet's Food tab, and ELEMENT reads its five off the food. They live on `food.base` beside the eight. A blank is "not known", never zero. |
 | `_smoke.html` | 328 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
@@ -364,7 +366,7 @@ An app may read any type. It writes only the types it owns.
 | `cperson` | **checkin** | client id | `{name, animal, unit, fields, seen}` — a client whose check-in file was opened. Their rows carry the id in front of the key |
 | `checkin` | **checkin** | `''`, dated | `{sent}` — when that day's check-in was sent to a coach |
 | `day` | **status**; **log** writes `note`, the day's summary | `''` | `{note, rest}` |
-| `food` | **status** names the shape; **portion** writes it too | food id | the label as printed, plus your own servings |
+| `food` | **status** names the shape; **portion** writes it too | food id | the label as printed, plus your own servings. `base` may also carry any key in `shared/nutrients.js`, and every writer MERGES into `base` rather than rebuilding it: STATUS's food editor rebuilt it until 2026-09-22 and would have wiped all of them on one Update |
 | `meal` | **status** | timestamp id | one logged serving, numbers frozen in |
 | `spend` | **status** | timestamp id | `{amt, acct, note, t}` |
 | `acct` | **status** | account id | `{name, order}` |
