@@ -241,7 +241,9 @@ coach/index.html   COACH, built 2026-09-22. Tom's clients in a Pokémon PC
                    from their last session. A PROGRAMS library holds programs
                    to send to anyone or sell. One column on a phone, two on an
                    upright iPad, three from 1180px. Tom only, dropped from the
-                   client build. Logging a 1:1 here is not built yet
+                   client build. LOG A 1:1 on a client writes their sets as `cset` and one
+                   WEALTH `sesh` per day, and every COACH client is a WEALTH
+                   client and the other way round (`cperson.wc`, `client.cp`)
 quest/index.html   QUESTS, the todolist, copied from Todoist. The same todo rows
                    as STATUS's journal, with a due date, priority, project and
                    repeat added. Desktop and phone. In the client build since
@@ -400,8 +402,8 @@ An app may read any type. It writes only the types it owns.
 | `cat` `rule` `wtag` | **wealth** | | spending categories, the text rules that sort into them, and occasion tags |
 | `mark` | **wealth** | `date\|spendKey` | `{cat, tag, big}` — what WEALTH thinks of one of STATUS's spends. Kept OFF the spend row on purpose |
 | `count` | **wealth** | date + account id | `{bal}` — a counted balance. Kept off `acct` so STATUS cannot wipe it |
-| `client` `paid` | **wealth** | | a coaching client, and money that arrived. A `paid` with no client is a one-off |
-| `sesh` | **wealth** | date + id | `{client}` — one session delivered. A client paid every N sessions is paid off a count, so the count has to be auditable |
+| `client` `paid` | **wealth**; **coach** writes `client` too | | a coaching client, and money that arrived. A `paid` with no client is a one-off. `cp` is the COACH card it is joined to; name and done follow whichever app changed them last |
+| `sesh` | **wealth**; **coach** writes one per 1:1 logged there, key `k-<pid>` | date + id | `{client, src, pid}` — one session delivered. A client paid every N sessions is paid off a count, so the count has to be auditable |
 | `pack` | **wealth** | date + id | `{client, n, price, note, parts, when}` — sessions sold before they happen, whole or in parts due as blocks of sessions start or end. Payments apply to packages oldest first, so partial payment needs no extra field |
 | `bill` `debt` `pot` `move` | **wealth** | | recurring outgoings, what is owed, savings pots and movements into them |
 | `recon` | **wealth** | a statement line's fingerprint | `{d, amt, acct, kind, spend, sdate, skip}` — this statement line has been dealt with. What makes re-importing the same file harmless |
