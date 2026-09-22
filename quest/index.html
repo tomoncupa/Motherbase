@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.15, 2026-09-19">
+<meta name="mb-version" content="1.0.16, 2026-09-22">
 <title>QUESTS</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -293,12 +293,12 @@ const S = {
 
 /* ── settings ──
    Tom, 2026-09-15: QUESTS gets a tab of its own, holding only real choices:
-   what Today shows under your tasks. Its theme is picked in STYLE. */
+   what Today shows among your tasks. Its theme is picked in STYLE. */
 function openSettings() {
   UI.settings(APP.id, [{ id: 'quests', name: 'QUESTS', draw: pane => {
     const sw = (label, note, k) => pane.appendChild(UI.row(label, note,
       UI.toggle(S.get(k, 1) !== 0, v => { S.set(k, v ? 1 : 0); draw(); })));
-    sw('BLOCK’s plan on Today', 'What BLOCK planned for today, under your tasks', 'showPlan');
+    sw('BLOCK’s plan on Today', 'What BLOCK planned for today, among your tasks by time', 'showPlan');
     sw('Finished tasks on Today', 'What you ticked today, at the bottom', 'showDone');
   } }], { order: ['quests', 'data'] });
 }
@@ -684,6 +684,17 @@ function sortQ(a, b) {
   if (ta !== tb) return ta < tb ? -1 : 1;
   return (a.t || 0) - (b.t || 0);
 }
+/* One day in clock order, todos and BLOCK's blocks together: by start time,
+   anything with no time after, and a todo moved away last of all. */
+const clockOf = x => x.blk ? (x.blk.s != null ? x.blk.s : 9999) :
+  (x.at ? +x.at.slice(0, 2) * 60 + +x.at.slice(3, 5) : 9999);
+function sortDay(a, b) {
+  if (!!a.movedAway !== !!b.movedAway) return a.movedAway ? 1 : -1;
+  const ca = clockOf(a), cb = clockOf(b);
+  if (ca !== cb) return ca - cb;
+  if (a.blk || b.blk) return a.blk ? (b.blk ? 0 : 1) : -1;
+  return sortQ(a, b);
+}
 const dayTitle = s => asDate(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
   ' · ' + dayWord(s) + (Math.abs(Day.diff(s, T())) <= 1 ? ' · ' + DAYNAME[Day.dow(s)] : '');
 
@@ -740,12 +751,13 @@ function viewInfo(v) {
   const done = all.filter(x => x.done && x.doneOn === t);
   const groups = [];
   if (over.length) groups.push({ id: 'over', title: 'Overdue', over: true, items: over });
-  groups.push({ id: t, title: dayTitle(t), day: t, items: now.concat(movedFrom(t)) });
   /* What BLOCK planned for today. Tom, 2026-09-14: "Daily tasks, and whats
      next from BLOCK is what QUEST is for." Read from BLOCK's published plan,
-     never written. */
+     never written. Tom, 2026-09-22: "QUEST should not group by source, instead
+     in chronological order for the day", so the blocks sit among the todos. */
   const plan = Rec.get('plan', t, 'routine');
-  if (S.get('showPlan', 1) !== 0 && plan && (plan.blocks || []).length) groups.push({ id: 'block', title: 'BLOCK · ' + (plan.name || 'Today'), block: true, day: t, items: plan.blocks });
+  const blks = S.get('showPlan', 1) !== 0 && plan ? (plan.blocks || []).map(b => ({ blk: b })) : [];
+  groups.push({ id: t, title: dayTitle(t), day: t, mixed: true, items: now.concat(blks, movedFrom(t)) });
   if (done.length && S.get('showDone', 1) !== 0) groups.push({ id: 'done', title: 'Completed', items: done, quiet: true });
   return { title: 'Today', sub: asDate(t).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
     groups: groups, due: t, proj: '', showProj: true };
@@ -836,10 +848,10 @@ function draw() {
       head.appendChild(r);
     }
     box.appendChild(head);
-    if (g.block) {
+    if (g.mixed) {
       const n = new Date(), mins = n.getHours() * 60 + n.getMinutes();
-      const next = g.items.filter(b => (b.s || 0) > mins)[0];
-      g.items.forEach(b => box.appendChild(blockRow(b, g.day, mins, next)));
+      const next = g.items.map(x => x.blk).filter(b => b && b.s != null && b.s > mins).sort((a, b) => a.s - b.s)[0];
+      g.items.slice().sort(sortDay).forEach(x => box.appendChild(x.blk ? blockRow(x.blk, g.day, mins, next) : rowEl(x, info)));
     } else g.items.slice().sort(sortQ).forEach(x => box.appendChild(rowEl(x, info)));
     list.appendChild(box);
   });
