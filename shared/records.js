@@ -622,6 +622,10 @@ const Rec = {
 
   /* ── reading ── */
   get(type, date, key) { const r = rows[rowId(type, date, key)]; return alive(r) ? copy(r.payload) : null; },
+  /** the id a row with this type, date and key has, or would have. For an
+      app merging rows it built itself with their own updated_at, so a
+      second import of the same file is a comparison rather than a rewrite. */
+  idOf(type, date, key) { return rowId(type, date, key); },
   has(type, date, key) { return alive(rows[rowId(type, date, key)]); },
   row(type, date, key) { const r = rows[rowId(type, date, key)]; return alive(r) ? r : null; },
   /** the tombstone of a row that was deleted, or null when it is alive or was

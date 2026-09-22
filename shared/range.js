@@ -1,4 +1,4 @@
-/* shared/range.js — 0.1.0 — a training history as a woodblock landscape.
+/* shared/range.js — 0.1.1 — a training history as a woodblock landscape.
 
    Tom, 2026-09-20 and 2026-09-22: training blocks drawn as mountains and
    sessions as trees, in the manner of ukiyo-e, "meant to be a nice
@@ -230,5 +230,25 @@ function mount(box, data, height) {
   return { redraw: paint, canvas: cv };
 }
 
-g.Range = { VERSION: '0.1.0', draw: draw, mount: mount, widthFor: widthFor };
+/** what the range draws, from set and phase rows shaped like TRAIN's
+    (a whole row with a payload, or the payload alone). TRAIN hands it its
+    own rows and COACH a client's. */
+function fromRows(sets, phases, to) {
+  var by = {};
+  (sets || []).forEach(function (r) {
+    var s = r.payload || r;
+    if (s.warm || !r.date) return;
+    var d = by[r.date] || (by[r.date] = { date: r.date, vol: 0, pr: false });
+    d.vol += (+s.kg || 0) * (+s.r || 0) || (+s.r || 0);
+    if (s.pr) d.pr = true;
+  });
+  return {
+    sessions: Object.keys(by).sort().map(function (k) { return by[k]; }),
+    phases: (phases || []).map(function (r) { var p = r.payload || r; return { name: p.name, start: p.start, end: p.end || null }; })
+      .filter(function (p) { return p.start; }),
+    to: to,
+  };
+}
+
+g.Range = { VERSION: '0.1.1', draw: draw, mount: mount, widthFor: widthFor, fromRows: fromRows };
 })(window);
