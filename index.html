@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.23, 2026-09-22">
+<meta name="mb-version" content="1.0.24, 2026-09-22">
 <title>MAIN MENU</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -222,6 +222,21 @@ nav button.dropinto{box-shadow:inset 2px 0 0 var(--acc)}
   margin:0 auto;
 }
 @media(max-width:820px){ #grid{grid-template-columns:repeat(4,1fr)} }
+/* ── a card stays where it was put ──
+   Tom, 2026-09-22: "allow empty space". A card with a saved spot sits at it,
+   and a gap it leaves stays a gap. Desk width only: on a phone the cards
+   stack in the order of their spots. */
+@media(min-width:821px){
+  #grid{position:relative}
+  .w.at{grid-column:var(--gx) / span var(--cw,4);grid-row:var(--gy) / span var(--ch,3)}
+  #grid.gapon{cursor:pointer}
+}
+/* the empty patch under the pointer, and where a dragged card will land */
+#gaphint{position:absolute;display:none;pointer-events:none;z-index:1;
+  border:1px dashed var(--line2);border-radius:var(--radius-lg,14px);
+  align-items:center;justify-content:center;color:var(--dim2)}
+#gaphint.on{display:flex}
+#gaphint.land{border-color:var(--acc);color:var(--acc)}
 .w{
   grid-column:span var(--cw,4);
   /* The material layer (shared/THEMING.md, Material): a card carries
@@ -2797,12 +2812,132 @@ const saveLayout = () => { try { Rec.setting('lifeos', 'layout', layout); } catc
 const FINE = matchMedia('(hover:hover) and (pointer:fine)').matches;
 let editing = false;
 function move(i, d) {
-  const to = i + d;
-  if (to < 0 || to >= layout.length) return;
-  layout.splice(to, 0, layout.splice(i, 1)[0]);
+  /* With spots, up and down mean the card before or after it in reading
+     order, and the two trade places. Without, the old list order. */
+  const ord = byPlace();
+  const k = ord.indexOf(i), j = ord[k + d];
+  if (j == null) return;
+  const a = layout[i], b = layout[j];
+  if (a.x && b.x) {
+    const ax = a.x, ay = a.y;
+    a.x = b.x; a.y = b.y; b.x = ax; b.y = ay;
+    pinned = i;
+  } else {
+    const to = i + d;
+    if (to < 0 || to >= layout.length) return;
+    layout.splice(to, 0, layout.splice(i, 1)[0]);
+  }
   saveLayout(); drawHome();
   Mobile.feedback('select');
 }
+
+/* ══════════════ spots ══════════════
+   Each card may carry x (its first column, 1 to 12) and y (its first row).
+   A card without one is placed by the grid into the first hole it fits and
+   then keeps where it landed, which is how every layout saved before
+   2026-09-22 got its spots without anyone arranging it. */
+let pinned = null;          /* the card just moved, resized or added: it wins a collision */
+const effH = [];            /* rows each card actually takes; a `fit` card's differ from cfg.h */
+const hOf = i => effH[i] || layout[i].h;
+/** layout indexes in reading order: top to bottom, then left to right */
+function byPlace() {
+  return layout.map((c, i) => i).sort((a, b) => {
+    const A = layout[a], B = layout[b];
+    if (!A.x || !B.x) return (A.x ? 0 : 1) - (B.x ? 0 : 1) || a - b;
+    return A.y - B.y || A.x - B.x || a - b;
+  });
+}
+/** nothing overlaps: a card that would is pushed down until it does not.
+    Nothing is ever pulled UP, which is what lets a gap stay a gap. */
+function settle(first) {
+  const cols = 12;
+  const ord = byPlace().filter(i => layout[i].x);
+  if (first != null && ord.indexOf(first) > -1) { ord.splice(ord.indexOf(first), 1); ord.unshift(first); }
+  const done = [];
+  ord.forEach(i => {
+    const c = layout[i];
+    c.w = Math.min(c.w, cols);
+    c.x = Math.max(1, Math.min(c.x, cols - c.w + 1));
+    c.y = Math.max(1, c.y);
+    const hit = o => c.x < o.x + o.w && o.x < c.x + c.w && c.y < o.y + o.h && o.y < c.y + hOf(i);
+    let guard = 0;
+    while (guard++ < 500) {
+      const o = done.find(hit);
+      if (!o) break;
+      c.y = o.y + o.h;
+    }
+    done.push({ x: c.x, y: c.y, w: c.w, h: hOf(i) });
+  });
+}
+/** where the grid's cells are, in pixels, right now */
+function gridMetrics() {
+  const g = $('#grid'), r = g.getBoundingClientRect();
+  const cs = getComputedStyle(g);
+  const cols = cs.gridTemplateColumns.split(' ').length;
+  const gap = parseFloat(cs.columnGap) || 12;
+  const R = parseFloat(g.style.getPropertyValue('--row')) || 84;
+  return { r: r, cols: cols, gap: gap, colw: (r.width - (cols - 1) * gap) / cols, R: R };
+}
+function cellAt(m, px, py) {
+  return {
+    c: Math.max(1, Math.min(m.cols, Math.floor((px - m.r.left + m.gap / 2) / (m.colw + m.gap)) + 1)),
+    r: Math.max(1, Math.floor((py - m.r.top + m.gap / 2) / m.R) + 1),
+  };
+}
+/** the empty patch around a cell, or null if a card is on it. A patch with
+    cards below it is bounded and has a size; one running off the bottom of
+    the board is not, and a widget added there keeps its own size. */
+function gapAt(c, r) {
+  const rects = layout.map((cfg, i) => cfg.x ? { x: cfg.x, y: cfg.y, w: cfg.w, h: hOf(i) } : null).filter(Boolean);
+  const N = rects.reduce((a, o) => Math.max(a, o.y + o.h - 1), 0);
+  const free = (x, y) => !rects.some(o => x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h);
+  if (!free(c, r)) return null;
+  if (r > N) return { x: c, y: r, w: 0, h: 0 };
+  let c0 = c, c1 = c;
+  while (c0 > 1 && free(c0 - 1, r)) c0--;
+  while (c1 < 12 && free(c1 + 1, r)) c1++;
+  const rowFree = y => { for (let x = c0; x <= c1; x++) if (!free(x, y)) return false; return true; };
+  let r0 = r, r1 = r;
+  while (r0 > 1 && rowFree(r0 - 1)) r0--;
+  while (r1 < N && rowFree(r1 + 1)) r1++;
+  if (r1 >= N) return { x: c, y: r0, w: 0, h: 0 };
+  return { x: c0, y: r0, w: c1 - c0 + 1, h: r1 - r0 + 1 };
+}
+function hint(m, x, y, w, h, land) {
+  const g = $('#grid');
+  let n = $('#gaphint');
+  if (!n) { n = el('div'); n.id = 'gaphint'; }
+  if (n.parentNode !== g) g.appendChild(n);
+  if (x == null) { n.className = ''; g.classList.remove('gapon'); return; }
+  n.className = 'on' + (land ? ' land' : '');
+  n.innerHTML = land ? '' : ((typeof Icons !== 'undefined' && Icons.svg('add', { size: 22 })) || '+');
+  n.style.left = ((x - 1) * (m.colw + m.gap)) + 'px';
+  n.style.top = ((y - 1) * m.R) + 'px';
+  n.style.width = (w * m.colw + (w - 1) * m.gap) + 'px';
+  n.style.height = (h * m.R - m.gap) + 'px';
+  g.classList.toggle('gapon', !land);
+}
+/* B: an empty patch offers a widget, the size of the patch */
+(function watchGaps() {
+  const g = $('#grid');
+  const target = ev => {
+    if (ev.target !== g || moving || sizing || editing || NARROW()) return null;
+    const m = gridMetrics(), at = cellAt(m, ev.clientX, ev.clientY);
+    return { m: m, gap: gapAt(at.c, at.r) };
+  };
+  g.addEventListener('mousemove', ev => {
+    if (moving || sizing) return;
+    const t = target(ev);
+    if (!t || !t.gap) { hint(); return; }
+    const x = t.gap.w ? t.gap.x : Math.min(t.gap.x, 9);
+    hint(t.m, x, t.gap.y, t.gap.w || 4, t.gap.h || 3);
+  });
+  g.addEventListener('mouseleave', () => { if (!moving && !sizing) hint(); });
+  g.addEventListener('click', ev => {
+    const t = target(ev);
+    if (t && t.gap) { hint(); widgetPicker(t.gap); }
+  });
+})();
 
 
 /* ══════════════ a menu on every card ══════════════
@@ -2852,11 +2987,15 @@ function drawHome() {
   const g = $('#grid'); g.innerHTML = '';
   let firstDone = 0;
   const later = [];
+  const rank = [];
+  byPlace().forEach((i, k) => { rank[i] = k; });
   document.body.classList.toggle('editing', editing);
   layout.forEach((cfg, i) => {
     const W = WIDGETS[cfg.t]; if (!W) return;
     const n = el('div', 'w mb-card');
     n.style.setProperty('--cw', cfg.w); n.style.setProperty('--ch', cfg.h);
+    if (cfg.x) { n.classList.add('at'); n.style.setProperty('--gx', cfg.x); n.style.setProperty('--gy', cfg.y); }
+    if (NARROW()) n.style.order = rank[i];
     n.dataset.i = i;
     /* the widget wears the colour of the app it draws for, which is what
        ties a card to an app without a label; a widget with no app wears the
@@ -2926,7 +3065,7 @@ function drawHome() {
     /* On a phone the first TODAY goes to the top and is drawn before
        anything else, so its NOW line is the first thing painted. Tom,
        2026-09-22. The rest are drawn straight after, in the next task. */
-    if (NARROW() && cfg.t === 'today' && !firstDone) { n.classList.add('first'); firstDone = 1; fill(); }
+    if (NARROW() && cfg.t === 'today' && !firstDone) { n.classList.add('first'); n.style.order = ''; firstDone = 1; fill(); }
     else if (NARROW()) later.push(fill);
     else fill();
     if (W.fit) n.classList.add('fit');
@@ -2965,11 +3104,14 @@ function drawHome() {
    changes how many rows a fitted card needs. */
 function fitGrid() {
   const g = $('#grid'), home = $('#home');
-  if (NARROW()) { g.style.removeProperty('--row'); return; }
+  if (NARROW()) { g.style.removeProperty('--row'); g.style.minHeight = ''; return; }
   const gap = parseFloat(getComputedStyle(g).rowGap) || 12;
   const H = home.clientHeight - 28;
   let R = parseFloat(g.style.getPropertyValue('--row')) || 84;
   const fits = [].slice.call(g.querySelectorAll('.w.fit'));
+  const nodes = [].slice.call(g.querySelectorAll('.w'));
+  effH.length = 0;
+  const before = JSON.stringify(layout.map(c => [c.x, c.y]));
   for (let pass = 0; pass < 3; pass++) {
     fits.forEach(n => {
       /* measured squeezed to one row, so a child that stretches to fill
@@ -2980,9 +3122,26 @@ function fitGrid() {
       body.style.overflow = 'auto';
       const need = head.offsetHeight + body.scrollHeight + 2;
       body.style.overflow = was;
-      n.style.setProperty('--ch', Math.max(1, Math.ceil((need + gap) / R)));
+      const ch = Math.max(1, Math.ceil((need + gap) / R));
+      n.style.setProperty('--ch', ch);
+      effH[+n.dataset.i] = ch;
     });
-    const N = Math.max(1, Math.round((g.offsetHeight + gap) / R));
+    /* a card with no spot yet keeps the one the grid gave it */
+    const m = gridMetrics();
+    nodes.forEach(n => {
+      const c = layout[+n.dataset.i];
+      if (!c || c.x) return;
+      const r = n.getBoundingClientRect();
+      c.x = Math.round((r.left - m.r.left) / (m.colw + m.gap)) + 1;
+      c.y = Math.round((r.top - m.r.top) / m.R) + 1;
+    });
+    settle(pinned);
+    nodes.forEach(n => {
+      const c = layout[+n.dataset.i];
+      n.classList.add('at');
+      n.style.setProperty('--gx', c.x); n.style.setProperty('--gy', c.y); n.style.setProperty('--cw', c.w);
+    });
+    const N = Math.max(1, layout.reduce((a, c, i) => Math.max(a, c.y + hOf(i) - 1), 0));
     /* a board that cannot fit even at 60 keeps the old 84 and scrolls,
        rather than squashing every chart for nothing */
     let R2 = Math.min(140, Math.floor((H + gap) / N));
@@ -2991,11 +3150,18 @@ function fitGrid() {
     R = R2;
     g.style.setProperty('--row', R + 'px');
   }
+  pinned = null;
+  /* the grid reaches the bottom of the window, so the space under the
+     last card is somewhere a widget can be added too */
+  g.style.minHeight = H + 'px';
+  if (JSON.stringify(layout.map(c => [c.x, c.y])) !== before) saveLayout();
 }
 let fitT = 0;
 addEventListener('resize', () => { clearTimeout(fitT); fitT = setTimeout(() => { if (view === 'home') drawHome(); }, 150); });
 
-/* --- drag to reorder: swap with whatever card the pointer is over --- */
+/* --- drag to a spot: the card lands on the cells under it, and anything
+   in the way moves down. Before 2026-09-22 it swapped with the card under
+   the pointer, which could not leave a gap. --- */
 let moving = null;
 function startMove(ev, i) {
   if (ev.target.closest('.x')) return;
@@ -3014,21 +3180,21 @@ function onMove(ev) {
   const gh = $('#ghost');
   gh.style.left = (ev.clientX - moving.dx) + 'px';
   gh.style.top = (ev.clientY - moving.dy) + 'px';
-  const over = document.elementFromPoint(ev.clientX, ev.clientY);
-  const card = over && over.closest ? over.closest('.w') : null;
-  document.querySelectorAll('.w.over').forEach(n => n.classList.remove('over'));
-  if (card && card !== moving.node) card.classList.add('over');
+  const m = gridMetrics(), c = layout[moving.i];
+  const at = cellAt(m, ev.clientX - moving.dx + m.colw / 2, ev.clientY - moving.dy + m.R / 2);
+  moving.to = { x: Math.max(1, Math.min(at.c, m.cols - c.w + 1)), y: at.r };
+  hint(m, moving.to.x, moving.to.y, c.w, hOf(moving.i), true);
 }
 function endMove(ev) {
   if (!moving) return;
   window.removeEventListener('pointermove', onMove);
   $('#ghost').style.display = 'none';
   moving.node.classList.remove('drag');
-  const over = document.elementFromPoint(ev.clientX, ev.clientY);
-  const card = over && over.closest ? over.closest('.w') : null;
-  if (card && card !== moving.node) {
-    const to = +card.dataset.i, from = moving.i;
-    layout.splice(to, 0, layout.splice(from, 1)[0]);
+  hint();
+  if (moving.to) {
+    const c = layout[moving.i];
+    c.x = moving.to.x; c.y = moving.to.y;
+    pinned = moving.i;
     saveLayout();
   }
   moving = null;
@@ -3058,15 +3224,28 @@ function onResize(ev) {
 function endResize() {
   if (!sizing) return;
   window.removeEventListener('pointermove', onResize);
+  pinned = sizing.i;
   saveLayout(); sizing = null; drawHome();
 }
 
 /* --- add a widget --- */
-function widgetPicker() {
+function widgetPicker(spot) {
+  spot = spot && spot.x ? spot : null;
+  /* a widget added from an empty patch lands on it, at the patch's size if
+     the patch has one; from the button it takes the first hole it fits */
+  const put = cfg => {
+    if (spot) {
+      cfg.x = spot.x; cfg.y = spot.y;
+      if (spot.w) { cfg.w = Math.max(2, spot.w); cfg.h = Math.max(1, spot.h); }
+      else cfg.x = Math.min(spot.x, 13 - cfg.w);
+    }
+    layout.push(cfg);
+    pinned = layout.length - 1;
+  };
   const mo = $('#modal'); mo.innerHTML = '';
   mo.appendChild(el('h3', null, 'ADD A WIDGET'));
   mo.appendChild(el('div', 'lede', FINE
-    ? 'Drag a widget by its title to move it. Drag the bottom-right corner to resize.'
+    ? 'Drag a widget by its title to move it, and a gap stays a gap. Drag the bottom-right corner to resize. Click an empty space to add a widget there.'
     : 'The layout is saved on this device only — it is not part of your data.'));
   Object.keys(WIDGETS).forEach(k => {
     const W = WIDGETS[k], n = layout.filter(c => c.t === k).length;
@@ -3074,13 +3253,13 @@ function widgetPicker() {
     const b = el('button', 'opt');
     b.innerHTML = '<span class="ic">▤</span><span class="t"><b>' + esc(W.nm) + '</b><span>' +
       (n ? 'already on the home screen — add another' : 'not on the home screen') + '</span></span>';
-    b.onclick = () => { layout.push({ t: k, w: W.w, h: W.h }); saveLayout(); closeModal(); drawHome(); toast('<b>' + esc(W.nm) + '</b> added'); };
+    b.onclick = () => { put({ t: k, w: W.w, h: W.h }); saveLayout(); closeModal(); drawHome(); toast('<b>' + esc(W.nm) + '</b> added'); };
     mo.appendChild(b);
     /* a widget may offer ready-made versions of itself */
     (W.presets || []).forEach(ps => {
       const pb = el('button', 'opt');
       pb.innerHTML = '<span class="ic">▤</span><span class="t"><b>' + esc(ps.nm) + '</b><span>' + esc(ps.note || '') + '</span></span>';
-      pb.onclick = () => { layout.push(Object.assign({ t: k, w: W.w, h: W.h }, ps.cfg)); saveLayout(); closeModal(); drawHome(); toast('<b>' + esc(ps.nm) + '</b> added'); };
+      pb.onclick = () => { put(Object.assign({ t: k, w: W.w, h: W.h }, ps.cfg)); saveLayout(); closeModal(); drawHome(); toast('<b>' + esc(ps.nm) + '</b> added'); };
       mo.appendChild(pb);
     });
   });
