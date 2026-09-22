@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.11, 2026-09-22">
+<meta name="mb-version" content="1.0.12, 2026-09-22">
 <title>TRAIN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛭</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -425,6 +425,8 @@ div.prow{padding:0}
 .dl{font-size:var(--f-1);font-weight:var(--w-bold);font-variant-numeric:tabular-nums;
   white-space:nowrap;color:var(--text-muted);margin-left:var(--s-2)}
 .dl.up{color:var(--success)}
+.setrow .upmark,.tset .upmark{display:inline-flex;align-items:center;justify-content:center;width:var(--s-5,20px);flex:none;color:var(--success)}
+.setrow .upmark svg,.tset .upmark svg{width:100%;height:auto}
 .dl.down{color:var(--warn)}
 .vsline{display:flex;gap:var(--s-2);flex-wrap:wrap;justify-content:space-between;
   padding:var(--s-2) var(--s-4) 0;font-size:var(--f-1);color:var(--text-muted)}
@@ -2134,7 +2136,10 @@ function drawWorkout(m) {
         (s.warm ? '<span class="wtag">warmup</span>' : '') +
         '<span class="grow"></span>' + setCols(s, g.ex) +
         /* its own line: weight, reps and a percentage do not fit beside the numbers at 390px */
-        (cr && cr.bySet[s.key] ? '<span class="smeta">' + deltaChip(cr.bySet[s.key]) + '</span>' : '');
+        (cr && cr.bySet[s.key] && cr.bySet[s.key].volUp
+          ? '<span class="upmark" aria-label="More than last time" title="' + UI.esc(cr.bySet[s.key].text) + '">' + ico('collapse') + '</span>' : '') +
+        (cr && cr.bySet[s.key] && Rec.setting(APP.id, 'rowDetail') === 1
+          ? '<span class="smeta">' + deltaChip(cr.bySet[s.key]) + '</span>' : '');
       sets.appendChild(row);
     });
     if (shown.length < g.sets.length) {
@@ -2613,7 +2618,12 @@ function drawTrack(m) {
       }).join(', ') + '</div>';
     m.appendChild(card);
   }
-  m.appendChild(setupCard(exId, ex, date));
+  /* Setup lives in each set's comment box now, the way FitNotes keeps
+     everything that is not a number. Tom, 2026-09-22: "put our extra input
+     features in the comments part of fitnotes because train feels
+     claustrophobic now". The next set still carries the last setup, because
+     draftSU is primed here exactly as setupCard primed it. */
+  if (TRAIN.suFor !== exId) { TRAIN.suFor = exId; TRAIN.draftSU = TRAIN.lastSetup(exId, date); }
 
   var pad = UI.el('div', 'exblock');
   pad.style.padding = 'var(--s-4)';
@@ -2658,7 +2668,10 @@ function drawTrack(m) {
       var d = null;
       if (!s.warm) {
         n++;
-        if (vs && TRAIN.counts(s)) d = TRAIN.setDelta(s, then[n - 1], kind);
+        if (vs && TRAIN.counts(s)) {
+          d = TRAIN.setDelta(s, then[n - 1], kind);
+          if (d) d.volUp = TRAIN.volUp(s, then[n - 1], kind, d);
+        }
       }
       listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d));
     });
@@ -2827,14 +2840,31 @@ function trainingSetRow(s, n, date, showChk, delta) {
   /* Under the numbers: how it split, how it was set up, and the change on the
      same set last time. A line of its own, because at 390px the numbers
      already fill the row. */
+  /* Off by default since 2026-09-22, when the row went back to FitNotes' own
+     shape: the comment holds the split and the setup, and the arrow says the
+     change. Kept as a switch (Settings, "Details under each set") rather
+     than deleted, because a removal can flip. */
   var meta = [];
-  if (s.split) meta.push(UI.esc(s.split.text));
-  var sut = setupText(s.su, s.ex);
-  if (sut) meta.push(UI.esc(sut));
-  if (delta) meta.push(deltaChip(delta));
+  if (Rec.setting(APP.id, 'rowDetail') === 1) {
+    if (s.split) meta.push(UI.esc(s.split.text));
+    var sut = setupText(s.su, s.ex);
+    if (sut) meta.push(UI.esc(sut));
+    if (delta) meta.push(deltaChip(delta));
+  }
   body.innerHTML = setCols(s, TRAIN.exId) +
     (meta.length ? '<span class="tmeta">' + meta.join(' · ') + '</span>' : '');
   row.appendChild(body);
+
+  /* A green arrow when this set moved more than the same set last time.
+     Heavier or more reps, and only when the volume actually went up, so
+     five more kilos for two fewer reps earns nothing. */
+  var up = UI.el('span', 'upmark');
+  if (delta && delta.volUp) {
+    up.innerHTML = ico('collapse');
+    up.setAttribute('aria-label', 'More than last time');
+    up.title = delta.text;
+  }
+  row.appendChild(up);
 
   if (showChk) {
     var chk = UI.el('button', 'chk nohold mb-tap' + (s.done ? ' on' : ''));
@@ -2900,6 +2930,7 @@ function commentDialog(s, date) {
     body: function (b, h) {
       var i = noteEl = UI.field('note', { value: s.note || '', placeholder: 'Comment Text ...' });
       b.appendChild(i);
+      b.appendChild(setupFor(s, date));
       Mobile.form(b, function () { saveNote(h, i); });
     },
     actions: [
@@ -6362,6 +6393,19 @@ TRAIN.vsFor = function (date, exId, ctx) {
 
    The numbers come back too, so a card can add them up: `dr` the change in
    reps, `pct` the change in strength, `e1` when that is a 1RM percentage. */
+/* Did this set move more than that one? Weight times reps where there is a
+   weight, reps where there is not, and for any other kind (distance, time)
+   the direction setDelta already worked out. */
+TRAIN.volUp = function (a, b, kind, d) {
+  if (!a || !b) return false;
+  var f = KIND_FIELDS[kind] || KIND_FIELDS.wr;
+  if (f.indexOf('r') > -1) {
+    var r1 = +a.r || 0, r0 = +b.r || 0, k1 = +a.kg || 0, k0 = +b.kg || 0;
+    var v1 = k1 > 0 || k0 > 0 ? k1 * r1 : r1, v0 = k1 > 0 || k0 > 0 ? k0 * r0 : r0;
+    return v1 > v0 + 1e-9;
+  }
+  return !!(d && d.dir > 0);
+};
 TRAIN.setDelta = function (a, b, kind) {
   if (!b) return { dir: 0, text: 'new' };
   if (!!a.split !== !!b.split) return { dir: 0, text: a.split ? 'split' : 'straight' };
@@ -6435,6 +6479,7 @@ TRAIN.dayCompare = function (date) {
       var b = then[n++];
       if (!TRAIN.counts(s)) return;
       var d = row.bySet[s.key] = TRAIN.setDelta(s, b, kind);
+      d.volUp = TRAIN.volUp(s, b, kind, d);
       var mk = !b ? 'new' : d.dir > 0 ? 'up' : d.dir < 0 ? 'down' : 'same';
       if (mk === 'new') out.fresh++; else { row[mk]++; out[mk]++; }
       out.marks.push(mk);
@@ -6892,6 +6937,53 @@ function setupText(su, exId) {
   return defs.filter(function (d) { return su[d.id] != null && su[d.id] !== '' && su[d.id] !== 0; })
     .map(function (d) { return d.kind === 'toggle' ? d.name : d.name + ' ' + su[d.id]; }).join(' · ');
 }
+/* The setup controls, inside one set's comment box. A change is written to
+   that set straight away and becomes what the next set carries. */
+function setupFor(s, date) {
+  var ex = TRAIN.exercises()[s.ex] || {};
+  var defs = ex.setup || [];
+  var su = {};
+  Object.keys(s.su || {}).forEach(function (k) { su[k] = s.su[k]; });
+  var wrap = UI.el('div', 'setup');
+  wrap.style.marginTop = 'var(--s-3)';
+  var keep = function () {
+    TRAIN.patchSet(s.key, date, { su: Object.keys(su).length ? su : undefined });
+    s.su = su;
+    TRAIN.suFor = s.ex;
+    TRAIN.draftSU = JSON.parse(JSON.stringify(su));
+  };
+  defs.forEach(function (d) {
+    if (d.kind === 'toggle') {
+      var c = UI.el('button', CHIP + ' mb-press mb-tap' + (su[d.id] ? ' on' : ''));
+      c.type = 'button';
+      c.textContent = d.name;
+      c.setAttribute('aria-pressed', su[d.id] ? 'true' : 'false');
+      c.onclick = function () {
+        if (su[d.id]) delete su[d.id]; else su[d.id] = 1;
+        c.classList.toggle('on', !!su[d.id]);
+        c.setAttribute('aria-pressed', su[d.id] ? 'true' : 'false');
+        Mobile.feedback('select');
+        keep();
+      };
+      wrap.appendChild(c);
+    } else {
+      var w = UI.el('label', 'sufield');
+      w.appendChild(document.createTextNode(d.name));
+      var i = UI.field('text', { value: su[d.id] == null ? '' : String(su[d.id]) });
+      i.setAttribute('aria-label', d.name);
+      i.onchange = function () { var v = i.value.trim(); if (v) su[d.id] = v; else delete su[d.id]; keep(); };
+      w.appendChild(i);
+      wrap.appendChild(w);
+    }
+  });
+  var ed = UI.el('button', CHIP + ' mb-press mb-tap');
+  ed.type = 'button';
+  ed.textContent = defs.length ? 'Edit Setup' : 'Add Setup';
+  ed.onclick = function () { TRAIN.setupDialog(s.ex); };
+  wrap.appendChild(ed);
+  return wrap;
+}
+
 function setupCard(exId, ex, date) {
   var defs = (ex && ex.setup) || [];
   if (TRAIN.suFor !== exId) { TRAIN.suFor = exId; TRAIN.draftSU = TRAIN.lastSetup(exId, date); }
@@ -7262,6 +7354,7 @@ TRAIN.settings = function () {
       num('Exercise Set Limit', 'Sets shown per exercise. 0 shows all', 'setLimit', 0);
       sw('Skip Empty Dates', 'Arrows jump between sessions', 'skipEmpty', 0);
       sw('Mark Sets Complete', 'Tick box next to each set', 'markComplete', 1, function () { draw(); });
+      sw('Details Under Each Set', 'Split, setup and the change from last time, in words', 'rowDetail', 0, function () { draw(); });
 
       group('TRAINING');
       num('Default Weight Increment', 'What + and − move by', 'increment', 2.5);
