@@ -229,6 +229,19 @@ tools/             not build steps. embed-skins.py re-embeds the factory themes;
                    build-client.py generates the client copy of the suite into
                    ../Motherbase-Client. Its output is never edited by hand —
                    client-only files live in tools/client/. See ONBOARDING.md.
+coach/index.html   COACH, built 2026-09-22. Tom's clients in a Pokémon PC
+                   box: three boxes (1:1, ONLINE, PAST) of thirty slots, each
+                   client drawn as the Pokémon CHECK IN gave them. A client's
+                   training arrives as the file TRAIN's Send To Coach makes and
+                   is kept under COACH's own types, so it never lands in Tom's
+                   own TRAIN. Strength, recent sessions and the range per
+                   client, and FIRST SETS: the weight and reps of each
+                   exercise's first set, sent back as a program file the
+                   client opens in TRAIN, where the rest of their sets fill
+                   from their last session. A PROGRAMS library holds programs
+                   to send to anyone or sell. One column on a phone, two on an
+                   upright iPad, three from 1180px. Tom only, dropped from the
+                   client build. Logging a 1:1 here is not built yet
 quest/index.html   QUESTS, the todolist, copied from Todoist. The same todo rows
                    as STATUS's journal, with a due date, priority, project and
                    repeat added. Desktop and phone. In the client build since
@@ -296,6 +309,8 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `import.js` | Bringing in a spreadsheet the suite did not write: ticks from a month grid, weigh-ins, foods and money out, read by shape. Never overwrites, never reads a formula as a record, one batch, one undo. |
 | `icons.js` | The icon master set. One drawing serves many buttons. |
 | `health.js` | Answers "is my data okay" without a test suite. |
+| `creatures.js` | The Pokémon a person is shown as, drawn from shapes on a canvas, since 2026-09-22. CHECK IN's picker and COACH's box both draw from it, so a client is the same creature in both. An old animal pick maps to a Pokémon. Writes colours down, like notice.js, because the creature is art. |
+| `range.js` | A training history as a woodblock landscape, since 2026-09-22: every training block a mountain, every session a tree, taller for more volume, blossoming on a record day. TRAIN's Profile and COACH draw it. `Range.fromRows` builds it from TRAIN-shaped rows. Writes colours down for the same reason. |
 | `notice.js` | The status window LOOK: four palettes and the cut-corner shape. NOTICE strokes it on a canvas to make a picture, STATUS clips a real panel to it for the status check. The one place in the suite that carries hex colours on purpose, for the reason NOTICE always had: the window is the art, not the furniture, so a Hunter window is blue in every theme. Nothing here reaches an app's own chrome. |
 | `cloud.js` | LIVE SYNC: Firebase beside the sheet, added 2026-09-20. One row per row at `/u/<uid>/rows/<id>`, pushed on change and listened for by `updated_at`, merged through `Rec.merge` like anything else. Fetched by `io.js` rather than by a tag in every app, the way `mobile.js` fetches `sw.js`, so no app was edited. Only the TOP document connects, because `records.js` already shares merged rows across the origin and fourteen frames would be fourteen connections. A row over 64KB is skipped AND THE BOUNDARY STILL PASSES IT, or one photo would jam every sync after it. Does nothing until a config is pasted. See `CLOUD.md`. |
 | `nutrients.js` | The full nutrient list a food can carry beyond the eight, added 2026-09-22: fibre, sugar, the fats, EPA and DHA, cholesterol, eleven minerals and the vitamins, thirty-one in all. One list, three readers: FOODDÉX fills them from its USDA lookup (found by the USDA's printed NAME and unit, never its numeric id, and International Units skipped), STATUS gives each one a column on the sheet's Food tab, and ELEMENT reads its five off the food. They live on `food.base` beside the eight. A blank is "not known", never zero. |
@@ -402,6 +417,8 @@ An app may read any type. It writes only the types it owns.
 | `cell` | **log** | column id (`done`), dated | `{text}` — one day's entry in one of LOG's text columns, such as "What got done today". Kept apart from `day.note` on purpose |
 | `take` | **speak** | timestamp id, dated | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, prompt}` — one practice take: every number the ear read, each goal as it stood with `got` and `ok`, and the transcript if there was one. The day's warm-up is one `take` with `drill: 'warm'` |
 | `topic` | **speak** | id | `{text, kind}` — his own prompt: a topic, a story, or three bullets |
+| `cset` `cex` `cphase` `csession` | **coach** | `pid\|` + the key the row had in the client's TRAIN; dated as it was | a client's set, exercise, block and day, exactly as their TRAIN wrote it, merged with its own updated_at so a second file only adds what is new |
+| `cprog` | **coach** | `c-<pid>` for a client's first sets, an id for a library program | `{name, pid, days:[{name, ex:[{name, sets:[{kg, r}]}]}]}` — one row per program, because a program is written, sent and sold as one piece. Only the first set of each exercise is sent. `cperson` gains `box` and `slot` from COACH, by patch |
 | `msg` | **system** (NOTICE) | id, dated | `{text, kind, style, seed, t}` — one status window that was saved or copied: the text as typed, notice or quest, the window style, and the reroll count its pseudo rewards were drawn with. The draft being typed and every choice on screen are settings, not rows |
 
 ### Many writers is fine. Replacing a payload you did not read is not
