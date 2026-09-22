@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.10, 2026-09-19">
+<meta name="mb-version" content="1.0.11, 2026-09-22">
 <title>TRAIN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛭</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -809,7 +809,13 @@ TRAIN.seedCats = function () {
     Rec.set('excat', null, catId, { name: nm, slot: i, ord: i });
     (TRAIN.DEFAULT_EX[nm] || []).forEach(function (row, j) {
       var name = row[0], kind = row[1];
-      Rec.set('exercise', null, TRAIN.newId(), {
+      /* A fixed id per starter exercise, never a random one. Every copy of
+         TRAIN that starts empty seeds this list: Safari, the home-screen icon
+         (which on an iPhone keeps its own storage) and a laptop. With random
+         ids each copy made its own hundred, the sheet merged them, and a
+         client saw every move three times. With a fixed id, seeding twice is
+         the same rows twice, which the store already treats as one. */
+      Rec.set('exercise', null, TRAIN.seedId(name), {
         name: name, cat: catId, kind: kind,
         /* 2.5 on a bar, 1 on anything you hold or hang from */
         inc: kind === 0 ? 2.5 : 1,
@@ -820,6 +826,86 @@ TRAIN.seedCats = function () {
   });
   TRAIN.reindex();
   return made;
+};
+
+TRAIN.seedId = function (name) {
+  return 'seed-' + String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+};
+
+/* ── folding the copies back into one ──
+
+   The repair for devices seeded before seedId existed. A starter exercise
+   that exists more than once in the same category, under the same name, is
+   one exercise, whatever its ids say. Only starter names are touched, never
+   one somebody typed, so an imported or hand-made list is left exactly as it
+   is.
+
+   The keeper is the copy with the most sets, so whichever copy somebody has
+   actually been training with keeps its history under its own id. Every set,
+   routine entry, goal and superset pointing at a spare is moved onto the
+   keeper by patching only that field, then the spare is deleted. A favourite
+   or a note on a spare comes across if the keeper has none.
+
+   Idempotent: once folded there is one copy of each, and a second run finds
+   nothing. It runs again whenever rows arrive, because a device that was
+   offline can still send a set logged against a spare, and that set has to
+   land on the keeper too. */
+TRAIN.foldSeeds = function () {
+  var starter = {};
+  TRAIN.DEFAULT_CATS.forEach(function (nm) {
+    (TRAIN.DEFAULT_EX[nm] || []).forEach(function (row) { starter[nm.toLowerCase() + '|' + row[0].toLowerCase()] = 1; });
+  });
+  var groups = {};
+  Rec.all('exercise').forEach(function (r) {
+    var p = r.payload || {};
+    var k = String(p.cat || '') + '|' + String(p.name || '').trim().toLowerCase();
+    if (!starter[k]) return;
+    (groups[k] || (groups[k] = [])).push(r);
+  });
+  var spare = {}, keepOf = {}, n = 0;
+  var sets = Rec.all('set'), count = {};
+  sets.forEach(function (s) { var e = s.payload && s.payload.ex; if (e) count[e] = (count[e] || 0) + 1; });
+  Object.keys(groups).forEach(function (k) {
+    var g = groups[k];
+    if (g.length < 2) return;
+    g.sort(function (a, b) {
+      return (count[b.key] || 0) - (count[a.key] || 0) ||
+        (a.key.indexOf('seed-') === 0 ? -1 : b.key.indexOf('seed-') === 0 ? 1 : 0) ||
+        (a.key < b.key ? -1 : 1);
+    });
+    var keep = g[0];
+    g.slice(1).forEach(function (r) {
+      spare[r.key] = keep.key;
+      var kp = keep.payload || {}, rp = r.payload || {}, carry = {};
+      if (rp.fav && !kp.fav) carry.fav = rp.fav;
+      if (rp.note && !kp.note) carry.note = rp.note;
+      if (Object.keys(carry).length) Rec.patch('exercise', null, keep.key, carry);
+    });
+    keepOf[keep.key] = 1;
+  });
+  if (!Object.keys(spare).length) return 0;
+  sets.forEach(function (s) {
+    var e = s.payload && s.payload.ex;
+    if (spare[e]) { Rec.patch('set', s.date, s.key, { ex: spare[e] }); n++; }
+  });
+  ['progex', 'goal'].forEach(function (t) {
+    Rec.all(t).forEach(function (r) {
+      var e = r.payload && r.payload.ex;
+      if (spare[e]) { Rec.patch(t, r.date, r.key, { ex: spare[e] }); n++; }
+    });
+  });
+  Rec.all('sgroup').forEach(function (r) {
+    var ex = r.payload && r.payload.ex;
+    if (!Array.isArray(ex) || !ex.some(function (e) { return spare[e]; })) return;
+    var seen = {}, out = [];
+    ex.forEach(function (e) { var id = spare[e] || e; if (!seen[id]) { seen[id] = 1; out.push(id); } });
+    Rec.patch('sgroup', r.date, r.key, { ex: out });
+    n++;
+  });
+  Object.keys(spare).forEach(function (id) { Rec.del('exercise', null, id); });
+  TRAIN._exC = null;
+  TRAIN.reindex();
+  return Object.keys(spare).length;
 };
 
 /* Add one by name, for the "+ New category" route out of the exercise form. */
@@ -7360,6 +7446,14 @@ function boot() {
      Anyone who has ever logged anything, or imported a FitNotes backup, has a
      list already and must not find a hundred strangers mixed into it. */
   if (!Rec.count('excat') && !Rec.count('exercise') && !Rec.count('set')) TRAIN.seedCats();
+  if (TRAIN.foldSeeds()) TRAIN.recomputePRs();
+  /* and again whenever exercises or sets arrive from another copy */
+  var foldT = null;
+  Rec.on(function (rows) {
+    if (!rows || !rows.some(function (r) { return r.type === 'exercise' || r.type === 'set'; })) return;
+    clearTimeout(foldT);
+    foldT = setTimeout(function () { if (TRAIN.foldSeeds()) { TRAIN.recomputePRs(); if (TRAIN.redraw) TRAIN.redraw(); } }, 800);
+  });
   TRAIN.restRestore();
   TRAIN.wake();
   /* Records are worked out again once under the rule that keeps split sets
