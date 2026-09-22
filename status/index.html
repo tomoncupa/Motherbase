@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.41, 2026-09-19">
+<meta name="mb-version" content="1.0.42, 2026-09-22">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -24,6 +24,7 @@
 <script src="../shared/sound.js"></script>
 <script src="../shared/ui.js"></script>
 <script src="../shared/io.js"></script>
+<script src="../shared/nutrients.js"></script>
 <script src="../shared/icons.js"></script>
 <script src="../shared/health.js"></script>
 <script src="../shared/notice.js"></script>
@@ -932,7 +933,13 @@ IO.register({
       ['base.kcal', 'Calories'], ['base.p', 'Protein'], ['base.c', 'Carbs'], ['base.f', 'Fat'],
       ['base.na', 'Sodium'], ['base.k', 'Potassium'], ['base.ca', 'Calcium'], ['base.caff', 'Caffeine'],
       ['base.price', 'Price'],
-    ] },
+    /* Tom, 2026-09-22: "make the food row COMPLETE atleast in the sheet."
+       The rest of what a food can carry, one column each, off the shared
+       list so FOODDÉX, MIX and this tab cannot disagree about what exists.
+       FOODDÉX's USDA lookup fills them; a blank is "not known", never zero,
+       and anything typed into one here comes back into the food. The tab is
+       matched by header name, so the columns before these do not move. */
+    ].concat(window.Nutrients ? Nutrients.cols() : []) },
     { name: 'Meals', type: 'meal', cols: [
       ['name', 'Food'], ['serve', 'Serving'], ['amt', 'Amount'], ['unit', 'Unit'],
       ['kcal', 'Calories'], ['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat'], ['price', 'Price'],
@@ -3602,13 +3609,21 @@ function foodEditor(fd, prefillName) {
       const name = inputs.name.value.trim();
       if (!name) return UI.toast('Needs a name', { bad: true });
       const unit = inputs.unit.value.trim() || 'serving';
-      const base = { amt: UI.amount(inputs.amt.value, unit) || 1, unit: unit };
+      /* ── merged, never rebuilt ──
+         This editor used to build the row from its own list of fields, which
+         is the exact bug the brief names: whatever it did not know about was
+         deleted on Update. It had already cost FOODDÉX's calcium once, and on
+         2026-09-22 a food started carrying thirty more nutrients from the
+         USDA, every one of which a single Update here would have wiped. So
+         the row as stored is the starting point, the eight boxes on screen
+         are written over it, and a box left blank clears only its own figure. */
+      const base = Object.assign({}, f.base || {}, { amt: UI.amount(inputs.amt.value, unit) || 1, unit: unit });
       NUTS.concat(['price']).forEach(n => {
         const v = UI.amount(inputs[n].value, NUT_UNIT[n]);
-        if (v != null) base[n] = v;
+        if (v != null) base[n] = v; else delete base[n];
       });
-      const row = { id: f.id, name: name, brand: inputs.brand.value.trim(), cat: inputs.cat.value.trim(),
-        base: base, serves: f.serves || [], dflt: f.dflt || 0, uses: f.uses || 0, shot: shotId };
+      const row = Object.assign({}, f, { id: f.id, name: name, brand: inputs.brand.value.trim(), cat: inputs.cat.value.trim(),
+        base: base, serves: f.serves || [], dflt: f.dflt || 0, uses: f.uses || 0, shot: shotId });
       Rec.set('food', null, f.id, row);
       Mobile.feedback('select');
       /* Straight on to how much, swapping this sheet's contents. Closing
