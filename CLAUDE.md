@@ -874,9 +874,9 @@ answer, or take it out.
    reads `shared/skins.js` and went from ten themes to eighteen, keeping its
    own per-theme colour editing. BLOCK and FORM went onto it the same day.
    HABITS was the only app left off it, and was deleted on 2026-09-14.
-3. **The apps still carry their own settings, themes and sounds** instead of using
-   `shared/ui.js`, `skins.js` and `sound.js`. `_template/` and `arc/` are fully
-   on them; the rest are not.
+3. ~~The apps still carry their own settings, themes and sounds~~ **Done
+   2026-09-22.** Every app uses `UI.settings` and `skins.js`; BLOCK was the last
+   on its own sound and moved to `sound.js` in 1.0.16.
 3b. ~~Apps not loading `shared/mobile.js`~~ **Done 2026-08-20.** Every app
    loads it and every viewport covers the safe area. What is left is per-app:
    auditing each one's own CSS for hover-only controls and sub-44px targets,
