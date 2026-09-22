@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.0, 2026-09-22">
+<meta name="mb-version" content="1.0.1, 2026-09-22">
 <title>COACH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -160,7 +160,11 @@ Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id); if (windo
 if (window.Icons) Icons.paint();
 Sfx.init(APP.id);
 Rec.declare(APP.id, APP.types);
-IO.register({ app: APP.id, name: APP.name, types: APP.types, reads: { checkin: ['cperson'] } });
+/* `client` and `sesh` are WEALTH's shape and `cperson` is CHECK IN's. COACH
+   writes into all three, so they ride COACH's sheet tab too, and it reads
+   theirs so a device where WEALTH or CHECK IN was never opened still knows. */
+IO.register({ app: APP.id, name: APP.name, types: APP.types.concat(['cperson', 'client', 'sesh']),
+  reads: { checkin: ['cperson'], wealth: ['client', 'sesh'] } });
 
 const BOXES = [{ id: 'one', name: '1:1' }, { id: 'online', name: 'ONLINE' }, { id: 'past', name: 'PAST' }];
 const SLOTS = 30;
@@ -183,6 +187,170 @@ const clientsIn = box => Object.entries(people())
 const own = (type, pid) => Rec.all(type).filter(r => String(r.key).indexOf(pid + '|') === 0);
 const setsOf = pid => own('cset', pid);
 const exOf = pid => { const m = {}; own('cex', pid).forEach(r => { m[r.key.slice(pid.length + 1)] = r.payload; }); return m; };
+
+/* ── one client, two apps ──
+   Tom, 2026-09-22: "I don't see the clients in WEALTH show up in COACH...
+   treat them as having equal custody." A COACH client and a WEALTH client
+   are one person. Each side carries the other's id, `cperson.wc` and
+   `client.cp`, and neither app is the master:
+     · a WEALTH client with no COACH card gets one, in 1:1, or PAST if done
+     · a COACH client with no WEALTH client gets one, per session at 0, so
+       nothing shows as owed until a price is set there
+     · the name, and whether they are past, follow whichever side changed
+       it last, read off the store's field times
+   An existing pair is joined by an exact name the first time, when only one
+   card has that name. A side that was deleted is never brought back. */
+const freeSlot = to => { const taken = {}; clientsIn(to).forEach(([, p]) => { taken[p.slot] = 1; }); let i = 0; while (taken[i]) i++; return i; };
+const normName = v => String(v || '').trim().toLowerCase();
+const fieldAt = (type, key, f) => {
+  const r = Rec.row(type, null, key); if (!r) return 0;
+  return r.ft ? (r.ft[f] != null ? r.ft[f] : (r.fb || 0)) : (Date.parse(r.updated_at) || 0);
+};
+const creatureFor = id => { const ks = Creatures.keys(); let h = 0; String(id).split('').forEach(c => { h = (h * 31 + c.charCodeAt(0)) >>> 0; }); return ks[h % ks.length]; };
+let linking = false;
+function link() {
+  if (linking || !Rec.hydrated) return;
+  linking = true;
+  try {
+    const ws = Rec.map('client'), ps = people();
+    const joined = {};
+    Object.entries(ps).forEach(([pid, p]) => { if (p.wc && ws[p.wc]) joined[p.wc] = pid; });
+    Object.entries(ws).forEach(([wid, c]) => {
+      if (joined[wid]) return;
+      if (c.cp && Rec.tombstone('cperson', null, c.cp)) return;
+      let pid = c.cp && ps[c.cp] ? c.cp : null;
+      if (!pid) {
+        const same = Object.entries(ps).filter(([, p]) => !(p.wc && ws[p.wc]) && normName(c.name) && normName(p.name) === normName(c.name));
+        if (same.length === 1) pid = same[0][0];
+      }
+      if (pid) { Rec.patch('cperson', null, pid, { wc: wid }); ps[pid].wc = wid; }
+      else {
+        pid = 'w-' + wid;
+        if (Rec.tombstone('cperson', null, pid)) return;
+        const to = c.status === 'done' ? 'past' : 'one';
+        Rec.set('cperson', null, pid, { name: c.name || 'Client', animal: creatureFor(wid), unit: unit(), fields: null, seen: null, box: to, slot: freeSlot(to), wc: wid });
+        ps[pid] = people()[pid];
+      }
+      if (c.cp !== pid) Rec.patch('client', null, wid, { cp: pid });
+      joined[wid] = pid;
+    });
+    Object.entries(people()).forEach(([pid, p]) => {
+      if (p.wc && Rec.get('client', null, p.wc)) return;
+      if (p.wc && Rec.tombstone('client', null, p.wc)) return;
+      const wid = 'c-' + pid;
+      if (Rec.tombstone('client', null, wid)) return;
+      Rec.set('client', null, wid, { name: p.name || 'Client', rate: 0, cycle: 'sesh', every: 1, start: Day.today(),
+        status: p.box === 'past' ? 'done' : 'on', cp: pid });
+      Rec.patch('cperson', null, pid, { wc: wid });
+    });
+    Object.entries(people()).forEach(([pid, p]) => {
+      const c = p.wc && Rec.get('client', null, p.wc); if (!c) return;
+      if (c.name && p.name && String(c.name) !== String(p.name)) {
+        if (fieldAt('client', p.wc, 'name') > fieldAt('cperson', pid, 'name')) Rec.patch('cperson', null, pid, { name: c.name });
+        else Rec.patch('client', null, p.wc, { name: p.name });
+      }
+      const past = (p.box || 'one') === 'past', done = c.status === 'done';
+      if (past !== done) {
+        if (fieldAt('client', p.wc, 'status') > fieldAt('cperson', pid, 'box')) {
+          const to = done ? 'past' : 'one';
+          Rec.patch('cperson', null, pid, { box: to, slot: freeSlot(to) });
+        } else Rec.patch('client', null, p.wc, { status: past ? 'done' : 'on' });
+      }
+    });
+  } finally { linking = false; }
+}
+
+/* ── logging a 1:1 ──
+   Tom trains the client, so he logs it, here. The sets are the client's own
+   rows, `cset` under their id, keyed `pid|k-...` so a file from their TRAIN
+   can never collide with them, and they count in STRENGTH, the sessions and
+   the range exactly like a set they logged themselves.
+   A day with at least one set with reps is one session in WEALTH: one `sesh`
+   row per client per day, keyed so logging more sets adds nothing, and taken
+   back when the day's last set goes. */
+const slugOf = v => normName(v).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'x';
+const coachSets = (pid, date) => Rec.all('cset', { date: date }).filter(r => String(r.key).indexOf(pid + '|k-') === 0)
+  .sort((a, b) => (a.payload.ord || 0) - (b.payload.ord || 0) || String(a.key).localeCompare(String(b.key)));
+function exFor(pid, name) {
+  const want = normName(name), ex = exOf(pid);
+  const hit = Object.keys(ex).find(k => normName(ex[k] && ex[k].name) === want);
+  if (hit) return hit;
+  const k = 'x-' + slugOf(name);
+  Rec.set('cex', null, pid + '|' + k, { name: name.trim() });
+  return k;
+}
+function countSession(pid, date) {
+  const p = people()[pid]; if (!p || !p.wc) return;
+  const key = 'k-' + pid, any = coachSets(pid, date).some(r => r.payload.r > 0);
+  if (any) { if (!Rec.get('sesh', date, key)) Rec.set('sesh', date, key, { client: p.wc, src: 'coach', pid: pid }); }
+  else if (Rec.get('sesh', date, key)) Rec.del('sesh', date, key);
+}
+function addSet(pid, date, exKey, from) {
+  const ord = coachSets(pid, date).reduce((a, r) => Math.max(a, r.payload.ord || 0), 0) + 1;
+  Rec.set('cset', date, pid + '|k-' + newId(), { ex: exKey, kg: from ? from.kg : null, r: from ? from.r : null, u: unit(), done: 1, ord: ord, src: 'coach' });
+  countSession(pid, date);
+}
+let logDay = '';
+function drawLog(col, pid, p) {
+  const card = document.createElement('div'); card.className = 'card';
+  const head = document.createElement('div'); head.className = 'dayhead';
+  const h = document.createElement('h2'); h.style.cssText = 'flex:1;margin:0'; h.textContent = '1:1 WITH ' + String(p.name || 'CLIENT').toUpperCase();
+  head.appendChild(h);
+  const dt = UI.field('date', { value: logDay }); dt.style.flex = '0 0 auto'; dt.setAttribute('aria-label', 'Session date');
+  dt.onchange = () => { if (dt.value && dt.value <= Day.today()) logDay = dt.value; else dt.value = logDay; dt.blur(); draw(); };
+  head.appendChild(dt);
+  card.appendChild(head);
+  const note = document.createElement('p'); note.className = 'empty'; note.style.marginBottom = 'var(--s-3)';
+  note.innerHTML = p.wc ? 'Counts as one session for <b>' + esc(p.name || 'this client') + '</b> in WEALTH once a set has reps.' : 'Not joined to a WEALTH client yet.';
+  card.appendChild(note);
+
+  const rows = coachSets(pid, logDay), ex = exOf(pid), order = [], by = {};
+  rows.forEach(r => { const k = r.payload.ex; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
+  order.forEach(k => {
+    const bx = document.createElement('div'); bx.className = 'day';
+    const t = document.createElement('div'); t.className = 'dayhead';
+    const tn = document.createElement('b'); tn.style.flex = '1'; tn.textContent = (ex[k] || {}).name || 'Exercise';
+    t.appendChild(tn);
+    bx.appendChild(t);
+    const lab = document.createElement('div'); lab.className = 'exlabels';
+    lab.innerHTML = '<span>SET</span><span>' + unit().toUpperCase() + '</span><span>REPS</span><span></span>';
+    bx.appendChild(lab);
+    by[k].forEach((r, i) => {
+      const row = document.createElement('div'); row.className = 'exrow';
+      const n = document.createElement('span'); n.textContent = String(i + 1); n.style.color = 'var(--text-muted)';
+      const wv = UI.field('text', { value: show(r.payload.kg) }); wv.inputMode = 'decimal'; wv.setAttribute('aria-label', 'Weight');
+      wv.onchange = () => { Rec.patch('cset', r.date, r.key, { kg: toKg(wv.value) }); };
+      const rv = UI.field('text', { value: r.payload.r == null ? '' : String(r.payload.r) }); rv.inputMode = 'numeric'; rv.setAttribute('aria-label', 'Reps');
+      rv.onchange = () => { const v = parseInt(rv.value, 10); Rec.patch('cset', r.date, r.key, { r: v > 0 ? v : undefined }); countSession(pid, r.date); };
+      const del = document.createElement('button'); del.className = 'ico mb-press mb-tap'; del.innerHTML = ico('close');
+      del.setAttribute('aria-label', 'Remove set');
+      del.onclick = () => { const d = r.date, was = Rec.get('cset', d, r.key); Rec.del('cset', d, r.key); countSession(pid, d);
+        UI.undo('Set removed', () => { Rec.set('cset', d, r.key, was); countSession(pid, d); }); };
+      row.appendChild(n); row.appendChild(wv); row.appendChild(rv); row.appendChild(del);
+      bx.appendChild(row);
+    });
+    const more = btn('+ SET', '', () => { const l = by[k][by[k].length - 1]; addSet(pid, logDay, k, l && l.payload); });
+    more.style.width = '100%';
+    bx.appendChild(more);
+    card.appendChild(bx);
+  });
+
+  const names = {}; Object.values(ex).forEach(x => { if (x && x.name) names[x.name] = 1; });
+  const dl = document.createElement('datalist'); dl.id = 'logex';
+  Object.keys(names).sort().forEach(v => { const o = document.createElement('option'); o.value = v; dl.appendChild(o); });
+  card.appendChild(dl);
+  const add = document.createElement('div'); add.className = 'row2';
+  const nm = UI.field('text', { placeholder: 'Add an exercise' }); nm.setAttribute('list', 'logex'); nm.style.cssText = 'flex:2;min-width:0';
+  const go = () => { const v = nm.value.trim(); if (!v) return; nm.value = ''; nm.blur(); addSet(pid, logDay, exFor(pid, v), null); Mobile.feedback('success'); };
+  nm.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); go(); } };
+  add.appendChild(nm);
+  add.appendChild(btn('ADD', 'go', go));
+  card.appendChild(add);
+  const done = btn('DONE', '', () => { logDay = ''; draw(); });
+  done.style.cssText = 'width:100%;margin-top:var(--s-3)';
+  card.appendChild(done);
+  col.appendChild(card);
+}
 
 let box = opt('box', 'one');
 let sel = opt('sel', '');
@@ -315,7 +483,7 @@ function drawBox(col) {
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.name || 'Client';
       b.appendChild(nm);
       b.setAttribute('aria-label', (p.name || 'Client') + ', ' + Creatures.name(p.animal));
-      b.onclick = () => { sel = pid; Rec.setting(APP.id, 'sel', sel); editing = ''; Mobile.feedback('select'); draw(); };
+      b.onclick = () => { if (sel !== pid) logDay = ''; sel = pid; Rec.setting(APP.id, 'sel', sel); editing = ''; Mobile.feedback('select'); draw(); };
       /* right click on a desk, a held finger on an iPad: Mobile.hold does both */
       Mobile.hold(b, e => clientMenu(pid, e));
     } else {
@@ -380,6 +548,11 @@ function drawClient(col) {
   ed.setAttribute('aria-label', 'Edit client'); ed.onclick = () => clientDialog(sel);
   who.appendChild(ed);
   card.appendChild(who);
+  if (!logDay) {
+    const lb = btn('LOG A 1:1', 'go', () => { logDay = Day.today(); draw(); });
+    lb.style.cssText = 'width:100%;margin-top:var(--s-4)';
+    card.appendChild(lb);
+  }
 
   const month = Day.shift(Day.today(), -28);
   const vol = ss.reduce((a, s) => a + s.vol, 0);
@@ -390,6 +563,7 @@ function drawClient(col) {
     stat('VOLUME', Math.round(unit() === 'lb' ? vol * KG_LB : vol).toLocaleString() + ' <small>' + unit() + '</small>');
   card.appendChild(stats);
   col.appendChild(card);
+  if (logDay) drawLog(col, sel, p);
 
   if (window.Range) {
     const rc = document.createElement('div'); rc.className = 'card range';
@@ -565,6 +739,7 @@ function drawProg(col) {
 
 /* ── the screen ── */
 function draw() {
+  link();
   const m = document.getElementById('main');
   const keep = m.parentElement ? m.parentElement.scrollTop : 0;
   const act = document.activeElement;
