@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mb-version" content="1.0.0, 2026-09-22">
+<title>COACH</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>">
+<meta name="theme-color" content="#0B0E14">
+<link href="../shared/fonts/fonts.css" rel="stylesheet">
+<script src="../shared/skins.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/mobile.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="../shared/io.js"></script>
+<script src="../shared/health.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/creatures.js"></script>
+<script src="../shared/range.js"></script>
+<style>
+/* COACH, built 2026-09-22. Tom: "Can coach look like a pokemon box on Pc?"
+   and "Optimize COACH to make use of iPad and desktop space".
+
+   So the layout is chosen by width, not by device:
+     · one column below 760px, so it still works on a phone in a pinch
+     · two from 760px, which is an iPad held upright: the box on the left,
+       the client and their first sets stacked on the right
+     · three from 1180px, an iPad on its side or any desk: the box, the
+       client, and the programming, all on screen at once
+   The box stays put while the right side scrolls, the way the PC box does. */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text-1);font-family:var(--font-body);font-size:var(--f-3);
+  font-weight:var(--w-body);display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+header{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);background:var(--surface-1);box-shadow:var(--e-1),var(--rim)}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-7) + var(--safe-b))}
+.cols{display:grid;gap:var(--s-4);max-width:1680px;margin:0 auto;grid-template-columns:minmax(0,1fr);align-items:start}
+@media (min-width:760px){
+  /* an iPad held upright: the box with the programming under it on the
+     left, where the hands work, and the client's history down the right */
+  .cols{grid-template-columns:minmax(300px,380px) minmax(0,1fr)}
+  .boxcol{grid-column:1;grid-row:1}
+  .progcol{grid-column:1;grid-row:2}
+  .clientcol{grid-column:2;grid-row:1 / span 2}
+}
+@media (min-width:1180px){
+  .cols{grid-template-columns:300px minmax(0,1fr) 400px}
+  .boxcol{grid-column:1;grid-row:1;position:sticky;top:0}
+  .clientcol{grid-column:2;grid-row:1}
+  .progcol{grid-column:3;grid-row:1}
+  .progcol{position:sticky;top:0}
+}
+@media (min-width:1440px){ .cols{grid-template-columns:380px minmax(0,1fr) 420px} }
+.card{border-radius:var(--radius-lg);background:var(--surface-1);padding:var(--s-4);box-shadow:var(--e-1),var(--rim)}
+.col{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
+h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted);margin-bottom:var(--s-3)}
+.empty{color:var(--text-muted);line-height:var(--lh-body)}
+
+/* the box */
+.boxhead{display:flex;align-items:center;gap:var(--s-2);margin-bottom:var(--s-3)}
+.boxhead .t{flex:1;text-align:center}
+.boxhead .t b{display:block;font-family:var(--font-display);font-size:var(--f-4);letter-spacing:var(--track-cap)}
+.boxhead .t span{font-size:var(--f-1);color:var(--text-muted)}
+.grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--s-1)}
+.slot{aspect-ratio:1/1;min-height:var(--tap);border:0;border-radius:var(--radius-md);cursor:pointer;
+  background:var(--surface-2);color:var(--text-2);display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:0;padding:var(--s-1);overflow:hidden;font:inherit}
+.slot.none{background:transparent;box-shadow:inset 0 0 0 1px var(--border)}
+.slot.sel{box-shadow:inset 0 0 0 2px var(--accent);background:var(--accent-soft, var(--surface-3))}
+.slot canvas{flex:0 0 auto}
+.slot .nm{font-size:var(--f-1);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:var(--lh-tight)}
+.boxtabs{margin-top:var(--s-3)}
+
+/* the client */
+.who{display:flex;align-items:center;gap:var(--s-4)}
+.who .nm{font-family:var(--font-display);font-size:var(--f-5);font-weight:var(--w-bold)}
+.who .sub{color:var(--text-muted);font-size:var(--f-2);margin-top:var(--s-1)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:var(--s-2);margin-top:var(--s-4)}
+.stat{background:var(--surface-2);border-radius:var(--radius-md);padding:var(--s-3)}
+.stat span{display:block;font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap)}
+.stat b{font-size:var(--f-5);font-variant-numeric:tabular-nums}
+.range{overflow:hidden;padding:0}
+table.lifts{width:100%;border-collapse:collapse;font-size:var(--f-2)}
+table.lifts td,table.lifts th{padding:var(--s-2) var(--s-1);text-align:left;border-bottom:1px solid var(--border)}
+table.lifts th{font-size:var(--f-1);color:var(--text-muted);font-weight:var(--w-bold);letter-spacing:var(--track-cap)}
+table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
+.recent{display:flex;flex-direction:column;gap:var(--s-2)}
+.recent .r{display:flex;gap:var(--s-3);align-items:baseline;padding:var(--s-2) 0;border-bottom:1px solid var(--border)}
+.recent .d{flex:0 0 auto;font-weight:var(--w-bold);font-variant-numeric:tabular-nums}
+.recent .x{flex:1;min-width:0;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent .v{color:var(--text-muted);font-variant-numeric:tabular-nums}
+
+/* programming */
+.day{background:var(--surface-2);border-radius:var(--radius-md);padding:var(--s-3);margin-bottom:var(--s-3)}
+.dayhead{display:flex;gap:var(--s-2);align-items:center;margin-bottom:var(--s-2)}
+.dayhead input{flex:1;min-width:0}
+.exrow{display:grid;grid-template-columns:minmax(0,1fr) calc(var(--tap) * 1.6) calc(var(--tap) * 1.25) var(--tap);gap:var(--s-1);align-items:center;margin-bottom:var(--s-1)}
+.exrow input{min-width:0}
+.exlabels{display:grid;grid-template-columns:minmax(0,1fr) calc(var(--tap) * 1.6) calc(var(--tap) * 1.25) var(--tap);gap:var(--s-1);
+  font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);margin-bottom:var(--s-1)}
+.row2{display:flex;gap:var(--s-2);flex-wrap:wrap}
+.row2 .mb-btn{flex:1}
+.plist .p{display:flex;align-items:center;gap:var(--s-3);min-height:var(--tap);padding:var(--s-2) 0;border-bottom:1px solid var(--border);cursor:pointer}
+.plist .p .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plist .p .c{color:var(--text-muted);font-size:var(--f-2)}
+.ico{width:var(--tap);height:var(--tap);display:inline-flex;align-items:center;justify-content:center;
+  border:0;background:none;color:var(--text-muted);cursor:pointer;border-radius:var(--radius-md)}
+.ico svg{width:var(--s-5);height:var(--s-5)}
+.picker{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s-2)}
+.picker button{border:0;border-radius:var(--radius-md);background:var(--surface-2);min-height:var(--tap);padding:var(--s-2);cursor:pointer}
+.picker button.on{box-shadow:inset 0 0 0 2px var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">CO<b>ACH</b></div>
+  <div class="spacer"></div>
+  <button class="mb-btn go mb-press mb-tap" id="open">OPEN A CLIENT FILE</button>
+  <button class="mb-btn mb-press mb-tap" onclick="settings()">SETTINGS</button>
+  <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
+</header>
+<main class="mb-scroll"><div class="cols" id="main"></div></main>
+
+<script>
+/* ══════════════════ COACH ══════════════════
+   DOCTRINE: "Clients send their TRAIN logs here. For now, TRAIN with
+   profiles: track each client's strength." Tom only, never in the client
+   build.
+
+   Clients are CHECK IN's `cperson` rows, the same list and the same
+   Pokémon, so a client added in either app is in both. COACH adds one field
+   to them, `box`, by patching, so CHECK IN's own fields are never touched.
+
+   A client's training arrives as the file TRAIN's Send To Coach makes. Its
+   rows are kept under COACH's own types with the client's id in front of the
+   key, the way CHECK IN keeps a client's photos, so a client's squats never
+   land in Tom's own TRAIN:
+     cset      one set          key pid|set key, dated
+     cex       one exercise     key pid|exercise key
+     cphase    one block        key pid|phase key
+     csession  one day          key pid|, dated
+   Each is merged with the updated_at it came with, so sending the same file
+   twice changes nothing and a newer file only adds what is new.
+
+   What goes back is a program, `cprog`: one row per program, because a
+   program is written, sent and sold as one piece. A client's own first sets
+   are the program keyed `c-<pid>`; anything else is a program in the
+   library, to reuse or sell. Weights are kept in kilograms, as TRAIN keeps
+   them, and shown in the unit chosen in Settings. */
+const APP = { id: 'coach', name: 'Coach', icon: '✦', blurb: 'your clients, their training, their first sets',
+  types: ['cset', 'cex', 'cphase', 'csession', 'cprog'] };
+Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id); if (window.Icons) Icons.paint(null, { force: true }); });
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({ app: APP.id, name: APP.name, types: APP.types, reads: { checkin: ['cperson'] } });
+
+const BOXES = [{ id: 'one', name: '1:1' }, { id: 'online', name: 'ONLINE' }, { id: 'past', name: 'PAST' }];
+const SLOTS = 30;
+const esc = UI.esc;
+const ico = r => (window.Icons && Icons.svg(r)) || '';
+let seq = 0;
+const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' + (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
+const opt = (k, d) => { const v = Rec.setting(APP.id, k); return v == null ? d : v; };
+const unit = () => opt('unit', 'kg');
+const KG_LB = 2.20462;
+const show = kg => kg == null || kg === '' ? '' : String(Math.round((unit() === 'lb' ? kg * KG_LB : kg) * 10) / 10);
+const toKg = v => { const n = parseFloat(v); if (!(n >= 0)) return null; return Math.round((unit() === 'lb' ? n / KG_LB : n) * 1000) / 1000; };
+const e1 = (kg, r) => kg > 0 && r > 0 && r <= 12 ? kg * (1 + r / 30) : 0;
+
+/* ── clients ── */
+const people = () => Rec.map('cperson');
+const clientsIn = box => Object.entries(people())
+  .filter(([, p]) => (p.box || 'one') === box)
+  .sort((a, b) => (a[1].slot == null ? 999 : a[1].slot) - (b[1].slot == null ? 999 : b[1].slot) || String(a[1].name).localeCompare(String(b[1].name)));
+const own = (type, pid) => Rec.all(type).filter(r => String(r.key).indexOf(pid + '|') === 0);
+const setsOf = pid => own('cset', pid);
+const exOf = pid => { const m = {}; own('cex', pid).forEach(r => { m[r.key.slice(pid.length + 1)] = r.payload; }); return m; };
+
+let box = opt('box', 'one');
+let sel = opt('sel', '');
+let tab = 'first';
+let editing = '';
+
+/* ── opening a client's file ── */
+const MAP = { set: 'cset', exercise: 'cex', phase: 'cphase', session: 'csession' };
+function takeFile(bag) {
+  if (!bag || bag.kind !== 'motherbase-train' || !bag.pid || !Array.isArray(bag.rows)) {
+    throw new Error('That is not a file from TRAIN. Ask for Send To Coach, in TRAIN’s Profile menu.');
+  }
+  const pid = String(bag.pid);
+  const cur = people()[pid];
+  if (!cur) {
+    const taken = {}; clientsIn('one').forEach(([, p]) => { taken[p.slot] = 1; });
+    let slot = 0; while (taken[slot]) slot++;
+    Rec.set('cperson', null, pid, { name: bag.name || 'Client', animal: bag.animal || 'pikachu', unit: bag.unit || 'kg', fields: null, seen: null, box: 'one', slot: slot });
+  } else {
+    const ch = {};
+    if (bag.name && !cur.name) ch.name = bag.name;
+    if (bag.animal && !cur.animal) ch.animal = bag.animal;
+    if (bag.unit) ch.unit = bag.unit;
+    if (Object.keys(ch).length) Rec.patch('cperson', null, pid, ch);
+  }
+  const rows = [];
+  bag.rows.forEach(r => {
+    const type = MAP[r.type];
+    if (!type || !r.updated_at) return;
+    const key = pid + '|' + (r.key == null ? '' : r.key);
+    rows.push({ id: Rec.idOf(type, r.date || null, key), user_id: Rec.USER, type: type, date: r.date || null, key: key,
+      payload: r.payload, updated_at: r.updated_at, deleted: r.deleted ? 1 : 0 });
+  });
+  const n = Rec.merge(rows);
+  return { pid: pid, name: bag.name || 'Client', rows: rows.length, fresh: n };
+}
+document.getElementById('open').onclick = () => {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,application/json'; inp.multiple = true;
+  inp.onchange = () => {
+    [].forEach.call(inp.files || [], f => {
+      f.text().then(t => {
+        const res = takeFile(JSON.parse(t));
+        sel = res.pid; Rec.setting(APP.id, 'sel', sel);
+        const p = people()[sel]; if (p) { box = p.box || 'one'; Rec.setting(APP.id, 'box', box); }
+        UI.toast('<b>' + esc(res.name) + '</b>: ' + (res.fresh ? res.fresh + ' new rows' : 'nothing new since last time'));
+        draw();
+      }).catch(e => UI.toast(esc((e && e.message) || 'That file could not be read'), { bad: true }));
+    });
+  };
+  inp.click();
+};
+
+/* ── adding a client by hand, and editing one ── */
+function clientDialog(pid) {
+  const cur = pid ? people()[pid] : null;
+  let animal = (cur && Creatures.pick(cur.animal)) || 'pikachu';
+  UI.dialog({
+    title: cur ? 'CLIENT' : 'NEW CLIENT', width: 460, focus: !cur,
+    body: b => {
+      const i = UI.field('text', { value: cur ? cur.name : '', placeholder: 'First name' });
+      i.id = 'cname';
+      b.appendChild(i);
+      const pk = document.createElement('div'); pk.className = 'picker'; pk.style.marginTop = 'var(--s-3)';
+      Creatures.keys().forEach(k => {
+        const bt = document.createElement('button'); bt.type = 'button'; bt.className = k === animal ? 'on' : '';
+        bt.appendChild(Creatures.canvas(k, 44)); bt.title = Creatures.name(k);
+        bt.onclick = () => { animal = k; pk.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === bt)); Mobile.feedback('select'); };
+        pk.appendChild(bt);
+      });
+      b.appendChild(pk);
+    },
+    actions: [{ label: 'CANCEL' }, { label: cur ? 'SAVE' : 'ADD', kind: 'go', fn: h => {
+      const name = (h.body.querySelector('#cname').value || '').trim();
+      if (!name) { UI.toast('Type a name first', { bad: true }); return false; }
+      if (cur) Rec.patch('cperson', null, pid, { name: name, animal: animal });
+      else {
+        const id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const taken = {}; clientsIn(box).forEach(([, p]) => { taken[p.slot] = 1; });
+        let slot = 0; while (taken[slot]) slot++;
+        Rec.set('cperson', null, id, { name: name, animal: animal, unit: unit(), fields: null, seen: null, box: box, slot: slot });
+        sel = id; Rec.setting(APP.id, 'sel', sel);
+      }
+      Mobile.feedback('success');
+    } }],
+  });
+}
+function moveTo(pid, to) {
+  const taken = {}; clientsIn(to).forEach(([, p]) => { taken[p.slot] = 1; });
+  let slot = 0; while (taken[slot]) slot++;
+  Rec.patch('cperson', null, pid, { box: to, slot: slot });
+  UI.toast('Moved to <b>' + esc(BOXES.find(b => b.id === to).name) + '</b>');
+}
+function clientMenu(pid, e) {
+  const items = [{ label: 'Edit Name And Pokémon', fn: () => clientDialog(pid) }];
+  BOXES.forEach(b => { if (b.id !== ((people()[pid] || {}).box || 'one')) items.push({ label: 'Move To ' + b.name, fn: () => moveTo(pid, b.id) }); });
+  UI.menu(e.clientX, e.clientY, items);
+}
+
+/* ── the box ── */
+function drawBox(col) {
+  const card = document.createElement('div'); card.className = 'card';
+  const list = clientsIn(box), bi = BOXES.findIndex(b => b.id === box);
+  const head = document.createElement('div'); head.className = 'boxhead';
+  const arrow = (dir, role, label) => {
+    const b = document.createElement('button'); b.className = 'ico mb-press mb-tap'; b.innerHTML = ico(role);
+    b.setAttribute('aria-label', label);
+    b.onclick = () => { box = BOXES[(bi + dir + BOXES.length) % BOXES.length].id; Rec.setting(APP.id, 'box', box); Mobile.feedback('select'); draw(); };
+    return b;
+  };
+  head.appendChild(arrow(-1, 'back', 'Previous box'));
+  const t = document.createElement('div'); t.className = 't';
+  t.innerHTML = '<b>BOX ' + (bi + 1) + ' · ' + esc(BOXES[bi].name) + '</b><span>' + list.length + ' of ' + SLOTS + '</span>';
+  head.appendChild(t);
+  head.appendChild(arrow(1, 'next', 'Next box'));
+  card.appendChild(head);
+
+  const grid = document.createElement('div'); grid.className = 'grid';
+  const at = {}; list.forEach(([pid, p], i) => { at[p.slot != null && p.slot < SLOTS && !at[p.slot] ? p.slot : list.length + i] = pid; });
+  /* anything without a free numbered slot fills the first empty one */
+  const loose = Object.keys(at).filter(k => +k >= SLOTS).map(k => at[k]);
+  for (let i = 0; i < SLOTS && loose.length; i++) if (!at[i]) at[i] = loose.shift();
+  for (let i = 0; i < SLOTS; i++) {
+    const pid = at[i], p = pid && people()[pid];
+    const b = document.createElement('button');
+    b.type = 'button';
+    if (p) {
+      b.className = 'slot mb-press' + (pid === sel ? ' sel' : '');
+      b.appendChild(Creatures.canvas(p.animal, 34));
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.name || 'Client';
+      b.appendChild(nm);
+      b.setAttribute('aria-label', (p.name || 'Client') + ', ' + Creatures.name(p.animal));
+      b.onclick = () => { sel = pid; Rec.setting(APP.id, 'sel', sel); editing = ''; Mobile.feedback('select'); draw(); };
+      /* right click on a desk, a held finger on an iPad: Mobile.hold does both */
+      Mobile.hold(b, e => clientMenu(pid, e));
+    } else {
+      b.className = 'slot none mb-press';
+      b.setAttribute('aria-label', 'Empty slot. Add a client');
+      b.onclick = () => clientDialog(null);
+    }
+    grid.appendChild(b);
+  }
+  card.appendChild(grid);
+  const tabs = UI.segmented(BOXES.map(b => ({ id: b.id, name: b.name })), box, v => { box = v; Rec.setting(APP.id, 'box', box); draw(); });
+  tabs.classList.add('boxtabs');
+  card.appendChild(tabs);
+  col.appendChild(card);
+}
+
+/* ── one client ── */
+function sessionsOf(pid) {
+  const ex = exOf(pid), by = {};
+  setsOf(pid).forEach(r => {
+    const s = r.payload; if (s.warm) return;
+    const d = by[r.date] || (by[r.date] = { date: r.date, vol: 0, ex: [] });
+    d.vol += (+s.kg || 0) * (+s.r || 0);
+    const nm = (ex[s.ex] || {}).name || 'Exercise';
+    if (d.ex.indexOf(nm) < 0) d.ex.push(nm);
+  });
+  return Object.keys(by).sort().map(k => by[k]);
+}
+function liftsOf(pid) {
+  const ex = exOf(pid), by = {};
+  setsOf(pid).forEach(r => {
+    const s = r.payload; if (s.warm || !(s.kg > 0) || !(s.r > 0)) return;
+    const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', best: 0, bs: null, days: {}, last: '' });
+    x.days[r.date] = 1;
+    if (r.date > x.last) x.last = r.date;
+    const v = e1(s.kg, s.r);
+    if (v > x.best) { x.best = v; x.bs = s; }
+  });
+  return Object.values(by).filter(x => x.best > 0)
+    .sort((a, b) => Object.keys(b.days).length - Object.keys(a.days).length).slice(0, 10);
+}
+function drawClient(col) {
+  const p = people()[sel];
+  const card = document.createElement('div'); card.className = 'card';
+  if (!p) {
+    card.innerHTML = '<h2>CLIENT</h2><p class="empty">Pick a client in the box, or press an empty slot to add one. ' +
+      'A client’s training arrives as a file: they press <b>Send To Coach</b> in TRAIN’s Profile menu, and you open it with <b>OPEN A CLIENT FILE</b>.</p>';
+    col.appendChild(card);
+    return;
+  }
+  const ss = sessionsOf(sel);
+  const who = document.createElement('div'); who.className = 'who';
+  who.appendChild(Creatures.canvas(p.animal, 72));
+  const w = document.createElement('div');
+  const last = ss.length ? ss[ss.length - 1].date : null;
+  w.innerHTML = '<div class="nm">' + esc(p.name || 'Client') + '</div><div class="sub">' +
+    esc(Creatures.name(p.animal)) + ' · ' + esc((BOXES.find(b => b.id === (p.box || 'one')) || BOXES[0]).name) +
+    (last ? ' · last trained ' + esc(Day.label(last)) : '') + '</div>';
+  who.appendChild(w);
+  const sp = document.createElement('div'); sp.className = 'spacer'; who.appendChild(sp);
+  const ed = document.createElement('button'); ed.className = 'ico mb-press mb-tap'; ed.innerHTML = ico('edit');
+  ed.setAttribute('aria-label', 'Edit client'); ed.onclick = () => clientDialog(sel);
+  who.appendChild(ed);
+  card.appendChild(who);
+
+  const month = Day.shift(Day.today(), -28);
+  const vol = ss.reduce((a, s) => a + s.vol, 0);
+  const stats = document.createElement('div'); stats.className = 'stats';
+  const stat = (k, v) => '<div class="stat"><span>' + k + '</span><b>' + v + '</b></div>';
+  stats.innerHTML = stat('SESSIONS', ss.length.toLocaleString()) +
+    stat('LAST 4 WEEKS', ss.filter(s => s.date >= month).length) +
+    stat('VOLUME', Math.round(unit() === 'lb' ? vol * KG_LB : vol).toLocaleString() + ' <small>' + unit() + '</small>');
+  card.appendChild(stats);
+  col.appendChild(card);
+
+  if (window.Range) {
+    const rc = document.createElement('div'); rc.className = 'card range';
+    col.appendChild(rc);
+    Range.mount(rc, Range.fromRows(setsOf(sel), own('cphase', sel), Day.today()), 210);
+  }
+  if (!ss.length) {
+    const e = document.createElement('div'); e.className = 'card';
+    e.innerHTML = '<p class="empty">No training from ' + esc(p.name || 'this client') + ' yet. Ask them to press <b>Send To Coach</b> in TRAIN’s Profile menu, then open the file here.</p>';
+    col.appendChild(e);
+    return;
+  }
+  const lf = liftsOf(sel);
+  if (lf.length) {
+    const lc = document.createElement('div'); lc.className = 'card';
+    lc.innerHTML = '<h2>STRENGTH</h2><table class="lifts"><tr><th>EXERCISE</th><th class="n">BEST SET</th><th class="n">EST. 1RM</th><th class="n">DAYS</th></tr>' +
+      lf.map(x => '<tr><td>' + esc(x.name) + '</td><td class="n">' + show(x.bs.kg) + ' × ' + x.bs.r + '</td><td class="n">' +
+        show(x.best) + ' ' + unit() + '</td><td class="n">' + Object.keys(x.days).length + '</td></tr>').join('') + '</table>';
+    col.appendChild(lc);
+  }
+  const rc2 = document.createElement('div'); rc2.className = 'card';
+  rc2.innerHTML = '<h2>RECENT SESSIONS</h2><div class="recent">' + ss.slice(-8).reverse().map(s =>
+    '<div class="r"><span class="d">' + esc(Day.label(s.date, { day: 'numeric', month: 'short' })) + '</span><span class="x">' +
+    esc(s.ex.join(', ')) + '</span><span class="v">' + Math.round(unit() === 'lb' ? s.vol * KG_LB : s.vol).toLocaleString() + ' ' + unit() + '</span></div>').join('') + '</div>';
+  col.appendChild(rc2);
+}
+
+/* ── programs ── */
+const progs = () => Rec.map('cprog');
+const clientProgKey = pid => 'c-' + pid;
+const blankDay = n => ({ name: 'Day ' + n, ex: [{ name: '', sets: [{ kg: null, r: null }] }] });
+function saveProg(key, days, name) {
+  const cur = Rec.get('cprog', null, key);
+  if (cur) Rec.patch('cprog', null, key, name == null ? { days: days } : { days: days, name: name });
+  else Rec.set('cprog', null, key, { name: name || 'Program', pid: key.indexOf('c-') === 0 ? key.slice(2) : null, days: days });
+}
+function fileOf(key) {
+  const p = Rec.get('cprog', null, key);
+  return { kind: 'motherbase-program', v: 1, id: key, name: p.name || 'Program', from: opt('me', 'Coach'), at: new Date().toISOString(),
+    days: (p.days || []).map(d => ({ name: d.name, ex: (d.ex || []).filter(x => x.name).map(x => ({
+      name: x.name, sets: (x.sets || []).slice(0, 1).filter(s => s.kg != null || s.r != null).map(s => ({ kg: s.kg, r: s.r })) })) })) };
+}
+function sendProg(key, label) {
+  const bag = fileOf(key), text = JSON.stringify(bag);
+  const file = 'PROGRAM ' + (label || bag.name) + '.json';
+  let f = null;
+  try { f = new File([text], file, { type: 'application/json' }); } catch (e) {}
+  if (f && navigator.canShare && navigator.canShare({ files: [f] }) && Mobile.touch) {
+    navigator.share({ files: [f] }).then(() => UI.toast('Sent'), () => {});
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const a = document.createElement('a'); a.href = url; a.download = file;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 8000);
+  UI.toast('Saved as <b>' + esc(file) + '</b>. The client opens it with <b>Open A Program</b> in TRAIN.');
+}
+/* The editor. Every field saves when it is left, so there is no Save
+   button to forget, and a refresh straight after typing keeps it
+   (UI.commitFocused blurs the box on the way out). */
+function editor(el, key, opts) {
+  const p = Rec.get('cprog', null, key) || { name: opts.name || 'Program', days: [blankDay(1)] };
+  const days = JSON.parse(JSON.stringify(p.days && p.days.length ? p.days : [blankDay(1)]));
+  const names = {};
+  if (sel) Object.values(exOf(sel)).forEach(x => { if (x && x.name) names[x.name] = 1; });
+  Object.values(progs()).forEach(pp => (pp.days || []).forEach(d => (d.ex || []).forEach(x => { if (x.name) names[x.name] = 1; })));
+  const dl = document.createElement('datalist'); dl.id = 'exnames';
+  Object.keys(names).sort().forEach(n => { const o = document.createElement('option'); o.value = n; dl.appendChild(o); });
+  el.appendChild(dl);
+  const commit = () => saveProg(key, days, null);
+  if (opts.named) {
+    const nm = UI.field('text', { value: p.name || '', placeholder: 'Program name' });
+    nm.onchange = () => saveProg(key, days, nm.value.trim() || 'Program');
+    nm.style.marginBottom = 'var(--s-3)';
+    el.appendChild(nm);
+  }
+  days.forEach((d, di) => {
+    const box = document.createElement('div'); box.className = 'day';
+    const hd = document.createElement('div'); hd.className = 'dayhead';
+    const dn = UI.field('text', { value: d.name || '', placeholder: 'Day name' });
+    dn.onchange = () => { d.name = dn.value.trim() || ('Day ' + (di + 1)); commit(); };
+    hd.appendChild(dn);
+    const rm = document.createElement('button'); rm.className = 'ico mb-press mb-tap'; rm.innerHTML = ico('delete');
+    rm.setAttribute('aria-label', 'Remove day');
+    rm.onclick = () => { const was = days.splice(di, 1)[0]; commit(); draw(); UI.undo('Day removed', () => { days.splice(di, 0, was); commit(); draw(); }); };
+    hd.appendChild(rm);
+    box.appendChild(hd);
+    const lab = document.createElement('div'); lab.className = 'exlabels';
+    lab.innerHTML = '<span>EXERCISE</span><span>FIRST SET ' + unit().toUpperCase() + '</span><span>REPS</span><span></span>';
+    box.appendChild(lab);
+    (d.ex || []).forEach((x, xi) => {
+      const row = document.createElement('div'); row.className = 'exrow';
+      const n = UI.field('text', { value: x.name || '', placeholder: 'Squat' }); n.setAttribute('list', 'exnames');
+      n.setAttribute('aria-label', 'Exercise');
+      n.onchange = () => { x.name = n.value.trim(); commit(); };
+      const s0 = (x.sets && x.sets[0]) || (x.sets = [{ kg: null, r: null }])[0];
+      const wv = UI.field('text', { value: show(s0.kg) }); wv.inputMode = 'decimal'; wv.setAttribute('aria-label', 'First set weight');
+      wv.onchange = () => { s0.kg = UI.amount ? toKg(wv.value) : toKg(wv.value); commit(); };
+      const rv = UI.field('text', { value: s0.r == null ? '' : String(s0.r) }); rv.inputMode = 'numeric'; rv.setAttribute('aria-label', 'First set reps');
+      rv.onchange = () => { const k = parseInt(rv.value, 10); s0.r = k > 0 ? k : null; commit(); };
+      const del = document.createElement('button'); del.className = 'ico mb-press mb-tap'; del.innerHTML = ico('close');
+      del.setAttribute('aria-label', 'Remove exercise');
+      del.onclick = () => { d.ex.splice(xi, 1); commit(); draw(); };
+      row.appendChild(n); row.appendChild(wv); row.appendChild(rv); row.appendChild(del);
+      box.appendChild(row);
+    });
+    const add = document.createElement('button'); add.className = 'mb-btn mb-press mb-tap'; add.textContent = '+ EXERCISE';
+    add.style.width = '100%';
+    add.onclick = () => { (d.ex || (d.ex = [])).push({ name: '', sets: [{ kg: null, r: null }] }); commit(); draw(); };
+    box.appendChild(add);
+    el.appendChild(box);
+  });
+  const r2 = document.createElement('div'); r2.className = 'row2';
+  const ad = document.createElement('button'); ad.className = 'mb-btn mb-press mb-tap'; ad.textContent = '+ DAY';
+  ad.onclick = () => { days.push(blankDay(days.length + 1)); commit(); draw(); };
+  r2.appendChild(ad);
+  (opts.extra || []).forEach(b => r2.appendChild(b));
+  el.appendChild(r2);
+}
+function btn(label, cls, fn) { const b = document.createElement('button'); b.className = 'mb-btn ' + (cls || '') + ' mb-press mb-tap'; b.textContent = label; b.onclick = fn; return b; }
+
+function drawProg(col) {
+  const card = document.createElement('div'); card.className = 'card';
+  const tabs = UI.segmented([{ id: 'first', name: 'FIRST SETS' }, { id: 'lib', name: 'PROGRAMS' }], tab, v => { tab = v; editing = ''; draw(); });
+  tabs.style.marginBottom = 'var(--s-4)';
+  card.appendChild(tabs);
+  const p = people()[sel];
+  if (tab === 'first') {
+    if (!p) { const e = document.createElement('p'); e.className = 'empty'; e.textContent = 'Pick a client to program their first sets.'; card.appendChild(e); col.appendChild(card); return; }
+    const key = clientProgKey(sel);
+    const h = document.createElement('h2'); h.textContent = 'FIRST SETS FOR ' + String(p.name || 'CLIENT').toUpperCase(); card.appendChild(h);
+    const why = document.createElement('p'); why.className = 'empty'; why.style.marginBottom = 'var(--s-3)';
+    why.textContent = 'The weight and reps of each exercise’s first set. In TRAIN the rest of their sets fill from their last session.';
+    card.appendChild(why);
+    if (!Rec.get('cprog', null, key)) Rec.set('cprog', null, key, { name: (p.name || 'Client') + '’s program', pid: sel, days: [blankDay(1)] });
+    editor(card, key, { extra: [btn('SEND TO ' + String(p.name || 'CLIENT').toUpperCase(), 'go', () => sendProg(key, p.name))] });
+  } else if (editing) {
+    const back = btn('‹ ALL PROGRAMS', '', () => { editing = ''; draw(); });
+    back.style.marginBottom = 'var(--s-3)';
+    card.appendChild(back);
+    const extra = [btn('SAVE AS FILE', 'go', () => sendProg(editing))];
+    if (p) extra.push(btn('USE FOR ' + String(p.name || 'CLIENT').toUpperCase(), '', () => {
+      const src = Rec.get('cprog', null, editing);
+      saveProg(clientProgKey(sel), JSON.parse(JSON.stringify(src.days || [])), null);
+      tab = 'first'; editing = ''; draw();
+      UI.toast('<b>' + esc(src.name) + '</b> is now ' + esc(p.name) + '’s first sets');
+    }));
+    editor(card, editing, { named: true, extra: extra });
+  } else {
+    const list = Object.entries(progs()).filter(([, v]) => !v.pid).sort((a, b) => String(a[1].name).localeCompare(String(b[1].name)));
+    const pl = document.createElement('div'); pl.className = 'plist';
+    if (!list.length) pl.innerHTML = '<p class="empty">A program here is one you can send to anyone, or sell. It opens in their TRAIN as a routine.</p>';
+    list.forEach(([k, v]) => {
+      const r = document.createElement('div'); r.className = 'p'; r.tabIndex = 0;
+      const n = (v.days || []).reduce((a, d) => a + (d.ex || []).filter(x => x.name).length, 0);
+      r.innerHTML = '<span class="nm">' + esc(v.name || 'Program') + '</span><span class="c">' + (v.days || []).length + ' days · ' + n + ' exercises</span>';
+      r.onclick = () => { editing = k; draw(); };
+      Mobile.hold(r, e => { UI.menu(e.clientX, e.clientY, [
+        { label: 'Save As File', fn: () => sendProg(k) },
+        { label: 'Delete Program', kind: 'bad', fn: () => { const was = Rec.get('cprog', null, k); Rec.del('cprog', null, k); UI.undo('Program deleted', () => Rec.set('cprog', null, k, was)); } },
+      ]); });
+      pl.appendChild(r);
+    });
+    card.appendChild(pl);
+    const nb = btn('+ NEW PROGRAM', 'go', () => {
+      const k = newId(); Rec.set('cprog', null, k, { name: 'New program', pid: null, days: [blankDay(1)] }); editing = k; draw();
+    });
+    nb.style.cssText = 'width:100%;margin-top:var(--s-3)';
+    card.appendChild(nb);
+  }
+  col.appendChild(card);
+}
+
+/* ── the screen ── */
+function draw() {
+  const m = document.getElementById('main');
+  const keep = m.parentElement ? m.parentElement.scrollTop : 0;
+  const act = document.activeElement;
+  if (act && act.tagName === 'INPUT' && m.contains(act)) return;   /* never redraw under a finger that is typing */
+  m.innerHTML = '';
+  if (sel && !people()[sel]) sel = '';
+  const c1 = document.createElement('div'); c1.className = 'col boxcol'; drawBox(c1);
+  const c2 = document.createElement('div'); c2.className = 'col clientcol'; drawClient(c2);
+  const c3 = document.createElement('div'); c3.className = 'col progcol'; drawProg(c3);
+  m.appendChild(c1); m.appendChild(c2); m.appendChild(c3);
+  if (m.parentElement) m.parentElement.scrollTop = keep;
+}
+
+function settings() {
+  UI.settings(APP.id, [{ id: 'coach', name: 'COACH', draw: pane => {
+    pane.appendChild(UI.row('Weights in', 'How COACH shows and takes weights', UI.segmented(
+      [{ id: 'kg', name: 'KG' }, { id: 'lb', name: 'LB' }], unit(), v => { Rec.setting(APP.id, 'unit', v); draw(); })));
+    const me = UI.field('text', { value: opt('me', ''), placeholder: 'Coach' });
+    me.onchange = () => Rec.setting(APP.id, 'me', me.value.trim());
+    pane.appendChild(UI.row('Your name', 'On every program you send', me));
+  } }]);
+}
+
+let rt = null;
+Rec.on(() => { clearTimeout(rt); rt = setTimeout(draw, 60); });
+Rec.ready(draw);
+draw();
+</script>
+</body>
+</html>
