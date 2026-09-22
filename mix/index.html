@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.3, 2026-09-21">
+<meta name="mb-version" content="1.0.4, 2026-09-22">
 <title>MIX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◉</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -97,6 +97,14 @@ details>.grid,details>.note{margin-top:var(--s-3)}
 .voff{flex:0 0 auto;min-width:var(--tap);min-height:var(--tap);margin:calc(var(--s-2) * -1) calc(var(--s-2) * -1) 0 0;
   background:none;border:0;cursor:pointer;color:var(--text-muted);font-size:var(--f-4);line-height:1}
 .voff:hover{color:var(--danger)}
+.vtick{flex:0 0 auto;width:var(--tap);height:var(--tap);margin:calc(var(--s-2) * -1) 0 0 calc(var(--s-2) * -1);
+  border:0;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.vtick span{width:28px;height:28px;border-radius:50%;border:2px solid var(--border-strong);
+  display:flex;align-items:center;justify-content:center;color:var(--accent-fg);font-size:var(--f-2);line-height:1}
+.vtick.on span{background:var(--accent);border-color:var(--accent)}
+.vtick:disabled{opacity:.3;cursor:default}
+.vessel.done{opacity:.65}
+.dose.taken{cursor:default}
 .vsize{font-size:var(--f-2);color:var(--text-muted);margin-bottom:var(--s-3)}
 .dose{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s-3);
   padding:var(--s-3) 0;border-top:var(--border-width) solid var(--border);cursor:grab}
@@ -300,6 +308,9 @@ const IN = [
   ['capMg',  350,  'Magnesium supplement cap, mg'],
   ['win',    21,   'Micro window, days'],
   ['pitch',  2,    'Number of day pitchers'],
+  ['trainAt', '17:00', 'Training starts'],
+  ['bed',    '22:30', 'Bedtime'],
+  ['saltCut', '18:00', 'No salt on food after'],
   ['litres', 1.0,  'Litres per pitcher'],
   ['splitK', 50,   'Potassium, % in day pitchers'],
   ['splitMg', 50,  'Magnesium, % with meal'],
@@ -312,7 +323,7 @@ const DEF = {}; IN.forEach(([k, v]) => { DEF[k] = v; });
 const v = k => {
   const raw = S.get('in.' + k, null);
   const d = DEF[k];
-  if (k === 'skin') return raw == null ? d : raw;
+  if (typeof d === 'string') return raw == null || raw === '' ? d : String(raw);
   return raw == null ? d : (num(raw, d) == null ? d : num(raw, d));
 };
 const setV = (k, val) => S.set('in.' + k, val);
@@ -473,6 +484,49 @@ function windowRead() {
   return { days: days, per: per, liver: liver, seen: seen };
 }
 
+/* ══════════════ CLOCKS ══════════════ */
+const hm = t => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+const clock = mins => {
+  if (mins == null) return '';
+  mins = ((Math.round(mins) % 1440) + 1440) % 1440;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return ((h + 11) % 12 + 1) + ':' + String(m).padStart(2, '0') + (h < 12 ? ' AM' : ' PM');
+};
+const nowMins = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+/* When training starts: TRAIN's own clock if a session is running today,
+   otherwise the time he set. A TRAIN session is a fact; the setting is a
+   plan, so the fact wins. */
+function trainStart() {
+  const s = Rec.get('session', today(), '');
+  if (s && s.start) { const d = new Date(s.start); return { m: d.getHours() * 60 + d.getMinutes(), from: 'TRAIN' }; }
+  return { m: hm(v('trainAt')), from: 'set' };
+}
+
+/* ══════════════ HOW MUCH GETS IN ══════════════
+
+   Tom picked this one, 2026-09-22: show what each zinc and magnesium dose
+   actually delivers, not only what goes in the glass.
+
+   Zinc is read straight off Tran and Miller's measured points, joined by
+   straight lines, and flat past the last one. No curve is fitted here,
+   because a fitted curve is a second claim on top of the study and these
+   six points are the study. They measured zinc sulfate in water after a
+   meal, which is close to the best case there is, so every number this
+   gives is labelled "at best".
+
+   Magnesium has no dose study of that quality for glycinate, so it gets the
+   range from the literature, 20 to 25%, and says it is a range.           */
+const ZN_CURVE = [[0, 0], [2.2, 1.6], [5.2, 3.5], [10.4, 7.4], [15.2, 9.5], [20.3, 11.0], [30.1, 11.2]];
+function znAbs(mg) {
+  if (!(mg > 0)) return 0;
+  for (let i = 1; i < ZN_CURVE.length; i++) {
+    const a = ZN_CURVE[i - 1], b = ZN_CURVE[i];
+    if (mg <= b[0]) return a[1] + (b[1] - a[1]) * (mg - a[0]) / (b[0] - a[0]);
+  }
+  return ZN_CURVE[ZN_CURVE.length - 1][1];
+}
+const MG_ABS = [.20, .25];
+
 /* ══════════════ THE MATHS ══════════════ */
 function compute() {
   const store = fromStore(today());
@@ -555,14 +609,48 @@ function compute() {
   doses.push({ id: 'zn-meal', nut: 'zn', name: 'Zinc glycinate', mg: znMeal, g: grams(znMeal, v('pctZn')), home: 'meal' });
   doses.push({ id: 'zn-night', nut: 'zn', name: 'Zinc glycinate', mg: znNight, g: grams(znNight, v('pctZn')), home: 'night' });
 
-  const supp = { na: preSalt + bottleSalt + foodSalt, k: kSupp, zn: znNight + znMeal, mg: mgSupp };
+  /* ── what has already gone down ──
+     Tom, 2026-09-22: tick each drink as it is taken, instead of one LOG
+     button that claimed the night drink before it was drunk.
+
+     A ticked dose is a fact and keeps the number it had when it was
+     ticked. What is still to take is worked out from what is left: the
+     day's total for that mineral, minus what is already in you, shared
+     across the untaken doses in the proportions they had. So logging more
+     food at 3 PM shrinks the doses still to come, and never rewrites the
+     one you drank at 9 AM. */
+  const took = {};
+  Rec.all('dose', { date: today() }).forEach(r => { took[r.key] = r.payload; });
+  Object.keys(took).forEach(id => {
+    if (!doses.some(d => d.id === id)) {
+      const t = took[id];
+      doses.push({ id: id, nut: t.nut, name: ({ na: 'Table salt', k: 'Potassium citrate', zn: 'Zinc glycinate', mg: 'Magnesium glycinate' })[t.nut] || id,
+        mg: 0, g: 0, home: t.slot || 'meal' });
+    }
+  });
+  ['na', 'k', 'zn', 'mg'].forEach(n => {
+    const mine = doses.filter(d => d.nut === n);
+    const total = mine.reduce((a, d) => a + d.mg, 0);
+    const done = mine.filter(d => took[d.id]).reduce((a, d) => a + (num(took[d.id].mg, 0) || 0), 0);
+    const rest = mine.filter(d => !took[d.id]);
+    const was = rest.reduce((a, d) => a + d.mg, 0);
+    const f = was > 0 ? clamp0(total - done) / was : 0;
+    rest.forEach(d => { d.mg *= f; d.g *= f; });
+    mine.filter(d => took[d.id]).forEach(d => {
+      d.mg = num(took[d.id].mg, 0) || 0; d.g = num(took[d.id].g, 0) || 0; d.taken = 1; d.at = took[d.id].t;
+    });
+  });
+  const supp = { na: 0, k: 0, zn: 0, mg: 0 };
+  doses.forEach(d => { supp[d.nut] += d.mg; });
+  const znPlan = znNight + znMeal;
+  const ts = trainStart();
 
   return {
     store: store, food: food, base: base, trained: trained, sess: sess,
     sweatL: sweatL, sweatNa: sweatNa, replace: replace,
     naGoal: naGoal, kGoal: kGoal, mgGoal: mgGoal, znGoal: znGoal, kg: kg,
     naAdd: naAdd, kShort: kShort, kRoom: kRoom, pitchers: pitchers,
-    doses: doses, supp: supp,
+    doses: doses, supp: supp, znPlan: znPlan, znWant: znWant, tStart: ts.m, tFrom: ts.from,
   };
 }
 
@@ -641,14 +729,17 @@ function slotOf(d, L, live) {
 const ALL_SLOTS = c => {
   const s = [];
   for (let i = 1; i <= c.pitchers; i++) s.push({ id: 'pitcher' + i, nm: 'DAY PITCHER ' + i, sub: r1(v('litres')) + ' L' });
-  if (c.trained) s.push({ id: 'pre', nm: 'PRE-WORKOUT', sub: '30 to 60 minutes before' });
-  if (c.trained) s.push({ id: 'bottle', nm: 'TRAINING BOTTLE', sub: 'sipped through the session' });
+  const st = c.tStart, src = c.tFrom === 'TRAIN' ? 'from TRAIN' : 'from your setting';
+  if (c.trained) s.push({ id: 'pre', nm: 'PRE-WORKOUT',
+    sub: st == null ? '30 to 60 minutes before' : 'about ' + clock(st - 45) + ', 45 minutes before a ' + clock(st) + ' start ' + src });
+  if (c.trained) s.push({ id: 'bottle', nm: 'TRAINING BOTTLE',
+    sub: st == null ? 'sipped through the session' : clock(st) + ' to ' + clock(st + c.sess) + ', through the session' });
   /* Tom, 2026-09-20: "I don't want it to assume any meals." It used to say
      WITH CHICKEN MEAL, which is a guess about what is on the plate, and a
      card that guesses wrong every time he eats something else is a card he
      has to translate before he can use it. It names the moment instead. */
-  s.push({ id: 'meal', nm: 'WITH FOOD', sub: 'whichever meal you are eating' });
-  s.push({ id: 'night', nm: 'NIGHT DRINK', sub: 'no sodium, ever' });
+  s.push({ id: 'meal', nm: 'WITH FOOD', sub: 'whichever meal you are eating · salt before ' + clock(hm(v('saltCut'))) });
+  s.push({ id: 'night', nm: 'NIGHT DRINK', sub: 'at ' + clock(hm(v('bed'))) + ' · no sodium, ever' });
   return s;
 };
 /* the ones actually on. Never empty: with every drink switched off there is
@@ -694,6 +785,11 @@ function field(k, label, opts) {
       i.appendChild(o);
     });
     i.onchange = () => { setV(k, i.value); draw(); };
+  } else if (opts.time) {
+    i = el('input');
+    i.type = 'time';
+    i.value = v(k);
+    i.onchange = () => { setV(k, i.value || null); draw(); };
   } else {
     i = el('input');
     i.type = 'number'; i.step = opts.step || 'any';
@@ -776,6 +872,9 @@ function inputsCard() {
   g4.appendChild(field('capZn1', 'Zinc single-dose cap, mg', { step: 1 }));
   g4.appendChild(field('capZnT', 'Zinc total ceiling, mg', { step: 1 }));
   g4.appendChild(field('capMg', 'Magnesium supplement cap, mg', { step: 25 }));
+  g4.appendChild(field('trainAt', 'Training starts', { time: true, hint: 'used when TRAIN has no session started today' }));
+  g4.appendChild(field('bed', 'Bedtime', { time: true }));
+  g4.appendChild(field('saltCut', 'No salt on food after', { time: true, hint: 'facial bloat: salt eaten late is held overnight' }));
   g4.appendChild(field('win', 'Micro window, days', { step: 1, hint: 'vitamin A, copper and liver are averaged over this many days' }));
   g4.appendChild(field('pitch', 'Number of day pitchers', { step: 1, hint: '0 means no pitchers and the day potassium becomes one mix' }));
   g4.appendChild(field('litres', 'Litres per pitcher', { step: .1 }));
@@ -860,15 +959,7 @@ function cardsBlock(c) {
   const reset = el('button', 'mb-btn mb-press mb-tap', 'RESET LAYOUT');
   reset.onclick = () => { S.set('layout', {}); Mobile.feedback('success'); draw(); };
   row.appendChild(reset);
-  const log = el('button', 'mb-btn mb-press mb-tap go', 'LOG THESE DOSES');
-  log.onclick = () => logDoses(c);
-  row.appendChild(log);
-  /* When it was logged is read off the dose rows themselves rather than kept
-     as a marker row of its own: a second shape inside one type is how a type
-     stops meaning one thing. */
-  const done = Rec.all('dose', { date: today() }).map(r => r.payload.t).filter(Boolean).sort();
-  if (done.length) row.appendChild(el('span', 'src', 'logged at '
-    + new Date(done[done.length - 1]).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })));
+  row.appendChild(el('span', 'src', 'Tick a drink when it has gone down. What is left recalculates around it.'));
   head.appendChild(row);
   box.appendChild(head);
 
@@ -896,6 +987,14 @@ function cardsBlock(c) {
     top.appendChild(el('div', 'vname', esc(s.nm)));
     /* One drink must stay on, or a dose has nowhere to land. The last one
        says so rather than going dead under the finger. */
+    const mineNow = c.doses.filter(d => slotOf(d, L, live) === s.id && d.mg > 0.5);
+    const allTaken = mineNow.length > 0 && mineNow.every(d => d.taken);
+    if (allTaken) card.classList.add('done');
+    const tick = el('button', 'vtick mb-tap' + (allTaken ? ' on' : ''), '<span>' + (allTaken ? '✓' : '') + '</span>');
+    tick.setAttribute('aria-label', (allTaken ? 'Untick ' : 'Tick ') + s.nm);
+    tick.disabled = !mineNow.length;
+    tick.onclick = () => tickCard(c, mineNow, !allTaken, s.id);
+    top.insertBefore(tick, top.firstChild);
     const x = el('button', 'voff mb-tap', '×');
     x.setAttribute('aria-label', 'Switch off ' + s.nm);
     x.onclick = () => {
@@ -945,15 +1044,19 @@ function cardsBlock(c) {
 
 let DRAG = null;
 function doseRow(d) {
-  const r = el('div', 'dose');
-  r.draggable = true;
+  const r = el('div', 'dose' + (d.taken ? ' taken' : ''));
+  r.draggable = !d.taken;
   r.dataset.id = d.id;
   const left = el('div', 'dl');
   left.innerHTML = esc(d.name) + (d.id.indexOf('k-p') === 0 && v('litres') > 0
     ? '<small>' + g3(d.g / v('litres')) + ' g per litre</small>' : '');
   r.appendChild(left);
   const right = el('div', 'da');
-  right.innerHTML = g3(d.g) + ' g<small>' + r0(d.mg) + ' mg ' + ({ na: 'sodium', k: 'potassium', zn: 'zinc', mg: 'magnesium' })[d.nut] + '</small>';
+  let absorbed = '';
+  if (d.nut === 'zn' && d.mg > 0.5) absorbed = '<small>about ' + r1(znAbs(d.mg)) + ' mg gets in, at best</small>';
+  if (d.nut === 'mg' && d.mg > 0.5) absorbed = '<small>about ' + r0(d.mg * MG_ABS[0]) + ' to ' + r0(d.mg * MG_ABS[1]) + ' mg gets in</small>';
+  right.innerHTML = g3(d.g) + ' g<small>' + r0(d.mg) + ' mg ' + ({ na: 'sodium', k: 'potassium', zn: 'zinc', mg: 'magnesium' })[d.nut] + '</small>' + absorbed
+    + (d.taken && d.at ? '<small>taken ' + clock(new Date(d.at).getHours() * 60 + new Date(d.at).getMinutes()) + '</small>' : '');
   r.appendChild(right);
   r.ondragstart = e => { DRAG = d.id; r.classList.add('drag'); try { e.dataTransfer.setData('text/plain', d.id); } catch (x) {} };
   r.ondragend = () => { DRAG = null; r.classList.remove('drag'); document.querySelectorAll('.vessel').forEach(v2 => v2.classList.remove('over', 'no')); };
@@ -1014,6 +1117,28 @@ function warnings(c) {
   if (c.base.settled && c.base.base > 0 && Math.abs(kept - c.base.base) / c.base.base > .2) {
     w.appendChild(el('div', 'flag warn', 'Big sodium swing = water swing for 2-3 days. After sweat, today keeps '
       + r0(kept) + ' mg against a base of ' + r0(c.base.base) + '.'));
+  }
+  /* ── the 6 PM rule, which nothing enforced ──
+     Salt eaten late is the salt his face holds overnight, and it is priority
+     1. Only the salt on FOOD is checked: pre-workout and bottle salt replace
+     what training sweats out, whenever training happens to be. */
+  const cut = hm(v('saltCut'));
+  const lateSalt = c.doses.filter(d => d.id === 'salt-food' && !d.taken && d.mg > 50)[0];
+  if (cut != null && lateSalt && nowMins() >= cut) {
+    w.appendChild(el('div', 'flag warn', 'It is past ' + clock(cut) + ' and ' + g3(lateSalt.g) + ' g of salt is still meant to go on food. '
+      + 'That is the salt your face keeps overnight. Skip it tonight, and it comes out of tomorrow\u2019s base as a lower day rather than a bloated one.'));
+  }
+  /* ── what a smaller zinc cap would buy ──
+     Worked out live off the same measured points the dose rows use, and
+     shown only when it is worth at least half a milligram a day. */
+  const want = c.znPlan;
+  if (want > 15 && v('capZn1') > 15) {
+    const now = znAbs(Math.min(v('capZn1'), want)) + znAbs(clamp0(want - v('capZn1')));
+    const alt = znAbs(Math.min(15, want)) + znAbs(clamp0(want - 15));
+    if (alt - now >= .5) {
+      w.appendChild(el('div', 'flag info', 'A 15 mg zinc single dose cap would get about ' + r1(alt - now)
+        + ' mg more zinc into you a day, at best: ' + r1(now) + ' now, ' + r1(alt) + ' with it. Two smaller doses each get their own run at the absorption curve. It is in Caps, pitchers and splits.'));
+    }
   }
   const znTot = c.food.zn + c.supp.zn;
   if (znTot > v('capZnT')) {
@@ -1212,20 +1337,32 @@ function factsCard() {
    • `meal` rows for the salt and the citrate, so STATUS's sodium and
      potassium tiles say what you actually took. These are the rows the
      sodium base takes back out again, by key.                                */
-function logDoses(c) {
-  if (!S.get('writeBack', 1)) { UI.toast('Writing back to STATUS is switched off'); return; }
-  const d = today(), L = layout(), live = SLOTS(c);
-  c.doses.filter(x => x.mg > 0.5).forEach(x => {
-    Rec.set('dose', d, x.id, { nut: x.nut, mg: Math.round(x.mg), g: +x.g.toFixed(3), slot: slotOf(x, L, live), t: Date.now() });
+function tickCard(c, list, on, slot) {
+  const d = today();
+  list.forEach(x => {
+    if (on) Rec.set('dose', d, x.id, { nut: x.nut, mg: Math.round(x.mg), g: +x.g.toFixed(3), slot: slot, t: Date.now() });
+    else Rec.del('dose', d, x.id);
   });
+  toStatus();
+  Mobile.feedback(on ? 'success' : 'untick');
+  draw();
+}
+
+/* STATUS is told what has actually gone down, summed from the ticked rows,
+   so unticking a drink takes it back out of STATUS too. */
+function toStatus() {
+  if (!S.get('writeBack', 1)) return;
+  const d = today();
+  const sum = { na: 0, k: 0, zn: 0, mg: 0 };
+  Rec.all('dose', { date: d }).forEach(r => { const p2 = r.payload; if (p2 && sum[p2.nut] != null) sum[p2.nut] += num(p2.mg, 0) || 0; });
 
   /* zinc and magnesium: read, drop what we wrote before, append one entry */
-  [['zinc', c.supp.zn], ['magnesium', c.supp.mg]].forEach(([fid, mg]) => {
-    if (!(mg > 0)) return;
+  [['zinc', sum.zn], ['magnesium', sum.mg]].forEach(([fid, mg]) => {
     const r = Rec.get('ev', d, fid);
     const e = (r && r.e ? r.e : []).filter(x => x.src !== APP.id);
-    e.push({ t: Date.now(), v: Math.round(mg), src: APP.id });
-    Rec.set('ev', d, fid, { e: e });
+    if (mg > 0) e.push({ t: Date.now(), v: Math.round(mg), src: APP.id });
+    if (e.length) Rec.set('ev', d, fid, { e: e });
+    else if (r) Rec.del('ev', d, fid);
   });
 
   /* salt and citrate as meals, so the sodium and potassium tiles are true */
@@ -1237,12 +1374,8 @@ function logDoses(c) {
       price: 0, t: Date.now(), src: APP.id,
     });
   };
-  meal(MIX_MEAL.salt, 'Salt (MIX)', c.supp.na, 0);
-  meal(MIX_MEAL.cit, 'Potassium citrate (MIX)', 0, c.supp.k);
-
-  Mobile.feedback('success');
-  UI.toast('logged into STATUS');
-  draw();
+  meal(MIX_MEAL.salt, 'Salt (MIX)', sum.na, 0);
+  meal(MIX_MEAL.cit, 'Potassium citrate (MIX)', 0, sum.k);
 }
 
 /* ══════════════ SETTINGS ══════════════ */
