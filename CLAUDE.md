@@ -375,7 +375,7 @@ An app may read any type. It writes only the types it owns.
 | `project` | **quest**; **arc** makes one named after a skill tree's map | slug of the hashtag | `{name, slot, ord}` — a Todoist project. `slot` is a theme colour slot, never a hex |
 | `excat` | **train** | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
 | `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup}` — `setup` is the setup fields he names for it, each a toggle or a setting |
-| `set` | **train** | timestamp id | one logged set, weight stored in kg with the unit it was typed in; `warm` a warmup marked by hand, `su` the setup it was done with. Warmups and split sets are also read from its comment, never stored |
+| `set` | **train** | timestamp id | one logged set, weight stored in kg with the unit it was typed in; `warm` a warmup marked by hand, `su` the setup it was done with, `rir` reps in reserve (5 means five or more) and `q` set quality 1 to 4, both from the comment box. Warmups and split sets are also read from its comment, never stored |
 | `session` | **train** | `''` | `{start, end, note, from, order, name, vs}` — the day's timing and comment, the day it was copied from, its exercise order, its name, and a day picked to compare it with |
 | `phase` | **train** | phase id | `{name, start, end}` — a training block. Not `block`: BLOCK is another app and has nothing to do with training beyond a tick. `end` is optional |
 | `sgroup` | **train** | group id | a superset |

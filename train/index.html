@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.12, 2026-09-22">
+<meta name="mb-version" content="1.0.13, 2026-09-22">
 <title>TRAIN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛭</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -251,7 +251,8 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 
 /* The previous time he did this movement, above the steppers. It is the one
    number that decides what he loads, so it is not buried in HISTORY. */
-.lasttime{font-size:var(--f-2);color:var(--text-muted);line-height:var(--lh-body)}
+.lasttime{font-size:var(--f-1);color:var(--text-muted);line-height:var(--lh-tight)}
+.lastline{padding:var(--s-1) var(--s-4) 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lasttime b{color:var(--text-2);font-variant-numeric:tabular-nums}
 
 /* ══════════ THE DAY'S EXERCISES DRAWER ══════════ */
@@ -2610,7 +2611,11 @@ function drawTrack(m) {
   var then = vs ? workOn(vs.date, exId) : [];
   if (then.length) {
     var vsName = (Rec.get('session', vs.date, '') || {}).name;
-    var card = UI.el('div', 'exblock pad');
+    /* A faded line above the steppers, not a card of its own: FitNotes has
+       nothing here, so this has to cost as little room as a line can. Tom,
+       2026-09-22: "small, faded, and unintrusive, maintain the fitnotes
+       layout". One line, cut off with an ellipsis rather than wrapping. */
+    var card = UI.el('div', 'lastline');
     card.innerHTML = '<div class="lasttime">' + (vsName ? UI.esc(vsName) + ' · ' : '') +
       UI.esc(dayY(vs.date, date)) + ' · ' +
       then.map(function (s) {
@@ -2825,7 +2830,7 @@ function afterSave(exId, date) {
 function trainingSetRow(s, n, date, showChk, delta) {
   var row = UI.el('div', 'tset' + (TRAIN.sel === s.key ? ' sel' : '') + (s.warm ? ' warm' : ''));
 
-  var bub = UI.el('button', 'bub nohold mb-tap' + (s.note ? ' on' : ''));
+  var bub = UI.el('button', 'bub nohold mb-tap' + (s.note || s.rir != null || s.q ? ' on' : ''));
   bub.innerHTML = BUBBLE;
   bub.setAttribute('aria-label', s.note ? 'Edit comment' : 'Add comment');
   bub.onclick = function (e) { e.stopPropagation(); commentDialog(s, date); };
@@ -2930,6 +2935,8 @@ function commentDialog(s, date) {
     body: function (b, h) {
       var i = noteEl = UI.field('note', { value: s.note || '', placeholder: 'Comment Text ...' });
       b.appendChild(i);
+      var rt = rateFor(s, date);
+      if (rt) b.appendChild(rt);
       b.appendChild(setupFor(s, date));
       Mobile.form(b, function () { saveNote(h, i); });
     },
@@ -6937,6 +6944,50 @@ function setupText(su, exId) {
   return defs.filter(function (d) { return su[d.id] != null && su[d.id] !== '' && su[d.id] !== 0; })
     .map(function (d) { return d.kind === 'toggle' ? d.name : d.name + ' ' + su[d.id]; }).join(' · ');
 }
+/* How the set felt, one tap, inside its comment box. Tom, 2026-09-22: "Set
+   comments should have either an RIR or set quality options". Which one is a
+   setting, RIR by default. Both are stored on the set as their own field
+   (`rir`, reps in reserve with 5 meaning five or more, and `q`, 1 to 4), so
+   switching the setting hides one and loses neither. Tapping the lit one
+   again clears it. */
+var QUALITY = ['Poor', 'OK', 'Good', 'Great'];
+function rateFor(s, date) {
+  var mode = Rec.setting(APP.id, 'rate') || 'rir';
+  if (mode === 'off') return null;
+  var wrap = UI.el('div', 'setup');
+  wrap.style.marginTop = 'var(--s-3)';
+  var lab = UI.el('div', 'fieldlabel');
+  lab.textContent = mode === 'rir' ? 'REPS IN RESERVE' : 'SET QUALITY';
+  lab.style.flexBasis = '100%';
+  wrap.appendChild(lab);
+  var opts = mode === 'rir'
+    ? [0, 1, 2, 3, 4, 5].map(function (n) { return { v: n, t: n === 5 ? '5+' : String(n) }; })
+    : QUALITY.map(function (w, i) { return { v: i + 1, t: w }; });
+  var field = mode === 'rir' ? 'rir' : 'q';
+  var btns = [];
+  opts.forEach(function (o) {
+    var c = UI.el('button', CHIP + ' mb-press mb-tap' + (s[field] === o.v ? ' on' : ''));
+    c.type = 'button';
+    c.textContent = o.t;
+    c.setAttribute('aria-pressed', s[field] === o.v ? 'true' : 'false');
+    c.onclick = function () {
+      var v = s[field] === o.v ? undefined : o.v, ch = {};
+      ch[field] = v;
+      TRAIN.patchSet(s.key, date, ch);
+      s[field] = v;
+      btns.forEach(function (b, j) {
+        var on = s[field] === opts[j].v;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      Mobile.feedback('select');
+    };
+    btns.push(c);
+    wrap.appendChild(c);
+  });
+  return wrap;
+}
+
 /* The setup controls, inside one set's comment box. A change is written to
    that set straight away and becomes what the next set carries. */
 function setupFor(s, date) {
@@ -7354,6 +7405,8 @@ TRAIN.settings = function () {
       num('Exercise Set Limit', 'Sets shown per exercise. 0 shows all', 'setLimit', 0);
       sw('Skip Empty Dates', 'Arrows jump between sessions', 'skipEmpty', 0);
       sw('Mark Sets Complete', 'Tick box next to each set', 'markComplete', 1, function () { draw(); });
+      seg('Rate Each Set', 'In the comment box', 'rate',
+        [{ id: 'rir', name: 'RIR' }, { id: 'q', name: 'QUALITY' }, { id: 'off', name: 'OFF' }], 'rir');
       sw('Details Under Each Set', 'Split, setup and the change from last time, in words', 'rowDetail', 0, function () { draw(); });
 
       group('TRAINING');
