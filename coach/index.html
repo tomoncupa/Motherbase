@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.2, 2026-09-22">
+<meta name="mb-version" content="1.0.3, 2026-09-22">
 <title>COACH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -116,6 +116,15 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
 .picker{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s-2)}
 .picker button{border:0;border-radius:var(--radius-md);background:var(--surface-2);min-height:var(--tap);padding:var(--s-2);cursor:pointer}
 .picker button.on{box-shadow:inset 0 0 0 2px var(--accent)}
+
+/* a client's TRAIN, over COACH, with one way back */
+#over{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;background:var(--bg)}
+#over.on{display:flex}
+#over .obar{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
+  padding:var(--safe-t) var(--s-2) 0 var(--s-4);background:var(--surface-1);box-shadow:var(--e-1),var(--rim)}
+#over .obar b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:var(--font-display);font-size:var(--f-2);letter-spacing:var(--track-cap);color:var(--text-muted)}
+#over iframe{flex:1;min-height:0;width:100%;border:0;background:var(--bg)}
 </style>
 </head>
 <body>
@@ -127,6 +136,10 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
   <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
 </header>
 <main class="mb-scroll"><div class="cols" id="main"></div></main>
+<div id="over" role="dialog" aria-label="Client training">
+  <div class="obar"><b id="overName"></b>
+    <button class="mb-btn go mb-press mb-tap" id="overDone">DONE</button></div>
+</div>
 
 <script>
 /* ══════════════════ COACH ══════════════════
@@ -155,7 +168,8 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
    library, to reuse or sell. Weights are kept in kilograms, as TRAIN keeps
    them, and shown in the unit chosen in Settings. */
 const APP = { id: 'coach', name: 'Coach', icon: '✦', blurb: 'your clients, their training, their first sets',
-  types: ['cset', 'cex', 'cphase', 'csession', 'cprog'] };
+  types: ['cset', 'cex', 'cphase', 'csession', 'cprog',
+    'cexcat', 'csgroup', 'cgoal', 'cprogram', 'cprogday', 'cprogex'] };
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id); if (window.Icons) Icons.paint(null, { force: true }); });
 if (window.Icons) Icons.paint();
 Sfx.init(APP.id);
@@ -366,7 +380,9 @@ let tab = 'first';
 let editing = '';
 
 /* ── opening a client's file ── */
-const MAP = { set: 'cset', exercise: 'cex', phase: 'cphase', session: 'csession' };
+/* categories, supersets and goals too since 1.0.3, so the client's own TRAIN
+   opens in COACH with the muscle groups it was logged under */
+const MAP = { set: 'cset', exercise: 'cex', phase: 'cphase', session: 'csession', excat: 'cexcat', sgroup: 'csgroup', goal: 'cgoal' };
 function takeFile(bag) {
   if (!bag || bag.kind !== 'motherbase-train' || !bag.pid || !Array.isArray(bag.rows)) {
     throw new Error('That is not a file from TRAIN. Ask for Send To Coach, in TRAIN’s Profile menu.');
@@ -557,7 +573,7 @@ function drawClient(col) {
   who.appendChild(ed);
   card.appendChild(who);
   if (!logDay) {
-    const lb = btn('LOG A SESSION', 'go', () => { logDay = Day.today(); draw(); });
+    const lb = btn('LOG A SESSION', 'go', () => openTrain(sel));
     lb.style.cssText = 'width:100%;margin-top:var(--s-4)';
     card.appendChild(lb);
   }
@@ -770,6 +786,47 @@ function settings() {
     pane.appendChild(UI.row('Your name', 'On every program you send', me));
   } }]);
 }
+
+/* ── the client's own TRAIN ──
+   Tom, 2026-09-22: "It should act exactly like train just on their
+   profile". LOG A SESSION opens the real TRAIN over COACH, pointed at this
+   client (train/index.html?client=<pid>; the top of that file says how), so
+   everything TRAIN does, Tom does on their log. The quick logger above,
+   drawLog, is no longer reached from any button and is kept as it was. */
+function openTrain(pid) {
+  const p = people()[pid]; if (!p) return;
+  const o = document.getElementById('over');
+  let f = o.querySelector('iframe');
+  if (!f || f.dataset.pid !== pid) {
+    if (f) f.remove();
+    f = document.createElement('iframe');
+    f.dataset.pid = pid;
+    f.title = (p.name || 'Client') + ' in TRAIN';
+    f.src = '../train/index.html?client=' + encodeURIComponent(pid);
+    o.appendChild(f);
+  }
+  document.getElementById('overName').textContent = String(p.name || 'Client').toUpperCase() + ' · TRAIN';
+  o.classList.add('on');
+}
+document.getElementById('overDone').onclick = () => { document.getElementById('over').classList.remove('on'); draw(); };
+
+/* A set Tom logs in the client's TRAIN is keyed `pid|k-...`, the mark the
+   quick logger always used, so it bills in WEALTH exactly the way a set
+   logged here did: one session per day, for a client paid per session. */
+const billQ = {};
+let billT = null;
+Rec.on(rows => {
+  (rows || []).forEach(r => {
+    if (!r || r.type !== 'cset' || !r.date) return;
+    const k = String(r.key), i = k.indexOf('|k-');
+    if (i > 0) billQ[k.slice(0, i) + '|' + r.date] = 1;
+  });
+  if (!Object.keys(billQ).length) return;
+  clearTimeout(billT);
+  billT = setTimeout(() => {
+    Object.keys(billQ).forEach(q => { delete billQ[q]; const j = q.lastIndexOf('|'); countSession(q.slice(0, j), q.slice(j + 1)); });
+  }, 400);
+});
 
 let rt = null;
 Rec.on(() => { clearTimeout(rt); rt = setTimeout(draw, 60); });
