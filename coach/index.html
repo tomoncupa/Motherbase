@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.1, 2026-09-22">
+<meta name="mb-version" content="1.0.2, 2026-09-22">
 <title>COACH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -194,8 +194,9 @@ const exOf = pid => { const m = {}; own('cex', pid).forEach(r => { m[r.key.slice
    are one person. Each side carries the other's id, `cperson.wc` and
    `client.cp`, and neither app is the master:
      · a WEALTH client with no COACH card gets one, in 1:1, or PAST if done
-     · a COACH client with no WEALTH client gets one, per session at 0, so
-       nothing shows as owed until a price is set there
+     · a COACH client with no WEALTH client gets one at no price, so nothing
+       shows as owed until a price is set there: monthly for ONLINE, per
+       session for 1:1
      · the name, and whether they are past, follow whichever side changed
        it last, read off the store's field times
    An existing pair is joined by an exact name the first time, when only one
@@ -239,12 +240,14 @@ function link() {
       if (p.wc && Rec.tombstone('client', null, p.wc)) return;
       const wid = 'c-' + pid;
       if (Rec.tombstone('client', null, wid)) return;
-      Rec.set('client', null, wid, { name: p.name || 'Client', rate: 0, cycle: 'sesh', every: 1, start: Day.today(),
+      Rec.set('client', null, wid, { name: p.name || 'Client', rate: 0, cycle: p.box === 'online' ? 'month' : 'sesh', every: 1, start: Day.today(),
         status: p.box === 'past' ? 'done' : 'on', cp: pid });
       Rec.patch('cperson', null, pid, { wc: wid });
     });
     Object.entries(people()).forEach(([pid, p]) => {
       const c = p.wc && Rec.get('client', null, p.wc); if (!c) return;
+      /* 1.0.1 made every one per session; an ONLINE one it made, still unpriced, is monthly */
+      if (p.wc === 'c-' + pid && p.box === 'online' && c.cycle === 'sesh' && !(+c.rate > 0)) Rec.patch('client', null, p.wc, { cycle: 'month' });
       if (c.name && p.name && String(c.name) !== String(p.name)) {
         if (fieldAt('client', p.wc, 'name') > fieldAt('cperson', pid, 'name')) Rec.patch('cperson', null, pid, { name: c.name });
         else Rec.patch('client', null, p.wc, { name: p.name });
@@ -260,8 +263,11 @@ function link() {
   } finally { linking = false; }
 }
 
-/* ── logging a 1:1 ──
-   Tom trains the client, so he logs it, here. The sets are the client's own
+/* ── logging a session ──
+   Tom, 2026-09-22: "Most of my clients are online clients who just report
+   their workouts... The log function just fills in their train." So a
+   logged session is training first. It only reaches WEALTH for a client
+   WEALTH bills per session or by package, where a session IS the bill. The sets are the client's own
    rows, `cset` under their id, keyed `pid|k-...` so a file from their TRAIN
    can never collide with them, and they count in STRENGTH, the sessions and
    the range exactly like a set they logged themselves.
@@ -279,9 +285,10 @@ function exFor(pid, name) {
   Rec.set('cex', null, pid + '|' + k, { name: name.trim() });
   return k;
 }
+const billsBySession = p => { const c = p && p.wc && Rec.get('client', null, p.wc); return !!c && (c.cycle === 'sesh' || c.cycle === 'session' || c.cycle === 'pack'); };
 function countSession(pid, date) {
   const p = people()[pid]; if (!p || !p.wc) return;
-  const key = 'k-' + pid, any = coachSets(pid, date).some(r => r.payload.r > 0);
+  const key = 'k-' + pid, any = billsBySession(p) && coachSets(pid, date).some(r => r.payload.r > 0);
   if (any) { if (!Rec.get('sesh', date, key)) Rec.set('sesh', date, key, { client: p.wc, src: 'coach', pid: pid }); }
   else if (Rec.get('sesh', date, key)) Rec.del('sesh', date, key);
 }
@@ -294,14 +301,15 @@ let logDay = '';
 function drawLog(col, pid, p) {
   const card = document.createElement('div'); card.className = 'card';
   const head = document.createElement('div'); head.className = 'dayhead';
-  const h = document.createElement('h2'); h.style.cssText = 'flex:1;margin:0'; h.textContent = '1:1 WITH ' + String(p.name || 'CLIENT').toUpperCase();
+  const h = document.createElement('h2'); h.style.cssText = 'flex:1;margin:0'; h.textContent = 'SESSION · ' + String(p.name || 'CLIENT').toUpperCase();
   head.appendChild(h);
   const dt = UI.field('date', { value: logDay }); dt.style.flex = '0 0 auto'; dt.setAttribute('aria-label', 'Session date');
   dt.onchange = () => { if (dt.value && dt.value <= Day.today()) logDay = dt.value; else dt.value = logDay; dt.blur(); draw(); };
   head.appendChild(dt);
   card.appendChild(head);
   const note = document.createElement('p'); note.className = 'empty'; note.style.marginBottom = 'var(--s-3)';
-  note.innerHTML = p.wc ? 'Counts as one session for <b>' + esc(p.name || 'this client') + '</b> in WEALTH once a set has reps.' : 'Not joined to a WEALTH client yet.';
+  note.innerHTML = billsBySession(p) ? 'WEALTH bills ' + esc(p.name || 'this client') + ' per session, so this counts as one there once a set has reps.'
+    : 'Goes into ' + esc(p.name || 'this client') + '’s training here, the same as a set they sent from TRAIN.';
   card.appendChild(note);
 
   const rows = coachSets(pid, logDay), ex = exOf(pid), order = [], by = {};
@@ -549,7 +557,7 @@ function drawClient(col) {
   who.appendChild(ed);
   card.appendChild(who);
   if (!logDay) {
-    const lb = btn('LOG A 1:1', 'go', () => { logDay = Day.today(); draw(); });
+    const lb = btn('LOG A SESSION', 'go', () => { logDay = Day.today(); draw(); });
     lb.style.cssText = 'width:100%;margin-top:var(--s-4)';
     card.appendChild(lb);
   }
