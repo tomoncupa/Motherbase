@@ -26,7 +26,9 @@ Opening it twice does nothing. There is only ever one.
   takes the focus and makes a sound. There is no close button and no skip:
   SAVE is the only way out, and until every scale is pressed it names the one
   still missing. It wears a status window, and which one is in Settings,
-  DESKTOP. Answering it pushes the next one back, so the one you answered
+  DESKTOP. If one comes due while you are away from the desk, it
+  waits, and goes up the moment you touch the mouse or keyboard. Settings,
+  DESKTOP, Wait until I am at the desk, turns that off. Answering it pushes the next one back, so the one you answered
   yourself is not followed by another ten minutes later. Walking away from one
   at night ends the night: you get one, and it closes when you answer it.
 - **Ctrl+B** writes a bullet from anywhere, even from inside another program.

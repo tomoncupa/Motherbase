@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.42, 2026-09-22">
+<meta name="mb-version" content="1.0.43, 2026-09-22">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -7791,9 +7791,36 @@ function deskAwake(now) {
   return c.from < to ? (h >= c.from && h < to) : (h >= c.from || h < to);
 }
 
+/* ── waiting for him to sit down ──
+   Tom, 2026-09-22: a check that comes due while he is away should go up when
+   he is back, not sit on an empty screen for an hour. STATUS.exe says every
+   5 seconds how long since the keyboard or mouse was touched, and a due check
+   waits while that is past two minutes. A reading is stamped when it is
+   answered, as it always was, so it is about how he is now.
+   Only the launcher can see this, so a plain browser tab never waits. */
+const DESK_AWAY = 120;      /* seconds untouched before he counts as away */
+let deskHostInfo = null;    /* the launcher's last word, and when it came */
+let deskHostAt = 0;
+let deskWaiting = false;    /* a check came due while he was away */
+function deskAway() {
+  if (!HOSTED || S.get('desk.wait', 1) === 0 || !deskHostInfo) return false;
+  if (Date.now() - deskHostAt > 30000) return false;   /* a quiet launcher is no evidence */
+  return deskHostInfo.idle >= DESK_AWAY;
+}
+function deskHost(m) {
+  deskHostInfo = m || {}; deskHostAt = Date.now();
+  if (deskWaiting && !deskAway()) deskTick();
+}
+
 function deskTick() {
   if (!DESK) return;
-  if (!deskCfg().on) { deskNext = 0; return; }
+  if (!deskCfg().on) { deskNext = 0; deskWaiting = false; return; }
+  if (deskWaiting) {
+    if (deskAway()) return;
+    deskWaiting = false;
+    if (!(checkOn || deskAsking || deskPanel || sheetH)) deskAsk();
+    return;
+  }
   if (!deskNext) { deskRoll(); return; }
   if (Date.now() < deskNext) return;
   deskRoll();
@@ -7807,6 +7834,7 @@ function deskTick() {
      until answered", so one still on the screen is not a jam to recover from,
      it is the thing working. */
   if (checkOn || deskAsking || deskPanel || sheetH) return;
+  if (deskAway()) { deskWaiting = true; return; }
   deskAsk();
 }
 
@@ -8264,6 +8292,9 @@ function drawDeskTab(pane) {
     };
     pair('Every', ['desk.min', c.min, 'min'], ['desk.max', c.max, 'max'], 'minutes, a different gap each time');
     pair('Between', ['desk.from', c.from, '0'], ['desk.to', c.to, '0'], 'hours, 0 to 23. 0 and 0 is all day');
+    pane.appendChild(toggleRow('Wait until I am at the desk',
+      'One that comes due while you are away goes up the moment you touch the mouse or keyboard',
+      S.get('desk.wait', 1) !== 0, v => { S.set('desk.wait', v ? 1 : 0); }));
   }
 
   /* Which stats it asks. Until one is picked, every scale. */

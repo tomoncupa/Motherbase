@@ -59,6 +59,9 @@ class App : Form
     [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT p);
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int k);
     [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO p);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+    [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
 
     const int WM_HOTKEY = 0x0312;
     const int WM_MOUSEACTIVATE = 0x0021, MA_ACTIVATE = 1;
@@ -78,6 +81,10 @@ class App : Form
     bool ready;
     string pageUrl;
     Timer dragT;             /* follows the cursor while he is moving the window */
+    Timer senseT;            /* tells the page what Windows can see, every 5 seconds */
+    MenuItem keysMenu;
+    System.Collections.Generic.Dictionary<uint, string[]> procNames =
+        new System.Collections.Generic.Dictionary<uint, string[]>();
     bool dragging;
     int grabX, grabY;
 
@@ -141,6 +148,11 @@ class App : Form
         dragT = new Timer();
         dragT.Interval = 12;
         dragT.Tick += (s, e) => DragTick();
+
+        senseT = new Timer();
+        senseT.Interval = 5000;
+        senseT.Tick += (s, e) => Sense();
+        senseT.Start();
 
         web = new WebView2();
         web.Dock = DockStyle.Fill;
@@ -257,6 +269,25 @@ class App : Form
             return;
         }
         if (verb == "quit") { Quit(); return; }
+        /* The tray's settings, asked for from STATUS's own Settings, so there
+           is one place to set them. The tray menu still works. */
+        if (verb == "top")
+        {
+            onTop = bits.Length > 1 && bits[1] == "1";
+            TopMost = onTop; if (miTop != null) miTop.Checked = onTop; SaveCfg();
+            return;
+        }
+        if (verb == "hotkey")
+        {
+            uint m2, v2;
+            if (bits.Length > 1 && ParseHotkey(bits[1], out m2, out v2))
+            {
+                hotkey = bits[1].ToLowerInvariant(); SaveCfg(); RegisterTheHotkey();
+                if (keysMenu != null) MarkKeys(keysMenu);
+            }
+            return;
+        }
+        if (verb == "boot") { SetBoot(bits.Length > 1 && bits[1] == "1"); return; }
 
         int w = 0, h = 0;
         if (bits.Length >= 3)
@@ -335,6 +366,104 @@ class App : Form
         if (!ready) return;
         web.CoreWebView2.ExecuteScriptAsync(
             "window.deskAsk && (deskPanel='', deskAsking=false, deskAsk())");
+    }
+
+    /* ── what Windows can see, handed to the page ──
+       Every 5 seconds: how long since the keyboard or mouse was last touched,
+       and which program is in front. The page decides everything else — when
+       a status check may go up, and what counts as screen time — so changing
+       that never needs this rebuilt. A window's title is passed along and
+       never kept here; the page keeps only a site name worked out from it. */
+    void Sense()
+    {
+        if (!ready) return;
+        var li = new LASTINPUTINFO();
+        li.cbSize = (uint)Marshal.SizeOf(li);
+        long idle = 0;
+        /* Unsigned and unchecked, so the subtraction survives the tick count
+           wrapping, which it does every 49 days on a machine never turned off. */
+        if (GetLastInputInfo(ref li)) idle = unchecked((uint)Environment.TickCount - li.dwTime) / 1000;
+
+        string exe = "", app = "", title = "";
+        IntPtr fg = GetForegroundWindow();
+        if (fg == Handle) { exe = "status"; app = "STATUS"; }
+        else if (fg != IntPtr.Zero)
+        {
+            uint pid;
+            GetWindowThreadProcessId(fg, out pid);
+            string[] n = ProcName(pid);
+            exe = n[0]; app = n[1];
+            var sb = new StringBuilder(512);
+            GetWindowText(fg, sb, sb.Capacity);
+            title = sb.ToString();
+        }
+        string js = "window.deskHost&&deskHost({idle:" + idle +
+            ",exe:" + Js(exe) + ",app:" + Js(app) + ",title:" + Js(title) +
+            ",top:" + (onTop ? 1 : 0) + ",key:" + Js(Pretty(hotkey)) +
+            ",boot:" + (GetBoot() ? 1 : 0) + "})";
+        try { web.CoreWebView2.ExecuteScriptAsync(js); } catch { }
+    }
+
+    /* The program's own name for itself ("CapCut", "Google Chrome") where it
+       gives one, its file name where it does not. Remembered per process. */
+    string[] ProcName(uint pid)
+    {
+        string[] n;
+        if (procNames.TryGetValue(pid, out n)) return n;
+        string exe = "", app = "";
+        try
+        {
+            var p = System.Diagnostics.Process.GetProcessById((int)pid);
+            exe = p.ProcessName;
+            try { app = p.MainModule.FileVersionInfo.FileDescription; } catch { }
+        }
+        catch { }
+        if (string.IsNullOrEmpty(app)) app = exe;
+        n = new string[] { exe.ToLowerInvariant(), app.Trim() };
+        if (procNames.Count > 500) procNames.Clear();
+        procNames[pid] = n;
+        return n;
+    }
+
+    static string Js(string s)
+    {
+        var sb = new StringBuilder("\"");
+        foreach (char ch in s ?? "")
+        {
+            if (ch == '"' || ch == '\\') sb.Append('\\').Append(ch);
+            else if (ch < 0x20 || ch == (char)0x2028 || ch == (char)0x2029 || ch == '<' || ch == '>')
+                sb.Append("\\u").Append(((int)ch).ToString("x4"));
+            else sb.Append(ch);
+        }
+        return sb.Append('"').ToString();
+    }
+
+    /* ── start with Windows ──
+       One line under the current user's Run key, which is what the Startup
+       folder does without needing a shortcut made. Off is the line removed. */
+    const string RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    const string RUN_NAME = "Motherbase STATUS";
+    bool GetBoot()
+    {
+        try
+        {
+            using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RUN_KEY))
+                return k != null && k.GetValue(RUN_NAME) != null;
+        }
+        catch { return false; }
+    }
+    void SetBoot(bool on)
+    {
+        try
+        {
+            using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RUN_KEY))
+            {
+                if (on) k.SetValue(RUN_NAME, "\"" + Application.ExecutablePath + "\"");
+                else if (k.GetValue(RUN_NAME) != null) k.DeleteValue(RUN_NAME);
+            }
+            Log("start with Windows: " + (on ? "on" : "off"));
+        }
+        catch (Exception ex) { Log("could not change start with Windows: " + ex.Message); }
     }
 
     /* The home screen is its own program. Starting it twice does nothing, so
@@ -525,6 +654,7 @@ class App : Form
         };
         keys.MenuItems.Add(custom);
         menu.MenuItems.Add(keys);
+        keysMenu = keys;
         menu.MenuItems.Add("-");
         menu.MenuItems.Add(new MenuItem("Quit", (s, e) => Quit()));
 
