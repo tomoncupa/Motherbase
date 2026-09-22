@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.17, 2026-09-22">
+<meta name="mb-version" content="1.0.18, 2026-09-22">
 <title>QUESTS</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◆</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -166,6 +166,15 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .row.blk.now{background:color-mix(in srgb,var(--success) 8%,transparent)}
 .tk:disabled{cursor:default;opacity:.4}
 .empty{color:var(--text-muted);padding:var(--s-6) 0;text-align:center}
+/* the daily brief: Tom, 2026-09-22 */
+.brief .gh{cursor:pointer}
+.brief .gh .chev{margin-left:auto;color:var(--text-muted);display:flex}
+.brief .gh .when{font-family:var(--font-mono);font-size:var(--f-1);color:var(--text-muted)}
+.brief .bx{padding:var(--s-3) 0;line-height:var(--lh-body);overflow-wrap:anywhere}
+.brief .bx p{margin:0 0 var(--s-2)}
+.brief .bx h4{margin:var(--s-3) 0 var(--s-1);font-family:var(--font-display);font-size:var(--f-2);
+  letter-spacing:var(--track-cap);text-transform:uppercase;color:var(--text-muted)}
+.brief .bx ul{margin:0 0 var(--s-2);padding-left:var(--s-5)}
 /* the month grid: Tom, 2026-09-18 */
 .calbar{display:flex;align-items:center;gap:var(--s-2);margin-bottom:var(--s-3)}
 .calbar b{font-family:var(--font-display);font-size:var(--f-3);flex:1}
@@ -276,6 +285,7 @@ Rec.declare(APP.id, APP.types);
    Today, each from its own app's tab on the sheet (shared/io.js, pull). */
 IO.register({ app: APP.id, name: APP.name, types: ['note', 'project'],
   reads: { status: ['note'], log: ['note'], block: ['plan'] } });
+/* `brief` is read, never written: the daemon on the PC writes it. */
 
 const $ = s => document.querySelector(s);
 const esc = s => UI.esc(String(s == null ? '' : s));
@@ -604,7 +614,7 @@ const movedFrom = d => quests().filter(x => {
    list had never heard of was quietly called STATUS, so the next writer to
    arrive would have been mislabelled the same way and nothing would have
    said so. A src that is not in the table now names itself. */
-const SRC_NAME = { quest: 'QUESTS', status: 'STATUS', block: 'BLOCK', arc: 'ARC', wealth: 'WEALTH' };
+const SRC_NAME = { quest: 'QUESTS', status: 'STATUS', block: 'BLOCK', arc: 'ARC', wealth: 'WEALTH', brief: 'BRIEF' };
 /* A row from before the stamp carries no src at all: QUESTS's if it has the
    three fields only QUESTS writes on creation, STATUS's otherwise. */
 const srcOf = x => x.src || (('pri' in x && 'proj' in x && 'rep' in x) ? 'quest' : 'status');
@@ -821,8 +831,67 @@ function drawSide() {
   if (ts.length) side.appendChild(el('h3', null, 'Labels'));
   ts.forEach(t2 => nav('t:' + t2, '<span class="at">@</span>', t2));
 }
+/* ══════════════ THE DAILY BRIEF ══════════════
+   Tom, 2026-09-22: "I want my daily brief to be part of my quests." The
+   morning brief Claude writes arrives as one `brief` row for the day, put in
+   the store by the daemon on his PC; QUESTS only reads it. `text` is plain
+   lines (`# ` a heading, `- ` a point), `todo` is a list of action items.
+   Each item becomes an ordinary todo due that day, keyed off the brief so it
+   is written once: tick it, move it or delete it like any other, and a
+   deleted one stays deleted. Shape in CLAUDE.md, under `brief`. */
+function briefTodos() {
+  const t = T(), b = Rec.get('brief', t, '');
+  if (!b || !Array.isArray(b.todo)) return;
+  let wrote = 0;
+  b.todo.forEach((it, i) => {
+    const text = String((it && it.text) || it || '').trim();
+    if (!text) return;
+    const k = 'brief-' + t + '-' + i;
+    if (Rec.get('note', t, k) || Rec.tombstone('note', t, k)) return;
+    Rec.set('note', t, k, { kind: 'todo', src: 'brief', text: text, t: Date.now(), made: t,
+      at: null, dur: null, ord: Rec.all('note', { date: t }).length, done: 0, cancelled: 0,
+      due: t, pri: 0, proj: null, rep: null });
+    wrote++;
+  });
+  if (wrote) publishNotes(t);
+}
+function briefHTML(text) {
+  let out = '', ul = false;
+  const close = () => { if (ul) { out += '</ul>'; ul = false; } };
+  String(text || '').split(/\r?\n/).forEach(ln => {
+    const l = ln.trim();
+    if (!l) { close(); return; }
+    let m;
+    if ((m = /^#+\s+(.*)$/.exec(l))) { close(); out += '<h4>' + esc(m[1]) + '</h4>'; }
+    else if ((m = /^[-*•]\s+(.*)$/.exec(l))) { if (!ul) { out += '<ul>'; ul = true; } out += '<li>' + esc(m[1]) + '</li>'; }
+    else { close(); out += '<p>' + esc(l) + '</p>'; }
+  });
+  close();
+  return out;
+}
+function drawBrief(list) {
+  const t = T(), b = Rec.get('brief', t, '');
+  if (!b || !String(b.text || '').trim()) return;
+  /* Folded is remembered for the day only, so tomorrow's opens again. */
+  const shut = S.get('briefShut', '') === t;
+  const box = el('section', 'grp brief');
+  const when = b.t ? new Date(b.t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+  const head = el('div', 'gh', '<b>Daily brief</b>' + (when ? '<span class="when">' + esc(when) + '</span>' : '') +
+    '<span class="chev">' + ico(shut ? 'down' : 'up') + '</span>');
+  head.setAttribute('role', 'button');
+  head.tabIndex = 0;
+  head.setAttribute('aria-expanded', shut ? 'false' : 'true');
+  const flip = () => { S.set('briefShut', shut ? '' : t); draw(); };
+  head.onclick = flip;
+  head.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } };
+  box.appendChild(head);
+  if (!shut) box.appendChild(el('div', 'bx', briefHTML(b.text)));
+  list.appendChild(box);
+}
+
 function draw() {
   if (!$('#main')) return;
+  briefTodos();
   if (VIEW.indexOf('p:') === 0 && !Rec.get('project', null, VIEW.slice(2))) VIEW = 'today';
   /* A label with nothing left on it is not a place you can stand. */
   if (VIEW.indexOf('t:') === 0 && tagsInUse().indexOf(VIEW.slice(2)) < 0) VIEW = 'today';
@@ -841,6 +910,7 @@ function draw() {
     bk.onclick = () => { calDay = ''; draw(); };
     list.appendChild(bk);
   }
+  if (VIEW === 'today') drawBrief(list);
   const any = info.groups.some(g => g.items.length);
   info.groups.forEach(g => {
     if (!g.items.length && g.id !== T() && !g.day) return;
