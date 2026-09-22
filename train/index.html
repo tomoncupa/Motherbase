@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.13, 2026-09-22">
+<meta name="mb-version" content="1.0.14, 2026-09-22">
 <title>TRAIN</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛭</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -20,6 +20,7 @@
 <script src="../shared/io.js"></script>
 <script src="../shared/icons.js"></script>
 <script src="../shared/chart.js"></script>
+<script src="../shared/range.js"></script>
 <script src="../shared/health.js"></script>
 
 <style>
@@ -5673,6 +5674,14 @@ TRAIN.fillFor = function (px, date, forLogAll) {
   var prev = TRAIN.lastSetsOf(px.ex, date);
   if ((px.fill | 0) === 1) {
     if (prev.length) return prev.map(function (s) { return { kg: s.kg, r: s.r, dist: s.dist, dur: s.dur }; });
+  } else if ((px.fill | 0) === 3 && px.sets && px.sets.length) {
+    /* Programmed by a coach. Tom, 2026-09-22: "First set only but they
+       should still see their other sets from last session." So set one is
+       the coach's, and every set after it is what was done last time. */
+    var c = px.sets[0];
+    var first = { kg: c.kg == null ? ((prev[0] || {}).kg || 0) : c.kg, r: c.r == null ? ((prev[0] || {}).r || 0) : c.r,
+                  dist: c.dist || 0, dur: c.dur || 0 };
+    return [first].concat(prev.slice(1).map(function (s) { return { kg: s.kg, r: s.r, dist: s.dist, dur: s.dur }; }));
   } else if ((px.fill | 0) === 2 && px.sets && px.sets.length) {
     return px.sets.map(function (s, i) {
       var p = prev[i] || prev[prev.length - 1] || {};
@@ -5709,6 +5718,143 @@ TRAIN.logFromRoutine = function (key) {
   if (made) { TRAIN.reindex(); TRAIN.assertTick(date); }
   TRAIN.openExercise(px.ex);
   if (made && Rec.setting(APP.id, 'autoNext') !== 0) TRAIN.selectNextOpen();
+};
+
+/* ═══════════════════ COACH ═══════════════════
+   Two files, one each way, because there is no server between a client and
+   a coach and there is not meant to be one yet.
+
+   Out: SEND TO COACH. Every training row on this phone, as a file the coach
+   opens in COACH. Sent again, it carries everything again, and COACH merges
+   on updated_at like any sync, so a second send only adds what is new.
+
+   In: OPEN A PROGRAM. A file the coach made in COACH, or one he sold. It
+   becomes an ordinary routine here. Its keys come from the program's own id,
+   so opening an updated version replaces the old one rather than adding a
+   second, and an exercise is matched by name so a client's own history
+   carries on under it.
+
+   Who the client is comes from CHECK IN, which already asks: its id, name
+   and creature. So a client is the same person, and the same Pokemon, in
+   both of the coach's apps. */
+var COACH_TYPES = ['set', 'session', 'exercise', 'excat', 'phase', 'goal', 'sgroup'];
+/* What the range draws, from any set of rows shaped like TRAIN's. COACH
+   hands it a client's rows; TRAIN hands it the store's. */
+TRAIN.rangeFrom = function (sets, phases) {
+  var by = {};
+  sets.forEach(function (r) {
+    var s = r.payload || r;
+    if (s.warm || !r.date) return;
+    var d = by[r.date] || (by[r.date] = { date: r.date, vol: 0, pr: false });
+    d.vol += (+s.kg || 0) * (+s.r || 0) || (+s.r || 0);
+    if (s.pr) d.pr = true;
+  });
+  return {
+    sessions: Object.keys(by).sort().map(function (k) { return by[k]; }),
+    phases: phases.map(function (r) { var p = r.payload || r; return { name: p.name, start: p.start, end: p.end || null }; })
+      .filter(function (p) { return p.start; }),
+    to: Day.today(),
+  };
+};
+TRAIN.rangeData = function () { return TRAIN.rangeFrom(Rec.all('set'), Rec.all('phase')); };
+
+TRAIN.whoAmI = function () {
+  var pid = Rec.setting('checkin', 'pid');
+  if (!pid) { pid = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); Rec.setting('checkin', 'pid', pid); }
+  return { pid: pid, name: Rec.setting('checkin', 'name') || '', animal: Rec.setting('checkin', 'animal') || '' };
+};
+TRAIN.coachFile = function (name) {
+  var me = TRAIN.whoAmI();
+  return { kind: 'motherbase-train', v: 1, pid: me.pid, name: name, animal: me.animal,
+    unit: TRAIN.unit(), at: new Date().toISOString(), rows: Rec.export(COACH_TYPES) };
+};
+TRAIN.sendToCoach = function () {
+  var me = TRAIN.whoAmI();
+  var ask = me.name ? Promise.resolve(me.name) : new Promise(function (res) {
+    UI.dialog({
+      title: 'YOUR NAME', width: 380,
+      body: function (b) { var i = UI.field('text', { placeholder: 'First name' }); b.appendChild(i); UI.focusSoon(i); },
+      actions: [{ label: 'CANCEL', fn: function () { res(null); } },
+        { label: 'SEND', kind: 'go', fn: function (h) {
+          var v = (h.body.querySelector('input').value || '').trim();
+          if (!v) { UI.toast('Type a name first', { bad: true }); return false; }
+          Rec.setting('checkin', 'name', v); res(v);
+        } }],
+    });
+  });
+  ask.then(function (name) {
+    if (!name) return;
+    var bag = TRAIN.coachFile(name);
+    var text = JSON.stringify(bag);
+    var file = 'TRAIN ' + name + ' ' + Day.today() + '.json';
+    var f = null;
+    try { f = new File([text], file, { type: 'application/json' }); } catch (e) {}
+    var done = function () { UI.toast('Sent. <b>' + bag.rows.length + '</b> rows in the file.'); };
+    if (f && navigator.canShare && navigator.canShare({ files: [f] }) && Mobile.touch) {
+      navigator.share({ files: [f] }).then(done, function () {});
+      return;
+    }
+    var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    var a = document.createElement('a'); a.href = url; a.download = file;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 8000);
+    done();
+  });
+};
+TRAIN.openProgram = function () {
+  var inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,application/json';
+  inp.onchange = function () {
+    var f = inp.files && inp.files[0];
+    if (!f) return;
+    f.text().then(function (t) {
+      var n = TRAIN.takeProgram(JSON.parse(t));
+      UI.toast('<b>' + UI.esc(n.name) + '</b> is in Training Routines, ' + n.ex + ' exercises');
+      TRAIN.show('routines');
+    }).catch(function (e) { UI.toast(UI.esc((e && e.message) || 'That file could not be read'), { bad: true }); });
+  };
+  inp.click();
+};
+TRAIN.takeProgram = function (bag) {
+  if (!bag || bag.kind !== 'motherbase-program' || !bag.id || !Array.isArray(bag.days)) {
+    throw new Error('That is not a program file from COACH');
+  }
+  var src = String(bag.id).replace(/[^a-z0-9-]/gi, '');
+  var exs = TRAIN.exercises(), byName = {};
+  Object.keys(exs).forEach(function (k) { byName[String(exs[k].name || '').trim().toLowerCase()] = k; });
+  var keepDays = {}, keepEx = {}, count = 0;
+  Rec.set('program', null, 'prog-' + src, { name: bag.name || 'Program', ord: -1, from: bag.from || '' });
+  bag.days.forEach(function (d, i) {
+    var dk = 'pday-' + src + '-' + i;
+    keepDays[dk] = 1;
+    Rec.set('progday', null, dk, { program: 'prog-' + src, name: d.name || ('Day ' + (i + 1)), ord: i });
+    (d.ex || []).forEach(function (x, j) {
+      var nm = String(x.name || '').trim();
+      if (!nm) return;
+      var id = byName[nm.toLowerCase()];
+      if (!id) {
+        id = TRAIN.seedId(nm);
+        var cats = TRAIN.cats(), cat = String(x.cat || '').toLowerCase();
+        if (!cats[cat]) cat = TRAIN.addCat(x.catName || 'Other') || Object.keys(cats)[0];
+        Rec.set('exercise', null, id, { name: nm, cat: cat, kind: x.kind | 0, inc: 2.5, rest: 0, unit: 0,
+          fav: 0, note: '', graph: 0, ord: 999 });
+        byName[nm.toLowerCase()] = id;
+      }
+      var xk = 'pex-' + src + '-' + i + '-' + j;
+      keepEx[xk] = 1;
+      Rec.set('progex', null, xk, { day: dk, ex: id, ord: j, fill: x.sets && x.sets.length ? 3 : 1,
+        sets: (x.sets || []).slice(0, 1).map(function (s) {
+          return { kg: s.kg == null ? null : +s.kg, r: s.r == null ? null : +s.r, u: TRAIN.unit() };
+        }) });
+      count++;
+    });
+  });
+  /* an updated program that dropped a day or an exercise drops it here too */
+  Rec.all('progday').forEach(function (r) { if (r.key.indexOf('pday-' + src + '-') === 0 && !keepDays[r.key]) Rec.del('progday', null, r.key); });
+  Rec.all('progex').forEach(function (r) { if (r.key.indexOf('pex-' + src + '-') === 0 && !keepEx[r.key]) Rec.del('progex', null, r.key); });
+  TRAIN._exC = null;
+  TRAIN.reindex();
+  return { name: bag.name || 'Program', ex: count };
 };
 
 TRAIN.progexDialog = function (key) {
@@ -6828,6 +6974,15 @@ function drawProfile(m) {
   shp.onclick = function () { shareCard(function () { return hero.cloneNode(true); }, 'train-profile'); };
   m.appendChild(shp);
 
+  /* The range: every block a mountain, every session a tree, records in
+     blossom. Scrolled to today; drag back to see the start. */
+  if (window.Range) {
+    var rc = UI.el('div', 'exblock');
+    rc.style.overflow = 'hidden';
+    m.appendChild(rc);
+    Range.mount(rc, TRAIN.rangeData(), 190);
+  }
+
   var ph = TRAIN.phaseOn(today);
   var bc = UI.el('div', 'exblock pad');
   bc.innerHTML = '<div class="fieldlabel">TRAINING BLOCK</div>';
@@ -7256,6 +7411,14 @@ document.getElementById('moreBtn').onclick = function (e) {
   } else if (scr === 'profile') {
     items = [
       { label: 'New Training Block', fn: function () { TRAIN.phaseDialog(null); } },
+      { label: 'Send To Coach', fn: function () { TRAIN.sendToCoach(); } },
+      { label: 'Open A Program', fn: function () { TRAIN.openProgram(); } },
+      { label: 'Settings', fn: function () { TRAIN.settings(); } },
+    ];
+  } else if (scr === 'routines') {
+    items = [
+      { label: 'Open A Program', fn: function () { TRAIN.openProgram(); } },
+      { label: 'Send To Coach', fn: function () { TRAIN.sendToCoach(); } },
       { label: 'Settings', fn: function () { TRAIN.settings(); } },
     ];
   } else {
