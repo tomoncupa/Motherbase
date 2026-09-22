@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.14, 2026-09-22">
+<meta name="mb-version" content="1.0.15, 2026-09-22">
 <title>LOG</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▤</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -287,6 +287,28 @@ main.dragging{cursor:grabbing;user-select:none}
 .cal.book .xn.empty{display:none}
 .cal.book .cell{padding:var(--s-1) var(--s-4) var(--s-2)}
 
+/* ══════════ LIST ══════════
+   Tom, 2026-09-22: the days listed on the left, one day open on the right.
+   The list is one screen tall and scrolls by itself; the day on the right
+   is Day's own drawing and scrolls with the page. */
+.cal.list{display:flex;align-items:flex-start;width:100%}
+.dlist{position:sticky;top:0;left:0;z-index:4;flex:0 0 auto;display:flex;flex-direction:column;
+  width:calc(var(--s-10) * 2.5);height:var(--sh);overflow-y:auto;background:var(--surface-1);box-shadow:var(--rim)}
+.lday{flex:1 1 auto;min-width:0}
+.lrow{flex:0 0 auto;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:var(--s-3);align-items:baseline;
+  width:100%;min-height:var(--tap);padding:var(--s-2) var(--s-4);border:0;border-radius:0;background:none;
+  color:var(--text-1);font:inherit;text-align:left;cursor:pointer}
+.lrow:hover{background:var(--surface-2)}
+.lrow.m0{border-top:var(--border-width) solid var(--border-strong)}
+.lrow.on{background:var(--surface-3);box-shadow:inset var(--s-1) 0 0 var(--accent)}
+.lrow .ln{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--tb, var(--f-4));color:var(--text-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lrow.today .ln,.lrow.on .ln{color:var(--accent)}
+.lrow .lc{font-size:var(--ts, var(--f-2));color:var(--text-muted)}
+.lrow .lc.zero{opacity:.6}
+.lrow .lt{grid-column:1 / -1;margin-top:var(--s-1);font-size:var(--ts, var(--f-2));line-height:var(--lh-tight);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 #probe{position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;width:calc(var(--s-10) * 2)}
 #probe .blk{position:static}
 </style>
@@ -382,20 +404,38 @@ const setInList = (key, all, cur, id, on) => S.set(key, all.filter(v => v === id
    scroll settles on: a day, or the named side block. */
 const LEVELS = [
   { id: 'd1', name: 'Day',     n: 1,   cols: [],              spread: 1 },
+  /* Tom, 2026-09-22: "a view in LOG that has a list of days on the left
+     side, and a day view open on the right." The right is Day's own drawing
+     of the one day chosen; `focus` is that day. */
+  { id: 'ls', name: 'List',    n: 1,   cols: [],              list: true },
   { id: 'd2', name: '2 Days',  n: 2,   cols: [],              spread: 2, book: true },
   { id: 'd3', name: '3 Days',  n: 3,   cols: [],              spread: 3 },
   { id: 'w1', name: 'Week',    n: 7,   cols: ['w'],           spread: 'w' },
-  { id: 'w2', name: 'Weeks',   n: 14,  cols: ['w'],           spread: 'ww' },
+  /* Off the strip since 2026-09-22. Tom: "the week and weeks view dont do
+     much different from each other, I think just remove the weeks view."
+     Kept whole; deleting `off` puts it back. */
+  { id: 'w2', name: 'Weeks',   n: 14,  cols: ['w'],           spread: 'ww', off: true },
   { id: 'm',  name: 'Month',   n: 31,  cols: ['m', 'w'],      snap: 'w' },
   { id: 'q',  name: 'Quarter', n: 92,  cols: ['q', 'm'],      snap: 'm' },
   { id: 'y',  name: 'Year',    n: 366, cols: ['y', 'q', 'm'], snap: 'q' },
 ];
 const LV = id => LEVELS.findIndex(l => l.id === id);
+const OFFERABLE = LEVELS.filter(l => !l.off);
+const listMode = () => !!LEVELS[level].list;
+
+/* A saved list of views predates List, so List is added to it once; hiding
+   it afterwards sticks. */
+(function addListView() {
+  const v = S.get('views', null);
+  if (!Array.isArray(v) || S.get('listAdded', false)) return;
+  if (v.indexOf('ls') < 0) S.set('views', v.concat('ls'));
+  S.set('listAdded', true);
+})();
 
 /* Which views are offered at all. Tom, 2026-09-13: "Right click
    functionality to pick what view modes are even available." A right click
    on the view strip, or the Views row in Settings. One always stays. */
-const viewsOn = () => { const v = S.get('views', null); const ok = Array.isArray(v) ? v.filter(id => LV(id) > -1) : []; return ok.length ? ok : LEVELS.map(l => l.id); };
+const viewsOn = () => { const v = S.get('views', null); const ok = Array.isArray(v) ? v.filter(id => LV(id) > -1 && !LEVELS[LV(id)].off) : []; return ok.length ? ok : OFFERABLE.map(l => l.id); };
 const viewOn = i => viewsOn().indexOf(LEVELS[i].id) > -1;
 /* The nearest offered view to `i`, looking in `dir` first. */
 function nearestView(i, dir) {
@@ -404,7 +444,8 @@ function nearestView(i, dir) {
   return LV(viewsOn()[0]);
 }
 /* The view LOG opens on is a setting; Month unless he picks another. */
-const openLevel = () => { const i = LV(S.get('open', 'm')); return nearestView(i < 0 ? LV('m') : i, 1); };
+/* A view taken off the strip opens on the one below it: Weeks on Week. */
+const openLevel = () => { const i = LV(S.get('open', 'm')); return i < 0 ? nearestView(LV('m'), 1) : nearestView(i, LEVELS[i].off ? -1 : 1); };
 
 const MIN_DH = 1;
 const COL_NAMES = { y: 'Year', q: 'Quarters', m: 'Months', w: 'Weeks' };
@@ -866,7 +907,8 @@ function buildTimeline(first, last) {
 const countOf = p => T.pre[p.i0 + p.n] - T.pre[p.i0];
 const bullets = n => n + (n === 1 ? ' bullet' : ' bullets');
 const ascIdx = date => clamp(Day.diff(date, T.first), 0, T.days.length - 1);
-const domIdx = date => desc() ? T.days.length - 1 - ascIdx(date) : ascIdx(date);
+/* List draws one day, so every day is the one on the page. */
+const domIdx = date => listMode() ? 0 : desc() ? T.days.length - 1 - ascIdx(date) : ascIdx(date);
 
 /* ══════════════════════ DRAWING ══════════════════════ */
 let T = null;
@@ -948,15 +990,74 @@ function aggHTML(p, col) {
     '</div></div>';
 }
 
+/* The day columns' headings, the same on the timeline and in List. */
+const xHeadsHTML = () => visibleX().map(k => '<div class="c ' + (k === 'd' ? 'c-d' : 'cx') + '" data-x="' + k + '"' +
+  (k === 'd' ? '' : ' style="--cw:' + xWidth(k) + '"') + ' title="' + attr(colName(k)) + '">' + esc(colName(k)) +
+  (k === 'd' ? '' : '<span class="rz" data-col="' + k + '" title="Drag to resize"></span>') + '</div>').join('');
+
+/* ── the List view's days ──
+   Newest at the top, back to the first record. Each row is the day's name,
+   its line, and the count every other view shows. */
+function listRowsHTML() {
+  let out = '';
+  for (let i = T.dayList.length - 1; i >= 0; i--) {
+    const p = T.dayList[i], note = (Rec.get('day', p.from, '') || {}).note || '', n = counted(p.from);
+    out += '<button type="button" class="lrow' + (p.from === focus ? ' on' : '') + (p.from === TODAY ? ' today' : '') +
+      (p.month ? ' m0' : '') + '" data-d="' + p.from + '" title="' + attr(p.label + (note ? ': ' + note : '')) + '">' +
+      '<span class="ln">' + esc(p.label) + '</span>' +
+      '<span class="lc' + (n ? '' : ' zero') + '" title="' + bullets(n) + '">' + n + '</span>' +
+      (note ? '<span class="lt">' + esc(note) + '</span>' : '') + '</button>';
+  }
+  return out;
+}
+/* Keep the chosen row in sight, without moving the list when it already is. */
+function showListRow() {
+  const box = $('dlist');
+  if (!box) return;
+  const r = box.querySelector('.lrow.on');
+  if (!r) return;
+  if (r.offsetTop < box.scrollTop) box.scrollTop = r.offsetTop;
+  else if (r.offsetTop + r.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = r.offsetTop + r.offsetHeight - box.clientHeight;
+}
+/* Choose a day in List: the right side becomes that day, from its top. */
+function listPick(d) {
+  if (!T || !d) return;
+  touched = true;
+  focus = d < T.first ? T.first : d > T.last ? T.last : d;
+  render();
+  applySizes();
+  setTop(0);
+  showFocus();
+}
+
 let renderedKey = '';
 function render(force) {
-  const key = level + '|' + isBook() + '|' + desc();
+  const list = listMode();
+  if (list) focus = focus < T.first ? T.first : focus > T.last ? T.last : focus;
+  const key = level + '|' + isBook() + '|' + desc() + (list ? '|' + focus : '');
   if (!force && key === renderedKey) return;
   renderedKey = key;
   const cal = $('cal'), book = isBook();
+  const oldList = $('dlist'), listTop = oldList ? oldList.scrollTop : null;
   cal.classList.toggle('book', book);
+  cal.classList.toggle('list', list);
   cal.style.height = '';
-  if (book) {
+  if (list) {
+    /* The list is newest first whatever the timeline's order, and the right
+       is Day's own markup for the one chosen day, so adding, ticking, editing
+       and the menus are the timeline's handlers unchanged. */
+    const p = T.dayList[ascIdx(focus)];
+    cal.innerHTML = '<nav class="dlist mb-scroll" id="dlist" aria-label="Days">' + listRowsHTML() + '</nav>' +
+      '<div class="lday">' +
+        '<div class="row heads" id="heads">' + xHeadsHTML() + '</div>' +
+        '<div class="row body"><div class="col c-d">' + dayHTML(p) + '</div></div>' +
+      '</div>';
+    blocks = []; aggCols = []; flows = [];
+    dayCol = cal.querySelector('.body .c-d');
+    dayEls = [...dayCol.children];
+    if (listTop != null) $('dlist').scrollTop = listTop;
+    showListRow();
+  } else if (book) {
     const stream = (desc() ? T.dayList.slice().reverse() : T.dayList).map(dayHTML).join('');
     cal.innerHTML = '<div class="pages"><div class="page"><div class="flow">' + stream + '</div></div>' +
       '<div class="page"><div class="flow">' + stream + '</div></div></div>';
@@ -973,9 +1074,7 @@ function render(force) {
       '<div class="row heads" id="heads">' +
         (c.length ? '<div class="agg">' + c.map(k => '<div class="c c-' + k + '" data-side="' + k + '">' + COL_NAMES[k] +
           '<span class="rz" data-col="' + k + '" title="Drag to resize"></span></div>').join('') + '</div>' : '') +
-        visibleX().map(k => '<div class="c ' + (k === 'd' ? 'c-d' : 'cx') + '" data-x="' + k + '"' +
-          (k === 'd' ? '' : ' style="--cw:' + xWidth(k) + '"') + ' title="' + attr(colName(k)) + '">' + esc(colName(k)) +
-          (k === 'd' ? '' : '<span class="rz" data-col="' + k + '" title="Drag to resize"></span>') + '</div>').join('') +
+        xHeadsHTML() +
       '</div>' +
       '<div class="row body">' +
         (c.length ? '<div class="agg">' + c.map(k => '<div class="col c-' + k + '" data-col="' + k + '">' + sets[k].map(p => aggHTML(p, k)).join('') + '</div>').join('') + '</div>' : '') +
@@ -1047,6 +1146,8 @@ function applySizes() {
     flowBook();
     return;
   }
+  /* In List the days' column is one screen tall and scrolls by itself. */
+  if (listMode()) cal.style.setProperty('--sh', sc.clientHeight + 'px');
   dayHeight = dhFor(LEVELS[level].n);
   cal.style.setProperty('--dh', dayHeight + 'px');
   cal.classList.toggle('near', dayHeight >= nearAt());
@@ -1151,7 +1252,7 @@ function redrawInPlace() {
    showing the last four weeks is focused on today, not four weeks ago. */
 let focus = TODAY;
 function readFocus() {
-  if (!T || !dayEls.length) return;
+  if (!T || !dayEls.length || listMode()) return;
   const max = sc.scrollHeight - sc.clientHeight;
   if (max > 0 && sc.scrollTop >= max - 1) { focus = desc() ? T.first : T.last; return; }
   const a = dateAt(sc.scrollTop + headH());
@@ -1161,6 +1262,8 @@ function placeFocus() {
   if (!T || !dayEls.length) return;
   if (focus < T.first) focus = T.first;
   if (focus > T.last) focus = T.last;
+  /* In List the focus is the day on the right: draw it if it changed. */
+  if (listMode()) { render(); applySizes(); setTop(0); return; }
   setTop(dayY(domIdx(focus)) - headH());
 }
 
@@ -1318,7 +1421,7 @@ function snapEdges() {
 }
 let snapT = null, snapping = false;
 function snapNow() {
-  if (!T || drag || rz || mv || snapping || Date.now() - progAt < 350) return;
+  if (!T || drag || rz || mv || snapping || listMode() || Date.now() - progAt < 350) return;
   const top = sc.scrollTop + headH();
   let best = null;
   const edges = snapEdges();
@@ -1382,8 +1485,8 @@ function toggleView(id) {
   if (level !== was) setLevel(level); else syncLevels();
 }
 function viewsMenu(e) {
-  UI.menu(e.clientX, e.clientY, LEVELS.map((l, i) => ({
-    label: (viewOn(i) ? 'Hide ' : 'Show ') + l.name, fn: () => toggleView(l.id),
+  UI.menu(e.clientX, e.clientY, OFFERABLE.map(l => ({
+    label: (viewOn(LV(l.id)) ? 'Hide ' : 'Show ') + l.name, fn: () => toggleView(l.id),
   })), { title: 'Views' });
 }
 $('levels').addEventListener('contextmenu', e => { e.preventDefault(); viewsMenu(e); });
@@ -1581,7 +1684,7 @@ function drawLogSettings(pane) {
 
   const sel = document.createElement('select');
   sel.className = 'mb-sel';
-  LEVELS.forEach(l => { const o = document.createElement('option'); o.value = l.id; o.textContent = l.name; sel.appendChild(o); });
+  OFFERABLE.forEach(l => { const o = document.createElement('option'); o.value = l.id; o.textContent = l.name; sel.appendChild(o); });
   sel.value = LEVELS[openLevel()].id;
   sel.onchange = () => S.set('open', sel.value);
   grp.appendChild(UI.row('Opens on', 'The view LOG starts in', sel));
@@ -1606,7 +1709,7 @@ function drawLogSettings(pane) {
      what gets changed; everything else here is set once. */
   grp.appendChild(UI.more('More', box => {
     const views = opts();
-    LEVELS.forEach((l, i) => views.appendChild(toggleEl(l.name, viewOn(i), () => toggleView(l.id))));
+    OFFERABLE.forEach(l => views.appendChild(toggleEl(l.name, viewOn(LV(l.id)), () => toggleView(l.id))));
     box.appendChild(UI.row('Views', 'Which views the strip offers', views));
 
     const first = firstRecord();
@@ -1617,7 +1720,7 @@ function drawLogSettings(pane) {
     box.appendChild(UI.row('Timeline starts', 'Blank starts at your first record, ' + Day.label(first) + ' ' + first.slice(0, 4), di));
 
     const side = opts();
-    LEVELS.filter(l => l.cols.length).forEach(l => {
+    OFFERABLE.filter(l => l.cols.length).forEach(l => {
       const line = UI.el('div', 'line');
       /* "In Month" rather than "Month", or the list read Week, Weeks, Weeks */
       line.appendChild(UI.el('span', 'k', 'In ' + l.name));
@@ -1893,6 +1996,8 @@ const bulletOf = el => byKey.get(el.dataset.d + '|' + el.dataset.k);
    line and the text columns take the cursor themselves. */
 $('cal').addEventListener('click', e => {
   if (Date.now() - heldAt < 800) return;
+  const lrow = e.target.closest('.lrow');
+  if (lrow) { listPick(lrow.dataset.d); return; }
   if (e.target.closest('.sum, .cell, .rz, .heads')) return;
   const tickBox = e.target.closest('button.k');
   if (tickBox) { const x = bulletOf(tickBox.closest('.bl')); if (x) tick(x); return; }
@@ -1963,6 +2068,18 @@ window.addEventListener('mouseup', e => {
   e.preventDefault();
   touched = true;
   setLevel(stepLevel(e.button === 3 ? 1 : -1));
+});
+
+/* In List, Up and Down move through the days: Up is the newer day, as the
+   list reads, Down the older. Not while typing, or with a menu or box open. */
+window.addEventListener('keydown', e => {
+  if (!T || !listMode() || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+  if (e.altKey || e.ctrlKey || e.metaKey || (e.target.closest && e.target.closest('input,textarea,select,[contenteditable]'))) return;
+  if (document.querySelector('[aria-modal="true"], .mb-menu')) return;
+  e.preventDefault();
+  const d = Day.shift(focus, e.key === 'ArrowUp' ? 1 : -1);
+  if (d < T.first || d > T.last) return;
+  listPick(d);
 });
 
 let drag = null, swallowClick = false, swallowMenuAt = 0;
