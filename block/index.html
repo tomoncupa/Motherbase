@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.15, 2026-09-19">
+<meta name="mb-version" content="1.0.16, 2026-09-22">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='28' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='55' y='20' width='17' height='20' rx='5' fill='%237EE8FA'/><rect x='16' y='34' width='68' height='46' rx='9' fill='%237EE8FA'/></svg>">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -682,6 +682,7 @@ footer .sp{flex:1}
 <script src="../shared/skins.js"></script>
 <script src="../shared/icons.js"></script>
 <script src="../shared/mobile.js"></script>
+<script src="../shared/sound.js"></script>
 <script src="../shared/ui.js"></script>
 <link href="../shared/fonts/fonts.css" rel="stylesheet">
 </head>
@@ -1828,6 +1829,7 @@ function normalise() {
 }
 normalise();
 S.viewDate = null;                     /* a session always opens on today */
+soundAdopt();
 
 /* ── the date on screen ──
    BLOCK used to know about weekdays and nothing else: Monday ran whatever the
@@ -3324,64 +3326,31 @@ function nowLine(m) {
   return n;
 }
 /* ---------- sounds ----------
- * Synthesised, no files. A tick should feel like a small physical click with a
- * pitch that RISES as you get closer to finishing (that rise is most of the
- * satisfaction); finishing the day gets a proper little fanfare.
+ * From shared/sound.js since 2026-09-22, like every other app, instead of a
+ * synth of BLOCK's own. A block ticked is one note, a block unticked or set
+ * aside drops, and the whole day done is the full chord. The set, the volume
+ * and on or off are the suite's per-app sound settings under the id `block`.
+ * BLOCK's old choice, kept on S as sound, soundTheme and volume, is carried
+ * across once on a device that has no shared setting for BLOCK yet, so
+ * someone who had turned the sound off does not get it back.
  */
-const THEMES = {
-  soft:    { name: 'Soft', wave: 'sine',     tick: [1, 2.01], decay: .17, bright: .55 },
-  marimba: { name: 'Marimba', wave: 'sine',  tick: [1, 4.02, 6.5], decay: .3, bright: .5 },
-  arcade:  { name: 'Arcade', wave: 'square', tick: [1, 1.5], decay: .1, bright: .3 },
-  bell:    { name: 'Bell', wave: 'triangle', tick: [1, 2.76, 5.4], decay: .45, bright: .42 },
-};
-let AC;
-function audio() {
-  if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
-  if (AC.state === 'suspended') AC.resume();      /* browsers park it until you interact */
-  return AC;
-}
-function tone(f, t, dur, vol, wave) {
-  const o = AC.createOscillator(), g = AC.createGain();
-  o.type = wave || 'sine'; o.frequency.setValueAtTime(f, AC.currentTime + t);
-  g.gain.setValueAtTime(0.0001, AC.currentTime + t);
-  g.gain.exponentialRampToValueAtTime(Math.max(.0002, vol), AC.currentTime + t + .008);
-  g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + t + dur);
-  o.connect(g); g.connect(AC.destination);
-  o.start(AC.currentTime + t); o.stop(AC.currentTime + t + dur + .02);
-}
-/** how far through today's list we are — drives the rising pitch */
-function progressRatio() {
-  try {
-    const col = viewCol();
-    const td = pairsFor(routineForDate(col.key), col.key);
-    if (!td.length) return 0;
-    return td.filter(({ it, l }) => isDoneOn(it, col, l)).length / td.length;
-  } catch (e) { return 0; }
+function soundAdopt() {
+  /* inside, not beside: this runs at boot, above where a top-level const would exist yet */
+  const OLD_SOUND = { soft: 'quiet', marimba: 'marimba', arcade: 'arcade', bell: 'temple' };
+  if (!window.Sfx) return;
+  Sfx.init('block');
+  if (Object.keys(Sfx.forApp('block')).length) return;     /* already has its own */
+  Sfx.set({
+    pack: OLD_SOUND[S.soundTheme] || 'marimba',
+    mute: S.sound === false || S.soundTheme === 'off',
+    vol: S.volume == null ? 0.6 : S.volume,
+  });
 }
 function beep(kind) {
-  if (!S.sound || S.soundTheme === 'off') return;
-  const T = THEMES[S.soundTheme] || THEMES.soft;
-  const vol = (S.volume == null ? 0.6 : S.volume) * 0.16;
-  if (vol <= 0) return;
+  if (!window.Sfx) return;
   try {
-    audio();
-    if (kind === 'untick') { tone(240, 0, .12, vol * .45, T.wave); return; }
-    if (kind === 'done') {
-      /* pentatonic step up the list: C D E G A C — never a sour note, always "one more" */
-      const scale = [523.25, 587.33, 659.25, 783.99, 880, 1046.5];
-      const base = scale[Math.min(scale.length - 1, Math.round(progressRatio() * (scale.length - 1)))];
-      T.tick.forEach((mult, i) => tone(base * mult, i * .012, T.decay * (i ? T.bright : 1), vol / (i + 1.4), T.wave));
-      return;
-    }
-    if (kind === 'complete') {
-      const chord = [523.25, 659.25, 783.99, 1046.5, 1318.5];
-      chord.forEach((f, i) => {
-        T.tick.forEach((mult, j) => tone(f * mult, i * .085 + j * .012, (T.decay + .35) / (j + 1), vol / (j + 1.3), T.wave));
-      });
-      tone(1567.98, .5, .7, vol * .5, T.wave);      /* the little sparkle on top */
-      return;
-    }
-    tone(440, 0, .12, vol, T.wave);
+    if (kind === 'complete') Sfx.play('complete', { level: 3 });
+    else Sfx.play(kind === 'untick' ? 'untick' : 'done');
   } catch (e) {}
 }
 
@@ -5223,12 +5192,12 @@ function selfTest() {
       render();
       return (split && keysDiffer && loggedOne) || 'independent ' + split + ', keys differ ' + keysDiffer + ', logged ' + loggedOne;
     });
-    ok('sounds build without error on every theme', () => {
-      const keep = [S.sound, S.soundTheme];
-      S.sound = true;
-      Object.keys(THEMES).forEach(t => { S.soundTheme = t; beep('done'); beep('complete'); beep('untick'); });
-      S.sound = keep[0]; S.soundTheme = keep[1];
-      return true;
+    ok('sounds come from the shared sound themes', () => {
+      if (!window.Sfx) return 'shared/sound.js did not load';
+      const seen = [], was = Sfx.play;
+      Sfx.play = (c, o) => seen.push(c + (o && o.level ? o.level : ''));
+      try { beep('done'); beep('untick'); beep('complete'); } finally { Sfx.play = was; }
+      return seen.join(',') === 'done,untick,complete3' || 'played ' + seen.join(',');
     });
     ok('settings apply without a Save button', () => {
       const keep = S.doneRoutines;
@@ -5668,8 +5637,8 @@ function tzList() {
    On the shared panel since 2026-09-15, like every other app, instead of a
    modal of its own that looked like nothing else. Tom: "Block yes". BLOCK's
    own tab, an EXPORT tab for the calendar file and Todoist, and the suite's
-   DATA tab. Its theme is picked in STYLE. BLOCK's sounds are its own synth,
-   so they stay here. The self-test and the resets are folded under More.
+   DATA tab. Its theme is picked in STYLE. Its sound is the suite's, from
+   shared/sound.js, and is picked here because STYLE's list leaves BLOCK out. The self-test and the resets are folded under More.
    Everything applies as it is touched; there is no Save to forget. */
 function openSettings() {
   return UI.settings('block', [
@@ -5732,14 +5701,16 @@ function drawBlockSettings(pane, h) {
   sw('Keep finished blocks in the Week tab', 'Off hides them as you tick', 'keepDone');
 
   pane.appendChild(el('div', 'mb-group', 'SOUND'));
-  sw('Sounds', null, 'sound');
-  pane.appendChild(UI.row('Sound set', 'Ticks rise in pitch as the list empties',
-    setSelect(Object.keys(THEMES).map(k => [k, THEMES[k].name]), S.soundTheme, v => { put('soundTheme', v); beep('done'); })));
-  const vol = document.createElement('input');
-  vol.type = 'range'; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.className = 'mb-range';
-  vol.value = S.volume == null ? 0.6 : S.volume;
-  vol.onchange = () => { S.volume = parseFloat(vol.value); save(); beep('done'); };
-  pane.appendChild(UI.row('Volume', null, vol));
+  if (window.Sfx) {
+    pane.appendChild(UI.row('Sounds', null, UI.toggle(!Sfx.mute(), v => { Sfx.mute(!v); if (v) beep('done'); })));
+    pane.appendChild(UI.row('Sound set', 'The same sets as the rest of the suite',
+      setSelect(Sfx.PACKS.map(p => [p.id, p.name]), Sfx.pack(), v => { Sfx.pack(v); beep('done'); })));
+    const vol = document.createElement('input');
+    vol.type = 'range'; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.className = 'mb-range';
+    vol.value = Sfx.volume();
+    vol.onchange = () => { Sfx.volume(parseFloat(vol.value)); beep('done'); };
+    pane.appendChild(UI.row('Volume', null, vol));
+  }
 
   pane.appendChild(UI.more('More', box => {
     const blocks = S.variants.reduce((a, v) => a + S.lanes.reduce((b, l) => b + ((v.items[l.id] || []).length), 0), 0);
