@@ -369,6 +369,20 @@ one. (HISTORY.md: A payment rail is not a shop)
 **A picture-only PDF is read by Tesseract**, and the running balance still
 guards every figure. (HISTORY.md: A PDF that is only a picture of the pages)
 
+**Screenshots fill the days a statement has not reached** (2026-09-23).
+GCash and UnionBank app history, read by Tesseract (`ocrShots`). A screenshot
+line is written with `src: 'shot'` and `shot: <fingerprint>`, never `stmt`
+or `bank`, so the statement's line merges into it later and its wording
+replaces the app's. A screenshot never changes a row a statement already
+wrote. A statement lists screenshot lines on days before its last that it
+does not show, and removes them unless told not to. No rule is ever asked
+for from app wording. A GCash line whose sign could not be read is left out.
+Two apps in one drop are refused. Anything dropped anywhere on WEALTH opens
+READ A STATEMENT with it.
+
+**A locked spreadsheet opens with its password** (`unlockXlsx`, Excel's
+agile AES lock, WebCrypto only). The password is treated like a PDF's.
+
 **A statement comment lives in its `recon` row**, merged. (HISTORY.md: Seeing a statement, and commenting on it)
 
 **Account numbers live in `wealth.ids.<account>`, never on `acct`.** (HISTORY.md: How an account is recognised)

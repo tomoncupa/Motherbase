@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.19, 2026-09-22">
+<meta name="mb-version" content="1.0.20, 2026-09-23">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -1579,6 +1579,7 @@ function fileKind(f) {
   const n = String(f.name || '').toLowerCase();
   if (/\.pdf$/.test(n) || f.type === 'application/pdf') return 'pdf';
   if (/\.xlsx?$/.test(n)) return 'xlsx';
+  if (/^image\//.test(f.type || '') || /\.(png|jpe?g|webp)$/.test(n)) return 'image';
   return 'text';
 }
 const readAs = (f, how) => new Promise((res, rej) => {
@@ -1588,15 +1589,70 @@ const readAs = (f, how) => new Promise((res, rej) => {
   if (how === 'text') fr.readAsText(f); else fr.readAsArrayBuffer(f);
 });
 
-async function openXlsx(buf) {
+/* == a spreadsheet locked with a password ==
+   Tom, 2026-09-23: UnionBank's download is an Excel file with a password on
+   it, and SheetJS cannot open one. Excel's lock (MS-OFFCRYPTO, "agile") is
+   AES over the real file, with a key made from the password by hashing it a
+   hundred thousand times. The browser's own crypto does all of it, so no
+   new library. The password goes to this and nowhere else, like a PDF's. */
+const b64bytes = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const catBytes = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let i = 0; a.forEach(x => { o.set(x, i); i += x.length; }); return o; };
+const u32 = n => new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]);
+const fitLen = (b, n, fill) => { const o = new Uint8Array(n).fill(fill); o.set(b.slice(0, n)); return o; };
+/* AES-CBC with no padding. WebCrypto insists on padding, so one block that
+   decrypts to a full padding block is made and put on the end. */
+async function cbcRaw(keyBytes, iv, data) {
+  const k = await crypto.subtle.importKey('raw', keyBytes, 'AES-CBC', false, ['encrypt', 'decrypt']);
+  const last = data.slice(data.length - 16);
+  const pad = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv: last }, k, new Uint8Array(16).fill(16))).slice(0, 16);
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-CBC', iv: iv }, k, catBytes(data, pad)));
+}
+async function unlockXlsx(X, buf, password) {
+  const cfb = X.CFB.read(new Uint8Array(buf), { type: 'array' });
+  const info = X.CFB.find(cfb, 'EncryptionInfo'), pkg = X.CFB.find(cfb, 'EncryptedPackage');
+  if (!info || !pkg) return null;
+  const xml = new TextDecoder().decode(new Uint8Array(info.content).slice(8));
+  const doc = new DOMParser().parseFromString(xml.slice(xml.indexOf('<')), 'application/xml');
+  const kd = doc.getElementsByTagName('keyData')[0];
+  const ke = Array.from(doc.getElementsByTagName('*')).find(e => e.localName === 'encryptedKey');
+  if (!kd || !ke) throw new Error('This spreadsheet is locked in an older way WEALTH cannot open. Open it, save a copy without the password, and choose that.');
+  const alg = a => ({ SHA512: 'SHA-512', SHA384: 'SHA-384', SHA256: 'SHA-256', SHA1: 'SHA-1' })[String(a).toUpperCase().replace('-', '')];
+  const H = async b => new Uint8Array(await crypto.subtle.digest(alg(ke.getAttribute('hashAlgorithm')), b));
+  const keyLen = +ke.getAttribute('keyBits') / 8;
+  const salt = b64bytes(ke.getAttribute('saltValue'));
+  const pw = new Uint8Array(password.length * 2);
+  for (let i = 0; i < password.length; i++) { const c = password.charCodeAt(i); pw[2 * i] = c & 255; pw[2 * i + 1] = c >> 8; }
+  let h = await H(catBytes(salt, pw));
+  for (let i = 0, n = +ke.getAttribute('spinCount'); i < n; i++) h = await H(catBytes(u32(i), h));
+  const derive = async blk => fitLen(await H(catBytes(h, new Uint8Array(blk))), keyLen, 0x36);
+  const iv0 = fitLen(salt, 16, 0x36);
+  const vIn = await cbcRaw(await derive([0xfe, 0xa7, 0xd2, 0x76, 0x3b, 0x4b, 0x9e, 0x79]), iv0, b64bytes(ke.getAttribute('encryptedVerifierHashInput')));
+  const vVal = await cbcRaw(await derive([0xd7, 0xaa, 0x0f, 0x6d, 0x30, 0x61, 0x34, 0x4e]), iv0, b64bytes(ke.getAttribute('encryptedVerifierHashValue')));
+  const want = await H(vIn.slice(0, +ke.getAttribute('saltSize')));
+  if (want.some((b, i) => b !== vVal[i])) { const err = new Error('password'); err.password = password ? 'wrong' : 'needed'; throw err; }
+  const secret = (await cbcRaw(await derive([0x14, 0x6e, 0x0b, 0xe7, 0xab, 0xac, 0xd0, 0xd6]), iv0, b64bytes(ke.getAttribute('encryptedKeyValue')))).slice(0, +kd.getAttribute('keyBits') / 8);
+  const kdSalt = b64bytes(kd.getAttribute('saltValue'));
+  const kdH = async b => new Uint8Array(await crypto.subtle.digest(alg(kd.getAttribute('hashAlgorithm')), b));
+  const raw = new Uint8Array(pkg.content);
+  const size = raw[0] + raw[1] * 256 + raw[2] * 65536 + raw[3] * 16777216 + (raw[4] + raw[5] * 256) * 4294967296;
+  const body = raw.slice(8), parts = [];
+  for (let i = 0, seg = 0; i < body.length; i += 4096, seg++) {
+    const chunk = body.slice(i, i + 4096);
+    parts.push(await cbcRaw(secret, (await kdH(catBytes(kdSalt, u32(seg)))).slice(0, 16), chunk.slice(0, chunk.length - chunk.length % 16)));
+  }
+  return catBytes(...parts).slice(0, size);
+}
+async function openXlsx(buf, password) {
   const X = await loadLib('xlsx');
   if (!X) throw new Error('The spreadsheet reader would not load, which usually means no internet. Save the file as CSV and choose that instead.');
   let wb;
   try { wb = X.read(new Uint8Array(buf), { type: 'array' }); }
   catch (e) {
-    throw new Error(/password|encrypt/i.test(String(e && e.message))
-      ? 'This spreadsheet has a password on it. Open it, save a copy without the password, and choose that.'
-      : 'That spreadsheet would not open: ' + (e && e.message || e));
+    if (!/password|encrypt/i.test(String(e && e.message))) throw new Error('That spreadsheet would not open: ' + (e && e.message || e));
+    if (!password) { const err = new Error('password'); err.password = 'needed'; throw err; }
+    const plain = await unlockXlsx(X, buf, password);
+    if (!plain) throw new Error('This spreadsheet has a password on it. Open it, save a copy without the password, and choose that.');
+    wb = X.read(plain, { type: 'array' });
   }
   const ws = wb.Sheets[wb.SheetNames[0]];
   return X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' })
@@ -1786,6 +1842,159 @@ function readGCash(lines) {
   });
   const own = Object.keys(from).sort((a, b) => from[b] - from[a])[0];
   if (own) st.ids.push(own);
+  return st;
+}
+
+/* == a screenshot of the app's own history ==
+   Tom, 2026-09-23: "the problem with the statements is they dont take
+   today's entries, the screens are to fix that." A statement stops at the
+   day it was made; the GCash and UnionBank apps show today as it happens.
+
+   Read by Tesseract like a picture PDF. Two shapes, told apart by order:
+   GCash puts the day ABOVE its lines ("Today", "Yesterday") with the time
+   above each line; UnionBank puts the date UNDER each line and no time.
+   A screenshot has no balance, so nothing checks its figures but him. That
+   is why every line it writes stays open for the statement: the row is not
+   linked to anything, the statement's own line merges into it when it
+   arrives, and a screenshot line the statement never shows is offered for
+   removal then. The bank's numbers still win, a day late. */
+function shotDate(s) {
+  const m = String(s || '').match(/^(?:as of\s+)?([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})$/i);
+  if (!m) return null;
+  const mo = MONTHS.indexOf(m[1].slice(0, 3).toLowerCase());
+  if (mo < 0 || +m[2] < 1 || +m[2] > 31) return null;
+  return m[3] + '-' + String(mo + 1).padStart(2, '0') + '-' + String(+m[2]).padStart(2, '0');
+}
+/* An amount at the end of a line, with whatever sign the app printed.
+   "- PHP 94.00", "+2,000.00", "PHP 148.00". A comma read as a dot is still
+   grouping: only the last two digits after the last dot are centavos. */
+const SHOT_AMT = /(?:^|\s)([+\-–—~])?\s*(?:PH[PF]|P|₱)?\s*(\d[\d,.]*[.,]\d{2})$/i;
+function shotLines(img) {
+  return img.data.words
+    .map(w => ({ t: String(w.text || '').trim(), x: w.bbox.x0, y: (w.bbox.y0 + w.bbox.y1) / 2, h: w.bbox.y1 - w.bbox.y0 }))
+    .filter(w => w.t).sort((a, b) => a.y - b.y)
+    .reduce((lines, w) => {
+      const L = lines[lines.length - 1];
+      if (L && Math.abs(w.y - L.y) < Math.max(L.h, w.h) * 0.6) { L.w.push(w); L.h = Math.max(L.h, w.h); }
+      else lines.push({ y: w.y, h: w.h, w: [w] });
+      return lines;
+    }, [])
+    .map(L => L.w.sort((a, b) => a.x - b.x).map(w => w.t).join(' ').replace(/\s+/g, ' ').trim());
+}
+function readShot(lines, carry) {
+  const out = { recs: [], app: '', asOf: null, cut: 0, nosign: 0, date: carry.date || null };
+  if (lines.some(l => /\bPH[PF]\s*\d/i.test(l) || /^visa/i.test(l))) out.app = 'ub';
+  else if (lines.some(l => /^(send money|pay via|bills payment|received money|cash in|gcredit|gsave)/i.test(l.replace(SHOT_AMT, '').trim()))) out.app = 'gcash';
+  const today = carry.today;
+  const dayOf = l => {
+    if (/^today$/i.test(l)) return today;
+    if (/^yesterday$/i.test(l)) return Day.shift(today, -1);
+    return shotDate(l);
+  };
+  let asOf = null;
+  lines.forEach(l => { const m = l.match(/^as of\s+(.+)$/i); if (m && shotDate(m[1])) asOf = shotDate(m[1]); });
+  if (asOf) { out.asOf = asOf; carry.today = asOf; }
+  /* Dates under their lines when there is roughly one date per amount. */
+  const nAmt = lines.filter(l => SHOT_AMT.test(l)).length;
+  const nDay = lines.filter(l => !/^as of/i.test(l) && dayOf(l)).length;
+  const after = out.app === 'ub' || (nDay >= 2 && nDay >= nAmt - 1 && !lines.some(l => /^(today|yesterday)$/i.test(l)));
+  let open = null, time = '';
+  lines.forEach(l => {
+    if (/^as of/i.test(l)) return;
+    const d = dayOf(l);
+    if (d) {
+      if (after) { if (open) { open.date = d; out.recs.push(open); open = null; } }
+      else { out.date = d; time = ''; }
+      return;
+    }
+    const tm = l.match(/^(\d{1,2}):(\d{2})\s*([AP])\.?M\.?$/i);
+    if (tm) {
+      let hr = +tm[1] % 12;
+      if (/p/i.test(tm[3])) hr += 12;
+      time = String(hr).padStart(2, '0') + ':' + tm[2];
+      return;
+    }
+    const a = l.match(SHOT_AMT);
+    if (a) {
+      if (after && open) out.cut++;            /* a line whose date never came */
+      const digits = a[2].replace(/[.,](\d{2})$/, '|$1').replace(/[.,]/g, '').replace('|', '.');
+      const n = num(digits, 0);
+      const desc = l.slice(0, l.length - a[0].length).trim();
+      let sign = a[1] ? (a[1] === '+' ? 1 : -1) : 0;
+      /* UnionBank prints money in with no sign at all. GCash signs every
+         line, so a missing one there is a misread, and a misread sign would
+         turn a payment into income. That line is left out and counted. */
+      if (!sign) { if (out.app === 'ub') sign = 1; else { out.nosign++; time = ''; return; } }
+      if (!n) return;
+      const rec = { date: after ? null : out.date, time: time, desc: desc, signed: round2(sign * n) };
+      time = '';
+      if (after) open = rec;
+      else if (rec.date) out.recs.push(rec);
+      else out.cut++;
+      return;
+    }
+    if (after && open) open.desc = (open.desc + ' ' + l).trim();
+  });
+  if (open) out.cut++;
+  carry.date = out.date;
+  return out;
+}
+/* Screenshots taken while scrolling overlap. The lines the next picture
+   starts with that the last one ended on are the same lines, not new ones. */
+function joinShots(lists) {
+  const k = r => r.date + '|' + r.time + '|' + r.signed + '|' + norm(r.desc);
+  return lists.reduce((all, b) => {
+    let best = 0;
+    for (let n = Math.min(all.length, b.length); n > 0; n--) {
+      let ok = true;
+      for (let i = 0; i < n && ok; i++) ok = k(all[all.length - n + i]) === k(b[i]);
+      if (ok) { best = n; break; }
+    }
+    return all.concat(b.slice(best));
+  }, []);
+}
+async function ocrShots(files, say) {
+  const T = await loadLib('ocr');
+  if (!T) throw new Error('The reader for pictures would not load, which usually means no internet. Try again with a connection.');
+  const worker = await T.createWorker('eng');
+  const lists = [], carry = { today: Day.today(), date: null };
+  const st = { source: 'shot', title: '', opening: null, closing: null, lines: [], ids: [], skipped: 0, app: '', cut: 0, nosign: 0 };
+  try {
+    for (let i = 0; i < files.length; i++) {
+      say('Reading screenshot ' + (i + 1) + ' of ' + files.length + '…');
+      const bmp = await createImageBitmap(files[i]);
+      /* Small pictures, like ones sent through a chat app, read far better
+         blown up to phone size first. */
+      const k = Math.max(1, 1200 / bmp.width);
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+      const cx = cv.getContext('2d');
+      cx.imageSmoothingQuality = 'high';
+      cx.drawImage(bmp, 0, 0, cv.width, cv.height);
+      const r = readShot(shotLines(await worker.recognize(cv)), carry);
+      if (r.app && st.app && r.app !== st.app) throw new Error('Those screenshots are from two different apps. Drop each app’s on its own, so each goes to its own account.');
+      if (r.app) st.app = st.app || r.app;
+      st.cut += r.cut; st.nosign += r.nosign;
+      lists.push(r.recs);
+    }
+  } finally {
+    await worker.terminate();
+  }
+  const recs = joinShots(lists);
+  /* The fingerprint: day, clock and amount, plus which copy it is, counted
+     oldest first, so two ₱148 rides on one day stay two and the same
+     screenshot read again adds nothing. */
+  const seen = {};
+  recs.slice().reverse().forEach(r => {
+    const k = r.date + '|' + r.time + '|' + r.signed;
+    seen[k] = (seen[k] || 0) + 1;
+    r.ref = 'shot:' + (r.time || '-') + ':' + seen[k];
+    r.bal = null;
+  });
+  st.lines = recs.slice().reverse();
+  st.skipped = st.cut + st.nosign;
+  st.title = (st.app === 'gcash' ? 'GCash' : st.app === 'ub' ? 'UnionBank' : 'App') +
+    ' screenshot' + (files.length === 1 ? '' : 's');
   return st;
 }
 
@@ -2068,7 +2277,8 @@ function preselect(c, cands, self) {
 function guessAcct(st) {
   const byId = accts().find(a => idsOf(a.id).some(i => st.ids.some(j => sameId(i, j))));
   if (byId) return byId.id;
-  if (st.source === 'gcash') { const g = accts().find(a => /gcash/i.test(a.name)); if (g) return g.id; }
+  if (st.source === 'gcash' || st.app === 'gcash') { const g = accts().find(a => /gcash/i.test(a.name)); if (g) return g.id; }
+  if (st.app === 'ub') { const u = accts().find(a => /union|^ub(\W|$)/i.test(a.name)); if (u) return u.id; }
   return '';
 }
 
@@ -2349,7 +2559,7 @@ function drawUnsure(m) {
    a wrong automatic merge is invisible and a question costs three seconds.
    `extra` is the account numbers he has just confirmed but not yet saved:
    nothing is written until apply, and the plan still has to use them. */
-function planImport(rows, acctId, extra) {
+function planImport(rows, acctId, extra, shot) {
   const out = { known: [], certain: [], ask: [], fresh: [], xnew: [], xlink: [] };
   const taken = {};
   const pend = [];
@@ -2378,7 +2588,9 @@ function planImport(rows, acctId, extra) {
        that happens below, once every line in the statement has been seen. */
     const pool = (isOut ? spendRows({ from: Day.shift(line.date, -12), to: Day.shift(line.date, 12) })
                         : paidRows({ from: Day.shift(line.date, -12), to: Day.shift(line.date, 12) }))
-      .filter(x => !x.stmt);
+      /* A screenshot may show lines a statement already brought in; those
+         are the same money, so they are candidates too. */
+      .filter(x => shot || !x.stmt);
 
     const score = x => {
       const gap = Math.abs(Day.diff(x.date, line.date));
@@ -2447,14 +2659,30 @@ function planImport(rows, acctId, extra) {
 
 /* ── writing the master entry ──
    His fields survive. The bank's version of the facts wins on the facts. */
-function mergeStatement(hit, acctId) {
+function mergeStatement(hit, acctId, shot) {
   const type = hit.kind === 'out' ? 'spend' : 'paid';
   const row = Rec.get(type, hit.match.date, hit.match.key);
   if (!row) return;
+  /* Already on a statement: the bank's figures stand, the screenshot line
+     is only remembered as seen. */
+  if (shot && row.stmt) {
+    Rec.set('recon', null, hit.id, { d: hit.line.desc, amt: hit.line.amt, acct: acctId,
+      kind: hit.kind, spend: hit.match.key, sdate: hit.match.date });
+    return;
+  }
   const want = Math.abs(hit.line.amt);
-  Rec.set(type, hit.match.date, hit.match.key, merge(row, {
-    amt: want, acct: type === 'spend' ? acctLabel(acctId) : acctId, stmt: hit.id, bank: hit.line.desc,
-  }));
+  const ch = { amt: want, acct: type === 'spend' ? acctLabel(acctId) : acctId };
+  /* A screenshot confirms an entry without closing it: `shot`, not `stmt`,
+     so the statement can still find it and take it over. */
+  if (shot) ch.shot = hit.id;
+  else {
+    ch.stmt = hit.id; ch.bank = hit.line.desc;
+    /* A screenshot's note is the app's wording, not his. The bank's replaces
+       it, so rules written on bank wording file the row. */
+    if (row.src === 'shot') { ch.note = hit.line.desc; ch.src = 'stmt'; }
+  }
+  if (shot && !row.t && hit.line.time) ch.t = stampFor(hit.match.date, hit.line.time);
+  Rec.set(type, hit.match.date, hit.match.key, merge(row, ch));
   /* The bank's date is the date it cleared, and a row's date is its key, so
      moving it means rewriting it. Only done when they actually differ. */
   if (hit.match.date !== hit.line.date) {
@@ -2470,11 +2698,19 @@ function mergeStatement(hit, acctId) {
   Rec.set('recon', null, hit.id, { d: hit.line.desc, amt: hit.line.amt, acct: acctId,
     kind: hit.kind, spend: hit.match.key, sdate: hit.line.date });
 }
-function addStatement(hit, acctId) {
+function addStatement(hit, acctId, shot) {
   const key = newId();
   const amt = Math.abs(hit.line.amt);
   const t = stampFor(hit.line.date, hit.line.time || '');
-  if (hit.kind === 'out') {
+  if (shot) {
+    /* No `stmt` and no `bank`: an open entry the statement will merge into.
+       No rule reads the app's wording, so it waits uncategorised until then
+       unless he files it. */
+    if (hit.kind === 'out') Rec.set('spend', hit.line.date, key, { amt: amt, acct: acctLabel(acctId),
+      note: hit.line.desc, t: hit.line.time ? t : 0, src: 'shot', shot: hit.id });
+    else Rec.set('paid', hit.line.date, key, { amt: amt, acct: acctId, client: '',
+      note: hit.line.desc, t: hit.line.time ? t : 0, src: 'shot', shot: hit.id });
+  } else if (hit.kind === 'out') {
     Rec.set('spend', hit.line.date, key, { amt: amt, acct: acctLabel(acctId), note: hit.line.desc,
       t: t, src: 'stmt', stmt: hit.id, bank: hit.line.desc, ref: hit.line.ref || undefined });
     const r = ruleFor(hit.line.desc);
@@ -5609,9 +5845,10 @@ function ruleSheet(existing) {
         and which of the numbers in it are his own accounts
      3  the questions, one at a time
      4  apply                                                         */
-function importSheet() {
+function importSheet(dropped) {
   let acct = '', stmt = null, settled = null, plan = null, answers = {};
-  let dayFirst = null, lastText = '', lastGrid = null, source = 'text';
+  let dayFirst = null, lastText = '', lastGrid = null, lastShot = null, source = 'text';
+  let dropShots = true;
   let mine = {}, force = false, setup = {}, setupList = [];
 
   UI.dialog({
@@ -5624,8 +5861,8 @@ function importSheet() {
       b.addEventListener('dragover', e => e.preventDefault());
       b.addEventListener('drop', e => {
         e.preventDefault();
-        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (f) takeFile(f);
+        const fs = e.dataTransfer && e.dataTransfer.files;
+        if (fs && fs.length) takeFiles(fs);
       });
 
       /* numbers confirmed on this screen, not yet saved */
@@ -5641,12 +5878,14 @@ function importSheet() {
         pane.innerHTML = '';
         pane.appendChild(el('div', 'note',
           'Choose the file GCash or your bank gave you: the PDF, the spreadsheet, or a CSV. ' +
+          'For what the statement does not have yet, choose screenshots of the app’s transaction history, several at once if you scrolled. ' +
           'You can also drag it onto this panel, or paste the rows below. Nothing is saved until the last step.'));
         const file = el('input');
         file.type = 'file';
-        file.accept = '.pdf,.xlsx,.xls,.csv,.tsv,.txt,application/pdf,text/csv,text/plain';
+        file.multiple = true;
+        file.accept = '.pdf,.xlsx,.xls,.csv,.tsv,.txt,.png,.jpg,.jpeg,.webp,application/pdf,text/csv,text/plain,image/*';
         file.style.display = 'none';
-        file.onchange = () => { if (file.files[0]) takeFile(file.files[0]); };
+        file.onchange = () => { if (file.files.length) takeFiles(file.files); };
         pane.appendChild(file);
         const r1 = el('div', 'rowbtns');
         const pick = el('button', 'btn go wide mb-press mb-tap', 'Choose a statement file');
@@ -5672,21 +5911,41 @@ function importSheet() {
         pane.appendChild(r2);
       }
 
+      async function takeFiles(list) {
+        const fs = Array.from(list);
+        const pics = fs.filter(f => fileKind(f) === 'image');
+        if (!pics.length) return takeFile(fs[0]);
+        if (pics.length !== fs.length) { fail('Choose screenshots on their own, or one statement file, not both at once.'); return; }
+        /* In the order they were taken, which is the order he scrolled. */
+        pics.sort((a, b) => (a.lastModified - b.lastModified) || String(a.name).localeCompare(String(b.name)));
+        busy('Reading the screenshots…');
+        try {
+          lastShot = await ocrShots(pics, busy);
+          source = 'shot';
+          reread();
+        } catch (e) { fail(e.message || String(e)); }
+      }
       async function takeFile(f) {
         dayFirst = null;
         try {
           const kind = fileKind(f);
-          if (kind === 'xlsx') {
-            busy('Reading the spreadsheet…');
-            lastGrid = await openXlsx(await readAs(f, 'buf'));
-            source = 'grid';
-            return reread();
-          }
+          if (kind === 'xlsx') return openXlsxStep(await readAs(f, 'buf'), '');
           if (kind === 'pdf') return openPdfStep(await readAs(f, 'buf'), '');
           lastText = await readAs(f, 'text');
           source = 'text';
           return reread();
         } catch (e) { fail(e.message || String(e)); }
+      }
+      async function openXlsxStep(buf, pw) {
+        busy(pw ? 'Unlocking the spreadsheet…' : 'Reading the spreadsheet…');
+        try {
+          lastGrid = await openXlsx(buf, pw);
+          source = 'grid';
+          reread();
+        } catch (e) {
+          if (e.password) return stepPassword(buf, e.password === 'wrong', openXlsxStep);
+          fail(e.message || String(e));
+        }
       }
       async function openPdfStep(buf, pw) {
         busy('Reading the PDF…');
@@ -5706,9 +5965,10 @@ function importSheet() {
           fail(e.message || String(e));
         }
       }
-      function stepPassword(buf, wrong) {
+      function stepPassword(buf, wrong, open) {
+        open = open || openPdfStep;
         pane.innerHTML = '';
-        pane.appendChild(el('h2', null, 'THIS PDF IS LOCKED'));
+        pane.appendChild(el('h2', null, open === openPdfStep ? 'THIS PDF IS LOCKED' : 'THIS SPREADSHEET IS LOCKED'));
         pane.appendChild(el('div', 'note', (wrong ? '<span class="stale">That password did not open it.</span> ' : '') +
           'GCash and most banks lock a statement with a password they tell you when they send it. ' +
           'It is used once, to open this file on this computer, and it is never saved.'));
@@ -5719,7 +5979,7 @@ function importSheet() {
         const r = el('div', 'rowbtns');
         const go = el('button', 'btn go wide mb-press mb-tap', 'Open it');
         go.type = 'button';
-        const submit = () => { const v = pw.value; pw.value = ''; openPdfStep(buf, v); };
+        const submit = () => { const v = pw.value; pw.value = ''; open(buf, v); };
         go.onclick = submit;
         pw.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
         r.appendChild(go);
@@ -5728,9 +5988,12 @@ function importSheet() {
       }
 
       function reread() {
-        stmt = source === 'grid' || source === 'picture' ? readTable(lastGrid, dayFirst) : readText(lastText, dayFirst);
+        stmt = source === 'shot' ? lastShot
+          : source === 'grid' || source === 'picture' ? readTable(lastGrid, dayFirst) : readText(lastText, dayFirst);
         if (!stmt || !stmt.lines.length) {
-          return fail(source === 'picture'
+          return fail(source === 'shot'
+            ? 'Read the screenshot, but found no lines with a date and an amount. The day’s heading, or the date under each line, has to be in the picture.'
+            : source === 'picture'
             ? 'Read the pages as pictures, but could not find a table with a date, a description and a balance on them.'
             : source === 'grid'
             ? 'Could not find a header row with a date and an amount in that spreadsheet.'
@@ -5783,10 +6046,25 @@ function importSheet() {
           g.appendChild(tile('ADDS UP', C.ok ? 'Yes' : 'No',
             C.ok ? 'every line, to the centavo' : C.broken + ' place' + (C.broken === 1 ? '' : 's') + ' it does not',
             C.ok ? 'good' : 'bad'));
+        } else if (stmt.source === 'shot') {
+          g.appendChild(tile('CHECKED BY', 'The statement', 'a screenshot shows no balance. When the statement arrives, its own lines replace these', 'warn'));
         } else {
           g.appendChild(tile('ADDS UP', 'Cannot tell', 'this file has no balance column to check against', 'warn'));
         }
         pane.appendChild(g);
+        if (stmt.source === 'shot') {
+          const l = el('div', 'list');
+          settled.real.slice().reverse().forEach(x => l.appendChild(itemRow(x.desc || 'No details',
+            Day.short(x.date) + (x.time ? ' ' + esc(UI.clockLabel(x.time)) : ''),
+            (x.amt > 0 ? '+' : '') + money(Math.abs(x.amt)), x.amt > 0 ? 'in' : '')));
+          pane.appendChild(el('h2', null, 'WHAT THE PICTURE SAYS'));
+          pane.appendChild(el('div', 'note', 'Compare these with the screenshot. A figure read wrong here has nothing to check it until the statement comes.'));
+          pane.appendChild(l);
+          if (stmt.cut) pane.appendChild(el('div', 'note', '<b>' + stmt.cut + ' line' + (stmt.cut === 1 ? '' : 's') +
+            '</b> cut off at the edge of a picture, with no date, left out.'));
+          if (stmt.nosign) pane.appendChild(el('div', 'note', '<span class="stale">' + stmt.nosign + ' line' + (stmt.nosign === 1 ? '' : 's') +
+            ' left out</span> because the + or − in front of the amount could not be read, and a guess would turn a payment into income.'));
+        }
         const g2 = el('div', 'grid2');
         g2.style.marginTop = 'var(--s-2)';
         g2.appendChild(tile('REALLY WENT OUT', money(settled.outTotal),
@@ -5836,9 +6114,11 @@ function importSheet() {
         next.onclick = () => {
           if (!acct) { UI.toast('say which account this statement is for first', { bad: true }); return; }
           if (!C.ok && !force) { UI.toast('the balances do not add up. Turn on "import it anyway" only if you have checked it', { bad: true }); return; }
-          plan = planImport(settled.real, acct, pendingIds());
+          plan = planImport(settled.real, acct, pendingIds(), stmt.source === 'shot');
           answers = {};
-          setupList = setupItems(plan.fresh.concat(plan.ask, plan.certain).map(x => x.line));
+          /* An app's own wording ("Pay via Scanned QR") names no shop, and a
+             rule is only ever written from a bank's. */
+          setupList = stmt.source === 'shot' ? [] : setupItems(plan.fresh.concat(plan.ask, plan.certain).map(x => x.line));
           setupList.forEach(i => { if (!(i.k in setup)) setup[i.k] = i.person ? UNSURE : 'later'; });
           if (setupList.length) stepSetup(); else stepReview();
         };
@@ -5936,6 +6216,17 @@ function importSheet() {
         const willMerge = plan.certain.concat(plan.ask.filter(x => answers[x.id] && answers[x.id].row)
           .map(x => ({ line: x.line, id: x.id, match: answers[x.id].row, kind: x.kind })));
         const willSkip = plan.ask.filter(x => answers[x.id] === 'skip');
+        /* Screenshot lines this statement should have shown and did not: a
+           card hold that was released, or money a screenshot could not tell
+           was his own moving between accounts. Only days before the
+           statement's last one, since that day may be cut part way. */
+        const days = settled.real.map(x => x.date).sort();
+        const taken = {};
+        willMerge.forEach(x => { taken[x.match.date + '|' + x.match.key] = 1; });
+        const orphans = stmt.source === 'shot' || !days.length ? [] :
+          spendRows({ from: days[0], to: Day.shift(days[days.length - 1], -1) }).map(x => Object.assign({ type: 'spend' }, x))
+            .concat(paidRows({ from: days[0], to: Day.shift(days[days.length - 1], -1) }).map(x => Object.assign({ type: 'paid' }, x)))
+            .filter(x => x.src === 'shot' && !x.stmt && x.acct === acct && !taken[x.date + '|' + x.key]);
 
         if (willMerge.length) {
           pane.appendChild(el('h2', null, 'MATCHED, AND KEPT AS ONE'));
@@ -5947,8 +6238,9 @@ function importSheet() {
               money(Math.abs(x.line.amt))));
           });
           pane.appendChild(l);
-          pane.appendChild(el('div', 'note',
-            'Your category, note and receipt stay. The amount, the date and the bank’s own wording are written over the top, so there is one entry and it is the right one.'));
+          pane.appendChild(el('div', 'note', stmt.source === 'shot'
+            ? 'Each is already in the app. Nothing on a statement is changed by a screenshot; the rest take the screenshot’s amount and time.'
+            : 'Your category, note and receipt stay. The amount, the date and the bank’s own wording are written over the top, so there is one entry and it is the right one.'));
         }
         if (moves) {
           pane.appendChild(el('h2', null, 'MOVED BETWEEN YOUR ACCOUNTS'));
@@ -5977,7 +6269,18 @@ function importSheet() {
         }
         if (willSkip.length) pane.appendChild(el('div', 'note', esc(String(willSkip.length)) + ' line' +
           (willSkip.length === 1 ? '' : 's') + ' you told me to leave out. They are remembered, so a second import will not ask again.'));
-        const nothing = !willAdd.length && !willMerge.length && !moves;
+        if (orphans.length) {
+          pane.appendChild(el('h2', null, 'ON A SCREENSHOT, NOT ON THE STATEMENT'));
+          const l = el('div', 'list');
+          orphans.forEach(x => l.appendChild(itemRow(x.note || 'No details',
+            Day.short(x.date) + (timeOf(x) ? ' ' + esc(clock(x)) : '') + ' · from a screenshot',
+            (x.type === 'paid' ? '+' : '') + money(num(x.amt, 0)), x.type === 'paid' ? 'in' : '')));
+          pane.appendChild(l);
+          pane.appendChild(el('div', 'note', 'The statement covers these days and does not have them, so the money never really moved: ' +
+            'usually a card hold that was released, or your own money moving between accounts.'));
+          pane.appendChild(UI.row('Remove them', 'The statement’s numbers win', UI.toggle(dropShots, v => { dropShots = v; })));
+        }
+        const nothing = !willAdd.length && !willMerge.length && !moves && !(orphans.length && dropShots);
         if (nothing) pane.appendChild(el('div', 'empty',
           'Everything in this statement is already in the app and matches. Nothing to do, which is the answer you want.'));
 
@@ -5987,7 +6290,8 @@ function importSheet() {
         back.onclick = () => (setupList.length ? stepSetup() : stepStatement());
         btns.appendChild(back);
         const go = el('button', 'btn go wide mb-press mb-tap',
-          'Apply: ' + willMerge.length + ' matched, ' + willAdd.length + ' added, ' + moves + ' transfers');
+          'Apply: ' + willMerge.length + ' matched, ' + willAdd.length + ' added, ' + moves + ' transfers' +
+          (orphans.length && dropShots ? ', ' + orphans.length + ' removed' : ''));
         go.type = 'button';
         go.disabled = nothing;
         go.style.opacity = nothing ? '.5' : '';
@@ -5999,8 +6303,13 @@ function importSheet() {
           if (applied) return;
           applied = true; go.disabled = true;
           writeSetup(setupList, setup);
-          willMerge.forEach(x => mergeStatement(x, acct));
-          willAdd.forEach(x => addStatement(x, acct));
+          const shot = stmt.source === 'shot';
+          willMerge.forEach(x => mergeStatement(x, acct, shot));
+          willAdd.forEach(x => addStatement(x, acct, shot));
+          if (dropShots) orphans.forEach(x => {
+            Rec.del(x.type, x.date, x.key);
+            if (Rec.get('mark', null, x.date + '|' + x.key)) Rec.del('mark', null, x.date + '|' + x.key);
+          });
           willSkip.forEach(x => skipStatement(x, acct));
           plan.xnew.forEach(x => writeTransfer(x, acct));
           plan.xlink.forEach(x => linkTransfer(x, acct));
@@ -6066,10 +6375,22 @@ function importSheet() {
       }
 
       stepBring();
+      if (dropped && dropped.length) takeFiles(dropped);
     },
     actions: [{ label: 'CLOSE' }],
   });
 }
+
+/* Tom, 2026-09-23: "Can it be a simple drag and drop?" A statement or
+   screenshots dropped anywhere on the app open READ A STATEMENT with them.
+   Inside an open dialog the dialog's own drop handles it. */
+document.addEventListener('dragover', e => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') > -1) e.preventDefault(); });
+document.addEventListener('drop', e => {
+  const fs = e.dataTransfer && e.dataTransfer.files;
+  if (!fs || !fs.length || e.defaultPrevented) return;
+  e.preventDefault();
+  importSheet(Array.from(fs));
+});
 
 /* an account */
 function acctSheet() {
