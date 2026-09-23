@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.22, 2026-09-23">
+<meta name="mb-version" content="1.0.23, 2026-09-23">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -1080,7 +1080,7 @@ function billsOwed(from, to) {
     if (paid['bill-' + x.bill.id + '-' + x.date]) return false;
     if (x.date > Day.shift(t, 3)) return true;
     const b = x.bill;
-    const gap = b.cycle === 'days' ? Math.max(1, num(b.every, 7)) : 28;
+    const gap = b.cycle === 'days' ? Math.max(1, num(b.every, 7)) : 28 * Math.max(1, Math.round(num(b.months, 1)));
     const reach = Math.max(0, Math.min(3, Math.floor(gap / 2)));
     const amt = num(b.amt, 0), name = norm(b.name);
     const hit = spendRows({ from: Day.shift(x.date, -reach), to: t }).find(s => {
@@ -1114,13 +1114,20 @@ function billDates(b, from, to) {
     return out;
   }
   const day = num(b.day, 1);
+  /* Tom, 2026-09-23: the gym paid "as a subscription for 3 months". `months`
+     steps from `start`, the month it was last paid. Its own field, not
+     `every`: a bill switched from every-N-days to monthly still carries its
+     old `every`, and reading that as months would be wrong. */
+  const step = Math.max(1, Math.round(num(b.months, 1)));
+  const s0 = b.start ? +b.start.slice(0, 4) * 12 + +b.start.slice(5, 7) - 1 : null;
   let d = new Date(from.slice(0, 4), +from.slice(5, 7) - 1, 1);
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < 24 * step; i++) {
     const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
       '-' + String(Math.min(day, last)).padStart(2, '0');
     if (iso > to) break;
-    if (inRange(iso)) out.push(iso);
+    const onStep = step === 1 || s0 == null || ((d.getFullYear() * 12 + d.getMonth() - s0) % step + step) % step === 0;
+    if (onStep && inRange(iso)) out.push(iso);
     d.setMonth(d.getMonth() + 1);
   }
   return out;
@@ -1128,7 +1135,8 @@ function billDates(b, from, to) {
 /* What a bill comes to in an average month: its amount, or for a bill every
    N days, its amount times the 30.44 days of an average month over N. */
 const billMonthly = b => b.cycle === 'days'
-  ? num(b.amt, 0) * (365.25 / 12) / Math.max(1, num(b.every, 7)) : num(b.amt, 0);
+  ? num(b.amt, 0) * (365.25 / 12) / Math.max(1, num(b.every, 7))
+  : num(b.amt, 0) / Math.max(1, Math.round(num(b.months, 1)));
 const monthlyFixed = () => bills().reduce((a, b) => a + billMonthly(b), 0);
 /* The bills runway counts. A bill filed under an everyday category, Groceries
    say, is left out: a normal month of everyday spending is already measured
@@ -3679,6 +3687,7 @@ function drawOut(m) {
     /* Tom, 2026-09-14: "Change 'Day X of the month' to just the number." */
     const r = itemRow(b.name, (b.cycle === 'days'
         ? 'every ' + num(b.every, 7) + ' days, ' + money(num(b.amt, 0)) + ' each'
+        : num(b.months, 1) > 1 ? 'every ' + Math.round(num(b.months, 1)) + ' months on the ' + num(b.day, 1) + ', ' + money(num(b.amt, 0)) + ' each'
         : num(b.day, 1)) + ' · ' + catName(b.cat) +
       (b.acct ? ' · ' + esc(acctName(b.acct)) : ''), money(billMonthly(b)) + '/mo');
     r.onclick = () => billSheet(b); r.menu = () => billMenu(b);
