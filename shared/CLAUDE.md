@@ -155,6 +155,18 @@ here as pixel art, read off those grids cell by cell in the browser.
   `eevee` and the rest that rows already carry are the same Pokémon, and
   LEGACY still maps an old animal pick.
 
+## Install files (2026-09-23)
+
+Every app folder has `manifest.json` and `icon-192.png`, `icon-512.png`,
+`icon-maskable-192.png` and `icon-maskable-512.png`; the home screen's are at
+the root. `tools/make-icons.html?port=<n>` with `py -3 tools/save-icons.py <n>`
+draws them all with the iPhone pictures (8920 is often taken by a dev server).
+A maskable window is 64% of the square, so its cut corners sit inside
+Android's 80% circle. Five `install:` smoke checks read the app list from
+`Icons.ROLES`, so a new app is checked without editing them. The offline
+cache serves a stale `index.html` for one open, so run them with the service
+worker cleared or the page can look unlinked.
+
 ## Testing
 
 ```

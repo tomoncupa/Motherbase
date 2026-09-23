@@ -707,6 +707,14 @@ answer, or take it out.
   through live sync. Do not design a feature around the page asking a local
   program for anything.
 
+- **A regex over an HTML tag stops at the first `>`, and a tag can hold one.**
+  The old favicons are `data:` SVGs with `<text>` inside the attribute, so
+  `<link rel="icon"[^>]*>` matched half the tag and left the rest printed on
+  15 pages (2026-09-23). Replace the whole line, then grep for leftovers.
+- **Staging a whole file commits another session's half-done edit in it.**
+  WEALTH 1.0.30 shipped a foundation session's broken icon line that way.
+  Before `git add <file>`, read `git diff <file>` and stop if you did not
+  write every hunk.
 - **Never pick your own elements by a short class name alone.** `Chart.header`
   draws its date line as `.w`, the home screen's card class, and `fitGrid`
   took those lines for cards, threw during boot and left the dock and clock
