@@ -135,6 +135,45 @@ Moving or deleting a workout re-asserts both days. Verified 2026-09-14.
 
 ---
 
+## On a client's profile (1.0.16, 2026-09-22)
+
+`train/index.html?client=<pid>` is the same TRAIN pointed at one of Tom's
+coaching clients, and COACH's LOG A SESSION opens it in a frame. The adapter
+is the first inline script in the file, before any other script runs, and it
+replaces the store's calls so every TRAIN type is read and written as COACH's
+(`set`→`cset`, `exercise`→`cex`, `excat`→`cexcat` and the rest), with `pid|`
+in front of each key. Nothing else in TRAIN was rewritten, and plain TRAIN is
+untouched: `CLIENT` is null and every call is the store's own.
+
+Rules, each with the reason it exists:
+
+- **A new TRAIN type must be added to the adapter's table**, and its `c` twin
+  to COACH's `APP.types`, or that part of a client's log silently goes into
+  Tom's own rows.
+- **`Rec.merge` is NOT mapped.** It is how rows from other tabs and frames
+  arrive, already in their own types; mapping it would rewrite Tom's own sets
+  as a client's. An import on a client's profile calls `TRAIN.mergeImport`,
+  which maps.
+- **No `tick` and no `activity`** are read or written on a client's profile:
+  their training is not Tom's day.
+- **Three settings are the client's** (`seen`, `prRule`, `rest`), namespaced
+  `train.<pid>|<name>`. Everything else, the unit included, stays Tom's, so
+  changing the unit there changes it in his own TRAIN.
+- **A new set's key gets `k-`** so COACH bills it as a session Tom delivered.
+- **No DATA tab there.** TRAIN does not register with the sheet on a client's
+  profile, so a backup taken from it would have been the whole device.
+  `TRAIN.settings` hides `window.IO` while the panel is built.
+- **Send To Coach is dropped from the menu**, and the bar carries the client's
+  name where TRAIN's own name goes.
+- **`seedCats` never overwrites an exercise that exists.** A client whose file
+  brought its own starters would have had them rebuilt to the defaults.
+
+Watched 2026-09-22 in the browser: sets logged on a client landed in their
+rows, Tom's own log did not move, and `_review.html` passed 116 of 116. Not
+opened on an iPad or a phone.
+
+---
+
 ## Weight, distance and time
 
 Every set stores the true value and display converts. His file is why this

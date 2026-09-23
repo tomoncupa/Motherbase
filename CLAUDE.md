@@ -683,6 +683,12 @@ answer, or take it out.
 - An app that computes its own `today` will disagree with `Day.today()` the moment
   the clock is past midnight but before the day-start hour. BLOCK did exactly this
   and published its plan on a date nothing else was reading.
+- **`sw.js` serves a page inside a frame too, so a test can run code you
+  already changed.** A `?cb=` on the frame's address does not help: the cached
+  copy answers first by design. Watched 2026-09-22, where a frame ran a TRAIN
+  from two edits ago and the checks passed on it. Before driving frames,
+  unregister the service worker and empty `caches` once in that tab, or open
+  the parent with `?nosw=1`.
 - **No page of the suite can talk to a program running on his PC.** The suite is
   served over https and every local program here serves http, so a fetch from
   tomoncupa.github.io to `http://127.0.0.1:<port>` dies as "Failed to fetch"
