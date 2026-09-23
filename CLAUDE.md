@@ -683,6 +683,14 @@ answer, or take it out.
 - An app that computes its own `today` will disagree with `Day.today()` the moment
   the clock is past midnight but before the day-start hour. BLOCK did exactly this
   and published its plan on a date nothing else was reading.
+- **No page of the suite can talk to a program running on his PC.** The suite is
+  served over https and every local program here serves http, so a fetch from
+  tomoncupa.github.io to `http://127.0.0.1:<port>` dies as "Failed to fetch"
+  (watched 2026-09-23 against the real hosted home screen and the real OUTER
+  HEAVEN board). A daemon reaches the store only through a FOLDER the browser
+  has been given permission to read, which is the receipts pipe, or later
+  through live sync. Do not design a feature around the page asking a local
+  program for anything.
 
 ---
 

@@ -189,3 +189,27 @@ price, servings and use count; a typed name and amount saved; undo removed
 the food and put the card back. `_review.html` RECEIPTS all green; ELEMENT
 failed 5 and the foundation run timed out, both outside this module and
 untouched by it.
+
+**1.0.2, 2026-09-23. The morning brief rides the pipe.** OUTER HEAVEN's
+`jobs/brief.py` writes Tom's brief to `out/brief-<date>.json` with
+`src: 'brief'`; `take()` puts it straight into the `brief` row QUESTS reads
+and never onto the waiting list, because there is no money in it and nothing
+to confirm. `binFile` removes the transit copy as it does for a receipt.
+
+**Why this app and not a neater door**, tested rather than assumed: the suite
+is served over https and OUTER HEAVEN's board over http, so a page at
+tomoncupa.github.io answers "Failed to fetch" for `http://127.0.0.1:8777`.
+The folder permission this app already holds is the only way from his PC into
+the store without a key or an account. If that ever changes — live sync, or a
+page served over https — the brief should move and this branch can go.
+
+**Watched, 2026-09-23:** a real brief, written by the real `claude.exe` run,
+handed to this app's own file input. It wrote the `brief` row, wrote no
+`receipt` row, drew no card, and said "Your brief is in". The same file again
+changed nothing; a file with a newer `t` replaced it. Then QUESTS drew it and
+made two todos keyed `brief-2026-09-23-0` and `-1`, `src: 'brief'`, due
+today. `_review.html` 116 of 116, foundation 328 of 328.
+
+**Untested:** a brief arriving through the FOLDER rather than the file input,
+because the folder permission needs a real click on a real picker. The code
+path after the JSON is parsed is the same one, and that half was driven.
