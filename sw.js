@@ -102,6 +102,9 @@ self.addEventListener('install', e => {
    The cache is named after the stamp, so this is one comparison rather than a
    list of things to remember to delete. */
 self.addEventListener('activate', e => {
+  /* A worker that has just taken over IS new code arriving, so the open
+     that brought it gets the network too. */
+  freshUntil = Date.now() + FRESH_MS;
   e.waitUntil(
     caches.keys()
       .then(ks => Promise.all(ks.map(k =>
@@ -131,6 +134,24 @@ self.addEventListener('activate', e => {
 const fresh = req => {
   try { return new Request(req, { cache: 'no-cache' }); }
   catch (e) { return req; }
+};
+
+/* ── ?fresh=1: this open, from the network ──
+   Tom, 2026-09-23: "Update the link widget to always force new copies." The
+   phone's-copy-first rule below makes a pushed change arrive one open late,
+   which is the trade he chose for speed. A link from the LINKS widget carries
+   ?fresh=1, and for the next twenty seconds, long enough for a page and
+   everything it loads, every request is answered by the network first and
+   kept, with the kept copy only as the fallback. mobile.js then takes the
+   ?fresh off the address, so a home-screen shortcut saved from that page is
+   the plain address and keeps the quick open. A worker's memory can be
+   dropped between requests; the worst that does is one ordinary open. */
+const FRESH_MS = 20000;
+let freshUntil = 0;
+const bare = url => {
+  const u = new URL(url.href);
+  u.searchParams.delete('fresh'); u.searchParams.delete('t');
+  return u.href;
 };
 
 const keep = (req, res) => {
@@ -164,6 +185,24 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return;
   /* Outside the suite's own folder. */
   if (url.href.indexOf(self.registration.scope) !== 0) return;
+
+  if (req.mode === 'navigate' && /[?&]fresh=/.test(url.search)) freshUntil = Date.now() + FRESH_MS;
+
+  /* A home-screen picture, or anything inside a fresh open: network first,
+     kept under its address without the ?fresh or ?t, the kept copy only when
+     there is no signal. An icon is asked for when a shortcut is saved and at
+     no other time, so answering it from the phone's copy only ever hands
+     iOS the old picture. */
+  if (/\/shared\/icons\/.*\.png$/.test(url.pathname) ||
+      (Date.now() < freshUntil && !/[?&]v=/.test(url.search))) {
+    const key = bare(url);
+    e.respondWith(fetch(fresh(req)).then(r => keep(key, r)).catch(() =>
+      caches.match(key, { ignoreSearch: true }).then(hit => hit ||
+        (req.mode === 'navigate'
+          ? caches.match(url.pathname.replace(/\/$/, '/index.html'), { ignoreSearch: true })
+          : undefined)).then(hit => hit || offline())));
+    return;
+  }
 
   /* A stamped file. The address changes when the file does, so the cache can
      answer without anyone asking whether it is still the current one. */

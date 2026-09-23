@@ -281,7 +281,11 @@ function chrome() {
       const l = doc.createElement('link');
       l.rel = 'apple-touch-icon';
       l.setAttribute('data-mb-app', appId); l.setAttribute('data-mb-dir', sharedDir);
-      l.href = sharedDir + 'icons/' + th + appId + '.png';
+      /* A new address every load. iOS keeps a home-screen icon by its
+         address, so a redrawn picture at the old one never reaches a phone
+         that saved it once. sw.js answers icons from the network whatever
+         is on the end. */
+      l.href = sharedDir + 'icons/' + th + appId + '.png?t=' + Date.now();
       doc.head.appendChild(l);
     }
     if (!doc.querySelector('meta[name="apple-mobile-web-app-title"]')) {
@@ -854,6 +858,19 @@ function offline() {
     return;
   }
   if (!ok || g.top !== g) return;
+
+  /* ?fresh=1 is what the home screen's LINKS widget puts on every address
+     it hands out: it tells sw.js to fetch this open from the network rather
+     than the phone's copy. It has done its job by the time this runs, so it
+     comes off the address bar, and Add to Home Screen saves the plain
+     address that opens at once. */
+  if (/[?&]fresh=/.test(g.location.search)) {
+    try {
+      var u = new URL(g.location.href);
+      u.searchParams.delete('fresh');
+      g.history.replaceState(g.history.state, '', u.pathname + u.search + u.hash);
+    } catch (e) {}
+  }
 
   /* Where sw.js is, worked out from where THIS file is, so it is right at the
      root of the suite whatever folder the suite itself sits in and whichever

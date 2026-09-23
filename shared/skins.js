@@ -681,7 +681,7 @@ const Skins={
        own keeps the default one. iOS reads the link when Add to Home Screen
        is pressed, so it is the theme in force at that moment. */
     try{const l=document.querySelector('link[rel="apple-touch-icon"][data-mb-app]');
-      if(l)l.setAttribute('href',(l.getAttribute('data-mb-dir')||'')+'icons/'+(this.factory(s.id)?s.id+'/':'')+l.getAttribute('data-mb-app')+'.png')}catch(e){}
+      if(l)l.setAttribute('href',(l.getAttribute('data-mb-dir')||'')+'icons/'+(this.factory(s.id)?s.id+'/':'')+l.getAttribute('data-mb-app')+'.png?t='+Date.now())}catch(e){}
     this.current=s;
     try{localStorage.setItem(skinKey(),s.id);if(s.custom)this.saveCustom(s)}catch(e){}
     return s;

@@ -13,3 +13,5 @@ Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab 
 ## 2026-09-23, HOME 1.0.26: the dock and clock vanished on refresh
 
 `fitGrid` picked cards with `.w`, and `Chart.header` draws its date line as `.w` too. With chart widgets holding data, the extra nodes threw during boot, so `go()`, the dock and the clock never ran; clicking MAIN MENU ran `go` again. Cards are now `:scope > .w`. Select cards as direct children of `#grid`, never by class alone.
+
+1.0.29, 2026-09-23: LINKS hands out every address with `?fresh=1`, so the app it opens is fetched new rather than from the phone's copy. Tom: "Update the link widget to always force new copies." `shared/CLAUDE.md`, Fresh copies, has how.

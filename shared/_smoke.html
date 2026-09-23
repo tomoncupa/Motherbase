@@ -384,10 +384,13 @@ async function run() {
      Whichever of the two gets there first is the one that counts, and a mouse
      right-click still works. */
   /* Add to Home Screen on an iPhone takes a PNG named by this link and
-     nothing else, so every page carries one, named after the app. */
-  ok('mobile: the page carries an iOS home-screen icon and title', (() => {
+     nothing else, so every page carries one, named after the app. Its
+     address ends in a new ?t= every load, because iOS keeps an icon by its
+     address and a redrawn picture at the old one never reached Tom's phone
+     (2026-09-23). */
+  ok('mobile: the page carries an iOS home-screen icon and title, at a new address each load', (() => {
     const l = document.querySelector('link[rel="apple-touch-icon"]'), t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-    return !!l && /\/icons\/([a-z0-9]+\/)?[a-z]+\.png$/.test(l.getAttribute('href')) && !!t && !!t.content;
+    return !!l && /\/icons\/([a-z0-9]+\/)?[a-z]+\.png\?t=\d+$/.test(l.getAttribute('href')) && !!t && !!t.content;
   })());
   /* The icon follows the theme, and the picture it names is really there:
      a link to a missing file is a screenshot of the page on a home screen. */
@@ -399,7 +402,7 @@ async function run() {
     const ice = l.getAttribute('href');
     const there = await fetch(l.href, { method: 'HEAD', cache: 'no-store' }).then(r => r.ok, () => false);
     if (was) Skins.apply(was);
-    return /\/icons\/ice\/[a-z]+\.png$/.test(ice) && there;
+    return /\/icons\/ice\/[a-z]+\.png\?t=\d+$/.test(ice) && there;
   })());
   ok('mobile: a touch hold opens its menu once, whichever way the browser orders it, and right-click still works', (() => {
     const box = document.createElement('div');
@@ -2729,12 +2732,53 @@ async function run() {
 
       as('uidT', 't@x');
       const w = await Cloud.waiting();
+      /* reading is never taking: twice over, all three are still there */
+      await Cloud.waiting();
+      R.read = Object.keys(DB).length === 3;
       R.order = w.map(x => x.from).join() === 'uidB,uidA,uidC';
       R.body = w[1] && w[1].body && w[1].body.rows[0].id === 3 && w[1].by === 'a@x';
       R.keep = w[2] && w[2].body === null && !!DB['drop/coach/uidC'];
 
       await Cloud.took('uidA');
       R.took = !DB['drop/coach/uidA'] && !!DB['drop/coach/uidB'] && !!DB['drop/coach/uidC'];
+
+      /* the cap at its exact edge. '{"p":""}' is 8 characters, so this is
+         a parcel of exactly the ceiling, and then one character over it */
+      as('uidE', 'e@x');
+      const edge = 2000000 - 8;
+      R.capAt = await Cloud.send('x', { p: 'x'.repeat(edge) }).then(n => n === 2000000, () => false);
+      R.capOver = await Cloud.send('x', { p: 'x'.repeat(edge + 1) })
+        .then(() => false, e => /too big/.test(e.message) && DB['drop/coach/uidE'].data.length === 2000000);
+      delete DB['drop/coach/uidE'];
+
+      as('uidT', 't@x');
+      const me = await Cloud.who();
+      R.who = me.uid === 'uidT' && me.email === 't@x' && !('db' in me);
+
+      /* All four from inside a frame, which is where TRAIN usually is. The
+         row sync refuses to run in one; the shelf must not. A frame of its
+         own with nothing in it but cloud.js, so nothing else can do the
+         work for it. */
+      const fr = document.createElement('iframe');
+      fr.style.cssText = 'position:absolute;width:1px;height:1px;border:0;left:-9px';
+      document.body.appendChild(fr);
+      fr.contentDocument.open();
+      fr.contentDocument.write('<scr' + 'ipt src="cloud.js"></scr' + 'ipt>');
+      fr.contentDocument.close();
+      for (let i = 0; i < 50 && !fr.contentWindow.Cloud; i++) await new Promise(r => setTimeout(r, 50));
+      const FC = fr.contentWindow.Cloud;
+      if (FC) {
+        Object.keys(DB).forEach(k => delete DB[k]);
+        FC._probe(() => ({ uid: 'uidF', email: 'f@x', db: fakeDb }));
+        const sent = await FC.send('train', { rows: [{ id: 7 }] }).then(() => !!DB['drop/coach/uidF'], () => false);
+        const got = await FC.waiting().then(l => l.length === 1 && l[0].body.rows[0].id === 7, () => false);
+        const who = await FC.who().then(m => m.uid === 'uidF', () => false);
+        const took = await FC.took('uidF').then(() => !DB['drop/coach/uidF'], () => false);
+        R.frame = fr.contentWindow.top !== fr.contentWindow && sent && got && who && took;
+        R.frameState = sent + ',' + got + ',' + who + ',' + took;
+        FC._probe(null);
+      }
+      fr.remove();
 
       Cloud._probe(() => { throw new Error('not signed in'); });
       R.out = await Cloud.send('train', { rows: [] }).then(() => false, e => /not signed in/.test(e.message));
@@ -2752,6 +2796,12 @@ async function run() {
     ok('shelf: the coach sees every parcel, newest first', !!R.order, say);
     ok('shelf: a parcel comes back exactly as it was sent', !!R.body, say);
     ok('shelf: a parcel that will not parse is listed and left on the shelf', !!R.keep, say);
+    ok('shelf: reading the shelf never clears anything from it', !!R.read, say);
+    ok('shelf: a parcel of exactly the ceiling goes', !!R.capAt, say);
+    ok('shelf: one character over the ceiling is refused and the old parcel stands', !!R.capOver, say);
+    ok('shelf: who names the signed-in account and hands out nothing else', !!R.who, say);
+    ok('shelf: send, waiting, who and took all work inside a frame', !!R.frame,
+      say + (R.frameState ? ' — send,waiting,who,took: ' + R.frameState : ' — cloud.js never loaded in the frame'));
     ok('shelf: taking one parcel clears that one only', !!R.took, say);
     ok('shelf: signed out, a send refuses and says why', !!R.out, say);
   }

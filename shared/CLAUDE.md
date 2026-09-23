@@ -44,7 +44,7 @@ are holding a stale copy of whatever you just changed.
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `import.js` | Bringing in an outside spreadsheet by shape: ticks, weigh-ins, foods, money out. | High. It writes rows many apps own. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 338 checks over all of it. | Run it every time. |
+| `_smoke.html` | 343 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -111,11 +111,27 @@ things about it that are load-bearing:
   and the shelf is not a place data lives. The app that takes it turns it into
   rows and clears it.
 
-**Untested against a real database.** Nobody has signed in. Ten `shelf:`
+**Untested against a real database.** Nobody has signed in. Fifteen `shelf:`
 checks in `_smoke.html` (2026-09-23) drive the real `send`, `waiting` and
 `took` against a database held in the page, through `Cloud._probe`, which
 swaps only the account the shelf asks for. They were watched failing with the
-sort reversed. What they cannot prove is the rules; only a real sign-in does.
+sort reversed. They also cover the 2MB cap at its exact edge, reading never
+clearing, `who`, and all four run in a frame holding nothing but cloud.js.
+What they cannot prove is the rules; only a real sign-in does.
+
+## Fresh copies (2026-09-23)
+
+Tom's phone kept the old app icons, so there are two changes to `sw.js`. An icon
+picture (`shared/icons/*.png`) is always fetched from the network first: iOS
+asks for it only when a shortcut is saved, so the phone's copy only ever
+handed back the old picture. And `?fresh=1` on a page address makes the next
+20 seconds network first; the home screen's LINKS widget puts it on every
+address it hands out, and `mobile.js` takes it off the address bar so a saved
+shortcut is the plain address. The icon link's address ends in `?t=<ms>`,
+new every load, because iOS keeps an icon by its address. Watched with a file
+changed on disk between fetches: an ordinary open got the old copy, an icon
+and a fresh open got the new one, and the kept copies had no `?t` or `?fresh`
+in their addresses. Not yet watched on the iPhone.
 
 ## Testing
 
