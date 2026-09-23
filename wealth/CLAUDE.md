@@ -350,6 +350,10 @@ and net figure. Never invent a debt row from a transfer. (HISTORY.md: Borrowed m
 
 **A rule is only written from a statement's wording**, never a typed note. (HISTORY.md: A rule is only written from a bank's own wording)
 
+**A tapped category is split BY SOURCE** (2026-09-23), right under the pie: `payeeOf` on the bank wording or his note, and names sharing a first word (two if the first is a number) are one place, so "Lawson Tonkatsu" is Lawson.
+
+**A payment past its reach still settles** (2026-09-23, Tami paid the 19th for the 1st): after the nearest-date pass, a leftover payment for that client settles the oldest unpaid date on or before it.
+
 **WHERE IT WENT is the first card under SPENDING's totals.** (HISTORY.md: Where it went sits under the totals)
 
 ## Import, in short

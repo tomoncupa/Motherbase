@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.25, 2026-09-23">
+<meta name="mb-version" content="1.0.26, 2026-09-23">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -1026,6 +1026,7 @@ function expected(from, to) {
     let gap = 28;
     for (let i = 1; i < wide.length; i++) gap = Math.min(gap, Day.diff(wide[i], wide[i - 1]));
     const reach = Math.max(1, Math.min(14, Math.floor(gap / 2)));
+    const mineOut = [];
     dueDates(c, from, to).forEach(d => {
       let hit = null, best = 99;
       got.forEach(p => {
@@ -1034,9 +1035,22 @@ function expected(from, to) {
         if (g <= reach && g < best) { best = g; hit = p; }
       });
       if (hit) used[hit.date + hit.key] = 1;
-      out.push({ client: c, date: d, amt: num(c.rate, 0), paid: hit || null,
-                 late: !hit && d < Day.today() });
+      const e = { client: c, date: d, amt: num(c.rate, 0), paid: hit || null,
+                  late: !hit && d < Day.today() };
+      mineOut.push(e); out.push(e);
     });
+    /* Later than the reach is still that payment. Tom, 2026-09-23: "Tami
+       already paid as shown by bank statements, why is she still showing as
+       not paid". She was due on the 1st and paid on the 19th, past the
+       fortnight, so the payment matched nothing and the 1st read as late. A
+       payment left over after the nearest-date pass settles the oldest unpaid
+       date on or before it, in order. */
+    got.filter(p => p.client === c.id && !used[p.date + p.key])
+      .sort((a, b) => a.date.localeCompare(b.date)).forEach(p => {
+        const e = mineOut.find(x => !x.paid && x.date <= p.date);
+        if (!e) return;
+        e.paid = p; e.late = false; used[p.date + p.key] = 1;
+      });
   });
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -4131,6 +4145,47 @@ function drawSpend(m) {
   const all = spendRows({ from: R.from, to: R.to })
     .filter(s => !isMove(s) && (CATFILTER == null || catOf(s) === CATFILTER))
     .sort((a, b) => b.date.localeCompare(a.date) || num(b.t) - num(a.t));
+  /* == one category, by where the money went ==
+     Tom, 2026-09-23: "I wanna see my outside food in detail, how much went to
+     each same source." A tapped category is split by who was paid: the shop
+     read off the bank's wording the way import reads it (`payeeOf`), or his
+     own note for a purchase typed in STATUS. Put right under the pie he
+     tapped, because that is where his eyes are. */
+  if (CATFILTER != null && all.length) {
+    const by = {};
+    all.forEach(x => {
+      const src = payeeOf(x.bank || x.note || '').label || 'No details';
+      const k = src.toLowerCase();
+      const g = by[k] || (by[k] = { name: src, amt: 0, n: 0 });
+      g.amt += num(x.amt, 0); g.n++;
+    });
+    /* A note typed in STATUS names the thing, "Lawson Tonkatsu", so one shop
+       arrives under many names. Names that share a first word (two, when the
+       first is a number like the 7 of 7 Eleven) are one place. */
+    const head = n => { const w = n.split(/\s+/); return (/^\d+$|^.{1,2}$/.test(w[0]) && w[1] ? w[0] + ' ' + w[1] : w[0]).toLowerCase(); };
+    const heads = {};
+    Object.values(by).forEach(g => { const h = head(g.name); heads[h] = (heads[h] || 0) + 1; });
+    const merged = {};
+    Object.values(by).forEach(g => {
+      const h = head(g.name), k = heads[h] > 1 ? h : g.name.toLowerCase();
+      const m2 = merged[k] || (merged[k] = { name: heads[h] > 1 ? g.name.split(/\s+/).slice(0, h.split(' ').length).join(' ') : g.name, amt: 0, n: 0 });
+      m2.amt += g.amt; m2.n += g.n;
+    });
+    const groups = Object.values(merged).sort((a, b2) => b2.amt - a.amt);
+    const sum = groups.reduce((a, g) => a + g.amt, 0);
+    const cs = card('BY SOURCE · ' + catName(CATFILTER).toUpperCase(), 'full');
+    cs.appendChild(el('div', 'note', money(sum) + ' across ' + groups.length + ' place' + (groups.length === 1 ? '' : 's') + ' in this ' + word + '.'));
+    const list = el('div', 'list');
+    groups.forEach(g => {
+      const r = itemRow(g.name, g.n + (g.n === 1 ? ' purchase' : ' purchases') + ' · ' +
+        Math.round(g.amt / sum * 100) + '%' + (g.n > 1 ? ' · about ' + esc(money(Math.round(g.amt / g.n))) + ' each' : ''),
+        money(g.amt));
+      r.tabIndex = -1;
+      list.appendChild(r);
+    });
+    cs.appendChild(list);
+    m.insertBefore(cs, c2.nextSibling);
+  }
   if (!all.length) c5.appendChild(el('div', 'empty', 'Nothing here.'));
   else {
     const list = el('div', 'list');
