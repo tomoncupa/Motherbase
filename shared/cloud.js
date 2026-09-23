@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.1.2 — Firebase as a SECOND sync, beside the Google Sheet.
+/* shared/cloud.js — 0.1.3 — Firebase as a SECOND sync, beside the Google Sheet.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
    replacement and it is not allowed to become one. The sheet keeps doing
@@ -97,8 +97,13 @@ var BUILT_IN = {
 };
 var cfg = { cfg: null, on: 0, uid: '', email: '', at: '', pushed: '', seen: '' };
 function cread() {
+  var was = { pushed: cfg.pushed, seen: cfg.seen };
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(CKEY) || '{}')); } catch (e) {}
   if (!cfg.cfg) cfg.cfg = BUILT_IN;
+  /* An older copy of this file in another tab can write a future boundary
+     back; keep the good one we had rather than starting over each time. */
+  cfg.pushed = cfg.pushed > soon() ? was.pushed : cfg.pushed;
+  cfg.seen = cfg.seen > soon() ? was.seen : cfg.seen;
   /* A boundary in the future stops every row, both ways, with nothing on
      screen to say so. It happened on 2026-09-24: two test rows dated 2999
      travelled, every device's boundary followed them, and nothing synced after.
@@ -487,16 +492,19 @@ function push(why) {
   todo.sort(function (a, b) { return a.updated_at < b.updated_at ? -1 : a.updated_at > b.updated_at ? 1 : 0; });
 
   pushing = true;
-  var sent = 0, skipped = 0, at = 0;
+  var sent = 0, skipped = 0, at = 0, edge = since;
 
   function chunk() {
     if (at >= todo.length) return Promise.resolve();
-    var p = plan(todo.slice(at, at + CHUNK), since, 'u/' + uid + '/rows/');
+    /* From the edge so far, not from `since`: a last chunk holding only
+       future-dated rows would otherwise put the boundary back to the start. */
+    var p = plan(todo.slice(at, at + CHUNK), edge, 'u/' + uid + '/rows/');
     at += CHUNK;
     skipped += p.skipped;
     var step = p.sent ? db.ref().update(p.patch) : Promise.resolve();
     return step.then(function () {
       sent += p.sent;
+      edge = p.edge;
       cfg.pushed = p.edge; csave();
       return chunk();
     });
@@ -556,7 +564,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.1.2',
+  VERSION: '0.1.3',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
