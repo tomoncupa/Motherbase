@@ -374,3 +374,13 @@ STYLE and NOTICE silver, HOME white. BLOCK is Lego bricks in real Lego red,
 yellow and blue, the one multicolour icon. Rejected: drawing-style variants
 (line, duotone, solid, angular, pixel); he wants different symbols, not
 different pens.
+
+Symbols picked 2026-09-23: STATUS character sheet, FORM eye, QUESTS quest
+mark "!", CHECK IN portrait, ELEMENT mortar and pestle, STYLE dye palette,
+NOTICE rune tablet (the cut-corner window itself), BLOCK Lego. Asked for by
+name and drawn in round two, waiting on his yes: HOME a house or something
+main-menu-ish (house, cottage, app grid, menu cursor shown), TRAIN barbell,
+LOG tome with a quill, ARC a better skill tree (branching tree, star web,
+diamond path shown), SPEAK microphone, COACH Poké Ball, FOODDÉX Pokédex,
+WEALTH dollar sign, RECEIPTS bill with a camera. Pokémon art is Nintendo's;
+both are Tom-only apps, same call as `creatures.js`.
