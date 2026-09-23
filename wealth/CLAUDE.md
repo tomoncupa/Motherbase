@@ -378,7 +378,9 @@ wrote. A statement lists screenshot lines on days before its last that it
 does not show, and removes them unless told not to. No rule is ever asked
 for from app wording. A GCash line whose sign could not be read is left out.
 Two apps in one drop are refused. Anything dropped anywhere on WEALTH opens
-READ A STATEMENT with it.
+READ A STATEMENT with it. The + menu on the first screen and ACCOUNTS carries
+A statement and Screenshots, each opening the file chooser for that kind only
+(`importSheet('statement' | 'shots')`).
 
 **A locked spreadsheet opens with its password** (`unlockXlsx`, Excel's
 agile AES lock, WebCrypto only). The password is treated like a PDF's.
