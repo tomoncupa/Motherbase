@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.21, 2026-09-23">
+<meta name="mb-version" content="1.0.22, 2026-09-23">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -448,6 +448,9 @@ const capped = () => cats().filter(c => num(c.cap, 0) > 0);
 
 const cats = () => Rec.all('cat').map(r => Object.assign({ id: r.key }, r.payload))
   .sort((a, b) => (a.ord || 0) - (b.ord || 0) || a.name.localeCompare(b.name));
+/* Tom, 2026-09-23: "Sort Categories alphabetically." Wherever a category is
+   PICKED. The CATEGORIES card keeps the order he dragged it into. */
+const catsAZ = () => cats().sort((a, b) => a.name.localeCompare(b.name));
 const catMap = () => Rec.map('cat');
 const catName = id => (Rec.get('cat', null, id) || {}).name || 'Uncategorised';
 const catGrp = id => (Rec.get('cat', null, id) || {}).grp || '';
@@ -2351,12 +2354,21 @@ function payeeOf(desc) {
 /* The payees in this import that nothing has decided yet: no rule matches
    them, and he has not already said "leave it" or seen that number. Money in
    is not asked about; a category is a question about spending. */
-function setupItems(lines) {
+function setupItems(hits) {
   const skip = listSetting('skipNames'), seen = listSetting('seenNums');
   const groups = {};
-  lines.forEach(x => {
+  hits.forEach(h => {
+    const x = h.line;
     if (!(x.amt < 0) || ruleFor(x.desc)) return;
     const p = payeeOf(x.desc);
+    /* Tom, 2026-09-23: "Bancnet shouldn't be grouped." A rail carries the
+       money and never names who got it, so every line is its own question,
+       answered on that line alone, and no rule is written. */
+    if (isRail(p.key)) {
+      groups['one:' + h.id] = { k: 'one:' + h.id, id: h.id, one: true, key: p.key,
+        label: p.label + ' · ' + Day.short(x.date) + (x.time ? ' ' + UI.clockLabel(x.time) : ''), person: false, n: 1, total: round2(-x.amt) };
+      return;
+    }
     const k = norm(p.key);
     if (!k) return;
     if ((p.person ? seen : skip).indexOf(k) > -1) return;
@@ -2367,9 +2379,9 @@ function setupItems(lines) {
   return Object.values(groups).sort((a, b) => b.total - a.total);
 }
 /* What a line will be filed as, counting answers not yet saved. */
-function fileAs(desc, setup) {
+function fileAs(desc, setup, id) {
   const p = payeeOf(desc);
-  const ch = setup && setup[norm(p.key)];
+  const ch = setup && (setup['one:' + id] || setup[norm(p.key)]);
   if (ch && ['later', 'leave', UNSURE].indexOf(ch) < 0) return 'files as ' + esc(catName(ch));
   const r = ruleFor(desc);
   if (r) return 'files as ' + esc(catName(r.cat));
@@ -2382,6 +2394,7 @@ function writeSetup(items, setup) {
   const skip = listSetting('skipNames'), seen = listSetting('seenNums');
   items.forEach(it => {
     const ch = setup[it.k];
+    if (it.one) return;                     /* filed on its own row at apply */
     if (it.person) {
       if (ch && ch !== UNSURE) Rec.set('rule', null, 'imp-' + it.k, { match: it.key, cat: ch });
       if (seen.indexOf(it.k) < 0) seen.push(it.k);
@@ -4222,7 +4235,7 @@ function quickFile() {
           '<div class="big">' + esc(money(num(s.amt, 0))) + '</div>' +
           '<div class="sub">' + esc(s.note || 'No details') + '</div>';
         chips.innerHTML = '';
-        cats().forEach(c => {
+        catsAZ().forEach(c => {
           const btn = el('button', 'btn mb-press mb-tap', esc(c.name));
           btn.type = 'button';
           if (c.grp === 'move') btn.style.opacity = '.75';
@@ -5292,7 +5305,7 @@ function billSheet(existing, seed) {
       amt.addEventListener('input', paintOften);
       paintOften();
       const cat = picker({
-        items: cats().filter(c => c.grp !== 'move').map(c => ({ id: c.id, name: c.name })),
+        items: catsAZ().filter(c => c.grp !== 'move').map(c => ({ id: c.id, name: c.name })),
         value: init.cat || '', placeholder: 'Rent, Utility Bills, Subscriptions',
         onCreate: n => makeCat(n, 'fix'),
       });
@@ -5577,7 +5590,7 @@ function spendSheet(s) {
       const rc = s.stmt ? recon(s.stmt) : null;
       if (rc && rc.comment) b.appendChild(el('div', 'note', 'Your comment on the statement line: <b>' + esc(rc.comment) + '</b>'));
       const cat = picker({
-        items: cats().map(c => ({ id: c.id, name: c.name, note: c.grp === 'move' ? 'not spending' : '' })),
+        items: catsAZ().map(c => ({ id: c.id, name: c.name, note: c.grp === 'move' ? 'not spending' : '' })),
         value: catOf(s), placeholder: 'Which category',
         onCreate: n => makeCat(n, 'var'),
       });
@@ -5675,7 +5688,7 @@ function newSpendSheet(preset) {
       /* Picked, never typed, and it guesses from the description as he types,
          because a rule already knows what "Grab" means. */
       const cat = picker({
-        items: cats().map(c => ({ id: c.id, name: c.name, note: c.grp === 'move' ? 'not spending' : '' })),
+        items: catsAZ().map(c => ({ id: c.id, name: c.name, note: c.grp === 'move' ? 'not spending' : '' })),
         value: '', placeholder: 'Which category',
         onCreate: n => makeCat(n, 'var'),
       });
@@ -5810,7 +5823,7 @@ function ruleSheet(existing) {
       const match = UI.field('text', { placeholder: 'grab', value: existing ? existing.match : '' });
       b.appendChild(fld('When the description contains', match));
       const cat = picker({
-        items: cats().map(c => ({ id: c.id, name: c.name })),
+        items: catsAZ().map(c => ({ id: c.id, name: c.name })),
         value: existing ? existing.cat : '', placeholder: 'File it as',
         onCreate: n => makeCat(n, 'var'),
       });
@@ -5849,6 +5862,16 @@ function importSheet(dropped) {
   let acct = '', stmt = null, settled = null, plan = null, answers = {};
   let dayFirst = null, lastText = '', lastGrid = null, lastShot = null, source = 'text';
   let dropShots = true;
+  /* Tom, 2026-09-23: "Should let me add comments during import also." Held
+     here by line until apply, then merged into that line's recon row, the
+     same place the statement viewer keeps its comments. */
+  const notes = {};
+  const noteBox = (id, r) => {
+    const c = UI.field('text', { placeholder: 'Add a comment', value: notes[id] || '' });
+    c.setAttribute('aria-label', 'Comment on this line');
+    c.oninput = () => { notes[id] = c.value; };
+    return stack(r, c);
+  };
   let mine = {}, force = false, setup = {}, setupList = [];
 
   UI.dialog({
@@ -6118,7 +6141,7 @@ function importSheet(dropped) {
           answers = {};
           /* An app's own wording ("Pay via Scanned QR") names no shop, and a
              rule is only ever written from a bank's. */
-          setupList = stmt.source === 'shot' ? [] : setupItems(plan.fresh.concat(plan.ask, plan.certain).map(x => x.line));
+          setupList = stmt.source === 'shot' ? [] : setupItems(plan.fresh.concat(plan.ask, plan.certain));
           setupList.forEach(i => { if (!(i.k in setup)) setup[i.k] = i.person ? UNSURE : 'later'; });
           if (setupList.length) stepSetup(); else stepReview();
         };
@@ -6132,20 +6155,21 @@ function importSheet(dropped) {
          not always cut cleanly where the shop name ends. */
       function stepSetup() {
         pane.innerHTML = '';
-        const names = setupList.filter(i => !i.person), people = setupList.filter(i => i.person);
+        const names = setupList.filter(i => !i.person && !i.one), people = setupList.filter(i => i.person),
+              ones = setupList.filter(i => i.one);
         const row = (it, first) => {
           const f = el('div', 'fld');
-          f.appendChild(el('label', null, '<b>' + esc(it.label) + '</b> · ' + it.n + ' payment' +
-            (it.n === 1 ? '' : 's') + ' · ' + esc(money(it.total))));
+          f.appendChild(el('label', null, '<b>' + esc(it.label) + '</b> · ' + (it.one ? '' : it.n + ' payment' +
+            (it.n === 1 ? '' : 's') + ' · ') + esc(money(it.total))));
           const g = el('div', 'grid2');
-          if (!it.person) {
+          if (!it.person && !it.one) {
             const match = UI.field('text', { value: it.key });
             match.title = 'The words a description has to contain';
             match.oninput = () => { if (match.value.trim()) it.key = match.value.trim(); };
             g.appendChild(match);
           }
           const sel = el('select', 'mb-input');
-          first.concat(cats().map(c => [c.id, c.name])).forEach(([v, t]) => {
+          first.concat(catsAZ().map(c => [c.id, c.name])).forEach(([v, t]) => {
             const o = el('option'); o.value = v; o.textContent = t; sel.appendChild(o);
           });
           sel.value = setup[it.k];
@@ -6163,6 +6187,12 @@ function importSheet(dropped) {
             [['later', 'Not now, ask next time'], ['leave', 'Leave uncategorised, never ask']])));
           if (names.length > 40) pane.appendChild(el('div', 'note', (names.length - 40) +
             ' smaller names stay as they are and come up again next time.'));
+        }
+        if (ones.length) {
+          pane.appendChild(el('h2', null, 'PAID THROUGH BANCNET AND THE LIKE'));
+          pane.appendChild(el('div', 'note',
+            'These only name the service that carried the money, not who got it, so each one is asked on its own and no rule is made.'));
+          ones.forEach(it => pane.appendChild(row(it, [['later', 'Leave uncategorised']])));
         }
         if (people.length) {
           pane.appendChild(el('h2', null, 'TRANSFERS TO OTHER PEOPLE'));
@@ -6233,9 +6263,9 @@ function importSheet(dropped) {
           const l = el('div', 'list');
           willMerge.slice(0, 40).forEach(x => {
             const changed = Math.abs(num(x.match.amt, 0) - Math.abs(x.line.amt)) > 0.005 || x.match.date !== x.line.date;
-            l.appendChild(itemRow(x.match.note || x.line.desc,
+            l.appendChild(noteBox(x.id, itemRow(x.match.note || x.line.desc,
               Day.short(x.line.date) + ' · ' + esc(x.line.desc) + (changed ? ' · <b>corrected</b>' : ''),
-              money(Math.abs(x.line.amt))));
+              money(Math.abs(x.line.amt)))));
           });
           pane.appendChild(l);
           pane.appendChild(el('div', 'note', stmt.source === 'shot'
@@ -6258,11 +6288,11 @@ function importSheet(dropped) {
           pane.appendChild(el('h2', null, 'WOULD BE ADDED'));
           const l = el('div', 'list');
           willAdd.slice(0, 80).forEach(x => {
-            l.appendChild(itemRow(x.line.desc || 'No details',
+            l.appendChild(noteBox(x.id, itemRow(x.line.desc || 'No details',
               Day.short(x.line.date) + (x.line.time ? ' ' + esc(UI.clockLabel(x.line.time)) : '') + ' · ' +
-              (x.kind === 'in' ? 'money in' : fileAs(x.line.desc, setup)) +
+              (x.kind === 'in' ? 'money in' : fileAs(x.line.desc, setup, x.id)) +
               (x.line.pieces ? ' · ' + x.line.pieces + ' pieces made one' : ''),
-              (x.kind === 'in' ? '+' : '') + money(Math.abs(x.line.amt)), x.kind === 'in' ? 'in' : ''));
+              (x.kind === 'in' ? '+' : '') + money(Math.abs(x.line.amt)), x.kind === 'in' ? 'in' : '')));
           });
           if (willAdd.length > 80) l.appendChild(el('div', 'note', 'and ' + (willAdd.length - 80) + ' more.'));
           pane.appendChild(l);
@@ -6306,6 +6336,16 @@ function importSheet(dropped) {
           const shot = stmt.source === 'shot';
           willMerge.forEach(x => mergeStatement(x, acct, shot));
           willAdd.forEach(x => addStatement(x, acct, shot));
+          /* A line answered on its own, a Bancnet payment: its category is a
+             mark on the one row it became. */
+          setupList.filter(it => it.one && setup[it.k] && setup[it.k] !== 'later').forEach(it => {
+            const rc = recon(it.id);
+            if (rc && rc.spend) setMark({ date: rc.sdate, key: rc.spend }, { cat: setup[it.k] });
+          });
+          Object.keys(notes).forEach(id => {
+            const v = String(notes[id] || '').trim(), rc = recon(id);
+            if (v && rc) Rec.set('recon', null, id, merge(rc, { comment: v }));
+          });
           if (dropShots) orphans.forEach(x => {
             Rec.del(x.type, x.date, x.key);
             if (Rec.get('mark', null, x.date + '|' + x.key)) Rec.del('mark', null, x.date + '|' + x.key);
