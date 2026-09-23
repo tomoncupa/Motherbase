@@ -34,7 +34,7 @@ are holding a stale copy of whatever you just changed.
 |---|---|---|
 | `records.js` | The store. Rows, merge, subscriptions. | Highest. Holds his history. |
 | `day.js` | One definition of "today" for the whole suite. | High. Everything dates through it. |
-| `journal.js` | One journal line: kinds, the day it shows on, typed times, ticking and repeats. Read by STATUS, LOG, QUESTS and the home screen. | High. It writes STATUS's `note` rows. |
+| `journal.js` | One journal line: kinds, the day it shows on, typed times, ticking and repeats. Read by STATUS, LOG, QUESTS and the home screen. Since 2026-09-24 `dedupe()` deletes extra copies of a made-once todo (`wealth-bill-*`, `arc-r-*`) found on more than one date, keeping a ticked one else the earliest; runs on `Rec.ready` and at most once a minute from `notes()`, so a device that never opens WEALTH is cleaned too. | High. It writes STATUS's `note` rows. |
 | `skins.js` `skins.json` | Themes, and the colour layer on top. | Medium. Cosmetic but wide. |
 | `mobile.js` | The touch layer: sheets, swipes, keyboard, back stack, haptics, safe areas. | Medium. Every app's feel. |
 | `sound.js` | Sound themes and instruments, synthesised. | Low. |

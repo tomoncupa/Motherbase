@@ -85,6 +85,7 @@ function place(r, d) {
 const onDay = (r, d) => { const x = place(r, d); return !!x && !x.movedAway; };
 function notes(date) {
   const d = date || Day().today();
+  dedupeSoon();
   return Rec().all('note').map(r => place(r, d)).filter(Boolean);
 }
 
@@ -637,6 +638,50 @@ function menuItems(x, after, src) {
   return out;
 }
 
+/* ══════════════ ONE ROW PER MADE-FOR-YOU TODO ══════════════
+   Tom, 2026-09-24, a phone screenshot of STATUS with every bill four times.
+   WEALTH makes one todo per bill due date (`wealth-bill-...`) and ARC one per
+   review (`arc-r-...`), each written once, on the day it was made. Before
+   2026-09-23 a device that had not seen the first copy wrote its own, on its
+   own today: same key, another date, a second row, and live sync then put
+   every device's copy in one list. WEALTH now cleans up after itself, but
+   only where WEALTH is opened, and the phone never opens it. So the cleanup
+   lives here, where every app that shows a todo already is.
+
+   A key on more than one date is a duplicate by construction. Keep a ticked
+   one, else the earliest; delete the unticked extras. A deleted row is a
+   tombstone, so the deletion travels like any other write. Runs when the
+   store is ready and at most once a minute after, because synced rows keep
+   arriving. */
+const ONCE = /^(wealth-bill-|arc-r-)/;
+let dedupAt = 0;
+function dedupe() {
+  const R = Rec();
+  if (!R || !R.all) return 0;
+  dedupAt = Date.now();
+  const by = {};
+  R.all('note').forEach(r => { if (ONCE.test(r.key)) (by[r.key] = by[r.key] || []).push(r); });
+  let n = 0;
+  const days = {};
+  Object.keys(by).forEach(k => {
+    const rs = by[k];
+    if (rs.length < 2) return;
+    const keep = rs.find(r => r.payload && r.payload.done) || rs[0];
+    rs.forEach(r => {
+      if (r === keep || (r.payload && r.payload.done)) return;
+      R.del('note', r.date, k); days[r.date] = 1; n++;
+    });
+  });
+  Object.keys(days).forEach(d => { try { publishNotes(d); } catch (e) {} });
+  return n;
+}
+function dedupeSoon() {
+  if (Date.now() - dedupAt < 60000) return;
+  dedupAt = Date.now();
+  setTimeout(() => { try { dedupe(); } catch (e) { console.warn('[journal] dedupe', e); } }, 0);
+}
+if (g.Rec && g.Rec.ready) g.Rec.ready(() => { try { dedupe(); } catch (e) { console.warn('[journal] dedupe', e); } });
+
 g.Journal = {
   KINDS: KINDS,
   bare: bare, place: place, onDay: onDay, notes: notes,
@@ -646,6 +691,6 @@ g.Journal = {
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,
   css: css, markHTML: markHTML, timeText: timeText, sortClock: sortClock, textHTML: textHTML,
   moveTo: moveTo, moveToTomorrow: moveToTomorrow, movedAfter: movedAfter,
-  cancel: cancel, menuItems: menuItems, askDay: askDay,
+  cancel: cancel, menuItems: menuItems, askDay: askDay, dedupe: dedupe,
 };
 })(window);
