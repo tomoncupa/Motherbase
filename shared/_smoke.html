@@ -1463,7 +1463,7 @@ async function run() {
     Rec.set(stamp, null, 'c1', { name: 'newer-here' });
     Rec.set(stamp, null, 'from-phone', { name: 'placeholder' });
     const incoming = Object.assign({}, Rec.row(stamp, null, 'from-phone'),
-      { payload: { name: 'arrived' }, updated_at: '2999-01-01T00:00:00.000Z' });
+      { payload: { name: 'arrived' }, updated_at: new Date(Date.now() + 60000).toISOString() });
     Rec.del(stamp, null, 'from-phone');
     const bag = IO.bagName('__clash');
     document.head.appendChild = function (el) {
@@ -1515,7 +1515,7 @@ async function run() {
     const bag = IO.bagName('__writer'), asked = [];
     IO.register({ app: '__reader', name: 'Reader', types: [stamp + 'r'], reads: { __writer: [stamp] } });
     const incoming = { id: Rec.USER + '|' + stamp + '||from-writer', user_id: Rec.USER, type: stamp, date: null,
-      key: 'from-writer', payload: { name: 'arrived' }, updated_at: '2999-01-01T00:00:00.000Z', deleted: false };
+      key: 'from-writer', payload: { name: 'arrived' }, updated_at: new Date(Date.now() + 60000).toISOString(), deleted: false };
     const photo = Object.assign({}, incoming, { id: Rec.USER + '|shot||not-mine', type: 'shot', key: 'not-mine' });
     const keep = IO.mirror.settings, keepSeen = JSON.parse(JSON.stringify(keep.seen || {}));
     /* Forget this check's own mark first, by blanking it. Saving merges `seen`
@@ -2650,6 +2650,17 @@ async function run() {
   });
   ok('cloud: something that is not a config at all is refused',
     () => !!Cloud._missing(Cloud._parse('hello')));
+  /* 2026-09-24: two test rows dated 2999 synced, every device's boundary
+     followed them, and nothing synced anywhere after. A row stamped in the
+     future is not sent and never moves the boundary. */
+  ok('live sync: a row stamped in the future is not sent and does not move the boundary', () => {
+    const now = new Date().toISOString();
+    const p = Cloud._plan([
+      { id: 'a', updated_at: now },
+      { id: 'b', updated_at: '2999-01-01T00:00:00.000Z' },
+    ], '', 'u/x/rows/');
+    return p.sent === 1 && p.edge === now && p.skipped === 1;
+  });
 
   /* ── the boundary, which is the whole ball game ──
 

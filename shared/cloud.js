@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.1.0 — Firebase as a SECOND sync, beside the Google Sheet.
+/* shared/cloud.js — 0.1.2 — Firebase as a SECOND sync, beside the Google Sheet.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
    replacement and it is not allowed to become one. The sheet keeps doing
@@ -99,14 +99,31 @@ var cfg = { cfg: null, on: 0, uid: '', email: '', at: '', pushed: '', seen: '' }
 function cread() {
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(CKEY) || '{}')); } catch (e) {}
   if (!cfg.cfg) cfg.cfg = BUILT_IN;
+  /* A boundary in the future stops every row, both ways, with nothing on
+     screen to say so. It happened on 2026-09-24: two test rows dated 2999
+     travelled, every device's boundary followed them, and nothing synced after.
+     Starting over costs one full push and one full read; `Rec.merge` makes
+     both harmless. */
+  var lim = soon();
+  if (cfg.pushed > lim) cfg.pushed = '';
+  if (cfg.seen > lim) cfg.seen = '';
 }
+/* The latest a real row can be stamped: now, plus a day for a clock set wrong.
+   Anything past it is a broken row, and it never moves a boundary. */
+function soon() { return new Date(Date.now() + 864e5).toISOString(); }
 function csave() { try { localStorage.setItem(CKEY, JSON.stringify(cfg)); } catch (e) {} }
 cread();
 
 /* Another frame pasted the config or signed in. Same reason the mirror does
    this: an app opened before the paste would otherwise answer "not set up" for
    the rest of the session. */
-g.addEventListener('storage', function (e) { if (e.key === CKEY) { cread(); say(); } });
+g.addEventListener('storage', function (e) {
+  if (e.key !== CKEY) return;
+  cread(); say();
+  /* Signed in from an app in a frame: only this top document may connect, so
+     it has to notice and start, or nothing syncs until the next reload. */
+  if (cfg.on && !started) boot();
+});
 
 /* ── the state every caller can read, and nobody outside can set ── */
 var fb = null, db = null, auth = null, ref = null, query = null;
@@ -371,7 +388,7 @@ function onRow(snap) {
   if (!v || !v.id || !v.type) return;
   var n = 0;
   try { n = g.Rec ? g.Rec.merge([v]) : 0; } catch (e) { return; }
-  if (v.updated_at && v.updated_at > (cfg.seen || '')) { cfg.seen = v.updated_at; csave(); }
+  if (v.updated_at && v.updated_at > (cfg.seen || '') && v.updated_at <= soon()) { cfg.seen = v.updated_at; csave(); }
   if (n) { last.got += n; say(); }
 }
 
@@ -436,9 +453,11 @@ function stop() {
    level under the bug is "does the edge pass an oversized row", not "did the
    photo arrive". */
 function plan(rows, since, base) {
-  var patch = {}, edge = since || '', sent = 0, skipped = 0;
+  var patch = {}, edge = since || '', sent = 0, skipped = 0, lim = soon();
   rows.forEach(function (r) {
     if (!r || !r.id) return;
+    /* Stamped in the future: not sent, and the boundary does not follow it. */
+    if (r.updated_at > lim) { skipped++; return; }
     if (r.updated_at > edge) edge = r.updated_at;
     var j;
     try { j = JSON.stringify(r); } catch (e) { skipped++; return; }
@@ -529,12 +548,23 @@ function wire() {
   g.Rec.on(nudge);
 }
 
+/* The top document's Cloud when this is a frame of the same site, or null. */
+function topCloud() {
+  if (g.top === g) return null;
+  try { var T = g.top.Cloud; return T && T !== Cloud && T.state ? T : null; } catch (e) { return null; }
+}
+
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.1.1',
+  VERSION: '0.1.2',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
+    /* In a frame the connection belongs to the top document, so ask it. Until
+       2026-09-24 every app opened from the home screen said "not signed in"
+       while the home screen was live. */
+    var T = topCloud();
+    if (T) { var s = T.state(); s.frame = true; return s; }
     return {
       has: !!(cfg.cfg && !missing(cfg.cfg)),
       on: !!cfg.on,
@@ -583,7 +613,11 @@ var Cloud = {
   start: start,
   stop: stop,
   /** push whatever is waiting, now */
-  sync: function () { return started ? push('manual') : start().then(function () { return push('manual'); }); },
+  sync: function () {
+    var T = topCloud();
+    if (T) return T.sync();
+    return started ? push('manual') : start().then(function () { return push('manual'); });
+  },
 
   /* exposed for the smoke checks, which have no database to talk to */
   _enc: enc, _dec: dec, _parse: parseCfg, _missing: missing, _plan: plan, _big: BIG,
