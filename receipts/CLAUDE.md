@@ -133,8 +133,19 @@ the card, the filed list and the undo for nothing.
   generated image: clean, flat, straight. A folded, angled, badly lit one is
   Tom's test.
 - **Never opened on a phone**, and it is a desktop app.
-- **The iPhone Shortcut and the scheduled task do not exist yet.** The pipe
-  does nothing until Tom does the three steps in `RECEIPTS.md`.
+- **The scheduled task is not registered and `Receipts/in` does not exist**
+  (checked 2026-09-24). Tom said yes to both; the next session does them.
+- **Next: the reader watches his camera roll, not a drop folder.** Tom,
+  2026-09-24, chose it over a shared album and the Shortcut. iCloud for
+  Windows already mirrors his whole library to
+  `C:/Users/user/Pictures/iCloud Photos/Photos` (30,680 files, mostly JPG,
+  about 32 new pictures a day). Photos from 2026-09-01 on only. A free first
+  pass with Windows' own OCR (`Windows.Media.Ocr`, en-US installed) sends
+  only pictures with receipt, payment or label words on to `claude.exe`.
+  **Copy, never move: deleting in that folder deletes the photo from his
+  iPhone.** A `src: 'other'` answer is skipped without a card.
+- The Shortcut in `RECEIPTS.md` starts with Take Photo, which is wrong when it
+  is run from the share sheet. Moot if the camera-roll watch replaces it.
 - Chrome hands a folder permission back as "ask" after the tab closes, so the
   first poll of a session asks once. That is the browser, not the app.
 - A `buy` row is written and nothing reads it yet. FOODDÉX is the natural
