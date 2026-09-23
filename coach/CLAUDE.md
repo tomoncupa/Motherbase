@@ -110,6 +110,22 @@ deliberately not one is billing: `coachSets` counts only `pid|k-` keys, so a
 day the client logged alone bills nothing. A client training on their own is
 not a 1:1 delivered. Do not "fix" that.
 
+## A 1:1 is never waiting on a send (1.0.6, 2026-09-23)
+
+Tom: *"My 1:1s don't track their own sets at ALL."* Which settles what the
+shelf is for and who it is not for.
+
+- **The shelf is for online clients.** A 1:1 never opens TRAIN, so they will
+  never press Send To Coach and there will never be a parcel from them.
+- **So the empty state asks the right thing of the right person.** A client in
+  the 1:1 box is told to press LOG A SESSION; anyone else is told to ask the
+  client to send. Telling Tom to chase a 1:1 for a file is advice nobody can
+  act on.
+- **And the billing rule is not a gap.** `coachSets` counting only `pid|k-`
+  keys was described here as "a day the client logged alone bills nothing".
+  For a 1:1 that day cannot exist. For an online client it should not bill,
+  because they are not buying sessions. Nothing to change.
+
 ## Needs from the foundation
 
 `shared/_smoke.html` has no checks for the coach shelf (`Cloud.send`,
