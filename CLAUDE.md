@@ -747,19 +747,32 @@ own brief since 2026-09-22.
 
 Moved to `shared/CLAUDE.md` on 2026-09-22, verbatim. Read it before touching `shared/` or the root.
 
-### Dead
+### Installable apps, no longer dead
 
-Installable phone apps. They need a web address, so they do not work from a folder,
-and the caching failure mode is exactly the kind of silent breakage he cannot
-diagnose.
+**Tom, 2026-09-23: "Every app can be installed from Chrome on Android and on
+the PC, with its own new icon."** Installable apps were listed as dead here
+until that day, for two reasons: they need a web address, and a cached copy
+can go stale in silence. The suite is hosted first now (the top of this
+file), so the first reason is gone, and the second is `sw.js`'s job.
 
-**`sw.js` is not that, and the difference is the whole reason it was allowed.**
-Added 2026-09-16. The objection above is to a cached copy going stale in
-silence. This one cannot: everything unstamped is fetched from the network
-first and the copy is only reached for when the network fails, so with signal
-you are always on the newest code and there is no stale window to be in. It
-also changes nothing about how the suite is opened. It is still a folder or a
-link, never an install.
+Every app folder holds a `manifest.json` and four icons beside its
+`index.html` (the home screen's at the root): `icon-192.png`,
+`icon-512.png`, and a maskable pair with the window shrunk into Android's
+round safe area. `tools/make-icons.html` draws them all with the iPhone
+pictures; `_smoke.html` fails a page with no manifest link, a manifest that
+does not read, or an icon that is not the size it claims. Each manifest's id
+is its own folder, so installing the home screen and then STATUS gives two
+apps. Opening an app from the installed home screen stays in the home
+screen's window, because the whole site is its scope. A new app copies a
+manifest and runs `make-icons.html`.
+
+Opening from a folder still works: the manifest link just fails to load, and
+nothing reads it but the browser.
+
+**`sw.js`** has answered from the phone's copy first since 2026-09-18, with
+the newest code arriving one open later. Tom chose that for speed. Icons, and
+any page opened with `?fresh=1` (the home screen's LINKS widget adds it),
+come from the network first. See `shared/CLAUDE.md`, Fresh copies.
 
 ---
 

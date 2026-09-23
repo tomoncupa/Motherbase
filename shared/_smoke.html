@@ -2806,6 +2806,50 @@ async function run() {
     ok('shelf: signed out, a send refuses and says why', !!R.out, say);
   }
 
+  /* ── installing: every app is its own app on Android and the PC ──
+
+     Tom, 2026-09-23: every app installable from Chrome, with its own icon.
+     One level under "the Install button shows the right picture": does the
+     page name an install file, does that file read, and is every picture it
+     names really there at the size it claims. Chrome drops an icon whose
+     size is wrong without a word and falls back to a screenshot of the page.
+     The app list is the one make-icons.html draws from, so an app added
+     later is checked without anybody editing this. From a folder there is
+     nothing to fetch, and install needs a web address anyway. */
+  if (location.protocol !== 'file:') {
+    const ids = Object.keys(Icons.ROLES).filter(r => r.indexOf('app.') === 0).map(r => r.slice(4));
+    const bad = { link: [], parse: [], shape: [], icons: [] };
+    const size = src => new Promise(res => {
+      const i = new Image();
+      i.onload = () => res(i.naturalWidth + 'x' + i.naturalHeight);
+      i.onerror = () => res('missing');
+      i.src = src + '?cb=' + Date.now();
+    });
+    const ids_ = {};
+    for (const id of ids) {
+      const dir = id === 'home' ? '../' : '../' + id + '/';
+      const html = await fetch(dir + 'index.html', { cache: 'no-store' }).then(r => r.ok ? r.text() : '', () => '');
+      if (!/<link rel="manifest" href="manifest\.json">/.test(html)) { bad.link.push(id); continue; }
+      let m = null;
+      try { m = await fetch(dir + 'manifest.json', { cache: 'no-store' }).then(r => r.json()); } catch (e) {}
+      if (!m) { bad.parse.push(id); continue; }
+      const kinds = (m.icons || []).map(i => i.purpose).join();
+      if (!m.name || m.display !== 'standalone' || m.start_url !== './' || m.scope !== './' || !m.id ||
+          !/any/.test(kinds) || !/maskable/.test(kinds)) bad.shape.push(id);
+      ids_[new URL(m.id, new URL(dir, location.href)).href] = (ids_[new URL(m.id, new URL(dir, location.href)).href] || 0) + 1;
+      for (const ic of m.icons || []) {
+        const got = await size(dir + ic.src);
+        if (got !== ic.sizes) bad.icons.push(id + ' ' + ic.src + ' is ' + got + ', says ' + ic.sizes);
+      }
+    }
+    ok('install: every app page links its install file (' + ids.length + ' apps)', !bad.link.length, ' — none in: ' + bad.link.join(', '));
+    ok('install: every install file reads', !bad.parse.length, ' — unreadable: ' + bad.parse.join(', '));
+    ok('install: every install file opens its own folder standalone, with a plain and a round icon', !bad.shape.length, ' — ' + bad.shape.join(', '));
+    ok('install: every icon a manifest names is there at the size it claims', !bad.icons.length, ' — ' + bad.icons.slice(0, 3).join('; '));
+    ok('install: no two apps share an id, so installing one never replaces another',
+      Object.keys(ids_).length === ids.length - bad.link.length - bad.parse.length);
+  }
+
   /* every promised check settles before anything is counted */
   await Promise.all(PENDING);
 

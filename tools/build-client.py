@@ -39,7 +39,10 @@ DEST = os.path.abspath(ARGS[0]) if ARGS \
 # Folders copied whole. Everything not named here is left behind, which is
 # the safe direction: a new app has to be added deliberately.
 COPY_DIRS = ['shared', 'block', 'status', 'train', 'style', 'checkin', 'log', 'quest']
-COPY_FILES = ['index.html', '.nojekyll']
+# The home screen's install file and icons sit at the root, beside index.html,
+# since 2026-09-23; every app's own sit in its folder and go with it.
+COPY_FILES = ['index.html', '.nojekyll', 'manifest.json',
+              'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png']
 
 # Left behind on purpose:
 #   form/    client video, and it is Tom's review tool, not theirs
@@ -329,6 +332,10 @@ if not stamped:
 # The shared files go in at the exact address the pages ask for, stamp and
 # all: a cache is keyed by the whole address, so shared/records.js and
 # shared/records.js?v=abc are two different entries and only one is asked for.
+#
+# So are the install files, manifest.json and its icons: Chrome reads them
+# when the app is installed, which needs a connection, and keeps its own copy
+# of the icons after that.
 #
 # The theme pictures under shared/icons/ are left out. They are three
 # megabytes, they are the icon you get when you add the app to a home screen,

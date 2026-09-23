@@ -23,6 +23,16 @@
   colour on the dark plate. That is art, the same in every theme, so each
   theme's folder gets the same picture. The window sits inset from the
   square because iOS rounds the corners and would cut the window's own.
+
+  Since 2026-09-23 it also draws the install icons Chrome uses on Android
+  and the PC, beside each app's index.html (the home screen's at the root):
+  icon-192.png and icon-512.png, the window at the same inset as the iPhone
+  one, and icon-maskable-192.png and icon-maskable-512.png, the window shrunk
+  to 64% of the square. Android crops a maskable icon to a circle and
+  promises only the middle 80% survives; the window's farthest points, the
+  ends of its cut corners, sit 0.61 of its width from the middle, so 64% of
+  the square keeps them at 39% of it, inside the circle's 40%. Each app's
+  manifest.json names all four.
 -->
 <script src="../shared/skins.js"></script>
 <script src="../shared/icons.js"></script>
@@ -42,16 +52,15 @@
 
   await Skins.load('../shared/skins.json');
   const APP_ART = Icons.APP_ART;
-  const W = 180, IN = 16, F = W - IN * 2, CUT = F * 10 / 64, EDGE = 3;
   const cutPath = (ctx, x, y, w, k) => {
     ctx.beginPath();
     ctx.moveTo(x + k, y); ctx.lineTo(x + w - k, y); ctx.lineTo(x + w, y + k); ctx.lineTo(x + w, y + w - k);
     ctx.lineTo(x + w - k, y + w); ctx.lineTo(x + k, y + w); ctx.lineTo(x, y + w - k); ctx.lineTo(x, y + k); ctx.closePath();
   };
-  const pics = {};
-  for (const app of APPS) {
+  /* one tile: `W` the square, `F` the window's width inside it */
+  const tile = async (app, W, F) => {
     const art = APP_ART[app];
-    if (!art) continue;
+    const IN = (W - F) / 2, CUT = F * 10 / 64, EDGE = F * 3 / 148;
     const cv = document.createElement('canvas');
     cv.width = cv.height = W;
     const ctx = cv.getContext('2d');
@@ -72,7 +81,18 @@
     const img = new Image();
     await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error(app)); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
     ctx.drawImage(img, (W - g) / 2, (W - g) / 2, g, g);
-    pics[app] = cv.toDataURL('image/png');
+    return cv.toDataURL('image/png');
+  };
+  const pics = {}, installs = {};
+  for (const app of APPS) {
+    if (!APP_ART[app]) continue;
+    pics[app] = await tile(app, 180, 148);
+    /* where the app keeps its things: its folder, the root for the home screen */
+    const dir = app === 'home' ? '' : app + '/';
+    for (const n of [192, 512]) {
+      installs['app:' + dir + 'icon-' + n] = await tile(app, n, n * 148 / 180);
+      installs['app:' + dir + 'icon-maskable-' + n] = await tile(app, n, n * .64);
+    }
     const i = new Image(); i.src = pics[app]; i.width = 60; i.title = app; i.style.borderRadius = '13px';
     document.getElementById('grid').appendChild(i);
   }
@@ -81,9 +101,11 @@
     out[app] = pics[app];
     for (const skin of Skins.data.skins) out[skin.id + '/' + app] = pics[app];
   }
+  Object.assign(out, installs);
   say('Sending ' + Object.keys(out).length + ' pictures…');
   try {
-    const r = await fetch('http://127.0.0.1:8920/', { method: 'POST', body: JSON.stringify(out) });
+    const port = new URLSearchParams(location.search).get('port') || '8920';
+    const r = await fetch('http://127.0.0.1:' + port + '/', { method: 'POST', body: JSON.stringify(out) });
     say(await r.text());
   } catch (e) {
     say('The receiver is not running: py -3 tools/save-icons.py');
