@@ -313,6 +313,8 @@ reading rather than by anybody noticing.
 `start`, never from the date before, and a month's worth is amount × 30.44 ÷
 `every`. (HISTORY.md: Bills every few days)
 
+**Bills every few months** (2026-09-23): `months` on a monthly bill, stepped from `start`, the month last paid; a month's worth is amount ÷ `months`. Never read from `every`, which a bill switched from days keeps. No field for it in the bill sheet yet; the sheet merges, so it survives an edit.
+
 **A loan's payments are bills with `until`, filed as Debt payment, never
 spending.** The bill sheet does not show `from` or `until` and must keep both. (HISTORY.md: A loan's payments are bills, with an end)
 
