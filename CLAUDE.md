@@ -698,6 +698,22 @@ answer, or take it out.
   through live sync. Do not design a feature around the page asking a local
   program for anything.
 
+- **Never pick your own elements by a short class name alone.** `Chart.header`
+  draws its date line as `.w`, the home screen's card class, and `fitGrid`
+  took those lines for cards, threw during boot and left the dock and clock
+  undrawn on every refresh (2026-09-23). Select by position (`:scope > .w`)
+  or a class no shared file could plausibly use.
+- **A panel that draws its own version of a shared row misses everything the
+  shared row gains later.** The home screen and STATUS draw their own sheet
+  setup (`sync: false`), so LIVE SYNC, added inside `IO.syncRow`, never
+  reached either until Tom went looking for it. When the shared row grows,
+  grep for the panels that opted out.
+- **A desktop program's store can be read without clicking.** Start it with
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` and
+  drive `Rec.export()` / `Rec.merge()` over the DevTools socket. Used once on
+  2026-09-23 to move the old folder-copy rows into the hosted copy. Close the
+  program and relaunch it without the variable afterwards.
+
 ---
 
 ## Current state
