@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.4, 2026-09-23">
+<meta name="mb-version" content="1.0.5, 2026-09-23">
 <title>COACH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -153,6 +153,7 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
 <header>
   <div class="logo">CO<b>ACH</b></div>
   <div class="spacer"></div>
+  <button class="mb-btn mb-press mb-tap" id="sends" title="What clients have sent">SENDS</button>
   <button class="mb-btn go mb-press mb-tap" id="open">OPEN A CLIENT FILE</button>
   <button class="mb-btn mb-press mb-tap" onclick="settings()">SETTINGS</button>
   <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
@@ -662,8 +663,8 @@ function drawClient(col) {
   const card = document.createElement('div'); card.className = 'card';
   if (!p) {
     card.innerHTML = '<h2>CLIENT</h2><p class="empty">Pick a client in the box, or press an empty slot to add one. ' +
-      'A client’s training arrives as a file: they press <b>Send To Coach</b> in TRAIN’s Profile menu. ' +
-      'Their check-in arrives the same way, from CHECK IN. Both open with <b>OPEN A CLIENT FILE</b>.</p>';
+      'A client’s training arrives when they press <b>Send To Coach</b> in TRAIN: it lands under <b>SENDS</b> above. ' +
+      'Their check-in still comes as a file from CHECK IN, and so does a training send from a phone that is not signed in. Both open with <b>OPEN A CLIENT FILE</b>.</p>';
     col.appendChild(card);
     return;
   }
@@ -706,7 +707,7 @@ function drawClient(col) {
   }
   if (!ss.length) {
     const e = document.createElement('div'); e.className = 'card';
-    e.innerHTML = '<p class="empty">No training from ' + esc(p.name || 'this client') + ' yet. Ask them to press <b>Send To Coach</b> in TRAIN’s Profile menu, then open the file here.</p>';
+    e.innerHTML = '<p class="empty">No training from ' + esc(p.name || 'this client') + ' yet. Ask them to press <b>Send To Coach</b> in TRAIN. It arrives under <b>SENDS</b>, or as a file they hand over.</p>';
     col.appendChild(e);
     return;
   }
@@ -986,6 +987,76 @@ function draw() {
   if (m.parentElement) m.parentElement.scrollTop = keep;
 }
 
+/* ── the shelf: what clients have sent, without a file ──
+
+   Tom, 2026-09-23. A client's SEND TO COACH now puts a parcel on
+   `drop/coach/<their account>` in the database, and this takes it off. The
+   database's rules are what make that safe: a client may write only to their
+   own slot and read none of it, and only this account may read the shelf or
+   clear it. CLOUD.md has the block.
+
+   Nothing new happens to the data. A parcel holds the same bag the file
+   always held, so it goes through the same `takeFile` and merges on
+   `updated_at` like any sync. The transport changed; the rules about what a
+   client's rows are and where they land did not.
+
+   A parcel is cleared only AFTER its rows are in. Until COACH has taken it,
+   that parcel is the only copy anywhere but the client's own phone, and a
+   send that vanished because the read half worked and the write half did not
+   is exactly the silent loss this suite is built against. */
+let shelfN = 0;
+function shelfSay(n, why) {
+  const b = document.getElementById('sends');
+  if (!b) return;
+  shelfN = n;
+  b.textContent = n ? 'SENDS · ' + n : 'SENDS';
+  b.classList.toggle('go', !!n);
+  b.title = why || (n ? n + ' waiting' : 'Nothing waiting');
+}
+
+/* `loud` is a press. Quiet is the look on load, which may only change the
+   button: a shelf that cannot be read on a device with no signal is not an
+   error worth a message nobody asked for. */
+function lookShelf(loud) {
+  if (!window.Cloud || !Cloud.waiting) {
+    shelfSay(0, 'Live sync is not set up here');
+    if (loud) UI.toast('Live sync is not set up on this device', { bad: true });
+    return Promise.resolve();
+  }
+  return Cloud.waiting().then(list => {
+    shelfSay(list.length);
+    if (!list.length) { if (loud) UI.toast('Nothing waiting'); return; }
+    if (loud) return takeShelf(list);
+  }, e => {
+    const m = (e && e.message) || 'the shelf could not be read';
+    shelfSay(0, m);
+    if (loud) UI.toast(esc(m), { bad: true });
+  });
+}
+
+function takeShelf(list) {
+  let took = 0, fresh = 0, bad = 0, last = null;
+  return list.reduce((p, parcel) => p.then(() => {
+    let res = null;
+    try { res = parcel.body ? takeFile(parcel.body) : null; } catch (e) { res = null; }
+    if (!res) { bad++; return; }
+    took++; fresh += res.fresh; last = res;
+    return Cloud.took(parcel.from).catch(() => {});
+  }), Promise.resolve()).then(() => {
+    if (last) {
+      sel = last.pid; Rec.setting(APP.id, 'sel', sel);
+      const who = people()[sel]; if (who) { box = who.box || 'one'; Rec.setting(APP.id, 'box', box); }
+    }
+    shelfSay(0);
+    const parts = [];
+    if (took) parts.push('<b>' + took + '</b> in, ' + (fresh ? fresh + ' new rows' : 'nothing new'));
+    if (bad) parts.push(bad + ' could not be read and was left on the shelf');
+    UI.toast(parts.join('. ') || 'Nothing taken', { bad: !took });
+    draw();
+  });
+}
+document.getElementById('sends').onclick = () => lookShelf(true);
+
 function settings() {
   UI.settings(APP.id, [{ id: 'coach', name: 'COACH', draw: pane => {
     pane.appendChild(UI.row('Weights in', 'How COACH shows and takes weights', UI.segmented(
@@ -993,6 +1064,29 @@ function settings() {
     const me = UI.field('text', { value: opt('me', ''), placeholder: 'Coach' });
     me.onchange = () => Rec.setting(APP.id, 'me', me.value.trim());
     pane.appendChild(UI.row('Your name', 'On every program you send', me));
+
+    /* The account id, because the drop rules in Firebase need it written in
+       and there is nowhere else in the suite that shows it. It is not a
+       secret and it is not a password: it only names which account the rules
+       hand the shelf to. It is not in this repo, which is why it is read off
+       the live sign-in here rather than written down anywhere. */
+    const idb = document.createElement('button');
+    idb.type = 'button'; idb.className = 'mb-btn mb-press mb-tap';
+    idb.textContent = 'reading…'; idb.disabled = true;
+    if (window.Cloud && Cloud.who) Cloud.who().then(who => {
+      idb.textContent = 'COPY'; idb.disabled = false; idb.title = who.uid;
+      idb.onclick = () => {
+        const ok = () => { idb.textContent = 'COPIED'; setTimeout(() => { idb.textContent = 'COPY'; }, 1500); };
+        if (navigator.clipboard) navigator.clipboard.writeText(who.uid).then(ok, () => UI.toast(esc(who.uid)));
+        else UI.toast(esc(who.uid));
+      };
+    }, e => { idb.textContent = 'not signed in'; idb.title = (e && e.message) || ''; });
+    pane.appendChild(UI.row('Your account id', 'Goes in the drop rules in Firebase, in both places. See CLOUD.md', idb));
+
+    const look = document.createElement('button');
+    look.type = 'button'; look.className = 'mb-btn mb-press mb-tap'; look.textContent = 'CHECK NOW';
+    look.onclick = () => lookShelf(true);
+    pane.appendChild(UI.row('What clients have sent', 'COACH also looks once every time it opens', look));
   } }]);
 }
 
@@ -1041,6 +1135,9 @@ let rt = null;
 Rec.on(() => { clearTimeout(rt); rt = setTimeout(draw, 60); });
 Rec.ready(draw);
 draw();
+/* After the first paint, never before it: the shelf needs the network and a
+   paint must not. */
+setTimeout(() => lookShelf(false), 1500);
 </script>
 </body>
 </html>

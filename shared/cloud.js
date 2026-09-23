@@ -249,6 +249,103 @@ function signOut() {
   return done.catch(function () {}).then(function () { note('', 0); });
 }
 
+/* ── the coach shelf ──
+
+   Tom, 2026-09-23: "We should put an upload to coach function in train."
+
+   The rule this had to work around: a client's space, `/u/<their uid>`, is
+   readable by them and nobody else, which is the whole reason the sync is
+   safe to hand to a client at all. Tom reading it directly would mean
+   granting his account read over every client's private space, and it would
+   turn a deliberate send into a live feed off their phone. He picked neither.
+
+   So there is one shelf, `drop/coach`, and a client puts a parcel on it. The
+   rules let a signed-in person write to `drop/coach/<their own uid>` and
+   nowhere else, so one client can never touch another's parcel and cannot
+   forge whose it is — the database enforces that, not this file. Only Tom's
+   account can read the shelf or clear it, and his uid appears only in the
+   rules, never in this repo.
+
+   Nothing about the row sync is touched. A parcel is not a row, never goes
+   through `Rec.merge` on the way up, and the shelf is not a place data lives:
+   COACH takes the parcel in as rows and clears it.
+
+   Unlike the row sync this runs in a FRAME too, because TRAIN is usually in
+   one, and the button is a button. There is no socket left open: the SDK is
+   already there or is fetched once, one read or one write happens, and that
+   is the end of it. Firebase keeps the sign-in per origin, so a frame sees
+   the account the top document signed in with.                             */
+var SHELF = 'drop/coach';
+var PARCEL = 2000000;   /* the ceiling the rules also check, so a refusal is
+                           readable here rather than a permission error */
+
+/* The account as the database will see it, or a plain reason why there isn't
+   one. Deliberately not `cfg.uid`: a stored uid outlives the token that makes
+   it mean anything, and addressing a path nothing can read is the failure
+   that reads as "it silently didn't send". */
+function account() {
+  if (isFile()) return Promise.reject(new Error('this page was opened from a folder, and Google sign-in needs a web address'));
+  var bad = missing(cfg.cfg);
+  if (bad) return Promise.reject(new Error(bad));
+  return loadSDK().then(function () {
+    var a = g.firebase.auth(app());
+    if (a.currentUser) return a.currentUser;
+    return new Promise(function (res) {
+      var off = a.onAuthStateChanged(function (u) { off(); res(u); });
+    });
+  }).then(function (u) {
+    if (!u) throw new Error('not signed in');
+    return { uid: u.uid, email: u.email || '', db: g.firebase.database(app()) };
+  });
+}
+
+/* Why a parcel is a STRING rather than a tree of children: a training log is
+   thousands of small objects, and writing it as a tree is thousands of keys
+   the rules have to walk and the client has to upload as structure. One
+   string is one write, and the only thing anything between here and COACH
+   needs to know about it is how long it is. */
+function put(kind, bag) {
+  return account().then(function (me) {
+    var data = JSON.stringify(bag);
+    if (data.length > PARCEL) throw new Error('that is too big to send this way. Use Send To Coach’s file instead');
+    return me.db.ref(SHELF + '/' + me.uid).set({
+      kind: String(kind || ''), at: new Date().toISOString(),
+      by: me.email, n: (bag && bag.rows && bag.rows.length) || 0, data: data,
+    }).then(function () { return data.length; });
+  }).catch(function (e) {
+    var m = (e && e.message) || 'the send did not land';
+    if (/permission/i.test(m)) m = 'the database refused the write. Check the drop rules from CLOUD.md';
+    throw new Error(m);
+  });
+}
+
+/* Everything on the shelf, newest first. A parcel whose text will not parse is
+   left where it is rather than thrown away: it is the only copy, and a client
+   who pressed send should not have it deleted by the app that could not read
+   it. */
+function shelf() {
+  return account().then(function (me) {
+    return me.db.ref(SHELF).once('value');
+  }).then(function (snap) {
+    var out = [];
+    snap.forEach(function (c) {
+      var v = c.val() || {}, body = null;
+      try { body = JSON.parse(v.data || 'null'); } catch (e) {}
+      out.push({ from: c.key, kind: v.kind || '', at: v.at || '', by: v.by || '', n: v.n || 0, body: body });
+    });
+    out.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
+    return out;
+  }).catch(function (e) {
+    var m = (e && e.message) || 'the shelf could not be read';
+    if (/permission/i.test(m)) m = 'the database refused the read. Only the coach account can read the shelf';
+    throw new Error(m);
+  });
+}
+
+function clear(from) {
+  return account().then(function (me) { return me.db.ref(SHELF + '/' + from).remove(); });
+}
+
 /* ── incoming ──
 
    One query, ordered by `updated_at` and starting at the last one we merged.
@@ -468,6 +565,19 @@ var Cloud = {
 
   signIn: signIn,
   signOut: signOut,
+
+  /* ── the coach shelf ──
+     `send` is the client's end, `waiting` and `took` are Tom's. All three work
+     in a frame, which the row sync deliberately does not. */
+
+  /** the account id the database sees, for pasting into the drop rules */
+  who: function () { return account().then(function (me) { return { uid: me.uid, email: me.email }; }); },
+  /** put one parcel on the coach's shelf. Resolves with its size in characters. */
+  send: put,
+  /** everything on the shelf, newest first. Coach account only. */
+  waiting: shelf,
+  /** that one is in. Clear it. */
+  took: clear,
   start: start,
   stop: stop,
   /** push whatever is waiting, now */

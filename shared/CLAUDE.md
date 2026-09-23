@@ -90,6 +90,31 @@ are holding a stale copy of whatever you just changed.
    `index.html`, then run the sync script, which asserts all copies are identical.
    Never hand-edit a copy.
 
+## The coach shelf in `cloud.js` (2026-09-23)
+
+Added from a COACH session, which the one-session rule above would normally
+forbid; Tom asked for it in that session and it is one commit, so it reverts
+alone. `CLOUD.md` is the long version.
+
+`Cloud.send`, `Cloud.waiting`, `Cloud.took` and `Cloud.who`. One shelf,
+`drop/coach`, where a client leaves a parcel and Tom's COACH takes it. Three
+things about it that are load-bearing:
+
+- **The database enforces it, not this file.** The rules let a signed-in person
+  write to `drop/coach/<their own uid>` and nowhere else, and let only the
+  coach read or clear the shelf. Nothing here is a security check and nothing
+  here should start pretending to be one.
+- **These four work in a FRAME**, which the row sync deliberately does not: the
+  sync holds one socket per document, and this holds none. It is one read or
+  one write on a button press, through `account()`, and then it is over.
+- **A parcel is not a row.** It never goes through `Rec.merge` on the way up
+  and the shelf is not a place data lives. The app that takes it turns it into
+  rows and clears it.
+
+**Untested against a real database.** Every check so far stubbed the transport
+and drove the real buttons. Nobody has signed in. `_smoke.html` has no checks
+for any of this yet, and that is the open foundation job.
+
 ## Testing
 
 ```

@@ -602,6 +602,36 @@ Never claim it works because it should. Claim it because you watched it.
 
 ---
 
+## Send To Coach, over the shelf (1.0.18, 2026-09-23)
+
+Tom, 2026-09-23: *"We should put an upload to coach function in train."* And,
+on where it goes: *"Maybe in post workout share menu."*
+
+The button does the same thing it always did from the client's side. What
+changed is what it produces.
+
+- **It uploads.** `Cloud.send('train', bag)` puts the same bag the file always
+  held on the coach's shelf in the database, `drop/coach/<the client's own
+  account>`. The rules are what make that safe, and `CLOUD.md` holds them.
+- **The file is the fall-back, not the past.** Opened from a folder, not
+  signed in, no signal, Firebase blocked: the file is made exactly as before
+  and the message says a file was saved instead and why. Hard constraint 4.
+  Do not delete that path.
+- **It still sends everything, never one day.** COACH merges on `updated_at`,
+  so a whole send costs nothing and a partial one is how the days around it go
+  missing.
+- **It is on the session menu now as well as Profile.** The moment a client
+  would send is the one they just finished, so it sits under Share As Text.
+- **Nothing leaves the phone until it is pressed.** That is the rule Tom kept
+  when he chose this over a live feed off a client's phone, and it is not a
+  detail to optimise away later.
+
+Watched 2026-09-23 in the browser: signed out, the menu item made the file and
+said "not signed in"; with the upload answering, it sent the bag, no file, and
+said so; with the upload refusing, the file came back with the reason. COACH
+took the same bag off a stubbed shelf and it landed as that client's rows.
+The real database has never been in the loop — nobody has signed in.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the

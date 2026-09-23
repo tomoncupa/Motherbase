@@ -82,6 +82,36 @@ with no `fields` drew derived labels. 44px date buttons and no sideways
 scroll at 375px. `_review.html` passed 116 of 116 at desktop and phone width,
 foundation 328 of 328.
 
+## The shelf: a send with no file (1.0.5, 2026-09-23)
+
+A client's TRAIN now uploads instead of making a file (`train/CLAUDE.md`, Send
+To Coach). COACH takes it off the shelf.
+
+- **`SENDS` in the header** says how many are waiting, and COACH looks once,
+  1.5 seconds after the first paint — after it, because the shelf needs the
+  network and a paint must not.
+- **Nothing new happens to the data.** A parcel holds the bag the file always
+  held, so it goes through the same `takeFile` and merges on `updated_at`. The
+  transport changed and nothing else did.
+- **A parcel is cleared only after its rows are in**, and one that cannot be
+  read is left on the shelf rather than thrown away. Until COACH has taken it,
+  that parcel is the only copy anywhere but the client's phone.
+- **Settings shows the account id**, because the drop rules in Firebase need it
+  written in and nowhere else in the suite shows it. It is not in this repo; it
+  is read off the live sign-in.
+
+**COACH and TRAIN sessions are already one, and were before this.** Tom,
+2026-09-23: *"Treat Coach and Train sessions as 1."* Measured rather than
+assumed: `sessionsOf` groups every one of a client's `cset` rows by date, so a
+day holding a set Tom logged here and a set the client sent from their own
+phone is ONE row in RECENT SESSIONS with one combined volume, and
+`countSession` writes one WEALTH `sesh` for it. The one place they are
+deliberately not one is billing: `coachSets` counts only `pid|k-` keys, so a
+day the client logged alone bills nothing. A client training on their own is
+not a 1:1 delivered. Do not "fix" that.
+
 ## Needs from the foundation
 
-Nothing open.
+`shared/_smoke.html` has no checks for the coach shelf (`Cloud.send`,
+`waiting`, `took`, `who` in `cloud.js`). Everything watched so far stubbed the
+transport. A foundation session should add them.
