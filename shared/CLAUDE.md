@@ -360,3 +360,17 @@ QUESTS, LOG, TRAIN and SPEAK.
 Found on the way: BLOCK registered `lane`, `item` and `routine` but not
 `rhythm` or `plan`, so an Every or Anytime habit and the published plan had
 never gone to the sheet. Both are registered now.
+
+### App icon rework, in progress 2026-09-23
+
+Tom's picks so far, nothing drawn in `icons.js` yet. Frame: the cut-corner
+window (notice.js shape) with a 1.5px edge in the app's colour, on a `#0E141D`
+plate, glyph in the same colour. Symbols: RPG inventory items (HOME campfire,
+LOG tome, ELEMENT potion and so on); Tom wants more options inside that family
+before any are final. Colours go by family, apps that share data share one:
+STATUS blue, TRAIN and FORM red, QUESTS yellow, WEALTH and RECEIPTS green,
+LOG, ARC and SPEAK purple, CHECK IN and COACH pink, FOODDÉX and ELEMENT teal,
+STYLE and NOTICE silver, HOME white. BLOCK is Lego bricks in real Lego red,
+yellow and blue, the one multicolour icon. Rejected: drawing-style variants
+(line, duotone, solid, angular, pixel); he wants different symbols, not
+different pens.
