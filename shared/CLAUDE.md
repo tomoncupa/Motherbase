@@ -382,7 +382,13 @@ branching tree of diamonds (lit filled, locked hollow), SPEAK microphone,
 CHECK IN portrait, COACH Poké Ball, FOODDÉX open two-panel Pokédex, ELEMENT
 mortar and pestle, WEALTH bold $ with two bars, RECEIPTS bill in scanner
 corners, STYLE palette, NOTICE the cut-corner window with a title bar and
-"!". Drawing style (line, thin, solid, glow, pixel) is being picked next.
+"!". Round four: style is THIN WITH A SOFT FILL (1.1 line, fill at 22%).
+TRAIN's bar is long, at real proportions, and runs near edge to edge;
+NOTICE's window fills the tile, its "!" thinner. Colours REPLACE the family
+colours above: HOME, FORM, SPEAK, COACH, FOODDÉX, ELEMENT white; STATUS,
+QUESTS, NOTICE brand gold; TRAIN and LOG blue; ARC purple; CHECK IN,
+WEALTH, RECEIPTS green (Lego green or dollar-bill green, his pick pending);
+STYLE colourful (rainbow edge, four paint colours); BLOCK Lego.
 
 Earlier picks, 2026-09-23: STATUS character sheet, FORM eye, QUESTS quest
 mark "!", CHECK IN portrait, ELEMENT mortar and pestle, STYLE dye palette,
