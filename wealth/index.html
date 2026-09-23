@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.28, 2026-09-23">
+<meta name="mb-version" content="1.0.29, 2026-09-23">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -423,7 +423,9 @@ function seed() {
 function capState(catId, mo) {
   const c = Rec.get('cat', null, catId) || {};
   const cap = num(c.cap, 0);
-  if (!cap) return null;
+  /* `zero` is an allowance of nothing, typed as 0 on purpose. Tom, 2026-09-23:
+     "We'll limit outside food to 0". A blank cap is still no allowance. */
+  if (!cap && !c.zero) return null;
   const from = monthStart(mo), to = monthEnd(mo);
   const spent = rangeSpend(from, to).byCat[catId] || 0;
   const days = Day.diff(to, from) + 1;
@@ -434,7 +436,7 @@ function capState(catId, mo) {
   const pace = done ? cap : cap * (gone / days);
   return { cap: cap, spent: spent, left: cap - spent, days: days, gone: gone,
            pace: pace, over: spent > cap, ahead: spent > pace, done: done,
-           pct: cap ? spent / cap : 0 };
+           pct: cap ? spent / cap : (spent > 0 ? 1 : 0) };
 }
 /* How many of the last N whole months went past the cap. Three is the number
    doctrine names, so three is what it takes to offer a change. */
@@ -447,7 +449,7 @@ function capMisses(catId, n) {
   }
   return miss;
 }
-const capped = () => cats().filter(c => num(c.cap, 0) > 0);
+const capped = () => cats().filter(c => num(c.cap, 0) > 0 || c.zero);
 
 const cats = () => Rec.all('cat').map(r => Object.assign({ id: r.key }, r.payload))
   .sort((a, b) => (a.ord || 0) - (b.ord || 0) || a.name.localeCompare(b.name));
@@ -3798,7 +3800,7 @@ function drawOut(m) {
   const shelfOf = id => ['subs', 'gym'].indexOf(id) > -1 || catGrp(id) === 'biz' ? 'subs'
     : id === 'water' || id === 'groceries' || catGrp(id) === 'var' ? 'regular' : 'bills';
   const shelf = b => shelfOf(b.cat);
-  const hasAllowance = id => num((Rec.get('cat', null, id) || {}).cap, 0) > 0;
+  const hasAllowance = id => { const c = Rec.get('cat', null, id) || {}; return num(c.cap, 0) > 0 || !!c.zero; };
   /* An allowance sits in the card its category belongs to, with what has
      gone against it this month from every account. Over is said as a number,
      because he asked to see it: "I also want it to show if I went over". */
@@ -5962,11 +5964,12 @@ function catSheet(existing) {
         '<b>Not spending</b> is money changing places, and never counts as an outgoing.'));
 
       b.appendChild(el('h2', null, 'A MONTHLY ALLOWANCE'));
-      const cap = amountField(existing && num(existing.cap, 0) ? existing.cap : '');
+      const cap = amountField(existing && num(existing.cap, 0) ? existing.cap : existing && existing.zero ? '0' : '');
       b.appendChild(fld('How much you allot to this a month', cap));
       const capNote = el('div', 'note', '');
       const paintCap = () => {
         const v = num(cap.value, 0);
+        if (!v && cap.value.trim() !== '') { capNote.innerHTML = 'Nothing allowed. Every peso here shows as over.'; return; }
         if (!v) { capNote.innerHTML = 'Leave it blank and this category is just counted, never judged.'; return; }
         const st = existing ? capState(existing.id, monthOf(Day.today())) : null;
         capNote.innerHTML = 'That is ' + esc(money(v / 4.345)) + ' a week, or ' +
@@ -5976,16 +5979,17 @@ function catSheet(existing) {
       cap.addEventListener('input', paintCap);
       paintCap();
       b.appendChild(capNote);
+      const zeroed = () => cap.value.trim() !== '' && !num(cap.value, 0) ? 1 : 0;
       h.save = () => {
         const n = name.value.trim();
         if (!n) { name.focus(); return false; }
         if (existing) Rec.set('cat', null, existing.id,
-          merge(existing, { name: n, grp: grp.get(), cap: num(cap.value, 0) }));
+          merge(existing, { name: n, grp: grp.get(), cap: num(cap.value, 0), zero: zeroed() }));
         else {
           const id = makeCat(n, grp.get());
           if (!id) return false;
-          if (num(cap.value, 0)) Rec.set('cat', null, id,
-            merge(Rec.get('cat', null, id), { cap: num(cap.value, 0) }));
+          if (num(cap.value, 0) || zeroed()) Rec.set('cat', null, id,
+            merge(Rec.get('cat', null, id), { cap: num(cap.value, 0), zero: zeroed() }));
         }
         return true;
       };
