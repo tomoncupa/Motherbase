@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover">
-<meta name="mb-version" content="1.0.3, 2026-09-22">
+<meta name="mb-version" content="1.0.4, 2026-09-23">
 <title>ARC — Mind Canvas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;600&family=Space+Grotesk:wght@500;700&family=Caveat:wght@500;700&family=Patrick+Hand&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
@@ -2828,6 +2828,12 @@ function skSync(){
   SKI=null;
   const t=skToday(), touched=new Set(), I=skIndex(), made=Rec.setting('arc','skmade')||{};
   let madeDirty=false;
+  /* A review todo is looked for on every date, not only the one `arc.skmade`
+     remembers: that setting is one row, two devices writing it keep only the
+     later list, and the other device wrote the review again on its own today.
+     Tom, 2026-09-23, duplicate todos once live sync joined his devices. */
+  const onAny={};
+  Rec.all('note').concat(Rec.tombstones('note')).forEach(r=>{if(r.key.indexOf('arc-r-')===0&&!onAny[r.key])onAny[r.key]=r.date});
   DB.maps.forEach(m=>{
     const skills=Object.values(m.nodes||{}).filter(n=>n.sk), want={};
     let proj=null; const P=()=>proj||(proj=skProject(m.title));
@@ -2842,6 +2848,7 @@ function skSync(){
       }
       if(si.passOn&&si.next){
         const k='arc-r-'+m.id+'-'+n.id+'-'+si.anchor; want[k]=1;
+        if(!made[k]&&onAny[k]){made[k]=onAny[k];madeDirty=true}
         const home=made[k]||t;
         if(!Rec.get('note',home,k)&&!Rec.tombstone('note',home,k)&&!made[k]){
           Rec.set('note',home,k,skTodo('Review, cold: '+name+test,home,si.next,P(),null,{m:m.id,n:n.id,k:'review'}));
