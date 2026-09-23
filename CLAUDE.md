@@ -794,6 +794,21 @@ briefs). A session works on one module:
 - **An app session never edits `shared/` or another app.** If it needs a
   foundation change, it writes the need under "Needs from the foundation" in
   its own brief and tells Tom, and a foundation session picks it up.
+- **Work that spans apps names every module it touches at the start** and reads
+  each one's brief. COACH, WEALTH and TRAIN are one system; so are STATUS,
+  FOODDÉX and ELEMENT.
+- **A lesson any app could hit goes in Known traps here.** A lesson only one app
+  can hit stays in that app's brief. WRAP asks which it is.
+- **A brief is rules, loaded every time; `HISTORY.md` beside it is the diary,**
+  read only when working in that corner. When a brief passes about 20 KB, move
+  the build stories out and keep the rules.
+- **Fetch and merge before every push**, never rebase: `git pull --no-rebase`,
+  then push. A rebase dies halfway while STATUS.exe or Main Menu.exe is running,
+  because Windows locks them.
+- **The client build refuses a dirty tree.** `tools/build-client.py` stops and
+  names any uncommitted file in an app clients get, because it packages every
+  client app and would ship another session's half-finished work. `--dirty`
+  overrides it only when the change is yours and finished.
 - **Wrap at around 200k tokens**, or when the module's task is done.
 
 So:

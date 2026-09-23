@@ -31,7 +31,8 @@ USAGE
 import io, json, os, re, shutil, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEST = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 \
+ARGS = [a for a in sys.argv[1:] if a != '--dirty']
+DEST = os.path.abspath(ARGS[0]) if ARGS \
     else os.path.join(os.path.dirname(ROOT), 'Motherbase-Client')
 
 # ── what a client gets ────────────────────────────────────────────────────
@@ -91,6 +92,30 @@ CLIENT_ONLY = {'README.md': 'README.md', 'guide.html': 'guide.html',
 
 def fail(msg):
     sys.exit('build-client: ' + msg)
+
+
+# ── refuse a dirty tree ───────────────────────────────────────────────────
+# Tom, 2026-09-23: one session per module means another session can have an
+# app half finished in this folder. This script packages every client app, so
+# building now would ship that half onto clients' phones. Anything uncommitted
+# in what a client gets stops the build and is named. `--dirty` overrides it,
+# for a session that knows the unsaved change is its own and finished.
+def refuse_dirty():
+    import subprocess
+    paths = [d + '/' for d in COPY_DIRS] + COPY_FILES
+    try:
+        out = subprocess.run(['git', 'status', '--porcelain', '--'] + paths,
+                             cwd=ROOT, capture_output=True, text=True).stdout
+    except OSError:
+        return
+    if out.strip():
+        fail('unsaved changes in what clients get. Commit them, or wait for '
+             'the session that owns them. Pass --dirty only if they are yours '
+             'and finished.\n' + out.rstrip())
+
+
+if '--dirty' not in sys.argv:
+    refuse_dirty()
 
 
 def patch(text, pattern, repl, what, flags=0):
