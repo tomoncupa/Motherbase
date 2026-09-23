@@ -79,8 +79,27 @@ var CHUNK = 400;            /* rows per write, so a first sync of 12,000 sets
    because it is a property of this DEVICE, not of his data — syncing the
    config through the thing it configures is a circle, and a client restoring
    his backup must not inherit his database.                                */
+/* ── the suite's own project, built in ──
+   Tom, 2026-09-23: "why do I need to paste the config again? cant I just
+   log on?" So every device starts with it and shows Sign in with Google.
+   This is not a secret: a Firebase web config is handed to every visitor of
+   any page that uses it. What keeps rows private is the database's rules,
+   `/u/<uid>` readable and writable by that account only (CLOUD.md, step 3),
+   so each person who signs in, a client included, gets their own space and
+   nobody else's. A pasted config still wins, for a different project.
+   Nothing here touches the network until someone signs in. */
+var BUILT_IN = {
+  apiKey: 'AIzaSyALSSt8W3N_Wlj6t54K7sMcCQ7rZz20E_g',
+  authDomain: 'motherbase-96011.firebaseapp.com',
+  databaseURL: 'https://motherbase-96011-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId: 'motherbase-96011',
+  appId: '1:487331976627:web:22a8f4d68be5ebd51aa7c6'
+};
 var cfg = { cfg: null, on: 0, uid: '', email: '', at: '', pushed: '', seen: '' };
-function cread() { try { Object.assign(cfg, JSON.parse(localStorage.getItem(CKEY) || '{}')); } catch (e) {} }
+function cread() {
+  try { Object.assign(cfg, JSON.parse(localStorage.getItem(CKEY) || '{}')); } catch (e) {}
+  if (!cfg.cfg) cfg.cfg = BUILT_IN;
+}
 function csave() { try { localStorage.setItem(CKEY, JSON.stringify(cfg)); } catch (e) {} }
 cread();
 
@@ -445,7 +464,7 @@ var Cloud = {
     csave(); say();
     return '';
   },
-  forget: function () { stop(); fb = null; cfg = { cfg: null, on: 0, uid: '', email: '', at: '', pushed: '', seen: '' }; csave(); say(); },
+  forget: function () { stop(); fb = null; cfg = { cfg: BUILT_IN, on: 0, uid: '', email: '', at: '', pushed: '', seen: '' }; csave(); say(); },
 
   signIn: signIn,
   signOut: signOut,

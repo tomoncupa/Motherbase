@@ -65,17 +65,16 @@ Project settings (the gear, top left), scroll to Your apps, click the web icon
 `</>`, register the app with any nickname. It shows you a block that starts
 `const firebaseConfig = {`. Copy the whole block.
 
-**6. Paste it into the app.**
-Open any app, Settings, DATA, LIVE SYNC. Paste the block into the box. Paste
-the whole thing, braces and all, it reads it either way.
-
-Pasting it once does every app on that device.
+**6. Nothing to paste any more.**
+Since 2026-09-23 the config is built into `shared/cloud.js` (`BUILT_IN`), so
+every device and every app starts with it. Pasting a block still works, and
+wins, for a different project.
 
 **7. Sign in.**
 Press Sign in with Google. That is it. It says `Live as <your email>` when it
 is working.
 
-Do steps 6 and 7 again on the phone. Not steps 1 to 5.
+On any other device, phone or desktop program, only step 7.
 
 ---
 
