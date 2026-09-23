@@ -438,6 +438,17 @@ Paint from localStorage immediately, redraw on `Rec.ready`. Never put the first
 paint behind the store. That is item 2 of the root brief's foundation list and
 STATUS is the app that got it wrong.
 
+## Next up
+
+**Movable cards, like Home's widgets.** Tom, 2026-09-23: "I want to drag
+WEALTH cards the way I do Home's widgets", e.g. the pie chart on top some
+days. One saved layout for every device (a setting row, so it syncs), not per
+device. Read `HOME.md` and the home screen's widget grid first and reuse its
+behaviour (spots, drag, the + in a gap), not only its look. Not started.
+
+**The bill sheet has no field for `months`** (bills every few months). Add it
+when the sheet is next touched.
+
 ## History
 
 Built and watched from 2026-09-11, moved from the root brief. (HISTORY.md: History, moved from the root brief on 2026-09-22)
