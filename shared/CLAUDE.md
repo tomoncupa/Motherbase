@@ -132,6 +132,25 @@ work. Clean up any test data you write, and stop the server when you are done.
   the other boundary maps with what is on disk. Deleting a key from `seen`
   does nothing; set it to `''` instead. A smoke check that deleted its own
   mark passed once per device and failed every run after (2026-09-15).
+- **A mirror check has to put the mirror back, and two of them read marks they
+  never set.** Found 2026-09-23. `mirror: a link that has NEVER answered is the
+  user's problem` and `mirror: an emptied push stamp is not proof the sheet ever
+  answered` both ask what the app says when a link has never worked, and
+  `neverAnswered()` answers off two marks: `sheetV`, and any per-app push stamp.
+  Neither check cleared the stamps, and a check further up the file pushes as
+  `status` and leaves a real one behind, so the answer depended on the run
+  order. Served on a port that had never been used they failed, 326 of 328,
+  with io.js correct; on a port with prior history they passed. They clear
+  every mark themselves now.
+
+  The second half is worse and was found on the way. Every teardown in that
+  section wrote `url: ''`, which on a real device is the sync link Tom pasted,
+  and `_review.html` runs this file — so a review silently unlinked his sheet
+  on that device. Watched both ways: with the old file a pasted link was gone
+  after one run; with the new one the link, the `sheetV` and a real `status`
+  stamp all survive. `mirrorSnap`, `mirrorBlank` and `mirrorPut` sit at the top
+  of the mirror section, and `mirrorPut(MIRROR_WAS)` closes it. Use them for
+  anything new in there.
 
 ## History, moved from the root brief on 2026-09-22
 
