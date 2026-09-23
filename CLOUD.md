@@ -93,12 +93,13 @@ want going over mobile data.
 
 **It cannot sign in from a folder.** Google checks the web address a sign-in
 came from, and a file opened from a folder has no address to check. So the
-desktop folder copy and Motherbase.exe show the live sync row and explain
-this instead of failing. The sheet sync works in both, as it always has.
+folder copy shows the live sync row and explains this instead of failing.
 
-That leaves Motherbase.exe out of live sync as things stand. The fix is to
-point it at the hosted copy instead of the local file, which is a separate
-decision and is not made yet.
+**The desktop programs open the hosted copy** since 2026-09-23, so they sign
+in like any other device. A file named `use-folder-copy.txt` in `desktop/`
+sends both back to the folder copy together. Untested: whether Google lets its
+sign-in window open inside a program rather than a browser. If it refuses,
+the programs keep the sheet sync, and that problem gets its own fix.
 
 **It is off until you set it up.** An app with no config pasted makes no
 network request from this at all. Clients get the file and never notice it.
@@ -117,6 +118,7 @@ worth knowing:
 | the database needs its index | Step 3. The `indexOn` line is missing. |
 | could not reach the Firebase library | No signal, or something is blocking it. Nothing is broken; it tries again next time the app opens. |
 | This page was opened from a folder | Expected. Use the hosted copy. |
+| Google says the browser or app may not be secure | You are in STATUS.exe or Main Menu.exe and Google refused the program. Tell Claude. |
 
 Nothing here can lose data. A failed sync moves no boundary, so the same rows
 simply go again next time.

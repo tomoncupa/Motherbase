@@ -73,6 +73,30 @@ class App : Form
     WebView2 web;
     NotifyIcon tray;
     MenuItem miTop;
+    /* ── hosted first ──
+       Tom, 2026-09-23: every device opens the hosted copy and joins by LIVE
+       SYNC, and these programs are devices too. A page opened from the folder
+       cannot sign in with Google, so the folder copy is now the exception:
+       a file named use-folder-copy.txt beside the program switches BOTH
+       programs back, because they share one store and must never split. The
+       folder copy's rows stay in the data folder under its own address. */
+    const string HOSTED = "https://tomoncupa.github.io/Motherbase/";
+    static bool UseFolder()
+    {
+        return File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "use-folder-copy.txt"));
+    }
+    /* Google's sign-in window has to open in here, where the page that asked
+       for it can hear the answer. Every other new window goes to his browser. */
+    static bool SignInWindow(string uri)
+    {
+        try
+        {
+            string h = new Uri(uri).Host.ToLowerInvariant();
+            return h == "accounts.google.com" || h.EndsWith(".firebaseapp.com");
+        }
+        catch { return false; }
+    }
+
     string root, cfgPath, dataDir;
     bool onTop = true;
     string hotkey = "ctrl+b";
@@ -124,7 +148,7 @@ class App : Form
         LoadCfg();
 
         string page = Path.Combine(root, "status", "index.html");
-        if (!File.Exists(page))
+        if (UseFolder() && !File.Exists(page))
         {
             MessageBox.Show("Could not find STATUS at\n\n" + page +
                 "\n\nThis program has to sit in the desktop folder inside Motherbase.",
@@ -159,7 +183,7 @@ class App : Form
         web.DefaultBackgroundColor = BackColor;
         web.CreationProperties = new CoreWebView2CreationProperties();
         web.CreationProperties.UserDataFolder = dataDir;
-        pageUrl = new Uri(page).AbsoluteUri + "?desktop=1&host=app";
+        pageUrl = (UseFolder() ? new Uri(page).AbsoluteUri : HOSTED + "status/index.html") + "?desktop=1&host=app";
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);
         /* Navigating after the engine is up, rather than setting Source
@@ -226,6 +250,7 @@ class App : Form
         /* A link to anywhere else opens in his real browser, not in here. */
         c.NewWindowRequested += (s2, e2) =>
         {
+            if (SignInWindow(e2.Uri)) return;
             e2.Handled = true;
             try { System.Diagnostics.Process.Start(e2.Uri); } catch { }
         };

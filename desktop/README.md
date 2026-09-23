@@ -43,17 +43,16 @@ Opening it twice does nothing. There is only ever one.
 Right click the tray icon next to the clock for **Open STATUS**, **Check in
 now**, always on top, the shortcut, and **Quit**.
 
-## Its data is its own
+## Its data
 
-This is a real program, so it has its own store, the way any program does. It
-opens **empty** the first time and fills up from your sync code, exactly as a
-second device would. Set the sync up in STATUS under Settings, DATA, and give
-it a minute.
+STATUS.exe and the Main Menu share one store, in `desktop\data`. Since
+23 September both open the hosted copy, tomoncupa.github.io/Motherbase, so
+they sign in to LIVE SYNC like a phone does and hold the same rows. The first
+time, they open empty and fill up once you sign in (or paste the sheet link).
 
-That is the one real cost of not being inside Chrome any more, and it buys the
-end of every window bug we had: the title bar that kept coming back, the page
-being clipped underneath it, and the window being closeable out from under the
-app so the check ins silently stopped.
+To go back to the folder copy, make an empty file called
+`use-folder-copy.txt` in this folder. Both programs switch together, and the
+rows the folder copy had are still there. Delete the file to come back.
 
 ## How it works
 
