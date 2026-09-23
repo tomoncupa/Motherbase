@@ -18,11 +18,11 @@
 
   The page says how many it wrote. Stop the receiver afterwards.
 
-  A tile is the theme's card colour with the app's chart colour mixed in, the
-  same plate recipe as mb-plate (26% at the top, 13% at the bottom, a lit top
-  edge at 62%), and the app's drawing in the theme's reading colour, in the
-  theme's own stroke recipe. The wobble filter is left off: a picture file
-  has no page to hold the filter, and a missing filter hides the drawing.
+  Since 2026-09-23 every app's picture is its picked tile from icons.js
+  (Icons.APP_ART): the cut-corner window with an edge in the app's own
+  colour on the dark plate. That is art, the same in every theme, so each
+  theme's folder gets the same picture. The window sits inset from the
+  square because iOS rounds the corners and would cut the window's own.
 -->
 <script src="../shared/skins.js"></script>
 <script src="../shared/icons.js"></script>
@@ -39,43 +39,47 @@
   document.body.appendChild(probe);
   const rgb = v => { probe.style.color = ''; probe.style.color = v; return getComputedStyle(probe).color; };
   const mix = (a, pct, b) => rgb('color-mix(in srgb, ' + a + ' ' + pct + '%, ' + b + ')');
-  /* The drawing in the theme's reading colour, unless that colour cannot be
-     read on this tile, which is Lego's red: then white or near-black,
-     whichever reads. A computed colour is rgb() in 0 to 255 or color(srgb)
-     in 0 to 1. */
-  const chans = c => { const n = (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number); return /^color\(/.test(c) ? n.map(v => v * 255) : n; };
-  const lumOf = c => { const [r, g, b] = chans(c).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * r + .7152 * g + .0722 * b; };
-  const ratio = (a, b) => { const x = lumOf(a), y = lumOf(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
-  const inkFor = (tile, ink) => ratio(ink, tile) >= 3 ? ink : (ratio('rgb(255, 255, 255)', tile) >= ratio('rgb(17, 17, 17)', tile) ? 'rgb(255, 255, 255)' : 'rgb(17, 17, 17)');
 
   await Skins.load('../shared/skins.json');
+  const APP_ART = Icons.APP_ART;
+  const W = 180, IN = 16, F = W - IN * 2, CUT = F * 10 / 64, EDGE = 3;
+  const cutPath = (ctx, x, y, w, k) => {
+    ctx.beginPath();
+    ctx.moveTo(x + k, y); ctx.lineTo(x + w - k, y); ctx.lineTo(x + w, y + k); ctx.lineTo(x + w, y + w - k);
+    ctx.lineTo(x + w - k, y + w); ctx.lineTo(x + k, y + w); ctx.lineTo(x, y + w - k); ctx.lineTo(x, y + k); ctx.closePath();
+  };
+  const pics = {};
+  for (const app of APPS) {
+    const art = APP_ART[app];
+    if (!art) continue;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = W;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#080B10'; ctx.fillRect(0, 0, W, W);
+    if (art.edge === 'rainbow') {
+      const g = ctx.createConicGradient(0, W / 2, W / 2);
+      ['#E0533D', '#F0B323', '#5DBB63', '#4C8DF0', '#9B7BEA', '#E0533D'].forEach((c, i, l) => g.addColorStop(i / (l.length - 1), c));
+      ctx.fillStyle = g;
+    } else ctx.fillStyle = art.c;
+    cutPath(ctx, IN, IN, F, CUT); ctx.fill();
+    const glow = ctx.createRadialGradient(W / 2, IN + F * .3, 0, W / 2, IN + F * .3, F * .7 * .75);
+    glow.addColorStop(0, mix(art.c, 16, '#0E141D')); glow.addColorStop(1, '#0E141D');
+    ctx.fillStyle = glow;
+    cutPath(ctx, IN + EDGE, IN + EDGE, F - EDGE * 2, CUT - EDGE * .4); ctx.fill();
+    const g = Math.round(F * (art.big ? .82 : 38 / 64));
+    const svg = Icons.appSvg(app, { size: g, art: true })
+      .replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error(app)); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+    ctx.drawImage(img, (W - g) / 2, (W - g) / 2, g, g);
+    pics[app] = cv.toDataURL('image/png');
+    const i = new Image(); i.src = pics[app]; i.width = 60; i.title = app; i.style.borderRadius = '13px';
+    document.getElementById('grid').appendChild(i);
+  }
   const out = {};
-  for (const skin of Skins.data.skins) {
-    const t = Skins.tokensFor(skin);
-    const surf = t['--surface-1'], ink = t['--text-1'];
-    for (const app of APPS) {
-      const slot = Icons.appSlot(app);
-      const tint = slot ? t['--data-' + slot] : t['--accent'];
-      const cv = document.createElement('canvas');
-      cv.width = cv.height = 180;
-      const ctx = cv.getContext('2d');
-      const grad = ctx.createLinearGradient(0, 0, 0, 180);
-      grad.addColorStop(0, mix(tint, 26, surf));
-      grad.addColorStop(1, mix(tint, 13, surf));
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, 180, 180);
-      ctx.fillStyle = mix(tint, 62, surf); ctx.fillRect(0, 0, 180, 3);
-      const svg = Icons.svg('app.' + app, { size: 108, skin: skin })
-        .replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ')
-        .replace(/ filter="[^"]*"/, '')
-        .replace(/currentColor/g, inkFor(mix(tint, 26, surf), rgb(ink)));
-      const img = new Image();
-      await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error(skin.id + '/' + app)); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
-      ctx.drawImage(img, 36, 36, 108, 108);
-      const png = cv.toDataURL('image/png');
-      out[skin.id + '/' + app] = png;
-      if (skin.id === 'block') out[app] = png;
-      if (app === 'home') { const i = new Image(); i.src = png; i.width = 48; i.title = skin.id; i.style.borderRadius = '11px'; document.getElementById('grid').appendChild(i); }
-    }
+  for (const app in pics) {
+    out[app] = pics[app];
+    for (const skin of Skins.data.skins) out[skin.id + '/' + app] = pics[app];
   }
   say('Sending ' + Object.keys(out).length + ' pictures…');
   try {

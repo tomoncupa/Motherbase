@@ -211,6 +211,7 @@ const ROLES = {
   'app.mix': 'drop',
   'app.system': 'info',
   'app.speak': 'mic',
+  'app.receipts': 'camera',
   quest: 'flag', flag: 'flag',
   pose: 'pose', physique: 'pose', checkin: 'pose',
   compare: 'frames', frames: 'frames',
@@ -230,6 +231,79 @@ const ROLES = {
    for twelve apps, so two share a slot where they never sit side by side;
    HOME and STYLE wear the accent. */
 const APP_SLOT = { block: 1, system: 1, status: 2, portion: 2, mix: 2, train: 3, coach: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6, speak: 6 };
+
+/* ── each app's own picture ──
+   Tom's picks, 2026-09-23 (the reference page is tools/icon-set.html, and
+   shared/CLAUDE.md, "App icon rework", has every choice and why). One symbol
+   per app, thin with a soft fill, in a colour of its own.
+
+   These are ART, like notice.js, so they carry hex colours on purpose and no
+   theme redraws them: BLOCK is Lego in every theme. The line drawings above
+   stay as each app's plain icon, which is what a theme's stroke recipe still
+   draws and what a button gets when it asks for `app.home` with no `art`.
+
+   Marks inside a glyph: f soft fill (22%), h half fill (55%), s solid,
+   o a hole in the plate colour, n no stroke. */
+const WHT = '#E8EDF3', GOLD = '#F0B323', BLUE = '#4C8DF0', PUR = '#9B7BEA', LEGO_GREEN = '#237841';
+const LEGO_Y = '#FFD500', LEGO_R = '#E3000B', LEGO_B = '#006CB7';
+const PLATE = '#0E141D';
+const RAINBOW = ['#E0533D', '#F0B323', '#5DBB63', '#4C8DF0', '#9B7BEA'];
+const dia = (x, y, k, r) => { r = r || 2.6; return '<path class="' + k + '" d="M' + x + ' ' + (y - r) + 'l' + r + ' ' + r + '-' + r + ' ' + r + '-' + r + '-' + r + 'z"/>'; };
+/* TRAIN: a 315 bar, three plates a side, the taller plates so they show at
+   dock size, mirrored about the centre */
+const barbell = (() => {
+  const ph = 8, pw = .9, gap = .25;
+  const r = (x, y, w, h, k) => '<rect class="' + k + ' n" x="' + +x.toFixed(2) + '" y="' + +y.toFixed(2)
+    + '" width="' + w + '" height="' + h + '" rx="' + +(Math.min(w, h) / 4).toFixed(3) + '"/>';
+  const L = [r(.5, 11.45, 4.34, 1.1, 'h'), r(4.84, 11.1, .35, 1.8, 's'), r(5.19, 11.65, 13.62, .7, 's')];
+  for (let i = 0; i < 3; i++) {
+    const x = 4.84 - .1 - pw - i * (pw + gap);
+    L.push(r(x, 12 - ph / 2, pw, ph, 's'), r(24 - x - pw, 12 - ph / 2, pw, ph, 's'));
+  }
+  L.push(r(18.81, 11.1, .35, 1.8, 's'), r(19.16, 11.45, 4.34, 1.1, 'h'));
+  return L.join('');
+})();
+const lego = (() => {
+  const studs = (x, n, c) => Array.from({ length: n }, (_, i) => [x + i * 3.4, 5.6, 2.4, 1.9, c]);
+  return [[3, 13, 18, 7, LEGO_R], [3, 7.5, 8.6, 5.5, LEGO_Y], [12.4, 7.5, 8.6, 5.5, LEGO_B]]
+    .concat(studs(4.4, 2, LEGO_Y), studs(13.8, 2, LEGO_B))
+    .map(b => '<rect class="n" x="' + b[0] + '" y="' + b[1] + '" width="' + b[2] + '" height="' + b[3] + '" fill="' + b[4] + '"/>').join('');
+})();
+const APP_ART = {
+  home:    { c: WHT, g: '<path class="f" d="M4 11l8-7 8 7v9.5H4z"/><path d="M10 20.5v-5.5h4v5.5"/>' },
+  status:  { c: GOLD, g: '<rect class="f" x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 8h8M8 12h5M8 16h7"/>' },
+  train:   { c: BLUE, g: barbell, big: 1 },
+  form:    { c: WHT, g: '<path class="f" d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>' },
+  quest:   { c: GOLD, g: '<path class="f" d="M9.5 3h5l-1 12h-3z"/><circle class="f" cx="12" cy="19" r="2"/>' },
+  block:   { c: LEGO_Y, g: lego },
+  log:     { c: BLUE, g: '<path class="f" d="M4 5h10a2 2 0 0 1 2 2v13H6a2 2 0 0 1-2-2z"/><path d="M4 18a2 2 0 0 1 2-2h10M7.5 9h4"/><path class="h" d="M21 2c-3.5.5-6 3-6.5 6.5l1.2.6C18.5 8 20.5 5.5 21 2z"/><path d="M14.5 9l-2 3"/>' },
+  arc:     { c: PUR, g: '<path d="M12 19L7 12M12 19l5-7M7 12V5M17 12l-3.5-7M17 12l3.5-7"/>'
+             + dia(12, 19, 's', 2.8) + dia(7, 12, 's') + dia(17, 12, 's') + dia(7, 5, 'o', 2.2) + dia(13.5, 5, 's', 2.2) + dia(20.5, 5, 'o', 2.2) },
+  speak:   { c: WHT, g: '<rect class="f" x="9" y="3" width="6" height="11" rx="3"/><path d="M9 7h2M9 10h2M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6"/>' },
+  checkin: { c: LEGO_GREEN, g: '<rect class="f" x="4" y="3" width="16" height="18" rx="1"/><circle cx="12" cy="10" r="2.5"/><path d="M7.5 18c1-3 2.5-4.5 4.5-4.5s3.5 1.5 4.5 4.5"/>' },
+  coach:   { c: WHT, g: '<circle class="f" cx="12" cy="12" r="8.5"/><path class="h" d="M3.5 12a8.5 8.5 0 0 1 17 0H15a3 3 0 0 0-6 0z"/><path d="M3.5 12H9M15 12h5.5"/><circle class="o" cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="1"/>' },
+  portion: { c: WHT, g: '<rect class="f" x="2.5" y="4" width="9" height="16" rx="1.5"/><rect class="f" x="12.5" y="4" width="9" height="16" rx="1.5"/><circle class="h" cx="5.5" cy="7" r="1.6"/><rect x="4.5" y="10" width="5" height="5.5"/><path d="M14.5 8h5M14.5 11h5M14.5 14h3"/>' },
+  mix:     { c: WHT, g: '<path class="f" d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M13 11l6-8M8 21h8"/>' },
+  wealth:  { c: LEGO_GREEN, g: '<path d="M16.5 7.5c-.8-1.6-2.5-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.3 0 2.1-2 3.3-4.5 3.3-2.2 0-4-1-4.7-2.8M10.5 2.5v19M13.5 2.5v19" stroke-width="1.8"/>' },
+  receipts:{ c: LEGO_GREEN, g: '<path d="M3 7V3h4M17 3h4v4M21 17v4h-4M7 21H3v-4"/><path class="f" d="M8 6h8v12l-1.3-1-1.3 1-1.4-1-1.4 1-1.3-1L8 18z"/><path d="M10 9.5h4M10 12.5h4"/>' },
+  style:   { c: WHT, edge: 'rainbow', g: '<path class="f" d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 1.5-2s0-2.5 1.5-2.5H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z"/>'
+             + [[7.3, 11.5, 0], [9.5, 7, 1], [14.5, 7, 2], [17.3, 11, 3]].map(p => '<circle class="n" cx="' + p[0] + '" cy="' + p[1] + '" r="1.6" fill="' + RAINBOW[p[2]] + '"/>').join('') },
+  system:  { c: GOLD, big: 1, g: '<path class="f" d="M4.5 1.5h15l3 3v15l-3 3h-15l-3-3v-15z"/><path d="M1.5 6.5h21"/><circle class="s n" cx="4.5" cy="4" r=".8"/><path class="s n" d="M11.35 9.5h1.3l-.3 7.5h-.7z"/><circle class="s n" cx="12" cy="19.3" r=".85"/>' },
+};
+/* the marks, turned into attributes, so a picture file with no stylesheet
+   draws them the same as the page does */
+function inkArt(g, c) {
+  return g.replace(/class="([^"]*)"/g, (m, k) => {
+    const has = x => k.split(' ').indexOf(x) > -1;
+    let a = '';
+    if (has('f')) a += ' fill="' + c + '" fill-opacity=".22"';
+    if (has('h')) a += ' fill="' + c + '" fill-opacity=".55"';
+    if (has('s')) a += ' fill="' + c + '"';
+    if (has('o')) a += ' style="fill:var(--surface-1,' + PLATE + ')"';
+    if (has('n')) a += ' stroke="none"';
+    return a.trim();
+  });
+}
 
 /* Plain words for the ones that are not obvious from the name. Shown in
    STYLE so the database explains itself. */
@@ -477,6 +551,8 @@ const Icons = {
      is how most of this suite builds a row. */
   svg(role, opts) {
     opts = opts || {};
+    const art = /^app\./.test(role) && APP_ART[role.slice(4)];
+    if (art && !(opts.skin && opts.skin.icons && opts.skin.icons[this.iconFor(role)])) return this.appSvg(role.slice(4), opts);
     const d = this.pathFor(role, opts.skin);
     if (!d) return '';
     const st = this.styleFor(opts.skin);
@@ -490,6 +566,45 @@ const Icons = {
       + (st.wobble ? ' filter="url(#mb-icon-wobble)"' : '')
       + ' aria-hidden="true" focusable="false">'
       + '<path d="' + d + '"/></svg>';
+  },
+
+  /* ── an app's own picture ──
+     `appSvg` is the symbol alone. In currentColor by default, so a HOME
+     button in an app's header takes its text colour like any other button;
+     `art: true` draws it in its own colour, which is what the dock does.
+     Thin on purpose: a theme's stroke and a caller's weight are ignored,
+     1.1 at 32px and up, 1.5 below, the weights Tom picked at each size.
+     BLOCK's bricks and STYLE's paints keep their colours either way. */
+  APP_ART: APP_ART,
+  appColor(id) { return (APP_ART[id] || {}).c || null; },
+  appSvg(id, opts) {
+    opts = opts || {};
+    const a = APP_ART[id];
+    if (!a) return '';
+    const size = opts.size || 20;
+    const c = opts.art ? a.c : 'currentColor';
+    return '<svg class="mb-ico mb-app-ico' + (opts.cls ? ' ' + opts.cls : '') + '"'
+      + ' width="' + size + '" height="' + size + '" viewBox="0 0 24 24"'
+      + ' fill="none" stroke="' + c + '" stroke-width="' + (size >= 32 ? 1.1 : 1.5) + '"'
+      + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+      + inkArt(a.g, c) + '</svg>';
+  },
+  /* The whole tile: the cut-corner window, an edge in the app's colour (a
+     rainbow for STYLE), the dark plate lit a little from above, the symbol
+     in the middle. Always the picked look, whatever the theme. */
+  appTile(id, opts) {
+    opts = opts || {};
+    const a = APP_ART[id];
+    if (!a) return '';
+    const s = opts.size || 64, cut = s * 10 / 64, e = Math.max(1, s * 1.5 / 64), ci = cut - e * .4;
+    const poly = k => 'polygon(' + k + 'px 0,calc(100% - ' + k + 'px) 0,100% ' + k + 'px,100% calc(100% - ' + k + 'px),calc(100% - '
+      + k + 'px) 100%,' + k + 'px 100%,0 calc(100% - ' + k + 'px),0 ' + k + 'px)';
+    const edge = a.edge === 'rainbow' ? 'conic-gradient(' + RAINBOW.concat(RAINBOW[0]).join(',') + ')' : a.c;
+    const g = Math.round(s * (a.big ? .82 : 38 / 64));
+    return '<span class="mb-app-tile" style="display:inline-block;position:relative;flex:0 0 auto;width:' + s + 'px;height:' + s + 'px;background:' + edge
+      + ';clip-path:' + poly(cut) + '"><span style="position:absolute;inset:' + e + 'px;display:grid;place-items:center;clip-path:' + poly(ci)
+      + ';background:radial-gradient(circle at 50% 30%,color-mix(in srgb,' + a.c + ' 16%,' + PLATE + '),' + PLATE + ' 70%)">'
+      + this.appSvg(id, { size: g, art: true }) + '</span></span>';
   },
 
   el(role, opts) {

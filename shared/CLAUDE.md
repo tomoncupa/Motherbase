@@ -361,9 +361,19 @@ Found on the way: BLOCK registered `lane`, `item` and `routine` but not
 `rhythm` or `plan`, so an Every or Anytime habit and the published plan had
 never gone to the sheet. Both are registered now.
 
-### App icon rework, in progress 2026-09-23
+### App icon rework, built 2026-09-23
 
-Tom's picks so far, nothing drawn in `icons.js` yet. Frame: the cut-corner
+Built into `icons.js` as `APP_ART`: `Icons.svg('app.<id>')` now draws the
+picked symbol (currentColor, so a header HOME button follows the text), and
+`art: true` draws it in its own colour, which the dock uses. `Icons.appTile`
+is the whole framed tile, `Icons.appColor` the colour. Art, so hex on purpose
+and no theme redraws it. The old line drawings stay under the same roles for
+STYLE and packs. The iPhone pictures were redrawn from it: every theme folder
+holds the same tile, inset so iOS rounding does not eat the cut corners.
+Not done, and Tom's call: the dock's open-app highlight, tiles and widgets
+still wear the theme's chart slot (`APP_SLOT`), not the picked colours.
+
+The history of the picks: Frame: the cut-corner
 window (notice.js shape) with a 1.5px edge in the app's colour, on a `#0E141D`
 plate, glyph in the same colour. Symbols: RPG inventory items (HOME campfire,
 LOG tome, ELEMENT potion and so on); Tom wants more options inside that family
