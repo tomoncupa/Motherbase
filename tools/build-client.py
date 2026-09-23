@@ -77,7 +77,7 @@ DROP_WIDGETS = ['links']
 #             only when Cloud is there, so a client build has no LIVE SYNC
 #             section at all rather than a dead one. Delete this line the day
 #             clients get it, and nothing else has to change.
-DROP_SHARED = ['cloud.js']
+DROP_SHARED = []   # cloud.js went to clients 2026-09-23, Tom: "push it to clients"
 
 # ── the five themes ───────────────────────────────────────────────────────
 # Order matters: skins.js falls back to skins[0] when nothing is saved, so
