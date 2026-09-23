@@ -1,5 +1,10 @@
 """read_receipt.py - turn a receipt photo into one JSON record, on this PC, for free.
 
+   Since 2026-09-23 it also reads a nutrition label, through the same folder
+   and the same Shortcut. The reader decides which it is looking at; a label
+   comes back as `src: "label"` with its figures in FOODDEX's own keys, and the
+   RECEIPTS app turns it into a food.
+
    Tom, 2026-09-20: "I never asked for receipt desk, I want a system that
    directly feeds data into Motherbase", and "why does the daemon cost money,
    there have to be a better way". So this file is not an app and it holds no
@@ -71,11 +76,14 @@ def claude_exe():
     return best
 
 
-PROMPT = """Read the receipt image at the path below and return ONE JSON object.
+PROMPT = """Read the image at the path below and return ONE JSON object.
 
 IMAGE: {path}
 
 Return nothing but the JSON. No prose, no code fence, no explanation.
+
+The image is one of two things. If it is a NUTRITION FACTS panel off a food
+pack, return the LABEL object further down. Otherwise return this one:
 
 {{
   "v": 1,
@@ -114,8 +122,55 @@ Rules, in order of importance:
 5. A weighed item's qty is the weight with its unit (1.020 kg), not 1.
 6. Ignore subtotals, VAT lines, discounts, change and points. Only real items
    go in "lines"; "total" is what he actually paid.
-7. If the image is not a receipt or a payment at all, return the object with
-   "src": "other" and say why in "unsure"."""
+7. If the image is not a receipt, a payment or a nutrition label, return the
+   object with "src": "other" and say why in "unsure".
+8. "unsure" is for things you could not read. A reference number or unit
+   price the receipt simply does not print is not a problem; leave it out.
+
+THE LABEL OBJECT, for a nutrition facts panel:
+
+{{
+  "v": 1,
+  "src": "label",
+  "name": the product's name if it is printed anywhere in the photo, or null,
+  "brand": the brand if printed, or null,
+  "amt": the amount the figures below are FOR, as a number,
+  "unit": "g" or "ml",
+  "per": "100" if you read a per 100 g / 100 ml column, "serving" otherwise,
+  "pc": the weight of ONE piece when the serving is counted in pieces
+        ("2 cookies (30 g)" is 15), else null,
+  "kcal": calories, or null,
+  "kj": energy in kJ ONLY when no calorie figure is printed, else null,
+  "p": protein g, "c": total carbohydrate g, "f": total fat g,
+  "na": sodium mg, or null,
+  "salt": salt g ONLY when salt is printed and sodium is not, else null,
+  "k": potassium mg, "ca": calcium mg, "caff": caffeine mg,
+  "more": {{ any of these that are printed, in these units:
+    "fib" fibre g, "sug" sugars g, "sat" saturated fat g,
+    "mono" monounsaturated g, "poly" polyunsaturated g, "chol" cholesterol mg,
+    "fe" iron mg, "mg" magnesium mg, "ph" phosphorus mg, "zn" zinc mg,
+    "cu" copper mg, "mn" manganese mg, "se" selenium mcg, "io" iodine mcg,
+    "rae" vitamin A mcg, "vc" vitamin C mg, "vd" vitamin D mcg,
+    "ve" vitamin E mg, "vk" vitamin K mcg, "b1" thiamin mg, "b2" riboflavin mg,
+    "b3" niacin mg, "b5" pantothenic acid mg, "b6" vitamin B6 mg,
+    "fol" folate mcg, "b12" vitamin B12 mcg, "ch" choline mg }},
+  "unsure": [ short plain sentences naming anything you could not read ]
+}}
+
+Label rules, in order of importance:
+
+1. NEVER invent a number. Blurred, cut off or missing is null, named in
+   "unsure". A figure that is not printed is null, never 0.
+2. If a per 100 g (or 100 ml) column is printed, read that column and set
+   "amt" 100. Otherwise read the per-serving column, and "amt" is the
+   serving's weight: in "1 cup (240 ml)" it is 240 ml, the figure in brackets.
+3. Never turn a % Daily Value into an amount. If a nutrient is printed only as
+   a percentage, leave it null and say so in "unsure".
+4. Convert only between the units named above (1000 mg is 1 g). Nothing else.
+5. Do not guess the product's name from the kind of food. No name printed is
+   null.
+6. "unsure" is for figures you could not read. A brand or a nutrient the
+   label simply does not print is not a problem; leave it out of "unsure"."""
 
 
 def log(msg):
@@ -140,6 +195,53 @@ def carve(text):
     return json.loads(t[a:b + 1])
 
 
+NUTS = ('kcal', 'p', 'c', 'f', 'na', 'k', 'ca', 'caff')
+
+
+def fig(v):
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 else None
+
+
+def sane_label(rec, unsure):
+    """A label's own checks, the way a receipt has its sum.
+
+       Calories against protein, carbs and fat is the one that earns its
+       place: a misread 8 for a 3 is invisible on its own and obvious when the
+       energy stops adding up. The two conversions are done here rather than
+       by the reader, so they are exact and the same every time."""
+    for k in NUTS:
+        rec[k] = fig(rec.get(k))
+    if rec['kcal'] is None and fig(rec.get('kj')):
+        rec['kcal'] = round(rec['kj'] / 4.184)
+    # salt is sodium chloride and sodium is 39.3% of it, the figure FOODDEX uses
+    if rec['na'] is None and fig(rec.get('salt')) is not None:
+        rec['na'] = round(rec['salt'] * 393, 1)
+    more = rec.get('more')
+    rec['more'] = {k: v for k, v in (more.items() if isinstance(more, dict) else [])
+                   if fig(v) is not None}
+    rec['amt'] = fig(rec.get('amt')) or None
+    if rec.get('unit') not in ('g', 'ml'):
+        rec['unit'] = 'g'
+    rec['pc'] = fig(rec.get('pc')) or None
+    if rec['amt'] is None:
+        unsure.append('What amount the figures are for could not be read.')
+    if not rec.get('name'):
+        unsure.append('No product name is printed in the photo.')
+
+    p, c, f, kcal = rec['p'], rec['c'], rec['f'], rec['kcal']
+    if None not in (p, c, f, kcal) and kcal > 0:
+        est = 4 * p + 4 * c + 9 * f
+        # fibre, alcohol and a label's own rounding stay well inside a fifth
+        if abs(kcal - est) > 0.2 * max(kcal, est) and abs(kcal - est) > 15:
+            unsure.append('The label says %g calories, but its protein, carbs and fat '
+                          'come to about %d. One of them may be misread.' % (kcal, est))
+    sat, sug = rec['more'].get('sat'), rec['more'].get('sug')
+    if sat is not None and f is not None and sat > f:
+        unsure.append('Saturated fat reads higher than total fat.')
+    if sug is not None and c is not None and sug > c:
+        unsure.append('Sugars read higher than total carbs.')
+
+
 def sane(rec, name):
     """Fill what is missing, and say when the lines do not add up.
 
@@ -157,6 +259,12 @@ def sane(rec, name):
     if not isinstance(unsure, list):
         unsure = [str(unsure)] if unsure else []
     rec['unsure'] = unsure
+
+    if rec.get('src') == 'label':
+        rec['lines'] = []
+        sane_label(rec, unsure)
+        rec['check'] = bool(unsure)
+        return rec
 
     if rec.get('direction') not in ('in', 'out'):
         rec['direction'] = 'out'
@@ -201,6 +309,11 @@ def read_one(exe, name):
     # the record exists before the photo moves, so a crash repeats a read
     # rather than losing one
     shutil.move(src, os.path.join(DONE, name))
+    if rec.get('src') == 'label':
+        log('read    %s  label  %s  per %s %s%s' % (
+            name, rec.get('name') or '(no name)', rec.get('amt'), rec.get('unit'),
+            '  NEEDS A LOOK' if rec['check'] else ''))
+        return True
     log('read    %s  %s  %s %s  %d line(s)%s' % (
         name, rec.get('merchant') or rec.get('src'), rec.get('currency'),
         rec.get('total'), len(rec['lines']),

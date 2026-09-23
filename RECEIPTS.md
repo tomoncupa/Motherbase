@@ -4,6 +4,10 @@ Take a picture of a receipt, or share a GCash screenshot, and the money shows
 up in WEALTH and the shopping shows up against your foods. You confirm each
 one with a tap. Nothing is saved without you.
 
+A photo of a **nutrition label** goes the same way, through the same
+Shortcut, and becomes a food in FOODDÉX. The reader works out which one it is
+looking at.
+
 It costs nothing to run. The reading is done by the Claude program that is
 already inside the desktop app, on the subscription you already pay for.
 
@@ -82,6 +86,18 @@ simply not claimed to be anything.
 **NOT MONEY** keeps the receipt and writes nothing. Useful for a receipt you
 only want as proof.
 
+**A label's name.** A nutrition panel often has no product name near it, so
+the card has a name box. Type what you want it called in FOODDÉX. If the photo
+did not show what amount the figures are for (per 100 g, or per a 40 g
+serving), it asks for that too. Every figure is shown; a wrong one is fixed in
+FOODDÉX afterwards, which marks it "label, corrected".
+
+If you already have a food by that name, the button says **UPDATE** and asks
+first. The food keeps its own amount, so its saved servings and its price stay
+right; the label's figures are scaled to fit it. For a photo, a per 100 g
+column beats a per-serving one, and a figure printed only as a percentage is
+left blank rather than guessed.
+
 ---
 
 ## Where things end up
@@ -93,6 +109,7 @@ only want as proof.
 | A line you matched to a food | a `buy` row: what, how much, what it cost, which shop |
 | The receipt itself | a `receipt` row, with the photo's name |
 | A shop's wording | an `alias` row, so it is never asked twice |
+| A nutrition label | a `food` row — the one FOODDÉX and STATUS both read |
 
 The photos stay in `Receipts\done`. The small text files in `Receipts\out` are
 deleted once you have confirmed them, because by then the rows hold everything
