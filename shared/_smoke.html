@@ -1092,7 +1092,41 @@ async function run() {
   localStorage.removeItem('suite_skin.__smoke');
   localStorage.removeItem('mb.sfx.__smoke');
 
-  /* ---- the mirror ---- */
+  /* ---- the mirror ----
+
+     == a mirror check puts the mirror back ==
+     Added 2026-09-23, after two checks failed on a browser that had never
+     held a sheet link, with nothing wrong in io.js.
+
+     Both ask what the app says about a link that has NEVER worked, and the
+     answer is read off two marks that neither of them sets: `sheetV`, and
+     the per-app push stamps. A check further up this same file pushes as
+     `status` and leaves a real stamp behind, so the answer depended on what
+     had run first and how far it got. A check that reads a mark it did not
+     set is not testing io.js, it is testing the run order.
+
+     And every teardown here wrote `url: ''`. On a real device that is the
+     sync link Tom pasted, and `_review.html` runs this file, so a review
+     quietly unlinked his sheet on that device every time. One restore at the
+     end of the section gives back whatever was there when it started. */
+  const mirrorSnap = () => JSON.parse(JSON.stringify(IO.mirror.settings));
+  /* Emptying a key is the only way to clear one: `msave` merges these maps
+     with what is on disk, so a deleted key comes straight back and an empty
+     string is the real delete. */
+  const mirrorBlank = m => { const o = {}; Object.keys(m || {}).forEach(k => { o[k] = ''; }); return o; };
+  const mirrorPut = was => {
+    const now = IO.mirror.settings;
+    const back = {};
+    /* anything a check added is emptied, then what was really there goes on
+       top, so a restore cannot leave a stamp of its own behind */
+    ['pushed', 'seen', 'full', 'sig'].forEach(k => {
+      back[k] = Object.assign(mirrorBlank(now[k]), was[k] || {});
+    });
+    IO.mirror.set(Object.assign({ url: was.url || '', on: was.on,
+      sheetV: was.sheetV || 0, cal: was.cal || 0 }, back));
+  };
+  const MIRROR_WAS = mirrorSnap();
+
   ok('mirror: it is shared, not per app', typeof IO.mirror === 'object' &&
     ['pull', 'push', 'sync', 'onOpen', 'script', 'tabs'].every(k => typeof IO.mirror[k] === 'function'));
   ok('mirror: the link lives outside any one app',
@@ -1213,19 +1247,23 @@ async function run() {
      pressing the button again could not have worked. A never-worked link is a
      setup to fix, not a blip to wait out. */
   ok('mirror: a link that has NEVER answered is the user\'s problem', () => {
-    const hadV = IO.mirror.settings.sheetV || 0;
-    IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec', sheetV: 0 });
+    const was = mirrorSnap();
+    /* the whole question is "no mark anywhere", so every mark is cleared here
+       rather than assumed, the push stamps included */
+    IO.mirror.set({ url: 'https://script.google.com/macros/s/X/exec', sheetV: 0,
+      pushed: mirrorBlank(was.pushed) });
     const f = IO.mirror.fault();
-    IO.mirror.set({ url: '', sheetV: hadV });
+    mirrorPut(was);
     return f.code === 'never-answered' && f.act === true && /access/.test(f.say);
   });
   ok('mirror: an emptied push stamp is not proof the sheet ever answered', () => {
-    const hadV = IO.mirror.settings.sheetV || 0;
-    IO.mirror.set({ sheetV: 0, pushed: { __never: '' } });
+    const was = mirrorSnap();
+    IO.mirror.set({ sheetV: 0,
+      pushed: Object.assign(mirrorBlank(was.pushed), { __never: '' }) });
     const blank = IO.mirror.neverAnswered();
     IO.mirror.set({ pushed: { __never: new Date().toISOString() } });
     const stamped = IO.mirror.neverAnswered();
-    IO.mirror.set({ pushed: { __never: '' }, sheetV: hadV });
+    mirrorPut(was);
     return blank === true && stamped === false;
   });
   ok('mirror: the sync pane stops saying "not synced yet" about a link that cannot work', () => {
@@ -1629,6 +1667,9 @@ async function run() {
     IO.mirror.set({ cal: was ? 1 : 0 });
     return cleared && off;
   })());
+  /* The last thing the mirror section does: give the device back the link,
+     the switch and the boundaries it arrived with. */
+  mirrorPut(MIRROR_WAS);
 
   /* ---- the store hands out copies ---- */
   /* This one exists because it cost two rounds of "it does not save". get()
