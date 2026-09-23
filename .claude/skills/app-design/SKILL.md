@@ -34,6 +34,7 @@ the single highest-value move in this skill and the one most often skipped.
 | `references/mobile.md` | Runs on a phone or tablet, or anyone says "native" / "feels like a website". |
 | `references/browser.md` | Runs on a desktop with a mouse and keyboard. |
 | `references/motherbase.md` | Working in this repo. The tokens, classes and API that already exist. |
+| `references/effects.md` | Anyone asks for an animation, a "wow" moment, or an effect from a library such as ObsidianUI. Public pages only. |
 
 Typical load: `foundations.md` + one interaction file. Something that must serve
 both reads both — **but build the touch version first.** Touch is the harder
