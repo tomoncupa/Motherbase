@@ -382,6 +382,12 @@ READ A STATEMENT with it. The + menu on the first screen and ACCOUNTS carries
 A statement and Screenshots, each opening the file chooser for that kind only
 (`importSheet('statement' | 'shots')`).
 
+**While importing** (2026-09-23): every added or matched line has a comment
+box, merged into its `recon.comment` at apply. A payment rail line (`isRail`,
+Bancnet) is asked on its own in setup, filed by a `mark` on its row, never a
+rule. Category pick lists are A to Z (`catsAZ`); the CATEGORIES card keeps
+his dragged order.
+
 **A locked spreadsheet opens with its password** (`unlockXlsx`, Excel's
 agile AES lock, WebCrypto only). The password is treated like a PDF's.
 
