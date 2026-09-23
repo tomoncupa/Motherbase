@@ -689,6 +689,15 @@ answer, or take it out.
   from two edits ago and the checks passed on it. Before driving frames,
   unregister the service worker and empty `caches` once in that tab, or open
   the parent with `?nosw=1`.
+- **A setting that remembers "I already wrote this row" breaks under live
+  sync.** A setting is one row, so two devices each writing it keep only the
+  later one's list, and a device opened before the synced rows arrive trusts
+  its empty local picture. WEALTH's bill todos (`wealth.billMade`, up to five
+  copies of each bill), ARC's reviews (`arc.skmade`) and COACH's WEALTH clients
+  all wrote duplicates this way on 2026-09-23. Before writing a row you make
+  on someone's behalf, look for its key on EVERY date, and its tombstone too;
+  never rely on a remembered list alone, and give the row a key that is the
+  same on every device.
 - **No page of the suite can talk to a program running on his PC.** The suite is
   served over https and every local program here serves http, so a fetch from
   tomoncupa.github.io to `http://127.0.0.1:<port>` dies as "Failed to fetch"

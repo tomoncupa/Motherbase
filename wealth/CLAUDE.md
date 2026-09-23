@@ -85,7 +85,7 @@ no more than half the gap between dates; one purchase settles one date. (HISTORY
 
 **ALLOCATED opens `allocSheet`** (2026-09-23): the pieces `board` adds, by date, with the balance left after each and the lowest point; its last figure must equal UNALLOCATED. Built by `allocItems`, which must stay in step with `board`.
 
-**A package client is expected to renew** (2026-09-23, Jay): `packState().renew`, the last package again once its sessions run out, dated from `perWeek` or the last four weeks' sessions, always a guess, never late. Marking the client finished stops it.
+**A package client is expected to renew** (2026-09-23): `packState().renew`, the last package again once its sessions run out, dated from `perWeek` or the last four weeks' sessions, always a guess, never late. Marking the client finished stops it.
 
 **`wealth.onTime`, off by default.** Off, FREE counts no money that has not
 arrived. On, it adds unpaid client payments due inside the window, never one
@@ -352,7 +352,7 @@ and net figure. Never invent a debt row from a transfer. (HISTORY.md: Borrowed m
 
 **A tapped category is split BY SOURCE** (2026-09-23), right under the pie: `payeeOf` on the bank wording or his note, and names sharing a first word (two if the first is a number) are one place, so "Lawson Tonkatsu" is Lawson.
 
-**A payment past its reach still settles** (2026-09-23, Tami paid the 19th for the 1st): after the nearest-date pass, a leftover payment for that client settles the oldest unpaid date on or before it.
+**A payment past its reach still settles** (2026-09-23, a monthly client paid on the 19th for the 1st): after the nearest-date pass, a leftover payment for that client settles the oldest unpaid date on or before it.
 
 **WHERE IT WENT is the first card under SPENDING's totals.** (HISTORY.md: Where it went sits under the totals)
 
