@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.19, 2026-09-23">
+<meta name="mb-version" content="1.0.20, 2026-09-24">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1862,6 +1862,16 @@ TRAIN.importPanel = function () {
   UI.dialog({
     title: 'IMPORT A TRAINING LOG', width: 460,
     body: function (b) {
+      /* Which log this lands in, said before anything is picked. Opened from
+         COACH this is a client's profile, and a FitNotes backup dropped into
+         the wrong one is thousands of rows to undo by hand. */
+      if (CLIENT) {
+        var w = UI.el('div', 'empty');
+        w.style.marginBottom = 'var(--s-3)';
+        w.innerHTML = '<b>This goes into this client\u2019s log</b>, not yours. ' +
+          'Their sets, exercises and categories are kept under their own name and never touch your TRAIN.';
+        b.appendChild(w);
+      }
       var p = UI.el('div', 'empty');
       p.innerHTML =
         '<b>From FitNotes.</b> Settings \u25b8 Backup \u25b8 Backup Now, then get the ' +
@@ -7904,6 +7914,17 @@ function boot() {
   if (!CLIENT && !Rec.setting(APP.id, 'seen') && !Rec.count('set')) {
     Rec.setting(APP.id, 'seen', 1);
     setTimeout(TRAIN.firstRun, 400);
+  }
+  /* COACH's IMPORT THEIR LOG opens this same file over the client's profile
+     with &import=1 on the end, so the panel is up rather than three folds
+     into Settings. The importer is not copied and not moved: the adapter at
+     the top of this file is already what sends every row it writes onto the
+     client, which is why COACH needs no importer of its own. It waits for
+     the store, because an import that cannot see what is already here would
+     write a second copy of it. */
+  if (/[?&]import=1/.test(location.search) && !TRAIN.importAsked) {
+    TRAIN.importAsked = 1;
+    setTimeout(function () { TRAIN.importPanel(); }, 150);
   }
 }
 

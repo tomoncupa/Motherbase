@@ -632,6 +632,32 @@ said so; with the upload refusing, the file came back with the reason. COACH
 took the same bag off a stubbed shelf and it landed as that client's rows.
 The real database has never been in the loop — nobody has signed in.
 
+## Opened straight into the import (1.0.20, 2026-09-24)
+
+Tom, 2026-09-24: *"Bring back the upload training data function from the most
+common apps, and fitnotes."* Nothing was rebuilt. The importer was already
+here and already client-aware; what was missing was a way in from a client's
+profile, where a new client's history actually arrives.
+
+- **`&import=1` on the address opens the panel**, once, after `boot`. COACH's
+  IMPORT THEIR LOG on a client profile opens
+  `train/index.html?client=<pid>&import=1` in the frame it already uses for
+  LOG A SESSION.
+- **It waits for the store**, like everything else in `boot`. An import that
+  cannot see what is already here would write a second copy of it.
+- **The panel says whose log it is** when `CLIENT` is set. A FitNotes backup
+  dropped into the wrong log is thousands of rows to undo by hand, and the
+  two logs look identical once the frame is open.
+- **Nothing in the importer changed.** `importFitNotes` already goes through
+  `TRAIN.mergeImport`, which maps, and `importCsv` writes through `Rec.set`,
+  which the adapter replaced. `assertTick` is a no-op on a client, because
+  `tick` is dropped there.
+
+Watched 2026-09-24 from COACH: the panel came up over the client's profile,
+a five-set CSV with a comma inside an exercise name imported as that client's
+rows, weights read as pounds and stored in kilograms, and Tom's own `set`,
+`exercise` and `tick` counts did not move.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the
