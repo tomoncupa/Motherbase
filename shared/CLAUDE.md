@@ -375,7 +375,16 @@ yellow and blue, the one multicolour icon. Rejected: drawing-style variants
 (line, duotone, solid, angular, pixel); he wants different symbols, not
 different pens.
 
-Symbols picked 2026-09-23: STATUS character sheet, FORM eye, QUESTS quest
+FINAL symbols, 2026-09-23 round three: HOME house, STATUS sheet with three
+lines, TRAIN a real 315 barbell (three plates a side), FORM eye, QUESTS "!",
+BLOCK Lego (red 2x4, yellow and blue on top), LOG tome with quill, ARC
+branching tree of diamonds (lit filled, locked hollow), SPEAK microphone,
+CHECK IN portrait, COACH Poké Ball, FOODDÉX open two-panel Pokédex, ELEMENT
+mortar and pestle, WEALTH bold $ with two bars, RECEIPTS bill in scanner
+corners, STYLE palette, NOTICE the cut-corner window with a title bar and
+"!". Drawing style (line, thin, solid, glow, pixel) is being picked next.
+
+Earlier picks, 2026-09-23: STATUS character sheet, FORM eye, QUESTS quest
 mark "!", CHECK IN portrait, ELEMENT mortar and pestle, STYLE dye palette,
 NOTICE rune tablet (the cut-corner window itself), BLOCK Lego. Asked for by
 name and drawn in round two, waiting on his yes: HOME a house or something
