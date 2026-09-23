@@ -20,9 +20,17 @@ same dialogs, the same import and export.
 
 **The shared drawer is the product. The apps are windows onto it.**
 
-Everything is local. One machine, one browser, no server, no sign-in, nothing
-uploaded. That is a current decision, not a permanent one, and nothing in here
-blocks changing it later.
+**Hosted first.** Tom, 2026-09-23. The suite is opened from its address,
+`tomoncupa.github.io/Motherbase/`, on the phone and on the PC, and the desktop
+programs open that address too. Each person signs in with Google and gets
+their own space; LIVE SYNC (`CLOUD.md`) keeps every device they sign in on as
+one store. The Google Sheet is an optional backup beside it. Every tap still
+saves on the device first, so nothing waits on the network or the sign-in.
+The folder copy is for building and testing, not for living in.
+
+**Clients sync their own profile, never Tom's.** A client's live sync reaches
+only their own space. What Tom sees of a client arrives by a SEND TO COACH
+button the client presses, and only that way, until Tom says otherwise.
 
 ---
 
@@ -72,8 +80,10 @@ Do not break these. Ask first if you think one needs to change.
 3. **Plain `<script src>` for shared files, never ES modules.** Modules do not load
    from `file://`, and opening a file straight from a folder has to keep working.
 4. **External dependencies are CDN-only and must degrade.** SheetJS for
-   spreadsheets, Google Fonts for type. If either fails to load, the app still
-   works: export falls back to CSV, fonts fall back to system stacks. Never add a
+   spreadsheets, Google Fonts for type, Firebase for LIVE SYNC. If any fails to
+   load, the app still works: export falls back to CSV, fonts fall back to
+   system stacks, and sync waits for the next open while every save stays on
+   the device. Never add a
    dependency the app cannot run without.
 5. **Offline first.** Every tap saves locally and instantly. Nothing in the logging
    loop may require a network, an account or a login.
@@ -203,7 +213,9 @@ Everything persists as independently addressable rows. Never as one blob.
 - `date` is `YYYY-MM-DD`, or `null` for anything not tied to a day.
 - `updated_at` decides conflicts. **The newer write wins, per row.**
 - `deleted` is a tombstone. Rows are never removed, or a deletion cannot travel.
-- `user_id` is on every row from day one, set to `local` until accounts exist.
+- `user_id` is on every row, and it stays `local` even with accounts. The
+  account lives in the sync path (`/u/<uid>/rows`), not the row: changing it
+  would give every row a new id and duplicate the whole history.
 - One row per field per day. Finer is theatre. Coarser is a blob.
 
 Storage is one entry per row, so rows are addressable in storage and not only in
@@ -495,8 +507,9 @@ discard newer work, is a separate button behind a confirm.
 Calendar tab with activities down the side and dates across the top, and a Log tab
 for pivots. SheetJS if it loads, CSV if it does not.
 
-The Data button turns amber once a backup is 14 days old. Local-only data has no
-other safety net.
+The Data button turns amber once a backup is 14 days old. LIVE SYNC carries
+no photos (a row over 64KB), so a backup or the sheet is still the only copy
+of a photo anywhere but the device it was taken on.
 
 **Where the sheet is set up.** Tom, 2026-09-14: the Google Sheet setup (the
 script, the automatic switch, syncing every app) lives on the home screen and
@@ -506,11 +519,10 @@ belongs to the suite, so pasting it in one app pastes it for every app on that
 device. An app that draws its own full setup passes `sync: false` to
 `UI.settings`.
 
-**Phase 2, when he asks for it:** a Google Sheet mirror. The phone stays the save
-file. The app pushes a copy into a Sheet he owns whenever there is signal, retries
-silently on failure, and never becomes a dependency. Setup must be: create a blank
-sheet, paste in a short Apps Script, click Deploy, paste the URL into settings
-once. No developer account, no API keys, no OAuth.
+**The sheet is the optional backup.** Since 2026-09-23 LIVE SYNC is how
+devices agree; the sheet stays for a copy he can read and for photos. It never
+becomes a dependency. Setup stays: create a blank sheet, paste in a short Apps
+Script, click Deploy, paste the URL into settings once.
 
 ---
 
@@ -744,17 +756,11 @@ own brief since 2026-09-22.
 
 Moved to `shared/CLAUDE.md` on 2026-09-22, verbatim. Read it before touching `shared/` or the root.
 
-### Parked, not cancelled
-
-Hosting, accounts and phone sign-in. The plan is in `ARCHITECTURE.md` with a banner
-saying so. Firebase was chosen for one narrow reason: it sends the SMS itself, so
-there is no texting company to sign up with and no carrier paperwork.
-
 ### Dead
 
 Installable phone apps. They need a web address, so they do not work from a folder,
 and the caching failure mode is exactly the kind of silent breakage he cannot
-diagnose. Revisit only if hosting returns.
+diagnose.
 
 **`sw.js` is not that, and the difference is the whole reason it was allowed.**
 Added 2026-09-16. The objection above is to a cached copy going stale in
