@@ -44,7 +44,7 @@ are holding a stale copy of whatever you just changed.
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `import.js` | Bringing in an outside spreadsheet by shape: ticks, weigh-ins, foods, money out. | High. It writes rows many apps own. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 312 checks over all of it. | Run it every time. |
+| `_smoke.html` | 338 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -111,9 +111,11 @@ things about it that are load-bearing:
   and the shelf is not a place data lives. The app that takes it turns it into
   rows and clears it.
 
-**Untested against a real database.** Every check so far stubbed the transport
-and drove the real buttons. Nobody has signed in. `_smoke.html` has no checks
-for any of this yet, and that is the open foundation job.
+**Untested against a real database.** Nobody has signed in. Ten `shelf:`
+checks in `_smoke.html` (2026-09-23) drive the real `send`, `waiting` and
+`took` against a database held in the page, through `Cloud._probe`, which
+swaps only the account the shelf asks for. They were watched failing with the
+sort reversed. What they cannot prove is the rules; only a real sign-in does.
 
 ## Testing
 

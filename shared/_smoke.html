@@ -2677,6 +2677,85 @@ async function run() {
     return typeof st.has === 'boolean' && (st.has || (!st.live && !st.on));
   });
 
+  /* ── the coach shelf ──
+
+     `send`, `waiting` and `took`, driven for real against a database held in
+     this page. `Cloud._probe` swaps only the account the shelf asks for; the
+     row sync never reads it. Run one after another, because they share the
+     one stand-in, and it is put back in `finally` whatever happens. */
+  {
+    const DB = {};
+    let refuse = '';
+    const fakeDb = {
+      ref: path => ({
+        set: v => refuse ? Promise.reject(new Error(refuse))
+                         : (DB[path] = JSON.parse(JSON.stringify(v)), Promise.resolve()),
+        remove: () => (delete DB[path], Promise.resolve()),
+        once: () => Promise.resolve({
+          forEach: f => Object.keys(DB).filter(k => k.indexOf(path + '/') === 0)
+            .forEach(k => f({ key: k.slice(path.length + 1), val: () => DB[k] })),
+        }),
+      }),
+    };
+    const as = (uid, email) => Cloud._probe(() => ({ uid: uid, email: email, db: fakeDb }));
+    const R = {};
+    try {
+      as('uidA', 'a@x');
+      await Cloud.send('train', { rows: [{ id: 1 }, { id: 2 }], note: 'hi' });
+      R.path = Object.keys(DB).join() === 'drop/coach/uidA';
+      const p = DB['drop/coach/uidA'] || {};
+      R.stamp = p.kind === 'train' && p.by === 'a@x' && p.n === 2 && typeof p.data === 'string' && !!p.at;
+
+      /* the same client sending again replaces their parcel, it does not pile up */
+      await Cloud.send('train', { rows: [{ id: 3 }] });
+      R.one = Object.keys(DB).length === 1 && DB['drop/coach/uidA'].n === 1;
+
+      /* too big: refused in words, and nothing written */
+      const before = JSON.stringify(DB);
+      R.big = await Cloud.send('train', { rows: [], pad: new Array(2000100).join('x') })
+        .then(() => false, e => /too big/.test(e.message) && JSON.stringify(DB) === before);
+
+      /* a database refusal reads as one, not as a Firebase code */
+      refuse = 'PERMISSION_DENIED: Permission denied';
+      R.denied = await Cloud.send('train', { rows: [] })
+        .then(() => false, e => /drop rules/.test(e.message));
+      refuse = '';
+
+      /* two more clients, one of whose parcels will not parse */
+      as('uidB', 'b@x');
+      await Cloud.send('train', { rows: [{ id: 9 }] });
+      DB['drop/coach/uidB'].at = '2099-01-01T00:00:00.000Z';
+      DB['drop/coach/uidC'] = { kind: 'train', at: '2000-01-01T00:00:00.000Z', by: 'c@x', n: 0, data: '{broken' };
+
+      as('uidT', 't@x');
+      const w = await Cloud.waiting();
+      R.order = w.map(x => x.from).join() === 'uidB,uidA,uidC';
+      R.body = w[1] && w[1].body && w[1].body.rows[0].id === 3 && w[1].by === 'a@x';
+      R.keep = w[2] && w[2].body === null && !!DB['drop/coach/uidC'];
+
+      await Cloud.took('uidA');
+      R.took = !DB['drop/coach/uidA'] && !!DB['drop/coach/uidB'] && !!DB['drop/coach/uidC'];
+
+      Cloud._probe(() => { throw new Error('not signed in'); });
+      R.out = await Cloud.send('train', { rows: [] }).then(() => false, e => /not signed in/.test(e.message));
+    } catch (e) {
+      R.threw = e.message;
+    } finally {
+      Cloud._probe(null);
+    }
+    const say = R.threw ? ' — threw: ' + R.threw : '';
+    ok('shelf: a client\'s send lands under their own uid and nowhere else', !!R.path, say);
+    ok('shelf: the parcel carries its kind, who sent it, when, and how many rows', !!R.stamp, say);
+    ok('shelf: sending again replaces the parcel instead of adding a second', !!R.one, say);
+    ok('shelf: a parcel over the ceiling is refused in words and writes nothing', !!R.big, say);
+    ok('shelf: a refused write says to check the drop rules', !!R.denied, say);
+    ok('shelf: the coach sees every parcel, newest first', !!R.order, say);
+    ok('shelf: a parcel comes back exactly as it was sent', !!R.body, say);
+    ok('shelf: a parcel that will not parse is listed and left on the shelf', !!R.keep, say);
+    ok('shelf: taking one parcel clears that one only', !!R.took, say);
+    ok('shelf: signed out, a send refuses and says why', !!R.out, say);
+  }
+
   /* every promised check settles before anything is counted */
   await Promise.all(PENDING);
 

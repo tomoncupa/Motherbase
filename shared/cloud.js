@@ -283,7 +283,9 @@ var PARCEL = 2000000;   /* the ceiling the rules also check, so a refusal is
    one. Deliberately not `cfg.uid`: a stored uid outlives the token that makes
    it mean anything, and addressing a path nothing can read is the failure
    that reads as "it silently didn't send". */
+var probe = null;   /* the smoke checks' stand-in for an account; null in use */
 function account() {
+  if (probe) return Promise.resolve().then(probe);
   if (isFile()) return Promise.reject(new Error('this page was opened from a folder, and Google sign-in needs a web address'));
   var bad = missing(cfg.cfg);
   if (bad) return Promise.reject(new Error(bad));
@@ -529,7 +531,7 @@ function wire() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.1.0',
+  VERSION: '0.1.1',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -586,6 +588,9 @@ var Cloud = {
   /* exposed for the smoke checks, which have no database to talk to */
   _enc: enc, _dec: dec, _parse: parseCfg, _missing: missing, _plan: plan, _big: BIG,
   _cfg: function () { return cfg; },
+  /* `f` returns `{uid, email, db}` as account() would, or throws; null puts
+     the real one back. Only the shelf reads it: the row sync never does. */
+  _probe: function (f) { probe = f || null; },
 };
 
 /* ── boot ──
