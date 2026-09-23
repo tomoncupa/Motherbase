@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.3, 2026-09-22">
+<meta name="mb-version" content="1.0.4, 2026-09-23">
 <title>COACH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✦</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -97,6 +97,28 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
 .recent .x{flex:1;min-width:0;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .recent .v{color:var(--text-muted);font-variant-numeric:tabular-nums}
 
+/* check-ins */
+.cidays{display:flex;gap:var(--s-1);overflow-x:auto;margin-bottom:var(--s-3);padding-bottom:var(--s-1)}
+.cidays button{flex:0 0 auto;min-height:var(--tap);padding:0 var(--s-3);border:0;border-radius:var(--radius-md);
+  background:var(--surface-2);color:var(--text-2);font:inherit;font-size:var(--f-1);
+  font-variant-numeric:tabular-nums;white-space:nowrap;cursor:pointer}
+.cidays button.sel{box-shadow:inset 0 0 0 2px var(--accent);color:var(--text-1)}
+.cishots{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:var(--s-2);margin-bottom:var(--s-3)}
+.cishots figure{margin:0}
+.cishots button{display:block;width:100%;padding:0;border:0;border-radius:var(--radius-md);
+  overflow:hidden;background:var(--surface-2);cursor:pointer}
+.cishots img{display:block;width:100%;aspect-ratio:3/4;object-fit:cover}
+.cishots figcaption{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);
+  margin-top:var(--s-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cians{display:flex;flex-direction:column;gap:var(--s-2)}
+.cians .a{display:flex;gap:var(--s-3);align-items:baseline;padding:var(--s-2) 0;border-bottom:1px solid var(--border)}
+.cians .k{flex:1;min-width:0;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cians .v{font-weight:var(--w-bold);font-variant-numeric:tabular-nums}
+.cians .ch{flex:0 0 auto;min-width:calc(var(--tap) * 1.1);text-align:right;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.ciwords{color:var(--text-2);line-height:var(--lh-body);margin-top:var(--s-3)}
+.ciwords b{display:block;font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap)}
+.cibig{display:block;width:100%;max-height:70vh;object-fit:contain;border-radius:var(--radius-md)}
+
 /* programming */
 .day{background:var(--surface-2);border-radius:var(--radius-md);padding:var(--s-3);margin-bottom:var(--s-3)}
 .dayhead{display:flex;gap:var(--s-2);align-items:center;margin-bottom:var(--s-2)}
@@ -162,6 +184,12 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
    Each is merged with the updated_at it came with, so sending the same file
    twice changes nothing and a newer file only adds what is new.
 
+   Their check-ins are read, not invented: CHECK IN already keys a client's
+   `cval`, `cphoto`, `cmark` and `cref` the same `pid|key` way, under the same
+   `cperson`. So COACH shows them on the profile and takes a check-in file
+   through the same button, and the two apps are looking at one set of rows
+   rather than two copies of one.
+
    What goes back is a program, `cprog`: one row per program, because a
    program is written, sent and sold as one piece. A client's own first sets
    are the program keyed `c-<pid>`; anything else is a program in the
@@ -174,11 +202,13 @@ Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id); if (windo
 if (window.Icons) Icons.paint();
 Sfx.init(APP.id);
 Rec.declare(APP.id, APP.types);
-/* `client` and `sesh` are WEALTH's shape and `cperson` is CHECK IN's. COACH
-   writes into all three, so they ride COACH's sheet tab too, and it reads
-   theirs so a device where WEALTH or CHECK IN was never opened still knows. */
-IO.register({ app: APP.id, name: APP.name, types: APP.types.concat(['cperson', 'client', 'sesh']),
-  reads: { checkin: ['cperson'], wealth: ['client', 'sesh'] } });
+/* `client` and `sesh` are WEALTH's shape and `cperson` and the check-in rows
+   are CHECK IN's. COACH writes into all of them, so they ride COACH's sheet
+   tab too, and it reads theirs so a device where WEALTH or CHECK IN was never
+   opened still knows. */
+const CI_TYPES = ['cval', 'cphoto', 'cmark', 'cref', 'checkin'];
+IO.register({ app: APP.id, name: APP.name, types: APP.types.concat(['cperson', 'client', 'sesh'], CI_TYPES),
+  reads: { checkin: ['cperson'].concat(CI_TYPES), wealth: ['client', 'sesh'] } });
 
 const BOXES = [{ id: 'one', name: '1:1' }, { id: 'online', name: 'ONLINE' }, { id: 'past', name: 'PAST' }];
 const SLOTS = 30;
@@ -201,6 +231,50 @@ const clientsIn = box => Object.entries(people())
 const own = (type, pid) => Rec.all(type).filter(r => String(r.key).indexOf(pid + '|') === 0);
 const setsOf = pid => own('cset', pid);
 const exOf = pid => { const m = {}; own('cex', pid).forEach(r => { m[r.key.slice(pid.length + 1)] = r.payload; }); return m; };
+
+/* ── a client's check-ins ──
+   CHECK IN keys a client's answers and photos `pid|field`, under the same
+   `cperson` COACH draws in the box. So nothing is copied and nothing is a
+   second list: this reads the rows CHECK IN wrote, for the client already
+   selected. The questions come off `cperson.fields`, which is the list that
+   client's own file asked, so the labels are theirs and not Tom's. A client
+   whose file predates that list has their questions read back off the rows
+   themselves, which gives a plainer label and never an empty card.
+   A photo is a big row, so it arrives from IndexedDB after the first paint;
+   `Rec.ready(draw)` at the bottom of this file is what puts it on screen. */
+const ciBare = (key, pid) => String(key).slice(pid.length + 1);
+const ciTitle = s => String(s).replace(/[-_]+/g, ' ').replace(/^./, c => c.toUpperCase());
+function ciFields(pid) {
+  const p = people()[pid] || {};
+  if (Array.isArray(p.fields) && p.fields.length) {
+    return p.fields.slice().sort((a, b) => (a.ord || 0) - (b.ord || 0));
+  }
+  const m = {};
+  own('cphoto', pid).forEach(r => { const id = ciBare(r.key, pid); m[id] = { id: id, label: ciTitle(id), kind: 'photo' }; });
+  own('cval', pid).forEach(r => {
+    const id = ciBare(r.key, pid);
+    if (m[id] || id === 'weight') return;
+    m[id] = { id: id, label: ciTitle(id), kind: typeof (r.payload || {}).v === 'number' ? 'number' : 'text' };
+  });
+  return Object.keys(m).sort().map(k => m[k])
+    .sort((a, b) => (a.kind === 'photo' ? 0 : 1) - (b.kind === 'photo' ? 0 : 1));
+}
+function ciDates(pid) {
+  const s = {};
+  ['cval', 'cphoto', 'checkin'].forEach(t => own(t, pid).forEach(r => { if (r.date) s[r.date] = 1; }));
+  return Object.keys(s).sort();
+}
+const ciVal = (date, id, pid) => { const r = Rec.get('cval', date, pid + '|' + id); return r ? r.v : null; };
+const ciPhoto = (date, pose, pid) => Rec.get('cphoto', date, pid + '|' + pose);
+const ciNum = v => v == null || v === '' ? '' : String(Math.round(+v * 10) / 10);
+/* The change since the check-in before it, stated and never judged: a number
+   going down is not a win or a loss until Tom decides it is. */
+function ciChange(now, was) {
+  if (typeof now !== 'number' || typeof was !== 'number') return '';
+  const d = Math.round((now - was) * 10) / 10;
+  if (!d) return '—';
+  return (d > 0 ? '+' : '−') + Math.abs(d);
+}
 
 /* ── one client, two apps ──
    Tom, 2026-09-22: "I don't see the clients in WEALTH show up in COACH...
@@ -383,16 +457,50 @@ let editing = '';
 /* categories, supersets and goals too since 1.0.3, so the client's own TRAIN
    opens in COACH with the muscle groups it was logged under */
 const MAP = { set: 'cset', exercise: 'cex', phase: 'cphase', session: 'csession', excat: 'cexcat', sgroup: 'csgroup', goal: 'cgoal' };
+/* A check-in file, the one CHECK IN's Send makes. Everything in COACH is a
+   client, so unlike CHECK IN there is nothing to ask about whose it is. The
+   rows are kept under the same `pid|key` CHECK IN uses, so opening the file
+   in either app puts it in the same place, and a row is only written when
+   what arrived is newer than what is here — dots Tom has already checked are
+   never undone by an old file. */
+function takeCheckin(bag) {
+  const pid = String(bag.pid || ('n-' + slugOf(bag.name || 'client')));
+  const cur = people()[pid];
+  const who = { name: bag.name || (cur && cur.name) || 'Client', animal: bag.animal || (cur && cur.animal) || 'pikachu',
+    unit: bag.unit || (cur && cur.unit) || 'kg', seen: new Date().toISOString() };
+  if (Array.isArray(bag.fields) && bag.fields.length) who.fields = bag.fields;
+  if (!cur) Rec.set('cperson', null, pid, Object.assign({ fields: null, box: 'one', slot: freeSlot('one') }, who));
+  else Rec.patch('cperson', null, pid, who);
+  let fresh = 0;
+  bag.rows.forEach(r => {
+    if (!r || !r.type) return;
+    let type = r.type, payload = r.payload, key = String(r.key == null ? '' : r.key);
+    if (type === 'ev') {
+      if (key !== 'weight' || !payload || !payload.e || !payload.e.length) return;
+      type = 'cval'; payload = { v: payload.e[payload.e.length - 1].v };
+    }
+    if (CI_TYPES.indexOf(type) < 0) return;
+    const k = pid + '|' + key, have = Rec.row(type, r.date || null, k);
+    if (have && (!r.updated_at || have.updated_at >= r.updated_at)) return;
+    /* The store does not bump a row whose payload is unchanged, so counting
+       every write would call the same file "new rows" every time it is
+       opened. Count what actually changed. */
+    const moved = !have || JSON.stringify(have.payload) !== JSON.stringify(payload);
+    Rec.set(type, r.date || null, k, payload);
+    if (moved) fresh++;
+  });
+  if (bag.date) ciDay = bag.date;
+  return { pid: pid, name: who.name, rows: bag.rows.length, fresh: fresh };
+}
 function takeFile(bag) {
+  if (bag && bag.kind === 'motherbase-checkin' && Array.isArray(bag.rows)) return takeCheckin(bag);
   if (!bag || bag.kind !== 'motherbase-train' || !bag.pid || !Array.isArray(bag.rows)) {
-    throw new Error('That is not a file from TRAIN. Ask for Send To Coach, in TRAIN’s Profile menu.');
+    throw new Error('That is not a file from TRAIN or CHECK IN. Ask for Send To Coach, in TRAIN’s Profile menu, or Send in CHECK IN.');
   }
   const pid = String(bag.pid);
   const cur = people()[pid];
   if (!cur) {
-    const taken = {}; clientsIn('one').forEach(([, p]) => { taken[p.slot] = 1; });
-    let slot = 0; while (taken[slot]) slot++;
-    Rec.set('cperson', null, pid, { name: bag.name || 'Client', animal: bag.animal || 'pikachu', unit: bag.unit || 'kg', fields: null, seen: null, box: 'one', slot: slot });
+    Rec.set('cperson', null, pid, { name: bag.name || 'Client', animal: bag.animal || 'pikachu', unit: bag.unit || 'kg', fields: null, seen: null, box: 'one', slot: freeSlot('one') });
   } else {
     const ch = {};
     if (bag.name && !cur.name) ch.name = bag.name;
@@ -554,7 +662,8 @@ function drawClient(col) {
   const card = document.createElement('div'); card.className = 'card';
   if (!p) {
     card.innerHTML = '<h2>CLIENT</h2><p class="empty">Pick a client in the box, or press an empty slot to add one. ' +
-      'A client’s training arrives as a file: they press <b>Send To Coach</b> in TRAIN’s Profile menu, and you open it with <b>OPEN A CLIENT FILE</b>.</p>';
+      'A client’s training arrives as a file: they press <b>Send To Coach</b> in TRAIN’s Profile menu. ' +
+      'Their check-in arrives the same way, from CHECK IN. Both open with <b>OPEN A CLIENT FILE</b>.</p>';
     col.appendChild(card);
     return;
   }
@@ -588,6 +697,7 @@ function drawClient(col) {
   card.appendChild(stats);
   col.appendChild(card);
   if (logDay) drawLog(col, sel, p);
+  drawCheckin(col, sel, p);
 
   if (window.Range) {
     const rc = document.createElement('div'); rc.className = 'card range';
@@ -613,6 +723,105 @@ function drawClient(col) {
     '<div class="r"><span class="d">' + esc(Day.label(s.date, { day: 'numeric', month: 'short' })) + '</span><span class="x">' +
     esc(s.ex.join(', ')) + '</span><span class="v">' + Math.round(unit() === 'lb' ? s.vol * KG_LB : s.vol).toLocaleString() + ' ' + unit() + '</span></div>').join('') + '</div>';
   col.appendChild(rc2);
+}
+
+/* One check-in on the client's profile: the photos of that day, then every
+   answer with what it was at the one before. The date strip is the history,
+   so the last twelve check-ins are one tap apart and Tom never leaves COACH
+   to see whether the waist moved. */
+let ciDay = '';
+function drawCheckin(col, pid, p) {
+  const days = ciDates(pid);
+  if (!days.length) return;
+  if (days.indexOf(ciDay) < 0) ciDay = days[days.length - 1];
+  const at = days.indexOf(ciDay), prev = at > 0 ? days[at - 1] : null;
+  const c = document.createElement('div'); c.className = 'card';
+  const h = document.createElement('h2');
+  h.textContent = 'CHECK IN · ' + String(Day.label(ciDay)).toUpperCase();
+  c.appendChild(h);
+
+  if (days.length > 1) {
+    const strip = document.createElement('div'); strip.className = 'cidays';
+    days.slice(-12).forEach(d => {
+      const b = document.createElement('button');
+      b.className = 'mb-press mb-tap' + (d === ciDay ? ' sel' : '');
+      b.textContent = Day.label(d, { day: 'numeric', month: 'short' });
+      b.onclick = () => { ciDay = d; draw(); };
+      strip.appendChild(b);
+    });
+    c.appendChild(strip);
+  }
+
+  const fields = ciFields(pid);
+  const shots = [];
+  fields.forEach(f => {
+    if (f.kind !== 'photo') return;
+    const ph = ciPhoto(ciDay, f.id, pid);
+    if (ph && ph.img) shots.push([f, ph]);
+  });
+  if (shots.length) {
+    const g = document.createElement('div'); g.className = 'cishots';
+    shots.forEach(pair => {
+      const f = pair[0], ph = pair[1];
+      const fig = document.createElement('figure');
+      const b = document.createElement('button'); b.className = 'mb-press';
+      b.setAttribute('aria-label', 'See ' + f.label + ' bigger');
+      const im = document.createElement('img');
+      im.src = ph.img; im.alt = f.label + ', ' + Day.label(ciDay); im.loading = 'lazy';
+      b.appendChild(im);
+      b.onclick = () => bigShot(f.label, ph, ciDay);
+      fig.appendChild(b);
+      const cap = document.createElement('figcaption'); cap.textContent = f.label;
+      fig.appendChild(cap);
+      g.appendChild(fig);
+    });
+    c.appendChild(g);
+  }
+
+  const ans = document.createElement('div'); ans.className = 'cians';
+  const line = (label, value, change) => {
+    const r = document.createElement('div'); r.className = 'a';
+    r.innerHTML = '<span class="k">' + esc(label) + '</span><span class="v">' + esc(value) +
+      '</span><span class="ch">' + esc(change || '') + '</span>';
+    ans.appendChild(r);
+  };
+  const wNow = ciVal(ciDay, 'weight', pid);
+  if (wNow != null && wNow !== '') {
+    line('Weight', ciNum(wNow) + ' ' + (p.unit || 'kg'), prev ? ciChange(wNow, ciVal(prev, 'weight', pid)) : '');
+  }
+  const words = [];
+  fields.forEach(f => {
+    if (f.kind === 'photo' || f.id === 'weight') return;
+    const v = ciVal(ciDay, f.id, pid);
+    if (v == null || v === '') return;
+    if (f.kind === 'text' || typeof v !== 'number') { words.push([f.label, String(v)]); return; }
+    const tail = f.kind === 'scale' ? ' / 5' : (f.unit ? ' ' + f.unit : '');
+    line(f.label, ciNum(v) + tail, prev ? ciChange(v, ciVal(prev, f.id, pid)) : '');
+  });
+  if (ans.children.length) c.appendChild(ans);
+  words.forEach(w => {
+    const d = document.createElement('div'); d.className = 'ciwords';
+    d.innerHTML = '<b>' + esc(w[0]) + '</b>' + esc(w[1]);
+    c.appendChild(d);
+  });
+  if (!shots.length && !ans.children.length && !words.length) {
+    const e = document.createElement('p'); e.className = 'empty';
+    e.textContent = 'Nothing answered on this check-in.';
+    c.appendChild(e);
+  }
+  col.appendChild(c);
+}
+function bigShot(label, ph, date) {
+  UI.dialog({
+    title: String(label).toUpperCase() + ' · ' + String(Day.label(date)).toUpperCase(),
+    width: 560,
+    body: b => {
+      const im = document.createElement('img');
+      im.className = 'cibig'; im.src = ph.img; im.alt = label + ', ' + Day.label(date);
+      b.appendChild(im);
+    },
+    actions: [{ label: 'CLOSE' }],
+  });
 }
 
 /* ── programs ── */

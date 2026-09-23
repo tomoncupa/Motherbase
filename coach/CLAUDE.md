@@ -39,3 +39,49 @@ Watched in the browser 2026-09-22 with a made-up client: two sets logged in
 the frame landed as the client's `cset` rows, a WEALTH `sesh` appeared and was
 taken back when the sets went, Tom's own `set`, `exercise` and `tick` counts
 did not move, and `_review.html` passed 116 of 116.
+
+## Their check-ins, on their profile (1.0.4, 2026-09-23)
+
+A client was in two places: their training in COACH, their photos and
+measurements in CHECK IN. Same person, two apps, and Tom had to leave the
+profile to answer "did the waist move".
+
+Nothing was copied to fix it. CHECK IN already keys a client's `cval`,
+`cphoto`, `cmark` and `cref` as `pid|key`, under the same `cperson` COACH
+draws in the box, so COACH reads those rows straight out of the store. One
+set of rows, two windows onto it.
+
+- **A CHECK IN card** sits under the client's name: the date strip (their
+  last twelve check-ins, one tap apart), that day's photos, then every answer
+  with what it was at the check-in before. A photo opens big.
+- **The change is stated, never judged.** `ciChange` prints `+1.5` or
+  `−1.5` in muted text and no colour. A waist going down is not a win
+  until Tom decides it is — root brief, self-determination theory.
+- **The questions are the client's own.** `ciFields` reads `cperson.fields`,
+  the list that client's file carried, so a label says what they were asked.
+  A client whose file predates that list has their questions read back off
+  the rows, photos first, with a plainer label — never an empty card.
+- **A check-in file opens here too.** `OPEN A CLIENT FILE` takes
+  `motherbase-checkin` as well as `motherbase-train` (`takeCheckin`). A
+  client's weight arrives as an `ev` row and is kept as their `cval`, so it
+  can never land in Tom's own weight log, and `cfield` is skipped so their
+  questions never overwrite his. An older file writes nothing.
+- **"New rows" counts what changed.** The store does not bump a row whose
+  payload is identical, so counting every write called the same file new
+  every time it was opened. `takeCheckin` compares the payload first.
+- **The check-in types ride COACH's tab.** `CI_TYPES` is in both `IO.register`'s
+  `types` and its `reads`, the way `cperson` already was, so a device where
+  CHECK IN was never opened still sees them.
+
+Watched in the browser 2026-09-23 with a made-up client: two check-ins drew
+with their photos and changes, the date strip switched between them, the
+photo opened big, a check-in file imported and re-imported (second time
+"nothing new"), an older file undid nothing, the client's weight stayed out
+of Tom's `ev` rows, a client with no check-ins drew no card, and a client
+with no `fields` drew derived labels. 44px date buttons and no sideways
+scroll at 375px. `_review.html` passed 116 of 116 at desktop and phone width,
+foundation 328 of 328.
+
+## Needs from the foundation
+
+Nothing open.
