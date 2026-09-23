@@ -50,6 +50,7 @@ RECEIPTS app     ->  reads out/ through the browser's folder permission
 | The receipt itself | `receipt`, keyed by the photo's name | this app. Proof of purchase, which had no home before |
 | A shop's wording | `alias`, keyed by the normalised text | this app |
 | A nutrition label | `food` `{name, brand, base:{amt, unit, src:'label', ...figures}, serves}` | STATUS names the shape, FOODDÉX writes it too. The same row FOODDÉX saves |
+| The morning brief | `brief` `{text, todo, t, src}`, dated its day | OUTER HEAVEN's `jobs/brief.py` drops `out/brief-<date>.json` with `src: 'brief'`. Goes straight in, never the waiting list; a stored brief with the same `t` or newer is left alone. The folder is the only door from his PC into the store: the suite is https, the board http (1.0.2) |
 
 Writing `spend` and `paid` is a deliberate cross-app write, the way ELEMENT
 writes STATUS's `ev` and `meal`. Ownership names who is responsible for the

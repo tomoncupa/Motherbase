@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.1, 2026-09-23">
+<meta name="mb-version" content="1.0.2, 2026-09-23">
 <title>RECEIPTS</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧾</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -242,7 +242,34 @@ async function allowed(ask) {
    can write one again, and neither should un-file money he has already
    confirmed.                                                               */
 
-function take(rec, name) {
+function take(rec, name, tally) {
+  /* ── the morning brief ──
+
+     OUTER HEAVEN writes Tom's brief on this PC and leaves it in the same
+     folder, because this folder is the only door from his machine into the
+     store: the suite is served over https and the board over http, so no
+     page of his can fetch the board directly (watched, 2026-09-23).
+
+     It is not a receipt and never joins the waiting list. There is no money
+     in it and nothing to confirm, so it goes straight in as the `brief` row
+     QUESTS reads at the top of Today. Re-reading the same file changes
+     nothing: a brief already in the store with the same stamp or newer is
+     left alone, so a brief he has since edited or folded is never trampled. */
+  if (rec.src === 'brief') {
+    const day = rec.date || Day.today();
+    const had = Rec.get('brief', day, '');
+    const t = +rec.t || Date.now();
+    if (had && (+had.t || 0) >= t) return 0;
+    Rec.set('brief', day, '', {
+      text: String(rec.text || ''),
+      todo: (Array.isArray(rec.todo) ? rec.todo : [])
+        .map(x => (typeof x === 'string' ? x : (x && x.text) || '')).filter(s => String(s).trim()),
+      t: t, src: rec.from || 'morning',
+    });
+    binFile('brief-' + day);
+    if (tally) tally.briefs++;
+    return 0;
+  }
   const file = rec.file || name;
   const key = file.replace(/\.[a-z0-9]+$/i, '');
   const had = Rec.get('receipt', null, key);
@@ -294,23 +321,27 @@ async function poll(ask) {
   try {
     if (!(await allowed(!!ask))) return;
     let got = 0;
+    const tally = { briefs: 0 };
     for await (const [name, h] of dir.entries()) {
       if (h.kind !== 'file' || !/\.json$/i.test(name)) continue;
-      try { got += take(JSON.parse(await (await h.getFile()).text()), name); }
+      try { got += take(JSON.parse(await (await h.getFile()).text()), name, tally); }
       catch (e) { /* half-written by the reader; the next poll gets it whole */ }
     }
     if (got) { Mobile.feedback('success'); UI.toast(got + (got === 1 ? ' receipt' : ' receipts') + ' came in'); }
+    if (tally.briefs) { Mobile.feedback('success'); UI.toast('Your brief is in. <b>QUESTS</b> shows it at the top of Today.'); }
   } finally { polling = false; }
 }
 
 document.getElementById('folder').onclick = askFolder;
 document.getElementById('files').onchange = async e => {
   let got = 0;
+  const tally = { briefs: 0 };
   for (const f of e.target.files) {
-    try { got += take(JSON.parse(await f.text()), f.name); } catch (err) {}
+    try { got += take(JSON.parse(await f.text()), f.name, tally); } catch (err) {}
   }
   e.target.value = '';
-  UI.toast(got ? got + ' brought in' : 'nothing new in those files', { bad: !got });
+  if (tally.briefs) UI.toast('Your brief is in. <b>QUESTS</b> shows it at the top of Today.');
+  else UI.toast(got ? got + ' brought in' : 'nothing new in those files', { bad: !got });
 };
 
 /* ── matching a line to a food ────────────────────────────────────────────
