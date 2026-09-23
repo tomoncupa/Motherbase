@@ -387,7 +387,8 @@ TRAIN's bar is long, at real proportions, and runs near edge to edge;
 NOTICE's window fills the tile, its "!" thinner. Colours REPLACE the family
 colours above: HOME, FORM, SPEAK, COACH, FOODDÉX, ELEMENT white; STATUS,
 QUESTS, NOTICE brand gold; TRAIN and LOG blue; ARC purple; CHECK IN,
-WEALTH, RECEIPTS green (Lego green or dollar-bill green, his pick pending);
+WEALTH, RECEIPTS Lego green `#237841` (his pick over dollar-bill green,
+knowing it reads dimmer); TRAIN uses the taller-plate barbell;
 STYLE colourful (rainbow edge, four paint colours); BLOCK Lego.
 
 Earlier picks, 2026-09-23: STATUS character sheet, FORM eye, QUESTS quest
