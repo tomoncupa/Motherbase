@@ -131,3 +131,72 @@ shelf is for and who it is not for.
 `shared/_smoke.html` has no checks for the coach shelf (`Cloud.send`,
 `waiting`, `took`, `who` in `cloud.js`). Everything watched so far stubbed the
 transport. A foundation session should add them.
+
+## The week, and the lifts (1.0.8, 2026-09-24)
+
+Tom: *"I want to see their week at a glace, I want to see their most recent
+lifts per session."* Both were things the profile could nearly answer and
+did not.
+
+- **THIS WEEK** sits under the client's name: seven days, Monday first, each
+  a bar as tall as the volume in it with the set count above the bar, then
+  the week's sessions, sets and volume with the week before it stated beside
+  them. The arrows walk back a week at a time. Which week is on screen
+  belongs to the client, so picking another client comes back to this week.
+- **The number is never drawn on the bar.** White on gold cannot be read, and
+  every theme's accent is a different colour, so no one text colour would be
+  safe over it. The bar is capped at 62% and the count keeps the band above.
+  Every bar is scaled the same, so comparing one day with another is
+  untouched.
+- **The change is stated, never judged**, the way `ciChange` already does it:
+  the week before is a number beside this week's, with no arrow, no colour
+  and no word for it. Root brief, self-determination theory.
+- **RECENT SESSIONS prints what was lifted.** `sessionsOf` used to add each
+  set into a volume and throw it away, so the card could say a session
+  happened and never what was in it. It now keeps the sets, grouped by
+  exercise, and the card prints each exercise with every working set as it
+  was logged — `60×8 · 60×6 · 55×8` — in the unit Settings is set to, with a
+  set TRAIN flagged as a record in the accent. Warmups stay out, as they are
+  out of the volume.
+- **A session reads back in the order it was done.** The store hands rows
+  back in no order, and `set.ord` numbers a set within its own exercise so it
+  cannot tell two exercises apart. The earliest set key can, because a set
+  key is a timestamp; an order Tom set by hand in TRAIN beats it, and it is
+  already on the day's `csession`.
+- **The range moved to the bottom.** The week and the sessions answer today,
+  the range answers the year, and that is the order a coach reads them in.
+
+## IMPORT THEIR LOG (1.0.8, 2026-09-24)
+
+Tom: *"Bring back the upload training data function from the most common
+apps, and fitnotes."* It existed, in TRAIN, three folds into Settings, and
+from a client's profile there was no way to it at all.
+
+- **COACH has no importer and must never grow one.** The button opens the
+  same client TRAIN that LOG A SESSION does, at
+  `train/index.html?client=<pid>&import=1`, and TRAIN puts its own import
+  panel up. The adapter at the top of `train/index.html` is already what
+  sends every row TRAIN writes onto the client, so a FitNotes backup and a
+  Strong, Hevy or JEFIT CSV all land on the client with nothing new written
+  here.
+- **The panel says whose log it is** when it is a client's. A backup dropped
+  into the wrong one is thousands of rows to undo by hand.
+- **An imported set does not bill.** `coachSets` counts only `pid|k-` keys,
+  and an imported set is keyed `csv-…` or off the FitNotes row. History
+  arriving is not a session delivered.
+- **The frame is reloaded when the panel is asked for**, because the address
+  is what opens it, so a frame already showing that client cannot just be
+  shown again.
+
+Watched in the browser 2026-09-24 with a made-up online client and three
+weeks of training: the week strip drew the right days, sets and volumes
+against the totals worked out by hand, the arrows walked back two weeks and
+would not go past this one, switching client came back to this week, a client
+with no training drew an empty week and the right empty state, and each
+session printed its exercises in order with its sets and the record in the
+accent. IMPORT THEIR LOG opened the client's TRAIN with the panel up, a
+five-set CSV carrying a comma inside an exercise name imported onto the
+client, and Tom's own `set`, `exercise` and `tick` counts did not move.
+44px targets on the arrows and both buttons, no sideways scroll at 390px.
+`_review.html` passed 116 of 116 at desktop and at 375px, foundation 348 of
+348.

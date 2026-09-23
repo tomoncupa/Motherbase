@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.7, 2026-09-23">
+<meta name="mb-version" content="1.0.8, 2026-09-24">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -97,6 +97,54 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
 .recent .d{flex:0 0 auto;font-weight:var(--w-bold);font-variant-numeric:tabular-nums}
 .recent .x{flex:1;min-width:0;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .recent .v{color:var(--text-muted);font-variant-numeric:tabular-nums}
+
+/* the week ── seven days, Monday first, each as tall as the work in it */
+.wkhead{display:flex;align-items:center;gap:var(--s-2);margin-bottom:var(--s-3)}
+.wkhead h2{flex:1;margin:0;text-align:center}
+.wkdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:var(--s-1)}
+.wkd{display:flex;flex-direction:column;align-items:center;gap:var(--s-1);min-width:0}
+.wkd .dn{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap)}
+/* The bar is the volume and the number is the sets, and the number never sits
+   on the bar: white on gold is unreadable, and every theme's accent is a
+   different colour so no one text colour would be safe over it. So the bar
+   is capped short of the top and the number keeps the band above it. The
+   bars are all scaled the same, so what they are read for — this day against
+   that one — is untouched. */
+.wkd .tile{width:100%;min-height:calc(var(--tap) * 1.3);border-radius:var(--radius-md);background:var(--surface-2);
+  display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;position:relative}
+.wkd.off .tile{background:none;box-shadow:inset 0 0 0 1px var(--border)}
+.wkd.now .dn{color:var(--accent)}
+.wkd.now .tile{box-shadow:inset 0 0 0 1px var(--accent)}
+.wkd .fill{background:var(--accent);min-height:3px}
+.wkd .n{position:absolute;top:0;left:0;right:0;height:1.7em;display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-display);font-size:var(--f-2);font-weight:var(--w-bold);
+  color:var(--text-1);font-variant-numeric:tabular-nums}
+.wkd .wv{font-size:var(--f-1);color:var(--text-muted);font-variant-numeric:tabular-nums;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wksum{display:flex;gap:var(--s-3);align-items:baseline;flex-wrap:wrap;margin-top:var(--s-3);
+  padding-top:var(--s-3);border-top:1px solid var(--border)}
+.wksum b{font-family:var(--font-display);font-size:var(--f-4);font-variant-numeric:tabular-nums}
+.wksum .was{flex:1;min-width:14ch;text-align:right;color:var(--text-muted);font-size:var(--f-2);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+/* On a narrow card the week before will not fit beside the total, and squeezed
+   into the corner it wraps into a three-line stack. It takes its own line. */
+@media (max-width:520px){ .wksum .was{flex:1 0 100%;text-align:left;margin-top:var(--s-1)} }
+
+/* one session, with what was actually lifted in it */
+.sesh{padding:var(--s-3) 0;border-bottom:1px solid var(--border)}
+.sesh:last-child{border-bottom:0;padding-bottom:0}
+.sesh .sh{display:flex;gap:var(--s-3);align-items:baseline;margin-bottom:var(--s-2)}
+.sesh .sh b{font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-cap);
+  font-variant-numeric:tabular-nums}
+.sesh .sh span{flex:1;min-width:0;color:var(--text-muted);font-size:var(--f-1);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sesh .sh i{font-style:normal;color:var(--text-muted);font-size:var(--f-2);font-variant-numeric:tabular-nums}
+.lift{display:flex;gap:var(--s-3);align-items:baseline;padding:var(--s-1) 0}
+.lift .ln{flex:0 0 40%;min-width:0;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lift .ls{flex:1;min-width:0;font-size:var(--f-2);font-variant-numeric:tabular-nums;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lift .ls em{font-style:normal;color:var(--accent)}
+@media (max-width:420px){ .lift{flex-direction:column;gap:0} .lift .ln{flex:0 0 auto;width:100%} }
 
 /* check-ins */
 .cidays{display:flex;gap:var(--s-1);overflow-x:auto;margin-bottom:var(--s-3);padding-bottom:var(--s-1)}
@@ -635,16 +683,45 @@ function drawBox(col) {
 }
 
 /* ── one client ── */
+/* A day, with what was lifted in it kept rather than counted away. Tom,
+   2026-09-24: "I want to see their most recent lifts per session." The old
+   version threw every set on the floor the moment it had added it to the
+   volume, so the profile could say a session happened and never what was in
+   it. Sets are grouped by exercise and left in the order they were done,
+   which is the order a coach reads them back. A warmup is still out of the
+   volume, and still out of the lifts: it is not what they worked at. */
 function sessionsOf(pid) {
   const ex = exOf(pid), by = {};
   setsOf(pid).forEach(r => {
     const s = r.payload; if (s.warm) return;
-    const d = by[r.date] || (by[r.date] = { date: r.date, vol: 0, ex: [] });
+    const d = by[r.date] || (by[r.date] = { date: r.date, vol: 0, sets: 0, ex: [], lifts: [], byEx: {} });
     d.vol += (+s.kg || 0) * (+s.r || 0);
+    d.sets++;
     const nm = (ex[s.ex] || {}).name || 'Exercise';
-    if (d.ex.indexOf(nm) < 0) d.ex.push(nm);
+    let L = d.byEx[s.ex];
+    if (!L) {
+      L = d.byEx[s.ex] = { id: s.ex, name: nm, sets: [] };
+      d.lifts.push(L);
+      if (d.ex.indexOf(nm) < 0) d.ex.push(nm);
+    }
+    L.sets.push({ s: s, ord: +s.ord || 0, k: String(r.key) });
   });
-  return Object.keys(by).sort().map(k => by[k]);
+  /* The order a session is read back in is the order it was done in. The
+     store hands rows back in no particular order, and `ord` is the set's
+     number within its own exercise, so it cannot tell two exercises apart:
+     the earliest set key does, because a set key is a timestamp. An order
+     Tom set by hand in TRAIN beats both — it is on the day's `csession`,
+     exactly where TRAIN put it. */
+  return Object.keys(by).sort().map(k => {
+    const d = by[k];
+    d.lifts.forEach(L => { L.sets.sort((a, b) => a.ord - b.ord || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0)); });
+    const sess = Rec.get('csession', d.date, pid + '|') || {};
+    const set = Array.isArray(sess.order) ? sess.order : null;
+    const at = L => { const i = set ? set.indexOf(L.id) : -1; return i < 0 ? 9e9 : i; };
+    d.lifts.sort((a, b) => at(a) - at(b) || (a.sets[0].k < b.sets[0].k ? -1 : a.sets[0].k > b.sets[0].k ? 1 : 0));
+    d.ex = d.lifts.map(L => L.name).filter((n, i, a) => a.indexOf(n) === i);
+    return d;
+  });
 }
 function liftsOf(pid) {
   const ex = exOf(pid), by = {};
@@ -658,6 +735,120 @@ function liftsOf(pid) {
   });
   return Object.values(by).filter(x => x.best > 0)
     .sort((a, b) => Object.keys(b.days).length - Object.keys(a.days).length).slice(0, 10);
+}
+
+/* ── the week, at a glance (1.0.8, 2026-09-24) ──
+   Tom: "I want to see their week at a glance." Seven days, Monday first,
+   each one a tile as tall as the volume in it, with the set count written
+   in. Under them the week's own total and the week before it, so "lighter
+   than last week" is read rather than worked out.
+
+   The change is stated and never judged — a week down on the one before is
+   not a failure until Tom says it is. Root brief, self-determination theory:
+   never tell him what a behaviour did to a number.
+
+   The arrows walk back a week at a time, because the week a coach reviews is
+   usually the one that just finished rather than the one half done. Which
+   week is on screen belongs to the client being looked at, so picking a
+   different client comes back to this week. */
+const weekStartOf = d => Day.shift(d, -((Day.dow(d) + 6) % 7));
+const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+let weekAt = '', weekFor = '';
+const kShort = v => v >= 10000 ? Math.round(v / 1000) + 'k' : v >= 1000 ? (Math.round(v / 100) / 10) + 'k' : String(Math.round(v));
+function drawWeek(col, pid, ss) {
+  const byDate = {};
+  ss.forEach(s => { byDate[s.date] = s; });
+  const today = Day.today(), thisWeek = weekStartOf(today);
+  if (weekFor !== pid || !weekAt) { weekAt = thisWeek; weekFor = pid; }
+  const days = Day.range(weekAt, Day.shift(weekAt, 6));
+  const back = Day.range(Day.shift(weekAt, -7), Day.shift(weekAt, -1));
+  const sum = list => list.reduce((a, d) => {
+    const s = byDate[d];
+    return s ? { n: a.n + 1, vol: a.vol + s.vol, sets: a.sets + s.sets } : a;
+  }, { n: 0, vol: 0, sets: 0 });
+  const now = sum(days), was = sum(back);
+  const top = days.reduce((m, d) => Math.max(m, byDate[d] ? byDate[d].vol : 0), 0);
+  const conv = v => Math.round(unit() === 'lb' ? v * KG_LB : v);
+
+  const card = document.createElement('div'); card.className = 'card';
+  const head = document.createElement('div'); head.className = 'wkhead';
+  const arrow = (label, role, to) => {
+    const b = document.createElement('button');
+    b.className = 'ico mb-press mb-tap'; b.innerHTML = ico(role);
+    b.setAttribute('aria-label', label);
+    if (!to) b.disabled = true; else b.onclick = () => { weekAt = to; draw(); };
+    b.style.opacity = to ? '' : '.3';
+    return b;
+  };
+  head.appendChild(arrow('Week before', 'prev', Day.shift(weekAt, -7)));
+  const t = document.createElement('h2');
+  t.textContent = weekAt === thisWeek ? 'THIS WEEK'
+    : weekAt === Day.shift(thisWeek, -7) ? 'LAST WEEK'
+    : String(Day.label(weekAt, { day: 'numeric', month: 'short' })).toUpperCase() + ' – ' +
+      String(Day.label(Day.shift(weekAt, 6), { day: 'numeric', month: 'short' })).toUpperCase();
+  head.appendChild(t);
+  head.appendChild(arrow('Week after', 'next', weekAt < thisWeek ? Day.shift(weekAt, 7) : null));
+  card.appendChild(head);
+
+  const strip = document.createElement('div'); strip.className = 'wkdays';
+  days.forEach((d, i) => {
+    const s = byDate[d];
+    const cell = document.createElement('div');
+    cell.className = 'wkd' + (s ? '' : ' off') + (d === today ? ' now' : '');
+    const h = s && top > 0 ? Math.max(12, Math.round(s.vol / top * 62)) : 0;
+    cell.innerHTML = '<span class="dn">' + DOW[i] + '</span>' +
+      '<div class="tile">' + (s ? '<div class="fill" style="height:' + h + '%"></div><span class="n">' + s.sets + '</span>' : '') + '</div>' +
+      '<span class="wv">' + (s ? kShort(conv(s.vol)) : '·') + '</span>';
+    cell.title = s ? Day.label(d) + ' · ' + s.sets + ' sets · ' + s.ex.join(', ') : Day.label(d) + ' · rest';
+    strip.appendChild(cell);
+  });
+  card.appendChild(strip);
+
+  const sm = document.createElement('div'); sm.className = 'wksum';
+  sm.innerHTML = '<b>' + now.n + '</b> ' + (now.n === 1 ? 'session' : 'sessions') +
+    ' · <b>' + now.sets + '</b> sets · <b>' + conv(now.vol).toLocaleString() + '</b> ' + unit() +
+    '<span class="was">week before: ' + was.n + ' · ' + conv(was.vol).toLocaleString() + ' ' + unit() + '</span>';
+  card.appendChild(sm);
+  col.appendChild(card);
+}
+
+/* ── the lifts, per session (1.0.8, 2026-09-24) ──
+   Tom: "I want to see their most recent lifts per session." Every session
+   used to print its exercise names and a total, which answers "did they
+   train" and not one question after it. So each session now prints what was
+   done: the exercise, then every working set as it was logged, in order, in
+   the unit Settings is set to. A set TRAIN flagged as a record is in the
+   accent — it is TRAIN's own flag, read and not recalculated here.
+   Warmups are not shown; sessionsOf leaves them out for the same reason
+   they are out of the volume. */
+function setText(s) {
+  const kg = +s.kg || 0, r = +s.r || 0;
+  if (kg > 0 && r > 0) return show(kg) + '×' + r;
+  if (r > 0) return r + ' reps';
+  if (s.dist > 0) return (Math.round(s.dist * 100) / 100) + ' km';
+  if (s.dur > 0) return Math.round(s.dur / 60) + ' min';
+  return kg > 0 ? show(kg) + ' ' + unit() : '—';
+}
+function drawRecent(col, pid, ss) {
+  const card = document.createElement('div'); card.className = 'card';
+  const h = document.createElement('h2'); h.textContent = 'RECENT SESSIONS'; card.appendChild(h);
+  ss.slice(-6).reverse().forEach(s => {
+    const box = document.createElement('div'); box.className = 'sesh';
+    const vol = Math.round(unit() === 'lb' ? s.vol * KG_LB : s.vol).toLocaleString();
+    box.innerHTML = '<div class="sh"><b>' + esc(String(Day.label(s.date)).toUpperCase()) + '</b>' +
+      '<span>' + s.lifts.length + (s.lifts.length === 1 ? ' exercise · ' : ' exercises · ') + s.sets + ' sets</span>' +
+      '<i>' + vol + ' ' + unit() + '</i></div>';
+    s.lifts.forEach(L => {
+      const shown = L.sets.slice(0, 8);
+      const txt = shown.map(x => (x.s.pr ? '<em>' : '') + esc(setText(x.s)) + (x.s.pr ? '</em>' : '')).join(' · ') +
+        (L.sets.length > shown.length ? ' +' + (L.sets.length - shown.length) : '');
+      const row = document.createElement('div'); row.className = 'lift';
+      row.innerHTML = '<span class="ln">' + esc(L.name) + '</span><span class="ls">' + txt + '</span>';
+      box.appendChild(row);
+    });
+    card.appendChild(box);
+  });
+  col.appendChild(card);
 }
 function drawClient(col) {
   const p = people()[sel];
@@ -684,9 +875,17 @@ function drawClient(col) {
   who.appendChild(ed);
   card.appendChild(who);
   if (!logDay) {
-    const lb = btn('LOG A SESSION', 'go', () => openTrain(sel));
-    lb.style.cssText = 'width:100%;margin-top:var(--s-4)';
-    card.appendChild(lb);
+    /* Two things you do to a client's log, side by side: add to it, or bring
+       one in. IMPORT THEIR LOG opens the same TRAIN over COACH with the
+       import panel already up — TRAIN's importer, TRAIN's file formats, and
+       the adapter at the top of train/index.html is what puts the rows on
+       this client instead of on Tom. COACH has no importer of its own and
+       should never grow one. */
+    const two = document.createElement('div'); two.className = 'row2';
+    two.style.marginTop = 'var(--s-4)';
+    two.appendChild(btn('LOG A SESSION', 'go', () => openTrain(sel)));
+    two.appendChild(btn('IMPORT THEIR LOG', '', () => openTrain(sel, { import: 1 })));
+    card.appendChild(two);
   }
 
   const month = Day.shift(Day.today(), -28);
@@ -699,13 +898,12 @@ function drawClient(col) {
   card.appendChild(stats);
   col.appendChild(card);
   if (logDay) drawLog(col, sel, p);
+  /* The week sits directly under the name, because it is the first question
+     asked of a client and the only one that has an answer on a day nothing
+     else changed. It draws even with no training in it: an empty week is an
+     answer. */
+  drawWeek(col, sel, ss);
   drawCheckin(col, sel, p);
-
-  if (window.Range) {
-    const rc = document.createElement('div'); rc.className = 'card range';
-    col.appendChild(rc);
-    Range.mount(rc, Range.fromRows(setsOf(sel), own('cphase', sel), Day.today()), 210);
-  }
   if (!ss.length) {
     const e = document.createElement('div'); e.className = 'card';
     /* Tom, 2026-09-23: "My 1:1s don't track their own sets at ALL." So a 1:1
@@ -726,11 +924,14 @@ function drawClient(col) {
         show(x.best) + ' ' + unit() + '</td><td class="n">' + Object.keys(x.days).length + '</td></tr>').join('') + '</table>';
     col.appendChild(lc);
   }
-  const rc2 = document.createElement('div'); rc2.className = 'card';
-  rc2.innerHTML = '<h2>RECENT SESSIONS</h2><div class="recent">' + ss.slice(-8).reverse().map(s =>
-    '<div class="r"><span class="d">' + esc(Day.label(s.date, { day: 'numeric', month: 'short' })) + '</span><span class="x">' +
-    esc(s.ex.join(', ')) + '</span><span class="v">' + Math.round(unit() === 'lb' ? s.vol * KG_LB : s.vol).toLocaleString() + ' ' + unit() + '</span></div>').join('') + '</div>';
-  col.appendChild(rc2);
+  drawRecent(col, sel, ss);
+  /* The long view goes last: the week and the sessions answer today, the
+     range answers the year, and a coach reads them in that order. */
+  if (window.Range) {
+    const rc = document.createElement('div'); rc.className = 'card range';
+    col.appendChild(rc);
+    Range.mount(rc, Range.fromRows(setsOf(sel), own('cphase', sel), Day.today()), 210);
+  }
 }
 
 /* One check-in on the client's profile: the photos of that day, then every
@@ -1103,16 +1304,21 @@ function settings() {
    client (train/index.html?client=<pid>; the top of that file says how), so
    everything TRAIN does, Tom does on their log. The quick logger above,
    drawLog, is no longer reached from any button and is kept as it was. */
-function openTrain(pid) {
+function openTrain(pid, o2) {
   const p = people()[pid]; if (!p) return;
+  const want = (o2 && o2.import) ? '1' : '';
   const o = document.getElementById('over');
   let f = o.querySelector('iframe');
-  if (!f || f.dataset.pid !== pid) {
+  /* A frame already showing this client is reused, except when it is being
+     asked for something new: the import panel is opened by the address, so
+     the same client wanting it needs the page loaded again. */
+  if (!f || f.dataset.pid !== pid || (want && f.dataset.want !== want)) {
     if (f) f.remove();
     f = document.createElement('iframe');
     f.dataset.pid = pid;
+    f.dataset.want = want;
     f.title = (p.name || 'Client') + ' in TRAIN';
-    f.src = '../train/index.html?client=' + encodeURIComponent(pid);
+    f.src = '../train/index.html?client=' + encodeURIComponent(pid) + (want ? '&import=1' : '');
     o.appendChild(f);
   }
   document.getElementById('overName').textContent = String(p.name || 'Client').toUpperCase() + ' · TRAIN';
