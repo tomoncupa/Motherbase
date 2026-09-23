@@ -133,6 +133,28 @@ changed on disk between fetches: an ordinary open got the old copy, an icon
 and a fresh open got the new one, and the kept copies had no `?t` or `?fresh`
 in their addresses. Not yet watched on the iPhone.
 
+## `creatures.js` 0.2.0: dot art, all 151 (2026-09-23)
+
+Tom pointed at a page of bead patterns and said to pull the Pokémon from it.
+The ten hand-drawn ones are gone; every Pokémon of the first generation is
+here as pixel art, read off those grids cell by cell in the browser.
+
+- **The API did not change.** `draw`, `canvas`, `name`, `keys`, `pick` and
+  `list` all keep their shapes, so CHECK IN and COACH were not edited. They
+  are the only two files that load this.
+- **A sprite is two strings**, its own palette and a run-length picture. One
+  shared colour table was tried and thrown away: 921 distinct colours across
+  the 151, and squashing them small enough to index with a single letter
+  flattened the shading that tells one orange Pokémon from another.
+- **82KB, and only those two apps pay it.** Worth checking before adding a
+  second generation.
+- **Smoothing off is the whole trick.** Each sprite is painted once at one
+  pixel per cell and kept, then blown up with `imageSmoothingEnabled` false.
+  Turn that on and it is a blurry mess at every size.
+- **Old keys still work.** The keys are the English names, so `pikachu`,
+  `eevee` and the rest that rows already carry are the same Pokémon, and
+  LEGACY still maps an old animal pick.
+
 ## Testing
 
 ```
