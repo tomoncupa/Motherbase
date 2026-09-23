@@ -36,32 +36,10 @@ button the client presses, and only that way, until Tom says otherwise.
 
 ## How to work with Tom
 
-Tom is a solo premium fitness coach in Manila, founder of Personal Protagonist,
-moving from one-to-one coaching toward community revenue and content. He runs a
-Skool community with a free tier and a paid all-access tier.
-
-**He is not a developer and does not read code.** That is the single most important
-line in this file.
-
-- **Plain language for anything he has to act on.** Say what a thing does before
-  what it is called. Spell out acronyms in full on first use.
-- **Ask before writing code when intent is genuinely unclear.** Otherwise attempt
-  the task with your assumptions stated plainly, and ask only when a missing answer
-  would materially change the output.
-- **Surgical diffs, not rewrites.** Change the lines that need changing. Never
-  create `index-v2.html`. Never rewrite a file that needed an edit.
-- **Complete truth only.** If something is untested, say so. If a number is a
-  guess, label it. Never assert a figure, formula or price without a real basis.
-- **No hedging and no corporate filler.** Be precise. Give numbers.
-- **Brand rules for anything he publishes:** the [Brand Master Guide](https://claude.ai/code/artifact/7c0036f3-9564-4c4d-89fb-811cad106780)
-  Claude Doc. Docs and code comments in this repo are exempt.
-- **End substantive replies with a confidence assessment and one concrete next
-  action.**
-- He is the device test. You cannot open anything on his iPhone. Say so plainly
-  rather than claiming a layout works.
-- **Clients** are the people who get the client build (`tools/build-client.py`).
-  Tom called them testers until 2026-09-14. They are not the coaching clients
-  WEALTH tracks: say which you mean wherever it could be either.
+`how-we-work.md` (loaded in every session) governs. One word this repo adds:
+**clients** are the people who get the client build (`tools/build-client.py`),
+not the coaching clients WEALTH and COACH track. Say which wherever it could be
+either.
 
 ---
 
@@ -460,7 +438,8 @@ buttons still drawn with a plain Unicode character.
 take a colour, and vanishes when a font does. Never put one in a button.
 
 **What a theme may never touch:** the spacing scale, padding, margins, or the
-44px tap target. A theme's own CSS setting `padding` on a card is the same
+44px tap target. It changes how a box is drawn, never where it sits or how big
+it is. Density was rejected on 2026-08-21: it reflows every hand-tuned layout. A theme's own CSS setting `padding` on a card is the same
 mistake as changing the spacing scale, and five themes were doing it until
 2026-08-22 — cards were a different size depending on which theme you wore.
 `_smoke.html` now fails on it.
@@ -472,11 +451,6 @@ the backup.
 
 **STYLE owns sound too.** Look, sound and feel are one idea. A theme may carry
 `sound: "<pack id>"` and choosing that theme chooses its sound pack.
-
-**What a theme may never touch:** the spacing scale and the 44px tap target.
-It changes how a box is drawn, never where it sits or how big it is under a
-thumb. Density was considered and rejected on 2026-08-21 — it reflows every
-hand-tuned layout and the bugs only surface on a phone nobody here can see.
 
 ---
 
@@ -620,8 +594,8 @@ because it runs the real thing rather than only parsing it:
    draws and every tab works, runs `shared/_smoke.html` inside itself and folds
    the result in, and looks over whatever rows are on the device. One page,
    one tally. `shared/_smoke.html` on its own is still there for when you are
-   working on the foundation and want the 314 without the apps.
-   It must say 314 of 314, or more once you add checks.
+   working on the foundation and want its checks without the apps.
+   Every check must pass.
    **Load it with a `?cb=<something new>` on the end.** The browser caches these
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks
@@ -663,19 +637,6 @@ and none of it was the app's fault.
 
 It has no `<script src>` of its own now. Every row it reads, it reads out of a
 frame. A thing that watches must not also be a thing that writes.
-
-### Closed: three icon checks failed on a cold store
-
-Closed 2026-09-15: all three pass on a store wiped empty first. See foundation
-item 7. Kept for the history.
-
-Found 2026-09-04 by `_review.html`, which opens `_smoke.html` in a fresh frame
-every run and so always runs it cold. `icons: a dropped pack installs`, `a
-theme naming one drawing beats the pack` and `a button can be pointed
-elsewhere` fail on the first run against an empty store and pass on the second.
-Running the same code by hand passes. Waiting on `Rec.ready` before starting
-was not enough. Not chased to the bottom yet — the review reports it rather
-than hiding it, which is the point.
 
 ### A red check nobody reads is worse than no check
 
@@ -750,7 +711,7 @@ own brief since 2026-09-22.
 | `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
 | `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
-| `shared/` | The foundation, passing 314 checks on 2026-09-17 at BOTH desktop and phone width. Every app loads it. |
+| `shared/` | The foundation. `_smoke.html` must pass at desktop and phone width. Every app loads it. |
 
 ### Debt and foundation findings
 
@@ -817,26 +778,16 @@ briefs). A session works on one module:
   overrides it only when the change is yours and finished.
 - **Wrap at around 200k tokens**, or when the module's task is done.
 
-So:
-
-1. **Stay in your folder.** An app session touches its own folder. Only a session
-   working on the foundation touches `shared/` or the root.
-2. **Look before you write.** `git status` and a fresh read of the file, right
-   before editing it, not at the start of the task.
-3. **Never `git add -A` while another session may be live.** Add explicit paths.
-   Sweeping someone else's half-finished work into your commit is not destructive,
-   but it is rude and it muddles the history.
-4. **Commit early and often.** Commits are the only handoff channel that exists.
-5. **After a structural change, tell Tom to restart his other sessions.** They will
-   not pick up a new or moved brief any other way.
-6. **If you find files you did not create**, assume another session is mid-task.
-   Leave them alone and say so, rather than tidying them up.
+- **Look before you write:** a fresh read of the file right before editing it.
+- **After a structural change, tell Tom to restart his other sessions.** They
+  will not pick up a new or moved brief any other way.
+- **Files you did not create** belong to another session mid-task. Leave them
+  alone and say so.
 
 ## Commits
 
-One commit per coherent change. Subject line names the area in caps, for example
-`SKINS: split theme and colour layers`. Body explains why in plain sentences, not a
-list of files. Say what was verified and how.
+One commit per coherent change, one line, naming the area in caps, for example
+`SKINS: split theme and colour layers`. No body.
 
 **Every app has its own version.** Tom, 2026-09-14: one app goes three weeks
 untouched while another changes three times in a day, so there is no suite
@@ -851,23 +802,12 @@ end with the line, for example "QUESTS 1.0.4, updated 14 Sep 2026", and
 script tags, which only tells a browser to fetch shared files again and which
 the client build stamps by itself.
 
-**Push the main repo after committing, without asking.** Tom, 2026-08-26:
-"always push without me asking". The repo is public, so nothing personal
-ever goes in it: no bank statements, no health notes, no workbook data.
-**Rebuild and push the client copy after every change clients can see**, and
-do it without asking. Tom, 2026-09-17: *"Features should be at par always."*
-This replaces "never push unless Tom says so", which was written to stop a
-half-finished thing reaching a phone and instead quietly stopped everything:
-six builds stacked up unpushed over two days, and clients sat on STATUS 1.0.7
-from 15 September while 1.0.19 waited on this machine. A client running code
-twelve versions old cannot be supported over a message, which is the failure
-the old rule was trying to prevent.
-
-**One condition, and it is not optional: `_review.html` passes first.** A push
-there lands on clients' phones in about a minute and cannot be taken back, only
-pushed over. The review opens every app, checks each draws and every tab works,
-and folds in the foundation checks. It costs one page load. If it fails, fix
-the failure or leave the client copy unpushed and say so.
+**Push the main repo after committing.** It is public, so nothing personal ever
+goes in it: no bank statements, no health notes, no workbook data. **Rebuild
+and push the client copy after every change clients can see** (Tom, 2026-09-17:
+*"Features should be at par always."*), and only once `_review.html` passes: a
+client push reaches phones in about a minute and can only be pushed over. If it
+fails, fix it or leave the client copy unpushed and say so.
 
 Then: `py -3 tools/build-client.py`, commit the generated folder with what
 changed and why, and push. Nothing in that folder is ever edited by hand.
