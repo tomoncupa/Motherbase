@@ -322,8 +322,11 @@ spending.** The bill sheet does not show `from` or `until` and must keep both. (
 filed as everyday spending stays out of runway; FREE still holds its dates. (HISTORY.md: Three cards on MONEY OUT)
 
 **A bill coming up is a `note` todo**, only its earliest outstanding date, never
-for a `move` category. `wealth.billMade` stops a second write; a deleted one
-stays deleted. (HISTORY.md: A bill coming up is a todo bullet)
+for a `move` category. Found by its key on ANY date, never only the one
+`wealth.billMade` remembers: that setting is one row two devices overwrite,
+and trusting it wrote the same bullet twice once live sync joined them
+(2026-09-23). An unticked extra is deleted; a key deleted on any date stays
+deleted. (HISTORY.md: A bill coming up is a todo bullet)
 
 **Ticking it writes one `spend` keyed `bill-<bill id>-<due date>`.** Unticking
 removes it only while unedited. `billTodoSync` settles ticks before it reads
