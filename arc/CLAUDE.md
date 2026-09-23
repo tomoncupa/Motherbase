@@ -2,7 +2,7 @@
 
 Single-file mind-mapping app for Tom (solo fitness coach, PROTAGONIST brand). Everything lives in `arc/index.html` (~4,400 lines: CSS + HTML + one inline vanilla-JS script). No build step, no dependencies beyond Google Fonts CDN. Deployed by copying the file to `tomoncupa.github.io`. Built iteratively across ~15 versions in claude.ai; this file is the handoff brief.
 
-**ARC is a sub-project of Motherbase.** It lives at `arc/` inside the Motherbase repo. This brief governs the `arc/` folder only; the repo-root `CLAUDE.md` (Daily Quest OS / LifeOS) governs everything outside it.
+**ARC is a sub-project of Motherbase.** It lives at `arc/` inside the Motherbase repo. This brief governs the `arc/` folder only; the repo-root `CLAUDE.md` (MOTHERBASE) governs everything outside it.
 
 **This folder is canonical.** `arc/index.html` is the file to edit and the one under git. A byte-identical convenience copy may sit at `Downloads/arc_12.html`; if the two ever disagree, this one wins.
 
