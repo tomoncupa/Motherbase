@@ -698,6 +698,12 @@ answer, or take it out.
   on someone's behalf, look for its key on EVERY date, and its tombstone too;
   never rely on a remembered list alone, and give the row a key that is the
   same on every device.
+- **A shared-file fix reaches a device on its SECOND open.** On the hosted
+  main copy nothing is stamped, so `sw.js` answers from the kept copy and
+  refreshes in the background. Watched 2026-09-24: the journal dedupe was live
+  on the phone browser and not in STATUS.exe until it was reopened twice.
+  After pushing a `shared/` fix, reopen the desktop programs twice (close
+  normally, never kill) before saying it did not work.
 - **No page of the suite can talk to a program running on his PC.** The suite is
   served over https and every local program here serves http, so a fetch from
   tomoncupa.github.io to `http://127.0.0.1:<port>` dies as "Failed to fetch"
