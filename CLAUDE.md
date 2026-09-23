@@ -736,6 +736,7 @@ own brief since 2026-09-22.
 | `system/` | NOTICE, status window pictures. Tom only. Brief: `system/CLAUDE.md`. |
 | `mix/` | ELEMENT, the electrolyte bench. Tom only. Brief: `mix/CLAUDE.md`. |
 | `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
+| `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation, passing 314 checks on 2026-09-17 at BOTH desktop and phone width. Every app loads it. |
 
