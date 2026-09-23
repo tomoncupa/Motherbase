@@ -762,7 +762,7 @@ own brief since 2026-09-22.
 
 ### Debt and foundation findings
 
-Moved to `shared/CLAUDE.md` on 2026-09-22, verbatim. Read it before touching `shared/` or the root.
+In `shared/HISTORY.md` since 2026-09-24 (from `shared/CLAUDE.md`, moved there from here on 2026-09-22). "Foundation item N" means an item there.
 
 ### Installable apps, no longer dead
 
