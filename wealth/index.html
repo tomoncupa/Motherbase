@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.24, 2026-09-23">
+<meta name="mb-version" content="1.0.25, 2026-09-23">
 <title>WEALTH</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
@@ -100,6 +100,9 @@ h2 .spacer{flex:1}
 .tile.warn .v{color:var(--warn)}
 .tile.bad .v{color:var(--danger)}
 .tile.good .v{color:var(--success)}
+.tile.tap{cursor:pointer}
+.tile.tap:hover{background:var(--surface-3)}
+.chartbox.tall{height:calc(var(--tap) * 7)}
 
 .list{display:flex;flex-direction:column;gap:var(--s-2)}
 .item{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);
@@ -840,9 +843,37 @@ function packState(c) {
     pool2 -= put;
     paidFor += price > 0 ? Math.floor(n * (put / price)) : 0;
   });
+  /* == the next package, before it is sold ==
+     Tom, 2026-09-23: "Does this already factor in Jay renewing his package?"
+     It did not: a package client's money stopped the day the last package was
+     paid for. A client still active is expected to buy the same package again
+     once the sessions run out, at the same price, split the same way. Always a
+     guess, so always "about" and never late, and only counted on SCORE while
+     "count clients as paying on time" is on. Marking the client finished is
+     how a renewal stops being expected. Its dates come from the pace he gave,
+     or failing that from the sessions of the last four weeks; with neither
+     there is no date and nothing is counted. */
+  const renew = [];
+  if (list.length && c.status !== 'done') {
+    const last = list[list.length - 1];
+    const recent = sess.filter(x => x.date > Day.shift(today, -28)).length;
+    const rate = pace > 0 ? pace : recent / 4;
+    const n = Math.max(1, num(last.n, 0)), price = num(last.price, 0);
+    const p = Math.max(1, Math.min(n, Math.round(num(last.parts, 1)) || 1));
+    const after = last.when === 'after';
+    const each = Math.floor(price / p * 100) / 100;
+    const base = [last.date].concat(delivered ? [sess[delivered - 1].date] : []).sort().pop();
+    if (price > 0 && rate > 0) for (let k = 0; k < p; k++) {
+      const at = after ? Math.round(n * (k + 1) / p) : Math.round(n * k / p);
+      let date = Day.shift(base, Math.ceil(Math.max(0, bought + at - delivered) * 7 / rate));
+      if (date < today) date = today;
+      renew.push({ pack: Object.assign({}, last, { renew: 1 }), date: date, amt: k === p - 1 ? round2(price - each * (p - 1)) : each,
+        part: false, k: k, of: p, at: bought + at, after: after, est: true });
+    }
+  }
   return {
     packs: list, bought: bought, delivered: delivered, left: bought - delivered,
-    value: value, paid: paid, dues: dues, coming: coming, pace: pace,
+    value: value, paid: paid, dues: dues, coming: coming, pace: pace, renew: renew,
     owed: round2(dues.reduce((t, d) => t + d.amt, 0)),
     toCome: round2(coming.reduce((t, d) => t + d.amt, 0)),
     paidFor: paidFor, owedWork: Math.max(0, paidFor - delivered),
@@ -891,7 +922,8 @@ const earnWords = (per, pace) => per
   : '';
 
 /* A package part, in words, for the rows that list it. */
-const partWhy = d => d.of > 1
+const partWhy = d => d.pack.renew ? 'renewal' + (d.of > 1 ? ', part ' + (d.k + 1) + ' of ' + d.of : '') + ', near session ' + d.at
+  : d.of > 1
   ? 'part ' + (d.k + 1) + ' of ' + d.of + (d.at ? ', when session ' + d.at + ' is done' : ', when sold')
   : d.pack.n + ' sessions' + (d.part ? ', part paid' : '');
 
@@ -966,7 +998,7 @@ function expected(from, to) {
                    late: d.date < Day.today(), why: partWhy(d) });
       });
       /* Not reached yet: expected on its guessed date, never late. */
-      st.coming.forEach(d => {
+      st.coming.concat(st.renew).forEach(d => {
         if (!d.date || d.date < from || d.date > to) return;
         out.push({ client: c, date: d.date, amt: d.amt, paid: null, late: false, est: true, why: partWhy(d) });
       });
@@ -3137,7 +3169,11 @@ function drawScore(m) {
   g.appendChild(tile('LIQUID', L.counted ? short(L.total) : '—',
     L.counted ? (L.age > STALE ? '<span class="stale">counted ' + L.age + ' days ago</span>' : 'counted ' + (L.age ? L.age + ' days ago' : 'today')) : 'no counts yet',
     L.age > STALE ? 'warn' : ''));
-  g.appendChild(tile('ALLOCATED', short(b.allocated), (b.allot ? 'pots, allowances, and bills due to ' : 'pots, and bills due to ') + Day.short(b.win.to)));
+  const at = tile('ALLOCATED', short(b.allocated), (b.allot ? 'pots, allowances, and bills due to ' : 'pots, and bills due to ') + Day.short(b.win.to) + ' · see when', 'tap mb-press');
+  at.setAttribute('role', 'button'); at.tabIndex = 0;
+  at.onclick = () => allocSheet();
+  at.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); allocSheet(); } };
+  g.appendChild(at);
   g.appendChild(tile('UNALLOCATED', L.counted ? short(b.free) : '—',
     onTime() ? 'if clients pay on time' : 'what is really yours',
     b.free < 0 ? 'bad' : ''));
@@ -3334,6 +3370,85 @@ function goalCard() {
 /* His number, never the app's. The sheet shows what a month costs and what
    three months of it would be, because those are facts he already owns, and
    then leaves the box empty. */
+/* == what ALLOCATED is made of, in date order ==
+   Tom, 2026-09-23: "Let me click on allocated to see a timeline of future
+   payments", and "I should see timeline bigger". The same pieces `board`
+   adds up, laid out by the day they leave: pots and what is left of this
+   month's allowances today, each bill on its due date, each later month's
+   allowance on its first. With paying on time on, client money lands on its
+   date too, so the line shows what is left after each one, and where it is
+   lowest. The last figure is UNALLOCATED; if it is not, this is the bug. */
+function allocItems() {
+  const t = Day.today(), b = board(), win = b.win, out = [];
+  const pt = potsTotal();
+  if (pt) out.push({ date: t, amt: -pt, name: 'Your pots', sub: 'already set aside' });
+  const mo = monthOf(t);
+  capped().forEach(c => {
+    const st = capState(c.id, mo);
+    if (st && st.left > 0) out.push({ date: t, amt: -st.left, name: c.name, sub: 'left of this month’s allowance' });
+    for (let d = Day.shift(monthEnd(mo), 1); d <= win.to; d = Day.shift(monthEnd(monthOf(d)), 1))
+      out.push({ date: d, amt: -num(c.cap, 0), name: c.name, sub: monthName(monthOf(d)) + '’s allowance' });
+  });
+  billsOwed(t, win.to).filter(x => !(num((Rec.get('cat', null, x.bill.cat) || {}).cap, 0) > 0))
+    .forEach(x => out.push({ date: x.date, amt: -num(x.bill.amt, 0), name: x.bill.name, sub: 'bill' }));
+  if (onTime()) expected(t, win.to).filter(e => !e.paid && !e.late)
+    .forEach(e => out.push({ date: e.date, amt: num(e.amt, 0), name: e.client.name,
+      sub: (e.est ? 'about, ' : '') + (e.why || 'client payment') }));
+  /* Out before in on the same day: the lowest point is the honest one. */
+  out.sort((a, b2) => a.date.localeCompare(b2.date) || a.amt - b2.amt);
+  return { items: out, b: b };
+}
+function allocSheet() {
+  const { items, b } = allocItems(), t = Day.today(), L = b.liquid;
+  let bal = L.total, low = { v: bal, d: t };
+  items.forEach(x => { bal += x.amt; x.left = bal; if (bal < low.v) low = { v: bal, d: x.date }; });
+  const days = Math.max(1, Day.diff(b.win.to, t));
+  UI.dialog({
+    title: 'ALLOCATED, BY DATE', width: 1100,
+    body: bx => {
+      bx.appendChild(el('div', 'note', 'Starts from <b>' + esc(money(L.total)) + '</b> in the accounts and takes each thing off on the day it is due, ' +
+        esc(b.win.words) + '.' + (onTime() ? ' Client money lands on its date, as if everyone pays on time.' : '')));
+      if (window.Chart && items.length) {
+        const head = Chart.header({ label: 'Lowest point', value: money(low.v), sub: Day.short(low.d) });
+        bx.appendChild(head.el);
+        const box = el('div', 'chartbox tall');
+        bx.appendChild(box);
+        const pts = [[0, L.total]];
+        items.forEach(x => { const o = Day.diff(x.date, t); pts.push([o, x.left - x.amt]); pts.push([o, x.left]); });
+        pts.push([days, bal]);
+        const labs = [];
+        const step = Math.max(1, Math.round(days / 6));
+        for (let o = 0; o <= days; o += step) labs.push([o, Day.short(Day.shift(t, o)), o === 0]);
+        requestAnimationFrame(() => Chart.mount(box, { label: 'What is left, day by day' }, ch => {
+          ch.xLinear(0, days);
+          ch.yFit(pts.map(p => p[1]).concat([0]));
+          ch.grid(v => short(v));
+          ch.labels(labs);
+          ch.add('line', { x1: ch.P.l, y1: ch.Y(0), x2: ch.W - ch.P.r, y2: ch.Y(0) }, 'mb-gl');
+          ch.area(pts, null, 0);
+          ch.line(pts);
+          ch.end(pts[pts.length - 1], short(bal));
+          ch.scrub(pts, {
+            onMove: p => head.set(money(p[1]), Day.short(Day.shift(t, Math.round(p[0]))), 'Left'),
+            onLeave: head.reset,
+          });
+        }));
+      }
+      const list = el('div', 'list');
+      list.style.marginTop = 'var(--s-3)';
+      if (!items.length) list.appendChild(el('div', 'empty', 'Nothing is spoken for ' + esc(b.win.words) + '.'));
+      items.forEach(x => {
+        const r = itemRow(x.name, esc(Day.short(x.date)) + ' · ' + esc(x.sub) + ' · leaves <b>' + esc(money(x.left)) + '</b>',
+          (x.amt > 0 ? '+' : '−') + money(Math.abs(x.amt)), x.amt > 0 ? 'in' : (x.left < 0 ? 'late' : ''));
+        r.tabIndex = -1;
+        list.appendChild(r);
+      });
+      bx.appendChild(list);
+    },
+    actions: [{ label: 'CLOSE' }],
+  });
+}
+
 function goalSheet() {
   UI.dialog({
     title: 'WHAT YOU PUT AWAY', width: 460,

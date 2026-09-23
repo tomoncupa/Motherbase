@@ -83,6 +83,10 @@ which window it uses, and ALLOCATED names its end date. (HISTORY.md: How far ahe
 purchase near it names the bill or matches its category and amount, reaching
 no more than half the gap between dates; one purchase settles one date. (HISTORY.md: A bill already paid is not held back)
 
+**ALLOCATED opens `allocSheet`** (2026-09-23): the pieces `board` adds, by date, with the balance left after each and the lowest point; its last figure must equal UNALLOCATED. Built by `allocItems`, which must stay in step with `board`.
+
+**A package client is expected to renew** (2026-09-23, Jay): `packState().renew`, the last package again once its sessions run out, dated from `perWeek` or the last four weeks' sessions, always a guess, never late. Marking the client finished stops it.
+
 **`wealth.onTime`, off by default.** Off, FREE counts no money that has not
 arrived. On, it adds unpaid client payments due inside the window, never one
 already late, and says how much. (HISTORY.md: Count clients as paying on time)
