@@ -725,6 +725,12 @@ answer, or take it out.
   setup (`sync: false`), so LIVE SYNC, added inside `IO.syncRow`, never
   reached either until Tom went looking for it. When the shared row grows,
   grep for the panels that opted out.
+- **Never stamp a test row in the far future.** `_smoke.html` merged two
+  rows dated 2999 to make them win; they stayed as tombstones, live sync
+  carried them to every device, and every device's sync boundary followed
+  them, so nothing synced anywhere for days (found 2026-09-24). `cloud.js`
+  0.1.2 now ignores a stamp more than a day ahead, but a test that needs a
+  newer row uses now plus a minute.
 - **A desktop program's store can be read without clicking.** Start it with
   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` and
   drive `Rec.export()` / `Rec.merge()` over the DevTools socket. Used once on
