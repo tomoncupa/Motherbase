@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.29, 2026-09-23">
+<link rel="manifest" href="manifest.json">
+<meta name="mb-version" content="1.0.30, 2026-09-23">
 <title>WEALTH</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▩</text></svg>">
+<link rel="icon" href="icon-192.png"><text y='.9em' font-size='90'>▩</text></svg>">
 <meta name="theme-color" content="#0B0E14">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3788,6 +3789,35 @@ function drawClients(m) {
 function drawOut(m) {
   m.appendChild(netCard());
   const bl = bills();
+  /* == what a month of bills is made of ==
+     Tom, 2026-09-23: "I want my Money out piechart to be this clear", about
+     a breakdown written for him in four groups with a total each. Home is
+     every fixed bill that is not a subscription or the gym, business tools
+     are the business group, debt is the move group, and personal is
+     subscriptions and the gym. Monthly amounts, so a bill every 5.7 days and
+     one every 3 months sit on one scale. Re-filing a bill moves its slice. */
+  if (bl.length && window.Chart) {
+    const G = [['home', 'Home'], ['biz', 'Business tools'], ['debt', 'Debt'], ['me', 'Personal'], ['day', 'Everyday']];
+    const gOf = b => catGrp(b.cat) === 'move' ? 'debt' : catGrp(b.cat) === 'biz' ? 'biz'
+      : ['subs', 'gym'].indexOf(b.cat) > -1 ? 'me' : catGrp(b.cat) === 'var' ? 'day' : 'home';
+    const sums = {};
+    bl.forEach(b => { const g = gOf(b); sums[g] = (sums[g] || 0) + billMonthly(b); });
+    const rows = G.filter(g => sums[g[0]] > 0).map(g => ({ id: g[0], name: g[1], amt: Math.round(sums[g[0]]) }));
+    const cp = card('YOUR BILLS, A MONTH', 'full');
+    const wrap = el('div');
+    wrap.appendChild(Chart.pie(rows, { fmt: money, label: 'a month' }));
+    cp.appendChild(wrap);
+    const list = el('div', 'list');
+    list.style.marginTop = 'var(--s-3)';
+    rows.forEach(r => {
+      const mine = bl.filter(b => gOf(b) === r.id).sort((x, y) => billMonthly(y) - billMonthly(x));
+      const row = itemRow(r.name, mine.map(b => esc(b.name) + ' ' + esc(money(Math.round(billMonthly(b))))).join(' · '), money(r.amt));
+      row.tabIndex = -1;
+      list.appendChild(row);
+    });
+    cp.appendChild(list);
+    m.appendChild(cp);
+  }
   /* Tom, 2026-09-14: three cards, every bill in exactly one. Bills and
      utilities; subscriptions, memberships and operating costs, "emphasise the
      monthly cost not the annual"; and groceries, water and regular spending.
