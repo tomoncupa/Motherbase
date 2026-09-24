@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.8, 2026-09-24">
+<meta name="mb-version" content="1.0.9, 2026-09-24">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -354,12 +354,16 @@ function link() {
     const ws = Rec.map('client'), ps = people();
     const joined = {};
     Object.entries(ps).forEach(([pid, p]) => { if (p.wc && ws[p.wc]) joined[p.wc] = pid; });
+    /* A partner id this device has not seen yet is still on its way over live
+       sync, not missing: making one here wrote blank duplicates on 2026-09-23. */
     Object.entries(ws).forEach(([wid, c]) => {
       if (joined[wid]) return;
       if (c.cp && Rec.tombstone('cperson', null, c.cp)) return;
+      if (c.cp && !ps[c.cp]) return;
+      if (c.cp) { const w = ps[c.cp].wc; if (w && w !== wid && ws[w]) return; }
       let pid = c.cp && ps[c.cp] ? c.cp : null;
       if (!pid) {
-        const same = Object.entries(ps).filter(([, p]) => !(p.wc && ws[p.wc]) && normName(c.name) && normName(p.name) === normName(c.name));
+        const same = Object.entries(ps).filter(([, p]) => !p.wc && normName(c.name) && normName(p.name) === normName(c.name));
         if (same.length === 1) pid = same[0][0];
       }
       if (pid) { Rec.patch('cperson', null, pid, { wc: wid }); ps[pid].wc = wid; }
@@ -376,6 +380,7 @@ function link() {
     Object.entries(people()).forEach(([pid, p]) => {
       if (p.wc && Rec.get('client', null, p.wc)) return;
       if (p.wc && Rec.tombstone('client', null, p.wc)) return;
+      if (p.wc) return;
       const wid = 'c-' + pid;
       if (Rec.tombstone('client', null, wid)) return;
       Rec.set('client', null, wid, { name: p.name || 'Client', rate: 0, cycle: p.box === 'online' ? 'month' : 'sesh', every: 1, start: Day.today(),
