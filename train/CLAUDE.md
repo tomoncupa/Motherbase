@@ -749,6 +749,50 @@ rest runs, the chip turning warn-coloured and counting up past zero, surviving
 a move to the day screen, and its menu opening. `_review.html` 116 of 116.
 **Not opened on the iPhone.**
 
+## Rest stops at zero, and search got loose (1.0.23, 2026-09-24)
+
+**The countdown no longer counts up.** Tom: *"I don't want to see the over
+timer in TRAIN."* It rings once and the chip goes; the rest timer button comes
+back in its place and the stored `train.rest` is cleared. The part that
+mattered is untouched: the clock still decides, so a tab suspended past the end
+comes back, rings and clears rather than resuming where it froze. Watched with
+a 3-second rest, with a stored rest 45 seconds past its end, and with one 11
+minutes past. The `.restchip.over` colours and the menu's Restart item went
+with it.
+
+**Searching for a movement is five routes, scored.** Tom: *"Make the search
+function more flexible."* It was a plain substring of the lowercased name, so
+"press bench" found nothing, "pull up" missed "Pull-Up" over a hyphen, and "bp"
+missed "Bench Press". `TRAIN.nameMatch(name, q)` returns a score or -1, and all
+three exercise searches use it: the picker, Records and the rep max grid. Best
+match first while he is typing, his own order otherwise.
+
+| Score | Route |
+|---|---|
+| 100 | the whole name |
+| 90 | the name starts with what he typed |
+| 80 | what he typed, in order, anywhere in the name |
+| 70 | every word he typed starts a word of the name, in any order |
+| 60 | the same, but his word may sit anywhere inside a name word |
+| 50 | his letters are the name's initials: bp, ohp |
+| 20+ | his letters in order but not together, plus one for each landing on the start of a word |
+
+Punctuation and accents come off both sides first (`fold`, `words`), so a
+hyphen never costs a match, and each query word is spent on one name word so
+"press press" cannot land twice on the same one. The loosest route needs three
+letters, or two would match nearly every movement in the list.
+
+Measured against the 111 seeded movements: "press bench" gives the four bench
+presses at 70, "pull up" gives Pull Up at 100, "bp" the bench presses at 50,
+"ohp" Overhead Press first, "lat pull" Lat Pulldown at 90, "rdl" Romanian
+Deadlift and Rear Delt Fly at the top. **Not typo tolerant**, deliberately:
+"benhc" finds nothing, because edit distance would also start matching things
+he did not mean.
+
+`MARKS`, the accent regex, is written as an escape rather than the characters
+themselves. A Python patch script ate the escape once and wrote two invisible
+combining accents into the file instead. Known traps, backslashes in a patch.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the
