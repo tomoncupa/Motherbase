@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.30, 2026-09-23">
+<meta name="mb-version" content="1.0.31, 2026-09-24">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -220,7 +220,7 @@ nav button.dropinto{box-shadow:inset 2px 0 0 var(--acc)}
      text, so an empty TODO collapsed to one line inside five rows. */
   /* Tom, 2026-09-22: the grid fits any screen, so no cap on its width.
      The row height is set by fitGrid to fill the window's height. */
-  margin:0 auto;
+  margin:0;
 }
 @media(max-width:820px){ #grid{grid-template-columns:repeat(4,1fr)} }
 /* ── a card stays where it was put ──
@@ -1909,6 +1909,58 @@ const WIDGETS = {
     },
   },
 
+  /* ── which muscles got trained, on a body ──
+     Tom, 2026-09-24: "Widget - Body Training Heatmap". Working sets from
+     TRAIN over the last 7, 14 or 30 days, laid on a front and a back figure:
+     the brighter a muscle, the more sets it got. Counted the way TRAIN's
+     WEEKLY counts them: warmups out, a set from today only once it is done,
+     and a muscle an exercise ALSO works gets its share (half a set for
+     biceps on a pull-up). TRAIN's muscle groups are names he can change, so
+     each is read onto the body by what it says: "Legs" lights every leg
+     muscle, "Hamstrings" lights only those. A group the body cannot show,
+     other than cardio, is named under the list rather than dropped. No
+     target and no verdict, as in TRAIN: "I'd rather be told how many times I
+     hit a muscle, I'll know if I need to hit more." */
+  bodyheat: {
+    nm: 'BODY HEATMAP', w: 4, h: 4, app: 'train', to: ['train'],
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
+    sub: cfg => 'working sets · last ' + ((cfg && cfg.days) || 7) + ' days',
+    draw(body, cfg) {
+      const days = (cfg && cfg.days) || 7, today = LifeOS.day(), from = LifeOS.shift(today, -(days - 1));
+      const heat = bodyHeat(from, today);
+      const regs = Object.keys(BODY_NAMES).filter(k => heat.v[k] > 0).sort((a, b) => heat.v[b] - heat.v[a]);
+      if (!regs.length && !heat.off.length) {
+        body.appendChild(el('div', 'empty', 'No working sets in the last ' + days + ' days. Log them in ' +
+          '<span class="link" onclick="go(\'train\')">TRAIN</span>.'));
+        return;
+      }
+      const wrap = el('div');
+      wrap.style.cssText = 'display:flex;gap:var(--gap);height:100%;min-height:0;align-items:stretch';
+      const fig = el('div');
+      fig.style.cssText = 'flex:1 1 55%;min-width:0;display:flex;align-items:center;justify-content:center';
+      fig.innerHTML = bodySvg(heat.v);
+      wrap.appendChild(fig);
+      const side = el('div');
+      side.style.cssText = 'flex:1 1 45%;min-width:0;overflow:auto';
+      const list = el('div', 'rowlist');
+      const fmt = n => (Math.round(n * 2) / 2).toString();
+      regs.forEach(k => {
+        const row = el('div', 'row');
+        row.innerHTML = '<span class="nm">' + BODY_NAMES[k] + '</span><span class="rt">' + fmt(heat.v[k]) + '</span>';
+        list.appendChild(row);
+      });
+      side.appendChild(list);
+      if (heat.off.length) {
+        const off = el('div', 'empty');
+        off.style.cssText = 'text-align:left;padding:6px 2px 0';
+        off.innerHTML = 'Not on the body: ' + heat.off.map(o => esc(o.name) + ' ' + fmt(o.n)).join(', ');
+        side.appendChild(off);
+      }
+      wrap.appendChild(side);
+      body.appendChild(wrap);
+    },
+  },
+
   /* ══════════════ STATUS ══════════════
      These read STATUS's rows straight out of the store. Nothing here writes
      one: STATUS owns every measurement and this screen only looks at them. */
@@ -2839,6 +2891,92 @@ function move(i, d) {
   Mobile.feedback('select');
 }
 
+/* ══════════════ the body heatmap's figure ══════════════
+   Front and back, drawn from flat panels so it sits with Block's cut
+   corners rather than an anatomy chart. Each panel is a muscle; the head,
+   hands, knees and feet are the figure and never light. Shapes are the
+   LEFT half; the right is mirrored, so the figure stays symmetrical. */
+const BODY_NAMES = { chest: 'CHEST', delts: 'SHOULDERS', traps: 'TRAPS', lats: 'LATS', lowback: 'LOWER BACK',
+  biceps: 'BICEPS', triceps: 'TRICEPS', forearms: 'FOREARMS', core: 'CORE',
+  glutes: 'GLUTES', quads: 'QUADS', hams: 'HAMSTRINGS', calves: 'CALVES' };
+/* a muscle-group NAME onto body parts, first match wins, most specific first */
+const BODY_RULES = [
+  [/lower ?back|erector|spinal/, ['lowback']], [/trap/, ['traps']], [/\blats?\b/, ['lats']],
+  [/back/, ['lats', 'traps', 'lowback']], [/chest|pec/, ['chest']], [/shoulder|delt/, ['delts']],
+  [/bicep/, ['biceps']], [/tricep/, ['triceps']], [/forearm|grip/, ['forearms']],
+  [/\barms?\b/, ['biceps', 'triceps', 'forearms']], [/\babs?\b|core|oblique|stomach/, ['core']],
+  [/glute|\bhips?\b|butt/, ['glutes']], [/quad/, ['quads']], [/ham/, ['hams']], [/cal(f|ves)/, ['calves']],
+  [/leg|lower body/, ['quads', 'hams', 'glutes', 'calves']],
+];
+const bodyParts = name => {
+  const n = String(name || '').toLowerCase();
+  for (let i = 0; i < BODY_RULES.length; i++) if (BODY_RULES[i][0].test(n)) return BODY_RULES[i][1];
+  return null;
+};
+/* the same test as TRAIN.noteWarm in train/index.html: change both */
+const setIsWarm = p => p.warm === 1 || p.warm === true ||
+  (p.warm !== 0 && p.warm !== false && !!p.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(p.note));
+function bodyHeat(from, to) {
+  const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day();
+  const v = {}, offN = {};
+  const put = (cat, share) => {
+    const c = cats[cat], name = c ? c.name : '';
+    const parts = bodyParts(name);
+    if (parts) parts.forEach(k => { v[k] = (v[k] || 0) + share; });
+    else if (name && !/cardio/i.test(name)) offN[name] = (offN[name] || 0) + share;
+  };
+  Rec.all('set').forEach(r => {
+    if (!r.date || r.date < from || r.date > to) return;
+    const p = r.payload || {};
+    if (setIsWarm(p) || !(p.done || r.date < today)) return;
+    const ex = exs[p.ex];
+    if (!ex || !ex.cat) return;
+    put(ex.cat, 1);
+    if (ex.also) Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) put(c, +ex.also[c] || 0); });
+  });
+  return { v: v, off: Object.keys(offN).map(k => ({ name: k, n: offN[k] })).sort((a, b) => b.n - a.n) };
+}
+const BODY_FIG = { head: '43,3 57,3 60,11 57,21 43,21 40,11', neck: '46,21 54,21 55,27 45,27',
+  hand: '23,88 30,88 29,96 22,96', knee: '39,131 48,131 47,134 40,134', foot: '41,171 46,171 47,178 39,178' };
+const BODY_FRONT = [
+  ['traps', '45,26 37,31 45,31'], ['delts', '36,31 28,35 26,47 33,45 37,35'],
+  ['chest', '38,32 49,32 49,47 37,48 34,39'], ['biceps', '26,49 33,47 32,64 25,64'],
+  ['forearms', '25,66 32,66 30,86 23,86'], ['core', '41,50 49,50 49,82 43,82'],
+  ['core', '36,50 40,50 42,82 37,75'], ['quads', '38,92 49,92 48,129 39,129 36,110'],
+  ['calves', '39,135 47,135 46,169 41,169'],
+];
+const BODY_BACK = [
+  ['traps', '44,23 50,23 50,46 38,32'], ['delts', '36,31 28,35 26,47 33,45 37,35'],
+  ['lats', '38,35 49,48 48,69 39,62 35,45'], ['lowback', '42,70 49,70 49,82 42,82'],
+  ['triceps', '26,49 33,47 32,64 25,64'], ['forearms', '25,66 32,66 30,86 23,86'],
+  ['glutes', '38,84 49,84 49,100 37,98'], ['hams', '38,101 49,102 48,129 39,129'],
+  ['calves', '38,135 48,135 47,157 41,164 37,149'],
+];
+function bodySvg(v) {
+  const max = Math.max(0, ...Object.keys(v).map(k => v[k]));
+  const mirror = pts => pts.split(' ').map(q => { const a = q.split(','); return (100 - a[0]) + ',' + a[1]; }).join(' ');
+  const poly = (pts, dx, style, tip) => '<polygon transform="translate(' + dx + ',0)" points="' + pts + '" style="' + style + '">' +
+    (tip ? '<title>' + tip + '</title>' : '') + '</polygon>';
+  const side = (list, dx) => {
+    let out = '';
+    Object.keys(BODY_FIG).forEach(k => {
+      const st = 'fill:var(--line);stroke:none';
+      out += poly(BODY_FIG[k], dx, st) + (k === 'head' || k === 'neck' ? '' : poly(mirror(BODY_FIG[k]), dx, st));
+    });
+    list.forEach(m => {
+      const n = v[m[0]] || 0, t = max ? n / max : 0;
+      const st = n > 0
+        ? 'fill:var(--acc);fill-opacity:' + (0.22 + 0.78 * t).toFixed(2) + ';stroke:var(--acc);stroke-opacity:.5;stroke-width:.4'
+        : 'fill:var(--panel2);stroke:var(--line2);stroke-width:.4';
+      const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets';
+      out += poly(m[1], dx, st, tip) + poly(mirror(m[1]), dx, st, tip);
+    });
+    return out;
+  };
+  return '<svg viewBox="0 0 210 182" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;max-height:100%;display:block">' +
+    side(BODY_FRONT, 0) + side(BODY_BACK, 110) + '</svg>';
+}
+
 /* ══════════════ spots ══════════════
    Each card may carry x (its first column, 1 to 12) and y (its first row).
    A card without one is placed by the grid into the first hole it fits and
@@ -2858,7 +2996,7 @@ function byPlace() {
 /** nothing overlaps: a card that would is pushed down until it does not.
     Nothing is ever pulled UP, which is what lets a gap stay a gap. */
 function settle(first) {
-  const cols = 12;
+  const cols = COLS;
   const ord = byPlace().filter(i => layout[i].x);
   if (first != null && ord.indexOf(first) > -1) { ord.splice(ord.indexOf(first), 1); ord.unshift(first); }
   const done = [];
@@ -2903,7 +3041,7 @@ function gapAt(c, r) {
   if (r > N) return { x: c, y: r, w: 0, h: 0 };
   let c0 = c, c1 = c;
   while (c0 > 1 && free(c0 - 1, r)) c0--;
-  while (c1 < 12 && free(c1 + 1, r)) c1++;
+  while (c1 < COLS && free(c1 + 1, r)) c1++;
   const rowFree = y => { for (let x = c0; x <= c1; x++) if (!free(x, y)) return false; return true; };
   let r0 = r, r1 = r;
   while (r0 > 1 && rowFree(r0 - 1)) r0--;
@@ -2937,7 +3075,7 @@ function hint(m, x, y, w, h, land) {
     if (moving || sizing) return;
     const t = target(ev);
     if (!t || !t.gap) { hint(); return; }
-    const x = t.gap.w ? t.gap.x : Math.min(t.gap.x, 9);
+    const x = t.gap.w ? t.gap.x : Math.min(t.gap.x, COLS - 3);
     hint(t.m, x, t.gap.y, t.gap.w || 4, t.gap.h || 3);
   });
   g.addEventListener('mouseleave', () => { if (!moving && !sizing) hint(); });
@@ -2960,14 +3098,14 @@ function widgetMenu(i, x, y) {
   const cfg = layout[i]; if (!cfg) return;
   const W = WIDGETS[cfg.t]; if (!W) return;
   const set = (k, v) => {
-    cfg[k] = Math.max(2, Math.min(k === 'w' ? 12 : 8, (cfg[k] || 3) + v));
+    cfg[k] = Math.max(2, Math.min(k === 'w' ? COLS : 8, (cfg[k] || 3) + v));
     saveLayout(); drawHome();
   };
   UI.menu(x, y, [
     i > 0 ? { label: 'Move up', icon: '\u2191', fn: () => move(i, -1) } : null,
     i < layout.length - 1 ? { label: 'Move down', icon: '\u2193', fn: () => move(i, 1) } : null,
     '-',
-    cfg.w < 12 ? { label: 'Wider', icon: '\u2192', fn: () => set('w', 1) } : null,
+    cfg.w < COLS ? { label: 'Wider', icon: '\u2192', fn: () => set('w', 1) } : null,
     cfg.w > 2 ? { label: 'Narrower', icon: '\u2190', fn: () => set('w', -1) } : null,
     cfg.h < 8 ? { label: 'Taller', fn: () => set('h', 1) } : null,
     cfg.h > 2 ? { label: 'Shorter', fn: () => set('h', -1) } : null,
@@ -2975,7 +3113,7 @@ function widgetMenu(i, x, y) {
        so a second copy of it can show a different stretch of time. */
     W.days ? '-' : null,
     W.days ? { label: 'Show', sub: W.days.map(d => ({
-        label: d[1], check: (cfg.days || 90) === d[0],
+        label: d[1], check: (cfg.days || W.day0 || 90) === d[0],
         fn: () => { cfg.days = d[0]; saveLayout(); drawHome(); } })) } : null,
     /* a widget with choices of its own puts them here, the same menu */
     ...(W.menu ? W.menu(cfg, () => { saveLayout(); drawHome(); }) : []),
@@ -3101,21 +3239,49 @@ function drawHome() {
   fitGrid();
 }
 
-/* ── the board fits the window ──
-   Tom, 2026-09-22: "the grid fits any screen". Two things, both desktop
-   only, since on a phone a card is as tall as what is in it already.
-   A card flagged `fit` (the small number cards, APPS, LINKS) takes as many
-   rows as its contents need and no more. Then the row height is chosen so
-   the rows the board uses fill the window, up to 140px so a sparse board is
-   not a few enormous cards. If it would need rows under 60 to fit, it
-   keeps 84 and scrolls: under 60 a two-row card has no room for its answer. Three passes, because a new row height
-   changes how many rows a fitted card needs. */
+/* ── the board is a fixed grid, and a bigger window is more of it ──
+   Tom, 2026-09-24: "Rather than resize my widgets when I resize my window, I
+   just want more space to work with." Until then the board was 12 columns
+   stretched across the window, with rows stretched to fill its height, so
+   every card grew and shrank with the window.
+
+   Now one cell is a fixed size, `lifeos.cell`, taken ONCE from what the
+   board looked like the first time this build opened, so nothing he had
+   changes size on the day. After that the window only decides how many
+   columns there are: wider adds empty columns to the right, taller adds
+   empty rows below, and both are places a widget can be added. A window
+   narrower than the cards scrolls sideways rather than moving or squashing
+   them, because a saved spot is his arrangement and a window is not a reason
+   to rewrite it. Desktop only; a phone still stacks.
+
+   A card flagged `fit` (the small number cards, APPS, LINKS) still takes as
+   many rows as its contents need and no more. */
+let COLS = 12;
+let CELL = null;
+try { const c = Rec.setting('lifeos', 'cell'); if (c && c.w > 0 && c.h > 0) CELL = c; } catch (e) {}
 function fitGrid() {
   const g = $('#grid'), home = $('#home');
-  if (NARROW()) { g.style.removeProperty('--row'); g.style.minHeight = ''; return; }
+  if (NARROW()) {
+    g.style.removeProperty('--row'); g.style.minHeight = ''; g.style.gridTemplateColumns = ''; g.style.width = '';
+    COLS = 4; return;
+  }
   const gap = parseFloat(getComputedStyle(g).rowGap) || 12;
-  const H = home.clientHeight - 28;
-  let R = parseFloat(g.style.getPropertyValue('--row')) || 84;
+  const H = home.clientHeight - 28, Wd = home.clientWidth - 28;
+  if (!CELL) {
+    /* what the stretched board used to give at this window, one time */
+    const colw = (Wd - 11 * gap) / 12;
+    const N = Math.max(1, layout.reduce((a, c) => Math.max(a, (c.y || 1) + (c.h || 3) - 1), 0));
+    let R = Math.min(140, Math.floor((H + gap) / N));
+    if (R < 60) R = 84;
+    CELL = { w: Math.round(Math.max(100, Math.min(200, colw))), h: Math.round(Math.max(72, Math.min(140, R))) };
+    try { Rec.setting('lifeos', 'cell', CELL); } catch (e) {}
+  }
+  const R = CELL.h;
+  const used = layout.reduce((a, c) => Math.max(a, c.x ? c.x + c.w - 1 : c.w), 1);
+  COLS = Math.max(used, Math.floor((Wd + gap) / (CELL.w + gap)), 4);
+  g.style.gridTemplateColumns = 'repeat(' + COLS + ',' + CELL.w + 'px)';
+  g.style.width = (COLS * CELL.w + (COLS - 1) * gap) + 'px';
+  g.style.setProperty('--row', R + 'px');
   /* the cards only, never a `.w` drawn inside one: Chart.header's date
      line is also `.w`, and treating it as a card threw here and stopped the
      boot before the dock and the clock were drawn */
@@ -3123,44 +3289,34 @@ function fitGrid() {
   const nodes = [].slice.call(g.querySelectorAll(':scope > .w'));
   effH.length = 0;
   const before = JSON.stringify(layout.map(c => [c.x, c.y]));
-  for (let pass = 0; pass < 3; pass++) {
-    fits.forEach(n => {
-      /* measured squeezed to one row, so a child that stretches to fill
-         the card cannot report the card's own height back as its need */
-      const head = n.querySelector('.w-head'), body = n.querySelector('.w-body');
-      n.style.setProperty('--ch', 1);
-      const was = body.style.overflow;
-      body.style.overflow = 'auto';
-      const need = head.offsetHeight + body.scrollHeight + 2;
-      body.style.overflow = was;
-      const ch = Math.max(1, Math.ceil((need + gap) / R));
-      n.style.setProperty('--ch', ch);
-      effH[+n.dataset.i] = ch;
-    });
-    /* a card with no spot yet keeps the one the grid gave it */
-    const m = gridMetrics();
-    nodes.forEach(n => {
-      const c = layout[+n.dataset.i];
-      if (!c || c.x) return;
-      const r = n.getBoundingClientRect();
-      c.x = Math.round((r.left - m.r.left) / (m.colw + m.gap)) + 1;
-      c.y = Math.round((r.top - m.r.top) / m.R) + 1;
-    });
-    settle(pinned);
-    nodes.forEach(n => {
-      const c = layout[+n.dataset.i];
-      n.classList.add('at');
-      n.style.setProperty('--gx', c.x); n.style.setProperty('--gy', c.y); n.style.setProperty('--cw', c.w);
-    });
-    const N = Math.max(1, layout.reduce((a, c, i) => Math.max(a, c.y + hOf(i) - 1), 0));
-    /* a board that cannot fit even at 60 keeps the old 84 and scrolls,
-       rather than squashing every chart for nothing */
-    let R2 = Math.min(140, Math.floor((H + gap) / N));
-    if (R2 < 60) R2 = 84;
-    if (R2 === R) break;
-    R = R2;
-    g.style.setProperty('--row', R + 'px');
-  }
+  fits.forEach(n => {
+    /* measured squeezed to one row, so a child that stretches to fill
+       the card cannot report the card's own height back as its need */
+    const head = n.querySelector('.w-head'), body = n.querySelector('.w-body');
+    n.style.setProperty('--ch', 1);
+    const was = body.style.overflow;
+    body.style.overflow = 'auto';
+    const need = head.offsetHeight + body.scrollHeight + 2;
+    body.style.overflow = was;
+    const ch = Math.max(1, Math.ceil((need + gap) / R));
+    n.style.setProperty('--ch', ch);
+    effH[+n.dataset.i] = ch;
+  });
+  /* a card with no spot yet keeps the one the grid gave it */
+  const m = gridMetrics();
+  nodes.forEach(n => {
+    const c = layout[+n.dataset.i];
+    if (!c || c.x) return;
+    const r = n.getBoundingClientRect();
+    c.x = Math.round((r.left - m.r.left) / (m.colw + m.gap)) + 1;
+    c.y = Math.round((r.top - m.r.top) / m.R) + 1;
+  });
+  settle(pinned);
+  nodes.forEach(n => {
+    const c = layout[+n.dataset.i];
+    n.classList.add('at');
+    n.style.setProperty('--gx', c.x); n.style.setProperty('--gy', c.y); n.style.setProperty('--cw', c.w);
+  });
   pinned = null;
   /* the grid reaches the bottom of the window, so the space under the
      last card is somewhere a widget can be added too */
@@ -3216,16 +3372,14 @@ function endMove(ev) {
 let sizing = null;
 function startResize(ev, i, node) {
   ev.preventDefault(); ev.stopPropagation();
-  const cols = getComputedStyle($('#grid')).gridTemplateColumns.split(' ').length;
-  const gw = $('#grid').getBoundingClientRect().width;
-  const colw = (gw - (cols - 1) * 12) / cols;
-  sizing = { i: i, node: node, cols: cols, colw: colw, x: ev.clientX, y: ev.clientY, w: layout[i].w, h: layout[i].h };
+  const m = gridMetrics();
+  sizing = { i: i, node: node, cols: m.cols, colw: m.colw, gap: m.gap, x: ev.clientX, y: ev.clientY, w: layout[i].w, h: layout[i].h };
   window.addEventListener('pointermove', onResize);
   window.addEventListener('pointerup', endResize, { once: true });
 }
 function onResize(ev) {
   if (!sizing) return;
-  const dw = Math.round((ev.clientX - sizing.x) / (sizing.colw + 12));
+  const dw = Math.round((ev.clientX - sizing.x) / (sizing.colw + sizing.gap));
   const dh = Math.round((ev.clientY - sizing.y) / (parseFloat($('#grid').style.getPropertyValue('--row')) || 84));
   const w = Math.max(2, Math.min(sizing.cols, sizing.w + dw));
   const h = Math.max(2, Math.min(12, sizing.h + dh));
@@ -3248,7 +3402,7 @@ function widgetPicker(spot) {
     if (spot) {
       cfg.x = spot.x; cfg.y = spot.y;
       if (spot.w) { cfg.w = Math.max(2, spot.w); cfg.h = Math.max(1, spot.h); }
-      else cfg.x = Math.min(spot.x, 13 - cfg.w);
+      else cfg.x = Math.min(spot.x, COLS + 1 - cfg.w);
     }
     layout.push(cfg);
     pinned = layout.length - 1;
