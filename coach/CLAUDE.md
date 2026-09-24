@@ -149,6 +149,29 @@ clients on the client build. Spans COACH, CHECK IN, TRAIN and `cloud.js`.
 First real test of any of it: Tom and one online client both signed in,
 sending one session. The real database has never been in the loop.
 
+## FORGE builds the programs (1.0.10, 2026-09-24)
+
+Programs are built in FORGE now (`forge/CLAUDE.md`). COACH stays the place a
+program goes out from.
+
+- **FORGE publishes into `cprog` as `f-<id>`, `src: 'forge'`.** Those rows sit
+  in PROGRAMS beside the old ones, tagged `FORGE · N wk`, and open READ-ONLY:
+  week one's days with each exercise's target, EDIT IN FORGE, SAVE AS FILE and
+  USE FOR the client. They are never edited here, because FORGE republishes
+  on every change and would write over the edit. Their menu has no Delete; a
+  program is deleted in FORGE, which removes its `f-` row.
+- **+ NEW PROGRAM became + BUILD A PROGRAM IN FORGE** (law 8, one way to make
+  one). A program made here before stays editable here, and FORGE offers to
+  bring it in.
+- **`fileOf` carries what FORGE adds**: a day's `wk` and plain `day`, and
+  beside each exercise `n`, `rir`, `rest`, `note` and `catName`. Still only
+  the FIRST set as a set. `v: 2` when a program has more than one week.
+- **USE FOR on a FORGE program** also copies its name and `weeks`, and
+  `from: f-<id>`, so FORGE's SEND knows it is not replacing someone else's.
+- **A client's FIRST SETS editor keeps those fields.** It deep-copies the days
+  and changes only a name and set one, so `n`, `rir`, `rest`, `wk` and `day` ride
+  through an edit made here.
+
 ## Needs from the foundation
 
 `shared/_smoke.html` has no checks for the coach shelf (`Cloud.send`,
