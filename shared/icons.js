@@ -202,6 +202,7 @@ const ROLES = {
   'app.quest': 'flag',
   'app.train': 'dumbbell',
   'app.coach': 'person',
+  'app.forge': 'grid',
   'app.checkin': 'pose',
   'app.style': 'palette',
   'app.arc': 'nodes',
@@ -230,7 +231,7 @@ const ROLES = {
    so the home screen and tools/make-icons.html cannot disagree. Six slots
    for twelve apps, so two share a slot where they never sit side by side;
    HOME and STYLE wear the accent. */
-const APP_SLOT = { block: 1, system: 1, status: 2, portion: 2, mix: 2, train: 3, coach: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6, speak: 6 };
+const APP_SLOT = { block: 1, system: 1, status: 2, portion: 2, mix: 2, train: 3, coach: 3, forge: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6, speak: 6 };
 
 /* ── each app's own picture ──
    Tom's picks, 2026-09-23 (the reference page is tools/icon-set.html, and
@@ -282,6 +283,9 @@ const APP_ART = {
   speak:   { c: WHT, g: '<rect class="f" x="9" y="3" width="6" height="11" rx="3"/><path d="M9 7h2M9 10h2M6 11a6 6 0 0 0 12 0M12 17v4M9 21h6"/>' },
   checkin: { c: LEGO_GREEN, g: '<rect class="f" x="4" y="3" width="16" height="18" rx="1"/><circle cx="12" cy="10" r="2.5"/><path d="M7.5 18c1-3 2.5-4.5 4.5-4.5s3.5 1.5 4.5 4.5"/>' },
   coach:   { c: WHT, g: '<circle class="f" cx="12" cy="12" r="8.5"/><path class="h" d="M3.5 12a8.5 8.5 0 0 1 17 0H15a3 3 0 0 0-6 0z"/><path d="M3.5 12H9M15 12h5.5"/><circle class="o" cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="1"/>' },
+  /* FORGE, 2026-09-24: an anvil, because a program is made there and
+     handed over finished. Picked by the build session, not by Tom yet. */
+  forge:   { c: GOLD, g: '<path class="f" d="M2.5 7.5h15.5a3.5 3.5 0 0 1 3.5 3.5H16c-1.4 0-2.5 1.1-2.5 2.5v.5l3 3.5h-9l3-3.5V13c0-2-1.8-3-4-3-2 0-4-.8-4-2.5z"/><path d="M5.5 20.5h13M7.5 17.5h9"/>' },
   portion: { c: WHT, g: '<rect class="f" x="2.5" y="4" width="9" height="16" rx="1.5"/><rect class="f" x="12.5" y="4" width="9" height="16" rx="1.5"/><circle class="h" cx="5.5" cy="7" r="1.6"/><rect x="4.5" y="10" width="5" height="5.5"/><path d="M14.5 8h5M14.5 11h5M14.5 14h3"/>' },
   mix:     { c: WHT, g: '<path class="f" d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M13 11l6-8M8 21h8"/>' },
   wealth:  { c: LEGO_GREEN, g: '<path d="M16.5 7.5c-.8-1.6-2.5-2.5-4.5-2.5-2.5 0-4.5 1.3-4.5 3.4 0 4.6 9 2.6 9 7.3 0 2.1-2 3.3-4.5 3.3-2.2 0-4-1-4.7-2.8M10.5 2.5v19M13.5 2.5v19" stroke-width="1.8"/>' },
