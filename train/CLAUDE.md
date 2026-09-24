@@ -62,7 +62,7 @@ see the root brief on many writers. Every edit merges into the row as it is
 |---|---|---|
 | `excat` | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
 | `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup}` |
-| `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
+| `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, plan, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
 | `session` | `''` | `{start, end, note, from, order, name, vs}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, and a day he picked to compare it with |
 | `phase` | phase id | `{name, start, end}` — a training block. `end` is optional |
 | `sgroup` | group id, dated | `{name, slot, ex:[ids], jump, resthold}` — a superset |
@@ -87,6 +87,10 @@ describe the gym, not the training.
 
 - `set.kg` is always kilograms. `set.u` is the unit it was typed in.
 - `set.dist` is always **kilometres**. `set.dur` is always **seconds**.
+- `set.done` is the tick box and nothing else: his mark, never the app's.
+  `set.plan` is the app's: 1 on a set TRAIN wrote on his behalf, from a copied
+  day, a routine or Copy Set. A plan is not work until it is ticked or pressed
+  UPDATE on; everything else counts the moment it is saved. See `TRAIN.counts`.
 - `set.warm` marks a warmup by hand: dimmed, never a record, never counted in volume or
   set totals. **A set is also a warmup when its comment says so**, worked out when the
   index is built and never written back; a stored `warm` of 1 or 0 beats the comment.
@@ -265,9 +269,11 @@ comments"). Nothing is written back, so editing a comment changes what the set i
 
 ### What counts
 
-A set counts once it is ticked. **A past day counts as it was logged**: 1,099 of
-his FitNotes sets were never ticked, and Analysis has always counted them. Today,
-a copied or planned set is not work until it is ticked. Warmups never count.
+A set counts unless it is a plan still waiting. **A past day counts as it was
+logged**: 1,099 of his FitNotes sets were never ticked, and Analysis has always
+counted them. Today, a copied or routine-filled set is not work until it is
+ticked or pressed UPDATE on, and `plan` is what marks one. A set he typed and
+saved is work the moment it is saved, box or no box. Warmups never count.
 
 ### Training blocks
 
@@ -456,6 +462,7 @@ not a fence.
 | `routine` | `program` | BLOCK owns `routine` |
 | "Workout" | "Session" and "Training": Training Log Empty, Copy Past Session, Training Routines | Tom, 2026-09-14: he trains |
 | One set of records per exercise | Straight sets and split sets each keep their own | A set with a rest in it is not the same lift |
+| A copied set and a logged set look alike | A plan still waiting reads in muted numbers | With the auto-tick gone nothing else told them apart |
 | Records never start again | Each training block has its own; all-time ones stay | Tom, 2026-09-14 |
 | No session names, blocks, weekly view, session summary or profile | All five | Tom, 2026-09-14 |
 
@@ -657,6 +664,50 @@ Watched 2026-09-24 from COACH: the panel came up over the client's profile,
 a five-set CSV with a comma inside an exercise name imported as that client's
 rows, weights read as pounds and stored in kilograms, and Tom's own `set`,
 `exercise` and `tick` counts did not move.
+
+## The training screen, four complaints (1.0.21, 2026-09-24)
+
+Tom sent four in one message, with a photo of TRAIN beside one of FitNotes.
+
+- **The name no longer gets cut in half.** *"I don't want the name of the
+  movement clipped, dynamic font sizing."* The font sizing was the smaller half
+  of it: the bar's `.spacer` is `flex:1` and so is a title, so the two of them
+  split the free space and "Cuffed External Rotation" was given **81px of bar
+  beside 73px of nothing**. The spacer stands down whenever there is a name.
+  Then `fitTitle` steps the name down the type scale on one line, and when one
+  line cannot hold it at a size worth reading it takes **two lines rather than
+  shrink further** — two lines of 16px are 35px against the icons' 44, so the
+  bar does not grow. Measured at 390px: "Cuffed External Rotation" 16px on two
+  lines, "Bench Press" 18px on one, a 43-character name 12px on three with the
+  bar one pixel taller. None clipped.
+- **Hold an exercise to move it.** *"I shouldn't have a specific re order
+  button, why didn't we copy the hold to rearrange function?"* The drawer's
+  Reorder mode and its up and down arrows are gone. A press and hold picks the
+  row up and the new order is read back off the page when it is dropped. The
+  menu the hold used to open keeps two ways in, so DOCTRINE laws 6 and 14 both
+  still hold: a menu button on the row, and a right click. A thumb that moves
+  more than 10px inside the half second is scrolling and nothing lifts; a mouse
+  drags on the first few pixels without waiting. `dragRows` is wired once, on
+  the list, because the list survives every repaint.
+- **A saved set does not tick itself.** FitNotes does not tick one either, and
+  his photo of it says so. `done` is now the box and nothing else; `plan` says
+  a set was written on his behalf. A plan reads in muted numbers, because with
+  the auto-tick gone that is the only thing left telling a plan from work.
+- **A new exercise keeps what he typed**, the way saving a food does in STATUS.
+  The button under the search box reads `+ CREATE "Cuffed External Rotation"`
+  and the name arrives in the dialog. The More menu's Create New Exercise
+  carries it too.
+
+Watched 2026-09-24 in the browser at 390px, driving the real controls: the
+title measured against three names, a saved set coming back unticked and still
+counting in the session card, a copied day counting for nothing until UPDATE,
+a hold-and-drag reordering the drawer and writing `session.order`, a scroll
+lifting nothing, and both menus opening. `_review.html` 116 of 116 at phone and
+desktop width. **Not opened on the iPhone.**
+
+**Still open: he also said TRAIN is "way too cramped" beside FitNotes.** Not
+built. It is a taste question, so it goes to him as a mockup and a pick list
+first.
 
 ## Parked
 
