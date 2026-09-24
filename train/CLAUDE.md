@@ -705,9 +705,49 @@ a hold-and-drag reordering the drawer and writing `session.order`, a scroll
 lifting nothing, and both menus opening. `_review.html` 116 of 116 at phone and
 desktop width. **Not opened on the iPhone.**
 
-**Still open: he also said TRAIN is "way too cramped" beside FitNotes.** Not
-built. It is a taste question, so it goes to him as a mockup and a pick list
-first.
+## Cramped, six causes, all six fixed (1.0.22, 2026-09-24)
+
+*"Train is way too cramped, look at fitnotes and how elegant/seamless it
+feels."* A vague visual ask, so it went back as six named causes and a mockup,
+and he answered "1, 2, 3, 4, 5, 6 — do all of them".
+
+1. **TRACK has no cards.** The steppers were one card and the day's sets were
+   another, each with its own padding inside the page's own margin, so the
+   numbers sat 28px from the edge and the screen read as boxes inside boxes.
+   Both are `.trackbox` now, flat on the page with one hairline between them.
+2. **The rest countdown lives in the top bar.** The band under the tabs cost
+   55px of a 844px screen the whole time he rested. `.restchip` stands exactly
+   where the rest timer's own button stood and hides that button while it
+   runs, so the bar does not change width and resting costs no height at all.
+   It still shows on every screen, because he leaves the exercise mid-rest,
+   and it still counts past zero. `drawRestBar` runs four times a second, so
+   it rebuilds nothing unless the chip has just come or gone, and it refits the
+   title when it does.
+3. **The last time line wraps to two lines.** This reverses his own
+   instruction of 2026-09-22 ("one line, cut off with an ellipsis"): he saw it
+   cut a number in half. Two lines, still small and faded, clamped.
+4. **A set row is 44px, not 61.** The comment bubble and the tick box were each
+   a full 44px tall inside 8px of padding. Both carry `mb-tap`, which keeps the
+   44px target while the drawing shrinks, so they draw at 32 and the row is
+   exactly the 44 the rules ask for. Measured: four sets on TRACK no longer
+   scroll at 390px.
+5. **SAVE is the accent, CLEAR is quiet.** Green and blue are FitNotes' colours
+   and belong to no theme here, so the two buttons looked imported from another
+   app. SAVE takes two thirds, CLEAR one.
+6. **The steppers came down a size.** 44 x 44 outlined buttons in place of
+   48 x 52 filled, the number at 30px rather than 36, and the number takes the
+   room between the buttons instead of a fixed 8ch so it is centred however
+   wide it is. `min-width:0` on the input, which is the flex-input trap.
+
+The field label's hairline went from 2px to 1px in the same pass, since it sits
+directly above the steppers and was the heaviest line on the screen.
+
+Watched 2026-09-24 at 390px: rows 44px with 44px tap targets measured off the
+`::after`, TRACK's scroll height inside the viewport with four sets, the chip
+at 56 x 44 with the header still 61px and the scrolling area unchanged while a
+rest runs, the chip turning warn-coloured and counting up past zero, surviving
+a move to the day screen, and its menu opening. `_review.html` 116 of 116.
+**Not opened on the iPhone.**
 
 ## Parked
 
