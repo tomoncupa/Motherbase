@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.20, 2026-09-24">
+<meta name="mb-version" content="1.0.21, 2026-09-24">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -354,6 +354,12 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .dhead b{font-family:var(--font-display);font-size:var(--f-2);letter-spacing:var(--track-cap)}
 .dhead span{display:block;font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-2)}
 .dlist{flex:1;min-height:0;overflow:auto}
+.dlist .prow.here{background:color-mix(in srgb, var(--accent) 14%, transparent)}
+/* A row held and picked up: lifted off the list, and it keeps its own
+   background so the rows it passes over stay readable behind it. */
+.dlist .prow.dragging{background:var(--surface-3);box-shadow:var(--e-3);
+  border-radius:var(--radius-md);border-bottom-color:transparent;
+  position:relative;z-index:2}
 .dfoot{border-top:var(--border-width) solid var(--border);padding-bottom:var(--safe-b)}
 .dfoot button{display:flex;align-items:center;gap:var(--s-3);width:100%;border:0;
   background:none;cursor:pointer;color:var(--text-2);font:inherit;text-align:left;
@@ -487,6 +493,10 @@ div.prow{padding:0}
 .fieldrow + .fieldlabel{margin-top:var(--s-4)}
 .tset .reorder{display:flex}
 .tset.warm{opacity:.55}
+/* A set the app wrote on his behalf, copied from a day or filled from a
+   routine, and not done yet. Saving no longer ticks a set, so this is the only
+   thing left that tells a plan from work. */
+.tset.plan b,.setrow.plan b{color:var(--text-muted)}
 .tickdot .mb-ico,.tset .chk .mb-ico{width:.9em;height:.9em}
 .datebar .arrow .mb-ico{width:1.2em;height:1.2em}
 .dhead .mb-ico{width:1em;height:1em}
@@ -779,7 +789,7 @@ TRAIN.reindex = function () {
        index. `warm` was exactly that on the day it was added. */
     var rec = { key: r.key, date: r.date, ex: p.ex, kg: p.kg, r: p.r, u: p.u,
                 done: p.done, pr: p.pr, prf: p.prf, dist: p.dist, dur: p.dur,
-                note: p.note, ord: p.ord, su: p.su,
+                note: p.note, ord: p.ord, su: p.su, plan: p.plan,
                 /* Read off the comment, and a mark made by hand wins either
                    way. See "what a comment says". */
                 warm: p.warm === 1 || p.warm === true ||
@@ -2152,12 +2162,20 @@ function drawChrome() {
   } else if (SCREEN_TITLE[scr]) {
     title = SCREEN_TITLE[scr];
   }
+  /* The bar's spacer is what pushes the icons right when the wordmark is
+     showing. A title is flex:1 as well, so the two of them split the free
+     space and half the room for the name went to nothing at all: 81px of name
+     beside 73px of empty bar. The spacer stands down whenever there is a name
+     to fit. */
+  var spacer = document.querySelector('header .spacer');
+  if (spacer) spacer.style.flex = title == null ? '' : '0 0 auto';
   if (title == null) {
     if (CLIENT) logo.textContent = CLIENT_NAME; else logo.innerHTML = 'TRA<b>IN</b>';
     logo.style.cssText = '';
   } else {
     logo.textContent = title;
     logo.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    fitTitle(logo);
   }
   if (onWorkout) drawDateBar();
   if (onTraining) {
@@ -2165,6 +2183,54 @@ function drawChrome() {
       b.className = 'mb-press' + (b.dataset.tab === TRAIN.tab ? ' on' : '');
     });
   }
+}
+
+/* ── a title that does not get cut in half ──
+   The title is the exercise's name, and "Cuffed External Rotation" has never
+   fitted a phone bar at 18px with the wordmark's .14em tracking behind it.
+   Tom, 2026-09-24: "I don't want the name of the movement clipped, dynamic
+   font sizing."
+
+   So the tracking comes off first, which is free, and then the size steps down
+   the type scale until the name fits. Four steps, each a scale step apart, so
+   nothing here is a judgement call. The ellipsis stays underneath as the floor
+   for a name no size on the scale could hold. */
+var TITLE_ONE = ['var(--f-4)', 'var(--f-3)'];
+var TITLE_TWO = ['var(--f-3)', 'var(--f-2)', 'var(--f-1)'];
+function fitTitle(el) {
+  el.style.letterSpacing = 'var(--track-cap)';
+  el.style.whiteSpace = 'nowrap';
+  el.style.lineHeight = '';
+  el.style.display = 'block';
+  el.style.webkitLineClamp = '';
+  var i;
+  for (i = 0; i < TITLE_ONE.length; i++) {
+    el.style.fontSize = TITLE_ONE[i];
+    /* One pixel of slack: scrollWidth rounds up on a subpixel layout, so an
+       exact fit reads as one pixel over and drops a size for nothing. */
+    if (el.scrollWidth <= el.clientWidth + 1) return;
+  }
+  /* One line cannot hold it at a size worth reading, so it takes two. Two
+     lines of 16px are 35px tall and the bar's icons are 44, so the bar does
+     not grow: the name gets bigger by using room that was already there.
+     Shrinking on one line instead would have put "Cuffed External Rotation"
+     at 12px to save height nothing else was going to use. */
+  el.style.letterSpacing = 'normal';
+  el.style.whiteSpace = 'normal';
+  el.style.lineHeight = 'var(--lh-tight)';
+  var lines = 2;
+  for (i = 0; i < TITLE_TWO.length; i++) {
+    el.style.fontSize = TITLE_TWO[i];
+    var line = parseFloat(getComputedStyle(el).lineHeight) || 1;
+    if (el.scrollHeight <= line * 2 + 1 && el.scrollWidth <= el.clientWidth + 1) break;
+    /* Nothing on the scale held it in two lines, so it gets a third. Three
+       lines at 12px are 45px against the icons' 44, so the bar grows by a
+       pixel or two, and only for a name long enough to need it. */
+    if (i === TITLE_TWO.length - 1) lines = 3;
+  }
+  el.style.display = '-webkit-box';
+  el.style.webkitBoxOrient = 'vertical';
+  el.style.webkitLineClamp = String(lines);
 }
 
 function drawWorkout(m) {
@@ -2210,7 +2276,7 @@ function drawWorkout(m) {
        setting asks for the category's own colour. */
     if (cat && catShow === 'both') block.style.setProperty('--cat', TRAIN.slotColor(cat.slot));
 
-    var done = g.sets.every(function (s) { return s.done; });
+    var done = g.sets.every(TRAIN.counts);
     var grp = null;
     groupsToday.forEach(function (x) { if ((x.g.ex || []).indexOf(g.ex) > -1) grp = x; });
     var head = UI.el('div', 'head mb-press mb-tap');
@@ -2238,7 +2304,7 @@ function drawWorkout(m) {
     var shown = limit > 0 ? g.sets.slice(0, limit) : g.sets;
     shown.forEach(function (s) {
       var row = UI.el('div', 'setrow' + (s.pr ? ' pr' : '') + (s.note ? ' has-note' : '') +
-        (s.warm ? ' warm' : ''));
+        (s.warm ? ' warm' : '') + (TRAIN.pending(s) ? ' plan' : ''));
       row.innerHTML = '<span class="cmt" title="' + UI.esc(s.note || '') + '">' + BUBBLE + '</span>' +
         (s.warm ? '<span class="wtag">warmup</span>' : '') +
         '<span class="grow"></span>' + setCols(s, g.ex) +
@@ -2359,7 +2425,11 @@ TRAIN.nextOrd = function (exId, date) {
 TRAIN.addSet = function (exId, date, fields) {
   var p = {
     ex: exId, kg: fields.kg || 0, r: fields.r || 0, u: TRAIN.unit(),
-    done: 1,   /* a saved set happened; Mark Sets Complete only decides whether the box shows */
+    /* Tom, 2026-09-24: "saved sets should not auto check", and FitNotes agrees
+       — a set he just saved comes back unticked there too. The tick is his
+       mark, not the app's claim. What makes a set count is `plan`: see
+       TRAIN.counts. */
+    done: 0,
     pr: 0, prf: 0, dist: fields.dist || 0, dur: fields.dur || 0,
     note: '', ord: TRAIN.nextOrd(exId, date),
   };
@@ -2455,11 +2525,16 @@ function drawList(host, q, cats, exs) {
 
   /* First, and unconditionally: this once sat below three early returns, so
      the button that makes your first exercise was the one you could never see. */
+  /* What he typed into the search box is the name of the thing he is about to
+     make. Tom, 2026-09-24: "if I enter a new exercise, include what I've
+     already typed", the same as saving a food in STATUS. The button says which
+     name it will carry, so the search and the new exercise are one move. */
+  var typed = (TRAIN.query || '').trim();
   var add = UI.el('button', 'mb-btn mb-press mb-tap');
   add.style.width = '100%';
   add.style.marginBottom = 'var(--s-3)';
-  add.textContent = '+ CREATE NEW EXERCISE';
-  add.onclick = function () { TRAIN.exerciseDialog(null); };
+  add.textContent = typed ? '+ CREATE “' + typed + '”' : '+ CREATE NEW EXERCISE';
+  add.onclick = function () { TRAIN.exerciseDialog(null, typed); };
   host.appendChild(add);
 
   var list = UI.el('div', 'plist');
@@ -2499,7 +2574,8 @@ function drawList(host, q, cats, exs) {
 
   if (!rows.length) {
     var none = UI.el('div', 'empty');
-    none.textContent = q ? 'No exercises found' : 'No exercises in here yet';
+    none.textContent = typed ? 'Nothing here by that name yet'
+      : q ? 'No exercises found' : 'No exercises in here yet';
     host.appendChild(none);
     return;
   }
@@ -2567,7 +2643,7 @@ function pickExercise(id, e) {
 
 /* Create or edit one exercise: name, category, and the two things that
    actually change how it behaves — its weight step and its rest time. */
-TRAIN.exerciseDialog = function (exId) {
+TRAIN.exerciseDialog = function (exId, prefill) {
   var exs = TRAIN.exercises(), cats = TRAIN.cats();
   var cur = exId ? exs[exId] : null;
   /* No categories is not a reason to refuse — it is a reason to make some. */
@@ -2579,7 +2655,7 @@ TRAIN.exerciseDialog = function (exId) {
   UI.dialog({
     title: cur ? 'EDIT EXERCISE' : 'CREATE NEW EXERCISE', width: 460,
     body: function (b, h) {
-      nameEl = UI.field('name', { value: cur ? cur.name : '', placeholder: 'Exercise name' });
+      nameEl = UI.field('name', { value: cur ? cur.name : (prefill || ''), placeholder: 'Exercise name' });
       b.appendChild(UI.row('Name', '', nameEl));
 
       sel = document.createElement('select');
@@ -2874,14 +2950,16 @@ function commitSet(inputs) {
 
   if (TRAIN.sel) {
     var was = Rec.get('set', date, TRAIN.sel);
-    var upd = { kg: fields.kg, r: fields.r, dist: fields.dist, dur: fields.dur, u: TRAIN.unit(), done: 1 };
+    /* Pressing UPDATE on a planned set is doing it, so the plan comes off.
+       The tick box is not touched: it is his mark. */
+    var upd = { kg: fields.kg, r: fields.r, dist: fields.dist, dur: fields.dur, u: TRAIN.unit(), plan: 0 };
     if (((TRAIN.exercises()[exId] || {}).setup || []).length) upd.su = fields.su || undefined;
     TRAIN.patchSet(TRAIN.sel, date, upd);
     TRAIN.sel = null;
     TRAIN.recomputePRs([exId]);
     UI.toast('Training updated');
     /* Updating a planned set that was not done yet is doing it. */
-    if (was && !was.done) afterSave(exId, date);
+    if (was && was.plan && !was.done) afterSave(exId, date);
   } else {
     var key = TRAIN.addSet(exId, date, fields);
     if (Rec.setting(APP.id, 'trackPRs') !== 0 && fields.kg > 0 && fields.r > 0) TRAIN.recomputePRs([exId]);
@@ -2924,7 +3002,7 @@ function afterSave(exId, date) {
     TRAIN.restStart(ex.rest || 0);
   }
   if (Rec.setting(APP.id, 'workoutTimerStop') === 1 &&
-      !TRAIN.setsOn(date).some(function (x) { return !x.done; })) {
+      !TRAIN.setsOn(date).some(TRAIN.pending)) {
     TRAIN.workoutStop(date);
   }
   if (grp && grp.g.jump && members.length > 1) {
@@ -2934,7 +3012,8 @@ function afterSave(exId, date) {
 }
 
 function trainingSetRow(s, n, date, showChk, delta) {
-  var row = UI.el('div', 'tset' + (TRAIN.sel === s.key ? ' sel' : '') + (s.warm ? ' warm' : ''));
+  var row = UI.el('div', 'tset' + (TRAIN.sel === s.key ? ' sel' : '') + (s.warm ? ' warm' : '') +
+    (TRAIN.pending(s) ? ' plan' : ''));
 
   var bub = UI.el('button', 'bub nohold mb-tap' + (s.note || s.rir != null || s.q ? ' on' : ''));
   bub.innerHTML = BUBBLE;
@@ -3023,7 +3102,7 @@ function setMenu(s, date, e) {
     { label: 'Copy Set', fn: function () {
       var p = Rec.get('set', date, s.key);
       if (!p) return;
-      p.done = 0; p.pr = 0; p.prf = 0; p.note = ''; p.ord = (p.ord || 0) + 0.5;
+      p.done = 0; p.plan = 1; p.pr = 0; p.prf = 0; p.note = ''; p.ord = (p.ord || 0) + 0.5;
       Rec.set('set', date, TRAIN.newId(), p);
       TRAIN.reindex();
       draw();
@@ -3285,7 +3364,6 @@ function graphChart(box, pts, g) {
 /* ═════════════════ THE DAY'S EXERCISES DRAWER ═════════════════ */
 TRAIN.openDrawer = function () {
   var wrap = document.getElementById('dwrap');
-  TRAIN.drawerReorder = false;
   paintDayDrawer();
   wrap.classList.add('open');
   wrap.offsetHeight;                 /* force layout before the transition; see shared/CLAUDE.md */
@@ -3300,38 +3378,31 @@ function paintDayDrawer() {
   var head = document.getElementById('dhead');
   var list = document.getElementById('dlist');
   var foot = document.getElementById('dfoot');
-  var groups = TRAIN.dayGroups(TRAIN.date), reorder = !!TRAIN.drawerReorder;
+  var groups = TRAIN.dayGroups(TRAIN.date);
 
   head.onclick = null;
   head.innerHTML = '<b>' + groups.length + ' EXERCISE' + (groups.length === 1 ? '' : 'S') + '</b>' +
-    '<span>' + (reorder ? 'Move exercises up or down' : 'Press-and-hold an exercise for options') + '</span>';
+    '<span>' + (groups.length > 1 ? 'Hold one to move it' : 'Tap one to train it') + '</span>';
 
   list.innerHTML = '';
-  groups.forEach(function (g, i) {
-    var done = g.sets.every(function (s) { return s.done; });
-    var row = UI.el('div', 'prow');
-    if (g.ex === TRAIN.exId) row.style.background = 'color-mix(in srgb, var(--accent) 14%, transparent)';
+  groups.forEach(function (g) {
+    var done = g.sets.every(TRAIN.counts);
+    var row = UI.el('div', 'prow' + (g.ex === TRAIN.exId ? ' here' : ''));
+    row.dataset.ex = g.ex;
     var main = UI.el('button', 'pmain mb-press');
     main.innerHTML = '<span class="nm">' + UI.esc(g.def.name) +
       '<br><span class="sub">' + g.sets.length + ' set' + (g.sets.length === 1 ? '' : 's') + '</span></span>' +
       '<span class="tickdot' + (done ? '' : ' off') + '">' + (done ? ico('done') : '') + '</span>';
     main.onclick = function () { closeDrawer(); TRAIN.openExercise(g.ex); };
     row.appendChild(main);
-    if (reorder) {
-      var up = UI.el('button', 'ico mb-press mb-tap');
-      up.innerHTML = ico('collapse'); up.setAttribute('aria-label', 'Move ' + g.def.name + ' up');
-      up.disabled = i === 0;
-      up.onclick = function () { TRAIN.moveInDay(TRAIN.date, g.ex, -1); paintDayDrawer(); draw(); };
-      var dn = UI.el('button', 'ico mb-press mb-tap');
-      dn.innerHTML = ico('expand'); dn.setAttribute('aria-label', 'Move ' + g.def.name + ' down');
-      dn.disabled = i === groups.length - 1;
-      dn.onclick = function () { TRAIN.moveInDay(TRAIN.date, g.ex, 1); paintDayDrawer(); draw(); };
-      row.appendChild(up); row.appendChild(dn);
-    } else {
-      withMenu(main, function (e) { closeDrawer(); TRAIN.dayExerciseMenu(g.ex, e); });
-    }
+    /* The hold on this row picks it up, so the menu keeps the two ways in that
+       do not need it: the button, and a right click. DOCTRINE laws 6 and 14. */
+    var open = function (e) { closeDrawer(); TRAIN.dayExerciseMenu(g.ex, e); };
+    row.appendChild(rowMenuBtn('More for ' + g.def.name, open));
+    rightMenu(row, open);
     list.appendChild(row);
   });
+  dragRows(list);
   if (!groups.length) {
     var none = UI.el('div', 'empty');
     none.style.padding = 'var(--s-4)';
@@ -3346,14 +3417,91 @@ function paintDayDrawer() {
   foot.appendChild(drawerAction('Add To Superset', ico('share'), function () {
     closeDrawer(); TRAIN.supersetPanel(TRAIN.exId);
   }));
-  if (groups.length > 1) {
-    foot.appendChild(drawerAction(reorder ? 'Finish Editing' : 'Reorder', ico(reorder ? 'done' : 'drag'), function () {
-      TRAIN.drawerReorder = !reorder; paintDayDrawer();
-    }));
-  }
   foot.appendChild(drawerAction('Home', ico('today'), function () {
     closeDrawer(); TRAIN.show('workout');
   }));
+}
+
+/* ── hold an exercise and move it ──
+   Tom, 2026-09-24: "I shouldn't have a specific re order button, why didn't we
+   copy the hold to rearrange function?" So the Reorder mode and its up and
+   down arrows are gone and the hold does the moving.
+
+   Two rules make it work on a thumb. The hold has to be still, because this is
+   a scrolling list and any real movement in the first half second is a scroll.
+   And once a row is up, a non-passive touchmove on the document is what stops
+   the page scrolling underneath: touch-action cannot be changed once a gesture
+   has already started.
+
+   A mouse skips the wait and drags on the first few pixels, which is what a
+   mouse has always meant.
+
+   The new order is read back off the page when the row is dropped, so what he
+   sees is what is saved. The listeners sit on the list, which survives every
+   repaint, so they are wired once. */
+function dragRows(list) {
+  if (list.dragWired) return;
+  list.dragWired = true;
+  var d = null;
+  var block = function (e) { e.preventDefault(); };
+  var order = function () {
+    return [].slice.call(list.children).map(function (k) { return k.dataset.ex; })
+      .filter(Boolean);
+  };
+  var lift = function () {
+    d.live = true;
+    d.row.classList.add('dragging');
+    Mobile.haptic('heavy');
+    document.addEventListener('touchmove', block, { passive: false });
+    try { list.setPointerCapture(d.id); } catch (x) {}
+  };
+  list.addEventListener('pointerdown', function (e) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target.closest && e.target.closest('.nohold')) return;
+    var row = e.target.closest && e.target.closest('.prow[data-ex]');
+    if (!row || list.children.length < 2) return;
+    d = { row: row, id: e.pointerId, sx: e.clientX, sy: e.clientY, live: false,
+          mouse: e.pointerType === 'mouse', was: order(), t: null };
+    if (!d.mouse) d.t = setTimeout(lift, 500);
+  });
+  list.addEventListener('pointermove', function (e) {
+    if (!d || e.pointerId !== d.id) return;
+    if (!d.live) {
+      var moved = Math.abs(e.clientY - d.sy) + Math.abs(e.clientX - d.sx);
+      if (d.mouse) { if (moved < 6) return; lift(); }
+      else { if (moved > 10) { clearTimeout(d.t); d = null; } return; }
+    }
+    e.preventDefault();
+    var over = null;
+    [].slice.call(list.children).forEach(function (k) {
+      if (over || k === d.row) return;
+      var b = k.getBoundingClientRect();
+      if (e.clientY < b.top + b.height / 2) over = k;
+    });
+    if (over) { if (d.row.nextSibling !== over) list.insertBefore(d.row, over); }
+    else if (list.lastChild !== d.row) list.appendChild(d.row);
+  });
+  var end = function (e) {
+    if (!d || e.pointerId !== d.id) return;
+    var was = d;
+    d = null;
+    clearTimeout(was.t);
+    if (!was.live) return;
+    document.removeEventListener('touchmove', block, { passive: false });
+    was.row.classList.remove('dragging');
+    /* The click that ends a drag is not a tap on the row. */
+    var eat = function (ev) { ev.stopPropagation(); ev.preventDefault(); };
+    list.addEventListener('click', eat, true);
+    setTimeout(function () { list.removeEventListener('click', eat, true); }, 40);
+    var now = order();
+    if (now.join('|') !== was.was.join('|')) {
+      TRAIN.patchSession(TRAIN.date, { order: now });
+      Mobile.feedback('select');
+      draw();
+    }
+  };
+  list.addEventListener('pointerup', end);
+  list.addEventListener('pointercancel', end);
 }
 
 function drawerAction(label, icon, fn) {
@@ -4659,6 +4807,13 @@ function withMenu(el, fn) {
   return el;
 }
 
+/* A right click on its own, for a row whose press-and-hold means something
+   else. Its menu's visible way in is the button below. */
+function rightMenu(el, fn) {
+  el.addEventListener('contextmenu', function (e) { e.preventDefault(); fn(e); });
+  return el;
+}
+
 /* A small icon button that opens a row's menu, so every menu has a visible
    way in and the hold is only ever a shortcut. DOCTRINE law 6. */
 function rowMenuBtn(label, fn) {
@@ -5437,7 +5592,7 @@ TRAIN.copyDay = function (from, to, opts) {
   TRAIN.dayGroups(from).forEach(function (g) {
     g.sets.forEach(function (s) {
       Rec.set('set', to, TRAIN.newId(), {
-        ex: s.ex, kg: s.kg || 0, r: s.r || 0, u: s.u, done: 0, pr: 0, prf: 0,
+        ex: s.ex, kg: s.kg || 0, r: s.r || 0, u: s.u, done: 0, plan: 1, pr: 0, prf: 0,
         dist: s.dist || 0, dur: s.dur || 0, note: opts.comments ? (s.note || '') : '',
         ord: ++n, warm: s.warm ? 1 : 0, su: s.su ? copyObj(s.su) : undefined,
       });
@@ -5805,7 +5960,7 @@ function writeFilled(exId, date, list) {
   var n = TRAIN.setsOn(date).length;
   list.forEach(function (s) {
     Rec.set('set', date, TRAIN.newId(), {
-      ex: exId, kg: s.kg || 0, r: s.r || 0, u: TRAIN.unit(), done: 0, pr: 0, prf: 0,
+      ex: exId, kg: s.kg || 0, r: s.r || 0, u: TRAIN.unit(), done: 0, plan: 1, pr: 0, prf: 0,
       dist: s.dist || 0, dur: s.dur || 0, note: '', ord: ++n,
     });
   });
@@ -6149,7 +6304,7 @@ function loadDraft(s) {
   if (s.su) TRAIN.draftSU = copyObj(s.su);
 }
 TRAIN.selectNextOpen = function () {
-  var nxt = TRAIN.setsOn(TRAIN.date).filter(function (s) { return s.ex === TRAIN.exId && !s.done; })[0];
+  var nxt = TRAIN.setsOn(TRAIN.date).filter(function (s) { return s.ex === TRAIN.exId && TRAIN.pending(s); })[0];
   if (!nxt) return false;
   TRAIN.sel = nxt.key;
   loadDraft(nxt);
@@ -6384,10 +6539,21 @@ function dayY(d, from) {
     ? Day.label(d) : Day.label(d, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/* A set counts once it is done. A past day counts as it was logged: 1,099 of
-   his FitNotes sets were never ticked, and Analysis has always counted them.
-   Today, a copied or planned set is not work until it is ticked. */
-TRAIN.counts = function (s) { return !!s.done || s.date < Day.today(); };
+/* A set counts unless it is a plan waiting to be done. A past day counts as it
+   was logged: 1,099 of his FitNotes sets were never ticked, and Analysis has
+   always counted them. Today, a copied or routine-filled set is not work until
+   it is ticked, and `plan` is what marks one.
+
+   Until 2026-09-24 saving a set wrote done:1 and this asked about `done`
+   alone. Tom asked for saved sets to stop ticking themselves, so the two facts
+   had to come apart: `plan` says the app wrote this set on his behalf, `done`
+   is the box he ticks. A set he typed and saved is work the moment it is
+   saved, box or no box. */
+TRAIN.counts = function (s) { return !s.plan || !!s.done || s.date < Day.today(); };
+
+/* A plan still waiting: what auto-select next set goes looking for, and what
+   stops the session timer from ending the moment the first set lands. */
+TRAIN.pending = function (s) { return !!s.plan && !s.done; };
 
 /* One exercise's working sets on a day, in the order they were done. */
 function workOn(date, exId) {
@@ -7495,7 +7661,7 @@ document.getElementById('moreBtn').onclick = function (e) {
   } else if (scr === 'picker') {
     var sorted = Rec.setting(APP.id, 'exSort') === 'recent';
     items = [
-      { label: 'Create New Exercise', fn: function () { TRAIN.exerciseDialog(null); } },
+      { label: 'Create New Exercise', fn: function () { TRAIN.exerciseDialog(null, (TRAIN.query || '').trim()); } },
       { label: 'Add New Category', fn: function () { TRAIN.categoryDialog(null); } },
       { label: 'Edit Categories', fn: function () { TRAIN.categoriesDialog(); } },
       { label: sorted ? 'Sort Alphabetically' : 'Sort By Last Used', fn: function () {
