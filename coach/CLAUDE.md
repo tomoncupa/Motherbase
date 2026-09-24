@@ -164,8 +164,10 @@ program goes out from.
   one). A program made here before stays editable here, and FORGE offers to
   bring it in.
 - **`fileOf` carries what FORGE adds**: a day's `wk` and plain `day`, and
-  beside each exercise `n`, `rir`, `rest`, `note` and `catName`. Still only
-  the FIRST set as a set. `v: 2` when a program has more than one week.
+  beside each exercise `n`, `reps` (a range), `bands`, `rir`, `rest`, `note`
+  and `catName`. Still only the FIRST set as a set, and from FORGE only its
+  load, per Tom's Algrowrithm (`forge/CLAUDE.md`). `v: 2` when a program has
+  more than one week. COACH 1.0.11 added `reps` and `bands`.
 - **USE FOR on a FORGE program** also copies its name and `weeks`, and
   `from: f-<id>`, so FORGE's SEND knows it is not replacing someone else's.
 - **A client's FIRST SETS editor keeps those fields.** It deep-copies the days
