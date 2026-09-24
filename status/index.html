@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.49, 2026-09-24">
+<meta name="mb-version" content="1.0.50, 2026-09-24">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -420,6 +420,23 @@ label.fl:first-child{margin-top:0}
   font-family:var(--font-mono);font-size:var(--f-3);font-weight:700;
   color:var(--text-muted);cursor:pointer}
 .lrun .ld.now{border-color:var(--accent)}
+/* The week as a table: a column per day, a row per pillar, and the week's
+   letter for each pillar on the end. Tom, 2026-09-24. */
+.wgrid{display:grid;grid-template-columns:minmax(64px,1.4fr) repeat(8,minmax(30px,1fr));
+  gap:var(--s-1);margin-bottom:var(--s-3);align-items:stretch}
+.wgrid .wh{font-family:var(--font-mono);font-size:var(--f-1);color:var(--text-muted);
+  text-align:center;line-height:1.2;align-self:end}
+.wgrid .wh b{display:block;color:var(--text-2);font-weight:700}
+.wgrid .wl{font-size:var(--f-1);color:var(--text-2);align-self:center;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wgrid .wl.top{font-weight:700;color:var(--text-1)}
+.wgrid .wc{min-height:44px;padding:0;background:var(--surface-2);border:1px solid transparent;
+  border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:var(--f-2);
+  font-weight:700;color:var(--text-muted);cursor:pointer}
+.wgrid .wc.top{font-size:var(--f-3)}
+.wgrid .wk{min-height:44px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  font-family:var(--font-mono);font-size:var(--f-3);font-weight:700;color:var(--text-muted)}
 /* The two ways out of the food search. Stacked, full width, and below the list
    so they never compete with a result you could have just tapped. */
 /* The brand, beside the name rather than buried in the small print. A tint
@@ -5309,6 +5326,53 @@ function letterRun(days) {
   return wrap;
 }
 
+/* ── the week as a table ──
+   Tom, 2026-09-24: "a grade for the past 7 days. A column per day, a row per
+   pillar. So information communicated is actually useful and actionable."
+   A row of day letters says the week was a C and not why. Laid out by pillar,
+   the row that is all Fs is the thing to fix, and the column that is all Fs
+   is the day it went. The seven days are the ones the big letter is built
+   from, today left out as it is there. The last column is each pillar's own
+   letter for the week, off its days that were logged; training's is its
+   ladder against the plan. Any cell opens that day's working. */
+function weekGrid(a) {
+  const rows = a.rows;               /* adherence's days, oldest first, no today */
+  const g = el('div', 'wgrid');
+  const cell = (cls, html) => { const n = el('div', cls, html); g.appendChild(n); return n; };
+  cell('wh', '');
+  rows.forEach(r => {
+    const dt = new Date(r.date + 'T12:00:00');
+    cell('wh', '<b>' + 'SMTWTFS'.charAt(dt.getDay()) + '</b>' + dt.getDate());
+  });
+  cell('wh', '<b>WK</b>');
+  const put = (label, top, pick, weekK) => {
+    cell('wl' + (top ? ' top' : ''), esc(label)).title = label;
+    rows.forEach(r => {
+      const v = r.used ? pick(r) : null;
+      const b = el('button', 'wc' + (top ? ' top' : ''), v || '\u00b7');
+      if (v && v !== '\u2713') b.style.color = rankColour(v);
+      else if (v) b.style.color = tok('--good');
+      b.title = Day.label(r.date) + (v ? ' \u2014 ' + label + ' ' + v : ' \u2014 nothing logged');
+      b.setAttribute('aria-label', b.title);
+      b.onclick = () => daySheet(r.date);
+      g.appendChild(b);
+    });
+    const w = cell('wk', weekK || '\u2013');
+    if (weekK) { w.style.color = rankColour(weekK); w.style.borderColor = rankColour(weekK); }
+  };
+  put('Day', true, r => { const sc = scoreFor(r.date); return sc && sc.rank ? sc.rank.k : null; },
+    a.rank ? a.rank.k : null);
+  /* the pillars in the order the day lists them */
+  const order = [], label = {};
+  rows.forEach(r => r.parts.forEach(p => { if (!label[p.id]) { label[p.id] = p.label; order.push(p.id); } }));
+  order.forEach(id => {
+    const of = r => { const p = r.parts.find(x => x.id === id); return p ? p.letter : null; };
+    put(label[id], false, of, averageLetter(rows.filter(r => r.used).map(of)));
+  });
+  put('Trained', false, r => r.trained ? '\u2713' : null, a.trainRank);
+  return g;
+}
+
 /* ── the badge ── */
 function rankBadge(date) {
   /* The letter beside the calories is the DAY YOU ARE LOOKING AT. It was the
@@ -5426,8 +5490,13 @@ function rankCard() {
      The big letter is an average and an average hides the shape: four Ss and
      three Fs average to the same place as seven Cs, and they are not the same
      week. Tap any day for its working. */
-  c.appendChild(el('label', 'fl', days === 7 ? 'Each day this week' : 'Each day'));
-  c.appendChild(letterRun(days));
+  if (days === 7) {
+    c.appendChild(el('label', 'fl', 'Each pillar, each day'));
+    c.appendChild(weekGrid(a));
+  } else {
+    c.appendChild(el('label', 'fl', 'Each day'));
+    c.appendChild(letterRun(days));
+  }
 
   /* training, said plainly, because it is the only thing that moves a letter */
   c.appendChild(el('div', 'note',
