@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.23, 2026-09-24">
+<meta name="mb-version" content="1.0.24, 2026-09-24">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -853,7 +853,22 @@ Rec.on(function () { TRAIN._catC = null; TRAIN._exC = null; });
    slot rather than a colour, so they change with the skin like everything
    else. Made once, and only when there are none: an import brings its own and
    must not find these sitting in the way. */
-TRAIN.DEFAULT_CATS = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core', 'Cardio'];
+/* Tom, 2026-09-24: "Add Forearms, Calves, Hamstrings, Glutes, Lower Back."
+   Seven groups meant a leg day was one bar on the week's sets-per-muscle and
+   said nothing about whether he had trained hamstrings at all. Twelve is also
+   exactly how many colours there are, six hues in two tints, and the order
+   here decides them: a group's slot is its place in this list, so Legs and
+   Hamstrings come out as two tints of one hue, and so do Core and Lower Back.
+   Do not reorder this list without looking at what the colours become. */
+TRAIN.DEFAULT_CATS = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core', 'Cardio',
+  'Forearms', 'Calves', 'Hamstrings', 'Glutes', 'Lower Back'];
+
+/* A group's row key. Every name up to 2026-09-24 was one word, so this is the
+   same string `nm.toLowerCase()` gave; "Lower Back" is the first that needed
+   a hyphen rather than a space in a key. */
+TRAIN.catId = function (nm) {
+  return String(nm).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+};
 
 /* ── the movements it opens with ──
    DOCTRINE law 1: ship it full. An empty log is not a clean slate, it is a
@@ -895,7 +910,6 @@ TRAIN.DEFAULT_EX = {
     ['Seated Cable Row', 0], ['Lat Pulldown', 0], ['Close Grip Lat Pulldown', 0],
     ['Straight Arm Pulldown', 0], ['Pull Up', 2], ['Chin Up', 2],
     ['Inverted Row', 2], ['Shrug', 0], ['Dumbbell Shrug', 0],
-    ['Back Extension', 2], ['Good Morning', 0],
   ],
   Shoulders: [
     ['Overhead Press', 0], ['Seated Barbell Press', 0], ['Dumbbell Shoulder Press', 0],
@@ -907,10 +921,7 @@ TRAIN.DEFAULT_EX = {
     ['Back Squat', 0], ['Front Squat', 0], ['Box Squat', 0], ['Goblet Squat', 0],
     ['Hack Squat', 0], ['Leg Press', 0], ['Bulgarian Split Squat', 0],
     ['Walking Lunge', 0], ['Reverse Lunge', 0], ['Step Up', 0],
-    ['Romanian Deadlift', 0], ['Stiff Leg Deadlift', 0], ['Sumo Deadlift', 0],
-    ['Leg Extension', 0], ['Leg Curl', 0], ['Seated Leg Curl', 0],
-    ['Hip Thrust', 0], ['Glute Bridge', 0], ['Calf Raise', 0],
-    ['Seated Calf Raise', 0], ['Hip Abduction', 0], ['Hip Adduction', 0],
+    ['Sumo Deadlift', 0], ['Leg Extension', 0], ['Hip Adduction', 0],
   ],
   Arms: [
     ['Barbell Curl', 0], ['EZ Bar Curl', 0], ['Dumbbell Curl', 0],
@@ -918,7 +929,6 @@ TRAIN.DEFAULT_EX = {
     ['Concentration Curl', 0], ['Cable Curl', 0], ['Close Grip Bench Press', 0],
     ['Skullcrusher', 0], ['Overhead Tricep Extension', 0], ['Tricep Pushdown', 0],
     ['Rope Pushdown', 0], ['Dumbbell Kickback', 0], ['Dip (Triceps)', 2],
-    ['Wrist Curl', 0], ['Reverse Wrist Curl', 0], ['Farmer\u2019s Walk', 0],
   ],
   Core: [
     ['Plank', 2], ['Side Plank', 2], ['Crunch', 2], ['Sit Up', 2],
@@ -932,6 +942,29 @@ TRAIN.DEFAULT_EX = {
     ['Elliptical', 1], ['Stair Climber', 1], ['Swimming', 1],
     ['Jump Rope', 1], ['Air Bike', 1],
   ],
+  /* The five Tom asked for on 2026-09-24. Each one takes the movements that
+     were already in the list under a coarser group, so nothing is duplicated:
+     a starter exercise's id comes from its NAME, so moving one between groups
+     here is the same exercise in a new place, not a second copy of it. */
+  Forearms: [
+    ['Wrist Curl', 0], ['Reverse Wrist Curl', 0], ['Reverse Curl', 0],
+    ['Farmer’s Walk', 0], ['Dead Hang', 2], ['Plate Pinch', 0],
+  ],
+  Calves: [
+    ['Calf Raise', 0], ['Seated Calf Raise', 0], ['Leg Press Calf Raise', 0],
+    ['Donkey Calf Raise', 0],
+  ],
+  Hamstrings: [
+    ['Romanian Deadlift', 0], ['Stiff Leg Deadlift', 0], ['Leg Curl', 0],
+    ['Seated Leg Curl', 0], ['Nordic Curl', 2], ['Good Morning', 0],
+  ],
+  Glutes: [
+    ['Hip Thrust', 0], ['Glute Bridge', 0], ['Single Leg Hip Thrust', 0],
+    ['Cable Glute Kickback', 0], ['Hip Abduction', 0],
+  ],
+  'Lower Back': [
+    ['Back Extension', 2], ['Reverse Hyperextension', 0], ['Superman', 2],
+  ],
 };
 
 /* Made once, and only when there are none: an import brings its own and must
@@ -940,7 +973,7 @@ TRAIN.seedCats = function () {
   if (Object.keys(TRAIN.cats()).length) return 0;
   var made = 0;
   TRAIN.DEFAULT_CATS.forEach(function (nm, i) {
-    var catId = nm.toLowerCase();
+    var catId = TRAIN.catId(nm);
     Rec.set('excat', null, catId, { name: nm, slot: i, ord: i });
     (TRAIN.DEFAULT_EX[nm] || []).forEach(function (row, j) {
       var name = row[0], kind = row[1];
@@ -962,6 +995,31 @@ TRAIN.seedCats = function () {
     });
   });
   TRAIN.reindex();
+  return made;
+};
+
+/* ── the groups a store made before today has never seen ──
+   `seedCats` runs only on a store with nothing in it, so adding a muscle
+   group to the list above would never reach a log that already exists — which
+   is every log that matters, Tom's included. This adds any standard group
+   that is missing, and nothing else: no exercise is moved, because which
+   group a movement belongs to is his call once he has one.
+
+   A group he deleted on purpose stays deleted. `Rec.tombstone` is how that is
+   known, rather than a setting remembering what this device has written:
+   a setting is one row, so two devices each keep only the later one's list
+   and a device opened before the synced rows arrive trusts an empty picture.
+   Known traps, the setting that remembers. For the same reason this runs
+   after `Rec.ready`, when the tombstones from every device are in. */
+TRAIN.fillCats = function () {
+  var have = TRAIN.cats(), ord = 0, made = 0;
+  Object.keys(have).forEach(function (k) { if ((have[k].ord | 0) > ord) ord = have[k].ord | 0; });
+  TRAIN.DEFAULT_CATS.forEach(function (nm, i) {
+    var id = TRAIN.catId(nm);
+    if (have[id] || Rec.tombstone('excat', null, id)) return;
+    Rec.set('excat', null, id, { name: nm, slot: i, ord: ++ord });
+    made++;
+  });
   return made;
 };
 
@@ -990,7 +1048,7 @@ TRAIN.seedId = function (name) {
 TRAIN.foldSeeds = function () {
   var starter = {};
   TRAIN.DEFAULT_CATS.forEach(function (nm) {
-    (TRAIN.DEFAULT_EX[nm] || []).forEach(function (row) { starter[nm.toLowerCase() + '|' + row[0].toLowerCase()] = 1; });
+    (TRAIN.DEFAULT_EX[nm] || []).forEach(function (row) { starter[TRAIN.catId(nm) + '|' + row[0].toLowerCase()] = 1; });
   });
   var groups = {};
   Rec.all('exercise').forEach(function (r) {
@@ -1644,7 +1702,7 @@ TRAIN.importFitNotes = function (buf, onProgress, opts) {
      one of the starter groups. Anything he made or logged stays. */
   function clearSeed() {
     var starter = {};
-    TRAIN.DEFAULT_CATS.forEach(function (n) { starter[n.toLowerCase()] = 1; });
+    TRAIN.DEFAULT_CATS.forEach(function (n) { starter[TRAIN.catId(n)] = 1; });
     var exs = TRAIN.exercises(), inRoutine = {}, removed = 0;
     var px = Rec.map('progex');
     Object.keys(px).forEach(function (k) { inRoutine[px[k].ex] = 1; });
@@ -8200,6 +8258,9 @@ function boot() {
      exercise without one. The starter list fills in round what they have. */
   else if (CLIENT && !Rec.count('excat')) TRAIN.seedCats();
   if (TRAIN.foldSeeds()) TRAIN.recomputePRs();
+  /* Only once every device's rows and tombstones are in, or a group deleted
+     on another device comes back. */
+  Rec.ready(function () { if (TRAIN.fillCats() && TRAIN.redraw) TRAIN.redraw(); });
   /* and again whenever exercises or sets arrive from another copy */
   var foldT = null;
   Rec.on(function (rows) {
