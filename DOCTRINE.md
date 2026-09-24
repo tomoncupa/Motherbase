@@ -291,7 +291,7 @@ called testers until 2026-09-14, and not the coaching clients in WEALTH.
 | NOTICE | `system/` | everywhere | no, Tom only | Text in, a status window out. A game notice or quest window as a picture, for a post or a story. Built 2026-09-15. |
 | SPEAK | `speak/` | everywhere | no, Tom only | Talking to a camera, measured. A path of drills for pace, fillers, flow, clarity and eyes, a daily warm-up, a streak. Numbers against his own targets, never a verdict. |
 | COACH | `coach/` | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. A separate app, with TRAIN as its core file. A profile is the same client as in WEALTH, so a 1:1 logged here is a session WEALTH counts. A log arrives as a file the client sends from TRAIN's share menu; sending again only adds what is new. Built 2026-09-22 as a Pokémon PC box: clients from CHECK IN in three boxes, a client's TRAIN file opened into their own rows, strength, recent sessions, the range, and first sets sent back as a program file. Since 1.0.1 a 1:1 is logged in COACH as sets, WEALTH counts it as a session, and every client is in both apps. Since 1.0.4 their check-ins are on the profile too — the photos, the measurements and what changed since last time, read out of CHECK IN's own rows rather than copied, and a check-in file opens here as well. |
-| FORGE | `forge/` | desktop only | no, Tom only | The program builder, built 2026-09-24. Works like BLOCK: days are lanes, exercises are plates dragged in from a bin, and weeks run along the top. Each exercise carries sets, reps, first-set load, RIR and rest; a later week says only what changes. Every program is published into COACH's PROGRAMS, and SEND puts it on a client and saves the file their TRAIN opens, one routine per week. |
+| FORGE | `forge/` | desktop only | no, Tom only | The program builder, built 2026-09-24. Works like BLOCK: days are lanes, exercises are plates dragged in from a bin, and weeks run along the top. Each exercise carries sets, a rep range, first-set load, RIR (0-3 unless set) and rest, per the Algrowrithm; a later week says only what changes. Every program is published into COACH's PROGRAMS, and SEND puts it on a client and saves the file their TRAIN opens, one routine per week. |
 
 ARC, BLOCK and STYLE are not meant to work on a phone. Tom, 2026-09-14.
 
@@ -476,8 +476,16 @@ block for one client or for sale.
 **Good looks like:** BLOCK's furniture. A day is a lane, an exercise is a
 plate in its muscle group's colour, and the bin down the left is TRAIN's own
 vocabulary, so an exercise is dragged from the bin into a day. Week one is
-typed once; every later week inherits it, with a load step per week if one is
-set, and says only what it changes. A deload is three numbers in one week.
+typed once; every later week inherits it and says only what it changes. A
+deload is a few numbers in one week.
+
+**It is built on the Algrowrithm** (Tom's Google Doc of that name). Effort is
+the constant, 0 to 3 reps from a true limit. Reps travel down a range across
+the sets while the load goes up, decided set by set from how the one before
+went. So FORGE takes a rep RANGE and shows its bands (8-15 over three sets
+is 13-15, 10-13, 8-10), sends only set one's load, and has no weekly load
+step. Tom, 2026-09-24: *"that's why I won't prescribe numbers for sets 2
+onwards."*
 The WEEKS view is the whole block on one screen, and the strip over the days
 counts the sets each muscle group gets that week, the way TRAIN counts them.
 
