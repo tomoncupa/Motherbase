@@ -32,13 +32,47 @@ wanted, and the reading costs nothing.
 ## The pipe, in order
 
 ```
-iPhone Shortcut  ->  iCloudDrive/Receipts/in/      photo or payment screenshot
-scheduled task   ->  tools/receipts/read_receipt.py, every 5 minutes
-  that script    ->  Receipts/out/<name>.json      one record per photo
-  and            ->  Receipts/done/<name>.jpg      the proof, never deleted
-RECEIPTS app     ->  reads out/ through the browser's folder permission
-  one tap        ->  spend / paid / buy / receipt / alias rows
+iPhone camera roll  ->  Pictures/iCloud Photos/Photos   iCloud for Windows mirrors it
+  or a file by hand ->  iCloudDrive/Receipts/in/
+scheduled task      ->  tools/receipts/read_receipt.py under pyw, every 5 minutes
+  ocr.ps1           ->  Windows reads each new picture's words, free
+  likely ones       ->  COPIED into Receipts/in/ (a HEIC becomes a JPEG)
+  claude.exe        ->  Receipts/out/<name>.json      one record per photo
+  and               ->  Receipts/done/<name>.jpg      the proof, never deleted
+RECEIPTS app        ->  reads out/ through the browser's folder permission
+  one tap           ->  spend / paid / buy / receipt / alias rows
 ```
+
+## The camera roll
+
+Tom, 2026-09-24: *"Can it auto copy from my photos?"* Nothing is done on the
+phone. The Shortcut is gone from `RECEIPTS.md`; `in/` stays for a file
+dropped by hand.
+
+- **Copy, never move or delete, in `Pictures/iCloud Photos/Photos`.** It is
+  his iCloud library: a file removed there is removed from his iPhone.
+- **Pictures dated 2026-09-01 on** (the file's time; EXIF would mean
+  downloading every picture just to read a date). `SINCE` in the script.
+- **Windows OCR first, Claude second.** `ocr.ps1` reads a batch of pictures
+  in one PowerShell. `looks_like()` passes a picture on one strong phrase
+  (GCash, Ref No, VATable, Nutrition Facts...) or two weak words (total,
+  cash, kcal...), or a column of three prices. Up to 120 pictures OCR'd and
+  15 read by Claude per run, so the backlog drains over several runs.
+- **A camera picture Claude calls `other` writes nothing** and makes no card.
+  One dropped in `in/` by hand still gets a card, since he chose to send it.
+- **`Receipts/seen.json`** holds every picture looked at and what it was
+  (`skip`, `picked`, `receipt`, `label`, `other`, `failed`, `e1`/`e2` for
+  Windows failing to open it, `unreadable` after three). Deleting it makes
+  the next runs look at September again.
+- **Most of the library is cloud stand-ins, and the disk had about 1.2 GB
+  free (2026-09-24).** Reading a picture downloads it. After each chunk of 20,
+  `give_back()` sets `attrib +U` on the ones that were stand-ins, waits for
+  iCloud to free them, then `attrib -U`, so the file ends as it was found.
+  Below 500 MB free the run stops.
+- **Python cannot see the OFFLINE bit on these files; PowerShell can.** The
+  stand-in test is `RECALL_ON_DATA_ACCESS` (0x400000). The first dry run
+  tested OFFLINE, handed nothing back, and took the disk from 1,222 MB to
+  370 MB before it was stopped; the 575 pictures were returned by hand.
 
 ## Where the rows go
 
@@ -133,19 +167,12 @@ the card, the filed list and the undo for nothing.
   generated image: clean, flat, straight. A folded, angled, badly lit one is
   Tom's test.
 - **Never opened on a phone**, and it is a desktop app.
-- **The scheduled task is not registered and `Receipts/in` does not exist**
-  (checked 2026-09-24). Tom said yes to both; the next session does them.
-- **Next: the reader watches his camera roll, not a drop folder.** Tom,
-  2026-09-24, chose it over a shared album and the Shortcut. iCloud for
-  Windows already mirrors his whole library to
-  `C:/Users/user/Pictures/iCloud Photos/Photos` (30,680 files, mostly JPG,
-  about 32 new pictures a day). Photos from 2026-09-01 on only. A free first
-  pass with Windows' own OCR (`Windows.Media.Ocr`, en-US installed) sends
-  only pictures with receipt, payment or label words on to `claude.exe`.
-  **Copy, never move: deleting in that folder deletes the photo from his
-  iPhone.** A `src: 'other'` answer is skipped without a card.
-- The Shortcut in `RECEIPTS.md` starts with Take Photo, which is wrong when it
-  is run from the share sheet. Moot if the camera-roll watch replaces it.
+- **How many receipts the word filter misses is unknown.** It picked 34 of
+  792 September pictures; nobody has gone through the 758 it skipped. A
+  missed one is saved into `in/` by hand.
+- A camera-roll picture with no printed date is dated the day it was taken,
+  `date_from: 'photo'`, and says so in `unsure`. The app does not read
+  `date_from`; the sentence is what he sees.
 - Chrome hands a folder permission back as "ask" after the tab closes, so the
   first poll of a session asks once. That is the browser, not the app.
 - A `buy` row is written and nothing reads it yet. FOODDÉX is the natural
@@ -224,3 +251,21 @@ today. `_review.html` 116 of 116, foundation 328 of 328.
 **Untested:** a brief arriving through the FOLDER rather than the file input,
 because the folder permission needs a real click on a real picker. The code
 path after the JSON is parsed is the same one, and that half was driven.
+
+**Camera roll, 2026-09-24.** No app change; `tools/receipts/` only. The
+reader watches `Pictures/iCloud Photos/Photos` (see "The camera roll"), and
+the task is registered: "Motherbase receipts", `pyw.exe` by full path, every
+5 minutes from registration and from each logon, as Tom's own account.
+`install-task.ps1` had never been run and failed three ways on Windows 11
+(MaxValue duration out of range, all-users logon needs admin, `pyw.exe` not
+found off his PATH); all three fixed.
+
+**Watched, 2026-09-24:** a dry run over 792 September pictures picked 34
+(8 nutrition labels, 3 GCash, the rest reference numbers, VAT and prices)
+and left all 792 as cloud stand-ins with no `+U` flag behind. The first real
+run from the task: 120 OCR'd, 4 picked, one called `other` and dropped with
+no JSON, two bank transfers and one Super Healthee receipt written to `out/`.
+The receipt's smudged total (585.71 or 685.71 against a 694.00 subtotal) was
+left empty and said why. The two transfers print no date, which is what
+added the photo-date fallback; the three waiting records were patched to
+match. Disk free stayed at about 1.1 GB. Not yet opened in the RECEIPTS app.

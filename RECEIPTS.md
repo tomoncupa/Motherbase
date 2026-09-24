@@ -4,8 +4,8 @@ Take a picture of a receipt, or share a GCash screenshot, and the money shows
 up in WEALTH and the shopping shows up against your foods. You confirm each
 one with a tap. Nothing is saved without you.
 
-A photo of a **nutrition label** goes the same way, through the same
-Shortcut, and becomes a food in FOODDÉX. The reader works out which one it is
+A photo of a **nutrition label** goes the same way and becomes a food in
+FOODDÉX. The reader works out which one it is
 looking at.
 
 It costs nothing to run. The reading is done by the Claude program that is
@@ -15,55 +15,47 @@ already inside the desktop app, on the subscription you already pay for.
 
 ## What happens, in order
 
-1. You photograph a receipt on the phone, or share a payment screenshot.
+1. You photograph a receipt, or screenshot a GCash or bank payment, the way
+   you already do. Nothing else on the phone.
 2. iCloud carries it to the PC, usually inside a minute or two.
-3. Every five minutes the PC reads any new photo and writes down what it says.
+3. Every five minutes the PC looks at your new photos. Windows reads the
+   words on each one for free, and only a photo with receipt, payment or
+   label words on it goes on to Claude. Selfies and memes cost nothing.
 4. RECEIPTS shows it waiting. You check the amount, tap any food it asks
    about, and press SAVE.
 5. The money becomes a spending row — the same row you get by typing
    "paid 250 - lunch" into STATUS — and WEALTH counts it like any other.
    Money coming IN becomes a one-off payment instead.
-6. The photo stays on the PC as proof of purchase. Nothing is deleted.
+6. A copy of the photo stays on the PC as proof of purchase. **Your photo
+   library is never moved, renamed or deleted.** The PC only copies out of it.
+
+Photos from 1 September 2026 on are looked at. Older ones are not.
 
 ---
 
 ## Setting it up, once
 
-### 1. The folder
+### 1. Windows checks every five minutes
 
-Make a folder called **Receipts** in iCloud Drive, and a folder called **in**
-inside it. The rest of the folders make themselves the first time the reader
-runs.
-
-### 2. Tell Windows to check it
-
-Open PowerShell and paste this one line:
+This is already set up on the PC. If it ever needs doing again, open
+PowerShell and paste this one line:
 
 ```
 powershell -ExecutionPolicy Bypass -File "C:\Users\user\Downloads\Motherbase\tools\receipts\install-task.ps1"
 ```
 
-That is the whole install. To stop it later, the same line with ` -Remove` on
-the end.
+To stop it, the same line with ` -Remove` on the end.
 
-### 3. The iPhone Shortcut
-
-In the Shortcuts app, make a new shortcut called **Receipt**:
-
-- **Take Photo** — turn off *Show Camera Preview* if you want it instant.
-- **Save File** — set it to iCloud Drive → Receipts → **in**, and turn OFF
-  *Ask Where to Save*.
-
-Then open the shortcut's settings and turn on **Show in Share Sheet**, with
-*Images* and *Screenshots* ticked. Now a GCash or bank screenshot can be sent
-straight in from the share button, and the same shortcut on the Home Screen
-takes a receipt photo.
-
-### 4. Point RECEIPTS at the folder
+### 2. Point RECEIPTS at the folder
 
 Open RECEIPTS on the PC in Chrome, press the button at the top left of the
-header, and choose **Receipts → out**. You only do this once per browser;
-Chrome asks you to allow it again the first time each day.
+header, and choose **iCloud Drive → Receipts → out**. You only do this once
+per browser; Chrome asks you to allow it again the first time each day.
+
+### Dropping a photo in by hand
+
+A picture that is not in your photo library, such as one someone sent you,
+still goes in by hand: put it in **iCloud Drive → Receipts → in**.
 
 ---
 
@@ -120,9 +112,14 @@ and stays there.
 
 ## When something looks wrong
 
-**Nothing arrives.** Check `Receipts\receipts.log` — every run writes a line.
-No lines at all means the scheduled task is not running; run the install line
-again.
+**Nothing arrives.** Check `Receipts\receipts.log` — every run that finds new
+photos writes a line saying how many it looked at and how many it picked. No
+new lines after you have taken photos means the scheduled task is not
+running; run the install line again.
+
+**A receipt photo was passed over.** Windows could not make out enough words
+on it. Save that photo into iCloud Drive → Receipts → **in** and it is read
+on the next check.
 
 **A receipt read badly.** The photo is still in `Receipts\done`. Move it back
 into `in` and it is read again.

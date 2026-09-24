@@ -41,6 +41,27 @@
      instead of quietly saving a wrong peso amount.
    * It never runs twice on one photo. done/ is the record of what is finished,
      and a second run skips anything already there.
+
+   -- the camera roll, since 2026-09-24 --
+
+   Tom asked "Can it auto copy from my photos?", so nothing has to be done on
+   the phone. iCloud for Windows mirrors his whole library into
+   Pictures/iCloud Photos/Photos, and every run looks there too, at pictures
+   dated 2026-09-01 or later. Three rules make that safe and cheap:
+
+   * COPY, NEVER MOVE. That folder IS his iCloud library: a file deleted or
+     moved there is deleted from his iPhone. This script only ever opens a
+     picture to read it, and copies a receipt into in/ before touching it.
+   * Windows reads the words first, for free (ocr.ps1). Only a picture with
+     receipt, payment or label words in it reaches claude.exe, because about
+     thirty new pictures a day would otherwise spend the subscription limits
+     he already hits on selfies.
+   * Most of the library is not on the disk, only a stand-in for it, and the
+     disk has little room. A picture that was a stand-in before it was read is
+     handed back to the cloud afterwards, so the folder is left as it was found.
+
+   seen.json in Receipts/ remembers every picture looked at, so no picture is
+   read twice. A picture Claude calls "other" is remembered and makes no card.
 """
 
 import json
@@ -58,7 +79,22 @@ IN, OUT, DONE, BAD = (os.path.join(BASE, d) for d in ('in', 'out', 'done', 'fail
 LOG = os.path.join(BASE, 'receipts.log')
 LOCK = os.path.join(BASE, '.lock')
 PICS = ('.jpg', '.jpeg', '.png', '.heic', '.webp')
+CAMERA = os.environ.get('MB_CAMERA') or os.path.join(
+    os.path.expanduser('~'), 'Pictures', 'iCloud Photos', 'Photos')
+SINCE = datetime(2026, 9, 1).timestamp()   # Tom, 2026-09-24: from September on
+SEEN = os.path.join(BASE, 'seen.json')
+OCR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ocr.ps1')
+OCR_BATCH = 120          # pictures Windows reads per run; the backlog drains over a few runs
+CLAUDE_BATCH = 15        # camera-roll pictures Claude reads per run
+# A cloud stand-in, not on the disk. PowerShell shows these as OFFLINE, but
+# Windows hides that bit from Python; RECALL_ON_DATA_ACCESS is what Python
+# sees, and it is gone once the picture has been downloaded. Watched
+# 2026-09-24: testing OFFLINE here handed nothing back and filled the disk.
+STANDIN = 0x400000
+FLOOR = 500 * 2 ** 20    # stop downloading pictures when the disk has less free than this
 STALE = 20 * 60          # a lock older than this belonged to a run that died
+# the task runs under pyw, with no window, and nothing it starts may open one either
+NOWIN = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 TIMEOUT = 300            # one photo, one reading; longer than this is a hang
 
 
@@ -285,7 +321,13 @@ def sane(rec, name):
     return rec
 
 
-def read_one(exe, name):
+def read_one(exe, name, cam=False, taken=None):
+    """One photo in in/ read into one record in out/.
+
+       A camera-roll copy that turns out not to be money or a label is
+       thrown away rather than filed: the picture is still in his library,
+       and a card for every chat screenshot with a number in it would train
+       him to skim the list. Returns the record's src, or None on a failure."""
     src = os.path.join(IN, name)
     try:
         prompt = PROMPT.format(path='in/' + name)
@@ -293,16 +335,29 @@ def read_one(exe, name):
             [exe, '-p', prompt, '--allowedTools', 'Read',
              '--permission-mode', 'acceptEdits'],
             cwd=BASE, capture_output=True, text=True, encoding='utf-8',
-            errors='replace', timeout=TIMEOUT)
+            errors='replace', timeout=TIMEOUT, creationflags=NOWIN)
         if out.returncode != 0:
             raise RuntimeError((out.stderr or out.stdout or '').strip()[:300]
                                or 'the CLI failed')
         rec = sane(carve(out.stdout), name)
+        # a bank screenshot rarely prints its date, and a card with no date
+        # files as today; for a camera-roll picture the day it was taken is
+        # the honest stand-in, and the card says where the date came from
+        if cam and taken and not rec.get('date') and rec.get('src') != 'label':
+            rec['date'] = datetime.fromtimestamp(taken).strftime('%Y-%m-%d')
+            rec['date_from'] = 'photo'
+            rec['unsure'].append('No date is printed, so this uses the day the '
+                                 'photo was taken.')
+            rec['check'] = True
     except Exception as e:                                    # noqa: BLE001
         log('FAILED  %s  %s' % (name, e))
         shutil.move(src, os.path.join(BAD, name))
-        return False
+        return None
 
+    if cam and rec.get('src') == 'other':
+        os.remove(src)
+        log('other   %s  not a receipt, a payment or a label' % name)
+        return 'other'
     stem = os.path.splitext(name)[0]
     with open(os.path.join(OUT, stem + '.json'), 'w', encoding='utf-8') as f:
         json.dump(rec, f, ensure_ascii=False, indent=1)
@@ -313,12 +368,214 @@ def read_one(exe, name):
         log('read    %s  label  %s  per %s %s%s' % (
             name, rec.get('name') or '(no name)', rec.get('amt'), rec.get('unit'),
             '  NEEDS A LOOK' if rec['check'] else ''))
-        return True
+        return 'label'
     log('read    %s  %s  %s %s  %d line(s)%s' % (
         name, rec.get('merchant') or rec.get('src'), rec.get('currency'),
         rec.get('total'), len(rec['lines']),
         '  NEEDS A LOOK' if rec['check'] else ''))
-    return True
+    return rec.get('src') or 'receipt'
+
+
+# -- the camera roll ---------------------------------------------------------
+
+# One of these is enough on its own: nothing but a receipt, a payment or a
+# label prints them.
+STRONG = ('nutrition facts', 'nutrition information', 'serving size',
+          'servings per', 'per 100 g', 'per 100g', 'amount due', 'vatable',
+          'vat sales', 'vat exempt', 'vat-exempt', 'official receipt',
+          'sales invoice', 'ref no', 'ref. no', 'reference no', 'reference number',
+          'gcash', 'instapay', 'pesonet', 'total amount', 'amount paid',
+          'transaction successful', 'you have sent', 'received from')
+# Any one of these turns up in a chat or a caption, so it takes two.
+WEAK = ('total', 'subtotal', 'change', 'cash', 'php', 'vat', 'tin', 'qty',
+        'receipt', 'invoice', 'amount', 'paid', 'payment', 'transfer', 'fee',
+        'balance', 'calories', 'kcal', 'kj', 'carbohydrate', 'sodium', 'sugars',
+        'maya', 'bpi', 'bdo', 'unionbank', 'metrobank', 'visa')
+WEAK_RE = re.compile(r'\b(%s)\b' % '|'.join(WEAK))
+MONEY_RE = re.compile(r'(?<![\d.])\d{1,3}(?:,\d{3})*\.\d{2}(?![\d.])')
+CHUNK = 20               # pictures downloaded at once, then handed back
+
+
+def looks_like(text):
+    """Why a picture's words say receipt, payment or label, or '' if they
+       do not. The reason goes in the log, so a wrong pick can be traced."""
+    t = ' '.join((text or '').lower().split())
+    if not t:
+        return ''
+    strong = [k for k in STRONG if k in t]
+    if strong:
+        return strong[0]
+    weak = sorted(set(WEAK_RE.findall(t)))
+    if '₱' in t:
+        weak.append('peso sign')
+    # a column of prices is a receipt even when its words are misread
+    if len(MONEY_RE.findall(t)) >= 3:
+        weak.append('prices')
+    return '+'.join(weak) if len(weak) >= 2 else ''
+
+
+def load_seen():
+    try:
+        with open(SEEN, encoding='utf-8') as f:
+            seen = json.load(f)
+        return seen if isinstance(seen, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_seen(seen):
+    tmp = SEEN + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(seen, f, ensure_ascii=False, separators=(',', ':'))
+    os.replace(tmp, SEEN)
+
+
+def attrs(p):
+    try:
+        return os.stat(p).st_file_attributes
+    except (OSError, AttributeError):
+        return 0
+
+
+def ocr(paths=None, jpeg=None):
+    """Windows' reader over a batch: {path: text}, and a picture it could
+       not open maps to None. With `jpeg` ({src: dst}) it writes JPEG copies
+       instead, which is how a HEIC reaches Claude."""
+    lst = os.path.join(BASE, '.ocr-list.txt')
+    with open(lst, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(['%s|%s' % kv for kv in jpeg.items()] if jpeg else paths))
+    try:
+        out = subprocess.run(
+            ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', OCR,
+             '-List', lst] + (['-Jpeg'] if jpeg else []),
+            capture_output=True, text=True, encoding='utf-8', errors='replace',
+            timeout=20 * 60, creationflags=NOWIN)
+    finally:
+        try:
+            os.remove(lst)
+        except OSError:
+            pass
+    got = {}
+    for line in out.stdout.splitlines():
+        try:
+            o = json.loads(line.lstrip('﻿'))
+        except ValueError:
+            continue
+        got[o.get('path')] = o.get('text') if 'text' in o else None
+    return got
+
+
+def give_back(paths):
+    """Hand pictures that were cloud stand-ins back to the cloud.
+
+       Reading one downloads it, and this disk has little room: the backlog
+       alone would fill it. attrib +U asks iCloud to free the local copy, and
+       -U afterwards clears the request, so the file ends in exactly the state
+       it was found. Returns the names iCloud had not freed yet; they keep +U,
+       which is what iCloud's own "Free up space" sets, until the next run."""
+    for p in paths:
+        subprocess.run(['attrib', '+U', '-P', p], capture_output=True, creationflags=NOWIN)
+    left, wait = list(paths), time.time() + 60
+    while left and time.time() < wait:
+        time.sleep(1)
+        left = [p for p in left if not attrs(p) & STANDIN]
+    for p in paths:
+        if p not in left:
+            subprocess.run(['attrib', '-U', p], capture_output=True, creationflags=NOWIN)
+    return [os.path.basename(p) for p in left]
+
+
+def camera(exe, dry=False):
+    """New camera-roll pictures: read for words, copy the likely ones into
+       in/, and hand Claude those copies. Never writes to CAMERA itself,
+       beyond asking iCloud to take back what reading it downloaded."""
+    if not os.path.isdir(CAMERA):
+        return
+    seen = load_seen()
+    unpin = seen.setdefault('_unpin', [])
+    for n in list(unpin):
+        p = os.path.join(CAMERA, n)
+        if attrs(p) & STANDIN or not os.path.exists(p):
+            subprocess.run(['attrib', '-U', p], capture_output=True, creationflags=NOWIN)
+            unpin.remove(n)
+
+    now, todo = time.time(), []
+    with os.scandir(CAMERA) as it:
+        for e in it:
+            n = e.name
+            if not n.lower().endswith(PICS) or not e.is_file():
+                continue
+            if n in seen and not seen[n].startswith('e'):
+                continue       # settled; 'e1', 'e2' are Windows failing to open it
+            st = e.stat()
+            # a picture still arriving from the phone waits for the next run
+            if st.st_mtime >= SINCE and now - st.st_mtime > 60:
+                todo.append((st.st_mtime, n, st.st_file_attributes))
+    todo.sort()
+    if not dry:
+        todo = todo[:OCR_BATCH]
+    picks, looked, skipped = [], 0, 0
+
+    for i in range(0, len(todo), CHUNK):
+        if shutil.disk_usage(CAMERA).free < FLOOR:
+            log('camera  stopped: under 500 MB free on the disk')
+            break
+        part = todo[i:i + CHUNK]
+        paths = [os.path.join(CAMERA, n) for _, n, _ in part]
+        texts = ocr(paths)
+        heic, mine = {}, []
+        for (_, n, _), p in zip(part, paths):
+            looked += 1
+            text = texts.get(p)
+            if text is None:
+                # iCloud may simply be offline; three strikes and it is dropped
+                tries = int(seen.get(n, 'e0')[1:] or 0) + 1
+                seen[n] = 'e%d' % tries if tries < 3 else 'unreadable'
+                continue
+            why = looks_like(text)
+            if not why or (not dry and len(picks) + len(mine) >= CLAUDE_BATCH):
+                if not why:
+                    seen[n] = 'skip'
+                    skipped += 1
+                continue       # a pick past this run's allowance waits for the next
+            mine.append((n, why))
+            # if this run dies before Claude reads the copy, the next run's
+            # in/ pass reads it; 'picked' stops the camera copying it again
+            seen[n] = 'picked'
+            if dry:
+                print('PICK  %s  %s' % (n, why), flush=True)
+            elif n.lower().endswith('.heic'):
+                heic[p] = os.path.join(IN, os.path.splitext(n)[0] + '.jpg')
+            else:
+                # copy, never move: the picture in CAMERA is his iCloud library
+                shutil.copy2(p, os.path.join(IN, n))
+        if heic:
+            ocr(jpeg=heic)
+        # the copies are made, so the downloads can go back
+        unpin.extend(give_back([p for (_, n, a), p in zip(part, paths) if a & STANDIN]))
+        picks += mine
+        if not dry:
+            save_seen(seen)
+
+    if dry:
+        print('looked at %d, picked %d, skipped %d' % (looked, len(picks), skipped))
+        return
+    if looked:
+        log('camera  looked at %d new photo(s), picked %d%s' % (
+            looked, len(picks), ', more waiting' if len(todo) >= OCR_BATCH else ''))
+    for n, why in picks:
+        name = os.path.splitext(n)[0] + '.jpg' if n.lower().endswith('.heic') else n
+        if not os.path.isfile(os.path.join(IN, name)):
+            seen[n] = 'unreadable'
+            continue
+        log('picked  %s  (%s)' % (n, why))
+        try:
+            taken = os.stat(os.path.join(CAMERA, n)).st_mtime
+        except OSError:
+            taken = None
+        seen[n] = read_one(exe, name, cam=True, taken=taken) or 'failed'
+        save_seen(seen)
+    save_seen(seen)
 
 
 def main():
@@ -343,6 +600,7 @@ def main():
                 work.append(n)
         for n in work:
             read_one(exe, n)
+        camera(exe)
         return 0
     finally:
         try:
@@ -352,4 +610,9 @@ def main():
 
 
 if __name__ == '__main__':
+    if '--dry' in sys.argv:
+        # which camera-roll pictures would be picked: no Claude read, no copy,
+        # nothing remembered
+        camera(None, dry=True)
+        sys.exit(0)
     sys.exit(main())
