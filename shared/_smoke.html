@@ -145,6 +145,39 @@ async function run() {
     }
     return false;
   })());
+  /* 2026-09-24: Main Menu.exe's localStorage was full to the byte and Google
+     sign-in refused to open. A full fast half now moves its oldest-dated rows
+     to IndexedDB only. Never an undated row, never a copy newer than
+     IndexedDB's, and a moved row is still there after a reload. */
+  ok('rec: a full fast half moves its oldest rows out, and they come back', await (async () => {
+    if (!Rec.stats().idb) return true;
+    const P = 'mb.r.', D0 = '1899-12-30', D1 = '1899-12-31', D2 = '1900-01-01';
+    Rec.set(stamp, D0, 'trim0', { v: 0 });
+    Rec.set(stamp, D1, 'trim1', { v: 1 });
+    Rec.set(stamp, D2, 'trim2', { v: 2 });
+    Rec.set(stamp, null, 'trimu', { v: 3 });
+    Rec.flush();
+    await new Promise(r => setTimeout(r, 400));
+    const id = (dd, k) => Rec.row(stamp, dd, k).id;
+    const j0 = JSON.parse(localStorage.getItem(P + id(D0, 'trim0')));
+    j0.updated_at = new Date(Date.now() + 60000).toISOString();
+    localStorage.setItem(P + id(D0, 'trim0'), JSON.stringify(j0));
+    await Rec._trim(Infinity);
+    const n = await Rec._trim(0, Rec._fastSize - 1);
+    const has = (dd, k) => localStorage.getItem(P + id(dd, k)) != null;
+    const moved = n === 1 && has(D0, 'trim0') && !has(D1, 'trim1') && has(D2, 'trim2') && has(null, 'trimu')
+      && Rec.get(stamp, D1, 'trim1').v === 1;
+    Rec.reload();
+    const t0 = Date.now();
+    let back = false;
+    while (Date.now() - t0 < 3000) {
+      const g1 = Rec.get(stamp, D1, 'trim1');
+      if (g1 && g1.v === 1 && Rec.hydrated) { back = true; break; }
+      await new Promise(r => setTimeout(r, 25));
+    }
+    [[D0, 'trim0'], [D1, 'trim1'], [D2, 'trim2'], [null, 'trimu']].forEach(x => Rec.del(stamp, x[0], x[1]));
+    return moved && back;
+  })());
 
   /* the whole reason for rows: a stale copy must not win */
   const mine = Rec.row(stamp, d, 'a');
