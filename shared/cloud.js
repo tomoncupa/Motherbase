@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.1.3 — Firebase as a SECOND sync, beside the Google Sheet.
+/* shared/cloud.js — 0.1.4 — Firebase as a SECOND sync, beside the Google Sheet.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
    replacement and it is not allowed to become one. The sheet keeps doing
@@ -95,7 +95,7 @@ var BUILT_IN = {
   projectId: 'motherbase-96011',
   appId: '1:487331976627:web:22a8f4d68be5ebd51aa7c6'
 };
-var cfg = { cfg: null, on: 0, uid: '', email: '', at: '', pushed: '', seen: '' };
+var cfg = { cfg: null, on: 0, uid: '', email: '', at: '', sentAt: '', gotAt: '', lost: '', pushed: '', seen: '' };
 function cread() {
   var was = { pushed: cfg.pushed, seen: cfg.seen };
   try { Object.assign(cfg, JSON.parse(localStorage.getItem(CKEY) || '{}')); } catch (e) {}
@@ -134,12 +134,32 @@ g.addEventListener('storage', function (e) {
 var fb = null, db = null, auth = null, ref = null, query = null;
 var uid = '', loading = null, started = false, pushing = false, pushAgain = false;
 var last = { ok: 0, why: '', at: '', sent: 0, got: 0, skipped: 0 };
+/* What is TRUE right now, rather than what was true when it started. Until
+   0.1.4 "Live" meant only "start() once got this far": Google could sign the
+   device out, the database could refuse the read, or the connection could
+   drop, and the row still said Live with a last-synced time that was really
+   the time it opened. Tom, 2026-09-24: "overall the diagnostic feedback has
+   been innacurate." Both desktop programs sat signed out for seven hours
+   saying nothing. */
+var conn = false;          /* the database says this device is connected */
+var broken = false;        /* the incoming listener was cancelled */
+var watching = false;      /* the lasting sign-in watch is set */
+var connRef = null;
 var listeners = [];
 function say() { listeners.forEach(function (f) { try { f(Cloud.state()); } catch (e) {} }); }
 function note(why, ok) {
   last.why = why || ''; last.ok = ok ? 1 : 0;
-  if (ok) { last.at = new Date().toLocaleString(); cfg.at = last.at; csave(); }
   say();
+}
+/* The database confirmed something: a write landed, or a row arrived. The
+   only thing allowed to move "last synced". Signing in and opening are not
+   syncing, and until 0.1.4 both set it. `sentAt` and `gotAt` are kept apart
+   so the row can say which way things last moved. */
+function landed(way) {
+  var t = new Date().toLocaleString();
+  last.at = t; cfg.at = t;
+  if (way === 'sent') cfg.sentAt = t; else cfg.gotAt = t;
+  csave(); say();
 }
 
 /* ── keys ──────────────────────────────────────────────────────────────── */
@@ -257,7 +277,7 @@ function signIn() {
   }).then(function (r) {
     var u = r && r.user;
     if (!u) throw new Error('signed in, but no account came back');
-    cfg.uid = u.uid; cfg.email = u.email || ''; cfg.on = 1; csave();
+    cfg.uid = u.uid; cfg.email = u.email || ''; cfg.on = 1; cfg.lost = ''; csave();
     note('', 1);
     return start();
   });
@@ -265,7 +285,7 @@ function signIn() {
 
 function signOut() {
   stop();
-  cfg.on = 0; cfg.uid = ''; cfg.email = ''; cfg.seen = ''; cfg.pushed = ''; csave();
+  cfg.on = 0; cfg.uid = ''; cfg.email = ''; cfg.seen = ''; cfg.pushed = ''; cfg.lost = ''; csave();
   var done = Promise.resolve();
   try { if (g.firebase && fb) done = g.firebase.auth(fb).signOut(); } catch (e) {}
   return done.catch(function () {}).then(function () { note('', 0); });
@@ -394,7 +414,7 @@ function onRow(snap) {
   var n = 0;
   try { n = g.Rec ? g.Rec.merge([v]) : 0; } catch (e) { return; }
   if (v.updated_at && v.updated_at > (cfg.seen || '') && v.updated_at <= soon()) { cfg.seen = v.updated_at; csave(); }
-  if (n) { last.got += n; say(); }
+  if (n) { last.got += n; landed('got'); }
 }
 
 function start() {
@@ -410,16 +430,21 @@ function start() {
       var off = auth.onAuthStateChanged(function (u) { off(); res(u); });
     });
   }).then(function (u) {
-    if (!u) { note('signed out. Sign in again to sync', 0); return false; }
+    if (!u) { signedOut(); return false; }
     uid = u.uid;
-    cfg.uid = uid; cfg.email = u.email || ''; csave();
+    cfg.uid = uid; cfg.email = u.email || ''; cfg.lost = ''; csave();
     db  = g.firebase.database(app());
     ref = db.ref('u/' + uid + '/rows');
     query = cfg.seen ? ref.orderByChild('updated_at').startAt(cfg.seen)
                      : ref.orderByChild('updated_at');
+    broken = false;
     query.on('child_added', onRow, onErr);
     query.on('child_changed', onRow, onErr);
+    /* Firebase's own answer to "can the database hear this device". */
+    connRef = db.ref('.info/connected');
+    connRef.on('value', onConn);
     started = true;
+    watch();
     wire();
     note('', 1);
     /* Anything written while this device was away goes up now. */
@@ -434,12 +459,42 @@ function onErr(e) {
   var m = e && e.message ? e.message : 'the database stopped answering';
   if (/permission/i.test(m)) m = 'the database refused the read. Check the rules from the setup note';
   if (/index/i.test(m)) m = 'the database needs its index. Add "rows": { ".indexOn": ["updated_at"] } to the rules';
+  /* A cancelled listener never hears another row, so this is not Live any
+     more, whatever start() said. */
+  broken = true;
   note(m, 0);
+}
+
+function onConn(s) { conn = !!(s && s.val()); say(); }
+
+/* Signed in once, and Google has no sign-in for this device now. It happened
+   to both desktop programs on 2026-09-24, some time after 3:20am, and nothing
+   in the suite signed them out: the sign-in was simply gone. Said in words
+   that name the one fix. */
+function signedOut() {
+  if (cfg.on && !cfg.lost) { cfg.lost = new Date().toLocaleString(); csave(); }
+  note('Google has signed this device out' + (cfg.lost ? ' (noticed ' + cfg.lost + ')' : '') +
+    '. Nothing syncs from here until you sign in again', 0);
+}
+
+/* The sign-in can end while the page is open. Until 0.1.4 the account was
+   read once at start and never again, so a device signed out mid-session kept
+   saying Live. One lasting watch per document, set the first time start()
+   gets a user. */
+function watch() {
+  if (watching || !auth) return;
+  watching = true;
+  auth.onAuthStateChanged(function (u) {
+    if (u || !started) return;
+    stop();
+    signedOut();
+  });
 }
 
 function stop() {
   try { if (query) { query.off('child_added', onRow); query.off('child_changed', onRow); } } catch (e) {}
-  query = null; ref = null; db = null; started = false; uid = '';
+  try { if (connRef) connRef.off('value', onConn); } catch (e) {}
+  query = null; ref = null; db = null; connRef = null; started = false; uid = ''; conn = false; broken = false;
 }
 
 /* ── outgoing ──
@@ -514,14 +569,17 @@ function push(why) {
     pushing = false;
     last.sent += sent; last.skipped += skipped;
     note('', 1);
-    if (pushAgain) { pushAgain = false; return push('again'); }
+    if (sent) landed('sent');
+    if (pushAgain) { pushAgain = false; return push('again').then(function (n) { return n < 0 ? n : sent + n; }); }
     return sent;
   }).catch(function (e) {
     pushing = false;
     var m = e && e.message ? e.message : 'the push did not land';
     if (/permission/i.test(m)) m = 'the database refused the write. Check the rules from the setup note';
     note(m, 0);
-    return 0;
+    /* -1, not 0: "nothing to send" and "the send failed" were the same answer
+       until 0.1.4, so Sync now said Sent after a refused write. */
+    return -1;
   });
 }
 
@@ -556,6 +614,20 @@ function wire() {
   g.Rec.on(nudge);
 }
 
+/* True once the database says it can hear us, false after `ms` without that.
+   Only Sync now waits on it; the connection event lands a moment after start. */
+function waitConn(ms) {
+  if (conn) return Promise.resolve(true);
+  return new Promise(function (res) {
+    var t0 = Date.now();
+    (function tick() {
+      if (conn) return res(true);
+      if (!started || Date.now() - t0 > ms) return res(false);
+      setTimeout(tick, 150);
+    })();
+  });
+}
+
 /* The top document's Cloud when this is a frame of the same site, or null. */
 function topCloud() {
   if (g.top === g) return null;
@@ -564,7 +636,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.1.3',
+  VERSION: '0.1.4',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -576,9 +648,16 @@ var Cloud = {
     return {
       has: !!(cfg.cfg && !missing(cfg.cfg)),
       on: !!cfg.on,
-      live: !!started,
+      /* listening AND nothing has cancelled it. `conn` is separate: a device
+         on a train is still live, just not connected this minute. */
+      live: !!started && !broken,
+      conn: !!started && !broken && conn,
+      out: !!(cfg.on && cfg.lost && !started),
+      lost: cfg.lost || '',
       email: cfg.email || '',
       at: cfg.at || '',
+      sentAt: cfg.sentAt || '',
+      gotAt: cfg.gotAt || '',
       why: last.why || '',
       ok: !!last.ok,
       sent: last.sent, got: last.got, skipped: last.skipped,
@@ -601,7 +680,7 @@ var Cloud = {
     csave(); say();
     return '';
   },
-  forget: function () { stop(); fb = null; cfg = { cfg: BUILT_IN, on: 0, uid: '', email: '', at: '', pushed: '', seen: '' }; csave(); say(); },
+  forget: function () { stop(); fb = null; cfg = { cfg: BUILT_IN, on: 0, uid: '', email: '', at: '', sentAt: '', gotAt: '', lost: '', pushed: '', seen: '' }; csave(); say(); },
 
   signIn: signIn,
   signOut: signOut,
@@ -620,11 +699,25 @@ var Cloud = {
   took: clear,
   start: start,
   stop: stop,
-  /** push whatever is waiting, now */
+  /** push whatever is waiting, now. Resolves with how many rows went up, and
+      rejects with the reason in words when nothing could. */
   sync: function () {
     var T = topCloud();
     if (T) return T.sync();
-    return started ? push('manual') : start().then(function () { return push('manual'); });
+    return (started ? Promise.resolve() : start()).then(function () {
+      if (!started) throw new Error(last.why || 'not signed in');
+      if (broken) throw new Error(last.why || 'the database stopped answering');
+      return waitConn(4000);
+    }).then(function (ok) {
+      /* Firebase holds an offline write until the connection is back, so
+         waiting on it would leave the button spinning for as long as that
+         takes. The rows are safe here and go up by themselves. */
+      if (!ok) throw new Error('this device is offline. Everything is saved here and goes up when the connection is back');
+      return push('manual');
+    }).then(function (n) {
+      if (n < 0) throw new Error(last.why || 'the send did not land');
+      return n;
+    });
   },
 
   /* exposed for the smoke checks, which have no database to talk to */

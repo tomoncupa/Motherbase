@@ -2691,6 +2691,33 @@ async function run() {
     return typeof st.has === 'boolean' && (st.has || (!st.live && !st.on));
   });
 
+  /* 2026-09-24: both desktop programs were signed out by Google for hours and
+     the row still said Live. The check one level under that: the row says
+     Live ONLY when the state says connected, and says Not syncing whenever
+     there is a reason. Driven with a stand-in Cloud, so it needs no account. */
+  const rowSays = st => {
+    const real = window.Cloud, pane = document.createElement('div');
+    window.Cloud = { state: () => Object.assign({ has: true, on: true, file: false }, st), on: () => () => {} };
+    try { IO.cloudRow(pane); } finally { window.Cloud = real; }
+    const p = pane.querySelector('.mb-live-sync p');
+    return p ? p.textContent : '';
+  };
+  ok('live sync row: says Live only when the database says connected', () =>
+    /^Live as/.test(rowSays({ live: true, conn: true, email: 'a@b' })) &&
+    !/^Live/.test(rowSays({ live: true, conn: false, email: 'a@b' })) &&
+    !/^Live/.test(rowSays({ live: false, conn: false, why: 'x' })));
+  ok('live sync row: a signed-out device says Not syncing and why', () =>
+    /^Not syncing\. Google has signed this device out/.test(
+      rowSays({ live: false, conn: false, out: true, why: 'Google has signed this device out' })));
+  ok('live sync row: last synced is the last send, never the time it opened', () => {
+    const t = rowSays({ live: true, conn: true, email: 'a@b', at: 'OPENED', sentAt: 'SENT' });
+    return /Last sent SENT/.test(t) && !/OPENED/.test(t);
+  });
+  ok('live sync: the state says connected only when it is listening', () => {
+    const st = Cloud.state();
+    return typeof st.conn === 'boolean' && (!st.conn || st.live);
+  });
+
   /* ── the coach shelf ──
 
      `send`, `waiting` and `took`, driven for real against a database held in

@@ -1489,9 +1489,18 @@ const IO = {
         return;
       }
 
-      line.innerHTML = s.live
-        ? 'Live as <b>' + esc(s.email || 'signed in') + '</b>.' + (s.at ? ' Last synced <b>' + esc(s.at) + '</b>.' : '')
-        : s.why ? esc(s.why)
+      /* Only what is true this minute. Until cloud.js 0.1.4 this said Live
+         for anything that had started once, with a "last synced" that was
+         really the time the page opened, and both desktop programs sat
+         signed out for hours under it. */
+      const times = (s.sentAt ? ' Last sent <b>' + esc(s.sentAt) + '</b>.' : '') +
+        (s.gotAt ? ' Last received <b>' + esc(s.gotAt) + '</b>.' : '');
+      line.innerHTML = s.conn
+        ? 'Live as <b>' + esc(s.email || 'signed in') + '</b>, connected.' + times
+        : s.live
+        ? 'Signed in as <b>' + esc(s.email || 'you') + '</b>, but not connected right now. Everything is saved here and goes up when the connection is back.' + times
+        : s.why ? '<b>Not syncing.</b> ' + esc(s.why) + '.' + times
+        : s.on ? '<b>Not syncing yet.</b> Starting up.' + times
         : 'Set up on this device, and not signed in yet.';
 
       const btn = (label, cls, fn) => {
@@ -1513,8 +1522,8 @@ const IO = {
         btn('Sync now', 'go', e => {
           const b = e.currentTarget;
           b.disabled = true;
-          C.sync().then(() => { b.disabled = false; toast('Sent'); draw(); },
-            () => { b.disabled = false; toast('Nothing went up this time', { bad: true }); draw(); });
+          C.sync().then(n => { b.disabled = false; toast(n ? 'Sent ' + n + ' rows' : 'Nothing new to send. Everything here is already up'); draw(); },
+            err => { b.disabled = false; toast(err && err.message ? err.message : 'Nothing went up this time', { bad: true }); draw(); });
         });
         btn('Sign out', '', () => { C.signOut().then(() => { toast('Live sync is off'); draw(); }); });
       }
