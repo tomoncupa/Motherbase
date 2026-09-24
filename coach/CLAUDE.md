@@ -126,6 +126,29 @@ shelf is for and who it is not for.
   For a 1:1 that day cannot exist. For an online client it should not bill,
   because they are not buying sessions. Nothing to change.
 
+## Client files, decided and not built (2026-09-24)
+
+Tom settled how a client's things reach him. Clients here means coaching
+clients on the client build. Spans COACH, CHECK IN, TRAIN and `cloud.js`.
+
+1. **Check-ins go on the shelf too.** Same SEND TO COACH, nothing leaves until
+   pressed. One parcel per photo, shrunk to 1080px for the trip, so each fits
+   the two-million-character cap.
+2. **Programs come back over a reverse shelf.** Tom sends from COACH; it lands
+   in the client's TRAIN on their next open. The file stays as the fall-back.
+3. **Client photos live on the PC.** Live sync keeps skipping them; the sheet
+   is the second copy. Tom: minimise the files he gets. So a send with no
+   signal WAITS on the phone and goes by itself when signal returns, and
+   signing in becomes a step in `ONBOARDING.md`. A file is left only for a
+   blocked Firebase or a folder copy.
+4. **Keep past clients, with a delete button.** Delete wipes their training,
+   check-ins and photos (`cset` and the other `c` types, `cval`, `cphoto`,
+   `cmark`, `cref`). WEALTH keeps their `client`, `paid`, `sesh` and `pack`
+   under their name: that is his income history.
+
+First real test of any of it: Tom and one online client both signed in,
+sending one session. The real database has never been in the loop.
+
 ## Needs from the foundation
 
 `shared/_smoke.html` has no checks for the coach shelf (`Cloud.send`,
