@@ -258,7 +258,10 @@ no key could be written. Firebase tests a write before it opens a sign-in.
 Once IndexedDB answers, `trimFast` now brings the fast half back to 3M chars
 once it is past 3.5M: oldest-dated rows first, never undated rows or
 settings, and only rows IndexedDB holds at the same or a newer time. One
-`rec:` smoke check covers it.
+`rec:` smoke check covers it. **IndexedDB was NOT "written always"**: on
+that PC it held 65 rows against 17,655 in localStorage, because rows from
+before it existed never went in. `makeRoom` copies every missing row in and
+waits for the transaction to complete before anything is trimmed.
 
 ## History
 

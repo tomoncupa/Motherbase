@@ -508,6 +508,25 @@ function loadFast() {
    newer time. A trimmed row is exactly a big row: missing from the first
    paint, there a few milliseconds later. */
 const FAST_MAX = 3500000, FAST_TO = 3000000;
+/* "Written always" was only true from the day IndexedDB arrived: a row
+   written before then, or brought in by a merge, sits in the fast half alone.
+   Main Menu.exe held 65 rows in IndexedDB against 17,655 in localStorage. So
+   before trimming, every row IndexedDB lacks or holds older is copied in, and
+   the trim waits for that transaction to COMPLETE, never just to start. */
+function makeRoom(idbList, max, to) {
+  max = max == null ? FAST_MAX : max;
+  if (fastSize <= max) return Promise.resolve(0);
+  const held = Object.create(null);
+  (idbList || []).forEach(r => { if (r && r.id) held[r.id] = r.updated_at || ''; });
+  const missing = [];
+  Store.keys().forEach(k => {
+    const r = rows[k.slice(PREFIX.length)];
+    if (r && (held[r.id] == null || held[r.id] < r.updated_at)) missing.push(r);
+  });
+  if (!missing.length) return Promise.resolve(trimFast(idbList, max, to));
+  return IDB.put(missing).then(() => IDB.all()).then(list => trimFast(list, max, to))
+    .catch(e => { console.warn('[records] could not copy rows into indexeddb; nothing trimmed', e); return 0; });
+}
 function trimFast(idbList, max, to) {
   max = max == null ? FAST_MAX : max; to = to == null ? FAST_TO : to;
   if (fastSize <= max) return 0;
@@ -566,7 +585,7 @@ function hydrate() {
       keep(r); serial[r.id] = JSON.stringify(r.payload); changed++;
     });
     if (changed) { repairDates(); announce([], false); }
-    try { trimFast(list); } catch (e) { console.warn('[records] trim', e); }
+    try { makeRoom(list); } catch (e) { console.warn('[records] trim', e); }
     hydrated = true; flushReady();
   }).catch(e => {
     settled = true; clearTimeout(slow); idbSlow = false;
@@ -894,7 +913,7 @@ const Rec = {
      once past `max`. Resolves with how many rows left it. */
   _trim(max, to) {
     fastSize = Store.keys().reduce((n, k) => n + k.length + (Store.get(k) || '').length, 0);
-    return IDB.all().then(list => trimFast(list, max, to));
+    return IDB.all().then(list => makeRoom(list, max, to));
   },
   get _fastSize() { return fastSize; },
 };

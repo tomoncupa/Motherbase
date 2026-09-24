@@ -159,23 +159,28 @@ async function run() {
     Rec.flush();
     await new Promise(r => setTimeout(r, 400));
     const id = (dd, k) => Rec.row(stamp, dd, k).id;
-    const j0 = JSON.parse(localStorage.getItem(P + id(D0, 'trim0')));
-    j0.updated_at = new Date(Date.now() + 60000).toISOString();
-    localStorage.setItem(P + id(D0, 'trim0'), JSON.stringify(j0));
+    /* A row in the fast half ALONE, the way rows from before IndexedDB are:
+       it has to be copied in before it may leave. */
+    const DL = '1899-12-29', lid = 'local|' + stamp + '|' + DL + '|trimL';
+    const lrow = { id: lid, user_id: 'local', type: stamp, date: DL, key: 'trimL', payload: { v: 7 }, updated_at: new Date().toISOString(), deleted: false };
+    localStorage.setItem(P + lid, JSON.stringify(lrow));
+    Rec.reload();
+    await new Promise(r => setTimeout(r, 400));
+    const len = k => k.length + (localStorage.getItem(k) || '').length;
     await Rec._trim(Infinity);
-    const n = await Rec._trim(0, Rec._fastSize - 1);
+    const n = await Rec._trim(0, Rec._fastSize - len(P + lid) - len(P + id(D0, 'trim0')));
     const has = (dd, k) => localStorage.getItem(P + id(dd, k)) != null;
-    const moved = n === 1 && has(D0, 'trim0') && !has(D1, 'trim1') && has(D2, 'trim2') && has(null, 'trimu')
-      && Rec.get(stamp, D1, 'trim1').v === 1;
+    const moved = n === 2 && localStorage.getItem(P + lid) == null && !has(D0, 'trim0') && has(D1, 'trim1')
+      && has(D2, 'trim2') && has(null, 'trimu') && Rec.get(stamp, D0, 'trim0').v === 0;
     Rec.reload();
     const t0 = Date.now();
     let back = false;
     while (Date.now() - t0 < 3000) {
-      const g1 = Rec.get(stamp, D1, 'trim1');
-      if (g1 && g1.v === 1 && Rec.hydrated) { back = true; break; }
+      const g0 = Rec.get(stamp, D0, 'trim0'), gl = Rec.get(stamp, DL, 'trimL');
+      if (g0 && g0.v === 0 && gl && gl.v === 7 && Rec.hydrated) { back = true; break; }
       await new Promise(r => setTimeout(r, 25));
     }
-    [[D0, 'trim0'], [D1, 'trim1'], [D2, 'trim2'], [null, 'trimu']].forEach(x => Rec.del(stamp, x[0], x[1]));
+    [[DL, 'trimL'], [D0, 'trim0'], [D1, 'trim1'], [D2, 'trim2'], [null, 'trimu']].forEach(x => Rec.del(stamp, x[0], x[1]));
     return moved && back;
   })());
 
