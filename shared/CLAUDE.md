@@ -229,6 +229,15 @@ work. Clean up any test data you write, and stop the server when you are done.
   of the mirror section, and `mirrorPut(MIRROR_WAS)` closes it. Use them for
   anything new in there.
 
+## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
+
+A row stamped more than a day ahead (`soon()`) is never sent and never moves
+`pushed` or `seen`; a stored boundary past it resets on read. A push carries
+its edge from chunk to chunk. In a frame, `Cloud.state()` and `Cloud.sync()`
+ask the top document, and the top starts when a frame signs in. Known cost:
+the two leftover 2999 tombstones keep `Rec.newerThan` true, so every push
+runs `Rec.export()`. Root Known traps has why.
+
 ## History
 
 `HISTORY.md`, beside this file, holds the debt list, the numbered foundation
