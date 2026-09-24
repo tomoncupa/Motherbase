@@ -60,7 +60,7 @@ see the root brief on many writers. Every edit merges into the row as it is
 
 | Type | Key | Payload |
 |---|---|---|
-| `excat` | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
+| `excat` | category id, the slug of its name | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex, and there are only twelve |
 | `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup}` |
 | `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, plan, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
 | `session` | `''` | `{start, end, note, from, order, name, vs}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, and a day he picked to compare it with |
@@ -792,6 +792,47 @@ he did not mean.
 `MARKS`, the accent regex, is written as an escape rather than the characters
 themselves. A Python patch script ate the escape once and wrote two invisible
 combining accents into the file instead. Known traps, backslashes in a patch.
+
+## Twelve muscle groups (1.0.24, 2026-09-24)
+
+Tom: *"Add Forearms, Calves, Hamstrings, Glutes, Lower Back."* Seven groups
+meant a leg day was one bar on the week's sets per muscle and said nothing
+about whether he had trained hamstrings at all.
+
+- **Twelve is the ceiling, not a coincidence.** A group stores a slot, and
+  there are twelve: six chart colours in two tints. A group's slot is its place
+  in `DEFAULT_CATS`, so the order there decides the colours. As it stands Legs
+  and Hamstrings come out as two tints of one hue, and so do Core and Lower
+  Back. **A thirteenth group would have to share a colour with another.**
+- **The movements moved rather than multiplied.** A starter exercise's id
+  comes from its NAME (`TRAIN.seedId`), so moving one between groups in
+  `DEFAULT_EX` is the same exercise in a new place. Legs went from 22 to 13,
+  Back 18 to 16, Arms 18 to 15, and ten new movements came with the new groups
+  (Nordic Curl, Reverse Hyperextension, Plate Pinch and so on): 121 starters,
+  no duplicates, measured on a fresh store.
+- **`TRAIN.catId`** slugs a group's name into its key. Every name before today
+  was one word, so this is the same string `nm.toLowerCase()` gave; "Lower
+  Back" is the first that needed a hyphen rather than a space.
+- **`TRAIN.fillCats` is how an existing log gets them.** `seedCats` runs only
+  on a store with nothing in it, so a new group would never reach a log that
+  already exists, which is every log that matters. `fillCats` adds any standard
+  group that is missing and **moves no exercise**: which group a movement
+  belongs to is his call once he has one.
+- **A group he deleted stays deleted**, by `Rec.tombstone`, not by a setting
+  remembering what this device wrote — a setting is one row, so two devices
+  each keep only the later one's list. Known traps, the setting that remembers.
+  For the same reason it runs inside `Rec.ready`, when every device's
+  tombstones are in.
+
+Watched 2026-09-24: a fresh store seeds 12 groups and 121 movements with no
+duplicates; a store seeded before today gained the five as empty groups with
+nothing else touched; a deleted group did not come back across a reload; and a
+day of Romanian Deadlifts and calf raises reads "Hamstrings 2, Calves 1" on the
+session card where it used to read "Legs 3". `_review.html` 116 of 116.
+
+**His own 270 are not re-sorted.** Every exercise from his FitNotes backup
+keeps the group it had, so the five start empty on his device and he moves what
+he wants into them.
 
 ## Parked
 
