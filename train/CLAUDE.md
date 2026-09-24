@@ -668,10 +668,13 @@ COACH's file. `takeProgram` reads the new fields and still accepts every older f
   under its plain `day` name. A file with one week, or none, is one routine,
   `prog-<id>`, exactly as before. A resend deletes the weeks it no longer has,
   and the single routine it used to be.
-- **The target is `progex.plan`**: `{n, rir, rest, note}` when the file sends
-  them. The routine list shows it as `3 × 8 · RIR 2 · 3:00 rest · cue` in
-  place of "previous sets". It is never logged; set one is still the only set
-  filled (`fillFor`, fill 3).
+- **The target is `progex.plan`**: `{n, reps, bands, rir, rest, note}` when
+  the file sends them. The routine list shows it as `3 × 8-15 · 13-15 ·
+  10-13 · 8-10 · RIR 0-3 · 3:00 rest · cue` in place of "previous sets". It
+  is never logged. Set one is still the only set filled (`fillFor`, fill 3),
+  and from FORGE only its load: its reps come from last time. That is Tom's
+  Algrowrithm, the reason set two onwards are never prescribed
+  (`forge/CLAUDE.md`). `reps`, `bands` and a text `rir` came in 1.0.22.
 - **The training screen shows it** as a faded `Coach · …` line under last
   time, when the exercise was started from that routine today (LOG ALL or a
   tap). It is remembered in one setting, `coachPlan`, today's only. On a
