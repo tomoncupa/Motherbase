@@ -250,6 +250,19 @@ that arrived. `Cloud.sync()` resolves with the row count and rejects with the
 reason. Untested: a sign-out while the page is open (needs a real account).
 Why Google dropped the desktop sign-in is still unknown.
 
+## A full fast half (2026-09-24, `records.js`)
+
+Main Menu.exe could not sign in to Google: "web storage must be enabled".
+Its localStorage held 17,672 rows, 5.8M chars, 4M of them TRAIN sets, and
+no key could be written. Firebase tests a write before it opens a sign-in.
+Once IndexedDB answers, `trimFast` now brings the fast half back to 3M chars
+once it is past 3.5M: oldest-dated rows first, never undated rows or
+settings, and only rows IndexedDB holds at the same or a newer time. One
+`rec:` smoke check covers it. **IndexedDB was NOT "written always"**: on
+that PC it held 65 rows against 17,655 in localStorage, because rows from
+before it existed never went in. `makeRoom` copies every missing row in and
+waits for the transaction to complete before anything is trimmed.
+
 ## History
 
 `HISTORY.md`, beside this file, holds the debt list, the numbered foundation

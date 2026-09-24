@@ -481,11 +481,78 @@ function repairDates() {
   return fixed;
 }
 
+let fastSize = 0;
 function loadFast() {
+  fastSize = 0;
   Store.keys().forEach(k => {
-    try { const r = JSON.parse(Store.get(k)); if (r && r.id) { keep(r); serial[r.id] = JSON.stringify(r.payload); } }
+    try {
+      const j = Store.get(k) || '';
+      fastSize += k.length + j.length;
+      const r = JSON.parse(j); if (r && r.id) { keep(r); serial[r.id] = JSON.stringify(r.payload); }
+    }
     catch (e) { console.warn('[records] unreadable row', k); }
   });
+}
+
+/* ── room in the fast half ──
+
+   Found 2026-09-24 in Main Menu.exe: twelve thousand TRAIN sets and the rest
+   of the suite had filled localStorage to the last byte. The store survived
+   that, because write() falls back to IndexedDB, but nothing else on the
+   page could write a single key, and Google sign-in tests for exactly that
+   before it opens: "web storage must be enabled".
+
+   So once IndexedDB has answered, the fast half is trimmed back under
+   FAST_TO whenever it is past FAST_MAX: the oldest-dated rows first, undated
+   rows and settings never, and only a row IndexedDB holds at the same or a
+   newer time. A trimmed row is exactly a big row: missing from the first
+   paint, there a few milliseconds later. */
+const FAST_MAX = 3500000, FAST_TO = 3000000;
+/* "Written always" was only true from the day IndexedDB arrived: a row
+   written before then, or brought in by a merge, sits in the fast half alone.
+   Main Menu.exe held 65 rows in IndexedDB against 17,655 in localStorage. So
+   before trimming, every row IndexedDB lacks or holds older is copied in, and
+   the trim waits for that transaction to COMPLETE, never just to start. */
+function makeRoom(idbList, max, to) {
+  max = max == null ? FAST_MAX : max;
+  if (fastSize <= max) return Promise.resolve(0);
+  const held = Object.create(null);
+  (idbList || []).forEach(r => { if (r && r.id) held[r.id] = r.updated_at || ''; });
+  const missing = [];
+  Store.keys().forEach(k => {
+    const r = rows[k.slice(PREFIX.length)];
+    if (r && (held[r.id] == null || held[r.id] < r.updated_at)) missing.push(r);
+  });
+  if (!missing.length) return Promise.resolve(trimFast(idbList, max, to));
+  return IDB.put(missing).then(() => IDB.all()).then(list => trimFast(list, max, to))
+    .catch(e => { console.warn('[records] could not copy rows into indexeddb; nothing trimmed', e); return 0; });
+}
+function trimFast(idbList, max, to) {
+  max = max == null ? FAST_MAX : max; to = to == null ? FAST_TO : to;
+  if (fastSize <= max) return 0;
+  const held = Object.create(null);
+  (idbList || []).forEach(r => { if (r && r.id) held[r.id] = r.updated_at || ''; });
+  const cands = [];
+  Store.keys().forEach(k => {
+    const id = k.slice(PREFIX.length), r = rows[id];
+    if (!r || !r.date || r.type === 'setting' || held[id] == null) return;
+    cands.push([r.date, k, id]);
+  });
+  cands.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+  let freed = 0, n = 0;
+  for (let i = 0; i < cands.length && fastSize > to; i++) {
+    const k = cands[i][1], id = cands[i][2];
+    try {
+      const j = Store.get(k);
+      if (j == null) continue;
+      const at = (JSON.parse(j) || {}).updated_at || '';
+      if (held[id] < at) continue;          /* this copy is newer than IndexedDB's: keep it */
+      Store.del(k);
+      fastSize -= k.length + j.length; freed += k.length + j.length; n++;
+    } catch (e) {}
+  }
+  if (n) console.warn('[records] fast half was full; moved ' + n + ' old row(s), ' + freed + ' chars, to IndexedDB only');
+  return n;
 }
 
 /* The big half, straight after. Merged rather than assigned, so anything the
@@ -518,6 +585,7 @@ function hydrate() {
       keep(r); serial[r.id] = JSON.stringify(r.payload); changed++;
     });
     if (changed) { repairDates(); announce([], false); }
+    try { makeRoom(list); } catch (e) { console.warn('[records] trim', e); }
     hydrated = true; flushReady();
   }).catch(e => {
     settled = true; clearTimeout(slow); idbSlow = false;
@@ -841,6 +909,13 @@ const Rec = {
       a restore or a sheet pull can run it again over what it just brought in. */
   repairDates() { const k = repairDates(); if (k) announce([], true); return k; },
   _rows: rows,
+  /* for _smoke.html: measure the fast half again and trim it to `to` chars
+     once past `max`. Resolves with how many rows left it. */
+  _trim(max, to) {
+    fastSize = Store.keys().reduce((n, k) => n + k.length + (Store.get(k) || '').length, 0);
+    return IDB.all().then(list => makeRoom(list, max, to));
+  },
+  get _fastSize() { return fastSize; },
 };
 
 /* other tabs and frames on this origin are the same store — one channel, and
