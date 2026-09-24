@@ -142,6 +142,23 @@ and 375, foundation 353 of 353.
 
 ## Open
 
+- **NEXT: movement patterns and muscle groups** (Tom, 2026-09-24: *"I program
+  in terms of movement patterns and muscle groups"*). Settled with Tom, not
+  built yet; he chose to build it on his PC:
+  - **A slot can be either.** A plate may be a pattern or muscle group with no
+    exercise picked ("Horizontal Push", "Quads"), filled per client when the
+    program goes to them. Or it may be a named exercise.
+  - **Every exercise is tagged** with its pattern and the muscle groups it
+    trains, so the weekly totals count sets per pattern and per muscle either
+    way.
+  - **Still open, ask Tom first:**
+    - the pattern list itself (his words, not a textbook's);
+    - where an exercise's tags live, since TRAIN owns `exercise` and has
+      `excat` (one muscle group) and `also` (shares);
+    - how an unfilled slot is filled when a program goes to a client (at
+      SEND in FORGE, or in COACH's USE FOR);
+    - what TRAIN shows for a slot nobody filled.
+
 - The reverse shelf (`coach/CLAUDE.md`, client files item 2) will carry the
   same bag. When it is built, SEND should use it and keep the file as the
   fall-back.
