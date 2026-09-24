@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.22, 2026-09-24">
+<meta name="mb-version" content="1.0.23, 2026-09-24">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -446,8 +446,7 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
   display:flex;align-items:center;justify-content:center}
 .restchip .fill{position:absolute;left:0;bottom:0;height:calc(var(--border-width) * 2);
   background:var(--accent);transition:width var(--dur-fast) linear}
-.restchip.over{color:var(--warn);box-shadow:inset 0 0 0 var(--border-width) var(--warn)}
-.restchip.over .fill{background:var(--warn)}
+
 
 /* ══════════ THE APP MENU ══════════ */
 .navrow{display:flex;align-items:center;gap:var(--s-3);width:100%;border:0;
@@ -2552,6 +2551,81 @@ function drawPickerList(m) {
   drawList(host, (TRAIN.query || '').trim().toLowerCase(), TRAIN.cats(), TRAIN.exercises());
 }
 
+/* ═══════════════ FINDING A MOVEMENT ═══════════════
+   Tom, 2026-09-24: "Make the search function more flexible." It was a plain
+   substring of the lowercased name, so "press bench" found nothing, "pull up"
+   missed "Pull-Up" because of the hyphen, and "bp" missed "Bench Press".
+
+   Five ways in now, each scored, so the closest match sorts to the top and
+   the loosest sits at the bottom rather than being refused:
+
+     100  the whole name
+      90  the name starts with what he typed
+      80  what he typed, in order, anywhere in the name
+      70  every word he typed starts a word of the name, in any order
+      60  the same, but his word can sit anywhere inside a name word
+      50  his letters are the name's initials: bp, ohp, rdl
+      20  his letters in order but not together: bnchprs
+
+   Punctuation and accents come off both sides first, so a hyphen never costs
+   a match. The loosest route needs three letters, or two would match nearly
+   every movement in the list. -1 is no match. */
+/* Written as an escape rather than the characters themselves: a combining
+   accent is invisible in an editor and the next tool to touch this file would
+   mangle it without anyone seeing. Known traps, backslashes in a patch. */
+var MARKS = /[̀-ͯ]/g;
+function fold(str) {
+  var t = String(str == null ? '' : str).toLowerCase();
+  try { t = t.normalize('NFD').replace(MARKS, ''); } catch (e) {}
+  return t;
+}
+function words(str) {
+  return fold(str).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+}
+/* Each query word is spent on one name word, so "press press" does not both
+   land on the same one. */
+function allWordsIn(nw, nq, startOnly) {
+  var used = {}, ok = true;
+  nq.forEach(function (t) {
+    var hit = -1;
+    for (var i = 0; i < nw.length; i++) {
+      if (used[i]) continue;
+      var at = nw[i].indexOf(t);
+      if (startOnly ? at === 0 : at > -1) { hit = i; break; }
+    }
+    if (hit < 0) ok = false; else used[hit] = 1;
+  });
+  return ok;
+}
+TRAIN.nameMatch = function (name, q) {
+  var nq = words(q);
+  if (!nq.length) return 0;
+  var nw = words(name);
+  if (!nw.length) return -1;
+  var flatN = nw.join(' '), flatQ = nq.join(' ');
+  if (flatN === flatQ) return 100;
+  var at = flatN.indexOf(flatQ);
+  if (at === 0) return 90;
+  if (at > 0) return 80;
+  if (allWordsIn(nw, nq, true)) return 70;
+  if (allWordsIn(nw, nq, false)) return 60;
+  var tightQ = nq.join(''), tight = nw.join('');
+  var ini = nw.map(function (w) { return w.charAt(0); }).join('');
+  if (ini.indexOf(tightQ) > -1) return 50;
+  if (tightQ.length < 3) return -1;
+  /* The letters in order but not together. Every letter that lands on the
+     start of a name word counts for one, so "rdl" puts Romanian Deadlift above
+     a name that happens to hold r, d and l somewhere in the middle. */
+  var starts = {}, n = 0;
+  nw.forEach(function (w) { starts[n] = 1; n += w.length; });
+  var i = 0, j = 0, bonus = 0;
+  while (i < tight.length && j < tightQ.length) {
+    if (tight.charAt(i) === tightQ.charAt(j)) { if (starts[i]) bonus++; j++; }
+    i++;
+  }
+  return j === tightQ.length ? 20 + bonus : -1;
+};
+
 function drawList(host, q, cats, exs) {
   host.innerHTML = '';
 
@@ -2593,13 +2667,17 @@ function drawList(host, q, cats, exs) {
     var h = TRAIN.historyOf(id);
     last[id] = h.length ? h[h.length - 1].date : '';
   });
-  var rows = Object.keys(exs).map(function (id) { return { id: id, e: exs[id] }; })
+  var rows = Object.keys(exs).map(function (id) {
+      return { id: id, e: exs[id], sc: q ? TRAIN.nameMatch(exs[id].name, q) : 0 };
+    })
     .filter(function (r) {
-      if (q) return r.e.name.toLowerCase().indexOf(q) > -1;
+      if (q) return r.sc >= 0;
       if (TRAIN.picking === '*fav') return !!r.e.fav;
       return r.e.cat === TRAIN.picking;
     })
     .sort(function (a, b) {
+      /* Closest match first while he is typing; his own order otherwise. */
+      if (q && a.sc !== b.sc) return b.sc - a.sc;
       if (sort === 'recent' && last[a.id] !== last[b.id]) return last[a.id] < last[b.id] ? 1 : -1;
       return a.e.name.localeCompare(b.e.name);
     });
@@ -3953,9 +4031,15 @@ function drawRecords(m) {
   m.appendChild(box);
 
   var rows = Object.keys(exs)
-    .map(function (id) { return { id: id, e: exs[id], r: TRAIN.recordsFor(id, rr) }; })
-    .filter(function (x) { return x.r.sets > 0 && (!q || x.e.name.toLowerCase().indexOf(q) > -1); })
-    .sort(function (a, b) { return a.e.name.localeCompare(b.e.name); });
+    .map(function (id) {
+      return { id: id, e: exs[id], r: TRAIN.recordsFor(id, rr),
+               sc: q ? TRAIN.nameMatch(exs[id].name, q) : 0 };
+    })
+    .filter(function (x) { return x.r.sets > 0 && x.sc >= 0; })
+    .sort(function (a, b) {
+      if (q && a.sc !== b.sc) return b.sc - a.sc;
+      return a.e.name.localeCompare(b.e.name);
+    });
 
   if (!rows.length) {
     var e = UI.el('div', 'empty');
@@ -4043,16 +4127,21 @@ function drawRepMax(m) {
   box.appendChild(input);
   m.appendChild(box);
 
-  var rows = Object.keys(exs).map(function (id) { return { id: id, e: exs[id] }; })
+  var rows = Object.keys(exs).map(function (id) {
+      return { id: id, e: exs[id], sc: q ? TRAIN.nameMatch(exs[id].name, q) : 0 };
+    })
     .filter(function (x) {
       if (favOnly && !x.e.fav) return false;
-      if (q && x.e.name.toLowerCase().indexOf(q) < 0) return false;
+      if (x.sc < 0) return false;
       return TRAIN.historyOf(x.id).some(function (s) {
         return !s.warm && !s.split && s.kg > 0 && s.r > 0 &&
           (!rr.from || (s.date >= rr.from && s.date <= rr.to));
       });
     })
-    .sort(function (a, b) { return a.e.name.localeCompare(b.e.name); });
+    .sort(function (a, b) {
+      if (q && a.sc !== b.sc) return b.sc - a.sc;
+      return a.e.name.localeCompare(b.e.name);
+    });
   if (!rows.length) {
     var e = UI.el('div', 'empty'); e.textContent = 'No records found'; m.appendChild(e);
     return;
@@ -4191,15 +4280,23 @@ function drawRestBar() {
   }
   if (!on) return;
   var left = Math.round((TRAIN.rest.until - Date.now()) / 1000);
-  chip.classList.toggle('over', left <= 0);
+  /* Tom, 2026-09-24: "I don't want to see the over timer in TRAIN." Rest is
+     over, so the chip has nothing left to say: it rings once and goes, and
+     the timer button comes back in its place. The clock is still what decides
+     it, which is the part that mattered — a tab that was suspended past the
+     end comes back, rings and clears rather than resuming where it froze. */
+  if (left <= 0) {
+    if (!TRAIN.rest.fired) {
+      TRAIN.rest.fired = true;
+      if (Rec.setting(APP.id, 'restVibrate') !== 0) Mobile.haptic('complete');
+      if (Rec.setting(APP.id, 'restSound') !== 0 && window.Sfx) Sfx.play('complete', { level: 2 });
+    }
+    TRAIN.restStop();
+    return;
+  }
   var pct = TRAIN.rest.len ? Math.max(0, Math.min(1, left / TRAIN.rest.len)) : 0;
   chip.querySelector('.fill').style.width = Math.round(pct * 100) + '%';
-  chip.querySelector('.t').textContent = left > 0 ? fmtSecs(left) : '+' + fmtSecs(-left);
-  if (left <= 0 && !TRAIN.rest.fired) {
-    TRAIN.rest.fired = true;
-    if (Rec.setting(APP.id, 'restVibrate') !== 0) Mobile.haptic('complete');
-    if (Rec.setting(APP.id, 'restSound') !== 0 && window.Sfx) Sfx.play('complete', { level: 2 });
-  }
+  chip.querySelector('.t').textContent = fmtSecs(left);
 }
 
 /* ═════════════════ THE WORKOUT TIMER ═════════════════
@@ -8166,12 +8263,10 @@ document.addEventListener('visibilitychange', function () {
   TRAIN.wake();
 });
 document.getElementById('restchip').onclick = function () {
-  var left = Math.round((TRAIN.rest.until - Date.now()) / 1000);
   menuAt({ clientX: innerWidth - 12, clientY: 96 }, [
     { label: 'Open Timer', fn: function () { TRAIN.restSheet(); } },
-    { label: left > 0 ? 'Add 30 seconds' : 'Restart', fn: function () {
-      if (left > 0) { TRAIN.rest.until += 30000; TRAIN.rest.fired = false; drawRestBar(); }
-      else TRAIN.restStart(TRAIN.rest.len);
+    { label: 'Add 30 seconds', fn: function () {
+      TRAIN.rest.until += 30000; TRAIN.rest.fired = false; drawRestBar();
     } },
     { label: 'Stop timer', fn: function () { TRAIN.restStop(); } },
   ], 'REST TIMER');
