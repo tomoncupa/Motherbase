@@ -743,6 +743,19 @@ answer, or take it out.
   2026-09-23 to move the old folder-copy rows into the hosted copy. Close the
   program and relaunch it without the variable afterwards.
 
+- **Never draw text on top of an accent fill.** A bar, a chip or a progress
+  strip painted `var(--accent)` is a different colour in every theme, so no
+  one text colour is readable over all eighteen, and a PARTIAL fill puts the
+  same label on two backgrounds at once — `--accent-fg` cannot save that
+  either. Cap the fill short of the top and keep the label in the band above
+  it, scaling every fill the same so what the bars are read for is untouched.
+  COACH's week strip, 2026-09-24: white set counts on gold.
+- **`Rec.all` hands rows back in no order**, and a payload's `ord` usually
+  numbers a row inside its own group, so it cannot order the groups. A list
+  that must read back in the order it was entered sorts on the row KEY, which
+  is a timestamp for anything keyed the suite's usual way. COACH printed a
+  session's exercises in whatever order the store felt like, 2026-09-24.
+
 ---
 
 ## Current state
