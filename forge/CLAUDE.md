@@ -15,11 +15,38 @@ Settled with Tom before building:
 
 - **Its own app**, not a tab in COACH: a BLOCK-style board needs the window.
 - **Weeks × days.** A program is N weeks; every week has the same days.
-- **Each exercise carries sets, reps, first-set load, RIR and rest.** No
-  supersets, no tempo, no %1RM. Add them only when asked.
-- **TRAIN still gets first sets only.** The weight and reps of set one travel
-  as a set; the set count, RIR, rest and note travel as a target TRAIN shows
-  and never logs.
+- **Each exercise carries sets, a rep range, first-set load, RIR and rest.**
+  No supersets, no tempo, no %1RM. Add them only when asked.
+- **TRAIN still gets first sets only**, and from FORGE only set one's LOAD.
+  The set count, rep range, bands, RIR, rest and note travel as a target
+  TRAIN shows and never logs.
+
+## The Algrowrithm is why (1.0.1, 2026-09-24)
+
+Tom: *"Look up our algrowrithm file, thats why I wont prescribe numbers for
+sets 2 onwards."* It is the Google Doc "The Algrowrithm" in his Drive. What
+it says, and what it rules out here:
+
+- **Effort is the constant.** 95% of the time, 0 to 3 reps from a true
+  limit. So a blank RIR reads **0-3**, and a number is typed only for a
+  deload or a technique block.
+- **Reps travel down a range.** 8-15 over three sets is 13-15, then 10-13,
+  then 8-10, with the load going UP each set. REPS is therefore a RANGE
+  (`r` is text, `"8-15"`), and the plate shows the bands `bands()` works
+  out (`hi - i*(hi-lo)/n`, rounded, which gives the file's own example
+  exactly).
+- **Set two onwards follow from set one, on the day.** Hit near the top of
+  the range, go heavier; hit it, heavier again; pass it, a lot heavier. So
+  nothing past set one is written, and set one's REPS are not sent either:
+  the file carries `sets: [{kg, r: null}]` and TRAIN fills reps from the
+  client's last session.
+- **Load rises from performance, never the calendar.** The "+kg a week"
+  step of 1.0.0 is gone (Tom chose to remove it). `val` no longer reads a
+  `step`, the Progression dialog is gone, and a later week carries only what
+  was typed into it.
+- **"The problem with specific prescribed reps: it doesn't take into
+  account what you can actually do that day."** That is the file's own
+  line and the test for anything added here that prescribes a number.
 
 ## The board
 
@@ -45,9 +72,9 @@ Settled with Tom before building:
 
 ## The weeks
 
-`n`, `r`, `kg` and `rir` on the `fex` row are week one's. `wk[w]` holds only
-what week `w` changes; anything it leaves out is the week before's, plus
-`step` kilograms on an inherited load. `val(x, f, w)` is the one reader.
+`n`, `r` (the range), `kg` and `rir` on the `fex` row are week one's.
+`wk[w]` holds only what week `w` changes; anything it leaves out is the week
+before's. `val(x, f, w)` is the one reader. A `step` on an old row is ignored.
 
 - **An inherited value is a placeholder, never written** (law 4). A value
   typed into a later week is drawn in the accent, and its week button is
@@ -55,7 +82,7 @@ what week `w` changes; anything it leaves out is the week before's, plus
 - **Follow Week N Again** (a week's menu, or one plate's) deletes that week's
   own changes, with UNDO.
 - **Removing a week shifts every later week's changes up one.** Removing week
-  one folds week two's values, step included, into the row. This was wrong on
+  one folds week two's values into the row. This was wrong on
   the first try (a stale `wk[1]` survived) and is checked.
 - Rest and the note are the same every week.
 
@@ -68,8 +95,9 @@ what week `w` changes; anything it leaves out is the week before's, plus
   because the next publish would write over the edit.
 - **The flattened shape** is COACH's `days` list: one day per week per day,
   named `W2 · Upper A`, each carrying `wk` and its plain `day` name. Beside
-  each exercise: `sets` (first set only), `n`, `rir`, `rest` in seconds,
-  `note`, `catName`. A 1-week program has no `W1 ·` prefix.
+  each exercise: `sets` (set one's load only, `r: null`), `n`, `reps`,
+  `bands`, `rir` (always sent, `0-3` when blank), `rest` in seconds, `note`,
+  `catName`. A 1-week program has no `W1 ·` prefix.
 - **SEND** asks who. A client: their `cprog c-<pid>` is patched to this program
   (with a confirm when it would replace a different program), and the file is
   saved as `PROGRAM <name>.json` with id `c-<pid>`, the id COACH uses, so
@@ -104,6 +132,13 @@ Also watched: remove week 2 and week 1, move a plate across days by drag, reorde
 123 of 123 at 1440 and at 375, foundation 353 of 353. **Not watched:** a real
 client's phone opening the file, and the print dialog itself (the sheet's
 contents were read, `window.print` was stubbed).
+
+Watched again for 1.0.1: "8 – 15" typed read back as `8-15`; the plate
+showed `13-15 · 10-13 · 8-10`; a blank RIR drew `0-3` and was sent as `"0-3"`;
+week 3 inherited 100 kg with no step; TRAIN's routine read `3 × 8-15 ·
+13-15 · 10-13 · 8-10 · RIR 0-3 · 3:00 rest` and tapping it filled set one as
+100 kg with the reps left to last time. `_review.html` 123 of 123 at 1440
+and 375, foundation 353 of 353.
 
 ## Open
 
