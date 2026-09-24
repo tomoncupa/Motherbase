@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="mb-version" content="1.0.0, 2026-09-24">
+<title>FORGE</title>
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#0B0E14">
+<link href="../shared/fonts/fonts.css" rel="stylesheet">
+<script src="../shared/skins.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/mobile.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="../shared/io.js"></script>
+<script src="../shared/health.js"></script>
+<script src="../shared/icons.js"></script>
+<style>
+/* FORGE, built 2026-09-24. Tom: "A program builder - that functions like
+   block - that outputs programs I can send to clients. Have it mesh with
+   COACH and TRAIN."
+
+   Desktop only, like BLOCK and ARC: used sitting down, with a mouse, to
+   build a block of training. So the layout assumes a wide window and a
+   pointer, hover is allowed, and a phone-width failure is not a bug. The
+   44px targets stay, because they cost nothing with a mouse.
+
+   The furniture is BLOCK's: each DAY is a lane (`mb-card`), each exercise
+   in it a plate (`mb-plate`) in its muscle group's colour, the exercises
+   you can use sit in a bin down the left, and you drag from the bin into a
+   day. The weeks run along the top. */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text-1);font-family:var(--font-body);font-size:var(--f-2);
+  font-weight:var(--w-body);display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+header{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;
+  padding:calc(var(--s-2) + var(--safe-t)) var(--s-4) var(--s-2);background:var(--surface-1);box-shadow:var(--e-1),var(--rim);position:relative;z-index:2}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em;flex:0 0 auto}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+#pname{flex:0 1 calc(var(--s-10) * 2.4);min-width:calc(var(--s-10) * 1.3);font-family:var(--font-display);
+  font-weight:var(--w-bold);letter-spacing:var(--track-cap)}
+.ico{width:var(--tap);height:var(--tap);flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+  border:0;background:none;color:var(--text-muted);cursor:pointer;border-radius:var(--radius-md)}
+.ico:hover{color:var(--text-1);background:var(--surface-2)}
+.ico svg{width:var(--s-5);height:var(--s-5)}
+
+/* the weeks */
+#weeks{display:flex;align-items:center;gap:var(--s-1)}
+#weeks .wk{min-width:var(--tap);height:var(--tap);padding:0 var(--s-2);border:0;border-radius:var(--radius-md);cursor:pointer;
+  background:var(--surface-2);color:var(--text-2);font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-cap)}
+#weeks .wk.on{box-shadow:inset 0 0 0 2px var(--accent);color:var(--text-1)}
+#weeks .wk.has{text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:.3em}
+#weeks .lbl{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);margin-right:var(--s-1)}
+
+#app{flex:1;min-height:0;display:flex}
+#side{flex:0 0 calc(var(--s-10) * 2.3);min-width:0;display:flex;flex-direction:column;gap:var(--s-3);
+  padding:var(--s-3) 0 var(--s-3) var(--s-3);min-height:0}
+#side .card{padding:var(--s-3)}
+#side .progs{flex:0 0 auto;max-height:38%;overflow:auto}
+#side .bin{flex:1;min-height:0;display:flex;flex-direction:column}
+#binList{flex:1;min-height:0;overflow:auto;margin-top:var(--s-2)}
+h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted);margin-bottom:var(--s-2)}
+.empty{color:var(--text-muted);line-height:var(--lh-body)}
+.plist .p{display:flex;align-items:center;gap:var(--s-2);min-height:var(--tap);padding:0 var(--s-2);border-radius:var(--radius-md);cursor:pointer}
+.plist .p:hover{background:var(--surface-2)}
+.plist .p.on{box-shadow:inset 0 0 0 2px var(--accent)}
+.plist .p .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plist .p .c{color:var(--text-muted);font-size:var(--f-1);white-space:nowrap}
+.plist .sub{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);margin:var(--s-3) 0 var(--s-1)}
+.cat{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);font-weight:var(--w-bold);
+  padding:var(--s-2) var(--s-1) var(--s-1);display:flex;align-items:center;gap:var(--s-2);position:sticky;top:0;background:var(--surface-1);z-index:1}
+.dot{width:var(--s-2);height:var(--s-2);border-radius:var(--radius-full);background:var(--c, var(--accent));flex:0 0 auto}
+.bx{display:flex;align-items:center;gap:var(--s-2);min-height:var(--tap);padding:0 var(--s-2);border-radius:var(--radius-md);
+  cursor:grab;user-select:none}
+.bx:hover{background:var(--surface-2)}
+.bx .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bx .n{color:var(--text-muted);font-size:var(--f-1)}
+.bx.new .nm{color:var(--accent)}
+
+/* the board: one lane per day, side by side, the way BLOCK lays routines */
+#board{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
+#sum{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;padding:var(--s-3) var(--s-4) 0;
+  font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap)}
+#sum .it{display:inline-flex;align-items:center;gap:var(--s-1)}
+#sum b{color:var(--text-1);font-variant-numeric:tabular-nums}
+#lanes{flex:1;min-height:0;display:flex;align-items:flex-start;gap:var(--s-3);overflow:auto;padding:var(--s-3) var(--s-4) var(--s-6)}
+.lane{flex:0 0 calc(var(--s-10) * 2.35);max-height:100%;display:flex;flex-direction:column;padding:var(--s-2);border-radius:var(--radius-lg)}
+.lane.act{box-shadow:inset 0 0 0 1px var(--accent)}
+.lane.over{box-shadow:inset 0 0 0 2px var(--accent)}
+.lhead{display:flex;align-items:center;gap:var(--s-1);margin-bottom:var(--s-2);cursor:grab}
+.lhead .dname{flex:1;min-width:0;min-height:var(--tap);background:none;border:0;border-radius:var(--radius-md);padding:0 var(--s-2);
+  font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-3);letter-spacing:var(--track-cap);
+  display:flex;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text}
+.lhead .dname:hover,.lhead .dname:focus{background:var(--surface-2);outline:none}
+.lhead .cnt{font-size:var(--f-1);color:var(--text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.plates{display:flex;flex-direction:column;gap:var(--s-2);min-height:var(--tap);overflow:auto}
+.drop{height:0;border-top:2px solid var(--accent);margin:calc(var(--s-1) * -1) 0}
+.plate{border-radius:var(--radius-md);padding:var(--s-1) var(--s-2) var(--s-2)}
+.phead{display:flex;align-items:center;gap:var(--s-1);cursor:grab;min-height:var(--tap)}
+.phead .pn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:var(--w-bold);font-size:var(--f-3)}
+.phead .tag{font-size:var(--f-1);color:var(--text-muted);white-space:nowrap}
+.pgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--s-1)}
+.pgrid label{display:flex;flex-direction:column;gap:var(--s-1);min-width:0}
+.pgrid label span{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);text-align:center}
+.pgrid input{width:100%;min-width:0;min-height:var(--tap);text-align:center;border-radius:var(--radius-sm);
+  border:1px solid color-mix(in srgb, var(--c, var(--accent)) 30%, transparent);
+  background:color-mix(in srgb, var(--bg) 45%, transparent);font-variant-numeric:tabular-nums;font-size:var(--f-3);padding:0}
+.pgrid input:focus{outline:none;border-color:var(--accent)}
+.pgrid input::placeholder{color:var(--text-muted);opacity:.8}
+.pgrid input.own{color:var(--accent);font-weight:var(--w-bold)}
+.pnote{margin-top:var(--s-2);font-size:var(--f-1);color:var(--text-2);line-height:var(--lh-body);cursor:text}
+.ladd{margin-top:var(--s-2)}
+.ladd input{font-size:var(--f-2)}
+.addday{flex:0 0 calc(var(--s-10) * 1.5);min-height:calc(var(--tap) * 2);border:1px dashed var(--border-strong);border-radius:var(--radius-lg);
+  background:none;color:var(--text-muted);cursor:pointer;font-family:var(--font-display);letter-spacing:var(--track-cap)}
+.addday:hover{color:var(--text-1);border-color:var(--accent)}
+.blank{max-width:calc(var(--s-10) * 4);margin:var(--s-8) auto;padding:var(--s-6);text-align:center;display:flex;flex-direction:column;gap:var(--s-4);align-items:center}
+.blank b{font-family:var(--font-display);font-size:var(--f-5);letter-spacing:var(--track-cap)}
+
+/* the weeks side by side: the whole block at a glance */
+#grid{flex:1;min-height:0;overflow:auto;padding:var(--s-3) var(--s-4) var(--s-6);display:flex;flex-direction:column;gap:var(--s-3)}
+#grid .card{padding:var(--s-3)}
+table.wt{border-collapse:collapse;width:100%;font-size:var(--f-2)}
+table.wt th,table.wt td{padding:var(--s-2);text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+table.wt th{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);font-weight:var(--w-bold)}
+table.wt th.w{cursor:pointer}
+table.wt th.w.on{color:var(--accent)}
+table.wt td.x{font-weight:var(--w-bold);position:sticky;left:0;background:var(--surface-1)}
+table.wt td.v{font-variant-numeric:tabular-nums;color:var(--text-muted);cursor:pointer}
+table.wt td.v.own{color:var(--text-1)}
+table.wt td.v:hover{background:var(--surface-2)}
+
+.pick{display:flex;flex-direction:column;gap:var(--s-1);max-height:55vh;overflow:auto}
+.pick button{display:flex;align-items:center;gap:var(--s-3);min-height:var(--tap);padding:0 var(--s-3);border:0;border-radius:var(--radius-md);
+  background:var(--surface-2);cursor:pointer;text-align:left}
+.pick button:hover{box-shadow:inset 0 0 0 2px var(--accent)}
+.pick button .nm{flex:1}
+.pick button .c{color:var(--text-muted);font-size:var(--f-1)}
+.pick .sep{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);margin-top:var(--s-2)}
+.form{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s-3);align-items:center}
+.form label{color:var(--text-muted);font-size:var(--f-1);letter-spacing:var(--track-cap)}
+
+/* the sheet a client reads, printed or saved as a PDF. Paper is white
+   whatever the theme, so the page is written in the system's own colours
+   for the page and its text rather than in a theme's. */
+#print{display:none}
+@media print{
+  html,body{height:auto;overflow:visible;display:block;background:Canvas;color:CanvasText;color-scheme:light}
+  header,#app,.mb-toast{display:none !important}
+  #print{display:block;font-family:var(--font-body);font-size:var(--f-2)}
+  #print h1{font-family:var(--font-display);font-size:var(--f-6);letter-spacing:var(--track-cap);margin-bottom:var(--s-1)}
+  #print .by{color:GrayText;margin-bottom:var(--s-5)}
+  #print h2{color:CanvasText;font-size:var(--f-4);margin:var(--s-5) 0 var(--s-2);break-after:avoid}
+  #print .wk{break-before:page}
+  #print .wk:first-of-type{break-before:auto}
+  #print h3{font-size:var(--f-3);margin:var(--s-4) 0 var(--s-1);break-after:avoid}
+  #print table{width:100%;border-collapse:collapse;break-inside:avoid}
+  #print th,#print td{text-align:left;padding:var(--s-1) var(--s-2);border-bottom:1px solid GrayText}
+  #print th{font-size:var(--f-1);letter-spacing:var(--track-cap);color:GrayText}
+  #print td.n{font-variant-numeric:tabular-nums}
+  #print .cue{color:GrayText;font-size:var(--f-1)}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">FOR<b>GE</b></div>
+  <input class="mb-input" id="pname" placeholder="Program name" aria-label="Program name">
+  <div id="weeks"></div>
+  <div class="spacer"></div>
+  <div id="viewSeg"></div>
+  <button class="mb-btn mb-press mb-tap" id="printBtn">PRINT</button>
+  <button class="mb-btn go mb-press mb-tap" id="sendBtn">SEND</button>
+  <button class="mb-btn mb-press mb-tap" id="setBtn">SETTINGS</button>
+  <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
+</header>
+<div id="app">
+  <aside id="side">
+    <div class="card mb-card progs"><h2>PROGRAMS</h2><div class="plist" id="plist"></div></div>
+    <div class="card mb-card bin"><h2>EXERCISES</h2>
+      <input class="mb-input" id="q" placeholder="Find or add an exercise" aria-label="Find or add an exercise">
+      <div id="binList"></div></div>
+  </aside>
+  <section id="board"></section>
+</div>
+<div id="print"></div>
+
+<script>
+/* ══════════════════ FORGE ══════════════════
+   Tom only, never in the client build. Build a block of training out of
+   weeks, days and exercises, and hand it to a client.
+
+   ── the rows ──
+     fprog   one program     key program id          {name, weeks, ord}
+     fday    one day         key prog|day id         {name, ord}
+     fex     one exercise    key prog|slot id        {day, name, cat, ord,
+                                                      n, r, kg, rir, rest,
+                                                      step, note, wk}
+   Rows, never a blob: moving one exercise writes one row. A day belongs to
+   every week of its program, so a week is not a row of its own; it is a
+   column of values on each exercise.
+
+   ── the weeks ──
+   `n` sets, `r` reps, `kg` the first set's load and `rir` reps in reserve
+   are week one's, on the row. A later week says only what CHANGES, in
+   `wk[w]`, and everything it does not say it inherits from the week before
+   it, with `step` kilograms added to an inherited load each week. So week
+   four of a four week block is typed once, in week one, and a deload is one
+   week with three numbers changed. An inherited value is drawn as a faded
+   placeholder and never written (DOCTRINE law 4, blank means blank); a value
+   typed into a later week is drawn in the accent, so which cells were
+   decided by hand is visible at a glance. Rest and the coaching note are
+   the same every week.
+
+   ── what goes out ──
+   COACH owns the program a client gets, `cprog`, and already knows how to
+   send one. So FORGE does not grow a second sending path; it PUBLISHES each
+   program into COACH's library as `cprog` key `f-<id>` (`src: 'forge'`),
+   the way BLOCK publishes today's plan for anything that wants to read it.
+   COACH lists it, sends it and puts it on a client, unchanged. SEND here
+   does the same two things COACH does, so the round trip is one press:
+   onto a client's first sets (`cprog` `c-<pid>`), and out as the file TRAIN
+   opens.
+
+   The file is COACH's `motherbase-program`, one day per week per day, each
+   carrying `wk` and its plain `day` name, so TRAIN makes one routine per
+   week. TRAIN still takes FIRST SETS ONLY (Tom, 2026-09-24, kept from
+   2026-09-22): the weight and reps of set one travel as sets, and the
+   number of sets, the RIR target, the rest and the note travel beside them
+   as a target TRAIN shows and never logs. */
+const APP = { id: 'forge', name: 'Forge', icon: '⚒', blurb: 'build a program, send it to a client',
+  types: ['fprog', 'fday', 'fex'] };
+Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id); if (window.Icons) Icons.paint(null, { force: true }); });
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+/* `cprog` is COACH's, and FORGE writes it (the published programs, and a
+   client's first sets on SEND), so it rides this tab too. The exercise
+   vocabulary is TRAIN's and a client's own names are COACH's; the clients
+   are CHECK IN's. Reading them by name means a device where those apps were
+   never opened still has them. */
+IO.register({ app: APP.id, name: 'FORGE', types: APP.types.concat(['cprog']),
+  reads: { train: ['exercise', 'excat'], coach: ['cex', 'cprog'], checkin: ['cperson'] } });
+
+const esc = UI.esc;
+const ico = r => (window.Icons && Icons.svg(r)) || '';
+let seq = 0;
+const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' + (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
+const opt = (k, d) => { const v = Rec.setting(APP.id, k); return v == null ? d : v; };
+/* the unit follows COACH's until it is set here, because the two are read
+   side by side */
+const unit = () => opt('unit', Rec.setting('coach', 'unit') || 'kg');
+const KG_LB = 2.20462;
+const r1 = v => Math.round(v * 10) / 10;
+const show = kg => kg == null ? '' : String(r1(unit() === 'lb' ? kg * KG_LB : kg));
+const toKg = v => { const n = parseFloat(String(v).replace(',', '.')); if (!(n >= 0)) return null; return Math.round((unit() === 'lb' ? n / KG_LB : n) * 1000) / 1000; };
+const MAX_WEEKS = 26;
+
+/* ── reading ── */
+const progs = () => Rec.map('fprog');
+function progList() {
+  const m = progs();
+  return Object.keys(m).map(k => ({ key: k, p: m[k] }))
+    .sort((a, b) => (a.p.ord || 0) - (b.p.ord || 0) || String(a.p.name).localeCompare(String(b.p.name)));
+}
+/* `Rec.all` hands rows back in no promised order (root brief, Known traps),
+   so everything that is a list sorts on `ord` and then on the key, which is
+   a timestamp for anything made here. */
+const byOrd = (a, b) => (a.v.ord || 0) - (b.v.ord || 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+function daysOf(pid) {
+  return Rec.all('fday').filter(r => r.key.indexOf(pid + '|') === 0).map(r => ({ key: r.key, v: r.payload || {} })).sort(byOrd);
+}
+/* every exercise of a program, by the day it is in */
+function exByDay(pid) {
+  const out = {};
+  Rec.all('fex').forEach(r => {
+    if (r.key.indexOf(pid + '|') !== 0) return;
+    const v = r.payload || {};
+    (out[v.day] || (out[v.day] = [])).push({ key: r.key, v: v });
+  });
+  Object.keys(out).forEach(d => out[d].sort(byOrd));
+  return out;
+}
+
+/* ── the weeks ──
+   A value for week `w`: week one's off the row, then each later week either
+   says it or inherits it, with `step` added to an inherited load. */
+const WF = ['n', 'r', 'kg', 'rir'];
+const has = (o, f) => !!o && Object.prototype.hasOwnProperty.call(o, f);
+function val(x, f, w) {
+  let v = x[f] == null ? null : x[f];
+  for (let i = 2; i <= w; i++) {
+    const o = x.wk && x.wk[i];
+    if (has(o, f)) v = o[f];
+    else if (f === 'kg' && v != null && x.step) v = Math.round((v + x.step) * 1000) / 1000;
+  }
+  return v;
+}
+const isOwn = (x, f, w) => w === 1 ? x[f] != null : has(x.wk && x.wk[w], f);
+const weekHasOwn = (x, w) => w > 1 && !!(x.wk && x.wk[w] && WF.some(f => has(x.wk[w], f)));
+
+/* ── words ── */
+function restText(s) {
+  if (s == null || s === '') return '';
+  s = Math.round(+s);
+  return s >= 60 ? Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') : s + 's';
+}
+/* "2:30", "90", "90s", "2m" and "2.5m" all mean what they say. A bare number
+   of ten or less is minutes, because nobody rests three seconds, and the box
+   shows what it was read as the moment it is left. */
+function readRest(t) {
+  t = String(t || '').trim().toLowerCase();
+  if (!t) return null;
+  let m = /^(\d+):(\d{1,2})$/.exec(t);
+  if (m) return +m[1] * 60 + +m[2];
+  m = /^(\d+(?:\.\d+)?)\s*m(in)?$/.exec(t);
+  if (m) return Math.round(+m[1] * 60);
+  m = /^(\d+(?:\.\d+)?)\s*s?$/.exec(t);
+  if (m) { const n = +m[1]; return n <= 10 ? Math.round(n * 60) : Math.round(n); }
+  return undefined;
+}
+function planText(x, w) {
+  const n = val(x, 'n', w), r = val(x, 'r', w), kg = val(x, 'kg', w), rir = val(x, 'rir', w);
+  const bits = [];
+  if (n != null || r != null) bits.push((n != null ? n : '?') + ' × ' + (r != null ? r : '?'));
+  if (kg != null) bits.push(show(kg) + ' ' + unit());
+  if (rir != null) bits.push('RIR ' + rir);
+  if (x.rest != null) bits.push(restText(x.rest) + ' rest');
+  return bits.join(' · ');
+}
+
+/* ── the exercises you can use ──
+   TRAIN's vocabulary, its 111 movements and whatever Tom has added, with its
+   muscle groups and their colour slots; the names clients' own logs carry;
+   and every name already in a program here. One entry per name. */
+function vocab() {
+  const cats = Rec.map('excat'), out = {};
+  const put = (name, cat, slot) => {
+    const nm = String(name || '').trim();
+    if (!nm) return;
+    const k = nm.toLowerCase();
+    if (out[k] && out[k].cat !== 'Other') return;
+    out[k] = { name: nm, cat: cat || 'Other', slot: slot };
+  };
+  const ex = Rec.map('exercise');
+  Object.keys(ex).forEach(k => { const c = cats[ex[k].cat]; put(ex[k].name, c && c.name, c && c.slot); });
+  Rec.all('cex').forEach(r => put((r.payload || {}).name));
+  Rec.all('fex').forEach(r => put((r.payload || {}).name, (r.payload || {}).cat));
+  return out;
+}
+/* a muscle group's colour: TRAIN's slot for it when TRAIN has one, and a
+   stable one from the name otherwise, so a group is one colour everywhere */
+let SLOT = {};
+function slotsNow() {
+  SLOT = {};
+  const cats = Rec.map('excat');
+  Object.keys(cats).forEach(k => { if (cats[k].name) SLOT[String(cats[k].name).toLowerCase()] = cats[k].slot | 0; });
+}
+function catColor(cat) {
+  const k = String(cat || 'other').toLowerCase();
+  let s = SLOT[k];
+  if (s == null) { s = 0; for (let i = 0; i < k.length; i++) s = (s * 31 + k.charCodeAt(i)) % 997; }
+  return 'var(--data-' + (s % 6 + 1) + ')';
+}
+
+/* ── state ── */
+let cur = opt('cur', '');
+let wk = 1;
+let view = opt('view', 'board');
+let act = '';                      /* the day a click in the bin adds to */
+let q = '';
+{ const m = /[?&]p=([^&#]+)/.exec(location.search); if (m) cur = decodeURIComponent(m[1]); }
+
+/* ── publishing into COACH ──
+   Every change to a program is published to its `cprog` row a moment later,
+   so COACH's library is never more than half a second behind, and the
+   write is skipped when nothing changed (Rec.set compares). Patched rather
+   than set, so a field COACH or a later build adds to the row survives. */
+const pubQ = {};
+let pubT = null;
+function touch(pid) { pubQ[pid] = 1; clearTimeout(pubT); pubT = setTimeout(publishAll, 400); }
+function publishAll() {
+  clearTimeout(pubT); pubT = null;
+  Object.keys(pubQ).forEach(pid => { delete pubQ[pid]; publish(pid); });
+}
+function flatten(pid) {
+  const p = progs()[pid];
+  if (!p) return null;
+  const weeks = Math.max(1, p.weeks | 0), days = daysOf(pid), EX = exByDay(pid), out = [];
+  for (let w = 1; w <= weeks; w++) {
+    days.forEach(d => {
+      out.push({ name: weeks > 1 ? 'W' + w + ' · ' + (d.v.name || 'Day') : (d.v.name || 'Day'), day: d.v.name || 'Day', wk: w,
+        ex: (EX[d.key] || []).filter(e => e.v.name).map(e => {
+          const x = e.v, kg = val(x, 'kg', w), r = val(x, 'r', w), n = val(x, 'n', w), rir = val(x, 'rir', w);
+          const o = { name: x.name, sets: kg != null || r != null ? [{ kg: kg, r: r }] : [] };
+          if (x.cat && x.cat !== 'Other') o.catName = x.cat;
+          if (n != null) o.n = n;
+          if (rir != null) o.rir = rir;
+          if (x.rest != null) o.rest = x.rest;
+          if (x.note) o.note = x.note;
+          return o;
+        }) });
+    });
+  }
+  return { name: p.name || 'Program', weeks: weeks, days: out };
+}
+function publish(pid) {
+  const f = flatten(pid);
+  if (!f) return;
+  Rec.patch('cprog', null, 'f-' + pid, { name: f.name, pid: null, src: 'forge', weeks: f.weeks, days: f.days });
+}
+addEventListener('pagehide', () => { UI.commitFocused && UI.commitFocused(); publishAll(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') publishAll(); });
+
+/* ── writing ── */
+function setField(key, f, w, v) {
+  const pid = key.split('|')[0];
+  if (w === 1 || WF.indexOf(f) < 0) Rec.patch('fex', null, key, { [f]: v });
+  else Rec.patch('fex', null, key, { ['wk.' + w + '.' + f]: v == null ? undefined : v });
+  touch(pid);
+}
+function newProgram() {
+  let nm, wks, dys;
+  UI.dialog({
+    title: 'NEW PROGRAM', width: 420,
+    body: b => {
+      const f = document.createElement('div'); f.className = 'form';
+      nm = UI.field('text', { placeholder: 'Hypertrophy block' });
+      wks = UI.field('number', { value: '4' });
+      dys = UI.field('number', { value: '3' });
+      [['NAME', nm], ['WEEKS', wks], ['DAYS A WEEK', dys]].forEach(([l, i]) => {
+        const lb = document.createElement('label'); lb.textContent = l; f.appendChild(lb); f.appendChild(i);
+      });
+      b.appendChild(f);
+      UI.focusSoon(nm);
+    },
+    enter: h => { h.box.querySelector('.mb-sheet-foot .go') && h.box.querySelector('.mb-sheet-foot .go').click(); },
+    actions: [{ label: 'CANCEL' }, { label: 'MAKE IT', kind: 'go', fn: () => {
+      const id = newId(), w = Math.min(MAX_WEEKS, Math.max(1, parseInt(wks.value, 10) || 1)), d = Math.min(7, Math.max(1, parseInt(dys.value, 10) || 1));
+      Rec.set('fprog', null, id, { name: nm.value.trim() || 'New program', weeks: w, ord: progList().length });
+      for (let i = 0; i < d; i++) Rec.set('fday', null, id + '|' + newId(), { name: 'Day ' + (i + 1), ord: i });
+      cur = id; wk = 1; Rec.setting(APP.id, 'cur', cur);
+      touch(id); draw();
+    } }],
+  });
+}
+function addEx(dayKey, name, cat, at) {
+  const pid = dayKey.split('|')[0];
+  const EX = exByDay(pid)[dayKey] || [];
+  const key = pid + '|' + newId();
+  Rec.set('fex', null, key, { day: dayKey, name: name, cat: cat || 'Other', ord: EX.length, n: null, r: null, kg: null, rir: null, rest: null });
+  if (at != null) place(key, dayKey, at);
+  act = dayKey;
+  touch(pid);
+  return key;
+}
+/* Put one exercise at a place in a day, and renumber that day. Only a row
+   whose `ord` or `day` actually moves is written. */
+function place(key, dayKey, at) {
+  const pid = dayKey.split('|')[0];
+  const list = (exByDay(pid)[dayKey] || []).map(e => e.key).filter(k => k !== key);
+  list.splice(Math.max(0, Math.min(at, list.length)), 0, key);
+  list.forEach((k, i) => {
+    const x = Rec.get('fex', null, k);
+    if (!x) return;
+    const ch = {};
+    if ((x.ord | 0) !== i) ch.ord = i;
+    if (k === key && x.day !== dayKey) ch.day = dayKey;
+    if (Object.keys(ch).length) Rec.patch('fex', null, k, ch);
+  });
+  touch(pid);
+}
+function moveDay(pid, dayKey, dir) {
+  const days = daysOf(pid).map(d => d.key), i = days.indexOf(dayKey), j = i + dir;
+  if (i < 0 || j < 0 || j >= days.length) return;
+  days.splice(i, 1); days.splice(j, 0, dayKey);
+  days.forEach((k, n) => { const d = Rec.get('fday', null, k); if (d && (d.ord | 0) !== n) Rec.patch('fday', null, k, { ord: n }); });
+  touch(pid); draw();
+}
+function dropDay(pid, dayKey, at) {
+  const days = daysOf(pid).map(d => d.key).filter(k => k !== dayKey);
+  days.splice(Math.max(0, Math.min(at, days.length)), 0, dayKey);
+  days.forEach((k, n) => { const d = Rec.get('fday', null, k); if (d && (d.ord | 0) !== n) Rec.patch('fday', null, k, { ord: n }); });
+  touch(pid); draw();
+}
+/* Everything a program is, as rows, for a delete to hand back to UNDO. */
+function rowsOf(pid) {
+  const out = [];
+  const p = Rec.get('fprog', null, pid); if (p) out.push(['fprog', pid, p]);
+  Rec.all('fday').forEach(r => { if (r.key.indexOf(pid + '|') === 0) out.push(['fday', r.key, r.payload]); });
+  Rec.all('fex').forEach(r => { if (r.key.indexOf(pid + '|') === 0) out.push(['fex', r.key, r.payload]); });
+  const c = Rec.get('cprog', null, 'f-' + pid); if (c) out.push(['cprog', 'f-' + pid, c]);
+  return out;
+}
+function deleteProgram(pid) {
+  const p = progs()[pid]; if (!p) return;
+  const rows = rowsOf(pid);
+  rows.forEach(([t, k]) => Rec.del(t, null, k));
+  if (cur === pid) { cur = ''; Rec.setting(APP.id, 'cur', ''); }
+  draw();
+  UI.undo('<b>' + esc(p.name || 'Program') + '</b> deleted, here and in COACH', () => {
+    rows.forEach(([t, k, v]) => Rec.set(t, null, k, v));
+    cur = pid; Rec.setting(APP.id, 'cur', pid); draw();
+  });
+}
+function duplicateProgram(pid) {
+  const p = progs()[pid]; if (!p) return;
+  const id = newId(), dmap = {};
+  Rec.set('fprog', null, id, Object.assign({}, p, { name: (p.name || 'Program') + ' copy', ord: progList().length }));
+  daysOf(pid).forEach(d => { const k = id + '|' + newId(); dmap[d.key] = k; Rec.set('fday', null, k, d.v); });
+  const EX = exByDay(pid);
+  Object.keys(EX).forEach(dk => EX[dk].forEach(e => {
+    if (!dmap[dk]) return;
+    Rec.set('fex', null, id + '|' + newId(), Object.assign({}, e.v, { day: dmap[dk] }));
+  }));
+  cur = id; Rec.setting(APP.id, 'cur', id); touch(id); draw();
+  UI.toast('Copied as <b>' + esc(p.name + ' copy') + '</b>');
+}
+function duplicateDay(pid, dayKey) {
+  const d = Rec.get('fday', null, dayKey); if (!d) return;
+  const days = daysOf(pid).map(x => x.key), k = pid + '|' + newId();
+  Rec.set('fday', null, k, Object.assign({}, d, { name: (d.name || 'Day') + ' copy' }));
+  (exByDay(pid)[dayKey] || []).forEach(e => Rec.set('fex', null, pid + '|' + newId(), Object.assign({}, e.v, { day: k })));
+  days.splice(days.indexOf(dayKey) + 1, 0, k);
+  days.forEach((x, n) => { const v = Rec.get('fday', null, x); if (v && (v.ord | 0) !== n) Rec.patch('fday', null, x, { ord: n }); });
+  touch(pid); draw();
+}
+function removeDay(pid, dayKey) {
+  const d = Rec.get('fday', null, dayKey); if (!d) return;
+  const exs = (exByDay(pid)[dayKey] || []).map(e => [e.key, e.v]);
+  exs.forEach(([k]) => Rec.del('fex', null, k));
+  Rec.del('fday', null, dayKey);
+  touch(pid); draw();
+  UI.undo('<b>' + esc(d.name || 'Day') + '</b> removed', () => {
+    Rec.set('fday', null, dayKey, d); exs.forEach(([k, v]) => Rec.set('fex', null, k, v)); touch(pid); draw();
+  });
+}
+function removeEx(key) {
+  const x = Rec.get('fex', null, key); if (!x) return;
+  const pid = key.split('|')[0];
+  Rec.del('fex', null, key); touch(pid); draw();
+  UI.undo('<b>' + esc(x.name) + '</b> removed', () => { Rec.set('fex', null, key, x); touch(pid); draw(); });
+}
+/* A week's own changes wiped, so it inherits again. */
+function clearWeek(pid, w, onlyKey) {
+  const undo = [];
+  Rec.all('fex').forEach(r => {
+    if (r.key.indexOf(pid + '|') !== 0 || (onlyKey && r.key !== onlyKey)) return;
+    const x = r.payload || {};
+    if (!(x.wk && x.wk[w])) return;
+    undo.push([r.key, x]);
+    Rec.patch('fex', null, r.key, { ['wk.' + w]: undefined });
+  });
+  touch(pid); draw();
+  if (undo.length) UI.undo('Week ' + w + ' follows week ' + (w - 1) + ' again', () => { undo.forEach(([k, v]) => Rec.set('fex', null, k, v)); touch(pid); draw(); });
+}
+/* Remove week `w`: every later week's own changes move up one, so what
+   week five said is what the new week four says. Removing week one makes
+   week two's values, step included, the new week one's. */
+function removeWeek(pid, w) {
+  const p = progs()[pid]; if (!p || (p.weeks | 0) <= 1) return;
+  const was = [];
+  Rec.all('fex').forEach(r => {
+    if (r.key.indexOf(pid + '|') !== 0) return;
+    const x = r.payload || {}, nw = {};
+    Object.keys(x.wk || {}).forEach(k => {
+      const i = +k;
+      if (i < w) nw[i] = x.wk[k];
+      else if (i > w && i - 1 >= 2) nw[i - 1] = x.wk[k];
+    });
+    const ch = { wk: nw };
+    if (w === 1) WF.forEach(f => { ch[f] = val(x, f, 2); });
+    was.push([r.key, x]);
+    Rec.patch('fex', null, r.key, ch);
+  });
+  Rec.patch('fprog', null, pid, { weeks: (p.weeks | 0) - 1 });
+  if (wk > (p.weeks | 0) - 1) wk = (p.weeks | 0) - 1;
+  touch(pid); draw();
+  UI.undo('Week ' + w + ' removed', () => { was.forEach(([k, v]) => Rec.set('fex', null, k, v)); Rec.patch('fprog', null, pid, { weeks: p.weeks }); touch(pid); draw(); });
+}
+
+/* ── sending ──
+   The same bag COACH makes, so TRAIN reads one kind of file whoever made it. */
+function fileBag(id, flat) {
+  return { kind: 'motherbase-program', v: 2, id: id, name: flat.name, weeks: flat.weeks,
+    from: Rec.setting('coach', 'me') || 'Coach', at: new Date().toISOString(), days: flat.days };
+}
+function saveFile(bag, label) {
+  const text = JSON.stringify(bag), file = 'PROGRAM ' + (label || bag.name) + '.json';
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  const a = document.createElement('a'); a.href = url; a.download = file;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 8000);
+  return file;
+}
+const people = () => Rec.map('cperson');
+const BOXN = { one: '1:1', online: 'ONLINE', past: 'PAST' };
+function send(pid) {
+  publishAll();
+  const flat = flatten(pid);
+  if (!flat) return;
+  if (!flat.days.some(d => d.ex.length)) { UI.toast('Put an exercise in a day first', { bad: true }); return; }
+  const ppl = people();
+  const ids = Object.keys(ppl).sort((a, b) => ['one', 'online', 'past'].indexOf(ppl[a].box || 'one') - ['one', 'online', 'past'].indexOf(ppl[b].box || 'one') ||
+    String(ppl[a].name).localeCompare(String(ppl[b].name)));
+  UI.dialog({
+    title: 'SEND ' + String(flat.name).toUpperCase(), width: 460,
+    body: (b, h) => {
+      const say = document.createElement('p'); say.className = 'empty'; say.style.marginBottom = 'var(--s-3)';
+      say.textContent = 'To a client: it becomes their program in COACH, and saves the file they open with Open A Program in TRAIN. Their first set of each exercise is set; the rest fill from their last session.';
+      b.appendChild(say);
+      const list = document.createElement('div'); list.className = 'pick';
+      const any = document.createElement('button'); any.type = 'button'; any.className = 'mb-press';
+      any.innerHTML = '<span class="nm">Anyone · just the file</span><span class="c">to sell or to share</span>';
+      any.onclick = () => { h.close(); const f = saveFile(fileBag('f-' + pid, flat)); UI.toast('Saved as <b>' + esc(f) + '</b>'); };
+      list.appendChild(any);
+      let box = '';
+      ids.forEach(id => {
+        const pp = ppl[id], bx = pp.box || 'one';
+        if (bx !== box) { box = bx; const s = document.createElement('div'); s.className = 'sep'; s.textContent = BOXN[bx] || bx.toUpperCase(); list.appendChild(s); }
+        const has = Rec.get('cprog', null, 'c-' + id);
+        const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'mb-press';
+        bt.innerHTML = '<span class="nm">' + esc(pp.name || 'Client') + '</span><span class="c">' + (has && has.name ? 'now: ' + esc(has.name) : 'no program yet') + '</span>';
+        bt.onclick = () => { h.close(); toClient(pid, id, flat); };
+        list.appendChild(bt);
+      });
+      if (!ids.length) { const e = document.createElement('p'); e.className = 'empty'; e.style.marginTop = 'var(--s-2)'; e.textContent = 'No clients yet. They arrive in COACH from CHECK IN or a TRAIN file.'; list.appendChild(e); }
+      b.appendChild(list);
+    },
+    actions: [{ label: 'CANCEL' }],
+  });
+}
+function toClient(pid, cid, flat) {
+  const who = people()[cid] || {}, key = 'c-' + cid, now = Rec.get('cprog', null, key);
+  const go = () => {
+    Rec.patch('cprog', null, key, { name: flat.name, pid: cid, days: flat.days, weeks: flat.weeks, from: 'f-' + pid });
+    const f = saveFile(fileBag(key, flat), who.name || 'client');
+    UI.toast('<b>' + esc(flat.name) + '</b> is ' + esc(who.name || 'the client') + '’s program in COACH, and saved as <b>' + esc(f) + '</b>');
+  };
+  if (now && (now.days || []).some(d => (d.ex || []).some(x => x.name)) && now.from !== 'f-' + pid) {
+    UI.confirm('Replace ' + (who.name || 'this client') + '’s program?', 'They have “' + (now.name || 'a program') + '” in COACH now. It is replaced by ' + flat.name + '.', { yes: 'REPLACE' })
+      .then(ok => { if (ok) go(); });
+  } else go();
+}
+
+/* ── printing: the sheet for a client who does not use TRAIN ── */
+function printIt(pid) {
+  const p = progs()[pid]; if (!p) return;
+  const weeks = Math.max(1, p.weeks | 0), days = daysOf(pid), EX = exByDay(pid);
+  let h = '<h1>' + esc(p.name || 'Program') + '</h1><div class="by">' + esc(Rec.setting('coach', 'me') || '') + (weeks > 1 ? ' · ' + weeks + ' weeks' : '') + '</div>';
+  for (let w = 1; w <= weeks; w++) {
+    h += '<section class="wk">' + (weeks > 1 ? '<h2>Week ' + w + '</h2>' : '');
+    days.forEach(d => {
+      const list = (EX[d.key] || []).filter(e => e.v.name);
+      if (!list.length) return;
+      h += '<h3>' + esc(d.v.name || 'Day') + '</h3><table><tr><th>EXERCISE</th><th>SETS</th><th>REPS</th><th>LOAD</th><th>RIR</th><th>REST</th></tr>';
+      list.forEach(e => {
+        const x = e.v, kg = val(x, 'kg', w);
+        h += '<tr><td>' + esc(x.name) + (x.note ? '<div class="cue">' + esc(x.note) + '</div>' : '') + '</td>' +
+          '<td class="n">' + (val(x, 'n', w) ?? '') + '</td><td class="n">' + (val(x, 'r', w) ?? '') + '</td>' +
+          '<td class="n">' + (kg != null ? show(kg) + ' ' + unit() : '') + '</td><td class="n">' + (val(x, 'rir', w) ?? '') + '</td>' +
+          '<td class="n">' + restText(x.rest) + '</td></tr>';
+      });
+      h += '</table>';
+    });
+    h += '</section>';
+  }
+  document.getElementById('print').innerHTML = h;
+  window.print();
+}
+
+/* ── dragging ──
+   HTML drag and drop, because this is a desktop app and a mouse is assumed.
+   Three things can be carried: a name from the bin, an exercise already in
+   a day, and a day by its head. Every one of them also has a menu route
+   (DOCTRINE law 6), so the drag is a shortcut and never the only way. */
+let drag = null;
+function dropAt(lane, y) {
+  const ps = [...lane.querySelectorAll('.plate')];
+  for (let i = 0; i < ps.length; i++) {
+    const r = ps[i].getBoundingClientRect();
+    if (y < r.top + r.height / 2) return i;
+  }
+  return ps.length;
+}
+function showMark(lane, at) {
+  document.querySelectorAll('.drop').forEach(n => n.remove());
+  const box = lane.querySelector('.plates'), ps = box.querySelectorAll('.plate');
+  const m = document.createElement('div'); m.className = 'drop';
+  if (at < ps.length) box.insertBefore(m, ps[at]); else box.appendChild(m);
+}
+function clearMarks() {
+  document.querySelectorAll('.drop').forEach(n => n.remove());
+  document.querySelectorAll('.lane.over').forEach(n => n.classList.remove('over'));
+}
+function wireLane(lane, dayKey, pid, index) {
+  lane.addEventListener('dragover', e => {
+    if (!drag) return;
+    e.preventDefault();
+    if (drag.kind === 'day') { lane.classList.add('over'); return; }
+    e.dataTransfer.dropEffect = drag.kind === 'bin' ? 'copy' : 'move';
+    lane.classList.add('over');
+    showMark(lane, dropAt(lane, e.clientY));
+  });
+  lane.addEventListener('dragleave', e => { if (!lane.contains(e.relatedTarget)) { lane.classList.remove('over'); lane.querySelectorAll('.drop').forEach(n => n.remove()); } });
+  lane.addEventListener('drop', e => {
+    if (!drag) return;
+    e.preventDefault();
+    const d = drag; drag = null; clearMarks();
+    if (d.kind === 'day') {
+      const r = lane.getBoundingClientRect();
+      dropDay(pid, d.key, e.clientX < r.left + r.width / 2 ? index : index + 1);
+      return;
+    }
+    const at = dropAt(lane, e.clientY);
+    if (d.kind === 'bin') addEx(dayKey, d.name, d.cat, at);
+    else {
+      /* moving down inside one day: the plate being carried still counts in
+         `at`, so one less */
+      const x = Rec.get('fex', null, d.key);
+      const list = (exByDay(pid)[dayKey] || []).map(e2 => e2.key), from = list.indexOf(d.key);
+      place(d.key, dayKey, x && x.day === dayKey && from > -1 && from < at ? at - 1 : at);
+    }
+    act = dayKey;
+    draw();
+  });
+}
+document.addEventListener('dragend', () => { drag = null; clearMarks(); });
+
+/* ── the side ── */
+function drawSide() {
+  const pl = document.getElementById('plist');
+  pl.innerHTML = '';
+  const list = progList();
+  if (!list.length) {
+    const e = document.createElement('p'); e.className = 'empty'; e.style.marginBottom = 'var(--s-2)';
+    e.textContent = 'None yet.'; pl.appendChild(e);
+  }
+  list.forEach(({ key, p }) => {
+    const r = document.createElement('div'); r.className = 'p' + (key === cur ? ' on' : ''); r.tabIndex = 0;
+    const nd = daysOf(key).length;
+    r.innerHTML = '<span class="nm">' + esc(p.name || 'Program') + '</span><span class="c">' + (p.weeks | 0 || 1) + 'w · ' + nd + 'd</span>';
+    r.onclick = () => { cur = key; wk = 1; act = ''; Rec.setting(APP.id, 'cur', key); draw(); };
+    r.onkeydown = e => { if (e.key === 'Enter') r.onclick(); };
+    Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, [
+      { label: 'Send…', fn: () => send(key) },
+      { label: 'Print', fn: () => printIt(key) },
+      { label: 'Duplicate', fn: () => duplicateProgram(key) },
+      '-',
+      { label: 'Delete Program', kind: 'bad', fn: () => deleteProgram(key) },
+    ]));
+    pl.appendChild(r);
+  });
+  /* COACH's own library, made before FORGE existed. Brought in on a press
+     and never behind his back: the COACH row goes and the FORGE one takes
+     its place in the same list, with UNDO. */
+  const legacy = Object.entries(Rec.map('cprog')).filter(([k, v]) => !v.pid && v.src !== 'forge' && k.indexOf('f-') !== 0 && k.indexOf('c-') !== 0);
+  if (legacy.length) {
+    const s = document.createElement('div'); s.className = 'sub'; s.textContent = 'IN COACH · TAP TO BRING IN'; pl.appendChild(s);
+    legacy.forEach(([k, v]) => {
+      const r = document.createElement('div'); r.className = 'p'; r.tabIndex = 0;
+      r.innerHTML = '<span class="nm">' + esc(v.name || 'Program') + '</span><span class="c">' + (v.days || []).length + 'd</span>';
+      r.onclick = () => bringIn(k, v);
+      pl.appendChild(r);
+    });
+  }
+  const nb = document.createElement('button'); nb.className = 'mb-btn go mb-press mb-tap'; nb.textContent = '+ NEW PROGRAM';
+  nb.style.cssText = 'width:100%;margin-top:var(--s-2)';
+  nb.onclick = newProgram;
+  pl.appendChild(nb);
+  drawBin();
+}
+function bringIn(k, v) {
+  const id = newId(), voc = vocab();
+  Rec.set('fprog', null, id, { name: v.name || 'Program', weeks: 1, ord: progList().length });
+  (v.days || []).forEach((d, i) => {
+    const dk = id + '|' + newId();
+    Rec.set('fday', null, dk, { name: d.name || ('Day ' + (i + 1)), ord: i });
+    (d.ex || []).filter(x => x.name).forEach((x, j) => {
+      const s = (x.sets || [])[0] || {}, vv = voc[String(x.name).toLowerCase()];
+      Rec.set('fex', null, id + '|' + newId(), { day: dk, name: x.name, cat: (vv && vv.cat) || 'Other', ord: j,
+        n: x.n == null ? null : x.n, r: s.r == null ? null : s.r, kg: s.kg == null ? null : s.kg,
+        rir: x.rir == null ? null : x.rir, rest: x.rest == null ? null : x.rest, note: x.note || '' });
+    });
+  });
+  Rec.del('cprog', null, k);
+  cur = id; wk = 1; Rec.setting(APP.id, 'cur', id);
+  publish(id); draw();
+  UI.undo('<b>' + esc(v.name || 'Program') + '</b> is in FORGE now', () => { rowsOf(id).forEach(([t, kk]) => Rec.del(t, null, kk)); Rec.set('cprog', null, k, v); cur = ''; draw(); });
+}
+function drawBin() {
+  const box = document.getElementById('binList');
+  box.innerHTML = '';
+  const voc = vocab(), days = cur ? daysOf(cur) : [];
+  const want = q.trim().toLowerCase();
+  const all = Object.values(voc).filter(v => !want || v.name.toLowerCase().indexOf(want) > -1);
+  const target = () => (act && days.find(d => d.key === act)) || days[0];
+  const add = (name, cat) => {
+    if (!cur) { UI.toast('Make a program first', { bad: true }); return; }
+    const d = target();
+    if (!d) { UI.toast('Add a day first', { bad: true }); return; }
+    addEx(d.key, name, cat); draw();
+    UI.toast('<b>' + esc(name) + '</b> into ' + esc(d.v.name || 'the day'));
+  };
+  if (want && !voc[want]) {
+    const nm = q.trim().replace(/\s+/g, ' ');
+    const r = document.createElement('div'); r.className = 'bx new'; r.tabIndex = 0;
+    r.innerHTML = '<span class="nm">+ ' + esc(nm) + '</span><span class="n">new</span>';
+    r.onclick = () => { add(nm, 'Other'); q = ''; document.getElementById('q').value = ''; drawBin(); };
+    r.draggable = true;
+    r.addEventListener('dragstart', e => { drag = { kind: 'bin', name: nm, cat: 'Other' }; e.dataTransfer.setData('text/plain', nm); e.dataTransfer.effectAllowed = 'copy'; });
+    box.appendChild(r);
+  }
+  if (!Object.keys(voc).length) {
+    const e = document.createElement('p'); e.className = 'empty'; e.style.marginTop = 'var(--s-2)';
+    e.textContent = 'TRAIN brings 111 movements the first time it opens on this device. Or type a name above and press Enter.';
+    box.appendChild(e);
+    return;
+  }
+  const groups = {};
+  all.forEach(v => (groups[v.cat] || (groups[v.cat] = [])).push(v));
+  const order = Object.keys(groups).sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b));
+  const used = {};
+  if (cur) Rec.all('fex').forEach(r => { if (r.key.indexOf(cur + '|') === 0) { const n = String((r.payload || {}).name).toLowerCase(); used[n] = (used[n] || 0) + 1; } });
+  order.forEach(c => {
+    const h = document.createElement('div'); h.className = 'cat'; h.style.setProperty('--c', catColor(c));
+    h.innerHTML = '<span class="dot"></span>' + esc(c.toUpperCase());
+    box.appendChild(h);
+    groups[c].sort((a, b) => a.name.localeCompare(b.name)).forEach(v => {
+      const r = document.createElement('div'); r.className = 'bx'; r.tabIndex = 0; r.draggable = true;
+      r.style.setProperty('--c', catColor(v.cat));
+      const n = used[v.name.toLowerCase()];
+      r.innerHTML = '<span class="dot"></span><span class="nm">' + esc(v.name) + '</span>' + (n ? '<span class="n">×' + n + '</span>' : '');
+      r.title = 'Drag into a day, or click to add to ' + ((target() || {}).v || {}).name;
+      r.onclick = () => add(v.name, v.cat);
+      r.onkeydown = e => { if (e.key === 'Enter') add(v.name, v.cat); };
+      r.addEventListener('dragstart', e => { drag = { kind: 'bin', name: v.name, cat: v.cat }; e.dataTransfer.setData('text/plain', v.name); e.dataTransfer.effectAllowed = 'copy'; });
+      Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, days.length ? days.map(d => ({ label: 'Add to ' + (d.v.name || 'Day'), fn: () => { addEx(d.key, v.name, v.cat); draw(); } }))
+        : [{ label: 'Add a day first', fn: () => {} }]));
+      box.appendChild(r);
+    });
+  });
+}
+const qEl = document.getElementById('q');
+qEl.oninput = () => { q = qEl.value; drawBin(); };
+qEl.onkeydown = e => {
+  if (e.key !== 'Enter') return;
+  const first = document.querySelector('#binList .bx');
+  if (first) first.click();
+  q = ''; qEl.value = ''; drawBin();
+};
+
+/* ── the header ── */
+function drawHead() {
+  const p = cur ? progs()[cur] : null;
+  const pn = document.getElementById('pname');
+  pn.disabled = !p;
+  if (document.activeElement !== pn) pn.value = p ? (p.name || '') : '';
+  pn.onchange = () => { if (!cur) return; Rec.patch('fprog', null, cur, { name: pn.value.trim() || 'Program' }); touch(cur); drawSide(); };
+  const W = document.getElementById('weeks');
+  W.innerHTML = '';
+  if (!p) return;
+  const weeks = Math.max(1, p.weeks | 0);
+  if (wk > weeks) wk = weeks;
+  const lb = document.createElement('span'); lb.className = 'lbl'; lb.textContent = 'WEEK'; W.appendChild(lb);
+  const all = Rec.all('fex').filter(r => r.key.indexOf(cur + '|') === 0).map(r => r.payload || {});
+  for (let w = 1; w <= weeks; w++) {
+    const b = document.createElement('button'); b.type = 'button';
+    b.className = 'wk mb-press' + (w === wk ? ' on' : '') + (all.some(x => weekHasOwn(x, w)) ? ' has' : '');
+    b.textContent = w;
+    b.title = w === 1 ? 'Week 1' : 'Week ' + w + (all.some(x => weekHasOwn(x, w)) ? ', with changes of its own' : ', the same as week ' + (w - 1) + ' plus any step');
+    b.onclick = () => { wk = w; draw(); };
+    Mobile.hold(b, e => UI.menu(e.clientX, e.clientY, [
+      w > 1 ? { label: 'Follow Week ' + (w - 1) + ' Again', fn: () => clearWeek(cur, w) } : null,
+      { label: 'Add A Week', fn: () => { Rec.patch('fprog', null, cur, { weeks: Math.min(MAX_WEEKS, weeks + 1) }); touch(cur); draw(); } },
+      weeks > 1 ? { label: 'Remove Week ' + w, kind: 'bad', fn: () => removeWeek(cur, w) } : null,
+    ].filter(Boolean)));
+    W.appendChild(b);
+  }
+  if (weeks < MAX_WEEKS) {
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'ico mb-press mb-tap';
+    add.innerHTML = ico('add'); add.setAttribute('aria-label', 'Add a week'); add.title = 'Add a week';
+    add.onclick = () => { Rec.patch('fprog', null, cur, { weeks: weeks + 1 }); touch(cur); wk = weeks + 1; draw(); };
+    W.appendChild(add);
+  }
+}
+const seg = UI.segmented([{ id: 'board', name: 'DAYS' }, { id: 'grid', name: 'WEEKS' }], view, v => { view = v; Rec.setting(APP.id, 'view', v); draw(); });
+document.getElementById('viewSeg').appendChild(seg);
+document.getElementById('sendBtn').onclick = () => { if (cur) send(cur); else UI.toast('Make a program first', { bad: true }); };
+document.getElementById('printBtn').onclick = () => { if (cur) printIt(cur); else UI.toast('Make a program first', { bad: true }); };
+document.getElementById('setBtn').onclick = () => settings();
+
+/* ── the board ── */
+function blank(board) {
+  const b = document.createElement('div'); b.className = 'blank card mb-card';
+  b.innerHTML = '<b>BUILD A PROGRAM</b><p class="empty">Weeks of days, each day the exercises in it, each exercise its sets, reps, first-set load, RIR and rest. ' +
+    'Drag exercises from the list on the left into a day. SEND puts it on a client in COACH and saves the file their TRAIN opens.</p>';
+  const nb = document.createElement('button'); nb.className = 'mb-btn go mb-press mb-tap'; nb.textContent = '+ NEW PROGRAM'; nb.onclick = newProgram;
+  b.appendChild(nb);
+  board.appendChild(b);
+}
+function drawSum(board, EX) {
+  const s = document.createElement('div'); s.id = 'sum';
+  const by = {}; let tot = 0, nex = 0;
+  Object.keys(EX).forEach(d => EX[d].forEach(e => {
+    nex++;
+    const n = val(e.v, 'n', wk);
+    if (n == null) return;
+    tot += n; by[e.v.cat || 'Other'] = (by[e.v.cat || 'Other'] || 0) + n;
+  }));
+  /* the sets each muscle group gets in this week, which is how TRAIN counts
+     a week too, so the number he plans is the number he later reads */
+  s.innerHTML = '<span>WEEK ' + wk + '</span><span class="it"><b>' + tot + '</b>&nbsp;SETS</span><span class="it"><b>' + nex + '</b>&nbsp;EXERCISES</span>' +
+    Object.keys(by).sort((a, b) => by[b] - by[a]).map(c => '<span class="it" style="--c:' + catColor(c) + '"><span class="dot"></span>' + esc(c.toUpperCase()) + '&nbsp;<b>' + by[c] + '</b></span>').join('');
+  board.appendChild(s);
+}
+function numBox(x, key, f, w, parse, fmt, label) {
+  const i = document.createElement('input');
+  i.type = 'text'; i.inputMode = 'decimal';
+  i.setAttribute('aria-label', label);
+  const own = isOwn(x, f, w), v = f === 'rest' ? x.rest : val(x, f, w);
+  if (own || (w === 1 && v != null) || f === 'rest') { i.value = v == null ? '' : fmt(v); if (w > 1 && own && f !== 'rest') i.classList.add('own'); }
+  else i.placeholder = v == null ? (f === 'kg' ? 'last' : '—') : fmt(v);
+  if (f === 'rest' && v == null) i.placeholder = '—';
+  if (f === 'kg' && v == null && w === 1) i.title = 'Blank: TRAIN uses their last session';
+  i.onchange = () => {
+    const t = i.value.trim();
+    if (!t) { setField(key, f, f === 'rest' ? 1 : w, null); return; }
+    const n = parse(t);
+    if (n === undefined || n === null || (typeof n === 'number' && isNaN(n))) { UI.toast('Could not read “' + esc(t) + '”', { bad: true }); i.value = own ? fmt(v) : ''; return; }
+    setField(key, f, f === 'rest' ? 1 : w, n);
+    i.value = fmt(n);
+    if (w > 1 && f !== 'rest') i.classList.add('own');
+  };
+  return i;
+}
+const intOf = t => { const n = parseInt(t, 10); return n >= 0 && n < 1000 ? n : undefined; };
+const rirOf = t => { const n = parseFloat(String(t).replace(',', '.')); return n >= 0 && n <= 10 ? Math.round(n * 2) / 2 : undefined; };
+function plate(e, dayKey, pid) {
+  const x = e.v, key = e.key;
+  const el = document.createElement('div'); el.className = 'plate mb-plate'; el.dataset.key = key;
+  el.style.setProperty('--c', catColor(x.cat));
+  const hd = document.createElement('div'); hd.className = 'phead'; hd.draggable = true;
+  hd.innerHTML = '<span class="pn">' + esc(x.name || 'Exercise') + '</span>' + (x.step ? '<span class="tag">+' + show(x.step) + '/wk</span>' : '');
+  hd.title = x.name + ' · drag to move';
+  hd.addEventListener('dragstart', ev => { drag = { kind: 'ex', key: key }; ev.dataTransfer.setData('text/plain', x.name); ev.dataTransfer.effectAllowed = 'move'; try { ev.dataTransfer.setDragImage(el, 20, 20); } catch (er) {} });
+  const more = document.createElement('button'); more.type = 'button'; more.className = 'ico mb-press mb-tap';
+  more.innerHTML = ico('more'); more.setAttribute('aria-label', 'Options for ' + x.name);
+  const menu = ev => {
+    const days = daysOf(pid).filter(d => d.key !== dayKey);
+    const list = (exByDay(pid)[dayKey] || []).map(z => z.key), at = list.indexOf(key);
+    UI.menu(ev.clientX, ev.clientY, [
+      { label: 'Progression…', fn: () => stepDialog(key) },
+      { label: x.note ? 'Edit Note…' : 'Note…', fn: () => noteDialog(key) },
+      at > 0 ? { label: 'Move Up', fn: () => { place(key, dayKey, at - 1); draw(); } } : null,
+      at < list.length - 1 ? { label: 'Move Down', fn: () => { place(key, dayKey, at + 1); draw(); } } : null,
+      days.length ? { label: 'Move To', sub: days.map(d => ({ label: d.v.name || 'Day', fn: () => { place(key, d.key, 999); draw(); } })) } : null,
+      { label: 'Duplicate', fn: () => { const k = pid + '|' + newId(); Rec.set('fex', null, k, Object.assign({}, x)); place(k, dayKey, at + 1); draw(); } },
+      weekHasOwn(x, wk) ? { label: 'Follow Week ' + (wk - 1) + ' Here', fn: () => clearWeek(pid, wk, key) } : null,
+      '-',
+      { label: 'Remove', kind: 'bad', fn: () => removeEx(key) },
+    ].filter(Boolean));
+  };
+  more.onclick = menu;
+  Mobile.hold(hd, menu, { skip: 'button' });
+  hd.appendChild(more);
+  el.appendChild(hd);
+  const g = document.createElement('div'); g.className = 'pgrid';
+  const cell = (lab, inp) => { const l = document.createElement('label'); const s = document.createElement('span'); s.textContent = lab; l.appendChild(s); l.appendChild(inp); g.appendChild(l); };
+  cell('SETS', numBox(x, key, 'n', wk, intOf, String, 'Sets'));
+  cell('REPS', numBox(x, key, 'r', wk, intOf, String, 'Reps'));
+  cell(unit().toUpperCase(), numBox(x, key, 'kg', wk, toKg, show, 'First set load'));
+  cell('RIR', numBox(x, key, 'rir', wk, rirOf, String, 'Reps in reserve'));
+  cell('REST', numBox(x, key, 'rest', 1, readRest, restText, 'Rest'));
+  el.appendChild(g);
+  if (x.note) {
+    const n = document.createElement('div'); n.className = 'pnote'; n.textContent = x.note; n.title = 'Edit the note';
+    n.onclick = () => noteDialog(key);
+    el.appendChild(n);
+  }
+  return el;
+}
+function stepDialog(key) {
+  const x = Rec.get('fex', null, key); if (!x) return;
+  let i;
+  UI.dialog({
+    title: 'PROGRESSION', width: 420,
+    body: b => {
+      const p = document.createElement('p'); p.className = 'empty'; p.style.marginBottom = 'var(--s-3)';
+      p.textContent = 'Added to ' + x.name + '’s load each week, unless a week says its own. Blank adds nothing.';
+      b.appendChild(p);
+      i = UI.field('decimal', { value: x.step ? show(x.step) : '', placeholder: '2.5' });
+      b.appendChild(UI.row(unit().toUpperCase() + ' A WEEK', '', i));
+      UI.focusSoon(i);
+    },
+    enter: h => { h.box.querySelector('.mb-sheet-foot .go').click(); },
+    actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: () => {
+      const t = i.value.trim(), n = t ? toKg(t) : null;
+      if (t && n == null) { UI.toast('Could not read that', { bad: true }); return false; }
+      setField(key, 'step', 1, n || null); draw();
+    } }],
+  });
+}
+function noteDialog(key) {
+  const x = Rec.get('fex', null, key); if (!x) return;
+  let i;
+  UI.dialog({
+    title: 'NOTE · ' + String(x.name).toUpperCase(), width: 460,
+    body: b => {
+      const p = document.createElement('p'); p.className = 'empty'; p.style.marginBottom = 'var(--s-3)';
+      p.textContent = 'A cue the client reads beside the exercise, every week.';
+      b.appendChild(p);
+      i = UI.field('note', { value: x.note || '', placeholder: 'Pause one second at the bottom', rows: 3 });
+      b.appendChild(i);
+      UI.focusSoon(i);
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: () => { setField(key, 'note', 1, i.value.trim()); draw(); } }],
+  });
+}
+function lane(d, i, pid, EX, days) {
+  const el = document.createElement('section'); el.className = 'lane card mb-card' + (d.key === act ? ' act' : ''); el.dataset.day = d.key;
+  const list = EX[d.key] || [];
+  const hd = document.createElement('div'); hd.className = 'lhead'; hd.draggable = true;
+  hd.addEventListener('dragstart', ev => { if (ev.target.tagName === 'INPUT') { ev.preventDefault(); return; } drag = { kind: 'day', key: d.key }; ev.dataTransfer.setData('text/plain', d.v.name || 'Day'); ev.dataTransfer.effectAllowed = 'move'; try { ev.dataTransfer.setDragImage(el, 30, 20); } catch (er) {} });
+  /* The name is text until it is clicked, and a box while it is typed in:
+     a box in a draggable head would take the press for itself, and the day
+     could only be carried by its edges. */
+  const nm = document.createElement('div'); nm.className = 'dname'; nm.tabIndex = 0; nm.textContent = d.v.name || 'Day';
+  nm.title = 'Click to rename · drag to move';
+  const rename = () => {
+    const box = document.createElement('input'); box.className = 'dname'; box.value = d.v.name || ''; box.placeholder = 'Day name';
+    box.setAttribute('aria-label', 'Day name');
+    let done = false;
+    const save = () => {
+      if (done) return; done = true;
+      Rec.patch('fday', null, d.key, { name: box.value.trim() || ('Day ' + (i + 1)) }); touch(pid);
+      nm.textContent = box.value.trim() || ('Day ' + (i + 1)); box.replaceWith(nm); draw();
+    };
+    box.onblur = save;
+    box.onkeydown = ev => { if (ev.key === 'Enter') box.blur(); if (ev.key === 'Escape') { box.value = d.v.name || ''; box.blur(); } };
+    nm.replaceWith(box); box.focus(); box.select();
+  };
+  nm.onclick = rename;
+  nm.onkeydown = ev => { if (ev.key === 'Enter') rename(); };
+  hd.appendChild(nm);
+  const sets = list.reduce((a, e) => a + (val(e.v, 'n', wk) || 0), 0);
+  const c = document.createElement('span'); c.className = 'cnt'; c.textContent = sets ? sets + ' sets' : ''; hd.appendChild(c);
+  const more = document.createElement('button'); more.type = 'button'; more.className = 'ico mb-press mb-tap';
+  more.innerHTML = ico('more'); more.setAttribute('aria-label', 'Options for ' + (d.v.name || 'day'));
+  const menu = ev => UI.menu(ev.clientX, ev.clientY, [
+    { label: 'Rename', fn: rename },
+    { label: 'Duplicate Day', fn: () => duplicateDay(pid, d.key) },
+    i > 0 ? { label: 'Move Left', fn: () => moveDay(pid, d.key, -1) } : null,
+    i < days.length - 1 ? { label: 'Move Right', fn: () => moveDay(pid, d.key, 1) } : null,
+    '-',
+    { label: 'Remove Day', kind: 'bad', fn: () => removeDay(pid, d.key) },
+  ].filter(Boolean));
+  more.onclick = menu;
+  Mobile.hold(hd, menu, { skip: 'button,input' });
+  hd.appendChild(more);
+  el.appendChild(hd);
+  const box = document.createElement('div'); box.className = 'plates';
+  list.forEach(e => box.appendChild(plate(e, d.key, pid)));
+  el.appendChild(box);
+  /* typing a name straight into a day, for when the bin is the long way round */
+  const ad = document.createElement('div'); ad.className = 'ladd';
+  const inp = UI.field('text', { placeholder: '+ exercise' }); inp.setAttribute('list', 'fxnames'); inp.setAttribute('aria-label', 'Add an exercise to ' + (d.v.name || 'this day'));
+  inp.onkeydown = ev => {
+    if (ev.key !== 'Enter') return;
+    const t = inp.value.trim(); if (!t) return;
+    const v = vocab()[t.toLowerCase()];
+    addEx(d.key, v ? v.name : t, v ? v.cat : 'Other');
+    inp.value = ''; act = d.key; drawNow(true);
+    const again = document.querySelector('.lane[data-day="' + CSS.escape(d.key) + '"] .ladd input'); if (again) again.focus();
+  };
+  ad.appendChild(inp);
+  el.appendChild(ad);
+  el.addEventListener('pointerdown', () => {
+    if (act === d.key) return;
+    act = d.key;
+    document.querySelectorAll('.lane.act').forEach(n => n.classList.remove('act'));
+    el.classList.add('act');
+  });
+  wireLane(el, d.key, pid, i);
+  return el;
+}
+function drawBoard(board) {
+  const p = progs()[cur];
+  const days = daysOf(cur), EX = exByDay(cur);
+  if (!act || !days.some(d => d.key === act)) act = days[0] ? days[0].key : '';
+  drawSum(board, EX);
+  const L = document.createElement('div'); L.id = 'lanes';
+  days.forEach((d, i) => L.appendChild(lane(d, i, cur, EX, days)));
+  const add = document.createElement('button'); add.type = 'button'; add.className = 'addday mb-press'; add.textContent = '+ DAY';
+  add.onclick = () => {
+    const k = cur + '|' + newId();
+    Rec.set('fday', null, k, { name: 'Day ' + (days.length + 1), ord: days.length });
+    act = k; touch(cur); draw();
+    const n = document.querySelector('.lane[data-day="' + CSS.escape(k) + '"] .dname'); if (n) n.click();
+  };
+  L.appendChild(add);
+  board.appendChild(L);
+  const dl = document.createElement('datalist'); dl.id = 'fxnames';
+  Object.values(vocab()).sort((a, b) => a.name.localeCompare(b.name)).forEach(v => { const o = document.createElement('option'); o.value = v.name; dl.appendChild(o); });
+  board.appendChild(dl);
+  void p;
+}
+function drawGrid(board) {
+  const p = progs()[cur], weeks = Math.max(1, p.weeks | 0), days = daysOf(cur), EX = exByDay(cur);
+  const G = document.createElement('div'); G.id = 'grid';
+  if (!days.length) { const e = document.createElement('p'); e.className = 'empty'; e.textContent = 'No days yet.'; G.appendChild(e); }
+  days.forEach(d => {
+    const card = document.createElement('div'); card.className = 'card mb-card';
+    const h = document.createElement('h2'); h.textContent = String(d.v.name || 'Day').toUpperCase(); card.appendChild(h);
+    const list = EX[d.key] || [];
+    if (!list.length) { const e = document.createElement('p'); e.className = 'empty'; e.textContent = 'Nothing in this day yet.'; card.appendChild(e); G.appendChild(card); return; }
+    const wrap = document.createElement('div'); wrap.style.overflowX = 'auto';
+    const t = document.createElement('table'); t.className = 'wt';
+    let hr = '<tr><th>EXERCISE</th>';
+    for (let w = 1; w <= weeks; w++) hr += '<th class="w' + (w === wk ? ' on' : '') + '" data-w="' + w + '">WEEK ' + w + '</th>';
+    t.innerHTML = hr + '<th>REST</th></tr>';
+    list.forEach(e => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="x" style="--c:' + catColor(e.v.cat) + '">' + esc(e.v.name) + '</td>';
+      for (let w = 1; w <= weeks; w++) {
+        const td = document.createElement('td');
+        td.className = 'v' + (w === 1 || weekHasOwn(e.v, w) ? ' own' : '');
+        const n = val(e.v, 'n', w), r = val(e.v, 'r', w), kg = val(e.v, 'kg', w), rir = val(e.v, 'rir', w);
+        td.textContent = [(n != null || r != null) ? (n ?? '?') + '×' + (r ?? '?') : '', kg != null ? show(kg) : '', rir != null ? '@' + rir : ''].filter(Boolean).join(' · ') || '—';
+        td.title = 'Week ' + w + ': ' + (planText(e.v, w) || 'nothing set') + (w > 1 && !weekHasOwn(e.v, w) ? ' (follows week ' + (w - 1) + ')' : '');
+        td.onclick = () => { wk = w; view = 'board'; Rec.setting(APP.id, 'view', view); seg.select('board'); draw(); };
+        tr.appendChild(td);
+      }
+      const rt = document.createElement('td'); rt.className = 'v own'; rt.textContent = restText(e.v.rest) || '—'; tr.appendChild(rt);
+      t.appendChild(tr);
+    });
+    t.querySelectorAll('th.w').forEach(th => th.onclick = () => { wk = +th.dataset.w; draw(); });
+    wrap.appendChild(t); card.appendChild(wrap); G.appendChild(card);
+  });
+  board.appendChild(G);
+}
+
+/* ── the screen ──
+   Never redrawn under a box that is being typed in: a row arriving from
+   another device waits for the box to be left. */
+let pending = false;
+function draw() {
+  const a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && document.getElementById('app').contains(a) && a.id !== 'q') { pending = true; return; }
+  drawNow();
+}
+function drawNow(force) {
+  pending = false;
+  void force;
+  slotsNow();
+  if (cur && !progs()[cur]) cur = '';
+  if (!cur) { const l = progList(); if (l.length) cur = l[0].key; }
+  drawHead();
+  drawSide();
+  const board = document.getElementById('board');
+  const lanes = board.querySelector('#lanes'), keepX = lanes ? lanes.scrollLeft : 0;
+  board.innerHTML = '';
+  if (!cur) { blank(board); return; }
+  if (view === 'grid') drawGrid(board); else drawBoard(board);
+  const nl = board.querySelector('#lanes'); if (nl) nl.scrollLeft = keepX;
+}
+document.addEventListener('focusout', () => setTimeout(() => {
+  const a = document.activeElement;
+  if (pending && !(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA'))) drawNow();
+}, 0));
+
+function settings() {
+  UI.settings(APP.id, [{ id: 'forge', name: 'FORGE', draw: pane => {
+    pane.appendChild(UI.row('Weights in', 'How FORGE shows and takes loads. Stored in kilograms, as TRAIN keeps them', UI.segmented(
+      [{ id: 'kg', name: 'KG' }, { id: 'lb', name: 'LB' }], unit(), v => { Rec.setting(APP.id, 'unit', v); draw(); })));
+    const c = document.createElement('button'); c.type = 'button'; c.className = 'mb-btn mb-press mb-tap'; c.textContent = 'OPEN COACH';
+    c.onclick = () => { location.href = '../coach/index.html'; };
+    pane.appendChild(UI.row('Where programs go', 'Every program here is in COACH’s PROGRAMS list too. Your name on a file is set in COACH', c));
+  } }]);
+}
+
+/* A program deleted on another device before its last publish would leave
+   its COACH copy behind. Tidied once at start, and only for a program whose
+   tombstone is here, so a program whose rows have not arrived yet is left
+   alone. */
+function tidy() {
+  Object.entries(Rec.map('cprog')).forEach(([k, v]) => {
+    if (v.src !== 'forge' || k.indexOf('f-') !== 0) return;
+    const id = k.slice(2);
+    if (!progs()[id] && Rec.tombstone('fprog', null, id)) Rec.del('cprog', null, k);
+  });
+  progList().forEach(({ key }) => { if (!Rec.get('cprog', null, 'f-' + key)) touch(key); });
+}
+
+let rt = null;
+Rec.on(() => { clearTimeout(rt); rt = setTimeout(draw, 80); });
+Rec.ready(() => { tidy(); draw(); });
+if (/[?&]new=1/.test(location.search)) setTimeout(newProgram, 300);
+draw();
+</script>
+</body>
+</html>
