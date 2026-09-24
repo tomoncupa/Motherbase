@@ -658,6 +658,28 @@ a five-set CSV with a comma inside an exercise name imported as that client's
 rows, weights read as pounds and stored in kilograms, and Tom's own `set`,
 `exercise` and `tick` counts did not move.
 
+## A program in weeks, and the coach's target (1.0.21, 2026-09-24)
+
+FORGE (`forge/CLAUDE.md`) builds programs in weeks and sends them through
+COACH's file. `takeProgram` reads the new fields and still accepts every older file.
+
+- **One routine per week.** A file whose days carry `wk` above 1 becomes
+  `prog-<id>-w1`, `-w2` and so on, named `<program> · Week N`, with each day
+  under its plain `day` name. A file with one week, or none, is one routine,
+  `prog-<id>`, exactly as before. A resend deletes the weeks it no longer has,
+  and the single routine it used to be.
+- **The target is `progex.plan`**: `{n, rir, rest, note}` when the file sends
+  them. The routine list shows it as `3 × 8 · RIR 2 · 3:00 rest · cue` in
+  place of "previous sets". It is never logged; set one is still the only set
+  filled (`fillFor`, fill 3).
+- **The training screen shows it** as a faded `Coach · …` line under last
+  time, when the exercise was started from that routine today (LOG ALL or a
+  tap). It is remembered in one setting, `coachPlan`, today's only. On a
+  client's profile it is `coachPlan.<pid>`, so a plan Tom opens for a client
+  never shows on his own TRAIN.
+- **A new exercise takes the rest as its rest timer.** One the client already
+  has keeps their own rest.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the
