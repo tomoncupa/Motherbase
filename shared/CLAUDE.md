@@ -238,6 +238,18 @@ ask the top document, and the top starts when a frame signs in. Known cost:
 the two leftover 2999 tombstones keep `Rec.newerThan` true, so every push
 runs `Rec.export()`. Root Known traps has why.
 
+## What the LIVE SYNC row may claim (2026-09-24, `cloud.js` 0.1.4)
+
+Tom: "overall the diagnostic feedback has been innacurate." Both desktop
+programs sat signed out by Google for seven hours under a row saying Live.
+Now `state().conn` (Firebase's `.info/connected`) is the only thing that
+earns "Live as", a cancelled listener clears `live`, a lasting
+`onAuthStateChanged` notices a sign-out mid-session (`out`, `lost`), and
+"last synced" is `sentAt`/`gotAt`, moved only by a write that landed or a row
+that arrived. `Cloud.sync()` resolves with the row count and rejects with the
+reason. Untested: a sign-out while the page is open (needs a real account).
+Why Google dropped the desktop sign-in is still unknown.
+
 ## History
 
 `HISTORY.md`, beside this file, holds the debt list, the numbered foundation
