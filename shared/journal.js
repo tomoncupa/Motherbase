@@ -128,6 +128,20 @@ function clockMins(h, mm, ap, date) {
   return (h <= 6 ? h + 12 : h) * 60 + mm;
 }
 const minsHM = v => String(Math.floor(v / 60) % 24).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0');
+const hmMins = s => { const p = String(s || '').split(':'); return +p[0] * 60 + (+p[1] || 0); };
+/* A start and a length as the clock it ends on, and back again. Tom,
+   2026-09-25: "should be start time and end time". A line still stores `at`
+   and `dur`, which the home screen's day log and every reader already take,
+   so a start and an end are only a way of typing and reading those two. The
+   end is the first time that clock comes round after the start, the same
+   rule as a typed range, so 11pm to 1am is two hours. */
+const endAt = (at, dur) => at && dur ? minsHM(hmMins(at) + dur) : null;
+function spanMins(at, end) {
+  if (!at || !end) return null;
+  const s = hmMins(at), e = hmMins(end);
+  if (e === s) return null;
+  return e > s ? e - s : e + 1440 - s;
+}
 
 function parseLine(raw, date) {
   let text = String(raw == null ? '' : raw).trim();
@@ -454,7 +468,9 @@ const CSS =
   '.mb-bullet .at{font-style:normal;font-family:var(--font-mono);font-size:var(--f-1);' +
     'color:var(--accent);margin-left:var(--s-2);white-space:nowrap}' +
   '.mb-bullet .at.wrote{opacity:.6}' +
-  '.mb-bullet .feel{font-size:var(--f-1);color:var(--text-muted);margin-left:var(--s-2);white-space:nowrap}';
+  '.mb-bullet .feel{font-size:var(--f-1);color:var(--text-muted);margin-left:var(--s-2);white-space:nowrap}' +
+  '.mb-bullet .mood{font-style:normal;font-family:var(--font-mono);display:inline-flex;align-items:center;gap:2px}' +
+  '.mb-bullet .mood svg{display:block}';
 let cssDone = false;
 function css() {
   if (cssDone || typeof document === 'undefined' || !document.head) return;
@@ -493,7 +509,9 @@ function timeText(x) {
   }
   /* Tracked and not stopped yet (STATUS's Track, 2026-09-18) */
   if (x.run && !x.dur) return { s: (x.at ? clockLabel(x.at) + ' · ' : '') + 'running', wrote: false };
-  if (x.at) return { s: clockLabel(x.at) + (dur ? ' · ' + dur : ''), wrote: false };
+  /* a start and a length read as the span, like a todo (2026-09-25) */
+  if (x.at && x.dur) return { s: clockLabel(x.at) + ' - ' + clockLabel(endAt(x.at, x.dur)), wrote: false };
+  if (x.at) return { s: clockLabel(x.at), wrote: false };
   if (dur) return { s: dur, wrote: false };
   if (x.t) return { s: clockLabel(hhmm(x.t)), wrote: true };
   return { s: '', wrote: false };
@@ -519,7 +537,10 @@ function textHTML(x, day) {
   const tm = timeText(x);
   return esc(x.text) +
     (tm.s ? '<i class="at' + (tm.wrote ? ' wrote' : '') + '">' + esc(tm.s) + '</i>' : '') +
-    /* how it felt, when STATUS's BULLETS switch asked (2026-09-19) */
+    /* the mood it was rated, a face and the number (2026-09-25), then how it
+       felt in words (2026-09-19), when STATUS's BULLETS switches asked */
+    (x.mood != null && x.mood !== '' ? '<i class="feel mood" title="Mood">' +
+      (g.Icons && g.Icons.svg ? g.Icons.svg('mood', { size: 12 }) : 'mood ') + esc(x.mood) + '</i>' : '') +
     (x.feel ? '<i class="feel">' + esc(x.feel) + '</i>' : '') +
     (x.carried ? '<i class="carried">' + x.carried + 'd</i>' : '') +
     (x.from && day ? '<i class="carried">' + Day().diff(day, x.from) + 'd</i>' : '');
@@ -685,7 +706,7 @@ if (g.Rec && g.Rec.ready) g.Rec.ready(() => { try { dedupe(); } catch (e) { cons
 g.Journal = {
   KINDS: KINDS,
   bare: bare, place: place, onDay: onDay, notes: notes,
-  parseLine: parseLine, clockMins: clockMins, minsHM: minsHM,
+  parseLine: parseLine, clockMins: clockMins, minsHM: minsHM, endAt: endAt, spanMins: spanMins,
   hhmm: hhmm, clockLabel: clockLabel, durLabel: durLabel,
   publishTimed: publishTimed, publishNotes: publishNotes, add: add, paidOf: paidOf,
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,
