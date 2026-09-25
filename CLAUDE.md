@@ -774,6 +774,19 @@ answer, or take it out.
   that must read back in the order it was entered sorts on the row KEY, which
   is a timestamp for anything keyed the suite's usual way. COACH printed a
   session's exercises in whatever order the store felt like, 2026-09-24.
+- **A drag that stops the page scrolling must say so before the finger lands.**
+  A phone decides at touchstart whether anything can cancel the scroll, so a
+  non-passive `touchmove` listener added once a row is lifted is ignored: the
+  list scrolls, the browser sends `pointercancel`, and the row drops back.
+  TRAIN's day drawer shipped that way and never moved on the iPhone
+  (2026-09-25). Put the listener on the list from the start and call
+  `preventDefault` only while something is lifted, and give held rows
+  `user-select:none` and `-webkit-touch-callout:none`. TRAIN's `holdToMove` and
+  STATUS's `makeTilesSortable` both do.
+- **Match a standard row by its NAME, not a key you would have made.** An
+  import brings its own keys (FitNotes groups are `fn<id>`), so TRAIN's
+  `fillCats` looked for `forearms`, missed his own Forearms, and added a second
+  one (2026-09-25). Before adding a default, look for one with that name.
 
 ---
 

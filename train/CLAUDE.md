@@ -649,6 +649,11 @@ session could undo without noticing:
   group an existing log is missing, **moves no exercise**, and skips a group he
   deleted by asking `Rec.tombstone` rather than remembering what it wrote —
   and it runs inside `Rec.ready`, when every device's tombstones are in.
+  **Known bug, not yet fixed (found 2026-09-25):** it checks KEYS, and a
+  FitNotes group is keyed `fn<id>`, so on an imported log it adds a second
+  Forearms beside his own, and Arms and Core beside Biceps, Triceps and Abs
+  unless their tombstones exist. The fix matches by name and synonym and
+  deletes an empty app-made copy.
 
 (`HISTORY.md: The training screen, four complaints` and the three sections
 after it.)
