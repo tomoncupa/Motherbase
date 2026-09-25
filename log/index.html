@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.16, 2026-09-23">
+<meta name="mb-version" content="1.0.17, 2026-09-25">
 <title>LOG</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1920,7 +1920,10 @@ function noteDialog(x, d) {
        saving it deletes it, with an undo, as well as the DELETE button. */
     if (!raw && !isNew) { h.close(); removeLine(x); return; }
     if (!raw) { UI.toast('Nothing to save', { bad: true }); return; }
-    const pz = parseLine(raw, isNew ? d : (x.day || x.date));
+    /* STATUS's BULLETS can switch time tracking off, and then a time at the
+       end of the words stays words (shared/journal.js, 2026-09-25) */
+    const pz = Journal.readLine(raw, isNew ? d : (x.day || x.date));
+    const timed = Journal.timesOn();
     let own = d;
     if (isNew) {
       /* the suite's one creator, shared/journal.js, so a line written here is
@@ -1932,7 +1935,9 @@ function noteDialog(x, d) {
       const cur = Rec.get('note', own, x.key);
       if (!cur) { UI.toast('That line is gone', { bad: true }); h.close(); return; }
       Rec.set('note', own, x.key, Object.assign({}, cur, {
-        kind: kind, text: pz.text, at: pz.at, dur: pz.dur,
+        kind: kind, text: pz.text,
+        /* off, the times the line already has are kept, since they are not in the box */
+        at: timed ? pz.at : (cur.at || null), dur: timed ? pz.dur : (cur.dur || null),
         by: kind === 'todo' ? (cur.by || null) : null,
       }));
       reveal = x.day;
@@ -1949,7 +1954,7 @@ function noteDialog(x, d) {
       b.appendChild(UI.segmented(NOTE_KINDS.map(k => ({ id: k.id, name: k.label })), kind, v => { kind = v; }));
       const p = x.p || {};
       ta = UI.field('note', { rows: 2, value: isNew ? '' :
-        String(p.text || '') + (p.at ? ' ' + clockLabel(p.at) : '') + (p.dur ? ' ' + durLabel(p.dur) : '') });
+        String(p.text || '') + (Journal.timesOn() ? (p.at ? ' ' + clockLabel(p.at) : '') + (p.dur ? ' ' + durLabel(p.dur) : '') : '') });
       ta.style.marginTop = 'var(--s-3)';
       ta.onkeydown = e => {
         if (e.key !== 'Enter' || e.shiftKey || e.altKey) return;
