@@ -789,6 +789,7 @@ own brief since 2026-09-22.
 | `mix/` | ELEMENT, the electrolyte bench. Tom only. Brief: `mix/CLAUDE.md`. |
 | `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
 | `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
+| `sheet/` | CHARACTER SHEET, a pixel character for story pictures. Planned; only the art engine exists. Client build. Brief: `sheet/CLAUDE.md`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation. `_smoke.html` must pass at desktop and phone width. Every app loads it. |
 
