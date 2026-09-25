@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
-<meta name="mb-version" content="1.0.9, 2026-09-25">
+<meta name="mb-version" content="1.0.10, 2026-09-25">
 <title>NOTICE</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -27,7 +27,7 @@
 <script src="../shared/io.js?v=16"></script>
 <script src="../shared/health.js?v=16"></script>
 <script src="../shared/icons.js?v=16"></script>
-<script src="../shared/notice.js?v=17"></script>
+<script src="../shared/notice.js?v=18"></script>
 
 <style>
 /* NOTICE: text in, a status window out. Built to the phone rules and used at
@@ -131,7 +131,7 @@ textarea.mb-input{width:100%;min-height:calc(var(--tap) * 4);resize:vertical;
     <div class="seg"><div class="lbl">HEADING</div><div id="segHead"></div></div>
     <div class="seg"><div class="lbl">STYLE</div><div id="segStyle"></div></div>
     <div id="rowMade" class="seg">
-      <div class="seg" id="rowRw"><div class="lbl">REWARDS</div><div class="mb-chips" id="rwChips"></div></div>
+      <div class="seg" id="rowRw"><div class="lbl">REWARDS</div><div id="rwRows"></div></div>
       <div class="seg" id="rowStat"><div class="lbl">STAT</div><div id="segStat"></div></div>
       <div class="acts">
         <button class="mb-btn mb-press mb-tap" id="btnRoll">REROLL REWARDS</button>
@@ -196,6 +196,7 @@ const S = {
   back: get('back', 'dark'),
   size: get('size', 'mid'),
   seed: +get('seed', 0) || 0,
+  rs: Object.assign({ exp: 0, stat: 0, title: 0, gold: 0, item: 0 }, get('rs', null) || {}),  // per-reward seeds, see RS0
 };
 
 /* ══════════════ the picture's palettes ══════════════
@@ -269,29 +270,34 @@ const ITEMS = ['Recovery Potion (Rare)', 'Random Box (C-Rank)', 'Random Box (B-R
    empty list (root CLAUDE.md, Known traps), so "none" stands for none. */
 const RW_KINDS = [{ id: 'exp', name: 'EXP' }, { id: 'stat', name: 'STAT' }, { id: 'title', name: 'TITLE' },
   { id: 'gold', name: 'GOLD' }, { id: 'item', name: 'ITEM' }];
-const rwOn = () => { const v = String(get('rw', 'exp,stat,title,item')); return v === 'none' ? [] : v.split(','); };
+const rwOn = () => { const v = String(get('rw', 'exp,stat,title')); return v === 'none' ? [] : v.split(','); };
+/* Each kind of reward rolls on its own seed, so the EXP can stay while only
+   the item is rerolled (Tom, 2026-09-25). REROLL REWARDS moves S.seed, which
+   rerolls every kind at once. Always a full object, never an empty one. */
+const RS0 = () => ({ exp: 0, stat: 0, title: 0, gold: 0, item: 0 });
 const STAT_PICK = [{ id: 'auto', name: 'AUTO' }].concat(STATS.map(s => ({ id: s, name: s })));
 
-function pseudoRewards(q, seed) {
-  const on = rwOn(), want = k => on.indexOf(k) >= 0;
+/* Every kind of reward, on or off, each from its own roll. */
+function rewardParts(q, seed, rs) {
+  rs = rs || RS0();
   const all = [q.title].concat(q.goals.map(g => g.label + ' ' + (g.unit || ''))).join(' ');
   const n = Math.max(1, q.goals.length);
   const words = all.split(/\s+/).filter(Boolean).length;
-  const r = rng(hash(all) + seed * 7919);
+  const roll = k => rng(hash(all + '|' + k) + (seed + (rs[k] || 0)) * 7919);
+  let r = roll('exp');
   const exp = Math.round((120 * n + 8 * words) * (1 + Math.floor(r() * 5) / 10) / 10) * 10;
+  r = roll('stat');
   const picked = get('rwStat', 'auto');
   const stat = picked !== 'auto' ? picked : statOf(all, r);
   const amt = 1 + (n > 3 ? 1 : 0) + (r() < 0.3 ? 1 : 0);
-  const title = TITLES[Math.floor(r() * TITLES.length)];
-  const gold = fmt((1 + Math.floor(r() * 9)) * 50 * n) + ' Gold';
-  const item = ITEMS[Math.floor(r() * ITEMS.length)];
-  const out = [];
-  if (want('exp')) out.push(fmt(exp) + ' EXP');
-  if (want('stat')) out.push(stat + ' +' + amt);
-  if (want('title')) out.push('Title: ' + title);
-  if (want('gold')) out.push(gold);
-  if (want('item')) out.push('Item: ' + item);
-  return out;
+  r = roll('title'); const title = TITLES[Math.floor(r() * TITLES.length)];
+  r = roll('gold'); const gold = fmt((1 + Math.floor(r() * 9)) * 50 * n) + ' Gold';
+  r = roll('item'); const item = ITEMS[Math.floor(r() * ITEMS.length)];
+  return { exp: fmt(exp) + ' EXP', stat: stat + ' +' + amt, title: 'Title: ' + title, gold: gold, item: 'Item: ' + item };
+}
+function pseudoRewards(q, seed, rs) {
+  const parts = rewardParts(q, seed, rs);
+  return rwOn().map(k => parts[k]).filter(Boolean);
 }
 
 /* What an item or a status effect does. {p} and {h} are filled per roll. */
@@ -308,7 +314,7 @@ const LIMITS = ['Cannot be used twice in one day', 'Single use', 'Cooldown: 24 h
 /* What the window shows under REWARDS or EFFECTS: typed ones win. */
 function shownRewards(q) {
   if (q.typedRewards) return q.rewards;
-  return q.kind === 'item' || q.kind === 'status' ? pseudoEffects(q, S.seed) : pseudoRewards(q, S.seed);
+  return q.kind === 'item' || q.kind === 'status' ? pseudoEffects(q, S.seed) : pseudoRewards(q, S.seed, S.rs);
 }
 
 /* An item or status window with nothing listed still needs something under
@@ -352,6 +358,7 @@ function render() {
   document.getElementById('btnWrite').textContent = fx ? 'EDIT EFFECTS' : 'EDIT REWARDS';
   /* the chips only steer a quest's rewards; the stat pick steers effects too */
   document.getElementById('rowRw').classList.toggle('hide', !made || fx);
+  if (made && !fx) rwRows(q);
   document.getElementById('rowStat').classList.toggle('hide', !made || (!fx && rwOn().indexOf('stat') < 0));
   document.getElementById('rowBack').classList.toggle('hide', S.frame === 'window');
   document.getElementById('rowSize').classList.toggle('hide', S.frame === 'window');
@@ -483,7 +490,7 @@ const QUEST_TITLE = ['Preparation to Become Strong', 'The Daily Grind', 'Show Up
   'The Quiet Work', 'First Steps', 'One More Day', 'The Unseen Hours', 'Earn the Rest', 'Clear the Board',
   'Steady Pace', 'The Hard Part', 'Nothing Skipped', 'Momentum', 'The Basics', 'Ordinary Heroics'];
 const QUEST_DESC = ['The Daily Quest has arrived.', 'This quest cannot be refused.',
-  'Failure will result in a penalty.', 'No extensions. No substitutions.', 'Complete all goals before midnight.',
+  'Failure will result in an appropriate penalty.', 'No extensions. No substitutions.', 'Complete all goals before midnight.',
   'The system has assigned this quest.', 'Progress is tracked automatically.', 'This quest resets at midnight.',
   'Only the player can complete this.', 'Rewards are paid on completion.'];
 const PENALTIES = ['{h} in the penalty zone', 'Tomorrow’s quest doubles', 'Streak resets to zero',
@@ -524,10 +531,10 @@ const SKILLS = [['Consistency', 'Passive', 'A missed day no longer breaks the st
   ['First Alarm', 'Passive', 'Out of bed on the first ring.'],
   ['Recovery', 'Passive', 'Soreness clears one day sooner.']];
 const MSGS = ['No session logged in {d}.', 'Sleep is down {p}% this week.',
-  'Daily Quest incomplete. Warning issued.', 'Streak: {d}. A new record.', 'A new quest is available.',
+  'WARNING: Daily Quest incomplete.', 'Streak: {d}. New record.', 'A new quest is available.',
   'Nothing to report.', 'Unspent stat points: {s}.', 'Level unchanged for {d}.', 'Hidden quest detected.',
   'A new dungeon has appeared nearby.', 'Recovery complete. All stats restored.',
-  'Fatigue is building. Rest is advised.', 'The player has returned.', 'Instant dungeon cleared.',
+  'Fatigue rising. Rest advised.', 'The player has returned.', 'Instant dungeon cleared.',
   'Condition: optimal.', 'Weekly quest {p}% complete.', 'An unknown item was found.',
   'The player is being watched.'];
 
@@ -736,8 +743,33 @@ ta.addEventListener('input', () => {
 });
 
 $('btnRoll').onclick = () => { S.seed = S.seed + 1; put('seed', S.seed); Mobile.feedback('select'); render(); };
+/* REWARDS on the main screen: one row per kind, what it rolled, a reroll for
+   that kind alone and a switch. Redrawn by render(), so it always shows what
+   the window shows. */
+function rwRows(q) {
+  const box = $('rwRows'); box.innerHTML = '';
+  const parts = rewardParts(q, S.seed, S.rs), on = rwOn();
+  RW_KINDS.forEach(k => {
+    const isOn = on.indexOf(k.id) >= 0;
+    const ctl = document.createElement('div');
+    ctl.style.cssText = 'display:flex;align-items:center;gap:var(--s-2)';
+    const re = document.createElement('button');
+    re.className = 'mb-btn mb-press mb-tap'; re.setAttribute('data-icon', 'refresh');
+    re.setAttribute('aria-label', 'Reroll ' + k.name); re.title = 'Reroll ' + k.name;
+    re.innerHTML = (window.Icons && Icons.svg('refresh', { size: 18 })) || 'REROLL';
+    re.disabled = !isOn; re.style.visibility = isOn ? '' : 'hidden';
+    re.onclick = () => { S.rs[k.id] = (S.rs[k.id] || 0) + 1; put('rs', S.rs); Mobile.feedback('select'); render(); };
+    ctl.appendChild(re);
+    ctl.appendChild(UI.toggle(isOn, v => {
+      const now = rwOn().filter(x => x !== k.id); if (v) now.push(k.id);
+      const ordered = RW_KINDS.map(x => x.id).filter(id => now.indexOf(id) >= 0);
+      put('rw', ordered.length ? ordered.join(',') : 'none');
+      Mobile.feedback('select'); render();
+    }));
+    box.appendChild(UI.row(k.name, isOn ? UI.esc(parts[k.id]) : 'Off', ctl));
+  });
+}
 $('btnWrite').onclick = writeRewardsIn;
-rwChips($('rwChips'), render);
 $('segStat').appendChild(UI.segmented(STAT_PICK, get('rwStat', 'auto'), v => { put('rwStat', v); Mobile.feedback('select'); render(); }));
 $('btnMake').onclick = makePanel;
 
@@ -746,7 +778,7 @@ const fileName = q => {
   return 'notice-' + (first || 'window') + '-' + Day.today();
 };
 function keep(q) {
-  Rec.set('msg', Day.today(), newId(), { text: S.text, kind: q.kind, head: S.head, style: S.style, seed: S.seed, t: Date.now() });
+  Rec.set('msg', Day.today(), newId(), { text: S.text, kind: q.kind, head: S.head, style: S.style, seed: S.seed, rs: S.rs, t: Date.now() });
 }
 /* The picture on screen IS the file, already drawn, so the share sheet is
    asked for inside the tap that pressed SAVE. iOS allows nothing later. */
@@ -861,6 +893,7 @@ $('btnRecent').onclick = () => {
           (p.kind === 'quest' ? 'quest' : 'notice') + ' · ' + Day.label(r.date || Day.today())) + '</small>';
         go.onclick = () => {
           S.text = p.text || ''; S.style = STYLES[p.style] ? p.style : S.style; S.seed = +p.seed || 0;
+          S.rs = Object.assign(RS0(), p.rs || {}); put('rs', S.rs);
           if (p.head && pick(HEADS, p.head).id === p.head) { S.head = p.head; put('head', S.head); }
           ta.value = S.text; put('draft', S.text); put('style', S.style); put('seed', S.seed);
           seg('segStyle', STYLE_LIST, 'style'); seg('segHead', HEADS, 'head');

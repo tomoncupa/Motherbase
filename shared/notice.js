@@ -328,8 +328,9 @@
       }
       if (q.goals.length) {
         y += 6; label('GOAL', st.mute);
-        /* A goal with a number is counted: no tick box, the count on the right
-           and a thin bar under it. A goal without one keeps its box. */
+        /* A goal with a number is counted: no tick box, the count on the right.
+           No bar under it: Tom, 2026-09-25, "games dont show bars". A goal
+           without a number keeps its box. */
         q.goals.forEach(g => {
           const hasP = g.max != null;
           const cnt = hasP ? '[' + fmt(g.cur) + '/' + fmt(g.max) + (g.unit ? ' ' + g.unit : '') + ']' : '';
@@ -351,14 +352,6 @@
             }
           }
           lines.forEach(l => { text(l, lx, y, bodyOf(st, 15, 500), ink, 'left', false); y += 21; });
-          if (hasP) {
-            if (draw) {
-              ctx.globalAlpha = 0.3; ctx.fillStyle = st.line; ctx.fillRect(X, y, CW, 3);
-              ctx.globalAlpha = 1; ctx.fillStyle = st.acc;
-              ctx.fillRect(X, y, CW * Math.max(0, Math.min(1, g.cur / g.max)), 3);
-            }
-            y += 6;
-          }
           y += 5;
         });
       }
