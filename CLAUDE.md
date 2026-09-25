@@ -779,9 +779,13 @@ answer, or take it out.
   Closing a sheet queues a `history.back()` that lands a moment later; a
   sheet opened in the same tick pushes its entry first, the late step takes
   it, and closing the second sheet then steps back to the page before the
-  app. FORGE's SEND → fill list did exactly this (2026-09-25). Open the
-  second sheet after the `popstate` lands: FORGE's `afterSheet` does it. The
-  real fix belongs in `mobile.js`'s `trap`, for a foundation session.
+  app. FORGE's SEND → fill list did exactly this (2026-09-25), and so did
+  TRAIN's Menu → Training Routines → LOG ALL, back to the home screen.
+  **Fixed at the root the same day:** `Mobile.trap` now holds a new entry's
+  push until a back already on its way has landed, and one smoke check
+  closes and opens in one tick and must unwind to where it began. A page
+  that calls `history.pushState` itself is not covered; go through
+  `Mobile.trap`.
 - **`Rec.all` hands rows back in no order**, and a payload's `ord` usually
   numbers a row inside its own group, so it cannot order the groups. A list
   that must read back in the order it was entered sorts on the row KEY, which

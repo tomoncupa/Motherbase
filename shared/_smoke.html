@@ -379,6 +379,29 @@ async function run() {
     rel();
     return !!pushed;
   })());
+  /* This one exists because it broke: TRAIN's menu closed and its next screen
+     opened in the same tap, the menu's late back took the screen's entry, and
+     LOG ALL then stepped off the page to the home screen (2026-09-25). Three
+     floor entries of its own keep a failure on this page instead of leaving
+     it: the old code was watched overshooting by two. */
+  ok('mobile: a trap opened as another closes still unwinds to where it began', await (async () => {
+    const pause = ms => new Promise(r => setTimeout(r, ms));
+    await pause(300);   /* the check above leaves its own back on its way */
+    history.pushState({ smoke: 'under' }, '');
+    history.pushState({ smoke: 'under' }, '');
+    history.pushState({ smoke: 'floor' }, '');
+    const r1 = Mobile.trap(() => {});
+    await pause(50);
+    r1();
+    const r2 = Mobile.trap(() => {});
+    await pause(300);
+    const atNext = !!(history.state && history.state.mb);
+    r2();
+    await pause(300);
+    const home = !!(history.state && history.state.smoke === 'floor');
+    if (home) { history.go(-3); await pause(300); }
+    return atNext && home;
+  })());
   ok('mobile: a sheet opens, locks the page and closes clean', (() => {
     const h = Mobile.sheet({ title: 'SMOKE', body: b => { b.textContent = 'x'; } });
     const open = document.querySelectorAll('.mb-sheet').length === 1 &&

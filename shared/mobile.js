@@ -358,8 +358,23 @@ const CUE = {
    and pops it when it closes, so the stack always matches what is on screen. */
 const traps = [];
 let popping = false, ignore = 0;
+/* Closing one thing and opening the next in the same tap is the normal case:
+   a menu row closes the menu and opens a screen. The close's history.back()
+   lands a moment later, so a push made in between is the entry it takes, and
+   the next close then steps off the page. TRAIN's Menu, Training Routines,
+   LOG ALL went back to the home screen that way (2026-09-25). So a trap made
+   while a back is on its way owes its push until that back has landed. */
+let owed = [], owedTimer = 0;
+function payOwed() {
+  clearTimeout(owedTimer); owedTimer = 0;
+  const list = owed; owed = [];
+  list.forEach(rec => {
+    if (traps.indexOf(rec) < 0) return;
+    try { history.pushState({ mb: traps.indexOf(rec) + 1 }, ''); rec.pushed = true; } catch (e) {}
+  });
+}
 addEventListener('popstate', () => {
-  if (ignore > 0) { ignore--; return; }
+  if (ignore > 0) { ignore--; if (!ignore && owed.length) payOwed(); return; }
   const t = traps.pop();
   if (!t) return;
   popping = true;
@@ -741,14 +756,22 @@ const Mobile = {
   /** the system back gesture closes this, instead of leaving the app.
       Returns a release function to call when you close it yourself. */
   trap(fn) {
-    const rec = { fn: fn };
+    const rec = { fn: fn, pushed: false };
     traps.push(rec);
-    try { history.pushState({ mb: traps.length }, ''); } catch (e) {}
+    if (ignore > 0) {
+      owed.push(rec);
+      /* a back that never lands would leave this with no entry at all */
+      if (!owedTimer) owedTimer = setTimeout(() => { ignore = 0; payOwed(); }, 1000);
+    } else {
+      try { history.pushState({ mb: traps.length }, ''); rec.pushed = true; } catch (e) {}
+    }
     return function release() {
       const i = traps.indexOf(rec);
       if (i < 0) return;
       const wasTop = i === traps.length - 1;
       traps.splice(i, 1);
+      /* closed before its push was paid: there is no entry to unwind */
+      if (!rec.pushed) { owed = owed.filter(r => r !== rec); return; }
       /* Only unwind history for the entry actually on top, and only when the
          close did not already come from a popstate. */
       if (wasTop && !popping) { ignore++; try { history.back(); } catch (e) {} }
