@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.1.4 — Firebase as a SECOND sync, beside the Google Sheet.
+/* shared/cloud.js — 0.1.5 —Firebase as a SECOND sync, beside the Google Sheet.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
    replacement and it is not allowed to become one. The sheet keeps doing
@@ -411,6 +411,10 @@ function onRow(snap) {
   var v = null;
   try { v = snap.val(); } catch (e) {}
   if (!v || !v.id || !v.type) return;
+  /* The database stores no empty list, empty object or null, so a row whose
+     payload was only those, such as BLOCK's `{v: []}`, comes down with no
+     payload at all, and an app reading a field off it throws (2026-09-25). */
+  if (v.payload == null && !v.deleted) v.payload = {};
   var n = 0;
   try { n = g.Rec ? g.Rec.merge([v]) : 0; } catch (e) { return; }
   if (v.updated_at && v.updated_at > (cfg.seen || '') && v.updated_at <= soon()) { cfg.seen = v.updated_at; csave(); }
