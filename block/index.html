@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.18, 2026-09-25">
+<meta name="mb-version" content="1.0.19, 2026-09-25">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -1542,6 +1542,11 @@ function blockRows(st) {
   vs.forEach((v, i) => {
     const r = Object.assign({}, v, { ord: oV[i] });
     delete r.items;
+    /* Live sync's database drops an empty list, so a new day's `routines: []`
+       arrived elsewhere as no list at all, which reads as "runs every
+       routine": a fresh day full of empty routines (2026-09-25). `picked`
+       survives the trip and says the list was chosen, even when empty. */
+    if (Array.isArray(v.routines)) r.picked = 1;
     out.routine[v.id] = r;
     Object.keys(v.items || {}).forEach(laneId => {
       const arr = v.items[laneId] || [], key = it => v.id + '|' + laneId + '|' + it.id;
@@ -1670,6 +1675,7 @@ function blockState() {
   st.variants = Object.keys(routines).map(id => {
     const v = Object.assign({ id: id }, routines[id]);
     v.items = {};
+    if (v.picked && !Array.isArray(v.routines)) v.routines = [];
     return v;
   }).sort(ord);
   const byId = {};
