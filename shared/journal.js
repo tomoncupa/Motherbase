@@ -379,6 +379,83 @@ function topFeels() {
   return mine.slice(0, 5);
 }
 
+/* ── what he usually says ──
+   Tom, 2026-09-25, asked what mood autofill could be, and picked two:
+   A, a line whose words match one rated before gets the number he usually
+   gives it; B, the word and the number teach each other, so "drained" points
+   at his usual number for drained, and a number picked turns the word
+   buttons into the words he pairs with it.
+
+   SUGGESTED, NEVER FILLED. A number filled in and not corrected would be a
+   false Mood reading, and those feed the Mood tile. So an app outlines the
+   guess and saves nothing until a number is tapped. Everything is his own
+   history, the last 180 days of rated lines, and it knows nothing until
+   there is some. Read once per sheet: `memo()` hands back the three
+   answers. The usual number is the one given most; a tie goes to the most
+   recent. */
+const normText = s => String(parseLine(s || '').text || '').toLowerCase()
+  .replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+const normWord = s => String(s || '').toLowerCase().trim();
+function usual(counts) {
+  let best = null;
+  Object.keys(counts || {}).forEach(k => {
+    const c = counts[k];
+    if (!best || c.n > best.n || (c.n === best.n && c.t > best.t)) best = { v: k, n: c.n, t: c.t };
+  });
+  return best;
+}
+/* `rows` is for _smoke.html, which hands in made-up lines rather than writing
+   any to a real device */
+function memo(rows) {
+  const from = Day().shift(Day().today(), -180);
+  const byText = {}, byWord = {}, wordsBy = {};
+  const bump = (o, k, x, t) => {
+    const m = o[k] = o[k] || {};
+    const c = m[x] = m[x] || { n: 0, t: 0 };
+    c.n++; c.t = Math.max(c.t, t || 0);
+  };
+  (rows || Rec().all('note', { from: from })).forEach(r => {
+    const p = r.payload;
+    if (!p || p.mood == null || p.mood === '') return;
+    const v = +p.mood, t = p.t || 0, w = normWord(p.feel), k = normText(p.text);
+    if (k) bump(byText, k, v, t);
+    if (w) { bump(byWord, w, v, t); bump(wordsBy, v, w, t); }
+  });
+  return {
+    /* A. The exact words first; then lines that start with them, or that
+       they start with ("gym" and "gym push day"), counted together. */
+    forText(text) {
+      const k = normText(text);
+      if (k.length < 2) return null;
+      if (byText[k]) return +usual(byText[k]).v;
+      const all = {};
+      Object.keys(byText).forEach(o => {
+        if (Math.min(o.length, k.length) < 3) return;
+        if (o.indexOf(k + ' ') !== 0 && k.indexOf(o + ' ') !== 0) return;
+        Object.keys(byText[o]).forEach(v => {
+          const c = byText[o][v], a = all[v] = all[v] || { n: 0, t: 0 };
+          a.n += c.n; a.t = Math.max(a.t, c.t);
+        });
+      });
+      const b = usual(all);
+      return b ? +b.v : null;
+    },
+    /* B. A word to its usual number */
+    forWord(word) {
+      const w = normWord(word);
+      return w && byWord[w] ? +usual(byWord[w]).v : null;
+    },
+    /* B. A number to the words he pairs with it, most used first, filled up
+       from his five most used overall */
+    wordsFor(v) {
+      const m = wordsBy[v] || {};
+      const mine = Object.keys(m).sort((a, b) => m[b].n - m[a].n || m[b].t - m[a].t);
+      topFeels().forEach(w => { if (mine.indexOf(w) < 0) mine.push(w); });
+      return mine.slice(0, 5);
+    },
+  };
+}
+
 /* ── a line's mood is a Mood reading too ──
    Tom, 2026-09-25: "since mood isnt graded letter wise and is more for
    tracking and looking back on". So a mood on a line also goes into the
@@ -819,7 +896,7 @@ g.Journal = {
   ASK: ASK, timesOn: timesOn, moodOn: moodOn, feelOn: feelOn, askMap: askMap, asks: asks, readLine: readLine,
   _said: fn => { saidBy = fn || null; },
   moodField: moodField, scaleLo: scaleLo, scaleHi: scaleHi, scaleName: scaleName, scaleWord: scaleWord,
-  topFeels: topFeels, moodToDay: moodToDay,
+  topFeels: topFeels, moodToDay: moodToDay, moodMemo: memo,
   hhmm: hhmm, clockLabel: clockLabel, durLabel: durLabel,
   publishTimed: publishTimed, publishNotes: publishNotes, add: add, paidOf: paidOf,
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,
