@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.52, 2026-09-25">
+<meta name="mb-version" content="1.0.53, 2026-09-25">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -3083,18 +3083,13 @@ function entryRow(f, d, e) {
    if they want to denote what the ranges mean for them". `lo` is where it
    starts (1 unless set, 0 allowed), `max` where it ends, at most eleven
    values, and `names` the words he gave any number. */
-function scaleLo(f) { return f && f.lo != null && isFinite(f.lo) ? Math.round(f.lo) : 1; }
-function scaleHi(f) { const lo = scaleLo(f); return Math.max(lo + 1, Math.min(lo + 10, Math.round((f && f.max) || 5))); }
-function scaleName(f, v) { return (f && f.names && f.names[v]) ? String(f.names[v]) : ''; }
-/* A scale runs 1..max, and max is whatever the field says — 3, 5, 10. The
-   words are stretched over whatever range that is rather than assuming five,
-   so a 1-to-3 scale reads bad / ok / great and a 1-to-10 still labels its
-   ends. His own words for a number win; the stretched ones fill the rest. */
-function scaleWord(f, v) {
-  if (scaleName(f, v)) return scaleName(f, v);
-  const lo = scaleLo(f), hi = scaleHi(f), t = (v - lo) / (hi - lo);
-  return t === 0 ? 'bad' : t === 1 ? 'great' : t < .34 ? 'low' : t > .66 ? 'good' : 'ok';
-}
+/* A scale runs lo..max, 3, 5 or 10, with its words stretched over whatever
+   range that is. In shared/journal.js since 2026-09-25, so BULLET reads a
+   mood in the same words. */
+function scaleLo(f) { return Journal.scaleLo(f); }
+function scaleHi(f) { return Journal.scaleHi(f); }
+function scaleName(f, v) { return Journal.scaleName(f, v); }
+function scaleWord(f, v) { return Journal.scaleWord(f, v); }
 
 function scaleSheet(f, date) {
   const d = date || vd();
@@ -8510,6 +8505,17 @@ function drawBulletsTab(pane) {
     S.get('bulletPaid', 1) !== 0, v => { S.set('bulletPaid', v ? 1 : 0); again(); }));
   pane.appendChild(el('div', 'note',
     'Enter saves a bullet and Shift+Enter starts a new line.'));
+
+  /* BULLET, the page that only writes a bullet, is an address rather than
+     an app on the home screen (Tom, 2026-09-25: "it can just be a link"), so
+     this is where anyone finds it. A new tab, because on a phone that is the
+     browser, where Add to Home Screen lives. */
+  pane.appendChild(el('label', 'fl', 'Home screen'));
+  const bl = el('button', 'mb-btn mb-press mb-tap', 'OPEN BULLET');
+  bl.type = 'button';
+  bl.onclick = () => { window.open(new URL('../bullet/', location.href).href, '_blank'); };
+  pane.appendChild(UI.row('An icon that only writes bullets',
+    'Opens BULLET in the browser. Then Share, Add to Home Screen.', bl));
 }
 /* What each kind of bullet asks for when it is written, with the switches
    above them, is shared/journal.js (`Journal.asks`), so LOG and the home
@@ -8529,41 +8535,10 @@ const feelAsked = () => S.get('bulletFeel', 1) !== 0;
    reading that moved with its line's start could be lost. Changing the mood
    changes the number in place; clearing it or deleting the line takes it
    out. Switched off in BULLETS, or no Mood field, it writes nothing. */
-function moodToDay(date, key, v, at, wrote) {
-  const f = field('mood');
-  if (!f || !f.on || S.get('bulletMoodDay', 1) === 0 || !date || !key) return;
-  const row = Rec.get('ev', date, 'mood') || {};
-  const e = (row.e || []).slice(), gone = row.gone || {};
-  const i = e.findIndex(x => x && x.n === key);
-  if (v == null) {
-    if (i < 0) return;
-    e.splice(i, 1);
-  } else if (i > -1) {
-    if (e[i].v === v) return;
-    e[i] = Object.assign({}, e[i], { v: v });
-  } else {
-    let t = wrote || Date.now();
-    if (at) {
-      const p = date.split('-'), hm = String(at).split(':');
-      t = new Date(+p[0], +p[1] - 1, +p[2], +hm[0], +hm[1] || 0).getTime();
-    }
-    while (e.some(x => x && x.t === t) || gone[t]) t++;
-    e.push({ t: t, v: v, n: key });
-  }
-  if (e.length) Rec.set('ev', date, 'mood', { e: e }); else Rec.del('ev', date, 'mood');
-}
+function moodToDay(date, key, v, at, wrote) { Journal.moodToDay(date, key, v, at, wrote); }
 /* The five feelings he writes most, from the last 90 days; plain ones until
    he has written any. */
-function topFeels() {
-  const n = {}, from = Day.shift(Day.today(), -90);
-  Rec.all('note', { from: from }).forEach(r => {
-    const f = r.payload && String(r.payload.feel || '').trim().toLowerCase();
-    if (f) n[f] = (n[f] || 0) + 1;
-  });
-  const mine = Object.keys(n).sort((a, b) => n[b] - n[a]);
-  ['good', 'focused', 'calm', 'tired', 'stressed'].forEach(w => { if (mine.indexOf(w) < 0) mine.push(w); });
-  return mine.slice(0, 5);
-}
+function topFeels() { return Journal.topFeels(); }
 
 function drawDeskTab(pane) {
   settingsPane = pane; pane.classList.add('setpane');
