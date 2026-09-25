@@ -32,7 +32,10 @@ can save and look at the history of when I open the CHARACTER SHEET".
   `Notice.compose` in `shared/notice.js`. No made-up rewards.
 - [TESTED in browser with made-up rows, 375px and desktop] UNTESTED on his real
   log (12k sets) and on a phone. Review 122/122 at both widths.
-- Open: live pop-ups inside TRAIN or STATUS at the moment it happens (asked Tom).
+- **No live pop-ups in TRAIN or STATUS.** Tom, 2026-09-25: "NO - SHEET is silly and
+  self contained for now". Feats pop only when SHEET is opened.
+- Next: devise an ACHIEVEMENT SYSTEM for SHEET (Tom, 2026-09-25). Design it
+  and show Tom before building.
 
 ## What it is for
 
