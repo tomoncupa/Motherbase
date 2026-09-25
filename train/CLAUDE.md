@@ -102,7 +102,15 @@ describe the gym, not the training.
 `workoutTimerStop` `graphPoints` `graphTrend` `graphZero` `e1rmMaxReps`
 `repCounts` `exSort` `catSort` `plates` `bars` `seen` `prRule` (2 once records
 have been worked out under the rule that keeps split sets apart) `sortSeen`
-`sortSkip` (Sort Into Groups: offered once, and the moves he switched off).
+`sortSkip` (Sort Into Groups: offered once, and the moves he switched off)
+`rangeBase` `rangePrint` (the Profile painting's two switches, written only when he switches).
+
+**Reps may carry a fraction** (1.0.37, Tom: "let it add fractions for reps"):
+a half rep is 8.5. Every reps box uses the keypad with a point, the steppers
+keep the fraction (8.5 then 9.5), `TRAIN.readReps` reads a comma as the point
+and keeps two places, `TRAIN.showReps` prints one. **A partial rep counts
+down for a rep max**, as it does in a split: 100 x 8.5 is an 8-rep max. The
+still-standing record rule compares the real number, so 8.5 beats 8.
 
 A setting that is on by default is read as `!== 0`; one that is off by default
 as `=== 1`. Mixing those up turns a default the wrong way for everyone who never

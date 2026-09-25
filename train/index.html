@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.36, 2026-09-25">
+<meta name="mb-version" content="1.0.37, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2100,7 +2100,7 @@ TRAIN.importCsv = function (grid) {
     }
 
     var w = map.kg != null ? parseFloat(r[map.kg]) : 0;
-    var reps = map.reps != null ? parseInt(r[map.reps], 10) : 0;
+    var reps = map.reps != null ? TRAIN.readReps(r[map.reps]) : 0;
     var dist = map.dist != null ? parseFloat(r[map.dist]) : 0;
     var dur = map.dur != null ? parseFloat(r[map.dur]) : 0;
     if (!isFinite(w)) w = 0;
@@ -2603,7 +2603,7 @@ TRAIN.importNotes = function (res, opt) {
       var ex = exFor(it);
       it.sets.forEach(function (s) {
         var key = 'nt-' + date + '-' + (++n);
-        var p = { ex: ex, kg: Math.round(s.kg * 1000) / 1000, r: s.r | 0, u: s.u, done: 1, pr: 0, prf: 0,
+        var p = { ex: ex, kg: Math.round(s.kg * 1000) / 1000, r: TRAIN.readReps(s.r) || 0, u: s.u, done: 1, pr: 0, prf: 0,
           dist: s.dist ? Math.round(s.dist * 1000) / 1000 : 0, dur: Math.round(s.dur || 0), note: s.note || '', ord: n };
         if (s.warm) p.warm = 1;
         if (s.rir != null) p.rir = s.rir;
@@ -3982,8 +3982,9 @@ function stepper(kind, value, step, onChange) {
   minus.innerHTML = ico('minus');
   minus.setAttribute('aria-label', 'Decrease ' + NAME);
   var input = UI.el('input');
-  /* Time needs a colon, which no number keypad has. */
-  Mobile.field(input, kind === 'r' ? 'number' : kind === 't' ? 'text' : 'decimal', {});
+  /* Time needs a colon, which no number keypad has. Reps take a point too:
+     a half rep is logged as 8.5 (Tom, 2026-09-25). */
+  Mobile.field(input, kind === 't' ? 'text' : 'decimal', {});
   if (kind === 't') input.placeholder = '0:00';
   input.value = value === '' ? '' : String(value);
   input.setAttribute('aria-label', NAME);
@@ -3997,7 +3998,7 @@ function stepper(kind, value, step, onChange) {
   };
   var write = function (n) {
     if (n < 0) n = 0;
-    input.value = kind === 'r' ? String(Math.round(n))
+    input.value = kind === 'r' ? TRAIN.showReps(n)
       : kind === 't' ? fmtSecs(Math.round(n))
       : String(Math.round(n * 1000) / 1000);
     onChange(input.value);
@@ -4023,7 +4024,7 @@ function commitSet(inputs) {
   var val = function (k) {
     var el = inputs[k];
     if (!el || String(el.value).trim() === '') return null;
-    var n = k === 't' ? TRAIN.parseTime(el.value) : k === 'r' ? parseInt(el.value, 10) : parseFloat(el.value);
+    var n = k === 't' ? TRAIN.parseTime(el.value) : k === 'r' ? TRAIN.readReps(el.value) : parseFloat(el.value);
     return isNaN(n) ? null : n;
   };
   if (f.every(function (k) { return !val(k); })) {
@@ -4407,7 +4408,7 @@ function drawGraph(m) {
   var values = pts.map(function (p) { return p[1]; });
   var best = Math.max.apply(null, values), latest = values[values.length - 1];
   var dec = g.u === 'reps' ? 0 : 1;
-  var num = function (v) { return dec ? fmt1(v) : String(Math.round(v)); };
+  var num = function (v) { return dec ? fmt1(v) : TRAIN.showReps(v); };
   card.appendChild(recLine('Best', num(best) + ' ' + UI.esc(g.u), pts[values.indexOf(best)][0]));
   card.appendChild(recLine('Latest', num(latest) + ' ' + UI.esc(g.u), pts[pts.length - 1][0]));
   card.appendChild(recLine('Sessions', String(pts.length), ''));
@@ -4752,6 +4753,14 @@ function closeDrawer(fromBack) {
 
 /* Brzycki, which is what FitNotes uses. It falls apart at high rep counts,
    which is why the app lets you cap the reps that count towards it. */
+/* Reps may carry a fraction: a half rep is 8.5 (Tom, 2026-09-25: "let it
+   add fractions for reps"). Kept to two places, so stepping and adding up
+   never print 9.499999. A comma is read as the point. */
+TRAIN.readReps = function (v) {
+  var n = parseFloat(String(v == null ? '' : v).replace(',', '.'));
+  return isNaN(n) ? NaN : Math.round(n * 100) / 100;
+};
+TRAIN.showReps = function (n) { return String(Math.round((+n || 0) * 100) / 100); };
 TRAIN.e1rm = function (kg, reps) {
   if (!kg || !reps) return 0;
   var cap = Rec.setting(APP.id, 'e1rmMaxReps') || 0;
@@ -4837,7 +4846,7 @@ TRAIN.recordsFor = function (exId, range) {
     if (s.split) {
       r.split.sets++;
       if (s.kg > 0 && (!r.split.maxWeight || s.kg > r.split.maxWeight.kg)) r.split.maxWeight = s;
-      if (s.kg > 0 && s.r > 0 && (!r.split.byReps[s.r] || s.kg > r.split.byReps[s.r].kg)) r.split.byReps[s.r] = s;
+      if (s.kg > 0 && s.r >= 1 && (!r.split.byReps[Math.floor(s.r)] || s.kg > r.split.byReps[Math.floor(s.r)].kg)) r.split.byReps[Math.floor(s.r)] = s;
       return;
     }
     var vol = (s.kg || 0) * (s.r || 0), e = TRAIN.e1rm(s.kg, s.r);
@@ -4845,7 +4854,7 @@ TRAIN.recordsFor = function (exId, range) {
     if (s.r > 0 && (!r.maxReps || s.r > r.maxReps.r)) r.maxReps = s;
     if (vol > 0 && (!r.maxVolume || vol > (r.maxVolume.kg * r.maxVolume.r))) r.maxVolume = s;
     if (e > 0 && (!r.max1rm || e > TRAIN.e1rm(r.max1rm.kg, r.max1rm.r))) r.max1rm = s;
-    if (s.r > 0 && s.kg > 0 && (!r.byReps[s.r] || s.kg > r.byReps[s.r].kg)) r.byReps[s.r] = s;
+    if (s.r >= 1 && s.kg > 0 && (!r.byReps[Math.floor(s.r)] || s.kg > r.byReps[Math.floor(s.r)].kg)) r.byReps[Math.floor(s.r)] = s;
   });
   r.workouts = Object.keys(days).length;
   return r;
@@ -6033,7 +6042,7 @@ TRAIN.goalDialog = function (key, forEx) {
         var note = wRow.querySelector('.lbl span');
         if (note) note.textContent = 'Weight in ' + TRAIN.unitLabel(sel.value);
       });
-      r = UI.field('number', { value: cur ? String(cur.r || 1) : '1', placeholder: 'reps' });
+      r = UI.field('decimal', { value: cur ? String(cur.r || 1) : '1', placeholder: 'reps' });
       b.appendChild(UI.row('Number Of Reps', '', r));
       to = UI.field('date', { value: cur && cur.to ? cur.to : '' });
       b.appendChild(UI.row('End Date', 'Optional', to));
@@ -6044,7 +6053,7 @@ TRAIN.goalDialog = function (key, forEx) {
         var kg = TRAIN.toKg(parseFloat(w.value) || 0, TRAIN.unit(sel.value));
         if (!kg) { UI.toast('Please enter a goal value', { bad: true }); return false; }
         var changes = {
-          kind: 0, ex: sel.value, kg: kg, r: parseInt(r.value, 10) || 1, u: TRAIN.unit(sel.value),
+          kind: 0, ex: sel.value, kg: kg, r: TRAIN.readReps(r.value) || 1, u: TRAIN.unit(sel.value),
           title: exs[sel.value] ? exs[sel.value].name : '', to: to.value || null,
         };
         if (key) TRAIN.patchRow('goal', null, key, changes);
@@ -7012,13 +7021,13 @@ TRAIN.e1rmCalc = function (kg, reps, exId) {
     title: 'ESTIMATED 1RM', width: 440,
     body: function (b) {
       w = UI.field('decimal', { value: kg ? TRAIN.showWeight(kg, null, exId) : '', placeholder: TRAIN.unitLabel(exId) });
-      r = UI.field('number', { value: reps ? String(reps) : '', placeholder: 'reps' });
+      r = UI.field('decimal', { value: reps ? String(reps) : '', placeholder: 'reps' });
       b.appendChild(UI.row('Weight', TRAIN.unitLabel(exId), w));
       b.appendChild(UI.row('Reps', 'Accuracy drops above 10', r));
       var out = UI.el('div');
       b.appendChild(out);
       var run = function () {
-        var W = parseFloat(w.value), R = parseInt(r.value, 10);
+        var W = parseFloat(w.value), R = TRAIN.readReps(r.value);
         if (!(W > 0) || !(R > 0)) { out.innerHTML = ''; return; }
         if (R >= 37) { out.innerHTML = '<div class="empty">Too many reps to estimate</div>'; return; }
         var one = W * 36 / (37 - R);
@@ -7827,10 +7836,10 @@ TRAIN.progexDialog = function (key) {
           w.className += ' count';
           w.setAttribute('aria-label', 'Set ' + (i + 1) + ' weight');
           w.oninput = function () { var v = parseFloat(w.value); s.kg = isNaN(v) ? null : TRAIN.toKg(v, TRAIN.unit(cur.ex)); s.u = TRAIN.unit(cur.ex); };
-          var r = UI.field('number', { value: s.r == null ? '' : String(s.r), placeholder: 'reps' });
+          var r = UI.field('decimal', { value: s.r == null ? '' : String(s.r), placeholder: 'reps' });
           r.className += ' count';
           r.setAttribute('aria-label', 'Set ' + (i + 1) + ' reps');
-          r.oninput = function () { var v = parseInt(r.value, 10); s.r = isNaN(v) ? null : v; };
+          r.oninput = function () { var v = TRAIN.readReps(r.value); s.r = isNaN(v) ? null : v; };
           var del = UI.el('button', 'ico mb-press mb-tap');
           del.innerHTML = ico('del'); del.setAttribute('aria-label', 'Delete set ' + (i + 1));
           del.onclick = function () { sets.splice(i, 1); paint(); };
@@ -8192,7 +8201,7 @@ TRAIN.noteSplit = function (note, reps) {
         if (!(run[j].v > 0)) break;
         sum += run[j].v;
         rest = Math.max(rest, run[j].rest);
-        if (Math.floor(sum + 1e-9) === reps) {
+        if (Math.floor(sum + 1e-9) === reps || Math.abs(sum - reps) < 1e-6) {
           return { text: note.slice(run[i].a, run[j].b), rest: rest,
                    parts: run.slice(i, j + 1).map(function (x) { return x.v; }) };
         }
@@ -8517,7 +8526,7 @@ TRAIN.setDelta = function (a, b, kind) {
   var val = function (s, k) { return +({ w: s.kg, r: s.r, d: s.dist, t: s.dur }[k]) || 0; };
   var same = function (x, y, k) { return k === 'w' ? Math.abs(x - y) < 0.005 : k === 'd' ? Math.abs(x - y) < 0.0005 : x === y; };
   var sign = function (v) { return v > 0 ? '+' : '−'; };
-  var repWord = function (n) { return sign(n) + Math.abs(n) + (Math.abs(n) === 1 ? ' rep' : ' reps'); };
+  var repWord = function (n) { return sign(n) + TRAIN.showReps(Math.abs(n)) + (Math.abs(n) === 1 ? ' rep' : ' reps'); };
   var out = { dir: 0, dr: f.indexOf('r') > -1 ? val(a, 'r') - val(b, 'r') : null, pct: null, e1: false };
   var parts = [];
   if (f[0] === 'w' && f[1] === 'r') {
@@ -8555,7 +8564,7 @@ TRAIN.setDelta = function (a, b, kind) {
    the sets that have a 1RM on both sides. */
 function gainText(reps, pctSum, pctN) {
   var parts = [];
-  if (reps) parts.push((reps > 0 ? '+' : '−') + Math.abs(reps) + (Math.abs(reps) === 1 ? ' rep' : ' reps'));
+  if (reps) parts.push((reps > 0 ? '+' : '−') + TRAIN.showReps(Math.abs(reps)) + (Math.abs(reps) === 1 ? ' rep' : ' reps'));
   if (pctN) {
     var p = pctSum / pctN;
     if (Math.abs(p) >= 0.05) parts.push((p > 0 ? '+' : '−') + Math.abs(p).toFixed(1) + '% average');
@@ -8931,7 +8940,17 @@ function drawProfile(m) {
     var rc = UI.el('div', 'exblock');
     rc.style.overflow = 'hidden';
     m.appendChild(rc);
-    Range.mount(rc, TRAIN.rangeData(), 190);
+    /* The base (BLOCKS, SESSIONS, SETS, VOLUME) and the print (FUJI, INK,
+       DUSK) are his to switch, and kept as settings: written only when he
+       switches one. */
+    Range.mount(rc, TRAIN.rangeData(), 230, {
+      base: Rec.setting(APP.id, 'rangeBase'), print: Rec.setting(APP.id, 'rangePrint'),
+      volume: function (kg) { return compact(TRAIN.toUnit(kg, U)) + ' ' + TRAIN.unitLabel(); },
+      onChange: function (o) {
+        if (o.base !== Rec.setting(APP.id, 'rangeBase')) Rec.setting(APP.id, 'rangeBase', o.base);
+        if (o.print !== Rec.setting(APP.id, 'rangePrint')) Rec.setting(APP.id, 'rangePrint', o.print);
+      },
+    });
   }
 
   var ph = TRAIN.phaseOn(today);
@@ -9366,7 +9385,7 @@ document.getElementById('moreBtn').onclick = function (e) {
       } },
       { label: 'Set Calculator', fn: function () { TRAIN.setCalc(id); } },
       { label: 'Estimated 1RM Calculator', fn: function () {
-        var typed = parseFloat(TRAIN.draftW), reps = parseInt(TRAIN.draftR, 10);
+        var typed = parseFloat(TRAIN.draftW), reps = TRAIN.readReps(TRAIN.draftR);
         TRAIN.e1rmCalc(typed > 0 ? TRAIN.toKg(typed, TRAIN.unit(id)) : 0, reps > 0 ? reps : 0, id);
       } },
       { label: 'Add To Superset', fn: function () { TRAIN.supersetPanel(id); } },
