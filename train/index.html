@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.32, 2026-09-25">
+<meta name="mb-version" content="1.0.33, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -3378,12 +3378,15 @@ function recordCheer(exId, date, key, kg) {
 
 /* After a set is done: the rest timer, the workout timer's end, and the
    superset's next exercise. A superset set to hold the rest timer starts it
-   only after its last exercise, which is FitNotes' "until a full round". */
-function afterSave(exId, date) {
+   only after its last exercise, which is FitNotes' "until a full round".
+   The rest timer starts from the tick box only (`byTick`), never from SAVE
+   or UPDATE. Tom, 2026-09-25: "saving a set should NOT start the timer,
+   only marking it as done". */
+function afterSave(exId, date, byTick) {
   var grp = TRAIN.groupOf(date, exId);
   var members = grp ? (grp.g.ex || []) : [];
   var lastOfRound = !grp || members[members.length - 1] === exId;
-  if (Rec.setting(APP.id, 'restAuto') !== 0 && (!grp || !grp.g.resthold || lastOfRound)) {
+  if (byTick && Rec.setting(APP.id, 'restAuto') !== 0 && (!grp || !grp.g.resthold || lastOfRound)) {
     var ex = TRAIN.exercises()[exId] || {};
     TRAIN.restStart(ex.rest || 0);
   }
@@ -3451,7 +3454,7 @@ function trainingSetRow(s, n, date, showChk, delta) {
       e.stopPropagation();
       TRAIN.patchSet(s.key, date, { done: s.done ? 0 : 1 });
       Mobile.feedback(s.done ? 'untick' : 'tick');
-      if (!s.done) afterSave(s.ex, date);
+      if (!s.done) afterSave(s.ex, date, true);
       if (TRAIN.pendingJump) {
         var nx = TRAIN.pendingJump;
         TRAIN.pendingJump = null;
@@ -8775,7 +8778,7 @@ TRAIN.settingsPanel = function () {
 
       group('REST TIMER');
       num('Rest Time', 'Seconds', 'restSeconds', 120);
-      sw('Auto Start', 'When a set is saved', 'restAuto', 1);
+      sw('Auto Start', 'When a set is marked done', 'restAuto', 1);
       /* Only where a web page can buzz. An iPhone will not let one and a
          computer has no motor, so there the switch did nothing. */
       if (navigator.vibrate && window.matchMedia && matchMedia('(pointer: coarse)').matches)

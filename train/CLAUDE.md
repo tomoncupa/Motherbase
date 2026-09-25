@@ -94,7 +94,7 @@ describe the gym, not the training.
 ### Settings (`train.*`)
 
 `unit` `distUnit` `weekStart` `catShow` `setLimit` `skipEmpty` `markComplete`
-`increment` `autoNext` `trackPRs` `keepAwake` `restSeconds` `restAuto`
+`increment` `autoNext` `trackPRs` `keepAwake` `restSeconds` `restAuto` (on by default; starts the rest timer when a set is TICKED, never on SAVE or UPDATE, 1.0.33)
 `restVibrate` `restSound` `rest` (a running timer) `workoutTimerAuto`
 `workoutTimerStop` `graphPoints` `graphTrend` `graphZero` `e1rmMaxReps`
 `repCounts` `exSort` `catSort` `plates` `bars` `seen` `prRule` (2 once records
