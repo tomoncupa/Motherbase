@@ -830,6 +830,13 @@ answer, or take it out.
   by the id it derives from type, date and key, so a hand-made `id` is a
   second row that `Rec.all` and `Rec.map` list and `Rec.get` cannot see, and
   the app shows a ghost (2026-09-25). Seed test rows with `Rec.set`.
+- **Clean test rows from a page that loads no store, in both halves, by
+  parsed row.** A localStorage name is `mb.r.<user>|<type>|<date>|<key>`, so
+  match the parsed `type` and `key`, not the name. A page that loads
+  `records.js` copies every localStorage row missing from IndexedDB back in,
+  so deleting from one half there brings rows back; and leaving
+  `_smoke.html` mid-run strands rows typed `smoke-<n>`. Each cost a failed
+  `_review.html` on 2026-09-25 (TRAIN 1.0.36).
 
 ---
 
