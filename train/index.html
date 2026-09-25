@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.33, 2026-09-25">
+<meta name="mb-version" content="1.0.34, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -775,23 +775,35 @@ TRAIN.toKg = function (v, unit) {
    each set was typed in. That is what FitNotes does: the stored kilograms are
    the truth, the display setting decides how they read, and its "Change
    Weight Unit → Convert Existing Values / Just Change Unit" dialog only makes
-   sense on those terms. It also means two units never appear on one screen,
-   which they did in the first version of this file.
+   sense on those terms. Every set of one exercise reads in one unit, and a
+   total across exercises reads in the app's.
 
    `u` on a set is still recorded. It is what he typed, and it is how a set
    entered as 500 lb can be shown as exactly 500 again rather than 226.8. */
-TRAIN.unit = function () { return Rec.setting(APP.id, 'unit') || 'lb'; };
+/* An exercise may carry its own unit, `wu`, 'kg' or 'lb' (Tom, 2026-09-25:
+   "Option to denote lbs and kilos PER exercise"), so dumbbells can read in
+   pounds beside a machine in kilograms. Hand this the exercise, its id or a
+   set, and it answers for that exercise; hand it nothing and it answers for
+   the whole app, which is what totals across exercises use. Not `unit`: the
+   importer has written 'kg' there on every FitNotes exercise, from a 0 that
+   means "the default". */
+TRAIN.unit = function (ex) {
+  if (ex && typeof ex === 'object' && ex.ex && !ex.name) ex = ex.ex;   /* a set */
+  if (typeof ex === 'string') ex = TRAIN.exercises()[ex];
+  if (ex && (ex.wu === 'kg' || ex.wu === 'lb')) return ex.wu;
+  return Rec.setting(APP.id, 'unit') || 'lb';
+};
 
 /* One decimal always, the way FitNotes prints it: 4.0 kgs, 12.5 kgs. A set
    typed in this unit is shown back exactly, without a float's fingerprints. */
-TRAIN.showWeight = function (kg, typedIn) {
-  var unit = TRAIN.unit();
+TRAIN.showWeight = function (kg, typedIn, ex) {
+  var unit = TRAIN.unit(ex);
   var v = TRAIN.toUnit(kg, unit);
   if (typedIn === unit) v = Math.round(v * 1000) / 1000;   /* it was typed here; trust it */
   return (Math.round(v * 10) / 10).toFixed(1);
 };
 /* FitNotes writes the unit plural in the log: "kgs", "lbs". */
-TRAIN.unitLabel = function () { return TRAIN.unit() + 's'; };
+TRAIN.unitLabel = function (ex) { return TRAIN.unit(ex) + 's'; };
 
 /* ═══════════════════ CATEGORY COLOUR SLOTS ═══════════════════
    A category stores a slot, never a hex. Six theme colours, each in a light
@@ -2446,7 +2458,6 @@ function drawWorkout(m) {
   var date = TRAIN.date;
   var groups = TRAIN.dayGroups(date);
   var cats = TRAIN.cats();
-  var unit = TRAIN.unit();
 
   if (!groups.length) { drawEmptyDay(m); return; }
   m.appendChild(sessionHead(date));
@@ -2559,9 +2570,9 @@ function drawWorkout(m) {
    with a small unit after it. Cardio and timed holds put whatever they have
    in the same two columns rather than growing a third. */
 function setCols(s, exId) {
-  var f = TRAIN.fieldsOf(exId || s.ex), U = TRAIN.unitLabel();
+  var f = TRAIN.fieldsOf(exId || s.ex), U = TRAIN.unitLabel(exId || s.ex);
   var cell = function (k) {
-    if (k === 'w') return s.kg ? '<b>' + TRAIN.showWeight(s.kg, s.u) + '</b> <span class="u">' + U + '</span>' : '';
+    if (k === 'w') return s.kg ? '<b>' + TRAIN.showWeight(s.kg, s.u, exId || s.ex) + '</b> <span class="u">' + U + '</span>' : '';
     if (k === 'r') return '<b>' + (s.r || 0) + '</b> <span class="u">reps</span>';
     if (k === 'd') return '<b>' + TRAIN.showDist(s.dist || 0) + '</b> <span class="u">' + TRAIN.distUnit() + '</span>';
     if (k === 't') return '<b>' + fmtSecs(s.dur || 0) + '</b>';
@@ -2643,7 +2654,7 @@ TRAIN.nextOrd = function (exId, date) {
 
 TRAIN.addSet = function (exId, date, fields) {
   var p = {
-    ex: exId, kg: fields.kg || 0, r: fields.r || 0, u: TRAIN.unit(),
+    ex: exId, kg: fields.kg || 0, r: fields.r || 0, u: TRAIN.unit(exId),
     /* Tom, 2026-09-24: "saved sets should not auto check", and FitNotes agrees
        — a set he just saved comes back unticked there too. The tick is his
        mark, not the app's claim. What makes a set count is `plan`: see
@@ -2989,6 +3000,7 @@ TRAIN.exerciseDialog = function (exId, prefill) {
   if (!Object.keys(cats).length) { TRAIN.seedCats(); cats = TRAIN.cats(); }
   var kind = cur ? TRAIN.kindOf(exId) : 'wr';
   var nameEl = null, sel = null, inc = null, rest = null, also = {}, barSw = null, barOn = null;
+  var wu = cur && (cur.wu === 'kg' || cur.wu === 'lb') ? cur.wu : '';
   if (cur && cur.also) Object.keys(cur.also).forEach(function (k) { also[k] = cur.also[k]; });
 
   UI.dialog({
@@ -3029,6 +3041,14 @@ TRAIN.exerciseDialog = function (exId, prefill) {
       ks.value = kind;
       ks.onchange = function () { kind = ks.value; };
       b.appendChild(UI.row('Type', 'What each set records', ks));
+
+      /* Its own unit, or the app's. Every set is kept in kilograms, so
+         changing this only changes how they read and what a typed number
+         means from here on. */
+      var appU = Rec.setting(APP.id, 'unit') || 'lb';
+      b.appendChild(UI.row('Weight unit', 'Default follows Settings, now ' + appU.toUpperCase(),
+        UI.segmented([{ id: '', name: 'DEFAULT' }, { id: 'lb', name: 'LBS' }, { id: 'kg', name: 'KGS' }],
+          wu, function (v) { wu = v; })));
 
       inc = UI.field('decimal', {
         value: cur && cur.inc ? String(cur.inc) : '',
@@ -3097,6 +3117,7 @@ TRAIN.exerciseDialog = function (exId, prefill) {
           inc: inc.value ? Number(inc.value) : null,
           rest: rest.value ? parseInt(rest.value, 10) : null,
           also: Object.keys(also).length ? also : null,
+          wu: wu || null,
         };
         if (barOn !== null) changes.bar = barOn;
         if (exId) {
@@ -3169,7 +3190,7 @@ function drawTrack(m) {
   f.forEach(function (k, i) {
     var label = UI.el('div', 'fieldlabel');
     if (i) label.style.marginTop = 'var(--s-4)';
-    label.textContent = { w: 'WEIGHT (' + TRAIN.unitLabel() + ')', r: 'REPS',
+    label.textContent = { w: 'WEIGHT (' + TRAIN.unitLabel(exId) + ')', r: 'REPS',
       d: 'DISTANCE (' + TRAIN.distUnit() + ')', t: 'TIME' }[k];
     /* The plates for each side sit on the label's own line, so a barbell
        lift costs no height for them, and they follow every step and key. */
@@ -3180,7 +3201,7 @@ function drawTrack(m) {
       label.appendChild(plates);
     }
     var paintPlates = function (v) {
-      if (plates) plates.textContent = TRAIN.platesText(TRAIN.toKg(parseFloat(v) || 0, TRAIN.unit()));
+      if (plates) plates.textContent = TRAIN.platesText(TRAIN.toKg(parseFloat(v) || 0, TRAIN.unit(exId)), TRAIN.unit(exId));
     };
     paintPlates(TRAIN.draftW);
     pad.appendChild(label);
@@ -3246,7 +3267,7 @@ function drawTrack(m) {
 function lastBit(s, f) {
   if (f[0] === 'w' && f[1] === 'r' && !s.kg) return '<b>' + (s.r || 0) + '</b> reps';
   return f.map(function (k) {
-    if (k === 'w') return s.kg ? '<b>' + TRAIN.showWeight(s.kg, s.u) + '</b> ' + TRAIN.unit() : '';
+    if (k === 'w') return s.kg ? '<b>' + TRAIN.showWeight(s.kg, s.u, s.ex) + '</b> ' + TRAIN.unit(s.ex) : '';
     if (k === 'r') return '<b>' + (s.r || 0) + '</b>';
     if (k === 'd') return '<b>' + TRAIN.showDist(s.dist || 0) + '</b> ' + TRAIN.distUnit();
     if (k === 't') return '<b>' + fmtSecs(s.dur || 0) + '</b>';
@@ -3313,7 +3334,7 @@ function commitSet(inputs) {
     return;
   }
   var w = val('w'), fields = {
-    kg: w ? TRAIN.toKg(w, TRAIN.unit()) : 0, r: val('r') || 0,
+    kg: w ? TRAIN.toKg(w, TRAIN.unit(exId)) : 0, r: val('r') || 0,
     dist: val('d') ? TRAIN.toKm(val('d')) : 0, dur: val('t') || 0,
     su: cleanSetup(exId),
   };
@@ -3328,7 +3349,7 @@ function commitSet(inputs) {
     var selKey = TRAIN.sel, was = Rec.get('set', date, selKey);
     /* Pressing UPDATE on a planned set is doing it, so the plan comes off.
        The tick box is not touched: it is his mark. */
-    var upd = { kg: fields.kg, r: fields.r, dist: fields.dist, dur: fields.dur, u: TRAIN.unit(), plan: 0 };
+    var upd = { kg: fields.kg, r: fields.r, dist: fields.dist, dur: fields.dur, u: TRAIN.unit(exId), plan: 0 };
     if (((TRAIN.exercises()[exId] || {}).setup || []).length) upd.su = fields.su || undefined;
     TRAIN.patchSet(TRAIN.sel, date, upd);
     TRAIN.sel = null;
@@ -3372,7 +3393,7 @@ function recordCheer(exId, date, key, kg) {
   Mobile.haptic('complete');
   if (window.Sfx && Sfx.play) Sfx.play('complete', { level: 2 });
   UI.toast((hit.all ? 'Personal record: ' : 'Block record: ') +
-    TRAIN.showWeight(kg, TRAIN.unit()) + ' ' + TRAIN.unitLabel());
+    TRAIN.showWeight(kg, TRAIN.unit(exId), exId) + ' ' + TRAIN.unitLabel(exId));
   return true;
 }
 
@@ -3608,7 +3629,7 @@ function drawGraph(m) {
     return;
   }
   if (TRAIN.graphEx !== exId) { TRAIN.graphEx = exId; TRAIN.graphType = null; TRAIN.graphPer = null; }
-  var ex = TRAIN.exercises()[exId] || {}, f = TRAIN.fieldsOf(exId), U = TRAIN.unit();
+  var ex = TRAIN.exercises()[exId] || {}, f = TRAIN.fieldsOf(exId), U = TRAIN.unit(exId);
   var W = function (kg) { return TRAIN.toUnit(kg || 0, U); };
   var D = function (km) { return TRAIN.distUnit() === 'mi' ? (km || 0) / KM_PER_MI : (km || 0); };
   var max = function (ss, fn) { return ss.reduce(function (a, x) { return Math.max(a, fn(x)); }, 0); };
@@ -3617,9 +3638,9 @@ function drawGraph(m) {
   /* FitNotes' graphs for the type of exercise on screen. */
   var G = [];
   if (f.indexOf('w') > -1) {
-    G.push({ id: 'e1rm', name: 'Estimated 1RM', u: TRAIN.unitLabel(), v: function (ss) { return W(max(ss, function (x) { return TRAIN.e1rm(x.kg, x.r); })); } });
-    G.push({ id: 'maxw', name: 'Max Weight', u: TRAIN.unitLabel(), v: function (ss) { return W(max(ss, function (x) { return x.kg || 0; })); } });
-    if (f.indexOf('r') > -1) G.push({ id: 'vol', name: 'Session Volume', u: TRAIN.unitLabel(), v: function (ss) { return W(sum(ss, function (x) { return (x.kg || 0) * (x.r || 0); })); } });
+    G.push({ id: 'e1rm', name: 'Estimated 1RM', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return TRAIN.e1rm(x.kg, x.r); })); } });
+    G.push({ id: 'maxw', name: 'Max Weight', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return x.kg || 0; })); } });
+    if (f.indexOf('r') > -1) G.push({ id: 'vol', name: 'Session Volume', u: U + 's', v: function (ss) { return W(sum(ss, function (x) { return (x.kg || 0) * (x.r || 0); })); } });
   }
   if (f.indexOf('r') > -1) {
     G.push({ id: 'maxr', name: 'Max Reps', u: 'reps', v: function (ss) { return max(ss, function (x) { return x.r || 0; }); } });
@@ -4391,10 +4412,12 @@ function drawAnalysis(m) {
   card.style.padding = 'var(--s-3) var(--s-4)';
   data.rows.slice(0, 40).forEach(function (r) {
     var row = UI.el('div', 'barrow');
+    /* one exercise reads in its own unit; a muscle group in the app's */
+    var ru = by === 'exercise' ? TRAIN.unit(r.key) : unit;
     var pct = Math.max(2, Math.round((r.vol / max) * 100));
     row.innerHTML =
       '<div class="lbl"><span class="nm">' + UI.esc(r.name) + '</span>' +
-      '<span class="v">' + Math.round(TRAIN.toUnit(r.vol, unit)).toLocaleString() + ' ' + unit + '</span></div>' +
+      '<span class="v">' + Math.round(TRAIN.toUnit(r.vol, ru)).toLocaleString() + ' ' + ru + '</span></div>' +
       '<div class="track"><i style="width:' + pct + '%;background:' +
       (r.slot != null ? TRAIN.slotColor(r.slot) : 'var(--accent)') + '"></i></div>' +
       '<div class="sub">' + r.sets + ' sets · ' + r.reps + ' reps · ' + r.workouts + ' sessions</div>';
@@ -4459,25 +4482,25 @@ function drawRecords(m) {
 
     var body = UI.el('div', 'sets');
     body.appendChild(recLine('Heaviest', x.r.maxWeight && x.r.maxWeight.kg
-      ? TRAIN.showWeight(x.r.maxWeight.kg, x.r.maxWeight.u) + ' ' + TRAIN.unitLabel() +
+      ? TRAIN.showWeight(x.r.maxWeight.kg, x.r.maxWeight.u, x.id) + ' ' + TRAIN.unitLabel(x.id) +
         ' × ' + x.r.maxWeight.r : '—',
       x.r.maxWeight && x.r.maxWeight.date));
     body.appendChild(recLine('Most reps', x.r.maxReps ? x.r.maxReps.r + ' reps' : '—',
       x.r.maxReps && x.r.maxReps.date));
     if (x.r.maxVolume && x.r.maxVolume.kg) {
       body.appendChild(recLine('Most volume',
-        Math.round(TRAIN.toUnit(x.r.maxVolume.kg * x.r.maxVolume.r, TRAIN.unit())).toLocaleString() +
-        ' ' + TRAIN.unit(), x.r.maxVolume.date));
+        Math.round(TRAIN.toUnit(x.r.maxVolume.kg * x.r.maxVolume.r, TRAIN.unit(x.id))).toLocaleString() +
+        ' ' + TRAIN.unit(x.id), x.r.maxVolume.date));
     }
     if (x.r.max1rm) {
       body.appendChild(recLine('Estimated 1RM',
-        TRAIN.showWeight(TRAIN.e1rm(x.r.max1rm.kg, x.r.max1rm.r), null) + ' ' + TRAIN.unitLabel(),
+        TRAIN.showWeight(TRAIN.e1rm(x.r.max1rm.kg, x.r.max1rm.r), null, x.id) + ' ' + TRAIN.unitLabel(x.id),
         x.r.max1rm.date));
     }
     var sp = x.r.split.maxWeight;
     if (sp) {
       body.appendChild(recLine('Split set',
-        TRAIN.showWeight(sp.kg, sp.u) + ' ' + TRAIN.unitLabel() + ' × ' + UI.esc(sp.split.text), sp.date));
+        TRAIN.showWeight(sp.kg, sp.u, x.id) + ' ' + TRAIN.unitLabel(x.id) + ' × ' + UI.esc(sp.split.text), sp.date));
     }
     card.appendChild(body);
     m.appendChild(card);
@@ -4553,7 +4576,7 @@ function drawRepMax(m) {
     withMenu(head, function (ev) { TRAIN.exerciseMenu(x.id, ev); });
     card.appendChild(head);
     var body = UI.el('div', 'pad');
-    body.appendChild(repMaxGrid(TRAIN.recordsFor(x.id, rr), est));
+    body.appendChild(repMaxGrid(TRAIN.recordsFor(x.id, rr), est, x.id));
     card.appendChild(body);
     m.appendChild(card);
   });
@@ -4797,8 +4820,8 @@ TRAIN.copyWorkout = function (fromDate, toDate) {
 /* A signed weight in the unit on screen. The delta is a difference between two
    kilogram figures, so it converts as a quantity — never by running each side
    through showWeight and subtracting the printed strings. */
-TRAIN.showDelta = function (kg) {
-  var v = TRAIN.toUnit(Math.abs(kg), TRAIN.unit());
+TRAIN.showDelta = function (kg, ex) {
+  var v = TRAIN.toUnit(Math.abs(kg), TRAIN.unit(ex));
   var t = (Math.round(v * 10) / 10).toFixed(1);
   return (kg >= 0 ? '+' : '−') + t;
 };
@@ -4806,7 +4829,6 @@ TRAIN.showDelta = function (kg) {
 TRAIN.shareWorkout = function () {
   var date = TRAIN.date, groups = TRAIN.dayGroups(date);
   if (!groups.length) return UI.toast('There is no session to share', { bad: true });
-  var unit = TRAIN.unit();
   var lines = [Day.label(date)];
   var sess = Rec.get('session', date, '') || {};
   if (sess.start && sess.end) lines.push(clockOf(sess.start) + ' - ' + clockOf(sess.end) + '  ' + fmtLen(sess.start, sess.end));
@@ -4815,7 +4837,7 @@ TRAIN.shareWorkout = function () {
     lines.push(g.def.name);
     g.sets.forEach(function (s, i) {
       lines.push('  ' + (i + 1) + '.  ' +
-        (s.kg ? TRAIN.showWeight(s.kg, s.u) + ' ' + TRAIN.unitLabel() + ' x ' : '') +
+        (s.kg ? TRAIN.showWeight(s.kg, s.u, g.ex) + ' ' + TRAIN.unitLabel(g.ex) + ' x ' : '') +
         (s.r || 0) + ' reps' + (s.note ? '   (' + s.note + ')' : ''));
     });
     lines.push('');
@@ -5258,7 +5280,7 @@ function drawGoals(m) {
     var card = UI.el('div', 'exblock');
     var head = UI.el('div', 'head mb-press mb-tap');
     head.innerHTML = '<span class="nm">' + UI.esc(g.title || (ex ? ex.name : 'Goal')) + '</span>' +
-      '<span class="u">' + TRAIN.showWeight(g.kg, g.u) + ' ' + TRAIN.unitLabel() + ' × ' + reps + '</span>';
+      '<span class="u">' + TRAIN.showWeight(g.kg, g.u, g.ex) + ' ' + TRAIN.unitLabel(g.ex) + ' × ' + reps + '</span>';
     head.onclick = function () { TRAIN.goalDialog(k); };
     withMenu(head, function (ev) { TRAIN.goalMenu(k, ev); });
     head.appendChild(rowMenuBtn('Options for this goal', function (ev) { TRAIN.goalMenu(k, ev); }));
@@ -5266,7 +5288,7 @@ function drawGoals(m) {
     var body = UI.el('div', 'pad');
     body.innerHTML = '<div class="track"><i style="width:' + pct + '%"></i></div>' +
       '<div class="sub">' + (bestKg
-        ? 'Best at ' + reps + '+ reps: <b>' + TRAIN.showWeight(bestKg, null) + ' ' + TRAIN.unitLabel() + '</b> · ' + pct + '%'
+        ? 'Best at ' + reps + '+ reps: <b>' + TRAIN.showWeight(bestKg, null, g.ex) + ' ' + TRAIN.unitLabel(g.ex) + '</b> · ' + pct + '%'
         : 'No sets at ' + reps + '+ reps yet') +
       (g.to ? ' · by ' + UI.esc(Day.label(g.to)) : '') + '</div>';
     card.appendChild(body);
@@ -5304,8 +5326,15 @@ TRAIN.goalDialog = function (key, forEx) {
       });
       sel.value = cur && cur.ex ? cur.ex : (forEx || (TRAIN.exId && exs[TRAIN.exId] ? TRAIN.exId : ids[0]));
       b.appendChild(UI.row('Exercise', '', sel));
-      w = UI.field('decimal', { value: cur ? TRAIN.showWeight(cur.kg, cur.u) : '', placeholder: TRAIN.unitLabel() });
-      b.appendChild(UI.row('Goal Value', 'Weight in ' + TRAIN.unitLabel(), w));
+      /* The weight is in the picked exercise's unit, so the words follow the pick. */
+      w = UI.field('decimal', { value: cur ? TRAIN.showWeight(cur.kg, cur.u, cur.ex) : '', placeholder: TRAIN.unitLabel(sel.value) });
+      var wRow = UI.row('Goal Value', 'Weight in ' + TRAIN.unitLabel(sel.value), w);
+      b.appendChild(wRow);
+      sel.addEventListener('change', function () {
+        w.placeholder = TRAIN.unitLabel(sel.value);
+        var note = wRow.querySelector('.lbl span');
+        if (note) note.textContent = 'Weight in ' + TRAIN.unitLabel(sel.value);
+      });
       r = UI.field('number', { value: cur ? String(cur.r || 1) : '1', placeholder: 'reps' });
       b.appendChild(UI.row('Number Of Reps', '', r));
       to = UI.field('date', { value: cur && cur.to ? cur.to : '' });
@@ -5314,10 +5343,10 @@ TRAIN.goalDialog = function (key, forEx) {
     actions: [
       { label: 'CANCEL' },
       { label: cur ? 'UPDATE' : 'ADD', kind: 'go', fn: function () {
-        var kg = TRAIN.toKg(parseFloat(w.value) || 0, TRAIN.unit());
+        var kg = TRAIN.toKg(parseFloat(w.value) || 0, TRAIN.unit(sel.value));
         if (!kg) { UI.toast('Please enter a goal value', { bad: true }); return false; }
         var changes = {
-          kind: 0, ex: sel.value, kg: kg, r: parseInt(r.value, 10) || 1, u: TRAIN.unit(),
+          kind: 0, ex: sel.value, kg: kg, r: parseInt(r.value, 10) || 1, u: TRAIN.unit(sel.value),
           title: exs[sel.value] ? exs[sel.value].name : '', to: to.value || null,
         };
         if (key) TRAIN.patchRow('goal', null, key, changes);
@@ -5337,7 +5366,7 @@ TRAIN.goalDialog = function (key, forEx) {
 /* ═════════════════ PLATE CALCULATOR ═════════════════
    Which plates go on each side to make a number. Greedy from the heaviest
    down, which is what anyone does at the rack. */
-TRAIN.plateSolve = function (targetKg, barKg, barUnit) {
+TRAIN.plateSolve = function (targetKg, barKg, barUnit, unit) {
   var perSide = (targetKg - barKg) / 2;
   if (perSide <= 0) return { ok: Math.abs(perSide) < 0.01, used: [], left: perSide, perSide: perSide };
   var enabled = TRAIN.gymPlates().filter(function (p) { return p.on !== 0; });
@@ -5355,7 +5384,7 @@ TRAIN.plateSolve = function (targetKg, barKg, barUnit) {
      the bar's own unit is tried alone first, then the unit on screen, then
      everything together, and the first exact answer wins. */
   var tries = [];
-  [barUnit, TRAIN.unit()].forEach(function (u) { if (u && tries.indexOf(u) < 0) tries.push(u); });
+  [barUnit, unit || TRAIN.unit()].forEach(function (u) { if (u && tries.indexOf(u) < 0) tries.push(u); });
   var sets = tries.map(function (u) { return enabled.filter(function (p) { return p.u === u; }); }).concat([enabled]);
   var best = null;
   sets.forEach(function (set) {
@@ -5392,9 +5421,10 @@ TRAIN.isBarbell = function (ex) {
   return TRAIN.BAR_LIFTS.indexOf(words(nm).join(' ')) >= 0;
 };
 /* The bar in the unit on screen, or the gym's first. */
-TRAIN.barKg = function () {
+TRAIN.barKg = function (unit) {
   var bars = TRAIN.gymBars();
-  var bar = bars.filter(function (b) { return b.u === TRAIN.unit(); })[0] || bars[0];
+  unit = unit || TRAIN.unit();
+  var bar = bars.filter(function (b) { return b.u === unit; })[0] || bars[0];
   return { kg: bar.u === 'lb' ? bar.w / LB_PER_KG : bar.w, u: bar.u };
 };
 /* What goes on each side, as the WEIGHT label says it: "20×2 · 5 each side".
@@ -5402,30 +5432,31 @@ TRAIN.barKg = function () {
    unit; a total the plates cannot make says ~ (the display font has no
    ≈, and the fallback glyph made the line taller). Nothing for no weight
    or less than the bar. */
-TRAIN.platesText = function (kg) {
+TRAIN.platesText = function (kg, unit) {
   if (!(kg > 0)) return '';
-  var bar = TRAIN.barKg(), sol = TRAIN.plateSolve(kg, bar.kg, bar.u);
+  unit = unit || TRAIN.unit();
+  var bar = TRAIN.barKg(unit), sol = TRAIN.plateSolve(kg, bar.kg, bar.u, unit);
   if (sol.perSide < -0.01) return '';
   if (!sol.used.length) return sol.ok ? 'bar only' : '';
   return (sol.ok ? '' : '~ ') + sol.used.map(function (p) {
-    var n = p.w != null ? p.w : Math.round(TRAIN.toUnit(p.kg, TRAIN.unit()) * 100) / 100;
-    return n + (p.u && p.u !== TRAIN.unit() ? p.u : '') + (p.n > 1 ? '×' + p.n : '');
+    var n = p.w != null ? p.w : Math.round(TRAIN.toUnit(p.kg, unit) * 100) / 100;
+    return n + (p.u && p.u !== unit ? p.u : '') + (p.n > 1 ? '×' + p.n : '');
   }).join(' · ') + ' each side';
 };
 
-TRAIN.platePanel = function (prefillKg) {
+TRAIN.platePanel = function (prefillKg, ex) {
   var bars = TRAIN.gymBars();
   UI.dialog({
     title: 'PLATE CALCULATOR', width: 420,
     body: function (b) {
-      var unit = TRAIN.unit();
+      var unit = TRAIN.unit(ex), UL = unit + 's';
       var barKg = bars[0].u === 'lb' ? bars[0].w / LB_PER_KG : bars[0].w;
       var wrap = UI.el('div');
       var w = UI.field('decimal', {
-        placeholder: 'target ' + TRAIN.unitLabel(),
-        value: prefillKg ? TRAIN.showWeight(prefillKg, null) : '',
+        placeholder: 'target ' + UL,
+        value: prefillKg ? TRAIN.showWeight(prefillKg, null, ex) : '',
       });
-      wrap.appendChild(UI.row('Target weight', 'total on the bar, in ' + TRAIN.unitLabel(), w));
+      wrap.appendChild(UI.row('Target weight', 'total on the bar, in ' + UL, w));
 
       var barSel = document.createElement('select');
       barSel.className = 'mb-input';
@@ -5433,7 +5464,7 @@ TRAIN.platePanel = function (prefillKg) {
         var o = document.createElement('option');
         o.value = String(i);
         o.textContent = (Math.round(TRAIN.toUnit(bar.u === 'lb' ? bar.w / LB_PER_KG : bar.w, unit) * 10) / 10) +
-          ' ' + TRAIN.unitLabel();
+          ' ' + UL;
         barSel.appendChild(o);
       });
       wrap.appendChild(UI.row('Bar', 'The empty bar', barSel));
@@ -5450,19 +5481,19 @@ TRAIN.platePanel = function (prefillKg) {
         barKg = bar.u === 'lb' ? bar.w / LB_PER_KG : bar.w;
         var target = TRAIN.toKg(parseFloat(w.value) || 0, unit);
         if (!target) { out.innerHTML = '<div class="empty">Enter a weight.</div>'; return; }
-        var sol = TRAIN.plateSolve(target, barKg, bar.u);
+        var sol = TRAIN.plateSolve(target, barKg, bar.u, unit);
         if (sol.perSide <= 0) {
           out.innerHTML = '<div class="empty">That is at or below the bar on its own.</div>';
           return;
         }
         var rows = sol.used.map(function (u) {
           return '<div class="recline"><span class="k">' +
-            (u.w != null ? u.w + ' ' + u.u + 's' : (Math.round(TRAIN.toUnit(u.kg, unit) * 100) / 100) + ' ' + TRAIN.unitLabel()) +
+            (u.w != null ? u.w + ' ' + u.u + 's' : (Math.round(TRAIN.toUnit(u.kg, unit) * 100) / 100) + ' ' + UL) +
             '</span><span class="v">× ' + u.n + '</span><span class="d"></span></div>';
         }).join('');
         out.innerHTML = '<div class="mb-group">EACH SIDE</div>' + rows +
           (sol.ok ? '' : '<div class="empty">Closest possible — <b>' +
-            (Math.round(TRAIN.toUnit(sol.left, unit) * 100) / 100) + ' ' + TRAIN.unitLabel() +
+            (Math.round(TRAIN.toUnit(sol.left, unit) * 100) / 100) + ' ' + UL +
             '</b> per side short with the plates you have.</div>');
       };
       w.oninput = run; barSel.onchange = run;
@@ -6016,7 +6047,7 @@ function distTimeRecords(exId) {
 TRAIN.recordsCard = function (exId) {
   var ex = TRAIN.exercises()[exId];
   if (!ex) return null;
-  var rec = TRAIN.recordsFor(exId), kind = TRAIN.kindOf(exId), U = TRAIN.unitLabel(), esc = UI.esc;
+  var rec = TRAIN.recordsFor(exId), kind = TRAIN.kindOf(exId), U = TRAIN.unitLabel(exId), esc = UI.esc;
   if (!rec.sets) return null;
   var today = Day.today(), ph = TRAIN.phaseOn(today), cells = [];
   var cell = function (label, val, unit, d) {
@@ -6028,11 +6059,11 @@ TRAIN.recordsCard = function (exId) {
     if (dt.dist) cell('Max distance', TRAIN.showDist(dt.dist.dist), du, dt.dist.date);
     if (dt.dur) cell('Max time', fmtSecs(dt.dur.dur), '', dt.dur.date);
   }
-  if (rec.maxWeight) cell('Heaviest', TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u), U + ' × ' + rec.maxWeight.r, rec.maxWeight.date);
-  if (rec.max1rm) cell('Estimated 1RM', fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), TRAIN.unit())), U, rec.max1rm.date);
+  if (rec.maxWeight) cell('Heaviest', TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u, exId), U + ' × ' + rec.maxWeight.r, rec.maxWeight.date);
+  if (rec.max1rm) cell('Estimated 1RM', fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), TRAIN.unit(exId))), U, rec.max1rm.date);
   if (rec.maxReps) cell('Most reps', rec.maxReps.r, 'reps', rec.maxReps.date);
   if (rec.maxVolume) cell('Most volume',
-    Math.round(TRAIN.toUnit(rec.maxVolume.kg * rec.maxVolume.r, TRAIN.unit())).toLocaleString(), U, rec.maxVolume.date);
+    Math.round(TRAIN.toUnit(rec.maxVolume.kg * rec.maxVolume.r, TRAIN.unit(exId))).toLocaleString(), U, rec.maxVolume.date);
   var last = TRAIN.historyOf(exId).filter(function (s) { return s.pr; }).slice(-1)[0];
   var card = UI.el('div', 'recap');
   card.innerHTML =
@@ -6041,14 +6072,14 @@ TRAIN.recordsCard = function (exId) {
     '<div class="rule"></div>' +
     (cells.length ? '<div class="big4">' + cells.slice(0, 4).join('') + '</div>' : '') +
     (last && (last.kg || last.r) ? '<div class="sub">Latest record ' + esc(Day.label(last.date)) + ': ' +
-      (last.kg ? TRAIN.showWeight(last.kg, last.u) + ' ' + U + ' × ' : '') + (last.r || 0) + ' reps</div>' : '');
+      (last.kg ? TRAIN.showWeight(last.kg, last.u, exId) + ' ' + U + ' × ' : '') + (last.r || 0) + ' reps</div>' : '');
   return card;
 };
 
 TRAIN.recordsSheet = function (exId) {
   var ex = TRAIN.exercises()[exId];
   if (!ex) return;
-  var rec = TRAIN.recordsFor(exId), kind = TRAIN.kindOf(exId), U = TRAIN.unitLabel();
+  var rec = TRAIN.recordsFor(exId), kind = TRAIN.kindOf(exId), U = TRAIN.unitLabel(exId);
   UI.dialog({
     title: 'PERSONAL RECORDS', width: 460,
     body: function (b) {
@@ -6066,13 +6097,13 @@ TRAIN.recordsSheet = function (exId) {
           fmtSecs(Math.round(dt.pace.dur / (du === 'mi' ? dt.pace.dist / KM_PER_MI : dt.pace.dist))) + ' /' + du, dt.pace.date));
       }
       if (rec.maxWeight) body.appendChild(recLine('Heaviest',
-        TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u) + ' ' + U + ' × ' + rec.maxWeight.r, rec.maxWeight.date));
+        TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u, exId) + ' ' + U + ' × ' + rec.maxWeight.r, rec.maxWeight.date));
       if (rec.maxReps) body.appendChild(recLine('Most reps', rec.maxReps.r + ' reps', rec.maxReps.date));
       if (rec.maxVolume) body.appendChild(recLine('Most volume',
-        Math.round(TRAIN.toUnit(rec.maxVolume.kg * rec.maxVolume.r, TRAIN.unit())).toLocaleString() + ' ' + U,
+        Math.round(TRAIN.toUnit(rec.maxVolume.kg * rec.maxVolume.r, TRAIN.unit(exId))).toLocaleString() + ' ' + U,
         rec.maxVolume.date));
       if (rec.max1rm) body.appendChild(recLine('Estimated 1RM',
-        fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), TRAIN.unit())) + ' ' + U, rec.max1rm.date));
+        fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), TRAIN.unit(exId))) + ' ' + U, rec.max1rm.date));
       b.appendChild(body);
       var shr = UI.el('button', 'mb-btn mb-press mb-tap');
       shr.style.width = '100%';
@@ -6087,9 +6118,9 @@ TRAIN.recordsSheet = function (exId) {
         var br = TRAIN.recordsFor(exId, { from: ph.from, to: ph.to || Day.today() });
         var gb = UI.el('div', 'mb-group'); gb.textContent = ph.p.name.toUpperCase(); b.appendChild(gb);
         if (br.maxWeight) b.appendChild(recLine('Heaviest',
-          TRAIN.showWeight(br.maxWeight.kg, br.maxWeight.u) + ' ' + U + ' × ' + br.maxWeight.r, br.maxWeight.date));
+          TRAIN.showWeight(br.maxWeight.kg, br.maxWeight.u, exId) + ' ' + U + ' × ' + br.maxWeight.r, br.maxWeight.date));
         if (br.max1rm) b.appendChild(recLine('Estimated 1RM',
-          fmt1(TRAIN.toUnit(TRAIN.e1rm(br.max1rm.kg, br.max1rm.r), TRAIN.unit())) + ' ' + U, br.max1rm.date));
+          fmt1(TRAIN.toUnit(TRAIN.e1rm(br.max1rm.kg, br.max1rm.r), TRAIN.unit(exId))) + ' ' + U, br.max1rm.date));
         if (!br.maxWeight) {
           var nb = UI.el('div', 'empty'); nb.textContent = 'Nothing logged in this block'; b.appendChild(nb);
         }
@@ -6098,14 +6129,14 @@ TRAIN.recordsSheet = function (exId) {
         var gs = UI.el('div', 'mb-group'); gs.textContent = 'SPLIT SETS'; b.appendChild(gs);
         Object.keys(rec.split.byReps).map(Number).sort(function (a, c) { return a - c; }).forEach(function (n) {
           var x = rec.split.byReps[n];
-          b.appendChild(recLine(n + ' reps', TRAIN.showWeight(x.kg, x.u) + ' ' + U + ' · ' + UI.esc(x.split.text), x.date));
+          b.appendChild(recLine(n + ' reps', TRAIN.showWeight(x.kg, x.u, exId) + ' ' + U + ' · ' + UI.esc(x.split.text), x.date));
         });
       }
 
       if (rec.maxWeight) {
         [['ACTUAL REP MAXES', false], ['ESTIMATED REP MAXES', true]].forEach(function (pair) {
           var h2 = UI.el('div', 'mb-group'); h2.textContent = pair[0]; b.appendChild(h2);
-          b.appendChild(repMaxGrid(rec, pair[1]));
+          b.appendChild(repMaxGrid(rec, pair[1], exId));
         });
       }
 
@@ -6114,7 +6145,7 @@ TRAIN.recordsSheet = function (exId) {
         var h3 = UI.el('div', 'mb-group'); h3.textContent = 'PERSONAL RECORD HISTORY'; b.appendChild(h3);
         prs.forEach(function (s) {
           b.appendChild(recLine(Day.label(s.date),
-            (s.kg ? TRAIN.showWeight(s.kg, s.u) + ' ' + U + ' × ' : '') + (s.r || 0), ''));
+            (s.kg ? TRAIN.showWeight(s.kg, s.u, exId) + ' ' + U + ' × ' : '') + (s.r || 0), ''));
         });
       }
     },
@@ -6122,12 +6153,12 @@ TRAIN.recordsSheet = function (exId) {
   });
 };
 
-function repMaxGrid(rec, est) {
+function repMaxGrid(rec, est, exId) {
   var grid = UI.el('div', 'rmgrid');
   TRAIN.repCounts().forEach(function (n) {
     var kg = TRAIN.repMax(rec, n, est);
     var cell = UI.el('div', 'rmcell' + (kg ? '' : ' none'));
-    cell.innerHTML = '<span>' + n + ' RM</span><b>' + (kg ? fmt1(TRAIN.toUnit(kg, TRAIN.unit())) : '—') + '</b>';
+    cell.innerHTML = '<span>' + n + ' RM</span><b>' + (kg ? fmt1(TRAIN.toUnit(kg, TRAIN.unit(exId))) : '—') + '</b>';
     grid.appendChild(cell);
   });
   return grid;
@@ -6156,7 +6187,7 @@ TRAIN.overviewSheet = function (exId) {
       b.appendChild(recLine('Sets', hist.length.toLocaleString(), ''));
       if (KIND_FIELDS[kind].indexOf('r') > -1) b.appendChild(recLine('Total reps', reps.toLocaleString(), ''));
       if (KIND_FIELDS[kind].indexOf('w') > -1) b.appendChild(recLine('Total volume',
-        Math.round(TRAIN.toUnit(vol, TRAIN.unit())).toLocaleString() + ' ' + TRAIN.unitLabel(), ''));
+        Math.round(TRAIN.toUnit(vol, TRAIN.unit(exId))).toLocaleString() + ' ' + TRAIN.unitLabel(exId), ''));
       if (KIND_FIELDS[kind].indexOf('d') > -1) b.appendChild(recLine('Total distance',
         TRAIN.showDist(dist) + ' ' + TRAIN.distUnit(), ''));
       if (KIND_FIELDS[kind].indexOf('t') > -1) b.appendChild(recLine('Total time', fmtSecs(dur), ''));
@@ -6182,14 +6213,14 @@ TRAIN.overviewSheet = function (exId) {
 
 /* FitNotes' Estimated 1RM Calculator. Brzycki is unit-free, so it works in
    whatever unit is on screen and never converts. */
-TRAIN.e1rmCalc = function (kg, reps) {
+TRAIN.e1rmCalc = function (kg, reps, exId) {
   var w = null, r = null;
   UI.dialog({
     title: 'ESTIMATED 1RM', width: 440,
     body: function (b) {
-      w = UI.field('decimal', { value: kg ? TRAIN.showWeight(kg, null) : '', placeholder: TRAIN.unitLabel() });
+      w = UI.field('decimal', { value: kg ? TRAIN.showWeight(kg, null, exId) : '', placeholder: TRAIN.unitLabel(exId) });
       r = UI.field('number', { value: reps ? String(reps) : '', placeholder: 'reps' });
-      b.appendChild(UI.row('Weight', TRAIN.unitLabel(), w));
+      b.appendChild(UI.row('Weight', TRAIN.unitLabel(exId), w));
       b.appendChild(UI.row('Reps', 'Accuracy drops above 10', r));
       var out = UI.el('div');
       b.appendChild(out);
@@ -6198,7 +6229,7 @@ TRAIN.e1rmCalc = function (kg, reps) {
         if (!(W > 0) || !(R > 0)) { out.innerHTML = ''; return; }
         if (R >= 37) { out.innerHTML = '<div class="empty">Too many reps to estimate</div>'; return; }
         var one = W * 36 / (37 - R);
-        var html = '<div class="bigtime">' + fmt1(one) + ' <span class="u">' + TRAIN.unitLabel() + '</span></div>' +
+        var html = '<div class="bigtime">' + fmt1(one) + ' <span class="u">' + TRAIN.unitLabel(exId) + '</span></div>' +
           '<div class="mb-group">REP MAXES</div><div class="rmgrid">';
         [1, 2, 3, 4, 5, 6, 8, 10, 12, 15].forEach(function (n) {
           html += '<div class="rmcell"><span>' + n + ' RM</span><b>' + fmt1(one * (37 - n) / 36) + '</b></div>';
@@ -6221,7 +6252,7 @@ TRAIN.e1rmCalc = function (kg, reps) {
 TRAIN.setCalc = function (exId) {
   var ex = exId ? TRAIN.exercises()[exId] : null;
   var rec = exId ? TRAIN.recordsFor(exId) : null;
-  var U = TRAIN.unit();
+  var U = TRAIN.unit(exId);
   var maxE = rec && rec.max1rm ? TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), U) : 0;
   var maxW = rec && rec.maxWeight ? TRAIN.toUnit(rec.maxWeight.kg, U) : 0;
   var inc = TRAIN.increment(ex);
@@ -6229,7 +6260,7 @@ TRAIN.setCalc = function (exId) {
   UI.dialog({
     title: 'SET CALCULATOR', width: 440,
     body: function (b) {
-      var base = UI.field('decimal', { value: maxE ? fmt1(maxE) : (maxW ? fmt1(maxW) : ''), placeholder: TRAIN.unitLabel() });
+      var base = UI.field('decimal', { value: maxE ? fmt1(maxE) : (maxW ? fmt1(maxW) : ''), placeholder: TRAIN.unitLabel(exId) });
       b.appendChild(UI.row('Max', 'The number the percentage is of', base));
       if (maxE || maxW) {
         var quick = UI.el('div', CHIPS);
@@ -6261,7 +6292,7 @@ TRAIN.setCalc = function (exId) {
         if (!(B > 0) || !(P > 0)) { out.textContent = '—'; note.textContent = ''; result = 0; return; }
         var raw = B * P / 100;
         result = Math.round(raw / inc) * inc;
-        out.innerHTML = fmt1(result) + ' <span class="u">' + TRAIN.unitLabel() + '</span>';
+        out.innerHTML = fmt1(result) + ' <span class="u">' + TRAIN.unitLabel(exId) + '</span>';
         note.textContent = 'Rounded to the closest ' + inc + ' from ' + fmt1(raw);
       }
       base.oninput = run; pct.oninput = run;
@@ -6724,7 +6755,7 @@ function writeFilled(exId, date, list) {
   var n = TRAIN.setsOn(date).length;
   list.forEach(function (s) {
     Rec.set('set', date, TRAIN.newId(), {
-      ex: exId, kg: s.kg || 0, r: s.r || 0, u: TRAIN.unit(), done: 0, plan: 1, pr: 0, prf: 0,
+      ex: exId, kg: s.kg || 0, r: s.r || 0, u: TRAIN.unit(exId), done: 0, plan: 1, pr: 0, prf: 0,
       dist: s.dist || 0, dur: s.dur || 0, note: '', ord: ++n,
     });
   });
@@ -6999,10 +7030,10 @@ TRAIN.progexDialog = function (key) {
           var n = UI.el('span', 'nm');
           n.textContent = 'Set ' + (i + 1);
           row.appendChild(n);
-          var w = UI.field('decimal', { value: s.kg == null ? '' : TRAIN.showWeight(s.kg, s.u), placeholder: TRAIN.unitLabel() });
+          var w = UI.field('decimal', { value: s.kg == null ? '' : TRAIN.showWeight(s.kg, s.u, cur.ex), placeholder: TRAIN.unitLabel(cur.ex) });
           w.className += ' count';
           w.setAttribute('aria-label', 'Set ' + (i + 1) + ' weight');
-          w.oninput = function () { var v = parseFloat(w.value); s.kg = isNaN(v) ? null : TRAIN.toKg(v, TRAIN.unit()); s.u = TRAIN.unit(); };
+          w.oninput = function () { var v = parseFloat(w.value); s.kg = isNaN(v) ? null : TRAIN.toKg(v, TRAIN.unit(cur.ex)); s.u = TRAIN.unit(cur.ex); };
           var r = UI.field('number', { value: s.r == null ? '' : String(s.r), placeholder: 'reps' });
           r.className += ' count';
           r.setAttribute('aria-label', 'Set ' + (i + 1) + ' reps');
@@ -7018,7 +7049,7 @@ TRAIN.progexDialog = function (key) {
         add.textContent = 'ADD SET';
         add.onclick = function () {
           var last = sets[sets.length - 1];
-          sets.push(last ? copyObj(last) : { kg: null, r: 5, u: TRAIN.unit() });
+          sets.push(last ? copyObj(last) : { kg: null, r: 5, u: TRAIN.unit(cur.ex) });
           paint();
         };
         b.appendChild(add);
@@ -7145,7 +7176,7 @@ TRAIN.groupOf = function (date, exId) {
    routine, the next set still to be done loads into the steppers, so logging
    it is change-the-number and press UPDATE. */
 function loadDraft(s) {
-  TRAIN.draftW = s.kg ? TRAIN.showWeight(s.kg, s.u) : '';
+  TRAIN.draftW = s.kg ? TRAIN.showWeight(s.kg, s.u, s.ex) : '';
   TRAIN.draftR = s.r ? String(s.r) : '';
   TRAIN.draftD = s.dist ? TRAIN.showDist(s.dist) : '';
   TRAIN.draftT = s.dur ? fmtSecs(s.dur) : '';
@@ -7698,7 +7729,7 @@ TRAIN.setDelta = function (a, b, kind) {
   var parts = [];
   if (f[0] === 'w' && f[1] === 'r') {
     var dk = val(a, 'w') - val(b, 'w'), moved = !same(val(a, 'w'), val(b, 'w'), 'w');
-    if (moved) parts.push(sign(dk) + fmt1(TRAIN.toUnit(Math.abs(dk), TRAIN.unit())) + ' ' + TRAIN.unit());
+    if (moved) parts.push(sign(dk) + fmt1(TRAIN.toUnit(Math.abs(dk), TRAIN.unit(a.ex))) + ' ' + TRAIN.unit(a.ex));
     if (out.dr) parts.push(repWord(out.dr));
     var ea = TRAIN.e1rm(a.kg, a.r), eb = TRAIN.e1rm(b.kg, b.r);
     if (ea > 0 && eb > 0) { out.pct = (ea / eb - 1) * 100; out.e1 = true; }
@@ -7711,7 +7742,7 @@ TRAIN.setDelta = function (a, b, kind) {
       var k = f[i], x = val(a, k), y = val(b, k);
       if (same(x, y, k)) continue;
       var dv = Math.abs(x - y);
-      parts.push(k === 'w' ? sign(x - y) + fmt1(TRAIN.toUnit(dv, TRAIN.unit())) + ' ' + TRAIN.unit()
+      parts.push(k === 'w' ? sign(x - y) + fmt1(TRAIN.toUnit(dv, TRAIN.unit(a.ex))) + ' ' + TRAIN.unit(a.ex)
         : k === 'r' ? repWord(x - y)
         : k === 'd' ? sign(x - y) + TRAIN.showDist(dv) + ' ' + TRAIN.distUnit()
         : sign(x - y) + fmtSecs(dv));
@@ -7945,7 +7976,7 @@ TRAIN.recapCard = function (date, cmp) {
     h += '<div><h3>RECORDS</h3>' + recs.map(function (x) {
       return '<div class="rec">' + ico('record') +
         '<span class="nm"><span>' + esc(x.name) + '</span><i class="pill">' + (x.all ? 'All-time' : 'Block') + '</i></span>' +
-        '<span class="v">' + TRAIN.showWeight(x.s.kg, x.s.u) + ' <small>' + TRAIN.unitLabel() + '</small> × ' +
+        '<span class="v">' + TRAIN.showWeight(x.s.kg, x.s.u, x.s.ex) + ' <small>' + TRAIN.unitLabel(x.s.ex) + '</small> × ' +
         (x.s.split ? esc(x.s.split.text) : x.s.r) + '</span></div>';
     }).join('') + '</div>';
   }
@@ -8498,10 +8529,10 @@ TRAIN.addWarmups = function (exId, date) {
     return list.reduce(function (m, s) { return !s.warm && s.kg > m ? s.kg : m; }, 0);
   };
   var typed = parseFloat(TRAIN.draftW);
-  var work = typed > 0 ? TRAIN.toKg(typed, TRAIN.unit()) : heaviest(mine) || heaviest(TRAIN.lastSetsOf(exId, date));
+  var work = typed > 0 ? TRAIN.toKg(typed, TRAIN.unit(exId)) : heaviest(mine) || heaviest(TRAIN.lastSetsOf(exId, date));
   if (!(work > 0)) return UI.toast('Type the working weight first', { bad: true });
-  var unit = TRAIN.unit(), inc = TRAIN.increment(ex), workU = TRAIN.toUnit(work, unit);
-  var bar = TRAIN.isBarbell(ex) ? TRAIN.toUnit(TRAIN.barKg().kg, unit) : 0;
+  var unit = TRAIN.unit(exId), inc = TRAIN.increment(ex), workU = TRAIN.toUnit(work, unit);
+  var bar = TRAIN.isBarbell(ex) ? TRAIN.toUnit(TRAIN.barKg(unit).kg, unit) : 0;
   var list = [], last = -1;
   TRAIN.WARMUPS.forEach(function (w) {
     var v = Math.floor(workU * w[0] / inc + 1e-6) * inc;
@@ -8538,12 +8569,12 @@ document.getElementById('moreBtn').onclick = function (e) {
       { label: 'Plate Calculator', fn: function () {
         var sel = TRAIN.sel && Rec.get('set', date, TRAIN.sel);
         var typed = parseFloat(TRAIN.draftW);
-        TRAIN.platePanel(sel ? sel.kg : (typed > 0 ? TRAIN.toKg(typed, TRAIN.unit()) : 0));
+        TRAIN.platePanel(sel ? sel.kg : (typed > 0 ? TRAIN.toKg(typed, TRAIN.unit(id)) : 0), id);
       } },
       { label: 'Set Calculator', fn: function () { TRAIN.setCalc(id); } },
       { label: 'Estimated 1RM Calculator', fn: function () {
         var typed = parseFloat(TRAIN.draftW), reps = parseInt(TRAIN.draftR, 10);
-        TRAIN.e1rmCalc(typed > 0 ? TRAIN.toKg(typed, TRAIN.unit()) : 0, reps > 0 ? reps : 0);
+        TRAIN.e1rmCalc(typed > 0 ? TRAIN.toKg(typed, TRAIN.unit(id)) : 0, reps > 0 ? reps : 0, id);
       } },
       { label: 'Add To Superset', fn: function () { TRAIN.supersetPanel(id); } },
       { label: 'Replace Exercise', fn: function () { TRAIN.startReplace(id); } },
@@ -8755,7 +8786,7 @@ TRAIN.settingsPanel = function () {
       };
 
       group('UNITS');
-      seg('Weight Unit', 'Stored in kilograms either way', 'unit', [{ id: 'lb', name: 'LBS' }, { id: 'kg', name: 'KGS' }], 'lb');
+      seg('Weight Unit', 'Stored in kilograms either way. An exercise can have its own, in Edit Exercise', 'unit', [{ id: 'lb', name: 'LBS' }, { id: 'kg', name: 'KGS' }], 'lb');
       seg('Distance Unit', 'Stored in kilometres either way', 'distUnit', [{ id: 'km', name: 'KM' }, { id: 'mi', name: 'MI' }], 'km');
       seg('Calendar Week Start', 'First day of the week', 'weekStart', [{ id: '1', name: 'SUN' }, { id: '2', name: 'MON' }], 1);
 

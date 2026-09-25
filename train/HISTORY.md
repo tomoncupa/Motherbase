@@ -40,7 +40,8 @@ until 2026-09-14 and at 390px since, except where a row says otherwise.
 ### Not built
 
 - A per-exercise weight unit (FitNotes Supporter's "custom weight units"). All 270
-  of his exercises use the default, so nothing of his depends on it.
+  of his exercises use the default, so nothing of his depends on it. **Built in
+  1.0.34, 2026-09-25**, when Tom asked for it.
 - Showing body weight above the workout log. Off in his FitNotes; would read STATUS.
 - Saved graph favourites beyond one default per exercise.
 - The calendar's detail panel under the grid. Off in his FitNotes.

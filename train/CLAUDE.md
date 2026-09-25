@@ -47,7 +47,7 @@ see the root brief on many writers. Every edit merges into the row as it is
 | Type | Key | Payload |
 |---|---|---|
 | `excat` | category id, the slug of its name | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex, and there are only twelve |
-| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar}` |
+| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar, wu}` |
 | `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, plan, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
 | `session` | `''` | `{start, end, note, from, order, name, vs}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, and a day he picked to compare it with |
 | `phase` | phase id | `{name, start, end}` — a training block. `end` is optional |
@@ -72,6 +72,9 @@ describe the gym, not the training.
 ### Fields worth knowing
 
 - `set.kg` is always kilograms. `set.u` is the unit it was typed in.
+- `exercise.wu` is the exercise's own weight unit, `kg` or `lb`; missing means
+  the app's. **Never read `exercise.unit` as a unit**: the importer wrote `kg`
+  there on all 270 of his FitNotes exercises, from a 0 that means default.
 - `set.dist` is always **kilometres**. `set.dur` is always **seconds**.
 - `set.done` is the tick box and nothing else: his mark, never the app's.
   `set.plan` is the app's: 1 on a set TRAIN wrote on his behalf, from a copied
@@ -171,8 +174,15 @@ Every set stores the true value and display converts. His file is why this
 matters: 7,886 sets entered in kilograms and 4,484 in pounds in one continuous
 log, and 500 lb is on disk as 226.79645 kg.
 
-- **Everything on screen reads in the unit chosen in Settings**, never in the unit a
-  set was typed in. Two units never appear on one screen.
+- **An exercise reads in its own unit** (Edit Exercise, Weight unit: DEFAULT, LBS
+  or KGS, 1.0.34), else the one chosen in Settings, never in the unit a set was
+  typed in. Tom, 2026-09-25: *"Option to denote lbs and kilos PER exercise."*
+  `TRAIN.unit(ex)` takes an exercise, its id or a set; with nothing it is the
+  app's. Anything about one exercise (TRACK, HISTORY, GRAPH, records, goals,
+  calculators, plates, the day's sets, the change against last time) passes
+  the exercise. **A total across exercises** (session volume, the week,
+  Profile, Analysis by muscle group, the spreadsheet) stays in the app's unit.
+  So two units can sit on one day's log, one per exercise.
 - **One decimal and the unit plural**: `4.0 kgs`. That is how FitNotes prints it.
 - A workout's length **truncates**: 72m 56s is `1h 12m`.
 - Rounding is display-only. Never write a rounded value back.
