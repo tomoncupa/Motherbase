@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.25, 2026-09-25">
+<meta name="mb-version" content="1.0.26, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -3151,7 +3151,7 @@ function commitSet(inputs) {
   TRAIN.draftT = inputs.t ? inputs.t.value : null;
 
   if (TRAIN.sel) {
-    var was = Rec.get('set', date, TRAIN.sel);
+    var selKey = TRAIN.sel, was = Rec.get('set', date, selKey);
     /* Pressing UPDATE on a planned set is doing it, so the plan comes off.
        The tick box is not touched: it is his mark. */
     var upd = { kg: fields.kg, r: fields.r, dist: fields.dist, dur: fields.dur, u: TRAIN.unit(), plan: 0 };
@@ -3159,7 +3159,7 @@ function commitSet(inputs) {
     TRAIN.patchSet(TRAIN.sel, date, upd);
     TRAIN.sel = null;
     TRAIN.recomputePRs([exId]);
-    UI.toast('Training updated');
+    if (!recordCheer(exId, date, selKey, fields.kg)) UI.toast('Training updated');
     /* Updating a planned set that was not done yet is doing it. */
     if (was && was.plan && !was.done) afterSave(exId, date);
   } else {
@@ -3167,19 +3167,15 @@ function commitSet(inputs) {
     if (Rec.setting(APP.id, 'trackPRs') !== 0 && fields.kg > 0 && fields.r > 0) TRAIN.recomputePRs([exId]);
     /* A record at the moment it was lifted: all-time, or only in this
        training block, which starts its records again. */
-    var hit = Rec.setting(APP.id, 'trackPRs') !== 0 &&
-      TRAIN.recordHits(exId, date).filter(function (h) { return h.s.key === key; })[0];
-    if (hit) {
-      if (window.Sfx && Sfx.play) Sfx.play('complete', { level: 2 });
-      UI.toast((hit.all ? 'Personal record: ' : 'Block record: ') +
-        TRAIN.showWeight(fields.kg, TRAIN.unit()) + ' ' + TRAIN.unitLabel());
-    }
+    recordCheer(exId, date, key, fields.kg);
     if (Rec.setting(APP.id, 'workoutTimerAuto') !== 0 && TRAIN.setsOn(date).length === 1) {
       TRAIN.workoutStart(date);
     }
     afterSave(exId, date);
   }
-  Mobile.feedback('success');
+  /* A buzz where there is a motor, and no sound: the sound is kept for a
+     record. Tom, 2026-09-25. */
+  Mobile.haptic('success');
   if (TRAIN.pendingJump) {
     var nx = TRAIN.pendingJump, nm = (TRAIN.exercises()[nx] || {}).name || 'next';
     TRAIN.pendingJump = null;
@@ -3190,6 +3186,20 @@ function commitSet(inputs) {
   }
   draw();
   if (Rec.setting(APP.id, 'autoNext') !== 0) TRAIN.selectNextOpen();
+}
+
+/* A new record, all-time or in this training block, makes one short sound
+   and says what it was. Every other save is silent (Tom, 2026-09-25: "a short
+   sound when you save a set that's a new record, and silence otherwise"). */
+function recordCheer(exId, date, key, kg) {
+  if (Rec.setting(APP.id, 'trackPRs') === 0) return false;
+  var hit = TRAIN.recordHits(exId, date).filter(function (h) { return h.s.key === key; })[0];
+  if (!hit) return false;
+  Mobile.haptic('complete');
+  if (window.Sfx && Sfx.play) Sfx.play('complete', { level: 2 });
+  UI.toast((hit.all ? 'Personal record: ' : 'Block record: ') +
+    TRAIN.showWeight(kg, TRAIN.unit()) + ' ' + TRAIN.unitLabel());
+  return true;
 }
 
 /* After a set is done: the rest timer, the workout timer's end, and the
@@ -4655,10 +4665,40 @@ TRAIN.exercisesOf = function (dayKey) {
   return out.sort(function (a, b) { return (a.x.ord || 0) - (b.x.ord || 0); });
 };
 
+/* ── named sessions ──
+   Tom, 2026-09-25: "I should see named days in Training Routines." His
+   FitNotes never held a routine; the days he repeats are the sessions he
+   names, and a name is already how TRAIN knows a repeat. So every name he has
+   given a day with sets in it is listed here with the last time it was done,
+   most recent first. The day on screen is left out of "last time", so the
+   day he is filling can offer the one before it. */
+TRAIN.namedSessions = function (except) {
+  var by = {};
+  Rec.all('session').forEach(function (r) {
+    var nm = r.payload && String(r.payload.name || '').trim();
+    if (!nm || r.date === except || !TRAIN.setsOn(r.date).length) return;
+    var k = nm.toLowerCase(), x = by[k] || (by[k] = { name: nm, last: '', times: 0 });
+    x.times++;
+    if (r.date > x.last) { x.last = r.date; x.name = nm; }
+  });
+  return Object.keys(by).map(function (k) { return by[k]; })
+    .sort(function (a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : 0; });
+};
+
+/* Copy a named session's last day into the day on screen, name and all, the
+   way Copy Past Session does. Twice onto one day would double every set. */
+TRAIN.startNamed = function (x) {
+  var date = TRAIN.date;
+  TRAIN.show('workout');
+  if ((Rec.get('session', date, '') || {}).from === x.last) return UI.toast('Already copied from ' + UI.esc(Day.label(x.last)));
+  TRAIN.copyWorkout(x.last, date);
+};
+
 function drawRoutines(m) {
   if (TRAIN.progOpen) return drawOneProgram(m, TRAIN.progOpen);
   var progs = TRAIN.programs();
   var keys = Object.keys(progs).sort(function (a, b) { return (progs[a].ord || 0) - (progs[b].ord || 0); });
+  var named = TRAIN.namedSessions(TRAIN.date);
 
   var add = UI.el('button', 'mb-btn mb-press mb-tap');
   add.style.width = '100%';
@@ -4673,12 +4713,15 @@ function drawRoutines(m) {
   };
   m.appendChild(add);
 
-  if (!keys.length) {
+  if (!keys.length && !named.length) {
     var e = UI.el('div', 'empty');
-    e.textContent = 'A routine allows you to create templates of sessions which you perform frequently.';
+    e.textContent = 'A routine allows you to create templates of sessions which you perform frequently. ' +
+      'A session you name in the log shows here too.';
     m.appendChild(e);
     return;
   }
+  if (named.length) drawNamed(m, named);
+  if (!keys.length) return;
   var list = UI.el('div', 'plist');
   holdToMove(list, {
     item: '.prow',
@@ -4698,6 +4741,39 @@ function drawRoutines(m) {
     list.appendChild(row);
   });
   m.appendChild(list);
+}
+
+function drawNamed(m, named) {
+  var date = TRAIN.date, into = date === Day.today() ? 'today' : Day.label(date);
+  var lab = UI.el('div', 'fieldlabel');
+  lab.textContent = 'NAMED SESSIONS';
+  m.appendChild(lab);
+  var list = UI.el('div', 'plist');
+  named.forEach(function (x) {
+    var n = TRAIN.dayGroups(x.last).length;
+    var row = UI.el('div', 'prow');
+    var main = UI.el('button', 'pmain mb-press');
+    main.innerHTML = '<span class="nm">' + UI.esc(x.name) +
+      '<br><span class="sub">' + UI.esc(dayY(x.last)) + ' · ' + n + ' exercise' + (n === 1 ? '' : 's') + '</span></span>';
+    main.setAttribute('aria-label', 'Copy ' + x.name + ' from ' + Day.label(x.last) + ' into ' + into);
+    main.onclick = function () { TRAIN.startNamed(x); };
+    var menu = function (e) {
+      menuAt(e, [
+        { label: 'Copy Into ' + (into === 'today' ? 'Today' : into), fn: function () { TRAIN.startNamed(x); } },
+        { label: 'Go To ' + Day.label(x.last), fn: function () { TRAIN.date = x.last; TRAIN.show('workout'); } },
+      ], x.name.toUpperCase());
+    };
+    withMenu(main, menu);
+    row.appendChild(main);
+    row.appendChild(rowMenuBtn('Options for ' + x.name, menu));
+    list.appendChild(row);
+  });
+  m.appendChild(list);
+  var hint = UI.el('div', 'empty');
+  hint.textContent = 'Tap one to copy the last time you did it into ' + into + '.';
+  m.appendChild(hint);
+  var lab2 = UI.el('div', 'fieldlabel');
+  if (Object.keys(TRAIN.programs()).length) { lab2.textContent = 'ROUTINES'; m.appendChild(lab2); }
 }
 
 function drawOneProgram(m, progId) {
@@ -4807,7 +4883,11 @@ TRAIN.startProgramDay = function (dayKey) {
   });
   var prior = TRAIN.dayGroups(date).map(function (g) { return g.ex; })
     .filter(function (x) { return order.indexOf(x) < 0; });
-  TRAIN.patchSession(date, { order: prior.concat(order) });
+  /* A routine day is a named session: it is compared with the last time that
+     day was done. A name already on the day stays. */
+  var day = Rec.get('progday', null, dayKey) || {}, ch = { order: prior.concat(order) };
+  if (day.name && !(Rec.get('session', date, '') || {}).name) ch.name = day.name;
+  TRAIN.patchSession(date, ch);
   TRAIN.reindex();
   TRAIN.assertTick(date);
   Mobile.feedback('success');
@@ -6324,6 +6404,8 @@ TRAIN.logFromRoutine = function (key) {
   var have = TRAIN.setsOn(date).some(function (s) { return s.ex === px.ex; });
   var made = have ? 0 : writeFilled(px.ex, date, TRAIN.fillFor(px, date, false));
   if (made) { TRAIN.reindex(); TRAIN.assertTick(date); }
+  var day = Rec.get('progday', null, px.day) || {};
+  if (day.name && !(Rec.get('session', date, '') || {}).name) TRAIN.patchSession(date, { name: day.name });
   TRAIN.openExercise(px.ex);
   if (made && Rec.setting(APP.id, 'autoNext') !== 0) TRAIN.selectNextOpen();
 };
@@ -8428,6 +8510,17 @@ function boot() {
     Rec.setting(APP.id, 'prRule', 2);
   }
   draw();
+  /* Tom, 2026-09-25: TRAIN opens on the first exercise of today's session
+     that still has a set waiting, so at the gym the first tap is the set. A
+     day with nothing waiting opens on the log as before. Once, when the store
+     is in, and only if nothing else has been opened in the meantime. */
+  Rec.ready(function () {
+    if (TRAIN.screen !== 'workout' || TRAIN.date !== Day.today() || /[?&]import=1/.test(location.search)) return;
+    var g = TRAIN.dayGroups(TRAIN.date).filter(function (x) { return x.sets.some(TRAIN.pending); })[0];
+    if (!g) return;
+    TRAIN.openExercise(g.ex);
+    if (Rec.setting(APP.id, 'autoNext') !== 0) TRAIN.selectNextOpen();
+  });
   if (!CLIENT && !Rec.setting(APP.id, 'seen') && !Rec.count('set')) {
     Rec.setting(APP.id, 'seen', 1);
     setTimeout(TRAIN.firstRun, 400);

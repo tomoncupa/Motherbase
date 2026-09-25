@@ -653,6 +653,27 @@ session could undo without noticing:
 (`HISTORY.md: The training screen, four complaints` and the three sections
 after it.)
 
+## Named sessions, and what opens first (1.0.26, 2026-09-25)
+
+- **Training Routines lists his named sessions** (`TRAIN.namedSessions`,
+  `drawNamed`). Tom: *"I should see named days in Training Routines"*, and he
+  picked this reading over listing a routine's day names. His FitNotes held
+  no routine; a named session is his routine. Each name with sets, most
+  recent first, the day on screen left out; a tap copies the last one into
+  the day on screen with its name (`TRAIN.startNamed`), and never twice onto
+  one day, judged by `session.from`.
+- **A routine day names the session** it is logged into, LOG ALL or one
+  exercise, unless the day already has a name. Tom: *"that's the behavior I
+  already expected."*
+- **TRAIN opens on the first exercise of today with a set waiting**
+  (`TRAIN.pending`), once, in `Rec.ready`, and only while the log for today
+  is still what is on screen and the address is not an import.
+- **A save is silent unless it is a record** (`recordCheer`): a buzz where
+  there is a motor, and one short `complete` sound for an all-time or block
+  record, on SAVE or on UPDATE of a planned set. The tick box keeps its click.
+  Tom: *"a short sound when you save a set that's a new record, and silence
+  otherwise."*
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the
