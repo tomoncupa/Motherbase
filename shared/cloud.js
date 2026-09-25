@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.1.4 — Firebase as a SECOND sync, beside the Google Sheet.
+/* shared/cloud.js — 0.1.6 —Firebase as a SECOND sync, beside the Google Sheet.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
    replacement and it is not allowed to become one. The sheet keeps doing
@@ -411,6 +411,10 @@ function onRow(snap) {
   var v = null;
   try { v = snap.val(); } catch (e) {}
   if (!v || !v.id || !v.type) return;
+  /* The database stores no empty list, empty object or null, so a row whose
+     payload was only those, such as BLOCK's `{v: []}`, comes down with no
+     payload at all, and an app reading a field off it throws (2026-09-25). */
+  if (v.payload == null && !v.deleted) v.payload = {};
   var n = 0;
   try { n = g.Rec ? g.Rec.merge([v]) : 0; } catch (e) { return; }
   if (v.updated_at && v.updated_at > (cfg.seen || '') && v.updated_at <= soon()) { cfg.seen = v.updated_at; csave(); }
@@ -432,7 +436,7 @@ function start() {
   }).then(function (u) {
     if (!u) { signedOut(); return false; }
     uid = u.uid;
-    cfg.uid = uid; cfg.email = u.email || ''; cfg.lost = ''; csave();
+    cfg.uid = uid; cfg.email = u.email || ''; cfg.lost = ''; cfg.kept = keptIn(); csave();
     db  = g.firebase.database(app());
     ref = db.ref('u/' + uid + '/rows');
     query = cfg.seen ? ref.orderByChild('updated_at').startAt(cfg.seen)
@@ -472,10 +476,39 @@ function onConn(s) { conn = !!(s && s.val()); say(); }
    in the suite signed them out: the sign-in was simply gone. Said in words
    that name the one fix. */
 function signedOut() {
-  if (cfg.on && !cfg.lost) { cfg.lost = new Date().toLocaleString(); csave(); }
+  if (cfg.on && !cfg.lost) { cfg.lost = new Date().toLocaleString(); cfg.lostKept = keptIn(); csave(); }
   note('Google has signed this device out' + (cfg.lost ? ' (noticed ' + cfg.lost + ')' : '') +
     '. Nothing syncs from here until you sign in again', 0);
 }
+
+/* Why the sign-in went is still unproven (2026-09-25). Firebase keeps it in
+   the first storage that answers at load, IndexedDB then localStorage then
+   sessionStorage, and deletes it from every other one. An IndexedDB slow to
+   open plus a full or working localStorage can therefore drop it. So the
+   store Firebase chose is written down when signed in (`kept`) and when the
+   sign-out is noticed (`lostKept`), and Google's last refusal of a token
+   (`authErr`, the error code only, never a token) beside them. */
+function keptIn() {
+  try { return auth._delegate.persistenceManager.persistence.type || '?'; } catch (e) { return '?'; }
+}
+(function () {
+  var f = g.fetch;
+  if (!f || f.__mbAuth) return;
+  g.fetch = function (u) {
+    var p = f.apply(this, arguments);
+    var s = String(u && u.url || u);
+    if (!/securetoken\.googleapis|identitytoolkit\.googleapis/.test(s)) return p;
+    return p.then(function (r) {
+      if (!r.ok) r.clone().json().then(function (j) {
+        cfg.authErr = new Date().toLocaleString() + ' ' + r.status + ' ' +
+          String(j && j.error && j.error.message || '').slice(0, 60);
+        csave();
+      }).catch(function () {});
+      return r;
+    });
+  };
+  g.fetch.__mbAuth = 1;
+})();
 
 /* The sign-in can end while the page is open. Until 0.1.4 the account was
    read once at start and never again, so a device signed out mid-session kept

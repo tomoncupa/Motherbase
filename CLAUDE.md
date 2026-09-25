@@ -170,7 +170,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `health.js` | Answers "is my data okay" without a test suite. |
 | `creatures.js` | The Pokémon a person is shown as, drawn from shapes on a canvas, since 2026-09-22. CHECK IN's picker and COACH's box both draw from it, so a client is the same creature in both. An old animal pick maps to a Pokémon. Writes colours down, like notice.js, because the creature is art. |
 | `range.js` | A training history as a woodblock landscape, since 2026-09-22: every training block a mountain, every session a tree, taller for more volume, blossoming on a record day. TRAIN's Profile and COACH draw it. `Range.fromRows` builds it from TRAIN-shaped rows. Writes colours down for the same reason. |
-| `notice.js` | The status window LOOK: four palettes and the cut-corner shape. NOTICE strokes it on a canvas to make a picture, STATUS clips a real panel to it for the status check. The one place in the suite that carries hex colours on purpose, for the reason NOTICE always had: the window is the art, not the furniture, so a Hunter window is blue in every theme. Nothing here reaches an app's own chrome. |
+| `notice.js` | The status window LOOK and, since 2026-09-25, NOTICE's ENGINE: `Notice.parse` (text in), `Notice.draw` (the window, 1080 wide), `Notice.compose` (on a story or post). NOTICE and SHEET both draw with it; NOTICE keeps its made-up rewards and hands them in as `o.rewards`. The four palettes and the cut-corner shape. NOTICE strokes it on a canvas to make a picture, STATUS clips a real panel to it for the status check. The one place in the suite that carries hex colours on purpose, for the reason NOTICE always had: the window is the art, not the furniture, so a Hunter window is blue in every theme. Nothing here reaches an app's own chrome. |
 | `cloud.js` | LIVE SYNC: Firebase beside the sheet, added 2026-09-20. One row per row at `/u/<uid>/rows/<id>`, pushed on change and listened for by `updated_at`, merged through `Rec.merge` like anything else. Fetched by `io.js` rather than by a tag in every app, the way `mobile.js` fetches `sw.js`, so no app was edited. Only the TOP document connects, because `records.js` already shares merged rows across the origin and fourteen frames would be fourteen connections. A row over 64KB is skipped AND THE BOUNDARY STILL PASSES IT, or one photo would jam every sync after it. Does nothing until a config is pasted. See `CLOUD.md`. |
 | `nutrients.js` | The full nutrient list a food can carry beyond the eight, added 2026-09-22: fibre, sugar, the fats, EPA and DHA, cholesterol, eleven minerals and the vitamins, thirty-one in all. One list, three readers: FOODDÉX fills them from its USDA lookup (found by the USDA's printed NAME and unit, never its numeric id, and International Units skipped), STATUS gives each one a column on the sheet's Food tab, and ELEMENT reads its five off the food. They live on `food.base` beside the eight. A blank is "not known", never zero. |
 | `_smoke.html` | 343 checks over all of the above. Run it after touching any of them. |
@@ -287,6 +287,7 @@ An app may read any type. It writes only the types it owns.
 | `fday` | **forge** | `prog\|day id` | `{name, ord}` — one day, in every week of its program |
 | `fex` | **forge** | `prog\|slot id` | `{day, name, cat, ord, n, r, kg, rir, rest, note, wk, slot, pat, mus}` — one exercise in one day, or an open slot (`slot: 'pat'` or `'mus'`, `name` empty) filled per client at SEND. `r` is a rep range as text (`"8-15"`), `rir` a number or range (blank reads `0-3`). `n` `r` `kg` `rir` are week one's; `wk[w]` holds only what week `w` changes, and anything it does not say is the week before's. No weekly load step: load rises from set one on the day |
 | `brief` | **the daemon on the PC**; **quest** reads it and never writes it | `''`, dated the day it is for | `{text, todo, t, src}` — Claude's morning brief for that day, added 2026-09-22. `text` is plain lines, `# ` a heading and `- ` a point; `todo` a list of action items, each a string or `{text}`. QUESTS shows it as a foldable card at the top of Today and turns each item into a todo keyed `brief-<date>-<n>`, `src: 'brief'`, due that day, written once, so a deleted one stays deleted. How the row reaches the store is the daemon's business |
+| `feat` | **sheet** | the feat's own id, undated | `{t, date, saved}` — this feat's window was shown (and when its picture was saved). The feats themselves are worked out from TRAIN and STATUS rows every open and never stored |
 | `msg` | **system** (NOTICE) | id, dated | `{text, kind, style, seed, t}` — one status window that was saved or copied: the text as typed, notice or quest, the window style, and the reroll count its pseudo rewards were drawn with. The draft being typed and every choice on screen are settings, not rows |
 
 ### Many writers is fine. Replacing a payload you did not read is not
@@ -756,6 +757,24 @@ answer, or take it out.
   either. Cap the fill short of the top and keep the label in the band above
   it, scaling every fill the same so what the bars are read for is untouched.
   COACH's week strip, 2026-09-24: white set counts on gold.
+- **Live sync's database keeps no empty list, empty object or null.** A
+  payload of only those arrives with no payload at all, and a field holding
+  `[]` arrives missing. BLOCK's `{v: []}` settings stopped its board drawing in
+  Chrome, and a new day's `routines: []` came back as "runs every routine"
+  (2026-09-25). `cloud.js` 0.1.5 gives a stripped row `{}`; an app whose
+  meaning depends on an EMPTY list must also carry a flag that says it was
+  chosen, as BLOCK's `picked` does.
+- **A `flex:1` title beside a `flex:1` spacer splits the bar between them.**
+  TRAIN's header pushed its icons right with an empty `.spacer{flex:1}`, and a
+  screen title was `flex:1` too, so "Cuffed External Rotation" was given 81px
+  of bar beside 73px of nothing and clipped at every font size (2026-09-24).
+  A spacer and a thing that wants the room cannot both grow: stand the spacer
+  down whenever there is something to fit.
+- **`mb-tap` means a control can be drawn smaller than 44px and still be 44px.**
+  It expands the hit area with a pseudo-element without changing the drawing,
+  so a row full of 44px-tall icon buttons can come down to a 32px drawing and
+  measure 44x44 to a thumb. TRAIN's set rows went from 61px to 44 that way. Check
+  the computed `::after`, not the button.
 - **A sheet opened from another sheet's button walks history off the page.**
   Closing a sheet queues a `history.back()` that lands a moment later; a
   sheet opened in the same tick pushes its entry first, the late step takes
@@ -768,6 +787,19 @@ answer, or take it out.
   that must read back in the order it was entered sorts on the row KEY, which
   is a timestamp for anything keyed the suite's usual way. COACH printed a
   session's exercises in whatever order the store felt like, 2026-09-24.
+- **A drag that stops the page scrolling must say so before the finger lands.**
+  A phone decides at touchstart whether anything can cancel the scroll, so a
+  non-passive `touchmove` listener added once a row is lifted is ignored: the
+  list scrolls, the browser sends `pointercancel`, and the row drops back.
+  TRAIN's day drawer shipped that way and never moved on the iPhone
+  (2026-09-25). Put the listener on the list from the start and call
+  `preventDefault` only while something is lifted, and give held rows
+  `user-select:none` and `-webkit-touch-callout:none`. TRAIN's `holdToMove` and
+  STATUS's `makeTilesSortable` both do.
+- **Match a standard row by its NAME, not a key you would have made.** An
+  import brings its own keys (FitNotes groups are `fn<id>`), so TRAIN's
+  `fillCats` looked for `forearms`, missed his own Forearms, and added a second
+  one (2026-09-25). Before adding a default, look for one with that name.
 
 ---
 
@@ -796,6 +828,7 @@ own brief since 2026-09-22.
 | `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
 | `forge/` | FORGE, the program builder. Weeks of days of exercises, sent through COACH to TRAIN. Tom only, desktop only. Brief: `forge/CLAUDE.md`. |
 | `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
+| `sheet/` | CHARACTER SHEET. Feats from TRAIN and STATUS as NOTICE windows, with a history; the pixel character is paused. Held out of the client build for now. Brief: `sheet/CLAUDE.md`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation. `_smoke.html` must pass at desktop and phone width. Every app loads it. |
 

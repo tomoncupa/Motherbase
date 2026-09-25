@@ -22,6 +22,6 @@ Tom: "Rather than resize my widgets when I resize my window, I just want more sp
 
 BODY HEATMAP ("Widget - Body Training Heatmap"): TRAIN's working sets over 7, 14 or 30 days on a front and back figure, brighter for more sets, with a ranked list. Counted like TRAIN's WEEKLY (warmups out, today's sets once done, `exercise.also` shares). Muscle-group names are read onto the body by `BODY_RULES`; an unreadable group other than cardio is listed as "Not on the body". `setIsWarm` copies `TRAIN.noteWarm`: change both.
 
-## 2026-09-24, HOME 1.0.32: FORGE in the roster
+## 2026-09-25, HOME 1.0.33: FORGE in the roster
 
-FORGE, the program builder (`forge/CLAUDE.md`), is in `APPS` after COACH, flagged `mine`. It sits behind the dock's line with Tom's other apps, and the client build's `DROP_APPS` removes it.
+FORGE, the program builder (`forge/CLAUDE.md`), is in `APPS` after COACH (built as 1.0.32 on its branch; SHEET took 1.0.32 on main first), flagged `mine`. It sits behind the dock's line with Tom's other apps, and the client build's `DROP_APPS` removes it.

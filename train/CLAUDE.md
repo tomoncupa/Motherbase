@@ -60,9 +60,9 @@ see the root brief on many writers. Every edit merges into the row as it is
 
 | Type | Key | Payload |
 |---|---|---|
-| `excat` | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
+| `excat` | category id, the slug of its name | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex, and there are only twelve |
 | `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup}` |
-| `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
+| `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, plan, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
 | `session` | `''` | `{start, end, note, from, order, name, vs}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, and a day he picked to compare it with |
 | `phase` | phase id | `{name, start, end}` — a training block. `end` is optional |
 | `sgroup` | group id, dated | `{name, slot, ex:[ids], jump, resthold}` — a superset |
@@ -87,6 +87,10 @@ describe the gym, not the training.
 
 - `set.kg` is always kilograms. `set.u` is the unit it was typed in.
 - `set.dist` is always **kilometres**. `set.dur` is always **seconds**.
+- `set.done` is the tick box and nothing else: his mark, never the app's.
+  `set.plan` is the app's: 1 on a set TRAIN wrote on his behalf, from a copied
+  day, a routine or Copy Set. A plan is not work until it is ticked or pressed
+  UPDATE on; everything else counts the moment it is saved. See `TRAIN.counts`.
 - `set.warm` marks a warmup by hand: dimmed, never a record, never counted in volume or
   set totals. **A set is also a warmup when its comment says so**, worked out when the
   index is built and never written back; a stored `warm` of 1 or 0 beats the comment.
@@ -265,9 +269,11 @@ comments"). Nothing is written back, so editing a comment changes what the set i
 
 ### What counts
 
-A set counts once it is ticked. **A past day counts as it was logged**: 1,099 of
-his FitNotes sets were never ticked, and Analysis has always counted them. Today,
-a copied or planned set is not work until it is ticked. Warmups never count.
+A set counts unless it is a plan still waiting. **A past day counts as it was
+logged**: 1,099 of his FitNotes sets were never ticked, and Analysis has always
+counted them. Today, a copied or routine-filled set is not work until it is
+ticked or pressed UPDATE on, and `plan` is what marks one. A set he typed and
+saved is work the moment it is saved, box or no box. Warmups never count.
 
 ### Training blocks
 
@@ -415,7 +421,8 @@ where FitNotes says workout.
 
 **Every row that can be changed has a menu**, on a long press and a right click
 both (DOCTRINE law 14), and every one of those menus also has a visible way in —
-a ⋮ button on the row, a Reorder button, or the screen's More (law 6).
+a ⋮ button on the row, or the screen's More (law 6). On a list with an order
+the long press is a hold let go without moving; see `holdToMove` below.
 
 **Summaries are facts, never verdicts.** The end of a session and the week add
 themselves up because Tom asked for both. Neither praises, sets a target, or
@@ -456,6 +463,7 @@ not a fence.
 | `routine` | `program` | BLOCK owns `routine` |
 | "Workout" | "Session" and "Training": Training Log Empty, Copy Past Session, Training Routines | Tom, 2026-09-14: he trains |
 | One set of records per exercise | Straight sets and split sets each keep their own | A set with a rest in it is not the same lift |
+| A copied set and a logged set look alike | A plan still waiting reads in muted numbers | With the auto-tick gone nothing else told them apart |
 | Records never start again | Each training block has its own; all-time ones stay | Tom, 2026-09-14 |
 | No session names, blocks, weekly view, session summary or profile | All five | Tom, 2026-09-14 |
 
@@ -470,46 +478,13 @@ browser does not support it.
 
 ---
 
-## What is built, as of 2026-09-14
+## What is built
 
-Everything below was driven in the browser against his real backup, at 375px
-until 2026-09-14 and at 390px since, except where a row says otherwise.
-
-| Area | Built |
-|---|---|
-| Training log | Session strip, cards, comments, warmups, timer card, set by set change on every set, category shown as nothing, a name, or name and colour, set limit, superset tags, skip empty dates, session card with SHARE PICTURE |
-| Blocks and names | Blocks created, edited, ended and deleted with an undo; names offered, carried by a copy, compared by name inside the block first; a day picked to compare with |
-| Weekly | This week and any before it, sets per muscle and sessions that hit it, eight weeks side by side, SHARE PICTURE |
-| Profile | All-time totals, the current block, all blocks, All-Time and Block Records |
-| Setup | Toggles and settings per exercise, recorded per set, carried forward |
-| Exercise list | Favourites, categories in his order, search, sort by last used, create, edit, delete with its sets and an undo, categories created, edited, recoloured, reordered and deleted |
-| Exercise editor | Name, category, new category, all six types, weight increment, rest time, second muscle groups, delete |
-| TRACK | Steppers for whichever two fields the type logs, SAVE keeps the numbers, UPDATE, CLEAR, tick box, comments, warmups, copy set, delete, last time, auto-select next set |
-| HISTORY | Newest first, 100 workouts at a time |
-| GRAPH | `chart.js`, per type: estimated 1RM, max weight, volume, max reps, reps, distance, time; five periods; points, trend line and y from zero as settings; expand; graph points listed; default graph per exercise |
-| Records | Actual and estimated records, rep max grid with his rep counts and a favourites filter, per-exercise record sheet with record history |
-| Overview | Totals, first and last date, notes |
-| Calculators | Estimated 1RM with rep maxes and percentages; set calculator rounded to the increment; plate calculator one unit system at a time |
-| Timers | Rest timer bar and sheet, per-exercise rest time, auto start; workout timer auto start and auto stop |
-| Supersets | Create, rename, delete, jump to next exercise, rest held until the round ends |
-| Calendar | Months to scroll through, category dots, category filter, workout count, pick mode for copy and move |
-| Copy and move | Copy Previous Workout, Copy Workout, Copy This Workout, Move Workout, each with FitNotes' options |
-| Routines | Routines, days, exercises; don't populate, copy previous sets, or predefined sets with blanks copied from last time; LOG ALL; tap to log one; rename, copy, reorder, delete |
-| Goals | Weight for reps, end date, progress from the best set at those reps, edit, reorder, delete |
-| Analysis | Breakdown by category or exercise over five periods; workout graphs per week, month and year for workouts, sets, reps, volume and time |
-| Settings | Every FitNotes setting TRAIN has an equivalent for, plates and bars, categories, re-calculate records, delete workout history, import |
-| Keep screen on | Wake Lock, re-requested when the tab comes back. **Not verified**: the test page was hidden, and a browser grants the lock only to a page on screen. Tom's phone is the test |
-
-### Not built
-
-- A per-exercise weight unit (FitNotes Supporter's "custom weight units"). All 270
-  of his exercises use the default, so nothing of his depends on it.
-- Showing body weight above the workout log. Off in his FitNotes; would read STATUS.
-- Saved graph favourites beyond one default per exercise.
-- The calendar's detail panel under the grid. Off in his FitNotes.
-- A confirmation when an exercise's type is changed. The data is kept either way.
-
----
+Everything FitNotes v25.1 has, plus the training layer above. The area-by-area
+table of what was built and driven in the browser, and the short list of what
+was deliberately not built (a per-exercise weight unit, body weight above the
+log, saved graph favourites, the calendar's detail panel), is in
+`HISTORY.md: What is built, as of 2026-09-14`.
 
 ## The phone
 
@@ -602,61 +577,116 @@ Never claim it works because it should. Claim it because you watched it.
 
 ---
 
-## Send To Coach, over the shelf (1.0.18, 2026-09-23)
+## Send To Coach, over the shelf
 
-Tom, 2026-09-23: *"We should put an upload to coach function in train."* And,
-on where it goes: *"Maybe in post workout share menu."*
+`Cloud.send('train', bag)` puts the whole bag on the coach's shelf, and the
+rules that make that safe are in `CLOUD.md`. Three of them cannot be optimised
+away: **the file is the fall-back, not the past** (opened from a folder, signed
+out or with no signal, it makes the file exactly as before and says why, which
+is hard constraint 4); **it always sends everything, never one day**, because
+COACH merges on `updated_at` and a partial send is how the days around it go
+missing; and **nothing leaves the phone until it is pressed**. It sits on the
+session menu under Share As Text as well as on Profile, because the moment a
+client would send is the session they just finished.
+(`HISTORY.md: Send To Coach, over the shelf`)
 
-The button does the same thing it always did from the client's side. What
-changed is what it produces.
+## Opened straight into the import
 
-- **It uploads.** `Cloud.send('train', bag)` puts the same bag the file always
-  held on the coach's shelf in the database, `drop/coach/<the client's own
-  account>`. The rules are what make that safe, and `CLOUD.md` holds them.
-- **The file is the fall-back, not the past.** Opened from a folder, not
-  signed in, no signal, Firebase blocked: the file is made exactly as before
-  and the message says a file was saved instead and why. Hard constraint 4.
-  Do not delete that path.
-- **It still sends everything, never one day.** COACH merges on `updated_at`,
-  so a whole send costs nothing and a partial one is how the days around it go
-  missing.
-- **It is on the session menu now as well as Profile.** The moment a client
-  would send is the one they just finished, so it sits under Share As Text.
-- **Nothing leaves the phone until it is pressed.** That is the rule Tom kept
-  when he chose this over a live feed off a client's phone, and it is not a
-  detail to optimise away later.
+`&import=1` on the address opens the import panel once, after `boot` and after
+the store is ready; COACH's IMPORT THEIR LOG uses it on a client profile. **The
+panel names whose log it is when `CLIENT` is set** — a FitNotes backup dropped
+into the wrong log is thousands of rows to undo by hand, and the two logs look
+identical once the frame is open.
+(`HISTORY.md: Opened straight into the import`)
 
-Watched 2026-09-23 in the browser: signed out, the menu item made the file and
-said "not signed in"; with the upload answering, it sent the bag, no file, and
-said so; with the upload refusing, the file came back with the reason. COACH
-took the same bag off a stubbed shelf and it landed as that client's rows.
-The real database has never been in the loop — nobody has signed in.
+## The training screen, as Tom rebuilt it on 2026-09-24
 
-## Opened straight into the import (1.0.20, 2026-09-24)
+Four complaints and then six more, all in one day, all from him using it beside
+FitNotes on his phone. The rules that came out of it, each of which a later
+session could undo without noticing:
 
-Tom, 2026-09-24: *"Bring back the upload training data function from the most
-common apps, and fitnotes."* Nothing was rebuilt. The importer was already
-here and already client-aware; what was missing was a way in from a client's
-profile, where a new client's history actually arrives.
+- **The title never clips.** `fitTitle` steps the name down the type scale on
+  one line, then takes two lines rather than shrink further, then three. The
+  header's `.spacer` must stand down whenever there is a title, or it and the
+  title split the free space and half the room goes to nothing.
+- **A hold on anything with an order lifts it** (`holdToMove`, 1.0.25): the
+  log's exercise cards, the drawer's rows, the sets on TRACK, and a routine's
+  list, days and exercises. Drag and it moves; **let go without moving and
+  its menu opens**, so every hold-menu those rows had is kept, and a right
+  click opens it too. Tom, 2026-09-25: *"I still cant hold to reorganize my
+  sets"* — the drawer-only version of 1.0.21 never worked on his iPhone,
+  because its touchmove guard was added after the finger was down and a
+  phone decides at touch start whether anything can stop the scroll. **The
+  guard must sit on the list from the start** and refuse only while a row is
+  up. Held rows carry `user-select:none` and no touch callout, or iOS takes
+  the press for text selection. A new ordered list uses `holdToMove`, never
+  `withMenu` on its rows, with each row's key in `data-key`.
+- **Saving a set never ticks it.** `done` is his box; `plan` is the app's mark.
+  See Fields worth knowing and What counts.
+- **A new exercise carries what he typed** into the search box.
+- **TRACK is flat.** No cards: the steppers and the day's sets are `.trackbox`
+  on the page with one hairline between them. Do not put them back in cards.
+- **The rest countdown is a chip in the top bar** (`.restchip`), standing where
+  the rest timer button stands and hiding it while it runs, so resting costs no
+  height. It **rings once at zero and goes** — Tom, 2026-09-24: *"I don't want
+  to see the over timer in TRAIN."* Do not bring the counting-up state back.
+  The clock still decides, so a tab suspended past the end rings and clears.
+- **A set row is 44px.** The bubble and the tick box draw at 32 and keep their
+  44px targets through `mb-tap`.
+- **SAVE is the accent and CLEAR is quiet.** No second colour on that bar.
+- **Searching for a movement is `TRAIN.nameMatch(name, q)`**, scored, best
+  first: the whole name 100, starts-with 90, substring 80, every query word
+  starting a name word in any order 70, anywhere inside a name word 60,
+  initials 50, letters in order but apart 20 plus one per word-start landed on.
+  Punctuation and accents come off both sides first. All three exercise
+  searches use it. **Not typo tolerant on purpose**: edit distance starts
+  offering things he did not mean.
+- **Twelve muscle groups, and twelve is the ceiling** — a group stores a slot
+  and there are six chart colours in two tints. A group's slot is its place in
+  `DEFAULT_CATS`, so **that order decides the colours**; as it stands Legs and
+  Hamstrings are two tints of one hue, and so are Core and Lower Back.
+  `TRAIN.catId` slugs a name into its key. `TRAIN.fillCats` adds any standard
+  group an existing log is missing, **moves no exercise**, and skips a group he
+  deleted by asking `Rec.tombstone` rather than remembering what it wrote —
+  and it runs inside `Rec.ready`, when every device's tombstones are in.
+  **It looks for a group by NAME** (`TRAIN.catWord`, plural dropped), never
+  by the key it would make: a FitNotes group is keyed `fn<id>`, and until
+  1.0.27 his log got a second, empty Forearms. Arms counts as there when he
+  has Biceps or Triceps, Core when he has Abs (`TRAIN.CAT_ALSO`). An app-made
+  copy beside one of his is deleted while it holds no exercise, and kept once
+  it holds one.
+- **Movements change group only through the SORT sheet** (1.0.28,
+  `TRAIN.sortDialog`): Calves, Glutes, Hamstrings and Lower Back read off the
+  name by `TRAIN.SORT_RULES`, Glutes before Hamstrings. Every move is a row
+  with a switch, one SORT, UNDO after. Offered once on the exercise list
+  (`train.sortSeen`), always in its More as Sort Into Groups, never on a
+  client's profile. A movement already in one of the four is never offered;
+  one switched off stays off (`train.sortSkip`). Watched on his 270 names:
+  8, 10, 12 and 1, Leg Curl out of Biceps.
 
-- **`&import=1` on the address opens the panel**, once, after `boot`. COACH's
-  IMPORT THEIR LOG on a client profile opens
-  `train/index.html?client=<pid>&import=1` in the frame it already uses for
-  LOG A SESSION.
-- **It waits for the store**, like everything else in `boot`. An import that
-  cannot see what is already here would write a second copy of it.
-- **The panel says whose log it is** when `CLIENT` is set. A FitNotes backup
-  dropped into the wrong log is thousands of rows to undo by hand, and the
-  two logs look identical once the frame is open.
-- **Nothing in the importer changed.** `importFitNotes` already goes through
-  `TRAIN.mergeImport`, which maps, and `importCsv` writes through `Rec.set`,
-  which the adapter replaced. `assertTick` is a no-op on a client, because
-  `tick` is dropped there.
+(`HISTORY.md: The training screen, four complaints` and the three sections
+after it.)
 
-Watched 2026-09-24 from COACH: the panel came up over the client's profile,
-a five-set CSV with a comma inside an exercise name imported as that client's
-rows, weights read as pounds and stored in kilograms, and Tom's own `set`,
-`exercise` and `tick` counts did not move.
+## Named sessions, and what opens first (1.0.26, 2026-09-25)
+
+- **Training Routines lists his named sessions** (`TRAIN.namedSessions`,
+  `drawNamed`). Tom: *"I should see named days in Training Routines"*, and he
+  picked this reading over listing a routine's day names. His FitNotes held
+  no routine; a named session is his routine. Each name with sets, most
+  recent first, the day on screen left out; a tap copies the last one into
+  the day on screen with its name (`TRAIN.startNamed`), and never twice onto
+  one day, judged by `session.from`.
+- **A routine day names the session** it is logged into, LOG ALL or one
+  exercise, unless the day already has a name. Tom: *"that's the behavior I
+  already expected."*
+- **TRAIN opens on the first exercise of today with a set waiting**
+  (`TRAIN.pending`), once, in `Rec.ready`, and only while the log for today
+  is still what is on screen and the address is not an import.
+- **A save is silent unless it is a record** (`recordCheer`): a buzz where
+  there is a motor, and one short `complete` sound for an all-time or block
+  record, on SAVE or on UPDATE of a planned set. The tick box keeps its click.
+  Tom: *"a short sound when you save a set that's a new record, and silence
+  otherwise."*
 
 ## A program in weeks, and the coach's target (1.0.21, 2026-09-24)
 
@@ -710,9 +740,8 @@ Chest" (`forge/CLAUDE.md`, Movement patterns). `takeProgram` keeps one as a
 screen off. It is parked because it introduces a build step, which is a decision
 about the whole suite. Keep Screen On covers most of what it would have fixed.
 
-## History, moved from the root brief on 2026-09-22
+## History
 
-What was built and watched, newest last. Moved here verbatim so the root brief
-stays small enough for per-module sessions.
-
-Built, and tested in the browser at 390px against Tom's real 12,370-set FitNotes backup; the phone itself is his iPhone 13 Pro, and nothing has been watched on it yet. A reproduction of FitNotes v25.1 on the shared foundation, plus Tom's own idea of training (2026-09-14): sessions with names and training blocks, each working set compared with the same set last time in reps and percentage, a session card and a weekly card that share as story pictures, sets per muscle per week, a Profile with all-time and block records, and setup recorded per set. Warmups and split sets are read from comments. Says session and training, never workout. Owns the training log. Has its own brief.
+The diary is `HISTORY.md` beside this file: what was built, watched and left
+open, including the line this app had in the root brief until 2026-09-22.
+(`HISTORY.md: History, moved from the root brief on 2026-09-22`)

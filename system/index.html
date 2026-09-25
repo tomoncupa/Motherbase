@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
-<meta name="mb-version" content="1.0.7, 2026-09-23">
+<meta name="mb-version" content="1.0.10, 2026-09-25">
 <title>NOTICE</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -27,7 +27,7 @@
 <script src="../shared/io.js?v=16"></script>
 <script src="../shared/health.js?v=16"></script>
 <script src="../shared/icons.js?v=16"></script>
-<script src="../shared/notice.js?v=16"></script>
+<script src="../shared/notice.js?v=18"></script>
 
 <style>
 /* NOTICE: text in, a status window out. Built to the phone rules and used at
@@ -123,13 +123,21 @@ textarea.mb-input{width:100%;min-height:calc(var(--tap) * 4);resize:vertical;
     <h2>TEXT</h2>
     <div id="txt"></div>
     <div class="hint">One line is one message. Start lines with <code>-</code> and it becomes a quest.
-      <code>Rewards:</code>, <code>Effect:</code>, <code>Rank:</code> and <code>Penalty:</code> are optional.
-      <code>#</code> sets the heading. <code>[x]</code> ticks a goal, <code>40/100</code> shows progress.</div>
+      <code>Rewards:</code>, <code>Effect:</code>, <code>Rank:</code> and <code>Penalty:</code> are optional;
+      <code>Type: Debuff</code> and <code>Duration:</code> make a status effect.
+      <code>#</code> sets the heading. <code>[x]</code> ticks a goal. A goal with a number, <code>100 push-ups</code> or <code>40/100</code>, is counted.</div>
     <div class="acts"><button class="mb-btn go mb-press mb-tap" id="btnMake">MAKE ONE FOR ME</button></div>
     <div class="seg"><div class="lbl">WINDOW</div><div id="segKind"></div></div>
     <div class="seg"><div class="lbl">HEADING</div><div id="segHead"></div></div>
     <div class="seg"><div class="lbl">STYLE</div><div id="segStyle"></div></div>
-    <div class="acts"><button class="mb-btn mb-press mb-tap" id="btnRoll">REROLL REWARDS</button></div>
+    <div id="rowMade" class="seg">
+      <div class="seg" id="rowRw"><div class="lbl">REWARDS</div><div id="rwRows"></div></div>
+      <div class="seg" id="rowStat"><div class="lbl">STAT</div><div id="segStat"></div></div>
+      <div class="acts">
+        <button class="mb-btn mb-press mb-tap" id="btnRoll">REROLL REWARDS</button>
+        <button class="mb-btn mb-press mb-tap" id="btnWrite">EDIT REWARDS</button>
+      </div>
+    </div>
   </section>
 </div></main>
 
@@ -160,7 +168,7 @@ const newId = () => Rec.USER + '-' + Date.now().toString(36) + '-' +
    is a draft, saved as you type; a window is only a row once SAVE or COPY
    was pressed. */
 const KINDS = [{ id: 'auto', name: 'AUTO' }, { id: 'notice', name: 'NOTICE' },
-  { id: 'quest', name: 'QUEST' }, { id: 'item', name: 'ITEM' }];
+  { id: 'quest', name: 'QUEST' }, { id: 'item', name: 'ITEM' }, { id: 'status', name: 'STATUS' }];
 /* The line across the top of the window. It used to come from the style, so
    picking HUNTER also picked the word NOTIFICATION and there was no way to
    have one without the other. Tom, 2026-09-17: unpair them. It is its own
@@ -169,8 +177,9 @@ const HEADS = [{ id: 'auto', name: 'AUTO' },
   { id: 'notification', name: 'NOTIFICATION', text: 'NOTIFICATION' },
   { id: 'quest', name: 'QUEST', text: 'QUEST' },
   { id: 'system', name: 'SYSTEM MESSAGE', text: 'SYSTEM MESSAGE' },
-  { id: 'notice', name: 'NOTICE', text: 'NOTICE' }];
-const AUTO_HEAD = { notice: 'NOTIFICATION', quest: 'QUEST', item: 'ITEM ACQUIRED' };
+  { id: 'notice', name: 'NOTICE', text: 'NOTICE' },
+  { id: 'status', name: 'STATUS EFFECT', text: 'STATUS EFFECT' }];
+const AUTO_HEAD = { notice: 'NOTIFICATION', quest: 'QUEST', item: 'ITEM ACQUIRED', status: 'STATUS EFFECT' };
 const FRAMES = [{ id: 'window', name: 'WINDOW' }, { id: 'story', name: 'STORY' }, { id: 'post', name: 'POST' }];
 const BACKS = [{ id: 'clear', name: 'CLEAR' }, { id: 'dark', name: 'DARK' }];
 const SIZES = IO.SHARE_SIZES.map(s => ({ id: s.id, name: s.name.toUpperCase(), fill: s.fill }));
@@ -187,6 +196,7 @@ const S = {
   back: get('back', 'dark'),
   size: get('size', 'mid'),
   seed: +get('seed', 0) || 0,
+  rs: Object.assign({ exp: 0, stat: 0, title: 0, gold: 0, item: 0 }, get('rs', null) || {}),  // per-reward seeds, see RS0
 };
 
 /* ══════════════ the picture's palettes ══════════════
@@ -205,321 +215,135 @@ function headText(q) {
   return h.text || AUTO_HEAD[q.kind] || 'NOTIFICATION';
 }
 
-/* ══════════════ reading the text ══════════════ */
-const BUL = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
-const CHK = /^\[( |x|X|✓|✔)\]\s*(.*)$/;
-const HEAD = /^\s*(rewards?|loot|effects?|penalty|penalties|failure|fail|warning|rank|grade)\s*:\s*(.*)$/i;
-const PROG = /^(.*?)\s*\[?(\d+)\s*\/\s*(\d+)\]?\s*$/;
-const strip = s => s.replace(/^\[\s*/, '').replace(/\s*\]$/, '');
-
-function parse(text, kind) {
-  const q = { head: '', title: '', rank: '', desc: [], goals: [], rewards: [], penalty: [], lines: [] };
-  let section = 'goal', anyBullet = false, anyItem = false;
-  String(text || '').split(/\r?\n/).forEach(raw => {
-    const line = raw.trim();
-    if (!line) return;
-    if (/^#/.test(line)) { q.head = line.replace(/^#+\s*/, ''); return; }
-    const h = HEAD.exec(line);
-    if (h) {
-      /* Rank: and Effect: are an item's two markers. Effects are kept in the
-         same list as rewards, because they are drawn the same way and only
-         the label over them differs. */
-      if (/^(rank|grade)/i.test(h[1])) { q.rank = h[2]; anyItem = true; return; }
-      if (/^effect/i.test(h[1])) anyItem = true;
-      section = /^(reward|loot|effect)/i.test(h[1]) ? 'reward' : 'penalty';
-      if (h[2]) h[2].split(/\s*,\s*/).forEach(x => { if (x) q[section === 'reward' ? 'rewards' : 'penalty'].push(x); });
-      return;
-    }
-    const b = BUL.exec(line);
-    const body = b ? b[1] : line;
-    if (b) anyBullet = true;
-    q.lines.push(body);
-    if (section === 'reward') { q.rewards.push(body); return; }
-    if (section === 'penalty') { q.penalty.push(body); return; }
-    if (b) {
-      const c = CHK.exec(body);
-      let done = !!(c && c[1] !== ' '), label = c ? c[2] : body, cur = null, max = null;
-      const p = PROG.exec(label);
-      if (p && +p[3] > 0) { label = p[1] || label; cur = +p[2]; max = +p[3]; if (cur >= max) done = true; }
-      q.goals.push({ label: label, done: done, cur: cur, max: max });
-    } else if (!q.title) q.title = body;
-    else q.desc.push(body);
-  });
-  q.kind = kind === 'auto'
-    ? (anyItem ? 'item' : (anyBullet || q.rewards.length) ? 'quest' : 'notice')
-    : kind;
-  /* QUEST chosen by hand with no bullets: the first line is the title and
-     the rest are the goals. NOTICE chosen by hand: every line is a message. */
-  if (q.kind === 'quest' && !q.goals.length && q.desc.length) { q.goals = q.desc.map(d => ({ label: d, done: false })); q.desc = []; }
-  /* ITEM: the first line is the item's name, anything listed is an effect,
-     and the rest is what it reads like in the hand. Nothing is ticked. */
-  if (q.kind === 'item' && q.goals.length) {
-    q.goals.forEach(g => q.rewards.push(g.label));
-    q.goals = [];
-  }
-  if (q.kind === 'notice') {
-    q.msgs = q.lines.map(l => strip(l.replace(CHK, '$2')));
-    q.rewards.forEach(r => q.msgs.push(r)); q.penalty.forEach(r => q.msgs.push(r));
-  }
-  q.typedRewards = q.rewards.length > 0;
-  return q;
-}
+/* ══════════════ reading the text ══════════════
+   The parser moved to shared/notice.js on 2026-09-25, when CHARACTER SHEET
+   started drawing NOTICE windows too. Change it there. */
+const fmt = n => (+n).toLocaleString('en');
+function parse(text, kind) { return Notice.parse(text, kind); }
 
 /* ══════════════ pseudo rewards ══════════════
    Made up, and steady: the same quest text gives the same rewards until
-   REROLL is pressed. Bigger quests pay more. The stat matches the words. */
+   REROLL is pressed. Bigger quests pay more. The stat matches the words,
+   unless one was picked. Which kinds of reward appear is his choice, on the
+   REWARDS chips (Tom, 2026-09-25: "let me pick when it offers stats"). */
 function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
 function rng(seed) { return () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const STATS = ['STR', 'AGI', 'VIT', 'INT', 'SENSE', 'CHA', 'WILL'];
 const STAT_WORDS = [
-  ['STR', /train|gym|lift|squat|bench|deadlift|press|push|pull|row|curl|rep|set/i],
-  ['AGI', /run|walk|steps|sprint|cardio|bike|cycle|swim|jump|stretch|mobility/i],
-  ['VIT', /sleep|rest|recover|nap|bed|water|protein|meal|eat|cook|vegetable/i],
-  ['INT', /read|study|learn|course|write|plan|review|book|research|budget/i],
-  ['CHA', /post|content|film|record|video|call|client|community|coach|reply|message|reel/i],
-  ['WILL', /meditat|journal|breath|pray|fast|no sugar|no alcohol|cold|early|wake/i],
+  ['STR', /train|gym|lift|squat|bench|deadlift|press|push|pull|row|curl|rep|set|swing|plank/i],
+  ['AGI', /run|walk|steps|sprint|cardio|bike|cycl|swim|jump|skip|stretch|mobility|stairs|zone 2/i],
+  ['VIT', /sleep|rest|recover|nap|bed|water|protein|meal|eat|cook|vegetable|fibre|fiber/i],
+  ['INT', /read|study|learn|course|write|plan|review|book|research|budget|invoice|flashcard|pages/i],
+  ['SENSE', /watch|observe|notice|listen|form video|check/i],
+  ['CHA', /post|content|film|record|video|call|client|community|coach|reply|message|reel|hook|camera/i],
+  ['WILL', /meditat|journal|breath|pray|fast|no sugar|no alcohol|cold|early|wake|phone/i],
 ];
+const statOf = (text, r) => {
+  let stat = null;
+  STAT_WORDS.forEach(s => { if (!stat && s[1].test(text)) stat = s[0]; });
+  return stat || STATS[Math.floor(r() * STATS.length)];
+};
+const pl = (n, w) => fmt(n) + ' ' + w + (n === 1 ? '' : 's');
+/* One filler for every table: {h} hours, {m} minutes, {d} days, {e} EXP,
+   {p} a percentage, {s} a small stat number. Plurals are worked out, so a
+   roll of one never reads "1 hours". */
+const filler = r => s => s
+  .replace('{h}', pl(1 + Math.floor(r() * 8), 'hour'))
+  .replace('{m}', ((2 + Math.floor(r() * 5)) * 15) + ' minutes')
+  .replace('{e}', fmt((1 + Math.floor(r() * 9)) * 100))
+  .replace('{d}', pl(2 + Math.floor(r() * 12), 'day'))
+  .replace('{p}', (2 + Math.floor(r() * 5)) * 5)
+  .replace('{s}', 1 + Math.floor(r() * 3));
+
 const TITLES = ['Early Riser', 'Iron Will', 'The One Who Shows Up', 'Relentless', 'Quiet Grinder',
   'Shadow of Discipline', 'Protagonist', 'Unbroken', 'Night Owl Slayer', 'Keeper of the Routine',
-  'Stone Legs', 'Steady Hand'];
-const ITEMS = ['Potion of Recovery (Rare)', 'Random Box (C-Rank)', 'Key to an Instant Dungeon',
+  'Stone Legs', 'Steady Hand', 'The Unyielding', 'First to Arrive', 'Last to Leave', 'Chain Keeper',
+  'Sunrise Hunter', 'Iron Lungs', 'The Patient One', 'Grinder of Days', 'Wolf Slayer',
+  'The Consistent', 'Master of the Mundane', 'Heavy Hands'];
+const ITEMS = ['Recovery Potion (Rare)', 'Random Box (C-Rank)', 'Random Box (B-Rank)', 'Instant Dungeon Key',
   'Elixir of Focus ×1', 'Skill Book: Concentration', 'Ring of Small Steps (Uncommon)',
   'Scroll of Second Wind', 'Boots of the Long Walk', 'Cloak of No Excuses', 'Stamina Tonic ×3',
-  'Bag of Gold Dust', 'Rune of Consistency'];
-function pseudoRewards(q, seed) {
-  const all = [q.title].concat(q.goals.map(g => g.label)).join(' ');
+  'Pouch of Gold Dust', 'Rune of Consistency', 'Full Recovery Potion', 'Rune Stone: Endurance',
+  'Rest Day Voucher', 'Cheat Meal Token', 'Protein Ration ×5', 'Magic Chalk', 'Skill Book: Deep Work',
+  'Belt of the Third Set', 'Lens of the First Take'];
+/* Which rewards appear. Stored as a string, never a list: live sync drops an
+   empty list (root CLAUDE.md, Known traps), so "none" stands for none. */
+const RW_KINDS = [{ id: 'exp', name: 'EXP' }, { id: 'stat', name: 'STAT' }, { id: 'title', name: 'TITLE' },
+  { id: 'gold', name: 'GOLD' }, { id: 'item', name: 'ITEM' }];
+const rwOn = () => { const v = String(get('rw', 'exp,stat,title')); return v === 'none' ? [] : v.split(','); };
+/* Each kind of reward rolls on its own seed, so the EXP can stay while only
+   the item is rerolled (Tom, 2026-09-25). REROLL REWARDS moves S.seed, which
+   rerolls every kind at once. Always a full object, never an empty one. */
+const RS0 = () => ({ exp: 0, stat: 0, title: 0, gold: 0, item: 0 });
+const STAT_PICK = [{ id: 'auto', name: 'AUTO' }].concat(STATS.map(s => ({ id: s, name: s })));
+
+/* Every kind of reward, on or off, each from its own roll. */
+function rewardParts(q, seed, rs) {
+  rs = rs || RS0();
+  const all = [q.title].concat(q.goals.map(g => g.label + ' ' + (g.unit || ''))).join(' ');
   const n = Math.max(1, q.goals.length);
   const words = all.split(/\s+/).filter(Boolean).length;
-  const r = rng(hash(all) + seed * 7919);
+  const roll = k => rng(hash(all + '|' + k) + (seed + (rs[k] || 0)) * 7919);
+  let r = roll('exp');
   const exp = Math.round((120 * n + 8 * words) * (1 + Math.floor(r() * 5) / 10) / 10) * 10;
-  let stat = null;
-  STAT_WORDS.forEach(s => { if (!stat && s[1].test(all)) stat = s[0]; });
-  if (!stat) stat = ['STR', 'AGI', 'VIT', 'INT', 'SENSE', 'WILL'][Math.floor(r() * 6)];
+  r = roll('stat');
+  const picked = get('rwStat', 'auto');
+  const stat = picked !== 'auto' ? picked : statOf(all, r);
   const amt = 1 + (n > 3 ? 1 : 0) + (r() < 0.3 ? 1 : 0);
-  const out = [exp.toLocaleString('en') + ' EXP', stat + ' +' + amt];
-  if (n >= 3 || r() < 0.5) out.push('Title: ' + TITLES[Math.floor(r() * TITLES.length)]);
-  if (r() < 0.5) out.push(((1 + Math.floor(r() * 9)) * 50 * n).toLocaleString('en') + ' Gold');
-  else out.push('Item: ' + ITEMS[Math.floor(r() * ITEMS.length)]);
-  return out.slice(0, 4);
+  r = roll('title'); const title = TITLES[Math.floor(r() * TITLES.length)];
+  r = roll('gold'); const gold = fmt((1 + Math.floor(r() * 9)) * 50 * n) + ' Gold';
+  r = roll('item'); const item = ITEMS[Math.floor(r() * ITEMS.length)];
+  return { exp: fmt(exp) + ' EXP', stat: stat + ' +' + amt, title: 'Title: ' + title, gold: gold, item: 'Item: ' + item };
 }
-/* An item window with nothing listed still needs something under EFFECTS, and
-   it is made the same steady way a quest's rewards are. */
+function pseudoRewards(q, seed, rs) {
+  const parts = rewardParts(q, seed, rs);
+  return rwOn().map(k => parts[k]).filter(Boolean);
+}
+
+/* What an item or a status effect does. {p} and {h} are filled per roll. */
+const BUFF_FX = ['Recovery +{p}% until next sleep', 'The first set costs nothing', 'Fatigue halved for one session',
+  'A missed day does not break the streak', 'Rest times -{p}%', 'Cravings halved until midnight',
+  'Focus +{p}% for {h}', 'Soreness removed', '+1 rep on the next PR attempt', 'Warm-up skipped with no penalty',
+  'Motivation fully restored', 'Stamina +{p}%', 'Sleep quality +{p}% tonight', 'Hard messages send on the first try'];
+const DEBUFF_FX = ['Recovery -{p}%', 'Rest times doubled', 'Focus lost after {h}', 'Cravings doubled after dark',
+  'Motivation -{p}%', 'Every rep feels heavier', 'Sleep quality halved', 'Stamina -{p}%',
+  'Reaction time slowed', 'Willpower drains {p}% faster', 'Warm-up takes twice as long', 'Phone pull doubled'];
+const LIMITS = ['Cannot be used twice in one day', 'Single use', 'Cooldown: 24 hours', 'Stacks up to 3 times',
+  'Bound to the owner', 'Breaks on a missed day'];
+
+/* What the window shows under REWARDS or EFFECTS: typed ones win. */
+function shownRewards(q) {
+  if (q.typedRewards) return q.rewards;
+  return q.kind === 'item' || q.kind === 'status' ? pseudoEffects(q, S.seed) : pseudoRewards(q, S.seed, S.rs);
+}
+
+/* An item or status window with nothing listed still needs something under
+   EFFECTS, made the same steady way a quest's rewards are. */
 function pseudoEffects(q, seed) {
   const all = (q.title + ' ' + q.desc.join(' ')).trim() || 'item';
-  const r = rng(hash(all) + seed * 7919);
-  let stat = null;
-  STAT_WORDS.forEach(s => { if (!stat && s[1].test(all)) stat = s[0]; });
-  if (!stat) stat = ['STR', 'AGI', 'VIT', 'INT', 'CHA', 'WILL'][Math.floor(r() * 6)];
-  const out = ['+' + (1 + Math.floor(r() * 3)) + ' ' + stat + ' for ' + (2 + Math.floor(r() * 10)) + ' hours'];
-  out.push(['Recovery is ' + (10 + Math.floor(r() * 4) * 5) + '% faster until you next sleep',
-    'The first set costs nothing', 'Fatigue is halved for one session',
-    'One missed day does not break the chain'][Math.floor(r() * 4)]);
-  if (r() < 0.6) out.push('Cannot be used twice in one day');
+  const r = rng(hash(all) + seed * 7919), f = filler(r);
+  const one = a => a[Math.floor(r() * a.length)];
+  const picked = get('rwStat', 'auto');
+  const stat = picked !== 'auto' ? picked : statOf(all, r);
+  if (q.kind === 'status') {
+    const pool = q.debuff ? DEBUFF_FX : BUFF_FX;
+    const a = one(pool); let b = one(pool); if (b === a) b = pool[(pool.indexOf(a) + 1) % pool.length];
+    return [stat + ' ' + (q.debuff ? '-' : '+') + (1 + Math.floor(r() * 3)), f(a), f(b)];
+  }
+  const out = [stat + ' +' + (1 + Math.floor(r() * 3)) + ' for ' + pl(2 + Math.floor(r() * 10), 'hour')];
+  out.push(f(one(BUFF_FX)));
+  if (r() < 0.6) out.push(one(LIMITS));
   return out;
 }
 
 /* ══════════════ drawing the window ══════════════
-   Everything is laid out in logical units on a 360-wide window and drawn at
-   three times that, so the file is 1080 wide and the type is sharp. */
-const T = 360, M = 24, W = T - 2 * M, P = 22, SC = 3;
+   The canvas layout moved to shared/notice.js on 2026-09-25 with the parser.
+   NOTICE hands in its heading and its made-up rewards; the drawing is shared. */
 const cv = document.getElementById('cv');
 let fontsIn = false;
-
-function faceOf(st, px, w) { return (w || 700) + ' ' + px + 'px "' + st.face + '", "Chakra Petch", sans-serif'; }
-function bodyOf(st, px, w) { return (w || 500) + ' ' + px + 'px "' + st.body + '", system-ui, sans-serif'; }
-
-function wrapText(ctx, text, maxW) {
-  const words = String(text).split(/\s+/).filter(Boolean), lines = [];
-  let cur = '';
-  words.forEach(w => {
-    const t = cur ? cur + ' ' + w : w;
-    if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t;
-  });
-  if (cur) lines.push(cur);
-  return lines.length ? lines : [''];
-}
-
-/* the box outline: cut corners for Hunter and Void, square for Legend */
-function frame(ctx, x, y, w, h, cut) {
-  /* The shape is in shared/notice.js, because STATUS clips a real panel to the
-     same octagon and the two must not drift. */
-  Notice.frame(ctx, x, y, w, h, cut);
-}
-
-/* spaced-out capitals, drawn a letter at a time so every browser agrees */
-function spaced(ctx, text, cx, y, gap, align) {
-  const chars = String(text).toUpperCase().split('');
-  const widths = chars.map(c => ctx.measureText(c).width);
-  const total = widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
-  let x = align === 'left' ? cx : cx - total / 2;
-  ctx.textAlign = 'left';
-  chars.forEach((c, i) => { ctx.fillText(c, x, y); x += widths[i] + gap; });
-  return total;
-}
-
-/* Two passes over the same list of steps: the first only measures, so the
-   canvas can be sized to the content; the second draws. */
-function layout(q, st, ctx, draw) {
-  const ink = st.ink, X = M + P, CW = W - 2 * P, CX = M + W / 2;
-  let y = M + P;
-  const glowOn = (c, b) => { if (!draw) return; ctx.shadowColor = c; ctx.shadowBlur = b * SC; };
-  const glowOff = () => { if (!draw) return; ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; };
-  const text = (s, x, yy, font, color, align, glow) => {
-    ctx.font = font;
-    if (!draw) return;
-    ctx.fillStyle = color; ctx.textAlign = align || 'left'; ctx.textBaseline = 'top';
-    if (glow) { glowOn(st.glow, 8); ctx.fillText(s, x, yy); }
-    ctx.fillText(s, x, yy);
-    glowOff();
-  };
-  const para = (lines, font, color, align, lh, glow) => {
-    lines.forEach(l => { text(l, align === 'center' ? CX : X, y, font, color, align, glow); y += lh; });
-  };
-  const label = (s, color) => {
-    ctx.font = faceOf(st, 11, 700);
-    if (draw) { ctx.fillStyle = color; ctx.textBaseline = 'top'; spaced(ctx, s, X, y, 2.6, 'left'); }
-    y += 18;
-  };
-
-  /* header: the mark, the heading, the rule */
-  if (draw) {
-    ctx.strokeStyle = st.acc; ctx.fillStyle = st.acc; ctx.lineWidth = 1.8;
-    glowOn(st.glow, 12);
-    const cy = y + 15;
-    ctx.beginPath();
-    if (st.icon === 'circle') ctx.arc(CX, cy, 14, 0, Math.PI * 2);
-    else if (st.icon === 'diamond') { ctx.moveTo(CX, cy - 15); ctx.lineTo(CX + 15, cy); ctx.lineTo(CX, cy + 15); ctx.lineTo(CX - 15, cy); ctx.closePath(); }
-    else if (st.icon === 'square') frame(ctx, CX - 13, cy - 13, 26, 26, 5);
-    else { ctx.moveTo(CX, cy - 14); ctx.lineTo(CX + 16, cy + 13); ctx.lineTo(CX - 16, cy + 13); ctx.closePath(); }
-    ctx.stroke();
-    ctx.font = faceOf(st, st.icon === 'triangle' ? 17 : 21, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('!', CX, cy + (st.icon === 'triangle' ? 2 : 0.5));
-    glowOff();
-  }
-  y += 38;
-  ctx.font = faceOf(st, 11, 700);
-  if (draw) { ctx.fillStyle = st.mute; ctx.textBaseline = 'top'; spaced(ctx, q.head || headText(q), CX, y, 3, 'center'); }
-  y += 20;
-  if (draw) {
-    glowOn(st.glow, 8); ctx.strokeStyle = st.line; ctx.globalAlpha = 0.7; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(X, y); ctx.lineTo(X + CW, y); ctx.stroke();
-    if (st.icon === 'diamond') { ctx.fillStyle = st.acc; ctx.beginPath(); ctx.moveTo(CX, y - 4); ctx.lineTo(CX + 4, y); ctx.lineTo(CX, y + 4); ctx.lineTo(CX - 4, y); ctx.fill(); }
-    ctx.globalAlpha = 1; glowOff();
-  }
-  y += 18;
-
-  if (q.kind === 'notice') {
-    ctx.font = bodyOf(st, 15, 500);
-    q.msgs.forEach(m => {
-      const s = st.brackets ? '[' + m + ']' : m;
-      para(wrapText(ctx, s, CW), bodyOf(st, 15, 500), ink, 'center', 22, false);
-      y += 10;
-    });
-    y -= 10;
-  } else {
-    if (q.title) {
-      ctx.font = faceOf(st, 20, 700);
-      const s = st.brackets ? '[' + q.title + ']' : q.title;
-      para(wrapText(ctx, s, CW), faceOf(st, 20, 700), st.acc, 'center', 26, true);
-      y += 6;
-    }
-    if (q.kind === 'item' && q.rank) {
-      ctx.font = faceOf(st, 11, 700);
-      if (draw) { ctx.fillStyle = st.mute; ctx.textBaseline = 'top'; spaced(ctx, 'RANK ' + q.rank, CX, y, 3, 'center'); }
-      y += 22;
-    }
-    if (q.desc.length) {
-      ctx.font = bodyOf(st, 13, 500);
-      q.desc.forEach(d => para(wrapText(ctx, d, CW), bodyOf(st, 13, 500), st.mute, 'center', 19, false));
-      y += 8;
-    }
-    if (q.goals.length) {
-      y += 6; label('GOAL', st.mute);
-      q.goals.forEach(g => {
-        const hasP = g.cur != null;
-        ctx.font = bodyOf(st, 15, 500);
-        const pw = hasP ? 62 : 0;
-        const lines = wrapText(ctx, g.label, CW - 24 - pw);
-        if (draw) {
-          const bx = X, by = y + 3;
-          ctx.lineWidth = 1.5; ctx.strokeStyle = st.acc; ctx.fillStyle = st.acc;
-          if (g.done) {
-            ctx.fillRect(bx, by, 13, 13);
-            ctx.strokeStyle = st.panel; ctx.lineWidth = 2; ctx.beginPath();
-            ctx.moveTo(bx + 3, by + 7); ctx.lineTo(bx + 5.5, by + 10); ctx.lineTo(bx + 10.5, by + 3.5); ctx.stroke();
-          } else ctx.strokeRect(bx + 0.5, by + 0.5, 12, 12);
-          if (hasP) text('[' + g.cur + '/' + g.max + ']', X + CW, y, faceOf(st, 14, 700), g.done ? st.acc : st.mute, 'right', false);
-        }
-        lines.forEach(l => { text(l, X + 24, y, bodyOf(st, 15, 500), ink, 'left', false); y += 21; });
-        y += 5;
-      });
-    }
-    const rewards = q.typedRewards ? q.rewards
-      : (q.kind === 'item' ? pseudoEffects(q, S.seed) : pseudoRewards(q, S.seed));
-    if (rewards.length) {
-      y += 10; label(q.kind === 'item' ? 'EFFECTS' : 'REWARDS', st.mute);
-      rewards.forEach(rw => {
-        ctx.font = bodyOf(st, 14, 600);
-        const lines = wrapText(ctx, rw, CW - 20);
-        if (draw) { ctx.fillStyle = st.acc; ctx.beginPath(); ctx.moveTo(X + 6, y + 5); ctx.lineTo(X + 11, y + 10); ctx.lineTo(X + 6, y + 15); ctx.lineTo(X + 1, y + 10); ctx.fill(); }
-        lines.forEach(l => { text(l, X + 20, y, bodyOf(st, 14, 600), st.acc, 'left', false); y += 21; });
-        y += 3;
-      });
-    }
-    if (q.penalty.length) {
-      y += 10; label('WARNING', st.warn);
-      ctx.font = bodyOf(st, 13, 500);
-      q.penalty.forEach(p => para(wrapText(ctx, p, CW), bodyOf(st, 13, 500), st.warn, 'left', 19, false));
-    }
-  }
-  y += P + 2;
-  return y + M - M; // bottom of the box, in logical units
-}
-
-/* the window alone, on a clear canvas, 1080 wide */
-function drawWindow(q, st) {
-  const c = document.createElement('canvas');
-  const ctx = c.getContext('2d');
-  ctx.scale(SC, SC);
-  const bottom = layout(q, st, ctx, false);
-  const H = bottom - M;                     // box height
-  c.width = T * SC; c.height = (H + 2 * M) * SC;
-  ctx.setTransform(SC, 0, 0, SC, 0, 0);
-
-  /* the plate */
-  const g = ctx.createLinearGradient(0, M, 0, M + H);
-  g.addColorStop(0, st.panel2); g.addColorStop(1, st.panel);
-  frame(ctx, M, M, W, H, st.cut);
-  ctx.fillStyle = g; ctx.fill();
-  if (st.scan) {
-    ctx.save(); ctx.clip(); ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
-    for (let yy = M + 2; yy < M + H; yy += 4) { ctx.beginPath(); ctx.moveTo(M, yy); ctx.lineTo(M + W, yy); ctx.stroke(); }
-    ctx.restore();
-  }
-  /* the glowing edge: once with the light, once crisp on top of it */
-  ctx.shadowColor = st.glow; ctx.shadowBlur = 14 * SC;
-  ctx.strokeStyle = st.line; ctx.lineWidth = 2;
-  frame(ctx, M, M, W, H, st.cut); ctx.stroke();
-  ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
-  ctx.stroke();
-  /* the inner hairline */
-  ctx.globalAlpha = st.icon === 'diamond' ? 0.6 : 0.35; ctx.lineWidth = 1;
-  frame(ctx, M + 5, M + 5, W - 10, H - 10, st.cut ? Math.max(0, st.cut - 4) : 0); ctx.stroke();
-  ctx.globalAlpha = 1;
-  if (st.icon === 'diamond') {
-    ctx.fillStyle = st.acc;
-    [[M, M], [M + W, M], [M, M + H], [M + W, M + H]].forEach(pt => {
-      ctx.beginPath(); ctx.moveTo(pt[0], pt[1] - 5); ctx.lineTo(pt[0] + 5, pt[1]); ctx.lineTo(pt[0], pt[1] + 5); ctx.lineTo(pt[0] - 5, pt[1]); ctx.fill();
-    });
-  }
-  layout(q, st, ctx, true);
-  return c;
-}
+function drawWindow(q, st) { return Notice.draw(q, st, { head: headText(q), rewards: shownRewards }); }
 
 /* the whole picture: the window alone, or laid on a story or a post */
-const FRAME_BOX = {
-  story: { w: IO.STORY.w, h: IO.STORY.h, safe: IO.STORY.safe },
-  post: { w: 1080, h: 1350, safe: { x: 60, y: 90, w: 960, h: 1170 } },
-};
 function render() {
   const q = parse(S.text, S.kind);
   const st = STYLES[S.style] || STYLES.block;
@@ -527,33 +351,19 @@ function render() {
   document.getElementById('empty').classList.toggle('hide', !!has);
   cv.classList.toggle('hide', !has);
   const roll = document.getElementById('btnRoll');
-  roll.classList.toggle('hide', !(has && q.kind !== 'notice' && !q.typedRewards));
-  roll.textContent = q.kind === 'item' ? 'REROLL EFFECTS' : 'REROLL REWARDS';
+  const made = !!(has && q.kind !== 'notice' && !q.typedRewards);
+  const fx = q.kind === 'item' || q.kind === 'status';
+  document.getElementById('rowMade').classList.toggle('hide', !made);
+  roll.textContent = fx ? 'REROLL EFFECTS' : 'REROLL REWARDS';
+  document.getElementById('btnWrite').textContent = fx ? 'EDIT EFFECTS' : 'EDIT REWARDS';
+  /* the chips only steer a quest's rewards; the stat pick steers effects too */
+  document.getElementById('rowRw').classList.toggle('hide', !made || fx);
+  if (made && !fx) rwRows(q);
+  document.getElementById('rowStat').classList.toggle('hide', !made || (!fx && rwOn().indexOf('stat') < 0));
   document.getElementById('rowBack').classList.toggle('hide', S.frame === 'window');
   document.getElementById('rowSize').classList.toggle('hide', S.frame === 'window');
   if (!has) return null;
-  const win = drawWindow(q, st);
-  const fb = FRAME_BOX[S.frame];
-  const ctx = cv.getContext('2d');
-  if (!fb) {
-    cv.width = win.width; cv.height = win.height;
-    ctx.drawImage(win, 0, 0);
-  } else {
-    cv.width = fb.w; cv.height = fb.h;
-    ctx.clearRect(0, 0, fb.w, fb.h);
-    if (S.back === 'dark') {
-      const g = ctx.createLinearGradient(0, 0, 0, fb.h);
-      g.addColorStop(0, st.bgB); g.addColorStop(1, st.bgA);
-      ctx.fillStyle = g; ctx.fillRect(0, 0, fb.w, fb.h);
-      const v = ctx.createRadialGradient(fb.w / 2, fb.h / 2, fb.h * 0.2, fb.w / 2, fb.h / 2, fb.h * 0.75);
-      v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
-      ctx.fillStyle = v; ctx.fillRect(0, 0, fb.w, fb.h);
-    }
-    const fill = pick(SIZES, S.size).fill;
-    const sc = Math.min(fb.safe.w * fill / win.width, fb.safe.h / win.height);
-    const sw = win.width * sc, sh = win.height * sc;
-    ctx.drawImage(win, fb.safe.x + (fb.safe.w - sw) / 2, fb.safe.y + (fb.safe.h - sh) / 2, sw, sh);
-  }
+  Notice.compose(cv, drawWindow(q, st), st, { frame: S.frame, back: S.back, fill: pick(SIZES, S.size).fill });
   return q;
 }
 
@@ -561,14 +371,19 @@ function render() {
    Windows he does not have to write. Every word here is a table in this file
    and every choice is a seeded shuffle, so it works with no signal, costs
    nothing, and the same settings give the same window until SPIN AGAIN is
-   pressed. It writes the ordinary text the app already reads, into the same
-   box, so anything it makes can be edited by hand afterwards. */
+   pressed. It writes the ordinary text the app already reads, into a box he
+   can edit before USE IT, and into the same text box after.
+
+   2026-09-25: the tables were rewritten short, in the genre's clipped system
+   voice, and roughly doubled. A line in here should read like a game prompt,
+   not a sentence someone is pleased with. */
 
 const MAKE_KINDS = [
   { id: 'daily', name: 'DAILY QUEST' },
   { id: 'urgent', name: 'URGENT QUEST' },
   { id: 'penalty', name: 'PENALTY QUEST' },
   { id: 'item', name: 'ITEM' },
+  { id: 'status', name: 'STATUS EFFECT' },
   { id: 'title', name: 'TITLE' },
   { id: 'skill', name: 'SKILL' },
   { id: 'level', name: 'LEVEL UP' },
@@ -585,118 +400,143 @@ const RANKS = [
   { id: 'A', name: 'A', mult: 2, goals: 4 },
   { id: 'S', name: 'S', mult: 3, goals: 5 },
 ];
-/* Each topic: countable goals as [words, the C-rank number, a sane ceiling],
-   goals with no number in them, and its own names. */
+/* Each topic: counted goals as [name, the C-rank number, a sane ceiling,
+   unit], goals with no number, and its own titles, items and status effects.
+   A counted goal is written "Push-ups 0/100" so the window draws a counter. */
 const TOPICS = [
   { id: 'train', name: 'TRAINING', stat: 'STR',
-    reps: [['push-ups', 100], ['sit-ups', 100], ['squats', 100], ['walking lunges', 60],
-      ['pull-ups', 20], ['dips', 40], ['burpees', 50], ['minutes under the bar', 45]],
-    flat: ['Finish every working set', 'Beat last session on one lift', 'Warm up before the first set',
-      'Log every set in TRAIN', 'No phone between sets', 'One set past the point it stops being fun'],
-    titles: ['Stone Legs', 'Iron Will', 'The One Who Shows Up', 'Unbroken'],
-    items: ['Belt of the Third Set', 'Chalk of the Certain Grip', 'Bar of Unbending Iron'] },
+    reps: [['Push-ups', 100], ['Sit-ups', 100], ['Squats', 100], ['Walking lunges', 60],
+      ['Pull-ups', 20], ['Dips', 40], ['Burpees', 50], ['Time under the bar', 45, 0, 'min'],
+      ['Plank', 3, 6, 'min'], ['Kettlebell swings', 100], ['Working sets', 15, 30], ['Chin-ups', 15]],
+    flat: ['Finish every working set', 'Beat one lift from last session', 'Warm up properly',
+      'Log every set', 'No phone between sets', 'One set past comfortable', 'Film one top set',
+      'Respect the rest timer', 'Stretch before leaving', 'Clean form on every rep'],
+    titles: ['Stone Legs', 'Iron Will', 'The One Who Shows Up', 'Unbroken', 'Heavy Hands', 'Iron Grip'],
+    items: ['Belt of the Third Set', 'Chalk of the Certain Grip', 'Bar of Unbending Iron', 'Wraps of the Last Rep'],
+    buffs: ['Pump', 'Adrenaline', 'Warmed Up', 'Iron Grip'], debuffs: ['DOMS', 'Overtrained', 'Tweaked Back'] },
   { id: 'cardio', name: 'CARDIO', stat: 'AGI',
-    reps: [['km run', 10], ['minutes in zone 2', 45], ['flights of stairs', 30],
-      ['minutes on the bike', 40], ['minutes skipping', 15], ['thousand steps', 12, 25]],
-    flat: ['Out of the door before you think about it', 'Keep it slow enough to talk',
-      'Same route, one minute faster', 'Walk the last kilometre home'],
-    titles: ['Long Distance', 'Relentless', 'Night Runner'],
-    items: ['Boots of the Long Walk', 'Second Wind in a Bottle', 'Lungs of the Marathon'] },
+    reps: [['Running', 10, 40, 'km'], ['Zone 2', 45, 120, 'min'], ['Stairs', 30, 100, 'flights'],
+      ['Cycling', 40, 120, 'min'], ['Skipping', 15, 40, 'min'], ['Steps', 12000, 25000],
+      ['Sprints', 8, 20], ['Swimming', 30, 90, 'min']],
+    flat: ['Out the door before thinking', 'Slow enough to talk', 'Same route, one minute faster',
+      'Walk the last kilometre', 'No headphones', 'Finish faster than you started', 'Stairs over the lift'],
+    titles: ['Long Distance', 'Relentless', 'Night Runner', 'Iron Lungs', 'Sunrise Hunter'],
+    items: ['Boots of the Long Walk', 'Second Wind in a Bottle', 'Lungs of the Marathon', 'Anklet of Swift Feet'],
+    buffs: ["Runner's High", 'Second Wind', 'Light Feet'], debuffs: ['Shin Splints', 'Winded', 'Heavy Legs'] },
   { id: 'food', name: 'FOOD', stat: 'VIT',
-    reps: [['g of protein', 180, 260], ['litres of water', 3, 5], ['portions of vegetables', 5, 9],
-      ['meals cooked at home', 3, 5]],
-    flat: ['No sugar until the sun goes down', 'Eat before you are starving',
-      'Weigh one meal honestly', 'Nothing after 9pm', 'Log every bite in STATUS'],
-    titles: ['Clean Plate', 'The Disciplined Fork'],
-    items: ['Protein of the Ancients', 'Flask of Still Water', 'Ration of the Steady Hand'] },
+    reps: [['Protein', 180, 260, 'g'], ['Water', 3, 5, 'L'], ['Vegetables', 5, 9, 'servings'],
+      ['Home-cooked meals', 3, 5], ['Fibre', 30, 50, 'g'], ['Fruit', 2, 4, 'servings']],
+    flat: ['No sugar before sundown', 'Eat before you are starving', 'Weigh one meal honestly',
+      'Nothing after 9 PM', 'Log every bite', 'Protein at every meal', 'Cook tomorrow’s lunch tonight',
+      'No drinks with calories'],
+    titles: ['Clean Plate', 'The Disciplined Fork', 'Iron Stomach'],
+    items: ['Protein of the Ancients', 'Flask of Still Water', 'Ration of the Steady Hand', 'Lunchbox of Foresight'],
+    buffs: ['Well Fed', 'Hydrated', 'Iron Stomach'], debuffs: ['Sugar Crash', 'Dehydrated', 'Food Coma'] },
   { id: 'sleep', name: 'SLEEP', stat: 'VIT',
-    reps: [['hours in bed', 8, 9], ['minutes of wind-down', 30, 60], ['nights before midnight', 5, 7]],
-    flat: ['Phone out of the room', 'Lights down an hour before bed',
-      'Same wake time as yesterday', 'No caffeine after midday'],
-    titles: ['Night Owl Slayer', 'Early Riser', 'Keeper of the Hour'],
-    items: ['Draught of Deep Sleep', 'Curtain of True Dark', 'Pillow of the Quiet Hour'] },
+    reps: [['Sleep', 8, 9, 'hours'], ['Wind-down', 30, 60, 'min'], ['Nights before midnight', 5, 7]],
+    flat: ['Phone out of the room', 'Lights down an hour before bed', 'Same wake time as yesterday',
+      'No caffeine after noon', 'Up on the first alarm', 'Room cold and dark', 'No screens in bed'],
+    titles: ['Night Owl Slayer', 'Early Riser', 'Keeper of the Hour', 'Sunrise Hunter'],
+    items: ['Draught of Deep Sleep', 'Curtain of True Dark', 'Pillow of the Quiet Hour', 'Alarm of the First Ring'],
+    buffs: ['Well Rested', 'Clear Head'], debuffs: ['Sleep Debt', 'Brain Fog', 'Groggy'] },
   { id: 'content', name: 'CONTENT', stat: 'CHA',
-    reps: [['posts written', 3, 7], ['reels filmed', 2, 5], ['comments answered', 20, 60],
-      ['minutes on camera', 20, 60]],
-    flat: ['Publish before you are ready', 'One hook rewritten five ways',
-      'Film it in one take', 'Reply to everyone who wrote in', 'Say the useful thing first'],
-    titles: ['Protagonist', 'The Voice', 'Shipped It Anyway'],
-    items: ['Lens of the First Take', 'Ring Light of Small Courage', 'Script of No Rambling'] },
+    reps: [['Posts written', 3, 7], ['Reels filmed', 2, 5], ['Comments answered', 20, 60],
+      ['On camera', 20, 60, 'min'], ['Hooks drafted', 10, 30], ['Stories posted', 3, 10]],
+    flat: ['Publish before it feels ready', 'Rewrite one hook five ways', 'Film it in one take',
+      'Reply to everyone who wrote in', 'Say the useful thing first', 'Post at the planned time',
+      'Cut the first sentence'],
+    titles: ['Protagonist', 'The Voice', 'Shipped It Anyway', 'One Take'],
+    items: ['Lens of the First Take', 'Ring Light of Small Courage', 'Script of No Rambling', 'Mic of Plain Speech'],
+    buffs: ['On Camera', 'Flow State'], debuffs: ['Stage Fright', 'Writer’s Block', 'Doomscroll'] },
   { id: 'study', name: 'STUDY', stat: 'INT',
-    reps: [['pages read', 40, 120], ['minutes of deep work', 90, 240], ['notes written', 10, 30]],
-    flat: ['One chapter, no skimming', 'Teach it back out loud',
-      'Close every other tab', 'Write down what you did not understand'],
-    titles: ['Quiet Grinder', 'Student of the System'],
-    items: ['Skill Book: Concentration', 'Lens of Slow Reading', 'Elixir of Focus'] },
+    reps: [['Pages read', 40, 120], ['Deep work', 90, 240, 'min'], ['Notes written', 10, 30],
+      ['Flashcards', 50, 200]],
+    flat: ['One chapter, no skimming', 'Teach it back out loud', 'Close every other tab',
+      'Write down what did not make sense', 'Phone in another room', 'Review yesterday first'],
+    titles: ['Quiet Grinder', 'Student of the System', 'The Patient One'],
+    items: ['Skill Book: Concentration', 'Lens of Slow Reading', 'Elixir of Focus', 'Tome of Deep Work'],
+    buffs: ['Locked In', 'Flow State', 'Clear Head'], debuffs: ['Distracted', 'Brain Fog'] },
   { id: 'money', name: 'MONEY', stat: 'INT',
-    reps: [['invoices sent', 3, 8], ['calls made', 5, 12], ['spends logged', 10, 40]],
-    flat: ['Count every account', 'Chase the oldest unpaid one', 'Put something in a pot',
-      'Open the statement you have been avoiding'],
-    titles: ['Ledger Keeper', 'Steady Hand'],
-    items: ['Purse of the Honest Count', 'Ledger That Cannot Lie'] },
+    reps: [['Invoices sent', 3, 8], ['Calls made', 5, 12], ['Spends logged', 10, 40]],
+    flat: ['Count every account', 'Chase the oldest unpaid invoice', 'Put something in savings',
+      'Open the statement you are avoiding', 'No impulse buys', 'Cancel one subscription'],
+    titles: ['Ledger Keeper', 'Steady Hand', 'Master of the Mundane'],
+    items: ['Purse of the Honest Count', 'Ledger That Cannot Lie', 'Coin of Patience'],
+    buffs: ['Paid', 'In the Black'], debuffs: ['Impulse Buy', 'Overdrawn'] },
   { id: 'coach', name: 'COACHING', stat: 'CHA',
-    reps: [['check-ins answered', 6, 20], ['programs written', 2, 6], ['clients called', 4, 10]],
-    flat: ['Send the hard message', 'Review one client properly',
-      'Write one thing worth keeping', 'Answer before the day ends'],
-    titles: ['The Coach', 'Keeper of the Routine'],
-    items: ['Whistle of Plain Speaking', 'Clipboard of the Long View'] },
+    reps: [['Check-ins answered', 6, 20], ['Programs written', 2, 6], ['Clients called', 4, 10],
+      ['Form videos reviewed', 5, 15]],
+    flat: ['Send the hard message', 'Review one client properly', 'Answer before the day ends',
+      'Write one note worth keeping', 'Follow up on a quiet client'],
+    titles: ['The Coach', 'Keeper of the Routine', 'The Consistent'],
+    items: ['Whistle of Plain Speaking', 'Clipboard of the Long View', 'Stopwatch of Honest Rest'],
+    buffs: ['Plain Speech', 'Locked In'], debuffs: ['Inbox Flood', 'Burnout'] },
   { id: 'will', name: 'DISCIPLINE', stat: 'WILL',
-    reps: [['minutes of cold water', 3, 10], ['minutes of stillness', 20, 45],
-      ['hours without the phone', 4, 10]],
-    flat: ['No scrolling before the work', 'Do it at the hour you said',
-      'Say no once, out loud', 'Finish what is half-done first', 'Make the bed'],
-    titles: ['Shadow of Discipline', 'Iron Will', 'Unbroken'],
-    items: ['Cloak of No Excuses', 'Rune of Consistency', 'Chain That Does Not Break'] },
+    reps: [['Cold exposure', 3, 10, 'min'], ['Meditation', 20, 45, 'min'], ['Phone-free', 4, 10, 'hours'],
+      ['Journal', 1, 3, 'pages']],
+    flat: ['No scrolling before the work', 'Start at the hour you said', 'Say no once, out loud',
+      'Finish what is half done first', 'Make the bed', 'No snooze', 'Hardest task first'],
+    titles: ['Shadow of Discipline', 'Iron Will', 'Unbroken', 'The Unyielding', 'Chain Keeper'],
+    items: ['Cloak of No Excuses', 'Rune of Consistency', 'Chain That Does Not Break', 'Stone of Stillness'],
+    buffs: ['Momentum', 'Resolve', 'Cold Start'], debuffs: ['Doomscroll', 'Procrastination', 'Burnout'] },
 ];
-const MIXED = { id: 'mix', name: 'ANYTHING', stat: null,
-  reps: [].concat.apply([], TOPICS.map(t => t.reps)),
-  flat: [].concat.apply([], TOPICS.map(t => t.flat)),
-  titles: [].concat.apply([], TOPICS.map(t => t.titles)),
-  items: [].concat.apply([], TOPICS.map(t => t.items)) };
+const MIXED = { id: 'mix', name: 'ANYTHING', stat: null };
+['reps', 'flat', 'titles', 'items', 'buffs', 'debuffs'].forEach(k => { MIXED[k] = [].concat.apply([], TOPICS.map(t => t[k])); });
 const TOPIC_LIST = [{ id: 'mix', name: 'ANYTHING' }].concat(TOPICS.map(t => ({ id: t.id, name: t.name })));
 const topicOf = id => (id === 'mix' ? MIXED : (TOPICS.filter(t => t.id === id)[0] || MIXED));
 
-const QUEST_TITLE = ['Preparation', 'The Daily Grind', 'Nothing Fancy', 'Show Up Anyway',
-  'The Work Before The Work', 'Ordinary Heroics', 'Keep The Chain', 'No Zero Days',
-  'Before The Day Starts', 'The Long Game'];
-const QUEST_DESC = ['This quest has been assigned. It cannot be refused.',
-  'Issued daily. Failure carries a penalty.', 'The system has judged this necessary.',
-  'You accepted this the moment you woke up.', 'No extensions. No substitutions.',
-  'Nobody is coming to do it for you.'];
-const PENALTIES = ['{h} hours in the penalty zone', 'Tomorrow’s quest is doubled',
-  'The chain resets to zero', '{e} EXP removed', 'Rank falls one step',
-  'No rest day this week'];
-const URGENT = ['Time remaining: {h} hours', 'Expires at midnight',
-  'Time remaining: {m} minutes', 'This window closes when the sun does'];
-const ITEM_HEAD = ['Elixir', 'Potion', 'Draught', 'Rune', 'Charm', 'Scroll', 'Sigil', 'Band',
-  'Cloak', 'Token', 'Key', 'Lens', 'Boots', 'Ring', 'Tonic', 'Mantle'];
-const ITEM_OF = ['Focus', 'the Second Wind', 'the Long Walk', 'No Excuses', 'Quiet Hours',
-  'the Early Rise', 'Steady Hands', 'the Clean Plate', 'Deep Sleep', 'the Empty Inbox',
-  'Small Steps', 'the Unbroken Chain', 'the Sixth Rep', 'Warm Muscle', 'the Hard Message'];
-const ITEM_FLAV = ['Warm to hold. It hums faintly while the work is unfinished.',
-  'Light as paper, and nobody who owns one says where it came from.',
-  'The guild sells these by the crate. Nobody has one when they need it.',
-  'Whoever carries this finds the first set easier than the last.',
-  'It works once a day, and never twice on the same excuse.',
-  'Older than the system. It remembers every morning you got up.',
-  'Cracked down one side. It has been used, and it worked.',
-  'It smells of chalk and cold air.',
-  'Worthless in a shop. Priceless at five in the morning.',
-  'The instructions are one word long: begin.'];
-const SKILLS = [['Consistency', 'Passive', 'One missed day no longer breaks the chain.'],
-  ['Early Rise', 'Passive', 'The first hour of the day costs no willpower.'],
-  ['Second Wind', 'Active', 'Once per session, fatigue is halved for five minutes.'],
-  ['Plain Speech', 'Passive', 'The hard message is sent on the first attempt.'],
-  ['Deep Work', 'Active', 'Ninety minutes pass without a single notification.'],
-  ['Hunger Control', 'Passive', 'Cravings after dark lose half their weight.'],
-  ['Cold Start', 'Active', 'The warm-up is no longer needed to begin.']];
-const MSGS = ['The player has not logged a session in {d} days.',
-  'A pattern has been detected. Sleep is down {p}% this week.',
-  'The daily quest has not been completed. A warning has been issued.',
-  'Your chain has reached {d} days. It has never been longer.',
-  'A new window has opened. It will not stay open.',
-  'The system has nothing to report. Carry on.',
-  'You are being watched by the person you will be in a year.'];
+const QUEST_TITLE = ['Preparation to Become Strong', 'The Daily Grind', 'Show Up Anyway', 'Keep the Chain',
+  'No Zero Days', 'Before Sunrise', 'The Long Game', 'Groundwork', 'Foundation', 'Iron Discipline',
+  'The Quiet Work', 'First Steps', 'One More Day', 'The Unseen Hours', 'Earn the Rest', 'Clear the Board',
+  'Steady Pace', 'The Hard Part', 'Nothing Skipped', 'Momentum', 'The Basics', 'Ordinary Heroics'];
+const QUEST_DESC = ['The Daily Quest has arrived.', 'This quest cannot be refused.',
+  'Failure will result in an appropriate penalty.', 'No extensions. No substitutions.', 'Complete all goals before midnight.',
+  'The system has assigned this quest.', 'Progress is tracked automatically.', 'This quest resets at midnight.',
+  'Only the player can complete this.', 'Rewards are paid on completion.'];
+const PENALTIES = ['{h} in the penalty zone', 'Tomorrow’s quest doubles', 'Streak resets to zero',
+  '-{e} EXP', 'Rank drops one step', 'Rest day revoked', 'All stats -1 for {d}', 'All rewards forfeited',
+  'Wake-up moved to 5 AM', 'Extra {m} of cardio', 'Debuff: Fatigue for {d}', 'No cheat meal this week'];
+const URGENT = ['Time remaining: {h}', 'Time remaining: {m}', 'Expires at midnight', 'Expires at sundown',
+  'Expires in {m}', 'Timer started'];
+const ITEM_HEAD = ['Elixir', 'Potion', 'Draught', 'Rune', 'Charm', 'Scroll', 'Sigil', 'Band', 'Cloak', 'Token',
+  'Key', 'Lens', 'Boots', 'Ring', 'Tonic', 'Mantle', 'Amulet', 'Gauntlets', 'Belt', 'Flask', 'Tome', 'Stone',
+  'Crest', 'Pendant', 'Bracer'];
+const ITEM_OF = ['Focus', 'the Second Wind', 'the Long Walk', 'No Excuses', 'Quiet Hours', 'the Early Rise',
+  'Steady Hands', 'the Clean Plate', 'Deep Sleep', 'the Empty Inbox', 'Small Steps', 'the Unbroken Chain',
+  'the Sixth Rep', 'Warm Muscle', 'the Hard Message', 'the Iron Grip', 'Endurance', 'the Clear Mind',
+  'the Last Rep', 'Patience', 'the Morning', 'Recovery', 'Resolve', 'the Full Tank'];
+const ITEM_FLAV = ['Warm to the touch. Hums while work is unfinished.', 'Weighs nothing. Origin unknown.',
+  'Common in shops. Rare when needed.', 'The first set feels lighter.', 'Works once a day. Never on the same excuse.',
+  'Older than the system.', 'Cracked, used, still works.', 'Smells of chalk and cold air.',
+  'Worthless in a shop. Priceless at 5 AM.', 'Instructions: begin.', 'Glows near unfinished work.',
+  'Heavier every day it goes unused.', 'Found at the bottom of a dungeon.', 'Dropped by a boss nobody else fought.',
+  'Cannot be traded.', 'Durability: infinite, if maintained.'];
+const DURATIONS = ['{h}', '{m}', 'Until next sleep', 'Until midnight', '{d}', 'Until removed'];
+const TITLE_DESC = ['Awarded for {d} in a row.', 'Earned, not given.', 'Rarely awarded.',
+  'Earned when nobody was watching.', 'Few players hold this title.', 'Granted for finishing what was started.',
+  'Awarded after the hardest week.', 'The system does not hand these out.'];
+const SKILLS = [['Consistency', 'Passive', 'A missed day no longer breaks the streak.'],
+  ['Early Rise', 'Passive', 'The first hour costs no willpower.'],
+  ['Second Wind', 'Active', 'Fatigue halved for 5 minutes. Once per session.'],
+  ['Plain Speech', 'Passive', 'Hard messages send on the first try.'],
+  ['Deep Work', 'Active', '90 minutes with no notifications.'],
+  ['Hunger Control', 'Passive', 'Late-night cravings halved.'],
+  ['Cold Start', 'Active', 'Begin without a warm-up.'],
+  ['Iron Grip', 'Passive', 'Grip never fails first.'],
+  ['Sprint', 'Active', 'Speed +30% for 10 seconds.'],
+  ['Focus', 'Active', 'Distractions ignored for 25 minutes.'],
+  ['Tenacity', 'Passive', 'Pain reduced by 50% near the end of a set.'],
+  ['Meal Prep', 'Passive', 'Meals are ready before hunger is.'],
+  ['One Take', 'Active', 'The next recording needs no retakes.'],
+  ['First Alarm', 'Passive', 'Out of bed on the first ring.'],
+  ['Recovery', 'Passive', 'Soreness clears one day sooner.']];
+const MSGS = ['No session logged in {d}.', 'Sleep is down {p}% this week.',
+  'WARNING: Daily Quest incomplete.', 'Streak: {d}. New record.', 'A new quest is available.',
+  'Nothing to report.', 'Unspent stat points: {s}.', 'Level unchanged for {d}.', 'Hidden quest detected.',
+  'A new dungeon has appeared nearby.', 'Recovery complete. All stats restored.',
+  'Fatigue rising. Rest advised.', 'The player has returned.', 'Instant dungeon cleared.',
+  'Condition: optimal.', 'Weekly quest {p}% complete.', 'An unknown item was found.',
+  'The player is being watched.'];
 
 function makeText(o) {
   const t = topicOf(o.topic);
@@ -705,14 +545,14 @@ function makeText(o) {
   const r = rng(hash(seedText) + o.spin * 7919);
   const one = a => a[Math.floor(r() * a.length)];
   const some = (a, n) => { const c = a.slice(), out = []; while (out.length < n && c.length) out.push(c.splice(Math.floor(r() * c.length), 1)[0]); return out; };
-  const round = v => v >= 50 ? Math.round(v / 10) * 10 : v >= 20 ? Math.round(v / 5) * 5 : Math.max(1, Math.round(v));
+  const round = v => v >= 1000 ? Math.round(v / 500) * 500 : v >= 50 ? Math.round(v / 10) * 10 : v >= 20 ? Math.round(v / 5) * 5 : Math.max(1, Math.round(v));
   const rep = spec => {
-    const cap = spec[2] || spec[1] * 4;
-    return round(Math.min(cap, spec[1] * rk.mult)) + ' ' + spec[0];
+    const lim = spec[2] || spec[1] * 4;
+    return spec[0] + ' 0/' + fmt(round(Math.min(lim, spec[1] * rk.mult))) + (spec[3] ? ' ' + spec[3] : '');
   };
-  const fill = s => s.replace('{h}', 1 + Math.floor(r() * 8)).replace('{m}', (2 + Math.floor(r() * 5)) * 15)
-    .replace('{e}', ((1 + Math.floor(r() * 9)) * 100).toLocaleString('en'))
-    .replace('{d}', 2 + Math.floor(r() * 12)).replace('{p}', (2 + Math.floor(r() * 5)) * 5);
+  const fill = filler(r);
+  const stat = () => t.stat || one(STATS);
+  const bump = Math.max(1, Math.round(rk.mult));
   const about = String(o.about || '').trim();
   const L = [];
 
@@ -721,36 +561,39 @@ function makeText(o) {
       : one(ITEM_HEAD) + ' of ' + one(ITEM_OF));
     L.push('# ITEM ACQUIRED', name, 'Rank: ' + rk.id, one(ITEM_FLAV));
     if (o.spell) {
-      const stat = t.stat || one(['STR', 'AGI', 'VIT', 'INT', 'CHA', 'WILL']);
-      L.push('Effect: +' + Math.max(1, Math.round(rk.mult * 2)) + ' ' + stat + ' for ' + (2 + Math.floor(r() * 10)) + ' hours');
-      L.push('Effect: ' + one(['Recovery is ' + (10 + Math.floor(r() * 4) * 5) + '% faster until you next sleep',
-        'The first set costs nothing', 'Fatigue is halved for one session',
-        'One missed day does not break the chain']));
-      if (r() < 0.5) L.push('Effect: Cannot be used twice in one day');
+      L.push('Effect: ' + stat() + ' +' + Math.max(1, Math.round(rk.mult * 2)) + ' for ' + pl(2 + Math.floor(r() * 10), 'hour'));
+      L.push('Effect: ' + fill(one(BUFF_FX)));
+      if (r() < 0.5) L.push('Effect: ' + one(LIMITS));
     }
     return { text: L.join('\n'), kind: 'item' };
   }
+  if (o.kind === 'status') {
+    const debuff = r() < 0.4;
+    const name = about || one(debuff ? t.debuffs : t.buffs);
+    L.push('# STATUS EFFECT', name, 'Type: ' + (debuff ? 'Debuff' : 'Buff'), 'Duration: ' + fill(one(DURATIONS)));
+    if (o.spell) {
+      const pool = debuff ? DEBUFF_FX : BUFF_FX;
+      L.push('Effect: ' + stat() + ' ' + (debuff ? '-' : '+') + bump);
+      some(pool, 2).forEach(x => L.push('Effect: ' + fill(x)));
+    }
+    return { text: L.join('\n'), kind: 'status' };
+  }
   if (o.kind === 'title') {
     const name = about || one(t.titles.concat(TITLES));
-    L.push('# TITLE EARNED', 'You have earned the title: ' + name,
-      one(['Granted for finishing what was started, ' + (10 + Math.floor(r() * 50)) + ' days running.',
-        'Nobody handed this over. It was taken.',
-        'Awarded by the system. It does not award many.',
-        'Earned on the days nobody was watching.']));
-    if (o.spell) L.push('Effect: ' + (t.stat || 'WILL') + ' +' + Math.max(1, Math.round(rk.mult)) + ' while the title is worn.');
+    L.push('# TITLE ACQUIRED', 'Title acquired: ' + name, fill(one(TITLE_DESC)));
+    if (o.spell) L.push('Effect: ' + (t.stat || 'WILL') + ' +' + bump + ' while equipped');
     return { text: L.join('\n'), kind: 'notice' };
   }
   if (o.kind === 'skill') {
     const s = about ? [about, r() < 0.5 ? 'Passive' : 'Active', one(SKILLS)[2]] : one(SKILLS);
-    L.push('# SKILL UNLOCKED', s[0] + ' (' + s[1] + ') has been acquired.', s[2]);
-    if (o.spell) L.push('Effect: ' + (t.stat || 'WILL') + ' +' + Math.max(1, Math.round(rk.mult)) + ' while it is in use.');
+    L.push('# SKILL ACQUIRED', 'Skill acquired: ' + s[0] + ' (' + s[1] + ')', s[2]);
+    if (o.spell) L.push('Effect: ' + (t.stat || 'WILL') + ' +' + bump + ' while active');
     return { text: L.join('\n'), kind: 'notice' };
   }
   if (o.kind === 'level') {
     const lv = 5 + Math.floor(r() * 60);
-    L.push('# LEVEL UP', 'You have reached Level ' + lv + '.',
-      'All stats +' + Math.max(1, Math.round(rk.mult)) + '.',
-      (1 + Math.floor(r() * 5)) + ' points available.');
+    L.push('# LEVEL UP', 'Level up! Level ' + lv, 'All stats +' + bump,
+      pl(1 + Math.floor(r() * 5), 'stat point') + ' available');
     if (about) L.push(about);
     return { text: L.join('\n'), kind: 'notice' };
   }
@@ -777,14 +620,51 @@ function makeText(o) {
   goals.forEach(g => L.push('- ' + g));
   if (o.spell) {
     const q = parse(L.join('\n'), 'quest');
-    L.push('Rewards: ' + pseudoRewards(q, Math.floor(r() * 1000)).join(', '));
+    const rw = pseudoRewards(q, Math.floor(r() * 1000));
+    if (rw.length) { L.push('Rewards:'); rw.forEach(x => L.push('- ' + x)); }
   }
   if (o.kind !== 'daily' || r() < 0.5) L.push('Penalty: ' + fill(one(PENALTIES)));
   return { text: L.join('\n'), kind: 'quest' };
 }
 
-/* The panel. It shows the words it made, not the picture: the picture is one
-   press away and the words are what he will want to change. */
+/* The made-up rewards or effects, written into the text so they can be
+   edited like anything else he typed. */
+function writeRewardsIn() {
+  const q = parse(S.text, S.kind);
+  if (q.kind === 'notice' || q.typedRewards) return;
+  const list = shownRewards(q);
+  const fx = q.kind === 'item' || q.kind === 'status';
+  const add = fx ? list.map(x => 'Effect: ' + x) : (list.length ? ['Rewards:'].concat(list.map(x => '- ' + x)) : []);
+  if (!add.length) { UI.toast('No rewards picked', { bad: true }); return; }
+  S.text = S.text.replace(/\s+$/, '') + '\n' + add.join('\n');
+  ta.value = S.text; put('draft', S.text);
+  Mobile.feedback('success'); render();
+  UI.toast((fx ? 'Effects' : 'Rewards') + ' are in the text now');
+}
+
+/* The REWARDS chips and the STAT pick, drawn into the main screen and the
+   maker alike. `after` redraws whatever is showing them. */
+function rwChips(box, after) {
+  box.innerHTML = '';
+  const on = rwOn();
+  RW_KINDS.forEach(k => {
+    const c = document.createElement('button');
+    c.className = 'mb-chip mb-press mb-tap' + (on.indexOf(k.id) >= 0 ? ' on' : '');
+    c.textContent = k.name;
+    c.onclick = () => {
+      const now = rwOn(), i = now.indexOf(k.id);
+      if (i >= 0) now.splice(i, 1); else now.push(k.id);
+      const ordered = RW_KINDS.map(x => x.id).filter(id => now.indexOf(id) >= 0);
+      put('rw', ordered.length ? ordered.join(',') : 'none');
+      Mobile.feedback('select'); rwChips(box, after); if (after) after();
+    };
+    box.appendChild(c);
+  });
+}
+
+/* The panel. It shows the words it made, not the picture, in a box he can
+   edit before USE IT (Tom, 2026-09-25): the words are what he will want to
+   change. SPIN AGAIN or any choice writes a fresh one over it. */
 const MK = {
   kind: get('mk.kind', 'daily'), topic: get('mk.topic', 'mix'),
   rank: get('mk.rank', 'C'), spell: !!get('mk.spell', false), about: '',
@@ -795,8 +675,11 @@ function makePanel() {
   UI.dialog({
     title: 'MAKE ONE', width: 520,
     body: (b, h) => {
-      const pre = document.createElement('pre'); pre.className = 'mk-pre';
-      draw = () => { out = makeText(Object.assign({ spin: spin }, MK)); pre.textContent = out.text; };
+      const box = UI.field('note', { rows: 9 });
+      box.classList.add('mk-pre'); box.setAttribute('data-keep-caret', '');
+      box.setAttribute('aria-label', 'The window it made, editable');
+      box.addEventListener('input', () => { if (out) out.text = box.value; });
+      draw = () => { out = makeText(Object.assign({ spin: spin }, MK)); box.value = out.text; };
       const seg = (lbl, list, key) => {
         const wrap = document.createElement('div'); wrap.className = 'seg';
         wrap.appendChild(Object.assign(document.createElement('div'), { className: 'lbl', textContent: lbl }));
@@ -810,9 +693,16 @@ function makePanel() {
       f.addEventListener('input', () => { MK.about = f.value; draw(); });
       b.appendChild(UI.row('In your own words', 'A quest title, an item name, a line to say', null));
       b.appendChild(f);
+      const rwWrap = document.createElement('div'); rwWrap.className = 'seg';
+      const chips = document.createElement('div'); chips.className = 'mb-chips';
+      rwWrap.appendChild(Object.assign(document.createElement('div'), { className: 'lbl', textContent: 'REWARDS' }));
+      rwWrap.appendChild(chips);
+      rwChips(chips, () => { draw(); render(); });
       b.appendChild(UI.row('Write the rewards in', 'Off, and NOTICE makes them up and REROLL respins them',
-        UI.toggle(MK.spell, v => { MK.spell = v; put('mk.spell', v); draw(); })));
-      b.appendChild(pre);
+        UI.toggle(MK.spell, v => { MK.spell = v; put('mk.spell', v); rwWrap.classList.toggle('hide', !v); draw(); })));
+      rwWrap.classList.toggle('hide', !MK.spell);
+      b.appendChild(rwWrap);
+      b.appendChild(box);
       draw();
     },
     actions: [
@@ -853,6 +743,34 @@ ta.addEventListener('input', () => {
 });
 
 $('btnRoll').onclick = () => { S.seed = S.seed + 1; put('seed', S.seed); Mobile.feedback('select'); render(); };
+/* REWARDS on the main screen: one row per kind, what it rolled, a reroll for
+   that kind alone and a switch. Redrawn by render(), so it always shows what
+   the window shows. */
+function rwRows(q) {
+  const box = $('rwRows'); box.innerHTML = '';
+  const parts = rewardParts(q, S.seed, S.rs), on = rwOn();
+  RW_KINDS.forEach(k => {
+    const isOn = on.indexOf(k.id) >= 0;
+    const ctl = document.createElement('div');
+    ctl.style.cssText = 'display:flex;align-items:center;gap:var(--s-2)';
+    const re = document.createElement('button');
+    re.className = 'mb-btn mb-press mb-tap'; re.setAttribute('data-icon', 'refresh');
+    re.setAttribute('aria-label', 'Reroll ' + k.name); re.title = 'Reroll ' + k.name;
+    re.innerHTML = (window.Icons && Icons.svg('refresh', { size: 18 })) || 'REROLL';
+    re.disabled = !isOn; re.style.visibility = isOn ? '' : 'hidden';
+    re.onclick = () => { S.rs[k.id] = (S.rs[k.id] || 0) + 1; put('rs', S.rs); Mobile.feedback('select'); render(); };
+    ctl.appendChild(re);
+    ctl.appendChild(UI.toggle(isOn, v => {
+      const now = rwOn().filter(x => x !== k.id); if (v) now.push(k.id);
+      const ordered = RW_KINDS.map(x => x.id).filter(id => now.indexOf(id) >= 0);
+      put('rw', ordered.length ? ordered.join(',') : 'none');
+      Mobile.feedback('select'); render();
+    }));
+    box.appendChild(UI.row(k.name, isOn ? UI.esc(parts[k.id]) : 'Off', ctl));
+  });
+}
+$('btnWrite').onclick = writeRewardsIn;
+$('segStat').appendChild(UI.segmented(STAT_PICK, get('rwStat', 'auto'), v => { put('rwStat', v); Mobile.feedback('select'); render(); }));
 $('btnMake').onclick = makePanel;
 
 const fileName = q => {
@@ -860,7 +778,7 @@ const fileName = q => {
   return 'notice-' + (first || 'window') + '-' + Day.today();
 };
 function keep(q) {
-  Rec.set('msg', Day.today(), newId(), { text: S.text, kind: q.kind, head: S.head, style: S.style, seed: S.seed, t: Date.now() });
+  Rec.set('msg', Day.today(), newId(), { text: S.text, kind: q.kind, head: S.head, style: S.style, seed: S.seed, rs: S.rs, t: Date.now() });
 }
 /* The picture on screen IS the file, already drawn, so the share sheet is
    asked for inside the tap that pressed SAVE. iOS allows nothing later. */
@@ -975,6 +893,7 @@ $('btnRecent').onclick = () => {
           (p.kind === 'quest' ? 'quest' : 'notice') + ' · ' + Day.label(r.date || Day.today())) + '</small>';
         go.onclick = () => {
           S.text = p.text || ''; S.style = STYLES[p.style] ? p.style : S.style; S.seed = +p.seed || 0;
+          S.rs = Object.assign(RS0(), p.rs || {}); put('rs', S.rs);
           if (p.head && pick(HEADS, p.head).id === p.head) { S.head = p.head; put('head', S.head); }
           ta.value = S.text; put('draft', S.text); put('style', S.style); put('seed', S.seed);
           seg('segStyle', STYLE_LIST, 'style'); seg('segHead', HEADS, 'head');
