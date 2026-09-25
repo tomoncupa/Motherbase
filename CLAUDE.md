@@ -750,6 +750,13 @@ answer, or take it out.
   either. Cap the fill short of the top and keep the label in the band above
   it, scaling every fill the same so what the bars are read for is untouched.
   COACH's week strip, 2026-09-24: white set counts on gold.
+- **Live sync's database keeps no empty list, empty object or null.** A
+  payload of only those arrives with no payload at all, and a field holding
+  `[]` arrives missing. BLOCK's `{v: []}` settings stopped its board drawing in
+  Chrome, and a new day's `routines: []` came back as "runs every routine"
+  (2026-09-25). `cloud.js` 0.1.5 gives a stripped row `{}`; an app whose
+  meaning depends on an EMPTY list must also carry a flag that says it was
+  chosen, as BLOCK's `picked` does.
 - **`Rec.all` hands rows back in no order**, and a payload's `ord` usually
   numbers a row inside its own group, so it cannot order the groups. A list
   that must read back in the order it was entered sorts on the row KEY, which
