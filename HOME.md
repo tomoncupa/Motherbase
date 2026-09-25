@@ -36,3 +36,22 @@ Tom: "fix the widget system." Three causes, found by reading the Main Menu progr
 - **On a phone every card was 72px tall** with the rest cut off, since 1.0.23: the desk's fixed row height reached the stacked cards. Phone rows are `auto` now.
 
 Watched here at 1920x1000 and 390x844: TODAY 408px, no rewrite on open, a synced layout landing while open, a real title drag and corner resize saving, WEIGHT's chart 96px on the phone. His layout on the hosted copy is the factory one as of today; the folder copy's store in the Main Menu program still holds the one he arranged on 21 Sep.
+
+## 2026-09-25, HOME 1.0.35: a widget for everything, and the desk tools
+
+Tom: "Add all the widgets we could have given our suite and functionality. Add some general widgets as well like timers and stop watches and alarms. Test everything." 23 new, 48 in all. ADD A WIDGET is grouped by the app a widget reads (ACROSS THE SUITE, then the apps in roster order, then DESK).
+
+- QUESTS: UPCOMING (dated todos, 7/14/30 days), PROJECTS (open per #project), BRIEF (the PC's morning brief and its todos; `mine`).
+- BLOCK: EVERY & ANYTIME (owed, due and coming up; this week's counts; tickable). `rhAddH`, `rhEveryState`, `rhWeekStartH`, `rhAnyState` copy BLOCK's: change both.
+- STATUS: MEASURE (any tracked field charted, picked from the widget's menu), MACROS (P, C, F, kcal against targets), MEALS (today's).
+- TRAIN: RECORDS (sets TRAIN itself flagged `pr`, in the range), TRAINING BLOCK (the running `phase`).
+- CHECK IN: days since the owner's last check-in (`cval`/`checkin` rows without a `pid|`; photos are not read, they are megabytes).
+- LOG: ON THIS DAY (a week, a month, three months and a year ago), RECAP (today, this week, last week).
+- Tom's own, dropped from the client build with their app: SPEAK, SESSIONS (`sesh`), BILLS (WEALTH's bill todos), POTS (moves summed as WEALTH's `potBal`), ARC (ARC's todos). `mine: 1` does the same for a widget with no app, via `MINE_BUILD`.
+- DESK: STOPWATCH (laps), INTERVALS (work, rest, rounds; presets on the menu; 3-2-1 ticks), ALARMS (a setting, `lifeos.alarms`; rings with a sheet, SNOOZE 5 MIN or STOP, on any device with the home screen open), COUNTDOWN (`lifeos.countdowns`), CALENDAR (month, dots, a day's bullets), WORLD CLOCK (cities on the menu).
+
+**The desk tools keep their count in `TOOLS`, not in the drawing.** A widget is redrawn on every store change, so TIMER used to go back to 00:00 whenever a tick landed from another app or from sync. One ticker (100ms) paints every face and rings what is due. State is memory only: a reload stops a running count. What has rung is memory too, never a setting (the live sync trap). A widget's `presets` is the picker's word for ready-made copies; INTERVALS' own presets are `kinds`, after the first name drew four blank rows in ADD A WIDGET.
+
+Also: the phone tab bar held eight apps once SHEET joined and ran to 460px on a 390px phone, SPEAK off the edge; buttons now share the width and CHECK IN wraps. `.chk`'s touch area counts its border, 40px to 44px, on TODAY too.
+
+Watched here at 1920x1000 and 390x844 with seeded rows in every app: all 48 draw, no widget error; TIMER survived a redraw; stopwatch start, lap, stop by mouse; intervals WORK, REST, done chime; an alarm set through its sheet rang at the minute, snoozed, rang again, stopped; countdown, calendar, world clock and measure menus; every tick box wrote its app's row. Review 129/129 both widths. Not seen on his screens; alarms not tested on the phone, where a sleeping phone will not ring.
