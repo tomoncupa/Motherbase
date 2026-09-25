@@ -41,3 +41,5 @@ the cursor in the box, an event with "9-9:30am" typed and mood 3 saved as
 starting now with the length beside End, the boxes clearing after a save.
 Review 135/135 at 375 and 1280. NOT watched on an iPhone, and the touch path
 itself was not exercised.
+
+1.0.1, 2026-09-25: the mood suggestions STATUS 1.0.54 got, off the same `Journal.moodMemo()`.
