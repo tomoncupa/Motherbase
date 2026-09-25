@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.35, 2026-09-25">
+<meta name="mb-version" content="1.0.36, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -28,11 +28,15 @@
      excat cexcat · sgroup csgroup · goal cgoal
      program cprogram · progday cprogday · progex cprogex
    Tom's own ticks are not the client's, so a tick is neither read nor
-   written. Three settings are the client's and not the app's (whether TRAIN
-   has greeted them, the record rule, a running rest timer); every other
-   setting, the unit and the theme among them, stays Tom's. Rec.patch, map,
-   keys, count and setting all go through the calls replaced here, so they
-   follow without being touched. */
+   written. Every TRAIN setting changed here is saved as the client's
+   (train.<pid>|name). Tom, 2026-09-25: "I dont want my train to be
+   affected" — until then only three were, and a unit changed on a client
+   changed his own TRAIN. A setting the client has never had reads Tom's,
+   so a new client starts on his setup; three never do (whether TRAIN has
+   greeted them, the record rule, a running rest timer). Theme and sound
+   are kept by the device per app, outside the store, and stay shared.
+   Rec.patch, map, keys, count and setting all go through the calls
+   replaced here, so they follow without being touched. */
 (function () {
   var m = /[?&]client=([^&#]+)/.exec(location.search);
   if (!m) return;
@@ -44,9 +48,14 @@
   var DROP = { tick: 1, activity: 1 };
   var raw = {};
   ['get', 'set', 'del', 'has', 'row', 'all', 'tombstone', 'tombstones', 'idOf', 'merge', 'export', 'on'].forEach(function (f) { raw[f] = Rec[f]; });
-  function to(type, key) {
+  /* `read` is a lookup: a setting the client has no row for yet answers
+     with Tom's. A write always lands on the client's. */
+  function to(type, key, read) {
     if (T[type]) return [T[type], pre + (key == null ? '' : key)];
-    if (type === 'setting' && MINE[key]) return [type, 'train.' + pre + key.slice(6)];
+    if (type === 'setting' && String(key).indexOf('train.') === 0) {
+      var theirs = 'train.' + pre + key.slice(6);
+      if (!read || MINE[key] || raw.row('setting', null, theirs)) return [type, theirs];
+    }
     return [type, key];
   }
   /* a stored row back as TRAIN wrote it, or null when it is someone else's */
@@ -55,20 +64,20 @@
     if (String(r.key).indexOf(pre) !== 0) return null;
     return Object.assign({}, r, { type: B[r.type], key: String(r.key).slice(pre.length) });
   }
-  function wrap(f, none) {
+  function wrap(f, none, read) {
     return function (type, date, key, x) {
       if (DROP[type]) return none;
-      var a = to(type, key);
+      var a = to(type, key, read);
       return f.call(Rec, a[0], date, a[1], x);
     };
   }
   Rec.client = pid;
-  Rec.get = wrap(raw.get, null);
+  Rec.get = wrap(raw.get, null, 1);
   Rec.set = wrap(raw.set, null);
   Rec.del = wrap(raw.del, null);
-  Rec.has = wrap(raw.has, false);
+  Rec.has = wrap(raw.has, false, 1);
   Rec.tombstone = wrap(function (t, d, k) { return back(raw.tombstone(t, d, k)); }, null);
-  Rec.row = wrap(function (t, d, k) { return back(raw.row(t, d, k)); }, null);
+  Rec.row = wrap(function (t, d, k) { return back(raw.row(t, d, k)); }, null, 1);
   Rec.idOf = wrap(raw.idOf, null);
   Rec.all = function (type, opt) {
     if (DROP[type]) return [];
@@ -481,6 +490,17 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .imp-stat{display:flex;justify-content:space-between;gap:var(--s-3);
   padding:var(--s-2) 0;font-size:var(--f-2);border-bottom:var(--border-width) solid var(--border)}
 .imp-stat:last-child{border-bottom:0}
+/* the notes preview: a day, then each exercise and what was read for it */
+.nt-sum{margin-top:var(--s-4);font-family:var(--font-display);font-weight:var(--w-bold);color:var(--text-1)}
+.nt-day{margin-top:var(--s-4);padding-bottom:var(--s-1);border-bottom:var(--border-width) solid var(--border);
+  font-size:var(--f-2);color:var(--text-2)}
+.nt-day b{font-family:var(--font-display);color:var(--text-1);margin-right:var(--s-2)}
+.nt-day em{font-style:normal;color:var(--warn)}
+.nt-ex{display:flex;justify-content:space-between;gap:var(--s-3);margin-top:var(--s-2);font-size:var(--f-2);color:var(--text-1)}
+.nt-ex i{font-style:normal;color:var(--text-muted);text-align:right}
+.nt-sets{font-size:var(--f-1);color:var(--text-2);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.nt-miss{margin-top:var(--s-2);font-size:var(--f-1);color:var(--text-muted);overflow-wrap:anywhere}
+.nt-miss b{color:var(--warn)}
 .imp-stat b{font-variant-numeric:tabular-nums}
 .bar{height:var(--s-2);border-radius:var(--radius-full);background:var(--surface-3);overflow:hidden}
 .bar>i{display:block;height:100%;background:var(--accent);width:0;
@@ -2112,6 +2132,511 @@ TRAIN.importCsv = function (grid) {
   return out;
 };
 
+/* ═══════════════════ FROM NOTES ═══════════════════
+   Tom, 2026-09-25: "Allow the option for smart import - some people track
+   on notes." A log typed into a phone's notes app, pasted in and read by
+   shape. A date line starts a day, a name starts an exercise, and the
+   numbers are sets, in whichever of the usual ways they were written:
+   60x8, 60kg 8/8/7, 3x8 @ 60, 100 x 5 x 5, 8, 8, 7 (60kg), bw x 12, bw+10
+   x 8, 45s, 20 min 2km, 40m. A line that gives only a weight ("Bench 60kg")
+   hands it to the reps under it.
+
+   Nothing is written until the preview has been read and IMPORT pressed,
+   every line it could not read is listed rather than dropped (DOCTRINE,
+   law 3), and the whole import is one UNDO. A day's sets are keyed by date
+   and place (`nt-<date>-<n>`), so the same notes twice write the same
+   rows, and a day imported again replaces what notes put there before. */
+var NT_MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+var NT_MONRE = '(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\\.?';
+var NT_WDRE = '(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?\\.?';
+var NT_HEAD = /^(week|wk|day|session|workout|block|phase)\s*\d+\b/i;
+
+/* one line with its bullet, numbering, checkbox and superset label off */
+var ntClean = function (s) {
+  return String(s || '').replace(/[☐-☒✅✓✔❌]|\[[ x]?\]/gi, ' ')
+    .replace(/^\s*(?:[-*•–—·>]+\s*)?(?:(?:\d{1,2}|[a-e]\d)[.)]\s+(?=[a-z]))?/i, '')
+    .replace(/^\s*[a-e]\d[:.)]?\s+(?=[a-z])/i, '')
+    .replace(/\s+/g, ' ').trim();
+};
+
+/* Does a numeric date read month first? Decided by any date in the notes
+   that can only be one way; when none can, Tom's default, month first, and
+   the preview offers the switch. */
+/* A number date at the start of a line: 9/20, 9/20/26, 20.9.2026. Without
+   a year only a slash counts, so 12.5 and 10-12 stay numbers. */
+var ntNum = function (s) {
+  var m = new RegExp('^(?:' + NT_WDRE + '[\\s,]*)?(\\d{1,2})([/.-])(\\d{1,2})\\2(\\d{4}|\\d{2})(?![\\d/.x])', 'i').exec(s);
+  if (m) return { a: +m[1], b: +m[3], y: m[4], hit: m[0] };
+  m = new RegExp('^(?:' + NT_WDRE + '[\\s,]*)?(\\d{1,2})/(\\d{1,2})(?![\\d/.])(?!\\s*(?:kg|lb|x\\b|x\\d|reps?\\b|@))', 'i').exec(s);
+  return m ? { a: +m[1], b: +m[2], y: null, hit: m[0] } : null;
+};
+TRAIN.noteOrder = function (lines) {
+  var md = 0, dm = 0, amb = 0;
+  lines.forEach(function (l) {
+    var m = ntNum(ntClean(l).toLowerCase());
+    if (!m || m.a > 31 || m.b > 31) return;
+    if (m.a > 12 && m.b <= 12) dm++; else if (m.b > 12 && m.a <= 12) md++; else amb++;
+  });
+  return { order: dm > md ? 'dm' : 'md', decided: !!(dm || md), ambiguous: amb > 0 };
+};
+
+/* A date line, or null. The rest of the line is the session's name. */
+var ntDate = function (line, order, lead, today) {
+  var s = line.toLowerCase(), m, y = null, mo, d, hit;
+  var wd = new RegExp('\\b' + NT_WDRE + '(?![a-z])', 'i');
+  if ((m = /\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b/.exec(s))) { y = +m[1]; mo = +m[2]; d = +m[3]; hit = m[0]; }
+  else if ((m = new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:of\\s+)?' + NT_MONRE + '(?![a-z])(?:,?\\s*(\\d{4}|\'?\\d{2})(?![\\d/.x]))?', 'i').exec(s))) {
+    d = +m[1]; mo = NT_MON.indexOf(m[2].slice(0, 3)) + 1; y = m[3]; hit = m[0];
+  } else if ((m = new RegExp('\\b' + NT_MONRE + '(?![a-z])\\s*(\\d{1,2})(?:st|nd|rd|th)?(?!\\d)(?:,?\\s*(\\d{4}|\'\\d{2})(?![\\d/.x]))?', 'i').exec(s))) {
+    mo = NT_MON.indexOf(m[1].slice(0, 3)) + 1; d = +m[2]; y = m[3]; hit = m[0];
+  } else if ((m = ntNum(s))) {
+    var after = s.slice(m.hit.length).trim();
+    /* 10/8 under an exercise is reps. A number date needs a year, a
+       weekday, words after it, or a line of its own after a gap. */
+    if (!m.y && !wd.test(s) && !/^[-–:,\s]*(?!x\s*\d)[a-z]/.test(after) && !(lead && !after)) return null;
+    mo = order === 'dm' ? m.b : m.a; d = order === 'dm' ? m.a : m.b; y = m.y; hit = m.hit;
+  } else return null;
+  var rest = (line.slice(0, s.indexOf(hit)) + ' ' + line.slice(s.indexOf(hit) + hit.length)).replace(wd, ' ');
+  /* a line that also holds sets is not a date line */
+  if (/\d\s*(x|×|kg|lb|@|reps?\b)|(^|\s)x\s*\d|@\s*\d/i.test(rest)) return null;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  var ty = +today.slice(0, 4);
+  if (y != null) { y = +String(y).replace("'", ''); if (y < 100) y += 2000; }
+  var iso = function (yy) { return yy + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0'); };
+  var date = y != null ? iso(y) : iso(ty);
+  /* no year: the most recent one that is not in the future */
+  if (y == null && date > today) date = iso(ty - 1);
+  var real = new Date(+date.slice(0, 4), mo - 1, d);
+  if (real.getMonth() !== mo - 1) return null;
+  return { date: date, name: rest.replace(/^[\s\-–—:,.|()]+|[\s\-–—:,.|()]+$/g, '').replace(/\s+/g, ' ') };
+};
+
+/* The numbers on one line, as tokens. A number keeps the unit written after
+   it; minutes, hours and miles are turned into seconds and kilometres here. */
+var NT_TOK = /(\d+):([0-5]\d)(?!\d)|\b(bw|bodyweight|body weight)\b(?:\s*\+\s*(\d+(?:\.\d+)?)\s*(kgs?|kilos?|lbs?|pounds?|#)?)?|(\d+(?:\.\d+)?)\s*(kgs?|kilos?|kilograms?|lbs?|pounds?|#|seconds?|secs?|sets?|s|minutes?|mins?|hours?|hrs?|h|kms?|miles?|mi|meters?|metres?|m|reps?|r)?(?![a-wyz])|(x(?![a-z])|@|\/|,|;|\+|-|–|—|\(|\)|:|\|)|([a-z’']+)/gi;
+var ntUnit = function (n, u) {
+  u = (u || '').toLowerCase();
+  if (!u) return { n: n, u: null };
+  if (/^k(g|ilo)/.test(u)) return { n: n, u: 'kg' };
+  if (/^(lb|pound|#)/.test(u)) return { n: n, u: 'lb' };
+  if (/^(s|sec)/.test(u) && u !== 'sets' && u !== 'set') return { n: n, u: 'sec' };
+  if (/^min/.test(u)) return { n: n * 60, u: 'sec' };
+  if (/^(h|hr|hour)/.test(u)) return { n: n * 3600, u: 'sec' };
+  if (/^km/.test(u)) return { n: n, u: 'km' };
+  if (/^mi/.test(u)) return { n: n * 1.609344, u: 'km' };
+  /* m is metres: a carry's 40m. Minutes are written min. */
+  if (u === 'm' || /^met/.test(u)) return { n: n / 1000, u: 'km' };
+  if (/^set/.test(u)) return { n: n, u: 'set' };
+  return { n: n, u: 'rep' };
+};
+var ntTokens = function (text) {
+  var out = [], m, s = String(text).replace(/[×✕✖*]/g, 'x');
+  NT_TOK.lastIndex = 0;
+  while ((m = NT_TOK.exec(s))) {
+    if (m[1]) out.push({ t: 'n', n: +m[1] * 60 + +m[2], u: 'sec', at: m.index });
+    else if (m[3]) {
+      var add = m[4] ? ntUnit(+m[4], m[5]) : null;
+      out.push({ t: 'n', n: add ? add.n : 0, u: 'bw', wu: add && add.u, at: m.index });
+    } else if (m[6]) { var v = ntUnit(+m[6], m[7]); out.push({ t: 'n', n: v.n, u: v.u, at: m.index }); }
+    else if (m[8]) out.push({ t: 'op', v: m[8].toLowerCase(), at: m.index });
+    else if (m[9]) out.push({ t: 'w', v: m[9].toLowerCase(), raw: m[9], at: m.index });
+  }
+  return out;
+};
+var ntIsW = function (t) { return t && (t.u === 'kg' || t.u === 'lb' || t.u === 'bw'); };
+
+/* The sets one piece of text holds. Returns the sets, the weight the line
+   named (handed on to the lines under it) and any words left over, which
+   become the note on the line's last set. A set whose weight is not known
+   yet carries w: null and is filled by whoever reads it next. */
+var ntSets = function (text) {
+  var toks = ntTokens(text), seq = [], words = [], warm = 0, rir = null, rpe = null;
+  for (var i = 0; i < toks.length; i++) {
+    var t = toks[i], nx = toks[i + 1];
+    if (t.t !== 'w') { seq.push(t); continue; }
+    if (t.v === 'rpe' && nx && nx.t === 'n') { rpe = nx.n; i++; continue; }
+    if (t.v === 'rir') {
+      if (nx && nx.t === 'n' && !nx.u) { rir = nx.n; i++; }
+      else if (seq.length && seq[seq.length - 1].t === 'n' && !seq[seq.length - 1].u) rir = seq.pop().n;
+      continue;
+    }
+    if (/^(warm|warmup|warmups|wu)$/.test(t.v)) { warm = 1; if (nx && nx.t === 'w' && nx.v === 'up') i++; continue; }
+    if (/^(each|ea|per|side|sides|of|and|at|total|then)$/.test(t.v)) continue;
+    if (t.v === 'x') continue;
+    words.push(t.raw);
+  }
+  /* chains: numbers joined by x. `sep` is what stood before the chain */
+  var chains = [], cur = null, sep = ' ', lx = false;
+  seq.forEach(function (t) {
+    if (t.t === 'n') {
+      if (cur && cur.open) { cur.nums.push(t); cur.open = false; return; }
+      cur = { nums: [t], sep: sep, lx: lx, open: false }; chains.push(cur); sep = ' '; lx = false;
+      return;
+    }
+    if (t.v === 'x') { if (cur && !cur.open && sep === ' ') cur.open = true; else lx = true; return; }
+    if (cur) cur.open = false;
+    sep = t.v === '@' ? '@' : t.v === '/' ? '/' : sep === '@' ? '@' : ',';
+  });
+  var sets = [], pend = [], curW = null, lineW = null, times = [], dists = [], nSets = null;
+  var lineHasW = chains.some(function (c) { return c.sep === '@' || (c.nums.length === 1 && ntIsW(c.nums[0])); });
+  var multi = chains.filter(function (c) { return c.nums.length > 1; }).length;
+  var add = function (w, r, n, x) {
+    for (var k = 0; k < (n || 1); k++) {
+      var s = Object.assign({ w: w, r: r }, x || {});
+      sets.push(s);
+      if (!w) pend.push(s);
+    }
+  };
+  var setW = function (w) {
+    curW = lineW = w;
+    pend.forEach(function (s) { s.w = w; });
+    pend = [];
+  };
+  /* 60 8 8 7: a first number far above the rest is the weight */
+  if (chains.length >= 3 && chains.every(function (c) { return c.nums.length === 1 && !c.nums[0].u; })) {
+    var first = chains[0].nums[0].n, most = Math.max.apply(null, chains.slice(1).map(function (c) { return c.nums[0].n; }));
+    if (first >= 20 && first >= 2 * most) { setW(chains[0].nums[0]); chains.shift(); }
+  }
+  /* 100 5x5: a bare number before sets and reps is their weight */
+  if (chains.length === 2 && chains[0].nums.length === 1 && !chains[0].nums[0].u && chains[1].nums.length > 1 &&
+      chains[1].nums.every(function (t) { return !t.u; }) &&
+      chains[0].nums[0].n >= 2 * Math.max.apply(null, chains[1].nums.map(function (t) { return t.n; }))) {
+    curW = chains[0].nums[0]; chains.shift(); lineHasW = true;
+  }
+  /* one bare number and nothing else: reps, unless reps follow on the next
+     lines, and then it was the weight ("Bench 60" / 8 / 8 / 7) */
+  var lone = chains.length === 1 && chains[0].nums.length === 1 && !chains[0].nums[0].u && chains[0].sep === ' ' &&
+    !chains[0].lx && chains[0].nums[0].n % 1 === 0;
+  for (var c = 0; c < chains.length; c++) {
+    var ch = chains[c], a = ch.nums[0], b = ch.nums[1], z = ch.nums[2];
+    if (ch.sep === '@' && ch.nums.length === 1 && (!a.u || ntIsW(a))) {
+      /* @8 beside a weight already named is effort, not load */
+      if (!a.u && a.n <= 10 && (curW || lineW) && a.n % 1 === 0) { rpe = a.n; continue; }
+      setW(a); continue;
+    }
+    if (ch.nums.length === 1) {
+      if (ntIsW(a)) { setW(a); continue; }
+      if (a.u === 'sec') { times.push(a.n); continue; }
+      if (a.u === 'km') { dists.push(a.n); continue; }
+      if (a.u === 'set') { nSets = a.n; continue; }
+      if (ch.lx) { add(curW, a.n); continue; }
+      /* 60/8: a weight over its reps, when the first is plainly a load */
+      var nxc = chains[c + 1];
+      if (!a.u && nxc && nxc.sep === '/' && nxc.nums.length === 1 && !nxc.nums[0].u &&
+          !(chains[c + 2] && chains[c + 2].sep === '/') && ch.sep !== '/' &&
+          a.n > 25 && a.n >= 2 * nxc.nums[0].n) { setW(a); add(a, nxc.nums[0].n); c++; continue; }
+      /* a plain number with a decimal is a load, not reps */
+      if (!a.u && a.n % 1) { setW(a); continue; }
+      add(curW, a.n, nSets || 1); nSets = null;
+      continue;
+    }
+    if (ch.nums.length === 2) {
+      if (b.u === 'set' && ntIsW(a)) { curW = lineW = a; continue; }
+      if (a.u === 'set') { add(curW, b.n, a.n); continue; }
+      if (ntIsW(a)) {
+        setW(a);
+        if (b.u === 'sec') add(a, 0, 1, { dur: b.n }); else if (b.u === 'km') add(a, 0, 1, { dist: b.n }); else add(a, b.n);
+        continue;
+      }
+      if (ntIsW(b)) { setW(b); add(b, a.n); continue; }
+      if (b.u === 'sec') { add(curW, 0, a.n, { dur: b.n }); continue; }
+      if (a.u === 'sec') { add(curW, 0, b.n, { dur: a.n }); continue; }
+      if (b.u === 'km') { add(curW, 0, a.n, { dist: b.n }); continue; }
+      /* plain a x b */
+      if (a.n <= 20 && b.n > 50) { setW(b); add(b, a.n); continue; }
+      if (a.n <= 10 && a.n % 1 === 0 && (lineHasW || curW)) { add(curW, b.n, a.n); continue; }
+      if (a.n <= 6 && multi === 1 && !curW) { add(null, b.n, a.n); continue; }
+      setW(a); add(a, b.n);
+      continue;
+    }
+    /* three or more: the larger end is the weight */
+    var last = ch.nums[ch.nums.length - 1];
+    if (ch.nums.length === 3) {
+      var wFirst = ntIsW(a) || a.u === 'set' ? ntIsW(a) : ntIsW(z) ? false : a.n >= z.n;
+      if (a.u === 'set') { setW(z); add(z, b.n, a.n); continue; }
+      if (wFirst) { setW(a); add(a, b.n, Math.min(z.n, 20)); }
+      else { setW(z); add(z, b.n, Math.min(a.n, 20)); }
+      continue;
+    }
+    setW(a); ch.nums.slice(1).forEach(function (t) { add(a, t.n); });
+    void last;
+  }
+  /* time and distance: one of each is one set, otherwise one set apiece */
+  if (times.length === 1 && dists.length === 1) add(lineW, 0, 1, { dur: times[0], dist: dists[0] });
+  else {
+    times.forEach(function (t) { add(lineW, 0, 1, { dur: t }); });
+    dists.forEach(function (d) { add(lineW, 0, 1, { dist: d }); });
+  }
+  var note = words.join(' ').trim();
+  if (rpe != null) note = (note ? note + ' ' : '') + 'RPE ' + rpe;
+  sets.forEach(function (s) { if (warm) s.warm = 1; if (rir != null) s.rir = rir; });
+  return { sets: sets, w: lineW || curW, note: note, words: words, lone: lone && sets.length === 1 };
+};
+
+/* Where the name stops and the sets start: the first number (or bw, or
+   x8) that has a word in front of it. A line that starts with its numbers
+   is sets for the exercise above, unless its words name one. */
+var ntSplit = function (line) {
+  var toks = ntTokens(line), seen = false;
+  for (var i = 0; i < toks.length; i++) {
+    var t = toks[i];
+    if (t.t === 'w' && /[a-z]/i.test(t.v) && !(t.v === 'x' && toks[i + 1] && toks[i + 1].t === 'n')) { seen = true; continue; }
+    var starts = t.t === 'n' || (t.t === 'op' && (t.v === 'x' || t.v === '@') && toks[i + 1] && toks[i + 1].t === 'n');
+    if (!starts) continue;
+    /* 1 arm row 20kg, 45 degree back extension: a bare number, then words,
+       then more numbers, is part of the name */
+    var nx = toks[i + 1];
+    if (!seen && i === 0 && t.t === 'n' && !t.u && nx && nx.t === 'w' && !/^(then|and|x|at|of|each)$/.test(nx.v) &&
+        toks.slice(i + 2).some(function (k) { return k.t === 'n'; })) continue;
+    if (!seen) return { name: '', rest: line, lead: true };
+    return { name: line.slice(0, t.at), rest: line.slice(t.at), lead: false };
+  }
+  return { name: line, rest: '', lead: false };
+};
+var ntName = function (s) {
+  return String(s || '').replace(/^[\s\-–—:,.|(]+|[\s\-–—:,.|(=]+$/g, '').replace(/\s+/g, ' ');
+};
+
+/* Exercise names, compared as words: lower case, the usual shorthand
+   spelled out, plurals off, and in any order. */
+var NT_ALIAS = { db: 'dumbbell', dbs: 'dumbbell', bb: 'barbell', kb: 'kettlebell', ohp: 'overhead press',
+  rdl: 'romanian deadlift', sldl: 'stiff leg deadlift', dl: 'deadlift', bp: 'bench press',
+  tri: 'tricep', triceps: 'tricep', biceps: 'bicep', lats: 'lat', ext: 'extension', exts: 'extension',
+  flye: 'fly', flies: 'fly', flyes: 'fly', ez: 'ez', incl: 'incline', decl: 'decline', dumbell: 'dumbbell' };
+TRAIN.noteWords = function (name) {
+  var s = String(name || '').toLowerCase().replace(/[’']/g, '')
+    .replace(/pull[\s-]?downs?/g, 'pulldown').replace(/push[\s-]?downs?/g, 'pushdown')
+    .replace(/(pull|chin|push|sit|step)[\s-]?ups?\b/g, '$1 up').replace(/skull[\s-]?crushers?/g, 'skullcrusher')
+    .replace(/\bt[\s-]?bar\b/g, 'tbar').replace(/[^a-z0-9]+/g, ' ');
+  var out = [];
+  var put = function (x) { if (x && out.indexOf(x) < 0) out.push(x); };
+  s.split(' ').forEach(function (w) {
+    if (!w || /^(the|a|an|on|with|exercise)$/.test(w)) return;
+    w = NT_ALIAS[w] || w;
+    w.split(' ').forEach(function (x) {
+      if (x.length > 3 && /sses$/.test(x)) x = x.slice(0, -2);
+      else if (x.length > 4 && /(ch|sh|x)es$/.test(x)) x = x.slice(0, -2);
+      else if (x.length > 3 && /ies$/.test(x)) x = x.slice(0, -3) + 'y';
+      else if (x.length > 3 && /s$/.test(x) && !/ss$/.test(x)) x = x.slice(0, -1);
+      (NT_ALIAS[x] || x).split(' ').forEach(put);
+    });
+  });
+  /* "bench" on its own is the bench press */
+  if (out.indexOf('bench') >= 0 && out.indexOf('press') < 0 && out.indexOf('dip') < 0) out.push('press');
+  return out;
+};
+/* The exercise in this log a name means, or null for a new one. Same words
+   in any order is a match. Fewer words is a match only when one exercise
+   holds them with the fewest extra, or, for bench, squat and row, when the
+   only extra is "barbell": said plainly in a gym, those mean the bar. */
+TRAIN.noteMatch = function (name, list) {
+  var nw = TRAIN.noteWords(name);
+  if (!nw.length) return null;
+  list = list || Object.keys(TRAIN.exercises()).map(function (id) {
+    return { id: id, name: TRAIN.exercises()[id].name, words: TRAIN.noteWords(TRAIN.exercises()[id].name) };
+  });
+  var key = nw.slice().sort().join(' ');
+  for (var i = 0; i < list.length; i++) if (list[i].words.slice().sort().join(' ') === key) return list[i].id;
+  var cand = list.filter(function (e) { return nw.every(function (w) { return e.words.indexOf(w) >= 0; }); });
+  if (!cand.length) return null;
+  var least = Math.min.apply(null, cand.map(function (e) { return e.words.length; }));
+  var top = cand.filter(function (e) { return e.words.length === least; });
+  if (top.length === 1) return top[0].id;
+  if (!nw.some(function (w) { return /^(bench|squat|row)$/.test(w); })) return null;
+  var bar = top.filter(function (e) {
+    return e.words.every(function (w) { return nw.indexOf(w) >= 0 || w === 'barbell'; });
+  });
+  return bar.length === 1 ? bar[0].id : null;
+};
+/* A new exercise's group, read off its name. Specific before general, so a
+   leg curl is hamstrings before a curl is arms. */
+TRAIN.NOTE_CATS = [
+  ['Calves', /calf|calves/],
+  ['Hamstrings', /leg curl|hamstring|romanian|\brdl|stiff[- ]?leg|sldl|good ?morning|nordic|glute[- ]?ham/],
+  ['Glutes', /hip thrust|glute|bridge|abduct/],
+  ['Lower Back', /hyper ?extension|back extension|superman/],
+  ['Forearms', /wrist|forearm|farmer|grip|dead ?hang|plate pinch/],
+  ['Legs', /squat|lunge|leg press|leg ext|split|step ?up|hack|quad|adduct/],
+  ['Cardio', /\brun|jog|walk|treadmill|bike|cycl|spin|elliptical|stair|swim|rower|rowing machine|jump rope|skip|cardio|hiit|sprint/],
+  ['Core', /plank|crunch|\babs?\b|sit ?up|leg raise|knee raise|hollow|dead ?bug|bird ?dog|pallof|russian twist|oblique|v ?up|mountain climber|core/],
+  ['Arms', /curl|tricep|bicep|pushdown|push ?down|skull|kickback|dips?\b.*tri|close grip bench|french press|overhead extension/],
+  ['Shoulders', /shoulder|overhead press|\bohp|military|arnold|lateral|side raise|front raise|rear delt|reverse fly|delt|face pull|upright row|push press/],
+  ['Chest', /bench|chest|\bpec|\bfly|flye|push ?up|\bdips?\b/],
+  ['Back', /\brow|pull ?up|chin ?up|pulldown|pull ?down|\blats?\b|deadlift|shrug|pullover|\bback\b/],
+  ['Legs', /\blegs?\b/],
+];
+TRAIN.noteCat = function (name) {
+  var s = String(name || '').toLowerCase();
+  for (var i = 0; i < TRAIN.NOTE_CATS.length; i++) if (TRAIN.NOTE_CATS[i][1].test(s)) return TRAIN.NOTE_CATS[i][0];
+  return null;
+};
+/* Title case for a new exercise's name, keeping the shorthand in capitals */
+TRAIN.noteTitle = function (name) {
+  return ntName(name).replace(/[a-z0-9’']+/gi, function (w) {
+    if (/^(db|bb|kb|ez|rdl|rdls|ohp|sldl|dl|bw|rpe)$/i.test(w)) return w.toUpperCase();
+    return w === w.toLowerCase() ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+  });
+};
+
+/** Read pasted notes. Nothing is written. */
+TRAIN.parseNotes = function (text, opt) {
+  opt = opt || {};
+  var today = opt.today || Day.today();
+  var lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+  var ord = TRAIN.noteOrder(lines), order = opt.order || ord.order;
+  var days = [], day = null, item = null, unread = [];
+  var newDay = function (date, name) { day = { date: date, name: name || '', items: [], heads: [] }; days.push(day); item = null; };
+  var list = Object.keys(TRAIN.exercises()).map(function (id) {
+    return { id: id, name: TRAIN.exercises()[id].name, words: TRAIN.noteWords(TRAIN.exercises()[id].name) };
+  });
+  lines.forEach(function (raw, i) {
+    var line = ntClean(raw);
+    if (!line) return;
+    var lead = i === 0 || !ntClean(lines[i - 1]);
+    var dt = ntDate(line, order, lead, today);
+    if (dt) { newDay(dt.date, dt.name); return; }
+    if (!day) newDay(null, '');
+    if (NT_HEAD.test(line)) { day.heads.push(ntName(line)); item = null; return; }
+    var sp = ntSplit(line), got = sp.rest ? ntSets(sp.rest) : { sets: [], w: null, note: '', words: [] };
+    var name = ntName(sp.name);
+    /* 3x10 push ups: numbers first, then a name this log knows */
+    if (sp.lead && got.words.length && got.sets.length &&
+        (!item || TRAIN.noteMatch(got.words.join(' '), list))) { name = got.words.join(' '); got.note = ''; }
+    if (name && /^(rest|note|notes|total|volume|bodyweight|bw|weight)$/i.test(name)) name = '';
+    if (name) { item = { name: name, sets: [], w: null, line: i + 1 }; day.items.push(item); }
+    if (!got.sets.length && !got.w) {
+      if (!name) unread.push({ n: i + 1, text: raw.trim(), why: 'no sets in it' });
+      return;
+    }
+    if (!item) { unread.push({ n: i + 1, text: raw.trim(), why: 'no exercise above it' }); return; }
+    if (!name && item.lone && item.sets.length === 1) { item.w = { n: item.sets[0].r, u: null }; item.sets = []; }
+    item.lone = !!(name && got.lone);
+    got.sets.forEach(function (s) { if (!s.w) s.w = got.w || item.w; });
+    if (got.w) item.w = got.w;
+    if (got.note && got.sets.length) got.sets[got.sets.length - 1].note = got.note;
+    [].push.apply(item.sets, got.sets);
+  });
+  /* A name with no sets under it is a heading: the day's name if it comes
+     before the first exercise, otherwise a line not read. */
+  days.forEach(function (d) {
+    var seenSets = false;
+    d.items = d.items.filter(function (it) {
+      if (it.sets.length) { seenSets = true; return true; }
+      if (!seenSets) d.heads.push(it.name);
+      else unread.push({ n: it.line, text: it.name, why: 'a name with no sets under it' });
+      return false;
+    });
+    if (!d.name && d.heads.length) d.name = d.heads[0];
+    d.items.forEach(function (it) {
+      it.ex = TRAIN.noteMatch(it.name, list);
+      it.cat = it.ex ? null : TRAIN.noteCat(it.name);
+      it.sets.forEach(function (s) {
+        var w = s.w, u = w && w.u === 'bw' ? (w.wu || opt.unit || 'kg') : (w && w.u) || opt.unit || 'kg';
+        s.u = u === 'lb' ? 'lb' : 'kg';
+        s.bw = !!(w && w.u === 'bw');
+        s.wv = w ? w.n : 0;
+        s.kg = TRAIN.toKg(s.wv, s.u);
+      });
+    });
+  });
+  days = days.filter(function (d) { return d.items.length; });
+  unread.sort(function (a, b) { return a.n - b.n; });
+  return { days: days, unread: unread, order: order, decided: ord.decided, ambiguous: ord.ambiguous && !ord.decided,
+    undated: days.some(function (d) { return !d.date; }) };
+};
+
+/** Write what parseNotes read. `opt.date` takes the days with no date,
+    `opt.redo` imports days that already hold sets logged some other way.
+    Returns the counts and the list UNDO needs. */
+TRAIN.importNotes = function (res, opt) {
+  opt = opt || {};
+  var today = Day.today(), undo = [], out = { sets: 0, exercises: 0, days: 0, future: 0, logged: [], undo: undo };
+  var keep = function (type, date, key) { undo.push({ type: type, date: date, key: key, was: Rec.get(type, date, key) }); };
+  var byDate = {};
+  res.days.forEach(function (d) {
+    var date = d.date || opt.date;
+    if (!date) return;
+    (byDate[date] || (byDate[date] = { items: [], name: '' })).items.push.apply(byDate[date].items, d.items);
+    if (d.name && !byDate[date].name) byDate[date].name = d.name;
+  });
+  var made = {}, cats = TRAIN.cats();
+  var maxOrd = 0;
+  Object.keys(cats).forEach(function (k) { if ((cats[k].ord | 0) > maxOrd) maxOrd = cats[k].ord | 0; });
+  var catFor = function (group) {
+    var id = group && TRAIN.catByWord(group);
+    if (id) return id;
+    if (group && !Rec.tombstone('excat', null, TRAIN.catId(group))) {
+      id = TRAIN.catId(group);
+      keep('excat', null, id);
+      Rec.set('excat', null, id, { name: group, slot: Math.max(0, TRAIN.DEFAULT_CATS.indexOf(group)), ord: ++maxOrd });
+      TRAIN._catC = null;
+      return id;
+    }
+    id = TRAIN.catByWord('Other');
+    if (id) return id;
+    id = 'other'; keep('excat', null, id);
+    Rec.set('excat', null, id, { name: 'Other', slot: (maxOrd + 1) % TRAIN.SLOTS, ord: ++maxOrd });
+    TRAIN._catC = null;
+    return id;
+  };
+  var exFor = function (it) {
+    if (it.ex && TRAIN.exercises()[it.ex]) return it.ex;
+    var k = TRAIN.noteWords(it.name).slice().sort().join(' ');
+    if (made[k]) return made[k];
+    var d = it.sets.some(function (s) { return s.dist; }), t = it.sets.some(function (s) { return s.dur; });
+    var r = it.sets.some(function (s) { return s.r; }), w = it.sets.some(function (s) { return s.kg; }), group = it.cat;
+    var kind = d && !r && w ? 'wd' : group === 'Cardio' || (d && !r) ? 'dt' : t && !r ? 'wt' : 'wr';
+    var id = TRAIN.newId();
+    keep('exercise', null, id);
+    Rec.set('exercise', null, id, { name: TRAIN.noteTitle(it.name), cat: catFor(group), kind: kind,
+      inc: kind === 'wr' ? 2.5 : 1, rest: 0, unit: 0, fav: 0, note: '', graph: 0, ord: 0 });
+    TRAIN._exC = null;
+    out.exercises++;
+    return (made[k] = id);
+  };
+  Object.keys(byDate).sort().forEach(function (date) {
+    if (date > today) { out.future++; return; }
+    var there = TRAIN.setsOn(date), mine = there.filter(function (s) { return /^nt-/.test(s.key); });
+    if (there.length > mine.length && !opt.redo) { out.logged.push(date); return; }
+    var n = 0;
+    byDate[date].items.forEach(function (it) {
+      var ex = exFor(it);
+      it.sets.forEach(function (s) {
+        var key = 'nt-' + date + '-' + (++n);
+        var p = { ex: ex, kg: Math.round(s.kg * 1000) / 1000, r: s.r | 0, u: s.u, done: 1, pr: 0, prf: 0,
+          dist: s.dist ? Math.round(s.dist * 1000) / 1000 : 0, dur: Math.round(s.dur || 0), note: s.note || '', ord: n };
+        if (s.warm) p.warm = 1;
+        if (s.rir != null) p.rir = s.rir;
+        keep('set', date, key);
+        Rec.set('set', date, key, p);
+        out.sets++;
+      });
+    });
+    /* fewer sets than last time: the ones past the end are gone from the notes */
+    mine.forEach(function (s) {
+      if (+s.key.split('-').pop() > n) { keep('set', date, s.key); Rec.del('set', date, s.key); }
+    });
+    var ses = Rec.get('session', date, '') || {};
+    if (byDate[date].name && !ses.name) { keep('session', date, ''); Rec.patch('session', date, '', { name: byDate[date].name }); }
+    out.days++;
+  });
+  TRAIN.reindex();
+  Object.keys(byDate).forEach(function (d) { TRAIN.assertTick(d); });
+  TRAIN.recomputePRs();
+  return out;
+};
+TRAIN.undoNotes = function (undo) {
+  var dates = {};
+  undo.slice().reverse().forEach(function (u) {
+    if (u.was) Rec.set(u.type, u.date, u.key, u.was); else Rec.del(u.type, u.date, u.key);
+    if (u.date) dates[u.date] = 1;
+  });
+  TRAIN._exC = null; TRAIN._catC = null;
+  TRAIN.reindex();
+  Object.keys(dates).forEach(function (d) { TRAIN.assertTick(d); });
+  TRAIN.recomputePRs();
+};
+
 TRAIN.importPanel = function () {
   UI.dialog({
     title: 'IMPORT A TRAINING LOG', width: 460,
@@ -2137,6 +2662,9 @@ TRAIN.importPanel = function () {
         'slightly differently \u2014 this reads whichever names yours used. It needs a ' +
         'date column and an exercise column; weight, reps, distance, time, category and ' +
         'notes come across when they are there.<br><br>' +
+        '<b>From notes.</b> Paste a log typed into a phone’s notes app. It reads dates, ' +
+        'exercise names and sets written the usual ways, shows you what it read, and ' +
+        'writes nothing until you press IMPORT.<br><br>' +
         'Importing <b>merges</b>. The same file twice changes nothing, and anything ' +
         'you have logged in TRAIN since is never overwritten.<br><br>' +
         '<b>It only goes one way.</b> There is no export back.<br><br>' +
@@ -2234,9 +2762,142 @@ TRAIN.importPanel = function () {
       pick.style.width = '100%';
       pick.onclick = function () { input.click(); };
       b.appendChild(pick);
+
+      var np = UI.el('button', 'mb-btn mb-press mb-tap');
+      np.textContent = 'PASTE FROM NOTES';
+      np.style.marginTop = 'var(--s-3)';
+      np.style.width = '100%';
+      var nbox = UI.el('div', 'nt');
+      nbox.style.display = 'none';
+      np.onclick = function () { np.style.display = 'none'; nbox.style.display = ''; TRAIN.notesBox(nbox); };
+      b.appendChild(np);
+      b.appendChild(nbox);
     },
     actions: [{ label: 'CLOSE' }],
   });
+};
+
+/* How a line of notes reads back: 60kg × 8, 8, 7 · 65kg × 6 */
+var ntDur = function (s) {
+  s = Math.round(s);
+  return s >= 60 ? Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') : s + 's';
+};
+TRAIN.noteSetsText = function (sets) {
+  var out = [], cur = null;
+  sets.forEach(function (s) {
+    var w = s.bw ? (s.wv ? 'BW+' + s.wv + s.u : 'BW') : s.wv ? s.wv + s.u : '';
+    if (s.dur || s.dist) {
+      out.push([w, s.dist ? (s.dist < 1 ? Math.round(s.dist * 1000) + 'm' : (Math.round(s.dist * 100) / 100) + 'km') : '',
+        s.dur ? ntDur(s.dur) : ''].filter(Boolean).join(' '));
+      cur = null; return;
+    }
+    if (cur && cur.w === w) { cur.r.push(s.r); return; }
+    cur = { w: w, r: [s.r] }; out.push(cur);
+  });
+  return out.map(function (x) {
+    return typeof x === 'string' ? x : x.w ? x.w + ' × ' + x.r.join(', ') : x.r.join(', ') + ' reps';
+  }).join(' · ');
+};
+var NT_DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+var NT_MONS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+var ntDay = function (iso) {
+  var d = new Date(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+  return NT_DAYS[d.getDay()] + ' ' + d.getDate() + ' ' + NT_MONS[d.getMonth()] +
+    (iso.slice(0, 4) !== Day.today().slice(0, 4) ? ' ' + iso.slice(0, 4) : '');
+};
+
+/* The paste box, its preview and IMPORT, drawn into the import panel. The
+   text is kept while the page is open, so closing the panel loses nothing. */
+TRAIN.notesBox = function (box) {
+  var unit = TRAIN.unit(), orderPick = null, redo = false, last = null, timer = null;
+  var ta = UI.field('note', { rows: 8, placeholder: 'Sep 20 Push\nBench 60kg x 8, 8, 7\nIncline DB press 22.5 x 10 x 3\nDips bw x 12, 10' });
+  ta.value = TRAIN._ntDraft || '';
+  ta.style.width = '100%';
+  ta.style.marginTop = 'var(--s-3)';
+  box.appendChild(ta);
+
+  box.appendChild(UI.row('Weights with no unit', '',
+    UI.segmented([{ id: 'kg', name: 'KG' }, { id: 'lb', name: 'LB' }], unit, function (v) { unit = v; draw_(); })));
+  var orderRow = UI.row('Dates like 9/10', 'Month first or day first',
+    UI.segmented([{ id: 'md', name: 'SEP 10' }, { id: 'dm', name: '9 OCT' }], 'md', function (v) { orderPick = v; draw_(); }));
+  box.appendChild(orderRow);
+  var di = document.createElement('input');
+  di.type = 'date'; di.className = 'mb-input'; di.value = Day.today(); di.max = Day.today();
+  di.onchange = function () { draw_(); };
+  var dateRow = UI.row('Sets with no date go on', 'Put a date line above each day to split them', di);
+  box.appendChild(dateRow);
+  var redoRow = UI.row('Days already logged here', 'Off: those days are left alone',
+    UI.toggle(false, function (on) { redo = on; draw_(); }));
+  box.appendChild(redoRow);
+
+  var view = UI.el('div');
+  box.appendChild(view);
+  var go = UI.el('button', 'mb-btn mb-press mb-tap go');
+  go.style.marginTop = 'var(--s-4)';
+  go.style.width = '100%';
+  box.appendChild(go);
+  var done = UI.el('div');
+  done.style.marginTop = 'var(--s-3)';
+  box.appendChild(done);
+
+  var logged = function (date) {
+    return TRAIN.setsOn(date).some(function (s) { return !/^nt-/.test(s.key); });
+  };
+  function draw_() {
+    TRAIN._ntDraft = ta.value;
+    var res = last = TRAIN.parseNotes(ta.value, { unit: unit, order: orderPick });
+    var today = Day.today(), fall = di.value || today, n = 0, days = 0, exs = {}, h = '', hasLogged = false;
+    orderRow.style.display = res.ambiguous || orderPick ? '' : 'none';
+    dateRow.style.display = res.undated ? '' : 'none';
+    res.days.forEach(function (d) {
+      var date = d.date || fall, why = '';
+      if (date > today) why = 'in the future, left out';
+      else if (logged(date)) { hasLogged = true; if (!redo) why = 'already has sets in this log, left alone'; }
+      h += '<div class="nt-day"><b>' + (d.date ? ntDay(d.date) : 'NO DATE → ' + ntDay(fall)) + '</b>' +
+        UI.esc(d.name || '') + (why ? ' <em>' + why + '</em>' : '') + '</div>';
+      d.items.forEach(function (it) {
+        var ex = it.ex && TRAIN.exercises()[it.ex];
+        h += '<div class="nt-ex"><span>' + UI.esc(it.name) + '</span><i>' +
+          (ex ? '→ ' + UI.esc(ex.name) : 'new · ' + UI.esc(it.cat || 'Other')) + '</i></div>' +
+          '<div class="nt-sets">' + UI.esc(TRAIN.noteSetsText(it.sets)) +
+          it.sets.filter(function (s) { return s.note; }).map(function (s) { return ' — ' + UI.esc(s.note); }).join('') + '</div>';
+        if (!why) { n += it.sets.length; exs[TRAIN.noteWords(it.name).sort().join(' ')] = 1; }
+      });
+      if (!why) days++;
+    });
+    redoRow.style.display = hasLogged ? '' : 'none';
+    res.unread.forEach(function (u) {
+      h += '<div class="nt-miss"><b>Not read</b> line ' + u.n + ': “' + UI.esc(u.text) + '”, ' + u.why + '</div>';
+    });
+    var ne = Object.keys(exs).length;
+    view.innerHTML = ta.value.trim() ? '<div class="nt-sum">' + n + ' sets · ' + ne + ' exercise' + (ne === 1 ? '' : 's') +
+      ' · ' + days + ' day' + (days === 1 ? '' : 's') + '</div>' + h : '';
+    go.textContent = n ? 'IMPORT ' + n + ' SET' + (n === 1 ? '' : 'S') : 'IMPORT';
+    go.disabled = !n;
+  }
+  ta.oninput = function () { clearTimeout(timer); timer = setTimeout(draw_, 250); };
+  go.onclick = function () {
+    if (!last) return;
+    var out = TRAIN.importNotes(last, { date: di.value || Day.today(), redo: redo });
+    Mobile.feedback('complete');
+    done.innerHTML = '<div class="empty"><b>' + out.sets + '</b> sets across <b>' + out.days + '</b> day' +
+      (out.days === 1 ? '' : 's') + '. ' + out.exercises + ' new exercise' + (out.exercises === 1 ? '' : 's') + '.' +
+      (out.logged.length ? '<br>' + out.logged.length + ' day' + (out.logged.length === 1 ? '' : 's') + ' already had sets and ' +
+        (out.logged.length === 1 ? 'was' : 'were') + ' left alone.' : '') + '</div>';
+    var u = UI.el('button', 'mb-btn mb-press mb-tap');
+    u.textContent = 'UNDO THIS IMPORT';
+    u.style.marginTop = 'var(--s-3)';
+    u.style.width = '100%';
+    u.onclick = function () {
+      TRAIN.undoNotes(out.undo);
+      done.innerHTML = '<div class="empty">Undone. Nothing from these notes is in the log.</div>';
+      draw(); draw_();
+    };
+    done.appendChild(u);
+    draw(); draw_();
+  };
+  draw_();
+  if (UI.focusSoon) UI.focusSoon(ta); else ta.focus();
 };
 
 TRAIN.statsHtml = function (s) {
@@ -5694,7 +6355,7 @@ TRAIN.parseTime = function (txt) {
 TRAIN.setStamp = function (s) {
   var k = String(s.key || '');
   if (/^fn\d+$/.test(k)) return +k.slice(2);
-  if (/^csv-/.test(k)) return 1e14 + (+k.split('-').pop() || 0);
+  if (/^(csv|nt)-/.test(k)) return 1e14 + (+k.split('-').pop() || 0);
   var m = k.match(/^[^-]+-([0-9a-z]+)-/);
   if (m) { var n = parseInt(m[1], 36); if (isFinite(n)) return n; }
   return 1e15 + (s.ord || 0);

@@ -150,9 +150,12 @@ Rules, each with the reason it exists:
   which maps.
 - **No `tick` and no `activity`** are read or written on a client's profile:
   their training is not Tom's day.
-- **Three settings are the client's** (`seen`, `prRule`, `rest`), namespaced
-  `train.<pid>|<name>`. Everything else, the unit included, stays Tom's, so
-  changing the unit there changes it in his own TRAIN.
+- **Every setting changed there is the client's** (1.0.36, Tom: "I dont want
+  my train to be affected"), namespaced `train.<pid>|<name>`. One the client
+  has never had reads Tom's, so a new client starts on his setup; `seen`,
+  `prRule` and `rest` never do. Theme and sound are kept by the device per
+  app, outside the store, and are still shared. Watched: LBS on a client,
+  KG still in his own TRAIN.
 - **A new set's key gets `k-`** so COACH bills it as a session Tom delivered.
 - **No DATA tab there.** TRAIN does not register with the sheet on a client's
   profile, so a backup taken from it would have been the whole device.
@@ -373,6 +376,33 @@ plain JavaScript, with no library, so the importer works offline.
 - **One way.** There is no export back into FitNotes.
 - A spreadsheet from Strong, Hevy, JEFIT or FitNotes' own CSV export also imports.
 - Body weight and measurements are not imported.
+
+**From notes (1.0.36, 2026-09-25).** Tom: "some people track on notes."
+PASTE FROM NOTES in the import panel, so COACH's IMPORT THEIR LOG has it too.
+`TRAIN.parseNotes` reads by shape and writes nothing; `importNotes` writes;
+`undoNotes` puts every row back as it was. Rules:
+- **A date line starts a day** (Sep 20, 20 Sept, 2026-09-20, 9/20). A number
+  date without a year counts only with a slash and a weekday, words after it,
+  or a gap above it, so 10/8 under an exercise stays reps and 12.5 stays a
+  weight. Month first unless a date in the notes proves otherwise; the preview
+  offers the switch only when it is a guess. No year: the latest past one.
+- **A name with no sets under it is a heading**: the day's name before the
+  first exercise, a "Not read" line after. Every line not read is listed.
+- **Set shapes are table-tested**, 31 of them, in the browser: plain `a x b` is
+  weight x reps, except sets x reps when a weight is named elsewhere on the
+  line (a <= 10) or a <= 6 alone; three numbers take the larger end as the
+  weight; `m` is metres, minutes are `min`. Change a rule, re-run the table.
+- **Names match this log's exercises by words**, shorthand spelled out (DB,
+  RDL, OHP), plurals off, any order. Fewer words match only one clear winner,
+  or the barbell one for bench, squat and row. Otherwise a new exercise,
+  grouped off its name (`NOTE_CATS`), in Other when nothing fits.
+- **Keys are `nt-<date>-<n>`**: the same notes twice write the same rows, and a
+  day imported again drops its own old tail. A day holding sets logged any
+  other way is left alone unless the switch says otherwise. Not billed: no `k-`.
+
+Watched on a client profile at phone width, by clicking: 14 sets landed as
+that client's `cset`, none in Tom's `set`, day names came across, UNDO left
+nothing. Not opened on the iPhone.
 
 **Every comment that still has a set comes across (2,240 of his 4,297; the
 rest point at deleted sets).** (HISTORY.md: Set comments: 4,297 in the file, 2,240 on sets)
