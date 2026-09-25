@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.29, 2026-09-25">
+<meta name="mb-version" content="1.0.30, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -8300,6 +8300,52 @@ TRAIN.copyPreviousSets = function (exId) {
   UI.toast(n + ' sets copied');
 };
 
+/* ── three warmups in one press ──
+   Tom, 2026-09-25, yes, and "warm ups are about 6-12". 40, 60 and 80 percent
+   of the working weight for 12, 8 and 6 reps: lighter takes more. The working
+   weight is what is typed in the steppers, else today's heaviest working set,
+   else the heaviest from last time. Each is rounded down to the exercise's
+   step, never below the empty bar on a barbell lift, and one that lands on
+   the same weight as the step before is dropped. They go in as warmups the
+   app wrote (`warm: 1, plan: 1`), in front of the working sets, so they count
+   for nothing until ticked and never count toward volume or records. */
+TRAIN.WARMUPS = [[0.4, 12], [0.6, 8], [0.8, 6]];
+TRAIN.addWarmups = function (exId, date) {
+  var ex = TRAIN.exercises()[exId] || {};
+  var mine = TRAIN.setsOn(date).filter(function (s) { return s.ex === exId; });
+  if (mine.some(function (s) { return s.warm && s.plan; })) return UI.toast('Warmups are already in');
+  var heaviest = function (list) {
+    return list.reduce(function (m, s) { return !s.warm && s.kg > m ? s.kg : m; }, 0);
+  };
+  var typed = parseFloat(TRAIN.draftW);
+  var work = typed > 0 ? TRAIN.toKg(typed, TRAIN.unit()) : heaviest(mine) || heaviest(TRAIN.lastSetsOf(exId, date));
+  if (!(work > 0)) return UI.toast('Type the working weight first', { bad: true });
+  var unit = TRAIN.unit(), inc = TRAIN.increment(ex), workU = TRAIN.toUnit(work, unit);
+  var bar = TRAIN.isBarbell(ex) ? TRAIN.toUnit(TRAIN.barKg().kg, unit) : 0;
+  var list = [], last = -1;
+  TRAIN.WARMUPS.forEach(function (w) {
+    var v = Math.floor(workU * w[0] / inc + 1e-6) * inc;
+    if (v < bar) v = bar;
+    v = Math.round(v * 100) / 100;
+    if (!(v > 0) || v >= workU || v === last) return;
+    last = v;
+    list.push({ v: v, r: w[1] });
+  });
+  if (!list.length) return UI.toast('Too light for warmups', { bad: true });
+  var first = mine.length ? Math.min.apply(null, mine.map(function (s) { return s.ord || 0; }))
+    : TRAIN.setsOn(date).length + 1;
+  list.forEach(function (w, i) {
+    Rec.set('set', date, TRAIN.newId(), {
+      ex: exId, kg: TRAIN.toKg(w.v, unit), r: w.r, u: unit, done: 0, plan: 1, warm: 1, pr: 0, prf: 0,
+      dist: 0, dur: 0, note: '', ord: mine.length ? first - (list.length - i) / (list.length + 1) : first + i,
+    });
+  });
+  TRAIN.reindex();
+  TRAIN.assertTick(date);
+  draw();
+  UI.toast(list.length + (list.length === 1 ? ' warmup added' : ' warmups added'));
+};
+
 document.getElementById('moreBtn').onclick = function (e) {
   var r = e.currentTarget.getBoundingClientRect();
   var at = { clientX: r.right, clientY: r.bottom };
@@ -8307,6 +8353,7 @@ document.getElementById('moreBtn').onclick = function (e) {
   if (scr === 'training') {
     var id = TRAIN.exId, date = TRAIN.date;
     items = [
+      { label: 'Add Warmups', fn: function () { TRAIN.addWarmups(id, date); } },
       { label: 'Copy Previous Sets', fn: function () { TRAIN.copyPreviousSets(id); } },
       { label: 'Plate Calculator', fn: function () {
         var sel = TRAIN.sel && Rec.get('set', date, TRAIN.sel);

@@ -671,6 +671,14 @@ session could undo without noticing:
   cable, EZ, trap bar, lever, brands). `exercise.bar` from Edit Exercise's
   switch beats the name. 30 of his 270 read as barbell. No `≈`: the display
   font lacks it and the fallback made the line a pixel taller.
+- **Add Warmups is first in TRACK's More** (1.0.30, `TRAIN.addWarmups`):
+  40, 60 and 80% of the working weight for 12, 8 and 6 reps (Tom: "about
+  6-12"; the split is Claude's, lighter takes more). Working weight: typed,
+  else today's heaviest working set, else last time's. Rounded down to the
+  exercise's step, never under the empty bar on a barbell lift, a repeated
+  weight dropped. Written `warm: 1, plan: 1` with `ord` just in front of the
+  first set, so they sit first and count for nothing. Refuses a second time
+  while app-made warmups are there.
 
 (`HISTORY.md: The training screen, four complaints` and the three sections
 after it.)
