@@ -214,6 +214,7 @@ const ROLES = {
   'app.speak': 'mic',
   'app.receipts': 'camera',
   'app.sheet': 'trophy',
+  'app.bullet': 'pencil',
   quest: 'flag', flag: 'flag',
   pose: 'pose', physique: 'pose', checkin: 'pose',
   compare: 'frames', frames: 'frames',
@@ -294,6 +295,9 @@ const APP_ART = {
   style:   { c: WHT, edge: 'rainbow', g: '<path class="f" d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 1.5-2s0-2.5 1.5-2.5H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z"/>'
              + [[7.3, 11.5, 0], [9.5, 7, 1], [14.5, 7, 2], [17.3, 11, 3]].map(p => '<circle class="n" cx="' + p[0] + '" cy="' + p[1] + '" r="1.6" fill="' + RAINBOW[p[2]] + '"/>').join('') },
   sheet:   { c: GOLD, g: '<path class="f" d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8"/>' },
+  /* BULLET, 2026-09-25: the page that only writes a bullet. Three bullet
+     lines, the first one being written. Picked by the build session. */
+  bullet:  { c: GOLD, g: '<circle class="f" cx="5.5" cy="6" r="2"/><path d="M10 6h10"/><circle cx="5.5" cy="12" r="1.2"/><path d="M10 12h7"/><circle cx="5.5" cy="18" r="1.2"/><path d="M10 18h9"/>' },
   system:  { c: GOLD, big: 1, g: '<path class="f" d="M4.5 1.5h15l3 3v15l-3 3h-15l-3-3v-15z"/><path d="M1.5 6.5h21"/><circle class="s n" cx="4.5" cy="4" r=".8"/><path class="s n" d="M11.35 9.5h1.3l-.3 7.5h-.7z"/><circle class="s n" cx="12" cy="19.3" r=".85"/>' },
 };
 /* the marks, turned into attributes, so a picture file with no stylesheet

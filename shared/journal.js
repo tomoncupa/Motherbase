@@ -214,6 +214,8 @@ function said(k, d) {
 }
 const timesOn = () => said('bulletTimes', 1) !== 0;
 const moodOn = () => said('bulletMood', 1) !== 0;
+/* the word box under a mood, on unless switched off (2026-09-25) */
+const feelOn = () => said('bulletFeel', 1) !== 0;
 /* which kinds ask, whether or not the switch above them is on */
 function askMap(what) {
   const def = Object.assign({}, ASK[what]);
@@ -346,6 +348,69 @@ function spentFrom(d, key, row) {
   const p = paidOf(row.text);
   if (!p) return;
   Rec().set('spend', d, 'note-' + key, { amt: p.amt, acct: '', note: p.note || row.text, t: row.t || Date.now() });
+}
+
+/* ══════════════ A LINE'S MOOD ══════════════
+   Moved here from STATUS on 2026-09-25 so BULLET, the page that only writes
+   bullets, asks and files a mood exactly as STATUS does.
+
+   The scale is the Mood field's: it runs lo..max, 3, 5 or 10, and the words
+   are stretched over whatever range that is. His own word for a number wins;
+   the stretched ones fill the rest. */
+const moodField = () => { try { return Rec().get('field', null, 'mood') || null; } catch (e) { return null; } };
+function scaleLo(f) { return f && f.lo != null && isFinite(f.lo) ? Math.round(f.lo) : 1; }
+function scaleHi(f) { const lo = scaleLo(f); return Math.max(lo + 1, Math.min(lo + 10, Math.round((f && f.max) || 5))); }
+function scaleName(f, v) { return (f && f.names && f.names[v]) ? String(f.names[v]) : ''; }
+function scaleWord(f, v) {
+  if (scaleName(f, v)) return scaleName(f, v);
+  const lo = scaleLo(f), hi = scaleHi(f), t = (v - lo) / (hi - lo);
+  return t === 0 ? 'bad' : t === 1 ? 'great' : t < .34 ? 'low' : t > .66 ? 'good' : 'ok';
+}
+/* The five feelings written most in the last 90 days; plain ones until
+   there are any. */
+function topFeels() {
+  const n = {}, from = Day().shift(Day().today(), -90);
+  Rec().all('note', { from: from }).forEach(r => {
+    const f = r.payload && String(r.payload.feel || '').trim().toLowerCase();
+    if (f) n[f] = (n[f] || 0) + 1;
+  });
+  const mine = Object.keys(n).sort((a, b) => n[b] - n[a]);
+  ['good', 'focused', 'calm', 'tired', 'stressed'].forEach(w => { if (mine.indexOf(w) < 0) mine.push(w); });
+  return mine.slice(0, 5);
+}
+
+/* ── a line's mood is a Mood reading too ──
+   Tom, 2026-09-25: "since mood isnt graded letter wise and is more for
+   tracking and looking back on". So a mood on a line also goes into the
+   day's Mood readings, at the line's start, or when it was written. The
+   reading carries the line's key (`n`) and keeps its first time for good:
+   readings are matched on their time, and a removed one leaves a mark that
+   stops the same time coming back (records.js, Lists join), so a reading
+   that moved with its line's start could be lost. Changing the mood changes
+   the number in place; `v` null takes it out. Switched off in BULLETS
+   (`bulletMoodDay`), or with no Mood field on, it writes nothing. */
+function moodToDay(date, key, v, at, wrote) {
+  const f = moodField(), R = Rec();
+  if (!f || !f.on || said('bulletMoodDay', 1) === 0 || !date || !key) return;
+  const row = R.get('ev', date, 'mood') || {};
+  const e = (row.e || []).slice(), gone = row.gone || {};
+  const i = e.findIndex(x => x && x.n === key);
+  if (v == null) {
+    if (i < 0) return;
+    e.splice(i, 1);
+  } else if (i > -1) {
+    if (e[i].v === v) return;
+    e[i] = Object.assign({}, e[i], { v: v });
+  } else {
+    let t = wrote || Date.now();
+    if (at) {
+      const p = date.split('-'), hm = String(at).split(':');
+      t = new Date(+p[0], +p[1] - 1, +p[2], +hm[0], +hm[1] || 0).getTime();
+    }
+    while (e.some(x => x && x.t === t) || gone[t]) t++;
+    e.push({ t: t, v: v, n: key });
+  }
+  if (e.length) R.set('ev', date, 'mood', { e: e }); else R.del('ev', date, 'mood');
 }
 
 /* ══════════════ REPEATS ══════════════
@@ -751,8 +816,10 @@ g.Journal = {
   KINDS: KINDS,
   bare: bare, place: place, onDay: onDay, notes: notes,
   parseLine: parseLine, clockMins: clockMins, minsHM: minsHM, endAt: endAt, spanMins: spanMins,
-  ASK: ASK, timesOn: timesOn, moodOn: moodOn, askMap: askMap, asks: asks, readLine: readLine,
+  ASK: ASK, timesOn: timesOn, moodOn: moodOn, feelOn: feelOn, askMap: askMap, asks: asks, readLine: readLine,
   _said: fn => { saidBy = fn || null; },
+  moodField: moodField, scaleLo: scaleLo, scaleHi: scaleHi, scaleName: scaleName, scaleWord: scaleWord,
+  topFeels: topFeels, moodToDay: moodToDay,
   hhmm: hhmm, clockLabel: clockLabel, durLabel: durLabel,
   publishTimed: publishTimed, publishNotes: publishNotes, add: add, paidOf: paidOf,
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,
