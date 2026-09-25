@@ -655,6 +655,14 @@ session could undo without noticing:
   has Biceps or Triceps, Core when he has Abs (`TRAIN.CAT_ALSO`). An app-made
   copy beside one of his is deleted while it holds no exercise, and kept once
   it holds one.
+- **Movements change group only through the SORT sheet** (1.0.28,
+  `TRAIN.sortDialog`): Calves, Glutes, Hamstrings and Lower Back read off the
+  name by `TRAIN.SORT_RULES`, Glutes before Hamstrings. Every move is a row
+  with a switch, one SORT, UNDO after. Offered once on the exercise list
+  (`train.sortSeen`), always in its More as Sort Into Groups, never on a
+  client's profile. A movement already in one of the four is never offered;
+  one switched off stays off (`train.sortSkip`). Watched on his 270 names:
+  8, 10, 12 and 1, Leg Curl out of Biceps.
 
 (`HISTORY.md: The training screen, four complaints` and the three sections
 after it.)

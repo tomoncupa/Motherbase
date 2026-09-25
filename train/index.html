@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.27, 2026-09-25">
+<meta name="mb-version" content="1.0.28, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -278,6 +278,11 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .prow .dot,.mrow .dot{width:var(--s-2);height:var(--s-2);border-radius:var(--radius-full);flex:0 0 auto;
   background:var(--cat,var(--border-strong))}
 .prow.added .nm{color:var(--text-muted)}
+.sortoffer{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-2) var(--s-3);
+  padding:var(--s-3) var(--s-4);margin-bottom:var(--s-3);background:var(--surface-1);
+  border-radius:var(--radius-md);box-shadow:var(--e-1),var(--rim)}
+.sortoffer .msg{flex:1 1 12em;min-width:0;color:var(--text-2);line-height:var(--lh-body)}
+.sortoffer .mb-btn:first-of-type{margin-left:auto}
 
 /* ══════════ THE TRAINING SCREEN ══════════ */
 .tabs{flex:0 0 auto;display:flex;background:var(--surface-1);box-shadow:var(--rim)}
@@ -1048,6 +1053,77 @@ TRAIN.fillCats = function () {
     made++;
   });
   return made;
+};
+
+/* ── moving his movements into the finer groups ──
+   Tom, 2026-09-25, yes to sorting his exercises into Calves, Glutes,
+   Hamstrings and Lower Back, and never on its own: a sheet lists every move
+   it would make, each one switched on, one SORT, and UNDO after. `fillCats`
+   still moves nothing.
+
+   Read off the name. Glutes is asked before Hamstrings, so a "Leg Curl
+   Machine Hip Thrust" is a hip thrust. A movement already in one of the four
+   is never offered again, so moving one back by hand sticks, and one he
+   switched off in the sheet stays off next time (`train.sortSkip`). A group
+   he deleted is never brought back for this; one that was never made is made
+   on SORT, in its standard colour. */
+TRAIN.SORT_RULES = [
+  ['Calves', /calf|calves/i],
+  ['Glutes', /hip thrust|glute bridge|glute isolator|glute swoop|abduct/i],
+  ['Hamstrings', /leg curl|sldl|romanian|stiff[- ]?leg|glute[- ]?ham|good ?morning/i],
+  ['Lower Back', /hyper ?extension|back extension/i],
+];
+TRAIN.catByWord = function (nm) {
+  var cats = TRAIN.cats(), w = TRAIN.catWord(nm);
+  if (cats[TRAIN.catId(nm)]) return TRAIN.catId(nm);
+  return Object.keys(cats).filter(function (k) { return TRAIN.catWord(cats[k].name) === w; })[0] || null;
+};
+TRAIN.sortProposals = function () {
+  var ex = TRAIN.exercises(), out = [], to = {}, fine = {};
+  TRAIN.SORT_RULES.forEach(function (r) {
+    var k = TRAIN.catByWord(r[0]);
+    to[r[0]] = k || (Rec.tombstone('excat', null, TRAIN.catId(r[0])) ? false : null);
+    if (k) fine[k] = 1;
+  });
+  Object.keys(ex).forEach(function (id) {
+    var e = ex[id];
+    if (fine[e.cat]) return;
+    for (var i = 0; i < TRAIN.SORT_RULES.length; i++) {
+      var g = TRAIN.SORT_RULES[i][0];
+      if (!TRAIN.SORT_RULES[i][1].test(e.name || '')) continue;
+      if (to[g] !== false) out.push({ id: id, name: e.name, from: e.cat, group: g, to: to[g], gi: i });
+      break;
+    }
+  });
+  return out.sort(function (a, b) { return a.gi - b.gi || String(a.name).localeCompare(b.name); });
+};
+TRAIN.sortSkip = function () {
+  var s = Rec.setting(APP.id, 'sortSkip');
+  return s && typeof s === 'object' ? s : {};
+};
+/* Moves the ones switched on, makes any group that is missing, and hands back
+   what it did so UNDO can put every one back. UNDO leaves a group it made:
+   `fillCats` would have made that same group on the next open, and deleting
+   it would leave a tombstone that keeps it away for good. */
+TRAIN.applySort = function (moves) {
+  var cats = TRAIN.cats(), ord = 0, made = {}, done = [];
+  Object.keys(cats).forEach(function (k) { if ((cats[k].ord | 0) > ord) ord = cats[k].ord | 0; });
+  moves.forEach(function (m) {
+    var to = m.to;
+    if (!to) {
+      to = TRAIN.catId(m.group);
+      if (!made[to] && !TRAIN.cats()[to]) {
+        Rec.set('excat', null, to, { name: m.group, slot: TRAIN.DEFAULT_CATS.indexOf(m.group), ord: ++ord });
+        made[to] = 1;
+      }
+    }
+    TRAIN.patchExercise(m.id, { cat: to });
+    done.push({ id: m.id, from: m.from });
+  });
+  return { moved: done, made: Object.keys(made) };
+};
+TRAIN.undoSort = function (did) {
+  did.moved.forEach(function (m) { TRAIN.patchExercise(m.id, { cat: m.from }); });
 };
 
 TRAIN.seedId = function (name) {
@@ -2750,6 +2826,12 @@ function drawList(host, q, cats, exs) {
   /* No search and no group chosen: favourites if there are any, then the
      groups, in his order or alphabetically. */
   if (!q && !TRAIN.picking) {
+    /* Offered here once; after that it lives in More. Not on a client's
+       profile, where the groups are theirs to keep. */
+    if (!CLIENT && !TRAIN.pickInto && Rec.setting(APP.id, 'sortSeen') !== 1) {
+      var skip = TRAIN.sortSkip(), props = TRAIN.sortProposals().filter(function (p) { return !skip[p.id]; });
+      if (props.length) host.appendChild(sortOffer(props));
+    }
     var favs = Object.keys(exs).filter(function (id) { return exs[id].fav; });
     if (favs.length) list.appendChild(catRow('*fav', 'Favourites', null, favs.length));
     TRAIN.catsSorted().forEach(function (k) {
@@ -2809,6 +2891,27 @@ function drawList(host, q, cats, exs) {
     list.appendChild(row);
   });
   host.appendChild(list);
+}
+
+function sortOffer(props) {
+  var groups = [];
+  props.forEach(function (p) { if (groups.indexOf(p.group) < 0) groups.push(p.group); });
+  var said = groups.length > 1 ? groups.slice(0, -1).join(', ') + ' or ' + groups[groups.length - 1] : groups[0];
+  var box = UI.el('div', 'sortoffer');
+  var msg = UI.el('div', 'msg');
+  msg.textContent = props.length + (props.length === 1 ? ' exercise fits ' : ' exercises fit ') + said + '.';
+  var no = UI.el('button', 'mb-btn mb-press mb-tap');
+  no.type = 'button'; no.textContent = 'NOT NOW';
+  no.onclick = function () {
+    Rec.setting(APP.id, 'sortSeen', 1);
+    draw();
+    UI.toast('Kept in More, Sort Into Groups');
+  };
+  var yes = UI.el('button', 'mb-btn go mb-press mb-tap');
+  yes.type = 'button'; yes.textContent = 'REVIEW';
+  yes.onclick = function () { TRAIN.sortDialog(); };
+  box.appendChild(msg); box.appendChild(no); box.appendChild(yes);
+  return box;
 }
 
 function catRow(k, name, slot, n) {
@@ -5604,6 +5707,56 @@ TRAIN.categoriesDialog = function () {
   });
 };
 
+/* The sheet that asks before any movement changes group. Every proposal is
+   a row with a switch, grouped under where it would go, and the switches
+   start on except for the ones he turned off last time. */
+TRAIN.sortDialog = function () {
+  Rec.setting(APP.id, 'sortSeen', 1);
+  var props = TRAIN.sortProposals(), skip = TRAIN.sortSkip(), cats = TRAIN.cats();
+  if (!props.length) { UI.toast('Nothing to sort'); draw(); return; }
+  var on = {};
+  props.forEach(function (p) { on[p.id] = !skip[p.id]; });
+  UI.dialog({
+    title: 'SORT INTO GROUPS', width: 460,
+    body: function (b) {
+      var note = UI.el('div', 'empty');
+      note.style.marginBottom = 'var(--s-3)';
+      note.textContent = 'Each one moves to the group it is under. Past sets move with it.';
+      b.appendChild(note);
+      var last = null;
+      props.forEach(function (p) {
+        if (p.group !== last) {
+          last = p.group;
+          var n = props.filter(function (x) { return x.group === p.group; }).length;
+          var h = UI.el('div', 'mb-group');
+          h.textContent = (p.to ? cats[p.to].name : p.group + ', new group').toUpperCase() + ' · ' + n;
+          b.appendChild(h);
+        }
+        var from = cats[p.from];
+        b.appendChild(UI.row(p.name, from ? 'Now in ' + UI.esc(from.name) : 'In no group',
+          UI.toggle(on[p.id], function (v) { on[p.id] = v; })));
+      });
+    },
+    actions: [
+      { label: 'CANCEL' },
+      { label: 'SORT', kind: 'go', fn: function () {
+        var go = props.filter(function (p) { return on[p.id]; });
+        var sk = TRAIN.sortSkip(), was = JSON.parse(JSON.stringify(sk));
+        props.forEach(function (p) { if (on[p.id]) delete sk[p.id]; else sk[p.id] = 1; });
+        Rec.setting(APP.id, 'sortSkip', sk);
+        if (!go.length) { draw(); return; }
+        var did = TRAIN.applySort(go);
+        draw();
+        UI.undo(go.length + (go.length === 1 ? ' exercise' : ' exercises') + ' sorted', function () {
+          TRAIN.undoSort(did);
+          Rec.setting(APP.id, 'sortSkip', was);
+          draw();
+        });
+      } },
+    ],
+  });
+};
+
 /* ═══════════════ ONE EXERCISE WITHIN A DAY ═══════════════ */
 
 TRAIN.dayExerciseMenu = function (exId, e) {
@@ -8115,6 +8268,7 @@ document.getElementById('moreBtn').onclick = function (e) {
       { label: 'Create New Exercise', fn: function () { TRAIN.exerciseDialog(null, (TRAIN.query || '').trim()); } },
       { label: 'Add New Category', fn: function () { TRAIN.categoryDialog(null); } },
       { label: 'Edit Categories', fn: function () { TRAIN.categoriesDialog(); } },
+      { label: 'Sort Into Groups', fn: function () { TRAIN.sortDialog(); } },
       { label: sorted ? 'Sort Alphabetically' : 'Sort By Last Used', fn: function () {
         Rec.setting(APP.id, 'exSort', sorted ? 'alpha' : 'recent'); draw();
       } },
