@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.31, 2026-09-25">
+<meta name="mb-version" content="1.0.32, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2359,6 +2359,7 @@ function drawChrome() {
     title = ex ? ex.name : 'Exercise';
   } else if (scr === 'picker') {
     if (TRAIN.pickInto && TRAIN.pickInto.replace) title = 'Replace Exercise';
+    else if (TRAIN.pickInto && TRAIN.pickInto.slot) title = 'Any ' + (TRAIN.pickInto.label || 'Exercise');
     else if (TRAIN.pickInto && TRAIN.pickInto.day) title = 'Add Exercise';
     else if (TRAIN.picking === '*fav') title = 'Favourites';
     else { var c = TRAIN.picking ? TRAIN.cats()[TRAIN.picking] : null; title = c ? c.name : 'All Exercises'; }
@@ -2945,6 +2946,20 @@ function catRow(k, name, slot, n) {
 function pickExercise(id, e) {
   Mobile.feedback('select');
   var into = TRAIN.pickInto;
+  if (into && into.slot) {
+    TRAIN.pickInto = null;
+    /* one pick fills the slot in every week of the program: FORGE gives a
+       slot the same id in each week, and the client chose it once */
+    var me = Rec.get('progex', null, into.slot) || {}, fk = me.slot && me.slot.fk, src = String(into.slot).replace(/-\d+-\d+$/, '-');
+    Rec.patch('progex', null, into.slot, { ex: id });
+    if (fk) Rec.all('progex').forEach(function (r) {
+      var v = r.payload || {};
+      if (r.key !== into.slot && r.key.indexOf(src) === 0 && v.slot && v.slot.fk === fk && !v.ex) Rec.patch('progex', null, r.key, { ex: id });
+    });
+    TRAIN.show('routines');
+    UI.toast(UI.esc(e.name) + ' is your ' + UI.esc(into.label || 'pick'));
+    return;
+  }
   if (into && into.day) {
     Rec.set('progex', null, TRAIN.newId(), {
       day: into.day, ex: id, ord: TRAIN.exercisesOf(into.day).length, fill: 1, sets: [],
@@ -3132,6 +3147,14 @@ function drawTrack(m) {
         return lastBit(s, f) + (s.split ? ' (' + UI.esc(s.split.text) + ')' : '');
       }).join(', ') + '</div>';
     m.appendChild(card);
+  }
+  /* The coach's target, when this was started from a routine a coach sent:
+     the same faded line, under last time. Stated, never checked against. */
+  var coachSays = TRAIN.planFor(date, exId);
+  if (coachSays) {
+    var pl = UI.el('div', 'lastline');
+    pl.innerHTML = '<div class="lasttime">Coach · ' + UI.esc(coachSays) + '</div>';
+    m.appendChild(pl);
   }
   /* Setup lives in each set's comment box now, the way FitNotes keeps
      everything that is not a number. Tom, 2026-09-22: "put our extra input
@@ -4983,7 +5006,24 @@ function drawOneProgram(m, progId) {
     items.forEach(function (it) {
       var ex = exs[it.x.ex];
       var fill = it.x.fill | 0;
-      var sub = fill === 2 ? ((it.x.sets || []).length + ' sets') : fill === 1 ? 'previous sets' : '';
+      /* an open slot nobody has picked for yet: its pattern, and a tap
+         opens the list to pick one, narrowed to its muscle group when it
+         names one */
+      if (!ex && it.x.slot) {
+        var srow = UI.el('div', 'prow');
+        var smain = UI.el('button', 'pmain mb-press');
+        var ssub = TRAIN.planText(it.x.plan, (it.x.sets || [])[0]);
+        smain.innerHTML = '<span class="nm"><i>Any ' + UI.esc(it.x.slot.label) + '</i></span>' +
+          '<span class="sub">' + UI.esc((ssub ? ssub + ' · ' : '') + 'tap to pick') + '</span>';
+        smain.onclick = function () { TRAIN.pickForSlot(d.key, it.key); };
+        withMenu(smain, function (ev) { TRAIN.progexMenu(d.key, it.key, ev); });
+        srow.appendChild(smain);
+        srow.appendChild(rowMenuBtn('Options for any ' + it.x.slot.label, function (ev) { TRAIN.progexMenu(d.key, it.key, ev); }));
+        box.appendChild(srow);
+        return;
+      }
+      var sub = it.x.plan ? TRAIN.planText(it.x.plan, (it.x.sets || [])[0])
+        : fill === 2 ? ((it.x.sets || []).length + ' sets') : fill === 1 ? 'previous sets' : '';
       var row = UI.el('div', 'prow');
       row.dataset.key = it.key;
       var main = UI.el('button', 'pmain mb-press');
@@ -5036,8 +5076,41 @@ function drawOneProgram(m, progId) {
 }
 
 /* Put every exercise of a routine day into today, ready to be filled in. */
+/* The coach's target for what is being logged today, remembered when it is
+   started from a routine, so the training screen can show it beside last
+   time. One setting, today's only, and a client profile opened from COACH
+   keeps its own so it never shows on Tom's. */
+TRAIN.planKey = function () { return CLIENT ? 'coachPlan.' + CLIENT : 'coachPlan'; };
+TRAIN.rememberPlan = function (date, items) {
+  var cur = Rec.setting(APP.id, TRAIN.planKey());
+  var ex = cur && cur.date === date ? cur.ex || {} : {}, any = false;
+  items.forEach(function (px) {
+    if (!px || !px.plan) return;
+    ex[px.ex] = TRAIN.planText(px.plan, (px.sets || [])[0]);
+    any = true;
+  });
+  if (any) Rec.setting(APP.id, TRAIN.planKey(), { date: date, ex: ex });
+};
+TRAIN.planFor = function (date, exId) {
+  var cur = Rec.setting(APP.id, TRAIN.planKey());
+  return cur && cur.date === date && cur.ex ? cur.ex[exId] || '' : '';
+};
+TRAIN.pickForSlot = function (dayKey, key) {
+  var px = Rec.get('progex', null, key);
+  if (!px || !px.slot) return;
+  var cat = null, cats = TRAIN.cats();
+  if (px.slot.mus) Object.keys(cats).forEach(function (k) {
+    if (String(cats[k].name || '').toLowerCase() === String(px.slot.mus).toLowerCase()) cat = k;
+  });
+  TRAIN.pickInto = { day: dayKey, slot: key, label: px.slot.label };
+  TRAIN.query = '';
+  TRAIN.show('picker', { cat: cat });
+};
 TRAIN.startProgramDay = function (dayKey) {
-  var items = TRAIN.exercisesOf(dayKey), date = TRAIN.date, order = [], made = 0;
+  /* an open slot with nothing picked is left out: there is no exercise to
+     fill in yet, and it stays on the routine to be picked */
+  var items = TRAIN.exercisesOf(dayKey).filter(function (it) { return !!it.x.ex; }), date = TRAIN.date, order = [], made = 0;
+  TRAIN.rememberPlan(date, items.map(function (it) { return it.x; }));
   var have = {};
   TRAIN.setsOn(date).forEach(function (s) { have[s.ex] = 1; });
   items.forEach(function (it) {
@@ -6661,6 +6734,7 @@ TRAIN.logFromRoutine = function (key) {
   var px = Rec.get('progex', null, key);
   if (!px) return;
   var date = TRAIN.date;
+  TRAIN.rememberPlan(date, [px]);
   var have = TRAIN.setsOn(date).some(function (s) { return s.ex === px.ex; });
   var made = have ? 0 : writeFilled(px.ex, date, TRAIN.fillFor(px, date, false));
   if (made) { TRAIN.reindex(); TRAIN.assertTick(date); }
@@ -6767,11 +6841,36 @@ TRAIN.openProgram = function () {
     if (!f) return;
     f.text().then(function (t) {
       var n = TRAIN.takeProgram(JSON.parse(t));
-      UI.toast('<b>' + UI.esc(n.name) + '</b> is in Training Routines, ' + n.ex + ' exercises');
+      UI.toast('<b>' + UI.esc(n.name) + '</b> is in Training Routines' + (n.weeks > 1 ? ', one per week for ' + n.weeks + ' weeks' : ', ' + n.ex + ' exercises'));
       TRAIN.show('routines');
     }).catch(function (e) { UI.toast(UI.esc((e && e.message) || 'That file could not be read'), { bad: true }); });
   };
   inp.click();
+};
+/* A program built in FORGE has weeks: each day in the file says which week
+   it is in (`wk`) and its plain name (`day`). Each week becomes a routine of
+   its own, "Hypertrophy · Week 2", so a client opens the week they are in
+   and sees three or four days rather than sixteen. A file with no weeks, or
+   one week, is one routine exactly as before.
+
+   Beside each exercise may ride the coach's target: `n` sets, `rir`, `rest`
+   in seconds and a `note`. It is kept on the routine entry as `plan` and
+   shown, never logged: still only the FIRST set is filled in (Tom,
+   2026-09-22, kept 2026-09-24). A new exercise takes the rest as its rest
+   timer; one the client already has keeps their own. */
+/* The rep range and its bands are Tom's Algrowrithm: reps travel down the
+   range across the sets (8-15 over three is 13-15, 10-13, 8-10) and the
+   load goes up from how the set before went, so only a range is ever sent,
+   never a count for set two onwards. */
+TRAIN.planText = function (plan, first) {
+  if (!plan) return '';
+  var b = [], r = plan.reps != null ? plan.reps : first && first.r != null ? first.r : null;
+  if (plan.n != null || r != null) b.push((plan.n != null ? plan.n + ' × ' : '') + (r != null ? r : '?'));
+  if (plan.bands) b.push(plan.bands);
+  if (plan.rir != null) b.push('RIR ' + plan.rir);
+  if (plan.rest != null) b.push(Math.floor(plan.rest / 60) + ':' + ('0' + (plan.rest % 60)).slice(-2) + ' rest');
+  if (plan.note) b.push(plan.note);
+  return b.join(' · ');
 };
 TRAIN.takeProgram = function (bag) {
   if (!bag || bag.kind !== 'motherbase-program' || !bag.id || !Array.isArray(bag.days)) {
@@ -6780,39 +6879,95 @@ TRAIN.takeProgram = function (bag) {
   var src = String(bag.id).replace(/[^a-z0-9-]/gi, '');
   var exs = TRAIN.exercises(), byName = {};
   Object.keys(exs).forEach(function (k) { byName[String(exs[k].name || '').trim().toLowerCase()] = k; });
-  var keepDays = {}, keepEx = {}, count = 0;
-  Rec.set('program', null, 'prog-' + src, { name: bag.name || 'Program', ord: -1, from: bag.from || '' });
+  var keepDays = {}, keepEx = {}, keepProg = {}, count = 0;
+  var weeks = 1;
+  bag.days.forEach(function (d) { if ((d.wk | 0) > weeks) weeks = d.wk | 0; });
+  var progOf = function (w) { return weeks > 1 ? 'prog-' + src + '-w' + w : 'prog-' + src; };
+  for (var w = 1; w <= weeks; w++) {
+    keepProg[progOf(w)] = 1;
+    Rec.set('program', null, progOf(w), { name: (bag.name || 'Program') + (weeks > 1 ? ' · Week ' + w : ''),
+      ord: weeks > 1 ? -1 + w / 1000 : -1, from: bag.from || '' });
+  }
+  /* what the client already picked for each open slot, by the slot's own
+     id from FORGE, which is the same in every week of the program */
+  var picked = {};
+  Rec.all('progex').forEach(function (r) {
+    var v = r.payload || {};
+    if (r.key.indexOf('pex-' + src + '-') === 0 && v.slot && v.slot.fk && v.ex) picked[v.slot.fk] = v.ex;
+  });
+  var nth = {};
   bag.days.forEach(function (d, i) {
-    var dk = 'pday-' + src + '-' + i;
+    var dk = 'pday-' + src + '-' + i, w = Math.max(1, d.wk | 0);
     keepDays[dk] = 1;
-    Rec.set('progday', null, dk, { program: 'prog-' + src, name: d.name || ('Day ' + (i + 1)), ord: i });
+    nth[w] = (nth[w] || 0) + 1;
+    Rec.set('progday', null, dk, { program: progOf(w), name: (weeks > 1 ? d.day : d.name) || d.name || ('Day ' + nth[w]), ord: i });
     (d.ex || []).forEach(function (x, j) {
       var nm = String(x.name || '').trim();
-      if (!nm) return;
+      var xk = 'pex-' + src + '-' + i + '-' + j;
+      var plan = {};
+      if (x.n != null) plan.n = +x.n;
+      if (x.reps != null) plan.reps = String(x.reps);
+      if (x.bands) plan.bands = String(x.bands);
+      if (x.rir != null) plan.rir = String(x.rir);
+      if (x.rest != null) plan.rest = +x.rest;
+      if (x.note) plan.note = String(x.note);
+      /* An open slot: the coach asked for a movement pattern or a muscle
+         group, "any Horizontal Push", and left the exercise to the client.
+         It is kept with no exercise and picked here, from the routine; a
+         pick survives the coach sending the program again, as long as the
+         slot still asks for the same thing. */
+      if (!nm) {
+        if (!x.slot || !x.slot.label) return;
+        var prev = Rec.get('progex', null, xk);
+        var keep = (x.fk && picked[x.fk]) || (prev && prev.slot && prev.slot.label === x.slot.label && prev.ex ? prev.ex : null);
+        keepEx[xk] = 1;
+        var sp = { day: dk, ex: keep, ord: j, fill: x.sets && x.sets.length ? 3 : 1,
+          slot: { label: String(x.slot.label), pat: x.slot.pat || null, mus: x.slot.mus || null, fk: x.fk || null },
+          sets: (x.sets || []).slice(0, 1).map(function (s) {
+            return { kg: s.kg == null ? null : +s.kg, r: s.r == null ? null : +s.r, u: TRAIN.unit() };
+          }) };
+        if (Object.keys(plan).length) sp.plan = plan;
+        Rec.set('progex', null, xk, sp);
+        count++;
+        return;
+      }
       var id = byName[nm.toLowerCase()];
       if (!id) {
         id = TRAIN.seedId(nm);
         var cats = TRAIN.cats(), cat = String(x.cat || '').toLowerCase();
+        /* a muscle group this phone already has is used as it is: addCat
+           would write it again and move its colour and its place */
+        if (!cats[cat] && x.catName) {
+          Object.keys(cats).forEach(function (k) {
+            if (String(cats[k].name || '').toLowerCase() === String(x.catName).toLowerCase()) cat = k;
+          });
+        }
         if (!cats[cat]) cat = TRAIN.addCat(x.catName || 'Other') || Object.keys(cats)[0];
-        Rec.set('exercise', null, id, { name: nm, cat: cat, kind: x.kind | 0, inc: 2.5, rest: 0, unit: 0,
+        Rec.set('exercise', null, id, { name: nm, cat: cat, kind: x.kind | 0, inc: 2.5, rest: x.rest > 0 ? x.rest | 0 : 0, unit: 0,
           fav: 0, note: '', graph: 0, ord: 999 });
         byName[nm.toLowerCase()] = id;
       }
-      var xk = 'pex-' + src + '-' + i + '-' + j;
       keepEx[xk] = 1;
-      Rec.set('progex', null, xk, { day: dk, ex: id, ord: j, fill: x.sets && x.sets.length ? 3 : 1,
+      var px = { day: dk, ex: id, ord: j, fill: x.sets && x.sets.length ? 3 : 1,
         sets: (x.sets || []).slice(0, 1).map(function (s) {
           return { kg: s.kg == null ? null : +s.kg, r: s.r == null ? null : +s.r, u: TRAIN.unit() };
-        }) });
+        }) };
+      if (Object.keys(plan).length) px.plan = plan;
+      Rec.set('progex', null, xk, px);
       count++;
     });
+  });
+  /* the same program sent before with more weeks, or before it had weeks */
+  Rec.all('program').forEach(function (r) {
+    var k = r.key, base = 'prog-' + src;
+    if ((k === base || k.indexOf(base + '-w') === 0) && !keepProg[k]) Rec.del('program', null, k);
   });
   /* an updated program that dropped a day or an exercise drops it here too */
   Rec.all('progday').forEach(function (r) { if (r.key.indexOf('pday-' + src + '-') === 0 && !keepDays[r.key]) Rec.del('progday', null, r.key); });
   Rec.all('progex').forEach(function (r) { if (r.key.indexOf('pex-' + src + '-') === 0 && !keepEx[r.key]) Rec.del('progex', null, r.key); });
   TRAIN._exC = null;
   TRAIN.reindex();
-  return { name: bag.name || 'Program', ex: count };
+  return { name: bag.name || 'Program', ex: count, weeks: weeks };
 };
 
 TRAIN.progexDialog = function (key) {

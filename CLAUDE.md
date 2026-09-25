@@ -96,10 +96,11 @@ Do not break these. Ask first if you think one needs to change.
    Not just "does not break" there.
 
    **Everything else is a desktop app**: the home screen, ARC, BLOCK, FORM,
-   FOODDÉX, LOG, WEALTH and STYLE.
+   FOODDÉX, LOG, WEALTH, STYLE and FORGE.
 
    **ARC, BLOCK and STYLE are desktop only.** Tom, 2026-09-14: they are not
-   meant to work on a phone. Do not spend work making them stack or fit a
+   meant to work on a phone. FORGE, built 2026-09-24 to work like BLOCK, is
+   desktop only too. Do not spend work making them stack or fit a
    thumb, and a phone-width failure in one of them is not a bug. They are used sitting down, with a mouse, to plan,
    build, review and compare. Hover is allowed, density can be tighter, dialogs
    may sit in the middle of the screen rather than rising from the bottom, and
@@ -280,6 +281,11 @@ An app may read any type. It writes only the types it owns.
 | `cset` `cex` `cphase` `csession` | **coach** | `pid\|` + the key the row had in the client's TRAIN; dated as it was | a client's set, exercise, block and day, exactly as their TRAIN wrote it, merged with its own updated_at so a second file only adds what is new |
 | `cexcat` `csgroup` `cgoal` `cprogram` `cprogday` `cprogex` | **coach**; **train** writes all of these and the four above when opened as `train/index.html?client=<pid>` | the same | the rest of a client's TRAIN. That address points TRAIN's store at the client (the top of `train/index.html`), so COACH's LOG A SESSION is the real TRAIN on their rows. A set Tom logs there is keyed `pid\|k-...` and bills in WEALTH like one from the old quick logger |
 | `cprog` | **coach** | `c-<pid>` for a client's first sets, an id for a library program | `{name, pid, days:[{name, ex:[{name, sets:[{kg, r}]}]}]}` — one row per program, because a program is written, sent and sold as one piece. Only the first set of each exercise is sent. `cperson` gains `box` and `slot` from COACH, by patch |
+| `cprog` from FORGE | **forge** writes `f-<id>` (`src: 'forge'`), republished on every change, and a client's `c-<pid>` on SEND | the same | the flattened program: a day per week per day, each with `wk` and its plain `day` name; beside each exercise set one's load only (`r: null`), `n`, `reps` (a range), `bands`, `rir` (`0-3` when blank), `rest` in seconds, `note` and `catName` — Tom's Algrowrithm, see `forge/CLAUDE.md`. An open slot carries `name: ''` and `slot: {kind, pat, mus, label}`, and every entry `fk`, its plate key; a client's `c-` row also keeps `fills`, what was picked for each slot. COACH shows an `f-` row and never edits it |
+| `fprog` | **forge** | program id | `{name, weeks, ord}` — a program FORGE builds |
+| `ftag` | **forge** | exercise name, lowercase | `{name, pat, mus}` — an exercise's movement pattern and the muscles it works, FORGE's own so TRAIN's `exercise` is untouched. No tag: the pattern is guessed from the name and drawn with a "?" |
+| `fday` | **forge** | `prog\|day id` | `{name, ord}` — one day, in every week of its program |
+| `fex` | **forge** | `prog\|slot id` | `{day, name, cat, ord, n, r, kg, rir, rest, note, wk, slot, pat, mus}` — one exercise in one day, or an open slot (`slot: 'pat'` or `'mus'`, `name` empty) filled per client at SEND. `r` is a rep range as text (`"8-15"`), `rir` a number or range (blank reads `0-3`). `n` `r` `kg` `rir` are week one's; `wk[w]` holds only what week `w` changes, and anything it does not say is the week before's. No weekly load step: load rises from set one on the day |
 | `brief` | **the daemon on the PC**; **quest** reads it and never writes it | `''`, dated the day it is for | `{text, todo, t, src}` — Claude's morning brief for that day, added 2026-09-22. `text` is plain lines, `# ` a heading and `- ` a point; `todo` a list of action items, each a string or `{text}`. QUESTS shows it as a foldable card at the top of Today and turns each item into a todo keyed `brief-<date>-<n>`, `src: 'brief'`, due that day, written once, so a deleted one stays deleted. How the row reaches the store is the daemon's business |
 | `feat` | **sheet** | the feat's own id, undated | `{t, date, saved}` — this feat's window was shown (and when its picture was saved). The feats themselves are worked out from TRAIN and STATUS rows every open and never stored |
 | `msg` | **system** (NOTICE) | id, dated | `{text, kind, style, seed, t}` — one status window that was saved or copied: the text as typed, notice or quest, the window style, and the reroll count its pseudo rewards were drawn with. The draft being typed and every choice on screen are settings, not rows |
@@ -769,6 +775,13 @@ answer, or take it out.
   so a row full of 44px-tall icon buttons can come down to a 32px drawing and
   measure 44x44 to a thumb. TRAIN's set rows went from 61px to 44 that way. Check
   the computed `::after`, not the button.
+- **A sheet opened from another sheet's button walks history off the page.**
+  Closing a sheet queues a `history.back()` that lands a moment later; a
+  sheet opened in the same tick pushes its entry first, the late step takes
+  it, and closing the second sheet then steps back to the page before the
+  app. FORGE's SEND → fill list did exactly this (2026-09-25). Open the
+  second sheet after the `popstate` lands: FORGE's `afterSheet` does it. The
+  real fix belongs in `mobile.js`'s `trap`, for a foundation session.
 - **`Rec.all` hands rows back in no order**, and a payload's `ord` usually
   numbers a row inside its own group, so it cannot order the groups. A list
   that must read back in the order it was entered sorts on the row KEY, which
@@ -827,6 +840,7 @@ own brief since 2026-09-22.
 | `system/` | NOTICE, status window pictures. Tom only. Brief: `system/CLAUDE.md`. |
 | `mix/` | ELEMENT, the electrolyte bench. Tom only. Brief: `mix/CLAUDE.md`. |
 | `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
+| `forge/` | FORGE, the program builder. Weeks of days of exercises, sent through COACH to TRAIN. Tom only, desktop only. Brief: `forge/CLAUDE.md`. |
 | `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
 | `sheet/` | CHARACTER SHEET. Feats from TRAIN and STATUS as NOTICE windows, with a history; the pixel character is paused. Held out of the client build for now. Brief: `sheet/CLAUDE.md`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
@@ -945,5 +959,5 @@ Then: `py -3 tools/build-client.py`, commit the generated folder with what
 changed and why, and push. Nothing in that folder is ever edited by hand.
 
 A change clients cannot see is one to an app they do not have (`wealth/`,
-`arc/`, `speak/`, `system/`, `form/`, `portion/`), to `tools/`, to
+`arc/`, `speak/`, `system/`, `form/`, `portion/`, `coach/`, `forge/`), to `tools/`, to
 `desktop/`, or to a brief. Those need no rebuild. Building it is fine.

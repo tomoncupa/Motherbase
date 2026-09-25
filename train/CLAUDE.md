@@ -681,6 +681,52 @@ after it.)
   Tom: *"a short sound when you save a set that's a new record, and silence
   otherwise."*
 
+## A program in weeks, and the coach's target (FORGE branch 1.0.21-1.0.22, on main as TRAIN 1.0.32, 2026-09-25)
+
+FORGE (`forge/CLAUDE.md`) builds programs in weeks and sends them through
+COACH's file. `takeProgram` reads the new fields and still accepts every older file.
+
+- **One routine per week.** A file whose days carry `wk` above 1 becomes
+  `prog-<id>-w1`, `-w2` and so on, named `<program> · Week N`, with each day
+  under its plain `day` name. A file with one week, or none, is one routine,
+  `prog-<id>`, exactly as before. A resend deletes the weeks it no longer has,
+  and the single routine it used to be.
+- **The target is `progex.plan`**: `{n, reps, bands, rir, rest, note}` when
+  the file sends them. The routine list shows it as `3 × 8-15 · 13-15 ·
+  10-13 · 8-10 · RIR 0-3 · 3:00 rest · cue` in place of "previous sets". It
+  is never logged. Set one is still the only set filled (`fillFor`, fill 3),
+  and from FORGE only its load: its reps come from last time. That is Tom's
+  Algrowrithm, the reason set two onwards are never prescribed
+  (`forge/CLAUDE.md`). `reps`, `bands` and a text `rir` came in 1.0.22.
+- **The training screen shows it** as a faded `Coach · …` line under last
+  time, when the exercise was started from that routine today (LOG ALL or a
+  tap). It is remembered in one setting, `coachPlan`, today's only. On a
+  client's profile it is `coachPlan.<pid>`, so a plan Tom opens for a client
+  never shows on his own TRAIN.
+- **A new exercise takes the rest as its rest timer.** One the client already
+  has keeps their own rest.
+
+## Open slots, and a muscle group left alone (FORGE branch 1.0.23, on main as TRAIN 1.0.32, 2026-09-25)
+
+FORGE can send a slot instead of an exercise: "any Horizontal Push", "any
+Chest" (`forge/CLAUDE.md`, Movement patterns). `takeProgram` keeps one as a
+`progex` with `ex: null` and `slot: {label, pat, mus, fk}`.
+
+- **The routine shows it as "Any Chest … tap to pick".** A tap opens the
+  exercise list titled with the slot, narrowed to the muscle group when the
+  slot names one (`TRAIN.pickForSlot`). The pick is patched onto the entry.
+- **One pick fills the slot in every week.** `fk` is FORGE's plate key, the
+  same in each week's routine, so every unpicked entry with that `fk` in the
+  same program takes it too.
+- **A pick survives the coach sending again**: `takeProgram` reads what was
+  picked per `fk` before it rewrites the routine.
+- **LOG ALL leaves an unpicked slot out**, and it stays on the routine.
+- **A new exercise from a program reuses a muscle group by NAME.** It used to
+  call `addCat` when the file's category id was not on this phone, which
+  wrote the existing group again with a new colour and place. FORGE sends
+  `catName` on every exercise, so this would have happened on almost every
+  program. Watched: the client's Chest row byte for byte the same after.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the

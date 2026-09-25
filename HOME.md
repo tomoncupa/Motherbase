@@ -21,3 +21,7 @@ Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab 
 Tom: "Rather than resize my widgets when I resize my window, I just want more space to work with." One cell is now a fixed size, the setting `lifeos.cell`, captured once from what the stretched board gave at the window open that day (clamped 100-200px wide, 72-140px tall). The window only sets how many columns there are (`COLS`, never fewer than the cards use): wider adds empty columns on the right, a narrower window scrolls sideways instead of moving cards. Everything that said 12 now reads `COLS`. Phone unchanged. To change the cell size, delete or edit `lifeos.cell`.
 
 BODY HEATMAP ("Widget - Body Training Heatmap"): TRAIN's working sets over 7, 14 or 30 days on a front and back figure, brighter for more sets, with a ranked list. Counted like TRAIN's WEEKLY (warmups out, today's sets once done, `exercise.also` shares). Muscle-group names are read onto the body by `BODY_RULES`; an unreadable group other than cardio is listed as "Not on the body". `setIsWarm` copies `TRAIN.noteWarm`: change both.
+
+## 2026-09-25, HOME 1.0.33: FORGE in the roster
+
+FORGE, the program builder (`forge/CLAUDE.md`), is in `APPS` after COACH (built as 1.0.32 on its branch; SHEET took 1.0.32 on main first), flagged `mine`. It sits behind the dock's line with Tom's other apps, and the client build's `DROP_APPS` removes it.

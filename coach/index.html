@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.9, 2026-09-24">
+<meta name="mb-version" content="1.0.12, 2026-09-25">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1047,11 +1047,62 @@ function saveProg(key, days, name) {
   if (cur) Rec.patch('cprog', null, key, name == null ? { days: days } : { days: days, name: name });
   else Rec.set('cprog', null, key, { name: name || 'Program', pid: key.indexOf('c-') === 0 ? key.slice(2) : null, days: days });
 }
+/* A program FORGE built carries more than first sets: the week and plain
+   name of each day, and beside each exercise its set count, RIR target,
+   rest and note, and its rep range and the Algrowrithm's bands for it
+   (`reps` 8-15, `bands` 13-15 · 10-13 · 8-10). They ride the file as they
+   are, so TRAIN can make one routine per week and show the target. Still
+   only the FIRST set travels as a set, and from FORGE only its load (Tom,
+   2026-09-22, kept 2026-09-24: set two onwards follow from set one). */
+const PLAN = ['catName', 'n', 'reps', 'bands', 'rir', 'rest', 'note', 'slot'];
+/* an open slot FORGE left for the client: no exercise, a movement pattern
+   or muscle group asked for instead */
+const exLabel = x => x.name || (x.slot && x.slot.label ? 'Any ' + x.slot.label : '');
 function fileOf(key) {
   const p = Rec.get('cprog', null, key);
-  return { kind: 'motherbase-program', v: 1, id: key, name: p.name || 'Program', from: opt('me', 'Coach'), at: new Date().toISOString(),
-    days: (p.days || []).map(d => ({ name: d.name, ex: (d.ex || []).filter(x => x.name).map(x => ({
-      name: x.name, sets: (x.sets || []).slice(0, 1).filter(s => s.kg != null || s.r != null).map(s => ({ kg: s.kg, r: s.r })) })) })) };
+  const days = (p.days || []).map(d => {
+    const o = { name: d.name, ex: (d.ex || []).filter(x => x.name || x.slot).map(x => {
+      const e = { name: x.name, sets: (x.sets || []).slice(0, 1).filter(s => s.kg != null || s.r != null).map(s => ({ kg: s.kg, r: s.r })) };
+      PLAN.forEach(f => { if (x[f] != null && x[f] !== '') e[f] = x[f]; });
+      return e;
+    }) };
+    if (d.wk) { o.wk = d.wk; o.day = d.day || d.name; }
+    return o;
+  });
+  const multi = days.some(d => d.wk > 1);
+  return { kind: 'motherbase-program', v: multi ? 2 : 1, id: key, name: p.name || 'Program', weeks: multi ? p.weeks : undefined,
+    from: opt('me', 'Coach'), at: new Date().toISOString(), days: days };
+}
+const FORGE = '../forge/index.html';
+const isForge = (k, v) => !!v && v.src === 'forge' && String(k).indexOf('f-') === 0;
+/* One line for an exercise FORGE planned: 3 × 8-15 · 60 kg · RIR 0-3 · 2:00 */
+function planLine(x) {
+  const s = (x.sets || [])[0] || {}, bits = [], r = x.reps != null ? x.reps : s.r;
+  if (x.n != null || r != null) bits.push((x.n != null ? x.n + ' × ' : '') + (r != null ? r : '?'));
+  if (s.kg != null) bits.push(show(s.kg) + ' ' + unit());
+  if (x.rir != null) bits.push('RIR ' + x.rir);
+  if (x.rest != null) bits.push(Math.floor(x.rest / 60) + ':' + String(x.rest % 60).padStart(2, '0') + ' rest');
+  return bits.join(' · ');
+}
+/* A FORGE program is edited in FORGE. Here it is shown, sent and put on a
+   client, and never edited: FORGE publishes it again on every change, so an
+   edit made here would be written over the next time Tom touched it there. */
+function forgeView(el, key) {
+  const p = Rec.get('cprog', null, key) || {};
+  const weeks = p.weeks || 1, days = (p.days || []).filter(d => (d.wk || 1) === 1);
+  const say = document.createElement('p'); say.className = 'empty'; say.style.marginBottom = 'var(--s-3)';
+  say.textContent = 'Built in FORGE' + (weeks > 1 ? ', ' + weeks + ' weeks. Week one is below' : '') + '. It is edited there and this copy follows.';
+  el.appendChild(say);
+  days.forEach(d => {
+    const box = document.createElement('div'); box.className = 'day';
+    const h = document.createElement('div'); h.className = 'dayhead'; h.innerHTML = '<b>' + esc(d.day || d.name) + '</b>'; box.appendChild(h);
+    (d.ex || []).forEach(x => {
+      const r = document.createElement('div'); r.className = 'recent';
+      r.innerHTML = '<div class="r"><span class="x">' + esc(exLabel(x)) + '</span><span class="v">' + esc(planLine(x)) + '</span></div>';
+      box.appendChild(r);
+    });
+    el.appendChild(box);
+  });
 }
 function sendProg(key, label) {
   const bag = fileOf(key), text = JSON.stringify(bag);
@@ -1103,7 +1154,7 @@ function editor(el, key, opts) {
     box.appendChild(lab);
     (d.ex || []).forEach((x, xi) => {
       const row = document.createElement('div'); row.className = 'exrow';
-      const n = UI.field('text', { value: x.name || '', placeholder: 'Squat' }); n.setAttribute('list', 'exnames');
+      const n = UI.field('text', { value: x.name || '', placeholder: x.slot && x.slot.label ? 'Any ' + x.slot.label : 'Squat' }); n.setAttribute('list', 'exnames');
       n.setAttribute('aria-label', 'Exercise');
       n.onchange = () => { x.name = n.value.trim(); commit(); };
       const s0 = (x.sets && x.sets[0]) || (x.sets = [{ kg: null, r: null }])[0];
@@ -1151,33 +1202,48 @@ function drawProg(col) {
     const back = btn('‹ ALL PROGRAMS', '', () => { editing = ''; draw(); });
     back.style.marginBottom = 'var(--s-3)';
     card.appendChild(back);
-    const extra = [btn('SAVE AS FILE', 'go', () => sendProg(editing))];
+    const fg = isForge(editing, Rec.get('cprog', null, editing));
+    const extra = [btn('SAVE AS FILE', fg ? '' : 'go', () => sendProg(editing))];
     if (p) extra.push(btn('USE FOR ' + String(p.name || 'CLIENT').toUpperCase(), '', () => {
       const src = Rec.get('cprog', null, editing);
       saveProg(clientProgKey(sel), JSON.parse(JSON.stringify(src.days || [])), null);
+      if (fg) Rec.patch('cprog', null, clientProgKey(sel), { name: src.name, weeks: src.weeks, from: editing });
       tab = 'first'; editing = ''; draw();
       UI.toast('<b>' + esc(src.name) + '</b> is now ' + esc(p.name) + '’s first sets');
     }));
-    editor(card, editing, { named: true, extra: extra });
+    if (fg) {
+      const h = document.createElement('h2'); h.textContent = String(Rec.get('cprog', null, editing).name || 'PROGRAM').toUpperCase(); card.appendChild(h);
+      forgeView(card, editing);
+      const r2 = document.createElement('div'); r2.className = 'row2';
+      const id = editing.slice(2);
+      r2.appendChild(btn('EDIT IN FORGE', 'go', () => { location.href = FORGE + '?p=' + encodeURIComponent(id); }));
+      extra.forEach(b => r2.appendChild(b));
+      card.appendChild(r2);
+    } else editor(card, editing, { named: true, extra: extra });
   } else {
     const list = Object.entries(progs()).filter(([, v]) => !v.pid).sort((a, b) => String(a[1].name).localeCompare(String(b[1].name)));
     const pl = document.createElement('div'); pl.className = 'plist';
-    if (!list.length) pl.innerHTML = '<p class="empty">A program here is one you can send to anyone, or sell. It opens in their TRAIN as a routine.</p>';
+    if (!list.length) pl.innerHTML = '<p class="empty">A program here is one you can send to anyone, or sell. It opens in their TRAIN as a routine. Build one in FORGE.</p>';
     list.forEach(([k, v]) => {
       const r = document.createElement('div'); r.className = 'p'; r.tabIndex = 0;
-      const n = (v.days || []).reduce((a, d) => a + (d.ex || []).filter(x => x.name).length, 0);
-      r.innerHTML = '<span class="nm">' + esc(v.name || 'Program') + '</span><span class="c">' + (v.days || []).length + ' days · ' + n + ' exercises</span>';
+      const fg = isForge(k, v), wk1 = (v.days || []).filter(d => (d.wk || 1) === 1);
+      const n = wk1.reduce((a, d) => a + (d.ex || []).filter(x => x.name).length, 0);
+      r.innerHTML = '<span class="nm">' + esc(v.name || 'Program') + '</span><span class="c">' + (fg ? 'FORGE · ' + (v.weeks || 1) + ' wk · ' : '') + wk1.length + ' days · ' + n + ' exercises</span>';
       r.onclick = () => { editing = k; draw(); };
-      Mobile.hold(r, e => { UI.menu(e.clientX, e.clientY, [
+      Mobile.hold(r, e => { UI.menu(e.clientX, e.clientY, fg ? [
+        { label: 'Save As File', fn: () => sendProg(k) },
+        { label: 'Edit In FORGE', fn: () => { location.href = FORGE + '?p=' + encodeURIComponent(k.slice(2)); } },
+      ] : [
         { label: 'Save As File', fn: () => sendProg(k) },
         { label: 'Delete Program', kind: 'bad', fn: () => { const was = Rec.get('cprog', null, k); Rec.del('cprog', null, k); UI.undo('Program deleted', () => Rec.set('cprog', null, k, was)); } },
       ]); });
       pl.appendChild(r);
     });
     card.appendChild(pl);
-    const nb = btn('+ NEW PROGRAM', 'go', () => {
-      const k = newId(); Rec.set('cprog', null, k, { name: 'New program', pid: null, days: [blankDay(1)] }); editing = k; draw();
-    });
+    /* New programs are built in FORGE since 2026-09-24, where a program has
+       weeks and a whole day is on screen at once. One way to make one
+       (DOCTRINE law 8); an older program made here still opens here. */
+    const nb = btn('+ BUILD A PROGRAM IN FORGE', 'go', () => { location.href = FORGE + '?new=1'; });
     nb.style.cssText = 'width:100%;margin-top:var(--s-3)';
     card.appendChild(nb);
   }

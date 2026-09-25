@@ -121,6 +121,12 @@ coach/index.html   COACH, built 2026-09-22. Tom's clients in a Pokémon PC
                    client build. LOG A 1:1 on a client writes their sets as `cset` and one
                    WEALTH `sesh` per day, and every COACH client is a WEALTH
                    client and the other way round (`cperson.wc`, `client.cp`)
+forge/index.html   FORGE, built 2026-09-24. The program builder, laid out like
+                   BLOCK: days as lanes, exercises dragged in from TRAIN's
+                   vocabulary, weeks along the top, each later week saying only
+                   what it changes. Publishes every program into COACH's
+                   `cprog` as `f-<id>`, and SEND puts one on a client and saves
+                   the file TRAIN opens. Desktop only, Tom only.
 quest/index.html   QUESTS, the todolist, copied from Todoist. The same todo rows
                    as STATUS's journal, with a due date, priority, project and
                    repeat added. Desktop and phone. In the client build since

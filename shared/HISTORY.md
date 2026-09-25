@@ -258,3 +258,7 @@ LOG tome with a quill, ARC a better skill tree (branching tree, star web,
 diamond path shown), SPEAK microphone, COACH Poké Ball, FOODDÉX Pokédex,
 WEALTH dollar sign, RECEIPTS bill with a camera. Pokémon art is Nintendo's;
 both are Tom-only apps, same call as `creatures.js`.
+
+## 2026-09-24: FORGE's icon
+
+`app.forge` is a role on the plain `grid` drawing, colour slot 3 with TRAIN and COACH, and its art is a gold anvil in `APP_ART`. Picked by the session that built FORGE and not yet approved by Tom. Its PNGs (`forge/icon-*.png`, `shared/icons/forge.png` and one per theme folder) came from `tools/make-icons.html`. Only FORGE's files were written. Every other icon is byte for byte as it was.
