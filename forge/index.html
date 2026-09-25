@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.1, 2026-09-24">
+<meta name="mb-version" content="1.0.2, 2026-09-25">
 <title>FORGE</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -82,10 +82,28 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .bx .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bx .n{color:var(--text-muted);font-size:var(--f-1)}
 .bx.new .nm{color:var(--accent)}
+.cat .any{margin-left:auto;border:0;background:none;cursor:grab;color:var(--text-muted);font:inherit;letter-spacing:var(--track-cap);
+  min-height:var(--tap);padding:0 var(--s-2);border-radius:var(--radius-md)}
+.cat .any:hover{color:var(--accent);background:var(--surface-2)}
+.bx .g{color:var(--text-muted);font-size:var(--f-1)}
+#binBy{margin-top:var(--s-2)}
+.plate.slot .pn{font-style:italic}
+.pmeta{font-size:var(--f-1);color:var(--text-2);margin:calc(var(--s-1) * -1) 0 var(--s-1);cursor:pointer;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pmeta:hover{color:var(--text-1)}
+#sum .row{display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;width:100%}
+#sum .row + .row{margin-top:var(--s-1)}
+#sum .h{min-width:calc(var(--s-10) * .75)}
+.chips{display:flex;flex-wrap:wrap;gap:var(--s-1);margin-bottom:var(--s-3)}
+.chips button{min-height:var(--tap);padding:0 var(--s-3);border:0;border-radius:var(--radius-md);background:var(--surface-2);cursor:pointer;font:inherit}
+.chips button.on{box-shadow:inset 0 0 0 2px var(--accent);color:var(--text-1)}
+.fills{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:var(--s-2);align-items:center}
+.fills .l{font-size:var(--f-2)}
+.fills .l span{display:block;font-size:var(--f-1);color:var(--text-muted)}
 
 /* the board: one lane per day, side by side, the way BLOCK lays routines */
 #board{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
-#sum{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);flex-wrap:wrap;padding:var(--s-3) var(--s-4) 0;
+#sum{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-start;padding:var(--s-3) var(--s-4) 0;
   font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap)}
 #sum .it{display:inline-flex;align-items:center;gap:var(--s-1)}
 #sum b{color:var(--text-1);font-variant-numeric:tabular-nums}
@@ -185,6 +203,7 @@ table.wt td.v:hover{background:var(--surface-2)}
     <div class="card mb-card progs"><h2>PROGRAMS</h2><div class="plist" id="plist"></div></div>
     <div class="card mb-card bin"><h2>EXERCISES</h2>
       <input class="mb-input" id="q" placeholder="Find or add an exercise" aria-label="Find or add an exercise">
+      <div id="binBy"></div>
       <div id="binList"></div></div>
   </aside>
   <section id="board"></section>
@@ -201,7 +220,10 @@ table.wt td.v:hover{background:var(--surface-2)}
      fday    one day         key prog|day id         {name, ord}
      fex     one exercise    key prog|slot id        {day, name, cat, ord,
                                                       n, r, kg, rir, rest,
-                                                      note, wk}
+                                                      note, wk, slot, pat,
+                                                      mus}
+     ftag    one exercise's  key its name, lowercase {name, pat, mus}
+             pattern and muscles
    Rows, never a blob: moving one exercise writes one row. A day belongs to
    every week of its program, so a week is not a row of its own; it is a
    column of values on each exercise.
@@ -216,6 +238,17 @@ table.wt td.v:hover{background:var(--surface-2)}
    rises on a calendar step is the wrong kind of progression. What FORGE
    holds is therefore: how many sets, the rep RANGE, the first set's load
    (blank: the client's last), the RIR (blank reads 0-3), and the rest.
+
+   ── movement patterns and muscle groups ──
+   Tom programs in patterns and muscle groups (2026-09-24). So a plate is
+   either a named exercise or an OPEN SLOT: `slot: 'pat'` with `pat`, "any
+   Horizontal Push", or `slot: 'mus'` with `mus`, "any Chest", `name` empty.
+   A slot is filled per client at SEND, never in the template. Every
+   exercise has a pattern and muscles: `ftag` if Tom set them, else the
+   pattern is guessed from the name and drawn with a "?" until he confirms
+   it, and the muscles are TRAIN's muscle group for it. The strip over the
+   days counts the week's sets per pattern and per muscle. The pattern list
+   is data (`forge.patterns`), editable in Settings.
 
    ── the weeks ──
    `n` sets, `r` the rep range as text ("8-15"), `kg` the first set's load
@@ -248,7 +281,7 @@ table.wt td.v:hover{background:var(--surface-2)}
    the rest and the note travel beside it as a target TRAIN shows and never
    logs. */
 const APP = { id: 'forge', name: 'Forge', icon: '⚒', blurb: 'build a program, send it to a client',
-  types: ['fprog', 'fday', 'fex'] };
+  types: ['fprog', 'fday', 'fex', 'ftag'] };
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id); if (window.Icons) Icons.paint(null, { force: true }); });
 if (window.Icons) Icons.paint();
 Sfx.init(APP.id);
@@ -412,6 +445,71 @@ function catColor(cat) {
   return 'var(--data-' + (s % 6 + 1) + ')';
 }
 
+/* ── movement patterns and muscle groups ──
+   The pattern list is Tom's and is data: ten to start (his pick,
+   2026-09-24), renamed and added to in Settings. An id never changes once
+   made, so a renamed pattern keeps every exercise tagged with it. */
+const PAT_DEFAULT = [['squat', 'Squat'], ['hinge', 'Hinge'], ['lunge', 'Lunge'], ['hpush', 'Horizontal Push'],
+  ['vpush', 'Vertical Push'], ['hpull', 'Horizontal Pull'], ['vpull', 'Vertical Pull'], ['iso', 'Isolation'],
+  ['carry', 'Carry'], ['core', 'Core']];
+function patterns() {
+  const s = Rec.setting(APP.id, 'patterns');
+  return Array.isArray(s) && s.length ? s : PAT_DEFAULT.map(([id, name]) => ({ id: id, name: name }));
+}
+const patName = id => (patterns().find(p => p.id === id) || {}).name || '';
+/* A first guess at an exercise's pattern from its name, so 111 movements are
+   not 111 clicks. A guess is drawn with a "?" and counts in the totals the
+   same, and one tag in the exercise's menu replaces it for good. Order
+   matters: a split squat is a lunge before it is a squat. */
+const GUESS = [
+  ['carry', /carry|farmer|suitcase|yoke/],
+  ['core', /plank|crunch|sit[- ]?up|\bab\b|ab wheel|rollout|pallof|leg raise|knee raise|russian twist|dead ?bug|hollow|woodchop/],
+  ['lunge', /lunge|split squat|step[- ]?up|bulgarian/],
+  ['hinge', /deadlift|\brdl\b|romanian|good ?morning|hip thrust|glute bridge|hyperextension|back extension|pull[- ]?through|swing/],
+  ['squat', /squat|leg press|hack|pendulum/],
+  ['vpull', /pull[- ]?up|chin[- ]?up|pull[- ]?down|lat pull/],
+  ['hpull', /\brows?\b|face pull|pendlay/],
+  ['vpush', /overhead press|\bohp\b|shoulder press|military|arnold|landmine press|handstand|\bdips?\b/],
+  ['hpush', /bench|push[- ]?up|chest press|floor press/],
+  ['iso', /curl|extension|raise|fly|flye|pec deck|crossover|kickback|pushdown|shrug|calf|adduct|abduct/],
+];
+function guessPat(name) {
+  const n = String(name || '').toLowerCase();
+  for (let i = 0; i < GUESS.length; i++) if (GUESS[i][1].test(n)) return GUESS[i][0];
+  return '';
+}
+const tagKey = name => String(name || '').trim().toLowerCase();
+const tagOf = name => Rec.get('ftag', null, tagKey(name)) || {};
+/* the pattern an exercise counts under: tagged, else guessed */
+function patOf(name) {
+  const t = tagOf(name);
+  if (t.pat && patName(t.pat)) return { id: t.pat, guess: false };
+  const g = guessPat(name);
+  return g && patName(g) ? { id: g, guess: true } : { id: '', guess: false };
+}
+/* the muscles a plate works: a muscle slot's own, a tag's, else TRAIN's
+   muscle group for it. A pattern slot has none until it is filled. */
+function musOf(x) {
+  if (x.slot === 'mus') return x.mus ? [x.mus] : [];
+  if (x.slot === 'pat') return [];
+  const t = tagOf(x.name);
+  if (Array.isArray(t.mus) && t.mus.length) return t.mus;
+  return x.cat && x.cat !== 'Other' ? [x.cat] : [];
+}
+function patOfPlate(x) { return x.slot === 'pat' ? { id: x.pat, guess: false } : x.slot === 'mus' ? { id: '', guess: false } : patOf(x.name); }
+/* every muscle group there is to pick: TRAIN's, or its starter list when
+   TRAIN has never opened here, plus any a tag has used */
+function musList() {
+  const out = {}, cats = Rec.map('excat');
+  Object.keys(cats).forEach(k => { if (cats[k].name) out[cats[k].name] = cats[k].ord == null ? 99 : cats[k].ord; });
+  if (!Object.keys(out).length) ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core'].forEach((n, i) => { out[n] = i; });
+  Rec.all('ftag').forEach(r => ((r.payload || {}).mus || []).forEach(m => { if (out[m] == null) out[m] = 100; }));
+  return Object.keys(out).sort((a, b) => out[a] - out[b] || a.localeCompare(b));
+}
+const slotLabel = x => x.slot === 'pat' ? patName(x.pat) || 'Pattern' : x.slot === 'mus' ? x.mus || 'Muscle' : '';
+const plateName = x => x.slot ? 'Any ' + slotLabel(x) : (x.name || 'Exercise');
+const plateColor = x => catColor(x.slot === 'pat' ? slotLabel(x) : x.slot === 'mus' ? x.mus : x.cat);
+
 /* ── state ── */
 let cur = opt('cur', '');
 let wk = 1;
@@ -439,11 +537,14 @@ function flatten(pid) {
   for (let w = 1; w <= weeks; w++) {
     days.forEach(d => {
       out.push({ name: weeks > 1 ? 'W' + w + ' · ' + (d.v.name || 'Day') : (d.v.name || 'Day'), day: d.v.name || 'Day', wk: w,
-        ex: (EX[d.key] || []).filter(e => e.v.name).map(e => {
+        ex: (EX[d.key] || []).filter(e => e.v.name || e.v.slot).map(e => {
           const x = e.v, kg = val(x, 'kg', w), r = val(x, 'r', w), n = val(x, 'n', w), rir = val(x, 'rir', w);
           /* set one's load only: its reps are what the client did last time,
              because the range is a target and never a number to hit */
-          const o = { name: x.name, sets: kg != null ? [{ kg: kg, r: null }] : [] };
+          const o = { name: x.slot ? '' : x.name, sets: kg != null ? [{ kg: kg, r: null }] : [], fk: e.key };
+          /* an open slot travels as what it asks for, and is filled per
+             client at SEND; one left open is picked by the client in TRAIN */
+          if (x.slot) o.slot = { kind: x.slot, pat: x.pat || null, mus: x.mus || null, label: slotLabel(x) };
           if (x.cat && x.cat !== 'Other') o.catName = x.cat;
           if (n != null) o.n = n;
           if (r != null) o.reps = String(r);
@@ -502,6 +603,17 @@ function addEx(dayKey, name, cat, at) {
   const EX = exByDay(pid)[dayKey] || [];
   const key = pid + '|' + newId();
   Rec.set('fex', null, key, { day: dayKey, name: name, cat: cat || 'Other', ord: EX.length, n: null, r: null, kg: null, rir: null, rest: null });
+  if (at != null) place(key, dayKey, at);
+  act = dayKey;
+  touch(pid);
+  return key;
+}
+function addSlot(dayKey, kind, v, at) {
+  const pid = dayKey.split('|')[0];
+  const EX = exByDay(pid)[dayKey] || [];
+  const key = pid + '|' + newId();
+  Rec.set('fex', null, key, { day: dayKey, name: '', slot: kind, pat: kind === 'pat' ? v : null, mus: kind === 'mus' ? v : null,
+    cat: kind === 'mus' ? v : 'Other', ord: EX.length, n: null, r: null, kg: null, rir: null, rest: null });
   if (at != null) place(key, dayKey, at);
   act = dayKey;
   touch(pid);
@@ -685,15 +797,103 @@ function send(pid) {
 }
 function toClient(pid, cid, flat) {
   const who = people()[cid] || {}, key = 'c-' + cid, now = Rec.get('cprog', null, key);
-  const go = () => {
-    Rec.patch('cprog', null, key, { name: flat.name, pid: cid, days: flat.days, weeks: flat.weeks, from: 'f-' + pid });
-    const f = saveFile(fileBag(key, flat), who.name || 'client');
-    UI.toast('<b>' + esc(flat.name) + '</b> is ' + esc(who.name || 'the client') + '’s program in COACH, and saved as <b>' + esc(f) + '</b>');
+  const go = fills => {
+    const out = withFills(flat, fills || {});
+    Rec.patch('cprog', null, key, { name: out.name, pid: cid, days: out.days, weeks: out.weeks, from: 'f-' + pid, fills: fills || {} });
+    const f = saveFile(fileBag(key, out), who.name || 'client');
+    const open = openSlots(out).length;
+    UI.toast('<b>' + esc(flat.name) + '</b> is ' + esc(who.name || 'the client') + '’s program in COACH, and saved as <b>' + esc(f) + '</b>' +
+      (open ? '. ' + open + ' open slot' + (open === 1 ? '' : 's') + ' left for them to pick in TRAIN' : ''));
   };
+  const next = () => openSlots(flat).length ? fillDialog(pid, cid, flat, now && now.from === 'f-' + pid ? now.fills || {} : {}, go) : go({});
   if (now && (now.days || []).some(d => (d.ex || []).some(x => x.name)) && now.from !== 'f-' + pid) {
     UI.confirm('Replace ' + (who.name || 'this client') + '’s program?', 'They have “' + (now.name || 'a program') + '” in COACH now. It is replaced by ' + flat.name + '.', { yes: 'REPLACE' })
-      .then(ok => { if (ok) go(); });
-  } else go();
+      .then(ok => { if (ok) next(); });
+  } else next();
+}
+/* the open slots of a flattened program, once each: a slot is one plate,
+   the same in every week, so it is filled once for all of them */
+function openSlots(flat) {
+  const seen = {}, out = [];
+  flat.days.forEach(d => d.ex.forEach(x => {
+    if (!x.slot || x.name || seen[x.fk]) return;
+    seen[x.fk] = 1; out.push({ fk: x.fk, slot: x.slot, day: d.day });
+  }));
+  return out;
+}
+function withFills(flat, fills) {
+  const voc = vocab(), out = JSON.parse(JSON.stringify(flat));
+  out.days.forEach(d => d.ex.forEach(x => {
+    const nm = x.slot && fills[x.fk];
+    if (!nm) return;
+    x.name = nm;
+    const v = voc[tagKey(nm)];
+    if (v && v.cat && v.cat !== 'Other') x.catName = v.cat;
+  }));
+  return out;
+}
+/* The exercises that fit a slot, the client's own first: what they have
+   logged is what their gym has. A pattern matches on the exercise's pattern;
+   a muscle on its muscles. */
+function fitsSlot(slot, name, cat) {
+  if (slot.kind === 'pat') return patOf(name).id === slot.pat;
+  const t = tagOf(name);
+  const mus = Array.isArray(t.mus) && t.mus.length ? t.mus : cat ? [cat] : [];
+  return mus.some(m => String(m).toLowerCase() === String(slot.mus || '').toLowerCase());
+}
+function suggestFor(slot, cid) {
+  const theirs = [], ccat = {};
+  Rec.all('cexcat').forEach(r => { if (r.key.indexOf(cid + '|') === 0) ccat[r.key.slice(cid.length + 1)] = (r.payload || {}).name; });
+  Rec.all('cex').forEach(r => {
+    if (r.key.indexOf(cid + '|') !== 0) return;
+    const x = r.payload || {};
+    if (x.name && fitsSlot(slot, x.name, ccat[x.cat]) && theirs.indexOf(x.name) < 0) theirs.push(x.name);
+  });
+  const rest = Object.values(vocab()).filter(v => fitsSlot(slot, v.name, v.cat) && !theirs.some(t => tagKey(t) === tagKey(v.name)))
+    .map(v => v.name).sort();
+  return { theirs: theirs.sort(), rest: rest };
+}
+/* A sheet that closes steps history back, and that step lands a moment
+   later. A second sheet opened in the same moment pushes its own entry
+   first, so the late step takes it, and closing the second sheet then
+   steps back off the page altogether (watched 2026-09-25: SEND to a client
+   with open slots left FORGE for the page before it). So a sheet opened
+   from another sheet's button waits for that step to land. */
+function afterSheet(fn) {
+  let done = false;
+  const go = () => { if (done) return; done = true; removeEventListener('popstate', go); setTimeout(fn, 0); };
+  addEventListener('popstate', go);
+  setTimeout(go, 450);
+}
+function fillDialog(pid, cid, flat, was, done) { afterSheet(() => fillSheet(pid, cid, flat, was, done)); }
+function fillSheet(pid, cid, flat, was, done) {
+  const who = people()[cid] || {}, slots = openSlots(flat), boxes = {};
+  UI.dialog({
+    title: 'FOR ' + String(who.name || 'THE CLIENT').toUpperCase(), width: 560,
+    body: b => {
+      const p = document.createElement('p'); p.className = 'empty'; p.style.marginBottom = 'var(--s-3)';
+      p.textContent = 'Pick the exercise for each open slot. Their own logged exercises are listed first. Leave one blank and they pick it in TRAIN.';
+      b.appendChild(p);
+      const g = document.createElement('div'); g.className = 'fills';
+      slots.forEach((s, i) => {
+        const l = document.createElement('div'); l.className = 'l';
+        l.innerHTML = 'Any ' + esc(s.slot.label) + '<span>' + esc(s.day) + '</span>';
+        const sug = suggestFor(s.slot, cid);
+        const dl = document.createElement('datalist'); dl.id = 'fill' + i;
+        sug.theirs.concat(sug.rest).forEach(n => { const o = document.createElement('option'); o.value = n; dl.appendChild(o); });
+        const inp = UI.field('text', { value: was[s.fk] || '', placeholder: sug.theirs[0] || sug.rest[0] || 'Exercise' });
+        inp.setAttribute('list', dl.id); inp.setAttribute('aria-label', 'Exercise for any ' + s.slot.label);
+        boxes[s.fk] = inp;
+        g.appendChild(l); g.appendChild(inp); g.appendChild(dl);
+      });
+      b.appendChild(g);
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'SEND', kind: 'go', fn: () => {
+      const fills = {};
+      Object.keys(boxes).forEach(k => { const v = boxes[k].value.trim().replace(/\s+/g, ' '); if (v) fills[k] = v; });
+      done(fills);
+    } }],
+  });
 }
 
 /* ── printing: the sheet for a client who does not use TRAIN ── */
@@ -704,12 +904,12 @@ function printIt(pid) {
   for (let w = 1; w <= weeks; w++) {
     h += '<section class="wk">' + (weeks > 1 ? '<h2>Week ' + w + '</h2>' : '');
     days.forEach(d => {
-      const list = (EX[d.key] || []).filter(e => e.v.name);
+      const list = (EX[d.key] || []).filter(e => e.v.name || e.v.slot);
       if (!list.length) return;
       h += '<h3>' + esc(d.v.name || 'Day') + '</h3><table><tr><th>EXERCISE</th><th>SETS</th><th>REPS</th><th>LOAD</th><th>RIR</th><th>REST</th></tr>';
       list.forEach(e => {
         const x = e.v, kg = val(x, 'kg', w);
-        h += '<tr><td>' + esc(x.name) + (x.note ? '<div class="cue">' + esc(x.note) + '</div>' : '') + '</td>' +
+        h += '<tr><td>' + esc(plateName(x)) + (x.note ? '<div class="cue">' + esc(x.note) + '</div>' : '') + '</td>' +
           '<td class="n">' + (val(x, 'n', w) ?? '') + '</td><td class="n">' + (val(x, 'r', w) ?? '') + '</td>' +
           '<td class="n">' + (kg != null ? show(kg) + ' ' + unit() : '') + '</td><td class="n">' + (val(x, 'rir', w) ?? RIR_DEFAULT) + '</td>' +
           '<td class="n">' + restText(x.rest) + '</td></tr>';
@@ -766,7 +966,8 @@ function wireLane(lane, dayKey, pid, index) {
       return;
     }
     const at = dropAt(lane, e.clientY);
-    if (d.kind === 'bin') addEx(dayKey, d.name, d.cat, at);
+    if (d.kind === 'bin' && d.slot) addSlot(dayKey, d.slot, d.v, at);
+    else if (d.kind === 'bin') addEx(dayKey, d.name, d.cat, at);
     else {
       /* moving down inside one day: the plate being carried still counts in
          `at`, so one less */
@@ -841,19 +1042,33 @@ function bringIn(k, v) {
   publish(id); draw();
   UI.undo('<b>' + esc(v.name || 'Program') + '</b> is in FORGE now', () => { rowsOf(id).forEach(([t, kk]) => Rec.del(t, null, kk)); Rec.set('cprog', null, k, v); cur = ''; draw(); });
 }
+let binBy = opt('binBy', 'pat');
 function drawBin() {
+  const by = document.getElementById('binBy');
+  by.innerHTML = '';
+  by.appendChild(UI.segmented([{ id: 'pat', name: 'BY PATTERN' }, { id: 'mus', name: 'BY MUSCLE' }], binBy,
+    v => { binBy = v; Rec.setting(APP.id, 'binBy', v); drawBin(); }));
   const box = document.getElementById('binList');
   box.innerHTML = '';
   const voc = vocab(), days = cur ? daysOf(cur) : [];
   const want = q.trim().toLowerCase();
   const all = Object.values(voc).filter(v => !want || v.name.toLowerCase().indexOf(want) > -1);
   const target = () => (act && days.find(d => d.key === act)) || days[0];
-  const add = (name, cat) => {
-    if (!cur) { UI.toast('Make a program first', { bad: true }); return; }
+  const where = () => {
+    if (!cur) { UI.toast('Make a program first', { bad: true }); return null; }
     const d = target();
-    if (!d) { UI.toast('Add a day first', { bad: true }); return; }
+    if (!d) { UI.toast('Add a day first', { bad: true }); return null; }
+    return d;
+  };
+  const add = (name, cat) => {
+    const d = where(); if (!d) return;
     addEx(d.key, name, cat); draw();
     UI.toast('<b>' + esc(name) + '</b> into ' + esc(d.v.name || 'the day'));
+  };
+  const addOpen = (kind, v, label) => {
+    const d = where(); if (!d) return;
+    addSlot(d.key, kind, v); draw();
+    UI.toast('<b>Any ' + esc(label) + '</b> into ' + esc(d.v.name || 'the day') + ', picked per client when it is sent');
   };
   if (want && !voc[want]) {
     const nm = q.trim().replace(/\s+/g, ' ');
@@ -864,34 +1079,96 @@ function drawBin() {
     r.addEventListener('dragstart', e => { drag = { kind: 'bin', name: nm, cat: 'Other' }; e.dataTransfer.setData('text/plain', nm); e.dataTransfer.effectAllowed = 'copy'; });
     box.appendChild(r);
   }
-  if (!Object.keys(voc).length) {
-    const e = document.createElement('p'); e.className = 'empty'; e.style.marginTop = 'var(--s-2)';
-    e.textContent = 'TRAIN brings 111 movements the first time it opens on this device. Or type a name above and press Enter.';
-    box.appendChild(e);
-    return;
+  /* The groups are the patterns, or the muscle groups, and every one is
+     there even when empty, because its head is also the open slot: "+ ANY"
+     drags or clicks "any Horizontal Push" into a day. */
+  const groups = {}, heads = [];
+  if (binBy === 'pat') {
+    patterns().forEach(p => { groups[p.id] = []; heads.push({ id: p.id, name: p.name, kind: 'pat' }); });
+    groups[''] = [];
+    all.forEach(v => (groups[patOf(v.name).id] || groups['']).push(v));
+    heads.push({ id: '', name: 'No pattern yet', kind: null });
+  } else {
+    musList().forEach(m => { groups[m] = []; heads.push({ id: m, name: m, kind: 'mus' }); });
+    groups['Other'] = [];
+    all.forEach(v => { const m = musOf({ name: v.name, cat: v.cat }); (m.length ? m : ['Other']).forEach(k => (groups[k] || (groups[k] = [])).push(v)); });
+    if (!heads.some(h => h.id === 'Other')) heads.push({ id: 'Other', name: 'Other', kind: null });
   }
-  const groups = {};
-  all.forEach(v => (groups[v.cat] || (groups[v.cat] = [])).push(v));
-  const order = Object.keys(groups).sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b));
   const used = {};
   if (cur) Rec.all('fex').forEach(r => { if (r.key.indexOf(cur + '|') === 0) { const n = String((r.payload || {}).name).toLowerCase(); used[n] = (used[n] || 0) + 1; } });
-  order.forEach(c => {
-    const h = document.createElement('div'); h.className = 'cat'; h.style.setProperty('--c', catColor(c));
-    h.innerHTML = '<span class="dot"></span>' + esc(c.toUpperCase());
+  heads.forEach(hd => {
+    const list = groups[hd.id] || [];
+    if (!list.length && (!hd.kind || want)) return;
+    const h = document.createElement('div'); h.className = 'cat'; h.style.setProperty('--c', catColor(hd.name));
+    h.innerHTML = '<span class="dot"></span>' + esc(hd.name.toUpperCase());
+    if (hd.kind) {
+      const any = document.createElement('button'); any.type = 'button'; any.className = 'any mb-press'; any.textContent = '+ ANY';
+      any.title = 'An open slot: any ' + hd.name + ', picked per client when it is sent. Drag into a day, or click';
+      any.draggable = true;
+      any.onclick = () => addOpen(hd.kind, hd.id, hd.name);
+      any.addEventListener('dragstart', e => { drag = { kind: 'bin', slot: hd.kind, v: hd.id }; e.dataTransfer.setData('text/plain', 'Any ' + hd.name); e.dataTransfer.effectAllowed = 'copy'; });
+      h.appendChild(any);
+    }
     box.appendChild(h);
-    groups[c].sort((a, b) => a.name.localeCompare(b.name)).forEach(v => {
+    list.sort((a, b) => a.name.localeCompare(b.name)).forEach(v => {
       const r = document.createElement('div'); r.className = 'bx'; r.tabIndex = 0; r.draggable = true;
-      r.style.setProperty('--c', catColor(v.cat));
-      const n = used[v.name.toLowerCase()];
-      r.innerHTML = '<span class="dot"></span><span class="nm">' + esc(v.name) + '</span>' + (n ? '<span class="n">×' + n + '</span>' : '');
+      r.style.setProperty('--c', catColor(binBy === 'pat' ? hd.name : v.cat));
+      const n = used[v.name.toLowerCase()], pg = patOf(v.name);
+      r.innerHTML = '<span class="dot"></span><span class="nm">' + esc(v.name) + '</span>' +
+        (binBy === 'pat' && pg.guess ? '<span class="g" title="Guessed from the name. Set it in the menu">?</span>' : '') +
+        (n ? '<span class="n">×' + n + '</span>' : '');
       r.title = 'Drag into a day, or click to add to ' + ((target() || {}).v || {}).name;
       r.onclick = () => add(v.name, v.cat);
       r.onkeydown = e => { if (e.key === 'Enter') add(v.name, v.cat); };
       r.addEventListener('dragstart', e => { drag = { kind: 'bin', name: v.name, cat: v.cat }; e.dataTransfer.setData('text/plain', v.name); e.dataTransfer.effectAllowed = 'copy'; });
-      Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, days.length ? days.map(d => ({ label: 'Add to ' + (d.v.name || 'Day'), fn: () => { addEx(d.key, v.name, v.cat); draw(); } }))
-        : [{ label: 'Add a day first', fn: () => {} }]));
+      Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, [{ label: 'Pattern & Muscles…', fn: () => tagDialog(v.name, v.cat) }, '-']
+        .concat(days.length ? days.map(d => ({ label: 'Add to ' + (d.v.name || 'Day'), fn: () => { addEx(d.key, v.name, v.cat); draw(); } }))
+          : [{ label: 'Add a day first', fn: () => {} }])));
       box.appendChild(r);
     });
+  });
+  if (!Object.keys(voc).length) {
+    const e = document.createElement('p'); e.className = 'empty'; e.style.marginTop = 'var(--s-2)';
+    e.textContent = 'No exercises here yet. TRAIN brings 111 the first time it opens on this device, or type a name above and press Enter. The + ANY slots work without any.';
+    box.appendChild(e);
+  }
+}
+/* An exercise's pattern and the muscles it works, set once for every
+   program. What is not set here stays guessed (the pattern) or TRAIN's
+   muscle group (the muscles). */
+function tagDialog(name, cat) {
+  const t = tagOf(name), pg = patOf(name);
+  let pat = t.pat || '', mus = Array.isArray(t.mus) && t.mus.length ? t.mus.slice() : (cat && cat !== 'Other' ? [cat] : []);
+  UI.dialog({
+    title: String(name).toUpperCase(), width: 520,
+    body: b => {
+      const paint = () => {
+        b.innerHTML = '';
+        const h1 = document.createElement('h2'); h1.textContent = 'MOVEMENT PATTERN'; b.appendChild(h1);
+        if (!pat && pg.guess) { const g = document.createElement('p'); g.className = 'empty'; g.style.marginBottom = 'var(--s-2)'; g.textContent = 'Guessed from the name: ' + patName(pg.id) + '. Pick one to set it.'; b.appendChild(g); }
+        const c1 = document.createElement('div'); c1.className = 'chips';
+        patterns().forEach(p => {
+          const x = document.createElement('button'); x.type = 'button'; x.className = 'mb-press' + (pat === p.id ? ' on' : '');
+          x.textContent = p.name; x.onclick = () => { pat = pat === p.id ? '' : p.id; paint(); };
+          c1.appendChild(x);
+        });
+        b.appendChild(c1);
+        const h2 = document.createElement('h2'); h2.textContent = 'MUSCLES IT WORKS'; b.appendChild(h2);
+        const c2 = document.createElement('div'); c2.className = 'chips';
+        musList().forEach(m => {
+          const x = document.createElement('button'); x.type = 'button'; x.className = 'mb-press' + (mus.indexOf(m) > -1 ? ' on' : '');
+          x.textContent = m; x.onclick = () => { const i = mus.indexOf(m); if (i > -1) mus.splice(i, 1); else mus.push(m); paint(); };
+          c2.appendChild(x);
+        });
+        b.appendChild(c2);
+      };
+      paint();
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: () => {
+      Rec.patch('ftag', null, tagKey(name), { name: name, pat: pat || null, mus: mus });
+      if (cur) touch(cur);
+      draw();
+    } }],
   });
 }
 const qEl = document.getElementById('q');
@@ -954,17 +1231,24 @@ function blank(board) {
 }
 function drawSum(board, EX) {
   const s = document.createElement('div'); s.id = 'sum';
-  const by = {}; let tot = 0, nex = 0;
+  const byP = {}, byM = {}; let tot = 0, nex = 0;
   Object.keys(EX).forEach(d => EX[d].forEach(e => {
     nex++;
     const n = val(e.v, 'n', wk);
     if (n == null) return;
-    tot += n; by[e.v.cat || 'Other'] = (by[e.v.cat || 'Other'] || 0) + n;
+    tot += n;
+    const p = patOfPlate(e.v).id || '';
+    byP[p] = (byP[p] || 0) + n;
+    musOf(e.v).forEach(m => { byM[m] = (byM[m] || 0) + n; });
   }));
-  /* the sets each muscle group gets in this week, which is how TRAIN counts
-     a week too, so the number he plans is the number he later reads */
-  s.innerHTML = '<span>WEEK ' + wk + '</span><span class="it"><b>' + tot + '</b>&nbsp;SETS</span><span class="it"><b>' + nex + '</b>&nbsp;EXERCISES</span>' +
-    Object.keys(by).sort((a, b) => by[b] - by[a]).map(c => '<span class="it" style="--c:' + catColor(c) + '"><span class="dot"></span>' + esc(c.toUpperCase()) + '&nbsp;<b>' + by[c] + '</b></span>').join('');
+  /* the week's sets per movement pattern and per muscle group, the two
+     things Tom programs in. A muscle is counted in full for every exercise
+     that works it, the way TRAIN's week counts a shared exercise. */
+  const chip = (label, n, col) => '<span class="it" style="--c:' + col + '"><span class="dot"></span>' + esc(label.toUpperCase()) + '&nbsp;<b>' + n + '</b></span>';
+  const order = patterns().map(p => p.id).concat(['']);
+  s.innerHTML = '<div class="row"><span class="h">WEEK ' + wk + '</span><span class="it"><b>' + tot + '</b>&nbsp;SETS</span><span class="it"><b>' + nex + '</b>&nbsp;SLOTS</span></div>' +
+    '<div class="row"><span class="h">PATTERNS</span>' + (order.filter(p => byP[p]).map(p => chip(p ? patName(p) : 'No pattern', byP[p], catColor(p ? patName(p) : 'x'))).join('') || '<span>—</span>') + '</div>' +
+    '<div class="row"><span class="h">MUSCLES</span>' + (Object.keys(byM).sort((a, b) => byM[b] - byM[a]).map(m => chip(m, byM[m], catColor(m))).join('') || '<span>—</span>') + '</div>';
   board.appendChild(s);
 }
 function numBox(x, key, f, w, parse, fmt, label) {
@@ -992,12 +1276,12 @@ function numBox(x, key, f, w, parse, fmt, label) {
 const intOf = t => { const n = parseInt(t, 10); return n >= 0 && n < 1000 ? n : undefined; };
 function plate(e, dayKey, pid) {
   const x = e.v, key = e.key;
-  const el = document.createElement('div'); el.className = 'plate mb-plate'; el.dataset.key = key;
-  el.style.setProperty('--c', catColor(x.cat));
+  const el = document.createElement('div'); el.className = 'plate mb-plate' + (x.slot ? ' slot' : ''); el.dataset.key = key;
+  el.style.setProperty('--c', plateColor(x));
   const hd = document.createElement('div'); hd.className = 'phead'; hd.draggable = true;
   const bd = bands(val(x, 'r', wk), val(x, 'n', wk));
-  hd.innerHTML = '<span class="pn">' + esc(x.name || 'Exercise') + '</span>' + (bd ? '<span class="tag">' + esc(bd) + '</span>' : '');
-  hd.title = x.name + ' · drag to move';
+  hd.innerHTML = '<span class="pn">' + esc(plateName(x)) + '</span>' + (bd ? '<span class="tag">' + esc(bd) + '</span>' : '');
+  hd.title = plateName(x) + ' · drag to move';
   hd.addEventListener('dragstart', ev => { drag = { kind: 'ex', key: key }; ev.dataTransfer.setData('text/plain', x.name); ev.dataTransfer.effectAllowed = 'move'; try { ev.dataTransfer.setDragImage(el, 20, 20); } catch (er) {} });
   const more = document.createElement('button'); more.type = 'button'; more.className = 'ico mb-press mb-tap';
   more.innerHTML = ico('more'); more.setAttribute('aria-label', 'Options for ' + x.name);
@@ -1005,6 +1289,9 @@ function plate(e, dayKey, pid) {
     const days = daysOf(pid).filter(d => d.key !== dayKey);
     const list = (exByDay(pid)[dayKey] || []).map(z => z.key), at = list.indexOf(key);
     UI.menu(ev.clientX, ev.clientY, [
+      x.slot ? { label: 'Fill With An Exercise…', fn: () => fillOne(key) } : { label: 'Pattern & Muscles…', fn: () => tagDialog(x.name, x.cat) },
+      !x.slot ? { label: 'Make It An Open Slot', sub: [patOf(x.name).id ? { label: 'Any ' + patName(patOf(x.name).id), fn: () => toSlot(key, 'pat', patOf(x.name).id) } : null]
+        .concat(musOf(x).map(m => ({ label: 'Any ' + m, fn: () => toSlot(key, 'mus', m) }))).filter(Boolean) } : null,
       { label: x.note ? 'Edit Note…' : 'Note…', fn: () => noteDialog(key) },
       at > 0 ? { label: 'Move Up', fn: () => { place(key, dayKey, at - 1); draw(); } } : null,
       at < list.length - 1 ? { label: 'Move Down', fn: () => { place(key, dayKey, at + 1); draw(); } } : null,
@@ -1019,6 +1306,17 @@ function plate(e, dayKey, pid) {
   Mobile.hold(hd, menu, { skip: 'button' });
   hd.appendChild(more);
   el.appendChild(hd);
+  /* what it is: an open slot says so; an exercise says its pattern (a "?"
+     when that is only a guess) and the muscles it works */
+  const meta = document.createElement('div'); meta.className = 'pmeta';
+  if (x.slot) { meta.textContent = 'Open · picked per client when sent'; meta.onclick = () => fillOne(key); }
+  else {
+    const pg = patOf(x.name), mu = musOf(x);
+    meta.textContent = (pg.id ? patName(pg.id) + (pg.guess ? '?' : '') : 'No pattern') + (mu.length ? ' · ' + mu.join(', ') : '');
+    meta.title = pg.guess ? 'Pattern guessed from the name. Click to set it' : 'Click to set its pattern and muscles';
+    meta.onclick = () => tagDialog(x.name, x.cat);
+  }
+  el.appendChild(meta);
   const g = document.createElement('div'); g.className = 'pgrid';
   const cell = (lab, inp) => { const l = document.createElement('label'); const s = document.createElement('span'); s.textContent = lab; l.appendChild(s); l.appendChild(inp); g.appendChild(l); };
   cell('SETS', numBox(x, key, 'n', wk, intOf, String, 'Sets'));
@@ -1033,6 +1331,41 @@ function plate(e, dayKey, pid) {
     el.appendChild(n);
   }
   return el;
+}
+/* A slot filled in the template itself, for a program where Tom already
+   knows the movement; it becomes an ordinary exercise. And the other way. */
+function fillOne(key) {
+  const x = Rec.get('fex', null, key); if (!x || !x.slot) return;
+  const slot = { kind: x.slot, pat: x.pat, mus: x.mus };
+  let inp;
+  UI.dialog({
+    title: 'ANY ' + slotLabel(x).toUpperCase(), width: 460,
+    body: b => {
+      const p = document.createElement('p'); p.className = 'empty'; p.style.marginBottom = 'var(--s-3)';
+      p.textContent = 'Fill it here and it is this exercise for every client. Leave it open and it is picked per client at SEND.';
+      b.appendChild(p);
+      const dl = document.createElement('datalist'); dl.id = 'fillone';
+      Object.values(vocab()).filter(v => fitsSlot(slot, v.name, v.cat)).sort((a, c) => a.name.localeCompare(c.name))
+        .forEach(v => { const o = document.createElement('option'); o.value = v.name; dl.appendChild(o); });
+      inp = UI.field('text', { placeholder: 'Exercise' }); inp.setAttribute('list', 'fillone');
+      b.appendChild(inp); b.appendChild(dl);
+      UI.focusSoon(inp);
+    },
+    enter: h => { h.box.querySelector('.mb-sheet-foot .go').click(); },
+    actions: [{ label: 'CANCEL' }, { label: 'FILL', kind: 'go', fn: () => {
+      const nm = inp.value.trim().replace(/\s+/g, ' ');
+      if (!nm) { UI.toast('Type an exercise', { bad: true }); return false; }
+      const v = vocab()[tagKey(nm)];
+      Rec.patch('fex', null, key, { name: v ? v.name : nm, cat: v ? v.cat : (x.slot === 'mus' ? x.mus : 'Other'), slot: undefined, pat: undefined, mus: undefined });
+      touch(key.split('|')[0]); draw();
+    } }],
+  });
+}
+function toSlot(key, kind, v) {
+  const x = Rec.get('fex', null, key); if (!x) return;
+  Rec.patch('fex', null, key, { name: '', slot: kind, pat: kind === 'pat' ? v : undefined, mus: kind === 'mus' ? v : undefined });
+  touch(key.split('|')[0]); draw();
+  UI.undo('<b>' + esc(x.name) + '</b> is an open slot now', () => { Rec.set('fex', null, key, x); touch(key.split('|')[0]); draw(); });
 }
 function noteDialog(key) {
   const x = Rec.get('fex', null, key); if (!x) return;
@@ -1154,7 +1487,7 @@ function drawGrid(board) {
     t.innerHTML = hr + '<th>REST</th></tr>';
     list.forEach(e => {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td class="x" style="--c:' + catColor(e.v.cat) + '">' + esc(e.v.name) + '</td>';
+      tr.innerHTML = '<td class="x" style="--c:' + plateColor(e.v) + '">' + esc(plateName(e.v)) + '</td>';
       for (let w = 1; w <= weeks; w++) {
         const td = document.createElement('td');
         td.className = 'v' + (w === 1 || weekHasOwn(e.v, w) ? ' own' : '');
@@ -1206,6 +1539,24 @@ function settings() {
   UI.settings(APP.id, [{ id: 'forge', name: 'FORGE', draw: pane => {
     pane.appendChild(UI.row('Weights in', 'How FORGE shows and takes loads. Stored in kilograms, as TRAIN keeps them', UI.segmented(
       [{ id: 'kg', name: 'KG' }, { id: 'lb', name: 'LB' }], unit(), v => { Rec.setting(APP.id, 'unit', v); draw(); })));
+    /* The pattern list, one per line. A name that stays keeps its id, so
+       renaming "Isolation" to "Accessory" keeps every exercise tagged with
+       it; a new line is a new pattern; a deleted line stops being offered
+       and its tags read as untagged until it comes back. */
+    const ta = UI.field('note', { rows: 6, value: patterns().map(p => p.name).join('\n') });
+    ta.setAttribute('data-keep-caret', '');
+    ta.onchange = () => {
+      const was = patterns(), used = {};
+      const out = ta.value.split('\n').map(t => t.trim()).filter(Boolean).map((name, i) => {
+        const hit = was.find(p => p.name.toLowerCase() === name.toLowerCase()) || (was[i] && !ta.value.toLowerCase().split('\n').map(t => t.trim()).includes(was[i].name.toLowerCase()) ? was[i] : null);
+        let id = hit && !used[hit.id] ? hit.id : name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'p' + i;
+        while (used[id]) id += '-2';
+        used[id] = 1;
+        return { id: id, name: name };
+      });
+      if (out.length) { Rec.setting(APP.id, 'patterns', out); draw(); }
+    };
+    pane.appendChild(UI.row('Movement patterns', 'One per line. Renaming a line keeps what is tagged with it', ta));
     const c = document.createElement('button'); c.type = 'button'; c.className = 'mb-btn mb-press mb-tap'; c.textContent = 'OPEN COACH';
     c.onclick = () => { location.href = '../coach/index.html'; };
     pane.appendChild(UI.row('Where programs go', 'Every program here is in COACH’s PROGRAMS list too. Your name on a file is set in COACH', c));

@@ -140,24 +140,58 @@ week 3 inherited 100 kg with no step; TRAIN's routine read `3 × 8-15 ·
 100 kg with the reps left to last time. `_review.html` 123 of 123 at 1440
 and 375, foundation 353 of 353.
 
-## Open
+## Movement patterns and muscle groups (1.0.2, 2026-09-25)
 
-- **NEXT: movement patterns and muscle groups** (Tom, 2026-09-24: *"I program
-  in terms of movement patterns and muscle groups"*). Settled with Tom, not
-  built yet; he chose to build it on his PC:
-  - **A slot can be either.** A plate may be a pattern or muscle group with no
-    exercise picked ("Horizontal Push", "Quads"), filled per client when the
-    program goes to them. Or it may be a named exercise.
-  - **Every exercise is tagged** with its pattern and the muscle groups it
-    trains, so the weekly totals count sets per pattern and per muscle either
-    way.
-  - **Still open, ask Tom first:**
-    - the pattern list itself (his words, not a textbook's);
-    - where an exercise's tags live, since TRAIN owns `exercise` and has
-      `excat` (one muscle group) and `also` (shares);
-    - how an unfilled slot is filled when a program goes to a client (at
-      SEND in FORGE, or in COACH's USE FOR);
-    - what TRAIN shows for a slot nobody filled.
+Tom: *"I program in terms of movement patterns and muscle groups."* Settled
+with him before building: a slot can be either, every exercise is tagged,
+tags live in FORGE, an open slot is filled per client at SEND, and one left
+open is picked by the client in TRAIN.
+
+- **The patterns are data**: `forge.patterns`, ten to start (Squat, Hinge,
+  Lunge, Horizontal Push, Vertical Push, Horizontal Pull, Vertical Pull,
+  Isolation, Carry, Core; Tom's pick). Settings edits them one per line. A
+  line whose name stays keeps its id, so a rename keeps every tag.
+- **`ftag`, keyed by the exercise name lowercased**: `{name, pat, mus}`.
+  FORGE's own, so TRAIN's `exercise` rows are never touched and a client
+  never sees it. Set from a plate's meta line, its menu, or a bin row's menu
+  (Pattern & Muscles…).
+- **No tag, a guess.** `guessPat` reads the name against `GUESS` (order
+  matters: a split squat is a lunge before a squat). A guess is drawn with a
+  "?" in the bin and on the plate, and counts in the totals like a tag.
+  Muscles with no tag are TRAIN's muscle group for the exercise.
+- **An open slot is a plate with `slot: 'pat'` or `'mus'`**, `pat` or `mus`
+  set and `name` empty, drawn "Any Horizontal Push" in italics. Made by
+  "+ ANY" on any group head in the bin (drag or click). Fill With An
+  Exercise… turns it into an exercise for every client; Make It An Open Slot
+  turns an exercise back. The bin groups BY PATTERN or BY MUSCLE.
+- **The strip counts the week's sets per pattern and per muscle.** A muscle
+  gets an exercise's full sets for each muscle it works.
+- **SEND to a client with open slots opens a fill list**: one box per slot
+  (once for every week), their own logged exercises (`cex`) that fit
+  suggested first, then the vocabulary. A blank box leaves the slot open.
+  The picks are kept on their `cprog` as `fills` (by plate key, `fk`), and
+  the next SEND of the same program starts from them.
+- **The fill list waits for the client list's sheet to finish closing**
+  (`afterSheet`). Opened in the same tick, it walked history off the page
+  (root brief, Known traps).
+
+Watched 2026-09-25, headless Chromium, 1440 wide, with a made-up client:
+- the bin showed all ten patterns, each with + ANY, and every guess with "?"
+- Back Squat dragged in; "Any Horizontal Push" dragged from its head; "Any
+  Chest" clicked in from the muscle view
+- the strip read Squat 3, Horizontal Push 3, No pattern 3, then Legs 3,
+  Chest 3; tagging Back Squat Squat + Legs, Back added Back 3
+- SEND to the client listed both slots with their own Machine Chest Press
+  first; filling one sent `Bench Press` for it and left `Any Chest` open,
+  and the page stayed in FORGE
+- TRAIN (1.0.23) showed "Any Chest … tap to pick", opened the list titled
+  Any Chest filtered to Chest, took Cable Fly for both weeks, kept it
+  through a resend, and LOG ALL skipped an unpicked slot
+- the client's Chest category was not rewritten (see TRAIN 1.0.23)
+- COACH showed and kept both slots
+- `_review.html` 123 of 123 at 1440 and 375, foundation 354 of 354
+
+## Open
 
 - The reverse shelf (`coach/CLAUDE.md`, client files item 2) will carry the
   same bag. When it is built, SEND should use it and keep the file as the
