@@ -249,7 +249,7 @@ An app may read any type. It writes only the types it owns.
 | `habit` | quest, later | | a todolist, once STATUS took the measurements |
 | `project` | **quest**; **arc** makes one named after a skill tree's map | slug of the hashtag | `{name, slot, ord}` — a Todoist project. `slot` is a theme colour slot, never a hex |
 | `excat` | **train** | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
-| `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup}` — `setup` is the setup fields he names for it, each a toggle or a setting |
+| `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar}` — `setup` is the setup fields he names for it, each a toggle or a setting; `bar` 1 or 0 overrides reading a barbell lift off the name |
 | `set` | **train** | timestamp id | one logged set, weight stored in kg with the unit it was typed in; `warm` a warmup marked by hand, `su` the setup it was done with, `rir` reps in reserve (5 means five or more) and `q` set quality 1 to 4, both from the comment box. Warmups and split sets are also read from its comment, never stored |
 | `session` | **train** | `''` | `{start, end, note, from, order, name, vs}` — the day's timing and comment, the day it was copied from, its exercise order, its name, and a day picked to compare it with |
 | `phase` | **train** | phase id | `{name, start, end}` — a training block. Not `block`: BLOCK is another app and has nothing to do with training beyond a tick. `end` is optional |
@@ -787,6 +787,20 @@ answer, or take it out.
   import brings its own keys (FitNotes groups are `fn<id>`), so TRAIN's
   `fillCats` looked for `forearms`, missed his own Forearms, and added a second
   one (2026-09-25). Before adding a default, look for one with that name.
+- **`Mobile.swipe` moves a row's contents onto a face, and the face is
+  transparent.** Its `background:inherit` takes nothing from a row with no
+  fill, so the red action shows through, and the row's own flex layout and
+  height no longer reach its contents. Draw the layout, the page background
+  and any selected colour on `> .mb-swipe-face`, less the row's hairline, or
+  a 44px row becomes 45. TRAIN's set rows, 2026-09-25.
+- **A character the display font lacks falls back to another font, and the
+  line grows.** `≈` in Chakra Petch made TRAIN's WEIGHT label a pixel taller
+  (2026-09-25). In a label that must not move, stay on characters the font has.
+- **A cloud session can push the client copy from a branch main has not
+  merged.** On 2026-09-25 `Mainmenu-client` carried FORGE from
+  `claude/tom-only-program-builder-vatd4l` while main had newer TRAIN. `git
+  fetch` the client repo before pushing a build; if its newest commit names
+  work main lacks, do not push over it, say so.
 
 ---
 

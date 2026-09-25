@@ -34,21 +34,7 @@ says session and training, never workout.
 
 ## Provenance
 
-Everything about how FitNotes behaves was read out of the app itself,
-`com.github.jamesgay.fitnotes` v25.1, and out of Tom's own backup file:
-
-- the full SQLite schema, 20 tables, column by column
-- all 44 columns of the `settings` table, which is its settings screen
-- every user-facing string, several thousand
-- the SQL FitNotes uses for personal records and routine loading
-- nine screenshots of FitNotes on his phone (no longer in Downloads)
-- **his file's own answers**, where the app could not be read: which records it
-  flags, which day a week starts on, what happens to a deleted set's comment
-
-What was **not** taken, and must never be: FitNotes' compiled code and its image
-files. The APK holds obfuscated Android bytecode and the target is one HTML file
-of plain JavaScript, so nothing in it would have transferred anyway. Every line
-in `train/index.html` is written here.
+Read out of FitNotes v25.1 and his own backup; nothing of its code or images was taken, and never may be. (HISTORY.md: Provenance)
 
 ---
 
@@ -112,7 +98,8 @@ describe the gym, not the training.
 `restVibrate` `restSound` `rest` (a running timer) `workoutTimerAuto`
 `workoutTimerStop` `graphPoints` `graphTrend` `graphZero` `e1rmMaxReps`
 `repCounts` `exSort` `catSort` `plates` `bars` `seen` `prRule` (2 once records
-have been worked out under the rule that keeps split sets apart).
+have been worked out under the rule that keeps split sets apart) `sortSeen`
+`sortSkip` (Sort Into Groups: offered once, and the moves he switched off).
 
 A setting that is on by default is read as `!== 0`; one that is off by default
 as `=== 1`. Mixing those up turns a default the wrong way for everyone who never
@@ -519,24 +506,7 @@ What iPhone Safari changes:
 
 ## For the foundation
 
-Found while building TRAIN. TRAIN never edits `shared/` or the root; it works
-around what it finds and writes it here.
-
-**Fixed by the foundation session of 2026-09-14, and TRAIN's workarounds deleted
-the same day:** the minus, trophy and hamburger icons (TRAIN's `MINUS`, `TROPHY`
-and `BURGER` drawings are gone), 38px segmented buttons, the desktop menu that
-could not be clicked (`menuAt()` no longer stops the press), chart steps past
-5000 (`bigStep()` is gone), `UI.row` squeezing a text box's label to 0px (TRAIN's
-`:has()` rules for `.mb-input` and `.mb-sel` are gone; the ones for its own
-swatches and chips stay), and sheets in `vh`.
-
-**Settled 2026-09-15:** `ui.js` adds its stylesheet when it loads, so the chip
-that came up as a bare browser button on the exercise screen is styled and
-TRAIN's throwaway switch at boot is gone. DOCTRINE's TRAIN entry, the root
-ownership table and the root Current state row were brought up to date by a
-session Tom sent to the root.
-
-**Still open:** nothing.
+TRAIN never edits `shared/`; a need goes here. Still open: nothing. (HISTORY.md: For the foundation)
 
 ---
 
