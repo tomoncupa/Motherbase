@@ -170,6 +170,10 @@ program goes out from.
   more than one week. COACH 1.0.11 added `reps` and `bands`.
 - **USE FOR on a FORGE program** also copies its name and `weeks`, and
   `from: f-<id>`, so FORGE's SEND knows it is not replacing someone else's.
+- **An open slot rides along (1.0.12, 2026-09-25).** `fileOf` keeps an entry
+  with no name when it has a `slot`, the read-only view shows "Any Chest",
+  and a client's first-sets editor shows it as the placeholder, so typing a
+  name there fills the slot for that client.
 - **A client's FIRST SETS editor keeps those fields.** It deep-copies the days
   and changes only a name and set one, so `n`, `rir`, `rest`, `wk` and `day` ride
   through an edit made here.

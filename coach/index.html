@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.11, 2026-09-24">
+<meta name="mb-version" content="1.0.12, 2026-09-25">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1054,11 +1054,14 @@ function saveProg(key, days, name) {
    are, so TRAIN can make one routine per week and show the target. Still
    only the FIRST set travels as a set, and from FORGE only its load (Tom,
    2026-09-22, kept 2026-09-24: set two onwards follow from set one). */
-const PLAN = ['catName', 'n', 'reps', 'bands', 'rir', 'rest', 'note'];
+const PLAN = ['catName', 'n', 'reps', 'bands', 'rir', 'rest', 'note', 'slot'];
+/* an open slot FORGE left for the client: no exercise, a movement pattern
+   or muscle group asked for instead */
+const exLabel = x => x.name || (x.slot && x.slot.label ? 'Any ' + x.slot.label : '');
 function fileOf(key) {
   const p = Rec.get('cprog', null, key);
   const days = (p.days || []).map(d => {
-    const o = { name: d.name, ex: (d.ex || []).filter(x => x.name).map(x => {
+    const o = { name: d.name, ex: (d.ex || []).filter(x => x.name || x.slot).map(x => {
       const e = { name: x.name, sets: (x.sets || []).slice(0, 1).filter(s => s.kg != null || s.r != null).map(s => ({ kg: s.kg, r: s.r })) };
       PLAN.forEach(f => { if (x[f] != null && x[f] !== '') e[f] = x[f]; });
       return e;
@@ -1095,7 +1098,7 @@ function forgeView(el, key) {
     const h = document.createElement('div'); h.className = 'dayhead'; h.innerHTML = '<b>' + esc(d.day || d.name) + '</b>'; box.appendChild(h);
     (d.ex || []).forEach(x => {
       const r = document.createElement('div'); r.className = 'recent';
-      r.innerHTML = '<div class="r"><span class="x">' + esc(x.name) + '</span><span class="v">' + esc(planLine(x)) + '</span></div>';
+      r.innerHTML = '<div class="r"><span class="x">' + esc(exLabel(x)) + '</span><span class="v">' + esc(planLine(x)) + '</span></div>';
       box.appendChild(r);
     });
     el.appendChild(box);
@@ -1151,7 +1154,7 @@ function editor(el, key, opts) {
     box.appendChild(lab);
     (d.ex || []).forEach((x, xi) => {
       const row = document.createElement('div'); row.className = 'exrow';
-      const n = UI.field('text', { value: x.name || '', placeholder: 'Squat' }); n.setAttribute('list', 'exnames');
+      const n = UI.field('text', { value: x.name || '', placeholder: x.slot && x.slot.label ? 'Any ' + x.slot.label : 'Squat' }); n.setAttribute('list', 'exnames');
       n.setAttribute('aria-label', 'Exercise');
       n.onchange = () => { x.name = n.value.trim(); commit(); };
       const s0 = (x.sets && x.sets[0]) || (x.sets = [{ kg: null, r: null }])[0];
