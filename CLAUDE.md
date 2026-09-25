@@ -757,6 +757,17 @@ answer, or take it out.
   (2026-09-25). `cloud.js` 0.1.5 gives a stripped row `{}`; an app whose
   meaning depends on an EMPTY list must also carry a flag that says it was
   chosen, as BLOCK's `picked` does.
+- **A `flex:1` title beside a `flex:1` spacer splits the bar between them.**
+  TRAIN's header pushed its icons right with an empty `.spacer{flex:1}`, and a
+  screen title was `flex:1` too, so "Cuffed External Rotation" was given 81px
+  of bar beside 73px of nothing and clipped at every font size (2026-09-24).
+  A spacer and a thing that wants the room cannot both grow: stand the spacer
+  down whenever there is something to fit.
+- **`mb-tap` means a control can be drawn smaller than 44px and still be 44px.**
+  It expands the hit area with a pseudo-element without changing the drawing,
+  so a row full of 44px-tall icon buttons can come down to a 32px drawing and
+  measure 44x44 to a thumb. TRAIN's set rows went from 61px to 44 that way. Check
+  the computed `::after`, not the button.
 - **`Rec.all` hands rows back in no order**, and a payload's `ord` usually
   numbers a row inside its own group, so it cannot order the groups. A list
   that must read back in the order it was entered sorts on the row KEY, which
