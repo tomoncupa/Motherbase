@@ -822,6 +822,15 @@ answer, or take it out.
   fetch` the client repo before pushing a build; if its newest commit names
   work main lacks, do not push over it, say so.
 
+- **An UNDO snackbar lasts six seconds.** A test that presses UNDO after a
+  few tool calls presses a hidden toast and reports the undo broken; TRAIN's
+  merge was nearly misdiagnosed that way (2026-09-25). Press it in the same
+  batch as the action, or call the undo the toast was given.
+- **Never `Rec.merge` a row with an id you made up.** The store finds a row
+  by the id it derives from type, date and key, so a hand-made `id` is a
+  second row that `Rec.all` and `Rec.map` list and `Rec.get` cannot see, and
+  the app shows a ghost (2026-09-25). Seed test rows with `Rec.set`.
+
 ---
 
 ## Current state

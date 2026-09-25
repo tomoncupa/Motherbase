@@ -215,16 +215,9 @@ Weights are compared at **three decimal places**: old FitNotes versions stored
 one weight as two floats a millionth apart, and at two places a 22.05 lb lunge
 tied with a 10 kg one that FitNotes had told apart.
 
-**Verified against his file, 2026-09-14:** FitNotes flagged 537 sets. After
-importing, recalculating with this rule changed **0** flags. The rules tried on
-the way there, so nobody tries them again:
-
-| Rule | Flagged | Agreeing with FitNotes |
-|---|---|---|
-| Heavier than every earlier set | 819 | 263 |
-| Heavier than anything at these reps or more, at the time | 1,555 | 537, plus 1,018 extra |
-| Still standing, weights at two decimals | 537 | 536 |
-| **Still standing, weights at three decimals** | **537** | **537** |
+Verified against his file: FitNotes' 537 flags matched exactly, and the rules
+tried on the way are recorded so nobody tries them again.
+(HISTORY.md: Personal records, verified against his file)
 
 **Split sets keep records of their own** (Tom, 2026-09-14). The still-standing
 rule runs twice per exercise, once over straight sets and once over split sets,
@@ -381,13 +374,8 @@ plain JavaScript, with no library, so the importer works offline.
 - A spreadsheet from Strong, Hevy, JEFIT or FitNotes' own CSV export also imports.
 - Body weight and measurements are not imported.
 
-### Set comments: 4,297 in the file, 2,240 on sets
-
-FitNotes keeps a comment after its set is deleted. Of his 4,297 set comments,
-**2,057 point at sets that no longer exist**, some dated 2019, before his log
-starts. **All 2,240 comments that have a set come across.** The import screen
-shows both numbers. Earlier versions of this brief expected 4,297 on sets; that
-target was wrong.
+**Every comment that still has a set comes across (2,240 of his 4,297; the
+rest point at deleted sets).** (HISTORY.md: Set comments: 4,297 in the file, 2,240 on sets)
 
 ---
 
@@ -443,26 +431,8 @@ category immediately. Verified 2026-09-14 by switching skins with a calendar ope
 
 ## Deliberate departures
 
-The ones made so far. Until 2026-09-15 anything not listed here was a bug;
-since Tom lifted FitNotes as a hard rule, this is the record of what changed,
-not a fence.
-
-| FitNotes | TRAIN | Why |
-|---|---|---|
-| Body Tracker | Not built | STATUS owns measurements |
-| Google Drive backup | Not built | Local only, per the master brief |
-| Supporter paywall | Everything unlocked | It is his app |
-| Deleting a category deletes its exercises and every set under them | Its exercises move to another category he picks | Four years of sets should not ride on a tidy-up |
-| Rest timer rings with the screen off | Rings only while TRAIN is open. **Keep Screen On** keeps it open | A backgrounded browser tab is suspended |
-| Double tap a graph to expand | One tap | A double tap on a phone is also a zoom |
-| Android back button | `shared/mobile.js` back stack | No hardware button in a browser |
-| Its own themes | Motherbase skins | The whole point |
-| `routine` | `program` | BLOCK owns `routine` |
-| "Workout" | "Session" and "Training": Training Log Empty, Copy Past Session, Training Routines | Tom, 2026-09-14: he trains |
-| One set of records per exercise | Straight sets and split sets each keep their own | A set with a rest in it is not the same lift |
-| A copied set and a logged set look alike | A plan still waiting reads in muted numbers | With the auto-tick gone nothing else told them apart |
-| Records never start again | Each training block has its own; all-time ones stay | Tom, 2026-09-14 |
-| No session names, blocks, weekly view, session summary or profile | All five | Tom, 2026-09-14 |
+A change from FitNotes still gets a row in the departures table, so the record
+stays whole. (HISTORY.md: Deliberate departures)
 
 ### The rest timer
 
