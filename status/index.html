@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.50, 2026-09-24">
+<meta name="mb-version" content="1.0.51, 2026-09-25">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -352,6 +352,15 @@ nav button.on{color:var(--accent);opacity:1}
 .chip.big{flex:1;min-width:var(--s-6);text-align:center;font-size:var(--f-4);padding:var(--s-4) var(--s-2);
   display:flex;flex-direction:column;align-items:center;gap:2px}
 .chip.big small{font-size:var(--f-1);opacity:.7;font-family:var(--font-body)}
+/* a bullet's mood: the scale in one row, the number over its word */
+.chip.scale{flex:1;min-width:0;padding:var(--s-1) var(--s-1);text-align:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+.chip.scale small{font-size:var(--f-1);opacity:.7;font-family:var(--font-body)}
+/* which kinds ask, in Settings, BULLETS: the kind's mark and its name */
+.kindpick .chip{display:inline-flex;align-items:center;gap:var(--s-2)}
+/* on the settings card an off button is the card's own colour, so it is
+   drawn with an edge or it reads as a word */
+.kindpick .chip:not(.on){box-shadow:inset 0 0 0 1px var(--border)}
 
 /* ── things you type into: the one place a border earns its keep ── */
 input[type=text],input[type=search],input[type=time],input.num,textarea,select{
@@ -3077,20 +3086,20 @@ function entryRow(f, d, e) {
 function scaleLo(f) { return f && f.lo != null && isFinite(f.lo) ? Math.round(f.lo) : 1; }
 function scaleHi(f) { const lo = scaleLo(f); return Math.max(lo + 1, Math.min(lo + 10, Math.round((f && f.max) || 5))); }
 function scaleName(f, v) { return (f && f.names && f.names[v]) ? String(f.names[v]) : ''; }
+/* A scale runs 1..max, and max is whatever the field says — 3, 5, 10. The
+   words are stretched over whatever range that is rather than assuming five,
+   so a 1-to-3 scale reads bad / ok / great and a 1-to-10 still labels its
+   ends. His own words for a number win; the stretched ones fill the rest. */
+function scaleWord(f, v) {
+  if (scaleName(f, v)) return scaleName(f, v);
+  const lo = scaleLo(f), hi = scaleHi(f), t = (v - lo) / (hi - lo);
+  return t === 0 ? 'bad' : t === 1 ? 'great' : t < .34 ? 'low' : t > .66 ? 'good' : 'ok';
+}
 
 function scaleSheet(f, date) {
   const d = date || vd();
-  /* A scale runs 1..max, and max is whatever the field says — 3, 5, 10. The
-     words are stretched over whatever range that is rather than assuming five,
-     so a 1-to-3 scale reads bad / ok / great and a 1-to-10 still labels its
-     ends. */
   const lo = scaleLo(f), hi = scaleHi(f);
-  /* His own words for a number win; the stretched ones fill the rest. */
-  const WORDS = v => {
-    if (scaleName(f, v)) return scaleName(f, v);
-    const t = (v - lo) / (hi - lo);
-    return t === 0 ? 'bad' : t === 1 ? 'great' : t < .34 ? 'low' : t > .66 ? 'good' : 'ok';
-  };
+  const WORDS = v => scaleWord(f, v);
   openSheet(f.label, body => {
     const w = el('div', 'chips');
     for (let v = lo; v <= hi; v++) {
@@ -4352,9 +4361,14 @@ function noteSheet(x, d) {
        to be done. The start can be typed into the line as it always could;
        both are here as fields because a deadline is not something you want to
        discover you typed wrong. Only todos have them - an idea is not due. */
-    let atVal = x.at || '', byVal = x.by || '';
+    /* A line with a start and a length shows its end as Done if it is, or
+       becomes, a todo, so saving it keeps the time it was given. */
+    let atVal = x.at || '', byVal = x.by || Journal.endAt(x.at, x.dur) || '';
     const times = el('div', 'grid2');
-    times.style.display = kind === 'todo' ? '' : 'none';
+    /* Which kinds ask for times, and which for a mood, is Settings, BULLETS
+       (Tom, 2026-09-25: "This should all be configurable in settings"). */
+    const todoTimed = () => kind === 'todo' && bulletAsks('times', 'todo');
+    times.style.display = todoTimed() ? '' : 'none';
     /* ── Start and Done ──
        "By" was the time you meant to finish. Calling it Done makes it the time
        you DID, which is the fact worth keeping once the day has happened - and
@@ -4373,42 +4387,81 @@ function noteSheet(x, d) {
     });
     body.appendChild(times);
 
-    /* ── an entry's time and how long it took ──
-       Tom, 2026-09-18: "Add manual duration tracking fields beside entry time,
-       Let entry time be modified as well." For an entry or an event: when it
-       happened (blank is when it was written) and how long it ran, typed as
-       45, 45m, 1h30 or 1.5h. */
-    let durVal = x.dur || null;
+    /* ── an entry's start and end ──
+       Tom, 2026-09-18, asked for a time and a length; 2026-09-25: "Should be
+       start time and end time". For an entry, an event, or an idea if
+       Settings says so. Blank Start is when it was written. The row still
+       keeps `at` and `dur`, so every app reading it is unchanged: the end is
+       only how a length is typed. The length it comes to sits beside End.
+
+       An End with no Start fills Start in with when it was written (now, for
+       a new line), on screen, so what gets saved is what is showing. */
+    const wrote = isNew ? '' : (x.t ? Journal.hhmm(x.t) : '');
+    let endVal = Journal.endAt(x.at || wrote, x.dur) || (x.kind === 'todo' ? x.by || '' : '');
+    let endTouched = false;
+    const startOf = () => atVal || wrote || Journal.hhmm(Date.now());
     const span = el('div', 'grid2');
     const tw = el('div', 'field');
-    tw.appendChild(el('label', 'fl', 'Time'));
-    tw.appendChild(timeInput(atVal || (isNew ? '' : (x.t ? Journal.hhmm(x.t) : '')), v => { atVal = v; }));
-    span.appendChild(tw);
+    tw.appendChild(el('label', 'fl', 'Start'));
+    let startBox = null;
+    const putStart = v => {
+      const n = timeInput(v, s => { atVal = s; paintLen(); });
+      if (startBox) tw.replaceChild(n, startBox); else tw.appendChild(n);
+      startBox = n;
+    };
     const dw = el('div', 'field');
-    dw.appendChild(el('label', 'fl', 'Duration'));
-    const di = document.createElement('input');
-    di.type = 'text'; di.className = 'mb-input'; di.placeholder = '45m or 1h30';
-    di.value = durVal ? durLabel(durVal) : '';
-    di.onchange = () => { durVal = readDur(di.value); di.value = durVal ? durLabel(durVal) : ''; };
-    dw.appendChild(di);
+    const endLbl = el('label', 'fl', 'End');
+    dw.appendChild(endLbl);
+    const paintLen = () => {
+      const m = endVal ? Journal.spanMins(startOf(), endVal) : null;
+      endLbl.innerHTML = 'End' + (m ? ' <span class="muted">· ' + esc(durLabel(m)) + '</span>' : '');
+    };
+    putStart(atVal || wrote);
+    dw.appendChild(timeInput(endVal, v => {
+      endVal = v; endTouched = true;
+      if (v && !atVal) { atVal = startOf(); putStart(atVal); }
+      paintLen();
+    }));
+    paintLen();
+    span.appendChild(tw);
     span.appendChild(dw);
-    const timed = () => kind === 'entry' || kind === 'event';
+    const timed = () => kind !== 'todo' && bulletAsks('times', kind);
     span.style.display = timed() ? '' : 'none';
     body.appendChild(span);
 
-    /* ── how it felt ──
-       Tom, 2026-09-19: mood on entries and events, "not just a 1-5 number but
-       a text field", with five options drawn from what he writes most. Off
-       until switched on in BULLETS, and never required. */
+    /* ── mood, and how it felt ──
+       Tom, 2026-09-19: mood "not just a 1-5 number but a text field", with
+       five words drawn from what he writes most. 2026-09-25: "Maybe add mood
+       tracking to events". So a mood is the number, on the same scale and
+       in the same words as his Mood tile, and the word goes under it when
+       BULLETS asks for one too. Which kinds ask is Settings; events by
+       default. Never required: tap a number again to clear it. */
+    const moodF = fields().mood || { lo: 1, max: 5 };
+    const moodOn = () => bulletAsks('mood', kind);
+    let moodVal = x.mood != null && x.mood !== '' ? +x.mood : null;
+    const mw = el('div', 'field');
+    mw.appendChild(el('label', 'fl', 'Mood'));
+    const mchips = el('div', 'chips moodrow');
+    const paintMood = () => {
+      mchips.innerHTML = '';
+      for (let v = scaleLo(moodF); v <= scaleHi(moodF); v++) {
+        const c = el('button', 'chip scale' + (moodVal === v ? ' on' : ''), v + '<small>' + esc(scaleWord(moodF, v)) + '</small>');
+        c.type = 'button';
+        c.setAttribute('aria-pressed', moodVal === v ? 'true' : 'false');
+        c.onclick = () => { moodVal = moodVal === v ? null : v; paintMood(); Mobile.haptic('select'); };
+        mchips.appendChild(c);
+      }
+    };
+    paintMood();
+    mw.appendChild(mchips);
     let feelVal = x.feel || '';
     const feelOn = S.get('bulletFeel', 0) === 1;
-    const fw = el('div', 'field');
     if (feelOn) {
-      fw.appendChild(el('label', 'fl', 'How it felt'));
       const fi = document.createElement('input');
-      fi.type = 'text'; fi.className = 'mb-input'; fi.placeholder = 'optional'; fi.value = feelVal;
+      fi.type = 'text'; fi.className = 'mb-input'; fi.placeholder = 'In a word, optional'; fi.value = feelVal;
+      fi.setAttribute('aria-label', 'How it felt');
       fi.oninput = () => { feelVal = fi.value.trim(); paintFeel(); };
-      fw.appendChild(fi);
+      mw.appendChild(fi);
       const chips = el('div', 'chips');
       const paintFeel = () => {
         chips.innerHTML = '';
@@ -4420,15 +4473,15 @@ function noteSheet(x, d) {
         });
       };
       paintFeel();
-      fw.appendChild(chips);
-      fw.style.display = timed() ? '' : 'none';
-      seg.addEventListener('click', () => { fw.style.display = timed() ? '' : 'none'; });
-      body.appendChild(fw);
+      mw.appendChild(chips);
     }
+    mw.style.display = moodOn() ? '' : 'none';
+    body.appendChild(mw);
     /* The picker above can change the kind after this is built. */
     seg.addEventListener('click', () => {
-      times.style.display = kind === 'todo' ? '' : 'none';
+      times.style.display = todoTimed() ? '' : 'none';
       span.style.display = timed() ? '' : 'none';
+      mw.style.display = moodOn() ? '' : 'none';
     });
 
     /* `again` reopens an empty line of the same kind instead of closing, which
@@ -4436,37 +4489,55 @@ function noteSheet(x, d) {
     const commit = (again, track) => {
       const text = ta.value.trim();
       if (!text) return UI.toast('Nothing to save', { bad: true });
+      /* the start and the length the two boxes say, or nulls */
+      const endSpan = () => {
+        if (!endVal) return { at: atVal || null, dur: null };
+        const s = startOf();
+        return { at: s, dur: Journal.spanMins(s, endVal) };
+      };
       if (isNew) {
         const ex = {};
-        if (timed() && atVal) ex.at = atVal;
-        if (timed() && durVal) ex.dur = durVal;
-        if (feelOn && timed() && feelVal) ex.feel = feelVal;
+        if (timed()) {
+          const sp = endSpan();
+          if (sp.at && (atVal || sp.dur)) ex.at = sp.at;
+          if (sp.dur) ex.dur = sp.dur;
+        }
+        if (todoTimed()) { if (atVal) ex.at = atVal; if (byVal) ex.by = byVal; }
+        if (moodOn() && moodVal != null) ex.mood = moodVal;
+        if (moodOn() && feelOn && feelVal) ex.feel = feelVal;
         /* Track: the clock runs from now, and the time is now unless set */
         if (track) { ex.run = Date.now(); delete ex.dur; if (!ex.at) ex.now = true; }
         addNote(d, kind, text, ex);
-        /* addNote made the row; the two clocks go on straight after it. */
-        if (kind === 'todo' && (atVal || byVal)) {
-          const list = Rec.all('note', { date: d })
-            .sort((a2, b2) => (b2.payload.t || 0) - (a2.payload.t || 0));
-          if (list[0]) Rec.set('note', d, list[0].key,
-            Object.assign({}, list[0].payload, { at: atVal || list[0].payload.at, by: byVal || null }));
-        }
       } else {
         const pz = parseLine(text, d);
         /* a range typed on a todo is its start and its end */
         if (kind === 'todo' && pz.at && pz.dur) {
-          const hm = pz.at.split(':');
-          byVal = Journal.minsHM(+hm[0] * 60 + (+hm[1] || 0) + pz.dur); pz.dur = null;
+          byVal = Journal.minsHM(+pz.at.split(':')[0] * 60 + (+pz.at.split(':')[1] || 0) + pz.dur); pz.dur = null;
+        }
+        /* What the sheet did not show is carried across as it was: a kind
+           whose times or mood are switched off keeps what it already had
+           (root CLAUDE.md, only write what you have shown). An untouched
+           End on a line with no start leaves it with no start. */
+        let at = x.at || null, dur = x.dur || null;
+        const untouched = !endTouched && atVal === (x.at || '') && kind === x.kind;
+        if (todoTimed()) { at = atVal || null; dur = null; }
+        else if (timed() && !untouched) {
+          const sp = endSpan();
+          at = atVal || (endTouched ? sp.at : (x.at || null));
+          dur = sp.dur;
         }
         Rec.set('note', x.date || d, x.key, Object.assign(bare(x), {
           kind: kind, text: pz.text,
           /* A time typed into the line still wins: it is the more recent thing
              the person did. */
-          at: pz.at || ((kind === 'todo' || timed()) ? (atVal || null) : null),
-          dur: pz.dur || (timed() ? durVal : null),
+          at: pz.at || at,
+          dur: pz.dur || dur,
+          /* a length that was typed or ended stops the clock Track started */
+          run: (pz.dur || dur) ? undefined : x.run,
+          mood: moodOn() ? moodVal : (x.mood != null ? x.mood : null),
           /* switched off, a feeling already on the line is left as it was */
-          feel: feelOn ? (timed() && feelVal ? feelVal : null) : (x.feel || null),
-          by: kind === 'todo' ? (byVal || null) : null,
+          feel: moodOn() && feelOn ? (feelVal || null) : (x.feel || null),
+          by: kind === 'todo' ? (todoTimed() ? (byVal || null) : (x.by || null)) : null,
           /* You set it, so it is yours: a later tick puts this aside rather
              than over the side, and un-ticking hands it back. */
           byAuto: 0,
@@ -8353,18 +8424,65 @@ function deskBullet() {
    ones that add a step (Track, the feeling) can be turned off entirely. */
 function drawBulletsTab(pane) {
   settingsPane = pane; pane.classList.add('setpane');
+  const again = () => { pane.innerHTML = ''; drawBulletsTab(pane); };
+  /* Which kinds ask for what, as a button per kind (Tom, 2026-09-25: "This
+     should all be configurable in settings"). */
+  const kinds = (what, title, note) => {
+    pane.appendChild(el('label', 'fl', title));
+    const w = el('div', 'field');
+    const row = el('div', 'chips kindpick');
+    NOTE_KINDS.forEach(k => {
+      const on = bulletAsks(what, k.id);
+      const b = el('button', 'chip' + (on ? ' on' : ''), noteSvg(k.id) + '<span>' + esc(k.label) + '</span>');
+      b.type = 'button';
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.onclick = () => {
+        const v = Object.assign({}, bulletAskMap(what));
+        v[k.id] = on ? 0 : 1;
+        S.set('bullet.' + what, v);
+        Mobile.haptic('select'); again();
+      };
+      row.appendChild(b);
+    });
+    w.appendChild(row);
+    w.appendChild(el('div', 'note', note));
+    pane.appendChild(w);
+  };
+  kinds('times', 'Start and end',
+    'A todo’s end is called Done, and ticking it fills that in. Blank Start is when you wrote it.');
+  kinds('mood', 'Mood',
+    'Tap a number from ' + scaleLo(fields().mood) + ' to ' + scaleHi(fields().mood) +
+    ', the scale your Mood tile uses. It stays on the line and never goes into the day’s Mood.');
+  pane.appendChild(toggleRow('A word for how it felt, under the mood',
+    'Typed, with your five most used as buttons',
+    S.get('bulletFeel', 0) === 1, v => { S.set('bulletFeel', v ? 1 : 0); again(); }));
+  pane.appendChild(el('label', 'fl', 'Writing'));
   pane.appendChild(toggleRow('Track button beside Add',
-    'On an entry or event: starts the clock now, and Stop fills in how long',
-    S.get('bulletTrack', 1) !== 0, v => { S.set('bulletTrack', v ? 1 : 0); }));
+    'Starts the clock now on a line with Start and end, and Stop fills in the end',
+    S.get('bulletTrack', 1) !== 0, v => { S.set('bulletTrack', v ? 1 : 0); again(); }));
   pane.appendChild(toggleRow('"Paid 250 - lunch" logs spending',
     'A line starting with paid and an amount also goes on the money screen',
-    S.get('bulletPaid', 1) !== 0, v => { S.set('bulletPaid', v ? 1 : 0); }));
-  pane.appendChild(toggleRow('Ask how it felt',
-    'On entries and events: a word or two, with your five most used as buttons',
-    S.get('bulletFeel', 0) === 1, v => { S.set('bulletFeel', v ? 1 : 0); }));
+    S.get('bulletPaid', 1) !== 0, v => { S.set('bulletPaid', v ? 1 : 0); again(); }));
   pane.appendChild(el('div', 'note',
-    'Enter saves a bullet and Shift+Enter starts a new line. A range like 8-11 at the end of a line is its time.'));
+    'Enter saves a bullet and Shift+Enter starts a new line. A range like 8-11 at the end of a line is its start and end.'));
 }
+/* What each kind of bullet asks for when it is written. One setting per
+   question, holding a 1 or a 0 for every kind: an object of numbers rather
+   than a list of kinds, because live sync drops an empty list and a device
+   would read "none" as "never chosen" (root CLAUDE.md, Known traps).
+   Anyone who had "Ask how it felt" on had it on entries and events, so their
+   mood starts on both; otherwise events only. */
+const BULLET_ASK = {
+  times: { todo: 1, entry: 1, event: 1, idea: 0 },
+  mood:  { todo: 0, entry: 0, event: 1, idea: 0 },
+};
+function bulletAskMap(what) {
+  const def = Object.assign({}, BULLET_ASK[what]);
+  if (what === 'mood' && S.get('bulletFeel', 0) === 1) def.entry = 1;
+  const v = S.get('bullet.' + what, null);
+  return v && typeof v === 'object' ? Object.assign(def, v) : def;
+}
+function bulletAsks(what, kind) { return bulletAskMap(what)[kind] === 1; }
 /* The five feelings he writes most, from the last 90 days; plain ones until
    he has written any. */
 function topFeels() {
