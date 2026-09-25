@@ -601,6 +601,9 @@ session could undo without noticing:
   height. It **rings once at zero and goes** — Tom, 2026-09-24: *"I don't want
   to see the over timer in TRAIN."* Do not bring the counting-up state back.
   The clock still decides, so a tab suspended past the end rings and clears.
+  **It starts from the tick box only** (1.0.33, `afterSave(..., byTick)`),
+  never from SAVE or UPDATE. Tom, 2026-09-25: *"saving a set should NOT start
+  the timer, only marking it as done."*
 - **A set row is 44px.** The bubble and the tick box draw at 32 and keep their
   44px targets through `mb-tap`.
 - **SAVE is the accent and CLEAR is quiet.** No second colour on that bar.

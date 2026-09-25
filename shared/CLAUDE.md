@@ -229,6 +229,17 @@ work. Clean up any test data you write, and stop the server when you are done.
   of the mirror section, and `mirrorPut(MIRROR_WAS)` closes it. Use them for
   anything new in there.
 
+- **A smoke check must never step back through history to tidy up.**
+  Inside `_review.html` the smoke page is a frame, and a frame's history
+  steps are the whole tab's, shared with every frame the review opened. The
+  back stack check's `history.go(-3)` walked the review itself back a page
+  once (2026-09-25). Push spare entries and leave them.
+- **A run that leaves the page mid-way leaves its test rows behind, and the
+  fast-half check then fails.** `rec: a full fast half` moves the oldest-dated
+  rows first and expects exactly its own two; leftover `smoke-<n>` rows dated
+  1899 from an aborted run get counted too. Clear `mb.r.local|smoke-*` keys
+  on that test origin and run again before suspecting `records.js`.
+
 ## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
 
 A row stamped more than a day ahead (`soon()`) is never sent and never moves
