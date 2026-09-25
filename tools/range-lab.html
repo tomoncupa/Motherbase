@@ -4,261 +4,66 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Range Lab</title>
+<script src="../shared/skins.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/range.js"></script>
 <style>
-:root{--bg:#12151c;--ink:#e8e4da;--mut:#9aa0ab;--card:#1b1f28}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif;padding:16px}
-.wrap{max-width:980px;margin:0 auto}
-.card{background:var(--card);border-radius:14px;padding:12px}
-canvas{display:block;width:100%;border-radius:10px}
-.ctl{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:12px;color:var(--mut)}
-.ctl input[type=range]{flex:1;min-width:180px}
-button{background:#2a3040;color:var(--ink);border:0;border-radius:8px;min-height:44px;padding:0 16px;font:inherit;cursor:pointer}
-button.on{outline:2px solid #d9573f}
-h1{font-size:15px;letter-spacing:.15em;color:var(--mut);font-weight:600;margin:0 0 10px}
+body{margin:0;background:var(--bg);color:var(--text-1);font-family:var(--font-body);padding:var(--s-4)}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s-4)}
+.card{background:var(--surface-1);border-radius:var(--radius-md);overflow:hidden}
+.ctl{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.ctl button{min-height:var(--tap);padding:0 var(--s-4);background:var(--surface-2);color:var(--text-1);border:0;border-radius:var(--radius-sm);font:inherit;cursor:pointer}
+h1{font-family:var(--font-display);font-size:var(--f-2);letter-spacing:var(--track-cap);color:var(--text-2);margin:0}
 </style>
 </head>
 <body>
 <div class="wrap">
-<h1>RANGE LAB · one block, sessions as trees</h1>
-<div class="card" id="box"><canvas id="cv"></canvas></div>
+<h1>RANGE LAB · shared/range.js on made-up history, touches no store</h1>
 <div class="ctl">
-  <span>Sessions</span><input type="range" id="n" min="0" max="36" value="24"><b id="nv">24</b>
+  <button data-h="short">3 WEEKS</button><button data-h="year">1 YEAR, BLOCKS</button>
+  <button data-h="long">4 YEARS, 2 BLOCKS</button><button data-h="none">EMPTY</button>
+  <button data-w="390">PHONE WIDTH</button><button data-w="980">FULL WIDTH</button>
 </div>
-<div class="ctl">
-  <button id="seed">NEW PRINT</button>
-  <button id="w390">PHONE WIDTH</button>
-  <button id="wfull" class="on">FULL WIDTH</button>
-</div>
+<div id="cards"></div>
 </div>
 <script>
-/* A test of the woodblock engine. Fake data, touches no app.
-   Everything is drawn from rules printers used: bokashi (ink wiped
-   into a gradient on the block), a few fixed inks, key-block outlines
-   of uneven weight, colour blocks a hair out of register, kasumi cloud
-   bands, and paper with fibre and wood grain showing through. */
-var PAPER = [42, 40, 89];
-var INDIGO = 'hsl(222 48% 20%)', PRUSSIAN = 'hsl(212 55% 30%)', SKYPALE = 'hsl(205 35% 78%)';
-var PEACH = 'hsl(18 70% 84%)', SUN = 'hsl(8 72% 54%)';
-var MTN_TOP = 'hsl(222 42% 24%)', MTN_MID = 'hsl(212 40% 40%)', MTN_LOW = 'hsl(206 32% 62%)';
-var SNOW = 'hsl(40 45% 95%)', KEY = 'hsl(222 35% 12%)';
-var PINE = 'hsl(150 34% 22%)', PINE_L = 'hsl(140 30% 34%)', BARK = 'hsl(20 30% 22%)';
-var BLOSSOM = 'hsl(345 70% 83%)', BLOSSOM2 = 'hsl(348 60% 68%)';
-
-var seed = 7, width = 0;
+/* Made-up history, seeded, so a look can be compared run to run. */
+if (window.Skins && Skins.restore) try { Skins.restore('range-lab'); } catch (e) {}
 function rng(s) { return function () { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; }; }
-function hsl(a, alpha) { return 'hsl(' + a[0] + ' ' + a[1] + '% ' + a[2] + '% / ' + (alpha == null ? 1 : alpha) + ')'; }
-
-/* 1D fractal noise, seeded, so one history always prints the same picture */
-function noise1(r) {
-  var pts = []; for (var i = 0; i < 64; i++) pts.push(r() * 2 - 1);
-  function v(x) { var i = Math.floor(x), f = x - i, a = pts[((i % 64) + 64) % 64], b = pts[(((i + 1) % 64) + 64) % 64]; f = f * f * (3 - 2 * f); return a + (b - a) * f; }
-  return function (x) { return v(x) * .55 + v(x * 2.1 + 9) * .27 + v(x * 4.3 + 21) * .13 + v(x * 9.1 + 5) * .05; };
+function add(d, n) { return new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10); }
+function history(kind) {
+  var to = '2026-09-25', r = rng(11), out = { sessions: [], phases: [], to: to };
+  if (kind === 'none') return out;
+  var n = kind === 'short' ? 21 : kind === 'year' ? 365 : 1700, vol = 5000;
+  for (var i = n; i >= 0; i--) {
+    var d = add(to, -i);
+    if (r() < (kind === 'long' ? 0.36 : 0.45)) {
+      vol = Math.max(1500, vol + (r() - 0.45) * 900);
+      var sets = 10 + Math.round(r() * 16);
+      out.sessions.push({ date: d, vol: vol * sets / 18, sets: sets, reps: sets * 9, pr: r() < 0.08 });
+    }
+  }
+  if (kind === 'year') {
+    out.phases = [{ name: 'Base', start: add(to, -300) }, { name: 'Strength', start: add(to, -220) },
+      { name: 'Hypertrophy', start: add(to, -150), end: add(to, -100) }, { name: 'Peak', start: add(to, -60) }];
+  } else if (kind === 'long') {
+    out.phases = [{ name: 'Push Pull Legs', start: add(to, -70) }, { name: 'Deload', start: add(to, -20), end: add(to, -14) }];
+  } else if (kind === 'short') out.phases = [{ name: 'Block 1', start: add(to, -14) }];
+  return out;
 }
-
-/* fake history: one block, sessions three a week, volume creeping up, some records */
-function history(n, r) {
-  var s = [];
-  for (var i = 0; i < n; i++) s.push({ i: i, vol: 0.45 + i / 60 + r() * .35, pr: i > 3 && r() < .18 });
-  return s;
-}
-
+var H = 'long', Wd = 980;
 function draw() {
-  var cv = document.getElementById('cv'), box = document.getElementById('box');
-  var W = Math.round(box.clientWidth - 24), H = Math.round(Math.max(200, Math.min(300, W * .32)));
-  var dpr = window.devicePixelRatio || 1;
-  cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + 'px';
-  var g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  var r = rng(seed * 7919 + 1), nz = noise1(r), nz2 = noise1(r);
-  var n = +document.getElementById('n').value;
-  var ses = history(n, rng(seed * 104729 + 3));
-
-  /* ── paper ── */
-  g.fillStyle = hsl(PAPER); g.fillRect(0, 0, W, H);
-
-  /* ── sky: bokashi, indigo wiped down into the paper, a peach wash at the horizon ── */
-  var horizon = H * .78;
-  var sk = g.createLinearGradient(0, 0, 0, horizon);
-  sk.addColorStop(0, INDIGO); sk.addColorStop(.16, PRUSSIAN); sk.addColorStop(.42, SKYPALE);
-  sk.addColorStop(.62, hsl(PAPER, 0)); sk.addColorStop(1, hsl(PAPER, 0));
-  g.fillStyle = sk; g.fillRect(0, 0, W, horizon);
-  var pe = g.createLinearGradient(0, horizon * .45, 0, horizon);
-  pe.addColorStop(0, 'hsl(18 70% 84% / 0)'); pe.addColorStop(.6, 'hsl(18 70% 84% / .55)'); pe.addColorStop(1, 'hsl(18 70% 84% / 0)');
-  g.fillStyle = pe; g.fillRect(0, horizon * .45, W, horizon * .55);
-
-  /* ── the sun, printed a hair out of register ── */
-  var sx = W * (.8 + r() * .1), sy = H * (.2 + r() * .08), sr = H * .085;
-  g.fillStyle = SUN; g.beginPath(); g.arc(sx + 1.2, sy + .8, sr, 0, 7); g.fill();
-
-  /* ── the mountain: one block. Height grows with sessions, never below a hill ── */
-  var base = H * .9, peakX = W * (.4 + (r() - .5) * .1);
-  var grow = Math.min(1, .45 + Math.sqrt(n / 36) * .55);
-  var peakH = H * .72 * grow;
-  var x0 = peakX - W * .46, x1 = peakX + W * .52;
-  var ridge = [], step = 2;
-  for (var x = x0; x <= x1; x += step) {
-    var u = x < peakX ? (peakX - x) / (peakX - x0) : (x - peakX) / (x1 - peakX);
-    var shape = Math.pow(1 - Math.min(1, u), 1.9);        /* concave flanks */
-    var rough = nz(x / 38) * H * .035 * (0.4 + shape) + nz2(x / 9) * H * .006;
-    var flat = Math.abs(x - peakX) < W * .018 ? -H * .01 : 0;   /* a crater lip, not a needle */
-    ridge.push([x, base - peakH * shape - rough + flat]);
-  }
-  var peakY = Math.min.apply(null, ridge.map(p => p[1]));
-  function ridgeAt(x) { var i = Math.max(0, Math.min(ridge.length - 1, Math.round((x - x0) / step))); return ridge[i][1]; }
-  function mtnPath(dx, dy) {
-    g.beginPath(); g.moveTo(x0 + dx, H + 2);
-    ridge.forEach(p => g.lineTo(p[0] + dx, p[1] + dy));
-    g.lineTo(x1 + dx, H + 2); g.closePath();
-  }
-
-  /* body: bokashi from the summit down into mist */
-  var mg = g.createLinearGradient(0, peakY, 0, base);
-  mg.addColorStop(0, MTN_TOP); mg.addColorStop(.45, MTN_MID); mg.addColorStop(.8, MTN_LOW); mg.addColorStop(1, hsl(PAPER, .9));
-  g.save(); mtnPath(1, 1); g.fillStyle = mg; g.fill();
-  /* the lit face: the left flank a shade paler, wiped sideways */
-  g.clip();
-  var lf = g.createLinearGradient(x0, 0, peakX, 0);
-  lf.addColorStop(0, 'hsl(205 40% 80% / .35)'); lf.addColorStop(1, 'hsl(205 40% 80% / 0)');
-  g.fillStyle = lf; g.fillRect(x0, peakY, peakX - x0, base - peakY);
-
-  /* snow: a cap with gullies running down it */
-  var snowLine = peakY + peakH * .3, snow = [];
-  g.beginPath();
-  for (var x = x0; x <= x1; x += step) {
-    var ph = x / (W * .011) + nz(x / 60) * 2.2 + seed;
-    var gul = Math.pow(Math.abs(Math.sin(ph)), 9) * peakH * (.06 + (nz2(x / 31) + 1) * .1);
-    var y = snowLine + nz2(x / 22) * peakH * .05 + gul;
-    snow.push([x, y]);
-    x === x0 ? g.moveTo(x, y) : g.lineTo(x, y);
-  }
-  g.lineTo(x1, 0); g.lineTo(x0, 0); g.closePath();
-  g.fillStyle = SNOW; g.fill();
-  g.restore();
-  function snowAt(x) { var i = Math.max(0, Math.min(snow.length - 1, Math.round((x - x0) / step))); return snow[i][1]; }
-
-  /* key block: the ridge in ink of uneven weight, and the snow's lower edge lighter */
-  g.strokeStyle = KEY; g.lineCap = 'round';
-  for (var i = 1; i < ridge.length; i++) {
-    var p = ridge[i - 1], q = ridge[i];
-    g.lineWidth = .8 + (nz(p[0] / 15) + 1) * 1.1;
-    g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.stroke();
-  }
-  g.save(); mtnPath(0, 0); g.clip();
-  g.strokeStyle = 'hsl(222 30% 30% / .7)';
-  for (var i = 1; i < snow.length; i++) {
-    var p = snow[i - 1], q = snow[i];
-    if (p[1] < ridgeAt(p[0]) + 2) continue;
-    g.lineWidth = .5 + (nz2(p[0] / 12) + 1) * .5;
-    g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]); g.stroke();
-  }
-  g.restore();
-
-  /* ── trees ON the mountain. One per session, left to right in the order
-     they happened, taller for more volume, a cherry in blossom for a record ── */
-  var mist = base - H * .04, trees = [];
-  var tr = rng(seed * 31 + 11);
-  ses.forEach(function (s, k) {
-    var span = (x1 - x0) * .64, tx = x0 + (x1 - x0) * .18 + (n > 1 ? k / (n - 1) : .5) * span + (tr() - .5) * 10;
-    var size = 9 + s.vol * 12;
-    var top = Math.max(ridgeAt(tx), snowAt(tx)) + size * 1.1, bot = mist - 2;
-    if (top > bot) top = bot;
-    var ty = top + (bot - top) * Math.pow(tr(), .55);
-    trees.push({ x: tx, y: ty, s: size, pr: s.pr, lean: (tr() - .5) * .3, r: tr });
+  var box = document.getElementById('cards');
+  box.innerHTML = '';
+  document.querySelector('.wrap').style.maxWidth = Wd + 'px';
+  var data = history(H);
+  [['sessions', 'fuji'], ['sets', 'ink'], ['volume', 'dusk'], ['blocks', 'fuji']].forEach(function (p) {
+    var c = document.createElement('div'); c.className = 'card'; box.appendChild(c);
+    Range.mount(c, data, 230, { base: p[0], print: p[1] });
   });
-  trees.sort((a, b) => a.y - b.y).forEach(drawTree);
-
-  function drawTree(t) {
-    var x = t.x, y = t.y, s = t.s;
-    g.lineJoin = 'round';
-    /* trunk */
-    g.strokeStyle = BARK; g.lineWidth = Math.max(1.2, s * .09);
-    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + s * t.lean, y - s * .5, x + s * t.lean * 1.4, y - s * .95); g.stroke();
-    if (t.pr) {
-      /* cherry: clouds of blossom, a darker inner print, key outline */
-      var puffs = [[0, -1, .42], [-.38, -.78, .32], [.4, -.82, .33], [-.12, -1.25, .3], [.22, -1.2, .28]];
-      g.fillStyle = BLOSSOM; g.strokeStyle = KEY; g.lineWidth = .7;
-      puffs.forEach(p => { g.beginPath(); g.arc(x + p[0] * s, y + p[1] * s, p[2] * s, 0, 7); g.fill(); g.stroke(); });
-      g.fillStyle = BLOSSOM2;
-      for (var i = 0; i < 9; i++) { g.beginPath(); g.arc(x + (t.r() - .5) * s * 1.1, y - s * (.75 + t.r() * .55), s * .05, 0, 7); g.fill(); }
-      return;
-    }
-    /* pine: flat tiers, the way the prints draw them, lighter on top */
-    var tiers = s > 18 ? 3 : 2;
-    for (var k = 0; k < tiers; k++) {
-      var ty = y - s * (.55 + k * .3), tw = s * (.62 - k * .14), th = s * .16;
-      var cx = x + s * t.lean * (.8 + k * .4);
-      g.beginPath(); g.ellipse(cx, ty, tw, th, 0, 0, 7);
-      g.fillStyle = PINE; g.fill();
-      g.beginPath(); g.ellipse(cx - tw * .1, ty - th * .35, tw * .75, th * .45, 0, 0, 7);
-      g.fillStyle = PINE_L; g.fill();
-      g.beginPath(); g.ellipse(cx, ty, tw, th, 0, 0, 7);
-      g.strokeStyle = KEY; g.lineWidth = .7; g.stroke();
-    }
-  }
-
-  /* ── mist at the foot, then kasumi: the long rounded cloud bands ── */
-  var fm = g.createLinearGradient(0, base - H * .14, 0, H);
-  fm.addColorStop(0, hsl(PAPER, 0)); fm.addColorStop(.55, hsl(PAPER, .92)); fm.addColorStop(1, hsl(PAPER, 1));
-  g.fillStyle = fm; g.fillRect(0, base - H * .14, W, H);
-  function kasumi(y, xa, xb, h) {
-    kband(y, xa, xb, h);
-    kband(y + h * 1.3, xa + (xb - xa) * .18, xb + (xb - xa) * .08, h * .8);
-  }
-  function kband(y, xa, xb, h) {
-    g.beginPath();
-    g.moveTo(xa + h, y); g.lineTo(xb - h, y); g.arc(xb - h, y + h, h, -Math.PI / 2, Math.PI / 2);
-    g.lineTo(xa + h, y + 2 * h); g.arc(xa + h, y + h, h, Math.PI / 2, Math.PI * 1.5);
-    var kg = g.createLinearGradient(0, y, 0, y + 2 * h);
-    kg.addColorStop(0, 'hsl(18 62% 88%)'); kg.addColorStop(1, hsl(PAPER));
-    g.fillStyle = kg; g.fill();
-  }
-  var kr = rng(seed * 13 + 5);
-  kasumi(H * (.52 + kr() * .06), -40, W * (.2 + kr() * .1), H * .05);
-  kasumi(H * (.3 + kr() * .05), W * (.66 + kr() * .08), W + 40, H * .045);
-
-  /* ── the paper shows through everything: mottling, fibres, and wood grain in the sky ── */
-  paper(g, W, H, horizon);
-
-  if (!n) {
-    g.fillStyle = 'hsl(222 35% 16% / .8)'; g.font = '600 ' + Math.round(H * .055) + 'px Georgia, serif'; g.textAlign = 'center';
-    g.fillText('The first session plants the first tree', W / 2, H * .96);
-  }
 }
-
-function paper(g, W, H, horizon) {
-  var pr = rng(99);
-  /* wood grain, only where the sky ink sat on the block */
-  g.save(); g.beginPath(); g.rect(0, 0, W, horizon * .55); g.clip();
-  g.strokeStyle = 'hsl(222 50% 8% / .045)'; g.lineWidth = 1;
-  for (var y = -10; y < horizon * .6; y += 3 + pr() * 4) {
-    g.beginPath(); var ph = pr() * 6, amp = 1 + pr() * 2.5;
-    for (var x = 0; x <= W; x += 12) { var yy = y + Math.sin(x / 90 + ph) * amp + Math.sin(x / 23 + ph * 2) * .6; x ? g.lineTo(x, yy) : g.moveTo(x, yy); }
-    g.stroke();
-  }
-  g.restore();
-  /* mottling: a coarse noise, stretched soft */
-  var m = document.createElement('canvas'); m.width = Math.ceil(W / 6); m.height = Math.ceil(H / 6);
-  var mg = m.getContext('2d'), id = mg.createImageData(m.width, m.height);
-  for (var i = 0; i < id.data.length; i += 4) { var v = pr(); id.data[i] = 120; id.data[i + 1] = 100; id.data[i + 2] = 70; id.data[i + 3] = v * 22; }
-  mg.putImageData(id, 0, 0);
-  g.save(); g.imageSmoothingEnabled = true; g.globalCompositeOperation = 'multiply'; g.drawImage(m, 0, 0, W, H); g.restore();
-  /* fibres: short curls, dark and light */
-  for (var i = 0; i < W * H / 420; i++) {
-    var x = pr() * W, y = pr() * H, l = 3 + pr() * 9, a = pr() * 6.3;
-    g.strokeStyle = pr() < .5 ? 'hsl(30 30% 30% / .05)' : 'hsl(40 60% 97% / .07)';
-    g.lineWidth = .5 + pr() * .6;
-    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + 1) * l * .6, y + Math.sin(a + 1) * l * .6, x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
-  }
-  /* specks */
-  for (var i = 0; i < W * H / 900; i++) { g.fillStyle = 'hsl(30 30% 25% / ' + (pr() * .12) + ')'; g.fillRect(pr() * W, pr() * H, 1, 1); }
-}
-
-var nIn = document.getElementById('n');
-nIn.oninput = () => { document.getElementById('nv').textContent = nIn.value; draw(); };
-document.getElementById('seed').onclick = () => { seed = Math.floor(Math.random() * 1e6); draw(); };
-function setW(px, on) { document.querySelector('.wrap').style.maxWidth = px; document.getElementById('w390').classList.toggle('on', on === 'p'); document.getElementById('wfull').classList.toggle('on', on === 'f'); draw(); }
-document.getElementById('w390').onclick = () => setW('390px', 'p');
-document.getElementById('wfull').onclick = () => setW('980px', 'f');
-window.onresize = draw;
+document.querySelectorAll('[data-h]').forEach(function (b) { b.onclick = function () { H = b.dataset.h; draw(); }; });
+document.querySelectorAll('[data-w]').forEach(function (b) { b.onclick = function () { Wd = +b.dataset.w; draw(); }; });
 draw();
 </script>
 </body>
