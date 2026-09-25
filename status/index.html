@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.51, 2026-09-25">
+<meta name="mb-version" content="1.0.52, 2026-09-25">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -360,7 +360,7 @@ nav button.on{color:var(--accent);opacity:1}
 .kindpick .chip{display:inline-flex;align-items:center;gap:var(--s-2)}
 /* on the settings card an off button is the card's own colour, so it is
    drawn with an edge or it reads as a word */
-.kindpick .chip:not(.on){box-shadow:inset 0 0 0 1px var(--border)}
+.kindpick .chip:not(.on){box-shadow:inset 0 0 0 1px var(--border-strong)}
 
 /* ── things you type into: the one place a border earns its keep ── */
 input[type=text],input[type=search],input[type=time],input.num,textarea,select{
@@ -4455,7 +4455,7 @@ function noteSheet(x, d) {
     paintMood();
     mw.appendChild(mchips);
     let feelVal = x.feel || '';
-    const feelOn = S.get('bulletFeel', 0) === 1;
+    const feelOn = feelAsked();
     if (feelOn) {
       const fi = document.createElement('input');
       fi.type = 'text'; fi.className = 'mb-input'; fi.placeholder = 'In a word, optional'; fi.value = feelVal;
@@ -4507,9 +4507,14 @@ function noteSheet(x, d) {
         if (moodOn() && feelOn && feelVal) ex.feel = feelVal;
         /* Track: the clock runs from now, and the time is now unless set */
         if (track) { ex.run = Date.now(); delete ex.dur; if (!ex.at) ex.now = true; }
-        addNote(d, kind, text, ex);
+        const nk = addNote(d, kind, text, ex);
+        if (moodOn() && moodVal != null) {
+          const nr = Rec.get('note', d, nk) || {};
+          moodToDay(d, nk, moodVal, nr.at, nr.t);
+        }
       } else {
-        const pz = parseLine(text, d);
+        /* time tracking switched off reads no time out of the words */
+        const pz = Journal.readLine(text, d);
         /* a range typed on a todo is its start and its end */
         if (kind === 'todo' && pz.at && pz.dur) {
           byVal = Journal.minsHM(+pz.at.split(':')[0] * 60 + (+pz.at.split(':')[1] || 0) + pz.dur); pz.dur = null;
@@ -4542,6 +4547,10 @@ function noteSheet(x, d) {
              than over the side, and un-ticking hands it back. */
           byAuto: 0,
         }));
+        if (moodOn()) {
+          const nr = Rec.get('note', x.date || d, x.key) || {};
+          moodToDay(x.date || d, x.key, moodVal, nr.at, nr.t);
+        }
       }
       publishNotes(d);
       Mobile.feedback(again ? 'tick' : 'success');
@@ -4579,7 +4588,7 @@ function noteSheet(x, d) {
        now; opening it again offers Stop, which fills in how long it ran. */
     const bar = el('div', 'trackbar');
     bar.appendChild(saveBar(isNew ? 'Add' : 'Save', () => commit(false)));
-    if (isNew && S.get('bulletTrack', 1) !== 0) {
+    if (isNew && Journal.timesOn() && S.get('bulletTrack', 1) !== 0) {
       const tr = saveBar('Track', () => commit(false, true));
       tr.className = 'btn wide';
       tr.title = 'Start the clock now';
@@ -4645,8 +4654,15 @@ function noteMenu(x, d, i, n, e) {
     '-',
     { label: 'Delete', kind: 'bad', icon: '⌫', fn: () => {
       const keep = bare(x);
-      Rec.del('note', own, x.key); Mobile.haptic('warn'); publishNotes(own); draw();
-      UI.undo('removed the line', () => { Rec.set('note', own, x.key, keep); publishNotes(own); draw(); });
+      Rec.del('note', own, x.key); Mobile.haptic('warn'); publishNotes(own);
+      /* its Mood reading goes with it, and comes back with the undo */
+      moodToDay(own, x.key, null);
+      draw();
+      UI.undo('removed the line', () => {
+        Rec.set('note', own, x.key, keep); publishNotes(own);
+        if (keep.mood != null && keep.mood !== '') moodToDay(own, x.key, +keep.mood, keep.at, keep.t);
+        draw();
+      });
     } },
   ].filter(Boolean), { title: noteKind(x.kind).label });
 }
@@ -8420,19 +8436,22 @@ function deskBullet() {
 }
 
 /* ── BULLETS ──
-   Everything about writing a line, in one place. Each is a switch, and the
-   ones that add a step (Track, the feeling) can be turned off entirely. */
+   Everything about writing a line, in one place. Tom, 2026-09-25: "Make sure
+   the settings for bullets is comprehensive, some people might not want mood
+   or time tracking at all." So time and mood each have one switch that turns
+   the whole thing off, and only when it is on do the choices under it show:
+   which kinds ask, and the parts that add a step. The switches themselves
+   are read by shared/journal.js, so LOG and the home screen obey them too. */
 function drawBulletsTab(pane) {
   settingsPane = pane; pane.classList.add('setpane');
   const again = () => { pane.innerHTML = ''; drawBulletsTab(pane); };
-  /* Which kinds ask for what, as a button per kind (Tom, 2026-09-25: "This
-     should all be configurable in settings"). */
-  const kinds = (what, title, note) => {
-    pane.appendChild(el('label', 'fl', title));
+  /* Which kinds ask, as a button per kind, on the card under a switch */
+  const kinds = (what, note) => {
     const w = el('div', 'field');
+    w.appendChild(el('label', 'fl', 'Which bullets ask'));
     const row = el('div', 'chips kindpick');
     NOTE_KINDS.forEach(k => {
-      const on = bulletAsks(what, k.id);
+      const on = bulletAskMap(what)[k.id] === 1;
       const b = el('button', 'chip' + (on ? ' on' : ''), noteSvg(k.id) + '<span>' + esc(k.label) + '</span>');
       b.type = 'button';
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -8448,41 +8467,91 @@ function drawBulletsTab(pane) {
     w.appendChild(el('div', 'note', note));
     pane.appendChild(w);
   };
-  kinds('times', 'Start and end',
-    'A todo’s end is called Done, and ticking it fills that in. Blank Start is when you wrote it.');
-  kinds('mood', 'Mood',
-    'Tap a number from ' + scaleLo(fields().mood) + ' to ' + scaleHi(fields().mood) +
-    ', the scale your Mood tile uses. It stays on the line and never goes into the day’s Mood.');
-  pane.appendChild(toggleRow('A word for how it felt, under the mood',
-    'Typed, with your five most used as buttons',
-    S.get('bulletFeel', 0) === 1, v => { S.set('bulletFeel', v ? 1 : 0); again(); }));
-  pane.appendChild(el('label', 'fl', 'Writing'));
-  pane.appendChild(toggleRow('Track button beside Add',
-    'Starts the clock now on a line with Start and end, and Stop fills in the end',
-    S.get('bulletTrack', 1) !== 0, v => { S.set('bulletTrack', v ? 1 : 0); again(); }));
+
+  pane.appendChild(el('label', 'fl', 'Time'));
+  const timeOn = Journal.timesOn();
+  pane.appendChild(toggleRow('Time tracking',
+    'A Start and an End on a bullet, and a time typed at the end of a line, like "Train 8-11"',
+    timeOn, v => { S.set('bulletTimes', v ? 1 : 0); again(); }));
+  if (timeOn) {
+    kinds('times', 'A todo’s end is called Done, and ticking it fills that in. A blank Start is when you wrote it.');
+    pane.appendChild(toggleRow('Track button beside Add',
+      'Starts the clock now, and Stop fills in the End',
+      S.get('bulletTrack', 1) !== 0, v => { S.set('bulletTrack', v ? 1 : 0); again(); }));
+  } else {
+    pane.appendChild(el('div', 'note', 'Off: bullets ask for no times, and "Train 8-11" stays as words. Times already on your bullets are kept.'));
+  }
+
+  pane.appendChild(el('label', 'fl', 'Mood'));
+  const mf = field('mood'), moodOn = Journal.moodOn();
+  pane.appendChild(toggleRow('Mood tracking',
+    'A number from ' + scaleLo(mf) + ' to ' + scaleHi(mf) + ' on a bullet, in the words your Mood tile uses',
+    moodOn, v => { S.set('bulletMood', v ? 1 : 0); again(); }));
+  if (moodOn) {
+    kinds('mood', 'Tap a number again to clear it. Never required.');
+    pane.appendChild(toggleRow('A word too',
+      'A box under the numbers for how it felt, with your five most used words as buttons',
+      feelAsked(), v => {
+        /* hold the kinds as they are, since "Ask how it felt" once decided them */
+        if (S.get('bullet.mood', null) == null) S.set('bullet.mood', bulletAskMap('mood'));
+        S.set('bulletFeel', v ? 1 : 0); again();
+      }));
+    pane.appendChild(toggleRow('Counts in the day’s Mood',
+      mf && mf.on ? 'Each rated bullet is also a Mood reading at its start, so the Mood tile and chart include it'
+                  : 'Needs the Mood stat switched on in TRACK',
+      S.get('bulletMoodDay', 1) !== 0, v => { S.set('bulletMoodDay', v ? 1 : 0); again(); }));
+  } else {
+    pane.appendChild(el('div', 'note', 'Off: bullets ask for no mood. Moods already on your bullets are kept.'));
+  }
+
+  pane.appendChild(el('label', 'fl', 'Money'));
   pane.appendChild(toggleRow('"Paid 250 - lunch" logs spending',
     'A line starting with paid and an amount also goes on the money screen',
     S.get('bulletPaid', 1) !== 0, v => { S.set('bulletPaid', v ? 1 : 0); again(); }));
   pane.appendChild(el('div', 'note',
-    'Enter saves a bullet and Shift+Enter starts a new line. A range like 8-11 at the end of a line is its start and end.'));
+    'Enter saves a bullet and Shift+Enter starts a new line.'));
 }
-/* What each kind of bullet asks for when it is written. One setting per
-   question, holding a 1 or a 0 for every kind: an object of numbers rather
-   than a list of kinds, because live sync drops an empty list and a device
-   would read "none" as "never chosen" (root CLAUDE.md, Known traps).
-   Anyone who had "Ask how it felt" on had it on entries and events, so their
-   mood starts on both; otherwise events only. */
-const BULLET_ASK = {
-  times: { todo: 1, entry: 1, event: 1, idea: 0 },
-  mood:  { todo: 0, entry: 0, event: 1, idea: 0 },
-};
-function bulletAskMap(what) {
-  const def = Object.assign({}, BULLET_ASK[what]);
-  if (what === 'mood' && S.get('bulletFeel', 0) === 1) def.entry = 1;
-  const v = S.get('bullet.' + what, null);
-  return v && typeof v === 'object' ? Object.assign(def, v) : def;
+/* What each kind of bullet asks for when it is written, with the switches
+   above them, is shared/journal.js (`Journal.asks`), so LOG and the home
+   screen obey the same settings. */
+function bulletAskMap(what) { return Journal.askMap(what); }
+function bulletAsks(what, kind) { return Journal.asks(what, kind); }
+/* the word box under the mood, on unless switched off (Tom, 2026-09-25) */
+const feelAsked = () => S.get('bulletFeel', 1) !== 0;
+
+/* ── an event's mood is a Mood reading too ──
+   Tom, 2026-09-25: "since mood isnt graded letter wise and is more for
+   tracking and looking back on". So a mood on a line also goes into the
+   day's Mood readings, at the line's start, or when it was written. The
+   reading carries the line's key (`n`) and keeps its first time for good:
+   readings are matched on their time, and a removed one leaves a mark that
+   stops the same time coming back (shared/records.js, Lists join), so a
+   reading that moved with its line's start could be lost. Changing the mood
+   changes the number in place; clearing it or deleting the line takes it
+   out. Switched off in BULLETS, or no Mood field, it writes nothing. */
+function moodToDay(date, key, v, at, wrote) {
+  const f = field('mood');
+  if (!f || !f.on || S.get('bulletMoodDay', 1) === 0 || !date || !key) return;
+  const row = Rec.get('ev', date, 'mood') || {};
+  const e = (row.e || []).slice(), gone = row.gone || {};
+  const i = e.findIndex(x => x && x.n === key);
+  if (v == null) {
+    if (i < 0) return;
+    e.splice(i, 1);
+  } else if (i > -1) {
+    if (e[i].v === v) return;
+    e[i] = Object.assign({}, e[i], { v: v });
+  } else {
+    let t = wrote || Date.now();
+    if (at) {
+      const p = date.split('-'), hm = String(at).split(':');
+      t = new Date(+p[0], +p[1] - 1, +p[2], +hm[0], +hm[1] || 0).getTime();
+    }
+    while (e.some(x => x && x.t === t) || gone[t]) t++;
+    e.push({ t: t, v: v, n: key });
+  }
+  if (e.length) Rec.set('ev', date, 'mood', { e: e }); else Rec.del('ev', date, 'mood');
 }
-function bulletAsks(what, kind) { return bulletAskMap(what)[kind] === 1; }
 /* The five feelings he writes most, from the last 90 days; plain ones until
    he has written any. */
 function topFeels() {
