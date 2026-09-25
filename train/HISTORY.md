@@ -285,3 +285,46 @@ What was built and watched, newest last. Moved here verbatim so the root brief
 stays small enough for per-module sessions.
 
 Built, and tested in the browser at 390px against Tom's real 12,370-set FitNotes backup; the phone itself is his iPhone 13 Pro, and nothing has been watched on it yet. A reproduction of FitNotes v25.1 on the shared foundation, plus Tom's own idea of training (2026-09-14): sessions with names and training blocks, each working set compared with the same set last time in reps and percentage, a session card and a weekly card that share as story pictures, sets per muscle per week, a Profile with all-time and block records, and setup recorded per set. Warmups and split sets are read from comments. Says session and training, never workout. Owns the training log. Has its own brief.
+
+---
+
+## Moved from the brief on 2026-09-25
+
+## Provenance
+
+Everything about how FitNotes behaves was read out of the app itself,
+`com.github.jamesgay.fitnotes` v25.1, and out of Tom's own backup file:
+
+- the full SQLite schema, 20 tables, column by column
+- all 44 columns of the `settings` table, which is its settings screen
+- every user-facing string, several thousand
+- the SQL FitNotes uses for personal records and routine loading
+- nine screenshots of FitNotes on his phone (no longer in Downloads)
+- **his file's own answers**, where the app could not be read: which records it
+  flags, which day a week starts on, what happens to a deleted set's comment
+
+What was **not** taken, and must never be: FitNotes' compiled code and its image
+files. The APK holds obfuscated Android bytecode and the target is one HTML file
+of plain JavaScript, so nothing in it would have transferred anyway. Every line
+in `train/index.html` is written here.
+
+## For the foundation
+
+Found while building TRAIN. TRAIN never edits `shared/` or the root; it works
+around what it finds and writes it here.
+
+**Fixed by the foundation session of 2026-09-14, and TRAIN's workarounds deleted
+the same day:** the minus, trophy and hamburger icons (TRAIN's `MINUS`, `TROPHY`
+and `BURGER` drawings are gone), 38px segmented buttons, the desktop menu that
+could not be clicked (`menuAt()` no longer stops the press), chart steps past
+5000 (`bigStep()` is gone), `UI.row` squeezing a text box's label to 0px (TRAIN's
+`:has()` rules for `.mb-input` and `.mb-sel` are gone; the ones for its own
+swatches and chips stay), and sheets in `vh`.
+
+**Settled 2026-09-15:** `ui.js` adds its stylesheet when it loads, so the chip
+that came up as a bare browser button on the exercise screen is styled and
+TRAIN's throwaway switch at boot is gone. DOCTRINE's TRAIN entry, the root
+ownership table and the root Current state row were brought up to date by a
+session Tom sent to the root.
+
+**Still open:** nothing.

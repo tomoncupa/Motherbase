@@ -184,7 +184,7 @@ Watched 2026-09-25, headless Chromium, 1440 wide, with a made-up client:
 - SEND to the client listed both slots with their own Machine Chest Press
   first; filling one sent `Bench Press` for it and left `Any Chest` open,
   and the page stayed in FORGE
-- TRAIN (1.0.23) showed "Any Chest … tap to pick", opened the list titled
+- TRAIN (1.0.32 on main) showed "Any Chest … tap to pick", opened the list titled
   Any Chest filtered to Chest, took Cable Fly for both weeks, kept it
   through a resend, and LOG ALL skipped an unpicked slot
 - the client's Chest category was not rewritten (see TRAIN 1.0.23)
