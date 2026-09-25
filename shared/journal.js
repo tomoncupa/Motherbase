@@ -189,6 +189,49 @@ function parseLine(raw, date) {
   return { text: text, at: at, dur: dur };
 }
 
+/* ══════════════ WHAT WRITING A LINE ASKS FOR ══════════════
+   Tom, 2026-09-25: "Make sure the settings for bullets is comprehensive, some
+   people might not want mood or time tracking at all." The switches are
+   STATUS's (Settings, BULLETS), read here so a line written in LOG or on the
+   home screen obeys the same ones, the way `bulletPaid` already did.
+
+   `bulletTimes` 0 is no time tracking at all: no Start and End, no Track,
+   and a time typed at the end of a line stays words. `bulletMood` 0 is no
+   mood. Under each, which kinds ask: `bullet.times` and `bullet.mood`, a 1
+   or 0 per kind, an object rather than a list because live sync drops an
+   empty list (root CLAUDE.md, Known traps). Anyone who had "Ask how it felt"
+   on before 2026-09-25 had it on entries and events, so their mood starts on
+   both. */
+const ASK = {
+  times: { todo: 1, entry: 1, event: 1, idea: 0 },
+  mood:  { todo: 0, entry: 0, event: 1, idea: 0 },
+};
+/* `_said` lets _smoke.html answer for the settings, so a check never writes
+   one on a real device, where live sync would carry it everywhere */
+let saidBy = null;
+function said(k, d) {
+  try { const v = saidBy ? saidBy(k) : Rec().setting('status', k); return v == null ? d : v; } catch (e) { return d; }
+}
+const timesOn = () => said('bulletTimes', 1) !== 0;
+const moodOn = () => said('bulletMood', 1) !== 0;
+/* which kinds ask, whether or not the switch above them is on */
+function askMap(what) {
+  const def = Object.assign({}, ASK[what]);
+  if (what === 'mood' && said('bulletFeel', 0) === 1) def.entry = 1;
+  const v = said('bullet.' + what, null);
+  return v && typeof v === 'object' ? Object.assign(def, v) : def;
+}
+function asks(what, kind) {
+  if (!(what === 'times' ? timesOn() : moodOn())) return false;
+  return askMap(what)[kind] === 1;
+}
+/* the words and any time at the end of them, or just the words when time
+   tracking is off */
+function readLine(raw, date) {
+  if (timesOn()) return parseLine(raw, date);
+  return { text: String(raw == null ? '' : raw).trim(), at: null, dur: null };
+}
+
 /* a timestamp as HH:MM */
 function hhmm(ms) {
   const d = new Date(ms);
@@ -260,12 +303,13 @@ function add(date, kind, text, extra, src) {
   const now = !!ex.now; delete ex.now;
   /* `parsed`: the caller has already read the time out of the words (QUESTS
      has its own reader), so the words are taken as they are */
-  const pz = ex.parsed ? { text: String(text == null ? '' : text).trim(), at: null, dur: null } : parseLine(text, d);
+  const pz = ex.parsed ? { text: String(text == null ? '' : text).trim(), at: null, dur: null } : readLine(text, d);
   delete ex.parsed;
   const key = 'j' + Date.now().toString(36) + (addN++).toString(36) + Math.random().toString(36).slice(2, 5);
   const row = Object.assign({
     kind: kind || 'entry', text: pz.text, t: Date.now(), made: d,
-    at: pz.at || (now ? hhmm(Date.now()) : null), dur: pz.dur,
+    /* "about right now" is a time too, so it waits on time tracking */
+    at: pz.at || (now && timesOn() ? hhmm(Date.now()) : null), dur: pz.dur,
     ord: R.all('note', { date: d }).length, done: 0, cancelled: 0,
   }, ex);
   /* Tom, 2026-09-18: a range on a todo is its start and its end ("Train
@@ -707,6 +751,8 @@ g.Journal = {
   KINDS: KINDS,
   bare: bare, place: place, onDay: onDay, notes: notes,
   parseLine: parseLine, clockMins: clockMins, minsHM: minsHM, endAt: endAt, spanMins: spanMins,
+  ASK: ASK, timesOn: timesOn, moodOn: moodOn, askMap: askMap, asks: asks, readLine: readLine,
+  _said: fn => { saidBy = fn || null; },
   hhmm: hhmm, clockLabel: clockLabel, durLabel: durLabel,
   publishTimed: publishTimed, publishNotes: publishNotes, add: add, paidOf: paidOf,
   occursAfter: occursAfter, nextRound: nextRound, tick: tick,

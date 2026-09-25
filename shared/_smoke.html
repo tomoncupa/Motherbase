@@ -771,6 +771,27 @@ async function run() {
     const b = J.textHTML({ kind: 'event', text: 'Call' });
     return /class="feel mood"[^>]*>.*4<\/i>/.test(a) && b.indexOf('mood') < 0;
   })());
+  ok('journal: time tracking off reads no time out of the words, and no kind asks for one', (() => {
+    J._said(() => null);
+    const on = J.readLine('Train 8-11', Day.today());
+    J._said(k => ({ bulletTimes: 0 })[k]);
+    const off = J.readLine('Train 8-11', Day.today());
+    const asked = J.KINDS.some(k => J.asks('times', k.id));
+    J._said(null);
+    return on.at != null && off.text === 'Train 8-11' && off.at === null && off.dur === null && !asked;
+  })());
+  ok('journal: mood asks on events by default, on entries too for anyone who had the old feeling box, and nowhere when off', (() => {
+    J._said(() => null);
+    const def = J.asks('mood', 'event') && !J.asks('mood', 'entry') && J.asks('times', 'entry') && !J.asks('times', 'idea');
+    J._said(k => ({ bulletFeel: 1 })[k]);
+    const old = J.asks('mood', 'entry');
+    J._said(k => ({ bulletMood: 0 })[k]);
+    const off = J.KINDS.some(k => J.asks('mood', k.id));
+    J._said(k => ({ 'bullet.mood': { event: 0, idea: 1 } })[k]);
+    const picked = !J.asks('mood', 'event') && J.asks('mood', 'idea') && !J.asks('mood', 'todo');
+    J._said(null);
+    return def && old && !off && picked;
+  })());
   ok('journal: time order is the start, not when it was ticked',
     J.sortClock({ kind: 'todo', at: '08:00', done: 1, doneAt: '21:00', by: '21:00' }) === 800);
   ok('journal: a todo with no start sorts by when it was ticked, or else when it was written', (() => {
