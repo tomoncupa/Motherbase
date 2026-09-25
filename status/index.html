@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.53, 2026-09-25">
+<meta name="mb-version" content="1.0.54, 2026-09-25">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -356,6 +356,8 @@ nav button.on{color:var(--accent);opacity:1}
 .chip.scale{flex:1;min-width:0;padding:var(--s-1) var(--s-1);text-align:center;
   display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
 .chip.scale small{font-size:var(--f-1);opacity:.7;font-family:var(--font-body)}
+/* the number he usually gives: outlined, dashed, never picked for him */
+.chip.scale.guess{outline:1px dashed var(--accent);outline-offset:-4px}
 /* which kinds ask, in Settings, BULLETS: the kind's mark and its name */
 .kindpick .chip{display:inline-flex;align-items:center;gap:var(--s-2)}
 /* on the settings card an off button is the card's own colour, so it is
@@ -4435,35 +4437,51 @@ function noteSheet(x, d) {
     const moodOn = () => bulletAsks('mood', kind);
     let moodVal = x.mood != null && x.mood !== '' ? +x.mood : null;
     const mw = el('div', 'field');
-    mw.appendChild(el('label', 'fl', 'Mood'));
+    /* A and B (Tom, 2026-09-25): the number he usually gives these words, or
+       this word, is outlined and named beside Mood; picking a number turns
+       the word buttons into the words he pairs with it. Outlined, never
+       picked: nothing is saved until he taps (shared/journal.js, memo). */
+    const memo = Journal.moodMemo();
+    const mLbl = el('label', 'fl', 'Mood');
+    mw.appendChild(mLbl);
     const mchips = el('div', 'chips moodrow');
+    let feelVal = x.feel || '';
+    let paintFeel = () => {};
+    const guess = () => {
+      if (moodVal != null) return null;
+      const g = memo.forWord(feelVal);
+      return g != null ? g : memo.forText(ta.value);
+    };
     const paintMood = () => {
+      const g = guess();
+      mLbl.innerHTML = 'Mood' + (g != null ? ' <span class="muted">· usually ' + esc(g) + '</span>' : '');
       mchips.innerHTML = '';
       for (let v = scaleLo(moodF); v <= scaleHi(moodF); v++) {
-        const c = el('button', 'chip scale' + (moodVal === v ? ' on' : ''), v + '<small>' + esc(scaleWord(moodF, v)) + '</small>');
+        const c = el('button', 'chip scale' + (moodVal === v ? ' on' : '') + (g === v ? ' guess' : ''), v + '<small>' + esc(scaleWord(moodF, v)) + '</small>');
         c.type = 'button';
         c.setAttribute('aria-pressed', moodVal === v ? 'true' : 'false');
-        c.onclick = () => { moodVal = moodVal === v ? null : v; paintMood(); Mobile.haptic('select'); };
+        c.onclick = () => { moodVal = moodVal === v ? null : v; paintMood(); paintFeel(); Mobile.haptic('select'); };
         mchips.appendChild(c);
       }
     };
     paintMood();
     mw.appendChild(mchips);
-    let feelVal = x.feel || '';
+    let guessT = null;
+    ta.addEventListener('input', () => { clearTimeout(guessT); guessT = setTimeout(paintMood, 150); });
     const feelOn = feelAsked();
     if (feelOn) {
       const fi = document.createElement('input');
       fi.type = 'text'; fi.className = 'mb-input'; fi.placeholder = 'In a word, optional'; fi.value = feelVal;
       fi.setAttribute('aria-label', 'How it felt');
-      fi.oninput = () => { feelVal = fi.value.trim(); paintFeel(); };
+      fi.oninput = () => { feelVal = fi.value.trim(); paintFeel(); paintMood(); };
       mw.appendChild(fi);
       const chips = el('div', 'chips');
-      const paintFeel = () => {
+      paintFeel = () => {
         chips.innerHTML = '';
-        topFeels().forEach(w => {
+        (moodVal != null ? memo.wordsFor(moodVal) : topFeels()).forEach(w => {
           const c = el('button', 'chip' + (feelVal.toLowerCase() === w ? ' on' : ''), esc(w));
           c.type = 'button';
-          c.onclick = () => { feelVal = feelVal.toLowerCase() === w ? '' : w; fi.value = feelVal; paintFeel(); Mobile.haptic('select'); };
+          c.onclick = () => { feelVal = feelVal.toLowerCase() === w ? '' : w; fi.value = feelVal; paintFeel(); paintMood(); Mobile.haptic('select'); };
           chips.appendChild(c);
         });
       };
