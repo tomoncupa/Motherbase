@@ -740,6 +740,31 @@ Chest" (`forge/CLAUDE.md`, Movement patterns). `takeProgram` keeps one as a
   `catName` on every exercise, so this would have happened on almost every
   program. Watched: the client's Chest row byte for byte the same after.
 
+## Merging two exercises, and starters renamed (1.0.35, 2026-09-25)
+
+Tom: *"merge leg curl and seated leg curl"*, keep Leg Curl, keep Lying Leg
+Curl separate; and *"There is no barbell squat?"*
+
+- **Merge Into…** is on an exercise's menu in the list and in the training
+  screen's More (`TRAIN.startMerge`). The list opens titled Merge Into, without
+  the one being merged; a pick asks with both names and the set count, then
+  `TRAIN.mergeExercise(from, to)` moves every set, routine entry, goal (and its
+  title), superset and day order onto the kept one, carries a favourite, a
+  note or setup fields it lacks, deletes the other and recomputes records.
+  One UNDO restores every row it touched, for the snackbar's six seconds.
+  The kept one keeps its own name, group, type, unit and step.
+- **The starter list says Barbell Squat and has no Seated Leg Curl.** A list
+  already seeded is put right by `foldSeeds` on open and whenever rows arrive:
+  `SEED_RENAME` renames `seed-back-squat` while it still says Back Squat, and
+  `SEED_FOLD` folds `seed-seated-leg-curl` into `seed-leg-curl` while it still
+  says Seated Leg Curl, sets and all. A set that arrives later against the
+  folded one still lands on Leg Curl. A name he changed is never touched.
+  A starter's id comes from its name, so **renaming or dropping a starter
+  always needs one of these two entries**, or old lists keep the old one and
+  new lists get a second.
+- His own imported names (Seated Leg Curl Machine, Lying Leg Curl Machine) are
+  not starters and are never folded; Merge Into is how he does those.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the

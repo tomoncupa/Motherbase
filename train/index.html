@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.34, 2026-09-25">
+<meta name="mb-version" content="1.0.35, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -952,7 +952,7 @@ TRAIN.DEFAULT_EX = {
     ['Face Pull', 0], ['Upright Row', 0], ['Shoulder Press Machine', 0],
   ],
   Legs: [
-    ['Back Squat', 0], ['Front Squat', 0], ['Box Squat', 0], ['Goblet Squat', 0],
+    ['Barbell Squat', 0], ['Front Squat', 0], ['Box Squat', 0], ['Goblet Squat', 0],
     ['Hack Squat', 0], ['Leg Press', 0], ['Bulgarian Split Squat', 0],
     ['Walking Lunge', 0], ['Reverse Lunge', 0], ['Step Up', 0],
     ['Sumo Deadlift', 0], ['Leg Extension', 0], ['Hip Adduction', 0],
@@ -990,7 +990,7 @@ TRAIN.DEFAULT_EX = {
   ],
   Hamstrings: [
     ['Romanian Deadlift', 0], ['Stiff Leg Deadlift', 0], ['Leg Curl', 0],
-    ['Seated Leg Curl', 0], ['Nordic Curl', 2], ['Good Morning', 0],
+    ['Nordic Curl', 2], ['Good Morning', 0],
   ],
   Glutes: [
     ['Hip Thrust', 0], ['Glute Bridge', 0], ['Single Leg Hip Thrust', 0],
@@ -1171,7 +1171,21 @@ TRAIN.seedId = function (name) {
    nothing. It runs again whenever rows arrive, because a device that was
    offline can still send a set logged against a spare, and that set has to
    land on the keeper too. */
+/* Starters renamed or folded away after a list had already been seeded.
+   Tom, 2026-09-25: "There is no barbell squat?" (it was Back Squat) and
+   "merge leg curl and seated leg curl". Only a row still wearing its
+   starter name is touched: one he renamed is his. A fold moves the spare's
+   sets onto the keeper the same way a copy is folded below. */
+TRAIN.SEED_RENAME = { 'seed-back-squat': ['Back Squat', 'Barbell Squat'] };
+TRAIN.SEED_FOLD = { 'seed-seated-leg-curl': ['Seated Leg Curl', 'seed-leg-curl'] };
+
 TRAIN.foldSeeds = function () {
+  var renamed = 0;
+  Object.keys(TRAIN.SEED_RENAME).forEach(function (id) {
+    var r = TRAIN.SEED_RENAME[id], e = Rec.get('exercise', null, id);
+    if (e && e.name === r[0]) { Rec.patch('exercise', null, id, { name: r[1] }); renamed++; }
+  });
+  if (renamed) TRAIN._exC = null;
   var starter = {};
   TRAIN.DEFAULT_CATS.forEach(function (nm) {
     (TRAIN.DEFAULT_EX[nm] || []).forEach(function (row) { starter[TRAIN.catId(nm) + '|' + row[0].toLowerCase()] = 1; });
@@ -1204,7 +1218,20 @@ TRAIN.foldSeeds = function () {
     });
     keepOf[keep.key] = 1;
   });
-  if (!Object.keys(spare).length) return 0;
+  Object.keys(TRAIN.SEED_FOLD).forEach(function (id) {
+    var f = TRAIN.SEED_FOLD[id], e = Rec.get('exercise', null, id), to = spare[f[1]] || f[1];
+    if (spare[id] || !Rec.get('exercise', null, to)) return;
+    /* gone already, but a device that was offline can still send a set
+       logged against it, and that set has to land on the keeper */
+    if (e ? e.name !== f[0] : !count[id]) return;
+    spare[id] = to;
+    if (!e) return;
+    var kp = Rec.get('exercise', null, to) || {}, carry = {};
+    if (e.fav && !kp.fav) carry.fav = e.fav;
+    if (e.note && !kp.note) carry.note = e.note;
+    if (Object.keys(carry).length) Rec.patch('exercise', null, to, carry);
+  });
+  if (!Object.keys(spare).length) return renamed;
   sets.forEach(function (s) {
     var e = s.payload && s.payload.ex;
     if (spare[e]) { Rec.patch('set', s.date, s.key, { ex: spare[e] }); n++; }
@@ -1223,10 +1250,10 @@ TRAIN.foldSeeds = function () {
     Rec.patch('sgroup', r.date, r.key, { ex: out });
     n++;
   });
-  Object.keys(spare).forEach(function (id) { Rec.del('exercise', null, id); });
+  Object.keys(spare).forEach(function (id) { if (Rec.get('exercise', null, id)) Rec.del('exercise', null, id); });
   TRAIN._exC = null;
   TRAIN.reindex();
-  return Object.keys(spare).length;
+  return Object.keys(spare).length + renamed;
 };
 
 /* Add one by name, for the "+ New category" route out of the exercise form. */
@@ -2306,6 +2333,8 @@ TRAIN.back = function () {
     var into = TRAIN.pickInto;
     TRAIN.pickInto = null;
     if (into && into.day) return TRAIN.show('routines');
+    if (into && into.merge && into.back === 'training') return TRAIN.openExercise(into.merge);
+    if (into && into.merge) return TRAIN.show('picker', { cat: null });
     return TRAIN.show('workout');
   }
   if (TRAIN.screen === 'routines' && TRAIN.progOpen) { TRAIN.progOpen = null; return draw(); }
@@ -2371,6 +2400,7 @@ function drawChrome() {
     title = ex ? ex.name : 'Exercise';
   } else if (scr === 'picker') {
     if (TRAIN.pickInto && TRAIN.pickInto.replace) title = 'Replace Exercise';
+    else if (TRAIN.pickInto && TRAIN.pickInto.merge) title = 'Merge Into';
     else if (TRAIN.pickInto && TRAIN.pickInto.slot) title = 'Any ' + (TRAIN.pickInto.label || 'Exercise');
     else if (TRAIN.pickInto && TRAIN.pickInto.day) title = 'Add Exercise';
     else if (TRAIN.picking === '*fav') title = 'Favourites';
@@ -2876,6 +2906,8 @@ function drawList(host, q, cats, exs) {
       return { id: id, e: exs[id], sc: q ? TRAIN.nameMatch(exs[id].name, q) : 0 };
     })
     .filter(function (r) {
+      /* merging: the one being merged is not a place to put it */
+      if (TRAIN.pickInto && TRAIN.pickInto.merge === r.id) return false;
       if (q) return r.sc >= 0;
       if (TRAIN.picking === '*fav') return !!r.e.fav;
       return r.e.cat === TRAIN.picking;
@@ -2978,6 +3010,11 @@ function pickExercise(id, e) {
     TRAIN.pickInto = null;
     TRAIN.show('routines');
     UI.toast(UI.esc(e.name) + ' added');
+    return;
+  }
+  if (into && into.merge) {
+    if (id === into.merge) return UI.toast('Pick the exercise to keep', { bad: true });
+    TRAIN.confirmMerge(into.merge, id);
     return;
   }
   if (into && into.replace) {
@@ -5719,6 +5756,100 @@ TRAIN.deleteExercise = function (id) {
     { yes: 'DELETE', danger: true }).then(function (yes) { if (yes) go(); });
 };
 
+/* Two names for one movement become one. Tom, 2026-09-25: "merge leg curl
+   and seated leg curl". Every set, routine entry, goal, superset and day
+   order that pointed at `fromId` points at `toId`, then `fromId` is deleted.
+   The kept one keeps its own name, group, type, unit and step; a favourite,
+   a note or setup fields it lacks come across. One undo puts every row back
+   exactly as it was. */
+TRAIN.mergeExercise = function (fromId, toId) {
+  var exs = TRAIN.exercises(), from = exs[fromId], to = exs[toId];
+  if (!from || !to || fromId === toId) return null;
+  var was = [], sets = 0, days = {};
+  var move = function (type, date, key, changes) {
+    was.push({ type: type, date: date, key: key, p: copyObj(Rec.get(type, date, key)) });
+    Rec.patch(type, date, key, changes);
+  };
+  var swap = function (list) {
+    var seen = {}, out = [];
+    list.forEach(function (e) { var id = e === fromId ? toId : e; if (!seen[id]) { seen[id] = 1; out.push(id); } });
+    return out;
+  };
+  Rec.all('set').forEach(function (r) {
+    if (!r.payload || r.payload.ex !== fromId) return;
+    move('set', r.date, r.key, { ex: toId }); sets++; days[r.date] = 1;
+  });
+  Rec.all('progex').forEach(function (r) {
+    if (r.payload && r.payload.ex === fromId) move('progex', r.date, r.key, { ex: toId });
+  });
+  Rec.all('goal').forEach(function (r) {
+    var g = r.payload || {};
+    if (g.ex !== fromId) return;
+    var ch = { ex: toId };
+    if (g.title === from.name) ch.title = to.name;
+    move('goal', r.date, r.key, ch);
+  });
+  Rec.all('sgroup').forEach(function (r) {
+    var ex = r.payload && r.payload.ex;
+    if (Array.isArray(ex) && ex.indexOf(fromId) > -1) move('sgroup', r.date, r.key, { ex: swap(ex) });
+  });
+  Rec.all('session').forEach(function (r) {
+    var o = r.payload && r.payload.order;
+    if (Array.isArray(o) && o.indexOf(fromId) > -1) move('session', r.date, r.key, { order: swap(o) });
+  });
+  var carry = {};
+  if (from.fav && !to.fav) carry.fav = from.fav;
+  if (from.note && !to.note) carry.note = from.note;
+  var su = (to.setup || []).slice(), have = {};
+  su.forEach(function (f) { have[f.id] = 1; });
+  (from.setup || []).forEach(function (f) { if (!have[f.id]) { su.push(f); carry.setup = su; } });
+  if (Object.keys(carry).length) move('exercise', null, toId, carry);
+  var gone = copyObj(Rec.get('exercise', null, fromId));
+  Rec.del('exercise', null, fromId);
+  TRAIN._exC = null;
+  TRAIN.reindex();
+  TRAIN.recomputePRs([toId]);
+  return {
+    sets: sets,
+    undo: function () {
+      Rec.set('exercise', null, fromId, gone);
+      was.forEach(function (w) { if (w.p) Rec.set(w.type, w.date, w.key, w.p); });
+      TRAIN._exC = null;
+      TRAIN.reindex();
+      TRAIN.recomputePRs([fromId, toId]);
+    },
+  };
+};
+
+/* Merge Into: the exercise list opens titled for it, he picks the one to
+   keep, and a confirm names both and the number of sets that move. */
+TRAIN.startMerge = function (exId) {
+  TRAIN.pickInto = { merge: exId, back: TRAIN.screen === 'training' ? 'training' : 'picker' };
+  TRAIN.query = '';
+  TRAIN.show('picker', { cat: null });
+};
+TRAIN.confirmMerge = function (fromId, toId) {
+  var exs = TRAIN.exercises(), from = exs[fromId], to = exs[toId];
+  if (!from || !to) return;
+  var n = TRAIN.historyOf(fromId).length;
+  /* UI.confirm escapes its own text */
+  UI.confirm('Merge ' + from.name + ' into ' + to.name + '?',
+    (n ? n.toLocaleString() + (n === 1 ? ' set moves' : ' sets move') : 'Its routines and goals move') +
+    ' to ' + to.name + ', and ' + from.name + ' is deleted.',
+    { yes: 'MERGE' }).then(function (yes) {
+      if (!yes) return;
+      var did = TRAIN.mergeExercise(fromId, toId);
+      if (!did) return;
+      TRAIN.pickInto = null;
+      TRAIN.openExercise(toId);
+      Mobile.haptic('success');
+      UI.undo('<b>' + UI.esc(from.name) + '</b> merged into <b>' + UI.esc(to.name) + '</b>', function () {
+        did.undo();
+        draw();
+      });
+    });
+};
+
 TRAIN.toggleFav = function (id) {
   var ex = TRAIN.exercises()[id];
   if (!ex) return;
@@ -5734,6 +5865,7 @@ TRAIN.exerciseMenu = function (id, e) {
     { label: ex.fav ? 'Unfavourite' : 'Favourite', fn: function () { TRAIN.toggleFav(id); } },
     { label: 'Edit Exercise', fn: function () { TRAIN.exerciseDialog(id); } },
     { label: 'Personal Records', fn: function () { TRAIN.recordsSheet(id); } },
+    { label: 'Merge Into…', fn: function () { TRAIN.startMerge(id); } },
     { label: 'Delete Exercise', kind: 'bad', fn: function () { TRAIN.deleteExercise(id); } },
   ], ex.name.toUpperCase());
 };
@@ -8578,6 +8710,7 @@ document.getElementById('moreBtn').onclick = function (e) {
       } },
       { label: 'Add To Superset', fn: function () { TRAIN.supersetPanel(id); } },
       { label: 'Replace Exercise', fn: function () { TRAIN.startReplace(id); } },
+      { label: 'Merge Into…', fn: function () { TRAIN.startMerge(id); } },
       { label: 'Add Goal', fn: function () { TRAIN.goalDialog(null, id); } },
       { label: 'Edit Exercise', fn: function () { TRAIN.exerciseDialog(id); } },
       { label: 'Edit Setup', fn: function () { TRAIN.setupDialog(id); } },
