@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="mb-version" content="1.0.0, 2026-09-25">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BULLET">
+<title>BULLET</title>
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#0B0E14">
+<link rel="manifest" href="manifest.json">
+<link href="../shared/fonts/fonts.css" rel="stylesheet">
+
+<!-- BULLET: the page that only writes a bullet. Tom, 2026-09-25: "how can
+     we add an icon to homescreen thats just bullet entry?", then "Build it
+     for them too BUT dont add it to the icon card, it can just be a link".
+     So it is on no dock and no app list: it is an address, saved to a phone's
+     home screen from the browser. Everything a line IS comes from
+     shared/journal.js, the same engine STATUS, LOG and QUESTS write with, and
+     what it asks for (times, mood) follows STATUS's Settings, BULLETS. -->
+<script src="../shared/skins.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/journal.js"></script>
+<script src="../shared/mobile.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="../shared/io.js"></script>
+<script src="../shared/icons.js"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--text-1);
+  font-family:var(--font-body);font-size:var(--f-3);font-weight:var(--w-body);
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+}
+header{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--s-2);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);
+  background:var(--surface-1);box-shadow:var(--e-1),var(--rim);
+}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em}
+.logo b{color:var(--accent)}
+.spacer{flex:1}
+main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-6) + var(--safe-b))}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s-3)}
+.card{border-radius:var(--radius-lg);background:var(--surface-1);padding:var(--s-4);
+  box-shadow:var(--e-1),var(--rim);display:flex;flex-direction:column;gap:var(--s-3)}
+h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted)}
+
+/* the box is the page: big enough to aim at, and the first thing under a thumb */
+textarea{width:100%;min-width:0;padding:var(--s-3);border:1px solid var(--border);
+  border-radius:var(--radius-md);background:var(--surface-2);color:var(--text-1);
+  font:inherit;font-size:var(--f-4);line-height:var(--lh-body);resize:none}
+textarea:focus{outline:none;border-color:var(--accent)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
+label.fl{display:block;font-size:var(--f-1);font-weight:600;color:var(--text-muted);margin-bottom:var(--s-2)}
+label.fl .mut{font-weight:400}
+.extras{display:flex;flex-direction:column;gap:var(--s-3)}
+.extras:empty{display:none}
+/* the mood scale in one row, the number over its word */
+.moodrow{display:flex;gap:var(--s-2)}
+.moodrow .mb-chip{flex:1;min-width:0;padding:var(--s-1);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;line-height:1.1;font-family:var(--font-mono)}
+.moodrow small{font-size:var(--f-1);opacity:.7;font-family:var(--font-body)}
+.feel{display:flex;flex-direction:column;gap:var(--s-2);margin-top:var(--s-2)}
+#add{width:100%}
+.say{font-size:var(--f-1);color:var(--text-muted);line-height:var(--lh-body)}
+.list{display:flex;flex-direction:column}
+.line{display:flex;align-items:flex-start;gap:var(--s-2);padding:var(--s-2) 0;border-top:1px solid var(--border)}
+.line:first-child{border-top:0}
+.line .k{cursor:default}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">BULL<b>ET</b></div>
+  <div class="spacer"></div>
+  <button class="mb-btn mb-press mb-tap" onclick="openSettings()">SETTINGS</button>
+  <button class="mb-btn mb-press mb-tap" onclick="location.href='../status/index.html'" aria-label="Open STATUS" data-icon="app.status"></button>
+</header>
+<main class="mb-scroll"><div class="wrap" id="main"></div></main>
+
+<script>
+const APP = {
+  id: 'bullet',
+  name: 'Bullet',
+  icon: '·',
+  blurb: 'one screen that writes a bullet',
+  /* It owns no type. `note` is STATUS's shape, written through Journal.add
+     under the root brief's many-writers rule, as LOG and QUESTS do. */
+  types: [],
+};
+Skins.load('../shared/skins.json').then(() => {
+  Skins.restore(APP.id);
+  if (window.Icons) Icons.paint(null, { force: true });
+});
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({ app: APP.id, name: APP.name, types: ['note'],
+  reads: { status: ['note', 'ev', 'field'] } });
+
+const esc = UI.esc;
+const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+
+/* What is being written. A new bullet is an Entry, every time (Tom,
+   2026-09-13: "Default type when making a bullet should be Entry"). */
+let kind = 'entry', atVal = '', endVal = '', moodVal = null, feelVal = '';
+let ta = null, extras = null, listBox = null, syncNote = null;
+
+function build() {
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  syncNote = el('div', 'say');
+  main.appendChild(syncNote);
+
+  const card = el('div', 'card');
+  card.appendChild(UI.segmented(Journal.KINDS.map(k => ({ id: k.id, name: k.label })), kind, v => {
+    kind = v; paintExtras();
+  }));
+  ta = document.createElement('textarea');
+  ta.rows = 2;
+  ta.placeholder = 'Write a bullet';
+  ta.setAttribute('autocapitalize', 'sentences');
+  ta.setAttribute('enterkeyhint', 'done');
+  /* Enter saves, Shift+Enter is a new line: one line per bullet is the habit
+     (Tom, 2026-09-18). Mid-composition on an IME, Enter is picking a word. */
+  ta.onkeydown = e => {
+    if (e.key !== 'Enter' || e.shiftKey || e.altKey || e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    save();
+  };
+  card.appendChild(ta);
+  extras = el('div', 'extras');
+  card.appendChild(extras);
+  const add = el('button', 'mb-btn go mb-press mb-tap', 'ADD');
+  add.id = 'add'; add.type = 'button';
+  add.onclick = save;
+  card.appendChild(add);
+  main.appendChild(card);
+
+  listBox = el('div', 'card');
+  main.appendChild(listBox);
+  paintExtras(); paintList(); paintSync();
+  /* The cursor starts in the box. An iPhone raises the keyboard only for a
+     focus inside a tap, so opened from the home screen it waits for one. */
+  UI.focusSoon(ta);
+}
+
+/* ── what the kind asks for, from STATUS's Settings, BULLETS ── */
+function paintExtras() {
+  extras.innerHTML = '';
+  const todo = kind === 'todo';
+  if (Journal.asks('times', kind)) {
+    const g = el('div', 'grid2');
+    const sw = el('div'), ew = el('div');
+    sw.appendChild(el('label', 'fl', 'Start'));
+    /* a todo's end is Done, which ticking it fills in */
+    const endLbl = el('label', 'fl', todo ? 'Done' : 'End');
+    ew.appendChild(endLbl);
+    let sBox = null;
+    const paintLen = () => {
+      if (todo) return;
+      const m = endVal ? Journal.spanMins(atVal || Journal.hhmm(Date.now()), endVal) : null;
+      endLbl.innerHTML = 'End' + (m ? ' <span class="mut">· ' + esc(Journal.durLabel(m)) + '</span>' : '');
+    };
+    const putStart = v => {
+      const n = UI.timeField(v, s => { atVal = s; paintLen(); });
+      if (sBox) sw.replaceChild(n, sBox); else sw.appendChild(n);
+      sBox = n;
+    };
+    putStart(atVal);
+    /* An End with no Start starts now, on screen, so what is saved is what
+       is showing. */
+    ew.appendChild(UI.timeField(endVal, v => {
+      endVal = v;
+      if (v && !atVal && !todo) { atVal = Journal.hhmm(Date.now()); putStart(atVal); }
+      paintLen();
+    }));
+    paintLen();
+    g.appendChild(sw); g.appendChild(ew);
+    extras.appendChild(g);
+  }
+  if (Journal.asks('mood', kind)) {
+    const f = Journal.moodField() || { lo: 1, max: 5 };
+    const w = el('div');
+    w.appendChild(el('label', 'fl', 'Mood'));
+    const row = el('div', 'moodrow');
+    const paintMood = () => {
+      row.innerHTML = '';
+      for (let v = Journal.scaleLo(f); v <= Journal.scaleHi(f); v++) {
+        const c = el('button', 'mb-chip mb-press' + (moodVal === v ? ' on' : ''), v + '<small>' + esc(Journal.scaleWord(f, v)) + '</small>');
+        c.type = 'button';
+        c.setAttribute('aria-pressed', moodVal === v ? 'true' : 'false');
+        c.onclick = () => { moodVal = moodVal === v ? null : v; paintMood(); Mobile.haptic('select'); };
+        row.appendChild(c);
+      }
+    };
+    paintMood();
+    w.appendChild(row);
+    if (Journal.feelOn()) {
+      const fw = el('div', 'feel');
+      const fi = document.createElement('input');
+      fi.type = 'text'; fi.className = 'mb-input'; fi.placeholder = 'In a word, optional';
+      fi.setAttribute('aria-label', 'How it felt');
+      fi.value = feelVal;
+      const chips = el('div', 'mb-chips');
+      const paintFeel = () => {
+        chips.innerHTML = '';
+        Journal.topFeels().forEach(word => {
+          const c = el('button', 'mb-chip mb-press' + (feelVal.toLowerCase() === word ? ' on' : ''), esc(word));
+          c.type = 'button';
+          c.onclick = () => { feelVal = feelVal.toLowerCase() === word ? '' : word; fi.value = feelVal; paintFeel(); Mobile.haptic('select'); };
+          chips.appendChild(c);
+        });
+      };
+      fi.oninput = () => { feelVal = fi.value.trim(); paintFeel(); };
+      fi.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); save(); } };
+      paintFeel();
+      fw.appendChild(fi); fw.appendChild(chips);
+      w.appendChild(fw);
+    }
+    extras.appendChild(w);
+  }
+}
+
+/* ── writing it ──
+   STATUS's new-line rules, through the same creator: a typed "8-11" is read
+   unless time tracking is off, a mood goes in as a Mood reading too, and
+   "paid 250 - lunch" is spending. */
+function save() {
+  const text = ta.value.trim();
+  if (!text) { UI.toast('Nothing to save', { bad: true }); UI.focusSoon(ta, true); return; }
+  const d = Day.today(), ex = {}, todo = kind === 'todo';
+  if (Journal.asks('times', kind)) {
+    if (todo) { if (atVal) ex.at = atVal; if (endVal) ex.by = endVal; }
+    else if (endVal) {
+      const s = atVal || Journal.hhmm(Date.now()), m = Journal.spanMins(s, endVal);
+      ex.at = s; if (m) ex.dur = m;
+    } else if (atVal) ex.at = atVal;
+  }
+  const moodAsked = Journal.asks('mood', kind);
+  if (moodAsked && moodVal != null) ex.mood = moodVal;
+  if (moodAsked && Journal.feelOn() && feelVal) ex.feel = feelVal;
+  const key = Journal.add(d, kind, text, ex, APP.id);
+  if (moodAsked && moodVal != null) {
+    const r = Rec.get('note', d, key) || {};
+    Journal.moodToDay(d, key, moodVal, r.at, r.t);
+  }
+  ta.value = ''; atVal = ''; endVal = ''; moodVal = null; feelVal = '';
+  paintExtras(); paintList();
+  Mobile.feedback('success');
+  UI.focusSoon(ta, true);
+}
+
+/* ── today's lines, newest first, so a save is something you see land ── */
+function paintList() {
+  if (!listBox) return;
+  listBox.innerHTML = '';
+  const d = Day.today();
+  const rows = Rec.all('note', { date: d }).filter(r => r.payload)
+    .sort((a, b) => (b.payload.t || 0) - (a.payload.t || 0)).slice(0, 8);
+  listBox.appendChild(el('h2', null, 'TODAY'));
+  if (!rows.length) { listBox.appendChild(el('div', 'say', 'Nothing written today yet.')); return; }
+  const list = el('div', 'list');
+  rows.forEach(r => {
+    const x = Object.assign({ key: r.key, date: r.date }, r.payload);
+    const row = el('div', 'line mb-bullet' + (x.done ? ' done' : '') + (x.cancelled ? ' cancelled' : ''));
+    row.innerHTML = '<span class="k">' + Journal.markHTML(x.kind, false) + '</span><span class="tx">' + Journal.textHTML(x, d) + '</span>';
+    list.appendChild(row);
+  });
+  listBox.appendChild(list);
+}
+
+/* ── where the line goes ──
+   An iPhone keeps a home-screen icon's storage apart from the browser's and
+   from other icons, so a line written here reaches STATUS on another icon
+   or device only through LIVE SYNC. Signed out, it says so. */
+function paintSync() {
+  if (!syncNote) return;
+  const C = window.Cloud, s = C && C.state ? C.state() : null;
+  const show = !!(s && s.has && !s.file && (!s.on || s.out));
+  syncNote.style.display = show ? '' : 'none';
+  syncNote.textContent = show ? 'Saved on this device only. Sign in once under SETTINGS, DATA, LIVE SYNC, and your bullets reach STATUS everywhere.' : '';
+}
+let cloudHooked = false;
+function hookCloud() {
+  if (!cloudHooked && window.Cloud && Cloud.on) { cloudHooked = true; Cloud.on(paintSync); }
+  paintSync();
+}
+setTimeout(hookCloud, 800);
+setTimeout(hookCloud, 3000);
+
+function openSettings() {
+  UI.settings(APP.id, [
+    { id: 'bullets', name: 'BULLETS', draw: pane => {
+      const n = el('div', 'say', 'Time tracking, mood tracking and which bullets ask for them are set in STATUS, Settings, BULLETS. This page follows them.');
+      n.style.marginBottom = 'var(--s-3)';
+      pane.appendChild(n);
+      const b = el('button', 'mb-btn mb-press mb-tap', 'OPEN STATUS');
+      b.type = 'button';
+      b.onclick = () => { location.href = '../status/index.html'; };
+      pane.appendChild(b);
+    } },
+  ]);
+}
+
+/* Paint from what is on the device now, then again when the big half of
+   the store lands, and whenever a row changes (a line synced in, a line
+   written in another tab). */
+build();
+Rec.ready(() => { paintList(); paintExtras(); });
+let soonT = null;
+Rec.on(() => { clearTimeout(soonT); soonT = setTimeout(paintList, 120); });
+</script>
+</body>
+</html>

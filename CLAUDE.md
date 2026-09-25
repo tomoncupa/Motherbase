@@ -136,7 +136,7 @@ _template/         the starter app to copy
 <app>/index.html   one app per folder; <app>/CLAUDE.md is that app's brief
 ```
 
-**Phone or desktop:** `train/` is a phone app. `status/`, `quest/`, `checkin/`, `system/` and `speak/` are for
+**Phone or desktop:** `train/` is a phone app. `status/`, `quest/`, `checkin/`, `system/`, `speak/` and `bullet/` are for
 everywhere. Every other app, including the home screen and `wealth/`, is a
 desktop app. See hard constraint 10. What each one is for, in Tom's words, is
 the table at the top of "The apps" in `DOCTRINE.md`.
@@ -865,6 +865,7 @@ own brief since 2026-09-22.
 | `coach/` | COACH, Tom's clients in a PC box. Tom only. Brief: `coach/CLAUDE.md`. |
 | `forge/` | FORGE, the program builder. Weeks of days of exercises, sent through COACH to TRAIN. Tom only, desktop only. Brief: `forge/CLAUDE.md`. |
 | `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
+| `bullet/` | BULLET, one screen that writes a bullet. An address on no roster or dock, found from STATUS, Settings, BULLETS. Client build. Brief: `bullet/CLAUDE.md`. |
 | `sheet/` | CHARACTER SHEET. Feats from TRAIN and STATUS as NOTICE windows, with a history; the pixel character is paused. Held out of the client build for now. Brief: `sheet/CLAUDE.md`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation. `_smoke.html` must pass at desktop and phone width. Every app loads it. |

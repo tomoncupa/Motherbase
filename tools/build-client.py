@@ -38,7 +38,7 @@ DEST = os.path.abspath(ARGS[0]) if ARGS \
 # ── what a client gets ────────────────────────────────────────────────────
 # Folders copied whole. Everything not named here is left behind, which is
 # the safe direction: a new app has to be added deliberately.
-COPY_DIRS = ['shared', 'block', 'status', 'train', 'style', 'checkin', 'log', 'quest']
+COPY_DIRS = ['shared', 'block', 'status', 'train', 'style', 'checkin', 'log', 'quest', 'bullet']   # bullet: an address, on no roster (Tom, 2026-09-25)
 # The home screen's install file and icons sit at the root, beside index.html,
 # since 2026-09-23; every app's own sit in its folder and go with it.
 COPY_FILES = ['index.html', '.nojekyll', 'manifest.json',
