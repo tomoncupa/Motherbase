@@ -683,6 +683,27 @@ COACH's file. `takeProgram` reads the new fields and still accepts every older f
 - **A new exercise takes the rest as its rest timer.** One the client already
   has keeps their own rest.
 
+## Open slots, and a muscle group left alone (1.0.23, 2026-09-25)
+
+FORGE can send a slot instead of an exercise: "any Horizontal Push", "any
+Chest" (`forge/CLAUDE.md`, Movement patterns). `takeProgram` keeps one as a
+`progex` with `ex: null` and `slot: {label, pat, mus, fk}`.
+
+- **The routine shows it as "Any Chest … tap to pick".** A tap opens the
+  exercise list titled with the slot, narrowed to the muscle group when the
+  slot names one (`TRAIN.pickForSlot`). The pick is patched onto the entry.
+- **One pick fills the slot in every week.** `fk` is FORGE's plate key, the
+  same in each week's routine, so every unpicked entry with that `fk` in the
+  same program takes it too.
+- **A pick survives the coach sending again**: `takeProgram` reads what was
+  picked per `fk` before it rewrites the routine.
+- **LOG ALL leaves an unpicked slot out**, and it stays on the routine.
+- **A new exercise from a program reuses a muscle group by NAME.** It used to
+  call `addCat` when the file's category id was not on this phone, which
+  wrote the existing group again with a new colour and place. FORGE sends
+  `catName` on every exercise, so this would have happened on almost every
+  program. Watched: the client's Chest row byte for byte the same after.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the
