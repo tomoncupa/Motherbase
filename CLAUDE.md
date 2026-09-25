@@ -281,10 +281,11 @@ An app may read any type. It writes only the types it owns.
 | `cset` `cex` `cphase` `csession` | **coach** | `pid\|` + the key the row had in the client's TRAIN; dated as it was | a client's set, exercise, block and day, exactly as their TRAIN wrote it, merged with its own updated_at so a second file only adds what is new |
 | `cexcat` `csgroup` `cgoal` `cprogram` `cprogday` `cprogex` | **coach**; **train** writes all of these and the four above when opened as `train/index.html?client=<pid>` | the same | the rest of a client's TRAIN. That address points TRAIN's store at the client (the top of `train/index.html`), so COACH's LOG A SESSION is the real TRAIN on their rows. A set Tom logs there is keyed `pid\|k-...` and bills in WEALTH like one from the old quick logger |
 | `cprog` | **coach** | `c-<pid>` for a client's first sets, an id for a library program | `{name, pid, days:[{name, ex:[{name, sets:[{kg, r}]}]}]}` — one row per program, because a program is written, sent and sold as one piece. Only the first set of each exercise is sent. `cperson` gains `box` and `slot` from COACH, by patch |
-| `cprog` from FORGE | **forge** writes `f-<id>` (`src: 'forge'`), republished on every change, and a client's `c-<pid>` on SEND | the same | the flattened program: a day per week per day, each with `wk` and its plain `day` name; beside each exercise set one's load only (`r: null`), `n`, `reps` (a range), `bands`, `rir` (`0-3` when blank), `rest` in seconds, `note` and `catName` — Tom's Algrowrithm, see `forge/CLAUDE.md`. COACH shows an `f-` row and never edits it |
+| `cprog` from FORGE | **forge** writes `f-<id>` (`src: 'forge'`), republished on every change, and a client's `c-<pid>` on SEND | the same | the flattened program: a day per week per day, each with `wk` and its plain `day` name; beside each exercise set one's load only (`r: null`), `n`, `reps` (a range), `bands`, `rir` (`0-3` when blank), `rest` in seconds, `note` and `catName` — Tom's Algrowrithm, see `forge/CLAUDE.md`. An open slot carries `name: ''` and `slot: {kind, pat, mus, label}`, and every entry `fk`, its plate key; a client's `c-` row also keeps `fills`, what was picked for each slot. COACH shows an `f-` row and never edits it |
 | `fprog` | **forge** | program id | `{name, weeks, ord}` — a program FORGE builds |
+| `ftag` | **forge** | exercise name, lowercase | `{name, pat, mus}` — an exercise's movement pattern and the muscles it works, FORGE's own so TRAIN's `exercise` is untouched. No tag: the pattern is guessed from the name and drawn with a "?" |
 | `fday` | **forge** | `prog\|day id` | `{name, ord}` — one day, in every week of its program |
-| `fex` | **forge** | `prog\|slot id` | `{day, name, cat, ord, n, r, kg, rir, rest, note, wk}` — one exercise in one day. `r` is a rep range as text (`"8-15"`), `rir` a number or range (blank reads `0-3`). `n` `r` `kg` `rir` are week one's; `wk[w]` holds only what week `w` changes, and anything it does not say is the week before's. No weekly load step: load rises from set one on the day |
+| `fex` | **forge** | `prog\|slot id` | `{day, name, cat, ord, n, r, kg, rir, rest, note, wk, slot, pat, mus}` — one exercise in one day, or an open slot (`slot: 'pat'` or `'mus'`, `name` empty) filled per client at SEND. `r` is a rep range as text (`"8-15"`), `rir` a number or range (blank reads `0-3`). `n` `r` `kg` `rir` are week one's; `wk[w]` holds only what week `w` changes, and anything it does not say is the week before's. No weekly load step: load rises from set one on the day |
 | `brief` | **the daemon on the PC**; **quest** reads it and never writes it | `''`, dated the day it is for | `{text, todo, t, src}` — Claude's morning brief for that day, added 2026-09-22. `text` is plain lines, `# ` a heading and `- ` a point; `todo` a list of action items, each a string or `{text}`. QUESTS shows it as a foldable card at the top of Today and turns each item into a todo keyed `brief-<date>-<n>`, `src: 'brief'`, due that day, written once, so a deleted one stays deleted. How the row reaches the store is the daemon's business |
 | `msg` | **system** (NOTICE) | id, dated | `{text, kind, style, seed, t}` — one status window that was saved or copied: the text as typed, notice or quest, the window style, and the reroll count its pseudo rewards were drawn with. The draft being typed and every choice on screen are settings, not rows |
 
@@ -755,6 +756,13 @@ answer, or take it out.
   either. Cap the fill short of the top and keep the label in the band above
   it, scaling every fill the same so what the bars are read for is untouched.
   COACH's week strip, 2026-09-24: white set counts on gold.
+- **A sheet opened from another sheet's button walks history off the page.**
+  Closing a sheet queues a `history.back()` that lands a moment later; a
+  sheet opened in the same tick pushes its entry first, the late step takes
+  it, and closing the second sheet then steps back to the page before the
+  app. FORGE's SEND → fill list did exactly this (2026-09-25). Open the
+  second sheet after the `popstate` lands: FORGE's `afterSheet` does it. The
+  real fix belongs in `mobile.js`'s `trap`, for a foundation session.
 - **`Rec.all` hands rows back in no order**, and a payload's `ord` usually
   numbers a row inside its own group, so it cannot order the groups. A list
   that must read back in the order it was entered sorts on the row KEY, which

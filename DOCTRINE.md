@@ -486,6 +486,11 @@ went. So FORGE takes a rep RANGE and shows its bands (8-15 over three sets
 is 13-15, 10-13, 8-10), sends only set one's load, and has no weekly load
 step. Tom, 2026-09-24: *"that's why I won't prescribe numbers for sets 2
 onwards."*
+
+**He programs in movement patterns and muscle groups** (2026-09-24). A slot in
+a day can be "any Horizontal Push" or "any Chest", filled per client when it
+is sent, from what that client already trains first. Every exercise has a
+pattern and its muscles, and the week is counted in both.
 The WEEKS view is the whole block on one screen, and the strip over the days
 counts the sets each muscle group gets that week, the way TRAIN counts them.
 
