@@ -61,7 +61,7 @@ see the root brief on many writers. Every edit merges into the row as it is
 | Type | Key | Payload |
 |---|---|---|
 | `excat` | category id, the slug of its name | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex, and there are only twelve |
-| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup}` |
+| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar}` |
 | `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, plan, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
 | `session` | `''` | `{start, end, note, from, order, name, vs}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, and a day he picked to compare it with |
 | `phase` | phase id | `{name, start, end}` — a training block. `end` is optional |
@@ -663,6 +663,14 @@ session could undo without noticing:
   client's profile. A movement already in one of the four is never offered;
   one switched off stays off (`train.sortSkip`). Watched on his 270 names:
   8, 10, 12 and 1, Leg Curl out of Biceps.
+- **Plates each side ride on the WEIGHT label's own line** (1.0.29,
+  `TRAIN.platesText`, "45×2 · 5 each side", `~` when the plates cannot make
+  it, "bar only" at the bar), so they cost no height. Only on a barbell lift,
+  `TRAIN.isBarbell`: "barbell" or "BB" in the name, or a bare barbell lift
+  in `BAR_LIFTS`, never a name `BAR_NOT` catches (dumbbell, machine, Smith,
+  cable, EZ, trap bar, lever, brands). `exercise.bar` from Edit Exercise's
+  switch beats the name. 30 of his 270 read as barbell. No `≈`: the display
+  font lacks it and the fallback made the line a pixel taller.
 
 (`HISTORY.md: The training screen, four complaints` and the three sections
 after it.)

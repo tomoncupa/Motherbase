@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.28, 2026-09-25">
+<meta name="mb-version" content="1.0.29, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -296,6 +296,9 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .fieldlabel{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
   letter-spacing:var(--track-cap);color:var(--text-muted);
   padding-bottom:var(--s-2);border-bottom:var(--border-width) solid var(--accent);margin-bottom:var(--s-3)}
+.fieldlabel.withplates{display:flex;align-items:baseline;gap:var(--s-3)}
+.fieldlabel .plates{margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  letter-spacing:normal;color:var(--text-2);font-variant-numeric:tabular-nums}
 
 /* − [big number] +  — the control he uses more than any other in the app, so
    the buttons are oversized and the number is the biggest thing on screen. */
@@ -2962,7 +2965,7 @@ TRAIN.exerciseDialog = function (exId, prefill) {
   /* No categories is not a reason to refuse — it is a reason to make some. */
   if (!Object.keys(cats).length) { TRAIN.seedCats(); cats = TRAIN.cats(); }
   var kind = cur ? TRAIN.kindOf(exId) : 'wr';
-  var nameEl = null, sel = null, inc = null, rest = null, also = {};
+  var nameEl = null, sel = null, inc = null, rest = null, also = {}, barSw = null, barOn = null;
   if (cur && cur.also) Object.keys(cur.also).forEach(function (k) { also[k] = cur.also[k]; });
 
   UI.dialog({
@@ -3009,6 +3012,9 @@ TRAIN.exerciseDialog = function (exId, prefill) {
         placeholder: String(Rec.setting(APP.id, 'increment') || 2.5),
       });
       b.appendChild(UI.row('Weight increment', 'Blank uses the default', inc));
+      /* Read off the name until switched here, then his switch stands. */
+      barSw = UI.toggle(TRAIN.isBarbell(cur || { name: prefill || '' }), function (v) { barOn = v ? 1 : 0; });
+      b.appendChild(UI.row('Plates each side', 'Shown above the weight on a barbell lift', barSw));
       rest = UI.field('number', {
         value: cur && cur.rest ? String(cur.rest) : '',
         placeholder: String(Rec.setting(APP.id, 'restSeconds') || 120),
@@ -3069,6 +3075,7 @@ TRAIN.exerciseDialog = function (exId, prefill) {
           rest: rest.value ? parseInt(rest.value, 10) : null,
           also: Object.keys(also).length ? also : null,
         };
+        if (barOn !== null) changes.bar = barOn;
         if (exId) {
           TRAIN.patchExercise(exId, changes);
         } else {
@@ -3133,11 +3140,23 @@ function drawTrack(m) {
     if (i) label.style.marginTop = 'var(--s-4)';
     label.textContent = { w: 'WEIGHT (' + TRAIN.unitLabel() + ')', r: 'REPS',
       d: 'DISTANCE (' + TRAIN.distUnit() + ')', t: 'TIME' }[k];
+    /* The plates for each side sit on the label's own line, so a barbell
+       lift costs no height for them, and they follow every step and key. */
+    var plates = null;
+    if (k === 'w' && TRAIN.isBarbell(ex)) {
+      label.classList.add('withplates');
+      plates = UI.el('span', 'plates');
+      label.appendChild(plates);
+    }
+    var paintPlates = function (v) {
+      if (plates) plates.textContent = TRAIN.platesText(TRAIN.toKg(parseFloat(v) || 0, TRAIN.unit()));
+    };
+    paintPlates(TRAIN.draftW);
     pad.appendChild(label);
     var stepBy = k === 'w' ? TRAIN.increment(ex) : k === 'r' ? 1 : k === 'd' ? 0.1
       : (TRAIN.kindOf(exId) === 'dt' ? 60 : 15);
     var st = stepper(k, TRAIN[DRAFT[k]] == null ? '' : TRAIN[DRAFT[k]], stepBy,
-      function (v) { TRAIN[DRAFT[k]] = v; });
+      function (v) { TRAIN[DRAFT[k]] = v; paintPlates(v); });
     pad.appendChild(st);
     inputs[k] = st.input;
   });
@@ -5249,6 +5268,51 @@ TRAIN.plateSolve = function (targetKg, barKg, barUnit) {
   best = best || { ok: false, used: [], left: perSide };
   best.perSide = perSide;
   return best;
+};
+
+/* ── is this lift loaded on a barbell ──
+   Tom, 2026-09-25, yes to plates each side on TRACK. Only a lift that takes
+   plates on both ends of a bar gets the line, so it is read off the name:
+   "barbell" or "BB" in it, or the bare name of a barbell lift (his "Press"
+   is the overhead press). Never a dumbbell, machine, Smith, cable, EZ bar,
+   trap bar, lever or a machine's brand. `exercise.bar`, set in Edit
+   Exercise, beats the name either way. */
+TRAIN.BAR_NOT = /dumbbell|\bdb\b|machine|smith|cable|\bez\b|kettlebell|\bkb\b|lever|trap ?bar|landmine|t[- ]?bar\b|band|rope|pull ?down|push ?down|plate loaded|hammer strength|life fitness|precor|nautilus|technogym|lgndry|ksyn|iron tech|body ?strong|\bmtg\b|century|padel|assisted/i;
+TRAIN.BAR_LIFTS = ['deadlift', 'sumo deadlift', 'romanian deadlift', 'stiff legged deadlift',
+  'stiff leg deadlift', 'rdl', 'sldl', 'deadlift row', 'rack pull', 'good morning', 'press',
+  'overhead press', 'military press', 'push press', 'behind the neck press', 'pendlay row',
+  'bent over row', 'wide bent over row', 'jm press', 'squat', 'squats', 'back squat',
+  'front squat', 'box squat', 'zercher squat', 'bench press', 'flat bench press',
+  'incline bench press', 'decline bench press', 'close grip bench press', 'floor press',
+  'power clean', 'clean', 'hang clean', 'snatch', 'clean and jerk'];
+TRAIN.isBarbell = function (ex) {
+  if (!ex) return false;
+  if (ex.bar === 1 || ex.bar === 0) return !!ex.bar;
+  var nm = String(ex.name || '');
+  if (TRAIN.BAR_NOT.test(nm)) return false;
+  if (/barbell|\bbb\b/i.test(nm)) return true;
+  return TRAIN.BAR_LIFTS.indexOf(words(nm).join(' ')) >= 0;
+};
+/* The bar in the unit on screen, or the gym's first. */
+TRAIN.barKg = function () {
+  var bars = TRAIN.gymBars();
+  var bar = bars.filter(function (b) { return b.u === TRAIN.unit(); })[0] || bars[0];
+  return { kg: bar.u === 'lb' ? bar.w / LB_PER_KG : bar.w, u: bar.u };
+};
+/* What goes on each side, as the WEIGHT label says it: "20×2 · 5 each side".
+   Heaviest first, the order they go on. A plate in the other unit says its
+   unit; a total the plates cannot make says ~ (the display font has no
+   ≈, and the fallback glyph made the line taller). Nothing for no weight
+   or less than the bar. */
+TRAIN.platesText = function (kg) {
+  if (!(kg > 0)) return '';
+  var bar = TRAIN.barKg(), sol = TRAIN.plateSolve(kg, bar.kg, bar.u);
+  if (sol.perSide < -0.01) return '';
+  if (!sol.used.length) return sol.ok ? 'bar only' : '';
+  return (sol.ok ? '' : '~ ') + sol.used.map(function (p) {
+    var n = p.w != null ? p.w : Math.round(TRAIN.toUnit(p.kg, TRAIN.unit()) * 100) / 100;
+    return n + (p.u && p.u !== TRAIN.unit() ? p.u : '') + (p.n > 1 ? '×' + p.n : '');
+  }).join(' · ') + ' each side';
 };
 
 TRAIN.platePanel = function (prefillKg) {
