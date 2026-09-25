@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.0, 2026-09-25">
+<meta name="mb-version" content="1.0.1, 2026-09-25">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -69,6 +69,8 @@ label.fl .mut{font-weight:400}
 .moodrow .mb-chip{flex:1;min-width:0;padding:var(--s-1);display:flex;flex-direction:column;
   align-items:center;justify-content:center;line-height:1.1;font-family:var(--font-mono)}
 .moodrow small{font-size:var(--f-1);opacity:.7;font-family:var(--font-body)}
+/* the number he usually gives: outlined, dashed, never picked for him */
+.moodrow .mb-chip.guess{outline:1px dashed var(--accent);outline-offset:-4px}
 .feel{display:flex;flex-direction:column;gap:var(--s-2);margin-top:var(--s-2)}
 #add{width:100%}
 .say{font-size:var(--f-1);color:var(--text-muted);line-height:var(--lh-body)}
@@ -114,6 +116,7 @@ const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls)
    2026-09-13: "Default type when making a bullet should be Entry"). */
 let kind = 'entry', atVal = '', endVal = '', moodVal = null, feelVal = '';
 let ta = null, extras = null, listBox = null, syncNote = null;
+let repaintMood = () => {}, guessT = null;
 
 function build() {
   const main = document.getElementById('main');
@@ -137,6 +140,7 @@ function build() {
     e.preventDefault();
     save();
   };
+  ta.addEventListener('input', () => { clearTimeout(guessT); guessT = setTimeout(() => repaintMood(), 150); });
   card.appendChild(ta);
   extras = el('div', 'extras');
   card.appendChild(extras);
@@ -188,21 +192,36 @@ function paintExtras() {
     g.appendChild(sw); g.appendChild(ew);
     extras.appendChild(g);
   }
+  repaintMood = () => {};
   if (Journal.asks('mood', kind)) {
     const f = Journal.moodField() || { lo: 1, max: 5 };
+    /* A and B (Tom, 2026-09-25): his usual number for these words, or for
+       this word, is outlined and named; a number picked turns the word
+       buttons into the words he pairs with it. Never picked for him. */
+    const memo = Journal.moodMemo();
     const w = el('div');
-    w.appendChild(el('label', 'fl', 'Mood'));
+    const lbl = el('label', 'fl', 'Mood');
+    w.appendChild(lbl);
     const row = el('div', 'moodrow');
+    let paintFeel = () => {};
+    const guess = () => {
+      if (moodVal != null) return null;
+      const g = memo.forWord(feelVal);
+      return g != null ? g : memo.forText(ta.value);
+    };
     const paintMood = () => {
+      const g = guess();
+      lbl.innerHTML = 'Mood' + (g != null ? ' <span class="mut">· usually ' + esc(g) + '</span>' : '');
       row.innerHTML = '';
       for (let v = Journal.scaleLo(f); v <= Journal.scaleHi(f); v++) {
-        const c = el('button', 'mb-chip mb-press' + (moodVal === v ? ' on' : ''), v + '<small>' + esc(Journal.scaleWord(f, v)) + '</small>');
+        const c = el('button', 'mb-chip mb-press' + (moodVal === v ? ' on' : '') + (g === v ? ' guess' : ''), v + '<small>' + esc(Journal.scaleWord(f, v)) + '</small>');
         c.type = 'button';
         c.setAttribute('aria-pressed', moodVal === v ? 'true' : 'false');
-        c.onclick = () => { moodVal = moodVal === v ? null : v; paintMood(); Mobile.haptic('select'); };
+        c.onclick = () => { moodVal = moodVal === v ? null : v; paintMood(); paintFeel(); Mobile.haptic('select'); };
         row.appendChild(c);
       }
     };
+    repaintMood = paintMood;
     paintMood();
     w.appendChild(row);
     if (Journal.feelOn()) {
@@ -212,16 +231,16 @@ function paintExtras() {
       fi.setAttribute('aria-label', 'How it felt');
       fi.value = feelVal;
       const chips = el('div', 'mb-chips');
-      const paintFeel = () => {
+      paintFeel = () => {
         chips.innerHTML = '';
-        Journal.topFeels().forEach(word => {
+        (moodVal != null ? memo.wordsFor(moodVal) : Journal.topFeels()).forEach(word => {
           const c = el('button', 'mb-chip mb-press' + (feelVal.toLowerCase() === word ? ' on' : ''), esc(word));
           c.type = 'button';
-          c.onclick = () => { feelVal = feelVal.toLowerCase() === word ? '' : word; fi.value = feelVal; paintFeel(); Mobile.haptic('select'); };
+          c.onclick = () => { feelVal = feelVal.toLowerCase() === word ? '' : word; fi.value = feelVal; paintFeel(); paintMood(); Mobile.haptic('select'); };
           chips.appendChild(c);
         });
       };
-      fi.oninput = () => { feelVal = fi.value.trim(); paintFeel(); };
+      fi.oninput = () => { feelVal = fi.value.trim(); paintFeel(); paintMood(); };
       fi.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); save(); } };
       paintFeel();
       fw.appendChild(fi); fw.appendChild(chips);
