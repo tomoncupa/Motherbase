@@ -704,7 +704,10 @@ answer, or take it out.
   all wrote duplicates this way on 2026-09-23. Before writing a row you make
   on someone's behalf, look for its key on EVERY date, and its tombstone too;
   never rely on a remembered list alone, and give the row a key that is the
-  same on every device.
+  same on every device. Saving a default on open is the same mistake: the
+  home screen saved its factory layout on a device that had not synced yet,
+  stamped newer than his real one, and sync spread it everywhere
+  (2026-09-25). Write a setting only when the person changes it.
 - **A shared-file fix reaches a device on its SECOND open.** On the hosted
   main copy nothing is stamped, so `sw.js` answers from the kept copy and
   refreshes in the background. Watched 2026-09-24: the journal dedupe was live

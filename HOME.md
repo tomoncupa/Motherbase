@@ -18,10 +18,21 @@ Home screen. On the shared foundation as of 2026-08-20: skin tokens, bottom tab 
 
 ## 2026-09-24, HOME 1.0.31: a fixed grid, and BODY HEATMAP
 
-Tom: "Rather than resize my widgets when I resize my window, I just want more space to work with." One cell is now a fixed size, the setting `lifeos.cell`, captured once from what the stretched board gave at the window open that day (clamped 100-200px wide, 72-140px tall). The window only sets how many columns there are (`COLS`, never fewer than the cards use): wider adds empty columns on the right, a narrower window scrolls sideways instead of moving cards. Everything that said 12 now reads `COLS`. Phone unchanged. To change the cell size, delete or edit `lifeos.cell`.
+Tom: "Rather than resize my widgets when I resize my window, I just want more space to work with." One cell is now a fixed size, the setting `lifeos.cell`, captured once from what the stretched board gave at the window open that day (clamped 100-200px wide, 72-140px tall). The window only sets how many columns there are (`COLS`, never fewer than the cards use): wider adds empty columns on the right, a narrower window scrolls sideways instead of moving cards. Everything that said 12 now reads `COLS`. Phone unchanged. (Since 1.0.34 the cell is the constant `CELL` in index.html and `lifeos.cell` is not read; see below.)
 
 BODY HEATMAP ("Widget - Body Training Heatmap"): TRAIN's working sets over 7, 14 or 30 days on a front and back figure, brighter for more sets, with a ranked list. Counted like TRAIN's WEEKLY (warmups out, today's sets once done, `exercise.also` shares). Muscle-group names are read onto the body by `BODY_RULES`; an unreadable group other than cardio is listed as "Not on the body". `setIsWarm` copies `TRAIN.noteWarm`: change both.
 
 ## 2026-09-25, HOME 1.0.33: FORGE in the roster
 
 FORGE, the program builder (`forge/CLAUDE.md`), is in `APPS` after COACH (built as 1.0.32 on its branch; SHEET took 1.0.32 on main first), flagged `mine`. It sits behind the dock's line with Tom's other apps, and the client build's `DROP_APPS` removes it.
+
+## 2026-09-25, HOME 1.0.34: the widget grid, fixed three ways
+
+Tom: "fix the widget system." Three causes, found by reading the Main Menu program's own store and measuring the same state here.
+
+- **Rows were 140px, not 84.** 1.0.31 took the cell from the window once and saved it as `lifeos.cell`, but counted the tallest card as the whole board when the cards had no spots yet, so rows locked at the 140px cap: TODAY stood 688px tall and the board ran 3,628px in a 939px window. The cell is now a constant, 146 x 84 (what the 12-column board gave on his 1920px PC, and the row any board too tall for the window had). `lifeos.cell` is no longer read, which also ends the first device to open deciding the size for all of them.
+- **Opening saved the layout.** `fitGrid` saved whenever it worked out spots or pushed a card down, so a device opened before its synced rows arrived saved the factory layout stamped newer than his real one, and sync carried it to every device. The Main Menu program did exactly that at 12:44pm today. Now the layout is written only when he moves, resizes, adds or removes a card; spots worked out on open, and push-downs from a `fit` card that grew, stay in memory.
+- **A layout from another device showed only after a reload.** `reloadLayout` reads the row again on every store change and redraws with it.
+- **On a phone every card was 72px tall** with the rest cut off, since 1.0.23: the desk's fixed row height reached the stacked cards. Phone rows are `auto` now.
+
+Watched here at 1920x1000 and 390x844: TODAY 408px, no rewrite on open, a synced layout landing while open, a real title drag and corner resize saving, WEIGHT's chart 96px on the phone. His layout on the hosted copy is the factory one as of today; the folder copy's store in the Main Menu program still holds the one he arranged on 21 Sep.
