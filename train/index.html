@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.24, 2026-09-24">
+<meta name="mb-version" content="1.0.25, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -376,9 +376,15 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .dlist .prow.here{background:color-mix(in srgb, var(--accent) 14%, transparent)}
 /* A row held and picked up: lifted off the list, and it keeps its own
    background so the rows it passes over stay readable behind it. */
-.dlist .prow.dragging{background:var(--surface-3);box-shadow:var(--e-3);
-  border-radius:var(--radius-md);border-bottom-color:transparent;
-  position:relative;z-index:2}
+/* holdToMove. A held row never selects its text or raises the phone's own
+   callout, which would take the press away from the page. A card being
+   sorted shows only its head, so a list of tall cards fits one screen. */
+.mvlist > [data-key]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.mvlist > [data-key].lifted{background:var(--surface-3);box-shadow:var(--e-3),inset 0 0 0 var(--border-width) var(--accent);
+  border-radius:var(--radius-md);border-bottom-color:transparent;position:relative;z-index:2}
+.mvlist.sorting > .exblock > :not(.head){display:none}
+.exlist{display:flex;flex-direction:column;gap:var(--s-3)}
+.mvlist.sorting > .exblock > .head{border-bottom-color:transparent}
 .dfoot{border-top:var(--border-width) solid var(--border);padding-bottom:var(--safe-b)}
 .dfoot button{display:flex;align-items:center;gap:var(--s-3);width:100%;border:0;
   background:none;cursor:pointer;color:var(--text-2);font:inherit;text-align:left;
@@ -1625,14 +1631,19 @@ TRAIN.importFitNotes = function (buf, onProgress, opts) {
   routines.forEach(function (r) {
     push('program', null, 'fn' + r._id, { name: r.name, ord: r.sort_order || 0 });
   });
+  /* A day's key names its routine as well as itself, so an exercise has to
+     name both to land in it. It named only the day until 2026-09-25, and
+     every imported routine day read "No exercises". */
+  var dayKey = {};
   sections.forEach(function (s) {
-    push('progday', null, 'fn' + s.routine_id + '.' + s._id,
+    dayKey[s._id] = 'fn' + s.routine_id + '.' + s._id;
+    push('progday', null, dayKey[s._id],
       { program: 'fn' + s.routine_id, name: s.name, ord: s.sort_order || 0 });
   });
   secEx.forEach(function (e) {
     var list = (setsFor[e._id] || []).sort(function (a, b) { return a.ord - b.ord; });
     push('progex', null, 'fn' + e.routine_section_id + '.' + e._id, {
-      day: 'fn' + e.routine_section_id, ex: 'fn' + e.exercise_id,
+      day: dayKey[e.routine_section_id] || ('fn' + e.routine_section_id), ex: 'fn' + e.exercise_id,
       ord: e.sort_order || 0, fill: e.populate_sets_type || 0, sets: list,
     });
   });
@@ -2358,9 +2369,20 @@ function drawWorkout(m) {
   var showChk = Rec.setting(APP.id, 'markComplete') !== 0;
   var groupsToday = TRAIN.groupsOn(date);
 
+  /* Hold a card and drag it to move the exercise; while it moves every card
+     shows only its name. Let go without moving and its menu opens. */
+  var exlist = UI.el('div', 'exlist');
+  m.appendChild(exlist);
+  holdToMove(exlist, {
+    item: '.exblock',
+    menu: function (row, e) { TRAIN.dayExerciseMenu(row.dataset.key, e); },
+    drop: function (order) { TRAIN.patchSession(date, { order: order }); draw(); },
+  });
+
   groups.forEach(function (g) {
     var cat = g.def.cat ? cats[g.def.cat] : null;
     var block = UI.el('div', 'exblock');
+    block.dataset.key = g.ex;
     /* The hairline under the name is the accent, as in FitNotes, unless the
        setting asks for the category's own colour. */
     if (cat && catShow === 'both') block.style.setProperty('--cat', TRAIN.slotColor(cat.slot));
@@ -2375,7 +2397,6 @@ function drawWorkout(m) {
         UI.esc(grp.g.name) + '</span>' : '') +
       (showChk ? '<span class="tickdot' + (done ? '' : ' off') + '">' + (done ? ico('done') : '') + '</span>' : '');
     head.onclick = function () { TRAIN.openExercise(g.ex); };
-    withMenu(head, function (e) { TRAIN.dayExerciseMenu(g.ex, e); });
     block.appendChild(head);
 
     /* Which session this exercise is measured against, and how its sets did. */
@@ -2410,7 +2431,7 @@ function drawWorkout(m) {
       sets.appendChild(more);
     }
     block.appendChild(sets);
-    m.appendChild(block);
+    exlist.appendChild(block);
   });
 
   /* The end of the session adds itself up, in a card made to be shared. */
@@ -3028,6 +3049,21 @@ function drawTrack(m) {
       }
       listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d));
     });
+    /* Hold a set and drag it to put it in another place; let go without
+       moving and its menu opens, as the hold always did. The numbers follow
+       the new order, and so does "set N against set N". */
+    holdToMove(listCard, {
+      item: '.tset',
+      menu: function (row, e) {
+        var s = mine.filter(function (x) { return x.key === row.dataset.key; })[0];
+        if (s) setMenu(s, date, e);
+      },
+      drop: function (order) {
+        TRAIN.writeOrd('set', date, order);
+        TRAIN.reindex();
+        draw();
+      },
+    });
     m.appendChild(listCard);
   }
 }
@@ -3180,6 +3216,7 @@ function afterSave(exId, date) {
 function trainingSetRow(s, n, date, showChk, delta) {
   var row = UI.el('div', 'tset' + (TRAIN.sel === s.key ? ' sel' : '') + (s.warm ? ' warm' : '') +
     (TRAIN.pending(s) ? ' plan' : ''));
+  row.dataset.key = s.key;
 
   var bub = UI.el('button', 'bub nohold mb-tap' + (s.note || s.rir != null || s.q ? ' on' : ''));
   bub.innerHTML = BUBBLE;
@@ -3250,7 +3287,7 @@ function trainingSetRow(s, n, date, showChk, delta) {
     Mobile.feedback('select');
     draw();
   };
-  withMenu(row, function (e) { setMenu(s, date, e); });
+  /* The hold is the list's: holdToMove, where drawTrack builds the list. */
   return row;
 }
 
@@ -3554,21 +3591,25 @@ function paintDayDrawer() {
   groups.forEach(function (g) {
     var done = g.sets.every(TRAIN.counts);
     var row = UI.el('div', 'prow' + (g.ex === TRAIN.exId ? ' here' : ''));
-    row.dataset.ex = g.ex;
+    row.dataset.key = g.ex;
     var main = UI.el('button', 'pmain mb-press');
     main.innerHTML = '<span class="nm">' + UI.esc(g.def.name) +
       '<br><span class="sub">' + g.sets.length + ' set' + (g.sets.length === 1 ? '' : 's') + '</span></span>' +
       '<span class="tickdot' + (done ? '' : ' off') + '">' + (done ? ico('done') : '') + '</span>';
     main.onclick = function () { closeDrawer(); TRAIN.openExercise(g.ex); };
     row.appendChild(main);
-    /* The hold on this row picks it up, so the menu keeps the two ways in that
-       do not need it: the button, and a right click. DOCTRINE laws 6 and 14. */
-    var open = function (e) { closeDrawer(); TRAIN.dayExerciseMenu(g.ex, e); };
-    row.appendChild(rowMenuBtn('More for ' + g.def.name, open));
-    rightMenu(row, open);
+    /* The menu's visible way in; a hold let go without moving opens it too. */
+    row.appendChild(rowMenuBtn('More for ' + g.def.name, function (e) {
+      closeDrawer(); TRAIN.dayExerciseMenu(g.ex, e);
+    }));
     list.appendChild(row);
   });
-  dragRows(list);
+  /* The list survives every repaint, so this wires once. */
+  holdToMove(list, {
+    item: '.prow',
+    menu: function (row, e) { closeDrawer(); TRAIN.dayExerciseMenu(row.dataset.key, e); },
+    drop: function (order) { TRAIN.patchSession(TRAIN.date, { order: order }); draw(); },
+  });
   if (!groups.length) {
     var none = UI.el('div', 'empty');
     none.style.padding = 'var(--s-4)';
@@ -3588,87 +3629,185 @@ function paintDayDrawer() {
   }));
 }
 
-/* ── hold an exercise and move it ──
+/* ── hold a row: drag it to move it, let go to open its menu ──
    Tom, 2026-09-24: "I shouldn't have a specific re order button, why didn't we
-   copy the hold to rearrange function?" So the Reorder mode and its up and
-   down arrows are gone and the hold does the moving.
+   copy the hold to rearrange function?" and 2026-09-25: "I still cant hold to
+   reorganize my sets." The first answer reached the day drawer only, and it
+   could not have worked on his iPhone: its guard against scrolling was added
+   AFTER the finger went down, and a phone decides when a touch starts whether
+   anything on the page can stop it scrolling. So the list scrolled, the
+   browser cancelled the press, and the row fell back where it was. The guard
+   now sits on the list for good and says no only while a row is up.
 
-   Two rules make it work on a thumb. The hold has to be still, because this is
-   a scrolling list and any real movement in the first half second is a scroll.
-   And once a row is up, a non-passive touchmove on the document is what stops
-   the page scrolling underneath: touch-action cannot be changed once a gesture
-   has already started.
+   One gesture, two outcomes, the way an iPhone home screen works. Hold still
+   and the row lifts. Drag and it moves, the others making room; near the top
+   or bottom of the screen the page scrolls under it. Let go without moving
+   and its menu opens, so every menu a hold used to open is still a hold away.
+   A right click opens the menu too. A mouse lifts on the first few pixels of
+   a drag without waiting.
 
-   A mouse skips the wait and drags on the first few pixels, which is what a
-   mouse has always meant.
-
-   The new order is read back off the page when the row is dropped, so what he
-   sees is what is saved. The listeners sit on the list, which survives every
-   repaint, so they are wired once. */
-function dragRows(list) {
-  if (list.dragWired) return;
-  list.dragWired = true;
-  var d = null;
-  var block = function (e) { e.preventDefault(); };
-  var order = function () {
-    return [].slice.call(list.children).map(function (k) { return k.dataset.ex; })
-      .filter(Boolean);
+   A list's rows are its own children matching `opts.item`, each with its key
+   in `data-key`. `opts.drop(keys)` gets the new order, read back off the page,
+   so what he sees is what is saved. A list inside another list's row (a
+   routine day's exercises) claims the press first, so the day stays put.
+   Anything marked `.nohold` is a button of its own and never lifts a row. */
+function holdToMove(list, opts) {
+  if (list.holdWired) return list;
+  list.holdWired = true;
+  list.classList.add('mvlist');
+  var d = null, eatUntil = 0;
+  var rows = function () {
+    return [].slice.call(list.children).filter(function (k) {
+      return k.dataset.key && k.matches(opts.item);
+    });
   };
+  var keys = function () { return rows().map(function (k) { return k.dataset.key; }); };
+  var rowOf = function (t) {
+    var el = t;
+    while (el && el.parentNode !== list) el = el.parentNode;
+    return el && el.dataset && el.dataset.key && el.matches(opts.item) ? el : null;
+  };
+  var scroller = function () { return list.closest('.mb-scroll') || document.scrollingElement; };
+
+  var place = function () {
+    var others = rows().filter(function (k) { return k !== d.row; });
+    var over = null;
+    others.forEach(function (k) {
+      if (over) return;
+      var b = k.getBoundingClientRect();
+      if (d.y < b.top + b.height / 2) over = k;
+    });
+    var before = over || (others.length ? others[others.length - 1].nextSibling : null);
+    if (d.row.nextSibling === before || d.row === before) return;
+    list.insertBefore(d.row, before);
+    Mobile.haptic('nav');
+  };
+
+  /* A card that is being moved shows only its name, so a list of tall cards
+     fits on one screen while it is sorted. The row is kept under the finger
+     when the list closes up around it. */
+  var sorting = function () {
+    d.sorting = true;
+    var top = d.row.getBoundingClientRect().top;
+    list.classList.add('sorting');
+    var sc = scroller();
+    sc.scrollTop += d.row.getBoundingClientRect().top - top;
+  };
+
+  var edge = function () {
+    if (!d || !d.live) return;
+    if (d.sorting) {
+      var sc = scroller(), r = sc === document.scrollingElement
+        ? { top: 0, bottom: innerHeight } : sc.getBoundingClientRect();
+      var zone = 56, step = 0;
+      if (d.y < r.top + zone) step = -Math.ceil((r.top + zone - d.y) / 4);
+      else if (d.y > r.bottom - zone) step = Math.ceil((d.y - (r.bottom - zone)) / 4);
+      if (step) { sc.scrollTop += Math.max(-18, Math.min(18, step)); place(); }
+    }
+    requestAnimationFrame(edge);
+  };
+
   var lift = function () {
+    if (!d) return;
     d.live = true;
-    d.row.classList.add('dragging');
+    d.lx = d.x; d.ly = d.y;
+    d.row.classList.add('lifted');
     Mobile.haptic('heavy');
-    document.addEventListener('touchmove', block, { passive: false });
     try { list.setPointerCapture(d.id); } catch (x) {}
+    requestAnimationFrame(edge);
   };
+
   list.addEventListener('pointerdown', function (e) {
+    if (e._mv) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.target.closest && e.target.closest('.nohold')) return;
-    var row = e.target.closest && e.target.closest('.prow[data-ex]');
-    if (!row || list.children.length < 2) return;
-    d = { row: row, id: e.pointerId, sx: e.clientX, sy: e.clientY, live: false,
-          mouse: e.pointerType === 'mouse', was: order(), t: null };
-    if (!d.mouse) d.t = setTimeout(lift, 500);
+    var row = rowOf(e.target);
+    if (!row) return;
+    e._mv = true;
+    var all = rows(), last = all[all.length - 1];
+    d = { row: row, id: e.pointerId, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY,
+          mouse: e.pointerType === 'mouse', live: false, sorting: false,
+          was: keys(), nodes: all, after: last ? last.nextSibling : null };
+    d.t = setTimeout(lift, 420);
   });
+
   list.addEventListener('pointermove', function (e) {
     if (!d || e.pointerId !== d.id) return;
+    d.x = e.clientX; d.y = e.clientY;
     if (!d.live) {
-      var moved = Math.abs(e.clientY - d.sy) + Math.abs(e.clientX - d.sx);
-      if (d.mouse) { if (moved < 6) return; lift(); }
-      else { if (moved > 10) { clearTimeout(d.t); d = null; } return; }
+      var moved = Math.abs(d.x - d.sx) + Math.abs(d.y - d.sy);
+      if (d.mouse && moved >= 6) { clearTimeout(d.t); lift(); }
+      else if (moved > 10) { clearTimeout(d.t); d = null; return; }
+      else return;
     }
     e.preventDefault();
-    var over = null;
-    [].slice.call(list.children).forEach(function (k) {
-      if (over || k === d.row) return;
-      var b = k.getBoundingClientRect();
-      if (e.clientY < b.top + b.height / 2) over = k;
-    });
-    if (over) { if (d.row.nextSibling !== over) list.insertBefore(d.row, over); }
-    else if (list.lastChild !== d.row) list.appendChild(d.row);
+    if (!d.sorting) {
+      if (Math.abs(d.x - d.lx) + Math.abs(d.y - d.ly) < 6) return;
+      sorting();
+    }
+    place();
   });
+
   var end = function (e) {
     if (!d || e.pointerId !== d.id) return;
     var was = d;
     d = null;
     clearTimeout(was.t);
     if (!was.live) return;
-    document.removeEventListener('touchmove', block, { passive: false });
-    was.row.classList.remove('dragging');
-    /* The click that ends a drag is not a tap on the row. */
-    var eat = function (ev) { ev.stopPropagation(); ev.preventDefault(); };
-    list.addEventListener('click', eat, true);
-    setTimeout(function () { list.removeEventListener('click', eat, true); }, 40);
-    var now = order();
+    eatUntil = Date.now() + 500;
+    try { list.releasePointerCapture(was.id); } catch (x) {}
+    was.row.classList.remove('lifted');
+    list.classList.remove('sorting');
+    /* The browser took the gesture back: put every row where it was. */
+    if (e.type === 'pointercancel') {
+      was.nodes.forEach(function (n) { list.insertBefore(n, was.after); });
+      return;
+    }
+    var now = keys();
     if (now.join('|') !== was.was.join('|')) {
-      TRAIN.patchSession(TRAIN.date, { order: now });
       Mobile.feedback('select');
-      draw();
+      opts.drop(now, was.row.dataset.key);
+    } else if (!was.sorting && opts.menu) {
+      opts.menu(was.row, e);
     }
   };
   list.addEventListener('pointerup', end);
   list.addEventListener('pointercancel', end);
+
+  /* Fixed on the list from the start, so the phone knows before the touch
+     begins that this list may refuse to scroll. It refuses only while a row
+     is up. */
+  list.addEventListener('touchmove', function (e) {
+    if (d && d.live) e.preventDefault();
+  }, { passive: false });
+
+  /* The click that ends a hold is not a tap on the row. */
+  list.addEventListener('click', function (e) {
+    if (Date.now() < eatUntil) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+
+  /* A right click is the menu. Android raises one of these at the end of a
+     long press as well, and that one belongs to the hold above. */
+  list.addEventListener('contextmenu', function (e) {
+    if (e._mv) return;
+    var row = rowOf(e.target);
+    if (!row) return;
+    e._mv = true;
+    e.preventDefault();
+    if (d || Date.now() < eatUntil) return;
+    if (opts.menu) opts.menu(row, e);
+  });
+  return list;
 }
+
+/* Write a list's order into `ord`, one row at a time and only where it
+   changed, merging into each row rather than rebuilding it. */
+TRAIN.writeOrd = function (type, date, keys) {
+  keys.forEach(function (k, n) {
+    var cur = Rec.get(type, date, k);
+    if (cur && cur.ord !== n) TRAIN.patchRow(type, date, k, { ord: n });
+  });
+};
 
 function drawerAction(label, icon, fn) {
   var b = UI.el('button', 'mb-press mb-tap');
@@ -4541,14 +4680,19 @@ function drawRoutines(m) {
     return;
   }
   var list = UI.el('div', 'plist');
+  holdToMove(list, {
+    item: '.prow',
+    menu: function (row, e) { TRAIN.programMenu(row.dataset.key, e); },
+    drop: function (order) { TRAIN.writeOrd('program', null, order); draw(); },
+  });
   keys.forEach(function (k) {
     var days = TRAIN.daysOf(k);
     var row = UI.el('div', 'prow');
+    row.dataset.key = k;
     var main = UI.el('button', 'pmain mb-press');
     main.innerHTML = '<span class="nm">' + UI.esc(progs[k].name) + '</span>' +
       '<span class="sub">' + days.length + ' day' + (days.length === 1 ? '' : 's') + '</span>';
     main.onclick = function () { TRAIN.progOpen = k; draw(); };
-    withMenu(main, function (ev) { TRAIN.programMenu(k, ev); });
     row.appendChild(main);
     row.appendChild(rowMenuBtn('Options for ' + progs[k].name, function (ev) { TRAIN.programMenu(k, ev); }));
     list.appendChild(row);
@@ -4567,9 +4711,19 @@ function drawOneProgram(m, progId) {
     m.appendChild(e);
   }
 
+  /* Hold a day to move it, or an exercise inside a day to move that. */
+  var daylist = UI.el('div', 'exlist');
+  m.appendChild(daylist);
+  holdToMove(daylist, {
+    item: '.exblock',
+    menu: function (row, e) { TRAIN.progdayMenu(progId, row.dataset.key, e); },
+    drop: function (order) { TRAIN.writeOrd('progday', null, order); draw(); },
+  });
+
   days.forEach(function (d) {
     var items = TRAIN.exercisesOf(d.key);
     var card = UI.el('div', 'exblock');
+    card.dataset.key = d.key;
     var head = UI.el('div', 'head');
     head.innerHTML = '<span class="nm">' + UI.esc(d.d.name) + '</span>';
     var logAll = UI.el('button', 'mb-btn nohold mb-press mb-tap');
@@ -4577,15 +4731,20 @@ function drawOneProgram(m, progId) {
     logAll.onclick = function (ev) { ev.stopPropagation(); TRAIN.startProgramDay(d.key); };
     head.appendChild(logAll);
     head.appendChild(rowMenuBtn('Options for ' + d.d.name, function (ev) { TRAIN.progdayMenu(progId, d.key, ev); }));
-    withMenu(head, function (ev) { TRAIN.progdayMenu(progId, d.key, ev); });
     card.appendChild(head);
 
     var box = UI.el('div');
+    holdToMove(box, {
+      item: '.prow',
+      menu: function (row, e) { TRAIN.progexMenu(d.key, row.dataset.key, e); },
+      drop: function (order) { TRAIN.writeOrd('progex', null, order); draw(); },
+    });
     items.forEach(function (it) {
       var ex = exs[it.x.ex];
       var fill = it.x.fill | 0;
       var sub = fill === 2 ? ((it.x.sets || []).length + ' sets') : fill === 1 ? 'previous sets' : '';
       var row = UI.el('div', 'prow');
+      row.dataset.key = it.key;
       var main = UI.el('button', 'pmain mb-press');
       main.innerHTML = '<span class="nm">' + UI.esc(ex ? ex.name : 'Deleted exercise') + '</span>' +
         (sub ? '<span class="sub">' + sub + '</span>' : '');
@@ -4593,7 +4752,6 @@ function drawOneProgram(m, progId) {
         if (!ex) return UI.toast('No exercise selected', { bad: true });
         TRAIN.logFromRoutine(it.key);
       };
-      withMenu(main, function (ev) { TRAIN.progexMenu(d.key, it.key, ev); });
       row.appendChild(main);
       row.appendChild(rowMenuBtn('Options for ' + (ex ? ex.name : 'exercise'), function (ev) {
         TRAIN.progexMenu(d.key, it.key, ev);
@@ -4605,7 +4763,7 @@ function drawOneProgram(m, progId) {
       none.textContent = 'No exercises';
       box.appendChild(none);
     }
-    var addEx = UI.el('button', 'mb-btn mb-press mb-tap');
+    var addEx = UI.el('button', 'mb-btn nohold mb-press mb-tap');
     addEx.style.width = '100%';
     addEx.textContent = '+ ADD EXERCISE';
     addEx.onclick = function () {
@@ -4615,7 +4773,7 @@ function drawOneProgram(m, progId) {
     };
     box.appendChild(addEx);
     card.appendChild(box);
-    m.appendChild(card);
+    daylist.appendChild(card);
   });
 
   var addDay = UI.el('button', 'mb-btn mb-press mb-tap');
@@ -5001,13 +5159,6 @@ function menuAt(e, items, title) {
    that follows a hold so the row underneath does not open as well. */
 function withMenu(el, fn) {
   Mobile.hold(el, function (e) { fn(e); }, { skip: '.nohold' });
-  return el;
-}
-
-/* A right click on its own, for a row whose press-and-hold means something
-   else. Its menu's visible way in is the button below. */
-function rightMenu(el, fn) {
-  el.addEventListener('contextmenu', function (e) { e.preventDefault(); fn(e); });
   return el;
 }
 

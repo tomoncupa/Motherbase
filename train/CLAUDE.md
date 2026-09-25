@@ -421,7 +421,8 @@ where FitNotes says workout.
 
 **Every row that can be changed has a menu**, on a long press and a right click
 both (DOCTRINE law 14), and every one of those menus also has a visible way in —
-a ⋮ button on the row, a Reorder button, or the screen's More (law 6).
+a ⋮ button on the row, or the screen's More (law 6). On a list with an order
+the long press is a hold let go without moving; see `holdToMove` below.
 
 **Summaries are facts, never verdicts.** The end of a session and the week add
 themselves up because Tom asked for both. Neither praises, sets a target, or
@@ -608,9 +609,18 @@ session could undo without noticing:
   one line, then takes two lines rather than shrink further, then three. The
   header's `.spacer` must stand down whenever there is a title, or it and the
   title split the free space and half the room goes to nothing.
-- **A hold on a row in the day drawer moves it**, it does not open a menu.
-  `dragRows`. The menu keeps the two ways in that do not need the hold: the
-  button on the row, and a right click. DOCTRINE laws 6 and 14.
+- **A hold on anything with an order lifts it** (`holdToMove`, 1.0.25): the
+  log's exercise cards, the drawer's rows, the sets on TRACK, and a routine's
+  list, days and exercises. Drag and it moves; **let go without moving and
+  its menu opens**, so every hold-menu those rows had is kept, and a right
+  click opens it too. Tom, 2026-09-25: *"I still cant hold to reorganize my
+  sets"* — the drawer-only version of 1.0.21 never worked on his iPhone,
+  because its touchmove guard was added after the finger was down and a
+  phone decides at touch start whether anything can stop the scroll. **The
+  guard must sit on the list from the start** and refuse only while a row is
+  up. Held rows carry `user-select:none` and no touch callout, or iOS takes
+  the press for text selection. A new ordered list uses `holdToMove`, never
+  `withMenu` on its rows, with each row's key in `data-key`.
 - **Saving a set never ticks it.** `done` is his box; `plan` is the app's mark.
   See Fields worth knowing and What counts.
 - **A new exercise carries what he typed** into the search box.
