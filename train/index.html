@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.26, 2026-09-25">
+<meta name="mb-version" content="1.0.27, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1016,12 +1016,33 @@ TRAIN.seedCats = function () {
    a setting is one row, so two devices each keep only the later one's list
    and a device opened before the synced rows arrive trusts an empty picture.
    Known traps, the setting that remembers. For the same reason this runs
-   after `Rec.ready`, when the tombstones from every device are in. */
+   after `Rec.ready`, when the tombstones from every device are in.
+
+   A group is looked for by its NAME, never by the key this list would give
+   it. An imported log keys its own (`fn9` is his Forearms), and until
+   1.0.27 this checked keys, so his log got a second, empty Forearms. Arms is
+   already there when he has Biceps or Triceps, and Core when he has Abs.
+   A copy this made beside one of his own is deleted while it holds no
+   exercise; one he has put a movement in stays, because then it is his. */
+TRAIN.CAT_ALSO = { arm: ['bicep', 'tricep'], core: ['ab', 'abdominal'] };
+TRAIN.catWord = function (nm) {
+  return String(nm || '').toLowerCase().replace(/[^a-z0-9]+/g, '').replace(/s$/, '');
+};
 TRAIN.fillCats = function () {
-  var have = TRAIN.cats(), ord = 0, made = 0;
+  var have = TRAIN.cats(), ord = 0, made = 0, used = {};
   Object.keys(have).forEach(function (k) { if ((have[k].ord | 0) > ord) ord = have[k].ord | 0; });
+  var ex = TRAIN.exercises();
+  Object.keys(ex).forEach(function (k) { if (ex[k].cat) used[ex[k].cat] = 1; });
   TRAIN.DEFAULT_CATS.forEach(function (nm, i) {
-    var id = TRAIN.catId(nm);
+    var id = TRAIN.catId(nm), w = TRAIN.catWord(nm);
+    var words = [w].concat(TRAIN.CAT_ALSO[w] || []);
+    var his = Object.keys(have).some(function (k) {
+      return k !== id && words.indexOf(TRAIN.catWord(have[k].name)) >= 0;
+    });
+    if (his) {
+      if (have[id] && !used[id]) { Rec.del('excat', null, id); made++; }
+      return;
+    }
     if (have[id] || Rec.tombstone('excat', null, id)) return;
     Rec.set('excat', null, id, { name: nm, slot: i, ord: ++ord });
     made++;

@@ -649,11 +649,12 @@ session could undo without noticing:
   group an existing log is missing, **moves no exercise**, and skips a group he
   deleted by asking `Rec.tombstone` rather than remembering what it wrote —
   and it runs inside `Rec.ready`, when every device's tombstones are in.
-  **Known bug, not yet fixed (found 2026-09-25):** it checks KEYS, and a
-  FitNotes group is keyed `fn<id>`, so on an imported log it adds a second
-  Forearms beside his own, and Arms and Core beside Biceps, Triceps and Abs
-  unless their tombstones exist. The fix matches by name and synonym and
-  deletes an empty app-made copy.
+  **It looks for a group by NAME** (`TRAIN.catWord`, plural dropped), never
+  by the key it would make: a FitNotes group is keyed `fn<id>`, and until
+  1.0.27 his log got a second, empty Forearms. Arms counts as there when he
+  has Biceps or Triceps, Core when he has Abs (`TRAIN.CAT_ALSO`). An app-made
+  copy beside one of his is deleted while it holds no exercise, and kept once
+  it holds one.
 
 (`HISTORY.md: The training screen, four complaints` and the three sections
 after it.)
