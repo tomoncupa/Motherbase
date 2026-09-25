@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
+<meta name="mb-version" content="1.0.0, 2026-09-25">
+<title>CHARACTER SHEET</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#0B0E14">
+<link href="../shared/fonts/fonts.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Cinzel:wght@600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+
+<script src="../shared/skins.js"></script>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/mobile.js"></script>
+<script src="../shared/sound.js"></script>
+<script src="../shared/ui.js"></script>
+<script src="../shared/io.js"></script>
+<script src="../shared/health.js"></script>
+<script src="../shared/icons.js"></script>
+<script src="../shared/notice.js"></script>
+
+<style>
+/* CHARACTER SHEET. Everywhere, phone first. The app's chrome is tokens only;
+   the windows it shows are NOTICE pictures with their own palettes, drawn by
+   shared/notice.js, the same way NOTICE draws them. */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);background-image:var(--tex-image);background-size:var(--tex-size);
+  color:var(--text-1);font-family:var(--font-body);font-size:var(--f-3);font-weight:var(--w-body);
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+}
+header{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
+  padding:calc(var(--s-3) + var(--safe-t)) var(--s-4) var(--s-3);
+  background:var(--surface-1);box-shadow:var(--e-1),var(--rim);
+}
+.logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-5);letter-spacing:.18em;white-space:nowrap}
+.logo b{color:var(--accent)}
+/* a phone has room for the word SHEET and both buttons, not the whole name */
+@media (max-width:440px){.logo .long{display:none}}
+.spacer{flex:1}
+main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-7) + var(--safe-b))}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:var(--s-4)}
+.card{border-radius:var(--radius-lg);padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-3)}
+h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted)}
+.muted{color:var(--text-muted);line-height:var(--lh-body)}
+.big{font-family:var(--font-num, var(--font-display));font-size:var(--f-6);font-weight:var(--w-bold);font-variant-numeric:tabular-nums}
+.tally{display:flex;gap:var(--s-4);flex-wrap:wrap}
+.tally div{display:flex;flex-direction:column;gap:var(--s-1)}
+.hide{display:none!important}
+
+/* the history */
+.month{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  letter-spacing:var(--track-cap);color:var(--text-muted);margin-top:var(--s-3)}
+.feats{display:flex;flex-direction:column;gap:var(--s-2)}
+.feat{display:flex;align-items:center;gap:var(--s-3);min-height:var(--tap);width:100%;text-align:left;
+  padding:var(--s-2) var(--s-3);border:0;border-radius:var(--radius-md);color:var(--text-1);font:inherit;cursor:pointer}
+.feat .tx{flex:1;min-width:0}
+.feat b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.feat small{color:var(--text-muted);font-size:var(--f-1)}
+.feat .dt{flex:0 0 auto;color:var(--text-muted);font-size:var(--f-1);font-variant-numeric:tabular-nums}
+.feat.new b::after{content:'NEW';margin-left:var(--s-2);font-family:var(--font-display);font-size:var(--f-1);
+  letter-spacing:var(--track-cap);color:var(--accent)}
+
+/* one window, big */
+.stage{display:flex;justify-content:center;align-items:flex-start;padding:var(--s-2);
+  border-radius:var(--radius-md);background:var(--surface-2)}
+.stage canvas{display:block;max-width:100%;max-height:62vh;width:auto;height:auto}
+.count{color:var(--text-muted);font-size:var(--f-2);text-align:center;margin-top:var(--s-2)}
+.seg{display:flex;flex-direction:column;gap:var(--s-1)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span class="long">CHARACTER </span><b>SHEET</b></div>
+  <div class="spacer"></div>
+  <button class="mb-btn mb-press mb-tap" onclick="UI.settings(APP.id)">SETTINGS</button>
+  <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
+</header>
+<main class="mb-scroll"><div class="wrap" id="main"></div></main>
+
+<script>
+const APP = {
+  id: 'sheet',
+  name: 'Character Sheet',
+  icon: '◆',
+  blurb: 'your feats from TRAIN and STATUS, as status windows',
+  types: ['feat'],   // one window he has been shown: key is the feat id, undated
+};
+
+Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
+  if (window.Icons) Icons.paint(null, { force: true }); });
+if (window.Icons) Icons.paint();
+Sfx.init(APP.id);
+Rec.declare(APP.id, APP.types);
+IO.register({ app: APP.id, name: APP.name, types: APP.types,
+  reads: { train: ['set', 'exercise', 'setting'], status: ['ev', 'field', 'note'] },
+  tables: [{ name: 'Feats seen', type: 'feat', cols: [['t', 'Shown'], ['saved', 'Saved']] }] });
+
+const get = (k, d) => { const v = Rec.setting(APP.id, k); return v == null ? d : v; };
+const put = (k, v) => Rec.setting(APP.id, k, v);
+
+/* ═══════════════════════════ FEATS ═══════════════════════════
+   What the log says he did, found by reading TRAIN's and STATUS's rows.
+   Worked out fresh every open and never stored: a feat is a fact about the
+   log, so a deleted set takes its feat with it, and a better rule next month
+   re-reads the whole history. The only row written is `feat`, "this one was
+   shown", so a window pops once.
+
+   Every feat must come from something real (Tom, 2026-09-25: it can boast
+   "but it has to make sense"). No made-up rewards: what a window lists under
+   REWARDS is the actual gain. */
+const LB = 2.20462262185;
+const unit = () => Rec.setting('train', 'unit') || 'lb';
+const fmt = n => (+n).toLocaleString('en');
+/* One decimal, and none when it is whole: 80 kg, 82.5 kg. */
+const wt = kg => { const u = unit(); const v = u === 'lb' ? kg * LB : kg;
+  return fmt(Math.round(v * 10) / 10) + ' ' + u; };
+
+/* TRAIN's own reading of a comment, copied rather than guessed (train/,
+   "what a comment says"). A warmup is never a record, and a split set keeps
+   records of its own, so it cannot take a straight one. */
+const warmNote = n => !!n && /\bwarm[ -]?ups?\b|\bwu\b/i.test(n);
+function splitNote(note, reps) {
+  if (!note || !(reps > 1) || !/\d/.test(note)) return false;
+  const rx = /\d+(?:\.\d+)?|\.\d+/g, nums = []; let m;
+  while ((m = rx.exec(note))) {
+    const a = m.index, b = a + m[0].length;
+    nums.push({ v: parseFloat(m[0]), a: a, b: b,
+      ok: !/[A-Za-z0-9_]/.test(note.charAt(a - 1)) && !/[A-Za-z0-9_]/.test(note.charAt(b)) });
+  }
+  const runs = []; let cur = [];
+  nums.forEach(n => {
+    if (!n.ok) { if (cur.length) runs.push(cur); cur = []; return; }
+    if (cur.length) {
+      const gap = note.slice(cur[cur.length - 1].b, n.a);
+      if (/^[ \t]*[,+][ \t]*$/.test(gap) || /^[ \t]+$/.test(gap)) { cur.push(n); return; }
+      runs.push(cur);
+    }
+    cur = [n];
+  });
+  if (cur.length) runs.push(cur);
+  for (const run of runs) for (let i = 0; i < run.length - 1; i++) {
+    if (!(run[i].v > 0)) continue;
+    let sum = run[i].v;
+    for (let j = i + 1; j < run.length; j++) {
+      if (!(run[j].v > 0)) break;
+      sum += run[j].v;
+      if (Math.floor(sum + 1e-9) === reps) return true;
+      if (sum > reps + 1) break;
+    }
+  }
+  return false;
+}
+
+/* Working sets that count, oldest first. A planned set counts once ticked,
+   or once its day is over, which is TRAIN.counts. */
+function workSets() {
+  const today = Day.today();
+  const out = [];
+  Rec.all('set').forEach(r => {
+    const p = r.payload || {};
+    if (!r.date || r.date > today || !p.ex) return;
+    if (p.plan && !p.done && r.date >= today) return;
+    const warm = p.warm === 1 || p.warm === true || (p.warm !== 0 && p.warm !== false && warmNote(p.note));
+    if (warm) return;
+    out.push({ date: r.date, ex: p.ex, kg: +p.kg || 0, r: +p.r || 0, split: splitNote(p.note, +p.r || 0) });
+  });
+  return out;
+}
+
+/* Milestones: the fixed ones, then every `step` after the last. */
+const LADDER = {
+  sessions: [[1, 10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500], 250],
+  weeks: [[4, 8, 12, 26, 52, 78, 104], 52],
+  tonnes: [[10, 25, 50, 100, 250, 500, 1000], 500],
+  logDays: [[7, 14, 30, 60, 100, 200, 365], 365],
+  target: [[7, 14, 30, 60, 100, 200, 365], 365],
+};
+function isStep(ladder, n) {
+  const fixed = ladder[0], last = fixed[fixed.length - 1];
+  return fixed.indexOf(n) >= 0 || (n > last && (n - last) % ladder[1] === 0);
+}
+const nth = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+const monday = d => Day.shift(d, -((Day.dow(d) + 6) % 7));
+
+/* A run of days in a row, walked over a sorted list of dates. `hit` is
+   called for each milestone the run reaches, with the day it reached it and
+   the day the run began, which is what makes a second streak a new feat. */
+function runs(dates, ladder, hit) {
+  let start = null, prev = null, n = 0;
+  dates.forEach(d => {
+    if (prev && Day.diff(d, prev) === 1) n++; else { n = 1; start = d; }
+    prev = d;
+    if (isStep(ladder, n)) hit(n, d, start);
+  });
+}
+
+function trainFeats(out) {
+  const sets = workSets();
+  if (!sets.length) return;
+  const exs = Rec.map('exercise');
+  const exName = id => (exs[id] && exs[id].name) || 'An exercise';
+
+  /* RECORDS, at the moment they were lifted: heavier than anything done
+     before that day at that many reps or more, TRAIN's rule. Only once an
+     exercise has two earlier days, or every first week of a new movement is
+     all records. One window per day, one line per exercise. */
+  const byEx = {};
+  sets.forEach(s => { if (!s.split && s.kg > 0 && s.r > 0) (byEx[s.ex] = byEx[s.ex] || []).push(s); });
+  const recDays = {};
+  Object.keys(byEx).forEach(ex => {
+    const list = byEx[ex].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+    const best = [];                       // best[r] = heaviest kg at exactly r reps
+    const atLeast = r => { let m = 0; for (let i = r; i < best.length; i++) if (best[i] > m) m = best[i]; return m; };
+    let days = 0;
+    for (let i = 0; i < list.length;) {
+      const d = list[i].date, day = [];
+      while (i < list.length && list[i].date === d) day.push(list[i++]);
+      if (days >= 2) {
+        let top = null;
+        day.forEach(s => {
+          const was = atLeast(s.r);
+          if (was > 0 && s.kg > was + 1e-6 && (!top || s.kg > top.kg || (s.kg === top.kg && s.r > top.r)))
+            top = { kg: s.kg, r: s.r, was: was };
+        });
+        if (top) (recDays[d] = recDays[d] || []).push({ ex: ex, name: exName(ex), kg: top.kg, r: top.r, gain: top.kg - top.was });
+      }
+      day.forEach(s => { if (!(best[s.r] >= s.kg)) best[s.r] = s.kg; });
+      days++;
+    }
+  });
+  Object.keys(recDays).forEach(d => {
+    const recs = recDays[d].sort((a, b) => b.gain - a.gain);
+    const shown = recs.slice(0, 5);
+    const lines = ['# RECORD BROKEN', recs.length === 1 ? 'A record has been broken.' : recs.length + ' records have been broken.'];
+    shown.forEach(x => lines.push('- [x] ' + x.name + ' ' + wt(x.kg) + ' × ' + x.r));
+    if (recs.length > shown.length) lines.push('- [x] ' + (recs.length - shown.length) + ' more');
+    lines.push('Rewards:');
+    shown.forEach(x => lines.push('+' + wt(x.gain) + ' on ' + x.name));
+    out.push({ id: 'rec|' + d, date: d, kind: 'record', title: recs.length === 1 ? 'Record: ' + recs[0].name : recs.length + ' records',
+      sub: shown.map(x => x.name).join(', '), text: lines.join('\n') });
+  });
+
+  /* SESSIONS: the Nth day he trained. */
+  const trainDays = Array.from(new Set(sets.map(s => s.date))).sort();
+  trainDays.forEach((d, i) => {
+    const n = i + 1;
+    if (!isStep(LADDER.sessions, n)) return;
+    out.push({ id: 'ses|' + n, date: d, kind: 'sessions', title: nth(n) + ' session', sub: 'Training days logged',
+      text: ['# NOTIFICATION', n === 1 ? 'The first session has been logged.' : 'Session ' + fmt(n) + ' has been logged.',
+        n > 1 ? 'The first was ' + Day.label(trainDays[0]) + '.' : 'The log has begun.'].join('\n') });
+  });
+
+  /* WEEKS IN A ROW with at least two training days, Monday to Sunday. A week
+     still running counts once it has its two. */
+  const perWeek = {};
+  trainDays.forEach(d => { const w = monday(d); perWeek[w] = (perWeek[w] || 0) + 1; });
+  const goodWeeks = Object.keys(perWeek).filter(w => perWeek[w] >= 2).sort();
+  let wStart = null, wPrev = null, wn = 0;
+  goodWeeks.forEach(w => {
+    if (wPrev && Day.diff(w, wPrev) === 7) wn++; else { wn = 1; wStart = w; }
+    wPrev = w;
+    if (!isStep(LADDER.weeks, wn)) return;
+    /* the day the week reached two sessions, so the feat lands on a real day */
+    const second = trainDays.filter(d => monday(d) === w)[1];
+    out.push({ id: 'wks|' + wStart + '|' + wn, date: second, kind: 'weeks', title: wn + ' weeks in a row', sub: 'Two or more sessions every week',
+      text: ['# QUEST', 'Consistency', '- [x] Train twice a week ' + wn + '/' + wn,
+        'Started the week of ' + Day.label(wStart) + '.', 'Rewards: ' + wn + ' weeks unbroken'].join('\n') });
+  });
+
+  /* TONNAGE: everything lifted, weight times reps, added up. */
+  let kg = 0, step = 0;
+  const ton = LADDER.tonnes;
+  const hits = ton[0].slice();
+  sets.forEach(s => {
+    kg += s.kg * s.r;
+    while (true) {
+      const next = step < hits.length ? hits[step] : hits[hits.length - 1] + (step - hits.length + 1) * ton[1];
+      if (kg < next * 1000) break;
+      const u = unit(), lifted = u === 'lb' ? fmt(Math.round(next * 1000 * LB)) + ' lb' : fmt(next) + ' tonnes';
+      out.push({ id: 'ton|' + next, date: s.date, kind: 'tonnage', title: lifted + ' lifted', sub: 'Every set, weight times reps',
+        text: ['# NOTIFICATION', 'Total weight moved has passed ' + lifted + '.'].join('\n') });
+      step++;
+    }
+  });
+}
+
+function statusFeats(out) {
+  const today = Day.today();
+  const evs = Rec.all('ev').filter(r => r.date && r.date <= today && r.payload && r.payload.e && r.payload.e.length);
+  const noteDays = Rec.all('note').filter(r => r.date && r.date <= today).map(r => r.date);
+
+  /* DAYS LOGGED IN A ROW: any reading, or any line in the journal. */
+  const logDays = Array.from(new Set(evs.map(r => r.date).concat(noteDays))).sort();
+  runs(logDays, LADDER.logDays, (n, d, start) => out.push({ id: 'log|' + start + '|' + n, date: d, kind: 'streak',
+    title: n + ' days logged in a row', sub: 'STATUS, every day',
+    text: ['# QUEST', 'Daily Log', '- [x] Log something every day ' + n + '/' + n,
+      'Unbroken since ' + Day.label(start) + '.', 'Rewards: ' + n + '-day streak'].join('\n') }));
+
+  /* A TARGET HIT DAYS IN A ROW, for every switched-on field with one, and a
+     done-or-not field done days in a row. Trained is TRAIN's, counted there. */
+  const fields = Rec.map('field');
+  const byField = {};
+  evs.forEach(r => (byField[r.key] = byField[r.key] || []).push(r));
+  Object.keys(fields).forEach(fid => {
+    const f = fields[fid];
+    if (!f || f.on === 0 || /^train/i.test(fid)) return;
+    const check = f.measure === 'check';
+    if (!check && !(f.target && (f.dir === 'gte' || f.dir === 'lte'))) return;
+    const dayVal = e => f.agg === 'sum' ? e.reduce((a, x) => a + x.v, 0)
+      : f.agg === 'avg' ? e.reduce((a, x) => a + x.v, 0) / e.length : e[e.length - 1].v;
+    const days = (byField[fid] || []).filter(r => {
+      const v = dayVal(r.payload.e);
+      return check ? !!v : f.dir === 'lte' ? v <= f.target : v >= f.target;
+    }).map(r => r.date).sort();
+    const label = f.label || fid;
+    const goal = check ? label : label + ' ' + (f.dir === 'lte' ? 'at most ' : 'at least ') + fmt(f.target) + (f.unit ? ' ' + f.unit : '');
+    runs(days, LADDER.target, (n, d, start) => out.push({ id: 'tgt|' + fid + '|' + start + '|' + n, date: d, kind: 'target',
+      title: label + ', ' + n + ' days in a row', sub: goal,
+      text: ['# QUEST', label, '- [x] ' + goal + ' ' + n + '/' + n,
+        'Every day since ' + Day.label(start) + '.', 'Rewards: ' + n + '-day streak'].join('\n') }));
+  });
+}
+
+/* Everything, newest first. Two feats on one day keep a steady order. */
+function allFeats() {
+  const out = [];
+  try { trainFeats(out); } catch (e) { console.error('SHEET: TRAIN feats', e); }
+  try { statusFeats(out); } catch (e) { console.error('SHEET: STATUS feats', e); }
+  const rank = { record: 0, sessions: 1, tonnage: 2, weeks: 3, streak: 4, target: 5 };
+  return out.sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : rank[a.kind] - rank[b.kind]);
+}
+
+/* ═══════════════════════════ WHAT POPS ═══════════════════════════
+   A feat pops once, on whichever device opens SHEET first, and never again:
+   its `feat` row is keyed by the feat's own id, which is the same on every
+   device, so a second device writes the same row rather than a copy (root
+   CLAUDE.md, Known traps). Anything older than a week before SHEET was first
+   opened goes straight into the history without popping, or a year of
+   records would all arrive at once. */
+const seen = id => Rec.has('feat', null, id) || !!Rec.tombstone('feat', null, id);
+function since() {
+  let s = get('since', null);
+  if (!s) { s = Day.shift(Day.today(), -6); put('since', s); }
+  return s;
+}
+const fresh = feats => { const s = since(); return feats.filter(f => f.date >= s && !seen(f.id)); };
+const markSeen = f => { if (!Rec.has('feat', null, f.id)) Rec.set('feat', null, f.id, { t: Date.now(), date: f.date }); };
+
+/* ═══════════════════════════ THE PICTURE ═══════════════════════════ */
+const style = () => { const s = get('style', 'block'); return Notice.STYLES[s] ? s : 'block'; };
+const canDraw = () => !!(window.Notice && Notice.parse && Notice.draw && Notice.compose);
+function windowOf(f) {
+  return Notice.draw(Notice.parse(f.text, 'auto'), style(), { seed: 0 });
+}
+function storyOf(f) {
+  const c = document.createElement('canvas');
+  Notice.compose(c, windowOf(f), style(), { frame: 'story', back: 'dark', fill: 0.86 });
+  return c;
+}
+function savePicture(f) {
+  let png;
+  try { png = storyOf(f).toDataURL('image/png'); } catch (e) { UI.toast('Could not draw the picture', { bad: true }); return; }
+  Rec.patch('feat', null, f.id, { t: (Rec.get('feat', null, f.id) || {}).t || Date.now(), saved: Date.now() });
+  Mobile.feedback('success');
+  IO.handOver(png, 'feat-' + f.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.png');
+}
+
+/* One window at a time, the way a game hands them out: NEXT walks the queue,
+   and every window is marked shown the moment it is on screen. */
+function showWindows(list, start) {
+  if (!list.length) return;
+  let i = start || 0;
+  Mobile.feedback('open');
+  UI.dialog({
+    title: 'NOTICE', width: 520,
+    body: (b, h) => {
+      const stage = document.createElement('div'); stage.className = 'stage';
+      const n = document.createElement('div'); n.className = 'count';
+      b.appendChild(stage); b.appendChild(n);
+      const paint = () => {
+        const f = list[i];
+        stage.innerHTML = '';
+        if (canDraw()) stage.appendChild(windowOf(f));
+        else stage.textContent = f.text.replace(/^#.*\n/, '');
+        n.textContent = Day.label(f.date) + (list.length > 1 ? ' · ' + (i + 1) + ' of ' + list.length : '');
+        markSeen(f);
+        const nx = h.panel && h.panel.querySelector('.mb-btn.go');
+        if (nx) nx.textContent = i < list.length - 1 ? 'NEXT' : 'DONE';
+      };
+      h.paint = paint;
+      paint();
+    },
+    actions: [
+      { label: 'SAVE PICTURE', fn: () => { savePicture(list[i]); return false; } },
+      { label: list.length > 1 ? 'NEXT' : 'DONE', kind: 'go', fn: h => {
+        if (i < list.length - 1) { i++; h.paint(); Mobile.feedback('select'); return false; }
+      } },
+    ],
+    onClose: () => draw(),
+  });
+}
+
+/* ═══════════════════════════ THE SCREEN ═══════════════════════════ */
+let FEATS = [];
+function draw() {
+  FEATS = allFeats();
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  const neu = fresh(FEATS);
+
+  if (neu.length) {
+    const c = document.createElement('section'); c.className = 'card mb-card';
+    c.innerHTML = '<h2>NEW</h2><div class="muted">' + (neu.length === 1 ? 'One window waiting.' : neu.length + ' windows waiting.') + '</div>';
+    const b = document.createElement('button'); b.className = 'mb-btn go mb-press mb-tap'; b.textContent = 'OPEN';
+    b.onclick = () => showWindows(neu.slice().reverse());
+    c.appendChild(b); m.appendChild(c);
+  }
+
+  const t = document.createElement('section'); t.className = 'card mb-card';
+  const count = k => FEATS.filter(f => f.kind === k).length;
+  t.innerHTML = '<h2>FEATS</h2><div class="tally">' +
+    '<div><span class="big">' + fmt(FEATS.length) + '</span><span class="muted">earned</span></div>' +
+    '<div><span class="big">' + fmt(count('record')) + '</span><span class="muted">record days</span></div>' +
+    '<div><span class="big">' + fmt(count('weeks') + count('streak') + count('target')) + '</span><span class="muted">streaks</span></div></div>';
+  const sg = document.createElement('div'); sg.className = 'seg';
+  sg.innerHTML = '<h2>WINDOW STYLE</h2>';
+  sg.appendChild(UI.segmented(Notice.list(), style(), v => { put('style', v); Mobile.feedback('select'); }));
+  t.appendChild(sg);
+  m.appendChild(t);
+
+  const hcard = document.createElement('section'); hcard.className = 'card mb-card';
+  hcard.innerHTML = '<h2>HISTORY</h2>';
+  if (!FEATS.length) {
+    const e = document.createElement('div'); e.className = 'muted';
+    e.textContent = 'Nothing yet. Log a session in TRAIN or a day in STATUS and the first window appears here.';
+    hcard.appendChild(e);
+  }
+  let month = '', box = null;
+  const newIds = {}; neu.forEach(f => newIds[f.id] = 1);
+  FEATS.slice(0, 300).forEach(f => {
+    const mo = f.date.slice(0, 7);
+    if (mo !== month) {
+      month = mo;
+      const h = document.createElement('div'); h.className = 'month';
+      h.textContent = new Date(f.date + 'T12:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' }).toUpperCase();
+      hcard.appendChild(h);
+      box = document.createElement('div'); box.className = 'feats'; hcard.appendChild(box);
+    }
+    const b = document.createElement('button');
+    b.className = 'feat mb-plate mb-press' + (newIds[f.id] ? ' new' : '');
+    b.innerHTML = '<span class="tx"><b>' + UI.esc(f.title) + '</b><small>' + UI.esc(f.sub || '') + '</small></span>' +
+      '<span class="dt">' + UI.esc(Day.short(f.date)) + '</span>';
+    b.onclick = () => showWindows([f]);
+    box.appendChild(b);
+  });
+  if (FEATS.length > 300) {
+    const e = document.createElement('div'); e.className = 'muted';
+    e.textContent = fmt(FEATS.length - 300) + ' older feats are not listed.';
+    hcard.appendChild(e);
+  }
+  m.appendChild(hcard);
+}
+
+let drawT = null;
+const soon = () => { clearTimeout(drawT); drawT = setTimeout(draw, 300); };
+draw();
+Rec.ready(() => {
+  draw();
+  /* Pops by itself once per open, after the big half of the store is in. */
+  const neu = fresh(FEATS);
+  if (neu.length) showWindows(neu.slice().reverse());
+});
+Rec.on(soon);
+Day.on(soon);
+if (document.fonts) document.fonts.ready.then(soon).catch(() => {});
+</script>
+</body>
+</html>

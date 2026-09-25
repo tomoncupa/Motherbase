@@ -1,7 +1,38 @@
 # CHARACTER SHEET — `sheet/`
 
-Planned, not built. Only `art/` exists. Everywhere (phone first), client build.
-Dock label SHEET; the picture's title is CHARACTER SHEET.
+SHEET 1.0.0 (2026-09-25) is the FEATS half: feats read off TRAIN and STATUS,
+popped as NOTICE windows, kept as a history. The avatar half is paused (Tom,
+2026-09-25: "pause the avatar work for now"); `art/` waits for it.
+Everywhere (phone first). Meant for the client build, HELD BACK from it
+(`DROP_APPS` in `tools/build-client.py`) until Tom has used it. Dock label SHEET.
+
+## Feats (built)
+
+Tom, 2026-09-25: "my STATUS and TRAIN data to be detected, as well as my
+consistency, and then have it use the NOTICE engine to generate pop ups that I
+can save and look at the history of when I open the CHARACTER SHEET".
+
+- **Worked out every open, never stored.** A feat is a fact about the log. The
+  only row is `feat` (undated, key = the feat id): "this one was shown".
+  Keys are the same on every device, so a second device writes the same row.
+- **What pops:** feats dated on or after `sheet.since` (set on first open to a
+  week back) with no `feat` row. Auto-popped once per open after `Rec.ready`,
+  one window at a time, NEXT / DONE, SAVE PICTURE = a 1080x1920 story on the
+  dark wash through `IO.handOver`. History lists the newest 300, tap to reopen.
+- **The feats:** RECORD (a day's sets heavier than anything before at that many
+  reps or more, TRAIN's rule, only after an exercise's first two days; warmups
+  and split sets read from the comment as TRAIN does; one window per day,
+  rewards are the real gains); Nth SESSION (1, 10, 25, 50, 75, 100 ... 500,
+  then every 250); WEEKS IN A ROW with two or more training days (4, 8, 12, 26,
+  52, 78, 104, then every 52); TONNAGE lifted (10, 25 ... 1000 t, then every
+  500, shown in TRAIN's unit); DAYS LOGGED IN A ROW in STATUS, any reading or
+  journal line (7, 14, 30, 60, 100, 200, 365); a FIELD TARGET hit, or a check
+  field done, days in a row (same ladder; Trained excluded).
+- Windows are NOTICE text drawn by `Notice.parse` / `Notice.draw` /
+  `Notice.compose` in `shared/notice.js`. No made-up rewards.
+- [TESTED in browser with made-up rows, 375px and desktop] UNTESTED on his real
+  log (12k sets) and on a phone. Review 122/122 at both widths.
+- Open: live pop-ups inside TRAIN or STATUS at the moment it happens (asked Tom).
 
 ## What it is for
 
@@ -53,7 +84,7 @@ the log. Do not "fix" this app back towards DOCTRINE's no-XP rules.
 - In the app, items will be separate sprite layers over the base; the anchors
   (hand, head, back) are set once for the shared pose.
 
-## Next
+## Next (avatar, paused)
 
 1. Tom's verdict on `art/knight96.png`, and background choice.
 2. Tom runs the cape / helmet / shield prompts in Gemini, pastes results.
