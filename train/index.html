@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.30, 2026-09-25">
+<meta name="mb-version" content="1.0.31, 2026-09-25">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -337,6 +337,14 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
   border-bottom:var(--border-width) solid var(--border);cursor:pointer;
   font-variant-numeric:tabular-nums;min-height:var(--tap)}
 .tset.sel{background:color-mix(in srgb, var(--accent) 14%, transparent)}
+/* Swipe to delete moves the row's contents onto a face, so the row's layout
+   and colours are the face's, over the page's own background, or DELETE
+   would show through it. The row keeps only its hairline. */
+.tset.mb-swipe{display:block;padding:0;border-radius:0}
+.tset > .mb-swipe-face{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-1) 0;
+  min-height:calc(var(--tap) - var(--border-width));background:var(--bg)}
+.tset.sel > .mb-swipe-face{background:color-mix(in srgb, var(--accent) 14%, var(--bg))}
+.tset.lifted > .mb-swipe-face{background:var(--surface-3);transform:none!important}
 .tset .bub{width:var(--s-6);height:var(--s-6);flex:0 0 auto;border:0;background:none;cursor:pointer;
   color:var(--border-strong);display:flex;align-items:center;justify-content:center;padding:0}
 .tset .bub.on{color:var(--accent)}
@@ -3433,8 +3441,22 @@ function trainingSetRow(s, n, date, showChk, delta) {
     row.appendChild(chk);
   }
 
+  /* Swipe a set left and DELETE is behind it. Tom said yes 2026-09-25. The
+     row's own contents move onto a face (shared swipe), so the flex layout
+     and the selected colour are drawn on the face in the CSS, over the
+     page's own background. The button is `nohold`, so pressing it never
+     starts a lift, and a tap on it never also loads the set. */
+  Mobile.swipe(row, { right: { label: 'DELETE', fn: function () {
+    if (TRAIN.sel === s.key) TRAIN.sel = null;
+    TRAIN.removeSet(s.key, date);
+    draw();
+  } } });
+  var back = row.querySelector('.mb-swipe-back');
+  if (back) back.classList.add('nohold');
+
   /* Tapping a set loads it into the steppers, which is how FitNotes edits one. */
-  row.onclick = function () {
+  row.onclick = function (e) {
+    if (e && e.target && e.target.closest && e.target.closest('.mb-swipe-back')) return;
     TRAIN.sel = s.key;
     loadDraft(s);
     Mobile.feedback('select');

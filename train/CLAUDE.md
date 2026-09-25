@@ -679,6 +679,13 @@ session could undo without noticing:
   weight dropped. Written `warm: 1, plan: 1` with `ord` just in front of the
   first set, so they sit first and count for nothing. Refuses a second time
   while app-made warmups are there.
+- **Swipe a set left on TRACK and DELETE is behind it** (1.0.31,
+  `Mobile.swipe` in `trainingSetRow`), with the undo `TRAIN.removeSet`
+  always had. The swipe moves the row's contents onto `.mb-swipe-face`, so
+  the row's flex layout, the page background, the selected colour and the
+  lifted colour are drawn on the face in CSS; without a background the red
+  shows through. The face is `--tap` less the hairline, so a row stays 44.
+  The back is `nohold`, and a tap on DELETE never also loads the set.
 
 (`HISTORY.md: The training screen, four complaints` and the three sections
 after it.)
