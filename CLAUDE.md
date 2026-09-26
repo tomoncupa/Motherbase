@@ -822,6 +822,17 @@ answer, or take it out.
   fetch` the client repo before pushing a build; if its newest commit names
   work main lacks, do not push over it, say so.
 
+- **A reader of TRAIN's `set` rows must apply TRAIN's warmup rule.** A set
+  is a warmup when marked, else when its comment says "warmup", "warm up" or
+  "wu" (`TRAIN.noteWarm`); `warm` is not stored for those. `range.js` skipped
+  only a stored `warm` and counted 12,370 sets where Profile says 12,209
+  (2026-09-25). COACH, SHEET and any widget reading sets need the same rule,
+  and a stored 0 beats the comment.
+- **When the Browser pane is not drawing, a coordinate click lands on
+  nothing** and screenshots time out; typing into a box that never got focus
+  is lost too. Focus the box and press the real control with `.click()` from
+  the page (it still runs the control's own handler), and read the result
+  from the page. Watched 2026-09-25 on TRAIN's SAVE.
 - **An UNDO snackbar lasts six seconds.** A test that presses UNDO after a
   few tool calls presses a hidden toast and reports the undo broken; TRAIN's
   merge was nearly misdiagnosed that way (2026-09-25). Press it in the same

@@ -240,6 +240,33 @@ work. Clean up any test data you write, and stop the server when you are done.
   1899 from an aborted run get counted too. Clear `mb.r.local|smoke-*` keys
   on that test origin and run again before suspecting `records.js`.
 
+## `range.js` 0.2.0: the painting (2026-09-25)
+
+Tom: "I want my painting visualizer perfectly working, and interchangeable.
+Set the base: Training Blocks, Sessions, Sets, Volume", with three prints.
+
+- **`Range.mount(box, data, height, opts)`**; `opts` is `{base, print,
+  volume(kg) → text, onChange({base, print})}`. The caller keeps the choice
+  (TRAIN `train.rangeBase`/`rangePrint`, COACH `coach.*`) and writes it only
+  on a switch. The old three-argument call still works.
+- **BASE**: BLOCKS fits the history on one screen (a slot per block, a hill
+  per year outside one); SESSIONS, SETS and VOLUME are the timeline at 5px a
+  day at least, trees sized by that measure, a hill per month outside a
+  block. Heights are linear above a floor; blocks and hills scale apart.
+- **PRINT**: `PRINT.fuji`, `.ink`, `.dusk`, each the same layer list (sky,
+  far, hill, block, mist, ground, tree, after). A new print is one more
+  object; nothing else changes.
+- **A block ends the day before the next starts** (`Range.blocksOf`), as in
+  TRAIN. 0.1.x ran an open block to today over every later one.
+- **Tiles of 1024px**, painted when near the screen and emptied when far,
+  everything placed in whole-picture coordinates and seeded from them, so
+  tiles meet without a seam. One canvas for a 4-year history at 3x was past
+  what an iPhone allows [ASSUMED from its limits, never watched failing].
+- **Opens on the latest session**, not on today, so a log that stopped
+  weeks ago does not open on bare field.
+- `tools/range-lab.html` draws all prints on made-up history, touching no
+  store. **Not watched on the iPhone.**
+
 ## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
 
 A row stamped more than a day ahead (`soon()`) is never sent and never moves
