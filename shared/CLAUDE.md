@@ -240,19 +240,30 @@ work. Clean up any test data you write, and stop the server when you are done.
   1899 from an aborted run get counted too. Clear `mb.r.local|smoke-*` keys
   on that test origin and run again before suspecting `records.js`.
 
-## `range.js` 0.2.0: the painting (2026-09-25)
+## `range.js` 0.3.1: the painting (2026-09-25, one picture 2026-09-26)
 
-Tom: "I want my painting visualizer perfectly working, and interchangeable.
-Set the base: Training Blocks, Sessions, Sets, Volume", with three prints.
+Tom, 2026-09-25: "I want my painting visualizer perfectly working, and
+interchangeable", with three prints. 2026-09-26: "I dont want to have
+blocks, sets, volumes, sessions all different in the visualizer. And trees
+should be ON the mountains."
 
-- **`Range.mount(box, data, height, opts)`**; `opts` is `{base, print,
-  volume(kg) → text, onChange({base, print})}`. The caller keeps the choice
-  (TRAIN `train.rangeBase`/`rangePrint`, COACH `coach.*`) and writes it only
-  on a switch. The old three-argument call still works.
-- **BASE**: BLOCKS fits the history on one screen (a slot per block, a hill
-  per year outside one); SESSIONS, SETS and VOLUME are the timeline at 5px a
-  day at least, trees sized by that measure, a hill per month outside a
-  block. Heights are linear above a floor; blocks and hills scale apart.
+- **`Range.mount(box, data, height, opts)`**; `opts` is `{print,
+  volume(kg) → text, onChange({print})}`. The caller keeps the print (TRAIN
+  `train.rangePrint`, COACH `coach.rangePrint`) and writes it only on a
+  switch. A `base` passed in is ignored; there is no BASE switch any more.
+- **One picture holds all four**: a mountain per block, as wide as its dates
+  and taller for more volume A WEEK (so its area is the work); a hill per
+  month outside a block, scaled apart and at most six tenths as tall; a tree
+  per session, taller for more sets; blossom a record. No weight in the
+  whole history: mountains measure sets a week. The header states all four
+  totals. Timeline at 5px a day at least.
+- **Trees stand on the skyline** at their date (`skyline`), every second and
+  third a tenth and a fifth of the way down the face, so a tree always
+  stands on whatever is highest there and no mountain can hide one. Placed
+  in `layout`, drawn after the ground. Block names are cartouches on the
+  ground under their mountain. No decoration on a slope may look like a
+  tree: FUJI's stippled pines and DUSK's canopy rounds were taken off.
+  DUSK's black pines carry an orange glow, or they vanish on violet.
 - **PRINT**: `PRINT.fuji`, `.ink`, `.dusk`, each the same layer list (sky,
   far, hill, block, mist, ground, tree, after). A new print is one more
   object; nothing else changes.

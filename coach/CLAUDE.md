@@ -215,9 +215,13 @@ did not.
   cannot tell two exercises apart. The earliest set key can, because a set
   key is a timestamp; an order Tom set by hand in TRAIN beats it, and it is
   already on the day's `csession`.
-- **The range has two switches** (1.0.13): BASE and PRINT, kept as
-  `coach.rangeBase` and `coach.rangePrint`, so a client's painting opens the
-  way Tom last left it. The engine is `shared/range.js`.
+- **The range is one picture** (1.0.14): blocks as mountains, sessions as
+  trees standing on them, sets in a tree's height, volume a week in a
+  mountain's. Tom, 2026-09-26: *"I dont want to have blocks, sets, volumes,
+  sessions all different."* The BASE switch went; PRINT stays, kept as
+  `coach.rangePrint`, so a client's painting opens the way Tom last left it.
+  A leftover `coach.rangeBase` setting is read by nothing. The engine is
+  `shared/range.js`.
 - **The range moved to the bottom.** The week and the sessions answer today,
   the range answers the year, and that is the order a coach reads them in.
 

@@ -103,7 +103,7 @@ describe the gym, not the training.
 `repCounts` `exSort` `catSort` `plates` `bars` `seen` `prRule` (2 once records
 have been worked out under the rule that keeps split sets apart) `sortSeen`
 `sortSkip` (Sort Into Groups: offered once, and the moves he switched off)
-`rangeBase` `rangePrint` (the Profile painting's two switches, written only when he switches).
+`rangePrint` (the Profile painting's print, written only when he switches; `rangeBase` is left over from 1.0.37 and read by nothing since the painting became one picture in 1.0.38).
 
 **Reps may carry a fraction** (1.0.37, Tom: "let it add fractions for reps"):
 a half rep is 8.5. Every reps box uses the keypad with a point, the steppers
