@@ -1,4 +1,4 @@
-/* shared/range.js — 0.3.0 — a training history as a woodblock print.
+/* shared/range.js — 0.3.1 — a training history as a woodblock print.
 
    Tom, 2026-09-20 and 2026-09-22: training blocks drawn as mountains and
    sessions as trees, in the manner of ukiyo-e, "meant to be a nice
@@ -18,7 +18,10 @@
        to today and stood over every block after it.
      · a HILL is time outside any block: a month on the timeline, a year on
        BLOCKS. A month with no session is flat ground.
-     · a TREE is a session, standing on its day.
+     · a TREE is a session, standing ON the mountain or hill over its day
+       (0.3.1; before that the trees stood in rows on the ground in front).
+       A block's name sits on the ground under it, so the slopes are left
+       to the trees, and no decoration on a slope looks like a tree.
      · a session that set a record BLOSSOMS.
      · the moon (DUSK) and the seal stand at today's end.
    Birds, clouds, boats and the far ridges stand for nothing: they are the
@@ -35,7 +38,8 @@
                measures its mountains in sets a week instead.
    Heights are linear in the measure above a floor, so a tree twice as tall
    (above the smallest) is twice the sets. Mountains and hills are scaled
-   apart, so a month outside a block never dwarfs a block. The header states
+   apart, and the tallest hill is six tenths of the tallest mountain, so a
+   month outside a block does not stand over a block. The header states
    all four totals.
 
    ── the print ──  FUJI, INK, DUSK. Same layout, same data, three hands.
@@ -57,7 +61,7 @@
 (function (g) {
 'use strict';
 
-var VERSION = '0.3.0';
+var VERSION = '0.3.1';
 var DAY = 86400000, TILE = 1024, PER_DAY = 5;
 var PRINTS = [{ id: 'fuji', name: 'FUJI' }, { id: 'ink', name: 'INK' }, { id: 'dusk', name: 'DUSK' }];
 
@@ -201,7 +205,7 @@ function layout(data, base, boxW, H) {   /* `base` is ignored since 0.3.0 */
   var bl = resolveBlocks(data.phases, to);
   var from = ss.length ? ss[0].date : (bl.length ? bl[0].start : to);
   if (bl.length && bl[0].start < from) from = bl[0].start;
-  var L = { H: H, hz: Math.round(H * 0.64), ss: ss, from: from, to: to, blocks: bl,
+  var L = { H: H, hz: Math.round(H * 0.76), ss: ss, from: from, to: to, blocks: bl,
             peaks: [], trees: [], labels: [], years: [], empty: !ss.length && !bl.length };
   L.total = stats(ss);
   L.mnt = L.total.vol > 0 ? 'vol' : 'sets';
@@ -228,7 +232,7 @@ function layoutTime(L, boxW) {
   secs = secs.filter(function (s) { return s.kind === 'block' || s.st.sessions > 0; });
   var maxB = 0, maxH = 0;
   secs.forEach(function (s) { var m = perWeek(L, s); if (s.kind === 'block') maxB = Math.max(maxB, m); else maxH = Math.max(maxH, m); });
-  var room = L.hz - H * 0.07;
+  var room = L.hz - H * 0.19;   /* headroom for the tallest tree on the tallest summit */
   secs.forEach(function (s) {
     var m = perWeek(L, s);
     var x0 = L.X(s.start) - per / 2, x1 = L.X(s.end) + per / 2;
@@ -237,20 +241,28 @@ function layoutTime(L, boxW) {
       s.h = room * (0.46 + 0.54 * (maxB ? m / maxB : 0.5));
       s.flank = Math.max(s.h * 0.95, (x1 - x0) * 0.3);
     } else {
-      s.h = room * (0.13 + 0.25 * (maxH ? m / maxH : 0.5));
+      /* tall enough to carry its trees on a real slope: most of a long
+         history is months outside any block */
+      s.h = room * (0.24 + 0.36 * (maxH ? m / maxH : 0.5));
       s.flank = Math.max(s.h * 1.3, (x1 - x0) * 0.35);
     }
     s.seed = hashStr(s.kind + s.start);
     L.peaks.push(s);
   });
-  /* trees, taller for more sets */
+  /* trees, taller for more sets, standing ON the mountains (Tom,
+     2026-09-26): each on the skyline at its date, the next a little down
+     the face and the next a little further, so sessions two days apart do
+     not stand in one another. A tree always stands on whatever is highest
+     at its date, so no mountain in front can hide one. */
+  L.peaks.forEach(function (P) { ridgeOf(P, L.hz); });
   var smax = 0;
   L.ss.forEach(function (s) { smax = Math.max(smax, s.sets); });
-  var tmin = H * 0.07, tmax = H * 0.31;
+  var tmin = H * 0.05, tmax = H * 0.14, down = [0, 0.1, 0.2];
   L.ss.forEach(function (s, i) {
     var r = rng(hashStr(s.date));
     var f = smax ? s.sets / smax : 0.5;
-    L.trees.push({ x: L.X(s.date) + (r() - 0.5) * Math.min(per * 0.6, 3), row: i % 3, h: tmin + (tmax - tmin) * f,
+    var x = L.X(s.date) + (r() - 0.5) * Math.min(per * 0.6, 3), top = skyline(L, x);
+    L.trees.push({ x: x, y: top + 1 + (L.hz - top) * down[i % 3], row: i % 3, h: tmin + (tmax - tmin) * f,
                    s: s, pr: s.pr, seed: hashStr('t' + s.date) });
   });
   /* the years along the bottom, so a long scroll knows where it is */
@@ -258,12 +270,13 @@ function layoutTime(L, boxW) {
     var d = y + '-01-01';
     L.years.push({ x: d < L.from ? L.X(L.from) : L.X(d), text: String(y) });
   }
-  /* each block's name, at its summit; one that would sit on another is left off */
+  /* each block's name on the ground under it, a title cartouche, so the
+     mountain is left to its trees; one that would sit on another is left off */
   var lastR = -1e9;
   secs.filter(function (s) { return s.kind === 'block'; }).sort(function (a, b) { return a.cx - b.cx; }).forEach(function (s) {
     var w = labelW(s.name), x = s.cx - w / 2;
     if (x < lastR + 6) return;
-    L.labels.push({ x: x, y: L.hz - s.h + H * 0.07, w: w, text: labelText(s.name), peak: s });
+    L.labels.push({ x: x, y: L.hz + (H - L.hz) * 0.2, w: w, text: labelText(s.name), peak: s });
     lastR = x + w;
   });
 }
@@ -301,6 +314,12 @@ function ridgeOf(P, base) {
   P.top = Math.min.apply(null, pts.map(function (p) { return p[1]; }));
   P.a = a; P.b = b;
   return pts;
+}
+/* the top of the whole range at x: the highest ridge standing there */
+function skyline(L, x) {
+  var y = L.hz;
+  L.peaks.forEach(function (P) { if (x >= P.a && x <= P.b) y = Math.min(y, yAt(P.pts, x)); });
+  return y;
 }
 function yAt(pts, x) {
   if (x <= pts[0][0]) return pts[0][1];
@@ -456,15 +475,7 @@ PRINT.fuji = {
     gr.addColorStop(0, 'hsl(216 14% 34%)'); gr.addColorStop(0.6, 'hsl(214 10% 56%)'); gr.addColorStop(1, 'hsl(214 10% 74%)');
     c.fillStyle = gr; c.fill();
     c.strokeStyle = 'hsl(222 26% 16%)'; c.lineWidth = 1; c.stroke();
-    /* pines on the ridge, as the cutter stipples them */
-    var r = rng(P.seed + 3);
-    c.fillStyle = 'hsl(222 26% 14% / .85)';
-    for (var i = 0; i < pts.length; i += 2) {
-      if (r() < 0.45) continue;
-      var p = pts[i], d = 1.5 + r() * P.h * 0.35;
-      if (p[1] + d > base - 2) continue;
-      c.fillRect(p[0], p[1] + d, 1.1, 1.8 + r() * 1.6);
-    }
+    /* no stippled pines since 0.3.1: a tree on a hill is a session now */
   },
   block: function (c, P, L) {
     var pts = ridgeOf(P, L.hz), base = L.hz, h = P.h, a = P.a, b = P.b;
@@ -515,7 +526,7 @@ PRINT.fuji = {
     });
   },
   ground: function (c, L, v) {
-    var H = L.H, hz = L.hz, road = H * 0.925;
+    var H = L.H, hz = L.hz, road = hz + (H - hz) * 0.7;
     var gf = c.createLinearGradient(0, hz, 0, road);
     gf.addColorStop(0, 'hsl(60 18% 84%)'); gf.addColorStop(1, 'hsl(78 16% 70%)');
     c.fillStyle = gf; c.fillRect(v.a, hz, v.b - v.a, road - hz);
@@ -541,7 +552,6 @@ PRINT.fuji = {
     }
     c.stroke();
   },
-  rows: [0.78, 0.845, 0.91],
   tree: function (c, T, L) {
     var x = T.x, y = T.y, h = T.h, r = rng(T.seed), lean = (r() - 0.5) * 0.22;
     c.lineJoin = 'round'; c.lineCap = 'round';
@@ -613,6 +623,9 @@ PRINT.ink = {
   hill: function (c, P, L) {
     var pts = this.wash(c, P, L, 'hsl(35 6% 40% / .55)', 'hsl(35 6% 55% / .25)');
     this.dots(c, P, pts, 3, 0.2);
+    /* a light brush along the ridge, so a tree on a hill has ground under it */
+    c.strokeStyle = 'hsl(30 8% 18% / .5)'; c.lineWidth = 0.9;
+    c.beginPath(); pts.forEach(function (p, i) { i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]); }); c.stroke();
   },
   block: function (c, P, L) {
     var pts = this.wash(c, P, L, 'hsl(30 6% 20% / .86)', 'hsl(30 5% 42% / .42)'), base = L.hz, h = P.h;
@@ -657,7 +670,7 @@ PRINT.ink = {
     c.fillStyle = fm; c.fillRect(v.a, hz - H * 0.1, v.b - v.a, H * 0.12);
   },
   ground: function (c, L, v) {
-    var H = L.H, hz = L.hz, bank = H * 0.83;
+    var H = L.H, hz = L.hz, bank = hz + (H - hz) * 0.55;
     c.fillStyle = this.paper; c.fillRect(v.a, hz, v.b - v.a, H - hz);
     /* the lake: ripples, more of them near the far shore */
     each(v, 60, 'rp', function (r, x) {
@@ -691,7 +704,6 @@ PRINT.ink = {
       c.beginPath(); c.ellipse(dx, dy, 1.3 + r(), 0.7, r() - 0.5, 0, 7); c.fill();
     }
   },
-  rows: [0.87, 0.91, 0.95],
   tree: function (c, T, L) {
     var x = T.x, y = T.y, h = T.h, r = rng(T.seed), lean = (r() - 0.5) * 0.14;
     var lw = Math.max(1, h * 0.024), segs = Math.max(3, Math.round(h / 12));
@@ -794,14 +806,9 @@ PRINT.dusk = {
   hill: function (c, P, L) {
     var pts = ridgeOf(P, L.hz), base = L.hz;
     shape(c, pts, base);
-    c.fillStyle = 'hsl(254 28% 25%)'; c.fill();
-    /* a forested edge: the canopy in small rounds along the ridge */
-    var r = rng(P.seed + 17);
-    for (var i = 0; i < pts.length; i += 2) {
-      var p = pts[i];
-      if (p[1] > base - 3) continue;
-      c.beginPath(); c.arc(p[0], p[1] + 1, 1.5 + r() * 2.2, 0, 7); c.fill();
-    }
+    c.fillStyle = 'hsl(254 26% 36%)'; c.fill();
+    /* no canopy of rounds along the ridge since 0.3.1: a tree there is a
+       session now */
   },
   block: function (c, P, L) {
     var pts = ridgeOf(P, L.hz), base = L.hz;
@@ -821,9 +828,10 @@ PRINT.dusk = {
     c.stroke();
     /* the shadow side, a shade darker, wiped across */
     c.save(); shape(c, pts, base); c.clip();
-    var sd = c.createLinearGradient(P.px, 0, P.b, 0);
-    sd.addColorStop(0, 'hsl(250 32% 16% / .28)'); sd.addColorStop(1, 'hsl(250 32% 16% / 0)');
-    c.fillStyle = sd; c.fillRect(P.px, P.top, P.b - P.px, base - P.top);
+    /* it comes in over a short way past the summit, or the summit is a seam */
+    var fade = (P.b - P.px) * 0.12, sd = c.createLinearGradient(P.px - fade, 0, P.b, 0);
+    sd.addColorStop(0, 'hsl(250 32% 16% / 0)'); sd.addColorStop(0.2, 'hsl(250 32% 16% / .28)'); sd.addColorStop(1, 'hsl(250 32% 16% / 0)');
+    c.fillStyle = sd; c.fillRect(P.px - fade, P.top, P.b - P.px + fade, base - P.top);
     c.restore();
   },
   mist: function (c, L, v) {
@@ -835,7 +843,7 @@ PRINT.dusk = {
     band(c, v, hz + 2, H * 0.035, 30, 53, 'hsl(252 28% 20%)');
   },
   ground: function (c, L, v) {
-    var H = L.H, hz = L.hz, shore = H * 0.89;
+    var H = L.H, hz = L.hz, shore = hz + (H - hz) * 0.6;
     var wg = c.createLinearGradient(0, hz, 0, shore);
     wg.addColorStop(0, 'hsl(28 82% 62%)'); wg.addColorStop(0.45, 'hsl(348 40% 52%)'); wg.addColorStop(1, 'hsl(262 32% 34%)');
     c.fillStyle = wg; c.fillRect(v.a, hz + 2, v.b - v.a, shore - hz - 2);
@@ -862,7 +870,7 @@ PRINT.dusk = {
     /* the gate into the current block */
     var last = L.blocks[L.blocks.length - 1];
     if (last && L.X) {
-      var tx = L.X(last.start), ty = hz + (shore - hz) * 0.72, th = H * 0.14;
+      var tx = L.X(last.start), ty = hz + (shore - hz) * 0.72, th = H * 0.11;
       if (inView(v, tx - th, tx + th)) torii(c, tx, ty, th, 'hsl(252 32% 10%)');
     }
     /* the near shore */
@@ -881,10 +889,12 @@ PRINT.dusk = {
       }
     });
   },
-  rows: [0.92, 0.95, 0.98],
   tree: function (c, T, L) {
     var x = T.x, y = T.y, h = T.h, r = rng(T.seed), lean = (r() - 0.5) * 0.12;
     var col = 'hsl(252 32% 8%)';
+    /* a black pine against a violet mountain needs the last light round
+       its edge, or it is lost */
+    c.save(); c.shadowColor = 'hsl(28 90% 70% / .8)'; c.shadowBlur = 2.5;
     c.strokeStyle = col; c.fillStyle = col; c.lineCap = 'round';
     c.lineWidth = Math.max(1, h * 0.032);
     var topX = x + lean * h;
@@ -915,6 +925,7 @@ PRINT.dusk = {
         }
       });
     }
+    c.restore();
   },
   birds: 'hsl(252 32% 12% / .85)',
   label: { fill: 'hsl(252 32% 12% / .78)', line: 'hsl(40 80% 76% / .8)', text: 'hsl(40 80% 86%)' },
@@ -964,10 +975,9 @@ function paintTile(cv, L, printId, x0, w) {
     flock(c, x + r() * 700, H * (0.12 + r() * 0.2), 3 + Math.round(r() * 5), 0.8 + r() * 0.5, P.birds);
   });
   P.ground(c, L, v);
-  /* trees stand on three rows; the rows are fixed so every tree's height
-     is measured from the same ground as its neighbour's */
+  /* trees on the mountains, placed by the layout; drawn last of all the
+     scenery so nothing stands in front of a session */
   L.trees.forEach(function (T) {
-    T.y = H * P.rows[T.row];
     if (!inView(v, T.x - T.h * 0.6, T.x + T.h * 0.6)) return;
     P.tree(c, T, L);
   });
@@ -1144,13 +1154,14 @@ function mount(box, data, height, opts) {
   strip.addEventListener('click', function (e) {
     if (!L) return;
     var r = strip.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    /* the nearest tree to the tap, measured to the middle of the tree,
+       within a thumb */
     var best = null, bd = 1e9;
     L.trees.forEach(function (T) {
-      var d = Math.abs(T.x - x) + (y < (T.y || H) - T.h - 10 ? 40 : 0);
+      var d = Math.hypot(T.x - x, T.y - T.h / 2 - y);
       if (d < bd) { bd = d; best = T; }
     });
-    var tol = Math.max(8, L.per * 1.5);
-    if (best && bd <= tol && y > L.hz - (best.h || 0) - 12) { info.textContent = describe(best, L, opts); return; }
+    if (best && bd <= 22) { info.textContent = describe(best, L, opts); return; }
     var pk = null;
     L.peaks.forEach(function (P) { if (x >= P.x0 && x <= P.x1 && (!pk || P.kind === 'block')) pk = P; });
     if (pk) info.textContent = describe({ peak: pk }, L, opts);
