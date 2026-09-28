@@ -55,3 +55,7 @@ Tom: "Add all the widgets we could have given our suite and functionality. Add s
 Also: the phone tab bar held eight apps once SHEET joined and ran to 460px on a 390px phone, SPEAK off the edge; buttons now share the width and CHECK IN wraps. `.chk`'s touch area counts its border, 40px to 44px, on TODAY too.
 
 Watched here at 1920x1000 and 390x844 with seeded rows in every app: all 48 draw, no widget error; TIMER survived a redraw; stopwatch start, lap, stop by mouse; intervals WORK, REST, done chime; an alarm set through its sheet rang at the minute, snoozed, rang again, stopped; countdown, calendar, world clock and measure menus; every tick box wrote its app's row. Review 129/129 both widths. Not seen on his screens; alarms not tested on the phone, where a sleeping phone will not ring.
+
+## 2026-09-28, HOME 1.0.36: KITCHEN in the roster
+
+KITCHEN, the shelf, the week of meals and targets and gaps (`kitchen/CLAUDE.md`), is in `APPS` after CHECK IN. A client app, so no `mine`, and `phone: 1`, so it joins the phone tab bar: nine buttons there now; measured at 390px, each 41px wide with a 44px hit area, the last ending at 386px, the word KITCHEN about 1px wider than its button.

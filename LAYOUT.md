@@ -96,6 +96,16 @@ checkin/index.html CHECK IN, physique check-ins for Tom and his clients: a goal
                    (STATUS's row) and a few answers, and a file to send a coach
                    that the coach keeps. Everywhere.
 checkin/CLAUDE.md  CHECK IN's own brief, governs checkin/ only
+kitchen/index.html KITCHEN, added 2026-09-28. The shelf, the meal planner and
+                   the guide. What is on the shelf, worked out from purchases
+                   (RECEIPTS' `buy` rows, or one typed in), meals eaten
+                   (STATUS's `meal` rows) and a hand count now and then; the
+                   week's meals planned from it; daily targets and what is
+                   short, with the foods on the shelf that carry it. Owns
+                   `kcount`, `kfood`, `kplan`, `kdish` and `kskip`, and writes
+                   `buy`, `meal` and `food` too. Everywhere. In the client
+                   build.
+kitchen/CLAUDE.md  KITCHEN's own brief, governs kitchen/ only
 clex/              GONE from the repo, 2026-09-16. Tom's Commander deck aid
                    left the suite on 2026-09-15 and the repo the next day. It
                    lives in Downloads/clex, outside Motherbase, unpublished.

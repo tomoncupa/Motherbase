@@ -292,6 +292,7 @@ called testers until 2026-09-14, and not the coaching clients in WEALTH.
 | SPEAK | `speak/` | everywhere | no, Tom only | Talking to a camera, measured. A path of drills for pace, fillers, flow, clarity and eyes, a daily warm-up, a streak. Numbers against his own targets, never a verdict. |
 | COACH | `coach/` | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. A separate app, with TRAIN as its core file. A profile is the same client as in WEALTH, so a 1:1 logged here is a session WEALTH counts. A log arrives as a file the client sends from TRAIN's share menu; sending again only adds what is new. Built 2026-09-22 as a Pokémon PC box: clients from CHECK IN in three boxes, a client's TRAIN file opened into their own rows, strength, recent sessions, the range, and first sets sent back as a program file. Since 1.0.1 a 1:1 is logged in COACH as sets, WEALTH counts it as a session, and every client is in both apps. Since 1.0.4 their check-ins are on the profile too — the photos, the measurements and what changed since last time, read out of CHECK IN's own rows rather than copied, and a check-in file opens here as well. |
 | FORGE | `forge/` | desktop only | no, Tom only | The program builder, built 2026-09-24. Works like BLOCK: days are lanes, exercises are plates dragged in from a bin, and weeks run along the top. Each exercise carries sets, a rep range, first-set load, RIR (0-3 unless set) and rest, per the Algrowrithm; a later week says only what changes. Every program is published into COACH's PROGRAMS, and SEND puts it on a client and saves the file their TRAIN opens, one routine per week. |
+| KITCHEN | `kitchen/` | everywhere | yes, since 2026-09-28 | "Pantry inventory, meal planner, nutritional guide" (Tom, 2026-09-28). What is on the shelf: receipts add, eating subtracts, a hand count corrects either. The week's meals planned from it. Daily targets for calories, protein, fibre, vitamins and minerals, how today and the planned week meet them, and which foods on the shelf close a gap. |
 
 ARC, BLOCK and STYLE are not meant to work on a phone. Tom, 2026-09-14.
 
@@ -465,6 +466,27 @@ questions are data.
 about whether either is good (Tom, 2026-09-15: "just give neutral numbers").
 Words about a body happen in Claude, when he pastes the bundle in, never on
 screen here.
+
+### KITCHEN — `kitchen/` · everywhere · clients
+
+**Function.** Plan what you eat from what you have.
+
+The shelf is the input, the plan is the job, and the guide is the check on
+the plan.
+
+**In hand:** a few taps on a phone after shopping or when something runs out;
+the week planned in one sitting, on a phone or at a desk.
+
+**Good looks like:** stock that needs no upkeep beyond a count now and then.
+Receipts add, eating subtracts, and a hand count corrects either. A week
+planned in minutes from saved meals. The guide shows numbers against daily
+targets, and which foods on the shelf carry what is short, one serving at a
+time.
+
+**Never:** a plan built by itself. It holds what the person picks (law 1).
+Never a verdict, a grade or praise: numbers only. Never a nutrient it does
+not know counted as zero; a total says what it could not count. Never a
+spend: money is STATUS's and WEALTH's, and a receipt has already written one.
 
 ### FORGE — `forge/` · desktop only · Tom only
 

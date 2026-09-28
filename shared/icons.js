@@ -215,6 +215,7 @@ const ROLES = {
   'app.receipts': 'camera',
   'app.sheet': 'trophy',
   'app.bullet': 'pencil',
+  'app.kitchen': 'bowl',
   quest: 'flag', flag: 'flag',
   pose: 'pose', physique: 'pose', checkin: 'pose',
   compare: 'frames', frames: 'frames',
@@ -233,7 +234,7 @@ const ROLES = {
    so the home screen and tools/make-icons.html cannot disagree. Six slots
    for twelve apps, so two share a slot where they never sit side by side;
    HOME and STYLE wear the accent. */
-const APP_SLOT = { block: 1, system: 1, status: 2, portion: 2, mix: 2, train: 3, coach: 3, forge: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6, speak: 6 };
+const APP_SLOT = { block: 1, system: 1, status: 2, portion: 2, mix: 2, train: 3, coach: 3, forge: 3, form: 3, log: 4, arc: 4, quest: 5, wealth: 5, checkin: 6, speak: 6, kitchen: 1 };
 
 /* ── each app's own picture ──
    Tom's picks, 2026-09-23 (the reference page is tools/icon-set.html, and
@@ -298,6 +299,9 @@ const APP_ART = {
   /* BULLET, 2026-09-25: the page that only writes a bullet. Three bullet
      lines, the first one being written. Picked by the build session. */
   bullet:  { c: GOLD, g: '<circle class="f" cx="5.5" cy="6" r="2"/><path d="M10 6h10"/><circle cx="5.5" cy="12" r="1.2"/><path d="M10 12h7"/><circle cx="5.5" cy="18" r="1.2"/><path d="M10 18h9"/>' },
+  /* KITCHEN, 2026-09-28: a lidded pot on the shelf, for what is kept and
+     what gets cooked from it. Picked by the build session, not by Tom yet. */
+  kitchen: { c: WHT, g: '<path class="f" d="M5.5 9v8.5a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5V9"/><path class="h" d="M6 9a6 3 0 0 1 12 0z"/><circle class="s n" cx="12" cy="4.6" r="1.1"/><path d="M4 9h16M5.5 12H3M18.5 12H21M1.5 20h21"/>' },
   system:  { c: GOLD, big: 1, g: '<path class="f" d="M4.5 1.5h15l3 3v15l-3 3h-15l-3-3v-15z"/><path d="M1.5 6.5h21"/><circle class="s n" cx="4.5" cy="4" r=".8"/><path class="s n" d="M11.35 9.5h1.3l-.3 7.5h-.7z"/><circle class="s n" cx="12" cy="19.3" r=".85"/>' },
 };
 /* the marks, turned into attributes, so a picture file with no stylesheet

@@ -136,7 +136,7 @@ _template/         the starter app to copy
 <app>/index.html   one app per folder; <app>/CLAUDE.md is that app's brief
 ```
 
-**Phone or desktop:** `train/` is a phone app. `status/`, `quest/`, `checkin/`, `system/`, `speak/` and `bullet/` are for
+**Phone or desktop:** `train/` is a phone app. `status/`, `quest/`, `checkin/`, `system/`, `speak/`, `bullet/` and `kitchen/` are for
 everywhere. Every other app, including the home screen and `wealth/`, is a
 desktop app. See hard constraint 10. What each one is for, in Tom's words, is
 the table at the top of "The apps" in `DOCTRINE.md`.
@@ -242,8 +242,8 @@ An app may read any type. It writes only the types it owns.
 | `cperson` | **checkin** | client id | `{name, animal, unit, fields, seen}` — a client whose check-in file was opened. Their rows carry the id in front of the key |
 | `checkin` | **checkin** | `''`, dated | `{sent}` — when that day's check-in was sent to a coach |
 | `day` | **status**; **log** writes `note`, the day's summary | `''` | `{note, rest}` |
-| `food` | **status** names the shape; **portion** writes it too | food id | the label as printed, plus your own servings. `base` may also carry any key in `shared/nutrients.js`, and every writer MERGES into `base` rather than rebuilding it: STATUS's food editor rebuilt it until 2026-09-22 and would have wiped all of them on one Update |
-| `meal` | **status** | timestamp id | one logged serving, numbers frozen in |
+| `food` | **status** names the shape; **portion** writes it too | food id | the label as printed, plus your own servings. `base` may also carry any key in `shared/nutrients.js`, and every writer MERGES into `base` rather than rebuilding it: STATUS's food editor rebuilt it until 2026-09-22 and would have wiped all of them on one Update; **kitchen** adds a food typed in it and a 1 piece serving |
+| `meal` | **status** | timestamp id | one logged serving, numbers frozen in; **kitchen** writes one per planned food marked eaten, key `kitchen-<plan key>`, `src: 'kitchen'` |
 | `spend` | **status** | timestamp id | `{amt, acct, note, t}` |
 | `acct` | **status** | account id | `{name, order}` |
 | `shot` | **status** | photo id | a shrunk photo of a label or receipt |
@@ -289,6 +289,12 @@ An app may read any type. It writes only the types it owns.
 | `brief` | **the daemon on the PC**; **quest** reads it and never writes it | `''`, dated the day it is for | `{text, todo, t, src}` — Claude's morning brief for that day, added 2026-09-22. `text` is plain lines, `# ` a heading and `- ` a point; `todo` a list of action items, each a string or `{text}`. QUESTS shows it as a foldable card at the top of Today and turns each item into a todo keyed `brief-<date>-<n>`, `src: 'brief'`, due that day, written once, so a deleted one stays deleted. How the row reaches the store is the daemon's business |
 | `feat` | **sheet** | the feat's own id, undated | `{t, date, saved}` — this feat's window was shown (and when its picture was saved). The feats themselves are worked out from TRAIN and STATUS rows every open and never stored |
 | `msg` | **system** (NOTICE) | id, dated | `{text, kind, style, seed, t}` — one status window that was saved or copied: the text as typed, notice or quest, the window style, and the reroll count its pseudo rewards were drawn with. The draft being typed and every choice on screen are settings, not rows |
+| `kcount` | **kitchen** | food id, dated the day counted | `{q, t}` — a hand count of one food: `q` in the food's base unit (g, ml or servings), `t` when. `q: 0` is used up. The latest count by time anchors the stock, which is worked out from counts, `buy` rows and eaten `meal` rows on every draw and never stored |
+| `kfood` | **kitchen** | food id, undated | `{min}` — keep at least this much, in the food's base unit. Kept off the food row, written by patch |
+| `kplan` | **kitchen** | timestamp id, dated the planned day | `{slot, food, mult, ord, dish}` — one planned food. `slot` is `b`, `l`, `d` or `s` (Breakfast, Lunch, Dinner, Snacks), `mult` a multiple of the food's base amount, `dish` the saved meal it came from, if any. Eaten is never stored here: it is the `meal` row `kitchen-<key>` existing |
+| `kdish` | **kitchen** | timestamp id, undated | `{name, items:[{food, mult}], ord}` — a saved meal. `items` is never empty: removing the last item removes the meal |
+| `kskip` | **kitchen** | the meal's key, dated the meal's date | `{skip: 1}` — this logged meal did not come out of the kitchen, so it takes no stock off. Kept off `meal`, the way WEALTH's `mark` is kept off `spend` |
+| `buy` | **receipts**; **kitchen** writes it too, for a purchase typed by hand, since clients have no RECEIPTS | `<receipt key>-<line>`, dated the receipt day; KITCHEN's is a timestamp id, dated the day bought | `{food, text, qty, unit, each, amount, shop, receipt}` — one line off a receipt. `unit` is `kg`, `g`, `L`, `ml`, `pc` or blank, and any field may be missing. KITCHEN's is `{food, text, qty, unit, t, src: 'kitchen'}` and never comes with a `spend` |
 
 ### Many writers is fine. Replacing a payload you did not read is not
 
@@ -878,6 +884,7 @@ own brief since 2026-09-22.
 | `receipts/` | RECEIPTS, a receipt photo turned into rows. Tom only. Brief: `receipts/CLAUDE.md`. |
 | `bullet/` | BULLET, one screen that writes a bullet. An address on no roster or dock, found from STATUS, Settings, BULLETS. Client build. Brief: `bullet/CLAUDE.md`. |
 | `sheet/` | CHARACTER SHEET. Feats from TRAIN and STATUS as NOTICE windows, with a history; the pixel character is paused. Held out of the client build for now. Brief: `sheet/CLAUDE.md`. |
+| `kitchen/` | KITCHEN, the shelf, the week of meals and targets and gaps. Client build. Brief: `kitchen/CLAUDE.md`. |
 | `_template/` | The starter app, and the reference for how a phone-native app in this suite is built. |
 | `shared/` | The foundation. `_smoke.html` must pass at desktop and phone width. Every app loads it. |
 
