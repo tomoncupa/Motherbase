@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.39, 2026-09-29">
+<meta name="mb-version" content="1.0.40, 2026-09-30">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -669,6 +669,15 @@ div.prow{padding:0}
   gap:var(--s-1);color:var(--text-2);overflow-wrap:anywhere}
 .recap .rec .v{font-variant-numeric:tabular-nums;color:var(--text-1);font-weight:var(--w-bold);white-space:nowrap}
 .recap .rec .v small{color:var(--text-muted);font-weight:var(--w-body)}
+/* A lift on a shared picture: its name, then its top set with how it moved
+   under it. The change is only ever a gain, so it is only ever this colour. */
+.recap .lift{display:flex;align-items:baseline;gap:var(--s-3);padding:var(--s-2) 0;
+  border-top:var(--border-width) solid var(--border)}
+.recap .lift .nm{flex:1;min-width:0;color:var(--text-2);overflow-wrap:anywhere}
+.recap .lift .v{display:flex;flex-direction:column;align-items:flex-end;font-variant-numeric:tabular-nums;
+  color:var(--text-1);font-weight:var(--w-bold);white-space:nowrap}
+.recap .lift .v small{color:var(--text-muted);font-weight:var(--w-body)}
+.recap .lift .v em{font-style:normal;font-size:var(--f-1);color:var(--success)}
 .recap .pill{font-style:normal;font-size:var(--f-1);letter-spacing:.06em;text-transform:uppercase;padding:0 var(--s-2);
   border-radius:var(--radius-full);background:color-mix(in srgb, var(--accent) 18%, transparent);
   color:var(--accent);white-space:nowrap}
@@ -5536,24 +5545,32 @@ TRAIN.showDelta = function (kg, ex) {
 };
 
 /* A lift switched off on the Share Picture panel stays out of the text too,
-   and the toast names it, so what went out is never a surprise to him. */
+   and so does a lift that went down (TRAIN.wentDown); the toast names what
+   was left out, so what went out is never a surprise to him. Plain, as Tom
+   picked (F, 2026-09-30): working sets only, no warmups and no comments. */
 TRAIN.shareWorkout = function () {
-  var date = TRAIN.date, all = TRAIN.dayGroups(date);
+  var date = TRAIN.date, down = TRAIN.wentDown(date);
+  var work = function (g) { return g.sets.filter(function (s) { return !s.warm && TRAIN.counts(s); }); };
+  var all = TRAIN.dayGroups(date).filter(function (g) { return work(g).length; });
   if (!all.length) return UI.toast('There is no session to share', { bad: true });
-  var groups = all.filter(function (g) { return !TRAIN.sharedOut(g.ex); });
-  var left = all.filter(function (g) { return TRAIN.sharedOut(g.ex); })
-    .map(function (g) { return UI.esc(g.def.name); }).join(', ');
-  if (!groups.length) return UI.toast('Every lift in this session is switched off in Share Picture', { bad: true });
+  var out = function (g) { return TRAIN.sharedOut(g.ex) || down[g.ex]; };
+  var groups = all.filter(function (g) { return !out(g); });
+  var left = all.filter(out).map(function (g) { return UI.esc(g.def.name); }).join(', ');
+  if (!groups.length) return UI.toast('Nothing to share. Left out: ' + left, { bad: true });
   var lines = [Day.label(date)];
   var sess = Rec.get('session', date, '') || {};
   if (sess.start && sess.end) lines.push(clockOf(sess.start) + ' - ' + clockOf(sess.end) + '  ' + fmtLen(sess.start, sess.end));
   lines.push('');
   groups.forEach(function (g) {
+    var f = TRAIN.fieldsOf(g.ex);
     lines.push(g.def.name);
-    g.sets.forEach(function (s, i) {
-      lines.push('  ' + (i + 1) + '.  ' +
-        (s.kg ? TRAIN.showWeight(s.kg, s.u, g.ex) + ' ' + TRAIN.unitLabel(g.ex) + ' x ' : '') +
-        (s.r || 0) + ' reps' + (s.note ? '   (' + s.note + ')' : ''));
+    work(g).forEach(function (s, i) {
+      lines.push('  ' + (i + 1) + '.  ' + f.map(function (k) {
+        if (k === 'w') return s.kg ? TRAIN.showWeight(s.kg, s.u, g.ex) + ' ' + TRAIN.unitLabel(g.ex) : '';
+        if (k === 'r') return TRAIN.showReps(s.r || 0) + ' reps';
+        if (k === 'd') return TRAIN.showDist(s.dist || 0) + ' ' + TRAIN.distUnit();
+        return fmtSecs(s.dur || 0);
+      }).filter(Boolean).join(' x '));
     });
     lines.push('');
   });
@@ -8729,8 +8746,12 @@ TRAIN.sessionStats = function (date, off) {
    social media." What it says is fact, never praise: what was lifted, how
    each set did against last time, which muscles it went to, and any record
    set. `off` holds lifts left out of a shared picture: the card is drawn as
-   if they were never in the session. */
-TRAIN.recapCard = function (date, cmp, off) {
+   if they were never in the session. `share` draws it for other people
+   (Tom picked B, 2026-09-30): "N of M sets stronger" stays, and the weaker
+   count, the down squares and every minus beside a total or on the gain
+   line go; each lift is listed with its top set (A). Only the picture does
+   this. The card on the log is his own view and shows everything. */
+TRAIN.recapCard = function (date, cmp, off, share) {
   var st = TRAIN.sessionStats(date, off);
   if (!st.sets) return null;
   if (cmp === undefined) cmp = TRAIN.dayCompare(date, off);
@@ -8746,8 +8767,8 @@ TRAIN.recapCard = function (date, cmp, off) {
   var num = function (n) { return Math.round(n).toLocaleString(); };
   var cell = function (label, big, small, now, then, fmt) {
     var em = '';
-    if (vs && then != null) {
-      var dd = now - then;
+    var dd = now - then;
+    if (vs && then != null && !(share && dd < 0 && Math.abs(dd) >= (label === 'Volume' ? 0.5 : 1))) {
       em = '<em>' + (Math.abs(dd) < (label === 'Volume' ? 0.5 : 1) ? 'same as ' : (dd > 0 ? '+' : '−') + fmt(Math.abs(dd)) + ' vs ') +
         esc(Day.short(cmp.vs)) + '</em>';
     }
@@ -8766,20 +8787,33 @@ TRAIN.recapCard = function (date, cmp, off) {
     '</div>';
 
   var n = cmp ? cmp.up + cmp.down + cmp.same : 0;
-  if (n) {
+  /* Shared, nothing stronger is nothing to say: the section goes. */
+  if (n && !(share && !cmp.up)) {
     var days = Object.keys(cmp.vsDays).length, vn = (Rec.get('session', cmp.vs, '') || {}).name;
-    var sub = [cmp.same ? cmp.same + ' same' : '', cmp.down ? cmp.down + ' weaker' : '',
+    var sub = [cmp.same ? cmp.same + ' same' : '', cmp.down && !share ? cmp.down + ' weaker' : '',
                cmp.fresh ? cmp.fresh + ' new' : ''].filter(Boolean);
     sub.push('vs ' + (vn ? vn + ', ' : '') + dayY(cmp.vs, date) +
       (days > 1 ? ' and ' + (days - 1) + ' other day' + (days > 2 ? 's' : '') : ''));
+    var avg = cmp.pctN ? cmp.pctSum / cmp.pctN : 0;
+    var gt = share ? gainText(Math.max(0, cmp.reps), avg > 0 ? cmp.pctSum : 0, cmp.pctN)
+                   : gainText(cmp.reps, cmp.pctSum, cmp.pctN);
     h += '<div><h3>SET BY SET</h3>' +
       '<div class="strong"><b>' + cmp.up + ' of ' + n + '</b> sets stronger</div>' +
-      (gainText(cmp.reps, cmp.pctSum, cmp.pctN)
-        ? '<div class="gain' + (cmp.pctN && cmp.pctSum / cmp.pctN >= 0.05 ? ' up'
-            : cmp.pctN && cmp.pctSum / cmp.pctN <= -0.05 ? ' down' : '') + '">' +
-          esc(gainText(cmp.reps, cmp.pctSum, cmp.pctN)) + '</div>' : '') +
+      (gt ? '<div class="gain' + (avg >= 0.05 ? ' up' : avg <= -0.05 && !share ? ' down' : '') + '">' + esc(gt) + '</div>' : '') +
       '<div class="sub">' + esc(sub.join(' · ')) + '</div>' +
-      '<div class="ticks">' + cmp.marks.map(function (k) { return '<i class="' + k + '"></i>'; }).join('') + '</div></div>';
+      '<div class="ticks">' + cmp.marks.map(function (k) {
+        return '<i class="' + (share && k === 'down' ? 'same' : k) + '"></i>';
+      }).join('') + '</div></div>';
+  }
+
+  if (share) {
+    var lifts = TRAIN.dayGroups(date).map(function (g) {
+      if (off && off[g.ex]) return null;
+      var L = TRAIN.liftLine(date, g.ex, cmp && cmp.byEx[g.ex]);
+      return L && '<div class="lift"><span class="nm">' + esc(g.def.name) + '</span><span class="v"><span>' + L.top + '</span>' +
+        (L.up ? '<em>' + esc(L.up) + '</em>' : '') + '</span></div>';
+    }).filter(Boolean);
+    if (lifts.length) h += '<div><h3>LIFTS</h3>' + lifts.join('') + '</div>';
   }
 
   h += musclesHtml(muscleRows(date, date, off), false);
@@ -8829,13 +8863,78 @@ TRAIN.sharedOut = function (exId) {
   var v = Rec.setting(APP.id, 'share.' + exId);
   return v != null && v !== true && +v !== 1;
 };
+/* Which of a day's lifts went down since the day each is measured against.
+   Tom, 2026-09-30: "I never want to share a lift im weaker in, no one does."
+   So a lift that went down is left out of every picture and text shared from
+   a session, for everyone, with no switch and no question. Down is the test
+   that colours a lift's gain line: its sets' average change in estimated 1RM
+   at -0.05% or under. A lift with no 1RM on either side is down when it lost
+   reps, and one with no reps either (a run, a hold) when more of its sets
+   went down than up. A lift with nothing to compare with never went down. */
+TRAIN.wentDown = function (date) {
+  var cmp = TRAIN.dayCompare(date), out = {};
+  if (!cmp) return out;
+  Object.keys(cmp.byEx).forEach(function (ex) {
+    var r = cmp.byEx[ex];
+    if (!r.vs || !(r.up + r.down + r.same)) return;
+    if (r.pctN ? r.pctSum / r.pctN <= -0.05 : r.reps ? r.reps < 0 : r.down > r.up) out[ex] = 1;
+  });
+  return out;
+};
+/* One lift as a shared picture lists it (A): its top set, the one furthest
+   along the lift's first measure (the heaviest, ties to more reps), and how
+   it moved. The change is the first of these that went up: the top set's
+   weight, the reps at the same top weight, the lift's average percentage.
+   Otherwise nothing: a shared picture never carries a minus. */
+TRAIN.liftLine = function (date, exId, row) {
+  var kind = TRAIN.kindOf(exId), f = TRAIN.fieldsOf(exId), U = TRAIN.unitLabel(exId);
+  var val = function (s, k) { return +({ w: s.kg, r: s.r, d: s.dist, t: s.dur }[k]) || 0; };
+  var better = function (a, b) {
+    for (var i = 0; i < f.length; i++) {
+      var x = val(a, f[i]), y = val(b, f[i]);
+      if (Math.abs(x - y) < 0.0005) continue;
+      /* over a distance, less time is the better run */
+      return kind === 'dt' && f[i] === 't' ? x < y : x > y;
+    }
+    return false;
+  };
+  var top = function (d) {
+    var best = null;
+    workOn(d, exId).forEach(function (s) { if (TRAIN.counts(s) && (!best || better(s, best))) best = s; });
+    return best;
+  };
+  var now = top(date);
+  if (!now) return null;
+  var then = row && row.vs ? top(row.vs.date) : null, up = '';
+  if (then && f[0] === 'w' && f[1] === 'r') {
+    var dk = (now.kg || 0) - (then.kg || 0), dr = (now.r || 0) - (then.r || 0);
+    if (dk >= 0.005) up = TRAIN.showDelta(dk, exId) + ' ' + U;
+    else if (dk > -0.005 && dr > 0) up = '+' + TRAIN.showReps(dr) + (dr === 1 ? ' rep' : ' reps');
+  } else if (then && better(now, then)) {
+    var d0 = val(now, f[0]) - val(then, f[0]);
+    if (d0 > 0.0005) up = f[0] === 'w' ? TRAIN.showDelta(d0, exId) + ' ' + U
+      : f[0] === 'r' ? '+' + TRAIN.showReps(d0) + (d0 === 1 ? ' rep' : ' reps')
+      : f[0] === 'd' ? '+' + TRAIN.showDist(d0) + ' ' + TRAIN.distUnit() : '';
+  }
+  if (!up && row && row.pctN && row.pctSum / row.pctN >= 0.05) up = '+' + (row.pctSum / row.pctN).toFixed(1) + '%';
+  var top1 = f.map(function (k) {
+    if (k === 'w') return now.kg ? TRAIN.showWeight(now.kg, now.u, exId) + ' <small>' + U + '</small>' : '';
+    if (k === 'r') return TRAIN.showReps(now.r || 0) + (f[0] === 'w' && now.kg ? '' : ' <small>reps</small>');
+    if (k === 'd') return TRAIN.showDist(now.dist || 0) + ' <small>' + TRAIN.distUnit() + '</small>';
+    return fmtSecs(now.dur || 0);
+  }).filter(Boolean).join(' × ');
+  return { top: top1, up: up };
+};
 TRAIN.shareRecap = function (date) {
   date = date || TRAIN.date;
-  var lifts = TRAIN.shareLifts(date);
+  var down = TRAIN.wentDown(date);
+  var lifts = TRAIN.shareLifts(date).filter(function (g) { return !down[g.ex]; });
+  if (!lifts.length && Object.keys(down).length) return UI.toast('Nothing to share: every lift is under last time', { bad: true });
   shareCard(function (o) {
     var off = {};
+    Object.keys(down).forEach(function (ex) { off[ex] = 1; });
     if (o) lifts.forEach(function (g) { if (!o['share.' + g.ex]) off[g.ex] = 1; });
-    return TRAIN.recapCard(date, undefined, off);
+    return TRAIN.recapCard(date, undefined, off, true);
   }, 'train-' + date, lifts.map(function (g) {
     return { id: 'share.' + g.ex, label: g.def.name, def: 1 };
   }));
