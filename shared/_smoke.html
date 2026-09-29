@@ -487,6 +487,33 @@ async function run() {
       return a === 1 && b === 2 && n === 3;
     })();
   })());
+  /* This one exists because it broke: a menu item ran 60ms after the tap,
+     so a typing box it opened was focused outside the gesture and an iPhone
+     showed the caret with no keyboard (KITCHEN's Count, 2026-09-30). The
+     check is one level under that: by the time the tap's own click is
+     over, the item has run and its box holds the focus. */
+  ok('mobile: a menu item runs inside the tap, so a box it opens has the focus before the tap ends', (() => {
+    let ran = false, box = null, inner = null, seen = null;
+    const menu = Mobile.actions('SMOKE', [{ label: 'Count', fn: () => {
+      ran = true;
+      inner = Mobile.sheet({ title: 'SMOKE COUNT', body: b => { box = document.createElement('input'); b.appendChild(box); } });
+      UI.focusSoon(box);
+    } }]);
+    const btn = menu.body.querySelector('.mb-act');
+    const after = () => { seen = document.activeElement; };
+    document.addEventListener('click', after);
+    btn.click();
+    document.removeEventListener('click', after);
+    const good = ran && !!box && seen === box;
+    if (inner) inner.close();
+    return good;
+  })());
+  ok('mobile: a sheet asked to focus focuses while it opens, not only after it rises', (() => {
+    const h = Mobile.sheet({ title: 'SMOKE', focus: true, body: b => { b.appendChild(document.createElement('input')); } });
+    const good = document.activeElement === h.body.querySelector('input');
+    h.close();
+    return good;
+  })());
 
   /* ---- the measurement tokens ---- */
   ok('tokens: the spacing scale never steps closer than 25%', (() => {

@@ -528,8 +528,15 @@ function sheet(o) {
   veil.classList.add('on'); panel.classList.add('on');
   if (g.Sfx) g.Sfx.play('open');
   /* Never steal focus into a field on a phone — that throws the keyboard up
-     over the sheet the instant it opens. o.focus asks for it explicitly. */
-  if (o.focus) setTimeout(() => { const f = body.querySelector('input,textarea,select'); if (f) f.focus(); }, 380);
+     over the sheet the instant it opens. o.focus asks for it explicitly.
+     Asked for, it focuses NOW as well, while the tap that opened the sheet
+     is still being handled, which is the only focus iOS answers with a
+     keyboard; the later one survives the sheet's rise. */
+  if (o.focus) {
+    const f = body.querySelector('input,textarea,select');
+    if (f) { try { f.focus({ preventScroll: true }); } catch (e) {} }
+    setTimeout(() => { const f2 = body.querySelector('input,textarea,select'); if (f2) f2.focus(); }, 380);
+  }
   return handle;
 }
 
@@ -802,7 +809,13 @@ const Mobile = {
           b2.innerHTML = (it.icon ? '<span class="ic">' + it.icon + '</span>' : '') +
             '<span class="t">' + String(it.label).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) +
             (it.note ? '<small>' + String(it.note).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) + '</small>' : '') + '</span>';
-          b2.onclick = () => { Mobile.feedback('select'); h.close(); setTimeout(() => it.fn && it.fn(), 60); };
+          /* The item runs INSIDE the tap, never on a timer. iOS raises the
+             keyboard only for a focus() made while the tap is still being
+             handled, so an item that opens a typing box (Count, Change
+             amount, Rename) showed a caret and no keyboard while this waited
+             60ms (2026-09-30). Opening a sheet as this one closes is safe:
+             Mobile.trap holds the new entry until this close's back lands. */
+          b2.onclick = () => { Mobile.feedback('select'); h.close(); if (it.fn) it.fn(); };
           list.appendChild(b2);
         });
         b.appendChild(list);

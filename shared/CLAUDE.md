@@ -234,6 +234,13 @@ work. Clean up any test data you write, and stop the server when you are done.
   steps are the whole tab's, shared with every frame the review opened. The
   back stack check's `history.go(-3)` walked the review itself back a page
   once (2026-09-25). Push spare entries and leave them.
+- **Nothing between a tap and a focus() may wait.** iOS raises the keyboard
+  only for a focus made while the tap is still being handled. `Mobile.actions`
+  ran its item 60ms late until 2026-09-30, so every menu item that opened a
+  typing box (KITCHEN's Count, Change amount, any Rename) showed a caret and
+  no keyboard on the iPhone. Items run inside the tap now, a `focus: true`
+  sheet focuses as it opens, and `UI.focusSoon` already did. Two smoke checks
+  read the focus at the end of the tap itself. Not yet watched on the iPhone.
 - **A run that leaves the page mid-way leaves its test rows behind, and the
   fast-half check then fails.** `rec: a full fast half` moves the oldest-dated
   rows first and expects exactly its own two; leftover `smoke-<n>` rows dated
