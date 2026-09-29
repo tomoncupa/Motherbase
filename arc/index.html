@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<meta name="mb-version" content="1.0.5, 2026-09-23">
+<meta name="mb-version" content="1.0.6, 2026-09-30">
 <title>ARC — Mind Canvas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;600&family=Space+Grotesk:wght@500;700&family=Caveat:wght@500;700&family=Patrick+Hand&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
@@ -560,6 +560,9 @@ body.theme-doodle .elabel{font-family:'Caveat',cursive;font-size:15px}
 <script src="../shared/ui.js"></script>
 <script src="../shared/io.js"></script>
 <script src="../shared/health.js"></script>
+<!-- The Cards tab's scheduler, FSRS, vendored beside this file. If it does
+     not load, the Cards tab replays its old SM-2 schedule instead. -->
+<script src="ts-fsrs.js"></script>
 </head>
 <body>
 
@@ -3069,16 +3072,48 @@ if(!RO){
    replayed out of `attempt`. Two devices' reviews merge as rows and the
    replay comes out the same on both.
 
-   The schedule is SM-2 STYLE, the family Anki grew out of. It is not Anki's
-   own and not FSRS: ease starts at 2.5; Again drops it 0.2 and brings the card
-   back tomorrow; Hard drops it 0.15 and multiplies the gap by 1.2; Good gives
-   1 day, then 3, then the gap times the ease; Easy is that again times 1.3.
-   Ease never goes below 1.3. None of it is tuned on Tom's own recall.
+   The schedule is FSRS since 1.0.6 (2026-09-30, Tom: "Yes"): ts-fsrs 5.4.2,
+   vendored as `ts-fsrs.js` beside this file, FSRS-6 with its published
+   default weights, 90% recall asked for, no fuzz, ten years at most. No
+   learning steps in minutes, because a day is the smallest unit a `crev` row
+   knows; a second grade on the same day goes through FSRS's own same-day
+   formula instead. The replay hands FSRS each day's grades at noon UTC of
+   that date, a second apart in the order they were given, so the gap it
+   counts is the gap between two dates and never the clock or the time zone.
+   The weights are the defaults, not fitted to Tom's own recall.
+
+   The old SM-2 STYLE replay stays as the fallback (`cdStateSM2`), used when
+   ts-fsrs.js does not load or throws, and the Import / export screen says
+   which one is running: ease starts at 2.5; Again drops it 0.2 and brings the
+   card back tomorrow; Hard drops it 0.15 and multiplies the gap by 1.2; Good
+   gives 1 day, then 3, then the gap times the ease; Easy is that again times
+   1.3. Ease never goes below 1.3.
+
+   No history moved: the same `crev` rows replay through whichever scheduler
+   runs, so every past grade carries over and only the dates it gives change.
 
    No streak, no points, no daily goal (root brief). The only number that
    climbs is how long until the card comes back.                            */
 const CD_EASE0 = 2.5, CD_EASE_MIN = 1.3, CD_NEW_DEFAULT = 20, CD_MAX_IVL = 3650;
 const CD_GRADES = [[1, 'AGAIN'], [2, 'HARD'], [3, 'GOOD'], [4, 'EASY']];
+let CD_F;          /* the FSRS scheduler, made once; null when ts-fsrs is missing */
+function cdF(){
+  if(CD_F!==undefined)return CD_F;
+  CD_F=null;
+  try{
+    if(window.FSRS&&typeof FSRS.fsrs==='function')
+      CD_F=FSRS.fsrs(FSRS.generatorParameters({request_retention:0.9,maximum_interval:CD_MAX_IVL,
+        enable_fuzz:false,enable_short_term:true,learning_steps:[],relearning_steps:[]}));
+  }catch(e){console.warn('ARC cards: FSRS did not start, the SM-2 replay runs instead',e)}
+  if(!CD_F)console.warn('ARC cards: ts-fsrs.js is missing, the SM-2 replay runs instead');
+  return CD_F;
+}
+/** Noon UTC on a YYYY-MM-DD date, plus s seconds: when the replay says a grade was given. */
+const cdAt=(d,s)=>{const p=String(d).split('-');return new Date(Date.UTC(+p[0],+p[1]-1,+p[2],12,0,s||0))};
+/** A grade as the scheduler takes it; anything but 1 to 4 reads as Good, as it always has. */
+const cdG=g=>{g=g|0;return g>=1&&g<=4?g:3};
+/** One day's grades in the order they were given. */
+const cdDayGrades=day=>(day.g||[]).map((e,i)=>({e,i})).sort((a,b)=>((a.e.t||0)-(b.e.t||0))||(a.i-b.i)).map(x=>x.e);
 let CDI = null;    /* the review log, indexed once per draw */
 let CARDV = null;  /* the open session: the queue, where we are, what is on screen */
 
@@ -3105,10 +3140,38 @@ function cdCards(mid){
   });
   return out.sort((a,b)=>(a.made||0)-(b.made||0));
 }
-/** Replay one card's grades into where it stands now. */
+/** Replay one card's grades into where it stands now: FSRS, else SM-2. */
 function cdState(key){
+  const f=cdF();
+  if(f){
+    try{return cdStateFSRS(key,f)}
+    catch(e){console.warn('ARC cards: the FSRS replay failed on '+key+', SM-2 used for that card',e)}
+  }
+  return cdStateSM2(key);
+}
+function cdStateFSRS(key,f){
   const log=cdIndex().revs[key]||[];
-  const st={reps:0,lapses:0,ease:CD_EASE0,ivl:0,due:null,last:null,first:null};
+  const st={reps:0,lapses:0,ivl:0,due:null,last:null,first:null,card:null,at:null,engine:'FSRS'};
+  let card=null, at=null;
+  log.forEach(day=>{
+    cdDayGrades(day).forEach((e,i)=>{
+      let now=cdAt(day.d,i);
+      if(at&&now<=at)now=new Date(at.getTime()+1000);
+      if(!card)card=FSRS.createEmptyCard(now);
+      const r=f.next(card,now,cdG(e.g));
+      card=r.card; at=now;
+      if(!st.first)st.first=day.d;
+      st.reps++; st.last=day.d;
+      st.ivl=Math.max(1,Math.min(CD_MAX_IVL,r.card.scheduled_days|0));
+      st.due=Day.shift(day.d,st.ivl);
+    });
+  });
+  st.card=card; st.at=at; st.lapses=card?card.lapses:0;
+  return st;
+}
+function cdStateSM2(key){
+  const log=cdIndex().revs[key]||[];
+  const st={reps:0,lapses:0,ease:CD_EASE0,ivl:0,due:null,last:null,first:null,engine:'SM-2'};
   log.forEach(day=>{
     (day.g||[]).forEach(e=>{
       const g=e.g|0;
@@ -3125,7 +3188,20 @@ function cdState(key){
 }
 /** What each of the four buttons would do, for their labels. */
 function cdPreview(key){
-  const st=cdState(key), out={};
+  const st=cdState(key);
+  if(st.engine==='FSRS'){
+    try{
+      let now=cdAt(skToday(),0);
+      if(st.at&&now<=st.at)now=new Date(st.at.getTime()+1000);
+      const rec=cdF().repeat(st.card||FSRS.createEmptyCard(now),now), out={};
+      CD_GRADES.forEach(g0=>{out[g0[0]]=Math.max(1,Math.min(CD_MAX_IVL,rec[g0[0]].card.scheduled_days|0))});
+      return out;
+    }catch(e){console.warn('ARC cards: the FSRS preview failed on '+key+', SM-2 shown',e)}
+  }
+  return cdPreviewSM2(key);
+}
+function cdPreviewSM2(key){
+  const st=cdStateSM2(key), out={};
   CD_GRADES.forEach(g0=>{
     const g=g0[0], s={reps:st.reps,ease:st.ease,ivl:st.ivl};
     if(g===1)s.ivl=1;
@@ -3320,6 +3396,7 @@ function cdIoHTML(){
     '<button data-cd="claude">COPY A PROMPT FOR CLAUDE</button>'+
     '<button data-cd="cancel">BACK</button></div>'+
     '<div class="cd-hint">New cards a day <button data-cd="newless">−</button> <b>'+cdNewADay()+'</b> <button data-cd="newmore">+</button> · more than that and the rest wait for tomorrow.</div>'+
+    '<div class="cd-hint" id="cd-engine">'+(cdF()?'Schedule: FSRS-6, default weights, 90% recall.':'Schedule: SM-2. FSRS did not load.')+'</div>'+
     '</div></div>';
 }
 function cdImport(text){
