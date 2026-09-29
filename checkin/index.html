@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.11, 2026-09-23">
+<meta name="mb-version" content="1.0.12, 2026-09-30">
 <title>CHECK IN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -853,7 +853,13 @@ function drawForm() {
     send.onclick = () => sendToCoach(day);
     acts.appendChild(send);
     const st = peek('checkin', day, '');
-    if (st && st.sent) acts.appendChild(el('span', 'muted', 'Sent ' + esc(Day.label(Day.calendar(Date.parse(st.sent))))));
+    if (st && st.sent) {
+      const said = el('span', 'muted', 'Sent ' + esc(Day.label(Day.calendar(Date.parse(st.sent)))));
+      acts.appendChild(said);
+      /* still in this phone's outbox: no signal yet, or nobody signed in */
+      const grp = 'ci-' + day;
+      if (window.Cloud && Cloud.pending) Cloud.pending().then(l => { if (l.some(x => x.to === 'coach' && x.grp === grp)) said.textContent = 'Waiting to send'; });
+    }
     c.appendChild(acts);
   } else {
     c.appendChild(answersTable(who, day));
@@ -2609,10 +2615,13 @@ function forClaude() {
 }
 
 /* ══════════════ sending, and opening what was sent ══════════════
-   No server and no account, so a check-in travels as a file: the phone's
-   share menu hands it to Messenger, WhatsApp or email, and a desktop saves
-   it. The file carries its own questions, poses, unit, dots and goal photos,
-   so it reads the same on a device that has never seen this person.
+   Signed in, a check-in goes straight into the coach's in-tray (cloud.js
+   0.2.0), and waits in this phone's outbox while there is no signal. Opened
+   from a folder, or with Firebase blocked, it travels as a file as it always
+   did: the phone's share menu hands it to Messenger, WhatsApp or email, and a
+   desktop saves it. Either way it carries its own questions, poses, unit,
+   dots and goal photos, so it reads the same on a device that has never seen
+   this person.
 
    Opening one KEEPS it, since 2026-09-15: a client's check-ins live under
    their own id, so their numbers and their timelapse build up week on week.
@@ -2626,17 +2635,81 @@ function sendToCoach(d) {
   const ev = Rec.row('ev', d, 'weight');
   if (ev) rows.push(ev);
   /* the goal photos go too, so the coach sees the same goal */
-  ['cref', 'cmark'].forEach(t => Rec.all(t).forEach(r => { if (r.date == null && /^goal:/.test(r.key)) rows.push(r); }));
-  const bag = {
+  const goals = [];
+  ['cref', 'cmark'].forEach(t => Rec.all(t).forEach(r => { if (r.date == null && /^goal:/.test(r.key)) goals.push(r); }));
+  const head = {
     kind: 'motherbase-checkin', v: 2, name: name, pid: myPid(), animal: opt('animal', 'bear'), date: d, at: new Date().toISOString(),
     unit: wUnit(), fields: fieldList(),
-    rows: rows.map(r => ({ type: r.type, date: r.date, key: r.key, payload: r.payload, updated_at: r.updated_at })),
   };
-  const text = JSON.stringify(bag), file = 'checkin-' + slug(name) + '-' + d + '.json';
-  handOver([{ name: file, blob: new Blob([text], { type: 'application/json' }), type: 'application/json' }], file).then(ok => {
-    if (!ok) return;
-    patch('checkin', d, '', { sent: new Date().toISOString() });
-    Mobile.feedback('success');
+  const bagOf = list => Object.assign({}, head, { rows: list.map(r => ({ type: r.type, date: r.date, key: r.key, payload: r.payload, updated_at: r.updated_at })) });
+  const sent = () => { patch('checkin', d, '', { sent: new Date().toISOString() }); Mobile.feedback('success'); };
+
+  /* The file: what this always did, and still does from a folder or when
+     Firebase will not load. Everything in one file, photos full size. */
+  const toFile = why => {
+    const bag = bagOf(rows.concat(goals)), text = JSON.stringify(bag), file = 'checkin-' + slug(name) + '-' + d + '.json';
+    if (why) UI.toast('Saved a file to send instead. ' + esc(why));
+    handOver([{ name: file, blob: new Blob([text], { type: 'application/json' }), type: 'application/json' }], file).then(ok => { if (ok) sent(); });
+  };
+  if (!window.Cloud || !Cloud.post) return toFile('');
+
+  /* Straight to the coach, 2026-09-30. One parcel for the answers and the
+     dots, and one per photo, each shrunk for the trip, so nothing comes near
+     a parcel's ceiling and a photo that has not gone yet holds up nothing
+     else. The goal photos go when they changed since the last send. All of
+     one check-in shares the group `ci-<date>`, which COACH counts as one. */
+  const g = 'ci-' + d, lastSent = Rec.all('checkin').reduce((m, r) => belongs(r.key, '') && r.payload && r.payload.sent > m ? r.payload.sent : m, '');
+  const plain = rows.filter(r => r.type !== 'cphoto').concat(goals.filter(r => r.type === 'cmark'));
+  const pics = rows.filter(r => r.type === 'cphoto').concat(goals.filter(r => r.type === 'cref' && (!lastSent || r.updated_at > lastSent)));
+  UI.toast('Sending to your coach…');
+  Promise.all(pics.map(r => forTrip(r.payload).then(p => ({ r: Object.assign({}, r, { payload: p }), id: g + '@' + String(r.key).replace(':', '-') }))))
+    .then(ps => Cloud.post([{ to: 'coach', id: g + '@data', kind: 'checkin', bag: bagOf(plain), say: 'to your coach' }]
+      .concat(ps.map(x => ({ to: 'coach', id: x.id, kind: 'checkin', bag: bagOf([x.r]), say: 'to your coach' })))))
+    .then(r => {
+      if (!r.left) { sent(); UI.toast('Sent to your coach.'); return draw(); }
+      if (r.why === 'offline') { sent(); UI.toast('No signal. Sends by itself when the signal is back.'); return draw(); }
+      if (r.why === 'refused') { sent(); UI.toast('Not sent. Your coach’s inbox refused it. It tries again next time an app opens.', { bad: true }); return draw(); }
+      if (r.why === 'signin') { sent(); draw(); return signInToSend(r.keys, () => toFile('')); }
+      Cloud.unpost(r.keys);
+      toFile(r.why === 'blocked' ? 'Firebase would not load.' : r.why === 'file' ? '' : (r.msg || 'It did not go.'));
+    }, e => toFile((e && e.message) || 'It did not go.'));
+}
+/* 1080px on the long edge for the trip, the plan Tom settled on 2026-09-24:
+   about a third of a stored photo, and still sharp on any screen. The dots
+   are kept as fractions of the photo, so they fit the smaller one as they
+   are. The phone keeps its own 1920px photo. */
+const TRIP_PX = 1080;
+function forTrip(p) {
+  if (!p || !p.img || Math.max(p.w || 0, p.h || 0) <= TRIP_PX) return Promise.resolve(p);
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const s = TRIP_PX / Math.max(im.naturalWidth, im.naturalHeight);
+      if (!(s < 1)) return res(p);
+      const c = document.createElement('canvas');
+      c.width = Math.round(im.naturalWidth * s); c.height = Math.round(im.naturalHeight * s);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      res(Object.assign({}, p, { img: c.toDataURL('image/jpeg', JPEG_Q), w: c.width, h: c.height }));
+    };
+    im.onerror = () => res(p);
+    im.src = p.img;
+  });
+}
+/* Nobody is signed in on this phone. The check-in waits in the outbox, and
+   signing in sends it. */
+function signInToSend(keys, fallback) {
+  UI.dialog({
+    title: 'SIGN IN TO SEND', width: 400,
+    body: b => b.appendChild(el('p', 'muted', 'Sign in with Google once and your check-ins go straight to your coach. This one waits here until then.')),
+    actions: [
+      { label: 'SAVE A FILE', fn: () => { Cloud.unpost(keys); fallback(); } },
+      { label: 'SIGN IN', kind: 'go', fn: () => {
+        Cloud.signIn().then(() => Cloud.flush()).then(r => {
+          UI.toast(r.left ? 'Signed in. Sends by itself when the signal is back.' : 'Sent to your coach.');
+          draw();
+        }, e => UI.toast(esc((e && e.message) || 'Could not sign in.'), { bad: true }));
+      } },
+    ],
   });
 }
 

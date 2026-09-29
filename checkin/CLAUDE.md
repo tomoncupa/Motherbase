@@ -133,6 +133,23 @@ file never undoes dots Tom has checked. His own file, sent from his phone to his
 desk, is recognised by its sender id, or by asking once. **Both**: a later COACH
 app can read these same rows.
 
+## Send to coach, straight to COACH (1.0.12, 2026-09-30)
+
+Signed in, a check-in goes into the coach's in-tray through this phone's
+outbox (cloud.js 0.2.0; `coach/CLAUDE.md`, Sends both ways), and no file is
+made. One parcel for the answers and dots (`ci-<date>@data`), one per photo
+(`ci-<date>@<pose>`), and one per goal photo that changed since the last send
+(`ci-<date>@goal-<pose>`). A photo travels at 1080px on its long edge
+(`forTrip`); the phone keeps its 1920px one, and the dots are fractions of the
+photo so they fit either. With no signal it waits, and the line beside the
+button reads **Waiting to send** until it has gone. Nobody signed in gets SIGN
+IN TO SEND, with SAVE A FILE beside it. A folder copy or a blocked Firebase
+still makes the one file, photos full size, as before.
+
+Watched against a stand-in database: three parcels, the front photo 1440x1920
+arriving as 810x1080, the goal left out of a second send and back in once it
+changed. Not on a phone, not against the real Firebase.
+
 ## Rows
 
 | Type | Date | Key | Payload |
