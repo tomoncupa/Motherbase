@@ -149,6 +149,52 @@ clients on the client build. Spans COACH, CHECK IN, TRAIN and `cloud.js`.
 First real test of any of it: Tom and one online client both signed in,
 sending one session. The real database has never been in the loop.
 
+## Sends both ways, built (1.0.15, 2026-09-30)
+
+Tom: *"Ok lets fix that"*, on the 2026-09-24 plan above. Spans COACH, CHECK
+IN, TRAIN and `cloud.js` 0.2.0.
+
+- **Two trays in the database, a parcel each.** `drop/in/<client uid>/<id>`
+  is what clients send; `drop/client/<client uid>/<id>` is what COACH sends a
+  client. An id names what it carries (`train@1`, `ci-<date>@data`,
+  `ci-<date>@front`, `prog@c-<pid>`), so sending the same thing again replaces
+  its parcel. The part before the @ is one SEND, and `SENDS · N` counts those.
+  The old one-slot shelf `drop/coach` is still read and cleared.
+- **The quiet look reads names only** (`Cloud.list`, a shallow REST read), so
+  opening COACH never downloads a client's photos to print a count.
+- **Photos wait for the PC.** On an iPhone, iPad or Android phone
+  (`photosHere`) SENDS takes the training and answers and leaves every
+  `ci-*@<pose>` parcel for COACH on the PC, and says how many. Tom,
+  2026-09-24: "Client photos live on the PC"; live sync never moves a photo.
+- **A send is the only place COACH learns a client's account.** `tie` writes
+  `cperson.uid` from the parcel's tray. A program can go straight to a client
+  only once that is known; before it, SEND saves the file as before and the
+  FIRST SETS card says so.
+- **A new client from a send goes in ONLINE**, a file still in 1:1. Only
+  online clients log and send for themselves.
+- **SEND TO <NAME> puts the program in their tray** (`sendProg` with a pid),
+  their TRAIN takes it the next time it opens, and `cprog.dl` records when.
+- **FORGE's SEND reaches their TRAIN through here** (`forgeOut`). FORGE writes
+  the client's `c-<pid>` with `from: 'f-<id>'` and has no send of its own, so
+  COACH, wherever it is open, sends a `c-` row whose `days` are newer than
+  both `ed` (COACH's own last edit, stamped by `saveProg` and USE FOR) and
+  `dl`. An edit in COACH's FIRST SETS never goes by itself; SEND sends it.
+- **Settings, COPY RULES** copies the whole database rules block with Tom's
+  account already in it (`Cloud.rules`). Nothing is edited by hand.
+
+Watched 2026-09-30 against a stand-in database (a Python server holding the
+rules written out by hand, `drop` paths only), with the client on one origin
+and COACH on another: a session queued with no signal, survived a reload,
+went on `online`, and SENDS took it as the client's 6 sets and 120 exercises
+with Tom's own `set` and `exercise` counts at 0; a check-in went as three
+parcels (answers, front photo 1440x1920 shrunk to 810x1080, goal), COACH at
+phone size took the answers and left both photos without downloading them,
+at desktop size took the photos; SEND TO TESTY landed in the client's TRAIN
+as a routine on its next open; a FORGE-shaped write to `c-<pid>` went to the
+client's tray when COACH next opened, and a FIRST SETS edit afterwards did
+not. **Not watched:** the real Firebase (nobody signed in), the real rules,
+the REST shallow read against Firebase, any iPhone.
+
 ## FORGE builds the programs (1.0.10, 2026-09-24)
 
 Programs are built in FORGE now (`forge/CLAUDE.md`). COACH stays the place a
@@ -180,9 +226,13 @@ program goes out from.
 
 ## Needs from the foundation
 
-`shared/_smoke.html` has no checks for the coach shelf (`Cloud.send`,
-`waiting`, `took`, `who` in `cloud.js`). Everything watched so far stubbed the
-transport. A foundation session should add them.
+`shared/_smoke.html` checks the 0.1 shelf (`send`, `waiting`, `took`,
+`who`). Nothing checks cloud.js 0.2.0's trays and outbox yet: `post` queueing
+with no signal and sending on `online`, `list` and `count` from names, `fetch`,
+`took(from, id)`, `inbox` and `opened`, and `rules()` parsing as JSON. A
+foundation session should add them, driven through `Cloud._probe` the way the
+shelf checks are (a stand-in `db` with `.info/connected`, and `keys` for the
+shallow read).
 
 ## The week, and the lifts (1.0.8, 2026-09-24)
 

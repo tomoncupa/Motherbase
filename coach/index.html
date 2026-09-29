@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.14, 2026-09-26">
+<meta name="mb-version" content="1.0.15, 2026-09-30">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -518,13 +518,14 @@ const MAP = { set: 'cset', exercise: 'cex', phase: 'cphase', session: 'csession'
    in either app puts it in the same place, and a row is only written when
    what arrived is newer than what is here — dots Tom has already checked are
    never undone by an old file. */
-function takeCheckin(bag) {
+function takeCheckin(bag, to) {
+  to = to || 'one';
   const pid = String(bag.pid || ('n-' + slugOf(bag.name || 'client')));
   const cur = people()[pid];
   const who = { name: bag.name || (cur && cur.name) || 'Client', animal: bag.animal || (cur && cur.animal) || 'pikachu',
     unit: bag.unit || (cur && cur.unit) || 'kg', seen: new Date().toISOString() };
   if (Array.isArray(bag.fields) && bag.fields.length) who.fields = bag.fields;
-  if (!cur) Rec.set('cperson', null, pid, Object.assign({ fields: null, box: 'one', slot: freeSlot('one') }, who));
+  if (!cur) Rec.set('cperson', null, pid, Object.assign({ fields: null, box: to, slot: freeSlot(to) }, who));
   else Rec.patch('cperson', null, pid, who);
   let fresh = 0;
   bag.rows.forEach(r => {
@@ -547,15 +548,19 @@ function takeCheckin(bag) {
   if (bag.date) ciDay = bag.date;
   return { pid: pid, name: who.name, rows: bag.rows.length, fresh: fresh };
 }
-function takeFile(bag) {
-  if (bag && bag.kind === 'motherbase-checkin' && Array.isArray(bag.rows)) return takeCheckin(bag);
+/* `to` is the box a client new to COACH goes in: 1:1 for a file, ONLINE for a
+   send off the shelf, since only an online client logs and sends for
+   themselves (Tom, 2026-09-23: "My 1:1s don't track their own sets at ALL"). */
+function takeFile(bag, to) {
+  to = to || 'one';
+  if (bag && bag.kind === 'motherbase-checkin' && Array.isArray(bag.rows)) return takeCheckin(bag, to);
   if (!bag || bag.kind !== 'motherbase-train' || !bag.pid || !Array.isArray(bag.rows)) {
     throw new Error('That is not a file from TRAIN or CHECK IN. Ask for Send To Coach, in TRAIN’s Profile menu, or Send in CHECK IN.');
   }
   const pid = String(bag.pid);
   const cur = people()[pid];
   if (!cur) {
-    Rec.set('cperson', null, pid, { name: bag.name || 'Client', animal: bag.animal || 'pikachu', unit: bag.unit || 'kg', fields: null, seen: null, box: 'one', slot: freeSlot('one') });
+    Rec.set('cperson', null, pid, { name: bag.name || 'Client', animal: bag.animal || 'pikachu', unit: bag.unit || 'kg', fields: null, seen: null, box: to, slot: freeSlot(to) });
   } else {
     const ch = {};
     if (bag.name && !cur.name) ch.name = bag.name;
@@ -1046,10 +1051,12 @@ function bigShot(label, ph, date) {
 const progs = () => Rec.map('cprog');
 const clientProgKey = pid => 'c-' + pid;
 const blankDay = n => ({ name: 'Day ' + n, ex: [{ name: '', sets: [{ kg: null, r: null }] }] });
+/* `ed` is when COACH itself last wrote the days, so a newer `days` can be
+   told apart as FORGE's SEND (see `forgeOut`). */
 function saveProg(key, days, name) {
   const cur = Rec.get('cprog', null, key);
-  if (cur) Rec.patch('cprog', null, key, name == null ? { days: days } : { days: days, name: name });
-  else Rec.set('cprog', null, key, { name: name || 'Program', pid: key.indexOf('c-') === 0 ? key.slice(2) : null, days: days });
+  if (cur) Rec.patch('cprog', null, key, name == null ? { days: days, ed: Date.now() } : { days: days, name: name, ed: Date.now() });
+  else Rec.set('cprog', null, key, { name: name || 'Program', pid: key.indexOf('c-') === 0 ? key.slice(2) : null, days: days, ed: Date.now() });
 }
 /* A program FORGE built carries more than first sets: the week and plain
    name of each day, and beside each exercise its set count, RIR target,
@@ -1108,20 +1115,46 @@ function forgeView(el, key) {
     el.appendChild(box);
   });
 }
-function sendProg(key, label) {
+/* A client's program goes straight to their TRAIN, 2026-09-30: into their
+   account's tray, where their TRAIN picks it up the next time it opens
+   (cloud.js 0.2.0). That needs their account, which COACH learns from the
+   first thing they send signed in. Until then, and for a program that is not
+   a client's, it is the file as before. `dl` is when it last went. */
+function sendProg(key, label, pid) {
+  const p = pid && people()[pid];
+  if (!p || !window.Cloud || !Cloud.give) return saveFile(key, label, '');
+  if (!p.uid) return saveFile(key, label, esc(p.name || 'They') + ' has not sent anything signed in yet, so it is a file.');
+  const bag = fileOf(key);
+  Rec.patch('cprog', null, key, { dl: Date.now() });
+  return Cloud.give(p.uid, 'prog@' + key, 'program', bag, 'to ' + (p.name || 'the client')).then(r => {
+    const who = esc(p.name || 'the client') + '’s TRAIN';
+    if (!r.left) return UI.toast('Sent. <b>' + esc(bag.name) + '</b> opens in ' + who + ' next time it opens.');
+    if (r.why === 'offline') return UI.toast('No signal. It goes to ' + who + ' when the signal is back.');
+    if (r.why === 'signin') return UI.toast('Not signed in here. It goes to ' + who + ' once you sign in.', { bad: true });
+    if (r.why === 'refused') return UI.toast('The database refused it. Paste the rules from Settings, COACH. It tries again next open.', { bad: true });
+    Cloud.unpost(r.keys);
+    saveFile(key, label, esc(r.msg || 'It did not go.'));
+  }, e => saveFile(key, label, esc((e && e.message) || 'It did not go.')));
+}
+function saveFile(key, label, why) {
   const bag = fileOf(key), text = JSON.stringify(bag);
   const file = 'PROGRAM ' + (label || bag.name) + '.json';
+  const down = () => {
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = file;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+    UI.toast((why ? why + ' ' : '') + 'Saved as <b>' + esc(file) + '</b>. The client opens it with <b>Open A Program</b> in TRAIN.');
+  };
   let f = null;
   try { f = new File([text], file, { type: 'application/json' }); } catch (e) {}
   if (f && navigator.canShare && navigator.canShare({ files: [f] }) && Mobile.touch) {
-    navigator.share({ files: [f] }).then(() => UI.toast('Sent'), () => {});
+    if (why) UI.toast(why);
+    /* a share asked for after a wait has lost the tap that allows it */
+    navigator.share({ files: [f] }).then(() => UI.toast('Sent'), e => { if (e && e.name === 'NotAllowedError') down(); });
     return;
   }
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-  const a = document.createElement('a'); a.href = url; a.download = file;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 8000);
-  UI.toast('Saved as <b>' + esc(file) + '</b>. The client opens it with <b>Open A Program</b> in TRAIN.');
+  down();
 }
 /* The editor. Every field saves when it is left, so there is no Save
    button to forget, and a refresh straight after typing keeps it
@@ -1201,7 +1234,13 @@ function drawProg(col) {
     why.textContent = 'The weight and reps of each exercise’s first set. In TRAIN the rest of their sets fill from their last session.';
     card.appendChild(why);
     if (!Rec.get('cprog', null, key)) Rec.set('cprog', null, key, { name: (p.name || 'Client') + '’s program', pid: sel, days: [blankDay(1)] });
-    editor(card, key, { extra: [btn('SEND TO ' + String(p.name || 'CLIENT').toUpperCase(), 'go', () => sendProg(key, p.name))] });
+    /* where SEND puts it: their TRAIN once their account is known, a file before */
+    const cp = Rec.get('cprog', null, key) || {}, st = document.createElement('p');
+    st.className = 'empty'; st.style.marginBottom = 'var(--s-3)';
+    st.textContent = !p.uid ? 'SEND saves a file until ' + (p.name || 'they') + ' sends you something signed in.'
+      : cp.dl ? 'Sent to their TRAIN ' + Day.label(Day.calendar(+cp.dl)) + '.' : 'SEND puts it straight into their TRAIN.';
+    card.appendChild(st);
+    editor(card, key, { extra: [btn('SEND TO ' + String(p.name || 'CLIENT').toUpperCase(), 'go', () => sendProg(key, p.name, sel))] });
   } else if (editing) {
     const back = btn('‹ ALL PROGRAMS', '', () => { editing = ''; draw(); });
     back.style.marginBottom = 'var(--s-3)';
@@ -1211,7 +1250,7 @@ function drawProg(col) {
     if (p) extra.push(btn('USE FOR ' + String(p.name || 'CLIENT').toUpperCase(), '', () => {
       const src = Rec.get('cprog', null, editing);
       saveProg(clientProgKey(sel), JSON.parse(JSON.stringify(src.days || [])), null);
-      if (fg) Rec.patch('cprog', null, clientProgKey(sel), { name: src.name, weeks: src.weeks, from: editing });
+      if (fg) Rec.patch('cprog', null, clientProgKey(sel), { name: src.name, weeks: src.weeks, from: editing, ed: Date.now() });
       tab = 'first'; editing = ''; draw();
       UI.toast('<b>' + esc(src.name) + '</b> is now ' + esc(p.name) + '’s first sets');
     }));
@@ -1297,19 +1336,39 @@ function shelfSay(n, why) {
   b.title = why || (n ? n + ' waiting' : 'Nothing waiting');
 }
 
+/* Since cloud.js 0.2.0 (2026-09-30) a client's sends sit in an in-tray, a
+   parcel each: a session is `train@1`, a check-in is `ci-<date>@data` for
+   the answers and one `ci-<date>@<pose>` per photo. One SEND is one group,
+   the part before the @, and that is what the button counts.
+
+   Photos live on the PC. Tom, 2026-09-24: "Client photos live on the PC."
+   Live sync never carries a photo, so one taken in on a phone would stay on
+   the phone. COACH on an iPhone, iPad or Android phone takes the training
+   and the answers and leaves the photos in the tray for COACH on the PC,
+   and says how many it left. It knows a photo by its name, so it never
+   downloads one it is leaving. */
+const photosHere = () => !(Mobile.ios || Mobile.android);
+const isPhoto = p => !p.legacy && /^ci-/.test(p.grp || '') && !/@data$/.test(p.id || '');
+const sendsIn = l => { const s = {}; l.forEach(p => { s[p.from + '|' + (p.legacy ? '' : p.grp)] = 1; }); return Object.keys(s).length; };
+
 /* `loud` is a press. Quiet is the look on load, which may only change the
    button: a shelf that cannot be read on a device with no signal is not an
-   error worth a message nobody asked for. */
+   error worth a message nobody asked for. The quiet look reads names only. */
 function lookShelf(loud) {
   if (!window.Cloud || !Cloud.waiting) {
     shelfSay(0, 'Live sync is not set up here');
     if (loud) UI.toast('Live sync is not set up on this device', { bad: true });
     return Promise.resolve();
   }
-  return Cloud.waiting().then(list => {
-    shelfSay(list.length);
-    if (!list.length) { if (loud) UI.toast('Nothing waiting'); return; }
-    if (loud) return takeShelf(list);
+  const names = Cloud.list ? Cloud.list() : Cloud.waiting();
+  return names.then(list => {
+    const here = photosHere();
+    const want = list.filter(p => here || !isPhoto(p)), left = list.length - want.length;
+    /* on a phone, photos waiting for the PC are not something to press for */
+    shelfSay(sendsIn(want), left ? left + (left === 1 ? ' photo waits' : ' photos wait') + ' for COACH on the PC' : '');
+    if (!loud) return;
+    if (!want.length) { UI.toast(left ? left + (left === 1 ? ' photo waits' : ' photos wait') + ' for COACH on the PC' : 'Nothing waiting'); return; }
+    return takeShelf(want, left);
   }, e => {
     const m = (e && e.message) || 'the shelf could not be read';
     shelfSay(0, m);
@@ -1317,25 +1376,37 @@ function lookShelf(loud) {
   });
 }
 
-function takeShelf(list) {
-  let took = 0, fresh = 0, bad = 0, last = null;
-  return list.reduce((p, parcel) => p.then(() => {
+/* Whose account sent it. A client's programs go back to their account's
+   tray, `drop/client/<uid>`, and a send is the only place COACH learns it. */
+function tie(pid, uid) {
+  const p = pid && uid && people()[pid];
+  if (p && p.uid !== uid) Rec.patch('cperson', null, pid, { uid: uid });
+}
+
+function takeShelf(list, left) {
+  let fresh = 0, bad = 0, last = null;
+  const grps = {};
+  return list.reduce((p, n) => p.then(() => (n.body !== undefined ? Promise.resolve(n) : Cloud.fetch(n.from, n.id)).then(parcel => {
+    if (!parcel) return;   /* taken on another device a moment ago */
     let res = null;
-    try { res = parcel.body ? takeFile(parcel.body) : null; } catch (e) { res = null; }
+    try { res = parcel.body ? takeFile(parcel.body, 'online') : null; } catch (e) { res = null; }
     if (!res) { bad++; return; }
-    took++; fresh += res.fresh; last = res;
-    return Cloud.took(parcel.from).catch(() => {});
-  }), Promise.resolve()).then(() => {
+    grps[parcel.from + '|' + (parcel.legacy ? '' : parcel.grp)] = 1; fresh += res.fresh; last = res;
+    tie(res.pid, parcel.from);
+    return Cloud.took(parcel.from, parcel.legacy ? undefined : parcel.id).catch(() => {});
+  }, () => { bad++; })), Promise.resolve()).then(() => {
+    const took = Object.keys(grps).length;
     if (last) {
       sel = last.pid; Rec.setting(APP.id, 'sel', sel);
       const who = people()[sel]; if (who) { box = who.box || 'one'; Rec.setting(APP.id, 'box', box); }
     }
-    shelfSay(0);
     const parts = [];
     if (took) parts.push('<b>' + took + '</b> in, ' + (fresh ? fresh + ' new rows' : 'nothing new'));
-    if (bad) parts.push(bad + ' could not be read and was left on the shelf');
+    if (bad) parts.push(bad + ' could not be read and ' + (bad === 1 ? 'was' : 'were') + ' left on the shelf');
+    if (left) parts.push(left + (left === 1 ? ' photo waits' : ' photos wait') + ' for COACH on the PC');
     UI.toast(parts.join('. ') || 'Nothing taken', { bad: !took });
     draw();
+    return lookShelf(false);
   });
 }
 document.getElementById('sends').onclick = () => lookShelf(true);
@@ -1364,7 +1435,23 @@ function settings() {
         else UI.toast(esc(who.uid));
       };
     }, e => { idb.textContent = 'not signed in'; idb.title = (e && e.message) || ''; });
-    pane.appendChild(UI.row('Your account id', 'Goes in the drop rules in Firebase, in both places. See CLOUD.md', idb));
+    pane.appendChild(UI.row('Your account id', 'The rules below already have it in', idb));
+
+    /* The whole rules block with that id already in it, since cloud.js
+       0.2.0, so nothing is edited by hand on the way to Firebase. */
+    const rb = document.createElement('button');
+    rb.type = 'button'; rb.className = 'mb-btn mb-press mb-tap';
+    rb.textContent = 'reading…'; rb.disabled = true;
+    if (window.Cloud && Cloud.who && Cloud.rules) Cloud.who().then(who => {
+      rb.textContent = 'COPY RULES'; rb.disabled = false;
+      rb.onclick = () => {
+        const text = Cloud.rules(who.uid);
+        const ok = () => { rb.textContent = 'COPIED'; setTimeout(() => { rb.textContent = 'COPY RULES'; }, 1500); };
+        if (navigator.clipboard) navigator.clipboard.writeText(text).then(ok, () => UI.toast('The clipboard refused it', { bad: true }));
+        else UI.toast('The clipboard refused it', { bad: true });
+      };
+    }, () => { rb.textContent = 'not signed in'; });
+    pane.appendChild(UI.row('Database rules', 'Firebase, Realtime Database, Rules: paste over everything, then Publish', rb));
 
     const look = document.createElement('button');
     look.type = 'button'; look.className = 'mb-btn mb-press mb-tap'; look.textContent = 'CHECK NOW';
@@ -1419,9 +1506,28 @@ Rec.on(rows => {
   }, 400);
 });
 
+/* FORGE's SEND puts a program on a client, their `cprog c-<pid>` with
+   `from: 'f-<id>'`, and saves a file, and has no way of its own to reach
+   their TRAIN. So it goes on from here: a client whose account COACH knows,
+   whose program came from FORGE and whose days are newer than both COACH's
+   own last edit (`ed`) and the last time it went (`dl`), gets it in their
+   tray. Wherever COACH is open, on any of Tom's devices, once. */
+function forgeOut() {
+  if (!window.Cloud || !Cloud.give || !Cloud.ready || !Cloud.ready() || !Rec.hydrated) return;
+  Object.entries(people()).forEach(([pid, p]) => {
+    const key = clientProgKey(pid), v = p.uid && Rec.get('cprog', null, key);
+    if (!v || String(v.from || '').indexOf('f-') !== 0) return;
+    if (!(fieldAt('cprog', key, 'days') > Math.max(+v.ed || 0, +v.dl || 0) + 1500)) return;
+    Rec.patch('cprog', null, key, { dl: Date.now() });
+    Cloud.give(p.uid, 'prog@' + key, 'program', fileOf(key), 'to ' + (p.name || 'the client')).then(r => {
+      UI.toast('<b>' + esc(v.name || 'Program') + '</b> ' + (r.left ? 'waits to go to ' : 'went to ') + esc(p.name || 'the client') + '’s TRAIN');
+    }, () => {});
+  });
+}
+
 let rt = null;
-Rec.on(() => { clearTimeout(rt); rt = setTimeout(draw, 60); });
-Rec.ready(draw);
+Rec.on(() => { clearTimeout(rt); rt = setTimeout(() => { draw(); forgeOut(); }, 60); });
+Rec.ready(() => { draw(); setTimeout(forgeOut, 2500); });
 draw();
 /* After the first paint, never before it: the shelf needs the network and a
    paint must not. */
