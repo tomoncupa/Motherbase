@@ -608,6 +608,26 @@ session menu under Share As Text as well as on Profile, because the moment a
 client would send is the session they just finished.
 (`HISTORY.md: Send To Coach, over the shelf`)
 
+## Sends through the outbox, and programs from the coach (1.0.41, 2026-09-30)
+
+cloud.js 0.2.0 (`coach/CLAUDE.md`, Sends both ways). What changed here:
+
+- **Send To Coach posts to the outbox** (`Cloud.post`): the log goes as
+  `train@1`, `train@2`, each under 1.9 million characters
+  (`TRAIN.coachParts`), into the coach's in-tray. With no signal it waits on
+  the phone and goes by itself when the signal is back, from any app of the
+  suite that is open. Nobody signed in gets SIGN IN TO SEND, with SAVE A FILE
+  beside it (`TRAIN.signInToSend`); the database refusing it keeps it queued
+  and says so. The file is left for a folder copy and a blocked Firebase, as
+  hard constraint 4 says. Still the whole log, still only on a press.
+- **A program the coach sends lands on its own** (`TRAIN.fromCoach`): 2.5
+  seconds after boot, and when the app comes back to the front at most every
+  five minutes, TRAIN reads its own tray and runs each program through
+  `takeProgram`, the same as Open A Program, then clears it. Never with
+  `CLIENT` set: inside COACH the tray would be Tom's.
+
+Watched against a stand-in database, not the real one, and not on a phone.
+
 ## Opened straight into the import
 
 `&import=1` on the address opens the import panel once, after `boot` and after
