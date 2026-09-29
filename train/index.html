@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.38, 2026-09-26">
+<meta name="mb-version" content="1.0.39, 2026-09-29">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -33,7 +33,9 @@
    affected" — until then only three were, and a unit changed on a client
    changed his own TRAIN. A setting the client has never had reads Tom's,
    so a new client starts on his setup; three never do (whether TRAIN has
-   greeted them, the record rule, a running rest timer). Theme and sound
+   greeted them, the record rule, a running rest timer), and nor does a lift
+   left out of a picture (`share.<id>`), because the same exercise id is
+   another lift in another log. Theme and sound
    are kept by the device per app, outside the store, and stay shared.
    Rec.patch, map, keys, count and setting all go through the calls
    replaced here, so they follow without being touched. */
@@ -54,7 +56,7 @@
     if (T[type]) return [T[type], pre + (key == null ? '' : key)];
     if (type === 'setting' && String(key).indexOf('train.') === 0) {
       var theirs = 'train.' + pre + key.slice(6);
-      if (!read || MINE[key] || raw.row('setting', null, theirs)) return [type, theirs];
+      if (!read || MINE[key] || key.indexOf('train.share.') === 0 || raw.row('setting', null, theirs)) return [type, theirs];
     }
     return [type, key];
   }
@@ -4876,12 +4878,12 @@ TRAIN.recordsFor = function (exId, range) {
    Sets can be fractional now. That is the honest shape: pretending a pull-up
    gives biceps a whole set or none of one is the thing that made the number
    not mean anything. */
-TRAIN.breakdown = function (from, to, by) {
+TRAIN.breakdown = function (from, to, by, off) {
   var exs = TRAIN.exercises(), cats = TRAIN.cats(), out = {}, days = {};
   Object.keys(TRAIN.idx.byDate).forEach(function (d) {
     if (d < from || d > to) return;
     TRAIN.idx.byDate[d].forEach(function (s) {
-      if (s.warm || !TRAIN.counts(s)) return;
+      if (s.warm || !TRAIN.counts(s) || (off && off[s.ex])) return;
       var ex = exs[s.ex];
       var vol = (s.kg || 0) * (s.r || 0);
       var put = function (key, share) {
@@ -5533,9 +5535,15 @@ TRAIN.showDelta = function (kg, ex) {
   return (kg >= 0 ? '+' : '−') + t;
 };
 
+/* A lift switched off on the Share Picture panel stays out of the text too,
+   and the toast names it, so what went out is never a surprise to him. */
 TRAIN.shareWorkout = function () {
-  var date = TRAIN.date, groups = TRAIN.dayGroups(date);
-  if (!groups.length) return UI.toast('There is no session to share', { bad: true });
+  var date = TRAIN.date, all = TRAIN.dayGroups(date);
+  if (!all.length) return UI.toast('There is no session to share', { bad: true });
+  var groups = all.filter(function (g) { return !TRAIN.sharedOut(g.ex); });
+  var left = all.filter(function (g) { return TRAIN.sharedOut(g.ex); })
+    .map(function (g) { return UI.esc(g.def.name); }).join(', ');
+  if (!groups.length) return UI.toast('Every lift in this session is switched off in Share Picture', { bad: true });
   var lines = [Day.label(date)];
   var sess = Rec.get('session', date, '') || {};
   if (sess.start && sess.end) lines.push(clockOf(sess.start) + ' - ' + clockOf(sess.end) + '  ' + fmtLen(sess.start, sess.end));
@@ -5550,10 +5558,10 @@ TRAIN.shareWorkout = function () {
     lines.push('');
   });
   var text = lines.join('\n');
-  var done = function () { UI.toast('Session copied to the clipboard'); };
+  var done = function () { UI.toast('Session copied to the clipboard' + (left ? '. Left out: ' + left : '')); };
   if (navigator.share) {
     navigator.share({ title: 'Training - ' + Day.label(date), text: text })
-      .catch(function () { copyText(text, done); });
+      .then(function () { if (left) UI.toast('Left out: ' + left); }, function () { copyText(text, done); });
   } else copyText(text, done);
 };
 function copyText(text, then) {
@@ -8576,13 +8584,14 @@ function deltaChip(d) {
   return '<span class="dl' + (d.dir > 0 ? ' up' : d.dir < 0 ? ' down' : '') + '">' + UI.esc(d.text) + '</span>';
 }
 
-TRAIN.dayCompare = function (date) {
+TRAIN.dayCompare = function (date, off) {
   var groups = TRAIN.dayGroups(date);
   if (!groups.length) return null;
   var ctx = TRAIN.compareCtx(date);
   var out = { byEx: {}, up: 0, down: 0, same: 0, fresh: 0, marks: [], vs: null, vsDays: {}, whyOf: {},
               reps: 0, pctSum: 0, pctN: 0 };
   groups.forEach(function (g) {
+    if (off && off[g.ex]) return;
     var row = { vs: TRAIN.vsFor(date, g.ex, ctx), bySet: {}, up: 0, down: 0, same: 0, reps: 0, pctSum: 0, pctN: 0 };
     out.byEx[g.ex] = row;
     if (!row.vs) return;
@@ -8645,9 +8654,10 @@ TRAIN.recordHits = function (exId, date) {
     });
   });
 };
-TRAIN.sessionRecords = function (date) {
+TRAIN.sessionRecords = function (date, off) {
   var out = [];
   TRAIN.dayGroups(date).forEach(function (g) {
+    if (off && off[g.ex]) return;
     TRAIN.recordHits(g.ex, date).forEach(function (h) {
       out.push({ ex: g.ex, name: g.def.name, s: h.s, all: h.all, block: h.block });
     });
@@ -8698,13 +8708,13 @@ function musclesHtml(rows, week) {
         '<b>' + r.sets + '</b>' + (week ? '<em>' + r.workouts + '×</em>' : '') + '</div>';
     }).join('') + '</div></div>';
 }
-function muscleRows(from, to) {
-  return TRAIN.breakdown(from, to, 'category').rows
+function muscleRows(from, to, off) {
+  return TRAIN.breakdown(from, to, 'category', off).rows
     .filter(function (r) { return r.sets > 0; })
     .sort(function (a, b) { return b.sets - a.sets || b.workouts - a.workouts; });
 }
-TRAIN.sessionStats = function (date) {
-  var sets = TRAIN.setsOn(date).filter(function (s) { return !s.warm && TRAIN.counts(s); });
+TRAIN.sessionStats = function (date, off) {
+  var sets = TRAIN.setsOn(date).filter(function (s) { return !s.warm && TRAIN.counts(s) && !(off && off[s.ex]); });
   var reps = 0, ex = {};
   sets.forEach(function (s) { reps += s.r || 0; ex[s.ex] = 1; });
   var sess = Rec.get('session', date, '') || {};
@@ -8718,18 +8728,19 @@ TRAIN.sessionStats = function (date) {
    Tom: "make it aesthetic, this is something we might want to share on
    social media." What it says is fact, never praise: what was lifted, how
    each set did against last time, which muscles it went to, and any record
-   set. */
-TRAIN.recapCard = function (date, cmp) {
-  var st = TRAIN.sessionStats(date);
+   set. `off` holds lifts left out of a shared picture: the card is drawn as
+   if they were never in the session. */
+TRAIN.recapCard = function (date, cmp, off) {
+  var st = TRAIN.sessionStats(date, off);
   if (!st.sets) return null;
-  if (cmp === undefined) cmp = TRAIN.dayCompare(date);
+  if (cmp === undefined) cmp = TRAIN.dayCompare(date, off);
   var U = TRAIN.unit(), ph = TRAIN.phaseOn(date), esc = UI.esc;
   /* Totals are only set against another day when that day is this session
      again: named the same, picked, copied from, or the one day every exercise
      was measured against. Exercises measured against three different days
      have no single session to total against. */
   var one = cmp && cmp.vs && (Object.keys(cmp.vsDays).length === 1 || cmp.whyOf[cmp.vs] !== 'last');
-  var vs = one ? TRAIN.sessionStats(cmp.vs) : null;
+  var vs = one ? TRAIN.sessionStats(cmp.vs, off) : null;
   var when = Day.label(date, { day: 'numeric', month: 'short', year: 'numeric' });
   var volF = function (kg) { return Math.round(TRAIN.toUnit(kg, U)).toLocaleString(); };
   var num = function (n) { return Math.round(n).toLocaleString(); };
@@ -8771,9 +8782,9 @@ TRAIN.recapCard = function (date, cmp) {
       '<div class="ticks">' + cmp.marks.map(function (k) { return '<i class="' + k + '"></i>'; }).join('') + '</div></div>';
   }
 
-  h += musclesHtml(muscleRows(date, date), false);
+  h += musclesHtml(muscleRows(date, date, off), false);
 
-  var recs = TRAIN.sessionRecords(date);
+  var recs = TRAIN.sessionRecords(date, off);
   if (recs.length) {
     h += '<div><h3>RECORDS</h3>' + recs.map(function (x) {
       return '<div class="rec">' + ico('record') +
@@ -8792,19 +8803,42 @@ TRAIN.recapCard = function (date, cmp) {
    shared/io.js): the picture, its style and size already set to the last ones
    used, and one SHARE. `build` makes a fresh card each time a choice changes.
    Drawn at phone width, so it looks the same whatever the window. The TRAIN
-   mark comes off the picture: Tom, 2026-09-14, "no small branding". */
-function shareCard(build, name) {
+   mark comes off the picture: Tom, 2026-09-14, "no small branding".
+   `options` are the panel's extra switches; `build` gets their state, or
+   null for the check that there is anything to share at all. */
+function shareCard(build, name, options) {
   if (!window.IO || !IO.share) return UI.toast('Pictures are not available here', { bad: true });
-  if (!build()) return UI.toast('There is nothing to share', { bad: true });
-  IO.share({ app: APP.id, name: name, width: 390, build: function () {
-    var c = build(), mk = c && c.querySelector('.mark');
+  if (!build(null)) return UI.toast('There is nothing to share', { bad: true });
+  IO.share({ app: APP.id, name: name, width: 390, options: options, build: function (o) {
+    var c = build(o), mk = c && c.querySelector('.mark');
     if (mk) mk.remove();
     return c;
   } });
 }
+/* Which of a day's lifts go out when it is shared. Tom, 2026-09-29: "I don't
+   want to share lifts im weaker in." One switch per lift on the Share panel,
+   on until he turns it off, kept per lift as `share.<exercise id>`, so a lift
+   left out once stays out of every later picture and text until he turns it
+   back on. Only a lift with a working set that counts gets a switch. */
+TRAIN.shareLifts = function (date) {
+  return TRAIN.dayGroups(date).filter(function (g) {
+    return g.sets.some(function (s) { return !s.warm && TRAIN.counts(s); });
+  });
+};
+TRAIN.sharedOut = function (exId) {
+  var v = Rec.setting(APP.id, 'share.' + exId);
+  return v != null && v !== true && +v !== 1;
+};
 TRAIN.shareRecap = function (date) {
   date = date || TRAIN.date;
-  shareCard(function () { return TRAIN.recapCard(date); }, 'train-' + date);
+  var lifts = TRAIN.shareLifts(date);
+  shareCard(function (o) {
+    var off = {};
+    if (o) lifts.forEach(function (g) { if (!o['share.' + g.ex]) off[g.ex] = 1; });
+    return TRAIN.recapCard(date, undefined, off);
+  }, 'train-' + date, lifts.map(function (g) {
+    return { id: 'share.' + g.ex, label: g.def.name, def: 1 };
+  }));
 };
 
 /* ── the week ──

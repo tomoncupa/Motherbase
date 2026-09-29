@@ -103,7 +103,8 @@ describe the gym, not the training.
 `repCounts` `exSort` `catSort` `plates` `bars` `seen` `prRule` (2 once records
 have been worked out under the rule that keeps split sets apart) `sortSeen`
 `sortSkip` (Sort Into Groups: offered once, and the moves he switched off)
-`rangePrint` (the Profile painting's print, written only when he switches; `rangeBase` is left over from 1.0.37 and read by nothing since the painting became one picture in 1.0.38).
+`rangePrint` (the Profile painting's print, written only when he switches; `rangeBase` is left over from 1.0.37 and read by nothing since the painting became one picture in 1.0.38)
+`share.<exercise id>` (0 when that lift is left out of what he shares; written only by its switch on the Share Picture panel, 1.0.39).
 
 **Reps may carry a fraction** (1.0.37, Tom: "let it add fractions for reps"):
 a half rep is 8.5. Every reps box uses the keypad with a point, the steppers
@@ -161,7 +162,8 @@ Rules, each with the reason it exists:
 - **Every setting changed there is the client's** (1.0.36, Tom: "I dont want
   my train to be affected"), namespaced `train.<pid>|<name>`. One the client
   has never had reads Tom's, so a new client starts on his setup; `seen`,
-  `prRule` and `rest` never do. Theme and sound are kept by the device per
+  `prRule`, `rest` and any `share.<id>` never do (an exercise id is another
+  lift in another log: a client's FitNotes `fn12` is not his). Theme and sound are kept by the device per
   app, outside the store, and are still shared. Watched: LBS on a client,
   KG still in his own TRAIN.
 - **A new set's key gets `k-`** so COACH bills it as a session Tom delivered.
@@ -327,6 +329,19 @@ process". The picture is always a 1080 x 1920 story, the card drawn at 390px and
 clear of the story's own buttons, with the TRAIN mark taken off ("no small
 branding"). It is on the session card, the week, Profile, an exercise's Personal
 Records, and GRAPH. **Not watched on the iPhone.**
+
+**A lift can be left out of what he shares** (1.0.39). Tom, 2026-09-29: *"I
+don't want to share lifts im weaker in."* The session's Share panel has one
+switch per lift under Style and Size (`TRAIN.shareRecap`, IO.share's
+`options`). Off, the picture is drawn as if that lift was never in the
+session: totals, set by set, sets per muscle and records all leave it out,
+and the day it is compared with leaves it out too, so the totals stay like
+for like. Time stays whole. The switch is kept per lift, so a lift left out
+once stays out of every later session's picture until he turns it back on.
+Share As Text follows the same switches and the toast names what it left
+out. The card on the log is his own view and always shows everything. The
+week, Profile, records and GRAPH pictures do not follow the switches: the
+first two name no lift, and the last two are a lift he picked to share.
 
 ### The week
 
