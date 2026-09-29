@@ -343,6 +343,19 @@ out. The card on the log is his own view and always shows everything. The
 week, Profile, records and GRAPH pictures do not follow the switches: the
 first two name no lift, and the last two are a lift he picked to share.
 
+**A lift that went down is never shared** (1.0.40). Tom, 2026-09-30: *"I
+never want to share a lift im weaker in, no one does."* `TRAIN.wentDown`
+leaves it out of the session picture and Share As Text for everyone, the
+client build too, with no switch and none offered: down is its sets'
+average estimated-1RM change at −0.05% or under; with no 1RM, fewer reps;
+with neither, more sets down than up. Shared, the card (`recapCard(...,
+share)`) keeps "N of M sets stronger", draws a down square as a same one,
+drops the weaker count and every minus beside a total or on the gain line,
+and leaves out SET BY SET when nothing got stronger. LIFTS lists each lift
+with its top set and the first gain of: top weight, reps at that weight,
+average % (`TRAIN.liftLine`). Share As Text is working sets only: no
+warmups, no comments.
+
 ### The week
 
 Analysis opens on WEEKLY: sessions, sets, reps and volume, then sets per muscle
