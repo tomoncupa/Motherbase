@@ -1,4 +1,5 @@
-/* shared/cloud.js — 0.1.6 —Firebase as a SECOND sync, beside the Google Sheet.
+/* shared/cloud.js — 0.2.0 — Firebase as a SECOND sync, beside the Google Sheet,
+   and since 0.2.0 the trays a client and the coach send each other things by.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
    replacement and it is not allowed to become one. The sheet keeps doing
@@ -279,6 +280,8 @@ function signIn() {
     if (!u) throw new Error('signed in, but no account came back');
     cfg.uid = u.uid; cfg.email = u.email || ''; cfg.on = 1; cfg.lost = ''; csave();
     note('', 1);
+    /* anything that waited for a sign-in goes now */
+    setTimeout(autoFlush, 500);
     return start();
   });
 }
@@ -369,13 +372,18 @@ function put(kind, bag) {
    it. */
 function shelf() {
   return account().then(function (me) {
-    return me.db.ref(SHELF).once('value');
-  }).then(function (snap) {
+    /* the 0.1 shelf, one parcel per client, and the 0.2 in-tray, any number */
+    return Promise.all([me.db.ref(SHELF).once('value'), me.db.ref(INTRAY).once('value')]);
+  }).then(function (snaps) {
     var out = [];
-    snap.forEach(function (c) {
+    snaps[0].forEach(function (c) {
       var v = c.val() || {}, body = null;
       try { body = JSON.parse(v.data || 'null'); } catch (e) {}
-      out.push({ from: c.key, kind: v.kind || '', at: v.at || '', by: v.by || '', n: v.n || 0, body: body });
+      out.push({ from: c.key, id: '', grp: c.key, legacy: 1, kind: v.kind || '', at: v.at || '', by: v.by || '', n: v.n || 0, body: body });
+    });
+    snaps[1].forEach(function (c) {
+      var v = c.val() || {};
+      Object.keys(v).forEach(function (k) { out.push(unpack(c.key, dec(k), v[k] || {})); });
     });
     out.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
     return out;
@@ -386,8 +394,333 @@ function shelf() {
   });
 }
 
-function clear(from) {
-  return account().then(function (me) { return me.db.ref(SHELF + '/' + from).remove(); });
+function clear(from, id) {
+  return account().then(function (me) {
+    return me.db.ref(id ? INTRAY + '/' + from + '/' + enc(id) : SHELF + '/' + from).remove();
+  });
+}
+
+/* ── the in-trays and the outbox, 0.2.0 (2026-09-30) ──
+
+   Tom, 2026-09-30: "Ok lets fix that", on the plan settled 2026-09-24
+   (coach/CLAUDE.md, Client files): check-ins over the shelf, one parcel per
+   photo; programs back into a client's TRAIN; a send with no signal waits on
+   the phone and goes when the signal is back.
+
+   The shelf above holds ONE parcel per client, so a check-in sent after a
+   session would have replaced the session. So there are two trays now, one
+   each way, and a tray holds any number of parcels, each under its own id:
+
+     drop/in/<client uid>/<id>       a client's parcels, for the coach
+     drop/client/<client uid>/<id>   the coach's parcels, for that client
+
+   The rules (`rules()` below, and CLOUD.md) are what keep them honest: a
+   client writes only under their own uid in `in`, and only the coach reads
+   it; a client reads only their own `client` tray, and only they and the
+   coach write there. A client never reads anything of Tom's.
+
+   An id is the thing it carries, `train@1` or `ci-2026-09-30@front`, so
+   sending the same thing again REPLACES its parcel rather than adding one,
+   and the part before the @ is the send it belongs to (`grp`), which is what
+   COACH counts. `drop/coach` stays readable and clearable, for parcels left
+   there by 0.1, and `send` still writes it; no app calls `send` now.
+
+   The outbox is why a send can wait. Firebase holds a write made with no
+   signal only while the page stays open, and a phone closes pages. So a send
+   goes into IndexedDB first, `motherbase-outbox`, one entry per parcel, and
+   is taken out only once the database has confirmed it. It is this device's,
+   not the person's, the same reason the config above is kept in
+   localStorage and not in a row: rows travel to other devices, and two
+   devices each sending one parcel is one parcel twice. It lives beside the
+   store rather than in it because a queued photo is 300KB and the store's
+   fast half is already full on one PC. It empties itself when the page
+   opens, when the phone says it is online again, and when an app comes back
+   to the front, from the top document only.                                */
+var INTRAY = 'drop/in';
+var OUTTRAY = 'drop/client';
+var OBX = 'motherbase-outbox', OBS = 'q';
+var obxP = null;
+function obx() {
+  if (obxP) return obxP;
+  obxP = new Promise(function (res, rej) {
+    if (!g.indexedDB) { rej(new Error('this browser has nowhere to keep a send')); return; }
+    var r = g.indexedDB.open(OBX, 1);
+    r.onupgradeneeded = function () { r.result.createObjectStore(OBS, { keyPath: 'k' }); };
+    r.onsuccess = function () { res(r.result); };
+    r.onerror = function () { rej(r.error || new Error('the outbox would not open')); };
+    r.onblocked = function () { rej(new Error('the outbox is held open by an older copy of the app')); };
+  }).catch(function (e) { obxP = null; throw e; });
+  return obxP;
+}
+/* One transaction, resolved when it has COMPLETED, never when a request
+   merely succeeded: a send is only in the outbox once it is on disk. */
+function obxRun(mode, fn) {
+  return obx().then(function (db) {
+    return new Promise(function (res, rej) {
+      var tx = db.transaction(OBS, mode), st = tx.objectStore(OBS), out = { v: null };
+      fn(st, out);
+      tx.oncomplete = function () { res(out.v); };
+      tx.onerror = tx.onabort = function () { rej(tx.error || new Error('the outbox did not save')); };
+    });
+  });
+}
+function qAll() {
+  return obxRun('readonly', function (st, out) {
+    var r = st.getAll(); r.onsuccess = function () { out.v = r.result || []; };
+  });
+}
+function qPut(items) { return obxRun('readwrite', function (st) { items.forEach(function (it) { st.put(it); }); }); }
+function qDel(keys) { return obxRun('readwrite', function (st) { keys.forEach(function (k) { st.delete(k); }); }); }
+function qPatch(keys, ch) {
+  return obxRun('readwrite', function (st) {
+    keys.forEach(function (k) {
+      var r = st.get(k);
+      r.onsuccess = function () { if (r.result) st.put(Object.assign(r.result, ch)); };
+    });
+  });
+}
+
+function trayPath(to, from, id) {
+  return (to === 'coach' ? INTRAY + '/' + from : OUTTRAY + '/' + to) + '/' + enc(id);
+}
+function online() { return !g.navigator || g.navigator.onLine !== false; }
+/* The database's own word on whether it can hear this device, waited for a
+   few seconds, because it is false for a moment after the library loads.
+   Writing without it is how a press sits spinning for as long as the phone
+   has no signal. A stand-in with no `.info` is taken at its word. */
+function heard(db, ms) {
+  return new Promise(function (res) {
+    var r, done = false, t;
+    try { r = db.ref('.info/connected'); } catch (e) { res(true); return; }
+    if (!r || typeof r.on !== 'function') { res(true); return; }
+    var f = function (s) {
+      if (done || !(s && s.val())) return;
+      done = true; clearTimeout(t); try { r.off('value', f); } catch (e) {} res(true);
+    };
+    t = setTimeout(function () { if (done) return; done = true; try { r.off('value', f); } catch (e) {} res(false); }, ms);
+    r.on('value', f);
+  });
+}
+function within(p, ms) {
+  return new Promise(function (res, rej) {
+    var t = setTimeout(function () { rej(new Error('no answer from the database')); }, ms);
+    p.then(function (v) { clearTimeout(t); res(v); }, function (e) { clearTimeout(t); rej(e); });
+  });
+}
+/* What stopped a send, as one word the apps can act on:
+     offline   no signal, or the database did not answer. It waits.
+     signin    nobody is signed in on this device. It waits.
+     blocked   there is signal and the Firebase library still would not load.
+     refused   the database said no: the rules are not the ones in CLOUD.md.
+     file      opened from a folder, which cannot sign in at all.        */
+function whyOf(e) {
+  var m = (e && e.message) || '';
+  if (/folder/.test(m)) return 'file';
+  if (/not signed in/.test(m)) return 'signin';
+  if (/permission|refused/i.test(m)) return 'refused';
+  if (/Firebase library|too slow/.test(m)) return online() ? 'blocked' : 'offline';
+  return 'offline';
+}
+
+/* Put parcels in the outbox and try to send them now. `list` is
+   [{to, id, kind, bag, say}], `to` 'coach' or a client's uid. Resolves with
+   {sent, left, why, msg}: `left` are still waiting, and why is one of the
+   words above, or '' when everything went. Refuses only a parcel that can
+   never go, one over the ceiling, and then queues none of the list. */
+function post(list) {
+  var at = new Date().toISOString(), items = [];
+  for (var i = 0; i < list.length; i++) {
+    var x = list[i], size = 0;
+    try { size = JSON.stringify(x.bag).length; } catch (e) { return Promise.reject(new Error('that could not be packed')); }
+    if (size > PARCEL) return Promise.reject(new Error('that is too big to send this way'));
+    var to = x.to || 'coach', id = String(x.id);
+    items.push({ k: to + '|' + id, to: to, id: id, grp: id.split('@')[0], kind: String(x.kind || ''),
+      n: (x.bag && x.bag.rows && x.bag.rows.length) || 0, bag: x.bag, at: at, size: size, say: x.say || '' });
+  }
+  if (isFile()) return Promise.resolve({ sent: 0, left: items.length, why: 'file', msg: 'this page was opened from a folder', keys: [] });
+  return qPut(items).then(function () {
+    var mine = {}; items.forEach(function (it) { mine[it.k] = 1; });
+    return flush().then(function (r) {
+      var left = r.leftKeys.filter(function (k) { return mine[k]; });
+      return { sent: items.length - left.length, left: left.length, why: left.length ? r.why : '', msg: r.msg, keys: left };
+    });
+  });
+}
+
+var flushQ = Promise.resolve();
+function flush() {
+  var p = flushQ.then(runFlush, runFlush);
+  flushQ = p.catch(function () {});
+  return p;
+}
+function runFlush() {
+  return qAll().then(function (items) {
+    var keys = items.map(function (it) { return it.k; });
+    var stop = function (e, sent) {
+      var why = whyOf(e), left = keys.filter(function (k) { return sent.indexOf(k) < 0; });
+      if (left.length) qPatch(left, { waited: 1 }).catch(function () {});
+      return { sent: sent.length, left: left.length, leftKeys: left, why: why, msg: (e && e.message) || '' };
+    };
+    if (!items.length) return { sent: 0, left: 0, leftKeys: [], why: '', msg: '' };
+    if (!online()) return stop(new Error('no signal'), []);
+    return account().then(function (me) {
+      return heard(me.db, 8000).then(function (ok) {
+        if (!ok) return stop(new Error('no signal'), []);
+        items.sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : 1; });
+        var sent = [], waited = [], fail = null;
+        return items.reduce(function (p, it) {
+          return p.then(function () {
+            if (fail) return;
+            var data = JSON.stringify(it.bag);
+            var v = { kind: it.kind, at: it.at, by: me.email || '', n: it.n || 0, grp: it.grp, data: data };
+            return within(me.db.ref(trayPath(it.to, me.uid, it.id)).set(v), 90000).then(function () {
+              sent.push(it.k); if (it.waited) waited.push(it);
+              return qDel([it.k]);
+            }, function (e) { fail = e; });
+          });
+        }, Promise.resolve()).then(function () {
+          if (waited.length) told(waited);
+          return fail ? stop(fail, sent) : { sent: sent.length, left: 0, leftKeys: [], why: '', msg: '' };
+        });
+      });
+    }, function (e) { return stop(e, []); });
+  }, function (e) { return { sent: 0, left: 0, leftKeys: [], why: 'nobox', msg: (e && e.message) || '' }; });
+}
+
+/* A send that had to wait says so when it finally goes, in whichever app is
+   open, because the app that queued it may be long closed. */
+function told(list) {
+  var say = {};
+  list.forEach(function (it) { if (it.say) say[it.say] = 1; });
+  var s = Object.keys(say);
+  if (!s.length || !g.UI || !g.UI.toast || g.document.hidden) return;
+  try { g.UI.toast('Sent ' + s.join(', ') + '.'); } catch (e) {}
+}
+
+/* Take a group back out of the outbox: the app handed a file over instead. */
+function unpost(keys) { return keys && keys.length ? qDel(keys) : Promise.resolve(); }
+/* What is still waiting, without the bags: [{k, to, id, grp, kind, at, size}] */
+function pending() {
+  return qAll().then(function (items) {
+    return items.map(function (it) { return { k: it.k, to: it.to, id: it.id, grp: it.grp, kind: it.kind, at: it.at, size: it.size }; });
+  }, function () { return []; });
+}
+
+/* Empty the outbox by itself, from the top document only, so a home screen
+   holding fourteen frames tries once and not fourteen times. A try that is
+   left waiting for signal tries again in a minute, then every five. */
+var autoT = null, autoGap = 60000;
+function autoFlush() {
+  if (g.top !== g || isFile()) return;
+  if (autoT) { clearTimeout(autoT); autoT = null; }
+  if (!probe && !cfg.on) return;
+  pending().then(function (l) {
+    if (!l.length) return null;
+    return flush().then(function (r) {
+      if (r.left && (r.why === 'offline' || r.why === 'blocked')) {
+        autoT = setTimeout(autoFlush, autoGap);
+        autoGap = Math.min(autoGap * 2, 300000);
+      } else autoGap = 60000;
+    });
+  }).catch(function () {});
+}
+g.addEventListener('online', function () { autoGap = 60000; setTimeout(autoFlush, 1500); });
+if (g.document) g.document.addEventListener('visibilitychange', function () { if (!g.document.hidden) setTimeout(autoFlush, 800); });
+
+/* ── the coach reading the in-tray ──
+
+   `list` names what is waiting without downloading it: a shallow read over
+   the database's REST door, which returns keys and no values. So COACH opening
+   on a phone does not pull every photo a client sent just to print a count.
+   It falls back to the whole read when that door will not answer. */
+function shallow(me, path) {
+  if (me.keys) return Promise.resolve(me.keys(path));
+  return g.firebase.auth(app()).currentUser.getIdToken().then(function (tok) {
+    var u = String(cfg.cfg.databaseURL).replace(/\/$/, '') + '/' + path + '.json?shallow=true&auth=' + encodeURIComponent(tok);
+    return g.fetch(u).then(function (r) {
+      if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'the database refused the read. Only the coach account can read the shelf' : 'the shelf did not answer');
+      return r.json();
+    });
+  });
+}
+function list() {
+  return account().then(function (me) {
+    return shallow(me, INTRAY).then(function (top) {
+      var froms = Object.keys(top || {});
+      return Promise.all(froms.map(function (f) {
+        return shallow(me, INTRAY + '/' + f).then(function (ids) {
+          return Object.keys(ids || {}).map(function (k) { var id = dec(k); return { from: f, id: id, grp: id.split('@')[0] }; });
+        });
+      })).then(function (ls) { return [].concat.apply([], ls); });
+    }).then(function (fresh) {
+      return shallow(me, SHELF).then(function (old) {
+        return fresh.concat(Object.keys(old || {}).map(function (f) { return { from: f, id: '', grp: '', legacy: 1 }; }));
+      });
+    });
+  }).catch(function (e) {
+    var m = (e && e.message) || '';
+    if (/refused|not signed in|folder|databaseURL|apiKey|Firebase library|too slow/.test(m)) throw e;
+    /* the REST door is shut: read the lot the slow way, and hand back the names */
+    return waiting().then(function (l) { return l.map(function (p) { return { from: p.from, id: p.id, grp: p.grp, legacy: p.legacy }; }); });
+  });
+}
+/* One parcel, read in full. */
+function fetchOne(from, id) {
+  return account().then(function (me) {
+    return me.db.ref(id ? INTRAY + '/' + from + '/' + enc(id) : SHELF + '/' + from).once('value');
+  }).then(function (snap) {
+    var v = (snap && snap.val && snap.val()) || null;
+    return v ? unpack(from, id, v) : null;
+  });
+}
+function unpack(from, id, v) {
+  var body = null;
+  try { body = JSON.parse(v.data || 'null'); } catch (e) {}
+  return { from: from, id: id || '', grp: v.grp || (id ? String(id).split('@')[0] : from), kind: v.kind || '', at: v.at || '',
+    by: v.by || '', n: v.n || 0, body: body, legacy: id ? 0 : 1 };
+}
+/* How many SENDS are waiting: a session is one, a check-in with its photos
+   is one. Counted from the names alone. */
+function count() {
+  return list().then(function (l) {
+    var s = {};
+    l.forEach(function (p) { s[p.from + '|' + (p.legacy ? '' : p.grp)] = 1; });
+    return Object.keys(s).length;
+  });
+}
+
+/* ── a client reading their own tray ── */
+function inbox() {
+  return account().then(function (me) {
+    return me.db.ref(OUTTRAY + '/' + me.uid).once('value');
+  }).then(function (snap) {
+    var out = [], v = (snap && snap.val && snap.val()) || {};
+    Object.keys(v).forEach(function (k) { out.push(unpack('coach', dec(k), v[k] || {})); });
+    out.sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : 0; });
+    return out;
+  });
+}
+function opened(id) {
+  return account().then(function (me) { return me.db.ref(OUTTRAY + '/' + me.uid + '/' + enc(id)).remove(); });
+}
+
+/* The rules, with the coach's account written in. COACH's Settings copies
+   this, so Tom never edits a placeholder by hand. Kept word for word with
+   CLOUD.md step 3. */
+function rules(coach) {
+  var C = "'" + String(coach || 'PASTE_YOUR_UID_HERE').replace(/[^A-Za-z0-9_-]/g, '') + "'";
+  var V = "newData.hasChildren(['kind','at','data']) && newData.child('data').isString() && newData.child('data').val().length < 2000000";
+  return JSON.stringify({ rules: {
+    u: { $uid: { '.read': 'auth != null && auth.uid === $uid', '.write': 'auth != null && auth.uid === $uid', rows: { '.indexOn': ['updated_at'] } } },
+    drop: {
+      coach: { '.read': 'auth != null && auth.uid === ' + C,
+        $from: { '.write': 'auth != null && ($from === auth.uid || auth.uid === ' + C + ')', '.validate': V } },
+      in: { '.read': 'auth != null && auth.uid === ' + C,
+        $from: { '.write': 'auth != null && ($from === auth.uid || auth.uid === ' + C + ')', $parcel: { '.validate': V } } },
+      client: {
+        $to: { '.read': 'auth != null && auth.uid === $to', '.write': 'auth != null && ($to === auth.uid || auth.uid === ' + C + ')', $parcel: { '.validate': V } } },
+    },
+  } }, null, 2);
 }
 
 /* ── incoming ──
@@ -669,7 +1002,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.1.4',
+  VERSION: '0.2.0',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -724,12 +1057,42 @@ var Cloud = {
 
   /** the account id the database sees, for pasting into the drop rules */
   who: function () { return account().then(function (me) { return { uid: me.uid, email: me.email }; }); },
-  /** put one parcel on the coach's shelf. Resolves with its size in characters. */
+  /** 0.1: one parcel in the client's single slot on the shelf. Kept for the
+      smoke checks and for anything older; apps send with `post` now. */
   send: put,
-  /** everything on the shelf, newest first. Coach account only. */
+  /** everything on the shelf and in the in-tray, newest first, bodies and
+      all. Coach account only. */
   waiting: shelf,
-  /** that one is in. Clear it. */
+  /** that one is in. Clear it: `took(from)` a 0.1 slot, `took(from, id)` one
+      parcel from the in-tray. */
   took: clear,
+
+  /* ── 0.2: the trays and the outbox ── */
+  /** is there an account to try: signed in on this device, from an address */
+  ready: function () { return !!probe || (!!cfg.on && !isFile() && !missing(cfg.cfg)); },
+  /** queue parcels [{to, id, kind, bag, say}] and try them now. Resolves
+      {sent, left, why, msg, keys}; see `whyOf` for the words. */
+  post: post,
+  /** try everything waiting in this device's outbox now */
+  flush: flush,
+  /** what is still waiting, without the bags */
+  pending: pending,
+  /** take waiting parcels back out, by key, when a file went instead */
+  unpost: unpost,
+  /** a program, or anything, for one client's TRAIN: to their tray */
+  give: function (uid, id, kind, bag, say) { return post([{ to: uid, id: id, kind: kind, bag: bag, say: say }]); },
+  /** the coach's in-tray and the old shelf as names only: [{from, id, grp, legacy}] */
+  list: list,
+  /** one parcel in full: {from, id, grp, kind, at, by, n, body, legacy} */
+  fetch: fetchOne,
+  /** how many sends are waiting, counted from names alone */
+  count: count,
+  /** a client's own tray, oldest first */
+  inbox: inbox,
+  /** that one is in the client's app now. Clear it from their tray. */
+  opened: opened,
+  /** the database rules with the coach's account id in them */
+  rules: rules,
   start: start,
   stop: stop,
   /** push whatever is waiting, now. Resolves with how many rows went up, and
@@ -772,6 +1135,8 @@ function boot() {
   if (!cfg.on || !cfg.cfg || missing(cfg.cfg)) return;
   if (isFile()) return;
   start();
+  /* a send left waiting when this device last closed */
+  setTimeout(autoFlush, 1500);
 }
 if (g.Rec && g.Rec.ready) g.Rec.ready(function () { setTimeout(boot, 1200); });
 else setTimeout(boot, 2500);
