@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.9, 2026-09-23">
+<meta name="mb-version" content="1.0.10, 2026-09-30">
 <title>FOODDÉX</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -22,6 +22,8 @@
 <script src="../shared/nutrients.js"></script>
 <script src="../shared/health.js"></script>
 <script src="../shared/icons.js"></script>
+<!-- SCAN: the barcode scanner KITCHEN keeps. It belongs in shared/; kitchen/CLAUDE.md, Needs from the foundation -->
+<script src="../kitchen/barcode.js"></script>
 
 <style>
 /* Colours and sizes are tokens, never numbers. shared/THEMING.md is the
@@ -288,6 +290,8 @@ const SRCS = {
   label:        { tag: 'from a label', say: 'These were read off a nutrition label, so they are the pack you had in your hand.' },
   'label-fixed':{ tag: 'label, corrected', say: 'Read off a nutrition label, with at least one figure changed by hand since.' },
   typed:        { tag: 'typed in', say: 'These were typed in by hand.' },
+  off:          { tag: 'from Open Food Facts', say: 'Looked up by barcode on Open Food Facts, which people fill in from the packs they scan.' },
+  'off-fixed':  { tag: 'Open Food Facts, corrected', say: 'Looked up by barcode on Open Food Facts, with at least one figure changed by hand since.' },
 };
 const srcOf = fd => SRCS[(fd && fd.base && fd.base.src) || ''] || null;
 
@@ -295,7 +299,9 @@ const L = { name: '', brand: '', cat: '', amt: '100', unit: 'g',
   kcal: '', p: '', c: '', f: '', na: '', k: '', ca: '', caff: '', price: '', pc: '',
   /* Not a box on screen. It rides in here so the draft, the save and the
      load all carry it without a second place to keep it. */
-  src: '' };
+  src: '',
+  /* the pack's barcode, from SCAN; saved on the row so a second scan finds it */
+  barcode: '' };
 /* ── the first amount follows the food ──
    Tom, 2026-09-22: "The default entry for something should deliver either
    50 grams of protein or 50 grams of carbs whichever relevant." Asking how
@@ -575,6 +581,75 @@ function fillFromUsda(fd, nums) {
   UI.toast('Filled from the USDA, per 100 g. Check the numbers, and use the pack if you have one.');
 }
 
+/* ══ SCAN ══
+   A barcode, then Open Food Facts. A code already on a food opens that food.
+   A new bench is filled the way a USDA pick fills it: every box from the
+   pack, a figure it does not carry cleared, the rest of its figures riding in
+   L.more. A food already open is only topped up: a box with a number keeps
+   it, an empty one is filled scaled to the food's own serving, and L.more
+   holds only what the row does not already carry, because writeFood merges
+   L.more over `base` and a scan must never replace a figure (merge into
+   base, never rebuild it: root brief). */
+function scanLabel() {
+  if (!window.Barcode) return UI.toast('The scanner did not load.', { bad: true });
+  Barcode.open({
+    known: code => {
+      const fd = Object.values(Rec.map('food')).find(f => f && Barcode.same(f.barcode, code));
+      return fd ? () => loadFood(fd) : null;
+    },
+    found: fillFromOff,
+  });
+}
+function fillFromOff(r) {
+  const got = r && r.food;
+  /* a saved food already tied to another pack keeps its own */
+  const held = EDIT ? (Rec.get('food', null, EDIT) || {}).barcode : '';
+  if (held && !Barcode.same(held, r.code)) {
+    return UI.toast('This food has another barcode, ' + esc(held) + '. Press NEW to scan a different pack.', { bad: true });
+  }
+  L.barcode = r.code;
+  if (!got) {
+    saveDraft();
+    return UI.toast(r.status === 'offline' ? 'No signal. Paste or type the label.' : 'Not on Open Food Facts. Paste or type the label.', { bad: true });
+  }
+  const extra = {};
+  Object.keys(got.base).forEach(k => { if (NUTS.indexOf(k) < 0) extra[k] = got.base[k]; });
+  if (!EDIT) {
+    if (got.name) setField('name', got.name);
+    if (got.brand) setField('brand', got.brand);
+    setField('amt', got.amt);
+    setField('unit', got.unit);
+    NUTS.forEach(k => { if (k !== 'price') setField(k, got.base[k] == null ? '' : got.base[k]); });
+    L.src = 'off';
+    L.more = extra;
+    paintLook([]);
+    paintPortions(); saveDraft();
+    Mobile.feedback('success');
+    return UI.toast('Filled from Open Food Facts, per 100 ' + got.unit + '. Check it against the pack.');
+  }
+  /* topping up a saved food: only where its own serving is in the same unit */
+  const unit = String(L.unit || '').trim().toLowerCase(), amt = numv(L.amt);
+  if (unit !== got.unit || !(amt > 0)) {
+    saveDraft();
+    return UI.toast('Barcode kept. This food is per ' + (L.unit || 'serving') + ', so nothing was filled.');
+  }
+  const k = amt / 100, row = Rec.get('food', null, EDIT) || {}, have = row.base || {};
+  const scale = (key, v) => key === 'p' || key === 'c' || key === 'f' ? r1(v * k) : key === 'kcal' || key === 'na' || key === 'k' || key === 'ca' || key === 'caff' ? Math.round(v * k) : +(v * k).toPrecision(3);
+  let n = 0;
+  NUTS.forEach(key => {
+    if (got.base[key] == null || String(L[key] == null ? '' : L[key]).trim()) return;
+    setField(key, scale(key, got.base[key])); n++;
+  });
+  const more = {};
+  Object.keys(extra).forEach(key => { if (have[key] == null) { more[key] = scale(key, extra[key]); n++; } });
+  L.more = Object.assign({}, typeof L.more === 'object' && L.more ? L.more : {}, more);
+  if (!L.src) L.src = 'off';
+  if (!L.brand.trim() && got.brand) setField('brand', got.brand);
+  paintPortions(); saveDraft();
+  Mobile.feedback(n ? 'success' : 'select');
+  UI.toast(n ? 'Filled ' + n + ' empty figure' + (n === 1 ? '' : 's') + ' from Open Food Facts. Nothing already here changed.' : 'Barcode kept. Every figure was already here.');
+}
+
 /* ══ settings ══
    One tab of this app's own, for the key the lookup uses. */
 function openSettings() {
@@ -706,7 +781,7 @@ function setField(key, v) {
    food, and one on top of a lookup or a label marks that source corrected. */
 function handTyped() {
   if (!L.src) { L.src = 'typed'; return; }
-  if (L.src === 'usda' || L.src === 'label') L.src = L.src + '-fixed';
+  if (L.src === 'usda' || L.src === 'label' || L.src === 'off') L.src = L.src + '-fixed';
 }
 
 function build() {
@@ -721,7 +796,7 @@ function build() {
      First in the card because it is the shorter road: for a plain food it
      fills every box below without a pack in your hand. Pasting sits under it,
      unchanged, and is the one that still works with no signal. */
-  c1.appendChild(el('div', 'note', 'Look up a plain food, or paste a label. The lookup asks the United States Department of Agriculture and answers per 100 g, so it needs a signal, and what it knows is American.'));
+  c1.appendChild(el('div', 'note', 'Look up a plain food, scan a pack, or paste a label. The lookup asks the United States Department of Agriculture and answers per 100 g, so it needs a signal, and what it knows is American.'));
   const lookRow = el('div', 'look');
   const lookIn = document.createElement('input');
   lookIn.type = 'text';
@@ -732,8 +807,15 @@ function build() {
   /* Enter searches. Typing a food and then reaching for the mouse is a step
      this box does not need, and on a phone it is the key the keyboard offers. */
   lookIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); lookUp(lookIn.value, lookBtn); } });
+  /* SCAN reads a pack's barcode with the camera, or its number typed, and
+     fills the label from Open Food Facts (../kitchen/barcode.js) */
+  const scanBtn = el('button', 'btn mb-press mb-tap', 'SCAN');
+  scanBtn.type = 'button';
+  scanBtn.setAttribute('aria-label', 'Scan a barcode');
+  scanBtn.onclick = scanLabel;
   lookRow.appendChild(lookIn);
   lookRow.appendChild(lookBtn);
+  lookRow.appendChild(scanBtn);
   c1.appendChild(lookRow);
   c1.appendChild(lookBox);
 
@@ -1305,6 +1387,7 @@ function loadFood(fd) {
   /* Carried, not re-derived. Loading a food to correct one figure is exactly
      when the row would otherwise forget that the rest came off a pack. */
   L.src = fd.base.src || '';
+  L.barcode = fd.barcode || '';
   /* A loaded food already carries its extra figures on the row, and the save
      merges into the row, so there is nothing to carry here. */
   L.more = {};
@@ -1424,7 +1507,7 @@ function writeFood() {
     dflt: was ? (was.dflt || 0) : leadServe(serves),
     uses: was ? (was.uses || 0) : 0,
     shot: was ? (was.shot || null) : null,
-  }));
+  }, L.barcode ? { barcode: L.barcode } : {}));
   EDIT = id; syncBar();
   Mobile.feedback('success');
   UI.toast('<b>' + esc(name) + '</b> saved with ' + serves.length +

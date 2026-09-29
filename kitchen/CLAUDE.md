@@ -229,6 +229,52 @@ potassium and calcium as frozen, and as zero for every other nutrient.
 Any other meal with no fid is not known for every nutrient beyond the
 macros it carries.
 
+## SCAN (1.0.1, 2026-09-30)
+
+Tom: "ok include". The food picker (ADD FOOD on SHELF, and every slot's add
+on PLAN) has SCAN beside New food. `barcode.js` beside this file opens a
+sheet: the back camera through `getUserMedia` (the iPhone included; video
+set `playsinline`, `muted` and `autoplay` before the stream), frames read by
+the phone's own `BarcodeDetector` where it has EAN or UPC (Chrome on
+Android), else by zxing-wasm 3.1.4 vendored in `zxing/` (reader IIFE, a
+950 KB wasm, MIT over zxing-cpp's Apache-2.0, both texts in
+`zxing/LICENSE`), loaded only on the first scan and pointed at that copy,
+never the CDN. The middle 60% band of the frame, at most 960 wide, every
+150 ms. Under it, always, a box for the number under the bars and LOOK UP;
+no camera or a refusal says "Camera not available. Type the number." and
+puts the caret there. A number is checked by its mod-10 digit (UPC-E read
+out to its twelve) before anything is asked.
+
+- **A code already on a food** (`food.barcode`, a UPC-A and its EAN-13 with
+  a leading 0 counted as one) picks that food: "Already in your foods".
+- **Else Open Food Facts**, CALCOUNT's v2 product call, free, no key, only
+  the number sent, at most 15 lookups a minute per page ("Lookup limit
+  reached. Try again in a minute."). `Barcode.fromOff` keeps only figures
+  the product carries: per 100 g, or per 100 ml when its quantity is in ml,
+  cl or L; calories from kcal, else kJ / 4.184; sodium as printed, else salt
+  x 400 mg; every other key in `shared/nutrients.js` it can map, a pack's
+  Vitamin A to `rae`. A blank is left off, never 0. No calories and no macro
+  at all reads as not found.
+- **NEW FOOD then opens filled**: name, 100, the unit chip, and the four
+  boxes when Count calories is on, under "From Open Food Facts: N figures
+  per 100 g. Check them against the pack." ADD saves `brand`, `barcode`,
+  `base.src: 'off'` and every other figure found; a box typed over wins and
+  a box emptied stays empty. Not found or no signal opens it empty with the
+  code kept, so the next scan finds the food.
+- `Barcode` is also FOODDÉX's (`../kitchen/barcode.js`); see
+  `portion/CLAUDE.md`.
+- **Watched 2026-09-30** at 390 wide, by pressing ADD FOOD, SCAN, typing and
+  LOOK UP, against the real Open Food Facts: Nutella (3017620422003) filled
+  and saved with 8 figures and its code, then scanned again and picked
+  straight into Bought; a made-up valid code opened NEW FOOD empty with the
+  code kept and p, c and f left off; a wrong check digit said "Not a
+  barcode number."; the camera refused in the browser pane fell back to
+  typing. The camera path was watched with a drawn EAN-13 fed in as the
+  camera's stream: zxing loaded from `zxing/`, read Coca-Cola 5449000000996
+  off the video, and NEW FOOD opened per 100 ml. The limit answered busy on
+  the 15th lookup in a minute (fetch stubbed). **Not watched: a real camera,
+  and anything on an iPhone.**
+
 ## Not in this version
 
 A home screen widget; prices and grocery cost; expiry dates; storage places
@@ -261,6 +307,16 @@ foods properly); generating a plan by itself (never).
    from a held item, still meet it. Every app with a menu that opens a
    typing screen has the same fault; running the item inside the tap fixes
    all of them. Read from the code, not watched on an iPhone.
+6. **`barcode.js` and `zxing/` belong in `shared/`.** They sit in
+   `kitchen/` since 2026-09-30 only because this session could not edit
+   `shared/`; FOODDÉX loads them as `../kitchen/barcode.js`. The file finds
+   `zxing/` from its own address, so moving the file and the folder
+   together is the whole move, plus the two script tags. `sw.js` keeps them
+   on first fetch like any file; the client build copies `kitchen/` whole,
+   so clients get them.
+7. **The root ownership table's `food` line** should say a food may carry
+   `barcode` (top level, the digits, KITCHEN and FOODDÉX write it on SCAN)
+   and `base.src: 'off'` (figures from Open Food Facts).
 
 ## Watched (2026-09-28)
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.0, 2026-09-28">
+<meta name="mb-version" content="1.0.1, 2026-09-30">
 <title>KITCHEN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -23,6 +23,8 @@
 <script src="../shared/health.js"></script>
 <script src="../shared/icons.js"></script>
 <script src="../shared/nutrients.js"></script>
+<!-- SCAN: the camera reads a barcode, Open Food Facts fills the label. Beside this file, with zxing/ -->
+<script src="barcode.js"></script>
 
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1252,7 +1254,14 @@ function pickFood(o, cb) {
       dl.style.marginTop = 'var(--s-3)';
       const nw = el('button', 'mb-btn quiet mb-press mb-tap');
       nw.type = 'button';
-      nw.style.marginTop = 'var(--s-3)';
+      /* SCAN sits beside it: a pack in the hand is the other way a food arrives */
+      const sc = el('button', 'mb-btn quiet mb-press mb-tap', 'SCAN');
+      sc.type = 'button';
+      sc.setAttribute('aria-label', 'Scan a barcode');
+      const adds = el('div', 'kx-btns');
+      adds.style.marginTop = 'var(--s-3)';
+      adds.appendChild(sc);
+      adds.appendChild(nw);
       const paint = () => {
         const w = W(), q = input.value.trim(), ql = q.toLowerCase();
         dl.innerHTML = '';
@@ -1291,11 +1300,12 @@ function pickFood(o, cb) {
         nw.textContent = q ? 'New food "' + q + '"' : 'New food';
       };
       nw.onclick = () => { const q = input.value.trim(); hh.close(); newFood(q, cb); };
+      sc.onclick = () => { hh.close(); scanFood(cb); };
       input.addEventListener('input', paint);
       b.appendChild(input);
       b.appendChild(dl);
       b.appendChild(list);
-      b.appendChild(nw);
+      b.appendChild(adds);
       b.appendChild(el('p', 'kx-q', 'Full labels live in STATUS.'));
       Mobile.form(b, () => { const first = list.querySelector('.kx-row'); if (first) first.click(); });
       paint();
@@ -1304,10 +1314,28 @@ function pickFood(o, cb) {
   });
   if (h && h.body) UI.focusSoon(input);
 }
-/* A new food with only what was typed: blank boxes stay off the row. */
-function newFood(name, cb) {
+/* ══════════════ SCAN ══════════════
+   The camera, or the number typed, then Open Food Facts (barcode.js). A code
+   already on a food picks that food. Otherwise NEW FOOD opens with what the
+   lookup found, or empty with the code kept, so the next scan finds it. */
+function scanFood(cb) {
+  if (!window.Barcode) { UI.toast('The scanner did not load.', { bad: 1 }); return; }
+  Barcode.open({
+    known: code => {
+      const foods = W().foods;
+      const id = Object.keys(foods).find(i => Barcode.same(foods[i].barcode, code));
+      return id ? () => { UI.toast('Already in your foods: <b>' + esc(nameOf(foods[id])) + '</b>.'); cb(id); } : null;
+    },
+    found: r => newFood(r.food ? r.food.name : '', cb, r),
+  });
+}
+/* A new food with only what was typed: blank boxes stay off the row. A scan
+   (`scan`, Barcode.lookup's answer) fills the boxes it has figures for, adds
+   the rest of what it found to `base`, and keeps the code on the food. */
+function newFood(name, cb, scan) {
   let unit = null, cat = null;
   const f = {};
+  const got = scan && scan.food ? scan.food : null;
   const h = UI.dialog({
     title: 'NEW FOOD', width: 520,
     body: (b, hh) => {
@@ -1336,13 +1364,14 @@ function newFood(name, cb) {
       f.cat = UI.field('text', { placeholder: groups.length ? 'Or a new group' : 'Group' });
       form.appendChild(groups.length ? f.cat : lab('Group', f.cat));
       /* the amount the numbers below are for */
-      f.amt = UI.field('decimal', { placeholder: '100' });
+      f.amt = UI.field('decimal', { placeholder: '100', value: got ? String(got.amt) : null });
       const al = lab('The numbers are for', f.amt);
       const uc = el('div', 'mb-chips');
       [['g', 'g'], ['ml', 'ml'], ['serving', 'serving']].forEach(x => {
         const c = el('button', 'mb-chip mb-press', x[1]);
         c.type = 'button';
         c.onclick = () => { unit = x[0]; uc.querySelectorAll('.mb-chip').forEach(y => y.classList.toggle('on', y === c)); Mobile.feedback('select'); };
+        if (got && got.unit === x[0]) { unit = x[0]; c.classList.add('on'); }
         uc.appendChild(c);
       });
       al.appendChild(uc);
@@ -1350,15 +1379,24 @@ function newFood(name, cb) {
       /* a device that does not count food is never asked for calories */
       if (countCal()) {
         const two = el('div', 'kx-two');
-        f.kcal = UI.field('decimal', { placeholder: 'kcal' });
-        f.p = UI.field('decimal', { placeholder: 'g' });
-        f.c = UI.field('decimal', { placeholder: 'g' });
-        f.f = UI.field('decimal', { placeholder: 'g' });
+        const pre = k => got && got.base[k] != null ? String(got.base[k]) : null;
+        f.kcal = UI.field('decimal', { placeholder: 'kcal', value: pre('kcal') });
+        f.p = UI.field('decimal', { placeholder: 'g', value: pre('p') });
+        f.c = UI.field('decimal', { placeholder: 'g', value: pre('c') });
+        f.f = UI.field('decimal', { placeholder: 'g', value: pre('f') });
         two.appendChild(lab('Calories', f.kcal));
         two.appendChild(lab('Protein', f.p));
         two.appendChild(lab('Carbs', f.c));
         two.appendChild(lab('Fat', f.f));
         form.appendChild(two);
+      }
+      if (scan) {
+        const n = got ? Object.keys(got.base).length : 0;
+        form.insertBefore(el('p', 'kx-note', esc(
+          got ? 'From Open Food Facts: ' + n + ' figure' + (n === 1 ? '' : 's') + ' per 100 ' + got.unit + '. Check them against the pack.'
+            : scan.status === 'offline' ? 'No signal. Type it from the label.'
+            : 'Not on Open Food Facts. Type it from the label.') +
+          ' <small>' + esc(scan.code) + '</small>'), form.firstChild);
       }
       form.appendChild(el('p', 'kx-q', 'Full labels live in STATUS.'));
       b.appendChild(form);
@@ -1384,9 +1422,16 @@ function newFood(name, cb) {
       const v = x[1] ? UI.amount(t, x[1]) : num(t.replace(/,/g, ''));
       if (v != null && v >= 0) base[x[0]] = v;
     });
+    /* what the scan found beyond the four boxes; a box typed over wins, a
+       box emptied stays empty (blank is not known, never zero) */
+    if (got) {
+      Object.keys(got.base).forEach(k => { if (!(k in f) && base[k] == null) base[k] = got.base[k]; });
+      base.src = 'off';
+    }
     const typed = f.cat.value.trim(), id = uid();
-    const row = { id, name: n, brand: '', base, uses: 0 };
+    const row = { id, name: n, brand: got && got.brand ? got.brand : '', base, uses: 0 };
     if (typed || cat) row.cat = typed || cat;
+    if (scan && scan.code) row.barcode = scan.code;
     /* no serves: an empty list does not survive live sync, and none is needed */
     Rec.set('food', null, id, row);
     Mobile.feedback('success');
@@ -1394,7 +1439,7 @@ function newFood(name, cb) {
     UI.toast('Added <b>' + esc(n) + '</b>.');
     if (cb) cb(id);
   }
-  if (h && h.body) UI.focusSoon(name ? f.amt : f.name);
+  if (h && h.body) UI.focusSoon(name ? (got ? null : f.amt) || f.name : f.name);
 }
 
 /* ══════════════ PLAN ══════════════ */
