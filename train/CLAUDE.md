@@ -539,7 +539,9 @@ What iPhone Safari changes:
 
 ## For the foundation
 
-TRAIN never edits `shared/`; a need goes here. Still open: nothing. (HISTORY.md: For the foundation)
+TRAIN never edits `shared/`; a need goes here. (HISTORY.md: For the foundation) Still open:
+- **Keep the middle of the story clear** (Tom, 2026-09-29: "someone will be in the middle of the story"; 2026-09-30: yes, for every app). `IO.shot` centres the picture in `IO.STORY.safe` and Medium and Small shrink it toward the middle; `.mb-glass` tints the whole node handed in, so a TRAIN-only frame with an empty middle is tinted in Transparent and Translucent. The layout has to change in `IO.share` itself.
+- **A note row on the Share panel.** `options` are switch rows only, so nothing can say which lifts were left out and why.
 
 ---
 
