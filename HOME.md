@@ -70,3 +70,7 @@ Part of the foundation's faster open (`shared/CLAUDE.md`, Faster open).
 - **Back up everything is every row, from the store** (`Rec.need()`, then `Rec.export()`, plus `IO.localBits`), the same `motherbase-backup` file the nightly backup writes and any app's Restore merges. It used to copy localStorage key by key, which never held a photo or any row the full fast half had moved to IndexedDB, and would have held no sets at all. The home screen's Restore merges that file; an old `lifeos-backup` still replaces everything, as it always did.
 
 1.0.38, 2026-09-30: MOMENTUM removed outright (Tom picked "A" to "remove it"). It showed how much got logged each day, which read as nothing. Revert a87fd42 to bring it back.
+
+## 2026-09-30, HOME 1.0.39: the dock wears the theme
+
+The desk dock was painted a fixed near-black and the logo glowed a fixed ice blue, so on a light theme the dock was a black bar under dark labels. It now sits on the recessed surface (`--surface-2`) and the glow is the accent at half strength. The open app's NAME, on the desk dock and the phone bar, is the reading colour; its colour stays on the icon, the tint and the ring, because a chart colour is picked to read as a line, not as words (Lego's yellow TRAIN measured 1.04 to 1). Lego and Minecraft 2 carry a dock rule in their own CSS putting it on the page colour, the only ground their words were worked out to read on. Measured in all 18 themes and a light test theme, both docks, every button plain and open: 4.5 to 1 or better.
