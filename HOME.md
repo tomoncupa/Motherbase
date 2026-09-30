@@ -68,3 +68,5 @@ Part of the foundation's faster open (`shared/CLAUDE.md`, Faster open).
 - **`import.js` is fetched on first use** (`needImport`) from beside `io.js`, so a client copy's stamp comes along.
 - **A widget that reads TRAIN's sets draws Loading until they arrive**: the card compares `Rec.missed()` before and after `W.sub` and `W.draw`. Sets are kept out of the open now, and "No working sets" before they land would be a lie.
 - **Back up everything is every row, from the store** (`Rec.need()`, then `Rec.export()`, plus `IO.localBits`), the same `motherbase-backup` file the nightly backup writes and any app's Restore merges. It used to copy localStorage key by key, which never held a photo or any row the full fast half had moved to IndexedDB, and would have held no sets at all. The home screen's Restore merges that file; an old `lifeos-backup` still replaces everything, as it always did.
+
+1.0.38, 2026-09-30: MOMENTUM removed outright (Tom picked "A" to "remove it"). It showed how much got logged each day, which read as nothing. Revert a87fd42 to bring it back.
