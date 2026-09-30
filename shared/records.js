@@ -97,6 +97,40 @@ const IDB = (() => {
         t.onerror = () => rej(t.error);
       }));
     },
+    /* Every row whose id sits in [lo, hi): one type's rows, since an id is
+       `local|<type>|<date>|<key>` and '}' is the character after '|'. */
+    range(lo, hi) {
+      return open().then(d => new Promise((res, rej) => {
+        const t = d.transaction(IDBSTORE).objectStore(IDBSTORE).getAll(g.IDBKeyRange.bound(lo, hi, false, true));
+        t.onsuccess = () => res(t.result || []);
+        t.onerror = () => rej(t.error);
+      }));
+    },
+    /* Every row EXCEPT the id ranges given ([[lo, hi], ...], sorted): the
+       gaps between them, read in one transaction. With no ranges, all(). */
+    allBut(skip) {
+      if (!skip.length || !g.IDBKeyRange) return this.all();
+      return open().then(d => new Promise((res, rej) => {
+        const st = d.transaction(IDBSTORE).objectStore(IDBSTORE), K = g.IDBKeyRange, qs = [];
+        qs.push(K.upperBound(skip[0][0], true));
+        for (let i = 0; i + 1 < skip.length; i++) qs.push(K.bound(skip[i][1], skip[i + 1][0], false, true));
+        qs.push(K.lowerBound(skip[skip.length - 1][1]));
+        const out = []; let left = qs.length, failed = false;
+        qs.forEach(q => {
+          const t = st.getAll(q);
+          t.onsuccess = () => { if (t.result) for (let i = 0; i < t.result.length; i++) out.push(t.result[i]); if (!--left && !failed) res(out); };
+          t.onerror = () => { if (!failed) { failed = true; rej(t.error); } };
+        });
+      }));
+    },
+    /* take one type's rows out, both kinds, in one transaction */
+    delRange(lo, hi) {
+      return open().then(d => new Promise((res, rej) => {
+        const tx = d.transaction(IDBSTORE, 'readwrite');
+        tx.objectStore(IDBSTORE).delete(g.IDBKeyRange.bound(lo, hi, false, true));
+        tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+      }));
+    },
     /* one transaction for a burst of writes: an import is twelve thousand rows
        and twelve thousand transactions is minutes of work to say one thing */
     put(list, gone) {
@@ -122,7 +156,7 @@ const IDB = (() => {
    transaction. Nothing waits on the flush: the memory picture is already
    correct and localStorage already has whatever fits. */
 const idbQ = Object.create(null), idbGone = Object.create(null);
-let idbT = null;
+let idbT = null, lastPut = Promise.resolve();
 function idbPush(r, deleting) {
   if (!IDB.available) return;
   if (deleting) { delete idbQ[r.id]; idbGone[r.id] = 1; }
@@ -135,7 +169,7 @@ function idbPush(r, deleting) {
     Object.keys(idbQ).forEach(k => delete idbQ[k]);
     Object.keys(idbGone).forEach(k => delete idbGone[k]);
     if (!list.length && !gone.length) return;
-    IDB.put(list, gone).catch(e => {
+    lastPut = IDB.put(list, gone).catch(e => {
       console.warn('[records] indexeddb write failed', e);
       /* a row whose fast-half copy was given up for this one is now nowhere */
       lostRows(list.filter(r => { try { return Store.get(PREFIX + r.id) == null; } catch (x) { return true; } }).length);
@@ -506,6 +540,8 @@ let fastSize = 0;
 function loadFast() {
   fastSize = 0;
   Store.keys().forEach(k => {
+    /* a type kept out of the open is read when something asks (lazyLoad) */
+    if (lazyKey(k)) return;
     try {
       const j = Store.get(k) || '';
       fastSize += k.length + j.length;
@@ -541,6 +577,7 @@ function makeRoom(idbList, max, to) {
   (idbList || []).forEach(r => { if (r && r.id) held[r.id] = r.updated_at || ''; });
   const missing = [];
   Store.keys().forEach(k => {
+    if (lazyKey(k)) return;           /* lazyLoad moves those itself */
     const r = rows[k.slice(PREFIX.length)];
     if (r && (held[r.id] == null || held[r.id] < r.updated_at)) missing.push(r);
   });
@@ -586,17 +623,18 @@ function trimFast(idbList, max, to) {
    merge in whenever the browser does answer, announced like any other change.
    Writes are unaffected — they queue on the same open and land when it does. */
 const IDBWAIT = 2500;
-let idbSlow = false;
+let idbSlow = false, baseDone = false;
 function hydrate() {
-  if (!IDB.available) { hydrated = true; flushReady(); return; }
+  if (!IDB.available) { baseIn(); return; }
   let settled = false;
   const slow = setTimeout(() => {
     if (settled) return;
     idbSlow = true;
     console.warn('[records] indexeddb has not answered in ' + IDBWAIT + 'ms; carrying on with localStorage, and big rows will merge in when it does');
-    hydrated = true; flushReady();
+    baseIn();
   }, IDBWAIT);
-  IDB.all().then(list => {
+  /* everything but the types kept out of the open (KEPT OUT, below) */
+  IDB.allBut(lazyRanges()).then(list => {
     settled = true; clearTimeout(slow); idbSlow = false;
     let changed = 0;
     (list || []).forEach(r => {
@@ -607,12 +645,154 @@ function hydrate() {
     });
     if (changed) { repairDates(); announce([], false); }
     try { makeRoom(list); } catch (e) { console.warn('[records] trim', e); }
-    hydrated = true; flushReady();
+    baseIn();
   }).catch(e => {
     settled = true; clearTimeout(slow); idbSlow = false;
     console.warn('[records] indexeddb unavailable, localStorage only', e);
-    hydrated = true; flushReady();
+    baseIn();
   });
+}
+function baseIn() { baseDone = true; maybeReady(); }
+/* Rec.ready fires once the big half has answered AND every kept-out type
+   something asked for before then has arrived, so an app that read sets while
+   it booted gets them by ready, as it always did. */
+function maybeReady() {
+  if (!baseDone) return;
+  for (const t in LZ) if (LZ[t].state === 1 && LZ[t].early) return;
+  hydrated = true; flushReady();
+}
+
+/* ══════════════ KEPT OUT OF THE OPEN (2026-09-30) ══════════════
+
+   Tom's Galaxy A10 is slow on every open. His TRAIN sets were 12,561 of
+   18,317 rows and 3.1M of the 4.69M characters every open read and parsed
+   before anything drew, on every app, including the ones that never show a
+   set. And localStorage stops near 5M characters, so the sets were also
+   what was filling it.
+
+   So a LAZY type is not read at boot. It is read from IndexedDB, by its own
+   id range, the first time anything touches it: a Rec.all, a get, a count,
+   an export, Rec.need(type), or an app declaring it owns the type (TRAIN).
+   Something that touched it before Rec.ready makes ready wait for it, so an
+   app that reads sets while it boots sees them by ready exactly as before;
+   something that touches it later gets what is in memory at once and an
+   announcement when the rest arrives, which every app already redraws on.
+
+   New rows of the type are still written to BOTH halves, so a set logged a
+   second before the phone kills the tab is not lost to the 60ms IndexedDB
+   queue. Each load then moves the fast half's copies out once IndexedDB
+   holds them at the same time or newer (moveOut). A device whose IndexedDB
+   does not answer keeps them in localStorage, read at load as before.
+
+   What cannot wait for the rows, waits for this: a delete or a patch of a
+   row of a type not loaded yet is queued and done when it arrives (a patch
+   of a row nobody has read would otherwise replace fields it never saw),
+   and a row merged in from outside (sync, a restore, the sheet) is held and
+   merged when the type arrives, so it is compared with the stored copy
+   rather than taken on trust. A row another page just wrote (the channel,
+   the storage event) is already stored, so a page not holding the type
+   simply ignores it. `Rec.need()` is how anything that must see every row,
+   a backup, live sync, the sheet, waits. */
+const LAZY = { set: 1 };
+const LZ = Object.create(null);     /* type -> { state: 1 loading, 2 in; early; q: [waiting work]; p } */
+let missN = 0;                      /* reads that found a kept-out type not in yet */
+const lazyTypes = () => Object.keys(LAZY).sort();
+const lazyLo = t => USER + '|' + t + '|';
+const lazyHi = t => USER + '|' + t + '}';
+const lazyRanges = () => lazyTypes().map(t => [lazyLo(t), lazyHi(t)]);
+const LAZY_KEYS = lazyTypes().map(t => PREFIX + lazyLo(t));
+function lazyKey(k) {
+  for (let i = 0; i < LAZY_KEYS.length; i++) if (k.indexOf(LAZY_KEYS[i]) === 0) return true;
+  return false;
+}
+const loaded = t => !LAZY[t] || !!(LZ[t] && LZ[t].state === 2);
+/* a read of a type: start loading it if it is kept out */
+function touch(t) {
+  if (!LAZY[t]) return;
+  if (!LZ[t]) lazyLoad(t);
+  if (LZ[t].state !== 2) missN++;
+}
+function touchAll(types) { (types && types.length ? types : lazyTypes()).forEach(touch); }
+
+function lazyLoad(type) {
+  if (LZ[type]) return LZ[type].p;
+  const z = LZ[type] = { state: 1, early: !hydrated, q: [], p: null };
+  z.p = new Promise(res => { z.res = res; });
+  lazyRead(type, z);
+  return z.p;
+}
+/* read one kept-out type: the fast half's copies first (a device that has
+   not moved them out yet, and rows written since), then IndexedDB's range */
+function lazyRead(type, z) {
+  const pre = PREFIX + lazyLo(type), inLs = Object.create(null);
+  let changed = 0;
+  Store.keys().forEach(k => {
+    if (k.indexOf(pre) !== 0) return;
+    try {
+      const r = JSON.parse(Store.get(k) || '');
+      if (!r || !r.id) return;
+      inLs[r.id] = r.updated_at || '';
+      if (wins(r, rows[r.id])) { keep(r); serial[r.id] = JSON.stringify(r.payload); changed++; }
+    } catch (e) { console.warn('[records] unreadable row', k); }
+  });
+  const done = () => {
+    if (changed) repairDates();
+    if (z.state === 2) { if (changed) announce([], false); return; }
+    z.state = 2;
+    TIME.lazy[type] = clock();
+    const q = z.q; z.q = [];
+    const merging = [];
+    q.forEach(w => {
+      try {
+        if (w[0] === 'merge') merging.push(w[1]);
+        else if (w[0] === 'del') Rec.del(w[1], w[2], w[3]);
+        else if (w[0] === 'patch') Rec.patch(w[1], w[2], w[3], w[4]);
+      } catch (e) { console.warn('[records] held work', e); }
+    });
+    if (merging.length) Rec.merge(merging);
+    z.res();
+    announce([], false);
+    maybeReady();
+  };
+  if (!IDB.available) { done(); return; }
+  let settled = false;
+  const slow = setTimeout(() => {
+    if (settled) return;
+    console.warn('[records] indexeddb has not answered for ' + type + ' in ' + IDBWAIT + 'ms; carrying on with what localStorage had');
+    done();
+  }, IDBWAIT);
+  IDB.range(lazyLo(type), lazyHi(type)).then(list => {
+    settled = true; clearTimeout(slow);
+    const held = Object.create(null);
+    (list || []).forEach(r => {
+      if (!r || !r.id) return;
+      held[r.id] = r.updated_at || '';
+      if (wins(r, rows[r.id])) { keep(r); serial[r.id] = JSON.stringify(r.payload); changed++; }
+    });
+    moveOut(inLs, held);
+    done();
+  }).catch(e => {
+    settled = true; clearTimeout(slow);
+    console.warn('[records] indexeddb unavailable for ' + type + ', localStorage only', e);
+    done();
+  });
+}
+/* The fast half's copies of a kept-out type go once IndexedDB holds them at
+   the same time or newer. One IndexedDB lacks, or holds older, is put there
+   first, and its fast-half copy goes only once that put has completed. */
+function moveOut(inLs, held) {
+  const put = [];
+  Object.keys(inLs).forEach(id => {
+    if (held[id] != null && held[id] >= inLs[id]) { try { Store.del(PREFIX + id); } catch (e) {} }
+    else if (rows[id]) put.push(rows[id]);
+  });
+  if (!put.length) return;
+  IDB.put(put).then(() => put.forEach(r => {
+    try {
+      const j = Store.get(PREFIX + r.id);
+      if (j && (JSON.parse(j).updated_at || '') <= r.updated_at) Store.del(PREFIX + r.id);
+    } catch (e) {}
+  })).catch(e => console.warn('[records] could not move rows into indexeddb; they stay in localStorage', e));
 }
 
 let readyQ = [];
@@ -656,6 +836,8 @@ const Rec = {
   declare(appId, types) {
     me = appId || 'app';
     (types || []).forEach(t => { owners[t] = appId; });
+    /* the app that owns a kept-out type wants it on every open (TRAIN) */
+    (types || []).forEach(t => { if (LAZY[t]) lazyLoad(t); });
     return Rec;
   },
   owner: t => owners[t] || null,
@@ -669,6 +851,25 @@ const Rec = {
     readyQ.push(fn);
   },
   get hydrated() { return hydrated; },
+  /** Resolves once these kept-out types are in memory, and the rest of the
+      store too: a string, a list, or nothing for every kept-out type. For
+      anything that must see every row (a backup, live sync, the sheet). A
+      type that is not kept out is always in by Rec.ready. */
+  need(types) {
+    const want = (types == null ? lazyTypes() : [].concat(types)).filter(t => LAZY[t]);
+    want.forEach(t => lazyLoad(t));
+    return new Promise(res => Rec.ready(() => Promise.all(want.map(t => LZ[t].p)).then(() => res())));
+  },
+  /** is this type in memory yet: always, unless it is kept out of the open */
+  loaded(type) { return loaded(type); },
+  /** the types kept out of the open */
+  get lazy() { return lazyTypes(); },
+  /** How many reads so far found a kept-out type not in yet. A screen can
+      compare it before and after drawing something, and draw a placeholder
+      rather than an empty answer; the rows' arrival is announced. */
+  missed() { return missN; },
+  /** Resolves when every write queued for IndexedDB so far has landed. */
+  saved() { Rec.flush(); return lastPut.then(() => true, () => false); },
   /** How long this open took, in ms since the page was asked for: `paint`
       (the first thing drawn, as the browser saw it), `ready`, `fast` (the
       fast half's read), `boot` and `lazy` {type: ms}. A figure not reached
@@ -687,6 +888,10 @@ const Rec = {
   set(type, date, key, payload) {
     if (owners[type] && owners[type] !== me && !Rec.shared[type])
       console.warn('[records] ' + me + ' is writing ' + type + ', which ' + owners[type] + ' owns');
+    /* A whole payload given is safe before a kept-out type is in: it is the
+       newest version of the row, and wins against the stored one when that
+       arrives. Start the load all the same. */
+    if (LAZY[type] && !LZ[type]) lazyLoad(type);
     const id = rowId(type, date, key), prev = rows[id];
     const r = {
       id: id, user_id: USER, type: type, date: date || null, key: String(key),
@@ -705,6 +910,8 @@ const Rec = {
     return r;
   },
   del(type, date, key) {
+    /* the row may be stored and simply not read yet: delete it once it is */
+    if (!loaded(type)) { touch(type); LZ[type].q.push(['del', type, date, key]); return null; }
     const id = rowId(type, date, key), prev = rows[id];
     if (!prev || prev.deleted) return null;
     const r = Object.assign({}, prev, { payload: null, deleted: true, updated_at: later(prev), by: me });
@@ -722,6 +929,8 @@ const Rec = {
       A value of undefined removes the field. A row that does not exist yet is
       made from the changes. Changing nothing writes nothing. */
   patch(type, date, key, changes) {
+    /* a patch of a row not read yet would replace every field it never saw */
+    if (!loaded(type)) { touch(type); LZ[type].q.push(['patch', type, date, key, copy(changes)]); return null; }
     const was = Rec.get(type, date, key);
     const cur = (was && typeof was === 'object' && !Array.isArray(was)) ? was : {};
     Object.keys(changes || {}).forEach(path => {
@@ -744,19 +953,20 @@ const Rec = {
   recDel(type, date, key) { return Rec.del(type, date, key); },
 
   /* ── reading ── */
-  get(type, date, key) { const r = rows[rowId(type, date, key)]; return alive(r) ? copy(r.payload) : null; },
+  get(type, date, key) { touch(type); const r = rows[rowId(type, date, key)]; return alive(r) ? copy(r.payload) : null; },
   /** the id a row with this type, date and key has, or would have. For an
       app merging rows it built itself with their own updated_at, so a
       second import of the same file is a comparison rather than a rewrite. */
   idOf(type, date, key) { return rowId(type, date, key); },
-  has(type, date, key) { return alive(rows[rowId(type, date, key)]); },
-  row(type, date, key) { const r = rows[rowId(type, date, key)]; return alive(r) ? r : null; },
+  has(type, date, key) { touch(type); return alive(rows[rowId(type, date, key)]); },
+  row(type, date, key) { touch(type); const r = rows[rowId(type, date, key)]; return alive(r) ? r : null; },
   /** the tombstone of a row that was deleted, or null when it is alive or was
       never there. The mirror asks, so a line the sheet still carries for a
       row this device deleted is not mistaken for something new. */
-  tombstone(type, date, key) { const r = rows[rowId(type, date, key)]; return r && r.deleted ? r : null; },
+  tombstone(type, date, key) { touch(type); const r = rows[rowId(type, date, key)]; return r && r.deleted ? r : null; },
   /** every tombstone of a type, or only the ones written after `since` */
   tombstones(type, since) {
+    touch(type);
     const out = [], ids = idsOf(type);
     for (let i = 0; i < ids.length; i++) {
       const r = rows[ids[i]];
@@ -769,6 +979,7 @@ const Rec = {
 
   /** every live row of a type, optionally narrowed by date or a date window */
   all(type, opt) {
+    touch(type);
     opt = opt || {};
     const out = [], ids = opt.date != null ? idsOn(type, opt.date) : idsOf(type);
     for (let i = 0; i < ids.length; i++) {
@@ -802,10 +1013,18 @@ const Rec = {
   /* ── merging: the whole point of rows ── */
   /** idempotent by construction: same rows in twice changes nothing the second
       time, because the comparison is on the times, not on arrival */
-  merge(incoming) {
+  merge(incoming, via) {
     const changed = [];
     (incoming || []).forEach(r => {
       if (!r || !r.id || !r.type) return;
+      /* A kept-out type not in yet (KEPT OUT). A row another page on this
+         device just wrote is stored already, so a page not holding the type
+         lets it go; anything from outside waits for the stored copy. */
+      if (!loaded(r.type)) {
+        if ((via === 'bc' || via === 'storage') && !LZ[r.type]) return;
+        touch(r.type); LZ[r.type].q.push(['merge', r]);
+        return;
+      }
       const prev = rows[r.id];
       /* two live versions with field times: a field at a time (FIELD TIMES) */
       const both = prev ? combine(prev, r) : null;
@@ -830,6 +1049,7 @@ const Rec = {
   },
   /** rows for backup. `types` narrows it to one app's own data. */
   export(types) {
+    touchAll(types);
     const want = types && types.length ? types : Object.keys(byType);
     const out = [];
     want.forEach(type => idsOf(type).forEach(id => out.push(rows[id])));
@@ -848,6 +1068,7 @@ const Rec = {
       with twelve thousand sets on it. This allocates nothing and stops at the
       first row that qualifies, so the interesting answer is the fast one. */
   newerThan(types, stamp, keyPrefix) {
+    touchAll(types);
     if (!stamp) return true;
     const want = types && types.length ? types : Object.keys(byType);
     for (let t = 0; t < want.length; t++) {
@@ -861,6 +1082,7 @@ const Rec = {
     return false;
   },
   types() {
+    touchAll();
     const t = Object.create(null);
     Object.keys(byType).forEach(type => {
       const n = idsOf(type).filter(id => alive(rows[id])).length;
@@ -869,6 +1091,7 @@ const Rec = {
     return t;
   },
   stats() {
+    touchAll();
     let live = 0, dead = 0, bytes = 0, big = 0;
     for (const id in rows) {
       alive(rows[id]) ? live++ : dead++;
@@ -896,19 +1119,24 @@ const Rec = {
        before the read on the same connection, and the browser keeps them in
        that order. */
     Rec.flush();
-    Object.keys(rows).forEach(drop);
+    /* A kept-out type that is in stays in memory and is read again below,
+       merged, so a redraw in between never sees it empty. */
+    Object.keys(rows).forEach(id => { if (!(LAZY[rows[id].type] && loaded(rows[id].type))) drop(id); });
     loadFast();
     repairDates();
     /* The fast half alone is not the store any more, so a reload that stopped
        there would drop every row too big for it until the next page load.
        Re-reading IndexedDB is a merge, so it costs nothing when nothing moved. */
     hydrate();
+    lazyTypes().forEach(t => { if (loaded(t)) lazyRead(t, LZ[t]); });
     if (JSON.stringify(Object.keys(rows).map(k => rows[k].updated_at)) !== before) announce([], false);
     return Rec;
   },
   /** really remove rows of a type before a date — no tombstone, no trace.
       Only safe while everything is local; a tombstone is required once it syncs. */
   purge(type, beforeDate) {
+    /* nothing purges a kept-out type today; if it ever does, it waits for it */
+    if (!loaded(type)) { touch(type); LZ[type].p.then(() => Rec.purge(type, beforeDate)); return 0; }
     let n = 0;
     for (const id in rows) {
       const r = rows[id];
@@ -941,6 +1169,14 @@ const Rec = {
     /* Wiping everything is one transaction rather than a queue of thousands of
        individual deletes. */
     if (wipeAll && IDB.available) IDB.wipe().catch(e => console.warn('[records] indexeddb wipe failed', e));
+    /* A kept-out type not read yet has rows in neither `rows` nor this loop:
+       take its range out of both halves too, and drop any work held for it. */
+    lazyTypes().forEach(t => {
+      if (!wipeAll && types.indexOf(t) === -1) return;
+      Store.keys().forEach(k => { if (k.indexOf(PREFIX + lazyLo(t)) === 0) { try { Store.del(k); n++; } catch (e) {} } });
+      if (LZ[t]) LZ[t].q = [];
+      if (!wipeAll && IDB.available) IDB.delRange(lazyLo(t), lazyHi(t)).catch(e => console.warn('[records] indexeddb delete failed', e));
+    });
     announce([], true);
     return n;
   },
@@ -956,7 +1192,7 @@ const Rec = {
     Object.keys(idbQ).forEach(k => delete idbQ[k]);
     Object.keys(idbGone).forEach(k => delete idbGone[k]);
     if (!list.length && !gone.length) return 0;
-    IDB.put(list, gone).catch(e => console.warn('[records] flush failed', e));
+    lastPut = IDB.put(list, gone).catch(e => console.warn('[records] flush failed', e));
     return list.length + gone.length;
   },
 
@@ -977,12 +1213,12 @@ const Rec = {
    an incoming row is merged, never blindly trusted */
 try {
   bc = new BroadcastChannel(CH);
-  bc.onmessage = e => { const m = e.data; if (m && m.mb === 1 && m.rows) Rec.merge(m.rows); };
+  bc.onmessage = e => { const m = e.data; if (m && m.mb === 1 && m.rows) Rec.merge(m.rows, 'bc'); };
 } catch (e) {}
 /* a second window that predates BroadcastChannel support still syncs on write */
 g.addEventListener('storage', e => {
   if (!e.key || e.key.indexOf(PREFIX) !== 0) return;
-  try { const r = JSON.parse(e.newValue); if (r && r.id) Rec.merge([r]); } catch (err) {}
+  try { const r = JSON.parse(e.newValue); if (r && r.id) Rec.merge([r], 'storage'); } catch (err) {}
 });
 /* a poke from a neighbour: look at storage again, then pass it on once. The
    relay flag is what stops two frames poking each other forever. */

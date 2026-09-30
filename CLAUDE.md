@@ -174,7 +174,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `report.js` | Each device's own note, added 2026-09-30: one `device` row per device (when it last opened anything, what live sync last did, every app version opened there, its last five uncaught errors and promise rejections). Fetched by `io.js` like `cloud.js`; `io.js` itself catches errors from its own first line until this arrives, so a page that dies while booting is still reported. DATA lists every device under LIVE SYNC (`IO.deviceRow`). Claude reads every device's row on the PC in the nightly backup file. Writes only what changed, never inside TRAIN on a client. The global is `DeviceReport`: WebKit already owns `Report`. |
 | `cloud.js` | LIVE SYNC: Firebase beside the sheet, added 2026-09-20. One row per row at `/u/<uid>/rows/<id>`, pushed on change and listened for by `updated_at`, merged through `Rec.merge` like anything else. Fetched by `io.js` rather than by a tag in every app, the way `mobile.js` fetches `sw.js`, so no app was edited. Only the TOP document connects, because `records.js` already shares merged rows across the origin and fourteen frames would be fourteen connections. A row over 64KB is skipped AND THE BOUNDARY STILL PASSES IT, or one photo would jam every sync after it. Does nothing until a config is pasted. See `CLOUD.md`. |
 | `nutrients.js` | The full nutrient list a food can carry beyond the eight, added 2026-09-22: fibre, sugar, the fats, EPA and DHA, cholesterol, eleven minerals and the vitamins, thirty-one in all. One list, three readers: FOODDÉX fills them from its USDA lookup (found by the USDA's printed NAME and unit, never its numeric id, and International Units skipped), STATUS gives each one a column on the sheet's Food tab, and ELEMENT reads its five off the food. They live on `food.base` beside the eight. A blank is "not known", never zero. |
-| `_smoke.html` | 380 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 396 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -209,6 +209,19 @@ ARC node — lives only there and arrives a few milliseconds later, merged in by
 That is what `Rec.ready()` is for. **An app that draws from the store on load
 must redraw when it lands**, or a big row will be missing from its first paint.
 STATUS, TRAIN and ARC all wait on it.
+
+**TRAIN's sets are kept out of the open** (2026-09-30, `records.js`, KEPT
+OUT). `set` is the one LAZY type: no page reads it at boot. It is read from
+IndexedDB the first time anything touches it (a read, an export,
+`Rec.need('set')`, or `Rec.declare` naming it, which TRAIN does), and a touch
+before `Rec.ready` makes ready wait for it, so an app that reads sets while
+it boots still has them by ready. A later touch gets what is in memory and an
+announcement when the rest lands. **Anything that must see every row waits
+on `Rec.need()` first**: a backup, a restore, the sheet sync, live sync, the
+nightly backup and `_review.html` already do. New sets are still written to
+both halves and moved out of localStorage once IndexedDB holds them.
+`Rec.missed()` counts reads that found a kept-out type not in yet; the home
+screen uses it to say Loading rather than "0 sets".
 
 **Waiting and redrawing are not the same thing, and the difference is a blank
 screen.** An app that puts its FIRST paint behind `Rec.ready` shows nothing at
@@ -889,6 +902,13 @@ answer, or take it out.
   by the id it derives from type, date and key, so a hand-made `id` is a
   second row that `Rec.all` and `Rec.map` list and `Rec.get` cannot see, and
   the app shows a ghost (2026-09-25). Seed test rows with `Rec.set`.
+- **A bulk merge of sets on a page that has not read them is held, not
+  written** (2026-09-30). `Rec.merge` of a kept-out type before it is in
+  queues the rows until it arrives, so they are compared with the stored
+  copies; a page that closes first never writes them. The demo's seeder lost
+  every set that way on its first run. Call `Rec.need()` before a bulk merge
+  or a restore. A `patch` or `del` of a set before sets are in is queued the
+  same way and returns null.
 - **Clean test rows from a page that loads no store, in both halves, by
   parsed row.** A localStorage name is `mb.r.<user>|<type>|<date>|<key>`, so
   match the parsed `type` and `key`, not the name. A page that loads

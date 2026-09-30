@@ -45,7 +45,7 @@ are holding a stale copy of whatever you just changed.
 | `import.js` | Bringing in an outside spreadsheet by shape: ticks, weigh-ins, foods, money out. | High. It writes rows many apps own. |
 | `health.js` | Answers "is my data okay". | Low. |
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
-| `_smoke.html` | 380 checks over all of it. | Run it every time. |
+| `_smoke.html` | 396 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -360,6 +360,31 @@ settings, and only rows IndexedDB holds at the same or a newer time. One
 that PC it held 65 rows against 17,655 in localStorage, because rows from
 before it existed never went in. `makeRoom` copies every missing row in and
 waits for the transaction to complete before anything is trimmed.
+
+## Faster open (2026-09-30, the plan Tom picked on 24 Sep)
+
+The Galaxy A10 is slow on every open. Measured on a store the size of his
+(12,561 sets, 16,302 rows, 4.6M characters) in headless Chromium slowed 6x:
+the home screen went from first paint 1.94 s and Rec.ready 3.33 s to 1.43 s
+and 2.05 s once TRAIN had opened once; TRAIN's first paint 0.87 s to 0.47 s.
+
+- **Every open is timed** (`Rec.timing()`): `paint` (the browser's first
+  contentful paint), `fast`, `boot`, `ready`, `lazy`. DATA says "Opened in X s
+  here" and each device's row carries `open.<app>`, so the A10's figure can
+  be read on the PC.
+- **report.js and cloud.js arrive after Rec.ready** (`io.js`, `afterOpen`),
+  never while the first screen draws. DATA opened sooner fetches cloud.js at
+  once (`IO.loadCloud`). `import.js` is fetched by the home screen only when
+  a spreadsheet is brought in. The home screen asks for one app's file (a
+  HEAD) when that app's frame is first made, not all fifteen on every open.
+- **Sets are kept out of the open** (`records.js`, KEPT OUT; the root brief's
+  data model has the rules). Rec.ready waits for a kept-out type only when
+  something touched it before ready. `cloud.js` 0.2.3 starts nothing until
+  `Rec.need()`; `io.js` backup, restore and the sheet sync call `needRows()`.
+  Nine `rec:` smoke checks drive it in fresh frames: nothing read at boot,
+  a first read starts the load, need brings all, the fast-half copy goes, a
+  held patch keeps fields it never saw, an older merged copy loses, a held
+  delete happens, and a boot-time read has sets by ready.
 
 ## History
 

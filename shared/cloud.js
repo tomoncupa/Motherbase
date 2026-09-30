@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.2.2 — Firebase as a SECOND sync, beside the Google Sheet,
+/* shared/cloud.js — 0.2.3 — Firebase as a SECOND sync, beside the Google Sheet,
    and since 0.2.0 the trays a client and the coach send each other things by.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
@@ -892,6 +892,14 @@ function start() {
   }).then(function (u) {
     return u ? { uid: u.uid, email: u.email || '', db: g.firebase.database(app()) } : null;
   });
+  /* 0.2.3: TRAIN's sets are kept out of the open (records.js, KEPT OUT). A
+     push, the daily check and a row heard from the cloud all compare against
+     every row here, so nothing starts until every kept-out type is in. The
+     smoke checks' stand-in store has no `need` and goes straight on. */
+  found = found.then(function (me) {
+    var R = store();
+    return me && !probe && R && R.need ? R.need().then(function () { return me; }) : me;
+  });
   return found.then(function (me) {
     if (!me) { signedOut(); return false; }
     if (started) return false;
@@ -1235,7 +1243,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.2',
+  VERSION: '0.2.3',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {

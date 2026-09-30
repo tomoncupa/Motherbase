@@ -59,3 +59,12 @@ Watched here at 1920x1000 and 390x844 with seeded rows in every app: all 48 draw
 ## 2026-09-28, HOME 1.0.36: KITCHEN in the roster
 
 KITCHEN, the shelf, the week of meals and targets and gaps (`kitchen/CLAUDE.md`), is in `APPS` after CHECK IN. A client app, so no `mine`, and `phone: 1`, so it joins the phone tab bar: nine buttons there now; measured at 390px, each 41px wide with a 44px hit area, the last ending at 386px, the word KITCHEN about 1px wider than its button.
+
+## 2026-09-30, HOME 1.0.37: a faster open, and a complete backup
+
+Part of the foundation's faster open (`shared/CLAUDE.md`, Faster open).
+
+- **One HEAD per app, when its frame is first made** (`probe(a)` in `frameFor` and `openOver`). Every open used to ask for all fifteen app files; a missing one still says so, closes its frame and goes home.
+- **`import.js` is fetched on first use** (`needImport`) from beside `io.js`, so a client copy's stamp comes along.
+- **A widget that reads TRAIN's sets draws Loading until they arrive**: the card compares `Rec.missed()` before and after `W.sub` and `W.draw`. Sets are kept out of the open now, and "No working sets" before they land would be a lie.
+- **Back up everything is every row, from the store** (`Rec.need()`, then `Rec.export()`, plus `IO.localBits`), the same `motherbase-backup` file the nightly backup writes and any app's Restore merges. It used to copy localStorage key by key, which never held a photo or any row the full fast half had moved to IndexedDB, and would have held no sets at all. The home screen's Restore merges that file; an old `lifeos-backup` still replaces everything, as it always did.

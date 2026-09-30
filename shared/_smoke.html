@@ -304,6 +304,76 @@ async function run() {
   ok('rec: a TRAIN set stays a whole row with no field times', !Rec.row('set', d, setKey).ft);
   Rec.del('set', d, setKey);
 
+  /* ---- sets kept out of the open (records.js, KEPT OUT, 2026-09-30) ----
+     A fresh page on this origin, holding nothing but the store, stands in for
+     an app that never shows a set: it must not read them at boot, must read
+     them the moment anything asks, and must not lose a patch, a delete or an
+     older copy that turns up before they are in. Each frame is its own page
+     load; the rows are this run's own and are deleted at the end. */
+  const lazyFrame = extra => new Promise(res => {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;border:0;left:-9px';
+    document.body.appendChild(fr);
+    fr.contentDocument.open();
+    fr.contentDocument.write('<scr' + 'ipt src="day.js"></scr' + 'ipt><scr' + 'ipt src="records.js"></scr' + 'ipt>' + (extra || ''));
+    fr.contentDocument.close();
+    const t0 = Date.now();
+    (function wait() {
+      const R = fr.contentWindow && fr.contentWindow.Rec;
+      if (R) { R.ready(() => res(fr)); return; }
+      if (Date.now() - t0 > 8000) { res(fr); return; }
+      setTimeout(wait, 30);
+    })();
+  });
+  ok('rec: TRAIN\'s sets are the type kept out of the open', Rec.lazy.join() === 'set' && Rec.loaded('note'));
+  if (Rec.stats().idb) {
+    const lzA = 'smoke-lazyA-' + Date.now(), lzB = 'smoke-lazyB-' + Date.now(), lzD = '1900-01-02';
+    Rec.set('set', lzD, lzA, { ex: 'smoke', kg: 60, r: 5, u: 'kg', done: 1 });
+    Rec.set('set', lzD, lzB, { ex: 'smoke', kg: 70, r: 3, u: 'kg', done: 1 });
+    await Rec.need('set');
+    await Rec.saved();
+    const idA = Rec.idOf('set', lzD, lzA);
+    let fr = await lazyFrame();
+    let R = fr.contentWindow.Rec;
+    ok('rec: a page that never asks for sets has none in memory after ready',
+      !!R && R.hydrated && !R.loaded('set') && !R._rows[idA]);
+    const m0 = R.missed();
+    R.all('set', { date: lzD });
+    ok('rec: the first read of a set starts the load and counts as a miss', R.missed() === m0 + 1 && !R.loaded('set'));
+    await R.need('set');
+    ok('rec: Rec.need brings every set in, and export then has them',
+      R.loaded('set') && R.all('set', { date: lzD }).length === 2 && R.export(['set']).some(r => r.id === idA));
+    await new Promise(r => setTimeout(r, 300));
+    ok('rec: once IndexedDB holds a set, its fast-half copy goes', localStorage.getItem('mb.r.' + idA) === null);
+    fr.remove();
+
+    /* a patch before the sets are in waits for them, and keeps every field */
+    fr = await lazyFrame(); R = fr.contentWindow.Rec;
+    const held = R.patch('set', lzD, lzA, { note: 'smoke held' });
+    await R.need('set');
+    const pA = R.get('set', lzD, lzA) || {};
+    ok('rec: a patch made before the sets arrive keeps the fields it never saw', held === null && pA.note === 'smoke held' && pA.kg === 60);
+    fr.remove();
+
+    /* an older copy from outside is compared with the stored one, never taken on trust */
+    fr = await lazyFrame(); R = fr.contentWindow.Rec;
+    const stale = Object.assign({}, Rec.row('set', lzD, lzB), { payload: { ex: 'smoke', kg: 1, r: 1 }, updated_at: '2001-01-01T00:00:00.000Z' });
+    R.merge([stale]);
+    const delHeld = R.del('set', lzD, lzA);
+    await R.need('set');
+    ok('rec: an older copy merged before the sets arrive loses to the stored one', (R.get('set', lzD, lzB) || {}).kg === 70);
+    ok('rec: a delete made before the sets arrive happens when they do', delHeld === null && R.get('set', lzD, lzA) === null && !!R.tombstone('set', lzD, lzA));
+    fr.remove();
+
+    /* a page that reads sets while it boots gets them by ready, as it always did */
+    fr = await lazyFrame('<scr' + 'ipt>window.__n = Rec.all("set").length;</scr' + 'ipt>'); R = fr.contentWindow.Rec;
+    ok('rec: a page that reads sets while it boots has them all by Rec.ready',
+      R.loaded('set') && R.all('set', { date: lzD }).length === 1 && R.timing().lazy.set > 0);
+    fr.remove();
+    await Rec.need('set');
+    Rec.del('set', lzD, lzA); Rec.del('set', lzD, lzB);
+  }
+
   Rec.set(stamp, null, 'undated', { v: 'x' });
   ok('rec: undated rows work', Rec.get(stamp, null, 'undated').v === 'x');
   Rec.setting('smoke', 'colour', 'blue');
@@ -2384,8 +2454,11 @@ async function run() {
     /repaint\(\)/.test(String(IO.panel)) && /IO\.backup\(appId\)\.then\(repaint\)/.test(String(IO.panel)));
   /* The careful version of this was in backup() and not in the button beside
      it, which stamped every app as safe before the share sheet was answered. */
-  ok('io: backing up every app also waits for the file', () =>
-    /if \(!done\)/.test(String(IO.backupAll)) && /return save\(/.test(String(IO.backupAll)));
+  ok('io: backing up every app also waits for the file', () => {
+    /* since 2026-09-30 the body is _backupAll, run once every set is in */
+    const src = String(IO.backupAll) + String(IO._backupAll || '');
+    return /if \(!done\)/.test(src) && /return save\(/.test(src) && /needRows/.test(String(IO.backupAll));
+  });
   ok('io: a backup that saved nothing does not claim to have run', (() => {
     const key = 'mb.backup.__smoke', had = localStorage.getItem(key);
     localStorage.removeItem(key);

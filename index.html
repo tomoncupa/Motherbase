@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.36, 2026-09-28">
+<meta name="mb-version" content="1.0.37, 2026-09-30">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -32,7 +32,8 @@
 <script src="shared/ui.js"></script>
 <script src="shared/io.js"></script>
 <script src="shared/icons.js"></script>
-<script src="shared/import.js"></script>
+<!-- shared/import.js is fetched when "Bring in an old spreadsheet" is used
+     (needImport), not on every open. -->
 <style>
 :root{
   /* ── the bridge ──
@@ -876,6 +877,7 @@ const appTint = a => {
 };
 const frames = {};      /* id -> iframe. Built on first visit, then kept alive. */
 const missing = {};     /* id -> true once a HEAD check says the file is not there */
+const checked = {};     /* id -> true once its file has been asked about this session */
 let view = 'home';
 
 const $ = s => document.querySelector(s);
@@ -910,6 +912,7 @@ function frameFor(id) {
     f.addEventListener('load', () => { f.dataset.loaded = '1'; }, { once: true });
     f.src = a.file;
     frames[id] = f; $('#stage').appendChild(f);
+    probe(a);
   }
   return frames[id];
 }
@@ -935,6 +938,7 @@ function openOver(id) {
     f.src = a.file;
     o.appendChild(f);
     overId = id;
+    probe(a);
   }
   o.classList.add('on');
   if (typeof Mobile !== 'undefined' && Mobile.trap) overRelease = Mobile.trap(closeOver);
@@ -1116,12 +1120,21 @@ function dockMenu(a, i, total, x, y) {
     { label: 'Reset the order', fn: () => { Rec.setting('lifeos', 'dockOrder', []); drawNav(); } },
   ].filter(Boolean), { title: a.nm });
 }
-/* a tile for a file that is not there should say so, not open a blank frame */
-function probe() {
-  if (location.protocol === 'file:') return;   /* HEAD on file:// tells us nothing */
-  APPS.filter(a => a.file).forEach(a => {
-    fetch(a.file, { method: 'HEAD' }).then(r => { if (!r.ok) { missing[a.id] = 1; drawNav(); if (view === 'home') drawHome(); } }).catch(() => {});
-  });
+/* A tile for a file that is not there should say so, not open a blank frame.
+   Asked once per app per session, when its frame is first made, since
+   1.0.37: every open used to send a HEAD for all fifteen app files, a second
+   and more on a phone's network, to catch a folder nobody had deleted. */
+function probe(a) {
+  if (!a || !a.file || checked[a.id] || location.protocol === 'file:') return;   /* HEAD on file:// tells us nothing */
+  checked[a.id] = 1;
+  fetch(a.file, { method: 'HEAD' }).then(r => {
+    if (r.ok) return;
+    missing[a.id] = 1;
+    if (frames[a.id]) { frames[a.id].remove(); delete frames[a.id]; }
+    if (view === a.id) go('home');
+    toast('<b>' + esc(a.file) + '</b> is missing from this folder', { bad: true });
+    drawNav(); if (view === 'home') drawHome();
+  }).catch(() => {});
 }
 
 /* ══════════════ helpers ══════════════ */
@@ -4201,9 +4214,15 @@ function drawHome() {
        tellable apart, so a widget that varies by config names itself. */
     const name = W.nmFor ? W.nmFor(cfg) : W.nm;
     const to = W.to && (!W.to[0] || W.to[0] === 'over' || app(W.to[0])) ? W.to : null;
+    /* TRAIN's sets arrive a moment after the open (records.js, KEPT OUT).
+       A widget that asked for them before they came says nothing yet rather
+       than "0 sets"; their arrival redraws the board. */
+    const miss0 = Rec.missed ? Rec.missed() : 0;
+    let sub = W.sub ? W.sub(cfg) : '';
+    if (Rec.missed && Rec.missed() !== miss0) sub = '';
     head.innerHTML = (to ? '<span class="wgo" role="link" tabindex="0">' + esc(name) + '</span>' : esc(name)) +
       (title ? ' <span class="c">' + esc(title) + '</span>' : '') +
-      '<span class="sub">' + esc(W.sub ? W.sub(cfg) : '') + '</span>';
+      '<span class="sub">' + esc(sub) + '</span>';
     if (to) {
       const lk = head.querySelector('.wgo');
       lk.title = 'Open ' + (to[0] === 'over' ? app(to[1]).nm : app(to[0]).nm);
@@ -4248,7 +4267,9 @@ function drawHome() {
 
     const body = el('div', 'w-body');
     const fill = () => {
+      const m0 = Rec.missed ? Rec.missed() : 0;
       try { W.draw(body, cfg); } catch (e) { body.appendChild(el('div', 'empty', 'widget error: ' + esc(e.message))); }
+      if (Rec.missed && Rec.missed() !== m0) { body.innerHTML = ''; body.appendChild(el('div', 'empty', 'Loading')); }
       /* the rows inside are the plates, in their own colour or the widget's.
          Only the card-shaped rows: a ruled list line (.hrow, .logline) is a
          line, and a plate on it would be a border on a border. */
@@ -4510,18 +4531,34 @@ function download(name, text, mime) {
 const csvCell = v => { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
 const csv = rows => rows.map(r => r.map(csvCell).join(',')).join('\r\n');
 
+/* Every row in the store, from the store (1.0.37). It used to copy
+   localStorage key by key, which held only the fast half: a photo, any row
+   the full fast half had moved to IndexedDB, and since TRAIN's sets were
+   kept out of the open (records.js, KEPT OUT), every set, were missing from
+   it. Now it is the same file the nightly backup writes, which any app's
+   Restore merges, plus the look of every app. */
 function backupAll() {
-  const bag = { kind: 'lifeos-backup', v: 1, at: new Date().toISOString(), shared: LifeOS.doc(), local: {} };
-  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); bag.local[k] = localStorage.getItem(k); }
-  download('lifeos-backup-' + LifeOS.day() + '.json', JSON.stringify(bag), 'application/json');
-  try { localStorage.setItem(BKEY, LifeOS.day()); } catch (e) {}
-  toast('backup saved — <b>shared data + every app</b>');
-  refreshDataBtn();
+  Rec.need().then(() => {
+    const bag = { kind: 'motherbase-backup', v: 1, app: '*', at: new Date().toISOString(), rows: Rec.export(),
+      local: IO.localBits ? IO.localBits('home') : {} };
+    download('motherbase-all-' + LifeOS.day() + '.json', JSON.stringify(bag), 'application/json');
+    try { localStorage.setItem(BKEY, LifeOS.day()); } catch (e) {}
+    toast('<b>' + bag.rows.length.toLocaleString() + '</b> rows backed up, every app');
+    refreshDataBtn();
+  });
 }
 function restore(file) {
   const fr = new FileReader();
   fr.onload = () => {
     let bag; try { bag = JSON.parse(fr.result); } catch (e) { return toast('that file is not JSON'); }
+    /* the store's own file merges, newer rows winning, like every app's Restore */
+    if (bag.kind === 'motherbase-backup') {
+      Rec.need().then(() => {
+        const c = IO.restore(bag, 'merge');
+        toast(c ? '<b>' + c.toLocaleString() + '</b> rows restored' : 'Nothing to restore. This device already has all of it');
+      }).catch(e => toast(esc(e && e.message || 'could not restore'), { bad: true }));
+      return;
+    }
     if (bag.kind !== 'lifeos-backup') return toast('not a backup from this suite');
     if (!confirm('Replace ALL data on this device with the backup from ' + (bag.at || '?') + '?\n\nThis cannot be undone.')) return;
     Object.keys(bag.local || {}).forEach(k => { try { localStorage.setItem(k, bag.local[k]); } catch (e) {} });
@@ -4795,8 +4832,23 @@ function mirrorSection(mo) {
 /* ══════════════ bringing in an old spreadsheet ══════════════
    shared/import.js reads it; this asks which parts to bring in. Nothing is
    written until BRING IN, and the undo takes back exactly what came in. */
+/* import.js, fetched on first use from beside io.js (so a client copy's
+   stamp comes along) rather than on every open: 16 KB nobody uses daily. */
+function needImport() {
+  if (typeof Import !== 'undefined') return Promise.resolve(true);
+  return new Promise(res => {
+    const io = document.querySelector('script[src*="shared/io.js"]');
+    const t = document.createElement('script');
+    t.src = io ? io.src.replace(/io\.js/, 'import.js') : 'shared/import.js';
+    t.onload = () => res(typeof Import !== 'undefined');
+    t.onerror = () => { t.remove(); res(false); };
+    document.head.appendChild(t);
+  });
+}
 function importSheet(file) {
-  if (typeof Import === 'undefined') return toast('<b>import.js</b> is missing', { bad: true });
+  needImport().then(ok => ok ? importRead(file) : toast('<b>import.js</b> is missing', { bad: true }));
+}
+function importRead(file) {
   toast('Reading <b>' + esc(file.name) + '</b>');
   Import.read(file).then(sheets => {
     const p = Import.plan(sheets);
@@ -4850,7 +4902,7 @@ function dataPanel() {
      2026-09-15: "simply the data screen. Export, import, Sync". */
   mo.appendChild(el('div', 'mgroup', 'EXPORT'));
   const opts = [
-    ['⭳', 'Back up everything', 'One JSON file: your ticks, habits, routines and every app’s own storage. This is the one that can be restored.', backupAll],
+    ['⭳', 'Back up everything', 'One JSON file: every row of every app, and each app’s look. Restore it here or in any app.', backupAll],
   ];
   opts.forEach(([ic, t, d, fn]) => {
     const b = el('button', 'opt');
@@ -4871,7 +4923,7 @@ function dataPanel() {
 
   mo.appendChild(el('div', 'mgroup', 'IMPORT'));
   const rs = el('button', 'opt');
-  rs.innerHTML = '<span class="ic">⭱</span><span class="t"><b>Restore from a backup</b><span>Replaces everything on this device with the contents of a backup file.</span></span>';
+  rs.innerHTML = '<span class="ic">⭱</span><span class="t"><b>Restore from a backup</b><span>Fills in what is missing from a backup file, never overwrites newer. An old whole-device backup still replaces everything.</span></span>';
   rs.onclick = () => $('#fileIn').click();
   mo.appendChild(rs);
   const im = el('button', 'opt');
@@ -4953,7 +5005,7 @@ LifeOS.on(() => { if (view === 'home' && !moving && !sizing) { reloadLayout(); d
 LifeOS.ready(() => {
   LifeOS.prune(800);
   go(location.hash.slice(1) || 'home');
-  probe(); refreshDataBtn();
+  refreshDataBtn();
 });
 clock(); setInterval(clock, 20000);
 /* midnight: today rolls over, so the home screen must too */
