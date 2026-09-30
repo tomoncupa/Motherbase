@@ -7,12 +7,12 @@
    This file loads first in every app, so this is where it happens, before a
    single line reads storage. Once on, for this browser tab only (the flag is
    in sessionStorage, which the tab's frames share):
-     · localStorage is swapped for one of the demo's own: rows (mb.r.*) are
-       kept in this page's memory, and every other key under an `mbdemo:`
-       prefix, so the demo's store never touches the fast half Tom's rows
-       live in, or its quota;
-     · every IndexedDB database the suite opens gets the same prefix, so the
-       demo's rows live in `mbdemo:motherbase`, never in `motherbase`;
+     · localStorage is swapped for one of the demo's own: every key, rows
+       too, lives in this tab's sessionStorage under an `mbdemo:` prefix, so
+       the demo's store never touches the fast half Tom's rows live in, or
+       its quota, and closing the tab ends it;
+     · the store gets no IndexedDB (its rows are all in the tab), and every
+       other database the suite opens gets the same prefix;
      · the BroadcastChannel and the storage event only carry the demo's own
        news, so none of Tom's rows can arrive in the demo and none of the
        demo's can leave it;
@@ -38,6 +38,9 @@
   /* A demo that was left: its store goes, while nothing holds it open. */
   if (!on) {
     try {
+      var mine = [];
+      for (var j = 0; j < ss.length; j++) { var k1 = ss.key(j); if (k1 && k1.indexOf(P) === 0) mine.push(k1); }
+      mine.forEach(function (k) { ss.removeItem(k); });
       if (real.getItem(WIPE) !== '1') return;
       real.removeItem(WIPE);
       var gone = [];
@@ -52,20 +55,24 @@
   }
   g.MB_DEMO = true;
 
-  /* localStorage: rows in memory, the rest under the prefix */
-  var mem = Object.create(null), list = null;
-  var isRow = function (k) { return String(k).indexOf('mb.r.') === 0; };
+  /* localStorage: every key, rows and the rest, in THIS TAB's sessionStorage
+     under the prefix. The tab's frames share it, a reload keeps it, it has
+     room of its own when localStorage is full, and it goes with the tab.
+     The first version kept rows in page memory and counted on IndexedDB to
+     carry them over the reload: WebKit took from six seconds to never to
+     save them, and a Chrome whose IndexedDB was broken reloaded forever
+     (2026-09-30). */
+  var list = null;
   var keys = function () {
     if (list) return list;
     list = [];
-    for (var i = 0; i < real.length; i++) { var k = real.key(i); if (k && k.indexOf(P) === 0) list.push(k.slice(P.length)); }
-    for (var m in mem) list.push(m);
+    for (var i = 0; i < ss.length; i++) { var k = ss.key(i); if (k && k.indexOf(P) === 0) list.push(k.slice(P.length)); }
     return list;
   };
   var api = {
-    getItem: function (k) { k = String(k); return isRow(k) ? (k in mem ? mem[k] : null) : real.getItem(P + k); },
-    setItem: function (k, v) { k = String(k); v = String(v); list = null; if (isRow(k)) mem[k] = v; else real.setItem(P + k, v); },
-    removeItem: function (k) { k = String(k); list = null; if (isRow(k)) delete mem[k]; else real.removeItem(P + k); },
+    getItem: function (k) { return ss.getItem(P + k); },
+    setItem: function (k, v) { list = null; ss.setItem(P + k, String(v)); },
+    removeItem: function (k) { list = null; ss.removeItem(P + k); },
     key: function (i) { var l = keys(); return i >= 0 && i < l.length ? l[i] : null; },
     clear: function () { keys().slice().forEach(function (k) { api.removeItem(k); }); },
   };
@@ -88,11 +95,16 @@
   try { Object.defineProperty(g, 'localStorage', { value: shim, configurable: true }); }
   catch (e) { g.MB_DEMO_BROKEN = true; }
 
-  /* IndexedDB: the demo's own databases */
+  /* IndexedDB: the demo's own databases. Not the store's: its rows are all
+     in the tab (above), so records.js is told there is none and runs on the
+     fast half alone. A row over 64KB, such as a photo, lasts until reload. */
   if (idb) {
     var open0 = idb.open.bind(idb), del0 = idb.deleteDatabase.bind(idb);
     try {
-      idb.open = function (n, v) { return v === undefined ? open0(P + n) : open0(P + n, v); };
+      idb.open = function (n, v) {
+        if (n === 'motherbase') throw new Error('demo: the rows are kept in this tab');
+        return v === undefined ? open0(P + n) : open0(P + n, v);
+      };
       idb.deleteDatabase = function (n) { return del0(P + n); };
     } catch (e) { g.MB_DEMO_BROKEN = true; }
   }
@@ -124,6 +136,13 @@
 
   /* the made-up person and the DEMO tab, on the page itself and not in its frames */
   if (g.top === g) {
+    /* what the first version left behind: its database and its keys */
+    try {
+      if (idb) del0(P + 'motherbase');
+      var old = [];
+      for (var n = 0; n < real.length; n++) { var k2 = real.key(n); if (k2 && k2.indexOf(P) === 0) old.push(k2); }
+      old.forEach(function (k) { real.removeItem(k); });
+    } catch (e) {}
     var me = g.document.currentScript && g.document.currentScript.src;
     if (me) {
       var t = g.document.createElement('script');

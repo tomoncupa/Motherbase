@@ -3381,7 +3381,30 @@ async function run() {
       !!W && !Rec.get('note', Day.today(), mark) && !Object.keys(localStorage).some(k => k.indexOf(mark) > -1));
     ok('demo: the demo\'s own keys sit under their prefix, and the real storage is not replaced here',
       !window.MB_DEMO && !!W && W.localStorage !== localStorage && W.localStorage.getItem('mb.r.local|note|' + Day.today() + '|' + mark) != null);
+    /* One level under the reload that never ended (2026-09-30): the demo's
+       rows are carried from page to page by the TAB, never by IndexedDB,
+       which WebKit took from six seconds to never to save. So the next page
+       holds them the moment it opens, and its store runs without IndexedDB. */
+    let fr2 = null, W2 = null;
+    try {
+      sessionStorage.setItem('mb.demo', '1');
+      fr2 = document.createElement('iframe');
+      fr2.style.cssText = 'position:absolute;width:1px;height:1px;border:0;left:-9px';
+      document.body.appendChild(fr2);
+      fr2.contentDocument.open();
+      fr2.contentDocument.write('<scr' + 'ipt src="skins.js"></scr' + 'ipt><scr' + 'ipt src="day.js"></scr' + 'ipt><scr' + 'ipt src="records.js"></scr' + 'ipt>');
+      fr2.contentDocument.close();
+      for (let i = 0; i < 200 && !fr2.contentWindow.Rec; i++) await new Promise(r => setTimeout(r, 10));
+      W2 = fr2.contentWindow;
+    } finally { sessionStorage.removeItem('mb.demo'); }
+    const atOnce = !!(W2 && W2.Rec && W2.Rec.get('note', Day.today(), mark));
+    for (let i = 0; i < 100 && W2 && W2.Rec && !W2.Rec.hydrated; i++) await new Promise(r => setTimeout(r, 40));
+    ok('demo: the next demo page holds the rows the moment it opens, kept by the tab and not by IndexedDB',
+      atOnce && W2.Rec.stats().idb === false
+      && sessionStorage.getItem('mbdemo:mb.r.local|note|' + Day.today() + '|' + mark) != null);
     if (fr) fr.remove();
+    if (fr2) fr2.remove();
+    Object.keys(sessionStorage).filter(k => k.indexOf('mbdemo:') === 0).forEach(k => sessionStorage.removeItem(k));
     try { localStorage.setItem('mb.demo.wipe', '1'); } catch (e) {}
     Rec.del('setting', null, 'smoke.demoProbe');
   }

@@ -15,7 +15,8 @@
        STATUS and KITCHEN, check-ins, a BLOCK day and its ticks, QUESTS
        todos, LOG notes, six made-up clients in COACH and the money in
        WEALTH. Dates are counted back from today, so the demo is always
-       current, and it is made fresh once a day. The numbers come from a
+       current, and it is made fresh once a day and in each new tab, since
+       it lives in the tab (skins.js). The numbers come from a
        fixed seed, so every demo shows the same person. Nobody in it is real.
      · draws the DEMO tab on the right edge of the screen, on every page.
        Pressing it offers LEAVE DEMO, which wipes the demo's store from this
@@ -565,13 +566,23 @@
     try { return g.localStorage.getItem('mb.demo.seeded') === stamp() && g.Rec.all('field').length > 0; } catch (e) { return false; }
   }
 
-  /* Fill the store (once a day), then open the page again on it. */
+  /* Fill the store (once a day, in each tab), then open the page again on
+     it. Once only: a page that comes back unfilled says so and stays. */
   function fill() {
     css();
     var w = doc.createElement('div');
     w.id = 'mb-demo-wait';
     w.innerHTML = '<b>DEMO</b><span>Filling in a made-up person</span>';
     doc.body.appendChild(w);
+    var tried = null;
+    try { tried = g.localStorage.getItem('mb.demo.tried'); } catch (e) {}
+    if (tried === stamp()) {
+      w.lastChild.textContent = 'This browser could not keep the demo. Open the link in a private window.';
+      w.style.zIndex = '2147482999';   /* under the DEMO tab, so LEAVE DEMO can still be pressed */
+      tab();
+      return;
+    }
+    try { g.localStorage.setItem('mb.demo.tried', stamp()); } catch (e) {}
     var R = g.Rec;
     /* every kept-out type in first (records.js, KEPT OUT), or its rows would
        wait in a queue this page never lives to empty */
