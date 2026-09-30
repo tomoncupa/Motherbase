@@ -333,10 +333,13 @@ Records, and GRAPH. **Not watched on the iPhone.**
 **A lift can be left out of what he shares** (1.0.39). Tom, 2026-09-29: *"I
 don't want to share lifts im weaker in."* The session's Share panel has one
 switch per lift under Style and Size (`TRAIN.shareRecap`, IO.share's
-`options`). Off, the picture is drawn as if that lift was never in the
-session: totals, set by set, sets per muscle and records all leave it out,
-and the day it is compared with leaves it out too, so the totals stay like
-for like. Time stays whole. The switch is kept per lift, so a lift left out
+`options`). **Off takes the lift's name and numbers out and nothing else**
+(1.0.42): its LIFTS row and its records go, and the totals, set by set and
+sets per muscle stay the whole session. Tom, 2026-09-30, the second time he
+said it: *"Sometimes I won't want to share any specific movement details,
+sometimes it will be plenty. This shouldn't change total sets."* 1.0.39 had
+drawn the picture as if the lift was never in the session, which changed
+the totals. Every switch off is a picture of the totals alone. The switch is kept per lift, so a lift left out
 once stays out of every later session's picture until he turns it back on.
 Share As Text follows the same switches and the toast names what it left
 out. The card on the log is his own view and always shows everything. The
@@ -345,8 +348,9 @@ first two name no lift, and the last two are a lift he picked to share.
 
 **A lift that went down is never shared** (1.0.40). Tom, 2026-09-30: *"I
 never want to share a lift im weaker in, no one does."* `TRAIN.wentDown`
-leaves it out of the session picture and Share As Text for everyone, the
-client build too, with no switch and none offered: down is its sets'
+keeps its name and numbers out of the session picture and Share As Text for
+everyone, the client build too, with no switch and none offered; its sets
+still count in the totals (1.0.42). Down is its sets'
 average estimated-1RM change at −0.05% or under; with no 1RM, fewer reps;
 with neither, more sets down than up. Shared, the card (`recapCard(...,
 share)`) keeps "N of M sets stronger", draws a down square as a same one,

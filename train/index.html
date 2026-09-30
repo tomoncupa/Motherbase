@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.41, 2026-09-30">
+<meta name="mb-version" content="1.0.42, 2026-09-30">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -8833,16 +8833,21 @@ TRAIN.sessionStats = function (date, off) {
    line go; each lift is listed with its top set (A). Only the picture does
    this. The card on the log is his own view and shows everything. */
 TRAIN.recapCard = function (date, cmp, off, share) {
-  var st = TRAIN.sessionStats(date, off);
+  /* A lift left out takes its name and numbers with it and nothing else.
+     Tom, 2026-09-30: "Sometimes I won't want to share any specific movement
+     details, sometimes it will be plenty. This shouldn't change total sets."
+     So the totals, set by set and sets per muscle are always the whole
+     session; `off` reaches only LIFTS and RECORDS, the rows that name a lift. */
+  var st = TRAIN.sessionStats(date);
   if (!st.sets) return null;
-  if (cmp === undefined) cmp = TRAIN.dayCompare(date, off);
+  if (cmp === undefined) cmp = TRAIN.dayCompare(date);
   var U = TRAIN.unit(), ph = TRAIN.phaseOn(date), esc = UI.esc;
   /* Totals are only set against another day when that day is this session
      again: named the same, picked, copied from, or the one day every exercise
      was measured against. Exercises measured against three different days
      have no single session to total against. */
   var one = cmp && cmp.vs && (Object.keys(cmp.vsDays).length === 1 || cmp.whyOf[cmp.vs] !== 'last');
-  var vs = one ? TRAIN.sessionStats(cmp.vs, off) : null;
+  var vs = one ? TRAIN.sessionStats(cmp.vs) : null;
   var when = Day.label(date, { day: 'numeric', month: 'short', year: 'numeric' });
   var volF = function (kg) { return Math.round(TRAIN.toUnit(kg, U)).toLocaleString(); };
   var num = function (n) { return Math.round(n).toLocaleString(); };
@@ -8897,7 +8902,7 @@ TRAIN.recapCard = function (date, cmp, off, share) {
     if (lifts.length) h += '<div><h3>LIFTS</h3>' + lifts.join('') + '</div>';
   }
 
-  h += musclesHtml(muscleRows(date, date, off), false);
+  h += musclesHtml(muscleRows(date, date), false);
 
   var recs = TRAIN.sessionRecords(date, off);
   if (recs.length) {
@@ -8930,11 +8935,13 @@ function shareCard(build, name, options) {
     return c;
   } });
 }
-/* Which of a day's lifts go out when it is shared. Tom, 2026-09-29: "I don't
-   want to share lifts im weaker in." One switch per lift on the Share panel,
-   on until he turns it off, kept per lift as `share.<exercise id>`, so a lift
-   left out once stays out of every later picture and text until he turns it
-   back on. Only a lift with a working set that counts gets a switch. */
+/* Which of a day's lifts are named when it is shared. Tom, 2026-09-29: "I
+   don't want to share lifts im weaker in." One switch per lift on the Share
+   panel, on until he turns it off, kept per lift as `share.<exercise id>`, so
+   a lift left out once stays out of every later picture and text until he
+   turns it back on. Off takes the lift's name and numbers out and leaves the
+   session's totals whole (recapCard). Only a lift with a working set that
+   counts gets a switch. */
 TRAIN.shareLifts = function (date) {
   return TRAIN.dayGroups(date).filter(function (g) {
     return g.sets.some(function (s) { return !s.warm && TRAIN.counts(s); });
@@ -8946,8 +8953,9 @@ TRAIN.sharedOut = function (exId) {
 };
 /* Which of a day's lifts went down since the day each is measured against.
    Tom, 2026-09-30: "I never want to share a lift im weaker in, no one does."
-   So a lift that went down is left out of every picture and text shared from
-   a session, for everyone, with no switch and no question. Down is the test
+   So a lift that went down is never named in a picture or text shared from a
+   session, for everyone, with no switch and no question; its sets still
+   count in the totals. Down is the test
    that colours a lift's gain line: its sets' average change in estimated 1RM
    at -0.05% or under. A lift with no 1RM on either side is down when it lost
    reps, and one with no reps either (a run, a hold) when more of its sets
@@ -9010,7 +9018,6 @@ TRAIN.shareRecap = function (date) {
   date = date || TRAIN.date;
   var down = TRAIN.wentDown(date);
   var lifts = TRAIN.shareLifts(date).filter(function (g) { return !down[g.ex]; });
-  if (!lifts.length && Object.keys(down).length) return UI.toast('Nothing to share: every lift is under last time', { bad: true });
   shareCard(function (o) {
     var off = {};
     Object.keys(down).forEach(function (ex) { off[ex] = 1; });
