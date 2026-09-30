@@ -60,10 +60,17 @@ dropped by hand.
   15 read by Claude per run, so the backlog drains over several runs.
 - **A camera picture Claude calls `other` writes nothing** and makes no card.
   One dropped in `in/` by hand still gets a card, since he chose to send it.
-- **`Receipts/seen.json`** holds every picture looked at and what it was
-  (`skip`, `picked`, `receipt`, `label`, `other`, `failed`, `e1`/`e2` for
-  Windows failing to open it, `unreadable` after three). Deleting it makes
-  the next runs look at September again.
+- **`seen.json`, in `%LOCALAPPDATA%/Motherbase/receipts` on the PC** (the
+  script's `STATE`; `MB_RECEIPTS_STATE` overrides it), holds every picture
+  looked at and what it was (`skip`, `picked`, `receipt`, `label`, `other`,
+  `failed`, `e1`/`e2` for Windows failing to open it, `unreadable` after
+  three) and `_held`, the downloads not yet freed. Deleting it makes the next
+  runs look at September again. It lived in `Receipts/` in iCloud Drive
+  until 2026-09-30, when iCloud turned it into a stand-in that refused to be
+  written; the first run after that carried it across (`OLD_SEEN`). The run
+  lock, a local copy of the log and the OCR list (`ocr-list.txt`) sit beside
+  it. `Receipts/` in iCloud Drive keeps `in/`, `out/`, `done/`, `failed/`,
+  `receipts.log` and `status.json`.
 - **Most of the library is cloud stand-ins, and the disk had about 1.2 GB
   free (2026-09-24).** Reading a picture downloads it. After each chunk of 20,
   `give_back()` sets `attrib +U` on the ones that were stand-ins, waits for
