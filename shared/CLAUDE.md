@@ -135,7 +135,9 @@ changed on disk between fetches: an ordinary open got the old copy, an icon
 and a fresh open got the new one, and the kept copies had no `?t` or `?fresh`
 in their addresses. Not yet watched on the iPhone.
 
-**UPDATE NOW** (2026-09-30), under the version line in every app's Settings:
+**UPDATE NOW** (2026-09-30): the version line at the foot of every app's
+Settings IS the button (Tom: "Make the version line the update button"),
+`button.mb-version`, drawn as the plain line, `mb-tap` for the thumb.
 `UI.update()` posts `{mb: 'refresh'}` to the worker, which fetches every kept
 file again and answers how many changed (ETag, else Last-Modified, else
 length); the top window then reopens with `?fresh=1` and says "Updated. N

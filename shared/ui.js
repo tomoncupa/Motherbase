@@ -835,18 +835,20 @@ const UI = {
         }
         body.appendChild(pane);
         /* which version of this app is open, under every tab */
+        /* and pressing it updates. Tom, 2026-09-30: a pushed change arrived
+           on the second open; then "Make the version line the update button".
+           It asks for every file now and reopens on them (UI.update). */
         const ver = UI.version();
         if (ver) {
-          const p = el('p', null, esc(appName.toUpperCase() + ' ' + ver.v + (ver.dateText ? ', updated ' + ver.dateText : '')));
-          p.style.cssText = 'color:var(--text-muted,#5b6d80);font-size:var(--f-1,12px);margin:var(--s-5,24px) 0 0';
+          const p = el('button', 'mb-tap mb-version', esc(appName.toUpperCase() + ' ' + ver.v + (ver.dateText ? ', updated ' + ver.dateText : '')));
+          p.type = 'button';
+          p.title = 'Update now';
+          p.setAttribute('aria-label', appName + ' ' + ver.v + '. Update now');
+          p.style.cssText = 'display:block;width:100%;background:none;border:0;padding:0;text-align:left;cursor:pointer;font:inherit;' +
+            'color:var(--text-muted,#5b6d80);font-size:var(--f-1,12px);margin:var(--s-5,24px) 0 0';
+          p.onclick = () => { p.disabled = true; p.textContent = 'Updating…'; UI.update(); };
           body.appendChild(p);
         }
-        /* Tom, 2026-09-30: a pushed change arrived on the second open. This
-           asks for every file now and reopens on them. */
-        const up = el('button', 'mb-btn', 'UPDATE NOW');
-        up.style.marginTop = 'var(--s-3,12px)';
-        up.onclick = () => { up.disabled = true; up.textContent = 'UPDATING…'; UI.update(); };
-        body.appendChild(up);
         show(active);
       },
       actions: [{ label: 'DONE', kind: 'go' }],
