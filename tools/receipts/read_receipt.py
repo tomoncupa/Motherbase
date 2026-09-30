@@ -60,8 +60,47 @@
      disk has little room. A picture that was a stand-in before it was read is
      handed back to the cloud afterwards, so the folder is left as it was found.
 
-   seen.json in Receipts/ remembers every picture looked at, so no picture is
-   read twice. A picture Claude calls "other" is remembered and makes no card.
+   seen.json remembers every picture looked at, so no picture is read twice.
+   A picture Claude calls "other" is remembered and makes no card.
+
+   -- leaving nothing behind, since 2026-09-30 --
+
+   Tom: "I don't want the receipt reader to fill up space, have it delete
+   what its determined to not be a receipt."
+
+   * Its own copy of a camera picture that is not money is deleted: "other"
+     at once, a label once its record is in out/ (the food row holds the
+     figures and the picture is still in his library). Receipts and payment
+     screenshots are kept in done/ as proof. A hand-dropped file is kept as
+     before, since he chose to send it.
+   * Every picture it downloaded is handed back with +U and remembered in
+     seen.json's `_held` until iCloud has really freed it, checked again on
+     every later run. status.json says how much it freed today.
+   * Its working files (the lock, seen.json, the OCR list) live in
+     %LOCALAPPDATA%/Motherbase/receipts, never in iCloud Drive. The reader
+     died there silently from 24 Sep: iCloud had turned a leftover OCR list
+     into a cloud stand-in, opening it for writing was refused, and pyw
+     swallowed the error, so the task said result 1 and the log said nothing.
+
+   -- a stall is loud --
+
+   Every run ends with Receipts/status.json: when it last ran, when it last
+   ran clean, when Claude last read a photo, how many wait in in/, and the
+   error in plain words if there is one. Anything that goes wrong is a log
+   line, and a crash is caught and written rather than lost. A condition that
+   repeats every run (signed out, disk full) is said once an hour, not every
+   run: 705 identical "under 500 MB" lines drowned the log from 25 to 29 Sep.
+
+   -- when Claude will not answer --
+
+   Claude's docs (code.claude.com/docs/en/headless) say --bare "will become
+   the default for -p in a future release", and "In bare mode, Claude Code
+   never reads OAuth credentials". An answer about signing in stops the run:
+   the photo stays in in/ to be read later, `claude auth status` tells a
+   sign-out from an update, and the log and status.json say which. While it
+   lasts nothing new is downloaded, since nothing could be read. The same
+   guard as OUTER HEAVEN's jobs/signin.py, and the same environment rule: a
+   Claude session's CLAUDE_* variables never reach the command.
 """
 
 import json
@@ -71,19 +110,31 @@ import shutil
 import subprocess
 import sys
 import time
+import traceback
 from datetime import datetime
 
 BASE = os.environ.get('MB_RECEIPTS') or os.path.join(
     os.path.expanduser('~'), 'iCloudDrive', 'Receipts')
 IN, OUT, DONE, BAD = (os.path.join(BASE, d) for d in ('in', 'out', 'done', 'failed'))
 LOG = os.path.join(BASE, 'receipts.log')
-LOCK = os.path.join(BASE, '.lock')
+STATUS = os.path.join(BASE, 'status.json')
+# working files stay on this PC: iCloud Drive can turn any file in it into a
+# cloud stand-in that refuses to be written (watched 2026-09-30)
+STATE = os.environ.get('MB_RECEIPTS_STATE') or os.path.join(
+    os.environ.get('LOCALAPPDATA') or os.path.expanduser('~'), 'Motherbase', 'receipts')
+LOCK = os.path.join(STATE, 'run.lock')
+LOCAL_LOG = os.path.join(STATE, 'receipts.log')
 PICS = ('.jpg', '.jpeg', '.png', '.heic', '.webp')
 CAMERA = os.environ.get('MB_CAMERA') or os.path.join(
     os.path.expanduser('~'), 'Pictures', 'iCloud Photos', 'Photos')
 SINCE = datetime(2026, 9, 1).timestamp()   # Tom, 2026-09-24: from September on
-SEEN = os.path.join(BASE, 'seen.json')
+SEEN = os.path.join(STATE, 'seen.json')
+OLD_SEEN = os.path.join(BASE, 'seen.json')   # where it lived until 2026-09-30
 OCR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ocr.ps1')
+TRIES = 3                # a camera copy Claude could not read is tried this many times
+UNPINNED = 0x100000      # attrib +U: "free this up", what iCloud's own Free up space sets
+HOURLY = 3600            # a stall that repeats every run is written once an hour
+GIVE_WAIT = 60           # seconds iCloud is given to free a picture before a later run checks
 OCR_BATCH = 120          # pictures Windows reads per run; the backlog drains over a few runs
 CLAUDE_BATCH = 15        # camera-roll pictures Claude reads per run
 # A cloud stand-in, not on the disk. PowerShell shows these as OFFLINE, but
@@ -110,6 +161,79 @@ def claude_exe():
         if v > bestv:
             best, bestv = exe, v
     return best
+
+
+# -- is Claude still allowed to read? -----------------------------------------
+
+# What claude.exe says when it cannot use his account: the first is the one
+# watched on this PC on 2026-09-30 ("Failed to authenticate: OAuth session
+# expired and could not be refreshed"), the rest older wordings. The same list
+# as OUTER HEAVEN's jobs/signin.py.
+AUTH = re.compile(r'failed to authenticate|not logged in|please run /login|run /login|invalid api key|'
+                  r'oauth|authentication[_ ]error|unauthori[sz]ed|\b401\b|apikeyhelper|anthropic_api_key|'
+                  r'not signed in|sign in again|log in again|credentials', re.I)
+SAY = {
+    'signed-out': 'Claude is signed out on this PC, so receipt photos wait unread. '
+                  'Sign in to Claude and they are read on the next check.',
+    'update': 'Claude signed the receipt reader out: a Claude update changed how it runs. Tell Claude.',
+}
+
+
+class ClaudeOut(Exception):
+    """Claude refused to read for a sign-in reason. Stops the run; the photo waits."""
+
+    def __init__(self, kind, said):
+        super().__init__(SAY[kind])
+        self.kind, self.said = kind, said
+
+
+def claude_env():
+    """His own environment, less what a Claude session leaves behind when it is
+       the one that started this: those point claude.exe at that session's
+       sign-in, and CLAUDE_CODE_SIMPLE forces bare mode."""
+    drop = ('ANTHROPIC_BASE_URL', 'USE_LOCAL_OAUTH', 'USE_STAGING_OAUTH')
+    return {k: v for k, v in os.environ.items()
+            if not (k.upper().startswith('CLAUDE') or k.upper() in drop)}
+
+
+_optout = {}
+
+
+def opt_out(exe):
+    """The flag that keeps -p reading his sign-in, once a claude.exe has one.
+       2.1.284 has none; --no-bare is a guess at the name, used only if --help
+       lists it."""
+    if exe not in _optout:
+        try:
+            h = subprocess.run([exe, '--help'], capture_output=True, text=True, encoding='utf-8',
+                               errors='replace', timeout=60, creationflags=NOWIN,
+                               env=claude_env()).stdout or ''
+        except (OSError, subprocess.TimeoutExpired):
+            h = ''
+        _optout[exe] = ['--no-bare'] if re.search(r'(?<![\w-])--no-bare\b', h) else []
+    return _optout[exe]
+
+
+def signed_in(exe):
+    """True or False from `claude auth status`, which reads this PC's own
+       sign-in and costs nothing; None when it could not be asked."""
+    try:
+        out = subprocess.run([exe, 'auth', 'status', '--json'], capture_output=True, text=True,
+                             encoding='utf-8', errors='replace', timeout=60,
+                             creationflags=NOWIN, env=claude_env()).stdout
+        return bool(json.loads(out or '{}').get('loggedIn'))
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+def refused(exe, said):
+    """A ClaudeOut if what Claude said is about signing in, else None."""
+    if not AUTH.search(str(said or '')):
+        return None
+    # the command's own words for the log, with anything shaped like a key taken out
+    t = re.sub(r'sk-[A-Za-z0-9_-]{8,}', '[hidden]', str(said))
+    t = re.sub(r'[A-Za-z0-9_\-+/=]{32,}', '[hidden]', t)
+    return ClaudeOut('update' if signed_in(exe) else 'signed-out', ' '.join(t.split())[:200])
 
 
 PROMPT = """Read the image at the path below and return ONE JSON object.
@@ -210,13 +334,86 @@ Label rules, in order of importance:
 
 
 def log(msg):
+    """One line in Receipts/receipts.log, where Tom is told to look. If iCloud
+       will not take it, the copy on this PC does, so a line is never lost."""
     line = datetime.now().strftime('%m-%d %H:%M:%S') + '  ' + msg
     print(line, flush=True)
+    for path in (LOG, LOCAL_LOG):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'a', encoding='utf-8') as f:
+                f.write(line + '\n')
+            return
+        except OSError:
+            continue
+
+
+def put_text(path, text):
+    """Write a small file whole. A file iCloud has made a cloud stand-in
+       refuses to be opened for writing, so on a refusal the stand-in is
+       removed and the write tried once more. Only ever used on this reader's
+       own files. Returns whether it landed."""
+    for attempt in (0, 1):
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp = path + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                f.write(text)
+            os.replace(tmp, path)
+            return True
+        except OSError:
+            if attempt:
+                return False
+            for p in (path + '.tmp', path):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+    return False
+
+
+def now_iso():
+    return datetime.now().isoformat(timespec='seconds')
+
+
+def load_status():
     try:
-        with open(LOG, 'a', encoding='utf-8') as f:
-            f.write(line + '\n')
-    except OSError:
-        pass
+        with open(STATUS, encoding='utf-8') as f:
+            st = json.load(f)
+        return st if isinstance(st, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_status(st):
+    """Receipts/status.json, for anything that wants to know whether the
+       reader is working: OUTER HEAVEN's board, a later RECEIPTS, or Claude."""
+    st['v'] = 1
+    st['updated'] = now_iso()
+    st['log'] = LOG
+    if not put_text(STATUS, json.dumps(st, ensure_ascii=False, indent=1)):
+        log('FAILED  could not write status.json in Receipts')
+
+
+def say_once(st, key, msg):
+    """A line that would repeat every run is written once an hour."""
+    said = st.setdefault('said', {})
+    if time.time() - said.get(key, 0) >= HOURLY:
+        log(msg)
+        said[key] = time.time()
+
+
+def trouble(st, kind, msg):
+    """The run met something that stops the reading. Said plainly, kept in
+       status.json until a run gets through without it."""
+    if st.get('error_kind') != kind:
+        st['error_since'] = now_iso()
+        st.get('said', {}).pop(kind, None)
+    st['error'], st['error_kind'] = msg, kind
+    if kind not in SAY:
+        st.pop('claude_said', None)
+    st.setdefault('run_trouble', []).append(kind)
+    say_once(st, kind, 'STALLED ' + msg)
 
 
 def carve(text):
@@ -327,15 +524,22 @@ def read_one(exe, name, cam=False, taken=None):
        A camera-roll copy that turns out not to be money or a label is
        thrown away rather than filed: the picture is still in his library,
        and a card for every chat screenshot with a number in it would train
-       him to skim the list. Returns the record's src, or None on a failure."""
+       him to skim the list. Returns the record's src, or None on a failure.
+
+       Raises ClaudeOut when Claude would not read for a sign-in reason; the
+       photo is left in in/ for a later run, untouched."""
     src = os.path.join(IN, name)
     try:
         prompt = PROMPT.format(path='in/' + name)
         out = subprocess.run(
-            [exe, '-p', prompt, '--allowedTools', 'Read',
-             '--permission-mode', 'acceptEdits'],
+            [exe] + opt_out(exe) + ['-p', prompt, '--allowedTools', 'Read',
+                                    '--permission-mode', 'acceptEdits'],
             cwd=BASE, capture_output=True, text=True, encoding='utf-8',
-            errors='replace', timeout=TIMEOUT, creationflags=NOWIN)
+            errors='replace', timeout=TIMEOUT, creationflags=NOWIN, env=claude_env())
+        if out.returncode != 0 or '{' not in (out.stdout or ''):
+            stop = refused(exe, '%s\n%s' % (out.stdout or '', out.stderr or ''))
+            if stop:
+                raise stop
         if out.returncode != 0:
             raise RuntimeError((out.stderr or out.stdout or '').strip()[:300]
                                or 'the CLI failed')
@@ -349,25 +553,39 @@ def read_one(exe, name, cam=False, taken=None):
             rec['unsure'].append('No date is printed, so this uses the day the '
                                  'photo was taken.')
             rec['check'] = True
+    except ClaudeOut:
+        raise
     except Exception as e:                                    # noqa: BLE001
         log('FAILED  %s  %s' % (name, e))
-        shutil.move(src, os.path.join(BAD, name))
+        try:
+            if cam:
+                # the picture is still in his library, so the copy goes and
+                # the camera pass tries it again on a later run
+                os.remove(src)
+            else:
+                shutil.move(src, os.path.join(BAD, name))
+        except OSError:
+            pass
         return None
 
     if cam and rec.get('src') == 'other':
         os.remove(src)
-        log('other   %s  not a receipt, a payment or a label' % name)
+        log('other   %s  not a receipt, a payment or a label; copy deleted' % name)
         return 'other'
     stem = os.path.splitext(name)[0]
     with open(os.path.join(OUT, stem + '.json'), 'w', encoding='utf-8') as f:
         json.dump(rec, f, ensure_ascii=False, indent=1)
     # the record exists before the photo moves, so a crash repeats a read
-    # rather than losing one
-    shutil.move(src, os.path.join(DONE, name))
+    # rather than losing one. A label is not a receipt: its camera copy goes,
+    # since the food row will hold the figures and his library the picture
+    if cam and rec.get('src') == 'label':
+        os.remove(src)
+    else:
+        shutil.move(src, os.path.join(DONE, name))
     if rec.get('src') == 'label':
-        log('read    %s  label  %s  per %s %s%s' % (
+        log('read    %s  label  %s  per %s %s%s%s' % (
             name, rec.get('name') or '(no name)', rec.get('amt'), rec.get('unit'),
-            '  NEEDS A LOOK' if rec['check'] else ''))
+            '  NEEDS A LOOK' if rec['check'] else '', '; copy deleted' if cam else ''))
         return 'label'
     log('read    %s  %s  %s %s  %d line(s)%s' % (
         name, rec.get('merchant') or rec.get('src'), rec.get('currency'),
@@ -415,19 +633,35 @@ def looks_like(text):
 
 
 def load_seen():
-    try:
-        with open(SEEN, encoding='utf-8') as f:
-            seen = json.load(f)
-        return seen if isinstance(seen, dict) else {}
-    except (OSError, ValueError):
-        return {}
+    """seen.json on this PC. The first run after 2026-09-30 carries over the
+       one that lived in Receipts/, then removes that one."""
+    for path in (SEEN, OLD_SEEN):
+        try:
+            with open(path, encoding='utf-8') as f:
+                seen = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(seen, dict):
+            continue
+        # `_unpin` was a list of names; `_held` also knows each one's size
+        held = seen.setdefault('_held', {})
+        for n in seen.pop('_unpin', None) or []:
+            held.setdefault(n, 0)
+        if path == OLD_SEEN and save_seen(seen):
+            try:
+                os.remove(OLD_SEEN)
+            except OSError:
+                pass
+            log('moved   seen.json to %s' % STATE)
+        return seen
+    return {'_held': {}}
 
 
 def save_seen(seen):
-    tmp = SEEN + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(seen, f, ensure_ascii=False, separators=(',', ':'))
-    os.replace(tmp, SEEN)
+    if put_text(SEEN, json.dumps(seen, ensure_ascii=False, separators=(',', ':'))):
+        return True
+    log('FAILED  could not write %s' % SEEN)
+    return False
 
 
 def attrs(p):
@@ -441,9 +675,11 @@ def ocr(paths=None, jpeg=None):
     """Windows' reader over a batch: {path: text}, and a picture it could
        not open maps to None. With `jpeg` ({src: dst}) it writes JPEG copies
        instead, which is how a HEIC reaches Claude."""
-    lst = os.path.join(BASE, '.ocr-list.txt')
-    with open(lst, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(['%s|%s' % kv for kv in jpeg.items()] if jpeg else paths))
+    # on this PC, never in iCloud Drive: a leftover list there became a cloud
+    # stand-in, opening it was refused, and every run died on it from 24 Sep
+    lst = os.path.join(STATE, 'ocr-list.txt')
+    if not put_text(lst, '\n'.join(['%s|%s' % kv for kv in jpeg.items()] if jpeg else paths)):
+        raise OSError('could not write the OCR list at %s' % lst)
     try:
         out = subprocess.run(
             ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', OCR,
@@ -461,43 +697,117 @@ def ocr(paths=None, jpeg=None):
             o = json.loads(line.lstrip('﻿'))
         except ValueError:
             continue
-        got[o.get('path')] = o.get('text') if 'text' in o else None
+        if isinstance(o, dict):
+            got[o.get('path')] = o.get('text') if 'text' in o else None
     return got
 
 
-def give_back(paths):
+def give_back(paths, held, st):
     """Hand pictures that were cloud stand-ins back to the cloud.
 
        Reading one downloads it, and this disk has little room: the backlog
        alone would fill it. attrib +U asks iCloud to free the local copy, and
        -U afterwards clears the request, so the file ends in exactly the state
-       it was found. Returns the names iCloud had not freed yet; they keep +U,
-       which is what iCloud's own "Free up space" sets, until the next run."""
+       it was found. One iCloud has not freed inside a minute keeps its +U,
+       which is what iCloud's own "Free up space" sets, and waits in `held`
+       for settle() on a later run. Nothing here opens, moves or deletes a
+       picture: +U and -U are the only things it ever changes."""
+    sizes = {}
     for p in paths:
+        try:
+            sizes[p] = os.stat(p).st_size
+        except OSError:
+            sizes[p] = 0
         subprocess.run(['attrib', '+U', '-P', p], capture_output=True, creationflags=NOWIN)
-    left, wait = list(paths), time.time() + 60
+    left, wait = list(paths), time.time() + GIVE_WAIT
     while left and time.time() < wait:
         time.sleep(1)
         left = [p for p in left if not attrs(p) & STANDIN]
     for p in paths:
-        if p not in left:
+        if p in left:
+            held[os.path.basename(p)] = sizes[p]
+        else:
             subprocess.run(['attrib', '-U', p], capture_output=True, creationflags=NOWIN)
-    return [os.path.basename(p) for p in left]
+            freed(st, sizes[p])
 
 
-def camera(exe, dry=False):
+def freed(st, size):
+    """Count a picture iCloud really took back, by the day it happened."""
+    day = datetime.now().strftime('%Y-%m-%d')
+    if st.get('freed_day') != day:
+        st['freed_day'], st['freed_today_bytes'], st['freed_today_n'] = day, 0, 0
+    st['freed_today_bytes'] = st.get('freed_today_bytes', 0) + (size or 0)
+    st['freed_today_mb'] = round(st['freed_today_bytes'] / 2 ** 20, 1)
+    st['freed_today_n'] = st.get('freed_today_n', 0) + 1
+
+
+def settle(seen, st):
+    """Every picture this reader downloaded and iCloud had not yet taken back,
+       checked again. Freed: its +U comes off and it is counted. Not freed:
+       its +U is asked for again, since something may have cleared it. Gone
+       from the library: forgotten. Runs every time, even when nothing else
+       can, so a download from an earlier run is never left behind."""
+    held = seen.setdefault('_held', {})
+    for n in list(held):
+        p = os.path.join(CAMERA, n)
+        if not os.path.exists(p):
+            held.pop(n)
+            continue
+        a = attrs(p)
+        if a & STANDIN:
+            subprocess.run(['attrib', '-U', p], capture_output=True, creationflags=NOWIN)
+            freed(st, held.pop(n) or 0)
+        elif not a & UNPINNED:
+            subprocess.run(['attrib', '+U', '-P', p], capture_output=True, creationflags=NOWIN)
+    sizes = list(held.values())
+    st['held'], st['held_mb'] = len(sizes), round(sum(sizes) / 2 ** 20, 1)
+    if held:
+        say_once(st, 'held', 'held    %d picture(s), %.0f MB, downloaded to read and not yet '
+                 'taken back by iCloud; asked again' % (len(sizes), sum(sizes) / 2 ** 20))
+
+
+def copy_name(n):
+    """The name a camera picture's copy has in in/: a HEIC arrives as a JPEG."""
+    return os.path.splitext(n)[0] + '.jpg' if n.lower().endswith('.heic') else n
+
+
+def unsettled(v):
+    """A camera picture looked at again on the next run: Windows could not
+       open it yet ('e1', 'e2'), or Claude could not read it yet ('retry')."""
+    return v == 'retry' or bool(re.fullmatch(r'e\d', str(v)))
+
+
+def read_camera(exe, seen, st, n, lib):
+    """One camera copy read, and what the library picture is now remembered
+       as. A copy Claude could not read is deleted and tried again on a later
+       run, TRIES times in all, then left alone and named in the log."""
+    try:
+        taken = os.stat(os.path.join(CAMERA, lib)).st_mtime
+    except OSError:
+        taken = None
+    got = read_one(exe, n, cam=True, taken=taken)
+    tries = seen.setdefault('_tries', {})
+    if got:
+        st['last_read'] = now_iso()
+        tries.pop(lib, None)
+        seen[lib] = got
+        return
+    k = tries.get(lib, 0) + 1
+    if k < TRIES:
+        tries[lib], seen[lib] = k, 'retry'
+    else:
+        tries.pop(lib, None)
+        seen[lib] = 'failed'
+        log('gave up %s after %d reads; save it into Receipts/in to try again by hand' % (lib, k))
+
+
+def camera(exe, seen, st, dry=False):
     """New camera-roll pictures: read for words, copy the likely ones into
        in/, and hand Claude those copies. Never writes to CAMERA itself,
        beyond asking iCloud to take back what reading it downloaded."""
     if not os.path.isdir(CAMERA):
         return
-    seen = load_seen()
-    unpin = seen.setdefault('_unpin', [])
-    for n in list(unpin):
-        p = os.path.join(CAMERA, n)
-        if attrs(p) & STANDIN or not os.path.exists(p):
-            subprocess.run(['attrib', '-U', p], capture_output=True, creationflags=NOWIN)
-            unpin.remove(n)
+    held = seen.setdefault('_held', {})
 
     now, todo = time.time(), []
     with os.scandir(CAMERA) as it:
@@ -505,12 +815,12 @@ def camera(exe, dry=False):
             n = e.name
             if not n.lower().endswith(PICS) or not e.is_file():
                 continue
-            if n in seen and not seen[n].startswith('e'):
-                continue       # settled; 'e1', 'e2' are Windows failing to open it
-            st = e.stat()
+            if n in seen and not unsettled(seen[n]):
+                continue       # settled
+            a = e.stat()
             # a picture still arriving from the phone waits for the next run
-            if st.st_mtime >= SINCE and now - st.st_mtime > 60:
-                todo.append((st.st_mtime, n, st.st_file_attributes))
+            if a.st_mtime >= SINCE and now - a.st_mtime > 60:
+                todo.append((a.st_mtime, n, attrs(os.path.join(CAMERA, n))))
     todo.sort()
     if not dry:
         todo = todo[:OCR_BATCH]
@@ -518,7 +828,8 @@ def camera(exe, dry=False):
 
     for i in range(0, len(todo), CHUNK):
         if shutil.disk_usage(CAMERA).free < FLOOR:
-            log('camera  stopped: under 500 MB free on the disk')
+            trouble(st, 'disk', 'Under 500 MB free on this PC, so new photos are not looked at. '
+                    'Free some space and it carries on by itself.')
             break
         part = todo[i:i + CHUNK]
         paths = [os.path.join(CAMERA, n) for _, n, _ in part]
@@ -529,7 +840,8 @@ def camera(exe, dry=False):
             text = texts.get(p)
             if text is None:
                 # iCloud may simply be offline; three strikes and it is dropped
-                tries = int(seen.get(n, 'e0')[1:] or 0) + 1
+                was = seen.get(n, '')
+                tries = (int(was[1:]) if re.fullmatch(r'e\d', was) else 0) + 1
                 seen[n] = 'e%d' % tries if tries < 3 else 'unreadable'
                 continue
             why = looks_like(text)
@@ -545,74 +857,138 @@ def camera(exe, dry=False):
             if dry:
                 print('PICK  %s  %s' % (n, why), flush=True)
             elif n.lower().endswith('.heic'):
-                heic[p] = os.path.join(IN, os.path.splitext(n)[0] + '.jpg')
+                heic[p] = os.path.join(IN, copy_name(n))
             else:
                 # copy, never move: the picture in CAMERA is his iCloud library
                 shutil.copy2(p, os.path.join(IN, n))
         if heic:
             ocr(jpeg=heic)
         # the copies are made, so the downloads can go back
-        unpin.extend(give_back([p for (_, n, a), p in zip(part, paths) if a & STANDIN]))
+        give_back([p for (_, n, a), p in zip(part, paths) if a & STANDIN], held, st)
         picks += mine
         if not dry:
             save_seen(seen)
 
+    st['held'] = len(held)
+    st['held_mb'] = round(sum(held.values()) / 2 ** 20, 1)
     if dry:
         print('looked at %d, picked %d, skipped %d' % (looked, len(picks), skipped))
+        # a dry run remembers nothing but what it downloaded and has not yet
+        # seen handed back, so a later run still settles those
+        real = load_seen()
+        real.setdefault('_held', {}).update(held)
+        save_seen(real)
         return
     if looked:
         log('camera  looked at %d new photo(s), picked %d%s' % (
             looked, len(picks), ', more waiting' if len(todo) >= OCR_BATCH else ''))
-    for n, why in picks:
-        name = os.path.splitext(n)[0] + '.jpg' if n.lower().endswith('.heic') else n
-        if not os.path.isfile(os.path.join(IN, name)):
-            seen[n] = 'unreadable'
-            continue
-        log('picked  %s  (%s)' % (n, why))
-        try:
-            taken = os.stat(os.path.join(CAMERA, n)).st_mtime
-        except OSError:
-            taken = None
-        seen[n] = read_one(exe, name, cam=True, taken=taken) or 'failed'
+    try:
+        for n, why in picks:
+            name = copy_name(n)
+            if not os.path.isfile(os.path.join(IN, name)):
+                seen[n] = 'unreadable'
+                continue
+            log('picked  %s  (%s)' % (n, why))
+            read_camera(exe, seen, st, name, n)
+            save_seen(seen)
+    finally:
         save_seen(seen)
+
+
+def run(st):
+    exe = claude_exe()
+    seen = load_seen()
+    # before anything else, and whatever else happens: pictures an earlier
+    # run downloaded and iCloud had not yet taken back
+    settle(seen, st)
     save_seen(seen)
+    if not exe:
+        trouble(st, 'no-claude', 'No Claude program was found under AppData/Roaming/Claude/claude-code, '
+                'so receipt photos wait unread.')
+        return 0
+
+    # While Claude is out nothing new is downloaded, since nothing could be
+    # read. A sign-out is asked about for free before every run; an update
+    # that refuses a signed-in command is tried again every half hour.
+    kind = st.get('error_kind')
+    if signed_in(exe) is False:
+        raise ClaudeOut('signed-out', 'claude auth status: not signed in')
+    if kind == 'update' and time.time() - st.get('out_tried', 0) < 1800:
+        raise ClaudeOut('update', st.get('claude_said') or '')
+    if kind in ('signed-out', 'update'):
+        st['out_tried'] = time.time()
+
+    # iCloud writes a placeholder first, so a file still arriving is left
+    # for the next run rather than read half-downloaded
+    now, work = time.time(), []
+    for n in sorted(os.listdir(IN)):
+        p = os.path.join(IN, n)
+        if (os.path.isfile(p) and n.lower().endswith(PICS)
+                and os.path.getsize(p) > 0 and now - os.path.getmtime(p) > 5):
+            work.append(n)
+    # a camera copy left waiting by an earlier run is still a camera copy
+    cam_of = {copy_name(k): k for k, v in seen.items() if v == 'picked'}
+    try:
+        for n in work:
+            if n in cam_of:
+                read_camera(exe, seen, st, n, cam_of[n])
+            elif read_one(exe, n):
+                st['last_read'] = now_iso()
+    finally:
+        save_seen(seen)
+    camera(exe, seen, st)
+    return 0
 
 
 def main():
-    for d in (IN, OUT, DONE, BAD):
+    for d in (IN, OUT, DONE, BAD, STATE):
         os.makedirs(d, exist_ok=True)
-
     if os.path.exists(LOCK) and time.time() - os.path.getmtime(LOCK) < STALE:
         return 0
-    open(LOCK, 'w').close()
+    put_text(LOCK, now_iso())
+    st = load_status()
+    st['last_run'] = now_iso()
+    st['run_trouble'] = []
+    code = 0
     try:
-        exe = claude_exe()
-        if not exe:
-            log('FAILED  no claude.exe under AppData/Roaming/Claude/claude-code')
-            return 1
-        # iCloud writes a placeholder first, so a file still arriving is left
-        # for the next run rather than read half-downloaded
-        now, work = time.time(), []
-        for n in sorted(os.listdir(IN)):
-            p = os.path.join(IN, n)
-            if (os.path.isfile(p) and n.lower().endswith(PICS)
-                    and os.path.getsize(p) > 0 and now - os.path.getmtime(p) > 5):
-                work.append(n)
-        for n in work:
-            read_one(exe, n)
-        camera(exe)
-        return 0
+        code = run(st)
+    except ClaudeOut as e:
+        st['claude_said'] = e.said
+        trouble(st, e.kind, e.args[0])
+    except Exception as e:                                       # noqa: BLE001
+        # pyw has no window and swallows a traceback, which is how a dead
+        # reader sat behind "result 1" from 24 to 30 Sep with nothing said
+        where = traceback.extract_tb(e.__traceback__)[-1]
+        trouble(st, 'crash', 'The receipt reader stopped on an error: %s: %s (line %d)'
+                % (type(e).__name__, str(e)[:200], where.lineno))
+        code = 1
     finally:
+        try:
+            st['waiting'] = sum(1 for n in os.listdir(IN) if n.lower().endswith(PICS))
+        except OSError:
+            pass
+        clean = not st.pop('run_trouble', None)
+        if clean:
+            if st.get('error_kind'):
+                log('back    %s is over' % st['error_kind'])
+            for k in ('error', 'error_kind', 'error_since', 'claude_said', 'out_tried'):
+                st.pop(k, None)
+            st['last_good'] = st['last_run']
+        st['ok'] = clean
+        save_status(st)
         try:
             os.remove(LOCK)
         except OSError:
             pass
+    return code
 
 
 if __name__ == '__main__':
     if '--dry' in sys.argv:
         # which camera-roll pictures would be picked: no Claude read, no copy,
-        # nothing remembered
-        camera(None, dry=True)
+        # nothing remembered but what it downloaded
+        for d in (IN, STATE):
+            os.makedirs(d, exist_ok=True)
+        camera(None, load_seen(), {}, dry=True)
         sys.exit(0)
     sys.exit(main())

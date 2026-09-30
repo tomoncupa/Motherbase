@@ -26,8 +26,12 @@ already inside the desktop app, on the subscription you already pay for.
 5. The money becomes a spending row — the same row you get by typing
    "paid 250 - lunch" into STATUS — and WEALTH counts it like any other.
    Money coming IN becomes a one-off payment instead.
-6. A copy of the photo stays on the PC as proof of purchase. **Your photo
-   library is never moved, renamed or deleted.** The PC only copies out of it.
+6. A receipt or payment photo is kept in `Receipts\done` as proof of
+   purchase. Anything else the PC copied (a label, a photo that turned out
+   not to be money) is deleted once read; the picture is still in your
+   library. **Your photo library is never moved, renamed or deleted.** The PC
+   only copies out of it, and every picture it had to download to read is
+   handed back to iCloud straight after, so nothing stays on the disk.
 
 Photos from 1 September 2026 on are looked at. Older ones are not.
 
@@ -103,19 +107,31 @@ left blank rather than guessed.
 | A shop's wording | an `alias` row, so it is never asked twice |
 | A nutrition label | a `food` row — the one FOODDÉX and STATUS both read |
 
-The photos stay in `Receipts\done`. The small text files in `Receipts\out` are
-deleted once you have confirmed them, because by then the rows hold everything
-they held. Anything the reader could not open at all goes to `Receipts\failed`
-and stays there.
+Receipt and payment photos stay in `Receipts\done`. The small text files in
+`Receipts\out` are deleted once you have confirmed them, because by then the
+rows hold everything they held. A photo you dropped in by hand that the reader
+could not open goes to `Receipts\failed` and stays there; one from your
+library is tried three times over later checks, then named in the log.
 
 ---
 
 ## When something looks wrong
 
-**Nothing arrives.** Check `Receipts\receipts.log` — every run that finds new
-photos writes a line saying how many it looked at and how many it picked. No
-new lines after you have taken photos means the scheduled task is not
-running; run the install line again.
+**Nothing arrives.** Open `Receipts\status.json`. `last_run` is the last
+check, `last_good` the last one that went through, and `error` says what is
+stopping it in plain words. The same words are a `STALLED` line in
+`Receipts\receipts.log`, once an hour while it lasts. `last_run` older than
+ten minutes means the scheduled task is not running; run the install line
+again.
+
+**"Claude is signed out on this PC".** The reader uses the Claude program
+inside the desktop app, and its sign-in ran out. Sign in to Claude on the PC
+(OUTER HEAVEN's red line opens the sign-in). The photos wait in
+`Receipts\in` and are read on the next check.
+
+**"Claude signed the receipt reader out: a Claude update changed how it
+runs".** Claude is signed in but a Claude update stopped it using that
+sign-in. Tell Claude; nothing on your side fixes it.
 
 **A receipt photo was passed over.** Windows could not make out enough words
 on it. Save that photo into iCloud Drive → Receipts → **in** and it is read
