@@ -135,6 +135,14 @@ changed on disk between fetches: an ordinary open got the old copy, an icon
 and a fresh open got the new one, and the kept copies had no `?t` or `?fresh`
 in their addresses. Not yet watched on the iPhone.
 
+**UPDATE NOW** (2026-09-30), under the version line in every app's Settings:
+`UI.update()` posts `{mb: 'refresh'}` to the worker, which fetches every kept
+file again and answers how many changed (ETag, else Last-Modified, else
+length); the top window then reopens with `?fresh=1` and says "Updated. N
+files were newer." A worker too old to answer is given 20 seconds. Watched in
+headless Chromium on QUESTS: old copy kept, one press, new copy running. The
+Browser pane cannot register a worker at all, so test it with Playwright.
+
 ## `creatures.js` 0.2.0: dot art, all 151 (2026-09-23)
 
 Tom pointed at a page of bead patterns and said to pull the Pokémon from it.

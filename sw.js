@@ -114,6 +114,31 @@ self.addEventListener('activate', e => {
   );
 });
 
+/* ── UPDATE NOW: every kept file asked for again, this minute ──
+   Tom, 2026-09-30: "I tired of having to reopen and close twice". The button
+   under the version line in every app's Settings posts {mb: 'refresh'} with a
+   port. Every file this device keeps is fetched from the network and kept,
+   and the answer says how many came back different (by ETag, else
+   Last-Modified, else length). The page then reloads with ?fresh=1, so
+   anything not kept yet comes from the network too. A file the network will
+   not give keeps its old copy, so no signal costs nothing. */
+self.addEventListener('message', e => {
+  const d = e.data || {};
+  if (d.mb !== 'refresh') return;
+  const port = e.ports && e.ports[0];
+  const sig = r => r ? (r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '') : '';
+  e.waitUntil(caches.open(CACHE).then(c => c.keys().then(reqs => Promise.all(reqs.map(req =>
+    c.match(req).then(old => fetch(fresh(req)).then(r => {
+      if (!r || !r.ok || r.type !== 'basic') return 0;
+      const was = sig(old), now = sig(r);
+      return c.put(req, r.clone()).then(() => (was && now && was === now) ? 0 : 1);
+    })).catch(() => 0)
+  )))).then(ns => {
+    freshUntil = Date.now() + FRESH_MS;
+    if (port) port.postMessage({ ok: 1, n: ns.reduce((a, b) => a + b, 0), of: ns.length });
+  }).catch(() => { if (port) port.postMessage({ ok: 0 }); }));
+});
+
 /* Only a real answer is worth keeping. An error page cached is an error page
    served back forever. */
 /* ── the network half has to actually reach the network ──
