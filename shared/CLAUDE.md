@@ -294,6 +294,18 @@ ask the top document, and the top starts when a frame signs in. Known cost:
 the two leftover 2999 tombstones keep `Rec.newerThan` true, so every push
 runs `Rec.export()`. Root Known traps has why.
 
+## A row saved nowhere is not received (2026-09-30, `cloud.js` 0.2.1)
+
+Tom's Chrome: localStorage full at 5.15M chars, every IndexedDB open on the
+origin answering "Internal error" (its database was recreated empty on
+2026-09-28), so arriving rows lived in memory only while `seen` moved past
+them. Signed in, Live, and two weeks missing. `Rec.unkept()` and
+`Rec.onUnkept(fn)` now count a row that reached neither half; the top
+document's cloud.js then holds `seen` still, sets it back to the start, and
+the row says to restart the browser. Two `rec:` smoke checks. Not covered
+yet: a device that lost IndexedDB rows EARLIER, with `seen` already past
+them, heals only if something resets `seen`.
+
 ## What the LIVE SYNC row may claim (2026-09-24, `cloud.js` 0.1.4)
 
 Tom: "overall the diagnostic feedback has been innacurate." Both desktop

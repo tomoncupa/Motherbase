@@ -135,8 +135,28 @@ function idbPush(r, deleting) {
     Object.keys(idbQ).forEach(k => delete idbQ[k]);
     Object.keys(idbGone).forEach(k => delete idbGone[k]);
     if (!list.length && !gone.length) return;
-    IDB.put(list, gone).catch(e => console.warn('[records] indexeddb write failed', e));
+    IDB.put(list, gone).catch(e => {
+      console.warn('[records] indexeddb write failed', e);
+      /* a row whose fast-half copy was given up for this one is now nowhere */
+      lostRows(list.filter(r => { try { return Store.get(PREFIX + r.id) == null; } catch (x) { return true; } }).length);
+    });
   }, 60);
+}
+
+/* ── rows that reached neither half ──
+
+   Tom's Chrome, 2026-09-30: localStorage full at 5.15M characters and every
+   IndexedDB open answering "Internal error". A row arriving then lived in
+   memory only, gone on the next load, and live sync had already marked it
+   received, so it never came down again. Two weeks of rows went that way.
+   The store cannot save what it has nowhere to put, but it can say so:
+   `Rec.unkept()` counts, and `Rec.onUnkept(fn)` hears each loss. */
+let unkept = 0;
+const unkeptFns = [];
+function lostRows(n) {
+  if (!n) return;
+  unkept += n;
+  unkeptFns.forEach(f => { try { f(unkept); } catch (e) { console.warn('[records]', e); } });
 }
 
 const rows = Object.create(null);      /* id -> row, the live picture */
@@ -383,6 +403,7 @@ function write(r) {
        — say so once and carry on rather than telling the app the write failed. */
     if (IDB.available) { try { Store.del(PREFIX + r.id); } catch (e2) {} return; }
     console.warn('[records] storage full', e); Rec.onfull && Rec.onfull(e);
+    lostRows(1);
   }
 }
 
@@ -606,6 +627,11 @@ function load() {
 
 const Rec = {
   USER: USER,
+
+  /** how many rows this page could not save in either half */
+  unkept() { return unkept; },
+  /** fn(count) on every row that could not be saved anywhere */
+  onUnkept(fn) { if (typeof fn === 'function') unkeptFns.push(fn); },
 
   /** an app says who it is and which types it owns. Writing someone else's
       type still works — it warns, because one writer per fact is a discipline

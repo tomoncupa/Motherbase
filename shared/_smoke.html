@@ -2984,6 +2984,44 @@ async function run() {
     ok('shelf: signed out, a send refuses and says why', !!R.out, say);
   }
 
+  /* ── a row that reaches neither half ──
+
+     Tom's Chrome, 2026-09-30: localStorage full and IndexedDB refusing to
+     open, so rows that arrived were gone on the next load while live sync
+     marked them received. One level under "his data is missing": does the
+     store SAY when a row was saved nowhere, which is what stops live sync
+     moving its boundary. A frame of its own, with a storage that holds only
+     small rows, an IndexedDB that will not open and no channel to this page,
+     so no real row is touched. */
+  {
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:absolute;width:1px;height:1px;border:0;left:-9px';
+    document.body.appendChild(fr);
+    const w = fr.contentWindow, held = {};
+    fr.contentDocument.open();
+    w.storage = { length: 0, key: () => null, getItem: k => held[k] == null ? null : held[k],
+      removeItem: k => { delete held[k]; },
+      setItem: (k, v) => { if (String(v).length > 400) throw new Error('QuotaExceededError'); held[k] = String(v); } };
+    Object.defineProperty(w, 'indexedDB', { value: { open() { throw new Error('Internal error.'); } }, configurable: true });
+    w.BroadcastChannel = undefined;
+    fr.contentDocument.write('<scr' + 'ipt src="records.js"></scr' + 'ipt>');
+    fr.contentDocument.close();
+    for (let i = 0; i < 50 && !w.Rec; i++) await new Promise(r => setTimeout(r, 50));
+    const FR = w.Rec;
+    let heard = 0, fits = false, lost = false;
+    if (FR && FR.onUnkept) {
+      FR.onUnkept(n => { heard = n; });
+      await new Promise(r => setTimeout(r, 100));
+      FR.set('smoke-unkept', null, 'a', { v: 1 });
+      fits = FR.unkept() === 0 && heard === 0;
+      FR.set('smoke-unkept', null, 'b', { v: 'x'.repeat(600) });
+      lost = FR.unkept() === 1 && heard === 1;
+    }
+    fr.remove();
+    ok('rec: a row that fits one half is not counted as lost', fits);
+    ok('rec: a row that fits neither half is counted, and the store says so', lost);
+  }
+
   /* ── installing: every app is its own app on Android and the PC ──
 
      Tom, 2026-09-23: every app installable from Chrome, with its own icon.

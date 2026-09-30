@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.2.0 — Firebase as a SECOND sync, beside the Google Sheet,
+/* shared/cloud.js — 0.2.1 — Firebase as a SECOND sync, beside the Google Sheet,
    and since 0.2.0 the trays a client and the coach send each other things by.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
@@ -149,8 +149,28 @@ var connRef = null;
 var listeners = [];
 function say() { listeners.forEach(function (f) { try { f(Cloud.state()); } catch (e) {} }); }
 function note(why, ok) {
+  if (!why && unkeptNow()) { why = UNKEPT; ok = 0; }
   last.why = why || ''; last.ok = ok ? 1 : 0;
   say();
+}
+
+/* ── a browser that cannot save, 0.2.1 (2026-09-30) ──
+
+   Tom's Chrome filled localStorage and then IndexedDB stopped opening, so rows
+   arrived, lived in memory, and were gone on the next load, while `seen` moved
+   past every one of them. "my data isnt here", signed in and Live. So while
+   the store reports a row it could not keep, `seen` does not move and is set
+   back to the start, and the next open reads everything again. The row says
+   what fixes it, and nothing else may clear that until the page reloads. */
+var UNKEPT = 'This browser would not save what arrived. Close it fully and open it again, and everything comes down again';
+function unkeptNow() { try { return !!(g.Rec && g.Rec.unkept && g.Rec.unkept()); } catch (e) { return false; } }
+function onUnkept() {
+  if (cfg.seen) { cfg.seen = ''; csave(); }
+  note(UNKEPT, 0);
+}
+if (g.top === g && g.Rec && g.Rec.onUnkept) {
+  g.Rec.onUnkept(onUnkept);
+  if (unkeptNow()) onUnkept();
 }
 /* The database confirmed something: a write landed, or a row arrived. The
    only thing allowed to move "last synced". Signing in and opening are not
@@ -750,7 +770,7 @@ function onRow(snap) {
   if (v.payload == null && !v.deleted) v.payload = {};
   var n = 0;
   try { n = g.Rec ? g.Rec.merge([v]) : 0; } catch (e) { return; }
-  if (v.updated_at && v.updated_at > (cfg.seen || '') && v.updated_at <= soon()) { cfg.seen = v.updated_at; csave(); }
+  if (v.updated_at && v.updated_at > (cfg.seen || '') && v.updated_at <= soon() && !unkeptNow()) { cfg.seen = v.updated_at; csave(); }
   if (n) { last.got += n; landed('got'); }
 }
 
@@ -1002,7 +1022,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.0',
+  VERSION: '0.2.1',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
