@@ -3332,6 +3332,42 @@ async function run() {
       Object.keys(ids_).length === ids.length - bad.link.length - bad.parse.length);
   }
 
+  /* ---- demo: a store of its own (skins.js, DEMO, 2026-09-30) ----
+     A frame opened with the tab's demo flag set must see none of this
+     page's rows, and nothing it writes may reach them. The flag is the tab's
+     (sessionStorage), so it is set only while the frame loads and taken off
+     in a finally, and the wipe mark clears the frame's store on the next
+     page load. */
+  {
+    const mark = 'smoke-demo-' + Date.now();
+    Rec.setting('smoke', 'demoProbe', mark);
+    let fr = null, W = null;
+    try {
+      sessionStorage.setItem('mb.demo', '1');
+      fr = document.createElement('iframe');
+      fr.style.cssText = 'position:absolute;width:1px;height:1px;border:0;left:-9px';
+      document.body.appendChild(fr);
+      fr.contentDocument.open();
+      fr.contentDocument.write('<scr' + 'ipt src="skins.js"></scr' + 'ipt><scr' + 'ipt src="day.js"></scr' + 'ipt><scr' + 'ipt src="records.js"></scr' + 'ipt>');
+      fr.contentDocument.close();
+      for (let i = 0; i < 100 && !(fr.contentWindow.Rec && fr.contentWindow.Rec.hydrated); i++) await new Promise(r => setTimeout(r, 40));
+      W = fr.contentWindow;
+    } finally { sessionStorage.removeItem('mb.demo'); }
+    ok('demo: a demo page gets a store of its own, and none of the real rows',
+      !!W && W.MB_DEMO === true && !!W.Rec && W.Rec.setting('smoke', 'demoProbe') === null && Rec.setting('smoke', 'demoProbe') === mark);
+    if (W && W.Rec) {
+      W.Rec.set('note', Day.today(), mark, { kind: 'entry', text: 'made up' });
+      await new Promise(r => setTimeout(r, 400));
+    }
+    ok('demo: a row written in the demo never reaches the real store or its localStorage',
+      !!W && !Rec.get('note', Day.today(), mark) && !Object.keys(localStorage).some(k => k.indexOf(mark) > -1));
+    ok('demo: the demo\'s own keys sit under their prefix, and the real storage is not replaced here',
+      !window.MB_DEMO && !!W && W.localStorage !== localStorage && W.localStorage.getItem('mb.r.local|note|' + Day.today() + '|' + mark) != null);
+    if (fr) fr.remove();
+    try { localStorage.setItem('mb.demo.wipe', '1'); } catch (e) {}
+    Rec.del('setting', null, 'smoke.demoProbe');
+  }
+
   /* ---- report: each device's own note (2026-09-30) ----
      The row is this device's real one, so everything it writes is put back:
      a review run on Tom's phone must not leave made-up errors in his list. */

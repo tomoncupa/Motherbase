@@ -44,8 +44,9 @@ are holding a stale copy of whatever you just changed.
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `import.js` | Bringing in an outside spreadsheet by shape: ticks, weigh-ins, foods, money out. | High. It writes rows many apps own. |
 | `health.js` | Answers "is my data okay". | Low. |
+| `demo.js` | The DEMO's made-up person and its DEMO tab. The storage switch itself is the first thing in `skins.js`. Fetched only in the demo. | Low. It writes only inside the demo's own namespace. |
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
-| `_smoke.html` | 396 checks over all of it. | Run it every time. |
+| `_smoke.html` | 399 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -385,6 +386,20 @@ and 2.05 s once TRAIN had opened once; TRAIN's first paint 0.87 s to 0.47 s.
   a first read starts the load, need brings all, the fast-half copy goes, a
   held patch keeps fields it never saw, an older merged copy loses, a held
   delete happens, and a boot-time read has sets by ready.
+
+## The demo's storage switch (2026-09-30)
+
+At the top of `skins.js`, so it runs before any file reads storage. With the
+tab's `mb.demo` flag set: `window.localStorage` is replaced (a Proxy: rows
+`mb.r.*` in page memory, other keys under `mbdemo:` in the real storage),
+`indexedDB.open` and `deleteDatabase` prefix `mbdemo:`, `BroadcastChannel`
+names are prefixed, and a `storage` listener hears only `mbdemo:` keys,
+translated back. `g.MB_DEMO` is set; `io.js` reads it (`DEMO`). Leaving sets
+`mb.demo.wipe` in the real storage, and the next load, holding nothing
+open, deletes every `mbdemo:` key and database. Watched in Chromium and
+WebKit: a real row invisible inside the demo and intact after, no `mbdemo:`
+key or database left. Three `demo:` smoke checks open a frame with the flag
+set (taken off in a finally) and prove it sees no real row and leaks none.
 
 ## History
 

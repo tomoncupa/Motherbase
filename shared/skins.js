@@ -1,3 +1,137 @@
+/* ══════════════ DEMO (2026-09-30) ══════════════
+   Tom: a link that opens the whole suite filled with a made-up person, for
+   filming tours without his money or health on screen and for software
+   clients to click through. Any page of the suite with ?demo=1 on its
+   address; ?demo=0 or LEAVE DEMO ends it.
+
+   This file loads first in every app, so this is where it happens, before a
+   single line reads storage. Once on, for this browser tab only (the flag is
+   in sessionStorage, which the tab's frames share):
+     · localStorage is swapped for one of the demo's own: rows (mb.r.*) are
+       kept in this page's memory, and every other key under an `mbdemo:`
+       prefix, so the demo's store never touches the fast half Tom's rows
+       live in, or its quota;
+     · every IndexedDB database the suite opens gets the same prefix, so the
+       demo's rows live in `mbdemo:motherbase`, never in `motherbase`;
+     · the BroadcastChannel and the storage event only carry the demo's own
+       news, so none of Tom's rows can arrive in the demo and none of the
+       demo's can leave it;
+     · io.js fetches neither cloud.js nor report.js, and switches the sheet
+       sync off: it never signs in and never syncs.
+   shared/demo.js (the top page only) fills the store with a made-up person
+   and draws the DEMO tab, whose LEAVE DEMO wipes all of it. */
+(function (g) {
+  'use strict';
+  var FLAG = 'mb.demo', P = 'mbdemo:', WIPE = 'mb.demo.wipe';
+  var ss = null, real = null;
+  try { ss = g.sessionStorage; } catch (e) {}
+  try { real = g.localStorage; } catch (e) {}
+  if (!ss || !real) return;
+  var q = /[?&]demo=([^&#]*)/.exec(g.location.search || '');
+  try {
+    if (q && /^(1|on|yes)$/i.test(q[1])) ss.setItem(FLAG, '1');
+    if (q && /^(0|off|no)$/i.test(q[1])) { ss.removeItem(FLAG); real.setItem(WIPE, '1'); }
+  } catch (e) {}
+  var on = false;
+  try { on = ss.getItem(FLAG) === '1'; } catch (e) {}
+  var idb = g.indexedDB;
+  /* A demo that was left: its store goes, while nothing holds it open. */
+  if (!on) {
+    try {
+      if (real.getItem(WIPE) !== '1') return;
+      real.removeItem(WIPE);
+      var gone = [];
+      for (var i = 0; i < real.length; i++) { var k0 = real.key(i); if (k0 && k0.indexOf(P) === 0) gone.push(k0); }
+      gone.forEach(function (k) { real.removeItem(k); });
+      var names = ['motherbase', 'lifeos', 'arc', 'motherbase-form', 'mb.receipts.dir', 'motherbase-outbox'];
+      var drop = function (n) { try { idb.deleteDatabase(n); } catch (e) {} };
+      if (idb && idb.databases) idb.databases().then(function (l) { (l || []).forEach(function (d) { if (d && d.name && d.name.indexOf(P) === 0) drop(d.name); }); }, function () {});
+      if (idb) names.forEach(function (n) { drop(P + n); });
+    } catch (e) {}
+    return;
+  }
+  g.MB_DEMO = true;
+
+  /* localStorage: rows in memory, the rest under the prefix */
+  var mem = Object.create(null), list = null;
+  var isRow = function (k) { return String(k).indexOf('mb.r.') === 0; };
+  var keys = function () {
+    if (list) return list;
+    list = [];
+    for (var i = 0; i < real.length; i++) { var k = real.key(i); if (k && k.indexOf(P) === 0) list.push(k.slice(P.length)); }
+    for (var m in mem) list.push(m);
+    return list;
+  };
+  var api = {
+    getItem: function (k) { k = String(k); return isRow(k) ? (k in mem ? mem[k] : null) : real.getItem(P + k); },
+    setItem: function (k, v) { k = String(k); v = String(v); list = null; if (isRow(k)) mem[k] = v; else real.setItem(P + k, v); },
+    removeItem: function (k) { k = String(k); list = null; if (isRow(k)) delete mem[k]; else real.removeItem(P + k); },
+    key: function (i) { var l = keys(); return i >= 0 && i < l.length ? l[i] : null; },
+    clear: function () { keys().slice().forEach(function (k) { api.removeItem(k); }); },
+  };
+  var shim = new Proxy(api, {
+    get: function (t, p) {
+      if (p === 'length') return keys().length;
+      if (typeof p !== 'string' || p in api) return api[p];
+      var v = api.getItem(p); return v == null ? undefined : v;
+    },
+    set: function (t, p, v) { api.setItem(p, v); return true; },
+    deleteProperty: function (t, p) { api.removeItem(p); return true; },
+    has: function (t, p) { return p in api || p === 'length' || api.getItem(p) != null; },
+    ownKeys: function () { return keys().slice(); },
+    getOwnPropertyDescriptor: function (t, p) {
+      if (typeof p !== 'string' || p in api) return Object.getOwnPropertyDescriptor(api, p);
+      var v = api.getItem(p);
+      return v == null ? undefined : { value: v, writable: true, enumerable: true, configurable: true };
+    },
+  });
+  try { Object.defineProperty(g, 'localStorage', { value: shim, configurable: true }); }
+  catch (e) { g.MB_DEMO_BROKEN = true; }
+
+  /* IndexedDB: the demo's own databases */
+  if (idb) {
+    var open0 = idb.open.bind(idb), del0 = idb.deleteDatabase.bind(idb);
+    try {
+      idb.open = function (n, v) { return v === undefined ? open0(P + n) : open0(P + n, v); };
+      idb.deleteDatabase = function (n) { return del0(P + n); };
+    } catch (e) { g.MB_DEMO_BROKEN = true; }
+  }
+  /* the channel between pages: the demo's own */
+  var BC = g.BroadcastChannel;
+  if (BC) {
+    var Demo = function (name) { return new BC(P + name); };
+    Demo.prototype = BC.prototype;
+    g.BroadcastChannel = Demo;
+  }
+  /* the storage event: only the demo's keys, told as the app wrote them */
+  var add0 = g.addEventListener, rem0 = g.removeEventListener, wraps = [];
+  g.addEventListener = function (type, fn, opt) {
+    if (type !== 'storage' || typeof fn !== 'function') return add0.call(this, type, fn, opt);
+    var w = function (e) {
+      if (!e || !e.key || e.key.indexOf(P) !== 0) return;
+      list = null;
+      fn.call(this, { type: 'storage', key: e.key.slice(P.length), newValue: e.newValue, oldValue: e.oldValue, url: e.url, storageArea: shim });
+    };
+    wraps.push([fn, w]);
+    return add0.call(this, type, w, opt);
+  };
+  g.removeEventListener = function (type, fn, opt) {
+    if (type === 'storage') for (var i = 0; i < wraps.length; i++) if (wraps[i][0] === fn) return rem0.call(this, type, wraps[i][1], opt);
+    return rem0.call(this, type, fn, opt);
+  };
+  /* for shared/demo.js, which wipes the demo on the way out */
+  g.MB_DEMO_REAL = { localStorage: real, sessionStorage: ss, prefix: P, flag: FLAG, wipe: WIPE };
+
+  /* the made-up person and the DEMO tab, on the page itself and not in its frames */
+  if (g.top === g) {
+    var me = g.document.currentScript && g.document.currentScript.src;
+    if (me) {
+      var t = g.document.createElement('script');
+      t.src = me.replace(/skins\.js(\?[^#]*)?/, 'demo.js$1');
+      (g.document.head || g.document.documentElement).appendChild(t);
+    }
+  }
+})(window);
 /* Universal skin engine. Shared by every app in the suite.
    Four colours in, ~30 semantic tokens out. Components read the tokens,
    never the raw colours, which is the single rule that keeps skins working.
