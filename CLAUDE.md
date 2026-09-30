@@ -626,9 +626,12 @@ cannot be followed literally. Use the browser instead, which is better anyway
 because it runs the real thing rather than only parsing it:
 
 1. Serve the folder on a port of your own, bound to this PC only:
-   `py -3 -m http.server 8811 --bind 127.0.0.1 -d "<repo>"`. Never 8777, which
-   is OUTER HEAVEN's board, and never without `--bind 127.0.0.1`: a server on
-   every address put Motherbase on the wifi on 2026-09-28.
+   `py -3 tools/serve.py 8811`. Never 8777, which is OUTER HEAVEN's board.
+   It binds 127.0.0.1 only (a server on every address put Motherbase on the
+   wifi on 2026-09-28) and answers every file no-store: plain `http.server`
+   let the browser reuse hour-old scripts, and five smoke checks failed on
+   code already fixed (2026-09-30). The smoke's first `harness:` check names
+   any file it ran stale.
 2. Open it with the browser tool, drive it with JavaScript, read the console.
 3. Run `_review.html` at the root. It opens every app in turn, checks each one
    draws and every tab works, runs `shared/_smoke.html` inside itself and folds

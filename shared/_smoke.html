@@ -80,6 +80,24 @@ async function run() {
   T.length = 0; PENDING.length = 0;
   const stamp = 'smoke-' + Date.now();
 
+  /* ---- the harness runs the files on disk ----
+     2026-09-30: five checks failed on an io.js and skins.js the browser had
+     kept from an hour before, while the files on disk were already right, and
+     a stale run reads exactly like broken code. So first: is every shared
+     file this page ran the size of the one on disk now? If not, the fix is
+     the server (tools/serve.py sends no-store), not the code. */
+  if (location.protocol !== 'file:') {
+    const ran = performance.getEntriesByType('resource')
+      .filter(e => e.initiatorType === 'script' && /\/shared\/[^/?]+\.js/.test(e.name) && e.decodedBodySize);
+    const stale = [];
+    for (const e of ran) {
+      const now = await fetch(e.name, { cache: 'no-store' }).then(r => r.arrayBuffer()).then(b => b.byteLength, () => -1);
+      if (now >= 0 && now !== e.decodedBodySize) stale.push(e.name.split('/').pop().split('?')[0]);
+    }
+    ok('harness: every shared file this page ran is the one on disk', !stale.length,
+      ' — old copies of ' + stale.join(', ') + '. Serve with tools/serve.py');
+  }
+
   /* ---- day ---- */
   const at2am = new Date(); at2am.setHours(2, 0, 0, 0);
   const at9am = new Date(); at9am.setHours(9, 0, 0, 0);

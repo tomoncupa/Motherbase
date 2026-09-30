@@ -180,8 +180,12 @@ worker cleared or the page can look unlinked.
 ## Testing
 
 ```
-py -3 -m http.server 8811 --bind 127.0.0.1 -d "C:\Users\user\Downloads\Motherbase"
+py -3 tools/serve.py 8811
 ```
+
+No-store on every file, so no run is of a stale copy (2026-09-30: five
+failures on an hour-old io.js and skins.js). Open it as `localhost`, not
+`127.0.0.1`, when a service worker must register.
 
 Then open `http://127.0.0.1:8811/shared/_smoke.html` in a browser and read the
 result. Drive the real apps too: a green smoke test does not prove the apps still
