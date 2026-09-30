@@ -44,6 +44,7 @@ are holding a stale copy of whatever you just changed.
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `import.js` | Bringing in an outside spreadsheet by shape: ticks, weigh-ins, foods, money out. | High. It writes rows many apps own. |
 | `health.js` | Answers "is my data okay". | Low. |
+| `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
 | `_smoke.html` | 380 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
@@ -170,10 +171,10 @@ worker cleared or the page can look unlinked.
 ## Testing
 
 ```
-py -3 -m http.server 8777 -d "C:\Users\user\Downloads\Motherbase"
+py -3 -m http.server 8811 --bind 127.0.0.1 -d "C:\Users\user\Downloads\Motherbase"
 ```
 
-Then open `http://127.0.0.1:8777/shared/_smoke.html` in a browser and read the
+Then open `http://127.0.0.1:8811/shared/_smoke.html` in a browser and read the
 result. Drive the real apps too: a green smoke test does not prove the apps still
 work. Clean up any test data you write, and stop the server when you are done.
 

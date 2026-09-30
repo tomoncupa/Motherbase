@@ -3259,6 +3259,36 @@ async function run() {
       Object.keys(ids_).length === ids.length - bad.link.length - bad.parse.length);
   }
 
+  /* ---- report: each device's own note (2026-09-30) ----
+     The row is this device's real one, so everything it writes is put back:
+     a review run on Tom's phone must not leave made-up errors in his list. */
+  for (let i = 0; i < 60 && !window.DeviceReport; i++) await new Promise(r => setTimeout(r, 50));
+  ok('report: io.js brings report.js in, with no tag of its own', !!window.DeviceReport && !!document.getElementById('mb-report-js'));
+  if (window.DeviceReport) {
+    const id = DeviceReport.id, was = Rec.get('device', null, id);
+    const before = (was && was.errN) || 0;
+    window.dispatchEvent(new ErrorEvent('error', { message: 'smoke: a thrown error', filename: 'https://x/shared/smoke.js?v=1', lineno: 7 }));
+    window.dispatchEvent(new PromiseRejectionEvent('unhandledrejection', { promise: Promise.resolve(), reason: new Error('smoke: a rejection') }));
+    DeviceReport.flush();
+    const row = Rec.get('device', null, id) || {};
+    const errs = row.errs || [];
+    ok('report: an uncaught error and a promise rejection land on this device\'s row, with where',
+      errs.some(e => e.m === 'smoke: a thrown error' && e.at === 'shared/smoke.js:7') &&
+      errs.some(e => /smoke: a rejection/.test(e.m)) && row.errN >= before + 2);
+    ok('report: the row names the device and when it was seen', !!row.name && Date.now() - Date.parse(row.seen) < 60000);
+    DeviceReport.write();
+    const at = (Rec.export(['device']).find(r => r.key === id) || {}).updated_at;
+    DeviceReport.write();
+    const at2 = (Rec.export(['device']).find(r => r.key === id) || {}).updated_at;
+    ok('report: an open with nothing new writes nothing', !!at && at === at2);
+    ok('report: DATA lists the devices under LIVE SYNC', (() => {
+      const pane = document.createElement('div');
+      IO.deviceRow(pane);
+      return /DEVICES/.test(pane.textContent) && /\(this one\)/.test(pane.textContent) && /errors this week/.test(pane.textContent);
+    })());
+    if (was) Rec.set('device', null, id, was); else Rec.del('device', null, id);
+  }
+
   /* every promised check settles before anything is counted */
   await Promise.all(PENDING);
 

@@ -171,6 +171,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `creatures.js` | The Pokémon a person is shown as, drawn from shapes on a canvas, since 2026-09-22. CHECK IN's picker and COACH's box both draw from it, so a client is the same creature in both. An old animal pick maps to a Pokémon. Writes colours down, like notice.js, because the creature is art. |
 | `range.js` | A training history as a woodblock print, since 2026-09-22; rebuilt as 0.2.0 on 2026-09-25, one picture since 0.3.0 on 2026-09-26. Every training block a mountain, taller for more volume a week; a month outside a block a hill; every session a tree standing on the mountain over its day, taller for more sets, blossoming on a record day. No base switch; a PRINT switch (FUJI, INK, DUSK) says how it is drawn and the caller keeps it. Drawn in 1024px tiles, only near the screen. TRAIN's Profile and COACH draw it. `Range.fromRows` builds it from TRAIN-shaped rows and counts what Profile counts (comment warmups out). Writes colours down for the same reason. |
 | `notice.js` | The status window LOOK and, since 2026-09-25, NOTICE's ENGINE: `Notice.parse` (text in), `Notice.draw` (the window, 1080 wide), `Notice.compose` (on a story or post). NOTICE and SHEET both draw with it; NOTICE keeps its made-up rewards and hands them in as `o.rewards`. The four palettes and the cut-corner shape. NOTICE strokes it on a canvas to make a picture, STATUS clips a real panel to it for the status check. The one place in the suite that carries hex colours on purpose, for the reason NOTICE always had: the window is the art, not the furniture, so a Hunter window is blue in every theme. Nothing here reaches an app's own chrome. |
+| `report.js` | Each device's own note, added 2026-09-30: one `device` row per device (when it last opened anything, what live sync last did, every app version opened there, its last five uncaught errors and promise rejections). Fetched by `io.js` like `cloud.js`; `io.js` itself catches errors from its own first line until this arrives, so a page that dies while booting is still reported. DATA lists every device under LIVE SYNC (`IO.deviceRow`). Claude reads every device's row on the PC in the nightly backup file. Writes only what changed, never inside TRAIN on a client. The global is `DeviceReport`: WebKit already owns `Report`. |
 | `cloud.js` | LIVE SYNC: Firebase beside the sheet, added 2026-09-20. One row per row at `/u/<uid>/rows/<id>`, pushed on change and listened for by `updated_at`, merged through `Rec.merge` like anything else. Fetched by `io.js` rather than by a tag in every app, the way `mobile.js` fetches `sw.js`, so no app was edited. Only the TOP document connects, because `records.js` already shares merged rows across the origin and fourteen frames would be fourteen connections. A row over 64KB is skipped AND THE BOUNDARY STILL PASSES IT, or one photo would jam every sync after it. Does nothing until a config is pasted. See `CLOUD.md`. |
 | `nutrients.js` | The full nutrient list a food can carry beyond the eight, added 2026-09-22: fibre, sugar, the fats, EPA and DHA, cholesterol, eleven minerals and the vitamins, thirty-one in all. One list, three readers: FOODDÉX fills them from its USDA lookup (found by the USDA's printed NAME and unit, never its numeric id, and International Units skipped), STATUS gives each one a column on the sheet's Food tab, and ELEMENT reads its five off the food. They live on `food.base` beside the eight. A blank is "not known", never zero. |
 | `_smoke.html` | 380 checks over all of the above. Run it after touching any of them. |
@@ -294,6 +295,7 @@ An app may read any type. It writes only the types it owns.
 | `kplan` | **kitchen** | timestamp id, dated the planned day | `{slot, food, mult, ord, dish}` — one planned food. `slot` is `b`, `l`, `d` or `s` (Breakfast, Lunch, Dinner, Snacks), `mult` a multiple of the food's base amount, `dish` the saved meal it came from, if any. Eaten is never stored here: it is the `meal` row `kitchen-<key>` existing |
 | `kdish` | **kitchen** | timestamp id, undated | `{name, items:[{food, mult}], ord}` — a saved meal. `items` is never empty: removing the last item removes the meal |
 | `kskip` | **kitchen** | the meal's key, dated the meal's date | `{skip: 1}` — this logged meal did not come out of the kitchen, so it takes no stock off. Kept off `meal`, the way WEALTH's `mark` is kept off `spend` |
+| `device` | **the shared layer** (`shared/report.js`); every device writes its own | a random id this browser made once, kept in localStorage `mb.device`, undated | `{name, seen, sync, syncedAt, v: {app: version}, errs: [{t, app, m, at}], errN}` — how this device is doing. An iPhone home-screen app has storage of its own, so it is a device of its own |
 | `buy` | **receipts**; **kitchen** writes it too, for a purchase typed by hand, since clients have no RECEIPTS | `<receipt key>-<line>`, dated the receipt day; KITCHEN's is a timestamp id, dated the day bought | `{food, text, qty, unit, each, amount, shop, receipt}` — one line off a receipt. `unit` is `kg`, `g`, `L`, `ml`, `pc` or blank, and any field may be missing. KITCHEN's is `{food, text, qty, unit, t, src: 'kitchen'}` and never comes with a `spend` |
 
 ### Many writers is fine. Replacing a payload you did not read is not
@@ -609,7 +611,10 @@ installed here, so any brief telling you to extract the script and run `node --c
 cannot be followed literally. Use the browser instead, which is better anyway
 because it runs the real thing rather than only parsing it:
 
-1. Serve the folder: `py -3 -m http.server 8777 -d "<repo>"`.
+1. Serve the folder on a port of your own, bound to this PC only:
+   `py -3 -m http.server 8811 --bind 127.0.0.1 -d "<repo>"`. Never 8777, which
+   is OUTER HEAVEN's board, and never without `--bind 127.0.0.1`: a server on
+   every address put Motherbase on the wifi on 2026-09-28.
 2. Open it with the browser tool, drive it with JavaScript, read the console.
 3. Run `_review.html` at the root. It opens every app in turn, checks each one
    draws and every tab works, runs `shared/_smoke.html` inside itself and folds
@@ -621,7 +626,27 @@ because it runs the real thing rather than only parsing it:
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks
    only mean anything at one width.
-4. Clean up any test data you wrote, and stop the server.
+4. **Before a client push, run it in Safari's engine too:** `py -3
+   tools/safari-check.py`. It serves the repo itself on 127.0.0.1, runs
+   `_review.html` in WebKit at iPhone 13 Pro size (390 x 844, touch, a fresh
+   store) and prints the tally and every failure; exit 0 is all passed.
+   WebKit is the engine inside Safari, not Safari: the keyboard, Add to Home
+   Screen and iOS's storage rules are still only proved on the phone.
+   `--engine chromium --width 1280 --height 900` runs the same review in a
+   Chromium no other session shares, which is also the way round the Browser
+   pane when its tab is hidden: a hidden tab slows the review's frames until
+   the apps after QUESTS time out. Playwright for Python is installed;
+   `py -3 -m playwright install webkit` timed out on this PC on 2026-09-30
+   while curl reached the same address, so the WebKit and headless Chromium
+   zips were fetched with curl into `%LOCALAPPDATA%/ms-playwright`
+   (`webkit-2359`, `chromium_headless_shell-1243`).
+   **Known, 2026-09-30:** in WebKit every app passes and one check fails,
+   "foundation: the shared checks ran, never finished": partway through, the
+   smoke page's frame inside the review loses its page (its `#out` is gone).
+   `shared/_smoke.html` opened on its own passes in WebKit, 385 of 385. Not
+   yet found; suspect a history step inside a frame (see the trap on smoke
+   checks and history).
+5. Clean up any test data you wrote, and stop the server.
 
 **Always test:** record merge including the two-device case where each device wrote
 a different field, export and import round trips, schedule due dates at interval
@@ -855,6 +880,11 @@ answer, or take it out.
   browser tool gives up on a script after 45. Press Run the review with
   `.click()`, then read the tally in calls of 40 seconds or less
   (2026-09-29).
+- **A global named after a web standard may already exist in Safari.** WebKit
+  has a built-in `Report`, so a shared file guarded by `if (g.Report) return`
+  never ran on an iPhone while Chrome, which has none, passed every check
+  (2026-09-30, caught by `tools/safari-check.py`). Give a global a name no
+  browser would use (`DeviceReport`), and run the WebKit check.
 - **Never `Rec.merge` a row with an id you made up.** The store finds a row
   by the id it derives from type, date and key, so a hand-made `id` is a
   second row that `Rec.all` and `Rec.map` list and `Rec.get` cannot see, and

@@ -1544,6 +1544,52 @@ const IO = {
        pane has left the document, which needs no cooperation from whoever
        closed it. */
     const off = C.on(() => { pane.isConnected ? draw() : off(); });
+    IO.deviceRow(wrap);
+  },
+
+  /** DEVICES, under LIVE SYNC: every device's own note from report.js, most
+      recently seen first. When it last opened anything, what live sync last
+      did there, and its last error if one came this week. Tom, 2026-09-30:
+      nothing had ever been watched on his iPhone, so this is where the
+      iPhone says how it is doing. Draws nothing until a device has written. */
+  deviceRow(host) {
+    const Rp = g.DeviceReport;
+    if (!Rp || !Rp.devices) return;
+    const list = Rp.devices();
+    if (!list.length) return;
+    const small = 'font-size:var(--f-2,13px);color:var(--text-2,#8fa3b5);margin:2px 0 0';
+    const ago = iso => {
+      const t = Date.parse(iso || '');
+      if (!t) return 'never';
+      const m = Math.round((Date.now() - t) / 60000);
+      if (m < 2) return 'just now';
+      if (m < 60) return m + ' min ago';
+      if (m < 60 * 24) return Math.round(m / 60) + ' h ago';
+      if (m < 60 * 48) return 'yesterday';
+      return new Date(t).toISOString().slice(0, 10);
+    };
+    /* an app's folder is not always its name */
+    const NAMES = { home: 'HOME', quest: 'QUESTS', portion: 'FOODDÉX', mix: 'ELEMENT', system: 'NOTICE', sheet: 'CHARACTER SHEET' };
+    const nameOf = k => NAMES[k] || String(k || 'an app').toUpperCase();
+    host.appendChild(el('div', 'mb-group', 'DEVICES'));
+    const week = Date.now() - 7 * 86400000;
+    list.slice(0, 8).forEach(d => {
+      const box = el('div');
+      box.style.cssText = 'margin:0 0 var(--s-3,12px)';
+      const sync = d.sync === 'live' ? 'synced ' + ago(d.syncedAt) : d.sync || 'no live sync';
+      box.appendChild(el('p', null, '<b>' + esc(d.name) + '</b>' + (d.me ? ' (this one)' : '') +
+        '. Seen ' + esc(ago(d.seen)) + ', ' + esc(sync) + '.'));
+      const recent = d.errs.filter(e => Date.parse(e.t) > week);
+      const last = d.errs[d.errs.length - 1];
+      const e = el('p', null, recent.length
+        ? esc(recent.length + (recent.length === 1 ? ' error' : ' errors') + ' this week. Last, in ' + nameOf(last.app) + ': ' + last.m)
+        : 'No errors this week.');
+      e.style.cssText = small;
+      box.appendChild(e);
+      const v = Object.keys(d.v).sort().map(k => nameOf(k) + ' ' + d.v[k]).join(', ');
+      if (v) { const vp = el('p', null, esc(v)); vp.style.cssText = small; box.appendChild(vp); }
+      host.appendChild(box);
+    });
   },
 };
 
@@ -3160,6 +3206,46 @@ g.addEventListener('message', e => {
    It is added even inside a frame and even from a folder, because the settings
    row has to be drawable everywhere. Whether anything CONNECTS is cloud.js's
    own decision, and from a folder or inside a frame the answer is no.      */
+/* ── errors, from the first line ──
+   report.js keeps each device's last errors, but it arrives after an app's
+   own script has run, and an error while an app boots is the one that
+   matters most. So this catches from here until report.js takes over and
+   hands it what it held (`__mbEarly`, five at most). */
+(function earlyErrors() {
+  if (g.__mbEarly) return;
+  var q = g.__mbEarly = [];
+  var put = function (m, at) {
+    if (q.done || q.length >= 5) return;
+    q.push({ t: new Date().toISOString(), m: String(m || 'error').slice(0, 160), at: at || '' });
+  };
+  g.addEventListener('error', function (e) {
+    if (e && e.message) put(e.message, String(e.filename || '').split('?')[0].split('/').slice(-2).join('/') + (e.lineno ? ':' + e.lineno : ''));
+  });
+  g.addEventListener('unhandledrejection', function (e) {
+    var r = e && e.reason;
+    put('promise: ' + ((r && (r.message || r.name)) || r || 'rejected'), '');
+  });
+})();
+
+/* report.js: this device's note, fetched the way cloud.js is below, so no
+   app is edited. A missing file costs nothing. */
+(function loadReport() {
+  if (g.DeviceReport || document.getElementById('mb-report-js')) return;
+  var me = document.currentScript && document.currentScript.src;
+  if (!me) {
+    var tags = document.getElementsByTagName('script');
+    for (var i = 0; i < tags.length; i++) {
+      if (/\/shared\/io\.js(\?|$)/.test(tags[i].src)) { me = tags[i].src; break; }
+    }
+  }
+  if (!me) return;
+  var t = document.createElement('script');
+  t.id = 'mb-report-js';
+  t.src = me.replace(/io\.js.*$/, 'report.js');
+  t.onerror = function () { t.remove(); };
+  document.head.appendChild(t);
+})();
+
 (function loadCloud() {
   if (g.Cloud || document.getElementById('mb-cloud-js')) return;
   var me = document.currentScript && document.currentScript.src;
