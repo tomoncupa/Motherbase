@@ -262,3 +262,16 @@ both are Tom-only apps, same call as `creatures.js`.
 ## 2026-09-24: FORGE's icon
 
 `app.forge` is a role on the plain `grid` drawing, colour slot 3 with TRAIN and COACH, and its art is a gold anvil in `APP_ART`. Picked by the session that built FORGE and not yet approved by Tom. Its PNGs (`forge/icon-*.png`, `shared/icons/forge.png` and one per theme folder) came from `tools/make-icons.html`. Only FORGE's files were written. Every other icon is byte for byte as it was.
+
+## 2026-09-30: two themes whose words read only on the page
+
+The contrast floor lifts each text colour against four grounds (page, card,
+recessed, raised) and the biggest push wins. Lego (light grey page, red and
+blue bricks) and Minecraft 2 (dark page, light grey stone) pull opposite
+ways, so every text token lands on what reads on the PAGE: Lego's are all
+#525252, Minecraft 2's all #FFFFFF. Their words do not read on their own
+cards: Lego's header 1.4 to 1, Minecraft 2's cards 1.7 to 1. Found while
+fixing the home dock, which now sits on the page colour in those two themes
+only (their own CSS). Not fixed: it needs either a theme that says which
+ground its words sit on, or new colours for the two themes. Tom has not
+been asked.

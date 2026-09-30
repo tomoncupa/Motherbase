@@ -925,6 +925,18 @@ answer, or take it out.
   `_smoke.html` mid-run strands rows typed `smoke-<n>`. Each cost a failed
   `_review.html` on 2026-09-25 (TRAIN 1.0.36).
 
+- **A chart colour is a line colour, not a word colour.** `--data-1` to
+  `--data-6`, and an app's `--c` taken from them, are pinned to read as a
+  line, and on a light theme Lego's yellow measured 1.04 to 1 as words. The
+  home dock printed the open app's NAME in it (2026-09-30). Put words in
+  `--text-1` and the colour on the icon, a tint or a ring.
+- **A contrast check that reads computed colours must convert them and stop
+  the fades.** `getComputedStyle` hands a `color-mix` back as `color(srgb
+  ...)` or `oklab(...)`, which a regex for numbers misreads, and `.mb-press`
+  fades its background over 90ms, so a read straight after a class change is
+  mid-fade. Paint the value into a 1px canvas and read the pixel, with
+  `transition:none` injected first (2026-09-30, the home dock).
+
 ---
 
 ## Current state
