@@ -494,6 +494,14 @@ discard newer work, is a separate button behind a confirm.
 Calendar tab with activities down the side and dates across the top, and a Log tab
 for pivots. SheetJS if it loads, CSV if it does not.
 
+**The nightly backup** (2026-09-30): Windows' task "Motherbase backup" starts
+`desktop/Backup.exe` at 4am and after sign-in. It opens `tools/backup.html`,
+unseen, in the desktop programs' store (`desktop/data`), waits for `Rec.ready`
+and for LIVE SYNC to catch up, and writes the home screen's "Back up
+everything" file to `Documents/Backups/Motherbase nightly`, outside any repo,
+the last 30 kept, `backup.log` beside them. Any app's DATA, Restore merges it
+back. `desktop/README.md` has the rest.
+
 The Data button turns amber once a backup is 14 days old. LIVE SYNC carries
 no photos (a row over 64KB), so a backup or the sheet is still the only copy
 of a photo anywhere but the device it was taken on.

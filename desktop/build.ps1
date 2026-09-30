@@ -53,8 +53,19 @@ $menu = Join-Path $dir 'Main Menu.exe'
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Main Menu build failed."; exit $LASTEXITCODE }
 
+# ── the nightly backup, started by Windows, never seen ──
+$backup = Join-Path $dir 'Backup.exe'
+& $csc -nologo -target:winexe -out:"$backup" `
+  -reference:System.dll -reference:System.Core.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
+  -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
+  -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
+  (Join-Path $dir 'Backup.cs')
+
+if ($LASTEXITCODE -ne 0) { Write-Output "Backup build failed."; exit $LASTEXITCODE }
+
 Write-Output "Built:"
 Write-Output "  $out"
 Write-Output "  $menu"
+Write-Output "  $backup"
 Write-Output ""
 Write-Output "Double click it. It puts an icon in the tray, next to the clock."

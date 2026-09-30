@@ -64,6 +64,25 @@ the page tells it what to be through a proper message channel.
 Closing the window quits the program, so it can never sit in the tray switched
 off.
 
+## The nightly backup
+
+Every night at 4am, and ten minutes after you sign in on a day the PC was
+off at 4am, Windows starts **Backup.exe**. You never see it. It opens the
+desktop programs' store, waits for live sync to catch up, and saves the whole
+store to **Documents\Backups\Motherbase nightly** as
+`motherbase-all-<date>.json`. The last 30 are kept; `backup.log` beside them
+says what each night did. Under 2 GB free on the disk, it skips the night and
+says so.
+
+To put one back: open any app, Settings, **DATA**, **Restore**, and pick the
+file. It merges: anything newer on the device is kept.
+
+Set up once with:
+
+```
+powershell -ExecutionPolicy Bypass -File "C:\Users\user\Downloads\Motherbase\desktop\install-backup-task.ps1"
+```
+
 ## Building it
 
 Only needed if the `.cs` files change. Editing STATUS never needs a rebuild.
@@ -87,5 +106,7 @@ three Microsoft WebView2 files in `lib\`.
 | `status-app.txt` | your shortcut, always-on-top and widget position |
 | `status-app.log` | what happened on the last run, for when something misbehaves |
 | `StatusDesktop.cs` | the old Chrome launcher, kept until the new one has earned its place |
+| `Backup.exe` `Backup.cs` | the nightly backup and its source; reads `tools/backup.html` |
+| `install-backup-task.ps1` | sets up (or `-Remove`s) the 4am task that starts it |
 
 Windows only, Tom only. Not in the client build.

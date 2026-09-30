@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motherbase backup</title>
+<link rel="stylesheet" href="../shared/fonts/fonts.css">
+<style>
+  /* Block, the house look. A tools page, not an app: the tokens with the
+     Block values behind them, the way ui.js writes its own. */
+  body { margin: 0; min-height: 100vh; background: var(--bg, #080B10); color: var(--text-1, #DBE7F0);
+         font: 16px/1.5 'Inter Tight', 'IBM Plex Sans', system-ui, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+  h1 { font: 700 22px/1.2 'Chakra Petch', system-ui, sans-serif; letter-spacing: .08em; margin: 0 0 16px;
+       color: var(--accent, #F0B323); }
+  .panel { background: var(--panel, #0E141D); border-radius: 6px; padding: 16px; }
+  #state { font: 600 18px/1.3 'Chakra Petch', system-ui, sans-serif; }
+  #detail { color: var(--text-2, #8FA3B5); margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>BACKUP</h1>
+  <div class="panel">
+    <div id="state">Waiting for the store</div>
+    <div id="detail">The nightly backup program reads this page. Nothing here needs a press.</div>
+  </div>
+</main>
+<script src="../shared/day.js"></script>
+<script src="../shared/records.js"></script>
+<script src="../shared/cloud.js"></script>
+<script>
+/* ── the nightly backup's page ──
+   Tom, 2026-09-30: once a day, a full copy of the whole store saved to a
+   folder on the PC outside any repo, the last 30 kept.
+
+   desktop/Backup.exe opens this page, unseen, in the desktop programs' own
+   store (desktop/data, the one STATUS.exe and the Main Menu share), waits
+   until MB_BACKUP.state is 'ready', then reads MB_BACKUP.json in pieces and
+   writes it to Documents/Backups/Motherbase nightly. A page cannot write to
+   a folder on the PC, so the program does the writing and this page only
+   gathers.
+
+   The file is exactly the home screen's "Back up everything" file, so any
+   app's DATA, Restore brings it back, merging: a row already newer on the
+   device is kept.
+
+   Waits, in order: every row in memory, IndexedDB included (Rec.ready); then,
+   if this store is signed in to LIVE SYNC, the first read from the cloud
+   merged and ten quiet seconds after the last row arrived, so a row written
+   on the phone today is in tonight's copy. Two minutes at most; a store that
+   is not signed in, or a cloud that never answers, is backed up as it is and
+   the file says so in `synced`. */
+(function () {
+  var B = window.MB_BACKUP = { state: 'waiting', rows: 0, json: '', why: '', synced: false };
+  var $ = function (id) { return document.getElementById(id); };
+  function show(state, detail) { $('state').textContent = state; if (detail != null) $('detail').textContent = detail; }
+  var start = Date.now(), MAX = 120000, QUIET = 10000;
+
+  function build() {
+    try {
+      var rows = Rec.export();
+      var bag = { kind: 'motherbase-backup', v: 1, app: '*', at: new Date().toISOString(),
+                  from: 'nightly', synced: B.synced, rows: rows };
+      B.json = JSON.stringify(bag);
+      B.rows = rows.length;
+      B.state = 'ready';
+      show('Ready: ' + rows.length + ' rows', B.synced ? 'Live sync caught up first.' : B.why);
+    } catch (e) {
+      B.state = 'error'; B.why = 'the store could not be read: ' + (e && e.message);
+      show('Could not read the store', B.why);
+    }
+  }
+
+  function waitCloud() {
+    var C = window.Cloud, s = C && C.state ? C.state() : null;
+    if (!s || !s.on) { B.why = 'This store is not signed in to live sync, so it holds what this PC last had.'; return build(); }
+    var quietSince = Date.now(), lastGot = s.gotAt;
+    show('Waiting for live sync', 'Signed in as ' + (s.email || 'this account') + '.');
+    var t = setInterval(function () {
+      var st = C.state();
+      if (st.gotAt !== lastGot) { lastGot = st.gotAt; quietSince = Date.now(); }
+      var caught = st.conn && st.loaded && Date.now() - quietSince >= QUIET;
+      if (caught || Date.now() - start > MAX) {
+        clearInterval(t);
+        B.synced = !!caught;
+        if (!caught) B.why = st.conn ? 'Live sync was still sending rows after two minutes.' :
+          'Live sync did not connect' + (st.why ? ' (' + st.why + ')' : '') + ', so this holds what this PC last had.';
+        build();
+      }
+    }, 1000);
+  }
+
+  Rec.ready(function () { show('Store loaded', ''); setTimeout(waitCloud, 1500); });
+})();
+</script>
+</body>
+</html>
