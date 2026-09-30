@@ -1494,7 +1494,9 @@ const IO = {
          really the time the page opened, and both desktop programs sat
          signed out for hours under it. */
       const times = (s.sentAt ? ' Last sent <b>' + esc(s.sentAt) + '</b>.' : '') +
-        (s.gotAt ? ' Last received <b>' + esc(s.gotAt) + '</b>.' : '');
+        (s.gotAt ? ' Last received <b>' + esc(s.gotAt) + '</b>.' : '') +
+        /* cloud.js 0.2.2's daily check found rows here missing and fetched them */
+        (s.healed ? ' Brought back <b>' + s.healed + '</b> rows this device was missing.' : '');
       line.innerHTML = s.conn
         ? 'Live as <b>' + esc(s.email || 'signed in') + '</b>, connected.' + times
         : s.live

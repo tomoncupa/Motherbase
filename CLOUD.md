@@ -164,6 +164,16 @@ sends both back to the folder copy together. Untested: whether Google lets its
 sign-in window open inside a program rather than a browser. If it refuses,
 the programs keep the sheet sync, and that problem gets its own fix.
 
+**It never puts an older copy over a newer one** (since 2026-09-30). A
+device sends nothing until it has heard what the cloud holds, and then only
+the rows the cloud lacks or holds older. A device that hears the cloud
+holding an older copy than its own sends its own back.
+
+**It checks itself once a day.** Each device compares the list of rows in the
+cloud with its own, fetches any it is missing and sends any the cloud is
+missing. The list is about a megabyte for a full history. The settings row
+says when it brought rows back.
+
 **It is off until you set it up.** An app with no config pasted makes no
 network request from this at all. Clients get the file and never notice it.
 

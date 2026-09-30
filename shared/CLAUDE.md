@@ -44,7 +44,7 @@ are holding a stale copy of whatever you just changed.
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `import.js` | Bringing in an outside spreadsheet by shape: ticks, weigh-ins, foods, money out. | High. It writes rows many apps own. |
 | `health.js` | Answers "is my data okay". | Low. |
-| `_smoke.html` | 343 checks over all of it. | Run it every time. |
+| `_smoke.html` | 380 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -302,9 +302,38 @@ origin answering "Internal error" (its database was recreated empty on
 them. Signed in, Live, and two weeks missing. `Rec.unkept()` and
 `Rec.onUnkept(fn)` now count a row that reached neither half; the top
 document's cloud.js then holds `seen` still, sets it back to the start, and
-the row says to restart the browser. Two `rec:` smoke checks. Not covered
-yet: a device that lost IndexedDB rows EARLIER, with `seen` already past
-them, heals only if something resets `seen`.
+the row says to restart the browser. Two `rec:` smoke checks. A device that
+lost rows EARLIER is healed by 0.2.2's daily check, below.
+
+## A push never replaces a newer row (2026-09-30, `cloud.js` 0.2.2)
+
+All 15,801 rows in Tom's Chrome matched the cloud's times after two weeks of
+use elsewhere: a first push (`pushed` empty) sent every row, before the cloud
+had answered, and a write replaces. Unproven that it happened; it cannot now.
+
+- **Nothing goes up until `loaded`** (the listen's first `value`, which comes
+  after every child event) **and `conn`**. A device with nothing pushed reads
+  the whole cloud first. After a dropped connection it listens afresh.
+- **`plan(rows, since, base, cloudAt)`** skips a row the cloud holds at the
+  same time or newer (`had`); the boundary still passes it.
+- **`redo`**: hearing the cloud hold an OLDER copy (`child_changed`) or a row
+  leave the window from below (`child_removed`) sends ours again. That covers
+  two devices racing on one row, and devices still on an older cloud.js.
+- **The window starts `LOOK`, two days, before `seen`**: a row is stamped
+  when written, so a phone's late push is older than a PC's `seen`.
+- **The daily check** (`check`, 20h apart, and on Sync now): a shallow read of
+  the cloud's ids against every id here. Lacking here: fetched, tombstones
+  too; over 300 with a live one among them resets `seen`. Lacking there:
+  `redo`. Ticks past the home screen's 800-day purge and `smoke*` types are
+  left alone. The row says "Brought back N rows".
+- **No database rule.** A refused row fails its whole 400-row write and would
+  stall the boundary; string comparison in the rules was never watched.
+- **Known cost:** Rewind (restore, replace) on a signed-in device gets back
+  any row the cloud has that the backup lacks, within a day.
+- **Fifteen `live sync:` checks** drive start, push, repair and the check
+  through `Cloud._probe`, which now takes `store`, `keys`, `pushed`, `seen`
+  and `checked` too, writes no setting, and puts everything back on
+  `_probe(null)`. Each was watched failing. Not watched on a real database.
 
 ## What the LIVE SYNC row may claim (2026-09-24, `cloud.js` 0.1.4)
 

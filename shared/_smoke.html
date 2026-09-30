@@ -2984,6 +2984,199 @@ async function run() {
     ok('shelf: signed out, a send refuses and says why', !!R.out, say);
   }
 
+  /* ── the row sync against a database held in this page (cloud.js 0.2.2) ──
+
+     2026-09-30: a browser last used two weeks earlier signed in, pushed
+     before the cloud had answered, and every row it sent replaced a newer
+     one. One level under "his data went back two weeks": does a push ever
+     put an older row over a newer one, and does a device that lacks rows get
+     them back. Driven for real through `Cloud._probe`, with a stand-in
+     database and a stand-in store, so no real row and no real setting is
+     touched. The stand-in database fires its events as it writes, as
+     Firebase does for this device's own writes. */
+  if (Cloud._look().started) {
+    ok('live sync rig: not run, because this page is really signed in and syncing', true);
+  } else {
+    const cp = v => v == null ? null : JSON.parse(JSON.stringify(v));
+    const ago = h => new Date(Date.now() - h * 36e5).toISOString();
+    const mk = (key, t, v, dead) => ({ id: 'local|x||' + key, user_id: 'local', type: 'x', date: null, key: key,
+      payload: dead ? null : { v: v }, updated_at: t, deleted: !!dead });
+    const E = id => Cloud._enc(id);
+    const CDB = {};
+    let qs = [], wrote = [], gate = null, connFns = [];
+    const inQ = (q, v) => !!v && (v.updated_at || '') >= q.from;
+    const snap = (k, v) => ({ key: k, val: () => cp(v) });
+    const fire = (q, e, k, v) => q.fns[e].slice().forEach(f => f(snap(k, v)));
+    /* another device writing, or this one: the cloud copy is replaced whole */
+    const put = (k, v) => {
+      const old = CDB[k];
+      CDB[k] = cp(v);
+      qs.slice().forEach(q => {
+        const was = inQ(q, old), is = inQ(q, v);
+        if (is) fire(q, was ? 'child_changed' : 'child_added', k, v);
+        else if (was) fire(q, 'child_removed', k, old);
+      });
+    };
+    const query = from => {
+      const q = { from: from, fns: { child_added: [], child_changed: [], child_removed: [] } };
+      return {
+        startAt: x => query(x),
+        on(e, f) {
+          if (qs.indexOf(q) < 0) qs.push(q);
+          q.fns[e].push(f);
+          if (e === 'child_added') Object.keys(CDB).sort().forEach(k => { if (inQ(q, CDB[k])) f(snap(k, CDB[k])); });
+        },
+        off(e, f) {
+          q.fns[e] = q.fns[e].filter(x => x !== f);
+          if (!q.fns.child_added.length && !q.fns.child_changed.length && !q.fns.child_removed.length) qs = qs.filter(x => x !== q);
+        },
+        /* the first answer, held back while `gate` is shut */
+        once: () => (gate || Promise.resolve()).then(() => ({})),
+      };
+    };
+    const fakeDb = {
+      ref(path) {
+        if (path === '.info/connected') return {
+          on: (e, f) => { connFns.push(f); f({ val: () => true }); },
+          off: (e, f) => { connFns = connFns.filter(x => x !== f); } };
+        if (!path) return { update(patch) {
+          Object.keys(patch).forEach(p => { const k = p.split('/').pop(); wrote.push(Cloud._dec(k)); put(k, patch[p]); });
+          return Promise.resolve();
+        } };
+        return { orderByChild: () => query(''), child: k => ({ once: () => Promise.resolve(snap(k, CDB[k])) }) };
+      },
+    };
+    const mkStore = list => {
+      const rows = Object.create(null);
+      (list || []).forEach(r => { rows[r.id] = cp(r); });
+      return {
+        _rows: rows,
+        merge(l) { let n = 0; (l || []).forEach(r => { const p = rows[r.id]; if (!p || r.updated_at > p.updated_at) { rows[r.id] = cp(r); n++; } }); return n; },
+        export() { return Object.keys(rows).sort().map(k => rows[k]); },
+        newerThan(t, s) { return !s || Object.keys(rows).some(k => rows[k].updated_at > s); },
+        unkept: () => 0,
+        stats: () => ({ hydrated: true, idbSlow: false }),
+      };
+    };
+    const settle = () => new Promise(r => setTimeout(r, 30));
+    const shut = () => { let open; gate = new Promise(r => { open = r; }); return () => { gate = null; open(); }; };
+    const run = (S, b) => {
+      Cloud._probe(() => Object.assign({ uid: 'uidL', email: 'l@x', db: fakeDb, store: S,
+        keys: () => { const o = {}; Object.keys(CDB).forEach(k => { o[k] = true; }); return o; } }, b));
+      return Cloud.start();
+    };
+    const wipe = () => { Cloud._probe(null); Object.keys(CDB).forEach(k => delete CDB[k]); qs = []; wrote = []; gate = null; connFns = []; };
+    const L = {};
+    try {
+      /* A browser away for two days signs in. The cloud has a newer copy of
+         one row and the same copy of another; this device has one row the
+         cloud lacks. */
+      const A = mk('a', ago(1), 'new'), B = mk('b', ago(5), 'same');
+      CDB[E(A.id)] = A; CDB[E(B.id)] = B;
+      const S1 = mkStore([mk('a', ago(48), 'stale'), B, mk('c', ago(3), 'here only')]);
+      const open1 = shut();
+      L.started = await run(S1, { pushed: '', seen: ago(2), checked: new Date().toISOString() });
+      L.full = Cloud._look().from === '';
+      L.waits = (await Cloud._push()) === 0 && !wrote.length && !Cloud._look().loaded;
+      open1(); await settle();
+      L.newer = CDB[E(A.id)].payload.v === 'new' && S1._rows[A.id].payload.v === 'new';
+      L.only = wrote.join() === 'local|x||c';
+      L.edge = Cloud._look().pushed === A.updated_at;
+      L.wrote1 = wrote.join();
+
+      /* Another device writes an OLDER copy of a over it. This one hears it
+         and puts its own back. */
+      wrote = [];
+      put(E(A.id), mk('a', ago(2), 'older, from elsewhere'));
+      await Cloud._push(); await settle();
+      L.repair = CDB[E(A.id)].payload.v === 'new' && wrote.indexOf(A.id) > -1;
+
+      /* The connection drops. An edit made meanwhile waits, and when the
+         connection is back, the cloud is read again before it goes. */
+      wrote = [];
+      connFns.slice().forEach(f => f({ val: () => false }));
+      S1.merge([mk('d', ago(0.5), 'offline edit')]);
+      L.offline = (await Cloud._push()) === 0 && !wrote.length;
+      const open2 = shut();
+      connFns.slice().forEach(f => f({ val: () => true }));
+      await Cloud._push();
+      L.reread = !Cloud._look().loaded && !wrote.length;
+      open2(); await settle();
+      L.back = wrote.join() === 'local|x||d' && Cloud._look().loaded;
+      wipe();
+
+      /* A device whose window starts two days before `seen`. Another writes
+         a copy of f stamped before that, so f leaves the window from below. */
+      const s2 = ago(1), F = mk('f', s2, 'here');
+      CDB[E(F.id)] = F;
+      const S2 = mkStore([F]);
+      await run(S2, { pushed: s2, seen: s2, checked: new Date().toISOString() });
+      await settle();
+      L.window = Cloud._look().from === new Date(Date.parse(s2) - 2 * 864e5).toISOString();
+      put(E(F.id), mk('f', ago(100), 'ancient'));
+      await Cloud._push(); await settle();
+      L.below = CDB[E(F.id)].payload.v === 'here';
+      wipe();
+
+      /* The daily check. The cloud holds g (live) and h (a tombstone) this
+         device lacks, below its window, and an old tick and a test row it
+         must leave alone; this device holds i, which the cloud lacks. */
+      const G = mk('g', ago(200), 'lost here'), H = mk('h', ago(300), '', true);
+      const TK = { id: 'local|tick|2000-01-01|walk', user_id: 'local', type: 'tick', date: '2000-01-01', key: 'walk', payload: { src: 'x' }, updated_at: ago(400), deleted: false };
+      const SM = { id: 'local|smoke-9||z', user_id: 'local', type: 'smoke-9', date: null, key: 'z', payload: {}, updated_at: ago(400), deleted: false };
+      const I = mk('i', ago(100), 'never went up');
+      [G, H, TK, SM].forEach(r => { CDB[E(r.id)] = r; });
+      const S3 = mkStore([I]);
+      await run(S3, { pushed: ago(1), seen: ago(1), checked: new Date().toISOString() });
+      await settle();
+      const h0 = Cloud._look().healed;
+      const res = await Cloud._check(true); await settle();
+      L.fetched = !!S3._rows[G.id] && !!S3._rows[H.id] && res && res.missing === 2 && res.back === 1;
+      L.left = !S3._rows[TK.id] && !S3._rows[SM.id];
+      L.up = !!CDB[E(I.id)] && res && res.up === 1;
+      L.checked = !!Cloud._look().checked && Cloud._look().healed === h0 + 1;
+      wipe();
+
+      /* More lacking than it will fetch one by one: the whole cloud is read
+         again from the start. */
+      const many = [1, 2, 3, 4, 5].map(n => mk('m' + n, ago(200 + n), 'lost ' + n));
+      many.forEach(r => { CDB[E(r.id)] = r; });
+      const S4 = mkStore([]);
+      await run(S4, { pushed: ago(1), seen: ago(1), checked: new Date().toISOString() });
+      await settle();
+      await Cloud._check(true, 2); await settle();
+      L.reset = Cloud._look().from === '' && many.every(r => !!S4._rows[r.id]);
+      wipe();
+
+      /* The rule underneath, on its own: a row the cloud holds at the same
+         time or newer is not sent, and the boundary still passes it. */
+      const t = n => '2026-01-0' + n + 'T00:00:00.000Z';
+      const p = Cloud._plan([mk('p', t(3), 1), mk('q', t(4), 1), mk('r', t(2), 1)], '', 'u/x/rows/',
+        { 'local|x||p': t(3), 'local|x||q': t(5), 'local|x||r': t(1) });
+      L.plan = p.sent === 1 && p.had === 2 && !!p.patch['u/x/rows/' + E('local|x||r')] && p.edge === t(4);
+    } catch (e) {
+      L.threw = e.message;
+    } finally {
+      wipe();
+    }
+    const say = L.threw ? ' — threw: ' + L.threw : '';
+    ok('live sync: a device that never pushed reads the whole cloud before its first push', !!(L.started && L.full), say);
+    ok('live sync: nothing goes up before the cloud\'s first answer is in', !!L.waits, say);
+    ok('live sync: a stale device signing in keeps the cloud\'s newer row and takes it', !!L.newer, say);
+    ok('live sync: a first push sends only what the cloud lacks or holds older', !!(L.only && L.edge), say + ' — wrote: ' + L.wrote1);
+    ok('live sync: an older copy written over a newer one is put back', !!L.repair, say);
+    ok('live sync: nothing goes up while the database cannot hear this device', !!L.offline, say);
+    ok('live sync: back online, the cloud is read again before anything goes up', !!(L.reread && L.back), say);
+    ok('live sync: the window starts two days before the last row heard', !!L.window, say);
+    ok('live sync: a row pushed below the window over a newer one is put back', !!L.below, say);
+    ok('live sync: the daily check fetches rows this device lacks, tombstones too', !!L.fetched, say);
+    ok('live sync: the daily check leaves purged old ticks and test rows alone', !!L.left, say);
+    ok('live sync: the daily check sends rows the cloud lacks', !!L.up, say);
+    ok('live sync: the daily check says when it ran and what it brought back', !!L.checked, say);
+    ok('live sync: too much lacking to fetch one by one reads the whole cloud again', !!L.reset, say);
+    ok('live sync: a row the cloud holds at the same time or newer is never sent', !!L.plan, say);
+  }
+
   /* ── a row that reaches neither half ──
 
      Tom's Chrome, 2026-09-30: localStorage full and IndexedDB refusing to
