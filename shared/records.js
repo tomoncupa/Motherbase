@@ -616,12 +616,29 @@ function hydrate() {
 }
 
 let readyQ = [];
-function flushReady() { const q = readyQ; readyQ = []; q.forEach(f => { try { f(); } catch (e) { console.warn('[records]', e); } }); }
+function flushReady() {
+  if (!TIME.ready) TIME.ready = clock();
+  const q = readyQ; readyQ = []; q.forEach(f => { try { f(); } catch (e) { console.warn('[records]', e); } });
+}
+
+/* ── how long this open took (2026-09-30) ──
+   Tom's Galaxy A10 is slow on every open and nobody had a number for it.
+   `performance.now()` counts from the moment the page was asked for, so these
+   are times since he tapped: `fast` is how long the fast half took to read,
+   `boot` when this file was done, `ready` when Rec.ready fired, `lazy` when a
+   type kept out of the open arrived. `Rec.timing()` adds the first paint the
+   browser itself recorded. report.js carries the figure to the device's row,
+   and DATA says it in words. */
+const clock = () => { try { return Math.round(g.performance.now()); } catch (e) { return 0; } };
+const TIME = { fast: 0, boot: 0, ready: 0, lazy: {} };
 
 function load() {
+  const t0 = clock();
   loadFast();
+  TIME.fast = clock() - t0;
   repairDates();
   booted = true;
+  TIME.boot = clock();
   hydrate();
 }
 
@@ -652,6 +669,18 @@ const Rec = {
     readyQ.push(fn);
   },
   get hydrated() { return hydrated; },
+  /** How long this open took, in ms since the page was asked for: `paint`
+      (the first thing drawn, as the browser saw it), `ready`, `fast` (the
+      fast half's read), `boot` and `lazy` {type: ms}. A figure not reached
+      yet is 0. */
+  timing() {
+    let paint = 0;
+    try {
+      const p = (g.performance.getEntriesByType('paint') || []).filter(e => e.name === 'first-contentful-paint')[0];
+      if (p) paint = Math.round(p.startTime);
+    } catch (e) {}
+    return { paint: paint, ready: TIME.ready, fast: TIME.fast, boot: TIME.boot, lazy: Object.assign({}, TIME.lazy) };
+  },
   on(f) { subs.push(f); return () => { const i = subs.indexOf(f); if (i > -1) subs.splice(i, 1); }; },
 
   /* ── writing ── */

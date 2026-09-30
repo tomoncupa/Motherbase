@@ -7,12 +7,16 @@
    So every device keeps ONE row about itself, type `device`, keyed by an id
    this browser made up once:
 
-     { name, seen, sync, syncedAt, v: {app: version}, errs: [{t, app, m, at}], errN }
+     { name, seen, sync, syncedAt, v: {app: version}, errs: [{t, app, m, at}], errN,
+       open: {app: {s, p, r, at}} }
 
    `seen` is the last time any app opened here, `sync` and `syncedAt` what
    LIVE SYNC last really did, `v` the version of every app opened here, and
    `errs` the last five uncaught errors and promise rejections, with `errN`
-   counting all of them. It is an ordinary row, so live sync carries it to
+   counting all of them. `open` (2026-09-30) is how long each app's last open
+   took here, in seconds: `s` until drawn and ready, `p` the first paint, `r`
+   Rec.ready, from records.js's own clock; only the page Tom opened, never a
+   frame inside it. It is an ordinary row, so live sync carries it to
    every other device, the nightly backup keeps it, and Claude reads it off
    the PC. The DATA panel lists every device under LIVE SYNC (io.js,
    `IO.cloudRow`).
@@ -76,7 +80,7 @@
     return dev + ', ' + browser;
   }
 
-  var me = id(), where = app(), pending = [], lastWrite = 0, timer = null, off = !me ||
+  var me = id(), where = app(), pending = [], lastWrite = 0, timer = null, opened = false, off = !me ||
     /[?&]client=/.test(g.location.search);
 
   function syncNow() {
@@ -99,6 +103,15 @@
     if (v && (!was.v || was.v[where] !== v)) ch['v.' + where] = v;
     if (was.sync !== s.sync) ch.sync = s.sync;
     if (s.syncedAt && was.syncedAt !== s.syncedAt) ch.syncedAt = s.syncedAt;
+    /* How long this open took, per app, from the page Tom actually opened
+       (never a frame inside the home screen): `s` until it had drawn and had
+       its rows, `p` the first paint, `r` Rec.ready, in seconds. Once an open. */
+    var t = !opened && g.top === g && R.timing ? R.timing() : null;
+    if (t && t.ready) {
+      var sec = function (ms) { return Math.round(ms / 100) / 10; };
+      ch['open.' + where] = { s: sec(Math.max(t.paint, t.ready)), p: sec(t.paint), r: sec(t.ready), at: new Date().toISOString() };
+      opened = true;
+    }
     if (pending.length) {
       var errs = (Array.isArray(was.errs) ? was.errs : []).concat(pending).slice(-MAX_ERRS);
       ch.errs = errs;
@@ -159,7 +172,8 @@
       return g.Rec.all('device').map(function (r) {
         var p = r.payload || {};
         return { id: r.key, me: r.key === me, name: p.name || 'A device', seen: p.seen || '', sync: p.sync || '',
-          syncedAt: p.syncedAt || '', v: p.v || {}, errs: Array.isArray(p.errs) ? p.errs : [], errN: p.errN || 0 };
+          syncedAt: p.syncedAt || '', v: p.v || {}, errs: Array.isArray(p.errs) ? p.errs : [], errN: p.errN || 0,
+          open: p.open && typeof p.open === 'object' ? p.open : {} };
       }).sort(function (a, b) { return a.seen < b.seen ? 1 : a.seen > b.seen ? -1 : 0; });
     },
     /** write now (the smoke checks use it) */

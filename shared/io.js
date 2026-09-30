@@ -1554,9 +1554,12 @@ const IO = {
       iPhone says how it is doing. Draws nothing until a device has written. */
   deviceRow(host) {
     const Rp = g.DeviceReport;
-    if (!Rp || !Rp.devices) return;
-    const list = Rp.devices();
-    if (!list.length) return;
+    const list = Rp && Rp.devices ? Rp.devices() : [];
+    /* How long THIS open took, from records.js's own clock (2026-09-30), so
+       the Galaxy A10 can say its figure on its own screen. */
+    const t = g.Rec && g.Rec.timing ? g.Rec.timing() : null;
+    const secs = ms => (Math.round(ms / 100) / 10) + ' s';
+    if (!list.length && !(t && t.ready)) return;
     const small = 'font-size:var(--f-2,13px);color:var(--text-2,#8fa3b5);margin:2px 0 0';
     const ago = iso => {
       const t = Date.parse(iso || '');
@@ -1572,6 +1575,12 @@ const IO = {
     const NAMES = { home: 'HOME', quest: 'QUESTS', portion: 'FOODDÉX', mix: 'ELEMENT', system: 'NOTICE', sheet: 'CHARACTER SHEET' };
     const nameOf = k => NAMES[k] || String(k || 'an app').toUpperCase();
     host.appendChild(el('div', 'mb-group', 'DEVICES'));
+    if (t && t.ready) {
+      const op = el('p', null, 'Opened in <b>' + secs(Math.max(t.paint, t.ready)) + '</b> here' +
+        (t.paint ? ', first drawn at ' + secs(t.paint) : '') + '.');
+      op.className = 'mb-opened';
+      host.appendChild(op);
+    }
     const week = Date.now() - 7 * 86400000;
     list.slice(0, 8).forEach(d => {
       const box = el('div');
@@ -1586,6 +1595,15 @@ const IO = {
         : 'No errors this week.');
       e.style.cssText = small;
       box.appendChild(e);
+      /* the last three opens on that device, newest first */
+      const opens = Object.keys(d.open || {}).map(k => [k, d.open[k]]).filter(x => x[1] && x[1].s != null)
+        .sort((a, b) => String(b[1].at || '').localeCompare(String(a[1].at || ''))).slice(0, 3);
+      if (opens.length) {
+        const o = el('p', null, esc('Opened ' + opens.map(x => nameOf(x[0]) + ' in ' + x[1].s + ' s' +
+          (x[1].p ? ' (drawn at ' + x[1].p + ' s)' : '')).join(', ') + '.'));
+        o.style.cssText = small;
+        box.appendChild(o);
+      }
       const v = Object.keys(d.v).sort().map(k => nameOf(k) + ' ' + d.v[k]).join(', ');
       if (v) { const vp = el('p', null, esc(v)); vp.style.cssText = small; box.appendChild(vp); }
       host.appendChild(box);
