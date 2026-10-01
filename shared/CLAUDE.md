@@ -430,6 +430,28 @@ DEMO pressed leaves no `mbdemo:` key. Four `demo:` smoke checks; the
 fourth opens a second demo page and must find the first page's row at
 once with no IndexedDB behind it, and was watched failing on the old file.
 
+## Why the sign-in goes (2026-10-01, `cloud.js` 0.2.4, `report.js`)
+
+Tom: "Why am I getting logged out so much?" The Google sign-in lives in the
+site's own storage beside the rows, so anything that empties one empties the
+other. Evidence: two "PC, Chrome" device rows in the 2026-10-01 nightly
+backup, so Chrome's storage for the site was emptied at least once (the
+device id lives in localStorage). Two causes, still not told apart:
+
+- **The browser clears it.** Nothing ever called `navigator.storage.persist()`,
+  so Chrome and Safari treated the site's storage as theirs to evict.
+  `report.js` now asks once per open from the top page (not Firefox, which
+  prompts), and writes `disk: 'kept'` or `'can be cleared'` on the device row.
+  The Browser pane answered "can be cleared": Chrome grants it to an
+  installed app or a site with engagement, not on request alone.
+- **No lasting storage answered.** With IndexedDB erroring and localStorage
+  full (Tom's Chrome, 2026-09-30), Firebase keeps the sign-in in
+  sessionStorage, which ends with the tab. `Cloud.state()` now hands out
+  `kept`, `lostKept` and `authErr`, and the device row carries them as
+  `auth`. `SESSION` in `kept` is this cause.
+
+Read every device's `disk` and `auth` in the nightly backup before guessing.
+
 ## History
 
 `HISTORY.md`, beside this file, holds the debt list, the numbered foundation

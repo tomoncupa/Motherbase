@@ -1,4 +1,4 @@
-/* shared/cloud.js — 0.2.3 — Firebase as a SECOND sync, beside the Google Sheet,
+/* shared/cloud.js — 0.2.4 — Firebase as a SECOND sync, beside the Google Sheet,
    and since 0.2.0 the trays a client and the coach send each other things by.
 
    Tom, 2026-09-20: "Keep the google sheet sync, I like it". So this is not a
@@ -1243,7 +1243,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.3',
+  VERSION: '0.2.4',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -1261,6 +1261,11 @@ var Cloud = {
       conn: !!started && !broken && conn,
       out: !!(cfg.on && cfg.lost && !started),
       lost: cfg.lost || '',
+      /* 0.2.4: where Firebase keeps the sign-in (LOCAL, or SESSION when no
+         lasting storage answered, which ends with the tab), where it was when
+         the sign-out was noticed, and Google's last refusal. report.js puts
+         them on the device row, so a sign-out is read in the nightly backup. */
+      kept: cfg.kept || '', lostKept: cfg.lostKept || '', authErr: cfg.authErr || '',
       email: cfg.email || '',
       at: cfg.at || '',
       sentAt: cfg.sentAt || '',

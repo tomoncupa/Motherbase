@@ -8,7 +8,7 @@
    this browser made up once:
 
      { name, seen, sync, syncedAt, v: {app: version}, errs: [{t, app, m, at}], errN,
-       open: {app: {s, p, r, at}} }
+       open: {app: {s, p, r, at}}, auth: {kept, lost, lostKept, err}, disk }
 
    `seen` is the last time any app opened here, `sync` and `syncedAt` what
    LIVE SYNC last really did, `v` the version of every app opened here, and
@@ -91,7 +91,35 @@
       sync: s.conn ? 'live' : s.live ? 'signed in, not connected' : s.why ? 'not syncing: ' + s.why
         : s.on ? 'starting' : s.has ? 'not signed in' : 'not set up',
       syncedAt: at,
+      /* Where the sign-in is kept and when it last went (cloud.js 0.2.4).
+         Error codes and storage names only, never a token. */
+      auth: s.kept || s.lost || s.authErr
+        ? { kept: s.kept || '', lost: s.lost || '', lostKept: s.lostKept || '', err: s.authErr || '' } : null,
     };
+  }
+
+  /* ── may the browser clear this site's storage ──
+
+     2026-10-01, Tom: "Why am I getting logged out so much?" The Google sign-in
+     lives in this site's own storage, beside the rows, so whatever empties one
+     empties the other. Chrome and Safari both treat a site's storage as theirs
+     to clear when the disk is short or the site is idle unless the site has
+     asked to keep it, and nothing in the suite had asked. Asked once an open,
+     from the page Tom opened. Chrome and Safari answer without a prompt;
+     Firefox would put up a question nobody asked for, so it is not asked
+     there. `disk` on the device row says what the browser answered. */
+  var disk = '';
+  function keepStorage() {
+    var S = g.navigator && g.navigator.storage;
+    if (g.top !== g || !S || !S.persisted) return;
+    var ua = g.navigator.userAgent || '';
+    S.persisted().then(function (p) {
+      if (p || !S.persist || /Firefox\//.test(ua)) return p;
+      return S.persist();
+    }).then(function (p) {
+      disk = p ? 'kept' : 'can be cleared';
+      write();
+    }).catch(function () {});
   }
 
   /* only the fields that changed, so an open with nothing new writes nothing */
@@ -103,6 +131,8 @@
     if (v && (!was.v || was.v[where] !== v)) ch['v.' + where] = v;
     if (was.sync !== s.sync) ch.sync = s.sync;
     if (s.syncedAt && was.syncedAt !== s.syncedAt) ch.syncedAt = s.syncedAt;
+    if (s.auth && JSON.stringify(was.auth || null) !== JSON.stringify(s.auth)) ch.auth = s.auth;
+    if (disk && was.disk !== disk) ch.disk = disk;
     /* How long this open took, per app, from the page Tom actually opened
        (never a frame inside the home screen): `s` until it had drawn and had
        its rows, `p` the first paint, `r` Rec.ready, in seconds. Once an open. */
@@ -161,7 +191,7 @@
   }
 
   /* once per open, once the store and live sync have had a moment */
-  function start() { setTimeout(function () { write(); }, 5000); }
+  function start() { keepStorage(); setTimeout(function () { write(); }, 5000); }
   if (g.Rec && g.Rec.ready) g.Rec.ready(start); else setTimeout(start, 3000);
 
   g.DeviceReport = {
