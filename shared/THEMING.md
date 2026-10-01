@@ -209,12 +209,11 @@ indicator, as plain values, so no app writes `env()` itself.
 
 ### Texture — 2
 
-`--tex-image` and `--tex-size` are the theme's page background. Put them on
-`body` and forget them:
-
-```css
-body { background-image: var(--tex-image); background-size: var(--tex-size) }
-```
+`--tex-image` and `--tex-size` are the theme's Pattern. **An app never draws
+them.** Since 2026-10-01 `skins.js` draws them on a fixed layer behind every
+page (`body::before`, the body made its own stack), so an app that also puts
+them on its body draws the pattern twice. A full-screen overlay that hides
+the page, such as SPEAK's take screen, may carry them itself.
 
 ### Rank — 7
 

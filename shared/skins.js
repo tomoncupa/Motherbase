@@ -811,11 +811,34 @@ const Skins={
     if(theme)document.head.insertBefore(el,theme);else document.head.appendChild(el);
   },
 
+  /* The scene: what a theme draws behind every screen, so no app has to.
+     Until 2026-10-01 the Pattern reached only the four apps that painted
+     `--tex-image` on their own body. One fixed layer, under everything and
+     never in the way of a tap. `isolation` makes the body its own stack, so
+     the layer sits ON the body's background, not under it: STATUS paints
+     `html` itself, and there an opaque body would hide a layer behind it.
+     The page's own wash (the Main Menu's gradients) is the body's background,
+     so it still shows through. A theme's own CSS comes after this and may
+     restyle `body::before` wholesale; `body::after` is left to it. */
+  sceneText(){
+    return 'body{isolation:isolate}'+
+      'body::before{content:"";position:fixed;top:0;left:0;right:0;bottom:0;z-index:-1;'+
+        'pointer-events:none;background-image:var(--tex-image);background-size:var(--tex-size)}'+
+      '@media print{body::before{display:none}}'},
+  sceneCSS(){
+    if(document.getElementById('skin-scene-css'))return;
+    const el=document.createElement('style');el.id='skin-scene-css';
+    el.textContent=this.sceneText();
+    const theme=document.getElementById('skin-theme-css');
+    if(theme)document.head.insertBefore(el,theme);else document.head.appendChild(el);
+  },
+
   /* `pal` paints without saving — that is what makes live preview possible */
   apply(idOrSkin,pal){
     const s=typeof idOrSkin==='string'?this.get(idOrSkin):idOrSkin;
     this.font(s);
     this.materialCSS();
+    this.sceneCSS();
     this.themeCSS(s);
     const use=pal||(this.isCustomised(s.id)?this.paletteFor(s.id):null);
     const t=use?Object.assign(this.tokensFor(s),this.palTokens(use)):this.tokensFor(s),
