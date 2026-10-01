@@ -101,3 +101,13 @@ Tom: "remove all the redundant widgets, make sure we don't lose any actual funct
 Kept, because each does something nothing else on the board does: TODO (QUESTS todos with No date, which TODAY never shows, plus each task's source and age), APPS (the only way to the desk apps from a phone, whose bar carries phone apps only), IDEAS and EVENTS (across days, not only today), DAY LOG (every tick, including ones no block or bullet made), SLEEP (nights on target), BILLS (bills not yet due), CLOCK and WORLD CLOCK, TIMER and INTERVALS, THE YEAR and CALENDAR.
 
 Watched in headless Chromium: a saved board of PROTEIN, CALORIES, ARC and TODAY opened as MACROS, TODO and TODAY with the saved row untouched; MACROS read "0g / 180g · 180g left"; ADD A WIDGET lists 43 and none of the three.
+
+## 2026-10-01, HOME 1.0.43: BODY HEATMAP shows recovery, and the figure is a 5'8" man
+
+Tom: "Heatmap should also show recovery. Big muscles - 72 hours, Small Muscles - 24-48 ... based on data from TRAIN", "2nd pose should be double bicep pose", "Figure is too bulky, follow golden ratio where applicable, definitely shoulders. Proportion him as a 5'8 man".
+
+- **Recovery** (`bodyRecovery`): each muscle's clock starts at its last working set in the last three days. A set's time is read off TRAIN's key (`local-<base36 ms>-`); an imported set uses the session's end or start, else 6pm. Big (chest, lats, quads, hams, glutes, lower back) 72h; small 24h at 2 or fewer sets that day up to 48h at 6 or more (Claude's split of his 24-48). Recovering muscles are striped, fainter as they come back; the row shows the hours left with the rest clock and wraps under the name when the row is narrow. The widget redraws every ten minutes.
+- **Counting today** now copies `TRAIN.counts` (`setCounts`, change both): a saved set counts unless it is a plan still waiting. It used to need the tick, so today's sets were missing since TRAIN stopped ticking on save.
+- **The figure** is 156.2 units tall (1 unit about 1.1 cm), the navel at height / 1.618 where the circle centres, and the shoulder caps 1.618 times the waist across. Leaner arms, thighs and calves; round deltoid caps. Made by remapping the 1.0.41 shapes through landmarks (scratch script, not in the repo) and hand-fixing the shoulders. The second pose is a double biceps: forearms up from the elbows, fists at head height.
+
+Watched in headless Chromium on the demo at 1920x1000 and 390x844: four muscles striped with their hours, a set key decoded to the right time, a small muscle at 2 and 6 sets gave 24h and 48h and was clear after 49h, no row overflowing on the phone. Review 142/142 Chromium, WebKit only the known foundation-frame fail. Not seen on his screens.

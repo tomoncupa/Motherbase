@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.42, 2026-10-01">
+<meta name="mb-version" content="1.0.43, 2026-10-01">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -325,6 +325,9 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .bh-fig{display:flex;align-items:center;justify-content:center}
 .bh-pair{display:flex;flex-direction:column;gap:var(--s-1);width:100%}
 .bh-pair svg{display:block;width:100%;height:auto}
+.row.bh-row{flex-wrap:wrap;row-gap:0}
+.row .bh-rec{margin-left:auto;display:inline-flex;align-items:center;gap:var(--s-1);
+  font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--dim2)}
 @media (min-width:821px){
   .bh-fig{container-type:size}
   .bh-pair{height:100%}
@@ -2193,7 +2196,12 @@ const WIDGETS = {
      muscle, "Hamstrings" lights only those. A group the body cannot show,
      other than cardio, is named under the list rather than dropped. No
      target and no verdict, as in TRAIN: "I'd rather be told how many times I
-     hit a muscle, I'll know if I need to hit more." */
+     hit a muscle, I'll know if I need to hit more."
+     Recovery, Tom, 2026-10-01: "Heatmap should also show recovery. Big
+     muscles - 72 hours, Small Muscles - 24-48". A muscle still inside its
+     window is striped, the stripes fading as it comes back, and its row
+     says the hours left. Worked out from the time of its last working set
+     (bodyRecovery), so it moves on its own: redrawn every ten minutes. */
   bodyheat: {
     nm: 'BODY HEATMAP', w: 4, h: 4, app: 'train', to: ['train'],
     days: [[7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
@@ -2211,15 +2219,18 @@ const WIDGETS = {
       wrap.style.cssText = 'display:flex;gap:var(--gap);height:100%;min-height:0;align-items:stretch';
       const fig = el('div', 'bh-fig');
       fig.style.cssText = 'flex:1 1 55%;min-width:0';
-      fig.innerHTML = bodySvg(heat.v);
+      const rec = bodyRecovery(Date.now());
+      fig.innerHTML = bodySvg(heat.v, rec);
       wrap.appendChild(fig);
       const side = el('div');
       side.style.cssText = 'flex:1 1 45%;min-width:0;overflow:auto';
       const list = el('div', 'rowlist');
       const fmt = n => (Math.round(n * 2) / 2).toString();
       regs.forEach(k => {
-        const row = el('div', 'row');
-        row.innerHTML = '<span class="nm">' + BODY_NAMES[k] + '</span><span class="rt">' + fmt(heat.v[k]) + '</span>';
+        const row = el('div', 'row bh-row');
+        row.innerHTML = '<span class="nm">' + BODY_NAMES[k] + '</span><span class="rt">' + fmt(heat.v[k]) + '</span>' +
+          (rec[k] ? '<span class="bh-rec" title="' + Math.ceil(rec[k].left) + ' of its ' + rec[k].win + ' hours to recover">' +
+            ((typeof Icons !== 'undefined' && Icons.svg('rest', { size: 12 })) || '') + bodyHours(rec[k].left) + '</span>' : '');
         list.appendChild(row);
       });
       side.appendChild(list);
@@ -2231,6 +2242,14 @@ const WIDGETS = {
       }
       wrap.appendChild(side);
       body.appendChild(wrap);
+      /* recovery runs on the clock, not on the store: redraw while it shows */
+      clearInterval(body.bhTimer);
+      body.bhTimer = setInterval(() => {
+        if (!body.isConnected) return clearInterval(body.bhTimer);
+        body.innerHTML = '';
+        WIDGETS.bodyheat.draw(body, cfg);
+        body.querySelectorAll('.row').forEach(r => r.classList.add('mb-plate'));
+      }, 600000);
     },
   },
 
@@ -3913,8 +3932,13 @@ function move(i, d) {
 
 /* ══════════════ the body heatmap's figure ══════════════
    Tom, 2026-10-01: "like a buff vitruvian man". Leonardo's figure, front and
-   back, each in its circle and square, with his second pose (arms raised,
-   legs apart) as a faint line behind. Every muscle is its own shape and the
+   back, each in its circle and square, with a second pose as a faint line
+   behind: a double biceps ("2nd pose should be double bicep pose").
+   Proportioned as a 5'8" man, 156.2 units tall, so one unit is about 1.1 cm,
+   with the golden ratio where it applies ("follow golden ratio where
+   applicable, definitely shoulders"): the navel at his height over 1.618,
+   which is where the circle centres, and the shoulders 1.618 times the
+   waist across. Every muscle is its own shape and the
    shapes tile the body, so a lit one reads as part of a figure rather than a
    patch on one; the head, neck, hands, knees, shins and feet are the figure
    and never light. Shapes are the LEFT half of a 200 x 200 panel; the right
@@ -3939,6 +3963,10 @@ const bodyParts = name => {
 /* the same test as TRAIN.noteWarm in train/index.html: change both */
 const setIsWarm = p => p.warm === 1 || p.warm === true ||
   (p.warm !== 0 && p.warm !== false && !!p.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(p.note));
+/* the same test as TRAIN.counts in train/index.html: change both. A set
+   counts unless it is a plan still waiting; saving a set no longer ticks it,
+   so "done" alone missed every set of today's session. */
+const setCounts = (p, date, today) => !p.plan || !!p.done || date < today;
 function bodyHeat(from, to) {
   const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day();
   const v = {}, offN = {};
@@ -3951,7 +3979,7 @@ function bodyHeat(from, to) {
   Rec.all('set').forEach(r => {
     if (!r.date || r.date < from || r.date > to) return;
     const p = r.payload || {};
-    if (setIsWarm(p) || !(p.done || r.date < today)) return;
+    if (setIsWarm(p) || !setCounts(p, r.date, today)) return;
     const ex = exs[p.ex];
     if (!ex || !ex.cat) return;
     put(ex.cat, 1);
@@ -3959,102 +3987,120 @@ function bodyHeat(from, to) {
   });
   return { v: v, off: Object.keys(offN).map(k => ({ name: k, n: offN[k] })).sort((a, b) => b.n - a.n) };
 }
-const BODY_SKIN = 'M100,35.4 C95,35.4 92.4,39.6 92.4,45 C92.4,49.6 93.6,52.6 95.4,54.6 L94.6,55.6 ' +
-  'C92.6,57.4 89,59.8 84.6,61 C82.6,61.6 80.8,61.8 79,61.9 C73,62.2 67,62.6 63.4,63.6 L52.4,64.2 ' +
-  'C49,62.8 45,62.6 41,63.6 C38,64.6 35.4,65.6 33.4,66.4 C30,66.4 26,66 22.6,66.6 C20.6,67 19.8,68.6 20.2,70 ' +
-  'C20.6,71.6 22,72.2 24,72.2 C27,72.6 30.4,73 33.4,73.2 C36.6,73.6 40,74.4 43.4,75.6 C46,76.4 48.6,76.4 50.8,75.6 ' +
-  'C52.4,75.8 53.8,75.8 55,75.8 C60,76.8 66,77.6 72,77.6 C75.6,77.6 78.4,77.8 80.6,78.8 ' +
-  'C79.2,80.6 78,82.4 77.8,84.4 C78.2,87.4 79.2,90.4 80.6,93 C82.4,96 84,99 84.6,102.4 ' +
-  'C84.8,106 84.4,110 83.4,113.4 C81.6,117 80.2,121 79.8,125 C79.4,132 79.8,140 81.6,146.4 ' +
-  'C82.6,150 83.8,153 84.4,156 C82.2,160 80.8,164.6 81,169 C81.2,173 82.6,176.6 84.4,179.6 ' +
-  'C85.2,182 85.6,184.4 85.6,186.4 C84.4,189 82.6,192 82,194.4 C81.8,195.6 82.6,196.2 84,196.2 L92.4,196.2 ' +
-  'C93,194.6 93,191 92.4,187.8 C92.6,184 93.8,180.6 95,176.6 C96.2,172.6 96.4,167 95.6,163 ' +
-  'C95,160.4 94.4,158.4 94.2,156.4 C94.4,152 95.2,146 96,140.4 C96.8,134 98,127 99.2,121.4 C99.5,120 99.8,119.2 100,119';
+/* when a set was done. TRAIN's own key carries the moment it was made
+   (`local-<base36 ms>-...`, `k-` in front on a client); an imported set has
+   none, so the day's session end, else its start, else six in the evening. */
+function setTime(r, sess) {
+  const m = /(?:^|-)([0-9a-z]{8})-/.exec(r.key || '');
+  if (m) { const t = parseInt(m[1], 36); if (t > 1.5e12 && t < Date.now() + 864e5) return t; }
+  const s = sess[r.date], at = s ? Date.parse(s.end || s.start || '') : NaN;
+  return isNaN(at) ? Date.parse(r.date + 'T18:00:00') : at;
+}
+/* how long a muscle takes to come back, Tom's numbers: a big one 72 hours,
+   a small one 24 to 48. Where in that a small one lands is Claude's call:
+   the sets it got on its last day, 2 or fewer a day, 6 or more two. */
+const BODY_BIG = { chest: 1, lats: 1, quads: 1, hams: 1, glutes: 1, lowback: 1 };
+function bodyRecovery(now) {
+  const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day(), from = LifeOS.shift(today, -3);
+  const sess = {}, last = {}, day = {};
+  Rec.all('session').forEach(r => { if (r.date >= from) sess[r.date] = r.payload || {}; });
+  Rec.all('set').forEach(r => {
+    if (!r.date || r.date < from || r.date > today) return;
+    const p = r.payload || {};
+    if (setIsWarm(p) || !setCounts(p, r.date, today)) return;
+    const ex = exs[p.ex];
+    if (!ex || !ex.cat) return;
+    const t = setTime(r, sess);
+    const hit = (cat, share) => (bodyParts(cats[cat] && cats[cat].name) || []).forEach(k => {
+      const d = day[k] || (day[k] = {});
+      d[r.date] = (d[r.date] || 0) + share;
+      if (!last[k] || t > last[k].t) last[k] = { t: t, date: r.date };
+    });
+    hit(ex.cat, 1);
+    if (ex.also) Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) hit(c, +ex.also[c] || 0); });
+  });
+  const out = {};
+  Object.keys(last).forEach(k => {
+    const n = day[k][last[k].date];
+    const win = BODY_BIG[k] ? 72 : Math.round(24 + 24 * Math.max(0, Math.min(1, (n - 2) / 4)));
+    const left = win - (now - last[k].t) / 36e5;
+    if (left > 0) out[k] = { left: left, win: win };
+  });
+  return out;
+}
+const bodyHours = h => h < 1 ? '<1H' : Math.ceil(h) + 'H';
+const BODY_SKIN = 'M100,40.0 C95.4,40.0 93,44.0 93,49.2 C93,53.7 94,56.6 95.4,58.5 L94.6,59.5 C92.6,61.1 89.4,62.6 86,63.4 C83.4,63.9 81.4,62.6 78.6,62.4 C74.4,62.2 70.2,63.4 67.6,65 C66.6,65.4 65.8,65.6 65.1,65.7 L55.5,66.3 C52.1,65.5 48.1,65.3 44.1,65.7 C41.1,66.2 38.5,66.7 36.5,67.0 C32.9,66.4 28.6,65.6 25,66.2 C22.9,66.6 22,68.4 22.4,70.0 C22.9,71.8 24.3,72.5 26.5,72.4 C29.7,72.9 33.3,72.9 36.5,72.6 C39.7,72.6 43.1,73.0 46.5,73.6 C49.1,74.0 51.7,74.0 53.9,73.6 C55.5,73.7 56.7,73.7 57.8,73.8 C62.2,74.5 67.4,75.1 72.7,75.3 C75.8,75.5 79.1,75.8 83.2,76.6 C81,78.4 82.1,80.9 82.4,83.3 C82.6,86.5 83.2,89.6 84.2,92.3 C85.5,95.4 86.6,98.6 86.9,102.3 C87,106.2 86.5,110.7 85.6,114.6 C84.5,119.8 83.8,124.3 84,127.4 C83.7,132.8 83.9,139.0 85.2,144.0 C85.7,146.8 86.5,149.2 86.7,151.5 C85.5,156.6 85.2,162.4 85.6,168.0 C85.7,173.0 86.8,177.6 87.8,181.4 C87.9,184.4 87.8,187.5 87.5,190.0 C86.5,191.6 85.1,193.5 84.6,195.1 C84.5,195.8 85.2,196.2 86.4,196.2 L93.5,196.2 C94,195.2 94,192.9 93.4,190.9 C93.8,187.0 95.1,182.7 96.2,177.6 C97.1,172.5 97.3,165.4 96.5,160.4 C95.9,157.1 95.4,154.5 95.1,152.0 C95.4,148.4 96.2,143.7 96.8,139.4 C97.5,134.4 98.4,128.9 99.3,124.6 C99.6,123.5 99.8,122.9 100,122.7';
 
-const ARM_UPPER = 'M63.2,63.7 L52.4,64.2 C50.6,66.6 50,70 50.6,73 C51.6,74.8 53,75.6 55,75.8 ' +
-  'C60,76.8 66,77.6 72,77.6 C75,77.6 77.8,77.4 80.2,77 L80.6,74.4 C77.6,74.8 74.4,74.6 71,73.8 ' +
-  'C67.4,72.6 63.4,71.6 60,70.4 C60.4,68.4 61.6,65.8 63.2,63.7 Z';
-const ARM_FORE = 'M52.2,64.2 C49,62.8 45,62.6 41,63.6 C38,64.6 35.4,65.6 33.4,66.4 L33.4,73.2 ' +
-  'C36.6,73.6 40,74.4 43.4,75.6 C46,76.4 48.6,76.4 50.8,75.6 C50,72 50,68 52.2,64.2 Z';
-const CALF_OUT = 'M85,157.6 C82.6,160.6 81.2,164.6 81.4,169 C81.6,173 82.6,176.2 84,178.6 ' +
-  'C85.6,174.6 86.4,170 86.6,166 C86.8,162.6 86.2,159.8 85,157.6 Z';
+const ARM_UPPER = 'M65,65.8 L55.5,66.3 C53.7,67.8 53.1,70.0 53.7,71.9 C54.7,73.1 56,73.6 57.8,73.8 C62.2,74.5 67.4,75.1 72.7,75.3 C75.3,75.5 78,75.5 82.2,75.3 L82.2,73.5 C77.7,73.6 74.8,73.3 71.8,72.6 C68.6,71.8 65.1,71.1 62.2,70.3 C62.5,68.9 63.6,67.2 65,65.8 Z';
+const ARM_FORE = 'M55.3,66.3 C52.1,65.5 48.1,65.3 44.1,65.7 C41.1,66.2 38.5,66.7 36.5,67.0 L36.5,72.6 C39.7,72.6 43.1,73.0 46.5,73.6 C49.1,74.0 51.7,74.0 53.9,73.6 C53.1,71.3 53.1,68.7 55.3,66.3 Z';
+const CALF_OUT = 'M87.5,153.5 C85.9,157.3 85.5,162.4 85.9,168.0 C86,173.0 86.8,177.1 87.7,180.1 C89.1,175.1 89.7,169.2 89.8,164.2 C89.6,159.9 88.7,156.3 87.5,153.5 Z';
 
 const BODY_FRONT = [
-  ['traps', 'M93.6,56.4 C91,58.4 88,59.8 84.6,61 C82.6,61.6 80.8,61.8 79.4,62 C81.6,62.8 83.6,63.4 85.6,63.6 C88.4,62.6 91.2,61.2 93.6,60 Z'],
-  ['delts', 'M85.4,63.6 C83.4,62.6 81.2,62 79,61.9 C73,62.2 67,62.6 63.4,63.6 C61.6,66 60.4,68.6 60,70.4 ' +
-    'C63.4,71.6 67.4,72.6 71,73.8 C74.4,74.6 77.8,74.8 80.8,74.4 C81.8,70.4 83.4,66.4 85.4,63.6 Z'],
-  ['chest', 'M99.4,63.2 L85.8,63.8 C83.6,66.6 82,70.6 81.2,74.6 C80.8,76.4 80.8,77.6 81,78.6 ' +
-    'C84.4,82.4 89.6,84.8 94.6,85 C96.6,85 98.4,84.6 99.4,84 Z'],
+  ['traps', 'M93.6,60.2 C91,61.9 88.6,62.8 86,63.4 C85.2,63.6 84.6,63.6 84.2,63.4 C84.6,64.4 85.2,65.2 85.6,65.6 C88.3,65.1 91.1,64.1 93.6,63.1 Z'],
+  ['delts', 'M85.6,65.6 C84.6,64.4 81.4,62.6 78.6,62.4 C74.4,62.2 70.2,63.4 67.6,65 C66.6,65.4 65.8,65.6 65.1,65.7 C63.6,67.3 62.5,69.1 62.2,70.3 C65.1,71.1 68.6,71.8 71.8,72.6 C74.8,73.3 78,73.6 82.4,73.5 C82.4,70.6 83.6,67.8 85.4,65.8 Z'],
+  ['chest', 'M99.4,65.5 L85.8,65.9 C83.8,67.9 82.7,70.8 82.8,73.6 C82.9,74.9 83.1,75.8 83.6,76.5 C87.3,80.9 91.8,83.8 95.7,84.0 C97.3,84.0 98.7,83.5 99.5,82.8 Z'],
   ['biceps', ARM_UPPER],
   ['forearms', ARM_FORE],
-  ['lats', 'M80.8,79.2 C82.6,81 84.6,82.6 86.6,83.8 L85.4,89.8 C84,91.6 82.6,93.2 81.2,94.6 ' +
-    'C79.8,91.4 78.4,87.6 78,84.6 C78.6,82.4 79.6,80.6 80.8,79.2 Z'],
-  ['core', 'M87.2,84.4 C89,85 90.6,85.4 92,85.4 L92,107 C90,110 87.6,112.4 84.6,113.6 ' +
-    'C84.9,109.6 84.9,105.6 84.4,102 C83.4,98.8 82.4,96.6 81.6,95.2 C83,93.6 84.4,92 85.8,90 Z'],
-  ['core', 'M92.6,85.8 C95,86.2 97.4,86 99.4,85.4 L99.4,92.4 L92.6,92.4 Z'],
-  ['core', 'M92.6,93.6 L99.4,93.6 L99.4,100.2 L92.6,100.2 Z'],
-  ['core', 'M92.6,101.4 L99.4,101.4 L99.4,108 L92.6,108 Z'],
-  ['core', 'M92.6,109.2 L99.4,109.2 L99.4,118.4 C96.4,116.6 93.8,113.4 92.6,109.2 Z'],
-  ['quads', 'M90,117.4 C93.4,123 94.6,131 94,139 C93.4,145 92,150 90.4,154 C88.6,150 87,145 86.4,139 C85.8,131 87,123 90,117.4 Z'],
-  ['quads', 'M84,114.6 C86.2,116 88,117 89.4,117.6 C86.4,123.6 85.2,131 85.8,139 C86.4,145.6 88.2,150.6 89.8,154.6 ' +
-    'L86.6,156.4 C85,154 83.2,150 82,146 C80.4,139 79.8,131 80.2,124 C80.8,119.8 82.2,116.6 84,114.6 Z'],
-  ['quads', 'M95.6,138.4 C96.4,144 96,150 94.8,154.8 C93.2,156.4 91.6,156 90.8,154.6 C92.6,149.6 94.2,144 95.6,138.4 Z'],
-  ['calves', 'M93.8,158.4 C95.6,161.6 96,167 95.2,172 C94.6,175.6 93.8,177.8 92.8,179.4 ' +
-    'C92.2,175 92,169 92.2,165 C92.4,162 93,160 93.8,158.4 Z'],
+  ['lats', 'M83.5,77.1 C85.5,79.2 87.5,81.1 89.4,82.6 L88.2,89.0 C87,90.9 85.8,92.5 84.6,94.0 C83.6,90.7 82.7,86.7 82.6,83.5 C82.6,80.9 81.9,78.6 83.5,77.1 Z'],
+  ['core', 'M89.9,83.3 C91.3,84.0 92.5,84.4 93.6,84.4 L93.1,107.4 C91.4,110.7 89.2,113.3 86.7,114.9 C87,110.2 87.1,105.8 86.7,101.8 C86.1,98.4 85.4,96.1 84.9,94.6 C86.1,92.9 87.3,91.3 88.5,89.2 Z'],
+  ['core', 'M94.1,84.8 C96,85.2 97.9,85.0 99.5,84.4 L99.5,91.7 L94,91.7 Z'],
+  ['core', 'M94,92.9 L99.5,92.9 L99.5,99.8 L93.8,99.8 Z'],
+  ['core', 'M93.7,101.2 L99.5,101.2 L99.5,108.5 L93.6,108.5 Z'],
+  ['core', 'M93.6,109.8 L99.5,109.8 L99.5,121.8 C97,119.2 94.6,114.6 93.6,109.8 Z'],
+  ['quads', 'M91.6,120.4 C94.7,125.8 95.7,132.0 95.2,138.3 C94.7,142.9 93.4,146.8 91.9,149.9 C90.7,146.8 89.6,142.9 89.2,138.3 C88.7,132.0 89.6,125.8 91.6,120.4 Z'],
+  ['quads', 'M86.3,116.3 C88.3,118.3 89.9,119.8 91.1,120.7 C89.1,126.3 88.3,132.0 88.7,138.3 C89.1,143.4 90.3,147.3 91.4,150.4 L88.7,152.0 C87.4,149.9 86.2,146.8 85.6,143.7 C84.4,138.3 84,132.0 84.2,126.6 C84.2,123.3 84.9,119.2 86.3,116.3 Z'],
+  ['quads', 'M96.5,137.8 C97.1,142.2 96.7,146.8 95.6,150.6 C94.2,152.0 92.9,151.5 92.2,150.4 C93.9,146.5 95.4,142.2 96.5,137.8 Z'],
+  ['calves', 'M94.9,154.5 C96.5,158.6 97,165.4 96.4,171.8 C95.9,176.3 95.3,179.1 94.4,181.1 C94.1,175.6 93.9,168.0 94,162.9 C94,159.1 94.3,156.6 94.9,154.5 Z'],
   ['calves', CALF_OUT],
 ];
 const BODY_BACK = [
-  ['traps', 'M99.4,50.6 C98,53.6 96,56.4 93.6,58 C89,60.4 84,61.4 79.4,62 C83,64.6 87.6,67.6 91,71 ' +
-    'C94.6,77 97.6,84 99.4,92 Z'],
-  ['delts', 'M84.2,63.4 C82.4,62.4 80.8,62 79,61.9 C73,62.2 67,62.6 63.4,63.6 C61.6,66 60.4,68.6 60,70.4 ' +
-    'C63.4,71.6 67.4,72.6 71,73.8 C74.4,74.6 77.4,74.4 79.8,73.4 C80.6,69.6 82.2,65.8 84.2,63.4 Z'],
-  ['lats', 'M84.8,63.8 C87.6,66.2 89.8,68.8 91.2,71.4 C92.4,73.6 93.2,76 93.4,78.2 C89.8,79.2 85.6,79 81.6,77.8 ' +
-    'C80.6,76.8 80.2,75.4 80.4,73.8 C81.2,70 82.6,66.6 84.8,63.8 Z'],
-  ['lats', 'M81,79 C85,80.2 89.6,80.4 93.8,79.4 C95.8,85 97.4,91 98.6,96 C96.6,100.4 93.6,103.6 90.2,105.2 ' +
-    'C88,105.4 86,104.4 84.8,102.4 C83.6,98.4 82,95 80.4,92.6 C78.8,89.6 78,86.6 78,84.4 C78.6,82.4 79.6,80.6 81,79 Z'],
-  ['lowback', 'M99.4,93.6 C97.6,96.6 95.8,100.2 94.6,104.4 C93.8,108 94,111.4 95.2,114.2 C96.8,114.8 98.2,115 99.4,115 Z'],
-  ['core', 'M84.8,103.4 C86.2,105.4 88.2,106.4 90.4,106.2 C92,105.8 93.2,105.4 94,105.6 C93.6,107.4 93.4,109.4 93.2,111 ' +
-    'C90,110.8 87,111.6 84.4,113 C84.8,109.8 84.9,106.6 84.8,103.4 Z'],
+  ['traps', 'M99.4,54.6 C98.1,57.5 96,60.2 93.6,61.6 C89.4,62.8 86,63.6 82.6,63.4 C83.4,65.4 87.8,68.6 91.4,71.1 C95.2,75.3 98.1,82.8 99.5,91.3 Z'],
+  ['delts', 'M84.4,65.4 C83.6,64.2 81.4,62.6 78.6,62.4 C74.4,62.2 70.2,63.4 67.6,65 C66.6,65.4 65.8,65.6 65.1,65.7 C63.6,67.3 62.5,69.1 62.2,70.3 C65.1,71.1 68.6,71.8 71.8,72.6 C74.8,73.3 77.5,73.3 80.9,72.7 C81.1,70.1 82.4,67.4 84.2,65.7 Z'],
+  ['lats', 'M84.8,65.9 C87.7,67.7 90,69.5 91.6,71.3 C93,72.9 93.9,74.6 94.3,76.2 C91.3,77.1 87.6,76.8 83.9,75.9 C82.7,75.2 81.9,74.2 81.8,73.0 C81.8,70.4 82.8,67.9 84.8,65.9 Z'],
+  ['lats', 'M83.7,76.8 C87.4,78.3 91.3,78.5 94.7,77.3 C96.7,84.0 97.9,90.2 98.8,95.4 C97.1,100.0 94.5,103.6 91.6,105.4 C89.7,105.6 88,104.5 87.1,102.3 C86.3,97.9 85.2,94.4 84.1,91.9 C82.9,88.8 82.5,85.7 82.6,83.3 C82.6,80.9 81.9,78.6 83.7,76.8 Z'],
+  ['lowback', 'M99.5,92.9 C98,96.1 96.5,99.8 95.4,104.5 C94.7,108.5 94.8,112.2 95.9,115.7 C97.3,116.6 98.5,116.9 99.5,116.9 Z'],
+  ['core', 'M87,103.4 C88.2,105.6 89.9,106.7 91.8,106.5 C93.1,106.0 94.2,105.6 94.9,105.8 C94.5,107.8 94.3,110.0 94.1,111.8 C91.3,111.6 88.7,112.4 86.4,114.0 C86.9,110.5 87,106.9 87,103.4 Z'],
   ['triceps', ARM_UPPER],
   ['forearms', ARM_FORE],
-  ['hams', 'M83.2,124.6 C85,126.6 87.4,128.2 90.2,129 C89.8,136 89.6,143 89.6,149.6 C89.6,151.8 89.4,153.8 88.8,155.6 ' +
-    'L86,156.2 C84.4,153 83,149.4 82,145.6 C80.4,139 80,131.6 80.6,127.6 C81.2,126.4 82.2,125.4 83.2,124.6 Z'],
-  ['hams', 'M91.4,129.2 C94,129.6 97,129.2 98.6,128.6 C98,133.6 96.8,139.6 95.8,145 C95,149 94.6,152.4 94.4,155.6 ' +
-    'L90.6,156 C90.8,152 90.8,148 90.8,144 C90.8,138.6 91,133.6 91.4,129.2 Z'],
-  ['glutes', 'M99.4,109.6 C96.4,108.6 92.2,108.8 88.8,110.4 C85.2,112.2 83.2,115.6 83,119.6 C82.8,124 85,128 89,129.6 C92.6,130.8 96.8,130.4 99.4,128.8 Z'],
-  ['calves', 'M86.2,157.4 C83,160 81,164.4 81.2,169 C81.4,173 83,176.6 85.4,178.6 C87,179.6 88.6,179 89.2,177.4 ' +
-    'L89.4,159 C88.4,158 87.4,157.4 86.2,157.4 Z'],
-  ['calves', 'M90.4,158.6 C92.4,158.6 94.4,160 95.4,162.6 C96.2,166 96,170 95,173.6 C94.2,176.6 92.8,179 91.2,179.6 ' +
-    'C90.6,179 90.4,178.2 90.4,177.4 Z'],
+  ['hams', 'M86.7,127.1 C88.1,128.6 90,129.9 92.2,130.5 C91.9,135.9 91.7,141.4 91.5,146.5 C91.4,148.2 91.1,149.8 90.5,151.2 L88.1,151.8 C87,149.2 86.1,146.4 85.6,143.4 C84.4,138.3 84.1,132.5 84.6,129.4 C85.1,128.5 85.9,127.7 86.7,127.1 Z'],
+  ['hams', 'M93.2,130.6 C95.2,131.0 97.6,130.6 98.9,130.2 C98.4,134.1 97.4,138.7 96.6,142.9 C95.9,146.1 95.5,148.7 95.3,151.2 L92,151.5 C92.4,148.4 92.5,145.3 92.6,142.2 C92.7,138.0 92.9,134.1 93.2,130.6 Z'],
+  ['glutes', 'M99.5,110.2 C96.9,109.1 93.3,109.3 90.3,111.1 C87.1,113.1 85.7,117.8 86,123.2 C86.3,126.6 88.1,129.7 91.3,131.0 C94.1,131.9 97.5,131.6 99.5,130.3 Z'],
+  ['calves', 'M88.4,153.3 C86.2,156.6 85.3,162.1 85.7,168.0 C85.9,173.0 87.1,177.6 88.8,180.1 C89.8,181.4 91.2,180.6 91.8,178.6 L91.3,155.3 C90.3,154.0 89.4,153.3 88.4,153.3 Z'],
+  ['calves', 'M92.1,154.8 C93.7,154.8 95.4,156.6 96.4,159.9 C97.1,164.2 97,169.2 96.2,173.8 C95.6,177.6 94.4,180.6 93.1,181.4 C92.7,180.6 92.7,179.6 92.7,178.6 Z'],
 ];
 /* the drawing inside the muscles, faint, over lit and unlit alike: fibres, edges, a kneecap, a shin */
-const BODY_LINES_FRONT = 'M93.8,52.6 C95.4,56 97,59.6 98.6,62.6 M98.4,69.6 C93,70 88,71.2 83.8,73.2 M98.4,76 C93.4,76.8 88.6,76.6 83.6,75.6 ' +
-  'M74,62.6 C71,66 68.6,69.4 67.2,72.4 M56.2,65.4 C55,68.6 55.4,72.4 57,75.6 M50,66.4 C45,67.6 40,68.4 34.6,68.8 ' +
-  'M82.6,86.4 L86.2,85.4 M83.4,90 L86.4,88.8 M86.8,95 C88.6,98 90,101.4 91,104.6 ' +
-  'M87.6,157.6 C88.6,155.8 91.4,155.6 92.6,157.4 C92.6,159.6 91.2,160.8 90,160.8 C88.8,160.8 87.6,159.6 87.6,157.6 Z ' +
-  'M90,163 C89.6,170 89.8,178 90.6,185';
-const BODY_LINES_BACK = 'M100,92 L100,110 M84.6,84.6 C88.4,88.6 92,93.4 95.2,99.4 M70,74.6 C64.6,73.8 59.4,72.2 55,70.2 ' +
-  'M50,66.4 C45,67.6 40,68.4 34.6,68.8 M89.6,179.4 C89.4,182 89.6,185 89.8,187.6 M87.4,93.6 C88.6,97 89.4,100.6 89.6,104';
-/* the second pose, as Leonardo drew it: arms raised to the circle, legs apart */
-const BODY_GHOST = 'M79,62 L24.4,38.4 C22.4,38 21,40 22.2,41.8 L80.6,74.6 ' +
-  'M83.6,113.4 L69.6,189.4 C69.2,191.8 71.4,193.8 73.6,192.8 L94.6,126';
+const BODY_LINES_FRONT = 'M94.2,56.6 C95.4,59.8 97,62.8 98.6,65.1 M98.4,70.1 C93.2,70.4 88.5,71.2 84.9,72.6 M98.6,74.6 C94.1,75.2 89.9,75.0 85.2,74.3 M74.4,64.7 C71.8,67.2 69.7,69.6 68.5,71.6 M58.8,67.0 C57.8,69.1 58.1,71.6 59.5,73.7 M53.1,67.7 C48.1,68.5 43.1,68.9 37.7,69.1 M86.1,85.5 L89,84.4 M86.6,89.2 L89.1,88.0 M89.2,94.4 C90.5,97.5 91.5,101.2 92.3,104.7 M89.6,153.5 C90.3,151.3 92.7,151.2 93.8,153.3 C93.9,156.1 92.9,157.6 91.9,157.6 C91,157.6 89.9,156.1 89.6,153.5 Z M92.1,160.4 C92.1,169.2 92.2,179.4 92,188.2';
+const BODY_LINES_BACK = 'M100,91.3 L100,110.7 M87.8,83.5 C90.7,87.7 93.5,92.7 96,99.0 M70.9,73.1 C66.2,72.5 61.6,71.4 57.8,70.1 M53.1,67.7 C48.1,68.5 43.1,68.9 37.7,69.1 M91.9,181.1 C91.4,184.4 91.1,188.2 91.2,190.8 M89.7,92.9 C90.6,96.5 91.1,100.3 91.1,104.0';
+/* the second pose: a double biceps, the upper arm where it is, the forearm up and the fist at the head */
+const BODY_GHOST = 'M79,64.4 C74,59.6 66.6,58.6 62,61.8 C61,57 61.6,51.6 62.6,47 C63.4,44.6 63,42.2 61.4,41.4 ' +
+  'C59.6,40.6 56.6,40.8 55.6,42.4 C55,46 54.6,51 54.8,56 C55,60 55.2,63.6 55.6,65.6';
 
-function bodySvg(v) {
+let bodyPat = 0;
+function bodySvg(v, rec) {
   const max = Math.max(0, ...Object.keys(v).map(k => v[k]));
   const ink = 'stroke:var(--text-muted);stroke-opacity:.4;stroke-width:.4;stroke-linejoin:round';
   const mir = s => s + '<g transform="matrix(-1,0,0,1,200,0)">' + s + '</g>';
   const panel = (list, lines) => {
-    let out = '<rect x="20" y="36" width="160" height="160" style="fill:none;stroke:var(--border-strong);stroke-width:.6"/>' +
-      '<circle cx="100" cy="100" r="96" style="fill:none;stroke:var(--border-strong);stroke-width:.6"/>' +
+    /* stripes for a muscle still recovering; an id per drawing, since a
+       pattern in a hidden copy of this picture draws nothing elsewhere */
+    const pat = 'bh-stripe-' + (++bodyPat);
+    let out = '<defs><pattern id="' + pat + '" width="2.4" height="2.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+      '<rect width="1.1" height="2.4" style="fill:var(--surface-1)"/></pattern></defs>' +
+      '<rect x="22" y="40" width="156" height="156.2" style="fill:none;stroke:var(--border-strong);stroke-width:.6"/>' +
+      '<circle cx="100" cy="99.6" r="96.6" style="fill:none;stroke:var(--border-strong);stroke-width:.6"/>' +
       mir('<path d="' + BODY_GHOST + '" style="fill:none;stroke:var(--border-strong);stroke-width:.5"/>') +
-      mir('<path d="' + BODY_SKIN + ' L100.6,119 L100.6,35.4 Z" style="fill:var(--surface-3);stroke:none"/>');
+      mir('<path d="' + BODY_SKIN + ' L100.6,122.7 L100.6,40 Z" style="fill:var(--surface-3);stroke:none"/>');
     let mus = '';
     list.forEach(m => {
       const n = v[m[0]] || 0, t = max ? n / max : 0;
       const st = n > 0
         ? 'fill:var(--accent);fill-opacity:' + (0.25 + 0.75 * t).toFixed(2) + ';stroke:var(--surface-1);stroke-opacity:.85;stroke-width:.5'
         : 'fill:var(--surface-3);' + ink;
-      mus += '<path d="' + m[1] + '" style="' + st + '"><title>' + BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets</title></path>';
+      const r = rec && rec[m[0]];
+      const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets' + (r ? ' · ' + Math.ceil(r.left) + 'h to recover' : '');
+      mus += '<path d="' + m[1] + '" style="' + st + '"><title>' + tip + '</title></path>';
+      if (r) mus += '<path d="' + m[1] + '" style="fill:url(#' + pat + ');fill-opacity:' + (0.3 + 0.6 * r.left / r.win).toFixed(2) +
+        ';stroke:none;pointer-events:none"/>';
     });
     out += mir(mus) +
       mir('<path d="' + lines + '" style="fill:none;stroke:var(--surface-1);stroke-opacity:.45;stroke-width:.35;stroke-linecap:round"/>') +
@@ -4491,7 +4537,7 @@ const ABOUT = {
   log: 'Everything ticked today, in the order it happened.',
   training: 'Your last training day, lift by lift.',
   trainvol: 'Training volume a week, over the last 8 weeks.',
-  bodyheat: 'Working sets per muscle on a front and back body, brighter for more.',
+  bodyheat: 'Working sets per muscle on a front and back body, brighter for more, striped while it recovers.',
   weight: 'Every weigh-in as a dot with the line through them, and a cut plan if you set one.',
   sleep: 'Your nights of sleep: the average night and the nights on target.',
   spend: 'Money out this week against last week.',
