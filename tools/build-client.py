@@ -229,8 +229,9 @@ for aid in DROP_APPS:
 for wid in DROP_WIDGETS:
     html = patch(html, r"\n  %s: \{\n.*?\n  \},\n" % wid, '\n',
                  'widget block for ' + wid, re.S)
-    html = patch(html, r"\{ t: '%s', w: \d+, h: \d+ \}, ?" % wid, '',
-                 'default layout entry for ' + wid)
+    # the default board may not carry it at all (HOME 1.0.40 does not carry
+    # LINKS); an entry is removed when it is there, and never required
+    html = re.sub(r"\{ t: '%s', w: \d+, h: \d+ \}, ?" % wid, '', html)
 
 # The Data panel offered a habits CSV. Nothing can make a habit now.
 html = patch(html, r"\n *\['◎', 'Habits as CSV'.*?\],(?=\n)", '',
