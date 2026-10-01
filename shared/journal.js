@@ -284,7 +284,7 @@ function publishNotes(date, src) {
     const n = R.all('note', { date: d })
       .filter(r => r.payload && r.payload.kind === k.id && !(k.id === 'todo' && r.payload.done)).length;
     const id = 'note-' + k.id;
-    R.set('activity', null, id, { name: k.label + 's', cat: 'journal' });
+    R.set('activity', null, id, { name: k.plural, cat: 'journal' });
     if (n) R.set('tick', d, id, { src: src, qty: n, to: k.to });
     else R.del('tick', d, id);
   });

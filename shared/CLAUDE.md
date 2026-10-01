@@ -46,7 +46,7 @@ are holding a stale copy of whatever you just changed.
 | `health.js` | Answers "is my data okay". | Low. |
 | `demo.js` | The DEMO's made-up person and its DEMO tab. The storage switch itself is the first thing in `skins.js`. Fetched only in the demo. | Low. It writes only inside the demo's own namespace. |
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
-| `_smoke.html` | 402 checks over all of it. | Run it every time. |
+| `_smoke.html` | 403 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
