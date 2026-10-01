@@ -30,7 +30,7 @@ from two sources:
 ## The shape
 
 ```
-MB_LIBRARY = { v: 1, made, text, sections: [9 names], patterns: {id: name}, exercises: [
+MB_LIBRARY = { v: 1, made, text, sections: [10 names], patterns: {id: name}, exercises: [
   { id, name, train: [TRAIN starter names], cat: TRAIN group, section: Skool
     section, pattern: FORGE pattern id, primary: [muscles], secondary: [muscles],
     equipment, kind (TRAIN's: 0 weight, 2 bodyweight), timed, reps ("8-15"),
@@ -49,6 +49,10 @@ traps, shoulders, biceps, triceps, forearms, abdominals, quadriceps,
 hamstrings, glutes, calves, adductors, abductors). `pattern` is one of
 FORGE's ten default ids. `cat` is TRAIN's group name, so FORGE's `musOf`
 fallback and TRAIN's list agree with it.
+
+`section` has Glutes after Hamstrings since 2026-10-01 (Tom: "Glutes get
+their own section"): hip thrusts, the bridge, the kickback, abduction and the
+reverse hyper. RDL, SLDL, sumo, good morning and the curls stayed.
 
 ## Not wired yet
 
