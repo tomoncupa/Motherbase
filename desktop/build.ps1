@@ -30,7 +30,23 @@ foreach ($need in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.Wi
 
 $out = Join-Path $dir 'STATUS.exe'
 
-& $csc -nologo -target:winexe -out:"$out" `
+# A running program cannot be overwritten, but Windows lets it be renamed.
+# So building while STATUS or the Main Menu is open moves the old exe aside
+# as <name>.old; it keeps running, and the next build deletes it.
+function Free-Exe($exe) {
+  $old = "$exe.old"
+  if (Test-Path $old) { try { Remove-Item $old -Force -ErrorAction Stop } catch {} }
+  if (Test-Path $exe) {
+    try { [IO.File]::Open($exe, 'Open', 'ReadWrite', 'None').Close() }
+    catch { if (-not (Test-Path $old)) { Rename-Item $exe (Split-Path -Leaf $old) } }
+  }
+}
+
+# The icon is built into the exe, because a desktop shortcut and a taskbar
+# pin read it from the file, never from the window. status.ico and menu.ico
+# are the apps' own install icons cut to the window, the corners clear.
+Free-Exe $out
+& $csc -nologo -target:winexe -out:"$out" -win32icon:"$dir\status.ico" `
   -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
   -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
   -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
@@ -38,14 +54,16 @@ $out = Join-Path $dir 'STATUS.exe'
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Build failed."; exit $LASTEXITCODE }
 
-# The exe has to find the WebView2 files, so they sit beside it.
+# The exe has to find the WebView2 files, so they sit beside it. A running
+# program holds them, and then the copy already there is the same file.
 foreach ($f in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll')) {
-  Copy-Item (Join-Path $lib $f) $dir -Force
+  try { Copy-Item (Join-Path $lib $f) $dir -Force -ErrorAction Stop } catch {}
 }
 
 # ── the Main Menu, the suite in an ordinary window ──
 $menu = Join-Path $dir 'Main Menu.exe'
-& $csc -nologo -target:winexe -out:"$menu" `
+Free-Exe $menu
+& $csc -nologo -target:winexe -out:"$menu" -win32icon:"$dir\menu.ico" `
   -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
   -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
   -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `

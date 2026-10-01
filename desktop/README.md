@@ -100,7 +100,8 @@ three Microsoft WebView2 files in `lib\`.
 |---|---|
 | `STATUS.exe` | the program |
 | `StatusApp.cs` `KeyBox.cs` | its source |
-| `build.ps1` | rebuilds it |
+| `build.ps1` | rebuilds it, even while it is open: the running copy is moved aside as `.old` |
+| `status.ico` `menu.ico` | the icons built into STATUS.exe and Main Menu.exe, cut from `status/icon-512.png` and the root `icon-512.png`. A shortcut reads the file's icon, never the window's |
 | `lib\` | Microsoft's WebView2 files, so there is nothing to download |
 | `data\` | its store. Deleting this empties it; it refills from sync |
 | `status-app.txt` | your shortcut, always-on-top and widget position |
