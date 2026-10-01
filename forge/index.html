@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.2, 2026-09-25">
+<meta name="mb-version" content="1.0.3, 2026-10-01">
 <title>FORGE</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -56,6 +56,19 @@ header{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);flex-wrap:wr
 #weeks .wk.on{box-shadow:inset 0 0 0 2px var(--accent);color:var(--text-1)}
 #weeks .wk.has{text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:.3em}
 #weeks .lbl{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);margin-right:var(--s-1)}
+
+/* the client tabs: LIBRARY, then one per client, BLOCK's tab row */
+#tabs{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-1);padding:var(--s-3) var(--s-4) 0;overflow-x:auto;min-width:0}
+#tabs .tab{flex:0 0 auto;display:inline-flex;align-items:center;gap:var(--s-2);min-height:var(--tap);padding:0 var(--s-3);
+  border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-1);color:var(--text-2);cursor:pointer;
+  font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-cap);text-transform:uppercase;white-space:nowrap}
+#tabs .tab:hover{border-color:var(--border-strong);color:var(--text-1)}
+#tabs .tab.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);color:var(--text-1);background:var(--surface-2)}
+#tabs .tab .c{font-size:var(--f-1);color:var(--text-muted);font-variant-numeric:tabular-nums}
+#tabs .tab.add{border-style:dashed;color:var(--text-muted)}
+#tabs .who{flex:0 0 auto;margin-left:auto;display:flex;gap:var(--s-4);padding-left:var(--s-4);font-size:var(--f-1);color:var(--text-muted);
+  letter-spacing:var(--track-cap);white-space:nowrap}
+#tabs .who b{color:var(--text-1);font-weight:var(--w-bold);letter-spacing:normal}
 
 #app{flex:1;min-height:0;display:flex}
 #side{flex:0 0 calc(var(--s-10) * 2.3);min-width:0;display:flex;flex-direction:column;gap:var(--s-3);
@@ -170,7 +183,7 @@ table.wt td.v:hover{background:var(--surface-2)}
 #print{display:none}
 @media print{
   html,body{height:auto;overflow:visible;display:block;background:Canvas;color:CanvasText;color-scheme:light}
-  header,#app,.mb-toast{display:none !important}
+  header,#tabs,#app,.mb-toast{display:none !important}
   #print{display:block;font-family:var(--font-body);font-size:var(--f-2)}
   #print h1{font-family:var(--font-display);font-size:var(--f-6);letter-spacing:var(--track-cap);margin-bottom:var(--s-1)}
   #print .by{color:GrayText;margin-bottom:var(--s-5)}
@@ -198,6 +211,7 @@ table.wt td.v:hover{background:var(--surface-2)}
   <button class="mb-btn mb-press mb-tap" id="setBtn">SETTINGS</button>
   <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
 </header>
+<nav id="tabs" aria-label="Library and clients"></nav>
 <div id="app">
   <aside id="side">
     <div class="card mb-card progs"><h2>PROGRAMS</h2><div class="plist" id="plist"></div></div>
@@ -216,7 +230,8 @@ table.wt td.v:hover{background:var(--surface-2)}
    weeks, days and exercises, and hand it to a client.
 
    ── the rows ──
-     fprog   one program     key program id          {name, weeks, ord}
+     fprog   one program     key program id          {name, weeks, ord, cid}
+             `cid` is the COACH client whose tab it is in; none is LIBRARY
      fday    one day         key prog|day id         {name, ord}
      fex     one exercise    key prog|slot id        {day, name, cat, ord,
                                                       n, r, kg, rir, rest,
@@ -292,7 +307,7 @@ Rec.declare(APP.id, APP.types);
    are CHECK IN's. Reading them by name means a device where those apps were
    never opened still has them. */
 IO.register({ app: APP.id, name: 'FORGE', types: APP.types.concat(['cprog']),
-  reads: { train: ['exercise', 'excat'], coach: ['cex', 'cprog'], checkin: ['cperson'] } });
+  reads: { train: ['exercise', 'excat'], coach: ['cex', 'cprog', 'cset'], checkin: ['cperson'] } });
 
 const esc = UI.esc;
 const ico = r => (window.Icons && Icons.svg(r)) || '';
@@ -518,6 +533,142 @@ let act = '';                      /* the day a click in the bin adds to */
 let q = '';
 { const m = /[?&]p=([^&#]+)/.exec(location.search); if (m) cur = decodeURIComponent(m[1]); }
 
+/* ── the client tabs ──
+   Tom, 2026-10-01: "Allow me to have client profile tabs." LIBRARY holds the
+   programs to sell or share; a tab per client holds that client's own, and
+   SEND in a client's tab goes straight to them. Which tab a program is in is
+   `cid` on its row, the COACH client (`cperson`) it is for, and none is
+   LIBRARY. Which tabs are open, and in what order, is the setting `tabs`,
+   written only when he opens, closes or moves one (root brief, Known traps:
+   a setting saved on open spreads a stale copy through live sync). Closing a
+   tab keeps the client's programs; + CLIENT opens it again with them in it. */
+let tab = opt('tab', '');
+const tabIds = () => { const l = opt('tabs', []); return Array.isArray(l) ? l.filter(x => typeof x === 'string' && x) : []; };
+if (tab && tabIds().indexOf(tab) < 0) tab = '';
+let follow = !!cur;                /* the program asked for at open brings its tab with it */
+const lastIn = {};                 /* the program last open in each tab, this visit */
+const inTab = (p, t) => (p.cid || '') === t;
+const tabProgs = t => progList().filter(x => inTab(x.p, t));
+const whoName = cid => (people()[cid] || {}).name || 'Client';
+const tabName = t => t ? whoName(t) + '’s tab' : 'LIBRARY';
+function showTab(t, pid) {
+  if (t && tabIds().indexOf(t) < 0) Rec.setting(APP.id, 'tabs', tabIds().concat([t]));
+  if (cur) lastIn[tab] = cur;
+  if (t !== tab) { tab = t; Rec.setting(APP.id, 'tab', t); wk = 1; act = ''; }
+  const want = pid || lastIn[t];
+  cur = want && progs()[want] && inTab(progs()[want], t) ? want : '';
+  if (pid) Rec.setting(APP.id, 'cur', pid);
+}
+function openTab(t) { showTab(t); draw(); }
+function closeTab(cid) {
+  const was = tabIds(), i = was.indexOf(cid);
+  if (i < 0) return;
+  Rec.setting(APP.id, 'tabs', was.filter(x => x !== cid));
+  if (tab === cid) showTab('');
+  draw();
+  const n = tabProgs(cid).length;
+  UI.undo('<b>' + esc(whoName(cid)) + '</b> closed' + (n ? '. Their ' + n + ' program' + (n === 1 ? '' : 's') + ' stay with them, and + CLIENT opens it again' : ''),
+    () => { Rec.setting(APP.id, 'tabs', was); openTab(cid); });
+}
+function moveTab(cid, dir) {
+  const l = tabIds(), i = l.indexOf(cid), j = i + dir;
+  if (i < 0 || j < 0 || j >= l.length) return;
+  l.splice(i, 1); l.splice(j, 0, cid);
+  Rec.setting(APP.id, 'tabs', l); draw();
+}
+/* the last day any of their sets was logged, by them or by Tom, the way
+   COACH's profile says it */
+function lastTrained(cid) {
+  let d = '';
+  Rec.all('cset').forEach(r => { if (r.date && r.date > d && String(r.key).indexOf(cid + '|') === 0) d = r.date; });
+  return d;
+}
+/* the program a client is on now, in COACH, if it has an exercise in it */
+function onNow(cid) {
+  const c = Rec.get('cprog', null, 'c-' + cid);
+  return c && (c.days || []).some(d => (d.ex || []).some(x => x.name || x.slot)) ? c : null;
+}
+/* Pick a tab: LIBRARY and every COACH client, by box, the way SEND lists
+   them. `skip` is the tabs not to offer. */
+function pickTab(title, say, skip, fn) {
+  const ppl = people(), order = ['one', 'online', 'past'], all = progList();
+  const ids = Object.keys(ppl).filter(id => skip.indexOf(id) < 0).sort((a, b) =>
+    order.indexOf(ppl[a].box || 'one') - order.indexOf(ppl[b].box || 'one') || String(ppl[a].name).localeCompare(String(ppl[b].name)));
+  UI.dialog({
+    title: title, width: 460,
+    body: (b, h) => {
+      if (say) { const p = document.createElement('p'); p.className = 'empty'; p.style.marginBottom = 'var(--s-3)'; p.textContent = say; b.appendChild(p); }
+      const list = document.createElement('div'); list.className = 'pick';
+      const row = (t, nm) => {
+        const n = all.filter(x => inTab(x.p, t)).length;
+        const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'mb-press';
+        bt.innerHTML = '<span class="nm">' + esc(nm) + '</span><span class="c">' + (n ? n + ' program' + (n === 1 ? '' : 's') : t ? 'no programs yet' : 'empty') + '</span>';
+        bt.onclick = () => { h.close(); fn(t); };
+        list.appendChild(bt);
+      };
+      if (skip.indexOf('') < 0) row('', 'LIBRARY');
+      let box = '';
+      ids.forEach(id => {
+        const bx = ppl[id].box || 'one';
+        if (bx !== box) { box = bx; const s = document.createElement('div'); s.className = 'sep'; s.textContent = BOXN[bx] || bx.toUpperCase(); list.appendChild(s); }
+        row(id, ppl[id].name || 'Client');
+      });
+      if (!ids.length && skip.indexOf('') > -1) { const e = document.createElement('p'); e.className = 'empty'; e.textContent = Object.keys(ppl).length ? 'Every client has a tab already.' : 'No clients yet. They arrive in COACH from CHECK IN or a TRAIN file.'; list.appendChild(e); }
+      b.appendChild(list);
+    },
+    actions: [{ label: 'CANCEL' }],
+  });
+}
+function addTab() {
+  pickTab('OPEN A CLIENT', 'Their programs get a tab of their own. SEND in it goes straight to them.', [''].concat(tabIds()), t => openTab(t));
+}
+/* A program moved to another tab keeps every row; only `cid` changes. */
+function moveProgram(pid, t) {
+  const p = progs()[pid]; if (!p) return;
+  const from = p.cid || '';
+  Rec.patch('fprog', null, pid, { cid: t || undefined, ord: tabProgs(t).length });
+  touch(pid); showTab(t, pid); draw();
+  UI.undo('<b>' + esc(p.name || 'Program') + '</b> moved to ' + esc(tabName(t)), () => {
+    Rec.patch('fprog', null, pid, { cid: from || undefined, ord: p.ord }); touch(pid); showTab(from, pid); draw();
+  });
+}
+function drawTabs() {
+  const T = document.getElementById('tabs'), all = progList(), ids = tabIds();
+  T.innerHTML = '';
+  const mk = (t, label) => {
+    const n = all.filter(x => inTab(x.p, t)).length;
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'tab mb-press' + (t === tab ? ' on' : '');
+    b.innerHTML = '<span>' + esc(label) + '</span>' + (n ? '<span class="c">' + n + '</span>' : '');
+    b.setAttribute('aria-pressed', t === tab ? 'true' : 'false');
+    b.title = (t ? whoName(t) + '’s programs' : 'Programs to sell or share') + (n ? ', ' + n : ', none yet');
+    b.onclick = () => openTab(t);
+    T.appendChild(b);
+    return b;
+  };
+  mk('', 'Library');
+  ids.forEach((cid, i) => {
+    const b = mk(cid, whoName(cid)), nm = whoName(cid);
+    Mobile.hold(b, e => UI.menu(e.clientX, e.clientY, [
+      { label: 'New Program For ' + nm, fn: () => { showTab(cid); draw(); newProgram(); } },
+      i > 0 ? { label: 'Move Left', fn: () => moveTab(cid, -1) } : null,
+      i < ids.length - 1 ? { label: 'Move Right', fn: () => moveTab(cid, 1) } : null,
+      '-',
+      { label: 'Close Tab', fn: () => closeTab(cid) },
+    ].filter(Boolean)));
+  });
+  const add = document.createElement('button'); add.type = 'button'; add.className = 'tab add mb-press';
+  add.textContent = '+ Client'; add.title = 'Give a client a tab of their own';
+  add.onclick = addTab;
+  T.appendChild(add);
+  if (tab) {
+    const w = document.createElement('div'); w.className = 'who';
+    const now = onNow(tab), last = lastTrained(tab);
+    w.innerHTML = '<span>ON NOW&nbsp; <b>' + esc(now ? now.name || 'a program' : 'nothing yet') + '</b></span>' +
+      '<span>LAST TRAINED&nbsp; <b>' + (last ? esc(Day.label(last)) : 'not logged') + '</b></span>';
+    T.appendChild(w);
+  }
+}
+
 /* ── publishing into COACH ──
    Every change to a program is published to its `cprog` row a moment later,
    so COACH's library is never more than half a second behind, and the
@@ -561,7 +712,9 @@ function flatten(pid) {
 function publish(pid) {
   const f = flatten(pid);
   if (!f) return;
-  Rec.patch('cprog', null, 'f-' + pid, { name: f.name, pid: null, src: 'forge', weeks: f.weeks, days: f.days });
+  /* `cid` says whose tab it is in, for COACH to group by one day; COACH
+     reads `pid` as the client a program is ON, so that stays null */
+  Rec.patch('cprog', null, 'f-' + pid, { name: f.name, pid: null, cid: progs()[pid].cid || undefined, src: 'forge', weeks: f.weeks, days: f.days });
 }
 addEventListener('pagehide', () => { UI.commitFocused && UI.commitFocused(); publishAll(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') publishAll(); });
@@ -575,8 +728,9 @@ function setField(key, f, w, v) {
 }
 function newProgram() {
   let nm, wks, dys;
+  const t = tab;
   UI.dialog({
-    title: 'NEW PROGRAM', width: 420,
+    title: t ? 'NEW PROGRAM FOR ' + whoName(t).toUpperCase() : 'NEW PROGRAM', width: 420,
     body: b => {
       const f = document.createElement('div'); f.className = 'form';
       nm = UI.field('text', { placeholder: 'Hypertrophy block' });
@@ -591,9 +745,9 @@ function newProgram() {
     enter: h => { h.box.querySelector('.mb-sheet-foot .go') && h.box.querySelector('.mb-sheet-foot .go').click(); },
     actions: [{ label: 'CANCEL' }, { label: 'MAKE IT', kind: 'go', fn: () => {
       const id = newId(), w = Math.min(MAX_WEEKS, Math.max(1, parseInt(wks.value, 10) || 1)), d = Math.min(7, Math.max(1, parseInt(dys.value, 10) || 1));
-      Rec.set('fprog', null, id, { name: nm.value.trim() || 'New program', weeks: w, ord: progList().length });
+      Rec.set('fprog', null, id, Object.assign({ name: nm.value.trim() || 'New program', weeks: w, ord: tabProgs(t).length }, t ? { cid: t } : {}));
       for (let i = 0; i < d; i++) Rec.set('fday', null, id + '|' + newId(), { name: 'Day ' + (i + 1), ord: i });
-      cur = id; wk = 1; Rec.setting(APP.id, 'cur', cur);
+      showTab(t, id);
       touch(id); draw();
     } }],
   });
@@ -665,21 +819,48 @@ function deleteProgram(pid) {
   draw();
   UI.undo('<b>' + esc(p.name || 'Program') + '</b> deleted, here and in COACH', () => {
     rows.forEach(([t, k, v]) => Rec.set(t, null, k, v));
-    cur = pid; Rec.setting(APP.id, 'cur', pid); draw();
+    showTab(p.cid || '', pid); draw();
   });
 }
-function duplicateProgram(pid) {
+/* A copy in the same tab is named "copy"; a copy into another tab, a
+   library program put in a client's tab to make it theirs, keeps its name. */
+function duplicateProgram(pid, to) {
   const p = progs()[pid]; if (!p) return;
-  const id = newId(), dmap = {};
-  Rec.set('fprog', null, id, Object.assign({}, p, { name: (p.name || 'Program') + ' copy', ord: progList().length }));
+  const t = to == null ? (p.cid || '') : to, same = t === (p.cid || '');
+  const id = newId(), dmap = {}, name = (p.name || 'Program') + (same ? ' copy' : '');
+  const np = Object.assign({}, p, { name: name, ord: tabProgs(t).length });
+  delete np.cid; if (t) np.cid = t;
+  Rec.set('fprog', null, id, np);
   daysOf(pid).forEach(d => { const k = id + '|' + newId(); dmap[d.key] = k; Rec.set('fday', null, k, d.v); });
   const EX = exByDay(pid);
   Object.keys(EX).forEach(dk => EX[dk].forEach(e => {
     if (!dmap[dk]) return;
     Rec.set('fex', null, id + '|' + newId(), Object.assign({}, e.v, { day: dmap[dk] }));
   }));
-  cur = id; Rec.setting(APP.id, 'cur', id); touch(id); draw();
-  UI.toast('Copied as <b>' + esc(p.name + ' copy') + '</b>');
+  showTab(t, id); touch(id); draw();
+  UI.toast(same ? 'Copied as <b>' + esc(name) + '</b>' : '<b>' + esc(name) + '</b> copied to ' + esc(tabName(t)));
+}
+/* a library program into this client's tab, to make it theirs */
+function fromLibrary(t) {
+  const lib = tabProgs('');
+  if (!lib.length) { UI.toast('Nothing in LIBRARY yet', { bad: true }); return; }
+  UI.dialog({
+    title: 'COPY FROM LIBRARY', width: 460,
+    body: (b, h) => {
+      const p = document.createElement('p'); p.className = 'empty'; p.style.marginBottom = 'var(--s-3)';
+      p.textContent = 'A copy goes in ' + whoName(t) + '’s tab, to change for them. The library one stays as it is.';
+      b.appendChild(p);
+      const list = document.createElement('div'); list.className = 'pick';
+      lib.forEach(({ key, p: pp }) => {
+        const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'mb-press';
+        bt.innerHTML = '<span class="nm">' + esc(pp.name || 'Program') + '</span><span class="c">' + (pp.weeks | 0 || 1) + 'w · ' + daysOf(key).length + 'd</span>';
+        bt.onclick = () => { h.close(); duplicateProgram(key, t); };
+        list.appendChild(bt);
+      });
+      b.appendChild(list);
+    },
+    actions: [{ label: 'CANCEL' }],
+  });
 }
 function duplicateDay(pid, dayKey) {
   const d = Rec.get('fday', null, dayKey); if (!d) return;
@@ -794,6 +975,14 @@ function send(pid) {
     },
     actions: [{ label: 'CANCEL' }],
   });
+}
+/* SEND in a client's tab: straight to them, no list */
+function sendTo(pid, cid) {
+  publishAll();
+  const flat = flatten(pid);
+  if (!flat) return;
+  if (!flat.days.some(d => d.ex.length)) { UI.toast('Put an exercise in a day first', { bad: true }); return; }
+  toClient(pid, cid, flat);
 }
 function toClient(pid, cid, flat) {
   const who = people()[cid] || {}, key = 'c-' + cid, now = Rec.get('cprog', null, key);
@@ -985,30 +1174,38 @@ document.addEventListener('dragend', () => { drag = null; clearMarks(); });
 function drawSide() {
   const pl = document.getElementById('plist');
   pl.innerHTML = '';
-  const list = progList();
+  const list = tabProgs(tab), nm = tab ? whoName(tab) : '', now = tab ? onNow(tab) : null;
+  pl.parentNode.querySelector('h2').textContent = tab ? nm.toUpperCase() + '’S PROGRAMS' : 'PROGRAMS';
   if (!list.length) {
     const e = document.createElement('p'); e.className = 'empty'; e.style.marginBottom = 'var(--s-2)';
-    e.textContent = 'None yet.'; pl.appendChild(e);
+    e.textContent = tab ? 'None for ' + nm + ' yet.' : 'None yet.'; pl.appendChild(e);
   }
   list.forEach(({ key, p }) => {
     const r = document.createElement('div'); r.className = 'p' + (key === cur ? ' on' : ''); r.tabIndex = 0;
     const nd = daysOf(key).length;
-    r.innerHTML = '<span class="nm">' + esc(p.name || 'Program') + '</span><span class="c">' + (p.weeks | 0 || 1) + 'w · ' + nd + 'd</span>';
+    r.innerHTML = '<span class="nm">' + esc(p.name || 'Program') + '</span><span class="c">' +
+      (now && now.from === 'f-' + key ? 'on now · ' : '') + (p.weeks | 0 || 1) + 'w · ' + nd + 'd</span>';
     r.onclick = () => { cur = key; wk = 1; act = ''; Rec.setting(APP.id, 'cur', key); draw(); };
     r.onkeydown = e => { if (e.key === 'Enter') r.onclick(); };
-    Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, [
+    Mobile.hold(r, e => UI.menu(e.clientX, e.clientY, (tab ? [
+      { label: 'Send To ' + nm, fn: () => sendTo(key, tab) },
+      { label: 'Send To Someone Else…', fn: () => send(key) },
+    ] : [
       { label: 'Send…', fn: () => send(key) },
+    ]).concat([
       { label: 'Print', fn: () => printIt(key) },
       { label: 'Duplicate', fn: () => duplicateProgram(key) },
+      { label: 'Copy To…', fn: () => pickTab('COPY TO', 'A copy goes in their tab. This one stays here.', [tab], t => duplicateProgram(key, t)) },
+      { label: 'Move To…', fn: () => pickTab('MOVE TO', '', [tab], t => moveProgram(key, t)) },
       '-',
       { label: 'Delete Program', kind: 'bad', fn: () => deleteProgram(key) },
-    ]));
+    ])));
     pl.appendChild(r);
   });
   /* COACH's own library, made before FORGE existed. Brought in on a press
      and never behind his back: the COACH row goes and the FORGE one takes
-     its place in the same list, with UNDO. */
-  const legacy = Object.entries(Rec.map('cprog')).filter(([k, v]) => !v.pid && v.src !== 'forge' && k.indexOf('f-') !== 0 && k.indexOf('c-') !== 0);
+     its place in the same list, with UNDO. Shown in LIBRARY, where it lands. */
+  const legacy = tab ? [] : Object.entries(Rec.map('cprog')).filter(([k, v]) => !v.pid && v.src !== 'forge' && k.indexOf('f-') !== 0 && k.indexOf('c-') !== 0);
   if (legacy.length) {
     const s = document.createElement('div'); s.className = 'sub'; s.textContent = 'IN COACH · TAP TO BRING IN'; pl.appendChild(s);
     legacy.forEach(([k, v]) => {
@@ -1022,6 +1219,12 @@ function drawSide() {
   nb.style.cssText = 'width:100%;margin-top:var(--s-2)';
   nb.onclick = newProgram;
   pl.appendChild(nb);
+  if (tab && tabProgs('').length) {
+    const fb = document.createElement('button'); fb.className = 'mb-btn mb-press mb-tap'; fb.textContent = '+ FROM LIBRARY';
+    fb.style.cssText = 'width:100%;margin-top:var(--s-2)';
+    fb.onclick = () => fromLibrary(tab);
+    pl.appendChild(fb);
+  }
   drawBin();
 }
 function bringIn(k, v) {
@@ -1183,6 +1386,7 @@ qEl.onkeydown = e => {
 /* ── the header ── */
 function drawHead() {
   const p = cur ? progs()[cur] : null;
+  document.getElementById('sendBtn').textContent = tab ? 'SEND TO ' + whoName(tab).toUpperCase() : 'SEND';
   const pn = document.getElementById('pname');
   pn.disabled = !p;
   if (document.activeElement !== pn) pn.value = p ? (p.name || '') : '';
@@ -1216,17 +1420,25 @@ function drawHead() {
 }
 const seg = UI.segmented([{ id: 'board', name: 'DAYS' }, { id: 'grid', name: 'WEEKS' }], view, v => { view = v; Rec.setting(APP.id, 'view', v); draw(); });
 document.getElementById('viewSeg').appendChild(seg);
-document.getElementById('sendBtn').onclick = () => { if (cur) send(cur); else UI.toast('Make a program first', { bad: true }); };
+document.getElementById('sendBtn').onclick = () => { if (!cur) UI.toast('Make a program first', { bad: true }); else if (tab) sendTo(cur, tab); else send(cur); };
 document.getElementById('printBtn').onclick = () => { if (cur) printIt(cur); else UI.toast('Make a program first', { bad: true }); };
 document.getElementById('setBtn').onclick = () => settings();
 
 /* ── the board ── */
 function blank(board) {
   const b = document.createElement('div'); b.className = 'blank card mb-card';
-  b.innerHTML = '<b>BUILD A PROGRAM</b><p class="empty">Weeks of days, each day the exercises in it, each exercise its sets, reps, first-set load, RIR and rest. ' +
-    'Drag exercises from the list on the left into a day. SEND puts it on a client in COACH and saves the file their TRAIN opens.</p>';
+  if (tab) b.innerHTML = '<b>' + esc(whoName(tab).toUpperCase()) + '</b><p class="empty">Programs made here are ' + esc(whoName(tab)) + '’s. ' +
+    'Start a new one, or copy one from LIBRARY and change it for them. SEND here goes straight to them.</p>';
+  else b.innerHTML = '<b>BUILD A PROGRAM</b><p class="empty">Weeks of days, each day the exercises in it, each exercise its sets, reps, first-set load, RIR and rest. ' +
+    'Drag exercises from the list on the left into a day. SEND puts it on a client in COACH and saves the file their TRAIN opens. ' +
+    '+ CLIENT above gives a client a tab of their own.</p>';
   const nb = document.createElement('button'); nb.className = 'mb-btn go mb-press mb-tap'; nb.textContent = '+ NEW PROGRAM'; nb.onclick = newProgram;
   b.appendChild(nb);
+  if (tab && tabProgs('').length) {
+    const fb = document.createElement('button'); fb.className = 'mb-btn mb-press mb-tap'; fb.textContent = '+ FROM LIBRARY';
+    fb.onclick = () => fromLibrary(tab);
+    b.appendChild(fb);
+  }
   board.appendChild(b);
 }
 function drawSum(board, EX) {
@@ -1520,7 +1732,11 @@ function drawNow(force) {
   void force;
   slotsNow();
   if (cur && !progs()[cur]) cur = '';
-  if (!cur) { const l = progList(); if (l.length) cur = l[0].key; }
+  const cp = cur ? progs()[cur] : null;
+  if (cp && !inTab(cp, tab)) { if (follow) showTab(cp.cid || '', cur); else cur = ''; }
+  if (cp) follow = false;
+  if (!cur) { const l = tabProgs(tab); if (l.length) cur = l[0].key; }
+  drawTabs();
   drawHead();
   drawSide();
   const board = document.getElementById('board');

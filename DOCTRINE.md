@@ -499,7 +499,8 @@ block for one client or for sale.
 plate in its muscle group's colour, and the bin down the left is TRAIN's own
 vocabulary, so an exercise is dragged from the bin into a day. Week one is
 typed once; every later week inherits it and says only what it changes. A
-deload is a few numbers in one week.
+deload is a few numbers in one week. LIBRARY holds the programs to sell;
+each client has a tab of their own programs, and SEND there goes to them.
 
 **It is built on the Algrowrithm** (Tom's Google Doc of that name). Effort is
 the constant, 0 to 3 reps from a true limit. Reps travel down a range across

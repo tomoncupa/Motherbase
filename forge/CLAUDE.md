@@ -191,6 +191,50 @@ Watched 2026-09-25, headless Chromium, 1440 wide, with a made-up client:
 - COACH showed and kept both slots
 - `_review.html` 123 of 123 at 1440 and 375, foundation 354 of 354
 
+## Client tabs (1.0.3, 2026-10-01)
+
+Tom: *"Allow me to have client profile tabs."* Settled with him before
+building: a tab holds that client's PROGRAMS, and the tabs run across the top.
+
+- **LIBRARY, then a tab per client, then + CLIENT**, in a row under the
+  header, drawn like BLOCK's tabs with FORGE's gold ring. A tab's number is
+  how many programs are in it.
+- **Which tab a program is in is `fprog.cid`**, the COACH client (`cperson`)
+  it is for. None is LIBRARY. Every program made before this is LIBRARY's.
+- **Which tabs are open, and their order, is the setting `forge.tabs`**, and
+  the open one `forge.tab`. Both are written only when Tom opens, closes or
+  moves a tab, never on open (root brief, Known traps).
+- **Closing a tab keeps the client's programs.** + CLIENT opens it again with
+  them in it, and the toast says so, with UNDO.
+- **In a client's tab:** a new program is theirs, + FROM LIBRARY copies a
+  library program in under its own name, and SEND reads SEND TO <NAME> and
+  goes straight to `toClient` with no list. The program menu keeps Send To
+  Someone Else… for the list.
+- **The strip on the right of the row** says what they are ON NOW (their
+  `cprog c-<pid>`, if it has an exercise) and when they LAST TRAINED (the
+  newest date on any of their `cset` rows, as COACH's profile says it). The
+  program they are on reads "on now" in the list. `cset` is in
+  `IO.register`'s reads for this.
+- **Copy To… and Move To…** on any program move it between tabs. Moving
+  changes only `cid`; a copy into another tab keeps the name, a copy in the
+  same tab is named "copy".
+- **`?p=` brings its tab with it**, so COACH's EDIT IN FORGE opens a client's
+  program in that client's tab.
+- **The published `f-` row carries `cid` too**, and `pid` stays null, because
+  COACH reads `pid` as the client a program is ON. COACH does not read `cid`
+  yet: its PROGRAMS list shows client programs beside library ones. A COACH
+  session can group by it.
+
+Watched 2026-10-01, headless Chromium at 1440 with two made-up clients, every
+step a real click: a tab opened from + CLIENT, the strip read nothing yet and
+28 Sep, a library program copied in with its 3 days, SEND TO ANA CRUZ wrote
+her `c-` row and saved `PROGRAM Ana Cruz.json` with no list, the strip and
+list then said on now, LIBRARY showed only its own, each tab came back to its
+own program, Close Tab kept her program and UNDO reopened it, Move Left,
+Move To another client, the tabs and order survived a reload, `?p=` opened
+the right tab both ways, and a new program in a client's tab was theirs. No
+page errors. `_review.html` 142 of 142 in headless Chromium at 1280.
+
 ## Open
 
 - The reverse shelf (`coach/CLAUDE.md`, client files item 2) will carry the
