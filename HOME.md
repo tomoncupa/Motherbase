@@ -74,3 +74,13 @@ Part of the foundation's faster open (`shared/CLAUDE.md`, Faster open).
 ## 2026-09-30, HOME 1.0.39: the dock wears the theme
 
 The desk dock was painted a fixed near-black and the logo glowed a fixed ice blue, so on a light theme the dock was a black bar under dark labels. It now sits on the recessed surface (`--surface-2`) and the glow is the accent at half strength. The open app's NAME, on the desk dock and the phone bar, is the reading colour; its colour stays on the icon, the tint and the ring, because a chart colour is picked to read as a line, not as words (Lego's yellow TRAIN measured 1.04 to 1). Lego and Minecraft 2 carry a dock rule in their own CSS putting it on the page colour, the only ground their words were worked out to read on. Measured in all 18 themes and a light test theme, both docks, every button plain and open: 4.5 to 1 or better.
+## 2026-10-01, HOME 1.0.40: the reel's board, and a widget menu that says what each one is
+
+Tom: "set the default main menu widget layout to be like in the video" and "put descriptions and customizations in the widgets menu".
+
+- **Default layout** is the board the hype reel filmed (`captures/home.js` HERO in `private/reel`): TODAY 4x7, BODY HEATMAP 4x7, CLOCK 4x2, MACROS 4x3, WEIGHT 4x3, EVERY & ANYTIME 4x5, RECORDS 4x5. MOMENTUM, 4x4 in the reel, was removed on 2026-09-30, so the bottom right of a fresh board is empty. It reaches only a device whose `lifeos.layout` was never saved, or Reset to the default layout.
+- **ADD A WIDGET**: every row carries one line saying what the widget shows (`ABOUT`, keyed by widget id) and whether it is on the board. A widget with choices of its own has a gear beside its row; the gear opens its page (what it shows, its choices as 44px chips, ADD TO THE BOARD), and the choices write a draft copy, so nothing on the board changes until ADD. Pressing the row itself still adds at once, so setting up is never a step in front of adding.
+- **Choices are `widgetChoices`**: the range (`days`) and any pick list (`sub`) in the widget's `menu`, the same ones its card menu carries. A menu item that opens a sheet (WEIGHT's cut plan) stays on the card: a sheet opened from this one walks history off the page. Seven widgets have a gear: BODY HEATMAP, WEIGHT, UPCOMING, MEASURE, RECORDS, INTERVALS, WORLD CLOCK.
+- The old lede said the layout lives on this device only; it has been a synced setting since 2026-09-17.
+
+Watched in headless Chromium at 1920x1000 and 390x844 by clicking: 46 rows, none without a line; BODY HEATMAP's gear, 30 days, ADD put a 30-day copy on the board; WORLD CLOCK's page lists its cities; All widgets goes back. Not seen on his screens.
