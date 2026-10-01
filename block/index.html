@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.19, 2026-09-25">
+<meta name="mb-version" content="1.0.20, 2026-10-01">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -5996,16 +5996,20 @@ IO.register({ app: 'block', name: 'BLOCK', types: ['lane', 'item', 'routine', 'r
    is taken the first moment you are not: twenty seconds with no click and no
    key, nothing open, nothing focused.
 
-   Working means any of these, and the clock is the last of them on purpose —
-   a menu left open or a cursor left in a text box is someone mid-thought, and
-   no amount of sitting still makes it a good moment to redraw. */
-const QUIET_MS = 20000;
-let lastTouch = 0;
+   ── and back to normal, 2026-10-01 ──
+
+   Tom: "Return Block to normal sync behavior since we have live sync even if
+   its a bit buggy now." The twenty seconds of stillness was built for the
+   sheet, which arrived every forty five seconds whether anything had changed
+   or not. LIVE SYNC sends a row only when one changed, so the board now takes
+   a change from another device about a second after it lands, like every
+   other app. What still holds a repaint is being in the middle of something:
+   a drag, a menu or popover open, a cursor in a box, an edit not yet saved.
+   Those are a half-made change of yours, and a repaint would throw it away.
+   The moment the reason passes, the board catches up. */
+const SETTLE_MS = 600;     /* forty rows landing together ask for one repaint */
+const RETRY_MS = 1500;     /* still mid-action: look again this soon */
 let quietT = null;
-/* Any press or key anywhere counts, taken in the capture phase so it is seen
-   whatever the target does with the event afterwards. */
-['pointerdown', 'keydown', 'wheel'].forEach(ev =>
-  document.addEventListener(ev, () => { lastTouch = Date.now(); }, true));
 
 /** Why now is a bad moment to redraw, or null when it is a fine one. */
 function boardBusy() {
@@ -6017,14 +6021,13 @@ function boardBusy() {
   if (document.querySelector('#veil.on, .ctxmenu, .pop, .mb-menu, .mb-sheet')) return 'open';
   const a = document.activeElement;
   if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return 'typing';
-  if (Date.now() - lastTouch < QUIET_MS) return 'working';
   return null;
 }
 
-/** Turned away for now. Ask again once the reason has had time to pass.
+/** Take what arrived once it has settled, or once you are not mid-action.
     Re-arms itself if you are still busy when it fires, so an update can never
     be dropped for good — it only ever waits. */
-function adoptSoon() {
+function adoptSoon(wait) {
   pendingAdopt = true;
   clearTimeout(quietT);
   quietT = setTimeout(() => {
@@ -6032,12 +6035,12 @@ function adoptSoon() {
     if (!pendingAdopt) return;
     pendingAdopt = false;
     adoptRows();
-  }, QUIET_MS + 500);
+  }, typeof wait === 'number' ? wait : SETTLE_MS);
 }
 
 function adoptRows() {
   const why = boardBusy();
-  if (why) { adoptSoon(); return false; }
+  if (why) { adoptSoon(RETRY_MS); return false; }
   clearTimeout(quietT); quietT = null;
   const fresh = blockState();
   if (!fresh) return false;
@@ -6135,7 +6138,7 @@ Rec.ready(adoptRows);
    So it goes through `adoptSoon` rather than straight to `adoptRows`: every
    arriving row asks for the quiet moment and resets the wait, so a sync that
    brings down forty rows asks once. */
-Rec.on(adoptSoon);
+Rec.on(() => adoptSoon());
 
 /* ══════════════════════ LifeOS bridge ══════════════════════
    BLOCK owns the schedule. LifeOS owns what actually got done. Three wires:
