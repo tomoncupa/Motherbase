@@ -10,7 +10,7 @@
 
    CHANGE THE NAME BELOW WITH EVERY RELEASE. The version in index.html's
    mb-version tag is the one to copy. Old copies are cleared when it changes. */
-const CACHE = 'calcount-1.0.2';
+const CACHE = 'calcount-1.0.3';
 const FILES = ['./', './index.html', './foods.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', event => {
