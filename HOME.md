@@ -88,3 +88,16 @@ Watched in headless Chromium at 1920x1000 and 390x844 by clicking: 46 rows, none
 ## 2026-10-01, HOME 1.0.41: BODY HEATMAP as a buff Vitruvian man
 
 Tom: "Make the bodyheatmap widget more aesthetic, like a buff vitruvian man". The flat-panel figure is now Leonardo's: front and back, each in its circle and square, arms out, with the second pose (arms raised, legs apart) as a faint line behind. Muscles are curved shapes that tile a muscular body (`BODY_SKIN`, `BODY_FRONT`, `BODY_BACK`, left half only, mirrored), with faint fibre lines over them (`BODY_LINES_*`). Same counting, same muscles, same list. The two figures stack in a tall card and sit side by side in a wide one (a container query on `.bh-fig`, desk only; a phone card stacks at its own height). Drawn unseen by hand coordinates the first time, so each round was rendered and looked at before the next. Watched in headless Chromium on the demo at 1920x1000 (figures 319x260 each, stacked) and 390x844 (177x177), a 320x200 box went side by side; review 142/142 in Chromium, WebKit 141/142 with only the known foundation-frame failure. Not seen on his screens.
+
+## 2026-10-01, HOME 1.0.42: redundant widgets removed
+
+Tom: "remove all the redundant widgets, make sure we don't lose any actual function." Every widget was read against every other. Removed, each fully shown by another:
+
+- **PROTEIN and CALORIES**: MACROS shows both against their targets. What they had that MACROS did not, how much is LEFT, MACROS now says on every line ("180g left", or "30g over"). Their percentage ring went with them; the bar shows the same share.
+- **ARC**: every row it listed is an open todo TODO lists with the same filter, tagged ARC, tickable there.
+
+`RETIRED` maps a saved board's old card to the one that covers it, in the same spot (PROTEIN and CALORIES to MACROS, ARC to TODO), or drops it when that one is on the board already. In memory only; the board is saved when he next changes it, never on open (the live sync trap).
+
+Kept, because each does something nothing else on the board does: TODO (QUESTS todos with No date, which TODAY never shows, plus each task's source and age), APPS (the only way to the desk apps from a phone, whose bar carries phone apps only), IDEAS and EVENTS (across days, not only today), DAY LOG (every tick, including ones no block or bullet made), SLEEP (nights on target), BILLS (bills not yet due), CLOCK and WORLD CLOCK, TIMER and INTERVALS, THE YEAR and CALENDAR.
+
+Watched in headless Chromium: a saved board of PROTEIN, CALORIES, ARC and TODAY opened as MACROS, TODO and TODAY with the saved row untouched; MACROS read "0g / 180g · 180g left"; ADD A WIDGET lists 43 and none of the three.
