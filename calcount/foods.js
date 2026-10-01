@@ -421,8 +421,108 @@
   f('kfc-bowl', 'Famous Bowl', KFC, 'fastfood', [300, null, 20, 60, 28], one('1 bowl'), 'est', ['famous bowl', 'kfc bowl']);
   mix('kfc-c1', 'Chicken with Rice (1 pc)', KFC, 'fastfood', [['kfc-chicken', 1], ['rice', 1], ['kfc-gravy', 1]], one('1 meal'), ['kfc meal', 'kfc chicken rice']);
   const SH = 'Shakey’s';
-  f('sh-pizza', 'Pizza (1 slice)', SH, 'fastfood', [100, null, 11, 28, 11], [['1 slice', 1], ['2 slices', 2]], 'est', ['shakeys', 'managers choice', 'pizza']);
-  f('sh-mojos', 'Mojos', SH, 'fastfood', [200, null, 6, 50, 22], [['Regular', 1], ['Large', 1.6]], 'est', ['mojos', 'mojo potatoes', 'shakeys potatoes']);
+  /* ── Shakey’s, as Shakey’s Philippines prints it ─────────────────────
+     Copied from Shakey’s own nutrition tables, supplied by Tom on
+     2026-10-01. A row is [size, calories, protein, fat, carbs, sodium], in
+     the table’s own column order, so it can be checked against the table by
+     eye. The first size is the food; every other size is that one scaled to
+     Shakey’s calories for it, so calories are exact at every size and the
+     macros are close. Shakey’s prints grams only for Mojos.
+     `odd` marks a food whose printed protein, carbs and fat do not add up to
+     its printed calories: Shakey’s own error, usually the fat. The calories
+     are kept, because they are the one number the app shows, and the food
+     says so on its detail. Beer lists no alcohol, so the calories its carbs
+     do not explain are counted as alcohol.                                */
+  function sk(id, name, cat, rows, aka, opts) {
+    opts = opts || {};
+    const [, kcal, p, fat, c, na] = rows[0];
+    // Coke Zero has no calories, so its sizes scale by sodium.
+    const by = r => kcal ? r[1] / kcal : r[5] / na;
+    const o = { na, alc: opts.alc };
+    if (opts.odd) o.note = 'Shakey’s printed protein, carbs and fat add up to about ' + kcalOf(p, c, fat) + ' calories, not ' + kcal + '. The calories here are Shakey’s own.';
+    if (opts.alc) o.note = 'Shakey’s lists no alcohol, so the calories its carbs do not explain are counted as alcohol.';
+    const food = f(id, name, SH, cat, [opts.g || 0, kcal, p, c, fat], rows.map(r => [r[0], by(r)]), 'pub', ['shakeys'].concat(aka), o);
+    if (opts.odd) food.odd = true;
+    return food;
+  }
+  sk('sh-pz-cheese-thin', 'Classic Cheese Pizza, Thin Crust', 'fastfood', [['Regular, 1 slice', 133, 5, 7, 10, 214], ['Large, 1 slice', 183, 7, 10, 14, 295], ['Party, 1 slice', 200, 7, 11, 16, 322], ['Regular, whole', 796, 29, 43, 63, 1283], ['Large, whole', 1462, 55, 83, 113, 2361], ['Party, whole', 2398, 88, 128, 189, 3865]], ['cheese pizza', 'classic', 'pizza', 'thin crust', 'thin']);
+  sk('sh-pz-cheese-hand', 'Classic Cheese Pizza, Hand-tossed', 'fastfood', [['Regular, 1 slice', 171, 5, 9, 20, 405], ['Large, 1 slice', 224, 7, 13, 26, 532], ['Party, 1 slice', 259, 8, 15, 30, 614], ['Regular, whole', 1025, 33, 54, 119, 2433], ['Large, whole', 1796, 58, 101, 208, 4254], ['Party, whole', 2595, 84, 149, 299, 6143]], ['cheese pizza', 'classic', 'pizza', 'hand tossed', 'handtossed', 'thick crust']);
+  sk('sh-pz-cheese-am', 'Classic Cheese Pizza Americana', 'fastfood', [['1 slice', 644, 35, 43, 75, 1566], ['Whole', 3863, 207, 261, 452, 9397]], ['cheese pizza', 'classic', 'pizza', 'americana', 'pizza americana'], { odd: 1 });
+  sk('sh-pz-hawaiian-thin', 'Hawaiian Delight Pizza, Thin Crust', 'fastfood', [['Regular, 1 slice', 147, 5, 8, 12, 258], ['Large, 1 slice', 200, 8, 11, 16, 348], ['Party, 1 slice', 215, 8, 11, 18, 375], ['Regular, whole', 880, 33, 45, 74, 1548], ['Large, whole', 1598, 60, 87, 131, 2786], ['Party, whole', 2583, 96, 134, 211, 4502]], ['hawaiian', 'pineapple pizza', 'ham', 'pizza', 'thin crust', 'thin']);
+  sk('sh-pz-hawaiian-hand', 'Hawaiian Delight Pizza, Hand-tossed', 'fastfood', [['Regular, 1 slice', 185, 6, 9, 22, 450], ['Large, 1 slice', 241, 8, 13, 28, 585], ['Party, 1 slice', 278, 9, 15, 32, 678], ['Regular, whole', 1109, 36, 57, 131, 2698], ['Large, whole', 1931, 64, 105, 226, 4679], ['Party, whole', 2780, 92, 155, 322, 6780]], ['hawaiian', 'pineapple pizza', 'ham', 'pizza', 'hand tossed', 'handtossed', 'thick crust']);
+  sk('sh-pz-hawaiian-am', 'Hawaiian Delight Pizza Americana', 'fastfood', [['1 slice', 728, 38, 46, 86, 1849], ['Whole', 4369, 230, 277, 515, 11096]], ['hawaiian', 'pineapple pizza', 'ham', 'pizza', 'americana', 'pizza americana'], { odd: 1 });
+  sk('sh-pz-pepperoni-thin', 'Pepperoni Pizza, Thin Crust', 'fastfood', [['Regular, 1 slice', 148, 6, 8, 11, 281], ['Large, 1 slice', 203, 8, 12, 14, 381], ['Party, 1 slice', 222, 8, 12, 16, 415], ['Regular, whole', 891, 34, 50, 64, 1689], ['Large, whole', 1623, 63, 96, 116, 3051], ['Party, whole', 2659, 102, 149, 193, 4981]], ['peperoni', 'pepperoni pizza', 'pizza', 'thin crust', 'thin']);
+  sk('sh-pz-pepperoni-hand', 'Pepperoni Pizza, Hand-tossed', 'fastfood', [['Regular, 1 slice', 187, 6, 10, 20, 473], ['Large, 1 slice', 245, 8, 14, 26, 618], ['Party, 1 slice', 286, 10, 17, 30, 726], ['Regular, whole', 1119, 38, 62, 121, 2839], ['Large, whole', 1957, 67, 114, 210, 4944], ['Party, whole', 2855, 98, 169, 303, 7259]], ['peperoni', 'pepperoni pizza', 'pizza', 'hand tossed', 'handtossed', 'thick crust']);
+  sk('sh-pz-pepperoni-am', 'Pepperoni Pizza Americana', 'fastfood', [['1 slice', 698, 37, 48, 76, 1800], ['Whole', 4190, 225, 287, 457, 10798]], ['peperoni', 'pepperoni pizza', 'pizza', 'americana', 'pizza americana'], { odd: 1 });
+  sk('sh-pz-garlic-thin', 'Garlic N’ Cheese Pizza, Thin Crust', 'fastfood', [['Regular, 1 slice', 135, 4, 3, 11, 199], ['Large, 1 slice', 186, 7, 10, 15, 295], ['Party, 1 slice', 203, 8, 11, 16, 322], ['Regular, whole', 809, 27, 18, 65, 1196], ['Large, whole', 1488, 56, 83, 118, 2363], ['Party, whole', 2437, 90, 128, 196, 3868]], ['garlic and cheese', 'garlic n cheese', 'garlic cheese pizza', 'pizza', 'thin crust', 'thin'], { odd: 1 });
+  sk('sh-pz-garlic-hand', 'Garlic N’ Cheese Pizza, Hand-tossed', 'fastfood', [['Regular, 1 slice', 173, 6, 9, 20, 406], ['Large, 1 slice', 228, 7, 13, 27, 532], ['Party, 1 slice', 263, 9, 15, 31, 615], ['Regular, whole', 1038, 34, 54, 122, 2434], ['Large, whole', 1821, 59, 101, 212, 4256], ['Party, whole', 2633, 86, 149, 307, 6146]], ['garlic and cheese', 'garlic n cheese', 'garlic cheese pizza', 'pizza', 'hand tossed', 'handtossed', 'thick crust']);
+  sk('sh-pz-beef-thin', 'Beef N’ Onion Pizza, Thin Crust', 'fastfood', [['Regular, 1 slice', 156, 6, 9, 11, 268], ['Large, 1 slice', 215, 8, 13, 16, 370], ['Party, 1 slice', 236, 9, 14, 17, 406], ['Regular, whole', 933, 36, 52, 68, 1608], ['Large, whole', 1717, 67, 100, 124, 2962], ['Party, whole', 2829, 109, 164, 206, 4871]], ['beef and onion', 'beef n onion', 'beef pizza', 'pizza', 'thin crust', 'thin']);
+  sk('sh-pz-beef-hand', 'Beef N’ Onion Pizza, Hand-tossed', 'fastfood', [['Regular, 1 slice', 194, 7, 11, 21, 460], ['Large, 1 slice', 256, 9, 15, 27, 607], ['Party, 1 slice', 303, 11, 18, 32, 715], ['Regular, whole', 1162, 39, 64, 125, 2758], ['Large, whole', 2051, 70, 118, 219, 4855], ['Party, whole', 3025, 105, 185, 317, 7149]], ['beef and onion', 'beef n onion', 'beef pizza', 'pizza', 'hand tossed', 'handtossed', 'thick crust']);
+  sk('sh-pz-beef-am', 'Beef N’ Onion Pizza Americana', 'fastfood', [['1 slice', 757, 40, 51, 80, 1833], ['Whole', 4543, 240, 307, 481, 11000]], ['beef and onion', 'beef n onion', 'beef pizza', 'pizza', 'americana', 'pizza americana'], { odd: 1 });
+  sk('sh-pz-truffle-thin', 'Truffle Four Cheese Pizza, Thin Crust', 'fastfood', [['Regular, 1 slice', 150, 6, 9, 11, 245], ['Large, 1 slice', 203, 7, 12, 15, 328], ['Party, 1 slice', 223, 8, 13, 17, 358], ['Regular, whole', 901, 33, 52, 65, 1469], ['Large, whole', 1621, 60, 97, 119, 2622], ['Party, whole', 2678, 97, 153, 198, 4301]], ['truffle', 'four cheese', '4 cheese', 'truffle pizza', 'pizza', 'thin crust', 'thin']);
+  sk('sh-pz-truffle-hand', 'Truffle Four Cheese Pizza, Hand-tossed', 'fastfood', [['Regular, 1 slice', 187, 6, 11, 20, 434], ['Large, 1 slice', 244, 8, 14, 26, 564], ['Party, 1 slice', 287, 9, 17, 31, 658], ['Regular, whole', 1123, 36, 63, 122, 2606], ['Large, whole', 1955, 63, 115, 211, 4515], ['Party, whole', 2874, 93, 174, 305, 6579]], ['truffle', 'four cheese', '4 cheese', 'truffle pizza', 'pizza', 'hand tossed', 'handtossed', 'thick crust']);
+  sk('sh-pz-truffle-am', 'Truffle Four Cheese Pizza Americana', 'fastfood', [['1 slice', 750, 39, 71, 77, 1732], ['Whole', 4500, 236, 427, 460, 10391]], ['truffle', 'four cheese', '4 cheese', 'truffle pizza', 'pizza', 'americana', 'pizza americana'], { odd: 1 });
+  sk('sh-chicken-mojos', 'Chicken ’n Mojos', 'fastfood', [['Solo pack', 705, 48, 23, 71, 2234], ['Buddy pack', 983, 78, 32, 90, 2761], ['Family pack', 1301, 109, 43, 114, 3337], ['Party pack', 2642, 194, 92, 248, 6536], ['Blowout pack', 3754, 314, 128, 324, 8644]], ['chicken and mojos', 'chicken n mojos', 'chicken mojos', 'fried chicken', 'mojos']);
+  sk('sh-mojos', 'Mojos ’n Dip', 'fastfood', [['1 order (150g)', 555, 8, 36, 51, 777]], ['mojos', 'mojo potatoes', 'mojos n dip', 'mojos and dip', 'potatoes'], { g: 150 });
+  sk('sh-mojos-basket', 'Basket of Mojos', 'fastfood', [['1 basket (450g)', 1490, 22, 90, 150, 2022]], ['mojos', 'mojos basket', 'potatoes'], { g: 450 });
+  sk('sh-mojos-supreme', 'Mojos Supreme', 'fastfood', [['1 order (600g)', 1887, 29, 109, 199, 2509]], ['mojos', 'potatoes'], { g: 600 });
+  sk('sh-skilleti', 'Skilleti', 'fastfood', [['Solo', 733, 31, 15, 108, 1426], ['Platter', 2272, 102, 54, 312, 5263]], ['spaghetti', 'skilletti', 'pasta']);
+  sk('sh-carbonara', 'Carbonara Supreme', 'fastfood', [['Solo', 1067, 29, 59, 95, 1860], ['Platter', 2605, 71, 136, 246, 4461]], ['carbonara', 'pasta']);
+  sk('sh-lasagna', 'Prima Lasagna', 'fastfood', [['Solo', 812, 34, 66, 88, 1511], ['Platter', 3126, 132, 259, 338, 6039]], ['lasagna', 'lasagne', 'pasta'], { odd: 1 });
+  sk('sh-baconcheese', 'Bacon and Cheese Pasta', 'fastfood', [['Solo', 562, 21, 45, 48, 1256], ['Platter', 1775, 69, 155, 159, 3552]], ['bacon cheese pasta', 'pasta'], { odd: 1 });
+  sk('sh-aglio', 'Shrimp Aglio Olio', 'fastfood', [['Solo', 874, 27, 45, 85, 897], ['Platter', 2278, 66, 111, 235, 2155]], ['aglio olio', 'aglio e olio', 'shrimp pasta', 'pasta']);
+  sk('sh-marinara', 'Seafood Marinara', 'fastfood', [['Solo', 958, 45, 39, 97, 1060], ['Platter', 2000, 99, 78, 215, 2464]], ['marinara', 'seafood pasta', 'pasta']);
+  sk('sh-rollups', 'Spinach Rollups', 'fastfood', [['Solo', 409, 16, 49, 50, 551], ['Platter', 1799, 69, 215, 203, 2555]], ['spinach roll ups', 'spinach rolls', 'rollups'], { odd: 1 });
+  sk('sh-bol-sk-haw', 'BOL Skilleti and Hawaiian', 'fastfood', [['1 meal', 734, 33, 16, 104, 2265]], ['bunch of lunch', 'bol', 'lunch']);
+  sk('sh-bol-sk-pep', 'BOL Skilleti and Pepperoni', 'fastfood', [['1 meal', 735, 33, 17, 103, 2288]], ['bunch of lunch', 'bol', 'lunch']);
+  sk('sh-bol-cb-haw', 'BOL Carbonara and Hawaiian', 'fastfood', [['1 meal', 800, 33, 23, 104, 2373]], ['bunch of lunch', 'bol', 'lunch']);
+  sk('sh-bol-cb-pep', 'BOL Carbonara and Pepperoni', 'fastfood', [['1 meal', 802, 33, 24, 103, 2397]], ['bunch of lunch', 'bol', 'lunch']);
+  sk('sh-bol-chicken-rice', '2 pcs Chicken N’ Rice', 'fastfood', [['1 meal', 446, 31, 8, 58, 1698]], ['chicken rice', 'chicken and rice', 'fried chicken', '2pcs chicken']);
+  sk('sh-bol-salad-chicken', 'Salad Chicken N’ Pizza', 'fastfood', [['1 meal', 575, 25, 22, 65, 2117]], ['salad chicken pizza', 'chicken pizza']);
+  sk('sh-bol-super', 'Super BOL', 'fastfood', [['1 meal', 810, 30, 28, 98, 2627]], ['bunch of lunch', 'bol', 'lunch']);
+  sk('sh-truffle-chicken', 'Chicken Thigh Fillet with Truffle Cream Sauce', 'fastfood', [['1 meal', 916, 31, 62, 90, 1478]], ['truffle chicken', 'chicken thigh', 'truffle cream']);
+  sk('sh-parmigiana', 'Chicken Parmigiana', 'fastfood', [['1 meal', 841, 34, 69, 93, 1366]], ['chicken parm', 'parmigiana', 'parmesan chicken'], { odd: 1 });
+  sk('sh-garlic-seafood', 'Garlic Buttered Seafood', 'fastfood', [['1 meal', 500, 22, 35, 83, 845]], ['garlic butter seafood', 'seafood rice'], { odd: 1 });
+  sk('sh-spicy-seafood', 'Spicy Garlic Seafood', 'fastfood', [['1 meal', 500, 22, 35, 83, 845]], ['spicy seafood', 'seafood rice'], { odd: 1 });
+  sk('sh-rice', 'Extra Rice', 'fastfood', [['1 cup', 104, 2, 0, 24, 2]], ['rice', 'kanin', 'extra rice']);
+  sk('sh-wings', 'Buffalo Wings', 'fastfood', [['Solo', 810, 43, 47, 23, 2200], ['Buddy', 1443, 84, 79, 39, 3926], ['Family', 2315, 129, 128, 71, 6244]], ['wings', 'chicken wings', 'buffalo'], { odd: 1 });
+  sk('sh-mozz', 'Mozzarella Cheese Sticks', 'fastfood', [['8 pcs', 509, 20, 38, 21, 1718]], ['mozzarella sticks', 'cheese sticks', 'mozza']);
+  sk('sh-calamari', 'Calamari Crunch', 'fastfood', [['To share', 891, 27, 56, 61, 1767]], ['calamari', 'squid rings', 'pusit']);
+  sk('sh-captain', 'Captain’s Choice', 'fastfood', [['To share', 1423, 63, 82, 103, 2027]], ['captains choice', 'fish and chips', 'platter']);
+  sk('sh-wings-rings', 'Wings N’ Rings', 'fastfood', [['To share', 1182, 59, 70, 75, 1617]], ['wings and rings', 'wings n rings', 'onion rings', 'wings']);
+  sk('sh-tender', 'Tender Crrrunch', 'fastfood', [['Solo', 403, 32, 19, 27, 874], ['Basket', 671, 53, 32, 45, 1455]], ['tender crunch', 'chicken tenders', 'tenders', 'chicken strips']);
+  sk('sh-gb-loaf', 'Garlic Bread Loaf', 'fastfood', [['1 pc', 73, 2, 1, 10, 122]], ['garlic bread'], { odd: 1 });
+  sk('sh-gb-stick', 'Garlic Bread Stick', 'fastfood', [['1 pc', 102, 2, 1, 15, 174]], ['garlic bread', 'breadstick'], { odd: 1 });
+  sk('sh-gb-quarter', 'Garlic Bread 1/4', 'fastfood', [['1 pc', 102, 2, 1, 15, 174]], ['garlic bread', 'quarter'], { odd: 1 });
+  sk('sh-gb-cheesy', 'Cheesy Garlic Bread', 'fastfood', [['1 pc', 245, 13, 84, 10, 45]], ['garlic bread', 'cheese garlic bread'], { odd: 1 });
+  sk('sh-soup-corn', 'Chicken n’ Corn Soup', 'fastfood', [['Solo side', 80, 6, 2, 7, 529], ['Solo', 136, 11, 3, 13, 899]], ['corn soup', 'chicken corn soup', 'soup']);
+  sk('sh-soup-mushroom', 'Creamy Mushroom Soup', 'fastfood', [['Solo side', 194, 3, 13, 19, 640], ['Solo', 309, 6, 27, 29, 1005]], ['mushroom soup', 'soup']);
+  sk('sh-soup-tomato', 'Roasted Tomato Soup', 'fastfood', [['Solo side', 79, 6, 13, 15, 423], ['Solo', 131, 10, 63, 25, 704]], ['tomato soup', 'soup'], { odd: 1 });
+  sk('sh-salad-side', 'Side Salad', 'fastfood', [['Solo side', 102, 1, 9, 4, 207]], ['salad']);
+  sk('sh-salad-caesar', 'Caesar Salad', 'fastfood', [['Solo side', 252, 6, 22, 8, 610], ['Full solo', 352, 9, 30, 11, 851], ['Family', 1036, 26, 90, 31, 2535]], ['caesar', 'salad']);
+  sk('sh-salad-tuna', 'Tuna Caesar Salad', 'fastfood', [['Solo side', 232, 5, 21, 7, 509], ['Full solo', 310, 7, 28, 9, 669], ['Family', 926, 19, 83, 27, 2024]], ['tuna salad', 'caesar', 'salad']);
+  sk('sh-salad-blt', 'Zesty BLT Salad', 'fastfood', [['Solo side', 194, 5, 13, 14, 332], ['Full solo', 261, 7, 17, 19, 438], ['Family', 760, 20, 52, 53, 1297]], ['blt', 'salad']);
+  sk('sh-salad-greek', 'Greek Salad', 'fastfood', [['Solo side', 166, 3, 13, 10, 178], ['Full solo', 228, 6, 17, 13, 340], ['Family', 602, 13, 45, 34, 758]], ['greek', 'salad']);
+  sk('sh-sundae-choc', 'Chocolate Sundae', 'fastfood', [['1 glass', 232, 3, 19, 29, 75]], ['sundae', 'ice cream', 'dessert'], { odd: 1 });
+  sk('sh-sundae-straw', 'Strawberry Sundae', 'fastfood', [['1 glass', 230, 3, 18, 29, 64]], ['sundae', 'ice cream', 'dessert'], { odd: 1 });
+  sk('sh-banana-split', 'Banana Split', 'fastfood', [['1 serving', 736, 12, 58, 91, 147]], ['ice cream', 'dessert'], { odd: 1 });
+  sk('sh-banana-peach', 'Banana Peach Surprise', 'fastfood', [['1 serving', 935, 14, 90, 114, 233]], ['ice cream', 'dessert'], { odd: 1 });
+  sk('sh-shake-vanilla', 'Vanilla Milkshake', 'drinks', [['1 glass', 621, 13, 32, 72, 259]], ['milkshake', 'shake']);
+  sk('sh-shake-straw', 'Strawberry Milkshake', 'drinks', [['1 glass', 564, 12, 31, 58, 185]], ['milkshake', 'shake']);
+  sk('sh-shake-choc', 'Chocolate Milkshake', 'drinks', [['1 glass', 645, 14, 91, 83, 255]], ['milkshake', 'shake'], { odd: 1 });
+  sk('sh-smores', '6" Choc’O S’mores Pizza', 'fastfood', [['1 pizza', 753, 16, 25, 115, 596]], ['smores', 'chocolate pizza', 'dessert pizza', 'dessert']);
+  sk('sh-brownies', 'Seasalt Brownies', 'fastfood', [['1 serving', 449, 6, 22, 61, 458]], ['brownie', 'brownies', 'sea salt brownies', 'dessert']);
+  sk('sh-float', 'Rootbeer Float', 'drinks', [['1 glass', 184, 2, 7, 29, 59]], ['root beer float', 'float']);
+  sk('sh-iced-tea', 'Houseblend Iced Tea', 'drinks', [['1 glass', 53, 0, 0, 13, 13], ['1 bottle', 180, 0, 0, 43, 45], ['1 pitcher', 240, 0, 0, 58, 60]], ['iced tea', 'house blend', 'tea']);
+  sk('sh-lemonade', 'Lemonade', 'drinks', [['1 glass', 20, 0, 0, 5, 74], ['1 bottle', 84, 0, 0, 20, 313], ['1 pitcher', 109, 0, 0, 26, 403]], ['lemonade', 'lemon']);
+  sk('sh-coke', 'Coca-Cola', 'drinks', [['1 glass', 101, 0, 0, 25, 12], ['1 can', 135, 0, 0, 34, 16], ['1 pitcher', 586, 0, 0, 147, 70]], ['coca cola', 'coke', 'softdrink', 'soda']);
+  sk('sh-coke-zero', 'Coca-Cola Zero', 'drinks', [['1 glass', 0, 0, 0, 0, 15], ['1 can', 0, 0, 0, 0, 20], ['1 pitcher', 0, 0, 0, 0, 87]], ['coke zero', 'zero', 'softdrink', 'soda']);
+  sk('sh-sprite', 'Sprite', 'drinks', [['1 glass', 48, 0, 0, 12, 23], ['1 can', 64, 0, 0, 16, 30], ['1 pitcher', 278, 0, 0, 70, 130]], ['sprite', 'softdrink', 'soda']);
+  sk('sh-pineapple', 'Pineapple Juice', 'drinks', [['1 glass', 120, 0, 0, 29, 5]], ['pineapple', 'juice']);
+  sk('sh-coffee', 'Black Coffee with Sugar and Creamer', 'drinks', [['1 cup', 35, 0, 1, 7, 10]], ['coffee', 'kape']);
+  sk('sh-smb-pale', 'San Miguel Pale Pilsen', 'drinks', [['1 can', 132, 0, 0, 10, 7]], ['beer', 'pale pilsen', 'san mig', 'serbesa'], { alc: 13.1 });
+  sk('sh-smb-light', 'San Miguel Light', 'drinks', [['1 can', 99, 0, 0, 3, 7]], ['beer', 'san mig light', 'serbesa'], { alc: 12.4 });
+  sk('sh-smb-draft', 'San Miguel Draft', 'drinks', [['1 glass', 96, 0, 0, 7, 5]], ['beer', 'draft beer', 'san mig', 'serbesa'], { alc: 9.7 });
   f('pc-fries', 'Flavored Fries', 'Potato Corner', 'fastfood', [120, null, 4, 44, 18], [['Regular', 1], ['Large', 1.6], ['Mega', 2.4]], 'est', ['potato corner', 'flavored fries', 'cheese fries', 'bbq fries']);
   f('mx-chicken', 'Fried Chicken (¼ chicken)', 'Max’s', 'fastfood', [180, null, 40, 4, 26], [['¼ chicken', 1], ['½ chicken', 2], ['Whole', 4]], 'est', ['maxs', 'max restaurant', 'max chicken', 'max fried chicken']);
   f('tt-bento', 'Chicken Teriyaki Bento', 'Tokyo Tokyo', 'fastfood', [350, null, 26, 80, 16], one('1 meal'), 'est', ['tokyo tokyo', 'teriyaki', 'bento', 'beef misono']);

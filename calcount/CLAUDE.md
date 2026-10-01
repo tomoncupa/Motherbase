@@ -186,8 +186,17 @@ whose calories and macros are more than 15% apart.
 
 **As of 2026-09-15 most of the database is `est`.** That is the honest state
 before the dish-building month. The `pub-us` Jollibee figures come from
-Jollibee USA's own Nutrition Facts sheet dated 01 July 2026. Nothing in here is
-`pub` yet, because no Philippine chain's figures have been checked.
+Jollibee USA's own Nutrition Facts sheet dated 01 July 2026. Shakey's is the first chain at `pub`: 78 foods copied from Shakey's
+Philippine nutrition tables, which Tom supplied as pictures on 2026-10-01
+(pizza by dough and size, Bunch of Lunch, pasta, Mojos, starters, soups,
+salads, desserts, drinks). One food per item; its first size is the food and
+every other size is scaled to Shakey's calories for that size. 23 are marked
+`odd`: Shakey's own protein, carbs and fat do not add up to its own calories
+(Cheesy Garlic Bread prints 84g of fat on 245 calories). The calories are
+kept, the food's detail says so, and `_test.html` checks each mark is real.
+The pizza table's cholesterol and trans fat columns are swapped; neither is
+stored. The two old Shakey's estimates are gone, and `sh-mojos` is now
+Mojos 'n Dip.
 
 **Never upgrade a `src` without a source.** Changing `est` to `pub` means the
 figure was read from something the chain published, and the commit says where.
@@ -276,7 +285,7 @@ Two consequences, both written up for Tom:
 | Part | State |
 |---|---|
 | `CLAUDE.md` | Written 2026-09-15. |
-| `foods.js` | 257 foods, 18 of them combos, counted from the loaded file 2026-09-15. 19 are Jollibee USA's own published figures, 29 are standard reference values, and 209 are estimates that give their macros so they cannot contradict themselves. Chains: Jollibee, McDonald's, Mang Inasal, Chowking, KFC, Andok's, Greenwich, Shakey's, Max's, Potato Corner, Tokyo Tokyo, 7-Eleven, Lawson, Ministop, S&R. "SM" in Tom's first list was read as SM Supermarket, so it is covered by the packaged goods rather than a brand of its own. Nothing is `pub` yet. |
+| `foods.js` | 257 foods, 18 of them combos, counted from the loaded file 2026-09-15. 19 are Jollibee USA's own published figures, 29 are standard reference values, and 209 are estimates that give their macros so they cannot contradict themselves. Chains: Jollibee, McDonald's, Mang Inasal, Chowking, KFC, Andok's, Greenwich, Shakey's, Max's, Potato Corner, Tokyo Tokyo, 7-Eleven, Lawson, Ministop, S&R. "SM" in Tom's first list was read as SM Supermarket, so it is covered by the packaged goods rather than a brand of its own. 2026-10-01: 333, after Shakey's 78 official foods replaced its 2 estimates. |
 | `index.html` | Built and tested in the browser 2026-09-15 at 375px, light and dark. Setup, Today, Add food with Tagalog search and one-tap add, Eat this again (a meal of two or more foods from an earlier day, re-added in one tap, because Filipino breakfasts and lunches repeat), servings, quick calories, make a food, barcode (the phone's own reader on Android Chrome, typing everywhere else, then Open Food Facts), photo scan with a confirm list, weight and the last 7 days, the goal check, settings, backup and restore, and a backup reminder on Today once there are 7 days of logging worth losing (at most weekly after Not now, and quiet for 14 days after a backup). Checked at double text size too, because many people set their phone's text large: the bottom bar grows to fit, hides its two words (keeping them as the buttons' names) when they cannot fit beside Add food, and the page keeps clear of it by measuring its height. **Not seen on a real phone.** The barcode camera and the photo picker cannot be driven from a desktop browser, so both are reasoned, not watched. |
 | `worker/scan.js` | Written 2026-09-15 and checked in the browser with the network faked: request shape, key handling, the monthly cap, refusals, outages and bad answers. **Never called the real Claude API**, because that spends Tom's money. The first real scan is the real test. |
 | `worker/SETUP.md` | Written 2026-09-15. Tom has not deployed it. |

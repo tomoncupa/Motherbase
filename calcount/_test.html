@@ -71,9 +71,13 @@
 
     // One level under "the calories are right": do a food's calories agree with its own macros?
     const energy = f => 4 * f.per.p + 4 * f.per.c + 9 * f.per.f + 7 * (f.per.alc || 0);
-    const drift = FOODS.filter(f => f.per.kcal >= 20 && Math.abs(f.per.kcal - energy(f)) / f.per.kcal > 0.15);
+    const drift = FOODS.filter(f => !f.odd && f.per.kcal >= 20 && Math.abs(f.per.kcal - energy(f)) / f.per.kcal > 0.15);
     check('no food’s calories are more than 15% away from its protein, carbs and fat', !drift.length,
       drift.map(f => f.id + ' ' + f.per.kcal + ' vs ' + Math.round(energy(f))));
+    // A chain's own table can disagree with itself. Such a food is marked, printed, and really does disagree.
+    const odd = FOODS.filter(f => f.odd), oddBad = odd.filter(f => !['pub', 'pub-us', 'label'].includes(f.src) || !f.note ||
+      Math.abs(f.per.kcal - energy(f)) / f.per.kcal <= 0.15);
+    check('a food marked as printed wrong is from a printed source, says so, and really disagrees (' + odd.length + ')', !oddBad.length, oddBad.map(f => f.id));
 
     const combos = FOODS.filter(f => f.parts);
     const comboBad = combos.filter(f => Math.abs(f.per.kcal - f.parts.reduce((a, [id, m]) => a + FOOD[id].per.kcal * m, 0)) > 1);
@@ -91,7 +95,9 @@
 
     const pubUs = FOODS.filter(f => f.src === 'pub-us');
     check('every US-published figure says so in its note', pubUs.every(f => /US/.test(f.note || '')), pubUs.filter(f => !/US/.test(f.note || '')).map(f => f.id));
-    check('nothing claims to be an official Philippine figure yet', !FOODS.some(f => f.src === 'pub'), FOODS.filter(f => f.src === 'pub').map(f => f.id));
+    // Raise this list only with the chain's own Philippine table in hand. Shakey's: Tom, 2026-10-01.
+    const pub = FOODS.filter(f => f.src === 'pub');
+    check('only Shakey’s claims an official Philippine figure (' + pub.length + ' foods)', pub.every(f => f.brand === 'Shakey’s'), pub.filter(f => f.brand !== 'Shakey’s').map(f => f.id));
 
     /* ── search ───────────────────────────────────────────────────── */
     const top = (q, n, brand) => A.searchFoods(q, brand).slice(0, n).map(f => f.id);
