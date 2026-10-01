@@ -84,3 +84,7 @@ Tom: "set the default main menu widget layout to be like in the video" and "put 
 - The old lede said the layout lives on this device only; it has been a synced setting since 2026-09-17.
 
 Watched in headless Chromium at 1920x1000 and 390x844 by clicking: 46 rows, none without a line; BODY HEATMAP's gear, 30 days, ADD put a 30-day copy on the board; WORLD CLOCK's page lists its cities; All widgets goes back. Not seen on his screens.
+
+## 2026-10-01, HOME 1.0.41: BODY HEATMAP as a buff Vitruvian man
+
+Tom: "Make the bodyheatmap widget more aesthetic, like a buff vitruvian man". The flat-panel figure is now Leonardo's: front and back, each in its circle and square, arms out, with the second pose (arms raised, legs apart) as a faint line behind. Muscles are curved shapes that tile a muscular body (`BODY_SKIN`, `BODY_FRONT`, `BODY_BACK`, left half only, mirrored), with faint fibre lines over them (`BODY_LINES_*`). Same counting, same muscles, same list. The two figures stack in a tall card and sit side by side in a wide one (a container query on `.bh-fig`, desk only; a phone card stacks at its own height). Drawn unseen by hand coordinates the first time, so each round was rendered and looked at before the next. Watched in headless Chromium on the demo at 1920x1000 (figures 319x260 each, stacked) and 390x844 (177x177), a 320x200 box went side by side; review 142/142 in Chromium, WebKit 141/142 with only the known foundation-frame failure. Not seen on his screens.

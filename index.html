@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.40, 2026-10-01">
+<meta name="mb-version" content="1.0.41, 2026-10-01">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -319,6 +319,18 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .w-body > .fits{flex:1 1 auto;min-height:var(--s-9,96px)}
 .w-body > .fits > svg{width:100%;height:100%;display:block}
 @media (hover:hover) and (pointer:fine){ .w-body{overflow:auto} }
+/* BODY HEATMAP's two figures: one above the other in a tall card, side by
+   side in a wide one. A phone card is as tall as its contents, so there the
+   figures stack at their own height and nothing is measured. */
+.bh-fig{display:flex;align-items:center;justify-content:center}
+.bh-pair{display:flex;flex-direction:column;gap:var(--s-1);width:100%}
+.bh-pair svg{display:block;width:100%;height:auto}
+@media (min-width:821px){
+  .bh-fig{container-type:size}
+  .bh-pair{height:100%}
+  .bh-pair svg{flex:1 1 0;min-width:0;min-height:0;height:100%}
+  @container (orientation: landscape){ .bh-pair{flex-direction:row} }
+}
 /* Resize is a mouse affordance and nothing else — a phone card is as wide as
    the screen and as tall as its contents, so there is nothing to resize. */
 .w-size{display:none}
@@ -2216,8 +2228,8 @@ const WIDGETS = {
       }
       const wrap = el('div');
       wrap.style.cssText = 'display:flex;gap:var(--gap);height:100%;min-height:0;align-items:stretch';
-      const fig = el('div');
-      fig.style.cssText = 'flex:1 1 55%;min-width:0;display:flex;align-items:center;justify-content:center';
+      const fig = el('div', 'bh-fig');
+      fig.style.cssText = 'flex:1 1 55%;min-width:0';
       fig.innerHTML = bodySvg(heat.v);
       wrap.appendChild(fig);
       const side = el('div');
@@ -3931,10 +3943,13 @@ function move(i, d) {
 }
 
 /* ══════════════ the body heatmap's figure ══════════════
-   Front and back, drawn from flat panels so it sits with Block's cut
-   corners rather than an anatomy chart. Each panel is a muscle; the head,
-   hands, knees and feet are the figure and never light. Shapes are the
-   LEFT half; the right is mirrored, so the figure stays symmetrical. */
+   Tom, 2026-10-01: "like a buff vitruvian man". Leonardo's figure, front and
+   back, each in its circle and square, with his second pose (arms raised,
+   legs apart) as a faint line behind. Every muscle is its own shape and the
+   shapes tile the body, so a lit one reads as part of a figure rather than a
+   patch on one; the head, neck, hands, knees, shins and feet are the figure
+   and never light. Shapes are the LEFT half of a 200 x 200 panel; the right
+   is the same drawing mirrored, so the figure stays symmetrical. */
 const BODY_NAMES = { chest: 'CHEST', delts: 'SHOULDERS', traps: 'TRAPS', lats: 'LATS', lowback: 'LOWER BACK',
   biceps: 'BICEPS', triceps: 'TRICEPS', forearms: 'FOREARMS', core: 'CORE',
   glutes: 'GLUTES', quads: 'QUADS', hams: 'HAMSTRINGS', calves: 'CALVES' };
@@ -3975,45 +3990,109 @@ function bodyHeat(from, to) {
   });
   return { v: v, off: Object.keys(offN).map(k => ({ name: k, n: offN[k] })).sort((a, b) => b.n - a.n) };
 }
-const BODY_FIG = { head: '43,3 57,3 60,11 57,21 43,21 40,11', neck: '46,21 54,21 55,27 45,27',
-  hand: '23,88 30,88 29,96 22,96', knee: '39,131 48,131 47,134 40,134', foot: '41,171 46,171 47,178 39,178' };
+const BODY_SKIN = 'M100,35.4 C95,35.4 92.4,39.6 92.4,45 C92.4,49.6 93.6,52.6 95.4,54.6 L94.6,55.6 ' +
+  'C92.6,57.4 89,59.8 84.6,61 C82.6,61.6 80.8,61.8 79,61.9 C73,62.2 67,62.6 63.4,63.6 L52.4,64.2 ' +
+  'C49,62.8 45,62.6 41,63.6 C38,64.6 35.4,65.6 33.4,66.4 C30,66.4 26,66 22.6,66.6 C20.6,67 19.8,68.6 20.2,70 ' +
+  'C20.6,71.6 22,72.2 24,72.2 C27,72.6 30.4,73 33.4,73.2 C36.6,73.6 40,74.4 43.4,75.6 C46,76.4 48.6,76.4 50.8,75.6 ' +
+  'C52.4,75.8 53.8,75.8 55,75.8 C60,76.8 66,77.6 72,77.6 C75.6,77.6 78.4,77.8 80.6,78.8 ' +
+  'C79.2,80.6 78,82.4 77.8,84.4 C78.2,87.4 79.2,90.4 80.6,93 C82.4,96 84,99 84.6,102.4 ' +
+  'C84.8,106 84.4,110 83.4,113.4 C81.6,117 80.2,121 79.8,125 C79.4,132 79.8,140 81.6,146.4 ' +
+  'C82.6,150 83.8,153 84.4,156 C82.2,160 80.8,164.6 81,169 C81.2,173 82.6,176.6 84.4,179.6 ' +
+  'C85.2,182 85.6,184.4 85.6,186.4 C84.4,189 82.6,192 82,194.4 C81.8,195.6 82.6,196.2 84,196.2 L92.4,196.2 ' +
+  'C93,194.6 93,191 92.4,187.8 C92.6,184 93.8,180.6 95,176.6 C96.2,172.6 96.4,167 95.6,163 ' +
+  'C95,160.4 94.4,158.4 94.2,156.4 C94.4,152 95.2,146 96,140.4 C96.8,134 98,127 99.2,121.4 C99.5,120 99.8,119.2 100,119';
+
+const ARM_UPPER = 'M63.2,63.7 L52.4,64.2 C50.6,66.6 50,70 50.6,73 C51.6,74.8 53,75.6 55,75.8 ' +
+  'C60,76.8 66,77.6 72,77.6 C75,77.6 77.8,77.4 80.2,77 L80.6,74.4 C77.6,74.8 74.4,74.6 71,73.8 ' +
+  'C67.4,72.6 63.4,71.6 60,70.4 C60.4,68.4 61.6,65.8 63.2,63.7 Z';
+const ARM_FORE = 'M52.2,64.2 C49,62.8 45,62.6 41,63.6 C38,64.6 35.4,65.6 33.4,66.4 L33.4,73.2 ' +
+  'C36.6,73.6 40,74.4 43.4,75.6 C46,76.4 48.6,76.4 50.8,75.6 C50,72 50,68 52.2,64.2 Z';
+const CALF_OUT = 'M85,157.6 C82.6,160.6 81.2,164.6 81.4,169 C81.6,173 82.6,176.2 84,178.6 ' +
+  'C85.6,174.6 86.4,170 86.6,166 C86.8,162.6 86.2,159.8 85,157.6 Z';
+
 const BODY_FRONT = [
-  ['traps', '45,26 37,31 45,31'], ['delts', '36,31 28,35 26,47 33,45 37,35'],
-  ['chest', '38,32 49,32 49,47 37,48 34,39'], ['biceps', '26,49 33,47 32,64 25,64'],
-  ['forearms', '25,66 32,66 30,86 23,86'], ['core', '41,50 49,50 49,82 43,82'],
-  ['core', '36,50 40,50 42,82 37,75'], ['quads', '38,92 49,92 48,129 39,129 36,110'],
-  ['calves', '39,135 47,135 46,169 41,169'],
+  ['traps', 'M93.6,56.4 C91,58.4 88,59.8 84.6,61 C82.6,61.6 80.8,61.8 79.4,62 C81.6,62.8 83.6,63.4 85.6,63.6 C88.4,62.6 91.2,61.2 93.6,60 Z'],
+  ['delts', 'M85.4,63.6 C83.4,62.6 81.2,62 79,61.9 C73,62.2 67,62.6 63.4,63.6 C61.6,66 60.4,68.6 60,70.4 ' +
+    'C63.4,71.6 67.4,72.6 71,73.8 C74.4,74.6 77.8,74.8 80.8,74.4 C81.8,70.4 83.4,66.4 85.4,63.6 Z'],
+  ['chest', 'M99.4,63.2 L85.8,63.8 C83.6,66.6 82,70.6 81.2,74.6 C80.8,76.4 80.8,77.6 81,78.6 ' +
+    'C84.4,82.4 89.6,84.8 94.6,85 C96.6,85 98.4,84.6 99.4,84 Z'],
+  ['biceps', ARM_UPPER],
+  ['forearms', ARM_FORE],
+  ['lats', 'M80.8,79.2 C82.6,81 84.6,82.6 86.6,83.8 L85.4,89.8 C84,91.6 82.6,93.2 81.2,94.6 ' +
+    'C79.8,91.4 78.4,87.6 78,84.6 C78.6,82.4 79.6,80.6 80.8,79.2 Z'],
+  ['core', 'M87.2,84.4 C89,85 90.6,85.4 92,85.4 L92,107 C90,110 87.6,112.4 84.6,113.6 ' +
+    'C84.9,109.6 84.9,105.6 84.4,102 C83.4,98.8 82.4,96.6 81.6,95.2 C83,93.6 84.4,92 85.8,90 Z'],
+  ['core', 'M92.6,85.8 C95,86.2 97.4,86 99.4,85.4 L99.4,92.4 L92.6,92.4 Z'],
+  ['core', 'M92.6,93.6 L99.4,93.6 L99.4,100.2 L92.6,100.2 Z'],
+  ['core', 'M92.6,101.4 L99.4,101.4 L99.4,108 L92.6,108 Z'],
+  ['core', 'M92.6,109.2 L99.4,109.2 L99.4,118.4 C96.4,116.6 93.8,113.4 92.6,109.2 Z'],
+  ['quads', 'M90,117.4 C93.4,123 94.6,131 94,139 C93.4,145 92,150 90.4,154 C88.6,150 87,145 86.4,139 C85.8,131 87,123 90,117.4 Z'],
+  ['quads', 'M84,114.6 C86.2,116 88,117 89.4,117.6 C86.4,123.6 85.2,131 85.8,139 C86.4,145.6 88.2,150.6 89.8,154.6 ' +
+    'L86.6,156.4 C85,154 83.2,150 82,146 C80.4,139 79.8,131 80.2,124 C80.8,119.8 82.2,116.6 84,114.6 Z'],
+  ['quads', 'M95.6,138.4 C96.4,144 96,150 94.8,154.8 C93.2,156.4 91.6,156 90.8,154.6 C92.6,149.6 94.2,144 95.6,138.4 Z'],
+  ['calves', 'M93.8,158.4 C95.6,161.6 96,167 95.2,172 C94.6,175.6 93.8,177.8 92.8,179.4 ' +
+    'C92.2,175 92,169 92.2,165 C92.4,162 93,160 93.8,158.4 Z'],
+  ['calves', CALF_OUT],
 ];
 const BODY_BACK = [
-  ['traps', '44,23 50,23 50,46 38,32'], ['delts', '36,31 28,35 26,47 33,45 37,35'],
-  ['lats', '38,35 49,48 48,69 39,62 35,45'], ['lowback', '42,70 49,70 49,82 42,82'],
-  ['triceps', '26,49 33,47 32,64 25,64'], ['forearms', '25,66 32,66 30,86 23,86'],
-  ['glutes', '38,84 49,84 49,100 37,98'], ['hams', '38,101 49,102 48,129 39,129'],
-  ['calves', '38,135 48,135 47,157 41,164 37,149'],
+  ['traps', 'M99.4,50.6 C98,53.6 96,56.4 93.6,58 C89,60.4 84,61.4 79.4,62 C83,64.6 87.6,67.6 91,71 ' +
+    'C94.6,77 97.6,84 99.4,92 Z'],
+  ['delts', 'M84.2,63.4 C82.4,62.4 80.8,62 79,61.9 C73,62.2 67,62.6 63.4,63.6 C61.6,66 60.4,68.6 60,70.4 ' +
+    'C63.4,71.6 67.4,72.6 71,73.8 C74.4,74.6 77.4,74.4 79.8,73.4 C80.6,69.6 82.2,65.8 84.2,63.4 Z'],
+  ['lats', 'M84.8,63.8 C87.6,66.2 89.8,68.8 91.2,71.4 C92.4,73.6 93.2,76 93.4,78.2 C89.8,79.2 85.6,79 81.6,77.8 ' +
+    'C80.6,76.8 80.2,75.4 80.4,73.8 C81.2,70 82.6,66.6 84.8,63.8 Z'],
+  ['lats', 'M81,79 C85,80.2 89.6,80.4 93.8,79.4 C95.8,85 97.4,91 98.6,96 C96.6,100.4 93.6,103.6 90.2,105.2 ' +
+    'C88,105.4 86,104.4 84.8,102.4 C83.6,98.4 82,95 80.4,92.6 C78.8,89.6 78,86.6 78,84.4 C78.6,82.4 79.6,80.6 81,79 Z'],
+  ['lowback', 'M99.4,93.6 C97.6,96.6 95.8,100.2 94.6,104.4 C93.8,108 94,111.4 95.2,114.2 C96.8,114.8 98.2,115 99.4,115 Z'],
+  ['core', 'M84.8,103.4 C86.2,105.4 88.2,106.4 90.4,106.2 C92,105.8 93.2,105.4 94,105.6 C93.6,107.4 93.4,109.4 93.2,111 ' +
+    'C90,110.8 87,111.6 84.4,113 C84.8,109.8 84.9,106.6 84.8,103.4 Z'],
+  ['triceps', ARM_UPPER],
+  ['forearms', ARM_FORE],
+  ['hams', 'M83.2,124.6 C85,126.6 87.4,128.2 90.2,129 C89.8,136 89.6,143 89.6,149.6 C89.6,151.8 89.4,153.8 88.8,155.6 ' +
+    'L86,156.2 C84.4,153 83,149.4 82,145.6 C80.4,139 80,131.6 80.6,127.6 C81.2,126.4 82.2,125.4 83.2,124.6 Z'],
+  ['hams', 'M91.4,129.2 C94,129.6 97,129.2 98.6,128.6 C98,133.6 96.8,139.6 95.8,145 C95,149 94.6,152.4 94.4,155.6 ' +
+    'L90.6,156 C90.8,152 90.8,148 90.8,144 C90.8,138.6 91,133.6 91.4,129.2 Z'],
+  ['glutes', 'M99.4,109.6 C96.4,108.6 92.2,108.8 88.8,110.4 C85.2,112.2 83.2,115.6 83,119.6 C82.8,124 85,128 89,129.6 C92.6,130.8 96.8,130.4 99.4,128.8 Z'],
+  ['calves', 'M86.2,157.4 C83,160 81,164.4 81.2,169 C81.4,173 83,176.6 85.4,178.6 C87,179.6 88.6,179 89.2,177.4 ' +
+    'L89.4,159 C88.4,158 87.4,157.4 86.2,157.4 Z'],
+  ['calves', 'M90.4,158.6 C92.4,158.6 94.4,160 95.4,162.6 C96.2,166 96,170 95,173.6 C94.2,176.6 92.8,179 91.2,179.6 ' +
+    'C90.6,179 90.4,178.2 90.4,177.4 Z'],
 ];
+/* the drawing inside the muscles, faint, over lit and unlit alike: fibres, edges, a kneecap, a shin */
+const BODY_LINES_FRONT = 'M93.8,52.6 C95.4,56 97,59.6 98.6,62.6 M98.4,69.6 C93,70 88,71.2 83.8,73.2 M98.4,76 C93.4,76.8 88.6,76.6 83.6,75.6 ' +
+  'M74,62.6 C71,66 68.6,69.4 67.2,72.4 M56.2,65.4 C55,68.6 55.4,72.4 57,75.6 M50,66.4 C45,67.6 40,68.4 34.6,68.8 ' +
+  'M82.6,86.4 L86.2,85.4 M83.4,90 L86.4,88.8 M86.8,95 C88.6,98 90,101.4 91,104.6 ' +
+  'M87.6,157.6 C88.6,155.8 91.4,155.6 92.6,157.4 C92.6,159.6 91.2,160.8 90,160.8 C88.8,160.8 87.6,159.6 87.6,157.6 Z ' +
+  'M90,163 C89.6,170 89.8,178 90.6,185';
+const BODY_LINES_BACK = 'M100,92 L100,110 M84.6,84.6 C88.4,88.6 92,93.4 95.2,99.4 M70,74.6 C64.6,73.8 59.4,72.2 55,70.2 ' +
+  'M50,66.4 C45,67.6 40,68.4 34.6,68.8 M89.6,179.4 C89.4,182 89.6,185 89.8,187.6 M87.4,93.6 C88.6,97 89.4,100.6 89.6,104';
+/* the second pose, as Leonardo drew it: arms raised to the circle, legs apart */
+const BODY_GHOST = 'M79,62 L24.4,38.4 C22.4,38 21,40 22.2,41.8 L80.6,74.6 ' +
+  'M83.6,113.4 L69.6,189.4 C69.2,191.8 71.4,193.8 73.6,192.8 L94.6,126';
+
 function bodySvg(v) {
   const max = Math.max(0, ...Object.keys(v).map(k => v[k]));
-  const mirror = pts => pts.split(' ').map(q => { const a = q.split(','); return (100 - a[0]) + ',' + a[1]; }).join(' ');
-  const poly = (pts, dx, style, tip) => '<polygon transform="translate(' + dx + ',0)" points="' + pts + '" style="' + style + '">' +
-    (tip ? '<title>' + tip + '</title>' : '') + '</polygon>';
-  const side = (list, dx) => {
-    let out = '';
-    Object.keys(BODY_FIG).forEach(k => {
-      const st = 'fill:var(--line);stroke:none';
-      out += poly(BODY_FIG[k], dx, st) + (k === 'head' || k === 'neck' ? '' : poly(mirror(BODY_FIG[k]), dx, st));
-    });
+  const ink = 'stroke:var(--text-muted);stroke-opacity:.4;stroke-width:.4;stroke-linejoin:round';
+  const mir = s => s + '<g transform="matrix(-1,0,0,1,200,0)">' + s + '</g>';
+  const panel = (list, lines) => {
+    let out = '<rect x="20" y="36" width="160" height="160" style="fill:none;stroke:var(--border-strong);stroke-width:.6"/>' +
+      '<circle cx="100" cy="100" r="96" style="fill:none;stroke:var(--border-strong);stroke-width:.6"/>' +
+      mir('<path d="' + BODY_GHOST + '" style="fill:none;stroke:var(--border-strong);stroke-width:.5"/>') +
+      mir('<path d="' + BODY_SKIN + ' L100.6,119 L100.6,35.4 Z" style="fill:var(--surface-3);stroke:none"/>');
+    let mus = '';
     list.forEach(m => {
       const n = v[m[0]] || 0, t = max ? n / max : 0;
       const st = n > 0
-        ? 'fill:var(--acc);fill-opacity:' + (0.22 + 0.78 * t).toFixed(2) + ';stroke:var(--acc);stroke-opacity:.5;stroke-width:.4'
-        : 'fill:var(--panel2);stroke:var(--line2);stroke-width:.4';
-      const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets';
-      out += poly(m[1], dx, st, tip) + poly(mirror(m[1]), dx, st, tip);
+        ? 'fill:var(--accent);fill-opacity:' + (0.25 + 0.75 * t).toFixed(2) + ';stroke:var(--surface-1);stroke-opacity:.85;stroke-width:.5'
+        : 'fill:var(--surface-3);' + ink;
+      mus += '<path d="' + m[1] + '" style="' + st + '"><title>' + BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets</title></path>';
     });
-    return out;
+    out += mir(mus) +
+      mir('<path d="' + lines + '" style="fill:none;stroke:var(--surface-1);stroke-opacity:.45;stroke-width:.35;stroke-linecap:round"/>') +
+      mir('<path d="' + BODY_SKIN + '" style="fill:none;stroke:var(--text-muted);stroke-opacity:.7;stroke-width:.55;stroke-linejoin:round"/>');
+    return '<svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">' + out + '</svg>';
   };
-  return '<svg viewBox="0 0 210 182" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;max-height:100%;display:block">' +
-    side(BODY_FRONT, 0) + side(BODY_BACK, 110) + '</svg>';
+  return '<div class="bh-pair">' + panel(BODY_FRONT, BODY_LINES_FRONT) + panel(BODY_BACK, BODY_LINES_BACK) + '</div>';
 }
 
 /* ══════════════ spots ══════════════
