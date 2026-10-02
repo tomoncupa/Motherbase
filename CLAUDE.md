@@ -936,6 +936,18 @@ answer, or take it out.
   fades its background over 90ms, so a read straight after a class change is
   mid-fade. Paint the value into a 1px canvas and read the pixel, with
   `transition:none` injected first (2026-09-30, the home dock).
+- **A picture drawn as an SVG image can fetch nothing and inherits the
+  body's written-out text colour.** Every `IO.shot` picture came out in the
+  device's plain font with every word one colour (2026-10-02): the wrapper
+  copied `-webkit-text-fill-color`, and the image could not load the theme's
+  fonts. `IO.shot` now skips those properties and writes the fonts in as data
+  (`IO._faces`). Anything that builds its own SVG picture must do both.
+- **Rules Tom gives in a session beat the general style docs.** On
+  2026-10-02 a TRAIN frame was redrawn from THEMING.md and lost what he had
+  asked for an hour earlier (no boxes, nothing in the middle); his words:
+  "don't let the style guidelines overwrite what I've told you this work
+  session". Write his rules into the module's brief as they come, and check
+  each redraw against them.
 - **A page that reloads once something is saved reloads forever where it
   cannot be saved.** The demo filled its store, waited on IndexedDB and
   reloaded onto it: WebKit took from 6 seconds to never to save, and a

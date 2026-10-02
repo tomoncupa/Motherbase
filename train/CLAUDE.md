@@ -860,6 +860,24 @@ Curl separate; and *"There is no barbell squat?"*
 - His own imported names (Seated Leg Curl Machine, Lying Leg Curl Machine) are
   not starters and are never folded; Merge Into is how he does those.
 
+## Next: strength graphics (proposed 2026-10-02, not built)
+
+Tom asked for eight ways to show strength going up, each as a sentence, a
+number and a graphic, then "Mockup the graphs". `train/mock-strength-graphs.html`
+is the mockup (example numbers, Block colours written in because it is a
+picture of a design, not app code): 1 estimated 1RM per lift (last time grey,
+now accent, % at the end); 2 more reps at the same weight (a dot per rep);
+3 more weight at the same reps (the bar side-on, the new plate lit); 4 sets
+higher, a square per working set in session order, grouped by lift; 5
+records, a solid trophy for lifetime, an outlined one for PR; 6 the block, a
+sparkline from week 1; 7 a milestone strip of round numbers; 8 lifted over
+bodyweight (STATUS's weigh-ins). Recommended for the frame: 4 as the
+headline, 1 per lift, 6 for a block-end post. Tom has not picked yet; the
+next session starts there. 1 to 5 are worked out already (`setDelta`,
+`liftLine`, `dayCompare`, `recordHits`); 6 to 8 are new. Draw them with
+`chart.js` where it fits (shared rule 5a), tokens only, and obey the frame's
+rules above.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the
