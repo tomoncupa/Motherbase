@@ -46,7 +46,7 @@ are holding a stale copy of whatever you just changed.
 | `health.js` | Answers "is my data okay". | Low. |
 | `demo.js` | The DEMO's made-up person and its DEMO tab. The storage switch itself is the first thing in `skins.js`. Fetched only in the demo. | Low. It writes only inside the demo's own namespace. |
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
-| `_smoke.html` | 406 checks over all of it. | Run it every time. |
+| `_smoke.html` | 409 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -431,6 +431,37 @@ before (it writes on every redraw), 1.3 s after.
   files off the main thread, so code caching is not worth chasing; a cached
   `Intl.Collator` sorts no faster than `localeCompare` in `Rec.all`.
 - Three smoke checks. The poke one was watched failing on the old file.
+
+## Pictures: frames, word colours and fonts (2026-10-02, `io.js`)
+
+From a TRAIN session, Tom's "beautiful export option for train", a frame for
+IG stories with nothing in the middle. Additive; no caller changed.
+
+- **`IO.share({frame})`**: an app that hands in `frame(o)` gets LAYOUT Frame
+  or Card on the panel (`shareLayout`, Frame first). `o.style` is the style
+  id. Size is hidden for a frame. The node is never given `.mb-glass`; a
+  frame tints its own panels.
+- **`IO.frameShot(node, {edges})`**: lays the node out at `frameSize()`
+  (390 by 693.3) and pictures it as the whole 1080 x 1920 story. It hands the
+  node Instagram's safe insets as `--story-t`, `--story-b`, `--story-x`, so
+  the app's CSS stays free of raw sizes. `edges` darkens the top, bottom and
+  right edges for Translucent and never the middle (`IO.shot`'s `edges`).
+- **Every word in every picture came out in the body's text colour**, the
+  card's green gains and gold block line included. The wrapper copied the
+  body's computed styles, and `-webkit-text-fill-color` (with the other three
+  "the text colour" properties) comes back written out and is inherited. They
+  are no longer copied. Pictures from STATUS and TRAIN change colour.
+- **Fonts go into the picture** (`IO._faces`): an SVG drawn as an image can
+  fetch nothing, so every picture was in the device's plain font. The
+  `@font-face` rules for the families the node uses are written in with their
+  files as data. The suite's own fonts come from the phone's copy, offline
+  too. A Google font (Block's IBM Plex Sans) needs signal and falls back as
+  before without it; this sandbox has none, so that half is unwatched.
+  Capped at `FACE_WAIT`, 2.5 s.
+- Three smoke checks: a word keeps its colour (watched failing on the old
+  file, 0 accent pixels to 630), a frame is the whole story with the middle
+  empty and nothing under the reply box, and the panel offers Frame only to
+  an app that gives one.
 
 ## The demo's storage switch (2026-09-30)
 

@@ -2617,6 +2617,54 @@ async function run() {
   sq.remove();
   ok('io: a picture given a box stays inside it — alpha ' + boxWhy, boxIn && boxOut);
 
+  /* 2026-10-02: every word in every picture came out in the body's text
+     colour. The wrapper copied -webkit-text-fill-color as a fixed colour, and
+     it is inherited. The check is one word in the accent, read off pixels. */
+  let wordKept = false, wordWhy = '';
+  const wd = document.createElement('div');
+  wd.style.cssText = 'position:fixed;left:-9999px;top:0;width:60px;height:40px;font:900 36px/40px sans-serif;color:var(--accent)';
+  wd.textContent = 'WW';
+  document.body.appendChild(wd);
+  try {
+    const want = (getComputedStyle(wd).color.match(/\d+/g) || []).map(Number);
+    const ink = (getComputedStyle(document.body).color.match(/\d+/g) || []).map(Number);
+    const png = await IO.shot(wd, { w: 60, h: 40, fill: 1, anchor: 0.5 });
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = png; });
+    const cv = document.createElement('canvas'); cv.width = 60; cv.height = 40;
+    const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
+    const p = cx.getImageData(0, 0, 60, 40).data, near = (i, c) => Math.abs(p[i] - c[0]) + Math.abs(p[i + 1] - c[1]) + Math.abs(p[i + 2] - c[2]) < 30;
+    let acc = 0, body = 0;
+    for (let i = 0; i < p.length; i += 4) { if (p[i + 3] < 250) continue; if (near(i, want)) acc++; else if (near(i, ink)) body++; }
+    wordKept = acc > 50 && acc > body;
+    wordWhy = acc + ' accent px, ' + body + ' body-colour px';
+  } catch (e) { wordWhy = e.message; }
+  wd.remove();
+  ok('io: a word in a picture keeps its own colour — ' + wordWhy, wordKept);
+
+  /* A frame (Tom, 2026-10-02): the whole story, words at the edges, the
+     middle left for the person, nothing under the reply box. */
+  let frWhy = '', frOk = false;
+  const fr = document.createElement('div');
+  fr.style.cssText = 'display:flex;flex-direction:column;justify-content:space-between;' +
+    'padding:var(--story-t) var(--story-x) var(--story-b)';
+  fr.innerHTML = '<div style="height:20px;background:var(--accent)"></div><div style="height:20px;background:var(--accent)"></div>';
+  const frStage = document.createElement('div');
+  frStage.style.cssText = 'position:fixed;left:-99999px;top:0';
+  frStage.appendChild(fr); document.body.appendChild(frStage);
+  try {
+    const png = await IO.frameShot(fr);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = png; });
+    const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height;
+    const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0);
+    const a = (x, y) => cx.getImageData(x, y, 1, 1).data[3];
+    const S = IO.STORY, bot = S.h - (S.h - S.safe.y - S.safe.h);
+    const v = [img.width, img.height, a(540, 960), a(540, S.safe.y + 20), a(540, bot - 20), a(540, bot + 20), a(40, S.safe.y + 20)];
+    frOk = v[0] === 1080 && v[1] === 1920 && v[2] === 0 && v[3] > 200 && v[4] > 200 && v[5] === 0 && v[6] === 0;
+    frWhy = v.join(' ');
+  } catch (e) { frWhy = e.message; }
+  frStage.remove();
+  ok('io: a frame is the whole story, words at its safe edges and the middle empty — ' + frWhy, frOk);
+
   let panelDrawn = false, panelKept = false, panelWhy = '';
   try {
     Rec.setting('smoke', 'shareStyle', null);
@@ -2643,6 +2691,37 @@ async function run() {
   } catch (e) { panelWhy = e.message; }
   ok('io: the share panel draws the picture before SHARE is pressed — ' + panelWhy, panelDrawn);
   ok('io: the share panel remembers the style chosen', panelKept);
+
+  let frPanel = false, frPanelWhy = '';
+  try {
+    Rec.setting('smoke', 'shareLayout', null);
+    const segs = h => [].map.call(h.panel.querySelectorAll('.mb-seg button'), b => b.textContent);
+    const build = () => { const n = document.createElement('div'); n.style.cssText = 'width:120px;height:80px;background:var(--accent)'; return n; };
+    const plain = IO.share({ app: 'smoke', name: 'smoke', build: build });
+    const noFrame = segs(plain).indexOf('Frame') === -1;
+    plain.close();
+    let asked = null;
+    const h = IO.share({ app: 'smoke', name: 'smoke', build: build, frame: o => {
+      asked = o;
+      const n = document.createElement('div');
+      n.innerHTML = '<div style="height:20px;background:var(--accent)"></div>';
+      return n;
+    } });
+    const t0 = performance.now();
+    let pv = null;
+    while (performance.now() - t0 < 3000) {
+      pv = h.panel.querySelector('.mb-sharepv img');
+      if (pv && !pv.classList.contains('wait') && /^data:image\/png/.test(pv.src)) break;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    const drawn = !!pv && /^data:image\/png/.test(pv.src);
+    const offered = segs(h).indexOf('Frame') > -1 && segs(h).indexOf('Card') > -1;
+    h.close();
+    frPanel = noFrame && offered && drawn && !!asked && typeof asked.style === 'string';
+    frPanelWhy = [noFrame, offered, drawn, asked && asked.style].join(' ');
+    Rec.setting('smoke', 'shareLayout', null);
+  } catch (e) { frPanelWhy = e.message; }
+  ok('io: the share panel offers Frame only to an app that gives one, and draws it — ' + frPanelWhy, frPanel);
 
   ok('skins: Block is the theme an app opens in when none is chosen', (() => {
     const first = Skins.data.skins[0];
