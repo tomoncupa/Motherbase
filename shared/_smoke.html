@@ -110,6 +110,15 @@ async function run() {
   ok('day: last(7) is 7 dates ending today', Day.last(7).length === 7 && Day.last(7)[6] === Day.today());
   ok('day: past is editable, future is not', Day.editable(Day.shift(Day.today(), -30)) && !Day.editable(Day.shift(Day.today(), 1)));
   ok('day: dst-safe across a spring forward', Day.diff('2026-03-30', '2026-03-28') === 2);
+  /* label and short keep one formatter per option set since 2026-10-02; the
+     words must stay exactly the browser's own, a time-only ask included */
+  ok('day: label and short read exactly as toLocaleDateString does', ['2026-01-05', '2026-10-02', '2025-12-31'].every(x => {
+    const n = new Date(x + 'T12:00:00'), L = o => n.toLocaleDateString(undefined, o);
+    return Day.label(x) === L({ weekday: 'short', day: 'numeric', month: 'short' }) &&
+      Day.short(x) === L({ day: 'numeric', month: 'short' }) &&
+      Day.label(x, { day: 'numeric', month: 'short', year: 'numeric' }) === L({ day: 'numeric', month: 'short', year: 'numeric' }) &&
+      Day.label(x, { hour: 'numeric' }) === L({ hour: 'numeric' });
+  }));
 
   /* ---- records ---- */
   Rec.declare('smoke', [stamp]);
@@ -162,6 +171,31 @@ async function run() {
       await new Promise(r => setTimeout(r, 25));
     }
     return false;
+  })());
+  /* 2026-10-02: a write in any app made the home screen and every app open
+     in it re-read the whole store, 2 to 4 seconds of a phone's time per tap
+     with five apps open. On a served address the channel carries the rows,
+     so a write pokes no one; a wipe has no rows to carry and still does. */
+  ok('rec: on a served address a write pokes no neighbour, a wipe still does', await (async () => {
+    if (!Rec.channel) return location.protocol === 'file:' || typeof BroadcastChannel === 'undefined';
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const got = [];
+    f.contentWindow.postMessage = m => got.push(m);
+    const poked = () => got.some(m => m && m.mb === 1 && m.poke);
+    Rec.set(stamp, d, 'poke', { v: Date.now() });
+    await new Promise(r => setTimeout(r, 400));
+    const quiet = !poked();
+    Rec.clear([stamp + '-wipe']);
+    await new Promise(r => setTimeout(r, 400));
+    const woke = poked();
+    Rec.del(stamp, d, 'poke'); f.remove();
+    return quiet && woke;
+  })());
+  ok('rec: the same row read back again changes nothing', (() => {
+    const r = Rec.row(stamp, d, 'a');
+    return Rec.merge([Object.assign({}, r, { payload: JSON.parse(JSON.stringify(r.payload)) })]) === 0 &&
+      Rec.row(stamp, d, 'a') === r;
   })());
   /* 2026-09-24: Main Menu.exe's localStorage was full to the byte and Google
      sign-in refused to open. A full fast half now moves its oldest-dated rows

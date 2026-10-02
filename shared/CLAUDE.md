@@ -46,7 +46,7 @@ are holding a stale copy of whatever you just changed.
 | `health.js` | Answers "is my data okay". | Low. |
 | `demo.js` | The DEMO's made-up person and its DEMO tab. The storage switch itself is the first thing in `skins.js`. Fetched only in the demo. | Low. It writes only inside the demo's own namespace. |
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
-| `_smoke.html` | 403 checks over all of it. | Run it every time. |
+| `_smoke.html` | 406 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -400,6 +400,37 @@ and 2.05 s once TRAIN had opened once; TRAIN's first paint 0.87 s to 0.47 s.
   a first read starts the load, need brings all, the fast-half copy goes, a
   held patch keeps fields it never saw, an older merged copy loses, a held
   delete happens, and a boot-time read has sets by ready.
+
+## No re-read on every write (2026-10-02)
+
+Tom: "Opening the apps takes too long." Measured on a store his size (12,561
+sets, 18,300 rows) in headless Chromium at 6x CPU. The big one: every local
+write poked the parent and every frame, and each ran `Rec.reload()`, a full
+re-read of both halves and of every set it held. The home screen's kernel
+(`wrote`, in `index.html` and `block/index.html`) poked a second time.
+One tick in STATUS with five apps open in home: 2.2 to 4.2 s of blocked main
+thread before, 0.12 to 0.25 s after. BLOCK opened from home settled in 3.3 s
+before (it writes on every redraw), 1.3 s after.
+
+- **`channelOk()`**: on http(s) with BroadcastChannel, a write that carries
+  rows does not poke; the channel already delivered them. A row-less
+  announcement (`clear`, `repairDates`) still pokes, since only a re-read
+  shows a wipe. `file://` pokes as before. `Rec.channel` exposes it; the
+  kernel's `wrote` pokes only when it is false. The receiving side is
+  unchanged, so an older cached sender still works.
+- **`wins()`** answers "the same write, read back" from the `serial`
+  snapshot with one `JSON.stringify` before falling back to `canon`. Every
+  open meets each row twice; canon cost about 200 ms of each open at 6x.
+- **`Day.label` / `Day.short`** keep one `Intl.DateTimeFormat` per option
+  set. `toLocaleDateString` built a new one per call: 500 ms of LOG's open.
+  A time-only ask gets the date added, exactly as `toLocaleDateString` does.
+- **`sound.js`** builds the audio context and its reverb on idle after a
+  fresh open, not on `pageshow`; a page back from the bfcache wakes at once.
+- Measured and ruled out: no signal and a 2 s, 50 kbps line open as fast as
+  full signal (`sw.js` answers from the phone first); V8 compiles the shared
+  files off the main thread, so code caching is not worth chasing; a cached
+  `Intl.Collator` sorts no faster than `localeCompare` in `Rec.all`.
+- Three smoke checks. The poke one was watched failing on the old file.
 
 ## The demo's storage switch (2026-09-30)
 

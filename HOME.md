@@ -111,3 +111,7 @@ Tom: "Heatmap should also show recovery. Big muscles - 72 hours, Small Muscles -
 - **The figure** is 156.2 units tall (1 unit about 1.1 cm), the navel at height / 1.618 where the circle centres, and the shoulder caps 1.618 times the waist across. Leaner arms, thighs and calves; round deltoid caps. Made by remapping the 1.0.41 shapes through landmarks (scratch script, not in the repo) and hand-fixing the shoulders. The second pose is a double biceps: forearms up from the elbows, fists at head height.
 
 Watched in headless Chromium on the demo at 1920x1000 and 390x844: four muscles striped with their hours, a set key decoded to the right time, a small muscle at 2 and 6 sets gave 24h and 48h and was clear after 49h, no row overflowing on the phone. Review 142/142 Chromium, WebKit only the known foundation-frame fail. Not seen on his screens.
+
+## 1.0.44, 2026-10-02: no store re-read on every write
+
+The kernel's `wrote` pokes neighbours only when `Rec.channel` is false (a folder open). On the hosted address the channel already carries the rows, and each poke made home and every app frame re-read the whole store. Change the copy in `block/index.html` with it. `shared/CLAUDE.md`, No re-read on every write, has the numbers.

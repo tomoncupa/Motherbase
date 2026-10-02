@@ -396,6 +396,11 @@ function wins(r, prev) {
   if (r.updated_at !== prev.updated_at) return r.updated_at > prev.updated_at;
   if (!!r.deleted !== !!prev.deleted) return !!r.deleted;
   if (r.deleted) return false;
+  /* The same write, read back: every open meets each row twice, once in
+     each half, at the same time with the same content. The snapshot says so
+     in one stringify; the canonical form costs a key sort per object, and
+     was 200ms of every open on a phone (2026-10-02). Equal never wins. */
+  if (serial[prev.id] !== undefined && serial[prev.id] === JSON.stringify(r.payload)) return false;
   return canon(r.payload) > canon(prev.payload);
 }
 
@@ -448,7 +453,18 @@ const copy = v => (v == null || typeof v !== 'object') ? v : JSON.parse(JSON.str
 function announce(list, local) {
   subs.forEach(f => { try { f(list); } catch (e) { console.warn('[records]', e); } });
   if (local && bc) { try { bc.postMessage({ mb: 1, rows: list }); } catch (e) {} }
-  if (local) poke();
+  if (local && (!list.length || !channelOk())) poke();
+}
+/* On a served address the channel reaches every page and frame of the
+   origin and carries the rows themselves, so a poke on top of it only made
+   each neighbour re-read the whole store: both halves, and all twelve
+   thousand sets wherever they were in. Measured 2026-10-02 at a phone's
+   speed: 660ms on the home screen for every write in any app it held, and
+   BLOCK writes on every redraw. The poke stays for a folder open, where the
+   channel may not cross frames, and for a write with no rows to carry (a
+   wipe), which only a re-read can show. */
+function channelOk() {
+  try { return !!bc && /^https?:$/.test(g.location.protocol); } catch (e) { return false; }
 }
 
 /* ── neighbours, when there is no channel ──
@@ -851,6 +867,10 @@ const Rec = {
     readyQ.push(fn);
   },
   get hydrated() { return hydrated; },
+  /** true when every page on this origin hears each write's rows through
+      the channel: a served address with BroadcastChannel. A page's own poke
+      to its neighbours is then only needed for a write with no rows. */
+  get channel() { return channelOk(); },
   /** Resolves once these kept-out types are in memory, and the rest of the
       store too: a string, a list, or nothing for every kept-out type. For
       anything that must see every row (a backup, live sync, the sheet). A

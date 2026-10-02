@@ -170,7 +170,15 @@ const Sfx = {
     g.addEventListener('pointerdown', wake, { passive: true });
     g.addEventListener('keydown', wake);
     doc.addEventListener('visibilitychange', () => { if (!doc.hidden) wake(); });
-    g.addEventListener('pageshow', wake);
+    /* A page coming back from the back-forward cache wakes at once. A fresh
+       open waits until the page has drawn: making the context fills 0.7s of
+       stereo reverb a sample at a time, 85ms of every open on a phone
+       (2026-10-02), and with no touch yet it cannot play anyway. */
+    g.addEventListener('pageshow', e => {
+      if (e && e.persisted) { wake(); return; }
+      if (g.requestIdleCallback) g.requestIdleCallback(wake, { timeout: 3000 });
+      else setTimeout(wake, 1500);
+    });
     return Sfx;
   },
   /* ── making an iPhone actually make a noise ──

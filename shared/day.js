@@ -42,6 +42,23 @@ const pad = n => String(n).padStart(2, '0');
 const iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 const noon = date => new Date(date + 'T12:00:00');   /* noon dodges every DST edge case */
 
+/* One formatter per set of options, kept (2026-10-02). toLocaleDateString
+   builds a new Intl.DateTimeFormat on every call, and LOG's open labels a
+   day thousands of times: 500ms of it at a phone's speed went on building
+   the same formatter. Same locale, same options, same words out. */
+const LABEL = { weekday: 'short', day: 'numeric', month: 'short' };
+const SHORT = { day: 'numeric', month: 'short' };
+const FMT = Object.create(null);
+function fmt(opts) {
+  const k = JSON.stringify(opts);
+  if (FMT[k]) return FMT[k];
+  /* what toLocaleDateString does first: no date part asked for, the whole date */
+  let o = opts;
+  if (!['weekday', 'year', 'month', 'day', 'dateStyle', 'timeStyle'].some(p => opts[p] !== undefined))
+    o = Object.assign({}, opts, { year: 'numeric', month: 'numeric', day: 'numeric' });
+  return (FMT[k] = new Intl.DateTimeFormat(undefined, o));
+}
+
 const Day = {
   DEF: DEF,
   get startsAt() { return cfg.startsAt; },
@@ -99,10 +116,8 @@ const Day = {
   on(f) { (Day._subs = Day._subs || []).push(f); return () => { const i = Day._subs.indexOf(f); if (i > -1) Day._subs.splice(i, 1); }; },
 
   /** "Mon 19 Aug" — one date format for the whole suite */
-  label(date, opts) {
-    return noon(date).toLocaleDateString(undefined, opts || { weekday: 'short', day: 'numeric', month: 'short' });
-  },
-  short(date) { return noon(date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); },
+  label(date, opts) { return fmt(opts || LABEL).format(noon(date)); },
+  short(date) { return fmt(SHORT).format(noon(date)); },
   isToday(date) { return date === Day.today(); },
 };
 
