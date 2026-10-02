@@ -330,33 +330,31 @@ clear of the story's own buttons, with the TRAIN mark taken off ("no small
 branding"). It is on the session card, the week, Profile, an exercise's Personal
 Records, and GRAPH. **Not watched on the iPhone.**
 
-**The session as a FRAME** (1.0.43, redrawn 1.0.44). Tom, 2026-10-02:
-*"Nothing in the middle, meant to be used as a frame for IG stories"*, then
-*"Clear more space for middle, maximize the safe area. Make the bottom info
-not so blocky. Sideways text."* The session's Share panel opens on LAYOUT
-Frame (Card is the old picture, remembered as `shareLayout`).
-`TRAIN.frameCard`, hugging the edge of Instagram's safe area: the session name
-one line along the top; the date (no year) and block sideways up the left
-edge; the totals sideways down the right; at the bottom "N sets higher than
-last time" (his words; never "N of M") and at most three lifts
-(`FRAME_LIFTS`, records and gains first, then "and N more lifts"). Every line
-wears its own tight highlight (`.fr-hl`), never a block. A weight × reps line
-carries no unit (it is on the rail). Measured on the demo: the bottom starts
-59 to 69% down, the middle is clear from the name to there. Two switches on
-the panel, both honoured by the card too:
-- **Gains as %** (`sharePct`, on): a lift's gain is its top set's estimated
-  1RM against the other day's (`TRAIN.liftLine` `pct`), the totals' gains
-  are percentages. Off: +kg, +reps as before. His: *"I want to see %
-  increase not +1 rep - make that an option."*
-- **Compare each lift with its own last time** (`shareMove`, off):
-  `TRAIN.dayCompare(date, off, 'move')` skips the picked, named and copied
-  days. Off is the usual order, last session first. Session totals are only
-  set against one session, so per lift the rail shows no gains.
-Same rules as the card: the per-lift switches, no lift that went down (asked
-again for whichever comparison is on), never a minus. Highlights are `--bg`,
-60% in Transparent, 80% in Translucent with IO's darkened edges, solid in
-Opaque. Gains are the theme's green pulled 60% to its ink. **Not watched on
-the iPhone or in Instagram.**
+**The session as a FRAME** (1.0.43 to 1.0.45). LAYOUT Frame on the
+session's Share panel (Card is the old picture, `shareLayout`).
+`TRAIN.frameCard`. **Tom's rules for it, 2026-10-02, and they win over any
+general style rule** (his: *"don't let the style guidelines overwrite what
+I've told you this work session"*):
+- a frame for IG stories, **nothing in the middle**, the safe area used to
+  the edge; the session's name and day on top, everything else at the bottom;
+- **not blocky**: no box behind each line, and no window ("super blocky");
+- **no sideways text**;
+- **"x sets x% higher"** (never "x of y"): the sets that went up and their
+  average estimated-1RM gain; with Gains as % off, "x sets higher · +N reps";
+- **all the PRs** when the PRs switch is on, grouped under "Lifetime PR" and
+  "PR" (never "Block PR"), at most `FRAME_PRS` then "and N more";
+- **weight, sets, reps and time at the bottom**, one row, number over name;
+- **"the report after a video game battle"**, done with type only: a RESULTS
+  caption over an accent hairline, caps in the display face, dotted leaders.
+Words sit on the photo with a glow of `--bg` behind each letter;
+Translucent and Opaque add a soft `--bg` fade from the top and bottom edges
+(75% and 92%), never IO's black edges. Three switches on the panel, all
+honoured by the card too: **Gains as %** (`sharePct`, on), **Compare each
+lift with its own last time** (`shareMove`, off: `TRAIN.dayCompare(date,
+off, 'move')`), **PRs** (`sharePrs`, on). Same rules as the card: the per-lift
+switches, no lift that went down, never a minus. Measured on the demo: the
+words at the bottom start 55 to 60% down with one PR, about 50% with four.
+**Not watched on the iPhone or in Instagram.**
 
 **A lift can be left out of what he shares** (1.0.39). Tom, 2026-09-29: *"I
 don't want to share lifts im weaker in."* The session's Share panel has one
