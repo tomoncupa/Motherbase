@@ -330,31 +330,38 @@ clear of the story's own buttons, with the TRAIN mark taken off ("no small
 branding"). It is on the session card, the week, Profile, an exercise's Personal
 Records, and GRAPH. **Not watched on the iPhone.**
 
-**The session as a FRAME** (1.0.43 to 1.0.45). LAYOUT Frame on the
+**The session as a FRAME** (1.0.43 to 1.0.46). LAYOUT Frame on the
 session's Share panel (Card is the old picture, `shareLayout`).
 `TRAIN.frameCard`. **Tom's rules for it, 2026-10-02, and they win over any
 general style rule** (his: *"don't let the style guidelines overwrite what
 I've told you this work session"*):
-- a frame for IG stories, **nothing in the middle**, the safe area used to
-  the edge; the session's name and day on top, everything else at the bottom;
-- **not blocky**: no box behind each line, and no window ("super blocky");
-- **no sideways text**;
+- a frame for IG stories, **nothing in the middle**, the full height used
+  (*"You're not maximizing the full verticality"*): the session's name and
+  day at the very top, everything else at the very bottom, at the edges a
+  posted story covers (`IO.STORY.frame`, 180 top, 220 bottom, 72 sides);
+- **condensed** (*"Condense it way down"*, seen on his phone);
+- **not blocky**: no box behind each line, and no window;
+- **no sideways text**, **no all caps** (*"Don't all caps anything"*):
+  every word as written, no caps tracking;
 - **"x sets x% higher"** (never "x of y"): the sets that went up and their
   average estimated-1RM gain; with Gains as % off, "x sets higher · +N reps";
-- **all the PRs** when the PRs switch is on, grouped under "Lifetime PR" and
-  "PR" (never "Block PR"), at most `FRAME_PRS` then "and N more";
-- **weight, sets, reps and time at the bottom**, one row, number over name;
-- **"the report after a video game battle"**, done with type only: a RESULTS
-  caption over an accent hairline, caps in the display face, dotted leaders.
+- **no RESULTS heading**;
+- **the PRs** when the PRs switch is on: one line per lift, its best record
+  (a lifetime one before a block one, else the heavier estimated 1RM), with
+  "PR" or "Lifetime PR" beside the set, never as headers and never "Block
+  PR"; at most `FRAME_PRS` (3), then "and N more PRs";
+- **weight, sets, reps and time at the bottom**, one line;
+- the video-game-results feel is the display face, the accent and big
+  numbers, nothing more.
 Words sit on the photo with a glow of `--bg` behind each letter;
 Translucent and Opaque add a soft `--bg` fade from the top and bottom edges
-(75% and 92%), never IO's black edges. Three switches on the panel, all
-honoured by the card too: **Gains as %** (`sharePct`, on), **Compare each
-lift with its own last time** (`shareMove`, off: `TRAIN.dayCompare(date,
-off, 'move')`), **PRs** (`sharePrs`, on). Same rules as the card: the per-lift
-switches, no lift that went down, never a minus. Measured on the demo: the
-words at the bottom start 55 to 60% down with one PR, about 50% with four.
-**Not watched on the iPhone or in Instagram.**
+(75% and 92%). Three switches, all honoured by the card too: **Gains as %**
+(`sharePct`, on), **Compare each lift with its own last time** (`shareMove`,
+off: `TRAIN.dayCompare(date, off, 'move')`), **PRs** (`sharePrs`, on). Same
+rules as the card: the per-lift switches, no lift that went down, never a
+minus. Measured on the demo: the bottom starts 62% down with three PRs, 74%
+with one; the top ends at 23% (both counting the fade). Seen on his iPhone
+in Instagram at 1.0.45, which is what 1.0.46 condensed.
 
 **A lift can be left out of what he shares** (1.0.39). Tom, 2026-09-29: *"I
 don't want to share lifts im weaker in."* The session's Share panel has one
