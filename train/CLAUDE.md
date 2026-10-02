@@ -585,6 +585,21 @@ What iPhone Safari changes:
   seeding and the record pass still wait for ready. Watched 2026-09-15 in a frame
   whose IndexedDB never answers. TRAIN 1.0.7.
 
+### A wide window (1.0.47, 2026-10-02)
+
+Tom runs the suite on a 5120 x 1440 screen, where the home screen gives
+TRAIN a 1280px frame. **His rule: on a wide window, lay things out side by
+side; never fold text** (no "show more" over words). HISTORY's SHOW MORE
+is paging past 100 sessions, not folding, and stays. What it does, CSS only:
+- **Past 720px the TRACK, HISTORY, GRAPH tabs stop stretching**: each is a
+  third of the 640 column, centred over it.
+- **Past 1100px HISTORY's days sit in columns** (`.histgrid`): as many
+  phone-width cards (at least `--s-10` x 3) as fit, newest first along each
+  row, up to six. On a phone `.histgrid` is the same single column.
+- **The phone must not move.** Both queries start far past 390, and the
+  390 x 844 screenshots of the log, TRACK, HISTORY and GRAPH were byte for
+  byte the same before and after. Check that again after any change here.
+
 ---
 
 ## For the foundation
