@@ -275,6 +275,30 @@ out to its twelve) before anything is asked.
   the 15th lookup in a minute (fetch stubbed). **Not watched: a real camera,
   and anything on an iPhone.**
 
+## A wide window (1.0.3, 2026-10-02)
+
+Tom runs the suite on a 5120x1440 screen, where KITCHEN gets a frame about
+2560 wide. **His rule: on a wide window, lay things out side by side; never
+fold text** (no "show more"). From 1100px (the same `wideNow` PLAN uses,
+and every tab now redraws when the window crosses it):
+
+- **SHELF**: the search keeps a 768px width, then To buy and the shelf's
+  groups flow down columns (`.kx-mason`, CSS columns at least 384px, a card
+  never split). Foods out, opened, lay out as a grid of the same width.
+  ADD FOOD stays sticky, centred, 384px.
+- **GUIDE**: the period strip and the note keep 768px; the setup card,
+  Short today and the four nutrient cards flow down the same columns.
+- **Tabs**: from 1100px each tab is at most 256px and the bar is centred
+  (they were 840px each at 2560).
+- Under 1100px nothing changed: at 390x844 every element of all three tabs
+  measured at the same place and size before and after.
+
+Scroll depth (scrollHeight over window height, demo data, headless
+Chromium), before to after: SHELF 1.84 to 1.00 at 1280, 1720 and 2560 x
+1300, 2.39 to 1.00 at 1920x1000; GUIDE 2.62 to 1.12 (1280), 1.01 (1720),
+1.01 (2560), 3.40 to 1.31 at 1920x1000. PLAN untouched (1.28 at 2560).
+Not watched: the Foods out list opened (the demo has no food at zero).
+
 ## Not in this version
 
 A home screen widget; prices and grocery cost; expiry dates; storage places

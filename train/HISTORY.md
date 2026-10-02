@@ -376,3 +376,17 @@ not a fence.
 | Records never start again | Each training block has its own; all-time ones stay | Tom, 2026-09-14 |
 | No session names, blocks, weekly view, session summary or profile | All five | Tom, 2026-09-14 |
 
+
+## A wide window (1.0.47, 2026-10-02)
+
+Tom's "option 4" for his 5120 x 1440 screen: apps use the width, side by
+side, never folded. TRAIN drew a 640 column at every width and its tab bar
+stretched each tab to a third of the window (1146px each at 3440). Measured
+in headless Chromium on the demo's Incline Dumbbell Bench Press (16 days),
+HISTORY's scroll as screens of the window, before and after:
+1280 x 1300 2.80 to 1.06 (3 columns), 1720 x 1300 2.80 to none (4),
+2560 x 1300 2.80 to none (6), 1920 x 1000 3.64 to 0.93 (4), 1100 x 900
+4.04 to 2.04 (2); 1099 x 900 unchanged at 4.04, one column. Tabs 213px
+each, centred, past 720. 390 x 844: log, TRACK, HISTORY and GRAPH
+screenshots identical byte for byte; HISTORY 4.31 both times. TRACK and
+GRAPH left as one column: TRACK already fits, GRAPH is one chart.

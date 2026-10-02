@@ -1329,6 +1329,32 @@ account.
 it: the meal loses its account, or saving the meal again would bring the
 purchase back.
 
+## A wide window
+
+1.0.32, 2026-10-02. Tom now runs the suite on a 5120x1440 screen, and the
+home screen gives WEALTH half of it, so its own window is 2560 wide. Tom:
+"minimize the need for scrolling", yes to "apps use the width", no to folding
+text behind "show more". His rule: on a wide window, lay things out side by
+side; never fold text.
+
+Before, `.wrap` stopped at 1400px in two columns, and every `full` card ran
+its list down the middle. Measured with the demo, scroll depth as page
+height over window height: at 2560x1300 ACCOUNTS 3.06, MONEY OUT 2.02, MONEY
+IN 1.90, SCORE 1.16, SPENDING 1.08; at 1720x1300 the same; at 1920x1000
+ACCOUNTS 3.98, MONEY OUT 2.62, MONEY IN 2.47.
+
+Now, past 1700px only: three columns, four past 2300, up to 2400px. A list
+directly inside a card uses CSS columns (about 352px each), so a 60 day or
+received list reads down then across; a draggable list is a grid instead,
+and `sortable` reads the pointer in two directions when its rows are not one
+column (one column is read exactly as before). CATEGORIES is `wfull`, YOUR
+BILLS and WHERE IT CAME FROM are `w2`, OWED TO YOU and EXPECTED NEXT are
+`t2`. Notes keep 80ch. After: every tab 1.00 at 2560x1300; at 1720x1300
+ACCOUNTS 1.17, MONEY OUT 1.09, MONEY IN 1.37; at 1920x1000 ACCOUNTS 1.32,
+MONEY OUT 1.35, MONEY IN 1.72. Watched: at 390, 1000, 1280 and 1600 every
+element in `#main` on every tab has the same box as the 1.0.31 file; a
+category dragged across at 2560 and down at 1280 both reorder.
+
 ## History, moved from the root brief on 2026-09-22
 
 What was built and watched, newest last. Moved here verbatim so the root brief
