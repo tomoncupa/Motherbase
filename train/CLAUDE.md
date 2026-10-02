@@ -330,6 +330,25 @@ clear of the story's own buttons, with the TRAIN mark taken off ("no small
 branding"). It is on the session card, the week, Profile, an exercise's Personal
 Records, and GRAPH. **Not watched on the iPhone.**
 
+**The session as a FRAME** (1.0.43). Tom, 2026-10-02: *"Nothing in the
+middle, meant to be used as a frame for IG stories so put the info mostly
+bottom and some on the side. Maybe session name on top."* The session's Share
+panel opens on LAYOUT Frame (Card is the old picture, remembered as
+`shareLayout`). `TRAIN.frameCard`: the date, session name and block on a panel
+top left; the totals (volume with any gain, sets, reps, time) as one line of
+text running down a rail on the right edge, the full height; "N of M sets
+stronger" and at most three lifts (`FRAME_LIFTS`, records and gains first,
+then "and N more lifts") on a panel at the bottom. Nothing in the middle:
+measured on the demo, the bottom panel starts 50 to 59% down and the space
+above it is empty. Same rules as the card: the per-lift switches, no lift that
+went down, never a minus. Panels are `--bg` (the one surface every theme's
+words read on; Lego's do not on `--surface-1`), 60% in Transparent, 80% in
+Translucent with IO's darkened edges, solid in Opaque, never `.mb-glass`.
+Gains are the theme's green pulled 60% to its ink, so a light theme's pale
+green reads. Contrast measured in seven themes, worst case pure black or white
+behind: Opaque 9:1 or better on words (Lego 4.5), Translucent 5:1 (Lego 2.9),
+Transparent about 3:1. **Not watched on the iPhone or in Instagram.**
+
 **A lift can be left out of what he shares** (1.0.39). Tom, 2026-09-29: *"I
 don't want to share lifts im weaker in."* The session's Share panel has one
 switch per lift under Style and Size (`TRAIN.shareRecap`, IO.share's
@@ -557,7 +576,7 @@ What iPhone Safari changes:
 ## For the foundation
 
 TRAIN never edits `shared/`; a need goes here. (HISTORY.md: For the foundation) Still open:
-- **Keep the middle of the story clear** (Tom, 2026-09-29: "someone will be in the middle of the story"; 2026-09-30: yes, for every app). `IO.shot` centres the picture in `IO.STORY.safe` and Medium and Small shrink it toward the middle; `.mb-glass` tints the whole node handed in, so a TRAIN-only frame with an empty middle is tinted in Transparent and Translucent. The layout has to change in `IO.share` itself.
+- ~~**Keep the middle of the story clear**~~ Done 2026-10-02: `IO.share` takes a `frame` builder and `IO.frameShot` pictures it edge to edge. The session uses it; the week, Profile, records and GRAPH pictures are still cards.
 - **A note row on the Share panel.** `options` are switch rows only, so nothing can say which lifts were left out and why.
 
 ---
