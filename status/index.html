@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.54, 2026-09-25">
+<meta name="mb-version" content="1.0.55, 2026-10-02">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -154,6 +154,30 @@ main{
 /* In one column the same choice is simply which card is on top, so the order
    he picks on the desk is the order he gets on the phone. */
 .wrap.beside.flip > .jcard{order:-1}
+
+/* ── wide: the Report in columns ──
+   Tom, 2026-10-02, on a 5120 wide screen where STATUS gets half: "minimize the
+   need for scrolling", and on a wide window, lay things out side by side;
+   never fold text. The Report was one 620px column at every width, two
+   screens deep at 2560 with three quarters of the window empty.
+
+   Its cards flow down one column and on into the next, so the rank is still
+   the first thing read and the order is the order it always was, just
+   wrapped. Each column is at least 480px, which keeps the day-by-pillar table
+   and the charts at least as wide as on the phone, and never more than three
+   of them, each about the 620 the cards were laid out in, so no line of notes
+   gets longer than it already was. Below 1024px, the phone included, none of
+   this applies and it is the one column it was. */
+@media (min-width:1024px){
+  .wrap.cols{
+    display:block;max-width:calc(620px * 3 + var(--s-4) * 2);
+    columns:480px 3;column-gap:var(--s-4);
+  }
+  .wrap.cols > *{break-inside:avoid;margin-bottom:var(--s-3)}
+  /* Day | Stretch sits over the middle, exactly where it is on Day, which
+     keeps its one column, so switching between them never moves the switch. */
+  .wrap.cols > .seg{column-span:all;max-width:620px;margin:0 auto var(--s-3)}
+}
 
 /* ── cards: background does the separating ── */
 .card{background:var(--surface-1);border-radius:var(--radius-md);padding:var(--s-4);box-shadow:var(--e-1)}
@@ -339,6 +363,14 @@ nav button{
 }
 nav button .g{font-size:var(--f-4);line-height:1}
 nav button.on{color:var(--accent);opacity:1}
+/* At a desk the bar spread its four buttons across the whole window, 860px
+   apart at 3440, so moving from Today to Report was a trip across the screen.
+   Past 1024px each button is four tap targets wide and the four sit together
+   in the middle, under the content. The phone keeps the full-width bar. */
+@media (min-width:1024px){
+  nav{justify-content:center}
+  nav button{flex:0 1 calc(var(--tap) * 4)}
+}
 
 /* ── chips ── */
 .chips{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-bottom:var(--s-3)}
@@ -6277,7 +6309,24 @@ function wireDaySwipe() {
 }
 
 /* ── the painter ── */
+/* ── one draw at a time ──
+   Found 2026-10-02 measuring the Report for the wide window: the first open
+   of the Report drew every card TWICE, thirteen children where there should
+   be seven. Its rank card is the first thing to read TRAIN's sets, and that
+   first read can announce the sets arriving while the draw is still going,
+   which runs draw() again from inside itself: the inner one clears the column
+   and draws it whole, then the outer one carries on appending its own cards
+   under it. So a draw that arrives mid-draw is held and run once after. */
+let drawing = false, drawAgain = false;
 function draw() {
+  if (drawing) { drawAgain = true; return; }
+  drawing = true;
+  /* the held draw runs inside the guard too, and at most twice more, so a
+     draw that keeps asking for another cannot loop */
+  try { let n = 0; do { drawAgain = false; drawOnce(); } while (drawAgain && ++n < 3); }
+  finally { drawing = false; drawAgain = false; }
+}
+function drawOnce() {
   const m = document.getElementById('main');
   m.innerHTML = '';
   /* Trends reads Day.last(28) and Day.today(), never the selected day — so a
@@ -6295,6 +6344,8 @@ function draw() {
      the media query decides the room and this decides the screen. */
   m.classList.toggle('beside', TAB === 'now');
   m.classList.toggle('flip', TAB === 'now' && isleFirst() === 'journal');
+  /* Only Stretch has enough cards to need columns; Day is one or two. */
+  m.classList.toggle('cols', TAB === 'trends' && REPTAB !== 'day');
   if (TAB === 'now') drawNow(m);
   else if (TAB === 'food') drawFood(m);
   else if (TAB === 'money') drawMoney(m);
