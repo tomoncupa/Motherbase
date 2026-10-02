@@ -520,9 +520,9 @@ const IO = {
     node.style.width = F.w + 'px';
     node.style.height = F.h + 'px';
     node.style.boxSizing = 'border-box';
-    node.style.setProperty('--story-t', (S.safe.y * k) + 'px');
-    node.style.setProperty('--story-b', ((S.h - S.safe.y - S.safe.h) * k) + 'px');
-    node.style.setProperty('--story-x', (S.safe.x * k) + 'px');
+    node.style.setProperty('--story-t', (S.frame.t * k) + 'px');
+    node.style.setProperty('--story-b', (S.frame.b * k) + 'px');
+    node.style.setProperty('--story-x', (S.frame.x * k) + 'px');
     return IO.shot(node, { w: S.w, h: S.h, box: { x: 0, y: 0, w: S.w, h: S.h }, fill: 1,
       width: F.w, edges: !!opts.edges, before: opts.before });
   },
@@ -652,7 +652,12 @@ const IO = {
      bottom 340, and a card under either cannot be read. 90 either side keeps
      even a Big card off the edges. The card sits in the middle of what is
      left, and a tall one shrinks to fit it rather than running under. */
-  STORY: { w: 1080, h: 1920, safe: { x: 90, y: 250, w: 900, h: 1330 } },
+  STORY: { w: 1080, h: 1920, safe: { x: 90, y: 250, w: 900, h: 1330 },
+    /* A frame hugs the edges a posted story actually covers, not the card's
+       wide berth: the progress bars and the name take about the top 160,
+       the reply bar about the bottom 200. Tom, 2026-10-02, on his phone:
+       "You're not maximizing the full verticality". */
+    frame: { t: 180, b: 220, x: 72 } },
 
   share(o) {
     o = o || {};

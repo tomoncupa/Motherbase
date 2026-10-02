@@ -443,7 +443,9 @@ IG stories with nothing in the middle. Additive; no caller changed.
   frame tints its own panels.
 - **`IO.frameShot(node, {edges})`**: lays the node out at `frameSize()`
   (390 by 693.3) and pictures it as the whole 1080 x 1920 story. It hands the
-  node Instagram's safe insets as `--story-t`, `--story-b`, `--story-x`, so
+  node `IO.STORY.frame`'s insets (180 top, 220 bottom, 72 sides: what a
+  posted story covers, tighter than a card's `safe`, Tom: "You're not
+  maximizing the full verticality") as `--story-t`, `--story-b`, `--story-x`, so
   the app's CSS stays free of raw sizes. `edges` darkens the top, bottom and
   right edges and never the middle (`IO.shot`'s `edges`). `IO.share` no
   longer asks for it: TRAIN's frame draws its own fades in the theme's
