@@ -445,7 +445,9 @@ IG stories with nothing in the middle. Additive; no caller changed.
   (390 by 693.3) and pictures it as the whole 1080 x 1920 story. It hands the
   node Instagram's safe insets as `--story-t`, `--story-b`, `--story-x`, so
   the app's CSS stays free of raw sizes. `edges` darkens the top, bottom and
-  right edges for Translucent and never the middle (`IO.shot`'s `edges`).
+  right edges and never the middle (`IO.shot`'s `edges`). `IO.share` no
+  longer asks for it: TRAIN's frame draws its own fades in the theme's
+  colours, because black edges sat under a light theme's dark words.
 - **Every word in every picture came out in the body's text colour**, the
   card's green gains and gold block line included. The wrapper copied the
   body's computed styles, and `-webkit-text-fill-color` (with the other three

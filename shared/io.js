@@ -687,7 +687,9 @@ const IO = {
         document.body.appendChild(stage);
         /* a chart measures its box once the box is in the page, a tick later */
         setTimeout(() => {
-          (fr ? IO.frameShot(node, { edges: !!st.scrim, before: o.before })
+          /* a frame draws its own fades in the theme's colours: IO's black
+             edges sit under a light theme's dark words (2026-10-02) */
+          (fr ? IO.frameShot(node, { before: o.before })
               : IO.shot(node, { w: IO.STORY.w, h: IO.STORY.h, box: IO.STORY.safe,
                   fill: sz.fill, scrim: !!st.scrim, before: o.before }))
             .then(png => { stage.remove(); res(png); }, err => { stage.remove(); rej(err); });
