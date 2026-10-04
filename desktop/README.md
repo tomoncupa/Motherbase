@@ -64,6 +64,22 @@ the page tells it what to be through a proper message channel.
 Closing the window quits the program, so it can never sit in the tray switched
 off.
 
+## Claude, inside the Main Menu
+
+A gold **CLAUDE** tab on the right edge of every page in the Main Menu opens a
+chat panel (added 4 October 2026). Ask about your own data ("how's my bench
+trending?") or tell it something to log ("3 sets bench 80kg for 8", "paid 450
+for lunch"). Each thing it logs shows under its answer with an UNDO.
+
+It runs the Claude program that comes with the Claude desktop app, on your
+subscription, so it costs nothing extra. It reads a copy of your rows kept in
+`%LOCALAPPDATA%\Motherbase\claude`, never in this repo, and it can only read
+that folder. Only the Main Menu has it: STATUS.exe, the phone and browsers do not.
+
+If it says Claude is signed out, press SIGN IN and sign in on the Claude website.
+
+The panel is `shared/claude.js`; the window side is `ClaudeBridge.cs`.
+
 ## The nightly backup
 
 Every night at 4am, and ten minutes after you sign in on a day the PC was
