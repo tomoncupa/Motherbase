@@ -47,7 +47,8 @@ are holding a stale copy of whatever you just changed.
 | `demo.js` | The DEMO's made-up person and its DEMO tab. The storage switch itself is the first thing in `skins.js`. Fetched only in the demo. | Low. It writes only inside the demo's own namespace. |
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
 | `claude.js` | The CLAUDE panel, added 2026-10-04: a gold tab in Main Menu.exe only (the window injects it; without `chrome.webview` it returns). Ask about the rows, or log by talking. Hands claude.exe a slimmed copy of every row as files; applies Claude's writes here (Journal.add, Rec.set for new rows, Rec.patch for changes), each with Undo; ticks Training after sets like TRAIN.assertTick. Never writes `device`, `setting`, `skin`, pictures or `brief`. | Medium. It writes rows on what Claude says, each shown with Undo. |
-| `_smoke.html` | 409 checks over all of it. | Run it every time. |
+| `boot.js` | The start screen on the home screen and the phone apps. | Low. Writes nothing but one sessionStorage flag. |
+| `_smoke.html` | 412 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -518,6 +519,45 @@ device id lives in localStorage). Two causes, still not told apart:
   `auth`. `SESSION` in `kept` is this cause.
 
 Read every device's `disk` and `auth` in the nightly backup before guessing.
+
+## The start screen (2026-10-04, `boot.js`)
+
+Tom: "a sort of cool startup animation when we're opening up the app",
+"game start load screen initializing system vibes", and the rule over all
+of it: "it should only hide the load time, never cause delay". The home
+screen and the phone apps (the roster's `phone` flag) only.
+
+- **Opt in with one tag, in the head, straight after `skins.js`.** Later and
+  it shows after the page it is meant to hide. A smoke check reads every
+  opted-in page's head for it; a new phone app adds the tag and its folder
+  to that check's list.
+- **When:** the first page a tab or installed app opens, top document only;
+  sessionStorage `mb.boot` remembers. A reload, a frame, or an app opened
+  from the home screen gets nothing. `?boot=1` forces it (in a frame too,
+  which is how the smoke opens it); `?boot=0` never.
+- **How long:** four stages, each lit when true, never on a timer: PAGE
+  (parsed), THEME (`Skins.current`), STORE (`Rec.hydrated`; the home screen
+  draws nothing before it), DRAWN (one frame after the three). Hooked on
+  `DOMContentLoaded` and `Rec.ready`, a 40ms timer as the floor. Measured at
+  6x CPU on all nine pages: the screen leaves 20 to 40ms after the last
+  stage, which is the frame the page paints in anyway. A page whose
+  `Rec.ready` work blocks the thread (STATUS, about 550ms at 6x) holds it
+  for that long because nothing could paint sooner. Four seconds is the cap,
+  and then it says which stage it was waiting on. A tap or a key ends it;
+  the exit runs with pointer events off, so the app takes a tap at once.
+- **Every line is a fact:** the build is `mb-version`, the store line is
+  `Rec.timing().ready`. No fake progress.
+- **Before a theme lands there are no tokens.** Every `var()` carries the
+  scale's own value and a system colour (`Canvas`, `GrayText`), never a hex;
+  the accent falls back to grey, so the window lights up in the theme's
+  colour the moment the THEME line prints.
+- **Every class is `mbb-`.** It sits over app CSS, and TRAIN's own `.seg`
+  and `.n` restyled the bar when it used short names.
+- **A quote inside the CSS string breaks the file.** The CSS is single-quoted
+  JS; a font name goes in double quotes. One edit broke it and the smoke's
+  "clears itself" check caught it.
+- Watched in Chromium only. Not run in WebKit (no WebKit build in the cloud
+  session it was made in) and not on the iPhone.
 
 ## History
 
