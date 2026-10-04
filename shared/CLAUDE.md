@@ -46,6 +46,7 @@ are holding a stale copy of whatever you just changed.
 | `health.js` | Answers "is my data okay". | Low. |
 | `demo.js` | The DEMO's made-up person and its DEMO tab. The storage switch itself is the first thing in `skins.js`. Fetched only in the demo. | Low. It writes only inside the demo's own namespace. |
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
+| `claude.js` | The CLAUDE panel, added 2026-10-04: a gold tab in Main Menu.exe only (the window injects it; without `chrome.webview` it returns). Ask about the rows, or log by talking. Hands claude.exe a slimmed copy of every row as files; applies Claude's writes here (Journal.add, Rec.set for new rows, Rec.patch for changes), each with Undo; ticks Training after sets like TRAIN.assertTick. Never writes `device`, `setting`, `skin`, pictures or `brief`. | Medium. It writes rows on what Claude says, each shown with Undo. |
 | `_smoke.html` | 403 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 

@@ -39,6 +39,7 @@ class Menu : Form
     const string TITLE = "Motherbase";
 
     WebView2 web;
+    ClaudeBridge claude;
     string root, cfgPath, dataDir, pageUrl;
 
     static Mutex only;
@@ -153,6 +154,9 @@ class Menu : Form
         };
         c.NavigationCompleted += (s2, e2) =>
             Log("page loaded: " + (e2.IsSuccess ? "yes" : "NO, " + e2.WebErrorStatus));
+        /* Claude, as a panel on every suite page (ClaudeBridge.cs) */
+        claude = new ClaudeBridge(this, c, UseFolder() ? new Uri(root + Path.DirectorySeparatorChar).AbsoluteUri : HOSTED, Log);
+        claude.Attach();
         c.Navigate(pageUrl);
 
         /* â”€â”€ never a one way trip â”€â”€
