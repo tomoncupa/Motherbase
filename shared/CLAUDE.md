@@ -47,7 +47,7 @@ are holding a stale copy of whatever you just changed.
 | `demo.js` | The DEMO's made-up person and its DEMO tab. The storage switch itself is the first thing in `skins.js`. Fetched only in the demo. | Low. It writes only inside the demo's own namespace. |
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
 | `claude.js` | The CLAUDE panel, added 2026-10-04: a gold tab in Main Menu.exe only (the window injects it; without `chrome.webview` it returns). Ask about the rows, or log by talking. Hands claude.exe a slimmed copy of every row as files; applies Claude's writes here (Journal.add, Rec.set for new rows, Rec.patch for changes), each with Undo; ticks Training after sets like TRAIN.assertTick. Never writes `device`, `setting`, `skin`, pictures or `brief`. | Medium. It writes rows on what Claude says, each shown with Undo. |
-| `_smoke.html` | 403 checks over all of it. | Run it every time. |
+| `_smoke.html` | 409 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -401,6 +401,72 @@ and 2.05 s once TRAIN had opened once; TRAIN's first paint 0.87 s to 0.47 s.
   a first read starts the load, need brings all, the fast-half copy goes, a
   held patch keeps fields it never saw, an older merged copy loses, a held
   delete happens, and a boot-time read has sets by ready.
+
+## No re-read on every write (2026-10-02)
+
+Tom: "Opening the apps takes too long." Measured on a store his size (12,561
+sets, 18,300 rows) in headless Chromium at 6x CPU. The big one: every local
+write poked the parent and every frame, and each ran `Rec.reload()`, a full
+re-read of both halves and of every set it held. The home screen's kernel
+(`wrote`, in `index.html` and `block/index.html`) poked a second time.
+One tick in STATUS with five apps open in home: 2.2 to 4.2 s of blocked main
+thread before, 0.12 to 0.25 s after. BLOCK opened from home settled in 3.3 s
+before (it writes on every redraw), 1.3 s after.
+
+- **`channelOk()`**: on http(s) with BroadcastChannel, a write that carries
+  rows does not poke; the channel already delivered them. A row-less
+  announcement (`clear`, `repairDates`) still pokes, since only a re-read
+  shows a wipe. `file://` pokes as before. `Rec.channel` exposes it; the
+  kernel's `wrote` pokes only when it is false. The receiving side is
+  unchanged, so an older cached sender still works.
+- **`wins()`** answers "the same write, read back" from the `serial`
+  snapshot with one `JSON.stringify` before falling back to `canon`. Every
+  open meets each row twice; canon cost about 200 ms of each open at 6x.
+- **`Day.label` / `Day.short`** keep one `Intl.DateTimeFormat` per option
+  set. `toLocaleDateString` built a new one per call: 500 ms of LOG's open.
+  A time-only ask gets the date added, exactly as `toLocaleDateString` does.
+- **`sound.js`** builds the audio context and its reverb on idle after a
+  fresh open, not on `pageshow`; a page back from the bfcache wakes at once.
+- Measured and ruled out: no signal and a 2 s, 50 kbps line open as fast as
+  full signal (`sw.js` answers from the phone first); V8 compiles the shared
+  files off the main thread, so code caching is not worth chasing; a cached
+  `Intl.Collator` sorts no faster than `localeCompare` in `Rec.all`.
+- Three smoke checks. The poke one was watched failing on the old file.
+
+## Pictures: frames, word colours and fonts (2026-10-02, `io.js`)
+
+From a TRAIN session, Tom's "beautiful export option for train", a frame for
+IG stories with nothing in the middle. Additive; no caller changed.
+
+- **`IO.share({frame})`**: an app that hands in `frame(o)` gets LAYOUT Frame
+  or Card on the panel (`shareLayout`, Frame first). `o.style` is the style
+  id. Size is hidden for a frame. The node is never given `.mb-glass`; a
+  frame tints its own panels.
+- **`IO.frameShot(node, {edges})`**: lays the node out at `frameSize()`
+  (390 by 693.3) and pictures it as the whole 1080 x 1920 story. It hands the
+  node `IO.STORY.frame`'s insets (180 top, 220 bottom, 72 sides: what a
+  posted story covers, tighter than a card's `safe`, Tom: "You're not
+  maximizing the full verticality") as `--story-t`, `--story-b`, `--story-x`, so
+  the app's CSS stays free of raw sizes. `edges` darkens the top, bottom and
+  right edges and never the middle (`IO.shot`'s `edges`). `IO.share` no
+  longer asks for it: TRAIN's frame draws its own fades in the theme's
+  colours, because black edges sat under a light theme's dark words.
+- **Every word in every picture came out in the body's text colour**, the
+  card's green gains and gold block line included. The wrapper copied the
+  body's computed styles, and `-webkit-text-fill-color` (with the other three
+  "the text colour" properties) comes back written out and is inherited. They
+  are no longer copied. Pictures from STATUS and TRAIN change colour.
+- **Fonts go into the picture** (`IO._faces`): an SVG drawn as an image can
+  fetch nothing, so every picture was in the device's plain font. The
+  `@font-face` rules for the families the node uses are written in with their
+  files as data. The suite's own fonts come from the phone's copy, offline
+  too. A Google font (Block's IBM Plex Sans) needs signal and falls back as
+  before without it; this sandbox has none, so that half is unwatched.
+  Capped at `FACE_WAIT`, 2.5 s.
+- Three smoke checks: a word keeps its colour (watched failing on the old
+  file, 0 accent pixels to 630), a frame is the whole story with the middle
+  empty and nothing under the reply box, and the panel offers Frame only to
+  an app that gives one.
 
 ## The demo's storage switch (2026-09-30)
 

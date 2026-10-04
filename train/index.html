@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.42, 2026-09-30">
+<meta name="mb-version" content="1.0.46, 2026-10-02">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -685,6 +685,65 @@ div.prow{padding:0}
 .recap .mark{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:.14em;
   color:var(--text-muted);text-align:right}
 .recap .mark b{color:var(--accent)}
+
+/* ── the frame: a session as the results screen after a battle ──
+   Tom's rules for it, 2026-10-02, in the order he gave them, and they win
+   over any general style rule (his: "don't let the style guidelines
+   overwrite what I've told you this work session"):
+     · a frame for IG stories with NOTHING in the middle; the safe area used
+       to the edge; the session's name on top, everything else at the bottom
+     · not blocky: no box behind each line, and no window ("super blocky")
+     · no sideways text
+     · "x sets x% higher", never "x of y"; gains as % (a switch, else reps);
+       compared with the last session or per lift (a switch)
+     · all the PRs when switched on, "PR" or "Lifetime PR" beside the set,
+       never "Block PR", never as headers
+     · weight, sets, reps and duration at the bottom
+     · "make it look like the report after a video game battle": done with
+       type only, no boxes: caps in the display face, the accent, big numbers
+     · then, seen on his phone: "Condense it way down, clear the middle of
+       the screen", "Remove results": one line per lift's best record, at
+       most three, the totals one line; "Don't all caps anything": every
+       word as it is written, no caps tracking
+   Colours, faces, sizes and spacing are all the theme's tokens. The words sit
+   on the photo with a glow of the theme's page colour (--bg) behind each
+   letter, dark behind light words and light behind dark ones; Translucent
+   and Opaque add a soft fade of --bg from the top and bottom edges, gone
+   well before the middle. IO.frameShot hands in Instagram's safe insets as
+   --story-t, --story-b and --story-x. */
+.frame{display:flex;flex-direction:column;justify-content:space-between;align-items:stretch;
+  padding:var(--story-t) var(--story-x) var(--story-b);overflow:hidden;color:var(--text-1);
+  --fade:color-mix(in srgb,var(--bg) 92%,transparent)}
+.frame.glass{--fade:color-mix(in srgb,var(--bg) 75%,transparent)}
+.frame .fr-head,.frame .fr-res{display:flex;flex-direction:column;gap:var(--s-1);
+  text-shadow:0 0 var(--s-1) var(--bg),0 0 var(--s-3) var(--bg)}
+.frame .fr-res{gap:var(--s-1)}
+/* the fade runs from the very edge of the story, past the words, to nothing */
+.frame.glass .fr-head,.frame.solid .fr-head{margin:calc(var(--story-t) * -1) calc(var(--story-x) * -1) 0;
+  padding:var(--story-t) var(--story-x) var(--s-7);background:linear-gradient(180deg,var(--fade) 50%,transparent)}
+.frame.glass .fr-res,.frame.solid .fr-res{margin:0 calc(var(--story-x) * -1) calc(var(--story-b) * -1);
+  padding:var(--s-7) var(--story-x) var(--story-b);background:linear-gradient(0deg,var(--fade) 50%,transparent)}
+.frame .fr-title{font-family:var(--font-display);font-size:var(--f-5);font-weight:var(--w-bold);
+  line-height:var(--lh-tight);overflow-wrap:anywhere}
+.frame .fr-day{font-size:var(--f-1);color:var(--text-2)}
+.frame .fr-day b{color:var(--accent);font-weight:var(--w-bold)}
+.frame .fr-strong{font-family:var(--font-display);font-size:var(--f-4);font-weight:var(--w-bold);line-height:var(--lh-tight);
+  color:var(--text-2)}
+.frame .fr-strong b{font-size:var(--f-6);color:var(--text-1);font-variant-numeric:tabular-nums}
+/* a gain is words, not a fill: the theme's green pulled 60% to its ink, so a
+   light theme's pale green still reads */
+.frame .fr-gain{color:color-mix(in srgb,var(--success) 40%,var(--text-1));font-variant-numeric:tabular-nums}
+/* a record is one line: trophy, lift, set, and PR or LIFETIME PR beside it */
+.frame .fr-pr{display:flex;align-items:baseline;gap:var(--s-2);min-width:0;font-size:var(--f-2)}
+.frame .fr-pr .mb-ico{width:1em;height:1em;color:var(--accent);flex:0 0 auto;align-self:center}
+.frame .fr-pr .nm{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frame .fr-pr .v{font-family:var(--font-display);font-weight:var(--w-bold);font-variant-numeric:tabular-nums;white-space:nowrap}
+.frame .fr-pr em{font-style:normal;font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
+  color:var(--accent);white-space:nowrap}
+/* weight, sets, reps, time: one line */
+.frame .fr-tot{font-size:var(--f-2);color:var(--text-2)}
+.frame .fr-tot b{font-family:var(--font-display);font-weight:var(--w-bold);color:var(--text-1);font-variant-numeric:tabular-nums}
+.frame .fr-more{font-size:var(--f-1);color:var(--text-2)}
 
 /* The week: arrows either side of which week it is. */
 .weeknav{display:flex;flex-direction:row;align-items:center;gap:var(--s-2)}
@@ -8593,10 +8652,12 @@ TRAIN.compareCtx = function (date) {
 };
 TRAIN.vsFor = function (date, exId, ctx) {
   var has = function (d) { return TRAIN.setsOn(d).some(function (s) { return s.ex === exId && !s.warm; }); };
-  var s = ctx.sess;
+  var s = ctx.move ? {} : ctx.sess;
+  if (!ctx.move) {
   if (s.vs && s.vs < date && has(s.vs)) return { date: s.vs, why: 'picked' };
   for (var i = 0; i < ctx.named.length; i++) if (has(ctx.named[i])) return { date: ctx.named[i], why: 'name' };
   if (s.from && s.from < date && has(s.from)) return { date: s.from, why: 'copy' };
+  }
   var h = TRAIN.historyOf(exId);
   for (var j = h.length - 1; j >= 0; j--) if (h[j].date < date && !h[j].warm) return { date: h[j].date, why: 'last' };
   return null;
@@ -8682,10 +8743,14 @@ function deltaChip(d) {
   return '<span class="dl' + (d.dir > 0 ? ' up' : d.dir < 0 ? ' down' : '') + '">' + UI.esc(d.text) + '</span>';
 }
 
-TRAIN.dayCompare = function (date, off) {
+/* `mode` 'move' skips 1 to 3 above: every lift against its own last time.
+   Tom, 2026-10-02, for the shared frame: "compare it to either last session
+   or per movement". Anything else is the usual order, last session first. */
+TRAIN.dayCompare = function (date, off, mode) {
   var groups = TRAIN.dayGroups(date);
   if (!groups.length) return null;
   var ctx = TRAIN.compareCtx(date);
+  ctx.move = mode === 'move';
   var out = { byEx: {}, up: 0, down: 0, same: 0, fresh: 0, marks: [], vs: null, vsDays: {}, whyOf: {},
               reps: 0, pctSum: 0, pctN: 0 };
   groups.forEach(function (g) {
@@ -8832,7 +8897,7 @@ TRAIN.sessionStats = function (date, off) {
    count, the down squares and every minus beside a total or on the gain
    line go; each lift is listed with its top set (A). Only the picture does
    this. The card on the log is his own view and shows everything. */
-TRAIN.recapCard = function (date, cmp, off, share) {
+TRAIN.recapCard = function (date, cmp, off, share, asPct) {
   /* A lift left out takes its name and numbers with it and nothing else.
      Tom, 2026-09-30: "Sometimes I won't want to share any specific movement
      details, sometimes it will be plenty. This shouldn't change total sets."
@@ -8896,8 +8961,9 @@ TRAIN.recapCard = function (date, cmp, off, share) {
     var lifts = TRAIN.dayGroups(date).map(function (g) {
       if (off && off[g.ex]) return null;
       var L = TRAIN.liftLine(date, g.ex, cmp && cmp.byEx[g.ex]);
+      var up = L && (asPct ? (L.pct ? '+' + L.pct.toFixed(1) + '%' : '') : L.up);
       return L && '<div class="lift"><span class="nm">' + esc(g.def.name) + '</span><span class="v"><span>' + L.top + '</span>' +
-        (L.up ? '<em>' + esc(L.up) + '</em>' : '') + '</span></div>';
+        (up ? '<em>' + esc(up) + '</em>' : '') + '</span></div>';
     }).filter(Boolean);
     if (lifts.length) h += '<div><h3>LIFTS</h3>' + lifts.join('') + '</div>';
   }
@@ -8926,14 +8992,15 @@ TRAIN.recapCard = function (date, cmp, off, share) {
    mark comes off the picture: Tom, 2026-09-14, "no small branding".
    `options` are the panel's extra switches; `build` gets their state, or
    null for the check that there is anything to share at all. */
-function shareCard(build, name, options) {
+function shareCard(build, name, options, frame) {
   if (!window.IO || !IO.share) return UI.toast('Pictures are not available here', { bad: true });
   if (!build(null)) return UI.toast('There is nothing to share', { bad: true });
   IO.share({ app: APP.id, name: name, width: 390, options: options, build: function (o) {
     var c = build(o), mk = c && c.querySelector('.mark');
     if (mk) mk.remove();
     return c;
-  } });
+  /* a shared/io.js too old to know frames simply never asks for one */
+  }, frame: frame && IO.frameShot ? frame : undefined });
 }
 /* Which of a day's lifts are named when it is shared. Tom, 2026-09-29: "I
    don't want to share lifts im weaker in." One switch per lift on the Share
@@ -8960,8 +9027,8 @@ TRAIN.sharedOut = function (exId) {
    at -0.05% or under. A lift with no 1RM on either side is down when it lost
    reps, and one with no reps either (a run, a hold) when more of its sets
    went down than up. A lift with nothing to compare with never went down. */
-TRAIN.wentDown = function (date) {
-  var cmp = TRAIN.dayCompare(date), out = {};
+TRAIN.wentDown = function (date, mode) {
+  var cmp = TRAIN.dayCompare(date, undefined, mode), out = {};
   if (!cmp) return out;
   Object.keys(cmp.byEx).forEach(function (ex) {
     var r = cmp.byEx[ex];
@@ -9012,20 +9079,122 @@ TRAIN.liftLine = function (date, exId, row) {
     if (k === 'd') return TRAIN.showDist(now.dist || 0) + ' <small>' + TRAIN.distUnit() + '</small>';
     return fmtSecs(now.dur || 0);
   }).filter(Boolean).join(' × ');
-  return { top: top1, up: up };
+  /* the same two top sets as a percentage: their estimated 1RMs, or the
+     first measure where there is no weight. Never below zero. */
+  var pct = 0;
+  if (then) {
+    var e1n = TRAIN.e1rm(now.kg, now.r), e1t = TRAIN.e1rm(then.kg, then.r);
+    if (e1n > 0 && e1t > 0) pct = (e1n / e1t - 1) * 100;
+    else {
+      var a0 = val(now, f[0]), b0 = val(then, f[0]);
+      if (a0 > 0 && b0 > 0) pct = (kind === 'dt' && f[0] === 't' ? b0 / a0 - 1 : a0 / b0 - 1) * 100;
+    }
+  }
+  return { top: top1, up: up, pct: pct >= 0.05 ? pct : 0 };
+};
+/* The session as a FRAME for a story (IO.share's `frame`): the session's
+   name and day at the top; at the bottom "N sets X% higher", each lift's best
+   record when `o.sharePrs` is on, and the totals; nothing in the middle,
+   where he is. Tom, 2026-10-02. The same rules as the card: `off` takes a
+   lift's records out and leaves every total whole, and nothing shared
+   carries a minus. `o.sharePct` says the gain as a percentage, else in reps;
+   `o.shareMove` measures each lift against its own last time instead of the
+   last time this session was done. At most FRAME_PRS records, then "and N
+   more". */
+var FRAME_PRS = 3;
+TRAIN.frameCard = function (date, off, o) {
+  var st = TRAIN.sessionStats(date);
+  if (!st.sets) return null;
+  o = o || {};
+  var asPct = !!o.sharePct, mode = o.shareMove ? 'move' : '';
+  var cmp = TRAIN.dayCompare(date, undefined, mode), U = TRAIN.unit(), ph = TRAIN.phaseOn(date), esc = UI.esc;
+
+  /* no year: a story is about now */
+  var h = '<div class="fr-head"><div class="fr-title">' + esc(st.name || 'Training session') + '</div>' +
+    '<div class="fr-day">' + esc(Day.label(date, { day: 'numeric', month: 'short' })) +
+    (ph ? ' · <b>' + esc(TRAIN.phaseLine(ph, date)) + '</b>' : '') + '</div></div>';
+
+  var res = '';
+  /* "N sets X% higher": the sets that went up, and by how much on average,
+     as a percentage of their estimated 1RM; in reps when he asks for reps */
+  if (cmp && cmp.up) {
+    var pSum = 0, pN = 0, reps = 0;
+    Object.keys(cmp.byEx).forEach(function (ex) {
+      var bs = cmp.byEx[ex].bySet;
+      Object.keys(bs).forEach(function (k) {
+        var d = bs[k];
+        if (!(d.dir > 0)) return;
+        if (d.pct != null && d.pct > 0) { pSum += d.pct; pN++; }
+        if (d.dr > 0) reps += d.dr;
+      });
+    });
+    var n = '<b>' + cmp.up + '</b> ' + (cmp.up === 1 ? 'set ' : 'sets ');
+    var pc = pN && pSum / pN >= 0.05 ? (pSum / pN).toFixed(1) + '% ' : '';
+    res += '<div class="fr-strong">' + (asPct
+      ? n + (pc ? '<span class="fr-gain">' + esc(pc) + '</span>' : '') + 'higher'
+      : n + 'higher' + (reps ? ' · <span class="fr-gain">+' + esc(TRAIN.showReps(reps)) + (reps === 1 ? ' rep' : ' reps') + '</span>' : '')) +
+      '</div>';
+  }
+  /* the records, condensed (Tom, 2026-10-02, on his phone: "Condense it way
+     down", "Put PR or lifetime PR beside the set, they don't need to be
+     headers"): one line per lift, its best record, a lifetime one before a
+     block one, the heavier estimated 1RM between two of a kind */
+  if (o.sharePrs) {
+    var best = {}, order = [];
+    TRAIN.sessionRecords(date, off).forEach(function (x) {
+      var b = best[x.ex], e = TRAIN.e1rm(x.s.kg, x.s.r);
+      if (!b) { order.push(x.ex); best[x.ex] = x; x.e = e; return; }
+      if ((x.all && !b.all) || (x.all === b.all && e > b.e)) { x.e = e; best[x.ex] = x; }
+    });
+    var recs = order.map(function (ex) { return best[ex]; })
+      .sort(function (a, b) { return (b.all ? 1 : 0) - (a.all ? 1 : 0); });
+    res += recs.slice(0, FRAME_PRS).map(function (x) {
+      return '<div class="fr-pr">' + ico('record') +
+        '<span class="nm">' + esc(x.name) + '</span><span class="v">' + TRAIN.showWeight(x.s.kg, x.s.u, x.s.ex) +
+          ' × ' + (x.s.split ? esc(x.s.split.text) : x.s.r) + '</span>' +
+        /* his words: "It's either a PR or a lifetime PR" */
+        '<em>' + (x.all ? 'Lifetime PR' : 'PR') + '</em></div>';
+    }).join('');
+    if (recs.length > FRAME_PRS) {
+      var more = recs.length - FRAME_PRS;
+      res += '<div class="fr-more">and ' + more + ' more PR' + (more === 1 ? '' : 's') + '</div>';
+    }
+  }
+  /* the totals close it, one line: "Put the weight sets reps duration at the bottom" */
+  var tot = function (n, label) { return '<b>' + n + '</b>' + (label ? ' ' + esc(label) : ''); };
+  res += '<div class="fr-tot">' + [tot(Math.round(TRAIN.toUnit(st.vol, U)).toLocaleString(), TRAIN.unitLabel()),
+    tot(st.sets, st.sets === 1 ? 'set' : 'sets'), tot(st.reps.toLocaleString(), 'reps'),
+    st.mins ? tot(fmtMins(st.mins)) : ''].filter(Boolean).join(' · ') + '</div>';
+  h += '<div class="fr-res">' + res + '</div>';
+
+  var card = UI.el('div', 'frame ' + (o.style === 'clear' || o.style === 'glass' ? o.style : 'solid'));
+  card.innerHTML = h;
+  return card;
 };
 TRAIN.shareRecap = function (date) {
   date = date || TRAIN.date;
-  var down = TRAIN.wentDown(date);
-  var lifts = TRAIN.shareLifts(date).filter(function (g) { return !down[g.ex]; });
-  shareCard(function (o) {
-    var off = {};
+  /* the switch list: every lift that went up the usual way; which ones went
+     down is asked again for whichever comparison the picture is drawn with */
+  var down0 = TRAIN.wentDown(date);
+  var lifts = TRAIN.shareLifts(date).filter(function (g) { return !down0[g.ex]; });
+  var offFor = function (o) {
+    var off = {}, down = TRAIN.wentDown(date, o && o.shareMove ? 'move' : '');
     Object.keys(down).forEach(function (ex) { off[ex] = 1; });
     if (o) lifts.forEach(function (g) { if (!o['share.' + g.ex]) off[g.ex] = 1; });
-    return TRAIN.recapCard(date, undefined, off, true);
-  }, 'train-' + date, lifts.map(function (g) {
+    return off;
+  };
+  shareCard(function (o) {
+    var mode = o && o.shareMove ? 'move' : '';
+    return TRAIN.recapCard(date, TRAIN.dayCompare(date, undefined, mode), offFor(o), true, !!(o && o.sharePct));
+  }, 'train-' + date, [
+    { id: 'sharePct', label: 'Gains as %', def: 1 },
+    { id: 'shareMove', label: 'Compare each lift with its own last time', def: 0 },
+    { id: 'sharePrs', label: 'PRs', def: 1 },
+  ].concat(lifts.map(function (g) {
     return { id: 'share.' + g.ex, label: g.def.name, def: 1 };
-  }));
+  })), function (o) {
+    return TRAIN.frameCard(date, offFor(o), o);
+  });
 };
 
 /* ── the week ──

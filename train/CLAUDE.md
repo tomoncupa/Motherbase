@@ -330,6 +330,39 @@ clear of the story's own buttons, with the TRAIN mark taken off ("no small
 branding"). It is on the session card, the week, Profile, an exercise's Personal
 Records, and GRAPH. **Not watched on the iPhone.**
 
+**The session as a FRAME** (1.0.43 to 1.0.46). LAYOUT Frame on the
+session's Share panel (Card is the old picture, `shareLayout`).
+`TRAIN.frameCard`. **Tom's rules for it, 2026-10-02, and they win over any
+general style rule** (his: *"don't let the style guidelines overwrite what
+I've told you this work session"*):
+- a frame for IG stories, **nothing in the middle**, the full height used
+  (*"You're not maximizing the full verticality"*): the session's name and
+  day at the very top, everything else at the very bottom, at the edges a
+  posted story covers (`IO.STORY.frame`, 180 top, 220 bottom, 72 sides);
+- **condensed** (*"Condense it way down"*, seen on his phone);
+- **not blocky**: no box behind each line, and no window;
+- **no sideways text**, **no all caps** (*"Don't all caps anything"*):
+  every word as written, no caps tracking;
+- **"x sets x% higher"** (never "x of y"): the sets that went up and their
+  average estimated-1RM gain; with Gains as % off, "x sets higher · +N reps";
+- **no RESULTS heading**;
+- **the PRs** when the PRs switch is on: one line per lift, its best record
+  (a lifetime one before a block one, else the heavier estimated 1RM), with
+  "PR" or "Lifetime PR" beside the set, never as headers and never "Block
+  PR"; at most `FRAME_PRS` (3), then "and N more PRs";
+- **weight, sets, reps and time at the bottom**, one line;
+- the video-game-results feel is the display face, the accent and big
+  numbers, nothing more.
+Words sit on the photo with a glow of `--bg` behind each letter;
+Translucent and Opaque add a soft `--bg` fade from the top and bottom edges
+(75% and 92%). Three switches, all honoured by the card too: **Gains as %**
+(`sharePct`, on), **Compare each lift with its own last time** (`shareMove`,
+off: `TRAIN.dayCompare(date, off, 'move')`), **PRs** (`sharePrs`, on). Same
+rules as the card: the per-lift switches, no lift that went down, never a
+minus. Measured on the demo: the bottom starts 62% down with three PRs, 74%
+with one; the top ends at 23% (both counting the fade). Seen on his iPhone
+in Instagram at 1.0.45, which is what 1.0.46 condensed.
+
 **A lift can be left out of what he shares** (1.0.39). Tom, 2026-09-29: *"I
 don't want to share lifts im weaker in."* The session's Share panel has one
 switch per lift under Style and Size (`TRAIN.shareRecap`, IO.share's
@@ -557,7 +590,7 @@ What iPhone Safari changes:
 ## For the foundation
 
 TRAIN never edits `shared/`; a need goes here. (HISTORY.md: For the foundation) Still open:
-- **Keep the middle of the story clear** (Tom, 2026-09-29: "someone will be in the middle of the story"; 2026-09-30: yes, for every app). `IO.shot` centres the picture in `IO.STORY.safe` and Medium and Small shrink it toward the middle; `.mb-glass` tints the whole node handed in, so a TRAIN-only frame with an empty middle is tinted in Transparent and Translucent. The layout has to change in `IO.share` itself.
+- ~~**Keep the middle of the story clear**~~ Done 2026-10-02: `IO.share` takes a `frame` builder and `IO.frameShot` pictures it edge to edge. The session uses it; the week, Profile, records and GRAPH pictures are still cards.
 - **A note row on the Share panel.** `options` are switch rows only, so nothing can say which lifts were left out and why.
 
 ---
@@ -826,6 +859,24 @@ Curl separate; and *"There is no barbell squat?"*
   new lists get a second.
 - His own imported names (Seated Leg Curl Machine, Lying Leg Curl Machine) are
   not starters and are never folded; Merge Into is how he does those.
+
+## Next: strength graphics (proposed 2026-10-02, not built)
+
+Tom asked for eight ways to show strength going up, each as a sentence, a
+number and a graphic, then "Mockup the graphs". `train/mock-strength-graphs.html`
+is the mockup (example numbers, Block colours written in because it is a
+picture of a design, not app code): 1 estimated 1RM per lift (last time grey,
+now accent, % at the end); 2 more reps at the same weight (a dot per rep);
+3 more weight at the same reps (the bar side-on, the new plate lit); 4 sets
+higher, a square per working set in session order, grouped by lift; 5
+records, a solid trophy for lifetime, an outlined one for PR; 6 the block, a
+sparkline from week 1; 7 a milestone strip of round numbers; 8 lifted over
+bodyweight (STATUS's weigh-ins). Recommended for the frame: 4 as the
+headline, 1 per lift, 6 for a block-end post. Tom has not picked yet; the
+next session starts there. 1 to 5 are worked out already (`setDelta`,
+`liftLine`, `dayCompare`, `recordHits`); 6 to 8 are new. Draw them with
+`chart.js` where it fits (shared rule 5a), tokens only, and obey the frame's
+rules above.
 
 ## Parked
 

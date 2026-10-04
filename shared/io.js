@@ -297,6 +297,66 @@ const IO = {
                  anything that has to measure before the picture is taken
        })  ->  Promise of a data URL
   */
+  /* ── the fonts, carried inside the picture ──
+     A picture is an SVG drawn as an image, and an image can fetch nothing:
+     every word fell back to the device's plain font, whatever the theme
+     wore (found 2026-10-02 on TRAIN's frame). So the @font-face rules for
+     the families the pictured element uses go into the picture with their
+     files written in as data. The suite's own fonts come from the phone's
+     copy and work with no signal; a theme's Google font needs signal and
+     falls back as before without it. Never longer than FACE_WAIT. */
+  FACE_WAIT: 2500,
+  _faceData: {},
+  _faces(node) {
+    const want = {};
+    const norm = f => String(f || '').trim().replace(/^["']|["']$/g, '').toLowerCase();
+    try {
+      const els = [node].concat([].slice.call(node.querySelectorAll('*'), 0, 3000));
+      els.forEach(e => getComputedStyle(e).fontFamily.split(',').forEach(f => { want[norm(f)] = 1; }));
+    } catch (e) { return Promise.resolve(''); }
+    const data = url => {
+      if (IO._faceData[url]) return IO._faceData[url];
+      const p = fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+        .then(b => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); }));
+      IO._faceData[url] = p;
+      p.catch(() => { delete IO._faceData[url]; });
+      return p;
+    };
+    /* one @font-face block, its url written in as data, or '' */
+    const inline = (body, base) => {
+      const fam = (/font-family\s*:\s*([^;]+)/i.exec(body) || [])[1];
+      if (!fam || !want[norm(fam)]) return Promise.resolve('');
+      const range = (/unicode-range\s*:\s*([^;]+)/i.exec(body) || [])[1];
+      /* Google splits a face by script: the Latin block is the one a word needs */
+      if (range && !/U\+0000/i.test(range)) return Promise.resolve('');
+      const m = /url\(\s*["']?([^"')]+)["']?\s*\)/i.exec(body);
+      if (!m || /^data:/i.test(m[1])) return Promise.resolve(m ? '@font-face{' + body + '}' : '');
+      let url;
+      try { url = new URL(m[1], base || location.href).href; } catch (e) { return Promise.resolve(''); }
+      return data(url).then(d => '@font-face{' + body.replace(m[0], 'url(' + d + ')') + '}', () => '');
+    };
+    const jobs = [];
+    [].forEach.call(document.styleSheets, sh => {
+      let rules = null;
+      try { rules = sh.cssRules; } catch (e) {}
+      if (rules) {
+        [].forEach.call(rules, r => {
+          if (r.type === 5) jobs.push(inline(r.style.cssText, sh.href));       /* CSSRule.FONT_FACE_RULE */
+        });
+      } else if (sh.href) {
+        /* a sheet from another address (Google Fonts) cannot be read, only fetched */
+        jobs.push(fetch(sh.href).then(r => r.text()).then(t => {
+          const out = [], re = /@font-face\s*{([^}]*)}/g;
+          let m;
+          while ((m = re.exec(t))) out.push(inline(m[1], sh.href));
+          return Promise.all(out).then(l => l.join(''));
+        }, () => ''));
+      }
+    });
+    const all = Promise.all(jobs).then(l => l.join(''));
+    return Promise.race([all, new Promise(res => setTimeout(() => res(''), IO.FACE_WAIT))]);
+  },
+
   shot(node, opts) {
     opts = opts || {};
     const W = opts.w || 1080, H = opts.h || 1920;
@@ -317,7 +377,8 @@ const IO = {
        so the picture would be in a different face from the screen. */
     const fonts = document.fonts ? document.fonts.ready.catch(() => {}) : Promise.resolve();
 
-    return fonts.then(() => {
+    let faces = '';
+    return fonts.then(() => IO._faces(node)).then(css => { faces = css; }).then(() => {
       if (opts.before) opts.before(node);
 
       const box = node.getBoundingClientRect();
@@ -356,8 +417,16 @@ const IO = {
       /* ── the page, stood in for ── */
       const bcs = getComputedStyle(document.body);
       let stand = '';
+      /* Four properties that mean "the text colour" come back from the browser
+         as the body's colour written out, and they are inherited, so copied
+         here they painted every word in every picture in that one colour:
+         accent, muted and green alike (found 2026-10-02 on TRAIN's frame).
+         Left off, each follows its element's own colour again. */
+      const SAME = { '-webkit-text-fill-color': 1, '-webkit-text-stroke-color': 1,
+        '-webkit-text-emphasis-color': 1, 'text-emphasis-color': 1, 'caret-color': 1 };
       for (let i = 0; i < bcs.length; i++) {
         const prop = bcs[i];
+        if (SAME[prop]) continue;
         stand += prop + ':' + bcs.getPropertyValue(prop) + ';';
       }
       stand += 'display:block;position:static;inset:auto;margin:0;padding:0;border:0;' +
@@ -380,7 +449,22 @@ const IO = {
          Softest at the top, deepest below the content, so it reads as the
          picture getting darker towards the bottom rather than as a box. */
       let scrim = '';
-      if (opts.scrim) {
+      /* A frame's scrim darkens the edges its words sit on and leaves the
+         middle, where the person is, untouched. */
+      if (opts.edges) {
+        const band = (id, x2, y2, stops) =>
+          '<linearGradient id="' + id + '" x1="0" y1="0" x2="' + x2 + '" y2="' + y2 + '">' +
+          stops.map(s => '<stop offset="' + s[0] + '" stop-color="#000" stop-opacity="' + s[1] + '"/>').join('') +
+          '</linearGradient>';
+        scrim =
+          '<defs>' +
+          band('mbtop', 0, 1, [[0, 0.55], [0.24, 0]]) +
+          band('mbbot', 0, 1, [[0.5, 0], [0.74, 0.45], [1, 0.75]]) +
+          band('mbside', 1, 0, [[0.76, 0], [1, 0.4]]) +
+          '</defs>' +
+          ['mbtop', 'mbbot', 'mbside'].map(id =>
+            '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="url(#' + id + ')"/>').join('');
+      } else if (opts.scrim) {
         const mid = Math.max(0, Math.min(1, (oy + sh / 2) / H));
         scrim =
           '<defs><linearGradient id="mbscrim" x1="0" y1="0" x2="0" y2="1">' +
@@ -397,7 +481,7 @@ const IO = {
         scrim +
         '<foreignObject x="' + ox + '" y="' + oy + '" width="' + sw + '" height="' + sh + '">' +
         '<div xmlns="http://www.w3.org/1999/xhtml" style="' + esc(stand) + '">' +
-        '<style>' + sheets + '</style>' +
+        '<style>' + faces + sheets + '</style>' +
         '<div style="width:' + cw + 'px;transform:scale(' + scale + ');transform-origin:top left">' +
         new XMLSerializer().serializeToString(flat(node)) + '</div></div></foreignObject></svg>';
 
@@ -413,6 +497,34 @@ const IO = {
         img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
       });
     }).then(png => { done(); return png; }, err => { done(); throw err; });
+  },
+
+  /* ── a FRAME: the edges are the picture, the middle is the person ──
+     Tom, 2026-09-29: "someone will be in the middle of the story", and
+     2026-10-02: "Nothing in the middle, meant to be used as a frame for IG
+     stories". A card is shrunk into the middle of the story; a frame IS the
+     story, 1080 x 1920 edge to edge, laid out by the app at frameSize() with
+     its words near the edges and nothing in the middle.
+
+     The app does not guess where Instagram draws: the frame node is given
+     the story's own safe insets, scaled to its width, as --story-t (the name
+     and progress bars), --story-b (the reply box) and --story-x (the sides).
+     Its CSS pads by those and stays free of raw sizes.
+
+       IO.frameShot(node, { edges, before })  ->  Promise of a data URL
+         edges   darken the top, bottom and right edges, never the middle */
+  frameSize() { const w = 390; return { w: w, h: w * IO.STORY.h / IO.STORY.w }; },
+  frameShot(node, opts) {
+    opts = opts || {};
+    const S = IO.STORY, F = IO.frameSize(), k = F.w / S.w;
+    node.style.width = F.w + 'px';
+    node.style.height = F.h + 'px';
+    node.style.boxSizing = 'border-box';
+    node.style.setProperty('--story-t', (S.frame.t * k) + 'px');
+    node.style.setProperty('--story-b', (S.frame.b * k) + 'px');
+    node.style.setProperty('--story-x', (S.frame.x * k) + 'px');
+    return IO.shot(node, { w: S.w, h: S.h, box: { x: 0, y: 0, w: S.w, h: S.h }, fill: 1,
+      width: F.w, edges: !!opts.edges, before: opts.before });
   },
 
   /** IO.shot, then hand it to the person. `name` gets .png put on it. */
@@ -511,6 +623,10 @@ const IO = {
          before   as IO.shot
          options  [{id, label, def}], extra switches, like STATUS's
                   "Leave spending out"
+         frame    (o) -> an element laid out as the whole story, words at the
+                  edges and the middle empty (IO.frameShot). Given, the panel
+                  offers Card or Frame, remembered as shareLayout; o.style
+                  is the style's id and o.glass as for build
        })
 
      The picture is drawn when the panel opens, so SHARE hands over a file
@@ -522,6 +638,10 @@ const IO = {
     { id: 'glass', name: 'Translucent', glass: 1, scrim: 1 },
     { id: 'solid', name: 'Opaque', glass: 0, scrim: 0 },
   ],
+  SHARE_LAYOUTS: [
+    { id: 'frame', name: 'Frame' },
+    { id: 'card', name: 'Card' },
+  ],
   SHARE_SIZES: [
     { id: 'big', name: 'Big', fill: 1 },
     { id: 'mid', name: 'Medium', fill: 0.78 },
@@ -532,7 +652,12 @@ const IO = {
      bottom 340, and a card under either cannot be read. 90 either side keeps
      even a Big card off the edges. The card sits in the middle of what is
      left, and a tall one shrinks to fit it rather than running under. */
-  STORY: { w: 1080, h: 1920, safe: { x: 90, y: 250, w: 900, h: 1330 } },
+  STORY: { w: 1080, h: 1920, safe: { x: 90, y: 250, w: 900, h: 1330 },
+    /* A frame hugs the edges a posted story actually covers, not the card's
+       wide berth: the progress bars and the name take about the top 160,
+       the reply bar about the bottom 200. Tom, 2026-10-02, on his phone:
+       "You're not maximizing the full verticality". */
+    frame: { t: 180, b: 220, x: 72 } },
 
   share(o) {
     o = o || {};
@@ -544,27 +669,34 @@ const IO = {
     const on = v => v === true || +v === 1;
     const pick = (list, id) => list.filter(x => x.id === id)[0] || list[0];
     const file = String(o.name || 'picture').replace(/\.png$/i, '') + '.png';
-    let img = null, gen = 0, ready = null;
+    let img = null, gen = 0, ready = null, sizeRow = null;
+    const framed = () => !!o.frame && pick(IO.SHARE_LAYOUTS, get('shareLayout', 'frame')).id === 'frame';
 
     const draw = () => {
       const my = ++gen;
       const st = pick(IO.SHARE_STYLES, get('shareStyle', 'glass'));
       const sz = pick(IO.SHARE_SIZES, get('shareSize', 'mid'));
-      const opt = { glass: !!st.glass };
+      const fr = framed();
+      const opt = { glass: !!st.glass, style: st.id };
       (o.options || []).forEach(x => { opt[x.id] = on(get(x.id, x.def ? 1 : 0)); });
       if (img) img.classList.add('wait');
+      if (sizeRow) sizeRow.style.display = fr ? 'none' : '';
       ready = new Promise((res, rej) => {
-        const node = o.build(opt);
+        const node = fr ? o.frame(opt) : o.build(opt);
         if (!node) return rej(new Error('There is nothing to share'));
-        if (opt.glass) node.classList.add('mb-glass');
+        /* a frame tints its own panels: tinting the node would tint the middle */
+        if (opt.glass && !fr) node.classList.add('mb-glass');
         const stage = el('div', 'mb-shotstage');
-        stage.style.width = (o.width || 390) + 'px';
+        stage.style.width = (fr ? IO.frameSize().w : (o.width || 390)) + 'px';
         stage.appendChild(node);
         document.body.appendChild(stage);
         /* a chart measures its box once the box is in the page, a tick later */
         setTimeout(() => {
-          IO.shot(node, { w: IO.STORY.w, h: IO.STORY.h, box: IO.STORY.safe,
-            fill: sz.fill, scrim: !!st.scrim, before: o.before })
+          /* a frame draws its own fades in the theme's colours: IO's black
+             edges sit under a light theme's dark words (2026-10-02) */
+          (fr ? IO.frameShot(node, { before: o.before })
+              : IO.shot(node, { w: IO.STORY.w, h: IO.STORY.h, box: IO.STORY.safe,
+                  fill: sz.fill, scrim: !!st.scrim, before: o.before }))
             .then(png => { stage.remove(); res(png); }, err => { stage.remove(); rej(err); });
         }, 60);
       });
@@ -581,12 +713,16 @@ const IO = {
         img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
         pv.appendChild(img);
         b.appendChild(pv);
-        const seg = (label, key, list, def) => {
-          b.appendChild(el('div', 'mb-sharelbl', esc(label)));
-          b.appendChild(U.segmented(list, pick(list, get(key, def)).id, v => { put(key, v); draw(); }));
+        const seg = (label, key, list, def, into) => {
+          into = into || b;
+          into.appendChild(el('div', 'mb-sharelbl', esc(label)));
+          into.appendChild(U.segmented(list, pick(list, get(key, def)).id, v => { put(key, v); draw(); }));
         };
+        if (o.frame) seg('Layout', 'shareLayout', IO.SHARE_LAYOUTS, 'frame');
         seg('Style', 'shareStyle', IO.SHARE_STYLES, 'glass');
-        seg('Size', 'shareSize', IO.SHARE_SIZES, 'mid');
+        sizeRow = el('div');
+        seg('Size', 'shareSize', IO.SHARE_SIZES, 'mid', sizeRow);
+        b.appendChild(sizeRow);
         (o.options || []).forEach(x => {
           b.appendChild(U.row(x.label, null,
             U.toggle(on(get(x.id, x.def ? 1 : 0)), v => { put(x.id, v ? 1 : 0); draw(); })));

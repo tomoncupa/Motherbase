@@ -176,7 +176,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `demo.js` | The DEMO, added 2026-09-30: any address with `?demo=1` opens the suite on a made-up person (Jamie Cruz, a coach: sixteen weeks of TRAIN, STATUS, KITCHEN, CHECK IN, BLOCK, QUESTS, LOG, six made-up COACH clients and WEALTH), made fresh each day from a fixed seed. The switch is the top of `skins.js`, which loads first everywhere: for that browser tab it gives localStorage, IndexedDB, the BroadcastChannel and the storage event an `mbdemo:` namespace of their own (every key in the tab's sessionStorage and no IndexedDB for the store, never Tom's fast half or its quota; closing the tab ends it), and `io.js` fetches no `cloud.js` or `report.js` and switches the sheet off. A gold DEMO tab on the right edge; LEAVE DEMO (or `?demo=0`) wipes all of it and opens the real suite. Fetched only in the demo. |
 | `claude.js` | The CLAUDE panel, added 2026-10-04 (Tom: "A and B", ask about his data and log by talking). Main Menu.exe injects it on every suite page (`desktop/ClaudeBridge.cs`); anywhere else it does nothing. The window runs the bundled claude.exe on his subscription (Sonnet, Read/Grep/Glob only) in `%LOCALAPPDATA%\Motherbase\claude`, never the repo, against a copy of every row; the page applies the writes Claude returns, each with Undo. The conversation lives in the window, so it follows him between apps. |
 | `nutrients.js` | The full nutrient list a food can carry beyond the eight, added 2026-09-22: fibre, sugar, the fats, EPA and DHA, cholesterol, eleven minerals and the vitamins, thirty-one in all. One list, three readers: FOODDÉX fills them from its USDA lookup (found by the USDA's printed NAME and unit, never its numeric id, and International Units skipped), STATUS gives each one a column on the sheet's Food tab, and ELEMENT reads its five off the food. They live on `food.base` beside the eight. A blank is "not known", never zero. |
-| `_smoke.html` | 403 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 409 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -937,6 +937,18 @@ answer, or take it out.
   fades its background over 90ms, so a read straight after a class change is
   mid-fade. Paint the value into a 1px canvas and read the pixel, with
   `transition:none` injected first (2026-09-30, the home dock).
+- **A picture drawn as an SVG image can fetch nothing and inherits the
+  body's written-out text colour.** Every `IO.shot` picture came out in the
+  device's plain font with every word one colour (2026-10-02): the wrapper
+  copied `-webkit-text-fill-color`, and the image could not load the theme's
+  fonts. `IO.shot` now skips those properties and writes the fonts in as data
+  (`IO._faces`). Anything that builds its own SVG picture must do both.
+- **Rules Tom gives in a session beat the general style docs.** On
+  2026-10-02 a TRAIN frame was redrawn from THEMING.md and lost what he had
+  asked for an hour earlier (no boxes, nothing in the middle); his words:
+  "don't let the style guidelines overwrite what I've told you this work
+  session". Write his rules into the module's brief as they come, and check
+  each redraw against them.
 - **A page that reloads once something is saved reloads forever where it
   cannot be saved.** The demo filled its store, waited on IndexedDB and
   reloaded onto it: WebKit took from 6 seconds to never to save, and a
