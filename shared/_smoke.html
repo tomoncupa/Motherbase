@@ -3488,6 +3488,46 @@ async function run() {
       Object.keys(ids_).length === ids.length - bad.link.length - bad.parse.length);
   }
 
+  /* ── the start screen (boot.js, 2026-10-04) ──
+     Tom: "it should only hide the load time, never cause delay". One level
+     under "it looks right": does it LEAVE, on its own, once the page is
+     ready, and does it stay out of a frame nobody asked it into. QUESTS is
+     opened twice in frames: plain, where it must do nothing, and with
+     `?boot=1`, which forces it, where it must clear itself with every stage
+     lit. And every page that carries it carries it straight after skins.js,
+     in the head, or it shows after the page it is meant to hide. */
+  if (location.protocol !== 'file:') {
+    const open = (src, until, ms) => new Promise(res => {
+      const fr = document.createElement('iframe');
+      fr.style.cssText = 'position:fixed;left:0;top:0;width:390px;height:700px;opacity:0;pointer-events:none';
+      fr.src = src;
+      document.body.appendChild(fr);
+      const t0 = Date.now();
+      const look = () => {
+        let W = null; try { W = fr.contentWindow; } catch (e) {}
+        const got = W && until(W);
+        if (got || Date.now() - t0 > ms) { const out = got ? Object.assign({}, got) : null; fr.remove(); res(out); }
+        else setTimeout(look, 50);
+      };
+      fr.onload = look;
+    });
+    const plain = await open('../quest/index.html?nosw=1', W => W.Boot && W.Rec && W.Rec.hydrated ? { shown: W.Boot.shown, el: !!W.document.getElementById('mb-boot') } : null, 8000);
+    ok('boot: a frame gets no start screen', !!plain && !plain.shown && !plain.el, ' — ' + JSON.stringify(plain));
+    const forced = await open('../quest/index.html?nosw=1&boot=1', W => W.Boot && W.Boot.at && !W.document.getElementById('mb-boot') && !W.document.getElementById('mb-boot-css') ?
+      { shown: W.Boot.shown, why: W.Boot.why, stage: W.Boot.stage } : null, 9000);
+    ok('boot: the start screen clears itself once the page is ready, every stage lit',
+      !!forced && forced.shown && forced.why === 'ready' && ['page', 'theme', 'store', 'drawn'].every(k => forced.stage[k] > 0),
+      ' — ' + JSON.stringify(forced));
+    const pages = ['', 'status/', 'quest/', 'train/', 'checkin/', 'kitchen/', 'sheet/', 'system/', 'speak/'];
+    const late = [];
+    for (const p of pages) {
+      const html = await fetch('../' + p + 'index.html', { cache: 'no-store' }).then(r => r.ok ? r.text() : '', () => '');
+      const head = html.split('</head>')[0];
+      if (!/shared\/skins\.js(\?v=\d+)?"><\/script>\n<script src="(\.\.\/)?shared\/boot\.js/.test(head)) late.push(p || 'home');
+    }
+    ok('boot: the home screen and the phone apps load it in the head, straight after skins.js', !late.length, ' — not in: ' + late.join(', '));
+  }
+
   /* ---- demo: a store of its own (skins.js, DEMO, 2026-09-30) ----
      A frame opened with the tab's demo flag set must see none of this
      page's rows, and nothing it writes may reach them. The flag is the tab's
