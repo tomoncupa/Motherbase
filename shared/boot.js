@@ -12,7 +12,7 @@
    the top document. A reload, a frame, or a second app opened in the same tab
    gets nothing; the tab's sessionStorage remembers. `?boot=1` plays it anyway,
    in a frame too (the smoke checks open it that way), and `?boot=0` never
-   does.
+   does. `?boot=fail` and `?boot=hang` are the smoke's, below.
 
    How long it stays: exactly as long as the page is still loading, and not
    one frame more. Four stages, each one a segment of the bar, lit when it is
@@ -44,7 +44,11 @@
   var top = false;
   try { top = g.top === g; } catch (e) {}
   var q = (g.location && g.location.search) || '';
-  var force = /[?&]boot=1(&|$)/.test(q), never = /[?&]boot=0(&|$)/.test(q);
+  /* two test switches, for the smoke checks: `fail` throws straight after
+     the screen goes on, `hang` stops its loop, and the screen must leave
+     anyway, by the catch and by the hard stop */
+  var fail = /[?&]boot=fail(&|$)/.test(q), hang = /[?&]boot=hang(&|$)/.test(q);
+  var force = fail || hang || /[?&]boot=1(&|$)/.test(q), never = /[?&]boot=0(&|$)/.test(q);
   var ss = null;
   try { ss = g.sessionStorage; } catch (e) {}
   var KEY = 'mb.boot', seen = false;
@@ -143,9 +147,24 @@
       '<div class="mbb-log"></div>' +
       '<div class="mbb-bar">' + STAGES.map(function () { return '<span class="mbb-seg"></span>'; }).join('') + '<span class="mbb-n">0/4</span></div>' +
     '</div></div>';
+  /* Never in the way, whatever breaks. Once the screen is on the page, two
+     things take it off without asking anything else in this file: a hard
+     stop past the cap, armed before any other line can fail, and the catch
+     around the rest. An engine nobody tested can lose the animation; it can
+     never lose the app under it. */
+  var dead = false, tick = null, scr = null;
+  var kill = function () {
+    dead = true;
+    try { clearInterval(tick); clearInterval(scr); } catch (e) {}
+    try { if (root.parentNode) root.parentNode.removeChild(root); } catch (e) {}
+    try { if (st.parentNode) st.parentNode.removeChild(st); } catch (e) {}
+  };
   /* in the head there is no body yet: the screen hangs off <html>, before it */
   d.documentElement.appendChild(root);
+  var hardStop = setTimeout(function () { if (!dead) { Boot.why = Boot.why || 'stop'; kill(); } }, CAP + 1500);
   Boot.shown = true;
+  try {
+  if (fail) throw new Error('boot=fail');
   /* a frame callback has run once the screen has been drawn at least once */
   var framed = false;
   if (g.requestAnimationFrame) g.requestAnimationFrame(function () { framed = true; });
@@ -155,10 +174,11 @@
   /* the name decodes: random letters settle left to right. Letters and digits
      only, so no glyph falls back to another font and moves the line. */
   var POOL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  var t0 = now(), scr = null;
+  var t0 = now();
   /* by the clock, not by ticks: a page busy loading starves the timer, and
      the name catches up the moment it gets a turn */
   var paintName = function () {
+    if (dead) return;
     var out = '', lock = (now() - t0) / 40 - 2;
     for (var i = 0; i < name.length; i++) {
       var c = name.charAt(i);
@@ -198,9 +218,13 @@
     nEl.textContent = got + '/4';
   };
 
-  var waitedStore = false, finished = false, tick = null, hooked = false;
+  var waitedStore = false, finished = false, hooked = false;
   var poll = function () {
-    if (finished) return;
+    if (finished || dead) return;
+    try { step(); } catch (e) { Boot.why = 'error'; Boot.err = String(e && e.message || e); kill(); }
+  };
+  var step = function () {
+    if (hang) return;
     var t1 = now();
     /* the timer is the floor; these answer the moment a stage lands */
     if (!hooked && g.Rec && g.Rec.ready) { hooked = true; try { g.Rec.ready(poll); } catch (e) {} }
@@ -235,8 +259,11 @@
 
   var gone = false;
   function done(why) {
-    if (gone) return;
+    if (gone || dead) return;
     gone = true; finished = true;
+    try { exit(why); } catch (e) { Boot.err = String(e && e.message || e); kill(); }
+  }
+  function exit(why) {
     Boot.why = why;
     Boot.at = Math.round(now());
     clearInterval(tick);
@@ -247,13 +274,10 @@
     /* nothing painted yet means nobody saw it: no exit to play */
     var painted = framed;
     try { painted = painted || g.performance.getEntriesByType('paint').length > 0; } catch (e) {}
-    var remove = function () {
-      if (root.parentNode) root.parentNode.removeChild(root);
-      if (st.parentNode) st.parentNode.removeChild(st);
-    };
-    if (!painted) { remove(); return; }
+    clearTimeout(hardStop);
+    if (!painted) { kill(); return; }
     root.classList.add('out');
-    setTimeout(remove, 700);
+    setTimeout(kill, 700);
   }
   Boot.done = function () { done('call'); };
 
@@ -263,4 +287,5 @@
   d.addEventListener('DOMContentLoaded', poll);
   tick = setInterval(poll, 40);
   poll();
+  } catch (e) { Boot.why = 'error'; Boot.err = String(e && e.message || e); kill(); }
 })(typeof window !== 'undefined' ? window : this);
