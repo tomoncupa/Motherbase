@@ -136,7 +136,7 @@ _template/         the starter app to copy
 <app>/index.html   one app per folder; <app>/CLAUDE.md is that app's brief
 ```
 
-**Phone or desktop:** `train/` is a phone app. `status/`, `quest/`, `checkin/`, `system/`, `speak/`, `bullet/` and `kitchen/` are for
+**Phone or desktop:** `train/` and `bullet/` are phone apps; BULLET is never opened on a PC (Tom, 2026-10-02). `status/`, `quest/`, `checkin/`, `system/`, `speak/` and `kitchen/` are for
 everywhere. Every other app, including the home screen and `wealth/`, is a
 desktop app. See hard constraint 10. What each one is for, in Tom's words, is
 the table at the top of "The apps" in `DOCTRINE.md`.

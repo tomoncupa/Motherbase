@@ -37,6 +37,18 @@ can save and look at the history of when I open the CHARACTER SHEET".
 - Next: devise an ACHIEVEMENT SYSTEM for SHEET (Tom, 2026-09-25). Design it
   and show Tom before building.
 
+## Wide windows (SHEET 1.0.2, 2026-10-02)
+
+**Tom's rule, 2026-10-02: on a wide window, lay things out side by side;
+never fold text.** He runs a 5120x1440 ultrawide, where SHEET is a "half"
+frame 2560 wide. From 1100px up the NEW and FEATS cards stand in a row
+(each up to 640px) and HISTORY flows its months into CSS columns about 320px
+wide, newest first down the first column (`.top`, `.hlist` in the style
+block). Below 1100px nothing changed: the phone layout was checked box for
+box against 1.0.1 at 390x844 (73 boxes identical). Main's scroll depth with
+the demo, before -> after: 1280x1300 3.40 -> 1.37, 1720x1300 3.40 -> 1.08,
+2560x1300 3.40 -> no scroll, 1920x1000 4.42 -> 1.22; phone 5.59 unchanged.
+
 ## What it is for
 
 Tom, 2026-09-25: "just for fun and social media sharing. The goal is to get
