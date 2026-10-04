@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.21, 2026-10-04">
+<meta name="mb-version" content="1.0.22, 2026-10-04">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -72,6 +72,30 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
   .nav{width:auto;flex:0 0 auto}
   .nav .ct{display:none}
   main{padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--safe-b))}
+}
+
+/* ── a wide window: Tom, 2026-10-02, "on a wide window, lay things out side
+   by side; never fold text". fit() sets --cols (how many sections the view
+   has) and the classes. Past 1240px the title sits beside the add bar and the
+   sections flow into columns of at least 448px, at most 576px, so a line of
+   text stays under about 80 characters. Below 1240px none of this applies:
+   the iPad and the phone are exactly as they were. ── */
+@media (min-width:1240px){
+  .wrap{max-width:max(calc(var(--s-10) * 6),
+    calc(var(--cols, 1) * var(--s-10) * 4.5 + (var(--cols, 1) - 1) * var(--s-6)))}
+  #main.month{max-width:calc(var(--s-10) * 14)}
+  /* the third, flexible track keeps the wide list out of the title's sizing */
+  #main.many{display:grid;grid-template-columns:auto minmax(0, calc(var(--s-10) * 6)) 1fr;
+    column-gap:var(--s-6);align-items:start}
+  #main.many > h1{padding-top:var(--s-3)}
+  #main.many > #list{grid-column:1 / -1}
+  #list.cols{column-width:calc(var(--s-10) * 3.5);column-count:var(--cols, 1);column-gap:var(--s-6)}
+  #list.cols > *{break-inside:avoid}
+  #list.cols > .grp.long{break-inside:auto}
+  #list.cols .row,#list.cols .gh{break-inside:avoid}
+  #list.cols .gh{break-after:avoid}
+  /* Overdue's Reschedule made its heading taller than the days beside it */
+  #list.cols .gh .lnk{margin-top:calc(var(--s-2) * -1);margin-bottom:calc(var(--s-2) * -1)}
 }
 
 /* ── adding: one line, with what it read highlighted underneath the words ── */
@@ -906,7 +930,7 @@ function draw() {
   const list = $('#list');
   list.innerHTML = '';
   if (VIEW === 'cal') {
-    if (!calDay) { drawMonth(list); return; }
+    if (!calDay) { drawMonth(list); fit(list); return; }
     const bk = el('button', 'mb-btn mb-press mb-tap flat', ico('back') + '<span>' + esc(monthName(calDay.slice(0, 7))) + '</span>');
     bk.onclick = () => { calDay = ''; draw(); };
     list.appendChild(bk);
@@ -933,6 +957,23 @@ function draw() {
     list.appendChild(box);
   });
   if (!any) list.appendChild(el('div', 'empty', VIEW === 'today' ? 'Nothing due today' : 'No tasks'));
+  fit(list);
+}
+/* ── a wide window: side by side, never folded ──
+   Tom, 2026-10-02: "on a wide window, lay things out side by side; never fold
+   text". On a window past 1240px the sections of a view (the brief, Overdue,
+   each day) flow into newspaper columns, as many as there are sections and
+   as fit at about 450px each, so Upcoming's fortnight reads across instead
+   of down. The CSS only acts past 1240px; below that nothing here changes
+   how anything is laid out. A section over eight rows may break between
+   columns; a smaller one stays whole. */
+function fit(list) {
+  const m = $('#main'), secs = list.querySelectorAll(':scope > section'), month = VIEW === 'cal' && !calDay;
+  m.classList.toggle('month', month);
+  m.classList.toggle('many', month || secs.length > 1);
+  list.classList.toggle('cols', !month);
+  m.style.setProperty('--cols', String(Math.max(1, secs.length)));
+  secs.forEach(s => s.classList.toggle('long', s.querySelectorAll('.row').length > 8));
 }
 const monthName = ym => asDate(ym + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 function drawMonth(list) {

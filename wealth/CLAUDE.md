@@ -443,6 +443,15 @@ honours the safe areas, because a desktop app on a phone has to stay usable.
 
 Quick entry on a phone stays in STATUS, which is what STATUS is for.
 
+**On a wide window, lay things out side by side; never fold text.** Tom,
+2026-10-02, on a 5120 screen where WEALTH gets a 2560 half. Past 1700px the
+cards sit three across, past 2300 four, up to 2400px; `wfull`, `w2` (one of
+three, two of four) and `t2` (two rows high) on a card act only there. A long
+list in a wide card flows into columns, down then across; a list he can drag
+goes across then down, and `sortable` reads the pointer both ways once its
+rows are not one column. Nothing is hidden or put behind "show more". Below
+1700px the layout is exactly what it was. (HISTORY.md: A wide window)
+
 ## First paint
 
 Paint from localStorage immediately, redraw on `Rec.ready`. Never put the first

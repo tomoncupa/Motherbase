@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.31, 2026-09-23">
+<meta name="mb-version" content="1.0.32, 2026-10-02">
 <title>WEALTH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -68,6 +68,34 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
   .wrap .full{grid-column:1 / -1}
 }
 @media (min-width:1400px){ .wrap{max-width:1400px} }
+
+/* ── a wide window ──
+   Tom, 2026-10-02, on a 5120 wide screen where WEALTH gets half of it: "on a
+   wide window, lay things out side by side; never fold text". Three columns
+   past 1700px and four past 2300px. Here only, and doing nothing below 1700:
+   `wfull` takes the whole row; `w2`, a pie with its key, takes one column of
+   three and two of four; `t2`, a tall list, is two rows high so the short
+   cards before it stack beside it. A long list inside a card wide enough
+   flows into columns rather than running down the page: top to bottom, then
+   across, for a list in date or rank order, and across then down for one he
+   can drag, because `sortable` then reads the pointer both ways. Notes keep
+   a reading width. Nothing is hidden or folded at any width. */
+@media (min-width:1700px){
+  .wrap{max-width:2400px;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-flow:row dense}
+  .wrap .w2{grid-column:auto}
+  .wrap .wfull{grid-column:1 / -1}
+  .wrap .t2{grid-row:span 2}
+  .wrap .card > .list:not([data-sort]){display:block;columns:calc(var(--tap) * 8);column-gap:var(--s-3)}
+  .wrap .card > .list:not([data-sort]) > *{break-inside:avoid;margin-bottom:var(--s-2)}
+  .wrap .card > .list:not([data-sort]) > :last-child{margin-bottom:0}
+  .wrap .card > .list[data-sort]{display:grid;column-gap:var(--s-3);
+    grid-template-columns:repeat(auto-fill,minmax(calc(var(--tap) * 8),1fr))}
+  .wrap .card .note,.wrap .card .empty{max-width:80ch}
+}
+@media (min-width:2300px){
+  .wrap{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .wrap .w2{grid-column:span 2}
+}
 
 .card{border-radius:var(--radius-lg);background:var(--surface-1);
   padding:var(--s-4);box-shadow:var(--e-1),var(--rim)}
@@ -3547,7 +3575,7 @@ function drawIn(m) {
   const exp = expected(monthStart(monthBack(now, 1)), monthEnd(monthBack(now, -2)));
   const late = exp.filter(e => e.late);
 
-  const c0 = card('OWED TO YOU');
+  const c0 = card('OWED TO YOU', 't2');
   if (!late.length) {
     c0.appendChild(el('div', 'empty', clients().length ? 'Nobody is late. Everything expected so far has arrived.'
       : 'No clients yet. Add them under <b>CLIENTS</b>, with what they pay and how often.'));
@@ -3567,7 +3595,7 @@ function drawIn(m) {
 
   /* Coming up. */
   const soon = exp.filter(e => !e.paid && !e.late).slice(0, 12);
-  const c1 = card('EXPECTED NEXT');
+  const c1 = card('EXPECTED NEXT', 't2');
   if (!soon.length) c1.appendChild(el('div', 'empty', 'Nothing dated is coming up. Clients paid by the session have no date until the block is finished, so they show under <b>CLIENTS</b> instead.'));
   else {
     const list = el('div', 'list');
@@ -3587,7 +3615,7 @@ function drawIn(m) {
   const IN_SPANS = [{ id: '1', name: 'THIS MONTH' }, { id: '3', name: '3 MONTHS' }, { id: '12', name: 'A YEAR' }];
   const inSpan = ['1', '3', '12'].indexOf(String(S.get('inSpan', '1'))) > -1 ? String(S.get('inSpan', '1')) : '1';
   const inView = S.get('inView', 'pie') === 'bars' ? 'bars' : 'pie';
-  const c2 = card('WHERE IT CAME FROM', 'full');
+  const c2 = card('WHERE IT CAME FROM', 'full w2');
   const inCtl = el('div', 'rowbtns');
   inCtl.style.flexWrap = 'wrap';
   inCtl.appendChild(UI.segmented(IN_SPANS, inSpan, v => { S.set('inSpan', v); draw(); }));
@@ -3803,7 +3831,7 @@ function drawOut(m) {
     const sums = {};
     bl.forEach(b => { const g = gOf(b); sums[g] = (sums[g] || 0) + billMonthly(b); });
     const rows = G.filter(g => sums[g[0]] > 0).map(g => ({ id: g[0], name: g[1], amt: Math.round(sums[g[0]]) }));
-    const cp = card('YOUR BILLS, A MONTH', 'full');
+    const cp = card('YOUR BILLS, A MONTH', 'full w2');
     const wrap = el('div');
     wrap.appendChild(Chart.pie(rows, { fmt: money, label: 'a month' }));
     cp.appendChild(wrap);
@@ -4927,7 +4955,7 @@ function drawAccounts(m) {
   }
   m.appendChild(c1);
 
-  const c2 = card('CATEGORIES');
+  const c2 = card('CATEGORIES', 'wfull');
   const list = el('div', 'list');
   list.dataset.sort = 'cat';
   const GRP = { fix: 'Fixed', var: 'Variable', biz: 'Business', move: 'Not spending' };
@@ -6805,19 +6833,29 @@ function sortable(list) {
     if (!row || !list.contains(row)) return;
     const onGrip = !!e.target.closest('.grip');
     if (e.pointerType !== 'mouse' && !onGrip) return;
-    drag = { row: row, unit: unitOf(row), sy: e.clientY, id: e.pointerId, live: false, grip: onGrip, was: order() };
+    const kids = [].slice.call(list.children);
+    drag = { row: row, unit: unitOf(row), sx: e.clientX, sy: e.clientY, id: e.pointerId, live: false, grip: onGrip, was: order(),
+      across: kids.some(k => k.offsetLeft !== kids[0].offsetLeft) };
   });
   list.addEventListener('pointermove', e => {
     if (!drag || e.pointerId !== drag.id) return;
     if (!drag.live) {
-      if (Math.abs(e.clientY - drag.sy) < (drag.grip ? 3 : 6)) return;
+      const moved = drag.across ? Math.max(Math.abs(e.clientX - drag.sx), Math.abs(e.clientY - drag.sy)) : Math.abs(e.clientY - drag.sy);
+      if (moved < (drag.grip ? 3 : 6)) return;
       drag.live = true;
       try { list.setPointerCapture(e.pointerId); } catch (x) {}
       drag.unit.classList.add('dragging');
     }
     e.preventDefault();
     const others = [].slice.call(list.children).filter(k => k !== drag.unit);
-    const over = others.find(k => { const b = k.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+    /* On a wide window a list he can drag is laid out across, then down
+       (the wide-window CSS), so the pointer is read in both directions: the
+       first row below it, or the first one beside it on its own line and
+       past its middle. One column is read exactly as it always was. */
+    const across = drag.across;
+    const over = others.find(k => { const b = k.getBoundingClientRect();
+      return across ? e.clientY < b.top || (e.clientY <= b.bottom && e.clientX < b.left + b.width / 2)
+        : e.clientY < b.top + b.height / 2; });
     if (over) { if (drag.unit.nextSibling !== over) list.insertBefore(drag.unit, over); }
     else if (list.lastChild !== drag.unit) list.appendChild(drag.unit);
   });

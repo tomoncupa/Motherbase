@@ -229,6 +229,8 @@ Spent) is read and never written.
 | A todo with no start sorts by when it was ticked, or when it was written if it is still open. A todo moved or rescheduled to a later day stays as > at the bottom, not counted, on every day it touched and was not done on, from the day it sat on to the day it was moved from, and not on the days it skips before its new date; it is to be done only on its new day. Both rules are `shared/journal.js`, the same in STATUS. | Tom, 2026-09-14 |
 | A LIST view, after Day: every day from today back to the first record down the left, newest at the top, each with its day name, its line and its count; the chosen day on the right, drawn by Day's own `dayHTML`, so adding, editing, ticking and the menus are unchanged. The chosen day is `focus`, so it survives a redraw, ADD writes to it and the header arrows move it; Up and Down move it too. A saved list of views gets List added once (`listAdded`). | Tom, 2026-09-22: *"I want a view in LOG that has a list of days on the left side, and a day view open on the right."* |
 | Weeks is off the strip, the mouse side buttons, the view menus and Settings. Its code stays: `off: true` on its LEVELS entry, and deleting that puts it back. A saved Opens on of Weeks opens on Week. | Tom, 2026-09-22: *"the week and weeks view dont do much different from each other, I think just remove the weeks view."* |
+| On a wide window, lay things out side by side; never fold text behind "show more". | Tom, 2026-10-02, for the 5120x1440 screen |
+| Month, Quarter and Year are zoomed out at every window height: they never become the journal (`far: 1` on their LEVELS entries). Month is always 31 days on screen; the bullets are read in Day to Week and in List. | Claude, 2026-10-02 |
 
 ## Found in STATUS, not fixed
 
@@ -283,3 +285,20 @@ What was built and watched, newest last. Moved here verbatim so the root brief
 stays small enough for per-module sessions.
 
 Built 2026-09-13 and tested in the browser. The journal module: a way to view STATUS's entries en masse. One continuous timeline from the first record to today, in eight views from Day to Year; the wheel scrolls, the mouse side buttons change view, a held button drags. Days show the day's line and STATUS's bullets, with a faint mood, energy and caffeine graph behind; beside them, day columns for "What got done today" and every STATUS measure, reorderable, resizable and hideable; beside those, weeks, months, quarters and the year with written summaries. A notebook view lays days out as two-page spreads. Writes `note` and the day's `note` by merging, owns `recap` and `cell`. Never watched with a real mouse or real data. In the client build since 2026-09-14 (Tom: "LOG and QUESTS are for clients as well"). Has its own brief.
+
+**A tall window, 2026-10-02 (LOG 1.0.18).** On the 5120x1440 screen LOG sits
+in a frame 2560 wide and 1300 tall, and Month scrolled 5.5 screens of the
+demo's 121 days against 3.4 at 1920x1000. Width had nothing to do with it:
+1280, 2560 and 3440 wide measured the same at one height. The cause was
+height. Whether a day is the journal (bullets under it, growing to fit) was
+picked by pixels alone, and 1300 tall gives Month 38px a day, past the
+line where a day opens into the journal, so every day with bullets grew and Month showed
+nine days rather than 31. Month, Quarter and Year now never take the journal
+zoom. Month at 2560x1300: 5.54 screens to 3.56, 31 days on screen; the same
+at 1280 and 1720 wide; 1920x1000 unchanged at 3.42; 390x844 unchanged at
+2.62, the timeline compared pixel by pixel. Week, List and Quarter
+measured the same before and after. In the same change, the What got done
+cell in a zoomed-out day is centred in its row; it sat at the top, above
+the day's date. The rest is the length of the history: Month is 31 days
+a screen, so the demo's 121 days are about four screens at any width, and
+fewer would make Month not a month.

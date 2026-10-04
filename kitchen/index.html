@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.3, 2026-10-04">
+<meta name="mb-version" content="1.0.4, 2026-10-04">
 <title>KITCHEN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -51,11 +51,25 @@ nav.kx-tabs button{flex:1;min-height:var(--tap);border:0;border-radius:var(--rad
   font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);letter-spacing:var(--track-cap);
   cursor:pointer;white-space:nowrap;padding:0 var(--s-3)}
 nav.kx-tabs button.on{background:var(--surface-2);color:var(--text-1)}
+/* a wide window: the tabs keep a button's width and sit in the middle */
+@media (min-width:1100px){
+  nav.kx-tabs{justify-content:center}
+  nav.kx-tabs button{flex:0 1 calc(var(--s-10) * 2)}
+}
 
 main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--safe-b))}
 .wrap{max-width:calc(var(--s-10) * 6);margin:0 auto;display:flex;flex-direction:column;gap:var(--s-4)}
-/* the week of PLAN on a wide window uses the whole room */
+/* a wide window uses the whole room: PLAN's week, SHELF's and GUIDE's cards side by side */
 .wrap.kx-wide{max-width:none}
+/* Tom, 2026-10-02: on a wide window lay things out side by side, never fold text.
+   Cards flow down columns at least 384px wide, as many as fit; a card never splits. */
+.kx-mason{columns:calc(var(--s-10) * 3);column-gap:var(--s-4)}
+.kx-mason > *{break-inside:avoid;margin-bottom:var(--s-4)}
+.kx-wide .kx-outl{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(var(--s-10) * 3),1fr));gap:var(--s-2)}
+/* a box, a strip or a line of words keeps a reading width */
+.kx-wide > .mb-input,.kx-wide > .mb-seg,.kx-wide > .kx-note,.kx-wide > .kx-q{width:100%;max-width:calc(var(--s-10) * 6)}
+.kx-wide .kx-foot{justify-content:center}
+.kx-wide .kx-foot .mb-btn{flex:0 1 calc(var(--s-10) * 3)}
 
 /* ── cards and plate rows. The material draws the box; we set corners and room ── */
 .kx-card{border-radius:var(--radius-lg);padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-3)}
@@ -711,7 +725,7 @@ function draw() {
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
   wideNow = innerWidth >= 1100;
-  v.classList.toggle('kx-wide', TAB === 'plan' && wideNow);
+  v.classList.toggle('kx-wide', wideNow);
   v.innerHTML = '';
   (TAB === 'plan' ? drawPlan : TAB === 'guide' ? drawGuide : drawShelf)(v);
   v.dataset.drawn = '1';
@@ -754,6 +768,7 @@ function drawShelf(v) {
   const buy = toBuy();
 
   /* 1. what to buy, only when something is needed */
+  let buyC = null;
   if (buy.length) {
     const c = card('To buy', String(buy.length));
     const list = el('div', 'kx-list');
@@ -772,7 +787,9 @@ function drawShelf(v) {
     const sh = button('SHARE LIST', 'quiet', () => shareList(buy));
     sh.insertAdjacentHTML('afterbegin', ico('share', 16) + ' ');
     c.appendChild(el('div', 'kx-btns')).appendChild(sh);
-    v.appendChild(c);
+    buyC = c;
+    /* on a wide window it heads the shelf's columns instead */
+    if (!wideNow || !inK.length) v.appendChild(c);
   }
 
   /* nothing in the kitchen yet: say what the shelf is and fill it */
@@ -788,10 +805,11 @@ function drawShelf(v) {
   const search = UI.field('search', { placeholder: 'Search the shelf', value: SQ });
   search.setAttribute('aria-label', 'Search the shelf');
   const box = el('div', 'kx-form');
-  search.addEventListener('input', () => { SQ = search.value; paintShelf(box, inK); });
+  const lead = wideNow ? buyC : null;
+  search.addEventListener('input', () => { SQ = search.value; paintShelf(box, inK, lead); });
   v.appendChild(search);
   v.appendChild(box);
-  paintShelf(box, inK);
+  paintShelf(box, inK, lead);
 
   /* purchases that could not be counted are listed, never dropped */
   const lost = inK.reduce((n, id) => n + stock(id).lost.length, 0);
@@ -805,7 +823,7 @@ function drawShelf(v) {
   /* 4. the one primary button, where a thumb is */
   v.appendChild(el('div', 'kx-foot')).appendChild(button('ADD FOOD', 'go', addToShelf));
 }
-function paintShelf(box, inK) {
+function paintShelf(box, inK, lead) {
   const w = W(), q = SQ.trim().toLowerCase();
   const match = id => { const f = w.foods[id]; return !q || (String(f.name || '') + ' ' + String(f.brand || '')).toLowerCase().indexOf(q) >= 0; };
   /* a food bought in a unit that could not be counted stays on the shelf */
@@ -813,6 +831,9 @@ function paintShelf(box, inK) {
   const on = inK.filter(id => onShelf(id) && match(id));
   const out = inK.filter(id => !onShelf(id) && match(id));
   box.innerHTML = '';
+  /* a wide window: To buy and the groups flow side by side in columns */
+  const host = wideNow ? box.appendChild(el('div', 'kx-mason')) : box;
+  if (lead) host.appendChild(lead);
   if (!on.length) box.appendChild(el('p', 'kx-empty', q ? 'Nothing on the shelf matches.' : 'Everything in the kitchen is used up.'));
   /* grouped the way the person's own foods fall, most used first */
   const groups = {};
@@ -823,17 +844,17 @@ function paintShelf(box, inK) {
     const list = el('div', 'kx-list');
     groups[g].sort((a, b) => byUse(w.foods[a], w.foods[b])).forEach(id => list.appendChild(shelfRow(id)));
     c.appendChild(list);
-    box.appendChild(c);
+    host.appendChild(c);
   });
   /* 3. foods at nothing, folded away */
   if (out.length) {
     const t = el('button', 'kx-out mb-press', esc(out.length + (out.length === 1 ? ' food out' : ' foods out')) + ' ' + ico(OUT_OPEN ? 'collapse' : 'expand', 14));
     t.type = 'button';
     t.setAttribute('aria-expanded', OUT_OPEN ? 'true' : 'false');
-    t.onclick = () => { OUT_OPEN = !OUT_OPEN; Mobile.feedback('select'); paintShelf(box, inK); };
+    t.onclick = () => { OUT_OPEN = !OUT_OPEN; Mobile.feedback('select'); paintShelf(box, inK, lead); };
     box.appendChild(t);
     if (OUT_OPEN) {
-      const list = el('div', 'kx-list');
+      const list = el('div', 'kx-list kx-outl');
       out.sort((a, b) => nameOf(w.foods[a]).localeCompare(nameOf(w.foods[b]))).forEach(id => list.appendChild(shelfRow(id)));
       box.appendChild(list);
     }
@@ -1998,7 +2019,8 @@ const valText = row => {
   return v;
 };
 function drawGuide(v) {
-  if (!S.get('ref', null)) v.appendChild(setupCard());
+  const setup = S.get('ref', null) ? null : setupCard();
+  if (setup) v.appendChild(setup);
   v.appendChild(UI.segmented([
     { id: 'today', name: 'TODAY' }, { id: 'next', name: 'NEXT 7 DAYS' }, { id: 'last', name: 'LAST 7 DAYS' },
   ], GPER, id => { GPER = id; draw(); }));
@@ -2017,14 +2039,17 @@ function drawGuide(v) {
   const rows = guideRows(P);
   /* Today's note is the key to the bars, so it shows only over a bar */
   if (GPER !== 'today' || rows.some(r => r.t)) v.appendChild(el('p', 'kx-note', esc(P.note)));
+  /* a wide window: the cards flow side by side in columns, setup first */
+  const host = wideNow ? el('div', 'kx-mason') : v;
+  if (wideNow) { if (setup) host.appendChild(setup); v.appendChild(host); }
   /* nothing measured, nothing to be short of */
-  if (GPER !== 'last' && rows.some(shortable)) v.appendChild(shortCard(P, rows));
+  if (GPER !== 'last' && rows.some(shortable)) host.appendChild(shortCard(P, rows));
   [['macro', 'Calories and macros'], ['fib', 'Fibre'], ['min', 'Minerals'], ['vit', 'Vitamins']].forEach(g => {
     const list = rows.filter(r => r.grp === g[0]);
     if (!list.length) return;
     const c = card(g[1]);
     list.forEach(r => c.appendChild(nutRow(r, P)));
-    v.appendChild(c);
+    host.appendChild(c);
   });
   /* while the setup card is on screen it says this itself */
   const ref = S.get('ref', null);
@@ -2325,8 +2350,8 @@ const rollover = () => {
 };
 setInterval(rollover, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) rollover(); });
-/* PLAN changes shape at 1100px */
-addEventListener('resize', () => { if (TAB === 'plan' && (innerWidth >= 1100) !== wideNow) soon(); });
+/* every tab changes shape at 1100px */
+addEventListener('resize', () => { if ((innerWidth >= 1100) !== wideNow) soon(); });
 
 draw();            /* paint what localStorage has now */
 Rec.ready(draw);   /* again once IndexedDB (big rows) has merged in */

@@ -14,7 +14,9 @@ it to the icon card, it can just be a link".
   OPEN BULLET (a new tab, so a phone lands in the browser where Add to Home
   Screen is), or by its address. It has its own `manifest.json` and icons so
   a saved icon looks like itself. Clients get it (`COPY_DIRS`).
-- **For everywhere, built to the phone rules.** 44px targets, safe areas,
+- **A phone app, never a PC one.** Tom, 2026-10-02: "Bullet isn't meant to
+  be opened on PC ever." No desk layout, no wide-window work, no place in
+  Main Menu's side-by-side mode. Built to the phone rules: 44px targets, safe areas,
   the cursor in the box on open. An iPhone raises the keyboard only for a
   focus inside a tap, so from the home screen it waits for one tap.
 - **It owns no type.** Every line goes through `Journal.add`, the one
