@@ -48,7 +48,7 @@ are holding a stale copy of whatever you just changed.
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
 | `claude.js` | The CLAUDE panel, added 2026-10-04: a gold tab in Main Menu.exe only (the window injects it; without `chrome.webview` it returns). Ask about the rows, or log by talking. Hands claude.exe a slimmed copy of every row as files; applies Claude's writes here (Journal.add, Rec.set for new rows, Rec.patch for changes), each with Undo; ticks Training after sets like TRAIN.assertTick. Never writes `device`, `setting`, `skin`, pictures or `brief`. | Medium. It writes rows on what Claude says, each shown with Undo. |
 | `boot.js` | The start screen on the home screen and the phone apps. | Low. Writes nothing but one sessionStorage flag. |
-| `_smoke.html` | 412 checks over all of it. | Run it every time. |
+| `_smoke.html` | 414 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -556,6 +556,14 @@ screen and the phone apps (the roster's `phone` flag) only.
 - **A quote inside the CSS string breaks the file.** The CSS is single-quoted
   JS; a font name goes in double quotes. One edit broke it and the smoke's
   "clears itself" check caught it.
+- **Never in the way, whatever breaks** (the same day, before it went to
+  clients). Until then, a throw between the screen going on and its timer
+  starting left it over the app for good, and the cap could not help: the
+  cap lives in that timer. Now `kill()` is armed first, a hard stop at the
+  cap plus 1.5 s calls it whatever else happens, and a catch around the
+  rest, `poll` and the exit calls it on any throw (`Boot.why` `'error'`,
+  `Boot.err` the message). `?boot=fail` and `?boot=hang` drive both in two
+  smoke checks, which were watched failing with the net taken out.
 - Watched in Chromium only. Not run in WebKit (no WebKit build in the cloud
   session it was made in) and not on the iPhone.
 
