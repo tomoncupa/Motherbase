@@ -182,6 +182,23 @@
    Ice. `Skins.for('block')` before restore()/apply() scopes it; without it
    everything shares the old single key, exactly as before. */
 let APP='';
+/* Where this file is, so a theme's font is found beside it in any app. */
+const HERE=((g.document&&g.document.currentScript&&g.document.currentScript.src)||'').replace(/[^/]*$/,'');
+/* The families kept in shared/fonts (A5, 2026-10-05: offline a theme lost its
+   look, because every face but two came from Google). Name to the stylesheet
+   tools/fetch-fonts.py writes; Chakra Petch and Inter Tight are fonts.css. */
+const LOCAL_FONTS={'Chakra Petch':'fonts','Inter Tight':'fonts','Orbitron':'orbitron','Rajdhani':'rajdhani',
+  'Oswald':'oswald','Archivo':'archivo','Silkscreen':'silkscreen','Press Start 2P':'press-start-2p','VT323':'vt323',
+  'IBM Plex Mono':'ibm-plex-mono','Space Mono':'space-mono','Gloria Hallelujah':'gloria-hallelujah',
+  'Patrick Hand':'patrick-hand','Architects Daughter':'architects-daughter','Bebas Neue':'bebas-neue',
+  'Playfair Display':'playfair-display','Cinzel':'cinzel','Audiowide':'audiowide','Fredoka':'fredoka',
+  'Nunito':'nunito','IBM Plex Sans':'ibm-plex-sans','Arimo':'arimo','Jost':'jost','DotGothic16':'dotgothic16',
+  'Bungee':'bungee'};
+/* "Press+Start+2P" or "Archivo:wght@400;700" to the family's name */
+const fontFamily=spec=>{try{return decodeURIComponent(String(spec).split(':')[0].replace(/\+/g,' ')).trim()}catch(e){return ''}};
+const googleFont=spec=>'https://fonts.googleapis.com/css2?family='+String(spec).replace(/"/g,'')+'&display=swap';
+/* this page's copy first, Google only if that will not load */
+const fontHref=spec=>{const k=LOCAL_FONTS[fontFamily(spec)];return k&&HERE?HERE+'fonts/'+k+'.css':googleFont(spec)};
 const KEY='suite_skin';
 const PAL_KEY='suite_palettes';
 const skinKey=()=>APP?KEY+'.'+APP:KEY;
@@ -747,12 +764,17 @@ const Skins={
        nothing. */
     const local=!!document.querySelector('link[href*="fonts/fonts.css"]');
     want.filter(Boolean).forEach(spec=>{
-      if(local&&/^(Chakra\+Petch|Inter\+Tight)(:|$)/.test(String(spec)))return;
+      if(local&&LOCAL_FONTS[fontFamily(spec)]==='fonts')return;
       const id='mb-font-'+String(spec).replace(/[^a-z0-9]/gi,'');
       if(document.getElementById(id))return;
       const l=document.createElement('link');
       l.id=id;l.rel='stylesheet';
-      l.href='https://fonts.googleapis.com/css2?family='+spec+'&display=swap';
+      /* Since 2026-10-05 a bundled family's own stylesheet in shared/fonts,
+         fetched only for the theme that asks, and kept by sw.js once it has
+         been; Google when this page cannot reach that file. */
+      const href=fontHref(spec),far=googleFont(spec);
+      if(href!==far)l.onerror=()=>{l.onerror=null;l.href=far};
+      l.href=href;
       document.head.appendChild(l);
     });
   },
@@ -761,9 +783,9 @@ const Skins={
   fontLinks(skin){
     if(!skin||!skin.font)return '';
     const want=Array.isArray(skin.font)?skin.font:[skin.font];
-    return want.filter(Boolean).map(spec=>
-      '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family='+
-      String(spec).replace(/"/g,'')+'&display=swap">').join('');
+    return want.filter(Boolean).map(spec=>{
+      const href=fontHref(spec),far=googleFont(spec);
+      return '<link rel="stylesheet" href="'+href+'"'+(href!==far?' onerror="this.onerror=null;this.href=\''+far+'\'"':'')+'>'}).join('');
   },
 
   /* A theme's own stylesheet. Tokens repaint a component; this restyles it —
@@ -944,6 +966,8 @@ const Skins={
   },
   /* exposed so STYLE can show what "automatic" would give without applying it */
   autoRamp(base){return autoRamp(base)},
+  /* the families kept in shared/fonts, and where one is fetched from */
+  localFonts:LOCAL_FONTS,fontHref:fontHref,
   util:{mix,contrast,readable,lum,rgb2hsl,hsl2rgb,lift,liftAll}
 };
 g.Skins=Skins;
