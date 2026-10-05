@@ -131,3 +131,12 @@ Watched in headless Chromium on the demo: at 5120x1300 TRAIN got 900px and the b
 ## 2026-10-05, HOME 1.0.47: UPCOMING in the default board
 
 Tom said yes to UPCOMING in the corner MOMENTUM left (4x5, so its bottom meets EVERY & ANYTIME and RECORDS). Measured at 1920x1000: the eight cards fill three columns with no hole.
+
+## 2026-10-05, HOME 1.0.49: BODY HEATMAP stands by default, other poses on the menu, a smaller waist
+
+Tom: "make the waist smaller", "Make the default pose standing", "Hide the other poses behind the righ click options".
+
+- **Poses** (`BODY_POSES`): Standing (arms at his sides, the default), Vitruvian (arms out) and Double biceps, picked from the card's right-click or hold menu, Pose; the choice is `cfg.pose` on the layout entry, absent for Standing. The faint second pose is gone. One torso (`BODY_SKIN`, `BODY_FRONT`, `BODY_BACK`, no arms in them) and an arm set per pose drawn over it: `skin` filled, `line` the outline without the edge it shares with the body, and the delts, biceps or triceps and forearms. The arm sets were generated from where the shoulder, elbow, wrist and fingertips sit, so all three carry the same muscles; the generator is a scratch script, not in the repo, so a new pose is drawn by hand or by writing one again.
+- **Waist**: 13% narrower at the navel, tapering back to nothing at the ribs and the hips. Shoulders to waist is about 1.85 now, past the golden ratio, at his word.
+
+Watched in headless Chromium on the demo: right-click on the card's title, Pose, Double biceps redrew the card and saved `pose: 'flex'` in the layout; Standing is what a fresh board draws, at 1920x1000 and 390x844 with no row overflowing. Review 142/142 Chromium, WebKit only the known foundation-frame fail. Not seen on his screens.
