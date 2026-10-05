@@ -398,6 +398,8 @@ Scroll depth (scrollHeight over window height, demo data, headless
 Chromium), before to after: SHELF 1.84 to 1.00 at 1280, 1720 and 2560 x
 1300, 2.39 to 1.00 at 1920x1000; GUIDE 2.62 to 1.12 (1280), 1.01 (1720),
 1.01 (2560), 3.40 to 1.31 at 1920x1000. PLAN untouched (1.28 at 2560).
+
+**1.0.6, 2026-10-06: dealt, not flowed.** On his 3840x1080 (Main Menu now gives every app the whole window) CSS columns stacked SHELF's and GUIDE's short cards under the tallest (Vitamins, 1105px) and left 1632px of the right side empty, with GUIDE scrolling 1.41 screens. `mason()` now deals the cards into flex columns (`.kx-mcol`): as many as there are cards and as fit at 384px, at most 768px each, each card into the shortest column, re-dealt on resize from the kept order (`host._cards`). A nutrient card with more than six rows on a wide window lists them in a grid (`.kx-nlist`, 288px at least), so a 750px Vitamins card is two columns. Measured on the demo, headless Chromium: at 3840x1000 SHELF and GUIDE fill the width, GUIDE 1.41 to 1.00 screens; at 1920 SHELF went from ending at 1428px to filling it, GUIDE 1.41 either way; at 1280 GUIDE 1.74 to 1.76. Under 1100px nothing changed.
 Not watched: the Foods out list opened (the demo has no food at zero).
 
 ## In progress (2026-10-05)

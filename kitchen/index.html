@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.5, 2026-10-05">
+<meta name="mb-version" content="1.0.6, 2026-10-06">
 <title>KITCHEN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -64,9 +64,14 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 /* a wide window uses the whole room: PLAN's week, SHELF's and GUIDE's cards side by side */
 .wrap.kx-wide{max-width:none}
 /* Tom, 2026-10-02: on a wide window lay things out side by side, never fold text.
-   Cards flow down columns at least 384px wide, as many as fit; a card never splits. */
-.kx-mason{columns:calc(var(--s-10) * 3);column-gap:var(--s-4)}
-.kx-mason > *{break-inside:avoid;margin-bottom:var(--s-4)}
+   mason() deals the cards into columns at least 384px wide, as many as there
+   are cards and as fit, each card into the shortest column; a card never splits.
+   CSS columns stacked short cards under the tallest and left half of a 3840
+   window empty (2026-10-06). */
+.kx-mason{display:flex;justify-content:center;align-items:flex-start;gap:var(--s-4)}
+.kx-mcol{flex:1 1 0;min-width:0;max-width:calc(var(--s-10) * 6);display:flex;flex-direction:column;gap:var(--s-4)}
+/* a long list of nutrients in a wide card runs in two columns, not one tall one */
+.kx-nlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(var(--s-10) * 2.25),1fr));column-gap:var(--s-5)}
 .kx-wide .kx-outl{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(var(--s-10) * 3),1fr));gap:var(--s-2)}
 /* a box, a strip or a line of words keeps a reading width */
 .kx-wide > .mb-input,.kx-wide > .mb-seg,.kx-wide > .kx-note,.kx-wide > .kx-q{width:100%;max-width:calc(var(--s-10) * 6)}
@@ -745,6 +750,21 @@ function go(tab) {
   TAB = tab;
   draw();
 }
+/* The wide window's cards, dealt into columns: as many as there are cards
+   and as fit at 384px, each card into the shortest so far, so they read
+   across and a short card sits beside a tall one rather than under it.
+   The cards are kept on the host, so a resize deals them again in order. */
+function mason(host) {
+  if (!host || !host.isConnected) return;
+  const cards = host._cards || (host._cards = [].slice.call(host.children));
+  const gap = parseFloat(getComputedStyle(host).columnGap) || 0;
+  const min = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--s-10')) * 3 || 384;
+  const n = Math.max(1, Math.min(cards.length, Math.floor((host.clientWidth + gap) / (min + gap))));
+  host.innerHTML = '';
+  const cols = [];
+  for (let i = 0; i < n; i++) cols.push(host.appendChild(el('div', 'kx-mcol')));
+  cards.forEach(c => { let s = cols[0]; cols.forEach(x => { if (x.offsetHeight < s.offsetHeight) s = x; }); s.appendChild(c); });
+}
 function card(title, right) {
   const c = el('div', 'kx-card mb-card');
   if (title) c.appendChild(el('h2', null, esc(title) + (right ? '<span class="r">' + esc(right) + '</span>' : '')));
@@ -853,6 +873,7 @@ function paintShelf(box, inK, lead) {
     c.appendChild(list);
     host.appendChild(c);
   });
+  if (wideNow) mason(host);
   /* 3. foods at nothing, folded away */
   if (out.length) {
     const t = el('button', 'kx-out mb-press', esc(out.length + (out.length === 1 ? ' food out' : ' foods out')) + ' ' + ico(OUT_OPEN ? 'collapse' : 'expand', 14));
@@ -2508,9 +2529,11 @@ function drawGuide(v) {
     const list = rows.filter(r => r.grp === g[0]);
     if (!list.length) return;
     const c = card(g[1]);
-    list.forEach(r => c.appendChild(nutRow(r, P)));
+    const into = wideNow && list.length > 6 ? c.appendChild(el('div', 'kx-nlist')) : c;
+    list.forEach(r => into.appendChild(nutRow(r, P)));
     host.appendChild(c);
   });
+  if (wideNow) mason(host);
   /* while the setup card is on screen it says this itself */
   const ref = S.get('ref', null);
   if (ref && !rows.some(r => r.grp !== 'macro')) v.appendChild(el('p', 'kx-q', ref.none ? 'No reference intakes are chosen.' : 'Every reference nutrient is hidden.'));
@@ -2820,7 +2843,12 @@ const rollover = () => {
 setInterval(rollover, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) rollover(); });
 /* every tab changes shape at 1100px */
-addEventListener('resize', () => { if ((innerWidth >= 1100) !== wideNow) soon(); });
+let masonT = 0;
+addEventListener('resize', () => {
+  if ((innerWidth >= 1100) !== wideNow) return soon();
+  clearTimeout(masonT);
+  if (wideNow) masonT = setTimeout(() => document.querySelectorAll('.kx-mason').forEach(mason), 150);
+});
 
 draw();            /* paint what localStorage has now */
 Rec.ready(draw);   /* again once IndexedDB (big rows) has merged in */
