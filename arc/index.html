@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<meta name="mb-version" content="1.0.6, 2026-09-30">
+<meta name="mb-version" content="1.0.7, 2026-10-06">
 <title>ARC — Mind Canvas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;600&family=Space+Grotesk:wght@500;700&family=Caveat:wght@500;700&family=Patrick+Hand&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
@@ -1028,21 +1028,31 @@ IO.register({
 const rowKey = (mapId, id) => mapId + '|' + id;
 const splitKey = k => { const i = k.indexOf('|'); return i < 0 ? [k, ''] : [k.slice(0, i), k.slice(i + 1)]; };
 
+/* Every row ARC has had on screen, as 'type|key'. dbToRows tombstones only
+   these. Found 2026-10-06: it used to tombstone every map, node and link in
+   the STORE that the screen lacked, so an ARC open on a blank map when the real
+   rows arrived (a sync, the big half, a node landing before its map row)
+   deleted all of them on its next save. That is how five maps and 347 nodes
+   went on 2026-09-17, every tombstone stamped the same millisecond, by: arc.
+   A row ARC never showed is not ARC's to delete. */
+const SEEN = new Set();
+
 /** Assemble the workspace out of whatever rows are in memory right now. */
 function rowsToDB(){
-  const byId = {}, maps = [];
+  const byId = {}, maps = [], placed = [];
   Rec.all('map').forEach(r => {
     const m = Object.assign({ nodes: {}, links: [], snaps: [] }, r.payload, { id: r.key });
-    byId[r.key] = m; maps.push(m);
+    byId[r.key] = m; maps.push(m); placed.push('map|' + r.key);
   });
   Rec.all('node').forEach(r => {
     const [mid, nid] = splitKey(r.key);
-    if (byId[mid] && nid) byId[mid].nodes[nid] = r.payload;
+    if (byId[mid] && nid) { byId[mid].nodes[nid] = r.payload; placed.push('node|' + r.key); }
   });
   Rec.all('link').forEach(r => {
     const [mid] = splitKey(r.key);
-    if (byId[mid]) byId[mid].links.push(r.payload);
+    if (byId[mid]) { byId[mid].links.push(r.payload); placed.push('link|' + r.key); }
   });
+  placed.forEach(k => SEEN.add(k));
   maps.sort((a, b) => (a.order || 0) - (b.order || 0));
   maps.forEach(m => m.links.sort((a, b) => (a.ord || 0) - (b.ord || 0)));
   if (!maps.length) return null;
@@ -1068,7 +1078,7 @@ const MAP_FIELDS = ['edgeStyle', 'posGrad', 'rankColors', 'hideCousins',
                     'lineDash', 'presPath', 'teachTopic', 'teachStart'];
 
 /** Write the workspace back out, one row per thing, and tombstone what went. */
-function dbToRows(){
+function dbToRows(noDelete){
   const keptMap = {}, keptNode = {}, keptLink = {};
   DB.maps.forEach((m, i) => {
     keptMap[m.id] = 1;
@@ -1099,11 +1109,21 @@ function dbToRows(){
       Rec.set('link', null, k, Object.assign({}, l, { ord: j }));
     });
   });
-  /* Anything the store still has that the workspace no longer does has been
-     deleted, and a deletion has to be recorded rather than merely absent. */
-  Rec.all('map').forEach(r => { if (!keptMap[r.key]) Rec.del('map', null, r.key); });
-  Rec.all('node').forEach(r => { if (!keptNode[r.key]) Rec.del('node', null, r.key); });
-  Rec.all('link').forEach(r => { if (!keptLink[r.key]) Rec.del('link', null, r.key); });
+  Object.keys(keptMap).forEach(k => SEEN.add('map|' + k));
+  Object.keys(keptNode).forEach(k => SEEN.add('node|' + k));
+  Object.keys(keptLink).forEach(k => SEEN.add('link|' + k));
+  /* Anything ARC showed that the workspace no longer has has been deleted, and
+     a deletion has to be recorded rather than merely absent. Only what it
+     showed: see SEEN. */
+  if (!noDelete) {
+    const kept = { map: keptMap, node: keptNode, link: keptLink };
+    Array.from(SEEN).forEach(s => {
+      const i = s.indexOf('|'), type = s.slice(0, i), key = s.slice(i + 1);
+      if (kept[type][key]) return;
+      if (Rec.get(type, null, key)) Rec.del(type, null, key);
+      SEEN.delete(s);
+    });
+  }
   Rec.setting('arc', 'current', DB.currentId);
 }
 
@@ -1125,14 +1145,14 @@ function migrateBlob(){
     const keep = DB;
     DB = old;
     (DB.maps || []).forEach(m => { (m.links || []).forEach(l => { if (!l.rel) l.rel = 'equal'; }); });
-    dbToRows();
+    dbToRows(true);
     DB = keep;
     Rec.setting('arc', 'migrated', new Date().toISOString());
     return old.maps.length;
   }).catch(() => {
     const ls = fromLS();
     if (ls && ls.maps && ls.maps.length) {
-      const keep = DB; DB = ls; dbToRows(); DB = keep;
+      const keep = DB; DB = ls; dbToRows(true); DB = keep;
     }
     Rec.setting('arc', 'migrated', new Date().toISOString());
     return ls && ls.maps ? ls.maps.length : 0;
