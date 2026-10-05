@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.53, 2026-10-05">
+<meta name="mb-version" content="1.0.54, 2026-10-05">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -2980,6 +2980,26 @@ const WIDGETS = {
         } }],
       });
       const capital = w => w.charAt(0).toUpperCase() + w.slice(1);
+      /* D4, 2026-10-05: the three bands are named on the card's own menu, a
+         setting each, with neutral names until then. "TOO OLD FOR A LOT" was
+         the old band's name, and a client was about to see it. */
+      const BAND = { youth: 'EARLY', mid: 'MIDDLE', old: 'LATE' };
+      const bandName = which => String(Rec.setting('lifeos', 'lifeName' + capital(which)) || BAND[which]).toUpperCase();
+      const askName = which => UI.dialog({
+        title: 'Name this band', width: 280,
+        body: b2 => {
+          const f = UI.field('text', { value: bandName(which) });
+          b2.appendChild(f);
+          const i = f.querySelector ? (f.querySelector('input') || f) : f;
+          setTimeout(() => { if (i.focus) i.focus(); if (i.select) i.select(); }, 40);
+        },
+        actions: [{ label: 'CANCEL' }, { label: 'SET', kind: 'go', fn: h => {
+          const i = h.body.querySelector('input');
+          const v = String((i && i.value) || '').trim().slice(0, 24);
+          Rec.setting('lifeos', 'lifeName' + capital(which), v && v.toUpperCase() !== BAND[which] ? v : null);
+          drawHome();
+        } }],
+      });
       const colourItems = which => [1, 2, 3, 4, 5, 6].map(n => ({
         label: 'Colour ' + n, check: cols[which] === n,
         fn: () => { Rec.setting('lifeos', 'life' + capital(which), n); drawHome(); },
@@ -3000,6 +3020,9 @@ const WIDGETS = {
         { label: 'Youth colour', sub: colourItems('youth') },
         { label: 'Middle colour', sub: colourItems('mid') },
         { label: 'Old age colour', sub: colourItems('old') },
+        '-',
+        { label: 'Name the bands', sub: [['youth', 'First band'], ['mid', 'Middle band'], ['old', 'Last band']].map(b => ({
+          label: b[1] + ': ' + bandName(b[0]), fn: () => askName(b[0]) })) },
       ], { title: 'LIFE' });
       body.oncontextmenu = ev => { ev.preventDefault(); ev.stopPropagation(); lifeMenu(ev.clientX, ev.clientY); };
       if (typeof Mobile !== 'undefined' && Mobile.hold) Mobile.hold(body, () => lifeMenu(0, 0));
@@ -3049,9 +3072,9 @@ const WIDGETS = {
             (range ? '<span style="color:var(--dim2)">' + esc(range) + '</span>' : '');
           key.appendChild(c);
         };
-        if (youth) chip('youth', 'YOUNG', 'to ' + youth);
-        chip('mid', 'MIDDLE', (youth || 0) + (old ? '\u2013' + old : '+'));
-        if (old) chip('old', 'TOO OLD FOR A LOT', 'from ' + old);
+        if (youth) chip('youth', bandName('youth'), 'to ' + youth);
+        chip('mid', bandName('mid'), (youth || 0) + (old ? '\u2013' + old : '+'));
+        if (old) chip('old', bandName('old'), 'from ' + old);
         body.appendChild(key);
       }
     },

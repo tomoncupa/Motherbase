@@ -156,3 +156,7 @@ Tom: "this doesnt show recovery. Red - just hit, Green - ready to go, Brightness
 - **Double biceps front**: the deltoid is a round cap standing above the arm with a dip before the biceps peak (per-pose `delt` and `biceps` in the generator), and the biceps fills its peak.
 
 Watched in headless Chromium at 1920x1000 and WebKit at 390x844 on the demo: computed fills are colours in both (oklab), dots 8px, no row overflowing. Review 142/142 Chromium, WebKit only the known foundation-frame fail. Not seen on his screens.
+
+## 2026-10-05, HOME 1.0.54: LIFE band names (D4)
+
+The three bands are EARLY, MIDDLE and LATE until named on the card's own menu, Name the bands, a setting each (`lifeos.lifeNameYouth`, `lifeNameMid`, `lifeNameOld`; cleared when set back to the default). "TOO OLD FOR A LOT" is gone before clients see it. Watched by right-clicking the card, Name the bands, First band, SET: the legend read GROWING.
