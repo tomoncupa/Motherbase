@@ -902,9 +902,19 @@ running block total. It dips in a lighter week; that is honest, leave it.
   set counts, warmups too**: a 70%-of-top-set cut was tried on his log and
   threw out the lighter opening sets he works up from, flipping three lifts
   from up to down. Mocked from his 5 Oct backup in a scratchpad, not in the
-  repo. Open: where it lives (recommended: the GRAPH tab, his own view; the
-  share picture only lifts trending up), and whether warmups-count is for
-  these graphs only or all of TRAIN.
+  repo. **Where (Tom, yes to the recommendation):** the GRAPH tab for every
+  lift, his own view, minuses shown; the share picture only lifts trending
+  up; the every-session chart in Analysis.
+- **Warmups count everywhere in TRAIN** (Tom, 2026-10-05, asked "these
+  graphs only or all of TRAIN": *"All of train"*). Session totals, volume,
+  sets, sets per muscle, the week, Profile, Sets per week and the frame's
+  totals all count warmups (`spanStats`, `sessionStats`, `breakdown` and
+  every `!s.warm` filter on a count). This replaces "never counted in
+  volume or set totals" under Fields worth knowing. **Claude's call, tell
+  Tom when built:** records and the set-N-against-set-N comparison stay on
+  working sets, because a warmup set against a working set reads as a
+  false drop, and a lighter set cannot be a record anyway. Warmups are
+  still marked and dimmed. Not built.
 - 1, 2, 3, 4, 7, 8 not built. Measured on the demo: the bottom starts 61%
   down with one PR and the line; `_review.html` 142/142 at 390 and 1280.
   Not seen on his iPhone.
