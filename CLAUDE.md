@@ -944,6 +944,10 @@ answer, or take it out.
   copied `-webkit-text-fill-color`, and the image could not load the theme's
   fonts. `IO.shot` now skips those properties and writes the fonts in as data
   (`IO._faces`). Anything that builds its own SVG picture must do both.
+- **`Chart.spark` fits its lowest value to the floor.** Right for a trend
+  in a tile, wrong for a count: TRAIN's sets per week drew 74 to 54 sets as
+  a crash (2026-10-05). A count or a volume is drawn from zero:
+  `Chart.make` with `ySet(0, hi)` and the same area, line and end marks.
 - **Rules Tom gives in a session beat the general style docs.** On
   2026-10-02 a TRAIN frame was redrawn from THEMING.md and lost what he had
   asked for an hour earlier (no boxes, nothing in the middle); his words:
