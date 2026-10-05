@@ -1,4 +1,4 @@
-﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â• STATUS â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â• STATUS â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    The standalone app. Tom, 2026-09-17: "I think the chrome environment is
    too limiting", after the title bar came back for the fourth time.
 
@@ -183,7 +183,11 @@ class App : Form
         web.DefaultBackgroundColor = BackColor;
         web.CreationProperties = new CoreWebView2CreationProperties();
         web.CreationProperties.UserDataFolder = dataDir;
-        pageUrl = (UseFolder() ? new Uri(page).AbsoluteUri : HOSTED + "status/index.html") + "?desktop=1&host=app";
+        /* fresh=1 (2026-10-05): the offline cache hands over the copy it kept
+           and fetches the new one for next time, so a push showed up one open
+           late and the widget stayed the old one. The PC is always online. */
+        pageUrl = UseFolder() ? new Uri(page).AbsoluteUri + "?desktop=1&host=app"
+                              : HOSTED + "status/index.html?desktop=1&host=app&fresh=1";
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);
         /* Navigating after the engine is up, rather than setting Source

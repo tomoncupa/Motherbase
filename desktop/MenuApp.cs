@@ -1,4 +1,4 @@
-﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â• MAIN MENU â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â• MAIN MENU â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    The suite as a Windows program. Tom, 2026-09-17: "No Only Status needs a
    stand alone widget. The Main Menu can be its own program."
 
@@ -124,7 +124,8 @@ class Menu : Form
         web.DefaultBackgroundColor = BackColor;
         web.CreationProperties = new CoreWebView2CreationProperties();
         web.CreationProperties.UserDataFolder = dataDir;
-        pageUrl = UseFolder() ? new Uri(page).AbsoluteUri : HOSTED;
+        /* fresh=1: this open comes from the network, not the kept copy. */
+        pageUrl = UseFolder() ? new Uri(page).AbsoluteUri : HOSTED + "?fresh=1";
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);
         web.EnsureCoreWebView2Async(null);
