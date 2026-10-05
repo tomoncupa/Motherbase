@@ -928,9 +928,21 @@ running block total. It dips in a lighter week; that is honest, leave it.
   SHARE PICTURE shows only while the trend is up. Analysis gained SESSION
   beside WEEK, MONTH and YEAR: the last 40 sessions, a trend line, and
   SESSIONS per session falls to VOLUME. Not seen on his iPhone.
-- **Read as, ask Tom:** "the share picture only lifts trending up" was
-  built as GRAPH's own SHARE PICTURE. Whether the session story frame
-  should also carry a lift's volume trend is not asked yet.
+- **One line, 1.0.51.** Tom, 2026-10-05: *"Might it be cleaner to just 1
+  line? Overall session volume?"*, then *"A and B"*. **A:** GRAPH's first
+  graph is VOLUME TREND, the session volume line and its trend only; the
+  set 1 to 4 lines are hidden, not deleted (`TRAIN.SHOW_SET_LINES`). Why
+  they crossed, measured on his log since January: sets climb inside a
+  session (set 1 to set 4 rising on 24 to 27 of about 28 sessions for
+  Rope Push Down, Triceps, Laterals, Pull Up), sets per session run 3 to
+  7, and Triceps had warmups on 10 of 30 days, so set N is not the same set
+  from one day to the next and the order of the four swapped against the
+  session before on 21 of 29 Triceps days. **B:** the story frame has
+  SESSION VOLUME (`shareVol`, on, `TRAIN.frameVol`) above Sets per week:
+  "N kgs this session · +X% over 12 sessions" and the line from zero with
+  its trend. Every session, not same-named ones: he named 0 of 41 days
+  since June. Shown only while the trend is up and the day is the last
+  point. Not seen on his iPhone.
 - 1, 2, 3, 4, 7, 8 not built. Measured on the demo: the bottom starts 61%
   down with one PR and the line; `_review.html` 142/142 at 390 and 1280.
   Not seen on his iPhone.

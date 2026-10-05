@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.50, 2026-10-05">
+<meta name="mb-version" content="1.0.51, 2026-10-05">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -4449,7 +4449,7 @@ function drawGraph(m) {
   /* Set Volume first, and the default: Tom, 2026-10-05, "we don't care
      about 1rms". Then FitNotes' graphs for the type of exercise on screen. */
   var G = [], sv = TRAIN.setVolume(exId);
-  if (sv) G.push({ id: 'setvol', name: 'Set Volume', u: sv.reps ? 'reps' : U + 's' });
+  if (sv) G.push({ id: 'setvol', name: 'Volume Trend', u: sv.reps ? 'reps' : U + 's' });
   if (f.indexOf('w') > -1) {
     G.push({ id: 'e1rm', name: 'Estimated 1RM', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return TRAIN.e1rm(x.kg, x.r); })); } });
     G.push({ id: 'maxw', name: 'Max Weight', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return x.kg || 0; })); } });
@@ -4711,14 +4711,22 @@ function drawSetVolume(m, ex, exId, per, range) {
     };
   };
 
-  var card = UI.el('div', 'exblock pad');
-  card.innerHTML = '<div class="fieldlabel">SET VOLUME (' + UI.esc(sv.u) + ')</div>';
-  var box = UI.el('div', 'chartbox');
-  card.appendChild(box);
-  setVolChart(box, sv, 'Set volume (' + sv.u + ')');
-  expand(box, 'SET VOLUME', function (b) { setVolChart(b, sv, 'Set volume (' + sv.u + ')'); });
-  card.appendChild(setVolKey(sv));
-  m.appendChild(card);
+  /* The line per set number is hidden, not gone (Tom, 2026-10-05: "Might it
+     be cleaner to just 1 line? Overall session volume?"). On his log sets 1
+     to 4 sit close and climb inside a session, and the number of warmups and
+     sets changes from day to day, so "set 2" was a warmup one day and the
+     top set the next, and the lines swapped places every other session.
+     TRAIN.SHOW_SET_LINES = true brings it back. */
+  if (TRAIN.SHOW_SET_LINES) {
+    var card = UI.el('div', 'exblock pad');
+    card.innerHTML = '<div class="fieldlabel">SET VOLUME (' + UI.esc(sv.u) + ')</div>';
+    var box = UI.el('div', 'chartbox');
+    card.appendChild(box);
+    setVolChart(box, sv, 'Set volume (' + sv.u + ')');
+    expand(box, 'SET VOLUME', function (b) { setVolChart(b, sv, 'Set volume (' + sv.u + ')'); });
+    card.appendChild(setVolKey(sv));
+    m.appendChild(card);
+  }
 
   var pts = sv.days.map(function (d) { return [d.date, d.total]; });
   var tr = TRAIN.trendOf(pts), said = trendWords(tr, pts.length);
@@ -9399,6 +9407,8 @@ TRAIN.frameCard = function (date, off, o) {
       res += '<div class="fr-more">and ' + more + ' more PR' + (more === 1 ? '' : 's') + '</div>';
     }
   }
+  /* the session's volume against the sessions before it, only while it trends up */
+  if (o.shareVol) res += TRAIN.frameVol(date);
   /* the block as sets per week, just above the session's own totals */
   if (o.shareBlock) res += TRAIN.frameBlock(date);
   /* the totals close it, one line: "Put the weight sets reps duration at the bottom" */
@@ -9430,6 +9440,34 @@ TRAIN.blockWeeks = function (date) {
   var n = out.length;
   if (n > 1 && !out[n - 1].full && out[n - 1].sets < out[n - 2].sets) out.pop();
   return { sp: sp, weeks: out };
+};
+/* The session's whole volume against the sessions before it (Tom,
+   2026-10-05: "1 line? Overall session volume?", and on the story too).
+   Every session, not the same-named ones: he names none (0 of 41 days
+   since June). The last FRAME_VOL_N up to this day, with the trend through
+   them; shown only while the trend is up, the rule for anything shared, and
+   drawn from zero, so a gain is drawn its true size. */
+var FRAME_VOL_N = 12;
+TRAIN.volSessions = function (date) {
+  var U = TRAIN.unit();
+  return Object.keys(TRAIN.idx.byDate).filter(function (d) { return d <= date; }).sort()
+    .map(function (d) { return [d, TRAIN.toUnit(TRAIN.sessionStats(d).vol, U)]; })
+    .filter(function (p) { return p[1] > 0; }).slice(-FRAME_VOL_N);
+};
+TRAIN.frameVol = function (date) {
+  var pts = TRAIN.volSessions(date), n = pts.length, tr = TRAIN.trendOf(pts);
+  if (!tr || !tr.up || tr.pct == null || pts[n - 1][0] !== date) return '';
+  var p = Math.round(tr.pct);
+  var F = IO.frameSize(), hi = Math.max.apply(null, pts.map(function (x) { return x[1]; })) || 1;
+  var c = Chart.make({ w: F.w, h: Math.round(F.w / 8), pad: { l: 3, r: 7, t: 7, b: 3 }, cls: 'mb-spark' });
+  var line = pts.map(function (x, i) { return [i, x[1]]; });
+  c.xLinear(0, n - 1).ySet(0, hi, hi);
+  c.area(line); c.line(line);
+  c.line([[0, tr.from], [n - 1, tr.to]], 'trend');
+  c.end(line[n - 1]);
+  return '<div class="fr-blk"><div class="fr-blk-t"><b>' + Math.round(pts[n - 1][1]).toLocaleString() + '</b> ' +
+    UI.esc(TRAIN.unitLabel()) + ' this session' + (p >= 1 ? ' · <span class="fr-gain">+' + p + '%</span> over ' + n + ' sessions' : '') +
+    '</div>' + c.el.outerHTML + '</div>';
 };
 TRAIN.frameBlock = function (date) {
   var bw = TRAIN.blockWeeks(date), w = bw.weeks, n = w.length;
@@ -9469,6 +9507,7 @@ TRAIN.shareRecap = function (date) {
     { id: 'sharePct', label: 'Gains as %', def: 1 },
     { id: 'shareMove', label: 'Compare each lift with its own last time', def: 0 },
     { id: 'sharePrs', label: 'PRs', def: 1 },
+    { id: 'shareVol', label: 'Session volume', def: 1 },
     { id: 'shareBlock', label: 'Sets per week', def: 1 },
   ].concat(lifts.map(function (g) {
     return { id: 'share.' + g.ex, label: g.def.name, def: 1 };
