@@ -957,6 +957,20 @@ answer, or take it out.
   without end (2026-09-30). Carry state over a reload in storage that
   answers at once (the demo uses the tab's sessionStorage), and let a fill
   and reload happen once, then say what failed.
+- **A fresh git worktree on this PC checks out CRLF; the hosted site is LF.**
+  `core.autocrlf` puts a carriage return before every line break in a new
+  checkout, so a check that reads a page's source with a bare `\n` in its
+  pattern fails there and passes on Pages. The boot check in `_smoke.html`
+  failed nine apps that way in a clean worktree (2026-10-05) and passed 142
+  of 142 once checked out with `core.autocrlf=false`. Write source-reading
+  patterns with `\r?\n`.
+- **When the folder holds unfinished work, review and build from a clean
+  worktree.** `git worktree add --detach <scratch> HEAD`, run
+  `tools/safari-check.py` there, and `py -3 <scratch>/tools/build-client.py
+  <client folder>`: the build's ROOT is the script's own repo, so it ships
+  exactly what is committed. Park unfinished app work on a branch, not in the
+  folder, or every other session's client build refuses the dirty tree
+  (KITCHEN's fill work, branch `kitchen-fill`, 2026-10-05).
 
 ---
 
