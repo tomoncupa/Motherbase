@@ -313,6 +313,19 @@ as in `+14 reps · +2.3% average`.
 It shows on each set in the day's cards and under each set on TRACK, where the
 line above the steppers lists the sets being compared against.
 
+**Nothing may need a name** (Tom, 2026-10-05: *"All our functions need to
+work even if we don't name sessions specfically"*; he named 0 of 41 days
+since June). A day with no name is the same session as an earlier day that
+shares at least half of all exercises on either (`TRAIN.likeDays`, on
+`TRAIN.dayExs`, cached on the index), or, today, one holding every exercise
+done so far. `compareCtx` uses those days where a name would go (1.0.52),
+so step 2 above, the session card's totals and the story's comparison all
+work unnamed. Training Routines lists YOUR SESSIONS: named ones, then up to
+six groups of unnamed days done twice or more, under their first two
+exercises and "done N times"; a tap copies the latest. On his log since
+March, 57 of 86 days have an earlier like day. A new feature that reads
+`session.name` must work without it.
+
 ### The session card
 
 At the end of every day with work in it: date, block and week, name, volume, sets,

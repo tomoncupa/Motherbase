@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.51, 2026-10-05">
+<meta name="mb-version" content="1.0.52, 2026-10-05">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -5920,6 +5920,27 @@ TRAIN.namedSessions = function (except) {
     x.times++;
     if (r.date > x.last) { x.last = r.date; x.name = nm; }
   });
+  /* and the days he repeats without a name (Tom, 2026-10-05: "All our
+     functions need to work even if we don't name sessions"): newest first,
+     each day joins the first group whose latest day it is the same session
+     as, and a group done twice or more is listed under its first two
+     exercises */
+  var groups = [];
+  Object.keys(TRAIN.idx.byDate).sort().reverse().forEach(function (d) {
+    var nm = String((Rec.get('session', d, '') || {}).name || '').trim();
+    if (nm || d === except) return;
+    var mine = TRAIN.dayExs(d);
+    if (!Object.keys(mine).length) return;
+    for (var i = 0; i < groups.length; i++) {
+      if (TRAIN.likeDays(mine, TRAIN.dayExs(groups[i].last))) { groups[i].times++; return; }
+    }
+    groups.push({ last: d, times: 1, auto: true });
+  });
+  groups.filter(function (g) { return g.times > 1; }).slice(0, 6).forEach(function (g) {
+    var names = TRAIN.dayGroups(g.last).map(function (x) { return x.def.name; });
+    g.name = names.slice(0, 2).join(', ') + (names.length > 2 ? ' +' + (names.length - 2) : '');
+    by['\u0000' + g.last] = g;
+  });
   return Object.keys(by).map(function (k) { return by[k]; })
     .sort(function (a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : 0; });
 };
@@ -5955,7 +5976,7 @@ function drawRoutines(m) {
   if (!keys.length && !named.length) {
     var e = UI.el('div', 'empty');
     e.textContent = 'A routine allows you to create templates of sessions which you perform frequently. ' +
-      'A session you name in the log shows here too.';
+      'A session you repeat shows here too, named or not.';
     m.appendChild(e);
     return;
   }
@@ -5985,7 +6006,7 @@ function drawRoutines(m) {
 function drawNamed(m, named) {
   var date = TRAIN.date, into = date === Day.today() ? 'today' : Day.label(date);
   var lab = UI.el('div', 'fieldlabel');
-  lab.textContent = 'NAMED SESSIONS';
+  lab.textContent = 'YOUR SESSIONS';
   m.appendChild(lab);
   var list = UI.el('div', 'plist');
   named.forEach(function (x) {
@@ -5993,7 +6014,8 @@ function drawNamed(m, named) {
     var row = UI.el('div', 'prow');
     var main = UI.el('button', 'pmain mb-press');
     main.innerHTML = '<span class="nm">' + UI.esc(x.name) +
-      '<br><span class="sub">' + UI.esc(dayY(x.last)) + ' · ' + n + ' exercise' + (n === 1 ? '' : 's') + '</span></span>';
+      '<br><span class="sub">' + UI.esc(dayY(x.last)) + ' · ' + n + ' exercise' + (n === 1 ? '' : 's') +
+      (x.auto ? ' · done ' + x.times + ' times' : '') + '</span></span>';
     main.setAttribute('aria-label', 'Copy ' + x.name + ' from ' + Day.label(x.last) + ' into ' + into);
     main.onclick = function () { TRAIN.startNamed(x); };
     var menu = function (e) {
@@ -8881,15 +8903,47 @@ TRAIN.sessionDialog = function (date) {
    the last Back day that did, then against its own last time.
 
    Working set N against working set N, warmups left out of both sides. */
+/* ── the same session, with no name ──
+   Tom, 2026-10-05: "All our functions need to work even if we don't name
+   sessions specfically." He named 0 of 41 days since June. A day with no
+   name is the same session as an earlier day that shares at least half of
+   all the exercises on either (2 of 4 here and 2 of 4 there is not; 4 of 6
+   and 4 of 5 is), or that holds every exercise done so far, so a session
+   half logged finds its last time. On his log since March, 57 of 86 days
+   have such a day. */
+TRAIN.dayExs = function (d) {
+  /* kept on the index, which is rebuilt whenever a set changes */
+  var c = TRAIN.idx._exs || (TRAIN.idx._exs = {});
+  if (c[d]) return c[d];
+  var o = {};
+  TRAIN.setsOn(d).forEach(function (s) { if (TRAIN.counts(s)) o[s.ex] = 1; });
+  return (c[d] = o);
+};
+TRAIN.likeDays = function (a, b, partial) {
+  var ka = Object.keys(a), both = 0, n = ka.length;
+  if (!n) return false;
+  ka.forEach(function (k) { if (b[k]) both++; });
+  var union = n + Object.keys(b).length - both;
+  return both / union >= 0.5 || (partial && both === n);
+};
 TRAIN.compareCtx = function (date) {
   var sess = Rec.get('session', date, '') || {}, named = [];
   var key = String(sess.name || '').trim().toLowerCase();
+  var ph = TRAIN.phaseOn(date), inside = [], outside = [];
+  if (!key) {
+    var mine = TRAIN.dayExs(date), today = date === Day.today();
+    Object.keys(TRAIN.idx.byDate).forEach(function (d) {
+      if (d >= date || !TRAIN.likeDays(mine, TRAIN.dayExs(d), today)) return;
+      (ph && d >= ph.from ? inside : outside).push(d);
+    });
+  }
   if (key) {
-    var ph = TRAIN.phaseOn(date), inside = [], outside = [];
     Rec.all('session').forEach(function (r) {
       if (!r.payload || r.date >= date || String(r.payload.name || '').trim().toLowerCase() !== key) return;
       (ph && r.date >= ph.from ? inside : outside).push(r.date);
     });
+  }
+  if (inside.length || outside.length) {
     var desc = function (a, b) { return a < b ? 1 : a > b ? -1 : 0; };
     named = inside.sort(desc).concat(outside.sort(desc));
   }
