@@ -154,8 +154,12 @@ def claude_exe():
     root = os.path.join(os.environ.get('APPDATA', ''), 'Claude', 'claude-code')
     best, bestv = None, ()
     for name in (os.listdir(root) if os.path.isdir(root) else []):
-        exe = os.path.join(root, name, 'claude.exe')
-        if not os.path.isfile(exe):
+        # Since the app's 2026-10-02 update it sits one folder deeper: <version>/<hash>/claude.exe.
+        here = os.path.join(root, name)
+        found = [os.path.join(here, 'claude.exe')] + [os.path.join(here, sub, 'claude.exe')
+                 for sub in (os.listdir(here) if os.path.isdir(here) else [])]
+        exe = next((x for x in found if os.path.isfile(x)), None)
+        if not exe:
             continue
         v = tuple(int(p) for p in re.findall(r'\d+', name)) or (0,)
         if v > bestv:
