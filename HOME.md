@@ -189,3 +189,12 @@ Tom: "a widget that shows me how locked in I am. Average training sessions, aver
 - **Steps** is the mean of the days with a steps reading, saying how many.
 
 Watched in the demo at 1600x950: added through ADD A WIDGET, SHOW 30 days through the menu and saved on the card, every number equal to a separate count of the same rows. Not seen with his own rows.
+
+## 2026-10-06, HOME 1.0.57: AVG WEIGHT, and an average line on WEIGHT
+
+Tom: "Create also an average weight widget AND an average weight right click option for regular weight widget."
+
+- **WEIGHT's menu has "7-day average line"**, a tick per widget (`cfg.avg`), off by default because of his 2026-09-14 "actual data than trends". On, a second line in the reading colour runs over the weigh-ins: at each weigh-in, the mean of the readings in the seven days ending that day (`weightAvg7`), and the widget's line adds "7-day avg".
+- **AVG WEIGHT**: the mean of every weigh-in in the last 7, 14, 30 or 90 days (today included), the same stretch before it, and the change. From 14 days up, each seven-day week's average and how many weigh-ins made it, newest first; at 7 days that list would only repeat the two numbers.
+
+Watched in the demo at 1600x950: the tick from the menu sheet, saved on the card, the average path drawn; AVG WEIGHT added through ADD A WIDGET at 7 and 30 days, both averages equal to a separate count.

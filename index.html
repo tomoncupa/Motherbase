@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.56, 2026-10-06">
+<meta name="mb-version" content="1.0.57, 2026-10-06">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -492,6 +492,8 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .stat b{display:block;font-family:var(--f1);font-size:19px;color:var(--txt);letter-spacing:.04em;line-height:1.15}
 .stat span{font-size:10px;letter-spacing:.14em;color:var(--dim2);font-family:var(--f1)}
 .stat.acc b{color:var(--acc)}
+/* WEIGHT's 7-day average line, drawn over the weigh-ins in the reading colour */
+.mb-line.w-avg{stroke:var(--txt);stroke-width:2.5}
 /* LOCKED IN: four averages, two by two */
 .li-g{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-4) var(--s-4);align-content:start}
 .li-c{min-width:0;display:flex;flex-direction:column;gap:var(--s-1)}
@@ -1246,6 +1248,16 @@ function weightSaid(pts, v, d) {
   const n = Day.diff(d, pts[0].d), m = v - pts[0].v;
   const move = !n ? '' : ', ' + (Math.abs(m) < 0.05 ? 'no change' : (m < 0 ? 'down ' : 'up ') + Math.abs(m).toFixed(1)) + ' in ' + n + ' days';
   return v.toFixed(1) + ' ' + (d === LifeOS.day() ? 'today' : Day.label(d)) + move;
+}
+/* The seven-day average at each weigh-in: the mean of the readings in the
+   seven days ending that day. Tom, 2026-10-06, asked for it as a switch on
+   WEIGHT ("an average weight right click option"); off, the chart is the
+   weigh-ins alone, as he asked on 2026-09-14. */
+function weightAvg7(pts) {
+  return pts.map(p => {
+    const from = LifeOS.shift(p.d, -6), w = pts.filter(q => q.d >= from && q.d <= p.d);
+    return [p.d, w.reduce((a, q) => a + q.v, 0) / w.length];
+  });
 }
 /* ── the cut's plan ──
    {from, to, goal, start} in the setting lifeos.weightPlan. A blank start is
@@ -2390,7 +2402,8 @@ const WIDGETS = {
       const said = plan ? planSaid(plan) : (Rec.setting('lifeos', 'weightPlan') ? ' · plan needs a starting weight' : '');
       if (!r.length) return said ? said.replace(/^ · /, '') : 'nothing logged yet';
       const last = r[r.length - 1];
-      return weightSaid(r, last.v, last.d) + said;
+      const avg = cfg && cfg.avg ? ' · 7-day avg ' + weightAvg7(r).pop()[1].toFixed(1) : '';
+      return weightSaid(r, last.v, last.d) + avg + said;
     },
     /* ── the cut ──
        Tom, 2026-09-15: "Yes chart the cut". A plan is a start, a goal and
@@ -2401,7 +2414,8 @@ const WIDGETS = {
        whether a weigh-in is good. */
     menu(cfg, redraw) {
       const has = !!Rec.setting('lifeos', 'weightPlan');
-      return ['-', { label: has ? 'Change the plan' : 'Plan a cut', fn: weightPlanSheet },
+      return ['-', { label: '7-day average line', check: !!cfg.avg, fn: () => { if (cfg.avg) delete cfg.avg; else cfg.avg = 1; redraw(); } },
+        { label: has ? 'Change the plan' : 'Plan a cut', fn: weightPlanSheet },
         has ? { label: 'Clear the plan', fn: () => {
           const was = Rec.setting('lifeos', 'weightPlan');
           Rec.setting('lifeos', 'weightPlan', null); redraw();
@@ -2465,6 +2479,7 @@ const WIDGETS = {
           gl.textContent = plan.goal.toFixed(1);
         }
         if (line.length > 1) { c.area(line); c.line(line); } else if (line.length) c.dots(line);
+        if (cfg.avg && line.length > 1) c.line(weightAvg7(pts), 'mb-line w-avg');
         if (line.length) c.end(line[line.length - 1], last.toFixed(1));
         c.scrub(line, {
           onMove: p => { const s = subOf(); if (!s) return; if (kept == null) kept = s.textContent;
@@ -2475,6 +2490,47 @@ const WIDGETS = {
     },
   },
 
+
+  /* ══════════════ AVG WEIGHT ══════════════
+     Tom, 2026-10-06: "an average weight widget". The mean of every weigh-in
+     in the days picked, the same stretch before it, the change between them,
+     and, from 14 days up, each week's average, newest first. A week is seven days counted back
+     from today, so the newest one is never half a calendar week. */
+  avgweight: {
+    nm: 'AVG WEIGHT', w: 4, h: 3, app: 'status', to: ['status', 'trends'],
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days']], day0: 7,
+    mean(n, to) {
+      const v = [];
+      for (let i = 0; i < n; i++) { const x = evValue(LifeOS.shift(to, -i), 'weight'); if (x != null && isFinite(x)) v.push(Number(x)); }
+      return v.length ? { v: v.reduce((a, b) => a + b, 0) / v.length, n: v.length } : null;
+    },
+    sub: cfg => {
+      const n = (cfg && cfg.days) || 7, a = WIDGETS.avgweight.mean(n, LifeOS.day());
+      return a ? a.n + ' weigh-in' + (a.n === 1 ? '' : 's') + ' in the last ' + n + ' days' : 'no weigh-ins in the last ' + n + ' days';
+    },
+    draw(body, cfg) {
+      const n = (cfg && cfg.days) || 7, t = LifeOS.day(), W = WIDGETS.avgweight;
+      const a = W.mean(n, t), b = W.mean(n, LifeOS.shift(t, -n));
+      if (!a && !b) { body.appendChild(el('div', 'empty', 'No weigh-ins yet. Log one in <span class="link" onclick="go(\'status\')">STATUS</span>.')); return; }
+      const d = a && b ? a.v - b.v : null;
+      const st = el('div', 'stats');
+      st.appendChild(el('div', 'stat acc', '<b>' + (a ? a.v.toFixed(1) : '—') + '</b><span>LAST ' + n + ' DAYS</span>'));
+      st.appendChild(el('div', 'stat', '<b>' + (b ? b.v.toFixed(1) : '—') + '</b><span>' + n + ' DAYS BEFORE</span>'));
+      st.appendChild(el('div', 'stat', '<b>' + (d == null ? '—' : (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d).toFixed(1)) + '</b><span>CHANGE</span>'));
+      body.appendChild(st);
+      /* at 7 days the two weeks ARE the two numbers above */
+      if (n < 14) return;
+      const list = el('div', 'rowlist');
+      for (let k = 0; k < Math.ceil(n / 7) && k < 13; k++) {
+        const end = LifeOS.shift(t, -7 * k), m = W.mean(7, end);
+        const row = el('div', 'row');
+        row.innerHTML = '<span class="n">' + (k ? Day.label(LifeOS.shift(end, -6)) + ' to ' + Day.label(end) : 'Last 7 days') + '</span>' +
+          '<span class="d">' + (m ? m.v.toFixed(1) + ' <i class="srv">' + m.n + 'x</i>' : '—') + '</span>';
+        list.appendChild(row);
+      }
+      body.appendChild(list);
+    },
+  },
 
   /* ══════════════ DESK TIME ══════════════
      Tom, 2026-10-05: a daily log of time per program, "But also I use to see
@@ -4997,7 +5053,8 @@ const ABOUT = {
   training: 'Your last training day, lift by lift.',
   trainvol: 'Training volume a week, over the last 8 weeks.',
   bodyheat: 'Working sets per muscle on a front and back body: red just hit, green ready, brighter for more work.',
-  weight: 'Every weigh-in as a dot with the line through them, and a cut plan if you set one.',
+  weight: 'Every weigh-in as a dot with the line through them, and a cut plan if you set one. A 7-day average line is on its menu.',
+  avgweight: 'Your average weight over the days you pick, beside the stretch before, and each week’s average.',
   sleep: 'Your nights of sleep: the average night and the nights on target.',
   spend: 'Money out this week against last week.',
   drinks: 'The next two drinks ELEMENT says to take.',
