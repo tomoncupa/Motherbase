@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.15, 2026-09-30">
+<meta name="mb-version" content="1.0.16, 2026-10-05">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -58,6 +58,24 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-7) + var(--s
   .progcol{position:sticky;top:0}
 }
 @media (min-width:1440px){ .cols{grid-template-columns:380px minmax(0,1fr) 420px} }
+/* A wide window (1.0.16, 2026-10-05; Tom: "on a wide window, lay things out
+   side by side; never fold text"). The box with the programming under it on
+   the left, as on an upright iPad, and the client in three columns of their
+   own (drawClient builds them past the same width), so a client reads at a
+   glance on a 1928 by 943 frame instead of scrolling nearly three screens.
+   A set list and an exercise name wrap rather than ending in an ellipsis,
+   and every check-in date is on screen rather than scrolled off the side. */
+@media (min-width:1560px){
+  .cols{max-width:2400px;grid-template-columns:clamp(380px,20%,400px) minmax(0,1fr);grid-template-rows:auto 1fr}
+  .boxcol{grid-column:1;grid-row:1;position:static}
+  .progcol{grid-column:1;grid-row:2;position:static}
+  .cols .clientcol{grid-column:2;grid-row:1 / span 2;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1fr);align-items:start}
+  .cc{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
+  .sesh .lift .ln,.sesh .lift .ls{white-space:normal}
+  .card .cidays{flex-wrap:wrap;overflow-x:visible}
+  table.lifts td.n{white-space:nowrap}
+  .card .wksum .was{flex-basis:100%}
+}
 .card{border-radius:var(--radius-lg);background:var(--surface-1);padding:var(--s-4);box-shadow:var(--e-1),var(--rim)}
 .col{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
 h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
@@ -860,7 +878,27 @@ function drawRecent(col, pid, ss) {
   });
   col.appendChild(card);
 }
+/* ── a wide window (1.0.16, 2026-10-05) ──
+   Tom runs the suite on a 3840 ultrawide, where COACH gets a frame about
+   1928 by 943, and his rule is "on a wide window, lay things out side by
+   side; never fold text". So past WIDE the client's cards stand in three
+   columns of their own: who they are, their week and their check-in; the
+   sessions; then their strength and the range. Below it they are one column
+   in exactly the order they always were — the same calls, handed one column
+   three times. */
+const WIDE = window.matchMedia ? matchMedia('(min-width:1560px)') : { matches: false };
+if (WIDE.addEventListener) WIDE.addEventListener('change', () => draw());
+else if (WIDE.addListener) WIDE.addListener(() => draw());
 function drawClient(col) {
+  if (!WIDE.matches) return drawClientIn(col, col, col);
+  const mk = n => { const d = document.createElement('div'); d.className = 'cc ' + n; return d; };
+  const a = mk('cc-a'), b = mk('cc-b'), c = mk('cc-c');
+  drawClientIn(a, b, c);
+  [a, b, c].forEach(d => { if (d.firstChild) col.appendChild(d); });
+}
+/* `col` holds the client, their week and their check-in, `cs` the sessions,
+   `cr` the strength and the range. Narrow, all three are the same column. */
+function drawClientIn(col, cs, cr) {
   const p = people()[sel];
   const card = document.createElement('div'); card.className = 'card';
   if (!p) {
@@ -932,14 +970,14 @@ function drawClient(col) {
     lc.innerHTML = '<h2>STRENGTH</h2><table class="lifts"><tr><th>EXERCISE</th><th class="n">BEST SET</th><th class="n">EST. 1RM</th><th class="n">DAYS</th></tr>' +
       lf.map(x => '<tr><td>' + esc(x.name) + '</td><td class="n">' + show(x.bs.kg) + ' × ' + x.bs.r + '</td><td class="n">' +
         show(x.best) + ' ' + unit() + '</td><td class="n">' + Object.keys(x.days).length + '</td></tr>').join('') + '</table>';
-    col.appendChild(lc);
+    cr.appendChild(lc);
   }
-  drawRecent(col, sel, ss);
+  drawRecent(cs, sel, ss);
   /* The long view goes last: the week and the sessions answer today, the
      range answers the year, and a coach reads them in that order. */
   if (window.Range) {
     const rc = document.createElement('div'); rc.className = 'card range';
-    col.appendChild(rc);
+    cr.appendChild(rc);
     Range.mount(rc, Range.fromRows(setsOf(sel), own('cphase', sel), Day.today()), 240, {
       print: opt('rangePrint'),
       volume: kg => { const v = +show(kg) || 0; return (v >= 1e6 ? Math.round(v / 1e5) / 10 + 'M' : v >= 1e5 ? Math.round(v / 1e3) + 'k' : Math.round(v).toLocaleString()) + ' ' + unit(); },
