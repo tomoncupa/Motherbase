@@ -3047,8 +3047,50 @@ async function run() {
   ok('cloud: a row that fits goes up under its encoded key', () => {
     const r = CROW('local|setting||status.x', '2026-01-02T00:00:00.000Z', { v: 1 });
     const p = Cloud._plan([r], '', 'u/u1/rows/');
-    return p.patch['u/u1/rows/' + Cloud._enc(r.id)] === r && p.sent === 1 && p.skipped === 0;
+    return JSON.stringify(p.patch['u/u1/rows/' + Cloud._enc(r.id)]) === JSON.stringify(r) && p.sent === 1 && p.skipped === 0;
   });
+
+  /* 2026-10-05: the iPhone STATUS app's push threw "values argument contains
+     undefined" on one meal for days, and a whole chunk went with it. A
+     stand-in that checks a write the way Firebase does: it THROWS, there and
+     then, on undefined, NaN or a key it cannot store. */
+  const strictDb = (into) => ({ ref: () => ({ update(patch) {
+    const bad = (v, path) => {
+      if (v === undefined || (typeof v === 'number' && !isFinite(v))) throw new Error('update failed: values argument contains ' + v + ' in property ' + path);
+      if (v && typeof v === 'object') Object.keys(v).forEach(k => {
+        if (/[.#$\/\[\]]/.test(k)) throw new Error('update failed: invalid key ' + k + ' in ' + path);
+        bad(v[k], path + '.' + k);
+      });
+    };
+    Object.keys(patch).forEach(k => bad(patch[k], k));
+    Object.keys(patch).forEach(k => { into[k] = patch[k]; });
+    return Promise.resolve();
+  } }) });
+  ok('live sync: a row holding undefined or NaN goes up without those fields', () => {
+    const r = CROW('local|meal|2026-09-29|m1', '2026-09-29T01:00:00.000Z', { kcal: 300, note: undefined, p: NaN });
+    const p = Cloud._plan([r], '', 'u/u1/rows/');
+    const into = {};
+    let threw = '';
+    try { strictDb(into).ref().update(p.patch); } catch (e) { threw = e.message; }
+    const got = into['u/u1/rows/' + Cloud._enc(r.id)];
+    return !threw && got && got.payload.kcal === 300 && !('note' in got.payload) && got.payload.p === null;
+  });
+  await (async () => {
+    const st0 = Cloud.state(), into = {};
+    const good = CROW('local|note||g1', '2026-01-03T00:00:00.000Z', { t: 'fine' });
+    const good2 = CROW('local|note||g2', '2026-01-03T00:00:01.000Z', { t: 'fine too' });
+    const odd = CROW('local|setting||x.map', '2026-01-03T00:00:02.000Z', { v: { 'a.b': 1 } });
+    const p = Cloud._plan([good, odd, good2], '', 'u/u1/rows/');
+    let bad = -1, threw = '';
+    try { bad = await Cloud._write(strictDb(into), p.patch); } catch (e) { threw = e.message; }
+    const st1 = Cloud.state();
+    ok('live sync: one row the database will not store never stops the rest of its chunk',
+      !threw && bad === 1 && !!into['u/u1/rows/' + Cloud._enc(good.id)] && !!into['u/u1/rows/' + Cloud._enc(good2.id)]
+        && !into['u/u1/rows/' + Cloud._enc(odd.id)] && p.edge === odd.updated_at,
+      threw ? ' — threw: ' + threw : ' — refused ' + bad);
+    ok('live sync: a refused row is counted and named',
+      st1.refused === st0.refused + 1 && st1.refusedIds.indexOf(odd.id) > -1);
+  })();
   ok('cloud: the boundary never goes backwards', () => {
     const r = CROW('local|note||b', '2026-01-01T00:00:00.000Z', { t: 'old' });
     return Cloud._plan([r], '2026-06-01T00:00:00.000Z', 'u/u1/rows/').edge === '2026-06-01T00:00:00.000Z';
