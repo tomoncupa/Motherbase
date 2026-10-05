@@ -166,6 +166,7 @@ and does not lose the weight.
 | `src` | Meaning | Shown as | Error margin |
 |---|---|---|---|
 | `pub` | Published by the chain for the **Philippine** menu | Official | 5% |
+| `avg` | The middle of several **unofficial** published figures, checked against each other | Averaged | 20% |
 | `pub-us` | Published by the chain for its **US** menu. Philippine portions and recipes may differ | Official (US) | 15% |
 | `label` | Read off the printed nutrition label of the product | Label | 5% |
 | `ref` | Standard food composition values (USDA FoodData Central style) for a plain food | Reference | 10% |
@@ -197,6 +198,52 @@ kept, the food's detail says so, and `_test.html` checks each mark is real.
 The pizza table's cholesterol and trans fat columns are swapped; neither is
 stored. The two old Shakey's estimates are gone, and `sh-mojos` is now
 Mojos 'n Dip.
+
+Three more chains joined `pub` the same day, all through `chain(brand, words)`
+in `foods.js`, the one adder for any chain's own Philippine table:
+
+- **McDonald's**, 48 foods from mcdonalds.com.ph/our-food ("3rd Party
+  Nutrition Testing in December 2019"). No grams printed. Plain McSpaghetti
+  has no figure there and stays an estimate. 8 are `odd`, worst the 6-piece
+  McNuggets at 348g carbs on 547 calories.
+- **Starbucks**, 128 drinks from starbucks.ph's calorie PDF (1,097 rows, made
+  for Quezon City's calorie rule). One food per drink, Grande first, whole
+  milk where there is a choice, whip where the drink carries it. No food in
+  the PDF. 4 are `odd`.
+- **Army Navy**, 86 foods from armynavy.com.ph/nutrition-facts, dated
+  2025-12-11. The page's fields say per 100g but hold the whole item. The
+  12-piece wings print double the macros their calories allow, so each is
+  the 6-piece scaled. 3 are `odd`. Ids are `av-`, because `an-` is Andok's.
+
+Quezon City has required calories on chain menu boards since December 2025,
+so photos of those boards are an official source for every chain that
+publishes nothing online (Jollibee, KFC, Chowking and the rest).
+
+`avg`, shown as Averaged, is for a chain food whose figure is the middle of
+several unofficial sources (FatSecret, Nutritionix, MyFitnessPal and the
+like), normalised to one serving with outliers dropped. It sits between
+Community and Estimate.
+
+2026-10-05, the rest of the chains:
+
+- **KFC** joined `pub`: 49 foods from corporate.kfc.com.ph/nutrition-and-
+  allergen-information, KFC Philippines' own table. Buckets, combos and dips
+  are left out (per-serving rows that do not say of what); a dash is 0.
+- `board`, shown as Menu board, is a chain's Quezon City menu-board calories
+  as transcribed by others (Instagram @anongcaloriesnito, indexed on
+  worththecals.com), some worked out by subtracting one combo from another.
+  Calories only, so the food's old protein, carbs and fat are scaled to the
+  board figure. 23 foods: Jollibee (7 that were US figures, plus hotdog and
+  sundae), Mang Inasal, Chowking and Greenwich. Jolly Crispy Fries kept its
+  US figure: the board's 182 is the meal side. Chickenjoy Drumstick and
+  Thigh are still US; only "any part" has a Philippine figure (402).
+- `avg` on 13 foods (Andok's, Potato Corner, Tokyo Tokyo, 7-Eleven, Lawson,
+  Ministop, S&R) plus a new 7-Eleven Busog Meal Sisig: 2 or more sources,
+  spread under 40%. Oden (spread 78%) and anything with one source stayed an
+  estimate. fatsecret.com.ph is a parked domain now.
+- Not added yet: 17 new items with board calories but no macros (Jollibee
+  Crunchy Chicken Sandwich, Mang Inasal rice and liempo, Greenwich pastas and
+  others). A food here needs protein, carbs and fat.
 
 **Never upgrade a `src` without a source.** Changing `est` to `pub` means the
 figure was read from something the chain published, and the commit says where.
@@ -285,7 +332,7 @@ Two consequences, both written up for Tom:
 | Part | State |
 |---|---|
 | `CLAUDE.md` | Written 2026-09-15. |
-| `foods.js` | 257 foods, 18 of them combos, counted from the loaded file 2026-09-15. 19 are Jollibee USA's own published figures, 29 are standard reference values, and 209 are estimates that give their macros so they cannot contradict themselves. Chains: Jollibee, McDonald's, Mang Inasal, Chowking, KFC, Andok's, Greenwich, Shakey's, Max's, Potato Corner, Tokyo Tokyo, 7-Eleven, Lawson, Ministop, S&R. "SM" in Tom's first list was read as SM Supermarket, so it is covered by the packaged goods rather than a brand of its own. 2026-10-01: 333, after Shakey's 78 official foods replaced its 2 estimates. |
+| `foods.js` | 257 foods, 18 of them combos, counted from the loaded file 2026-09-15. 19 are Jollibee USA's own published figures, 29 are standard reference values, and 209 are estimates that give their macros so they cannot contradict themselves. Chains: Jollibee, McDonald's, Mang Inasal, Chowking, KFC, Andok's, Greenwich, Shakey's, Max's, Potato Corner, Tokyo Tokyo, 7-Eleven, Lawson, Ministop, S&R. "SM" in Tom's first list was read as SM Supermarket, so it is covered by the packaged goods rather than a brand of its own. 2026-10-01: 333, after Shakey's 78 official foods replaced its 2 estimates; then 586, with McDonald's (48, replacing 10 estimates), Starbucks (128) and Army Navy (86) official. |
 | `index.html` | Built and tested in the browser 2026-09-15 at 375px, light and dark. Setup, Today, Add food with Tagalog search and one-tap add, Eat this again (a meal of two or more foods from an earlier day, re-added in one tap, because Filipino breakfasts and lunches repeat), servings, quick calories, make a food, barcode (the phone's own reader on Android Chrome, typing everywhere else, then Open Food Facts), photo scan with a confirm list, weight and the last 7 days, the goal check, settings, backup and restore, and a backup reminder on Today once there are 7 days of logging worth losing (at most weekly after Not now, and quiet for 14 days after a backup). Checked at double text size too, because many people set their phone's text large: the bottom bar grows to fit, hides its two words (keeping them as the buttons' names) when they cannot fit beside Add food, and the page keeps clear of it by measuring its height. **Not seen on a real phone.** The barcode camera and the photo picker cannot be driven from a desktop browser, so both are reasoned, not watched. |
 | `worker/scan.js` | Written 2026-09-15 and checked in the browser with the network faked: request shape, key handling, the monthly cap, refusals, outages and bad answers. **Never called the real Claude API**, because that spends Tom's money. The first real scan is the real test. |
 | `worker/SETUP.md` | Written 2026-09-15. Tom has not deployed it. |

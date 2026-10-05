@@ -29,6 +29,7 @@
     ref:      { label: 'Reference',     err: 0.10, rank: 2, about: 'Standard food composition values for a plain food.' },
     off:      { label: 'Community',     err: 0.15, rank: 3, about: 'From Open Food Facts, entered by volunteers.' },
     avg:      { label: 'Averaged',      err: 0.20, rank: 3, about: 'The middle of several unofficial published figures for this item, checked against each other. Not from the restaurant.' },
+    board:    { label: 'Menu board',    err: 0.10, rank: 2, about: 'Calories from the chain’s own Quezon City menu board, as copied by others. Protein, carbs and fat are our estimate, scaled to match.' },
     'pub-us': { label: 'Official (US)', err: 0.15, rank: 3, about: 'Published by the restaurant for its US menu. Philippine portions may differ.' },
     ai:       { label: 'Photo guess',   err: 0.30, rank: 5, about: 'Estimated from a photo.' },
     est:      { label: 'Estimate',      err: 0.25, rank: 4, about: 'Worked out from a typical recipe and portion. Not yet verified.' },
@@ -236,20 +237,20 @@
   const JB = 'Jollibee';
   f('jb-cj-drum', 'Chickenjoy Drumstick', JB, 'fastfood', [85, 220, 20, 3, 14], [['1 pc', 1], ['2 pcs', 2]], 'pub-us', ['chickenjoy', 'chicken joy', 'cj', 'drumstick', 'paa'], { na: 270, note: JB_US });
   f('jb-cj-thigh', 'Chickenjoy Thigh', JB, 'fastfood', [125, 380, 27, 5, 28], [['1 pc', 1], ['2 pcs', 2]], 'pub-us', ['chickenjoy', 'chicken joy', 'cj', 'thigh', 'hita'], { na: 400, note: JB_US });
-  f('jb-cj', 'Chickenjoy (1 pc, any part)', JB, 'fastfood', [105, 300, 23.5, 4, 21], [['1 pc', 1], ['2 pcs', 2], ['6 pc bucket', 6]], 'pub-us', ['chickenjoy', 'chicken joy', 'cj', 'jollibee chicken', 'fried chicken'], { na: 335, note: 'The average of the drumstick and the thigh. ' + JB_US });
+  f('jb-cj', 'Chickenjoy (1 pc, any part)', JB, 'fastfood', [0, 402, 31.5, 5.4, 28.1], [['1 pc', 1], ['2 pcs', 2], ['6 pc bucket', 6]], 'board', ['chickenjoy', 'chicken joy', 'cj', 'jollibee chicken', 'fried chicken']);
   f('jb-cj-spicy-drum', 'Spicy Chickenjoy Drumstick', JB, 'fastfood', [85, 240, 16, 10, 14], one('1 pc'), 'pub-us', ['spicy chickenjoy', 'spicy cj'], { na: 540, note: JB_US });
   f('jb-cj-spicy-thigh', 'Spicy Chickenjoy Thigh', JB, 'fastfood', [126, 350, 23, 15, 21], one('1 pc'), 'pub-us', ['spicy chickenjoy', 'spicy cj'], { na: 790, note: JB_US });
   f('jb-gravy', 'Gravy', JB, 'fastfood', [77, 25, 1, 5, 0], one('1 small cup'), 'pub-us', ['jollibee gravy', 'gravy'], { na: 380, note: JB_US });
   f('jb-rice', 'Rice', JB, 'fastfood', [198, 190, 4, 44, 0], [['1 rice', 0.81], ['1 US serving (198g)', 1]], 'pub-us', ['jollibee rice', 'extra rice', 'kanin'], { na: 0, note: 'The US serving is 198g. A Philippine rice is taken as about one cup, 160g, which is an estimate. ' + JB_US });
-  f('jb-spaghetti', 'Jolly Spaghetti', JB, 'fastfood', [411, 610, 23, 76, 23], [['1 solo', 0.6], ['1 US serving (411g)', 1], ['Family pack', 3]], 'pub-us', ['jollibee spaghetti', 'jolly spag', 'spaghetti'], { na: 1340, note: 'The US serving is 411g. The Philippine solo is smaller; taking it as 60% of that is an estimate. ' + JB_US });
-  f('jb-palabok', 'Palabok Fiesta', JB, 'fastfood', [351, 410, 20, 49, 15], [['1 regular', 1], ['Family pack', 3.02]], 'pub-us', ['jollibee palabok', 'palabok'], { na: 950, note: JB_US });
-  f('jb-burgersteak', 'Burger Steak (1 pc, no rice)', JB, 'fastfood', [112, 190, 10, 6, 14], [['1 pc', 1], ['2 pcs', 2]], 'pub-us', ['burgersteak', 'burger steak'], { na: 505, note: 'Worked out from the US 2 pc Burger Steak with rice, minus the rice. ' + JB_US });
-  f('jb-yum', 'Yumburger', JB, 'fastfood', [118, 360, 13, 30, 21], one('1 pc'), 'pub-us', ['yum burger', 'yum', 'jollibee burger', 'burger'], { na: 630, note: 'The US Yum. The Philippine Yumburger is smaller, so this is on the high side. ' + JB_US });
-  f('jb-yum-cheese', 'Cheesy Yumburger', JB, 'fastfood', [132, 410, 16, 30, 25], one('1 pc'), 'pub-us', ['cheesy yum', 'yum with cheese', 'cheeseburger'], { na: 880, note: 'The US Yum with Cheese. The Philippine one is smaller. ' + JB_US });
+  f('jb-spaghetti', 'Jolly Spaghetti', JB, 'fastfood', [0, 474, 17.9, 59.1, 17.9], [['1 solo', 1], ['Family pack', 5]], 'board', ['jollibee spaghetti', 'jolly spag', 'spaghetti']);
+  f('jb-palabok', 'Palabok Fiesta', JB, 'fastfood', [0, 318, 15.5, 38.0, 11.6], [['1 regular', 1], ['Family pack', 3.02]], 'board', ['jollibee palabok', 'palabok']);
+  f('jb-burgersteak', 'Burger Steak (1 pc, no rice)', JB, 'fastfood', [0, 134, 7.1, 4.2, 9.9], [['1 pc', 1], ['2 pcs', 2]], 'board', ['burgersteak', 'burger steak']);
+  f('jb-yum', 'Yumburger', JB, 'fastfood', [0, 301, 10.9, 25.1, 17.6], one('1 pc'), 'board', ['yum burger', 'yum', 'jollibee burger', 'burger']);
+  f('jb-yum-cheese', 'Cheesy Yumburger', JB, 'fastfood', [0, 310, 12.1, 22.7, 18.9], one('1 pc'), 'board', ['cheesy yum', 'yum with cheese', 'cheeseburger']);
   f('jb-fries', 'Jolly Crispy Fries', JB, 'fastfood', [113, 340, 4, 41, 18], [['Regular', 1], ['Large', 1.5]], 'pub-us', ['fries', 'french fries', 'jollibee fries'], { na: 560, note: JB_US });
-  f('jb-peach-mango', 'Peach Mango Pie', JB, 'fastfood', [94, 270, 3, 40, 11], one('1 pc'), 'pub-us', ['peach mango', 'pie', 'jollibee pie'], { na: 130, note: JB_US });
-  f('jb-hotdog', 'Jolly Hotdog', JB, 'fastfood', [130, null, 12, 32, 20], one('1 pc'), 'est', ['jolly hotdog', 'hotdog sandwich']);
-  f('jb-sundae', 'Chocolate Sundae', JB, 'fastfood', [120, null, 4, 34, 6], one('1 cup'), 'est', ['sundae', 'jollibee sundae', 'ice cream']);
+  f('jb-peach-mango', 'Peach Mango Pie', JB, 'fastfood', [0, 214, 2.4, 31.7, 8.7], one('1 pc'), 'board', ['peach mango', 'pie', 'jollibee pie']);
+  f('jb-hotdog', 'Jolly Hotdog', JB, 'fastfood', [130, 375, 12.6, 33.7, 21.1], one('1 pc'), 'board', ['jolly hotdog', 'hotdog sandwich']);
+  f('jb-sundae', 'Chocolate Sundae', JB, 'fastfood', [120, 247, 4.8, 40.8, 7.2], one('1 cup'), 'board', ['sundae', 'jollibee sundae', 'ice cream']);
   mix('jb-c1', 'Chickenjoy with Rice (1 pc)', JB, 'fastfood', [['jb-cj', 1], ['jb-rice', 0.81], ['jb-gravy', 1]], one('1 meal'), ['c1', '1pc chickenjoy', 'chickenjoy meal', 'chickenjoy with rice']);
   mix('jb-c2', 'Chickenjoy with Rice (2 pcs)', JB, 'fastfood', [['jb-cj', 2], ['jb-rice', 0.81], ['jb-gravy', 1]], one('1 meal'), ['2pc chickenjoy', 'chickenjoy meal']);
   mix('jb-cj-spag', 'Chickenjoy with Jolly Spaghetti', JB, 'fastfood', [['jb-cj', 1], ['jb-spaghetti', 0.6], ['jb-gravy', 1]], one('1 meal'), ['chickenjoy spaghetti', 'cj spag', 'chicken spaghetti']);
@@ -317,54 +318,55 @@
   /* ── Mang Inasal ────────────────────────────────────────────────────── */
   const MI = 'Mang Inasal';
   const unli = 'Unli rice: add a Rice for every extra cup.';
-  f('mi-pecho', 'Chicken Inasal Pecho (breast)', MI, 'fastfood', [200, null, 48, 4, 18], one('1 pc'), 'est', ['pecho', 'inasal', 'chicken inasal', 'breast', 'mang inasal chicken']);
-  f('mi-paa', 'Chicken Inasal Paa (leg)', MI, 'fastfood', [200, null, 38, 4, 26], one('1 pc'), 'est', ['paa', 'inasal', 'chicken inasal', 'leg', 'mang inasal chicken']);
-  f('mi-pork-bbq', 'Pork BBQ', MI, 'fastfood', [120, null, 20, 14, 20], one('2 sticks'), 'est', ['pork bbq', 'barbecue', 'mang inasal bbq']);
+  f('mi-pecho', 'Chicken Inasal Pecho (breast)', MI, 'fastfood', [200, 403, 52.3, 4.4, 19.6], one('1 pc'), 'board', ['pecho', 'inasal', 'chicken inasal', 'breast', 'mang inasal chicken']);
+  f('mi-paa', 'Chicken Inasal Paa (leg)', MI, 'fastfood', [200, 444, 42.0, 4.4, 28.7], one('1 pc'), 'board', ['paa', 'inasal', 'chicken inasal', 'leg', 'mang inasal chicken']);
+  f('mi-pork-bbq', 'Pork BBQ', MI, 'fastfood', [120, 211, 13.4, 9.3, 13.4], one('2 sticks'), 'board', ['pork bbq', 'barbecue', 'mang inasal bbq']);
   f('chicken-oil', 'Chicken oil', MI, 'extras', [13, 115, 0, 0, 12.8], [['1 tbsp', 1], ['2 tbsp', 2]], 'ref', ['chicken oil', 'mantika', 'inasal oil']);
-  f('mi-halo', 'Halo-halo', MI, 'fastfood', [350, null, 6, 70, 8], one('1 regular'), 'est', ['halo halo', 'mang inasal halo halo']);
-  f('mi-sisig', 'Sisig', MI, 'fastfood', [200, null, 26, 6, 46], one('1 order'), 'est', ['pork sisig', 'mang inasal sisig']);
+  f('mi-halo', 'Halo-halo', MI, 'fastfood', [350, 377, 6.0, 70.2, 8.0], one('1 regular'), 'board', ['halo halo', 'mang inasal halo halo']);
+  f('mi-sisig', 'Sisig', MI, 'fastfood', [200, 340, 16.3, 3.8, 28.9], one('1 order'), 'board', ['pork sisig', 'mang inasal sisig']);
   mix('mi-pm1', 'PM1 Chicken Inasal Paa with Rice', MI, 'fastfood', [['mi-paa', 1], ['rice', 1]], one('1 meal'), ['pm1', 'paa meal', 'inasal meal', 'unli rice'], { note: unli });
   mix('mi-pm2', 'PM2 Chicken Inasal Pecho with Rice', MI, 'fastfood', [['mi-pecho', 1], ['rice', 1]], one('1 meal'), ['pm2', 'pecho meal', 'inasal meal', 'unli rice'], { note: unli });
 
   /* ── Chowking ───────────────────────────────────────────────────────── */
   const CK = 'Chowking';
-  f('ck-chaofan', 'Chao Fan', CK, 'fastfood', [300, null, 16, 78, 18], [['Regular', 1], ['Solo', 0.7]], 'est', ['chao fan', 'chaofan', 'fried rice', 'pork chao fan']);
-  f('ck-siomai', 'Siomai (4 pcs)', CK, 'fastfood', [100, null, 10, 12, 10], one('4 pcs'), 'est', ['siomai', 'chowking siomai']);
-  f('ck-siopao', 'Asado Siopao', CK, 'fastfood', [130, null, 11, 46, 9], one('1 pc'), 'est', ['siopao', 'chowking siopao']);
-  f('ck-mami', 'Beef Mami', CK, 'fastfood', [500, null, 22, 52, 12], one('1 bowl'), 'est', ['mami', 'beef mami', 'noodle soup']);
+  f('ck-chaofan', 'Chao Fan', CK, 'fastfood', [300, 551, 16.4, 79.9, 18.4], [['Regular', 1], ['Solo', 0.7]], 'board', ['chao fan', 'chaofan', 'fried rice', 'pork chao fan']);
+  f('ck-siomai', 'Siomai (4 pcs)', CK, 'fastfood', [100, 114, 6.4, 7.7, 6.4], one('4 pcs'), 'board', ['siomai', 'chowking siomai']);
+  f('ck-siopao', 'Asado Siopao', CK, 'fastfood', [130, 295, 10.5, 43.9, 8.6], one('1 pc'), 'board', ['siopao', 'chowking siopao']);
+  f('ck-mami', 'Beef Mami', CK, 'fastfood', [500, 452, 24.6, 58.2, 13.4], one('1 bowl'), 'board', ['mami', 'beef mami', 'noodle soup']);
   f('ck-chicken', 'Chinese-style Fried Chicken', CK, 'fastfood', [110, null, 24, 8, 18], [['1 pc', 1], ['2 pcs', 2]], 'est', ['chowking chicken', 'fried chicken']);
-  f('ck-pancit', 'Pancit Canton', CK, 'fastfood', [300, null, 16, 62, 14], one('1 regular'), 'est', ['pancit canton', 'chowking pancit']);
+  f('ck-pancit', 'Pancit Canton', CK, 'fastfood', [300, 356, 13.0, 50.4, 11.4], one('1 regular'), 'board', ['pancit canton', 'chowking pancit']);
   f('ck-lumpia', 'Lumpiang Shanghai (3 pcs)', CK, 'fastfood', [60, null, 7.5, 12, 12], one('3 pcs'), 'est', ['lumpia', 'shanghai']);
-  f('ck-buchi', 'Buchi', CK, 'fastfood', [35, null, 2, 18, 4], [['1 pc', 1], ['3 pcs', 3]], 'est', ['butsi', 'sesame ball', 'buchi']);
-  f('ck-halo', 'Halo-Halo', CK, 'fastfood', [400, null, 7, 80, 9], one('1 regular'), 'est', ['halo halo', 'chowking halo halo']);
+  f('ck-buchi', 'Buchi', CK, 'fastfood', [35, 125, 2.2, 19.4, 4.3], [['1 pc', 1], ['3 pcs', 3]], 'board', ['butsi', 'sesame ball', 'buchi']);
+  f('ck-halo', 'Halo-Halo', CK, 'fastfood', [400, 491, 8.0, 91.6, 10.3], one('1 regular'), 'board', ['halo halo', 'chowking halo halo']);
   mix('ck-lauriat', 'Chicken Lauriat', CK, 'fastfood', [['ck-chicken', 1], ['ck-chaofan', 1], ['ck-siomai', 0.5], ['ck-buchi', 1]], one('1 meal'), ['lauriat', 'chinese style chicken lauriat']);
 
   /* ── Andok's ────────────────────────────────────────────────────────── */
   const AN = 'Andok’s';
-  f('an-litson', 'Litson Manok', AN, 'fastfood', [180, null, 40, 1, 20], [['¼ chicken', 1], ['½ chicken', 2], ['Whole', 4]], 'est', ['lechon manok', 'litson manok', 'roast chicken', 'andoks']);
-  f('an-liempo', 'Litson Liempo', AN, 'fastfood', [100, null, 18, 3, 40], [['1 serving', 1], ['¼ kilo', 2.5]], 'est', ['liempo', 'andoks liempo']);
+  f('an-litson', 'Litson Manok', AN, 'fastfood', [180, 348, 43.2, 0, 19.4], [['¼ chicken', 1], ['½ chicken', 2], ['Whole', 4]], 'avg', ['lechon manok', 'litson manok', 'roast chicken', 'andoks']);
+  f('an-liempo', 'Litson Liempo', AN, 'fastfood', [100, 310, 23.5, 0, 24], [['1 serving', 1], ['¼ kilo', 2.5]], 'avg', ['liempo', 'andoks liempo']);
 
   /* ── Greenwich ──────────────────────────────────────────────────────── */
   const GW = 'Greenwich';
-  f('gw-pizza', 'Pizza (1 slice)', GW, 'fastfood', [100, null, 10, 30, 10], [['1 slice', 1], ['2 slices', 2]], 'est', ['pizza', 'greenwich pizza', 'hawaiian', 'overload']);
-  f('gw-lasagna', 'Lasagna Supreme', GW, 'fastfood', [300, null, 22, 50, 20], one('1 solo'), 'est', ['lasagna', 'lasagne']);
+  f('gw-pizza', 'Pizza (1 slice)', GW, 'fastfood', [100, 166, 6.6, 19.9, 6.6], [['1 slice', 1], ['2 slices', 2]], 'board', ['pizza', 'greenwich pizza', 'hawaiian', 'overload']);
+  f('gw-lasagna', 'Lasagna Supreme', GW, 'fastfood', [300, 395, 18.6, 42.2, 16.9], one('1 solo'), 'board', ['lasagna', 'lasagne']);
 
   /* ── convenience stores ─────────────────────────────────────────────── */
   const SE = '7-Eleven';
-  f('se-bigbite', 'Big Bite Hotdog', SE, 'fastfood', [150, null, 12, 34, 20], one('1 pc'), 'est', ['big bite', 'hotdog sandwich', 'seven eleven', '711']);
-  f('se-siopao', 'Siopao', SE, 'fastfood', [140, null, 11, 50, 9], one('1 pc'), 'est', ['siopao', 'seven eleven', '711']);
+  f('se-bigbite', 'Big Bite Hotdog', SE, 'fastfood', [150, 436, 17.5, 33, 26.4], one('1 pc'), 'avg', ['big bite', 'hotdog sandwich', 'seven eleven', '711']);
+  f('se-siopao', 'Siopao', SE, 'fastfood', [140, 322, 9.9, 57, 5], one('1 pc'), 'avg', ['siopao', 'seven eleven', '711']);
   f('se-ricemeal', 'Chicken Rice Meal', SE, 'fastfood', [350, null, 24, 80, 18], one('1 pack'), 'est', ['rice meal', 'seven eleven', '711', 'chicken meal']);
-  f('se-slurpee', 'Slurpee', SE, 'drinks', [350, null, 0, 40, 0], [['Regular', 1], ['Large', 1.5]], 'est', ['slurpee', 'seven eleven', '711']);
+  f('se-slurpee', 'Slurpee', SE, 'drinks', [350, 154, 0, 40.4, 0], [['Regular', 1], ['Large', 1.5]], 'avg', ['slurpee', 'seven eleven', '711']);
+  f('se-busog-sisig', 'Busog Meal Sisig', SE, 'fastfood', [250, 363, 10.9, 64, 9.5], one('1 pack'), 'avg', ['busog meal', 'sisig', 'rice meal', 'seven eleven', '711']);
   const LW = 'Lawson';
-  f('lw-onigiri', 'Onigiri', LW, 'fastfood', [110, null, 5, 36, 4], [['1 pc', 1], ['2 pcs', 2]], 'est', ['onigiri', 'rice ball', 'tuna mayo']);
-  f('lw-karaage', 'Karaage (5 pcs)', LW, 'fastfood', [120, null, 20, 14, 18], one('5 pcs'), 'est', ['karaage', 'fried chicken']);
+  f('lw-onigiri', 'Onigiri', LW, 'fastfood', [110, 196, 5, 35.2, 2.3], [['1 pc', 1], ['2 pcs', 2]], 'avg', ['onigiri', 'rice ball', 'tuna mayo']);
+  f('lw-karaage', 'Karaage (5 pcs)', LW, 'fastfood', [120, 211, 24, 2.7, 9.3], one('5 pcs'), 'avg', ['karaage', 'fried chicken']);
   f('lw-oden', 'Oden', LW, 'fastfood', [60, null, 4, 6, 2], [['1 pc', 1], ['3 pcs', 3]], 'est', ['oden', 'fish cake']);
   f('lw-bento', 'Bento Meal', LW, 'fastfood', [350, null, 20, 80, 16], one('1 pack'), 'est', ['bento', 'rice meal']);
-  f('ms-chicken', 'Uncle John’s Fried Chicken', 'Ministop', 'fastfood', [120, null, 24, 10, 20], [['1 pc', 1], ['2 pcs', 2]], 'est', ['uncle johns', 'ministop chicken', 'fried chicken']);
+  f('ms-chicken', 'Uncle John’s Fried Chicken', 'Ministop', 'fastfood', [120, 274, 21.4, 8.6, 17.1], [['1 pc', 1], ['2 pcs', 2]], 'avg', ['uncle johns', 'ministop chicken', 'fried chicken']);
   const SR = 'S&R';
-  f('sr-pizza', 'Pizza (1 slice, 18-inch)', SR, 'fastfood', [230, null, 28, 70, 26], one('1 slice'), 'est', ['snr pizza', 's and r', 'snr', 'new york pizza']);
-  f('sr-wings', 'Chicken Wings (6 pcs)', SR, 'fastfood', [240, null, 40, 10, 34], one('6 pcs'), 'est', ['snr wings', 'wings', 'snr']);
-  f('sr-hotdog', 'Quarter-pound Hotdog', SR, 'fastfood', [220, null, 20, 40, 30], one('1 pc'), 'est', ['snr hotdog', 'hotdog sandwich', 'snr']);
+  f('sr-pizza', 'Pizza (1 slice, 18-inch)', SR, 'fastfood', [230, 635, 28.7, 72.4, 25.8], one('1 slice'), 'avg', ['snr pizza', 's and r', 'snr', 'new york pizza']);
+  f('sr-wings', 'Chicken Wings (6 pcs)', SR, 'fastfood', [240, 694, 46.6, 14.2, 48.5], one('6 pcs'), 'avg', ['snr wings', 'wings', 'snr']);
+  f('sr-hotdog', 'Quarter-pound Hotdog', SR, 'fastfood', [220, 644, 24.6, 48.6, 38.5], one('1 pc'), 'avg', ['snr hotdog', 'hotdog sandwich', 'snr']);
 
   /* ── drinks ─────────────────────────────────────────────────────────── */
   f('softdrink', 'Softdrink (regular)', '', 'drinks', [330, 139, 0, 35, 0],
@@ -460,11 +462,61 @@
   f('pk-cornick', 'Cornick (small pack)', '', 'packaged', [30, null, 2, 18, 7], [['1 small pack', 1], ['1 big pack', 3]], 'est', ['boy bawang', 'cornick', 'corn nuts'], { note: PACK });
   f('pk-cracker-nuts', 'Cracker nuts (small pack)', '', 'packaged', [30, null, 5, 12, 12], [['1 small pack', 1], ['1 big pack', 3]], 'est', ['nagaraya', 'cracker nuts', 'coated peanuts'], { note: PACK });
 
+  /* KFC Philippines' own table, corporate.kfc.com.ph/nutrition-and-allergen-
+     information. A dash on the table is read as 0. Buckets, combos and dips
+     are left out: their rows are per serving and do not say of what.     */
   const KFC = 'KFC';
-  f('kfc-chicken', 'Original Recipe Chicken (1 pc)', KFC, 'fastfood', [120, null, 22, 8, 18], [['1 pc', 1], ['2 pcs', 2]], 'est', ['kfc', 'kentucky', 'fried chicken']);
-  f('kfc-gravy', 'Gravy', KFC, 'fastfood', [30, null, 0.5, 3, 1], one('1 cup'), 'est', ['kfc gravy', 'gravy']);
-  f('kfc-bowl', 'Famous Bowl', KFC, 'fastfood', [300, null, 20, 60, 28], one('1 bowl'), 'est', ['famous bowl', 'kfc bowl']);
-  mix('kfc-c1', 'Chicken with Rice (1 pc)', KFC, 'fastfood', [['kfc-chicken', 1], ['rice', 1], ['kfc-gravy', 1]], one('1 meal'), ['kfc meal', 'kfc chicken rice']);
+  const kfc = chain(KFC, ['kfc', 'kentucky']);
+  kfc('kfc-chicken', 'Original Recipe Chicken (1 pc)', 'fastfood', [['1 pc', 257, 19, 14, 14, 762]], ['fried chicken', 'original recipe']);
+  kfc('kfc-c1', 'Chicken with Rice', 'fastfood', [['1 pc', 476, 23, 17, 59, 1121], ['2 pcs', 733, 42, 31, 73, 1884]], ['kfc meal', 'chicken rice', 'fried chicken']);
+  kfc('kfc-chicken-pasta', 'Chicken with Spaghetti (1 pc)', 'fastfood', [['1 meal', 602, 26, 23, 72, 2025]], ['chicken spaghetti', 'chicken pasta']);
+  kfc('kfc-chicken-mash', 'Chicken with Mashed Potato (1 pc)', 'fastfood', [['1 meal', 560, 24, 20, 70, 1434]], ['chicken mashed potato']);
+  kfc('kfc-chicken-soup', 'Chicken with Soup (1 pc)', 'fastfood', [['1 meal', 528, 23, 18, 68, 1730]], ['chicken soup']);
+  kfc('kfc-box1', 'Fully Loaded Box (1 pc)', 'fastfood', [['1 box', 612, 25, 22, 79, 2043]], ['fully loaded']);
+  kfc('kfc-box2', 'Fully Loaded Box (2 pcs)', 'fastfood', [['1 box', 869, 44, 36, 92, 2805]], ['fully loaded']);
+  kfc('kfc-zinger-box', 'Zinger Steak Fully Loaded Box', 'fastfood', [['1 box', 1036, 42, 54, 95, 2676]], ['fully loaded', 'zinger']);
+  kfc('kfc-zinger-burger-box', 'Zinger Burger Fully Loaded Box', 'fastfood', [['1 box', 1322, 48, 70, 125, 2386]], ['fully loaded', 'zinger']);
+  kfc('kfc-bowl', 'Famous Bowl', 'fastfood', [['Snack', 303, 9, 18, 26, 822], ['Super Platter', 404, 13, 24, 34, 1096]], ['kfc bowl', 'rice bowl']);
+  kfc('kfc-spaghetti', 'Spaghetti', 'fastfood', [['1 order', 306, 7, 7, 54, 903]], ['kfc spaghetti']);
+  kfc('kfc-flavor-shots', 'Flavor Shots', 'fastfood', [['1 order', 474, 13, 19, 63, 392]], ['hot shots']);
+  kfc('kfc-chops', 'Chicken Chops', 'fastfood', [['1 order', 272, 4, 1, 61, 131]], ['chicken chop']);
+  kfc('kfc-ala-king', 'Rice Bowl, Ala King', 'fastfood', [['1 bowl', 528, 14, 12, 80, 975]], ['ala king', 'rice bowl']);
+  kfc('kfc-sisig', 'Rice Bowl, Sisig', 'fastfood', [['1 bowl', 750, 24, 39, 76, 1134]], ['sisig', 'rice bowl']);
+  kfc('kfc-zinger-steak', 'Zinger Steak', 'fastfood', [['1 order', 951, 27, 36, 130, 634]], ['zinger']);
+  kfc('kfc-chicken-burger', 'Chicken Burger', 'fastfood', [['1 pc', 215, 5, 9, 28, 0]], ['burger']);
+  kfc('kfc-cheeseburger', 'Chicken Cheeseburger', 'fastfood', [['1 pc', 253, 7, 12, 29, 0]], ['cheeseburger', 'burger']);
+  kfc('kfc-snacker', 'Original Recipe Snacker', 'fastfood', [['1 pc', 317, 9, 14, 34, 333]], ['snacker', 'sandwich']);
+  kfc('kfc-zinger', 'Zinger Burger', 'fastfood', [['1 pc', 710, 23, 48, 46, 343]], ['zinger', 'burger']);
+  kfc('kfc-twister', 'Cali Maki Twister', 'fastfood', [['1 pc', 495, 10, 31, 44, 133]], ['twister', 'wrap']);
+  kfc('kfc-hot-shots', 'Hot Shots', 'fastfood', [['Regular', 255, 10, 22, 4, 420], ['Large', 495, 19, 43, 7, 710]], ['fun shots', 'popcorn chicken']);
+  kfc('kfc-tenders', 'Original Recipe Tenders (2 pcs)', 'fastfood', [['2 pcs', 301, 22, 12, 26, 1479]], ['tenders']);
+  kfc('kfc-tenders-rice', 'Tenders with Rice (2 pcs)', 'fastfood', [['1 meal', 481, 25, 12, 67, 1479]], ['tenders', 'rice']);
+  kfc('kfc-am-steak', 'a.m. Steak', 'fastfood', [['1 order', 776, 23, 16, 129, 576]], ['breakfast', 'am steak']);
+  kfc('kfc-am-cheesedog', 'a.m. Chicken Cheesedog Bowl', 'fastfood', [['1 bowl', 644, 18, 10, 119, 2]], ['breakfast', 'hotdog']);
+  kfc('kfc-am-shots', 'a.m. Flavor Shots', 'fastfood', [['1 order', 864, 26, 29, 125, 590]], ['breakfast']);
+  kfc('kfc-am-egg', 'a.m. Egg Pandesal', 'fastfood', [['1 pc', 260, 11, 17, 16, 0]], ['breakfast', 'pandesal']);
+  kfc('kfc-am-ham', 'a.m. Ham Pandesal', 'fastfood', [['1 pc', 259, 7, 12, 29, 0]], ['breakfast', 'pandesal']);
+  kfc('kfc-am-or', 'a.m. Original Recipe Pandesal', 'fastfood', [['1 pc', 360, 12, 17, 36, 333]], ['breakfast', 'pandesal']);
+  kfc('kfc-fries', 'Crispy Fries', 'fastfood', [['Regular', 107, 2, 4, 17, 167], ['Large', 153, 4, 6, 25, 239], ['Mini Bucket', 230, 5, 9, 37, 359]], ['fries']);
+  kfc('kfc-mash', 'Mashed Potato', 'fastfood', [['Regular', 84, 2, 4, 11, 313], ['Large', 153, 4, 6, 21, 495]], ['mashed potato']);
+  kfc('kfc-corn', 'Buttered Corn', 'fastfood', [['Regular', 90, 2, 5, 9, 57], ['Large', 180, 4, 10, 18, 114]], ['corn']);
+  kfc('kfc-coleslaw', 'Coleslaw', 'fastfood', [['Regular', 97, 1, 7, 7, 106], ['Large', 206, 2, 15, 16, 226]], ['coleslaw']);
+  kfc('kfc-macaroni', 'Macaroni Salad', 'fastfood', [['Regular', 146, 3, 8, 17, 290], ['Large', 310, 6, 16, 36, 619]], ['macaroni salad']);
+  kfc('kfc-soup', 'Mushroom Soup', 'fastfood', [['1 cup', 52, 1, 2, 8, 609]], ['soup']);
+  kfc('kfc-gravy', 'Gravy', 'fastfood', [['Regular', 39, 1, 2, 4, 359], ['Large', 138, 2, 9, 13, 1273]], ['kfc gravy']);
+  kfc('kfc-rice', 'Rice', 'fastfood', [['1 cup', 181, 3, 0, 42, 0]], ['kanin', 'extra rice']);
+  kfc('kfc-butter-rice', 'Chicken Butter Rice', 'fastfood', [['1 order', 513, 10, 3, 110, 1]], ['rice']);
+  kfc('kfc-garlic-rice', 'Garlic Rice', 'fastfood', [['1 order', 552, 11, 4, 118, 2]], ['rice', 'sinangag']);
+  kfc('kfc-brownie', 'Mini Brownie', 'fastfood', [['1 pc', 132, 1, 5, 22, 72]], ['brownie', 'dessert']);
+  kfc('kfc-kup', 'Classic Kup Vanilla', 'fastfood', [['1 cup', 64, 1, 1, 13, 30]], ['ice cream', 'soft serve']);
+  kfc('kfc-sundae-caramel', 'Caramel Sundae', 'fastfood', [['1 cup', 112, 1, 2, 23, 73]], ['sundae', 'ice cream']);
+  kfc('kfc-sundae-choc', 'Chocolate Sundae', 'fastfood', [['1 cup', 100, 2, 2, 18, 47]], ['sundae', 'ice cream']);
+  kfc('kfc-sundae-straw', 'Strawberry Sundae', 'fastfood', [['1 cup', 64, 1, 1, 13, 30]], ['sundae', 'ice cream']);
+  kfc('kfc-kreamball', 'Strawberry Mango Kreamball', 'fastfood', [['1 cup', 164, 2, 3, 32, 71]], ['kreamball', 'ice cream']);
+  kfc('kfc-float', 'Float', 'drinks', [['1 regular', 96, 1, 2, 19, 40]], ['coke float', 'float']);
+  kfc('kfc-iced-coffee', 'Iced Coffee, Black', 'drinks', [['1 regular', 80, 0, 0, 20, 0]], ['iced coffee']);
+  kfc('kfc-creamy-iced', 'Creamy Iced Coffee', 'drinks', [['1 regular', 103, 1, 1, 22, 25]], ['iced coffee']);
+
   const SH = 'Shakey’s';
   /* ── Shakey’s, as Shakey’s Philippines prints it ─────────────────────
      Copied from Shakey’s own nutrition tables, supplied by Tom on
@@ -805,9 +857,9 @@
   sbx('sb-hot-salted-caramel-oatmilk-latte', 'Hot Salted Caramel Oatmilk Latte', 'drinks', [['Grande', 356, 5, 18, 43, 381], ['Tall', 283, 4, 15, 33, 294], ['Venti', 427, 6, 21, 53, 477]], ['sbux', 'starbs', 'coffee', 'latte']);
   sbx('sb-iced-salted-caramel-oatmilk-latte', 'Iced Salted Caramel Oatmilk Latte', 'drinks', [['Grande', 242, 3, 12, 29, 305], ['Tall', 194, 2, 10, 23, 235], ['Venti', 263, 3, 13, 33, 364]], ['sbux', 'starbs', 'coffee', 'latte']);
   sbx('sb-salted-caramel-oatmilk-frappuccino', 'Salted Caramel Oatmilk Frappuccino', 'drinks', [['Grande', 407, 2, 15, 66, 160], ['Tall', 287, 2, 11, 46, 109], ['Venti', 486, 2, 15, 85, 206]], ['sbux', 'starbs', 'coffee', 'frap', 'frappe']);
-  f('pc-fries', 'Flavored Fries', 'Potato Corner', 'fastfood', [120, null, 4, 44, 18], [['Regular', 1], ['Large', 1.6], ['Mega', 2.4]], 'est', ['potato corner', 'flavored fries', 'cheese fries', 'bbq fries']);
+  f('pc-fries', 'Flavored Fries', 'Potato Corner', 'fastfood', [120, 344, 4.1, 41.4, 18.4], [['Regular', 1], ['Large', 1.6], ['Mega', 2.4]], 'avg', ['potato corner', 'flavored fries', 'cheese fries', 'bbq fries']);
   f('mx-chicken', 'Fried Chicken (¼ chicken)', 'Max’s', 'fastfood', [180, null, 40, 4, 26], [['¼ chicken', 1], ['½ chicken', 2], ['Whole', 4]], 'est', ['maxs', 'max restaurant', 'max chicken', 'max fried chicken']);
-  f('tt-bento', 'Chicken Teriyaki Bento', 'Tokyo Tokyo', 'fastfood', [350, null, 26, 80, 16], one('1 meal'), 'est', ['tokyo tokyo', 'teriyaki', 'bento', 'beef misono']);
+  f('tt-bento', 'Chicken Teriyaki Bento', 'Tokyo Tokyo', 'fastfood', [350, 524, 28.4, 71.4, 12.3], one('1 meal'), 'avg', ['tokyo tokyo', 'teriyaki', 'bento', 'beef misono']);
 
   /* ── lists the app uses ─────────────────────────────────────────────── */
 
