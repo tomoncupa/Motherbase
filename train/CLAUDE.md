@@ -892,6 +892,19 @@ running block total. It dips in a lighter week; that is honest, leave it.
   sets as a crash). A week still running is left off while it is under the
   week before; the gain is said only when up.
 - **5**: a lifetime PR's trophy is filled, a PR's is outlined (`.fr-pr.all`).
+- **Next, decided 2026-10-05, not built: set volume per lift.** Tom: *"we
+  don't care about 1rms"*, *"Graph it via weght * Reps, set by set and overall
+  session volume"*, *"set 1s should all be on 1 line, set 2s on another"*,
+  *"don't drop anything out anymore"*. Each point weight x reps (reps for a
+  lift done mostly without weight); a line per set number, set 1 to 4, a
+  point per session; under it that lift's session volume (every set added)
+  with a dashed least-squares trend; and every session's total. **Every
+  set counts, warmups too**: a 70%-of-top-set cut was tried on his log and
+  threw out the lighter opening sets he works up from, flipping three lifts
+  from up to down. Mocked from his 5 Oct backup in a scratchpad, not in the
+  repo. Open: where it lives (recommended: the GRAPH tab, his own view; the
+  share picture only lifts trending up), and whether warmups-count is for
+  these graphs only or all of TRAIN.
 - 1, 2, 3, 4, 7, 8 not built. Measured on the demo: the bottom starts 61%
   down with one PR and the line; `_review.html` 142/142 at 390 and 1280.
   Not seen on his iPhone.
