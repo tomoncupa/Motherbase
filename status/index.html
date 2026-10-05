@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.60, 2026-10-05">
+<meta name="mb-version" content="1.0.61, 2026-10-05">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -831,13 +831,19 @@ html.deskhost header { padding-right: var(--s-7); }
    across the top left with small icons under it, a running time beside it, and
    the round button on the right. Where his picture has a timer, this has the
    time since the last line he wrote today, which is how long he has been on it.
-   The right edge keeps room for the chevron, which never moves. */
+   The right edge keeps room for the chevron, which never moves.
+   Two rows: the box beside the time, then the icons and the last line, which
+   run on under the time. Tom: "Don't clip it anymore, it fits under the timer."
+   The status check button stands across both. */
 .deskrow {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center; column-gap: var(--s-3);
   padding-right: calc(var(--tap) - var(--s-2));
 }
-.deskmain { display: flex; flex-direction: column; min-width: 0; }
+.deskrow > .deskdoing { grid-column: 1; grid-row: 1; min-width: 0; }
+.deskrow > .desktime { grid-column: 2; grid-row: 1; }
+.deskrow > .deskfab { grid-column: 3; grid-row: 1 / span 2; }
+.deskrow > .deskfoot { grid-column: 1 / span 2; grid-row: 2; }
 .desktime {
   font-family: var(--font-display); font-size: var(--f-3); font-weight: var(--w-bold);
   font-variant-numeric: tabular-nums; color: var(--text-1); white-space: nowrap;
@@ -846,8 +852,9 @@ html.deskhost header { padding-right: var(--s-7); }
 
 /* the last thing he wrote, one line under the box, beside the icons */
 .deskmark { flex: none; color: var(--accent); display: flex; align-items: center; }
+/* never cut off: a line too long for the room wraps, and the window grows */
 .deskline {
-  flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1; min-width: 0; overflow-wrap: anywhere;
   font-size: var(--f-1); color: var(--text-2);
 }
 .deskopen {
@@ -8186,8 +8193,6 @@ function deskBar() {
   /* One strip: the box and the icons under it on the left, the time, then the
      status check. See `.deskrow` for the why. */
   const row = el('div', 'deskrow');
-  const main = el('div', 'deskmain');
-  row.appendChild(main);
   bar.appendChild(row);
 
   const last = deskLast();
@@ -8232,10 +8237,11 @@ function deskBar() {
     addNote(Day.today(), doingKind(), text, { now: true });
     Mobile.feedback('success');
     deskBar();
+    if (deskNewDay()) return;
     const again = document.querySelector('#deskbar .deskdoing');
     if (again) again.focus();
   };
-  main.appendChild(doing);
+  row.appendChild(doing);
   if (hadFocus) setTimeout(() => { doing.focus(); doing.setSelectionRange(doing.value.length, doing.value.length); }, 0);
 
   /* Under the box: the two ways of writing a line, today's readings, then the
@@ -8266,11 +8272,11 @@ function deskBar() {
   });
   if (chips.children.length) foot.appendChild(chips);
   foot.appendChild(lastEl);
-  main.appendChild(foot);
 
   const time = el('div', 'desktime');
   row.appendChild(time);
   deskClock();
+  row.appendChild(foot);
 
   /* last, in the far corner, where the hand goes for it */
   const fab = el('button', 'deskfab');
@@ -8284,6 +8290,23 @@ function deskBar() {
   if (window.Icons && Icons.paint) Icons.paint(bar);
   deskWatchBox(bar);
   deskTitle();
+}
+
+/* ── the first line of a new day asks for sleep and weight ──
+   Tom, 2026-10-05: "The first entry of a new day should ask for sleep and
+   weight." The first line written in this box each day brings up the status
+   check with those two only, and only the ones not logged yet today, so a
+   weight already put in on the phone is not asked again. Typed and optional,
+   like every number in the check: a morning he did not weigh in is SAVE with
+   the box empty. Remembered per day, so it asks once. */
+function deskNewDay() {
+  const d = Day.today();
+  if (S.get('desk.newday', '') === d || checkOn) return false;
+  S.set('desk.newday', d);
+  const miss = ['sleep', 'weight'].map(quickField).filter(f => f && !logged(d, f.id));
+  if (!miss.length) return false;
+  checkOpen(miss);
+  return true;
 }
 
 /* ── the running time ──
@@ -8365,8 +8388,10 @@ function checkChosen() {
     (Array.isArray(pick) ? pick.indexOf(f.id) > -1 : f.measure === 'scale'))
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 }
+let checkOnly = null;    /* a fixed list for this one check, the new day's two */
 function checkFields() {
   const d = Day.today();
+  if (checkOnly) return checkOnly.filter(f => !logged(d, f.id));
   return checkChosen().filter(f => !((f.measure === 'check' || (f.measure === 'number' && f.once)) && logged(d, f.id)));
 }
 let checkDoing = '';     /* "what are you doing now", as typed */
@@ -8385,7 +8410,7 @@ function checkDraw() {
   const win = el('div', 'nwin');
   win.appendChild(el('div', 'nwhead', esc(Notice.bracket(st, 'STATUS CHECK'))));
   win.appendChild(el('div', 'nwrule'));
-  win.appendChild(el('div', 'nwask', 'How are you?'));
+  win.appendChild(el('div', 'nwask', checkOnly ? 'New day.' : 'How are you?'));
 
   const fs = checkFields();
   fs.forEach(f => {
@@ -8425,13 +8450,16 @@ function checkDraw() {
 
   /* What he is up to, saved as an entry bullet at this minute. Optional: the
      scales are the check, this is the line that says what they were read in
-     the middle of. */
-  win.appendChild(el('div', 'nwlabel', esc(doingAsk().toUpperCase())));
-  const doing = document.createElement('textarea');
-  doing.className = 'nwdoing'; doing.rows = 2; doing.value = checkDoing;
-  doing.setAttribute('aria-label', 'What are you doing now');
-  doing.oninput = () => { checkDoing = doing.value; };
-  win.appendChild(doing);
+     the middle of. The new day's check comes from a line just written, so it
+     has no box. */
+  if (!checkOnly) {
+    win.appendChild(el('div', 'nwlabel', esc(doingAsk().toUpperCase())));
+    const doing = document.createElement('textarea');
+    doing.className = 'nwdoing'; doing.rows = 2; doing.value = checkDoing;
+    doing.setAttribute('aria-label', 'What are you doing now');
+    doing.oninput = () => { checkDoing = doing.value; };
+    win.appendChild(doing);
+  }
 
   const go = el('button', 'nwgo');
   const left = () => fs.filter(f => (f.measure === 'scale' || f.measure === 'check') && checkVals[f.id] == null);
@@ -8453,13 +8481,14 @@ function checkDraw() {
 }
 
 /** put it up, and tell the launcher to give it the screen */
-function checkOpen() {
+function checkOpen(only) {
   checkOn = true;
+  checkOnly = only || null;
   checkVals = {};
   checkDoing = '';
   /* Nothing to ask means nothing to hold him with: both scales switched off in
      TRACK is a legitimate state and must not leave a screen he cannot leave. */
-  if (!checkFields().length) { checkOn = false; deskAsking = false; deskRoll(); return; }
+  if (!checkFields().length) { checkOn = false; checkOnly = null; deskAsking = false; deskRoll(); return; }
   document.body.classList.add('checking');
   checkDraw();
   /* ── for a launcher that has not been rebuilt ──
@@ -8487,6 +8516,16 @@ function checkSave() {
   checkDoing = '';
   if (doing) addNote(d, doingKind(), doing, { now: true });
   if (n) Mobile.feedback('success');
+  /* The new day's check asked no mood or energy, so the timed one is not put
+     off by it and the phone's three hours do not start. */
+  const only = !!checkOnly;
+  checkOnly = null;
+  if (only) {
+    checkOn = false;
+    document.body.classList.remove('checking');
+    deskTitle(); deskBar(); draw();
+    return;
+  }
   /* Answering by hand puts the next one off. Without this the question he just
      answered comes back ten minutes later, which is how a prompt stops being
      worth reading. */
