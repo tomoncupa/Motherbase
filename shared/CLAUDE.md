@@ -352,6 +352,20 @@ had answered, and a write replaces. Unproven that it happened; it cannot now.
   and `checked` too, writes no setting, and puts everything back on
   `_probe(null)`. Each was watched failing. Not watched on a real database.
 
+## One bad row never stops a device (2026-10-05, `cloud.js` 0.2.5)
+
+The 2026-10-05 nightly backup: the iPhone STATUS app's push threw "values
+argument contains undefined" on one meal row for days, and no TRAIN set
+reached the cloud after 12 Sep except one day. Firebase checks a write
+before sending and THROWS on `undefined`, NaN or a key holding `. # $ / [ ]`;
+one such row failed its whole 400-row chunk, `pushed` stayed put, and every
+later push threw on the same row. IndexedDB keeps `undefined`, so it never
+healed. Now `plan` sends the row as JSON reads it, and `write` retries a
+thrown chunk one row at a time, leaving out (and counting in `refused`,
+`refusedIds`) a row that still throws; the boundary passes it like a photo.
+A refusal that comes back later (rules, network) still fails the push.
+Three `live sync:` checks with a stand-in that throws the way Firebase does.
+
 ## What the LIVE SYNC row may claim (2026-09-24, `cloud.js` 0.1.4)
 
 Tom: "overall the diagnostic feedback has been innacurate." Both desktop

@@ -138,7 +138,7 @@ g.addEventListener('storage', function (e) {
 /* ── the state every caller can read, and nobody outside can set ── */
 var fb = null, db = null, auth = null, ref = null, query = null;
 var uid = '', loading = null, started = false, pushing = false, pushAgain = false;
-var last = { ok: 0, why: '', at: '', sent: 0, got: 0, skipped: 0 };
+var last = { ok: 0, why: '', at: '', sent: 0, got: 0, skipped: 0, refused: 0, refusedIds: [] };
 /* What is TRUE right now, rather than what was true when it started. Until
    0.1.4 "Live" meant only "start() once got this far": Google could sign the
    device out, the database could refuse the read, or the connection could
@@ -1048,7 +1048,12 @@ function plan(rows, since, base, cloud) {
     var j;
     try { j = JSON.stringify(r); } catch (e) { skipped++; return; }
     if (j.length > BIG) { skipped++; return; }
-    patch[base + enc(r.id)] = r;
+    /* The copy as JSON read it, not the row: Firebase throws on a field
+       holding `undefined` (or NaN), and that one throw failed the whole
+       400-row write and every push after it (0.2.5, 2026-10-05, the iPhone
+       STATUS app on one meal). IndexedDB keeps `undefined`, so such a row
+       never heals by itself. JSON drops it, which is what the store does. */
+    patch[base + enc(r.id)] = JSON.parse(j);
     sent++;
   });
   return { patch: patch, edge: edge, sent: sent, skipped: skipped, had: had };
@@ -1057,6 +1062,33 @@ function plan(rows, since, base, cloud) {
 function fits(r) {
   if (!r || !r.id || r.updated_at > soon()) return false;
   try { return JSON.stringify(r).length <= BIG; } catch (e) { return false; }
+}
+
+/* One chunk's write. Resolves with how many rows the database refused.
+   Firebase checks a write before sending it and THROWS, there and then, on
+   anything it will not store: a key holding `.` `#` `$` `/` `[` `]`, a value
+   it cannot read. One such row made the whole chunk throw, the boundary
+   stayed put, and every push after it threw on the same row, so nothing
+   from that device went up again. A thrown chunk is now written a row at a
+   time; a row that throws on its own is left out, counted in `refused`, and
+   the boundary passes it like a photo. A refusal that comes back LATER
+   (the rules, no network) is not this, and still fails the push. */
+function write(patch) {
+  try { return db.ref().update(patch).then(function () { return 0; }); }
+  catch (e) {
+    var bad = 0, steps = [];
+    Object.keys(patch).forEach(function (k) {
+      var one = {}; one[k] = patch[k];
+      try { steps.push(db.ref().update(one)); }
+      catch (e2) {
+        bad++;
+        if (last.refusedIds.length < 20) last.refusedIds.push(patch[k] && patch[k].id);
+        delete patch[k];
+      }
+    });
+    last.refused += bad;
+    return Promise.all(steps).then(function () { return bad; });
+  }
 }
 
 function push(why) {
@@ -1093,10 +1125,10 @@ function push(why) {
     var p = plan(todo.slice(at, at + CHUNK), edge, 'u/' + uid + '/rows/', cloudAt);
     at += CHUNK;
     skipped += p.skipped;
-    var step = p.sent ? db.ref().update(p.patch) : Promise.resolve();
-    return step.then(function () {
-      sent += p.sent;
-      Object.keys(p.patch).forEach(function (k) { var r = p.patch[k]; cloudAt[r.id] = r.updated_at; });
+    var step = p.sent ? write(p.patch) : Promise.resolve(0);
+    return step.then(function (bad) {
+      sent += p.sent - bad;
+      Object.keys(p.patch).forEach(function (k) { var r = p.patch[k]; if (r) cloudAt[r.id] = r.updated_at; });
       edge = p.edge;
       cfg.pushed = p.edge; csave();
       return chunk();
@@ -1243,7 +1275,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.4',
+  VERSION: '0.2.5',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -1273,6 +1305,8 @@ var Cloud = {
       why: last.why || '',
       ok: !!last.ok,
       sent: last.sent, got: last.got, skipped: last.skipped,
+      /* 0.2.5: rows the database would not store, and the first few ids */
+      refused: last.refused, refusedIds: last.refusedIds.slice(),
       /* the first read after a start or a dropped connection is merged */
       loaded: !!started && loaded,
       /* the daily check: when it last ran, rows it brought back this session,
@@ -1373,7 +1407,7 @@ var Cloud = {
   },
 
   /* exposed for the smoke checks, which have no database to talk to */
-  _enc: enc, _dec: dec, _parse: parseCfg, _missing: missing, _plan: plan, _big: BIG,
+  _enc: enc, _dec: dec, _parse: parseCfg, _missing: missing, _plan: plan, _write: function (d, p) { var was = db; db = d; try { return write(p); } finally { db = was; } }, _big: BIG,
   _cfg: function () { return cfg; },
   /* `f` returns `{uid, email, db}` as account() would, or throws; null puts
      the real one back. The shelf reads it, and since 0.2.2 so does `start`,
