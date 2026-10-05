@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.57, 2026-10-05">
+<meta name="mb-version" content="1.0.58, 2026-10-05">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -3248,8 +3248,8 @@ function pastOneOffs() {
     if (!k) return;
     const seen = by[k];
     if (!seen || (m.t || 0) > (seen.t || 0)) {
-      by[k] = { key: k, name: m.name, kcal: num(m.kcal, 0) || 0, p: num(m.p, 0) || 0,
-                c: num(m.c, 0) || 0, f: num(m.f, 0) || 0, t: m.t || 0, n: seen ? seen.n : 0 };
+      /* null is not known, so last time's blank comes back blank */
+      by[k] = { key: k, name: m.name, kcal: num(m.kcal), p: num(m.p), t: m.t || 0, n: seen ? seen.n : 0 };
     }
     by[k].n = (by[k].n || 0) + 1;
   });
@@ -3307,8 +3307,9 @@ function foodPicker() {
            separates them. */
         r.innerHTML = '<span class="nm">' + esc(f.name) +
           (f.brand ? '<b class="brand">' + esc(f.brand) + '</b>' : '') +
-          '<small>' + r1(num(f.base.amt, 0)) + ' ' + esc(f.base.unit || '') + ' · ' +
-          Math.round(num(f.base.kcal, 0)) + ' kcal \u00b7 ' + r1(num(f.base.p, 0)) + 'p</small></span>';
+          '<small>' + [r1(num(f.base.amt, 0)) + ' ' + esc(f.base.unit || ''),
+            num(f.base.kcal) != null ? Math.round(num(f.base.kcal)) + ' kcal' : '',
+            num(f.base.p) != null ? r1(num(f.base.p)) + 'p' : ''].filter(Boolean).join(' · ') + '</small></span>';
         r.onclick = () => amountSheet(f);
         const e = el('button', 'x', '\u270e');
         e.onclick = ev => { ev.stopPropagation(); foodEditor(f); };
@@ -3326,7 +3327,8 @@ function foodPicker() {
         const r = el('div', 'row tap');
         r.innerHTML = '<span class="nm">' + esc(o.name) +
           '<b class="brand oncebadge">' + o.n + '\u00d7 before</b>' +
-          '<small>' + Math.round(o.kcal) + ' kcal \u00b7 ' + r1(o.p) + 'p \u00b7 not saved</small></span>';
+          '<small>' + [o.kcal != null ? Math.round(o.kcal) + ' kcal' : '', o.p != null ? r1(o.p) + 'p' : '', 'not saved']
+            .filter(Boolean).join(' \u00b7 ') + '</small></span>';
         r.onclick = () => onceSheet(o.name, o);
         list.appendChild(r);
       });
@@ -3386,25 +3388,27 @@ function onceSheet(name, past) {
       if (val != null && val !== '') i.value = String(val);
       w.appendChild(i); g.appendChild(w); return i;
     };
-    const kc = mk('Calories', '0', before ? Math.round(before.kcal) : '');
-    const pr = mk('Protein (g)', '0', before ? r1(before.p) : '');
+    const kc = mk('Calories', '0', before && before.kcal != null ? Math.round(before.kcal) : '');
+    const pr = mk('Protein (g)', '0', before && before.p != null ? r1(before.p) : '');
     body.appendChild(g);
     kRef = kc;
 
+    /* A box left empty is not known, never 0: KITCHEN's GUIDE reads a 0 as
+       none at all. Carbs and fat are never asked here, so never written. */
     const readIt = () => ({
       label: nm.value.trim(),
-      k: num(kc.value, 0) || 0,
-      p: num(pr.value, 0) || 0,
+      k: num(kc.value),
+      p: num(pr.value),
     });
+    const known = (o, v) => { if (v.k != null) o.kcal = v.k; if (v.p != null) o.p = v.p; return o; };
 
     body.appendChild(saveBar('Log it', () => {
       const v = readIt();
       if (!v.label) return UI.toast('What was it?', { bad: true });
       if (!v.k && !v.p) return UI.toast('Calories or protein, at least one', { bad: true });
-      Rec.set('meal', vd(), uid(), {
-        food: '', name: v.label, amt: 1, unit: 'serving', serve: 'one off',
-        kcal: v.k, p: v.p, c: 0, f: 0, t: Date.now(),
-      });
+      Rec.set('meal', vd(), uid(), known({
+        food: '', name: v.label, amt: 1, unit: 'serving', serve: 'one off', t: Date.now(),
+      }, v));
       Mobile.feedback('tick');
       closeSheet(); draw();
       UI.toast('<b>' + esc(v.label) + '</b> logged');
@@ -3425,7 +3429,7 @@ function onceSheet(name, past) {
         const id = uid();
         Rec.set('food', null, id, {
           id: id, name: v.label, brand: '',
-          base: { amt: 1, unit: 'serving', kcal: v.k, p: v.p, c: 0, f: 0 },
+          base: known({ amt: 1, unit: 'serving' }, v),
           serves: [], uses: before.n,
         });
         /* `uses` carries over, so something eaten five times sorts where it
@@ -4798,7 +4802,7 @@ function drawFood(m) {
     const marks = [when ? clockLabel(when) : '', esc(serveText), r1(x.amt) + ' ' + esc(x.unit || '')]
       .concat(errTag(x.err) ? [errTag(x.err)] : []).concat(x.acct ? [esc(x.acct)] : []);
     r.innerHTML = '<span class="nm">' + esc(x.name) + '<small>' + marks.filter(Boolean).join(' · ') + '</small></span>' +
-      '<span class="fig">' + Math.round(x.kcal) + '<small>' + r1(x.p) + 'g protein</small></span>';
+      '<span class="fig">' + (x.kcal != null ? Math.round(x.kcal) : '-') + '<small>' + (x.p != null ? r1(x.p) + 'g' : '-') + ' protein</small></span>';
     const del = el('button', 'x', '✕');
     del.onclick = e => {
       e.stopPropagation();
@@ -7804,8 +7808,10 @@ function exportSheets() {
   });
 
   const mealRows = [['Date', 'Time', 'Food', 'Serving', 'Amount', 'Unit', 'Calories', 'Protein', 'Carbs', 'Fat', 'Sodium', 'Potassium', 'Calcium', 'Caffeine', 'Price', 'Margin', 'Paid from']];
+  /* a figure the meal does not carry is a blank cell, not NaN */
+  const cell = (v, f) => num(v) == null ? '' : f(num(v));
   days.forEach(d => meals(d).forEach(x => mealRows.push([d, new Date(x.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    x.name, x.serve || '', r1(x.amt), x.unit || '', Math.round(x.kcal), r1(x.p), r1(x.c), r1(x.f), Math.round(x.na), Math.round(x.k), Math.round(x.ca), Math.round(x.caff), Math.round(x.price),
+    x.name, x.serve || '', r1(x.amt), x.unit || '', cell(x.kcal, Math.round), cell(x.p, r1), cell(x.c, r1), cell(x.f, r1), cell(x.na, Math.round), cell(x.k, Math.round), cell(x.ca, Math.round), cell(x.caff, Math.round), cell(x.price, Math.round),
     errTag(x.err), x.acct || ''])));
 
   const spendRows = [['Date', 'Time', 'Amount', 'Account', 'Details']];
