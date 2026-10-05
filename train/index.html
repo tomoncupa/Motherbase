@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.48, 2026-10-04">
+<meta name="mb-version" content="1.0.49, 2026-10-05">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -762,6 +762,13 @@ div.prow{padding:0}
 .frame .fr-pr .v{font-family:var(--font-display);font-weight:var(--w-bold);font-variant-numeric:tabular-nums;white-space:nowrap}
 .frame .fr-pr em{font-style:normal;font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);
   color:var(--accent);white-space:nowrap}
+/* a lifetime PR's trophy is filled, a PR's is drawn in outline */
+.frame .fr-pr.all .mb-ico path{fill:currentColor}
+/* the block as sets per week: the count, then the line under it, edge to edge */
+.frame .fr-blk{display:flex;flex-direction:column;gap:var(--s-1)}
+.frame .fr-blk-t{font-size:var(--f-2);color:var(--text-2)}
+.frame .fr-blk-t b{font-family:var(--font-display);font-weight:var(--w-bold);color:var(--text-1);font-variant-numeric:tabular-nums}
+.frame .fr-blk .mb-spark{--chart-bg:var(--bg)}
 /* weight, sets, reps, time: one line */
 .frame .fr-tot{font-size:var(--f-2);color:var(--text-2)}
 .frame .fr-tot b{font-family:var(--font-display);font-weight:var(--w-bold);color:var(--text-1);font-variant-numeric:tabular-nums}
@@ -9174,7 +9181,9 @@ TRAIN.frameCard = function (date, off, o) {
     var recs = order.map(function (ex) { return best[ex]; })
       .sort(function (a, b) { return (b.all ? 1 : 0) - (a.all ? 1 : 0); });
     res += recs.slice(0, FRAME_PRS).map(function (x) {
-      return '<div class="fr-pr">' + ico('record') +
+      /* a solid trophy for a lifetime PR, an outlined one for a PR (the
+         mockup's 5, Tom 2026-10-05: "5 is okay too") */
+      return '<div class="fr-pr' + (x.all ? ' all' : '') + '">' + ico('record') +
         '<span class="nm">' + esc(x.name) + '</span><span class="v">' + TRAIN.showWeight(x.s.kg, x.s.u, x.s.ex) +
           ' × ' + (x.s.split ? esc(x.s.split.text) : x.s.r) + '</span>' +
         /* his words: "It's either a PR or a lifetime PR" */
@@ -9185,6 +9194,8 @@ TRAIN.frameCard = function (date, off, o) {
       res += '<div class="fr-more">and ' + more + ' more PR' + (more === 1 ? '' : 's') + '</div>';
     }
   }
+  /* the block as sets per week, just above the session's own totals */
+  if (o.shareBlock) res += TRAIN.frameBlock(date);
   /* the totals close it, one line: "Put the weight sets reps duration at the bottom" */
   var tot = function (n, label) { return '<b>' + n + '</b>' + (label ? ' ' + esc(label) : ''); };
   res += '<div class="fr-tot">' + [tot(Math.round(TRAIN.toUnit(st.vol, U)).toLocaleString(), TRAIN.unitLabel()),
@@ -9195,6 +9206,44 @@ TRAIN.frameCard = function (date, off, o) {
   var card = UI.el('div', 'frame ' + (o.style === 'clear' || o.style === 'glass' ? o.style : 'solid'));
   card.innerHTML = h;
   return card;
+};
+/* The block as sets per week (Tom, 2026-10-05: "I like 6, have it track set
+   volumes"): working sets in each week of the training block the day is in,
+   its weeks counted from the block's first day as "Week N" is, week 1 up to
+   the week of `date`, which counts only to `date`. Without a block, the last
+   eight calendar weeks, from the first one with a set. A week still running
+   is left off while it has fewer sets than the one before: an unfinished
+   week is not a drop. A gain since the first week is said only when it is
+   one, so nothing shared carries a minus. '' when there are not two weeks. */
+TRAIN.blockWeeks = function (date) {
+  var sp = TRAIN.phaseOn(date), from = sp ? sp.from : Day.shift(TRAIN.weekOf(date), -49), out = [];
+  for (var s = from; s <= date; s = Day.shift(s, 7)) {
+    var e = Day.shift(s, 6);
+    out.push({ start: s, sets: spanStats(s, e < date ? e : date).sets, full: e <= date });
+  }
+  if (!sp) while (out.length && !out[0].sets) out.shift();
+  var n = out.length;
+  if (n > 1 && !out[n - 1].full && out[n - 1].sets < out[n - 2].sets) out.pop();
+  return { sp: sp, weeks: out };
+};
+TRAIN.frameBlock = function (date) {
+  var bw = TRAIN.blockWeeks(date), w = bw.weeks, n = w.length;
+  if (n < 2) return '';
+  var last = w[n - 1], first = w[0], esc = UI.esc;
+  var when = bw.sp ? 'in week ' + n : last.start <= date && date <= Day.shift(last.start, 6) ? 'this week' : 'last week';
+  var pct = first.sets ? (last.sets / first.sets - 1) * 100 : 0;
+  var gain = pct >= 0.5 ? ' · <span class="fr-gain">+' + Math.round(pct) + '%</span> ' +
+    (bw.sp ? 'since week 1' : 'in ' + n + ' weeks') : '';
+  /* Chart.spark's marks on a scale from zero: a sparkline fits its lowest
+     week to the floor, and 74 to 54 sets read as a crash */
+  var F = IO.frameSize(), hi = Math.max.apply(null, w.map(function (x) { return x.sets; })) || 1;
+  var c = Chart.make({ w: F.w, h: Math.round(F.w / 8), pad: { l: 3, r: 7, t: 7, b: 3 }, cls: 'mb-spark' });
+  var pts = w.map(function (x, i) { return [i, x.sets]; });
+  c.xLinear(0, n - 1).ySet(0, hi, hi);
+  c.area(pts); c.line(pts); c.end(pts[n - 1]);
+  var line = c.el;
+  return '<div class="fr-blk"><div class="fr-blk-t"><b>' + last.sets + '</b> ' + (last.sets === 1 ? 'set ' : 'sets ') +
+    esc(when) + gain + '</div>' + line.outerHTML + '</div>';
 };
 TRAIN.shareRecap = function (date) {
   date = date || TRAIN.date;
@@ -9215,6 +9264,7 @@ TRAIN.shareRecap = function (date) {
     { id: 'sharePct', label: 'Gains as %', def: 1 },
     { id: 'shareMove', label: 'Compare each lift with its own last time', def: 0 },
     { id: 'sharePrs', label: 'PRs', def: 1 },
+    { id: 'shareBlock', label: 'Sets per week', def: 1 },
   ].concat(lifts.map(function (g) {
     return { id: 'share.' + g.ex, label: g.def.name, def: 1 };
   })), function (o) {
