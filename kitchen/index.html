@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.4, 2026-10-04">
+<meta name="mb-version" content="1.0.5, 2026-10-05">
 <title>KITCHEN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1305,6 +1305,10 @@ const fillsOf = fd => Array.isArray(fd && fd.fills) ? fd.fills.filter(e => e && 
 /* "per 1 Bowl", "per 100 g" */
 const perText = fd => 'per ' + fx(baseAmt(fd), 2) + ' ' + unitText(fd);
 const figText = (k, v) => labelOf(k) + ' ' + fx(v, 4) + (fillUnit(k) ? ' ' + fillUnit(k) : '');
+/* a search of the table that found nothing; one word cannot be fewer */
+const tableMiss = q => q.split(/\s+/).filter(Boolean).length > 1
+  ? 'Nothing in the food table has every word. Try fewer words.'
+  : 'Nothing in the food table is called "' + q + '". Try its main ingredient.';
 function fillWords(e) {
   const n = (e.keys || []).length, f = n + (n === 1 ? ' figure' : ' figures');
   return e.src === 'usda' ? f + ' from USDA, ' + (e.from || 'the food table') + ' (an average)'
@@ -1377,11 +1381,13 @@ function fillFood(fid) {
       const paint = () => {
         list.innerHTML = '';
         const q = input.value.trim();
+        /* a table that arrived after its load gave up is still the table */
+        if (T.ready) state = 'ready';
         if (state !== 'ready') { say.textContent = state === 'off' ? 'The food table downloads the first time you have signal.' : 'Loading the food table.'; return; }
         if (q.length < 2) { say.textContent = 'Type a food to search the table.'; return; }
         let hits = [];
         try { hits = T.search(q, 8) || []; } catch (e) { hits = []; }
-        say.textContent = hits.length ? '' : 'Nothing in the food table has every word. Try fewer words.';
+        say.textContent = hits.length ? '' : tableMiss(q);
         hits.forEach(x => {
           const r = el('button', 'kx-row mb-plate mb-press');
           r.type = 'button';
@@ -1402,6 +1408,7 @@ function fillFood(fid) {
         try { p = T.load(); } catch (e) { p = null; }
         Promise.resolve(p).then(ok => { state = ok ? 'ready' : 'off'; if (input.isConnected) paint(); },
           () => { state = 'off'; if (input.isConnected) paint(); });
+        window.addEventListener('foodtable:ready', () => { if (input.isConnected) paint(); }, { once: true });
       }
     },
     actions: [{ label: 'CANCEL' }],
@@ -1444,8 +1451,20 @@ function fillConfirm(fid, src) {
   if (!fd) return;
   const auto = baseWeight(fd, src.unit), su = src.unit;
   const keys = Object.keys(fillPlan(fd, src.figs, 100));
-  let box = null, prev = null;
-  const weight = () => auto ? auto.v : (box ? UI.amount(box.value, su) : null);
+  let box = null, prev = null, done = false;
+  /* The answer to "How many g is ...": a bare number, or one in a unit of
+     the same kind (0.3 kg). "250 ml" or "1 cup" is no answer, never 1 ml =
+     1 g, which UI.amount would give back as the bare number. */
+  const weight = () => {
+    if (auto) return auto.v;
+    if (!box) return null;
+    const t = box.value.trim().toLowerCase().replace(/,/g, '');
+    const m = /^([0-9]*\.?[0-9]+)\s*([a-zµ]*)\.?$/.exec(t);
+    if (!m) return null;
+    if (!m[2]) return num(m[1]);
+    const a = UI.UNITS[m[2]], b = UI.UNITS[su];
+    return a && b && a[0] === b[0] ? UI.amount(t, su) : null;
+  };
   const paint = () => {
     if (!prev) return;
     const w = weight(), n = keys.length, head = 'Fills ' + n + (n === 1 ? ' blank' : ' blanks');
@@ -1503,6 +1522,10 @@ function fillConfirm(fid, src) {
   function save(hh) {
     const w = weight();
     if (!(w > 0)) { if (box) UI.focusSoon(box, true); return; }
+    /* a second press while the sheet fades out would find nothing blank and
+       say so over the UNDO */
+    if (done) return;
+    done = true;
     /* the row as it is now: blanks are read again, and every other field
        rides along untouched */
     const was = Rec.get('food', null, fid);
@@ -1532,7 +1555,9 @@ function removeFill(fid, e) {
   const i = list.findIndex(x => x && x.t === e.t && x.src === e.src && String(x.id) === String(e.id));
   if (i < 0) return;
   const x = list[i], v = (x.v && typeof x.v === 'object') ? x.v : {}, base = was.base || {};
-  const gone = (x.keys || []).filter(k => Object.prototype.hasOwnProperty.call(v, k) &&
+  /* FILL_KEYS only, so a record that ever named a macro still never takes
+     calories off a food */
+  const gone = (x.keys || []).filter(k => FILL_KEYS.indexOf(k) >= 0 && Object.prototype.hasOwnProperty.call(v, k) &&
     typeof base[k] === 'number' && typeof v[k] === 'number' && Math.abs(base[k] - v[k]) < 1e-9);
   const change = {};
   gone.forEach(k => { change['base.' + k] = undefined; });
@@ -1550,7 +1575,10 @@ function removeFill(fid, e) {
 function missSheet(k, kind) {
   liveSheet({ title: 'FILL BLANKS', width: 520, actions: [{ label: 'DONE', kind: 'go' }] }, b => {
     const s = sumOf(periodOf(kind), k), ids = Object.keys(s.miss);
-    const mine = ids.filter(id => food(id));
+    /* a food with the figure is not known only through a meal logged with
+       no amount its label can be read against: a fill would change nothing */
+    const mine = ids.filter(id => food(id) && baseVal(food(id), k) == null);
+    const noAmt = ids.filter(id => food(id) && baseVal(food(id), k) != null).map(id => nameOf(food(id)));
     /* a meal typed with no food, and a food since deleted: nothing to fill */
     const loose = ids.filter(id => !food(id) && id.indexOf('name:') === 0).map(id => s.miss[id]);
     const gone = ids.filter(id => !food(id) && id.indexOf('name:') !== 0).length;
@@ -1575,6 +1603,10 @@ function missSheet(k, kind) {
         list.appendChild(r);
       });
       b.appendChild(list);
+    }
+    if (noAmt.length) {
+      const q = b.appendChild(el('p', 'kx-q', esc('Has a figure already, but was logged with no amount its label can be read against: ' + noAmt.join(', ') + '.')));
+      q.style.marginTop = 'var(--s-3)';
     }
     if (loose.length) {
       const q = b.appendChild(el('p', 'kx-q', esc('Logged in STATUS without one of your foods, so nothing to fill: ' + loose.join(', ') + '.')));
@@ -1655,12 +1687,13 @@ function pickFood(o, cb) {
         nw.textContent = q ? 'New food "' + q + '"' : 'New food';
         /* one tap picks, never automatic */
         tb.innerHTML = '';
+        if (T && T.ready) tState = 'ready';
         if (T && q.length >= 2) {
           tb.appendChild(el('div', 'kx-gh', 'From the food table'));
           if (tState === 'ready') {
             let hits = [];
             try { hits = T.search(q, 6) || []; } catch (e) { hits = []; }
-            if (!hits.length) tb.appendChild(el('p', 'kx-q', 'Nothing in the food table has every word.'));
+            if (!hits.length) tb.appendChild(el('p', 'kx-q', esc(tableMiss(q))));
             hits.forEach(x => {
               const r = el('button', 'kx-row mb-plate mb-press');
               r.type = 'button';
@@ -1689,6 +1722,8 @@ function pickFood(o, cb) {
         let p = null;
         try { p = T.load(); } catch (e) { p = null; }
         Promise.resolve(p).then(ok => { tState = ok ? 'ready' : 'off'; if (input.isConnected) paint(); }, () => { tState = 'off'; if (input.isConnected) paint(); });
+        /* a slow download that lands after load() gave up still shows */
+        window.addEventListener('foodtable:ready', () => { if (input.isConnected) paint(); }, { once: true });
       }
     },
     actions: [{ label: 'CANCEL' }],
@@ -1727,6 +1762,24 @@ function newFood(name, cb, scan) {
   let unit = null, cat = null;
   const f = {};
   const got = scan && scan.food ? scan.food : null;
+  /* The four boxes follow the amount while they still hold what the source
+     put there, so they and the figures with no box are for the same amount.
+     Another unit has no figures from the source (no density guess): the
+     boxes empty. A box typed over is the person's and never moves. */
+  const MACROS4 = ['kcal', 'p', 'c', 'f'], put = {};
+  function follow() {
+    if (!got || !f.kcal) return;
+    const m = f.amt.value.trim().toLowerCase().replace(/,/g, '').match(/^([0-9]*\.?[0-9]+)\s*(g|ml|servings?)?$/);
+    const u = unit || (m && m[2] ? (m[2].indexOf('serv') === 0 ? 'serving' : m[2]) : null), a = m ? num(m[1]) : null;
+    MACROS4.forEach(k => {
+      if (f[k].value !== put[k] || got.base[k] == null) return;
+      let v;
+      if (u && u !== got.unit) v = '';
+      else if (a > 0) { const x = a / (num(got.amt, 0) || 100); v = String(Math.abs(x - 1) < EPS ? got.base[k] : tidy3(got.base[k] * x)); }
+      else return;
+      f[k].value = put[k] = v;
+    });
+  }
   const h = UI.dialog({
     title: 'NEW FOOD', width: 520,
     body: (b, hh) => {
@@ -1759,9 +1812,10 @@ function newFood(name, cb, scan) {
       const al = lab('The numbers are for', f.amt);
       const uc = el('div', 'mb-chips');
       [['g', 'g'], ['ml', 'ml'], ['serving', 'serving']].forEach(x => {
-        const c = el('button', 'mb-chip mb-press', x[1]);
+        /* mb-tap: "g" alone draws narrower than a thumb */
+        const c = el('button', 'mb-chip mb-press mb-tap', x[1]);
         c.type = 'button';
-        c.onclick = () => { unit = x[0]; uc.querySelectorAll('.mb-chip').forEach(y => y.classList.toggle('on', y === c)); Mobile.feedback('select'); };
+        c.onclick = () => { unit = x[0]; uc.querySelectorAll('.mb-chip').forEach(y => y.classList.toggle('on', y === c)); Mobile.feedback('select'); follow(); };
         if (got && got.unit === x[0]) { unit = x[0]; c.classList.add('on'); }
         uc.appendChild(c);
       });
@@ -1780,6 +1834,8 @@ function newFood(name, cb, scan) {
         two.appendChild(lab('Carbs', f.c));
         two.appendChild(lab('Fat', f.f));
         form.appendChild(two);
+        MACROS4.forEach(k => { put[k] = f[k].value; });
+        f.amt.addEventListener('input', follow);
       }
       if (scan && scan.table) {
         const n = Object.keys(got.base).length;
@@ -1827,7 +1883,8 @@ function newFood(name, cb, scan) {
       const k = unit === got.unit ? a / (num(got.amt, 0) || 100) : null;
       if (k != null) Object.keys(got.base).forEach(key => { fromSrc[key] = Math.abs(k - 1) < EPS ? got.base[key] : tidy3(got.base[key] * k); });
       Object.keys(fromSrc).forEach(key => { if (!(key in f) && base[key] == null) base[key] = fromSrc[key]; });
-      base.src = scan.table ? 'usda' : 'off';
+      /* the source is named only when one of its figures was kept */
+      if (Object.keys(fromSrc).some(key => base[key] === fromSrc[key])) base.src = scan.table ? 'usda' : 'off';
     }
     const typed = f.cat.value.trim(), id = uid();
     const row = { id, name: n, brand: got && got.brand ? got.brand : '', base, uses: 0 };
@@ -1836,7 +1893,8 @@ function newFood(name, cb, scan) {
     /* from the food table: which figures are the table's, so the food's
        sheet can take them off again. A box typed over is the person's */
     if (scan && scan.table) {
-      const keys = Object.keys(fromSrc).filter(key => base[key] === fromSrc[key]);
+      /* never calories or macros: REMOVE would take them off the food */
+      const keys = Object.keys(fromSrc).filter(key => FILL_KEYS.indexOf(key) >= 0 && base[key] === fromSrc[key]);
       const v = {};
       keys.forEach(key => { v[key] = base[key]; });
       if (keys.length) row.fills = [{ src: 'usda', from: scan.from, id: scan.id, keys, v, t: Date.now() }];

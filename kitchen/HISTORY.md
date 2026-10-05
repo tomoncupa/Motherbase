@@ -32,9 +32,11 @@ off the video, and NEW FOOD opened per 100 ml. The limit answered busy on
 the 15th lookup in a minute (fetch stubbed). **Not watched: a real camera,
 and anything on an iPhone.**
 
-## FILL BLANKS and THE FOOD TABLE watched (2026-10-01, 1.0.3)
+## FILL BLANKS and THE FOOD TABLE, the builder's report (2026-10-01, never released)
 
-Playwright for Python, headless Chromium at 390 x 844 with touch and at
+Written by the screens builder, which was cut off before its work was
+committed or reviewed; it sat on branch `kitchen-fill` until 1.0.5 below.
+Kept as its report, not as proof. Playwright for Python, headless Chromium at 390 x 844 with touch and at
 1280 x 900, and WebKit at 390 x 844, a fresh store each run, by pressing the
 controls: 58 of 58 checks against a stand-in table shaped like the contract
 (test script only), then 9 of 9 against the real `foodtable.js` and its data.
@@ -82,3 +84,51 @@ Open Food Facts stubbed; no real lookup.
 **Not watched:** an iPhone (the keyboard on the chooser and the grams box,
 a real long press in Safari), a real camera, a real Open Food Facts answer
 for a fill, a food deleted while planned in the fill list.
+
+## FILL BLANKS and THE FOOD TABLE released (2026-10-05, 1.0.5)
+
+Branch `kitchen-fill` back to LF line endings (committed CRLF, so every
+line read as changed), main merged in, then every flow pressed again from
+scratch by seven testers on their own ports, Playwright for Python, a fresh
+store each run, the real `foodtable.js` and data, Open Food Facts stubbed:
+SHELF fill (74 checks), the grams question (62), the picker's table group
+and NEW FOOD (90), GUIDE's route and the name match (93), SCAN inside a fill
+(93), the whole path in WebKit at 390 x 844 touch (126), and a code read.
+Each bug then reproduced by a second agent before it was fixed. Nine were
+real, all fixed and re-run:
+
+- A food added from the table named its calories and macros in `fills`,
+  so REMOVE took the calories off the food. `fills` now names only
+  `FILL_KEYS`, and REMOVE skips anything else even on an old record.
+- NEW FOOD from the table or a scan: an amount changed from 100 to 50
+  halved the figures with no box and left the four boxes per 100 g. The
+  boxes now follow the amount while they hold what the source put there;
+  another unit empties them (no density guess); a typed box never moves.
+- "How many g is 250 mL of Milk?" took "250 ml" as 250 g, and "1 cup" as
+  1 g (`UI.amount` gives back the bare number for another kind or an
+  unknown word). A bare number or the same kind (0.3 kg) is an answer;
+  anything else writes nothing and keeps the box.
+- A double click on FILL ran it twice while the sheet faded, and the
+  second said "Nothing was blank any more" over the UNDO. One press now.
+- The `g` unit chip drew 43.3 px wide with no `mb-tap`; it has one now,
+  the hit area measured 44.
+- One word that found nothing said "Try fewer words."; it now says
+  `Nothing in the food table is called "Lugaw". Try its main ingredient.`
+- The fill list named a food that has the figure (Oats, logged in bowls
+  with no amount its label reads), where FILL changes nothing. It is now
+  its own line: "Has a figure already, but was logged with no amount its
+  label can be read against: Oats."
+- A table that arrived after `load()` gave up at 30 s left an open picker
+  saying "downloads the first time you have signal" (watched: data landed
+  at 36 s). Both sheets now repaint when it lands.
+- `base.src` was written when nothing from the source was kept (unit
+  changed to serving). Only when a source figure was kept now.
+
+Left as they are, as the brief says: REMOVE keeps a barcode the fill wrote
+(the code still names the pack); a typed "Banana" meal in servings beside
+a Banana food in g is named twice in the not-known line. `_review.html`:
+Chromium 142 of 142 at 1280 x 900 and at 390 x 844 touch; WebKit 141 of
+142, the known foundation failure.
+
+**Not watched:** an iPhone (the keyboard on the chooser and the grams box,
+a real long press in Safari), a real camera, a real Open Food Facts answer.

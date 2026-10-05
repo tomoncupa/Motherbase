@@ -207,7 +207,7 @@ up otherwise.
   keeps its frozen figure when it is over 0. The extras use the meal's own
   amount over the label's amount when the units match, not `meal.mult`,
   since the label may have changed; "Last:" does the same.
-- **A meal with no fid finds its food by name** (1.0.3; 75 of Tom's 175
+- **A meal with no fid finds its food by name** (1.0.5; 75 of Tom's 175
   meals have none): trimmed, any case, only when exactly ONE food has that
   name and the meal's unit is the food's, never an ELEMENT row. It then
   counts the extras and the sodium, potassium and calcium rule as a fid meal
@@ -280,15 +280,18 @@ out to its twelve) before anything is asked.
   boxes when Count calories is on, under "From Open Food Facts: N figures
   per 100 g. Check them against the pack." ADD saves `brand`, `barcode`,
   `base.src: 'off'` and every other figure found; a box typed over wins and
-  a box emptied stays empty. The figures with no box are per 100 of the
+  a box emptied stays empty. The four boxes follow the amount while they
+  still hold the source's figures (100 to 50 halves them), and empty when
+  the unit changes; a box typed over never moves. The figures with no box are per 100 of the
   source's unit: an amount changed in the same unit scales them, a changed
-  unit takes none of them (since 1.0.3; before, they were saved unscaled).
+  unit takes none of them (since 1.0.5; before, they were saved unscaled).
+  `base.src` is written only when one of the source's figures was kept.
   Not found or no signal opens it empty with the code kept, so the next
   scan finds the food.
 - `Barcode` is also FOODDÉX's (`../kitchen/barcode.js`); see
   `portion/CLAUDE.md`.
 
-## FILL BLANKS (1.0.3, 2026-10-01)
+## FILL BLANKS (1.0.5, 2026-10-05)
 
 Tom: "okay, do 1 and 2". None of his 38 foods carried any of the 31 extra
 nutrients, so the guide said "not known" for every vitamin and mineral.
@@ -308,7 +311,11 @@ food table, and never by itself.
   weight ("1 pack (55 g)", one weight in its label) gives it, and the
   confirm says so. Otherwise it asks once, "How many g is 1 Bowl of
   Lugaw?", with the pack's serving and the last weight typed as offers.
-  Never 1 ml = 1 g. Three significant figures, as `nutrients.js` keeps them.
+  Never 1 ml = 1 g. The answer is a bare number or one of the same kind
+  (0.3 kg); "250 ml" or "1 cup" is no answer and writes nothing, since
+  `UI.amount` hands back the bare number for another kind. Three
+  significant figures, as `nutrients.js` keeps them. FILL runs once per
+  confirm: a second press while the sheet fades does nothing.
 - **The screens.** The chooser: SCAN THE PACK, and a search of the food
   table prefilled with the food's name, caret in it. A pick closes the
   chooser and opens the confirm (two sheets closed in one tick would be two
@@ -334,7 +341,7 @@ food table, and never by itself.
   one of the person's foods, which have nothing to fill. The GUIDE route is
   Tom's: his foods are not on the shelf.
 
-## THE FOOD TABLE (1.0.3, 2026-10-01)
+## THE FOOD TABLE (1.0.5, 2026-10-05)
 
 USDA FoodData Central, SR Legacy (April 2018), public domain (CC0), per
 100 g, shipped beside this file: `foodtable.js` (the engine, hand-written)
@@ -360,9 +367,10 @@ names, and writes the STAMP.
   NEW FOOD filled through the scan path, under "From the USDA food table: N
   figures per 100 g. An average for this food, not your pack.", named by
   the Tagalog word when it came through one. ADD saves `base.src: 'usda'`,
-  the figures, and `fills` naming the figures that are still the table's.
-  Not loaded and no signal: "The food table downloads the first time you
-  have signal."
+  the figures, and `fills` naming the figures that are still the table's,
+  never calories or macros (REMOVE would take them off the food). Not
+  loaded and no signal: "The food table downloads the first time you have
+  signal.", until the data lands, even after `load()` gave up.
 - **Why a shipped table, not a live USDA lookup:** FOODDÉX's lookup runs on
   the shared DEMO_KEY, which allows 10 lookups a day per connection
   (WATCHED 2026-10-01), and clients have no key of their own. A table on
@@ -394,12 +402,6 @@ Not watched: the Foods out list opened (the demo has no food at zero).
 
 ## In progress (2026-10-05)
 
-- **FILL BLANKS and the FOOD TABLE** (Tom 2026-10-01, "do 1 and 2"): on
-  branch `kitchen-fill`, not on main. `tools/food-table.py`,
-  `foodtable.js` (STAMP b4924de9) and `foodtable-data.js` (USDA SR Legacy,
-  CC0) were finished by their builder; the screens in `index.html` were cut
-  off and never integrated, pressed or reviewed. Merge main into the branch
-  first (main moved to KITCHEN 1.0.4 since).
 - **RECIPES** (Tom 2026-10-05): live in KITCHEN, beside New food. Ingredients
   with amounts make one food whose numbers follow them; "makes N servings"
   plus an optional cooked weight; also log a fraction of a cooked batch.
@@ -448,6 +450,11 @@ macros (never: see FILL BLANKS); filling a food by itself (never).
 8. **The food table belongs in `shared/` once a second app wants it.**
    `foodtable.js` finds `foodtable-data.js` from its own address, like
    `barcode.js`, so the move is the two files and the script tags.
+9. **A sheet's action button still runs after the sheet has closed.**
+   `shared/mobile.js` leaves a closed panel in the page for 320 ms, and on
+   a desk it only fades, so a double click runs the action twice. KITCHEN's
+   FILL guards itself (1.0.5); every other sheet action in the suite does
+   not. An `if (closed) return` in the action handler would cover all.
 
 ## History
 
