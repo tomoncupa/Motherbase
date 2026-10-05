@@ -160,3 +160,7 @@ Watched in headless Chromium at 1920x1000 and WebKit at 390x844 on the demo: com
 ## 2026-10-05, HOME 1.0.54: LIFE band names (D4)
 
 The three bands are EARLY, MIDDLE and LATE until named on the card's own menu, Name the bands, a setting each (`lifeos.lifeNameYouth`, `lifeNameMid`, `lifeNameOld`; cleared when set back to the default). "TOO OLD FOR A LOT" is gone before clients see it. Watched by right-clicking the card, Name the bands, First band, SET: the legend read GROWING.
+
+## 2026-10-06, HOME 1.0.55: DESK TIME
+
+Tom picked a daily log of time per program, "But also I use to see what time I generally go to bed", then "have it be a main menu widget". DESK TIME (`desktime`, `mine: 1`, under STATUS in ADD A WIDGET) reads STATUS.exe's `screen` and `deskon` rows (status/CLAUDE.md 1.0.62): TODAY (time at the PC), OFF LAST NIGHT, USUAL (the middle of the last 14 nights that have one), then today's top six programs. A night is named by its evening; bedtime (`deskBed`) is the end of the first stretch ending 9pm to noon next day that is followed by 3 hours or more with nobody at the PC, so phone time in bed is not seen. Watched in headless Chromium at 1920 by adding it from the picker over six made-up nights: 2:15, 2:10am, 1:18am over 4 nights, CapCut 1:30, Chrome 0:45; review 142/142. Not on his screens; real nights start once STATUS.exe runs 1.0.62.
