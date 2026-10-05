@@ -693,11 +693,46 @@ async function run() {
     const s = Object.assign({}, Skins.get('block'), { texture: Object.assign({}, Skins.get('block').texture,
       { image: 'radial-gradient(rgba(1,2,3,.5) 1px,transparent 2px)', size: '9px 9px' }) });
     Skins.apply(s);
-    const b = getComputedStyle(document.body), p = getComputedStyle(document.body, '::before');
+    const b = getComputedStyle(document.body), p = getComputedStyle(document.body, '::after');
     const got = /radial-gradient/.test(p.backgroundImage) && p.backgroundSize === '9px 9px' &&
       p.position === 'fixed' && p.zIndex === '-1' && p.pointerEvents === 'none' && b.isolation === 'isolate';
     if (was) Skins.apply(was);
     return got;
+  })());
+  /* B1 to B6, 2026-10-05: the page, the sun, the grid, glass, hard shadows,
+     card colours and titles are theme fields, drawn by shared code. */
+  ok('scene: a page fill, a sun and a horizon grid draw under the pattern, on the body', (() => {
+    const was = Skins.current;
+    const s = Object.assign({}, Skins.get('block'), {
+      page: { kind: 'gradient', colors: ['#102030', '#405060', '#708090'], angle: 180 },
+      scene: { sun: { colors: ['#ffee00', '#ff0088'] }, grid: { color: '#ff55cc', opacity: .7 } },
+      texture: Object.assign({}, Skins.get('block').texture, { image: 'radial-gradient(rgba(1,2,3,.5) 1px,transparent 2px)', size: '9px 9px' }) });
+    Skins.apply(s);
+    const bf = getComputedStyle(document.body, '::before'), af = getComputedStyle(document.body, '::after');
+    const imgs = bf.backgroundSize.split(',').length;
+    const got = imgs === 3 && /linear-gradient/.test(bf.backgroundImage) && (bf.backgroundImage.match(/data:image\/svg/g) || []).length === 2 &&
+      bf.zIndex === '-1' && bf.pointerEvents === 'none' && /radial-gradient/.test(af.backgroundImage);
+    if (was) Skins.apply(was);
+    return got;
+  })());
+  ok('scene: only a hex colour from a theme reaches the stylesheet', (() => {
+    const css = Skins.sceneText({ page: { kind: 'gradient', colors: ['red;}body{display:none', '#000000', '#ffffff'] },
+      glass: { blur: 12, tint: 'x}body{display:none' }, cards: { kind: 'cycle', colors: ['#111111', 'url(x)'] },
+      titles: { kind: 'gradient', colors: ['#ffffff', '}h1{color:red'] } });
+    return css.indexOf('body{display') < 0 && css.indexOf('url(x)') < 0 && css.indexOf('h1{') < 0 &&
+      /blur\(12px\)/.test(css) && /#grid > \.w:nth-child\(6n\+2\)\{background:#111111\}/.test(css);
+  })());
+  ok('scene: glass, cycling cards, gradient titles and glowing numbers are drawn from their fields', (() => {
+    const css = Skins.sceneText({ glass: { blur: 10, tint: '#2e1054', alpha: 74 }, cards: { kind: 'cycle' },
+      titles: { kind: 'gradient', colors: ['#ffffff', '#ff4fa3'], numGlow: true } });
+    return /backdrop-filter:blur\(10px\)/.test(css) && /color-mix\(in srgb,#2e1054 74%,transparent\)/.test(css) &&
+      /nth-child\(6n\+6\)\{background:color-mix\(in srgb,var\(--data-6\)/.test(css) &&
+      /background-clip:text/.test(css) && /\.ring \.num,\.stat b,\.num\{text-shadow/.test(css) &&
+      Skins.sceneText({}).indexOf('body::before{content') < 0;
+  })());
+  ok('shadow: a hard shadow is an offset that never blurs, on cards and rows', (() => {
+    const t = Skins.tokensFor(Object.assign({}, Skins.get('block'), { shadow: { kind: 'hard', x: 7, y: 7, color: '#111111' } }));
+    return t['--card-shadow'] === '7px 7px 0 #111111' && t['--plate-shadow'] === '3px 3px 0 #111111' && t['--e-3'] === '7px 7px 0 #111111';
   })());
   ok('tokens: safe areas are tokens, so no app writes env() itself',
     /safe-area-inset/.test(Skins.tokensFor(Skins.current)['--safe-b']));
@@ -2006,8 +2041,9 @@ async function run() {
   const faces = Skins.data.skins.map(k => (k.texture || {}).display || '').filter(Boolean);
   ok('skins: no theme falls back to a generic decorative family',
     !Skins.data.skins.some(k => /(^|,)\s*(cursive|fantasy)\s*$/.test((k.texture || {}).display || '')));
-  ok('skins: no two themes wear the same face',
-    new Set(faces).size === faces.length);
+  const pairs = Skins.data.skins.map(k => ((k.texture || {}).display || '') + '|' + ((k.texture || {}).body || '')).filter(f => f !== '|');
+  ok('skins: no two themes wear the same pair of faces',
+    new Set(pairs).size === pairs.length);
   /* `font` takes a string OR a list of two, because a theme usually wants one
      face for labels and another for reading. This check assumed a string and
      threw the moment a theme used the list - the same shape of mistake as
@@ -2523,8 +2559,11 @@ async function run() {
     const A = a.map(key).sort(), B = b.map(key).sort();
     return A.every((v, i) => v === B[i]);
   })());
-  ok('skins: every theme still names a face nothing else uses', (() => {
-    const faces = Skins.data.skins.map(k => (k.texture || {}).display || '').filter(Boolean);
+  /* The pair, headings and body: Arcade and Craft Day both head in VT323, the
+     face Tom named for Arcade (2026-10-05), and differ in body, corners, depth
+     and everything else. Fetching, the bug this began with, is the font check. */
+  ok('skins: every theme still names a pair of faces nothing else uses', (() => {
+    const faces = Skins.data.skins.map(k => ((k.texture || {}).display || '') + '|' + ((k.texture || {}).body || '')).filter(f => f !== '|');
     return new Set(faces).size === faces.length;
   })());
   ok('skins: a theme that brings css keeps it in the embedded copy',

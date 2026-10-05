@@ -177,7 +177,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `claude.js` | The CLAUDE panel, added 2026-10-04 (Tom: "A and B", ask about his data and log by talking). Main Menu.exe injects it on every suite page (`desktop/ClaudeBridge.cs`); anywhere else it does nothing. The window runs the bundled claude.exe on his subscription (Sonnet, Read/Grep/Glob only) in `%LOCALAPPDATA%\Motherbase\claude`, never the repo, against a copy of every row; the page applies the writes Claude returns, each with Undo. The conversation lives in the window, so it follows him between apps. |
 | `nutrients.js` | The full nutrient list a food can carry beyond the eight, added 2026-09-22: fibre, sugar, the fats, EPA and DHA, cholesterol, eleven minerals and the vitamins, thirty-one in all. One list, three readers: FOODDÉX fills them from its USDA lookup (found by the USDA's printed NAME and unit, never its numeric id, and International Units skipped), STATUS gives each one a column on the sheet's Food tab, and ELEMENT reads its five off the food. They live on `food.base` beside the eight. A blank is "not known", never zero. |
 | `boot.js` | The start screen, added 2026-10-04: a System window, INITIALIZING SYSTEM, the page's name decoding, a log of real facts and a bar of four real stages (PAGE, THEME, STORE, DRAWN). Opted into by one tag straight after `skins.js` in the head; the home screen and the phone apps carry it. Plays once per tab or app launch, top document only, and leaves one frame after the last stage, so it only covers load time and never adds to it. Four seconds at most; a tap ends it. If its own code throws, a catch takes it off at once, and a hard stop at 5.5 s takes it off if its loop never runs, so it can never sit over an app. `?boot=1` forces it, `?boot=0` never. |
-| `_smoke.html` | 418 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 422 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -422,7 +422,7 @@ Chosen **per app**, so ARC can be Doodle while BLOCK is Ice. **Block is the
 default** (Tom, 2026-09-14): an app with no theme chosen opens in Block, with a
 gold accent, `#F0B323`. It sits first in `skins.json` because first is what
 `Skins.restore` falls back to, so keep it first. Eighteen of them, in
-`skins.json`, and every one differs by more than its colours. Ember, Violet,
+`skins.json` (twenty-three since the five reel themes, 2026-10-05), and every one differs by more than its colours. Ember, Violet,
 Matrix and Mono were dropped on 2026-08-21: they were Ice with a different
 accent hex and nothing else. Changing one colour is an edit in STYLE, not a
 whole theme. `_smoke.html` now fails if two themes share a shape.
