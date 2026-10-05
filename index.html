@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.52, 2026-10-05">
+<meta name="mb-version" content="1.0.53, 2026-10-05">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -332,12 +332,17 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .w-body > .fits{flex:1 1 auto;min-height:var(--s-9,96px)}
 .w-body > .fits > svg{width:100%;height:100%;display:block}
 @media (hover:hover) and (pointer:fine){ .w-body{overflow:auto} }
-/* BODY HEATMAP's two figures: one above the other in a tall card, side by
-   side in a wide one. A phone card is as tall as its contents, so there the
-   figures stack at their own height and nothing is measured. */
+/* BODY HEATMAP's two figures: one above the other, or side by side,
+   whichever draws them bigger in the box. Standing and Double biceps are
+   tall and narrow, so they go side by side much sooner than Vitruvian. A
+   phone card is as tall as its contents, so there nothing is measured:
+   the tall poses sit side by side and Vitruvian stacks. */
 .bh-fig{display:flex;align-items:center;justify-content:center}
 .bh-pair{display:flex;flex-direction:column;gap:var(--s-1);width:100%}
 .bh-pair svg{display:block;width:100%;height:auto}
+.bh-pair.bh-p-stand,.bh-pair.bh-p-flex{flex-direction:row;align-items:flex-start}
+.bh-pair.bh-p-stand svg,.bh-pair.bh-p-flex svg{flex:1 1 0;min-width:0}
+.row .bh-dot{flex:0 0 auto;width:var(--s-2);height:var(--s-2);border-radius:var(--radius-full,999px)}
 .row.bh-row{flex-wrap:wrap;row-gap:0}
 .row .bh-rec{margin-left:auto;display:inline-flex;align-items:center;gap:var(--s-1);
   font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--dim2)}
@@ -345,7 +350,10 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
   .bh-fig{container-type:size}
   .bh-pair{height:100%}
   .bh-pair svg{flex:1 1 0;min-width:0;min-height:0;height:100%}
+  .bh-pair.bh-p-stand,.bh-pair.bh-p-flex{flex-direction:column;align-items:stretch}
   @container (orientation: landscape){ .bh-pair{flex-direction:row} }
+  @container (min-aspect-ratio: 2/5){ .bh-pair.bh-p-stand{flex-direction:row} }
+  @container (min-aspect-ratio: 3/5){ .bh-pair.bh-p-flex{flex-direction:row} }
 }
 /* Resize is a mouse affordance and nothing else — a phone card is as wide as
    the screen and as tall as its contents, so there is nothing to resize. */
@@ -2287,9 +2295,12 @@ const WIDGETS = {
      target and no verdict, as in TRAIN: "I'd rather be told how many times I
      hit a muscle, I'll know if I need to hit more."
      Recovery, Tom, 2026-10-01: "Heatmap should also show recovery. Big
-     muscles - 72 hours, Small Muscles - 24-48". A muscle still inside its
-     window is striped, the stripes fading as it comes back, and its row
-     says the hours left. Worked out from the time of its last working set
+     muscles - 72 hours, Small Muscles - 24-48", and 2026-10-05: "Red - just
+     hit, Green - ready to go, Brightness - amount of work this week". A
+     trained muscle's colour is how far it has come back (bodyColour), its
+     brightness its sets in the range (bodyBright), the dot on its row the
+     same, and a row still recovering says the hours left. Worked out from
+     the time of its last working set
      (bodyRecovery), so it moves on its own: redrawn every ten minutes.
      Pose, Tom, 2026-10-05: "Make the default pose standing. Hide the other
      poses behind the right click options". Standing unless the card's menu
@@ -2333,9 +2344,11 @@ const WIDGETS = {
       side.style.cssText = 'flex:1 1 45%;min-width:0;overflow:auto';
       const list = el('div', 'rowlist');
       const fmt = n => (Math.round(n * 2) / 2).toString();
+      const most = Math.max(0, ...regs.map(k => heat.v[k]));
       regs.forEach(k => {
         const row = el('div', 'row bh-row');
-        row.innerHTML = '<span class="nm">' + BODY_NAMES[k] + '</span><span class="rt">' + fmt(heat.v[k]) + '</span>' +
+        row.innerHTML = '<span class="bh-dot" style="background:' + bodyColour(rec[k]) + ';opacity:' + bodyBright(heat.v[k], most) + '"></span>' +
+          '<span class="nm">' + BODY_NAMES[k] + '</span><span class="rt">' + fmt(heat.v[k]) + '</span>' +
           (rec[k] ? '<span class="bh-rec" title="' + Math.ceil(rec[k].left) + ' of its ' + rec[k].win + ' hours to recover">' +
             ((typeof Icons !== 'undefined' && Icons.svg('rest', { size: 12 })) || '') + bodyHours(rec[k].left) + '</span>' : '');
         list.appendChild(row);
@@ -4040,15 +4053,19 @@ function move(i, d) {
 
 /* ══════════════ the body heatmap's figure ══════════════
    Tom, 2026-10-01: "like a buff vitruvian man". Leonardo's figure, front and
-   back, each in its circle and square. Standing, arms at his sides, by
+   back, without the circle and square since 2026-10-05 (Tom: "remove the
+   circle and square"); each pose's `box` is the figure and a margin, so
+   the figure fills its panel. Standing, arms at his sides, by
    default (Tom, 2026-10-05); Vitruvian (arms out) and Double biceps are
    the card's other poses. Only the arms change: one torso, an arm set per
    pose in BODY_POSES. Proportioned as a 5'8" man, 156.2 units tall, so one
    unit is about 1.1 cm, with the golden ratio where it applies ("follow
    golden ratio where applicable, definitely shoulders"): the navel at his
-   height over 1.618, which is where the circle centres. The shoulders were
+   height over 1.618, where Leonardo centred his circle. The shoulders were
    1.618 times the waist until Tom, 2026-10-05: "make the waist smaller";
-   the waist is 13% narrower since, about 1.85. Every muscle is its own shape and the
+   the waist is 13% narrower since, about 1.85. The double biceps' shoulders
+   are a round cap standing above the arm (Tom, 2026-10-05: "that's not what
+   the shoulders look like from the front"). Every muscle is its own shape and the
    shapes tile the body, so a lit one reads as part of a figure rather than a
    patch on one; the head, neck, hands, knees, shins and feet are the figure
    and never light. Shapes are the LEFT half of a 200 x 200 panel; the right
@@ -4210,7 +4227,7 @@ const BODY_LINES_BACK = 'M100,91.3 L100,110.7 M87.8,83.5 C90.9,87.7 93.9,92.7 96
    with the body. Standing is the default; the others are on the card's menu, Pose. */
 const BODY_POSES = {
   stand: {
-    nm: 'Standing',
+    nm: 'Standing', box: '66.9 37.5 66.1 161',
     skin: 'M84.4,63.6 C84.1,63.4 82.2,63 81.3,63.1 C80.4,63.3 79.6,63.9 78.9,64.5 C78.1,65 77.5,65.7 77,66.5 ' +
       'C76.5,67.2 76.1,68.1 75.9,69.2 C75.6,70.2 75.4,71.5 75.3,72.7 C75.2,73.9 75.3,75.2 75.1,76.4 C74.8,77.6 ' +
       '74.3,78.5 73.9,79.8 C73.6,81.2 73.3,82.8 73,84.5 C72.7,86.3 72.2,89.2 71.9,90.5 C71.7,91.7 71.6,91.5 ' +
@@ -4268,7 +4285,7 @@ const BODY_POSES = {
       'C75.4,82.6 76.1,80 76.2,79.2 M76.4,93.1 C76.2,94.2 75.4,97.5 74.9,100 C74.4,102.4 73.5,106.6 73.2,108'],
   },
   vitruvian: {
-    nm: 'Vitruvian',
+    nm: 'Vitruvian', box: '21 37.5 158 161',
     skin: 'M84.6,63.6 C84.3,62.4 84.9,64.2 84.3,64 C83.7,63.8 82.1,62.9 81.2,62.6 C80.3,62.3 79.7,62.2 78.6,62.4 ' +
       'C77.6,62.6 76.1,63.2 74.8,63.6 C73.5,64 72.4,64.5 70.9,64.7 C69.4,64.9 67.5,64.9 65.8,65 C64.1,65.1 ' +
       '62.4,65.3 60.6,65.4 C58.9,65.5 56.5,65.7 55.5,65.7 C54.5,65.7 54.8,65.5 54.4,65.4 C53.9,65.3 53.9,64.9 ' +
@@ -4326,39 +4343,41 @@ const BODY_POSES = {
       'C64.6,67.4 67.5,67.3 68.3,67.2 M54,71.4 C52.8,71.3 49.5,70.9 47,70.7 C44.4,70.5 40.1,70.2 38.8,70.1'],
   },
   flex: {
-    nm: 'Double biceps',
-    skin: 'M84.6,63.6 C84.6,62.4 85.6,64.3 85.2,64.1 C84.9,63.9 83.5,62.7 82.6,62.3 C81.7,62 81,62 79.8,62 C78.5,62 ' +
-      '76.8,62.7 75.3,62.3 C73.8,61.9 72.4,60.4 70.9,59.6 C69.4,58.7 67.9,57.4 66.5,57.2 C65,57.1 63.6,58 ' +
-      '62.3,58.6 C60.9,59.3 58.5,60.2 58.3,61.1 C58.2,62 60.7,63.7 61.4,63.9 C62.1,64.2 62.3,63.8 62.5,62.5 ' +
-      'C62.8,61.3 62.8,58.7 62.9,56.5 C63,54.4 63,51.5 63,49.7 C63.1,47.9 63.2,46.5 63.3,45.8 C63.3,45.1 ' +
-      '63.1,46.1 63.4,45.7 C63.7,45.3 64.6,44.3 64.9,43.4 C65.2,42.5 65.2,41 65,40.2 C64.8,39.3 64.2,38.7 ' +
-      '63.6,38.3 C63.1,37.8 62,37.6 61.5,37.5 C61,37.3 61.1,37.4 60.9,37.4 C60.7,37.4 60.8,37.3 60.3,37.3 ' +
-      'C59.8,37.4 58.7,37.4 58.1,37.8 C57.4,38.1 56.8,38.6 56.4,39.4 C56.1,40.2 55.8,41.7 55.9,42.6 C56,43.6 ' +
-      '56.8,44.7 57,45.1 C57.2,45.5 57.3,44.4 57.1,45 C57,45.6 56.7,47 56.2,48.8 C55.8,50.5 55,53.3 54.4,55.4 ' +
-      'C53.8,57.4 53.1,59.8 52.8,61 C52.6,62.3 52.6,61.7 52.8,62.8 C53.1,63.9 53.6,66.8 54.2,67.8 C54.8,68.8 ' +
-      '55.7,68.5 56.7,68.9 C57.7,69.3 58.6,69.7 60.2,70.1 C61.7,70.6 64.1,71.1 66,71.6 C68,72.1 70.1,72.6 ' +
-      '71.9,73 C73.6,73.4 75.2,73.7 76.5,74.2 C77.9,74.6 79,76 79.9,75.9 C80.7,75.7 80.8,74 81.6,73.3 ' +
-      'C82.5,72.5 84.7,73 85.2,71.3 C85.7,69.7 84.6,64.8 84.6,63.6 Z',
-    line: 'M84.6,63.6 C84.7,63.7 85.6,64.3 85.2,64.1 C84.9,63.9 83.5,62.7 82.6,62.3 C81.7,62 81,62 79.8,62 C78.5,62 ' +
-      '76.8,62.7 75.3,62.3 C73.8,61.9 72.4,60.4 70.9,59.6 C69.4,58.7 67.9,57.4 66.5,57.2 C65,57.1 63.6,58 ' +
-      '62.3,58.6 C60.9,59.3 58.5,60.2 58.3,61.1 C58.2,62 60.7,63.7 61.4,63.9 C62.1,64.2 62.3,63.8 62.5,62.5 ' +
-      'C62.8,61.3 62.8,58.7 62.9,56.5 C63,54.4 63,51.5 63,49.7 C63.1,47.9 63.2,46.5 63.3,45.8 C63.3,45.1 ' +
-      '63.1,46.1 63.4,45.7 C63.7,45.3 64.6,44.3 64.9,43.4 C65.2,42.5 65.2,41 65,40.2 C64.8,39.3 64.2,38.7 ' +
-      '63.6,38.3 C63.1,37.8 62,37.6 61.5,37.5 C61,37.3 61.1,37.4 60.9,37.4 C60.7,37.4 60.8,37.3 60.3,37.3 ' +
-      'C59.8,37.4 58.7,37.4 58.1,37.8 C57.4,38.1 56.8,38.6 56.4,39.4 C56.1,40.2 55.8,41.7 55.9,42.6 C56,43.6 ' +
-      '56.8,44.7 57,45.1 C57.2,45.5 57.3,44.4 57.1,45 C57,45.6 56.7,47 56.2,48.8 C55.8,50.5 55,53.3 54.4,55.4 ' +
-      'C53.8,57.4 53.1,59.8 52.8,61 C52.6,62.3 52.6,61.7 52.8,62.8 C53.1,63.9 53.6,66.8 54.2,67.8 C54.8,68.8 ' +
-      '55.7,68.5 56.7,68.9 C57.7,69.3 58.6,69.7 60.2,70.1 C61.7,70.6 64.1,71.1 66,71.6 C68,72.1 70.1,72.6 ' +
-      '71.9,73 C73.6,73.4 75.2,73.7 76.5,74.2 C77.9,74.6 79.3,75.6 79.9,75.9',
+    nm: 'Double biceps', box: '50.3 34.8 99.3 163.7',
+    skin: 'M84.6,63.6 C84.6,62.3 85.6,64.1 85.3,63.7 C85,63.3 83.7,61.5 82.9,61 C82.1,60.4 81.4,60.4 80.6,60.3 ' +
+      'C79.8,60.2 79,60.3 78.1,60.6 C77.2,60.9 76,61.8 75.3,62.1 C74.6,62.3 74.6,62.6 73.8,62.2 C73.1,61.8 ' +
+      '72.1,60.4 70.9,59.6 C69.7,58.7 68,57.2 66.5,57 C65.1,56.9 63.6,57.9 62.3,58.6 C60.9,59.3 58.5,60.2 ' +
+      '58.3,61.1 C58.2,62 60.7,63.7 61.4,63.9 C62.1,64.2 62.3,63.8 62.5,62.5 C62.8,61.3 62.8,58.7 62.9,56.5 ' +
+      'C63,54.4 63,51.5 63,49.7 C63.1,47.9 63.2,46.5 63.3,45.8 C63.3,45.1 63.1,46.1 63.4,45.7 C63.7,45.3 ' +
+      '64.6,44.3 64.9,43.4 C65.2,42.5 65.2,41 65,40.2 C64.8,39.3 64.2,38.7 63.6,38.3 C63.1,37.8 62,37.6 ' +
+      '61.5,37.5 C61,37.3 61.1,37.4 60.9,37.4 C60.7,37.4 60.8,37.3 60.3,37.3 C59.8,37.4 58.7,37.4 58.1,37.8 ' +
+      'C57.4,38.1 56.8,38.6 56.4,39.4 C56.1,40.2 55.8,41.7 55.9,42.6 C56,43.6 56.8,44.7 57,45.1 C57.2,45.5 ' +
+      '57.3,44.4 57.1,45 C57,45.6 56.7,47 56.2,48.8 C55.8,50.5 55,53.3 54.4,55.4 C53.8,57.4 53.1,59.8 52.8,61 ' +
+      'C52.6,62.3 52.6,61.7 52.8,62.8 C53.1,63.9 53.6,66.8 54.2,67.8 C54.8,68.8 55.7,68.5 56.7,68.9 C57.7,69.3 ' +
+      '58.6,69.7 60.2,70.1 C61.7,70.6 64.1,71.1 66,71.6 C68,72.1 70.1,72.6 71.9,73 C73.6,73.4 75.2,73.7 ' +
+      '76.5,74.2 C77.9,74.6 79,76 79.9,75.9 C80.7,75.7 80.8,74 81.6,73.3 C82.5,72.5 84.7,73 85.2,71.3 ' +
+      'C85.7,69.7 84.6,64.9 84.6,63.6 Z',
+    line: 'M84.6,63.6 C84.7,63.6 85.6,64.1 85.3,63.7 C85,63.3 83.7,61.5 82.9,61 C82.1,60.4 81.4,60.4 80.6,60.3 ' +
+      'C79.8,60.2 79,60.3 78.1,60.6 C77.2,60.9 76,61.8 75.3,62.1 C74.6,62.3 74.6,62.6 73.8,62.2 C73.1,61.8 ' +
+      '72.1,60.4 70.9,59.6 C69.7,58.7 68,57.2 66.5,57 C65.1,56.9 63.6,57.9 62.3,58.6 C60.9,59.3 58.5,60.2 ' +
+      '58.3,61.1 C58.2,62 60.7,63.7 61.4,63.9 C62.1,64.2 62.3,63.8 62.5,62.5 C62.8,61.3 62.8,58.7 62.9,56.5 ' +
+      'C63,54.4 63,51.5 63,49.7 C63.1,47.9 63.2,46.5 63.3,45.8 C63.3,45.1 63.1,46.1 63.4,45.7 C63.7,45.3 ' +
+      '64.6,44.3 64.9,43.4 C65.2,42.5 65.2,41 65,40.2 C64.8,39.3 64.2,38.7 63.6,38.3 C63.1,37.8 62,37.6 ' +
+      '61.5,37.5 C61,37.3 61.1,37.4 60.9,37.4 C60.7,37.4 60.8,37.3 60.3,37.3 C59.8,37.4 58.7,37.4 58.1,37.8 ' +
+      'C57.4,38.1 56.8,38.6 56.4,39.4 C56.1,40.2 55.8,41.7 55.9,42.6 C56,43.6 56.8,44.7 57,45.1 C57.2,45.5 ' +
+      '57.3,44.4 57.1,45 C57,45.6 56.7,47 56.2,48.8 C55.8,50.5 55,53.3 54.4,55.4 C53.8,57.4 53.1,59.8 52.8,61 ' +
+      'C52.6,62.3 52.6,61.7 52.8,62.8 C53.1,63.9 53.6,66.8 54.2,67.8 C54.8,68.8 55.7,68.5 56.7,68.9 C57.7,69.3 ' +
+      '58.6,69.7 60.2,70.1 C61.7,70.6 64.1,71.1 66,71.6 C68,72.1 70.1,72.6 71.9,73 C73.6,73.4 75.2,73.7 ' +
+      '76.5,74.2 C77.9,74.6 79.3,75.6 79.9,75.9',
     front: [
-      ['biceps', 'M73.5,70.9 C73.1,71.7 71.1,71.8 69.6,71.8 C68.2,71.8 66.5,71.3 64.9,70.8 C63.4,70.3 61.3,69.6 60.2,68.7 ' +
-        'C59.1,67.8 58.3,66.5 58.1,65.6 C57.9,64.7 58.2,64.2 59.1,63.2 C60,62.2 62,60.3 63.5,59.7 C65.1,59.2 ' +
-        '67.1,59.3 68.4,59.9 C69.7,60.4 70.5,62.1 71.1,63.3 C71.8,64.4 72,65.5 72.4,66.8 C72.8,68.1 74,70.1 ' +
-        '73.5,70.9 Z'],
-      ['delts', 'M85.9,70.4 C86.1,69.1 85.1,66.6 84.5,65.3 C83.9,64 83.2,62.9 82.1,62.4 C81.1,61.9 79.5,62.2 78.2,62.2 ' +
-        'C77,62.2 75.9,62.2 74.7,62.5 C73.6,62.7 71.8,62.9 71.5,63.8 C71.2,64.8 72.3,66.8 73.1,68 C73.9,69.3 ' +
-        '75.3,70.3 76.4,71.3 C77.5,72.3 78.6,73.8 79.8,74.1 C80.9,74.3 82.5,73.3 83.5,72.7 C84.5,72.1 85.8,71.6 ' +
-        '85.9,70.4 Z'],
+      ['biceps', 'M73.6,70.6 C73.1,71.4 71.7,71.8 70.4,71.8 C69.1,71.9 67.3,71.5 65.6,71 C64,70.5 61.7,69.8 60.4,68.9 ' +
+        'C59.1,68.1 58.4,66.8 58.1,65.8 C57.8,64.9 58,64.2 58.6,63.1 C59.3,62 60.8,60.3 62.1,59.3 C63.4,58.3 ' +
+        '65.1,57.1 66.5,57.2 C67.9,57.3 69.4,58.6 70.4,59.7 C71.4,60.8 72,62.6 72.5,63.9 C73,65.1 73.1,66.1 ' +
+        '73.3,67.2 C73.5,68.3 74.1,69.9 73.6,70.6 Z'],
+      ['delts', 'M85.9,70.4 C86.1,69 85.6,66.2 85.1,64.6 C84.6,63.1 83.8,61.7 82.9,61 C82.1,60.3 81,60.2 80.1,60.4 ' +
+        'C79.2,60.5 78.3,60.9 77.4,61.6 C76.5,62.4 75.3,63.8 74.8,64.7 C74.3,65.7 74.1,66.5 74.2,67.4 C74.4,68.3 ' +
+        '75,69.3 75.6,70.2 C76.3,71.2 77.1,72.2 78,73 C78.9,73.7 80.1,74.8 81.1,74.8 C82.1,74.7 83.2,73.5 84,72.8 ' +
+        'C84.8,72 85.7,71.7 85.9,70.4 Z'],
       ['forearms', 'M53.6,63.1 C52.8,62.4 53,61.7 53.2,60.1 C53.5,58.5 54.5,55.6 55.1,53.5 C55.8,51.4 56.2,48.6 57.1,47.3 ' +
         'C57.9,46.1 59.2,45.9 60.1,46 C61.1,46.1 62.2,46.6 62.7,48.1 C63.1,49.5 62.8,52.3 62.8,54.5 C62.7,56.8 ' +
         '62.8,59.8 62.5,61.3 C62.1,62.9 61.5,63.6 60.7,64 C59.9,64.5 58.8,64.4 57.7,64.2 C56.5,64.1 54.3,63.8 ' +
@@ -4366,61 +4385,60 @@ const BODY_POSES = {
     ],
     back: [
       ['triceps', 'M74.2,72.6 C73.4,73.3 71.3,72.5 69.6,72.2 C67.8,71.9 65.5,71.2 63.8,70.5 C62.1,69.8 60.3,68.9 59.4,68 ' +
-        'C58.4,67 57.9,65.8 58.1,64.7 C58.3,63.6 59.3,62.7 60.7,61.6 C62,60.6 64.5,58.7 66.2,58.5 C67.9,58.2 ' +
-        '69.6,59.4 70.8,60.3 C71.9,61.2 72.5,62.5 73,63.7 C73.6,65 73.9,66.5 74.1,68 C74.3,69.4 74.9,71.9 ' +
+        'C58.4,67 57.9,65.8 58.1,64.7 C58.3,63.6 59.3,62.7 60.7,61.6 C62,60.6 64.6,58.5 66.3,58.3 C67.9,58.1 ' +
+        '69.7,59.3 70.8,60.3 C71.9,61.3 72.4,62.8 72.9,64.1 C73.5,65.4 73.9,66.6 74.1,68 C74.3,69.4 74.9,71.9 ' +
         '74.2,72.6 Z'],
-      ['delts', 'M85.9,70.4 C86.1,69.1 85.1,66.6 84.5,65.3 C83.9,64 83.2,62.9 82.1,62.4 C81.1,61.9 79.5,62.2 78.2,62.2 ' +
-        'C77,62.2 75.9,62.2 74.7,62.5 C73.6,62.7 71.8,62.9 71.5,63.8 C71.2,64.8 72.3,66.8 73.1,68 C73.9,69.3 ' +
-        '75.3,70.3 76.4,71.3 C77.5,72.3 78.6,73.8 79.8,74.1 C80.9,74.3 82.5,73.3 83.5,72.7 C84.5,72.1 85.8,71.6 ' +
-        '85.9,70.4 Z'],
+      ['delts', 'M85.9,70.4 C86.1,69 85.6,66.2 85.1,64.6 C84.6,63.1 83.8,61.7 82.9,61 C82.1,60.3 81,60.2 80.1,60.4 ' +
+        'C79.2,60.5 78.3,60.9 77.4,61.6 C76.5,62.4 75.3,63.8 74.8,64.7 C74.3,65.7 74.1,66.5 74.2,67.4 C74.4,68.3 ' +
+        '75,69.3 75.6,70.2 C76.3,71.2 77.1,72.2 78,73 C78.9,73.7 80.1,74.8 81.1,74.8 C82.1,74.7 83.2,73.5 84,72.8 ' +
+        'C84.8,72 85.7,71.7 85.9,70.4 Z'],
       ['forearms', 'M53.6,63.1 C52.8,62.4 53,61.7 53.2,60.1 C53.5,58.5 54.5,55.6 55.1,53.5 C55.8,51.4 56.2,48.6 57.1,47.3 ' +
         'C57.9,46.1 59.2,45.9 60.1,46 C61.1,46.1 62.2,46.6 62.7,48.1 C63.1,49.5 62.8,52.3 62.8,54.5 C62.7,56.8 ' +
         '62.8,59.8 62.5,61.3 C62.1,62.9 61.5,63.6 60.7,64 C59.9,64.5 58.8,64.4 57.7,64.2 C56.5,64.1 54.3,63.8 ' +
         '53.6,63.1 Z'],
     ],
-    lines: ['M82.6,67.3 C81.9,66.9 79.6,65.9 78.1,65.3 C76.6,64.8 74.2,64.2 73.5,63.9 M68.9,67.2 C68.2,67 66,66.4 ' +
-      '64.7,66 C63.4,65.7 61.6,65.1 61,64.9 M59.2,63.2 C59.2,62.1 59.5,58.7 59.6,56.1 C59.7,53.5 60,49.1 ' +
-      '60.1,47.7',
-      'M69.8,70.1 C68.8,69.7 65.1,68.9 63.8,68 C62.5,67.2 61.6,66.1 61.9,65.1 C62.2,64.1 64.1,62.4 65.5,62.1 ' +
-      'C66.9,61.7 69.4,62.8 70.2,62.9 M56.1,62.8 C56.4,61.7 57.3,58.4 57.9,55.8 C58.5,53.3 59.4,49 59.7,47.7'],
+    lines: ['M82.7,66.9 C82,66.5 79.8,65 78.3,64.6 C76.7,64.1 74.2,64.4 73.4,64.4 M68.9,67.2 C68.2,67 66,66.4 64.7,66 ' +
+      'C63.4,65.7 61.6,65.1 61,64.9 M59.2,63.2 C59.2,62.1 59.5,58.7 59.6,56.1 C59.7,53.5 60,49.1 60.1,47.7',
+      'M69.8,70.1 C68.8,69.7 65.1,68.9 63.8,68 C62.5,67.2 61.6,66.1 61.9,65.1 C62.2,64.1 64.1,62.3 65.5,62 ' +
+      'C66.9,61.6 69.4,62.8 70.2,62.9 M56.1,62.8 C56.4,61.7 57.3,58.4 57.9,55.8 C58.5,53.3 59.4,49 59.7,47.7'],
   },
 };
 
-let bodyPat = 0;
+/* a trained muscle's colour, Tom, 2026-10-05: "Red - just hit, Green - ready
+   to go, Brightness - amount of work this week". Red to the theme's warning
+   colour over the first half of its window, warning to green over the
+   second, so the middle of a recovery reads as amber rather than as mud. */
+function bodyColour(r) {
+  const g = r ? Math.max(0, Math.min(1, 1 - r.left / r.win)) : 1;
+  return g < 0.5
+    ? 'color-mix(in oklab, var(--warn) ' + Math.round(g * 200) + '%, var(--danger))'
+    : 'color-mix(in oklab, var(--success) ' + Math.round((g - 0.5) * 200) + '%, var(--warn))';
+}
+const bodyBright = (n, max) => (0.25 + 0.75 * (max ? n / max : 0)).toFixed(2);
 function bodySvg(v, rec, pose) {
-  const P = BODY_POSES[pose] || BODY_POSES.stand;
+  const key = BODY_POSES[pose] ? pose : 'stand', P = BODY_POSES[key];
   const max = Math.max(0, ...Object.keys(v).map(k => v[k]));
   const ink = 'stroke:var(--text-muted);stroke-opacity:.4;stroke-width:.4;stroke-linejoin:round';
   const edge = 'fill:none;stroke:var(--text-muted);stroke-opacity:.7;stroke-width:.55;stroke-linejoin:round';
   const fibre = 'fill:none;stroke:var(--surface-1);stroke-opacity:.45;stroke-width:.35;stroke-linecap:round';
   const mir = s => s + '<g transform="matrix(-1,0,0,1,200,0)">' + s + '</g>';
-  const panel = (list, lines, arm, armLines) => {
-    /* stripes for a muscle still recovering; an id per drawing, since a
-       pattern in a hidden copy of this picture draws nothing elsewhere */
-    const pat = 'bh-stripe-' + (++bodyPat);
-    const muscles = l => l.map(m => {
-      const n = v[m[0]] || 0, t = max ? n / max : 0, r = rec && rec[m[0]];
-      const st = n > 0
-        ? 'fill:var(--accent);fill-opacity:' + (0.25 + 0.75 * t).toFixed(2) + ';stroke:var(--surface-1);stroke-opacity:.85;stroke-width:.5'
-        : 'fill:var(--surface-3);' + ink;
-      const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets' + (r ? ' · ' + Math.ceil(r.left) + 'h to recover' : '');
-      return '<path d="' + m[1] + '" style="' + st + '"><title>' + tip + '</title></path>' +
-        (r ? '<path d="' + m[1] + '" style="fill:url(#' + pat + ');fill-opacity:' + (0.3 + 0.6 * r.left / r.win).toFixed(2) +
-          ';stroke:none;pointer-events:none"/>' : '');
-    }).join('');
-    return '<svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">' +
-      '<defs><pattern id="' + pat + '" width="2.4" height="2.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
-      '<rect width="1.1" height="2.4" style="fill:var(--surface-1)"/></pattern></defs>' +
-      '<rect x="22" y="40" width="156" height="156.2" style="fill:none;stroke:var(--border-strong);stroke-width:.6"/>' +
-      '<circle cx="100" cy="99.6" r="96.6" style="fill:none;stroke:var(--border-strong);stroke-width:.6"/>' +
+  const muscles = l => l.map(m => {
+    const n = v[m[0]] || 0, r = rec && rec[m[0]];
+    const st = n > 0
+      ? 'fill:' + bodyColour(r) + ';fill-opacity:' + bodyBright(n, max) + ';stroke:var(--surface-1);stroke-opacity:.85;stroke-width:.5'
+      : 'fill:var(--surface-3);' + ink;
+    const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets' + (r ? ' · ' + Math.ceil(r.left) + 'h to recover' : n ? ' · ready' : '');
+    return '<path d="' + m[1] + '" style="' + st + '"><title>' + tip + '</title></path>';
+  }).join('');
+  const panel = (list, lines, arm, armLines) =>
+    '<svg viewBox="' + P.box + '" preserveAspectRatio="xMidYMid meet">' +
       mir('<path d="' + BODY_SKIN + ' L100.6,122.7 L100.6,40 Z" style="fill:var(--surface-3);stroke:none"/>') +
       mir(muscles(list)) + mir('<path d="' + lines + '" style="' + fibre + '"/>') + mir('<path d="' + BODY_SKIN + '" style="' + edge + '"/>') +
       /* the arms over the body, so a shoulder sits in front of the chest and back in every pose */
       mir('<path d="' + P.skin + '" style="fill:var(--surface-3);stroke:none"/>') +
       mir(muscles(arm)) + mir('<path d="' + armLines + '" style="' + fibre + '"/>') + mir('<path d="' + P.line + '" style="' + edge + '"/>') +
-      '</svg>';
-  };
-  return '<div class="bh-pair">' + panel(BODY_FRONT, BODY_LINES_FRONT, P.front, P.lines[0]) +
+    '</svg>';
+  return '<div class="bh-pair bh-p-' + key + '">' + panel(BODY_FRONT, BODY_LINES_FRONT, P.front, P.lines[0]) +
     panel(BODY_BACK, BODY_LINES_BACK, P.back, P.lines[1]) + '</div>';
 }
 
@@ -4853,7 +4871,7 @@ const ABOUT = {
   log: 'Everything ticked today, in the order it happened.',
   training: 'Your last training day, lift by lift.',
   trainvol: 'Training volume a week, over the last 8 weeks.',
-  bodyheat: 'Working sets per muscle on a front and back body, brighter for more, striped while it recovers.',
+  bodyheat: 'Working sets per muscle on a front and back body: red just hit, green ready, brighter for more work.',
   weight: 'Every weigh-in as a dot with the line through them, and a cut plan if you set one.',
   sleep: 'Your nights of sleep: the average night and the nights on target.',
   spend: 'Money out this week against last week.',
