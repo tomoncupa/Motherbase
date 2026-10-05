@@ -875,23 +875,24 @@ Curl separate; and *"There is no barbell squat?"*
 - His own imported names (Seated Leg Curl Machine, Lying Leg Curl Machine) are
   not starters and are never folded; Merge Into is how he does those.
 
-## Next: strength graphics (proposed 2026-10-02, not built)
+## Strength graphics (picked 2026-10-05, 1.0.49)
 
-Tom asked for eight ways to show strength going up, each as a sentence, a
-number and a graphic, then "Mockup the graphs". `train/mock-strength-graphs.html`
-is the mockup (example numbers, Block colours written in because it is a
-picture of a design, not app code): 1 estimated 1RM per lift (last time grey,
-now accent, % at the end); 2 more reps at the same weight (a dot per rep);
-3 more weight at the same reps (the bar side-on, the new plate lit); 4 sets
-higher, a square per working set in session order, grouped by lift; 5
-records, a solid trophy for lifetime, an outlined one for PR; 6 the block, a
-sparkline from week 1; 7 a milestone strip of round numbers; 8 lifted over
-bodyweight (STATUS's weigh-ins). Recommended for the frame: 4 as the
-headline, 1 per lift, 6 for a block-end post. Tom has not picked yet; the
-next session starts there. 1 to 5 are worked out already (`setDelta`,
-`liftLine`, `dayCompare`, `recordHits`); 6 to 8 are new. Draw them with
-`chart.js` where it fits (shared rule 5a), tokens only, and obey the frame's
-rules above.
+`train/mock-strength-graphs.html` mocks eight (1 e1RM bars, 2 rep dots, 3
+new plate, 4 set squares, 5 trophies, 6 block sparkline, 7 milestones, 8
+bodyweight ratio). Tom, 2026-10-05: *"I like 6, have it track set volumes, 5
+is okay too."* Read as working sets per week, not tonnage; say so if asked.
+- **6, Sets per week** (`shareBlock`, on), in the frame just above the
+  totals: "N sets in week K · +X% since week 1" and a line under it
+  (`TRAIN.frameBlock`, `TRAIN.blockWeeks`). Weeks are the block's own 7-day
+  weeks from its start, as "Week N" counts them; no block, the last eight
+  calendar weeks. **The line starts at zero** (`Chart.make`, not
+  `Chart.spark`, which fits the lowest week to the floor and drew 74 to 54
+  sets as a crash). A week still running is left off while it is under the
+  week before; the gain is said only when up.
+- **5**: a lifetime PR's trophy is filled, a PR's is outlined (`.fr-pr.all`).
+- 1, 2, 3, 4, 7, 8 not built. Measured on the demo: the bottom starts 61%
+  down with one PR and the line; `_review.html` 142/142 at 390 and 1280.
+  Not seen on his iPhone.
 
 ## Parked
 

@@ -392,6 +392,19 @@ Chromium), before to after: SHELF 1.84 to 1.00 at 1280, 1720 and 2560 x
 1.01 (2560), 3.40 to 1.31 at 1920x1000. PLAN untouched (1.28 at 2560).
 Not watched: the Foods out list opened (the demo has no food at zero).
 
+## In progress (2026-10-05)
+
+- **FILL BLANKS and the FOOD TABLE** (Tom 2026-10-01, "do 1 and 2"): on
+  branch `kitchen-fill`, not on main. `tools/food-table.py`,
+  `foodtable.js` (STAMP b4924de9) and `foodtable-data.js` (USDA SR Legacy,
+  CC0) were finished by their builder; the screens in `index.html` were cut
+  off and never integrated, pressed or reviewed. Merge main into the branch
+  first (main moved to KITCHEN 1.0.4 since).
+- **RECIPES** (Tom 2026-10-05): live in KITCHEN, beside New food. Ingredients
+  with amounts make one food whose numbers follow them; "makes N servings"
+  plus an optional cooked weight; also log a fraction of a cooked batch.
+  Logged meals keep their frozen numbers. Not built.
+
 ## Not in this version
 
 A home screen widget; prices and grocery cost; expiry dates; storage places

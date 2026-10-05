@@ -140,3 +140,23 @@ Tom: "make the waist smaller", "Make the default pose standing", "Hide the other
 - **Waist**: 13% narrower at the navel, tapering back to nothing at the ribs and the hips. Shoulders to waist is about 1.85 now, past the golden ratio, at his word.
 
 Watched in headless Chromium on the demo: right-click on the card's title, Pose, Double biceps redrew the card and saved `pose: 'flex'` in the layout; Standing is what a fresh board draws, at 1920x1000 and 390x844 with no row overflowing. Review 142/142 Chromium, WebKit only the known foundation-frame fail. Not seen on his screens.
+
+## 2026-10-05, HOME 1.0.48 to 1.0.52: reel fixes A4, A7, A8
+
+- **A4** (1.0.48, 1.0.50): a phone tab label may use its whole button (1px side padding) and, wider than it, loses its letter spacing and shrinks to three quarters at most; if the theme font still will not fit, every label on the bar is set in the phone's own font (`#tabs.plainfont`). Nine words in a pixel font do not fit 390px at any readable size; 5.7px was tried. `fitTabs` reruns on resize, a font landing and a theme change. TODAY's time column is at least 60px and as wide as its time. CLOCK uses its font's own line height. Every font in STYLE's list plus the eight B7 adds, 26, measured with no text overlapping or spilling at 390px on the Main Menu, STATUS, TRAIN, QUESTS and CHECK IN.
+- **A7** (1.0.51): every card carries `data-w`, its widget id.
+- **A8** (1.0.52): an empty BODY HEATMAP draws the body in its zero colour with the sentence under it.
+
+## 2026-10-05, HOME 1.0.53: BODY HEATMAP colours by recovery, no circle or square, round shoulders on the double biceps
+
+Tom: "this doesnt show recovery. Red - just hit, Green - ready to go, Brightness - amount of work this week", "remove the circle and square", "fix the front flexing, that's not what the shoulders look like from the front".
+
+- **Colour is recovery** (`bodyColour`): `--danger` at the last set, through `--warn` at half its window, to `--success` when ready, mixed in oklab so the middle is amber, not mud. **Brightness is the sets** in the card's range (`bodyBright`, the old opacity scale). The stripes are gone. Each row carries a dot in its muscle's colour and brightness; a row still recovering keeps its hours.
+- **No circle or square.** Each pose has a `box`, its figure plus a margin, as the viewBox, so the figure fills its panel. Standing and Double biceps go side by side once the box is wider than 2/5 and 3/5 of its height (container queries on `.bh-fig`, classes `bh-p-<pose>`); on a phone they always sit side by side and Vitruvian stacks. Standing at 1920: two figures 158x524, against 319x260 squares before.
+- **Double biceps front**: the deltoid is a round cap standing above the arm with a dip before the biceps peak (per-pose `delt` and `biceps` in the generator), and the biceps fills its peak.
+
+Watched in headless Chromium at 1920x1000 and WebKit at 390x844 on the demo: computed fills are colours in both (oklab), dots 8px, no row overflowing. Review 142/142 Chromium, WebKit only the known foundation-frame fail. Not seen on his screens.
+
+## 2026-10-05, HOME 1.0.54: LIFE band names (D4)
+
+The three bands are EARLY, MIDDLE and LATE until named on the card's own menu, Name the bands, a setting each (`lifeos.lifeNameYouth`, `lifeNameMid`, `lifeNameOld`; cleared when set back to the default). "TOO OLD FOR A LOT" is gone before clients see it. Watched by right-clicking the card, Name the bands, First band, SET: the legend read GROWING.

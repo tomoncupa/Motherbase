@@ -48,7 +48,7 @@ are holding a stale copy of whatever you just changed.
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
 | `claude.js` | The CLAUDE panel, added 2026-10-04: a gold tab in Main Menu.exe only (the window injects it; without `chrome.webview` it returns). Ask about the rows, or log by talking. Hands claude.exe a slimmed copy of every row as files; applies Claude's writes here (Journal.add, Rec.set for new rows, Rec.patch for changes), each with Undo; ticks Training after sets like TRAIN.assertTick. Never writes `device`, `setting`, `skin`, pictures or `brief`. | Medium. It writes rows on what Claude says, each shown with Undo. |
 | `boot.js` | The start screen on the home screen and the phone apps. | Low. Writes nothing but one sessionStorage flag. |
-| `_smoke.html` | 414 checks over all of it. | Run it every time. |
+| `_smoke.html` | 422 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -580,6 +580,18 @@ screen and the phone apps (the roster's `phone` flag) only.
   smoke checks, which were watched failing with the net taken out.
 - Watched in Chromium only. Not run in WebKit (no WebKit build in the cloud
   session it was made in) and not on the iPhone.
+
+## Theme fonts kept here (2026-10-05, A5)
+
+Every family a factory theme or STYLE's picker names is in `shared/fonts`: latin
+woff2 files, one stylesheet per family (`<slug>.css`) and its licence beside it
+(`<slug>-LICENSE.txt`, all OFL; Arimo moved from Apache to OFL upstream).
+`tools/fetch-fonts.py` fetches them; add a family to its list AND to
+`LOCAL_FONTS` in `skins.js`. `Skins.font()` links only the current theme's
+stylesheets, from this copy, and Google only on that link's `onerror`;
+`sw.js` keeps them like any file, so a theme opened once works with no signal
+(watched in headless Chromium: a VT323 theme reopened offline was VT323).
+One smoke check fetches every family's stylesheet and every file it names.
 
 ## History
 

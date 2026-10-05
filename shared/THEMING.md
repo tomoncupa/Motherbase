@@ -211,9 +211,29 @@ indicator, as plain values, so no app writes `env()` itself.
 
 `--tex-image` and `--tex-size` are the theme's Pattern. **An app never draws
 them.** Since 2026-10-01 `skins.js` draws them on a fixed layer behind every
-page (`body::before`, the body made its own stack), so an app that also puts
+page (`body::after`, the body made its own stack), so an app that also puts
 them on its body draws the pattern twice. A full-screen overlay that hides
 the page, such as SPEAK's take screen, may carry them itself.
+
+### The scene, glass, shadow, cards and titles (2026-10-05)
+
+Theme FIELDS, not tokens, edited in STYLE and drawn by `skins.js` into
+`#skin-scene-css` for every app. An app writes none of this.
+
+- `page`: `{kind: 'gradient', colors (2 to 6), stops, angle}` or
+  `{kind: 'mesh', spots: [{c, x, y, r}] (up to 5)}`, and `fixed: false` to
+  scroll with the page. Drawn on `body::before`, under the Pattern.
+- `scene.sun` `{colors (4), x, bottom, size, glow, glowAlpha, opacity}` and
+  `scene.grid` `{color, opacity, height, floor}`: on `body::before` too.
+- `glass` `{blur 0 to 30, tint, alpha}`: cards, sheets, menus and the dock.
+- `shadow` `{kind: 'hard', x, y, color}`: sets `--e-1` to `--e-5`,
+  `--card-shadow` and `--plate-shadow` to offsets that never blur.
+- `cards` `{kind: 'cycle', colors?}`: each Main Menu card the next colour.
+- `titles` `{kind: 'gradient' | 'glow', colors, stops, numGlow}`.
+
+Only a hex colour from a field reaches the stylesheet. A theme's own CSS
+comes after it and still wins; `body::before` is the scene's when a theme
+has a page fill or scene layer.
 
 ### Rank — 7
 
