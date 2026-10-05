@@ -127,3 +127,7 @@ Tom, on a super ultrawide (first said 5120x1440; it is **3840x1080**, Tom 2026-1
 Watched in headless Chromium on the demo: at 5120x1300 TRAIN got 900px and the board 4220, STATUS, QUESTS and WEALTH 1600 and 3520, ARC the whole 5120; at 3440, TRAIN 900 / 1600 for the half apps; at 1920 no change at all. On the demo the board's need is large because its cards had no saved spots and spread across the wide grid; his own board decides it on his screen. Not seen on his screen.
 
 **His screen is 3840x1080** (Tom, 2026-10-04, after the above was built for 5120x1440). The rule is width-driven, so it holds: re-measured at a 3840x1000 window, TRAIN gets 900 to 1280, the half apps 1600 to 1928 on a 12-column board, ARC all 3840, and the review passed 142/142 there and at 390x844. At a 943px-tall frame of 1928: STATUS Report 1.15 screens, QUESTS Upcoming 1.22, WEALTH 1.46 at most, SHEET 1.32, KITCHEN PLAN 1.82, LOG Month 3.37, COACH 2.70, FOODDEX 1.85. Height, not width, is now what makes him scroll.
+
+## 2026-10-05, HOME 1.0.47: UPCOMING in the default board
+
+Tom said yes to UPCOMING in the corner MOMENTUM left (4x5, so its bottom meets EVERY & ANYTIME and RECORDS). Measured at 1920x1000: the eight cards fill three columns with no hole.
