@@ -93,6 +93,13 @@ the "foods out" fold are view state, never stored.
   left OFF. No `serves` (an empty list does not survive sync). Setting a
   piece weight reads the food, replaces any `1 piece` serving and patches
   `serves`.
+- **`food.base.<key>`, `food.fills` and `food.barcode`** on FILL BLANKS
+  (below): `Rec.patch` with dotted keys, so nothing else on the row moves.
+  `fills` is a list of `{src: 'usda'|'off', from, id, keys, v, g?, ml?, t}`:
+  where the figures came from (the USDA's description or the pack's name),
+  its fdcId or barcode, the keys filled, `v` the values written (REMOVE
+  compares against them), `g` or `ml` the weight typed when one was asked,
+  `t` ms. Removing the last entry removes the field, never `[]`.
 
 ### Read
 
@@ -144,12 +151,16 @@ up otherwise.
   foods sorted by uses; "count it" and "low" flags. Foods at 0 folded under
   "N foods out". ADD FOOD at the bottom (picker, then Bought). Tap a food:
   the food sheet (stock large, BOUGHT, COUNT, USED UP, KEEP AT LEAST, PIECE
-  WEIGHT for g/ml foods without one, and the last 12 events; hold or the
+  WEIGHT for g/ml foods without one, FILL BLANKS, "Filled figures" with
+  REMOVE on each fill, and the last 12 events; hold or the
   more button on a meal event toggles `kskip`, on a hand purchase removes
   it). Hold a row: Bought, Count, Used up, Keep at least.
 - **Food picker.** Search focused on open, sorted by uses then name, in-stock
   first on PLAN, stock shown, at most 40. Opened from a slot on PLAN, the
-  saved meals come first, searched by the same box. "New food" adds one with
+  saved meals come first, searched by the same box. From 2 characters, "FROM
+  THE FOOD TABLE" under the person's own foods, up to 6 (THE FOOD TABLE,
+  below). Hold or right-click one of the person's foods: Fill blanks, with
+  the picker left open under it. "New food" adds one with
   name, group, amount and unit, and calories, protein, carbs and fat only
   when STATUS's Count calories is on.
 - **PLAN.** Under 1100px: the week's day strip (today outlined) and one day.
@@ -183,6 +194,8 @@ up otherwise.
   library foods marked "not on the shelf"); tapping one opens the amount
   sheet with a "One serving" offer. Tap a row: where it came from and the
   richest foods per serving and, when calories are counted, per 100 kcal.
+  The sheet is live, and its "Not known for ..." line leads to FILL BLANKS
+  for every row but calories and macros, which a fill never writes.
   Fat's, Carbs' and Vitamin A's sheets also list the nutrients with no
   reference intake under "Also counted" (saturated fat, EPA, DHA and
   cholesterol; sugar; beta-carotene and preformed A), a total and a
@@ -194,6 +207,14 @@ up otherwise.
   keeps its frozen figure when it is over 0. The extras use the meal's own
   amount over the label's amount when the units match, not `meal.mult`,
   since the label may have changed; "Last:" does the same.
+- **A meal with no fid finds its food by name** (1.0.3; 75 of Tom's 175
+  meals have none): trimmed, any case, only when exactly ONE food has that
+  name and the meal's unit is the food's, never an ELEMENT row. It then
+  counts the extras and the sodium, potassium and calcium rule as a fid meal
+  does, with two differences: its macros stand as typed, and a sodium,
+  potassium or calcium over 0 typed on it is kept when the food has none.
+  Read in `eatItem` only; nothing is written to the meal, and stock and
+  "Last:" still go by fid.
 - **Settings.** TARGETS (the reference choice again, the source, every
   reference nutrient with its value, a box to type over it and a switch to
   hide it) and MEALS (saved meals: rename, remove with UNDO; empty, an OPEN
@@ -227,7 +248,7 @@ lactation are left out. Notes from the research that matter here:
 ELEMENT's salt and citrate meals (`src: 'mix'`, no fid) count for sodium,
 potassium and calcium as frozen, and as zero for every other nutrient.
 Any other meal with no fid is not known for every nutrient beyond the
-macros it carries.
+macros it carries, unless it finds its food by name (Screens, above).
 
 ## SCAN (1.0.1, 2026-09-30)
 
@@ -259,21 +280,93 @@ out to its twelve) before anything is asked.
   boxes when Count calories is on, under "From Open Food Facts: N figures
   per 100 g. Check them against the pack." ADD saves `brand`, `barcode`,
   `base.src: 'off'` and every other figure found; a box typed over wins and
-  a box emptied stays empty. Not found or no signal opens it empty with the
-  code kept, so the next scan finds the food.
+  a box emptied stays empty. The figures with no box are per 100 of the
+  source's unit: an amount changed in the same unit scales them, a changed
+  unit takes none of them (since 1.0.3; before, they were saved unscaled).
+  Not found or no signal opens it empty with the code kept, so the next
+  scan finds the food.
 - `Barcode` is also FOODDÉX's (`../kitchen/barcode.js`); see
   `portion/CLAUDE.md`.
-- **Watched 2026-09-30** at 390 wide, by pressing ADD FOOD, SCAN, typing and
-  LOOK UP, against the real Open Food Facts: Nutella (3017620422003) filled
-  and saved with 8 figures and its code, then scanned again and picked
-  straight into Bought; a made-up valid code opened NEW FOOD empty with the
-  code kept and p, c and f left off; a wrong check digit said "Not a
-  barcode number."; the camera refused in the browser pane fell back to
-  typing. The camera path was watched with a drawn EAN-13 fed in as the
-  camera's stream: zxing loaded from `zxing/`, read Coca-Cola 5449000000996
-  off the video, and NEW FOOD opened per 100 ml. The limit answered busy on
-  the 15th lookup in a minute (fetch stubbed). **Not watched: a real camera,
-  and anything on an iPhone.**
+
+## FILL BLANKS (1.0.3, 2026-10-01)
+
+Tom: "okay, do 1 and 2". None of his 38 foods carried any of the 31 extra
+nutrients, so the guide said "not known" for every vitamin and mineral.
+FILL BLANKS fills a food that already exists, from its pack or from the
+food table, and never by itself.
+
+- **Blanks only.** A key is blank when it is absent, `null` or `''`; a 0 is
+  a figure. Filled: `na`, `k`, `ca`, `caff` and every key in
+  `shared/nutrients.js`. **Never `kcal`, `p`, `c` or `f`, even blank**: a
+  macro frozen as 0 on a past meal reads as not known only while the food
+  has no figure for it (`itemVal`), so filling one would turn those meals
+  into false zeros. The screens say "Calories and macros stay as you typed
+  them."
+- **Scaled to the food's own amount.** Sources are per 100 g (the table) or
+  per 100 g or 100 ml (Open Food Facts, by its unit). One kind (g, kg, ml,
+  L) converts: 1 Kg is 1000 g. Otherwise a serving that names its own
+  weight ("1 pack (55 g)", one weight in its label) gives it, and the
+  confirm says so. Otherwise it asks once, "How many g is 1 Bowl of
+  Lugaw?", with the pack's serving and the last weight typed as offers.
+  Never 1 ml = 1 g. Three significant figures, as `nutrients.js` keeps them.
+- **The screens.** The chooser: SCAN THE PACK, and a search of the food
+  table prefilled with the food's name, caret in it. A pick closes the
+  chooser and opens the confirm (two sheets closed in one tick would be two
+  history steps): the source ("USDA food table: Bananas, raw — an average
+  for this food, not your pack." or "Open Food Facts: Nutella
+  3017620422003"), "Fills N blanks: Fibre 2.6 g, ..." with the first four,
+  and FILL / CANCEL. A table source adds "If the pack lists its own
+  figures, scan it instead." Nothing is written before FILL.
+- **A scanned code on another food** fills nothing: "That code is on Cola.
+  Nothing was filled." A scan writes `barcode` when the food has none.
+- **Written** with `Rec.patch` on dotted keys, then "Filled N figures on
+  X." with UNDO, which sets the row back exactly as read before the fill.
+  Blanks are read again at FILL, from the row as it is then.
+- **REMOVE**, on the food's sheet under "Filled figures" ("31 figures from
+  USDA, Bananas, raw (an average) · 1 Oct"): deletes only the keys whose
+  value still equals the one filled (`v`), drops the entry, offers UNDO. A
+  figure typed over since stays.
+- **Three ways in:** FILL BLANKS on the food's sheet (from a shelf row);
+  hold or right-click a food in the picker, Fill blanks; and GUIDE, a row's
+  sheet, its "Not known for ... Fill blanks" line, which lists the foods
+  with no figure for that nutrient over the period on screen, each with
+  FILL (tap the food for its sheet), and names the meals logged without
+  one of the person's foods, which have nothing to fill. The GUIDE route is
+  Tom's: his foods are not on the shelf.
+
+## THE FOOD TABLE (1.0.3, 2026-10-01)
+
+USDA FoodData Central, SR Legacy (April 2018), public domain (CC0), per
+100 g, shipped beside this file: `foodtable.js` (the engine, hand-written)
+and `foodtable-data.js` (generated, about 1.2 MB, fetched only the first
+time a picker or the chooser opens, as `foodtable-data.js?v=<STAMP>`, which
+`sw.js` answers from the phone's copy ever after). Regenerate with
+`py -3 tools/food-table.py` (`--fresh` downloads the USDA file again, into
+the system temp folder, never the repo); it reads the key list out of
+`shared/nutrients.js`, maps figures exactly as `Nutrients.fromUsda` does,
+drops baby food, US fast food and restaurants, American Indian and Alaska
+Native foods and US brands, checks every Tagalog word against the real
+names, and writes the STAMP.
+
+- **The contract** (`window.FoodTable`): `load()` a promise of true, or
+  false with no signal, safe to call often; `ready`; `count`; `search(q, n)`
+  `[{i, name, cat, via}]` best first, every word must match, `via` the
+  Tagalog word when the hit came through the alias list; `food(i)` `{name,
+  cat, id: fdcId, amt: 100, unit: 'g', base}` with missing keys absent.
+  No `foodtable.js` at all: the table group and the chooser's search do not
+  show; SCAN still works.
+- **In the picker**, from 2 characters, "FROM THE FOOD TABLE" under the
+  person's own foods, up to 6, a name and a category line. One tap opens
+  NEW FOOD filled through the scan path, under "From the USDA food table: N
+  figures per 100 g. An average for this food, not your pack.", named by
+  the Tagalog word when it came through one. ADD saves `base.src: 'usda'`,
+  the figures, and `fills` naming the figures that are still the table's.
+  Not loaded and no signal: "The food table downloads the first time you
+  have signal."
+- **Why a shipped table, not a live USDA lookup:** FOODDÉX's lookup runs on
+  the shared DEMO_KEY, which allows 10 lookups a day per connection
+  (WATCHED 2026-10-01), and clients have no key of their own. A table on
+  the phone answers offline, instantly, for everyone.
 
 ## A wide window (1.0.3, 2026-10-02)
 
@@ -302,8 +395,8 @@ Not watched: the Foods out list opened (the demo has no food at zero).
 ## Not in this version
 
 A home screen widget; prices and grocery cost; expiry dates; storage places
-(fridge, freezer); a USDA lookup inside KITCHEN (FOODDÉX and STATUS add
-foods properly); generating a plan by itself (never).
+(fridge, freezer); generating a plan by itself (never); filling calories or
+macros (never: see FILL BLANKS); filling a food by itself (never).
 
 ## Needs from the foundation
 
@@ -322,15 +415,11 @@ foods properly); generating a plan by itself (never).
    `receipts/index.html`. KITCHEN does not match shop wording yet; if it
    ever does, the matcher belongs in `shared/` so the alias keys cannot
    drift apart.
-5. **A phone menu runs its item 60ms after the tap** (`Mobile.actions`,
-   `setTimeout(() => it.fn(), 60)` in `shared/mobile.js`), so any typing
-   screen opened from a menu calls `UI.focusSoon` outside the tap and iOS
-   shows the caret without the keyboard. KITCHEN keeps a menu out of the
-   everyday path (the slot's add button opens the picker directly), but
-   Bought, Count and Keep at least from a held shelf row, and Change amount
-   from a held item, still meet it. Every app with a menu that opens a
-   typing screen has the same fault; running the item inside the tap fixes
-   all of them. Read from the code, not watched on an iPhone.
+5. ~~A phone menu runs its item 60ms after the tap.~~ Done in
+   `shared/mobile.js` on 2026-09-30 (`shared/CLAUDE.md`): a menu item runs
+   inside the tap, so Bought, Count, Keep at least, Change amount and Fill
+   blanks from a held row can raise the iPhone keyboard. Not yet watched on
+   the iPhone.
 6. **`barcode.js` and `zxing/` belong in `shared/`.** They sit in
    `kitchen/` since 2026-09-30 only because this session could not edit
    `shared/`; FOODDÉX loads them as `../kitchen/barcode.js`. The file finds
@@ -339,21 +428,14 @@ foods properly); generating a plan by itself (never).
    on first fetch like any file; the client build copies `kitchen/` whole,
    so clients get them.
 7. **The root ownership table's `food` line** should say a food may carry
-   `barcode` (top level, the digits, KITCHEN and FOODDÉX write it on SCAN)
-   and `base.src: 'off'` (figures from Open Food Facts).
+   `barcode` (top level, the digits, KITCHEN and FOODDÉX write it on SCAN),
+   `base.src: 'off'` (figures from Open Food Facts) or `'usda'` (from the
+   food table), and `fills: [{src, from, id, keys, v, g, t}]` (FILL BLANKS,
+   KITCHEN writes it; `ml` in place of `g` when millilitres were asked).
+8. **The food table belongs in `shared/` once a second app wants it.**
+   `foodtable.js` finds `foodtable-data.js` from its own address, like
+   `barcode.js`, so the move is the two files and the script tags.
 
-## Watched (2026-09-28)
+## History
 
-In the browser, by clicking the real controls, with seeded rows cleaned up
-after: shelf stock against hand arithmetic (a kg buy, pc through a piece
-weight, an L buy for a g food listed as not counted), Bought, Count, Used up
-with UNDO, Keep at least and To buy, `kskip` both ways, a hand purchase
-removed with UNDO, piece weight, new food with blank boxes left off; PLAN at
-390 and 1280 wide: add, change amount, tick (the meal matched STATUS's
-logMeal field for field, uses went up, stock went down), untick with UNDO,
-save and add a saved meal, copy a day, clear, move, a future day with no
-tick; GUIDE setup, the three periods, not-known lines, a Short suggestion
-into Snacks, detail sheets; Settings TARGETS and MEALS and the version line;
-the back gesture. `_review.html` 142 of 142 at desktop and 390 wide.
-Not watched: an iPhone. Calories were added to Short today afterwards and
-not clicked again.
+`HISTORY.md` beside this file: what was watched for each version.

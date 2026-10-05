@@ -26,6 +26,8 @@
 <script src="../shared/nutrients.js"></script>
 <!-- SCAN: the camera reads a barcode, Open Food Facts fills the label. Beside this file, with zxing/ -->
 <script src="barcode.js"></script>
+<!-- THE FOOD TABLE: USDA figures per 100 g, picked by hand, never automatic. Its data loads on first use -->
+<script src="foodtable.js"></script>
 
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -110,6 +112,8 @@ a.kx-src{color:var(--text-2)}
 /* ── SHELF ── */
 .kx-out{display:flex;align-items:center;gap:var(--s-2);background:none;border:0;cursor:pointer;min-height:var(--tap);
   color:var(--text-2);font-size:var(--f-2);text-align:left;padding:0}
+/* the words that say a line leads somewhere */
+.kx-out b{color:var(--accent);font-weight:var(--w-bold);white-space:nowrap}
 
 /* ── food sheet ── */
 .kx-big{font-family:var(--font-display);font-size:var(--f-8);font-weight:var(--w-bold);line-height:var(--lh-tight);font-variant-numeric:tabular-nums}
@@ -274,7 +278,7 @@ const CORE = [
 const NUTS = ['p', 'c', 'f', 'kcal', 'na', 'k', 'ca', 'caff'];
 /* Words for keys STATUS owns, and two that read better than the sheet's
    column names. Folate counts whatever figure the food carries. */
-const LABEL = { k: 'Potassium', na: 'Sodium', ca: 'Calcium', rae: 'Vitamin A', fol: 'Folate (food figure)', fib: 'Fibre' };
+const LABEL = { k: 'Potassium', na: 'Sodium', ca: 'Calcium', caff: 'Caffeine', rae: 'Vitamin A', fol: 'Folate (food figure)', fib: 'Fibre' };
 const NLIST = (window.Nutrients && Nutrients.LIST) || [];
 const labelOf = k => LABEL[k] || ((NLIST.find(n => n.k === k) || {}).label) || k;
 const unitOfK = k => (REF.byK[k] && REF.byK[k].unit) || ((NLIST.find(n => n.k === k) || {}).unit) || '';
@@ -469,8 +473,11 @@ function W() {
   const w = {
     foods: Rec.map('food'), receipts: Rec.map('receipt'), kfood: Rec.map('kfood'),
     counts: {}, buys: {}, meals: {}, skip: Object.create(null), stock: Object.create(null),
+    /* foods by name, trimmed and lower case, for meals logged with no fid */
+    byName: Object.create(null),
   };
   const push = (o, k, r) => { (o[k] = o[k] || []).push(r); };
+  Object.keys(w.foods).forEach(id => { const n = String(w.foods[id].name || '').trim().toLowerCase(); if (n) push(w.byName, n, id); });
   Rec.all('kcount').forEach(r => push(w.counts, r.key, r));
   Rec.all('buy').forEach(r => { const f = r.payload && r.payload.food; if (f) push(w.buys, f, r); });
   Rec.all('meal').forEach(r => { const f = r.payload && r.payload.fid; if (f) push(w.meals, f, r); });
@@ -930,7 +937,22 @@ function foodSheet(fid) {
     if (canUseUp(fid)) acts.appendChild(button('USED UP', '', () => usedUp(fid)));
     acts.appendChild(button('KEEP AT LEAST', '', () => keepSheet(fid)));
     if (isMV(fd) && !pieceServe(fd)) acts.appendChild(button('PIECE WEIGHT', '', () => pieceSheet(fid)));
+    acts.appendChild(button('FILL BLANKS', '', () => fillFood(fid)));
     b.appendChild(acts);
+
+    /* where filled figures came from, each one removable */
+    const fl = fillsOf(fd);
+    if (fl.length) {
+      const fs = el('div', 'kx-sec');
+      fs.appendChild(el('div', 'kx-gh', 'Filled figures'));
+      fl.forEach(e => {
+        const r = el('div', 'kx-ev');
+        r.appendChild(el('span', 'tx', esc(fillWords(e)) + (known(e.t) ? ' · ' + esc(dd(Day.calendar(num(e.t)))) : '')));
+        r.appendChild(button('REMOVE', 'quiet', () => removeFill(fid, e)));
+        fs.appendChild(r);
+      });
+      b.appendChild(fs);
+    }
 
     /* the last twelve things that happened, newest first */
     const ev = s.events.slice().reverse().slice(0, 12);
@@ -1259,10 +1281,320 @@ function liveSheet(o, paint) {
   return h;
 }
 
+/* ══════════════ FILL BLANKS ══════════════
+   The figures a food has no number for, filled from its pack (Open Food
+   Facts, by its barcode) or from the USDA food table (foodtable.js). Blanks
+   only, never calories or macros: a macro frozen as 0 on a past meal reads
+   as not known only while the food has no figure for it (itemVal), so
+   filling one would turn those meals into false zeros. Merged into the row,
+   never rebuilt; `food.fills` says where each filled figure came from. */
+const FILL_KEYS = ['na', 'k', 'ca', 'caff'].concat(NLIST.map(n => n.k));
+/* the guide's order first, so a preview names what the guide counts */
+const FILL_ORDER = ORDER.map(x => x[0]).concat(FILL_KEYS).filter((k, i, a) => a.indexOf(k) === i && FILL_KEYS.indexOf(k) >= 0);
+/* a blank is absent, null or empty; a 0 is a figure */
+const blankV = v => v == null || v === '';
+const fillUnit = k => ({ na: 'mg', k: 'mg', ca: 'mg', caff: 'mg' })[k] || unitOfK(k);
+/* three significant figures, the way nutrients.js keeps the USDA's */
+const tidy3 = v => {
+  if (!isFinite(v)) return null;
+  if (v === 0) return 0;
+  const d = Math.max(0, 2 - Math.floor(Math.log10(Math.abs(v))));
+  return +v.toFixed(Math.min(d, 4));
+};
+const fillsOf = fd => Array.isArray(fd && fd.fills) ? fd.fills.filter(e => e && typeof e === 'object' && Array.isArray(e.keys)) : [];
+/* "per 1 Bowl", "per 100 g" */
+const perText = fd => 'per ' + fx(baseAmt(fd), 2) + ' ' + unitText(fd);
+const figText = (k, v) => labelOf(k) + ' ' + fx(v, 4) + (fillUnit(k) ? ' ' + fillUnit(k) : '');
+function fillWords(e) {
+  const n = (e.keys || []).length, f = n + (n === 1 ? ' figure' : ' figures');
+  return e.src === 'usda' ? f + ' from USDA, ' + (e.from || 'the food table') + ' (an average)'
+    : f + ' from Open Food Facts, ' + (e.from || 'a pack') + (e.id ? ' ' + e.id : '');
+}
+/* a source's figures per 100 of its unit, without its amount or unit */
+function srcFigures(base) {
+  const out = {};
+  Object.keys(base || {}).forEach(k => {
+    if (k === 'amt' || k === 'unit' || k === 'src') return;
+    const v = base[k];
+    if (typeof v === 'number' && isFinite(v)) out[k] = v;
+  });
+  return out;
+}
+/* How much the food's own amount weighs in the source's unit (g or ml): by
+   conversion when the two are one kind (1 Kg is 1000 g), else from a
+   serving that names its own weight ("1 pack (55 g)"). Null: ask. Never
+   1 ml = 1 g. */
+function baseWeight(fd, su) {
+  const U = UI.UNITS, S = U[su], F = U[unitOf(fd)];
+  if (!S) return null;
+  if (F && F[0] === S[0]) return { v: baseAmt(fd) * F[1] / S[1] };
+  for (const s of servesList(fd)) {
+    const mult = num(s.mult, 0), lb = String(s.label || '');
+    const all = lb.match(/\d+(?:\.\d+)?\s*(?:mg|g|kg|ml|cl|l)\b/gi);
+    if (!(mult > 0) || !all || all.length !== 1) continue;
+    const m = /(\d+(?:\.\d+)?)\s*([a-z]+)/i.exec(all[0]), uu = U[m[2].toLowerCase()];
+    if (!uu || uu[0] !== S[0]) continue;
+    return { v: num(m[1]) * uu[1] / S[1] / mult, serve: lb };
+  }
+  return null;
+}
+/* What a source fills on a food: its blanks only, scaled from per 100 of
+   the source's unit to the food's own amount, `w` of that unit. */
+function fillPlan(fd, figs, w) {
+  const have = (fd && fd.base) || {}, out = {};
+  FILL_ORDER.forEach(k => {
+    if (!blankV(have[k]) || figs[k] == null) return;
+    out[k] = tidy3(figs[k] * w / 100);
+  });
+  return out;
+}
+
+/* The chooser: the pack, or the food table searched by the food's name. */
+function fillFood(fid) {
+  const fd = food(fid);
+  if (!fd) return;
+  const T = window.FoodTable || null;
+  let input = null, state = !T ? 'none' : T.ready ? 'ready' : 'loading';
+  const h = UI.dialog({
+    title: 'FILL BLANKS', width: 520,
+    body: (b, hh) => {
+      const n = FILL_KEYS.filter(k => blankV((fd.base || {})[k])).length;
+      b.appendChild(el('p', 'kx-note', '<b>' + esc(nameOf(fd)) + '</b> · ' + esc(perText(fd)) + '. ' +
+        esc(n ? n + (n === 1 ? ' figure has' : ' figures have') + ' no number. Only those are filled. Calories and macros stay as you typed them.'
+          : 'Every figure already has a number.')));
+      if (!n) return;
+      /* the chooser hands on and closes, the way the picker does: two sheets
+         closed in one tick would be two history steps at once */
+      const sc = button('SCAN THE PACK', 'go', () => { hh.close(); fillScan(fid); });
+      b.appendChild(el('div', 'kx-btns')).appendChild(sc);
+      if (!T) return;
+      b.appendChild(el('div', 'kx-gh', 'Or the food table'));
+      input = UI.field('search', { placeholder: 'Search the food table', value: nameOf(fd) });
+      input.setAttribute('aria-label', 'Search the food table');
+      const say = el('p', 'kx-q'), list = el('div', 'kx-list');
+      say.style.marginTop = 'var(--s-2)';
+      list.style.marginTop = 'var(--s-2)';
+      const paint = () => {
+        list.innerHTML = '';
+        const q = input.value.trim();
+        if (state !== 'ready') { say.textContent = state === 'off' ? 'The food table downloads the first time you have signal.' : 'Loading the food table.'; return; }
+        if (q.length < 2) { say.textContent = 'Type a food to search the table.'; return; }
+        let hits = [];
+        try { hits = T.search(q, 8) || []; } catch (e) { hits = []; }
+        say.textContent = hits.length ? '' : 'Nothing in the food table has every word. Try fewer words.';
+        hits.forEach(x => {
+          const r = el('button', 'kx-row mb-plate mb-press');
+          r.type = 'button';
+          r.innerHTML = '<span class="tx"><span class="nm">' + esc(x.name) + '</span>' +
+            '<span class="sub">' + esc([x.cat, x.via ? 'for "' + x.via + '"' : ''].filter(Boolean).join(' · ')) + '</span></span>';
+          r.onclick = () => { const s = tableSource(x); if (!s) return; hh.close(); fillConfirm(fid, s); };
+          list.appendChild(r);
+        });
+      };
+      input.addEventListener('input', paint);
+      b.appendChild(input);
+      b.appendChild(say);
+      b.appendChild(list);
+      Mobile.form(b, () => { const first = list.querySelector('.kx-row'); if (first) first.click(); });
+      paint();
+      if (state !== 'ready') {
+        let p = null;
+        try { p = T.load(); } catch (e) { p = null; }
+        Promise.resolve(p).then(ok => { state = ok ? 'ready' : 'off'; if (input.isConnected) paint(); },
+          () => { state = 'off'; if (input.isConnected) paint(); });
+      }
+    },
+    actions: [{ label: 'CANCEL' }],
+  });
+  if (h && h.body && input) UI.focusSoon(input);
+}
+function tableSource(hit) {
+  let t = null;
+  try { t = window.FoodTable ? FoodTable.food(hit.i) : null; } catch (e) { t = null; }
+  if (!t) return null;
+  return { kind: 'usda', figs: srcFigures(t.base), unit: 'g', from: t.name, id: t.id,
+    title: 'USDA food table: ' + t.name + ' — an average for this food, not your pack.' };
+}
+/* SCAN THE PACK: a code already on another food fills nothing. */
+function fillScan(fid) {
+  if (!window.Barcode) { UI.toast('The scanner did not load.', { bad: 1 }); return; }
+  Barcode.open({
+    title: 'SCAN THE PACK',
+    known: code => {
+      const foods = W().foods;
+      const other = Object.keys(foods).find(i => i !== fid && Barcode.same(foods[i].barcode, code));
+      return other ? () => UI.toast('That code is on <b>' + esc(nameOf(foods[other])) + '</b>. Nothing was filled.', { bad: 1 }) : null;
+    },
+    found: r => {
+      const g = r && r.food;
+      if (!g) {
+        UI.toast(r && r.status === 'offline' ? 'No signal. Nothing was filled.' : 'Not on Open Food Facts. Nothing was filled.', { bad: 1 });
+        return;
+      }
+      fillConfirm(fid, { kind: 'off', figs: srcFigures(g.base), unit: g.unit === 'ml' ? 'ml' : 'g',
+        from: g.name || g.brand || 'a product', id: r.code, code: r.code, serve: g.serve,
+        title: 'Open Food Facts: ' + (g.name || 'a product') + ' ' + r.code });
+    },
+  });
+}
+/* The confirm: the source, how many blanks, the first few figures. Nothing
+   is written before FILL. */
+function fillConfirm(fid, src) {
+  const fd = food(fid);
+  if (!fd) return;
+  const auto = baseWeight(fd, src.unit), su = src.unit;
+  const keys = Object.keys(fillPlan(fd, src.figs, 100));
+  let box = null, prev = null;
+  const weight = () => auto ? auto.v : (box ? UI.amount(box.value, su) : null);
+  const paint = () => {
+    if (!prev) return;
+    const w = weight(), n = keys.length, head = 'Fills ' + n + (n === 1 ? ' blank' : ' blanks');
+    if (!(w > 0)) { prev.textContent = head + '. Type how much it weighs to see the figures.'; return; }
+    const plan = fillPlan(fd, src.figs, w), ks = Object.keys(plan);
+    prev.textContent = head + ': ' + ks.slice(0, 4).map(k => figText(k, plan[k])).join(', ') +
+      (ks.length > 4 ? ' and ' + (ks.length - 4) + ' more.' : '.');
+  };
+  const h = UI.dialog({
+    title: 'FILL BLANKS', width: 520,
+    body: (b, hh) => {
+      b.appendChild(el('p', 'kx-note', '<b>' + esc(src.title) + '</b>'));
+      if (!keys.length) {
+        b.appendChild(el('p', 'kx-empty', esc(nameOf(fd) + ' already has a number for every figure this carries. Nothing is filled.')));
+        return;
+      }
+      if (!auto) {
+        /* the food is not per g (or ml) of the source: ask, never assume */
+        const lab = el('label', 'kx-lab', '<span>' + esc('How many ' + su + ' is ' + fx(baseAmt(fd), 2) + ' ' + unitText(fd) + ' of ' + nameOf(fd) + '?') + '</span>');
+        const ln = el('div', 'ln');
+        box = UI.field('decimal', { placeholder: su });
+        box.setAttribute('aria-label', 'Weight in ' + su);
+        ln.appendChild(box);
+        ln.appendChild(el('span', 'u', esc(su)));
+        lab.appendChild(el('div', 'kx-amt')).appendChild(ln);
+        b.appendChild(lab);
+        /* offers fill the box; nothing is assumed */
+        const offers = el('div', 'mb-chips');
+        const offer = (text, v) => {
+          const c = el('button', 'mb-chip mb-press', esc(text));
+          c.type = 'button';
+          c.onclick = () => { box.value = String(v); paint(); Mobile.feedback('select'); UI.focusSoon(box, true); };
+          offers.appendChild(c);
+        };
+        const sq = src.serve && num(src.serve.amt, 0);
+        if (sq > 0) offer("The pack's serving: " + fx(sq, 1) + ' ' + su + (src.serve.text ? ' (' + src.serve.text + ')' : ''), sq);
+        const last = fillsOf(fd).slice().reverse().find(e => num(e[su === 'ml' ? 'ml' : 'g'], 0) > 0);
+        if (last) offer('Last time: ' + fx(num(last[su === 'ml' ? 'ml' : 'g']), 1) + ' ' + su, num(last[su === 'ml' ? 'ml' : 'g']));
+        if (offers.children.length) { offers.style.marginTop = 'var(--s-2)'; b.appendChild(offers); }
+        box.addEventListener('input', paint);
+      } else if (auto.serve) {
+        b.appendChild(el('p', 'kx-q', esc(fx(baseAmt(fd), 2) + ' ' + unitText(fd) + ' is ' + fx(auto.v, 1) + ' ' + su + ', from its serving "' + auto.serve + '".')));
+      }
+      prev = el('p', 'kx-note');
+      prev.style.marginTop = 'var(--s-3)';
+      b.appendChild(prev);
+      b.appendChild(el('p', 'kx-q', 'Calories and macros stay as you typed them.' +
+        (src.kind === 'usda' ? ' If the pack lists its own figures, scan it instead.' : '')));
+      paint();
+      Mobile.form(b, () => save(hh));
+    },
+    actions: keys.length ? [{ label: 'CANCEL' }, { label: 'FILL', kind: 'go', fn: hh => { save(hh); return false; } }]
+      : [{ label: 'DONE', kind: 'go' }],
+  });
+  function save(hh) {
+    const w = weight();
+    if (!(w > 0)) { if (box) UI.focusSoon(box, true); return; }
+    /* the row as it is now: blanks are read again, and every other field
+       rides along untouched */
+    const was = Rec.get('food', null, fid);
+    if (!was) { hh.close(); return; }
+    const plan = fillPlan(was, src.figs, w), ks = Object.keys(plan);
+    hh.close();
+    if (!ks.length) { UI.toast('Nothing was blank any more. Nothing was filled.'); return; }
+    const change = {};
+    ks.forEach(k => { change['base.' + k] = plan[k]; });
+    const entry = { src: src.kind, from: src.from, id: src.id, keys: ks, v: plan, t: Date.now() };
+    if (!auto) entry[su === 'ml' ? 'ml' : 'g'] = w;
+    change.fills = (Array.isArray(was.fills) ? was.fills : []).concat([entry]);
+    if (src.code && !String(was.barcode || '').trim()) change.barcode = src.code;
+    Rec.patch('food', null, fid, change);
+    Mobile.feedback('success');
+    UI.undo('Filled ' + ks.length + (ks.length === 1 ? ' figure' : ' figures') + ' on <b>' + esc(nameOf(was)) + '</b>.',
+      () => Rec.set('food', null, fid, was));
+  }
+  if (h && h.body && box) UI.focusSoon(box);
+}
+/* REMOVE takes off exactly the figures that still hold what was filled; a
+   figure changed since is the person's and stays. */
+function removeFill(fid, e) {
+  const was = Rec.get('food', null, fid);
+  if (!was) return;
+  const list = Array.isArray(was.fills) ? was.fills : [];
+  const i = list.findIndex(x => x && x.t === e.t && x.src === e.src && String(x.id) === String(e.id));
+  if (i < 0) return;
+  const x = list[i], v = (x.v && typeof x.v === 'object') ? x.v : {}, base = was.base || {};
+  const gone = (x.keys || []).filter(k => Object.prototype.hasOwnProperty.call(v, k) &&
+    typeof base[k] === 'number' && typeof v[k] === 'number' && Math.abs(base[k] - v[k]) < 1e-9);
+  const change = {};
+  gone.forEach(k => { change['base.' + k] = undefined; });
+  const rest = list.filter((y, j) => j !== i);
+  /* an empty list does not survive live sync: no list at all */
+  change.fills = rest.length ? rest : undefined;
+  Rec.patch('food', null, fid, change);
+  Mobile.haptic('warn');
+  UI.undo(gone.length ? 'Removed ' + gone.length + (gone.length === 1 ? ' figure' : ' figures') + ' from <b>' + esc(nameOf(was)) + '</b>.'
+    : 'Removed the record. Its figures had all been changed since, so they stay.', () => Rec.set('food', null, fid, was));
+}
+/* GUIDE's "Not known for" line: the foods with no figure for one nutrient
+   over the period on screen, each with FILL. Tap a food for its sheet,
+   where a fill can be removed. */
+function missSheet(k, kind) {
+  liveSheet({ title: 'FILL BLANKS', width: 520, actions: [{ label: 'DONE', kind: 'go' }] }, b => {
+    const s = sumOf(periodOf(kind), k), ids = Object.keys(s.miss);
+    const mine = ids.filter(id => food(id));
+    /* a meal typed with no food, and a food since deleted: nothing to fill */
+    const loose = ids.filter(id => !food(id) && id.indexOf('name:') === 0).map(id => s.miss[id]);
+    const gone = ids.filter(id => !food(id) && id.indexOf('name:') !== 0).length;
+    const what = inSentence(labelOf(k));
+    if (!ids.length) { b.appendChild(el('p', 'kx-empty', esc('Every food counted now has a figure for ' + what + '.'))); return; }
+    if (mine.length) {
+      b.appendChild(el('p', 'kx-note', esc('No figure for ' + what + ' on ' + (mine.length === 1 ? 'this food' : 'these ' + mine.length + ' foods') + '.')));
+      const list = el('div', 'kx-list');
+      list.style.marginTop = 'var(--s-3)';
+      mine.sort((a, c) => nameOf(food(a)).localeCompare(nameOf(food(c)))).forEach(id => {
+        const fd = food(id), fl = fillsOf(fd);
+        const srcs = fl.map(e => e.src === 'usda' ? 'USDA' : 'Open Food Facts').filter((x, i, a) => a.indexOf(x) === i);
+        const r = el('div', 'kx-row mb-plate mb-press');
+        r.setAttribute('role', 'button');
+        r.tabIndex = 0;
+        r.innerHTML = '<span class="tx"><span class="nm">' + esc(nameOf(fd)) + (fd.brand ? ' <small>' + esc(fd.brand) + '</small>' : '') + '</span>' +
+          '<span class="sub">' + esc(perText(fd) + (srcs.length ? ' · filled from ' + srcs.join(' and ') : '')) + '</span></span>';
+        const f = button('FILL', '', e => { e.stopPropagation(); fillFood(id); });
+        r.appendChild(f);
+        r.onclick = () => foodSheet(id);
+        r.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === r) { e.preventDefault(); r.click(); } };
+        list.appendChild(r);
+      });
+      b.appendChild(list);
+    }
+    if (loose.length) {
+      const q = b.appendChild(el('p', 'kx-q', esc('Logged in STATUS without one of your foods, so nothing to fill: ' + loose.join(', ') + '.')));
+      q.style.marginTop = 'var(--s-3)';
+    }
+    if (gone) {
+      const q = b.appendChild(el('p', 'kx-q', esc(gone + (gone === 1 ? ' food is' : ' foods are') + ' no longer in your foods, so nothing to fill.')));
+      q.style.marginTop = 'var(--s-3)';
+    }
+  });
+}
+
 /* ══════════════ the food picker, for SHELF and PLAN ══════════════ */
 function pickFood(o, cb) {
   o = o || {};
   let input;
+  /* the food table, below the person's own foods; asked for now so it is
+     ready by the time they type. No foodtable.js: the group never shows */
+  const T = window.FoodTable || null;
+  let tState = !T ? 'none' : T.ready ? 'ready' : 'loading';
   const h = UI.dialog({
     title: o.title || 'PICK A FOOD', width: 520,
     body: (b, hh) => {
@@ -1316,20 +1648,48 @@ function pickFood(o, cb) {
           r.innerHTML = '<span class="tx"><span class="nm">' + esc(nameOf(f)) + (f.brand ? ' <small>' + esc(f.brand) + '</small>' : '') + '</span></span>' +
             (inStock(id) ? '<span class="num">' + esc(amtText(f, stock(id).q)) + '</span>' : '');
           r.onclick = () => { hh.close(); cb(id); };
+          /* hold or right-click: fill its blanks, the picker stays under it */
+          Mobile.hold(r, e => menu(e, [{ label: 'Fill blanks', fn: () => fillFood(id) }], nameOf(f)));
           list.appendChild(r);
         });
         nw.textContent = q ? 'New food "' + q + '"' : 'New food';
+        /* one tap picks, never automatic */
+        tb.innerHTML = '';
+        if (T && q.length >= 2) {
+          tb.appendChild(el('div', 'kx-gh', 'From the food table'));
+          if (tState === 'ready') {
+            let hits = [];
+            try { hits = T.search(q, 6) || []; } catch (e) { hits = []; }
+            if (!hits.length) tb.appendChild(el('p', 'kx-q', 'Nothing in the food table has every word.'));
+            hits.forEach(x => {
+              const r = el('button', 'kx-row mb-plate mb-press');
+              r.type = 'button';
+              r.innerHTML = '<span class="tx"><span class="nm">' + esc(x.name) + '</span>' +
+                '<span class="sub">' + esc([x.cat, x.via ? 'for "' + x.via + '"' : ''].filter(Boolean).join(' · ')) + '</span></span>';
+              r.onclick = () => { hh.close(); newFromTable(x, cb); };
+              tb.appendChild(r);
+            });
+          } else tb.appendChild(el('p', 'kx-q', tState === 'off' ? 'The food table downloads the first time you have signal.' : 'Loading the food table.'));
+        }
       };
       nw.onclick = () => { const q = input.value.trim(); hh.close(); newFood(q, cb); };
       sc.onclick = () => { hh.close(); scanFood(cb); };
       input.addEventListener('input', paint);
+      const tb = el('div', 'kx-list');
+      tb.style.marginTop = 'var(--s-3)';
       b.appendChild(input);
       b.appendChild(dl);
       b.appendChild(list);
+      b.appendChild(tb);
       b.appendChild(adds);
       b.appendChild(el('p', 'kx-q', 'Full labels live in STATUS.'));
       Mobile.form(b, () => { const first = list.querySelector('.kx-row'); if (first) first.click(); });
       paint();
+      if (T && tState !== 'ready') {
+        let p = null;
+        try { p = T.load(); } catch (e) { p = null; }
+        Promise.resolve(p).then(ok => { tState = ok ? 'ready' : 'off'; if (input.isConnected) paint(); }, () => { tState = 'off'; if (input.isConnected) paint(); });
+      }
     },
     actions: [{ label: 'CANCEL' }],
   });
@@ -1349,6 +1709,16 @@ function scanFood(cb) {
     },
     found: r => newFood(r.food ? r.food.name : '', cb, r),
   });
+}
+/* A food table pick: NEW FOOD opens filled, per 100 g. A hit found through
+   a Tagalog word is named by that word. */
+function newFromTable(hit, cb) {
+  let t = null;
+  try { t = window.FoodTable ? FoodTable.food(hit.i) : null; } catch (e) { t = null; }
+  if (!t) { UI.toast('The food table did not answer.', { bad: 1 }); return; }
+  const via = String(hit.via || '').trim();
+  const name = via ? via.charAt(0).toUpperCase() + via.slice(1) : t.name;
+  newFood(name, cb, { table: 1, from: t.name, id: t.id, food: { name: t.name, brand: '', amt: 100, unit: 'g', base: srcFigures(t.base) } });
 }
 /* A new food with only what was typed: blank boxes stay off the row. A scan
    (`scan`, Barcode.lookup's answer) fills the boxes it has figures for, adds
@@ -1411,7 +1781,11 @@ function newFood(name, cb, scan) {
         two.appendChild(lab('Fat', f.f));
         form.appendChild(two);
       }
-      if (scan) {
+      if (scan && scan.table) {
+        const n = Object.keys(got.base).length;
+        form.insertBefore(el('p', 'kx-note', esc('From the USDA food table: ' + n + ' figure' + (n === 1 ? '' : 's') +
+          ' per 100 g. An average for this food, not your pack.') + ' <small>' + esc(scan.from) + '</small>'), form.firstChild);
+      } else if (scan) {
         const n = got ? Object.keys(got.base).length : 0;
         form.insertBefore(el('p', 'kx-note', esc(
           got ? 'From Open Food Facts: ' + n + ' figure' + (n === 1 ? '' : 's') + ' per 100 ' + got.unit + '. Check them against the pack.'
@@ -1445,14 +1819,28 @@ function newFood(name, cb, scan) {
     });
     /* what the scan found beyond the four boxes; a box typed over wins, a
        box emptied stays empty (blank is not known, never zero) */
+    /* the source's figures as this food's amount carries them: per 100 of
+       its unit, so an amount changed in the same unit scales them, and a
+       changed unit takes none of the ones with no box (no density guess) */
+    const fromSrc = {};
     if (got) {
-      Object.keys(got.base).forEach(k => { if (!(k in f) && base[k] == null) base[k] = got.base[k]; });
-      base.src = 'off';
+      const k = unit === got.unit ? a / (num(got.amt, 0) || 100) : null;
+      if (k != null) Object.keys(got.base).forEach(key => { fromSrc[key] = Math.abs(k - 1) < EPS ? got.base[key] : tidy3(got.base[key] * k); });
+      Object.keys(fromSrc).forEach(key => { if (!(key in f) && base[key] == null) base[key] = fromSrc[key]; });
+      base.src = scan.table ? 'usda' : 'off';
     }
     const typed = f.cat.value.trim(), id = uid();
     const row = { id, name: n, brand: got && got.brand ? got.brand : '', base, uses: 0 };
     if (typed || cat) row.cat = typed || cat;
     if (scan && scan.code) row.barcode = scan.code;
+    /* from the food table: which figures are the table's, so the food's
+       sheet can take them off again. A box typed over is the person's */
+    if (scan && scan.table) {
+      const keys = Object.keys(fromSrc).filter(key => base[key] === fromSrc[key]);
+      const v = {};
+      keys.forEach(key => { v[key] = base[key]; });
+      if (keys.length) row.fills = [{ src: 'usda', from: scan.from, id: scan.id, keys, v, t: Date.now() }];
+    }
     /* no serves: an empty list does not survive live sync, and none is needed */
     Rec.set('food', null, id, row);
     Mobile.feedback('success');
@@ -1919,11 +2307,23 @@ function amountSheet(fid, o) {
    Numbers only. Never praise, never a grade. */
 
 /* One eaten or planned thing, and what it carries of a nutrient. */
+/* A meal logged with no fid (typed in STATUS) finds its food by name: only
+   when exactly one food has that name, trimmed and in any case, and the
+   meal's unit is the food's. Read here; nothing is written to the meal.
+   ELEMENT's rows keep their own rule. */
+function foodByName(p) {
+  if (p.src === 'mix') return null;
+  const n = String(p.name || '').trim().toLowerCase(), w = W(), ids = n ? w.byName[n] : null;
+  if (!ids || ids.length !== 1) return null;
+  return String(p.unit || '').trim().toLowerCase() === unitOf(w.foods[ids[0]]) ? ids[0] : null;
+}
 function eatItem(r) {
-  const p = r.payload || {}, fid = p.fid || null, fd = fid ? food(fid) : null;
+  const p = r.payload || {}, fid = p.fid || null, nid = fid ? null : foodByName(p);
+  const fd = fid ? food(fid) : nid ? food(nid) : null;
   /* from the amount eaten when the units match, not the label as it is now */
   const mult = mealMult(fd, p);
-  return { src: 'eat', date: r.date, key: r.key, p, fid, fd, mult, id: fid || ('name:' + String(p.name || '').trim().toLowerCase()), name: fd ? nameOf(fd) : String(p.name || 'One-off') };
+  return { src: 'eat', date: r.date, key: r.key, p, fid, fd, named: !!nid, mult,
+    id: fid || nid || ('name:' + String(p.name || '').trim().toLowerCase()), name: fd ? nameOf(fd) : String(p.name || 'One-off') };
 }
 function planItem(r) {
   const p = r.payload || {}, fd = food(p.food);
@@ -1938,11 +2338,13 @@ function itemVal(it, k) {
   /* the macros frozen on a meal are what STATUS counts. A blank on the food
      was frozen as 0, which is not known; a number typed over it in STATUS
      is kept */
-  if (MACRO[k]) return (it.fd && baseVal(it.fd, k) == null && !(v > 0)) ? null : v;
+  /* a meal matched by name only carried what was typed: its macros stand */
+  if (MACRO[k]) return (it.fd && !it.named && baseVal(it.fd, k) == null && !(v > 0)) ? null : v;
   if (k === 'na' || k === 'k' || k === 'ca') {
     if (it.fd) {
       const b = baseVal(it.fd, k);
-      if (b == null) return null;
+      /* a number over 0 typed on a meal matched by name is kept */
+      if (b == null) return it.named && v > 0 ? v : null;
       /* frozen as 0 before the food had a figure: the food's figure now */
       if (v == null || (v === 0 && b > 0 && it.mult > 0)) return it.mult == null ? null : b * it.mult;
       return v;
@@ -2123,67 +2525,76 @@ function suggestAdd(fid, P) {
   amountSheet(fid, { date: Day.today(), slot: 's', pickSlot: 1, offer: 1 });
 }
 /* Where a nutrient came from, and the reference part of the guide. */
-function nutSheet(row, P) {
-  const k = row.k, u = row.unit ? ' ' + row.unit : '';
-  UI.dialog({
-    title: row.label.toUpperCase(), width: 560,
-    body: b => {
-      b.appendChild(el('div', 'kx-big', esc(valText(row)) + '<small>' + esc(P.note) + '</small>'));
-      const t = row.t;
-      if (t) b.appendChild(el('p', 'kx-q', esc(t.typed ? 'A typed target.' : t.kind === 'target' ? "STATUS's target." + (t.note ? ' ' + t.note : '') :
-        (t.kind === 'limit' ? 'A limit' : t.kind === 'ai' ? 'An adequate intake' : 'A recommended allowance') + ' from the US National Academies.')));
-      /* by food, over the whole period, biggest first */
-      const by = {};
-      P.items.forEach(it => {
-        const v = itemVal(it, k);
-        if (v == null) return;
-        const x = by[it.id] = by[it.id] || { name: it.name, v: 0, src: {} };
-        x.v += v; x.src[it.src] = 1;
-      });
-      const from = Object.keys(by).map(id => by[id]).filter(x => x.v > 0).sort((a, c) => c.v - a.v);
-      const sec = el('div', 'kx-sec');
-      sec.appendChild(el('div', 'kx-gh', P.kind === 'today' ? 'Where it came from today' : 'Where it came from, in total'));
-      if (!from.length) sec.appendChild(el('p', 'kx-empty', 'Nothing counted carries it.'));
-      from.forEach(x => sec.appendChild(el('div', 'kx-ev', '<span class="tx"><b>' + esc(x.name) + '</b> · ' + esc(nf(x.v) + u) +
-        ' · ' + esc(x.src.eat && x.src.plan ? 'eaten and planned' : x.src.eat ? 'eaten' : 'planned') + '</span>')));
-      if (row.s.missN) {
-        const names = Object.keys(row.s.miss).map(id => row.s.miss[id]);
-        sec.appendChild(el('p', 'kx-q', esc('Not known for ' + names.join(', ') + '.')));
-      }
-      b.appendChild(sec);
-      /* nutrients with no reference intake: counted, never a target */
-      const also = (ALSO[k] || []).filter(x => NLIST.some(n => n.k === x));
-      if (also.length) {
-        const s3 = el('div', 'kx-sec');
-        s3.appendChild(el('div', 'kx-gh', 'Also counted'));
-        also.forEach(x => {
-          const s = sumOf(P, x), ux = unitOfK(x);
-          s3.appendChild(el('div', 'kx-ev', '<span class="tx"><b>' + esc(labelOf(x)) + '</b> · ' + esc(nf(s.total) + (ux ? ' ' + ux : '')) +
-            (s.missN ? ' · ' + esc('not known for ' + s.missN + (s.missN === 1 ? ' food' : ' foods')) : '') + '</span>'));
-        });
-        b.appendChild(s3);
-      }
-      /* the library, richest first, shelf ones marked */
-      const rich = (title, list, per) => {
-        const s2 = el('div', 'kx-sec');
-        s2.appendChild(el('div', 'kx-gh', title));
-        if (!list.length) s2.appendChild(el('p', 'kx-empty', 'No food in the library carries a figure for it.'));
-        list.forEach(x => s2.appendChild(el('div', 'kx-ev', '<span class="tx"><b>' + esc(nameOf(x.fd)) + '</b> · ' + esc(nf(x.v) + u + ' ' + per(x)) +
-          (inStock(x.id) ? ' · on the shelf' : '') + '</span>')));
-        b.appendChild(s2);
-      };
-      rich('Richest per serving', richest(k, 8, null), x => 'per ' + planText(x.fd, 1));
-      /* a device that does not count food is never shown calories */
-      if (k !== 'kcal' && countCal()) {
-        const w = W();
-        const per100 = Object.keys(w.foods).map(id => {
-          const fd = w.foods[id], v = baseVal(fd, k), kc = baseVal(fd, 'kcal');
-          return { id, fd, v: v > 0 && kc > 0 ? v / kc * 100 : 0 };
-        }).filter(x => x.v > 0).sort((a, c) => c.v - a.v).slice(0, 8);
-        rich('Richest per 100 kcal', per100, () => 'per 100 kcal');
-      }
-    },
+function nutSheet(row0, P0) {
+  const k = row0.k, u = row0.unit ? ' ' + row0.unit : '';
+  /* live, so a food filled from here shows in its numbers at once */
+  liveSheet({
+    title: row0.label.toUpperCase(), width: 560,
     actions: [{ label: 'DONE', kind: 'go' }],
+  }, b => {
+    const P = periodOf(P0.kind), row = Object.assign({}, row0, { s: sumOf(P, k) });
+    b.appendChild(el('div', 'kx-big', esc(valText(row)) + '<small>' + esc(P.note) + '</small>'));
+    const t = row.t;
+    if (t) b.appendChild(el('p', 'kx-q', esc(t.typed ? 'A typed target.' : t.kind === 'target' ? "STATUS's target." + (t.note ? ' ' + t.note : '') :
+      (t.kind === 'limit' ? 'A limit' : t.kind === 'ai' ? 'An adequate intake' : 'A recommended allowance') + ' from the US National Academies.')));
+    /* by food, over the whole period, biggest first */
+    const by = {};
+    P.items.forEach(it => {
+      const v = itemVal(it, k);
+      if (v == null) return;
+      const x = by[it.id] = by[it.id] || { name: it.name, v: 0, src: {} };
+      x.v += v; x.src[it.src] = 1;
+    });
+    const from = Object.keys(by).map(id => by[id]).filter(x => x.v > 0).sort((a, c) => c.v - a.v);
+    const sec = el('div', 'kx-sec');
+    sec.appendChild(el('div', 'kx-gh', P.kind === 'today' ? 'Where it came from today' : 'Where it came from, in total'));
+    if (!from.length) sec.appendChild(el('p', 'kx-empty', 'Nothing counted carries it.'));
+    from.forEach(x => sec.appendChild(el('div', 'kx-ev', '<span class="tx"><b>' + esc(x.name) + '</b> · ' + esc(nf(x.v) + u) +
+      ' · ' + esc(x.src.eat && x.src.plan ? 'eaten and planned' : x.src.eat ? 'eaten' : 'planned') + '</span>')));
+    if (row.s.missN) {
+      const names = Object.keys(row.s.miss).map(id => row.s.miss[id]);
+      const say = 'Not known for ' + names.join(', ') + '.';
+      /* a fill never writes calories or macros, so only the rest lead to one */
+      if (MACRO[k]) sec.appendChild(el('p', 'kx-q', esc(say)));
+      else {
+        const l = el('button', 'kx-out mb-press', '<span>' + esc(say) + ' <b>Fill blanks</b></span>' + ico('next', 14));
+        l.type = 'button';
+        l.onclick = () => missSheet(k, P0.kind);
+        sec.appendChild(l);
+      }
+    }
+    b.appendChild(sec);
+    /* nutrients with no reference intake: counted, never a target */
+    const also = (ALSO[k] || []).filter(x => NLIST.some(n => n.k === x));
+    if (also.length) {
+      const s3 = el('div', 'kx-sec');
+      s3.appendChild(el('div', 'kx-gh', 'Also counted'));
+      also.forEach(x => {
+        const s = sumOf(P, x), ux = unitOfK(x);
+        s3.appendChild(el('div', 'kx-ev', '<span class="tx"><b>' + esc(labelOf(x)) + '</b> · ' + esc(nf(s.total) + (ux ? ' ' + ux : '')) +
+          (s.missN ? ' · ' + esc('not known for ' + s.missN + (s.missN === 1 ? ' food' : ' foods')) : '') + '</span>'));
+      });
+      b.appendChild(s3);
+    }
+    /* the library, richest first, shelf ones marked */
+    const rich = (title, list, per) => {
+      const s2 = el('div', 'kx-sec');
+      s2.appendChild(el('div', 'kx-gh', title));
+      if (!list.length) s2.appendChild(el('p', 'kx-empty', 'No food in the library carries a figure for it.'));
+      list.forEach(x => s2.appendChild(el('div', 'kx-ev', '<span class="tx"><b>' + esc(nameOf(x.fd)) + '</b> · ' + esc(nf(x.v) + u + ' ' + per(x)) +
+        (inStock(x.id) ? ' · on the shelf' : '') + '</span>')));
+      b.appendChild(s2);
+    };
+    rich('Richest per serving', richest(k, 8, null), x => 'per ' + planText(x.fd, 1));
+    /* a device that does not count food is never shown calories */
+    if (k !== 'kcal' && countCal()) {
+      const w = W();
+      const per100 = Object.keys(w.foods).map(id => {
+        const fd = w.foods[id], v = baseVal(fd, k), kc = baseVal(fd, 'kcal');
+        return { id, fd, v: v > 0 && kc > 0 ? v / kc * 100 : 0 };
+      }).filter(x => x.v > 0).sort((a, c) => c.v - a.v).slice(0, 8);
+      rich('Richest per 100 kcal', per100, () => 'per 100 kcal');
+    }
   });
 }
 
