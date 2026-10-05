@@ -80,8 +80,9 @@ describe the gym, not the training.
   `set.plan` is the app's: 1 on a set TRAIN wrote on his behalf, from a copied
   day, a routine or Copy Set. A plan is not work until it is ticked or pressed
   UPDATE on; everything else counts the moment it is saved. See `TRAIN.counts`.
-- `set.warm` marks a warmup by hand: dimmed, never a record, never counted in volume or
-  set totals. **A set is also a warmup when its comment says so**, worked out when the
+- `set.warm` marks a warmup by hand: dimmed, never a record, and never lined up in
+  the set-N-against-set-N comparison, but **counted in every total** since 1.0.50
+  (Tom, 2026-10-05: "All of train"). **A set is also a warmup when its comment says so**, worked out when the
   index is built and never written back; a stored `warm` of 1 or 0 beats the comment.
 - **A split set is read from its comment only**, never stored. See "What a comment says".
 - `set.su` is the setup that set was done with, `{fieldId: 1 or "value"}`.
@@ -276,7 +277,7 @@ A set counts unless it is a plan still waiting. **A past day counts as it was
 logged**: 1,099 of his FitNotes sets were never ticked, and Analysis has always
 counted them. Today, a copied or routine-filled set is not work until it is
 ticked or pressed UPDATE on, and `plan` is what marks one. A set he typed and
-saved is work the moment it is saved, box or no box. Warmups never count.
+saved is work the moment it is saved, box or no box. Warmups count (1.0.50).
 
 ### Training blocks
 
@@ -914,7 +915,22 @@ running block total. It dips in a lighter week; that is honest, leave it.
   Tom when built:** records and the set-N-against-set-N comparison stay on
   working sets, because a warmup set against a working set reads as a
   false drop, and a lighter set cannot be a record anyway. Warmups are
-  still marked and dimmed. Not built.
+  still marked and dimmed. **Built 1.0.50.** The text share keeps working
+  sets only (his pick F, 2026-09-30); GRAPH's Max graphs and Estimated 1RM
+  read working sets, its Session graphs every set.
+- **Set Volume, built 1.0.50.** GRAPH's first graph and the default unless
+  a lift has a saved one (`TRAIN.setVolume`, `drawSetVolume`): a line for
+  set 1 to 4 (`TRAIN.SV_LINES`) in `--data-1` to `--data-4`, a key under
+  it; then SESSION VOLUME with the dashed least-squares trend
+  (`TRAIN.trendOf`) and "Trend +X% over N sessions", minus said. Sets are
+  numbered in the order done, warmups included, so set 1 is often the
+  warmup. A lift with weight on under half its sets is measured in reps.
+  SHARE PICTURE shows only while the trend is up. Analysis gained SESSION
+  beside WEEK, MONTH and YEAR: the last 40 sessions, a trend line, and
+  SESSIONS per session falls to VOLUME. Not seen on his iPhone.
+- **Read as, ask Tom:** "the share picture only lifts trending up" was
+  built as GRAPH's own SHARE PICTURE. Whether the session story frame
+  should also carry a lift's volume trend is not asked yet.
 - 1, 2, 3, 4, 7, 8 not built. Measured on the demo: the bottom starts 61%
   down with one PR and the line; `_review.html` 142/142 at 390 and 1280.
   Not seen on his iPhone.
