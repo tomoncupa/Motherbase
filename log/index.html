@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.18, 2026-10-02">
+<meta name="mb-version" content="1.0.19, 2026-10-06">
 <title>LOG</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -56,6 +56,17 @@ header{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-
    row; the browser tab already says LOG. Measured at 1280 wide, 2026-09-14. */
 @media (max-width: 1359px){ .logo{display:none} }
 .spacer{flex:1}
+/* ── SPLIT: on a very wide window, the timeline on one half and one day on
+   the other (Tom, 2026-10-06). The other half is LOG again, `?pane=1`. ── */
+body.split{padding-right:50vw}
+body.split.pane-left{padding-right:0;padding-left:50vw}
+#pane{display:none}
+body.split #pane{display:block;position:fixed;top:0;bottom:0;right:0;width:50vw;border:0;
+  border-left:var(--border-width) solid var(--border);background:var(--bg)}
+body.split.pane-left #pane{right:auto;left:0;border-left:0;border-right:var(--border-width) solid var(--border)}
+#swapBtn{display:none}
+body.split #swapBtn{display:inline-flex}
+body.pane .nopane{display:none}
 .yr{display:flex;align-items:center;gap:var(--s-1)}
 .yr b{font-family:var(--font-display);font-size:var(--f-4);font-weight:var(--w-bold);
   min-width:calc(var(--s-10) * 1.5);text-align:center;white-space:nowrap}
@@ -321,20 +332,21 @@ main.dragging{cursor:grabbing;user-select:none}
 </head>
 <body>
 <header>
-  <div class="logo">LO<b>G</b></div>
+  <div class="logo nopane">LO<b>G</b></div>
   <div class="yr">
     <button id="prevBtn" class="mb-btn mb-press mb-tap" onclick="goStep(-1)" aria-label="Back" data-icon="prev"></button>
     <b id="focusLabel"></b>
     <button id="nextBtn" class="mb-btn mb-press mb-tap" onclick="goStep(1)" aria-label="Forward" data-icon="next"></button>
   </div>
   <button class="mb-btn mb-press mb-tap" onclick="toToday()">TODAY</button>
-  <div id="levels"></div>
+  <div id="levels" class="nopane"></div>
   <button id="filterBtn" class="mb-btn mb-press mb-tap" aria-label="Filters" aria-expanded="false" data-icon="filter"></button>
   <button class="mb-btn go mb-press mb-tap" onclick="noteDialog({}, addTarget())">ADD</button>
   <span class="quiet" id="state"></span>
   <div class="spacer"></div>
-  <button class="mb-btn mb-press mb-tap" onclick="openSettings()" aria-label="Settings" title="Settings" data-icon="settings"></button>
-  <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
+  <button id="swapBtn" class="mb-btn mb-press mb-tap nopane" onclick="swapSides()" aria-label="Swap sides" title="Swap sides" data-icon="compare"></button>
+  <button class="mb-btn mb-press mb-tap nopane" onclick="openSettings()" aria-label="Settings" title="Settings" data-icon="settings"></button>
+  <button class="mb-btn mb-press mb-tap nopane" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
   <div class="bar" id="bar" hidden></div>
 </header>
 <main id="scroller" class="mb-scroll"><div class="cal" id="cal"></div></main>
@@ -1282,7 +1294,7 @@ function placeFocus() {
 /* The bar and the label first: either can change the header's height, and
    the sizes are measured off what is left of the screen. */
 function setLevel(i) {
-  level = clamp(i, 0, LEVELS.length - 1);
+  level = PANE ? LV('d1') : clamp(i, 0, LEVELS.length - 1);
   drawBar();
   render();
   syncLevels();
@@ -1311,6 +1323,8 @@ function toToday() {
 function openBox(box) {
   touched = true;
   const from = box.dataset.from, to = box.dataset.to || from;
+  /* split: a day opens on the other half, and this half stays as it is */
+  if (splitOn() && box.classList.contains('day')) { showInPane(from); Mobile.feedback('open'); return; }
   let id = 'd1';
   if (!box.classList.contains('day')) {
     const kind = box.dataset.kind, n = Day.diff(to, from) + 1;
@@ -2181,11 +2195,59 @@ const soon = () => {
   rebuildT = setTimeout(() => { if (typing()) { pendingRebuild = true; return; } rebuild(); }, 60);
 };
 
+/* ══════════════════════ SPLIT ══════════════════════
+   Tom, 2026-10-06, on his 3840x1080: "LOG can be full dual screen. Regular
+   month view on 1 side, and day view on the other. Let this be adjustable
+   which is which." Past SPLIT_MIN this LOG keeps one half and the other half
+   is LOG again, opened as `?pane=1`: always Day, no view strip, no settings.
+   A date clicked here is shown there rather than opening Day here. Both
+   share the store, so a line added in either shows in both. Which half is
+   which is the `paneSide` setting, flipped by the swap button. */
+const PANE = /[?&]pane=1(&|$)/.test(location.search);
+const SPLIT_MIN = 2400;
+let paneDay = null;
+const splitOn = () => !PANE && document.body.classList.contains('split');
+function placeSplit() {
+  if (PANE) return;
+  const on = innerWidth >= SPLIT_MIN, b = document.body;
+  b.classList.toggle('split', on);
+  b.classList.toggle('pane-left', S.get('paneSide', 'right') === 'left');
+  if (on && !$('pane')) {
+    const f = document.createElement('iframe');
+    f.id = 'pane';
+    f.title = 'Day';
+    f.src = 'index.html?pane=1&d=' + (paneDay || TODAY);
+    b.appendChild(f);
+  }
+}
+function showInPane(d) {
+  paneDay = d;
+  const f = $('pane');
+  if (f && f.contentWindow) f.contentWindow.postMessage({ logDay: d }, '*');
+}
+function swapSides() {
+  S.set('paneSide', S.get('paneSide', 'right') === 'left' ? 'right' : 'left');
+  placeSplit();
+  Mobile.feedback('select');
+}
+if (PANE) {
+  document.body.classList.add('pane');
+  addEventListener('message', e => {
+    if (e.source !== parent || !e.data || !e.data.logDay || !T) return;
+    focus = e.data.logDay;
+    touched = true;
+    placeFocus();
+    showFocus();
+  });
+}
+addEventListener('resize', placeSplit);
+placeSplit();
+
 applyText();
 indexJournal();
 indexGraph();
 T = buildTimeline(startDate(), TODAY);
-level = openLevel();
+level = PANE ? LV('d1') : openLevel();
 applyColW();
 drawLevels();
 drawBar();
@@ -2194,6 +2256,10 @@ render(true);
 applySizes();
 syncLevels();
 toToday();
+if (PANE) {
+  const d = (location.search.match(/[?&]d=(\d{4}-\d\d-\d\d)/) || [])[1];
+  if (d && d !== TODAY) { focus = d; touched = true; placeFocus(); showFocus(); }
+}
 Rec.ready(soon);
 Rec.on(soon);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); applySizes(); if (!touched) toToday(); });
