@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.8, 2026-09-23">
+<meta name="mb-version" content="1.0.9, 2026-10-05">
 <title>ELEMENT</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -156,6 +156,47 @@ th:first-child,td:first-child{text-align:left}
 .ft{font-size:var(--f-2);color:var(--text-1);line-height:var(--lh-body)}
 .note a{color:var(--accent)}
 .row{display:flex;gap:var(--s-2);flex-wrap:wrap;align-items:center}
+
+/* ---- a wide window: columns, never folds (Tom, 2026-10-05) ----
+   `.pair` is two cards that sit side by side from 900px and stack, with the
+   card gap between them, below it, so a phone draws what it always drew.
+   The columns exist only from 1100px, where draw() builds them. */
+.pair,.col,.col-u{display:flex;flex-direction:column;gap:var(--s-3);min-width:0}
+/* a drink card narrower than its amounts let them run past its edge; from
+   600px the small lines under an amount wrap instead. A phone's one card
+   across never needed it, so it is left exactly as it was. */
+@media(min-width:600px){.da small{white-space:normal}.dl{flex-shrink:100}}
+@media(min-width:900px){
+  .pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}
+}
+@media(min-width:1100px){
+  .wrap{max-width:1600px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:start}
+  /* the table's six columns are never squeezed under what they need; in a
+     column the cells sit closer and the heads lose their tracking, so it
+     needs about 430px rather than 510 */
+  .col-u{display:grid;grid-template-columns:minmax(min-content,1fr) minmax(0,1fr);align-items:start}
+  .col-b th,.col-b td{padding-left:var(--s-1);padding-right:var(--s-1)}
+  .col-b th{letter-spacing:0}
+  .col-c{container-type:inline-size}
+  /* a time box and a select are wider than a third of this column by
+     default, and ran past the card; they take the column's width instead */
+  .col-c .grid>*{min-width:0}
+  /* the drinks share out the whole width, with no empty track at the end */
+  .col-r .cards{grid-template-columns:repeat(auto-fit,minmax(calc(var(--tap) * 5.7),1fr))}
+  .warns:empty{display:none}
+  .warns>.flag:first-child{margin-top:0}
+  .note,.flag,.src{max-width:80ch}
+}
+/* three drinks across in the 700px a 1100px window leaves them, rather than two */
+@media(min-width:1100px) and (max-width:1279px){
+  .col-r .cards{grid-template-columns:repeat(auto-fit,minmax(calc(var(--tap) * 5),1fr))}
+}
+@media(min-width:1800px){
+  .wrap{max-width:3000px}
+}
+/* the inputs grid answers to its column, not the window */
+@container (max-width:560px){.g4{grid-template-columns:repeat(3,1fr)}}
+@container (max-width:300px){.g4{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
@@ -455,7 +496,13 @@ const sessionMin = () => {
   const o = S.get('in.sess', null);
   if (o != null) return num(o, DEF.sess);
   const s = Rec.get('session', today(), '');
-  if (s && s.start && s.end) return Math.round((s.end - s.start) / 60000);
+  /* TRAIN writes start and end as ISO strings, so they are read as dates:
+     subtracting the strings gave NaN, and NaN ran into every sodium figure
+     on a day TRAIN had a finished session (found 2026-10-05). */
+  if (s && s.start && s.end) {
+    const m = Math.round((new Date(s.end) - new Date(s.start)) / 60000);
+    if (isFinite(m) && m > 0) return m;
+  }
   return DEF.sess;
 };
 
@@ -774,6 +821,10 @@ const SLOTS = c => {
 
 /* ══════════════ DRAWING ══════════════ */
 let C = null;
+/* the wide layout is a different arrangement of the same cards, so crossing
+   1100px draws again rather than leaving the old arrangement standing */
+const WIDE = matchMedia('(min-width: 1100px)');
+WIDE.addEventListener('change', () => { if (C) draw(); });
 
 function draw() {
   C = compute();
@@ -785,12 +836,33 @@ function draw() {
      screen you open to be told a number. He opens this to find out what to
      weigh, and the inputs are a thing he touches once a week. So the answer
      is first and the working is underneath it. */
-  m.appendChild(cardsBlock(C));
-  m.appendChild(goalsCard(C));
-  m.appendChild(tableCard(C));
-  m.appendChild(inputsCard());
-  m.appendChild(microsCard(C));
-  m.appendChild(factsCard());
+  const box = cardsBlock(C), goals = goalsCard(C), table = tableCard(C),
+    inputs = inputsCard(), micros = microsCard(C), facts = factsCard();
+  /* Tom, 2026-10-05: on a wide window, lay things out side by side; never
+     fold text. From 1100px the page is columns: on the left the head of
+     WHAT TO WEIGH, its warnings and the goals; on the right the drinks
+     across the top and, under them, the table, micros and facts beside the
+     inputs. Below 1100px it is the one stack it always was, in the same
+     order, so a phone draws exactly what it drew; from 900px the goals sit
+     beside the table and the micros beside the facts. */
+  if (WIDE.matches) {
+    const parts = Array.from(box.children), head = parts[0], drinks = parts[1], warn = parts[2];
+    drinks.style.marginTop = '';
+    warn.classList.add('warns');
+    const ca = el('div', 'col col-a'), cr = el('div', 'col col-r'), cu = el('div', 'col-u'),
+      cb = el('div', 'col col-b'), cc = el('div', 'col col-c');
+    ca.appendChild(head); ca.appendChild(warn); ca.appendChild(goals);
+    cb.appendChild(table); cb.appendChild(micros); cb.appendChild(facts);
+    cc.appendChild(inputs);
+    cu.appendChild(cb); cu.appendChild(cc);
+    cr.appendChild(drinks); cr.appendChild(cu);
+    m.appendChild(ca); m.appendChild(cr);
+  } else {
+    const p1 = el('div', 'pair'), p2 = el('div', 'pair');
+    p1.appendChild(goals); p1.appendChild(table);
+    p2.appendChild(micros); p2.appendChild(facts);
+    m.appendChild(box); m.appendChild(p1); m.appendChild(inputs); m.appendChild(p2);
+  }
   if (window.Icons) Icons.paint();
   publishPlan(C);
 }
@@ -1010,7 +1082,10 @@ function cardsBlock(c) {
 
   const L = layout();
   const live = SLOTS(c);
-  const gone = ALL_SLOTS(c).filter(x => live.indexOf(x) < 0);
+  /* by id: ALL_SLOTS makes new objects each call, so comparing the objects
+     listed every drink as switched off (found 2026-10-05) */
+  const liveIds = live.map(x => x.id);
+  const gone = ALL_SLOTS(c).filter(x => liveIds.indexOf(x.id) < 0);
   if (gone.length) {
     const chips = el('div', 'row');
     chips.style.marginTop = 'var(--s-3)';

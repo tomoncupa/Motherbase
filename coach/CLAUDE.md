@@ -224,6 +224,35 @@ program goes out from.
   and changes only a name and set one, so `n`, `rir`, `rest`, `wk` and `day` ride
   through an edit made here.
 
+## A wide window (1.0.16, 2026-10-05)
+
+**On a wide window, lay things out side by side; never fold text.** Tom,
+2026-10-02 and 2026-10-04: he runs the suite on a 3840 ultrawide, where the
+home screen gives COACH a frame about 1928 by 943 (1600 at its floor). He
+wants "to minimize the need for scrolling", approved "apps use the width",
+and said no to folding anything behind "show more".
+
+- **From 1560px** the box sits with FIRST SETS / PROGRAMS under it on the
+  left (`clamp(380px,20%,400px)`, as on an upright iPad), and the client
+  takes the rest in three columns of their own: the name, the week and the
+  check-in; RECENT SESSIONS (1.3 times as wide, it is the longest); then
+  STRENGTH and the range. The page caps at 2400px.
+- **`drawClient` builds the three columns only past `WIDE`** (a
+  `matchMedia` on the same width, redrawing when it is crossed). Below it,
+  `drawClientIn(col, col, col)` makes the same calls in the same order into
+  one column, so 1280, an iPad and a phone draw exactly as before.
+- **Past 1560 nothing ends in an ellipsis that did not have to**: an
+  exercise name and its set list wrap, every check-in date shows (the strip
+  wraps instead of scrolling the newest off the side), STRENGTH's numbers
+  stay on one line, and "week before" takes its own line.
+
+Measured in headless Chromium with the demo (six clients), main's scroll
+height over the window: 1928x943 2.70 to 1.15, 1600x943 2.70 to 1.15,
+1920x1000 2.55 to 1.08, 2560x943 2.70 to 1.15; every client 1.12 to 1.15.
+1280x943 stays 2.72 and 390x844 stays 4.91 (screenshots pixel-compared
+before and after, phone identical). No sideways scroll, no button under
+44px, no page errors at any width.
+
 ## Needs from the foundation
 
 `shared/_smoke.html` checks the 0.1 shelf (`send`, `waiting`, `took`,

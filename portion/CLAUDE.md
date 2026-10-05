@@ -3,6 +3,30 @@
 Governs `portion/` only. The repo-root `CLAUDE.md` and `DOCTRINE.md` still apply
 and win any disagreement.
 
+## A wide window (1.0.11, 2026-10-05)
+
+**On a wide window, lay things out side by side; never fold text.** Tom,
+2026-10-02/04: "minimize the need for scrolling", yes to apps using the
+width, no to hiding text behind "show more". On his 3840x1080 screen the home
+screen gives FOODDÉX a 1928 x 943 frame (1600 at the least).
+
+Past 1600px only (the `@media (min-width:1600px)` block after the 1300px one):
+the row runs to 2400px as label 6 : amounts 4 : foods 9, and the save bar
+follows it. YOUR FOODS lays its list two across in a grid (`.foods`), ranked
+across then down so the best answers stay together at the top; a name too
+long for its half wraps instead of being cut. THE LABEL is a two-column grid
+in which everything spans both except Name and Brand (`.half`, placed with
+`grid-auto-flow: dense` so the duplicate-name note still sits under them),
+and its figures run four or five to a row. Below 1600px nothing changed:
+every element in `#main` has the same box, and the screenshots are byte
+identical, at 390, 1000 and 1280.
+
+Measured with the demo, `main`'s scroll height over the window height,
+before and after: 1928x943 1.85 to 1.20; 1600x943 1.85 to 1.32; 1920x1000
+1.74 to 1.13; 1280x943 2.67 unchanged; 390x844 4.68 unchanged. Watched at
+1928: a duplicate name shows its note under Name and Brand, a food clicked
+in the two-across list opens, no console errors.
+
 ## SCAN (1.0.10, 2026-09-30)
 
 Tom: "ok include". SCAN sits beside LOOK IT UP and opens KITCHEN's barcode
