@@ -339,6 +339,18 @@ USUAL N SETS, the story's "Volume +X% over N sessions like it" (no kg figure,
 the totals line has it) and Analysis SESSION's trend read it; every total, set
 count and Analysis bar still adds every set. His log: Triceps +7 to +13%, Curl
 +6 to -1%, Rope Push Down +9 to +10%, Laterals +5 to +2%.
+**Replaced 1.0.55 (Tom, 2026-10-06, "do that for graphic and for data
+visualization"): TOP 3 SETS, AVERAGE leads and TOTAL WORK sits under it.**
+Top 3 is the three biggest sets by weight x reps (reps on a bodyweight lift),
+averaged, all of them on a day with fewer (`TRAIN.top3`); untagged warmups and
+extra sets cannot move it. Use it for "am I getting better": GRAPH's first
+card with SET AS DEFAULT and SHARE PICTURE (shown only while its trend is up),
+and the story's "Best sets +X% over N sessions like it" (`TRAIN.sessionTop3`,
+each lift's Top 3 added). Total work is every set added, the dose: "am I
+doing enough"; GRAPH's second card, and Analysis SESSION's bars and trend.
+Read together: total up and top 3 flat means extra sets that are not making
+him better. His log, 6 Oct: Rope Push Down total +16% top 3 +7%, Laterals
++5% and -11%, Curl +16% and +15%. `usualSets` and `trendVol` are gone.
 A new feature that reads
 `session.name` must work without it.
 

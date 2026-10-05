@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.54, 2026-10-06">
+<meta name="mb-version" content="1.0.55, 2026-10-06">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -4449,7 +4449,7 @@ function drawGraph(m) {
   /* Set Volume first, and the default: Tom, 2026-10-05, "we don't care
      about 1rms". Then FitNotes' graphs for the type of exercise on screen. */
   var G = [], sv = TRAIN.setVolume(exId);
-  if (sv) G.push({ id: 'setvol', name: 'Volume Trend', u: sv.reps ? 'reps' : U + 's' });
+  if (sv) G.push({ id: 'setvol', name: 'Top 3 Sets & Total Work', u: sv.reps ? 'reps' : U + 's' });
   if (f.indexOf('w') > -1) {
     G.push({ id: 'e1rm', name: 'Estimated 1RM', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return TRAIN.e1rm(x.kg, x.r); })); } });
     G.push({ id: 'maxw', name: 'Max Weight', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return x.kg || 0; })); } });
@@ -4633,40 +4633,31 @@ TRAIN.setVolume = function (exId, range) {
       .map(function (s) { return reps ? (s.r || 0) : TRAIN.toUnit((s.kg || 0) * (s.r || 0), U); });
     return { date: d, sets: v, total: v.reduce(function (a, x) { return a + x; }, 0) };
   }).filter(function (x) { return x.total > 0; });
-  var usual = days.length ? TRAIN.usualSets(exId, days[days.length - 1].date) : 0;
-  days.forEach(function (x) { x.top = TRAIN.topSum(x.sets, usual); });
-  return { reps: reps, u: reps ? 'reps' : U + 's', days: days, usual: usual };
+  days.forEach(function (x) { x.top3 = TRAIN.top3(x.sets); });
+  return { reps: reps, u: reps ? 'reps' : U + 's', days: days };
 };
 
-/* ── what a trend measures ──
-   Tom, 2026-10-06, picked A: "your usual number of sets, heaviest first".
-   He warms up differently from day to day and does not always say so, and
-   nothing can tell an untagged warmup from a lighter set he works up from
-   (a 70% cut tried on his log flipped three lifts). So a TREND counts each
-   lift's usual number of sets, its median over its last 12 sessions, the
-   biggest first: extra light sets fall out only on a day with more sets
-   than usual, and a day with fewer counts as the less work it was. Every
-   total and set count still adds every set. */
-TRAIN.usualSets = function (exId, upto) {
-  var c = TRAIN.idx._usual || (TRAIN.idx._usual = {}), k = exId + '|' + upto;
-  if (c[k] != null) return c[k];
-  var n = {};
-  TRAIN.historyOf(exId).forEach(function (s) { if (s.date <= upto && TRAIN.counts(s)) n[s.date] = (n[s.date] || 0) + 1; });
-  var counts = Object.keys(n).sort().slice(-12).map(function (d) { return n[d]; }).sort(function (a, b) { return a - b; });
-  var m = counts.length, med = !m ? 0 : m % 2 ? counts[(m - 1) / 2] : Math.floor((counts[m / 2 - 1] + counts[m / 2]) / 2);
-  return (c[k] = med);
+/* ── what a lift's graphs measure ──
+   Tom, 2026-10-06, after "when do I want to use either one?": TOP 3 SETS,
+   AVERAGE leads, TOTAL WORK sits under it. Top 3 is how good his best sets
+   were: the three biggest by weight x reps (reps on a bodyweight lift),
+   averaged, or all of them on a day with fewer. Warmups, extra sets and a
+   short session cannot move it, tagged or not, which is what he needed:
+   "I don't always do the same warmups nor do I always tag them". Total
+   work is the dose, every set added. The trend, the share rule and the
+   story line read Top 3; every total and set count still adds every set.
+   Replaces 1.0.54's "usual number of sets". */
+TRAIN.top3 = function (vals) {
+  var t = vals.slice().sort(function (a, b) { return b - a; }).slice(0, 3);
+  return t.length ? t.reduce(function (a, x) { return a + x; }, 0) / t.length : 0;
 };
-TRAIN.topSum = function (vals, n) {
-  return vals.slice().sort(function (a, b) { return b - a; }).slice(0, n || vals.length)
-    .reduce(function (a, x) { return a + x; }, 0);
-};
-/* A whole session as a trend reads it, in kg: each lift's usual sets. */
-TRAIN.trendVol = function (date) {
+/* A whole session's best sets, in kg: each lift's Top 3 average, added. */
+TRAIN.sessionTop3 = function (date) {
   var by = {};
   TRAIN.setsOn(date).forEach(function (s) {
     if (TRAIN.counts(s)) (by[s.ex] = by[s.ex] || []).push((s.kg || 0) * (s.r || 0));
   });
-  return Object.keys(by).reduce(function (a, ex) { return a + TRAIN.topSum(by[ex], TRAIN.usualSets(ex, date)); }, 0);
+  return Object.keys(by).reduce(function (a, ex) { return a + TRAIN.top3(by[ex]); }, 0);
 };
 
 /* The lines, set 1 to set 4, one point per session. */
@@ -4701,11 +4692,13 @@ function setVolKey(sv) {
   for (var n = 0; n < Math.min(most, TRAIN.SV_LINES); n++) items.push({ name: 'Set ' + (n + 1), color: 'var(--data-' + (n + 1) + ')' });
   return Chart.legend(items);
 }
-/* The lift's usual number of sets, biggest first (TRAIN.usualSets), added
-   up, a point per session, and the trend. */
-function sessVolChart(box, sv, label) {
+/* One measure of a lift, a point per session, with its trend. `k` is the
+   day's field: 'top3' or 'total'. */
+function sessVolChart(box, sv, label, k) {
+  k = k || 'top3';
   var num = function (v) { return sv.reps ? TRAIN.showReps(v) : Math.round(v).toLocaleString(); };
-  var pts = sv.days.map(function (d) { return [d.date, d.top, Day.label(d.date) + ': ' + num(d.top) + ' ' + sv.u]; });
+  var what = k === 'top3' ? 'top 3 average' : 'total work';
+  var pts = sv.days.map(function (d) { return [d.date, d[k], Day.label(d.date) + ': ' + num(d[k]) + ' ' + sv.u]; });
   return Chart.mount(box, { label: label }, function (c) {
     c.xTime(pts[0][0], pts[pts.length - 1][0]);
     fitY(c, pts.map(function (p) { return p[1]; }), Rec.setting(APP.id, 'graphZero') === 1);
@@ -4717,12 +4710,15 @@ function sessVolChart(box, sv, label) {
     if (tr) c.line(tr.line, 'trend');
     var end = pts[pts.length - 1];
     c.end(end, num(end[1]));
-    c.scrub(pts, { fmt: function (p) { return num(p[1]) + ' ' + sv.u + ', ' + Day.label(p[0]); } });
+    c.scrub(pts, { fmt: function (p) {
+      var d = sv.days.filter(function (x) { return x.date === p[0]; })[0];
+      return num(p[1]) + ' ' + sv.u + ' ' + what + ', ' + d.sets.length + ' set' + (d.sets.length === 1 ? '' : 's') + ', ' + Day.label(p[0]);
+    } });
   });
 }
 /* "+9% over 14 sessions": the trend line's end against its start. His own
-   view, so a minus is said; the share picture is offered only when it is up
-   (Tom: never share a lift he is weaker in). */
+   view, so a minus is said; the share picture is offered only when Top 3
+   is up (Tom: never share a lift he is weaker in). */
 function trendWords(tr, n) {
   if (!tr || tr.pct == null) return '';
   var p = Math.round(tr.pct);
@@ -4762,26 +4758,27 @@ function drawSetVolume(m, ex, exId, per, range) {
     m.appendChild(card);
   }
 
-  var pts = sv.days.map(function (d) { return [d.date, d.top]; });
-  var tr = TRAIN.trendOf(pts), said = trendWords(tr, pts.length);
-  var card2 = UI.el('div', 'exblock pad');
-  card2.innerHTML = '<div class="fieldlabel">VOLUME, YOUR USUAL ' + sv.usual + ' SET' + (sv.usual === 1 ? '' : 'S') +
-    ' (' + UI.esc(sv.u) + ')</div>';
-  var box2 = UI.el('div', 'chartbox');
-  card2.appendChild(box2);
-  sessVolChart(box2, sv, 'Session volume (' + sv.u + ')');
-  expand(box2, 'SESSION VOLUME', function (b) { sessVolChart(b, sv, 'Session volume (' + sv.u + ')'); });
-  if (said) {
+  /* One card per measure: its chart, its trend, best and latest. */
+  var measure = function (k, title, why) {
+    var pts = sv.days.map(function (d) { return [d.date, d[k]]; });
+    var tr = TRAIN.trendOf(pts), said = trendWords(tr, pts.length);
+    var card2 = UI.el('div', 'exblock pad');
+    card2.innerHTML = '<div class="fieldlabel">' + title + ' (' + UI.esc(sv.u) + ')</div>';
+    var box2 = UI.el('div', 'chartbox');
+    card2.appendChild(box2);
+    sessVolChart(box2, sv, title + ' (' + sv.u + ')', k);
+    expand(box2, title, function (b) { sessVolChart(b, sv, title + ' (' + sv.u + ')', k); });
     var foot = UI.el('div', 'lasttime');
-    foot.innerHTML = 'Trend <b>' + UI.esc(said.split(' ')[0]) + '</b> ' + UI.esc(said.split(' ').slice(1).join(' ')) +
-      ', each counting its ' + sv.usual + ' biggest set' + (sv.usual === 1 ? '' : 's');
+    foot.innerHTML = (said ? 'Trend <b>' + UI.esc(said.split(' ')[0]) + '</b> ' + UI.esc(said.split(' ').slice(1).join(' ')) + '. ' : '') + UI.esc(why);
     card2.appendChild(foot);
-  }
-  var totals = pts.map(function (p) { return p[1]; });
-  var best = Math.max.apply(null, totals), latest = totals[totals.length - 1];
-  card2.appendChild(recLine('Best', num(best) + ' ' + UI.esc(sv.u), pts[totals.indexOf(best)][0]));
-  card2.appendChild(recLine('Latest', num(latest) + ' ' + UI.esc(sv.u), pts[pts.length - 1][0]));
-  card2.appendChild(recLine('Sessions', String(pts.length), ''));
+    var vals = pts.map(function (p) { return p[1]; });
+    var best = Math.max.apply(null, vals), latest = vals[vals.length - 1];
+    card2.appendChild(recLine('Best', num(best) + ' ' + UI.esc(sv.u), pts[vals.indexOf(best)][0]));
+    card2.appendChild(recLine('Latest', num(latest) + ' ' + UI.esc(sv.u), pts[pts.length - 1][0]));
+    m.appendChild(card2);
+    return { card: card2, tr: tr, best: best };
+  };
+  var a = measure('top3', 'TOP 3 SETS, AVERAGE', 'Your three biggest sets each session, averaged: how good your best work was.');
   var dflt = UI.el('button', 'mb-btn mb-press mb-tap');
   dflt.style.width = '100%';
   dflt.style.marginTop = 'var(--s-3)';
@@ -4790,8 +4787,8 @@ function drawSetVolume(m, ex, exId, per, range) {
     TRAIN.patchExercise(exId, { gdef: { type: 'setvol', per: per } });
     UI.toast('Default graph saved');
   };
-  card2.appendChild(dflt);
-  if (tr && tr.up) {
+  a.card.appendChild(dflt);
+  if (a.tr && a.tr.up) {
     var shg = UI.el('button', 'mb-btn mb-press mb-tap');
     shg.style.width = '100%';
     shg.style.marginTop = 'var(--s-2)';
@@ -4800,26 +4797,26 @@ function drawSetVolume(m, ex, exId, per, range) {
       var pname = (TRAIN.PERIODS.filter(function (p) { return p.id === per; })[0] || {}).name || '';
       shareCard(function () {
         var c = UI.el('div', 'recap');
-        c.innerHTML = '<div class="eyebrow"><span>Session volume</span><b>' + UI.esc(pname) + '</b></div>' +
+        c.innerHTML = '<div class="eyebrow"><span>Top 3 sets, average</span><b>' + UI.esc(pname) + '</b></div>' +
           '<div class="title">' + UI.esc(ex.name) + '</div><div class="rule"></div>';
         var bx = UI.el('div', 'chartbox');
         c.appendChild(bx);
-        sessVolChart(bx, sv, 'Session volume (' + sv.u + ')');
+        sessVolChart(bx, sv, 'Top 3 sets, average (' + sv.u + ')', 'top3');
         c.insertAdjacentHTML('beforeend', '<div class="big4">' +
-          (tr.pct != null ? '<div><span>Trend</span><b>+' + Math.round(tr.pct) + '<small>%</small></b></div>' : '') +
-          '<div><span>Best</span><b>' + num(best) + ' <small>' + UI.esc(sv.u) + '</small></b></div></div>');
+          (a.tr.pct != null ? '<div><span>Trend</span><b>+' + Math.round(a.tr.pct) + '<small>%</small></b></div>' : '') +
+          '<div><span>Best</span><b>' + num(a.best) + ' <small>' + UI.esc(sv.u) + '</small></b></div></div>');
         return c;
       }, 'train-graph-setvol');
     };
-    card2.appendChild(shg);
+    a.card.appendChild(shg);
   }
-  m.appendChild(card2);
+  measure('total', 'TOTAL WORK', 'Every set added, warmups too: how much you did.');
 
-  /* Newest first, every set of the session and what they add up to. */
+  /* Newest first, every set of the session, its top 3 average and total. */
   var list = UI.el('div', 'exblock pad');
   var h = UI.el('div', 'fieldlabel'); h.textContent = 'GRAPH POINTS'; list.appendChild(h);
   sv.days.slice(-12).reverse().forEach(function (d) {
-    list.appendChild(recLine(Day.label(d.date), d.sets.map(num).join(' · ') + ' = ' + num(d.total) + ' ' + UI.esc(sv.u), ''));
+    list.appendChild(recLine(Day.label(d.date), d.sets.map(num).join(' · ') + ' · top 3 ' + num(d.top3) + ' · total ' + num(d.total) + ' ' + UI.esc(sv.u), ''));
   });
   m.appendChild(list);
 }
@@ -8558,10 +8555,8 @@ function drawWorkoutGraphs(m) {
   var card = UI.el('div', 'exblock pad');
   var unitWord = { workouts: 'sessions', sets: 'sets', reps: 'reps', volume: TRAIN.unitLabel(), time: 'minutes' }[metric];
   var perWord = { session: 'session', week: 'week', month: 'month', year: 'year' }[by];
-  /* the trend through each session's usual sets per lift (TRAIN.trendVol)
-     when the bars are volume; the bars stay every set */
-  var tr = by === 'session' && TRAIN.trendOf(metric === 'volume'
-    ? series.map(function (p) { return [p[0], TRAIN.toUnit(TRAIN.trendVol(p[0]), TRAIN.unit())]; }) : series);
+  /* the bars are total work, and so is their trend */
+  var tr = by === 'session' && TRAIN.trendOf(series);
   card.innerHTML = '<div class="fieldlabel">' + UI.esc(metric === 'workouts' ? 'SESSIONS' : metric.toUpperCase()) + ' PER ' + perWord.toUpperCase() + '</div>';
   var box = UI.el('div', 'chartbox');
   card.appendChild(box);
@@ -9570,7 +9565,7 @@ TRAIN.volSessions = function (date) {
      beside an arm day's says nothing about either */
   var U = TRAIN.unit();
   return Object.keys(TRAIN.idx.byDate).filter(function (d) { return d === date || (d < date && TRAIN.sameSession(date, d)); }).sort()
-    .map(function (d) { return [d, TRAIN.toUnit(TRAIN.trendVol(d), U)]; })
+    .map(function (d) { return [d, TRAIN.toUnit(TRAIN.sessionTop3(d), U)]; })
     .filter(function (p) { return p[1] > 0; }).slice(-FRAME_VOL_N);
 };
 TRAIN.frameVol = function (date) {
@@ -9585,9 +9580,9 @@ TRAIN.frameVol = function (date) {
   c.area(line); c.line(line);
   c.line([[0, tr.from], [n - 1, tr.to]], 'trend');
   c.end(line[n - 1]);
-  /* no kg figure: the line is each lift's usual sets, and the totals line
-     under it already says the whole session's volume */
-  return '<div class="fr-blk"><div class="fr-blk-t">Volume <span class="fr-gain">+' + p + '%</span> over ' + n +
+  /* no kg figure: the line is each lift's top 3 sets averaged, added up,
+     and the totals line under it already says the session's volume */
+  return '<div class="fr-blk"><div class="fr-blk-t">Best sets <span class="fr-gain">+' + p + '%</span> over ' + n +
     ' sessions like it</div>' + c.el.outerHTML + '</div>';
 };
 TRAIN.frameBlock = function (date) {
