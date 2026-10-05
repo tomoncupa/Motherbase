@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.55, 2026-10-06">
+<meta name="mb-version" content="1.0.56, 2026-10-06">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -492,6 +492,13 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .stat b{display:block;font-family:var(--f1);font-size:19px;color:var(--txt);letter-spacing:.04em;line-height:1.15}
 .stat span{font-size:10px;letter-spacing:.14em;color:var(--dim2);font-family:var(--f1)}
 .stat.acc b{color:var(--acc)}
+/* LOCKED IN: four averages, two by two */
+.li-g{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-4) var(--s-4);align-content:start}
+.li-c{min-width:0;display:flex;flex-direction:column;gap:var(--s-1)}
+.li-c b{font-family:var(--f1);font-size:var(--f-5);color:var(--txt);letter-spacing:.04em;line-height:var(--lh-tight);font-variant-numeric:tabular-nums}
+.li-c b i{font-style:normal;font-size:var(--f-1);color:var(--dim2);letter-spacing:.06em}
+.li-l{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--acc)}
+.li-n{font-size:var(--f-1);color:var(--dim2);line-height:var(--lh-tight)}
 .hrow{display:flex;align-items:center;gap:10px;padding:6px 2px}
 .hrow+.hrow{border-top:1px solid var(--line)}
 /* DRINKS: a drink is a row you tap to open ELEMENT over the home screen */
@@ -2710,6 +2717,79 @@ const WIDGETS = {
     },
   },
 
+  /* ══════════════ LOCKED IN ══════════════
+     Tom, 2026-10-06: "a widget that shows me how locked in I am. Average
+     training sessions, average number of tracked meals, average calorie
+     deficit/surplus, average steps. No letter grades just math."
+     Every number covers the last N FINISHED days, ending yesterday, so a day
+     still in progress never drags an average down (half a day of food reads
+     as a deficit, half a day of steps as a slump). Under each number, the N
+     days before it, for the trend. Sessions follow TRAIN's rule: a day with
+     one working set or more, warmups out. Calories are each logged day's
+     total against STATUS's maintenance estimate (`tdeeState`), or the
+     calorie target when there is none yet, and only days with food logged
+     count, since an unlogged day is not a day of zero calories. A meal is
+     foods logged close together (see `sums`). */
+  lockedin: {
+    nm: 'LOCKED IN', w: 4, h: 4,
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days']], day0: 7,
+    sub: cfg => 'last ' + ((cfg && cfg.days) || 7) + ' days, to yesterday',
+    /* the four averages over the n days ending on `to` */
+    sums(n, to) {
+      const from = LifeOS.shift(to, -(n - 1)), inP = d => d && d >= from && d <= to;
+      const trained = {};
+      Rec.all('set').forEach(r => { if (inP(r.date) && !setIsWarm(r.payload || {}) && setCounts(r.payload || {}, r.date, LifeOS.day())) trained[r.date] = 1; });
+      /* a meal is a sitting, not a food: STATUS logs each food as its own row, so
+         foods logged within 45 minutes of the one before are one meal. A food
+         with no time is a meal of its own. */
+      const kcal = {}, at = {}; let meals = 0;
+      Rec.all('meal').forEach(r => { if (!inP(r.date)) return; kcal[r.date] = (kcal[r.date] || 0) + (Number(r.payload.kcal) || 0);
+        if (r.payload.t) (at[r.date] = at[r.date] || []).push(+r.payload.t); else meals++; });
+      Object.keys(at).forEach(d => at[d].sort((x, z) => x - z).forEach((t, i, A) => { if (!i || t - A[i - 1] > 45 * 60000) meals++; }));
+      const st = Rec.setting('status', 'tdeeState'), tdee = st && Number(st.v) > 0 ? Number(st.v) : 0;
+      const tgt = Number(statusTargets().kcal) || 0, base = tdee || tgt;
+      const fd = Object.keys(kcal);
+      const steps = [];
+      for (let i = 0; i < n; i++) { const v = evValue(LifeOS.shift(to, -i), 'steps'); if (v != null && isFinite(v)) steps.push(Number(v)); }
+      return {
+        n: n, sessions: Object.keys(trained).length, meals: meals, foodDays: fd.length,
+        base: base, vs: tdee ? 'maintenance' : 'target',
+        diff: base && fd.length ? fd.reduce((a, d) => a + kcal[d] - base, 0) / fd.length : null,
+        stepDays: steps.length, steps: steps.length ? steps.reduce((a, v) => a + v, 0) / steps.length : null,
+      };
+    },
+    draw(body, cfg) {
+      const n = (cfg && cfg.days) || 7, y = LifeOS.shift(LifeOS.day(), -1);
+      const W = WIDGETS.lockedin, a = W.sums(n, y), b = W.sums(n, LifeOS.shift(y, -n));
+      const num = (v, dp) => v.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
+      const sign = v => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + num(Math.abs(Math.round(v)), 0);
+      const perWk = s => s.sessions / s.n * 7, perDay = s => s.meals / s.n;
+      const cell = (label, val, unit, line, prev) => {
+        const c = el('div', 'li-c');
+        c.innerHTML = '<span class="li-l">' + label + '</span><b>' + val + (unit ? ' <i>' + unit + '</i>' : '') + '</b>' +
+          '<span class="li-n">' + line + '</span><span class="li-n">' + prev + '</span>';
+        return c;
+      };
+      const g = el('div', 'li-g');
+      g.appendChild(cell('TRAINING', num(perWk(a), 1), 'a week',
+        a.sessions + ' session' + (a.sessions === 1 ? '' : 's') + ' in ' + n + ' days',
+        'before: ' + num(perWk(b), 1) + ' a week'));
+      g.appendChild(cell('MEALS TRACKED', num(perDay(a), 1), 'a day',
+        a.meals + ' meals, ' + a.foodDays + ' of ' + n + ' days logged',
+        'before: ' + num(perDay(b), 1) + ' a day'));
+      g.appendChild(a.diff == null
+        ? cell('CALORIES', '\u2014', '', a.base ? 'no food logged' : 'no maintenance or target in STATUS', b.diff == null ? '' : 'before: ' + sign(b.diff) + ' a day')
+        : cell(a.diff > 0 ? 'SURPLUS' : 'DEFICIT', sign(a.diff), 'kcal a day',
+            'against ' + num(Math.round(a.base), 0) + ' ' + a.vs + ', ' + a.foodDays + ' days',
+            b.diff == null ? 'before: no food logged' : 'before: ' + sign(b.diff) + ' a day'));
+      g.appendChild(a.steps == null
+        ? cell('STEPS', '\u2014', '', 'no steps logged', b.steps == null ? '' : 'before: ' + num(Math.round(b.steps), 0) + ' a day')
+        : cell('STEPS', num(Math.round(a.steps), 0), 'a day', a.stepDays + ' of ' + n + ' days had steps',
+            b.steps == null ? 'before: no steps logged' : 'before: ' + num(Math.round(b.steps), 0) + ' a day'));
+      body.appendChild(g);
+    },
+  },
+
   /* ══════════════ the journal ══════════════
      STATUS writes bullets: a todo, an entry, an event, an idea. These are
      three views of the same rows, split by kind, because what you want from
@@ -4921,6 +5001,7 @@ const ABOUT = {
   sleep: 'Your nights of sleep: the average night and the nights on target.',
   spend: 'Money out this week against last week.',
   drinks: 'The next two drinks ELEMENT says to take.',
+  lockedin: 'How locked in you are: training sessions a week, meals tracked a day, calorie deficit or surplus, and steps, averaged over the days you pick, beside the stretch before.',
   workdone: 'What got done and what your numbers averaged, over 7 and 30 days and longer.',
   todo: 'Open todos, tickable, each naming where it came from.',
   ideas: 'Your idea bullets, the ! lines.',

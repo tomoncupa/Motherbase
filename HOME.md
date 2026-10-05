@@ -177,3 +177,15 @@ Measured in headless Chromium at 3840x1000 on the demo, every app full width, bo
 - **Left-heavy, 1250 to 1650px empty on the right:** QUESTS (to 2574), KITCHEN (to 2200).
 - ARC, FORGE and FORM are canvases; the demo leaves most of them empty, so their numbers say nothing.
 
+
+## 2026-10-06, HOME 1.0.56: LOCKED IN
+
+Tom: "a widget that shows me how locked in I am. Average training sessions, average number of tracked meals, average calorie deficit/surplus, average steps. No letter grades just math." Four numbers, 7, 14, 30 or 90 days from the widget's menu (7 by default), each with the same stretch before it underneath.
+
+- **The period ends yesterday.** A day still in progress would pull every average down: half a day of food reads as a deficit.
+- **Training** is sessions a week: days with one counted working set or more, by TRAIN's rule (`setIsWarm`, `setCounts`).
+- **Meals** is meals a day over every day in the period. STATUS logs each food as its own row, so foods logged within 45 minutes of the one before are one meal; a food with no time is one meal.
+- **Calories** is each food-logged day's total minus STATUS's maintenance estimate (`status.tdeeState`), or the calorie target, named as such, when there is no estimate. Days with no food are left out, not counted as zero.
+- **Steps** is the mean of the days with a steps reading, saying how many.
+
+Watched in the demo at 1600x950: added through ADD A WIDGET, SHOW 30 days through the menu and saved on the card, every number equal to a separate count of the same rows. Not seen with his own rows.
