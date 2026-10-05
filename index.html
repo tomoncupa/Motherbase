@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.47, 2026-10-05">
+<meta name="mb-version" content="1.0.48, 2026-10-05">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -201,6 +201,7 @@ nav button.dropinto{box-shadow:inset 2px 0 0 var(--acc)}
   }
   #tabs button{white-space:normal;text-align:center;line-height:1.15}
   #tabs button .g{font-size:18px;line-height:1}
+  #tabs button .lb{display:block;max-width:100%}
   /* the reading colour, as on the desk dock: the accent over the app's tint
      measured 3.96 to 1 on Slab */
   #tabs button.on{color:var(--txt)}
@@ -367,7 +368,9 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
   border-radius:var(--radius-md,10px);position:relative}
 @media (hover:hover) and (pointer:fine){ .row:hover{background:var(--surface-3)} }
 .row .bar{position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:3px;background:var(--acc)}
-.row .t{font-family:var(--f1);font-size:11px;letter-spacing:.06em;color:var(--dim);width:60px;flex:0 0 auto;padding-left:8px}
+/* at least 60px so times line up, wider when the theme's font is wide (A4,
+   2026-10-05: Press Start 2P ran "10:45pm" into the name beside it) */
+.row .t{font-family:var(--f1);font-size:11px;letter-spacing:.06em;color:var(--dim);min-width:60px;white-space:nowrap;flex:0 0 auto;padding-left:8px}
 .row .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* A bullet on the home screen is the same bullet as everywhere else: the mark
    in a .k, the words in a .tx, both dressed by shared/journal.js. The widget
@@ -1100,7 +1103,7 @@ function drawNav() {
        used on one. ARC, BLOCK and STYLE are desk work by hard constraint 10,
        and a bottom bar carrying all fourteen gave each of them 27px. */
     if (!a.phone) return;
-    const t = el('button', state + ' mb-press mb-tap', '<span class="g">' + appIco(a, 22) + '</span>' + a.nm);
+    const t = el('button', state + ' mb-press mb-tap', '<span class="g">' + appIco(a, 22) + '</span><span class="lb">' + a.nm + '</span>');
     if (appTint(a)) t.style.setProperty('--c', appTint(a));
     t.setAttribute('aria-label', a.nm + ' — ' + a.ds);
     if (view === a.id) t.setAttribute('aria-current', 'page');
@@ -1110,7 +1113,33 @@ function drawNav() {
     tabs.appendChild(t);
   });
   fitNav();
+  fitTabs();
 }
+
+/* ── a label shrinks until it fits its button ──
+   A4, 2026-10-05: in a wide theme font (Press Start 2P, Silkscreen) the
+   bottom bar's names ran into each other, HOMESTATUSQUESTSTRAIN. A label
+   wider than its button is set smaller, in proportion, never under 60% of
+   the bar's size; past that it clips at its own edge. Measured again when
+   the window, the theme or a font changes, so it is right in every theme. */
+function fitTabs() {
+  const t = $('#tabs');
+  if (!t || !t.offsetWidth) return;
+  t.querySelectorAll('.lb').forEach(lb => {
+    lb.style.fontSize = '';
+    const base = parseFloat(getComputedStyle(lb).fontSize) || 9.5;
+    let fs = base;
+    for (let k = 0; k < 4 && lb.scrollWidth > lb.clientWidth + 0.5; k++) {
+      fs = Math.max(base * 0.6, Math.floor(fs * lb.clientWidth / lb.scrollWidth * 4) / 4);
+      lb.style.fontSize = fs + 'px';
+      if (fs <= base * 0.6) break;
+    }
+    lb.style.overflow = lb.scrollWidth > lb.clientWidth + 0.5 ? 'hidden' : '';
+  });
+}
+window.addEventListener('resize', () => fitTabs());
+if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', () => fitTabs());
+new MutationObserver(() => fitTabs()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-skin', 'style'] });
 
 /* ── the names come off when they stop fitting ──
    Measured rather than guessed at a width, because the guess is what lost
@@ -2718,7 +2747,7 @@ const WIDGETS = {
     sub: () => '',
     draw(body) {
       const big = el('div');
-      big.style.cssText = 'font-family:var(--f1);font-size:34px;letter-spacing:.04em;color:var(--txt);line-height:1.1';
+      big.style.cssText = 'font-family:var(--f1);font-size:34px;letter-spacing:.04em;color:var(--txt);line-height:normal';
       const sub = el('div');
       sub.style.cssText = 'font-family:var(--f1);font-size:11px;letter-spacing:.14em;color:var(--dim2);margin-top:4px';
       const tick = () => {
