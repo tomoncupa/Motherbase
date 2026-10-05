@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.53, 2026-10-05">
+<meta name="mb-version" content="1.0.54, 2026-10-06">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -4633,7 +4633,40 @@ TRAIN.setVolume = function (exId, range) {
       .map(function (s) { return reps ? (s.r || 0) : TRAIN.toUnit((s.kg || 0) * (s.r || 0), U); });
     return { date: d, sets: v, total: v.reduce(function (a, x) { return a + x; }, 0) };
   }).filter(function (x) { return x.total > 0; });
-  return { reps: reps, u: reps ? 'reps' : U + 's', days: days };
+  var usual = days.length ? TRAIN.usualSets(exId, days[days.length - 1].date) : 0;
+  days.forEach(function (x) { x.top = TRAIN.topSum(x.sets, usual); });
+  return { reps: reps, u: reps ? 'reps' : U + 's', days: days, usual: usual };
+};
+
+/* ── what a trend measures ──
+   Tom, 2026-10-06, picked A: "your usual number of sets, heaviest first".
+   He warms up differently from day to day and does not always say so, and
+   nothing can tell an untagged warmup from a lighter set he works up from
+   (a 70% cut tried on his log flipped three lifts). So a TREND counts each
+   lift's usual number of sets, its median over its last 12 sessions, the
+   biggest first: extra light sets fall out only on a day with more sets
+   than usual, and a day with fewer counts as the less work it was. Every
+   total and set count still adds every set. */
+TRAIN.usualSets = function (exId, upto) {
+  var c = TRAIN.idx._usual || (TRAIN.idx._usual = {}), k = exId + '|' + upto;
+  if (c[k] != null) return c[k];
+  var n = {};
+  TRAIN.historyOf(exId).forEach(function (s) { if (s.date <= upto && TRAIN.counts(s)) n[s.date] = (n[s.date] || 0) + 1; });
+  var counts = Object.keys(n).sort().slice(-12).map(function (d) { return n[d]; }).sort(function (a, b) { return a - b; });
+  var m = counts.length, med = !m ? 0 : m % 2 ? counts[(m - 1) / 2] : Math.floor((counts[m / 2 - 1] + counts[m / 2]) / 2);
+  return (c[k] = med);
+};
+TRAIN.topSum = function (vals, n) {
+  return vals.slice().sort(function (a, b) { return b - a; }).slice(0, n || vals.length)
+    .reduce(function (a, x) { return a + x; }, 0);
+};
+/* A whole session as a trend reads it, in kg: each lift's usual sets. */
+TRAIN.trendVol = function (date) {
+  var by = {};
+  TRAIN.setsOn(date).forEach(function (s) {
+    if (TRAIN.counts(s)) (by[s.ex] = by[s.ex] || []).push((s.kg || 0) * (s.r || 0));
+  });
+  return Object.keys(by).reduce(function (a, ex) { return a + TRAIN.topSum(by[ex], TRAIN.usualSets(ex, date)); }, 0);
 };
 
 /* The lines, set 1 to set 4, one point per session. */
@@ -4668,10 +4701,11 @@ function setVolKey(sv) {
   for (var n = 0; n < Math.min(most, TRAIN.SV_LINES); n++) items.push({ name: 'Set ' + (n + 1), color: 'var(--data-' + (n + 1) + ')' });
   return Chart.legend(items);
 }
-/* Every set of the lift added up, a point per session, and the trend. */
+/* The lift's usual number of sets, biggest first (TRAIN.usualSets), added
+   up, a point per session, and the trend. */
 function sessVolChart(box, sv, label) {
   var num = function (v) { return sv.reps ? TRAIN.showReps(v) : Math.round(v).toLocaleString(); };
-  var pts = sv.days.map(function (d) { return [d.date, d.total, Day.label(d.date) + ': ' + num(d.total) + ' ' + sv.u]; });
+  var pts = sv.days.map(function (d) { return [d.date, d.top, Day.label(d.date) + ': ' + num(d.top) + ' ' + sv.u]; });
   return Chart.mount(box, { label: label }, function (c) {
     c.xTime(pts[0][0], pts[pts.length - 1][0]);
     fitY(c, pts.map(function (p) { return p[1]; }), Rec.setting(APP.id, 'graphZero') === 1);
@@ -4728,17 +4762,19 @@ function drawSetVolume(m, ex, exId, per, range) {
     m.appendChild(card);
   }
 
-  var pts = sv.days.map(function (d) { return [d.date, d.total]; });
+  var pts = sv.days.map(function (d) { return [d.date, d.top]; });
   var tr = TRAIN.trendOf(pts), said = trendWords(tr, pts.length);
   var card2 = UI.el('div', 'exblock pad');
-  card2.innerHTML = '<div class="fieldlabel">SESSION VOLUME (' + UI.esc(sv.u) + ')</div>';
+  card2.innerHTML = '<div class="fieldlabel">VOLUME, YOUR USUAL ' + sv.usual + ' SET' + (sv.usual === 1 ? '' : 'S') +
+    ' (' + UI.esc(sv.u) + ')</div>';
   var box2 = UI.el('div', 'chartbox');
   card2.appendChild(box2);
   sessVolChart(box2, sv, 'Session volume (' + sv.u + ')');
   expand(box2, 'SESSION VOLUME', function (b) { sessVolChart(b, sv, 'Session volume (' + sv.u + ')'); });
   if (said) {
     var foot = UI.el('div', 'lasttime');
-    foot.innerHTML = 'Trend <b>' + UI.esc(said.split(' ')[0]) + '</b> ' + UI.esc(said.split(' ').slice(1).join(' '));
+    foot.innerHTML = 'Trend <b>' + UI.esc(said.split(' ')[0]) + '</b> ' + UI.esc(said.split(' ').slice(1).join(' ')) +
+      ', each counting its ' + sv.usual + ' biggest set' + (sv.usual === 1 ? '' : 's');
     card2.appendChild(foot);
   }
   var totals = pts.map(function (p) { return p[1]; });
@@ -8522,7 +8558,10 @@ function drawWorkoutGraphs(m) {
   var card = UI.el('div', 'exblock pad');
   var unitWord = { workouts: 'sessions', sets: 'sets', reps: 'reps', volume: TRAIN.unitLabel(), time: 'minutes' }[metric];
   var perWord = { session: 'session', week: 'week', month: 'month', year: 'year' }[by];
-  var tr = by === 'session' && TRAIN.trendOf(series);
+  /* the trend through each session's usual sets per lift (TRAIN.trendVol)
+     when the bars are volume; the bars stay every set */
+  var tr = by === 'session' && TRAIN.trendOf(metric === 'volume'
+    ? series.map(function (p) { return [p[0], TRAIN.toUnit(TRAIN.trendVol(p[0]), TRAIN.unit())]; }) : series);
   card.innerHTML = '<div class="fieldlabel">' + UI.esc(metric === 'workouts' ? 'SESSIONS' : metric.toUpperCase()) + ' PER ' + perWord.toUpperCase() + '</div>';
   var box = UI.el('div', 'chartbox');
   card.appendChild(box);
@@ -9531,13 +9570,14 @@ TRAIN.volSessions = function (date) {
      beside an arm day's says nothing about either */
   var U = TRAIN.unit();
   return Object.keys(TRAIN.idx.byDate).filter(function (d) { return d === date || (d < date && TRAIN.sameSession(date, d)); }).sort()
-    .map(function (d) { return [d, TRAIN.toUnit(TRAIN.sessionStats(d).vol, U)]; })
+    .map(function (d) { return [d, TRAIN.toUnit(TRAIN.trendVol(d), U)]; })
     .filter(function (p) { return p[1] > 0; }).slice(-FRAME_VOL_N);
 };
 TRAIN.frameVol = function (date) {
   var pts = TRAIN.volSessions(date), n = pts.length, tr = TRAIN.trendOf(pts);
   if (!tr || !tr.up || tr.pct == null || pts[n - 1][0] !== date) return '';
   var p = Math.round(tr.pct);
+  if (p < 1) return '';
   var F = IO.frameSize(), hi = Math.max.apply(null, pts.map(function (x) { return x[1]; })) || 1;
   var c = Chart.make({ w: F.w, h: Math.round(F.w / 8), pad: { l: 3, r: 7, t: 7, b: 3 }, cls: 'mb-spark' });
   var line = pts.map(function (x, i) { return [i, x[1]]; });
@@ -9545,9 +9585,10 @@ TRAIN.frameVol = function (date) {
   c.area(line); c.line(line);
   c.line([[0, tr.from], [n - 1, tr.to]], 'trend');
   c.end(line[n - 1]);
-  return '<div class="fr-blk"><div class="fr-blk-t"><b>' + Math.round(pts[n - 1][1]).toLocaleString() + '</b> ' +
-    UI.esc(TRAIN.unitLabel()) + ' this session' + (p >= 1 ? ' · <span class="fr-gain">+' + p + '%</span> over ' + n + ' sessions like it' : '') +
-    '</div>' + c.el.outerHTML + '</div>';
+  /* no kg figure: the line is each lift's usual sets, and the totals line
+     under it already says the whole session's volume */
+  return '<div class="fr-blk"><div class="fr-blk-t">Volume <span class="fr-gain">+' + p + '%</span> over ' + n +
+    ' sessions like it</div>' + c.el.outerHTML + '</div>';
 };
 TRAIN.frameBlock = function (date) {
   var bw = TRAIN.blockWeeks(date), w = bw.weeks, n = w.length;

@@ -331,7 +331,14 @@ patterns are FORGE's `ftag` and none of his lifts have one. The story's
 SESSION VOLUME line compares only sessions like it. **Warmups are not always
 the same and not always tagged** (Tom, same day): four ways to discount them
 untagged were measured on his log and disagreed (Dumbbell Curl +6% every set,
--1% his usual 4 heaviest, +2% best set, -14% load-weighted); asked, not built.
+-1% his usual 4 heaviest, +2% best set, -14% load-weighted). **Tom picked A,
+2026-10-06, built 1.0.54: a TREND counts each lift's usual number of sets,
+biggest first** (`TRAIN.usualSets`, the median over its last 12 sessions;
+`TRAIN.topSum`; `TRAIN.trendVol` for a whole session). GRAPH's VOLUME, YOUR
+USUAL N SETS, the story's "Volume +X% over N sessions like it" (no kg figure,
+the totals line has it) and Analysis SESSION's trend read it; every total, set
+count and Analysis bar still adds every set. His log: Triceps +7 to +13%, Curl
++6 to -1%, Rope Push Down +9 to +10%, Laterals +5 to +2%.
 A new feature that reads
 `session.name` must work without it.
 
