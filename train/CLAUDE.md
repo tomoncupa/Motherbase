@@ -880,7 +880,9 @@ Curl separate; and *"There is no barbell squat?"*
 `train/mock-strength-graphs.html` mocks eight (1 e1RM bars, 2 rep dots, 3
 new plate, 4 set squares, 5 trophies, 6 block sparkline, 7 milestones, 8
 bodyweight ratio). Tom, 2026-10-05: *"I like 6, have it track set volumes, 5
-is okay too."* Read as working sets per week, not tonnage; say so if asked.
+is okay too."* Working sets per week, confirmed the same day: *"we don't care
+about 1rms - More overall set volume"*, and he chose sets per week over a
+running block total. It dips in a lighter week; that is honest, leave it.
 - **6, Sets per week** (`shareBlock`, on), in the frame just above the
   totals: "N sets in week K · +X% since week 1" and a line under it
   (`TRAIN.frameBlock`, `TRAIN.blockWeeks`). Weeks are the block's own 7-day
