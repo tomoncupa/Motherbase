@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.61, 2026-10-05">
+<meta name="mb-version" content="1.0.62, 2026-10-05">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -983,7 +983,7 @@ const APP = {
   name: 'Status',
   icon: '◐',
   blurb: 'sleep, weight, mood, food and money',
-  types: ['field', 'ev', 'day', 'food', 'meal', 'spend', 'acct', 'shot', 'note'],
+  types: ['field', 'ev', 'day', 'food', 'meal', 'spend', 'acct', 'shot', 'note', 'screen', 'deskon'],
 };
 
 /* ── settings, all namespaced under status. ───────────────────────────── */
@@ -8093,8 +8093,75 @@ function deskAway() {
 }
 function deskHost(m) {
   deskHostInfo = m || {}; deskHostAt = Date.now();
+  screenTick(deskHostInfo);
   if (deskWaiting && !deskAway()) deskTick();
 }
+
+/* ── where the desk time goes ──
+   Tom, 2026-10-05, picking "a daily log of time per program": "But also I
+   use to see what time I generally go to bed." The launcher already says
+   every 5 seconds which program is in front and how long since the keyboard
+   or mouse was touched; until now none of it was kept. Two row types:
+
+     screen  key the program's file name, dated: {app, s}, seconds it was in
+             front while he was there (touched in the last SCREEN_IDLE).
+     deskon  key '', dated: {on: [[from, to], ...]}, minutes of the day he
+             was at the PC, a gap under SCREEN_GAP minutes joined. The last
+             one before a long night gap is when he left the desk, which is
+             what "when do I go to bed" is read from.
+
+   Program names only: a window's title is never kept. Held in memory and
+   written once a minute, and when the page goes, so live sync carries a
+   row a minute rather than one every 5 seconds. Only the launcher calls
+   this, so a phone or a browser tab never writes either type. */
+const SCREEN_IDLE = 120;   /* seconds untouched before the time stops counting */
+const SCREEN_GAP = 10;     /* minutes: a shorter break is one stretch at the desk */
+const SCREEN_FLUSH = 60000;
+let scrBuf = {};           /* exe -> {app, ms} not yet written */
+let scrSpan = null;        /* {d, a, b} the stretch he is in, minutes of day d */
+let scrAt = 0, scrFlushAt = 0;
+function screenTick(m) {
+  if (!DESK || !HOSTED) return;
+  const now = Date.now();
+  /* A gap longer than a few ticks is the PC asleep, not him in front of it. */
+  const dt = scrAt && now - scrAt < 15000 ? now - scrAt : 5000;
+  scrAt = now;
+  if (m.idle == null || m.idle >= SCREEN_IDLE) return screenMaybeFlush(now);
+  /* the stretch first, so a new day's first tick is not written to the last */
+  const d = Day.today(), t = new Date(now), min = t.getHours() * 60 + t.getMinutes();
+  if (scrSpan && scrSpan.d === d && min - scrSpan.b <= SCREEN_GAP) scrSpan.b = min;
+  else { screenFlush(); scrSpan = { d: d, a: min, b: min }; }
+  const exe = String(m.exe || '').toLowerCase().replace(/\.exe$/, '');
+  if (exe) {
+    const b = scrBuf[exe] || (scrBuf[exe] = { app: m.app || exe, ms: 0 });
+    b.ms += dt;
+    if (m.app) b.app = m.app;
+  }
+  screenMaybeFlush(now);
+}
+function screenMaybeFlush(now) {
+  if (now - scrFlushAt >= SCREEN_FLUSH) screenFlush();
+}
+function screenFlush() {
+  scrFlushAt = Date.now();
+  const d = scrSpan ? scrSpan.d : Day.today();
+  Object.keys(scrBuf).forEach(exe => {
+    const add = Math.round(scrBuf[exe].ms / 1000);
+    if (add < 1) return;
+    const old = Rec.get('screen', d, exe) || {};
+    Rec.set('screen', d, exe, { app: scrBuf[exe].app, s: (old.s || 0) + add });
+  });
+  scrBuf = {};
+  if (!scrSpan) return;
+  const row = Rec.get('deskon', scrSpan.d, '') || {};
+  const on = Array.isArray(row.on) ? row.on.slice() : [];
+  const i = on.findIndex(x => x[0] === scrSpan.a);
+  const span = [scrSpan.a, scrSpan.b];
+  if (i > -1) { if (on[i][1] === span[1]) return; on[i] = span; }
+  else on.push(span);
+  Rec.set('deskon', scrSpan.d, '', { on: on });
+}
+addEventListener('pagehide', () => { if (DESK && HOSTED) screenFlush(); });
 
 function deskTick() {
   if (!DESK) return;

@@ -258,6 +258,8 @@ An app may read any type. It writes only the types it owns.
 | `cref` | **checkin** | `goal:pose`, `setup`, or `pid\|goal:pose` | a goal photo, or where the phone stands. Shaped like `cphoto` |
 | `cperson` | **checkin** | client id | `{name, animal, unit, fields, seen}` — a client whose check-in file was opened. Their rows carry the id in front of the key |
 | `checkin` | **checkin** | `''`, dated | `{sent}` — when that day's check-in was sent to a coach |
+| `screen` | **status**, only inside STATUS.exe | the program's file name, lowercase, no `.exe`, dated | `{app, s}` — seconds that program was in front while he was at the PC (keyboard or mouse touched in the last 2 minutes). Never a window title |
+| `deskon` | **status**, only inside STATUS.exe | `''`, dated | `{on: [[from, to], ...]}` — minutes of the day he was at the PC, breaks under 10 minutes joined. When he left the desk at night is read from these |
 | `day` | **status**; **log** writes `note`, the day's summary | `''` | `{note, rest}` |
 | `food` | **status** names the shape; **portion** writes it too | food id | the label as printed, plus your own servings. `base` may also carry any key in `shared/nutrients.js`, and every writer MERGES into `base` rather than rebuilding it: STATUS's food editor rebuilt it until 2026-09-22 and would have wiped all of them on one Update; **kitchen** adds a food typed in it and a 1 piece serving |
 | `meal` | **status** | timestamp id | one logged serving, numbers frozen in; **kitchen** writes one per planned food marked eaten, key `kitchen-<plan key>`, `src: 'kitchen'` |
