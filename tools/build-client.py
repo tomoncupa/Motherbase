@@ -85,7 +85,11 @@ DROP_WIDGETS = ['links']
 #             only when Cloud is there, so a client build has no LIVE SYNC
 #             section at all rather than a dead one. Delete this line the day
 #             clients get it, and nothing else has to change.
-DROP_SHARED = []   # cloud.js went to clients 2026-09-23, Tom: "push it to clients"
+#   claude.js the CLAUDE panel, 2026-10-04. Main Menu.exe injects it and runs
+#             Tom's own claude.exe on his subscription; no client page loads
+#             it and no client has the program. Tom, 2026-10-05: "Make sure
+#             clients dont get anything they should[n't]".
+DROP_SHARED = ['claude.js']   # cloud.js went to clients 2026-09-23, Tom: "push it to clients"
 
 # ── the five themes ───────────────────────────────────────────────────────
 # Order matters: skins.js falls back to skins[0] when nothing is saved, so
@@ -166,6 +170,13 @@ for d in COPY_DIRS:
     for name in os.listdir(here):
         low = name.lower()
         if low.endswith('.md') or low == '_smoke.html' or low == 'placeholder.txt':
+            os.remove(os.path.join(here, name))
+        # An app folder ships its index.html and nothing else that is a page:
+        # a mock-up or a before/after copy left beside it is a session's
+        # working file, and the offline list below would cache it on every
+        # client's phone. TRAIN's mock-strength-graphs.html went out that
+        # way on 2026-10-04.
+        elif d != 'shared' and low.endswith('.html') and low != 'index.html':
             os.remove(os.path.join(here, name))
         elif d == 'shared' and name in DROP_SHARED:
             os.remove(os.path.join(here, name))
