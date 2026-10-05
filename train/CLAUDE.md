@@ -323,7 +323,16 @@ so step 2 above, the session card's totals and the story's comparison all
 work unnamed. Training Routines lists YOUR SESSIONS: named ones, then up to
 six groups of unnamed days done twice or more, under their first two
 exercises and "done N times"; a tap copies the latest. On his log since
-March, 57 of 86 days have an earlier like day. A new feature that reads
+March, 57 of 86 days have an earlier like day. **Or the same muscle
+groups in close to the same amounts** (1.0.53, Tom: *"sessions that share a
+close enough movement pattern/muscle group combination"*): sets per group,
+alike at 60% (`TRAIN.dayMix`, `TRAIN.sameSession`), 73 of 86 days. Movement
+patterns are FORGE's `ftag` and none of his lifts have one. The story's
+SESSION VOLUME line compares only sessions like it. **Warmups are not always
+the same and not always tagged** (Tom, same day): four ways to discount them
+untagged were measured on his log and disagreed (Dumbbell Curl +6% every set,
+-1% his usual 4 heaviest, +2% best set, -14% load-weighted); asked, not built.
+A new feature that reads
 `session.name` must work without it.
 
 ### The session card

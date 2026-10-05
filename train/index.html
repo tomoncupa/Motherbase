@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.52, 2026-10-05">
+<meta name="mb-version" content="1.0.53, 2026-10-05">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -5929,10 +5929,9 @@ TRAIN.namedSessions = function (except) {
   Object.keys(TRAIN.idx.byDate).sort().reverse().forEach(function (d) {
     var nm = String((Rec.get('session', d, '') || {}).name || '').trim();
     if (nm || d === except) return;
-    var mine = TRAIN.dayExs(d);
-    if (!Object.keys(mine).length) return;
+    if (!Object.keys(TRAIN.dayExs(d)).length) return;
     for (var i = 0; i < groups.length; i++) {
-      if (TRAIN.likeDays(mine, TRAIN.dayExs(groups[i].last))) { groups[i].times++; return; }
+      if (TRAIN.sameSession(d, groups[i].last)) { groups[i].times++; return; }
     }
     groups.push({ last: d, times: 1, auto: true });
   });
@@ -8926,14 +8925,39 @@ TRAIN.likeDays = function (a, b, partial) {
   var union = n + Object.keys(b).length - both;
   return both / union >= 0.5 || (partial && both === n);
 };
+/* Or the same muscle groups in close to the same amounts (Tom, 2026-10-05:
+   "sessions that share a close enough movement pattern/muscle group
+   combination"): sets per group, alike when what the two days share is 60%
+   of what either did. Back 14 + Triceps 9 is like Back 16 + Triceps 4. On
+   his log since March it takes days with a like day from 57 of 86 to 73.
+   Muscle groups, because every exercise has one; movement patterns are
+   FORGE's and none of his lifts carry one. */
+TRAIN.dayMix = function (d) {
+  var c = TRAIN.idx._mix || (TRAIN.idx._mix = {});
+  if (c[d]) return c[d];
+  var exs = TRAIN.exercises(), o = {};
+  TRAIN.setsOn(d).forEach(function (s) {
+    if (!TRAIN.counts(s)) return;
+    var k = (exs[s.ex] || {}).cat || '?';
+    o[k] = (o[k] || 0) + 1;
+  });
+  return (c[d] = o);
+};
+TRAIN.sameSession = function (a, b, partial) {
+  if (TRAIN.likeDays(TRAIN.dayExs(a), TRAIN.dayExs(b), partial)) return true;
+  var x = TRAIN.dayMix(a), y = TRAIN.dayMix(b), lo = 0, hi = 0, k;
+  for (k in x) { lo += Math.min(x[k], y[k] || 0); hi += Math.max(x[k], y[k] || 0); }
+  for (k in y) if (!(k in x)) hi += y[k];
+  return hi > 0 && lo / hi >= 0.6;
+};
 TRAIN.compareCtx = function (date) {
   var sess = Rec.get('session', date, '') || {}, named = [];
   var key = String(sess.name || '').trim().toLowerCase();
   var ph = TRAIN.phaseOn(date), inside = [], outside = [];
   if (!key) {
-    var mine = TRAIN.dayExs(date), today = date === Day.today();
+    var today = date === Day.today();
     Object.keys(TRAIN.idx.byDate).forEach(function (d) {
-      if (d >= date || !TRAIN.likeDays(mine, TRAIN.dayExs(d), today)) return;
+      if (d >= date || !TRAIN.sameSession(date, d, today)) return;
       (ph && d >= ph.from ? inside : outside).push(d);
     });
   }
@@ -9497,14 +9521,16 @@ TRAIN.blockWeeks = function (date) {
 };
 /* The session's whole volume against the sessions before it (Tom,
    2026-10-05: "1 line? Overall session volume?", and on the story too).
-   Every session, not the same-named ones: he names none (0 of 41 days
-   since June). The last FRAME_VOL_N up to this day, with the trend through
+   Sessions like this one by exercises or muscle groups, never by name: he
+   names none (0 of 41 days since June). The last FRAME_VOL_N up to this day, with the trend through
    them; shown only while the trend is up, the rule for anything shared, and
    drawn from zero, so a gain is drawn its true size. */
 var FRAME_VOL_N = 12;
 TRAIN.volSessions = function (date) {
+  /* only sessions like this one (TRAIN.sameSession): a leg day's volume
+     beside an arm day's says nothing about either */
   var U = TRAIN.unit();
-  return Object.keys(TRAIN.idx.byDate).filter(function (d) { return d <= date; }).sort()
+  return Object.keys(TRAIN.idx.byDate).filter(function (d) { return d === date || (d < date && TRAIN.sameSession(date, d)); }).sort()
     .map(function (d) { return [d, TRAIN.toUnit(TRAIN.sessionStats(d).vol, U)]; })
     .filter(function (p) { return p[1] > 0; }).slice(-FRAME_VOL_N);
 };
@@ -9520,7 +9546,7 @@ TRAIN.frameVol = function (date) {
   c.line([[0, tr.from], [n - 1, tr.to]], 'trend');
   c.end(line[n - 1]);
   return '<div class="fr-blk"><div class="fr-blk-t"><b>' + Math.round(pts[n - 1][1]).toLocaleString() + '</b> ' +
-    UI.esc(TRAIN.unitLabel()) + ' this session' + (p >= 1 ? ' · <span class="fr-gain">+' + p + '%</span> over ' + n + ' sessions' : '') +
+    UI.esc(TRAIN.unitLabel()) + ' this session' + (p >= 1 ? ' · <span class="fr-gain">+' + p + '%</span> over ' + n + ' sessions like it' : '') +
     '</div>' + c.el.outerHTML + '</div>';
 };
 TRAIN.frameBlock = function (date) {
