@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.59, 2026-10-05">
+<meta name="mb-version" content="1.0.60, 2026-10-05">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -6700,6 +6700,15 @@ function drawTrackTab(pane) {
   clr.onclick = () => UI.confirm('Delete every photo?', 'The entries they belong to stay.')
     .then(ok => { if (ok) { Rec.all('shot').forEach(r => Rec.del('shot', r.date, r.key)); drawSettingsPane('track'); } });
   pane.appendChild(clr);
+
+  /* D3, 2026-10-05: the status check on a phone, off until switched on */
+  pane.appendChild(el('label', 'fl', 'Status check on the phone'));
+  pane.appendChild(toggleRow('Ask when STATUS opens', '', !!S.get('phonecheck.on', 0), v => {
+    S.set('phonecheck.on', v ? 1 : 0); drawSettingsPane('track');
+  }));
+  pane.appendChild(el('div', 'note', 'Between 8am and 9pm, when STATUS opens on a phone three hours or ' +
+    'more after the last check, the same status check comes up once. It stays until it is answered, ' +
+    'as on the desk, and what you answer is an ordinary reading.'));
 }
 
 /* anything not in the library */
@@ -7878,6 +7887,7 @@ Rec.ready(() => {
      Never blocks, never speaks unless it actually brought something back. */
   Mirror.onOpen(APP.id);
   draw();
+  setTimeout(phoneCheck, 600);
   if (IO.isStale(APP.id)) setTimeout(() => UI.toast('no backup in ' + (IO.staleDays(APP.id) == null ? 'a while' : IO.staleDays(APP.id) + ' days') + ' — <b>settings → data</b>'), 1500);
 });
 wireDaySwipe();
@@ -8489,10 +8499,31 @@ function checkSave() {
   checkOn = false;
   document.body.classList.remove('checking');
   deskAsking = false;
+  /* the phone asks three hours after this, wherever it was answered */
+  S.set('check.at', Date.now());
   deskTitle();
   deskBar();
   draw();
 }
+
+/* ── the status check on a phone (D3, 2026-10-05) ──
+   Tom said yes to: "When STATUS opens on a phone between 8am and 9pm, and the
+   last check was 3 or more hours ago, the same status check comes up once and
+   saves the same rows as the desktop one. It's a setting, OFF by default."
+   Opening counts twice on a phone: a fresh load, and coming back to the app,
+   because an installed iPhone app resumes rather than reloads. The desk has
+   its own timer, so this never runs where the launcher opened the page. */
+const PHONE_GAP = 3 * 3600000;
+function phoneCheck() {
+  if (DESK || checkOn || sheetH || document.hidden) return;
+  if (!S.get('phonecheck.on', 0)) return;
+  if (!matchMedia('(pointer:coarse)').matches) return;
+  const h = new Date().getHours();
+  if (h < 8 || h >= 21) return;
+  if (Date.now() - (+S.get('check.at', 0) || 0) < PHONE_GAP) return;
+  checkOpen();
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(phoneCheck, 400); });
 
 function deskAsk() {
   if (checkOn) return;
