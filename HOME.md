@@ -118,6 +118,8 @@ The kernel's `wrote` pokes neighbours only when `Rec.channel` is false (a folder
 
 ## 1.0.45, 2026-10-02: SIDE, the board stays beside an app on a very wide window
 
+**Gone since 1.0.55** (Tom, 2026-10-06, "I don't want to look at 2 apps at the same time"). See the 1.0.55 SIDE entry at the end.
+
 Tom, on a super ultrawide (first said 5120x1440; it is **3840x1080**, Tom 2026-10-04): "what kind of smart resizing can we do when switching". Measured first, on the demo at 3440 wide: every app filled the stage and drew a column of 606 (SHEET), 632 (TRAIN), 768 (QUESTS, KITCHEN), 1126 (STATUS) to 1646px (COACH), the rest empty. He picked "the app plus the home board" and "each app uses the width", and said no to three apps at once.
 
 - **The rule.** Below `SIDE_MIN` (2400px of stage) nothing changes. Above it an app with a `fit` in the roster takes the RIGHT part of the stage and the board keeps the left: the board is a fixed grid that grows empty columns to the right (1.0.31), so his cards do not move when an app opens. The app's width is what the board's saved cards do not need (`boardNeed`, their right edge), held between its fit's floor and ceiling: `narrow` 900 to 1280 (TRAIN, CHECK IN, NOTICE, SPEAK, ELEMENT, RECEIPTS), `half` 1600 to 3200 (STATUS, LOG, QUESTS, KITCHEN, WEALTH, COACH, FOODDEX, SHEET). `full` (BLOCK, STYLE, ARC, FORGE, FORM) and anything that would leave the board under `BOARD_MIN` (900) fill the stage as before. Switching apps re-sizes the frame and redraws the board; the board redraws on store changes while it is beside an app, not only on HOME.
@@ -164,3 +166,14 @@ The three bands are EARLY, MIDDLE and LATE until named on the card's own menu, N
 ## 2026-10-06, HOME 1.0.55: DESK TIME
 
 Tom picked a daily log of time per program, "But also I use to see what time I generally go to bed", then "have it be a main menu widget". DESK TIME (`desktime`, `mine: 1`, under STATUS in ADD A WIDGET) reads STATUS.exe's `screen` and `deskon` rows (status/CLAUDE.md 1.0.62): TODAY (time at the PC), OFF LAST NIGHT, USUAL (the middle of the last 14 nights that have one), then today's top six programs. A night is named by its evening; bedtime (`deskBed`) is the end of the first stretch ending 9pm to noon next day that is followed by 3 hours or more with nobody at the PC, so phone time in bed is not seen. Watched in headless Chromium at 1920 by adding it from the picker over six made-up nights: 2:15, 2:10am, 1:18am over 4 nights, CapCut 1:30, Chrome 0:45; review 142/142. Not on his screens; real nights start once STATUS.exe runs 1.0.62.
+
+## 2026-10-06, HOME 1.0.55 also: SIDE removed, every app fills the stage again
+
+Tom, in Main Menu.exe on his 3840x1080: "I don't want to look at 2 apps at the same time, let's review our 3840*1080 accomodation". SIDE (1.0.45) is deleted: `SIDE_MIN`, `sideFor`, `placeSide`, `boardNeed`, `boardOn`, `#stage.side` and each roster entry's `fit`. `go()` is back to what it was before 1.0.45, the board hidden whenever an app is open. Each app's own wide layout stays. It shipped inside the DESK TIME commit (64b863e), because that session staged the whole file while this edit sat in it; to bring SIDE back, restore those names from 8dd9f5e.
+
+Measured in headless Chromium at 3840x1000 on the demo, every app full width, board hidden: how wide the drawn part is below the top bar, and the widest empty band.
+- **Fill the width:** SHEET (98% covered), ELEMENT, WEALTH, COACH, FOODDEX, CHECK IN (centred, 600 to 700px empty each side), BLOCK, STYLE, LOG.
+- **A column in the middle, 1300 to 1600px empty each side:** TRAIN (640 wide), RECEIPTS (670), SPEAK (770), NOTICE (1100), STATUS (1180).
+- **Left-heavy, 1250 to 1650px empty on the right:** QUESTS (to 2574), KITCHEN (to 2200).
+- ARC, FORGE and FORM are canvases; the demo leaves most of them empty, so their numbers say nothing.
+
