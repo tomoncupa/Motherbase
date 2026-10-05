@@ -2023,6 +2023,29 @@ async function run() {
         !!document.getElementById('mb-font-' + String(spec).replace(/[^a-z0-9]/gi, '')));
     });
   })());
+  /* A5, 2026-10-05: offline a theme fell back to the device's font, because
+     every face but two came from Google. Every family a factory theme names
+     is kept here, and its stylesheet and every file it names answer. */
+  {
+    const fams = {};
+    Skins.data.skins.forEach(k => (Array.isArray(k.font) ? k.font : [k.font]).filter(Boolean)
+      .forEach(spec => { fams[decodeURIComponent(String(spec).split(':')[0].replace(/\+/g, ' '))] = 1; }));
+    const missing = Object.keys(fams).filter(f => !Skins.localFonts[f]);
+    const bad = [];
+    for (const f of Object.keys(Skins.localFonts)) {
+      const href = Skins.fontHref(f.replace(/ /g, '+'));
+      if (/googleapis/.test(href)) { bad.push(f + ' goes to Google'); continue; }
+      const css = await fetch(href, { cache: 'no-store' }).then(r => r.ok ? r.text() : '', () => '');
+      if (css.indexOf("'" + f + "'") < 0) { bad.push(f + ': no stylesheet'); continue; }
+      for (const m of css.match(/url\([^)]+\)/g) || []) {
+        const u = new URL(m.slice(4, -1), href);
+        const ok2 = await fetch(u, { method: 'HEAD', cache: 'no-store' }).then(r => r.ok, () => false);
+        if (!ok2) bad.push(f + ': ' + u.pathname.split('/').pop() + ' missing');
+      }
+    }
+    ok('fonts: every family a theme names is kept in shared/fonts, and every file of it is there',
+      !missing.length && !bad.length, ' — not kept: ' + missing.join(', ') + '; ' + bad.slice(0, 4).join(', '));
+  }
   ok('skins: a theme may name two faces, and does', (() => {
     const two = Skins.data.skins.filter(k => Array.isArray(k.font));
     return two.length > 0 && two.every(k => k.font.length === 2 &&
