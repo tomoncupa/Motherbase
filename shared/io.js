@@ -3450,9 +3450,98 @@ IO.loadCloud = function (done) {
   if (g.Cloud) { if (done) setTimeout(done, 0); return; }
   addShared('mb-cloud-js', 'cloud.js', done);
 };
+/* ── the sync dot (2026-10-06) ──
+   Tom, from a design review: "Maybe a small green dot." A sync that failed in
+   the background said nothing at all (`quiet` hides its toasts) and the only
+   place to find out was Settings, DATA, LIVE SYNC. So every app's header
+   carries a dot beside its name: green while live and connected, and amber
+   or red with the words "Not syncing" when it is not, so the colour is never
+   the only signal. A tap opens the same LIVE SYNC panel DATA has, with its
+   reason and its Sign in or Sync now.
+
+   Nothing at all on a device that has never signed in (a client who uses the
+   suite offline, a folder copy, the demo) or that signed out on purpose: a
+   dot there would nag about a choice. Top document only, like cloud.js's own
+   connection, so an app opened inside the home screen does not show a second
+   one under the home screen's. A hiccup is not news: a bad state shows only
+   once it has lasted GRACE, which also covers the second or two every open
+   takes to connect. */
+IO.syncDot = function () {
+  if (DEMO || g.top !== g || !g.Cloud || document.querySelector('.mb-sdot')) return;
+  const at = document.querySelector('header .logo, #topbar #logo, header .brand');
+  if (!at || !at.parentNode) return;
+  if (!document.getElementById('mb-sdot-css')) {
+    const st = document.createElement('style');
+    st.id = 'mb-sdot-css';
+    st.textContent =
+      '.mb-sdot{display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2,8px);flex:0 0 auto;' +
+        'min-width:var(--tap,44px);min-height:var(--tap,44px);margin:calc(-1 * var(--s-2,8px)) 0;padding:0 var(--s-2,8px);' +
+        'border:0;background:none;color:var(--text-2);font:inherit;font-size:var(--f-1,12px);letter-spacing:0;' +
+        'text-transform:none;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+      '.mb-sdot[hidden]{display:none}' +
+      '.mb-sdot i{display:block;width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:var(--success)}' +
+      '.mb-sdot.warn i{background:var(--warn)}' +
+      '.mb-sdot.bad i{background:var(--danger)}' +
+      '.mb-sdot.ok span{display:none}' +
+      /* a phone's header has no 96px to spare: the two words stack */
+      '@media (max-width:480px){.mb-sdot{gap:6px;padding:0 var(--s-1,4px)}' +
+        '.mb-sdot span{white-space:normal;width:min-content;line-height:1.15;text-align:left}}' +
+      '.mb-sdot:focus-visible{outline:2px solid var(--focus,var(--accent));outline-offset:-4px;border-radius:var(--radius-sm,4px)}';
+    document.head.appendChild(st);
+  }
+  const b = el('button', 'mb-sdot', '<i></i><span>Not syncing</span>');
+  b.type = 'button';
+  b.hidden = true;
+  at.parentNode.insertBefore(b, at.nextSibling);
+
+  const GRACE = 10000;
+  let badSince = 0, timer = null;
+  const modeOf = s => {
+    if (!s || s.file || !s.has) return '';
+    if (s.conn) return 'ok';
+    if (s.live) return 'warn';                       /* signed in, no connection this minute */
+    if (s.out || (s.on && s.why)) return 'bad';      /* Google signed it out, or it was refused */
+    if (s.on) return 'warn';                         /* still starting, past the grace */
+    return '';                                       /* never signed in, or signed out on purpose */
+  };
+  const draw = () => {
+    clearTimeout(timer); timer = null;
+    let s = null;
+    try { s = g.Cloud.state(); } catch (e) {}
+    const m = modeOf(s);
+    if (m === 'ok' || m === '') badSince = 0;
+    else if (!badSince) badSince = Date.now();
+    const wait = badSince ? GRACE - (Date.now() - badSince) : 0;
+    if (wait > 0) timer = setTimeout(draw, wait + 50);
+    const show = m === 'ok' || (!!m && wait <= 0);
+    b.hidden = !show;
+    if (!show) return;
+    b.className = 'mb-sdot ' + m;
+    const say = m === 'ok' ? 'Live sync: connected' + (s.email ? ' as ' + s.email : '')
+      : 'Not syncing' + (s.why ? ': ' + s.why : s.live ? ': no connection right now, everything is saved here' : '');
+    b.title = say;
+    b.setAttribute('aria-label', say + '. Open live sync');
+  };
+  b.onclick = () => {
+    if (!g.UI || !g.UI.dialog) return;
+    g.UI.dialog({
+      title: 'LIVE SYNC',
+      width: 460,
+      body: box => {
+        IO.cloudRow(box, false);
+        /* the panel's own heading says what the dialog's title already does */
+        const h = box.querySelector('.mb-live-sync > .mb-group');
+        if (h) h.remove();
+      },
+      actions: [{ label: 'DONE', kind: 'go' }],
+    });
+  };
+  g.Cloud.on(draw);
+  draw();
+};
 (function afterOpen() {
   if (DEMO) return;
-  const go = () => setTimeout(() => { addShared('mb-report-js', 'report.js'); IO.loadCloud(); }, 0);
+  const go = () => setTimeout(() => { addShared('mb-report-js', 'report.js'); IO.loadCloud(() => IO.syncDot()); }, 0);
   if (g.Rec && g.Rec.ready) g.Rec.ready(go);
   else g.addEventListener('load', go, { once: true });
 })();

@@ -593,6 +593,17 @@ stylesheets, from this copy, and Google only on that link's `onerror`;
 (watched in headless Chromium: a VT323 theme reopened offline was VT323).
 One smoke check fetches every family's stylesheet and every file it names.
 
+## The sync dot (2026-10-06, `io.js`)
+
+`IO.syncDot()` puts a dot after the header's `.logo` (or ARC's `#logo`, FORM's
+`.brand`) once cloud.js is in: green while `state().conn`, amber or red plus
+the words "Not syncing" otherwise, a tap opens `IO.cloudRow` in a dialog.
+Hidden when the device never signed in or signed out on purpose (`!on`), from
+a folder, in the demo, and in any frame, so HOME shows one and its framed app
+none. A bad state shows only after 10 s, which covers every open's connect.
+Phone headers stack the two words (under 480px), measured with no overflow
+at 390 in TRAIN, STATUS, KITCHEN, SPEAK, CHECK IN, BULLET.
+
 ## History
 
 `HISTORY.md`, beside this file, holds the debt list, the numbered foundation
