@@ -110,6 +110,20 @@ body{overscroll-behavior-y:none}
 .mb-press.flat[data-press]{transform:none;background-color:var(--surface-3,#1a2430)}
 .mb-press.lift[data-press]{transform:none;box-shadow:var(--e-1)}
 
+/* ── what a hold does, made visible (2026-10-06) ──
+   A hold opened a menu and nothing on the row said so. \`.mb-dots\` is the
+   button Mobile.hold adds when asked (opts.dots), opening the same menu; and
+   \`.mb-grip\` is the mark on a row a hold picks up to move. Both quiet. */
+.mb-dots{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+  position:relative;z-index:1;
+  width:32px;height:32px;padding:0;margin:0;border:0;border-radius:var(--radius-sm,4px);
+  background:none;color:var(--text-muted,#5b6d80);font:inherit;line-height:1;cursor:pointer}
+.mb-dots:hover{color:var(--text-1,#dbe7f0)}
+.mb-dots svg{display:block}
+.mb-grip{display:block;flex:0 0 auto;width:7px;height:13px;color:var(--text-muted,#5b6d80);opacity:.75;
+  pointer-events:none;
+  background:radial-gradient(circle,currentColor 1.1px,transparent 1.5px) 0 0/3.5px 4.33px}
+
 /* Keyboard is up: anything that says so can lift itself clear. */
 .mb-kbpad{padding-bottom:calc(var(--kb) + var(--safe-b,0px))}
 
@@ -631,8 +645,38 @@ function hold(el, fn, opts) {
   let timer = null, sx = 0, sy = 0, fired = false, firedAt = 0, id = null;
   const cancel = () => { clearTimeout(timer); timer = null; id = null; };
 
+  /* opts.dots: a visible ⋯ on the row opening the same menu, so the hold is
+     a shortcut and never the only way in (DOCTRINE law 6). `true` puts it
+     last in the row; a node puts it just before that node. Tom, 2026-10-06. */
+  if (opts.dots) {
+    /* a row that is itself a button cannot hold another one */
+    const inBtn = el.tagName === 'BUTTON';
+    const d = doc.createElement(inBtn ? 'span' : 'button');
+    if (inBtn) {
+      d.setAttribute('role', 'button'); d.tabIndex = 0;
+      d.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault(); e.stopPropagation(); d.click();
+      });
+    } else d.type = 'button';
+    d.className = 'mb-dots mb-tap nohold';
+    d.setAttribute('aria-label', opts.dotsLabel || 'More');
+    d.title = opts.dotsLabel || 'More';
+    d.innerHTML = (g.Icons && g.Icons.svg && g.Icons.svg('menu', { size: 18 })) || '⋯';
+    d.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      const r = d.getBoundingClientRect();
+      Mobile.feedback('select');
+      fn({ type: 'dots', target: d, currentTarget: el, pointerType: 'dots',
+           clientX: r.left, clientY: r.bottom, preventDefault() {}, stopPropagation() {} });
+    });
+    if (opts.dots.nodeType && opts.dots.parentNode === el) el.insertBefore(d, opts.dots);
+    else el.appendChild(d);
+  }
+
   el.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;  /* right-click has its own path */
+    if (e.target.closest && e.target.closest('.mb-dots')) return;
     if (opts.skip && e.target.closest(opts.skip)) return;
     id = e.pointerId; sx = e.clientX; sy = e.clientY; fired = false; firedAt = 0;
     timer = setTimeout(() => {
