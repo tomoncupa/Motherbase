@@ -8,6 +8,10 @@ were called testers until then. They are not the coaching clients in WEALTH.
 `CLAUDE.md` says what the suite is. `DOCTRINE.md` says what each app is for.
 This says how it reaches somebody who is not you.
 
+**Two addresses, never mixed.** Tom, 2026-10-06: `tomoncupa.github.io/Motherbase/`
+is Tom's alone, always. Everyone else gets
+`tomoncupa.github.io/Mainmenu-client/`, and every link sent to anyone uses it.
+
 ---
 
 ## The shape of it

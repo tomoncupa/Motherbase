@@ -41,6 +41,11 @@ button the client presses, and only that way, until Tom says otherwise.
 not the coaching clients WEALTH and COACH track. Say which wherever it could be
 either.
 
+**Two addresses, never mixed.** Tom, 2026-10-06: `tomoncupa.github.io/Motherbase/`
+is Tom's alone, always. `tomoncupa.github.io/Mainmenu-client/` is for everyone
+who is not Tom. A link written for anyone else, in a message, a guide or a
+brief, uses the client address.
+
 ---
 
 ## Hard constraints
