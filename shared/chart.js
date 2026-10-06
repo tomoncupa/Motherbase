@@ -328,6 +328,36 @@
       return c;
     };
 
+    /** The lowest and the highest point, each with a small dot and its value,
+        muted, the high one above its point and the low one below. The latest
+        point is left to c.end, which labels it louder; so is a high or low
+        that IS the latest. Tom, 2026-10-06: a trend line should say how low
+        and how high it went, not only where it ended. */
+    c.extremes = function (pts, fmt) {
+      const ps = (pts || []).filter(p => p && p[1] != null && isFinite(p[1]));
+      if (ps.length < 2) return c;
+      let lo = ps[0], hi = ps[0];
+      ps.forEach(p => { if (p[1] < lo[1]) lo = p; if (p[1] >= hi[1]) hi = p; });
+      if (lo[1] === hi[1]) return c;
+      const last = ps[ps.length - 1];
+      const put = (p, above) => {
+        if (p === last) return;
+        const x = c.X(p[0]), y = c.Y(p[1]);
+        add('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: 2.5 }, 'mb-ext');
+        const s = String(fmt ? fmt(p[1]) : fmtNum(p[1], c.step));
+        const half = s.length * 3.6 + 2;
+        const tx = Math.max(half, Math.min(W - half, x));
+        /* beside the latest point its louder label wins the room */
+        const lx = c.X(last[0]), ly = c.Y(last[1]);
+        if (Math.abs(tx - lx) < half * 2 + 10 && Math.abs((above ? y - 6 : y + 13) - (ly - 6)) < 14) return;
+        const t = add('text', { x: tx.toFixed(1), y: (above ? y - 6 : y + 13).toFixed(1), 'text-anchor': 'middle' }, 'mb-lab mb-extlab');
+        t.textContent = s;
+      };
+      put(hi, true);
+      put(lo, false);
+      return c;
+    };
+
     /** The band between two lines: a cone of uncertainty, a range, a spread. */
     c.band = function (top, bottom, cls) {
       if (!top || !bottom || top.length < 2) return c;
@@ -505,21 +535,33 @@
     return api;
   }
 
-  /** A trend in a line's height: no axis, the latest value marked. For a
-      tile that says a number and needs to show which way it is going. */
+  /** A trend in a line's height, no axis. Since 2026-10-06 (Tom, from a
+      design review) it says what the line did: the low and the high labelled
+      at their points, small and muted, the latest value labelled, and a
+      dashed target across it when the caller passes `o.target` (RECKON's own
+      spark drew one first). `o.fmt` formats every number; `o.marks: false`
+      draws the bare line as before. */
   function spark(values, o) {
     css();
     o = o || {};
     const vs = (values || []).map(Number);
     const ok = vs.filter(v => isFinite(v));
-    const c = make({ w: o.w || 120, h: o.h || 36, pad: { l: 3, r: 7, t: 7, b: 7 }, cls: 'mb-spark' });
+    const marks = o.marks !== false;
+    const tgt = o.target != null && isFinite(o.target) ? +o.target : null;
+    const fmt = v => o.fmt ? o.fmt(v) : (Math.round(v * 10) / 10).toLocaleString();
+    const c = make({ w: o.w || 120, h: o.h || (marks ? 52 : 36),
+      pad: marks ? { l: 3, r: 7, t: 15, b: 15 } : { l: 3, r: 7, t: 7, b: 7 }, cls: 'mb-spark' });
     if (ok.length < 2) return c.el;
-    const lo = Math.min.apply(null, ok), hi = Math.max.apply(null, ok);
+    const all = tgt == null ? ok : ok.concat([tgt]);
+    const lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
     c.xLinear(0, vs.length - 1).ySet(lo, hi === lo ? lo + 1 : hi, 1);
     const pts = vs.map((v, i) => [i, v]).filter(p => isFinite(p[1]));
+    if (tgt != null) c.rule(tgt, o.targetLabel || '');
     c.area(pts);
     c.line(pts);
-    c.end(pts[pts.length - 1]);
+    if (marks) c.extremes(pts, fmt);
+    const end = pts[pts.length - 1];
+    c.end(end, marks ? fmt(end[1]) : null);
     return c.el;
   }
 
@@ -727,6 +769,8 @@
       '.mb-tagbox{fill:var(--surface-3);stroke:var(--border)}' +
       '.mb-tag{fill:var(--text-1);font-family:var(--font-mono);font-size:var(--f-1);font-weight:var(--w-bold)}' +
       '.mb-spark{height:auto}' +
+      '.mb-ext{fill:var(--text-muted)}' +
+      '.mb-extlab{font-size:calc(var(--f-1) * .9)}' +
       '@keyframes mb-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}' +
       '@keyframes mb-fade{from{opacity:0}}' +
       '.mb-anim .mb-line[pathLength]{stroke-dasharray:1;stroke-dashoffset:1;' +
