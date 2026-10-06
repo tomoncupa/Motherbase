@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<meta name="mb-version" content="1.0.2, 2026-09-23">
+<meta name="mb-version" content="1.0.3, 2026-10-06">
 <title>Form Review</title>
 <!-- No font link. skins.js fetches whatever face the chosen theme asks for and
      falls back to a system stack when the network is not there. A hard-coded
@@ -303,9 +303,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none
    and stays legible; smaller type needs MORE contrast, not less. */
 .pill{font-size:12px; padding:2px 8px; border-radius:var(--radius-full); letter-spacing:1px; text-transform:uppercase; border:1px solid var(--line); color:var(--dim)}
 .speedbadge{font-size:13px; color:var(--accent); min-width:44px; text-align:center; font-weight:600}
-.hint{position:fixed; bottom:78px; left:50%; transform:translateX(-50%); z-index:40; background:color-mix(in srgb, var(--surface-1) 93%, transparent); border:1px solid var(--accent-dim);
-  color:var(--ink); padding:9px 16px; border-radius:10px; font-size:13px; opacity:0; transition:opacity .3s; pointer-events:none; box-shadow:var(--e-3); max-width:82vw; text-align:center; line-height:1.7}
-.hint.show{opacity:1}
 kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid var(--line); border-bottom-width:2px; border-radius:5px; padding:1px 6px; font-size:13px; color:var(--accent)}
 #busy{position:fixed; inset:0; z-index:60; background:var(--overlay); display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px; backdrop-filter:blur(3px)}
 #busy.on{display:flex}
@@ -608,7 +605,6 @@ kbd{font-family:var(--font-mono); background:var(--surface-3); border:1px solid 
 
 <input type="file" id="filePick" accept="video/*" style="display:none">
 <datalist id="liftList"></datalist>
-<div class="hint" id="hint"></div>
 <div id="busy"><div id="busyMsg">Working…</div><div class="bar"><i id="busyBar"></i></div></div>
 
 <script>
@@ -666,7 +662,10 @@ for(const k of ['A','B']){ V[k].video=document.querySelector(`video[data-pane="$
 
 /* ============================== helpers ============================== */
 function fmt(t){ if(!isFinite(t)||t<0)t=0; const m=Math.floor(t/60),s=Math.floor(t%60),cs=Math.floor((t*100)%100); return `${m}:${String(s).padStart(2,'0')}.${String(cs).padStart(2,'0')}`; }
-function toast(msg){ const h=$('#hint'); h.innerHTML=msg; h.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>h.classList.remove('show'),2600); }
+/* The suite's own snackbar (shared/ui.js), not a private one, since
+   2026-10-06: same place, same look, and an Undo where something went. */
+function toast(msg, opts){ UI.toast(msg, opts); }
+function undoable(msg, back){ UI.undo(msg, back); }
 function loaded(p){ return !!V[p].url; }
 function panes(){ return ['A','B'].filter(loaded); }
 function activePanes(){ return view==='solo' ? (loaded(soloPane)?[soloPane]:[]) : panes(); }
@@ -956,7 +955,7 @@ $$('.srcwrap').forEach(w=>{ const pane=w.dataset.src, menu=w.querySelector('.src
   menu.addEventListener('click', e=>e.stopPropagation());
   w.querySelector(`[data-mirror="${pane}"]`).addEventListener('click', e=>{ V[pane].mirrored=!V[pane].mirrored; V[pane].video.classList.toggle('mirror',V[pane].mirrored); e.currentTarget.classList.toggle('on',V[pane].mirrored); });
   w.querySelector(`[data-fps="${pane}"]`).addEventListener('change', e=>{ V[pane].fps=Math.max(1,parseFloat(e.target.value)||30); });
-  w.querySelector(`[data-trimreset="${pane}"]`).addEventListener('click', ()=>{ if(!loaded(pane))return; V[pane].trim={start:0,end:null}; updateTrimVisual(pane); toast(`${paneName(pane)} trim reset`); }); });
+  w.querySelector(`[data-trimreset="${pane}"]`).addEventListener('click', ()=>{ if(!loaded(pane))return; const was={start:V[pane].trim.start, end:V[pane].trim.end}; V[pane].trim={start:0,end:null}; updateTrimVisual(pane); undoable(`${paneName(pane)} trim reset`, ()=>{ V[pane].trim=was; updateTrimVisual(pane); }); }); });
 document.addEventListener('click', closeSrcMenus);
 
 /* ============================== canvas ============================== */
@@ -1176,7 +1175,7 @@ function setTool(t){ tool=t; $$('#rail .railbtn').forEach(x=>x.classList.toggle(
   if(t==='rep') openDrawer(); setTimeout(()=>['A','B'].forEach(sizeCanvas),60); }
 $$('.tbpanel[data-tb="anno"] [data-atool]').forEach(btn=>btn.addEventListener('click',()=>{ anno.tool=btn.dataset.atool; $$('.tbpanel[data-tb="anno"] [data-atool]').forEach(b=>b.classList.toggle('on',b===btn)); }));
 $$('.tbpanel[data-tb="anno"] .swatch').forEach(sw=>sw.addEventListener('click',()=>{ anno.color=sw.dataset.color; $$('.tbpanel[data-tb="anno"] .swatch').forEach(s=>s.classList.toggle('on',s===sw)); }));
-$$('[data-clear]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.clear; V[p].strokes=[]; redraw(p); }));
+$$('[data-clear]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.clear, was=V[p].strokes; if(!was.length) return; V[p].strokes=[]; redraw(p); undoable(`Drawing on ${paneName(p)} cleared`, ()=>{ V[p].strokes=was; redraw(p); }); }));
 /* muscle highlight — anchored to tracked joints, so it follows the limb through the rep */
 $$('[data-muscle]').forEach(b=>b.addEventListener('click', async ()=>{ const p=b.dataset.muscle;
   if(!loaded(p)){ toast('Load a clip first'); return; }
@@ -1191,7 +1190,7 @@ $$('[data-muscle]').forEach(b=>b.addEventListener('click', async ()=>{ const p=b
 function addPathPoint(pane,p){ const t=V[pane].video.currentTime, arr=V[pane].path;
   const i=arr.findIndex(q=>Math.abs(q.t-t)<1e-3); if(i>=0) arr[i]={t,x:p.x,y:p.y}; else { arr.push({t,x:p.x,y:p.y}); arr.sort((a,b)=>a.t-b.t); } redraw(pane); }
 $$('[data-pathundo]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.pathundo; V[p].path.pop(); redraw(p); }));
-$$('[data-pathclear]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.pathclear; V[p].path=[]; redraw(p); }));
+$$('[data-pathclear]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.pathclear, was=V[p].path; if(!was.length) return; V[p].path=[]; redraw(p); undoable(`Bar path on ${paneName(p)} cleared`, ()=>{ V[p].path=was; redraw(p); }); }));
 $$('[data-autopath]').forEach(b=>b.addEventListener('click', async ()=>{ const p=b.dataset.autopath; if(!loaded(p)){ toast(`No clip in ${p}`); return; }
   if(V[p].series.length<8){ const ok=await ensurePose(p); if(!ok) return; }
   const {s,e}=trimOf(p); const src=V[p].series.filter(q=>q.t>=s&&q.t<=e);
@@ -1200,9 +1199,23 @@ $$('[data-autopath]').forEach(b=>b.addEventListener('click', async ()=>{ const p
   V[p].path=src.filter((_,i)=>i%step===0).map(q=>({t:q.t,x:q.x,y:q.y})); redraw(p); toast(`Auto bar path from ${V[p].path.length} tracked points`); }));
 $$('[data-cal]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.cal; calibrating=p; setCanvasPointers(); toast(`Draw a line of known length on ${paneName(p)}, then enter its real length.`); }));
 function finishCalibration(pane,pts){ calibrating=null; setCanvasPointers(); if(!pts[1]) return;
-  const m=parseFloat(prompt('Length of that line in metres? (e.g. 0.45 for a plate diameter)','0.45')); if(!m||m<=0){ toast('Calibration cancelled'); return; }
+  askLength(m=>{ if(!m||m<=0){ toast('Calibration cancelled'); return; }
   const r=videoDisplayRect(V[pane].video), dx=(pts[1].x-pts[0].x)*r.width, dy=(pts[1].y-pts[0].y)*r.height, px=Math.hypot(dx,dy);
-  V[pane].scale={mPerPx:m/px, p0:pts[0], p1:pts[1]}; redraw(pane); renderReps(pane); toast(`${paneName(pane)} calibrated — velocity now in m/s`); }
+  V[pane].scale={mPerPx:m/px, p0:pts[0], p1:pts[1]}; redraw(pane); renderReps(pane); toast(`${paneName(pane)} calibrated — velocity now in m/s`); }); }
+/* The line's real length, asked in the suite's own dialog rather than the
+   browser's prompt box (2026-10-06). `done` gets the metres, or null. */
+function askLength(done){
+  let inp=null, said=false; const say=v=>{ if(said) return; said=true; done(v); };
+  const read=()=>parseFloat(String(inp.value).replace(',','.'));
+  const h=UI.dialog({ title:'LINE LENGTH', width:380,
+    body:b=>{ const p=document.createElement('p'); p.textContent='How long is that line, in metres? A plate is 0.45.'; b.appendChild(p);
+      inp=document.createElement('input'); inp.className='mb-input'; inp.type='text'; inp.inputMode='decimal'; inp.value='0.45';
+      inp.setAttribute('aria-label','Length in metres'); inp.style.width='100%'; b.appendChild(inp);
+      inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); say(read()); if(h&&h.close) h.close(); } });
+      if(UI.focusSoon) UI.focusSoon(inp); },
+    actions:[{ label:'CANCEL', fn:()=>say(null) }, { label:'SET', kind:'go', fn:()=>say(read()) }],
+    onClose:()=>say(null) });
+}
 
 /* ============================== signals: pose + motion ============================== */
 let poseLandmarker=null, poseRunning=false, poseModelKind=null;
@@ -1580,7 +1593,7 @@ $('#repFirst').addEventListener('change', ()=>['A','B'].forEach(renderReps));
 $('#repTol').addEventListener('change', ()=>['A','B'].forEach(renderReps));
 $('#repAuto').addEventListener('click', ()=>runAnalyse(true));
 $$('[data-mark]').forEach(b=>b.addEventListener('click',()=>markRep(b.dataset.mark)));
-$$('[data-repclear]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.repclear; V[p].marks=[]; V[p].reps=[]; renderReps(p); renderRepMarks(p); }));
+$$('[data-repclear]').forEach(b=>b.addEventListener('click',()=>{ const p=b.dataset.repclear, wm=V[p].marks, wr=V[p].reps; if(!wm.length&&!wr.length) return; V[p].marks=[]; V[p].reps=[]; renderReps(p); renderRepMarks(p); undoable(`Reps on ${paneName(p)} cleared`, ()=>{ V[p].marks=wm; V[p].reps=wr; renderReps(p); renderRepMarks(p); }); }));
 function markRep(p){ if(!loaded(p)) return; V[p].marks.push(V[p].video.currentTime); V[p].marks.sort((a,b)=>a-b);
   toast(`${paneName(p)}: turnaround @ ${fmt(V[p].video.currentTime)} (${V[p].marks.length})`); }
 
@@ -1599,7 +1612,7 @@ $('#repLoop').addEventListener('click',()=>{ const p=repPane(); if(!V[p].reps.le
   if(loop.on){ loop.on=false; $('#repLoop').classList.remove('on'); toast('Rep loop off'); }
   else { setLoopToRep(); loop.on=true; $('#repLoop').classList.add('on'); V[p].video.currentTime=loop.a; V[p].video.play(); toast(`Looping rep ${repCursor+1}`); }
   updateRepPill(); });
-$('#uLoopClear').addEventListener('click',()=>{ loop={a:null,b:null,on:false}; $('#repLoop').classList.remove('on'); toast('Loop cleared'); });
+$('#uLoopClear').addEventListener('click',()=>{ const was=loop; loop={a:null,b:null,on:false}; $('#repLoop').classList.remove('on'); undoable('Loop cleared', ()=>{ loop=was; $('#repLoop').classList.toggle('on',!!was.on); }); });
 
 /* ── rep 1 against the last rep ──
    Fatigue is the difference between the first rep and the last, and seeing it
@@ -1667,7 +1680,7 @@ $$('[data-noteinput]').forEach(inp=>inp.addEventListener('keydown', e=>{ if(e.ke
 function renderNotes(p){ const host=document.getElementById('notes'+p); host.innerHTML='';
   V[p].notes.forEach((n,i)=>{ const el=document.createElement('div'); el.className='noteitem';
     el.innerHTML=`<span class="t">${fmt(n.t)}</span><span>${n.txt.replace(/</g,'&lt;')}</span><span class="x">✕</span>`;
-    el.querySelector('.t').onclick=()=>{ V[p].video.currentTime=n.t; }; el.querySelector('.x').onclick=()=>{ V[p].notes.splice(i,1); renderNotes(p); }; host.appendChild(el); }); }
+    el.querySelector('.t').onclick=()=>{ V[p].video.currentTime=n.t; }; el.querySelector('.x').onclick=()=>{ const gone=V[p].notes.splice(i,1)[0]; renderNotes(p); undoable('Note removed', ()=>{ V[p].notes.splice(Math.min(i,V[p].notes.length),0,gone); renderNotes(p); }); }; host.appendChild(el); }); }
 
 /* ============================== drawer / snapshot / swap ============================== */
 function openDrawer(){ $('#drawer').classList.remove('collapsed'); }

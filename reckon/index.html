@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.0, 2026-09-18">
+<meta name="mb-version" content="1.0.1, 2026-10-06">
 <title>RECKON</title>
 <meta name="theme-color" content="#0B0E14">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%230B0E14'/><text x='50' y='72' font-size='58' font-family='monospace' font-weight='700' fill='%23F0B323' text-anchor='middle'>x</text></svg>">
@@ -243,6 +243,10 @@ main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-ove
   padding:var(--s3) var(--s4);font-size:var(--f2);opacity:0;pointer-events:none;
   transition:opacity var(--med) linear,transform var(--med) var(--out);max-width:88vw;text-align:center}
 .toast.up{opacity:1;transform:translate(-50%,0)}
+.toast.act{display:flex;align-items:center;gap:var(--s3);text-align:left}
+.toast.act.up{pointer-events:auto}
+.toast .undo{flex:0 0 auto;min-height:var(--tap);padding:0 var(--s3);border:0;background:none;
+  color:var(--acc);font:inherit;font-weight:700;letter-spacing:.06em;cursor:pointer}
 
 @media (max-height:620px){
   .qtext{font-size:var(--f7)}
@@ -674,13 +678,23 @@ function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e
 
 /* ── toast ───────────────────────────────────────────────────── */
 let toastT = null;
-function toast(msg) {
+/* `back` turns it into an undo: an UNDO button, and longer on screen. Kept
+   inside this file, since RECKON loads nothing from ../shared (its brief);
+   it does what the suite's UI.undo does. 2026-10-06. */
+function toast(msg, back) {
   let n = document.querySelector('.toast');
   if (!n) { n = el('div', 'toast'); document.body.appendChild(n); }
-  n.innerHTML = msg;
+  n.className = 'toast' + (back ? ' act' : '') + (n.classList.contains('up') ? ' up' : '');
+  n.innerHTML = '<span>' + msg + '</span>';
+  if (back) {
+    const u = el('button', 'undo press', 'UNDO');
+    u.type = 'button';
+    u.onclick = () => { clearTimeout(toastT); n.classList.remove('up'); back(); };
+    n.appendChild(u);
+  }
   requestAnimationFrame(() => n.classList.add('up'));
   clearTimeout(toastT);
-  toastT = setTimeout(() => n.classList.remove('up'), 2600);
+  toastT = setTimeout(() => n.classList.remove('up'), back ? 6000 : 2600);
 }
 
 /* ══════════════════ THE PATH ══════════════════ */
@@ -1284,7 +1298,11 @@ document.getElementById('setBtn').onclick = () => {
       t.appendChild(el('h4', null, 'EASED TARGETS'));
       t.appendChild(el('div', null, ease.map(l => esc(l.nm) + ' at ' + lvl(l.id).ease + 's').join(', ') + '.'));
       const b = el('button', 'go ghost press', 'PUT THEM BACK');
-      b.onclick = () => { ease.forEach(l => setLvl(l.id, { ease: 0 })); t.remove(); toast('Targets back where they started.'); };
+      b.onclick = () => {
+        const was = ease.map(l => [l.id, lvl(l.id).ease]);
+        ease.forEach(l => setLvl(l.id, { ease: 0 })); t.remove();
+        toast('Targets back where they started.', () => { was.forEach(x => setLvl(x[0], { ease: x[1] })); drawPath(); toast('Eased targets kept.'); });
+      };
       t.appendChild(b);
       h.appendChild(t);
     }
@@ -1298,11 +1316,17 @@ document.getElementById('setBtn').onclick = () => {
         wipe.textContent = 'TAP AGAIN TO ERASE ' + passed().length + ' PASSED LEVELS';
         return;
       }
-      DB.keys('').forEach(k => { try { localStorage.removeItem('rk.' + k); } catch (e) {} });
-      h.close(); toast('Erased. Back to level one.');
+      /* held in memory until the page goes, so UNDO puts every key back */
+      const kept = DB.keys('').map(k => { let v = null; try { v = localStorage.getItem('rk.' + k); } catch (e) {} return [k, v]; });
+      kept.forEach(x => { try { localStorage.removeItem('rk.' + x[0]); } catch (e) {} });
+      h.close();
+      toast('Erased. Back to level one.', () => {
+        kept.forEach(x => { if (x[1] != null) try { localStorage.setItem('rk.' + x[0], x[1]); } catch (e) {} });
+        drawPath(); toast('All of it is back.');
+      });
     };
     h.appendChild(wipe);
-    h.appendChild(el('div', 'foot', 'RECKON 1.0.0, 18 Sep 2026. Everything is saved on this device only, in this browser.'));
+    h.appendChild(el('div', 'foot', 'RECKON 1.0.1, 6 Oct 2026. Everything is saved on this device only, in this browser.'));
   });
 };
 

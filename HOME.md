@@ -198,3 +198,14 @@ Tom: "Create also an average weight widget AND an average weight right click opt
 - **AVG WEIGHT**: the mean of every weigh-in in the last 7, 14, 30 or 90 days (today included), the same stretch before it, and the change. From 14 days up, each seven-day week's average and how many weigh-ins made it, newest first; at 7 days that list would only repeat the two numbers.
 
 Watched in the demo at 1600x950: the tick from the menu sheet, saved on the card, the average path drawn; AVG WEIGHT added through ADD A WIDGET at 7 and 30 days, both averages equal to a separate count.
+
+## 2026-10-06, HOME 1.0.58: DELETE EVERYTHING has a way back
+
+DATA's "Delete everything on this device" asks once in the suite's own
+dialog (was two native confirm boxes), keeps a copy of every localStorage key
+and the store's IndexedDB rows in the `mb-wiped` database, and the open after
+offers UNDO for 12 s; DATA shows "Bring back what was deleted" for 7 days
+(`mb.wiped.at`), then the copy is dropped on open. No copy kept: it says so
+and asks again. It now deletes the `motherbase` IndexedDB too, whose big rows
+used to survive a delete. Tested in headless Chromium by clicking DATA, the
+option and DELETE EVERYTHING, then UNDO and Bring back.

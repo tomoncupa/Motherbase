@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.57, 2026-10-06">
+<meta name="mb-version" content="1.0.58, 2026-10-06">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -5320,12 +5320,94 @@ function copyToday() {
     navigator.clipboard.writeText(text).then(() => toast('today copied to the clipboard'), () => download('today-' + LifeOS.day() + '.txt', text));
   } else download('today-' + LifeOS.day() + '.txt', text);
 }
-function wipeAll() {
-  if (!confirm('Delete ALL data on this device — ticks, habits, every app’s own storage?\n\nBack up first. This cannot be undone.')) return;
-  if (!confirm('Really delete everything? Last chance.')) return;
+/* ── delete everything, with a way back (2026-10-06) ──
+   It was two of the browser's own confirm boxes and then nothing: one wrong
+   tap from gone. The warning stays, in the suite's own dialog, and before
+   anything goes a copy of all of it (localStorage and the store's IndexedDB
+   half, where the big rows live) is put in a database of its own on this
+   device. The open after the reload offers UNDO, and DATA offers "Bring back
+   what was deleted" for WIPE_DAYS, after which the copy is dropped. If no
+   copy can be kept it says so and asks again before deleting.
+   The store's IndexedDB ('motherbase') is deleted too now: until this, its
+   big rows outlived "delete everything" and came back on the next open. */
+const WIPE_DB = 'mb-wiped', WIPE_AT = 'mb.wiped.at', WIPE_DAYS = 7;
+function wipeIdb(name, mode, fn) {
+  return new Promise((res, rej) => {
+    let q;
+    try { q = indexedDB.open(name, 1); } catch (e) { rej(e); return; }
+    q.onupgradeneeded = () => { const d = q.result; if (!d.objectStoreNames.contains('rows')) d.createObjectStore('rows'); };
+    q.onerror = () => rej(q.error);
+    q.onsuccess = () => {
+      const d = q.result;
+      let out;
+      try {
+        const tx = d.transaction('rows', mode);
+        out = fn(tx.objectStore('rows'));
+        tx.oncomplete = () => { d.close(); res(out && typeof out === 'object' && 'v' in out ? out.v : out); };
+        tx.onerror = tx.onabort = () => { d.close(); rej(tx.error); };
+      } catch (e) { d.close(); rej(e); }
+    };
+  });
+}
+/* every key and value in the store's IndexedDB half */
+const idbAll = () => wipeIdb('motherbase', 'readonly', st => {
+  const o = { v: [] }, ks = st.getAllKeys(), vs = st.getAll();
+  vs.onsuccess = () => { o.v = (ks.result || []).map((k, i) => [k, vs.result[i]]); };
+  return o;
+});
+function wipeSnapshot() {
+  const ls = {};
+  for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k != null && k !== WIPE_AT) ls[k] = localStorage.getItem(k); }
+  return idbAll().catch(() => []).then(idb =>
+    wipeIdb(WIPE_DB, 'readwrite', st => { st.put({ at: new Date().toISOString(), ls: ls, idb: idb }, 'snap'); }));
+}
+const wipeRead = () => wipeIdb(WIPE_DB, 'readonly', st => { const o = { v: null }, r = st.get('snap'); r.onsuccess = () => { o.v = r.result || null; }; return o; });
+function wipeForget() {
+  try { localStorage.removeItem(WIPE_AT); } catch (e) {}
+  try { indexedDB.deleteDatabase(WIPE_DB); } catch (e) {}
+}
+async function wipeAll() {
+  const yes = await UI.confirm('Delete ALL data on this device?',
+    'Ticks, habits and every app’s own storage. Back up first. A copy stays on this device for ' + WIPE_DAYS +
+    ' days so it can be brought back from DATA, then it is gone for good.',
+    { title: 'DELETE EVERYTHING', yes: 'DELETE EVERYTHING', danger: true });
+  if (!yes) return;
+  let kept = false;
+  try { await wipeSnapshot(); kept = !!(await wipeRead()); } catch (e) { kept = false; }
+  if (!kept && !(await UI.confirm('No copy could be kept, so this cannot be undone.', 'Delete everything anyway?',
+    { title: 'NO WAY BACK', yes: 'DELETE', danger: true }))) return;
   try { localStorage.clear(); } catch (e) {}
+  if (kept) {
+    try { localStorage.setItem(WIPE_AT, new Date().toISOString()); } catch (e) {}
+    try { sessionStorage.setItem('mb.wiped.now', '1'); } catch (e) {}
+  }
   try { indexedDB.deleteDatabase('lifeos'); } catch (e) {}
+  try { indexedDB.deleteDatabase('motherbase'); } catch (e) {}
   setTimeout(() => location.reload(), 400);
+}
+/* Everything in the copy back as it was, then a fresh open to read it. */
+async function unwipe() {
+  let snap = null;
+  try { snap = await wipeRead(); } catch (e) {}
+  if (!snap) { toast('The deleted copy is not on this device any more', { bad: true }); wipeForget(); return; }
+  Object.keys(snap.ls || {}).forEach(k => { try { localStorage.setItem(k, snap.ls[k]); } catch (e) {} });
+  if (snap.idb && snap.idb.length) {
+    try { await wipeIdb('motherbase', 'readwrite', st => { snap.idb.forEach(p => st.put(p[1], p[0])); }); } catch (e) {}
+  }
+  wipeForget();
+  toast('Bringing it all back');
+  setTimeout(() => location.reload(), 400);
+}
+/* On open: the UNDO straight after a delete, and the copy dropped once it is
+   older than WIPE_DAYS. */
+function wipeOnOpen() {
+  let at = null;
+  try { at = localStorage.getItem(WIPE_AT); } catch (e) {}
+  if (!at) return;
+  if (Date.now() - Date.parse(at) > WIPE_DAYS * 864e5) { wipeForget(); return; }
+  let now = false;
+  try { now = sessionStorage.getItem('mb.wiped.now') === '1'; sessionStorage.removeItem('mb.wiped.now'); } catch (e) {}
+  if (now) UI.undo('Everything on this device was deleted.', unwipe, { ms: 12000 });
 }
 
 const daysSinceBackup = () => {
@@ -5641,6 +5723,23 @@ function dataPanel() {
   const w = el('button', 'opt danger');
   w.innerHTML = '<span class="ic">⌫</span><span class="t"><b>Delete everything on this device</b><span>Every app’s data, gone. Back up first.</span></span>';
   w.onclick = wipeAll; mo.appendChild(w);
+  /* the copy a delete left behind, while it is kept */
+  let wat = null;
+  try { wat = localStorage.getItem(WIPE_AT); } catch (e) {}
+  if (wat) {
+    const ub = el('button', 'opt');
+    ub.innerHTML = '<span class="ic">↺</span><span class="t"><b>Bring back what was deleted</b><span>Everything deleted on ' +
+      esc(new Date(wat).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) +
+      '. Kept on this device until ' + esc(new Date(Date.parse(wat) + WIPE_DAYS * 864e5).toLocaleDateString([], { day: 'numeric', month: 'short' })) + '.</span></span>';
+    ub.onclick = unwipe; mo.appendChild(ub);
+    const fb = el('button', 'opt danger');
+    fb.innerHTML = '<span class="ic">⌫</span><span class="t"><b>Drop the deleted copy now</b><span>It cannot be brought back after this.</span></span>';
+    fb.onclick = async () => {
+      if (!(await UI.confirm('Drop the deleted copy?', 'What was deleted is then gone for good.', { yes: 'DROP IT', danger: true }))) return;
+      wipeForget(); toast('The deleted copy is gone'); closeModal();
+    };
+    mo.appendChild(fb);
+  }
   /* which version of the home screen this is; every app says the same in its settings */
   const ver = UI.version();
   if (ver) mo.appendChild(el('div', 'lede', 'MAIN MENU ' + ver.v + (ver.dateText ? ', updated ' + ver.dateText : '')));
@@ -5707,6 +5806,7 @@ Sfx.init('home');
 /* any change from any app repaints home — the frames repaint themselves */
 LifeOS.on(() => { if (view === 'home' && !moving && !sizing) { reloadLayout(); drawHome(); } });
 LifeOS.ready(() => {
+  wipeOnOpen();
   LifeOS.prune(800);
   go(location.hash.slice(1) || 'home');
   refreshDataBtn();
