@@ -1,4 +1,4 @@
-/* shared/demo.js — 1.0.0 — the DEMO: a made-up person, and the way out
+/* shared/demo.js — 1.0.1 — the DEMO: a made-up person, and the way out
    ════════════════════════════════════════════════════════════════════════════
    Tom, 2026-09-30: "Do that" to a link that opens the whole suite filled with
    a made-up person's history, kept completely apart from his store, for
@@ -14,7 +14,11 @@
        training in TRAIN, weigh-ins, sleep, steps, meals and a shelf in
        STATUS and KITCHEN, check-ins, a BLOCK day and its ticks, QUESTS
        todos, LOG notes, six made-up clients in COACH and the money in
-       WEALTH. Dates are counted back from today, so the demo is always
+       WEALTH. Since 1.0.1 (2026-10-07) also what the home widgets read
+       that only an app's own open used to write: the names of BLOCK's
+       ticks, the records TRAIN marks, WEALTH's bill todos, ELEMENT's plan,
+       desk time, SPEAK takes and a birth year for LIFE, each in the shape
+       its app writes. Dates are counted back from today, so the demo is always
        current, and it is made fresh once a day and in each new tab, since
        it lives in the tab (skins.js). The numbers come from a
        fixed seed, so every demo shows the same person. Nobody in it is real.
@@ -30,7 +34,8 @@
   g.MB_DEMO_JS = true;
   var doc = g.document;
   var REAL = g.MB_DEMO_REAL || {};
-  var VERSION = '1';
+  /* in the seeded stamp, so a tab filled by an older demo.js fills again */
+  var VERSION = '2';
 
   /* ── the DEMO tab ── */
   function css() {
@@ -167,7 +172,7 @@
       var step = /Dumbbell|Split/.test(e[0]) ? 2 : 2.5;
       return round(e[3] * (1 + 0.011 * week), step);
     };
-    var trainedDays = {};
+    var trainedDays = {}, todayStart = null;
     for (var day = start; day <= TODAY; day = D.shift(day, 1)) {
       var plan = DAYS[dow(day)];
       if (!plan) continue;
@@ -204,7 +209,41 @@
       put('session', day, '', { start: iso(t0), end: iso(isToday ? t0 + 20 * 60000 : tm + 5 * 60000), name: plan[0], note: '', order: order }, t0);
       put('tick', day, 'training', { src: 'train', qty: n }, tm);
       trainedDays[day] = 1;
+      if (isToday) todayStart = t0;
     }
+
+    /* ── records, the way TRAIN marks them ──
+       A documented copy of TRAIN.recomputePRs (train/index.html, THE
+       NUMBERS), so RECORDS on the home screen has the records before TRAIN
+       is ever opened. Per exercise, working sets only (not a warmup, weight
+       and reps over 0; planned sets are not left out, as TRAIN does not),
+       heaviest first at three decimal places, then more reps, then the
+       earlier set (TRAIN.setStamp: the clock in the key); a set is a record
+       while it has more reps than every set ahead of it. TRAIN also keeps
+       split sets' records apart, read off the numbers in a comment; no demo
+       comment has a digit, so no demo set is split. `train.prRule` is left
+       unset, so TRAIN works them out again on its first open and must change
+       none: if it changes any, this copy has drifted from TRAIN. */
+    var prRd = function (v) { return Math.round((v || 0) * 1000) / 1000; };
+    var prStamp = function (r) {
+      var m = String(r.key).match(/^[^-]+-([0-9a-z]+)-/);
+      if (m) { var ms = parseInt(m[1], 36); if (isFinite(ms)) return ms; }
+      return 1e15 + (r.payload.ord || 0);
+    };
+    var prWarm = function (p) {
+      return p.warm === 1 || p.warm === true || (p.warm !== 0 && p.warm !== false && !!p.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(p.note));
+    };
+    var setsOf = {};
+    rows.forEach(function (r) { if (r.type === 'set') (setsOf[r.payload.ex] = setsOf[r.payload.ex] || []).push(r); });
+    Object.keys(setsOf).forEach(function (ex) {
+      var maxR = 0;
+      setsOf[ex].filter(function (r) { return !prWarm(r.payload) && (r.payload.kg || 0) > 0 && (r.payload.r || 0) > 0; })
+        .sort(function (a, b) {
+          return prRd(b.payload.kg) - prRd(a.payload.kg) || b.payload.r - a.payload.r ||
+            (a.date < b.date ? -1 : a.date > b.date ? 1 : prStamp(a) - prStamp(b));
+        })
+        .forEach(function (r) { if (r.payload.r > maxR) { r.payload.pr = 1; maxR = r.payload.r; } });
+    });
     setting('train.seen', 1);
     setting('train.unit', 'kg');
     setting('train.sortSeen', 1);
@@ -393,20 +432,33 @@
       'm-work': [['Plan the day', 10], ['Client programs', 90], ['Messages', 30], ['Content', 60]],
       'm-evening': [['Walk', 20], ['Stretch', 15], ['Read', 20], ['Lights out', 5]],
     };
+    /* The names of BLOCK's ticks, as BLOCK publishes them every time it
+       draws (pushLib in block/index.html): the library first, then each
+       block under the id its ticks use, the name of its block and routine
+       (slugs joined by a dot), with the routine as its category. Without
+       them STREAKS and DAY LOG print "read.evening" until BLOCK is opened. */
+    var named = {};
+    var actName = function (id, name, cat, dur, color, energy) {
+      if (named[id]) return;
+      named[id] = 1;
+      put('activity', null, id, { name: name, cat: cat || '', dur: dur || 0, color: color || '', energy: energy || 2 });
+    };
     var blockTicks = [];
+    [['Meditate', 10], ['Cold shower', 5], ['Language practice', 15]].forEach(function (b, k) {
+      put('item', null, 'lib|b-' + slug(b[0]), { name: b[0], dur: b[1], color: PAL[k], cat: '', energy: 1, ord: k, bin: 1 });
+      actName(slug(b[0]), b[0], '', b[1], PAL[k], 1);
+    });
     ['d-week', 'd-weekend'].forEach(function (dayId) {
       LANES.forEach(function (l) {
         if (dayId === 'd-weekend' && l[0] === 'm-work') return;
         BLOCKS[l[0]].forEach(function (b, k) {
-          var bid = 'b-' + slug(b[0]);
-          put('item', null, dayId + '|' + l[0] + '|' + bid, { srcId: bid, name: b[0], dur: b[1], color: PAL[(k + l[0].length) % PAL.length], note: '',
+          var bid = 'b-' + slug(b[0]), color = PAL[(k + l[0].length) % PAL.length];
+          put('item', null, dayId + '|' + l[0] + '|' + bid, { srcId: bid, name: b[0], dur: b[1], color: color, note: '',
             days: [1, 1, 1, 1, 1, 1, 1], pin: false, at: null, pri: 0, energy: 1, done: false, hidden: false, ord: k, lane: l[0], rt: dayId });
+          actName(slug(b[0]) + '.' + slug(l[1]), b[0], l[1], b[1], color, 1);
           if (dayId === 'd-week') blockTicks.push([slug(b[0]) + '.' + slug(l[1]), l[0]]);
         });
       });
-    });
-    [['Meditate', 10], ['Cold shower', 5], ['Language practice', 15]].forEach(function (b, k) {
-      put('item', null, 'lib|b-' + slug(b[0]), { name: b[0], dur: b[1], color: PAL[k], cat: '', energy: 1, ord: k, bin: 1 });
     });
     setting('block.week', ['d-weekend', 'd-week', 'd-week', 'd-week', 'd-week', 'd-week', 'd-weekend']);
     setting('block.current', 'd-week');
@@ -416,12 +468,20 @@
     setting('block.h24', false);
     put('rhythm', null, 'r-haircut', { kind: 'every', name: 'Haircut', color: PAL[5], n: 4, unit: 'week', from: ago(24), ord: 0 });
     put('rhythm', null, 'r-swim', { kind: 'anytime', name: 'Swim', color: PAL[0], times: 2, ord: 1 });
+    /* BLOCK ticks a rhythm under the slug of its name and publishes no name
+       for it; the demo names these two so they read as words on the board */
+    actName('haircut', 'Haircut', '', 0, PAL[5]);
+    actName('swim', 'Swim', '', 0, PAL[0]);
     for (i = 30; i >= 1; i--) {
       d = ago(i);
       var wk = dow(d) >= 1 && dow(d) <= 5;
       blockTicks.forEach(function (bt) {
         if (!wk && bt[1] === 'm-work') return;
-        if (rnd() < 0.78) put('tick', d, bt[0], { src: 'block' }, at(d, 20, 0));
+        /* the Train block is ticked on the days TRAIN has a session, and
+           only then; the draw is still made, so nothing after it moves */
+        var hit = rnd() < 0.78;
+        if (bt[0] === 'train.morning') hit = !!trainedDays[d];
+        if (hit) put('tick', d, bt[0], { src: 'block' }, at(d, 20, 0));
       });
       if (rnd() < 0.25) put('tick', d, 'swim', { src: 'block' }, at(d, 17, 0));
     }
@@ -524,9 +584,9 @@
     /* ════ WEALTH: counted balances, bills, pots, spending ════ */
     var cday = ago(45);
     [['cash', 4200], ['gcash', 12850], ['card', 0], ['bank', 86400]].forEach(function (a) { put('count', cday, a[0], { bal: a[1] }, at(cday, 9, 0)); });
-    [['b-rent', 'Rent', 15000, 5, 'rent', 'bank'], ['b-power', 'Electricity', 2800, 18, 'utilities', 'gcash'], ['b-net', 'Internet', 1699, 12, 'utilities', 'gcash'],
-      ['b-phone', 'Phone plan', 999, 22, 'utilities', 'gcash'], ['b-gym', 'Gym membership', 2500, 1, 'gym', 'bank'], ['b-music', 'Music streaming', 149, 9, 'subs', 'card']]
-      .forEach(function (b, k) { put('bill', null, b[0], { name: b[1], amt: b[2], day: b[3], cycle: 'month', cat: b[4], acct: b[5], ord: k }); });
+    var BILLS = [['b-rent', 'Rent', 15000, 5, 'rent', 'bank'], ['b-power', 'Electricity', 2800, 18, 'utilities', 'gcash'], ['b-net', 'Internet', 1699, 12, 'utilities', 'gcash'],
+      ['b-phone', 'Phone plan', 999, 22, 'utilities', 'gcash'], ['b-gym', 'Gym membership', 2500, 1, 'gym', 'bank'], ['b-music', 'Music streaming', 149, 9, 'subs', 'card']];
+    BILLS.forEach(function (b, k) { put('bill', null, b[0], { name: b[1], amt: b[2], day: b[3], cycle: 'month', cat: b[4], acct: b[5], ord: k }); });
     put('pot', null, 'pot-emergency', { name: 'Emergency fund', target: 100000, acct: 'bank', ord: 0 });
     put('pot', null, 'pot-travel', { name: 'Japan trip', target: 60000, acct: 'bank', ord: 1 });
     for (i = 0; i < 4; i++) {
@@ -546,7 +606,209 @@
       }
     }
 
-    /* ════ nags a first open would show ════ */
+    /* ════ what the home widgets read that only an app's own open wrote ════
+       Every draw from here on comes after every draw above, so everything
+       above is the same person it was before 1.0.1. */
+    var pad2 = function (n) { return ('0' + n).slice(-2); };
+
+    /* ── WEALTH's bill todos ──
+       What billTodoSync (wealth/index.html) writes when WEALTH opens: one
+       todo per bill for its earliest date in the next 30 days, written
+       today, keyed wealth-bill-<bill>-<due>, and wealth.billMade naming the
+       day each was written. WEALTH opened on this finds them all and writes
+       nothing. No demo purchase names a bill, so none of them is paid. */
+    var dueOf = function (dayOfMonth) {
+      var y = +TODAY.slice(0, 4), m0 = +TODAY.slice(5, 7) - 1;
+      for (var k = 0; k < 3; k++) {
+        var yy = y + Math.floor((m0 + k) / 12), mm = (m0 + k) % 12;
+        var iso = yy + '-' + pad2(mm + 1) + '-' + pad2(Math.min(dayOfMonth, new Date(yy, mm + 1, 0).getDate()));
+        if (iso >= TODAY) return iso <= D.shift(TODAY, 30) ? iso : null;
+      }
+      return null;
+    };
+    var billMade = {};
+    BILLS.map(function (b) { return { b: b, due: dueOf(b[3]) }; })
+      .filter(function (x) { return x.due; })
+      .sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : 0; })
+      .forEach(function (x, k) {
+        var key = 'wealth-bill-' + x.b[0] + '-' + x.due;
+        put('note', TODAY, key, { kind: 'todo', src: 'wealth', text: 'Pay ' + x.b[1] + ', ₱' + Math.round(x.b[2]).toLocaleString(),
+          t: NOW - 60000, made: TODAY, at: null, dur: null, ord: k, done: 0, cancelled: 0, due: x.due, pri: 0, proj: null, rep: null });
+        billMade[key] = TODAY;
+      });
+    setting('wealth.billMade', billMade);
+
+    /* ── ELEMENT's plan for today ──
+       ELEMENT works the day's drinks out when it opens and writes them as
+       mix.plan (publishPlan in mix/index.html), which DRINKS reads. These
+       drinks and grams are the ones ELEMENT itself wrote for this person on
+       7 October 2026, a rest day, and 8 October, a training day, where the
+       PRE-WORKOUT is timed off TRAIN's session start. ELEMENT's sums read
+       the week's meals and the latest weigh-in, which come out a little
+       different each day, so on another day the grams here can be a few
+       hundredths off ELEMENT's; it writes its own the moment it opens.
+       No `dose` rows: nothing has gone down yet. */
+    var clk = function (mins) {
+      mins = ((Math.round(mins) % 1440) + 1440) % 1440;
+      var h = Math.floor(mins / 60);
+      return ((h + 11) % 12 + 1) + ':' + pad2(mins % 60) + (h < 12 ? ' AM' : ' PM');
+    };
+    var trainNow = !!trainedDays[TODAY] && todayStart != null, mgG = trainNow ? 1.555 : 1.557;
+    var drinks = [
+      { id: 'pitcher1', nm: 'DAY PITCHER 1', sub: '1 L', doses: [{ id: 'k-p1', name: 'Potassium citrate', g: 1.25 }] },
+      { id: 'pitcher2', nm: 'DAY PITCHER 2', sub: '1 L', doses: [{ id: 'k-p2', name: 'Potassium citrate', g: 1.25 }] },
+    ];
+    if (trainNow) {
+      var t0d = new Date(todayStart), sm = t0d.getHours() * 60 + t0d.getMinutes();
+      drinks.push({ id: 'pre', nm: 'PRE-WORKOUT', sub: 'about ' + clk(sm - 45) + ', 45 minutes before a ' + clk(sm) + ' start from TRAIN',
+        doses: [{ id: 'salt-pre', name: 'Table salt', g: 2.545 }] });
+    }
+    drinks.push({ id: 'meal', nm: 'WITH FOOD', sub: 'whichever meal you are eating · salt before 6:00 PM',
+      doses: [{ id: 'salt-food', name: 'Salt on food', g: trainNow ? 1.142 : 2.529 }, { id: 'mg-meal', name: 'Magnesium glycinate', g: mgG },
+        { id: 'zn-meal', name: 'Zinc glycinate', g: 0.046 }] });
+    drinks.push({ id: 'night', nm: 'NIGHT DRINK', sub: 'at 10:30 PM · no sodium, ever',
+      doses: [{ id: 'k-night', name: 'Potassium citrate', g: 2.5 }, { id: 'mg-night', name: 'Magnesium glycinate', g: mgG },
+        { id: 'zn-night', name: 'Zinc glycinate', g: 0.071 }] });
+    setting('mix.plan', { date: TODAY, drinks: drinks, at: NOW - 60000 });
+
+    /* ── LIFE: the birth year it asks for. 31 this year, as KITCHEN's ref says ── */
+    setting('lifeos.born', +TODAY.slice(0, 4) - 31);
+
+    /* ── BLOCK, today ──
+       Each block ticked a few minutes after its time is past, in the order
+       the routine runs, as the boxes are by someone working through the
+       day; the Train block only on a TRAIN day. Nothing ahead of the clock
+       is ticked, and the weekend has no work routine. */
+    var routineToday = dow(TODAY) === 0 || dow(TODAY) === 6 ? 'd-weekend' : 'd-week';
+    var lastTick = 0;
+    LANES.forEach(function (l) {
+      var mins = +l[2].slice(0, 2) * 60 + +l[2].slice(3, 5);
+      BLOCKS[l[0]].forEach(function (b) {
+        mins += b[1];
+        var late = Math.floor(rnd() * 6), hit = rnd() < 0.85, ms = Math.max(at(TODAY, 0, mins + late), lastTick + 60000);
+        if (b[0] === 'Train') hit = !!trainedDays[TODAY];
+        if (!hit || (routineToday === 'd-weekend' && l[0] === 'm-work') || ms > NOW - 60000) return;
+        put('tick', TODAY, slug(b[0]) + '.' + slug(l[1]), { src: 'block' }, ms);
+        lastTick = ms;
+      });
+    });
+
+    /* ── DESK TIME ──
+       What STATUS.exe keeps (screenTick in status/index.html): one `deskon`
+       row a day, the stretches at the PC in minutes of that day, and one
+       `screen` row per program a day, the seconds it was in front while
+       someone was at the keyboard, keyed by its file name. Two weeks of it,
+       and today up to now. Leaving the PC between 10:30 and 11:45 at night
+       is what OFF LAST NIGHT and USUAL read. */
+    var PROGS = [['chrome', 'Google Chrome', 0.4], ['capcut', 'CapCut', 0.2], ['excel', 'Microsoft Excel', 0.14],
+      ['messenger', 'Messenger', 0.12], ['spotify', 'Spotify', 0.04]];
+    var nowM = new Date(NOW).getHours() * 60 + new Date(NOW).getMinutes();
+    for (i = 14; i >= 0; i--) {
+      d = ago(i);
+      var jit = [];
+      for (var q = 0; q < 6; q++) jit.push(rnd());
+      var busy = between(0.78, 0.9), wts = PROGS.map(function (p) { return p[2] * between(0.6, 1.4); });
+      var on = dow(d) === 0 || dow(d) === 6
+        ? [[600 + Math.floor(jit[0] * 20), 690 + Math.floor(jit[1] * 30)], [1250 + Math.floor(jit[4] * 20), 1390 + Math.floor(jit[5] * 40)]]
+        : [[520 + Math.floor(jit[0] * 20), 705 + Math.floor(jit[1] * 25)], [805 + Math.floor(jit[2] * 20), 975 + Math.floor(jit[3] * 30)],
+          [1235 + Math.floor(jit[4] * 25), 1350 + Math.floor(jit[5] * 75)]];
+      if (i === 0) on = on.filter(function (s) { return s[0] < nowM - 1; }).map(function (s) { return [s[0], Math.min(s[1], nowM - 1)]; });
+      if (!on.length) continue;
+      var deskAt = at(d, 0, on[on.length - 1][1]);
+      put('deskon', d, '', { on: on }, deskAt);
+      var secs = on.reduce(function (n, s) { return n + (s[1] - s[0]) * 60; }, 0) * busy;
+      var wsum = wts.reduce(function (a, b) { return a + b; }, 0);
+      PROGS.forEach(function (p, k) {
+        var s = Math.round(secs * wts[k] / wsum);
+        if (s >= 60) put('screen', d, p[0], { app: p[1], s: s }, deskAt);
+      });
+    }
+
+    /* ── SPEAK ──
+       Takes in the shape SPEAK saves them (finishTake and finishWarm in
+       speak/index.html, targets at their defaults): the day's warm-up
+       first, then a drill or two, with the numbers the ear reads and the
+       transcript and camera off, as they are by default, so no word counts,
+       crutch phrases or eye readings. Each goal as it stood, with `got` and
+       `ok`; the day's `speak` tick and the activity naming it, as saveTake
+       writes them. Seven practice days over the last eleven. */
+    var SPD = {   /* drill: [skill, style, prompt kind, length in seconds, goals] */
+      'pace-read': ['pace', 'read', 'read', 45, [['wpm', 'in', [140, 160]]]],
+      'pace-free': ['pace', 'long', 'topic', 60, [['wpm', 'in', [140, 160]]]],
+      'pace-beat': ['pace', 'long', 'topic', 60, [['wpm', 'in', [135, 165]]]],
+      'clean-count': ['clean', 'long', 'topic', 60, []],
+      'flow-bullets': ['flow', 'long', 'bullets', 60, [['longP', 'le', 2], ['restarts', 'le', 1]]],
+      'flow-stream': ['flow', 'live', 'topic', 90, [['longP', 'le', 1], ['restarts', 'le', 0]]],
+      'flow-hook': ['flow', 'short', 'hook', 30, [['ratio', 'ge', 80], ['longP', 'le', 0]]],
+      'clear-over': ['clear', 'read', 'twister', 30, []],
+      'clear-read': ['clear', 'read', 'read', 45, [['crisp', 'ge', 85]]],
+    };
+    /* SPEAK's own words: a passage, topics, bullets, hooks and twisters, all public domain or its own */
+    var SP = {
+      read: ['The North Wind and the Sun were disputing which was the stronger, when a traveler came along wrapped in a warm cloak. ' +
+        'They agreed that the one who first succeeded in making the traveler take his cloak off should be considered stronger than the other. ' +
+        'Then the North Wind blew as hard as he could, but the more he blew the more closely did the traveler fold his cloak around him; ' +
+        'and at last the North Wind gave up the attempt. Then the Sun shone out warmly, and immediately the traveler took off his cloak. ' +
+        'And so the North Wind was obliged to confess that the Sun was the stronger of the two.'],
+      topic: ['What a good morning looks like', 'Why people quit things in week three', 'The best advice you ignored',
+        'What you would tell a beginner', 'A habit you dropped and why', 'Why the simple version wins'],
+      bullets: ['why the first week is easy | what changes in week three | the one thing that gets people through it',
+        'the myth | where it came from | what the evidence says', 'warm up | the main set | the thing everyone skips at the end'],
+      hook: ['Most people quit here.', 'Nobody tells you this part.', 'You do not need more time.'],
+      twister: ['Red leather, yellow leather. | Unique New York, unique New York. | Six thick thistle sticks.',
+        'She sells sea shells by the sea shore. | A proper copper coffee pot. | Good blood, bad blood.'],
+    };
+    var r1 = function (v) { return Math.round(v * 10) / 10; };
+    var OPS = { in: function (v, t) { return v >= t[0] && v <= t[1]; }, le: function (v, t) { return v <= t; }, ge: function (v, t) { return v >= t; } };
+    var SESS = [   /* days ago, then each drill and the readings it is built around */
+      [11, [['pace-read', { wpm: 152 }], ['clean-count', { wpm: 158, held: 9 }]]],
+      [9, [['pace-free', { wpm: 171 }], ['flow-bullets', { wpm: 149, longP: 3, restarts: 1 }]]],
+      [8, [['pace-free', { wpm: 155 }], ['clear-over', { wpm: 131 }]]],
+      [6, [['flow-bullets', { wpm: 146, longP: 1, restarts: 0 }], ['clean-count', { wpm: 151, held: 6 }]]],
+      [4, [['flow-stream', { wpm: 158, longP: 2, restarts: 0 }]]],
+      [3, [['flow-stream', { wpm: 152, longP: 1, restarts: 0 }], ['pace-beat', { wpm: 149 }]]],
+      [1, [['clear-read', { wpm: 147, crisp: 91 }], ['flow-hook', { wpm: 166, ratio: 76, longP: 0 }]]],
+    ];
+    put('activity', null, 'speak', { name: 'Speak', cat: 'mind' });
+    var spN = 0;
+    SESS.forEach(function (sess) {
+      var sd = ago(sess[0]), tk = at(sd, 13, 50 + Math.floor(rnd() * 25));
+      var warm = { drill: 'warm', dur: Math.round(between(128, 150)),
+        m: { hiss: r1(between(14.5, 21)), pitch: r1(between(10.5, 14.5)), crispRaw: Math.round(between(0.058, 0.066) * 1000) / 1000 },
+        steps: ['warm-breath', 'warm-siren', 'warm-twist'], pass: 1, at: tk };
+      put('take', sd, uid(tk), warm, tk);
+      put('tick', sd, 'speak', { src: 'speak' }, tk);
+      var ref = warm.m.crispRaw;
+      tk += (warm.dur + 60) * 1000;
+      sess[1].forEach(function (t) {
+        var dr = SPD[t[0]], o = t[1], J = [];
+        for (var q2 = 0; q2 < 10; q2++) J.push(rnd());
+        var dur = dr[3] + 1 + Math.floor(J[0] * 2), spoken = r1(dur - 1 - J[1] * 1.5), mins = Math.max(0.1, spoken / 60);
+        var syll = Math.round(o.wpm * 1.4 * mins), held = o.held != null ? o.held : Math.round(1 + J[2] * 3 * mins);
+        var pauses = Math.round(4 + J[3] * 6 * mins), longP = o.longP != null ? o.longP : (J[3] < 0.5 ? 0 : 1);
+        var crispRaw = Math.round(ref * (o.crisp != null ? o.crisp : 84 + J[9] * 14) / 100 * 1000) / 1000;
+        var m = {
+          wpm: syll / 1.4 / mins, wpmEst: syll / 1.4 / mins, words: 0, syll: syll,
+          fpm: held / mins, fillers: held, crutch: null, held: held, repeats: null,
+          pauses: pauses, longP: longP, heldP: Math.min(pauses, 1 + Math.floor(J[4] * 3)),
+          longestPause: longP ? r1(1.6 + J[5] * 0.9) : r1(0.7 + J[5] * 0.7),
+          ratio: o.ratio != null ? o.ratio : 82 + J[6] * 9, restarts: o.restarts || 0,
+          pitch: r1(4.6 + J[7] * 3), f0: Math.round(112 + J[8] * 14),
+          crispRaw: crispRaw, crisp: crispRaw / ref * 100,
+          eye: null, eyeAway: null, spoken: spoken, loud: r1(-28 + J[2] * 4),
+        };
+        var goals = dr[4].map(function (g) {
+          var got = m[g[0]];
+          return { m: g[0], op: g[1], v: g[2], got: got == null ? null : r1(got), ok: got == null ? false : OPS[g[1]](got, g[2]) };
+        });
+        var words = SP[dr[2]];
+        put('take', sd, uid(tk), { drill: t[0], skill: dr[0], style: dr[1], dur: dur, m: m, goals: goals,
+          pass: goals.every(function (g) { return g.ok; }) ? 1 : 0, asr: 0, cam: 0, tx: '', hits: null,
+          prompt: words[spN++ % words.length], at: tk }, tk);
+        tk += (dur + 90 + Math.floor(J[9] * 60)) * 1000;
+      });
+    });
+
     return rows;
   }
 
