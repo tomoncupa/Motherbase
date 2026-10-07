@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.63, 2026-10-06">
+<meta name="mb-version" content="1.0.64, 2026-10-07">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -761,7 +761,8 @@ body.checking .deskx { display: none; }
      3840px monitor a 720px box is not the "HUGE" he asked for. Off vmin, so a
      short window cannot make it taller than the screen. */
   width: min(100%, clamp(300px, 70vmin, 1200px)); max-height: 100%;
-  display: flex; flex-direction: column; gap: clamp(6px, 1.6vmin, 18px);
+  --nw-gap: clamp(6px, 1.6vmin, 18px);
+  display: flex; flex-direction: column; gap: var(--nw-gap);
   padding: clamp(12px, 3.4vmin, 34px);
   background: var(--nw-panel);
   border: 1px solid var(--nw-line);
@@ -783,6 +784,9 @@ body.checking .deskx { display: none; }
   font-family: var(--nw-face); font-weight: 700; color: var(--nw-acc);
   letter-spacing: .22em; font-size: clamp(10px, 1.9vmin, 15px);
 }
+/* A label sits with the control it names: closer to its own box than to the
+   one above it, which one gap between everything did not do. */
+.nwlabel + .nwscale, .nwlabel + .nwdoing { margin-top: calc(var(--nw-gap) * -0.6); }
 /* Five across, always, however wide the window is. A square target that grows
    with the screen is the "HUGE" half of what he asked for. */
 .nwscale { display: grid; grid-template-columns: repeat(5, 1fr); gap: clamp(5px, 1.4vmin, 14px); }
@@ -856,15 +860,20 @@ html.deskhost header { padding-right: var(--s-7); }
 }
 .desktime.idle { color: var(--text-muted); }
 
-/* the last thing he wrote, one line under the box, beside the icons */
-.deskmark { flex: none; color: var(--accent); display: flex; align-items: center; }
+/* the last thing he wrote, one line under the box, beside the icons.
+   Everything in the row hangs from its top, in a band as tall as the icons,
+   so a line that wraps keeps its mark beside its FIRST line and the icons
+   stay where they were, rather than all sliding down to its middle. */
+.deskmark { flex: none; height: var(--s-5); color: var(--accent); display: flex; align-items: center; }
 /* never cut off: a line too long for the room wraps, and the window grows */
 .deskline {
   flex: 1; min-width: 0; overflow-wrap: anywhere;
   font-size: var(--f-1); color: var(--text-2);
+  /* the first line centred in the icons' band, whatever the theme's line height */
+  padding-top: var(--s-1); padding-top: calc((var(--s-5) - 1lh) / 2);
 }
 .deskopen {
-  display: flex; align-items: center; gap: var(--s-1); flex: 1; min-width: 0;
+  display: flex; align-items: flex-start; gap: var(--s-1); flex: 1; min-width: 0;
   text-align: left; padding: 0; background: none; border: 0;
   color: inherit; font: inherit; cursor: pointer;
 }
@@ -880,11 +889,11 @@ body.deskmini .deskdoing {
   border-color: var(--border-strong);
 }
 body.deskmini .deskdoing:focus { border-color: var(--accent); }
-.deskempty { font-size: var(--f-1); color: var(--text-muted); white-space: nowrap; }
+.deskempty { font-size: var(--f-1); color: var(--text-muted); white-space: nowrap; align-self: center; }
 
 /* the small icons under the box. Drawn small, pressed at 44 (mb-tap). */
-.deskfoot { display: flex; align-items: center; gap: var(--s-2); min-width: 0; margin-top: var(--s-1); }
-.deskchips { display: flex; align-items: center; gap: var(--s-2); flex: none; }
+.deskfoot { display: flex; align-items: flex-start; gap: var(--s-2); min-width: 0; margin-top: var(--s-1); }
+.deskchips { display: flex; align-items: center; gap: var(--s-2); flex: none; height: var(--s-5); }
 .deskchip { display: flex; align-items: center; gap: var(--s-1); color: var(--text-muted); }
 .deskchip b {
   font-family: var(--font-display); font-size: var(--f-1);
@@ -897,7 +906,27 @@ body.deskmini .deskdoing:focus { border-color: var(--accent); }
   color: var(--text-muted); cursor: pointer;
 }
 .deskbtn:hover { background: var(--surface-2); color: var(--text-1); }
-.deskpair { display: flex; align-items: center; gap: var(--s-1); flex: none; }
+/* Pressed at 44 with a mouse too: `mb-tap` only widens a control on a touch
+   screen, and this is a PC widget. The two stay drawn as a pair, 8 apart, so
+   their 44s go outward rather than over each other: Todo's reaches back over
+   the strip's padding to its left edge, Entry's forward over the room before
+   the line. Neither reaches the box above, which sits over them. */
+.deskpair { display: flex; align-items: center; gap: var(--s-2); flex: none; margin-right: var(--s-3); }
+.deskpair .deskbtn { position: relative; }
+.deskpair .deskbtn::after {
+  content: ''; position: absolute; top: 50%; z-index: 1;
+  transform: translateY(-50%); width: var(--tap); height: var(--tap);
+}
+.deskpair .deskbtn:first-child::after { left: auto; right: calc(-1 * var(--s-2)); }
+.deskpair .deskbtn:last-child::after { left: 0; right: auto; }
+/* The last line is pressed to edit it: as tall a target as the icons'. */
+.deskopen { position: relative; }
+.deskopen::after {
+  content: ''; position: absolute; left: 0; right: 0;
+  top: calc((var(--s-5) - var(--tap)) / 2); bottom: calc((var(--s-5) - var(--tap)) / 2);
+}
+/* the box keeps every pixel of its own where those reach up into it */
+.deskrow > .deskdoing { position: relative; z-index: 2; }
 /* An outline, not a gold disc: the line he is on is the primary thing here,
    and a filled accent circle out-shouted it. */
 .deskfab {
@@ -909,48 +938,7 @@ body.deskmini .deskdoing:focus { border-color: var(--accent); }
 }
 .deskfab:hover { background: var(--accent); color: var(--accent-fg); }
 
-/* the two panels the widget turns into. Spacing says what belongs together:
-   4 between a label and its control, 16 between one question and the next. */
-.deskask { display: flex; flex-direction: column; }
-.deskask label.fl {
-  font-size: var(--f-1); color: var(--text-muted);
-  letter-spacing: var(--track-cap); margin-bottom: var(--s-1);
-}
-.deskask label.fl + * { margin-bottom: var(--s-4); }
-.deskask > *:last-child { margin-bottom: 0; }
-.deskscale { display: flex; gap: var(--s-2); }
-.deskscale button {
-  flex: 1; min-height: var(--tap);
-  background: var(--surface-2); border: 0; border-radius: var(--radius-sm);
-  color: var(--text-2); font-size: var(--f-2); font-family: inherit;
-  cursor: pointer;
-}
-.deskscale button.on { background: var(--accent); color: var(--accent-fg); }
-.deskkinds { display: flex; gap: var(--s-2); }
-.deskkinds button {
-  flex: 1; min-height: var(--tap);
-  display: flex; align-items: center; justify-content: center;
-  background: var(--surface-2); border: 0; border-radius: var(--radius-sm);
-  color: var(--text-2); cursor: pointer;
-}
-.deskkinds button.on { background: var(--accent); color: var(--accent-fg); }
-.deskgo {
-  min-height: var(--tap); padding: 0 var(--s-5);
-  border: 0; border-radius: var(--radius-sm); cursor: pointer;
-  background: var(--accent); color: var(--accent-fg);
-  font-family: inherit; font-size: var(--f-2); font-weight: var(--w-bold);
-}
 body.deskmini .mb-input { width: 100%; }
-
-/* the check in, on its interval */
-.deskscale { display: flex; gap: var(--s-2); margin-bottom: var(--s-4); }
-.deskscale button {
-  flex: 1; min-height: var(--tap);
-  background: var(--surface-2); border: 0; border-radius: var(--radius-sm);
-  color: var(--text-2); font-size: var(--f-3); font-family: inherit;
-  cursor: pointer;
-}
-.deskscale button.on { background: var(--accent); color: var(--accent-fg); }
 </style>
 </head>
 <body>
@@ -8069,6 +8057,14 @@ function deskNightKey(now) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' +
          String(d.getDate()).padStart(2, '0');
 }
+/* After midnight and before his hours start: the same small hours as
+   `deskNightKey`, for the widget's day. A window that runs past midnight
+   (10 to 2) still starts at 10, so 00:30 is last night in it too. From 0 is
+   the whole day, with no morning to wait for. */
+function deskSmallHours(now) {
+  const c = deskCfg();
+  return c.from > 0 && now.getHours() < c.from;
+}
 
 /* Inside the hours he set. A window whose end is before its start runs
    through midnight, so 22 to 6 means the night. */
@@ -8204,6 +8200,10 @@ function deskLast() {
   Rec.all('note').forEach(r => {
     const p = r.payload;
     if (!p || !p.text || p.cancelled) return;
+    /* Made for him by another app (ARC's practice, WEALTH's bills, the
+       morning brief's items), not written by him: opening one of those apps
+       must not swap his line out or restart the time. */
+    if (p.src === 'arc' || p.src === 'wealth' || p.src === 'brief') return;
     /* A todo dated for next Tuesday is not the last thing he wrote, it is a
        thing he decided not to think about yet. Tom, 2026-09-17. */
     if (p.kind === 'todo' && p.due && p.due > today) return;
@@ -8375,6 +8375,9 @@ function deskBar() {
 function deskNewDay() {
   const d = Day.today();
   if (S.get('desk.newday', '') === d || checkOn) return false;
+  /* A line in the small hours is still last night: he has not slept, so it
+     asks nothing and leaves the day unasked for the first line after waking. */
+  if (deskSmallHours(new Date())) return false;
   S.set('desk.newday', d);
   const miss = ['sleep', 'weight'].map(quickField).filter(f => f && !logged(d, f.id));
   if (!miss.length) return false;
@@ -8386,14 +8389,19 @@ function deskNewDay() {
    How long since the last line he wrote today: how long he has been on what
    he said he was doing. A line from yesterday is not still running, so it
    reads 0:00:00 the way an idle timer does. Only the digits change each
-   second; nothing is redrawn and the window keeps its size. */
+   second; nothing is redrawn and the window keeps its size.
+   Midnight is not where yesterday ends for him: a line written at 23:40 he
+   is still on at 00:01 keeps running through the small hours, until his
+   hours start (`deskSmallHours`). */
 let deskClockT = 0;
 function deskClock() {
   const t = document.querySelector('#deskbar .desktime');
   if (!t) return;
   if (!deskClockT) deskClockT = setInterval(() => { if (deskSmall) deskClock(); }, 1000);
   const last = deskLast();
-  const on = last && last.date === Day.today() && last.payload.t;
+  const today = Day.today();
+  const on = last && last.payload.t && (last.date === today ||
+    (last.date === Day.shift(today, -1) && deskSmallHours(new Date())));
   const s = on ? Math.max(0, Math.floor((Date.now() - last.payload.t) / 1000)) : 0;
   const txt = Math.floor(s / 3600) + ':' + String(Math.floor(s / 60) % 60).padStart(2, '0') +
               ':' + String(s % 60).padStart(2, '0');
@@ -8494,6 +8502,15 @@ function checkDraw() {
       i.type = 'text'; i.inputMode = 'decimal'; i.className = 'nwdoing';
       i.placeholder = f.unit || ''; i.value = checkVals[f.id] != null ? String(checkVals[f.id]) : '';
       i.oninput = () => { const v = num(i.value); if (v == null) delete checkVals[f.id]; else checkVals[f.id] = v; };
+      /* Enter goes to the next box, and from the last one it is SAVE: his
+         hands are on the keys, he came here by pressing Enter on a line. */
+      i.onkeydown = e => {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        const boxes = [].slice.call(win.querySelectorAll('input.nwdoing'));
+        const nx = boxes[boxes.indexOf(i) + 1];
+        if (nx) nx.focus(); else go.click();
+      };
       win.appendChild(i);
       return;
     }
@@ -8564,14 +8581,14 @@ function checkOpen(only) {
   if (!checkFields().length) { checkOn = false; checkOnly = null; deskAsking = false; deskRoll(); return; }
   document.body.classList.add('checking');
   checkDraw();
-  /* ── for a launcher that has not been rebuilt ──
-     `takeover` is new, and a STATUS.exe built before it ignores a verb it does
-     not know, which would leave a full-screen question crammed into a 320px
-     widget. `checkin` is the old verb and it at least centres a big window, so
-     it goes first and the new one overrides it a moment later. Sent once per
-     check rather than on every redraw, or a rebuilt launcher would shrink and
-     grow the window every time a button is pressed. */
-  if (HOSTED) deskSend('checkin|900|700');
+  /* The new day's check is two boxes to type in, so the cursor is already in
+     the first (STANDARDS rule 14). The timed one starts with scales to press. */
+  if (checkOnly) UI.focusSoon(document.querySelector('#statuscheck input.nwdoing'));
+  /* Only `takeover` is sent. The old `checkin` went first, for a launcher
+     built before `takeover`, but STATUS.exe answers `checkin` by becoming the
+     check, and then refuses `takeover` because it already is one, so every
+     check came up as a 900x700 box and never the whole screen. The
+     STATUS.exe in desktop/ (rebuilt 2026-10-05) knows `takeover`. */
   deskTitle();
 }
 
@@ -8597,6 +8614,10 @@ function checkSave() {
     checkOn = false;
     document.body.classList.remove('checking');
     deskTitle(); deskBar(); draw();
+    /* It came up because he pressed Enter on a line, so he is mid-flow: the
+       cursor goes back in the box, or the next line he types goes nowhere. */
+    const box = deskSmall && document.querySelector('#deskbar .deskdoing');
+    if (box) box.focus();
     return;
   }
   /* Answering by hand puts the next one off. Without this the question he just
