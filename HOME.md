@@ -209,3 +209,18 @@ offers UNDO for 12 s; DATA shows "Bring back what was deleted" for 7 days
 and asks again. It now deletes the `motherbase` IndexedDB too, whose big rows
 used to survive a delete. Tested in headless Chromium by clicking DATA, the
 option and DELETE EVERYTHING, then UNDO and Bring back.
+
+## 2026-10-07, HOME 1.0.59: board fixes and polish
+
+Tom: "Check for bugs and save issues and redundancies. Polish the widgets." A review drew all 46 widgets in headless Chromium (demo at 1920 and 390 touch, an empty store) and measured and looked at each; a code audit read the file. Pass A, the board-wide part, is 1.0.59:
+
+- **Fit cards are measured again once the font lands** (`document.fonts.ready`, `loadingdone`): MACROS was cut to 2 rows. `defaultLayout()` hands out fresh copies with the reel's spots, so Reset works after a move and 3840 keeps three columns. `seenOrder()` drives REARRANGE arrows and Move up/down. The hover remove button no longer makes a header 16px taller. Phone card menus drop Wider/Narrower/Taller/Shorter; fit cards drop Taller/Shorter and resize by width only.
+- **Typing survives a redraw.** `redrawHome()` waits while a box on the board has the caret (STICKY lost words on its own save, and on any store write or resize).
+- **Saves:** an emptied board stays empty (`lifeos.layoutEmpty`, since live sync strips an empty list); cards a newer build knows are held in `layoutHeld` and saved back; Bring back only restores a row that is missing or older than its copy; + WIDGET no longer passes its click as a spot.
+- **Rows line up:** `.row.mb-bullet` is 44px with the box beside the words; an all-untimed list hides the time column; a TODAY todo wears the journal's square inside its tick button; `.chk` rings are `--dim2`. Sizes under 12px and raw padding are tokens (`--f-1`, `--s-2`, `--s-3`).
+- LINKS stops at the window and scrolls; APPS says keys 1 to 9 truthfully; the picker's rows are one width with body-face descriptions and icon buttons; the drag ghost is a real header.
+- Dock: a drop on the next app right works; phone Move left/right skips desk apps; an app opened while ELEMENT is over the board hides ELEMENT. Dead: the v1 `lifeos` IndexedDB block and `dueHabits`.
+
+Watched in headless Chromium at 1920, 3840 and 390 touch; review 142/142 Chromium, WebKit only the known smoke-frame fail. Not on his screens.
+
+**Passes B, C and D are not on main.** B (TODAY, TODO, UPCOMING, IDEAS, EVENTS, STREAKS, RHYTHMS, STICKY, RECAP, ON THIS DAY, CALENDAR) was cut off by a usage limit and is parked unfinished and untested on the branch `home-polish-wip`. C (TRAIN, weight, MEASURE, WORK DONE, BESIDE) and D (money, food, desk tools, LIFE, YEAR) never started. Their lists are in `Claude outputs/audit-2026-10-08/home-*.json` (local, not in git). Rule for them: TRAIN totals count warmups (train/CLAUDE.md, 1.0.50), so a home total must too; recovery clocks and records stay on working sets.

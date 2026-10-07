@@ -48,7 +48,7 @@ are holding a stale copy of whatever you just changed.
 | `report.js` | Each device's own `device` row: when it was seen, live sync, app versions, its last errors. Fetched by `io.js`, which also catches boot errors until it lands. | Low. It writes one row per device. |
 | `claude.js` | The CLAUDE panel, added 2026-10-04: a gold tab in Main Menu.exe only (the window injects it; without `chrome.webview` it returns). Ask about the rows, or log by talking. Hands claude.exe a slimmed copy of every row as files; applies Claude's writes here (Journal.add, Rec.set for new rows, Rec.patch for changes), each with Undo; ticks Training after sets like TRAIN.assertTick. Never writes `device`, `setting`, `skin`, pictures or `brief`. | Medium. It writes rows on what Claude says, each shown with Undo. |
 | `boot.js` | The start screen on the home screen and the phone apps. | Low. Writes nothing but one sessionStorage flag. |
-| `_smoke.html` | 422 checks over all of it. | Run it every time. |
+| `_smoke.html` | 424 checks over all of it. | Run it every time. |
 | `THEMING.md` | The contract the apps obey. Changing a token name changes it. | Read before renaming anything. |
 
 ## Rules
@@ -603,6 +603,25 @@ a folder, in the demo, and in any frame, so HOME shows one and its framed app
 none. A bad state shows only after 10 s, which covers every open's connect.
 Phone headers stack the two words (under 480px), measured with no overflow
 at 390 in TRAIN, STATUS, KITCHEN, SPEAK, CHECK IN, BULLET.
+
+## A tag at the point, always (2026-10-07, `chart.js`)
+
+Tom, 2026-10-06: a pointed-at point shows its data AT the point. `c.scrub`
+draws its tag whether or not the caller passes `onMove`; `onMove` still lets
+the caller update its header. The tag says `o.fmt(p)`, else the point's own
+title (its third item), else its value and, on a time axis, its date. A time
+axis drops any date that would come within 6px of the one before it; the far
+end outranks the regular date before it. Two smoke checks. WEALTH's two
+charts on a numbered axis show a bare number in the tag (no peso sign): give
+them an `o.fmt` in a WEALTH session. Not seen on the iPhone.
+
+## The demo, filled for the widgets (2026-10-07, `demo.js` 1.0.1, seed '2')
+
+The demo seeds what the home widgets read: `activity` names for BLOCK's ticks,
+`pr` on sets by a copy of `TRAIN.recomputePRs`, WEALTH bill todos, ELEMENT's
+`mix.plan`, `screen`/`deskon` rows, SPEAK `take` rows and a birth year. Each
+shape was checked against the app that writes it. Gap found in passing: real
+BLOCK never names a rhythm, so a rhythm streak shows its slug in STREAKS.
 
 ## History
 
