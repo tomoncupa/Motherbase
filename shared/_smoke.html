@@ -2894,6 +2894,55 @@ async function run() {
     box.remove();
     return mid && left;
   });
+  ok('chart: a pointed-at point shows its tag at the point, even when the caller also listens', () => {
+    /* Tom, 2026-10-06: data at the point. A chart with onMove drew no tag,
+       so WEIGHT, MEASURE and SLEEP only changed a line above the chart. */
+    const box = offstage(400, 150);
+    const c = Chart.make({ w: 400, h: 150 });
+    box.appendChild(c.el);
+    const from = Day.shift(Day.today(), -10), mid = Day.shift(from, 5);
+    const pts = [[from, 1], [mid, 3.2], [Day.today(), 2]];
+    let got = null;
+    c.xTime(from, Day.today()).yFit([1, 3.2]).line(pts).scrub(pts, { onMove: p => { got = p; } });
+    const r = c.el.getBoundingClientRect();
+    const at = d => r.left + c.X(d) * r.width / 400;
+    c.el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: at(mid), pointerType: 'touch' }));
+    const tag = c.el.querySelector('.mb-tag'), grp = c.el.querySelector('.mb-scrub');
+    const tx = tag ? +tag.getAttribute('x') : -1;
+    const res = !!got && got[0] === mid && !!tag && grp.style.display !== 'none' &&
+      c.el.querySelectorAll('.mb-tag').length === 1 && /^3\.2 · \d{1,2} [A-Z][a-z]{2}$/.test(tag.textContent) &&
+      Math.abs(tx - c.X(mid)) < 1;
+    box.remove();
+    return res;
+  });
+  let axisBad = '';
+  ok('chart: no date on a time axis touches the one beside it, and the far end keeps its date', () => {
+    /* the far end is right-aligned, and at 30 days on a wide widget it
+       printed 5 Oct on top of 7 Oct */
+    const box = offstage(1000, 150);
+    const dates = (w, span) => {
+      const c = Chart.make({ w: w, h: 150 });
+      box.appendChild(c.el);
+      c.xTime(Day.shift(Day.today(), -span), Day.today()).yFit([1, 2]).grid().timeAxis();
+      const labs = [].slice.call(c.el.querySelectorAll('text.mb-lab'))
+        .filter(t => /^\d{1,2} [A-Z][a-z]{2}/.test(t.textContent))
+        .map(t => { const b = t.getBBox(); return { a: b.x, b: b.x + b.width, x: +t.getAttribute('x') }; })
+        .sort((p, q) => p.a - q.a);
+      const end = c.X(Day.today());
+      c.el.remove();
+      return { labs: labs, end: end };
+    };
+    [260, 320, 420, 560, 700, 860].forEach(w => [6, 13, 29, 30, 44, 89, 179, 364, 730].forEach(span => {
+      if (axisBad) return;
+      const labs = dates(w, span).labs;
+      for (let i = 1; i < labs.length; i++) if (labs[i].a < labs[i - 1].b + 2) axisBad = 'touching at ' + w + 'px, ' + span + ' days';
+    }));
+    /* the case that was reported: a date every 3 days, 2 days left over */
+    const rep = dates(700, 29);
+    if (!axisBad && Math.abs(rep.labs[rep.labs.length - 1].x - rep.end) > 1) axisBad = 'no far-end date at 700px, 29 days';
+    box.remove();
+    return !axisBad;
+  }).note += axisBad ? ' ' + axisBad : '';
   ok('chart: the latest value is marked, and a line draws in only for those who want motion', (() => {
     const c = Chart.make({ w: 320, h: 150, anim: true });
     c.xLinear(0, 2).yFit([1, 3]).area([[0, 1], [2, 3]]).line([[0, 1], [2, 3]]).end([2, 3], '3');

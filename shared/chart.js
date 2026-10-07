@@ -15,9 +15,10 @@
                          words. Nobody should read an axis to learn the one
                          number the chart is about.
      DRAG TO EXPLORE     c.scrub: a finger or a mouse across the chart moves a
-                         crosshair to the nearest point, and the header (or a
-                         small tag) follows it. Lift the finger and it goes
-                         back to now. Arrow keys do the same.
+                         crosshair to the nearest point, a small tag at the
+                         point says what it is, and the header can follow it.
+                         Lift the finger and it goes back to now. Arrow keys
+                         do the same.
      ONE THING LOUD      c.end marks the latest value; c.bars can light one
                          bar and grey the rest. Everything else is quiet: hair
                          gridlines, muted labels, no vertical grid on time.
@@ -84,6 +85,40 @@
     const d = decOf(step), r = Math.round(v * Math.pow(10, d)) / Math.pow(10, d);
     return d && !Number.isInteger(r) ? r.toFixed(d) : Math.round(r).toLocaleString();
   };
+  /* A reading, not a gridline: one decimal finer than the scale, so 82.1 on
+     a scale in whole kilos still says 82.1, and a whole number stays whole. */
+  const fmtVal = (v, step) => (+v).toLocaleString(undefined, { maximumFractionDigits: Math.min(2, decOf(step) + 1) });
+  /* "5 Oct", the way the time axis writes it, with the year when asked */
+  const dateLab = (d, yr) => {
+    const p = String(d).split('-');
+    return +p[2] + ' ' + MON[+p[1] - 1] + (yr ? ' ' + String(p[0]).slice(2) : '');
+  };
+  /* How wide one character of a label is. Labels are --f-1 in --font-mono,
+     and which mono font that turns out to be depends on the device:
+     JetBrains Mono is not shipped, so Windows draws Consolas at 6.6px and
+     an iPhone SF Mono at 7.2. Measured on a canvas, which needs no layout,
+     from the tokens skins.js writes on the root, plus the theme's body
+     tracking, which svg text inherits. Kept until any of those change. */
+  let cwKey = '', cwVal = 7.2, cwCtx = null;
+  const charW = () => {
+    try {
+      const st = document.documentElement.style;
+      const fam = st.getPropertyValue('--font-mono').trim() || 'monospace';
+      const size = parseFloat(st.getPropertyValue('--f-1')) || 12;
+      const track = st.getPropertyValue('--track-body').trim();
+      const key = fam + '|' + size + '|' + track + '|' + (document.fonts ? document.fonts.status : '');
+      if (key === cwKey) return cwVal;
+      cwCtx = cwCtx || document.createElement('canvas').getContext('2d');
+      cwCtx.font = '700 ' + size + 'px ' + fam;
+      const w = cwCtx.measureText('30 Sep 2026').width / 11;
+      const em = parseFloat(track);
+      cwKey = key;
+      cwVal = (w > 0 ? w : 7.2) + (/em$/.test(track) && em > 0 ? em * size : 0);
+    } catch (e) { /* no canvas: the 12px mono guess */ }
+    return cwVal;
+  };
+  /* Two dates closer than this read as one. */
+  const LAB_GAP = 6;
 
   function make(opts) {
     opts = opts || {};
@@ -192,18 +227,35 @@
       const days = c.x1;
       const room = Math.max(2, Math.floor((W - P.l - P.r) / 64));
       const every = [1, 2, 3, 7, 14, 28, 91, 182, 365].filter(n => days / n <= room)[0] || 365;
-      const put = n => {
-        const d = D.shift(c.from, n);
-        const x = c.X(d);
-        if (o.ticks) add('line', { x1: x, y1: P.t, x2: x, y2: H - P.b }, 'mb-gl');
-        const p = String(d).split('-');
-        const t = add('text', { x: x, y: H - 6, 'text-anchor': n === 0 ? 'start' : n >= days ? 'end' : 'middle' }, 'mb-lab');
-        t.textContent = +p[2] + ' ' + MON[+p[1] - 1] + (every >= 182 ? ' ' + String(p[0]).slice(2) : '');
+      const xOf = n => c.X(D.shift(c.from, n)), cw = charW();
+      const textOf = n => dateLab(D.shift(c.from, n), every >= 182);
+      /* The first date starts at its tick, the far end's ends at it, and the
+         rest are centred, so each one's left and right edge is known before
+         it is drawn. */
+      const span = n => {
+        const x = xOf(n), w = textOf(n).length * cw;
+        return n === 0 ? [x, x + w] : n >= days ? [x - w, x] : [x - w / 2, x + w / 2];
       };
-      let last = 0;
-      for (let n = 0; n <= days; n += every) { put(n); last = n; }
-      /* The far end always gets its date, unless it would sit on the last one. */
-      if (days - last > every * 0.5) put(days);
+      const ns = [];
+      for (let n = 0; n <= days; n += every) ns.push(n);
+      /* The far end gets its date when it is more than half a step past the
+         last one. It is right-aligned, so it can still land on that date:
+         MEASURE at 30 days printed 5 Oct and 7 Oct on top of each other. */
+      if (days - ns[ns.length - 1] > every * 0.5) ns.push(days);
+      /* No date may touch the one before it. The far end outranks the
+         regular date before it, which steps aside; the first date outranks
+         everything, and a far end that would touch it is left off. */
+      const kept = [];
+      const fits = n => !kept.length || span(n)[0] - span(kept[kept.length - 1])[1] >= LAB_GAP;
+      ns.forEach(n => {
+        if (n >= days) while (kept.length > 1 && !fits(n)) kept.pop();
+        if (fits(n)) kept.push(n);
+      });
+      if (o.ticks) ns.forEach(n => { const x = xOf(n); add('line', { x1: x, y1: P.t, x2: x, y2: H - P.b }, 'mb-gl'); });
+      kept.forEach(n => {
+        const t = add('text', { x: xOf(n), y: H - 6, 'text-anchor': n === 0 ? 'start' : n >= days ? 'end' : 'middle' }, 'mb-lab');
+        t.textContent = textOf(n);
+      });
       return c;
     };
 
@@ -388,12 +440,17 @@
     };
 
     /** DRAG TO EXPLORE. Call last, after every mark. A pointer anywhere over
-        the chart snaps a crosshair and a dot to the nearest point in `pts`.
-        With `o.onMove(p, i)` the caller shows the value (usually in its
-        Chart.header) and `o.onLeave()` puts it back; without, a small tag
-        above the dot says `o.fmt(p)`. A finger that lifts lets go; a mouse
-        that leaves lets go; arrow keys step point by point. The chart keeps
-        vertical scrolling for the page, so a thumb can still scroll past it. */
+        the chart snaps a crosshair and a dot to the nearest point in `pts`,
+        and a small tag beside the dot says what that point is. Tom,
+        2026-10-06: a pointed-at point shows its data AT the point, so the
+        tag is drawn whether or not the caller also listens: `o.onMove(p, i)`
+        lets the caller show more (usually in its Chart.header) and
+        `o.onLeave()` puts that back. The tag says `o.fmt(p)`; without one,
+        the point's own title (its third item, as c.bars and c.dots take
+        it); without that, its value, and its date on a time axis. A finger
+        that lifts lets go; a mouse that leaves lets go; arrow keys step
+        point by point. The chart keeps vertical scrolling for the page, so
+        a thumb can still scroll past it. */
     c.scrub = function (pts, o) {
       o = o || {};
       const list = (pts || []).filter(p => p && p[1] != null && isFinite(p[1]));
@@ -404,23 +461,29 @@
       const mk = (tag, attrs, cls) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); n.setAttribute('class', cls); grp.appendChild(n); return n; };
       const cross = mk('line', { y1: P.t, y2: H - P.b }, 'mb-x');
       const dot = mk('circle', { r: 5 }, 'mb-end');
-      let tagBox = null, tagText = null;
-      if (!o.onMove) { tagBox = mk('rect', { rx: 4, height: 20 }, 'mb-tagbox'); tagText = mk('text', { 'text-anchor': 'middle' }, 'mb-tag'); }
+      const tagBox = mk('rect', { rx: 4, height: 20 }, 'mb-tagbox');
+      const tagText = mk('text', { 'text-anchor': 'middle' }, 'mb-tag');
+      const say = p => {
+        if (o.fmt) return o.fmt(p);
+        if (typeof p[2] === 'string' && p[2]) return p[2];
+        const v = fmtVal(p[1], c.step);
+        return c.time && day() ? v + ' · ' + dateLab(p[0], c.x1 > 300) : v;
+      };
       let cur = -1;
       const show = i => {
         cur = i;
         const p = list[i], x = xs[i], y = c.Y(p[1]);
         cross.setAttribute('x1', x); cross.setAttribute('x2', x);
         dot.setAttribute('cx', x); dot.setAttribute('cy', y);
-        if (tagText) {
-          const s = o.fmt ? o.fmt(p) : fmtNum(p[1], c.step);
-          const w = String(s).length * 7.2 + 14;
-          const tx = Math.max(P.l + w / 2, Math.min(W - P.r - w / 2, x));
-          const ty = Math.max(P.t + 2, y - 30);
-          tagText.textContent = s;
-          tagText.setAttribute('x', tx); tagText.setAttribute('y', ty + 14);
-          tagBox.setAttribute('x', tx - w / 2); tagBox.setAttribute('y', ty); tagBox.setAttribute('width', w);
-        }
+        const s = say(p);
+        const w = String(s).length * charW() + 14;
+        const tx = Math.max(P.l + w / 2, Math.min(W - P.r - w / 2, x));
+        /* above the dot, or below it when the dot is near the top, so the
+           tag never covers the point it names */
+        const ty = y - 30 >= 0 ? y - 30 : Math.min(y + 10, H - 20);
+        tagText.textContent = s;
+        tagText.setAttribute('x', tx); tagText.setAttribute('y', ty + 14);
+        tagBox.setAttribute('x', tx - w / 2); tagBox.setAttribute('y', ty); tagBox.setAttribute('width', w);
         grp.style.display = '';
         if (o.onMove) o.onMove(p, i);
       };
