@@ -994,6 +994,19 @@ answer, or take it out.
   under a minute). A session reading his data mid-day runs it rather than
   trusting last night's file: on 2026-10-06 the 4am file was missing
   1,055 rows he had synced since.
+- **A drag that listens on the element it lifted dies when a redraw
+  replaces that element.** A sync landing mid-drag redraws from `Rec`, the
+  old node is gone, the release is never heard, and the ghost stays on the
+  page for good (COACH's box, 2026-10-08). Put `pointermove`/`pointerup`/
+  `pointercancel` on `window` for the length of the drag and remove them on
+  release.
+- **Anything that measures itself while built off the page measures 0.**
+  An app that builds columns detached and appends them after (COACH past
+  1560px) hands a shared component a box with no width, so it cannot
+  scroll or size itself. `range.js` opened on its first day that way
+  (2026-10-08) and now re-places itself on its first real width; anything
+  else that reads `clientWidth` or sets `scrollLeft` while building needs
+  the same.
 
 ---
 
