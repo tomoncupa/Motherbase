@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.18, 2026-10-08">
+<meta name="mb-version" content="1.0.19, 2026-10-08">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -19,6 +19,7 @@
 <script src="../shared/health.js"></script>
 <script src="../shared/icons.js"></script>
 <script src="../shared/creatures.js"></script>
+<script src="../shared/chart.js"></script>
 <script src="../shared/range.js"></script>
 <style>
 /* COACH, built 2026-09-22. Tom: "Can coach look like a pokemon box on Pc?"
@@ -122,6 +123,19 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
 .recent .d{flex:0 0 auto;font-weight:var(--w-bold);font-variant-numeric:tabular-nums}
 .recent .x{flex:1;min-width:0;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .recent .v{color:var(--text-muted);font-variant-numeric:tabular-nums}
+
+/* strength in a block (1.0.19) ── a row per lift, then every lift on one chart */
+.bk .sub{text-align:center;color:var(--text-muted);font-size:var(--f-1);margin:0 0 var(--s-3)}
+.bkr{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.6fr) auto auto auto;gap:var(--s-3);align-items:center;padding:var(--s-1) 0;border-bottom:1px solid var(--border);font-size:var(--f-2)}
+.bkr.th{font-size:var(--f-1);color:var(--text-muted);font-weight:var(--w-bold);letter-spacing:var(--track-cap)}
+.bkr .ln{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bkr .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bkr .was,.bkr .ch{color:var(--text-muted)}
+.bkr svg{display:block;width:100%}
+.bkpct{margin-top:var(--s-4)}
+.bkpct h3{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);margin:0 0 var(--s-2)}
+.bkpct .mb-line.k1{stroke:var(--data-1)}.bkpct .mb-line.k2{stroke:var(--data-2)}.bkpct .mb-line.k3{stroke:var(--data-3)}
+.bkpct .mb-line.k4{stroke:var(--data-4)}.bkpct .mb-line.k5{stroke:var(--data-5)}.bkpct .mb-line.k6{stroke:var(--data-6)}
 
 /* the week ── seven days, Monday first, each as tall as the work in it */
 .wkhead{display:flex;align-items:center;gap:var(--s-2);margin-bottom:var(--s-3)}
@@ -832,6 +846,112 @@ function liftsOf(pid) {
     .sort((a, b) => Object.keys(b.days).length - Object.keys(a.days).length).slice(0, 10);
 }
 
+/* ── strength in a block (1.0.19, 2026-10-08) ──
+   Tom: "I need better visualization of strength increases in a block", and
+   of the three drawn he picked two, "A and B". A: a row per lift with its
+   estimated one-rep max at the block's first session, its best in the block,
+   the change, and a line through every session (point at one for that day's
+   set). B: every lift on one chart as a share of where it started, so a
+   squat and a curl can be read side by side.
+   The change is stated and never judged: muted, no colour, no arrow. BEST
+   is the peak in the block rather than the last session, so a deload week
+   at the end does not read as lost strength. A client with no blocks gets
+   their last eight weeks instead. Warmups out, by TRAIN's rule. */
+let bkAt = -1, bkFor = '';
+const warmSet = s => s.warm === 1 || s.warm === true ? true : s.warm === 0 || s.warm === false ? false
+  : !!s.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(s.note);
+function blockLifts(pid, a, z) {
+  const ex = exOf(pid), by = {};
+  setsOf(pid).forEach(r => {
+    if (r.date < a || r.date > z) return;
+    const s = r.payload; if (warmSet(s)) return;
+    const v = e1(s.kg, s.r); if (!v) return;
+    const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', days: {} });
+    const d = x.days[r.date]; if (!d || v > d.v) x.days[r.date] = { v: v, kg: s.kg, r: s.r };
+  });
+  return Object.values(by).map(x => {
+    const ds = Object.keys(x.days).sort(), pts = ds.map(d => [d, x.days[d].v, x.days[d]]);
+    return { name: x.name, pts: pts, start: pts[0][1], best: Math.max.apply(null, pts.map(p => p[1])) };
+  }).filter(x => x.pts.length >= 2).sort((p, q) => q.pts.length - p.pts.length || q.best - p.best).slice(0, 8);
+}
+function drawBlockStrength(col, pid) {
+  const today = Day.today();
+  const blocks = Range.blocksOf(own('cphase', pid).map(r => r.payload).filter(p => p && p.start), today);
+  if (bkFor !== pid) { bkAt = blocks.length - 1; bkFor = pid; }
+  if (bkAt > blocks.length - 1) bkAt = blocks.length - 1;
+  const b = blocks.length ? blocks[bkAt] : { name: 'Last 8 weeks', start: Day.shift(today, -55), end: today };
+  const lifts = blockLifts(pid, b.start, b.end);
+  if (!blocks.length && !lifts.length) return;
+  const conv = v => Math.round((unit() === 'lb' ? v * KG_LB : v) * 2) / 2;
+  const card = document.createElement('div'); card.className = 'card bk';
+  const head = document.createElement('div'); head.className = 'wkhead';
+  const arrow = (label, role, to) => {
+    const x = document.createElement('button'); x.className = 'ico mb-press mb-tap'; x.innerHTML = ico(role);
+    x.setAttribute('aria-label', label);
+    if (!(to >= 0 && to < blocks.length)) { x.disabled = true; x.style.opacity = '.3'; }
+    else x.onclick = () => { bkAt = to; Mobile.feedback('select'); draw(); };
+    return x;
+  };
+  head.appendChild(arrow('Block before', 'back', blocks.length ? bkAt - 1 : -1));
+  const h = document.createElement('h2'); h.textContent = 'STRENGTH · ' + String(b.name || 'Training block').toUpperCase(); head.appendChild(h);
+  head.appendChild(arrow('Block after', 'next', blocks.length ? bkAt + 1 : -1));
+  card.appendChild(head);
+  const sub = document.createElement('div'); sub.className = 'sub';
+  sub.textContent = Day.short(b.start) + ' to ' + Day.short(b.end) + ' · estimated one-rep max, ' + unit();
+  card.appendChild(sub);
+  if (!lifts.length) {
+    const e = document.createElement('p'); e.className = 'empty'; e.textContent = 'No lift was trained twice in this block yet.';
+    card.appendChild(e); col.appendChild(card); return;
+  }
+  /* A: a row per lift */
+  const th = document.createElement('div'); th.className = 'bkr th';
+  th.innerHTML = '<span>LIFT</span><span>EACH SESSION</span><span class="n">START</span><span class="n">BEST</span><span class="n"></span>';
+  card.appendChild(th);
+  lifts.forEach(L => {
+    const row = document.createElement('div'); row.className = 'bkr';
+    const nm = document.createElement('span'); nm.className = 'ln'; nm.textContent = L.name; nm.title = L.name;
+    const sp = document.createElement('span');
+    const c = Chart.make({ w: 160, h: 40, pad: { l: 4, r: 8, t: 6, b: 6 }, cls: 'mb-spark' });
+    const vs = L.pts.map(p => p[1]), lo = Math.min.apply(null, vs), hi = Math.max.apply(null, vs);
+    c.xTime(L.pts[0][0], L.pts[L.pts.length - 1][0]).ySet(lo, hi === lo ? lo + 1 : hi, 1);
+    c.line(L.pts); c.end(L.pts[L.pts.length - 1], null);
+    c.scrub(L.pts, { fmt: p => Day.short(p[0]) + ' · ' + show(p[2].kg) + '×' + p[2].r });
+    sp.appendChild(c.el);
+    const ch = conv(L.best) - conv(L.start);
+    row.appendChild(nm); row.appendChild(sp);
+    row.insertAdjacentHTML('beforeend', '<span class="n was">' + conv(L.start) + '</span><span class="n">' + conv(L.best) +
+      '</span><span class="n ch">' + (ch > 0 ? '+' : ch < 0 ? '−' : '') + Math.abs(ch) + '</span>');
+    card.appendChild(row);
+  });
+  /* B: every lift as a share of its start, on one chart */
+  const top = lifts.slice(0, 6);
+  const wrap = document.createElement('div'); wrap.className = 'bkpct';
+  wrap.innerHTML = '<h3>EVERY LIFT, AS A SHARE OF ITS START</h3>';
+  const box = document.createElement('div'); wrap.appendChild(box);
+  const series = top.map(L => L.pts.map(p => [p[0], Math.round(p[1] / L.start * 1000) / 10]));
+  const all = [100].concat([].concat.apply([], series.map(sr => sr.map(p => p[1]))));
+  /* one point per session day for the pointer, naming every lift that day */
+  /* the movement word names a lift in the tag (Squat, Deadlift), the full
+     name when two lifts share one (Bench Press, Overhead Press) */
+  const last = L => L.name.trim().split(/\s+/).pop();
+  const tagName = L => top.filter(x => last(x) === last(L)).length > 1 ? L.name : last(L);
+  const byDay = {};
+  series.forEach((sr, i) => sr.forEach(p => { (byDay[p[0]] || (byDay[p[0]] = [])).push([i, p[1]]); }));
+  const tagPts = Object.keys(byDay).sort().map(d => [d, Math.max.apply(null, byDay[d].map(x => x[1])),
+    Day.short(d) + ' · ' + byDay[d].map(x => tagName(top[x[0]]) + ' ' + Math.round(x[1]) + '%').join(' · ')]);
+  card.appendChild(wrap);
+  col.appendChild(card);
+  Chart.mount(box, { h: 180 }, c => {
+    c.xTime(b.start, b.end); c.yFit(all); c.grid(v => Math.round(v) + '%'); c.timeAxis();
+    series.forEach((sr, i) => { c.line(sr, 'mb-line k' + (i + 1)); });
+    c.scrub(tagPts);
+  });
+  wrap.appendChild(Chart.legend(top.map((L, i) => {
+    const pc = Math.round((L.best / L.start - 1) * 100);
+    return { name: L.name + ' ' + (pc > 0 ? '+' : pc < 0 ? '−' : '') + Math.abs(pc) + '%', color: 'var(--data-' + (i + 1) + ')' };
+  })));
+}
+
 /* ── the week, at a glance (1.0.8, 2026-09-24) ──
    Tom: "I want to see their week at a glance." Seven days, Monday first,
    each one a tile as tall as the volume in it, with the set count written
@@ -1031,6 +1151,7 @@ function drawClientIn(col, cs, cr, cw) {
     col.appendChild(e);
     return;
   }
+  if (window.Range && window.Chart) drawBlockStrength(cr, sel);
   const lf = liftsOf(sel);
   if (lf.length) {
     const lc = document.createElement('div'); lc.className = 'card';
