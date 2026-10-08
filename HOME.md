@@ -210,6 +210,19 @@ and asks again. It now deletes the `motherbase` IndexedDB too, whose big rows
 used to survive a delete. Tested in headless Chromium by clicking DATA, the
 option and DELETE EVERYTHING, then UNDO and Bring back.
 
+## 2026-10-08, HOME 1.0.60: widget polish B and C
+
+Pass B (journal and todos) finished from branch `home-polish-wip`, and pass C (training and body), from the fix lists in `Claude outputs/audit-2026-10-08/home-B-journal.json` and `home-C-body.json`.
+
+- **TODAY counts only what can be ticked.** An entry, event or idea wears its journal mark in the box column and is never "behind" or missed; a todo's typed end (`by`) is its length; PLANNED and LEFT show only with BLOCK blocks; today's plan is read by date (`todayPlan()`), so after midnight it is not yesterday's.
+- **A bullet's mark is a button only when it ticks** (`bulletRow(r, day, tick)`); TODO, UPCOMING and CALENDAR todos tick from it, IDEAS, EVENTS and ON THIS DAY marks are plain. IDEAS and EVENTS wrap, newest first, the day at the end.
+- `actLabel(id)` names a tick BLOCK never named (DAY LOG, STREAKS); STREAKS leaves out note-todo and note-at- ticks. RECAP reads LOG's weeks (1, 8, 15, 22, 29; a copy of WEEK_STARTS in log/index.html). ON THIS DAY goes back calendar months. STICKY saves on blur, grows on a phone, 16px on touch. BRIEF todos are labelled BRIEF.
+- **Training widgets skip planned sets not yet done** (`setCounts`); warmups count, as in TRAIN 1.0.50, except TRAINING BLOCK's "working sets". TRAINING follows TRAIN's exercise order and is 5x5 when added; TRAINING VOLUME is a chart.js bar chart; BODY HEATMAP stacks below 820px.
+- WEIGHT's plan is a line under the chart, its unit shows, one weigh-in draws a dot; AVG WEIGHT names its range and the change matches the numbers; MEASURE never offers a done-or-not field and draws scales 1 to 5 and counts from zero; LOCKED IN shows a dash, not 0.0, with no TRAIN; CHECK IN sees photo-only check-ins; WORK DONE counts meals as sittings and leaves today out of food averages.
+- Empty states are plain facts (the card title opens the app).
+
+Watched: the widget harness on all 46 widgets at 1920, 390 touch and an empty store, no page errors; a TODAY tick by click and by tap. Review 142/142 Chromium 1280, WebKit 141/142 (the known smoke-frame fail). Not on his screens. A TODO/UPCOMING tick was not pressed (TODO is not on the default board). Not done: pass D (money, food, desk tools), `home-D-desk.json`; subjective items wait for Tom's suggestions list.
+
 ## 2026-10-07, HOME 1.0.59: board fixes and polish
 
 Tom: "Check for bugs and save issues and redundancies. Polish the widgets." A review drew all 46 widgets in headless Chromium (demo at 1920 and 390 touch, an empty store) and measured and looked at each; a code audit read the file. Pass A, the board-wide part, is 1.0.59:
