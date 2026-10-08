@@ -986,7 +986,14 @@ answer, or take it out.
   <client folder>`: the build's ROOT is the script's own repo, so it ships
   exactly what is committed. Park unfinished app work on a branch, not in the
   folder, or every other session's client build refuses the dirty tree
-  (KITCHEN's fill work, branch `kitchen-fill`, 2026-10-05).
+  (KITCHEN's fill work, branch `kitchen-fill`, 2026-10-05). Without the
+  client folder named, it builds beside the scratch copy, not into
+  `Downloads/Motherbase-Client`. Check out with `core.autocrlf=false`.
+- **His newest rows are one command away.** `desktop/Backup.exe`, run by
+  hand, writes today's backup file once live sync has caught up (well
+  under a minute). A session reading his data mid-day runs it rather than
+  trusting last night's file: on 2026-10-06 the 4am file was missing
+  1,055 rows he had synced since.
 
 ---
 

@@ -314,53 +314,13 @@ It shows on each set in the day's cards and under each set on TRACK, where the
 line above the steppers lists the sets being compared against.
 
 **Nothing may need a name** (Tom, 2026-10-05: *"All our functions need to
-work even if we don't name sessions specfically"*; he named 0 of 41 days
-since June). A day with no name is the same session as an earlier day that
-shares at least half of all exercises on either (`TRAIN.likeDays`, on
-`TRAIN.dayExs`, cached on the index), or, today, one holding every exercise
-done so far. `compareCtx` uses those days where a name would go (1.0.52),
-so step 2 above, the session card's totals and the story's comparison all
-work unnamed. Training Routines lists YOUR SESSIONS: named ones, then up to
-six groups of unnamed days done twice or more, under their first two
-exercises and "done N times"; a tap copies the latest. On his log since
-March, 57 of 86 days have an earlier like day. **Or the same muscle
-groups in close to the same amounts** (1.0.53, Tom: *"sessions that share a
-close enough movement pattern/muscle group combination"*): sets per group,
-alike at 60% (`TRAIN.dayMix`, `TRAIN.sameSession`), 73 of 86 days. Movement
-patterns are FORGE's `ftag` and none of his lifts have one. The story's
-SESSION VOLUME line compares only sessions like it. **Warmups are not always
-the same and not always tagged** (Tom, same day): four ways to discount them
-untagged were measured on his log and disagreed (Dumbbell Curl +6% every set,
--1% his usual 4 heaviest, +2% best set, -14% load-weighted). **Tom picked A,
-2026-10-06, built 1.0.54: a TREND counts each lift's usual number of sets,
-biggest first** (`TRAIN.usualSets`, the median over its last 12 sessions;
-`TRAIN.topSum`; `TRAIN.trendVol` for a whole session). GRAPH's VOLUME, YOUR
-USUAL N SETS, the story's "Volume +X% over N sessions like it" (no kg figure,
-the totals line has it) and Analysis SESSION's trend read it; every total, set
-count and Analysis bar still adds every set. His log: Triceps +7 to +13%, Curl
-+6 to -1%, Rope Push Down +9 to +10%, Laterals +5 to +2%.
-**Replaced 1.0.55 (Tom, 2026-10-06, "do that for graphic and for data
-visualization"): TOP 3 SETS, AVERAGE leads and TOTAL WORK sits under it.**
-Top 3 is the three biggest sets by weight x reps (reps on a bodyweight lift),
-averaged, all of them on a day with fewer (`TRAIN.top3`); untagged warmups and
-extra sets cannot move it. Use it for "am I getting better": GRAPH's first
-card with SET AS DEFAULT and SHARE PICTURE (shown only while its trend is up),
-and the story's "Best sets +X% over N sessions like it" (`TRAIN.sessionTop3`,
-each lift's Top 3 added). Total work is every set added, the dose: "am I
-doing enough"; GRAPH's second card, and Analysis SESSION's bars and trend.
-Read together: total up and top 3 flat means extra sets that are not making
-him better. His log, 6 Oct: Rope Push Down total +16% top 3 +7%, Laterals
-+5% and -11%, Curl +16% and +15%. `usualSets` and `trendVol` are gone.
-**The story line weighs every lift the same (1.0.59, Tom, 2026-10-08, "A").**
-Added up in kg, a heavy lift's sets outweighed a light one's about three to
-one, so the line reported the heavy lifts. `TRAIN.volSessions` now takes each
-lift's Top 3 over its own mean across the like sessions shown, averages those
-per session as a percentage, and the trend runs through that; a lift missing
-from a session moves nothing. `TRAIN.sessionTop3` is gone. Known limits, told
-to Tom: weight x reps rewards reps as much as load, so moving a lift to a
-lower rep range reads as a drop; and other equipment (his 4 Oct "machine
-here is 1/2 weight") reads as weaker. Comparing only sessions on the same
-setup was offered (B) and not picked.
+work even if we don't name sessions specfically"*). A day with no name is
+the same session as an earlier day sharing half of all exercises on either
+(`TRAIN.likeDays`, `TRAIN.dayExs`), or holding everything done so far today,
+or the same muscle groups in close to the same amounts, 60% alike
+(`TRAIN.dayMix`, `TRAIN.sameSession`). `compareCtx`, the session card's
+totals, the story line and Training Routines' YOUR SESSIONS all use it.
+(HISTORY.md: Sessions without names, and what a trend measures)
 A new feature that reads
 `session.name` must work without it.
 
@@ -939,76 +899,39 @@ Curl separate; and *"There is no barbell squat?"*
 - His own imported names (Seated Leg Curl Machine, Lying Leg Curl Machine) are
   not starters and are never folded; Merge Into is how he does those.
 
-## Strength graphics (picked 2026-10-05, 1.0.49)
+## Strength graphics and what a trend measures (1.0.49 to 1.0.59)
 
-`train/mock-strength-graphs.html` mocks eight (1 e1RM bars, 2 rep dots, 3
-new plate, 4 set squares, 5 trophies, 6 block sparkline, 7 milestones, 8
-bodyweight ratio). Tom, 2026-10-05: *"I like 6, have it track set volumes, 5
-is okay too."* Working sets per week, confirmed the same day: *"we don't care
-about 1rms - More overall set volume"*, and he chose sets per week over a
-running block total. It dips in a lighter week; that is honest, leave it.
-- **6, Sets per week** (`shareBlock`, on), in the frame just above the
-  totals: "N sets in week K · +X% since week 1" and a line under it
-  (`TRAIN.frameBlock`, `TRAIN.blockWeeks`). Weeks are the block's own 7-day
-  weeks from its start, as "Week N" counts them; no block, the last eight
-  calendar weeks. **The line starts at zero** (`Chart.make`, not
-  `Chart.spark`, which fits the lowest week to the floor and drew 74 to 54
-  sets as a crash). A week still running is left off while it is under the
-  week before; the gain is said only when up.
-- **5**: a lifetime PR's trophy is filled, a PR's is outlined (`.fr-pr.all`).
-- **Next, decided 2026-10-05, not built: set volume per lift.** Tom: *"we
-  don't care about 1rms"*, *"Graph it via weght * Reps, set by set and overall
-  session volume"*, *"set 1s should all be on 1 line, set 2s on another"*,
-  *"don't drop anything out anymore"*. Each point weight x reps (reps for a
-  lift done mostly without weight); a line per set number, set 1 to 4, a
-  point per session; under it that lift's session volume (every set added)
-  with a dashed least-squares trend; and every session's total. **Every
-  set counts, warmups too**: a 70%-of-top-set cut was tried on his log and
-  threw out the lighter opening sets he works up from, flipping three lifts
-  from up to down. Mocked from his 5 Oct backup in a scratchpad, not in the
-  repo. **Where (Tom, yes to the recommendation):** the GRAPH tab for every
-  lift, his own view, minuses shown; the share picture only lifts trending
-  up; the every-session chart in Analysis.
-- **Warmups count everywhere in TRAIN** (Tom, 2026-10-05, asked "these
-  graphs only or all of TRAIN": *"All of train"*). Session totals, volume,
-  sets, sets per muscle, the week, Profile, Sets per week and the frame's
-  totals all count warmups (`spanStats`, `sessionStats`, `breakdown` and
-  every `!s.warm` filter on a count). This replaces "never counted in
-  volume or set totals" under Fields worth knowing. **Claude's call, tell
-  Tom when built:** records and the set-N-against-set-N comparison stay on
-  working sets, because a warmup set against a working set reads as a
-  false drop, and a lighter set cannot be a record anyway. Warmups are
-  still marked and dimmed. **Built 1.0.50.** The text share keeps working
-  sets only (his pick F, 2026-09-30); GRAPH's Max graphs and Estimated 1RM
-  read working sets, its Session graphs every set.
-- **Set Volume, built 1.0.50.** GRAPH's first graph and the default unless
-  a lift has a saved one (`TRAIN.setVolume`, `drawSetVolume`): a line for
-  set 1 to 4 (`TRAIN.SV_LINES`) in `--data-1` to `--data-4`, a key under
-  it; then SESSION VOLUME with the dashed least-squares trend
-  (`TRAIN.trendOf`) and "Trend +X% over N sessions", minus said. Sets are
-  numbered in the order done, warmups included, so set 1 is often the
-  warmup. A lift with weight on under half its sets is measured in reps.
-  SHARE PICTURE shows only while the trend is up. Analysis gained SESSION
-  beside WEEK, MONTH and YEAR: the last 40 sessions, a trend line, and
-  SESSIONS per session falls to VOLUME. Not seen on his iPhone.
-- **One line, 1.0.51.** Tom, 2026-10-05: *"Might it be cleaner to just 1
-  line? Overall session volume?"*, then *"A and B"*. **A:** GRAPH's first
-  graph is VOLUME TREND, the session volume line and its trend only; the
-  set 1 to 4 lines are hidden, not deleted (`TRAIN.SHOW_SET_LINES`). Why
-  they crossed, measured on his log since January: sets climb inside a
-  session (set 1 to set 4 rising on 24 to 27 of about 28 sessions for
-  Rope Push Down, Triceps, Laterals, Pull Up), sets per session run 3 to
-  7, and Triceps had warmups on 10 of 30 days, so set N is not the same set
-  from one day to the next and the order of the four swapped against the
-  session before on 21 of 29 Triceps days. **B:** the story frame has
-  SESSION VOLUME (`shareVol`, on, `TRAIN.frameVol`) above Sets per week:
-  "N kgs this session · +X% over 12 sessions" and the line from zero with
-  its trend. Every session, not same-named ones: he named 0 of 41 days
-  since June. Shown only while the trend is up and the day is the last
-  point. Not seen on his iPhone.
-- 1, 2, 3, 4, 7, 8 not built. Measured on the demo: the bottom starts 61%
-  down with one PR and the line; `_review.html` 142/142 at 390 and 1280.
-  Not seen on his iPhone.
+- **Warmups count in every total** (Tom: "All of train"). Records and the
+  set-N-against-set-N comparison stay on working sets; warmups stay dimmed.
+  GRAPH's Max graphs and Estimated 1RM read working sets, Session graphs
+  every set. Share As Text stays working sets only (his pick F).
+- **A lift's GRAPH opens on Top 3 Sets & Total Work** (`setvol`,
+  `drawSetVolume`) unless he saved another default. TOP 3 SETS, AVERAGE
+  leads (`TRAIN.top3`: the three biggest sets by weight x reps, reps on a
+  mostly-bodyweight lift, averaged): "am I getting better", immune to
+  untagged warmups and set count. TOTAL WORK under it: "am I doing
+  enough". Each has a dashed least-squares trend (`TRAIN.trendOf`) and
+  "Trend +X% over N sessions", minus said. SHARE PICTURE only while Top 3
+  trends up. Dragging a chart shows the reading at the point.
+- **The set 1 to 4 lines are hidden, not deleted** (`TRAIN.SHOW_SET_LINES`):
+  sets climb inside a session and warmups vary, so set N was not the same
+  set from day to day.
+- **Analysis SESSION**: the last 40 sessions as bars of total work, with
+  its trend.
+- **The story frame** (`shareVol`, on, above `shareBlock` Sets per week):
+  "Best sets +X% over N sessions like it" (`TRAIN.frameVol`,
+  `TRAIN.volSessions`): the last 12 like sessions, each lift's Top 3 over
+  its own mean, averaged, so every lift counts the same. Drawn from zero,
+  shown only when up, no kg figure. Sets per week (`TRAIN.frameBlock`) is
+  drawn from zero too; a dip in a light week is honest.
+- **Limits Tom was told**: weight x reps rewards reps as much as load, so
+  a lower rep range reads as a drop; other equipment reads as weaker.
+  Same-setup comparison was offered (B), not picked.
+- **Rejected**: estimated 1RM lines; a 70%-of-top-set warmup cut; a
+  running block total of sets; `Chart.spark` for counts; "usual number of
+  sets" (1.0.54, replaced by Top 3 in 1.0.55); summing lifts' kg on the
+  story line (1.0.55, replaced 1.0.59).
+(HISTORY.md: Strength graphics, as built 2026-10-05 to 2026-10-08)
 
 ## Parked
 
