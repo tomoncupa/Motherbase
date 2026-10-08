@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.58, 2026-10-08">
+<meta name="mb-version" content="1.0.59, 2026-10-08">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -4730,14 +4730,6 @@ TRAIN.setVolume = function (exId, range) {
 TRAIN.top3 = function (vals) {
   var t = vals.slice().sort(function (a, b) { return b - a; }).slice(0, 3);
   return t.length ? t.reduce(function (a, x) { return a + x; }, 0) / t.length : 0;
-};
-/* A whole session's best sets, in kg: each lift's Top 3 average, added. */
-TRAIN.sessionTop3 = function (date) {
-  var by = {};
-  TRAIN.setsOn(date).forEach(function (s) {
-    if (TRAIN.counts(s)) (by[s.ex] = by[s.ex] || []).push((s.kg || 0) * (s.r || 0));
-  });
-  return Object.keys(by).reduce(function (a, ex) { return a + TRAIN.top3(by[ex]); }, 0);
 };
 
 /* The lines, set 1 to set 4, one point per session. */
@@ -9643,10 +9635,31 @@ var FRAME_VOL_N = 12;
 TRAIN.volSessions = function (date) {
   /* only sessions like this one (TRAIN.sameSession): a leg day's volume
      beside an arm day's says nothing about either */
-  var U = TRAIN.unit();
-  return Object.keys(TRAIN.idx.byDate).filter(function (d) { return d === date || (d < date && TRAIN.sameSession(date, d)); }).sort()
-    .map(function (d) { return [d, TRAIN.toUnit(TRAIN.sessionTop3(d), U)]; })
-    .filter(function (p) { return p[1] > 0; }).slice(-FRAME_VOL_N);
+  var days = Object.keys(TRAIN.idx.byDate).filter(function (d) { return d === date || (d < date && TRAIN.sameSession(date, d)); })
+    .sort().slice(-FRAME_VOL_N);
+  /* Each lift against its own level, then averaged, so every lift counts
+     the same (Tom, 2026-10-08, "A"): added up in kg, a heavy lift's sets
+     outweighed a light one's three to one and the line mostly reported the
+     heavy lifts. A lift's level is its mean Top 3 over these sessions; a
+     session's point is the mean of its lifts' Top 3 over their level, as a
+     percentage, so a lift missing from one session moves nothing. */
+  var per = days.map(function (d) {
+    var by = {};
+    TRAIN.setsOn(d).forEach(function (s) {
+      if (TRAIN.counts(s)) (by[s.ex] = by[s.ex] || []).push((s.kg || 0) * (s.r || 0) || (s.r || 0));
+    });
+    var o = {};
+    Object.keys(by).forEach(function (ex) { var t = TRAIN.top3(by[ex]); if (t > 0) o[ex] = t; });
+    return o;
+  });
+  var lvl = {};
+  per.forEach(function (o) { for (var ex in o) (lvl[ex] = lvl[ex] || []).push(o[ex]); });
+  for (var ex in lvl) lvl[ex] = lvl[ex].reduce(function (a, x) { return a + x; }, 0) / lvl[ex].length;
+  return days.map(function (d, i) {
+    var ks = Object.keys(per[i]);
+    if (!ks.length) return null;
+    return [d, ks.reduce(function (a, ex) { return a + per[i][ex] / lvl[ex]; }, 0) / ks.length * 100];
+  }).filter(Boolean);
 };
 TRAIN.frameVol = function (date) {
   var pts = TRAIN.volSessions(date), n = pts.length, tr = TRAIN.trendOf(pts);
@@ -9660,8 +9673,8 @@ TRAIN.frameVol = function (date) {
   c.area(line); c.line(line);
   c.line([[0, tr.from], [n - 1, tr.to]], 'trend');
   c.end(line[n - 1]);
-  /* no kg figure: the line is each lift's top 3 sets averaged, added up,
-     and the totals line under it already says the session's volume */
+  /* no kg figure: the line is each lift's top 3 against its own level,
+     averaged, and the totals line under it says the session's volume */
   return '<div class="fr-blk"><div class="fr-blk-t">Best sets <span class="fr-gain">+' + p + '%</span> over ' + n +
     ' sessions like it</div>' + c.el.outerHTML + '</div>';
 };

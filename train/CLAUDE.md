@@ -351,6 +351,16 @@ doing enough"; GRAPH's second card, and Analysis SESSION's bars and trend.
 Read together: total up and top 3 flat means extra sets that are not making
 him better. His log, 6 Oct: Rope Push Down total +16% top 3 +7%, Laterals
 +5% and -11%, Curl +16% and +15%. `usualSets` and `trendVol` are gone.
+**The story line weighs every lift the same (1.0.59, Tom, 2026-10-08, "A").**
+Added up in kg, a heavy lift's sets outweighed a light one's about three to
+one, so the line reported the heavy lifts. `TRAIN.volSessions` now takes each
+lift's Top 3 over its own mean across the like sessions shown, averages those
+per session as a percentage, and the trend runs through that; a lift missing
+from a session moves nothing. `TRAIN.sessionTop3` is gone. Known limits, told
+to Tom: weight x reps rewards reps as much as load, so moving a lift to a
+lower rep range reads as a drop; and other equipment (his 4 Oct "machine
+here is 1/2 weight") reads as weaker. Comparing only sessions on the same
+setup was offered (B) and not picked.
 A new feature that reads
 `session.name` must work without it.
 
