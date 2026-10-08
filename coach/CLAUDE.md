@@ -253,6 +253,32 @@ height over the window: 1928x943 2.70 to 1.15, 1600x943 2.70 to 1.15,
 before and after, phone identical). No sideways scroll, no button under
 44px, no page errors at any width.
 
+## Drag a client to another slot (1.0.17, 2026-10-08)
+
+Tom: *"let me drag and drop pokemon/client locations, just put them in the
+next available slot."* New clients already took the next free slot
+(`freeSlot`, and `clientDialog`'s own loop).
+
+- **`dragSlot`**: press a client and move 8px and they follow the pointer
+  (a ghost, the slot left faded); let go over another slot to trade places,
+  over an empty one to move in. Pointer events, so a mouse and an iPad finger
+  both work; `touch-action:none` on filled slots only, so the box still
+  scrolls from an empty one. A press that never moves is still a tap, a held
+  still finger still opens the menu, and the click that follows a drag is
+  swallowed (`slotDragged`).
+- **It writes the slot each client is DRAWN in**, so the first drag mends two
+  clients a sync left on one number. Jay and Zef were both slot 2 in the
+  1:1 box on 2026-10-08: two devices each ran `freeSlot` before syncing.
+- **A clash no longer hides anyone.** `drawBox` parked a second client on a
+  taken number at `list.length + i`, a number inside the box, so with three
+  clients the third overwrote a real slot and vanished. It parks them past
+  `SLOTS` now and they fill the first empty slot.
+
+Watched in the browser with the demo, by pointer events on the slots (the
+pane was not drawing): ghost shown, target ringed, moved to an empty slot,
+two traded, a still press selected, the click after a drag ignored, three
+clients on one number all drawn. Not tried on an iPad.
+
 ## Needs from the foundation
 
 `shared/_smoke.html` checks the 0.1 shelf (`send`, `waiting`, `took`,
