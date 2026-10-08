@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.57, 2026-10-06">
+<meta name="mb-version" content="1.0.58, 2026-10-08">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1028,8 +1028,22 @@ Rec.on(function () { TRAIN._catC = null; TRAIN._exC = null; });
    here decides them: a group's slot is its place in this list, so Legs and
    Hamstrings come out as two tints of one hue, and so do Core and Lower Back.
    Do not reorder this list without looking at what the colours become. */
-TRAIN.DEFAULT_CATS = ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core', 'Cardio',
-  'Forearms', 'Calves', 'Hamstrings', 'Glutes', 'Lower Back'];
+/* Tom, 2026-10-08: "Delete Arms and Legs as categories", their movements
+   "into where they were always meant to go". Legs became Quads, Arms became
+   Biceps and Triceps, and the movements that were really hamstrings went to
+   Hamstrings. That is thirteen groups for twelve colours, so a group's colour
+   is now `CAT_SLOT`, not its place here: every group kept the colour it had,
+   Quads took Legs', Biceps took Arms', and Triceps shares Cardio's, the one
+   group never trained beside it. This list is the order a new log shows. */
+TRAIN.DEFAULT_CATS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Forearms',
+  'Core', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 'Lower Back', 'Cardio'];
+TRAIN.CAT_SLOT = { Chest: 0, Back: 1, Shoulders: 2, Quads: 3, Biceps: 4, Core: 5, Cardio: 6,
+  Forearms: 7, Calves: 8, Hamstrings: 9, Glutes: 10, 'Lower Back': 11, Triceps: 6 };
+TRAIN.catSlot = function (nm) { return TRAIN.CAT_SLOT[nm] != null ? TRAIN.CAT_SLOT[nm] : 0; };
+/* The two groups a fresh TRAIN made until 1.0.58. Only rows keyed `legs` and
+   `arms` are these; a group a FitNotes import named Legs is keyed `fn<id>`
+   and is the person's own. */
+TRAIN.RETIRED_CATS = ['Legs', 'Arms'];
 
 /* A group's row key. Every name up to 2026-09-24 was one word, so this is the
    same string `nm.toLowerCase()` gave; "Lower Back" is the first that needed
@@ -1085,18 +1099,21 @@ TRAIN.DEFAULT_EX = {
     ['Cable Lateral Raise', 0], ['Front Raise', 0], ['Rear Delt Fly', 0],
     ['Face Pull', 0], ['Upright Row', 0], ['Shoulder Press Machine', 0],
   ],
-  Legs: [
+  Quads: [
     ['Barbell Squat', 0], ['Front Squat', 0], ['Box Squat', 0], ['Goblet Squat', 0],
     ['Hack Squat', 0], ['Leg Press', 0], ['Bulgarian Split Squat', 0],
     ['Walking Lunge', 0], ['Reverse Lunge', 0], ['Step Up', 0],
-    ['Sumo Deadlift', 0], ['Leg Extension', 0], ['Hip Adduction', 0],
+    ['Leg Extension', 0], ['Hip Adduction', 0],
   ],
-  Arms: [
+  Biceps: [
     ['Barbell Curl', 0], ['EZ Bar Curl', 0], ['Dumbbell Curl', 0],
     ['Hammer Curl', 0], ['Incline Dumbbell Curl', 0], ['Preacher Curl', 0],
-    ['Concentration Curl', 0], ['Cable Curl', 0], ['Close Grip Bench Press', 0],
-    ['Skullcrusher', 0], ['Overhead Tricep Extension', 0], ['Tricep Pushdown', 0],
-    ['Rope Pushdown', 0], ['Dumbbell Kickback', 0], ['Dip (Triceps)', 2],
+    ['Concentration Curl', 0], ['Cable Curl', 0],
+  ],
+  Triceps: [
+    ['Close Grip Bench Press', 0], ['Skullcrusher', 0], ['Overhead Tricep Extension', 0],
+    ['Tricep Pushdown', 0], ['Rope Pushdown', 0], ['Dumbbell Kickback', 0],
+    ['Dip (Triceps)', 2],
   ],
   Core: [
     ['Plank', 2], ['Side Plank', 2], ['Crunch', 2], ['Sit Up', 2],
@@ -1123,8 +1140,8 @@ TRAIN.DEFAULT_EX = {
     ['Donkey Calf Raise', 0],
   ],
   Hamstrings: [
-    ['Romanian Deadlift', 0], ['Stiff Leg Deadlift', 0], ['Leg Curl', 0],
-    ['Nordic Curl', 2], ['Good Morning', 0],
+    ['Romanian Deadlift', 0], ['Stiff Leg Deadlift', 0], ['Sumo Deadlift', 0],
+    ['Leg Curl', 0], ['Nordic Curl', 2], ['Good Morning', 0],
   ],
   Glutes: [
     ['Hip Thrust', 0], ['Glute Bridge', 0], ['Single Leg Hip Thrust', 0],
@@ -1142,7 +1159,7 @@ TRAIN.seedCats = function () {
   var made = 0;
   TRAIN.DEFAULT_CATS.forEach(function (nm, i) {
     var catId = TRAIN.catId(nm);
-    Rec.set('excat', null, catId, { name: nm, slot: i, ord: i });
+    Rec.set('excat', null, catId, { name: nm, slot: TRAIN.catSlot(nm), ord: i });
     (TRAIN.DEFAULT_EX[nm] || []).forEach(function (row, j) {
       var name = row[0], kind = row[1];
       /* A fixed id per starter exercise, never a random one. Every copy of
@@ -1182,11 +1199,11 @@ TRAIN.seedCats = function () {
 
    A group is looked for by its NAME, never by the key this list would give
    it. An imported log keys its own (`fn9` is his Forearms), and until
-   1.0.27 this checked keys, so his log got a second, empty Forearms. Arms is
-   already there when he has Biceps or Triceps, and Core when he has Abs.
+   1.0.27 this checked keys, so his log got a second, empty Forearms. Quads
+   is already there when he has a Legs of his own, and Core when he has Abs.
    A copy this made beside one of his own is deleted while it holds no
    exercise; one he has put a movement in stays, because then it is his. */
-TRAIN.CAT_ALSO = { arm: ['bicep', 'tricep'], core: ['ab', 'abdominal'] };
+TRAIN.CAT_ALSO = { quad: ['leg', 'quadricep'], core: ['ab', 'abdominal'] };
 TRAIN.catWord = function (nm) {
   return String(nm || '').toLowerCase().replace(/[^a-z0-9]+/g, '').replace(/s$/, '');
 };
@@ -1206,10 +1223,56 @@ TRAIN.fillCats = function () {
       return;
     }
     if (have[id] || Rec.tombstone('excat', null, id)) return;
-    Rec.set('excat', null, id, { name: nm, slot: i, ord: ++ord });
+    Rec.set('excat', null, id, { name: nm, slot: TRAIN.catSlot(nm), ord: ++ord });
     made++;
   });
   return made;
+};
+
+/* ── Legs and Arms, taken apart ──
+   Tom, 2026-10-08. A log TRAIN seeded before 1.0.58 has the groups `legs` and
+   `arms`. Every movement in them moves by its name: in Legs to Hamstrings,
+   Glutes, Calves or Lower Back when the name says so and Quads otherwise, in
+   Arms to Triceps or Forearms when the name says so and Biceps otherwise.
+   Then the emptied group is deleted. A target group the person deleted is
+   not brought back; the movement takes the fallback instead, and if that is
+   gone too it stays where it is and so does its group. Runs before
+   `fillCats`, inside `Rec.ready`, so every device's rows are in. */
+TRAIN.SPLIT = {
+  legs: { to: ['Hamstrings', 'Glutes', 'Calves', 'Lower Back', 'Quads'], or: 'Quads' },
+  /* a dip or a close grip press sitting in Arms was put there as triceps */
+  arms: { to: ['Triceps', 'Forearms', 'Biceps'], or: 'Biceps', first: [['Triceps', /\bdips?\b|close[- ]?grip/i]] },
+};
+TRAIN.splitCoarse = function () {
+  var cats = TRAIN.cats(), ex = TRAIN.exercises(), moved = 0, ord = 0;
+  Object.keys(cats).forEach(function (k) { if ((cats[k].ord | 0) > ord) ord = cats[k].ord | 0; });
+  var find = function (nm, not) {
+    var k = TRAIN.catByWord(nm);
+    if (k && k !== not) return k;
+    var id = TRAIN.catId(nm);
+    if (Rec.tombstone('excat', null, id)) return null;
+    Rec.set('excat', null, id, { name: nm, slot: TRAIN.catSlot(nm), ord: ++ord });
+    TRAIN._catC = null;
+    return id;
+  };
+  Object.keys(TRAIN.SPLIT).forEach(function (from) {
+    if (!cats[from]) return;
+    var sp = TRAIN.SPLIT[from], left = 0;
+    Object.keys(ex).forEach(function (id) {
+      if (ex[id].cat !== from) return;
+      var nm = String(ex[id].name || ''), g = null;
+      (sp.first || []).some(function (f) { if (f[1].test(nm)) { g = f[0]; return true; } });
+      g = g || TRAIN.noteCat(nm);
+      if (sp.to.indexOf(g) < 0) g = sp.or;
+      var to = find(g, from) || (g !== sp.or ? find(sp.or, from) : null);
+      if (!to) { left++; return; }
+      TRAIN.patchExercise(id, { cat: to });
+      moved++;
+    });
+    if (!left) { Rec.del('excat', null, from); moved++; }
+  });
+  if (moved) { TRAIN._catC = null; TRAIN._exC = null; }
+  return moved;
 };
 
 /* ── moving his movements into the finer groups ──
@@ -1230,10 +1293,14 @@ TRAIN.SORT_RULES = [
   ['Hamstrings', /leg curl|sldl|romanian|stiff[- ]?leg|glute[- ]?ham|good ?morning/i],
   ['Lower Back', /hyper ?extension|back extension/i],
 ];
-TRAIN.catByWord = function (nm) {
+/* `also` lets a name stand in for a standard group: his own Legs for Quads */
+TRAIN.catByWord = function (nm, also) {
   var cats = TRAIN.cats(), w = TRAIN.catWord(nm);
   if (cats[TRAIN.catId(nm)]) return TRAIN.catId(nm);
-  return Object.keys(cats).filter(function (k) { return TRAIN.catWord(cats[k].name) === w; })[0] || null;
+  var hit = function (words) {
+    return Object.keys(cats).filter(function (k) { return words.indexOf(TRAIN.catWord(cats[k].name)) >= 0; })[0] || null;
+  };
+  return hit([w]) || (also && TRAIN.CAT_ALSO[w] ? hit(TRAIN.CAT_ALSO[w]) : null);
 };
 TRAIN.sortProposals = function () {
   var ex = TRAIN.exercises(), out = [], to = {}, fine = {};
@@ -1270,7 +1337,7 @@ TRAIN.applySort = function (moves) {
     if (!to) {
       to = TRAIN.catId(m.group);
       if (!made[to] && !TRAIN.cats()[to]) {
-        Rec.set('excat', null, to, { name: m.group, slot: TRAIN.DEFAULT_CATS.indexOf(m.group), ord: ++ord });
+        Rec.set('excat', null, to, { name: m.group, slot: TRAIN.catSlot(m.group), ord: ++ord });
         made[to] = 1;
       }
     }
@@ -1994,7 +2061,7 @@ TRAIN.importFitNotes = function (buf, onProgress, opts) {
      one of the starter groups. Anything he made or logged stays. */
   function clearSeed() {
     var starter = {};
-    TRAIN.DEFAULT_CATS.forEach(function (n) { starter[TRAIN.catId(n)] = 1; });
+    TRAIN.DEFAULT_CATS.concat(TRAIN.RETIRED_CATS).forEach(function (n) { starter[TRAIN.catId(n)] = 1; });
     var exs = TRAIN.exercises(), inRoutine = {}, removed = 0;
     var px = Rec.map('progex');
     Object.keys(px).forEach(function (k) { inRoutine[px[k].ex] = 1; });
@@ -2563,21 +2630,25 @@ TRAIN.noteMatch = function (name, list) {
   return bar.length === 1 ? bar[0].id : null;
 };
 /* A new exercise's group, read off its name. Specific before general, so a
-   leg curl is hamstrings before a curl is arms. */
+   hip thrust on a leg curl machine is glutes and a leg curl is hamstrings
+   before a curl is biceps, and a close grip bench is
+   triceps before "grip" is forearms. Also how `splitCoarse` sorts Legs and
+   Arms apart. */
 TRAIN.NOTE_CATS = [
   ['Calves', /calf|calves/],
-  ['Hamstrings', /leg curl|hamstring|romanian|\brdl|stiff[- ]?leg|sldl|good ?morning|nordic|glute[- ]?ham/],
-  ['Glutes', /hip thrust|glute|bridge|abduct/],
+  ['Glutes', /hip thrust|glute(?![- ]?ham)|bridge|abduct/],
+  ['Hamstrings', /leg curl|hamstring|romanian|\brdl|stiff[- ]?leg|sldl|good ?morning|nordic|glute[- ]?ham|sumo dead/],
   ['Lower Back', /hyper ?extension|back extension|superman/],
-  ['Forearms', /wrist|forearm|farmer|grip|dead ?hang|plate pinch/],
-  ['Legs', /squat|lunge|leg press|leg ext|split|step ?up|hack|quad|adduct/],
+  ['Triceps', /tricep|pushdown|push ?down|skull|kickback|dips?\b.*tri|close[- ]?grip (barbell |smith )?bench|french press|overhead extension|jm press/],
+  ['Forearms', /wrist|forearm|farmer|gripper|hand grip|grip (trainer|strength)|dead ?hang|^hang$|plate pinch|reverse curl|finger curl/],
+  ['Quads', /squat|lunge|leg press|leg ext|split|step ?up|hack|quad|adduct|wall sit/],
   ['Cardio', /\brun|jog|walk|treadmill|bike|cycl|spin|elliptical|stair|swim|rower|rowing machine|jump rope|skip|cardio|hiit|sprint/],
   ['Core', /plank|crunch|\babs?\b|sit ?up|leg raise|knee raise|hollow|dead ?bug|bird ?dog|pallof|russian twist|oblique|v ?up|mountain climber|core/],
-  ['Arms', /curl|tricep|bicep|pushdown|push ?down|skull|kickback|dips?\b.*tri|close grip bench|french press|overhead extension/],
+  ['Biceps', /curl|bicep|preacher/],
   ['Shoulders', /shoulder|overhead press|\bohp|military|arnold|lateral|side raise|front raise|rear delt|reverse fly|delt|face pull|upright row|push press/],
   ['Chest', /bench|chest|\bpec|\bfly|flye|push ?up|\bdips?\b/],
   ['Back', /\brow|pull ?up|chin ?up|pulldown|pull ?down|\blats?\b|deadlift|shrug|pullover|\bback\b/],
-  ['Legs', /\blegs?\b/],
+  ['Quads', /\blegs?\b/],
 ];
 TRAIN.noteCat = function (name) {
   var s = String(name || '').toLowerCase();
@@ -2677,12 +2748,12 @@ TRAIN.importNotes = function (res, opt) {
   var maxOrd = 0;
   Object.keys(cats).forEach(function (k) { if ((cats[k].ord | 0) > maxOrd) maxOrd = cats[k].ord | 0; });
   var catFor = function (group) {
-    var id = group && TRAIN.catByWord(group);
+    var id = group && TRAIN.catByWord(group, true);
     if (id) return id;
     if (group && !Rec.tombstone('excat', null, TRAIN.catId(group))) {
       id = TRAIN.catId(group);
       keep('excat', null, id);
-      Rec.set('excat', null, id, { name: group, slot: Math.max(0, TRAIN.DEFAULT_CATS.indexOf(group)), ord: ++maxOrd });
+      Rec.set('excat', null, id, { name: group, slot: TRAIN.catSlot(group), ord: ++maxOrd });
       TRAIN._catC = null;
       return id;
     }
@@ -10636,7 +10707,7 @@ function boot() {
   if (TRAIN.foldSeeds()) TRAIN.recomputePRs();
   /* Only once every device's rows and tombstones are in, or a group deleted
      on another device comes back. */
-  Rec.ready(function () { if (TRAIN.fillCats() && TRAIN.redraw) TRAIN.redraw(); });
+  Rec.ready(function () { if ((TRAIN.splitCoarse() + TRAIN.fillCats()) && TRAIN.redraw) TRAIN.redraw(); });
   /* and again whenever exercises or sets arrive from another copy */
   var foldT = null;
   Rec.on(function (rows) {

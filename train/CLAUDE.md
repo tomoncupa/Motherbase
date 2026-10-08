@@ -776,21 +776,33 @@ session could undo without noticing:
   Punctuation and accents come off both sides first. All three exercise
   searches use it. **Not typo tolerant on purpose**: edit distance starts
   offering things he did not mean.
-- **Twelve muscle groups, and twelve is the ceiling** — a group stores a slot
-  and there are six chart colours in two tints. A group's slot is its place in
-  `DEFAULT_CATS`, so **that order decides the colours**; as it stands Legs and
-  Hamstrings are two tints of one hue, and so are Core and Lower Back.
+- **No Legs and no Arms** (Tom, 2026-10-08: "Delete Arms and Legs as
+  categories", put "where they were always meant to go"). The standard groups
+  are Chest, Back, Shoulders, Biceps, Triceps, Forearms, Core, Quads,
+  Hamstrings, Glutes, Calves, Lower Back, Cardio. `TRAIN.splitCoarse` runs
+  at `Rec.ready` before `fillCats`: a log with the old app-made `legs` or
+  `arms` group has each movement moved by name (`TRAIN.SPLIT`, then
+  `NOTE_CATS`; Legs falls back to Quads, Arms to Biceps, a dip or close grip
+  in Arms is Triceps) and the emptied group deleted. A FitNotes group named
+  Legs (`fn<id>`, Tom's own, 53 movements) is never touched, and counts as
+  Quads (`CAT_ALSO`), so his log gets no empty Quads.
+- **Thirteen groups, twelve colours.** A group's colour is `TRAIN.CAT_SLOT`,
+  not its place in `DEFAULT_CATS` (that is only the order a new log shows).
+  Every group kept its old colour, Quads took Legs', Biceps took Arms', and
+  Triceps shares Cardio's. Quads and Hamstrings are two tints of one hue, and
+  so are Core and Lower Back.
   `TRAIN.catId` slugs a name into its key. `TRAIN.fillCats` adds any standard
   group an existing log is missing, **moves no exercise**, and skips a group he
   deleted by asking `Rec.tombstone` rather than remembering what it wrote —
   and it runs inside `Rec.ready`, when every device's tombstones are in.
   **It looks for a group by NAME** (`TRAIN.catWord`, plural dropped), never
   by the key it would make: a FitNotes group is keyed `fn<id>`, and until
-  1.0.27 his log got a second, empty Forearms. Arms counts as there when he
-  has Biceps or Triceps, Core when he has Abs (`TRAIN.CAT_ALSO`). An app-made
+  1.0.27 his log got a second, empty Forearms. Quads counts as there when he
+  has a Legs of his own, Core when he has Abs (`TRAIN.CAT_ALSO`). An app-made
   copy beside one of his is deleted while it holds no exercise, and kept once
   it holds one.
-- **Movements change group only through the SORT sheet** (1.0.28,
+- **Movements change group only through the SORT sheet** (1.0.28; the one
+  exception is `splitCoarse` above, which Tom ordered,
   `TRAIN.sortDialog`): Calves, Glutes, Hamstrings and Lower Back read off the
   name by `TRAIN.SORT_RULES`, Glutes before Hamstrings. Every move is a row
   with a switch, one SORT, UNDO after. Offered once on the exercise list
