@@ -1,0 +1,89 @@
+# COACH history
+
+Build stories moved out of `CLAUDE.md`. Rules stay there.
+
+## Their check-ins, on their profile (1.0.4, 2026-09-23)
+
+A client was in two places: their training in COACH, their photos and
+measurements in CHECK IN. Same person, two apps, and Tom had to leave the
+profile to answer "did the waist move".
+
+Nothing was copied to fix it. CHECK IN already keys a client's `cval`,
+`cphoto`, `cmark` and `cref` as `pid|key`, under the same `cperson` COACH
+draws in the box, so COACH reads those rows straight out of the store. One
+set of rows, two windows onto it.
+
+- **A CHECK IN card** sits under the client's name: the date strip (their
+  last twelve check-ins, one tap apart), that day's photos, then every answer
+  with what it was at the check-in before. A photo opens big.
+- **The change is stated, never judged.** `ciChange` prints `+1.5` or
+  `−1.5` in muted text and no colour. A waist going down is not a win
+  until Tom decides it is — root brief, self-determination theory.
+- **The questions are the client's own.** `ciFields` reads `cperson.fields`,
+  the list that client's file carried, so a label says what they were asked.
+  A client whose file predates that list has their questions read back off
+  the rows, photos first, with a plainer label — never an empty card.
+- **A check-in file opens here too.** `OPEN A CLIENT FILE` takes
+  `motherbase-checkin` as well as `motherbase-train` (`takeCheckin`). A
+  client's weight arrives as an `ev` row and is kept as their `cval`, so it
+  can never land in Tom's own weight log, and `cfield` is skipped so their
+  questions never overwrite his. An older file writes nothing.
+- **"New rows" counts what changed.** The store does not bump a row whose
+  payload is identical, so counting every write called the same file new
+  every time it was opened. `takeCheckin` compares the payload first.
+- **The check-in types ride COACH's tab.** `CI_TYPES` is in both `IO.register`'s
+  `types` and its `reads`, the way `cperson` already was, so a device where
+  CHECK IN was never opened still sees them.
+
+Watched in the browser 2026-09-23 with a made-up client: two check-ins drew
+with their photos and changes, the date strip switched between them, the
+photo opened big, a check-in file imported and re-imported (second time
+"nothing new"), an older file undid nothing, the client's weight stayed out
+of Tom's `ev` rows, a client with no check-ins drew no card, and a client
+with no `fields` drew derived labels. 44px date buttons and no sideways
+scroll at 375px. `_review.html` passed 116 of 116 at desktop and phone width,
+foundation 328 of 328.
+
+## The shelf: a send with no file (1.0.5, 2026-09-23)
+
+A client's TRAIN now uploads instead of making a file (`train/CLAUDE.md`, Send
+To Coach). COACH takes it off the shelf.
+
+- **`SENDS` in the header** says how many are waiting, and COACH looks once,
+  1.5 seconds after the first paint — after it, because the shelf needs the
+  network and a paint must not.
+- **Nothing new happens to the data.** A parcel holds the bag the file always
+  held, so it goes through the same `takeFile` and merges on `updated_at`. The
+  transport changed and nothing else did.
+- **A parcel is cleared only after its rows are in**, and one that cannot be
+  read is left on the shelf rather than thrown away. Until COACH has taken it,
+  that parcel is the only copy anywhere but the client's phone.
+- **Settings shows the account id**, because the drop rules in Firebase need it
+  written in and nowhere else in the suite shows it. It is not in this repo; it
+  is read off the live sign-in.
+
+**COACH and TRAIN sessions are already one, and were before this.** Tom,
+2026-09-23: *"Treat Coach and Train sessions as 1."* Measured rather than
+assumed: `sessionsOf` groups every one of a client's `cset` rows by date, so a
+day holding a set Tom logged here and a set the client sent from their own
+phone is ONE row in RECENT SESSIONS with one combined volume, and
+`countSession` writes one WEALTH `sesh` for it. The one place they are
+deliberately not one is billing: `coachSets` counts only `pid|k-` keys, so a
+day the client logged alone bills nothing. A client training on their own is
+not a 1:1 delivered. Do not "fix" that.
+
+## A 1:1 is never waiting on a send (1.0.6, 2026-09-23)
+
+Tom: *"My 1:1s don't track their own sets at ALL."* Which settles what the
+shelf is for and who it is not for.
+
+- **The shelf is for online clients.** A 1:1 never opens TRAIN, so they will
+  never press Send To Coach and there will never be a parcel from them.
+- **So the empty state asks the right thing of the right person.** A client in
+  the 1:1 box is told to press LOG A SESSION; anyone else is told to ask the
+  client to send. Telling Tom to chase a 1:1 for a file is advice nobody can
+  act on.
+- **And the billing rule is not a gap.** `coachSets` counting only `pid|k-`
+  keys was described here as "a day the client logged alone bills nothing".
+  For a 1:1 that day cannot exist. For an online client it should not bill,
+  because they are not buying sessions. Nothing to change.
