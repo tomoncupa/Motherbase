@@ -1,4 +1,4 @@
-/* shared/range.js — 0.3.3 — a training history as a woodblock print.
+/* shared/range.js — 0.4.0 — a training history as a woodblock print.
 
    Tom, 2026-09-20 and 2026-09-22: training blocks drawn as mountains and
    sessions as trees, in the manner of ukiyo-e, "meant to be a nice
@@ -16,13 +16,12 @@
        the dates the block ran; a block with no end runs until the next one
        starts, as it does everywhere in TRAIN. Before 0.2.0 an open block ran
        to today and stood over every block after it.
-     · a HILL is time outside any block: a month on the timeline, a year on
-       BLOCKS. A month with no session is flat ground.
+     · time outside any block is flat ground (0.4.0; hills before that).
      · a TREE is a session, standing ON the mountain or hill over its day
        (0.3.1; before that the trees stood in rows on the ground in front).
        A block's name sits on the ground under it, so the slopes are left
        to the trees, and no decoration on a slope looks like a tree.
-     · a session that set a record BLOSSOMS.
+     · a session that set a record bears FRUIT (blossom before 0.4.0).
      · the moon (DUSK) and the seal stand at today's end.
    Birds, clouds, boats and the far ridges stand for nothing: they are the
    print. There is no bad weather, no dead tree and no verdict.
@@ -61,7 +60,7 @@
 (function (g) {
 'use strict';
 
-var VERSION = '0.3.3';
+var VERSION = '0.4.0';
 var DAY = 86400000, TILE = 1024, PER_DAY = 5;
 var PRINTS = [{ id: 'fuji', name: 'FUJI' }, { id: 'ink', name: 'INK' }, { id: 'dusk', name: 'DUSK' }];
 
@@ -225,9 +224,9 @@ function layoutTime(L, boxW, perDay) {
   L.W = Math.ceil(left + span * per + right);
   L.X = function (d) { return left + (days(L.from, d) + 0.5) * per; };
   var secs = L.blocks.map(function (b) { return { kind: 'block', name: b.name, start: b.start, end: b.end }; });
-  outside(L.blocks, L.from, L.to).forEach(function (r) {
-    splitBy(r, 'month').forEach(function (m) { secs.push({ kind: 'hill', name: MONTHS[m.m - 1] + ' ' + m.y, start: m.start, end: m.end }); });
-  });
+  /* no hills since 0.4.0 (Tom, 2026-10-08: "No hills, 1 Block - 1
+     Mountain"): time outside a block is flat ground, and its trees stand
+     on the ground */
   secs.forEach(function (s) { s.list = within(L.ss, s.start, s.end); s.st = stats(s.list); });
   secs = secs.filter(function (s) { return s.kind === 'block' || s.st.sessions > 0; });
   var maxB = 0, maxH = 0;
@@ -239,7 +238,9 @@ function layoutTime(L, boxW, perDay) {
     s.x0 = x0; s.x1 = x1; s.cx = (x0 + x1) / 2;
     if (s.kind === 'block') {
       s.h = room * (0.46 + 0.54 * (maxB ? m / maxB : 0.5));
-      s.flank = Math.max(s.h * 0.95, (x1 - x0) * 0.3);
+      /* short flanks, so each block is its own mountain with a valley
+         between it and the next, not one ridge running through all of them */
+      s.flank = Math.min(Math.max(s.h * 0.35, (x1 - x0) * 0.08), s.h * 0.6);
     } else {
       /* tall enough to carry its trees on a real slope: most of a long
          history is months outside any block */
@@ -557,15 +558,6 @@ PRINT.fuji = {
     c.lineJoin = 'round'; c.lineCap = 'round';
     c.strokeStyle = 'hsl(20 30% 22%)'; c.lineWidth = Math.max(1, h * 0.045);
     c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + h * lean * 0.5, y - h * 0.45, x + h * lean, y - h * 0.86); c.stroke();
-    if (T.pr) {
-      var cx = x + h * lean * 0.85, cy = y - h * 0.72, s = h * 0.34;
-      var puffs = [[0, 0, 0.5], [-0.46, 0.18, 0.38], [0.46, 0.16, 0.4], [-0.18, -0.36, 0.36], [0.24, -0.32, 0.34]];
-      c.fillStyle = 'hsl(345 72% 85%)'; c.strokeStyle = 'hsl(222 30% 16%)'; c.lineWidth = 0.6;
-      puffs.forEach(function (p) { c.beginPath(); c.arc(cx + p[0] * s, cy + p[1] * s, p[2] * s, 0, 7); c.fill(); c.stroke(); });
-      c.fillStyle = 'hsl(348 62% 68%)';
-      for (var i = 0; i < 9; i++) { c.beginPath(); c.arc(cx + (r() - 0.5) * s * 1.3, cy + (r() - 0.5) * s, Math.max(0.8, s * 0.07), 0, 7); c.fill(); }
-      return;
-    }
     var tiers = h > 40 ? 3 : 2, w = h * 0.4;
     for (var k = 0; k < tiers; k++) {
       var ty = y - h * (0.5 + k * (0.42 / tiers)), tw = w * (0.62 - k * 0.14), th = Math.max(1.4, h * 0.075);
@@ -573,6 +565,7 @@ PRINT.fuji = {
       c.beginPath(); c.ellipse(tx, ty, tw, th, 0, 0, 7); c.fillStyle = 'hsl(150 32% 22%)'; c.fill();
       c.beginPath(); c.ellipse(tx - tw * 0.1, ty - th * 0.35, tw * 0.74, th * 0.45, 0, 0, 7); c.fillStyle = 'hsl(138 28% 36%)'; c.fill();
       c.beginPath(); c.ellipse(tx, ty, tw, th, 0, 0, 7); c.strokeStyle = 'hsl(222 30% 14%)'; c.lineWidth = 0.6; c.stroke();
+      if (T.pr) fruit(c, r, tx, ty + th * 0.6, tw * 0.8, Math.max(1.6, h * 0.05), 'hsl(8 78% 50%)', 'hsl(222 30% 14%)');
     }
   },
   birds: 'hsl(222 30% 16% / .8)',
@@ -734,14 +727,7 @@ PRINT.ink = {
         c.fill();
       }
     }
-    if (T.pr) {
-      for (var b = 0; b < 6; b++) {
-        var a = b / 6 * Math.PI * 2 + r(), rr = Math.max(1.4, h * 0.028);
-        var bx = tipX + Math.cos(a) * h * 0.1, by = tipY + h * 0.08 + Math.sin(a) * h * 0.07;
-        c.fillStyle = 'hsl(4 80% 48%)'; c.beginPath(); c.arc(bx, by, rr, 0, 7); c.fill();
-        c.fillStyle = 'hsl(44 60% 90%)'; c.beginPath(); c.arc(bx, by, rr * 0.35, 0, 7); c.fill();
-      }
-    }
+    if (T.pr) fruit(c, r, tipX, tipY + h * 0.14, h * 0.16, Math.max(1.8, h * 0.05), 'hsl(4 80% 46%)', 'hsl(30 8% 12% / .88)');
   },
   birds: 'hsl(30 8% 14% / .75)',
   label: { fill: 'hsl(44 30% 92% / .92)', line: 'hsl(30 8% 14% / .7)', text: 'hsl(30 8% 12%)' },
@@ -917,14 +903,7 @@ PRINT.dusk = {
       }
       spots.push([px, by - ph, pw]);
     }
-    if (T.pr) {
-      spots.forEach(function (s) {
-        for (var i = 0; i < 3; i++) {
-          c.fillStyle = i % 2 ? 'hsl(340 80% 80%)' : 'hsl(42 92% 74%)';
-          c.beginPath(); c.arc(s[0] + (r() - 0.5) * s[2] * 0.9, s[1] + (r() - 0.5) * 3, Math.max(1.1, h * 0.02), 0, 7); c.fill();
-        }
-      });
-    }
+    if (T.pr) spots.forEach(function (s) { fruit(c, r, s[0], s[1] + Math.max(2, h * 0.04), s[2] * 0.4, Math.max(1.6, h * 0.045), 'hsl(28 95% 58%)', col); });
     c.restore();
   },
   birds: 'hsl(252 32% 12% / .85)',
@@ -935,6 +914,19 @@ PRINT.dusk = {
     frame(c, L, v, 'hsl(252 32% 10%)', this.paper);
   },
 };
+
+/* A record is fruit on its tree (Tom, 2026-10-08: "Make Records fruits on
+   trees"; blossom until 0.4.0). Three rounds hanging along a branch, each
+   with a stalk and a light spot, so it reads as fruit at any print's size. */
+function fruit(c, r, x, y, spread, rad, body, stalk) {
+  for (var i = 0; i < 3; i++) {
+    var fx = x + (i - 1) * spread * 0.7 + (r() - 0.5) * spread * 0.3, fy = y + (i % 2) * rad * 0.9;
+    c.strokeStyle = stalk; c.lineWidth = Math.max(0.6, rad * 0.25);
+    c.beginPath(); c.moveTo(fx, fy - rad * 1.8); c.lineTo(fx, fy - rad * 0.8); c.stroke();
+    c.fillStyle = body; c.beginPath(); c.arc(fx, fy, rad, 0, 7); c.fill();
+    c.fillStyle = 'hsl(48 90% 90% / .85)'; c.beginPath(); c.arc(fx - rad * 0.35, fy - rad * 0.35, rad * 0.32, 0, 7); c.fill();
+  }
+}
 
 function torii(c, x, y, h, col) {
   var w = h * 0.9;
@@ -1062,8 +1054,8 @@ function headline(L, opts) {
       { num: fmtN(n.sets), lab: n.sets === 1 ? 'set' : 'sets' },
       { num: sp > 0 ? v.slice(0, sp) : v, lab: sp > 0 ? v.slice(sp + 1) + ' volume' : 'volume' },
     ],
-    info: 'Trees are sessions, taller for more sets. Mountains are blocks and hills are months outside one, ' +
-      'taller for more ' + (L.mnt === 'sets' ? 'sets' : 'volume') + ' a week. Blossom is a record.',
+    info: 'Trees are sessions, taller for more sets. Each mountain is a block, ' +
+      'taller for more ' + (L.mnt === 'sets' ? 'sets' : 'volume') + ' a week. Fruit is a record.',
   };
 }
 function describe(x, L, opts) {
