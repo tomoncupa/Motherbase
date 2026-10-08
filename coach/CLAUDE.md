@@ -364,3 +364,25 @@ client, and Tom's own `set`, `exercise` and `tick` counts did not move.
 44px targets on the arrows and both buttons, no sideways scroll at 390px.
 `_review.html` passed 116 of 116 at desktop and at 375px, foundation 348 of
 348.
+
+## Ghost, range and strength in a block (1.0.18 and 1.0.19, 2026-10-08)
+
+- **A drag listens on the window.** A sync landing mid-drag redraws the
+  box, the slot is replaced, and a release heard only by the slot left the
+  ghost floating over the page (Tom saw a Geodude under VOLUME). Watched:
+  old code ghost stays after a redraw mid-drag, new code clears it.
+- **The range runs under all three columns past `WIDE`** (`.cc-d`, the
+  fourth argument of `drawClientIn`) and passes `perDay: 2`, so a year fits
+  on a desk. Tom: "less then 37 trees and I don't see 3 distinct mountains":
+  it had opened on the first day, built while the columns were off the page.
+  Measured: 37 of 37 trees and 3 of 3 mountains in view at 1600 and 1928.
+- **STRENGTH · <BLOCK>** (`drawBlockStrength`, above the all-time STRENGTH
+  table). Tom picked "A and B": a row per lift (estimated one-rep max at the
+  block's first session, BEST in the block, the change muted, a line through
+  every session with that day's set at the pointer), then every lift on one
+  chart as a share of its start. Arrows walk the blocks; no blocks means the
+  last 8 weeks. BEST is the block's peak, not the last session, so a deload
+  does not read as lost strength [Claude's call, not Tom's]. A lift needs two
+  days in the block to show. Warmups by TRAIN's rule (`warmSet`); the
+  all-time table's `liftsOf` still skips only a marked warmup.
+- COACH loads `chart.js` since 1.0.19.
