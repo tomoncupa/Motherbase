@@ -302,6 +302,14 @@ should be ON the mountains."
   weeks ago does not open on bare field.
 - `tools/range-lab.html` draws all prints on made-up history, touching no
   store. **Not watched on the iPhone.**
+- **0.4.0, 2026-10-08** (Tom, from COACH: "No hills, 1 Block - 1 Mountain
+  Make Records fruits on trees"): time outside a block is flat ground (the
+  `hill` drawings stay, unused), a block's flanks are short so neighbours
+  stand apart with a valley, and a record bears three fruit on its tree in
+  every print. TRAIN's Profile changed with it. 0.3.2: a range built before
+  it is on the page opens on the latest session once placed; `opts.perDay`
+  lowers the 5px a day floor (COACH passes 2). 0.3.3: a resize rebuilds on
+  the next frame, not inside the observer.
 
 ## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
 
