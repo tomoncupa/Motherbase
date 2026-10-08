@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.17, 2026-10-08">
+<meta name="mb-version" content="1.0.18, 2026-10-08">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -71,6 +71,8 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-7) + var(--s
   .progcol{grid-column:1;grid-row:2;position:static}
   .cols .clientcol{grid-column:2;grid-row:1 / span 2;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1fr);align-items:start}
   .cc{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
+  /* the range under all three, so a year of blocks and sessions is on screen at once */
+  .cc-d{grid-column:1 / -1;margin-top:var(--s-4)}
   .sesh .lift .ln,.sesh .lift .ls{white-space:normal}
   .card .cidays{flex-wrap:wrap;overflow-x:visible}
   table.lifts td.n{white-space:nowrap}
@@ -680,6 +682,7 @@ function dragSlot(b, pid, from) {
     let ghost = null, over = null;
     try { b.setPointerCapture(e.pointerId); } catch (_) {}
     const move = ev => {
+      if (ev.pointerId !== e.pointerId) return;
       if (!ghost) {
         if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return;
         ghost = document.createElement('div'); ghost.className = 'slot ghost';
@@ -697,7 +700,8 @@ function dragSlot(b, pid, from) {
       ev.preventDefault();
     };
     const end = ev => {
-      b.removeEventListener('pointermove', move); b.removeEventListener('pointerup', end); b.removeEventListener('pointercancel', end);
+      if (ev.pointerId !== e.pointerId) return;
+      off();
       if (!ghost) return;
       ghost.remove(); b.classList.remove('lifted');
       if (over) over.classList.remove('drop');
@@ -709,7 +713,13 @@ function dragSlot(b, pid, from) {
       Mobile.feedback('success');
       draw();
     };
-    b.addEventListener('pointermove', move); b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
+    /* on the window, not the slot: a sync landing mid-drag redraws the box,
+       the slot is replaced, and a listener on it never hears the release,
+       which left the ghost floating over the page (2026-10-08) */
+    const off = () => { ['pointermove', 'pointerup', 'pointercancel'].forEach((k, i) => window.removeEventListener(k, i ? end : move)); b.removeEventListener('lostpointercapture', lost); };
+    const lost = ev => { if (!b.isConnected) end({ pointerId: e.pointerId, type: 'pointercancel' }); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+    b.addEventListener('lostpointercapture', lost);
   });
 }
 function drawBox(col) {
@@ -947,15 +957,15 @@ const WIDE = window.matchMedia ? matchMedia('(min-width:1560px)') : { matches: f
 if (WIDE.addEventListener) WIDE.addEventListener('change', () => draw());
 else if (WIDE.addListener) WIDE.addListener(() => draw());
 function drawClient(col) {
-  if (!WIDE.matches) return drawClientIn(col, col, col);
+  if (!WIDE.matches) return drawClientIn(col, col, col, col);
   const mk = n => { const d = document.createElement('div'); d.className = 'cc ' + n; return d; };
-  const a = mk('cc-a'), b = mk('cc-b'), c = mk('cc-c');
-  drawClientIn(a, b, c);
-  [a, b, c].forEach(d => { if (d.firstChild) col.appendChild(d); });
+  const a = mk('cc-a'), b = mk('cc-b'), c = mk('cc-c'), d = mk('cc-d');
+  drawClientIn(a, b, c, d);
+  [a, b, c, d].forEach(d => { if (d.firstChild) col.appendChild(d); });
 }
 /* `col` holds the client, their week and their check-in, `cs` the sessions,
-   `cr` the strength and the range. Narrow, all three are the same column. */
-function drawClientIn(col, cs, cr) {
+   `cr` the strength, `cw` the range across all three. Narrow, all four are the same column. */
+function drawClientIn(col, cs, cr, cw) {
   const p = people()[sel];
   const card = document.createElement('div'); card.className = 'card';
   if (!p) {
@@ -1034,9 +1044,9 @@ function drawClientIn(col, cs, cr) {
      range answers the year, and a coach reads them in that order. */
   if (window.Range) {
     const rc = document.createElement('div'); rc.className = 'card range';
-    cr.appendChild(rc);
+    cw.appendChild(rc);
     Range.mount(rc, Range.fromRows(setsOf(sel), own('cphase', sel), Day.today()), 240, {
-      print: opt('rangePrint'),
+      print: opt('rangePrint'), perDay: 2,
       volume: kg => { const v = +show(kg) || 0; return (v >= 1e6 ? Math.round(v / 1e5) / 10 + 'M' : v >= 1e5 ? Math.round(v / 1e3) + 'k' : Math.round(v).toLocaleString()) + ' ' + unit(); },
       onChange: o => { if (o.print !== opt('rangePrint')) Rec.setting(APP.id, 'rangePrint', o.print); },
     });
