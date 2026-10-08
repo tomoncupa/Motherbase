@@ -104,8 +104,8 @@ WEALTH writes these types. It may read anything.
 | `wtag` | tag id | `{name}` — an occasion, not a category. `date`, `gift`, `travel` |
 | `mark` | `date\|spendKey` | `{cat, tag, big}` — what WEALTH thinks of one spend row |
 | `count` | date + account id | `{bal}` — a counted balance, on the day it was counted |
-| `client` | client id | `{name, rate, cycle, every, start, days, day, perWeek, status, note}` — `days` is a list of days of the month; `day` is its first, kept for rows written before the list; `perWeek` is his rough pace for a client paid by the session |
-| `sesh` | date + id | `{client}` — one session delivered, for a client paid by the session |
+| `client` | client id | `{name, rate, cycle, every, start, days, day, perWeek, status, note}` — `days` is a list of days of the month; `day` is its first, kept for rows written before the list; `perWeek` is his rough pace for a client paid by the session; `alt` `{name, price, n}` is a second kind of session at its own price (package clients), `0` for none |
+| `sesh` | date + id | `{client, alt}` — one session delivered, for a client paid by the session; `alt` 1 is the client's other kind (in person) |
 | `pack` | date + id | `{client, n, price, note, parts, when}` — sessions sold before they happen; `parts` splits the price, `when` is `before` or `after` each block |
 | `paid` | date + id | `{amt, acct, client, note, t}` — money in. No client means a one-off |
 | `bill` | bill id | `{name, amt, day, acct, cat, from, until, cycle, every, start}` — a recurring outgoing. `cycle` is `month`, or `days` for one due every `every` days after `start`, the day it was last paid. No `cycle` reads as monthly |
@@ -276,6 +276,16 @@ apply oldest package first, never tagged to one. (HISTORY.md: Packages bought up
 
 **A package part not reached yet is "to come", not owed**; a paced guess says
 "about" and is never late. (HISTORY.md: Packages paid in parts)
+
+**A second kind of session owes the difference** (2026-10-08, Jay: online
+package 45,000/30, in person 70,000/30). `client.alt` holds the other kind's
+price; each session box gets a tick for it. A ticked session still uses one
+session of its package and owes its price a session less the package's,
+due the day it happened, rounded on the running total. Ordered with the
+package's parts by session, so money pays the oldest owed first; next to
+each other they are one line owed. A cheaper kind owes nothing. Clearing
+the price keeps the ticks. Packages only; a session-cycle client has no
+second price yet (`altOf`, `packState`).
 
 **Session boxes are `sesh` rows in date order**; a future date is refused. (HISTORY.md: Sessions as boxes)
 
