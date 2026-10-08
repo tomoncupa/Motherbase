@@ -1,4 +1,4 @@
-/* shared/range.js — 0.3.1 — a training history as a woodblock print.
+/* shared/range.js — 0.3.2 — a training history as a woodblock print.
 
    Tom, 2026-09-20 and 2026-09-22: training blocks drawn as mountains and
    sessions as trees, in the manner of ukiyo-e, "meant to be a nice
@@ -61,7 +61,7 @@
 (function (g) {
 'use strict';
 
-var VERSION = '0.3.1';
+var VERSION = '0.3.2';
 var DAY = 86400000, TILE = 1024, PER_DAY = 5;
 var PRINTS = [{ id: 'fuji', name: 'FUJI' }, { id: 'ink', name: 'INK' }, { id: 'dusk', name: 'DUSK' }];
 
@@ -199,7 +199,7 @@ function within(ss, a, b) {
 function perWeek(L, s) { return (L.mnt === 'sets' ? s.st.sets : s.st.vol) / (Math.max(7, days(s.start, s.end) + 1) / 7); }
 
 /* ── the layout: where everything stands, before a single tile is drawn ── */
-function layout(data, base, boxW, H) {   /* `base` is ignored since 0.3.0 */
+function layout(data, base, boxW, H, perDay) {   /* `base` is ignored since 0.3.0 */
   var ss = (data.sessions || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
   var to = data.to || (ss.length ? ss[ss.length - 1].date : todayStr());
   var bl = resolveBlocks(data.phases, to);
@@ -209,7 +209,7 @@ function layout(data, base, boxW, H) {   /* `base` is ignored since 0.3.0 */
             peaks: [], trees: [], labels: [], years: [], empty: !ss.length && !bl.length };
   L.total = stats(ss);
   L.mnt = L.total.vol > 0 ? 'vol' : 'sets';
-  layoutTime(L, boxW);
+  layoutTime(L, boxW, perDay);
   /* back to front: hills, then blocks, the taller behind */
   L.peaks.sort(function (a, b) { return (a.kind === 'block') - (b.kind === 'block') || b.h - a.h; });
   /* trees: the back row first, then along the row */
@@ -217,10 +217,10 @@ function layout(data, base, boxW, H) {   /* `base` is ignored since 0.3.0 */
   return L;
 }
 
-function layoutTime(L, boxW) {
+function layoutTime(L, boxW, perDay) {
   var H = L.H, span = days(L.from, L.to) + 1;
   var left = 34, right = 96;
-  var per = Math.max(PER_DAY, (boxW - left - right) / span);
+  var per = Math.max(perDay || PER_DAY, (boxW - left - right) / span);
   L.per = per;
   L.W = Math.ceil(left + span * per + right);
   L.X = function (d) { return left + (days(L.from, d) + 0.5) * per; };
@@ -1083,7 +1083,9 @@ function describe(x, L, opts) {
 /** Put the range into `box`: a header that answers first, the print,
     scrollable and scrolled to today, and two switches under it.
     data: { sessions: [{date, vol, sets, pr}], phases: [{name, start, end}], to }
-    opts: { base, print, volume(kg) → text, onChange({base, print}) }
+    opts: { print, volume(kg) → text, onChange({print}), perDay }
+    `perDay` lowers the 5 pixels a day floor, so a wide desk card can hold a
+    whole year: COACH passes 2 (2026-10-08, "I don't see 3 mountains").
     The caller keeps the choice (TRAIN and COACH each in a setting). */
 function mount(box, data, height, opts) {
   opts = opts || {};
@@ -1103,7 +1105,7 @@ function mount(box, data, height, opts) {
   var bar = el('div', 'rg-bar');
   box.appendChild(head); box.appendChild(sc); box.appendChild(bar);
 
-  var L = null, tiles = [], raf = 0, lastW = 0;
+  var L = null, tiles = [], raf = 0, lastW = 0, placed = false;
   var tell = function () { if (opts.onChange) opts.onChange({ print: st.print }); };
   bar.appendChild(segmented(PRINTS, st.print, function (id) { st.print = id; repaintAll(); tell(); }));
 
@@ -1116,9 +1118,14 @@ function mount(box, data, height, opts) {
   function build(keep) {
     var bw = box.clientWidth || 360;
     lastW = bw;
+    /* built before it is on the page (COACH's wide columns are made apart
+       and put in after), nothing can scroll, so it sat on the first day
+       and the latest blocks and trees were off to the right (2026-10-08).
+       Until it has been placed once, a rebuild opens on the latest session. */
+    if (!placed) keep = false;
     var frac = keep && L && sc.scrollWidth > sc.clientWidth
       ? (sc.scrollLeft + sc.clientWidth) / sc.scrollWidth : 1;
-    L = layout(data, null, bw, H);
+    L = layout(data, null, bw, H, opts.perDay);
     strip.innerHTML = ''; tiles = [];
     strip.style.width = L.W + 'px'; strip.style.height = H + 'px';
     strip.setAttribute('role', 'img');
@@ -1133,6 +1140,7 @@ function mount(box, data, height, opts) {
        stopped in August should not open on seven weeks of bare field */
     var end = L.trees.length ? Math.min(L.W, Math.max.apply(null, L.trees.map(function (T) { return T.x; })) + 110) : L.W;
     sc.scrollLeft = Math.max(0, (frac < 1 ? frac * L.W : end) - sc.clientWidth);
+    placed = sc.clientWidth > 0;
     ensure();
   }
   function ensure() {
@@ -1169,7 +1177,7 @@ function mount(box, data, height, opts) {
   });
   build(false);
   if (g.ResizeObserver) new g.ResizeObserver(function () {
-    if (Math.abs(box.clientWidth - lastW) > 4) build(true);
+    if (Math.abs(box.clientWidth - lastW) > 4 || (!placed && box.clientWidth)) build(true);
   }).observe(box);
   return {
     redraw: function () { build(true); },
