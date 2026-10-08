@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.65, 2026-10-08">
+<meta name="mb-version" content="1.0.66, 2026-10-08">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -309,6 +309,29 @@ button.islehero{background:none;border:0;padding:0;margin:0;color:inherit;
   background:none;color:var(--text-muted);cursor:pointer;font-size:var(--f-3)}
 .row .x:active{background:var(--surface-3);color:var(--text-1)}
 .row.tap{cursor:pointer}
+
+/* ── the Logged table on Food (2026-10-08): Name, then four numbers ── */
+.fgrid{display:flex;flex-direction:column;gap:var(--s-1)}
+.logrow{display:grid;grid-template-columns:minmax(0,1fr) repeat(4,var(--tap)) var(--s-6);
+  gap:var(--s-1);align-items:start}
+.logrow.fhead{align-items:end;color:var(--text-muted);font-size:var(--f-1)}
+.logrow .fh{text-align:center;white-space:nowrap}
+.logrow .fnm{min-width:0}
+.logrow .fnm small{display:block;color:var(--text-muted);font-size:var(--f-1);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;padding:var(--s-1) var(--s-2) 0}
+.logrow input[type=text]{height:var(--tap);padding:0 var(--s-2);font-size:var(--f-2)}
+.logrow input.fnum[type=text]{padding:0 var(--s-1);text-align:center;font-family:var(--font-mono)}
+.logrow .fnum.lock{display:flex;align-items:center;justify-content:center;height:var(--tap);
+  font-family:var(--font-mono);font-size:var(--f-2);color:var(--text-2)}
+.logrow.tap{cursor:pointer}
+.logrow.unsaved input{border-style:dashed;border-color:var(--warn)}
+.logrow .mb-dots{width:var(--s-6);height:var(--tap)}
+.fsug{grid-column:1 / -1;display:flex;flex-direction:column;gap:var(--s-1)}
+.fsugrow{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);
+  min-height:var(--tap);padding:0 var(--s-3);border:0;border-radius:var(--radius-md);
+  background:var(--surface-3);color:var(--text-1);font:inherit;font-size:var(--f-2);text-align:left;cursor:pointer}
+.fsugrow .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fsugrow small{flex:0 0 auto;color:var(--text-muted);font-size:var(--f-1)}
 .row.tap:active{background:var(--surface-3)}
 
 /* ── progress ── */
@@ -2832,6 +2855,7 @@ function mealMenu(x, d, e) {
   UI.menu(e ? e.clientX : 0, e ? e.clientY : 0, [
     { label: 'Edit this serving', note: 'Only this one row', icon: '✎', fn: () => mealSheet(x, d) },
     fd ? { label: 'Edit ' + fd.name, note: 'The food itself, everywhere', icon: '◈', fn: () => foodEditor(fd) } : null,
+    !x.fid && x.src !== 'kitchen' ? { label: 'Save to foods', note: 'One tap next time. This meal stays as it is', icon: '◈', fn: () => mealToFood(x) } : null,
     '-',
     { label: 'Delete', kind: 'bad', icon: '⌫', fn: () => {
       const row = Object.assign({}, x); delete row.key;
@@ -3252,7 +3276,7 @@ function pastOneOffs() {
     const seen = by[k];
     if (!seen || (m.t || 0) > (seen.t || 0)) {
       /* null is not known, so last time's blank comes back blank */
-      by[k] = { key: k, name: m.name, kcal: num(m.kcal), p: num(m.p), t: m.t || 0, n: seen ? seen.n : 0 };
+      by[k] = { key: k, name: m.name, kcal: num(m.kcal), p: num(m.p), c: num(m.c), f: num(m.f), t: m.t || 0, n: seen ? seen.n : 0 };
     }
     by[k].n = (by[k].n || 0) + 1;
   });
@@ -4730,9 +4754,380 @@ function moveNote(d, x, dir) {
 
 
 function drawFood(m) {
-  const d = vd(), t = dayTotals(d), tg = TARGETS(), ct = calTarget();
+  const d = vd(), t = dayTotals(d);
+  foodPending = false;
+  m.appendChild(foodSumCard(d));
+  seamButton(m);
 
+  const list = meals(d);
+  const c2 = card('Logged', list.length ? money(t.price) : '');
+  c2.id = 'foodlog';
+  c2.appendChild(foodGrid(d, list));
+  const b = el('button', 'btn go wide', 'Log food');
+  b.style.marginTop = 'var(--s-2)';
+  b.onclick = foodPicker;
+  c2.appendChild(b);
+  /* Quieter on purpose: a one-off leaves nothing behind to log again, so it is
+     the wrong default. It is here for a restaurant meal you will never eat
+     twice, where adding it to the database is just litter.
+     Hidden 2026-10-08: the blank rows in this card do its job (Tom, "Yes" to
+     hiding it). oneOffSheet stays, so bringing it back is this one line. */
+  const ONE_OFF_BUTTON = false;
+  if (ONE_OFF_BUTTON) {
+    const one = el('button', 'btn wide quiet', 'One-off');
+    one.style.marginTop = 'var(--s-2)';
+    one.onclick = oneOffSheet;
+    c2.appendChild(one);
+  }
+  m.appendChild(c2);
+  /* Enter in the last box of the last row left the table; the new blank row
+     takes the cursor once the table is drawn again. */
+  if (foodFocusBlank) {
+    foodFocusBlank = false;
+    const nb = c2.querySelector('.logrow.fblank input');
+    if (nb) nb.focus();
+  }
+}
+
+/* ══ the Logged card is a table ══
+   Tom, 2026-10-08: "Food entry in the logged island can be ready to input
+   blank fields. Name, Protein, Carbs, Fats, Cals. 5 blank entries, with
+   there always being 1 blank entry if they all get filled."
+
+   Every meal is a row, and blank rows wait under them: five rows at least,
+   one blank always. What he settled, by number:
+   - A typed row saves when he leaves it, with a name and one number at
+     least. Half a row stays on screen, dashed, until it has both.
+   - Typing in a blank Name searches his foods and past one-offs; a saved
+     food opens its amount sheet as Log food does, a past one-off fills the
+     row. A name left matching one exactly fills the numbers.
+   - A meal logged from a saved food shows its numbers and only the name can
+     be typed over; tapping the row opens its serving sheet as before.
+   - Calories left blank are worked out from the macros, 4 4 9, and drawn
+     dim (`kx` on the meal says they were worked out, not typed).
+   - The row's menu (hold, right click, the dots) can save a typed meal to
+     his foods.
+   A blank box is not known, never 0, as everywhere else in the Food tab. */
+const FOODCOLS = [['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat'], ['kcal', 'Cals']];
+/* Half-typed rows, per day, so a redraw cannot wipe them. Kept on this page
+   only: they are not rows, because they are not yet a meal. */
+const FOOD_DRAFTS = Object.create(null);
+let foodPending = false, foodFocusBlank = false, foodDraftN = 0;
+/* A redraw rebuilds every box, so none may run while the caret is in this
+   table: the redraw waits, and runs when the caret leaves it. */
+const foodBusy = () => { const a = document.activeElement; return !!(a && a.closest && a.closest('.fgrid')); };
+const macroKcal = (p, c, f) => (p == null && c == null && f == null) ? null
+  : Math.round((p || 0) * 4 + (c || 0) * 4 + (f || 0) * 9);
+/* logged from a saved food, here or in KITCHEN: its numbers come from the food */
+const lockedMeal = x => !!(x.fid || x.src === 'kitchen');
+const foodFig = (k, v) => k === 'kcal' ? String(Math.round(v)) : String(r1(v));
+
+/* the grey line under a meal's name: when, and for a saved food how much */
+function mealMarks(x) {
+  /* when it was eaten: Tom, 2026-09-18, "Food entry should have a time stamp" */
+  const when = x.at || (x.t ? Journal.hhmm(x.t) : '');
+  const bits = [when ? clockLabel(when) : ''];
+  if (lockedMeal(x)) {
+    /* A meal logged before serveLabel existed carries the right `mult` and a
+       label that forgot it. The number on the row is the record, so the count
+       is read back off it rather than trusted from the words.
+       Tom, 2026-09-18: "1 Serving bug still persists". A row whose amount was
+       edited kept its old words, and "1 serving" starts with a digit so the
+       rule below trusted it. The count is worked out from the food's own
+       serving sizes wherever the words name one of them. */
+    const mult = num(x.mult, 1) || 1;
+    const said = String(x.serve || '');
+    const own = meal1Serve(x);
+    const serveText = own ? serveLabel(own, mult)
+      : (Math.abs(mult - 1) > 0.001 && said && !/×/.test(said) && !/^to target$/.test(said) && !/^[\d.]/.test(said))
+        ? r1(mult) + ' × ' + said.replace(/^1\s+/, '') : said;
+    bits.push(esc(serveText), x.amt != null ? r1(x.amt) + ' ' + esc(x.unit || '') : '');
+  }
+  if (errTag(x.err)) bits.push(errTag(x.err));
+  if (x.acct) bits.push(esc(x.acct));
+  return bits.filter(Boolean).join(' · ');
+}
+
+function foodGrid(d, list) {
+  const g = el('div', 'fgrid');
+  const head = el('div', 'logrow fhead');
+  head.appendChild(el('span', 'fnm', 'Name'));
+  FOODCOLS.forEach(k => head.appendChild(el('span', 'fh', k[1])));
+  head.appendChild(el('span'));
+  g.appendChild(head);
+  list.forEach(x => g.appendChild(lockedMeal(x) ? foodRowLocked(d, x) : foodRowTyped(d, x, null)));
+  const drafts = FOOD_DRAFTS[d] || [];
+  drafts.forEach(dr => g.appendChild(foodRowTyped(d, null, dr)));
+  const blanks = Math.max(5 - list.length - drafts.length, 1);
+  for (let i = 0; i < blanks; i++) g.appendChild(foodRowTyped(d, null, null));
+  g.addEventListener('focusout', () => setTimeout(() => {
+    if (!foodBusy() && foodPending) { foodPending = false; draw(); }
+  }, 0));
+  return g;
+}
+
+/* Enter in a row's last box goes to the next row's name */
+function foodNext(r) {
+  let n = r.nextElementSibling;
+  while (n && !n.classList.contains('logrow')) n = n.nextElementSibling;
+  const i = n && n.querySelector('input');
+  if (i) { i.focus(); return; }
+  foodFocusBlank = true;
+  if (document.activeElement) document.activeElement.blur();
+}
+
+function foodDraftSet(d, id, v) {
+  const a = FOOD_DRAFTS[d] || (FOOD_DRAFTS[d] = []);
+  const i = a.findIndex(x => x.id === id);
+  const row = Object.assign({ id: id }, v);
+  if (i > -1) a[i] = row; else a.push(row);
+}
+function foodDraftDrop(d, id) {
+  const a = FOOD_DRAFTS[d];
+  if (!a) return;
+  const i = a.findIndex(x => x.id === id);
+  if (i > -1) a.splice(i, 1);
+}
+
+/* A row he types into: a one-off meal already logged, a half-typed draft, or
+   a blank. All five boxes are his. */
+function foodRowTyped(d, x, draft) {
+  const r = el('div', 'logrow' + (x ? '' : draft ? ' unsaved' : ' fblank'));
+  const did = draft ? draft.id : 'fd' + (++foodDraftN);
+  const src = x || draft || {};
+  const cell = el('div', 'fnm');
+  const nm = document.createElement('input');
+  nm.type = 'text'; nm.autocomplete = 'off'; nm.setAttribute('autocapitalize', 'sentences');
+  nm.setAttribute('aria-label', 'Name');
+  nm.value = src.name || '';
+  cell.appendChild(nm);
+  if (x) { const s = mealMarks(x); if (s) cell.appendChild(el('small', null, s)); }
+  r.appendChild(cell);
+
+  const box = {};
+  FOODCOLS.forEach(k => {
+    const i = document.createElement('input');
+    i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*');
+    i.autocomplete = 'off'; i.className = 'fnum';
+    i.setAttribute('aria-label', k[1]);
+    const v = num(src[k[0]]);
+    /* worked-out calories stay out of the box and show as its dim hint */
+    if (v != null && !(k[0] === 'kcal' && src.kx)) i.value = foodFig(k[0], v);
+    box[k[0]] = i; r.appendChild(i);
+  });
+  const hint = () => {
+    const k = num(box.kcal.value) == null ? macroKcal(num(box.p.value), num(box.c.value), num(box.f.value)) : null;
+    box.kcal.placeholder = k == null ? '' : String(k);
+  };
+  ['p', 'c', 'f', 'kcal'].forEach(k => box[k].addEventListener('input', hint));
+  hint();
+
+  const fill = o => {
+    FOODCOLS.forEach(k => { const v = num(o[k[0]]); box[k[0]].value = v == null ? '' : foodFig(k[0], v); });
+    hint();
+  };
+
+  if (x) {
+    Mobile.hold(r, e => mealMenu(x, d, e), { skip: 'input', dots: true, dotsLabel: 'More for ' + x.name });
+  } else {
+    r.appendChild(el('span'));
+    /* ── search as you type ── his foods first, then what he has typed
+       before and never saved, as on Log food's own screen */
+    let sug = null;
+    const hideSug = () => { if (sug) { sug.remove(); sug = null; } };
+    const paintSug = () => {
+      hideSug();
+      const term = nm.value.trim().toLowerCase();
+      if (!term) return;
+      const fs = Object.values(foods())
+        .filter(f => (f.name + ' ' + (f.brand || '')).toLowerCase().indexOf(term) > -1)
+        .sort((a, b) => (b.uses || 0) - (a.uses || 0) || String(a.name).localeCompare(String(b.name)))
+        .slice(0, 5);
+      const ps = pastOneOffs()
+        .filter(o => o.key.indexOf(term) > -1 && !fs.some(f => String(f.name).trim().toLowerCase() === o.key))
+        .slice(0, 3);
+      if (!fs.length && !ps.length) return;
+      sug = el('div', 'fsug');
+      const item = (html, sub, fn) => {
+        const b = el('button', 'fsugrow mb-press', '<span class="nm">' + html + '</span><small>' + sub + '</small>');
+        b.type = 'button';
+        /* keeps the caret in Name, so pressing this is not leaving the row */
+        b.addEventListener('mousedown', e => e.preventDefault());
+        b.onclick = fn;
+        sug.appendChild(b);
+      };
+      fs.forEach(f => item(esc(f.name) + (f.brand ? '<b class="brand">' + esc(f.brand) + '</b>' : ''),
+        [num(f.base.kcal) != null ? Math.round(num(f.base.kcal)) + ' kcal' : '',
+         num(f.base.p) != null ? r1(num(f.base.p)) + 'p' : ''].filter(Boolean).join(' · '),
+        () => {
+          /* the saved food is logged the way Log food logs it; what was typed
+             here goes, so leaving the row does not log it twice */
+          r._skip = true; nm.value = ''; hideSug(); foodDraftDrop(d, did);
+          amountSheet(f);
+        }));
+      ps.forEach(o => item(esc(o.name) + '<b class="brand oncebadge">' + o.n + '× before</b>',
+        [o.kcal != null ? Math.round(o.kcal) + ' kcal' : '', o.p != null ? r1(o.p) + 'p' : ''].filter(Boolean).join(' · '),
+        () => { nm.value = o.name; fill(o); hideSug(); box.p.focus(); }));
+      r.appendChild(sug);
+    };
+    nm.addEventListener('input', paintSug);
+    /* A name left matching one he has logged before fills the numbers, when
+       none are typed yet; he can still type over them. */
+    nm.addEventListener('blur', () => {
+      hideSug();
+      if (r._skip || FOODCOLS.some(k => num(box[k[0]].value) != null)) return;
+      const key = nm.value.trim().toLowerCase();
+      if (!key) return;
+      const f = Object.values(foods()).find(f => String(f.name).trim().toLowerCase() === key);
+      if (f) {
+        const sv = foodServes(f)[Math.min(f.dflt || 0, foodServes(f).length - 1)];
+        return fill(scale(f, sv ? sv.mult : 1));
+      }
+      const o = pastOneOffs().find(o => o.key === key);
+      if (o) fill(o);
+    });
+  }
+
+  const order = [nm, box.p, box.c, box.f, box.kcal];
+  order.forEach((inp, i) => inp.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault();
+    if (i < order.length - 1) order[i + 1].focus(); else foodNext(r);
+  }));
+
+  /* one check per leaving, however fast the keys came: a row left once is
+     logged once */
+  r.addEventListener('focusout', () => { clearTimeout(r._t); r._t = setTimeout(() => {
+    if (r.contains(document.activeElement) || r._skip) return;
+    foodCommit(d, r, x, did, nm, box);
+  }, 0); });
+  return r;
+}
+
+/* A row from a saved food: the numbers are the food's, so only the name. */
+function foodRowLocked(d, x) {
+  const r = el('div', 'logrow tap');
+  const cell = el('div', 'fnm');
+  const nm = document.createElement('input');
+  nm.type = 'text'; nm.autocomplete = 'off';
+  nm.setAttribute('aria-label', 'Name');
+  nm.value = x.name || '';
+  cell.appendChild(nm);
+  const s = mealMarks(x);
+  if (s) cell.appendChild(el('small', null, s));
+  r.appendChild(cell);
+  FOODCOLS.forEach(k => {
+    const v = num(x[k[0]]);
+    r.appendChild(el('span', 'fnum lock', v == null ? '-' : foodFig(k[0], v)));
+  });
+  /* Tap edits this serving. Hold asks the wider question — because "change
+     what I ate" and "change what this food is" are genuinely different, and
+     one of them rewrites history. */
+  r.onclick = e => { if (e.target.closest('input')) return; mealSheet(x, d); };
+  Mobile.hold(r, e => mealMenu(x, d, e), { skip: 'input', dots: true, dotsLabel: 'More for ' + x.name });
+  nm.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    e.preventDefault(); foodNext(r);
+  });
+  nm.addEventListener('blur', () => {
+    const name = nm.value.trim();
+    if (!name || name === x.name) { nm.value = x.name || ''; return; }
+    const cur = Rec.get('meal', d, x.key);
+    if (!cur) return;
+    Rec.set('meal', d, x.key, Object.assign({}, cur, { name: name }));
+    x.name = name;
+    setTimeout(() => { if (!foodBusy()) draw(); }, 0);
+  });
+  return r;
+}
+
+/* Leaving a typed row: log it, change it, empty it, or hold it as a draft. */
+function foodCommit(d, r, x, did, nm, box) {
+  const name = nm.value.trim();
+  const v = {};
+  FOODCOLS.forEach(k => { v[k[0]] = num(box[k[0]].value); });
+  const any = FOODCOLS.some(k => v[k[0]] != null);
+  const kx = v.kcal == null ? macroKcal(v.p, v.c, v.f) : null;
+  const put = row => {
+    ['p', 'c', 'f'].forEach(k => { if (v[k] != null) row[k] = v[k]; else delete row[k]; });
+    if (v.kcal != null) { row.kcal = v.kcal; delete row.kx; }
+    else if (kx != null) { row.kcal = kx; row.kx = 1; }
+    else { delete row.kcal; delete row.kx; }
+    return row;
+  };
+  let saved = null;
+  if (x) {
+    const was = Rec.get('meal', d, x.key);
+    if (!was) return;
+    if (!any) {
+      /* every number taken out: the meal goes, with an undo */
+      Rec.del('meal', d, x.key); mealSpend(d, x.key, null); Mobile.feedback('untick');
+      UI.undo('removed <b>' + esc(was.name) + '</b>',
+        () => { Rec.set('meal', d, x.key, was); mealSpend(d, x.key, was); draw(); });
+    } else {
+      /* merged into what is there: price, account, sodium and the rest of
+         a one-off stay as they were */
+      const next = put(Object.assign({}, was));
+      if (name) next.name = name; else nm.value = was.name || '';
+      if (JSON.stringify(next) === JSON.stringify(was)) return;
+      Rec.set('meal', d, x.key, next); mealSpend(d, x.key, next);
+      saved = Object.assign({ key: x.key }, next);
+    }
+  } else {
+    if (!name && !any) { foodDraftDrop(d, did); r.classList.remove('unsaved'); return; }
+    if (!name || !any) {
+      /* half a row: kept on screen until it has a name and a number */
+      foodDraftSet(d, did, { name: name, p: v.p, c: v.c, f: v.f, kcal: v.kcal });
+      r.classList.add('unsaved');
+      r.title = name ? 'Add a number to log it' : 'Add a name to log it';
+      return;
+    }
+    const row = put({ fid: null, food: '', name: name, amt: 1, unit: 'serving', serve: 'one off', t: Date.now() });
+    const key = uid();
+    r._skip = true;   /* this row is a meal now; it is drawn again below */
+    Rec.set('meal', d, key, row);
+    foodDraftDrop(d, did);
+    Mobile.feedback('tick');
+    saved = Object.assign({ key: key }, row);
+  }
+  if (!foodBusy()) { draw(); return; }
+  /* The caret went to another row, so the table stays and only what changed
+     is drawn again: this row, the totals, and a blank row if none is left. */
+  if (r.isConnected) {
+    const g = r.parentNode;
+    r.replaceWith(saved ? foodRowTyped(d, saved, null) : foodRowTyped(d, null, null));
+    if (!g.querySelector('.logrow.fblank')) g.appendChild(foodRowTyped(d, null, null));
+  }
+  const sum = document.getElementById('foodsum');
+  if (sum) sum.replaceWith(foodSumCard(d));
+  const h = document.querySelector('#foodlog h2');
+  if (h) {
+    const t = dayTotals(d);
+    h.innerHTML = 'Logged' + (meals(d).length ? '<span class="sub">' + esc(money(t.price)) + '</span>' : '');
+  }
+}
+
+/* a typed meal, kept: Tom, 2026-10-08, a hold option to save it to the foods */
+function mealToFood(x) {
+  const key = String(x.name || '').trim().toLowerCase();
+  const have = Object.values(foods()).find(f => String(f.name).trim().toLowerCase() === key);
+  if (have) return UI.toast('<b>' + esc(have.name) + '</b> is already in your foods');
+  const base = { amt: 1, unit: 'serving' };
+  ['kcal', 'p', 'c', 'f'].forEach(n => { if (num(x[n]) != null) base[n] = num(x[n]); });
+  /* the One-off sheet wrote 0 for a box left empty; a 0 here is not known */
+  ['na', 'k', 'ca', 'caff', 'price'].forEach(n => { if ((num(x[n], 0) || 0) > 0) base[n] = num(x[n]); });
+  const past = pastOneOffs().find(o => o.key === key);
+  const id = uid();
+  Rec.set('food', null, id, { id: id, name: x.name, brand: '', base: base, serves: [], uses: past ? past.n : 1 });
+  Mobile.feedback('tick');
+  UI.toast('<b>' + esc(x.name) + '</b> saved to your foods');
+}
+
+/* the day's totals, at the top of Food; drawn again in place while he types */
+function foodSumCard(d) {
+  const t = dayTotals(d), tg = TARGETS(), ct = calTarget();
   const c = card('Food', Math.round(t.kcal).toLocaleString() + ' kcal');
+  c.id = 'foodsum';
   const left = ct.v - Math.round(t.kcal);
   const hero = el('div', 'hero',
     left.toLocaleString() + ' <span class="sl">/</span> ' + (calTarget().v || 0).toLocaleString() +
@@ -4779,66 +5174,7 @@ function drawFood(m) {
   if (ct.src === 'tdee') bits.push('target from measured TDEE');
   if (ct.src === 'macros') bits.push('calories from macros');
   c.appendChild(el('div', 'note', bits.join(' · ')));
-  m.appendChild(c);
-  seamButton(m);
-
-  const list = meals(d);
-  const c2 = card('Logged', list.length ? money(t.price) : '');
-  if (!list.length) c2.appendChild(el('div', 'empty', 'Nothing yet.'));
-  list.forEach(x => {
-    const r = el('div', 'row tap');
-    /* A meal logged before serveLabel existed carries the right `mult` and a
-       label that forgot it. The number on the row is the record, so the count
-       is read back off it rather than trusted from the words. */
-    const mult = num(x.mult, 1) || 1;
-    const said = String(x.serve || '');
-    /* Tom, 2026-09-18: "1 Serving bug still persists". A row whose amount was
-       edited kept its old words, and "1 serving" starts with a digit so the
-       rule below trusted it. The count is worked out from the food's own
-       serving sizes wherever the words name one of them. */
-    const own = meal1Serve(x);
-    const serveText = own ? serveLabel(own, mult)
-      : (Math.abs(mult - 1) > 0.001 && said && !/×/.test(said) && !/^to target$/.test(said) && !/^[\d.]/.test(said))
-        ? r1(mult) + ' × ' + said.replace(/^1\s+/, '') : said;
-    /* when it was eaten: Tom, 2026-09-18, "Food entry should have a time stamp" */
-    const when = x.at || (x.t ? Journal.hhmm(x.t) : '');
-    const marks = [when ? clockLabel(when) : '', esc(serveText), r1(x.amt) + ' ' + esc(x.unit || '')]
-      .concat(errTag(x.err) ? [errTag(x.err)] : []).concat(x.acct ? [esc(x.acct)] : []);
-    r.innerHTML = '<span class="nm">' + esc(x.name) + '<small>' + marks.filter(Boolean).join(' · ') + '</small></span>' +
-      '<span class="fig">' + (x.kcal != null ? Math.round(x.kcal) : '-') + '<small>' + (x.p != null ? r1(x.p) + 'g' : '-') + ' protein</small></span>';
-    const del = el('button', 'x', '✕');
-    del.onclick = e => {
-      e.stopPropagation();
-      const row = Object.assign({}, x); delete row.key;
-      Rec.del('meal', d, x.key); mealSpend(d, x.key, null); Mobile.feedback('untick'); draw();
-      UI.undo('removed <b>' + esc(x.name) + '</b>',
-        () => { Rec.set('meal', d, x.key, row); mealSpend(d, x.key, row); draw(); });
-    };
-    r.appendChild(del);
-    /* Tap edits this serving. Hold asks the wider question — because "change
-       what I ate" and "change what this food is" are genuinely different, and
-       one of them rewrites history. */
-    r.onclick = () => mealSheet(x, d);
-    Mobile.hold(r, e => mealMenu(x, d, e), { skip: '.x', dots: del, dotsLabel: 'More for ' + x.name });
-    c2.appendChild(r);
-  });
-  const b = el('button', 'btn go wide', 'Log food');
-  b.style.marginTop = 'var(--s-2)';
-  b.onclick = foodPicker;
-  c2.appendChild(b);
-  /* Quieter on purpose: a one-off leaves nothing behind to log again, so it is
-     the wrong default. It is here for a restaurant meal you will never eat
-     twice, where adding it to the database is just litter.
-     Hidden 2026-10-08: the blank rows in this card do its job (Tom, "Yes" to
-     hiding it). oneOffSheet stays, so bringing it back is this one line. */
-  const ONE_OFF_BUTTON = false;
-  if (ONE_OFF_BUTTON) {
-    const one = el('button', 'btn wide quiet', 'One-off');
-    one.style.marginTop = 'var(--s-2)';
-    one.onclick = oneOffSheet;
-    c2.appendChild(one);
-  }
-  m.appendChild(c2);
+  return c;
 }
 
 /* ── MONEY ── */
@@ -6330,6 +6666,8 @@ function wireDaySwipe() {
    under it. So a draw that arrives mid-draw is held and run once after. */
 let drawing = false, drawAgain = false;
 function draw() {
+  /* the Food table is being typed in: it redraws when the caret leaves */
+  if (TAB === 'food' && foodBusy()) { foodPending = true; return; }
   if (drawing) { drawAgain = true; return; }
   drawing = true;
   /* the held draw runs inside the guard too, and at most twice more, so a
