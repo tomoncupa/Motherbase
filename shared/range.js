@@ -1,4 +1,4 @@
-/* shared/range.js — 0.3.2 — a training history as a woodblock print.
+/* shared/range.js — 0.3.3 — a training history as a woodblock print.
 
    Tom, 2026-09-20 and 2026-09-22: training blocks drawn as mountains and
    sessions as trees, in the manner of ukiyo-e, "meant to be a nice
@@ -61,7 +61,7 @@
 (function (g) {
 'use strict';
 
-var VERSION = '0.3.2';
+var VERSION = '0.3.3';
 var DAY = 86400000, TILE = 1024, PER_DAY = 5;
 var PRINTS = [{ id: 'fuji', name: 'FUJI' }, { id: 'ink', name: 'INK' }, { id: 'dusk', name: 'DUSK' }];
 
@@ -1176,8 +1176,16 @@ function mount(box, data, height, opts) {
     else say();
   });
   build(false);
+  /* rebuilt on the next frame, never inside the observer: a rebuild can
+     change the page's size in the same frame, which WebKit reports as a
+     ResizeObserver loop */
+  var rso = 0;
   if (g.ResizeObserver) new g.ResizeObserver(function () {
-    if (Math.abs(box.clientWidth - lastW) > 4 || (!placed && box.clientWidth)) build(true);
+    if (rso) return;
+    rso = (g.requestAnimationFrame || setTimeout)(function () {
+      rso = 0;
+      if (Math.abs(box.clientWidth - lastW) > 4 || (!placed && box.clientWidth)) build(true);
+    });
   }).observe(box);
   return {
     redraw: function () { build(true); },
