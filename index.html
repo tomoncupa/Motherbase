@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.64, 2026-10-09">
+<meta name="mb-version" content="1.0.65, 2026-10-09">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -576,6 +576,8 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .row.li-r::before{content:'';position:absolute;left:0;top:var(--s-2);bottom:var(--s-2);width:var(--s-1);border-radius:var(--radius-sm,3px);background:var(--acc)}
 .li-l{flex:0 0 11em;font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--dim)}
 .li-v{flex:0 0 auto;font-family:var(--f1);font-size:var(--f-7);color:var(--txt);letter-spacing:.02em;line-height:var(--lh-tight);font-variant-numeric:tabular-nums}
+/* the bottom of a fraction: the target the top is measured against */
+.li-v small{font-size:var(--f-3);color:var(--dim);letter-spacing:.04em}
 .li-n{flex:1 1 auto;min-width:0;font-size:var(--f-1);color:var(--dim2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .li-d{flex:0 0 auto;font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--txt);font-variant-numeric:tabular-nums}
 .li-d.same{color:var(--dim2)}
@@ -3005,6 +3007,8 @@ const WIDGETS = {
         n: n, sessions: Object.keys(trained).length, meals: meals, foodDays: fd.length,
         base: base, vs: tdee ? 'maintenance' : 'target',
         diff: base && fd.length ? fd.reduce((a, d) => a + kcal[d] - base, 0) / fd.length : null,
+        eat: fd.length ? fd.reduce((a, d) => a + kcal[d], 0) / fd.length : null, tgt: tgt, tdee: tdee,
+        stepGoal: Number((((Rec.map('field') || {}).steps) || {}).target) || 0,
         stepDays: steps.length, steps: steps.length ? steps.reduce((a, v) => a + v, 0) / steps.length : null,
       };
     },
@@ -3037,12 +3041,19 @@ const WIDGETS = {
       else row('TRAINING', '\u2014', 'nothing logged in TRAIN', '', '');
       row('MEALS TRACKED', num(perDay(a), 1), 'a day \u00b7 ' + a.foodDays + ' of ' + n + ' days',
         b.foodDays ? chg(perDay(a), perDay(b), 1) : '', b.foodDays ? num(perDay(b), 1) + ' a day' : 'no food logged');
-      if (a.diff == null) row('CALORIES', '\u2014', a.base ? 'no food logged' : 'no maintenance or target in STATUS', '',
-        b.diff == null ? '' : sign(b.diff) + ' a day');
-      else row(a.diff > 0 ? 'SURPLUS' : 'DEFICIT', sign(a.diff), 'kcal a day \u00b7 vs ' + num(Math.round(a.base), 0) + ' ' + a.vs,
-        b.diff == null ? '' : chg(Math.round(a.diff), Math.round(b.diff), 0), b.diff == null ? 'no food logged' : sign(b.diff) + ' a day');
+      /* Calories and steps as fractions of their targets (Tom, 2026-10-09:
+         "I want data to be displayed as fractions"): the average a day over
+         the target. Training and meals have no target, so they stay
+         averages over the stretch. Calories are measured against STATUS's
+         calorie target, or maintenance when there is no target. */
+      const frac = (top, bottom) => num(Math.round(top), 0) + (bottom ? '<small> / ' + num(Math.round(bottom), 0) + '</small>' : '');
+      const kGoal = a.tgt || a.tdee, kWas = b.eat == null ? null : Math.round(b.eat);
+      if (a.eat == null) row('CALORIES', '\u2014', kGoal ? 'no food logged' : 'no target or maintenance in STATUS', '',
+        kWas == null ? '' : num(kWas, 0) + ' a day');
+      else row('CALORIES', frac(a.eat, kGoal), 'a day' + (kGoal ? ' \u00b7 ' + num(Math.abs(Math.round(a.eat - kGoal)), 0) + (a.eat > kGoal ? ' over ' : ' under ') + (a.tgt ? 'target' : 'maintenance') : '') + ' \u00b7 ' + a.foodDays + ' of ' + n + ' days',
+        kWas == null ? '' : chg(Math.round(a.eat), kWas, 0), kWas == null ? 'no food logged' : num(kWas, 0) + ' a day');
       if (a.steps == null) row('STEPS', '\u2014', 'no steps logged', '', b.steps == null ? '' : num(Math.round(b.steps), 0) + ' a day');
-      else row('STEPS', num(Math.round(a.steps), 0), 'a day \u00b7 ' + a.stepDays + ' of ' + n + ' days',
+      else row('STEPS', frac(a.steps, a.stepGoal), 'a day \u00b7 ' + a.stepDays + ' of ' + n + ' days',
         b.steps == null ? '' : chg(Math.round(a.steps), Math.round(b.steps), 0), b.steps == null ? 'no steps logged' : num(Math.round(b.steps), 0) + ' a day');
       body.appendChild(list);
     },
