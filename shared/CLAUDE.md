@@ -317,6 +317,12 @@ should be ON the mountains."
   need, an empty stretch a 28px valley. Height still volume a week.
   Measured: 14, 45 and 62 day blocks all 452px at 1600, 240px at 390,
   every tree on its own block.
+- **0.5.1, 2026-10-09**: 0.5.0 placed every day off the blocks-only list,
+  so a history with no blocks drew all its trees at the left edge (Marc,
+  81 sessions on one spot). And everyone has a **Block 1** (Tom: "Give
+  everyone a default Block 1"): training before the first block, or all of
+  it with none, is a mountain named Block 1. Drawn only (`auto: true` in
+  `layout`), never a row; `Range.blocksOf` does not include it.
 
 ## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
 

@@ -1,4 +1,4 @@
-/* shared/range.js — 0.5.0 — a training history as a woodblock print.
+/* shared/range.js — 0.5.1 — a training history as a woodblock print.
 
    Tom, 2026-09-20 and 2026-09-22: training blocks drawn as mountains and
    sessions as trees, in the manner of ukiyo-e, "meant to be a nice
@@ -62,7 +62,7 @@
 (function (g) {
 'use strict';
 
-var VERSION = '0.5.0';
+var VERSION = '0.5.1';
 var DAY = 86400000, TILE = 1024, PER_DAY = 5;
 var PRINTS = [{ id: 'fuji', name: 'FUJI' }, { id: 'ink', name: 'INK' }, { id: 'dusk', name: 'DUSK' }];
 
@@ -206,6 +206,11 @@ function layout(data, base, boxW, H, perDay) {   /* `base` is ignored since 0.3.
   var bl = resolveBlocks(data.phases, to);
   var from = ss.length ? ss[0].date : (bl.length ? bl[0].start : to);
   if (bl.length && bl[0].start < from) from = bl[0].start;
+  /* everyone has a Block 1 (0.5.1, Tom, 2026-10-09: "Give everyone a
+     default Block 1"): training before the first block, or all of it when
+     there is none, is a mountain of its own. Drawn only; no row is written */
+  if (ss.length && (!bl.length || ss[0].date < bl[0].start))
+    bl.unshift({ name: 'Block 1', start: from, end: bl.length ? addDays(bl[0].start, -1) : to, auto: true });
   var L = { H: H, hz: Math.round(H * 0.76), ss: ss, from: from, to: to, blocks: bl,
             peaks: [], trees: [], labels: [], years: [], empty: !ss.length && !bl.length };
   L.total = stats(ss);
@@ -241,16 +246,20 @@ function layoutTime(L, boxW, perDay) {
   secs.forEach(function (s) { s.w *= grow; s.x = at; at += s.w; s.per = s.w / s.n; });
   L.W = Math.ceil(at + right);
   L.per = Math.min.apply(null, secs.map(function (s) { return s.per; }).concat([pitch]));
+  /* `all` keeps every stretch: `secs` is cut to the blocks below, and an
+     axis read off that left a history with no blocks all at the left edge
+     (0.5.1, Marc's 81 sessions on one spot) */
+  var all = secs.slice();
   L.X = function (d) {
-    if (!secs.length) return left;
-    var s = secs[0];
-    for (var i = 0; i < secs.length; i++) { if (secs[i].start <= d) s = secs[i]; else break; }
+    if (!all.length) return left;
+    var s = all[0];
+    for (var i = 0; i < all.length; i++) { if (all[i].start <= d) s = all[i]; else break; }
     var k = clamp(days(s.start, d), 0, s.n - 1);
     return s.x + (k + 0.5) * s.per;
   };
   L.perAt = function (d) {
-    var p = secs.length ? secs[0].per : pitch;
-    secs.forEach(function (s) { if (s.start <= d) p = s.per; });
+    var p = all.length ? all[0].per : pitch;
+    all.forEach(function (s) { if (s.start <= d) p = s.per; });
     return p;
   };
   /* no hills since 0.4.0 (Tom, 2026-10-08: "No hills, 1 Block - 1
