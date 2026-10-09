@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.19, 2026-10-08">
+<meta name="mb-version" content="1.0.20, 2026-10-09">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -798,11 +798,15 @@ function drawBox(col) {
    volume, so the profile could say a session happened and never what was in
    it. Sets are grouped by exercise and left in the order they were done,
    which is the order a coach reads them back. A warmup is still out of the
-   volume, and still out of the lifts: it is not what they worked at. */
+   volume, and still out of the lifts: it is not what they worked at.
+   A warmup is TRAIN's: marked, else "warmup", "warm up" or "wu" in its
+   comment, and a stored 0 beats the comment (1.0.20). */
+const warmSet = s => s.warm === 1 || s.warm === true ? true : s.warm === 0 || s.warm === false ? false
+  : !!s.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(s.note);
 function sessionsOf(pid) {
   const ex = exOf(pid), by = {};
   setsOf(pid).forEach(r => {
-    const s = r.payload; if (s.warm) return;
+    const s = r.payload; if (warmSet(s)) return;
     const d = by[r.date] || (by[r.date] = { date: r.date, vol: 0, sets: 0, ex: [], lifts: [], byEx: {} });
     d.vol += (+s.kg || 0) * (+s.r || 0);
     d.sets++;
@@ -835,7 +839,7 @@ function sessionsOf(pid) {
 function liftsOf(pid) {
   const ex = exOf(pid), by = {};
   setsOf(pid).forEach(r => {
-    const s = r.payload; if (s.warm || !(s.kg > 0) || !(s.r > 0)) return;
+    const s = r.payload; if (warmSet(s) || !(s.kg > 0) || !(s.r > 0)) return;
     const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', best: 0, bs: null, days: {}, last: '' });
     x.days[r.date] = 1;
     if (r.date > x.last) x.last = r.date;
@@ -858,8 +862,6 @@ function liftsOf(pid) {
    at the end does not read as lost strength. A client with no blocks gets
    their last eight weeks instead. Warmups out, by TRAIN's rule. */
 let bkAt = -1, bkFor = '';
-const warmSet = s => s.warm === 1 || s.warm === true ? true : s.warm === 0 || s.warm === false ? false
-  : !!s.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(s.note);
 function blockLifts(pid, a, z) {
   const ex = exOf(pid), by = {};
   setsOf(pid).forEach(r => {
