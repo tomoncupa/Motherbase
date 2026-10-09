@@ -310,6 +310,13 @@ should be ON the mountains."
   it is on the page opens on the latest session once placed; `opts.perDay`
   lowers the 5px a day floor (COACH passes 2). 0.3.3: a resize rebuilds on
   the next frame, not inside the observer.
+- **0.5.0, 2026-10-09** (Tom, from COACH: "Don't make the mountains wider
+  to represent length"): every block is the same width, the busiest
+  block's trees at `2 x perDay` apart, and a day stands where its date
+  falls inside its own block. Time outside a block is as wide as its trees
+  need, an empty stretch a 28px valley. Height still volume a week.
+  Measured: 14, 45 and 62 day blocks all 452px at 1600, 240px at 390,
+  every tree on its own block.
 
 ## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
 

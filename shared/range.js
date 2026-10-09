@@ -1,4 +1,4 @@
-/* shared/range.js — 0.4.0 — a training history as a woodblock print.
+/* shared/range.js — 0.5.0 — a training history as a woodblock print.
 
    Tom, 2026-09-20 and 2026-09-22: training blocks drawn as mountains and
    sessions as trees, in the manner of ukiyo-e, "meant to be a nice
@@ -28,12 +28,12 @@
 
    ── the measures ──  (one picture, all four at once)
 
-     BLOCKS    a mountain each, as wide as the dates it ran.
+     BLOCKS    a mountain each, every one the same width however long it
+               ran (0.5.0; as wide as its dates before that).
      SESSIONS  a tree each; how close they stand is how often.
      SETS      a tree is taller for more sets that session.
-     VOLUME    a mountain or hill is taller for more volume a week, so its
-               width is how long and its height how hard, and its area is
-               the work. A history with no weight in it (bodyweight only)
+     VOLUME    a mountain is taller for more volume a week: its height is
+               how hard. A history with no weight in it (bodyweight only)
                measures its mountains in sets a week instead.
    Heights are linear in the measure above a floor, so a tree twice as tall
    (above the smallest) is twice the sets. Mountains and hills are scaled
@@ -51,7 +51,9 @@
 
    ── size ──
 
-   The timeline is 5 pixels a day at the least, so years are long. It is
+   Since 0.5.0 trees stand at least 2 x perDay (10) pixels apart on the
+   busiest block, every block is that block's width, and a long history is
+   long. It is
    drawn in tiles of 1024 pixels, only the ones near the screen, and tiles far
    away give their memory back: an iPhone refuses one canvas that wide at 3x.
    Everything is placed in whole-picture coordinates and seeded from them, so
@@ -60,7 +62,7 @@
 (function (g) {
 'use strict';
 
-var VERSION = '0.4.0';
+var VERSION = '0.5.0';
 var DAY = 86400000, TILE = 1024, PER_DAY = 5;
 var PRINTS = [{ id: 'fuji', name: 'FUJI' }, { id: 'ink', name: 'INK' }, { id: 'dusk', name: 'DUSK' }];
 
@@ -216,25 +218,51 @@ function layout(data, base, boxW, H, perDay) {   /* `base` is ignored since 0.3.
   return L;
 }
 
+/* The axis is cut into stretches: each block, and each run of days outside
+   one. Since 0.5.0 every block gets the SAME width, whatever its length
+   (Tom, 2026-10-09: "Don't make the mountains wider to represent length"),
+   wide enough for the busiest block's trees at one pitch apart. A stretch
+   outside a block is as wide as its trees need, and an empty one is a short
+   valley. Inside a stretch, a day stands where its date falls. If it all
+   comes short of the box, every stretch grows by the same share. */
 function layoutTime(L, boxW, perDay) {
-  var H = L.H, span = days(L.from, L.to) + 1;
-  var left = 34, right = 96;
-  var per = Math.max(perDay || PER_DAY, (boxW - left - right) / span);
-  L.per = per;
-  L.W = Math.ceil(left + span * per + right);
-  L.X = function (d) { return left + (days(L.from, d) + 0.5) * per; };
-  var secs = L.blocks.map(function (b) { return { kind: 'block', name: b.name, start: b.start, end: b.end }; });
+  var H = L.H, left = 34, right = 96, GAP = 28;
+  var pitch = 2 * (perDay || PER_DAY);
+  var secs = L.blocks.map(function (b) { return { kind: 'block', name: b.name, start: b.start, end: b.end }; })
+    .concat(outside(L.blocks, L.from, L.to).map(function (r) { return { kind: 'gap', start: r.start, end: r.end }; }))
+    .sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+  secs.forEach(function (s) { s.list = within(L.ss, s.start, s.end); s.st = stats(s.list); s.n = days(s.start, s.end) + 1; });
+  var most = 0;
+  secs.forEach(function (s) { if (s.kind === 'block') most = Math.max(most, s.st.sessions); });
+  var BW = Math.max(H, most * pitch);
+  secs.forEach(function (s) { s.w = s.kind === 'block' ? BW : Math.max(GAP, s.st.sessions * pitch); });
+  var sum = secs.reduce(function (a, s) { return a + s.w; }, 0) || 1;
+  var grow = Math.max(1, (boxW - left - right) / sum), at = left;
+  secs.forEach(function (s) { s.w *= grow; s.x = at; at += s.w; s.per = s.w / s.n; });
+  L.W = Math.ceil(at + right);
+  L.per = Math.min.apply(null, secs.map(function (s) { return s.per; }).concat([pitch]));
+  L.X = function (d) {
+    if (!secs.length) return left;
+    var s = secs[0];
+    for (var i = 0; i < secs.length; i++) { if (secs[i].start <= d) s = secs[i]; else break; }
+    var k = clamp(days(s.start, d), 0, s.n - 1);
+    return s.x + (k + 0.5) * s.per;
+  };
+  L.perAt = function (d) {
+    var p = secs.length ? secs[0].per : pitch;
+    secs.forEach(function (s) { if (s.start <= d) p = s.per; });
+    return p;
+  };
   /* no hills since 0.4.0 (Tom, 2026-10-08: "No hills, 1 Block - 1
      Mountain"): time outside a block is flat ground, and its trees stand
      on the ground */
-  secs.forEach(function (s) { s.list = within(L.ss, s.start, s.end); s.st = stats(s.list); });
-  secs = secs.filter(function (s) { return s.kind === 'block' || s.st.sessions > 0; });
+  secs = secs.filter(function (s) { return s.kind === 'block'; });
   var maxB = 0, maxH = 0;
   secs.forEach(function (s) { var m = perWeek(L, s); if (s.kind === 'block') maxB = Math.max(maxB, m); else maxH = Math.max(maxH, m); });
   var room = L.hz - H * 0.19;   /* headroom for the tallest tree on the tallest summit */
   secs.forEach(function (s) {
     var m = perWeek(L, s);
-    var x0 = L.X(s.start) - per / 2, x1 = L.X(s.end) + per / 2;
+    var x0 = s.x, x1 = s.x + s.w;
     s.x0 = x0; s.x1 = x1; s.cx = (x0 + x1) / 2;
     if (s.kind === 'block') {
       s.h = room * (0.46 + 0.54 * (maxB ? m / maxB : 0.5));
@@ -262,7 +290,7 @@ function layoutTime(L, boxW, perDay) {
   L.ss.forEach(function (s, i) {
     var r = rng(hashStr(s.date));
     var f = smax ? s.sets / smax : 0.5;
-    var x = L.X(s.date) + (r() - 0.5) * Math.min(per * 0.6, 3), top = skyline(L, x);
+    var x = L.X(s.date) + (r() - 0.5) * Math.min(L.perAt(s.date) * 0.6, 3), top = skyline(L, x);
     L.trees.push({ x: x, y: top + 1 + (L.hz - top) * down[i % 3], row: i % 3, h: tmin + (tmax - tmin) * f,
                    s: s, pr: s.pr, seed: hashStr('t' + s.date) });
   });
@@ -1076,8 +1104,9 @@ function describe(x, L, opts) {
     scrollable and scrolled to today, and two switches under it.
     data: { sessions: [{date, vol, sets, pr}], phases: [{name, start, end}], to }
     opts: { print, volume(kg) → text, onChange({print}), perDay }
-    `perDay` lowers the 5 pixels a day floor, so a wide desk card can hold a
-    whole year: COACH passes 2 (2026-10-08, "I don't see 3 mountains").
+    `perDay` (5) sets the gap between trees, twice it, so a wide desk card
+    can hold a whole year: COACH passes 2 (2026-10-08, "I don't see 3
+    mountains"). The picture still grows to fill its box.
     The caller keeps the choice (TRAIN and COACH each in a setting). */
 function mount(box, data, height, opts) {
   opts = opts || {};
