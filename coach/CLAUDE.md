@@ -308,7 +308,7 @@ client, and Tom's own `set`, `exercise` and `tick` counts did not move.
   every session with that day's set at the pointer), then every lift on one
   chart as a share of its start. Arrows walk the blocks; no blocks means the
   last 8 weeks. BEST is the block's peak, not the last session, so a deload
-  does not read as lost strength [Claude's call, not Tom's]. A lift needs two
+  does not read as lost strength (Claude's call, Tom's "ok" 2026-10-09). A lift needs two
   days in the block to show. Warmups by TRAIN's rule (`warmSet`).
 - **Every reader of a client's sets uses `warmSet`** since 1.0.20: the week
   strip, RECENT SESSIONS (`sessionsOf`) and the all-time STRENGTH table
