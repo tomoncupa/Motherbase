@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.59, 2026-10-08">
+<meta name="mb-version" content="1.0.60, 2026-10-09">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2331,6 +2331,8 @@ var NT_MON = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oc
 var NT_MONRE = '(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept|sep|oct|nov|dec)\\.?';
 var NT_WDRE = '(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?\\.?';
 var NT_HEAD = /^(week|wk|day|session|workout|block|phase)\s*\d+\b/i;
+/* A machine or box setting written with a number: Height 5, Seat 3, Pin 7 */
+var NT_SETUP = /\b(height|seat|pin|notch|hole|level|setting)\s*:?\s*\d+(?:\.\d+)?\b\s*,?/gi;
 
 /* one line with its bullet, numbering, checkbox and superset label off */
 var ntClean = function (s) {
@@ -2682,6 +2684,10 @@ TRAIN.parseNotes = function (text, opt) {
     if (dt) { newDay(dt.date, dt.name); return; }
     if (!day) newDay(null, '');
     if (NT_HEAD.test(line)) { day.heads.push(ntName(line)); item = null; return; }
+    /* "Height 5", "Seat 3": a machine setting, never a name and never reps.
+       Taken out first and kept on the line's first set as a comment. */
+    var setup = [], bare = line.replace(NT_SETUP, function (m) { setup.push(ntName(m)); return ' '; }).replace(/\s+/g, ' ').trim();
+    if (setup.length && /[a-z0-9]/i.test(bare)) line = bare; else setup = [];
     var sp = ntSplit(line), got = sp.rest ? ntSets(sp.rest) : { sets: [], w: null, note: '', words: [] };
     var name = ntName(sp.name);
     /* 3x10 push ups: numbers first, then a name this log knows */
@@ -2689,6 +2695,7 @@ TRAIN.parseNotes = function (text, opt) {
         (!item || TRAIN.noteMatch(got.words.join(' '), list))) { name = got.words.join(' '); got.note = ''; }
     if (name && /^(rest|note|notes|total|volume|bodyweight|bw|weight)$/i.test(name)) name = '';
     if (name) { item = { name: name, sets: [], w: null, line: i + 1 }; day.items.push(item); }
+    if (setup.length && item) item.setup = (item.setup ? item.setup + ', ' : '') + setup.join(', ');
     if (!got.sets.length && !got.w) {
       if (!name) unread.push({ n: i + 1, text: raw.trim(), why: 'no sets in it' });
       return;
@@ -2699,19 +2706,26 @@ TRAIN.parseNotes = function (text, opt) {
     got.sets.forEach(function (s) { if (!s.w) s.w = got.w || item.w; });
     if (got.w) item.w = got.w;
     if (got.note && got.sets.length) got.sets[got.sets.length - 1].note = got.note;
+    if (item.setup && got.sets.length) {
+      got.sets[0].note = (item.setup + ' ' + (got.sets[0].note || '')).trim();
+      item.setup = '';
+    }
     [].push.apply(item.sets, got.sets);
   });
-  /* A name with no sets under it is a heading: the day's name if it comes
-     before the first exercise, otherwise a line not read. */
+  /* A name with no sets under it is a comment on the session (Tom,
+     2026-10-09: "Those are more session comments"). The first one before
+     any exercise names the day when its date line did not; every other one
+     becomes the day's comment, never a line thrown away. */
   days.forEach(function (d) {
-    var seenSets = false;
+    var notes = [];
+    d.heads.forEach(function (h) { if (!d.name) d.name = h; else if (h !== d.name) notes.push(h); });
     d.items = d.items.filter(function (it) {
-      if (it.sets.length) { seenSets = true; return true; }
-      if (!seenSets) d.heads.push(it.name);
-      else unread.push({ n: it.line, text: it.name, why: 'a name with no sets under it' });
+      if (it.sets.length) return true;
+      if (!d.name && !d.items.some(function (x) { return x.sets.length && x.line < it.line; })) d.name = it.name;
+      else notes.push(it.name);
       return false;
     });
-    if (!d.name && d.heads.length) d.name = d.heads[0];
+    d.note = notes.join('\n');
     d.items.forEach(function (it) {
       it.ex = TRAIN.noteMatch(it.name, list);
       it.cat = it.ex ? null : TRAIN.noteCat(it.name);
@@ -2743,6 +2757,7 @@ TRAIN.importNotes = function (res, opt) {
     if (!date) return;
     (byDate[date] || (byDate[date] = { items: [], name: '' })).items.push.apply(byDate[date].items, d.items);
     if (d.name && !byDate[date].name) byDate[date].name = d.name;
+    if (d.note) byDate[date].note = byDate[date].note ? byDate[date].note + '\n' + d.note : d.note;
   });
   var made = {}, cats = TRAIN.cats();
   var maxOrd = 0;
@@ -2801,8 +2816,11 @@ TRAIN.importNotes = function (res, opt) {
     mine.forEach(function (s) {
       if (+s.key.split('-').pop() > n) { keep('set', date, s.key); Rec.del('set', date, s.key); }
     });
-    var ses = Rec.get('session', date, '') || {};
-    if (byDate[date].name && !ses.name) { keep('session', date, ''); Rec.patch('session', date, '', { name: byDate[date].name }); }
+    var ses = Rec.get('session', date, '') || {}, ch = {};
+    if (byDate[date].name && !ses.name) ch.name = byDate[date].name;
+    var nt = byDate[date].note;
+    if (nt && (ses.note || '').indexOf(nt) < 0) ch.note = ses.note ? ses.note + '\n' + nt : nt;
+    if (Object.keys(ch).length) { keep('session', date, ''); Rec.patch('session', date, '', ch); }
     out.days++;
   });
   TRAIN.reindex();
@@ -3039,7 +3057,8 @@ TRAIN.notesBox = function (box) {
       if (date > today) why = 'in the future, left out';
       else if (logged(date)) { hasLogged = true; if (!redo) why = 'already has sets in this log, left alone'; }
       h += '<div class="nt-day"><b>' + (d.date ? ntDay(d.date) : 'NO DATE → ' + ntDay(fall)) + '</b>' +
-        UI.esc(d.name || '') + (why ? ' <em>' + why + '</em>' : '') + '</div>';
+        UI.esc(d.name || '') + (why ? ' <em>' + why + '</em>' : '') + '</div>' +
+        (d.note ? '<div class="nt-sets">Comment: ' + UI.esc(d.note.replace(/\n/g, ' · ')) + '</div>' : '');
       d.items.forEach(function (it) {
         var ex = it.ex && TRAIN.exercises()[it.ex];
         h += '<div class="nt-ex"><span>' + UI.esc(it.name) + '</span><i>' +

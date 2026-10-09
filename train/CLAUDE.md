@@ -471,8 +471,17 @@ PASTE FROM NOTES in the import panel, so COACH's IMPORT THEIR LOG has it too.
   or a gap above it, so 10/8 under an exercise stays reps and 12.5 stays a
   weight. Month first unless a date in the notes proves otherwise; the preview
   offers the switch only when it is a guess. No year: the latest past one.
-- **A name with no sets under it is a heading**: the day's name before the
-  first exercise, a "Not read" line after. Every line not read is listed.
+- **A name with no sets under it is a session comment** (1.0.60, Tom: "Those
+  are more session comments"): the first one before any exercise names the
+  day when its date line did not, and every other one is written into the
+  day's session comment and shown in the preview. Until 1.0.60 one under a
+  named date line was dropped without a word, and one after an exercise was
+  "Not read".
+- **A setting with a number is never a name or reps** (`NT_SETUP`: Height,
+  Seat, Pin, Notch, Hole, Level, Setting): "Pushups Height 5, 10 12 15" is
+  Push Ups with "Height 5" on its first set, not "Pushups Height" x 5.
+  Clients' logs imported 2026-10-08 had headings filed as exercises; they
+  were cleaned by hand, and today's parser did not reproduce that shape.
 - **Set shapes are table-tested**, 31 of them, in the browser: plain `a x b` is
   weight x reps, except sets x reps when a weight is named elsewhere on the
   line (a <= 10) or a <= 6 alone; three numbers take the larger end as the
