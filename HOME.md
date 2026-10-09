@@ -237,3 +237,19 @@ Pass B (journal and todos) finished from branch `home-polish-wip`, and pass C (t
 - Empty states are plain facts (the card title opens the app).
 
 Watched: the widget harness on all 46 widgets at 1920, 390 touch and an empty store, no page errors; a TODAY tick by click and by tap. Review 142/142 Chromium 1280, WebKit 141/142 (the known smoke-frame fail). Not on his screens. A TODO/UPCOMING tick was not pressed (TODO is not on the default board). Not done: pass D (money, food, desk tools), `home-D-desk.json`; subjective items wait for Tom's suggestions list.
+
+## 2026-10-09, HOME 1.0.62: widget polish D
+
+Pass D (money, food, desk tools) from `Claude outputs/audit-2026-10-08/home-D-desk.json`. The commit says 1.0.61: another session shipped its own 1.0.61 (LOCKED IN is CONSISTENCY) minutes before, so the file is 1.0.62.
+
+- **SPEND** is "the last 7 days against the 7 before", in pesos, and leaves out money moved: a spend whose category (its `mark`, else the longest matching `rule`) is in WEALTH's `move` group. A copy of WEALTH's `catOf`/`isMove`; change both. An account is found by key or by name, so one account is one bar; no account reads "No account".
+- **No target, no bar** (`meter(..., null)`): POTS and MACROS draw the amount line only. POTS has a header (the total in pots) and capitals like MACROS.
+- **MACROS reads STATUS's rule** (`statusTargets`): STATUS's defaults when nothing is set, calories from the switched-on macros in `macros` mode. In `tdee` mode the calories line has no target: the estimate lives only in STATUS (`TD.targetIntake`), and moving it to `shared/` is a foundation job. A meal with no figure for a macro is counted apart ("1 without"), never as 0.
+- **MEALS** newest first, a blank figure a dash, the numbers in `--dim`. `clock12` writes 7:25am like the rest of the board (CLOCK too).
+- **LIFE**: its settings are the widget menu (`WIDGETS.life.menu`), so a right click or hold anywhere on the card gives one menu; Enter confirms its dialogs; the bands are First, Middle and Last everywhere; this year is drawn in `--txt`; the legend sits on the age's line; no birth year is a 44px box with SET.
+- **THE YEAR** fills its card (`.yeargrid`), today in `--txt`, days ahead as outlined slots, each square its date on hover.
+- DESK TIME's programs are ruled lines (`.hrow .d`), all six fit. TIMER's STOP shows only while it runs; its dialog title is in capitals. STOPWATCH is no longer a fit card: laps scroll inside a card that keeps its size. INTERVALS shows START after the last round (step ends the run before paint looked). CLOCK turns on the second. ALARMS' days sit on their own line. COUNTDOWN says "Deload today" and "1 day". WORLD CLOCK no longer grows an empty row. Plain-fact empty states throughout.
+
+Left for Tom (suggestions list): fixed-width digits (item 45 of the pass, suggestion 4), 44px desk buttons (suggestion 3). Left as subjective: overdue bills in the warning colour, DESK TIME durations as 4h 13m, its empty words, LIFE/STREAKS count styling.
+
+Watched: the widget harness on the 17 pass D widgets at 1920, 390 touch and an empty store, no page errors, nothing cut; by clicking in headless Chromium, 18 of 18: TIMER STOP hidden, shown, hidden; STOPWATCH 8 laps scroll in a 240px card that stays 240px after a redraw; INTERVALS 1 s, 1 round ends on START; LIFE's card menu, Enter sets 90 years, a year's menu, birth year by Enter; SPEND drops a move-category spend and counts a coffee; MACROS says "1 without". Review 142/142 Chromium 1280, WebKit 141/142 (the known smoke-frame fail). Not on his screens. BILLS with six bills scrolls inside its 3-high card, as built.
