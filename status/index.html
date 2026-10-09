@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.67, 2026-10-08">
+<meta name="mb-version" content="1.0.68, 2026-10-09">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -316,6 +316,7 @@ button.islehero{background:none;border:0;padding:0;margin:0;color:inherit;
   gap:var(--s-1);align-items:start}
 .logrow.fhead{align-items:end;color:var(--text-muted);font-size:var(--f-1)}
 .logrow .fh{text-align:center;white-space:nowrap}
+.logrow.fhead h2{margin:0;white-space:nowrap}
 .logrow .fnm{min-width:0}
 .logrow .fnm small{display:block;color:var(--text-muted);font-size:var(--f-1);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;padding:var(--s-1) var(--s-2) 0}
@@ -347,6 +348,11 @@ button.islehero{background:none;border:0;padding:0;margin:0;color:inherit;
 .macro.k4 .track i{background:var(--data-4)}
 .macro.over .track i{background:var(--warn)}
 /* no target, so the bar describes rather than measures */
+/* Protein, Carbs and Fat side by side on Food: the label over the number */
+.macros3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-3);margin-bottom:var(--s-3)}
+.macros3 .macro{margin-bottom:0;min-width:0}
+.macros3 .macro .top{flex-direction:column;align-items:flex-start;gap:0;margin-bottom:var(--s-1)}
+.macros3 .macro .top .n{margin-left:0;white-space:nowrap}
 .macro.untargeted{opacity:.62}
 .macro.untargeted .track i{background:var(--text-muted)}
 
@@ -4763,7 +4769,7 @@ function drawFood(m) {
   seamButton(m);
 
   const list = meals(d);
-  const c2 = card('Logged', list.length ? money(t.price) : '');
+  const c2 = card(null);
   c2.id = 'foodlog';
   c2.appendChild(foodGrid(d, list));
   const b = el('button', 'btn go wide', 'Log food');
@@ -4854,7 +4860,8 @@ function mealMarks(x) {
 function foodGrid(d, list) {
   const g = el('div', 'fgrid');
   const head = el('div', 'logrow fhead');
-  head.appendChild(el('span', 'fnm', 'Name'));
+  /* the card's title is the Name column's heading: one line, not two */
+  head.appendChild(el('h2', 'fnm', foodLoggedHead(d)));
   FOODCOLS.forEach(k => head.appendChild(el('span', 'fh', k[1])));
   head.appendChild(el('span'));
   g.appendChild(head);
@@ -4867,6 +4874,11 @@ function foodGrid(d, list) {
     if (!foodBusy() && foodPending) { foodPending = false; draw(); }
   }, 0));
   return g;
+}
+
+function foodLoggedHead(d) {
+  const price = dayTotals(d).price;
+  return 'Logged' + (price > 0 ? '<span class="sub">' + esc(money(price)) + '</span>' : '');
 }
 
 /* Enter in a row's last box goes to the next row's name */
@@ -5103,11 +5115,8 @@ function foodCommit(d, r, x, did, nm, box) {
   }
   const sum = document.getElementById('foodsum');
   if (sum) sum.replaceWith(foodSumCard(d));
-  const h = document.querySelector('#foodlog h2');
-  if (h) {
-    const t = dayTotals(d);
-    h.innerHTML = 'Logged' + (meals(d).length ? '<span class="sub">' + esc(money(t.price)) + '</span>' : '');
-  }
+  const h = document.querySelector('#foodlog .fhead h2');
+  if (h) h.innerHTML = foodLoggedHead(d);
 }
 
 /* a typed meal, kept: Tom, 2026-10-08, a hold option to save it to the foods */
@@ -5128,8 +5137,13 @@ function mealToFood(x) {
 
 /* the day's totals, at the top of Food; drawn again in place while he types */
 function foodSumCard(d) {
+  /* Tom, 2026-10-09, all four of: no title row (the big number says it), no
+     Calories bar (the same number again), Protein, Carbs and Fat side by side,
+     and Logged moved into the table's own header. "What can be done to
+     minimize this scrolling?": the Food tab was about 180px taller than his
+     iPhone's screen between the date bar and the tab bar. */
   const t = dayTotals(d), tg = TARGETS(), ct = calTarget();
-  const c = card('Food', Math.round(t.kcal).toLocaleString() + ' kcal');
+  const c = card(null);
   c.id = 'foodsum';
   const left = ct.v - Math.round(t.kcal);
   const hero = el('div', 'hero',
@@ -5143,36 +5157,35 @@ function foodSumCard(d) {
      untargeted one fills by its share of the calories you actually ate — 4
      kcal a gram for protein and carbohydrate, 9 for fat — so it still shows
      the shape of the day without inventing a goal you never set. It is drawn
-     faded and reads "31% of intake" rather than "x / y", because it is a
-     description of what happened, not progress toward anything. */
+     faded and reads "31%" rather than "x / y", because it is a description
+     of what happened, not progress toward anything. */
   const on = S.get('macroOn', { p: 1, c: 1, f: 1 });
   const KCALG = { p: 4, c: 4, f: 9 };
-  [['kcal', 'Calories', ct.v, 'k1', 'lte'], ['p', 'Protein', tg.p, 'k2', 'gte'],
-   ['c', 'Carbs', tg.c, 'k3', 'lte'], ['f', 'Fat', tg.f, 'k4', 'lte']]
+  const row3 = el('div', 'macros3');
+  [['p', 'Protein', tg.p, 'k2', 'gte'], ['c', 'Carbs', tg.c, 'k3', 'lte'], ['f', 'Fat', tg.f, 'k4', 'lte']]
    .forEach(row => {
     const key = row[0], v = t[key] || 0;
-    const targeted = key === 'kcal' || on[key];
+    const targeted = on[key];
     const w = el('div', 'macro ' + row[3] + (targeted ? '' : ' untargeted'));
     if (targeted) {
       const lim = row[2] || 0, pct = lim ? v / lim : 0;
-      const over = row[4] === 'lte' && v > lim;
-      if (over) w.className += ' over';
-      /* the band on calories only, because that is the one it changes a
-         decision about — the macros inherit the same doubt and saying so four
-         times is noise */
-      const band = (key === 'kcal' && t.kerr >= 25) ? ' ±' + Math.round(t.kerr) : '';
-      w.innerHTML = '<div class="top"><b>' + row[1] + '</b><span class="n">' + Math.round(v) + band + ' / ' + Math.round(lim) + '</span></div>' +
+      if (row[4] === 'lte' && v > lim) w.className += ' over';
+      w.innerHTML = '<div class="top"><b>' + row[1] + '</b><span class="n">' + Math.round(v) + ' / ' + Math.round(lim) + '</span></div>' +
         '<div class="track"><i style="width:' + Math.min(100, Math.round(pct * 100)) + '%"></i></div>';
     } else {
       const share = t.kcal > 0 ? (v * KCALG[key]) / t.kcal : 0;
       w.innerHTML = '<div class="top"><b>' + row[1] + '</b><span class="n derived-tag">' +
-        Math.round(v) + 'g · ' + Math.round(share * 100) + '% of intake</span></div>' +
+        Math.round(v) + 'g · ' + Math.round(share * 100) + '%</span></div>' +
         '<div class="track"><i style="width:' + Math.min(100, Math.round(share * 100)) + '%"></i></div>';
     }
-    c.appendChild(w);
+    row3.appendChild(w);
   });
+  c.appendChild(row3);
   const bits = [];
   if (on.p) bits.push(Math.max(0, Math.round(tg.p - t.p)) + 'g protein to go');
+  /* the calorie band sat on the Calories bar; it is the one doubt that
+     changes a decision, so it moved here rather than going */
+  if (t.kerr >= 25) bits.push('±' + Math.round(t.kerr) + ' kcal guessed');
   bits.push(Math.round(t.na) + 'mg sodium', Math.round(t.k) + 'mg potassium');
   if (ct.src === 'tdee') bits.push('target from measured TDEE');
   if (ct.src === 'macros') bits.push('calories from macros');
