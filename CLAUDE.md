@@ -1007,6 +1007,16 @@ answer, or take it out.
   (2026-10-08) and now re-places itself on its first real width; anything
   else that reads `clientWidth` or sets `scrollLeft` while building needs
   the same.
+- **`Rec.get` hands back the PAYLOAD, not the row.** `Rec.get(type, date,
+  key)` returns a copy of the payload or null, so `Rec.get(...).payload` is
+  always undefined and an edit guarded on it silently does nothing. STATUS's
+  Food table was written that way and its edits and renames never saved
+  until a typing test caught it before the push (2026-10-08).
+- **A save-on-leave timer per blur stacks when keys come fast.** A row that
+  saves on `focusout` after `setTimeout(0)` ran its save once per box left,
+  and with quick Enter presses every timer found the caret already gone and
+  logged the same meal five times (STATUS Food, 2026-10-08). Keep one pending
+  timer per row (`clearTimeout` first), and mark a row saved once it is.
 
 ---
 
