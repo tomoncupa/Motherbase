@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.69, 2026-10-09">
+<meta name="mb-version" content="1.0.70, 2026-10-12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -510,6 +510,8 @@ label.fl:first-child{margin-top:0}
   font-size:var(--f-4);font-weight:700}
 
 /* One letter per day. A row you can read the shape of a week from. */
+.jfold{display:flex;align-items:center;width:100%;min-height:44px;padding:0;background:none;border:0;
+  color:var(--text-muted);font:inherit;font-size:var(--f-1);text-align:left;cursor:pointer}
 .lrun{display:flex;flex-wrap:wrap;gap:var(--s-1);margin-bottom:var(--s-3)}
 .lrun .ld{flex:1 0 auto;min-width:30px;min-height:36px;padding:0;
   background:var(--surface-2);border:1px solid transparent;border-radius:var(--radius-sm);
@@ -4294,6 +4296,7 @@ function seamButton(m) {
    Paragraph or bullets, chosen per day rather than globally: some days are one
    piece of writing and some are a list, and having to pick once for all time
    makes one of those days awkward forever. */
+let FOLD_OPEN = false;   /* page memory: the fold opens for this visit only */
 function drawJournal(m) {
   const d = vd();
   const list = notes(d).filter(x => x.kind !== 'para');
@@ -4339,6 +4342,13 @@ function drawJournal(m) {
   }
 
   const wrap = el('div', 'list');
+  /* Open to-dos from before a fresh start fold into one line, so coming back
+     does not open on a wall of them. They are the same rows, untouched. */
+  const from = freshFrom();
+  const old = x => !!from && d >= from && x.kind === 'todo' && !x.done && !x.cancelled &&
+    !!x.carried && (x.due || x.date) < from;
+  const foldN = list.filter(old).length;
+  const fold = el('div', 'list');
   list.forEach((x, i) => {
     const r = el('div', 'note-row mb-bullet' + (x.done && !x.movedAway ? ' done' : '') + (x.cancelled ? ' cancelled' : ''));
     /* ── two targets, two meanings ──
@@ -4388,9 +4398,16 @@ function drawJournal(m) {
     }
     r.onclick = () => noteSheet(x, x.date || d);
     Mobile.hold(r, e => noteMenu(x, d, i, list.length, e), { dots: true, dotsLabel: 'More for this line' });
-    wrap.appendChild(r);
+    (old(x) ? fold : wrap).appendChild(r);
   });
   c.appendChild(wrap);
+  if (foldN) {
+    const tg = el('button', 'jfold mb-press mb-tap',
+      (FOLD_OPEN ? 'Hide' : 'Show') + ' ' + foldN + ' to-do' + (foldN === 1 ? '' : 's') + ' from before your fresh start');
+    tg.onclick = () => { FOLD_OPEN = !FOLD_OPEN; Mobile.feedback('select'); draw(); };
+    c.appendChild(tg);
+    if (FOLD_OPEN) c.appendChild(fold);
+  }
   m.appendChild(c);
 }
 
@@ -5540,6 +5557,97 @@ function trainedOn(date) {
   return false;
 }
 
+/* ══════════════ FRESH START ══════════════
+   Tom, 2026-10-12: "a lot of my people get depressed and have lapses in
+   tracking, and it can be overwhelming to restart from the top." Past data is
+   never touched. A fresh start is one date, `fresh.from`: the rank counts from
+   it, and open to-dos older than it fold into one line on the journal. Offered
+   on the first open after two empty days (the root brief: forgive one missed
+   day, step in at two), once per lapse, and in Settings, GRADES, any time.
+   One date, not a list, so a person who lapses often never collects chapters. */
+const freshFrom = () => S.get('fresh.from', '') || null;
+
+/* Machine-written todos (WEALTH's bills, ARC's reviews, the morning brief)
+   are not the person showing up. */
+const NOT_YOU = { wealth: 1, arc: 1, brief: 1 };
+/* A day touched by ANY entry: a reading, a meal, a set, a spend, a line in
+   the journal. Wider than the grade's `used`, which leaves out a day with
+   only a journal line so that day cannot drag a letter down. */
+function touched(date) {
+  if (Rec.all('ev', { date: date }).length || Rec.all('meal', { date: date }).length ||
+      Rec.all('spend', { date: date }).length || trainedOn(date)) return true;
+  const dr = Rec.get('day', date, '') || {};
+  if (dr.note || dr.rest) return true;
+  return Rec.all('note', { date: date }).some(r => !NOT_YOU[(r.payload || {}).src]);
+}
+/* Every day ever touched, counted. Only grows; a fresh start leaves it be. */
+function daysLoggedAll() {
+  const seen = {};
+  ['ev', 'meal', 'spend', 'set', 'session'].forEach(t => Rec.all(t).forEach(r => { if (r.date) seen[r.date] = 1; }));
+  Rec.all('day').forEach(r => { if (r.date && r.payload && (r.payload.note || r.payload.rest)) seen[r.date] = 1; });
+  Rec.all('note').forEach(r => { if (r.date && !NOT_YOU[(r.payload || {}).src]) seen[r.date] = 1; });
+  const t = Day.today();
+  return Object.keys(seen).filter(d => d <= t).length;
+}
+function lastTouched() {
+  const t = Day.today();
+  for (let i = 1; i <= 400; i++) { const d = Day.shift(t, -i); if (touched(d)) return d; }
+  return null;
+}
+function startFresh() {
+  S.set('fresh.from', Day.today());
+  Mobile.feedback('success');
+  UI.toast('Counting from today');
+  draw();
+}
+
+function freshOffer(tries) {
+  if (DESK || document.hidden) return;
+  /* the status check or another sheet is up: wait for it, never stack */
+  if (sheetH || checkOn) { if ((tries || 0) < 90) setTimeout(() => freshOffer((tries || 0) + 1), 2000); return; }
+  const t = Day.today();
+  if (touched(t)) return;
+  const last = lastTouched();
+  if (!last || Day.diff(t, last) < 3) return;
+  const from = freshFrom();
+  if (from && from > last) return;
+  if (S.get('fresh.asked', '') === last) return;
+  const n = daysLoggedAll();
+  openSheet('Welcome back', body => {
+    body.appendChild(el('div', 'note', '<b>' + n + '</b> day' + (n === 1 ? '' : 's') + ' logged so far.'));
+    body.appendChild(el('div', 'note',
+      'Start fresh from today? Your rank counts from today and older to-dos fold away. Every past day stays saved.'));
+    const bar = el('div', 'btns');
+    const go = el('button', 'btn go mb-press mb-tap', 'START FRESH');
+    go.onclick = () => { S.set('fresh.asked', last); closeSheet(); startFresh(); };
+    const no = el('button', 'btn mb-press mb-tap', 'NOT NOW');
+    no.onclick = () => { S.set('fresh.asked', last); Mobile.feedback('select'); closeSheet(); };
+    bar.appendChild(go); bar.appendChild(no);
+    body.appendChild(bar);
+  });
+}
+/* Asked only once the store is whole: TRAIN's sets are kept out of an open,
+   and on a signed-in device live sync may still be bringing the days he
+   logged elsewhere. Asking before that would greet him back from a lapse he
+   never had. If sync never goes quiet, it does not ask this time. */
+function freshWhenSettled() {
+  if (DESK) return;
+  const start = Date.now();
+  const wait = () => {
+    const C = window.Cloud, s = C && C.state ? C.state() : null;
+    if (!s) { if (Date.now() - start < 6000) setTimeout(wait, 500); else freshOffer(); return; }
+    if (!s.on) { freshOffer(); return; }
+    let got = s.gotAt, quiet = Date.now();
+    const iv = setInterval(() => {
+      const st = C.state();
+      if (st.gotAt !== got) { got = st.gotAt; quiet = Date.now(); }
+      if (st.conn && st.loaded && Date.now() - quiet >= 3000) { clearInterval(iv); freshOffer(); }
+      else if (Date.now() - start > 30000) clearInterval(iv);
+    }, 1000);
+  };
+  (Rec.need ? Rec.need('set') : Promise.resolve()).then(() => setTimeout(wait, 1500));
+}
+
 /* ── one day ── */
 function dayScore(date) {
   const live = PILLARS(), parts = [], pending = [];
@@ -5642,8 +5750,14 @@ function dayScore(date) {
    Today is never in here. It moves all day and a rank that moves all day is
    one you stop reading; it is shown beside this instead. */
 function adherence(days) {
-  const rows = [];
-  for (let i = days; i >= 1; i--) rows.push(dayScore(Day.shift(Day.today(), -i)));
+  const rows = [], from = freshFrom();
+  /* A fresh start cuts the window: days before it are kept and still drawn
+     on Trends, they just stop counting towards the letter. */
+  for (let i = days; i >= 1; i--) {
+    const d = Day.shift(Day.today(), -i);
+    if (!from || d >= from) rows.push(dayScore(d));
+  }
+  const span = rows.length;
   /* Only days that were actually used. A day with nothing on it says nothing
      about how you did, so it says nothing about the average either. */
   const scored = rows.filter(r => r.pct != null && r.used);
@@ -5654,8 +5768,8 @@ function adherence(days) {
      four is not the same week's work as four out of six. */
   const sessions = rows.filter(r => r.trained).length;
   const perWeek = num(S.get('trainPerWeek', 4), 4);
-  const want = perWeek * (days / 7);
-  const trainK = trainLetter(sessions, perWeek, days / 7);
+  const want = perWeek * (span / 7);
+  const trainK = trainLetter(sessions, perWeek, span / 7);
   const hitTraining = sessions >= Math.floor(want);
 
   /* No days to go on means no letter. Showing F would be inventing a verdict
@@ -5679,7 +5793,8 @@ function adherence(days) {
   const worst = Object.entries(lost).filter(w => w[1] > 0.5)
     .sort((a, b) => b[1] - a[1]).slice(0, 3);
 
-  return { pct: pct, rank: k ? RANKS.find(r => r.k === k) : null, days: days, rows: rows,
+  return { pct: pct, rank: k ? RANKS.find(r => r.k === k) : null, days: days, span: span,
+           from: span < days ? from : null, rows: rows,
            sessions: sessions, want: Math.floor(want), hitTraining: hitTraining,
            trainRank: trainK, perWeek: perWeek,
            worst: worst, scoredDays: scored.length, loggedDays: touched.length };
@@ -5824,8 +5939,10 @@ function daySheet(date) {
 function letterRun(days) {
   const wrap = el('div', 'lrun');
   const today = Day.today();
+  const from = freshFrom();
   for (let i = days - 1; i >= 0; i--) {
     const d = Day.shift(today, -i);
+    if (from && d < from) continue;
     const sc = d === today ? todayScore() : scoreFor(d);
     const k = sc && sc.rank ? sc.rank.k : (sc && sc.letter) || null;
     const b = el('button', 'ld' + (d === today ? ' now' : ''), k || '\u00b7');
@@ -5850,6 +5967,8 @@ function letterRun(days) {
 function weekGrid(a) {
   const rows = a.rows;               /* adherence's days, oldest first, no today */
   const g = el('div', 'wgrid');
+  /* fewer than seven columns after a fresh start */
+  if (rows.length !== 7) g.style.gridTemplateColumns = 'minmax(64px,1.4fr) repeat(' + (rows.length + 1) + ',minmax(30px,1fr))';
   const cell = (cls, html) => { const n = el('div', cls, html); g.appendChild(n); return n; };
   cell('wh', '');
   rows.forEach(r => {
@@ -5979,7 +6098,7 @@ function rankCard() {
   const days = num(S.get('rankDays', 7), 7) || 7;
   /* Set below; the letter runs read it so the row matches the window. */
   const a = adherence(days);
-  const c = card('RANK', a.loggedDays + ' of ' + days + ' days logged');
+  const c = card('RANK', a.loggedDays + ' of ' + a.span + ' days logged');
 
   const seg = el('div', 'seg');
   [[7, '7 days'], [30, '30 days'], [90, '90 days']].forEach(([n, lbl]) => {
@@ -6002,7 +6121,9 @@ function rankCard() {
      The big letter is an average and an average hides the shape: four Ss and
      three Fs average to the same place as seven Cs, and they are not the same
      week. Tap any day for its working. */
-  if (days === 7) {
+  if (!a.span) {
+    /* a fresh start made today: nothing behind it yet */
+  } else if (days === 7) {
     c.appendChild(el('label', 'fl', 'Each pillar, each day'));
     c.appendChild(weekGrid(a));
   } else {
@@ -6020,16 +6141,24 @@ function rankCard() {
     c.appendChild(el('div', 'note', 'Costing the most: ' +
       a.worst.map(w => esc(w[0])).join(', ') + '.'));
   }
-  if (!a.loggedDays) {
+  if (a.from) {
     c.appendChild(el('div', 'note',
-      'Nothing logged in this stretch, so there is nothing to grade. Log a day and the letter arrives tomorrow.'));
-  } else if (a.loggedDays < days) {
+      'Counting from <b>' + esc(Day.label(a.from)) + '</b>, your fresh start. Every day before it is still saved.'));
+  }
+  if (!a.loggedDays) {
+    c.appendChild(el('div', 'note', a.span
+      ? 'Nothing logged in this stretch, so there is nothing to grade. Log a day and the letter arrives tomorrow.'
+      : 'Log today and the letter arrives tomorrow.'));
+  } else if (a.loggedDays < a.span) {
     /* Said out loud, because an average over two days and an average over
        thirty are not the same claim and the letter looks identical. */
     c.appendChild(el('div', 'note',
       'Built from the <b>' + a.loggedDays + '</b> day' + (a.loggedDays === 1 ? '' : 's') +
       ' you logged. Days the app was not opened are left out rather than counted as noughts.'));
   }
+
+  const all = daysLoggedAll();
+  if (all) c.appendChild(el('div', 'note', '<b>' + all + '</b> day' + (all === 1 ? '' : 's') + ' logged in all.'));
 
   /* today, kept out of the number above */
   const t = todayScore();
@@ -7744,6 +7873,25 @@ function drawQuestsTab(pane) {
   pane.appendChild(el('div', 'note',
     Object.keys(col).sort((a, b) => b - a)
       .map(n => n + ' \u2192 ' + col[n]).join('   ')));
+
+  /* ── fresh start ── the same as the offer after a lapse, any time */
+  pane.appendChild(el('label', 'fl', 'Fresh start'));
+  const from = freshFrom();
+  pane.appendChild(el('div', 'note', from
+    ? 'Your rank counts from <b>' + esc(Day.label(from)) + '</b>. Every day before it is still saved.'
+    : 'Start your rank over from today. Every past day stays saved.'));
+  const fb = el('div', 'btns');
+  if (from !== Day.today()) {
+    const go = el('button', 'btn mb-press mb-tap', 'START FRESH TODAY');
+    go.onclick = () => { startFresh(); drawSettingsPane('quests'); };
+    fb.appendChild(go);
+  }
+  if (from) {
+    const all = el('button', 'btn mb-press mb-tap', 'COUNT EVERY DAY AGAIN');
+    all.onclick = () => { S.set('fresh.from', ''); Mobile.feedback('select'); drawSettingsPane('quests'); draw(); };
+    fb.appendChild(all);
+  }
+  pane.appendChild(fb);
 }
 
 
@@ -8265,6 +8413,7 @@ Rec.ready(() => {
   Mirror.onOpen(APP.id);
   draw();
   setTimeout(phoneCheck, 600);
+  freshWhenSettled();
   if (IO.isStale(APP.id)) setTimeout(() => UI.toast('no backup in ' + (IO.staleDays(APP.id) == null ? 'a while' : IO.staleDays(APP.id) + ' days') + ' — <b>settings → data</b>'), 1500);
 });
 wireDaySwipe();
