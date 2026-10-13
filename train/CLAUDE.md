@@ -942,6 +942,20 @@ Curl separate; and *"There is no barbell squat?"*
   story line (1.0.55, replaced 1.0.59).
 (HISTORY.md: Strength graphics, as built 2026-10-05 to 2026-10-08)
 
+## The set arrow, and decided not built (2026-10-13)
+
+- **A set's green arrow** (`TRAIN.volUp`) shows when it moved more weight x
+  reps than set N last time OR its estimated 1RM rose (1.0.61; Tom: 120 x 8
+  after 100 x 10 drew nothing). Watched on the page: 4 arrows before, 5 after.
+- **Decided by Tom, not built yet:** a session that crosses midnight stays
+  on the day it started (a set saved before 5am within 3 hours of the last
+  set joins it; `TRAIN.date` is fixed at boot today, so a reopen after
+  midnight splits the session); a same-session comparison day counts only
+  within 8 weeks of the lift's own last time, else `vsFor` falls to 'last'
+  (a 2022 day beat Sep 11); the session card shows total work (weight x
+  reps) per lift and session against the last same session, drops shown
+  on his screens, gains only when shared.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the
