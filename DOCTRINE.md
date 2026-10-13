@@ -311,6 +311,12 @@ better. It is a hallway. Nobody should want to stay in it.
 **Never:** a dashboard that grows features. Anything worth doing here is worth
 doing in the app that owns it.
 
+**On the PC, the hallway is also the room.** Tom, 2026-10-13: "on pc there
+is minimal need to open the other apps." The rule above still decides HOW:
+an app card is the owning app itself in a frame, and a quick box (a weight,
+a food, a tick, a bullet) writes exactly the row its app writes, the way
+that app writes it. The board never grows its own version of an app.
+
 ### STATUS — `status/` · everywhere
 
 **Function.** Record what happened to your body and your money today.
