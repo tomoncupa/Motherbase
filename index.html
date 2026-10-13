@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.65, 2026-10-09">
+<meta name="mb-version" content="1.0.66, 2026-10-13">
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -578,6 +578,18 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .li-v{flex:0 0 auto;font-family:var(--f1);font-size:var(--f-7);color:var(--txt);letter-spacing:.02em;line-height:var(--lh-tight);font-variant-numeric:tabular-nums}
 /* the bottom of a fraction: the target the top is measured against */
 .li-v small{font-size:var(--f-3);color:var(--dim);letter-spacing:.04em}
+/* a number that met its target is in the accent (Tom, 2026-10-09, "A,B,C") */
+.li-v.hit{color:var(--acc)}
+/* under a fraction, how much of the target it is: the fill stops at full,
+   and no words sit on it (root brief, never text on an accent fill) */
+.li-vw{flex:0 0 auto;display:flex;flex-direction:column;gap:var(--s-1)}
+.li-bar{height:var(--s-1);border-radius:var(--radius-sm,3px);background:var(--line2);overflow:hidden}
+.li-bar i{display:block;height:100%;background:var(--acc)}
+/* the detail and, under it, a dot a day, lit on a day it was done */
+.li-mid{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:var(--s-1)}
+.li-dots{display:flex;gap:var(--s-1)}
+.li-dots i{flex:1 1 0;max-width:var(--s-2);aspect-ratio:1;border-radius:var(--radius-full,999px);background:var(--line2)}
+.li-dots i.on{background:var(--acc)}
 .li-n{flex:1 1 auto;min-width:0;font-size:var(--f-1);color:var(--dim2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .li-d{flex:0 0 auto;font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--txt);font-variant-numeric:tabular-nums}
 .li-d.same{color:var(--dim2)}
@@ -3002,13 +3014,15 @@ const WIDGETS = {
       const tgt = Number(statusTargets().kcal) || 0, base = tdee || tgt;
       const fd = Object.keys(kcal);
       const steps = [];
-      for (let i = 0; i < n; i++) { const v = evValue(LifeOS.shift(to, -i), 'steps'); if (v != null && isFinite(v)) steps.push(Number(v)); }
+      const sday = {};
+      for (let i = 0; i < n; i++) { const dd = LifeOS.shift(to, -i), v = evValue(dd, 'steps'); if (v != null && isFinite(v)) { steps.push(Number(v)); sday[dd] = Number(v); } }
       return {
         n: n, sessions: Object.keys(trained).length, meals: meals, foodDays: fd.length,
         base: base, vs: tdee ? 'maintenance' : 'target',
         diff: base && fd.length ? fd.reduce((a, d) => a + kcal[d] - base, 0) / fd.length : null,
         eat: fd.length ? fd.reduce((a, d) => a + kcal[d], 0) / fd.length : null, tgt: tgt, tdee: tdee,
         stepGoal: Number((((Rec.map('field') || {}).steps) || {}).target) || 0,
+        from: from, tday: trained, kday: kcal, sday: sday,
         stepDays: steps.length, steps: steps.length ? steps.reduce((a, v) => a + v, 0) / steps.length : null,
       };
     },
@@ -3027,20 +3041,35 @@ const WIDGETS = {
         return d ? (d > 0 ? '+' : '\u2212') + num(Math.abs(d), dp) : 'same';
       };
       const list = el('div', 'rowlist li-list');
-      const row = (label, val, line, delta, was) => {
+      /* A dot a day over the stretch, lit on a day it was done; past a month
+         a dot a week, as bright as the share of its days. */
+      const dotsHTML = test => {
+        const days = [];
+        for (let i = 0; i < n; i++) days.push(LifeOS.shift(a.from, i));
+        const groups = n > 31 ? days.reduce((g, d, i) => { (g[Math.floor(i / 7)] = g[Math.floor(i / 7)] || []).push(d); return g; }, []) : days.map(d => [d]);
+        return '<span class="li-dots">' + groups.map(g => {
+          const k = g.filter(d => test(d)).length;
+          if (g.length === 1) return '<i' + (k ? ' class="on"' : '') + ' title="' + esc(Day.short(g[0])) + '"></i>';
+          return '<i' + (k ? ' class="on" style="opacity:' + (0.25 + 0.75 * k / g.length).toFixed(2) + '"' : '') + ' title="' + esc(Day.short(g[0])) + ', ' + k + ' of ' + g.length + ' days"></i>';
+        }).join('') + '</span>';
+      };
+      const row = (label, val, line, delta, was, o) => {
+        o = o || {};
         const r = el('div', 'row li-r');
-        r.innerHTML = '<span class="li-l">' + label + '</span><span class="li-v">' + val + '</span>' +
-          '<span class="li-n">' + line + '</span>' +
+        const v = '<span class="li-v' + (o.hit ? ' hit' : '') + '">' + val + '</span>';
+        r.innerHTML = '<span class="li-l">' + label + '</span>' +
+          (o.pct != null ? '<span class="li-vw">' + v + '<span class="li-bar"><i style="width:' + Math.round(Math.min(1, Math.max(0, o.pct)) * 100) + '%"></i></span></span>' : v) +
+          '<span class="li-mid"><span class="li-n">' + line + '</span>' + (o.dots ? dotsHTML(o.dots) : '') + '</span>' +
           (delta ? '<span class="li-d' + (delta === 'same' ? ' same' : '') + '">' + (delta === 'same' ? 'same as before' : delta) + '</span>' : '');
         if (was) r.title = 'The ' + n + ' days before: ' + was;
         list.appendChild(r);
       };
       /* 0.0 a week is a verdict on someone who has never opened TRAIN */
       if (sets) row('TRAINING', num(perWk(a), 1), 'a week \u00b7 ' + a.sessions + ' session' + (a.sessions === 1 ? '' : 's'),
-        chg(perWk(a), perWk(b), 1), num(perWk(b), 1) + ' a week');
+        chg(perWk(a), perWk(b), 1), num(perWk(b), 1) + ' a week', { dots: d => a.tday[d] });
       else row('TRAINING', '\u2014', 'nothing logged in TRAIN', '', '');
       row('MEALS TRACKED', num(perDay(a), 1), 'a day \u00b7 ' + a.foodDays + ' of ' + n + ' days',
-        b.foodDays ? chg(perDay(a), perDay(b), 1) : '', b.foodDays ? num(perDay(b), 1) + ' a day' : 'no food logged');
+        b.foodDays ? chg(perDay(a), perDay(b), 1) : '', b.foodDays ? num(perDay(b), 1) + ' a day' : 'no food logged', { dots: d => a.kday[d] != null });
       /* Calories and steps as fractions of their targets (Tom, 2026-10-09:
          "I want data to be displayed as fractions"): the average a day over
          the target. Training and meals have no target, so they stay
@@ -3051,10 +3080,12 @@ const WIDGETS = {
       if (a.eat == null) row('CALORIES', '\u2014', kGoal ? 'no food logged' : 'no target or maintenance in STATUS', '',
         kWas == null ? '' : num(kWas, 0) + ' a day');
       else row('CALORIES', frac(a.eat, kGoal), 'a day' + (kGoal ? ' \u00b7 ' + num(Math.abs(Math.round(a.eat - kGoal)), 0) + (a.eat > kGoal ? ' over ' : ' under ') + (a.tgt ? 'target' : 'maintenance') : '') + ' \u00b7 ' + a.foodDays + ' of ' + n + ' days',
-        kWas == null ? '' : chg(Math.round(a.eat), kWas, 0), kWas == null ? 'no food logged' : num(kWas, 0) + ' a day');
+        kWas == null ? '' : chg(Math.round(a.eat), kWas, 0), kWas == null ? 'no food logged' : num(kWas, 0) + ' a day',
+        { dots: d => a.kday[d] != null && (!kGoal || a.kday[d] <= kGoal), pct: kGoal ? a.eat / kGoal : null, hit: !!kGoal && a.eat <= kGoal });
       if (a.steps == null) row('STEPS', '\u2014', 'no steps logged', '', b.steps == null ? '' : num(Math.round(b.steps), 0) + ' a day');
       else row('STEPS', frac(a.steps, a.stepGoal), 'a day \u00b7 ' + a.stepDays + ' of ' + n + ' days',
-        b.steps == null ? '' : chg(Math.round(a.steps), Math.round(b.steps), 0), b.steps == null ? 'no steps logged' : num(Math.round(b.steps), 0) + ' a day');
+        b.steps == null ? '' : chg(Math.round(a.steps), Math.round(b.steps), 0), b.steps == null ? 'no steps logged' : num(Math.round(b.steps), 0) + ' a day',
+        { dots: d => a.sday[d] != null && (!a.stepGoal || a.sday[d] >= a.stepGoal), pct: a.stepGoal ? a.steps / a.stepGoal : null, hit: !!a.stepGoal && a.steps >= a.stepGoal });
       body.appendChild(list);
     },
   },
