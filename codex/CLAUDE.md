@@ -74,7 +74,11 @@ is a draft.
   (2), type the name with the first letters shown (3), type it cold (4 and up).
   A new entry opens on a discover screen and comes back as a question two turns
   later. A miss comes back in the same round, up to twice, and only the first
-  try is graded. Up to 20 reviews and `newPer` (default 5) new entries a quest.
+  try is graded. Up to 20 reviews and `newPer` (default 5) new entries a quest,
+  the new ones spread evenly through the reviews. An entry whose own definition
+  names it (DOMS, PCOS, Hypothyroidism, Sleep in the drafts) is asked by name at
+  box 2 instead, and its definition is never offered as a decoy, because a
+  "which definition?" question would point straight at it.
 - **SORT**, 30 seconds: file each name into its bracket. Personal best.
 - **BLITZ**, 60 seconds: name or definition, from found entries only. Personal
   best. Opens at four found.
@@ -145,12 +149,25 @@ headings, names with commas, also `[SKILLS]: names` and `SKILLS: names`),
 header, quoted line breaks kept; or cells copied from a sheet), and JSON.
 
 **The Skool page is the rule that settles most of it.** A title in brackets
-(`[Palatability]`) or a heading that is a name opens a PAGE, and every line
-after it is that page's text, bullets, "Why it matters:" labels and number
-ranges included, until the next title, heading or bracket line, or a blank line
-followed by a known name with a separator. Outside a page, a number range
-(`24 - 72`) is never a separator, and a line is a new name only when it is
-written like one (Title Case, or an existing name).
+(`[Palatability]`, `**[Palatability]**`, `[Palatability] [STATS]`) or a heading
+that is a name opens a PAGE. Every line after it is that page's text (bullets,
+"Why it matters:" labels, sub-headings deeper than the page's own, capitals
+like SYMPTOMS, asides in brackets, number ranges) until one of: the next title,
+heading or bracket line; another entry's name with a definition, after a blank
+line or before the page has any text (never the page's own name or alias); or
+a run of two Title Case `Name: definition` lines after a blank line. **A page
+never takes the bracket of the section before it**: a bracket it does not name
+is no bracket, so SAVE leaves an existing entry where it is. Only a heading page
+under a bracket heading of a higher level inherits it. A page's own text beats
+a mention of the same name elsewhere in the paste.
+
+Outside a page, a number range (`24 - 72`) is never a separator and comes back
+as written; a line opens a new entry only when it reads as a name (Title Case,
+an existing name, a bullet, bold or a tag) and is set apart, and label words
+("Why it matters", "For example") never do. A definition ending in a colon
+takes the bullets under it as its list. The empty-TRAITS note is skipped in any
+dress, and only that note: "Empty Calories" is an entry. A CODEX backup pasted
+into LOAD is refused with a pointer to RESTORE.
 
 `plan` matches a pasted name to an entry by id, then by a part of it
 (`Personal Record (PR)`, `Height (cm)`, `A / B`), then by an alias, but only an
@@ -162,10 +179,11 @@ the preview says so. A deleted entry is brought back with only what was pasted.
 SAVE re-reads the box first, only ever updates or adds, never deletes, never
 touches progress, and UNDO puts back the exact rows.
 
-A bracket is one of the four, a heading in capitals that is not an entry's name
-and not the title on the first line, a tag in capitals right after a name, or a
-capitalised plural of five letters or more ([QUESTS]). `[DOMS]`, `### DOMS` and
-`[PCOS]` are terms, not brackets.
+A bracket is one of the four, or a new one declared in square brackets: a
+heading `## [QUESTS]`, a line `[QUESTS]`, or a tag `[QUESTS]` right after a name
+(a capitalised plural of five letters or more). A plain capitals heading
+(`## NEAT`, `### DOMS`) is an entry, and plain capitals in text (SYMPTOMS) are
+text. `[DOMS]` and `[PCOS]` are terms.
 
 ## Answers
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.1, 2026-10-13">
+<meta name="mb-version" content="1.0.2, 2026-10-13">
 <title>CODEX</title>
 <meta name="theme-color" content="#05070D">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%2305070D'/%3E%3Cpath d='M38 24H24v52h14M62 24h14v52H62' fill='none' stroke='%235FD3FF' stroke-width='9' stroke-linecap='square'/%3E%3C/svg%3E">
@@ -393,7 +393,7 @@ main{flex:1}
    ══════════════════════════════════════════════════════════════════ */
 'use strict';
 
-const VERSION = '1.0.1', UPDATED = '13 Oct 2026';
+const VERSION = '1.0.2', UPDATED = '13 Oct 2026';
 
 /* ── storage: one key, one fact ───────────────────────────────── */
 const P = 'cx.';
@@ -404,10 +404,10 @@ const DB = {
   },
   /* `ok` says whether the last write was kept, so a screen never says
      "saved" about something the browser refused */
-  ok: true,
+  ok: true, fails: 0,
   set(k, v) {
     try { localStorage.setItem(P + k, JSON.stringify(v)); DB.ok = true; return true; }
-    catch (e) { DB.ok = false; return false; /* full, or private mode */ }
+    catch (e) { DB.ok = false; DB.fails++; return false; /* full, or private mode */ }
   },
   /* merge, never replace: read what is there, change the named fields,
      write it back whole */
@@ -470,6 +470,7 @@ function slug(s) {
    apostrophes, punctuation, spacing and a leading article do not count. */
 function norm(s) {
   return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/\b(?:[a-z]\.){2,}[a-z]?\.?/g, m => m.replace(/\./g, ''))      /* D.O.M.S. is DOMS */
     .replace(/['’`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().replace(/^(the|a|an) /, '');
 }
 /* optimal string alignment distance: one swap of neighbours counts as one */
@@ -573,7 +574,7 @@ const TERMS0 = [
   { t: 'Hypothyroidism', b: 'CONDITIONS', a: ['Underactive thyroid'],
     d: 'An underactive thyroid that makes too little thyroid hormone. It slows metabolism and can bring tiredness, feeling cold and weight gain. Diagnosed with a blood test and treated with medication.' },
   { t: 'PCOS', b: 'CONDITIONS', a: ['Polycystic ovary syndrome'],
-    d: 'Polycystic ovary syndrome: a hormonal condition in about 1 in 10 women, diagnosed by two of three signs: irregular periods, high androgens, polycystic ovaries. Insulin resistance is common, and fat loss can be slower, not impossible.' },
+    d: 'Polycystic ovary syndrome: a hormonal condition in about 1 in 10 women, diagnosed by two of three signs: irregular periods, high androgens, many follicles on the ovaries on a scan. Insulin resistance is common, and fat loss can be slower, not impossible.' },
   { t: 'Lipedema', b: 'CONDITIONS', a: ['Lipoedema'],
     d: 'A chronic condition, almost only in women, where fat builds up evenly in both legs and sometimes the arms, sparing the hands and feet. Often painful, bruises easily, and does not respond to diet the way ordinary fat does.' },
   { t: 'Calorie Deficit', b: 'CONDITIONS', a: ['Deficit', 'Caloric deficit', 'Energy deficit'],
@@ -665,12 +666,21 @@ function namesOf(t) {
    match inside aria-label). A plural, a possessive, a curly apostrophe or
    a hyphen in place of a space still counts as the name. */
 function masked(t, text) {
-  let h = esc(text == null ? t.def : text);
-  const toPat = x => esc(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/&#39;/g, '(?:&#39;|\u2019)').replace(/\s+|-/g, '[\\s-]+');
+  const raw = String(text == null ? t.def : text);
+  const toPat = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/['\u2019]/g, "['\u2019]").replace(/\s+|-/g, '[\\s-]+');
   const alt = namesOf(t).sort((a, b) => b.length - a.length).map(toPat).join('|');
-  if (alt) h = h.replace(new RegExp('(^|[^A-Za-z0-9])((?:' + alt + ')(?:s|es|(?:&#39;|\u2019)s)?)(?=[^A-Za-z0-9]|$)', 'gi'),
-    '$1<span class="blank" aria-label="blank">____</span>');
-  return refs(h);
+  if (!alt) return refs(esc(raw));
+  /* matched on the raw text, and only the pieces between matches are
+     escaped, so an entity such as &amp; is never searched */
+  const re = new RegExp('(^|[^A-Za-z0-9])((?:' + alt + ")(?:s|es|['\u2019]s)?)(?=[^A-Za-z0-9]|$)", 'gi');
+  let out = '', at = 0, m;
+  while ((m = re.exec(raw))) {
+    const from = m.index + m[1].length;
+    out += esc(raw.slice(at, from)) + '<span class="blank" aria-label="blank">____</span>';
+    at = from + m[2].length;
+    if (!m[0].length) re.lastIndex++;
+  }
+  return refs(out + esc(raw.slice(at)));
 }
 /* A definition that says its own name cannot be a "which definition?"
    question: the blank would point at the answer. */
@@ -830,7 +840,7 @@ function drawHome() {
   const blitzPool = d.terms.filter(t => t.def && tier(card(t.id)) >= 1).length;
   const openNow = sortable && blitzPool >= 4 ? ' SORT and BLITZ are open any time.' : sortable ? ' SORT is open any time.' : '';
 
-  if (!STORE_OK) h.appendChild(el('div', 'banner', '<div><b>This browser is not keeping anything.</b> Storage is off (a private window) or full, so every answer is lost when the page closes.</div>'));
+  if (!STORE_OK || DB.fails) h.appendChild(el('div', 'banner', '<div><b>This browser is not keeping everything.</b> Storage is off (a private window) or full, so answers are lost when the page closes. BACK UP in Settings still saves a file.</div>'));
 
   /* the one primary thing: today's quest */
   const newToday = Math.min(n.fresh, s.newPer);
@@ -858,7 +868,9 @@ function drawHome() {
   /* the two games that need no schedule */
   const modes = el('div', 'modes');
   modes.appendChild(modeBtn('SORT', sortable ? '30 s · file each term · best ' + r.sort : 'Needs two brackets with entries', sortable, startSort));
-  modes.appendChild(modeBtn('BLITZ', blitzPool >= 4 ? '60 s · name or define · best ' + r.blitz : 'Find ' + (4 - blitzPool) + ' more ' + (4 - blitzPool === 1 ? 'entry' : 'entries') + ' to open', blitzPool >= 4, startBlitz));
+  const findable = d.terms.filter(t => t.def && tier(card(t.id)) === 0).length, need = 4 - blitzPool;
+  modes.appendChild(modeBtn('BLITZ', blitzPool >= 4 ? '60 s · name or define · best ' + r.blitz
+    : blitzPool + findable >= 4 ? 'Find ' + need + ' more ' + (need === 1 ? 'entry' : 'entries') + ' to open' : 'Needs four entries with a definition', blitzPool >= 4, startBlitz));
   h.appendChild(modes);
 
   /* the collection, in one bar */
@@ -900,6 +912,7 @@ function drawHome() {
 
 function modeBtn(name, sub, on, fn) {
   const b = btn('mode press hov' + (on ? '' : ' lock'), '<span class="nm">' + name + '</span><span class="sub">' + esc(sub) + '</span>', on ? fn : () => toast(esc(sub) + '.'));
+  b.id = 'mode-' + name.toLowerCase();
   return b;
 }
 
@@ -922,7 +935,7 @@ function drawBrackets(list) {
     if (seal) head.appendChild(el('span', 'seal', 'CLEARED ' + esc(niceDay(seal).toUpperCase())));
     if (fightable.length >= 3) {
       const short = fightable.filter(t => tier(card(t.id)) < 2).length;
-      if (!short) head.appendChild(btn('small hot press boss', seal ? 'REMATCH' : 'BOSS', () => startBoss(b.id), (seal ? 'Rematch the ' : 'Fight the ') + b.id + ' boss'));
+      if (!short) { const bb = btn('small hot press boss', seal ? 'REMATCH' : 'BOSS', () => startBoss(b.id), (seal ? 'Rematch the ' : 'Fight the ') + b.id + ' boss'); bb.dataset.b = b.id; head.appendChild(bb); }
       else if (!seal) head.appendChild(el('span', 'gate', 'Boss opens at all KNOWN · ' + short + ' to go'));
     }
     head.appendChild(el('div', 'means', esc(b.means) + (b.meansSrc === 'draft' ? ' <span class="draft">DRAFT</span>' : '')));
@@ -953,6 +966,7 @@ function tile(t) {
   const b2 = btn(cls, '<span class="nm">' + esc(t.term) + '</span><span class="st">' + pips + TIER[ti] + '</span>' + (isDue(c) ? '<span class="due" title="Review due"></span>' : ''),
     () => openEntry(t.id), t.term + ', ' + TIER[ti].toLowerCase() + (isDue(c) ? ', review due' : ''));
   b2.style.setProperty('--c', b.color);
+  b2.dataset.id = t.id;
   return b2;
 }
 
@@ -1023,9 +1037,10 @@ function openEdit(id, bracket) {
       const def = fD.input.value.trim().replace(/\s+\n/g, '\n');
       const nid = t ? id : slug(name);
       if (!nid) { toast('That name has no letters or numbers in it.'); return; }
-      const mine = [name].concat(aka).map(norm).filter(Boolean);
+      const own = t ? answers(t) : [];
+      const mine = [name].concat(aka).map(norm).filter(a => a && own.indexOf(a) < 0);
       const clash = deck().terms.find(x => x.id !== (t ? id : '') && (x.id === nid || answers(x).some(a => mine.indexOf(a) >= 0)));
-      if (clash) { toast('Already in the database as ' + esc(clash.term) + '.'); return; }
+      if (clash) { toast('"' + esc(mine.find(a => clash.id === nid || answers(clash).indexOf(a) >= 0) || name) + '" is already ' + esc(clash.term) + '. Use another name.'); return; }
       if (!t) {
         /* a deleted entry brought back keeps the progress it had */
         DB.set('term.' + nid, { term: name, bracket: pick, def, aka, del: false, at: new Date().toISOString(), ord: deck().terms.length });
@@ -1099,7 +1114,7 @@ function kindFor(t, c, mode) {
 /* Wrong answers worth considering: same bracket first, so the choice is
    about meaning and not about family. No two options say the same thing. */
 function decoys(t, field, n, hard) {
-  const pool = deck().terms.filter(x => x.id !== t.id && (field !== 'def' || x.def));
+  const pool = deck().terms.filter(x => x.id !== t.id && (field !== 'def' || (x.def && !selfNamed(x))));
   const key = x => norm(field === 'def' ? x.def : x.term);
   const same = shuffle(pool.filter(x => x.bracket === t.bracket)), other = shuffle(pool.filter(x => x.bracket !== t.bracket));
   let order;
@@ -1135,7 +1150,11 @@ function closePlay(silent) {
   if (p) p.remove();
   document.body.style.overflow = '';
   syncInert();
-  if (!silent) { run = null; guardClose(); drawHome(); }
+  if (!silent) {
+    const mode = run && run.mode, bracket = run && run.bracket;
+    run = null; guardClose(); drawHome();
+    refocus(mode === 'sort' ? '#mode-sort' : mode === 'blitz' ? '#mode-blitz' : mode === 'boss' ? '.boss[data-b="' + bracket + '"]' : '.next .go');
+  }
 }
 const LABEL = { quest: 'quest', boss: 'boss fight', blitz: 'blitz', sort: 'sort' };
 function leave() {
@@ -1145,7 +1164,7 @@ function leave() {
   if (r.done) return;
   if (r.mode === 'quest' || r.mode === 'boss') {
     const n = r.asked.size;
-    if (n) toast('Left the ' + LABEL[r.mode] + '. ' + (DB.ok ? plural(n, 'answer') + ' saved.' : 'Nothing was saved: this browser is not keeping anything.'));
+    if (n) toast('Left the ' + LABEL[r.mode] + '. ' + (DB.fails === r.fails0 ? plural(n, 'answer') + ' saved.' : 'Not everything was saved: this browser is not keeping it.'));
   } else if (r.started) toast('Left the ' + LABEL[r.mode] + '. A score only counts when the clock runs out.');
 }
 
@@ -1171,7 +1190,7 @@ function startQuest() {
     const at = Math.min(q.length, Math.round((i + 1) * D / (fresh.length + 1)) + i);
     q.splice(at, 0, { id: t.id, step: card(t.id).seen ? 'ask' : 'discover', tries: 0, fresh: true });
   });
-  run = { mode: 'quest', queue: q, total: due.length + fresh.length, asked: new Set(), firstRight: 0, answered: 0,
+  run = { fails0: DB.fails, mode: 'quest', queue: q, total: due.length + fresh.length, asked: new Set(), firstRight: 0, answered: 0,
     found: [], ranks: [], missed: [], done: false };
   openPlay('quest', 'Quest');
   nextQ();
@@ -1182,7 +1201,7 @@ function startBoss(id) {
   const all = deck().terms.filter(t => t.bracket === id && t.def);
   if (all.length < 3) return;
   stopRun();
-  run = { mode: 'boss', bracket: id, queue: shuffle(all).map(t => ({ id: t.id, step: 'ask', tries: 0 })), total: all.length,
+  run = { fails0: DB.fails, mode: 'boss', bracket: id, queue: shuffle(all).map(t => ({ id: t.id, step: 'ask', tries: 0 })), total: all.length,
     asked: new Set(), firstRight: 0, answered: 0, found: [], ranks: [], missed: [], done: false, need: Math.ceil(all.length * .9) };
   openPlay('boss', 'Boss: ' + id);
   nextQ();
@@ -1202,7 +1221,7 @@ function startSort() {
 }
 function timed(mode, pool, secs) {
   stopRun();
-  run = { mode, pool, bag: [], secs, end: 0, right: 0, wrong: 0, answered: 0, missed: [], done: false, started: false, last: null };
+  run = { fails0: DB.fails, mode, pool, bag: [], secs, end: 0, right: 0, wrong: 0, answered: 0, missed: [], done: false, started: false, last: null };
   openPlay(mode, mode.toUpperCase());
   /* a READY screen first, so the clock starts on a press and not on a
      page that is still sliding in */
@@ -1242,6 +1261,7 @@ function drawTimed() {
 /* ── one question ── */
 function nextQ() {
   if (!run) return;
+  { const pb = $('.pbody'); if (pb) pb.scrollTop = 0; }
   if (run.wait) { clearTimeout(run.wait); run.wait = null; }
   let item;
   if (run.mode === 'blitz' || run.mode === 'sort') { if (!run.started || run.done) return; if (Date.now() >= run.end) { finishTimed(); return; } item = drawTimed(); }
@@ -1512,6 +1532,7 @@ function finishRound() {
   run.done = true; run.locked = true; run.choices = null;
   const mode = run.mode, w = $('.pwrap');
   setProg(1, run.total + ' / ' + run.total);
+  { const pb = $('.pbody'); if (pb) pb.scrollTop = 0; }
   w.innerHTML = '';
   const g = el('div', 'res glow open'), win = el('div', 'win'), inn = el('div', 'in');
   win.appendChild(inn); g.appendChild(win);
@@ -1524,9 +1545,11 @@ function finishRound() {
       if (!seals[run.bracket]) seals[run.bracket] = today();
       DB.patch('rec', { seals });
     }
+    if (DB.fails > run.fails0) cleared = false;
     inn.appendChild(el('div', 'kick', cleared ? '[SYSTEM] BOSS CLEARED' : '[SYSTEM] BOSS STANDS'));
     inn.appendChild(el('div', null, chip(run.bracket)));
   } else inn.appendChild(el('div', 'kick', '[SYSTEM] QUEST COMPLETE'));
+  if (DB.fails > run.fails0) inn.appendChild(el('div', 'fb no', '<div class="t">Not everything here was saved: this browser is not keeping it.</div>'));
   inn.appendChild(el('div', 'score', '<span class="v">' + run.firstRight + ' / ' + run.total + '</span><span class="k">' + (mode === 'boss' ? 'needed ' + run.need : 'right first time') + '</span>'));
 
   const d = deck();
@@ -1570,16 +1593,19 @@ function finishTimed() {
   if (run.timer) clearInterval(run.timer);
   if (run.wait) clearTimeout(run.wait);
   setProg(0, '0 s');
+  { const pb = $('.pbody'); if (pb) pb.scrollTop = 0; }
   const mode = run.mode, r = rec(), key = mode, prev = r[key] || 0, score = run.right;
-  const best = score > prev;
+  let best = score > prev;
   if (best) DB.patch('rec', { [key]: score, [key + 'At']: today() });
+  const lost = DB.fails > run.fails0;
+  if (lost) best = false;
   const w = $('.pwrap'); w.innerHTML = '';
   const g = el('div', 'res glow open'), win = el('div', 'win'), inn = el('div', 'in');
   if (best) g.style.setProperty('--c', 'var(--gold)');
   win.appendChild(inn); g.appendChild(win);
   inn.appendChild(el('div', 'kick', '[SYSTEM] ' + mode.toUpperCase() + ' OVER'));
   inn.appendChild(el('div', 'score', '<span class="v">' + score + '</span><span class="k">' + (mode === 'sort' ? 'filed right' : 'right') + ' in ' + run.secs + ' s' + (run.wrong ? ', ' + run.wrong + ' wrong' : '') + '</span>'));
-  inn.appendChild(el('div', best ? 'best' : 'note', best ? (prev ? 'NEW BEST. THE OLD ONE WAS ' + prev + '.' : 'FIRST RECORD SET.') : 'Best: ' + prev + (r[key + 'At'] ? ', set ' + esc(niceDay(r[key + 'At'])) : '') + '.'));
+  inn.appendChild(el('div', best ? 'best' : 'note', lost ? 'Not saved: this browser is not keeping it.' : best ? (prev ? 'NEW BEST. THE OLD ONE WAS ' + prev + '.' : 'FIRST RECORD SET.') : 'Best: ' + prev + (r[key + 'At'] ? ', set ' + esc(niceDay(r[key + 'At'])) : '') + '.'));
   const miss = Array.from(new Set(run.missed));
   if (miss.length) {
     const l = el('div', 'list'); l.appendChild(el('h4', null, 'TO GO OVER'));
@@ -1637,7 +1663,12 @@ function parseDeck(raw) {
   const text = String(raw || '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').replace(/ /g, ' ').trim();
   if (!text) return out;
   if (/^\{/.test(text) || /^\[\s*[\[{"]/.test(text)) {
-    try { fromJSON(JSON.parse(text), out); out.fmt = 'JSON'; return tidy(out); }
+    try {
+      const j = JSON.parse(text);
+      out.fmt = 'JSON';
+      if (j && !Array.isArray(j) && (j.kind === 'codex-backup' || (j.rows && typeof j.rows === 'object' && !Array.isArray(j.rows)))) { out.skipped.push('this is a CODEX backup: use RESTORE in Settings'); return out; }
+      fromJSON(j, out); return tidy(out);
+    }
     catch (e) { out.fmt = 'JSON'; out.skipped.push('the JSON did not read (' + String(e.message || e).slice(0, 50) + ')'); return out; }
   }
   const first = text.split('\n')[0];
@@ -1649,7 +1680,7 @@ function parseDeck(raw) {
 /* JSON: an array of entries, {terms: [...]}, {brackets: ...}, a map of
    brackets to lists, or a map of names to meanings. Keys that describe
    the file (version, name, made...) are never entries. */
-const META = /^(v|version|kind|name|title|made|at|source|src|updated|id|count)$/i;
+const META = /^(v|version|kind|name|title|made|at|source|src|updated|id|count|rows)$/i;
 const isEntryObj = o => o && typeof o === 'object' && !Array.isArray(o) && ['term', 'name', 'word', 'def', 'definition', 'meaning', 'bracket', 'category', 'description', 'aka'].some(f => f in o);
 function fromJSON(j, out) {
   if (Array.isArray(j)) { j.forEach(x => pushJSON(x, '', out)); return; }
@@ -1700,13 +1731,25 @@ function pushJSON(x, bracket, out) {
 
 /* CSV and TSV: records split with quotes respected, so a cell holding a
    line break (a Sheets or Excel export) stays one cell */
-function records(text) {
-  const recs = []; let cur = '', q = false;
+/* A double quote opens a quoted field only at the start of a field, and
+   closes it only before a separator, a line end or the end; anywhere else
+   (5'11", "the" inside a sentence) it is a character like any other. */
+function records(text, sep) {
+  const recs = []; let cur = '', q = false, start = true;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (ch === '"') { if (q && text[i + 1] === '"') { cur += '""'; i++; continue; } q = !q; cur += ch; continue; }
-    if (ch === '\n' && !q) { if (cur.trim()) recs.push(cur); cur = ''; continue; }
+    if (q) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cur += '""'; i++; continue; }
+        const nx = text[i + 1];
+        if (nx === undefined || nx === sep || nx === '\n') q = false;
+      }
+      cur += ch; continue;
+    }
+    if (ch === '"' && start) { q = true; start = false; cur += ch; continue; }
+    if (ch === '\n') { if (cur.trim()) recs.push(cur); cur = ''; start = true; continue; }
     cur += ch;
+    start = ch === sep || (start && ch === ' ');
   }
   if (cur.trim()) recs.push(cur);
   return recs;
@@ -1715,19 +1758,23 @@ function splitRow(line, sep) {
   const cells = []; let cur = '', q = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
-    else if (ch === '"') q = true;
+    if (q) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"' && (i + 1 >= line.length || line[i + 1] === sep)) q = false;
+      else cur += ch;
+    }
+    else if (ch === '"' && cur.trim() === '') { q = true; cur = ''; }
     else if (ch === sep) { cells.push(cur); cur = ''; }
     else cur += ch;
   }
   cells.push(cur);
-  return cells.map(s => s.trim());
+  return cells.map(x => x.trim());
 }
 function colsFrom(cells) {
   const find = re => cells.findIndex(c => re.test(String(c).replace(/[*_]/g, '').trim()));
   const t = find(/^(term|name|word|entry|title)$/i);
   if (t < 0) return null;
-  return { t, b: find(/^(bracket|category|cat|type|tag|section|group)$/i), d: find(/^(def|definition|meaning|description|desc|what it means|body)$/i), a: find(/^(aka|also|aliases|alias|also accept)$/i) };
+  return { t, b: find(/^(bracket|category|cat|type|tag|section|group)$/i), d: find(/^(def|definition|meaning|description|desc|what it means|body)$/i), a: find(/^(aka|also|aliases|alias|also accept)$/i), n: cells.length };
 }
 /* One row of cells, from a table, a sheet or a CSV: which is the name,
    which the bracket, which the meaning. */
@@ -1736,6 +1783,7 @@ function fromCells(cells, cols, isCat) {
   let t = '', b = '', d = '', a = [];
   if (cols) {
     t = cells[cols.t] || ''; b = cols.b >= 0 ? cells[cols.b] || '' : ''; d = cols.d >= 0 ? cells[cols.d] || '' : '';
+    if (cols.d >= 0 && cols.d === cols.n - 1 && cells.length > cols.n) d = cells.slice(cols.d).join(cols.join || ', ');
     a = cols.a >= 0 && cells[cols.a] ? cells[cols.a].split(/[;,]/) : [];
   } else if (cells.length >= 3) {
     const rest = i => cells.slice(i).filter(Boolean).join(' | ');
@@ -1751,10 +1799,11 @@ function fromCells(cells, cols, isCat) {
   return { t, b: b ? bracketId(b) : '', d, a };
 }
 function fromDelim(text, out) {
-  const recs = records(text);
-  const sep = /\t/.test(recs[0]) ? '\t' : ',';
+  const sep = /\t/.test(text.split('\n')[0]) ? '\t' : ',';
+  const recs = records(text, sep);
   const cols = colsFrom(splitRow(recs[0], sep));
   if (!cols) return false;
+  cols.join = sep === ',' ? ', ' : ' ';
   recs.slice(1).forEach(l => {
     const it = fromCells(splitRow(l, sep), cols);
     if (it.t && termLike(it.t)) out.items.push({ term: it.t, bracket: it.b, def: it.d, aka: it.a });
@@ -1777,172 +1826,226 @@ function fromLines(text, out) {
   const names = new Set();
   deck().terms.forEach(t => answers(t).forEach(a => names.add(a)));
   const isTermName = x => names.has(norm(String(x || '').replace(/[\[\]*_]/g, '')));
-  /* a heading in capitals is a bracket, unless it is the name of an entry
-     (### DOMS) or the title at the very top (# BRACKET DATABASE) */
+  /* a heading written in brackets and capitals declares a bracket: ## [QUESTS] */
   lines.forEach(l => {
-    const hm = l.match(/^\s*(#{1,6})\s*(\[)?([^\]\n#]+?)\]?\s*$/);
-    if (!hm) return;
-    const name = hm[3].trim();
-    if (words(name) <= 3 && /^[A-Z][A-Z &/-]+$/.test(name) && !isTermName(name) && (hm[1].length >= 2 || hm[2] || known.has(bracketId(name)))) known.add(bracketId(name));
+    const hm = l.match(/^\s*#{1,6}\s*\[([A-Z][A-Z &/-]+)\]\s*$/);
+    if (hm && words(hm[1]) <= 3 && !isTermName(hm[1])) known.add(bracketId(hm[1]));
   });
-  const isCat = x => {
+  /* A bracket is one of the four or a declared one. A capitalised plural of
+     five letters or more counts only when it is written in square brackets,
+     so SYMPTOMS or EXAMPLES in a page's text never become a bracket. */
+  const isCat = (x, bracketed) => {
     const y = String(x || '').replace(/[\[\]*_]/g, '').trim();
     if (!y || isTermName(y)) return false;
-    return known.has(bracketId(y)) || /^[A-Z]{4,}S$/.test(y);
+    return known.has(bracketId(y)) || (!!bracketed && /^[A-Z]{4,}S$/.test(y));
   };
+  const h1Count = lines.filter(l => /^\s*#\s+\S/.test(l)).length;
+  /* words that label a part of a page, never the name of an entry */
+  const LABEL = /^(example|examples|for example|related|see also|note|notes|tip|tips|summary|why|how|what|why it matters|how to|source|sources|key points?|bottom line|in short|takeaways?|remember|warning|caution|definition|also)$/i;
+  const nameish = x => { const c = cleanTerm(x); return !LABEL.test(c) && titleCase(c); };
+  const nextLine = i => { for (let j = i + 1; j < lines.length; j++) { const x = lines[j].trim(); if (x) return x; } return ''; };
+  const entryLine = x => { const td = splitTD(String(x).replace(BULLET, '')); return !!(td && td[1] && (td[2] === ':' || td[2] === 'emdash' || td[2] === 'bold') && nameish(td[0])); };
 
-  let sec = '', last = null, cols = null, gap = true, lastShape = '', page = false, prevList = false, seen = false;
+  let sec = '', secLvl = 0, last = null, cols = null, gap = true, lastShape = '', page = false, pageLvl = 7, prevList = false, seen = false;
   const push = (term, def, bracket, aka) => {
     const it = { term: cleanTerm(term), def: cleanDef(def || ''), bracket: bracket || sec, aka: aka || [] };
     out.items.push(it); last = it; prevList = false; return it;
   };
-  const openPage = () => { page = true; lastShape = ''; };
+  /* A page never takes the bracket of whatever section came before it: a
+     bracket it does not name is no bracket, so an existing entry stays
+     where it is. Only a heading page under a bracket heading inherits. */
+  const pushPage = (term, def, bracket) => {
+    const it = { term: cleanTerm(term), def: cleanDef(def || ''), bracket: bracket || '', aka: [], page: true };
+    out.items.push(it); last = it; prevList = false; return it;
+  };
+  const openPage = lvl => { page = true; pageLvl = lvl; lastShape = ''; };
   /* bullets are joined with semicolons, and the sentence after a list
      starts as a sentence */
   const appendTo = (it, txt, bullet) => {
     const open = !/[:.;!?]$/.test(it.def);
-    const sep = !it.def ? '' : open && (bullet || it.bul) ? (bullet ? '; ' : '. ') : ' ';
+    /* a short line with no full stop, then a list, is the list's label */
+    const sep = !it.def ? '' : open && (bullet || it.bul) ? (bullet ? (it.label ? ': ' : '; ') : '. ') : ' ';
     it.def = cleanDef(it.def + sep + txt); it.bul = bullet;
+    it.label = !bullet && words(txt) <= 3 && !/[.!?:;]$/.test(txt);
   };
+  const EMPTY_NOTE = /^\(?\s*empty(?:\s*[.,;:—–-]\s*populate\b.*|\s*\.?\s*\)?)$/i;
 
-  lines.forEach(line => {
-    const s0 = line.trim();
-    if (!s0) { gap = true; return; }
+  for (let i = 0; i < lines.length; i++) {
+    const s0 = lines[i].trim();
+    if (!s0) { gap = true; continue; }
     const wasGap = gap; gap = false;
     const isFirst = !seen; seen = true;
-    if (/^[-*_=]{3,}$/.test(s0)) return;                        /* a rule line */
+    if (/^[-*_=]{3,}$/.test(s0)) continue;                      /* a rule line */
 
-    /* 1. a heading: a bracket, an entry, or the title */
+    /* 1. a heading: a bracket, a sub-heading of the page, a page, or the title */
     const hm = s0.match(/^(#{1,6})\s+(.+)$/);
     if (hm) {
       const lvl = hm[1].length, htxt = hm[2].replace(/\*\*|__/g, '').replace(/:$/, '').trim();
       const inBr = htxt.match(/^\[([^\]]+)\]\s*(?:[:\-–—]\s*(.*))?$/);
       const sp = htxt.split(/\s+[:\-–—]\s+|:\s/);
       const name = inBr ? inBr[1] : sp[0], rest = inBr ? (inBr[2] || '') : sp.slice(1).join(' ');
+      if (isCat(name, !!inBr)) { sec = bracketId(name); secLvl = lvl; page = false; last = null; prevList = false; if (rest) out.means[sec] = cleanDef(rest); continue; }
+      if (page && last && lvl > pageLvl && !matchEntry(cleanTerm(name))) { appendTo(last, htxt + (/[:.!?]$/.test(htxt) ? '' : ':'), false); continue; }
       page = false; prevList = false;
-      if (isCat(name) || (inBr && /^[A-Z][A-Z &/-]*$/.test(name.trim()) && !isTermName(name))) {
-        sec = bracketId(name); if (rest) out.means[sec] = cleanDef(rest); last = null; return;
+      if (termLike(name) && (lvl >= 2 || !isFirst || h1Count > 1 || isTermName(name))) {
+        pushPage(name, rest, sec && secLvl > 0 && lvl > secLvl ? sec : '');
+        openPage(lvl); continue;
       }
-      if (termLike(name) && (lvl >= 2 || !isFirst || isTermName(name))) { push(name, rest, ''); openPage(); return; }
-      last = null; return;
+      last = null; continue;
     }
 
     /* 2. a bracket line: [SKILLS], SKILLS, [SKILLS]: names, SKILLS: names, [SKILLS] - meaning */
     const plain = s0.replace(/\*\*|__/g, '');
-    const bm = plain.match(/^\[([^\]]{1,40})\]\s*(?:[:\-–—]\s*(.*))?$/) || plain.match(/^([A-Z][A-Z &/-]{2,39}?)\s*(?::\s*(.*))?$/);
-    if (bm && isCat(bm[1])) {
+    const bB = plain.match(/^\[([^\]]{1,40})\]\s*(?:[:\-–—]\s*(.*))?$/), bP = plain.match(/^([A-Z][A-Z &/-]{2,39}?)\s*(?::\s*(.*))?$/);
+    const bm = bB && isCat(bB[1], true) ? bB : (bP && isCat(bP[1], false) ? bP : null);
+    if (bm) {
       /* a Skool title and then its bracket tag: the tag is the title's */
-      if (page && last && !last.def && !bm[2]) { last.bracket = bracketId(bm[1]); return; }
-      sec = bracketId(bm[1]); page = false; last = null; prevList = false;
+      if (page && last && !last.def && !bm[2]) { last.bracket = bracketId(bm[1]); continue; }
+      sec = bracketId(bm[1]); secLvl = 0; page = false; last = null; prevList = false;
       if (bm[2]) {
         const ns = nameList(bm[2]);
         if (ns) { ns.forEach(n => push(n, '')); last = null; prevList = true; }
         else out.means[sec] = cleanDef(bm[2]);
       }
-      return;
+      continue;
     }
 
-    /* 3. asides in brackets, and the empty-bracket note however it is written */
-    if (/^\(.*\)$/.test(s0) || (sec && !page && /^\(?\s*empty\b/i.test(s0))) return;
-
-    /* 4. inside a page, everything is the page's text, unless a new title
-       starts, or after a blank line a known name starts its own entry */
+    /* 3. inside a page, every line is the page's text, unless it starts a
+       new page, or (after a blank line, or before the page has any text) it
+       is another entry's name with a definition, or the first of a run of
+       "Name: definition" lines */
     if (page && last) {
-      const tm = s0.match(/^\[([^\]]{1,60})\]\s*(?:(?:[:|=]|\s[-–—]|[–—])\s*(.*))?$/);
-      if (tm && termLike(tm[1]) && !isCat(tm[1])) { push(tm[1], tm[2] || '', ''); openPage(); return; }
+      const c0 = s0.replace(BULLET, '').replace(/^\*\*(.*)\*\*$/, '$1');
+      const tm = c0.match(/^\[([^\]]{1,60})\](?:\s*\[([^\]]{1,40})\])?\s*(?:(?:[:|=]|\s[-–—]|[–—])\s*(.*))?$/);
+      if (tm && termLike(tm[1]) && !isCat(tm[1], true)) { pushPage(tm[1], tm[3] || '', tm[2] && isCat(tm[2], true) ? bracketId(tm[2]) : ''); openPage(7); continue; }
       const cand = s0.replace(BULLET, ''), td0 = splitTD(cand);
-      const named = wasGap && (td0 ? isTermName(td0[0]) : (/^\*\*[^*]+\*\*$/.test(cand) && isTermName(cand)));
-      if (!named) { appendTo(last, cand, BULLET.test(s0)); return; }
+      let leave = false;
+      if ((wasGap || !last.def) && td0 && td0[1]) {
+        const hit = matchEntry(cleanTerm(td0[0])), own = matchEntry(last.term);
+        leave = (!!hit && !(own && hit.t.id === own.t.id)) || (wasGap && entryLine(cand) && entryLine(nextLine(i)));
+      }
+      if (!leave) { appendTo(last, cand, BULLET.test(s0)); continue; }
       page = false;
     }
 
+    /* 4. the empty-bracket note in any form, and an aside with nothing to belong to */
+    const bareLine = s0.replace(BULLET, '').replace(/^[*_]+|[*_]+$/g, '').trim();
+    if (EMPTY_NOTE.test(bareLine) && !(last && last.def)) continue;
+    if (/^\(.*\)$/.test(bareLine) && !(last && last.def)) continue;
+
     /* 5. a markdown table row */
     if (/^\|.*\|$/.test(s0) || s0.split('|').length >= 3) {
-      if (/^[\s|:\-]+$/.test(s0)) return;
+      if (/^[\s|:\-]+$/.test(s0)) continue;
       const cells = s0.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
       const h = colsFrom(cells);
-      if (h) { cols = h; return; }
-      const it = fromCells(cells, cols, isCat);
+      if (h) { cols = Object.assign(h, { join: ' | ' }); continue; }
+      const it = fromCells(cells, cols, x => isCat(x, true));
       if (it.t && termLike(it.t)) push(it.t, it.d, it.b, it.a); else out.skipped.push(s0);
-      return;
+      continue;
     }
 
-    /* 6. cells copied from a sheet, a tab between each */
-    if (s0.indexOf('\t') >= 0) {
-      const cells = s0.split('\t').map(c => c.trim());
-      while (cells.length && cells[cells.length - 1] === '') cells.pop();
-      if (cells.length >= 2) {
-        const h = colsFrom(cells);
-        if (h) { cols = h; return; }
-        const it = fromCells(cells, cols, isCat);
+    /* 6. cells copied from a sheet (a tab between each), or a CSV line whose
+       second cell is a bracket */
+    const tabbed = s0.indexOf('\t') >= 0, cells0 = tabbed ? s0.split('\t').map(c => c.trim()) : ((s0.match(/,/g) || []).length >= 2 ? splitRow(s0, ',') : null);
+    if (cells0) {
+      while (cells0.length && cells0[cells0.length - 1] === '') cells0.pop();
+      const h = tabbed ? colsFrom(cells0) : null;
+      if (h) { cols = Object.assign(h, { join: ' ' }); continue; }
+      if ((tabbed && cells0.length >= 2) || (!tabbed && cells0.length >= 3 && isCat(cells0[1], true))) {
+        const it = fromCells(cells0, tabbed ? cols : null, x => isCat(x, true));
         if (it.t && termLike(it.t)) push(it.t, it.d, it.b, it.a); else out.skipped.push(s0);
-        return;
+        continue;
       }
     }
 
     /* 7. everything else */
-    let s = s0.replace(BULLET, '');
-    const bulleted = s !== s0;
-    const marked = bulleted || /^\*\*/.test(s) || /^\[/.test(s);
-
-    /* a bracket tag on the line: only a real bracket, only beside the name */
+    const sRaw = s0.replace(BULLET, '');
+    const bulleted = sRaw !== s0;
+    const marked = bulleted || /^\*\*/.test(sRaw) || /^\[/.test(sRaw);
+    /* a bracket tag on the line: only a real bracket, only beside the name,
+       and it is taken off the text only if the line becomes an entry */
     let lineBr = '';
-    s = s.replace(/\s*\[([^\]]{1,40})\]\s*/g, (m, x, off, whole) => {
-      if (lineBr || !isCat(x)) return m;
+    let s = sRaw.replace(/\s*\[([^\]]{1,40})\]\s*/g, (m, x, off, whole) => {
+      if (lineBr || !isCat(x, true)) return m;
       const before = whole.slice(0, off).trim(), after = whole.slice(off + m.length);
       if (before && !termLike(before)) return m;
       if (before && after && !/^[:|=\-–—]/.test(after)) return m;
       lineBr = bracketId(x); return ' ';
-    }).replace(/\s+([:,|])/g, '$1').replace(/\s{2,}/g, ' ').trim();
-    if (!s) return;
+    });
+    s = lineBr ? s.replace(/\s+([:,])/g, '$1').replace(/\s{2,}/g, ' ').trim() : sRaw.trim();
+    if (!s) continue;
+    const td = splitTD(s);
 
-    /* a Skool page title on its own line: its text follows */
-    if (/^\[[^\]]+\]$/.test(s) && termLike(s)) { push(s, '', lineBr); openPage(); return; }
+    /* the title line, however it is dressed: BRACKET DATABASE - Tom Moncupa */
+    if (isFirst && !last) {
+      const nm = cleanTerm(td ? td[0] : s);
+      if (/^[A-Z0-9][A-Z0-9 &'-]+$/.test(nm) && !isTermName(nm) && !isCat(nm, true)) continue;
+    }
+
+    /* a Skool page title on its own line, plain or bold: its text follows */
+    const st = s.replace(/^\*\*(.*)\*\*$/, '$1');
+    if (/^\[[^\]]+\]$/.test(st) && termLike(st)) { pushPage(st, '', lineBr); openPage(7); continue; }
 
     /* pipes without a table: Name | definition */
     if (/\s\|\s/.test(s)) {
       const parts = s.split(/\s*\|\s*/);
-      if (termLike(parts[0])) { push(parts[0], parts.slice(1).join(' | '), lineBr); lastShape = 'pipe'; return; }
+      if (termLike(parts[0])) { push(parts[0], parts.slice(1).join(' | '), lineBr); lastShape = 'pipe'; continue; }
     }
 
-    const td = splitTD(s);
     /* "SKILLS: names" or "STATS - meaning", written without brackets */
-    if (td && isCat(td[0])) {
-      sec = bracketId(td[0]); page = false; last = null;
+    if (td && isCat(td[0], false)) {
+      sec = bracketId(td[0]); secLvl = 0; page = false; last = null;
       const ns = nameList(td[1]);
       if (ns) { ns.forEach(n => push(n, '')); last = null; prevList = true; }
       else if (td[1]) out.means[sec] = cleanDef(td[1]);
-      return;
+      continue;
     }
-    const starts = td && (marked || lineBr || wasGap || !last || td[2] === lastShape || td[2] === ':' || td[2] === 'emdash' || td[2] === 'bold' || isTermName(td[0]));
-    if (starts) {
-      push(td[0], td[1], lineBr); lastShape = td[2];
-      if (/^\[/.test(s)) openPage();
-      return;
+
+    /* a new entry: something that reads as a name, then a separator. After
+       an entry, a line starts a new one only when it is set apart (a blank
+       line, a bullet, bold, a tag) or keeps the same shape, and "Why it
+       matters:" never does. */
+    if (td && !LABEL.test(cleanTerm(td[0]))) {
+      const named = marked || lineBr || titleCase(td[0]) || isTermName(td[0]);
+      const apart = wasGap || marked || lineBr || td[2] === lastShape || td[2] === ':' || td[2] === 'emdash' || td[2] === 'bold' || isTermName(td[0]);
+      if (!last || (named && apart)) {
+        if (/^(\*\*)?\[/.test(s)) { pushPage(td[0], td[1], lineBr); openPage(7); }
+        else push(td[0], td[1], lineBr);
+        lastShape = td[2];
+        continue;
+      }
     }
 
     /* names with commas: straight under a bracket, or after another list */
     const ns = (sec || lineBr) && (last === null || prevList || !last.def) ? nameList(s) : null;
-    if (ns) { ns.forEach(n => push(n, '', lineBr)); last = null; prevList = true; return; }
+    if (ns) { ns.forEach(n => push(n, '', lineBr)); last = null; prevList = true; continue; }
 
-    /* a name alone, written like a name, under a bracket */
-    const bare = termLike(s) && words(s) <= 6 && !/[.!?]$/.test(s) && (titleCase(s) || isTermName(s)) && (sec || lineBr || marked);
-    if (last && !(bare && (lineBr || isTermName(s) || !last.def || bulleted))) { appendTo(last, s, bulleted); return; }
-    if (bare) { push(s, '', lineBr); return; }
-    if (isFirst) return;                                        /* a title line such as BRACKET DATABASE */
+    /* a name alone, or more of the last definition */
+    const bareName = termLike(s) && words(s) <= 6 && !/[.!?:]$/.test(s) && (titleCase(s) || isTermName(s)) && !LABEL.test(cleanTerm(s));
+    if (last) {
+      const ld = last.def || '';
+      if (/:$/.test(ld)) { appendTo(last, s, true); continue; }       /* the items of a list the definition opened */
+      const opens = bareName && (sec || lineBr || marked || isTermName(s)) && (!ld || wasGap || /[.!?]$/.test(ld) || lineBr || isTermName(s));
+      if (!opens) { appendTo(last, lineBr ? sRaw : s, bulleted); continue; }
+      push(s, '', lineBr); continue;
+    }
+    if (bareName && (sec || lineBr || marked || isTermName(s))) { push(s, '', lineBr); continue; }
+    if (isFirst) continue;
     out.skipped.push(s0);
-  });
+  }
 }
 /* Split a line into a name and its meaning at the first separator, if the
    part before it can be a name. A number range (24 - 72, 24–72) is never a
-   separator. Returns [name, meaning, kind of separator]. */
+   separator and comes back exactly as written. Returns [name, meaning,
+   kind of separator]. */
 function splitTD(s) {
   const bold = s.match(/^\*\*(.+?)\*\*\s*(?:[:\-–—=|]\s*)?(.*)$/);
   if (bold) return termLike(bold[1]) ? [bold[1], bold[2], 'bold'] : null;
-  const p = s.replace(/(\d)\s*[-–—]\s*(?=\d)/g, '$1‒');
+  const kept = [];
+  const p = s.replace(/\d\s*[-–—]\s*(?=\d)/g, m => { kept.push(m); return '‒' + (kept.length - 1) + '‒'; });
   const m = p.match(/\s+[|=]\s+|\s+--\s+|\s+-\s+|\s+[–—]\s*|[–—]\s+|\t+|:\s+|:$/) || p.match(/[–—]/);
   if (!m) return null;
-  const back = x => x.replace(/‒/g, '–');
+  const back = x => x.replace(/‒(\d+)‒/g, (z, n) => kept[+n]);
   const t = back(p.slice(0, m.index)), d = back(p.slice(m.index + m[0].length));
   if (!termLike(t)) return null;
   const k = m[0].trim();
@@ -1955,9 +2058,10 @@ function tidy(out) {
   out.items.forEach(it => {
     const term = cleanTerm(it.term), id = slug(term);
     if (!term || !id || term.length > 60) { if (it.term) out.skipped.push(String(it.term)); return; }
-    const x = { id, term, def: cleanDef(it.def), bracket: bracketId(it.bracket), aka: (it.aka || []).map(a => String(a).trim()).filter(Boolean) };
+    const x = { id, term, def: cleanDef(it.def), bracket: bracketId(it.bracket), aka: (it.aka || []).map(a => String(a).trim()).filter(Boolean), page: !!it.page };
     if (seenAt[id] != null) {
       const y = items[seenAt[id]];
+      if (it.page && !y.page && x.def) { if (y.def && y.def !== x.def) out.dupes.push(term); y.def = x.def; y.page = true; if (x.bracket) y.bracket = x.bracket; return; }
       if (x.def && y.def && x.def !== y.def) out.dupes.push(term);
       if (x.def && !y.def) y.def = x.def;
       if (x.bracket && !y.bracket) y.bracket = x.bracket;
@@ -1991,7 +2095,7 @@ function matchEntry(name) {
 function plan(parsed) {
   const d = deck(), now = new Date().toISOString();
   const res = { add: [], update: [], back: [], same: 0, rows: {}, means: {}, dupes: (parsed.dupes || []).slice(), via: [] };
-  const done = new Set();
+  const done = new Set(), hadDef = {};
   parsed.items.forEach(it => {
     const hit = matchEntry(it.term);
     if (!hit) {
@@ -2019,9 +2123,13 @@ function plan(parsed) {
     if (it.bracket && it.bracket !== t.bracket) ch.bracket = it.bracket;
     if (it.aka.length) { const merged = (t.aka || []).slice(); it.aka.forEach(a => { if (merged.indexOf(a) < 0) merged.push(a); }); if (merged.length !== (t.aka || []).length) ch.aka = merged; }
     if (done.has(t.id)) {
-      /* the same entry twice in one paste: the first definition stays */
-      res.dupes.push(it.term + (norm(it.term) !== norm(t.term) ? ' (' + t.term + ')' : ''));
-      const u = res.update.find(x => x.t.id === t.id);
+      /* the same entry twice in one paste: the first definition stays, and
+         a later one fills in only if the first mention had none */
+      let u = res.update.find(x => x.t.id === t.id);
+      if (ch.def && !hadDef[t.id]) {
+        if (!u) { res.same--; u = { t, ch: {}, via: it.term }; res.update.push(u); }
+        u.ch.def = ch.def; hadDef[t.id] = true;
+      } else if (ch.def) res.dupes.push(it.term + (norm(it.term) !== norm(t.term) ? ' (' + t.term + ')' : ''));
       if (u) {
         if (!u.ch.bracket && ch.bracket) u.ch.bracket = ch.bracket;
         if (ch.aka) u.ch.aka = ch.aka;
@@ -2029,13 +2137,13 @@ function plan(parsed) {
       }
       return;
     }
-    done.add(t.id);
+    done.add(t.id); hadDef[t.id] = !!it.def;
     if (hit.via) res.via.push(it.term + ' → ' + t.term);
     if (!Object.keys(ch).length) { res.same++; return; }
     res.update.push({ t, ch, via: hit.via ? it.term : '' });
     res.rows[t.id] = Object.assign({}, DB.get('term.' + t.id, {}), ch, { at: now });
   });
-  Object.keys(parsed.means || {}).forEach(b => { if (parsed.means[b] && parsed.means[b] !== bkt(b).means) res.means[b] = parsed.means[b]; });
+  Object.keys(parsed.means || {}).forEach(b => { if (!parsed.means[b]) return; if (parsed.means[b] !== bkt(b).means) res.means[b] = parsed.means[b]; else res.same++; });
   return res;
 }
 
@@ -2088,7 +2196,7 @@ function openImport() {
       prev.innerHTML = html;
       save.disabled = !(p.update.length || p.add.length || p.back.length || nMeans);
     };
-    f.input.oninput = () => { clearTimeout(timer); timer = setTimeout(update, 200); };
+    f.input.oninput = () => { clearTimeout(timer); save.disabled = !f.input.value.trim(); timer = setTimeout(update, 200); };
     file.onchange = () => {
       const fl = file.files && file.files[0]; if (!fl) return;
       if (fl.size > 2e6) { toast('That file is over 2 MB. Paste the part with the definitions.'); return; }
@@ -2098,7 +2206,7 @@ function openImport() {
     };
     save.onclick = () => {
       update();                         /* the text on screen now, not 200 ms ago */
-      if (save.disabled || !current) return;
+      if (save.disabled || !current) { if (f.input.value.trim()) toast('Nothing recognised in that paste.'); return; }
       const p = current, now = new Date().toISOString();
       const ids = Object.keys(p.rows), bs = Object.keys(p.means);
       const before = {}, beforeMeans = {};
@@ -2136,6 +2244,15 @@ function syncInert() {
   sheets.forEach((b, i) => { b.inert = i < sheets.length - 1; });
 }
 let sheetN = 0;
+/* After a redraw has replaced what had focus, put it on the new copy (or
+   the settings button), but only if focus fell to the page itself. */
+function refocus(sel) {
+  setTimeout(() => {
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const n = (sel && document.querySelector(sel)) || document.getElementById('setBtn');
+    if (n && !n.closest('[inert]')) n.focus({ preventScroll: true });
+  }, 0);
+}
 function sheet(fill, opts) {
   opts = opts || {};
   const bg = el('div', 'sheet-bg');
@@ -2149,12 +2266,14 @@ function sheet(fill, opts) {
   function close() {
     if (closed) return; closed = true;
     bg.dataset.gone = '1';
+    s.inert = true;
     bg.classList.remove('up');
     setTimeout(() => bg.remove(), 360);
     const at = stack.indexOf(close);
     if (at >= 0) stack.splice(at, 1);
     syncInert();
     if (opener && opener.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true });
+    refocus(opener && opener.dataset && opener.dataset.id ? '.tile[data-id="' + opener.dataset.id + '"]' : (opener && opener.id ? '#' + opener.id : ''));
     guardClose();
     if (opts.onClose) opts.onClose();
   }
@@ -2191,7 +2310,8 @@ addEventListener('popstate', () => {
   depth = 0;
   const top = stack[stack.length - 1];
   if (top) { top(); if (anythingOpen()) guardOpen(); return; }
-  if (document.querySelector('.play')) leave();
+  if (document.querySelector('.play')) { leave(); return; }
+  if (history.state && history.state.cx) { popping++; history.back(); }
 });
 
 /* ── keys, for the desk ── */
@@ -2251,8 +2371,13 @@ document.getElementById('setBtn').onclick = () => {
   sheet(h => {
     h.appendChild(el('h3', null, 'Settings'));
     const s = settings(), rows = el('div', 'rows');
-    rows.appendChild(row('New entries per quest', 'How many entries a quest brings in for the first time.',
-      seg([[3, '3'], [5, '5'], [8, '8'], [12, '12']], s.newPer, v => { DB.patch('set', { newPer: v }); drawHome(); })));
+    const perSeg = () => seg([[3, '3'], [5, '5'], [8, '8'], [12, '12']], settings().newPer, v => {
+      DB.patch('set', { newPer: v });
+      if (!DB.ok) { toast('Not saved: this browser is not keeping anything.'); const fresh = perSeg(); cur.replaceWith(fresh); cur = fresh; return; }
+      drawHome();
+    });
+    let cur = perSeg();
+    rows.appendChild(row('New entries per quest', 'How many entries a quest brings in for the first time.', cur));
     rows.appendChild(row('Type the hardest answers', 'Known entries ask you to type the name. Off: you pick from four instead.', sw(s.typing, v => DB.patch('set', { typing: v }), 'Type the hardest answers')));
     rows.appendChild(row('Move on after a right answer', 'Wrong answers always wait for you.', sw(s.auto, v => DB.patch('set', { auto: v }), 'Move on after a right answer')));
     rows.appendChild(row('Sound', 'Synthesised, nothing downloaded.', sw(s.sound, v => DB.patch('set', { sound: v }), 'Sound')));

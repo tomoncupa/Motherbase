@@ -82,6 +82,30 @@ ego-depletion claim; "1 to 2 kg day to day" is the right coaching range;
 caveat because the CONDITIONS meaning already spans "a passing effect to a
 diagnosis"; "Weightlifting" is never accepted for Weight Training (distance 6).
 
-A second workflow re-ran every confirmed repro against the fixed file and
-hunted regressions in the rewritten parts; its result is recorded below when it
-lands.
+## 2026-10-13: the re-check, 1.0.2
+
+A second workflow re-ran all 80 repros against 1.0.1 and sent a fresh hunter at
+the rewritten parts. **73 fixed, 7 only partly, 35 new issues**, most of them
+the parser's new page rule meeting real Skool text:
+
+- a page took the bracket of whatever section came before it, so a SAVE would
+  have moved Palatability and Satiety into SKILLS. Pages now take no bracket
+  they do not name;
+- capitals inside a page (SYMPTOMS) and plain capitals headings (`## NEAT`)
+  became brackets. Only square brackets declare one now;
+- sub-headings inside a markdown page became entries; a `Name: def` list after
+  a page was glued into it; a page left for its own alias and made a junk entry;
+- "Empty" at the start of any line under a bracket was thrown away, Empty
+  Calories included;
+- masking still searched inside `&amp;` once escaped; the decoy pool still held
+  self-naming definitions;
+- `DB.ok` only remembered the last write, so a failed card write followed by a
+  good day write read as saved. Failures are counted now, and a round that lost
+  a write says so instead of "FIRST RECORD SET" or "BOSS CLEARED";
+- the verdict's scroll carried into the next question on a 360 px phone; a
+  double click on ERASE or DELETE ran twice and broke the UNDO; focus fell to
+  the page after any redraw; a Forward step left a dead Back.
+
+All of them fixed and each repro re-run in headless Chromium: Tom's own paste
+still reads as 39 of 39 already the same, and every case above now gives the
+expected entries, brackets and definitions.
