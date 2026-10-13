@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="mb-version" content="1.0.2, 2026-10-13">
+<meta name="mb-version" content="1.0.3, 2026-10-13">
 <title>CODEX</title>
 <meta name="theme-color" content="#05070D">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%2305070D'/%3E%3Cpath d='M38 24H24v52h14M62 24h14v52H62' fill='none' stroke='%235FD3FF' stroke-width='9' stroke-linecap='square'/%3E%3C/svg%3E">
@@ -393,7 +393,7 @@ main{flex:1}
    ══════════════════════════════════════════════════════════════════ */
 'use strict';
 
-const VERSION = '1.0.2', UPDATED = '13 Oct 2026';
+const VERSION = '1.0.3', UPDATED = '13 Oct 2026';
 
 /* ── storage: one key, one fact ───────────────────────────────── */
 const P = 'cx.';
@@ -404,10 +404,10 @@ const DB = {
   },
   /* `ok` says whether the last write was kept, so a screen never says
      "saved" about something the browser refused */
-  ok: true, fails: 0,
+  ok: true, fails: 0, bad: new Set(),
   set(k, v) {
-    try { localStorage.setItem(P + k, JSON.stringify(v)); DB.ok = true; return true; }
-    catch (e) { DB.ok = false; DB.fails++; return false; /* full, or private mode */ }
+    try { localStorage.setItem(P + k, JSON.stringify(v)); DB.ok = true; DB.bad.delete(k); return true; }
+    catch (e) { DB.ok = false; DB.fails++; DB.bad.add(k); return false; /* full, or private mode */ }
   },
   /* merge, never replace: read what is there, change the named fields,
      write it back whole */
@@ -470,7 +470,7 @@ function slug(s) {
    apostrophes, punctuation, spacing and a leading article do not count. */
 function norm(s) {
   return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
-    .replace(/\b(?:[a-z]\.){2,}[a-z]?\.?/g, m => m.replace(/\./g, ''))      /* D.O.M.S. is DOMS */
+    .replace(/\b[a-z](?:\.\s?[a-z]\b)+\.?/g, m => m.replace(/[.\s]/g, ''))  /* D.O.M.S., P.R and D. O. M. S. */
     .replace(/['’`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().replace(/^(the|a|an) /, '');
 }
 /* optimal string alignment distance: one swap of neighbours counts as one */
@@ -685,6 +685,8 @@ function masked(t, text) {
 /* A definition that says its own name cannot be a "which definition?"
    question: the blank would point at the answer. */
 const selfNamed = t => /class="blank"/.test(masked(t));
+/* how many other definitions share this one's style (names itself or not) */
+const twins = t => deck().terms.filter(x => x.id !== t.id && x.def && selfNamed(x) === selfNamed(t)).length;
 /* [Term] inside a definition is a reference to another entry. */
 const refs = h => h.replace(/\[([^\]<>]{1,40})\]/g, '<span class="ref">[$1]</span>');
 
@@ -798,7 +800,8 @@ function toast(msg, undo) {
   if (!n) { n = el('div', 'toast'); n.setAttribute('role', 'status'); document.body.appendChild(n); }
   n.className = 'toast' + (undo ? ' act' : '') + (n.classList.contains('up') ? ' up' : '');
   n.innerHTML = '<span>' + msg + '</span>';
-  if (undo) n.appendChild(btn('undo press', 'UNDO', () => { clearTimeout(toastT); n.classList.remove('up'); undo(); }));
+  const born = performance.now();
+  if (undo) n.appendChild(btn('undo press', 'UNDO', () => { if (performance.now() - born < 400) return; clearTimeout(toastT); n.classList.remove('up'); undo(); }));
   requestAnimationFrame(() => n.classList.add('up'));
   clearTimeout(toastT);
   toastT = setTimeout(() => n.classList.remove('up'), undo ? 6000 : 2600);
@@ -840,7 +843,7 @@ function drawHome() {
   const blitzPool = d.terms.filter(t => t.def && tier(card(t.id)) >= 1).length;
   const openNow = sortable && blitzPool >= 4 ? ' SORT and BLITZ are open any time.' : sortable ? ' SORT is open any time.' : '';
 
-  if (!STORE_OK || DB.fails) h.appendChild(el('div', 'banner', '<div><b>This browser is not keeping everything.</b> Storage is off (a private window) or full, so answers are lost when the page closes. BACK UP in Settings still saves a file.</div>'));
+  if (!STORE_OK || DB.bad.size) h.appendChild(el('div', 'banner', '<div><b>This browser is not keeping everything.</b> Storage is off (a private window) or full, so answers are lost when the page closes. BACK UP in Settings still saves a file.</div>'));
 
   /* the one primary thing: today's quest */
   const newToday = Math.min(n.fresh, s.newPer);
@@ -857,6 +860,9 @@ function drawHome() {
     inn.appendChild(el('p', null, esc(bits.join(' · ')) + '.'));
     inn.appendChild(btn('go press', 'START', startQuest));
   } else {
+    /* Nothing due and nothing new: showing up is all there was to do, so it
+       keeps the streak. A missed day is one with work that was not done. */
+    if (streakNow() > 0 && streak().last !== today() && STORE_OK) touchStreak();
     inn.appendChild(el('div', 'kick', '[SYSTEM] ALL CLEAR'));
     inn.appendChild(el('h1', null, 'NOTHING DUE'));
     inn.appendChild(el('p', null, (n.nextDue
@@ -989,7 +995,7 @@ function openEntry(id) {
     h.appendChild(el('h3', null, esc(t.term)));
     if (t.aka && t.aka.length) h.appendChild(el('div', 'note', 'Also: ' + esc(t.aka.join(', '))));
     const defBox = el('div');
-    const showDef = () => { defBox.innerHTML = t.def ? '<p class="def">' + refs(esc(t.def)) + draftMark(t) + '</p>' : '<p class="note">No definition yet. EDIT to add yours.</p>'; };
+    const showDef = () => { defBox.innerHTML = t.def ? '<p class="def">' + refs(esc(t.def)) + draftMark(t) + '</p>' : '<p class="note">No definition yet. EDIT to add yours.</p>'; if (h.contains(document.activeElement) === false || document.activeElement === document.body) { defBox.tabIndex = -1; defBox.focus({ preventScroll: true }); } };
     if (ti >= 1 || !t.def) showDef();
     else {
       defBox.appendChild(el('p', 'note', 'Not found yet. It turns up in a QUEST, and finding it there is how it joins the codex.'));
@@ -1102,7 +1108,7 @@ function kindFor(t, c, mode) {
   const typing = settings().typing;
   if (mode === 'sort') return 'sort';
   if (!t.def) return 'classify';
-  const rev = () => selfNamed(t) ? 'identify' : 'reverse';
+  const rev = () => twins(t) >= 3 ? 'reverse' : 'identify';
   if (mode === 'blitz') return Math.random() < .5 ? 'identify' : rev();
   if (mode === 'boss') return typing ? 'recall' : 'identify';
   if (c.box <= 1) return 'identify';
@@ -1114,7 +1120,8 @@ function kindFor(t, c, mode) {
 /* Wrong answers worth considering: same bracket first, so the choice is
    about meaning and not about family. No two options say the same thing. */
 function decoys(t, field, n, hard) {
-  const pool = deck().terms.filter(x => x.id !== t.id && (field !== 'def' || (x.def && !selfNamed(x))));
+  const self = field === 'def' && selfNamed(t);
+  const pool = deck().terms.filter(x => x.id !== t.id && (field !== 'def' || (x.def && selfNamed(x) === self)));
   const key = x => norm(field === 'def' ? x.def : x.term);
   const same = shuffle(pool.filter(x => x.bracket === t.bracket)), other = shuffle(pool.filter(x => x.bracket !== t.bracket));
   let order;
@@ -1348,10 +1355,13 @@ function drawQ(t, kind) {
     const hard = run.mode === 'boss' || card(t.id).box >= 4;
     const field = kind === 'identify' ? 'term' : 'def';
     const opts = shuffle([t].concat(decoys(t, field, 3, hard)));
+    if (kind === 'reverse' && opts.length < 4) { run.kind = 'identify'; drawQ(t, 'identify'); return; }
     if (opts.length < 2) { drawFlash(t, inn, kind); return; }
     const box = el('div', 'opts' + (kind === 'identify' ? ' two' : ''));
     run.choices = opts.map((o, i) => {
-      const label = kind === 'identify' ? esc(o.term) : refs(esc(o.def));
+      /* when the asked definition names itself, every option is shown with
+         its own name blanked, so a blank points at nothing */
+      const label = kind === 'identify' ? esc(o.term) : selfNamed(t) ? masked(o) : refs(esc(o.def));
       const b = btn('opt press hov ' + (kind === 'identify' ? 'term' : 'defn'), '<span class="k">' + (i + 1) + '</span><span class="v">' + label + '</span>', () => choose(i));
       b._ok = o.id === t.id; b._o = o;
       box.appendChild(b);
@@ -1545,8 +1555,8 @@ function finishRound() {
       if (!seals[run.bracket]) seals[run.bracket] = today();
       DB.patch('rec', { seals });
     }
-    if (DB.fails > run.fails0) cleared = false;
-    inn.appendChild(el('div', 'kick', cleared ? '[SYSTEM] BOSS CLEARED' : '[SYSTEM] BOSS STANDS'));
+    const sealKept = !cleared || !!(rec().seals || {})[run.bracket];
+    inn.appendChild(el('div', 'kick', cleared ? (sealKept ? '[SYSTEM] BOSS CLEARED' : '[SYSTEM] BOSS CLEARED · SEAL NOT SAVED') : '[SYSTEM] BOSS STANDS'));
     inn.appendChild(el('div', null, chip(run.bracket)));
   } else inn.appendChild(el('div', 'kick', '[SYSTEM] QUEST COMPLETE'));
   if (DB.fails > run.fails0) inn.appendChild(el('div', 'fb no', '<div class="t">Not everything here was saved: this browser is not keeping it.</div>'));
@@ -1642,14 +1652,14 @@ function bracketId(s) {
   if (KNOWN_BRACKETS.indexOf(x + 'S') >= 0) x += 'S';
   return x;
 }
-const BULLET = /^\s*(?:[-*•+▪◦]|\d+[.)])\s+/;
+const BULLET = /^\s*(?:[-*•+▪◦●○■□◆◇►▶➤➢✓✔✅☑→⇒‣⁃·]|\p{Extended_Pictographic}️?|\d+[.)])\s+/u;
 const cleanTerm = s => String(s || '').replace(BULLET, '').replace(/\*\*|__/g, '').replace(/^[\s"'“”]+|[\s"'“”.;,:]+$/g, '').replace(/^\[(.+)\]$/, '$1').replace(/\s+/g, ' ').trim();
-const cleanDef = s => String(s || '').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').replace(/^[\s"“]+|[\s"”]+$/g, '').trim();
+const cleanDef = s => String(s || '').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').trim().replace(/^["“]([^"“”]*)["”]$/, '$1').trim();
 const words = s => String(s).trim().split(/\s+/).filter(Boolean).length;
 const termLike = s => { const c = cleanTerm(s); return c.length >= 1 && c.length <= 60 && words(c) <= 7 && /[A-Za-z0-9]/.test(c); };
 /* Title Case, small words allowed: how a name is written and a sentence is not */
 const SMALL = /^(of|and|the|a|an|to|in|for|on|or|with|vs|per|at|by)$/i;
-const titleCase = s => { const w = cleanTerm(s).split(/\s+/); return w.length > 0 && w.every((x, i) => /^[A-Z0-9(\["'“]/.test(x) || (i > 0 && SMALL.test(x))); };
+const titleCase = s => { const w = cleanTerm(s).replace(/\s*\([^)]*\)/g, '').split(/\s+/).filter(Boolean); return w.length > 0 && w.every((x, i) => /^[A-Z0-9(\["'“]/.test(x) || (i > 0 && SMALL.test(x))); };
 /* names with commas between them, each one a name: his own list format */
 function nameList(s) {
   const r = String(s || '').trim().replace(/\.$/, '');
@@ -1741,8 +1751,7 @@ function records(text, sep) {
     if (q) {
       if (ch === '"') {
         if (text[i + 1] === '"') { cur += '""'; i++; continue; }
-        const nx = text[i + 1];
-        if (nx === undefined || nx === sep || nx === '\n') q = false;
+        q = false;
       }
       cur += ch; continue;
     }
@@ -1761,6 +1770,7 @@ function splitRow(line, sep) {
     if (q) {
       if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
       else if (ch === '"' && (i + 1 >= line.length || line[i + 1] === sep)) q = false;
+      else if (ch === '"') { q = false; cur = '"' + cur + '"'; }
       else cur += ch;
     }
     else if (ch === '"' && cur.trim() === '') { q = true; cur = ''; }
@@ -1804,8 +1814,10 @@ function fromDelim(text, out) {
   const cols = colsFrom(splitRow(recs[0], sep));
   if (!cols) return false;
   cols.join = sep === ',' ? ', ' : ' ';
+  let lastB = '';
   recs.slice(1).forEach(l => {
     const it = fromCells(splitRow(l, sep), cols);
+    if (cols.b >= 0) { if (it.b) lastB = it.b; else it.b = lastB; }
     if (it.t && termLike(it.t)) out.items.push({ term: it.t, bracket: it.b, def: it.d, aka: it.a });
     else out.skipped.push(l.trim());
   });
@@ -1841,40 +1853,58 @@ function fromLines(text, out) {
   };
   const h1Count = lines.filter(l => /^\s*#\s+\S/.test(l)).length;
   /* words that label a part of a page, never the name of an entry */
-  const LABEL = /^(example|examples|for example|related|see also|note|notes|tip|tips|summary|why|how|what|why it matters|how to|source|sources|key points?|bottom line|in short|takeaways?|remember|warning|caution|definition|also)$/i;
-  const nameish = x => { const c = cleanTerm(x); return !LABEL.test(c) && titleCase(c); };
-  const nextLine = i => { for (let j = i + 1; j < lines.length; j++) { const x = lines[j].trim(); if (x) return x; } return ''; };
-  const entryLine = x => { const td = splitTD(String(x).replace(BULLET, '')); return !!(td && td[1] && (td[2] === ':' || td[2] === 'emdash' || td[2] === 'bold') && nameish(td[0])); };
+  const LABEL = /^(example|examples|for example|related|related brackets|see also|note|notes|tip|tips|summary|why|how|what|why it matters|how to|how to use it|how to raise it|source|sources|key points?|bottom line|in short|takeaways?|remember|warning|caution|definition|also|mild|moderate|severe|low|medium|high|myths?|truth|facts?|fiction|signs?|symptoms?|causes?|risks?|fix|fixes|the fix|the science|the problem|the solution|problem|solution|goal|target|formula|rule|cue|pros?|cons?|levels?|(?:step|stage|level|phase|week|day|part) \d+)$/i;
+  const TITLE_RE = /^\[([^\]]{1,60})\](?:\s*\[([^\]]{1,40})\])?\s*(?:(?:[:|=]|\s[-–—]|[–—])\s*(.*))?$/;
+  const PROPS = /^(?:created|created time|created by|last edited(?: time| by)?|tags|status|owner|date|url|published|updated)\s*:/i;
+  const LINK = /\[([^\]]+)\]\((?:https?:\/\/|www\.)[^)\s]*\)/g;
 
-  let sec = '', secLvl = 0, last = null, cols = null, gap = true, lastShape = '', page = false, pageLvl = 7, prevList = false, seen = false;
+  let sec = '', secLvl = 0, last = null, cols = null, gap = true, lastShape = '', page = false, pageLvl = 7, pageInline = false, prevList = false, seen = false, pushedAt = -1, prevIdx = -1, i = 0;
+  /* "Glycogen (aka stored carbs)" is the name Glycogen, accepting "stored carbs" */
+  const akaOf = term => { const m = String(term).match(/^(.*?)\s*\((?:aka|a\.k\.a\.|also(?: called| known as)?)\s+([^)]+)\)\s*$/i); return m ? [m[1], m[2].split(/\s*,\s*/)] : [term, []]; };
   const push = (term, def, bracket, aka) => {
-    const it = { term: cleanTerm(term), def: cleanDef(def || ''), bracket: bracket || sec, aka: aka || [] };
-    out.items.push(it); last = it; prevList = false; return it;
+    const [nm, more] = akaOf(term);
+    const it = { term: cleanTerm(nm), def: cleanDef(def || ''), bracket: bracket || sec, aka: (aka || []).concat(more) };
+    out.items.push(it); last = it; prevList = false; pushedAt = i; return it;
   };
   /* A page never takes the bracket of whatever section came before it: a
      bracket it does not name is no bracket, so an existing entry stays
      where it is. Only a heading page under a bracket heading inherits. */
   const pushPage = (term, def, bracket) => {
-    const it = { term: cleanTerm(term), def: cleanDef(def || ''), bracket: bracket || '', aka: [], page: true };
-    out.items.push(it); last = it; prevList = false; return it;
+    const [nm, more] = akaOf(term);
+    const it = { term: cleanTerm(nm), def: cleanDef(def || ''), bracket: bracket || '', aka: more, page: true };
+    out.items.push(it); last = it; prevList = false; pushedAt = i; return it;
   };
-  const openPage = lvl => { page = true; pageLvl = lvl; lastShape = ''; };
+  /* `inline`: the page was opened by "[Name] — definition", so a line of the
+     same shape after it is a sibling page, not a reference inside it */
+  const openPage = (lvl, inline) => { page = true; pageLvl = lvl; pageInline = !!inline; lastShape = ''; };
   /* bullets are joined with semicolons, and the sentence after a list
      starts as a sentence */
   const appendTo = (it, txt, bullet) => {
+    txt = String(txt).replace(/^>\s*/, '');
     const open = !/[:.;!?]$/.test(it.def);
-    /* a short line with no full stop, then a list, is the list's label */
-    const sep = !it.def ? '' : open && (bullet || it.bul) ? (bullet ? (it.label ? ': ' : '; ') : '. ') : ' ';
-    it.def = cleanDef(it.def + sep + txt); it.bul = bullet;
-    it.label = !bullet && words(txt) <= 3 && !/[.!?:;]$/.test(txt);
+    /* a short line with no full stop is a label: a colon after it, and the
+       sentence after a list starts as a sentence */
+    const sep = !it.def ? '' : open && (bullet || it.bul) ? (bullet ? (it.label ? ': ' : '; ') : '. ') : open && it.label && !/:/.test(it.lastLine || '') ? ': ' : ' ';
+    it.def = cleanDef(it.def + sep + txt); it.bul = bullet; it.lastLine = txt;
+    it.label = !bullet && !/[.!?:;]$/.test(txt) && (words(txt) <= 3 || (titleCase(txt) && words(txt) <= 6));
   };
   const EMPTY_NOTE = /^\(?\s*empty(?:\s*[.,;:—–-]\s*populate\b.*|\s*\.?\s*\)?)$/i;
 
-  for (let i = 0; i < lines.length; i++) {
-    const s0 = lines[i].trim();
+  for (i = 0; i < lines.length; i++) {
+    let s0 = lines[i].trim().replace(/^>\s*/, '');
     if (!s0) { gap = true; continue; }
     const wasGap = gap; gap = false;
     const isFirst = !seen; seen = true;
+    const prevLine = prevIdx; prevIdx = i;
+    const ind = lines[i].match(/^[ \t]*/)[0].replace(/\t/g, '    ').length;
+    /* a markdown link: alone on a line it is a page title, in text a reference */
+    if (LINK.test(s0)) {
+      LINK.lastIndex = 0;
+      const lone = s0.replace(BULLET, '').match(/^\[([^\]]+)\]\((?:https?:\/\/|www\.)[^)\s]*\)$/);
+      s0 = lone ? (BULLET.test(s0) ? lone[1] : '[' + lone[1] + ']') : s0.replace(LINK, '[$1]');
+    }
+    LINK.lastIndex = 0;
+    s0 = s0.replace(/^((?:\*\*)?\[[^\]]+\](?:\*\*)?)\s*(?:\p{Extended_Pictographic}️?\s*)+$/u, '$1');
     if (/^[-*_=]{3,}$/.test(s0)) continue;                      /* a rule line */
 
     /* 1. a heading: a bracket, a sub-heading of the page, a page, or the title */
@@ -1896,13 +1926,17 @@ function fromLines(text, out) {
 
     /* 2. a bracket line: [SKILLS], SKILLS, [SKILLS]: names, SKILLS: names, [SKILLS] - meaning */
     const plain = s0.replace(/\*\*|__/g, '');
-    const bB = plain.match(/^\[([^\]]{1,40})\]\s*(?:[:\-–—]\s*(.*))?$/), bP = plain.match(/^([A-Z][A-Z &/-]{2,39}?)\s*(?::\s*(.*))?$/);
+    const bB = plain.match(/^\[([^\]]{1,40})\]\s*(?:\(\d+\))?\s*(?:[:\-–—]\s*(.*))?$/), bP = plain.match(/^([A-Z][A-Z &/-]{2,39}?)\s*(?:\(\d+\))?\s*(?::\s*(.*))?$/);
     const bm = bB && isCat(bB[1], true) ? bB : (bP && isCat(bP[1], false) ? bP : null);
     if (bm) {
-      /* a Skool title and then its bracket tag: the tag is the title's */
-      if (page && last && !last.def && !bm[2]) { last.bracket = bracketId(bm[1]); continue; }
+      const rest = (bm[2] || '').replace(/^[*_]+|[*_]+$/g, '').trim();
+      const tagOnly = !rest || /^\(?\d+\)?(?:\s*(entries|terms|items))?$/i.test(rest);
+      /* a Skool title and then its bracket tag: the tag is the title's. The
+         same for a plain name straight above a tag, with no bracket open */
+      if (page && last && !last.def && tagOnly) { last.bracket = bracketId(bm[1]); continue; }
+      if (!sec && !page && last && !last.def && tagOnly && pushedAt === prevLine) { last.bracket = bracketId(bm[1]); openPage(7); continue; }
       sec = bracketId(bm[1]); secLvl = 0; page = false; last = null; prevList = false;
-      if (bm[2]) {
+      if (bm[2] && !tagOnly && !EMPTY_NOTE.test(rest)) {
         const ns = nameList(bm[2]);
         if (ns) { ns.forEach(n => push(n, '')); last = null; prevList = true; }
         else out.means[sec] = cleanDef(bm[2]);
@@ -1910,22 +1944,25 @@ function fromLines(text, out) {
       continue;
     }
 
-    /* 3. inside a page, every line is the page's text, unless it starts a
-       new page, or (after a blank line, or before the page has any text) it
-       is another entry's name with a definition, or the first of a run of
-       "Name: definition" lines */
+    /* 3. Inside a page, every line is the page's text. A page ends only at a
+       heading, a bracket line (step 2) or a new title: "[Name]" alone on its
+       line, or "[Name] — definition" right after a page opened the same way.
+       Nothing else can end it, so a "Related" list, "1. Sleep: 7 to 9 hours",
+       Mild / Moderate / Severe or Myth / Truth can never be read as another
+       entry and overwrite it. A title in a list or after a label is a
+       reference and stays text. */
     if (page && last) {
-      const c0 = s0.replace(BULLET, '').replace(/^\*\*(.*)\*\*$/, '$1');
-      const tm = c0.match(/^\[([^\]]{1,60})\](?:\s*\[([^\]]{1,40})\])?\s*(?:(?:[:|=]|\s[-–—]|[–—])\s*(.*))?$/);
-      if (tm && termLike(tm[1]) && !isCat(tm[1], true)) { pushPage(tm[1], tm[3] || '', tm[2] && isCat(tm[2], true) ? bracketId(tm[2]) : ''); openPage(7); continue; }
-      const cand = s0.replace(BULLET, ''), td0 = splitTD(cand);
-      let leave = false;
-      if ((wasGap || !last.def) && td0 && td0[1]) {
-        const hit = matchEntry(cleanTerm(td0[0])), own = matchEntry(last.term);
-        leave = (!!hit && !(own && hit.t.id === own.t.id)) || (wasGap && entryLine(cand) && entryLine(nextLine(i)));
+      const plainP = s0.replace(BULLET, '').replace(/\*\*|__/g, '');
+      const pm = plainP.match(/^(?:bracket|category|type|section|group)\s*:\s*\[?([^\]]+?)\]?\s*$/i);
+      if (pm && isCat(pm[1], true)) { last.bracket = bracketId(pm[1]); continue; }       /* a Notion property */
+      if (!last.def && PROPS.test(plainP)) continue;
+      const tm = BULLET.test(s0) ? null : s0.replace(/^\*\*(.*)\*\*$/, '$1').match(TITLE_RE);
+      const refCtx = /:$/.test(last.def) || last.label || /^(related|see also|see|also|links?)\b/i.test(last.lastLine || '') || /^\[[^\]]+\]/.test(last.lastLine || '');
+      if (tm && termLike(tm[1]) && !isCat(tm[1], true) && !refCtx && (!tm[3] || pageInline)) {
+        pushPage(tm[1], tm[3] || '', tm[2] && isCat(tm[2], true) ? bracketId(tm[2]) : ''); openPage(7, !!tm[3]); continue;
       }
-      if (!leave) { appendTo(last, cand, BULLET.test(s0)); continue; }
-      page = false;
+      appendTo(last, s0.replace(BULLET, ''), BULLET.test(s0));
+      continue;
     }
 
     /* 4. the empty-bracket note in any form, and an aside with nothing to belong to */
@@ -1937,6 +1974,13 @@ function fromLines(text, out) {
     if (/^\|.*\|$/.test(s0) || s0.split('|').length >= 3) {
       if (/^[\s|:\-]+$/.test(s0)) continue;
       const cells = s0.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+      const cl = c => String(c).replace(/[*_]/g, '').trim();
+      if (cells.length === 2 && /^(bracket|category|section)$/i.test(cl(cells[0])) && /^(entries|terms|names|list|items)$/i.test(cl(cells[1]))) { cols = { list: true }; continue; }
+      if (cols && cols.list && cells.length >= 2) {
+        const b = isCat(cells[0], true) ? bracketId(cells[0]) : '';
+        const nl = nameList(cells[1]) || (termLike(cells[1]) && !EMPTY_NOTE.test(cl(cells[1])) && !/^empty\b/i.test(cl(cells[1])) ? [cells[1]] : []);
+        nl.forEach(n => push(n, '', b)); last = null; continue;
+      }
       const h = colsFrom(cells);
       if (h) { cols = Object.assign(h, { join: ' | ' }); continue; }
       const it = fromCells(cells, cols, x => isCat(x, true));
@@ -1974,6 +2018,13 @@ function fromLines(text, out) {
     });
     s = lineBr ? s.replace(/\s+([:,])/g, '$1').replace(/\s{2,}/g, ' ').trim() : sRaw.trim();
     if (!s) continue;
+    /* bullets under a definition that ends in a colon, or indented deeper
+       than the entry they follow, are that entry's list */
+    if (last && bulleted && (/:$/.test(last.def || '') || last.inList || (last.ind != null && ind > last.ind))) {
+      if (/:$/.test(last.def || '') || last.inList) last.inList = true;
+      appendTo(last, sRaw.trim(), true); continue;
+    }
+    if (last && !bulleted) last.inList = false;
     const td = splitTD(s);
 
     /* the title line, however it is dressed: BRACKET DATABASE - Tom Moncupa */
@@ -2009,9 +2060,9 @@ function fromLines(text, out) {
       const named = marked || lineBr || titleCase(td[0]) || isTermName(td[0]);
       const apart = wasGap || marked || lineBr || td[2] === lastShape || td[2] === ':' || td[2] === 'emdash' || td[2] === 'bold' || isTermName(td[0]);
       if (!last || (named && apart)) {
-        if (/^(\*\*)?\[/.test(s)) { pushPage(td[0], td[1], lineBr); openPage(7); }
+        if (/^(\*\*)?\[/.test(s)) { pushPage(td[0], td[1], lineBr); openPage(7, !!td[1]); }
         else push(td[0], td[1], lineBr);
-        lastShape = td[2];
+        last.ind = ind; lastShape = td[2];
         continue;
       }
     }
@@ -2025,7 +2076,7 @@ function fromLines(text, out) {
     if (last) {
       const ld = last.def || '';
       if (/:$/.test(ld)) { appendTo(last, s, true); continue; }       /* the items of a list the definition opened */
-      const opens = bareName && (sec || lineBr || marked || isTermName(s)) && (!ld || wasGap || /[.!?]$/.test(ld) || lineBr || isTermName(s));
+      const opens = bareName && (sec || lineBr || marked || isTermName(s) || (wasGap && /[.!?]$/.test(ld))) && (!ld || wasGap || /[.!?]$/.test(ld) || lineBr || isTermName(s));
       if (!opens) { appendTo(last, lineBr ? sRaw : s, bulleted); continue; }
       push(s, '', lineBr); continue;
     }
@@ -2039,8 +2090,8 @@ function fromLines(text, out) {
    separator and comes back exactly as written. Returns [name, meaning,
    kind of separator]. */
 function splitTD(s) {
-  const bold = s.match(/^\*\*(.+?)\*\*\s*(?:[:\-–—=|]\s*)?(.*)$/);
-  if (bold) return termLike(bold[1]) ? [bold[1], bold[2], 'bold'] : null;
+  const bold = s.match(/^\*\*(.+?)\*\*\s*([:\-–—=|]\s*)?(.*)$/);
+  if (bold) return termLike(bold[1]) ? [bold[1], !bold[2] && /^[a-z]/.test(bold[3]) ? cleanTerm(bold[1]) + ' ' + bold[3] : bold[3], 'bold'] : null;
   const kept = [];
   const p = s.replace(/\d\s*[-–—]\s*(?=\d)/g, m => { kept.push(m); return '‒' + (kept.length - 1) + '‒'; });
   const m = p.match(/\s+[|=]\s+|\s+--\s+|\s+-\s+|\s+[–—]\s*|[–—]\s+|\t+|:\s+|:$/) || p.match(/[–—]/);
@@ -2061,7 +2112,7 @@ function tidy(out) {
     const x = { id, term, def: cleanDef(it.def), bracket: bracketId(it.bracket), aka: (it.aka || []).map(a => String(a).trim()).filter(Boolean), page: !!it.page };
     if (seenAt[id] != null) {
       const y = items[seenAt[id]];
-      if (it.page && !y.page && x.def) { if (y.def && y.def !== x.def) out.dupes.push(term); y.def = x.def; y.page = true; if (x.bracket) y.bracket = x.bracket; return; }
+      if (it.page && !y.page && x.def) { if (y.def && y.def !== x.def) (out.pageWon = out.pageWon || []).push(term); y.def = x.def; y.page = true; if (x.bracket) y.bracket = x.bracket; return; }
       if (x.def && y.def && x.def !== y.def) out.dupes.push(term);
       if (x.def && !y.def) y.def = x.def;
       if (x.bracket && !y.bracket) y.bracket = x.bracket;
@@ -2192,6 +2243,7 @@ function openImport() {
       if (show.length > 6) html += '<div>…and ' + (show.length - 6) + ' more.</div>';
       Object.keys(p.means).forEach(b => { html += '<div class="ln">' + chip(b) + '<span><b>meaning</b> ' + esc(cut(p.means[b], 90)) + '</span></div>'; });
       if (p.dupes.length) html += '<div class="warn">Named twice, the first definition kept: ' + esc(p.dupes.slice(0, 4).join(', ')) + '</div>';
+      if (parsed.pageWon && parsed.pageWon.length) html += '<div class="warn">Named twice, the page\'s own text kept: ' + esc(parsed.pageWon.slice(0, 4).join(', ')) + '</div>';
       if (parsed.skipped.length) html += '<div class="warn">' + plural(parsed.skipped.length, 'line') + ' not understood, left out: ' + esc(parsed.skipped.slice(0, 3).map(x => cut(x, 40)).join(' / ')) + '</div>';
       prev.innerHTML = html;
       save.disabled = !(p.update.length || p.add.length || p.back.length || nMeans);
@@ -2519,7 +2571,7 @@ const dayCheck = () => {
 setInterval(dayCheck, 60000);
 addEventListener('focus', dayCheck);
 addEventListener('pageshow', e => { if (e.persisted) { invalidate(); drawHome(); } });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !document.querySelector('.play')) drawHome(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !document.querySelector('.play') && !(document.activeElement && document.activeElement.type === 'search')) drawHome(); });
 </script>
 </body>
 </html>

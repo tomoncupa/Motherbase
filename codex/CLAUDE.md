@@ -113,7 +113,11 @@ definition anyway" under it. Names are always visible: SORT shows them anyway.
 
 As RECKON's: continues if he answered anything, a freeze every seventh day,
 capped at three, spent silently on a missed day, never offered at the moment of
-failure. The header shows what it is worth today.
+failure. The header shows what it is worth today. **A day with nothing to do is
+not a missed day**: when the home screen says ALL CLEAR (nothing due, nothing
+new), opening it keeps the streak, because showing up was all there was to do.
+The final review's 40-day simulation found the streak breaking for someone who
+cleared every quest.
 
 ## Data
 
@@ -149,22 +153,35 @@ headings, names with commas, also `[SKILLS]: names` and `SKILLS: names`),
 header, quoted line breaks kept; or cells copied from a sheet), and JSON.
 
 **The Skool page is the rule that settles most of it.** A title in brackets
-(`[Palatability]`, `**[Palatability]**`, `[Palatability] [STATS]`) or a heading
-that is a name opens a PAGE. Every line after it is that page's text (bullets,
-"Why it matters:" labels, sub-headings deeper than the page's own, capitals
-like SYMPTOMS, asides in brackets, number ranges) until one of: the next title,
-heading or bracket line; another entry's name with a definition, after a blank
-line or before the page has any text (never the page's own name or alias); or
-a run of two Title Case `Name: definition` lines after a blank line. **A page
-never takes the bracket of the section before it**: a bracket it does not name
-is no bracket, so SAVE leaves an existing entry where it is. Only a heading page
-under a bracket heading of a higher level inherits it. A page's own text beats
-a mention of the same name elsewhere in the paste.
+(`[Palatability]`, `**[Palatability]**`, `[Palatability] [STATS]`, a markdown
+link alone on its line) or a heading that is a name opens a PAGE. **A page ends
+only at an explicit boundary**: a heading (one deeper than the page's own is a
+sub-heading and stays inside), a bracket line, a table, or a new title alone on
+its line. "[Name] — definition" starts a sibling page only straight after a page
+opened the same way. Everything else is that page's text: bullets, numbered
+steps, "Mild / Moderate / Severe", "Myth / Truth", "Related" lists, capitals
+like SYMPTOMS, asides in brackets, a title in a list or after a label. **So
+nothing inside a page can ever be read as another entry and overwrite it.**
+That rule was bought on purpose (the final review found "1. Sleep: 7 to 9
+hours." in a Recovery page replacing a stored Sleep definition), and its price
+is stated: a `Name: def` list straight after a page joins that page's text
+unless a bracket line sits above it, as his database's lists already do. The
+preview shows it before SAVE, and UNDO takes it back.
+
+**A page never takes the bracket of the section before it**: a bracket it does
+not name is no bracket, so SAVE leaves an existing entry where it is. Only a
+heading page under a bracket heading of a higher level inherits it, a
+`Bracket: [STATS]` line in the page sets it (Notion), and a bracket line right
+under a title with no text yet tags that title. A page's own text beats a
+mention of the same name elsewhere, and the preview says which was kept.
 
 Outside a page, a number range (`24 - 72`) is never a separator and comes back
 as written; a line opens a new entry only when it reads as a name (Title Case,
 an existing name, a bullet, bold or a tag) and is set apart, and label words
-("Why it matters", "For example") never do. A definition ending in a colon
+("Why it matters", "For example", "Mild", "Step 1", "Myth", "Symptoms") never
+do. Bullets indented under an entry, or under a definition ending in a colon,
+are its list. `Name (aka other name):` gives the entry an extra accepted
+answer. Emoji and Google Docs glyphs count as bullets; a link becomes its text. A definition ending in a colon
 takes the bullets under it as its list. The empty-TRAITS note is skipped in any
 dress, and only that note: "Empty Calories" is an entry. A CODEX backup pasted
 into LOAD is refused with a pointer to RESTORE.
@@ -222,9 +239,12 @@ One history entry covers everything open, and closes in the same tick share one
 `history.back()`, which is what keeps ERASE and RESET (two sheets closing
 together) from leaving the app with their UNDO.
 
-A failed write is never reported as saved: `DB.ok` follows every write, the
-home screen says when the browser keeps nothing at all (a private window), and
-an edit, a switch or a restore that was refused says so.
+A failed write is never reported as saved. `DB.ok` follows the last write,
+`DB.fails` counts every failure (a round compares it with its start, so a lost
+write is named on the result screen and a record or seal is not claimed when it
+was not kept), and `DB.bad` holds the keys whose last write failed, so the home
+banner comes and goes with the storage. An edit, a switch or a restore that was
+refused says so.
 
 ## Testing
 

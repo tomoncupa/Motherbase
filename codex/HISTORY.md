@@ -109,3 +109,34 @@ the parser's new page rule meeting real Skool text:
 All of them fixed and each repro re-run in headless Chromium: Tom's own paste
 still reads as 39 of 39 already the same, and every case above now gives the
 expected entries, brackets and definitions.
+
+## 2026-10-13: the final check, 1.0.3
+
+Three independent agents on 1.0.2. The **season** simulation played eleven
+40-day seasons (newPer 3 to 12, typing off, skipped days, bosses, midnight
+crossings, a page left open overnight) against a model of this brief and found
+the core loop exact, bar one rule gap: a day with nothing due broke the streak.
+The **UI and data** check found 13 of 16 items fixed. Three were partial: a boss
+won on score was called BOSS STANDS when an unrelated write failed; a phone
+double tap on ERASE landed on the toast's UNDO; "P.R" without its last dot was
+still wrong.
+
+The **parser** attack found the only P0 of the round, and it came from the
+round-2 fix itself: the rule that let a page end at "another entry's name after
+a blank line" turned a Recovery page's "1. Sleep: 7 to 9 hours." into a new
+definition for Sleep, overwriting Tom's own. Related lists, level lists and
+tagged references did the same. The fix is a rule, not a patch: **a page ends
+only at an explicit boundary**, so no line inside a page can ever touch another
+entry. The price, a list straight after a page joining it unless a bracket line
+separates them, is written into the brief.
+
+Also fixed: label words (Mild, Step 1, Myth, Symptoms) as entries, colon lists
+and indented bullets, emoji bullets, Notion property lines, Tom's own
+`| Bracket | Entries |` table, the empty-TRAITS note on its bracket line, names
+after a blank line with no bracket open, `(aka ...)`, markdown links, emoji
+after a title, quotes at the end of a definition, a count after a bracket, a
+bold name that opens a sentence, a bracket tag under a plain title, quotes in
+TSV, a grouped bracket column, the "first definition kept" message when the
+page's text was kept, focus after "Show the definition anyway", a search box
+wiped by a tab switch, and definitions in a style where most name themselves
+(every option is now blanked the same way, or the question is asked by name).
