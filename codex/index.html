@@ -1,0 +1,2095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mb-version" content="1.0.0, 2026-10-13">
+<title>CODEX</title>
+<meta name="theme-color" content="#05070D">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%2305070D'/%3E%3Cpath d='M38 24H24v52h14M62 24h14v52H62' fill='none' stroke='%235FD3FF' stroke-width='9' stroke-linecap='square'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!--  CODEX is a guest in this repo, like reckon/ and calcount/. It loads
+      nothing from ../shared: no store, no themes, no icons, no sounds. Every
+      line it needs is in this file, so the folder lifts out into its own repo
+      with nothing to untangle. Its storage keys all start "cx." and it never
+      reads or writes Motherbase's rows. See codex/CLAUDE.md.
+
+      The one font is Rajdhani from Google Fonts, for the System-window look.
+      If it does not load, the stack falls back to the system's own and
+      nothing else changes.                                                  -->
+
+<style>
+/* ─────────────────────────── the system ───────────────────────────
+   Every colour in this file is declared here and nowhere else. The look
+   is the System window from NOTICE's HUNTER palette: near-black navy,
+   one cyan that means "this is live", cut corners and a faint glow.
+   Each bracket gets its own colour so a term's family is visible at a
+   glance; gold is kept for MASTERED and nothing else.                */
+:root{
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px;
+  --f1:12px; --f2:14px; --f3:16px; --f4:18px; --f5:20px; --f6:24px; --f7:30px; --f8:36px; --f9:48px;
+
+  --bg:#05070D;
+  --bg-2:#0A1830;
+  --s-1:#0B1626;          /* a window or card */
+  --s-2:#102036;          /* a row on a card */
+  --s-3:#17304D;          /* a key or a pressed row */
+  --line:#1F3A5A;
+  --line-2:#4A7BA8;       /* a line that carries meaning */
+
+  --t1:#EAF7FF;           /* primary text */
+  --t2:#B4D4EA;           /* secondary */
+  --t3:#8DB0CB;           /* tertiary, 5:1 or better on a row */
+
+  --acc:#5FD3FF;
+  --acc-fg:#03121F;
+  --glow:rgba(95,211,255,.45);
+  --glow-2:rgba(95,211,255,.14);
+  --gold:#F2C14E;
+  --gold-fg:#1E1503;
+  --good:#5BD98A;
+  --good-bg:rgba(91,217,138,.12);
+  --bad:#FF7A7A;
+  --bad-bg:rgba(255,122,122,.12);
+  --scrim:rgba(2,5,10,.78);
+  --knob:#EAF7FF;
+
+  /* one per bracket, in the order the database lists them */
+  --b1:#5FD3FF; --b2:#F2C14E; --b3:#FF8A7A; --b4:#C79BFF; --b5:#5BD98A; --b6:#FF85C8;
+
+  --face:'Rajdhani','Bahnschrift','DIN Alternate','Segoe UI',system-ui,sans-serif;
+  --body:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',system-ui,sans-serif;
+  --mono:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+
+  --r1:6px; --r2:10px; --r3:16px; --r4:999px;
+  --cut:12px;
+  --clip:polygon(var(--cut) 0,calc(100% - var(--cut)) 0,100% var(--cut),100% calc(100% - var(--cut)),calc(100% - var(--cut)) 100%,var(--cut) 100%,0 calc(100% - var(--cut)),0 var(--cut));
+  --tap:44px;
+  --e1:0 1px 2px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.35);
+  --e2:0 4px 12px rgba(0,0,0,.45),0 2px 4px rgba(0,0,0,.35);
+  --e3:0 12px 32px rgba(0,0,0,.55);
+
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+
+  --fast:120ms; --med:220ms; --slow:420ms;
+  --out:cubic-bezier(.2,.8,.3,1);
+}
+
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{height:100%}
+body{
+  min-height:100dvh;color:var(--t1);
+  background:radial-gradient(120% 70% at 50% -10%,var(--bg-2),var(--bg) 70%) fixed,var(--bg);
+  font-family:var(--body);font-size:var(--f3);line-height:1.5;-webkit-font-smoothing:antialiased;
+  overscroll-behavior-y:none;display:flex;flex-direction:column;
+}
+button,input,textarea{font:inherit;color:inherit}
+button{border:0;background:none;cursor:pointer;touch-action:manipulation}
+button:disabled{cursor:default}
+button:focus-visible,[tabindex]:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.press{transition:transform var(--fast) var(--out),background-color var(--fast) linear,border-color var(--fast) linear}
+.press:active:not(:disabled){transform:scale(.97)}
+@media (hover:hover) and (pointer:fine){ .hov:hover:not(:disabled){background:var(--s-3)} }
+@media (prefers-reduced-motion:reduce){ *{animation-duration:.01ms !important;transition-duration:.01ms !important} }
+.face{font-family:var(--face);letter-spacing:.06em}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+
+/* ─────────────────────────── shell ─────────────────────────── */
+header{
+  flex:0 0 auto;display:flex;align-items:center;gap:var(--s2);position:sticky;top:0;z-index:10;
+  padding:calc(var(--s2) + var(--safe-t)) calc(var(--s3) + var(--safe-r)) var(--s2) calc(var(--s4) + var(--safe-l));
+  background:var(--s-1);border-bottom:1px solid var(--line);
+}
+.mark{font-family:var(--face);font-size:var(--f5);font-weight:700;letter-spacing:.24em;display:flex;align-items:center;gap:var(--s1)}
+.mark b{color:var(--acc);font-weight:700}
+.grow{flex:1}
+.hbtn{min-width:var(--tap);min-height:var(--tap);display:flex;align-items:center;justify-content:center;
+  border-radius:var(--r1);color:var(--t2)}
+.streak{display:flex;align-items:baseline;gap:var(--s1);font-size:var(--f2);color:var(--t2);
+  min-height:var(--tap);padding:0 var(--s2);border-radius:var(--r1)}
+.streak b{font-family:var(--face);font-size:var(--f5);color:var(--acc);font-weight:700}
+.streak.off b{color:var(--t3)}
+
+main{flex:1}
+.wrap{max-width:760px;margin:0 auto;
+  padding:var(--s5) calc(var(--s4) + var(--safe-r)) calc(var(--s7) + var(--safe-b)) calc(var(--s4) + var(--safe-l));
+  display:flex;flex-direction:column;gap:var(--s5)}
+
+/* ─────────────────────── the System window ───────────────────────
+   An octagon with its corners cut, drawn twice: the outer box is the
+   line colour, the inner box is the panel, inset by one pixel. A
+   clip-path cannot carry a border, and this is the way round it. The
+   glow sits on a wrapper because a clipped box cannot cast a shadow. */
+.glow{filter:drop-shadow(0 0 10px var(--glow-2)) drop-shadow(0 0 2px var(--glow))}
+.win{background:var(--c,var(--acc));clip-path:var(--clip);padding:1px}
+.win>.in{background:linear-gradient(180deg,var(--s-1),var(--bg));clip-path:var(--clip);padding:var(--s5)}
+.kick{font-family:var(--face);font-size:var(--f2);font-weight:700;letter-spacing:.18em;color:var(--c,var(--acc))}
+.chip{display:inline-flex;align-items:center;font-family:var(--face);font-weight:700;letter-spacing:.1em;
+  font-size:var(--f2);color:var(--c,var(--acc));border:1px solid currentColor;border-radius:var(--r1);
+  padding:0 var(--s2);line-height:1.6;white-space:nowrap}
+.draft{font-family:var(--face);font-size:var(--f1);font-weight:700;letter-spacing:.14em;color:var(--t3);
+  border:1px dashed var(--line-2);border-radius:var(--r1);padding:0 var(--s1);white-space:nowrap}
+
+/* ─────────────────────────── home ─────────────────────────── */
+.next .in{display:flex;flex-direction:column;gap:var(--s2)}
+.next h1{font-family:var(--face);font-size:var(--f8);line-height:1.05;font-weight:700;letter-spacing:.04em}
+.next p{color:var(--t2)}
+.go{margin-top:var(--s3);width:100%;min-height:56px;border-radius:var(--r2);
+  background:var(--acc);color:var(--acc-fg);font-family:var(--face);font-size:var(--f5);font-weight:700;letter-spacing:.16em}
+.go:disabled{background:var(--s-2);color:var(--t3)}
+.go.ghost{background:none;color:var(--t1);border:1px solid var(--line-2)}
+
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+.mode{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;
+  min-height:72px;padding:var(--s3) var(--s4);border-radius:var(--r2);background:var(--s-1);border:1px solid var(--line)}
+.mode .nm{font-family:var(--face);font-size:var(--f5);font-weight:700;letter-spacing:.14em}
+.mode .sub{font-size:var(--f2);color:var(--t3)}
+.mode.lock{opacity:.6}
+
+.tally{display:flex;flex-direction:column;gap:var(--s2)}
+.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--s-2)}
+.bar i{display:block;height:100%}
+.bar .m{background:var(--gold)} .bar .k{background:var(--acc)} .bar .f{background:var(--line-2)}
+.tally .txt{font-size:var(--f2);color:var(--t2);display:flex;flex-wrap:wrap;gap:var(--s1) var(--s4)}
+.tally .txt b{color:var(--t1);font-family:var(--face);font-size:var(--f4)}
+
+.search{display:flex;align-items:center;gap:var(--s2);background:var(--s-1);border:1px solid var(--line);
+  border-radius:var(--r2);padding:0 var(--s3);min-height:48px;color:var(--t3)}
+.search input{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--t1);font-size:var(--f3);min-height:46px}
+.search input::placeholder{color:var(--t3)}
+
+.brk{display:flex;flex-direction:column;gap:var(--s3)}
+.brk-h{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap}
+.brk-h .chip{font-size:var(--f4)}
+.brk-h .cnt{font-family:var(--face);font-size:var(--f4);color:var(--t2);font-weight:600}
+.brk-h .means{flex-basis:100%;font-size:var(--f2);color:var(--t3)}
+.brk-h .boss{margin-left:auto}
+.small{min-height:var(--tap);padding:0 var(--s3);border-radius:var(--r1);font-family:var(--face);font-weight:700;
+  letter-spacing:.12em;font-size:var(--f2);border:1px solid var(--line-2);color:var(--t1);display:inline-flex;align-items:center;gap:var(--s2)}
+.small.hot{border-color:var(--c,var(--acc));color:var(--c,var(--acc))}
+.seal{font-family:var(--face);font-weight:700;letter-spacing:.14em;font-size:var(--f2);color:var(--gold);
+  border:1px solid var(--gold);border-radius:var(--r1);padding:var(--s1) var(--s2);margin-left:auto}
+.gate{font-size:var(--f2);color:var(--t3);margin-left:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--s2)}
+.tile{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:var(--s2);text-align:left;
+  min-height:72px;padding:var(--s3);border-radius:var(--r1);background:var(--s-1);
+  border:1px solid var(--line);border-left:3px solid var(--c)}
+.tile .nm{font-family:var(--face);font-size:var(--f4);font-weight:700;line-height:1.15;letter-spacing:.02em;overflow-wrap:anywhere}
+.tile .st{display:flex;align-items:center;gap:var(--s2);font-size:var(--f1);color:var(--t3);letter-spacing:.12em;font-family:var(--face);font-weight:700}
+.pips{display:flex;gap:3px}
+.pips i{width:14px;height:4px;border-radius:2px;background:var(--s-3)}
+.pips i.on{background:var(--c)}
+.tile.t3{border-color:var(--gold);border-left-color:var(--gold)}
+.tile.t3 .pips i.on{background:var(--gold)}
+.tile.lock{border-left-color:var(--line-2);background:var(--bg)}
+.tile.lock .nm{color:var(--t2);font-weight:600}
+.tile .due{position:absolute;top:var(--s2);right:var(--s2);width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 6px var(--glow)}
+.tile.fresh{animation:flip var(--slow) var(--out)}
+@keyframes flip{from{transform:rotateY(80deg);opacity:.2}to{transform:none;opacity:1}}
+.empty{border:1px dashed var(--line-2);border-radius:var(--r2);padding:var(--s4);color:var(--t3);font-size:var(--f2);
+  display:flex;flex-direction:column;align-items:flex-start;gap:var(--s3)}
+.none{color:var(--t3);font-size:var(--f2);text-align:center;padding:var(--s5)}
+.banner{display:flex;flex-direction:column;gap:var(--s2);border:1px dashed var(--line-2);border-radius:var(--r2);
+  padding:var(--s3) var(--s4);font-size:var(--f2);color:var(--t2)}
+.banner .row{display:flex;flex-wrap:wrap;gap:var(--s2)}
+
+/* ─────────────────────────── play ─────────────────────────── */
+.play{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;
+  background:radial-gradient(120% 70% at 50% -10%,var(--bg-2),var(--bg) 70%),var(--bg)}
+.ptop{flex:0 0 auto;display:flex;align-items:center;gap:var(--s3);
+  padding:calc(var(--s2) + var(--safe-t)) calc(var(--s4) + var(--safe-r)) var(--s2) calc(var(--s2) + var(--safe-l))}
+.prog{flex:1;height:6px;border-radius:3px;background:var(--s-2);overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--acc);transition:width var(--med) var(--out)}
+.prog.time i{background:var(--gold);transition:width 250ms linear}
+.ptag{flex:0 0 auto;min-width:56px;text-align:right;font-family:var(--face);font-weight:700;font-size:var(--f4);color:var(--t2);letter-spacing:.06em}
+.pbody{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.pwrap{max-width:640px;margin:0 auto;padding:var(--s4) calc(var(--s4) + var(--safe-r)) var(--s4) calc(var(--s4) + var(--safe-l));
+  display:flex;flex-direction:column;gap:var(--s4);min-height:100%}
+.pfoot{flex:0 0 auto;padding:var(--s3) calc(var(--s4) + var(--safe-r)) calc(var(--s3) + var(--safe-b)) calc(var(--s4) + var(--safe-l));
+  border-top:1px solid var(--line);background:var(--s-1)}
+.pfoot .inner{max-width:640px;margin:0 auto;display:flex;gap:var(--s3)}
+.pfoot .inner > *{flex:1}
+.pfoot .go{margin-top:0}
+.pfoot:empty{display:none}
+
+.q .in{display:flex;flex-direction:column;gap:var(--s3)}
+.q .top{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap}
+.q .top .chip{margin-left:auto}
+.big{font-family:var(--face);font-size:var(--f8);font-weight:700;line-height:1.08;letter-spacing:.03em;overflow-wrap:anywhere}
+.big.xl{font-size:var(--f9)}
+.def{font-size:var(--f4);line-height:1.55;color:var(--t1)}
+.def .blank{display:inline-block;min-width:3.2em;border-bottom:2px solid var(--c,var(--acc));color:transparent;user-select:none}
+.def .ref{color:var(--acc);font-weight:600}
+.hint{font-family:var(--mono);font-size:var(--f4);color:var(--t2);letter-spacing:.18em}
+
+.opts{display:flex;flex-direction:column;gap:var(--s2)}
+.opt{display:flex;align-items:center;gap:var(--s3);text-align:left;width:100%;
+  min-height:56px;padding:var(--s3) var(--s4);border-radius:var(--r2);background:var(--s-1);border:1px solid var(--line)}
+.opt .k{flex:0 0 26px;height:26px;border-radius:var(--r1);display:flex;align-items:center;justify-content:center;
+  font-family:var(--face);font-weight:700;font-size:var(--f2);background:var(--s-3);color:var(--t2)}
+.opt .v{flex:1;min-width:0}
+.opt.term .v{font-family:var(--face);font-size:var(--f5);font-weight:700;letter-spacing:.03em}
+.opt.defn .v{font-size:var(--f3);line-height:1.45}
+.opt.ok{border-color:var(--good);background:var(--good-bg)}
+.opt.ok .k{background:var(--good);color:var(--acc-fg)}
+.opt.no{border-color:var(--bad);background:var(--bad-bg)}
+.opt.no .k{background:var(--bad);color:var(--acc-fg)}
+.opt.dim{opacity:.45}
+@media (pointer:coarse){ .opt .k{display:none} }
+.sorts{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
+.sorts .opt{justify-content:center;min-height:64px;border-left:3px solid var(--c)}
+.sorts .opt .v{flex:0 1 auto;font-family:var(--face);font-weight:700;letter-spacing:.12em;font-size:var(--f4);color:var(--c)}
+
+.type{display:flex;gap:var(--s2)}
+.type input{flex:1;min-width:0;min-height:56px;padding:0 var(--s4);border-radius:var(--r2);background:var(--s-1);
+  border:1px solid var(--line-2);font-family:var(--face);font-size:var(--f5);font-weight:600;letter-spacing:.04em;color:var(--t1)}
+.type input::placeholder{color:var(--t3);font-weight:500}
+.type input.ok{border-color:var(--good);background:var(--good-bg)}
+.type input.no{border-color:var(--bad);background:var(--bad-bg)}
+.type .go{width:auto;flex:0 0 auto;margin-top:0;padding:0 var(--s4)}
+
+.fb{border-radius:var(--r2);padding:var(--s3) var(--s4);display:flex;flex-direction:column;gap:var(--s1)}
+.fb.ok{background:var(--good-bg);border:1px solid var(--good)}
+.fb.no{background:var(--bad-bg);border:1px solid var(--bad)}
+.fb .h{font-family:var(--face);font-weight:700;letter-spacing:.14em;font-size:var(--f3)}
+.fb.ok .h{color:var(--good)} .fb.no .h{color:var(--bad)}
+.fb .t{font-size:var(--f3);color:var(--t1)}
+.fb .t b{font-family:var(--face);font-size:var(--f4);letter-spacing:.03em}
+.rankup{color:var(--gold);font-family:var(--face);font-weight:700;letter-spacing:.1em}
+
+.open{animation:open var(--slow) var(--out)}
+@keyframes open{from{transform:scaleY(.04);opacity:0}60%{opacity:1}to{transform:none}}
+
+.res .in{display:flex;flex-direction:column;gap:var(--s4)}
+.score{display:flex;align-items:baseline;gap:var(--s3)}
+.score .v{font-family:var(--face);font-size:64px;font-weight:700;line-height:1;color:var(--t1)}
+.score .k{font-size:var(--f3);color:var(--t2)}
+.best{font-family:var(--face);font-weight:700;letter-spacing:.16em;color:var(--gold)}
+.list{display:flex;flex-direction:column;gap:var(--s2)}
+.list h4{font-family:var(--face);font-size:var(--f2);font-weight:700;letter-spacing:.16em;color:var(--t3)}
+.li{display:flex;flex-direction:column;gap:2px;padding:var(--s2) var(--s3);border-radius:var(--r1);background:var(--s-2);border-left:3px solid var(--c)}
+.li .a{font-family:var(--face);font-weight:700;font-size:var(--f4);letter-spacing:.03em}
+.li .b{font-size:var(--f2);color:var(--t2)}
+.chips{display:flex;flex-wrap:wrap;gap:var(--s2)}
+
+/* ─────────────────────────── sheet ─────────────────────────── */
+.sheet-bg{position:fixed;inset:0;z-index:60;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;transition:opacity var(--med) linear}
+.sheet-bg.up{opacity:1}
+.sheet{width:100%;max-width:580px;background:var(--s-1);border-radius:var(--r3) var(--r3) 0 0;box-shadow:var(--e3);
+  border-top:1px solid var(--line-2);max-height:92dvh;overflow-y:auto;overscroll-behavior:contain;
+  padding:var(--s3) calc(var(--s5) + var(--safe-r)) calc(var(--s5) + var(--safe-b)) calc(var(--s5) + var(--safe-l));
+  transform:translateY(100%);transition:transform 360ms cubic-bezier(.32,.72,0,1);
+  display:flex;flex-direction:column;gap:var(--s3)}
+.sheet-bg.up .sheet{transform:none}
+@media (min-width:640px){
+  .sheet-bg{align-items:center}
+  .sheet{border-radius:var(--r3);border:1px solid var(--line-2);max-height:88dvh;transform:translateY(16px) scale(.98);opacity:0;
+    transition:transform var(--med) var(--out),opacity var(--med) linear}
+  .sheet-bg.up .sheet{transform:none;opacity:1}
+}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--line-2);margin:0 auto var(--s2)}
+.sheet h3{font-family:var(--face);font-size:var(--f7);font-weight:700;letter-spacing:.04em;line-height:1.1}
+.sheet .lede{color:var(--t2);font-size:var(--f3)}
+.sheet .btns{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.sheet .btns .go{flex:1 1 160px}
+.sheet .def{font-size:var(--f3)}
+.facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:var(--s2)}
+.fact{background:var(--s-2);border-radius:var(--r1);padding:var(--s2) var(--s3)}
+.fact .v{font-family:var(--face);font-size:var(--f5);font-weight:700}
+.fact .k{font-size:var(--f1);color:var(--t3);letter-spacing:.08em}
+.field{display:flex;flex-direction:column;gap:var(--s1)}
+.field span{font-family:var(--face);font-size:var(--f2);font-weight:700;letter-spacing:.14em;color:var(--t3)}
+.field input,.field textarea{background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r1);
+  padding:var(--s2) var(--s3);min-height:var(--tap);color:var(--t1);font-size:var(--f3);width:100%}
+.field textarea{min-height:120px;resize:vertical;line-height:1.5;font-family:var(--body)}
+.field textarea.code{font-family:var(--mono);font-size:var(--f2)}
+.rows{display:flex;flex-direction:column}
+.srow{display:flex;align-items:center;gap:var(--s3);min-height:var(--tap);padding:var(--s2) 0;border-bottom:1px solid var(--line)}
+.srow:last-child{border-bottom:0}
+.srow .l{flex:1;min-width:0}
+.srow .n{font-size:var(--f2);color:var(--t3)}
+.sw{flex:0 0 auto;width:52px;height:30px;border-radius:var(--r4);background:var(--s-3);position:relative;transition:background-color var(--med) linear}
+.sw.on{background:var(--acc)}
+.sw::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:var(--knob);transition:transform var(--med) var(--out)}
+.sw.on::after{transform:translateX(22px);background:var(--acc-fg)}
+.seg{display:flex;flex-wrap:wrap;gap:var(--s1);background:var(--s-3);border-radius:var(--r1);padding:3px}
+.seg button{min-height:38px;padding:0 var(--s3);border-radius:4px;font-family:var(--face);font-weight:700;letter-spacing:.08em;font-size:var(--f2);color:var(--t2)}
+.seg button.on{background:var(--s-1);color:var(--t1);box-shadow:var(--e1)}
+.prev{background:var(--bg);border:1px solid var(--line);border-radius:var(--r1);padding:var(--s3);font-size:var(--f2);color:var(--t2);
+  display:flex;flex-direction:column;gap:var(--s2)}
+.prev .sum{color:var(--t1);font-weight:600}
+.prev .ln{display:flex;gap:var(--s2);align-items:baseline}
+.prev .ln b{font-family:var(--face);color:var(--t1);font-size:var(--f3)}
+.prev .warn{color:var(--bad)}
+.linkish{color:var(--acc);text-decoration:underline;text-underline-offset:3px;min-height:var(--tap);padding:0 var(--s1)}
+.foot{font-size:var(--f2);color:var(--t3);text-align:center}
+.note{color:var(--t3);font-size:var(--f2)}
+
+.toast{position:fixed;left:50%;bottom:calc(var(--s6) + var(--safe-b));transform:translate(-50%,12px);z-index:80;
+  background:var(--s-3);color:var(--t1);border-radius:var(--r1);box-shadow:var(--e2);border:1px solid var(--line-2);
+  padding:var(--s3) var(--s4);font-size:var(--f2);opacity:0;pointer-events:none;
+  transition:opacity var(--med) linear,transform var(--med) var(--out);max-width:88vw;text-align:center}
+.toast.up{opacity:1;transform:translate(-50%,0)}
+.toast.act{display:flex;align-items:center;gap:var(--s3);text-align:left}
+.toast.act.up{pointer-events:auto}
+.toast .undo{flex:0 0 auto;min-height:var(--tap);padding:0 var(--s3);color:var(--acc);font-weight:700;letter-spacing:.06em}
+
+@media (min-width:720px){
+  .opts.two{display:grid;grid-template-columns:1fr 1fr}
+  .modes{grid-template-columns:1fr 1fr}
+}
+@media (max-height:640px){
+  .big{font-size:var(--f7)} .big.xl{font-size:var(--f8)}
+  .win>.in{padding:var(--s4)}
+  .opt{min-height:var(--tap)}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark" aria-label="CODEX"><b>[</b>CODEX<b>]</b></div>
+  <div class="grow"></div>
+  <button class="streak press" id="streak" type="button"></button>
+  <button class="hbtn press hov" id="setBtn" type="button" aria-label="Settings"></button>
+</header>
+
+<main><div class="wrap" id="home"></div></main>
+<div class="sr" aria-live="polite" id="live"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   CODEX: Tom's Skool bracket database, played.
+
+   The database files every term under a bracket: [SKILLS], [STATS],
+   [CONDITIONS], [TRAITS]. The game teaches two things about each term:
+   what it MEANS, and which BRACKET it lives in. The second is the one the
+   database itself is about, which is why SORT exists and why it needs
+   nothing but the names.
+
+   Built-in: the 39 names and their brackets exactly as Tom pasted them on
+   2026-10-13. Every definition and every bracket meaning built into this
+   file is a DRAFT Claude wrote, marked as one on screen, because the real
+   definitions live on Tom's Skool pages and Skool's paid text never goes
+   into this public repo. Tom's own words arrive through LOAD (paste or a
+   file) or EDIT, and are kept in this browser only, under "cx." keys.
+
+   Storage is one key per fact, never one blob: a card per term, a row per
+   day, a row per term Tom changed. See codex/CLAUDE.md.
+   ══════════════════════════════════════════════════════════════════ */
+'use strict';
+
+const VERSION = '1.0.0', UPDATED = '13 Oct 2026';
+
+/* ── storage: one key, one fact ───────────────────────────────── */
+const P = 'cx.';
+const DB = {
+  get(k, dflt) {
+    try { const raw = localStorage.getItem(P + k); return raw == null ? dflt : JSON.parse(raw); }
+    catch (e) { return dflt; }
+  },
+  set(k, v) {
+    try { localStorage.setItem(P + k, JSON.stringify(v)); return true; }
+    catch (e) { return false; /* full, or private mode */ }
+  },
+  /* merge, never replace: read what is there, change the named fields,
+     write it back whole */
+  patch(k, changes) {
+    const now = Object.assign({}, DB.get(k, {}), changes);
+    DB.set(k, now); return now;
+  },
+  del(k) { try { localStorage.removeItem(P + k); } catch (e) { /* nothing to remove */ } },
+  keys(prefix) {
+    const out = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.indexOf(P + (prefix || '')) === 0) out.push(k.slice(P.length));
+      }
+    } catch (e) { /* nothing readable */ }
+    return out;
+  },
+};
+
+/* ── days ─────────────────────────────────────────────────────── */
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const today = () => ymd(new Date());
+const addDays = (s, n) => { const d = new Date(s + 'T12:00'); d.setDate(d.getDate() + n); return ymd(d); };
+const daysBetween = (a, b) => Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 86400000);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function niceDay(s) {
+  if (!s) return '';
+  const g = daysBetween(today(), s);
+  if (g === 0) return 'today';
+  if (g === 1) return 'tomorrow';
+  if (g === -1) return 'yesterday';
+  const d = new Date(s + 'T12:00');
+  return d.getDate() + ' ' + MONTHS[d.getMonth()];
+}
+
+/* ── little helpers ───────────────────────────────────────────── */
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
+const btn = (cls, html, fn, label) => {
+  const b = el('button', cls, html); b.type = 'button';
+  if (label) b.setAttribute('aria-label', label);
+  if (fn) b.onclick = fn;
+  return b;
+};
+function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
+
+/* A term's id is its slug, so the same name typed twice is the same entry
+   and progress follows the name across an import. */
+function slug(s) {
+  return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+/* What two answers have to agree on to be the same answer: case, accents,
+   apostrophes, punctuation, spacing and a leading article do not count. */
+function norm(s) {
+  return String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/['’`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().replace(/^(the|a|an) /, '');
+}
+/* optimal string alignment distance: one swap of neighbours counts as one */
+function dist(a, b) {
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) > 3) return 99;
+  const d = [];
+  for (let i = 0; i <= m; i++) { d[i] = [i]; }
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
+    const c = a[i - 1] === b[j - 1] ? 0 : 1;
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + c);
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[m][n];
+}
+
+/* Drawings, because a character is not an icon. Strokes, so they take the
+   text colour and scale with it. */
+const ICON = {
+  gear: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  close: '<svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  search: '<svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+  plus: '<svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+};
+
+/* ══════════════════ THE DATABASE ══════════════════
+   Names and brackets: Tom's, verbatim, 2026-10-13. Definitions and bracket
+   meanings: Claude's drafts, so each one is shown with a DRAFT mark until
+   Tom replaces it. `a` is other names an answer may be typed as.        */
+const BRACKETS0 = [
+  { id: 'SKILLS', means: 'Something you do. It gets better with practice, so it can be trained.' },
+  { id: 'STATS', means: 'A number or level you have right now. It can be measured, and it moves.' },
+  { id: 'CONDITIONS', means: 'A state you are in, from a passing effect to a diagnosis. Some come in Mild, Moderate and Severe.' },
+  { id: 'TRAITS', means: 'Something you were born with, or that changes over years rather than weeks.',
+    empty: 'Empty. Populate as content development surfaces candidates.' },
+];
+const TERMS0 = [
+  { t: 'Food Weighing', b: 'SKILLS', a: ['Weighing food', 'Weighing your food'],
+    d: 'Weighing what you eat on a kitchen scale, in grams, before you eat it. The only way to know a portion for certain instead of guessing.' },
+  { t: 'Nutrition Label Reading', b: 'SKILLS', a: ['Label reading', 'Reading labels', 'Reading nutrition labels'],
+    d: 'Reading the label on packaged food: the serving size first, then the calories and protein per serving, then how many servings you actually ate.' },
+  { t: 'Calorie Counting', b: 'SKILLS', a: ['Counting calories', 'Tracking calories', 'Calorie tracking'],
+    d: 'Logging everything you eat and drink, with amounts, so the day\'s total can be held against a target.' },
+  { t: 'Scale Tracking', b: 'SKILLS', a: ['Weighing in', 'Weigh-ins', 'Tracking your weight'],
+    d: 'Weighing yourself under the same conditions each time (morning, after the bathroom, before food) and reading the weekly average instead of any single day.' },
+  { t: 'Training', b: 'SKILLS', a: [],
+    d: 'Exercise done to a plan, for a result you chose. What separates it from exercise is that it is measured and progressed.' },
+  { t: 'Cardio', b: 'SKILLS', a: ['Cardiovascular training', 'Cardiovascular exercise', 'Conditioning'],
+    d: 'Sustained work that keeps your heart rate up, such as walking, cycling, running or rowing. Builds the heart and lungs and adds to the calories you burn.' },
+  { t: 'Lifting', b: 'SKILLS', a: ['Weightlifting'],
+    d: 'Moving a weight through its full range with control. The movement itself: setup, bracing, bar path and tempo.' },
+  { t: 'Weight Training', b: 'SKILLS', a: ['Resistance training', 'Strength training'],
+    d: 'Training with external load (barbells, dumbbells, machines, cables) to build muscle and strength over months.' },
+  { t: 'Progressive Overloading', b: 'SKILLS', a: ['Progressive overload'],
+    d: 'Asking a little more of the muscle over time: another rep, a little more weight, the same form. Without it the body has no reason to change.' },
+  { t: 'Recovery', b: 'SKILLS', a: [],
+    d: 'What you do between sessions so you come back able to train: sleep, enough food and protein, and managing everything else that drains you.' },
+  { t: 'Calorie Banking', b: 'SKILLS', a: ['Banking calories'],
+    d: 'Eating under your target on some days to save calories for a planned bigger day, so the week\'s total still lands where it should.' },
+  { t: 'Fasting', b: 'SKILLS', a: ['Intermittent fasting'],
+    d: 'Going a set time without eating. A tool that can make a deficit easier to hold; it burns no more fat than the same calories eaten across the day.' },
+  { t: 'Environment Design', b: 'SKILLS', a: ['Environmental design'],
+    d: 'Arranging your surroundings so the action you want is the easy one and the one you don\'t want is hard. The phone in another room, the shoes by the door.' },
+  { t: 'Journaling', b: 'SKILLS', a: ['Journalling', 'Keeping a journal'],
+    d: 'Writing down what you did and how it went, daily and weekly, so patterns show that memory would smooth over.' },
+  { t: 'Volume Eating', b: 'SKILLS', a: ['High volume eating', 'High-volume eating'],
+    d: 'Choosing foods with few calories per bite (vegetables, fruit, lean protein, soups) so a large, filling plate still fits the target.' },
+  { t: 'Form Review', b: 'SKILLS', a: ['Form check', 'Video review'],
+    d: 'Filming a set and checking it against the standard for that lift, so you can fix what you cannot feel.' },
+
+  { t: 'Weight', b: 'STATS', a: ['Bodyweight', 'Body weight'],
+    d: 'What you weigh on the scale. It swings 1 to 2 kg day to day with water, salt, carbs and food in your gut, which is why the weekly average is the number that counts.' },
+  { t: 'Height', b: 'STATS', a: [],
+    d: 'How tall you are. Fixed once you stop growing, and one of the inputs that sets your calorie needs.' },
+  { t: 'Body Composition', b: 'STATS', a: ['Body comp'],
+    d: 'How much of your weight is fat and how much is lean mass: muscle, bone, organs and water. Two people at the same weight can look nothing alike.' },
+  { t: 'Maintenance Calories', b: 'STATS', a: ['Maintenance', 'Maintenance intake'],
+    d: 'The calories a day that hold your weight steady. Eat above it and weight goes up; eat below it and weight comes down.' },
+  { t: 'Personal Record', b: 'STATS', a: ['PR', 'Personal best', 'PB'],
+    d: 'Your best performance on a lift or a measure: the most weight, the most reps, the fastest time. The clearest proof you are getting better.' },
+  { t: 'Sleep', b: 'STATS', a: [],
+    d: 'How long and how well you sleep. Adults need 7 to 9 hours, and it decides recovery, hunger and willpower the next day.' },
+  { t: 'Stress', b: 'STATS', a: ['Stress load'],
+    d: 'The total load on your body and mind: training, work, money, people, poor sleep. Recovery has to pay for all of it, not only the gym.' },
+  { t: 'Willpower', b: 'STATS', a: ['Self-control'],
+    d: 'How well you choose the harder option in the moment. It runs low when you are tired, hungry or stressed, so a good plan needs less of it.' },
+  { t: 'Dopamine', b: 'STATS', a: [],
+    d: 'The brain chemical behind wanting and motivation. It drives you toward a reward more than it makes the reward feel good.' },
+  { t: 'Satiety', b: 'STATS', a: ['Fullness'],
+    d: 'How full you feel after eating and how long it lasts. Protein, fibre and water-rich food raise it.' },
+  { t: 'Palatability', b: 'STATS', a: [],
+    d: 'How rewarding a food tastes. The higher it is, the easier it is to eat past full, which is why ultra-processed food is so easy to overeat.' },
+
+  { t: 'DOMS', b: 'CONDITIONS', a: ['Delayed onset muscle soreness', 'Muscle soreness', 'Soreness'],
+    d: 'Delayed onset muscle soreness: the ache that peaks 24 to 72 hours after training a muscle in a way it is not used to. It can signal a good stimulus but does not guarantee one, and no soreness does not mean the session failed.' },
+  { t: 'Sleep Deprivation', b: 'CONDITIONS', a: ['Sleep loss', 'Sleep debt'],
+    d: 'Getting less sleep than you need, for one night or for weeks. It raises hunger, lowers performance and willpower, and slows recovery.' },
+  { t: 'Stressed', b: 'CONDITIONS', a: ['Being stressed', 'Chronic stress'],
+    d: 'The state you are in when stress outruns recovery: worse sleep, more cravings, flat training and a shorter temper.' },
+  { t: 'Hypothyroidism', b: 'CONDITIONS', a: ['Underactive thyroid'],
+    d: 'An underactive thyroid that makes too little thyroid hormone. It slows metabolism and can bring tiredness, feeling cold and weight gain. Diagnosed with a blood test and treated with medication.' },
+  { t: 'PCOS', b: 'CONDITIONS', a: ['Polycystic ovary syndrome'],
+    d: 'Polycystic ovary syndrome: a hormonal condition in about 1 in 10 women, with irregular periods, higher androgens and often insulin resistance. It can make fat loss slower and hunger louder, not impossible.' },
+  { t: 'Lipedema', b: 'CONDITIONS', a: ['Lipoedema'],
+    d: 'A chronic condition, almost only in women, where fat builds up evenly in both legs and sometimes the arms, sparing the hands and feet. Often painful, bruises easily, and does not respond to diet the way ordinary fat does.' },
+  { t: 'Calorie Deficit', b: 'CONDITIONS', a: ['Deficit', 'Caloric deficit', 'Energy deficit'],
+    d: 'Eating fewer calories than you burn. The one condition fat loss requires, however you get there.' },
+  { t: 'Weight Loss', b: 'CONDITIONS', a: ['Losing weight'],
+    d: 'The scale trending down over weeks. Not the same as fat loss: water, glycogen and food in the gut move it too.' },
+  { t: 'Dopamine Overload', b: 'CONDITIONS', a: ['Dopamine overstimulation'],
+    d: 'So much easy, high-stimulation reward (scrolling, junk food, games) that slower rewards like training and work feel flat. Comes in Mild, Moderate and Severe.' },
+  { t: 'Depression', b: 'CONDITIONS', a: ['Clinical depression', 'Major depression'],
+    d: 'A mood disorder: low mood or loss of interest in almost everything for two weeks or more, with changes to sleep, appetite and energy. Treatable, and a doctor\'s job to diagnose.' },
+  { t: "Alzheimer's", b: 'CONDITIONS', a: ["Alzheimer's disease", 'Alzheimers'],
+    d: 'The most common cause of dementia: a brain disease that slowly destroys memory first, then thinking and the ability to live independently.' },
+  { t: 'Neurodegeneration', b: 'CONDITIONS', a: ['Neurodegenerative disease'],
+    d: 'The gradual loss of nerve cells and their function. It is the process behind diseases such as Alzheimer\'s and Parkinson\'s.' },
+];
+
+/* ── the deck as it stands: built-in, with Tom's changes laid over ──
+   A change is its own row, `cx.term.<id>`, holding only what he changed.
+   `del: true` hides an entry without forgetting it, so a deletion can be
+   undone and a re-import cannot resurrect it by accident.             */
+let DECK = null;
+function invalidate() { DECK = null; }
+function deck() {
+  if (DECK) return DECK;
+  const over = {};
+  DB.keys('term.').forEach(k => { const v = DB.get(k, null); if (v && typeof v === 'object') over[k.slice(5)] = v; });
+  const terms = [], seen = new Set();
+  TERMS0.forEach((b, i) => {
+    const id = slug(b.t); seen.add(id);
+    const o = over[id] || {};
+    if (o.del) return;
+    terms.push({
+      id, ord: i,
+      term: o.term || b.t,
+      bracket: o.bracket || b.b,
+      def: o.def != null ? o.def : b.d,
+      aka: Array.isArray(o.aka) ? o.aka : (b.a || []),
+      src: o.def != null ? 'yours' : 'draft',
+      base: true, changed: !!over[id],
+    });
+  });
+  Object.keys(over).forEach(id => {
+    if (seen.has(id)) return;
+    const o = over[id];
+    if (o.del || !o.term) return;
+    terms.push({ id, ord: 1000 + (o.ord || 0), term: o.term, bracket: o.bracket || 'UNSORTED', def: o.def || '',
+      aka: Array.isArray(o.aka) ? o.aka : [], src: 'yours', base: false, changed: true });
+  });
+  terms.sort((a, b) => a.ord - b.ord);
+  const ids = BRACKETS0.map(b => b.id);
+  terms.forEach(t => { if (ids.indexOf(t.bracket) < 0) ids.push(t.bracket); });
+  const brackets = ids.map((id, i) => {
+    const b0 = BRACKETS0.find(b => b.id === id) || {};
+    const m = DB.get('bkt.' + id, null);
+    return { id, i, color: 'var(--b' + (i % 6 + 1) + ')',
+      means: (m && m.means) || b0.means || '', meansSrc: (m && m.means) ? 'yours' : (b0.means ? 'draft' : ''),
+      empty: b0.empty || 'No entries yet.' };
+  });
+  const byId = {}; terms.forEach(t => { byId[t.id] = t; });
+  DECK = { terms, brackets, byId };
+  return DECK;
+}
+const term = id => deck().byId[id];
+const bkt = id => deck().brackets.find(b => b.id === id) || { id, color: 'var(--b6)', means: '', empty: '' };
+const chip = id => '<span class="chip" style="--c:' + bkt(id).color + '">[' + esc(id) + ']</span>';
+const draftMark = t => t && t.src === 'draft' ? ' <span class="draft" title="Claude wrote this definition. Replace it with yours from Skool.">DRAFT</span>' : '';
+
+/* Every way an answer may be written: the name, its other names, and
+   anything in brackets inside the name, both with and without it. */
+function answers(t) {
+  const out = new Set();
+  const add = s => { const n = norm(s); if (n) out.add(n); };
+  add(t.term); (t.aka || []).forEach(add);
+  const m = String(t.term).match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (m) { add(m[1]); add(m[2]); }
+  return Array.from(out);
+}
+/* The definition with the answer taken out of it, so a definition that
+   spells out its own name ("Delayed onset muscle soreness: ...") is not a
+   giveaway. Works on the escaped text, so the names are escaped too.    */
+function masked(t, text) {
+  let h = esc(text == null ? t.def : text);
+  const names = [t.term].concat(t.aka || []);
+  const m = String(t.term).match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+  if (m) names.push(m[1], m[2]);
+  names.filter(s => s && s.length > 1).sort((a, b) => b.length - a.length).forEach(s => {
+    const pat = esc(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    h = h.replace(new RegExp('(^|[^A-Za-z0-9])(' + pat + ')(?=[^A-Za-z0-9]|$)', 'gi'), '$1<span class="blank" aria-label="blank">' + '_'.repeat(4) + '</span>');
+  });
+  return refs(h);
+}
+/* [Term] inside a definition is a reference to another entry. */
+const refs = h => h.replace(/\[([^\]<>]{1,40})\]/g, '<span class="ref">[$1]</span>');
+
+/* ══════════════════ PROGRESS ══════════════════
+   A card per term: which box it is in, when it is next due, and the
+   highest box it has ever reached. The box moves both ways; `best` only
+   goes up, and the codex draws from `best`, so earned progress is never
+   taken away by a bad day. Review timing reads `box`.               */
+const INTERVAL = [0, 1, 3, 7, 16, 35, 80];   /* days after a right answer in that box */
+const CARD0 = { box: 0, best: 0, due: null, seen: null, right: 0, wrong: 0, last: null };
+const card = id => Object.assign({}, CARD0, DB.get('card.' + id, {}));
+const TIER = ['LOCKED', 'FOUND', 'KNOWN', 'MASTERED'];
+function tier(c) { return !c.seen ? 0 : c.best >= 5 ? 3 : c.best >= 3 ? 2 : 1; }
+const isDue = c => c.box >= 1 && !!c.due && c.due <= today();
+
+const SET0 = { sound: true, buzz: true, typing: true, newPer: 5, auto: true };
+const settings = () => Object.assign({}, SET0, DB.get('set', {}));
+const REC0 = { blitz: 0, blitzAt: null, sort: 0, sortAt: null, seals: {} };
+const rec = () => Object.assign({}, REC0, DB.get('rec', {}));
+
+/* Grade one answer. `early` is a review of a card that was not due yet
+   (a boss fight): a right answer then counts but does not push the
+   schedule further out, and a wrong one still sends it back. `lapsed` is
+   the second try at a card missed earlier in the same round.          */
+function grade(id, ok, opts) {
+  opts = opts || {};
+  const c = card(id), before = tier(c), now = new Date().toISOString();
+  let box = c.box;
+  if (ok && opts.early) { /* counted, not moved */ }
+  else if (ok && !opts.lapsed) box = Math.min(6, Math.max(1, c.box + 1));
+  else box = 1;
+  const moved = !(ok && opts.early);
+  const next = {
+    box, best: Math.max(c.best, box),
+    due: moved ? addDays(today(), INTERVAL[box]) : c.due,
+    seen: c.seen || now, last: now,
+    right: c.right + (ok ? 1 : 0), wrong: c.wrong + (ok ? 0 : 1),
+  };
+  DB.patch('card.' + id, next);
+  touchDay(ok);
+  const after = tier(Object.assign({}, c, next));
+  return { before, after, box };
+}
+function discover(id) {
+  const c = card(id);
+  if (!c.seen) DB.patch('card.' + id, { seen: new Date().toISOString() });
+}
+
+/* ── the day and the streak ──
+   The streak continues if he played at all, not if he played well. A
+   freeze is earned every seventh day, capped at three, and spent without
+   a word on a missed day. It is never offered at the moment of failure. */
+function touchDay(ok) {
+  const k = 'day.' + today(), d = DB.get(k, { n: 0, right: 0 });
+  DB.set(k, { n: d.n + 1, right: d.right + (ok ? 1 : 0) });
+  touchStreak();
+}
+const streak = () => Object.assign({ n: 0, last: null, freeze: 0, best: 0 }, DB.get('streak', {}));
+function touchStreak() {
+  const s = streak(), t = today();
+  if (s.last === t) return;
+  const gap = s.last ? daysBetween(s.last, t) : null;
+  let n, freeze = s.freeze;
+  if (gap === 1) n = s.n + 1;
+  else if (gap != null && gap > 1 && gap - 1 <= freeze) { freeze -= gap - 1; n = s.n + 1; }
+  else n = 1;
+  if (n % 7 === 0) freeze = Math.min(3, freeze + 1);
+  DB.set('streak', { n, last: t, freeze, best: Math.max(s.best, n) });
+}
+/* What the streak is worth TODAY, without writing anything. */
+function streakNow() {
+  const s = streak();
+  if (!s.last) return 0;
+  const gap = daysBetween(s.last, today());
+  if (gap <= 1) return s.n;
+  return s.freeze >= gap - 1 ? s.n : 0;
+}
+
+/* ── sound: synthesised, short, no files ── */
+let AC = null;
+function beep(freq, ms, kind, vol, at) {
+  if (!settings().sound) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime + (at || 0) / 1000;
+    o.type = kind || 'sine'; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol == null ? .06 : vol, t + .006);
+    g.gain.exponentialRampToValueAtTime(.0001, t + ms / 1000);
+    o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + ms / 1000 + .02);
+  } catch (e) { /* no audio here, and that is fine */ }
+}
+function buzz(p) { if (!settings().buzz) return; try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) { /* none */ } }
+/* Small things stay small. Only a finish, a new best and a cleared boss
+   run long, and they climb with what was actually done. */
+const cue = {
+  tap:    () => { beep(880, 24, 'square', .018); buzz(4); },
+  right:  () => { beep(740, 50, 'sine', .06); beep(1108, 70, 'sine', .05, 40); buzz(8); },
+  wrong:  () => { beep(160, 140, 'sawtooth', .04); buzz([14, 50, 14]); },
+  found:  () => { beep(587, 60, 'triangle', .06); beep(880, 60, 'triangle', .06, 55); beep(1175, 80, 'triangle', .05, 110); buzz([6, 30, 10]); },
+  rank:   () => { [659, 830, 988].forEach(f => beep(f, 180, 'triangle', .05)); buzz([10, 40, 14]); },
+  finish: () => { [523, 659, 784, 1046].forEach((f, i) => beep(f, 240, 'triangle', .06, i * 100)); buzz([10, 40, 10, 40, 22]); },
+};
+
+/* ── toast ── */
+let toastT = null;
+function toast(msg, undo) {
+  let n = document.querySelector('.toast');
+  if (!n) { n = el('div', 'toast'); n.setAttribute('role', 'status'); document.body.appendChild(n); }
+  n.className = 'toast' + (undo ? ' act' : '') + (n.classList.contains('up') ? ' up' : '');
+  n.innerHTML = '<span>' + msg + '</span>';
+  if (undo) n.appendChild(btn('undo press', 'UNDO', () => { clearTimeout(toastT); n.classList.remove('up'); undo(); }));
+  requestAnimationFrame(() => n.classList.add('up'));
+  clearTimeout(toastT);
+  toastT = setTimeout(() => n.classList.remove('up'), undo ? 6000 : 2600);
+}
+const say = s => { const l = document.getElementById('live'); if (l) { l.textContent = ''; setTimeout(() => { l.textContent = s; }, 30); } };
+
+/* ══════════════════ HOME ══════════════════ */
+let query = '';
+let freshIds = new Set();
+
+function counts() {
+  const d = deck(), out = { found: 0, known: 0, mastered: 0, due: 0, fresh: 0, withDef: 0, total: d.terms.length, nextDue: null, nextN: 0 };
+  d.terms.forEach(t => {
+    const c = card(t.id), ti = tier(c);
+    if (t.def) out.withDef++;
+    if (ti >= 1) out.found++;
+    if (ti === 2) out.known++;
+    if (ti === 3) out.mastered++;
+    if (isDue(c)) out.due++;
+    else if (c.box >= 1 && c.due) {
+      if (!out.nextDue || c.due < out.nextDue) { out.nextDue = c.due; out.nextN = 1; }
+      else if (c.due === out.nextDue) out.nextN++;
+    }
+    if (c.box === 0) out.fresh++;
+  });
+  return out;
+}
+
+function drawHome() {
+  const h = document.getElementById('home');
+  const top = window.scrollY;
+  h.innerHTML = '';
+  const d = deck(), n = counts(), s = settings();
+
+  /* the one primary thing: today's quest */
+  const newToday = Math.min(n.fresh, s.newPer);
+  const due = Math.min(n.due, 20);
+  const card1 = el('section', 'next glow');
+  const w = el('div', 'win'), inn = el('div', 'in');
+  w.appendChild(inn); card1.appendChild(w);
+  if (due + newToday > 0) {
+    inn.appendChild(el('div', 'kick', '[SYSTEM] DAILY QUEST'));
+    inn.appendChild(el('h1', null, 'QUEST'));
+    const bits = [];
+    if (due) bits.push(plural(due, 'entry', 'entries') + ' to review');
+    if (newToday) bits.push(plural(newToday, 'new entry', 'new entries') + ' to find');
+    inn.appendChild(el('p', null, esc(bits.join(' · ')) + '.'));
+    inn.appendChild(btn('go press', 'START', startQuest));
+  } else {
+    inn.appendChild(el('div', 'kick', '[SYSTEM] ALL CLEAR'));
+    inn.appendChild(el('h1', null, 'NOTHING DUE'));
+    inn.appendChild(el('p', null, n.nextDue
+      ? 'Next review ' + esc(niceDay(n.nextDue)) + ': ' + plural(n.nextN, 'entry', 'entries') + '. SORT and BLITZ are open any time.'
+      : (n.withDef ? 'Every entry is found. SORT and BLITZ are open any time.' : 'No entry has a definition to learn yet. SORT is open.')));
+  }
+  h.appendChild(card1);
+
+  /* the two games that need no schedule */
+  const modes = el('div', 'modes');
+  const r = rec();
+  const sortable = d.brackets.filter(b => d.terms.some(t => t.bracket === b.id)).length >= 2;
+  const blitzPool = d.terms.filter(t => t.def && tier(card(t.id)) >= 1).length;
+  modes.appendChild(modeBtn('SORT', sortable ? '30 s · file each term · best ' + r.sort : 'Needs two brackets with entries', sortable, startSort));
+  modes.appendChild(modeBtn('BLITZ', blitzPool >= 4 ? '60 s · name or define · best ' + r.blitz : 'Find ' + (4 - blitzPool) + ' more ' + (4 - blitzPool === 1 ? 'entry' : 'entries') + ' to open', blitzPool >= 4, startBlitz));
+  h.appendChild(modes);
+
+  /* the collection, in one bar */
+  const tally = el('div', 'tally');
+  const pct = x => (n.total ? (x / n.total * 100) : 0) + '%';
+  tally.innerHTML = '<div class="bar" role="img" aria-label="' + n.found + ' of ' + n.total + ' found"><i class="m" style="width:' + pct(n.mastered) + '"></i><i class="k" style="width:' + pct(n.known) + '"></i><i class="f" style="width:' + pct(n.found - n.known - n.mastered) + '"></i></div>' +
+    '<div class="txt"><span><b>' + n.found + '</b> of ' + n.total + ' found</span><span><b>' + n.known + '</b> known</span><span><b>' + n.mastered + '</b> mastered</span></div>';
+  h.appendChild(tally);
+
+  /* the banner that tells the truth about the definitions */
+  const drafts = d.terms.filter(t => t.src === 'draft').length;
+  if (drafts) {
+    const b = el('div', 'banner');
+    b.innerHTML = '<div><b>' + drafts + ' of ' + d.terms.length + ' definitions are drafts.</b> The names and brackets are your database. The definitions were written by Claude, because yours live on your Skool pages. Paste them in and yours replace the drafts.</div>';
+    const row = el('div', 'row');
+    row.appendChild(btn('small press', 'LOAD YOUR DEFINITIONS', openImport));
+    b.appendChild(row);
+    h.appendChild(b);
+  }
+
+  /* search */
+  const sr = el('label', 'search');
+  sr.innerHTML = ICON.search + '<span class="sr">Search the codex</span>';
+  const inp = el('input');
+  inp.type = 'search'; inp.placeholder = 'Search ' + d.terms.length + ' entries'; inp.value = query;
+  inp.setAttribute('autocomplete', 'off'); inp.setAttribute('autocapitalize', 'off'); inp.setAttribute('spellcheck', 'false');
+  inp.oninput = () => { query = inp.value; drawBrackets(list); };
+  sr.appendChild(inp);
+  h.appendChild(sr);
+
+  const list = el('div');
+  list.style.display = 'flex'; list.style.flexDirection = 'column'; list.style.gap = 'var(--s6)';
+  h.appendChild(list);
+  drawBrackets(list);
+  drawStreak();
+  window.scrollTo(0, top);
+  freshIds = new Set();
+}
+
+function modeBtn(name, sub, on, fn) {
+  const b = btn('mode press hov' + (on ? '' : ' lock'), '<span class="nm">' + name + '</span><span class="sub">' + esc(sub) + '</span>', on ? fn : () => toast(esc(sub) + '.'));
+  return b;
+}
+
+function drawBrackets(list) {
+  list.innerHTML = '';
+  const d = deck(), q = norm(query), r = rec();
+  let shown = 0;
+  d.brackets.forEach(b => {
+    const all = d.terms.filter(t => t.bracket === b.id);
+    const hit = !q ? all : all.filter(t => norm(t.term + ' ' + (t.aka || []).join(' ') + ' ' + (tier(card(t.id)) ? t.def : '')).indexOf(q) >= 0);
+    if (q && !hit.length) return;
+    const sec = el('section', 'brk');
+    sec.style.setProperty('--c', b.color);
+    const head = el('div', 'brk-h');
+    const found = all.filter(t => tier(card(t.id)) >= 1).length;
+    head.innerHTML = chip(b.id) + '<span class="cnt">' + found + ' / ' + all.length + '</span>';
+    /* the boss: every entry with a definition at KNOWN or better */
+    const fightable = all.filter(t => t.def);
+    const seal = r.seals && r.seals[b.id];
+    if (seal) head.appendChild(el('span', 'seal', 'CLEARED ' + esc(niceDay(seal).toUpperCase())));
+    if (fightable.length >= 3) {
+      const short = fightable.filter(t => tier(card(t.id)) < 2).length;
+      if (!short) head.appendChild(btn('small hot press boss', seal ? 'REMATCH' : 'BOSS', () => startBoss(b.id), (seal ? 'Rematch the ' : 'Fight the ') + b.id + ' boss'));
+      else if (!seal) head.appendChild(el('span', 'gate', 'Boss opens at all KNOWN · ' + short + ' to go'));
+    }
+    head.appendChild(el('div', 'means', esc(b.means) + (b.meansSrc === 'draft' ? ' <span class="draft">DRAFT</span>' : '')));
+    sec.appendChild(head);
+    if (!all.length) {
+      const e = el('div', 'empty', esc(b.empty));
+      e.appendChild(btn('small press', ICON.plus + 'ADD THE FIRST ' + esc(b.id.replace(/S$/, '')), () => openEdit(null, b.id)));
+      sec.appendChild(e);
+    } else {
+      const g = el('div', 'grid');
+      hit.forEach(t => { g.appendChild(tile(t)); shown++; });
+      sec.appendChild(g);
+      if (!q) {
+        const add = btn('linkish', 'Add an entry to [' + esc(b.id) + ']', () => openEdit(null, b.id));
+        add.style.alignSelf = 'flex-start';
+        sec.appendChild(add);
+      }
+    }
+    list.appendChild(sec);
+  });
+  if (q && !shown) list.appendChild(el('div', 'none', 'Nothing in the codex matches "' + esc(query) + '".'));
+}
+
+function tile(t) {
+  const c = card(t.id), ti = tier(c), b = bkt(t.bracket);
+  const cls = 'tile press hov' + (ti === 0 ? ' lock' : '') + (ti === 3 ? ' t3' : '') + (freshIds.has(t.id) ? ' fresh' : '');
+  const pips = '<span class="pips">' + [1, 2, 3].map(i => '<i class="' + (ti >= i ? 'on' : '') + '"></i>').join('') + '</span>';
+  const b2 = btn(cls, '<span class="nm">' + esc(t.term) + '</span><span class="st">' + pips + TIER[ti] + '</span>' + (isDue(c) ? '<span class="due" title="Review due"></span>' : ''),
+    () => openEntry(t.id), t.term + ', ' + TIER[ti].toLowerCase() + (isDue(c) ? ', review due' : ''));
+  b2.style.setProperty('--c', b.color);
+  return b2;
+}
+
+function drawStreak() {
+  const n = streakNow(), s = streak(), b = document.getElementById('streak');
+  b.className = 'streak press' + (n ? '' : ' off');
+  b.innerHTML = '<b>' + n + '</b>' + (n === 1 ? 'day' : 'days');
+  b.setAttribute('aria-label', 'Streak ' + n + (n === 1 ? ' day' : ' days'));
+  b.onclick = () => toast(n ? 'Played ' + plural(n, 'day') + ' running. Best ' + s.best + '. ' + (s.freeze ? plural(s.freeze, 'freeze', 'freezes') + ' banked.' : 'A freeze is earned every 7th day.') : 'Answer anything today to start a streak.');
+}
+
+/* ══════════════════ ENTRY SHEET ══════════════════ */
+function openEntry(id) {
+  const t = term(id); if (!t) return;
+  const c = card(id), ti = tier(c), b = bkt(t.bracket);
+  sheet(h => {
+    h.style.setProperty('--c', b.color);
+    h.appendChild(el('div', null, chip(t.bracket)));
+    h.appendChild(el('h3', null, esc(t.term)));
+    if (t.aka && t.aka.length) h.appendChild(el('div', 'note', 'Also: ' + esc(t.aka.join(', '))));
+    const defBox = el('div');
+    const showDef = () => { defBox.innerHTML = t.def ? '<p class="def">' + refs(esc(t.def)) + draftMark(t) + '</p>' : '<p class="note">No definition yet. EDIT to add yours.</p>'; };
+    if (ti >= 1 || !t.def) showDef();
+    else {
+      defBox.appendChild(el('p', 'note', 'Not found yet. It turns up in a QUEST, and finding it there is how it joins the codex.'));
+      defBox.appendChild(btn('linkish', 'Show the definition anyway', showDef));
+    }
+    h.appendChild(defBox);
+    const facts = el('div', 'facts');
+    const f = (v, k) => facts.appendChild(el('div', 'fact', '<div class="v">' + esc(v) + '</div><div class="k">' + esc(k) + '</div>'));
+    f(TIER[ti], 'RANK');
+    f(c.right + ' / ' + (c.right + c.wrong), 'RIGHT');
+    f(c.box ? (isDue(c) ? 'Due now' : niceDay(c.due)) : '–', 'NEXT REVIEW');
+    h.appendChild(facts);
+    const row = el('div', 'btns');
+    row.appendChild(btn('go ghost press', 'EDIT', () => { h.close(); openEdit(id); }));
+    row.appendChild(btn('go press', 'DONE', () => h.close()));
+    h.appendChild(row);
+  });
+}
+
+/* ══════════════════ EDIT AND ADD ══════════════════
+   Tom's own words go here. A change is written as its own row holding
+   only the fields he touched; RESET hands the entry back to the draft. */
+function openEdit(id, bracket) {
+  const t = id ? term(id) : null;
+  const d = deck();
+  let pick = t ? t.bracket : (bracket || d.brackets[0].id);
+  sheet(h => {
+    h.appendChild(el('h3', null, t ? 'Edit entry' : 'New entry'));
+    const fT = field('NAME', 'input', t ? t.term : '');
+    const fA = field('ALSO ACCEPT (comma between)', 'input', t ? (t.aka || []).join(', ') : '');
+    const fD = field('DEFINITION', 'textarea', t ? t.def : '');
+    h.appendChild(fT.wrap);
+    const bw = el('div', 'field'); bw.appendChild(el('span', null, 'BRACKET'));
+    bw.appendChild(seg(d.brackets.map(b => [b.id, '[' + b.id + ']']), pick, v => { pick = v; }));
+    h.appendChild(bw);
+    h.appendChild(fD.wrap);
+    h.appendChild(fA.wrap);
+    if (t && t.src === 'draft') h.appendChild(el('p', 'note', 'The definition above is Claude\'s draft. Whatever you save here is yours and replaces it.'));
+    const row = el('div', 'btns');
+    row.appendChild(btn('go press', 'SAVE', () => {
+      const name = fT.input.value.trim().replace(/\s+/g, ' ');
+      if (!name) { toast('Give it a name.'); fT.input.focus(); return; }
+      if (name.length > 60) { toast('Keep the name under 60 characters.'); return; }
+      const aka = fA.input.value.split(',').map(s => s.trim()).filter(Boolean);
+      const def = fD.input.value.trim().replace(/\s+\n/g, '\n');
+      const nid = t ? id : slug(name);
+      if (!nid) { toast('That name has no letters or numbers in it.'); return; }
+      if (!t) {
+        const clash = deck().terms.find(x => x.id === nid || answers(x).indexOf(norm(name)) >= 0);
+        if (clash) { toast('Already in the database as ' + esc(clash.term) + '.'); return; }
+        const was = DB.get('term.' + nid, null);
+        DB.set('term.' + nid, { term: name, bracket: pick, def, aka, at: new Date().toISOString(), ord: deck().terms.length });
+        if (was && was.del) { /* a deleted entry brought back: its progress was kept */ }
+      } else {
+        const ch = { at: new Date().toISOString() };
+        if (name !== t.term) ch.term = name;
+        if (pick !== t.bracket) ch.bracket = pick;
+        if (def !== t.def) ch.def = def;
+        if (aka.join('|') !== (t.aka || []).join('|')) ch.aka = aka;
+        if (Object.keys(ch).length === 1) { h.close(); return; }
+        DB.patch('term.' + nid, ch);
+      }
+      invalidate(); h.close(); drawHome();
+      toast(t ? 'Saved.' : 'Added ' + esc(name) + ' to [' + esc(pick) + '].');
+    }));
+    h.appendChild(row);
+    if (t) {
+      const row2 = el('div', 'btns');
+      if (t.base && t.changed) row2.appendChild(btn('small press', 'RESET TO DRAFT', () => {
+        const was = DB.get('term.' + id, null);
+        DB.del('term.' + id); invalidate(); h.close(); drawHome();
+        toast('Back to the draft.', () => { DB.set('term.' + id, was); invalidate(); drawHome(); });
+      }));
+      row2.appendChild(btn('small press', 'DELETE', () => {
+        const was = DB.get('term.' + id, null);
+        DB.patch('term.' + id, { del: true, at: new Date().toISOString() }); invalidate(); h.close(); drawHome();
+        toast(esc(t.term) + ' deleted. Its progress is kept.', () => { if (was) DB.set('term.' + id, was); else DB.del('term.' + id); invalidate(); drawHome(); });
+      }));
+      h.appendChild(row2);
+    }
+    setTimeout(() => { if (!t) fT.input.focus(); }, 60);
+  });
+}
+function field(label, kind, value) {
+  const wrap = el('label', 'field');
+  wrap.appendChild(el('span', null, esc(label)));
+  const input = el(kind);
+  if (kind === 'input') { input.type = 'text'; input.setAttribute('autocomplete', 'off'); }
+  input.value = value || '';
+  wrap.appendChild(input);
+  return { wrap, input };
+}
+
+/* ══════════════════ THE ROUND ══════════════════
+   One runner for every mode. A round is a queue of items; an item is a
+   term and a step. What is asked about a term depends on how well it is
+   known: pick the name, then pick the meaning, then name it with a hint,
+   then name it cold. Each answer is saved the moment it is given, so
+   leaving halfway loses nothing.                                      */
+let run = null;
+
+function kindFor(t, c, mode) {
+  const typing = settings().typing;
+  if (mode === 'sort') return 'sort';
+  if (!t.def) return 'classify';
+  if (mode === 'blitz') return Math.random() < .5 ? 'identify' : 'reverse';
+  if (mode === 'boss') return typing ? 'recall' : 'identify';
+  if (c.box <= 1) return 'identify';
+  if (c.box === 2) return 'reverse';
+  if (c.box === 3) return typing ? 'hint' : 'reverse';
+  return typing ? 'recall' : 'identify';
+}
+
+/* Wrong answers worth considering: same bracket first, so the choice is
+   about meaning and not about family. No two options say the same thing. */
+function decoys(t, field, n, hard) {
+  const pool = deck().terms.filter(x => x.id !== t.id && (field !== 'def' || x.def));
+  const key = x => norm(field === 'def' ? x.def : x.term);
+  const same = shuffle(pool.filter(x => x.bracket === t.bracket)), other = shuffle(pool.filter(x => x.bracket !== t.bracket));
+  let order;
+  if (hard) order = same.concat(other);
+  else { order = []; while (same.length || other.length) { if (same.length) order.push(same.shift()); if (other.length) order.push(other.shift()); } }
+  const out = [], keys = new Set([key(t)]);
+  for (const x of order) { const k = key(x); if (!k || keys.has(k)) continue; keys.add(k); out.push(x); if (out.length >= n) break; }
+  return out;
+}
+
+function openPlay(mode, label) {
+  closePlay(true);
+  const p = el('div', 'play');
+  p.setAttribute('role', 'dialog'); p.setAttribute('aria-modal', 'true'); p.setAttribute('aria-label', label);
+  p.innerHTML = '<div class="ptop"></div><div class="pbody"><div class="pwrap"></div></div><div class="pfoot"></div>';
+  const top = p.querySelector('.ptop');
+  top.appendChild(btn('hbtn press hov', ICON.close, () => leave(), 'Leave'));
+  top.appendChild(el('div', 'prog' + (mode === 'blitz' || mode === 'sort' ? ' time' : ''), '<i></i>'));
+  top.appendChild(el('div', 'ptag'));
+  document.body.appendChild(p);
+  document.body.style.overflow = 'hidden';
+  guardOpen();
+  return p;
+}
+function closePlay(silent) {
+  const p = document.querySelector('.play');
+  if (run && run.timer) clearInterval(run.timer);
+  if (run && run.wait) clearTimeout(run.wait);
+  if (p) p.remove();
+  document.body.style.overflow = '';
+  if (!silent) { run = null; guardClose(); drawHome(); }
+}
+function leave() {
+  if (!run) { closePlay(); return; }
+  const n = run.answered;
+  const done = run.done;
+  closePlay();
+  if (!done && n) toast('Left the ' + run_label() + '. ' + plural(n, 'answer') + ' saved.');
+}
+let lastLabel = 'round';
+const run_label = () => lastLabel;
+
+const $ = s => document.querySelector('.play ' + s);
+function setProg(frac, tag) {
+  const i = $('.prog i'); if (i) i.style.width = Math.max(0, Math.min(1, frac)) * 100 + '%';
+  const g = $('.ptag'); if (g) g.textContent = tag;
+}
+
+/* ── QUEST ── */
+function startQuest() {
+  const d = deck(), s = settings();
+  const due = d.terms.filter(t => isDue(card(t.id)))
+    .sort((a, b) => { const ca = card(a.id), cb = card(b.id); return ca.due < cb.due ? -1 : ca.due > cb.due ? 1 : ca.box - cb.box; })
+    .slice(0, 20);
+  const fresh = d.terms.filter(t => card(t.id).box === 0).slice(0, s.newPer);
+  if (!due.length && !fresh.length) { toast('Nothing due. SORT and BLITZ are open.'); return; }
+  /* spread the new ones through the reviews so the round is not front-loaded */
+  const q = due.map(t => ({ id: t.id, step: 'ask', tries: 0 }));
+  fresh.forEach((t, i) => {
+    const at = Math.min(q.length, Math.round((i + 1) * (q.length + 1) / (fresh.length + 1)) + i);
+    q.splice(at, 0, { id: t.id, step: card(t.id).seen ? 'ask' : 'discover', tries: 0, fresh: true });
+  });
+  run = { mode: 'quest', queue: q, total: due.length + fresh.length, asked: new Set(), firstRight: 0, answered: 0,
+    found: [], ranks: [], missed: [], done: false };
+  lastLabel = 'quest';
+  openPlay('quest', 'Quest');
+  nextQ();
+}
+
+/* ── BOSS ── */
+function startBoss(id) {
+  const all = deck().terms.filter(t => t.bracket === id && t.def);
+  if (all.length < 3) return;
+  run = { mode: 'boss', bracket: id, queue: shuffle(all).map(t => ({ id: t.id, step: 'ask', tries: 0 })), total: all.length,
+    asked: new Set(), firstRight: 0, answered: 0, found: [], ranks: [], missed: [], done: false, need: Math.ceil(all.length * .9) };
+  lastLabel = 'boss fight';
+  openPlay('boss', 'Boss: ' + id);
+  nextQ();
+}
+
+/* ── BLITZ and SORT: against the clock, nothing scheduled ── */
+function startBlitz() {
+  const pool = deck().terms.filter(t => t.def && tier(card(t.id)) >= 1);
+  if (pool.length < 4) return;
+  timed('blitz', pool, 60);
+}
+function startSort() {
+  const d = deck();
+  const pool = d.terms.slice();
+  if (d.brackets.filter(b => d.terms.some(t => t.bracket === b.id)).length < 2) return;
+  timed('sort', pool, 30);
+}
+function timed(mode, pool, secs) {
+  run = { mode, pool, bag: [], secs, end: 0, right: 0, wrong: 0, answered: 0, missed: [], done: false, started: false, last: null };
+  lastLabel = mode === 'blitz' ? 'blitz' : 'sort';
+  openPlay(mode, mode.toUpperCase());
+  /* a READY screen first, so the clock starts on a press and not on a
+     page that is still sliding in */
+  const w = $('.pwrap'); w.innerHTML = '';
+  const g = el('div', 'q glow'), win = el('div', 'win'), inn = el('div', 'in');
+  win.appendChild(inn); g.appendChild(win);
+  const r = rec();
+  inn.appendChild(el('div', 'kick', mode === 'blitz' ? '[SYSTEM] TIME TRIAL' : '[SYSTEM] SORTING TRIAL'));
+  inn.appendChild(el('div', 'big xl', mode.toUpperCase()));
+  inn.appendChild(el('p', 'def', mode === 'blitz'
+    ? 'Sixty seconds. Pick the name for a definition, or the definition for a name. Only entries you have found turn up.'
+    : 'Thirty seconds. Each name belongs to one bracket. File as many as you can. The near twins are the point: Stress and Stressed are not in the same place.'));
+  inn.appendChild(el('p', 'note', 'Best: ' + (mode === 'blitz' ? r.blitz : r.sort) + '. It does not change any schedule.'));
+  w.appendChild(g);
+  setProg(1, secs + ' s');
+  foot([['START', () => go(), 'go press']]);
+  function go() {
+    run.started = true; run.end = Date.now() + secs * 1000;
+    run.timer = setInterval(tickClock, 250);
+    tickClock(); nextQ();
+  }
+}
+function tickClock() {
+  if (!run || !run.started || run.done) return;
+  const left = Math.max(0, run.end - Date.now());
+  setProg(left / (run.secs * 1000), Math.ceil(left / 1000) + ' s');
+  if (left <= 0) { clearInterval(run.timer); finishTimed(); }
+}
+function drawTimed() {
+  /* a bag that empties before it refills, so nothing repeats until
+     everything has had a turn */
+  if (!run.bag.length) { run.bag = shuffle(run.pool); if (run.bag.length > 1 && run.bag[0] === run.last) run.bag.push(run.bag.shift()); }
+  const t = run.bag.shift(); run.last = t;
+  return { id: t.id, step: 'ask', tries: 0 };
+}
+
+/* ── one question ── */
+function nextQ() {
+  if (!run) return;
+  if (run.wait) { clearTimeout(run.wait); run.wait = null; }
+  let item;
+  if (run.mode === 'blitz' || run.mode === 'sort') { if (Date.now() >= run.end) { finishTimed(); return; } item = drawTimed(); }
+  else {
+    if (!run.queue.length) { finishRound(); return; }
+    item = run.queue.shift();
+    setProg(run.asked.size / run.total, Math.min(run.total, run.asked.size + (run.asked.has(item.id) ? 0 : 1)) + ' / ' + run.total);
+  }
+  const t = term(item.id);
+  if (!t) { nextQ(); return; }
+  run.item = item; run.t = t; run.locked = false;
+  if (item.step === 'discover') { drawDiscover(t); return; }
+  const c = card(t.id);
+  let kind = kindFor(t, c, run.mode);
+  run.kind = kind;
+  drawQ(t, kind);
+}
+
+function windowFor(t, kick) {
+  const b = bkt(t.bracket);
+  const g = el('div', 'q glow open'), win = el('div', 'win'), inn = el('div', 'in');
+  g.style.setProperty('--c', b.color);
+  win.appendChild(inn); g.appendChild(win);
+  const top = el('div', 'top');
+  top.appendChild(el('span', 'kick', kick));
+  g._top = top; g._in = inn;
+  inn.appendChild(top);
+  return g;
+}
+
+const DISCOVER_WORD = { SKILLS: 'SKILL ACQUIRED', STATS: 'STAT REVEALED', CONDITIONS: 'CONDITION IDENTIFIED', TRAITS: 'TRAIT DISCOVERED' };
+function drawDiscover(t) {
+  const w = $('.pwrap'); w.innerHTML = '';
+  const g = windowFor(t, '[SYSTEM] ' + (DISCOVER_WORD[t.bracket] || 'ENTRY FOUND'));
+  g._top.insertAdjacentHTML('beforeend', chip(t.bracket));
+  const name = el('div', 'big xl'); g._in.appendChild(name);
+  decode(name, t.term);
+  if (t.aka && t.aka.length) g._in.appendChild(el('div', 'note', 'Also: ' + esc(t.aka.join(', '))));
+  g._in.appendChild(t.def ? el('p', 'def', refs(esc(t.def)) + draftMark(t)) : el('p', 'note', 'No definition yet. Add yours with EDIT on its codex entry. For now it is asked by bracket.'));
+  w.appendChild(g);
+  discover(t.id);
+  freshIds.add(t.id);
+  run.found.push(t.id);
+  cue.found();
+  say('New entry: ' + t.term + ', in ' + t.bracket + '. ' + (t.def || ''));
+  foot([['GOT IT', () => {
+    /* it comes back as a question two or three turns later, not at once */
+    run.queue.splice(Math.min(run.queue.length, 2), 0, { id: t.id, step: 'ask', tries: 0, fresh: true });
+    nextQ();
+  }, 'go press']]);
+}
+/* The name decodes out of noise. It is the one flourish, it is short,
+   and with reduced motion it simply appears. */
+function decode(node, text) {
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  node.textContent = text;
+  if (reduce) return;
+  const glyphs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%';
+  const t0 = performance.now(), dur = 420;
+  const step = now => {
+    const k = Math.min(1, (now - t0) / dur), n = Math.floor(text.length * k);
+    node.textContent = text.slice(0, n) + text.slice(n).replace(/[^\s]/g, () => glyphs[Math.floor(Math.random() * glyphs.length)]);
+    if (k < 1 && node.isConnected) requestAnimationFrame(step); else node.textContent = text;
+  };
+  requestAnimationFrame(step);
+}
+
+const KICK = { identify: 'WHICH ENTRY IS THIS?', reverse: 'WHAT DOES IT MEAN?', hint: 'NAME THIS ENTRY', recall: 'NAME THIS ENTRY', classify: 'WHICH BRACKET?', sort: 'FILE IT' };
+function drawQ(t, kind) {
+  const w = $('.pwrap'); w.innerHTML = '';
+  const g = windowFor(t, (run.mode === 'boss' ? '[BOSS] ' : '') + KICK[kind]);
+  const showChip = kind !== 'classify' && kind !== 'sort';
+  if (showChip) g._top.insertAdjacentHTML('beforeend', chip(t.bracket));
+  if (kind === 'sort' || kind === 'classify') g.style.setProperty('--c', 'var(--acc)');
+  const inn = g._in;
+  w.appendChild(g);
+  run.choices = null;
+
+  if (kind === 'identify' || kind === 'hint' || kind === 'recall') inn.appendChild(el('p', 'def', masked(t)));
+  if (kind === 'reverse' || kind === 'sort' || kind === 'classify') inn.appendChild(el('div', 'big' + (kind === 'sort' ? ' xl' : ''), esc(t.term)));
+
+  if (kind === 'identify' || kind === 'reverse') {
+    const hard = run.mode === 'boss' || card(t.id).box >= 4;
+    const field = kind === 'identify' ? 'term' : 'def';
+    const opts = shuffle([t].concat(decoys(t, field, 3, hard)));
+    if (opts.length < 2) { drawFlash(t, inn); return; }
+    const box = el('div', 'opts' + (kind === 'identify' ? ' two' : ''));
+    run.choices = opts.map((o, i) => {
+      const label = kind === 'identify' ? esc(o.term) : masked(t, o.def);
+      const b = btn('opt press hov ' + (kind === 'identify' ? 'term' : 'defn'), '<span class="k">' + (i + 1) + '</span><span class="v">' + label + '</span>', () => choose(i));
+      b._ok = o.id === t.id; b._o = o;
+      box.appendChild(b);
+      return b;
+    });
+    w.appendChild(box);
+    foot([['I DON\'T KNOW', () => choose(-1), 'go ghost press']]);
+  } else if (kind === 'sort' || kind === 'classify') {
+    const box = el('div', 'sorts');
+    run.choices = deck().brackets.map((b, i) => {
+      const x = btn('opt press hov', '<span class="k">' + (i + 1) + '</span><span class="v">[' + esc(b.id) + ']</span>', () => choose(i));
+      x.style.setProperty('--c', b.color);
+      x._ok = b.id === t.bracket; x._b = b;
+      box.appendChild(x);
+      return x;
+    });
+    w.appendChild(box);
+    if (run.mode !== 'sort') foot([['I DON\'T KNOW', () => choose(-1), 'go ghost press']]);
+    else foot([]);
+  } else {
+    if (kind === 'hint') {
+      const ans = t.term;
+      inn.appendChild(el('div', 'hint', esc(ans.replace(/[A-Za-z0-9]/g, (ch, i) => i === 0 || /\s/.test(ans[i - 1] || ' ') ? ch : '_'))));
+    }
+    const row = el('form', 'type');
+    row.setAttribute('autocomplete', 'off');
+    const inp = el('input');
+    inp.type = 'text'; inp.placeholder = 'Type the name';
+    ['autocomplete', 'autocorrect', 'autocapitalize'].forEach(a => inp.setAttribute(a, 'off'));
+    inp.setAttribute('spellcheck', 'false'); inp.setAttribute('enterkeyhint', 'done'); inp.setAttribute('aria-label', 'Your answer');
+    row.appendChild(inp);
+    const go = btn('go press', 'CHECK'); go.type = 'submit';
+    row.appendChild(go);
+    row.onsubmit = e => { e.preventDefault(); if (!run.locked) typed(inp.value); };
+    w.appendChild(row);
+    run.input = inp;
+    foot([['I DON\'T KNOW', () => typed(null), 'go ghost press']]);
+    inp.focus({ preventScroll: true });
+  }
+  say(kind === 'sort' || kind === 'classify' || kind === 'reverse' ? t.term : (KICK[kind] + ' ' + inn.querySelector('.def').textContent));
+}
+
+/* Fewer than two options possible (a one-entry database): a plain flash
+   card, graded by him. */
+function drawFlash(t, inn) {
+  const d = el('p', 'def', '');
+  inn.appendChild(d);
+  foot([['SHOW IT', () => {
+    d.innerHTML = '<b>' + esc(t.term) + '</b>';
+    foot([['NOT YET', () => settle(false, null), 'go ghost press'], ['KNEW IT', () => settle(true, null), 'go press']]);
+  }, 'go press']]);
+}
+
+function choose(i) {
+  if (!run || run.locked || !run.choices) return;
+  const ok = i >= 0 && !!run.choices[i]._ok;
+  run.choices.forEach((b, j) => {
+    b.disabled = true;
+    if (b._ok) b.classList.add('ok');
+    else if (j === i) b.classList.add('no');
+    else b.classList.add('dim');
+  });
+  settle(ok, null);
+}
+
+function typed(value) {
+  if (!run || run.locked) return;
+  const t = run.t;
+  let ok = false, close = false;
+  if (value != null) {
+    const v = norm(value);
+    if (!v) { toast('Type the name, or press I DON\'T KNOW.'); return; }
+    const acc = answers(t);
+    if (acc.indexOf(v) >= 0) ok = true;
+    else {
+      /* one slip in a short word, two in a long one, and never in a word of
+         four letters or fewer, where one letter is the whole difference */
+      const best = Math.min.apply(null, acc.map(a => dist(v, a)));
+      const len = norm(t.term).length;
+      if ((len >= 5 && len <= 8 && best <= 1) || (len >= 9 && best <= 2)) { ok = true; close = true; }
+      /* a typed answer that is a different entry is wrong, however close */
+      if (ok && deck().terms.some(x => x.id !== t.id && answers(x).indexOf(v) >= 0)) { ok = false; close = false; }
+    }
+  }
+  if (run.input) { run.input.classList.add(ok ? 'ok' : 'no'); run.input.readOnly = true; run.input.blur(); }
+  settle(ok, close ? value : null);
+}
+
+/* An answer is in. Save it, say so, and move on. */
+function settle(ok, closeSpelling) {
+  run.locked = true;
+  const t = run.t, item = run.item, mode = run.mode;
+  run.answered++;
+  let res = null;
+  if (mode === 'blitz' || mode === 'sort') {
+    if (ok) run.right++; else { run.wrong++; run.missed.push(t.id); }
+    touchDay(ok);
+  } else {
+    const first = item.tries === 0;
+    if (first) {
+      run.asked.add(t.id);
+      res = grade(t.id, ok, { early: mode === 'boss' && !isDue(card(t.id)), lapsed: false });
+      if (ok) run.firstRight++;
+      else run.missed.push(t.id);
+      if (res.after > res.before && res.after >= 2) run.ranks.push({ id: t.id, to: res.after });
+    }
+    if (!ok && mode === 'quest' && item.tries < 2) {
+      run.queue.splice(Math.min(run.queue.length, 3), 0, { id: t.id, step: 'ask', tries: item.tries + 1 });
+    }
+  }
+  if (ok) cue.right(); else cue.wrong();
+  const rank = res && res.after > res.before && res.after >= 2;
+  if (rank) setTimeout(cue.rank, 90);
+
+  /* the verdict */
+  const w = $('.pwrap');
+  if (mode !== 'blitz' && mode !== 'sort') {
+    const fb = el('div', 'fb ' + (ok ? 'ok' : 'no'));
+    fb.setAttribute('role', 'status');
+    let html = '<div class="h">' + (ok ? (closeSpelling ? 'ACCEPTED' : 'RIGHT') : 'NOT QUITE') + '</div>';
+    if (closeSpelling) html += '<div class="t">It is spelled <b>' + esc(t.term) + '</b>.</div>';
+    if (!ok) {
+      if (run.kind === 'classify') html += '<div class="t"><b>' + esc(t.term) + '</b> is in ' + chip(t.bracket) + '</div>';
+      else html += '<div class="t"><b>' + esc(t.term) + '</b>: ' + refs(esc(t.def)) + '</div>';
+      if (mode === 'quest' && item.tries < 2) html += '<div class="t" style="color:var(--t3)">It comes back in this round.</div>';
+    }
+    if (rank) html += '<div class="rankup">[' + esc(t.term.toUpperCase()) + '] IS NOW ' + TIER[res.after] + '</div>';
+    fb.innerHTML = html;
+    w.appendChild(fb);
+    say((ok ? 'Right. ' : 'Not quite. It was ' + t.term + '. ') + (rank ? t.term + ' is now ' + TIER[res.after] + '.' : ''));
+    const s = settings();
+    const auto = ok && s.auto && !closeSpelling && !rank && !nextNeedsKeyboard();
+    foot([[run.queue.length ? 'NEXT' : 'FINISH', () => nextQ(), 'go press']]);
+    if (auto) run.wait = setTimeout(nextQ, 750);
+    else focusFoot();
+  } else {
+    if (!ok && run.mode === 'sort') {
+      const fb = el('div', 'fb no');
+      fb.innerHTML = '<div class="t"><b>' + esc(t.term) + '</b> is in ' + chip(t.bracket) + '</div>';
+      w.appendChild(fb);
+    }
+    run.wait = setTimeout(nextQ, ok ? 260 : 950);
+  }
+}
+/* iPhone only raises the keyboard for a focus that happens inside a tap,
+   so a question that wants typing is never reached by a timer. */
+function nextNeedsKeyboard() {
+  if (!run || !run.queue || !run.queue.length || !settings().typing) return false;
+  const it = run.queue[0];
+  if (it.step === 'discover') return false;
+  const t = term(it.id); if (!t) return false;
+  const k = kindFor(t, card(t.id), run.mode);
+  return k === 'hint' || k === 'recall';
+}
+function focusFoot() { const all = document.querySelectorAll('.play .pfoot .go:not(.ghost)'), b = all[all.length - 1]; if (b) b.focus({ preventScroll: true }); }
+
+function foot(list) {
+  const f = document.querySelector('.play .pfoot'); if (!f) return;
+  f.innerHTML = '';
+  if (!list.length) return;
+  const inner = el('div', 'inner');
+  list.forEach(([label, fn, cls]) => inner.appendChild(btn(cls, label, fn)));
+  f.appendChild(inner);
+}
+
+/* ── the end of a round ── */
+function finishRound() {
+  run.done = true;
+  const mode = run.mode, w = $('.pwrap');
+  setProg(1, run.total + ' / ' + run.total);
+  w.innerHTML = '';
+  const g = el('div', 'res glow open'), win = el('div', 'win'), inn = el('div', 'in');
+  win.appendChild(inn); g.appendChild(win);
+  let cleared = false;
+  if (mode === 'boss') {
+    cleared = run.firstRight >= run.need;
+    g.style.setProperty('--c', cleared ? 'var(--gold)' : bkt(run.bracket).color);
+    if (cleared) {
+      const r = rec(), seals = Object.assign({}, r.seals);
+      if (!seals[run.bracket]) seals[run.bracket] = today();
+      DB.patch('rec', { seals });
+    }
+    inn.appendChild(el('div', 'kick', cleared ? '[SYSTEM] BOSS CLEARED' : '[SYSTEM] BOSS STANDS'));
+    inn.appendChild(el('div', null, chip(run.bracket)));
+  } else inn.appendChild(el('div', 'kick', '[SYSTEM] QUEST COMPLETE'));
+  inn.appendChild(el('div', 'score', '<span class="v">' + run.firstRight + ' / ' + run.total + '</span><span class="k">' + (mode === 'boss' ? 'needed ' + run.need : 'right first time') + '</span>'));
+
+  const d = deck();
+  if (run.found.length) {
+    const l = el('div', 'list'); l.appendChild(el('h4', null, 'NEW IN THE CODEX'));
+    const cs = el('div', 'chips');
+    run.found.forEach(id => { const t = term(id); if (t) cs.insertAdjacentHTML('beforeend', '<span class="chip" style="--c:' + bkt(t.bracket).color + '">' + esc(t.term) + '</span>'); });
+    l.appendChild(cs); inn.appendChild(l);
+  }
+  if (run.ranks.length) {
+    const l = el('div', 'list'); l.appendChild(el('h4', null, 'RANKED UP'));
+    run.ranks.forEach(r => { const t = term(r.id); if (t) l.appendChild(li(t, TIER[r.to])); });
+    inn.appendChild(l);
+  }
+  const miss = Array.from(new Set(run.missed));
+  if (miss.length) {
+    const l = el('div', 'list'); l.appendChild(el('h4', null, 'TO GO OVER'));
+    miss.forEach(id => { const t = term(id); if (t) l.appendChild(li(t, t.def)); });
+    inn.appendChild(l);
+  }
+  const n = counts();
+  const tail = n.due ? plural(n.due, 'entry is', 'entries are') + ' still due today.' :
+    n.nextDue ? 'Next review ' + niceDay(n.nextDue) + ': ' + plural(n.nextN, 'entry', 'entries') + '.' : '';
+  if (tail) inn.appendChild(el('p', 'note', esc(tail)));
+  w.appendChild(g);
+  if (cleared || run.ranks.length || run.found.length) cue.finish();
+  say((mode === 'boss' ? (cleared ? 'Boss cleared. ' : 'Boss stands. ') : 'Quest complete. ') + run.firstRight + ' of ' + run.total + ' right first time.');
+  const again = mode === 'boss' && !cleared ? [['TRY AGAIN', () => startBoss(run.bracket), 'go ghost press']] : [];
+  foot(again.concat([['DONE', () => closePlay(), 'go press']]));
+  focusFoot();
+}
+function li(t, sub) {
+  const x = el('div', 'li', '<span class="a">' + esc(t.term) + '</span><span class="b">' + refs(esc(sub || '')) + '</span>');
+  x.style.setProperty('--c', bkt(t.bracket).color);
+  return x;
+}
+
+function finishTimed() {
+  if (!run || run.done) return;
+  run.done = true;
+  if (run.timer) clearInterval(run.timer);
+  if (run.wait) clearTimeout(run.wait);
+  setProg(0, '0 s');
+  const mode = run.mode, r = rec(), key = mode, prev = r[key] || 0, score = run.right;
+  const best = score > prev;
+  if (best) DB.patch('rec', { [key]: score, [key + 'At']: today() });
+  const w = $('.pwrap'); w.innerHTML = '';
+  const g = el('div', 'res glow open'), win = el('div', 'win'), inn = el('div', 'in');
+  if (best) g.style.setProperty('--c', 'var(--gold)');
+  win.appendChild(inn); g.appendChild(win);
+  inn.appendChild(el('div', 'kick', '[SYSTEM] ' + mode.toUpperCase() + ' OVER'));
+  inn.appendChild(el('div', 'score', '<span class="v">' + score + '</span><span class="k">' + (mode === 'sort' ? 'filed right' : 'right') + ' in ' + run.secs + ' s' + (run.wrong ? ', ' + run.wrong + ' wrong' : '') + '</span>'));
+  inn.appendChild(el('div', best ? 'best' : 'note', best ? (prev ? 'NEW BEST. THE OLD ONE WAS ' + prev + '.' : 'FIRST RECORD SET.') : 'Best: ' + prev + (r[key + 'At'] ? ', set ' + esc(niceDay(r[key + 'At'])) : '') + '.'));
+  const miss = Array.from(new Set(run.missed));
+  if (miss.length) {
+    const l = el('div', 'list'); l.appendChild(el('h4', null, 'TO GO OVER'));
+    miss.forEach(id => { const t = term(id); if (t) l.appendChild(li(t, mode === 'sort' ? '[' + t.bracket + ']  ' + bkt(t.bracket).means : t.def)); });
+    inn.appendChild(l);
+  }
+  w.appendChild(g);
+  if (best) cue.finish();
+  say(mode + ' over. ' + score + ' right.' + (best ? ' New best.' : ''));
+  foot([['AGAIN', () => (mode === 'blitz' ? startBlitz() : startSort()), 'go ghost press'], ['DONE', () => closePlay(), 'go press']]);
+  focusFoot();
+}
+
+/* ══════════════════ LOAD: Tom's definitions, pasted ══════════════════
+   Reads whatever shape the text comes in. Every shape seen or likely:
+
+     [SKILLS]                          a bracket heading, then under it
+     Food Weighing, Calorie Counting   names with commas (his own list)
+     Food Weighing: definition         or one name and its meaning a line
+     **Food Weighing** - definition    bold, a dash, an en or em dash
+     Food Weighing [SKILLS]: def       a bracket on the line itself
+     Food Weighing | [SKILLS] | def    pipes
+     | Term | Bracket | Definition |   a markdown table, with a header
+     [Palatability]                    a Skool page title, then its body
+     How rewarding a food tastes...    on the lines under it
+     { "terms": [ ... ] }              JSON, or CSV with a header row
+
+   A name it already knows is updated, a new name is added, and nothing is
+   ever deleted. It never touches progress.                             */
+const KNOWN_BRACKETS = ['SKILLS', 'STATS', 'CONDITIONS', 'TRAITS'];
+function bracketId(s) {
+  let x = String(s || '').replace(/[\[\]*_`#:]/g, '').trim().toUpperCase().replace(/\s+/g, ' ');
+  if (!x) return '';
+  if (KNOWN_BRACKETS.indexOf(x + 'S') >= 0) x += 'S';
+  return x;
+}
+const cleanTerm = s => String(s || '').replace(/^\s*(?:[-*•+▪◦]|\d+[.)])\s+/, '').replace(/\*\*|__/g, '').replace(/^[\s"'“”]+|[\s"'“”.;,]+$/g, '').replace(/^\[(.+)\]$/, '$1').replace(/\s+/g, ' ').trim();
+const cleanDef = s => String(s || '').replace(/\*\*|__/g, '').replace(/\s+/g, ' ').replace(/^[\s"“]+|[\s"”]+$/g, '').trim();
+const words = s => String(s).trim().split(/\s+/).filter(Boolean).length;
+const termLike = s => { const c = cleanTerm(s); return c.length >= 1 && c.length <= 60 && words(c) <= 7 && /[A-Za-z0-9]/.test(c); };
+
+function parseDeck(raw) {
+  const out = { items: [], means: {}, skipped: [], fmt: '' };
+  const text = String(raw || '').replace(/\r\n?/g, '\n').replace(/ /g, ' ').replace(/^﻿/, '').trim();
+  if (!text) return out;
+  if (/^[\[{]/.test(text)) {
+    try { fromJSON(JSON.parse(text), out); out.fmt = 'JSON'; return tidy(out); } catch (e) { /* not JSON after all */ }
+  }
+  const first = text.split('\n')[0];
+  if (!/\|/.test(first) && /(^|[\t,])\s*"?(term|name|word|entry)"?\s*([\t,]|$)/i.test(first) && fromDelim(text, out)) { out.fmt = /\t/.test(first) ? 'TSV' : 'CSV'; return tidy(out); }
+  fromLines(text, out); out.fmt = 'text';
+  return tidy(out);
+}
+
+function fromJSON(j, out) {
+  let arr = Array.isArray(j) ? j : (j.terms || j.entries || j.items || j.glossary || j.database || null);
+  if (j && !Array.isArray(j) && j.brackets) {
+    const bs = Array.isArray(j.brackets) ? j.brackets : Object.keys(j.brackets).map(k => (typeof j.brackets[k] === 'string' ? { id: k, means: j.brackets[k] } : Object.assign({ id: k }, j.brackets[k])));
+    bs.forEach(b => {
+      const id = bracketId(b.id || b.name);
+      if (!id) return;
+      if (b.means || b.description) out.means[id] = cleanDef(b.means || b.description);
+      (Array.isArray(b.terms) ? b.terms : []).forEach(x => pushJSON(x, id, out));
+    });
+  }
+  if (!arr && j && typeof j === 'object' && !Array.isArray(j)) {
+    /* { "SKILLS": [...], "STATS": [...] } or { "Term": "definition" } */
+    const ks = Object.keys(j).filter(k => k !== 'brackets');
+    if (ks.length && ks.every(k => Array.isArray(j[k]))) { ks.forEach(k => j[k].forEach(x => pushJSON(x, bracketId(k), out))); return; }
+    if (ks.length && ks.every(k => typeof j[k] === 'string')) { ks.forEach(k => out.items.push({ term: k, def: j[k], bracket: '' })); return; }
+  }
+  (arr || []).forEach(x => pushJSON(x, '', out));
+}
+function pushJSON(x, bracket, out) {
+  if (typeof x === 'string') { out.items.push({ term: x, def: '', bracket }); return; }
+  if (Array.isArray(x)) { out.items.push({ term: x[0], bracket: x.length > 2 ? x[1] : bracket, def: x.length > 2 ? x[2] : x[1] }); return; }
+  if (!x || typeof x !== 'object') return;
+  const pickF = names => { for (const n of names) if (x[n] != null && x[n] !== '') return x[n]; return ''; };
+  let aka = pickF(['aka', 'aliases', 'also', 'alias']);
+  if (typeof aka === 'string') aka = aka.split(',');
+  out.items.push({ term: pickF(['term', 'name', 'word', 'title', 'entry']), bracket: pickF(['bracket', 'category', 'cat', 'type', 'tag', 'section']) || bracket,
+    def: pickF(['def', 'definition', 'meaning', 'desc', 'description', 'body', 'text']), aka: Array.isArray(aka) ? aka : [] });
+}
+
+function splitRow(line, sep) {
+  const cells = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) { if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === sep) { cells.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  cells.push(cur);
+  return cells.map(s => s.trim());
+}
+function colsFrom(cells) {
+  const find = re => cells.findIndex(c => re.test(c.replace(/[*_]/g, '').trim()));
+  const t = find(/^(term|name|word|entry|title)$/i);
+  if (t < 0) return null;
+  return { t, b: find(/^(bracket|category|cat|type|tag|section|group)$/i), d: find(/^(def|definition|meaning|description|desc|what it means|body)$/i), a: find(/^(aka|also|aliases|alias|also accept)$/i) };
+}
+function fromDelim(text, out) {
+  const lines = text.split('\n').filter(l => l.trim());
+  const sep = /\t/.test(lines[0]) ? '\t' : ',';
+  const cols = colsFrom(splitRow(lines[0], sep));
+  if (!cols) return false;
+  lines.slice(1).forEach(l => {
+    const c = splitRow(l, sep);
+    out.items.push({ term: c[cols.t], bracket: cols.b >= 0 ? c[cols.b] : '', def: cols.d >= 0 ? c[cols.d] : '', aka: cols.a >= 0 && c[cols.a] ? c[cols.a].split(/[;,]/) : [] });
+  });
+  return true;
+}
+
+function fromLines(text, out) {
+  const lines = text.split('\n');
+  /* which [WORDS] are brackets, not terms: the four known ones, anything
+     used as a heading, and anything tagged on three lines or more */
+  const cats = new Set(KNOWN_BRACKETS);
+  lines.forEach(l => {
+    const hm = l.match(/^\s*#{1,6}\s*\[?([^\]\n#]+?)\]?\s*$/);
+    if (hm && words(hm[1]) <= 3 && /^[A-Z][A-Z &/-]+$/.test(hm[1].trim())) cats.add(bracketId(hm[1]));
+  });
+  /* a plural in capitals, five letters or more, is a bracket: QUESTS, ITEMS.
+     [DOMS] and [PCOS] are four, and they are terms */
+  const isCat = s => { const x = String(s || '').replace(/[\[\]*_]/g, '').trim(); return cats.has(bracketId(x)) || /^[A-Z]{4,}S$/.test(x); };
+
+  let sec = '', last = null, cols = null, gap = true, lastShape = '';
+  const push = (term, def, bracket, aka) => {
+    const it = { term: cleanTerm(term), def: cleanDef(def || ''), bracket: bracket || sec, aka: aka || [] };
+    out.items.push(it); last = it; return it;
+  };
+
+  lines.forEach((line, idx) => {
+    const s0 = line.trim();
+    if (!s0) { gap = true; return; }
+    const wasGap = gap; gap = false;
+
+    /* a markdown table */
+    if (/^\|.*\|$/.test(s0) || (s0.split('|').length >= 3 && !/^[^|]*\[[A-Z ]+\][^|]*$/.test(s0))) {
+      if (/^[\s|:\-]+$/.test(s0)) return;
+      const cells = s0.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+      const h = colsFrom(cells);
+      if (h) { cols = h; return; }
+      let t = '', b = '', d = '', a = [];
+      if (cols) { t = cells[cols.t]; b = cols.b >= 0 ? cells[cols.b] : ''; d = cols.d >= 0 ? cells[cols.d] : ''; a = cols.a >= 0 && cells[cols.a] ? cells[cols.a].split(/[;,]/) : []; }
+      else if (cells.length >= 3) {
+        if (isCat(cells[1]) || /^\[.+\]$/.test(cells[1])) { t = cells[0]; b = cells[1]; d = cells.slice(2).join(' | '); }
+        else if (isCat(cells[2])) { t = cells[0]; d = cells[1]; b = cells[2]; }
+        else if (isCat(cells[0])) { b = cells[0]; t = cells[1]; d = cells.slice(2).join(' | '); }
+        else { t = cells[0]; d = cells.slice(1).join(' | '); }
+      } else if (cells.length === 2) {
+        if (isCat(cells[1])) { t = cells[0]; b = cells[1]; } else { t = cells[0]; d = cells[1]; }
+      }
+      if (t && termLike(t)) push(t, d, b ? bracketId(b) : '', a);
+      else out.skipped.push(s0);
+      return;
+    }
+
+    /* a heading */
+    const hm = s0.match(/^(#{1,6})\s+(.+)$/);
+    if (hm) {
+      const lvl = hm[1].length, htxt = hm[2].replace(/\*\*|__/g, '').trim();
+      const inBr = htxt.match(/^\[([^\]]+)\]\s*(?:[:\-–—]\s*(.*))?$/);
+      const name = inBr ? inBr[1] : htxt.split(/\s+[:\-–—]\s+|:\s/)[0];
+      const rest = inBr ? (inBr[2] || '') : (htxt.split(/\s+[:\-–—]\s+|:\s/).slice(1).join(' '));
+      if (isCat(name) || (inBr && /^[A-Z][A-Z &/-]*$/.test(name.trim()))) { sec = bracketId(name); if (rest) out.means[sec] = cleanDef(rest); last = null; return; }
+      if (lvl >= 2 && termLike(name)) { push(name, rest, ''); return; }
+      last = null; return;
+    }
+
+    /* a bracket alone, or a bracket and its meaning */
+    const bm = s0.replace(/\*\*|__/g, '').match(/^\[([^\]]{1,40})\]\s*(?:[:\-–—]\s*(.*))?$/);
+    if (bm && isCat(bm[1])) { sec = bracketId(bm[1]); if (bm[2]) out.means[sec] = cleanDef(bm[2]); last = null; return; }
+
+    /* "(Empty — populate as ...)" and other asides in brackets */
+    if (/^\(.*\)$/.test(s0)) { if (/empty/i.test(s0) && sec) { /* an empty bracket, as he wrote it */ } return; }
+
+    let s = s0.replace(/^\s*(?:[-*•+▪◦]|\d+[.)])\s+/, '');
+    const marked = s !== s0 || /^\*\*/.test(s) || /^\[/.test(s);
+
+    /* a bracket named on the line itself */
+    let lineBr = '';
+    s = s.replace(/\s*\[([^\]]{1,40})\]\s*/g, (m, x, off, whole) => {
+      if (lineBr) return m;
+      const after = whole.slice(off + m.length);
+      const tag = off > 0 && /^[A-Z][A-Z &/-]{2,}$/.test(x.trim()) && (after === '' || /^[:|=\-–—]/.test(after));
+      if (isCat(x) || tag) { lineBr = bracketId(x); return ' '; }
+      return m;
+    }).replace(/\s+([:,|])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+
+    /* pipes without a table: Term | [BRACKET] | definition */
+    if (/\s\|\s/.test(s)) {
+      const parts = s.split(/\s*\|\s*/);
+      if (termLike(parts[0])) { push(parts[0], parts.slice(1).join(' | '), lineBr); return; }
+    }
+
+    const td = splitTD(s);
+    const startsEntry = td && (marked || lineBr || wasGap || !last || td[2] === lastShape || /^[^:]{1,60}:\s/.test(s) || /\s[–—]\s/.test(s) || /^\*\*/.test(s0));
+    if (td && startsEntry) { push(td[0], td[1], lineBr); lastShape = td[2]; return; }
+
+    /* names with commas under a bracket: his own format */
+    if ((sec || lineBr) && s.indexOf(',') >= 0 && !/[.!?]$/.test(s)) {
+      const names = s.split(/\s*,\s*/).filter(Boolean);
+      if (names.every(termLike)) { names.forEach(n => push(n, '', lineBr)); last = null; return; }
+    }
+
+    /* a long line after an entry: more of its definition */
+    if (last && (words(s) > 7 || /[.!?)]$/.test(s) || !last.def) && !(lineBr && termLike(s))) {
+      if (!last.def && termLike(s) && words(s) <= 4 && !/[.!?]$/.test(s) && (sec || lineBr)) { push(s, '', lineBr); return; }
+      last.def = cleanDef((last.def ? last.def + ' ' : '') + s);
+      return;
+    }
+
+    /* a name on its own line: a term with no definition yet, or a Skool
+       page title whose body follows */
+    if (termLike(s) && (sec || lineBr || /^\[.+\]$/.test(s0) || marked)) { push(s, '', lineBr); return; }
+
+    if (idx === 0 && !last) return;     /* a title line such as BRACKET DATABASE */
+    out.skipped.push(s0);
+  });
+}
+/* Split a line into a name and its meaning at the first separator, if
+   the part before it can be a name. */
+function splitTD(s) {
+  const bold = s.match(/^\*\*(.+?)\*\*\s*(?:[:\-–—=|]\s*)?(.*)$/);
+  if (bold) return termLike(bold[1]) ? [bold[1], bold[2], 'bold'] : null;
+  const m = s.match(/\s+[|=]\s+|\s+-\s+|\s*[–—]\s*|\t+|:\s+|:$/);
+  if (!m) return null;
+  const t = s.slice(0, m.index), d = s.slice(m.index + m[0].length);
+  if (!termLike(t)) return null;
+  const k = m[0].trim();
+  return [t, d, k === '' ? 'tab' : k === '—' || k === '–' ? 'emdash' : k];
+}
+function tidy(out) {
+  const seen = {};
+  const items = [];
+  out.items.forEach(it => {
+    const term = cleanTerm(it.term), id = slug(term);
+    if (!term || !id || term.length > 60) { if (it.term) out.skipped.push(String(it.term)); return; }
+    const x = { id, term, def: cleanDef(it.def), bracket: bracketId(it.bracket), aka: (it.aka || []).map(a => String(a).trim()).filter(Boolean) };
+    if (seen[id] != null) { const y = items[seen[id]]; if (x.def) y.def = x.def; if (x.bracket) y.bracket = x.bracket; x.aka.forEach(a => { if (y.aka.indexOf(a) < 0) y.aka.push(a); }); return; }
+    seen[id] = items.length; items.push(x);
+  });
+  out.items = items;
+  return out;
+}
+/* What a parsed list would change, before anything is written. A name is
+   matched by its id first, then by any name an answer may be typed as. */
+function plan(parsed) {
+  const d = deck(), res = { add: [], update: [], same: 0, rows: {} };
+  parsed.items.forEach(it => {
+    let t = d.byId[it.id] || d.terms.find(x => answers(x).indexOf(norm(it.term)) >= 0);
+    if (!t) {
+      const del = DB.get('term.' + it.id, null);
+      res.add.push(it);
+      res.rows[it.id] = Object.assign({}, del && del.del ? del : {}, { term: it.term, bracket: it.bracket || 'UNSORTED', def: it.def, aka: it.aka, del: false, at: new Date().toISOString(), ord: d.terms.length + res.add.length });
+      return;
+    }
+    const ch = {};
+    if (it.def && it.def !== t.def) ch.def = it.def;
+    if (it.bracket && it.bracket !== t.bracket) ch.bracket = it.bracket;
+    if (it.aka.length) { const merged = (t.aka || []).slice(); it.aka.forEach(a => { if (merged.indexOf(a) < 0) merged.push(a); }); if (merged.length !== (t.aka || []).length) ch.aka = merged; }
+    if (!Object.keys(ch).length) { res.same++; return; }
+    res.update.push({ t, ch });
+    res.rows[t.id] = Object.assign({}, DB.get('term.' + t.id, {}), ch, { at: new Date().toISOString() });
+  });
+  return res;
+}
+
+function openImport() {
+  sheet(h => {
+    h.appendChild(el('h3', null, 'Load your definitions'));
+    h.appendChild(el('p', 'lede', 'Paste from your Skool pages, or pick a file. A name already here gets your definition; a new name is added; nothing is deleted and no progress is touched.'));
+    h.appendChild(el('p', 'note', 'Any of these work: a bracket heading with Name: definition under it, Name | [BRACKET] | definition, a markdown table, a Skool page title in brackets with its text under it, CSV or JSON. It stays in this browser. Nothing is uploaded.'));
+    const f = field('PASTE HERE', 'textarea', '');
+    f.input.classList.add('code');
+    f.input.placeholder = '[SKILLS]\nFood Weighing: weighing what you eat in grams...\n\n[STATS]\nSatiety: how full you feel...';
+    h.appendChild(f.wrap);
+    const file = el('input'); file.type = 'file'; file.accept = '.md,.txt,.csv,.tsv,.json,text/*,application/json'; file.style.display = 'none';
+    h.appendChild(file);
+    const fileRow = el('div', 'btns');
+    fileRow.appendChild(btn('small press', 'CHOOSE A FILE', () => file.click()));
+    h.appendChild(fileRow);
+    const prev = el('div', 'prev'); prev.style.display = 'none';
+    h.appendChild(prev);
+    const save = btn('go press', 'SAVE', null); save.disabled = true;
+    const row = el('div', 'btns'); row.appendChild(save); h.appendChild(row);
+    let current = null, timer = null;
+    const update = () => {
+      const parsed = parseDeck(f.input.value);
+      const p = plan(parsed);
+      current = p;
+      prev.style.display = f.input.value.trim() ? 'flex' : 'none';
+      if (!f.input.value.trim()) { save.disabled = true; return; }
+      const nDefs = p.update.filter(u => u.ch.def).length + p.add.filter(a => a.def).length;
+      const moves = p.update.filter(u => u.ch.bracket).length;
+      const bits = [];
+      if (p.update.length) bits.push(plural(p.update.length, 'entry', 'entries') + ' updated');
+      if (p.add.length) bits.push(plural(p.add.length, 'new entry', 'new entries'));
+      if (p.same) bits.push(p.same + ' already the same');
+      let html = '<div class="sum">' + (bits.length ? esc(bits.join(' · ')) : 'Nothing recognised yet.') + '</div>';
+      if (bits.length) html += '<div>' + plural(nDefs, 'definition') + ' of yours' + (moves ? ', ' + plural(moves, 'entry', 'entries') + ' moved to another bracket' : '') + '. Read as ' + esc(parsed.fmt) + '.</div>';
+      const show = p.update.slice(0, 4).map(u => ({ term: u.t.term, bracket: u.ch.bracket || u.t.bracket, def: u.ch.def || '(definition unchanged)' }))
+        .concat(p.add.slice(0, 4).map(a => ({ term: a.term + ' (new)', bracket: a.bracket || 'UNSORTED', def: a.def || '(no definition)' })));
+      show.slice(0, 6).forEach(x => { html += '<div class="ln">' + chip(x.bracket) + '<span><b>' + esc(x.term) + '</b> ' + esc(x.def.length > 90 ? x.def.slice(0, 88) + '…' : x.def) + '</span></div>'; });
+      if (parsed.skipped.length) html += '<div class="warn">' + plural(parsed.skipped.length, 'line') + ' not understood, left out: ' + esc(parsed.skipped.slice(0, 3).map(s => s.length > 40 ? s.slice(0, 38) + '…' : s).join(' / ')) + '</div>';
+      prev.innerHTML = html;
+      save.disabled = !(p.update.length || p.add.length);
+    };
+    f.input.oninput = () => { clearTimeout(timer); timer = setTimeout(update, 200); };
+    file.onchange = () => {
+      const fl = file.files && file.files[0]; if (!fl) return;
+      if (fl.size > 2e6) { toast('That file is over 2 MB. Paste the part with the definitions.'); return; }
+      const rd = new FileReader();
+      rd.onload = () => { f.input.value = String(rd.result || ''); update(); };
+      rd.readAsText(fl);
+    };
+    save.onclick = () => {
+      if (!current) return;
+      const before = {};
+      Object.keys(current.rows).forEach(id => { before[id] = DB.get('term.' + id, null); });
+      let failed = 0;
+      Object.keys(current.rows).forEach(id => { if (!DB.set('term.' + id, current.rows[id])) failed++; });
+      const parsedMeans = parseDeck(f.input.value).means;
+      const beforeMeans = {};
+      Object.keys(parsedMeans).forEach(b => { beforeMeans[b] = DB.get('bkt.' + b, null); DB.set('bkt.' + b, { means: parsedMeans[b] }); });
+      invalidate(); h.close(); drawHome();
+      const n = Object.keys(current.rows).length;
+      if (failed) toast('Storage is full: ' + failed + ' of ' + n + ' entries were not saved.');
+      else toast('Saved ' + plural(n, 'entry', 'entries') + '.', () => {
+        Object.keys(before).forEach(id => { if (before[id]) DB.set('term.' + id, before[id]); else DB.del('term.' + id); });
+        Object.keys(beforeMeans).forEach(b => { if (beforeMeans[b]) DB.set('bkt.' + b, beforeMeans[b]); else DB.del('bkt.' + b); });
+        invalidate(); drawHome();
+      });
+    };
+    setTimeout(() => f.input.focus(), 60);
+  });
+}
+
+/* ══════════════════ SHEET ══════════════════
+   One component, two shapes: up from the bottom on a phone, centred on a
+   desktop. Back closes it. */
+const stack = [];
+function sheet(fill, opts) {
+  opts = opts || {};
+  const bg = el('div', 'sheet-bg');
+  const s = el('div', 'sheet');
+  s.setAttribute('role', 'dialog'); s.setAttribute('aria-modal', 'true');
+  s.appendChild(el('div', 'grab'));
+  bg.appendChild(s);
+  document.body.appendChild(bg);
+  let closed = false;
+  function close() {
+    if (closed) return; closed = true;
+    bg.dataset.gone = '1';
+    bg.classList.remove('up');
+    setTimeout(() => bg.remove(), 360);
+    const at = stack.indexOf(close);
+    if (at >= 0) stack.splice(at, 1);
+    guardClose();
+    if (opts.onClose) opts.onClose();
+  }
+  s.close = close;
+  stack.push(close);
+  fill(s);
+  requestAnimationFrame(() => bg.classList.add('up'));
+  guardOpen();
+  bg.addEventListener('click', e => { if (e.target === bg) close(); });
+  return s;
+}
+
+/* ── the back gesture ──
+   Back closes what is open. Only when nothing is open does it leave the
+   app. One history entry covers everything, however deep, and the wait in
+   guardClose is what lets "close this, open that" happen in one tick
+   without the entry being dropped between them.                       */
+let depth = 0, popping = 0;
+const anythingOpen = () => !!document.querySelector('.sheet-bg:not([data-gone])') || !!document.querySelector('.play');
+function guardOpen() { if (depth === 0) { depth = 1; history.pushState({ cx: 1 }, ''); } }
+function guardClose() { setTimeout(() => { if (depth === 1 && !anythingOpen()) { popping++; history.back(); } }, 0); }
+addEventListener('popstate', () => {
+  if (popping > 0) { popping--; depth = 0; return; }
+  depth = 0;
+  const top = stack[stack.length - 1];
+  if (top) { top(); if (anythingOpen()) guardOpen(); return; }
+  if (document.querySelector('.play')) leave();
+});
+
+/* ── keys, for the desk ── */
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const top = stack[stack.length - 1];
+    if (top) { top(); e.preventDefault(); return; }
+    if (document.querySelector('.play')) { leave(); e.preventDefault(); }
+    return;
+  }
+  if (!run || !document.querySelector('.play') || stack.length) return;
+  const typing = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName) && !document.activeElement.readOnly;
+  if (!typing && /^[1-9]$/.test(e.key) && run.choices && !run.locked) {
+    const i = +e.key - 1;
+    if (run.choices[i]) { choose(i); e.preventDefault(); }
+    return;
+  }
+  if (e.key === 'Enter' && !typing) {
+    const all = document.querySelectorAll('.play .pfoot .go:not(.ghost)'), b = all[all.length - 1];
+    if (b && document.activeElement !== b) { b.click(); e.preventDefault(); }
+  }
+});
+
+/* ══════════════════ SETTINGS ══════════════════ */
+function row(title, note, control) {
+  const r = el('div', 'srow');
+  const l = el('div', 'l', '<div>' + esc(title) + '</div>' + (note ? '<div class="n">' + esc(note) + '</div>' : ''));
+  r.appendChild(l); if (control) r.appendChild(control);
+  return r;
+}
+function sw(on, fn) {
+  const b = btn('sw press' + (on ? ' on' : ''), '', null);
+  b.setAttribute('role', 'switch'); b.setAttribute('aria-checked', on ? 'true' : 'false');
+  b.onclick = () => { on = !on; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); fn(on); };
+  return b;
+}
+function seg(items, value, fn) {
+  const s = el('div', 'seg');
+  items.forEach(([v, label]) => {
+    const b = btn(v === value ? 'on' : '', esc(label), () => { s.querySelectorAll('button').forEach(x => x.classList.remove('on')); b.classList.add('on'); fn(v); });
+    b.setAttribute('aria-pressed', v === value ? 'true' : 'false');
+    s.appendChild(b);
+  });
+  return s;
+}
+
+document.getElementById('setBtn').innerHTML = ICON.gear;
+document.getElementById('setBtn').onclick = () => {
+  sheet(h => {
+    h.appendChild(el('h3', null, 'Settings'));
+    const s = settings(), rows = el('div', 'rows');
+    rows.appendChild(row('New entries per quest', 'How many entries a quest brings in for the first time.',
+      seg([[3, '3'], [5, '5'], [8, '8'], [12, '12']], s.newPer, v => { DB.patch('set', { newPer: v }); drawHome(); })));
+    rows.appendChild(row('Type the hardest answers', 'Known entries ask you to type the name. Off: you pick it from four instead.', sw(s.typing, v => DB.patch('set', { typing: v }))));
+    rows.appendChild(row('Move on after a right answer', 'Wrong answers always wait for you.', sw(s.auto, v => DB.patch('set', { auto: v }))));
+    rows.appendChild(row('Sound', 'Synthesised, nothing downloaded.', sw(s.sound, v => DB.patch('set', { sound: v }))));
+    rows.appendChild(row('Vibration', 'Android only. iPhone browsers have none.', sw(s.buzz, v => DB.patch('set', { buzz: v }))));
+    h.appendChild(rows);
+
+    const d = deck(), drafts = d.terms.filter(t => t.src === 'draft').length, yours = d.terms.filter(t => t.src === 'yours').length;
+    h.appendChild(el('h3', null, 'Database'));
+    h.appendChild(el('p', 'note', d.terms.length + ' entries in ' + d.brackets.length + ' brackets. ' + yours + ' definitions are yours, ' + drafts + ' are Claude\'s drafts.'));
+    const b1 = el('div', 'btns');
+    b1.appendChild(btn('go ghost press', 'LOAD DEFINITIONS', () => { h.close(); openImport(); }));
+    b1.appendChild(btn('go ghost press', 'BACK UP', backup));
+    b1.appendChild(btn('go ghost press', 'RESTORE', restore));
+    h.appendChild(b1);
+    h.appendChild(el('p', 'note', 'Everything lives in this browser on this device. BACK UP saves one file with your definitions and progress; RESTORE on another device merges it in, newer answers winning.'));
+
+    const found = counts().found;
+    const b2 = el('div', 'btns');
+    b2.appendChild(btn('small press', 'ERASE PROGRESS', () => eraseProgress(found, h)));
+    if (yours || DB.keys('term.').length) b2.appendChild(btn('small press', 'BACK TO THE DRAFTS', () => resetDeck(h)));
+    h.appendChild(b2);
+    h.appendChild(el('p', 'foot', 'CODEX ' + VERSION + ', updated ' + UPDATED));
+  });
+};
+
+function snapshot(prefixes) {
+  const o = {};
+  DB.keys('').forEach(k => { if (prefixes.some(p => k.indexOf(p) === 0)) o[k] = DB.get(k, null); });
+  return o;
+}
+function eraseProgress(found, h) {
+  sheet(c => {
+    c.appendChild(el('h3', null, 'Erase progress?'));
+    c.appendChild(el('p', 'lede', 'This clears ' + plural(found, 'found entry', 'found entries') + ', every review date, the streak, your bests and boss seals. Your definitions stay.'));
+    const r = el('div', 'btns');
+    r.appendChild(btn('go ghost press', 'KEEP IT', () => c.close()));
+    r.appendChild(btn('go press', 'ERASE', () => {
+      const snap = snapshot(['card.', 'day.', 'streak', 'rec']);
+      Object.keys(snap).forEach(k => DB.del(k));
+      c.close(); h.close(); drawHome();
+      toast('Progress erased.', () => { Object.keys(snap).forEach(k => DB.set(k, snap[k])); drawHome(); });
+    }));
+    c.appendChild(r);
+  });
+}
+function resetDeck(h) {
+  sheet(c => {
+    c.appendChild(el('h3', null, 'Back to the drafts?'));
+    c.appendChild(el('p', 'lede', 'Every definition, name, bracket and entry you changed or added goes, and the database is the built-in one again. Progress stays.'));
+    const r = el('div', 'btns');
+    r.appendChild(btn('go ghost press', 'KEEP MINE', () => c.close()));
+    r.appendChild(btn('go press', 'RESET', () => {
+      const snap = snapshot(['term.', 'bkt.']);
+      Object.keys(snap).forEach(k => DB.del(k));
+      invalidate(); c.close(); h.close(); drawHome();
+      toast('Back to the drafts.', () => { Object.keys(snap).forEach(k => DB.set(k, snap[k])); invalidate(); drawHome(); });
+    }));
+    c.appendChild(r);
+  });
+}
+
+/* ── backup and restore: one file, merged on the way back in ── */
+function backup() {
+  const rows = snapshot(['']);
+  const body = JSON.stringify({ kind: 'codex-backup', v: 1, at: new Date().toISOString(), version: VERSION, rows }, null, 1);
+  try {
+    const a = el('a');
+    a.href = URL.createObjectURL(new Blob([body], { type: 'application/json' }));
+    a.download = 'codex-backup-' + today() + '.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    toast('Backup saved: ' + plural(Object.keys(rows).length, 'row') + '.');
+  } catch (e) { toast('This browser would not save the file.'); }
+}
+function restore() {
+  const f = el('input'); f.type = 'file'; f.accept = '.json,application/json';
+  f.onchange = () => {
+    const fl = f.files && f.files[0]; if (!fl) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      let j = null;
+      try { j = JSON.parse(String(rd.result)); } catch (e) { /* below */ }
+      if (!j || j.kind !== 'codex-backup' || !j.rows || typeof j.rows !== 'object') { toast('That is not a CODEX backup.'); return; }
+      const n = mergeRows(j.rows);
+      invalidate(); drawHome();
+      toast('Restored: ' + plural(n, 'row') + ' merged in.');
+    };
+    rd.readAsText(fl);
+  };
+  f.click();
+}
+/* Newer wins, per row, and nothing earned is lost: a card keeps the
+   higher `best`, a day keeps the bigger count, a record keeps the better
+   score and every seal. */
+function mergeRows(rows) {
+  let n = 0;
+  Object.keys(rows).forEach(k => {
+    const v = rows[k], mine = DB.get(k, null);
+    if (v == null) return;
+    let out = null;
+    if (k.indexOf('card.') === 0) {
+      if (!mine) out = v;
+      else { out = (v.last || '') > (mine.last || '') ? Object.assign({}, mine, v) : Object.assign({}, v, mine); out.best = Math.max(v.best || 0, mine.best || 0); out.seen = mine.seen && v.seen ? (mine.seen < v.seen ? mine.seen : v.seen) : (mine.seen || v.seen); }
+    } else if (k.indexOf('day.') === 0) {
+      out = !mine ? v : (v.n > mine.n ? v : mine);
+    } else if (k === 'rec') {
+      const m = Object.assign({}, REC0, mine || {});
+      out = Object.assign({}, m);
+      if ((v.blitz || 0) > m.blitz) { out.blitz = v.blitz; out.blitzAt = v.blitzAt; }
+      if ((v.sort || 0) > m.sort) { out.sort = v.sort; out.sortAt = v.sortAt; }
+      out.seals = Object.assign({}, v.seals || {}, m.seals || {});
+    } else if (k === 'streak') {
+      out = !mine ? v : ((v.last || '') > (mine.last || '') ? Object.assign({}, v, { best: Math.max(v.best || 0, mine.best || 0) }) : Object.assign({}, mine, { best: Math.max(v.best || 0, mine.best || 0) }));
+    } else if (k.indexOf('term.') === 0 || k.indexOf('bkt.') === 0) {
+      out = !mine ? v : ((v.at || '') > (mine.at || '') ? Object.assign({}, mine, v) : mine);
+    } else if (k === 'set') {
+      out = mine || v;
+    } else return;
+    if (JSON.stringify(out) !== JSON.stringify(mine)) { DB.set(k, out); n++; }
+  });
+  return n;
+}
+
+/* ══════════════════ START ══════════════════ */
+drawHome();
+addEventListener('pageshow', e => { if (e.persisted) { invalidate(); drawHome(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !document.querySelector('.play')) drawHome(); });
+</script>
+</body>
+</html>
