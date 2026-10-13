@@ -4,7 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.66, 2026-10-13">
+<meta name="mb-version" content="1.0.68, 2026-10-13">
+<script>
+/* An app's home button, pressed in one of this page's own frames, opens
+   this page inside the frame: a second home screen in a box, loading app
+   cards of its own before its frame could say it had arrived. It steps
+   aside at once, and the home screen around it (stayIn) puts the app back
+   and goes home. Only under the home screen: _review.html frames this page
+   too, and it has no stayIn. */
+try { if (window.frameElement && typeof parent.stayIn === 'function') location.replace('about:blank'); } catch (e) {}
+</script>
 <title>MAIN MENU</title>
 <link rel="icon" href="icon-192.png">
 <!-- the icon on an iPhone's home screen. Every app gets one from mobile.js;
@@ -376,6 +385,21 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
   .w.fit .w-size{cursor:ew-resize}
 }
 .w-size:hover{background:linear-gradient(135deg,transparent 46%,var(--acc) 46%,var(--acc) 54%,transparent 54%,transparent 70%,var(--acc) 70%,var(--acc) 78%,transparent 78%)}
+/* an app in a card: its frame sits over the card's body, in a layer of its
+   own outside the grid (placeCards), with the card's edge left showing round
+   it and the resize corner clear of it */
+#cardframes{position:absolute;left:0;top:0;width:0;height:0;z-index:2}
+.cardframe{position:absolute;border:0;background:var(--bg);border-radius:var(--radius-md,8px)}
+.cardframe.off{display:none}
+body.dragging .cardframe{pointer-events:none}
+/* the landing outline (#gaphint, z-index 1) shows over a frame while a card moves */
+body.dragging #cardframes{z-index:0}
+.w-body.appslot{padding:0 var(--s-2) var(--s-3)}
+/* a whole row that is one button: a food to log, an activity to tick */
+.row.qpick{width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;border:0}
+.row.qpick .chk{display:flex;align-items:center;justify-content:center;pointer-events:none}
+.qline{font-size:var(--f-1);color:var(--dim)}
+.qunit{font-size:var(--f-1);color:var(--dim2)}
 #ghost{position:fixed;pointer-events:none;z-index:80;opacity:.9;border:1px solid var(--acc);border-radius:var(--radius-lg,12px);background:var(--panel2);box-shadow:var(--e-5);display:none}
 #ghost .w-head{color:var(--acc)}
 .empty{color:var(--dim2);font-size:var(--f-1);line-height:1.7}
@@ -703,7 +727,7 @@ kbd{font-family:var(--f1);font-size:var(--f-1);border:1px solid var(--line2);bor
     <button class="hbtn mb-press mb-tap" id="btnData" title="Backup, restore and export your data"><span class="lg">DATA</span><span class="sm" data-icon="backup" data-icon-size="16"></span></button>
   </header>
   <main id="stage">
-    <section id="home" class="mb-scroll"><div id="grid"></div></section>
+    <section id="home" class="mb-scroll"><div id="grid"></div><div id="cardframes"></div></section>
     <div id="over" role="dialog" aria-modal="true"></div>
   </main>
   <!-- the same six apps as the top dock, where a thumb can reach them -->
@@ -1057,6 +1081,8 @@ function frameFor(id) {
     const f = el('iframe', 'frame hide');
     f.setAttribute('allow', 'camera; microphone; fullscreen; clipboard-read; clipboard-write');
     f.addEventListener('load', () => { f.dataset.loaded = '1'; }, { once: true });
+    /* its own home button drew a second home screen inside it (stayIn) */
+    f.addEventListener('load', () => stayIn(f, a));
     f.src = a.file;
     frames[id] = f; $('#stage').appendChild(f);
     probe(a);
@@ -1082,6 +1108,7 @@ function openOver(id) {
     bar.appendChild(x);
     o.appendChild(bar);
     const f = el('iframe');
+    f.addEventListener('load', () => stayIn(f, a, true));
     f.src = a.file;
     o.appendChild(f);
     overId = id;
@@ -4484,6 +4511,427 @@ const WIDGETS = {
   },
 };
 
+/* ══════════════ the board does the apps' jobs ══════════════
+   Tom, 2026-10-06, picked off a list: apps as widgets ("All that are
+   sensible", and ELEMENT, WEALTH, SPEAK and NOTICE by name), a box for
+   weight and one for steps, his foods as one-tap buttons, a box for each
+   kind of bullet, and one-tap ticks. 2026-10-13, what it is for: "on pc
+   there is minimal need to open the other apps".
+
+   Each one writes exactly the rows its app writes, the way that app writes
+   them, so the board never becomes a second author with its own idea of a
+   row. The app cards are the app itself, so they write nothing here. */
+
+/* ── a measure, typed in ──
+   STATUS's evAdd without its own screen's bookkeeping. A field kept once a
+   day (a weight, a step count) is replaced; any other (water, mood) gets
+   one more reading. The number is stored in the field's own unit, as
+   typed, which is how STATUS stores it. Weight and steps fall back to
+   STATUS's own first settings on a device STATUS has never opened. */
+const FIELD0 = {
+  weight: { id: 'weight', label: 'Weight', unit: 'lb', measure: 'number', once: 1, agg: 'last', step: .1, dec: 1, order: 1, on: 1 },
+  steps: { id: 'steps', label: 'Steps', unit: '', measure: 'number', once: 1, agg: 'last', step: 500, dec: 0, target: 10000, dir: 'gte', order: 3, on: 1 },
+};
+function fieldRow(id) {
+  const f = Rec.get('field', null, id);
+  return f ? Object.assign({ id: id }, f) : (FIELD0[id] || null);
+}
+/* the measures a box can take: switched on, typed by hand (not fed from
+   food), in STATUS's order */
+function fieldsTyped() {
+  const m = Rec.map('field') || {}, out = [];
+  Object.keys(m).forEach(id => {
+    const f = m[id];
+    if (f && f.on && !f.from && /^(number|amount|scale|check)$/.test(f.measure || '')) out.push(Object.assign({ id: id }, f));
+  });
+  Object.keys(FIELD0).forEach(id => { if (!m[id]) out.push(FIELD0[id]); });
+  return out.sort((a, b) => (a.order || 99) - (b.order || 99));
+}
+function evPut(date, f, v) {
+  const was = Rec.get('ev', date, f.id);
+  const before = was && Array.isArray(was.e) ? was.e.slice() : [];
+  const e = f.once ? [] : before.slice();
+  e.push({ t: Date.now(), v: v });
+  Rec.patch('ev', date, f.id, { e: e });
+  return () => { if (before.length) Rec.patch('ev', date, f.id, { e: before }); else Rec.del('ev', date, f.id); };
+}
+const fieldNum = (f, v) => {
+  const d = f.dec != null ? f.dec : (f.measure === 'scale' ? 1 : 0);
+  return Number(v).toLocaleString(undefined, { maximumFractionDigits: d });
+};
+const fieldUnit = f => f.unit ? ' ' + f.unit : '';
+
+/* ── a food, logged ──
+   STATUS's logMeal, copied: every figure frozen in for the serving, the
+   row keyed with a counter so two taps in one millisecond are two meals,
+   and the food's use count up by one. A patch, not a rebuilt row, so a
+   figure FOODDÉX added and STATUS never showed survives it. */
+const MEAL_NUTS = ['p', 'c', 'f', 'kcal', 'na', 'k', 'ca', 'caff'];
+let mealSeq = 0;
+function foodServe(fd) {
+  const b = fd.base || {}, out = [];
+  const amt = parseFloat(b.amt);
+  out.push({ label: '1 serving (' + (isFinite(amt) ? Math.round(amt * 10) / 10 : 1) + ' ' + (b.unit || '') + ')', mult: 1 });
+  const u = String(b.unit || '').toLowerCase();
+  if ((u === 'g' || u === 'ml') && amt > 0) out.push({ label: '100 ' + u, mult: 100 / amt });
+  (fd.serves || []).forEach(s => out.push(s));
+  const i = Math.min(fd.lastServe != null ? fd.lastServe : (fd.dflt || 0), out.length - 1);
+  return out[Math.max(0, i)];
+}
+function logFood(fd) {
+  const today = LifeOS.day(), s = foodServe(fd), mult = parseFloat(s.mult) || 1, b = fd.base || {};
+  const n = k => (parseFloat(b[k]) || 0) * mult;
+  const row = { fid: fd.id, name: fd.name, serve: String(s.label || ''), unit: b.unit, t: Date.now() };
+  MEAL_NUTS.forEach(k => { row[k] = n(k); });
+  row.price = n('price'); row.amt = n('amt'); row.mult = mult;
+  row.err = 0; row.acct = '';
+  const key = Rec.USER + '-' + Date.now().toString(36) + '-' + (mealSeq++).toString(36) + Math.random().toString(36).slice(2, 5);
+  Rec.set('meal', today, key, row);
+  const uses = fd.uses || 0, last = fd.last;
+  Rec.patch('food', null, fd.id, { uses: uses + 1, last: today });
+  return () => { Rec.del('meal', today, key); Rec.patch('food', null, fd.id, { uses: uses, last: last }); };
+}
+
+/* ── an app, in a card ──
+   The app's own page in a frame, so it is the app and not a copy of it.
+   The frames live OUTSIDE the grid, in #cardframes, and sit over their
+   cards: the board throws its cards away and draws them again on every
+   write anywhere, and a frame taken out of the page loses everything in
+   it. placeCards puts each one over its card after every draw. One per
+   app; a second card of the same app says so. A phone stacks the board,
+   and an app inside a stacked card is a scroll inside a scroll, so there
+   the card is a row that opens the app. */
+const cardFrames = {};
+function cardFrame(id) {
+  const a = app(id);
+  if (!a || !a.file || missing[id]) return null;
+  const f = el('iframe', 'cardframe off');
+  f.setAttribute('allow', 'camera; microphone; fullscreen; clipboard-read; clipboard-write');
+  f.title = a.nm;
+  f.addEventListener('load', () => stayIn(f, a));
+  f.src = a.file;
+  $('#cardframes').appendChild(f);
+  cardFrames[id] = f;
+  probe(a);
+  return f;
+}
+/* An app's own home button sends its page to the home screen, which inside
+   a frame is a second home screen in a box, with app cards of its own.
+   A frame that leaves its app's folder goes back to it, and the place it
+   was sent to opens the usual way: home stays home, another app opens
+   full size. Unreadable (a page opened from a folder) is left alone. */
+function frameLeft(f, a) {
+  let p = '';
+  try { p = f.contentWindow.location.pathname; } catch (e) { return null; }
+  const dir = f => '/' + String(f).replace(/index\.html$/, '');
+  if (!p || p.indexOf(dir(a.file)) > -1) return null;
+  return APPS.find(x => x.file && x.id !== a.id && p.indexOf(dir(x.file)) > -1) || app('home');
+}
+/* Sent to another app with an address of its own (COACH's EDIT IN FORGE
+   adds the program to FORGE's address), the frame is left where it went: that app reads
+   the address, and opening it the usual way would drop it. */
+function stayIn(f, a, over) {
+  const to = frameLeft(f, a);
+  if (!to) return;
+  let q = '';
+  try { q = f.contentWindow.location.search + f.contentWindow.location.hash; } catch (e) {}
+  if (to.id !== 'home' && q) return;
+  f.src = a.file;
+  if (over) closeOver();
+  if (to.id !== 'home' || !over) go(to.id);
+}
+function placeCards() {
+  const layer = $('#cardframes'), home = $('#home');
+  if (!layer || !home) return;
+  const on = {};
+  layout.forEach(c => { const W = WIDGETS[c.t]; if (W && W.appCard) on[W.appCard] = 1; });
+  Object.keys(cardFrames).forEach(id => {
+    if (on[id] && !missing[id]) return;
+    cardFrames[id].remove(); delete cardFrames[id];
+  });
+  /* away from the board #home is hidden, and the frames wait inside it */
+  if (view !== 'home') return;
+  const hr = home.getBoundingClientRect(), seen = {};
+  $('#grid').querySelectorAll(':scope > .w > .w-body.appslot').forEach(b => {
+    const id = b.dataset.app;
+    if (seen[id]) {
+      if (!b.firstChild) b.appendChild(el('div', 'empty', esc(app(id).nm) + ' is open in another card'));
+      return;
+    }
+    seen[id] = 1;
+    const f = cardFrames[id] || cardFrame(id);
+    if (!f) return;
+    const r = b.getBoundingClientRect(), cs = getComputedStyle(b);
+    const pl = parseFloat(cs.paddingLeft) || 0, pr = parseFloat(cs.paddingRight) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+    f.style.left = (r.left - hr.left - home.clientLeft + home.scrollLeft + pl) + 'px';
+    f.style.top = (r.top - hr.top - home.clientTop + home.scrollTop) + 'px';
+    f.style.width = Math.max(0, r.width - pl - pr) + 'px';
+    f.style.height = Math.max(0, r.height - pb) + 'px';
+    f.classList.remove('off');
+  });
+  Object.keys(cardFrames).forEach(id => { if (!seen[id]) cardFrames[id].classList.add('off'); });
+}
+
+Object.assign(WIDGETS, {
+  /* LOG WEIGHT and LOG STEPS are this with a field picked. Tom's a and b,
+     2026-10-06; any other measure STATUS keeps can go in one too. */
+  logfield: {
+    nm: 'LOG A MEASURE', w: 3, h: 2, fit: 1, app: 'status', to: ['status', 'now'],
+    about: 'A box for one of your STATUS measures. Type the number and press Enter.',
+    presets: [
+      { nm: 'LOG WEIGHT', note: 'Type today\'s weight and press Enter.', cfg: { f: 'weight' } },
+      { nm: 'LOG STEPS', note: 'Type today\'s steps and press Enter.', cfg: { f: 'steps' } },
+    ],
+    field: cfg => fieldRow((cfg && cfg.f) || 'weight'),
+    nmFor: cfg => { const f = WIDGETS.logfield.field(cfg); return 'LOG ' + String(f ? f.label : 'a measure').toUpperCase(); },
+    menu(cfg, redraw) {
+      const cur = (cfg && cfg.f) || 'weight';
+      return ['-', { label: 'Measure', sub: fieldsTyped().map(f => ({ label: f.label, check: f.id === cur, fn: () => { cfg.f = f.id; redraw(); } })) }];
+    },
+    draw(body, cfg) {
+      const f = WIDGETS.logfield.field(cfg);
+      if (!f) { body.appendChild(el('div', 'empty', 'That measure is gone from STATUS')); return; }
+      const today = LifeOS.day();
+      const said = el('div', 'qline');
+      const paint = () => {
+        const v = evValue(today, f.id);
+        if (f.measure === 'check') { said.textContent = v ? 'Done today' : 'Not done today'; return; }
+        if (v != null) {
+          const n = (Rec.get('ev', today, f.id) || {}).e;
+          said.textContent = 'Today ' + fieldNum(f, v) + fieldUnit(f) +
+            (f.target ? ' of ' + fieldNum(f, f.target) : '') +
+            (f.measure === 'scale' && n && n.length > 1 ? ', ' + n.length + ' readings' : '');
+          return;
+        }
+        for (let i = 1; i <= 60; i++) {
+          const d = LifeOS.shift(today, -i), w = evValue(d, f.id);
+          if (w != null) { said.textContent = 'Last ' + fieldNum(f, w) + fieldUnit(f) + ', ' + (i === 1 ? 'yesterday' : i + ' days ago'); return; }
+        }
+        said.textContent = 'Nothing logged';
+      };
+      const done = (v, undo) => {
+        paint();
+        UI.undo('<b>' + esc(f.label) + '</b> ' + esc(f.measure === 'check' ? (v ? 'done' : 'not done') : fieldNum(f, v) + fieldUnit(f)),
+          () => { undo(); if (said.isConnected) paint(); });
+      };
+      body.appendChild(said);
+      const bar = el('div', 'tbar');
+      if (f.measure === 'scale') {
+        [1, 2, 3, 4, 5].forEach(n => bar.appendChild(tbtn(String(n), () => done(n, evPut(today, f, n)))));
+      } else if (f.measure === 'check') {
+        const on = !!evValue(today, f.id);
+        bar.appendChild(tbtn(on ? 'UNDO' : 'DONE', () => {
+          if (on) { const was = Rec.get('ev', today, f.id); Rec.del('ev', today, f.id); done(0, () => Rec.patch('ev', today, f.id, was)); }
+          else done(1, evPut(today, f, 1));
+        }, on ? '' : 'go'));
+      } else {
+        /* a weight has a decimal point; iOS's number pad has none */
+        const whole = !(f.dec > 0) && !(f.step > 0 && f.step < 1);
+        const inp = UI.field(whole ? 'number' : 'decimal', { placeholder: f.label + (f.unit ? ' in ' + f.unit : '') });
+        inp.style.cssText = 'flex:1;min-width:0';
+        inp.setAttribute('aria-label', f.label + ' today');
+        const save = () => {
+          const v = UI.amount(inp.value, f.unit || '');
+          if (v == null) { inp.focus(); return; }
+          inp.value = '';
+          done(v, evPut(today, f, v));
+        };
+        inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+        bar.appendChild(inp);
+        if (f.unit) bar.appendChild(el('span', 'qunit', esc(f.unit)));
+        bar.appendChild(tbtn('SAVE', save, 'go'));
+      }
+      body.appendChild(bar);
+      paint();
+    },
+  },
+
+  /* Tom's c, 2026-10-06, and his question with it: "how are foods arranged
+     in the main food entry?" The same way here: most logged first, then A
+     to Z. One tap logs the serving STATUS would open on. */
+  foods: {
+    nm: 'FOODS', w: 4, h: 4, app: 'status', to: ['status', 'food'],
+    about: 'Your foods, most logged first. One tap logs a serving of it to today.',
+    /* The order is taken once per open and kept: a tap raises the food's
+       count, and re-sorting then slid a different food under the finger, so
+       a second quick tap logged something else. A food saved since goes to
+       the end; the next open sorts afresh. */
+    rank: null,
+    list() {
+      const m = Rec.map('food') || {}, W = WIDGETS.foods;
+      const all = Object.keys(m).map(id => Object.assign({}, m[id], { id: id }))
+        .filter(fd => fd.name && fd.base)
+        .sort((a, b) => (b.uses || 0) - (a.uses || 0) || String(a.name).localeCompare(String(b.name)));
+      if (!W.rank) { W.rank = {}; all.forEach((fd, i) => { W.rank[fd.id] = i; }); }
+      const at = fd => (fd.id in W.rank ? W.rank[fd.id] : 1e6);
+      return all.map((fd, i) => [fd, i]).sort((x, y) => at(x[0]) - at(y[0]) || x[1] - y[1]).map(x => x[0]);
+    },
+    sub: () => {
+      const k = Rec.all('meal', { date: LifeOS.day() }).reduce((a, r) => a + ((r.payload && parseFloat(r.payload.kcal)) || 0), 0);
+      return k ? Math.round(k).toLocaleString() + ' kcal today' : 'nothing logged today';
+    },
+    draw(body) {
+      const all = WIDGETS.foods.list();
+      if (!all.length) { body.appendChild(el('div', 'empty', 'No foods saved')); return; }
+      const list = el('div', 'rowlist');
+      all.slice(0, 40).forEach(fd => {
+        const s = foodServe(fd), kc = (parseFloat((fd.base || {}).kcal) || 0) * (parseFloat(s.mult) || 1);
+        const r = el('button', 'row qpick mb-press');
+        r.type = 'button';
+        r.innerHTML = '<span class="n">' + esc(fd.name) + '</span><span class="d">' + esc(s.label) + '</span>' +
+          (kc ? '<span class="rt">' + Math.round(kc) + '</span>' : '');
+        r.setAttribute('aria-label', 'Log ' + fd.name + ', ' + s.label);
+        r.onclick = ev => {
+          ev.stopPropagation();
+          const undo = logFood(fd);
+          UI.undo('<b>' + esc(fd.name) + '</b> logged, ' + esc(s.label), undo);
+        };
+        list.appendChild(r);
+      });
+      body.appendChild(list);
+    },
+  },
+
+  /* Tom's e, 2026-10-06. The same tick BLOCK, STREAKS and EVERY & ANYTIME
+     read, written the way the board already writes one. */
+  ticks: {
+    nm: 'TICKS', w: 4, h: 3, app: 'block', to: ['block'],
+    about: 'The activities you pick, each ticked done for today with one tap.',
+    /* everything a tick can be for: named activities, Every and Anytime
+       blocks, and anything ticked in the last 60 days. Not the journal's
+       own counters, which count lines and are not ticked by hand. */
+    pool() {
+      const ids = {}, today = LifeOS.day(), log = (LifeOS.doc() || {}).log || {}, rh = Rec.map('rhythm') || {};
+      const skip = id => /^note-/.test(id);
+      Object.keys(Rec.map('activity') || {}).forEach(id => { if (!skip(id)) ids[id] = ''; });
+      Object.keys(rh).forEach(k => { const r = rh[k]; if (r && r.name && (r.kind === 'every' || r.kind === 'anytime')) ids[LifeOS.slug(r.name)] = r.name; });
+      for (let i = 0; i <= 60; i++) Object.keys(log[LifeOS.shift(today, -i)] || {}).forEach(id => { if (!skip(id) && !(id in ids)) ids[id] = ''; });
+      const out = Object.keys(ids).map(id => { const l = actLabel(id); return { id: id, name: ids[id] || l.name, part: ids[id] ? '' : l.part }; });
+      const n = {};
+      out.forEach(x => { n[x.name] = (n[x.name] || 0) + 1; });
+      out.forEach(x => { x.label = x.name + (n[x.name] > 1 && x.part ? ' · ' + x.part : ''); });
+      return out.sort((a, b) => a.label.localeCompare(b.label));
+    },
+    picks: cfg => (cfg && Array.isArray(cfg.acts) ? cfg.acts : []),
+    menu(cfg, redraw) {
+      const cur = WIDGETS.ticks.picks(cfg);
+      return ['-', { label: 'Activities', sub: WIDGETS.ticks.pool().map(a => ({
+        label: a.label, check: cur.indexOf(a.id) > -1,
+        fn: () => { const now = WIDGETS.ticks.picks(cfg); cfg.acts = now.indexOf(a.id) > -1 ? now.filter(x => x !== a.id) : now.concat([a.id]); redraw(); } })) }];
+    },
+    sub: cfg => {
+      const p = WIDGETS.ticks.picks(cfg);
+      return p.length ? p.filter(id => LifeOS.isDone(id, LifeOS.day())).length + ' of ' + p.length + ' today' : '';
+    },
+    draw(body, cfg) {
+      const p = WIDGETS.ticks.picks(cfg), today = LifeOS.day();
+      if (!p.length) {
+        body.appendChild(el('div', 'empty', 'No activities picked'));
+        const bar = el('div', 'tbar');
+        bar.appendChild(tbtn('PICK', ev => {
+          const r = ev.currentTarget.getBoundingClientRect();
+          UI.menu(r.left, r.bottom, WIDGETS.ticks.menu(cfg, () => { saveLayout(); drawHome(); })[1].sub, { title: 'TICKS' });
+        }, 'go'));
+        body.appendChild(bar);
+        return;
+      }
+      const names = {};
+      WIDGETS.ticks.pool().forEach(a => { names[a.id] = a.label; });
+      const list = el('div', 'rowlist');
+      p.forEach(id => {
+        const done = LifeOS.isDone(id, today), run = tickStreak(id);
+        const r = el('button', 'row qpick mb-press' + (done ? ' done' : ''));
+        r.type = 'button';
+        r.innerHTML = '<span class="chk' + (done ? ' on' : '') + '">' + ((typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '') + '</span>' +
+          '<span class="n">' + esc(names[id] || actLabel(id).name) + '</span>' +
+          (run > 1 ? '<span class="d">' + run + ' days</span>' : '');
+        r.setAttribute('aria-pressed', done ? 'true' : 'false');
+        r.onclick = ev => { ev.stopPropagation(); LifeOS.done(id, today, !done, { src: 'home' }); drawHome(); };
+        list.appendChild(r);
+      });
+      body.appendChild(list);
+    },
+  },
+});
+
+/* Tom's d, 2026-10-06: "Make one for each bullet type". The line goes in
+   through Journal.add like STATUS's own box, so a time typed into it is
+   read the same way, and today's lines of that kind show under the box. */
+[['todo', 'A TO DO', 'quest', 'today', 'New to do'], ['entry', 'AN ENTRY', 'status', 'now', 'New entry'],
+ ['event', 'AN EVENT', 'status', 'now', 'New event'], ['idea', 'AN IDEA', 'status', 'now', 'New idea']].forEach(k => {
+  const kind = k[0];
+  WIDGETS['add-' + kind] = {
+    nm: 'ADD ' + k[1], w: 4, h: 3, app: k[2], to: [k[2], k[3]],
+    about: 'Type ' + k[1].toLowerCase() + ' and press Enter. Today\'s show under the box.',
+    rows: () => Rec.all('note', { date: LifeOS.day() })
+      .filter(r => r.payload && r.payload.kind === kind && !r.payload.cancelled)
+      .sort((a, b) => (b.payload.t || 0) - (a.payload.t || 0)),
+    sub: () => { const n = WIDGETS['add-' + kind].rows().length; return n ? n + ' today' : ''; },
+    draw(body) {
+      const W = WIDGETS['add-' + kind], today = LifeOS.day();
+      const bar = el('div', 'tbar');
+      const inp = UI.field('text', { placeholder: k[4] });
+      inp.style.cssText = 'flex:1;min-width:0';
+      inp.setAttribute('aria-label', k[4]);
+      const list = el('div', 'rowlist');
+      /* the board waits while the caret is in a box, so the list under it
+         is redrawn here, not by the board */
+      const paint = () => {
+        list.innerHTML = '';
+        W.rows().slice(0, 12).forEach(r => {
+          const row = kind === 'todo' ? tickRow(r, today) : bulletRow(r, today);
+          row.classList.add('wraps', 'mb-plate');
+          list.appendChild(row);
+        });
+      };
+      const add = () => {
+        const text = inp.value.trim();
+        if (!text) { inp.focus(); return; }
+        Journal.add(today, kind, text, {}, 'home');
+        inp.value = '';
+        paint();
+      };
+      inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
+      bar.appendChild(inp);
+      bar.appendChild(tbtn('ADD', add, 'go'));
+      body.appendChild(bar);
+      body.appendChild(list);
+      paint();
+    },
+  };
+});
+
+/* Tom's 1, 2026-10-06: every app that works in a card. BULLET is not here:
+   it is never opened on the PC (Tom, 2026-10-02), and the four boxes above
+   do its job on the board. The sizes are each app's own: a phone app gets
+   a phone-wide card, WEALTH and NOTICE the width their two columns need.
+   An app this build does not carry has no card, so the client build loses
+   the Tom-only ones with nothing else to do. */
+[['status', 4, 8], ['quest', 4, 8], ['train', 4, 8], ['checkin', 4, 8], ['kitchen', 4, 8],
+ ['wealth', 7, 9], ['system', 6, 8], ['speak', 4, 8], ['mix', 5, 8]].forEach(c => {
+  const id = c[0], a = app(id);
+  if (!a || !a.file) return;
+  const to = a.nodock ? ['over', id] : [id];
+  WIDGETS['app-' + id] = {
+    nm: a.nm, w: c[1], h: c[2], app: id, to: to, appCard: id,
+    about: 'All of ' + a.nm + ', working, in a card. The title opens it full size.',
+    menu: () => ['-', { label: 'Reload ' + a.nm, fn: () => { const f = cardFrames[id]; if (f) f.src = a.file; } }],
+    draw(body) {
+      if (missing[id]) { body.appendChild(el('div', 'empty', esc(a.nm) + ' is missing from this folder')); return; }
+      if (NARROW()) {
+        const r = el('button', 'row qpick mb-press');
+        r.type = 'button';
+        r.innerHTML = '<span class="n">' + esc(a.ds) + '</span><span class="d">OPEN</span>';
+        r.onclick = ev => { ev.stopPropagation(); goTo(to); };
+        body.appendChild(r);
+        return;
+      }
+      body.classList.add('appslot');
+      body.dataset.app = id;
+    },
+  };
+});
+
 /* ══════════════ the grid ══════════════
    Layout is device preference, not shared data — it lives in localStorage and
    never touches the LifeOS doc, so rearranging widgets here changes nothing
@@ -5335,7 +5783,7 @@ function fitGrid() {
   const g = $('#grid'), home = $('#home');
   if (NARROW()) {
     g.style.removeProperty('--row'); g.style.minHeight = ''; g.style.gridTemplateColumns = ''; g.style.width = '';
-    COLS = 4; return;
+    COLS = 4; placeCards(); return;
   }
   const gap = parseFloat(getComputedStyle(g).rowGap) || 12;
   const H = home.clientHeight - 28, Wd = home.clientWidth - 28;
@@ -5388,6 +5836,7 @@ function fitGrid() {
   /* the grid reaches the bottom of the window, so the space under the
      last card is somewhere a widget can be added too */
   g.style.minHeight = H + 'px';
+  placeCards();
 }
 /* A fit card measured in the fallback font came out a row short and was
    never measured again: MACROS opened with CALORIES cut in half, then grew
@@ -5411,6 +5860,7 @@ function startMove(ev, i) {
   const node = ev.currentTarget.parentElement, r = node.getBoundingClientRect();
   moving = { i: i, node: node, dx: ev.clientX - r.left, dy: ev.clientY - r.top };
   node.classList.add('drag');
+  document.body.classList.add('dragging');
   const gh = $('#ghost');
   gh.style.cssText = 'display:block;width:' + r.width + 'px;height:' + Math.min(r.height, 160) + 'px;left:' + r.left + 'px;top:' + r.top + 'px';
   /* the card's own header, by the name it goes by on the board, so a second
@@ -5433,6 +5883,7 @@ function onMove(ev) {
 function endMove(ev) {
   if (!moving) return;
   window.removeEventListener('pointermove', onMove);
+  document.body.classList.remove('dragging');
   $('#ghost').style.display = 'none';
   moving.node.classList.remove('drag');
   hint();
@@ -5454,6 +5905,7 @@ function startResize(ev, i, node) {
   /* a card that sizes to its contents takes width only: its height is
      measured, so a drag down snapped back on release */
   const fit = !!(WIDGETS[layout[i].t] || {}).fit;
+  document.body.classList.add('dragging');
   sizing = { i: i, node: node, fit: fit, cols: m.cols, colw: m.colw, gap: m.gap, x: ev.clientX, y: ev.clientY, w: layout[i].w, h: layout[i].h };
   window.addEventListener('pointermove', onResize);
   window.addEventListener('pointerup', endResize, { once: true });
@@ -5465,14 +5917,16 @@ function onResize(ev) {
   const w = Math.max(2, Math.min(sizing.cols, sizing.w + dw));
   layout[sizing.i].w = w;
   sizing.node.style.setProperty('--cw', w);
-  if (sizing.fit) return;
+  if (sizing.fit) return placeCards();
   const h = Math.max(2, Math.min(12, sizing.h + dh));
   layout[sizing.i].h = h;
   sizing.node.style.setProperty('--ch', h);
+  placeCards();
 }
 function endResize() {
   if (!sizing) return;
   window.removeEventListener('pointermove', onResize);
+  document.body.classList.remove('dragging');
   pinned = sizing.i;
   saveLayout(); sizing = null; drawHome();
 }
@@ -5529,6 +5983,8 @@ const ABOUT = {
   calendar: 'The month, with a dot on every day that has bullets.',
   worldclock: 'The time in the cities you pick.',
 };
+/* the widgets that carry their line with them, the app cards made in a loop */
+Object.keys(WIDGETS).forEach(k => { if (WIDGETS[k].about && !ABOUT[k]) ABOUT[k] = WIDGETS[k].about; });
 /* A widget's own choices, the ones its card menu carries: the range it shows
    (`days`) and any pick list its `menu` offers. Only pick lists: a menu item
    that opens a sheet of its own (WEIGHT's cut plan) stays on the card, since
