@@ -139,26 +139,51 @@ the better score and every seal.
 ## LOAD
 
 `parseDeck` reads whatever shape the paste is in: his own format (bracket
-headings, names with commas), `Name: definition`, `**Name** - definition`,
-`Name [BRACKET]: definition`, `Name | [BRACKET] | definition`, markdown tables,
-Skool page titles in brackets with their text below, CSV/TSV with a header, and
-JSON. `plan` matches each name to an entry by id, then by any accepted answer
-(so "Progressive Overload" finds Progressive Overloading), and SAVE only ever
-updates or adds. Nothing is deleted and progress is never touched. UNDO puts
-back the exact rows.
+headings, names with commas, also `[SKILLS]: names` and `SKILLS: names`),
+`Name: definition`, `**Name** - definition`, `Name [BRACKET]: definition`,
+`Name | [BRACKET] | definition`, markdown tables, Skool pages, CSV/TSV (with a
+header, quoted line breaks kept; or cells copied from a sheet), and JSON.
 
-A bracket is one of the four, anything written as a heading, a tag after a name
-in capitals, or a capitalised plural of five letters or more ([QUESTS]).
-`[DOMS]` and `[PCOS]` alone on a line are terms, not brackets.
+**The Skool page is the rule that settles most of it.** A title in brackets
+(`[Palatability]`) or a heading that is a name opens a PAGE, and every line
+after it is that page's text, bullets, "Why it matters:" labels and number
+ranges included, until the next title, heading or bracket line, or a blank line
+followed by a known name with a separator. Outside a page, a number range
+(`24 - 72`) is never a separator, and a line is a new name only when it is
+written like one (Title Case, or an existing name).
+
+`plan` matches a pasted name to an entry by id, then by a part of it
+(`Personal Record (PR)`, `Height (cm)`, `A / B`), then by an alias, but only an
+alias Tom gave himself or one within three letters of the entry's own name, so
+a draft alias never pulls a different page onto an entry ("Strength Training"
+is added, not poured into Weight Training). Every non-id match is shown in the
+preview as `pasted → entry`. A name said twice keeps its first definition and
+the preview says so. A deleted entry is brought back with only what was pasted.
+SAVE re-reads the box first, only ever updates or adds, never deletes, never
+touches progress, and UNDO puts back the exact rows.
+
+A bracket is one of the four, a heading in capitals that is not an entry's name
+and not the title on the first line, a tag in capitals right after a name, or a
+capitalised plural of five letters or more ([QUESTS]). `[DOMS]`, `### DOMS` and
+`[PCOS]` are terms, not brackets.
 
 ## Answers
 
 Typed answers are compared after `norm`: case, accents, apostrophes,
-punctuation and a leading article do not count. One slip is allowed in a name of
-5 to 8 letters, two in 9 or more, none in four or fewer, and an answer that is
-another entry's name is wrong however close it is. A definition is shown with
-the entry's own name and aliases blanked out, so "Delayed onset muscle soreness:
-..." does not give DOMS away.
+punctuation and a leading article do not count. **The slack belongs to the
+answer it is measured against**, not the entry: none for four letters or fewer
+(so "x" is not "PR"), one up to eight, two beyond. A typo is forgiven only when
+it is nearer this entry than any other; exactly as near to another ("Stresse"
+between Stress and Stressed) is not graded at all and asks for the spelling
+again. A forgiven typo shows how the answer is spelled, the alias he meant
+included.
+
+A definition is shown with the entry's own name and aliases blanked out, in one
+pass, plurals, possessives, curly apostrophes and hyphens included, so
+"Delayed onset muscle soreness: ..." does not give DOMS away. An entry whose own
+definition names it is never asked as "which definition?", because the blank
+would point at the answer; those are asked the other way round. Options in that
+question are shown as written, never blanked.
 
 ## Interface
 
@@ -169,6 +194,19 @@ Every colour is declared once, in `:root`. Back closes what is open. Desk keys:
 1 to 4 pick, Enter goes forward (never "I don't know"), Escape closes or leaves.
 iPhone only raises the keyboard inside a tap, so a typed question is never
 reached by the auto-advance timer.
+
+**A footer button ignores a press in the first 350 ms after it is drawn.** The
+auto-advance swaps NEXT for the next question's I DON'T KNOW (or GOT IT) in the
+same spot, and a thumb already on its way to NEXT would otherwise answer a
+question nobody had read. Only the top layer can be reached: a sheet makes the
+page and any round under it `inert`, takes focus, and hands it back on close.
+One history entry covers everything open, and closes in the same tick share one
+`history.back()`, which is what keeps ERASE and RESET (two sheets closing
+together) from leaving the app with their UNDO.
+
+A failed write is never reported as saved: `DB.ok` follows every write, the
+home screen says when the browser keeps nothing at all (a private window), and
+an edit, a switch or a restore that was refused says so.
 
 ## Testing
 
