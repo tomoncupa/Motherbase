@@ -257,3 +257,7 @@ Watched: the widget harness on the 17 pass D widgets at 1920, 390 touch and an e
 ## 2026-10-09, HOME 1.0.61 and 1.0.64: CONSISTENCY
 
 LOCKED IN is CONSISTENCY (id still `lockedin`); its header names the stretch, 1 week, 2 weeks, 1 month or 3 months, from the card's Show menu, still ending yesterday. Tom asked why it was ugly and why it ignored the design standards: it drew its own 2x2 grid of label, number and two grey sentences (`li-g`) instead of the board's rows. Redrawn with his five picks: four full-width `.row` plates filling the card, grey plates with a gold strip down the left (`::before`; a plate fills with its `--c`, so `--c` is grey), grey labels, numbers at `--f-7`, one detail line, and the change against the stretch before as a number ("same as before", never a verdict). On a phone the label sits above the number and rows size to content. Watched at 1920 and 390 touch on the demo; review 142/142 Chromium, WebKit 141/142 known.
+
+**1.0.63, same day:** a comment in SPEND named WEALTH's file path, and `tools/build-client.py` fails the build on any `<dropped app>/index.html` or `go('<dropped app>')` in index.html, comments included. Name a Tom-only app in words in index.html, never by its path.
+
+**Needs from the foundation:** STATUS's calorie target from measured TDEE (`TD.targetIntake`, status/index.html) lives only in STATUS, so MACROS shows no calorie target in `tdee` mode. Moving `calTarget` into `shared/` would let the home screen read the same number.
