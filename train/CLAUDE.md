@@ -526,6 +526,13 @@ where FitNotes says workout.
   Exercises, Training Routines, Personal Records, Analysis, Goals, Profile. Its
   header opens Profile too.
 - **The empty day:** "Training Log Empty", Start New Session, Copy Past Session.
+  **Copy Past Session asks which one** (1.0.62, `TRAIN.pastSessionPicker`).
+  Tom, 2026-10-15: it "literally copies last session - useless!" He rotates
+  sessions, so the day before is rarely the one he repeats. A sheet lists the
+  last 14 training days, newest first, each by its name (else its first
+  exercises) and date; a tap copies that day. PICK ANOTHER DAY opens the
+  calendar. Never copy a day he did not pick. COACH's LOG A SESSION is this
+  TRAIN, so it gets the same.
 - **Analysis:** WEEKLY first, then BREAKDOWN and GRAPHS.
 
 **Every row that can be changed has a menu**, on a long press and a right click
