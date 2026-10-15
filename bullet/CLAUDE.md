@@ -18,7 +18,9 @@ it to the icon card, it can just be a link".
   be opened on PC ever." No desk layout, no wide-window work, no place in
   Main Menu's side-by-side mode. Built to the phone rules: 44px targets, safe areas,
   the cursor in the box on open. An iPhone raises the keyboard only for a
-  focus inside a tap, so from the home screen it waits for one tap.
+  focus inside a tap, so from the home screen it waits for one tap, and
+  since 1.0.2 (Tom, 2026-10-15) that tap can land anywhere that is not a
+  control: a `touchend` on the page focuses the box.
 - **It owns no type.** Every line goes through `Journal.add`, the one
   creator STATUS, LOG and QUESTS use, so a line written here is the same row
   STATUS would write: typed times, "paid 250 - lunch", the home screen's day
