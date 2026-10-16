@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.71, 2026-10-13">
+<meta name="mb-version" content="1.0.72, 2026-10-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4991,8 +4991,9 @@ function foodRowTyped(d, x, draft) {
     const hideSug = () => { if (sug) { sug.remove(); sug = null; } };
     const paintSug = () => {
       hideSug();
+      /* an empty Name lists his most used foods: Tom, 2026-10-16, "Clicking
+         on add food should open a dropdown menu already" */
       const term = nm.value.trim().toLowerCase();
-      if (!term) return;
       const fs = Object.values(foods())
         .filter(f => (f.name + ' ' + (f.brand || '')).toLowerCase().indexOf(term) > -1)
         .sort((a, b) => (b.uses || 0) - (a.uses || 0) || String(a.name).localeCompare(String(b.name)))
@@ -5025,6 +5026,17 @@ function foodRowTyped(d, x, draft) {
       r.appendChild(sug);
     };
     nm.addEventListener('input', paintSug);
+    nm.addEventListener('focus', paintSug);
+    /* The moment a blank row is typed into, another blank is added below it,
+       so there is always one empty row. Tom, 2026-10-16: "A blank field
+       should auto appear if I fill up all 5 foods already" */
+    const grow = () => {
+      if (x || draft || r.classList.contains('ftyped')) return;
+      r.classList.add('ftyped');
+      const g = r.parentNode;
+      if (g && !g.querySelector('.logrow.fblank:not(.ftyped)')) g.appendChild(foodRowTyped(d, null, null));
+    };
+    [nm].concat(FOODCOLS.map(k => box[k[0]])).forEach(i => i.addEventListener('input', grow));
     /* A name left matching one he has logged before fills the numbers, when
        none are typed yet; he can still type over them. */
     nm.addEventListener('blur', () => {
@@ -5150,7 +5162,7 @@ function foodCommit(d, r, x, did, nm, box) {
   if (r.isConnected) {
     const g = r.parentNode;
     r.replaceWith(saved ? foodRowTyped(d, saved, null) : foodRowTyped(d, null, null));
-    if (!g.querySelector('.logrow.fblank')) g.appendChild(foodRowTyped(d, null, null));
+    if (!g.querySelector('.logrow.fblank:not(.ftyped)')) g.appendChild(foodRowTyped(d, null, null));
   }
   const sum = document.getElementById('foodsum');
   if (sum) sum.replaceWith(foodSumCard(d));
