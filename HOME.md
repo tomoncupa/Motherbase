@@ -276,3 +276,23 @@ Tom's widget picks of 2026-10-06, built with his reason of 2026-10-13: "on pc th
 - **ADD A TO DO / AN ENTRY / AN EVENT / AN IDEA** (`add-<kind>`): `Journal.add(today, kind, text, {}, 'home')`, the same call STATUS makes; today's lines of that kind under the box, redrawn by the card because the board waits while the caret is in it.
 
 Watched in the Browser pane on the demo at 1600x950 by typing and pressing: weight 80.9 Enter (row replaced, line updated, focus kept, digits never opened an app), UNDO back to 81.4, steps "8,500", Apple logged (meal row, uses 30 to 31), Walk picked and ticked, "Call the gym 3pm" added (at 15:00, in TODAY) and ticked; TRAIN's frame kept a marker through a store write; STATUS's home button in a card and in the stage both came back home; TRAIN sent to QUESTS opened QUESTS. At 390 the cards are OPEN rows with no sideways scroll. Not on his screens.
+
+## 2026-10-16, HOME 1.0.69: the board scales to the window
+
+Tom: "I don't want scrolling when I resize from 3840 to 1920", then "Keep
+the same layout, but the widgets show up differently based on size", yes to
+a bigger window making widgets bigger, "must still allow blank space", and
+scroll down only if absolutely needed. This replaces 2026-09-24's fixed
+146 x 84 cell. `fitGrid` now scales the cell (ratio kept) so the cards'
+reach (12 columns at least) fits the window's width always and its height
+unless the cell would go under half size (`SMIN`); spare room is more empty
+cells. Spots never change; a fit card's rows are measured at full width and
+capped at 12, so a resize cannot push anything down. `sizeCards` marks each
+card `data-sz` s/m/l by its pixels and `sz-xs` under 80px (title hidden
+outside REARRANGE); `cutCards` leaves off whole rows a small card cannot
+hold. Also fixed: `H` ignored #home's 60px bottom padding, so every board
+scrolled by 46px. [TESTED on the demo with his saved layout at 3840 (scale
+1.01, as before), 1920 (0.46) and 1280 (0.28): no scroll either way; review
+142/142 Chromium, WebKit 141/142 known. NOT on his screens.] Open: TODAY's
+STILL TO DO squeezes at medium; his board is wider than 16:9, so the
+bottom of a 16:9 window stays empty space.
