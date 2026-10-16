@@ -1018,6 +1018,21 @@ answer, or take it out.
   logged the same meal five times (STATUS Food, 2026-10-08). Keep one pending
   timer per row (`clearTimeout` first), and mark a row saved once it is.
 
+- **A frame inside a container a page empties and redraws reloads every
+  time.** Taking an iframe out of the page, even to put the same element
+  back, throws away everything in it. The home screen redraws its grid on
+  every store write, so its app cards keep their frames in a layer outside
+  the grid and lay each one over its card after a draw (`placeCards`,
+  2026-10-13). Anything that frames an app inside a redrawn list needs the
+  same.
+- **An edit can rewrite a file's line endings, and the commit then changes
+  every line.** STATUS 1.0.71 went out as 18,967 changed lines for a 7-line
+  fix: the file was CRLF and the edit wrote it LF (2026-10-13), which would
+  have conflicted on every line with any other session's STATUS work. Read
+  `git diff --stat` before committing; a count far past what you changed is
+  this. Put the endings back before committing, never after a push if it
+  can be helped.
+
 ---
 
 ## Current state

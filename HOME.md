@@ -277,6 +277,8 @@ Tom's widget picks of 2026-10-06, built with his reason of 2026-10-13: "on pc th
 
 Watched in the Browser pane on the demo at 1600x950 by typing and pressing: weight 80.9 Enter (row replaced, line updated, focus kept, digits never opened an app), UNDO back to 81.4, steps "8,500", Apple logged (meal row, uses 30 to 31), Walk picked and ticked, "Call the gym 3pm" added (at 15:00, in TODAY) and ticked; TRAIN's frame kept a marker through a store write; STATUS's home button in a card and in the stage both came back home; TRAIN sent to QUESTS opened QUESTS. At 390 the cards are OPEN rows with no sideways scroll. Not on his screens.
 
+**After a two-lens code review, same day (1.0.67 still, then 1.0.68):** ELEMENT's over-the-board frame gets `stayIn(f, a, true)` (its Home button closes the overlay instead of leaving it blank for the session); a frame sent to another app WITH an address of its own (COACH's EDIT IN FORGE adds `?p=`) is left where it went, since opening the app the usual way drops the address; FOODS keeps the order it had when the board opened (`WIDGETS.foods.rank`), or a tap re-sorted the list and a second quick tap logged a different food; a weight or any field with decimals uses `UI.field('decimal')`, since iOS's number pad has no point; `body.dragging #cardframes{z-index:0}` so the landing outline shows over a frame. 1.0.68 only reworded a comment that named FORGE's path, which `tools/build-client.py` refuses. Not yet checked against 1.0.69's scaled board: `placeCards` reads real card rects, so it should follow, unwatched.
+
 ## 2026-10-16, HOME 1.0.69: the board scales to the window
 
 Tom: "I don't want scrolling when I resize from 3840 to 1920", then "Keep
