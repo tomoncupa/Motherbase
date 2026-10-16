@@ -1698,6 +1698,11 @@ const IO = {
         p.innerHTML = '<b>' + s.skipped + '</b> rows were too big for live sync, such as photos. Those travel by backup and by the sheet.';
         box.appendChild(p);
       }
+      if (s.ahead) {
+        const p = el('p');
+        p.innerHTML = '<b>' + s.ahead + '</b> rows are stamped with a time more than a day ahead, so live sync holds them back. Check this device’s clock.';
+        box.appendChild(p);
+      }
     };
     draw();
     /* The settings sheet is thrown away and rebuilt every time it opens, so a

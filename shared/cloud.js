@@ -138,7 +138,7 @@ g.addEventListener('storage', function (e) {
 /* ── the state every caller can read, and nobody outside can set ── */
 var fb = null, db = null, auth = null, ref = null, query = null;
 var uid = '', loading = null, started = false, pushing = false, pushAgain = false;
-var last = { ok: 0, why: '', at: '', sent: 0, got: 0, skipped: 0, refused: 0, refusedIds: [] };
+var last = { ok: 0, why: '', at: '', sent: 0, got: 0, skipped: 0, ahead: 0, refused: 0, refusedIds: [] };
 /* What is TRUE right now, rather than what was true when it started. Until
    0.1.4 "Live" meant only "start() once got this far": Google could sign the
    device out, the database could refuse the read, or the connection could
@@ -1035,11 +1035,14 @@ function stop() {
    level under the bug is "does the edge pass an oversized row", not "did the
    photo arrive". */
 function plan(rows, since, base, cloud) {
-  var patch = {}, edge = since || '', sent = 0, skipped = 0, had = 0, lim = soon();
+  var patch = {}, edge = since || '', sent = 0, skipped = 0, ahead = 0, had = 0, lim = soon();
   rows.forEach(function (r) {
     if (!r || !r.id) return;
-    /* Stamped in the future: not sent, and the boundary does not follow it. */
-    if (r.updated_at > lim) { skipped++; return; }
+    /* Stamped in the future: not sent, and the boundary does not follow it.
+       Counted apart from the too-big rows (0.2.6): DATA called two deleted
+       smoke rows dated 2999 "too big for live sync". A deleted one is not
+       counted at all, since nothing is waiting on it. */
+    if (r.updated_at > lim) { if (!r.deleted) ahead++; return; }
     if (r.updated_at > edge) edge = r.updated_at;
     /* The cloud holds this already, or a newer copy. Sending it would at best
        write the same row again and at worst put an old one over a new one.
@@ -1056,7 +1059,7 @@ function plan(rows, since, base, cloud) {
     patch[base + enc(r.id)] = JSON.parse(j);
     sent++;
   });
-  return { patch: patch, edge: edge, sent: sent, skipped: skipped, had: had };
+  return { patch: patch, edge: edge, sent: sent, skipped: skipped, ahead: ahead, had: had };
 }
 /* Would `plan` ever send this row. */
 function fits(r) {
@@ -1116,7 +1119,7 @@ function push(why) {
   todo.sort(function (a, b) { return a.updated_at < b.updated_at ? -1 : a.updated_at > b.updated_at ? 1 : 0; });
 
   pushing = true;
-  var sent = 0, skipped = 0, at = 0, edge = since;
+  var sent = 0, skipped = 0, ahead = 0, at = 0, edge = since;
 
   function chunk() {
     if (at >= todo.length) return Promise.resolve();
@@ -1124,7 +1127,7 @@ function push(why) {
        future-dated rows would otherwise put the boundary back to the start. */
     var p = plan(todo.slice(at, at + CHUNK), edge, 'u/' + uid + '/rows/', cloudAt);
     at += CHUNK;
-    skipped += p.skipped;
+    skipped += p.skipped; ahead += p.ahead;
     var step = p.sent ? write(p.patch) : Promise.resolve(0);
     return step.then(function (bad) {
       sent += p.sent - bad;
@@ -1138,6 +1141,8 @@ function push(why) {
   return chunk().then(function () {
     pushing = false;
     last.sent += sent; last.skipped += skipped;
+    /* every push meets the same future rows again, so this is a recount */
+    last.ahead = ahead;
     note('', 1);
     if (sent) landed('sent');
     if (pushAgain) { pushAgain = false; return push('again').then(function (n) { return n < 0 ? n : sent + n; }); }
@@ -1275,7 +1280,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.5',
+  VERSION: '0.2.6',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -1304,7 +1309,7 @@ var Cloud = {
       gotAt: cfg.gotAt || '',
       why: last.why || '',
       ok: !!last.ok,
-      sent: last.sent, got: last.got, skipped: last.skipped,
+      sent: last.sent, got: last.got, skipped: last.skipped, ahead: last.ahead,
       /* 0.2.5: rows the database would not store, and the first few ids */
       refused: last.refused, refusedIds: last.refusedIds.slice(),
       /* the first read after a start or a dropped connection is merged */
