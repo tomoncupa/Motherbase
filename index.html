@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.68, 2026-10-13">
+<meta name="mb-version" content="1.0.69, 2026-10-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -338,6 +338,26 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
   display:flex;flex-direction:column;gap:var(--s-2)}
 /* a card that sizes to its contents stops at the window and scrolls inside */
 .w.capped .w-body{overflow:auto}
+/* ── a widget shows less the smaller it is ──
+   Tom, 2026-10-16: the board scales to the window (fitGrid), and "the
+   widgets show up differently based on size". fitGrid marks each card
+   s, m or l by its size in pixels. Small: the header tightens and loses its
+   side note, a chart takes only the room left, and whatever still does not fit is left off
+   whole (`sz-cut`, from cutCards) rather than cut in half or scrolled.
+   Medium: a chart may be a shorter strip. Large is the widget as built. */
+@media(min-width:821px){
+  #grid > .w[data-sz=s] .w-head{padding:var(--s-2) var(--s-3) var(--s-1)}
+  #grid > .w[data-sz=s] .w-head .sub{display:none}
+  #grid > .w[data-sz=s] .w-body{overflow:hidden;gap:var(--s-1);padding-bottom:var(--s-2);container-type:size}
+  #grid > .w[data-sz=s] .w-body > .fits{min-height:0}
+  /* a card too short for its title shows only its answer; REARRANGE
+     brings the title back, with its buttons and its drag */
+  body:not(.editing) #grid > .w.sz-xs .w-head{display:none}
+  body:not(.editing) #grid > .w.sz-xs .w-body{padding-top:var(--s-2)}
+  #grid > .w[data-sz=s] .ckbig{font-size:min(var(--f-8),70cqh);line-height:1}
+  #grid > .w[data-sz=m] .w-body > .fits{min-height:var(--s-7,48px)}
+  #grid > .w .sz-cut{display:none !important}
+}
 /* A chart takes the room that is left, but never less than a readable strip:
    with the answer on top of it, a small widget left it no room at all. */
 .w-body > .fits{flex:1 1 auto;min-height:var(--s-9,96px)}
@@ -5750,7 +5770,11 @@ function drawHome() {
     /* a fact, not an instruction; + WIDGET is in the header above it */
     g.appendChild(el('div', 'empty', 'No widgets')).style.gridColumn = 'span 12';
   }
-  if (later.length) setTimeout(() => later.forEach(f => f()), 0);
+  /* a widget drawn later is cut to its size once it is drawn */
+  if (later.length) setTimeout(() => {
+    later.forEach(f => f());
+    if (!NARROW()) cutCards([].slice.call(g.querySelectorAll(':scope > .w')));
+  }, 0);
   fitGrid();
 }
 
@@ -5776,47 +5800,80 @@ function drawHome() {
    setting is no longer read.
 
    A card flagged `fit` (the small number cards, APPS, LINKS) still takes as
-   many rows as its contents need and no more. */
-let COLS = 12;
-const CELL = { w: 146, h: 84 };
+   many rows as its contents need and no more.
+
+   ── and since 1.0.69 the board scales to the window ──
+   Tom, 2026-10-16: "I don't want scrolling when I resize from 3840 to 1920",
+   then "Keep the same layout, but the widgets show up differently based on
+   size", and yes to a bigger window making widgets bigger. A saved spot is
+   still a column and a row, and nothing moves: the cell grows or shrinks so
+   the whole arrangement fits the window, its shape kept at 146 by 84. The
+   board is as wide as the cards reach (12 columns at least); room the
+   window has over is more empty cells, there to add a widget to. The width
+   always fits, so nothing scrolls sideways; the height fits too unless that
+   takes a cell under half size, and only then does the board scroll down.
+   Each card then says how big it came out (`data-sz`, s m or l), and the
+   CSS shows less of a widget the smaller it is. */
+let COLS = 12, SCALE = 1;
+const CELL = { w: 146, h: 84 }, SMIN = 0.5;
 function fitGrid() {
   const g = $('#grid'), home = $('#home');
   if (NARROW()) {
     g.style.removeProperty('--row'); g.style.minHeight = ''; g.style.gridTemplateColumns = ''; g.style.width = '';
-    COLS = 4; placeCards(); return;
+    g.querySelectorAll(':scope > .w').forEach(n => { delete n.dataset.sz; });
+    COLS = 4; SCALE = 1; placeCards(); return;
   }
   const gap = parseFloat(getComputedStyle(g).rowGap) || 12;
-  const H = home.clientHeight - 28, Wd = home.clientWidth - 28;
-  const R = CELL.h;
-  const used = layout.reduce((a, c) => Math.max(a, c.x ? c.x + c.w - 1 : c.w), 1);
-  COLS = Math.max(used, Math.floor((Wd + gap) / (CELL.w + gap)), 4);
-  g.style.gridTemplateColumns = 'repeat(' + COLS + ',' + CELL.w + 'px)';
-  g.style.width = (COLS * CELL.w + (COLS - 1) * gap) + 'px';
-  g.style.setProperty('--row', R + 'px');
+  /* the room inside #home's padding: a flat 28 missed the 60px kept clear
+     for the dock at the bottom, so every board scrolled by 46px */
+  const hs = getComputedStyle(home);
+  const H = home.clientHeight - (parseFloat(hs.paddingTop) || 0) - (parseFloat(hs.paddingBottom) || 0);
+  const Wd = home.clientWidth - (parseFloat(hs.paddingLeft) || 0) - (parseFloat(hs.paddingRight) || 0);
   /* the cards only, never a `.w` drawn inside one: Chart.header's date
      line is also `.w`, and treating it as a card threw here and stopped the
      boot before the dock and the clock were drawn */
   const fits = [].slice.call(g.querySelectorAll(':scope > .w.fit'));
   const nodes = [].slice.call(g.querySelectorAll(':scope > .w'));
   effH.length = 0;
-  /* the rows a window holds: a fit card stops there and scrolls inside, or
-     LINKS stood 1668px tall in a 1000px window with CLIENTS below the fold */
-  const most = Math.floor((H + gap) / R);
+  /* the most rows a fit card takes: it stops there and scrolls inside, or
+     LINKS stood 1668px tall in a 1000px window with CLIENTS below the fold.
+     A number now, not the window's rows, so a card's rows are the same at
+     every window size and resizing cannot push anything down. */
+  const most = 12;
   fits.forEach(n => {
     /* measured squeezed to one row, so a child that stretches to fill
-       the card cannot report the card's own height back as its need */
+       the card cannot report the card's own height back as its need, and
+       at its full-size width, so a smaller window does not wrap its lines
+       into more rows */
     const head = n.querySelector('.w-head'), body = n.querySelector('.w-body');
+    const cw = layout[+n.dataset.i].w;
     n.style.setProperty('--ch', 1);
+    n.style.width = (cw * CELL.w + (cw - 1) * gap) + 'px';
+    /* measured whole: as a large card, with nothing left off */
+    n.dataset.sz = 'l'; n.classList.remove('sz-xs');
+    n.querySelectorAll('.sz-cut').forEach(e => e.classList.remove('sz-cut'));
     const was = body.style.overflow;
     body.style.overflow = 'auto';
     const need = head.offsetHeight + body.scrollHeight + 2;
     body.style.overflow = was;
-    const want = Math.max(1, Math.ceil((need + gap) / R));
+    n.style.width = '';
+    const want = Math.max(1, Math.ceil((need + gap) / CELL.h));
     const ch = Math.min(want, Math.max(layout[+n.dataset.i].h, most));
     n.classList.toggle('capped', ch < want);
     n.style.setProperty('--ch', ch);
     effH[+n.dataset.i] = ch;
   });
+  /* how far the cards reach, and the cell that fits that in the window */
+  const usedC = Math.max(12, layout.reduce((a, c) => Math.max(a, (c.x || 1) + c.w - 1), 1));
+  const usedR = Math.max(1, layout.reduce((a, c, i) => Math.max(a, (c.y || 1) + hOf(i) - 1), 1));
+  const sw = (Wd - (usedC - 1) * gap) / (usedC * CELL.w);
+  const sh = (H + gap) / (usedR * CELL.h);
+  SCALE = Math.max(0.1, Math.min(sw, Math.max(sh, SMIN)));
+  const cw = CELL.w * SCALE, R = CELL.h * SCALE;
+  COLS = Math.max(usedC, Math.floor((Wd + gap) / (cw + gap)));
+  g.style.gridTemplateColumns = 'repeat(' + COLS + ',' + cw.toFixed(2) + 'px)';
+  g.style.width = (COLS * cw + (COLS - 1) * gap).toFixed(2) + 'px';
+  g.style.setProperty('--row', R.toFixed(2) + 'px');
   /* a card with no spot yet keeps the one the grid gave it */
   const m = gridMetrics();
   nodes.forEach(n => {
@@ -5836,7 +5893,48 @@ function fitGrid() {
   /* the grid reaches the bottom of the window, so the space under the
      last card is somewhere a widget can be added too */
   g.style.minHeight = H + 'px';
+  sizeCards(nodes, cw, R, gap);
   placeCards();
+}
+/* small, medium or large, read off the card's size in pixels once it is
+   placed. A small card shows its answer and drops the rest (the CSS under
+   `data-sz`); a medium one keeps a short chart. */
+function sizeCards(nodes, cw, R, gap) {
+  nodes.forEach(n => {
+    const c = layout[+n.dataset.i]; if (!c) return;
+    const w = c.w * cw + (c.w - 1) * gap, h = (effH[+n.dataset.i] || c.h) * R - gap;
+    n.dataset.sz = h < 150 || w < 190 ? 's' : h < 300 || w < 300 ? 'm' : 'l';
+    /* too short for a title and an answer both: the answer wins */
+    n.classList.toggle('sz-xs', h < 80);
+  });
+  cutCards(nodes);
+}
+/* A small card keeps what fits whole and leaves the rest off: MACROS at a
+   third of its size shows PROTEIN and CARBS, not four meters sliced
+   through. A box holding a list (LOCKED IN's rows) is looked inside, so a
+   whole row goes rather than the list. */
+function cutCards(nodes) {
+  nodes.forEach(n => {
+    n.querySelectorAll('.sz-cut').forEach(e => e.classList.remove('sz-cut'));
+    if (n.dataset.sz !== 's') return;
+    const body = n.querySelector(':scope > .w-body');
+    if (!body || body.classList.contains('appslot')) return;
+    const bottom = body.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(body).paddingBottom) || 0) + 1;
+    const walk = box => {
+      [].slice.call(box.children).forEach((e, k) => {
+        if (e.classList.contains('sz-cut')) return;
+        const r = e.getBoundingClientRect();
+        /* a list box can fit and scroll inside: its rows are what spill */
+        const spills = e.scrollHeight > e.clientHeight + 1;
+        if (r.bottom <= bottom && !(box === body && spills)) return;
+        /* the first thing in a card is its answer: kept, and looked into */
+        if (box === body && r.top < bottom && e.children.length > 1) { walk(e); return; }
+        if (k === 0 && (box === body || box === body.firstElementChild)) return;
+        e.classList.add('sz-cut');
+      });
+    };
+    walk(body);
+  });
 }
 /* A fit card measured in the fallback font came out a row short and was
    never measured again: MACROS opened with CALORIES cut in half, then grew
