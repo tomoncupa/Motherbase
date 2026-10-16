@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.69, 2026-10-16">
+<meta name="mb-version" content="1.0.70, 2026-10-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -5002,6 +5002,77 @@ if (!layout && !chosenEmpty()) {
   if (!Array.isArray(layout) || !layout.length) layout = defaultLayout();
 }
 if (!Array.isArray(layout)) layout = [];
+/* ── two boards: one for the 1920 screen, one for the 3840 ──
+   Tom, 2026-10-16, a few hours after 1.0.69 scaled one board to every
+   window: "Just save 2 positions between the 2 main screen sizes, I don't
+   like the resizing." Every card still exists once, with its settings, so
+   a widget added or removed on one screen is added or removed on both.
+   What each screen keeps is where the card sits and how big it is: the
+   card's own x, y, w and h are the 1920 board, and `W` holds the same four
+   for the wide one. A window 2880px wide or more (half way between) wears
+   the wide board; anything narrower, and a phone, the other. Each is drawn
+   at full size, never scaled up.
+
+   In memory the board on screen always has its spots in x, y, w and h, so
+   none of the drag, resize and add code had to learn about two boards;
+   the other board's spots ride along in `S` and are put back on saving. */
+const WIDE_AT = 2880;
+const boardFor = () => !matchMedia('(max-width:820px)').matches && innerWidth >= WIDE_AT ? 'wide' : 'std';
+let BOARD = boardFor();
+const spotOf = e => { const s = {}; ['x', 'y', 'w', 'h'].forEach(k => { if (e[k] != null) s[k] = e[k]; }); return s; };
+const setSpot = (e, s) => { ['x', 'y', 'w', 'h'].forEach(k => { delete e[k]; }); return Object.assign(e, s); };
+/* The board before two boards was arranged on the 3840 screen, reaching
+   past the 12 columns 1920 has. It becomes the wide board as it is, and
+   the 1920 board starts as the same cards packed into 12 columns in the
+   order they read (top to bottom, then left to right), each in the first
+   place it fits whole. Worked out on open and kept in memory; saved the
+   first time he changes either board. */
+function splitOld(list) {
+  if (list.some(e => e && e.W)) return list;
+  const reach = list.reduce((a, c) => Math.max(a, c && c.x ? c.x + c.w - 1 : 0), 0);
+  if (reach <= 12) return list;
+  const out = list.map(c => c && c.x ? Object.assign({}, c, { W: spotOf(c) }) : c);
+  const taken = {}, free = (x, y, w, h) => {
+    for (let r = y; r < y + h; r++) for (let k = x; k < x + w; k++) if (taken[r + ',' + k]) return false;
+    return true;
+  };
+  out.map((c, i) => i).filter(i => out[i] && out[i].x)
+    .sort((a, b) => out[a].y - out[b].y || out[a].x - out[b].x || a - b)
+    .forEach(i => {
+      const c = out[i]; c.w = Math.min(c.w, 12);
+      let y = 1, x = 0;
+      for (; !x && y < 500; y++) for (let k = 1; k <= 13 - c.w; k++) if (free(k, y, c.w, c.h)) { x = k; break; }
+      c.x = x || 1; c.y = y - 1;
+      for (let r = c.y; r < c.y + c.h; r++) for (let k = c.x; k < c.x + c.w; k++) taken[r + ',' + k] = 1;
+    });
+  return out;
+}
+/* the saved list, made into the board on screen, and back */
+function toWork(list, b) {
+  if (b !== 'wide') return list;
+  return list.map(e => {
+    const o = Object.assign({}, e); delete o.W;
+    o.S = spotOf(e);
+    return setSpot(o, e.W || spotOf(e));
+  });
+}
+function toStore(list, b) {
+  if (b !== 'wide') return list;
+  return list.map(e => {
+    const o = Object.assign({}, e); delete o.S;
+    o.W = spotOf(e);
+    /* a card added on the wide screen finds its own spot on the 1920 one */
+    return setSpot(o, e.S || { w: Math.min(e.w, 12), h: e.h });
+  });
+}
+/* the window crossed 2880px: put this board's spots away, take the other's */
+function useBoard() {
+  const b = boardFor();
+  if (b === BOARD) return;
+  layout = toWork(toStore(layout, BOARD), b);
+  BOARD = b;
+  effH.length = 0;
+}
 /* A widget for an app this build does not carry is not offered and not
    drawn: the client build drops ELEMENT, and DRINKS goes with it. */
 /* `mine` is for a widget with no app of its own to take it out: the client
@@ -5031,7 +5102,7 @@ function retire(list) {
    first time the board was changed on the old copy. */
 const known = c => !!(c && WIDGETS[c.t] && widgetHere(WIDGETS[c.t]));
 const takeLayout = list => { const r = retire(list); layoutHeld = r.filter(c => !known(c)); return r.filter(known); };
-layout = takeLayout(layout);
+layout = toWork(takeLayout(splitOld(layout)), BOARD);
 /* Written only when he changes something, never on open. A device opened
    before its synced rows arrive has only the factory layout, and saving that
    stamped it newer than his real one, so it replaced his arrangement on every
@@ -5040,7 +5111,7 @@ layout = takeLayout(layout);
 let layoutSeen = '';
 const seenKey = s => JSON.stringify([s || null, chosenEmpty()]);
 const saveLayout = () => { try {
-  const all = layout.concat(layoutHeld);
+  const all = toStore(layout, BOARD).concat(layoutHeld);
   /* the list first, then the flag, each only as it changes */
   layoutSeen = JSON.stringify([all, !all.length]);
   Rec.setting('lifeos', 'layout', all);
@@ -5054,7 +5125,7 @@ function reloadLayout() {
   const j = seenKey(s);
   if (j === layoutSeen) return;
   layoutSeen = j;
-  if (Array.isArray(s) && s.length) layout = takeLayout(s);
+  if (Array.isArray(s) && s.length) layout = toWork(takeLayout(splitOld(s)), BOARD);
   else if (chosenEmpty()) { layout = []; layoutHeld = []; }
 }
 try { layoutSeen = seenKey(Rec.setting('lifeos', 'layout')); } catch (e) {}
@@ -5646,6 +5717,7 @@ function widgetMenu(i, x, y) {
 
 const NARROW = () => matchMedia('(max-width:820px)').matches;
 function drawHome() {
+  useBoard();
   const g = $('#grid'); g.innerHTML = '';
   let firstDone = 0;
   const later = [];
@@ -5813,9 +5885,17 @@ function drawHome() {
    always fits, so nothing scrolls sideways; the height fits too unless that
    takes a cell under half size, and only then does the board scroll down.
    Each card then says how big it came out (`data-sz`, s m or l), and the
-   CSS shows less of a widget the smaller it is. */
+   CSS shows less of a widget the smaller it is.
+
+   ── 1.0.70: a board per screen instead ──
+   The same day: "I don't like the resizing now it needs to be more
+   intelligent". Each screen has its own board (`useBoard`, at the
+   layout), so the cell is 146 by 84 again on both, never bigger. It still
+   shrinks in a window too narrow for the board on it, so nothing scrolls
+   sideways, and it no longer shrinks to fit the height: a board taller
+   than the window scrolls down. */
 let COLS = 12, SCALE = 1;
-const CELL = { w: 146, h: 84 }, SMIN = 0.5;
+const CELL = { w: 146, h: 84 };
 function fitGrid() {
   const g = $('#grid'), home = $('#home');
   if (NARROW()) {
@@ -5837,9 +5917,10 @@ function fitGrid() {
   effH.length = 0;
   /* the most rows a fit card takes: it stops there and scrolls inside, or
      LINKS stood 1668px tall in a 1000px window with CLIENTS below the fold.
-     A number now, not the window's rows, so a card's rows are the same at
-     every window size and resizing cannot push anything down. */
-  const most = 12;
+     Since 1.0.70 it grows to its contents only as far as the bottom of the
+     window, and never stays smaller than the size he gave it, so a fit
+     card low on the board no longer makes the whole board scroll. */
+  const win = Math.max(1, Math.floor((H + gap) / CELL.h));
   fits.forEach(n => {
     /* measured squeezed to one row, so a child that stretches to fill
        the card cannot report the card's own height back as its need, and
@@ -5858,17 +5939,16 @@ function fitGrid() {
     body.style.overflow = was;
     n.style.width = '';
     const want = Math.max(1, Math.ceil((need + gap) / CELL.h));
-    const ch = Math.min(want, Math.max(layout[+n.dataset.i].h, most));
+    const ch = Math.min(want, Math.max(layout[+n.dataset.i].h, win - (layout[+n.dataset.i].y || 1) + 1));
     n.classList.toggle('capped', ch < want);
     n.style.setProperty('--ch', ch);
     effH[+n.dataset.i] = ch;
   });
   /* how far the cards reach, and the cell that fits that in the window */
   const usedC = Math.max(12, layout.reduce((a, c) => Math.max(a, (c.x || 1) + c.w - 1), 1));
-  const usedR = Math.max(1, layout.reduce((a, c, i) => Math.max(a, (c.y || 1) + hOf(i) - 1), 1));
   const sw = (Wd - (usedC - 1) * gap) / (usedC * CELL.w);
-  const sh = (H + gap) / (usedR * CELL.h);
-  SCALE = Math.max(0.1, Math.min(sw, Math.max(sh, SMIN)));
+  /* full size, and smaller only in a window too narrow for the board */
+  SCALE = Math.max(0.1, Math.min(1, sw));
   const cw = CELL.w * SCALE, R = CELL.h * SCALE;
   COLS = Math.max(usedC, Math.floor((Wd + gap) / (cw + gap)));
   g.style.gridTemplateColumns = 'repeat(' + COLS + ',' + cw.toFixed(2) + 'px)';
@@ -6221,7 +6301,7 @@ function widgetPicker(spot) {
          was the list, so every move after it was written into the factory
          board and the next Reset gave the moved board back */
       const was = layout.slice(), held = layoutHeld.slice();
-      layout = defaultLayout(); layoutHeld = []; saveLayout(); closeModal(); drawHome();
+      layout = toWork(defaultLayout(), BOARD); layoutHeld = []; saveLayout(); closeModal(); drawHome();
       UI.undo('layout reset', () => { layout = was; layoutHeld = held; saveLayout(); drawHome(); });
     };
     layoutRow(rb);

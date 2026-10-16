@@ -298,3 +298,31 @@ scrolled by 46px. [TESTED on the demo with his saved layout at 3840 (scale
 142/142 Chromium, WebKit 141/142 known. NOT on his screens.] Open: TODAY's
 STILL TO DO squeezes at medium; his board is wider than 16:9, so the
 bottom of a 16:9 window stays empty space.
+
+## 2026-10-16, HOME 1.0.70: a board per screen
+
+Tom, the same day: "Just save 2 positions between the 2 main screen sizes,
+I don't like the resizing now it needs to be more intelligent." One set of
+cards, two sets of spots: a card's own x, y, w, h are the 1920 board and
+`W` holds the wide one's. A window 2880px or wider (`WIDE_AT`, half way
+between 1920 and 3840) wears the wide board; narrower windows and the
+phone, the 1920 one. In memory the board on screen always has its spots
+in x, y, w, h (`toWork`); the other board's ride in `S` and go back on
+saving (`toStore`), so drag, resize and add needed no change. `useBoard`
+swaps them at the top of `drawHome` when a resize crosses 2880. Adding or
+removing a widget, and its settings, are shared by both boards.
+His old one board (reaching column 24) becomes the wide board as it is;
+the 1920 board starts as the same cards packed into 12 columns in reading
+order, first place each fits (`splitOld`), in memory until he changes
+either board. The cell is 146 x 84 again on both, never bigger, and it
+shrinks only in a window too narrow for its board (1500px: 0.77); no
+shrinking to fit the height. A fit card grows to its contents only down
+to the window's bottom, never below its own size (LINKS at row 9 had
+grown to 12 rows and scrolled the whole board).
+[TESTED in headless Chromium on the demo with his saved board: 3840 wide
+board unchanged at scale 1; 1920 packed at scale 1, no sideways scroll; a
+real title drag at 1920 saved only the 1920 spot, one at 3840 only `W`;
+phone stacks the 1920 board; review 142/142. NOT on his screens.] His
+wide board itself reaches row 14, so at 3840x1080 it scrolls 219px; the
+packed 1920 board scrolls 723px until he arranges it (184 cells of cards
+in 120).
