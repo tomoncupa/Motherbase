@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.20, 2026-10-09">
+<meta name="mb-version" content="1.0.21, 2026-10-17">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -636,7 +636,7 @@ document.getElementById('open').onclick = () => {
 };
 
 /* ── adding a client by hand, and editing one ── */
-function clientDialog(pid) {
+function clientDialog(pid, at) {
   const cur = pid ? people()[pid] : null;
   let animal = (cur && Creatures.pick(cur.animal)) || 'pikachu';
   UI.dialog({
@@ -661,7 +661,7 @@ function clientDialog(pid) {
       else {
         const id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         const taken = {}; clientsIn(box).forEach(([, p]) => { taken[p.slot] = 1; });
-        let slot = 0; while (taken[slot]) slot++;
+        let slot = at != null && !taken[at] ? at : 0; while (taken[slot]) slot++;
         Rec.set('cperson', null, id, { name: name, animal: animal, unit: unit(), fields: null, seen: null, box: box, slot: slot });
         sel = id; Rec.setting(APP.id, 'sel', sel);
       }
@@ -675,11 +675,91 @@ function moveTo(pid, to) {
   Rec.patch('cperson', null, pid, { box: to, slot: slot });
   UI.toast('Moved to <b>' + esc(BOXES.find(b => b.id === to).name) + '</b>');
 }
-function clientMenu(pid, e) {
-  const items = [{ label: 'Edit Name And Pokémon', fn: () => clientDialog(pid) }];
-  BOXES.forEach(b => { if (b.id !== ((people()[pid] || {}).box || 'one')) items.push({ label: 'Move To ' + b.name, fn: () => moveTo(pid, b.id) }); });
-  UI.menu(e.clientX, e.clientY, items);
+/* ── right click, everywhere (1.0.21, 2026-10-17) ──
+   Tom: "Add complete right click function on COACH." Everything that can be
+   acted on has a menu, on a right click and a held finger both
+   (`Mobile.hold`), and every item in one is also a button somewhere on the
+   page (DOCTRINE laws 6 and 14). A right click on the bare page opens the
+   app's own menu, so the browser's never shows. A box being typed in keeps
+   the browser's, for copy and paste. */
+function menuOn(el, items, skip) {
+  Mobile.hold(el, e => {
+    const it = typeof items === 'function' ? items(e) : items;
+    if (it && it.length) UI.menu(e.clientX, e.clientY, it);
+  }, { skip: skip || 'input, textarea' });
+  return el;
 }
+function copyOut(text, what) {
+  const ok = () => UI.toast((what || 'Copied') + ' to the clipboard');
+  const old = () => {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); ok(); } catch (e) { UI.toast('Could not copy', { bad: true }); }
+    ta.remove();
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, old); else old();
+}
+function pickClient(pid) {
+  if (sel !== pid) logDay = '';
+  sel = pid; Rec.setting(APP.id, 'sel', sel); editing = '';
+  Mobile.feedback('select'); draw();
+}
+/* The step + and − move by in this client's TRAIN, theirs alone: TRAIN on a
+   client reads `train.<pid>|increment` before Tom's (the adapter at the top
+   of train/index.html). Tom, 2026-10-17: "I need to set weight intervals per
+   person." The same box is in their TRAIN's Settings. */
+function stepDialog(pid) {
+  const p = people()[pid] || {}, key = pid + '|increment';
+  const cur = Rec.setting('train', key), u = Rec.setting('train', pid + '|unit') || Rec.setting('train', 'unit') || 'lb';
+  UI.dialog({
+    title: 'WEIGHT STEP · ' + String(p.name || 'CLIENT').toUpperCase(), width: 420, focus: true,
+    body: b => {
+      const i = UI.field('decimal', { value: cur == null ? '' : String(cur), placeholder: String(Rec.setting('train', 'increment') || 2.5) });
+      i.id = 'cstep';
+      b.appendChild(UI.row('What + and − move by', 'In ' + u.toUpperCase() + '. Blank uses yours. An exercise given its own step keeps it', i));
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: h => {
+      const i = document.getElementById('cstep'), v = UI.amount ? parseFloat(String(i.value).replace(',', '.')) : parseFloat(i.value);
+      Rec.setting('train', key, v > 0 ? v : null);
+      Mobile.feedback('success');
+      UI.toast(v > 0 ? 'Weight step for <b>' + esc(p.name || 'the client') + '</b>: ' + v + ' ' + esc(u) : 'Weight step for <b>' + esc(p.name || 'the client') + '</b> follows yours');
+    } }],
+  });
+}
+function clientItems(pid) {
+  const p = people()[pid] || {}, first = Rec.get('cprog', null, clientProgKey(pid));
+  const items = [];
+  if (pid !== sel) items.push({ label: 'Open ' + (p.name || 'Client'), fn: () => pickClient(pid) });
+  items.push({ label: 'Log A Session', fn: () => openTrain(pid) });
+  items.push({ label: 'Import Their Log', fn: () => openTrain(pid, { import: 1 }) });
+  items.push({ label: 'Weight Step…', fn: () => stepDialog(pid) });
+  if (first && (first.days || []).some(d => (d.ex || []).some(x => x.name || x.slot))) {
+    items.push({ label: 'Send First Sets To ' + (p.name || 'Client'), fn: () => sendProg(clientProgKey(pid), p.name, pid) });
+  }
+  items.push('-');
+  items.push({ label: 'Edit Name And Pokémon', fn: () => clientDialog(pid) });
+  BOXES.forEach(b => { if (b.id !== (p.box || 'one')) items.push({ label: 'Move To ' + b.name, fn: () => moveTo(pid, b.id) }); });
+  items.push({ label: 'Copy Name', fn: () => copyOut(p.name || 'Client', 'Name copied') });
+  return items;
+}
+function clientMenu(pid, e) { UI.menu(e.clientX, e.clientY, clientItems(pid)); }
+/* A session as text, the way RECENT SESSIONS prints it. */
+function sessionText(s) {
+  return [Day.label(s.date) + ' · ' + s.sets + ' sets'].concat(s.lifts.map(L => L.name + ': ' + L.sets.map(x => setText(x.s)).join(', '))).join('\n');
+}
+/* the app's own menu, on the bare page */
+document.addEventListener('contextmenu', e => {
+  if (e.defaultPrevented || e.target.closest('input, textarea, #over, .mb-menu, .mb-sheet, .mb-dialog')) return;
+  e.preventDefault();
+  const items = [
+    { label: 'Add A Client', fn: () => clientDialog(null) },
+    { label: 'Open A Client File', fn: () => document.getElementById('open').click() },
+    { label: 'Sends', fn: () => document.getElementById('sends').click() },
+  ];
+  if (sel && people()[sel]) items.push('-', { label: (people()[sel].name || 'Client'), sub: clientItems(sel) });
+  items.push('-', { label: 'Settings', fn: () => settings() });
+  UI.menu(e.clientX, e.clientY, items);
+});
 
 /* ── the box ── */
 /* Tom, 2026-10-08: "let me drag and drop pokemon/client locations". Press a
@@ -773,14 +853,15 @@ function drawBox(col) {
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.name || 'Client';
       b.appendChild(nm);
       b.setAttribute('aria-label', (p.name || 'Client') + ', ' + Creatures.name(p.animal));
-      b.onclick = () => { if (slotDragged) return; if (sel !== pid) logDay = ''; sel = pid; Rec.setting(APP.id, 'sel', sel); editing = ''; Mobile.feedback('select'); draw(); };
+      b.onclick = () => { if (slotDragged) return; pickClient(pid); };
       /* right click on a desk, a held finger on an iPad: Mobile.hold does both */
       Mobile.hold(b, e => clientMenu(pid, e));
       dragSlot(b, pid, i);
     } else {
       b.className = 'slot none mb-press';
       b.setAttribute('aria-label', 'Empty slot. Add a client');
-      b.onclick = () => clientDialog(null);
+      b.onclick = () => clientDialog(null, i);
+      menuOn(b, [{ label: 'Add A Client Here', fn: () => clientDialog(null, i) }]);
     }
     grid.appendChild(b);
   }
@@ -923,6 +1004,7 @@ function drawBlockStrength(col, pid) {
     row.appendChild(nm); row.appendChild(sp);
     row.insertAdjacentHTML('beforeend', '<span class="n was">' + conv(L.start) + '</span><span class="n">' + conv(L.best) +
       '</span><span class="n ch">' + (ch > 0 ? '+' : ch < 0 ? '−' : '') + Math.abs(ch) + '</span>');
+    menuOn(row, [{ label: 'Copy As Text', fn: () => copyOut(L.name + ': ' + conv(L.start) + ' to ' + conv(L.best) + ' ' + unit() + ' est. 1RM', 'Lift copied') }]);
     card.appendChild(row);
   });
   /* B: every lift as a share of its start, on one chart */
@@ -1005,6 +1087,11 @@ function drawWeek(col, pid, ss) {
       String(Day.label(Day.shift(weekAt, 6), { day: 'numeric', month: 'short' })).toUpperCase();
   head.appendChild(t);
   head.appendChild(arrow('Week after', 'next', weekAt < thisWeek ? Day.shift(weekAt, 7) : null));
+  menuOn(head, () => [
+    { label: 'Week Before', fn: () => { weekAt = Day.shift(weekAt, -7); draw(); } },
+    weekAt < thisWeek ? { label: 'Week After', fn: () => { weekAt = Day.shift(weekAt, 7); draw(); } } : null,
+    weekAt !== thisWeek ? { label: 'This Week', fn: () => { weekAt = thisWeek; draw(); } } : null,
+  ].filter(Boolean));
   card.appendChild(head);
 
   const strip = document.createElement('div'); strip.className = 'wkdays';
@@ -1017,6 +1104,11 @@ function drawWeek(col, pid, ss) {
       '<div class="tile">' + (s ? '<div class="fill" style="height:' + h + '%"></div><span class="n">' + s.sets + '</span>' : '') + '</div>' +
       '<span class="wv">' + (s ? kShort(conv(s.vol)) : '·') + '</span>';
     cell.title = s ? Day.label(d) + ' · ' + s.sets + ' sets · ' + s.ex.join(', ') : Day.label(d) + ' · rest';
+    if (s) menuOn(cell, [
+      { label: 'Open ' + Day.label(d) + ' In TRAIN', fn: () => openTrain(pid, { date: d }) },
+      { label: 'Copy As Text', fn: () => copyOut(sessionText(s), 'Session copied') },
+    ]);
+    else if (d <= today) menuOn(cell, [{ label: 'Log A Session On ' + Day.label(d), fn: () => openTrain(pid, { date: d }) }]);
     strip.appendChild(cell);
   });
   card.appendChild(strip);
@@ -1063,6 +1155,10 @@ function drawRecent(col, pid, ss) {
       row.innerHTML = '<span class="ln">' + esc(L.name) + '</span><span class="ls">' + txt + '</span>';
       box.appendChild(row);
     });
+    menuOn(box, [
+      { label: 'Open In TRAIN', fn: () => openTrain(pid, { date: s.date }) },
+      { label: 'Copy As Text', fn: () => copyOut(sessionText(s), 'Session copied') },
+    ]);
     card.appendChild(box);
   });
   col.appendChild(card);
@@ -1110,6 +1206,7 @@ function drawClientIn(col, cs, cr, cw) {
   const ed = document.createElement('button'); ed.className = 'ico mb-press mb-tap'; ed.innerHTML = ico('edit');
   ed.setAttribute('aria-label', 'Edit client'); ed.onclick = () => clientDialog(sel);
   who.appendChild(ed);
+  menuOn(who, () => clientItems(sel));
   card.appendChild(who);
   if (!logDay) {
     /* Two things you do to a client's log, side by side: add to it, or bring
@@ -1160,6 +1257,8 @@ function drawClientIn(col, cs, cr, cw) {
     lc.innerHTML = '<h2>STRENGTH</h2><table class="lifts"><tr><th>EXERCISE</th><th class="n">BEST SET</th><th class="n">EST. 1RM</th><th class="n">DAYS</th></tr>' +
       lf.map(x => '<tr><td>' + esc(x.name) + '</td><td class="n">' + show(x.bs.kg) + ' × ' + x.bs.r + '</td><td class="n">' +
         show(x.best) + ' ' + unit() + '</td><td class="n">' + Object.keys(x.days).length + '</td></tr>').join('') + '</table>';
+    menuOn(lc, [{ label: 'Copy As Text', fn: () => copyOut(['STRENGTH · ' + (p.name || 'Client')].concat(lf.map(x =>
+      x.name + ': best ' + show(x.bs.kg) + ' × ' + x.bs.r + ', est. 1RM ' + show(x.best) + ' ' + unit())).join('\n'), 'Strength copied') }]);
     cr.appendChild(lc);
   }
   drawRecent(cs, sel, ss);
@@ -1198,6 +1297,7 @@ function drawCheckin(col, pid, p) {
       b.className = 'mb-press mb-tap' + (d === ciDay ? ' sel' : '');
       b.textContent = Day.label(d, { day: 'numeric', month: 'short' });
       b.onclick = () => { ciDay = d; draw(); };
+      menuOn(b, [{ label: 'Show ' + Day.label(d), fn: () => { ciDay = d; draw(); } }]);
       strip.appendChild(b);
     });
     c.appendChild(strip);
@@ -1220,7 +1320,15 @@ function drawCheckin(col, pid, p) {
       const im = document.createElement('img');
       im.src = ph.img; im.alt = f.label + ', ' + Day.label(ciDay); im.loading = 'lazy';
       b.appendChild(im);
-      b.onclick = () => bigShot(f.label, ph, ciDay);
+      const day = ciDay;
+      b.onclick = () => bigShot(f.label, ph, day);
+      menuOn(b, [
+        { label: 'See Bigger', fn: () => bigShot(f.label, ph, day) },
+        { label: 'Save Photo', fn: () => {
+          const a = document.createElement('a'); a.href = ph.img; a.download = (p.name || 'Client') + ' ' + f.label + ' ' + day + '.jpg';
+          document.body.appendChild(a); a.click(); a.remove();
+        } },
+      ]);
       fig.appendChild(b);
       const cap = document.createElement('figcaption'); cap.textContent = f.label;
       fig.appendChild(cap);
@@ -1413,6 +1521,14 @@ function editor(el, key, opts) {
     rm.setAttribute('aria-label', 'Remove day');
     rm.onclick = () => { const was = days.splice(di, 1)[0]; commit(); draw(); UI.undo('Day removed', () => { days.splice(di, 0, was); commit(); draw(); }); };
     hd.appendChild(rm);
+    menuOn(hd, [
+      { label: 'Add Exercise', fn: () => { (d.ex || (d.ex = [])).push({ name: '', sets: [{ kg: null, r: null }] }); commit(); draw(); } },
+      { label: 'Duplicate Day', fn: () => { const c = JSON.parse(JSON.stringify(d)); c.name = (d.name || 'Day') + ' copy'; days.splice(di + 1, 0, c); commit(); draw(); } },
+      di > 0 ? { label: 'Move Day Up', fn: () => { days.splice(di - 1, 0, days.splice(di, 1)[0]); commit(); draw(); } } : null,
+      di < days.length - 1 ? { label: 'Move Day Down', fn: () => { days.splice(di + 1, 0, days.splice(di, 1)[0]); commit(); draw(); } } : null,
+      '-',
+      { label: 'Remove Day', kind: 'bad', fn: () => rm.click() },
+    ].filter(Boolean));
     box.appendChild(hd);
     const lab = document.createElement('div'); lab.className = 'exlabels';
     lab.innerHTML = '<span>EXERCISE</span><span>FIRST SET ' + unit().toUpperCase() + '</span><span>REPS</span><span></span>';
@@ -1431,6 +1547,13 @@ function editor(el, key, opts) {
       del.setAttribute('aria-label', 'Remove exercise');
       del.onclick = () => { d.ex.splice(xi, 1); commit(); draw(); };
       row.appendChild(n); row.appendChild(wv); row.appendChild(rv); row.appendChild(del);
+      menuOn(row, () => [
+        { label: 'Add Exercise Below', fn: () => { d.ex.splice(xi + 1, 0, { name: '', sets: [{ kg: null, r: null }] }); commit(); draw(); } },
+        xi > 0 ? { label: 'Move Up', fn: () => { d.ex.splice(xi - 1, 0, d.ex.splice(xi, 1)[0]); commit(); draw(); } } : null,
+        xi < d.ex.length - 1 ? { label: 'Move Down', fn: () => { d.ex.splice(xi + 1, 0, d.ex.splice(xi, 1)[0]); commit(); draw(); } } : null,
+        '-',
+        { label: 'Remove Exercise', kind: 'bad', fn: () => { const was = d.ex.splice(xi, 1)[0]; commit(); draw(); UI.undo('Exercise removed', () => { d.ex.splice(xi, 0, was); commit(); draw(); }); } },
+      ].filter(Boolean));
       box.appendChild(row);
     });
     const add = document.createElement('button'); add.className = 'mb-btn mb-press mb-tap'; add.textContent = '+ EXERCISE';
@@ -1448,6 +1571,15 @@ function editor(el, key, opts) {
 }
 function btn(label, cls, fn) { const b = document.createElement('button'); b.className = 'mb-btn ' + (cls || '') + ' mb-press mb-tap'; b.textContent = label; b.onclick = fn; return b; }
 
+/* A library program becomes the picked client's first sets. */
+function useFor(k) {
+  const p = people()[sel], src = Rec.get('cprog', null, k);
+  if (!p || !src) return;
+  saveProg(clientProgKey(sel), JSON.parse(JSON.stringify(src.days || [])), null);
+  if (isForge(k, src)) Rec.patch('cprog', null, clientProgKey(sel), { name: src.name, weeks: src.weeks, from: k, ed: Date.now() });
+  tab = 'first'; editing = ''; draw();
+  UI.toast('<b>' + esc(src.name) + '</b> is now ' + esc(p.name) + '’s first sets');
+}
 function drawProg(col) {
   const card = document.createElement('div'); card.className = 'card';
   const tabs = UI.segmented([{ id: 'first', name: 'FIRST SETS' }, { id: 'lib', name: 'PROGRAMS' }], tab, v => { tab = v; editing = ''; draw(); });
@@ -1475,13 +1607,7 @@ function drawProg(col) {
     card.appendChild(back);
     const fg = isForge(editing, Rec.get('cprog', null, editing));
     const extra = [btn('SAVE AS FILE', fg ? '' : 'go', () => sendProg(editing))];
-    if (p) extra.push(btn('USE FOR ' + String(p.name || 'CLIENT').toUpperCase(), '', () => {
-      const src = Rec.get('cprog', null, editing);
-      saveProg(clientProgKey(sel), JSON.parse(JSON.stringify(src.days || [])), null);
-      if (fg) Rec.patch('cprog', null, clientProgKey(sel), { name: src.name, weeks: src.weeks, from: editing, ed: Date.now() });
-      tab = 'first'; editing = ''; draw();
-      UI.toast('<b>' + esc(src.name) + '</b> is now ' + esc(p.name) + '’s first sets');
-    }));
+    if (p) extra.push(btn('USE FOR ' + String(p.name || 'CLIENT').toUpperCase(), '', () => useFor(editing)));
     if (fg) {
       const h = document.createElement('h2'); h.textContent = String(Rec.get('cprog', null, editing).name || 'PROGRAM').toUpperCase(); card.appendChild(h);
       forgeView(card, editing);
@@ -1501,13 +1627,14 @@ function drawProg(col) {
       const n = wk1.reduce((a, d) => a + (d.ex || []).filter(x => x.name).length, 0);
       r.innerHTML = '<span class="nm">' + esc(v.name || 'Program') + '</span><span class="c">' + (fg ? 'FORGE · ' + (v.weeks || 1) + ' wk · ' : '') + wk1.length + ' days · ' + n + ' exercises</span>';
       r.onclick = () => { editing = k; draw(); };
-      Mobile.hold(r, e => { UI.menu(e.clientX, e.clientY, fg ? [
-        { label: 'Save As File', fn: () => sendProg(k) },
-        { label: 'Edit In FORGE', fn: () => { location.href = FORGE + '?p=' + encodeURIComponent(k.slice(2)); } },
-      ] : [
-        { label: 'Save As File', fn: () => sendProg(k) },
-        { label: 'Delete Program', kind: 'bad', fn: () => { const was = Rec.get('cprog', null, k); Rec.del('cprog', null, k); UI.undo('Program deleted', () => Rec.set('cprog', null, k, was)); } },
-      ]); });
+      menuOn(r, () => {
+        const items = [{ label: 'Open', fn: () => { editing = k; draw(); } }];
+        if (p) items.push({ label: 'Use For ' + (p.name || 'Client'), fn: () => useFor(k) });
+        items.push({ label: 'Save As File', fn: () => sendProg(k) });
+        if (fg) items.push({ label: 'Edit In FORGE', fn: () => { location.href = FORGE + '?p=' + encodeURIComponent(k.slice(2)); } });
+        else items.push('-', { label: 'Delete Program', kind: 'bad', fn: () => { const was = Rec.get('cprog', null, k); Rec.del('cprog', null, k); UI.undo('Program deleted', () => Rec.set('cprog', null, k, was)); } });
+        return items;
+      });
       pl.appendChild(r);
     });
     card.appendChild(pl);
@@ -1713,6 +1840,16 @@ function openTrain(pid, o2) {
   }
   document.getElementById('overName').textContent = String(p.name || 'Client').toUpperCase() + ' · TRAIN';
   o.classList.add('on');
+  /* a day picked from the week or a session: TRAIN's log on that day, once
+     its store is in, so its own "open on the set waiting today" has run */
+  if (o2 && o2.date) {
+    const go = () => {
+      const w = f.contentWindow;
+      if (!w || !w.TRAIN || !w.TRAIN.go || !w.Rec) return setTimeout(go, 150);
+      w.Rec.ready(() => { w.TRAIN.show('workout'); w.TRAIN.go(o2.date); });
+    };
+    if (f.contentWindow && f.contentWindow.TRAIN) go(); else f.addEventListener('load', go, { once: true });
+  }
 }
 document.getElementById('overDone').onclick = () => { document.getElementById('over').classList.remove('on'); draw(); };
 

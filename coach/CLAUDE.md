@@ -205,6 +205,40 @@ pane was not drawing): ghost shown, target ringed, moved to an empty slot,
 two traded, a still press selected, the click after a drag ignored, three
 clients on one number all drawn. Not tried on an iPad.
 
+## Right click, everywhere (1.0.21, 2026-10-17)
+
+Tom: *"Add complete right click function on COACH."* `menuOn(el, items)` is
+`Mobile.hold` (right click and a held finger) opening `UI.menu`; a box being
+typed in keeps the browser's own menu.
+
+- **A client** (slot or name card, `clientItems`): Open, Log A Session,
+  Import Their Log, Weight Step…, Send First Sets (when there are any), Edit
+  Name And Pokémon, Move To each box, Copy Name. **An empty slot**: Add A
+  Client Here, into that slot (`clientDialog(null, slot)`).
+- **Weight Step…** (`stepDialog`) writes the client's own TRAIN setting
+  `train.<pid>|increment`, the same box as their TRAIN's Settings. Tom: "I
+  need to set weight intervals per person." TRAIN 1.0.63 made that setting
+  reach every exercise.
+- **A day in the week, a recent session**: Open In TRAIN (`openTrain(pid,
+  {date})`, TRAIN's log on that day once its store is in), Copy As Text; a
+  rest day up to today: Log A Session On it. The week's head walks weeks.
+- **STRENGTH, a block lift**: Copy As Text. **A check-in date**: Show it. **A
+  photo**: See Bigger, Save Photo.
+- **A program**: Open, Use For the picked client (`useFor`), Save As File,
+  Edit In FORGE or Delete. **The first-sets editor**: a day adds, duplicates,
+  moves or removes; an exercise adds below, moves up or down, or is removed
+  with UNDO.
+- **The bare page**: Add A Client, Open A Client File, Sends, the picked
+  client's menu, Settings. A menu on an element already took the click
+  (`defaultPrevented`), so one right click never opens two.
+- **Not built: Delete Client.** Decided 2026-09-24 (wipes training, check-ins
+  and photos, WEALTH keeps the money); it needs its own yes.
+
+Watched on the demo by right-click events on each element: every menu's
+items, Weight Step saved 1.25 and the client's TRAIN stepped by 1.25 while
+Tom's stayed unset, Open In TRAIN landed on that day, Move Up, Remove with
+UNDO, Duplicate Day and Use For wrote what they said. Not tried on an iPad.
+
 ## Needs from the foundation
 
 `shared/_smoke.html` checks the 0.1 shelf (`send`, `waiting`, `took`,
