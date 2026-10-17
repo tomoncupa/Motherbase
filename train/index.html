@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.63, 2026-10-17">
+<meta name="mb-version" content="1.0.64, 2026-10-17">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -5948,17 +5948,23 @@ TRAIN.commentWorkout = function () {
   }
 };
 
-/* Copy every set of one day onto another, weights and reps intact. The sets
-   arrive uncompleted, because copying a workout is a plan, not a claim that
-   it happened. */
+/* Copy Past Session and a named session: the picked day's exercises in its
+   order, each filled with ITS latest sets and their comments, from whichever
+   day it was last done. Tom, 2026-10-17: the picked day's own numbers were
+   "literally the PAST session, useless" — he rotates sessions, so a lift has
+   usually moved on since. He picked A, and "include the comments". The day
+   is still `from`, so it is compared as the same session. The sets arrive
+   unticked: a copy is a plan, not a claim that it happened. Copy Session in
+   More still copies a day as it was, with its own switches. */
 TRAIN.copyWorkout = function (fromDate, toDate) {
   fromDate = fromDate || TRAIN.previousWorkout(TRAIN.date);
   toDate = toDate || TRAIN.date;
   if (!fromDate) return UI.toast('There is no session to copy', { bad: true });
-  var n = TRAIN.copyDay(fromDate, toDate, { comments: 0, supersets: 1, note: 0, time: 0 });
+  var exs = TRAIN.dayGroups(fromDate).length;
+  var n = TRAIN.copyDay(fromDate, toDate, { comments: 1, supersets: 1, note: 0, time: 0, latest: 1 });
   Mobile.feedback('success');
   draw();
-  UI.toast('Copied ' + n + ' sets from ' + UI.esc(Day.label(fromDate)));
+  UI.toast('Copied ' + exs + ' exercise' + (exs === 1 ? '' : 's') + ' from ' + UI.esc(Day.label(fromDate)) + ', ' + n + ' sets, each as it was last done');
 };
 
 /* Copy Past Session asks which one. Tom, 2026-10-15: it "literally copies
@@ -7705,7 +7711,7 @@ TRAIN.copyDay = function (from, to, opts) {
   if (!from || !to || from === to) return 0;
   var n = TRAIN.setsOn(to).length, made = 0;
   TRAIN.dayGroups(from).forEach(function (g) {
-    g.sets.forEach(function (s) {
+    (opts.latest ? TRAIN.latestSetsOf(g.ex, to) : g.sets).forEach(function (s) {
       Rec.set('set', to, TRAIN.newId(), {
         ex: s.ex, kg: s.kg || 0, r: s.r || 0, u: s.u, done: 0, plan: 1, pr: 0, prf: 0,
         dist: s.dist || 0, dur: s.dur || 0, note: opts.comments ? (s.note || '') : '',
@@ -7731,6 +7737,16 @@ TRAIN.copyDay = function (from, to, opts) {
   TRAIN.reindex();
   TRAIN.assertTick(to);
   return made;
+};
+
+/* Every set of an exercise's most recent day before `before`, warmups and
+   all, in the order they were done. */
+TRAIN.latestSetsOf = function (exId, before) {
+  var last = '';
+  TRAIN.historyOf(exId).forEach(function (s) { if (s.date < before && s.date > last) last = s.date; });
+  if (!last) return [];
+  return TRAIN.setsOn(last).filter(function (s) { return s.ex === exId; })
+    .sort(function (a, b) { return (a.ord || 0) - (b.ord || 0) || TRAIN.setStamp(a) - TRAIN.setStamp(b); });
 };
 
 /* Move a whole day. Each set keeps its own key and only its date changes,

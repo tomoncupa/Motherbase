@@ -537,6 +537,12 @@ where FitNotes says workout.
   exercises) and date; a tap copies that day. PICK ANOTHER DAY opens the
   calendar. Never copy a day he did not pick. COACH's LOG A SESSION is this
   TRAIN, so it gets the same.
+  **A pick copies that day's exercises, each with ITS latest sets and their
+  comments** (1.0.64, `copyDay` with `latest`, `TRAIN.latestSetsOf`). Tom,
+  2026-10-17: the day's own numbers were "literally the PAST session,
+  useless"; he picked A and "include the comments". Named sessions in
+  Training Routines do the same. Copy Session in More still copies a day as
+  it was.
 - **Analysis:** WEEKLY first, then BREAKDOWN and GRAPHS.
 
 **Every row that can be changed has a menu**, on a long press and a right click
