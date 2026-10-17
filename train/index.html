@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.62, 2026-10-15">
+<meta name="mb-version" content="1.0.63, 2026-10-17">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -3955,7 +3955,7 @@ TRAIN.exerciseDialog = function (exId, prefill) {
           wu, function (v) { wu = v; })));
 
       inc = UI.field('decimal', {
-        value: cur && cur.inc ? String(cur.inc) : '',
+        value: TRAIN.ownInc(cur) ? String(cur.inc) : '',
         placeholder: String(Rec.setting(APP.id, 'increment') || 2.5),
       });
       b.appendChild(UI.row('Weight increment', 'Blank uses the default', inc));
@@ -4019,6 +4019,7 @@ TRAIN.exerciseDialog = function (exId, prefill) {
         var changes = {
           name: nm, cat: sel.value, kind: kind,
           inc: inc.value ? Number(inc.value) : null,
+          incOwn: inc.value ? 1 : null,
           rest: rest.value ? parseInt(rest.value, 10) : null,
           also: Object.keys(also).length ? also : null,
           wu: wu || null,
@@ -4218,10 +4219,21 @@ function stepper(kind, value, step, onChange) {
   return box;
 }
 
-/* The step size: the exercise's own increment if it has one, else the app
-   setting, else 2.5. Expressed in whatever unit is on screen. */
+/* The step size: the exercise's own increment if somebody chose one, else
+   the app setting, else 2.5. Expressed in whatever unit is on screen.
+   Every starter and every exercise TRAIN made wrote its factory step (2.5,
+   or 1 on a lift with no weight) onto the row, so the Default Weight
+   Increment never reached them and a client's step could not be set per
+   person (Tom, 2026-10-17: "I need to set weight intervals per person"). So
+   a step equal to the factory one is not a choice unless Edit Exercise set
+   it (`incOwn`); a FitNotes exercise's step is FitNotes' own and counts. */
+TRAIN.ownInc = function (ex) {
+  var v = ex && +ex.inc;
+  if (!(v > 0)) return 0;
+  return ex.incOwn || ex.fnKind != null || (v !== 2.5 && v !== 1) ? v : 0;
+};
 TRAIN.increment = function (ex) {
-  var v = (ex && ex.inc) || Rec.setting(APP.id, 'increment') || 2.5;
+  var v = TRAIN.ownInc(ex) || Rec.setting(APP.id, 'increment') || 2.5;
   return Number(v) || 2.5;
 };
 
@@ -10594,7 +10606,7 @@ TRAIN.settingsPanel = function () {
       sw('Details Under Each Set', 'Split, setup and the change from last time, in words', 'rowDetail', 0, function () { draw(); });
 
       group('TRAINING');
-      num('Default Weight Increment', 'What + and − move by', 'increment', 2.5);
+      num('Default Weight Increment', CLIENT ? 'What + and − move by, for ' + (CLIENT_NAME.charAt(0) + CLIENT_NAME.slice(1).toLowerCase()) + ' only' : 'What + and − move by', 'increment', 2.5);
       sw('Auto-Select Next Set', 'Load the next unfinished set after saving', 'autoNext', 1);
       sw('Track Personal Records', 'Flag a set that beats your best', 'trackPRs', 1);
       sw('Keep Screen On', TRAIN.canWake() ? 'While TRAIN is open' : 'Not supported by this browser', 'keepAwake', 0,

@@ -72,6 +72,10 @@ describe the gym, not the training.
 ### Fields worth knowing
 
 - `set.kg` is always kilograms. `set.u` is the unit it was typed in.
+- `exercise.inc` is a step somebody chose only when `incOwn` is 1, the row is from
+  FitNotes (`fnKind`), or it is not the factory 2.5 or 1 (`TRAIN.ownInc`, 1.0.63).
+  Every starter and new exercise wrote 2.5, so until then Default Weight Increment
+  reached nothing, on Tom or a client. On a client it is theirs, so it is per person.
 - `exercise.wu` is the exercise's own weight unit, `kg` or `lb`; missing means
   the app's. **Never read `exercise.unit` as a unit**: the importer wrote `kg`
   there on all 270 of his FitNotes exercises, from a 0 that means default.
