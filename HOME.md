@@ -439,3 +439,21 @@ all three fixes offered.
 - **CONSISTENCY**: three mockups shown (2x2 big numbers; a day grid; rows
   of day bars), no fractions ("just data as clear as possible"). Waiting
   on his pick.
+
+## 2026-10-18, HOME 1.0.77: CONSISTENCY as four big numbers
+
+Tom picked mockup 1 of three: "I don't need to see fraction anymore, just
+data as clear as possible". Four tiles two by two (`.lc`): TRAINED (the
+sessions in a week, else the average a week), MEALS TRACKED a day,
+CALORIES as the gap a day to maintenance (else the target; else the
+average eaten), STEPS a day. Each: a quiet label, the number as big as its
+tile (`16cqi`/`34cqb`, clamped to `--f-5`..`--f-9`), its unit beside it or
+under it when there is no room, and the change against the stretch before
+with an up or down icon: green or red for training, meals and steps, plain
+for calories, since a smaller deficit is not better or worse on its own.
+No fractions, no target bars, no day dots (the Day dots choice is gone);
+the parts are the four tiles and the change line. Three tiles: the last
+spans both columns.
+[TESTED on the demo at 1920 (4x4 card 38px numbers, 6x5 48px, 3x3 24px,
+none cut) and 375 (nothing cut, the calories unit drops a line); no
+console errors. NOT on his screens.]
