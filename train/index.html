@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.64, 2026-10-17">
+<meta name="mb-version" content="1.0.65, 2026-10-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -623,6 +623,20 @@ div.prow{padding:0}
 .sesshead .nm span{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);
   text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sesshead.flat{box-shadow:none;background:none;padding:0;cursor:default}
+/* The strip and its how-it-went line are one card. */
+.sesswrap{border-radius:var(--radius-md);background:var(--surface-1);box-shadow:var(--e-1),var(--rim);overflow:hidden}
+.sesswrap > .sesshead{background:none;box-shadow:none;border-radius:0}
+.sessdesc{display:block;width:100%;min-height:var(--tap);padding:var(--s-2) var(--s-4);text-align:left;
+  border:0;border-top:1px solid var(--border);background:none;font:inherit;font-size:var(--f-2);
+  color:var(--text-2);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sessdesc.none{color:var(--text-muted)}
+.desctags .addtag{display:inline-flex;align-items:center;gap:var(--s-1)}
+.desctags .addtag .mb-ico{width:1em;height:1em}
+.raterow{display:flex;gap:var(--s-2)}
+.raterow button{flex:1;min-height:var(--tap);border:1px solid var(--border);border-radius:var(--radius-md);
+  background:var(--surface-2);color:var(--text-2);font-family:var(--font-display);font-size:var(--f-3);cursor:pointer}
+.raterow button.lit{border-color:var(--accent);color:var(--text-1)}
+.raterow button.on{background:var(--surface-3);color:var(--accent);font-weight:var(--w-bold)}
 .prow > .mb-ico{width:1.25em;height:1.25em;flex:0 0 auto;color:var(--text-muted)}
 
 /* Set by set: the change against the same working set last time. */
@@ -665,6 +679,7 @@ div.prow{padding:0}
 .recap .eyebrow b{color:var(--accent);font-weight:var(--w-bold);text-align:right;min-width:0}
 .recap .title{font-family:var(--font-display);font-size:var(--f-7);font-weight:var(--w-bold);
   line-height:var(--lh-tight);color:var(--text-1);overflow-wrap:anywhere}
+.recap .desc{font-size:var(--f-2);color:var(--text-2)}
 .recap .rule{height:calc(var(--border-width) * 2);background:var(--accent)}
 .recap .big4{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-4) var(--s-3)}
 .recap .big4 > div{display:flex;flex-direction:column;gap:var(--s-1);min-width:0}
@@ -8987,6 +9002,7 @@ TRAIN.sessionNames = function (except) {
 
 function sessionHead(date) {
   var s = Rec.get('session', date, '') || {}, ph = TRAIN.phaseOn(date);
+  var wrap = UI.el('div', 'sesswrap');
   var el = UI.el('div', 'sesshead mb-press');
   el.innerHTML = '<div class="nm">' +
     (s.name ? '<b>' + UI.esc(s.name) + '</b>' : '<b class="none">Name this session</b>') +
@@ -8994,12 +9010,134 @@ function sessionHead(date) {
   el.onclick = function () { Mobile.feedback('open'); TRAIN.sessionDialog(date); };
   withMenu(el, function (e) { sessionMenu(date, e); });
   el.appendChild(rowMenuBtn('Session options', function (e) { sessionMenu(date, e); }));
-  return el;
+  wrap.appendChild(el);
+  /* How it went: its own row, so rating it never brings the keyboard up */
+  var said = TRAIN.describeLine(s);
+  var d = UI.el('button', 'sessdesc mb-press' + (said ? '' : ' none'));
+  d.type = 'button';
+  d.textContent = said || 'How did it go?';
+  d.onclick = function () { Mobile.feedback('open'); TRAIN.describeDialog(date); };
+  wrap.appendChild(d);
+  return wrap;
 }
+
+/* ── how the session went: context tags and three ratings ──
+   Tom, 2026-10-18: "like 'fasted' or 'feeling strong'. Just something to
+   describe the overall context of that day", and "rating fields for energy
+   and pump and session quality". Sleep is STATUS's, so it is not asked here.
+   `tags` is a list of words; `energy`, `pump` and `quality` are 1 to 5, kept
+   as three fields so two devices rating different ones both keep theirs.
+   Every tap saves at once, like a tick. */
+TRAIN.RATINGS = [
+  { id: 'energy', name: 'Energy' },
+  { id: 'pump', name: 'Pump' },
+  { id: 'quality', name: 'Session quality', short: 'Quality' },
+];
+TRAIN.TAG_STARTERS = ['Fasted', 'Feeling strong', 'Feeling flat', 'Tired', 'Sore', 'Short on time', 'Pre-workout', 'New gym'];
+TRAIN.describeLine = function (s) {
+  s = s || {};
+  var bits = (Array.isArray(s.tags) ? s.tags : []).slice();
+  TRAIN.RATINGS.forEach(function (r) { if (s[r.id]) bits.push((r.short || r.name) + ' ' + s[r.id]); });
+  return bits.join(' · ');
+};
+/* Every tag he has used, most recent first, then the starters he has not. */
+TRAIN.sessionTags = function () {
+  var seen = {}, out = [];
+  var add = function (t) {
+    t = String(t || '').trim(); var k = t.toLowerCase();
+    if (!t || seen[k]) return; seen[k] = 1; out.push(t);
+  };
+  Rec.all('session').filter(function (r) { return r.payload && Array.isArray(r.payload.tags); })
+    .sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; })
+    .forEach(function (r) { r.payload.tags.forEach(add); });
+  TRAIN.TAG_STARTERS.forEach(add);
+  return out;
+};
+TRAIN.describeDialog = function (date) {
+  date = date || TRAIN.date;
+  var cur = function () { return Rec.get('session', date, '') || {}; };
+  UI.dialog({
+    title: 'HOW IT WENT', width: 440,
+    body: function (b) {
+      var g = UI.el('div', 'mb-group'); g.textContent = 'CONTEXT'; b.appendChild(g);
+      var chips = UI.el('div', CHIPS + ' desctags');
+      b.appendChild(chips);
+      var drawTags = function () {
+        var on = (cur().tags || []).map(function (t) { return String(t).toLowerCase(); });
+        var all = TRAIN.sessionTags();
+        (cur().tags || []).forEach(function (t) {
+          if (all.map(function (x) { return x.toLowerCase(); }).indexOf(String(t).toLowerCase()) < 0) all.unshift(t);
+        });
+        chips.innerHTML = '';
+        all.forEach(function (t) {
+          var c = UI.el('button', CHIP + ' mb-press mb-tap' + (on.indexOf(t.toLowerCase()) >= 0 ? ' on' : ''));
+          c.type = 'button';
+          c.textContent = t;
+          c.onclick = function () { toggle(t); };
+          chips.appendChild(c);
+        });
+        var add = UI.el('button', CHIP + ' mb-press mb-tap addtag');
+        add.type = 'button';
+        add.innerHTML = ico('add') + '<span>Add</span>';
+        add.onclick = function () {
+          askName('New tag', '', function (v) {
+            var have = (cur().tags || []).some(function (x) { return String(x).toLowerCase() === v.toLowerCase(); });
+            if (!have) toggle(v);
+          });
+        };
+        chips.appendChild(add);
+      };
+      var toggle = function (t) {
+        var tags = (cur().tags || []).slice(), k = t.toLowerCase();
+        var i = tags.map(function (x) { return String(x).toLowerCase(); }).indexOf(k);
+        if (i >= 0) tags.splice(i, 1); else tags.push(t);
+        TRAIN.patchSession(date, { tags: tags.length ? tags : undefined });
+        Mobile.feedback('select');
+        drawTags(); draw();
+      };
+      drawTags();
+
+      TRAIN.RATINGS.forEach(function (r) {
+        var gg = UI.el('div', 'mb-group'); gg.textContent = r.name.toUpperCase(); b.appendChild(gg);
+        var row = UI.el('div', 'raterow');
+        row.setAttribute('role', 'radiogroup');
+        row.setAttribute('aria-label', r.name);
+        var paint = function () {
+          var v = cur()[r.id] || 0;
+          [].forEach.call(row.children, function (x, i) {
+            x.classList.toggle('on', i + 1 === v);
+            x.classList.toggle('lit', i + 1 <= v);
+            x.setAttribute('aria-checked', i + 1 === v ? 'true' : 'false');
+          });
+        };
+        for (var n = 1; n <= 5; n++) (function (n) {
+          var x = UI.el('button', 'mb-press');
+          x.type = 'button';
+          x.setAttribute('role', 'radio');
+          x.textContent = n;
+          /* the same number again takes the rating off */
+          x.onclick = function () {
+            TRAIN.patchSession(date, (function () { var o = {}; o[r.id] = cur()[r.id] === n ? undefined : n; return o; })());
+            Mobile.feedback('select');
+            paint(); draw();
+          };
+          row.appendChild(x);
+        })(n);
+        b.appendChild(row);
+        paint();
+      });
+      var tip = UI.el('div', 'empty');
+      tip.textContent = '1 is the worst, 5 the best. Tap a number again to clear it.';
+      b.appendChild(tip);
+    },
+    actions: [{ label: 'DONE', kind: 'go' }],
+  });
+};
 function sessionMenu(date, e) {
   var ph = TRAIN.phaseOn(date);
   menuAt(e, [
     { label: 'Name Session', fn: function () { TRAIN.sessionDialog(date); } },
+    { label: 'How It Went', fn: function () { TRAIN.describeDialog(date); } },
     { label: 'Compare With A Day', fn: function () { TRAIN.pickVs(date); } },
     { label: ph ? 'Edit Training Block' : 'New Training Block', fn: function () { TRAIN.phaseDialog(ph ? ph.key : null); } },
     { label: 'Share Picture', fn: function () { TRAIN.shareRecap(date); } },
@@ -9448,6 +9586,11 @@ TRAIN.recapCard = function (date, cmp, off, share, asPct) {
   var h = '<div class="eyebrow"><span>' + esc(when) + '</span>' +
       (ph ? '<b>' + esc(TRAIN.phaseLine(ph, date)) + '</b>' : '') + '</div>' +
     '<div class="title">' + esc(st.name || 'Training session') + '</div>' +
+    (function () {
+      /* how it went is his own note on the day, kept off a shared picture */
+      var said = share ? '' : TRAIN.describeLine(Rec.get('session', date, ''));
+      return said ? '<div class="desc">' + esc(said) + '</div>' : '';
+    })() +
     '<div class="rule"></div>' +
     '<div class="big4">' +
       cell('Volume', volF(st.vol), TRAIN.unitLabel(), st.vol, vs && vs.vol, volF) +

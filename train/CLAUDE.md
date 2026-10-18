@@ -49,7 +49,7 @@ see the root brief on many writers. Every edit merges into the row as it is
 | `excat` | category id, the slug of its name | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex, and there are only twelve |
 | `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar, wu}` |
 | `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, plan, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
-| `session` | `''` | `{start, end, note, from, order, name, vs}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, and a day he picked to compare it with |
+| `session` | `''` | `{start, end, note, from, order, name, vs, tags, energy, pump, quality}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, a day he picked to compare it with, and how it went: context tags and three 1 to 5 ratings |
 | `phase` | phase id | `{name, start, end}` — a training block. `end` is optional |
 | `sgroup` | group id, dated | `{name, slot, ex:[ids], jump, resthold}` — a superset |
 | `program` | program id | `{name, ord}` — a routine |
@@ -972,6 +972,13 @@ Curl separate; and *"There is no barbell squat?"*
   (a 2022 day beat Sep 11); the session card shows total work (weight x
   reps) per lift and session against the last same session, drops shown
   on his screens, gains only when shared.
+
+## How it went (1.0.65, 2026-10-18)
+
+- Tom: descriptors "like 'fasted' or 'feeling strong'. Just something to describe the overall context of that day", and "rating fields for energy and pump and session quality". **Sleep is STATUS's**; never ask it here.
+- `session.tags` (words, his own or the starters in `TRAIN.TAG_STARTERS`, his used ones first) and `energy`, `pump`, `quality` (1 to 5, three fields so two devices merge). Every tap saves at once; the same number again clears.
+- The session strip is one card: name and block above, the how-it-went line below (`.sessdesc`, its own 44px button, so rating never brings up the keyboard). Session menu: How It Went. The session card shows the line on screen, **never on a shared picture**.
+- Works with no name. Not yet read by COACH, Analysis or a graph.
 
 ## Parked
 
