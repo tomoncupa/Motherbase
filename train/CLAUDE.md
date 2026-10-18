@@ -257,6 +257,19 @@ COUNT. Changing a weight in Settings works records out again.
 stored `pr` flag is still the all-time, still-standing rule. Block records are
 worked out when shown.
 
+**Five kinds, five symbols on a set row** (1.0.73, `TRAIN.prKinds`,
+`TRAIN.prMarks`). Tom's picks from a page of 40 ideas, 2026-10-19: Lifetime PR a
+trophy (the stored `pr`), Block PR a medal (the still-standing rule inside the
+set's own block), Weight PR a barbell (heaviest ever at that many reps), Reps at
+weight PR a crown (most reps ever at that exact weight), Volume PR rising bars
+(most weight x reps in one set). **Weight, reps and volume are what the set was
+on the day it was lifted and keep their symbol after a later set beats it** (his
+pick A), and need an earlier set to have beaten. **A set shows every kind it is**
+(his pick B), small: on TRACK a line of 12px symbols under the numbers, so the
+row stays 44px and the note keeps its room (beside the numbers, five took the
+note down to 6px); on the log a two-row cluster after the numbers. Gold, the
+accent. The Personal Records sheet ends with SYMBOLS ON A SET, the key.
+
 ## Training, not working out
 
 Built 2026-09-14 from Tom's answers. All of it sits on top of FitNotes; none of
@@ -659,6 +672,11 @@ is paging past 100 sessions, not folding, and stays. What it does, CSS only:
 
 TRAIN never edits `shared/`; a need goes here. (HISTORY.md: For the foundation) Still open:
 - ~~**Keep the middle of the story clear**~~ Done 2026-10-02: `IO.share` takes a `frame` builder and `IO.frameShot` pictures it edge to edge. The session uses it; the week, Profile, records and GRAPH pictures are still cards.
+- **The five record symbols** (trophy, medal, barbell, crown, rising bars) are
+  drawn in TRAIN (`PR_PATH`) because an app session never edits `shared/`. They
+  belong in `shared/icons.js` as roles (`pr-life`, `pr-block`, `pr-weight`,
+  `pr-reps`, `pr-vol`) so a theme's stroke reaches them; `record` already points
+  at the trophy. Once there, `TRAIN.prIcon` should call `ico()`.
 - **SHEET still keeps split sets apart** (`sheet/index.html`, `splitNote`, records
   read `!s.split`). TRAIN counts them by effective reps since 1.0.70, so SHEET's
   feats can disagree with TRAIN's records. A SHEET session should copy
@@ -1035,6 +1053,12 @@ Curl separate; and *"There is no barbell squat?"*
 - **A tap opens one SESSION sheet**: Name (with earlier names as chips), Notes (the session comment), CONTEXT tags and the three ratings. Nothing is focused when it opens. Name and Notes save on change and when the sheet closes. Name Session in the menus still opens the old sheet, which has Compare With and the block.
 - **The comment's own card under the time is hidden** (`train.noteCard` 1 brings it back), so it is not shown twice.
 - Watched at 390px: a 108-character comment and context at 8px in three lines, the strip still 44px.
+
+## Five record symbols (1.0.73, 2026-10-19)
+
+- See Personal records. Watched in headless Chromium at 390x844 on seeded sets:
+  110x10 showed all five, 90x12 Lifetime and Block, 80x5 none; every TRACK row
+  44px; the key in the records sheet. Not watched on the iPhone.
 
 ## Parked
 

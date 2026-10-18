@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.72, 2026-10-18">
+<meta name="mb-version" content="1.0.73, 2026-10-19">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -667,6 +667,17 @@ main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hid
 .dl.up{color:var(--success)}
 .setrow .upmark,.tset .upmark{display:inline-flex;align-items:center;justify-content:center;width:var(--s-5,20px);flex:none;color:var(--success)}
 .setrow .upmark svg,.tset .upmark svg{width:100%;height:auto}
+/* the record symbols: small, two to a column, so all five fit beside the
+   numbers (Tom: "make the symbols smaller to fit") */
+.prm{display:inline-grid;grid-auto-flow:column;grid-template-rows:repeat(2,auto);align-content:center;
+  gap:var(--s-1);flex:none;color:var(--accent);font-size:var(--f-1);margin-left:var(--s-1);align-self:center}
+.prm i{display:block;width:1em;height:1em}
+.prm svg{display:block;width:1em;height:1em}
+.tset .grow .prm{display:flex;justify-content:flex-end;margin:0;gap:var(--s-1);line-height:1}
+.prkey{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-1) 0}
+.prkey .prm{font-size:var(--f-3);margin:0}
+.prkey .k{font-weight:var(--w-bold)}
+.prkey .s{color:var(--text-muted);font-size:var(--f-1)}
 .dl.down{color:var(--warn)}
 .vsline{display:flex;gap:var(--s-2);flex-wrap:wrap;justify-content:space-between;
   padding:var(--s-2) var(--s-4) 0;font-size:var(--f-1);color:var(--text-muted)}
@@ -3500,7 +3511,7 @@ function drawWorkout(m) {
         (s.warm ? ' warm' : '') + (TRAIN.pending(s) ? ' plan' : ''));
       row.innerHTML = '<span class="cmt" title="' + UI.esc(s.note || '') + '">' + BUBBLE + '</span>' +
         (s.warm ? '<span class="wtag">warmup</span>' : '') +
-        '<span class="grow"></span>' + setCols(s, g.ex) +
+        '<span class="grow"></span>' + setCols(s, g.ex) + TRAIN.prMarks(s) +
         /* its own line: weight, reps and a percentage do not fit beside the numbers at 390px */
         (cr && cr.bySet[s.key] && cr.bySet[s.key].volUp
           ? '<span class="upmark" aria-label="More than last time" title="' + UI.esc(cr.bySet[s.key].text) + '">' + ico('collapse') + '</span>' : '') +
@@ -4479,7 +4490,9 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
     if (sut) meta.push(UI.esc(sut));
     if (delta) meta.push(deltaChip(delta));
   }
-  body.innerHTML = setCols(s, TRAIN.exId) +
+  /* the kinds of record it set, each its own symbol, on a line of their
+     own under the numbers (1.0.73): beside them, five took the note's room */
+  body.innerHTML = setCols(s, TRAIN.exId) + TRAIN.prMarks(s) +
     (meta.length ? '<span class="tmeta">' + meta.join(' · ') + '</span>' : '');
   row.appendChild(body);
 
@@ -7536,6 +7549,14 @@ TRAIN.recordsSheet = function (exId) {
       if (rec.max1rm) body.appendChild(recLine('Estimated 1RM',
         fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, TRAIN.sr(rec.max1rm)), TRAIN.unit(exId))) + ' ' + U, rec.max1rm.date));
       b.appendChild(body);
+      /* what each symbol on a set row means (1.0.73) */
+      var kg0 = UI.el('div', 'mb-group'); kg0.textContent = 'SYMBOLS ON A SET'; body.appendChild(kg0);
+      TRAIN.PR_KINDS.forEach(function (x) {
+        var r = UI.el('div', 'prkey');
+        r.innerHTML = '<span class="prm"><i>' + TRAIN.prIcon(x.id) + '</i></span><span><span class="k">' + UI.esc(x.name) +
+          '</span><br><span class="s">' + UI.esc(x.say) + '</span></span>';
+        body.appendChild(r);
+      });
       var shr = UI.el('button', 'mb-btn mb-press mb-tap');
       shr.style.width = '100%';
       shr.style.marginTop = 'var(--s-3)';
@@ -9807,6 +9828,92 @@ TRAIN.sessionRecords = function (date, off) {
     });
   });
   return out;
+};
+
+/* ═══════════════════ FIVE KINDS OF RECORD (1.0.73) ═══════════════════
+   Tom, 2026-10-18, each with its own symbol on a set row (his picks from
+   a page of 40 ideas, 2026-10-19):
+     Lifetime PR        the stored `pr` flag: all-time, still standing     trophy
+     Block PR           the same rule inside the set's own training block  medal
+     Weight PR          the heaviest ever at that many reps               barbell
+     Reps at weight PR  the most reps ever at that exact weight           crown
+     Volume PR          the most weight x reps in one set                 rising bars
+   Weight, reps and volume are what the set was ON THE DAY it was lifted,
+   against everything before it, and it keeps its symbol after a later set
+   beats it (his pick A). It needs an earlier set to have beaten: the first
+   8 ever is not a Weight PR at 8. Reps are effective reps
+   (TRAIN.effReps) everywhere but volume, which is every rep. Working sets
+   that count only. A set shows every kind it is (his pick B), small. */
+TRAIN.PR_KINDS = [
+  { id: 'life', name: 'Lifetime PR', say: 'Nothing heavier at these reps or more, ever' },
+  { id: 'block', name: 'Block PR', say: 'The same, inside this training block' },
+  { id: 'weight', name: 'Weight PR', say: 'Heaviest ever at these reps, when lifted' },
+  { id: 'reps', name: 'Reps at weight PR', say: 'Most reps ever at this weight, when lifted' },
+  { id: 'vol', name: 'Volume PR', say: 'Most weight x reps in one set, when lifted' }
+];
+/* Drawn here until the foundation takes them (see the brief, For the
+   foundation). currentColor only, so a theme's accent paints them. */
+var PR_PATH = {
+  life: '<path d="M7 4h10v5a5 5 0 01-10 0z" fill="currentColor" stroke="currentColor"/><path d="M7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3M12 14v4M8 21h8" fill="none" stroke="currentColor"/>',
+  block: '<path d="M8 2l4 7 4-7" fill="none" stroke="currentColor"/><circle cx="12" cy="15" r="5" fill="currentColor" stroke="currentColor"/>',
+  weight: '<path d="M1 12h22" fill="none" stroke="currentColor"/><path d="M4 6h3v12H4zM17 6h3v12h-3zM7.5 8h2v8h-2zM14.5 8h2v8h-2z" fill="currentColor"/>',
+  reps: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z" fill="currentColor" stroke="currentColor"/>',
+  vol: '<path d="M5 20v-5M10 20v-9M15 20v-12M20 20V4" fill="none" stroke="currentColor"/>'
+};
+TRAIN.prIcon = function (id) {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (PR_PATH[id] || '') + '</svg>';
+};
+TRAIN.prKinds = function (exId) {
+  var c = TRAIN._prK;
+  if (!c || c.built !== TRAIN.idx.built) c = TRAIN._prK = { built: TRAIN.idx.built, ex: {} };
+  if (c.ex[exId]) return c.ex[exId];
+  var out = c.ex[exId] = {}, f = TRAIN.fieldsOf(exId);
+  if (f[0] !== 'w' || f[1] !== 'r') return out;
+  var rd = function (kg) { return Math.round((kg || 0) * TRAIN.PR_SCALE) / TRAIN.PR_SCALE; };
+  var work = TRAIN.historyOf(exId).filter(function (x) {
+    return !x.warm && (x.kg || 0) > 0 && (x.r || 0) > 0 && TRAIN.counts(x);
+  });
+  var when = function (a, b) {
+    return a.date < b.date ? -1 : a.date > b.date ? 1 : ((a.ord || 0) - (b.ord || 0)) || TRAIN.setStamp(a) - TRAIN.setStamp(b);
+  };
+  var atReps = {}, atKg = {}, vol = 0, any = false;
+  work.slice().sort(when).forEach(function (s) {
+    var k = {}, sr = TRAIN.sr(s), n = Math.floor(sr), w = rd(s.kg), v = s.kg * s.r;
+    if (s.pr) k.life = 1;
+    if (atReps[n] != null && w > atReps[n]) k.weight = 1;
+    if (atKg[w] != null && sr > atKg[w] + 1e-6) k.reps = 1;
+    if (any && v > vol + 1e-6) k.vol = 1;
+    atReps[n] = Math.max(atReps[n] || 0, w);
+    atKg[w] = Math.max(atKg[w] || 0, sr);
+    vol = Math.max(vol, v);
+    any = true;
+    out[s.key] = k;
+  });
+  /* the still-standing rule, one block at a time */
+  var blocks = {};
+  work.forEach(function (s) {
+    var ph = TRAIN.phaseOn(s.date);
+    if (ph) (blocks[ph.from] = blocks[ph.from] || []).push(s);
+  });
+  Object.keys(blocks).forEach(function (b) {
+    var maxR = 0;
+    blocks[b].sort(function (a, c) { return rd(c.kg) - rd(a.kg) || TRAIN.sr(c) - TRAIN.sr(a) || when(a, c); })
+      .forEach(function (s) {
+        var r = TRAIN.sr(s);
+        if (r > maxR) { out[s.key].block = 1; maxR = r; }
+      });
+  });
+  return out;
+};
+/* The symbols for one set, in the order above; '' when it is none. */
+TRAIN.prMarks = function (s) {
+  var k = TRAIN.prKinds(s.ex)[s.key];
+  if (!k) return '';
+  var on = TRAIN.PR_KINDS.filter(function (x) { return k[x.id]; });
+  if (!on.length) return '';
+  var names = on.map(function (x) { return x.name; }).join(', ');
+  return '<span class="prm" role="img" aria-label="' + UI.esc(names) + '" title="' + UI.esc(names) + '">' +
+    on.map(function (x) { return '<i>' + TRAIN.prIcon(x.id) + '</i>'; }).join('') + '</span>';
 };
 
 /* ═══════════════════ THE CARDS ═══════════════════ */
