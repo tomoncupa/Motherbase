@@ -42,6 +42,9 @@ Opening it twice does nothing. There is only ever one.
 
 Right click the tray icon next to the clock for **Open STATUS**, **Check in
 now**, always on top, the shortcut, and **Quit**.
+Right clicking the widget or the app opens the same menu where the page has
+no menu of its own (2026-10-18). Coming back from the whole app after moving
+it, the widget shrinks into the app's top right corner and stays there.
 
 ## Its data
 

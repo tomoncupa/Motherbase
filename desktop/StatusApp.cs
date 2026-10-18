@@ -111,6 +111,11 @@ class App : Form
         new System.Collections.Generic.Dictionary<uint, string[]>();
     bool dragging;
     int grabX, grabY;
+    ContextMenu trayMenu;
+    /* where the whole app was put when it opened, and its corner before a
+       status check took the screen, so going back lands where he left it */
+    Point appPlaced = new Point(int.MinValue, 0);
+    int backRight = int.MinValue, backTop;
 
     /* A few lines beside the program saying what happened, so a thing that
        goes quiet can be asked why instead of guessed at. Fresh every run. */
@@ -219,6 +224,12 @@ class App : Form
         c.Settings.AreBrowserAcceleratorKeysEnabled = false;
         c.Settings.IsStatusBarEnabled = false;
         c.WebMessageReceived += Message;
+        /* Tom, 2026-10-18: a right click on the window offers the tray's
+           menu, Always on top first. Only where the page did not take the
+           right click for a menu of its own. */
+        c.AddScriptToExecuteOnDocumentCreatedAsync(
+            "addEventListener('contextmenu', function (e) { if (e.defaultPrevented) return; e.preventDefault();" +
+            " try { chrome.webview.postMessage('menu'); } catch (x) {} });");
         /* ── this program is STATUS ──
            Its Home button used to navigate the widget's own window to the home
            screen, and the window was then stranded: the home screen has none
@@ -300,6 +311,7 @@ class App : Form
             return;
         }
         if (verb == "quit") { Quit(); return; }
+        if (verb == "menu") { if (trayMenu != null) trayMenu.Show(this, PointToClient(Cursor.Position)); return; }
         /* The tray's settings, asked for from STATUS's own Settings, so there
            is one place to set them. The tray menu still works. */
         if (verb == "top")
@@ -330,17 +342,33 @@ class App : Form
            other verb is a size and a size under this is a misread message. */
         if (verb != "takeover" && (w < 120 || h < 60)) return;
 
-        if (verb == "widget") { mode = "widget"; ClientSize = new Size(w, h); PlaceWidget(); Round(); }
+        if (verb == "widget")
+        {
+            /* Tom, 2026-10-18: "it repositions itself if I move the big view
+               and back." The widget went back to where it was before the app
+               opened, wherever the app had been moved to. Back from an app he
+               moved, it shrinks into the app's top right corner, where the
+               chevron is, and stays there. */
+            bool moved = mode == "app" && Location != appPlaced;
+            int right = Left + Width, top = Top;
+            mode = "widget"; ClientSize = new Size(w, h);
+            if (moved) { KeepCorner(right, top); posX = Left; posY = Top; SaveCfg(); }
+            else PlaceWidget();
+            Round();
+        }
         else if (verb == "app")
         {
             /* Opening the whole app used to throw the window into the middle
                of the screen, which is not where he was looking. It grows from
                where the widget already is, and only moves as far as it must
                to stay on the screen. */
-            mode = "app";
             int right = Left + Width, top = Top;
+            if (mode == "checkin" && backRight != int.MinValue) { right = backRight; top = backTop; }
+            backRight = int.MinValue;
+            mode = "app";
             ClientSize = new Size(w, h);
             KeepCorner(right, top);
+            appPlaced = Location;
             Round();
         }
         else if (verb == "checkin" || verb == "takeover")
@@ -370,6 +398,7 @@ class App : Form
                    reason; this is the half that holds if anything ever sends
                    a second. */
                 if (mode == "checkin") return;
+                if (mode == "app") { backRight = Left + Width; backTop = Top; }
                 mode = "checkin";
                 var scr = Screen.FromPoint(Cursor.Position).Bounds;
                 Square();
@@ -693,6 +722,7 @@ class App : Form
         tray.Icon = TrayIcon();
         tray.Text = "STATUS";
         tray.ContextMenu = menu;
+        trayMenu = menu;
         tray.Visible = true;
         tray.DoubleClick += (s, e) => Front();
         MarkKeys(keys);
