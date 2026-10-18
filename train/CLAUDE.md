@@ -1029,6 +1029,13 @@ Curl separate; and *"There is no barbell squat?"*
 - **The empty day in such a block leads with Next: <day>**, then Another Day Of <block> (a menu, also on hold or right click of Next), then Start New Session and Copy Past Session.
 - **Set one's load** (`suggestFill`, `topBand`): last time's sets, with set one moved against the exercise's top band (`plan.bands`, else from `plan.reps` and `plan.n` as FORGE's `bands()`): past the top two steps heavier, at the top one step, inside the same, under it one step lighter. No range on the routine (a TRAIN-built one): last time as it was. **The step rule is Claude's reading of the Algrowrithm, not Tom's words yet.** Watched: 28 kg x 12 against 9-10 became 33 kg.
 
+## Notes and context in the session strip (1.0.72, 2026-10-18)
+
+- Tom, pointing at the strip: "This is where I want to put set notes and context, have it show up also in the blank space." The strip shows the name with the block stacked under it (at most 45% of the width), and beside them `.sessnote`: the session comment, then tags and ratings. It is never clipped: `fitLine` steps 12 to 8px to fit two lines, then wraps. Empty, it says Notes and context.
+- **A tap opens one SESSION sheet**: Name (with earlier names as chips), Notes (the session comment), CONTEXT tags and the three ratings. Nothing is focused when it opens. Name and Notes save on change and when the sheet closes. Name Session in the menus still opens the old sheet, which has Compare With and the block.
+- **The comment's own card under the time is hidden** (`train.noteCard` 1 brings it back), so it is not shown twice.
+- Watched at 390px: a 108-character comment and context at 8px in three lines, the strip still 44px.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.71, 2026-10-18">
+<meta name="mb-version" content="1.0.72, 2026-10-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -647,9 +647,11 @@ main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hid
 .sesshead.flat{box-shadow:none;background:none;padding:0;cursor:default}
 /* The strip on the day: one line, as short as a tap allows. */
 .sesshead.slim{padding-top:0;padding-bottom:0}
-.sesshead.slim .nm{flex-direction:row;align-items:baseline;gap:var(--s-2)}
+.sesshead.slim .nm{flex-direction:column;flex:0 1 auto;max-width:45%;line-height:var(--lh-tight)}
 .sesshead.slim .nm b{font-size:var(--f-3);flex:0 1 auto}
-.sesshead.slim .nm span{flex:1 1 0;text-transform:none;letter-spacing:normal;font-size:var(--f-1)}
+.sesshead.slim .nm span{flex:0 1 auto;text-transform:none;letter-spacing:normal;font-size:var(--f-1)}
+.sessnote{flex:1 1 0;min-width:0;font-size:var(--f-1);line-height:var(--lh-tight);color:var(--text-2);overflow-wrap:anywhere}
+.sessnote.none{color:var(--text-muted)}
 .desctags .addtag{display:inline-flex;align-items:center;gap:var(--s-1)}
 .desctags .addtag .mb-ico{width:1em;height:1em}
 .raterow{display:flex;gap:var(--s-2)}
@@ -3428,7 +3430,10 @@ function drawWorkout(m) {
       (sess.end ? '<span class="len">' + fmtLen(sess.start, sess.end) + '</span>' : '');
     m.appendChild(t);
   }
-  if (sess.note) {
+  /* The comment lives in the session strip since 1.0.72 (Tom: "This is
+     where I want to put set notes and context"); its own card here is kept
+     behind this switch, off, in case it is wanted back. */
+  if (sess.note && Rec.setting(APP.id, 'noteCard') === 1) {
     var dn = UI.el('div', 'exblock');
     dn.style.padding = 'var(--s-3) var(--s-4)';
     dn.innerHTML = '<div class="daynote">' + UI.esc(sess.note) + '</div>';
@@ -9271,16 +9276,32 @@ TRAIN.sessionNames = function (except) {
 function sessionHead(date) {
   var s = Rec.get('session', date, '') || {}, ph = TRAIN.phaseOn(date);
   /* One line, Tom 2026-10-18: "minimize the amount of space that entry box
-     takes". The name, then what describes the day, then the block. */
-  var said = [TRAIN.describeLine(s), ph ? TRAIN.phaseLine(ph, date) : ''].filter(Boolean).join(' · ');
+     takes". The name and block on the left; the session's comment and how
+     it went in the space beside them ("This is where I want to put set
+     notes and context, have it show up also in the blank space"), as small
+     as it needs to be and never cut off. A tap opens all of it. */
   var el = UI.el('div', 'sesshead slim mb-press');
   el.innerHTML = '<div class="nm">' +
     (s.name ? '<b>' + UI.esc(s.name) + '</b>' : '<b class="none">Name this session</b>') +
-    (said ? '<span>' + UI.esc(said) + '</span>' : '') + '</div>';
-  el.onclick = function () { Mobile.feedback('open'); TRAIN.sessionDialog(date); };
+    (ph ? '<span>' + UI.esc(TRAIN.phaseLine(ph, date)) + '</span>' : '') + '</div>';
+  var said = [String(s.note || '').trim(), TRAIN.describeLine(s)].filter(Boolean).join(' · ');
+  var sn = UI.el('span', 'sessnote' + (said ? '' : ' none'));
+  sn.textContent = said || 'Notes and context';
+  el.appendChild(sn);
+  el.onclick = function () { Mobile.feedback('open'); TRAIN.describeDialog(date); };
   withMenu(el, function (e) { sessionMenu(date, e); });
   el.appendChild(rowMenuBtn('Session options', function (e) { sessionMenu(date, e); }));
+  setTimeout(function () { fitLine(sn, 2); }, 0);
   return el;
+}
+/* A small line that steps down until it fits `lines` lines, then wraps
+   rather than hide a word. The set rows' notes work the same way. */
+function fitLine(el, lines) {
+  if (!el || !el.isConnected || !el.textContent) return;
+  for (var i = 0; i < NOTE_PX.length; i++) {
+    el.style.fontSize = NOTE_PX[i] + 'px';
+    if (el.scrollHeight <= Math.ceil(NOTE_PX[i] * 1.25 * lines) + 1 && el.scrollWidth <= el.clientWidth + 1) return;
+  }
 }
 
 /* ── how the session went: context tags and three ratings ──
@@ -9318,9 +9339,37 @@ TRAIN.sessionTags = function () {
 TRAIN.describeDialog = function (date) {
   date = date || TRAIN.date;
   var cur = function () { return Rec.get('session', date, '') || {}; };
+  var nameIn = null, noteIn = null;
+  var keep = function () {
+    if (!nameIn) return;
+    var nm = String(nameIn.value || '').trim(), nt = String(noteIn.value || '').trim(), c = cur();
+    var ch = {};
+    if ((c.name || '') !== nm) ch.name = nm || undefined;
+    if ((c.note || '') !== nt) ch.note = nt;
+    if (Object.keys(ch).length) { TRAIN.patchSession(date, ch); draw(); }
+  };
   UI.dialog({
-    title: 'DESCRIBE SESSION', width: 440,
+    title: 'SESSION', width: 440, onClose: keep,
     body: function (b) {
+      /* his words first, then the taps; nothing is focused, so the
+         keyboard waits until he presses into a box */
+      nameIn = UI.field('text', { value: cur().name || '', placeholder: 'Back 1' });
+      nameIn.addEventListener('change', keep);
+      b.appendChild(UI.row('Name', 'Sessions with the same name are compared', nameIn));
+      var names = TRAIN.sessionNames(cur().name).slice(0, 8);
+      if (names.length) {
+        var nc = UI.el('div', CHIPS);
+        names.forEach(function (nm) {
+          var c = UI.el('button', CHIP + ' mb-press mb-tap');
+          c.type = 'button'; c.textContent = nm;
+          c.onclick = function () { nameIn.value = nm; keep(); };
+          nc.appendChild(c);
+        });
+        b.appendChild(nc);
+      }
+      noteIn = UI.field('note', { value: cur().note || '', placeholder: 'Notes', rows: 2 });
+      noteIn.addEventListener('change', keep);
+      b.appendChild(UI.row('Notes', '', noteIn));
       var g = UI.el('div', 'mb-group'); g.textContent = 'CONTEXT'; b.appendChild(g);
       var chips = UI.el('div', CHIPS + ' desctags');
       b.appendChild(chips);
@@ -9392,7 +9441,7 @@ TRAIN.describeDialog = function (date) {
       tip.textContent = '1 is the worst, 5 the best. Tap a number again to clear it.';
       b.appendChild(tip);
     },
-    actions: [{ label: 'DONE', kind: 'go' }],
+    actions: [{ label: 'DONE', kind: 'go', fn: function () { keep(); } }],
   });
 };
 function sessionMenu(date, e) {
