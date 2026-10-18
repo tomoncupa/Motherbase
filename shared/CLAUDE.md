@@ -147,6 +147,48 @@ files were newer." A worker too old to answer is given 20 seconds. Watched in
 headless Chromium on QUESTS: old copy kept, one press, new copy running. The
 Browser pane cannot register a worker at all, so test it with Playwright.
 
+## Catching up (2026-10-18)
+
+Tom's iPhone TRAIN app ran 1.0.61 on 2026-10-18 while main had 1.0.68, and he
+hit the Copy Past Session fixed on the 15th. Its device row stopped on
+2026-10-15 17:34 Manila: one page booted then and, most likely, was RESUMED
+for three days, never opened. A resume fetches nothing, so the
+one-open-late refresh never ran. Not proved on the phone; it is the one
+story that fits the device row.
+
+- **`check`** (sw.js message, asked by `mobile.js` `catchUp`): the top page
+  sends its address and every file it and its frames loaded, with when
+  (Resource Timing). sw.js answers the files whose kept copy changed after
+  that moment, and the `mb-version` on the network's copy of the page.
+  Either one means old code. Asked 1s after `load`, and on a resume after
+  `Mobile.freshGap` (15 minutes) hidden or a page-cache restore, where it
+  first asks the network for every file itself.
+- **The reopen** is `?fresh=1` (network first for 20s), only if he has not
+  pressed a key or touched the page since it opened or came back, only
+  within 8s of asking, at most once a minute per tab. It toasts "Updated to
+  1.0.68." (`mb.updated` = `auto`) and leaves why in sessionStorage
+  `mb.catchUp`. Touched: nothing moves, the newer copy is already kept, and
+  the next open or long resume has it.
+- **CHANGED** is a cache of its own, `mbmeta`, address to time, written only
+  when the network's copy differs from the kept one BY CONTENT. GitHub Pages
+  restamps every file (ETag and Last-Modified) on every push of anything, so
+  a stamp says nothing; UPDATE NOW's count went to content the same day. A
+  fresh open records nothing: it was handed the network's copy.
+- **Every kept-copy write is inside `waitUntil`.** Until then the write ran
+  loose after the event finished; WebKit may stop a worker then.
+- **Every answer is `Cache-Control: no-cache`.** A kept copy carried
+  GitHub's max-age=600, and the browser's memory cache handed it to the next
+  page without asking the worker: watched in Chromium AND WebKit, where a
+  shared-file push never reached three opens in a row.
+- **Exact address first**, then the path ignoring the query: by path alone
+  the FIRST copy kept wins forever.
+- `tools/sw-check.py` serves the repo the way Pages does and drives TRAIN
+  through pushes, opens and resumes, in WebKit and headless Chromium. 10 of
+  10 both; `--head` runs the last commit's files (4 of 10). Eleven
+  `catch-up:` smoke checks run the real sw.js against a stand-in cache.
+- Still only proved in Playwright. iOS's resume and `visibilitychange` are
+  the phone's to show.
+
 ## `creatures.js` 0.2.0: dot art, all 151 (2026-09-23)
 
 Tom pointed at a page of bead patterns and said to pull the Pokémon from it.

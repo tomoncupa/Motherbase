@@ -976,6 +976,109 @@ function offline() {
   nav.serviceWorker.register(root + 'sw.js', { scope: root, updateViaCache: 'none' })
     .then(function (reg) { try { reg.update(); } catch (e) {} })
     .catch(function () {});
+  catchUp(nav, root);
+}
+
+/* ── catching up: a page running older code than the hosted copy ──
+   Added 2026-10-18. Tom's iPhone TRAIN ran 1.0.61 for three days while
+   1.0.68 was live, and he hit a Copy Past Session fixed on the 15th. The
+   phone's-copy-first rule promised one open late, and an iPhone home-screen
+   app is mostly not opened at all: it is RESUMED, the same page from memory,
+   and a resume fetches nothing.
+
+   So the top page asks sw.js (`check`) once it has loaded, and again when it
+   comes back after FRESH_GAP away: am I running old code? It names every
+   file it loaded and when; sw.js answers with the ones whose kept copy has
+   changed since, and the version on the network's copy of this page. If
+   either says old, and he has not touched the page since it opened or came
+   back, it reopens with ?fresh=1, network first, and says "Updated to 1.0.68".
+   If he has touched it, nothing happens under his thumb: the newer copy is
+   already kept, so the next open has it, and the next long resume asks again.
+
+   The open stays as quick as it was: the first paint is still the phone's
+   copy, and the reopen happens only on the first open after a push, before
+   he has done anything. At most once a minute, so a server handing out two
+   copies at once cannot loop it. Never on a page whose name starts with _,
+   the review and smoke pages, which must not reload under their own run. */
+var FRESH_GAP = 15 * 60000;
+function versionNewer(a, b) {
+  if (!a || !b) return false;
+  var x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+  for (var i = 0; i < Math.max(x.length, y.length); i++) {
+    var p = x[i] || 0, q = y[i] || 0;
+    if (p !== q) return p > q;
+  }
+  return false;
+}
+function catchUp(nav, root) {
+  if (/\/_[^\/]*$/.test(g.location.pathname)) return;
+  var meta = document.querySelector('meta[name="mb-version"]');
+  var mine = meta ? ((/^\s*([\d.]+)/.exec(meta.content || '') || [])[1] || '') : '';
+  var touched = false, hiddenAt = 0, timer = null;
+  function touch() { touched = true; }
+  ['pointerdown', 'keydown'].forEach(function (k) { g.addEventListener(k, touch, { capture: true, passive: true }); });
+
+  /* every file this page and its frames loaded, with when it was asked for */
+  function loaded() {
+    var out = [], seen = {};
+    function add(u, t) {
+      try { u = new URL(u, g.location.href); } catch (e) { return; }
+      u.hash = ''; u.searchParams.delete('fresh'); u.searchParams.delete('t');
+      u = u.href;
+      if (seen[u] || u.indexOf(root) !== 0) return;
+      seen[u] = 1; out.push({ u: u, t: Math.floor(t) });
+    }
+    (function from(w) {
+      try {
+        var P = w.performance, o = P.timeOrigin || (P.timing && P.timing.navigationStart) || Date.now();
+        add(w.location.href, o);
+        (P.getEntriesByType ? P.getEntriesByType('resource') : []).forEach(function (e) { add(e.name, o + e.startTime); });
+        for (var i = 0; i < w.frames.length; i++) from(w.frames[i]);
+      } catch (e) {}
+    })(g);
+    return out;
+  }
+
+  function check(refetch, why) {
+    var sw = nav.serviceWorker.controller;
+    if (!sw || typeof MessageChannel === 'undefined') return;
+    var asked = Date.now(), ch = new MessageChannel();
+    ch.port1.onmessage = function (e) {
+      var d = e.data || {};
+      var old = !!(d.ok && ((d.stale && d.stale.length) || versionNewer(d.v, mine)));
+      Mobile.catchUp = { why: why, at: asked, old: old, v: d.v || '', mine: mine, stale: d.stale || [], touched: touched, took: Date.now() - asked };
+      if (!old || touched || Date.now() - asked > 8000) return;
+      var last = 0;
+      try { last = +g.sessionStorage.getItem('mb.autoAt') || 0; } catch (e) {}
+      if (Date.now() - last < 60000) { Mobile.catchUp.held = 'once a minute'; return; }
+      try {
+        g.sessionStorage.setItem('mb.autoAt', String(Date.now()));
+        g.sessionStorage.setItem('mb.updated', 'auto');
+        g.sessionStorage.setItem('mb.catchUp', JSON.stringify(Mobile.catchUp));
+      } catch (e) {}
+      Mobile.catchUp.reopened = true;
+      try { if (g.UI && g.UI.commitFocused) g.UI.commitFocused(); } catch (e) {}
+      var u = new URL(g.location.href);
+      u.searchParams.set('fresh', '1');
+      g.location.replace(u.href);
+    };
+    try { sw.postMessage({ mb: 'check', page: g.location.href, files: loaded(), fetch: !!refetch }, [ch.port2]); } catch (e) {}
+  }
+
+  function soon() {
+    clearTimeout(timer);
+    timer = setTimeout(function () { check(false, 'open'); }, 1000);
+  }
+  if (document.readyState === 'complete') soon(); else g.addEventListener('load', soon);
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    var away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = 0;
+    if (away >= Mobile.freshGap) { touched = false; check(true, 'resume'); }
+  });
+  /* back from the browser's page cache: a whole page restored, an open */
+  g.addEventListener('pageshow', function (e) { if (e.persisted) { touched = false; check(true, 'restored'); } });
 }
 
 /* ── boot ── */
@@ -985,5 +1088,7 @@ wirePress();
 wireKeyboard();
 offline();
 
+Mobile.freshGap = FRESH_GAP;
+Mobile.versionNewer = versionNewer;
 g.Mobile = Mobile;
 })(window);

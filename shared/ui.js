@@ -1087,8 +1087,11 @@ if (g.top === g) {
   let n = null;
   try { n = g.sessionStorage.getItem('mb.updated'); if (n != null) g.sessionStorage.removeItem('mb.updated'); } catch (e) {}
   if (n != null) {
-    const k = +n;
-    const say = k > 0 ? 'Updated. ' + k + (k === 1 ? ' file was' : ' files were') + ' newer.'
+    /* 'auto': mobile.js found this page running old code and reopened it
+       (Mobile, catching up), so it names the version it is now */
+    const k = +n, ver = UI.version();
+    const say = n === 'auto' ? (ver ? 'Updated to ' + ver.v + '.' : 'Updated.')
+      : k > 0 ? 'Updated. ' + k + (k === 1 ? ' file was' : ' files were') + ' newer.'
       : k === 0 ? 'Already the newest.' : 'Reopened from the network.';
     setTimeout(() => { try { UI.toast(say); } catch (e) {} }, 800);
   }

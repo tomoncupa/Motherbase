@@ -3691,6 +3691,137 @@ async function run() {
     ok('boot: the home screen and the phone apps load it in the head, straight after skins.js', !late.length, ' — not in: ' + late.join(', '));
   }
 
+  /* ── catching up: the offline cache and a page running old code (sw.js, mobile.js, 2026-10-18) ──
+     Tom's iPhone TRAIN ran 1.0.61 for three days while 1.0.68 was live. One
+     level under "the phone has the new version": the real sw.js, run here
+     against a stand-in cache and network, must keep the network's newer copy
+     BEFORE its fetch event lets go (WebKit may stop a worker then), must tell
+     a page that was handed the old copy that it was, must not call a file
+     new because GitHub restamped it, must hand back answers marked no-cache
+     (or the browser's memory answers for it without asking), and must prefer
+     a page's exact address. tools/sw-check.py watches the whole thing in
+     WebKit and Chromium; this runs anywhere. */
+  {
+    const src = await fetch('../sw.js', { cache: 'no-store' }).then(r => r.ok ? r.text() : '', () => '');
+    const SCOPE = 'https://mb.test/Motherbase/';
+    const server = {}, stamp = { n: 1 }, stores = new Map();
+    const abs = k => typeof k === 'string' ? new URL(k, SCOPE + 'sw.js').href : k.url;
+    const noQ = u => u.split('?')[0];
+    const net = req => {
+      const p = new URL(abs(req)).pathname.replace('/Motherbase/', '').replace(/(^|\/)$/, '$1index.html');
+      const b = server[p];
+      return Promise.resolve(b == null ? new Response('', { status: 404 })
+        : new Response(b, { status: 200, headers: { ETag: '"' + stamp.n + '-' + b.length + '"', 'Cache-Control': 'max-age=600' } }));
+    };
+    const box = name => {
+      if (!stores.has(name)) stores.set(name, new Map());
+      const m = stores.get(name);
+      const find = (k, o) => {
+        /* as the real one does: ignoring the query, the FIRST copy kept wins */
+        const u = abs(k);
+        if (o && o.ignoreSearch) { for (const [x, v] of m) if (noQ(x) === noQ(u)) return v; return null; }
+        return m.has(u) ? m.get(u) : null;
+      };
+      return {
+        put: (k, r) => r.arrayBuffer().then(b => { const u = abs(k); m.delete(u); m.set(u, new Response(b, { status: r.status, headers: r.headers })); }),
+        match: (k, o) => Promise.resolve(find(k, o) ? find(k, o).clone() : undefined),
+        keys: () => Promise.resolve(Array.from(m.keys()).map(u => new Request(u))),
+        add: () => Promise.resolve(),
+        _m: m,
+      };
+    };
+    const C = {
+      open: n => Promise.resolve(box(n)),
+      keys: () => Promise.resolve(Array.from(stores.keys())),
+      delete: n => Promise.resolve(stores.delete(n)),
+      match: (k, o) => Promise.resolve((() => {
+        for (const n of stores.keys()) {
+          const m = box(n)._m, u = abs(k);
+          if (o && o.ignoreSearch) { for (const [x, v] of m) if (noQ(x) === noQ(u)) return v.clone(); }
+          else if (m.has(u)) return m.get(u).clone();
+        }
+      })()),
+    };
+    const on = {};
+    const SELF = { addEventListener: (t, f) => { on[t] = f; }, registration: { scope: SCOPE }, location: new URL(SCOPE + 'sw.js'),
+      skipWaiting: () => Promise.resolve(), clients: { claim: () => Promise.resolve() } };
+    let ran = false;
+    try { new Function('self', 'caches', 'fetch', src)(SELF, C, net); ran = !!(on.fetch && on.message); } catch (e) { ran = false; }
+    ok('catch-up: sw.js runs in a stand-in worker', ran);
+    if (ran) {
+      const open = (path, nav) => {
+        const req = new Request(SCOPE + path);
+        if (nav) Object.defineProperty(req, 'mode', { value: 'navigate' });
+        let resp = null; const waits = [];
+        on.fetch({ request: req, respondWith: p => { resp = Promise.resolve(p); }, waitUntil: p => waits.push(p) });
+        return { resp: (resp || Promise.resolve(new Response(''))).then(r => r.text().then(t => ({ t: t, cc: r.headers.get('cache-control') }))), done: Promise.all(waits) };
+      };
+      const ask = d => new Promise(res => {
+        const ch = new MessageChannel();
+        setTimeout(() => res({ ok: 0, why: 'no answer in 10s', stale: [] }), 10000);
+        ch.port1.onmessage = e => res(e.data);
+        on.message({ data: d, ports: [ch.port2], waitUntil: () => {} });
+      });
+      const kept = path => box('mb-live')._m.has(SCOPE + path) ? box('mb-live')._m.get(SCOPE + path).clone().text() : Promise.resolve(null);
+      const page = v => '<!doctype html><meta name="mb-version" content="' + v + ', 2026-10-18">';
+
+      server['train/index.html'] = page('1.0.61');
+      server['shared/day.js'] = 'day 1';
+      let o = open('train/', true); await o.resp; await o.done;
+      o = open('shared/day.js'); await o.resp; await o.done;
+      server['train/index.html'] = page('1.0.68'); stamp.n++;
+      const t0 = Date.now() - 1;
+      o = open('train/', true);
+      const got = await o.resp;
+      await o.done;
+      const now = await kept('train/');
+      ok('catch-up: an open is handed the phone copy at once, marked no-cache',
+        /1\.0\.61/.test(got.t) && got.cc === 'no-cache', ' — ' + JSON.stringify(got).slice(0, 120));
+      ok('catch-up: the newer copy is kept before the fetch event lets go', /1\.0\.68/.test(now || ''), ' — ' + (now || 'nothing kept').slice(0, 80));
+      const told = await ask({ mb: 'check', page: SCOPE + 'train/', files: [{ u: SCOPE + 'train/', t: t0 }, { u: SCOPE + 'shared/day.js', t: t0 }] });
+      ok('catch-up: a page handed the old copy is told so, with the version it should be',
+        told.ok && told.v === '1.0.68' && told.stale.length === 1 && /train\/$/.test(told.stale[0]), ' — ' + JSON.stringify(told));
+
+      stamp.n++;
+      const t1 = Date.now() - 1;
+      o = open('shared/day.js'); await o.resp; await o.done;
+      const restamped = await ask({ mb: 'check', page: SCOPE + 'train/', files: [{ u: SCOPE + 'shared/day.js', t: t1 }] });
+      ok('catch-up: a file GitHub only restamped is not news', restamped.ok && !restamped.stale.length, ' — ' + JSON.stringify(restamped));
+
+      server['shared/day.js'] = 'day 2'; stamp.n++;
+      const t2 = Date.now() - 1;
+      const resumed = await ask({ mb: 'check', fetch: true, page: SCOPE + 'train/', files: [{ u: SCOPE + 'shared/day.js', t: t2 - 60000 }] });
+      ok('catch-up: a resume asks the network itself and finds a changed shared file',
+        resumed.ok && resumed.stale.some(u => /day\.js$/.test(u)) && (await kept('shared/day.js')) === 'day 2', ' — ' + JSON.stringify(resumed));
+
+      await box('mb-live').put(SCOPE + 'kitchen/?from=a', new Response(page('0.0.1')));
+      await box('mb-live').put(SCOPE + 'kitchen/', new Response(page('0.0.2')));
+      server['kitchen/index.html'] = page('0.0.2');
+      o = open('kitchen/', true);
+      const exact = await o.resp; await o.done;
+      ok('catch-up: a page kept under two addresses opens its exact one', /0\.0\.2/.test(exact.t), ' — ' + exact.t.slice(-40));
+
+      server['train/index.html'] = page('1.0.69'); stamp.n++;
+      const t3 = Date.now() - 1;
+      o = open('train/?fresh=1', true);
+      const fr = await o.resp; await o.done;
+      const after = await ask({ mb: 'check', page: SCOPE + 'train/', files: [{ u: SCOPE + 'train/', t: t3 }] });
+      ok('catch-up: a fresh open is handed the network copy and counts as current',
+        /1\.0\.69/.test(fr.t) && after.ok && !after.stale.length && after.v === '1.0.69', ' — ' + JSON.stringify(after));
+
+      /* newer by content: day.js, and the second kitchen copy; train and
+         kitchen/ only restamped */
+      server['shared/day.js'] = 'day 3'; stamp.n++;
+      const counted = await ask({ mb: 'refresh' });
+      ok('catch-up: UPDATE NOW counts files newer by what is in them, not their stamp',
+        counted.ok && counted.n === 2 && counted.of === 4, ' — ' + JSON.stringify(counted));
+    }
+    const vn = x => Mobile.versionNewer(x[0], x[1]);
+    ok('catch-up: 1.0.10 is newer than 1.0.9, and not the other way round',
+      typeof Mobile.versionNewer === 'function' && vn(['1.0.10', '1.0.9']) && !vn(['1.0.9', '1.0.10']) && !vn(['1.0.68', '1.0.68']) && !vn(['', '1.0.1']));
+    ok('catch-up: a long time away is a quarter of an hour', Mobile.freshGap === 15 * 60000);
+  }
+
   /* ---- demo: a store of its own (skins.js, DEMO, 2026-09-30) ----
      A frame opened with the tab's demo flag set must see none of this
      page's rows, and nothing it writes may reach them. The flag is the tab's

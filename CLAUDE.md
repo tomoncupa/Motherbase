@@ -182,7 +182,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `claude.js` | The CLAUDE panel, added 2026-10-04 (Tom: "A and B", ask about his data and log by talking). Main Menu.exe injects it on every suite page (`desktop/ClaudeBridge.cs`); anywhere else it does nothing. The window runs the bundled claude.exe on his subscription (Sonnet, Read/Grep/Glob only) in `%LOCALAPPDATA%\Motherbase\claude`, never the repo, against a copy of every row; the page applies the writes Claude returns, each with Undo. The conversation lives in the window, so it follows him between apps. |
 | `nutrients.js` | The full nutrient list a food can carry beyond the eight, added 2026-09-22: fibre, sugar, the fats, EPA and DHA, cholesterol, eleven minerals and the vitamins, thirty-one in all. One list, three readers: FOODDÉX fills them from its USDA lookup (found by the USDA's printed NAME and unit, never its numeric id, and International Units skipped), STATUS gives each one a column on the sheet's Food tab, and ELEMENT reads its five off the food. They live on `food.base` beside the eight. A blank is "not known", never zero. |
 | `boot.js` | The start screen, added 2026-10-04: a System window, INITIALIZING SYSTEM, the page's name decoding, a log of real facts and a bar of four real stages (PAGE, THEME, STORE, DRAWN). Opted into by one tag straight after `skins.js` in the head; the home screen and the phone apps carry it. Plays once per tab or app launch, top document only, and leaves one frame after the last stage, so it only covers load time and never adds to it. Four seconds at most; a tap ends it. If its own code throws, a catch takes it off at once, and a hard stop at 5.5 s takes it off if its loop never runs, so it can never sit over an app. `?boot=1` forces it, `?boot=0` never. |
-| `_smoke.html` | 424 checks over all of the above. Run it after touching any of them. |
+| `_smoke.html` | 435 checks over all of the above. Run it after touching any of them. |
 | `THEMING.md` | **How an app obeys STYLE.** Every token, what an app may never do, and how to prove it obeyed. Binding. |
 | `STANDARDS.md` | How the apps feel on a phone. Binding, and written in plain language. Rule 14 is the typing-cursor rule: a screen you came to type into opens with the keyboard up, via `UI.focusSoon`. |
 
@@ -779,6 +779,13 @@ answer, or take it out.
   on the phone browser and not in STATUS.exe until it was reopened twice.
   After pushing a `shared/` fix, reopen the desktop programs twice (close
   normally, never kill) before saying it did not work.
+- **An iPhone home-screen app is resumed, not opened.** The same page runs
+  from memory for days and a resume fetches nothing, so "the next open" may
+  never come: TRAIN sat on 1.0.61 for three days (2026-10-18). `mobile.js`
+  now asks sw.js on load and on a resume after 15 minutes away, and reopens
+  fresh if the code is old and he has not touched it. Anything that must
+  run "when the app opens" also needs `visibilitychange`. See `shared/CLAUDE.md`,
+  Catching up.
 - **No page of the suite can talk to a program running on his PC.** The suite is
   served over https and every local program here serves http, so a fetch from
   tomoncupa.github.io to `http://127.0.0.1:<port>` dies as "Failed to fetch"

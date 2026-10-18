@@ -37,6 +37,12 @@
      Together: always opens at once, signal or none, and is never more than
      one open behind.
 
+     And since 2026-10-18 not even that, most of the time: an open handed an
+     old copy is told so (`check`, below) and mobile.js reopens it fresh
+     before he has touched it, and an app resumed after a long time away
+     asks too. An iPhone home-screen app is mostly resumed, never opened,
+     which is how TRAIN sat on 1.0.61 for three days.
+
    WHAT IS KEPT
      PRECACHE below is taken at install. In this repo that is the shared
      foundation and the home screen, and nothing else, because a list of apps
@@ -120,28 +126,71 @@ self.addEventListener('activate', e => {
    under the version line in every app's Settings posts {mb: 'refresh'} with a
    port. Every file this device keeps is fetched from the network and kept,
    and the answer says how many came back different (by ETag, else
-   Last-Modified, else length). The page then reloads with ?fresh=1, so
+   by what is in it). The page then reloads with ?fresh=1, so
    anything not kept yet comes from the network too. A file the network will
-   not give keeps its old copy, so no signal costs nothing. */
+   not give keeps its old copy, so no signal costs nothing.
+
+   By what is in it, since 2026-10-18: GitHub Pages stamps every file with
+   the time of the last push, so an ETag changed on every file whenever any
+   app was pushed and the count was always "every file". */
 self.addEventListener('message', e => {
   const d = e.data || {};
-  if (d.mb !== 'refresh') return;
   const port = e.ports && e.ports[0];
-  const sig = r => r ? (r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '') : '';
-  e.waitUntil(caches.open(CACHE).then(c => c.keys().then(reqs => Promise.all(reqs.map(req =>
-    c.match(req).then(old => fetch(fresh(req)).then(r => {
-      if (!r || !r.ok || r.type !== 'basic') return 0;
-      const was = sig(old), now = sig(r);
-      return c.put(req, r.clone()).then(() => (was && now && was === now) ? 0 : 1);
-    })).catch(() => 0)
-  )))).then(ns => {
-    freshUntil = Date.now() + FRESH_MS;
-    if (port) port.postMessage({ ok: 1, n: ns.reduce((a, b) => a + b, 0), of: ns.length });
-  }).catch(() => { if (port) port.postMessage({ ok: 0 }); }));
+  const say = a => { if (port) port.postMessage(a); };
+  if (d.mb === 'refresh') {
+    e.waitUntil(caches.open(CACHE).then(c => c.keys()).then(reqs => Promise.all(reqs.map(req =>
+      lookup(req).then(old => fetch(fresh(req)).then(r => store(req, r, old)))
+        .then(ch => ch ? 1 : 0, () => 0)
+    ))).then(ns => {
+      freshUntil = Date.now() + FRESH_MS;
+      say({ ok: 1, n: ns.reduce((a, b) => a + b, 0), of: ns.length });
+    }).catch(() => say({ ok: 0 })));
+    return;
+  }
+
+  /* ── is the page asking running code older than what is kept? ──
+     Added 2026-10-18. Tom's iPhone TRAIN ran 1.0.61 for three days while
+     main had 1.0.68, and the one-open-late rule above never caught up. An
+     iPhone home-screen app is mostly RESUMED, not opened: the same page,
+     from memory, for days, and nothing is fetched on a resume. And a page
+     that is opened takes the kept copy and only refreshes it for later.
+
+     So mobile.js asks, from the top page, once it has loaded and again when
+     it comes back after a long time away: here is my address, here is every
+     file I loaded and when. The answer names the files whose kept copy has
+     changed since the page loaded them (CHANGED, below), and the version on
+     the network's copy of the page. Either one means the page is running
+     old code, and mobile.js reopens it fresh if he has not touched it yet.
+
+     `fetch: true` (a resume) asks the network for every file first, since
+     nothing has asked it since the page loaded. An open has just asked, so
+     it waits for those answers instead (INFLIGHT). The page itself is asked
+     for every time: one more round trip, answered 304 when it is the same. */
+  if (d.mb === 'check') {
+    const files = (Array.isArray(d.files) ? d.files : []).filter(f => f && typeof f.u === 'string' && inScope(f.u));
+    const page = typeof d.page === 'string' && inScope(d.page) ? bareHref(d.page) : '';
+    const ask = u => lookup(u).then(old =>
+      fetch(new Request(u, { cache: 'no-cache' })).then(r => {
+        const copy = r && r.ok ? r.clone() : null;
+        return store(u, r, old).then(() => copy);
+      })).catch(() => null);
+    const settled = Promise.race([
+      Promise.all(Array.from(inflight).map(p => p.catch(() => {}))),
+      new Promise(res => setTimeout(res, 8000)),
+    ]);
+    e.waitUntil(settled
+      .then(() => d.fetch ? Promise.all(files.filter(f => bareHref(f.u) !== page).map(f => ask(bareHref(f.u)))) : null)
+      .then(() => page ? ask(page) : null)
+      .then(r => r ? r.text() : '')
+      .then(html => loadChanged().then(m => {
+        const v = (/<meta name="mb-version" content="\s*([\d.]+)/.exec(html) || [])[1] || '';
+        const stale = files.filter(f => m[bareHref(f.u)] > (+f.t || 0)).map(f => bareHref(f.u));
+        say({ ok: 1, v: v, stale: stale });
+      }))
+      .catch(() => say({ ok: 0 })));
+  }
 });
 
-/* Only a real answer is worth keeping. An error page cached is an error page
-   served back forever. */
 /* ── the network half has to actually reach the network ──
    `fetch()` inside a worker goes through the browser's OWN http cache, so
    "newest copy whenever the network can give one" could still be answered
@@ -181,12 +230,82 @@ const bare = url => {
   return u.href;
 };
 
-const keep = (req, res) => {
-  if (res && res.ok && res.type === 'basic') {
-    const copy = res.clone();
-    caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-  }
-  return res;
+const bareHref = s => { try { return bare(new URL(s, self.location.href)); } catch (e) { return String(s); } };
+const inScope = s => { try { return new URL(s, self.location.href).href.indexOf(self.registration.scope) === 0; } catch (e) { return false; } };
+
+/* ── CHANGED: when each kept copy last came back different ──
+   Address to time, in a cache of its own that the activate step's sweep of
+   'mb-' names leaves alone, so it outlives a new build. A page that loaded a
+   file before that time is running the old one. Written only when the
+   network's copy differs from the kept one by what is in it, never by its
+   stamp, and never for a fresh open, which was handed the network's copy. */
+const META = 'mbmeta';
+const META_KEY = 'changed';
+let changed = null, saving = Promise.resolve();
+const loadChanged = () => changed ? Promise.resolve(changed) :
+  caches.open(META).then(c => c.match(META_KEY)).then(r => r ? r.json() : {}).catch(() => ({}))
+    .then(m => (changed = changed || m || {}));
+const markChanged = url => loadChanged().then(m => {
+  const now = Date.now();
+  m[url] = now;
+  Object.keys(m).forEach(k => { if (now - m[k] > 60 * 86400000) delete m[k]; });
+  saving = saving.then(() => caches.open(META).then(c => c.put(META_KEY,
+    new Response(JSON.stringify(m), { headers: { 'Content-Type': 'application/json' } })))).catch(() => {});
+  return saving;
+});
+
+/* ── keep a copy, and finish keeping it before the worker may stop ──
+   Until 2026-10-18 the copy was written off to one side and nothing waited
+   for it: the fetch event was told it was done as soon as the network
+   answered, before the body had been read into the cache. Chrome keeps an
+   idle worker for half a minute so it always finished there. WebKit may
+   stop a worker as soon as nothing is waiting on it, and an iPhone app sent
+   to the background stops everything, so a 500KB page could be dropped
+   halfway and the old copy served again next time. Now the write is a
+   promise, and every caller hands it to waitUntil.
+
+   With `old`, the kept copy it replaces, the two are compared and CHANGED
+   is told when they differ. Answers whether they did. Only a real answer is
+   kept: an error page cached is an error page served back forever. A
+   'default' type is a Response made by hand, which only the smoke checks
+   do. */
+const store = (key, res, old) => {
+  if (!res || !res.ok || (res.type !== 'basic' && res.type !== 'default')) return Promise.resolve(false);
+  const put = caches.open(CACHE).then(c => c.put(key, res.clone()));
+  if (!old) return put.then(() => false, () => false);
+  return Promise.all([put, old.text(), res.clone().text()])
+    .then(a => a[1] === a[2] ? false : markChanged(bareHref(typeof key === 'string' ? key : key.url)).then(() => true))
+    .catch(() => false);
+};
+
+/* The kept copy for a request: the exact address first, then the same path
+   with anything after the ? (see below), then a folder's index.html. Exact
+   first since 2026-10-18: matching by path alone hands back whichever copy
+   of that path was kept FIRST, and a page kept once under a second address
+   would then be served forever while its newer copy sat under the other. */
+const lookup = (key, nav) => caches.match(key).then(hit => hit || caches.match(key, { ignoreSearch: true }))
+  .then(hit => hit || (nav
+    ? caches.match(new URL(typeof key === 'string' ? key : key.url, self.location.href).pathname.replace(/\/$/, '/index.html'), { ignoreSearch: true })
+    : undefined));
+
+/* the network answers this open's own requests are waiting on, so a check
+   that arrives while they are still coming waits for them */
+const inflight = new Set();
+const track = p => { inflight.add(p); p.then(() => inflight.delete(p), () => inflight.delete(p)); return p; };
+
+/* ── every answer says no-cache ──
+   GitHub Pages sends max-age=600, and a kept copy keeps that header. The
+   browser's own memory of a page's files then treats them as good for ten
+   minutes and hands them to the next page without asking this worker at
+   all: watched 2026-10-18 in Chromium, where a page reopened to catch up
+   still ran its old day.js and no request for it ever arrived here. So what
+   this hands back is marked no-cache, the browser asks every time, and the
+   answer is still the kept copy, from the phone, at once. */
+const own = r => {
+  if (!r || r.type === 'opaque' || !r.status) return r;
+  const h = new Headers(r.headers);
+  h.set('Cache-Control', 'no-cache');
+  return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
 };
 
 const offline = () => new Response(
@@ -223,20 +342,19 @@ self.addEventListener('fetch', e => {
   if (/\/shared\/icons\/.*\.png$/.test(url.pathname) ||
       (Date.now() < freshUntil && !/[?&]v=/.test(url.search))) {
     const key = bare(url);
-    e.respondWith(fetch(fresh(req)).then(r => keep(key, r)).catch(() =>
-      caches.match(key, { ignoreSearch: true }).then(hit => hit ||
-        (req.mode === 'navigate'
-          ? caches.match(url.pathname.replace(/\/$/, '/index.html'), { ignoreSearch: true })
-          : undefined)).then(hit => hit || offline())));
+    const net = fetch(fresh(req)).then(r => ({ r: r, copy: r.clone() }));
+    e.waitUntil(track(net.then(n => store(key, n.copy))).catch(() => {}));
+    e.respondWith(net.then(n => own(n.r)).catch(() =>
+      lookup(key, req.mode === 'navigate').then(hit => own(hit) || offline())));
     return;
   }
 
   /* A stamped file. The address changes when the file does, so the cache can
      answer without anyone asking whether it is still the current one. */
   if (/[?&]v=/.test(url.search)) {
-    e.respondWith(
-      caches.match(req).then(hit => hit || fetch(req).then(r => keep(req, r)))
-    );
+    const got = caches.match(req).then(hit => hit ? { hit: hit } : fetch(req).then(r => ({ r: r, copy: r.clone() })));
+    e.waitUntil(got.then(g => g.copy ? store(req, g.copy) : null).catch(() => {}));
+    e.respondWith(got.then(g => g.hit || g.r));
     return;
   }
 
@@ -263,12 +381,12 @@ self.addEventListener('fetch', e => {
      data is rows in the store and never comes from here. Only the app's own
      code arrives one open late. With nothing kept yet, the network answers,
      exactly as before. */
-  const bg = fetch(fresh(req)).then(r => keep(req, r));
-  e.waitUntil(bg.catch(() => {}));
-  /* A folder address, ".../status/", also finds a kept index.html. */
-  const kept = caches.match(req, { ignoreSearch: true }).then(hit => hit ||
-    (req.mode === 'navigate'
-      ? caches.match(url.pathname.replace(/\/$/, '/index.html'), { ignoreSearch: true })
-      : undefined));
-  e.respondWith(kept.then(hit => hit || bg.catch(() => offline())));
+  /* What the network brings is compared with the copy handed to the page,
+     and CHANGED is told if they differ: the page asking `check` is then
+     told it is running the old one. A folder address, ".../status/", also
+     finds a kept index.html. */
+  const bg = fetch(fresh(req)).then(r => ({ r: r, copy: r.clone() }));
+  const kept = lookup(req, req.mode === 'navigate').then(hit => ({ hit: hit, old: hit ? hit.clone() : null }));
+  e.waitUntil(track(Promise.all([bg, kept]).then(a => store(req, a[0].copy, a[1].old))).catch(() => {}));
+  e.respondWith(kept.then(k => own(k.hit) || bg.then(n => own(n.r))).catch(() => offline()));
 });
