@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.68, 2026-10-18">
+<meta name="mb-version" content="1.0.69, 2026-10-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -383,7 +383,9 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
   color:var(--border-strong);display:flex;align-items:center;justify-content:center;padding:0}
 .tset .bub.on{color:var(--accent)}
 .tset .idx{width:2em;flex:0 0 auto;color:var(--text-muted);font-size:var(--f-2)}
-.tset .grow{flex:1}
+.tset .grow{flex:0 0 auto}
+.tset .tnote{flex:1 1 0;min-width:0;font-size:var(--f-1);line-height:var(--lh-tight);color:var(--text-2);
+  overflow-wrap:anywhere}
 .tset .col{text-align:right;white-space:nowrap}
 .tset .col.w{min-width:7em}
 .tset .col.r{min-width:5em}
@@ -634,6 +636,10 @@ main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hid
 .sesshead .nm b.none{color:var(--text-muted);font-weight:var(--w-body)}
 .sesshead .nm span{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);
   text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.copyhead{display:flex;flex-direction:column;gap:var(--s-1);margin-bottom:var(--s-3)}
+.copyhead b{font-family:var(--font-display);font-size:var(--f-4);color:var(--text-1)}
+.copyhead span{font-size:var(--f-2);color:var(--text-muted)}
+.copylist{display:flex;flex-direction:column;gap:var(--s-1);margin-bottom:var(--s-3);font-size:var(--f-3);color:var(--text-2)}
 .sesshead.flat{box-shadow:none;background:none;padding:0;cursor:default}
 /* The strip on the day: one line, as short as a tap allows. */
 .sesshead.slim{padding-top:0;padding-bottom:0}
@@ -4186,7 +4192,7 @@ function drawTrack(m) {
   if (mine.length) {
     var showChk = Rec.setting(APP.id, 'markComplete') !== 0;
     var listCard = UI.el('div', 'trackbox');
-    var n = 0, kind = TRAIN.kindOf(exId);
+    var n = 0, kind = TRAIN.kindOf(exId), prevSu;
     mine.forEach(function (s) {
       var d = null;
       if (!s.warm) {
@@ -4196,7 +4202,10 @@ function drawTrack(m) {
           if (d) d.volUp = TRAIN.volUp(s, then[n - 1], kind, d);
         }
       }
-      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d));
+      /* setup only when it changed from the set before (Tom, 2026-10-18) */
+      var su = JSON.stringify(s.su || {});
+      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d, su === prevSu));
+      prevSu = su;
     });
     /* Hold a set and drag it to put it in another place; let go without
        moving and its menu opens, as the hold always did. The numbers follow
@@ -4214,6 +4223,7 @@ function drawTrack(m) {
       },
     });
     m.appendChild(listCard);
+    fitNotes(listCard);
   }
 }
 
@@ -4387,7 +4397,23 @@ function afterSave(exId, date, byTick) {
   }
 }
 
-function trainingSetRow(s, n, date, showChk, delta) {
+/* A row's comment is never cut off (Tom, 2026-10-18: "I don't want any
+   clipping, make the font as small as needed"): it steps down from the
+   12px of --f-1 until it fits two lines' room, and past the smallest step
+   it wraps and the row grows rather than hide a word. */
+var NOTE_PX = [12, 11, 10, 9, 8];
+function fitNotes(box) {
+  [].forEach.call(box.querySelectorAll('.tnote'), function (el) {
+    if (!el.textContent) return;
+    var room = 0;
+    for (var i = 0; i < NOTE_PX.length; i++) {
+      el.style.fontSize = NOTE_PX[i] + 'px';
+      if (!room) room = Math.ceil(NOTE_PX[0] * 1.25 * 2) + 1;
+      if (el.scrollHeight <= room && el.scrollWidth <= el.clientWidth + 1) return;
+    }
+  });
+}
+function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
   var row = UI.el('div', 'tset' + (TRAIN.sel === s.key ? ' sel' : '') + (s.warm ? ' warm' : '') +
     (TRAIN.pending(s) ? ' plan' : ''));
   row.dataset.key = s.key;
@@ -4401,6 +4427,15 @@ function trainingSetRow(s, n, date, showChk, delta) {
   var idx = UI.el('span', 'idx');
   idx.textContent = s.warm ? 'W' : String(n);
   row.appendChild(idx);
+
+  /* The comment and the setup, in the gap between the number and the
+     weight. Tom, 2026-10-18: "Put comments and setup in this blank space,
+     smaller but readable font". Never cut off: see fitNotes. */
+  var said = [String(s.note || '').trim(), sameSetup ? '' : setupText(s.su, s.ex)].filter(Boolean).join(' · ');
+  var tn = UI.el('span', 'tnote');
+  tn.textContent = said;
+  if (said) tn.title = said;
+  row.appendChild(tn);
 
   var body = UI.el('span', 'grow');
   body.style.textAlign = 'right';
@@ -6017,44 +6052,35 @@ TRAIN.copyWorkout = function (fromDate, toDate) {
 };
 
 /* Copy Past Session asks which one. Tom, 2026-10-15: it "literally copies
-   last session - useless!" The day before is rarely the session he is about
-   to repeat (he rotates them), so the empty day lists the recent days, newest
-   first, each by its name or else its first exercises, and a tap copies that
-   one. Pick Another Day opens the calendar for anything older. */
-TRAIN.PAST_SHOWN = 14;
+   last session - useless!", since he rotates sessions. 2026-10-18: "The
+   Picker should be the calender view with a confirm, just like fitnotes".
+   So the calendar opens in pick mode, a tap on a day with a session shows
+   what is in it, and COPY copies it. CANCEL leaves the day as it was. */
 TRAIN.pastSessionPicker = function () {
   var to = TRAIN.date;
-  var days = Object.keys(TRAIN.idx.byDate).filter(function (d) { return d < to; })
-    .sort().reverse().slice(0, TRAIN.PAST_SHOWN);
-  if (!days.length) return UI.toast('There is no session to copy', { bad: true });
-  UI.dialog({
-    title: 'COPY PAST SESSION', width: 460,
-    body: function (b, h) {
-      var list = UI.el('div', 'plist');
-      days.forEach(function (d) {
-        var nm = String((Rec.get('session', d, '') || {}).name || '').trim();
-        var exs = TRAIN.dayGroups(d).map(function (g) { return g.def.name; });
-        var what = exs.slice(0, 3).join(', ') + (exs.length > 3 ? ' +' + (exs.length - 3) : '');
-        var row = UI.el('div', 'prow');
-        var main = UI.el('button', 'pmain mb-press');
-        main.innerHTML = '<span class="nm">' + UI.esc(nm || what) +
-          '<br><span class="sub">' + UI.esc(dayY(d)) +
-          (nm ? ' · ' + UI.esc(what) : ' · ' + exs.length + ' exercise' + (exs.length === 1 ? '' : 's')) +
-          '</span></span>';
-        main.setAttribute('aria-label', 'Copy ' + (nm || what) + ' from ' + Day.label(d));
-        main.onclick = function () {
-          h.close();
-          setTimeout(function () { TRAIN.copyWorkout(d, to); }, 60);
-        };
-        row.appendChild(main);
-        list.appendChild(row);
-      });
-      b.appendChild(list);
-    },
-    actions: [
-      { label: 'CANCEL' },
-      { label: 'PICK ANOTHER DAY', fn: function () { setTimeout(function () { TRAIN.copyWorkoutFlow(); }, 60); } },
-    ],
+  TRAIN.pickDate('Select the session to copy', function (d) {
+    if (d >= to) { UI.toast('Pick a day before this one', { bad: true }); return TRAIN.pastSessionPicker(); }
+    if (!TRAIN.setsOn(d).length) { UI.toast('There is no session on that day', { bad: true }); return TRAIN.pastSessionPicker(); }
+    var nm = String((Rec.get('session', d, '') || {}).name || '').trim();
+    var exs = TRAIN.dayGroups(d).map(function (g) { return g.def.name; });
+    UI.dialog({
+      title: 'COPY PAST SESSION', width: 440,
+      body: function (b) {
+        var h = UI.el('div', 'copyhead');
+        h.innerHTML = '<b>' + UI.esc(nm || Day.label(d)) + '</b>' + (nm ? '<span>' + UI.esc(dayY(d)) + '</span>' : '');
+        b.appendChild(h);
+        var ul = UI.el('div', 'copylist');
+        exs.forEach(function (x) { var li = UI.el('div'); li.textContent = x; ul.appendChild(li); });
+        b.appendChild(ul);
+        var why = UI.el('div', 'empty');
+        why.textContent = 'Each exercise comes in with its latest sets and their comments, unticked.';
+        b.appendChild(why);
+      },
+      actions: [
+        { label: 'CANCEL' },
+        { label: 'COPY', kind: 'go', fn: function () { setTimeout(function () { TRAIN.copyWorkout(d, to); }, 60); } },
+      ],
+    });
   });
 };
 
@@ -6149,7 +6175,7 @@ TRAIN.namedSessions = function (except) {
   Rec.all('session').forEach(function (r) {
     var nm = r.payload && String(r.payload.name || '').trim();
     if (!nm || r.date === except || !TRAIN.setsOn(r.date).length) return;
-    var k = nm.toLowerCase(), x = by[k] || (by[k] = { name: nm, last: '', times: 0 });
+    var k = TRAIN.nameKey(nm), x = by[k] || (by[k] = { name: nm, last: '', times: 0 });
     x.times++;
     if (r.date > x.last) { x.last = r.date; x.name = nm; }
   });
@@ -9311,9 +9337,17 @@ TRAIN.sameSession = function (a, b, partial) {
   for (k in y) if (!(k in x)) hi += y[k];
   return hi > 0 && lo / hi >= 0.6;
 };
+/* What makes two names one session. Tom, 2026-10-18: "Back 1, Back 2 ...
+   more or less intended to be the same program", "Back 2 as in it's the 2nd
+   time to hit back". So a number on the end is dropped: Back 1, Back 2 and
+   Back are one session, and each is measured against whichever was last. */
+TRAIN.nameKey = function (nm) {
+  var k = String(nm || '').trim().toLowerCase();
+  return k.replace(/[\s#._-]*\d+$/, '').trim() || k;
+};
 TRAIN.compareCtx = function (date) {
   var sess = Rec.get('session', date, '') || {}, named = [];
-  var key = String(sess.name || '').trim().toLowerCase();
+  var key = TRAIN.nameKey(sess.name);
   var ph = TRAIN.phaseOn(date), inside = [], outside = [];
   if (!key) {
     var today = date === Day.today();
@@ -9324,7 +9358,7 @@ TRAIN.compareCtx = function (date) {
   }
   if (key) {
     Rec.all('session').forEach(function (r) {
-      if (!r.payload || r.date >= date || String(r.payload.name || '').trim().toLowerCase() !== key) return;
+      if (!r.payload || r.date >= date || TRAIN.nameKey(r.payload.name) !== key) return;
       (ph && r.date >= ph.from ? inside : outside).push(r.date);
     });
   }

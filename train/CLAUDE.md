@@ -989,6 +989,12 @@ Curl separate; and *"There is no barbell squat?"*
 
 - COACH hides its own bar over the frame. TRAIN on a client's profile inside a frame puts a back arrow first in its header (`#toCoach`), which posts `{mb: 'coach-close'}` to COACH. The bar names the client in their own case (`CLIENT_NAME`, no longer upper-cased, `.logo.who`).
 
+## Copy from the calendar, names in a series, notes on the row (1.0.69, 2026-10-18)
+
+- **Copy Past Session is the calendar with a confirm** (Tom: "just like fitnotes"). `pastSessionPicker` opens `pickDate`; a day with sets shows its name, date and every exercise, COPY runs `copyWorkout` (latest sets and comments, unticked). A later day or an empty one says so and reopens the calendar. The 14-day list is gone.
+- **A number on the end of a name is dropped when matching** (`TRAIN.nameKey`): Back 1, Back 2 and Back are one session, each measured against whichever was last. Tom: "Back 2 as in it's the 2nd time to hit back, not another form of back day". Training Routines lists the family once, by its latest name. A name that is only a number keeps itself.
+- **The set row shows its comment and setup** in the gap between the set number and the weight (`.tnote`). **Never clipped** (Tom: "I don't want any clipping, make the font as small as needed"): `fitNotes` steps 12 to 8px until it fits two lines, then wraps and the row grows. **Setup shows only when it changed** from the set before. Watched at 390px: a long note at 8px made a 49px row.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the
