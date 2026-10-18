@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.74, 2026-10-18">
+<meta name="mb-version" content="1.0.75, 2026-10-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1045,7 +1045,9 @@ Skins.load('../shared/skins.json').then(() => {
   /* Not before the page has been read to the end. The theme can land while
      the browser is still parsing this file, and a draw then ran before the
      later script blocks existed: "kcalDir is not defined" (2026-10-13). */
-  const later = () => Rec.ready(draw);
+  /* And the first paint itself waits for the colours, never for the store:
+     drawn before them, the page flashes unstyled (2026-10-18). */
+  const later = () => { if (!booted && Rec.count('field')) draw(); Rec.ready(draw); };
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', later, { once: true });
   else later();
 });
@@ -1818,7 +1820,22 @@ function readDur(s) {
    payload for every app. `t` is when it was written, `at` the time the thing
    happens, and it publishes, so a line reaches the hub however it was
    written. Returns the new key. */
-const addNote = (date, kind, text, extra) => Journal.add(date, kind, text, extra, APP.id);
+/* Tom, 2026-10-18: "Stop the current timer if I create a new entry." A new
+   entry or event is what he is on now, so any line Track left running gets
+   its length, the way its own Stop button gives it. A todo is a plan and an
+   idea a thought on the way past, so neither stops it. */
+function stopRunning() {
+  Rec.all('note').forEach(r => {
+    const p = r.payload;
+    if (!p || !p.run || p.dur) return;
+    Rec.patch('note', r.date, r.key, { dur: Math.max(1, Math.round((Date.now() - p.run) / 60000)), run: undefined });
+    publishNotes(r.date);
+  });
+}
+const addNote = (date, kind, text, extra) => {
+  if (kind === 'entry' || kind === 'event') stopRunning();
+  return Journal.add(date, kind, text, extra, APP.id);
+};
 
 /* A tick is the one row every app may write, which makes it the only way to
    tell the rest of the suite something happened without the other end knowing
@@ -8436,12 +8453,12 @@ if (window.Icons) Icons.paint();
    to 2.5 seconds before the store gives up on it, and STATUS showed nothing
    until then. Fields, readings and the journal are small rows, already here
    from localStorage. So if the store has not answered by the time the page
-   is read and there is anything to show, show it: the wait was 300ms until
-   2026-10-18, and it was most of the time to a drawn screen. Seeding still
+   is read and the theme has landed, show it (the theme callback above).
+   This timer is the backstop for a theme that never arrives. Seeding still
    waits: it must see every row, or it would add fields a slow store was
    about to hand over. */
 let booted = false;
-setTimeout(() => { if (!booted && Rec.count('field')) draw(); }, 0);
+setTimeout(() => { if (!booted && Rec.count('field')) draw(); }, 300);
 Rec.ready(() => {
   booted = true;
   Rec.need('set');
@@ -8877,7 +8894,8 @@ function deskBar() {
     addNote(Day.today(), doingKind(), text, { now: true });
     Mobile.feedback('success');
     deskBar();
-    if (deskNewDay()) return;
+    /* The new day's questions ride on the first timed check now (`deskMorning`),
+       so a first line no longer puts up a second one. */
     const again = document.querySelector('#deskbar .deskdoing');
     if (again) again.focus();
   };
@@ -8965,6 +8983,24 @@ function deskClock() {
   const t = document.querySelector('#deskbar .desktime');
   if (!t) return;
   if (!deskClockT) deskClockT = setInterval(() => { if (deskSmall) deskClock(); }, 1000);
+  /* Tom, 2026-10-18: "Disable the automatic time tracking." The clock ran
+     from whatever line was written last, so every line started a timer. It
+     now runs only for a line he pressed Track on, and sits at 0:00:00
+     otherwise. `desk.autoclock` 1 brings the old clock back. */
+  if (S.get('desk.autoclock', 0) !== 1) {
+    let run = null;
+    Rec.all('note').forEach(r => {
+      const p = r.payload;
+      if (p && p.run && !p.dur && !p.cancelled && (!run || p.run > run.run)) run = p;
+    });
+    const s2 = run ? Math.max(0, Math.floor((Date.now() - run.run) / 1000)) : 0;
+    const txt2 = Math.floor(s2 / 3600) + ':' + String(Math.floor(s2 / 60) % 60).padStart(2, '0') +
+                 ':' + String(s2 % 60).padStart(2, '0');
+    if (t.textContent !== txt2) t.textContent = txt2;
+    t.classList.toggle('idle', !run);
+    t.title = run ? 'Tracking ' + run.text : 'Nothing tracked. Press Track on a line to time it';
+    return;
+  }
   const last = deskLast();
   const today = Day.today();
   const on = last && last.payload.t && (last.date === today ||
