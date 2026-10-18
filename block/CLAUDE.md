@@ -28,4 +28,4 @@ Tom: "If we wanted to specifically do Habits in BLOCK what can we retool", then 
 
 ## Needs from the home screen
 
-- `index.html` keeps copies of `anytimeState` and friends (`rhAnyState`, near "BLOCK's Every and Anytime, read here"). They count every habit as a week and tick by name. A fortnight or month habit reads wrong there, and a habit with `act` ticks the wrong id. Copy `rhPeriod`, `rhPer`, and `rhTick`'s `r.act ||`, and rename Anytime to Habits in its rhythms card.
+None. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.

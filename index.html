@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.74, 2026-10-18">
+<meta name="mb-version" content="1.0.75, 2026-10-18">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -300,6 +300,16 @@ nav button.dropinto{box-shadow:inset 2px 0 0 var(--acc)}
   .w-head{cursor:grab}
   .w-head:active{cursor:grabbing}
 }
+/* Telling cards apart on a wide board (Tom, 2026-10-18, picked D): the
+   title is bright and a step bigger, the card's colour is on its icon and a
+   strip down the title's left edge (a chart colour is never a word colour:
+   root Known traps), and the card sits a step lighter than the page's own
+   panels, the material's own gradient on --surface-2. */
+#grid > .w.mb-card{background:linear-gradient(180deg,color-mix(in srgb,var(--surface-2) var(--card-solid,100%),transparent),
+  color-mix(in srgb,var(--surface-2) var(--card-solid-2,100%),transparent))}
+#grid > .w > .w-head{color:var(--text-1,var(--ink));font-size:var(--f-2,14px);box-shadow:inset 3px 0 0 var(--c,var(--acc))}
+.w-head .wic{display:inline-flex;flex:0 0 auto;color:var(--c,var(--acc))}
+.w-head .wic svg{display:block}
 .w-head .c{color:var(--acc);letter-spacing:.06em}
 .w-head .sub{margin-left:auto;font-family:var(--f2);font-size:var(--f-1);letter-spacing:0;color:var(--dim2);white-space:nowrap}
 /* The negative margin lets a 32px button sit in a head whose words are 16px
@@ -2030,10 +2040,13 @@ setInterval(() => {
   if (sec !== toolSec) { toolSec = sec; try { alarmCheck(new Date(now)); } catch (e) { console.warn('[alarms]', e); } }
 }, 100);
 
-/* ── BLOCK's Every and Anytime, read here ──
-   Copies of rhAdd, everyState, rhWeekStart and anytimeState in
-   block/index.html: change both. What got done is an ordinary shared tick
-   under the slug of the name, so ticking one here is ticking it in BLOCK. */
+/* ── BLOCK's Every and Habits, read here ──
+   Copies of rhAdd, everyState, rhWeekStart, RH_PER, rhPer, rhMade, rhPeriod
+   and anytimeState in block/index.html: change both. What got done is an
+   ordinary shared tick under the slug of the name, or under `act`, the
+   block's own id, for a habit tracked from a block (BLOCK 1.0.23), so
+   ticking one here is ticking it in BLOCK. */
+const rhTickH = r => r.act || LifeOS.slug(r.name);
 function rhAddH(date, n, unit) {
   if (unit === 'day') return Day.shift(date, n);
   if (unit === 'week') return Day.shift(date, 7 * n);
@@ -2054,10 +2067,23 @@ function rhWeekStartH(today, start) {
   const dow = new Date(today + 'T12:00:00').getDay();
   return Day.shift(today, -((dow - (start == null ? 1 : start) + 7) % 7));
 }
+/* a habit is `times` per `per`: a week (none is a week), two weeks counted
+   from the week it began, or the calendar month */
+const RH_PER_H = { week: { one: 'week', len: 7 }, fortnight: { one: 'fortnight', len: 14 }, month: { one: 'month', len: 0 } };
+const rhPerH = r => (RH_PER_H[r.per] ? r.per : 'week');
+function rhPeriodH(r, date, today, start, made) {
+  const p = rhPerH(r);
+  if (p === 'month') { const f = date.slice(0, 8) + '01'; return [f, Day.shift(rhAddH(f, 1, 'month'), -1)]; }
+  const len = RH_PER_H[p].len;
+  const anchor = p === 'week' ? rhWeekStartH(today, start) : rhWeekStartH(made, start === 'today' ? 1 : start);
+  const f = Day.shift(anchor, len * Math.floor(Day.diff(date, anchor) / len));
+  return [f, Day.shift(f, len - 1)];
+}
 function rhAnyState(r, dates, today, start) {
-  const from = rhWeekStartH(today, start);
+  const made = [r.made, dates[0]].filter(Boolean).sort()[0] || today;
+  const from = rhPeriodH(r, today, today, start, made)[0];
   const n = dates.filter(d => d >= from && d <= today).length;
-  return { n: n, of: r.times || 1, met: n >= (r.times || 1), today: dates.indexOf(today) >= 0 };
+  return { n: n, of: r.times || 1, met: n >= (r.times || 1), today: dates.indexOf(today) >= 0, per: RH_PER_H[rhPerH(r)].one };
 }
 
 /* ── small things several widgets share ── */
@@ -3976,7 +4002,7 @@ const WIDGETS = {
 
   /* ── BLOCK ── */
   rhythms: {
-    nm: 'EVERY & ANYTIME', w: 4, h: 4, app: 'block', to: ['block'],
+    nm: 'EVERY & HABITS', w: 4, h: 4, app: 'block', to: ['block'],
     state() {
       const today = LifeOS.day(), log = {};
       Rec.all('tick').forEach(t => { if (t.date && t.date <= today) (log[t.key] || (log[t.key] = [])).push(t.date); });
@@ -3985,7 +4011,7 @@ const WIDGETS = {
       return Object.keys(rh).map(id => Object.assign({ id: id }, rh[id]))
         .filter(r => r.name && (r.kind === 'every' || r.kind === 'anytime'))
         .map(r => {
-          const tid = LifeOS.slug(r.name), dates = log[tid] || [];
+          const tid = rhTickH(r), dates = log[tid] || [];
           return { r: r, tid: tid, s: r.kind === 'every' ? rhEveryState(r, dates, today) : rhAnyState(r, dates, today, ws == null ? 1 : ws) };
         });
     },
@@ -3994,10 +4020,10 @@ const WIDGETS = {
       const owed = all.filter(x => x.s.st === 'owed' || x.s.st === 'due').length;
       return all.length ? (owed ? owed + ' due or owed' : 'nothing owed') : 'none set up';
     },
-    parts: [['every', 'Every'], ['any', 'Anytime'], ['done', 'Done today'], ['later', 'Coming later']],
+    parts: [['every', 'Every'], ['any', 'Habits'], ['done', 'Done today'], ['later', 'Coming later']],
     draw(body, cfg) {
       const all = WIDGETS.rhythms.state(), today = LifeOS.day();
-      if (!all.length) { body.appendChild(el('div', 'empty', 'No Every or Anytime blocks')); return; }
+      if (!all.length) { body.appendChild(el('div', 'empty', 'No Every blocks or habits')); return; }
       const list = el('div', 'rowlist');
       const row = (x, done, tail, cls) => {
         const r = el('div', 'row' + (done ? ' done' : '') + (cls ? ' ' + cls : ''));
@@ -4022,9 +4048,9 @@ const WIDGETS = {
           .forEach(x => row(x, false, x.s.late === -1 ? 'tomorrow' : 'in ' + (-x.s.late) + ' days'));
       }
       if (any.length) {
-        list.appendChild(el('div', 'mb-group', 'ANYTIME, THIS WEEK'));
+        list.appendChild(el('div', 'mb-group', 'HABITS'));
         any.sort((a, b) => (a.s.met ? 1 : 0) - (b.s.met ? 1 : 0))
-          .forEach(x => row(x, x.s.today, x.s.n + ' of ' + x.s.of, x.s.met ? 'met' : ''));
+          .forEach(x => row(x, x.s.today, x.s.n + ' of ' + x.s.of + ' this ' + x.s.per, x.s.met ? 'met' : ''));
       }
       body.appendChild(list);
     },
@@ -5032,14 +5058,14 @@ Object.assign(WIDGETS, {
   ticks: {
     nm: 'TICKS', w: 4, h: 3, app: 'block', to: ['block'],
     about: 'The activities you pick, each ticked done for today with one tap.',
-    /* everything a tick can be for: named activities, Every and Anytime
+    /* everything a tick can be for: named activities, Every and Habits
        blocks, and anything ticked in the last 60 days. Not the journal's
        own counters, which count lines and are not ticked by hand. */
     pool() {
       const ids = {}, today = LifeOS.day(), log = (LifeOS.doc() || {}).log || {}, rh = Rec.map('rhythm') || {};
       const skip = id => /^note-/.test(id);
       Object.keys(Rec.map('activity') || {}).forEach(id => { if (!skip(id)) ids[id] = ''; });
-      Object.keys(rh).forEach(k => { const r = rh[k]; if (r && r.name && (r.kind === 'every' || r.kind === 'anytime')) ids[LifeOS.slug(r.name)] = r.name; });
+      Object.keys(rh).forEach(k => { const r = rh[k]; if (r && r.name && (r.kind === 'every' || r.kind === 'anytime')) ids[rhTickH(r)] = r.name; });
       for (let i = 0; i <= 60; i++) Object.keys(log[LifeOS.shift(today, -i)] || {}).forEach(id => { if (!skip(id) && !(id in ids)) ids[id] = ''; });
       const out = Object.keys(ids).map(id => { const l = actLabel(id); return { id: id, name: ids[id] || l.name, part: ids[id] ? '' : l.part }; });
       const n = {};
@@ -6058,6 +6084,12 @@ function widgetMenu(i, x, y) {
 }
 
 const NARROW = () => matchMedia('(max-width:820px)').matches;
+/* the icon of a widget that draws for no one app, by what it is about */
+const WIC = { lockedin: 'energy', workdone: 'done', todo: 'done', ideas: 'edit', events: 'today', streaks: 'star',
+  sticky: 'edit', clock: 'timer', timer: 'timer', stopwatch: 'timer', intervals: 'timer', alarms: 'timer',
+  countdown: 'timer', worldclock: 'timer', desktime: 'timer', calendar: 'calendar', year: 'calendar', life: 'calendar',
+  links: 'link', apps: 'menu', upcoming: 'calendar', projects: 'filter', onthisday: 'history', recap: 'history',
+  log: 'history', ticks: 'done', 'add-todo': 'add', 'add-entry': 'add', 'add-event': 'add', 'add-idea': 'add' };
 function drawHome() {
   useBoard();
   const g = $('#grid'); g.innerHTML = '';
@@ -6098,7 +6130,13 @@ function drawHome() {
     const miss0 = Rec.missed ? Rec.missed() : 0;
     let sub = W.sub ? W.sub(cfg) : '';
     if (Rec.missed && Rec.missed() !== miss0) sub = '';
-    head.innerHTML = (to ? '<span class="wgo" role="link" tabindex="0">' + esc(name) + '</span>' : esc(name)) +
+    /* every card says what it is before it is read (Tom, 2026-10-18: "I also
+       want to immediately see it's the CONSISTENCY widget"): its app's icon,
+       or one of its own, in the card's colour (`.wic`) */
+    const icRole = WIC[cfg.t] || (String(cfg.t).indexOf('app-') === 0 ? '' : 'info');
+    const ic = W.app ? appIco(app(W.app), 16) : (icRole && typeof Icons !== 'undefined' ? Icons.svg(icRole, { size: 16, weight: 2 }) : '');
+    head.innerHTML = (ic ? '<span class="wic" aria-hidden="true">' + ic + '</span>' : '') +
+      (to ? '<span class="wgo" role="link" tabindex="0">' + esc(name) + '</span>' : esc(name)) +
       (title ? ' <span class="c">' + esc(title) + '</span>' : '') +
       '<span class="sub">' + esc(sub) + '</span>';
     if (to) {
@@ -6551,7 +6589,7 @@ const ABOUT = {
   upcoming: 'Todos with a date coming up.',
   projects: 'Open todos for each project.',
   brief: 'The morning brief from your PC, and its todos.',
-  rhythms: 'BLOCK’s Every and Anytime blocks: owed, due and coming up, tickable.',
+  rhythms: 'BLOCK’s Every blocks and Habits: owed, due, coming up and this period’s count, tickable.',
   measure: 'Any measure you track in STATUS, charted.',
   macros: 'Protein, carbs, fat and calories today against your targets.',
   meals: 'What you have eaten today.',

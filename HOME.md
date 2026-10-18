@@ -406,3 +406,12 @@ everything", and "when I removed an app, everything got rearranged".
 every widget, every option, no page errors), and his saved board from the
 16 Oct backup at 3840: APPS removed, scale 0.50 before and after, no card
 moved. NOT on his screens.]
+
+
+1.0.75, 2026-10-18: the EVERY & HABITS card reads BLOCK 1.0.23. A habit
+counts its own period (a week, two weeks from the week it began, or the
+calendar month) and says "n of N this week/fortnight/month"; a habit
+tracked from a block ticks the block's own id (`act`), here and in TICKS.
+Anytime is called Habits. The copies stay in step with block/index.html.
+[TESTED: one habit of each kind and a tracked block seeded, the card drawn
+and its tick pressed: counts right, the tick under the block's id.]
