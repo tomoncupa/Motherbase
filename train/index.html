@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.70, 2026-10-18">
+<meta name="mb-version" content="1.0.71, 2026-10-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -264,6 +264,10 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
   border:0;background:none;cursor:pointer;color:var(--text-2);font:inherit;
   padding:var(--s-3) var(--s-4);border-radius:var(--radius-md);min-height:var(--tap)}
 .bigact svg{width:1.75em;height:1.75em;color:var(--accent)}
+/* the next day of the block: the first thing on an empty day in a block */
+.bigact.next{color:var(--text-1);font-family:var(--font-display);font-size:var(--f-5);font-weight:var(--w-bold)}
+.bigact.next small{font-family:var(--font-body);font-size:var(--f-2);font-weight:var(--w-body);color:var(--text-muted)}
+.startbox .otherday{margin-top:calc(var(--s-4) * -1)}
 
 /* No floating button: FitNotes puts add in the top bar, and a FAB here would
    sit on top of the last set of the day. */
@@ -3547,6 +3551,21 @@ function drawEmptyDay(m) {
   m.appendChild(box);
 
   var acts = UI.el('div', 'startbox');
+  /* inside a block with days: the next one in the rotation, first */
+  var nb = TRAIN.nextBlockDay(TRAIN.date);
+  if (nb) {
+    var nx = UI.el('button', 'bigact next mb-press mb-tap');
+    nx.innerHTML = ico('next') + '<span>Next: ' + UI.esc(nb.d.name) + '</span><small>Set one from last time and the Algrowrithm</small>';
+    nx.onclick = function () { Mobile.feedback('open'); TRAIN.startNextDay(TRAIN.date); };
+    withMenu(nx, function (e) { TRAIN.pickBlockDay(e); });
+    acts.appendChild(nx);
+    if (nb.days.length > 1) {
+      var other = UI.el('button', 'mb-btn mb-press mb-tap otherday');
+      other.textContent = 'Another Day Of ' + nb.sp.p.name;
+      other.onclick = function (e) { TRAIN.pickBlockDay(e); };
+      acts.appendChild(other);
+    }
+  }
   var start = UI.el('button', 'bigact mb-press mb-tap');
   start.innerHTML = ico('add') + '<span>Start New Session</span>';
   start.onclick = function () { Mobile.feedback('open'); TRAIN.addExercise(); };
@@ -6442,7 +6461,8 @@ TRAIN.pickForSlot = function (dayKey, key) {
   TRAIN.query = '';
   TRAIN.show('picker', { cat: cat });
 };
-TRAIN.startProgramDay = function (dayKey) {
+TRAIN.startProgramDay = function (dayKey, o) {
+  o = o || {};
   /* an open slot with nothing picked is left out: there is no exercise to
      fill in yet, and it stays on the routine to be picked */
   var items = TRAIN.exercisesOf(dayKey).filter(function (it) { return !!it.x.ex; }), date = TRAIN.date, order = [], made = 0;
@@ -6452,14 +6472,14 @@ TRAIN.startProgramDay = function (dayKey) {
   items.forEach(function (it) {
     if (order.indexOf(it.x.ex) < 0) order.push(it.x.ex);
     if (have[it.x.ex]) return;
-    made += writeFilled(it.x.ex, date, TRAIN.fillFor(it.x, date, true));
+    made += writeFilled(it.x.ex, date, o.suggest ? TRAIN.suggestFill(it.x, date) : TRAIN.fillFor(it.x, date, true));
     have[it.x.ex] = 1;
   });
   var prior = TRAIN.dayGroups(date).map(function (g) { return g.ex; })
     .filter(function (x) { return order.indexOf(x) < 0; });
   /* A routine day is a named session: it is compared with the last time that
      day was done. A name already on the day stays. */
-  var day = Rec.get('progday', null, dayKey) || {}, ch = { order: prior.concat(order) };
+  var day = Rec.get('progday', null, dayKey) || {}, ch = { order: prior.concat(order), pday: dayKey };
   if (day.name && !(Rec.get('session', date, '') || {}).name) ch.name = day.name;
   TRAIN.patchSession(date, ch);
   TRAIN.reindex();
@@ -9038,7 +9058,7 @@ TRAIN.phaseWeek = function (sp, date) { return Math.floor(Day.diff(date, sp.from
 TRAIN.phaseLine = function (sp, date) { return sp.p.name + ' · Week ' + TRAIN.phaseWeek(sp, date); };
 
 TRAIN.phaseDialog = function (key) {
-  var cur = key ? Rec.get('phase', null, key) : null, name = null, start = null, end = null;
+  var cur = key ? Rec.get('phase', null, key) : null, name = null, start = null, end = null, days = null;
   UI.dialog({
     title: key ? 'TRAINING BLOCK' : 'NEW TRAINING BLOCK', width: 440,
     body: function (b, h) {
@@ -9048,6 +9068,16 @@ TRAIN.phaseDialog = function (key) {
       b.appendChild(UI.row('Name', '', name));
       b.appendChild(UI.row('Starts', 'Block records count from this day', start));
       b.appendChild(UI.row('Ends', 'Empty runs it until the next block', end));
+      /* the days this block runs, in rotation (Tom, 2026-10-18) */
+      days = document.createElement('select');
+      days.className = SEL;
+      var opt = function (v, t) { var o = document.createElement('option'); o.value = v; o.textContent = t; days.appendChild(o); };
+      opt('', 'None');
+      TRAIN.blockPrograms().forEach(function (x) { opt(x.id, x.name); });
+      opt('*new', 'New routine for this block');
+      var was = cur && cur.program ? String(cur.program).replace(/^prog-(f-)/, 'forge:$1') : '';
+      days.value = was && [].some.call(days.options, function (o) { return o.value === was; }) ? was : (cur && cur.program) || '';
+      b.appendChild(UI.row('Days', 'Each empty day in the block offers the next one', days));
       Mobile.form(b, function () { if (save()) h.close(); });
     },
     actions: (key ? [{ label: 'DELETE', kind: 'bad', fn: function () {
@@ -9063,11 +9093,134 @@ TRAIN.phaseDialog = function (key) {
     if (!nm) { UI.toast('Please enter a name', { bad: true }); UI.focusSoon(name); return false; }
     if (!st) { UI.toast('Please select a start date', { bad: true }); return false; }
     if (en && en < st) { UI.toast('The end is before the start', { bad: true }); return false; }
-    TRAIN.patchRow('phase', null, key || TRAIN.newId(), { name: nm, start: st, end: en || undefined });
+    var pick = days ? days.value : '', prog = pick;
+    if (pick === '*new') {
+      prog = 'prog-' + TRAIN.newId();
+      Rec.set('program', null, prog, { name: nm, ord: Object.keys(TRAIN.programs()).length });
+    } else if (pick.indexOf('forge:') === 0) prog = TRAIN.useForgeProgram(pick.slice(6));
+    TRAIN.patchRow('phase', null, key || TRAIN.newId(), { name: nm, start: st, end: en || undefined, program: prog || undefined });
     Mobile.feedback('success');
-    draw();
+    if (pick === '*new') {
+      /* straight to the new routine, to add its days and exercises */
+      setTimeout(function () { TRAIN.progOpen = prog; TRAIN.show('routines'); UI.toast('Add the days of ' + nm + ' in order'); }, 60);
+    } else draw();
     return true;
   }
+};
+
+/* ── a block's days, in rotation ──
+   Tom, 2026-10-18: "When I create a block I want to be able to program all
+   the days for that block then give me the option to auto repopulate from
+   the cycle. So if I have a 4 day split, it asks me if I want to do the next
+   scheduled, then intelligent weight suggestion based on last session and
+   algrowrithm." He picked: next in the rotation (the day after the last one
+   done in the block, whatever the date), and programmed in TRAIN or FORGE.
+   `phase.program` is a routine id; a FORGE program of several weeks is
+   kept by its base id and the block's week picks `-wN`. */
+TRAIN.blockPrograms = function () {
+  var progs = TRAIN.programs(), out = [];
+  Object.keys(progs).forEach(function (id) {
+    var m = /^(.*)-w(\d+)$/.exec(id);
+    if (m && m[2] !== '1') return;
+    out.push({ id: m ? m[1] : id, name: String(progs[id].name || 'Routine').replace(/ · Week 1$/, ''), ord: progs[id].ord || 0 });
+  });
+  out.sort(function (a, b) { return a.ord - b.ord; });
+  /* FORGE's programs, Tom's own; never on a client's profile */
+  if (!CLIENT) Rec.all('cprog').forEach(function (r) {
+    var v = r.payload || {};
+    if (r.deleted || v.src !== 'forge' || String(r.key).indexOf('f-') !== 0) return;
+    /* always offered as FORGE's, so saving the block again brings in
+       whatever FORGE changed since */
+    var made = 'prog-' + r.key;
+    out = out.filter(function (x) { return x.id !== made; });
+    out.push({ id: 'forge:' + r.key, name: 'FORGE · ' + (v.name || 'Program') });
+  });
+  return out;
+};
+/* A FORGE program into TRAIN's routines, the way a coach's file arrives. */
+TRAIN.useForgeProgram = function (key) {
+  var p = Rec.get('cprog', null, key);
+  if (!p) return '';
+  var PLAN = ['catName', 'n', 'reps', 'bands', 'rir', 'rest', 'note', 'slot'];
+  var bag = { kind: 'motherbase-program', v: 2, id: key, name: p.name || 'Program', weeks: p.weeks, from: 'FORGE',
+    days: (p.days || []).map(function (d) {
+      var o = { name: d.name, ex: (d.ex || []).filter(function (x) { return x.name || x.slot; }).map(function (x) {
+        var e = { name: x.name, sets: (x.sets || []).slice(0, 1).filter(function (q) { return q.kg != null || q.r != null; })
+          .map(function (q) { return { kg: q.kg, r: q.r }; }) };
+        PLAN.forEach(function (f) { if (x[f] != null && x[f] !== '') e[f] = x[f]; });
+        return e;
+      }) };
+      if (d.wk) { o.wk = d.wk; o.day = d.day || d.name; }
+      return o;
+    }) };
+  TRAIN.takeProgram(bag);
+  return 'prog-' + String(key).replace(/[^a-z0-9-]/gi, '');
+};
+/* The routine a block runs on a day: its own, or that week of a FORGE one. */
+TRAIN.blockProgram = function (sp, date) {
+  var id = sp && sp.p && sp.p.program;
+  if (!id) return '';
+  var progs = TRAIN.programs();
+  if (progs[id]) return id;
+  var wk = TRAIN.phaseWeek(sp, date), best = '';
+  for (var w = 1; w <= wk; w++) if (progs[id + '-w' + w]) best = id + '-w' + w;
+  return best || (progs[id + '-w1'] ? id + '-w1' : '');
+};
+/* The next day in the rotation: the one after the last day of this block's
+   routine done in the block, matched by name, so a FORGE week change or a
+   renamed session still lines up. None done yet is the first day. */
+TRAIN.nextBlockDay = function (date) {
+  var sp = TRAIN.phaseOn(date), prog = TRAIN.blockProgram(sp, date);
+  var days = prog ? TRAIN.daysOf(prog) : [];
+  if (!days.length) return null;
+  var keys = days.map(function (d) { return TRAIN.nameKey(d.d.name); });
+  var done = Object.keys(TRAIN.idx.byDate).filter(function (d) { return d < date && d >= sp.from; }).sort().reverse();
+  for (var i = 0; i < done.length; i++) {
+    var ss = Rec.get('session', done[i], '') || {};
+    var nm = ss.pday ? (Rec.get('progday', null, ss.pday) || {}).name : ss.name;
+    var at = keys.indexOf(TRAIN.nameKey(nm));
+    if (at >= 0) { var nx = days[(at + 1) % days.length]; return { key: nx.key, d: nx.d, days: days, sp: sp }; }
+  }
+  return { key: days[0].key, d: days[0].d, days: days, sp: sp };
+};
+/* Set one's load from last time and the Algrowrithm (forge/CLAUDE.md):
+   effort is constant, reps travel down a range, load rises from what was
+   done. Last time's first set against this exercise's top band: past the
+   top, two steps heavier; at the top, one step; inside the band, the same;
+   under it, one step lighter. Reps and the sets after it are last time's.
+   No range on the routine, no rule to apply: last time as it was.
+   The steps are Claude's reading of the file, not Tom's words yet. */
+TRAIN.topBand = function (plan) {
+  if (!plan) return null;
+  var b = /(\d+)\s*-\s*(\d+)/.exec(String(plan.bands || '').split(/[·,|]/)[0]);
+  if (b) return { lo: +b[1], hi: +b[2] };
+  var r = /(\d+)\s*-\s*(\d+)/.exec(String(plan.reps || ''));
+  if (!r) return null;
+  var lo = +r[1], hi = +r[2], n = Math.max(1, +plan.n || 3);
+  return { lo: Math.round(hi - (hi - lo) / n), hi: hi };
+};
+TRAIN.suggestFill = function (px, date) {
+  var prev = TRAIN.lastSetsOf(px.ex, date);
+  if (!prev.length) return TRAIN.fillFor(px, date, true);
+  var list = prev.map(function (q) { return { kg: q.kg, r: q.r, dist: q.dist, dur: q.dur }; });
+  var band = TRAIN.topBand(px.plan), first = list[0];
+  if (band && first.kg > 0) {
+    var ex = TRAIN.exercises()[px.ex], step = TRAIN.toKg(TRAIN.increment(ex), TRAIN.unit(px.ex));
+    var r = +prev[0].r || 0;
+    first.kg = Math.max(0, first.kg + (r > band.hi ? 2 * step : r >= band.hi ? step : r < band.lo ? -step : 0));
+  }
+  return list;
+};
+TRAIN.startNextDay = function (date) {
+  var nb = TRAIN.nextBlockDay(date);
+  if (nb) TRAIN.startProgramDay(nb.key, { suggest: 1 });
+};
+TRAIN.pickBlockDay = function (e) {
+  var nb = TRAIN.nextBlockDay(TRAIN.date);
+  if (!nb) return;
+  menuAt(e, nb.days.map(function (d) {
+    return { label: d.d.name + (d.key === nb.key ? ' (next)' : ''), fn: function () { TRAIN.startProgramDay(d.key, { suggest: 1 }); } };
+  }), String(nb.sp.p.name).toUpperCase());
 };
 TRAIN.deletePhase = function (key) {
   var cur = Rec.get('phase', null, key);

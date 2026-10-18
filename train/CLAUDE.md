@@ -1021,6 +1021,14 @@ Curl separate; and *"There is no barbell squat?"*
   clicking (Short Rest 50 made `10 5` count 12.5 and re-flagged records), the
   log. Not watched on the iPhone or on his real log.
 
+## A block's days, in rotation (1.0.71, 2026-10-18)
+
+- Tom: "When I create a block I want to be able to program all the days for that block then give me the option to auto repopulate from the cycle... it asks me if I want to do the next scheduled then intelligent weight suggestion based on last session and algrowrithm." He picked: **next in the rotation**, and **programmed in TRAIN or FORGE**.
+- **`phase.program`**: the block dialog's Days row picks a routine, a FORGE program (`FORGE · name`, from `cprog f-*`, Tom only), or New Routine For This Block (made with the block's name, then Training Routines opens on it). A FORGE program comes in through `takeProgram` (`useForgeProgram`), is stored by its base id `prog-f-<id>`, the block's week picks `-wN` (the last week there is past the end), and **saving the block again re-imports it**, so FORGE edits arrive.
+- **The rotation** (`nextBlockDay`): the day after the last day of the block's routine done inside the block, matched by `nameKey` of `session.pday`'s day name, else the session name; nothing done yet is day one. `startProgramDay` now writes `session.pday`.
+- **The empty day in such a block leads with Next: <day>**, then Another Day Of <block> (a menu, also on hold or right click of Next), then Start New Session and Copy Past Session.
+- **Set one's load** (`suggestFill`, `topBand`): last time's sets, with set one moved against the exercise's top band (`plan.bands`, else from `plan.reps` and `plan.n` as FORGE's `bands()`): past the top two steps heavier, at the top one step, inside the same, under it one step lighter. No range on the routine (a TRAIN-built one): last time as it was. **The step rule is Claude's reading of the Algrowrithm, not Tom's words yet.** Watched: 28 kg x 12 against 9-10 became 33 kg.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the
