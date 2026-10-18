@@ -415,3 +415,27 @@ tracked from a block ticks the block's own id (`act`), here and in TICKS.
 Anytime is called Habits. The copies stay in step with block/index.html.
 [TESTED: one habit of each kind and a tracked block seeded, the card drawn
 and its tick pressed: counts right, the tick under the block's id.]
+
+## 2026-10-18, HOME 1.0.76: cards tell themselves apart, and Fit board to screen
+
+Tom, on the 3840 board: "There's not a lot of visual distinction", "I
+also want to immediately see it's the CONSISTENCY widget", and he picked
+all three fixes offered.
+- **Every title** carries an icon (the app's, else `WIC` by what the widget
+  is about) in the card's colour, a 3px strip of that colour down its left
+  edge, and is `--text-1` at `--f-2` instead of dim at `--f-1`. The colour
+  is on the icon and strip only: a chart colour is never a word colour.
+- **Cards a step lighter**: the material's own gradient on `--surface-2`
+  instead of `--surface-1`, home board only.
+- These two went out inside the other session's HOME 1.0.75 commit
+  (bb59268), which staged the whole file while they were on disk; watched
+  working after, no console errors.
+- **Fit board to screen** (card menu, shown when the board draws under 95%):
+  every spot times the scale, reach reset, one undo. His 16 Oct board at
+  3840: 0.50 to 1.0, same arrangement, 1070px tall in a 1080 window. APPS,
+  a fit card, came out taller at its narrower width.
+- **Animations**: offered (count-up numbers, filling bars, tick ripple,
+  gliding cards, a muscle pulse); Tom: "These don't seem useful". None.
+- **CONSISTENCY**: three mockups shown (2x2 big numbers; a day grid; rows
+  of day bars), no fractions ("just data as clear as possible"). Waiting
+  on his pick.

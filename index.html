@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.75, 2026-10-18">
+<meta name="mb-version" content="1.0.76, 2026-10-18">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -6073,6 +6073,10 @@ function widgetMenu(i, x, y) {
     /* a widget with choices of its own puts them here, the same menu */
     ...(W.menu ? W.menu(cfg, () => { saveLayout(); drawHome(); }) : []),
     '-',
+    /* Tom, 2026-10-18, picked "rebuild the wide board so it draws full
+       size": a board drawn under 95% takes every spot times the scale, so
+       it looks the same arrangement and everything in it is 100% */
+    !NARROW() && SCALE < 0.95 ? { label: 'Fit board to screen', fn: fitBoard } : null,
     { label: 'Add another widget', fn: () => widgetPicker() },
     { label: 'Remove', kind: 'bad', fn: () => {
         const gone = layout.splice(i, 1)[0];
@@ -6291,6 +6295,20 @@ function keepReach() {
   if ((r[BOARD] || 0) >= drawnReach) return;
   r[BOARD] = drawnReach;
   Rec.setting('lifeos', 'boardReach', r);
+}
+function fitBoard() {
+  const f = SCALE, was = layout.map(c => Object.assign({}, c)), wasReach = boardReach();
+  layout.forEach(c => {
+    if (!c.x) return;
+    c.x = Math.round((c.x - 1) * f) + 1; c.y = Math.round((c.y - 1) * f) + 1;
+    c.w = Math.max(2, Math.round(c.w * f)); c.h = Math.max(c.hs ? 1 : 2, Math.round(c.h * f));
+  });
+  const r = boardReach(); r[BOARD] = 0; Rec.setting('lifeos', 'boardReach', r);
+  drawnReach = 0; saveLayout(); drawHome(); saveLayout();
+  UI.undo('Board fitted to the screen', () => {
+    layout.splice(0, layout.length, ...was); Rec.setting('lifeos', 'boardReach', wasReach);
+    drawnReach = 0; saveLayout(); drawHome();
+  });
 }
 let COLS = 12, SCALE = 1;
 const CELL = { w: 146, h: 84 };
