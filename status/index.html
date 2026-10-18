@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.72, 2026-10-16">
+<meta name="mb-version" content="1.0.73, 2026-10-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,7 +17,6 @@
 <link href="../shared/fonts/fonts.css" rel="stylesheet">
 
 <script src="../shared/skins.js"></script>
-<script src="../shared/boot.js"></script>
 <script src="../shared/day.js"></script>
 <script src="../shared/records.js"></script>
 <script src="../shared/journal.js"></script>
@@ -1484,7 +1483,13 @@ function value(date, fid) {
    toggle TRAIN in STATUS". Read, not written: the grade already counted TRAIN's
    rows, and now the tile says what the grade knew. */
 const trainField = fid => fid === 'trained' || /^train/i.test(fid);
-const trainLogged = date => !!Rec.get('session', date, '') || Rec.all('set', { date: date }).length > 0;
+/* TRAIN's sets are read once the rest of the store is in, never before. A
+   read before Rec.ready made ready wait for all of them, and the iPhone app
+   sat on its start screen 3 seconds for it (2026-10-18). Until they land a
+   day reads as no sets; their arrival redraws (Rec.on), so the Trained tick
+   and the rank fill in a moment later. Nothing written reads this. */
+const setsOn = date => (Rec.hydrated || Rec.loaded('set')) ? Rec.all('set', { date: date }) : [];
+const trainLogged = date => !!Rec.get('session', date, '') || setsOn(date).length > 0;
 const logged = (date, fid) => entries(date, fid).length > 0 || (trainField(fid) && trainLogged(date));
 
 /* ══════════════ FOOD ══════════════
@@ -5568,7 +5573,7 @@ function syncSentField(flipped) {
    if it is not. Naming a body part is itself a yes. */
 function trainedOn(date) {
   if (Rec.get('session', date, '')) return true;
-  if (Rec.all('set', { date: date }).length) return true;
+  if (setsOn(date).length) return true;
   const f = Object.values(fields()).filter(x => /^train/i.test(x.id) || /training/i.test(x.label || ''))[0];
   if (f && logged(date, f.id)) return true;
   return false;
@@ -5600,7 +5605,7 @@ function touched(date) {
 /* Every day ever touched, counted. Only grows; a fresh start leaves it be. */
 function daysLoggedAll() {
   const seen = {};
-  ['ev', 'meal', 'spend', 'set', 'session'].forEach(t => Rec.all(t).forEach(r => { if (r.date) seen[r.date] = 1; }));
+  ['ev', 'meal', 'spend', 'set', 'session'].forEach(t => (t !== 'set' || Rec.hydrated || Rec.loaded('set') ? Rec.all(t) : []).forEach(r => { if (r.date) seen[r.date] = 1; }));
   Rec.all('day').forEach(r => { if (r.date && r.payload && (r.payload.note || r.payload.rest)) seen[r.date] = 1; });
   Rec.all('note').forEach(r => { if (r.date && !NOT_YOU[(r.payload || {}).src]) seen[r.date] = 1; });
   const t = Day.today();
@@ -8413,13 +8418,16 @@ if (window.Icons) Icons.paint();
    Rec.ready waits for the big half of the store, IndexedDB, which can take up
    to 2.5 seconds before the store gives up on it, and STATUS showed nothing
    until then. Fields, readings and the journal are small rows, already here
-   from localStorage. So if the store has not answered in a moment and there
-   is anything to show, show it. Seeding still waits: it must see every row,
-   or it would add fields a slow store was about to hand over. */
+   from localStorage. So if the store has not answered by the time the page
+   is read and there is anything to show, show it: the wait was 300ms until
+   2026-10-18, and it was most of the time to a drawn screen. Seeding still
+   waits: it must see every row, or it would add fields a slow store was
+   about to hand over. */
 let booted = false;
-setTimeout(() => { if (!booted && Rec.count('field')) draw(); }, 300);
+setTimeout(() => { if (!booted && Rec.count('field')) draw(); }, 0);
 Rec.ready(() => {
   booted = true;
+  Rec.need('set');
   seedFields();
   linkNutrients();
   fixSeedFields();
