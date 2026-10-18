@@ -189,6 +189,34 @@ story that fits the device row.
 - Still only proved in Playwright. iOS's resume and `visibilitychange` are
   the phone's to show.
 
+## Live sync waking up (`cloud.js` 0.2.7, 2026-10-18)
+
+The iPhone TRAIN app sent three sets on 15 Oct (09:34 to 09:40 UTC) and
+nothing after; 8 Oct the same, when Tom saw the dot green and nothing reached
+the PC. Its device row said "starting" because `report.js` wrote it once, 5s
+into the open, before live sync had signed in and read the sets: a snapshot,
+not the fault. The fault: a socket that dies while the phone sleeps between
+sets can leave Firebase saying connected, a write is never answered, and
+`pushing` stays set, so every later push is skipped as "one already going".
+Nothing is lost (the boundary moves only on an answered write); it goes on
+the next real open, which a resumed page never has.
+
+- **`revive`** drops and remakes the connection (`goOffline`, `goOnline`):
+  on coming back after 30s hidden, on the browser's `online`, and when a send
+  has waited 60s (`stuck`, every 15s). Firebase resends its unanswered writes
+  on the new socket; the drop makes `onConn` read the cloud again first.
+- After 180s a send is given up (`pushGen`) and the next sends from the same
+  boundary. A first read that never answers is asked again after 60s.
+- `stop()` now clears a send in flight: one stuck send used to block every
+  push after a restart in the same page too, and broke five rig checks.
+- `Cloud.state().revived` and the device row's `revived` say the last remake
+  and why. The device row is written again on every live sync change and on
+  coming back, not only 5s into an open.
+- Four `live sync waking:` smoke checks drive a stand-in database that never
+  answers until remade; the old cloud.js passes only the symptom check.
+- Not watched on the iPhone, and the zombie socket is the story that fits
+  the rows, not one seen on the phone.
+
 ## `creatures.js` 0.2.0: dot art, all 151 (2026-09-23)
 
 Tom pointed at a page of bead patterns and said to pull the Pokémon from it.

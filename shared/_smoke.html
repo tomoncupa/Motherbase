@@ -3368,6 +3368,72 @@ async function run() {
     ok('shelf: signed out, a send refuses and says why', !!R.out, say);
   }
 
+  /* ── live sync waking up (cloud.js 0.2.7, 2026-10-18) ──
+     Tom's iPhone TRAIN app sent three sets on 15 Oct and nothing after, with
+     the dot green on 8 Oct while nothing arrived. One level under "the sets
+     reached the PC": a write the database never answers, as on a socket that
+     died while the phone slept. Every later push must not just wait behind
+     it forever; remaking the connection must send both. The stand-in
+     database answers a write only once `goOnline` has run after it. */
+  if (Cloud._look().started) {
+    ok('live sync waking: not run, because this page is really signed in and syncing', true);
+  } else {
+    let conns = [], pending = [], online = true, zombie = true, wrote = [], remade = 0;
+    const row = (k, h) => ({ id: 'local|x||' + k, user_id: 'local', type: 'x', date: null, key: k,
+      payload: { v: k }, updated_at: new Date(Date.now() - h * 60000).toISOString(), deleted: false });
+    const rows = Object.create(null);
+    const S = {
+      _rows: rows,
+      merge: () => 0,
+      export: () => Object.keys(rows).sort().map(k => rows[k]),
+      newerThan: (t, s) => !s || Object.keys(rows).some(k => rows[k].updated_at > s),
+      unkept: () => 0,
+      stats: () => ({ hydrated: true, idbSlow: false }),
+    };
+    const q = { startAt: () => q, on() {}, off() {}, once: () => Promise.resolve({}) };
+    const fdb = {
+      ref(path) {
+        if (path === '.info/connected') return {
+          on: (e, f) => { conns.push(f); f({ val: () => online }); },
+          off: (e, f) => { conns = conns.filter(x => x !== f); } };
+        /* on the dead socket a write waits; on the new one it is answered */
+        if (!path) return { update: patch => new Promise(res => {
+          const land = () => { Object.keys(patch).forEach(p => wrote.push(Cloud._dec(p.split('/').pop()))); res(); };
+          if (zombie) pending.push(land); else land();
+        }) };
+        return { orderByChild: () => q, child: k => ({ once: () => Promise.resolve({ key: k, val: () => null }) }) };
+      },
+      goOffline() { online = false; conns.slice().forEach(f => f({ val: () => false })); },
+      goOnline() { remade++; online = true; zombie = false; pending.splice(0).forEach(f => f()); conns.slice().forEach(f => f({ val: () => true })); },
+    };
+    const settle = ms => new Promise(r => setTimeout(r, ms || 40));
+    const W = {};
+    try {
+      const a = row('a', 3);
+      rows[a.id] = a;
+      Cloud._probe(() => ({ uid: 'uidW', email: 'w@x', db: fdb, store: S, pushed: new Date(Date.now() - 864e5).toISOString(),
+        seen: new Date().toISOString(), checked: new Date().toISOString(), keys: () => ({}) }));
+      await Cloud.start();
+      await settle();
+      W.hung = !wrote.length && pending.length === 1;
+      const b = row('b', 1);
+      rows[b.id] = b;
+      W.skipped = (await Cloud._push()) === 0 && !wrote.length;
+      W.early = Cloud._stuck(Date.now() + 5000) === '' && remade === 0;
+      W.step = Cloud._stuck(Date.now() + 61000);
+      await settle(120);
+      W.wrote = wrote.slice();
+      W.both = wrote.indexOf(a.id) > -1 && wrote.indexOf(b.id) > -1;
+      W.said = /a send had no answer/.test(Cloud.state().revived || '');
+    } catch (e) { W.err = String(e && e.message || e); }
+    Cloud._probe(null);
+    ok('live sync waking: a write the database never answers holds back every push after it (the symptom)', W.hung && W.skipped, ' — ' + JSON.stringify(W));
+    ok('live sync waking: nothing is remade before a send has waited a minute', W.early, ' — ' + JSON.stringify(W));
+    ok('live sync waking: a minute on, the connection is made again and both rows go up',
+      W.step === 'revived' && W.both, ' — ' + JSON.stringify(W));
+    ok('live sync waking: the device says when and why it remade the connection', W.said, ' — ' + JSON.stringify(W));
+  }
+
   /* ── the row sync against a database held in this page (cloud.js 0.2.2) ──
 
      2026-09-30: a browser last used two weeks earlier signed in, pushed

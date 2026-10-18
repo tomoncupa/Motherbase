@@ -854,6 +854,7 @@ function onGone(snap) {
 function listen() {
   unlisten();
   loaded = false;
+  listenAt = Date.now();
   winFrom = back(cfg.seen);
   var q = winFrom ? ref.orderByChild('updated_at').startAt(winFrom) : ref.orderByChild('updated_at');
   query = q;
@@ -926,6 +927,7 @@ function start() {
     if (!probe) {
       watch();
       wire();
+      wake();
       if (!hourly) hourly = setInterval(function () { if (started && due()) check(); }, 36e5);
     }
     note('', 1);
@@ -1015,6 +1017,8 @@ function stop() {
   try { if (connRef) connRef.off('value', onConn); } catch (e) {}
   if (pt) { clearTimeout(pt); pt = null; }
   ref = null; db = null; connRef = null; started = false; uid = ''; conn = false; broken = false;
+  /* a send on the connection just stopped can never be answered now */
+  pushGen++; pushing = false; pushAgain = false; pushAt = 0;
   loaded = false; owed = false; dropped = false; winFrom = ''; acct = null;
   cloudAt = Object.create(null); redo = Object.create(null);
 }
@@ -1118,10 +1122,13 @@ function push(why) {
   if (!todo.length) return Promise.resolve(0);
   todo.sort(function (a, b) { return a.updated_at < b.updated_at ? -1 : a.updated_at > b.updated_at ? 1 : 0; });
 
-  pushing = true;
+  pushing = true; pushAt = Date.now();
+  var gen = ++pushGen;
   var sent = 0, skipped = 0, ahead = 0, at = 0, edge = since;
 
   function chunk() {
+    /* a send given up on by `stuck` leaves everything to the one after it */
+    if (gen !== pushGen) return Promise.reject(new Error('given up'));
     if (at >= todo.length) return Promise.resolve();
     /* From the edge so far, not from `since`: a last chunk holding only
        future-dated rows would otherwise put the boundary back to the start. */
@@ -1130,6 +1137,7 @@ function push(why) {
     skipped += p.skipped; ahead += p.ahead;
     var step = p.sent ? write(p.patch) : Promise.resolve(0);
     return step.then(function (bad) {
+      if (gen !== pushGen) throw new Error('given up');
       sent += p.sent - bad;
       Object.keys(p.patch).forEach(function (k) { var r = p.patch[k]; if (r) cloudAt[r.id] = r.updated_at; });
       edge = p.edge;
@@ -1139,6 +1147,7 @@ function push(why) {
   }
 
   return chunk().then(function () {
+    if (gen !== pushGen) return 0;
     pushing = false;
     last.sent += sent; last.skipped += skipped;
     /* every push meets the same future rows again, so this is a recount */
@@ -1148,6 +1157,7 @@ function push(why) {
     if (pushAgain) { pushAgain = false; return push('again').then(function (n) { return n < 0 ? n : sent + n; }); }
     return sent;
   }).catch(function (e) {
+    if (gen !== pushGen) return 0;
     pushing = false;
     /* whatever was owed a second send is still owed one */
     Object.keys(again).forEach(function (id) { redo[id] = 1; });
@@ -1227,6 +1237,64 @@ function check(force, max) {
           function () { checking = false; return null; });
 }
 
+/* ── waking up: a connection that died while the phone slept (0.2.7) ──
+
+   2026-10-18. Tom's iPhone TRAIN app sent three sets on 15 Oct, 09:34 to
+   09:40 UTC, and nothing after; 8 Oct the same, three sets, and that day he
+   saw the sync dot GREEN while rows never reached the PC. An iPhone puts a
+   home-screen app to sleep between sets, and the socket under Firebase can
+   die there without either end saying so. Firebase still says connected,
+   a write sent into it is never answered, `pushing` stays set, and every
+   push after it is skipped as "one already going". Nothing was lost: the
+   boundary moves only on an answered write, so it all goes on the next
+   real open. But a page he keeps resuming never has one.
+
+   So the connection is dropped and made again (`goOffline`, `goOnline`)
+   when the page comes back after WAKE_GAP away, when the browser says the
+   network is back, and when a send or a first read has waited STUCK with no
+   answer. Firebase keeps an unanswered write and sends it again on the new
+   connection, and the drop makes `onConn` read the cloud again before
+   anything new goes up. A send still unanswered after three times STUCK is
+   given up (`pushGen`) and the next one sends from the same boundary;
+   sending a row twice is the same row. */
+var WAKE_GAP = 30000, STUCK = 60000;
+var asleepAt = 0, pushAt = 0, listenAt = 0, pushGen = 0, revivedFor = -1, woken = false;
+function revive(why) {
+  if (!started || !db || typeof db.goOffline !== 'function') return false;
+  last.revived = why + ', ' + new Date().toLocaleString();
+  try { db.goOffline(); db.goOnline(); } catch (e) { return false; }
+  return true;
+}
+function stuck(now) {
+  now = now || Date.now();
+  if (!started) return '';
+  if (pushing && pushAt && now - pushAt > 3 * STUCK) {
+    pushGen++; pushing = false; pushAgain = false; pushAt = 0;
+    revive('a send never answered');
+    push('stuck');
+    return 'gave up';
+  }
+  if (pushing && pushAt && now - pushAt > STUCK && revivedFor !== pushGen) {
+    revivedFor = pushGen;
+    revive('a send had no answer');
+    return 'revived';
+  }
+  if (conn && !loaded && listenAt && now - listenAt > STUCK) { listen(); return 'asked again'; }
+  return '';
+}
+function wake() {
+  if (woken || !g.document) return;
+  woken = true;
+  g.document.addEventListener('visibilitychange', function () {
+    if (g.document.visibilityState === 'hidden') { asleepAt = Date.now(); return; }
+    var away = asleepAt ? Date.now() - asleepAt : 0;
+    asleepAt = 0;
+    if (away > WAKE_GAP) revive('back after ' + Math.round(away / 1000) + 's away');
+  });
+  g.addEventListener('online', function () { revive('the network came back'); });
+  setInterval(function () { stuck(); }, 15000);
+}
+
 /* ── when to push ──
 
    On every change, debounced. The store announces a change whatever wrote it,
@@ -1280,7 +1348,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.6',
+  VERSION: '0.2.7',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -1308,6 +1376,8 @@ var Cloud = {
       sentAt: cfg.sentAt || '',
       gotAt: cfg.gotAt || '',
       why: last.why || '',
+      /* the last time a sleeping connection was made again, and why (0.2.7) */
+      revived: last.revived || '',
       ok: !!last.ok,
       sent: last.sent, got: last.got, skipped: last.skipped, ahead: last.ahead,
       /* 0.2.5: rows the database would not store, and the first few ids */
@@ -1430,6 +1500,8 @@ var Cloud = {
     say();
   },
   _push: function () { return push('check'); },
+  _stuck: stuck,
+  _revive: revive,
   _check: check,
   _look: function () {
     return { started: started, loaded: loaded, conn: conn, pushed: cfg.pushed, seen: cfg.seen, from: winFrom,

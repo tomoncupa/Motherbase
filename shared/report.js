@@ -91,6 +91,7 @@
       sync: s.conn ? 'live' : s.live ? 'signed in, not connected' : s.why ? 'not syncing: ' + s.why
         : s.on ? 'starting' : s.has ? 'not signed in' : 'not set up',
       syncedAt: at,
+      revived: s.revived || '',
       /* Where the sign-in is kept and when it last went (cloud.js 0.2.4).
          Error codes and storage names only, never a token. */
       auth: s.kept || s.lost || s.authErr
@@ -131,6 +132,7 @@
     if (v && (!was.v || was.v[where] !== v)) ch['v.' + where] = v;
     if (was.sync !== s.sync) ch.sync = s.sync;
     if (s.syncedAt && was.syncedAt !== s.syncedAt) ch.syncedAt = s.syncedAt;
+    if (s.revived && was.revived !== s.revived) ch.revived = s.revived;
     if (s.auth && JSON.stringify(was.auth || null) !== JSON.stringify(s.auth)) ch.auth = s.auth;
     if (disk && was.disk !== disk) ch.disk = disk;
     /* How long this open took, per app, from the page Tom actually opened
@@ -191,7 +193,23 @@
   }
 
   /* once per open, once the store and live sync have had a moment */
-  function start() { keepStorage(); setTimeout(function () { write(); }, 5000); }
+  /* and again whenever live sync changes state or the app comes back.
+     2026-10-18: the row was written once, five seconds into an open, which
+     is before live sync has signed in and read the sets, so the iPhone TRAIN
+     app's row said "starting" for good, and a page resumed for days never
+     said it was alive at all. `soon` writes only what changed, at most every
+     EVERY. */
+  var hooked = false;
+  function hook(n) {
+    if (hooked || off) return;
+    if (!g.Cloud || !g.Cloud.on) { if ((n || 0) < 20) setTimeout(function () { hook((n || 0) + 1); }, 3000); return; }
+    hooked = true;
+    g.Cloud.on(function () { soon(); });
+  }
+  if (g.top === g && g.document) g.document.addEventListener('visibilitychange', function () {
+    if (g.document.visibilityState === 'visible') soon();
+  });
+  function start() { keepStorage(); setTimeout(function () { write(); }, 5000); hook(); }
   if (g.Rec && g.Rec.ready) g.Rec.ready(start); else setTimeout(start, 3000);
 
   g.DeviceReport = {
