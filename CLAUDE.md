@@ -1039,6 +1039,16 @@ answer, or take it out.
   `git diff --stat` before committing; a count far past what you changed is
   this. Put the endings back before committing, never after a push if it
   can be helped.
+- **An entry animation that starts see-through never plays on a page that
+  is not being drawn**, and the content sits invisible on its first frame
+  (the Browser pane when hidden reported `currentTime` 0 for good). TRAIN's
+  day slide and COACH's client fade take their class off on a timer
+  (600ms) as well as on the animation's own end (2026-10-18).
+- **"It still does the old thing" is first a question of which build that
+  device runs.** Every device's `device` row carries `v`, the version of
+  each app it last opened; read it in the nightly backup before reading
+  code. Tom's iPhone TRAIN app was on 1.0.61 three days after 1.0.62
+  shipped the fix he said was missing (2026-10-18).
 
 ---
 
