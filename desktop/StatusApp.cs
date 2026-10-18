@@ -160,6 +160,8 @@ class App : Form
         StartPosition = FormStartPosition.Manual;
         ShowInTaskbar = true;
         Text = "STATUS";
+        Icon = TrayIcon();   /* the running window's taskbar button reads this,
+                                not the exe's; unset it is Windows' stock squares */
         TopMost = onTop;
         BackColor = Color.FromArgb(11, 14, 20);   /* the theme's page colour, so
                                                       the first paint is not white */
