@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.21, 2026-10-17">
+<meta name="mb-version" content="1.0.22, 2026-10-18">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -228,12 +228,17 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
 .picker button.on{box-shadow:inset 0 0 0 2px var(--accent)}
 
 /* a client's TRAIN, over COACH, with one way back */
+@keyframes mvIn{from{opacity:0;transform:translateY(var(--s-3))}to{opacity:1;transform:none}}
+.col.mv-in{animation:mvIn var(--dur-med) var(--ease-out)}
+@media (prefers-reduced-motion:reduce){.col.mv-in{animation:none}}
 #over{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;background:var(--bg)}
 #over.on{display:flex}
-#over .obar{flex:0 0 auto;display:flex;align-items:center;gap:var(--s-3);
+#over .obar{flex:0 0 auto;display:none;align-items:center;gap:var(--s-3);
   padding:var(--safe-t) var(--s-2) 0 var(--s-4);background:var(--surface-1);box-shadow:var(--e-1),var(--rim)}
 #over .obar b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-family:var(--font-display);font-size:var(--f-2);letter-spacing:var(--track-cap);color:var(--text-muted)}
+.mb-btn.icobtn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2)}
+.mb-btn.icobtn svg{width:1.1em;height:1.1em}
 #over iframe{flex:1;min-height:0;width:100%;border:0;background:var(--bg)}
 </style>
 </head>
@@ -241,9 +246,9 @@ table.lifts td.n{text-align:right;font-variant-numeric:tabular-nums}
 <header>
   <div class="logo">CO<b>ACH</b></div>
   <div class="spacer"></div>
-  <button class="mb-btn mb-press mb-tap" id="sends" title="What clients have sent">SENDS</button>
-  <button class="mb-btn go mb-press mb-tap" id="open">OPEN A CLIENT FILE</button>
-  <button class="mb-btn mb-press mb-tap" onclick="settings()">SETTINGS</button>
+  <button class="mb-btn mb-press mb-tap" id="sends" title="What clients have sent">Sends</button>
+  <button class="mb-btn mb-press mb-tap" id="open">Open Client File</button>
+  <button class="mb-btn mb-press mb-tap" onclick="settings()" aria-label="Settings" title="Settings" data-icon="settings"></button>
   <button class="mb-btn mb-press mb-tap" onclick="location.href='../index.html'" aria-label="Home" data-icon="app.home"></button>
 </header>
 <main class="mb-scroll"><div class="cols" id="main"></div></main>
@@ -1188,8 +1193,8 @@ function drawClientIn(col, cs, cr, cw) {
   const card = document.createElement('div'); card.className = 'card';
   if (!p) {
     card.innerHTML = '<h2>CLIENT</h2><p class="empty">Pick a client in the box, or press an empty slot to add one. ' +
-      'You log a 1:1 yourself with <b>LOG A SESSION</b>. An online client presses <b>Send To Coach</b> in TRAIN and it lands under <b>SENDS</b> above. ' +
-      'A check-in still comes as a file from CHECK IN, and so does a send from a phone that is not signed in. Both open with <b>OPEN A CLIENT FILE</b>.</p>';
+      'You log a 1:1 yourself with <b>Log Session</b>. An online client presses <b>Send To Coach</b> in TRAIN and it lands under <b>Sends</b> above. ' +
+      'A check-in still comes as a file from CHECK IN, and so does a send from a phone that is not signed in. Both open with <b>Open Client File</b>.</p>';
     col.appendChild(card);
     return;
   }
@@ -1217,8 +1222,8 @@ function drawClientIn(col, cs, cr, cw) {
        should never grow one. */
     const two = document.createElement('div'); two.className = 'row2';
     two.style.marginTop = 'var(--s-4)';
-    two.appendChild(btn('LOG A SESSION', 'go', () => openTrain(sel)));
-    two.appendChild(btn('IMPORT THEIR LOG', '', () => openTrain(sel, { import: 1 })));
+    two.appendChild(btn('Log Session', 'go', () => openTrain(sel)));
+    two.appendChild(btn('Import Their Log', '', () => openTrain(sel, { import: 1 })));
     card.appendChild(two);
   }
 
@@ -1245,8 +1250,8 @@ function drawClientIn(col, cs, cr, cw) {
        him to ask them for one is advice they will never act on. Only a client
        who does their own logging gets pointed at Send To Coach. */
     e.innerHTML = p.box === 'one'
-      ? '<p class="empty">No training for ' + esc(p.name || 'this client') + ' yet. Press <b>LOG A SESSION</b> — you log a 1:1, they do not.</p>'
-      : '<p class="empty">No training from ' + esc(p.name || 'this client') + ' yet. Ask them to press <b>Send To Coach</b> in TRAIN. It arrives under <b>SENDS</b>, or as a file they hand over.</p>';
+      ? '<p class="empty">No training for ' + esc(p.name || 'this client') + ' yet. Press <b>Log Session</b> — you log a 1:1, they do not.</p>'
+      : '<p class="empty">No training from ' + esc(p.name || 'this client') + ' yet. Ask them to press <b>Send To Coach</b> in TRAIN. It arrives under <b>Sends</b>, or as a file they hand over.</p>';
     col.appendChild(e);
     return;
   }
@@ -1600,20 +1605,21 @@ function drawProg(col) {
     st.textContent = !p.uid ? 'SEND saves a file until ' + (p.name || 'they') + ' sends you something signed in.'
       : cp.dl ? 'Sent to their TRAIN ' + Day.label(Day.calendar(+cp.dl)) + '.' : 'SEND puts it straight into their TRAIN.';
     card.appendChild(st);
-    editor(card, key, { extra: [btn('SEND TO ' + String(p.name || 'CLIENT').toUpperCase(), 'go', () => sendProg(key, p.name, sel))] });
+    editor(card, key, { extra: [btn('Send To ' + String(p.name || 'Client'), 'go', () => sendProg(key, p.name, sel))] });
   } else if (editing) {
-    const back = btn('‹ ALL PROGRAMS', '', () => { editing = ''; draw(); });
+    const back = btn('All Programs', 'icobtn', () => { editing = ''; draw(); });
+    back.insertAdjacentHTML('afterbegin', window.Icons ? Icons.svg('back') : '');
     back.style.marginBottom = 'var(--s-3)';
     card.appendChild(back);
     const fg = isForge(editing, Rec.get('cprog', null, editing));
-    const extra = [btn('SAVE AS FILE', fg ? '' : 'go', () => sendProg(editing))];
-    if (p) extra.push(btn('USE FOR ' + String(p.name || 'CLIENT').toUpperCase(), '', () => useFor(editing)));
+    const extra = [btn('Save As File', fg ? '' : 'go', () => sendProg(editing))];
+    if (p) extra.push(btn('Use For ' + String(p.name || 'Client'), '', () => useFor(editing)));
     if (fg) {
       const h = document.createElement('h2'); h.textContent = String(Rec.get('cprog', null, editing).name || 'PROGRAM').toUpperCase(); card.appendChild(h);
       forgeView(card, editing);
       const r2 = document.createElement('div'); r2.className = 'row2';
       const id = editing.slice(2);
-      r2.appendChild(btn('EDIT IN FORGE', 'go', () => { location.href = FORGE + '?p=' + encodeURIComponent(id); }));
+      r2.appendChild(btn('Edit In FORGE', 'go', () => { location.href = FORGE + '?p=' + encodeURIComponent(id); }));
       extra.forEach(b => r2.appendChild(b));
       card.appendChild(r2);
     } else editor(card, editing, { named: true, extra: extra });
@@ -1641,7 +1647,8 @@ function drawProg(col) {
     /* New programs are built in FORGE since 2026-09-24, where a program has
        weeks and a whole day is on screen at once. One way to make one
        (DOCTRINE law 8); an older program made here still opens here. */
-    const nb = btn('+ BUILD A PROGRAM IN FORGE', 'go', () => { location.href = FORGE + '?new=1'; });
+    const nb = btn('Build A Program In FORGE', 'go icobtn', () => { location.href = FORGE + '?new=1'; });
+    nb.insertAdjacentHTML('afterbegin', window.Icons ? Icons.svg('add') : '');
     nb.style.cssText = 'width:100%;margin-top:var(--s-3)';
     card.appendChild(nb);
   }
@@ -1655,14 +1662,27 @@ function draw() {
   const keep = m.parentElement ? m.parentElement.scrollTop : 0;
   const act = document.activeElement;
   if (act && act.tagName === 'INPUT' && m.contains(act)) return;   /* never redraw under a finger that is typing */
-  m.innerHTML = '';
   if (sel && !people()[sel]) sel = '';
   const c1 = document.createElement('div'); c1.className = 'col boxcol'; drawBox(c1);
   const c2 = document.createElement('div'); c2.className = 'col clientcol'; drawClient(c2);
   const c3 = document.createElement('div'); c3.className = 'col progcol'; drawProg(c3);
-  m.appendChild(c1); m.appendChild(c2); m.appendChild(c3);
+  /* Only a column that changed is swapped. Tom, 2026-10-18: COACH blinked,
+     because every click and every sync rebuilt all three, and a painted
+     chart or range redraws a frame late. A column is compared with what the
+     last draw built, read before anything paints into it. */
+  const made = [c1, c2, c3], html = made.map(c => c.innerHTML), was = [...m.children];
+  if (was.length !== 3) { m.innerHTML = ''; made.forEach(c => m.appendChild(c)); }
+  else made.forEach((c, i) => { if (html[i] !== drawn[i]) m.replaceChild(c, was[i]); });
+  drawn = html;
+  /* a different client fades in rather than snapping */
+  if (sel !== drawnSel && m.children[1] === c2) {
+    c2.classList.add('mv-in');
+    setTimeout(() => c2.classList.remove('mv-in'), 600);   /* an undrawn page never plays it */
+  }
+  drawnSel = sel;
   if (m.parentElement) m.parentElement.scrollTop = keep;
 }
+var drawn = [], drawnSel = null;
 
 /* ── the shelf: what clients have sent, without a file ──
 
@@ -1686,7 +1706,7 @@ function shelfSay(n, why) {
   const b = document.getElementById('sends');
   if (!b) return;
   shelfN = n;
-  b.textContent = n ? 'SENDS · ' + n : 'SENDS';
+  b.textContent = n ? 'Sends · ' + n : 'Sends';
   b.classList.toggle('go', !!n);
   b.title = why || (n ? n + ' waiting' : 'Nothing waiting');
 }
@@ -1851,7 +1871,10 @@ function openTrain(pid, o2) {
     if (f.contentWindow && f.contentWindow.TRAIN) go(); else f.addEventListener('load', go, { once: true });
   }
 }
-document.getElementById('overDone').onclick = () => { document.getElementById('over').classList.remove('on'); draw(); };
+function closeTrain() { document.getElementById('over').classList.remove('on'); draw(); }
+document.getElementById('overDone').onclick = closeTrain;
+/* TRAIN's own back arrow, since COACH's bar is hidden (2026-10-18) */
+addEventListener('message', e => { if (e.data && e.data.mb === 'coach-close' && e.source === (document.querySelector('#over iframe') || {}).contentWindow) closeTrain(); });
 
 /* A set Tom logs in the client's TRAIN is keyed `pid|k-...`, the mark the
    quick logger always used, so it bills in WEALTH exactly the way a set

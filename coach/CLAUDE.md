@@ -349,3 +349,11 @@ client, and Tom's own `set`, `exercise` and `tick` counts did not move.
   (`liftsOf`) skipped only a marked warmup until then, so a set commented
   "wu" counted in volume, set counts and best lifts.
 - COACH loads `chart.js` since 1.0.19.
+
+## Less stiff (1.0.22, 2026-10-18)
+
+- Tom: TRAIN and COACH "feel stiff, like it's not 1 designed cohesive intuitive system". He picked four fixes; the COACH layout itself is still to be diagnosed with a mockup and his pick.
+- **One voice with TRAIN:** page buttons in Title Case (Sends, Open Client File, Log Session, Import Their Log, Send To <name>, All Programs, Build A Program In FORGE), Settings is the gear icon, no character drawn as an icon. Group headings, segmented tabs and dialog actions stay in capitals, as in TRAIN.
+- **No blinking:** `draw()` builds all three columns and swaps only a column whose built HTML differs from the last draw's (`drawn`), so a sync or an unrelated write moves nothing. A different client fades in (`mv-in`), with a timer that takes the class off in an undrawn page.
+- **TRAIN inside COACH is one bar:** `.obar` is hidden; TRAIN's back arrow posts `coach-close` and `closeTrain()` runs. DONE's code stays for a TRAIN too old to have the arrow.
+
