@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.71, 2026-10-18">
+<meta name="mb-version" content="1.0.72, 2026-10-18">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -382,7 +382,10 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .bh-pair{display:flex;flex-direction:column;gap:var(--s-1);width:100%}
 .bh-pair svg{display:block;width:100%;height:auto}
 .bh-pair.bh-p-stand,.bh-pair.bh-p-flex{flex-direction:row;align-items:flex-start}
-.bh-pair.bh-p-stand svg,.bh-pair.bh-p-flex svg{flex:1 1 0;min-width:0}
+/* in a row each figure takes its drawing's width (`--bw`), so front, side
+   and back come out at one scale; the side view is the narrow one */
+.bh-pair.bh-p-stand svg,.bh-pair.bh-p-flex svg{flex:var(--bw,1) 1 0;min-width:0}
+.bh-pair.bh-p-vitruvian .bh-sv{width:22%;align-self:center}
 .row .bh-dot{flex:0 0 auto;width:var(--s-2);height:var(--s-2);border-radius:var(--radius-full,999px)}
 .row.bh-row{flex-wrap:wrap;row-gap:0}
 .row .bh-rec{margin-left:auto;display:inline-flex;align-items:center;justify-content:flex-end;min-width:5ch;gap:var(--s-1);
@@ -392,9 +395,13 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
   .bh-pair{height:100%}
   .bh-pair svg{flex:1 1 0;min-width:0;min-height:0;height:100%}
   .bh-pair.bh-p-stand,.bh-pair.bh-p-flex{flex-direction:column;align-items:stretch}
-  @container (orientation: landscape){ .bh-pair{flex-direction:row} }
-  @container (min-aspect-ratio: 2/5){ .bh-pair.bh-p-stand{flex-direction:row} }
-  @container (min-aspect-ratio: 3/5){ .bh-pair.bh-p-flex{flex-direction:row} }
+  .bh-pair.bh-p-stand svg,.bh-pair.bh-p-flex svg,.bh-pair.bh-p-vitruvian .bh-sv{flex-grow:1;width:100%}
+  /* three figures across, the side view among them: where a row beats a
+     column moved with it (stand 0.38, double biceps 0.49) */
+  @container (orientation: landscape){ .bh-pair{flex-direction:row}
+    .bh-pair.bh-p-vitruvian svg,.bh-pair.bh-p-vitruvian .bh-sv,.bh-pair.bh-p-stand svg,.bh-pair.bh-p-flex svg{flex-grow:var(--bw)} }
+  @container (min-aspect-ratio: 2/5){ .bh-pair.bh-p-stand{flex-direction:row} .bh-pair.bh-p-stand svg{flex-grow:var(--bw)} }
+  @container (min-aspect-ratio: 1/2){ .bh-pair.bh-p-flex{flex-direction:row} .bh-pair.bh-p-flex svg{flex-grow:var(--bw)} }
 }
 /* Resize is a mouse affordance and nothing else — a phone card is as wide as
    the screen and as tall as its contents, so there is nothing to resize. */
@@ -405,8 +412,6 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
     background:linear-gradient(135deg,transparent 46%,var(--line2) 46%,var(--line2) 54%,transparent 54%,transparent 70%,var(--line2) 70%,var(--line2) 78%,transparent 78%);
   }
   .w:hover .w-size{opacity:1}
-  /* a card that sizes to its own contents changes width only */
-  .w.fit .w-size{cursor:ew-resize}
 }
 .w-size:hover{background:linear-gradient(135deg,transparent 46%,var(--acc) 46%,var(--acc) 54%,transparent 54%,transparent 70%,var(--acc) 70%,var(--acc) 78%,transparent 78%)}
 /* an app in a card: its frame sits over the card's body, in a layer of its
@@ -5023,8 +5028,9 @@ if (!Array.isArray(layout)) layout = [];
 const WIDE_AT = 2880;
 const boardFor = () => !matchMedia('(max-width:820px)').matches && innerWidth >= WIDE_AT ? 'wide' : 'std';
 let BOARD = boardFor();
-const spotOf = e => { const s = {}; ['x', 'y', 'w', 'h'].forEach(k => { if (e[k] != null) s[k] = e[k]; }); return s; };
-const setSpot = (e, s) => { ['x', 'y', 'w', 'h'].forEach(k => { delete e[k]; }); return Object.assign(e, s); };
+/* `hs`: he set this fit card's height by hand, so it keeps it (1.0.72) */
+const spotOf = e => { const s = {}; ['x', 'y', 'w', 'h', 'hs'].forEach(k => { if (e[k] != null) s[k] = e[k]; }); return s; };
+const setSpot = (e, s) => { ['x', 'y', 'w', 'h', 'hs'].forEach(k => { delete e[k]; }); return Object.assign(e, s); };
 /* The board before two boards was arranged on the 3840 screen, reaching
    past the 12 columns 1920 has. It becomes the wide board as it is, and
    the 1920 board starts as the same cards packed into 12 columns in the
@@ -5521,8 +5527,95 @@ function bodyColour(r) {
     : 'color-mix(in oklab, var(--success) ' + Math.round((g - 0.5) * 200) + '%, var(--warn))';
 }
 const bodyBright = (n, max) => (0.25 + 0.75 * (max ? n / max : 0)).toFixed(2);
+/* Wider collarbones, Tom, 2026-10-18: "widen the clavicles". Every point
+   outside the neck moves out BODY_CLAV units (about 3.3 cm a side, so the
+   shoulders go from about 35 to 41 cm across), the whole move at the
+   shoulder and none by the waist, so the chest and lats broaden and the
+   hips and legs stay. An arm moves out whole. Done here rather than in
+   the drawings, so the number is one edit. */
+const BODY_CLAV = 3;
+const bodyWideCache = {};
+function bodyWide(d, arm) {
+  const k = (arm ? 'a' : 'b') + d;
+  if (bodyWideCache[k]) return bodyWideCache[k];
+  return (bodyWideCache[k] = d.replace(/(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/g, (m, x, y) => {
+    x = +x; y = +y;
+    let f = 1;
+    if (!arm) {
+      const s = Math.max(0, Math.min(1, (94 - x) / 10));
+      const u = Math.max(0, Math.min(1, (y - 66) / 38));
+      f = y < 57 ? 0 : s * (1 - u * u * (3 - 2 * u));
+    }
+    return (Math.round((x - BODY_CLAV * f) * 100) / 100) + ',' + y;
+  }));
+}
+const bodyWideList = (l, arm) => l.map(m => [m[0], bodyWide(m[1], arm)]);
+/* The side view, Tom, 2026-10-18: "Body heatmap should have a side view".
+   Standing, facing left, the arm hanging, on the same 156.2-unit man as the
+   front and back, so a muscle is the same size in all three. It stands in
+   every pose: it is there for what only the side shows (the side of the
+   shoulder, the glutes and the calves in profile), not to repeat the pose.
+   Not mirrored. The body first, then the arm over it. */
+const BODY_SIDE = {
+  box: '82.5 37.5 31.5 161',
+  skin: 'M100.5,40 C105,40 108.5,43.5 108.5,48.5 C108.5,52 107,54.5 105.5,56 C104.8,57.5 104.5,59.5 105,61 ' +
+    'C106.5,62.3 108.8,63.5 110,65.5 C111.3,68 111.6,72 111.2,76 C110.8,82 109.6,88 108.4,93 C107.6,96.5 107.4,99 107.8,102 ' +
+    'C108.4,106 111.6,111 112.3,117 C112.8,122 112,127 110,130.5 C109.2,131.5 108.8,132.5 108.9,134 C109,139 107.6,145 106,150 ' +
+    'C105.5,151.5 105.3,152.5 105.6,154 C107.8,157 109,161 108.8,165 C108.6,170 106.2,176 104.4,181 C103.6,184 103.4,187 103.6,190 ' +
+    'C103.8,192 105,193.5 104.6,195.2 C104.4,196 103.8,196.2 103,196.2 L85,196.2 C84,196.2 83.6,195.2 84.4,194.6 ' +
+    'C87,193.4 91.5,191.5 94.5,189 C95.6,188 96,186.5 95.9,185 C95.9,178 96.4,168 95.6,159 C95.4,156.5 95.8,155 95.4,153.4 ' +
+    'C95,151.5 94.2,150 93.4,148.5 C91,143 89.8,136 89.9,130 C90,125 90.8,121 92,118.5 C91.4,116 90.6,113 90.4,110 ' +
+    'C90,106 89.8,101 89.9,97 C90,92 90.3,88 90.8,85.5 C90,84.6 88.8,83.6 88,82 C87.3,79.5 87.2,75.5 88,72.5 ' +
+    'C88.8,69.5 91,67 93.5,65.3 C94.6,64.5 95.2,62.5 95.4,60.5 C95.5,59 95.3,58 94.6,57.4 C93.8,57 92.8,57 92.4,56.4 ' +
+    'C91.9,55.8 92.1,54.6 92.4,54.2 C91.7,53.6 91.9,52.6 91.4,52.1 C90.8,51.6 89.5,51.2 89.7,50.4 C90,49.6 91,48.2 91.2,46.8 ' +
+    'C91.3,45.6 91,44.8 91.3,44 C91.8,41.5 95.5,40 100.5,40 Z',
+  body: [
+    ['traps', 'M105.4,57 C104.8,58.6 104.7,60 105,61 C106.5,62.3 108.8,63.5 110,65.5 C110.4,66.2 110.6,66.8 110.7,67.5 ' +
+      'C109.4,67.4 108,67.1 106.8,66.6 C106,64.6 104.4,62.8 102.8,62 C103.6,60.4 104.4,58.6 105.4,57 Z'],
+    ['chest', 'M93.5,65.3 C94.2,65.5 94.8,65.7 95.2,66 C94.8,68.5 95.2,72 95.9,74.6 C95.6,76 95.4,77.6 95.5,80 ' +
+      'C95.5,82.2 95.6,84.4 95.7,86.6 C93.6,86.8 91.8,86.4 90.8,85.5 C90.3,85 89,83.8 88,82 C87.3,79.5 87.2,75.5 88,72.5 ' +
+      'C88.8,69.5 91,67 93.5,65.3 Z'],
+    ['lats', 'M110.7,67.5 C111.4,70.5 111.5,73.5 111.2,76 C110.8,82 109.6,88 108.4,93 C107.9,95 107.6,96.8 107.5,98.5 ' +
+      'C106.4,97.2 105.4,95.6 104.6,94 C105,92 105.4,90 105.7,88.4 C106.6,84 106.9,79 106.7,75.5 C107.2,72.5 107.2,69.2 ' +
+      '106.8,66.6 C108,67.1 109.4,67.4 110.7,67.5 Z'],
+    ['lowback', 'M107.5,98.5 C107.4,100 107.5,101 107.8,102 C108.1,104 108.6,106 109,107.6 C107.4,108.6 105.6,109.2 104,109.4 ' +
+      'C104,104.5 104.2,99 104.6,94 C105.4,95.6 106.4,97.2 107.5,98.5 Z'],
+    ['core', 'M90.8,85.5 C91.8,86.4 93.6,86.8 95.7,86.6 C95.9,90 96.6,93 96.9,95.5 C97.3,99 98.2,105 98.8,110.6 ' +
+      'C98.9,112 99,114 99,115.5 C96.6,114.8 93,113.4 90.6,111.6 C90.4,110.9 90.4,110.4 90.4,110 C90,106 89.8,101 89.9,97 ' +
+      'C90,92 90.3,88 90.8,85.5 Z'],
+    ['glutes', 'M108.6,105.5 C109.8,108 111.6,111.5 112.3,117 C112.8,122 112,127 110,130.5 C109.2,131.5 108.8,132.5 108.9,134 ' +
+      'C106.6,133.2 104.4,131.6 102.8,129.4 C102.6,124.5 103.2,118 103.9,113 C104,111.6 104,110.4 104,109.4 ' +
+      'C105.6,109.2 107.2,108.4 108.6,105.5 Z'],
+    ['quads', 'M92,118.5 C94.5,118.2 97.2,117.6 99,117 C100.2,122 100.6,130 100.4,137 C100.2,142 99.2,147 97.8,150.6 ' +
+      'C96.6,150 95,149.4 93.4,148.5 C91,143 89.8,136 89.9,130 C90,125 90.8,121 92,118.5 Z'],
+    ['hams', 'M102.8,129.8 C104.6,131.8 106.6,133.2 108.9,134 C109,139 107.6,145 106,150 C104.6,151 102.8,151.4 101,151.2 ' +
+      'C101.6,146 101.8,140 101.6,134.5 C101.8,132.8 102.2,131.2 102.8,129.8 Z'],
+    ['calves', 'M105.6,154 C107.8,157 109,161 108.8,165 C108.6,170 106.2,176 104.4,181 C103,179 101.8,174 101.4,168 ' +
+      'C101.2,163 101.6,158 102.6,154.6 C103.6,154.6 104.6,154.4 105.6,154 Z'],
+  ],
+  lines: 'M101.2,48.6 C102.6,48.4 103.4,49.6 103.2,51.2 C103,52.6 102,53.4 101.4,53.2 M93.6,148.8 C94.6,150.2 95.2,152 95.2,153.6 ' +
+    'M98,158 C98.4,168 98.4,178 98.2,186 M100.6,121 C101.2,130 101,140 99.8,150',
+  arm: 'M95.2,66 C96.2,63.3 98.2,62 100.6,62 C103.4,62 105.8,63.6 106.6,66.4 C107.3,69 107.2,72.5 106.6,75.5 ' +
+    'C106.8,79 106.6,84 105.6,88.5 C105.2,90.5 105,92.2 104.6,93.5 C104.4,98 103.8,104 103.2,110.5 C103.4,113.5 103.6,117 103.1,120 ' +
+    'C102.8,122 101.8,123.2 100.7,123.2 C99.4,123.2 98.9,121.8 99,120 C99.1,117 99.1,113.5 98.8,110.8 C98.2,105 97.2,99 96.9,95.5 ' +
+    'C96.7,93.5 97,92 97.2,91 C96.4,88 95.6,84 95.5,80 C95.4,77 95.6,75.5 95.9,74.6 C95.2,72 94.8,68.5 95.2,66 Z',
+  arms: [
+    ['delts', 'M95.2,66 C96.2,63.3 98.2,62 100.6,62 C103.4,62 105.8,63.6 106.6,66.4 C107.3,69 107.2,72.5 106.6,75.5 ' +
+      'C104.6,76.6 102.4,78.8 100.8,80 C99.4,78.4 97.4,76 95.9,74.6 C95.2,72 94.8,68.5 95.2,66 Z'],
+    ['biceps', 'M95.9,75.2 C97.6,76.8 99.4,78.8 100.6,80.6 C101,83.5 100.8,86.5 100.2,89.8 C99.2,90.8 98.2,91.2 97.2,91 ' +
+      'C96.4,88 95.6,84 95.5,80 C95.4,77.6 95.6,76 95.9,75.2 Z'],
+    ['triceps', 'M106.4,76.2 C106.8,79 106.6,84 105.6,88.5 C105.2,90.5 105,92.2 104.6,93.5 C103.2,93.2 102,92.4 101,91.2 ' +
+      'C101.6,87.5 101.6,84 101.3,80.8 C103.2,79.6 105,78 106.4,76.2 Z'],
+    ['forearms', 'M97.2,92 C98.6,92.8 100.4,93.4 101.8,93.4 C102.8,93.6 103.8,93.8 104.5,94.2 C104.3,99 103.8,104.5 103.2,110.2 ' +
+      'C101.7,110.8 100.2,110.8 98.8,110.4 C98.2,105 97.2,99 96.9,95.5 C96.8,94 97,92.8 97.2,92 Z'],
+  ],
+  armLines: 'M101,80.6 C101.2,84 101,87.5 100.6,90.8',
+};
 function bodySvg(v, rec, pose) {
   const key = BODY_POSES[pose] ? pose : 'stand', P = BODY_POSES[key];
+  const bx = P.box.split(' ').map(Number);
+  const box = (bx[0] - BODY_CLAV) + ' ' + bx[1] + ' ' + (bx[2] + 2 * BODY_CLAV) + ' ' + bx[3];
+  const S = BODY_SIDE, sw = +S.box.split(' ')[2];
   const max = Math.max(0, ...Object.keys(v).map(k => v[k]));
   const ink = 'stroke:var(--text-muted);stroke-opacity:.4;stroke-width:.4;stroke-linejoin:round';
   const edge = 'fill:none;stroke:var(--text-muted);stroke-opacity:.7;stroke-width:.55;stroke-linejoin:round';
@@ -5536,16 +5629,24 @@ function bodySvg(v, rec, pose) {
     const tip = BODY_NAMES[m[0]] + ' · ' + (Math.round(n * 2) / 2) + ' sets' + (r ? ' · ' + Math.ceil(r.left) + 'h to recover' : n ? ' · ready' : '');
     return '<path d="' + m[1] + '" style="' + st + '"><title>' + tip + '</title></path>';
   }).join('');
+  const skin = bodyWide(BODY_SKIN);
   const panel = (list, lines, arm, armLines) =>
-    '<svg viewBox="' + P.box + '" preserveAspectRatio="xMidYMid meet">' +
-      mir('<path d="' + BODY_SKIN + ' L100.6,122.7 L100.6,40 Z" style="fill:var(--surface-3);stroke:none"/>') +
-      mir(muscles(list)) + mir('<path d="' + lines + '" style="' + fibre + '"/>') + mir('<path d="' + BODY_SKIN + '" style="' + edge + '"/>') +
+    '<svg viewBox="' + box + '" preserveAspectRatio="xMidYMid meet" style="--bw:' + (bx[2] + 2 * BODY_CLAV) + '">' +
+      mir('<path d="' + skin + ' L100.6,122.7 L100.6,40 Z" style="fill:var(--surface-3);stroke:none"/>') +
+      mir(muscles(bodyWideList(list))) + mir('<path d="' + bodyWide(lines) + '" style="' + fibre + '"/>') + mir('<path d="' + skin + '" style="' + edge + '"/>') +
       /* the arms over the body, so a shoulder sits in front of the chest and back in every pose */
-      mir('<path d="' + P.skin + '" style="fill:var(--surface-3);stroke:none"/>') +
-      mir(muscles(arm)) + mir('<path d="' + armLines + '" style="' + fibre + '"/>') + mir('<path d="' + P.line + '" style="' + edge + '"/>') +
+      mir('<path d="' + bodyWide(P.skin, 1) + '" style="fill:var(--surface-3);stroke:none"/>') +
+      mir(muscles(bodyWideList(arm, 1))) + mir('<path d="' + bodyWide(armLines, 1) + '" style="' + fibre + '"/>') +
+      mir('<path d="' + bodyWide(P.line, 1) + '" style="' + edge + '"/>') +
+    '</svg>';
+  const side = '<svg class="bh-sv" viewBox="' + S.box + '" preserveAspectRatio="xMidYMid meet" style="--bw:' + sw + '">' +
+      '<path d="' + S.skin + '" style="fill:var(--surface-3);stroke:none"/>' + muscles(S.body) +
+      '<path d="' + S.lines + '" style="' + fibre + '"/>' + '<path d="' + S.skin + '" style="' + edge + '"/>' +
+      '<path d="' + S.arm + '" style="fill:var(--surface-3);stroke:none"/>' + muscles(S.arms) +
+      '<path d="' + S.armLines + '" style="' + fibre + '"/>' + '<path d="' + S.arm + '" style="' + edge + '"/>' +
     '</svg>';
   return '<div class="bh-pair bh-p-' + key + '">' + panel(BODY_FRONT, BODY_LINES_FRONT, P.front, P.lines[0]) +
-    panel(BODY_BACK, BODY_LINES_BACK, P.back, P.lines[1]) + '</div>';
+    side + panel(BODY_BACK, BODY_LINES_BACK, P.back, P.lines[1]) + '</div>';
 }
 
 /* ══════════════ spots ══════════════
@@ -5677,10 +5778,12 @@ function hint(m, x, y, w, h, land) {
 function widgetMenu(i, x, y) {
   const cfg = layout[i]; if (!cfg) return;
   const W = WIDGETS[cfg.t]; if (!W) return;
-  /* 12 rows, the same ceiling as dragging the corner: at 8 a 12-row card
-     went straight to 8 on one Shorter */
+  /* no height ceiling, the same as dragging the corner (1.0.71 lifted the
+     drag's and left this one at 12). A fit card steps from the height it
+     shows, not its factory one, and keeps what it is given (`hs`). */
   const set = (k, v) => {
-    cfg[k] = Math.max(2, Math.min(k === 'w' ? COLS : 12, (cfg[k] || 3) + v));
+    if (k === 'h' && W.fit) { cfg.h = effH[i] || cfg.h; cfg.hs = 1; }
+    cfg[k] = Math.max(k === 'h' && W.fit ? 1 : 2, Math.min(k === 'w' ? COLS : 1e4, (cfg[k] || 3) + v));
     saveLayout(); drawHome();
   };
   /* Up and down by where the card is seen, the order move() works in, not
@@ -5688,8 +5791,10 @@ function widgetMenu(i, x, y) {
   const ord = seenOrder(), k = ord.indexOf(i);
   /* No characters as icons (root brief: a character is not an icon). A
      phone card is the screen's width and as tall as its contents, so the
-     sizes are left off there; a card that sizes itself to its contents
-     (`fit`) has no height to change anywhere. */
+     sizes are left off there. A card that sizes itself to its contents
+     (`fit`) takes a height too since 1.0.72, and Fit to contents gives the
+     measuring back. */
+  const hNow = W.fit ? (effH[i] || cfg.h) : cfg.h;
   UI.menu(x, y, [
     k > 0 ? { label: 'Move up', fn: () => move(i, -1) } : null,
     k > -1 && k < ord.length - 1 ? { label: 'Move down', fn: () => move(i, 1) } : null,
@@ -5697,8 +5802,9 @@ function widgetMenu(i, x, y) {
       '-',
       cfg.w < COLS ? { label: 'Wider', fn: () => set('w', 1) } : null,
       cfg.w > 2 ? { label: 'Narrower', fn: () => set('w', -1) } : null,
-      !W.fit ? { label: 'Taller', fn: () => set('h', 1) } : null,
-      !W.fit && cfg.h > 2 ? { label: 'Shorter', fn: () => set('h', -1) } : null,
+      { label: 'Taller', fn: () => set('h', 1) },
+      hNow > (W.fit ? 1 : 2) ? { label: 'Shorter', fn: () => set('h', -1) } : null,
+      W.fit && cfg.hs ? { label: 'Fit to contents', fn: () => { delete cfg.hs; cfg.h = W.h; saveLayout(); drawHome(); } } : null,
     ]),
     /* A widget that says what ranges it understands gets them offered here,
        so a second copy of it can show a different stretch of time. */
@@ -5945,7 +6051,11 @@ function fitGrid() {
     body.style.overflow = was;
     n.style.width = '';
     const want = Math.max(1, Math.ceil((need + gap) / CELL.h));
-    const ch = Math.min(want, Math.max(layout[+n.dataset.i].h, win - (layout[+n.dataset.i].y || 1) + 1));
+    /* a height he dragged or picked is kept, taller or shorter than the
+       contents (Tom, 2026-10-18: "I need widgets to be vertically scalable
+       as well"); short, the body scrolls and a small card leaves rows off */
+    const c = layout[+n.dataset.i];
+    const ch = c.hs ? c.h : Math.min(want, Math.max(c.h, win - (c.y || 1) + 1));
     n.classList.toggle('capped', ch < want);
     n.style.setProperty('--ch', ch);
     effH[+n.dataset.i] = ch;
@@ -6120,11 +6230,12 @@ let sizing = null;
 function startResize(ev, i, node) {
   ev.preventDefault(); ev.stopPropagation();
   const m = gridMetrics();
-  /* a card that sizes to its contents takes width only: its height is
-     measured, so a drag down snapped back on release */
+  /* a card that sizes to its contents starts from the height it shows, and
+     keeps measuring until the drag actually moves it up or down (`hs`) */
   const fit = !!(WIDGETS[layout[i].t] || {}).fit;
   document.body.classList.add('dragging');
-  sizing = { i: i, node: node, fit: fit, cols: m.cols, colw: m.colw, gap: m.gap, x: ev.clientX, y: ev.clientY, w: layout[i].w, h: layout[i].h };
+  sizing = { i: i, node: node, fit: fit, cols: m.cols, colw: m.colw, gap: m.gap, x: ev.clientX, y: ev.clientY, w: layout[i].w,
+    h: fit ? (effH[i] || layout[i].h) : layout[i].h, h0: layout[i].h, hs: layout[i].hs };
   window.addEventListener('pointermove', onResize);
   window.addEventListener('pointerup', endResize, { once: true });
 }
@@ -6135,12 +6246,18 @@ function onResize(ev) {
   const w = Math.max(2, Math.min(sizing.cols, sizing.w + dw));
   layout[sizing.i].w = w;
   sizing.node.style.setProperty('--cw', w);
-  if (sizing.fit) return placeCards();
+  const c = layout[sizing.i];
+  /* a fit card dragged back to where it started measures itself again */
+  if (sizing.fit && !dh) {
+    c.h = sizing.h0; if (sizing.hs) c.hs = 1; else delete c.hs;
+    if (!sizing.hs) { sizing.node.style.setProperty('--ch', sizing.h); return placeCards(); }
+  }
   /* no ceiling: a card can be dragged as tall as he likes and the board
      scrolls (Tom, 2026-10-18: "today should be infinitely vertically
      expandable"). It was 12 rows. */
-  const h = Math.max(2, sizing.h + dh);
-  layout[sizing.i].h = h;
+  const h = Math.max(sizing.fit ? 1 : 2, sizing.h + dh);
+  c.h = h;
+  if (sizing.fit) { c.hs = 1; effH[sizing.i] = h; }
   sizing.node.style.setProperty('--ch', h);
   placeCards();
 }

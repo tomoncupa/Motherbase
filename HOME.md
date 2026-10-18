@@ -350,3 +350,29 @@ and a real corner drag: two notches up 125% (saved in `lifeos.layout`,
 page zoom untouched), one down 110%, TODAY dragged to 24 rows and the
 board scrolled to its bottom, the menu reset to 100%, no page errors. NOT
 on his screens.]
+
+## 2026-10-18, HOME 1.0.72: every card takes a height, and BODY HEATMAP gets a side view and wider shoulders
+
+Tom: "I need widgets to be vertically scalable as well", and "Body heatmap
+should have a side view, widen the clavicles as well".
+- **Fit cards take a height.** The 17 cards that size to their contents
+  (MACROS, CLOCK, LINKS, CALENDAR...) resized by width only. Now a corner
+  drag up or down, or the menu's Taller and Shorter, sets the height and
+  the card keeps it (`hs` on the card's spot, so each board has its own),
+  down to 1 row, where `sizeCards` leaves only the answer. A drag that only
+  moves sideways keeps measuring. **Fit to contents** on the menu gives the
+  measuring back. The menu's Taller lost its 12-row ceiling too: 1.0.71
+  lifted the drag's and missed it.
+- **Side view.** A third figure between front and back, standing, facing
+  left, arm hanging (`BODY_SIDE`), the same 156.2-unit man. Shown in every
+  pose, since it is there for what only the side shows. Each figure's
+  width in a row follows its drawing (`--bw`), so all three are one scale.
+- **Wider clavicles.** `bodyWide` moves every point outside the neck out by
+  `BODY_CLAV` (3 units, about 3.3 cm a side: shoulders about 35 to 41 cm
+  across), all of it at the shoulder, none by the waist (smoothstep 66 to
+  104); arms move out whole. The drawings themselves are unchanged.
+[TESTED on the demo at 1920x1000 by the real corner handle (pointer
+events: the pane was not taking coordinate drags) and the real right-click
+menu: MACROS to 6 rows, to 1, Taller, Fit to contents back to 3, saved in
+`lifeos.layout`; phone 375 three figures at one scale; no console errors.
+NOT on his screens.]
