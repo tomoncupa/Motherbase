@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.22, 2026-10-18">
+<meta name="mb-version" content="1.0.23, 2026-10-18">
 <title>LOG</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -138,6 +138,12 @@ main.dragging{cursor:grabbing;user-select:none}
   border-right:var(--border-width) solid transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (hover:hover) and (pointer:fine){ .heads:hover .c{border-right-color:var(--border)} }
 .heads .c.c-d{flex:1 1 auto;min-width:calc(var(--s-10) * 2)}
+/* Tom, 2026-10-18: "why am I unable to shorten the length of the days
+   column". It took whatever room was left, never less than --s-10 twice,
+   and had no handle. Once dragged it is exactly that wide and the room left
+   over sits after the last column; a double-click on its edge gives the old
+   behaviour back. */
+.cal.dfixed .heads .c.c-d,.cal.dfixed:not(.book) .xd{flex:0 0 var(--w-d);width:var(--w-d);min-width:0}
 /* A day column's heading drags sideways to rearrange. */
 .heads .c[data-x]{cursor:grab}
 .heads .c.lift{opacity:.4}
@@ -485,7 +491,8 @@ function nearestView(i, dir) {
 const openLevel = () => { const i = LV(S.get('open', 'm')); return i < 0 ? nearestView(LV('m'), 1) : nearestView(i, LEVELS[i].off ? -1 : 1); };
 
 const MIN_DH = 1;
-const COL_NAMES = { y: 'Year', q: 'Quarters', m: 'Months', w: 'Weeks' };
+/* Singular since 2026-10-18. Tom: "Use singular nouns for the dates". */
+const COL_NAMES = { y: 'Year', q: 'Quarter', m: 'Month', w: 'Week' };
 const COL_KIND = { y: 'year', q: 'quarter', m: 'month', w: 'week' };
 let level = LV('m'), dayHeight = 20;
 let touched = false;         /* once he has moved the view himself, a late theme load must not yank it */
@@ -536,7 +543,7 @@ function xDefs() {
 }
 const xDef = k => xDefs().find(x => x.key === k) || null;
 const xKeys = () => xDefs().map(x => x.key);
-const defaultName = k => { const d = xDef(k); return d ? d.name : k === 'd' ? 'Days' : COL_NAMES[k] || k; };
+const defaultName = k => { const d = xDef(k); return d ? d.name : k === 'd' ? 'Day' : COL_NAMES[k] || k; };
 const colName = k => { const n = S.get('colnames', null); return (n && n[k]) || defaultName(k); };
 const isXOn = k => { const v = S.get('xvis', null) || {}; return k in v ? !!v[k] : X_SHOWN_FIRST.indexOf(k) > -1; };
 const xWidth = k => 'var(--w-' + k + ', ' + (xDef(k) && (xDef(k).kind === 'text' || xDef(k).kind === 'sum') ? 'calc(var(--s-10) * 2.5)' : 'var(--s-9)') + ')';
@@ -1046,7 +1053,7 @@ function aggHTML(p, col) {
 /* The day columns' headings, the same on the timeline and in List. */
 const xHeadsHTML = () => visibleX().map(k => '<div class="c ' + (k === 'd' ? 'c-d' : 'cx') + '" data-x="' + k + '"' +
   (k === 'd' ? '' : ' style="--cw:' + xWidth(k) + '"') + ' title="' + attr(colName(k)) + '">' + esc(colName(k)) +
-  (k === 'd' ? '' : '<span class="rz" data-col="' + k + '" title="Drag to resize"></span>') + '</div>').join('');
+  '<span class="rz" data-col="' + k + '" title="Drag to resize"></span></div>').join('');
 
 /* ── the List view's days ──
    Newest at the top, back to the first record. Each row is the day's name,
@@ -1825,6 +1832,7 @@ function applyColW() {
   widthsSet.forEach(k => { if (!w[k]) cal.style.removeProperty('--w-' + k); });
   widthsSet = Object.keys(w).filter(k => w[k]);
   widthsSet.forEach(k => cal.style.setProperty('--w-' + k, w[k] + 'px'));
+  cal.classList.toggle('dfixed', !!w.d);
 }
 let rz = null, rzT = null;
 $('cal').addEventListener('pointerdown', e => {
@@ -1839,6 +1847,7 @@ window.addEventListener('pointermove', e => {
   if (rz) {
     rz.cur = Math.round(clamp(rz.w + e.clientX - rz.x, 64, 800));
     $('cal').style.setProperty('--w-' + rz.k, rz.cur + 'px');
+    if (rz.k === 'd') $('cal').classList.add('dfixed');
     if (!rzT) rzT = setTimeout(() => { rzT = null; applySizes(); }, 40);
     return;
   }
