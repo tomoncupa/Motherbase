@@ -985,6 +985,10 @@ Curl separate; and *"There is no barbell squat?"*
 - Tom: TRAIN and COACH "feel stiff". Cause: every screen and day was wiped and redrawn in place. Now `motion()` in `draw()`: a new day slides in from its side (`mv-r`, `mv-l`), a new screen rises in (`mv-up`), `--dur-med`. A redraw of the same screen and day (every save) never moves.
 - A timer takes the class off after 600ms, because a page that is not drawn never runs an animation and would sit on its see-through first frame. Watched in headless Chromium: 0.73 opacity mid-slide, 1 after.
 
+## Inside COACH, one bar (1.0.68, 2026-10-18)
+
+- COACH hides its own bar over the frame. TRAIN on a client's profile inside a frame puts a back arrow first in its header (`#toCoach`), which posts `{mb: 'coach-close'}` to COACH. The bar names the client in their own case (`CLIENT_NAME`, no longer upper-cased, `.logo.who`).
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the

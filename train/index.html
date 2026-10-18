@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.67, 2026-10-18">
+<meta name="mb-version" content="1.0.68, 2026-10-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -138,6 +138,7 @@ header{
 .logo{font-family:var(--font-display);font-weight:var(--w-bold);font-size:var(--f-4);
   letter-spacing:.14em;padding-left:var(--s-2)}
 .logo b{color:var(--accent)}
+.logo.who{text-transform:none;letter-spacing:normal;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .spacer{flex:1}
 /* One icon button shape for the whole app: a --tap target with a glyph a little bigger than the text. */
 .ico{width:var(--tap);height:var(--tap);flex:0 0 auto;border:0;background:none;
@@ -907,7 +908,7 @@ var CLIENT = Rec.client || null;
 if (!CLIENT) IO.register({ app: APP.id, name: APP.name, types: APP.types,
   sheets: function () { return exportSheets(); } });
 /* and the bar says whose training this is, where TRAIN's name would be */
-var CLIENT_NAME = CLIENT ? String((Rec.get('cperson', null, CLIENT) || {}).name || 'Client').toUpperCase() : '';
+var CLIENT_NAME = CLIENT ? String((Rec.get('cperson', null, CLIENT) || {}).name || 'Client') : '';
 if (CLIENT) document.title = CLIENT_NAME + ' · TRAIN';
 
 /* Everything hangs off one global on purpose. `var` at the top level of a
@@ -3334,7 +3335,7 @@ function drawChrome() {
   var spacer = document.querySelector('header .spacer');
   if (spacer) spacer.style.flex = title == null ? '' : '0 0 auto';
   if (title == null) {
-    if (CLIENT) logo.textContent = CLIENT_NAME; else logo.innerHTML = 'TRA<b>IN</b>';
+    if (CLIENT) { logo.textContent = CLIENT_NAME; logo.classList.add('who'); } else logo.innerHTML = 'TRA<b>IN</b>';
     logo.style.cssText = '';
   } else {
     logo.textContent = title;
@@ -10793,7 +10794,7 @@ TRAIN.settingsPanel = function () {
       sw('Details Under Each Set', 'Split, setup and the change from last time, in words', 'rowDetail', 0, function () { draw(); });
 
       group('TRAINING');
-      num('Default Weight Increment', CLIENT ? 'What + and − move by, for ' + (CLIENT_NAME.charAt(0) + CLIENT_NAME.slice(1).toLowerCase()) + ' only' : 'What + and − move by', 'increment', 2.5);
+      num('Default Weight Increment', CLIENT ? 'What + and − move by, for ' + CLIENT_NAME + ' only' : 'What + and − move by', 'increment', 2.5);
       sw('Auto-Select Next Set', 'Load the next unfinished set after saving', 'autoNext', 1);
       sw('Track Personal Records', 'Flag a set that beats your best', 'trackPRs', 1);
       sw('Keep Screen On', TRAIN.canWake() ? 'While TRAIN is open' : 'Not supported by this browser', 'keepAwake', 0,
@@ -11036,6 +11037,23 @@ function boot() {
    exercises are small rows, already here from localStorage, so if the store
    has not answered in a moment and there is a log to show, show it. Seeding
    and the record pass still wait for ready, because they must see every row. */
+/* ── inside COACH: one bar, not two ──
+   Tom, 2026-10-18: COACH opened this as a second app on top, with its own
+   bar and a DONE. Now COACH hides its bar; this one already names the
+   client, and gains the way back. Only on a client's profile inside a frame. */
+(function () {
+  if (!Rec.client || window.parent === window) return;
+  var head = document.querySelector('header');
+  if (!head) return;
+  var bk = document.createElement('button');
+  bk.className = 'ico mb-press mb-tap';
+  bk.id = 'toCoach';
+  bk.setAttribute('aria-label', 'Back to COACH');
+  bk.innerHTML = ico('back');
+  bk.onclick = function () { Mobile.feedback('open'); window.parent.postMessage({ mb: 'coach-close' }, '*'); };
+  head.insertBefore(bk, head.firstChild);
+})();
+
 var trainBooted = false;
 setTimeout(function () {
   if (trainBooted || !(Rec.count('set') || Rec.count('exercise'))) return;
