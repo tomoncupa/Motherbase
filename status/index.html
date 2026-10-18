@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.75, 2026-10-18">
+<meta name="mb-version" content="1.0.76, 2026-10-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -9076,7 +9076,31 @@ let checkOnly = null;    /* a fixed list for this one check, the new day's two *
 function checkFields() {
   const d = Day.today();
   if (checkOnly) return checkOnly.filter(f => !logged(d, f.id));
-  return checkChosen().filter(f => !((f.measure === 'check' || (f.measure === 'number' && f.once)) && logged(d, f.id)));
+  const m = checkMorn.filter(f => f.fid || !logged(d, f.id)), ids = m.map(f => f.id);
+  return m.concat(checkChosen().filter(f => ids.indexOf(f.id) < 0 &&
+    !((f.measure === 'check' || (f.measure === 'number' && f.once)) && logged(d, f.id))));
+}
+
+/* ── the first check of the day ──
+   Tom, 2026-10-18: "The first auto check in of the day should ask me how
+   much sleep I got AND the final count for yesterday's steps", and "There
+   seem to be 2 check in pop ups?" There were: the first line of a day put
+   up its own check (sleep and weight, `deskNewDay`) and the timed one came
+   as well. Now the first timed check of the day, from his hours' start,
+   carries them: sleep and weight if not logged yet today, and yesterday's
+   steps, filled in with what yesterday holds so the final count is a
+   retype. Steps are written to yesterday, and only when changed. */
+let checkMorn = [];
+function deskMorning() {
+  const d = Day.today();
+  if (!DESK || S.get('desk.newday', '') === d || deskSmallHours(new Date())) return [];
+  const out = ['sleep', 'weight'].map(quickField).filter(f => f && !logged(d, f.id));
+  const st = quickField('steps');
+  if (st) {
+    const y = Day.shift(d, -1), e = evList(y, st.id), was = e.length ? +e[e.length - 1].v : null;
+    out.push(Object.assign({}, st, { id: st.id + '@y', fid: st.id, date: y, was: was, label: 'Steps yesterday' }));
+  }
+  return out;
 }
 let checkDoing = '';     /* "what are you doing now", as typed */
 
@@ -9094,7 +9118,7 @@ function checkDraw() {
   const win = el('div', 'nwin');
   win.appendChild(el('div', 'nwhead', esc(Notice.bracket(st, 'STATUS CHECK'))));
   win.appendChild(el('div', 'nwrule'));
-  win.appendChild(el('div', 'nwask', checkOnly ? 'New day.' : 'How are you?'));
+  win.appendChild(el('div', 'nwask', checkOnly || checkMorn.length ? 'New day.' : 'How are you?'));
 
   const fs = checkFields();
   fs.forEach(f => {
@@ -9203,6 +9227,7 @@ function checkSave() {
     if (v == null) return;
     /* NOT YET writes nothing, so it is asked again next time */
     if (f.measure === 'check' && !v) return;
+    if (f.fid) { if (v !== f.was) { evAdd(f.date, f.fid, v); n++; } return; }
     evAdd(d, f.id, v); n++;
   });
   const doing = checkDoing.trim();
@@ -9232,6 +9257,7 @@ function checkSave() {
      be walking away that closed it, and walking away is no longer something
      this can be done to. */
   if (deskAskedNight) { S.set('desk.nightOff', deskAskedNight); deskAskedNight = ''; }
+  if (checkMorn.length) { S.set('desk.newday', d); checkMorn = []; }
   checkOn = false;
   document.body.classList.remove('checking');
   deskAsking = false;
@@ -9268,7 +9294,10 @@ function deskAsk() {
   const now = new Date();
   deskAskedNight = deskAwake(now) ? '' : deskNightKey(now);
   deskRaise();
+  checkMorn = deskMorning();
   checkOpen();
+  checkMorn.forEach(f => { if (f.fid && f.was != null && checkVals[f.id] == null) checkVals[f.id] = f.was; });
+  if (checkOn && checkMorn.length) checkDraw();
 }
 
 function deskSetSmall(v) {
