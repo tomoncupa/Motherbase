@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.70, 2026-10-16">
+<meta name="mb-version" content="1.0.71, 2026-10-18">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -338,6 +338,10 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
   display:flex;flex-direction:column;gap:var(--s-2)}
 /* a card that sizes to its contents stops at the window and scrolls inside */
 .w.capped .w-body{overflow:auto}
+/* the zoom level, shown while Ctrl+scroll changes it, gone on the redraw */
+.ztag{position:absolute;top:var(--s-2);right:var(--s-2);z-index:2;pointer-events:none;
+  padding:var(--s-1) var(--s-2);border-radius:var(--radius-sm,6px);background:var(--surface-3);
+  color:var(--text-1);font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em}
 /* ── a widget shows less the smaller it is ──
    Tom, 2026-10-16: the board scales to the window (fitGrid), and "the
    widgets show up differently based on size". fitGrid marks each card
@@ -5693,11 +5697,12 @@ function widgetMenu(i, x, y) {
       '-',
       cfg.w < COLS ? { label: 'Wider', fn: () => set('w', 1) } : null,
       cfg.w > 2 ? { label: 'Narrower', fn: () => set('w', -1) } : null,
-      !W.fit && cfg.h < 12 ? { label: 'Taller', fn: () => set('h', 1) } : null,
+      !W.fit ? { label: 'Taller', fn: () => set('h', 1) } : null,
       !W.fit && cfg.h > 2 ? { label: 'Shorter', fn: () => set('h', -1) } : null,
     ]),
     /* A widget that says what ranges it understands gets them offered here,
        so a second copy of it can show a different stretch of time. */
+    cfg.zoom && !NARROW() ? { label: 'Zoom back to 100%', fn: () => { delete cfg.zoom; saveLayout(); drawHome(); } } : null,
     W.days ? '-' : null,
     W.days ? { label: 'Show', sub: W.days.map(d => ({
         label: d[1], check: (cfg.days || W.day0 || 90) === d[0],
@@ -5805,6 +5810,7 @@ function drawHome() {
     n.appendChild(head);
 
     const body = el('div', 'w-body');
+    if (cfg.zoom && !NARROW()) body.style.zoom = cfg.zoom;
     const fill = () => {
       const m0 = Rec.missed ? Rec.missed() : 0;
       try { W.draw(body, cfg); } catch (e) { body.appendChild(el('div', 'empty', 'widget error: ' + esc(e.message))); }
@@ -5982,7 +5988,9 @@ function fitGrid() {
 function sizeCards(nodes, cw, R, gap) {
   nodes.forEach(n => {
     const c = layout[+n.dataset.i]; if (!c) return;
-    const w = c.w * cw + (c.w - 1) * gap, h = (effH[+n.dataset.i] || c.h) * R - gap;
+    /* in the card's own zoom: a card zoomed to 200% has half the room */
+    const z = (!NARROW() && c.zoom) || 1;
+    const w = (c.w * cw + (c.w - 1) * gap) / z, h = ((effH[+n.dataset.i] || c.h) * R - gap) / z;
     n.dataset.sz = h < 150 || w < 190 ? 's' : h < 300 || w < 300 ? 'm' : 'l';
     /* too short for a title and an answer both: the answer wins */
     n.classList.toggle('sz-xs', h < 80);
@@ -6025,6 +6033,38 @@ if (document.fonts) {
   if (document.fonts.ready) document.fonts.ready.then(refit).catch(() => {});
   if (document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', refit);
 }
+/* ── Ctrl+scroll zooms one widget ──
+   Tom, 2026-10-18: "let me ctrl+scroll while a widget is highlighted to
+   change the zoom or font size within the widget like in chrome". Over a
+   card, Ctrl and the wheel step through Chrome's own zoom levels; the
+   card's body zooms (its title bar stays put, so it still drags), and the
+   level is `zoom` on the card's layout entry, so it syncs and survives a
+   redraw. Desk only. An app card's frame is its own page and takes no
+   zoom from here. */
+const ZOOMS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+let zoomT = 0, zoomAcc = 0;
+document.addEventListener('wheel', ev => {
+  if (!ev.ctrlKey || view !== 'home' || NARROW()) return;
+  const n = ev.target && ev.target.closest && ev.target.closest('#grid > .w');
+  if (!n) return;
+  ev.preventDefault();
+  const c = layout[+n.dataset.i], body = n.querySelector(':scope > .w-body');
+  if (!c || !body || body.classList.contains('appslot')) return;
+  /* a mouse notch is about 100, a trackpad sends many small ones */
+  zoomAcc += ev.deltaY;
+  if (Math.abs(zoomAcc) < 40) return;
+  const up = zoomAcc < 0; zoomAcc = 0;
+  const z = c.zoom || 1;
+  let k = up ? ZOOMS.findIndex(v => v > z + 0.001) : ZOOMS.length - 1 - ZOOMS.slice().reverse().findIndex(v => v < z - 0.001);
+  if (k < 0 || k >= ZOOMS.length) return;
+  if (ZOOMS[k] === 1) delete c.zoom; else c.zoom = ZOOMS[k];
+  body.style.zoom = c.zoom || '';
+  let tag = n.querySelector(':scope > .ztag');
+  if (!tag) { tag = el('div', 'ztag'); n.appendChild(tag); }
+  tag.textContent = Math.round((c.zoom || 1) * 100) + '%';
+  clearTimeout(zoomT);
+  zoomT = setTimeout(() => { saveLayout(); drawHome(); }, 700);
+}, { passive: false });
 let fitT = 0;
 addEventListener('resize', () => { clearTimeout(fitT); fitT = setTimeout(() => { if (view === 'home') redrawHome(); }, 150); });
 
@@ -6096,7 +6136,10 @@ function onResize(ev) {
   layout[sizing.i].w = w;
   sizing.node.style.setProperty('--cw', w);
   if (sizing.fit) return placeCards();
-  const h = Math.max(2, Math.min(12, sizing.h + dh));
+  /* no ceiling: a card can be dragged as tall as he likes and the board
+     scrolls (Tom, 2026-10-18: "today should be infinitely vertically
+     expandable"). It was 12 rows. */
+  const h = Math.max(2, sizing.h + dh);
   layout[sizing.i].h = h;
   sizing.node.style.setProperty('--ch', h);
   placeCards();

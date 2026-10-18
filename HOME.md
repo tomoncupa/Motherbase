@@ -326,3 +326,27 @@ phone stacks the 1920 board; review 142/142. NOT on his screens.] His
 wide board itself reaches row 14, so at 3840x1080 it scrolls 219px; the
 packed 1920 board scrolls 723px until he arranges it (184 cells of cards
 in 120).
+
+## 2026-10-18, HOME 1.0.71: taller cards, and Ctrl+scroll zooms one widget
+
+Tom, asked about fitting any window: "personally will only ever use Main
+Menu in half screen or full screen, what I would like more is the widget
+expandability. Like today should be infinitely vertically expandable", and
+"let me ctrl+scroll while a widget is highlighted to change the zoom or
+font size within the widget like in chrome". So no window-size work.
+- **No height ceiling.** The corner drag and the menu's Taller stopped at
+  12 rows; now a card goes as tall as he drags it and the board scrolls.
+- **Ctrl+scroll over a card** steps its body through Chrome's levels (50%
+  to 300%, `ZOOMS`), a mouse notch a step, a trackpad once its deltas add
+  to 40. CSS `zoom` on `.w-body` only, so the title bar stays its size and
+  still drags. The level is `zoom` on the card's layout entry (synced,
+  shared by both boards), saved and redrawn 0.7 s after the last step; a
+  `.ztag` shows the percentage until then. `sizeCards` divides by it, so a
+  card at 200% picks small, medium or large on half its pixels. The card
+  menu gains **Zoom back to 100%**. Desk only; an app card's frame is its
+  own page and is skipped.
+[TESTED in headless Chromium on the demo at 1920x1000 with real Ctrl+wheel
+and a real corner drag: two notches up 125% (saved in `lifeos.layout`,
+page zoom untouched), one down 110%, TODAY dragged to 24 rows and the
+board scrolled to its bottom, the menu reset to 100%, no page errors. NOT
+on his screens.]
