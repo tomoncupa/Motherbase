@@ -34,6 +34,9 @@ class Menu : Form
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
     [DllImport("user32.dll")] static extern IntPtr FindWindowW(string cls, string win);
     [DllImport("user32.dll")] static extern short GetKeyState(int k);
+    [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int val, int size);
+    const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20, DWMWA_BORDER_COLOR = 34,
+              DWMWA_CAPTION_COLOR = 35, DWMWA_TEXT_COLOR = 36;
     const int VK_MENU = 0x12;
     const int SW_RESTORE = 9;
     const string TITLE = "Motherbase";
@@ -158,6 +161,7 @@ class Menu : Form
         /* Claude, as a panel on every suite page (ClaudeBridge.cs) */
         claude = new ClaudeBridge(this, c, UseFolder() ? new Uri(root + Path.DirectorySeparatorChar).AbsoluteUri : HOSTED, Log);
         claude.Attach();
+        Caption(c);
         c.Navigate(pageUrl);
 
         /* â”€â”€ never a one way trip â”€â”€
@@ -172,6 +176,62 @@ class Menu : Form
            navigates to with location.href leaves history behind it, so there
            is always something to go back to. */
         c.Settings.AreBrowserAcceleratorKeysEnabled = true;
+    }
+
+    /* ── the title bar wears the page ──
+       Tom, 2026-10-18, of the white Windows bar over the dark suite: "how can
+       we remove this?" The bar stays, because it is what snaps, drags,
+       resizes and holds the three buttons, but it takes the colour of
+       whatever is at the top of the page, so in Block it is #080B10 and
+       reads as part of the app. Each app can wear its own theme, so the
+       page reports its colour as it changes, top document only. The colour
+       goes through a 1px canvas because a computed colour can come back as
+       oklab() or color(srgb ...) (Known traps). */
+    void Caption(CoreWebView2 c)
+    {
+        c.AddScriptToExecuteOnDocumentCreatedAsync(
+            "(function(){if(window.top!==window||!window.chrome||!chrome.webview)return;var last='',cv,cx;" +
+            "function px(col){try{if(!cx){cv=document.createElement('canvas');cv.width=cv.height=1;cx=cv.getContext('2d',{willReadFrequently:true});}" +
+            "cx.clearRect(0,0,1,1);cx.fillStyle='#000';cx.fillStyle=col;cx.fillRect(0,0,1,1);var d=cx.getImageData(0,0,1,1).data;return d[3]>200?d[0]+','+d[1]+','+d[2]:'';}catch(e){return '';}}" +
+            "function tick(){try{var el=document.elementFromPoint(Math.floor(innerWidth/2),1),v='';" +
+            "while(el&&!v){var b=getComputedStyle(el).backgroundColor;if(b&&b!=='transparent'&&!/,\\s*0\\)$|\\/\\s*0\\)$/.test(b))v=px(b);el=el.parentElement;}" +
+            "if(!v&&document.body)v=px(getComputedStyle(document.body).backgroundColor);" +
+            "if(v&&v!==last){last=v;chrome.webview.postMessage('mbcap:'+v);}}catch(e){}}" +
+            "addEventListener('load',tick);setInterval(tick,1000);setTimeout(tick,50);})();");
+        c.WebMessageReceived += (s, e) =>
+        {
+            string m;
+            try { m = e.TryGetWebMessageAsString(); } catch { return; }
+            if (m == null || !m.StartsWith("mbcap:")) return;
+            string[] p = m.Substring(6).Split(',');
+            int r, g, b;
+            if (p.Length == 3 && int.TryParse(p[0], out r) && int.TryParse(p[1], out g) && int.TryParse(p[2], out b))
+                PaintBar(Color.FromArgb(r, g, b));
+        };
+    }
+
+    void PaintBar(Color bg)
+    {
+        bool dark = (bg.R * 299 + bg.G * 587 + bg.B * 114) / 1000 < 128;
+        /* Block's muted text on a dark bar, a dark grey on a light one */
+        Color fg = dark ? Color.FromArgb(0x7F, 0x93, 0xA8) : Color.FromArgb(0x3A, 0x40, 0x48);
+        int on = dark ? 1 : 0, cap = Ref(bg), txt = Ref(fg);
+        try
+        {
+            DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, 4);
+            DwmSetWindowAttribute(Handle, DWMWA_CAPTION_COLOR, ref cap, 4);
+            DwmSetWindowAttribute(Handle, DWMWA_BORDER_COLOR, ref cap, 4);
+            DwmSetWindowAttribute(Handle, DWMWA_TEXT_COLOR, ref txt, 4);
+        }
+        catch { }
+    }
+    static int Ref(Color c) { return c.R | (c.G << 8) | (c.B << 16); }
+
+    /* Block before the page has said anything, so the first frame is not white */
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        PaintBar(Color.FromArgb(0x08, 0x0B, 0x10));
     }
 
     Icon AppIcon()

@@ -64,6 +64,14 @@ the page tells it what to be through a proper message channel.
 Closing the window quits the program, so it can never sit in the tray switched
 off.
 
+## The Main Menu's title bar
+
+The Main Menu keeps Windows' own title bar, because that is what drags, snaps,
+resizes and holds minimise, maximise and close. Since 18 October it wears the
+colour at the top of whatever page is open (Block's dark header on the home
+screen), so it reads as part of the app rather than a white strip over it.
+The page reports its colour once a second; `MenuApp.cs`, `Caption`.
+
 ## Claude, inside the Main Menu
 
 A gold **CLAUDE** tab on the right edge of every page in the Main Menu opens a
