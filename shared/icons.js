@@ -296,9 +296,13 @@ const APP_ART = {
   style:   { c: WHT, edge: 'rainbow', g: '<path class="f" d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 1.5-2s0-2.5 1.5-2.5H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3z"/>'
              + [[7.3, 11.5, 0], [9.5, 7, 1], [14.5, 7, 2], [17.3, 11, 3]].map(p => '<circle class="n" cx="' + p[0] + '" cy="' + p[1] + '" r="1.6" fill="' + RAINBOW[p[2]] + '"/>').join('') },
   sheet:   { c: GOLD, g: '<path class="f" d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8"/>' },
-  /* BULLET, 2026-09-25: the page that only writes a bullet. Three bullet
-     lines, the first one being written. Picked by the build session. */
-  bullet:  { c: GOLD, g: '<circle class="f" cx="5.5" cy="6" r="2"/><path d="M10 6h10"/><circle cx="5.5" cy="12" r="1.2"/><path d="M10 12h7"/><circle cx="5.5" cy="18" r="1.2"/><path d="M10 18h9"/>' },
+  /* BULLET, 2026-09-25: the page that only writes a bullet. Since
+     2026-10-18, Tom's pick: each line is a rifle round seen from the side,
+     its primer the bullet point and the rest of the round the line, long,
+     medium, short. The first one is loaded (solid). */
+  bullet:  { c: GOLD, g: '<circle class="s" cx="4.6" cy="6" r="2.1"/><circle class="o n" cx="4.6" cy="6" r=".88"/><path class="s" stroke-width=".6" d="M15.15 4.6C17.78 4.6 20.12 5.51 21 6C20.12 6.49 17.78 7.4 15.15 7.4Z"/><path class="s" stroke-width=".6" d="M8 4.6H15.15V7.4H8Z"/><path style="stroke:var(--surface-1,' + PLATE + ')" stroke-width=".8" stroke-linecap="butt" d="M15.15 4.4v3.2"/>'
+           + '<circle cx="4.6" cy="12" r="1.5"/><circle class="s n" cx="4.6" cy="12" r=".63"/><path stroke-width=".6" d="M13.78 10.9C15.9 10.9 17.79 11.62 18.5 12C17.79 12.38 15.9 13.1 13.78 13.1Z"/><path stroke-width=".6" d="M8 10.9H13.78V13.1H8Z"/>'
+           + '<circle cx="4.6" cy="18" r="1.5"/><circle class="s n" cx="4.6" cy="18" r=".63"/><path stroke-width=".6" d="M12.12 16.9C13.64 16.9 14.99 17.61 15.5 18C14.99 18.39 13.64 19.1 12.12 19.1Z"/><path stroke-width=".6" d="M8 16.9H12.12V19.1H8Z"/>' },
   /* KITCHEN, 2026-09-28: a lidded pot on the shelf, for what is kept and
      what gets cooked from it. Picked by the build session, not by Tom yet. */
   kitchen: { c: WHT, g: '<path class="f" d="M5.5 9v8.5a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5V9"/><path class="h" d="M6 9a6 3 0 0 1 12 0z"/><circle class="s n" cx="12" cy="4.6" r="1.1"/><path d="M4 9h16M5.5 12H3M18.5 12H21M1.5 20h21"/>' },

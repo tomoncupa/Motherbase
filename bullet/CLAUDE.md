@@ -47,3 +47,5 @@ Review 135/135 at 375 and 1280. NOT watched on an iPhone, and the touch path
 itself was not exercised.
 
 1.0.1, 2026-09-25: the mood suggestions STATUS 1.0.54 got, off the same `Journal.moodMemo()`.
+
+1.0.3, 2026-10-18: a new icon, Tom's pick after four rounds of mockups ("Make the primer the point, the rest of the bullet the line", then 5 and 6 combined): three rifle rounds seen from the side, each primer the bullet point and the round the line, long, medium, short, the first loaded (solid). The drawing is `APP_ART.bullet` in `shared/icons.js`; the install icons and every theme's `shared/icons/<theme>/bullet.png` were redrawn with `tools/make-icons.html`. A saved home-screen icon keeps the old picture until it is removed and added again. Not seen on the iPhone.
