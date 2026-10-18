@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.69, 2026-10-18">
+<meta name="mb-version" content="1.0.70, 2026-10-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1007,7 +1007,7 @@ TRAIN.newId = function () {
 TRAIN.idx = { byDate: {}, byEx: {}, built: 0 };
 
 TRAIN.reindex = function () {
-  var byDate = {}, byEx = {};
+  var byDate = {}, byEx = {}, sw = TRAIN.splitWeights();
   var all = Rec.all('set');
   for (var i = 0; i < all.length; i++) {
     var r = all[i], p = r.payload;
@@ -1022,6 +1022,8 @@ TRAIN.reindex = function () {
                 warm: p.warm === 1 || p.warm === true ||
                   (p.warm !== 0 && p.warm !== false && TRAIN.noteWarm(p.note)) ? 1 : 0,
                 split: p.note ? TRAIN.noteSplit(p.note, p.r) : null };
+    /* a split set's effective reps, for strength only: see TRAIN.effReps */
+    if (rec.split) rec.er = TRAIN.effReps(rec.split, p.r, sw);
     (byDate[r.date] || (byDate[r.date] = [])).push(rec);
     (byEx[p.ex] || (byEx[p.ex] = [])).push(rec);
   }
@@ -2079,7 +2081,7 @@ TRAIN.importFitNotes = function (buf, onProgress, opts) {
     /* FitNotes' flags arrive as it set them; TRAIN's rule keeps split sets
        apart, so they are worked out again once everything is in. */
     TRAIN.recomputePRs();
-    Rec.setting(APP.id, 'prRule', 2);
+    Rec.setting(APP.id, 'prRule', 3);
     Object.keys(days).forEach(TRAIN.assertTick);
     return stats;
   }
@@ -4125,7 +4127,7 @@ function drawTrack(m) {
     card.innerHTML = '<div class="lasttime">' + (vsName ? UI.esc(vsName) + ' · ' : '') +
       UI.esc(dayY(vs.date, date)) + ' · ' +
       then.map(function (s) {
-        return lastBit(s, f) + (s.split ? ' (' + UI.esc(s.split.text) + ')' : '');
+        return lastBit(s, f) + (s.split ? ' (' + UI.esc(s.split.text) + (TRAIN.sr(s) !== s.r ? ', counts as ' + TRAIN.showReps(TRAIN.sr(s)) : '') + ')' : '');
       }).join(', ') + '</div>';
     m.appendChild(card);
   }
@@ -4646,12 +4648,12 @@ function drawGraph(m) {
   var G = [], sv = TRAIN.setVolume(exId);
   if (sv) G.push({ id: 'setvol', name: 'Top 3 Sets & Total Work', u: sv.reps ? 'reps' : U + 's' });
   if (f.indexOf('w') > -1) {
-    G.push({ id: 'e1rm', name: 'Estimated 1RM', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return TRAIN.e1rm(x.kg, x.r); })); } });
+    G.push({ id: 'e1rm', name: 'Estimated 1RM', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return TRAIN.e1rm(x.kg, TRAIN.sr(x)); })); } });
     G.push({ id: 'maxw', name: 'Max Weight', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return x.kg || 0; })); } });
     if (f.indexOf('r') > -1) G.push({ id: 'vol', name: 'Session Volume', u: U + 's', v: function (ss) { return W(sum(ss, function (x) { return (x.kg || 0) * (x.r || 0); })); } });
   }
   if (f.indexOf('r') > -1) {
-    G.push({ id: 'maxr', name: 'Max Reps', u: 'reps', v: function (ss) { return max(ss, function (x) { return x.r || 0; }); } });
+    G.push({ id: 'maxr', name: 'Max Reps', u: 'reps', v: function (ss) { return max(ss, TRAIN.sr); } });
     G.push({ id: 'reps', name: 'Session Reps', u: 'reps', v: function (ss) { return sum(ss, function (x) { return x.r || 0; }); } });
   }
   if (f.indexOf('d') > -1) {
@@ -4826,9 +4828,12 @@ TRAIN.setVolume = function (exId, range) {
   var days = Object.keys(byDay).sort().map(function (d) {
     var v = byDay[d].sort(function (a, b) { return (a.ord || 0) - (b.ord || 0) || TRAIN.setStamp(a) - TRAIN.setStamp(b); })
       .map(function (s) { return reps ? (s.r || 0) : TRAIN.toUnit((s.kg || 0) * (s.r || 0), U); });
-    return { date: d, sets: v, total: v.reduce(function (a, x) { return a + x; }, 0) };
+    /* the best sets are a strength measure, so a split set counts its
+       effective reps there (1.0.70); the set lines and the total, every rep */
+    var str = byDay[d].map(function (s) { return reps ? TRAIN.sr(s) : TRAIN.toUnit((s.kg || 0) * TRAIN.sr(s), U); });
+    return { date: d, sets: v, str: str, total: v.reduce(function (a, x) { return a + x; }, 0) };
   }).filter(function (x) { return x.total > 0; });
-  days.forEach(function (x) { x.top3 = TRAIN.top3(x.sets); });
+  days.forEach(function (x) { x.top3 = TRAIN.top3(x.str); });
   return { reps: reps, u: reps ? 'reps' : U + 's', days: days };
 };
 
@@ -5315,23 +5320,21 @@ TRAIN.recomputePRs = function (only) {
     var list = TRAIN.historyOf(id);
     var work = list.filter(function (x) { return !x.warm && (x.kg || 0) > 0 && (x.r || 0) > 0; })
       .sort(function (a, b) {
-        return rd(b.kg) - rd(a.kg) || b.r - a.r ||
+        return rd(b.kg) - rd(a.kg) || TRAIN.sr(b) - TRAIN.sr(a) ||
           (a.date < b.date ? -1 : a.date > b.date ? 1 : TRAIN.setStamp(a) - TRAIN.setStamp(b));
       });
     /* Heaviest first: a set is beaten exactly when something ahead of it in
        this order has at least as many reps.
 
-       Split sets and straight sets are two separate lists of records (Tom,
-       2026-09-14). Ten reps with a rest in the middle is not ten reps, so a
-       split set can neither take a straight record nor lose one to it. This
-       is where TRAIN stops agreeing with FitNotes' own 537 flags. */
-    var isPr = {};
-    [false, true].forEach(function (split) {
-      var maxR = 0;
-      work.forEach(function (x) {
-        if (!!x.split !== split) return;
-        if (x.r > maxR) { isPr[x.key] = 1; maxR = x.r; }
-      });
+       A split set counts its effective reps (TRAIN.effReps, 1.0.70): "10+5"
+       is a 10, "10 5" nearly a 14. From 2026-09-14 to 1.0.69 split sets kept
+       a list of records of their own, because ten reps with a rest in them
+       is not ten reps; Tom asked on 2026-10-18 for the rest to be weighed
+       instead. This is where TRAIN stops agreeing with FitNotes' 537 flags. */
+    var isPr = {}, maxR = 0;
+    work.forEach(function (x) {
+      var r = TRAIN.sr(x);
+      if (r > maxR) { isPr[x.key] = 1; maxR = r; }
     });
     list.forEach(function (x) {
       var want = isPr[x.key] ? 1 : 0;
@@ -5354,9 +5357,9 @@ TRAIN.recordsFor = function (exId, range) {
   /* Every set, warmups too, as everywhere else in TRAIN since 2026-10-05;
      the records themselves are working sets only.
 
-     `range` is a training block's dates, whose records start again. Split
-     sets count as sets and keep records of their own, under `split`: an
-     estimated 1RM off ten reps with a rest in them would overstate the lift. */
+     `range` is a training block's dates, whose records start again. A split
+     set counts its effective reps in every record but Most volume, which is
+     every rep (1.0.70). `split` still lists the split sets on their own. */
   var r = { maxWeight: null, maxReps: null, maxVolume: null, max1rm: null,
             byReps: {}, sets: 0, workouts: 0,
             split: { maxWeight: null, byReps: {}, sets: 0 } };
@@ -5368,18 +5371,20 @@ TRAIN.recordsFor = function (exId, range) {
     r.sets++;
     days[s.date] = 1;
     if (s.warm) return;
+    var sr = TRAIN.sr(s), n = Math.floor(sr);
     if (s.split) {
       r.split.sets++;
       if (s.kg > 0 && (!r.split.maxWeight || s.kg > r.split.maxWeight.kg)) r.split.maxWeight = s;
-      if (s.kg > 0 && s.r >= 1 && (!r.split.byReps[Math.floor(s.r)] || s.kg > r.split.byReps[Math.floor(s.r)].kg)) r.split.byReps[Math.floor(s.r)] = s;
-      return;
+      if (s.kg > 0 && n >= 1 && (!r.split.byReps[n] || s.kg > r.split.byReps[n].kg)) r.split.byReps[n] = s;
     }
-    var vol = (s.kg || 0) * (s.r || 0), e = TRAIN.e1rm(s.kg, s.r);
-    if (s.kg > 0 && (!r.maxWeight || s.kg > r.maxWeight.kg)) r.maxWeight = s;
-    if (s.r > 0 && (!r.maxReps || s.r > r.maxReps.r)) r.maxReps = s;
+    var vol = (s.kg || 0) * (s.r || 0), e = TRAIN.e1rm(s.kg, sr);
+    /* the heaviest at the most reps it was done for */
+    if (s.kg > 0 && (!r.maxWeight || s.kg > r.maxWeight.kg ||
+        (Math.abs(s.kg - r.maxWeight.kg) < 0.0005 && sr > TRAIN.sr(r.maxWeight)))) r.maxWeight = s;
+    if (sr > 0 && (!r.maxReps || sr > TRAIN.sr(r.maxReps))) r.maxReps = s;
     if (vol > 0 && (!r.maxVolume || vol > (r.maxVolume.kg * r.maxVolume.r))) r.maxVolume = s;
-    if (e > 0 && (!r.max1rm || e > TRAIN.e1rm(r.max1rm.kg, r.max1rm.r))) r.max1rm = s;
-    if (s.r >= 1 && s.kg > 0 && (!r.byReps[Math.floor(s.r)] || s.kg > r.byReps[Math.floor(s.r)].kg)) r.byReps[Math.floor(s.r)] = s;
+    if (e > 0 && (!r.max1rm || e > TRAIN.e1rm(r.max1rm.kg, TRAIN.sr(r.max1rm)))) r.max1rm = s;
+    if (n >= 1 && s.kg > 0 && (!r.byReps[n] || s.kg > r.byReps[n].kg)) r.byReps[n] = s;
   });
   r.workouts = Object.keys(days).length;
   return r;
@@ -5726,13 +5731,13 @@ function drawRecords(m) {
     }
     if (x.r.max1rm) {
       body.appendChild(recLine('Estimated 1RM',
-        TRAIN.showWeight(TRAIN.e1rm(x.r.max1rm.kg, x.r.max1rm.r), null, x.id) + ' ' + TRAIN.unitLabel(x.id),
+        TRAIN.showWeight(TRAIN.e1rm(x.r.max1rm.kg, TRAIN.sr(x.r.max1rm)), null, x.id) + ' ' + TRAIN.unitLabel(x.id),
         x.r.max1rm.date));
     }
     var sp = x.r.split.maxWeight;
     if (sp) {
       body.appendChild(recLine('Split set',
-        TRAIN.showWeight(sp.kg, sp.u, x.id) + ' ' + TRAIN.unitLabel(x.id) + ' × ' + UI.esc(sp.split.text), sp.date));
+        TRAIN.showWeight(sp.kg, sp.u, x.id) + ' ' + TRAIN.unitLabel(x.id) + ' × ' + TRAIN.repsText(sp), sp.date));
     }
     card.appendChild(body);
     m.appendChild(card);
@@ -5787,7 +5792,7 @@ function drawRepMax(m) {
       if (favOnly && !x.e.fav) return false;
       if (x.sc < 0) return false;
       return TRAIN.historyOf(x.id).some(function (s) {
-        return !s.warm && !s.split && s.kg > 0 && s.r > 0 &&
+        return !s.warm && s.kg > 0 && s.r > 0 &&
           (!rr.from || (s.date >= rr.from && s.date <= rr.to));
       });
     })
@@ -7423,7 +7428,7 @@ TRAIN.repCounts = function () {
    Actual and Estimated Personal Records. */
 TRAIN.repMax = function (rec, reps, est) {
   if (!est) return rec.byReps[reps] ? rec.byReps[reps].kg : 0;
-  var best = rec.max1rm ? TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r) : 0;
+  var best = rec.max1rm ? TRAIN.e1rm(rec.max1rm.kg, TRAIN.sr(rec.max1rm)) : 0;
   if (!best || reps >= 37) return 0;
   return best * (37 - reps) / 36;
 };
@@ -7460,8 +7465,8 @@ TRAIN.recordsCard = function (exId) {
     if (dt.dist) cell('Max distance', TRAIN.showDist(dt.dist.dist), du, dt.dist.date);
     if (dt.dur) cell('Max time', fmtSecs(dt.dur.dur), '', dt.dur.date);
   }
-  if (rec.maxWeight) cell('Heaviest', TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u, exId), U + ' × ' + rec.maxWeight.r, rec.maxWeight.date);
-  if (rec.max1rm) cell('Estimated 1RM', fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), TRAIN.unit(exId))), U, rec.max1rm.date);
+  if (rec.maxWeight) cell('Heaviest', TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u, exId), U + ' × ' + TRAIN.repsText(rec.maxWeight), rec.maxWeight.date);
+  if (rec.max1rm) cell('Estimated 1RM', fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, TRAIN.sr(rec.max1rm)), TRAIN.unit(exId))), U, rec.max1rm.date);
   if (rec.maxReps) cell('Most reps', rec.maxReps.r, 'reps', rec.maxReps.date);
   if (rec.maxVolume) cell('Most volume',
     Math.round(TRAIN.toUnit(rec.maxVolume.kg * rec.maxVolume.r, TRAIN.unit(exId))).toLocaleString(), U, rec.maxVolume.date);
@@ -7473,7 +7478,7 @@ TRAIN.recordsCard = function (exId) {
     '<div class="rule"></div>' +
     (cells.length ? '<div class="big4">' + cells.slice(0, 4).join('') + '</div>' : '') +
     (last && (last.kg || last.r) ? '<div class="sub">Latest record ' + esc(Day.label(last.date)) + ': ' +
-      (last.kg ? TRAIN.showWeight(last.kg, last.u, exId) + ' ' + U + ' × ' : '') + (last.r || 0) + ' reps</div>' : '');
+      (last.kg ? TRAIN.showWeight(last.kg, last.u, exId) + ' ' + U + ' × ' : '') + TRAIN.repsText(last, null, 'reps') + '</div>' : '');
   return card;
 };
 
@@ -7498,13 +7503,13 @@ TRAIN.recordsSheet = function (exId) {
           fmtSecs(Math.round(dt.pace.dur / (du === 'mi' ? dt.pace.dist / KM_PER_MI : dt.pace.dist))) + ' /' + du, dt.pace.date));
       }
       if (rec.maxWeight) body.appendChild(recLine('Heaviest',
-        TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u, exId) + ' ' + U + ' × ' + rec.maxWeight.r, rec.maxWeight.date));
-      if (rec.maxReps) body.appendChild(recLine('Most reps', rec.maxReps.r + ' reps', rec.maxReps.date));
+        TRAIN.showWeight(rec.maxWeight.kg, rec.maxWeight.u, exId) + ' ' + U + ' × ' + TRAIN.repsText(rec.maxWeight), rec.maxWeight.date));
+      if (rec.maxReps) body.appendChild(recLine('Most reps', TRAIN.repsText(rec.maxReps, null, 'reps'), rec.maxReps.date));
       if (rec.maxVolume) body.appendChild(recLine('Most volume',
         Math.round(TRAIN.toUnit(rec.maxVolume.kg * rec.maxVolume.r, TRAIN.unit(exId))).toLocaleString() + ' ' + U,
         rec.maxVolume.date));
       if (rec.max1rm) body.appendChild(recLine('Estimated 1RM',
-        fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), TRAIN.unit(exId))) + ' ' + U, rec.max1rm.date));
+        fmt1(TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, TRAIN.sr(rec.max1rm)), TRAIN.unit(exId))) + ' ' + U, rec.max1rm.date));
       b.appendChild(body);
       var shr = UI.el('button', 'mb-btn mb-press mb-tap');
       shr.style.width = '100%';
@@ -7519,18 +7524,20 @@ TRAIN.recordsSheet = function (exId) {
         var br = TRAIN.recordsFor(exId, { from: ph.from, to: ph.to || Day.today() });
         var gb = UI.el('div', 'mb-group'); gb.textContent = ph.p.name.toUpperCase(); b.appendChild(gb);
         if (br.maxWeight) b.appendChild(recLine('Heaviest',
-          TRAIN.showWeight(br.maxWeight.kg, br.maxWeight.u, exId) + ' ' + U + ' × ' + br.maxWeight.r, br.maxWeight.date));
+          TRAIN.showWeight(br.maxWeight.kg, br.maxWeight.u, exId) + ' ' + U + ' × ' + TRAIN.repsText(br.maxWeight), br.maxWeight.date));
         if (br.max1rm) b.appendChild(recLine('Estimated 1RM',
-          fmt1(TRAIN.toUnit(TRAIN.e1rm(br.max1rm.kg, br.max1rm.r), TRAIN.unit(exId))) + ' ' + U, br.max1rm.date));
+          fmt1(TRAIN.toUnit(TRAIN.e1rm(br.max1rm.kg, TRAIN.sr(br.max1rm)), TRAIN.unit(exId))) + ' ' + U, br.max1rm.date));
         if (!br.maxWeight) {
           var nb = UI.el('div', 'empty'); nb.textContent = 'Nothing logged in this block'; b.appendChild(nb);
         }
       }
+      /* Since 1.0.70 split sets are in every record above by their
+         effective reps; this lists the best of them by what they count as. */
       if (rec.split.sets) {
-        var gs = UI.el('div', 'mb-group'); gs.textContent = 'SPLIT SETS'; b.appendChild(gs);
+        var gs = UI.el('div', 'mb-group'); gs.textContent = 'SPLIT SETS, AS THEY COUNT'; b.appendChild(gs);
         Object.keys(rec.split.byReps).map(Number).sort(function (a, c) { return a - c; }).forEach(function (n) {
           var x = rec.split.byReps[n];
-          b.appendChild(recLine(n + ' reps', TRAIN.showWeight(x.kg, x.u, exId) + ' ' + U + ' · ' + UI.esc(x.split.text), x.date));
+          b.appendChild(recLine(n + ' reps', TRAIN.showWeight(x.kg, x.u, exId) + ' ' + U + ' · ' + TRAIN.repsText(x), x.date));
         });
       }
 
@@ -7546,7 +7553,7 @@ TRAIN.recordsSheet = function (exId) {
         var h3 = UI.el('div', 'mb-group'); h3.textContent = 'PERSONAL RECORD HISTORY'; b.appendChild(h3);
         prs.forEach(function (s) {
           b.appendChild(recLine(Day.label(s.date),
-            (s.kg ? TRAIN.showWeight(s.kg, s.u, exId) + ' ' + U + ' × ' : '') + (s.r || 0), ''));
+            (s.kg ? TRAIN.showWeight(s.kg, s.u, exId) + ' ' + U + ' × ' : '') + TRAIN.repsText(s), ''));
         });
       }
     },
@@ -7654,7 +7661,7 @@ TRAIN.setCalc = function (exId) {
   var ex = exId ? TRAIN.exercises()[exId] : null;
   var rec = exId ? TRAIN.recordsFor(exId) : null;
   var U = TRAIN.unit(exId);
-  var maxE = rec && rec.max1rm ? TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, rec.max1rm.r), U) : 0;
+  var maxE = rec && rec.max1rm ? TRAIN.toUnit(TRAIN.e1rm(rec.max1rm.kg, TRAIN.sr(rec.max1rm)), U) : 0;
   var maxW = rec && rec.maxWeight ? TRAIN.toUnit(rec.maxWeight.kg, U) : 0;
   var inc = TRAIN.increment(ex);
   var result = 0;
@@ -8904,13 +8911,61 @@ TRAIN.noteSplit = function (note, reps) {
         rest = Math.max(rest, run[j].rest);
         if (Math.floor(sum + 1e-9) === reps || Math.abs(sum - reps) < 1e-6) {
           return { text: note.slice(run[i].a, run[j].b), rest: rest,
-                   parts: run.slice(i, j + 1).map(function (x) { return x.v; }) };
+                   parts: run.slice(i, j + 1).map(function (x) { return x.v; }),
+                   /* the rest before each part, 0 before the first */
+                   rests: run.slice(i, j + 1).map(function (x, k) { return k ? x.rest : 0; }) };
         }
         if (sum > reps + 1) break;
       }
     }
   }
   return null;
+};
+
+/* ── how much a split set counts toward strength (1.0.70) ──
+   Tom, 2026-10-18: "10 can have 10 2 or 6,4 or 4+6 and they would all mean
+   different things", and he picked rest-weighted. The first part counts
+   whole; each part after it counts by the rest before it, times what the
+   part before it counted, so "10 5 5" is 10 + 4 + 3.2 and a long rest ends
+   the count. Volume never uses this: every rep is work. The three weights
+   are GUESSES, as percentages, and Settings changes them:
+     short rest ("10 5", about three breaths)   80
+     under thirty seconds ("10,5")             50
+     long rest ("10+5")                          0
+   Capped at the set's reps, so "5 1.5" on 6 reps is never more than 6. */
+TRAIN.SPLIT_W = { splitShort: 80, splitMid: 50, splitLong: 0 };
+TRAIN.splitWeights = function () {
+  var w = {};
+  Object.keys(TRAIN.SPLIT_W).forEach(function (k) {
+    var v = Rec.setting(APP.id, k);
+    v = typeof v === 'number' && isFinite(v) ? v : TRAIN.SPLIT_W[k];
+    w[k] = Math.max(0, Math.min(100, v)) / 100;
+  });
+  return { 1: w.splitShort, 2: w.splitMid, 3: w.splitLong };
+};
+TRAIN.effReps = function (split, reps, w) {
+  if (!split || !split.parts) return reps;
+  w = w || TRAIN.splitWeights();
+  var e = 0, m = 1;
+  split.parts.forEach(function (p, k) {
+    if (k) m *= (w[(split.rests || [])[k] || split.rest] || 0);
+    e += m * p;
+  });
+  return Math.round(Math.min(e, reps || e) * 100) / 100;
+};
+/* The reps a set counts for in strength: a straight set's reps, a split
+   set's effective reps. Every estimated 1RM, rep max, record, best set and
+   the set arrow's strength half read this; every total reads `r`. */
+TRAIN.sr = function (s) { return s ? (s.er != null ? s.er : (+s.r || 0)) : 0; };
+/* A split set's reps as words wherever its strength is stated:
+   "10 5 (counts as 14)". A straight set is its reps. `word` goes after
+   the reps and before the count: "10 5 reps (counts as 14)". */
+TRAIN.repsText = function (s, esc, word) {
+  esc = esc || UI.esc;
+  word = word ? ' ' + word : '';
+  if (!s.split) return TRAIN.showReps(s.r || 0) + word;
+  var er = TRAIN.sr(s);
+  return esc(s.split.text) + word + (Math.abs(er - (s.r || 0)) > 1e-6 ? ' (counts as ' + TRAIN.showReps(er) + ')' : '');
 };
 
 /* A date, with its year when it is not the year of the day it is shown on.
@@ -9387,7 +9442,8 @@ TRAIN.vsFor = function (date, exId, ctx) {
    was as a percentage of its estimated 1RM. The 1RM is what lets the same bar
    for two more reps count, and a percentage reads the same in pounds and
    kilograms. A set with no weight has no 1RM, so its percentage is of its reps.
-   A split set against a straight one is not like for like and gets no direction.
+   A split set is measured by its effective reps (TRAIN.effReps), so it can be
+   set against a straight one since 1.0.70; the reps it names are every rep.
 
    The numbers come back too, so a card can add them up: `dr` the change in
    reps, `pct` the change in strength, `e1` when that is a 1RM percentage. */
@@ -9408,7 +9464,6 @@ TRAIN.volUp = function (a, b, kind, d) {
 };
 TRAIN.setDelta = function (a, b, kind) {
   if (!b) return { dir: 0, text: 'new' };
-  if (!!a.split !== !!b.split) return { dir: 0, text: a.split ? 'split' : 'straight' };
   var f = KIND_FIELDS[kind] || KIND_FIELDS.wr;
   var val = function (s, k) { return +({ w: s.kg, r: s.r, d: s.dist, t: s.dur }[k]) || 0; };
   var same = function (x, y, k) { return k === 'w' ? Math.abs(x - y) < 0.005 : k === 'd' ? Math.abs(x - y) < 0.0005 : x === y; };
@@ -9420,12 +9475,16 @@ TRAIN.setDelta = function (a, b, kind) {
     var dk = val(a, 'w') - val(b, 'w'), moved = !same(val(a, 'w'), val(b, 'w'), 'w');
     if (moved) parts.push(sign(dk) + fmt1(TRAIN.toUnit(Math.abs(dk), TRAIN.unit(a.ex))) + ' ' + TRAIN.unit(a.ex));
     if (out.dr) parts.push(repWord(out.dr));
-    var ea = TRAIN.e1rm(a.kg, a.r), eb = TRAIN.e1rm(b.kg, b.r);
+    var ea = TRAIN.e1rm(a.kg, TRAIN.sr(a)), eb = TRAIN.e1rm(b.kg, TRAIN.sr(b));
     if (ea > 0 && eb > 0) { out.pct = (ea / eb - 1) * 100; out.e1 = true; }
-    else if (!moved && !a.kg && b.r > 0) out.pct = (val(a, 'r') / b.r - 1) * 100;
+    else if (!moved && !a.kg && TRAIN.sr(b) > 0) out.pct = (TRAIN.sr(a) / TRAIN.sr(b) - 1) * 100;
     if (out.pct != null && Math.abs(out.pct) < 0.05) out.pct = 0;
     if (out.pct) parts.push(sign(out.pct) + Math.abs(out.pct).toFixed(1) + '%');
-    out.dir = out.pct ? (out.pct > 0 ? 1 : -1) : moved ? (dk > 0 ? 1 : -1) : out.dr ? (out.dr > 0 ? 1 : -1) : 0;
+    /* stronger or weaker goes by effective reps: 10+5 after a straight 10
+       is more work and the same strength */
+    var ds = TRAIN.sr(a) - TRAIN.sr(b);
+    if (Math.abs(ds) < 1e-6) ds = 0;
+    out.dir = out.pct ? (out.pct > 0 ? 1 : -1) : moved ? (dk > 0 ? 1 : -1) : out.e1 || a.split || b.split ? (ds > 0 ? 1 : ds < 0 ? -1 : 0) : out.dr ? (out.dr > 0 ? 1 : -1) : 0;
   } else {
     for (var i = 0; i < f.length; i++) {
       var k = f[i], x = val(a, k), y = val(b, k);
@@ -9523,17 +9582,17 @@ TRAIN.recordHits = function (exId, date) {
   var hits = [];
   hist.forEach(function (s) {
     if (s.date !== date) return;
-    var prior = hist.filter(function (x) { return !!x.split === !!s.split && before(x, s); });
+    var prior = hist.filter(function (x) { return before(x, s); });
     var stands = function (list) {
-      return list.length > 0 && !list.some(function (x) { return rd(x.kg) >= rd(s.kg) && x.r >= s.r; });
+      return list.length > 0 && !list.some(function (x) { return rd(x.kg) >= rd(s.kg) && TRAIN.sr(x) >= TRAIN.sr(s); });
     };
     var all = stands(prior), blk = !!ph && stands(prior.filter(function (x) { return x.date >= ph.from; }));
     if (all || blk) hits.push({ s: s, all: all, block: blk });
   });
   return hits.filter(function (h) {
     return !hits.some(function (o) {
-      return o !== h && !!o.s.split === !!h.s.split && rd(o.s.kg) >= rd(h.s.kg) && o.s.r >= h.s.r &&
-        (rd(o.s.kg) > rd(h.s.kg) || o.s.r > h.s.r);
+      return o !== h && rd(o.s.kg) >= rd(h.s.kg) && TRAIN.sr(o.s) >= TRAIN.sr(h.s) &&
+        (rd(o.s.kg) > rd(h.s.kg) || TRAIN.sr(o.s) > TRAIN.sr(h.s));
     });
   });
 };
@@ -9701,7 +9760,7 @@ TRAIN.recapCard = function (date, cmp, off, share, asPct) {
       return '<div class="rec">' + ico('record') +
         '<span class="nm"><span>' + esc(x.name) + '</span><i class="pill">' + (x.all ? 'All-time' : 'Block') + '</i></span>' +
         '<span class="v">' + TRAIN.showWeight(x.s.kg, x.s.u, x.s.ex) + ' <small>' + TRAIN.unitLabel(x.s.ex) + '</small> × ' +
-        (x.s.split ? esc(x.s.split.text) : x.s.r) + '</span></div>';
+        TRAIN.repsText(x.s, esc) + '</span></div>';
     }).join('') + '</div>';
   }
   h += '<div class="mark">TRA<b>IN</b></div>';
@@ -9769,7 +9828,7 @@ TRAIN.wentDown = function (date, mode) {
    Otherwise nothing: a shared picture never carries a minus. */
 TRAIN.liftLine = function (date, exId, row) {
   var kind = TRAIN.kindOf(exId), f = TRAIN.fieldsOf(exId), U = TRAIN.unitLabel(exId);
-  var val = function (s, k) { return +({ w: s.kg, r: s.r, d: s.dist, t: s.dur }[k]) || 0; };
+  var val = function (s, k) { return +({ w: s.kg, r: TRAIN.sr(s), d: s.dist, t: s.dur }[k]) || 0; };
   var better = function (a, b) {
     for (var i = 0; i < f.length; i++) {
       var x = val(a, f[i]), y = val(b, f[i]);
@@ -9788,7 +9847,7 @@ TRAIN.liftLine = function (date, exId, row) {
   if (!now) return null;
   var then = row && row.vs ? top(row.vs.date) : null, up = '';
   if (then && f[0] === 'w' && f[1] === 'r') {
-    var dk = (now.kg || 0) - (then.kg || 0), dr = (now.r || 0) - (then.r || 0);
+    var dk = (now.kg || 0) - (then.kg || 0), dr = TRAIN.sr(now) - TRAIN.sr(then);
     if (dk >= 0.005) up = TRAIN.showDelta(dk, exId) + ' ' + U;
     else if (dk > -0.005 && dr > 0) up = '+' + TRAIN.showReps(dr) + (dr === 1 ? ' rep' : ' reps');
   } else if (then && better(now, then)) {
@@ -9800,7 +9859,7 @@ TRAIN.liftLine = function (date, exId, row) {
   if (!up && row && row.pctN && row.pctSum / row.pctN >= 0.05) up = '+' + (row.pctSum / row.pctN).toFixed(1) + '%';
   var top1 = f.map(function (k) {
     if (k === 'w') return now.kg ? TRAIN.showWeight(now.kg, now.u, exId) + ' <small>' + U + '</small>' : '';
-    if (k === 'r') return TRAIN.showReps(now.r || 0) + (f[0] === 'w' && now.kg ? '' : ' <small>reps</small>');
+    if (k === 'r') return TRAIN.repsText(now) + (f[0] === 'w' && now.kg ? '' : ' <small>reps</small>');
     if (k === 'd') return TRAIN.showDist(now.dist || 0) + ' <small>' + TRAIN.distUnit() + '</small>';
     return fmtSecs(now.dur || 0);
   }).filter(Boolean).join(' × ');
@@ -9808,7 +9867,7 @@ TRAIN.liftLine = function (date, exId, row) {
      first measure where there is no weight. Never below zero. */
   var pct = 0;
   if (then) {
-    var e1n = TRAIN.e1rm(now.kg, now.r), e1t = TRAIN.e1rm(then.kg, then.r);
+    var e1n = TRAIN.e1rm(now.kg, TRAIN.sr(now)), e1t = TRAIN.e1rm(then.kg, TRAIN.sr(then));
     if (e1n > 0 && e1t > 0) pct = (e1n / e1t - 1) * 100;
     else {
       var a0 = val(now, f[0]), b0 = val(then, f[0]);
@@ -9867,7 +9926,7 @@ TRAIN.frameCard = function (date, off, o) {
   if (o.sharePrs) {
     var best = {}, order = [];
     TRAIN.sessionRecords(date, off).forEach(function (x) {
-      var b = best[x.ex], e = TRAIN.e1rm(x.s.kg, x.s.r);
+      var b = best[x.ex], e = TRAIN.e1rm(x.s.kg, TRAIN.sr(x.s));
       if (!b) { order.push(x.ex); best[x.ex] = x; x.e = e; return; }
       if ((x.all && !b.all) || (x.all === b.all && e > b.e)) { x.e = e; best[x.ex] = x; }
     });
@@ -9878,7 +9937,7 @@ TRAIN.frameCard = function (date, off, o) {
          mockup's 5, Tom 2026-10-05: "5 is okay too") */
       return '<div class="fr-pr' + (x.all ? ' all' : '') + '">' + ico('record') +
         '<span class="nm">' + esc(x.name) + '</span><span class="v">' + TRAIN.showWeight(x.s.kg, x.s.u, x.s.ex) +
-          ' × ' + (x.s.split ? esc(x.s.split.text) : x.s.r) + '</span>' +
+          ' × ' + TRAIN.repsText(x.s, esc) + '</span>' +
         /* his words: "It's either a PR or a lifetime PR" */
         '<em>' + (x.all ? 'Lifetime PR' : 'PR') + '</em></div>';
     }).join('');
@@ -10874,6 +10933,7 @@ TRAIN.settingsPanel = function () {
 
         group('PERSONAL RECORDS', box);
         num('Estimated 1RM Max Reps', 'Sets above this are left out. 0 uses all', 'e1rmMaxReps', 0, box);
+
         var rc = UI.el('button', 'mb-btn mb-press mb-tap');
         rc.style.width = '100%';
         rc.textContent = 'RE-CALCULATE PERSONAL RECORDS';
@@ -10883,6 +10943,31 @@ TRAIN.settingsPanel = function () {
           UI.toast(n2 ? n2 + ' sets re-flagged' : 'Records already correct');
         };
         box.appendChild(rc);
+
+        /* TRAIN.effReps. Guesses, so they are his to change; records are
+           worked out again on each change. */
+        group('SPLIT SETS', box);
+        var swNote = UI.el('div', 'empty');
+        swNote.textContent = 'How much the reps after a rest count toward strength, in %. Volume counts every rep. These are guesses.';
+        box.appendChild(swNote);
+        [['Short Rest', '10 5, about three breaths', 'splitShort'],
+         ['Under 30 Seconds', '10,5', 'splitMid'],
+         ['Long Rest', '10+5', 'splitLong']].forEach(function (x) {
+          var f = UI.field('decimal', { value: String(get(x[2], TRAIN.SPLIT_W[x[2]])) });
+          f.style.maxWidth = '6em';
+          f.onchange = function () {
+            var v = parseFloat(f.value);
+            if (isNaN(v)) { f.value = String(get(x[2], TRAIN.SPLIT_W[x[2]])); return; }
+            v = Math.max(0, Math.min(100, v));
+            f.value = String(v);
+            Rec.setting(APP.id, x[2], v);
+            TRAIN.reindex();
+            var n3 = TRAIN.recomputePRs();
+            draw();
+            UI.toast(n3 ? n3 + ' sets re-flagged' : 'Records unchanged');
+          };
+          box.appendChild(UI.row(x[0], x[1], f));
+        });
 
         group('COMING FROM ANOTHER APP', box);
         var b = UI.el('button', 'mb-btn mb-press mb-tap');
@@ -10961,7 +11046,7 @@ function exportSheets() {
       r.maxWeight ? Math.round(TRAIN.toUnit(r.maxWeight.kg, unit) * 10) / 10 : '',
       r.maxWeight ? r.maxWeight.date : '',
       r.maxReps ? r.maxReps.r : '',
-      r.max1rm ? Math.round(TRAIN.toUnit(TRAIN.e1rm(r.max1rm.kg, r.max1rm.r), unit) * 10) / 10 : '']);
+      r.max1rm ? Math.round(TRAIN.toUnit(TRAIN.e1rm(r.max1rm.kg, TRAIN.sr(r.max1rm)), unit) * 10) / 10 : '']);
   });
 
   return [
@@ -11027,11 +11112,12 @@ function boot() {
   });
   TRAIN.restRestore();
   TRAIN.wake();
-  /* Records are worked out again once under the rule that keeps split sets
-     apart, and never again unless something changes. */
-  if (Rec.setting(APP.id, 'prRule') !== 2 && Rec.count('set')) {
+  /* Records are worked out again once under the rule that counts a split
+     set by its effective reps (3, 1.0.70; 2 kept split sets apart), and
+     never again unless something changes. */
+  if (Rec.setting(APP.id, 'prRule') !== 3 && Rec.count('set')) {
     TRAIN.recomputePRs();
-    Rec.setting(APP.id, 'prRule', 2);
+    Rec.setting(APP.id, 'prRule', 3);
   }
   draw();
   /* Tom, 2026-09-25: TRAIN opens on the first exercise of today's session

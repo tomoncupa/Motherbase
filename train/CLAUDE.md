@@ -105,9 +105,10 @@ describe the gym, not the training.
 `increment` `autoNext` `trackPRs` `keepAwake` `restSeconds` `restAuto` (on by default; starts the rest timer when a set is TICKED, never on SAVE or UPDATE, 1.0.33)
 `restVibrate` `restSound` `rest` (a running timer) `workoutTimerAuto`
 `workoutTimerStop` `graphPoints` `graphTrend` `graphZero` `e1rmMaxReps`
-`repCounts` `exSort` `catSort` `plates` `bars` `seen` `prRule` (2 once records
-have been worked out under the rule that keeps split sets apart) `sortSeen`
+`repCounts` `exSort` `catSort` `plates` `bars` `seen` `prRule` (3 once records
+have been worked out under effective reps, 1.0.70; 2 was the rule that kept split sets apart) `sortSeen`
 `sortSkip` (Sort Into Groups: offered once, and the moves he switched off)
+`splitShort` `splitMid` `splitLong` (how much a split set's later parts count toward strength, in %, 80, 50 and 0 until changed; guesses, 1.0.70)
 `rangePrint` (the Profile painting's print, written only when he switches; `rangeBase` is left over from 1.0.37 and read by nothing since the painting became one picture in 1.0.38)
 `share.<exercise id>` (0 when that lift is left out of what he shares; written only by its switch on the Share Picture panel, 1.0.39).
 
@@ -237,12 +238,20 @@ Verified against his file: FitNotes' 537 flags matched exactly, and the rules
 tried on the way are recorded so nobody tries them again.
 (HISTORY.md: Personal records, verified against his file)
 
-**Split sets keep records of their own** (Tom, 2026-09-14). The still-standing
-rule runs twice per exercise, once over straight sets and once over split sets,
-so a set with a rest in it can neither take a straight record nor lose one to it.
-This is where TRAIN stops matching FitNotes on purpose: his file now carries
-**688** flags, and Re-calculate changes **0**. Straight records, rep maxes and the
-estimated 1RM leave split sets out; the records sheet lists them separately.
+**A split set counts its effective reps** (1.0.70, Tom 2026-10-18: "10 can
+have 10 2 or 6,4 or 4+6 and they would all mean different things"; he picked
+rest-weighted). Every strength reading uses `TRAIN.sr(s)`: the still-standing
+rule, rep maxes, the estimated 1RM, Heaviest, Most reps, block and session
+records, Top 3 sets, GRAPH's Estimated 1RM and Max Reps, the set arrow's 1RM
+half and `setDelta`. **Every total, Most volume and the arrow's weight x reps
+half read `r`, every rep.** Wherever a split set's strength is stated it says
+so: "10 5 (counts as 14)" (`TRAIN.repsText`). A split set and a straight set
+are compared like for like now; "10+5" after a straight 10 is more work and the
+same strength, so the arrow is green and the direction is same.
+Until 1.0.69 split sets kept records of their own (Tom, 2026-09-14) and his
+file carried 688 flags; the count under effective reps has not been taken on
+his file. The records sheet still lists split sets, as SPLIT SETS, AS THEY
+COUNT. Changing a weight in Settings works records out again.
 
 **Records start again with each training block**, and the all-time ones stay. The
 stored `pr` flag is still the all-time, still-standing rule. Block records are
@@ -274,6 +283,12 @@ comments"). Nothing is written back, so editing a comment changes what the set i
   words: "Height 11, 10 5" on 15 reps is 10 and 5. Numbers that do not add up are
   not a split: "5 5 4 4" on a 9-rep curl is per side, "2 10s" is plates. **610** of
   his sets: 430 short rests, 112 under thirty seconds, 68 long.
+- **What a split counts for in strength** (`TRAIN.effReps`, 1.0.70): the first
+  part whole, each later part by the rest before it times what the part before
+  counted. Short rest 80%, under thirty seconds 50%, long rest 0%. **These are
+  guesses, not research**, and Settings, More, SPLIT SETS changes them. So
+  `10 5` is 14, `10,5` is 12.5, `10+5` is 10, `10 5,3` is 15.2. Never more than
+  the set's reps. Kept on the index as `er`, never on the row.
 
 ### What counts
 
@@ -644,6 +659,10 @@ is paging past 100 sessions, not folding, and stays. What it does, CSS only:
 
 TRAIN never edits `shared/`; a need goes here. (HISTORY.md: For the foundation) Still open:
 - ~~**Keep the middle of the story clear**~~ Done 2026-10-02: `IO.share` takes a `frame` builder and `IO.frameShot` pictures it edge to edge. The session uses it; the week, Profile, records and GRAPH pictures are still cards.
+- **SHEET still keeps split sets apart** (`sheet/index.html`, `splitNote`, records
+  read `!s.split`). TRAIN counts them by effective reps since 1.0.70, so SHEET's
+  feats can disagree with TRAIN's records. A SHEET session should copy
+  `TRAIN.effReps` and the three `train.split*` settings. COACH reads no split rule.
 - **A note row on the Share panel.** `options` are switch rows only, so nothing can say which lifts were left out and why.
 
 ---
@@ -666,7 +685,7 @@ straight from the file:
 | Comments on sets / comments on deleted sets | 2,240 / 2,057 |
 | Workout timings | 550 |
 | Supersets | 55 across 40 days |
-| Personal record flags | 688 with split sets kept apart (FitNotes flagged 537), and **0 changed** by Re-calculate |
+| Personal record flags | 688 with split sets kept apart until 1.0.69 (FitNotes flagged 537); not yet counted under effective reps (1.0.70). Re-calculate twice changes **0** the second time |
 | Warmups read from comments | 161 |
 | Split sets read from comments | 610: 430 short rests, 112 under thirty seconds, 68 long |
 | Entered in kg / lb | 7,886 / 4,484 |
@@ -994,6 +1013,13 @@ Curl separate; and *"There is no barbell squat?"*
 - **Copy Past Session is the calendar with a confirm** (Tom: "just like fitnotes"). `pastSessionPicker` opens `pickDate`; a day with sets shows its name, date and every exercise, COPY runs `copyWorkout` (latest sets and comments, unticked). A later day or an empty one says so and reopens the calendar. The 14-day list is gone.
 - **A number on the end of a name is dropped when matching** (`TRAIN.nameKey`): Back 1, Back 2 and Back are one session, each measured against whichever was last. Tom: "Back 2 as in it's the 2nd time to hit back, not another form of back day". Training Routines lists the family once, by its latest name. A name that is only a number keeps itself.
 - **The set row shows its comment and setup** in the gap between the set number and the weight (`.tnote`). **Never clipped** (Tom: "I don't want any clipping, make the font as small as needed"): `fitNotes` steps 12 to 8px until it fits two lines, then wraps and the row grows. **Setup shows only when it changed** from the set before. Watched at 390px: a long note at 8px made a 49px row.
+
+## Split sets in strength (1.0.70, 2026-10-18)
+
+- See Personal records and What a comment says. Watched in headless Chromium at
+  390x844 on seeded sets: the records sheet, the Settings rows changed by
+  clicking (Short Rest 50 made `10 5` count 12.5 and re-flagged records), the
+  log. Not watched on the iPhone or on his real log.
 
 ## Parked
 
