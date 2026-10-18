@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.21, 2026-10-18">
+<meta name="mb-version" content="1.0.22, 2026-10-18">
 <title>LOG</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -978,7 +978,8 @@ const recapOf = (kind, from) => (Rec.get('recap', from, kind) || {}).text || '';
 const cellOf = (d, col) => (Rec.get('cell', d, col) || {}).text || '';
 
 function dayHTML(p) {
-  const hit = dayCache.get(p.from);
+  const book = isBook(), ck = p.from + (book ? 'b' : '');
+  const hit = dayCache.get(ck);
   if (hit) return hit;
   const cls = ['day'];
   if (p.from.slice(8) === '01') cls.push('m0');
@@ -987,11 +988,16 @@ function dayHTML(p) {
   if (p.alt) cls.push('alt');
   const list = byDay.get(p.from) || [];
   const note = (Rec.get('day', p.from, '') || {}).note || '';
+  /* Tom, 2026-10-18: "Put the bullets below." In the notebook the date band
+     comes first, then a line per column, then the bullets, so the day's
+     cell is drawn in two halves and the bullets go last. */
+  const bulletsHTML = '<div class="bw">' + graphHTML(p.from) + '<div class="bls">' + list.map(bulletHTML).join('') + '</div></div>';
   const cells = visibleX().map(k => {
+    if (k === 'd' && book) return '';
     if (k === 'd') {
       return '<div class="xc xd">' +
         '<div class="hd"><span class="lab">' + esc(p.label) + '</span></div>' +
-        '<div class="bw">' + graphHTML(p.from) + '<div class="bls">' + list.map(bulletHTML).join('') + '</div></div></div>';
+        bulletsHTML + '</div>';
     }
     const def = xDef(k);
     if (!def) return '';
@@ -1014,8 +1020,10 @@ function dayHTML(p) {
   const html = '<div class="' + cls.join(' ') + '" data-from="' + p.from + '"' +
     (note ? ' title="' + attr(p.label + ': ' + note) + '"' : '') + '>' +
     (p.month ? '<div class="mo">' + esc(p.month) + '</div>' : '') +
-    '<div class="drow">' + cells + '</div></div>';
-  dayCache.set(p.from, html);
+    '<div class="drow">' + (book
+      ? '<div class="xc xd"><div class="hd"><span class="lab">' + esc(p.label) + '</span></div></div>' + cells + '<div class="xc xd xb">' + bulletsHTML + '</div>'
+      : cells) + '</div></div>';
+  dayCache.set(ck, html);
   return html;
 }
 
