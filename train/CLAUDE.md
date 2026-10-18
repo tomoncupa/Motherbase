@@ -980,6 +980,11 @@ Curl separate; and *"There is no barbell squat?"*
 - **No "How did it go?" row** (Tom, 1.0.66: "I don't want a how did it go"). The session strip is ONE 44px line: name, then tags and ratings, then the block, ellipsed (`.sesshead.slim`). Name Session and Describe Session are the first two items of the day's More menu, above Settings, and in the strip's own menu. The session card shows the line on screen, **never on a shared picture**.
 - Works with no name. Not yet read by COACH, Analysis or a graph.
 
+## Motion (1.0.67, 2026-10-18)
+
+- Tom: TRAIN and COACH "feel stiff". Cause: every screen and day was wiped and redrawn in place. Now `motion()` in `draw()`: a new day slides in from its side (`mv-r`, `mv-l`), a new screen rises in (`mv-up`), `--dur-med`. A redraw of the same screen and day (every save) never moves.
+- A timer takes the class off after 600ms, because a page that is not drawn never runs an animation and would sit on its see-through first frame. Watched in headless Chromium: 0.73 opacity mid-slide, 1 after.
+
 ## Parked
 
 **The wrapper app.** An Android wrapper would let the rest timer ring with the

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.66, 2026-10-18">
+<meta name="mb-version" content="1.0.67, 2026-10-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -610,6 +610,17 @@ div.prow{padding:0}
 .datebar .arrow .mb-ico{width:1.2em;height:1.2em}
 .dhead .mb-ico{width:1em;height:1em}
 .kindsel{margin-top:var(--s-2)}
+
+/* Motion: a new day slides in from its side, a new screen rises in. */
+@keyframes mvR{from{opacity:0;transform:translateX(var(--s-7))}to{opacity:1;transform:none}}
+@keyframes mvL{from{opacity:0;transform:translateX(calc(var(--s-7) * -1))}to{opacity:1;transform:none}}
+@keyframes mvUp{from{opacity:0;transform:translateY(var(--s-5))}to{opacity:1;transform:none}}
+#main.mv-r{animation:mvR var(--dur-med) var(--ease-out)}
+#main.mv-l{animation:mvL var(--dur-med) var(--ease-out)}
+#main.mv-up{animation:mvUp var(--dur-med) var(--ease-out)}
+@media (prefers-reduced-motion:reduce){#main.mv-r,#main.mv-l,#main.mv-up{animation:none}}
+/* a slide must not flash a sideways scrollbar */
+main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hidden}
 
 /* ══════════ TRAINING, NOT WORKING OUT ══════════ */
 /* The session strip: its name, and the block and week it sits in. */
@@ -3220,10 +3231,34 @@ TRAIN.back = function () {
   return false;
 };
 
+/* Motion. Tom, 2026-10-18: TRAIN felt stiff, because every screen and day
+   was wiped and redrawn in place, so things blinked instead of moved. A new
+   day slides in from the side it came from and a new screen rises in. A
+   redraw of the same screen on the same day, which every save causes, does
+   not move at all. */
+var lastDrawn = null;
+function motion(m) {
+  var now = { scr: TRAIN.screen, date: TRAIN.date }, was = lastDrawn;
+  lastDrawn = now;
+  if (!was) return;
+  var cls = '';
+  if (was.scr !== now.scr) cls = 'mv-up';
+  else if (was.date !== now.date && (now.scr === 'workout' || now.scr === 'training')) cls = now.date > was.date ? 'mv-r' : 'mv-l';
+  if (!cls) return;
+  m.classList.remove('mv-up', 'mv-r', 'mv-l');
+  m.offsetHeight;                    /* force layout so the same class can play again */
+  m.classList.add(cls);
+  /* A page that is not being drawn never runs an animation and would sit on
+     its first, see-through frame. A timer runs anyway and takes it off. */
+  clearTimeout(motion.t);
+  motion.t = setTimeout(function () { m.classList.remove(cls); }, 600);
+}
+
 function draw() {
   drawChrome();
   var m = document.getElementById('main');
   m.innerHTML = '';
+  motion(m);
   if (TRAIN.screen === 'picker') return drawPicker(m);
   if (TRAIN.screen === 'training') return drawTraining(m);
   if (TRAIN.screen === 'calendar') return drawCalendar(m);
