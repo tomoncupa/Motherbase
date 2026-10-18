@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.73, 2026-10-18">
+<meta name="mb-version" content="1.0.74, 2026-10-18">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -2088,6 +2088,56 @@ function meter(label, value, share, tint) {
 }
 const textBlock = s => esc(String(s || '').trim()).replace(/\n/g, '<br>');
 
+/* ══════════════ what a card shows, picked from its menu ══════════════
+   Tom, 2026-10-18: "a widget like work done, I want to be able to right
+   click and pick which dates and time frames get displayed", and "Apply
+   this level of granularity and modularity to everything". Two levers, both
+   on the card's menu and both saved on the card, so two copies can differ:
+   - `periods`: a widget that shows stretches of time side by side names
+     which of PERIODS it offers; `cfg.cols` is the ones he ticked.
+   - `parts`: a widget made of pieces lists them as [id, label]; `cfg.off`
+     is the ones he turned off. Missing means all on, which is also what an
+     empty list reads as after live sync drops it.
+   A widget showing one stretch keeps `days`, a single pick. */
+const PERIODS = [
+  ['d7', 'Last 7 days', '7D'], ['d14', 'Last 14 days', '14D'], ['d30', 'Last 30 days', '30D'],
+  ['d90', 'Last 90 days', '90D'], ['d180', 'Last 180 days', '180D'], ['d365', 'Last 365 days', '365D'],
+  ['wk', 'This week', 'WEEK'], ['lwk', 'Last week', 'LAST WK'], ['mo', 'This month', 'MONTH'],
+  ['lmo', 'Last month', 'LAST MO'], ['yr', 'This year', 'YEAR'], ['all', 'All time', 'ALL'],
+];
+/* the first day anything was recorded, read off the rows themselves */
+function firstDay() {
+  let first = null;
+  ['ev', 'meal', 'note', 'set'].forEach(t => Rec.all(t).forEach(r => { if (r.date && (!first || r.date < first)) first = r.date; }));
+  return first;
+}
+/* a period as {id, label, head, from, to, n}; weeks start on Monday. A
+   stretch still running ends today. */
+function periodOf(id, today) {
+  today = today || LifeOS.day();
+  const P = PERIODS.filter(p => p[0] === id)[0]; if (!P) return null;
+  const dt = new Date(today + 'T12:00:00'), dow = (dt.getDay() + 6) % 7;
+  const ym = today.slice(0, 7), y = today.slice(0, 4);
+  let from = today, to = today;
+  if (id[0] === 'd' && id !== 'd') from = LifeOS.shift(today, -(+id.slice(1) - 1));
+  else if (id === 'wk') from = LifeOS.shift(today, -dow);
+  else if (id === 'lwk') { to = LifeOS.shift(today, -dow - 1); from = LifeOS.shift(to, -6); }
+  else if (id === 'mo') from = ym + '-01';
+  else if (id === 'lmo') { to = LifeOS.shift(ym + '-01', -1); from = to.slice(0, 7) + '-01'; }
+  else if (id === 'yr') from = y + '-01-01';
+  else if (id === 'all') from = firstDay() || today;
+  const n = Math.round((new Date(to + 'T12:00:00') - new Date(from + 'T12:00:00')) / 864e5) + 1;
+  return { id: id, label: P[1], head: P[2], from: from, to: to, n: n };
+}
+const partOn = (cfg, id) => !(cfg && cfg.off && cfg.off.indexOf(id) > -1);
+const partsOf = (W, cfg) => (typeof W.parts === 'function' ? W.parts(cfg) : W.parts) || [];
+/* one piece on its own is a tick in the widget's own menu, since a Show
+   list of one could never be turned off (one has to stay on); it writes
+   the same `cfg.off` */
+const partToggle = (cfg, id, label, redraw) => ({ label: label, check: partOn(cfg, id), fn: () => {
+  const off = (cfg.off || []).filter(o => o !== id); if (partOn(cfg, id)) off.push(id);
+  if (off.length) cfg.off = off; else delete cfg.off; redraw(); } });
+
 const WIDGETS = {
   /* ══════════════ TODAY ══════════════
      The day as one list. BLOCK owns the blocks and STATUS owns the bullets,
@@ -2110,8 +2160,13 @@ const WIDGETS = {
     /* Done and to do count the rows that can be ticked, blocks and todos.
        An entry, an event or an idea is a note in the day's order with
        nothing to tick, so counted as open the day could never be done. */
-    sub: () => {
-      const it = todayItems().filter(x => x.tick);
+    /* what the card shows, from its menu: the pieces, and which kinds of
+       line make the list (and the count, so the header agrees with it) */
+    parts: [['now', 'Now and next'], ['ring', 'Done ring'], ['stats', 'Planned and left'], ['list', 'List'],
+      ['tidy', 'Missed button'], ['blocks', 'Blocks'], ['todos', 'To dos'], ['notes', 'Entries, events and ideas']],
+    items: cfg => todayItems().filter(x => partOn(cfg, x.kind === 'block' ? 'blocks' : x.kind === 'todo' ? 'todos' : 'notes')),
+    sub: cfg => {
+      const it = WIDGETS.today.items(cfg).filter(x => x.tick);
       if (!it.length) return 'nothing scheduled';
       const done = it.filter(x => x.done).length;
       return done + ' / ' + it.length + ' done';
@@ -2119,7 +2174,7 @@ const WIDGETS = {
     title: () => { const t = todayPlan(); return t && t.date === LifeOS.day() ? (t.name || '') : ''; },
     draw(body, cfg) {
       cfg = cfg || {};
-      const items = todayItems();
+      const items = WIDGETS.today.items(cfg);
       const tasks = items.filter(x => x.tick);
       const blocks = items.filter(x => x.kind === 'block');
       const done = tasks.filter(x => x.done).length;
@@ -2129,7 +2184,7 @@ const WIDGETS = {
          summary is what you want at the END of a day. During one you want to
          be told what to do, so that goes first and the ring goes under it. */
       const nn = nowNext(tasks);
-      if (nn) {
+      if (nn && partOn(cfg, 'now')) {
         const band = el('div', 'nowband' + (nn.state === 'running' ? ' live' : ''));
         if (nn.state === 'done') {
           band.innerHTML = '<div class="nlab">DONE</div><div class="nname">Everything on today is ticked</div>';
@@ -2160,11 +2215,11 @@ const WIDGETS = {
 
       /* the card's title already says TODAY, so the ring carries only its share */
       const rw = el('div', 'ringwrap');
-      rw.appendChild(ring(tasks.length ? done / tasks.length : 0,
+      if (partOn(cfg, 'ring')) rw.appendChild(ring(tasks.length ? done / tasks.length : 0,
         tasks.length ? Math.round(done / tasks.length * 100) + '%' : '—', ''));
       /* PLANNED and LEFT add up BLOCK's blocks, so with no blocks they are
          left off: 0m there meant no plan, not nothing planned */
-      if (blocks.length) {
+      if (blocks.length && partOn(cfg, 'stats')) {
         const st = el('div', 'stats');
         const mins = blocks.reduce((a, b) => a + (b.dur || 0), 0);
         const left = blocks.filter(b => !b.done).reduce((a, b) => a + (b.dur || 0), 0);
@@ -2172,7 +2227,7 @@ const WIDGETS = {
         st.appendChild(el('div', 'stat acc', '<b>' + DUR(left || 0) + '</b><span>LEFT</span>'));
         rw.appendChild(st);
       }
-      body.appendChild(rw);
+      if (rw.childNodes.length) body.appendChild(rw);
 
       /* A fact, and the title opens BLOCK. "The last plan was for <date>"
          only ever showed when the kernel still held yesterday's plan after
@@ -2253,12 +2308,12 @@ const WIDGETS = {
         }
         list.appendChild(r);
       });
-      body.appendChild(list);
+      if (partOn(cfg, 'list')) body.appendChild(list);
 
       /* One tap, in the place it matters, and only on a day where it means
          anything. A setting for this would be a thing to go and find on the
          day you least feel like looking. */
-      if (missed.length) {
+      if (missed.length && partOn(cfg, 'list') && partOn(cfg, 'tidy')) {
         const t2 = el('button', 'tidy', missed.length + ' missed · ' +
           (cfg.tidy ? 'show in place' : 'move down'));
         t2.onclick = () => {
@@ -2270,7 +2325,7 @@ const WIDGETS = {
 
       /* Open it and the thing you are on is already on screen. Only the list
          scrolls - scrollIntoView would take the whole page with it. */
-      if (here && list.scrollHeight > list.clientHeight) {
+      if (here && list.isConnected && list.scrollHeight > list.clientHeight) {
         list.scrollTop = Math.max(0, here.offsetTop - 6);
       }
     },
@@ -2301,7 +2356,7 @@ const WIDGETS = {
        sleep, mood and energy on one screen." His protocol watches sleep
        falling while mood rises, and these three strips are that picture. */
     presets: [{ nm: 'SLEEP · MOOD · ENERGY', note: 'three strips on one date axis', cfg: { nm: 'SLEEP · MOOD · ENERGY', m: ['sleep', 'mood', 'energy'], days: 30, w: 12, h: 5 } }],
-    days: [[30, '30 days'], [90, '90 days'], [365, 'a year']],
+    days: [[30, '30 days'], [90, '90 days'], [180, '180 days'], [365, 'a year']],
     measures() {
       const fields = Rec.map('field'), seen = {}, out = [];
       const put = (id, label, unit, kind, read) => { if (!seen[id]) { seen[id] = 1; out.push({ id: id, label: label, unit: unit, kind: kind, read: read }); } };
@@ -2401,7 +2456,8 @@ const WIDGETS = {
        header, are for things that happened. */
     keys: () => Object.keys(LifeOS.dayLog()).filter(k => k.indexOf('note-') !== 0 || k.indexOf('note-at-') === 0),
     sub: () => { const n = WIDGETS.log.keys().length; return n ? n + ' logged' : 'nothing yet'; },
-    draw(body) {
+    parts: [['time', 'Time'], ['dur', 'How long'], ['src', 'Which app']],
+    draw(body, cfg) {
       /* ── the time it happened, not the time it was typed ──
          A tick's own timestamp is when you pressed the button, which for
          anything ticked after the fact is the wrong number. Where the writer
@@ -2425,9 +2481,9 @@ const WIDGETS = {
         /* one clock for the column, the one a typed time is written in */
         const tm = el('span', 'tm' + (stated ? ' said' : ''), MIN2(mins(k)));
         if (stated) tm.title = 'The time you wrote, not the time it was logged';
-        line.appendChild(tm);
-        line.appendChild(el('span', null, esc(actLabel(k).name) + (rec.dur ? ' <i class="dur">' + DUR(rec.dur) + '</i>' : '')));
-        line.appendChild(el('span', 'src', esc((rec.src || '').toUpperCase())));
+        if (partOn(cfg, 'time')) line.appendChild(tm);
+        line.appendChild(el('span', null, esc(actLabel(k).name) + (rec.dur && partOn(cfg, 'dur') ? ' <i class="dur">' + DUR(rec.dur) + '</i>' : '')));
+        if (partOn(cfg, 'src')) line.appendChild(el('span', 'src', esc((rec.src || '').toUpperCase())));
         body.appendChild(line);
       });
     },
@@ -2445,7 +2501,8 @@ const WIDGETS = {
       if (!d) return 'nothing logged yet';
       return d === LifeOS.day() ? 'today' : LifeOS.shift(LifeOS.day(), -1) === d ? 'yesterday' : Day.short(d);
     },
-    draw(body) {
+    parts: [['ex', 'Exercises'], ['sets', 'Sets'], ['reps', 'Reps'], ['vol', 'Volume'], ['list', 'Exercise list']],
+    draw(body, cfg) {
       const day = trainLastDay();
       if (!day) { body.appendChild(el('div', 'empty', 'No training logged')); return; }
       const t = LifeOS.day(), exs = Rec.map('exercise');
@@ -2467,11 +2524,12 @@ const WIDGETS = {
       sets.forEach(r => { reps += r.payload.r || 0; vol += (r.payload.kg || 0) * (r.payload.r || 0); });
 
       const st = el('div', 'stats');
-      st.appendChild(el('div', 'stat acc', '<b>' + order.length + '</b><span>EXERCISES</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + sets.length + '</b><span>SETS</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + reps.toLocaleString() + '</b><span>REPS</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + Math.round(vol).toLocaleString() + '</b><span>VOLUME KG</span>'));
-      body.appendChild(st);
+      if (partOn(cfg, 'ex')) st.appendChild(el('div', 'stat acc', '<b>' + order.length + '</b><span>EXERCISES</span>'));
+      if (partOn(cfg, 'sets')) st.appendChild(el('div', 'stat', '<b>' + sets.length + '</b><span>SETS</span>'));
+      if (partOn(cfg, 'reps')) st.appendChild(el('div', 'stat', '<b>' + reps.toLocaleString() + '</b><span>REPS</span>'));
+      if (partOn(cfg, 'vol')) st.appendChild(el('div', 'stat', '<b>' + Math.round(vol).toLocaleString() + '</b><span>VOLUME KG</span>'));
+      if (st.childNodes.length) body.appendChild(st);
+      if (!partOn(cfg, 'list')) return;
 
       const list = el('div', 'rowlist');
       order.slice(0, 6).forEach(id => {
@@ -2492,9 +2550,13 @@ const WIDGETS = {
      answer in the header, the latest week lit, a drag to read any week. */
   trainvol: {
     nm: 'TRAINING VOLUME', w: 4, h: 2, app: 'train', to: ['train'],
-    weeks() {
+    /* how many weeks, from the card's menu, as days so the menu's one
+       Time frame list serves it; untouched it is the 8 it always was */
+    days: [[28, '4 weeks'], [56, '8 weeks'], [91, '13 weeks'], [182, '26 weeks'], [364, '52 weeks']], day0: 56,
+    nWk: cfg => Math.round(((cfg && cfg.days) || 56) / 7),
+    weeks(cfg) {
       const t = LifeOS.day(), out = [];
-      for (let w = 7; w >= 0; w--) {
+      for (let w = WIDGETS.trainvol.nWk(cfg) - 1; w >= 0; w--) {
         const end = LifeOS.shift(t, -w * 7), days = {};
         let vol = 0;
         for (let i = 0; i < 7; i++) {
@@ -2509,18 +2571,19 @@ const WIDGETS = {
       }
       return out;
     },
-    sub: () => { const n = WIDGETS.trainvol.weeks()[7]; return n.days ? n.vol.toLocaleString() + ' kg in the last 7 days' : 'last 8 weeks'; },
-    draw(body) {
-      const W8 = WIDGETS.trainvol.weeks();
-      if (!W8.some(x => x.days)) { body.appendChild(el('div', 'empty', 'No training in the last 8 weeks')); return; }
+    sub: cfg => { const N = WIDGETS.trainvol.nWk(cfg), n = WIDGETS.trainvol.weeks({ days: 7 })[0]; return n.days ? n.vol.toLocaleString() + ' kg in the last 7 days' : 'last ' + N + ' weeks'; },
+    draw(body, cfg) {
+      const N = WIDGETS.trainvol.nWk(cfg), W8 = WIDGETS.trainvol.weeks(cfg), step = Math.ceil(N / 4);
+      if (!W8.some(x => x.days)) { body.appendChild(el('div', 'empty', 'No training in the last ' + N + ' weeks')); return; }
       const box = el('div', 'fits');
       body.appendChild(box);
       const bars = W8.map((x, i) => [i, x.vol, 'Week to ' + Day.short(x.end) + ', ' + x.vol.toLocaleString() + ' kg']);
-      Chart.mount(box, { label: 'Training volume, the last 8 weeks' }, c => {
-        c.xLinear(-0.5, 7.5);
+      Chart.mount(box, { label: 'Training volume, the last ' + N + ' weeks' }, c => {
+        c.xLinear(-0.5, N - 0.5);
         c.yFit(W8.map(x => x.vol), { min: 0 });
         c.grid();
-        c.labels(W8.map((x, i) => [i, Day.short(x.end), i === 7]).filter((l, i) => i % 2 === 1));
+        /* a date under every other week at 8, as before; fewer as the weeks grow */
+        c.labels(W8.map((x, i) => [i, Day.short(x.end), i === N - 1]).filter((l, i) => (N - 1 - i) % step === 0));
         c.bars(bars, null, null, { highlight: 'last' });
         c.scrub(bars);
       });
@@ -2552,7 +2615,8 @@ const WIDGETS = {
      says otherwise; the choice is the card's, so two copies can differ. */
   bodyheat: {
     nm: 'BODY HEATMAP', w: 4, h: 4, app: 'train', to: ['train'],
-    days: [[7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days']], day0: 7,
+    parts: [['fig', 'Body'], ['list', 'Muscle list'], ['rec', 'Hours to recover'], ['off', 'Not on the body']],
     sub: cfg => 'working sets · last ' + ((cfg && cfg.days) || 7) + ' days',
     menu(cfg, redraw) {
       return [{ label: 'Pose', sub: Object.keys(BODY_POSES).map(k => ({
@@ -2581,7 +2645,7 @@ const WIDGETS = {
       const fig = el('div', 'bh-fig');
       const rec = bodyRecovery(Date.now());
       fig.innerHTML = bodySvg(heat.v, rec, cfg && cfg.pose);
-      wrap.appendChild(fig);
+      if (partOn(cfg, 'fig')) wrap.appendChild(fig);
       const side = el('div', 'bh-side');
       const list = el('div', 'rowlist');
       const fmt = n => (Math.round(n * 2) / 2).toString();
@@ -2590,18 +2654,18 @@ const WIDGETS = {
         const row = el('div', 'row bh-row');
         row.innerHTML = '<span class="bh-dot" style="background:' + bodyColour(rec[k]) + ';opacity:' + bodyBright(heat.v[k], most) + '"></span>' +
           '<span class="nm">' + BODY_NAMES[k] + '</span><span class="rt">' + fmt(heat.v[k]) + '</span>' +
-          (rec[k] ? '<span class="bh-rec" title="' + Math.ceil(rec[k].left) + ' of its ' + rec[k].win + ' hours to recover">' +
+          (rec[k] && partOn(cfg, 'rec') ? '<span class="bh-rec" title="' + Math.ceil(rec[k].left) + ' of its ' + rec[k].win + ' hours to recover">' +
             ((typeof Icons !== 'undefined' && Icons.svg('rest', { size: 12 })) || '') + bodyHours(rec[k].left) + '</span>' : '<span class="bh-rec"></span>');
         list.appendChild(row);
       });
-      side.appendChild(list);
-      if (heat.off.length) {
+      if (partOn(cfg, 'list')) side.appendChild(list);
+      if (heat.off.length && partOn(cfg, 'off')) {
         const off = el('div', 'empty');
         off.style.cssText = 'text-align:left;padding:var(--s-2) var(--s-1) 0';
         off.innerHTML = 'Not on the body: ' + heat.off.map(o => esc(o.name) + ' ' + fmt(o.n)).join(', ');
         side.appendChild(off);
       }
-      wrap.appendChild(side);
+      if (side.childNodes.length) wrap.appendChild(side);
       body.appendChild(wrap);
       /* recovery runs on the clock, not on the store: redraw while it shows */
       clearInterval(body.bhTimer);
@@ -2628,7 +2692,9 @@ const WIDGETS = {
        days is a comparison you can see at once. STATUS is one screen you
        scroll, so the choice has to be tabs.
        Set it from the widget's own menu: right-click, or hold on a phone. */
-    days: [[30, '30 days'], [90, '90 days'], [365, 'a year'], [3650, 'all of it']],
+    days: [[30, '30 days'], [90, '90 days'], [180, '180 days'], [365, 'a year'], [3650, 'all of it']],
+    /* the plan's dashed line and its line of words, each its own pick */
+    parts: [['plan', 'Plan line'], ['note', 'Plan note']],
     nmFor: cfg => 'WEIGHT · ' + String((WIDGETS.weight.days.filter(d => d[0] === (cfg.days || 90))[0] || [0, ''])[1]).toUpperCase(),
     sub: cfg => {
       const r = weightSeries((cfg && cfg.days) || 90);
@@ -2658,7 +2724,7 @@ const WIDGETS = {
     },
     draw(body, cfg) {
       cfg = cfg || {};
-      const today = LifeOS.day(), plan = weightPlan();
+      const today = LifeOS.day(), plan = partOn(cfg, 'plan') ? weightPlan() : null;
       const back = plan ? Math.max(cfg.days || 90, Day.diff(today, plan.from)) : (cfg.days || 90);
       const pts = weightSeries(back);
       if (!pts.length && !plan) { body.appendChild(el('div', 'empty', 'No weigh-ins in the last ' + (cfg.days || 90) + ' days')); return; }
@@ -2718,8 +2784,8 @@ const WIDGETS = {
           onLeave: () => { const s = subOf(); if (s && kept != null) s.textContent = kept; kept = null; },
         });
       });
-      const ps = plan ? planSaid(plan).replace(/^ · /, '') : (Rec.setting('lifeos', 'weightPlan') ? 'plan needs a starting weight' : '');
-      if (ps) body.appendChild(el('div', 'tsub', esc(ps.charAt(0).toUpperCase() + ps.slice(1))));
+      const pl = weightPlan(), ps = pl ? planSaid(pl).replace(/^ · /, '') : (Rec.setting('lifeos', 'weightPlan') ? 'plan needs a starting weight' : '');
+      if (ps && partOn(cfg, 'note')) body.appendChild(el('div', 'tsub', esc(ps.charAt(0).toUpperCase() + ps.slice(1))));
     },
   },
 
@@ -2731,7 +2797,8 @@ const WIDGETS = {
      from today, so the newest one is never half a calendar week. */
   avgweight: {
     nm: 'AVG WEIGHT', w: 4, h: 2, app: 'status', to: ['status', 'trends'],
-    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days']], day0: 7,
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days'], [180, '180 days']], day0: 7,
+    parts: [['now', 'This stretch'], ['before', 'The stretch before'], ['change', 'Change'], ['weeks', 'Each week']],
     nmFor: cfg => 'AVG WEIGHT · ' + String((WIDGETS.avgweight.days.filter(d => d[0] === ((cfg && cfg.days) || 7))[0] || [0, ''])[1]).toUpperCase(),
     mean(n, to) {
       const v = [];
@@ -2751,12 +2818,12 @@ const WIDGETS = {
       const r1 = v => Math.round(v * 10) / 10;
       const d = a && b ? r1(a.v) - r1(b.v) : null;
       const st = el('div', 'stats');
-      st.appendChild(el('div', 'stat acc', '<b>' + (a ? a.v.toFixed(1) : '—') + '</b><span>LAST ' + n + ' DAYS</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + (b ? b.v.toFixed(1) : '—') + '</b><span>' + n + ' DAYS BEFORE</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + (d == null ? '—' : (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d).toFixed(1)) + '</b><span>CHANGE</span>'));
-      body.appendChild(st);
+      if (partOn(cfg, 'now')) st.appendChild(el('div', 'stat acc', '<b>' + (a ? a.v.toFixed(1) : '—') + '</b><span>LAST ' + n + ' DAYS</span>'));
+      if (partOn(cfg, 'before')) st.appendChild(el('div', 'stat', '<b>' + (b ? b.v.toFixed(1) : '—') + '</b><span>' + n + ' DAYS BEFORE</span>'));
+      if (partOn(cfg, 'change')) st.appendChild(el('div', 'stat', '<b>' + (d == null ? '—' : (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d).toFixed(1)) + '</b><span>CHANGE</span>'));
+      if (st.childNodes.length) body.appendChild(st);
       /* at 7 days the two weeks ARE the two numbers above */
-      if (n < 14) return;
+      if (n < 14 || !partOn(cfg, 'weeks')) return;
       const list = el('div', 'rowlist');
       for (let k = 0; k < Math.ceil(n / 7) && k < 13; k++) {
         const end = LifeOS.shift(t, -7 * k), m = W.mean(7, end);
@@ -2779,20 +2846,27 @@ const WIDGETS = {
   desktime: {
     nm: 'DESK TIME', w: 4, h: 4, app: 'status', mine: 1, to: ['status'],
     sub: () => { const u = deskUsual(); return u ? 'usually off the PC at ' + deskClk(u.m) : 'when you leave the PC at night'; },
-    draw(body) {
-      const t = LifeOS.day();
-      const S = Rec.all('screen').filter(r => r.date === t && r.payload && r.payload.s > 0)
-        .sort((a, b) => b.payload.s - a.payload.s);
+    /* the time per program over today or a longer stretch, added up */
+    days: [[1, 'Today'], [7, '7 days'], [30, '30 days'], [90, '90 days']], day0: 1,
+    parts: [['total', 'Time at the PC'], ['last', 'Off last night'], ['usual', 'Usual time off'], ['list', 'Programs']],
+    draw(body, cfg) {
+      const t = LifeOS.day(), n = (cfg && cfg.days) || 1, from = LifeOS.shift(t, -(n - 1)), by = {};
+      Rec.all('screen').forEach(r => {
+        if (!r.date || r.date < from || r.date > t || !r.payload || !(r.payload.s > 0)) return;
+        const k = r.key; by[k] = by[k] || { key: k, payload: { app: r.payload.app, s: 0 } }; by[k].payload.s += r.payload.s;
+      });
+      const S = Object.keys(by).map(k => by[k]).sort((a, b) => b.payload.s - a.payload.s);
       const any = Rec.all('deskon').length || Rec.all('screen').length;
       if (!any) { body.appendChild(el('div', 'empty', 'Nothing yet. STATUS on the PC keeps this while it is open.')); return; }
       const tot = S.reduce((n, r) => n + r.payload.s, 0);
       const last = deskBed(deskShift(t, -1)), u = deskUsual();
       const st = el('div', 'stats');
-      st.appendChild(el('div', 'stat acc', '<b>' + deskHM(tot) + '</b><span>TODAY</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + (last == null ? '—' : deskClk(last)) + '</b><span>OFF LAST NIGHT</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + (u ? deskClk(u.m) : '—') + '</b><span>' + (u ? 'USUAL, ' + u.n + ' NIGHT' + (u.n > 1 ? 'S' : '') : 'USUAL') + '</span>'));
-      body.appendChild(st);
-      if (!S.length) { body.appendChild(el('div', 'empty', 'No time at the PC yet today.')); return; }
+      if (partOn(cfg, 'total')) st.appendChild(el('div', 'stat acc', '<b>' + deskHM(tot) + '</b><span>' + (n > 1 ? 'LAST ' + n + ' DAYS' : 'TODAY') + '</span>'));
+      if (partOn(cfg, 'last')) st.appendChild(el('div', 'stat', '<b>' + (last == null ? '—' : deskClk(last)) + '</b><span>OFF LAST NIGHT</span>'));
+      if (partOn(cfg, 'usual')) st.appendChild(el('div', 'stat', '<b>' + (u ? deskClk(u.m) : '—') + '</b><span>' + (u ? 'USUAL, ' + u.n + ' NIGHT' + (u.n > 1 ? 'S' : '') : 'USUAL') + '</span>'));
+      if (st.childNodes.length) body.appendChild(st);
+      if (!partOn(cfg, 'list')) return;
+      if (!S.length) { body.appendChild(el('div', 'empty', n > 1 ? 'No time at the PC in the last ' + n + ' days.' : 'No time at the PC yet today.')); return; }
       /* ruled lines, as STREAKS draws them: nothing here is pressed, and as
          44px plates the last two of six programs fell off the card */
       const list = el('div');
@@ -2808,12 +2882,23 @@ const WIDGETS = {
   sleep: {
     nm: 'SLEEP', w: 4, h: 2, app: 'status', to: ['status', 'trends'],
     /* the answer, in the widget's own line: the average night and nights on target */
-    sub: () => sleepSaid(),
-    draw(body) {
-      const f = Rec.map('field').sleep;
+    /* how many nights, from the card's menu; sleepSaid() with the nights
+       as a number, so the header covers what the chart does */
+    days: [[7, '7 nights'], [14, '14 nights'], [30, '30 nights'], [90, '90 nights']], day0: 7,
+    menu: (cfg, redraw) => [partToggle(cfg, 'target', 'Show the target line', redraw)],
+    said(n) {
+      const f = Rec.map('field').sleep, target = f && f.target ? Number(f.target) : 0, got = [];
+      for (let i = n - 1; i >= 0; i--) { const v = evValue(LifeOS.shift(LifeOS.day(), -i), 'sleep'); if (v != null) got.push(v); }
+      if (!got.length) return 'last ' + n + ' nights';
+      const mean = got.reduce((a, v) => a + v, 0) / got.length;
+      return mean.toFixed(1) + ' hrs a night' + (target ? ', ' + got.filter(v => v >= target).length + ' of ' + got.length + ' on target' : '');
+    },
+    sub: cfg => WIDGETS.sleep.said((cfg && cfg.days) || 7),
+    draw(body, cfg) {
+      const f = Rec.map('field').sleep, n = (cfg && cfg.days) || 7;
       const target = f && f.target ? Number(f.target) : 0;
       const days = [];
-      for (let i = 6; i >= 0; i--) {
+      for (let i = n - 1; i >= 0; i--) {
         const d = LifeOS.shift(LifeOS.day(), -i);
         days.push({ d: d, v: evValue(d, 'sleep') });
       }
@@ -2831,13 +2916,16 @@ const WIDGETS = {
       const box = el('div', 'fits');
       body.appendChild(box);
       const bars = days.map((x, i) => [i, x.v, Day.label(x.d) + (x.v == null ? ', nothing logged' : ', ' + x.v + ' hrs')]);
-      Chart.mount(box, { label: 'Sleep, the last 7 nights' }, c => {
-        c.xLinear(-0.5, 6.5);
+      /* a weekday letter a night at 7; past that a date every few nights */
+      const step = Math.ceil(n / 7);
+      Chart.mount(box, { label: 'Sleep, the last ' + n + ' nights' }, c => {
+        c.xLinear(-0.5, n - 0.5);
         c.yFit(got.map(x => x.v).concat(target ? [target] : []), { min: 0 });
         c.grid();
-        c.labels(days.map((x, i) => [i, DLET[new Date(x.d + 'T12:00:00').getDay()], i === 6]));
+        c.labels(n <= 7 ? days.map((x, i) => [i, DLET[new Date(x.d + 'T12:00:00').getDay()], i === n - 1])
+          : days.map((x, i) => [i, Day.short(x.d), i === n - 1]).filter((l, i) => (n - 1 - i) % step === 0));
         c.bars(bars, null, null, { highlight: target ? (p => p[1] != null && p[1] >= target) : 'last' });
-        if (target) c.rule(target);
+        if (target && partOn(cfg, 'target')) c.rule(target);
         c.scrub(bars.filter(b => b[1] != null), {
           onMove: p => { const s = subOf(); if (!s) return; if (kept == null) kept = s.textContent; s.textContent = Number(p[1]).toFixed(1) + ' hrs, ' + Day.label(days[p[0]].d); },
           onLeave: () => { const s = subOf(); if (s && kept != null) s.textContent = kept; kept = null; },
@@ -2848,8 +2936,11 @@ const WIDGETS = {
 
   spend: {
     nm: 'SPEND', w: 4, h: 3, app: 'status', to: ['status', 'money'],
-    sub: () => 'the last 7 days against the 7 before',
-    draw(body) {
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days']], day0: 7,
+    parts: [['total', 'Total'], ['vs', 'Against the stretch before'], ['acct', 'By account']],
+    sub: cfg => { const n = (cfg && cfg.days) || 7; return 'the last ' + n + ' days against the ' + n + ' before'; },
+    draw(body, cfg) {
+      const n = (cfg && cfg.days) || 7;
       /* Money moved, not spent: WEALTH files a spend whose category is in
          the move group (a loan payment, savings) apart from spending. A copy
          of WEALTH's own catOf and isMove: the mark,
@@ -2868,7 +2959,7 @@ const WIDGETS = {
       const acctOf = v => { if (!v) return ''; if (A[v]) return v; const lv = String(v).toLowerCase(); return Object.keys(A).find(k => String(A[k].name || '').toLowerCase() === lv) || v; };
       const week = start => {
         let total = 0; const by = {};
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < n; i++) {
           Rec.all('spend', { date: LifeOS.shift(start, -i) }).forEach(r => {
             if (moved(r)) return;
             const a = Number(r.payload.amt) || 0;
@@ -2879,9 +2970,9 @@ const WIDGETS = {
         }
         return { total: total, by: by };
       };
-      const now = week(LifeOS.day()), prev = week(LifeOS.shift(LifeOS.day(), -7));
+      const now = week(LifeOS.day()), prev = week(LifeOS.shift(LifeOS.day(), -n));
       if (!now.total && !prev.total) {
-        body.appendChild(el('div', 'empty', 'Nothing spent in the last two weeks.'));
+        body.appendChild(el('div', 'empty', n === 7 ? 'Nothing spent in the last two weeks.' : 'Nothing spent in the last ' + (n * 2) + ' days.'));
         return;
       }
       /* On shared/chart.js: this week's total and how it compares on top, in
@@ -2889,11 +2980,12 @@ const WIDGETS = {
          biggest. */
       const diff = now.total - prev.total;
       /* the last 7 days, said as that: "this week" read as since Monday */
-      body.appendChild(Chart.header({ size: 'sm', value: peso(now.total), unit: 'in 7 days',
-        sub: Math.abs(diff) < 1 ? 'the same as the 7 days before'
-          : peso(Math.abs(diff)) + (diff > 0 ? ' more' : ' less') + ' than the 7 days before' }).el);
+      if (partOn(cfg, 'total') || partOn(cfg, 'vs')) body.appendChild(Chart.header({ size: 'sm',
+        value: partOn(cfg, 'total') ? peso(now.total) : '', unit: partOn(cfg, 'total') ? 'in ' + n + ' days' : '',
+        sub: !partOn(cfg, 'vs') ? '' : Math.abs(diff) < 1 ? 'the same as the ' + n + ' days before'
+          : peso(Math.abs(diff)) + (diff > 0 ? ' more' : ' less') + ' than the ' + n + ' days before' }).el);
       const rows = Object.keys(now.by).map(k => ({ name: A[k] ? A[k].name : (k || 'No account'), amt: now.by[k] }));
-      if (rows.length) body.appendChild(Chart.shares(rows, { max: 5, total: now.total, fmt: peso }));
+      if (rows.length && partOn(cfg, 'acct')) body.appendChild(Chart.shares(rows, { max: 5, total: now.total, fmt: peso }));
     },
   },
 
@@ -2918,7 +3010,8 @@ const WIDGETS = {
       const left = p.filter(d => !d.done).length;
       return left ? left + ' of ' + p.length + ' to take' : 'all taken';
     },
-    draw(body) {
+    parts: [['sub', 'Details'], ['doses', 'Amounts']],
+    draw(body, cfg) {
       const p = WIDGETS.drinks.plan();
       const list = el('div', 'rowlist');
       const openIt = () => openOver('mix');
@@ -2933,8 +3026,8 @@ const WIDGETS = {
         const r = el('div', 'row drink');
         r.setAttribute('role', 'button');
         r.tabIndex = 0;
-        r.innerHTML = '<div class="n"><b>' + esc(d.nm) + '</b><small>' + esc(d.sub) + '</small>' +
-          '<span class="dl">' + d.doses.map(x => esc(x.name) + ' <i>' + x.g.toFixed(3) + 'g</i>').join(' · ') + '</span></div>';
+        r.innerHTML = '<div class="n"><b>' + esc(d.nm) + '</b>' + (partOn(cfg, 'sub') ? '<small>' + esc(d.sub) + '</small>' : '') +
+          (partOn(cfg, 'doses') ? '<span class="dl">' + d.doses.map(x => esc(x.name) + ' <i>' + x.g.toFixed(3) + 'g</i>').join(' · ') + '</span>' : '') + '</div>';
         r.onclick = openIt;
         r.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openIt(); } };
         list.appendChild(r);
@@ -2950,49 +3043,53 @@ const WIDGETS = {
      less than it says. Averages are over the days that HAVE a reading, and
      the row says how many that was, so a week with two weigh-ins is not
      passed off as seven. No verdicts: the numbers and nothing else. */
+  /* Columns and rows picked from the menu since 1.0.74 (Tom, 2026-10-18):
+     Time frames ticks any of PERIODS, Show turns rows off. Untouched, it
+     shows what it always did. A stretch he ticked is shown even when the
+     records do not reach back that far; its cells say how many days had a
+     reading, as before. */
   workdone: {
     nm: 'WORK DONE', w: 6, h: 5, fit: 1,
-    spans() {
-      /* the first day anything was recorded, read off the rows themselves */
-      let first = null;
-      ['ev', 'meal', 'note', 'set'].forEach(t => Rec.all(t).forEach(r => {
-        if (r.date && (!first || r.date < first)) first = r.date;
-      }));
-      const today = LifeOS.day();
+    periods: PERIODS.map(p => p[0]),
+    periodsDef() {
+      const first = firstDay(), today = LifeOS.day();
       const back = first ? Math.round((new Date(today + 'T12:00:00') - new Date(first + 'T12:00:00')) / 864e5) + 1 : 0;
-      return [7, 30, 90, 180].filter(n => n <= 30 || back >= n);
+      return [7, 30, 90, 180].filter(n => n <= 30 || back >= n).map(n => 'd' + n);
     },
-    sub: () => 'the last ' + WIDGETS.workdone.spans().join(', ') + ' days',
-    draw(body) {
-      const today = LifeOS.day(), spans = WIDGETS.workdone.spans(), far = spans[spans.length - 1];
-      const from = LifeOS.shift(today, -(far - 1));
-      const inSpan = (d, n) => d && d <= today && d >= LifeOS.shift(today, -(n - 1));
+    parts: [['trained', 'Times trained'], ['meals', 'Meals tracked'], ['logged', 'Days logged'], ['bullets', 'Bullets written'],
+      ['sleep', 'Sleep'], ['weight', 'Weight'], ['mood', 'Mood'], ['energy', 'Energy'], ['kcal', 'Calories'], ['p', 'Protein'], ['steps', 'Steps']],
+    cols: cfg => ((cfg && cfg.cols) || WIDGETS.workdone.periodsDef()).map(id => periodOf(id)).filter(Boolean),
+    sub: cfg => WIDGETS.workdone.cols(cfg).map(p => p.label.toLowerCase()).join(', '),
+    draw(body, cfg) {
+      const today = LifeOS.day(), cols = WIDGETS.workdone.cols(cfg);
+      const from = cols.reduce((a, p) => p.from < a ? p.from : a, today);
+      const inSpan = (d, P) => d && d >= P.from && d <= P.to;
       const days = [];
-      for (let i = 0; i < far; i++) days.push(LifeOS.shift(today, -i));
+      for (let d = today; d >= from; d = LifeOS.shift(d, -1)) days.push(d);
 
       /* ── counts ── */
       /* times trained and meals counted the way LOCKED IN counts them: a
          day TRAIN counts, and a sitting rather than each food in it. A line
          an app wrote for him (a bill, a review, the brief) is not one he wrote. */
       const logged = {}, mealsBy = {}, bullets = [], S = {};
-      spans.forEach(n => { S[n] = WIDGETS.lockedin.sums(n, today); });
+      cols.forEach(P => { S[P.id] = WIDGETS.lockedin.sums(P.n, P.to); });
       Rec.all('set').forEach(r => { if (r.date >= from) logged[r.date] = 1; });
       Rec.all('meal').forEach(r => { if (r.date >= from) { (mealsBy[r.date] = mealsBy[r.date] || []).push(r.payload); logged[r.date] = 1; } });
       Rec.all('note').forEach(r => { const s = r.payload && r.payload.src; if (r.date >= from && s !== 'wealth' && s !== 'arc' && s !== 'brief') { bullets.push(r.date); logged[r.date] = 1; } });
       Rec.all('ev').forEach(r => { if (r.date >= from) logged[r.date] = 1; });
-      const count = (map, n) => Object.keys(map).filter(d => inSpan(d, n)).length;
+      const count = (map, P) => Object.keys(map).filter(d => inSpan(d, P)).length;
       const work = [
-        ['Times trained', n => S[n].sessions],
-        ['Meals tracked', n => S[n].meals],
-        ['Days logged', n => count(logged, n)],
-        ['Bullets written', n => bullets.filter(d => inSpan(d, n)).length],
-      ];
+        ['trained', 'Times trained', P => S[P.id].sessions],
+        ['meals', 'Meals tracked', P => S[P.id].meals],
+        ['logged', 'Days logged', P => count(logged, P)],
+        ['bullets', 'Bullets written', P => bullets.filter(d => inSpan(d, P)).length],
+      ].filter(w => partOn(cfg, w[0]));
 
       /* ── averages ── one number per day, then the mean of the days that have one */
       const perDay = {};
       const fields = Rec.map('field') || {};
       const measure = (id, label, dp) => {
-        if (!fields[id]) return;
+        if (!fields[id] || !partOn(cfg, id)) return;
         const v = {};
         days.forEach(d => { const x = evValue(d, id); if (x != null && isFinite(x)) v[d] = Number(x); });
         perDay[label] = { v: v, dp: dp };
@@ -3002,6 +3099,7 @@ const WIDGETS = {
       measure('mood', 'Mood', 1);
       measure('energy', 'Energy', 1);
       ['kcal', 'p'].forEach(k => {
+        if (!partOn(cfg, k)) return;
         const v = {};
         /* today is half eaten, so it is left out of the averages */
         Object.keys(mealsBy).forEach(d => { if (d >= today) return; v[d] = mealsBy[d].reduce((a, m) => a + (Number(m[k]) || 0), 0); });
@@ -3010,24 +3108,24 @@ const WIDGETS = {
       measure('steps', 'Steps', 0);
 
       const t = el('table', 'wd');
-      const head = '<tr><th></th>' + spans.map(n => '<th>' + n + 'D</th>').join('') + '</tr>';
-      let rows = '<tr class="grp"><td colspan="' + (spans.length + 1) + '">COUNTS</td></tr>';
-      work.forEach(w => { rows += '<tr><td>' + w[0] + '</td>' + spans.map(n => '<td>' + w[1](n).toLocaleString() + '</td>').join('') + '</tr>'; });
+      const head = '<tr><th></th>' + cols.map(P => '<th title="' + P.from + ' to ' + P.to + '">' + P.head + '</th>').join('') + '</tr>';
+      let rows = work.length ? '<tr class="grp"><td colspan="' + (cols.length + 1) + '">COUNTS</td></tr>' : '';
+      work.forEach(w => { rows += '<tr><td>' + w[1] + '</td>' + cols.map(P => '<td>' + w[2](P).toLocaleString() + '</td>').join('') + '</tr>'; });
       let avg = '';
       Object.keys(perDay).forEach(label => {
         const f = perDay[label];
-        const cells = spans.map(n => {
-          const got = Object.keys(f.v).filter(d => inSpan(d, n));
+        const cells = cols.map(P => {
+          const got = Object.keys(f.v).filter(d => inSpan(d, P));
           if (!got.length) return '<td class="nil">—</td>';
           const m = got.reduce((a, d) => a + f.v[d], 0) / got.length;
-          return '<td title="' + got.length + ' of ' + n + ' days had a reading">' +
-            (got.length < n ? '<small>' + got.length + 'd</small>' : '') +
+          return '<td title="' + got.length + ' of ' + P.n + ' days had a reading">' +
+            (got.length < P.n ? '<small>' + got.length + 'd</small>' : '') +
             m.toLocaleString(undefined, { maximumFractionDigits: f.dp, minimumFractionDigits: f.dp }) + '</td>';
         });
         if (cells.every(c => c.indexOf('nil') > -1)) return;
         avg += '<tr><td>' + label + '</td>' + cells.join('') + '</tr>';
       });
-      if (avg) rows += '<tr class="grp"><td colspan="' + (spans.length + 1) + '">AVERAGES</td></tr>' + avg;
+      if (avg) rows += '<tr class="grp"><td colspan="' + (cols.length + 1) + '">AVERAGES</td></tr>' + avg;
       t.innerHTML = '<thead>' + head + '</thead><tbody>' + rows + '</tbody>';
       body.appendChild(t);
     },
@@ -3052,7 +3150,9 @@ const WIDGETS = {
      that changeable"); it still ends yesterday, for the reason above. */
   lockedin: {
     nm: 'CONSISTENCY', w: 4, h: 4,
-    days: [[7, '1 week'], [14, '2 weeks'], [30, '1 month'], [90, '3 months']], day0: 7,
+    days: [[7, '1 week'], [14, '2 weeks'], [30, '1 month'], [90, '3 months'], [182, '6 months'], [365, '1 year']], day0: 7,
+    parts: [['train', 'Training'], ['meals', 'Meals tracked'], ['kcal', 'Calories'], ['steps', 'Steps'],
+      ['dots', 'Day dots'], ['change', 'Change against before']],
     sub: cfg => (WIDGETS.lockedin.days.filter(d => d[0] === ((cfg && cfg.days) || 7))[0] || [0, ((cfg && cfg.days) || 7) + ' days'])[1],
     /* the four averages over the n days ending on `to` */
     sums(n, to) {
@@ -3111,6 +3211,9 @@ const WIDGETS = {
       };
       const row = (label, val, line, delta, was, o) => {
         o = o || {};
+        if (!partOn(cfg, { TRAINING: 'train', 'MEALS TRACKED': 'meals', CALORIES: 'kcal', STEPS: 'steps' }[label])) return;
+        if (!partOn(cfg, 'dots')) delete o.dots;
+        if (!partOn(cfg, 'change')) delta = '';
         const r = el('div', 'row li-r');
         const v = '<span class="li-v' + (o.hit ? ' hit' : '') + '">' + val + '</span>';
         r.innerHTML = '<span class="li-l">' + label + '</span>' +
@@ -3157,7 +3260,8 @@ const WIDGETS = {
       const n = openTodos().length;
       return n ? n + ' open' : 'nothing open';
     },
-    draw(body) {
+    parts: [['src', 'Where it came from'], ['age', 'Days old']],
+    draw(body, cfg) {
       const list = openTodos();
       if (!list.length) { body.appendChild(el('div', 'empty', 'Nothing open')); return; }
       const wrap = el('div', 'rowlist');
@@ -3167,8 +3271,8 @@ const WIDGETS = {
         /* drawn on its own day, so an open todo carried to today wears the
            box, as STATUS draws it on today; the arrow is for a day gone */
         const r = tickRow(x, x.date);
-        if (from) r.appendChild(el('span', 'tag', esc(from)));
-        if (age > 0) r.appendChild(el('span', 'd', age + 'd'));
+        if (from && partOn(cfg, 'src')) r.appendChild(el('span', 'tag', esc(from)));
+        if (age > 0 && partOn(cfg, 'age')) r.appendChild(el('span', 'd', age + 'd'));
         wrap.appendChild(r);
       });
       /* the header counts every open todo, so the cut says so */
@@ -3177,16 +3281,39 @@ const WIDGETS = {
     },
   },
 
+  /* IDEAS and EVENTS: how far back, and the date on each line, from the
+     card's menu. bulletList with those two choices; untouched it is the
+     same list. */
   ideas: {
     nm: 'IDEAS', w: 4, h: 3, app: 'status', to: ['status', 'now'],
-    sub: () => notesOfKind('idea').length + ' kept',
-    draw(body) { bulletList(body, 'idea', 'No ideas'); },
+    days: [[7, '7 days'], [30, '30 days'], [90, '90 days'], [365, 'a year'], [36500, 'All of them']], day0: 36500,
+    menu: (cfg, redraw) => [partToggle(cfg, 'date', 'Show dates', redraw)],
+    rows(kind, cfg) {
+      const n = (cfg && cfg.days) || 36500, from = LifeOS.shift(LifeOS.day(), -(n - 1));
+      return notesOfKind(kind).filter(r => n >= 36500 || !r.date || r.date >= from);
+    },
+    list(body, kind, empty, cfg) {
+      const rows = WIDGETS.ideas.rows(kind, cfg);
+      if (!rows.length) { body.appendChild(el('div', 'empty', empty)); return; }
+      const wrap = el('div', 'rowlist');
+      rows.slice(0, 10).forEach(r => {
+        const row = bulletRow(r, r.date);
+        row.classList.add('wraps');
+        if (r.date && partOn(cfg, 'date')) row.appendChild(el('span', 'd', esc(Day.short(r.date))));
+        wrap.appendChild(row);
+      });
+      body.appendChild(wrap);
+    },
+    sub: cfg => WIDGETS.ideas.rows('idea', cfg).length + ' kept',
+    draw(body, cfg) { WIDGETS.ideas.list(body, 'idea', 'No ideas', cfg); },
   },
 
   events: {
     nm: 'EVENTS', w: 4, h: 3, app: 'status', to: ['status', 'now'],
-    sub: () => { const n = notesOfKind('event').length; return n ? n + ' logged' : 'none logged'; },
-    draw(body) { bulletList(body, 'event', 'No events'); },
+    days: [[7, '7 days'], [30, '30 days'], [90, '90 days'], [365, 'a year'], [36500, 'All of them']], day0: 36500,
+    menu: (cfg, redraw) => [partToggle(cfg, 'date', 'Show dates', redraw)],
+    sub: cfg => { const n = WIDGETS.ideas.rows('event', cfg).length; return n ? n + ' logged' : 'none logged'; },
+    draw(body, cfg) { WIDGETS.ideas.list(body, 'event', 'No events', cfg); },
   },
 
   /* ══════════════ streaks, off ticks ══════════════
@@ -3198,7 +3325,14 @@ const WIDGETS = {
   streaks: {
     nm: 'STREAKS', w: 3, h: 3,
     sub: () => 'running now',
-    draw(body) {
+    /* which streaks show, picked by name from the card's menu; a new one
+       shows until it is turned off */
+    parts: () => {
+      const R = WIDGETS.streaks.runs(), twice = {};
+      R.forEach(x => { twice[x.name] = (twice[x.name] || 0) + 1; });
+      return R.map(x => [x.id, x.name + (twice[x.name] > 1 && x.part ? ', ' + x.part : '')]);
+    },
+    runs() {
       /* Read the ticks, not the vocabulary. An activity ticked from an app
          that never registered a name still has a streak, and a streak the
          screen cannot see is the same as no streak. */
@@ -3211,10 +3345,13 @@ const WIDGETS = {
          ticked on every day with a todo still open, and a note-at- tick is
          one timed line. Entries, events and ideas stay: a day something was
          written. */
-      const runs = Object.keys(seen)
+      return Object.keys(seen)
         .filter(id => id !== 'note-todo' && id.indexOf('note-at-') !== 0)
-        .map(id => Object.assign({ n: tickStreak(id) }, actLabel(id)))
+        .map(id => Object.assign({ n: tickStreak(id) }, actLabel(id), { id: id }))
         .filter(x => x.n > 0).sort((a, b) => b.n - a.n);
+    },
+    draw(body, cfg) {
+      const runs = WIDGETS.streaks.runs().filter(x => partOn(cfg, x.id));
       if (!runs.length) {
         body.appendChild(el('div', 'empty', 'No streak data'));
         return;
@@ -3272,23 +3409,28 @@ const WIDGETS = {
   clock: {
     nm: 'CLOCK', w: 3, h: 2, fit: 1, grp: 'DESK',
     sub: () => '',
-    draw(body) {
+    /* the time, the date, the weekday in it, and seconds (off until ticked) */
+    parts: [['time', 'Time'], ['date', 'Date'], ['wday', 'Weekday']],
+    menu: (cfg, redraw) => [{ label: 'Seconds', check: !!cfg.sec, fn: () => { if (cfg.sec) delete cfg.sec; else cfg.sec = 1; redraw(); } }],
+    draw(body, cfg) {
       const big = el('div', 'ckbig'), sub = el('div', 'cksub');
       const tick = () => {
         const d = new Date();
         /* the clock the rest of the board writes times in */
-        big.textContent = clock12(d.getTime());
-        sub.textContent = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase();
+        big.textContent = cfg && cfg.sec ? clock12(d.getTime()).replace(/(\d+:\d\d)/, '$1:' + zpad(d.getSeconds())) : clock12(d.getTime());
+        sub.textContent = d.toLocaleDateString(undefined, partOn(cfg, 'wday') ? { weekday: 'long', day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long' }).toUpperCase();
       };
       tick();
       const id = setInterval(() => { if (!body.isConnected) return clearInterval(id); tick(); }, 1000);
-      body.appendChild(big); body.appendChild(sub);
+      if (partOn(cfg, 'time')) body.appendChild(big);
+      if (partOn(cfg, 'date')) body.appendChild(sub);
     },
   },
 
   timer: {
     nm: 'TIMER', w: 3, h: 2, fit: 1, grp: 'DESK',
     sub: () => '',
+    parts: [['presets', '1m, 3m and 5m'], ['set', 'Set button'], ['stop', 'Stop button']],
     draw(body, cfg) {
       /* The count lives in TOOLS, not in here: see "desk tools" above. */
       const s = toolOf(cfg, timerTool);
@@ -3357,10 +3499,12 @@ const WIDGETS = {
       face.style.cursor = 'pointer';
       face.title = 'Set the timer';
       face.onclick = setIt;
-      bar.appendChild(tbtn('SET', setIt));
-      bar.appendChild(stopB = tbtn('STOP', () => { s.end = 0; show(); }));
+      if (!partOn(cfg, 'presets')) bar.innerHTML = '';
+      if (partOn(cfg, 'set')) bar.appendChild(tbtn('SET', setIt));
+      stopB = tbtn('STOP', () => { s.end = 0; show(); });
+      if (partOn(cfg, 'stop')) bar.appendChild(stopB);
       show();
-      body.appendChild(face); body.appendChild(bar);
+      body.appendChild(face); if (bar.childNodes.length) body.appendChild(bar);
     },
   },
 
@@ -3403,6 +3547,7 @@ const WIDGETS = {
        setting each, with neutral names until then. "TOO OLD FOR A LOT" was
        the old band's name, and a client was about to see it. */
     BAND: { youth: 'EARLY', mid: 'MIDDLE', old: 'LATE' },
+    parts: [['age', 'Age'], ['legend', 'Legend'], ['grid', 'Years']],
     bandName(which) {
       const w = which.charAt(0).toUpperCase() + which.slice(1);
       return String(Rec.setting('lifeos', 'lifeName' + w) || WIDGETS.life.BAND[which]).toUpperCase();
@@ -3478,7 +3623,7 @@ const WIDGETS = {
           label: b[1] + ': ' + L.bandName(b[0]), fn: () => askName(b[0]) })) },
       ];
     },
-    draw(body) {
+    draw(body, cfg) {
       const L = WIDGETS.life;
       const born = Rec.setting('lifeos', 'born');
       const span = Number(Rec.setting('lifeos', 'span') || 80);
@@ -3518,7 +3663,7 @@ const WIDGETS = {
       const head = el('div');
       head.style.cssText = 'font-family:var(--f1);font-size:var(--f-7);color:var(--txt);letter-spacing:.04em;line-height:var(--lh-tight)';
       head.innerHTML = age + '<span style="color:var(--dim2);font-size:var(--f-3)"> / ' + span + '</span>';
-      top.appendChild(head);
+      if (partOn(cfg, 'age')) top.appendChild(head);
       body.appendChild(top);
 
       const grid = el('div');
@@ -3548,14 +3693,14 @@ const WIDGETS = {
         };
         grid.appendChild(b);
       }
-      body.appendChild(grid);
+      if (partOn(cfg, 'grid')) body.appendChild(grid);
 
       /* ── the legend ──
          What he asked the bands FOR: "when I was young and when im gonna be
          too old for a lot of things". Without it the square is three hues and
          no statement. Drawn only once a boundary is set, because three chips
          naming nothing is worse than no chips. */
-      if (youth || old) {
+      if ((youth || old) && partOn(cfg, 'legend')) {
         const key = el('div');
         key.style.cssText = 'display:flex;flex-wrap:wrap;gap:var(--s-2)';
         const chip = (which, label, range) => {
@@ -3572,6 +3717,7 @@ const WIDGETS = {
         if (old) chip('old', L.bandName('old'), 'from ' + old);
         top.appendChild(key);
       }
+      if (!top.childNodes.length) top.remove();
     },
   },
 
@@ -3612,6 +3758,7 @@ const WIDGETS = {
        happens to be open from. */
     nm: 'LINKS', w: 5, h: 6, fit: 1,
     sub: () => 'tap a link to copy it',
+    parts: [['MINE', 'Mine'], ['CLIENTS', 'Clients'], ['addr', 'Addresses']],
     sites: [
       { nm: 'MINE', base: 'https://tomoncupa.github.io/Motherbase/', all: () => APPS.filter(a => a.file) },
       { nm: 'CLIENTS', base: 'https://tomoncupa.github.io/Mainmenu-client/', all: () => APPS.filter(a => a.file && !a.mine) },
@@ -3668,21 +3815,21 @@ const WIDGETS = {
       list.appendChild(r);
       return r;
     },
-    draw(body) {
-      const L = WIDGETS.links, list = el('div', 'rowlist');
-      L.sites.forEach(site => {
+    draw(body, cfg) {
+      const L = WIDGETS.links, list = el('div', 'rowlist'), addr = partOn(cfg, 'addr');
+      L.sites.filter(site => partOn(cfg, site.nm)).forEach(site => {
         /* The address goes on the heading, not on the row under it. It was on
            the row first, and at phone width it squeezed "The whole suite"
            down to an ellipsis: the tail is fixed width and the name is what
            gives way. A heading has the whole card to itself and can wrap. */
         const where = site.base.replace(/^https?:\/\//, '').replace(/\/$/, '');
-        list.appendChild(el('div', 'mb-group', esc(site.nm) + ' <span class="lwhere">' + esc(where) + '</span>'));
+        list.appendChild(el('div', 'mb-group', esc(site.nm) + (addr ? ' <span class="lwhere">' + esc(where) + '</span>' : '')));
         /* the home screen's own icon on the first row, so every name starts
            at one edge; the tail is the end of the address that is copied */
         L.row(list, 'The whole suite', site.base, '', app('home') ? appIco(app('home'), 16) : '', '');
         site.all().forEach(a => {
           const folder = String(a.file).split('/')[0];
-          L.row(list, a.nm, site.base + folder + '/', appTint(a), appIco(a, 16), '/' + folder + '/');
+          L.row(list, a.nm, site.base + folder + '/', appTint(a), appIco(a, 16), addr ? '/' + folder + '/' : '');
         });
       });
       body.appendChild(list);
@@ -3696,16 +3843,19 @@ const WIDGETS = {
        a key and its tile agree, then the apps the dock leaves out (ELEMENT),
        which are still here (`nodock`). */
     sub: () => FINE ? 'keys 1–9 open the first nine in the dock' : '',
-    draw(body) {
+    /* the words under each name, the number keys, and which apps */
+    parts: () => [['ds', 'What each one is'], ['keys', 'Number keys']]
+      .concat(dockApps().concat(APPS.filter(a => a.nodock)).filter(a => a.file).map(a => ['a-' + a.id, a.nm])),
+    draw(body, cfg) {
       const tiles = el('div', 'tiles');
       const dock = dockApps();
-      dock.concat(APPS.filter(a => a.nodock)).filter(a => a.file).forEach(a => {
+      dock.concat(APPS.filter(a => a.nodock)).filter(a => a.file && partOn(cfg, 'a-' + a.id)).forEach(a => {
         const b = el('button', 'tile mb-plate' + (missing[a.id] ? ' missing' : ''));
         if (appTint(a)) b.style.setProperty('--c', appTint(a));
         const k = dock.indexOf(a) + 1;
         b.innerHTML = '<span class="ic">' + appIco(a, 22) + '</span><span class="nm">' + a.nm +
-          (k > 0 && k <= 9 ? ' <kbd>' + k + '</kbd>' : '') + '</span><span class="ds">' +
-          (missing[a.id] ? '<span style="color:var(--bad)">' + esc(a.file) + ' not found</span>' : esc(a.ds)) + '</span>';
+          (k > 0 && k <= 9 && partOn(cfg, 'keys') ? ' <kbd>' + k + '</kbd>' : '') + '</span>' + (missing[a.id] || partOn(cfg, 'ds') ? '<span class="ds">' +
+          (missing[a.id] ? '<span style="color:var(--bad)">' + esc(a.file) + ' not found</span>' : esc(a.ds)) + '</span>' : '');
         b.onclick = () => missing[a.id] ? toast('<b>' + esc(a.file) + '</b> is missing') : go(a.id);
         tiles.appendChild(b);
       });
@@ -3725,7 +3875,8 @@ const WIDGETS = {
   /* ── QUESTS ── */
   upcoming: {
     nm: 'UPCOMING', w: 4, h: 4, app: 'quest', to: ['quest'],
-    days: [[7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days']], day0: 7,
+    parts: [['heads', 'Day headings'], ['src', 'Where it came from']],
     list(cfg) {
       const t = LifeOS.day(), end = LifeOS.shift(t, (cfg && cfg.days) || 7);
       return noteRows().filter(r => r.payload.kind === 'todo' && !r.payload.done && !r.payload.cancelled &&
@@ -3739,11 +3890,13 @@ const WIDGETS = {
       const list = el('div', 'rowlist');
       let last = '';
       L.forEach(x => {
-        if (x.payload.due !== last) { last = x.payload.due; list.appendChild(el('div', 'mb-group', esc(Day.label(last)))); }
-        /* drawn on the day it was written, so it wears a box, not the moved-on arrow */
+        if (x.payload.due !== last) { last = x.payload.due; if (partOn(cfg, 'heads')) list.appendChild(el('div', 'mb-group', esc(Day.label(last)))); }
+        /* drawn on the day it was written, so it wears a box, not the moved-on
+           arrow; with no headings, the day it is due goes on the row */
         const r = tickRow(x, x.date);
         const from = todoSource(x);
-        if (from) r.appendChild(el('span', 'tag', esc(from)));
+        if (from && partOn(cfg, 'src')) r.appendChild(el('span', 'tag', esc(from)));
+        if (!partOn(cfg, 'heads')) r.appendChild(el('span', 'd', esc(Day.short(x.payload.due))));
         list.appendChild(r);
       });
       body.appendChild(list);
@@ -3764,9 +3917,16 @@ const WIDGETS = {
       return { n: n, old: old };
     },
     sub: () => { const c = WIDGETS.projects.count(); const k = Object.keys(c.n); return k.length ? k.reduce((a, x) => a + c.n[x], 0) + ' open across ' + k.length : 'no project has anything open'; },
-    draw(body) {
+    /* the two numbers on a row, the clear ones, and which projects */
+    parts: () => {
+      const P = Rec.map('project') || {};
+      return [['clear', 'Projects with nothing open'], ['age', 'Oldest todo'], ['n', 'How many open']]
+        .concat(Object.keys(P).sort((a, b) => (P[a].ord || 0) - (P[b].ord || 0)).map(k => ['p-' + k, '# ' + (P[k].name || k)]));
+    },
+    draw(body, cfg) {
       const P = Rec.map('project'), c = WIDGETS.projects.count();
-      const keys = Object.keys(P).sort((a, b) => (P[a].ord || 0) - (P[b].ord || 0));
+      const keys = Object.keys(P).sort((a, b) => (P[a].ord || 0) - (P[b].ord || 0))
+        .filter(k => partOn(cfg, 'p-' + k) && (c.n[k] || partOn(cfg, 'clear')));
       if (!keys.length) { body.appendChild(el('div', 'empty', 'No projects')); return; }
       const list = el('div', 'rowlist');
       keys.forEach(k => {
@@ -3777,8 +3937,8 @@ const WIDGETS = {
         /* the project's colour is the plate's; a chart colour is a line
            colour, not a word colour (root brief), so the # is in the words' */
         r.innerHTML = '<span class="n"># ' + esc(P[k].name || k) + '</span>' +
-          (age > 0 ? '<span class="d">oldest ' + age + 'd</span>' : '') +
-          '<span class="d">' + (c.n[k] ? c.n[k] + ' open' : 'clear') + '</span>';
+          (age > 0 && partOn(cfg, 'age') ? '<span class="d">oldest ' + age + 'd</span>' : '') +
+          (partOn(cfg, 'n') ? '<span class="d">' + (c.n[k] ? c.n[k] + ' open' : 'clear') + '</span>' : '');
         list.appendChild(r);
       });
       body.appendChild(list);
@@ -3789,10 +3949,11 @@ const WIDGETS = {
   brief: {
     nm: 'BRIEF', w: 5, h: 5, app: 'quest', mine: 1, to: ['quest'],
     sub: () => Rec.get('brief', LifeOS.day(), '') ? 'this morning' : 'none today',
-    draw(body) {
+    parts: [['text', 'The brief'], ['todo', 'To do']],
+    draw(body, cfg) {
       const t = LifeOS.day(), b = Rec.get('brief', t, '');
       if (!b) { body.appendChild(el('div', 'empty', 'No brief for today yet. It arrives from the PC in the morning.')); return; }
-      String(b.text || '').split('\n').forEach(line => {
+      if (partOn(cfg, 'text')) String(b.text || '').split('\n').forEach(line => {
         const l = line.trim();
         if (!l) return;
         if (/^#\s/.test(l)) body.appendChild(el('div', 'mb-group', esc(l.replace(/^#\s+/, ''))));
@@ -3800,7 +3961,7 @@ const WIDGETS = {
         else body.appendChild(el('div', 'bline plain', esc(l)));
       });
       const items = Array.isArray(b.todo) ? b.todo : [];
-      if (items.length) {
+      if (items.length && partOn(cfg, 'todo')) {
         body.appendChild(el('div', 'mb-group', 'TO DO'));
         const list = el('div', 'rowlist');
         items.forEach((it, i) => {
@@ -3833,7 +3994,8 @@ const WIDGETS = {
       const owed = all.filter(x => x.s.st === 'owed' || x.s.st === 'due').length;
       return all.length ? (owed ? owed + ' due or owed' : 'nothing owed') : 'none set up';
     },
-    draw(body) {
+    parts: [['every', 'Every'], ['any', 'Anytime'], ['done', 'Done today'], ['later', 'Coming later']],
+    draw(body, cfg) {
       const all = WIDGETS.rhythms.state(), today = LifeOS.day();
       if (!all.length) { body.appendChild(el('div', 'empty', 'No Every or Anytime blocks')); return; }
       const list = el('div', 'rowlist');
@@ -3848,7 +4010,8 @@ const WIDGETS = {
         r.appendChild(el('div', 'd', tail));
         list.appendChild(r);
       };
-      const every = all.filter(x => x.r.kind === 'every'), any = all.filter(x => x.r.kind === 'anytime');
+      const every = all.filter(x => x.r.kind === 'every' && partOn(cfg, 'every') && (x.s.st !== 'done' || partOn(cfg, 'done')) && (x.s.st !== 'later' || partOn(cfg, 'later')));
+      const any = all.filter(x => x.r.kind === 'anytime' && partOn(cfg, 'any'));
       if (every.length) {
         list.appendChild(el('div', 'mb-group', 'EVERY'));
         every.filter(x => x.s.st === 'owed').sort((a, b) => b.s.late - a.s.late)
@@ -3872,7 +4035,7 @@ const WIDGETS = {
      energy, steps or water each get a chart the way WEIGHT and SLEEP do */
   measure: {
     nm: 'MEASURE', w: 5, h: 3, app: 'status', to: ['status', 'trends'],
-    days: [[7, '7 days'], [30, '30 days'], [90, '90 days'], [365, 'a year']], day0: 30,
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days'], [180, '180 days'], [365, 'a year']], day0: 30,
     field(cfg) {
       const F = Rec.map('field') || {};
       /* a done-or-not field ("Trained") has no line to draw, so it is not offered */
@@ -3940,10 +4103,11 @@ const WIDGETS = {
   macros: {
     nm: 'MACROS', w: 4, h: 3, app: 'status', fit: 1, to: ['status', 'food'],
     sub: () => Math.round(macroToday('kcal')).toLocaleString() + ' kcal so far today',
-    draw(body) {
+    parts: [['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat'], ['kcal', 'Calories']],
+    draw(body, cfg) {
       const t = statusTargets(), rows = [['p', 'PROTEIN', 'g'], ['c', 'CARBS', 'g'], ['f', 'FAT', 'g'], ['kcal', 'CALORIES', '']];
       const n = v => Math.round(v).toLocaleString();
-      rows.forEach(x => {
+      rows.filter(x => partOn(cfg, x[0])).forEach(x => {
         const o = {}, got = macroToday(x[0], o), of = Number(t[x[0]]) || 0, miss = o.all - o.known;
         let val = o.all && !o.known ? 'not known' : n(got) + x[2];
         if (of) val += ' / ' + n(of) + x[2];
@@ -3957,19 +4121,31 @@ const WIDGETS = {
   meals: {
     nm: 'MEALS', w: 4, h: 3, app: 'status', to: ['status', 'food'],
     today: () => Rec.all('meal', { date: LifeOS.day() }).sort((a, b) => (a.payload.t || 0) - (b.payload.t || 0)),
-    sub: () => { const m = WIDGETS.meals.today(); return m.length ? m.length + ' logged today' : 'nothing logged today'; },
-    draw(body) {
+    /* today, or the last few days with a heading a day; and the pieces of a row */
+    days: [[1, 'Today'], [2, 'Today and yesterday'], [7, '7 days']], day0: 1,
+    parts: [['time', 'Time'], ['serve', 'Serving'], ['kcal', 'Calories'], ['p', 'Protein']],
+    span(cfg) {
+      const n = (cfg && cfg.days) || 1, t = LifeOS.day(), from = LifeOS.shift(t, -(n - 1));
+      if (n === 1) return WIDGETS.meals.today();
+      return Rec.all('meal').filter(r => r.date && r.date >= from && r.date <= t)
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.payload.t || 0) - (b.payload.t || 0));
+    },
+    sub: cfg => { const n = (cfg && cfg.days) || 1, m = WIDGETS.meals.span(cfg); return m.length ? m.length + (n > 1 ? ' logged in the last ' + n + ' days' : ' logged today') : (n > 1 ? 'nothing logged in the last ' + n + ' days' : 'nothing logged today'); },
+    draw(body, cfg) {
       /* newest first: the meal just eaten was below the fold */
-      const m = WIDGETS.meals.today().slice().reverse();
-      if (!m.length) { body.appendChild(el('div', 'empty', 'Nothing logged today')); return; }
+      const n = (cfg && cfg.days) || 1, m = WIDGETS.meals.span(cfg).slice().reverse();
+      if (!m.length) { body.appendChild(el('div', 'empty', n > 1 ? 'Nothing logged in the last ' + n + ' days' : 'Nothing logged today')); return; }
       const list = el('div', 'rowlist');
       /* a blank figure is a dash, never 0 kcal */
       const num = (v, u) => v == null || v === '' || !isFinite(Number(v)) ? '-' : Math.round(Number(v)) + u;
+      const fig = p => [partOn(cfg, 'kcal') ? num(p.kcal, ' kcal') : '', partOn(cfg, 'p') ? num(p.p, 'g P') : ''].filter(Boolean).join(' \u00b7 ');
+      let day = '';
       m.forEach(r => {
+        if (n > 1 && r.date !== day) { day = r.date; list.appendChild(el('div', 'mb-group', esc(Day.label(day).toUpperCase()))); }
         const p = r.payload, row = el('div', 'row');
-        row.innerHTML = '<span class="t">' + (p.t ? esc(clock12(p.t)) : '') + '</span>' +
-          '<span class="n">' + esc(p.name || 'Food') + (p.serve ? ' <i class="srv">' + esc(p.serve) + '</i>' : '') + '</span>' +
-          '<span class="d kc">' + num(p.kcal, ' kcal') + ' \u00b7 ' + num(p.p, 'g P') + '</span>';
+        row.innerHTML = (partOn(cfg, 'time') ? '<span class="t">' + (p.t ? esc(clock12(p.t)) : '') + '</span>' : '') +
+          '<span class="n">' + esc(p.name || 'Food') + (p.serve && partOn(cfg, 'serve') ? ' <i class="srv">' + esc(p.serve) + '</i>' : '') + '</span>' +
+          (fig(p) ? '<span class="d kc">' + fig(p) + '</span>' : '');
         list.appendChild(row);
       });
       body.appendChild(list);
@@ -3982,7 +4158,8 @@ const WIDGETS = {
      this only lists them. */
   records: {
     nm: 'RECORDS', w: 4, h: 3, app: 'train', to: ['train'],
-    days: [[30, '30 days'], [90, '90 days'], [365, 'a year']], day0: 30,
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days'], [365, 'a year']], day0: 30,
+    menu: (cfg, redraw) => [partToggle(cfg, 'date', 'Show dates', redraw)],
     list(cfg) {
       const t = LifeOS.day(), from = LifeOS.shift(t, -(((cfg && cfg.days) || 30) - 1));
       return Rec.all('set').filter(r => r.payload.pr && r.date >= from && r.date <= t)
@@ -3998,7 +4175,7 @@ const WIDGETS = {
         const w = p.kg ? Math.round((lb ? p.kg * 2.20462262185 : p.kg) * 10) / 10 + (lb ? 'lb' : 'kg') + ' \u00d7 ' + (p.r || 0) : (p.r || 0) + ' reps';
         const row = el('div', 'row');
         row.innerHTML = '<span class="n">' + esc(exs[p.ex] ? exs[p.ex].name : 'Exercise') + '</span>' +
-          '<span class="rt rec">' + esc(w) + '</span><span class="d">' + esc(Day.short(r.date)) + '</span>';
+          '<span class="rt rec">' + esc(w) + '</span>' + (partOn(cfg, 'date') ? '<span class="d">' + esc(Day.short(r.date)) + '</span>' : '');
         list.appendChild(row);
       });
       if (L.length > 14) list.appendChild(el('div', 'empty', (L.length - 14) + ' more'));
@@ -4016,21 +4193,22 @@ const WIDGETS = {
       return on ? { p: on, live: 1 } : all[0] ? { p: all[0], live: 0 } : null;
     },
     sub: () => { const c = WIDGETS.phase.cur(); return !c ? 'none running' : c.live ? 'running' : 'the last one'; },
-    draw(body) {
+    parts: [['name', 'Name'], ['when', 'Week and day'], ['sessions', 'Sessions'], ['sets', 'Working sets']],
+    draw(body, cfg) {
       const c = WIDGETS.phase.cur(), t = LifeOS.day();
       if (!c) { body.appendChild(el('div', 'empty', 'No training block')); return; }
       const p = c.p, upto = p.end && p.end < t ? p.end : t;
       const day = Day.diff(upto, p.start) + 1, len = p.end ? Day.diff(p.end, p.start) + 1 : 0;
-      body.appendChild(el('div', 'tbig', esc(p.name || 'Training block')));
-      body.appendChild(el('div', 'tsub', c.live
+      if (partOn(cfg, 'name')) body.appendChild(el('div', 'tbig', esc(p.name || 'Training block')));
+      if (partOn(cfg, 'when')) body.appendChild(el('div', 'tsub', c.live
         ? 'Week ' + (Math.floor((day - 1) / 7) + 1) + ', day ' + day + (len ? ' of ' + len + ' \u00b7 ' + (len - day) + ' days left' : '')
         : 'Ended ' + esc(Day.short(p.end)) + ', after ' + day + ' days'));
       const days = {}; let sets = 0;
       Rec.all('set').forEach(r => { if (r.date >= p.start && r.date <= upto && !setIsWarm(r.payload) && setCounts(r.payload, r.date, t)) { days[r.date] = 1; sets++; } });
       const st = el('div', 'stats');
-      st.appendChild(el('div', 'stat acc', '<b>' + Object.keys(days).length + '</b><span>SESSIONS</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + sets + '</b><span>WORKING SETS</span>'));
-      body.appendChild(st);
+      if (partOn(cfg, 'sessions')) st.appendChild(el('div', 'stat acc', '<b>' + Object.keys(days).length + '</b><span>SESSIONS</span>'));
+      if (partOn(cfg, 'sets')) st.appendChild(el('div', 'stat', '<b>' + sets + '</b><span>WORKING SETS</span>'));
+      if (st.childNodes.length) body.appendChild(st);
     },
   },
 
@@ -4046,16 +4224,18 @@ const WIDGETS = {
       return d;
     },
     sub: () => { const d = WIDGETS.checkins.last(); return d ? 'last ' + Day.short(d) : 'none yet'; },
-    draw(body) {
+    parts: [['days', 'Days since'], ['date', 'Date'], ['weight', 'Weight'], ['answers', 'Answers']],
+    draw(body, cfg) {
       const d = WIDGETS.checkins.last();
       if (!d) { body.appendChild(el('div', 'empty', 'No check-ins')); return; }
       const n = Day.diff(LifeOS.day(), d);
       const cw = Rec.get('cval', d, 'weight'), wv = cw && cw.v != null ? cw.v : evValue(d, 'weight');
       const answers = Rec.all('cval', { date: d }).filter(r => String(r.key).indexOf('|') < 0).length;
-      body.appendChild(el('div', 'tface' + (n ? '' : ' live'), n ? n + '<small> day' + (n === 1 ? '' : 's') + '</small>' : 'TODAY'));
-      body.appendChild(el('div', 'tsub', (n ? 'since the last one, ' + esc(Day.short(d)) : 'checked in today') +
-        (wv != null ? ' \u00b7 ' + (+Number(wv).toFixed(1)) + ' on the scale' : '') +
-        (answers ? ' \u00b7 ' + answers + ' answer' + (answers === 1 ? '' : 's') : '')));
+      if (partOn(cfg, 'days')) body.appendChild(el('div', 'tface' + (n ? '' : ' live'), n ? n + '<small> day' + (n === 1 ? '' : 's') + '</small>' : 'TODAY'));
+      const line = [partOn(cfg, 'date') ? (n ? 'since the last one, ' + esc(Day.short(d)) : 'checked in today') : '',
+        wv != null && partOn(cfg, 'weight') ? (+Number(wv).toFixed(1)) + ' on the scale' : '',
+        answers && partOn(cfg, 'answers') ? answers + ' answer' + (answers === 1 ? '' : 's') : ''].filter(Boolean).join(' \u00b7 ');
+      if (line) body.appendChild(el('div', 'tsub', partOn(cfg, 'date') ? line : line.charAt(0).toUpperCase() + line.slice(1)));
     },
   },
 
@@ -4068,16 +4248,18 @@ const WIDGETS = {
        month: 30 days back from the 31st was the 1st of the same month, and
        365 days back was a day off across a leap day */
     back: [[1, 'week', 'A WEEK AGO'], [1, 'month', 'A MONTH AGO'], [3, 'month', 'THREE MONTHS AGO'], [12, 'month', 'A YEAR AGO']],
-    found() {
+    /* which of the four days back, from the card's menu */
+    parts: [['A WEEK AGO', 'A week ago'], ['A MONTH AGO', 'A month ago'], ['THREE MONTHS AGO', 'Three months ago'], ['A YEAR AGO', 'A year ago']],
+    found(cfg) {
       const by = {};
       noteRows().forEach(r => { const p = r.payload; if (!r.date || (p.kind === 'todo' && !p.done)) return; (by[r.date] = by[r.date] || []).push(r); });
-      return WIDGETS.onthisday.back.map(b => { const d = rhAddH(LifeOS.day(), -b[0], b[1]); return { d: d, nm: b[2], rows: by[d] || [] }; })
+      return WIDGETS.onthisday.back.filter(b => partOn(cfg, b[2])).map(b => { const d = rhAddH(LifeOS.day(), -b[0], b[1]); return { d: d, nm: b[2], rows: by[d] || [] }; })
         .filter(x => x.rows.length);
     },
-    sub: () => { const f = WIDGETS.onthisday.found(); return f.length ? f.length + ' day' + (f.length === 1 ? '' : 's') + ' to look back on' : 'nothing written on these days'; },
-    draw(body) {
-      const f = WIDGETS.onthisday.found();
-      if (!f.length) { body.appendChild(el('div', 'empty', 'Nothing written a week, a month, three months or a year ago')); return; }
+    sub: cfg => { const f = WIDGETS.onthisday.found(cfg); return f.length ? f.length + ' day' + (f.length === 1 ? '' : 's') + ' to look back on' : 'nothing written on these days'; },
+    draw(body, cfg) {
+      const f = WIDGETS.onthisday.found(cfg);
+      if (!f.length) { body.appendChild(el('div', 'empty', cfg && cfg.off ? 'Nothing written on these days' : 'Nothing written a week, a month, three months or a year ago')); return; }
       const list = el('div', 'rowlist');
       f.forEach(x => {
         list.appendChild(el('div', 'mb-group', esc(x.nm) + ' <span class="lwhere">' + esc(Day.short(x.d)) + '</span>'));
@@ -4102,7 +4284,8 @@ const WIDGETS = {
       return r ? r.payload : null;
     },
     sub: () => { const t = LifeOS.day(); return WIDGETS.recap.week(WIDGETS.recap.weekOf(t), t) ? 'this week is written' : 'this week is not written yet'; },
-    draw(body) {
+    parts: [['today', 'Today'], ['week', 'This week'], ['last', 'Last week']],
+    draw(body, cfg) {
       const R = WIDGETS.recap, t = LifeOS.day(), from = R.weekOf(t), was = R.weekOf(LifeOS.shift(from, -1));
       const done = Rec.get('cell', t, 'done'), day = Rec.get('day', t, '');
       const tw = R.week(from, t), lw = R.week(was, LifeOS.shift(from, -1));
@@ -4115,30 +4298,32 @@ const WIDGETS = {
         p.appendChild(el('div', text ? 'rtext' : 'empty', text ? textBlock(text) : none));
         body.appendChild(p);
       };
-      part('TODAY', (done && done.text) || (day && day.note) || '', 'Nothing written today');
-      part('THIS WEEK', tw && tw.text, 'Not written');
-      if (lw && lw.text) part('LAST WEEK', lw.text, '');
+      if (partOn(cfg, 'today')) part('TODAY', (done && done.text) || (day && day.note) || '', 'Nothing written today');
+      if (partOn(cfg, 'week')) part('THIS WEEK', tw && tw.text, 'Not written');
+      if (lw && lw.text && partOn(cfg, 'last')) part('LAST WEEK', lw.text, '');
     },
   },
 
   /* ── Tom's own apps ── */
   speakw: {
     nm: 'SPEAK', w: 4, h: 2, app: 'speak', fit: 1, to: ['speak'],
-    week() {
-      const t = LifeOS.day(), from = LifeOS.shift(t, -6);
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [90, '90 days']], day0: 7,
+    parts: [['takes', 'Takes'], ['mins', 'Minutes'], ['days', 'Days'], ['pass', 'Passed']],
+    week(cfg) {
+      const t = LifeOS.day(), from = LifeOS.shift(t, -(((cfg && cfg.days) || 7) - 1));
       return Rec.all('take').filter(r => r.date >= from && r.date <= t);
     },
-    sub: () => 'the last 7 days',
-    draw(body) {
-      const w = WIDGETS.speakw.week();
-      if (!w.length) { body.appendChild(el('div', 'empty', 'No takes in the last 7 days')); return; }
+    sub: cfg => 'the last ' + ((cfg && cfg.days) || 7) + ' days',
+    draw(body, cfg) {
+      const N = (cfg && cfg.days) || 7, w = WIDGETS.speakw.week(cfg);
+      if (!w.length) { body.appendChild(el('div', 'empty', 'No takes in the last ' + N + ' days')); return; }
       const secs = w.reduce((a, r) => a + (Number(r.payload.dur) || 0), 0);
       const days = {}; w.forEach(r => { days[r.date] = 1; });
       const st = el('div', 'stats');
-      st.appendChild(el('div', 'stat acc', '<b>' + w.length + '</b><span>TAKES</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + (secs < 600 ? (secs / 60).toFixed(1) : Math.round(secs / 60)) + '</b><span>MINUTES</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + Object.keys(days).length + '/7</b><span>DAYS</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + w.filter(r => r.payload.pass).length + '</b><span>PASSED</span>'));
+      if (partOn(cfg, 'takes')) st.appendChild(el('div', 'stat acc', '<b>' + w.length + '</b><span>TAKES</span>'));
+      if (partOn(cfg, 'mins')) st.appendChild(el('div', 'stat', '<b>' + (secs < 600 ? (secs / 60).toFixed(1) : Math.round(secs / 60)) + '</b><span>MINUTES</span>'));
+      if (partOn(cfg, 'days')) st.appendChild(el('div', 'stat', '<b>' + Object.keys(days).length + '/' + N + '</b><span>DAYS</span>'));
+      if (partOn(cfg, 'pass')) st.appendChild(el('div', 'stat', '<b>' + w.filter(r => r.payload.pass).length + '</b><span>PASSED</span>'));
       body.appendChild(st);
     },
   },
@@ -4147,16 +4332,18 @@ const WIDGETS = {
   sessions: {
     nm: 'SESSIONS', w: 4, h: 3, app: 'wealth', to: ['wealth'],
     sub: () => { const t = LifeOS.day(); return Rec.all('sesh').filter(r => r.date && r.date <= t && r.date.slice(0, 7) === t.slice(0, 7)).length + ' this month'; },
-    draw(body) {
+    parts: [['week', 'This week'], ['month', 'This month'], ['last', 'Last month'], ['list', 'By client']],
+    draw(body, cfg) {
       const t = LifeOS.day(), mon = monday(t), ym = t.slice(0, 7);
       const lm = (() => { const d = new Date(t + 'T12:00:00'); d.setDate(0); return d.getFullYear() + '-' + zpad(d.getMonth() + 1); })();
       const S = Rec.all('sesh').filter(r => r.date && r.date <= t), C = Rec.map('client') || {};
       if (!S.length) { body.appendChild(el('div', 'empty', 'No sessions logged')); return; }
       const st = el('div', 'stats');
-      st.appendChild(el('div', 'stat acc', '<b>' + S.filter(r => r.date >= mon).length + '</b><span>THIS WEEK</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + S.filter(r => r.date.slice(0, 7) === ym).length + '</b><span>THIS MONTH</span>'));
-      st.appendChild(el('div', 'stat', '<b>' + S.filter(r => r.date.slice(0, 7) === lm).length + '</b><span>LAST MONTH</span>'));
-      body.appendChild(st);
+      if (partOn(cfg, 'week')) st.appendChild(el('div', 'stat acc', '<b>' + S.filter(r => r.date >= mon).length + '</b><span>THIS WEEK</span>'));
+      if (partOn(cfg, 'month')) st.appendChild(el('div', 'stat', '<b>' + S.filter(r => r.date.slice(0, 7) === ym).length + '</b><span>THIS MONTH</span>'));
+      if (partOn(cfg, 'last')) st.appendChild(el('div', 'stat', '<b>' + S.filter(r => r.date.slice(0, 7) === lm).length + '</b><span>LAST MONTH</span>'));
+      if (st.childNodes.length) body.appendChild(st);
+      if (!partOn(cfg, 'list')) return;
       const by = {};
       S.filter(r => r.date.slice(0, 7) === ym).forEach(r => { const k = r.payload.client || '?'; by[k] = (by[k] || 0) + 1; });
       const list = el('div', 'rowlist');
@@ -4172,11 +4359,15 @@ const WIDGETS = {
   /* the bill todos WEALTH writes, so paying one here ticks the same row */
   bills: {
     nm: 'BILLS', w: 4, h: 3, app: 'wealth', to: ['wealth'],
-    list: () => noteRows().filter(r => r.payload.kind === 'todo' && r.payload.src === 'wealth' && !r.payload.done && !r.payload.cancelled)
-      .sort((a, b) => String(todoFrom(a) || '9999').localeCompare(String(todoFrom(b) || '9999'))),
-    sub: () => { const n = WIDGETS.bills.list().length; return n ? n + ' coming up' : 'none listed'; },
-    draw(body) {
-      const L = WIDGETS.bills.list();
+    /* how far ahead, from the card's menu; one already late always shows */
+    days: [[7, '7 days'], [14, '14 days'], [30, '30 days'], [36500, 'All of them']], day0: 36500,
+    list: cfg => { const n = (cfg && cfg.days) || 36500, end = LifeOS.shift(LifeOS.day(), n);
+      return noteRows().filter(r => r.payload.kind === 'todo' && r.payload.src === 'wealth' && !r.payload.done && !r.payload.cancelled &&
+        (n >= 36500 || !todoFrom(r) || todoFrom(r) <= end))
+      .sort((a, b) => String(todoFrom(a) || '9999').localeCompare(String(todoFrom(b) || '9999'))); },
+    sub: cfg => { const n = WIDGETS.bills.list(cfg).length; return n ? n + ' coming up' : 'none listed'; },
+    draw(body, cfg) {
+      const L = WIDGETS.bills.list(cfg);
       if (!L.length) { body.appendChild(el('div', 'empty', 'No bills listed')); return; }
       const list = el('div', 'rowlist');
       L.forEach(x => { const d = todoFrom(x); list.appendChild(tickRow(x, x.date, d ? dueWords(d) : '')); });
@@ -4191,13 +4382,15 @@ const WIDGETS = {
       Rec.all('move').forEach(r => { const m = r.payload; if (!m.pot || !P[m.pot]) return; bal[m.pot] = (bal[m.pot] || 0) + (m.dir === 'out' ? -1 : 1) * (Number(m.amt) || 0); });
       return bal;
     },
-    sub: () => {
+    /* which pots, by name; the header adds up the ones shown */
+    parts: () => { const P = Rec.map('pot') || {}; return Object.keys(P).sort((a, b) => (P[a].ord || 0) - (P[b].ord || 0)).map(k => [k, P[k].name || 'Pot']); },
+    sub: cfg => {
       if (!Object.keys(Rec.map('pot') || {}).length) return 'no pots';
       const b = WIDGETS.pots.bal();
-      return peso(Object.keys(b).reduce((n, k) => n + b[k], 0)) + ' in pots';
+      return peso(Object.keys(b).filter(k => partOn(cfg, k)).reduce((n, k) => n + b[k], 0)) + ' in pots';
     },
-    draw(body) {
-      const P = Rec.map('pot') || {}, keys = Object.keys(P).sort((a, b) => (P[a].ord || 0) - (P[b].ord || 0));
+    draw(body, cfg) {
+      const P = Rec.map('pot') || {}, keys = Object.keys(P).sort((a, b) => (P[a].ord || 0) - (P[b].ord || 0)).filter(k => partOn(cfg, k));
       if (!keys.length) { body.appendChild(el('div', 'empty', 'No savings pots')); return; }
       const bal = WIDGETS.pots.bal();
       keys.forEach(k => {
@@ -4214,6 +4407,7 @@ const WIDGETS = {
   stopwatch: {
     nm: 'STOPWATCH', w: 3, h: 3, grp: 'DESK',
     sub: () => '',
+    menu: (cfg, redraw) => ['-', partToggle(cfg, 'laps', 'Show laps', redraw)],
     draw(body, cfg) {
       const s = toolOf(cfg, watchTool);
       const tenths = ms => { const t = Math.floor(ms / 100); return mmss(Math.floor(t / 10)) + '.' + (t % 10); };
@@ -4239,7 +4433,7 @@ const WIDGETS = {
       };
       const show = now => { const ms = s.ms(now || Date.now()); face.textContent = tenths(ms); face.classList.toggle('idle', !ms); };
       s.paint = now => { if (face.isConnected && s.t0) show(now); };
-      body.appendChild(face); body.appendChild(bar); body.appendChild(laps);
+      body.appendChild(face); body.appendChild(bar); if (partOn(cfg, 'laps')) body.appendChild(laps);
       render();
     },
   },
@@ -4250,6 +4444,7 @@ const WIDGETS = {
     kinds: [['Tabata, 20 on 10 off \u00d7 8', 20, 10, 8], ['40 on 20 off \u00d7 8', 40, 20, 8],
       ['30 on 30 off \u00d7 10', 30, 30, 10], ['EMOM, a minute each \u00d7 10', 60, 0, 10]],
     sub: cfg => { const c = ivCfg(cfg); return c.work + 's on' + (c.rest ? ', ' + c.rest + 's off' : '') + ' \u00d7 ' + c.rounds; },
+    parts: [['phase', 'Work or rest'], ['info', 'Rounds and time to go']],
     menu(cfg, redraw) {
       return ['-', { label: 'Presets', sub: WIDGETS.intervals.kinds.map(p => ({
         label: p[0], check: ivCfg(cfg).work === p[1] && ivCfg(cfg).rest === p[2] && ivCfg(cfg).rounds === p[3],
@@ -4312,7 +4507,7 @@ const WIDGETS = {
         const want = s.t0 ? 'PAUSE' : (s.acc ? 'GO ON' : 'START');
         if (!bar.firstChild || bar.firstChild.textContent !== want) render();
       };
-      [phase, face, info, bar].forEach(n => body.appendChild(n));
+      [partOn(cfg, 'phase') ? phase : null, face, partOn(cfg, 'info') ? info : null, bar].filter(Boolean).forEach(n => body.appendChild(n));
       render();
     },
   },
@@ -4323,6 +4518,7 @@ const WIDGETS = {
       const now = new Date(), next = alarmList().filter(a => a.on).map(a => alarmNext(a, now)).filter(Boolean).sort((a, b) => a - b)[0];
       return next ? 'next in ' + inWords((next - now) / 60000) + ' \u00b7 rings while this screen is open' : 'rings while this screen is open';
     },
+    parts: [['off', 'Alarms turned off'], ['days', 'Days'], ['add', 'Add button']],
     edit(was) {
       const DN = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
       let tm, lb; const pick = was && alarmDays(was) ? alarmDays(was).slice() : [];
@@ -4355,17 +4551,17 @@ const WIDGETS = {
         } }],
       });
     },
-    draw(body) {
+    draw(body, cfg) {
       const L = alarmList(), DN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const list = el('div', 'rowlist');
-      L.forEach(a => {
+      L.filter(a => a.on || partOn(cfg, 'off')).forEach(a => {
         const r = el('div', 'row' + (a.on ? '' : ' done'));
         const days = alarmDays(a);
         const say = !days ? 'every day' : days.length === 5 && [1, 2, 3, 4, 5].every(d => days.indexOf(d) > -1) ? 'weekdays'
           : days.length === 2 && days.indexOf(0) > -1 && days.indexOf(6) > -1 ? 'weekends' : days.map(d => DN[d]).join(' ');
         r.appendChild(el('span', 'abig', esc(MIN2(alarmMin(a)))));
         /* the days on a line of their own: on a phone they ran off the row */
-        r.appendChild(el('span', 'n', esc(a.label || 'Alarm') + ' <i class="srv blk">' + esc(say) + '</i>'));
+        r.appendChild(el('span', 'n', esc(a.label || 'Alarm') + (partOn(cfg, 'days') ? ' <i class="srv blk">' + esc(say) + '</i>' : '')));
         r.style.cursor = 'pointer';
         r.onclick = () => WIDGETS.alarms.edit(a);
         const sw = tbtn(a.on ? 'ON' : 'OFF', () => { alarmSave(alarmList().map(x => x.id === a.id ? Object.assign({}, x, { on: x.on ? 0 : 1 }) : x)); drawHome(); }, a.on ? 'go' : '');
@@ -4382,6 +4578,7 @@ const WIDGETS = {
       });
       if (!L.length) body.appendChild(el('div', 'empty', 'No alarms'));
       body.appendChild(list);
+      if (!partOn(cfg, 'add')) return;
       const bar = el('div', 'tbar');
       bar.appendChild(tbtn('+ ALARM', () => WIDGETS.alarms.edit(null), 'go'));
       body.appendChild(bar);
@@ -4398,14 +4595,15 @@ const WIDGETS = {
       const k = Day.diff(n.date, LifeOS.day()), nm = n.name || 'it';
       return k === 0 ? nm + ' today' : k + (k === 1 ? ' day' : ' days') + ' to ' + nm;
     },
-    draw(body) {
+    parts: [['past', 'Dates gone by'], ['date', 'Dates'], ['add', 'Add button']],
+    draw(body, cfg) {
       const L = WIDGETS.countdown.list(), t = LifeOS.day();
       const list = el('div', 'rowlist');
-      L.forEach(x => {
+      L.filter(x => x.date >= t || partOn(cfg, 'past')).forEach(x => {
         const n = Day.diff(x.date, t);
         const r = el('div', 'row' + (n < 0 ? ' done' : ''));
         r.appendChild(el('span', 'abig', n === 0 ? 'TODAY' : Math.abs(n) + '<small>' + (n > 0 ? 'd' : 'd ago') + '</small>'));
-        r.appendChild(el('span', 'n', esc(x.name || 'Untitled') + ' <i class="srv">' + esc(Day.short(x.date)) + '</i>'));
+        r.appendChild(el('span', 'n', esc(x.name || 'Untitled') + (partOn(cfg, 'date') ? ' <i class="srv">' + esc(Day.short(x.date)) + '</i>' : '')));
         const del = tbtn((typeof Icons !== 'undefined' && Icons.svg('close', { size: 13 })) || '\u2715', () => {
           const was = Rec.setting('lifeos', 'countdowns') || [];
           Rec.setting('lifeos', 'countdowns', was.filter(y => y.id !== x.id)); drawHome();
@@ -4417,6 +4615,7 @@ const WIDGETS = {
       });
       if (!L.length) body.appendChild(el('div', 'empty', 'No dates'));
       body.appendChild(list);
+      if (!partOn(cfg, 'add')) return;
       const bar = el('div', 'tbar');
       bar.appendChild(tbtn('+ DATE', () => {
         let nm, dt;
@@ -4443,6 +4642,8 @@ const WIDGETS = {
     nm: 'CALENDAR', w: 4, h: 5, fit: 1, grp: 'DESK',
     /* the month is the card's own title, and follows the arrows */
     sub: () => '',
+    /* what marks a day, and the picked day's list under the month */
+    parts: [['train', 'Training'], ['notes', 'Bullets'], ['day', 'The day picked']],
     draw(body, cfg) {
       const s = toolOf(cfg, () => ({ off: 0, pick: null }));
       const render = () => {
@@ -4454,10 +4655,10 @@ const WIDGETS = {
         const pick = s.pick || today;
         /* what each day holds: a bullet written or due on it, and training */
         const notes = {}, trained = {};
-        noteRows().forEach(r => { const p = r.payload; if (p.cancelled) return; const d = p.kind === 'todo' ? (p.due || r.date) : r.date; if (d) (notes[d] = notes[d] || []).push(r); });
+        if (partOn(cfg, 'notes')) noteRows().forEach(r => { const p = r.payload; if (p.cancelled) return; const d = p.kind === 'todo' ? (p.due || r.date) : r.date; if (d) (notes[d] = notes[d] || []).push(r); });
         /* every set TRAIN counts, warmups too (TRAIN 1.0.50): a planned set
            still waiting is not one yet */
-        Rec.all('set').forEach(r => { if (r.date && setCounts(r.payload || {}, r.date, today)) trained[r.date] = (trained[r.date] || 0) + 1; });
+        if (partOn(cfg, 'train')) Rec.all('set').forEach(r => { if (r.date && setCounts(r.payload || {}, r.date, today)) trained[r.date] = (trained[r.date] || 0) + 1; });
         const head = el('div', 'calhead');
         head.appendChild(tbtn((typeof Icons !== 'undefined' && Icons.svg('back', { size: 14 })) || '\u2039', () => { s.off--; render(); }));
         head.appendChild(el('b', null, esc(first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }).toUpperCase())));
@@ -4477,6 +4678,7 @@ const WIDGETS = {
           grid.appendChild(b);
         }
         body.appendChild(grid);
+        if (!partOn(cfg, 'day')) return;
         body.appendChild(el('div', 'mb-group', esc(Day.label(pick).toUpperCase())));
         const list = el('div', 'rowlist');
         if (trained[pick]) list.appendChild(el('div', 'bline', '<i></i>Trained, ' + trained[pick] + ' set' + (trained[pick] === 1 ? '' : 's')));
@@ -4497,6 +4699,7 @@ const WIDGETS = {
       ['America/Toronto', 'Toronto'], ['America/Chicago', 'Chicago'], ['America/Denver', 'Denver'], ['America/Los_Angeles', 'Los Angeles'],
       ['America/Vancouver', 'Vancouver'], ['Pacific/Honolulu', 'Honolulu'], ['America/Sao_Paulo', 'S\u00e3o Paulo'], ['UTC', 'UTC']],
     zones: cfg => (cfg && Array.isArray(cfg.zones) && cfg.zones.length ? cfg.zones : ['Asia/Manila', 'Europe/London', 'America/New_York', 'America/Los_Angeles']),
+    parts: [['day', 'Today or tomorrow'], ['diff', 'Hours apart']],
     menu(cfg, redraw) {
       const W = WIDGETS.worldclock, cur = W.zones(cfg), name = z => (W.ZONES.filter(x => x[0] === z)[0] || [z, z])[1];
       return ['-',
@@ -4529,7 +4732,8 @@ const WIDGETS = {
           const r = el('div', 'row');
           r.innerHTML = '<span class="abig">' + esc(MIN2(wall.getHours() * 60 + wall.getMinutes())) + '</span>' +
             '<span class="n">' + esc((W.ZONES.filter(x => x[0] === z)[0] || [z, z])[1]) + '</span>' +
-            '<span class="d">' + (dd > 0 ? 'tomorrow' : dd < 0 ? 'yesterday' : 'today') + (diff ? ' \u00b7 ' + (diff > 0 ? '+' : '\u2212') + Math.abs(diff) + 'h' : '') + '</span>';
+            '<span class="d">' + [partOn(cfg, 'day') ? (dd > 0 ? 'tomorrow' : dd < 0 ? 'yesterday' : 'today') : '',
+              diff && partOn(cfg, 'diff') ? (diff > 0 ? '+' : '\u2212') + Math.abs(diff) + 'h' : ''].filter(Boolean).join(' \u00b7 ') + '</span>';
           list.appendChild(r);
         });
       };
@@ -4715,7 +4919,8 @@ Object.assign(WIDGETS, {
     nmFor: cfg => { const f = WIDGETS.logfield.field(cfg); return 'LOG ' + String(f ? f.label : 'a measure').toUpperCase(); },
     menu(cfg, redraw) {
       const cur = (cfg && cfg.f) || 'weight';
-      return ['-', { label: 'Measure', sub: fieldsTyped().map(f => ({ label: f.label, check: f.id === cur, fn: () => { cfg.f = f.id; redraw(); } })) }];
+      return ['-', { label: 'Measure', sub: fieldsTyped().map(f => ({ label: f.label, check: f.id === cur, fn: () => { cfg.f = f.id; redraw(); } })) },
+        partToggle(cfg, 'said', 'Show the last reading', redraw)];
     },
     draw(body, cfg) {
       const f = WIDGETS.logfield.field(cfg);
@@ -4743,7 +4948,7 @@ Object.assign(WIDGETS, {
         UI.undo('<b>' + esc(f.label) + '</b> ' + esc(f.measure === 'check' ? (v ? 'done' : 'not done') : fieldNum(f, v) + fieldUnit(f)),
           () => { undo(); if (said.isConnected) paint(); });
       };
-      body.appendChild(said);
+      if (partOn(cfg, 'said')) body.appendChild(said);
       const bar = el('div', 'tbar');
       if (f.measure === 'scale') {
         [1, 2, 3, 4, 5].forEach(n => bar.appendChild(tbtn(String(n), () => done(n, evPut(today, f, n)))));
@@ -4799,7 +5004,8 @@ Object.assign(WIDGETS, {
       const k = Rec.all('meal', { date: LifeOS.day() }).reduce((a, r) => a + ((r.payload && parseFloat(r.payload.kcal)) || 0), 0);
       return k ? Math.round(k).toLocaleString() + ' kcal today' : 'nothing logged today';
     },
-    draw(body) {
+    parts: [['serve', 'Serving'], ['kcal', 'Calories']],
+    draw(body, cfg) {
       const all = WIDGETS.foods.list();
       if (!all.length) { body.appendChild(el('div', 'empty', 'No foods saved')); return; }
       const list = el('div', 'rowlist');
@@ -4807,8 +5013,8 @@ Object.assign(WIDGETS, {
         const s = foodServe(fd), kc = (parseFloat((fd.base || {}).kcal) || 0) * (parseFloat(s.mult) || 1);
         const r = el('button', 'row qpick mb-press');
         r.type = 'button';
-        r.innerHTML = '<span class="n">' + esc(fd.name) + '</span><span class="d">' + esc(s.label) + '</span>' +
-          (kc ? '<span class="rt">' + Math.round(kc) + '</span>' : '');
+        r.innerHTML = '<span class="n">' + esc(fd.name) + '</span>' + (partOn(cfg, 'serve') ? '<span class="d">' + esc(s.label) + '</span>' : '') +
+          (kc && partOn(cfg, 'kcal') ? '<span class="rt">' + Math.round(kc) + '</span>' : '');
         r.setAttribute('aria-label', 'Log ' + fd.name + ', ' + s.label);
         r.onclick = ev => {
           ev.stopPropagation();
@@ -4846,7 +5052,8 @@ Object.assign(WIDGETS, {
       const cur = WIDGETS.ticks.picks(cfg);
       return ['-', { label: 'Activities', sub: WIDGETS.ticks.pool().map(a => ({
         label: a.label, check: cur.indexOf(a.id) > -1,
-        fn: () => { const now = WIDGETS.ticks.picks(cfg); cfg.acts = now.indexOf(a.id) > -1 ? now.filter(x => x !== a.id) : now.concat([a.id]); redraw(); } })) }];
+        fn: () => { const now = WIDGETS.ticks.picks(cfg); cfg.acts = now.indexOf(a.id) > -1 ? now.filter(x => x !== a.id) : now.concat([a.id]); redraw(); } })) },
+        partToggle(cfg, 'run', 'Show days in a row', redraw)];
     },
     sub: cfg => {
       const p = WIDGETS.ticks.picks(cfg);
@@ -4873,7 +5080,7 @@ Object.assign(WIDGETS, {
         r.type = 'button';
         r.innerHTML = '<span class="chk' + (done ? ' on' : '') + '">' + ((typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '') + '</span>' +
           '<span class="n">' + esc(names[id] || actLabel(id).name) + '</span>' +
-          (run > 1 ? '<span class="d">' + run + ' days</span>' : '');
+          (run > 1 && partOn(cfg, 'run') ? '<span class="d">' + run + ' days</span>' : '');
         r.setAttribute('aria-pressed', done ? 'true' : 'false');
         r.onclick = ev => { ev.stopPropagation(); LifeOS.done(id, today, !done, { src: 'home' }); drawHome(); };
         list.appendChild(r);
@@ -4896,7 +5103,8 @@ Object.assign(WIDGETS, {
       .filter(r => r.payload && r.payload.kind === kind && !r.payload.cancelled)
       .sort((a, b) => (b.payload.t || 0) - (a.payload.t || 0)),
     sub: () => { const n = WIDGETS['add-' + kind].rows().length; return n ? n + ' today' : ''; },
-    draw(body) {
+    menu: (cfg, redraw) => ['-', partToggle(cfg, 'list', 'Show today\'s under the box', redraw)],
+    draw(body, cfg) {
       const W = WIDGETS['add-' + kind], today = LifeOS.day();
       const bar = el('div', 'tbar');
       const inp = UI.field('text', { placeholder: k[4] });
@@ -4924,7 +5132,7 @@ Object.assign(WIDGETS, {
       bar.appendChild(inp);
       bar.appendChild(tbtn('ADD', add, 'go'));
       body.appendChild(bar);
-      body.appendChild(list);
+      if (partOn(cfg, 'list')) body.appendChild(list);
       paint();
     },
   };
@@ -5121,6 +5329,7 @@ layout = toWork(takeLayout(splitOld(layout)), BOARD);
 let layoutSeen = '';
 const seenKey = s => JSON.stringify([s || null, chosenEmpty()]);
 const saveLayout = () => { try {
+  keepReach();
   const all = toStore(layout, BOARD).concat(layoutHeld);
   /* the list first, then the flag, each only as it changes */
   layoutSeen = JSON.stringify([all, !all.length]);
@@ -5775,6 +5984,21 @@ function hint(m, x, y, w, h, land) {
    both landing on the same list. The buttons in REARRANGE mode stay - law 6
    says a gesture may be a shortcut to something visible, never the only way
    to reach it. */
+/* a sub-menu of things to tick on and off: `list()` is [[id, label]],
+   `isOn(id)` reads, `put(id, on)` writes the card's config */
+function tickList(title, x, y, list, isOn, put) {
+  const build = () => {
+    const L = list(), onN = L.filter(p => isOn(p[0])).length;
+    return L.map(p => ({ label: p[1], check: isOn(p[0]),
+      fn: () => {
+        const on = !isOn(p[0]);
+        if (!on && onN < 2) { UI.toast && UI.toast('One has to stay on'); return; }
+        put(p[0], on); saveLayout(); drawHome();
+        UI.menu(x, y, build(), { title: title });
+      } }));
+  };
+  return build();
+}
 function widgetMenu(i, x, y) {
   const cfg = layout[i]; if (!cfg) return;
   const W = WIDGETS[cfg.t]; if (!W) return;
@@ -5804,10 +6028,22 @@ function widgetMenu(i, x, y) {
     /* A widget that says what ranges it understands gets them offered here,
        so a second copy of it can show a different stretch of time. */
     cfg.zoom && !NARROW() ? { label: 'Zoom back to 100%', fn: () => { delete cfg.zoom; saveLayout(); drawHome(); } } : null,
-    W.days ? '-' : null,
-    W.days ? { label: 'Show', sub: W.days.map(d => ({
+    W.days || W.periods || W.parts ? '-' : null,
+    W.days ? { label: 'Time frame', sub: W.days.map(d => ({
         label: d[1], check: (cfg.days || W.day0 || 90) === d[0],
         fn: () => { cfg.days = d[0]; saveLayout(); drawHome(); } })) } : null,
+    /* tick lists: each pick redraws the card and opens the list again, so
+       several can be ticked in a row; the last one on cannot go */
+    W.periods ? { label: 'Time frames', sub: tickList('Time frames', x, y,
+      () => W.periods.map(id => [id, PERIODS.filter(p => p[0] === id)[0][1]]),
+      id => (cfg.cols || W.periodsDef()).indexOf(id) > -1,
+      (id, on) => { const cur = (cfg.cols || W.periodsDef()).filter(c => c !== id);
+        if (on) cur.push(id); cfg.cols = W.periods.filter(p => cur.indexOf(p) > -1); }) } : null,
+    W.parts ? { label: 'Show', sub: tickList('Show', x, y,
+      () => partsOf(W, cfg),
+      id => partOn(cfg, id),
+      (id, on) => { const off = (cfg.off || []).filter(o => o !== id); if (!on) off.push(id);
+        if (off.length) cfg.off = off; else delete cfg.off; }) } : null,
     /* a widget with choices of its own puts them here, the same menu */
     ...(W.menu ? W.menu(cfg, () => { saveLayout(); drawHome(); }) : []),
     '-',
@@ -6001,6 +6237,23 @@ function drawHome() {
    shrinks in a window too narrow for the board on it, so nothing scrolls
    sideways, and it no longer shrinks to fit the height: a board taller
    than the window scrolls down. */
+/* A board is as wide as it has ever reached, per board. Tom, 2026-10-18:
+   "when I removed an app, everything got rearranged". His wide board
+   reaches column 45 of a screen that fits about 24, so the cell is shrunk
+   to fit it; removing APPS, the card furthest right, took the reach to 41
+   and every card grew 11% and moved. The reach the board was last drawn
+   with is kept on every change he makes (`lifeos.boardReach`, synced), so
+   a card leaving the edge leaves empty columns instead; it grows when a
+   card goes further right, and never shrinks by itself. */
+let drawnReach = 0;
+const boardReach = () => { const v = Rec.setting('lifeos', 'boardReach'); return v && typeof v === 'object' ? v : {}; };
+function keepReach() {
+  if (NARROW() || !drawnReach) return;
+  const r = boardReach();
+  if ((r[BOARD] || 0) >= drawnReach) return;
+  r[BOARD] = drawnReach;
+  Rec.setting('lifeos', 'boardReach', r);
+}
 let COLS = 12, SCALE = 1;
 const CELL = { w: 146, h: 84 };
 function fitGrid() {
@@ -6055,8 +6308,11 @@ function fitGrid() {
     n.style.setProperty('--ch', ch);
     effH[+n.dataset.i] = ch;
   });
-  /* how far the cards reach, and the cell that fits that in the window */
-  const usedC = Math.max(12, layout.reduce((a, c) => Math.max(a, (c.x || 1) + c.w - 1), 1));
+  /* how far the cards reach, and the cell that fits that in the window;
+     never less than the board has been, so taking a card off the right
+     edge does not make every other card jump bigger (keepReach) */
+  const usedC = Math.max(12, layout.reduce((a, c) => Math.max(a, (c.x || 1) + c.w - 1), 1), boardReach()[BOARD] || 0);
+  drawnReach = usedC;
   const sw = (Wd - (usedC - 1) * gap) / (usedC * CELL.w);
   /* full size, and smaller only in a window too narrow for the board */
   SCALE = Math.max(0.1, Math.min(1, sw));

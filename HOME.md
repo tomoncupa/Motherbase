@@ -376,3 +376,33 @@ events: the pane was not taking coordinate drags) and the real right-click
 menu: MACROS to 6 rows, to 1, Taller, Fit to contents back to 3, saved in
 `lifeos.layout`; phone 375 three figures at one scale; no console errors.
 NOT on his screens.]
+
+## 2026-10-18, HOME 1.0.73-1.0.74: pick what every card shows, and a removed card no longer rescales the board
+
+Tom: "a widget like work done, I want to be able to right click and pick
+which dates and time frames get displayed", "I don't need move up/down
+wider or narrower", "Apply this level of granularity and modularity to
+everything", and "when I removed an app, everything got rearranged".
+- **1.0.73** took Move up, Move down, Wider and Narrower off the card menu,
+  alone in its commit. REARRANGE keeps its arrows for the phone.
+- **Three levers on every card's menu**, saved on the card: `days` (one
+  stretch, now labelled **Time frame**), `periods` (stretches side by side,
+  **Time frames**, `cfg.cols`, from `PERIODS`: rolling 7 to 365 days, this
+  and last week, this and last month, this year, all time, via
+  `periodOf`), and `parts` (**Show**, `cfg.off`, read with `partOn`). Tick
+  lists reopen after each tick (`tickList`); the last one on stays.
+  `partToggle` is a single "Show ..." tick for a widget with one piece.
+  Untouched, every card draws exactly as before (all 54 cards' text
+  compared before and after). WORK DONE is the reference: any of PERIODS
+  as columns, any row off. Every widget got its choices except STICKY,
+  THE YEAR and the app cards; the full list is in the commit's session.
+- **Board reach is kept** (`lifeos.boardReach`, per board, written on any
+  change he makes, `keepReach`). His wide board reaches column 45 on a
+  screen that fits about 24, so the cell shrinks to fit; removing APPS (the
+  card furthest right) took the reach to 41 and every card grew 11% and
+  moved. Now the board never narrows by itself; a card placed further right
+  still widens it.
+[TESTED on the demo through real right-click menus at 1920 (helper agent:
+every widget, every option, no page errors), and his saved board from the
+16 Oct backup at 3840: APPS removed, scale 0.50 before and after, no card
+moved. NOT on his screens.]
