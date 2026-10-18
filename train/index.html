@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.65, 2026-10-18">
+<meta name="mb-version" content="1.0.66, 2026-10-18">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -623,13 +623,11 @@ div.prow{padding:0}
 .sesshead .nm span{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap);
   text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sesshead.flat{box-shadow:none;background:none;padding:0;cursor:default}
-/* The strip and its how-it-went line are one card. */
-.sesswrap{border-radius:var(--radius-md);background:var(--surface-1);box-shadow:var(--e-1),var(--rim);overflow:hidden}
-.sesswrap > .sesshead{background:none;box-shadow:none;border-radius:0}
-.sessdesc{display:block;width:100%;min-height:var(--tap);padding:var(--s-2) var(--s-4);text-align:left;
-  border:0;border-top:1px solid var(--border);background:none;font:inherit;font-size:var(--f-2);
-  color:var(--text-2);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sessdesc.none{color:var(--text-muted)}
+/* The strip on the day: one line, as short as a tap allows. */
+.sesshead.slim{padding-top:0;padding-bottom:0}
+.sesshead.slim .nm{flex-direction:row;align-items:baseline;gap:var(--s-2)}
+.sesshead.slim .nm b{font-size:var(--f-3);flex:0 1 auto}
+.sesshead.slim .nm span{flex:1 1 0;text-transform:none;letter-spacing:normal;font-size:var(--f-1)}
 .desctags .addtag{display:inline-flex;align-items:center;gap:var(--s-1)}
 .desctags .addtag .mb-ico{width:1em;height:1em}
 .raterow{display:flex;gap:var(--s-2)}
@@ -9002,23 +9000,17 @@ TRAIN.sessionNames = function (except) {
 
 function sessionHead(date) {
   var s = Rec.get('session', date, '') || {}, ph = TRAIN.phaseOn(date);
-  var wrap = UI.el('div', 'sesswrap');
-  var el = UI.el('div', 'sesshead mb-press');
+  /* One line, Tom 2026-10-18: "minimize the amount of space that entry box
+     takes". The name, then what describes the day, then the block. */
+  var said = [TRAIN.describeLine(s), ph ? TRAIN.phaseLine(ph, date) : ''].filter(Boolean).join(' · ');
+  var el = UI.el('div', 'sesshead slim mb-press');
   el.innerHTML = '<div class="nm">' +
     (s.name ? '<b>' + UI.esc(s.name) + '</b>' : '<b class="none">Name this session</b>') +
-    '<span>' + UI.esc(ph ? TRAIN.phaseLine(ph, date) : 'No training block') + '</span></div>';
+    (said ? '<span>' + UI.esc(said) + '</span>' : '') + '</div>';
   el.onclick = function () { Mobile.feedback('open'); TRAIN.sessionDialog(date); };
   withMenu(el, function (e) { sessionMenu(date, e); });
   el.appendChild(rowMenuBtn('Session options', function (e) { sessionMenu(date, e); }));
-  wrap.appendChild(el);
-  /* How it went: its own row, so rating it never brings the keyboard up */
-  var said = TRAIN.describeLine(s);
-  var d = UI.el('button', 'sessdesc mb-press' + (said ? '' : ' none'));
-  d.type = 'button';
-  d.textContent = said || 'How did it go?';
-  d.onclick = function () { Mobile.feedback('open'); TRAIN.describeDialog(date); };
-  wrap.appendChild(d);
-  return wrap;
+  return el;
 }
 
 /* ── how the session went: context tags and three ratings ──
@@ -9057,7 +9049,7 @@ TRAIN.describeDialog = function (date) {
   date = date || TRAIN.date;
   var cur = function () { return Rec.get('session', date, '') || {}; };
   UI.dialog({
-    title: 'HOW IT WENT', width: 440,
+    title: 'DESCRIBE SESSION', width: 440,
     body: function (b) {
       var g = UI.el('div', 'mb-group'); g.textContent = 'CONTEXT'; b.appendChild(g);
       var chips = UI.el('div', CHIPS + ' desctags');
@@ -9137,7 +9129,7 @@ function sessionMenu(date, e) {
   var ph = TRAIN.phaseOn(date);
   menuAt(e, [
     { label: 'Name Session', fn: function () { TRAIN.sessionDialog(date); } },
-    { label: 'How It Went', fn: function () { TRAIN.describeDialog(date); } },
+    { label: 'Describe Session', fn: function () { TRAIN.describeDialog(date); } },
     { label: 'Compare With A Day', fn: function () { TRAIN.pickVs(date); } },
     { label: ph ? 'Edit Training Block' : 'New Training Block', fn: function () { TRAIN.phaseDialog(ph ? ph.key : null); } },
     { label: 'Share Picture', fn: function () { TRAIN.shareRecap(date); } },
@@ -10562,8 +10554,9 @@ document.getElementById('moreBtn').onclick = function (e) {
   } else if (scr === 'workout') {
     var phNow = TRAIN.phaseOn(TRAIN.date);
     items = [
-      { label: 'Settings', fn: function () { TRAIN.settings(); } },
       { label: 'Name Session', fn: function () { TRAIN.sessionDialog(TRAIN.date); } },
+      { label: 'Describe Session', fn: function () { TRAIN.describeDialog(TRAIN.date); } },
+      { label: 'Settings', fn: function () { TRAIN.settings(); } },
       { label: 'Compare With A Day', fn: function () { TRAIN.pickVs(TRAIN.date); } },
       { label: 'Copy Session', fn: function () { TRAIN.copyWorkoutFlow(); } },
       { label: 'Copy This Session', fn: function () { TRAIN.copyThisWorkoutFlow(); } },

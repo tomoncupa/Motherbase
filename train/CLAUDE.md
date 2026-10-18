@@ -973,11 +973,11 @@ Curl separate; and *"There is no barbell squat?"*
   reps) per lift and session against the last same session, drops shown
   on his screens, gains only when shared.
 
-## How it went (1.0.65, 2026-10-18)
+## Describe Session (1.0.65 to 1.0.66, 2026-10-18)
 
 - Tom: descriptors "like 'fasted' or 'feeling strong'. Just something to describe the overall context of that day", and "rating fields for energy and pump and session quality". **Sleep is STATUS's**; never ask it here.
 - `session.tags` (words, his own or the starters in `TRAIN.TAG_STARTERS`, his used ones first) and `energy`, `pump`, `quality` (1 to 5, three fields so two devices merge). Every tap saves at once; the same number again clears.
-- The session strip is one card: name and block above, the how-it-went line below (`.sessdesc`, its own 44px button, so rating never brings up the keyboard). Session menu: How It Went. The session card shows the line on screen, **never on a shared picture**.
+- **No "How did it go?" row** (Tom, 1.0.66: "I don't want a how did it go"). The session strip is ONE 44px line: name, then tags and ratings, then the block, ellipsed (`.sesshead.slim`). Name Session and Describe Session are the first two items of the day's More menu, above Settings, and in the strip's own menu. The session card shows the line on screen, **never on a shared picture**.
 - Works with no name. Not yet read by COACH, Analysis or a graph.
 
 ## Parked
