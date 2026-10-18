@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.19, 2026-10-06">
+<meta name="mb-version" content="1.0.20, 2026-10-18">
 <title>LOG</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -125,7 +125,7 @@ main.dragging{cursor:grabbing;user-select:none}
 .c-w{width:var(--w-w, clamp(var(--s-10), 14vw, calc(var(--s-10) * 2)))}
 /* A day column's width comes from its own --w-<key> once dragged, else its
    starting width; the script hands both over as --cw. */
-.heads .c.cx,.xt,.xn{width:var(--cw, var(--s-9))}
+.heads .c.cx,.xt,.xn,.xs{width:var(--cw, var(--s-9))}
 
 /* Headings are small print: they name columns, they are not the content. A
    column's edge shows only while the pointer is over the headings, which is
@@ -198,7 +198,7 @@ main.dragging{cursor:grabbing;user-select:none}
 .cal:not(.near) .day{height:var(--dh)}
 .cal.tiny .day{border-top-width:0}
 .cal.small:not(.near) .xd>.hd{display:grid}
-.cal:not(.near):not(.small) .xt>*,.cal:not(.near):not(.small) .xn>*{display:none}
+.cal:not(.near):not(.small) .xt>*,.cal:not(.near):not(.small) .xn>*,.cal:not(.near):not(.small) .xs>*{display:none}
 
 /* Zoomed in, and always in the notebook: a day grows to fit, so it never
    has to be opened to be read. */
@@ -223,9 +223,12 @@ main.dragging{cursor:grabbing;user-select:none}
 .cal.small:not(.near) .xd>.hd{grid-template-columns:var(--datews, var(--s-8)) minmax(0,1fr);
   height:100%;align-items:center;padding:0 var(--s-3);background:none;line-height:1}
 .cal.small:not(.near) .xd>.hd .lab{font-family:var(--font-body);font-size:var(--ts, var(--f-2))}
-.cal.small:not(.near) .xd>.hd .sum{font-size:var(--ts, var(--f-2));line-height:1}
 
-/* The day's line, beside the date. Looks like text until pointed at. */
+/* The day's line, in its own column beside the date since 2026-10-18.
+   Looks like text until pointed at. Zoomed in it starts level with the date. */
+.xs{display:flex;align-items:flex-start;padding:var(--s-2) var(--s-3)}
+.cal.small:not(.near) .xs{align-items:center;padding:0 var(--s-3)}
+.cal.small:not(.near) .xs .sum{font-size:var(--ts, var(--f-2));line-height:1}
 .sum{min-width:0;max-width:80ch;width:100%;font:inherit;font-size:var(--tb, var(--f-4));
   line-height:var(--lh-tight);color:var(--text-1);background:none;border:0;border-radius:0;
   border-bottom:var(--border-width) solid transparent;padding:0;cursor:text}
@@ -298,7 +301,9 @@ main.dragging{cursor:grabbing;user-select:none}
 .flow{position:absolute;left:0;right:0;top:0}
 .cal.book .drow{flex-direction:column}
 .cal.book .xc{border-right:0}
-.cal.book .xt,.cal.book .xn{width:auto}
+.cal.book .xt,.cal.book .xn,.cal.book .xs{width:auto}
+.cal.book .xs{display:block;padding:0 var(--s-4) var(--s-2)}
+.cal.book .xs .xl{padding-left:0;padding-right:0}
 .cal.book .xl{display:block;padding:var(--s-2) var(--s-4) 0;font-size:var(--ts, var(--f-2));color:var(--text-muted)}
 .cal.book .xn{justify-content:space-between;align-items:baseline}
 .cal.book .xn.empty{display:none}
@@ -503,13 +508,16 @@ const X_EXTRA = [
   { key: 'spent',   kind: 'spend',               name: 'Spent' },
 ];
 /* Spent joined these on 2026-09-18: Tom wanted the day's spending beside the days. */
-const X_SHOWN_FIRST = ['done', 'f-mood', 'f-energy', 'spent'];
+const X_SHOWN_FIRST = ['sum', 'done', 'f-mood', 'f-energy', 'spent'];
 let xDefCache = null;        /* cleared whenever the store changes, since a field can be added in STATUS */
 function xDefs() {
   if (xDefCache) return xDefCache;
   const fields = Object.values(Rec.map('field')).filter(f => f && f.id)
     .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.label || '').localeCompare(String(b.label || '')));
-  xDefCache = [{ key: 'done', kind: 'text', name: 'What got done today' }]
+  /* Tom, 2026-10-18: "I want the date and the summary of the day to be
+     different columns." The day's line was a box beside the date inside the
+     Days column; it is a column of its own now, still `day.note`. */
+  xDefCache = [{ key: 'sum', kind: 'sum', name: 'Summary' }, { key: 'done', kind: 'text', name: 'What got done today' }]
     /* Tom, 2026-09-19: "Give me the option to add columns in LOG". Text
        columns of his own, each day's box a `cell` row like What got done. */
     .concat(myCols().map(c => ({ key: c.k, kind: 'text', name: c.name, mine: true })))
@@ -522,10 +530,12 @@ const xKeys = () => xDefs().map(x => x.key);
 const defaultName = k => { const d = xDef(k); return d ? d.name : k === 'd' ? 'Days' : COL_NAMES[k] || k; };
 const colName = k => { const n = S.get('colnames', null); return (n && n[k]) || defaultName(k); };
 const isXOn = k => { const v = S.get('xvis', null) || {}; return k in v ? !!v[k] : X_SHOWN_FIRST.indexOf(k) > -1; };
-const xWidth = k => 'var(--w-' + k + ', ' + (xDef(k) && xDef(k).kind === 'text' ? 'calc(var(--s-10) * 2.5)' : 'var(--s-9)') + ')';
+const xWidth = k => 'var(--w-' + k + ', ' + (xDef(k) && (xDef(k).kind === 'text' || xDef(k).kind === 'sum') ? 'calc(var(--s-10) * 2.5)' : 'var(--s-9)') + ')';
 function xOrder() {
   const all = ['d'].concat(xKeys()), saved = S.get('xorder', null);
   const out = (Array.isArray(saved) ? saved : []).filter(k => all.indexOf(k) > -1);
+  /* An order saved before the Summary column existed gets it beside the date, not at the end. */
+  if (out.length && out.indexOf('sum') < 0) out.splice(Math.max(0, out.indexOf('d')) + 1, 0, 'sum');
   all.forEach(k => { if (out.indexOf(k) < 0) out.push(k); });
   return out;
 }
@@ -971,14 +981,17 @@ function dayHTML(p) {
   const cells = visibleX().map(k => {
     if (k === 'd') {
       return '<div class="xc xd">' +
-        '<div class="hd"><span class="lab">' + esc(p.label) + '</span>' +
-          '<input class="sum" type="text" maxlength="240" data-d="' + p.from + '" value="' + attr(note) +
-          '" aria-label="' + attr(p.label) + '"></div>' +
+        '<div class="hd"><span class="lab">' + esc(p.label) + '</span></div>' +
         '<div class="bw">' + graphHTML(p.from) + '<div class="bls">' + list.map(bulletHTML).join('') + '</div></div></div>';
     }
     const def = xDef(k);
     if (!def) return '';
     const cw = ' style="--cw:' + xWidth(k) + '"';
+    if (def.kind === 'sum') {
+      return '<div class="xc xs" data-col="' + k + '"' + cw + '><span class="xl">' + esc(colName(k)) + '</span>' +
+        '<input class="sum" type="text" maxlength="240" data-d="' + p.from + '" value="' + attr(note) +
+        '" aria-label="' + attr(colName(k) + ', ' + p.label) + '"></div>';
+    }
     if (def.kind === 'text') {
       return '<div class="xc xt" data-col="' + k + '"' + cw + '><span class="xl">' + esc(colName(k)) + '</span>' +
         '<textarea class="cell" rows="1" data-d="' + p.from + '" data-col="' + k + '" aria-label="' + attr(colName(k) + ', ' + p.label) + '">' +
