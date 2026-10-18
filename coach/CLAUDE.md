@@ -357,3 +357,13 @@ client, and Tom's own `set`, `exercise` and `tick` counts did not move.
 - **No blinking:** `draw()` builds all three columns and swaps only a column whose built HTML differs from the last draw's (`drawn`), so a sync or an unrelated write moves nothing. A different client fades in (`mv-in`), with a timer that takes the class off in an undrawn page.
 - **TRAIN inside COACH is one bar:** `.obar` is hidden; TRAIN's back arrow posts `coach-close` and `closeTrain()` runs. DONE's code stays for a TRAIN too old to have the arrow.
 
+## The layout (1.0.23, 2026-10-18)
+
+- Tom picked all six fixes. Measured first at his 1928 x 943 frame: the client was 1,510px tall, recent sessions 1,045px, the range below the fold, programs under the box mostly off screen, strength twice.
+- **Two views beside the box:** the client, or PROGRAMS (`view`, `.cols[data-view]`). The header's Programs button toggles it; the client card's Program button opens First Sets for that client; Back To <name> returns. Picking a client while on First Sets stays on First Sets, anywhere else shows the client.
+- **The box column is 260 to 300px** at every width past 760.
+- **Past 1180px (`WIDE`)** the client is a grid: the name card and the range share the top row (range 140px tall), then the week and check-in, the sessions, the strength; two columns to 1560, three past it. Below 1180 one column, range straight under the name.
+- **One Strength:** the all-time table sits inside the block strength card (`.card.bk`) under ALL TIME.
+- **Recent sessions shows five**, then Show N More adds ten.
+- Result at 1928 x 943: client 1,297px tall, name and range on the first screen. At 1440: 2,463px from 3,190. [Measured in the Browser pane; NOT on his screen.]
+
