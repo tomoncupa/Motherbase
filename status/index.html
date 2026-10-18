@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.73, 2026-10-18">
+<meta name="mb-version" content="1.0.74, 2026-10-18">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -227,6 +227,10 @@ button.islehero{background:none;border:0;padding:0;margin:0;color:inherit;
 .hero .u{font-size:var(--f-2);font-weight:400;color:var(--text-muted);letter-spacing:0;margin-left:var(--s-1)}
 /* the divider in "1,680 / 2,400" - present, and quieter than either number */
 .hero .sl{color:var(--text-muted);font-weight:400;margin:0}
+.logbar{display:flex;align-items:center;gap:var(--s-3);margin-top:var(--s-2)}
+.logbar > .btn{flex:1;min-width:0}
+.fullsw{display:flex;align-items:center;gap:var(--s-2);flex:none;min-height:44px;
+  font-size:var(--f-1);color:var(--text-muted);cursor:pointer;white-space:nowrap}
 /* A value with a slash in it - 200/175 - is nearly twice as wide as a plain
    one and was running under the unit. It steps down instead of overflowing;
    the tile is a fixed width and the number has to live inside it. */
@@ -4816,9 +4820,20 @@ function drawFood(m) {
   c2.id = 'foodlog';
   c2.appendChild(foodGrid(d, list));
   const b = el('button', 'btn line wide', 'Log food');
-  b.style.marginTop = 'var(--s-2)';
   b.onclick = foodPicker;
-  c2.appendChild(b);
+  /* Tom, 2026-10-18, option A: whether the day's food is all in, on the row
+     he logs from. Beside the calorie number it wrapped that number onto two
+     lines on a phone; here it adds no height. It is the same `untracked` flag
+     as the island's hold menu, so TDEE skips the day as before, and the day
+     sheet says "not fully logged" against Calories and Protein instead of
+     grading a half-logged day as under-eating. Weight in the grade: none. */
+  const bar = el('div', 'logbar');
+  bar.appendChild(b);
+  const full = el('label', 'fullsw');
+  full.appendChild(el('span', '', 'Logged in full'));
+  full.appendChild(UI.toggle(!dayUntracked(d), on => { setDayUntracked(d, !on); draw(); }));
+  bar.appendChild(full);
+  c2.appendChild(bar);
   /* Quieter on purpose: a one-off leaves nothing behind to log again, so it is
      the wrong default. It is here for a restaurant meal you will never eat
      twice, where adding it to the database is just litter.
@@ -5675,6 +5690,7 @@ function dayScore(date) {
   const live = PILLARS(), parts = [], pending = [];
   const today = date === Day.today();
   const T = TARGETS(), tot = dayTotals(date), ate = meals(date).length > 0;
+  const untracked = dayUntracked(date);
 
   /* Each pillar earns a letter off its own ladder and the day is the average
      of those letters. `score` is the same letter as a fraction, so the tiles
@@ -5714,7 +5730,7 @@ function dayScore(date) {
     if (val == null) pending.push(label);
     parts.push({ id: id, label: label, letter: letter, score: asScore(letter),
                  val: val, target: target, unit: unit || '', acc: acc,
-                 waiting: val == null });
+                 waiting: val == null, partial: acc != null && untracked });
   };
 
   if (live.indexOf('protein') > -1)
@@ -5898,7 +5914,8 @@ function daySheet(date) {
         list.appendChild(el('div', 'dayrow',
           '<span class="pl">' + esc(pt.label) + '</span>' +
           '<span class="pv">' + shown + against + (pt.unit ? ' ' + esc(pt.unit) : '') +
-          (pt.acc != null ? '<i>' + Math.round(pt.acc) + '% accurate</i>' : '') + '</span>' +
+          (pt.partial ? '<i>not fully logged</i>'
+            : pt.acc != null ? '<i>' + Math.round(pt.acc) + '% accurate</i>' : '') + '</span>' +
           '<span class="pk" style="color:' + c + '">' + pt.letter + '</span>'));
       });
       body.appendChild(list);
