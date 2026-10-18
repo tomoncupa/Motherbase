@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.23, 2026-10-18">
+<meta name="mb-version" content="1.0.24, 2026-10-18">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -64,9 +64,14 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-7) + var(--s
   .cols{max-width:2400px}
   .cols .clientcol{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s-4);align-items:start}
   .cols[data-view="prog"] .clientcol{display:none}
-  .cc{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
-  .cc-d{grid-column:1 / -1;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s-4);align-items:stretch}
-  .cc-c{grid-column:1 / -1}
+  /* where each card stands is Tom's (1.0.24): a top row, then three columns.
+     Narrower than 1560 the third column is a row of its own under the two. */
+  .cc,.cw{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
+  .cc-top{grid-column:1 / -1;display:flex;gap:var(--s-4);align-items:stretch;min-width:0}
+  .cc-top > .cw{flex:1 1 0}
+  .cc-top > .cw > .card{flex:1}
+  .cc[data-w="2"]{grid-column:1 / -1}
+  .clientcol:not(.lay-drag) .cc-top:empty{display:none}
   .sesh .lift .ln,.sesh .lift .ls{white-space:normal}
   .card .cidays{flex-wrap:wrap;overflow-x:visible}
   table.lifts td.n{white-space:nowrap}
@@ -74,9 +79,20 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-7) + var(--s
 }
 @media (min-width:1560px){
   .cols .clientcol{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1fr)}
-  .cc-c{grid-column:auto}
-  .cc-d{grid-template-columns:minmax(0,1fr) minmax(0,2.2fr)}
+  .cc[data-w="2"]{grid-column:auto}
+  .cc-top > .cw[data-card="range"]{flex-grow:2.2}
 }
+/* moving a card: grabbed by its heading, a line where it will land, the
+   card faded where it was, and an empty column shown as a place to drop */
+.lay-h{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.lay-h button{cursor:pointer}
+.cw.lifted{opacity:.35}
+.lay-drag .cc:empty,.lay-drag .cc-top:empty{min-height:calc(var(--tap) * 2);border-radius:var(--radius-lg);box-shadow:inset 0 0 0 1px var(--border)}
+.lay-mark{position:fixed;left:0;top:0;z-index:50;pointer-events:none;background:var(--accent);border-radius:var(--radius-sm)}
+.lay-ghost{position:fixed;left:0;top:0;z-index:51;pointer-events:none;display:flex;align-items:center;gap:var(--s-2);
+  min-height:var(--tap);padding:0 var(--s-4);border-radius:var(--radius-lg);background:var(--surface-2);color:var(--text-1);
+  box-shadow:var(--e-1),var(--rim);font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-cap);font-size:var(--f-2)}
+.lay-ghost svg{color:var(--accent)}
 .alltime{margin-top:var(--s-5)}
 .card{border-radius:var(--radius-lg);background:var(--surface-1);padding:var(--s-4);box-shadow:var(--e-1),var(--rim)}
 .col{display:flex;flex-direction:column;gap:var(--s-4);min-width:0}
@@ -765,6 +781,10 @@ document.addEventListener('contextmenu', e => {
     { label: 'Sends', fn: () => document.getElementById('sends').click() },
   ];
   if (sel && people()[sel]) items.push('-', { label: (people()[sel].name || 'Client'), sub: clientItems(sel) });
+  /* on a card, that card's moves come first; anywhere, Reset Layout once there is one */
+  const cw = e.target.closest('.clientcol .cw[data-card]');
+  if (cw) items.unshift.apply(items, cardItems(cw.dataset.card).filter(x => x !== '-' && x.fn !== resetLayout).concat('-'));
+  if (WIDE.matches && view === 'client' && opt('layout')) items.push('-', { label: 'Reset Layout', fn: resetLayout });
   items.push('-', { label: 'Settings', fn: () => settings() });
   UI.menu(e.clientX, e.clientY, items);
 });
@@ -1099,7 +1119,8 @@ function drawWeek(col, pid, ss) {
     { label: 'Week Before', fn: () => { weekAt = Day.shift(weekAt, -7); draw(); } },
     weekAt < thisWeek ? { label: 'Week After', fn: () => { weekAt = Day.shift(weekAt, 7); draw(); } } : null,
     weekAt !== thisWeek ? { label: 'This Week', fn: () => { weekAt = thisWeek; draw(); } } : null,
-  ].filter(Boolean));
+  ].filter(Boolean).concat(andCard('week')));
+  head.dataset.menu = '1';
   card.appendChild(head);
 
   const strip = document.createElement('div'); strip.className = 'wkdays';
@@ -1192,23 +1213,174 @@ const WIDE = window.matchMedia ? matchMedia('(min-width:1180px)') : { matches: f
 if (WIDE.addEventListener) WIDE.addEventListener('change', () => draw());
 else if (WIDE.addListener) WIDE.addListener(() => draw());
 function drawClient(col) {
-  if (!WIDE.matches) return drawClientIn(col, col, col, col);
-  const mk = n => { const d = document.createElement('div'); d.className = 'cc ' + n; return d; };
-  const a = mk('cc-a'), b = mk('cc-b'), c = mk('cc-c'), d = mk('cc-d');
-  drawClientIn(a, b, c, d);
-  [a, b, c, d].forEach(d => { if (d.firstChild) col.appendChild(d); });
+  const hold = {};
+  const put = id => hold[id] || (hold[id] = Object.assign(document.createElement('div'), { className: 'cw' }));
+  const has = id => hold[id] && hold[id].firstChild;
+  const client = drawClientIn(put);
+  /* narrow, or no client picked: one column, in the order it always was */
+  if (!WIDE.matches || !client) {
+    ['name', 'range', 'week', 'checkin', 'strength', 'sessions'].forEach(id => { while (has(id)) col.appendChild(hold[id].firstChild); });
+    return;
+  }
+  const L = layout();
+  LAY_W.forEach(w => {
+    const c = document.createElement('div'); c.className = w === 'top' ? 'cc-top' : 'cc'; c.dataset.w = w;
+    L[w].forEach(id => { if (!has(id)) return; hold[id].dataset.card = id; c.appendChild(hold[id]); grabCard(hold[id], id); });
+    col.appendChild(c);
+  });
 }
-/* `col` holds the client, their week and their check-in, `cs` the sessions,
-   `cr` the strength, `cw` the range across all three. Narrow, all four are the same column. */
-function drawClientIn(col, cs, cr, cw) {
+
+/* ── the client's cards, where Tom puts them (1.0.24, 2026-10-18) ──
+   Tom: "Coach - let me rearrange the screen layout", and "1 layout for all
+   clients". Past WIDE every card (the name, the range, the week, the
+   check-in, recent sessions, strength) is grabbed by its heading and dropped
+   in the top row or any of three columns, at any place in it; its heading's
+   right click or held finger moves it too. Where each stands is ONE setting,
+   `coach.layout`, {card: 'top:0' | '<column>:<place>'}: no lists, because
+   live sync drops an empty one. It is written only when Tom moves a card or
+   resets, never as a default on open (root Known traps). Narrower than WIDE
+   the cards stay one column in their old order. */
+const CARDS = { name: 'Name', range: 'Range', week: 'Week', checkin: 'Check In', sessions: 'Recent Sessions', strength: 'Strength' };
+const LAY0 = { name: 'top:0', range: 'top:1', week: '0:0', checkin: '0:1', sessions: '1:0', strength: '2:0' };
+const LAY_W = ['top', '0', '1', '2'];
+function layout() {
+  const s = opt('layout'), L = { top: [], 0: [], 1: [], 2: [] };
+  Object.keys(CARDS).map(id => {
+    const v = s && typeof s[id] === 'string' && /^(top|[012]):\d+$/.test(s[id]) ? s[id] : LAY0[id];
+    return { id: id, w: v.split(':')[0], i: +v.split(':')[1] };
+  }).sort((a, b) => a.i - b.i).forEach(x => L[x.w].push(x.id));
+  return L;
+}
+function moveCard(id, w, before) {
+  const L = layout(), was = JSON.stringify(L);
+  LAY_W.forEach(k => { L[k] = L[k].filter(x => x !== id); });
+  const i = before ? L[w].indexOf(before) : -1;
+  if (i < 0) L[w].push(id); else L[w].splice(i, 0, id);
+  if (JSON.stringify(L) === was && opt('layout')) return;   /* dropped where it was: nothing to write */
+  const v = {};
+  LAY_W.forEach(k => L[k].forEach((x, n) => { v[x] = k + ':' + n; }));
+  Rec.setting(APP.id, 'layout', v);
+  Mobile.feedback('success'); draw();
+}
+function resetLayout() {
+  const was = opt('layout');
+  Rec.setting(APP.id, 'layout', null); draw();
+  UI.toast('Layout reset', { action: { label: 'UNDO', fn: () => { Rec.setting(APP.id, 'layout', was); draw(); } } });
+}
+/* Move Up, Down, To Column N: the menu on a card's heading. Up and down step
+   past the cards on screen, so one this client has not got (no check-ins)
+   is never stepped over invisibly. */
+function cardItems(id) {
+  if (!WIDE.matches || view !== 'client') return [];
+  const L = layout(), w = LAY_W.find(k => L[k].indexOf(id) >= 0), top = w === 'top';
+  const vis = [...document.querySelectorAll('.clientcol > [data-w="' + w + '"] > .cw')].map(x => x.dataset.card);
+  const i = vis.indexOf(id), items = [];
+  if (i > 0) items.push({ label: top ? 'Move Left' : 'Move Up', fn: () => moveCard(id, w, vis[i - 1]) });
+  if (i >= 0 && i < vis.length - 1) items.push({ label: top ? 'Move Right' : 'Move Down', fn: () => moveCard(id, w, vis[i + 2] || null) });
+  if (!top) items.push({ label: 'Move To Top Row', fn: () => moveCard(id, 'top') });
+  ['0', '1', '2'].forEach(k => { if (k !== w) items.push({ label: 'Move To Column ' + (+k + 1), fn: () => moveCard(id, k) }); });
+  if (opt('layout')) items.push('-', { label: 'Reset Layout', fn: resetLayout });
+  return items;
+}
+const andCard = id => { const it = cardItems(id); return it.length ? ['-'].concat(it) : []; };
+/* The drag, the way the box's dragSlot does it: move 8px and the card is
+   lifted, a line shows where it will land, let go to put it there. Listened
+   for on the window, and every card looked up by name on each move, because
+   a sync landing mid-drag redraws the columns (root Known traps). */
+function grabCard(wrap, id) {
+  const h = wrap.querySelector('.who, .wkhead, .rg-head, h2') || wrap.firstChild;
+  if (!h) return;
+  h.classList.add('lay-h');
+  if (!h.dataset.menu) menuOn(h, () => cardItems(id));
+  h.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('button, input, textarea, a, [role="button"]')) return;
+    const x0 = e.clientX, y0 = e.clientY, sc = document.querySelector('main');
+    let ghost = null, mark = null, to = null, px = x0, py = y0, raf = 0;
+    const live = () => document.querySelector('.clientcol');
+    const target = () => {
+      const cc = live(); if (!cc) return null;
+      const conts = [...cc.querySelectorAll(':scope > [data-w]')];
+      const top = conts.find(c => c.dataset.w === 'top'), tr = top && top.getBoundingClientRect();
+      let c = null;
+      if (tr && py <= tr.bottom + 8) c = top;
+      else c = conts.filter(k => k !== top).map(k => {
+        const r = k.getBoundingClientRect();
+        const dx = px < r.left ? r.left - px : px > r.right ? px - r.right : 0;
+        const dy = py < r.top ? r.top - py : py > r.bottom ? py - r.bottom : 0;
+        return { k: k, d: dx * 1e4 + dy };
+      }).sort((a, b) => a.d - b.d).map(x => x.k)[0];
+      if (!c) return null;
+      const horiz = c.dataset.w === 'top';
+      const ws = [...c.querySelectorAll(':scope > .cw')].filter(x => x.dataset.card !== id);
+      const before = ws.find(x => { const r = x.getBoundingClientRect(); return horiz ? px < r.left + r.width / 2 : py < r.top + r.height / 2; }) || null;
+      return { c: c, w: c.dataset.w, before: before, last: ws[ws.length - 1], horiz: horiz };
+    };
+    const paint = () => {
+      const cc = live();
+      if (cc) cc.classList.add('lay-drag');
+      document.querySelectorAll('.clientcol .cw').forEach(x => x.classList.toggle('lifted', x.dataset.card === id));
+      ghost.style.transform = 'translate(' + (px + 12) + 'px,' + (py - 22) + 'px)';
+      to = target();
+      if (!to) { mark.style.display = 'none'; return; }
+      const r = to.c.getBoundingClientRect(), g = parseFloat(getComputedStyle(to.c).gap) || 16, t = 4;
+      const b = to.before && to.before.getBoundingClientRect(), l = to.last && to.last.getBoundingClientRect();
+      let x, y, w, hh;
+      if (to.horiz) { x = b ? b.left - g / 2 : l ? l.right + g / 2 : r.left + g; y = r.top; w = t; hh = Math.max(r.height, 44); x -= t / 2; }
+      else { y = b ? b.top - g / 2 : l ? l.bottom + g / 2 : r.top + g; x = r.left; w = r.width; hh = t; y -= t / 2; }
+      Object.assign(mark.style, { display: '', transform: 'translate(' + x + 'px,' + y + 'px)', width: w + 'px', height: hh + 'px' });
+    };
+    /* near the top or bottom of the page, it scrolls */
+    const tick = () => {
+      if (!ghost) return;
+      const r = sc.getBoundingClientRect(), edge = 56;
+      const v = py < r.top + edge ? py - (r.top + edge) : py > r.bottom - edge ? py - (r.bottom - edge) : 0;
+      if (v) { sc.scrollTop += Math.round(v / 3); paint(); }
+      raf = requestAnimationFrame(tick);
+    };
+    try { h.setPointerCapture(e.pointerId); } catch (_) {}
+    const move = ev => {
+      if (ev.pointerId !== e.pointerId) return;
+      px = ev.clientX; py = ev.clientY;
+      if (!ghost) {
+        if (Math.hypot(px - x0, py - y0) < 8) return;
+        ghost = document.createElement('div'); ghost.className = 'lay-ghost';
+        ghost.innerHTML = ico('drag') + '<span>' + esc(CARDS[id].toUpperCase()) + '</span>';
+        mark = document.createElement('div'); mark.className = 'lay-mark';
+        document.body.appendChild(mark); document.body.appendChild(ghost);
+        Mobile.feedback('select');
+        raf = requestAnimationFrame(tick);
+      }
+      paint();
+      ev.preventDefault();
+    };
+    const end = ev => {
+      if (ev.pointerId !== e.pointerId) return;
+      off();
+      if (!ghost) return;
+      cancelAnimationFrame(raf);
+      ghost.remove(); mark.remove(); ghost = null;
+      const cc = live(); if (cc) cc.classList.remove('lay-drag');
+      document.querySelectorAll('.clientcol .cw.lifted').forEach(x => x.classList.remove('lifted'));
+      if (ev.type === 'pointercancel' || !to) return;
+      moveCard(id, to.w, to.before ? to.before.dataset.card : null);
+    };
+    /* a redraw that replaces the heading loses the capture, and the window
+       still hears the rest, so the drag carries on over the new columns */
+    const off = () => { ['pointermove', 'pointerup', 'pointercancel'].forEach((k, i) => window.removeEventListener(k, i ? end : move)); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+  });
+}
+/* Each card goes into `put(<card>)`, its own holder; drawClient decides where
+   the holders stand. Returns false when no client is picked. */
+function drawClientIn(put) {
   const p = people()[sel];
   const card = document.createElement('div'); card.className = 'card';
   if (!p) {
     card.innerHTML = '<h2>CLIENT</h2><p class="empty">Pick a client in the box, or press an empty slot to add one. ' +
       'You log a 1:1 yourself with <b>Log Session</b>. An online client presses <b>Send To Coach</b> in TRAIN and it lands under <b>Sends</b> above. ' +
       'A check-in still comes as a file from CHECK IN, and so does a send from a phone that is not signed in. Both open with <b>Open Client File</b>.</p>';
-    col.appendChild(card);
-    return;
+    put('name').appendChild(card);
+    return false;
   }
   const ss = sessionsOf(sel);
   const who = document.createElement('div'); who.className = 'who';
@@ -1223,7 +1395,8 @@ function drawClientIn(col, cs, cr, cw) {
   const ed = document.createElement('button'); ed.className = 'ico mb-press mb-tap'; ed.innerHTML = ico('edit');
   ed.setAttribute('aria-label', 'Edit client'); ed.onclick = () => clientDialog(sel);
   who.appendChild(ed);
-  menuOn(who, () => clientItems(sel));
+  who.dataset.menu = '1';
+  menuOn(who, () => clientItems(sel).concat(andCard('name')));
   card.appendChild(who);
   if (!logDay) {
     /* Two things you do to a client's log, side by side: add to it, or bring
@@ -1248,15 +1421,14 @@ function drawClientIn(col, cs, cr, cw) {
     stat('LAST 4 WEEKS', ss.filter(s => s.date >= month).length) +
     stat('VOLUME', Math.round(unit() === 'lb' ? vol * KG_LB : vol).toLocaleString() + ' <small>' + unit() + '</small>');
   card.appendChild(stats);
-  /* wide, the name shares the top row with the range */
-  (cw === col ? col : cw).appendChild(card);
-  if (logDay) drawLog(col, sel, p);
+  put('name').appendChild(card);
+  if (logDay) drawLog(put('week'), sel, p);
   /* The week sits directly under the name, because it is the first question
      asked of a client and the only one that has an answer on a day nothing
      else changed. It draws even with no training in it: an empty week is an
      answer. */
-  drawWeek(col, sel, ss);
-  drawCheckin(col, sel, p);
+  drawWeek(put('week'), sel, ss);
+  drawCheckin(put('checkin'), sel, p);
   if (!ss.length) {
     const e = document.createElement('div'); e.className = 'card';
     /* Tom, 2026-09-23: "My 1:1s don't track their own sets at ALL." So a 1:1
@@ -1266,9 +1438,10 @@ function drawClientIn(col, cs, cr, cw) {
     e.innerHTML = p.box === 'one'
       ? '<p class="empty">No training for ' + esc(p.name || 'this client') + ' yet. Press <b>Log Session</b> — you log a 1:1, they do not.</p>'
       : '<p class="empty">No training from ' + esc(p.name || 'this client') + ' yet. Ask them to press <b>Send To Coach</b> in TRAIN. It arrives under <b>Sends</b>, or as a file they hand over.</p>';
-    col.appendChild(e);
-    return;
+    put('sessions').appendChild(e);
+    return true;
   }
+  const cr = put('strength');
   if (window.Range && window.Chart) drawBlockStrength(cr, sel);
   const lf = liftsOf(sel);
   if (lf.length) {
@@ -1284,19 +1457,20 @@ function drawClientIn(col, cs, cr, cw) {
     if (bs) { lc.className = 'alltime'; lc.querySelector('h2').textContent = 'ALL TIME'; bs.appendChild(lc); }
     else cr.appendChild(lc);
   }
-  drawRecent(cs, sel, ss);
+  drawRecent(put('sessions'), sel, ss);
   /* The long view goes last: the week and the sessions answer today, the
      range answers the year, and a coach reads them in that order. */
   if (window.Range) {
     const rc = document.createElement('div'); rc.className = 'card range';
     /* the year at a glance first (2026-10-18), not under everything else */
-    if (cw === col) col.insertBefore(rc, card.nextSibling); else cw.appendChild(rc);
+    put('range').appendChild(rc);
     Range.mount(rc, Range.fromRows(setsOf(sel), own('cphase', sel), Day.today()), WIDE.matches ? 140 : 200, {
       print: opt('rangePrint'), perDay: 2,
       volume: kg => { const v = +show(kg) || 0; return (v >= 1e6 ? Math.round(v / 1e5) / 10 + 'M' : v >= 1e5 ? Math.round(v / 1e3) + 'k' : Math.round(v).toLocaleString()) + ' ' + unit(); },
       onChange: o => { if (o.print !== opt('rangePrint')) Rec.setting(APP.id, 'rangePrint', o.print); },
     });
   }
+  return true;
 }
 
 /* One check-in on the client's profile: the photos of that day, then every
