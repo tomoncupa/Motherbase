@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<meta name="mb-version" content="1.0.7, 2026-10-06">
+<meta name="mb-version" content="1.0.8, 2026-10-18">
 <title>ARC — Mind Canvas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;600&family=Space+Grotesk:wght@500;700&family=Caveat:wght@500;700&family=Patrick+Hand&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
@@ -95,6 +95,9 @@ input,textarea{font-family:inherit;color:inherit}
   background:var(--acc);color:var(--acc-ink);font-family:var(--f-mono);font-size:11px;font-weight:700;
   display:flex;align-items:center;justify-content:center;pointer-events:none;box-shadow:var(--e-2, 0 2px 8px rgba(0,0,0,.45))}
 body.pathpicking .node{cursor:crosshair}
+/* a top node is the brand's gold, solid; the dark ink is the gold's own pair */
+.node.top{background:var(--c);border-color:var(--c)}
+.node.top .ndesc{color:inherit;opacity:.75}
 body.presenting .pathbadge{display:none}
 
 /* ---------- node toolbar ---------- */
@@ -1251,7 +1254,7 @@ function highlightSet(){
 const world=$('#world'), edgesSvg=$('#edges'), vp=$('#viewport');
 // render-scoped caches: cleared at the top of every render(); safe between renders because
 // anything that changes colors or selection always triggers a render
-const RC_COLOR=new Map(); const RC_RECT=new Map(); let RC_HL=null;
+const RC_COLOR=new Map(); const RC_RECT=new Map(); const RC_TOP=new Map(); let RC_HL=null;
 let decorT=null;
 function applyView(){
   world.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.k})`;
@@ -1278,7 +1281,7 @@ function hslHex(hh,s,l){
 }
 
 function render(){
-  RC_COLOR.clear(); RC_RECT.clear(); RC_HL=null; SKI=null; SKR.clear();
+  RC_COLOR.clear(); RC_RECT.clear(); RC_TOP.clear(); RC_HL=null; SKI=null; SKR.clear();
   $$('.node').forEach(e=>e.remove());
   edgesSvg.innerHTML='';
   const ns=Object.values(M().nodes);
@@ -1340,6 +1343,7 @@ function render(){
     if(n.w){el.style.width=n.w+'px';el.style.maxWidth='none'}
     if(n.scl&&n.scl!==1)el.style.padding=Math.round(10*n.scl)+'px '+Math.round(14*n.scl)+'px';
     el.style.setProperty('--c',nodeColor(n));
+    if(!GRAD&&!(M().rankColors&&n.rank)&&isTopNode(n)){el.classList.add('top');el.style.color=BRAND_INK}
     if(n.img){const im=document.createElement('img'); im.src=n.img; im.draggable=false; el.appendChild(im)}
     const t=document.createElement('div'); t.className='ntext';
     if(n.html)t.innerHTML=sanitize(n.html); else t.textContent=n.text||' ';
@@ -5389,7 +5393,7 @@ function importMarkdown(text,under){
     /* Tom, 2026-09-16: no curvy lines on a skill tree. Boss on top. */
     M().edgeStyle='ortho'; syncEdgeBtn();
     newIds.clear(); render();
-    (under?[rootOf(under)]:rootIds).forEach(r=>layoutTree(r,true));
+    layoutTree(under?[rootOf(under)]:rootIds,true);
     render(); resolveOverlaps(null,true); render(); save(); fitView();
     skSyncSoon();
     $('#teachpanel').classList.add('show'); $('#btn-teach').classList.add('on'); renderSkillPanel();
@@ -5427,64 +5431,110 @@ function rootOf(id){let n=M().nodes[id];while(n&&n.parentId)n=M().nodes[n.parent
    either. layoutBranch (the old Radial) stays, because a markdown import fans with it. */
 function layoutFn(kind){return({level:layoutLevel,tree:layoutTree,tidy:layoutTidy})[kind]||layoutLevel}
 function layoutName(kind){return({level:'Clean',tree:'Tree',tidy:'Tidy'})[kind]||'Clean'}
-/* CLEAN. Tom, 2026-09-14: "I don't like how the branches aren't on the same level."
-   An ortho elbow bends halfway between a parent's bottom and its child's top, so two
-   siblings at different heights bend at two different heights. Every node at the same
-   depth goes on one row, tops aligned, and every elbow under one parent lines up.
-   Sideways positions are his and are kept: a node only slides right if levelling
-   would drop it onto its neighbour. Rows keep the gap he already uses between a
-   parent and its children (the median at that depth, never under 40), so a roomy map
-   stays roomy. The root does not move. A collapsed branch is left alone. */
-function layoutLevel(rootId,skipSnap){
-  const root=M().nodes[rootId]; if(!root)return;
-  if(!skipSnap)snap();
-  const rows=[];
-  (function walk(id,d){
-    (rows[d]=rows[d]||[]).push(id);
-    if(!M().nodes[id].collapsed)layoutKids(id).forEach(k=>walk(k.id,d+1));
-  })(rootId,0);
-  const sz={};
-  rows.flat().forEach(id=>{const r=nodeRect(id);sz[id]=r?{w:r.w,h:r.h}:{w:180,h:44}});
-  // measure every gap before anything moves
-  const gap=rows.map((ids,d)=>{
-    if(!d)return 0;
-    const g=ids.map(id=>{const n=M().nodes[id],pp=M().nodes[n.parentId];return n.y-(pp.y+sz[pp.id].h)}).sort((a,b)=>a-b);
-    return Math.max(40*SPACE(),g[g.length>>1]);
+/* TIERS. Tom, 2026-10-18: "Clean doesn't actually put things of the same tier on
+   the same line", and the hierarchy reads top down. Clean and Tree used to walk
+   only the plain parent line, but most of a real map's parentage is in "child"
+   links (141 of the skill tree's 247 nodes hang off one), so 73 nodes were each
+   treated as a top and levelled from their own height. Both now read H, the one
+   hierarchy, and every node sits one tier below its DEEPEST parent, so every line
+   runs downward. Starts: the nodes being arranged from (none is the whole map).
+   Returns {ids, depth, kids, lp}: every node in play, its tier, its children in
+   play, and its layout parent (the deepest of its parents, primary first). */
+function tierPlan(starts){
+  const all=Object.values(M().nodes).filter(n=>!isHidden(n)).map(n=>n.id);
+  const inMap=new Set(all);
+  const kidsAll={}, parsAll={};
+  all.forEach(id=>{kidsAll[id]=[];parsAll[id]=[]});
+  all.forEach(id=>H.parents(id).forEach(p=>{if(inMap.has(p)&&!M().nodes[p].collapsed){kidsAll[p].push(id);parsAll[id].push(p)}}));
+  let ids;
+  if(starts&&starts.length){
+    const set=new Set(), st=starts.filter(s=>inMap.has(s));
+    (function walk(list){list.forEach(id=>{if(set.has(id))return;set.add(id);walk(kidsAll[id])})})(st);
+    ids=[...set];
+  }else ids=all;
+  const inSet=new Set(ids), startSet=new Set(starts||[]);
+  const pars=id=>startSet.has(id)?[]:parsAll[id].filter(p=>inSet.has(p));
+  const depth={}, busy=new Set();
+  const dOf=id=>{
+    if(depth[id]!=null)return depth[id];
+    if(busy.has(id))return 0;               // a loop in the links: cut it here
+    busy.add(id);
+    const ps=pars(id);
+    const d=ps.length?Math.max(...ps.map(dOf))+1:0;
+    busy.delete(id);
+    return depth[id]=d;
+  };
+  ids.forEach(dOf);
+  const lp={};
+  ids.forEach(id=>{
+    const ps=pars(id).filter(p=>depth[p]===depth[id]-1);
+    if(!ps.length)return;
+    const prim=M().nodes[id].parentId;
+    lp[id]=ps.includes(prim)?prim:ps.sort((a,b)=>Math.abs(M().nodes[a].x-M().nodes[id].x)-Math.abs(M().nodes[b].x-M().nodes[id].x))[0];
   });
-  const MIN=24*SPACE();
-  let top=root.y;
+  const kids={}; ids.forEach(id=>kids[id]=[]);
+  ids.forEach(id=>{if(lp[id])kids[lp[id]].push(id)});
+  for(const id in kids)kids[id].sort((a,b)=>M().nodes[a].x-M().nodes[b].x);
+  return{ids,depth,kids,lp};
+}
+/* Room. Tom, 2026-10-18: "too dense and visually cluttered for a map of this
+   size". Rows are a fixed tall gap apart, never borrowed from how tight the map
+   already was, and boxes on a row keep a clear gap. Both scale with Spacing. */
+function tierGapY(){return 140*SPACE()}
+function tierGapX(){return 56*SPACE()}
+function tierRows(plan,top){
+  const sz={}, rows=[];
+  plan.ids.forEach(id=>{const r=nodeRect(id);sz[id]=r?{w:r.w,h:r.h}:{w:180,h:44};(rows[plan.depth[id]]=rows[plan.depth[id]]||[]).push(id)});
+  const rowY=[]; let y=top;
+  rows.forEach((ids,d)=>{rowY[d]=Math.round(y);y+=Math.max(...ids.map(id=>sz[id].h))+tierGapY()});
+  return{sz,rows,rowY};
+}
+function tierTop(plan,starts){
+  const ref=(starts&&starts.length?starts:plan.ids.filter(id=>!plan.depth[id]));
+  return Math.min(...ref.map(id=>M().nodes[id].y));
+}
+/* CLEAN. Every tier on one row, top down. Sideways positions are his and are
+   kept: a box only slides right if it would land on its neighbour. */
+function layoutLevel(rootId,skipSnap){
+  if(!skipSnap)snap();
+  const starts=rootId==null?null:[].concat(rootId);
+  const plan=tierPlan(starts);
+  const{sz,rows,rowY}=tierRows(plan,tierTop(plan,starts));
   rows.forEach((ids,d)=>{
-    if(d)top+=Math.max(...rows[d-1].map(id=>sz[id].h))+gap[d];
     let edge=-Infinity;
     ids.slice().sort((a,b)=>M().nodes[a].x-M().nodes[b].x).forEach(id=>{
       const n=M().nodes[id];
-      if(d){n.y=Math.round(top); if(n.x<edge)n.x=Math.round(edge)}
-      edge=n.x+sz[id].w+MIN;
+      n.y=rowY[d]; if(n.x<edge)n.x=Math.round(edge);
+      edge=n.x+sz[id].w+tierGapX();
     });
   });
   if(!skipSnap){render();save();toast('Clean layout')}
+  return plan.ids;
 }
-function nW(id){const r=nodeRect(id);return (r?r.w:180)+50*SPACE()}
-function subW(id){const ks=children(id);if(!ks.length)return nW(id);return Math.max(nW(id),ks.reduce((s,k)=>s+subW(k.id),0))}
+/* TREE. Every tier on one row, and each box rebuilt under the parent it hangs
+   from, its children spread evenly beneath it in the order they stood. A node
+   with several parents sits under the deepest one; its other lines still draw. */
 function layoutTree(rootId,skipSnap){
-  const root=M().nodes[rootId]; if(!root)return;
   if(!skipSnap)snap();
-  const ROW=180*SPACE();
-  const rowH={};
-  const scan=(id,d)=>{const r=nodeRect(id);rowH[d]=Math.max(rowH[d]||0,(r?r.h:44));layoutKids(id).forEach(k=>scan(k.id,d+1))};
-  scan(rootId,0);
-  const rowY={}; let acc=root.y;
-  Object.keys(rowH).map(Number).sort((a,b)=>a-b).forEach(d=>{rowY[d]=acc; acc+=rowH[d]+Math.max(70,ROW-110)});
-  const place=(id,cx,depth)=>{
-    const n=M().nodes[id], r=nodeRect(id), w=r?r.w:180;
-    if(id!==rootId){n.x=Math.round(cx-w/2); n.y=Math.round(rowY[depth]); n.pinned=false}
-    const kk=layoutKids(id); if(!kk.length)return;
-    const total=kk.reduce((s,k)=>s+subW(k.id),0);
-    let x=cx-total/2;
-    for(const k of kk){const w2=subW(k.id); place(k.id,x+w2/2,depth+1); x+=w2}
+  const starts=rootId==null?null:[].concat(rootId);
+  const plan=tierPlan(starts);
+  const{sz,rowY}=tierRows(plan,tierTop(plan,starts));
+  const memo={};
+  const sw=id=>memo[id]!=null?memo[id]:(memo[id]=Math.max(sz[id].w+tierGapX(),plan.kids[id].reduce((s,k)=>s+sw(k),0)));
+  const tops=plan.ids.filter(id=>!plan.lp[id]).sort((a,b)=>M().nodes[a].x-M().nodes[b].x);
+  const total=tops.reduce((s,id)=>s+sw(id),0);
+  const cx0=tops.reduce((s,id)=>s+M().nodes[id].x+sz[id].w/2,0)/Math.max(1,tops.length);
+  const place=(id,cx)=>{
+    const n=M().nodes[id];
+    n.x=Math.round(cx-sz[id].w/2); n.y=rowY[plan.depth[id]]; n.pinned=false;
+    const kk=plan.kids[id]; if(!kk.length)return;
+    let x=cx-kk.reduce((s,k)=>s+sw(k),0)/2;
+    for(const k of kk){place(k,x+sw(k)/2);x+=sw(k)}
   };
-  place(rootId,root.x+((nodeRect(rootId)||{w:200}).w)/2,0);
-  if(!skipSnap){render();save();toast('Tree layout — skill-tier style')}
+  let x=cx0-total/2;
+  for(const id of tops){place(id,x+sw(id)/2);x+=sw(id)}
+  if(!skipSnap){render();save();toast('Tree layout')}
+  return plan.ids;
 }
 function SPACE(){return parseFloat(pref('arc_space')||'1')}
 function FITRESIZE(){return pref('arc_fitresize')==='1'}
@@ -5572,6 +5622,18 @@ function enforceNo(id){
   resolveOverlaps(id);render();
 }
 function applyLayoutCore(kind,target){
+  if(kind!=='tidy'){
+    /* Clean and Tree arrange by tier over the whole hierarchy in one go: every
+       tier one row, so nothing far away is left out. A selected node stays put. */
+    const anchor=(sel&&M().nodes[sel])?{id:sel,x:M().nodes[sel].x,y:M().nodes[sel].y}:null;
+    const moved=layoutFn(kind)(target||null,true);
+    if(anchor&&moved.includes(anchor.id)){
+      const n=M().nodes[anchor.id], dx=n.x-anchor.x, dy=n.y-anchor.y;
+      if(dx||dy)moved.forEach(id=>{const o=M().nodes[id];o.x=Math.round(o.x-dx);o.y=Math.round(o.y-dy)});
+    }
+    render(); resolveOverlaps(anchor?anchor.id:null,true); render();
+    return{skipped:0,anchor};
+  }
   const scope=target?[rootOf(target)||target]:roots().map(r=>r.id);
   // far-node exemption: a child dragged way off from its parent (deliberate long-range
   // synthesis) keeps its position — its whole subtree is left out of the arrangement
@@ -5624,7 +5686,7 @@ function runLayout(kind,target){
     Object.values(M().nodes).forEach(n=>{if(!only.has(n.id))stash[n.id]=[n.x,n.y]});
     const tops=[...only].filter(id=>M().nodes[id]&&!ancestors(id).some(a=>only.has(a)));
     const fn=layoutFn(kind);
-    tops.forEach(id=>fn(id,true));
+    if(kind==='tidy')tops.forEach(id=>fn(id,true)); else fn(tops,true);
     for(const id in stash){const n=M().nodes[id];if(n){n.x=stash[id][0];n.y=stash[id][1]}}
     LAYOUT_ONLY=only;
     render(); resolveOverlaps(null,true); render();
@@ -5790,10 +5852,20 @@ function depthFromColored(n){
   if(M().rankColors&&n.rank&&RANKC[n.rank])return{c:RANKC[n.rank],d:0};
   return lineageBase(n,new Set());
 }
+/* Tom, 2026-10-18: "ARC's top level node is supposed to be on brand gold." A node
+   with no parent and something under it is a top; it is the brand's gold in every
+   theme, drawn solid, whatever colour it was given, and its branches inherit from it. */
+const BRAND_GOLD='#F0B323', BRAND_INK='#080B10';
+function isTopNode(n){
+  if(RC_TOP.has(n.id))return RC_TOP.get(n.id);
+  const t=!H.parents(n.id).length&&H.children(n.id).length>0;
+  RC_TOP.set(n.id,t); return t;
+}
 function lineageBase(n,seen){
   if(!n||seen.has(n.id))return{c:COLORS[0],d:0};
   const seen2=new Set(seen); seen2.add(n.id);
   const parents=H.parents(n.id).map(pid=>M().nodes[pid]).filter(Boolean);
+  if(!parents.length&&isTopNode(n))return{c:BRAND_GOLD,d:0,top:true};
   if(!parents.length){
     return{c:n.color||(n.type&&TYPE_COLORS[n.type]?TYPE_COLORS[n.type]:COLORS[0]),d:0};
   }
@@ -5805,6 +5877,7 @@ function lineageBase(n,seen){
 }
 function shadeFor(n){
   const b=depthFromColored(n);
+  if(b.top)return b.c;
   const[hh,s,l]=hex2hsl(b.c);
   const size=(n.w||200)*((effFs(n)||14)/14);
   // A deliberately greyscale choice stays greyscale. The saturation floor and the
