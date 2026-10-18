@@ -15,3 +15,17 @@ Working. Publishes today's plan, reads and writes shared ticks. Actively edited 
 ## 1.0.21, 2026-10-02: the kernel stops poking on a served address
 
 Same change as the home screen's 1.0.44, in this copy of the kernel: `wrote` pokes only when `Rec.channel` is false. BLOCK publishes on every redraw, so every redraw made the home screen and every open app re-read the whole store. See `shared/CLAUDE.md`, No re-read on every write.
+
+## 1.0.23, 2026-10-18: Anytime is Habits, with a tick grid and a streak
+
+Tom: "If we wanted to specifically do Habits in BLOCK what can we retool", then "Do A, B, C. Be flexible with different habit frequencies. Since that habit was created." Rules that stand:
+
+- **Frequency** is `times` per `per`: `week` (none is a week, every habit made before this), `fortnight` or `month`. A week follows "week starts on"; a rolling week counts back from today in sevens; a fortnight counts in fourteens from the week the habit began; a month is the calendar month (`rhPeriod`).
+- **The grid starts the day the habit began**: `made`, or its first tick if earlier. Nothing writes a `made` onto an old habit (saving a default on open is a root trap); it is worked out on every draw. A column a week, a row a weekday, Monday first when the week rolls. Any day up to today is a click to tick or untick. Scrolled to today, and a redraw keeps where you scrolled.
+- **Streak** is periods with the target met. A short period with any tick holds it without adding; one empty period is forgiven; two empty in a row end it. The period still open never breaks it (`rhStreak`).
+- **An every-day thing stays a block** (Tom). The block menu's "Track as a habit" adds a habit with `act`, the block's own tick id, so its grid shows the block's history and a tick in either place is one tick. Its count is the days the block runs a week. It is left off the Day's Also column and the published plan, because the block is already there.
+- The view id stays `anytime` and the kind stays `anytime`, so nothing stored moved.
+
+## Needs from the home screen
+
+- `index.html` keeps copies of `anytimeState` and friends (`rhAnyState`, near "BLOCK's Every and Anytime, read here"). They count every habit as a week and tick by name. A fortnight or month habit reads wrong there, and a habit with `act` ticks the wrong id. Copy `rhPeriod`, `rhPer`, and `rhTick`'s `r.act ||`, and rename Anytime to Habits in its rhythms card.

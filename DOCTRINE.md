@@ -277,7 +277,7 @@ called testers until 2026-09-14, and not the coaching clients in WEALTH.
 | App | Folder | Device | Clients | What it is for |
 |---|---|---|---|---|
 | HOME | `index.html` | desktop | yes | The hub for everything. |
-| BLOCK | `block/` | desktop only | yes | Routines, mostly daily. Since 2026-09-14, an Every tab for Blocks that repeat every few days, weeks or months, and an Anytime tab for habits done a number of times a week on any day. |
+| BLOCK | `block/` | desktop only | yes | Routines, mostly daily. Since 2026-09-14, an Every tab for Blocks that repeat every few days, weeks or months, and a Habits tab (Anytime until 2026-10-18) for habits done a number of times a week, fortnight or month on any day, with a tick grid and a streak. |
 | STATUS | `status/` | everywhere | yes | The tracker, built for fast input. |
 | LOG | `log/` | desktop | yes, since 2026-09-14 | The journal module. Brings every bullet type together. |
 | QUESTS | `quest/` | everywhere | yes, since 2026-09-14 | Todo bullets, pulled from STATUS and BLOCK. Answers "what's next to be done". |
@@ -397,10 +397,14 @@ blocks.
 - **Every.** A Block that repeats every so many days, weeks or months: a
   deload, a monthly review, a haircut. Missed, it stays **owed** and keeps
   showing until it is done. The next one is counted from the day it was done.
-- **Anytime.** A habit done a number of times a week, on any day, at no set
-  time: gym three times, read four. It shows how many of this week's are done
-  and stops asking once the week's count is met. It counts ticks, so a tick
-  from anywhere in the suite counts.
+- **Habits** (called Anytime until 2026-10-18). A habit done a number of
+  times a week, a fortnight or a month, on any day, at no set time: gym three
+  times a week, a sauna twice a fortnight. It shows how many of this period's
+  are done and stops asking once the count is met. It counts ticks, so a tick
+  from anywhere in the suite counts. Each one carries a tick grid of every day
+  since it began, clickable, and a streak counted in periods met. An every-day
+  thing stays a block in its routine; the block's menu can track it as a
+  habit too, which ticks the block's own id.
 
 A habit being built belongs here. A chore that repeats, like rent, is a QUESTS
 todo.

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.22, 2026-10-06">
+<meta name="mb-version" content="1.0.23, 2026-10-18">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -458,6 +458,20 @@ main{display:flex;flex:1;min-height:0}
 .rhdots{display:flex;gap:var(--s-1)}
 .rhdots i{width:var(--s-2);height:var(--s-2);border-radius:50%;border:1px solid var(--line2)}
 .rhdots i.on{background:var(--good);border-color:var(--good)}
+.rhst{font-family:var(--f1);font-size:var(--f-1);color:var(--text-1);white-space:nowrap}
+/* a habit's row wraps, and its tick grid takes the second line */
+.rhrow.hasgrid{flex-wrap:wrap;row-gap:0;padding-bottom:var(--s-2)}
+.rhgrid{flex:1 0 100%;min-width:0;overflow-x:auto;padding-left:var(--tap)}
+.rhcells{display:flex;gap:var(--s-1);width:max-content;margin-left:auto}
+.rhcol{display:flex;flex-direction:column;gap:var(--s-1)}
+.rhmon{height:var(--f-1);width:var(--s-3);font-size:var(--f-1);line-height:1;color:var(--text-muted);white-space:nowrap;overflow:visible}
+.rhwd{height:var(--s-3);width:var(--s-3);font-size:var(--f-1);line-height:1;color:var(--text-muted);text-align:center}
+.rhlab{margin-right:var(--s-1)}
+.rhc{display:block;width:var(--s-3);height:var(--s-3);padding:0;border:1px solid var(--line);border-radius:var(--radius-sm);background:transparent;cursor:pointer}
+.rhc.off{visibility:hidden}
+.rhc:hover{border-color:var(--good)}
+.rhc.on{background:var(--good);border-color:var(--good)}
+.rhc.now{outline:1px solid var(--text-muted);outline-offset:1px}
 /* the Day's column for Every and Anytime: not a routine, so dashed and not draggable */
 .alsoday{flex:0 0 264px;align-self:flex-start;display:flex;flex-direction:column;gap:var(--s-1);
   padding:var(--s-2);border:1px dashed var(--line);border-radius:var(--radius-sm);background:var(--panel)}
@@ -701,7 +715,7 @@ footer .sp{flex:1}
       <button id="vDay" class="on" data-tip="<b>Day</b> — build one routine out of blocks">Day</button>
       <button id="vWeek" data-tip="<b>Week</b> — which <b>day</b> runs on which weekday">Week</button>
       <button id="vEvery" data-tip="<b>Every</b>: blocks that come round every few days, weeks or months">Every</button>
-      <button id="vAny" data-tip="<b>Anytime</b>: habits done a few times a week, on any day">Anytime</button>
+      <button id="vAny" data-tip="<b>Habits</b>: done on any day at no set time, so many times a week, a fortnight or a month">Habits</button>
       <button id="vSum" data-tip="<b>Summary</b> — what actually gets done, and what to do about it">Summary</button>
     </div>
     <div id="datebar"></div>
@@ -3636,6 +3650,14 @@ function blockMenu(laneId, it, x, y) {
             fn: () => { snap(); if (!it.daysEx) { it.days = rd.slice(); it.daysEx = true; } it.days[d] = it.days[d] ? 0 : 1; render(); } })),
         ];
       } },
+    /* Tom, 2026-10-18: an every-day thing stays a block in its routine,
+       with the option to track it as a habit too */
+    (() => {
+      const L = lane(laneId), id = window.LifeOS ? actIdOf(it, L) : null;
+      const has = id && (S.rhythms || []).find(r => r.act === id);
+      return has ? { label: 'Tracked on Habits', fn: () => { S.view = 'anytime'; render(); } }
+        : { label: 'Track as a habit', fn: () => trackBlock(it, L) };
+    })(),
     { sep: 1 },
     /* ── the link, and the rename it displaces ──
        A linked block's title opens the link, so renaming has to live here.
@@ -3878,10 +3900,62 @@ function renderWeek() {
 const RH_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const RH_UNIT = { day: ['day', 'days'], week: ['week', 'weeks'], month: ['month', 'months'] };
 const rhythms = kind => (S.rhythms || (S.rhythms = [])).filter(r => r.kind === kind);
-const rhTick = r => (window.LifeOS ? LifeOS.slug(r.name) : null);
+/* A habit tracked from a block (`act`) ticks that block's own id, so a tick
+   in the routine and a tick on Habits are the same tick. */
+const rhTick = r => (window.LifeOS ? (r.act || LifeOS.slug(r.name)) : null);
 const rhDate = k => { const d = new Date(k + 'T12:00:00'); return DSHORT[d.getDay()] + ' ' + d.getDate() + ' ' + RH_MON[d.getMonth()]; };
 const rhEvery = r => 'every ' + (r.n > 1 ? r.n + ' ' + RH_UNIT[r.unit][1] : RH_UNIT[r.unit][0]);
-const rhTimes = r => (r.times === 1 ? 'once' : r.times + ' times') + ' a week';
+
+/* ── habits: how often, since when, and how long it has held ──
+   Tom, 2026-10-18: Anytime became Habits, with a tick grid and a streak, and
+   "be flexible with different habit frequencies". A habit is done `times`
+   in each period, `per` a week, two weeks or a month, on any day at no set
+   time. No `per` is a week, which is every habit made before this.
+   It begins on `made` or its first tick, whichever is earlier, and nothing
+   writes a `made` onto an old habit: one made before this begins at its
+   first tick, worked out on every draw. */
+const RH_PER = {
+  week: { how: 'a week', one: 'week', many: 'weeks', len: 7, max: 7 },
+  fortnight: { how: 'every 2 weeks', one: 'fortnight', many: 'fortnights', len: 14, max: 14 },
+  month: { how: 'a month', one: 'month', many: 'months', len: 0, max: 31 },
+};
+const rhPer = r => (RH_PER[r.per] ? r.per : 'week');
+const rhTimes = r => {
+  const p = rhPer(r);
+  if (p === 'week' && r.times >= 7) return 'every day';
+  return (r.times === 1 ? 'once' : r.times + ' times') + ' ' + RH_PER[p].how;
+};
+const rhMade = (r, dates, today) => [r.made, dates[0]].filter(Boolean).sort()[0] || today;
+/** The period a date falls in, as [first day, last day]. A week follows the
+    "week starts on" setting, and a rolling week (starts today) counts back
+    from today in sevens. Two weeks count in fourteens from the week the habit
+    began, so they never shift under it. A month is the calendar month. */
+function rhPeriod(r, date, today, start, made) {
+  const p = rhPer(r);
+  if (p === 'month') { const f = date.slice(0, 8) + '01'; return [f, Day.shift(rhAdd(f, 1, 'month'), -1)]; }
+  const len = RH_PER[p].len;
+  const anchor = p === 'week' ? rhWeekStart(today, start) : rhWeekStart(made, start === 'today' ? 1 : start);
+  const f = Day.shift(anchor, len * Math.floor(Day.diff(date, anchor) / len));
+  return [f, Day.shift(f, len - 1)];
+}
+/** How many periods running the habit has held. A period that met its count
+    adds one. A period short of it with any tick keeps the run without adding
+    (a streak continues if he logged anything at all), and one empty period is
+    forgiven silently; two empty in a row end it. The period still open adds
+    once it is met and never breaks the run. Nothing before it began counts. */
+function rhStreak(r, dates, today, start, made) {
+  const count = (a, b) => dates.filter(d => d >= a && d <= b).length;
+  let [from, to] = rhPeriod(r, today, today, start, made);
+  let run = 0, empty = 0, open = true;
+  for (let guard = 0; to >= made && guard < 2000; guard++) {
+    const n = count(from, to);
+    if (n >= r.times) { run++; empty = 0; }
+    else if (!open) { if (n) empty = 0; else if (++empty >= 2) break; }
+    open = false;
+    [from, to] = rhPeriod(r, Day.shift(from, -1), today, start, made);
+  }
+  return run;
+}
 
 /** A date moved on by n days, weeks or months. A month keeps its day where
     the month has one and takes its last day where it does not, so the 31st
@@ -3917,9 +3991,10 @@ function rhWeekStart(today, start) {
   return Day.shift(today, -((dow - (start == null ? 1 : start) + 7) % 7));
 }
 function anytimeState(r, dates, today, start) {
-  const from = rhWeekStart(today, start);
+  const made = rhMade(r, dates, today), from = rhPeriod(r, today, today, start, made)[0];
   const n = dates.filter(d => d >= from && d <= today).length;
-  return { n: n, of: r.times, met: n >= r.times, today: dates.indexOf(today) >= 0 };
+  return { n: n, of: r.times, met: n >= r.times, today: dates.indexOf(today) >= 0, made: made,
+    streak: rhStreak(r, dates, today, start, made), per: RH_PER[rhPer(r)] };
 }
 
 function rhToggle(r, date, force) {
@@ -3963,7 +4038,54 @@ function rhRow(r, meta, status, cls) {
   more.onclick = e => { e.stopPropagation(); const b = more.getBoundingClientRect(); rhMenu(r, b.left, b.bottom); };
   row.appendChild(more);
   row.oncontextmenu = e => { e.preventDefault(); rhMenu(r, e.clientX, e.clientY); };
+  if (meta.below) { row.classList.add('hasgrid'); row.appendChild(meta.below); }
   return row;
+}
+
+function rhPerSelect(v) {
+  const s = document.createElement('select'); s.className = 'rhper';
+  Object.keys(RH_PER).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = RH_PER[k].how; o.selected = k === v; s.appendChild(o); });
+  return s;
+}
+
+/* ── the tick grid: every day since the habit began ──
+   Tom, 2026-10-18. A column a week, a row a weekday, in the "week starts
+   on" order (Monday when the week rolls from today, since a grid needs
+   fixed rows). Click any day up to today to tick or untick it. Days before
+   the habit began and after today are drawn as nothing. Scrolled to today;
+   a redraw keeps the place you scrolled to, counted from the right. */
+const rhScroll = {};
+function rhGrid(r, dates, made, today) {
+  const s0 = S.weekStart === 'today' ? 1 : (S.weekStart == null ? 1 : S.weekStart);
+  const done = {}; dates.forEach(d => { done[d] = 1; });
+  const wrap = el('div', 'rhgrid'); wrap.dataset.rh = r.id;
+  const g = el('div', 'rhcells');
+  const lab = el('div', 'rhcol rhlab');
+  lab.appendChild(el('span', 'rhmon'));
+  for (let i = 0; i < 7; i++) lab.appendChild(el('span', 'rhwd', i % 2 ? '' : DLET[(s0 + i) % 7]));
+  g.appendChild(lab);
+  const last = rhWeekStart(today, s0);
+  for (let c = rhWeekStart(made, s0), first = true; c <= last; c = Day.shift(c, 7), first = false) {
+    const col = el('div', 'rhcol');
+    let mon = '';
+    for (let i = 0; i < 7; i++) if (Day.shift(c, i).slice(8) === '01') mon = RH_MON[+Day.shift(c, i).slice(5, 7) - 1];
+    if (first && !mon) mon = RH_MON[+made.slice(5, 7) - 1];
+    col.appendChild(el('span', 'rhmon', mon));
+    for (let i = 0; i < 7; i++) {
+      const d = Day.shift(c, i);
+      if (d < made || d > today) { col.appendChild(el('i', 'rhc off')); continue; }
+      const b = el('button', 'rhc' + (done[d] ? ' on' : '') + (d === today ? ' now' : ''));
+      b.type = 'button'; b.dataset.d = d;
+      b.dataset.tip = '<b>' + rhDate(d) + '</b> ' + (done[d] ? 'done. Click to untick.' : 'not done. Click to tick.');
+      b.setAttribute('aria-label', rhDate(d) + (done[d] ? ', done' : ', not done'));
+      col.appendChild(b);
+    }
+    g.appendChild(col);
+  }
+  g.onclick = e => { const b = e.target.closest('.rhc[data-d]'); if (!b) return; e.stopPropagation(); rhToggle(r, b.dataset.d); };
+  wrap.appendChild(g);
+  wrap.onscroll = () => { rhScroll[r.id] = wrap.scrollWidth - wrap.clientWidth - wrap.scrollLeft; };
+  return wrap;
 }
 
 function rhAddBar(kind) {
@@ -3973,7 +4095,7 @@ function rhAddBar(kind) {
   name.placeholder = kind === 'every' ? 'Deload week, monthly review, haircut…' : 'Gym, read, stretch…';
   f.appendChild(name);
   const num = (v, min, max) => { const i = document.createElement('input'); i.type = 'number'; i.min = min; if (max) i.max = max; i.value = v; i.className = 'rhnum'; return i; };
-  let n, unit, from, times;
+  let n, unit, from, times, per;
   if (kind === 'every') {
     f.appendChild(el('span', 'rhword', 'every'));
     n = num(2, 1); f.appendChild(n);
@@ -3984,18 +4106,19 @@ function rhAddBar(kind) {
     from = document.createElement('input'); from.type = 'date'; from.value = todayKey(); from.className = 'rhfrom';
     f.appendChild(from);
   } else {
-    times = num(3, 1, 7); f.appendChild(times);
-    f.appendChild(el('span', 'rhword', 'times a week'));
+    times = num(3, 1, 31); f.appendChild(times);
+    f.appendChild(el('span', 'rhword', 'times'));
+    per = rhPerSelect('week'); f.appendChild(per);
   }
   const go = el('button', 'btn acc rhgo', 'Add');
   const add = () => {
     const nm = name.value.trim();
     if (!nm) { name.focus(); return toast('give it a name first'); }
     /* the ticks are filed by name, so two with one name would share them */
-    if ((S.rhythms || []).some(x => x.name.toLowerCase() === nm.toLowerCase())) return toast('<b>' + esc(nm) + '</b> is already on Every or Anytime');
+    if ((S.rhythms || []).some(x => x.name.toLowerCase() === nm.toLowerCase())) return toast('<b>' + esc(nm) + '</b> is already on Every or Habits');
     const r = { id: uid(), kind: kind, name: nm, color: PAL[Math.floor(Math.random() * PAL.length)] };
     if (kind === 'every') { r.n = Math.max(1, Math.round(+n.value || 1)); r.unit = unit.value; r.from = from.value || todayKey(); }
-    else r.times = clamp(Math.round(+times.value || 1), 1, 7);
+    else { r.per = per.value; r.times = clamp(Math.round(+times.value || 1), 1, RH_PER[r.per].max); r.made = todayKey(); }
     snap(); rhythms(kind); S.rhythms.push(r); render();
     const again = $('#' + kind + ' .rhname'); if (again) again.focus();
   };
@@ -4028,17 +4151,26 @@ function renderAnytime() {
   const p = $('#anytime'); p.innerHTML = '';
   const today = todayKey(), start = S.weekStart, from = rhWeekStart(today, start);
   const bar = el('div', 'weekbar');
-  bar.appendChild(el('span', 'wbnote', 'Done a few times a week, on any day. ' +
-    (start === 'today' ? 'Counting the last seven days.' : 'This week is ' + rhDate(from) + ' to ' + rhDate(Day.shift(from, 6)) + '.')));
+  bar.appendChild(el('span', 'wbnote', 'Done on any day, at no set time, as often as you say. ' +
+    (start === 'today' ? 'A week is the last seven days.' : 'This week is ' + rhDate(from) + ' to ' + rhDate(Day.shift(from, 6)) + '.')));
   p.appendChild(bar);
   p.appendChild(rhAddBar('anytime'));
   const log = rhLog();
-  const list = rhythms('anytime').map(r => ({ r: r, s: anytimeState(r, log[rhTick(r)] || [], today, start) }));
-  if (!list.length) { p.appendChild(el('div', 'hint', 'Nothing here yet. Name one above and say how many times a week.')); return; }
-  const dots = s => { const d = el('span', 'rhdots'); for (let i = 0; i < Math.max(s.of, s.n); i++) d.appendChild(el('i', i < s.n ? 'on' : '')); return d; };
-  const row = x => rhRow(x.r, { how: rhTimes(x.r), done: x.s.today, extra: dots(x.s) }, x.s.n + ' of ' + x.s.of, x.s.met ? 'met' : '');
-  rhGroup(p, 'This week', list.filter(x => !x.s.met).map(row));
-  rhGroup(p, 'Done for this week', list.filter(x => x.s.met).map(row));
+  const list = rhythms('anytime').map(r => { const dates = log[rhTick(r)] || []; return { r: r, dates: dates, s: anytimeState(r, dates, today, start) }; });
+  if (!list.length) { p.appendChild(el('div', 'hint', 'Nothing here yet. Name one above and say how often.')); return; }
+  /* dots only while they can be counted at a glance; past that the words say it */
+  const dots = s => { const k = Math.max(s.of, s.n); if (k > 14) return null; const d = el('span', 'rhdots'); for (let i = 0; i < k; i++) d.appendChild(el('i', i < s.n ? 'on' : '')); return d; };
+  const streak = s => s.streak ? el('span', 'rhst', s.streak + ' ' + (s.streak === 1 ? s.per.one : s.per.many)) : null;
+  const row = x => {
+    const r = rhRow(x.r, { how: rhTimes(x.r), done: x.s.today, extra: dots(x.s), below: rhGrid(x.r, x.dates, x.s.made, today) },
+      x.s.n + ' of ' + x.s.of + ' this ' + x.s.per.one, x.s.met ? 'met' : '');
+    const st = streak(x.s);
+    if (st) { st.dataset.tip = '<b>Streak</b>: ' + x.s.per.many + ' with the target met. A short ' + x.s.per.one + ' with any tick keeps it going, and one empty ' + x.s.per.one + ' is forgiven.'; r.insertBefore(st, r.querySelector('.rhs')); }
+    return r;
+  };
+  rhGroup(p, 'Still to do', list.filter(x => !x.s.met).map(row));
+  rhGroup(p, 'Target met', list.filter(x => x.s.met).map(row));
+  p.querySelectorAll('.rhgrid').forEach(w => { w.scrollLeft = w.scrollWidth - w.clientWidth - (rhScroll[w.dataset.rh] || 0); });
 }
 
 /* Only Every carries a number on its tab: owed or due today. A count of
@@ -4055,11 +4187,11 @@ function rhMenu(r, x, y) {
   openMenu(x, y, [
     { head: r.name },
     { label: 'Done on another day…', fn: () => rhBackfill(r) },
-    { label: every ? 'How often…' : 'Times a week…', fn: () => rhEdit(r) },
+    { label: 'How often…', fn: () => rhEdit(r) },
     { label: 'Rename…', fn: () => {
         const v = prompt('Name', r.name), nm = v && v.trim();
         if (!nm || nm === r.name) return;
-        if ((S.rhythms || []).some(z => z !== r && z.name.toLowerCase() === nm.toLowerCase())) return toast('<b>' + esc(nm) + '</b> is already on Every or Anytime');
+        if ((S.rhythms || []).some(z => z !== r && z.name.toLowerCase() === nm.toLowerCase())) return toast('<b>' + esc(nm) + '</b> is already on Every or Habits');
         snap();
         /* The ticks are filed under the name, so a new name starts a fresh
            page, as renaming a block on the board does. An Every block keeps
@@ -4078,6 +4210,23 @@ function rhMenu(r, x, y) {
   ]);
 }
 
+/** A block tracked as a habit: the block stays in its routine, and a habit
+    on the Habits tab ticks the block's own id, so its grid shows the block's
+    whole history. Its count is the days the block runs a week. A name the
+    Habits tab already has takes the routine's name after it. */
+function trackBlock(it, L) {
+  if (!window.LifeOS) return toast('the shared tick log did not load, so this cannot be tracked');
+  const id = actIdOf(it, L), taken = nm => (S.rhythms || []).some(r => r.name.toLowerCase() === nm.toLowerCase());
+  let nm = it.name;
+  if (taken(nm)) nm = it.name + ' (' + L.name + ')';
+  if (taken(nm)) return toast('<b>' + esc(nm) + '</b> is already on Every or Habits');
+  const n = effDays(L, it).filter(Boolean).length || 7;
+  snap(); rhythms('anytime');
+  const r = { id: uid(), kind: 'anytime', name: nm, color: it.color || PAL[0], per: 'week', times: n, made: todayKey(), act: id };
+  S.rhythms.push(r); render();
+  toast('<b>' + esc(nm) + '</b> is tracked on Habits, ' + rhTimes(r));
+}
+
 function rhBackfill(r) {
   const t = todayKey();
   openModal('<div class="modal-head"><h3>DONE ON ANOTHER DAY</h3><button class="btn sm" id="mX" aria-label="Close" data-icon="close"></button></div>' +
@@ -4093,19 +4242,21 @@ function rhBackfill(r) {
 
 function rhEdit(r) {
   const every = r.kind === 'every';
-  openModal('<div class="modal-head"><h3>' + (every ? 'HOW OFTEN' : 'TIMES A WEEK') + '</h3><button class="btn sm" id="mX" aria-label="Close" data-icon="close"></button></div>' +
+  openModal('<div class="modal-head"><h3>HOW OFTEN</h3><button class="btn sm" id="mX" aria-label="Close" data-icon="close"></button></div>' +
     '<div class="modal-body"><div class="rhadd">' +
     (every
       ? '<span class="rhword">every</span><input type="number" id="rhN" min="1" value="' + r.n + '"><select id="rhU">' +
         ['day', 'week', 'month'].map(u => '<option value="' + u + '"' + (u === r.unit ? ' selected' : '') + '>' + RH_UNIT[u][1] + '</option>').join('') + '</select>'
-      : '<input type="number" id="rhT" min="1" max="7" value="' + r.times + '"><span class="rhword">times a week</span>') +
+      : '<input type="number" id="rhT" min="1" max="31" value="' + r.times + '"><span class="rhword">times</span><span id="rhPerAt"></span>') +
     '<button class="btn acc" id="rhOk" data-icon="save">Save</button></div>' +
     (every ? '<div class="hint">The next one is counted from the last day it was done.</div>' : '') + '</div>');
   $('#mX').onclick = closeModal;
+  const per = every ? null : rhPerSelect(rhPer(r));
+  if (per) $('#rhPerAt').replaceWith(per);
   $('#rhOk').onclick = () => {
     snap();
     if (every) { r.n = Math.max(1, Math.round(+$('#rhN').value || 1)); r.unit = $('#rhU').value; }
-    else r.times = clamp(Math.round(+$('#rhT').value || 1), 1, 7);
+    else { r.per = per.value; r.times = clamp(Math.round(+$('#rhT').value || 1), 1, RH_PER[r.per].max); }
     closeModal(); render();
   };
 }
@@ -4125,9 +4276,10 @@ function rhFor(day, log) {
     else if (s.st === 'due') out.push({ r: r, done: false, tone: 'due', why: 'due' });
     else if (s.st === 'done') out.push({ r: r, done: true, why: 'done, next ' + rhDate(s.next) });
   });
-  rhythms('anytime').forEach(r => {
+  /* a habit tracked from a block is left out: the block is already on the day */
+  rhythms('anytime').filter(r => !r.act).forEach(r => {
     const s = anytimeState(r, (log[rhTick(r)] || []).filter(d => d <= day), day, S.weekStart);
-    if (s.today || !s.met) out.push({ r: r, done: s.today, why: s.n + ' of ' + s.of + ' this week' });
+    if (s.today || !s.met) out.push({ r: r, done: s.today, why: s.n + ' of ' + s.of + ' this ' + s.per.one });
   });
   return out;
 }
@@ -4140,7 +4292,7 @@ function alsoToday(col) {
   const day = col.key, rows = rhFor(day, rhLog());
   if (!rows.length) return null;
   const box = el('div', 'alsoday');
-  box.appendChild(el('div', 'also-head', '<b>Also ' + (col.isToday ? 'today' : 'this day') + '</b><span>from Every and Anytime</span>'));
+  box.appendChild(el('div', 'also-head', '<b>Also ' + (col.isToday ? 'today' : 'this day') + '</b><span>from Every and Habits</span>'));
   rows.forEach(x => {
     const row = el('div', 'also-row' + (x.done ? ' isdone' : ''));
     row.style.setProperty('--c', x.r.color || PAL[0]);
@@ -4723,7 +4875,7 @@ function buildStarter(dayIds, rhIds, withBin) {
     lib: (S.lib || []).filter(b => withBin || src[b.id]).map(b => starterCopy(b)),
     days: outDays,
     /* the first due date is the giver's, so the other end starts from its own today */
-    rhythms: (S.rhythms || []).filter(r => rhIds.indexOf(r.id) >= 0).map(r => { const c = starterCopy(r); delete c.from; return c; }),
+    rhythms: (S.rhythms || []).filter(r => rhIds.indexOf(r.id) >= 0).map(r => { const c = starterCopy(r); delete c.from; delete c.made; delete c.act; return c; }),
   };
 }
 
@@ -4799,7 +4951,7 @@ function importStarter(pack) {
   (pack.rhythms || []).forEach(r => {
     if (S.rhythms.some(x => low(x.name) === low(r.name))) { got.skipped++; return; }
     const c = Object.assign(starterCopy(r), { id: uid() });
-    if (c.kind === 'every') c.from = todayKey();
+    if (c.kind === 'every') c.from = todayKey(); else c.made = todayKey();
     S.rhythms.push(c);
     got.rhythms++;
   });
@@ -4847,7 +4999,7 @@ function paintShare(body) {
   body.innerHTML =
     '<div class="hint">For helping somebody start. This is the day on screen, <b>' + esc(v.name) + '</b>: ' + n + (n === 1 ? ' routine' : ' routines') +
       ' and their blocks' + (wds ? ', running on ' + esc(wds) : '') + '. Your ticks, history, settings and rules stay here. To hand over a different day, open that one first.</div>' +
-    (rh.length ? '<div class="sumh">Every and Anytime to go with it</div>' + rh.map(r => line('data-rh', r.id, SHARE.rh[r.id], r.name, r.kind === 'every' ? rhEvery(r) : rhTimes(r))).join('') : '') +
+    (rh.length ? '<div class="sumh">Every and Habits to go with it</div>' + rh.map(r => line('data-rh', r.id, SHARE.rh[r.id], r.name, r.kind === 'every' ? rhEvery(r) : rhTimes(r))).join('') : '') +
     '<label class="shr"><input type="checkbox" id="shBin"' + (SHARE.bin ? ' checked' : '') + '>Include the whole Block bin<span>not only the blocks this day uses</span></label>' +
     '<div class="row"><button class="btn acc" id="shDl">Download ' + esc(file) + '</button></div>' +
     '<div class="sumh">On their computer</div>' +
@@ -5464,6 +5616,49 @@ function selfTest() {
     ok('anytime: counts only this week, from the day the week starts', () => {
       const s = anytimeState({ times: 3 }, ['2026-09-12', '2026-09-13', '2026-09-14', '2026-09-16'], '2026-09-16', 1);
       return (s.n === 2 && !s.met && s.today) || JSON.stringify(s);
+    });
+    ok('habits: a month counts the calendar month, two weeks count from the week it began', () => {
+      const m = anytimeState({ times: 4, per: 'month', made: '2026-08-10' }, ['2026-08-31', '2026-09-01', '2026-09-20'], '2026-09-21', 1);
+      const f = rhPeriod({ per: 'fortnight' }, '2026-09-21', '2026-09-21', 1, '2026-09-02');
+      return (m.n === 2 && !m.met && m.per.one === 'month' && f[0] === '2026-09-14' && f[1] === '2026-09-27') || JSON.stringify({ m: m, f: f });
+    });
+    ok('habits: streak counts met weeks, a short week holds it, two empty weeks end it', () => {
+      /* weeks from Mon 31 Aug: met, empty, empty, met, short (one tick), met, and this week open */
+      const d = ['2026-08-31', '2026-09-01', '2026-09-21', '2026-09-22', '2026-09-29', '2026-10-05', '2026-10-06'];
+      const a = rhStreak({ times: 2 }, d, '2026-10-14', 1, '2026-08-31');
+      const b = rhStreak({ times: 2 }, d.concat('2026-10-12', '2026-10-13'), '2026-10-14', 1, '2026-08-31');
+      return (a === 2 && b === 3) || JSON.stringify({ a: a, b: b });
+    });
+    ok('habits: clicking a day on the grid ticks that day, and clicking again unticks it', () => {
+      if (!window.LifeOS) return 'skip: the shared tick log did not load';
+      const t = todayKey(), y = Day.shift(t, -1);
+      S.rhythms = [{ id: 'zzgrid', kind: 'anytime', name: 'Zz Rhythm Test', times: 3, made: Day.shift(t, -20), color: PAL[0] }];
+      S.view = 'anytime'; render();
+      const id = LifeOS.slug('Zz Rhythm Test'), cell = () => $('#anytime .rhc[data-d="' + y + '"]');
+      const had = !!cell(), before = $('#anytime .rhc[data-d="' + Day.shift(t, -21) + '"]');
+      cell().click();
+      const on = !!LifeOS.isDone(id, y) && cell().classList.contains('on');
+      cell().click();
+      const off = !LifeOS.isDone(id, y);
+      LifeOS.done(id, y, false, { src: 'test' });
+      S.rhythms = []; S.view = 'day'; render();
+      return (had && !before && on && off) || JSON.stringify({ had: had, before: !!before, on: on, off: off });
+    });
+    ok('habits: a block tracked as a habit ticks the block, and stays off the Day column', () => {
+      if (!window.LifeOS) return 'skip: the shared tick log did not load';
+      const L0 = LANES()[0]; if (!L0) return 'no routine on the test day';
+      const it = mkItem({ name: 'Zz Track', dur: 10, color: PAL[0] }); items(L0.id).push(it);
+      S.rhythms = []; S.view = 'day'; S.viewDate = null; render();
+      trackBlock(it, L0);
+      const r = S.rhythms[0], id = actIdOf(it, L0), t = todayKey();
+      S.view = 'anytime'; render();
+      $('#anytime .rhrow .rhck').click();
+      const ticked = !!LifeOS.isDone(id, t);
+      S.view = 'day'; render();
+      const col = $('#board .alsoday'), inCol = !!col && /Zz Track/.test(col.textContent);
+      LifeOS.done(id, t, false, { src: 'test' });
+      S.rhythms = []; render();
+      return (!!r && r.act === id && ticked && !inCol) || JSON.stringify({ r: r || null, ticked: ticked, inCol: inCol });
     });
     ok('every: kept as rows of its own, not folded into a setting', () => {
       S.rhythms = [{ id: 'rhtest', kind: 'every', name: 'Zz Rhythm Test', n: 1, unit: 'day', from: todayKey() }];
@@ -6331,7 +6526,7 @@ function publishDay(key, quiet, log) {
      here. */
   const extra = rhFor(key, log || rhLog()).map(x => ({
     id: x.r.id, actId: rhTick(x.r), name: x.r.name, s: null, dur: 0, color: x.r.color || '',
-    lane: x.r.kind === 'every' ? 'Every' : 'Anytime', why: x.why, link: '', note: '',
+    lane: x.r.kind === 'every' ? 'Every' : 'Habits', why: x.why, link: '', note: '',
   }));
   const plan = { date: key, vid: vid, name: (variant(vid) || {}).name || 'routine', blocks: blocks.concat(extra) };
   if (quiet) Rec.set('plan', key, 'routine', plan);
