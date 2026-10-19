@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.76, 2026-10-18">
+<meta name="mb-version" content="1.0.77, 2026-10-19">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4530,13 +4530,19 @@ function noteSheet(x, d) {
     const wrote = isNew ? '' : (x.t ? Journal.hhmm(x.t) : '');
     let endVal = Journal.endAt(x.at || wrote, x.dur) || (x.kind === 'todo' ? x.by || '' : '');
     let endTouched = false;
+    /* Tom, 2026-10-19: "If I delete a time from a bullet, then that bullet is
+       timeless." Emptying Start fell back to the old start on save, and a
+       line with no start still showed when it was written. Emptied now, it
+       saves with no start, no length and `notime`, which journal.js reads
+       as showing no time at all. A start set again takes it off. */
+    let startCleared = false;
     const startOf = () => atVal || wrote || Journal.hhmm(Date.now());
     const span = el('div', 'grid2');
     const tw = el('div', 'field');
     tw.appendChild(el('label', 'fl', 'Start'));
     let startBox = null;
     const putStart = v => {
-      const n = timeInput(v, s => { atVal = s; paintLen(); });
+      const n = timeInput(v, s => { atVal = s; startCleared = !s; paintLen(); });
       if (startBox) tw.replaceChild(n, startBox); else tw.appendChild(n);
       startBox = n;
     };
@@ -4547,10 +4553,10 @@ function noteSheet(x, d) {
       const m = endVal ? Journal.spanMins(startOf(), endVal) : null;
       endLbl.innerHTML = 'End' + (m ? ' <span class="muted">· ' + esc(durLabel(m)) + '</span>' : '');
     };
-    putStart(atVal || wrote);
+    putStart(atVal || (x.notime ? '' : wrote));
     dw.appendChild(timeInput(endVal, v => {
       endVal = v; endTouched = true;
-      if (v && !atVal) { atVal = startOf(); putStart(atVal); }
+      if (v && !atVal) { atVal = startOf(); startCleared = false; putStart(atVal); }
       paintLen();
     }));
     paintLen();
@@ -4678,6 +4684,8 @@ function noteSheet(x, d) {
           at = atVal || (endTouched ? sp.at : (x.at || null));
           dur = sp.dur;
         }
+        const timeless = timed() && !pz.at && !pz.dur && !atVal && !endVal && (startCleared || x.notime);
+        if (timeless) { at = null; dur = null; }
         Rec.set('note', x.date || d, x.key, Object.assign(bare(x), {
           kind: kind, text: pz.text,
           /* A time typed into the line still wins: it is the more recent thing
@@ -4685,7 +4693,8 @@ function noteSheet(x, d) {
           at: pz.at || at,
           dur: pz.dur || dur,
           /* a length that was typed or ended stops the clock Track started */
-          run: (pz.dur || dur) ? undefined : x.run,
+          run: (pz.dur || dur || timeless) ? undefined : x.run,
+          notime: timeless ? 1 : undefined,
           mood: moodOn() ? moodVal : (x.mood != null ? x.mood : null),
           /* switched off, a feeling already on the line is left as it was */
           feel: moodOn() && feelOn ? (feelVal || null) : (x.feel || null),
@@ -9091,9 +9100,30 @@ function checkFields() {
    steps, filled in with what yesterday holds so the final count is a
    retype. Steps are written to yesterday, and only when changed. */
 let checkMorn = [];
+/* Tom, 2026-10-19: "it came early last night, I was still active on my PC
+   but it asked me how much sleep I got". A new calendar day is not a
+   morning: he is often up past midnight. It is a morning once the stretch
+   at the PC he is in began after three hours or more with nobody at it,
+   from 4am on, read from `deskon` (the bedtime rule DESK TIME uses). No
+   record of yesterday at all is a PC that was off, so that counts too. */
+function deskBack() {
+  const t = Day.today(), y = Day.shift(t, -1);
+  const on = (day, off) => { const r = Rec.get('deskon', day, ''); return r && Array.isArray(r.on) ? r.on.map(x => [x[0] + off, x[1] + off]) : []; };
+  const prev = on(y, -1440);
+  if (!prev.length) return true;
+  const sp = prev.concat(on(t, 0));
+  if (scrSpan && scrSpan.d === t) sp.push([scrSpan.a, scrSpan.b]);
+  sp.sort((a, b) => a[0] - b[0]);
+  let end = null, back = false;
+  sp.forEach(s => {
+    if (end != null && s[0] - end >= 180 && s[0] >= 240) back = true;
+    end = end == null ? s[1] : Math.max(end, s[1]);
+  });
+  return back;
+}
 function deskMorning() {
   const d = Day.today();
-  if (!DESK || S.get('desk.newday', '') === d || deskSmallHours(new Date())) return [];
+  if (!DESK || S.get('desk.newday', '') === d || deskSmallHours(new Date()) || !deskBack()) return [];
   const out = ['sleep', 'weight'].map(quickField).filter(f => f && !logged(d, f.id));
   const st = quickField('steps');
   if (st) {

@@ -699,6 +699,8 @@ function timeText(x) {
   if (x.at && x.dur) return { s: clockLabel(x.at) + ' - ' + clockLabel(endAt(x.at, x.dur)), wrote: false };
   if (x.at) return { s: clockLabel(x.at), wrote: false };
   if (dur) return { s: dur, wrote: false };
+  /* its time deleted by hand (STATUS, 2026-10-19): no time, not when it was written */
+  if (x.notime) return { s: '', wrote: false };
   if (x.t) return { s: clockLabel(hhmm(x.t)), wrote: true };
   return { s: '', wrote: false };
 }
