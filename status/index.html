@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.77, 2026-10-19">
+<meta name="mb-version" content="1.0.78, 2026-10-19">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -895,14 +895,27 @@ html.deskhost header { padding-right: var(--s-7); }
    run on under the time. Tom: "Don't clip it anymore, it fits under the timer."
    The status check button stands across both. */
 .deskrow {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center; column-gap: var(--s-3);
   padding-right: calc(var(--tap) - var(--s-2));
 }
 .deskrow > .deskdoing { grid-column: 1; grid-row: 1; min-width: 0; }
-.deskrow > .desktime { grid-column: 2; grid-row: 1; }
-.deskrow > .deskfab { grid-column: 3; grid-row: 1 / span 2; }
-.deskrow > .deskfoot { grid-column: 1 / span 2; grid-row: 2; }
+.deskrow > .deskplay { grid-column: 2; grid-row: 1; }
+.deskrow > .desktime { grid-column: 3; grid-row: 1; }
+.deskrow > .deskfab { grid-column: 4; grid-row: 1 / span 2; }
+.deskrow > .deskfoot { grid-column: 1 / span 3; grid-row: 2; }
+/* Tom, 2026-10-19: "add a play button beside the widget box; Enter only
+   writes the line." Play writes the line and times it; with the box empty
+   and a line running it is Stop. The same 44 the status check button is,
+   drawn plain so the box stays the primary thing. */
+.deskplay {
+  width: var(--tap); height: var(--tap); padding: 0; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 0; border-radius: var(--radius-sm);
+  color: var(--text-muted); cursor: pointer;
+}
+.deskplay:hover { background: var(--surface-2); color: var(--text-1); }
+.deskplay.go { color: var(--accent); }
 .desktime {
   font-family: var(--font-display); font-size: var(--f-3); font-weight: var(--w-bold);
   font-variant-numeric: tabular-nums; color: var(--text-1); white-space: nowrap;
@@ -8909,6 +8922,35 @@ function deskBar() {
     if (again) again.focus();
   };
   row.appendChild(doing);
+
+  const play = el('button', 'deskplay');
+  const runningNow = () => Rec.all('note').some(r => r.payload && r.payload.run && !r.payload.dur);
+  const paintPlay = () => {
+    const stop = !doing.value.trim() && runningNow();
+    play.setAttribute('data-icon', stop ? 'stop' : 'play');
+    play.setAttribute('data-icon-size', '20');
+    play.classList.toggle('go', !!doing.value.trim() || stop);
+    play.title = stop ? 'Stop the clock' : 'Write this and start the clock';
+    play.setAttribute('aria-label', play.title);
+    if (window.Icons && Icons.paint) Icons.paint(play.parentNode || play);
+  };
+  play.onclick = () => {
+    const text = doing.value.trim();
+    if (!text) {
+      if (runningNow()) { stopRunning(); Mobile.feedback('success'); deskBar(); }
+      else doing.focus();
+      return;
+    }
+    deskDoing = '';
+    stopRunning();
+    const k = doingKind() === 'todo' ? 'entry' : doingKind();
+    addNote(Day.today(), k, text, { now: true, run: Date.now() });
+    Mobile.feedback('success');
+    deskBar();
+  };
+  doing.addEventListener('input', paintPlay);
+  row.appendChild(play);
+  paintPlay();
   if (hadFocus) setTimeout(() => { doing.focus(); doing.setSelectionRange(doing.value.length, doing.value.length); }, 0);
 
   /* Under the box: the two ways of writing a line, today's readings, then the
