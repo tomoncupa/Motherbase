@@ -223,6 +223,7 @@ const fresh = req => {
    the plain address and keeps the quick open. A worker's memory can be
    dropped between requests; the worst that does is one ordinary open. */
 const FRESH_MS = 20000;
+const SLOW_MS = 3000;
 let freshUntil = 0;
 const bare = url => {
   const u = new URL(url.href);
@@ -341,11 +342,23 @@ self.addEventListener('fetch', e => {
      iOS the old picture. */
   if (/\/shared\/icons\/.*\.png$/.test(url.pathname) ||
       (Date.now() < freshUntil && !/[?&]v=/.test(url.search))) {
+    /* ── but never wait on it for long ──
+       2026-10-19, Main Menu.exe sat blank for 23 to 29 seconds on open. The
+       PC's IPv6 route to GitHub was dead, and when the first connection
+       tried it, nothing answered until Windows gave up at 21 seconds. A
+       network that hangs rather than fails never reaches the catch below.
+       So after SLOW_MS the kept copy answers, and the network's copy is
+       still kept when it comes, for the next open. */
     const key = bare(url);
     const net = fetch(fresh(req)).then(r => ({ r: r, copy: r.clone() }));
     e.waitUntil(track(net.then(n => store(key, n.copy))).catch(() => {}));
-    e.respondWith(net.then(n => own(n.r)).catch(() =>
-      lookup(key, req.mode === 'navigate').then(hit => own(hit) || offline())));
+    const kept = () => lookup(key, req.mode === 'navigate');
+    let done = false;
+    const first = net.then(n => { done = true; return own(n.r); });
+    const slow = new Promise(res => setTimeout(res, SLOW_MS))
+      .then(() => done ? first : kept().then(hit => hit ? own(hit) : first));
+    e.respondWith(Promise.race([first, slow]).catch(() =>
+      kept().then(hit => own(hit) || offline())));
     return;
   }
 
