@@ -1074,3 +1074,4 @@ open, including the line this app had in the root brief until 2026-09-22.
 ## Opened from COACH onto a block (1.0.74, 2026-10-21)
 
 - `&block=new` or `&block=<phase key>` on a client's address (`CLIENT` set only) opens `TRAIN.phaseDialog` once the store is in, with `{back: true}`: closing it posts `coach-close`, unless the save went on to Training Routines (New Routine For This Block) or DELETE is still asking. It also skips opening on today's waiting set. `coach/CLAUDE.md` has the COACH half.
+- **On a client's profile the Days row offers their own program** (1.0.76): `cprog c-<CLIENT>` as "Their program · <name>", only when it has an exercise or slot, through `useForgeProgram`. Tom's FORGE library is still never offered there. `phaseDialog`'s `was` maps `prog-c-` back as well as `prog-f-`.

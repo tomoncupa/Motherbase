@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.75, 2026-10-21">
+<meta name="mb-version" content="1.0.76, 2026-10-21">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -9107,7 +9107,7 @@ TRAIN.phaseDialog = function (key, o) {
       opt('', 'None');
       TRAIN.blockPrograms().forEach(function (x) { opt(x.id, x.name); });
       opt('*new', 'New routine for this block');
-      var was = cur && cur.program ? String(cur.program).replace(/^prog-(f-)/, 'forge:$1') : '';
+      var was = cur && cur.program ? String(cur.program).replace(/^prog-([fc]-)/, 'forge:$1') : '';
       days.value = was && [].some.call(days.options, function (o) { return o.value === was; }) ? was : (cur && cur.program) || '';
       b.appendChild(UI.row('Days', 'Each empty day in the block offers the next one', days));
       Mobile.form(b, function () { if (save()) h.close(); });
@@ -9169,6 +9169,18 @@ TRAIN.blockPrograms = function () {
     out = out.filter(function (x) { return x.id !== made; });
     out.push({ id: 'forge:' + r.key, name: 'FORGE · ' + (v.name || 'Program') });
   });
+  /* On a client's profile, their own program (2026-10-21): the one COACH's
+     Use For or FORGE's Send gave them, `cprog c-<pid>`, brought in the same
+     way, so a 1:1's block can run it in rotation. Offered again on every
+     save, so a program changed since comes in. */
+  if (CLIENT) {
+    var cp = Rec.get('cprog', null, 'c-' + CLIENT);
+    if (cp && (cp.days || []).some(function (d) { return (d.ex || []).some(function (x) { return x.name || x.slot; }); })) {
+      var mine = 'prog-' + ('c-' + CLIENT).replace(/[^a-z0-9-]/gi, '');
+      out = out.filter(function (x) { return x.id !== mine; });
+      out.push({ id: 'forge:c-' + CLIENT, name: 'Their program · ' + (cp.name || 'Program') });
+    }
+  }
   return out;
 };
 /* A FORGE program into TRAIN's routines, the way a coach's file arrives. */
