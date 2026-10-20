@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.78, 2026-10-19">
+<meta name="mb-version" content="1.0.79, 2026-10-21">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4393,6 +4393,19 @@ function drawJournal(m) {
     !!x.carried && (x.due || x.date) < from;
   const foldN = list.filter(old).length;
   const fold = el('div', 'list');
+  /* ── the day's summary, pinned on top ──
+     Tom, 2026-10-21: "we should be able to enter LOG's day summary in status.
+     Keep it pinned as the top most entry bullet." It is LOG's own fact, the
+     `note` on the day's `day` row, drawn as an entry line that never moves;
+     empty, it says what it is for. Tapping it edits it. */
+  const sumTx = (Rec.get('day', d, '') || {}).note || '';
+  const sum = el('div', 'note-row mb-bullet jsum');
+  sum.innerHTML = '<button class="k" type="button" tabindex="-1" aria-label="Day summary"></button>' +
+    '<span class="tx">' + (sumTx ? esc(sumTx) : '<span class="muted">Day summary</span>') + '</span>';
+  sum.querySelector('.k').innerHTML = noteSvg('entry');
+  sum.querySelector('.k').style.cursor = 'inherit';
+  sum.onclick = () => summarySheet(d);
+  wrap.appendChild(sum);
   list.forEach((x, i) => {
     const r = el('div', 'note-row mb-bullet' + (x.done && !x.movedAway ? ' done' : '') + (x.cancelled ? ' cancelled' : ''));
     /* ── two targets, two meanings ──
@@ -4453,6 +4466,34 @@ function drawJournal(m) {
     if (FOLD_OPEN) c.appendChild(fold);
   }
   m.appendChild(c);
+}
+
+/* The day's summary, written the way LOG's saveSummary writes it: the rest
+   of the day row carried across, an empty summary taken off. */
+function summarySheet(d) {
+  let ta = null;
+  openSheet('Day summary', body => {
+    ta = document.createElement('textarea');
+    ta.rows = 2;
+    ta.value = (Rec.get('day', d, '') || {}).note || '';
+    const save = () => {
+      const v = ta.value.trim(), cur = Rec.get('day', d, '') || {};
+      if ((cur.note || '') !== v) {
+        const next = Object.assign({}, cur, { note: v });
+        if (!v) delete next.note;
+        if (Object.keys(next).length) Rec.set('day', d, '', next); else Rec.del('day', d, '');
+        Mobile.feedback('success');
+      }
+      closeSheet(); draw();
+    };
+    ta.onkeydown = e => {
+      if (e.key !== 'Enter' || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+      e.preventDefault(); save();
+    };
+    body.appendChild(ta);
+    body.appendChild(saveBar('Save', save));
+  });
+  UI.focusSoon(ta);
 }
 
 /* write or edit one line */
