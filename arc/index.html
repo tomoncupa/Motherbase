@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<meta name="mb-version" content="1.0.8, 2026-10-18">
+<meta name="mb-version" content="1.0.9, 2026-10-21">
 <title>ARC — Mind Canvas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;600&family=Space+Grotesk:wght@500;700&family=Caveat:wght@500;700&family=Patrick+Hand&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
@@ -304,6 +304,8 @@ kbd{font-family:var(--f-mono);font-size:10.5px;background:var(--panel2);border:1
 .npath{padding:9px 12px 6px;font-family:var(--f-mono);font-size:9.5px;color:var(--dim);line-height:1.7;max-width:280px;border-bottom:1px solid var(--line)}
 .npath i{color:var(--acc);font-style:normal}
 .menu hr{border:none;border-top:1px solid var(--line);margin:4px 0}
+.mpull{display:flex;align-items:center;gap:8px;padding:0 12px 6px 34px;min-height:44px;font-size:10px;color:var(--dim)}
+.mpull input{flex:1;min-width:0;accent-color:var(--acc)}
 
 /* ---------- toast / empty ---------- */
 #toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%) translateY(10px);z-index:80;padding:9px 16px;
@@ -749,7 +751,8 @@ body.theme-doodle .elabel{font-family:'Caveat',cursive;font-size:15px}
 </div>
 <div class="menu" id="menu-layout" style="min-width:250px">
   <div class="mhead">AUTO-ARRANGE — selection or whole map</div>
-  <button data-lay="level" data-icon="rows" data-icon-size="14">Clean<span class="msub">every level on one line. Nothing moves sideways, so your layout stays yours</span></button>
+  <button data-lay="level" data-icon="rows" data-icon-size="14">Clean<span class="msub">your layout with every box clear and fewer lines crossing. Tops one size</span></button>
+  <div class="mpull"><span>Tidier</span><input type="range" id="clean-pull" min="0" max="100" step="5" value="15" aria-label="How close Clean keeps your places"><span>Your places</span></div>
   <button data-lay="tree" data-icon="map" data-icon-size="14">Tree<span class="msub">rebuilds it top-down with even spacing, every level on one line</span></button>
   <button data-lay="tidy" data-icon="layout" data-icon-size="14">Tidy<span class="msub">gentle nudge. Pulls in far-flung nodes and straightens near-straight lines</span></button>
 </div>
@@ -5493,23 +5496,141 @@ function tierTop(plan,starts){
   const ref=(starts&&starts.length?starts:plan.ids.filter(id=>!plan.depth[id]));
   return Math.min(...ref.map(id=>M().nodes[id].y));
 }
-/* CLEAN. Every tier on one row, top down. Sideways positions are his and are
-   kept: a box only slides right if it would land on its neighbour. */
+/* CLEAN. Tom approved it 2026-10-21 ("build it into ARC as Clean") after tier rows,
+   branch columns and a galaxy were refused: his own layout, cleaned in place by one
+   score over the whole map, made as low as it goes.
+   (1) Stress majorization, the method behind Graphviz's neato: every pair of boxes
+   wants the distance the shortest path of lines between them says, every parent
+   line counted equally (no home parent), equal and cousin links a little longer.
+   (2) An anchor pulls each box toward the spot he gave it, his layout scaled so his
+   lines are as long as the ideal ones on average. The slider in Arrange sets how
+   hard (arc_cleanpull, 0 tidy to 100 your places, 15 by default).
+   (3) PRISM removes overlaps: pairs that touch ask to move apart along the line
+   between them by as much as they touch, near neighbours keep their distances.
+   Then a last push for the few left. His sizes stay; on the whole map every top is
+   given one size, the middle of the sizes he gave his tops. On his skill tree it took
+   line crossings from 946 to 394 with no box overlapping (Claude outputs/arc-principled.html). */
+function cleanPull(){const v=parseFloat(pref('arc_cleanpull'));return isFinite(v)?Math.max(0,Math.min(100,v)):15}
+function sizeTops(ids){
+  const tops=ids.map(id=>M().nodes[id]).filter(n=>n&&isTopNode(n));
+  if(tops.length<2)return;
+  const fsOf=n=>effFs(n)||autoTitleFs(n);
+  const big=tops.filter(n=>fsOf(n)>13).sort((a,b)=>fsOf(a)-fsOf(b));
+  if(!big.length)return;
+  const ref=big[big.length>>1], fs=fsOf(ref), scl=ref.scl||1;
+  const w=Math.round(fs*14*.56+28*scl);   // about fourteen letters a line, as the approved page
+  tops.forEach(n=>{n.fs=fs;n.w=w;if(scl!==1)n.scl=scl;else delete n.scl});
+}
 function layoutLevel(rootId,skipSnap){
   if(!skipSnap)snap();
   const starts=rootId==null?null:[].concat(rootId);
-  const plan=tierPlan(starts);
-  const{sz,rows,rowY}=tierRows(plan,tierTop(plan,starts));
-  rows.forEach((ids,d)=>{
-    let edge=-Infinity;
-    ids.slice().sort((a,b)=>M().nodes[a].x-M().nodes[b].x).forEach(id=>{
-      const n=M().nodes[id];
-      n.y=rowY[d]; if(n.x<edge)n.x=Math.round(edge);
-      edge=n.x+sz[id].w+tierGapX();
-    });
+  const ids=tierPlan(starts).ids, n=ids.length;
+  if(n<2)return ids;
+  const IX={}; ids.forEach((id,k)=>IX[id]=k);
+  const rect=id=>nodeRect(id)||{x:M().nodes[id].x,y:M().nodes[id].y,w:180,h:44};
+  // his centres, as he sees them now
+  const H0=ids.map(id=>{const r=rect(id);return[r.x+r.w/2,r.y+r.h/2]});
+  const old={}; Object.values(M().nodes).forEach(o=>old[o.id]=[o.x,o.y]);
+  if(!starts){sizeTops(ids);render()}
+  const BW=[],BH=[],GP=[];
+  ids.forEach(id=>{const r=rect(id);BW.push(r.w);BH.push(r.h);GP.push(Math.max(20,(effFs(M().nodes[id])||14)*1.2))});
+  const edgeL=(a,b)=>(BW[a]+BW[b])/4+(BH[a]+BH[b])/4+60;
+  const adj=ids.map(()=>[]), E=[];
+  ids.forEach(ch=>H.parents(ch).forEach(p=>{
+    const a=IX[p], b=IX[ch]; if(a==null||M().nodes[p].collapsed)return;
+    const L=edgeL(a,b); adj[a].push([b,L]); adj[b].push([a,L]); E.push([a,b]);
+  }));
+  (M().links||[]).forEach(l=>{
+    if(l.rel&&l.rel!=='equal'&&l.rel!=='cousin')return;
+    const a=IX[l.a], b=IX[l.b]; if(a==null||b==null||a===b)return;
+    const L=edgeL(a,b)*1.6; adj[a].push([b,L]); adj[b].push([a,L]);
+  });
+  // shortest path of lines between every pair (Dijkstra with a binary heap)
+  const D=ids.map(()=>new Float64Array(n).fill(Infinity));
+  for(let s=0;s<n;s++){
+    const d=D[s], hp=[[0,s]]; d[s]=0;
+    const push=x=>{hp.push(x);let i=hp.length-1;while(i){const p=(i-1)>>1;if(hp[p][0]<=hp[i][0])break;[hp[p],hp[i]]=[hp[i],hp[p]];i=p}};
+    const pop=()=>{const top=hp[0],last=hp.pop();if(hp.length){hp[0]=last;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;if(l<hp.length&&hp[l][0]<hp[m][0])m=l;if(r<hp.length&&hp[r][0]<hp[m][0])m=r;if(m===i)break;[hp[m],hp[i]]=[hp[i],hp[m]];i=m}}return top};
+    while(hp.length){const[du,u]=pop();if(du>d[u])continue;for(const[v,L]of adj[u])if(du+L<d[v]){d[v]=du+L;push([d[v],v])}}
+  }
+  let maxD=0; D.forEach(r=>r.forEach(v=>{if(v<Infinity&&v>maxD)maxD=v}));
+  if(!maxD)maxD=600;
+  const Wt=ids.map(()=>new Float64Array(n));
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+    if(i===j)continue;
+    if(D[i][j]===Infinity){D[i][j]=maxD*.6;Wt[i][j]=.05/(D[i][j]*D[i][j])}else Wt[i][j]=1/(D[i][j]*D[i][j]);
+  }
+  // his layout, scaled so his lines are as long as the ideal ones on average
+  const rs=E.map(([a,b])=>edgeL(a,b)/(Math.hypot(H0[a][0]-H0[b][0],H0[a][1]-H0[b][1])||1)).sort((x,y)=>x-y);
+  const SC=rs.length?Math.max(.25,Math.min(8,rs[rs.length>>1])):1;
+  const cx0=H0.reduce((s,p)=>s+p[0],0)/n, cy0=H0.reduce((s,p)=>s+p[1],0)/n;
+  const A=H0.map(p=>[(p[0]-cx0)*SC,(p[1]-cy0)*SC]);
+  const X=A.map(p=>[p[0],p[1]]);
+  const majorize=(iters,pairs,alpha)=>{
+    for(let it=0;it<iters;it++)for(let i=0;i<n;i++){
+      let sx=0,sy=0,sw=0;
+      const pull=(j,dij,w)=>{const dx=X[i][0]-X[j][0],dy=X[i][1]-X[j][1],l=Math.hypot(dx,dy)||1e-3;sx+=w*(X[j][0]+dij*dx/l);sy+=w*(X[j][1]+dij*dy/l);sw+=w};
+      if(pairs)for(const[j,dij,w]of pairs[i])pull(j,dij,w);
+      else{const Di=D[i],Wi=Wt[i];for(let j=0;j<n;j++)if(j!==i)pull(j,Di[j],Wi[j])}
+      if(alpha){const aw=alpha*sw;sx+=aw*A[i][0];sy+=aw*A[i][1];sw+=aw}
+      if(sw>0){X[i][0]=sx/sw;X[i][1]=sy/sw}
+    }
+  };
+  majorize(220,null,.02*Math.pow(10,cleanPull()/40));
+  // PRISM over near pairs
+  for(let round=0;round<160;round++){
+    const pairs=ids.map(()=>[]); let any=0;
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+      const dx=X[j][0]-X[i][0],dy=X[j][1]-X[i][1],g=Math.max(GP[i],GP[j]);
+      const nx=(BW[i]+BW[j])/2+g, ny=(BH[i]+BH[j])/2+g;
+      if(Math.abs(dx)>nx*2.2||Math.abs(dy)>ny*2.2)continue;
+      let t=Math.min(Math.abs(dx)>1e-3?nx/Math.abs(dx):1e9,Math.abs(dy)>1e-3?ny/Math.abs(dy):1e9);
+      t=Math.max(1,Math.min(t,1.8)); if(t>1)any=1;
+      const d=(Math.hypot(dx,dy)||1e-3)*t, w=1/(d*d);
+      pairs[i].push([j,d,w]); pairs[j].push([i,d,w]);
+    }
+    if(!any)break;
+    majorize(12,pairs,0);
+  }
+  // the last few still touching go apart the shorter way out
+  for(let it=0;it<400;it++){
+    let any=0;
+    for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){
+      const dx=X[j][0]-X[i][0],dy=X[j][1]-X[i][1],g=Math.max(GP[i],GP[j])*.6;
+      const ox=(BW[i]+BW[j])/2+g-Math.abs(dx), oy=(BH[i]+BH[j])/2+g-Math.abs(dy);
+      if(ox<=0||oy<=0)continue; any=1;
+      const ai=BW[i]*BH[i], aj=BW[j]*BH[j], fi=aj/(ai+aj), fj=1-fi;
+      if(ox<oy){const s=Math.sign(dx||1)*ox;X[i][0]-=s*fi;X[j][0]+=s*fj}
+      else{const s=Math.sign(dy||1)*oy;X[i][1]-=s*fi;X[j][1]+=s*fj}
+    }
+    if(!any)break;
+  }
+  // back where his map was, centred on the same spot
+  ids.forEach((id,k)=>{const o=M().nodes[id];o.x=Math.round(X[k][0]+cx0-BW[k]/2);o.y=Math.round(X[k][1]+cy0-BH[k]/2)});
+  // a folded branch's nodes travel with the nearest node above them that moved
+  Object.values(M().nodes).forEach(o=>{
+    if(IX[o.id]!=null||!isHidden(o))return;
+    let p=o.parentId;
+    while(p&&IX[p]==null)p=M().nodes[p]?.parentId;
+    if(!p)return;
+    const q=M().nodes[p]; o.x=Math.round(o.x+q.x-old[p][0]); o.y=Math.round(o.y+q.y-old[p][1]);
   });
   if(!skipSnap){render();save();toast('Clean layout')}
-  return plan.ids;
+  return ids;
+}
+/* Straight lines between box centres that cross, for measuring a layout. */
+function lineCrossings(){
+  const segs=[];
+  Object.values(M().nodes).forEach(o=>{if(isHidden(o))return;const b=nodeRect(o.id);if(!b)return;
+    H.parents(o.id).forEach(p=>{const a=nodeRect(p);if(a&&!isHidden(M().nodes[p]))segs.push([p,o.id,[a.cx,a.cy],[b.cx,b.cy]])})});
+  const ccw=(p,q,r)=>(q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]);
+  let cr=0;
+  for(let s=0;s<segs.length;s++)for(let t=s+1;t<segs.length;t++){
+    const[a,b,p1,p2]=segs[s],[c,d,p3,p4]=segs[t];
+    if(a===c||a===d||b===c||b===d)continue;
+    if(ccw(p1,p2,p3)*ccw(p1,p2,p4)<0&&ccw(p3,p4,p1)*ccw(p3,p4,p2)<0)cr++;
+  }
+  return cr;
 }
 /* TREE. Every tier on one row, and each box rebuilt under the parent it hangs
    from, its children spread evenly beneath it in the order they stood. A node
@@ -5695,19 +5816,23 @@ function runLayout(kind,target){
     toast(layoutName(kind)+' layout — '+only.size+' selected nodes only');
     return;
   }
+  const cr=kind==='level'?lineCrossings():null;
   const{skipped,anchor}=applyLayoutCore(kind,target);
   save();
   if(!target&&!anchor)fitView();
+  if(kind==='level'){toast(cleanToast(cr,lineCrossings()));return}
   toast(layoutName(kind)+' layout'+(skipped?' — '+skipped+' far branch'+(skipped>1?'es':'')+' left in place':' — overlaps resolved'));
 }
 /* arrange preview: hover a layout option to see the result; move away to undo; click to keep */
-let previewStash=null, previewKind=null;
+let previewStash=null, previewKind=null, previewCross=null;
+function cleanToast(a,b){return 'Clean layout'+(a!=null&&a!==b?'. Lines crossing '+a+' → '+b:'')}
 function startArrPreview(kind){
   if(previewKind===kind)return;
   cancelArrPreview();
   previewStash={};
-  Object.values(M().nodes).forEach(n=>previewStash[n.id]=[n.x,n.y,n.pinned]);
+  Object.values(M().nodes).forEach(n=>previewStash[n.id]=[n.x,n.y,n.pinned,n.fs,n.w,n.scl]);
   previewKind=kind;
+  previewCross=kind==='level'?lineCrossings():null;
   applyLayoutCore(kind,sel);
   toast('Preview — click to keep it, move the mouse away to undo');
 }
@@ -5715,8 +5840,12 @@ function cancelArrPreview(){
   if(!previewStash)return;
   for(const id in previewStash){
     const n=M().nodes[id]; if(!n)continue;
-    n.x=previewStash[id][0]; n.y=previewStash[id][1];
-    if(previewStash[id][2])n.pinned=true; else delete n.pinned;
+    const[x,y,pin,fs,w,scl]=previewStash[id];
+    n.x=x; n.y=y;
+    if(pin)n.pinned=true; else delete n.pinned;
+    if(fs==null)delete n.fs; else n.fs=fs;     // Clean gives the tops one size
+    if(w==null)delete n.w; else n.w=w;
+    if(scl==null)delete n.scl; else n.scl=scl;
   }
   previewStash=null; previewKind=null;
   render();
@@ -5731,8 +5860,25 @@ function openLayoutMenu(){
 }
 $('#menu-layout').addEventListener('click',e=>{
   const k=e.target.closest('button')?.dataset.lay; if(!k)return;
+  /* Clean takes a moment on a big map, so a click on the preview keeps what is on
+     screen rather than working it out twice. */
+  if(k==='level'&&previewKind===k&&msel.size<2){
+    const keep={}; Object.values(M().nodes).forEach(n=>keep[n.id]=[n.x,n.y,n.pinned,n.fs,n.w,n.scl]);
+    const cr=previewCross;
+    cancelArrPreview(); closeMenus();
+    lastLayout=k; snap();
+    previewStash=keep; cancelArrPreview();   // puts the kept preview back
+    save(); if(!sel)fitView();
+    toast(cleanToast(cr,lineCrossings()));
+    return;
+  }
   cancelArrPreview(); // restore first so undo history captures the real before-state
   closeMenus(); runLayout(k,sel);
+});
+$('#clean-pull').value=cleanPull();
+$('#clean-pull').addEventListener('change',e=>{
+  pref('arc_cleanpull',String(e.target.value));
+  if(previewKind==='level'){previewKind=null;startArrPreview('level')}
 });
 $('#menu-layout').addEventListener('mouseover',e=>{
   const k=e.target.closest('button')?.dataset.lay;
