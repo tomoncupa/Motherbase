@@ -39,7 +39,7 @@ are holding a stale copy of whatever you just changed.
 | `mobile.js` | The touch layer: sheets, swipes, keyboard, back stack, haptics, safe areas. | Medium. Every app's feel. |
 | `sound.js` | Sound themes and instruments, synthesised. | Low. |
 | `ui.js` | Snackbars, dialogs, menus, switches, the Settings panel. **Build app screens out of these, never a private copy of them.** | Medium. |
-| `icons.js` | The icon master set: ~55 drawings carrying ~160 buttons, plus the packs. | Medium. Every button in the suite. |
+| `icons.js` | The icon master set: ~60 drawings carrying ~165 buttons, plus the packs. A drawing may have a part drawn solid (`SOLID`, since 2026-10-21 for TRAIN's five record symbols, roles `pr-*`); a theme or pack that redraws that drawing drops it. | Medium. Every button in the suite. |
 | `io.js` | Backup, restore, spreadsheet export, and the Share picture panel (`IO.share`). | High. It is the safety net. |
 | `chart.js` | Every chart in the suite. Axes, a readable scale, and marks. **Draw a chart with this, never by hand.** | Medium. |
 | `import.js` | Bringing in an outside spreadsheet by shape: ticks, weigh-ins, foods, money out. | High. It writes rows many apps own. |

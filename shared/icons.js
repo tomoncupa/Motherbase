@@ -118,6 +118,27 @@ const PATHS = {
   frames:      'M3 5h8v14H3zM13 5h8v14h-8zM6.5 9.5v5l3.5-2.5z',
   /* a microphone on a stand, for SPEAK: a capsule, the cradle, the stem */
   mic:         'M12 3a3 3 0 013 3v6a3 3 0 01-6 0V6a3 3 0 013-3zM6 11a6 6 0 0012 0M12 17v4M8.5 21h7',
+  /* TRAIN's five record symbols, Tom's picks from a page of 40 on 2026-10-19,
+     drawn in TRAIN until 2026-10-21. Four have a part drawn solid, in SOLID
+     below. `cup` is the trophy with its cup filled, so `record` keeps the
+     outline everywhere else. */
+  cup:         'M7 4h10v5a5 5 0 01-10 0zM7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3M12 14v4M8 21h8',
+  medal:       'M8 2l4 7 4-7M12 10a5 5 0 100 10 5 5 0 000-10',
+  plates:      'M1 12h22',
+  crown:       'M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z',
+  rising:      'M5 20v-5M10 20v-9M15 20v-12M20 20V4',
+};
+
+/* ── the solid parts ──
+   A few drawings are read by a filled shape: a medal is a disc, a barbell is
+   its plates. These are drawn filled in currentColor with no stroke, over the
+   drawing. A theme or pack that redraws one of these drawings drops its solid
+   part too, since it belongs to the shape it was drawn for. */
+const SOLID = {
+  cup:    'M7 4h10v5a5 5 0 01-10 0z',
+  medal:  'M12 10a5 5 0 100 10 5 5 0 000-10',
+  plates: 'M4 6h3v12H4zM17 6h3v12h-3zM7.5 8h2v8h-2zM14.5 8h2v8h-2z',
+  crown:  'M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z',
 };
 
 /* ── the roles ──
@@ -185,6 +206,8 @@ const ROLES = {
   chart: 'chart', graph: 'chart', stats: 'chart', progress: 'chart', volume: 'chart',
   goal: 'target', target: 'target',
   record: 'trophy', best: 'trophy', pr: 'trophy', trophy: 'trophy',
+  /* the five kinds of record on a TRAIN set */
+  'pr-life': 'cup', 'pr-block': 'medal', 'pr-weight': 'plates', 'pr-reps': 'crown', 'pr-vol': 'rising',
   streak: 'flame', fire: 'flame',
   body: 'person', profile: 'person', person: 'person',
 
@@ -338,6 +361,11 @@ const NOTES = {
   pose: 'a figure in a frame, for CHECK IN',
   frames: 'two frames side by side, for FORM',
   mic: 'a microphone on a stand, for SPEAK',
+  cup: 'a filled trophy, a lifetime record on a TRAIN set',
+  medal: 'a medal on its ribbon, a record in this training block',
+  plates: 'a barbell, heaviest ever at these reps',
+  crown: 'a crown, most reps ever at this weight',
+  rising: 'rising bars, most weight x reps in one set',
 };
 
 /* ── how a theme draws them ──
@@ -459,6 +487,7 @@ const Icons = {
   PATHS: PATHS,
   ROLES: ROLES,
   NOTES: NOTES,
+  SOLID: SOLID,
   APP_SLOT: APP_SLOT,
   /** the chart colour an app wears, 1 to 6, or 0 for the accent */
   appSlot(id) { return APP_SLOT[id] || 0; },
@@ -564,6 +593,17 @@ const Icons = {
     if (pack.paths && pack.paths[id]) return pack.paths[id];
     return PATHS[id] || null;
   },
+  /* The part of a drawing drawn solid, or null. Only for the master drawing:
+     a theme or pack that redrew it has a shape this was not made for. */
+  solidFor(role, skin) {
+    const id = this.iconFor(role);
+    if (!id || !SOLID[id]) return null;
+    const s = skin || (typeof Skins !== 'undefined' && Skins.current) || null;
+    if (s && s.icons && s.icons[id]) return null;
+    const pack = allPacks()[packFor(s)] || PACKS.line;
+    if (pack.paths && pack.paths[id]) return null;
+    return SOLID[id];
+  },
 
   /* `svg` returns markup so it can go straight into an innerHTML string, which
      is how most of this suite builds a row. */
@@ -573,6 +613,7 @@ const Icons = {
     if (art && !(opts.skin && opts.skin.icons && opts.skin.icons[this.iconFor(role)])) return this.appSvg(role.slice(4), opts);
     const d = this.pathFor(role, opts.skin);
     if (!d) return '';
+    const so = this.solidFor(role, opts.skin);
     const st = this.styleFor(opts.skin);
     const size = opts.size || 20;
     if (st.wobble) ensureWobble();
@@ -583,7 +624,8 @@ const Icons = {
       + ' stroke-linecap="' + st.cap + '" stroke-linejoin="' + st.join + '"'
       + (st.wobble ? ' filter="url(#mb-icon-wobble)"' : '')
       + ' aria-hidden="true" focusable="false">'
-      + '<path d="' + d + '"/></svg>';
+      + '<path d="' + d + '"/>'
+      + (so ? '<path d="' + so + '" fill="currentColor" stroke="none"/>' : '') + '</svg>';
   },
 
   /* ── an app's own picture ──

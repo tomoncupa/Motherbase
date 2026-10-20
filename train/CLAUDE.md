@@ -269,6 +269,9 @@ pick A), and need an earlier set to have beaten. **A set shows every kind it is*
 row stays 44px and the note keeps its room (beside the numbers, five took the
 note down to 6px); on the log a two-row cluster after the numbers. Gold, the
 accent. The Personal Records sheet ends with SYMBOLS ON A SET, the key.
+The drawings are `shared/icons.js` roles `pr-<kind>` since 1.0.75, so a
+theme's stroke weight reaches them; the cup, disc, plates and crown are drawn
+solid (`Icons.SOLID`).
 
 ## Training, not working out
 
@@ -672,11 +675,7 @@ is paging past 100 sessions, not folding, and stays. What it does, CSS only:
 
 TRAIN never edits `shared/`; a need goes here. (HISTORY.md: For the foundation) Still open:
 - ~~**Keep the middle of the story clear**~~ Done 2026-10-02: `IO.share` takes a `frame` builder and `IO.frameShot` pictures it edge to edge. The session uses it; the week, Profile, records and GRAPH pictures are still cards.
-- **The five record symbols** (trophy, medal, barbell, crown, rising bars) are
-  drawn in TRAIN (`PR_PATH`) because an app session never edits `shared/`. They
-  belong in `shared/icons.js` as roles (`pr-life`, `pr-block`, `pr-weight`,
-  `pr-reps`, `pr-vol`) so a theme's stroke reaches them; `record` already points
-  at the trophy. Once there, `TRAIN.prIcon` should call `ico()`.
+- ~~**The five record symbols**~~ Done 2026-10-21 (1.0.75): roles `pr-life`, `pr-block`, `pr-weight`, `pr-reps`, `pr-vol` in `shared/icons.js`; `TRAIN.prIcon` is `ico('pr-' + id)`.
 - **SHEET still keeps split sets apart** (`sheet/index.html`, `splitNote`, records
   read `!s.split`). TRAIN counts them by effective reps since 1.0.70, so SHEET's
   feats can disagree with TRAIN's records. A SHEET session should copy
