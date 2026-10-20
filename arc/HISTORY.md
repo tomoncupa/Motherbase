@@ -1,0 +1,16 @@
+# ARC history
+
+Build stories moved out of `arc/CLAUDE.md` verbatim. Rules stay in the brief.
+
+## Deleting rows
+
+- **`dbToRows` tombstones only rows in `SEEN`**: rows `rowsToDB` put on screen, or `dbToRows` wrote. Before 1.0.7 it tombstoned every map, node and link in the STORE that the screen lacked. On 2026-09-17 10:58:32Z an ARC open on a blank "Untitled map" saved while the real rows were in the store, and five maps and 347 nodes were tombstoned in one millisecond, `by: arc` (the 89fgkvhaty "Tom Moncupa Skill Tree", 247 nodes, among them). Tombstones carry no payload, and no nightly backup (they start 2026-09-30) or browser store on the PC held the contents. **The Google Sheet did**: `_Data · arc` (and the readable Maps, Nodes, Links tabs) still had every row as of 2026-09-17 08:25Z, because ARC's last push was before the wipe. Pulled through the sync link's `?only=_Data · arc` on 2026-10-06 and written to `Documents/Backups/arc-restore-from-sheet-2026-10-06.json`, every row restamped to that day so it beats the tombstones in a Restore merge (watched: 347 nodes back, 247 drawn on the skill tree). Merged into Main Menu.exe's store over the DevTools port the same night; **live sync did not send them**, because their stamps were six minutes old and its push boundary had already passed that. Restamped to the moment of the merge, 557 rows went up and read back live from the cloud. A restore on a signed-in device needs rows stamped newer than its last push, or they stay on that device. When rows go missing, read the sheet's `_Data · <app>` tab before calling them lost.
+- A node whose map row is not in yet is not shown and therefore never deleted. The migration (`migrateBlob`) calls `dbToRows(true)`, which writes and never deletes.
+- Watched 2026-10-06 on a fresh localhost store: rows set while ARC showed a blank map, and a node with no map row, survived a save; a node made and removed on screen was tombstoned; after a reload, removing a map tombstoned its node.
+
+## History, moved from the root brief on 2026-09-22
+
+What was built and watched, newest last. Moved here verbatim so the root brief
+stays small enough for per-module sessions.
+
+Tom's build, with its own brief. On the shared foundation as of 2026-08-27: the store, the theme engine, the icon set, the settings sheet and the standard backup. Owns `map`, `node`, `link`, `attempt`, `card` and `crev`. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. Tom only since 2026-09-14: behind the dock's line with his other own apps, and dropped from the client build. Skill trees since 2026-09-16 (1.0.1), replacing AI Teach Mode: a node can be a skill with a test; it opens when the skills under it pass, passes on hits on separate days, comes back for reviews, and while in training is a daily QUESTS todo whose tick is a hit. Four in training, stuck skills split, trophies. Built with Claude through the clipboard, and the skill tree.exe skill carries the format. Watched in the browser on test data; not with a real tick from a phone. Cards the same day (1.0.2): a Cards tab over the canvas for the fact-shaped parts of what a tree teaches, on their own SM-2-style schedule that never touches the skill schedule, made from a node or pasted in as `front :: back` lines, graded with the keyboard, and exportable as a spreadsheet. See `arc/CLAUDE.md`.

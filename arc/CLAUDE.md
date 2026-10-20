@@ -17,9 +17,7 @@ Single-file mind-mapping app for Tom (solo fitness coach, PROTAGONIST brand). Ev
 
 ## Deleting rows (2026-10-06, 1.0.7)
 
-- **`dbToRows` tombstones only rows in `SEEN`**: rows `rowsToDB` put on screen, or `dbToRows` wrote. Before 1.0.7 it tombstoned every map, node and link in the STORE that the screen lacked. On 2026-09-17 10:58:32Z an ARC open on a blank "Untitled map" saved while the real rows were in the store, and five maps and 347 nodes were tombstoned in one millisecond, `by: arc` (the 89fgkvhaty "Tom Moncupa Skill Tree", 247 nodes, among them). Tombstones carry no payload, and no nightly backup (they start 2026-09-30) or browser store on the PC held the contents. **The Google Sheet did**: `_Data · arc` (and the readable Maps, Nodes, Links tabs) still had every row as of 2026-09-17 08:25Z, because ARC's last push was before the wipe. Pulled through the sync link's `?only=_Data · arc` on 2026-10-06 and written to `Documents/Backups/arc-restore-from-sheet-2026-10-06.json`, every row restamped to that day so it beats the tombstones in a Restore merge (watched: 347 nodes back, 247 drawn on the skill tree). Merged into Main Menu.exe's store over the DevTools port the same night; **live sync did not send them**, because their stamps were six minutes old and its push boundary had already passed that. Restamped to the moment of the merge, 557 rows went up and read back live from the cloud. A restore on a signed-in device needs rows stamped newer than its last push, or they stay on that device. When rows go missing, read the sheet's `_Data · <app>` tab before calling them lost.
-- A node whose map row is not in yet is not shown and therefore never deleted. The migration (`migrateBlob`) calls `dbToRows(true)`, which writes and never deletes.
-- Watched 2026-10-06 on a fresh localhost store: rows set while ARC showed a blank map, and a node with no map row, survived a save; a node made and removed on screen was tombstoned; after a reload, removing a map tombstoned its node.
+- **`dbToRows` tombstones only rows in `SEEN`** (rows `rowsToDB` put on screen, or `dbToRows` wrote), never every store row the screen lacks: on 2026-09-17 a blank map's save wiped five maps and 347 nodes. When rows go missing, read the sheet's `_Data · <app>` tab before calling them lost, and restamp a restore newer than live sync's push boundary. (HISTORY.md: Deleting rows)
 
 ## Architecture (the parts that must not regress)
 
@@ -79,9 +77,12 @@ Edge routing that avoids crossing nodes · pixel-1:1 PNG export via DOM capture 
 
 1. **The root brief's `crev` line still says "SM-2 style".** Since ARC 1.0.6 (2026-09-30) the replay is FSRS through `arc/ts-fsrs.js`, with SM-2 as the fallback. One line in the root `CLAUDE.md` ownership table.
 
-## History, moved from the root brief on 2026-09-22
+## Layout direction (2026-10-19, after 1.0.8)
 
-What was built and watched, newest last. Moved here verbatim so the root brief
-stays small enough for per-module sessions.
-
-Tom's build, with its own brief. On the shared foundation as of 2026-08-27: the store, the theme engine, the icon set, the settings sheet and the standard backup. Owns `map`, `node`, `link`, `attempt`, `card` and `crev`. `arc/` is canonical; any copy in `Downloads` is a convenience mirror and loses. Tom only since 2026-09-14: behind the dock's line with his other own apps, and dropped from the client build. Skill trees since 2026-09-16 (1.0.1), replacing AI Teach Mode: a node can be a skill with a test; it opens when the skills under it pass, passes on hits on separate days, comes back for reviews, and while in training is a daily QUESTS todo whose tick is a hit. Four in training, stuck skills split, trophies. Built with Claude through the clipboard, and the skill tree.exe skill carries the format. Watched in the browser on test data; not with a real tick from a phone. Cards the same day (1.0.2): a Cards tab over the canvas for the fact-shaped parts of what a tree teaches, on their own SM-2-style schedule that never touches the skill schedule, made from a node or pasted in as `front :: back` lines, graded with the keyboard, and exportable as a spreadsheet. See `arc/CLAUDE.md`.
+Tom, over one session, on Arrange for his skill tree (247 nodes, 9 tops, 49 nodes with 2 to 7 parents, 127 of 238 nodes under 2 to 5 tops):
+- **It is a mind map for seeing every area at once and how they connect (his "B")**; one area at a time is Focus mode, already built.
+- **Parenthood is equal.** "First parent doesn't matter." No layout may give a node a home parent: one-home-plus-lines, a shared row, copies under each parent, "also under" labels were all refused.
+- **Tops (no parent, something under) have equal visual weight**: one gold size. 1.0.8 draws them solid gold (`isTopNode`).
+- **His hand-set sizes stay** and rank nodes within a tier.
+- **Refused as whole-map layouts:** tier rows (1.0.8 Clean: "very horizontal", "doesn't look nice"), branch columns, a force galaxy with tops on a ring ("not functional in a sensible way"; tops overlap as areas, so grouping by top muddles).
+- **Picked: his own layout, cleaned in place**, and he asked for the mathematically principled version: one objective over the whole map, minimised jointly: anchor to his positions, stress majorization for line length scaled by box size, PRISM-style overlap removal with gap by size, a crossing penalty, and a slider for anchor weight. Vanilla JS, no library. Mockups in the untracked `Claude outputs/` folder (`arc-clean-in-place.html` is the heuristic it must beat: 0 overlaps from 65, mean move 293px, top size the median of his own top sizes, about 120).
