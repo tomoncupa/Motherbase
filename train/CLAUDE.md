@@ -1071,3 +1071,7 @@ about the whole suite. Keep Screen On covers most of what it would have fixed.
 The diary is `HISTORY.md` beside this file: what was built, watched and left
 open, including the line this app had in the root brief until 2026-09-22.
 (`HISTORY.md: History, moved from the root brief on 2026-09-22`)
+
+## Opened from COACH onto a block (1.0.74, 2026-10-21)
+
+- `&block=new` or `&block=<phase key>` on a client's address (`CLIENT` set only) opens `TRAIN.phaseDialog` once the store is in, with `{back: true}`: closing it posts `coach-close`, unless the save went on to Training Routines (New Routine For This Block) or DELETE is still asking. It also skips opening on today's waiting set. `coach/CLAUDE.md` has the COACH half.
