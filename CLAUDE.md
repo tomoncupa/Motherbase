@@ -1039,6 +1039,9 @@ answer, or take it out.
   `git diff --stat` before committing; a count far past what you changed is
   this. Put the endings back before committing, never after a push if it
   can be helped.
+  The usual causes here (2026-10-18): Python's `open(p, 'w')` on Windows
+  writes CRLF, and Git Bash's `sed -i` writes LF. Patch files in binary
+  (`'rb'`/`'wb'`) and keep whatever ending the file already had.
 - **An entry animation that starts see-through never plays on a page that
   is not being drawn**, and the content sits invisible on its first frame
   (the Browser pane when hidden reported `currentTime` 0 for good). TRAIN's
