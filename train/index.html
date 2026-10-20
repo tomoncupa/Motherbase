@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.73, 2026-10-19">
+<meta name="mb-version" content="1.0.74, 2026-10-21">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -9083,10 +9083,16 @@ TRAIN.phaseByKey = function (key) {
 TRAIN.phaseWeek = function (sp, date) { return Math.floor(Day.diff(date, sp.from) / 7) + 1; };
 TRAIN.phaseLine = function (sp, date) { return sp.p.name + ' · Week ' + TRAIN.phaseWeek(sp, date); };
 
-TRAIN.phaseDialog = function (key) {
-  var cur = key ? Rec.get('phase', null, key) : null, name = null, start = null, end = null, days = null;
+/* `o.back` (COACH's &block=, 2026-10-21): when the dialog closes, hand the
+   frame back to COACH, unless the save went on to Training Routines or the
+   delete is still asking. */
+TRAIN.phaseDialog = function (key, o) {
+  var cur = key ? Rec.get('phase', null, key) : null, name = null, start = null, end = null, days = null, stay = false;
   UI.dialog({
     title: key ? 'TRAINING BLOCK' : 'NEW TRAINING BLOCK', width: 440,
+    onClose: function () {
+      if (o && o.back && !stay) setTimeout(function () { window.parent.postMessage({ mb: 'coach-close' }, '*'); }, 60);
+    },
     body: function (b, h) {
       name = UI.field('text', { value: cur ? cur.name : '', placeholder: 'Summer Cut 2026' });
       start = UI.field('date', { value: cur ? cur.start : Day.today() });
@@ -9107,6 +9113,7 @@ TRAIN.phaseDialog = function (key) {
       Mobile.form(b, function () { if (save()) h.close(); });
     },
     actions: (key ? [{ label: 'DELETE', kind: 'bad', fn: function () {
+      stay = true;
       setTimeout(function () { TRAIN.deletePhase(key); }, 60);
     } }] : []).concat([
       { label: 'CANCEL' },
@@ -9120,6 +9127,7 @@ TRAIN.phaseDialog = function (key) {
     if (!st) { UI.toast('Please select a start date', { bad: true }); return false; }
     if (en && en < st) { UI.toast('The end is before the start', { bad: true }); return false; }
     var pick = days ? days.value : '', prog = pick;
+    if (pick === '*new') stay = true;
     if (pick === '*new') {
       prog = 'prog-' + TRAIN.newId();
       Rec.set('program', null, prog, { name: nm, ord: Object.keys(TRAIN.programs()).length });
@@ -11434,7 +11442,7 @@ function boot() {
      day with nothing waiting opens on the log as before. Once, when the store
      is in, and only if nothing else has been opened in the meantime. */
   Rec.ready(function () {
-    if (TRAIN.screen !== 'workout' || TRAIN.date !== Day.today() || /[?&]import=1/.test(location.search)) return;
+    if (TRAIN.screen !== 'workout' || TRAIN.date !== Day.today() || /[?&](import=1|block=)/.test(location.search)) return;
     var g = TRAIN.dayGroups(TRAIN.date).filter(function (x) { return x.sets.some(TRAIN.pending); })[0];
     if (!g) return;
     TRAIN.openExercise(g.ex);
@@ -11454,6 +11462,17 @@ function boot() {
   if (/[?&]import=1/.test(location.search) && !TRAIN.importAsked) {
     TRAIN.importAsked = 1;
     setTimeout(function () { TRAIN.importPanel(); }, 150);
+  }
+  /* COACH's New Training Block and Edit Block (2026-10-21): &block=new or
+     &block=<key> opens the block dialog once the store is in, so the client's
+     routines are there for its Days row. Closing it goes back to COACH. */
+  var bkAsk = /[?&]block=([^&]+)/.exec(location.search);
+  if (bkAsk && CLIENT && !TRAIN.blockAsked) {
+    TRAIN.blockAsked = 1;
+    Rec.ready(function () {
+      var k = decodeURIComponent(bkAsk[1]);
+      setTimeout(function () { TRAIN.phaseDialog(k === 'new' || !Rec.get('phase', null, k) ? null : k, { back: true }); }, 150);
+    });
   }
   /* a program the coach sent. After the paint, never before it: the tray
      needs the network, and cloud.js arrives after io.js by itself. */

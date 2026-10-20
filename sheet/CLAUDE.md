@@ -21,7 +21,10 @@ can save and look at the history of when I open the CHARACTER SHEET".
   dark wash through `IO.handOver`. History lists the newest 300, tap to reopen.
 - **The feats:** RECORD (a day's sets heavier than anything before at that many
   reps or more, TRAIN's rule, only after an exercise's first two days; warmups
-  and split sets read from the comment as TRAIN does; one window per day,
+  and split sets read from the comment as TRAIN does; since 1.0.4 a split set
+  counts by its effective reps with TRAIN's `train.split*` weights, copied
+  from `TRAIN.effReps`, and its line reads "10 5 (counts as 14)"; tonnage
+  stays every rep; one window per day,
   rewards are the real gains); Nth SESSION (1, 10, 25, 50, 75, 100 ... 500,
   then every 250); WEEKS IN A ROW with two or more training days (4, 8, 12, 26,
   52, 78, 104, then every 52); TONNAGE lifted (10, 25 ... 1000 t, then every

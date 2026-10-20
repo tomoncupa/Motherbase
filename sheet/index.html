@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
-<meta name="mb-version" content="1.0.3, 2026-10-04">
+<meta name="mb-version" content="1.0.4, 2026-10-21">
 <title>CHARACTER SHEET</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -143,11 +143,14 @@ const wt = kg => { const u = unit(); const v = u === 'lb' ? kg * LB : kg;
   return fmt(Math.round(v * 10) / 10) + ' ' + u; };
 
 /* TRAIN's own reading of a comment, copied rather than guessed (train/,
-   "what a comment says"). A warmup is never a record, and a split set keeps
-   records of its own, so it cannot take a straight one. */
+   "what a comment says"). A warmup is never a record. A split set ("10 5"
+   short rest, "10,5" under 30 s, "10+5" long rest) counts toward a record by
+   its effective reps, TRAIN.effReps since TRAIN 1.0.70: the first part whole,
+   each later part by the rest before it times what the part before counted,
+   with TRAIN's own weights. Tonnage still counts every rep. */
 const warmNote = n => !!n && /\bwarm[ -]?ups?\b|\bwu\b/i.test(n);
 function splitNote(note, reps) {
-  if (!note || !(reps > 1) || !/\d/.test(note)) return false;
+  if (!note || !(reps > 1) || !/\d/.test(note)) return null;
   const rx = /\d+(?:\.\d+)?|\.\d+/g, nums = []; let m;
   while ((m = rx.exec(note))) {
     const a = m.index, b = a + m[0].length;
@@ -159,37 +162,71 @@ function splitNote(note, reps) {
     if (!n.ok) { if (cur.length) runs.push(cur); cur = []; return; }
     if (cur.length) {
       const gap = note.slice(cur[cur.length - 1].b, n.a);
-      if (/^[ \t]*[,+][ \t]*$/.test(gap) || /^[ \t]+$/.test(gap)) { cur.push(n); return; }
+      if (/^[ \t]*[,+][ \t]*$/.test(gap) || /^[ \t]+$/.test(gap)) {
+        n.rest = gap.indexOf('+') > -1 ? 3 : gap.indexOf(',') > -1 ? 2 : 1;
+        cur.push(n); return;
+      }
       runs.push(cur);
     }
+    n.rest = 0;
     cur = [n];
   });
   if (cur.length) runs.push(cur);
   for (const run of runs) for (let i = 0; i < run.length - 1; i++) {
     if (!(run[i].v > 0)) continue;
-    let sum = run[i].v;
+    let sum = run[i].v, rest = 0;
     for (let j = i + 1; j < run.length; j++) {
       if (!(run[j].v > 0)) break;
       sum += run[j].v;
-      if (Math.floor(sum + 1e-9) === reps) return true;
+      rest = Math.max(rest, run[j].rest);
+      if (Math.floor(sum + 1e-9) === reps || Math.abs(sum - reps) < 1e-6)
+        return { text: note.slice(run[i].a, run[j].b), rest: rest,
+                 parts: run.slice(i, j + 1).map(x => x.v),
+                 rests: run.slice(i, j + 1).map((x, k) => k ? x.rest : 0) };
       if (sum > reps + 1) break;
     }
   }
-  return false;
+  return null;
 }
+/* TRAIN.SPLIT_W and TRAIN.splitWeights: percent, changed in TRAIN's Settings. */
+const SPLIT_W = { splitShort: 80, splitMid: 50, splitLong: 0 };
+function splitWeights() {
+  const w = {};
+  Object.keys(SPLIT_W).forEach(k => {
+    let v = Rec.setting('train', k);
+    v = typeof v === 'number' && isFinite(v) ? v : SPLIT_W[k];
+    w[k] = Math.max(0, Math.min(100, v)) / 100;
+  });
+  return { 1: w.splitShort, 2: w.splitMid, 3: w.splitLong };
+}
+function effReps(split, reps, w) {
+  if (!split || !split.parts) return reps;
+  let e = 0, m = 1;
+  split.parts.forEach((p, k) => {
+    if (k) m *= (w[(split.rests || [])[k] || split.rest] || 0);
+    e += m * p;
+  });
+  return Math.round(Math.min(e, reps || e) * 100) / 100;
+}
+const showReps = n => String(Math.round((+n || 0) * 100) / 100);
+/* TRAIN.repsText: "10 5 (counts as 14)" wherever a split set's strength is stated. */
+const repsText = s => !s.split ? showReps(s.r)
+  : s.split.text + (Math.abs(s.er - s.r) > 1e-6 ? ' (counts as ' + showReps(s.er) + ')' : '');
 
 /* Working sets that count, oldest first. A planned set counts once ticked,
    or once its day is over, which is TRAIN.counts. */
 function workSets() {
   const today = Day.today();
-  const out = [];
+  const out = [], sw = splitWeights();
   Rec.all('set').forEach(r => {
     const p = r.payload || {};
     if (!r.date || r.date > today || !p.ex) return;
     if (p.plan && !p.done && r.date >= today) return;
     const warm = p.warm === 1 || p.warm === true || (p.warm !== 0 && p.warm !== false && warmNote(p.note));
     if (warm) return;
-    out.push({ date: r.date, ex: p.ex, kg: +p.kg || 0, r: +p.r || 0, split: splitNote(p.note, +p.r || 0) });
+    const reps = +p.r || 0, split = splitNote(p.note, reps);
+    /* `er` is what the set counts for in strength, `r` every rep */
+    out.push({ date: r.date, ex: p.ex, kg: +p.kg || 0, r: reps, split: split, er: split ? effReps(split, reps, sw) : reps });
   });
   return out;
 }
@@ -232,12 +269,12 @@ function trainFeats(out) {
      exercise has two earlier days, or every first week of a new movement is
      all records. One window per day, one line per exercise. */
   const byEx = {};
-  sets.forEach(s => { if (!s.split && s.kg > 0 && s.r > 0) (byEx[s.ex] = byEx[s.ex] || []).push(s); });
+  sets.forEach(s => { if (s.kg > 0 && s.er > 0) (byEx[s.ex] = byEx[s.ex] || []).push(s); });
   const recDays = {};
   Object.keys(byEx).forEach(ex => {
     const list = byEx[ex].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-    const best = [];                       // best[r] = heaviest kg at exactly r reps
-    const atLeast = r => { let m = 0; for (let i = r; i < best.length; i++) if (best[i] > m) m = best[i]; return m; };
+    const best = {};                       // best[er] = heaviest kg at exactly er reps; er may be 13.6
+    const atLeast = r => { let m = 0; for (const k in best) if (+k >= r - 1e-6 && best[k] > m) m = best[k]; return m; };
     let days = 0;
     for (let i = 0; i < list.length;) {
       const d = list[i].date, day = [];
@@ -245,13 +282,13 @@ function trainFeats(out) {
       if (days >= 2) {
         let top = null;
         day.forEach(s => {
-          const was = atLeast(s.r);
-          if (was > 0 && s.kg > was + 1e-6 && (!top || s.kg > top.kg || (s.kg === top.kg && s.r > top.r)))
-            top = { kg: s.kg, r: s.r, was: was };
+          const was = atLeast(s.er);
+          if (was > 0 && s.kg > was + 1e-6 && (!top || s.kg > top.kg || (s.kg === top.kg && s.er > top.s.er)))
+            top = { kg: s.kg, s: s, was: was };
         });
-        if (top) (recDays[d] = recDays[d] || []).push({ ex: ex, name: exName(ex), kg: top.kg, r: top.r, gain: top.kg - top.was });
+        if (top) (recDays[d] = recDays[d] || []).push({ ex: ex, name: exName(ex), kg: top.kg, reps: repsText(top.s), gain: top.kg - top.was });
       }
-      day.forEach(s => { if (!(best[s.r] >= s.kg)) best[s.r] = s.kg; });
+      day.forEach(s => { if (!(best[s.er] >= s.kg)) best[s.er] = s.kg; });
       days++;
     }
   });
@@ -259,7 +296,7 @@ function trainFeats(out) {
     const recs = recDays[d].sort((a, b) => b.gain - a.gain);
     const shown = recs.slice(0, 5);
     const lines = ['# RECORD BROKEN', recs.length === 1 ? 'A record has been broken.' : recs.length + ' records have been broken.'];
-    shown.forEach(x => lines.push('- [x] ' + x.name + ' ' + wt(x.kg) + ' × ' + x.r));
+    shown.forEach(x => lines.push('- [x] ' + x.name + ' ' + wt(x.kg) + ' × ' + x.reps));
     if (recs.length > shown.length) lines.push('- [x] ' + (recs.length - shown.length) + ' more');
     lines.push('Rewards:');
     shown.forEach(x => lines.push('+' + wt(x.gain) + ' on ' + x.name));
