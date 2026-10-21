@@ -457,3 +457,24 @@ spans both columns.
 [TESTED on the demo at 1920 (4x4 card 38px numbers, 6x5 48px, 3x3 24px,
 none cut) and 375 (nothing cut, the calories unit drops a line); no
 console errors. NOT on his screens.]
+
+## 2026-10-21, HOME 1.0.78: the yes picks 1, 3, 4 and 5 of 2026-10-13
+
+From the picks page Tom answered on 2026-10-13 (pick 2 is a Block token,
+in the foundation commit before this one).
+- **1, a menu button on every card** (`.wdots`, the `more` icon): 32px
+  drawn in the head with a negative margin so no head got taller, 44px
+  caught by `mb-tap`, opening `widgetMenu` under itself; right click and
+  hold still land on the same list. Hidden while rearranging (the up, down
+  and remove buttons are there). On a phone the line beside the title
+  wraps under it rather than pushing past the card (RECORDS did, 394 in
+  360) and the title stays one line.
+- **3, desk buttons 44px tall** (`.tbtn` `min-height:var(--tap)`).
+- **4, digits in fixed slots** on the header clock, CLOCK, TIMER,
+  STOPWATCH and INTERVALS through `dg()`, which is `UI.digits`.
+- **5, HOME is off the phone bar**: eight apps; the logo goes home.
+[TESTED on the demo by mouse at 1920 and by touch at 390: 8 of 8 cards
+carry the button, no head changed height, no head overflows at 375, 390,
+1920 or 3840; the button and right click open the same five items; TIMER
+added through + WIDGET shows four 44px buttons; tabs read STATUS to SPEAK,
+STATUS tap opens it, the logo tap comes home. NOT on his screens.]

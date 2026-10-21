@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.77, 2026-10-18">
+<meta name="mb-version" content="1.0.78, 2026-10-21">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -321,6 +321,18 @@ nav button.dropinto{box-shadow:inset 2px 0 0 var(--acc)}
 /* Controls appear when you say you are rearranging, and not before. A control
    that only exists on hover does not exist at all on a phone. */
 body.editing .w-head .x,body.editing .w-head .mv{display:block}
+/* Every card's menu has a button you can see (pick 1, Tom 2026-10-13):
+   right click and hold reach the same list, but a gesture is a shortcut,
+   never the only way. Drawn small in the head, caught at 44 by mb-tap. */
+.w-head .wdots{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;
+  width:var(--s-6,32px);height:var(--s-6,32px);margin:calc(var(--s-2) * -1) calc(var(--s-1) * -1) calc(var(--s-2) * -1) 0;
+  padding:0;border:0;background:transparent;color:var(--dim2);cursor:pointer;border-radius:var(--radius-sm,6px)}
+.w-head .sub + .wdots{margin-left:0}
+/* the line beside the title gives way to the menu button on a phone, onto
+   two lines rather than past the card's edge */
+@media(max-width:820px){ .w-head{white-space:nowrap} .w-head .sub{min-width:0;white-space:normal;text-align:right} }
+body.editing .w-head .wdots{display:none}
+@media (hover:hover) and (pointer:fine){ .w-head .wdots:hover{color:var(--txt);background:var(--panel2)} }
 /* three buttons and the header line left a phone's title no room, so WEIGHT
    went onto three lines; while rearranging the line steps aside */
 body.editing .w-head .sub{display:none}
@@ -577,6 +589,7 @@ body.dragging #cardframes{z-index:0}
 .tbar{display:flex;gap:var(--s-2);flex-wrap:wrap;align-items:center}
 .tbtn{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.1em;color:var(--dim);background:transparent;
   border:1px solid var(--line2);border-radius:var(--radius-md,6px);padding:var(--s-1) var(--s-3);cursor:pointer;
+  min-height:var(--tap,44px);   /* drawn 44 tall, not only caught at 44 (pick 3, Tom 2026-10-13) */
   display:inline-flex;align-items:center;justify-content:center;gap:var(--s-1);flex:0 0 auto}
 .tbtn:hover{color:var(--txt);border-color:var(--dim2)}
 .tbtn.go{color:var(--acc);border-color:var(--acc)}
@@ -980,8 +993,9 @@ const APPS = [
      The bottom bar is built from these and the top dock from all of them, so
      a phone shows STATUS, QUESTS, TRAIN, CHECK IN, NOTICE and SPEAK and not
      the desk work. Tom, 2026-09-17: "Main Menu on phone should only show
-     Phone apps." HOME carries it because HOME is the screen the bar is on. */
-  { id: 'home',   nm: 'HOME',   ic: '◈', file: null,                ds: 'today, streaks, everything at a glance', phone: 1 },
+     Phone apps." HOME left the bar on 2026-10-21 (pick 5, Tom 2026-10-13):
+     the logo in the header goes home, so the bar is eight apps, not nine. */
+  { id: 'home',   nm: 'HOME',   ic: '◈', file: null,                ds: 'today, streaks, everything at a glance' },
   { id: 'block',  nm: 'BLOCK',  ic: '▦', file: 'block/index.html',  ds: 'build the day out of blocks',               shares: 'routine + ticks' },
   { id: 'status', nm: 'STATUS', ic: '◐', file: 'status/index.html', ds: 'sleep, weight, mood, food and money',        shares: 'the daily measurements', phone: 1 },
   { id: 'log',    nm: 'LOG',    ic: '▤', file: 'log/index.html',    ds: 'the journal, the last few weeks at a glance', shares: 'the journal' },
@@ -1396,6 +1410,10 @@ const DUR = d => d >= 60 ? (d % 60 ? Math.floor(d / 60) + 'h' + String(d % 60).p
 const DLET = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 /* the board's one clock style, 7:25am, not the device's 7:25 AM */
 const clock12 = ts => { const d = new Date(ts); return MIN2(d.getHours() * 60 + d.getMinutes()); };
+/* a number that ticks in place, each digit in a slot of its own (pick 4,
+   Tom 2026-10-13): Chakra Petch's 1 is half the width of its 0, so a clock
+   written as plain text shuffles sideways every minute */
+const dg = (node, text) => { if (typeof UI !== 'undefined' && UI.digits) UI.digits(node, text); else node.textContent = text; };
 
 /* A ring from shared/chart.js, with its number in the middle. */
 function ring(pct, big, small) {
@@ -3414,7 +3432,7 @@ const WIDGETS = {
       const tick = () => {
         const d = new Date();
         /* the clock the rest of the board writes times in */
-        big.textContent = cfg && cfg.sec ? clock12(d.getTime()).replace(/(\d+:\d\d)/, '$1:' + zpad(d.getSeconds())) : clock12(d.getTime());
+        dg(big, cfg && cfg.sec ? clock12(d.getTime()).replace(/(\d+:\d\d)/, '$1:' + zpad(d.getSeconds())) : clock12(d.getTime()));
         sub.textContent = d.toLocaleDateString(undefined, partOn(cfg, 'wday') ? { weekday: 'long', day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long' }).toUpperCase();
       };
       tick();
@@ -3433,7 +3451,7 @@ const WIDGETS = {
       const s = toolOf(cfg, timerTool);
       const face = el('div', 'tface');
       let stopB;
-      const show = now => { const l = s.left(now || Date.now()); face.textContent = mmss(l); face.classList.toggle('idle', !l); if (stopB) stopB.style.display = l ? '' : 'none'; };
+      const show = now => { const l = s.left(now || Date.now()); dg(face, mmss(l)); face.classList.toggle('idle', !l); if (stopB) stopB.style.display = l ? '' : 'none'; };
       s.paint = now => { if (face.isConnected) show(now); };
       show();
       const start = secs => { s.set = secs; s.end = Date.now() + secs * 1000; show(); };
@@ -4428,7 +4446,7 @@ const WIDGETS = {
         });
         show();
       };
-      const show = now => { const ms = s.ms(now || Date.now()); face.textContent = tenths(ms); face.classList.toggle('idle', !ms); };
+      const show = now => { const ms = s.ms(now || Date.now()); dg(face, tenths(ms)); face.classList.toggle('idle', !ms); };
       s.paint = now => { if (face.isConnected && s.t0) show(now); };
       body.appendChild(face); body.appendChild(bar); if (partOn(cfg, 'laps')) body.appendChild(laps);
       render();
@@ -4456,13 +4474,13 @@ const WIDGETS = {
         const c = ivCfg(cfg);
         if (fresh || w.done) {
           phase.textContent = 'READY'; phase.className = 'tphase';
-          face.textContent = mmss(c.work); face.classList.add('idle');
+          dg(face, mmss(c.work)); face.classList.add('idle');
           info.textContent = c.rounds + ' rounds \u00b7 ' + mmss(c.rounds * c.work + (c.rounds - 1) * c.rest) + ' in all';
           return;
         }
         phase.textContent = w.work ? 'WORK' : 'REST';
         phase.className = 'tphase' + (w.work ? ' on' : '');
-        face.textContent = mmss(Math.ceil(w.left)); face.classList.toggle('idle', !s.t0);
+        dg(face, mmss(Math.ceil(w.left))); face.classList.toggle('idle', !s.t0);
         info.textContent = 'Round ' + w.round + ' of ' + c.rounds + ' \u00b7 ' + mmss(Math.ceil(w.total - w.gone)) + ' to go' + (s.t0 ? '' : ' \u00b7 paused');
       };
       const render = () => {
@@ -6154,6 +6172,19 @@ function drawHome() {
       UI.undo('<b>' + esc(W.nm) + '</b> removed', () => { layout.splice(i, 0, gone); saveLayout(); drawHome(); });
     };
     head.appendChild(x);
+    const dots = el('button', 'wdots mb-press mb-tap',
+      (typeof Icons !== 'undefined' && Icons.svg('more', { size: 16 })) || '⋯');
+    dots.title = 'Card menu';
+    dots.setAttribute('aria-label', W.nm + ' menu');
+    dots.setAttribute('aria-haspopup', 'menu');
+    /* pressing it must not start a drag of the card */
+    dots.addEventListener('pointerdown', ev => ev.stopPropagation());
+    dots.onclick = ev => {
+      ev.stopPropagation();
+      const r = dots.getBoundingClientRect();
+      widgetMenu(i, r.left, r.bottom);
+    };
+    head.appendChild(dots);
     /* Dragging by the title only exists where there is a pointer that can
        hover. On a touch screen this gesture IS the scroll gesture. */
     if (FINE) head.addEventListener('pointerdown', ev => startMove(ev, i));
@@ -7315,7 +7346,7 @@ function closeModal() { if (modalH) modalH.close(); }
 function clock() {
   const d = new Date();
   $('#cDate').textContent = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
-  $('#cSub').textContent = clock12(d.getTime());
+  dg($('#cSub'), clock12(d.getTime()));
 }
 $('#btnData').onclick = dataPanel;
 $('#btnWidget').onclick = () => widgetPicker();
