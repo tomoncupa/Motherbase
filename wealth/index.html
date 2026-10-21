@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.33, 2026-10-08">
+<meta name="mb-version" content="1.0.34, 2026-10-21">
 <title>WEALTH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -203,6 +203,21 @@ h2 .spacer{flex:1}
 .list[data-sort] .item{user-select:none;-webkit-user-select:none}
 .list[data-sort] > .dragging, .list[data-sort] > .dragging .item{position:relative;z-index:2;
   background:var(--surface-3);box-shadow:var(--e-3);cursor:grabbing}
+/* A card is moved by its heading (1.0.34): the grip at its end is the visible
+   way in, a gold line shows where it will land, and the card fades where it
+   was. A thumb drags by the grip only, so a heading still scrolls the page. */
+.card > h2.mv{cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.card > h2.mv button{cursor:pointer}
+.cgrip{position:relative;flex:0 0 auto;margin-left:auto;display:flex;align-items:center;justify-content:center;
+  width:var(--s-5);height:1.25em;color:var(--text-muted);cursor:grab;touch-action:none}
+.cgrip::before{content:'';position:absolute;left:50%;top:50%;width:var(--tap);height:var(--tap);transform:translate(-50%,-50%)}
+h2 .spacer + .cgrip, h2 button + .cgrip{margin-left:0}
+.card.lifted{opacity:.35}
+.mv-mark{position:fixed;left:0;top:0;z-index:50;pointer-events:none;background:var(--accent);border-radius:var(--radius-sm)}
+.mv-ghost{position:fixed;left:0;top:0;z-index:51;pointer-events:none;display:flex;align-items:center;gap:var(--s-2);
+  min-height:var(--tap);padding:0 var(--s-4);border-radius:var(--radius-lg);background:var(--surface-2);color:var(--text-1);
+  box-shadow:var(--e-3),var(--rim);font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-cap);font-size:var(--f-1)}
+.mv-ghost [data-icon], .mv-ghost svg{color:var(--accent)}
 #fab{position:fixed;right:var(--s-4);bottom:calc(var(--s-4) + var(--safe-b));z-index:40;
   width:58px;height:58px;border:0;border-radius:50%;cursor:pointer;
   background:var(--accent);color:var(--accent-fg);font-size:28px;line-height:1;
@@ -3168,7 +3183,13 @@ const TABS = [['score', 'SCORE'], ['in', 'MONEY IN'], ['clients', 'CLIENTS'], ['
 
 function card(title, cls) {
   const c = el('div', 'card' + (cls ? ' ' + cls : ''));
-  if (title) c.appendChild(el('h2', null, esc(title)));
+  if (title) {
+    c.appendChild(el('h2', null, esc(title)));
+    /* the name a moved card is kept under (1.0.34): its heading up to any
+       " · ", so EVERYTHING · FOOD is still EVERYTHING. A heading that
+       changes by itself (a month, a day) sets its own after this. */
+    c.dataset.card = String(title).split(' · ')[0].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
   return c;
 }
 function tile(k, v, n, cls) {
@@ -3422,6 +3443,7 @@ function goalCard() {
   const days = Day.diff(monthEnd(mo), monthStart(mo)) + 1;
   const gone = Day.diff(t, monthStart(mo)) + 1;
   const c = card('THIS MONTH');
+  c.dataset.card = 'goal';
   const sc = el('div', 'score');
   sc.appendChild(el('div', 'cap', save ? 'EARNED OF YOUR GOAL' : 'EARNED OF WHAT THE MONTH COSTS'));
   sc.appendChild(el('div', 'big' + (need && got >= need ? ' good' : ''), money(got)));
@@ -3606,6 +3628,7 @@ function netCard() {
   const inNow = monthIn(now), outNow = monthSpend(now).total, net = inNow - outNow;
   const inPrev = monthIn(prev), outPrev = monthSpend(prev).total, netPrev = inPrev - outPrev;
   const c = card(monthName(now).toUpperCase());
+  c.dataset.card = 'net';
   const g = el('div', 'grid3');
   g.appendChild(tile('IN', short(inNow), 'received this month'));
   g.appendChild(tile('OUT', short(outNow), 'spent this month'));
@@ -3939,6 +3962,7 @@ function drawOut(m) {
     const list = bl.filter(b => shelf(b) === id);
     const allow = capped().filter(x => shelfOf(x.id) === id);
     const c = card(title);
+    c.dataset.card = 'shelf-' + id;
     if (!list.length && !allow.length) c.appendChild(el('div', 'empty', empty));
     else {
       const l = el('div', 'list');
@@ -4844,6 +4868,7 @@ function drawCaps(m, mo) {
 function drawOneDay(m, date) {
   const ev = dayEvents(date);
   const c = card(Day.label(date).toUpperCase(), 'full');
+  c.dataset.card = 'day';
   if (!ev.length) {
     c.appendChild(el('div', 'empty', Day.isToday(date)
       ? 'Nothing logged today yet. Spending arrives from STATUS on your phone.'
@@ -6961,6 +6986,181 @@ function sortable(list) {
   list.addEventListener('pointercancel', end);
 }
 
+/* == moving cards ==
+   Tom, 2026-09-23: "I want to drag WEALTH cards the way I do Home's
+   widgets", the pie on top some days. Each screen's cards keep the order he
+   gives them, one saved layout for every device: the setting `layout`,
+   {tab: 'card|card|...'}, a string per screen because live sync drops an
+   empty list. Written only when he moves a card or resets, never on open
+   (root Known traps). A card with no heading (a screen's own header, like
+   UNALLOCATED) stays where it is; the moved ones take the other places.
+   A card that only shows sometimes (BY SOURCE, STILL UNSURE) keeps its
+   place after the card it follows by default. */
+const cardsIn = m => (m ? [].slice.call(m.children) : []).filter(c => c.classList.contains('card') && c.dataset.card);
+function layoutOf(tab) {
+  const s = S.get('layout', null), v = s && typeof s[tab] === 'string' ? s[tab] : '';
+  return v ? v.split('|').filter(Boolean) : [];
+}
+/* `list` in its order, with every id of `def` it lacks put after the id it
+   follows in `def` */
+function fillIn(list, def) {
+  const res = list.slice();
+  def.forEach((id, i) => {
+    if (res.indexOf(id) >= 0) return;
+    let j = i - 1;
+    while (j >= 0 && res.indexOf(def[j]) < 0) j--;
+    res.splice(j < 0 ? 0 : res.indexOf(def[j]) + 1, 0, id);
+  });
+  return res;
+}
+function arrange(m) {
+  const kids = [].slice.call(m.children), mov = cardsIn(m);
+  const seen = {};
+  mov.forEach(c => { const id = c.dataset.card; if (seen[id]) c.dataset.card = id + '-' + (++seen[id]); else seen[id] = 1; });
+  const def = mov.map(c => c.dataset.card);
+  const want = fillIn(layoutOf(TAB).filter(id => def.indexOf(id) >= 0), def), by = {};
+  mov.forEach(c => { by[c.dataset.card] = c; });
+  let n = 0;
+  kids.map(k => (mov.indexOf(k) >= 0 ? by[want[n++]] : k)).forEach(k => m.appendChild(k));
+  if (mov.length > 1) mov.forEach(grabCard);
+}
+/* What is on screen now is what gets saved, with any card not showing today
+   kept after the card it followed in the saved order. */
+function saveCards(tab, ids) {
+  const old = layoutOf(tab), res = fillIn(ids, old);
+  if (res.join('|') === old.join('|')) return false;
+  const s = Object.assign({}, S.get('layout', null) || {});
+  s[tab] = res.join('|');
+  S.set('layout', s);
+  return true;
+}
+function moveCard(id, to) {
+  const ids = cardsIn(document.getElementById('main')).map(c => c.dataset.card);
+  const i = ids.indexOf(id);
+  if (i < 0) return;
+  ids.splice(i, 1);
+  ids.splice(Math.max(0, Math.min(ids.length, to)), 0, id);
+  if (saveCards(TAB, ids)) Mobile.feedback('select');
+  draw();
+}
+function resetCards() {
+  const was = S.get('layout', null), s = Object.assign({}, was || {});
+  if (!s[TAB]) return;
+  delete s[TAB];
+  S.set('layout', Object.keys(s).length ? s : null);
+  draw();
+  UI.undo('layout of this screen reset', () => { S.set('layout', was); draw(); });
+}
+function cardMenu(id) {
+  const ids = cardsIn(document.getElementById('main')).map(c => c.dataset.card), i = ids.indexOf(id), last = ids.length - 1;
+  return [
+    i > 0 ? { label: 'Move up', fn: () => moveCard(id, i - 1) } : null,
+    i > -1 && i < last ? { label: 'Move down', fn: () => moveCard(id, i + 1) } : null,
+    i > 1 ? { label: 'Move to the top', fn: () => moveCard(id, 0) } : null,
+    i > -1 && i < last - 1 ? { label: 'Move to the bottom', fn: () => moveCard(id, last) } : null,
+  ].filter(Boolean).concat(layoutOf(TAB).length ? ['-', { label: 'Reset layout', fn: resetCards }] : []);
+}
+/* The drag, the way COACH moves its cards: past 6px the card lifts, a gold
+   line shows where it will land, let go to put it there. Heard on the
+   window and every card looked up by name on each move, because a sync
+   landing mid-drag redraws the screen (root Known traps). A mouse drags the
+   heading; a thumb drags the grip. The grip pressed and let go opens the
+   menu, and so do a right click and a hold on the heading. */
+function grabCard(c) {
+  const h = c.querySelector(':scope > h2'), id = c.dataset.card;
+  if (!h || h.mvWired) return;
+  h.mvWired = true;
+  h.classList.add('mv');
+  const grip = el('span', 'cgrip');
+  grip.setAttribute('data-icon', 'drag');
+  grip.setAttribute('role', 'button');
+  grip.setAttribute('aria-label', 'Move this card');
+  grip.title = 'Drag to move, or press for the menu';
+  h.appendChild(grip);
+  const title = () => (h.firstChild && h.firstChild.nodeType === 3 ? h.firstChild.textContent : id).trim();
+  if (Mobile.hold) Mobile.hold(h, e => menu(e, cardMenu(id), { title: title() }), { skip: '.cgrip, button' });
+  h.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('button, input, a')) return;
+    const onGrip = !!e.target.closest('.cgrip');
+    if (e.pointerType !== 'mouse' && !onGrip) return;
+    const x0 = e.clientX, y0 = e.clientY, t0 = Date.now(), sc = document.querySelector('main');
+    let ghost = null, mark = null, to = null, px = x0, py = y0, raf = 0;
+    const live = () => document.getElementById('main');
+    const target = () => {
+      const all = cardsIn(live()), ws = all.filter(k => k.dataset.card !== id);
+      if (!ws.length) return null;
+      const across = all.some(k => k.offsetLeft !== all[0].offsetLeft);
+      const near = ws.map(k => {
+        const r = k.getBoundingClientRect();
+        const dx = px < r.left ? r.left - px : px > r.right ? px - r.right : 0;
+        const dy = py < r.top ? r.top - py : py > r.bottom ? py - r.bottom : 0;
+        return { k: k, r: r, d: dx * dx + dy * dy };
+      }).sort((a, b) => a.d - b.d)[0];
+      const before = across ? px < near.r.left + near.r.width / 2 : py < near.r.top + near.r.height / 2;
+      const at = ws.indexOf(near.k) + (before ? 0 : 1);
+      return { r: near.r, before: before, across: across, at: at };
+    };
+    const paint = () => {
+      cardsIn(live()).forEach(k => k.classList.toggle('lifted', k.dataset.card === id));
+      ghost.style.transform = 'translate(' + (px + 12) + 'px,' + (py - 22) + 'px)';
+      to = target();
+      if (!to) { mark.style.display = 'none'; return; }
+      const r = to.r, g = parseFloat(getComputedStyle(live()).rowGap) || 16, t = 4;
+      let x, y, w, hh;
+      if (to.across) { x = (to.before ? r.left - g / 2 : r.right + g / 2) - t / 2; y = r.top; w = t; hh = Math.max(r.height, 44); }
+      else { y = (to.before ? r.top - g / 2 : r.bottom + g / 2) - t / 2; x = r.left; w = r.width; hh = t; }
+      Object.assign(mark.style, { display: '', transform: 'translate(' + x + 'px,' + y + 'px)', width: w + 'px', height: hh + 'px' });
+    };
+    /* near the top or bottom of the page, it scrolls */
+    const tick = () => {
+      if (!ghost) return;
+      const r = sc.getBoundingClientRect(), edge = 56;
+      const v = py < r.top + edge ? py - (r.top + edge) : py > r.bottom - edge ? py - (r.bottom - edge) : 0;
+      if (v) { sc.scrollTop += Math.round(v / 3); paint(); }
+      raf = requestAnimationFrame(tick);
+    };
+    const move = ev => {
+      if (ev.pointerId !== e.pointerId) return;
+      px = ev.clientX; py = ev.clientY;
+      if (!ghost) {
+        if (Math.hypot(px - x0, py - y0) < 6) return;
+        /* held still long enough for the hold menu: that press was the menu */
+        if (!onGrip && Date.now() - t0 > 450) { off(); return; }
+        ghost = el('div', 'mv-ghost', '<span data-icon="drag"></span><span>' + esc(title()) + '</span>');
+        mark = el('div', 'mv-mark');
+        document.body.appendChild(mark); document.body.appendChild(ghost);
+        if (window.Icons) Icons.paint(ghost);
+        Mobile.feedback('select');
+        raf = requestAnimationFrame(tick);
+      }
+      paint();
+      ev.preventDefault();
+    };
+    const end = ev => {
+      if (ev.pointerId !== e.pointerId) return;
+      off();
+      if (!ghost) {
+        /* the grip pressed and let go, not dragged: its menu */
+        if (onGrip && ev.type === 'pointerup') { Mobile.feedback('select'); menu(grip, cardMenu(id), { title: title() }); }
+        return;
+      }
+      cancelAnimationFrame(raf);
+      ghost.remove(); mark.remove(); ghost = null;
+      cardsIn(live()).forEach(k => k.classList.remove('lifted'));
+      /* the click that ends a drag is not a press on what is under it */
+      const eat = x => { x.stopPropagation(); x.preventDefault(); };
+      window.addEventListener('click', eat, true);
+      setTimeout(() => window.removeEventListener('click', eat, true), 40);
+      if (ev.type === 'pointercancel' || !to) return;
+      moveCard(id, to.at);
+    };
+    const off = () => { ['pointermove', 'pointerup', 'pointercancel'].forEach((k, i) => window.removeEventListener(k, i ? end : move)); };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+    if (onGrip) e.preventDefault();
+  });
+}
+
 /* == the menus == */
 function removeWithUndo(type, date, key, label) {
   const keep = Rec.get(type, date, key);
@@ -7282,6 +7482,7 @@ function draw() {
     m.appendChild(el('div', 'card', '<b>Something went wrong drawing this screen.</b><div class="note">' +
       esc(String(e && e.message || e)) + '</div>'));
   }
+  try { arrange(m); } catch (e) { console.warn('[wealth] card order', e); }
   attachMenus(m);
 }
 

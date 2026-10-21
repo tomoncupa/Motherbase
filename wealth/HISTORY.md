@@ -1361,3 +1361,244 @@ What was built and watched, newest last. Moved here verbatim so the root brief
 stays small enough for per-module sessions.
 
 Built 2026-09-11 and tested in the browser. The money app: three numbers (liquid, allocated, free) and runway. Owns clients on any payment cycle — every N months on one or several days, every N weeks, every N sessions, packages bought up front, or one off — with expected payments derived from the cycle rather than stored. A monthly day is clamped per month when the date is worked out and never when it is saved, so the 31st stays the 31st in every month that has one. Spending reviews at three zoom levels, day, week and month, with a day drawn as a timeline down the clock. Reads STATUS's `spend` rows and files them with a `mark` row rather than editing them, so STATUS's price, account, receipt and meal link cannot be dropped. Text rules sort spending retroactively. Big purchases are marked and excluded from every "normal spending" figure. Every name is picked from a list, never typed twice, and every amount groups itself with commas as it is typed. Logs spending itself as well as reading STATUS's. A donut for where money went, and monthly net beside liquid. Amounts are stored in one base currency and a header switch reads them all in a second one; the rate is typed and dated rather than fetched, and typing always stays in the base currency so a round trip cannot lose anything. Tom only, kept out of the client build. Opens a GCash PDF (asking for its password, never storing it) or a bank spreadsheet directly, with pasting as the fallback. Trusts the running balance over the printed amount, so ride holds GCash prints as payments are dropped and part-charges fold into one purchase; checks every statement against its own closing balance; nets reversals; and records money between his own accounts once, as a transfer, even when both statements show it. An import setup asks once what each new payee is and turns the answer into a rule; transfers to people nobody named are filed as One-time transfers tagged Unsure, still counted as money out. Then reconciles it: certain matches merge into a master entry keeping his category and taking the bank's amount, uncertain ones are asked about one at a time, and reading the same file twice adds nothing. Optional monthly caps per category, shown as a number and a pace mark rather than a verdict. Has its own brief. 1.0.14, 2026-09-17: one bill bullet at a time. Tom: "Why does pay skool show up twice in my todo widget? meralco too." They were not duplicates. Bills are read 30 days ahead and Meralco is every 6 to 7 days, so four or five of its dates sit in the window at once and every one not matched to a payment is overdue and therefore on today's list — four real rows, all reading `Pay Meralco, 1,040`. You cannot pay next week's before this week's, so only the earliest outstanding date per bill gets a bullet and the next appears when that one is cleared. Rows written under the old rule fall out of `want` and are taken back on the next pass, so his existing ones clear themselves; a ticked one is kept, as ever. Watched: six owed dates across two bills became two bullets, and two extra rows seeded by hand were removed on the next sync.
+
+# Moved from the brief on 2026-10-21, verbatim
+
+## Runway is the real subject
+
+Runway is the app's real subject. Liquid goes up and down for boring reasons.
+Runway only moves when something structural changed, and it is the number that
+tells him whether the business is getting safer or not. It is also, in the
+language of the root brief's psychology section, a **competence** signal rather
+than a compliance one: it is evidence the thing is working, not a scolding
+about a budget he missed.
+
+## 5. Nothing important is typed twice
+
+### 5. Nothing important is typed twice
+
+Set by Tom: *"I want a lot of autofills because im scared of typo induced
+duplicates."* He is right to be. A merchant name, a category, a client, an
+account and a tag are all picked from what already exists. Typing filters the
+list; it does not create a new thing. Creating is a separate deliberate act,
+and it refuses a near-match: type "grab" when "Grab" exists and it offers the
+existing one instead of making a second.
+
+PORTION already works this way and refuses a second food with a name you
+already have. Same rule, same reason.
+
+There is a second duplicate this catches, and it is not a typo: the same amount
+logged twice to the same account within the hour. That gets a question, not a
+silent second row.
+
+## 7. Show the number, never the verdict
+
+Client concentration is the case that made this a law. If one client is 34% of
+his income, the app says 34%. It does not say that is dangerous, because the
+published benchmarks are written for firms with staff and he is one coach. Ship
+vocabulary, never prescription. The root brief's rule about never telling him
+what a behaviour did to a number applies here with full force: no line ever
+reads "you saved more because you cooked".
+
+## 8. Categories are few, and rules do the sorting
+
+A category earns its place by being a decision. The starting set is his, in his
+words, and the app ships it as vocabulary rather than growing it on its own.
+
+Sorting happens through `rule` rows: text found in a description maps to a
+category. Write a rule today and it sorts the whole history back to the
+beginning, which is what makes categorising bearable at all. A single spend can
+override its rule through its `mark`.
+
+**Categories say what. Tags say why.** Groceries is a category. A date is a
+
+## The starting vocabulary
+
+## The starting vocabulary
+
+Shipped as a starting set, editable, and never added to automatically.
+
+| `fix` | `var` | `biz` | `move` |
+|---|---|---|---|
+| Rent | Groceries | Operating costs | Debt payment |
+| Utility Bills | Outside food | Marketing | Savings transfer |
+| Drinking Water | Transport | | Between accounts |
+| Subscriptions | Health | | |
+| Gym | Household | | |
+| | Personal | | |
+
+Gasoline, Grab and Angkas are all Transport. The split between them comes free
+from the merchant name in the description, so it costs no categories.
+
+`fix` and `var` is the split that matters most, because only the variable half
+is steerable, and the fixed half is what runway is calculated against.
+
+## A second kind of session owes the difference
+
+**A second kind of session owes the difference** (2026-10-08, Jay: online
+package 45,000/30, in person 70,000/30). `client.alt` holds the other kind's
+price; each session box gets a tick for it. A ticked session still uses one
+session of its package and owes its price a session less the package's,
+due the day it happened, rounded on the running total. Ordered with the
+package's parts by session, so money pays the oldest owed first; next to
+each other they are one line owed. A cheaper kind owes nothing. Clearing
+the price keeps the ticks. Packages only; a session-cycle client has no
+second price yet (`altOf`, `packState`).
+
+## A payment sheet must merge, like everything else
+
+### A payment sheet must merge, like everything else
+
+Found while adding the above, and older than it: `paidSheet` rebuilt the whole
+payload on save, so editing an imported payment dropped `stmt`, the link to
+the statement line it came from. The "already imported" record then pointed at
+a row with no link, and reading that file again would have added the payment a
+second time. It merges now. The calcium bug, in the money app, found by
+reading rather than by anybody noticing.
+
+## Screenshots fill the days a statement has not reached
+
+**Screenshots fill the days a statement has not reached** (2026-09-23).
+GCash and UnionBank app history, read by Tesseract (`ocrShots`). A screenshot
+line is written with `src: 'shot'` and `shot: <fingerprint>`, never `stmt`
+or `bank`, so the statement's line merges into it later and its wording
+replaces the app's. A screenshot never changes a row a statement already
+wrote. A statement lists screenshot lines on days before its last that it
+does not show, and removes them unless told not to. No rule is ever asked
+for from app wording. A GCash line whose sign could not be read is left out.
+Two apps in one drop are refused. Anything dropped anywhere on WEALTH opens
+READ A STATEMENT with it. The + menu on the first screen and ACCOUNTS carries
+A statement and Screenshots, each opening the file chooser for that kind only
+(`importSheet('statement' | 'shots')`).
+
+## While importing
+
+**While importing** (2026-09-23): every added or matched line has a comment
+box, merged into its `recon.comment` at apply. A payment rail line (`isRail`,
+Bancnet) is asked on its own in setup, filed by a `mark` on its row, never a
+rule. Category pick lists are A to Z (`catsAZ`); the CATEGORIES card keeps
+his dragged order.
+
+## Device
+
+**Desktop**, under hard constraint 10, like PORTION and for the same reason.
+This is desk work. Reconciling a statement, setting up clients and reading a
+month against another month are all sitting-down jobs with a mouse.
+
+It still stacks to one column below 900px, keeps every target at 44px and
+honours the safe areas, because a desktop app on a phone has to stay usable.
+
+Quick entry on a phone stays in STATUS, which is what STATUS is for.
+
+## Movable cards, the ask (built 1.0.34)
+
+**Movable cards, like Home's widgets.** Tom, 2026-09-23: "I want to drag
+WEALTH cards the way I do Home's widgets", e.g. the pie chart on top some
+days. One saved layout for every device (a setting row, so it syncs), not per
+device. Read `HOME.md` and the home screen's widget grid first and reuse its
+behaviour (spots, drag, the + in a gap), not only its look. Not started.
+
+## Tom only, forever
+
+**Tom only, forever.** It is in `DROP_APPS` in `tools/build-client.py`, like
+PORTION and FORM. No client ever sees it, and that is settled rather than
+current: Tom, 2026-09-16, *"WEALTH is a forever Tom only app that I'm directly
+working on you with."* That is not squeamishness about money, it is that the
+app is built around one person's clients and one person's rent. Build nothing
+here for a stranger, and no onboarding for one.
+
+## Why it exists
+
+## Why it exists
+
+Tom is a solo coach. His costs are flat and his income is not. Rent is the same
+every month; a client can pause, finish, or pay late, and a commercial shoot
+arrives out of nowhere. That shape of money is what breaks people, and it does
+not break them by being small. It breaks them because in a good month it looks
+like there is more than there is.
+
+STATUS already logs the day to day. It is the phone in the queue at the
+supermarket and it is good at that. It has never been able to answer the only
+question that matters, which is whether he can afford something.
+
+## 6. A cap is his to write (the brief's version, 2026-10-21)
+
+Nothing ships with a cap. "3,400 of 5,000, 11 days in", never "over budget";
+over is a number in the warning colour. Every bar carries a pace mark, a line
+to read against, never a rule. On screen a cap is an allowance, under BUDGETS;
+the field is still `cap` on `cat`. Every purchase filed under the category
+counts, however it arrived. FREE holds back what is left this month, never
+below zero, plus each later month's whole allowance inside the window, and
+never holds a bill in that category twice. Nothing suggests an amount, except
+a cap passed three months running offers once, quietly, the middle of those
+three. (HISTORY.md: 6. A cap is his to write, and it is never a verdict)
+
+## A bill coming up is a todo bullet (the brief's version, 2026-10-21)
+
+**A bill coming up is a `note` todo**, only its earliest outstanding date, never
+for a `move` category. Found by its key on ANY date, never only the one
+`wealth.billMade` remembers: that setting is one row two devices overwrite,
+and trusting it wrote the same bullet twice once live sync joined them
+(2026-09-23). An unticked extra is deleted; a key deleted on any date stays
+deleted. (HISTORY.md: A bill coming up is a todo bullet)
+
+## BY SOURCE, and a payment past its reach (2026-09-23)
+
+**A tapped category is split BY SOURCE** (2026-09-23), right under the pie: `payeeOf` on the bank wording or his note, and names sharing a first word (two if the first is a number) are one place, so "Lawson Tonkatsu" is Lawson.
+
+**A payment past its reach still settles** (2026-09-23, a monthly client paid on the 19th for the 1st): after the nearest-date pass, a leftover payment for that client settles the oldest unpaid date on or before it.
+
+## A wide window (the brief's version, 2026-10-21)
+
+**On a wide window, lay things out side by side; never fold text.** Tom,
+2026-10-02, on a 5120 screen where WEALTH gets a 2560 half. Past 1700px the
+cards sit three across, past 2300 four, up to 2400px; `wfull`, `w2` (one of
+three, two of four) and `t2` (two rows high) on a card act only there. A long
+list in a wide card flows into columns, down then across; a list he can drag
+goes across then down, and `sortable` reads the pointer both ways once its
+rows are not one column. Nothing is hidden or put behind "show more". Below
+1700px the layout is exactly what it was. (HISTORY.md: A wide window)
+
+## Moving cards (1.0.34)
+
+Built 2026-10-21 from the ask above, which the brief had listed as agreed
+since 2026-09-23. Home's widgets sit on a grid of spots with a + in a gap;
+WEALTH's screens are one flowing grid with nothing to add, so the part of
+Home's behaviour that carries over is the drag by the heading, and the code
+copies COACH 1.0.24's `grabCard` (one system with WEALTH), with WEALTH's own
+visible grip (law 6, as on its sortable rows) and sentence-case menu words.
+Watched in headless Chromium on the demo: opening wrote no layout; at
+1920x1080 a real mouse drag of THE NEXT 60 DAYS's heading onto the first
+card on MONEY OUT showed the gold line and the faded card, saved
+`{out: ...}`, and held on reload; a right click on a heading gave Move down,
+Move to the bottom, Reset layout, and Move down moved it; the grip pressed and
+let go opened the same menu; Reset layout cleared the setting and UNDO put it
+back. At 390x844 with touch, a drag by the grip moved a card on SCORE and
+saved, a press on the grip opened the menu, no sideways scroll, the grip's
+press area 44x44. No page errors. Not seen on his screens.
+
+## His own data may be written when he asks for it
+
+**His own data may be written when he asks for it.** The copy he opens from
+the folder cannot be reached from a session, so a change he asks to be made
+for him goes into the website copy in his Chrome and reaches the folder copy
+through the Google Sheet, once that copy is opened again. Say so when doing
+it, and say what was changed to what.
+
+## 3. One big purchase must not become the story of the month
+
+A laptop makes a normal month look like a catastrophe and hides the ordinary
+drift that is actually worth seeing. Big purchases are marked and pulled out,
+listed on their own, and every "what do I normally spend" figure excludes them
+and says that it does.
+
+## Client payments, a kind and a number
+
+Tom, 2026-09-11: *"I need to be able to add clients with more freedom, I have a
+client who pays me every 2 months and 1 who pays every X sessions."*
+
+So a cycle is **a kind and a number**, not one of a fixed list of four.
+
+## Bills every few months (the brief's version, 2026-10-21)
+
+**Bills every few months** (2026-09-23): `months` on a monthly bill, stepped from `start`, the month last paid; a month's worth is amount ÷ `months`. Never read from `every`, which a bill switched from days keeps. No field for it in the bill sheet yet; the sheet merges, so it survives an edit.

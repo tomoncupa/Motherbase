@@ -9,18 +9,11 @@ wins and this file is the bug.
 
 The build stories are in `wealth/HISTORY.md`, read the section for the corner you are working in.
 
-**Tom only, forever.** It is in `DROP_APPS` in `tools/build-client.py`, like
-PORTION and FORM. No client ever sees it, and that is settled rather than
-current: Tom, 2026-09-16, *"WEALTH is a forever Tom only app that I'm directly
-working on you with."* That is not squeamishness about money, it is that the
-app is built around one person's clients and one person's rent. Build nothing
-here for a stranger, and no onboarding for one.
+**Tom only, forever** (Tom, 2026-09-16): in `DROP_APPS`; build nothing here
+for a stranger, and no onboarding for one. (HISTORY.md: Tom only, forever)
 
-**His own data may be written when he asks for it.** The copy he opens from
-the folder cannot be reached from a session, so a change he asks to be made
-for him goes into the website copy in his Chrome and reaches the folder copy
-through the Google Sheet, once that copy is opened again. Say so when doing
-it, and say what was changed to what.
+**His own data may be written when he asks for it**, in his hosted copy in
+Chrome; say what was changed to what. (HISTORY.md: His own data may be written when he asks for it)
 
 ---
 
@@ -34,15 +27,8 @@ every screen serves that, or it belongs somewhere else.
 
 ## Why it exists
 
-Tom is a solo coach. His costs are flat and his income is not. Rent is the same
-every month; a client can pause, finish, or pay late, and a commercial shoot
-arrives out of nowhere. That shape of money is what breaks people, and it does
-not break them by being small. It breaks them because in a good month it looks
-like there is more than there is.
-
-STATUS already logs the day to day. It is the phone in the queue at the
-supermarket and it is good at that. It has never been able to answer the only
-question that matters, which is whether he can afford something.
+Flat costs, uneven income: a good month looks like more than there is. STATUS
+logs the day; this answers "can I afford it". (HISTORY.md: Why it exists)
 
 ---
 
@@ -59,12 +45,8 @@ Three numbers, in this order, at the top of the first screen:
 And under them, **RUNWAY**: how many months he could keep paying himself and
 the bills if every client left tomorrow.
 
-Runway is the app's real subject. Liquid goes up and down for boring reasons.
-Runway only moves when something structural changed, and it is the number that
-tells him whether the business is getting safer or not. It is also, in the
-language of the root brief's psychology section, a **competence** signal rather
-than a compliance one: it is evidence the thing is working, not a scolding
-about a budget he missed.
+Runway is the app's real subject: it moves only when something structural
+changed, a competence signal, never a scolding. (HISTORY.md: Runway is the real subject)
 
 ### How the big number behaves
 
@@ -158,10 +140,8 @@ in it is ever counted as an outgoing.
 
 ### 3. One big purchase must not become the story of the month
 
-A laptop makes a normal month look like a catastrophe and hides the ordinary
-drift that is actually worth seeing. Big purchases are marked and pulled out,
-listed on their own, and every "what do I normally spend" figure excludes them
-and says that it does.
+Big purchases are marked, listed on their own, and left out of every "normal
+spending" figure, which says so. (HISTORY.md: 3. One big purchase must not become the story of the month)
 
 ### 4. Numbers group themselves, and reading one survives it
 
@@ -171,51 +151,25 @@ restored by counting digits, not characters. (HISTORY.md: 4. Numbers group thems
 
 ### 5. Nothing important is typed twice
 
-Set by Tom: *"I want a lot of autofills because im scared of typo induced
-duplicates."* He is right to be. A merchant name, a category, a client, an
-account and a tag are all picked from what already exists. Typing filters the
-list; it does not create a new thing. Creating is a separate deliberate act,
-and it refuses a near-match: type "grab" when "Grab" exists and it offers the
-existing one instead of making a second.
-
-PORTION already works this way and refuses a second food with a name you
-already have. Same rule, same reason.
-
-There is a second duplicate this catches, and it is not a typo: the same amount
-logged twice to the same account within the hour. That gets a question, not a
-silent second row.
+Names are picked from what exists; typing filters, creating is a separate act
+that refuses a near-match. The same amount to the same account within the hour
+gets a question. (HISTORY.md: 5. Nothing important is typed twice)
 
 ### 6. A cap is his to write, and it is never a verdict
 
-Nothing ships with a cap. "3,400 of 5,000, 11 days in", never "over budget";
-over is a number in the warning colour. Every bar carries a pace mark, a line
-to read against, never a rule. On screen a cap is an allowance, under BUDGETS;
-the field is still `cap` on `cat`. Every purchase filed under the category
-counts, however it arrived. FREE holds back what is left this month, never
-below zero, plus each later month's whole allowance inside the window, and
-never holds a bill in that category twice. Nothing suggests an amount, except
-a cap passed three months running offers once, quietly, the middle of those
-three. (HISTORY.md: 6. A cap is his to write, and it is never a verdict)
+Nothing ships with a cap; "3,400 of 5,000, 11 days in", never "over budget".
+On screen an allowance (`cap` on `cat`); FREE holds back what is left, never
+below zero. (HISTORY.md: 6. A cap is his to write, and it is never a verdict)
 
 ### 7. Show the number, never the verdict
 
-Client concentration is the case that made this a law. If one client is 34% of
-his income, the app says 34%. It does not say that is dangerous, because the
-published benchmarks are written for firms with staff and he is one coach. Ship
-vocabulary, never prescription. The root brief's rule about never telling him
-what a behaviour did to a number applies here with full force: no line ever
-reads "you saved more because you cooked".
+One client at 34% of income reads 34%, never "dangerous". No line ever says
+what a behaviour did to a number. (HISTORY.md: 7. Show the number, never the verdict)
 
 ### 8. Categories are few, and rules do the sorting
 
-A category earns its place by being a decision. The starting set is his, in his
-words, and the app ships it as vocabulary rather than growing it on its own.
-
-Sorting happens through `rule` rows: text found in a description maps to a
-category. Write a rule today and it sorts the whole history back to the
-beginning, which is what makes categorising bearable at all. A single spend can
-override its rule through its `mark`.
-
+A category earns its place by being a decision. A `rule` (text in a
+description to a category) sorts all history; a `mark` overrides one spend.
 **Categories say what. Tags say why.** Groceries is a category. A date is a
 tag. Keeping them apart is what lets him ask "how much on eating out" and "how
 much on dates" without the two questions fighting.
@@ -224,31 +178,14 @@ much on dates" without the two questions fighting.
 
 ## The starting vocabulary
 
-Shipped as a starting set, editable, and never added to automatically.
-
-| `fix` | `var` | `biz` | `move` |
-|---|---|---|---|
-| Rent | Groceries | Operating costs | Debt payment |
-| Utility Bills | Outside food | Marketing | Savings transfer |
-| Drinking Water | Transport | | Between accounts |
-| Subscriptions | Health | | |
-| Gym | Household | | |
-| | Personal | | |
-
-Gasoline, Grab and Angkas are all Transport. The split between them comes free
-from the merchant name in the description, so it costs no categories.
-
-`fix` and `var` is the split that matters most, because only the variable half
-is steerable, and the fixed half is what runway is calculated against.
+A starting set of categories in four groups (`fix`, `var`, `biz`, `move`),
+editable, never added to by the app. Runway is figured against `fix`. (HISTORY.md: The starting vocabulary)
 
 ---
 
 ## Client payments
 
-Tom, 2026-09-11: *"I need to be able to add clients with more freedom, I have a
-client who pays me every 2 months and 1 who pays every X sessions."*
-
-So a cycle is **a kind and a number**, not one of a fixed list of four.
+A cycle is **a kind and a number** (Tom, 2026-09-11). (HISTORY.md: Client payments, a kind and a number)
 
 | Kind | Number means | Repeats on |
 |---|---|---|
@@ -277,15 +214,9 @@ apply oldest package first, never tagged to one. (HISTORY.md: Packages bought up
 **A package part not reached yet is "to come", not owed**; a paced guess says
 "about" and is never late. (HISTORY.md: Packages paid in parts)
 
-**A second kind of session owes the difference** (2026-10-08, Jay: online
-package 45,000/30, in person 70,000/30). `client.alt` holds the other kind's
-price; each session box gets a tick for it. A ticked session still uses one
-session of its package and owes its price a session less the package's,
-due the day it happened, rounded on the running total. Ordered with the
-package's parts by session, so money pays the oldest owed first; next to
-each other they are one line owed. A cheaper kind owes nothing. Clearing
-the price keeps the ticks. Packages only; a session-cycle client has no
-second price yet (`altOf`, `packState`).
+**A second kind of session owes the difference** (`client.alt`, `altOf`,
+`packState`): a ticked session uses one of its package and owes its price less
+the package's, due that day. Packages only. (HISTORY.md: A second kind of session owes the difference)
 
 **Session boxes are `sesh` rows in date order**; a future date is refused. (HISTORY.md: Sessions as boxes)
 
@@ -312,14 +243,8 @@ No Move up or Move down on bills. (HISTORY.md: Bills have a handle)
 bars are worth a month from the terms, never payments logged. Card titles say
 what is on the card, not how to feel about it. (HISTORY.md: One-offs)
 
-### A payment sheet must merge, like everything else
-
-Found while adding the above, and older than it: `paidSheet` rebuilt the whole
-payload on save, so editing an imported payment dropped `stmt`, the link to
-the statement line it came from. The "already imported" record then pointed at
-a row with no link, and reading that file again would have added the payment a
-second time. It merges now. The calcium bug, in the money app, found by
-reading rather than by anybody noticing.
+**`paidSheet` merges, never rebuilds**: rebuilding dropped `stmt` and would
+have re-imported the payment. (HISTORY.md: A payment sheet must merge, like everything else)
 
 ## Bills, in short
 
@@ -327,7 +252,9 @@ reading rather than by anybody noticing.
 `start`, never from the date before, and a month's worth is amount × 30.44 ÷
 `every`. (HISTORY.md: Bills every few days)
 
-**Bills every few months** (2026-09-23): `months` on a monthly bill, stepped from `start`, the month last paid; a month's worth is amount ÷ `months`. Never read from `every`, which a bill switched from days keeps. No field for it in the bill sheet yet; the sheet merges, so it survives an edit.
+**Bills every few months**: `months` on a monthly bill, stepped from `start`;
+never read from `every`. No sheet field yet; the sheet merges, so it survives.
+(HISTORY.md: Bills every few months (the brief's version, 2026-10-21))
 
 **A loan's payments are bills with `until`, filed as Debt payment, never
 spending.** The bill sheet does not show `from` or `until` and must keep both. (HISTORY.md: A loan's payments are bills, with an end)
@@ -335,12 +262,9 @@ spending.** The bill sheet does not show `from` or `until` and must keep both. (
 **Three cards on MONEY OUT, each bill in exactly one**, by category. A bill
 filed as everyday spending stays out of runway; FREE still holds its dates. (HISTORY.md: Three cards on MONEY OUT)
 
-**A bill coming up is a `note` todo**, only its earliest outstanding date, never
-for a `move` category. Found by its key on ANY date, never only the one
-`wealth.billMade` remembers: that setting is one row two devices overwrite,
-and trusting it wrote the same bullet twice once live sync joined them
-(2026-09-23). An unticked extra is deleted; a key deleted on any date stays
-deleted. (HISTORY.md: A bill coming up is a todo bullet)
+**A bill coming up is a `note` todo** for its earliest outstanding date only,
+found by its key on ANY date, never by the `wealth.billMade` setting (two
+devices overwrite it). (HISTORY.md: A bill coming up is a todo bullet)
 
 **Ticking it writes one `spend` keyed `bill-<bill id>-<due date>`.** Unticking
 removes it only while unedited. `billTodoSync` settles ticks before it reads
@@ -360,9 +284,9 @@ and net figure. Never invent a debt row from a transfer. (HISTORY.md: Borrowed m
 
 **A rule is only written from a statement's wording**, never a typed note. (HISTORY.md: A rule is only written from a bank's own wording)
 
-**A tapped category is split BY SOURCE** (2026-09-23), right under the pie: `payeeOf` on the bank wording or his note, and names sharing a first word (two if the first is a number) are one place, so "Lawson Tonkatsu" is Lawson.
-
-**A payment past its reach still settles** (2026-09-23, a monthly client paid on the 19th for the 1st): after the nearest-date pass, a leftover payment for that client settles the oldest unpaid date on or before it.
+**A tapped category is split BY SOURCE** (`payeeOf`; names sharing a first
+word are one place). **A payment past its reach** settles that client's
+oldest unpaid date on or before it. (HISTORY.md: BY SOURCE, and a payment past its reach (2026-09-23))
 
 **WHERE IT WENT is the first card under SPENDING's totals.** (HISTORY.md: Where it went sits under the totals)
 
@@ -392,24 +316,13 @@ one. (HISTORY.md: A payment rail is not a shop)
 **A picture-only PDF is read by Tesseract**, and the running balance still
 guards every figure. (HISTORY.md: A PDF that is only a picture of the pages)
 
-**Screenshots fill the days a statement has not reached** (2026-09-23).
-GCash and UnionBank app history, read by Tesseract (`ocrShots`). A screenshot
-line is written with `src: 'shot'` and `shot: <fingerprint>`, never `stmt`
-or `bank`, so the statement's line merges into it later and its wording
-replaces the app's. A screenshot never changes a row a statement already
-wrote. A statement lists screenshot lines on days before its last that it
-does not show, and removes them unless told not to. No rule is ever asked
-for from app wording. A GCash line whose sign could not be read is left out.
-Two apps in one drop are refused. Anything dropped anywhere on WEALTH opens
-READ A STATEMENT with it. The + menu on the first screen and ACCOUNTS carries
-A statement and Screenshots, each opening the file chooser for that kind only
-(`importSheet('statement' | 'shots')`).
+**Screenshots fill the days a statement has not reached** (`ocrShots`): rows
+carry `src: 'shot'` and `shot`, never `stmt`, so the statement merges over them
+later; a screenshot never changes a row a statement wrote, and no rule is asked
+from app wording. (HISTORY.md: Screenshots fill the days a statement has not reached)
 
-**While importing** (2026-09-23): every added or matched line has a comment
-box, merged into its `recon.comment` at apply. A payment rail line (`isRail`,
-Bancnet) is asked on its own in setup, filed by a `mark` on its row, never a
-rule. Category pick lists are A to Z (`catsAZ`); the CATEGORIES card keeps
-his dragged order.
+**While importing**, a comment per line goes to `recon.comment`; a payment rail
+line is filed by a `mark`, never a rule. (HISTORY.md: While importing)
 
 **A locked spreadsheet opens with its password** (`unlockXlsx`, Excel's
 agile AES lock, WebCrypto only). The password is treated like a PDF's.
@@ -444,23 +357,22 @@ finished, never deleted. (HISTORY.md: Menus, rearranging and deleting)
 
 ## Device
 
-**Desktop**, under hard constraint 10, like PORTION and for the same reason.
-This is desk work. Reconciling a statement, setting up clients and reading a
-month against another month are all sitting-down jobs with a mouse.
+**Desktop** (hard constraint 10). One column below 1000px, 44px targets and
+safe areas still; quick entry on a phone stays in STATUS. (HISTORY.md: Device)
 
-It still stacks to one column below 900px, keeps every target at 44px and
-honours the safe areas, because a desktop app on a phone has to stay usable.
+**On a wide window, side by side; never fold text** (Tom, 2026-10-02): three
+across past 1700px, four past 2300; `wfull`, `w2`, `t2` act only there.
+(HISTORY.md: A wide window)
 
-Quick entry on a phone stays in STATUS, which is what STATUS is for.
+## Moving cards (1.0.34, 2026-10-21)
 
-**On a wide window, lay things out side by side; never fold text.** Tom,
-2026-10-02, on a 5120 screen where WEALTH gets a 2560 half. Past 1700px the
-cards sit three across, past 2300 four, up to 2400px; `wfull`, `w2` (one of
-three, two of four) and `t2` (two rows high) on a card act only there. A long
-list in a wide card flows into columns, down then across; a list he can drag
-goes across then down, and `sortable` reads the pointer both ways once its
-rows are not one column. Nothing is hidden or put behind "show more". Below
-1700px the layout is exactly what it was. (HISTORY.md: A wide window)
+**Each screen's cards keep the order he drags them into**, one layout for
+every device: setting `wealth.layout` `{tab: 'id|id'}`, written only by a
+move, Reset layout or its UNDO, never on open. Id = `data-card` (heading up
+to " · ", or set: `net`, `goal`, `day`, `shelf-<id>`); no heading, no move.
+The grip ending each heading drags (a thumb only there) and, pressed, opens
+the menu a right click or hold on the heading opens. Modelled on COACH's
+`grabCard`. (HISTORY.md: Moving cards (1.0.34))
 
 ## First paint
 
@@ -470,14 +382,7 @@ STATUS is the app that got it wrong.
 
 ## Next up
 
-**Movable cards, like Home's widgets.** Tom, 2026-09-23: "I want to drag
-WEALTH cards the way I do Home's widgets", e.g. the pie chart on top some
-days. One saved layout for every device (a setting row, so it syncs), not per
-device. Read `HOME.md` and the home screen's widget grid first and reuse its
-behaviour (spots, drag, the + in a gap), not only its look. Not started.
-
-**The bill sheet has no field for `months`** (bills every few months). Add it
-when the sheet is next touched.
+**The bill sheet has no field for `months`.** Add it when the sheet is next touched.
 
 ## History
 
