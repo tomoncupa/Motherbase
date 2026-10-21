@@ -275,3 +275,16 @@ fixing the home dock, which now sits on the page colour in those two themes
 only (their own CSS). Not fixed: it needs either a theme that says which
 ground its words sit on, or new colours for the two themes. Tom has not
 been asked.
+
+2026-10-21, Craft Day fixed. Two causes. Its page was dark while its plates
+were light, so it gets a light stone page (#A0A0A0) and keeps its own dark
+words. And `lift()` chose which way to push by the ground's lightness alone
+(under half meant white), so dark words on the mid grey slots (#8B8B8B) went
+to white at 3.4 to 1 when black reached 6.2; it now pushes toward the end the
+words already lean to, unless only the other end can pass. Only Craft Day's
+tokens changed among the 23 factory themes. Words that fail: 553 to 263 across
+eight apps at 1280; what is left is chart and meaning colours used as words
+in LOG, QUESTS, STATUS and KITCHEN, the app trap in the root brief.
+Brick is NOT fixed and cannot be by text or page colours: red and blue bricks
+need white words, the yellow raised face and light grey page need dark ones,
+and one text token cannot do both. Tom's call.
