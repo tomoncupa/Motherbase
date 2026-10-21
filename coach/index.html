@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.26, 2026-10-21">
+<meta name="mb-version" content="1.0.27, 2026-10-21">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -415,8 +415,34 @@ const fieldAt = (type, key, f) => {
 };
 const creatureFor = id => { const ks = Creatures.keys(); let h = 0; String(id).split('').forEach(c => { h = (h * 31 + c.charCodeAt(0)) >>> 0; }); return ks[h % ks.length]; };
 let linking = false;
+/* ── live sync first, then the pairs (1.0.27) ──
+   A device signed in to live sync whose first answer has not been merged
+   yet holds only what it last saw. Pairing then made a blank WEALTH client
+   for a client whose real one was still on its way, and stamped stale names
+   newer than his edits from another device. So nothing is paired until that
+   answer is in: cloud.js arrives after the store does (io.js), so its
+   absence is "not yet" for the first 15 seconds, and a sync that never
+   starts (no sign-in, the demo, a file, a sign-in that ran out) waits for
+   nothing. Signed in with no signal, pairing waits for the signal: nothing
+   is lost, a new client just gets its WEALTH twin once the rows are in. */
+const OPENED = Date.now();
+let syncAsked = false, syncPoll = 0;
+function syncPending() {
+  if (location.protocol === 'file:' || window.MB_DEMO) return false;
+  const early = Date.now() - OPENED < 15000;
+  let wait;
+  if (!window.Cloud || !Cloud.state) {
+    if (!syncAsked && window.IO && IO.loadCloud) { syncAsked = true; IO.loadCloud(() => setTimeout(draw, 0)); }
+    wait = early;
+  } else {
+    const st = Cloud.state();
+    wait = !!(st.on && !st.file && !st.out && !st.loaded && (st.live || early));
+  }
+  if (wait && !syncPoll) syncPoll = setTimeout(() => { syncPoll = 0; draw(); }, 1000);
+  return wait;
+}
 function link() {
-  if (linking || !Rec.hydrated) return;
+  if (linking || !Rec.hydrated || syncPending()) return;
   linking = true;
   try {
     const ws = Rec.map('client'), ps = people();
