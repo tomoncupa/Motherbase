@@ -1053,6 +1053,10 @@ answer, or take it out.
   code. Tom's iPhone TRAIN app was on 1.0.61 three days after 1.0.62
   shipped the fix he said was missing (2026-10-18).
 
+- Commands run from the Claude app see a frozen copy of `%LOCALAPPDATA%`, not the live one.
+  A scheduled task's state there (RECEIPTS `seen.json`) reads weeks stale from a Claude
+  session; check the task's own `status.json` or Task Scheduler's last run instead.
+
 ---
 
 ## Current state
