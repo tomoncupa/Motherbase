@@ -111,7 +111,7 @@ ones still can.
 | App | Storage per person | Verdict |
 |---|---|---|
 | BLOCK | a few KB | **multi-user** |
-| Daily Quest OS | a few KB | **multi-user** |
+| MOTHERBASE | a few KB | **multi-user** |
 | ARC | small unless maps hold images | **multi-user, with an image limit** |
 | Form Review | hundreds of MB of video | **stays Tom's only** |
 
@@ -132,13 +132,13 @@ join code can tag where someone came from. Not a lock on the door — none was a
    because this is the step that must be right.
 4. **BLOCK** — already speaks the shared language, not being rebuilt, so a failure is
    the new plumbing rather than new app code.
-5. **Daily Quest OS** — fresh, but against plumbing BLOCK has already proven.
+5. **MOTHERBASE** — fresh, but against plumbing BLOCK has already proven.
 6. **ARC** — bigger maps, saved-not-streamed.
 - **Form Review** — unchanged, local.
 
 ## Settled
 
-- **habits.html is a stand-in** → Daily Quest OS replaces it. Harvest the 28-day
+- **habits.html is a stand-in** → MOTHERBASE replaces it. Harvest the 28-day
   grid, streaks, and one-click promote-from-routine. Stop adding to that file.
 - **Client data is private, no coach view** → rules stay simple: each person reaches
   only their own data. Adding coach visibility later is real work, not a switch.

@@ -158,7 +158,7 @@ mix/index.html     ELEMENT, called MIX until 2026-09-22; the folder and the app
                    what he actually weighs, and the food comes from STATUS.
                    Desktop. Tom only, dropped from the client build. Owns
                    `dose`
-quest/BRIEF.md     the Daily Quest OS brief. Its measurement half moved into
+quest/BRIEF.md     the first MOTHERBASE brief. Its measurement half moved into
                    status/ on 2026-08-20; what is left of it is a todolist.
                    Its data model and design system still govern. Superseded
                    on repo layout and testing by this file.

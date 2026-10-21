@@ -1,9 +1,9 @@
-# Daily Quest OS — build brief
+# MOTHERBASE — build brief
 
 > **Scope changed 2026-08-20.** Everything in here that measures a number —
 > sleep, weight, steps, calories, protein, mood, energy — was built into
 > `status/` instead, and STATUS is now the one writer of those facts. What is
-> left for Daily Quest OS is the todolist: quests, scoring, streaks and ranks,
+> left for QUESTS is the todolist: quests, scoring, streaks and ranks,
 > reading the measurements rather than collecting them. The data model, the
 > field/day/ev row shapes and the design system below all still govern —
 > STATUS was built to them. Check the ownership table in the root `CLAUDE.md`
@@ -14,14 +14,13 @@
 Tom. Solo premium fitness coach in Manila, 8+ years lifting, founder of Personal
 Protagonist. Revenue is in-person coaching, online coaching, and a Skool community
 with a free tier and a $7 all-access tier. Moving away from 1:1 toward community
-revenue and content. My training system is already called The Daily Quest Method,
-so the tracker takes the name.
+revenue and content. My training system is already called The Daily Quest Method.
 
 I am not a developer. Explain decisions in plain language. I will not read code.
 
 ## What you are building
 
-Daily Quest OS — a personal habit and data tracker as a progressive web app.
+MOTHERBASE — a personal habit and data tracker as a progressive web app.
 Greenfield. Nothing carried over from previous attempts.
 
 This is one app in an intended suite of three that share a data store and a look:

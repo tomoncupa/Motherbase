@@ -2,9 +2,9 @@
 
 Captured 2026-08-19, verbatim from Tom. Architecture doc first, no app features.
 
-Apps in scope: Daily Quest OS, BLOCK, ARC, future tools. Today they are standalone
+Apps in scope: MOTHERBASE, BLOCK, ARC, future tools. Today they are standalone
 HTML/JS with independent localStorage and overlapping data — BLOCK's schedule and
-Daily Quest OS's day log both need to agree on whether "Morning Run" got done today.
+MOTHERBASE's day log both need to agree on whether "Morning Run" got done today.
 
 **Deliverable: a written architecture doc, not code, to review and approve before
 anything is built. Flag every assumption so it can be corrected before it becomes
@@ -35,11 +35,11 @@ anything is built. Flag every assumption so it can be corrected before it become
    servers, GitHub Pages or equivalent free static hosting. Discovered via links
    inside a Skool community; Skool does not host them and does not provide identity.
    Assume Skool membership and app identity are separate unless there is a specific
-   reason to unify. Some apps (Daily Quest OS) may stay single-user/personal; others
+   reason to unify. Some apps (MOTHERBASE) may stay single-user/personal; others
    (BLOCK) will be used by many community members — **ask which are personal-only vs
    multi-user if it changes the recommendation, rather than assuming.**
 
-6. **Migration path** — Daily Quest OS has a working localStorage + Supabase sync
+6. **Migration path** — MOTHERBASE has a working localStorage + Supabase sync
    implementation being rebuilt from scratch: clean slate, no back-compat. BLOCK is a
    standalone HTML file, localStorage only, opened from Downloads, no backend. Propose
    the build order — shared backend first, then which app first, and why.

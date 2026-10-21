@@ -6,7 +6,7 @@ This brief governs `quest/` only. It obeys the master brief at the repo root and
 may add rules but never contradict them. Where the two disagree, the root wins
 and this file is the bug.
 
-`quest/BRIEF.md` beside it is the older Daily Quest OS brief. Its data model and
+`quest/BRIEF.md` beside it is the older MOTHERBASE brief. Its data model and
 design-system sections still govern. Its ranks, scores and streaks do **not**
 describe this app: Tom, 2026-09-14, *"Honestly I just want to almost entirely
 copy Todoist."* Nothing from the rank half gets built without being asked for.
