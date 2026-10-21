@@ -204,6 +204,10 @@ function css() {
   .mb-toast .act:hover{color:var(--accent-hover,#7ee8fa)}
 }
 @media (prefers-reduced-motion:reduce){.mb-toast,.mb-seg i.ind,.mb-sw,.mb-sw i{transition:none}}
+/* A digit in a slot of its own, so a clock or a timer does not shuffle as it
+   ticks. Chakra Petch has no tabular figures (a 1 is .36em, a 0 .63em), so
+   font-variant-numeric does nothing there. UI.digits writes these. */
+.mb-dg{display:inline-block;width:.67em;text-align:center}
 `;
   document.head.appendChild(s);
 
@@ -425,6 +429,19 @@ const UI = {
     if (n.type === 'number') return true;
     const im = n.inputMode || n.getAttribute('inputmode') || '';
     return /^(numeric|decimal)$/.test(im);
+  },
+
+  /** Writes `text` into `node` with every digit in a fixed-width slot (pick 4,
+      Tom 2026-10-13): numbers that change in place or line up in a column,
+      such as clocks, timers and tables, stop jumping. Writes only when the
+      text changed, so a ticking clock costs nothing between ticks. */
+  digits(node, text) {
+    css();
+    const t = String(text == null ? '' : text);
+    if (!node || node.dataset.mbDg === t) return node;
+    node.dataset.mbDg = t;
+    node.innerHTML = esc(t).replace(/\d/g, '<span class="mb-dg">$&</span>');
+    return node;
   },
 
   /** "09:30" -> "9:30am" */

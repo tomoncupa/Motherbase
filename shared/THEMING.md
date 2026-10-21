@@ -117,6 +117,14 @@ A theme may hand-pick them. If it does not, they are worked out from its accent
 
 The whole family follows the theme's corner setting, so a square theme squares
 everything and a soft one softens it. **Use these; never a number.**
+Block, the default, sets `--radius-lg` to 6px itself (Tom's pick 2,
+2026-10-13): its cards wear the same 6px corner as its rows, not the 10px the
+family would derive from its 6px cut.
+
+**Numbers that tick or line up** (clocks, timers, columns of figures) go
+through `UI.digits(node, text)`, which puts each digit in a `.67em` slot.
+Chakra Petch has no tabular figures, so `font-variant-numeric` does nothing
+in Block (pick 4, 2026-10-13).
 
 ### Depth — 7
 
