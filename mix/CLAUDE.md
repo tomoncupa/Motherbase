@@ -39,3 +39,5 @@ subtracted TRAIN's ISO `start` and `end` strings, so on any day TRAIN had a
 finished session the session minutes, the sweat, and the sodium and
 potassium goals were NaN; and SWITCHED OFF compared freshly made slot
 objects, so it listed every drink as off when none was.
+
+**1.0.10, 2026-10-22.** The small line under a drink (1.250 g per litre) is 12px, the smallest reading size, from 11.7px. Found by `_review.html`'s tiny-text check.
