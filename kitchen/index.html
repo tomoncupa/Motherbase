@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.8, 2026-10-22">
+<meta name="mb-version" content="1.0.9, 2026-10-22">
 <title>KITCHEN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -125,6 +125,11 @@ a.kx-src{color:var(--text-2)}
 /* the words that say a line leads somewhere */
 .kx-out b{color:var(--accent);font-weight:var(--w-bold);white-space:nowrap}
 
+/* the small mark on a total that includes USDA averages */
+.kx-usda{display:inline-block;font-family:var(--font-mono);font-size:var(--f-1);font-weight:var(--w-body);letter-spacing:0;line-height:1;
+  color:var(--text-2);border:var(--border-width) solid var(--border-strong);border-radius:var(--radius-sm);padding:var(--s-1);vertical-align:middle;
+  text-transform:none;white-space:nowrap}
+
 /* ── food sheet ── */
 .kx-big{font-family:var(--font-display);font-size:var(--f-8);font-weight:var(--w-bold);line-height:var(--lh-tight);font-variant-numeric:tabular-nums}
 .kx-big small{display:block;font-size:var(--f-3);color:var(--text-2);font-weight:var(--w-body);margin-top:var(--s-1)}
@@ -141,6 +146,7 @@ a.kx-src{color:var(--text-2)}
 .kx-amt .ln .mb-input{flex:1;min-width:0}
 .kx-amt .u{color:var(--text-2);white-space:nowrap}
 .kx-lab{display:flex;flex-direction:column;gap:var(--s-1);font-size:var(--f-2);color:var(--text-2)}
+.kx-lab[hidden]{display:none}
 .kx-form{display:flex;flex-direction:column;gap:var(--s-3)}
 .kx-two{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-3)}
 
@@ -190,7 +196,7 @@ a.kx-src{color:var(--text-2)}
   background:none;border:0;cursor:pointer;text-align:left}
 .kx-meter{display:flex;flex-direction:column;gap:var(--s-1);width:100%}
 .kx-mline{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s-2)}
-.kx-mline span{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);text-transform:uppercase;color:var(--text-muted)}
+.kx-mline > span{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);text-transform:uppercase;color:var(--text-muted)}
 .kx-mline b{font-weight:var(--w-body);font-size:var(--f-2);color:var(--text-1);font-variant-numeric:tabular-nums;text-align:right}
 .kx-bar{display:flex;height:var(--s-2);border-radius:var(--radius-sm);background:var(--surface-3);overflow:hidden}
 .kx-bar i{display:block;height:100%;background:var(--c,var(--accent))}
@@ -229,7 +235,7 @@ a.kx-src{color:var(--text-2)}
 const APP = {
   id: 'kitchen', name: 'KITCHEN', icon: '',
   blurb: 'Plan what you eat from what you have.',
-  types: ['kcount', 'kfood', 'kplan', 'kdish', 'kskip'],
+  types: ['kcount', 'kfood', 'kplan', 'kdish', 'kskip', 'kcook'],
 };
 
 /* ══════════════ the reference intakes ══════════════
@@ -414,9 +420,78 @@ function pieceWord(fd) {
 const food = fid => W().foods[fid] || null;
 const nameOf = fd => (fd && String(fd.name || '').trim()) || 'Food';
 
+/* ══════════════ recipes ══════════════
+   Tom, 2026-10-05 and 2026-10-22. A recipe is ONE food row whose figures
+   follow its ingredients: `recipe: {items: [{food, mult}], makes, cooked}`,
+   `base: {amt: 1, unit: 'batch', ...the sum of the ingredients}`. So PLAN,
+   GUIDE and STATUS read it as any other food. A part of a cooked batch is
+   logged as a fraction of it (1/4), never grams or servings. A figure is
+   on the recipe only when every ingredient carries it: blank is not known. */
+const isRecipe = fd => !!(fd && fd.recipe && typeof fd.recipe === 'object' && Array.isArray(fd.recipe.items));
+const recipeItems = fd => isRecipe(fd) ? fd.recipe.items.filter(it => it && it.food && num(it.mult, 0) > 0) : [];
+const makesOf = fd => { const n = isRecipe(fd) ? num(fd.recipe.makes, 0) : 0; return n > 0 ? n : 0; };
+/* one serving: a label serving, or a recipe's batch over what it makes */
+const oneServe = fd => (isRecipe(fd) && makesOf(fd) > 0 ? 1 / makesOf(fd) : 1);
+/* 0.25 is "1/4", 1.5 is "1 1/2"; anything else two decimals */
+function fracText(q) {
+  const w = Math.floor(q + 1e-6), r = q - w;
+  if (r < 0.005) return String(w);
+  for (const d of [2, 3, 4, 6, 8]) {
+    const n = Math.round(r * d);
+    if (n > 0 && n < d && Math.abs(r - n / d) < 0.005) {
+      let a = n, b = d;
+      for (let g = a; g > 1; g--) if (a % g === 0 && b % g === 0) { a /= g; b /= g; break; }
+      return (w ? w + ' ' : '') + a + '/' + b;
+    }
+  }
+  return String(Math.round(q * 100) / 100);
+}
+const batchText = q => fracText(q) + (q > 1 + 0.005 ? ' batches' : ' batch');
+/* "1/4", "1 1/2", "0.25" or "1" */
+function parseFrac(t) {
+  const s = String(t || '').trim().replace(/,/g, '.');
+  let m = /^(\d+)\s+(\d+)\s*\/\s*(\d+)$/.exec(s);
+  if (m && +m[3] > 0) return +m[1] + m[2] / m[3];
+  m = /^(\d*\.?\d+)\s*\/\s*(\d*\.?\d+)$/.exec(s);
+  if (m && +m[2] > 0) return m[1] / m[2];
+  const n = parseFloat(s);
+  return /^\d*\.?\d+$/.test(s) && isFinite(n) ? n : null;
+}
+/* Every figure a food can carry that a recipe adds up. */
+const RKEYS = ['kcal', 'p', 'c', 'f', 'na', 'k', 'ca', 'caff'].concat(NLIST.map(n => n.k)).filter((k, i, a) => a.indexOf(k) === i);
+/* The batch's figures from its ingredients: a key only when every
+   ingredient carries it. `gone` counts ingredients no longer in the store,
+   `short[k]` the ingredients with no figure for k. */
+function recipeBase(items) {
+  const base = {}, short = {}, list = (items || []).filter(it => it && num(it.mult, 0) > 0);
+  let gone = 0;
+  list.forEach(it => { if (!food(it.food)) gone++; });
+  if (!list.length) return { base, short, gone };
+  RKEYS.forEach(k => {
+    let sum = 0, ok = true;
+    list.forEach(it => {
+      const fd = food(it.food), v = fd ? baseVal(fd, k) : null;
+      if (v == null) { ok = false; if (fd) (short[k] = short[k] || []).push(it.food); return; }
+      sum += v * num(it.mult);
+    });
+    if (ok) base[k] = Math.round(sum * 100) / 100;
+  });
+  return { base, short, gone };
+}
+/* A figure that is a USDA average: filled from the food table, or a macro on
+   a food added from it. A recipe's is any of its ingredients'. */
+function usdaIn(fd, k, depth) {
+  if (!fd) return false;
+  if (isRecipe(fd)) return (depth || 0) < 4 && recipeItems(fd).some(it => usdaIn(food(it.food), k, (depth || 0) + 1));
+  if (fillsOf(fd).some(e => e.src === 'usda' && e.keys.indexOf(k) >= 0)) return true;
+  return !!(MACRO[k] && fd.base && fd.base.src === 'usda');
+}
+const USDA = '<span class="kx-usda" title="Includes USDA averages" aria-label="Includes USDA averages">USDA</span>';
+
 /* An amount in the food's own terms: 450 g, 1.2 kg, 8 pieces · 400 g,
    3 servings. `plain` leaves the pieces out. */
 function amtText(fd, q, plain) {
+  if (isRecipe(fd)) return batchText(q);
   const u = unitOf(fd);
   if (u === 'g' || u === 'ml') {
     const main = q >= 1000 ? fx(q / 1000, 2) + (u === 'g' ? ' kg' : ' L') : fx(q, q < 10 ? 1 : 0) + ' ' + u;
@@ -432,6 +507,7 @@ function amtText(fd, q, plain) {
 }
 /* A planned amount: whole pieces by count, anything else by weight. */
 function planText(fd, mult) {
+  if (isRecipe(fd)) return batchText(mult);
   const q = baseAmt(fd) * mult, pa = pieceAmt(fd);
   if (pa > 0) {
     const n = q / pa, r = Math.round(n);
@@ -445,6 +521,8 @@ function planText(fd, mult) {
    the leading "1 " dropped after a count, and no thousands comma. */
 const r1 = n => Math.round(n * 10) / 10;
 function serveText(fd, mult) {
+  /* a recipe's part is said as a fraction of the batch, never rounded to 0.3 */
+  if (isRecipe(fd)) return batchText(mult);
   const q = baseAmt(fd) * mult, pa = pieceAmt(fd);
   if (pa > 0) {
     const n = q / pa, r = Math.round(n);
@@ -492,6 +570,13 @@ function W() {
   Rec.all('buy').forEach(r => { const f = r.payload && r.payload.food; if (f) push(w.buys, f, r); });
   Rec.all('meal').forEach(r => { const f = r.payload && r.payload.fid; if (f) push(w.meals, f, r); });
   Rec.all('kskip').forEach(r => { w.skip[r.date + '|' + r.key] = 1; });
+  /* a batch cooked: in for the recipe, out for each ingredient */
+  w.cooks = {}; w.cookUse = {};
+  Rec.all('kcook').forEach(r => {
+    const p = r.payload || {};
+    if (p.food) push(w.cooks, p.food, r);
+    (Array.isArray(p.items) ? p.items : []).forEach(it => { if (it && it.food) push(w.cookUse, it.food, { r, it }); });
+  });
   WC = w; WG = gen;
   return w;
 }
@@ -555,6 +640,17 @@ function stock(fid) {
     const p = r.payload || {};
     ev.push({ kind: 'out', t: mealTime(r), q: fd ? mealAmt(fd, p) : null, date: r.date, key: r.key, p, skip: !!w.skip[r.date + '|' + r.key] });
   });
+  /* a batch cooked puts the batch on the shelf and takes its ingredients
+     off, as they were when it was cooked */
+  const cookT = r => known((r.payload || {}).t) ? num(r.payload.t) : noonMs(r.date);
+  (w.cooks[fid] || []).forEach(r => {
+    const p = r.payload || {};
+    ev.push({ kind: 'in', cook: 1, t: cookT(r), q: num(p.n, 1) || 1, date: r.date, key: r.key, p });
+  });
+  (w.cookUse[fid] || []).forEach(x => {
+    const p = x.r.payload || {};
+    ev.push({ kind: 'out', cook: 1, t: cookT(x.r), q: fd ? baseAmt(fd) * num(x.it.mult, 0) * (num(p.n, 1) || 1) : null, date: x.r.date, key: x.r.key, p });
+  });
   /* at one moment: what came in, then what went out, then the count */
   const RANK = { in: 0, out: 1, count: 2 };
   ev.sort((a, b) => (a.t - b.t) || (RANK[a.kind] - RANK[b.kind]));
@@ -609,9 +705,24 @@ function toBuy() {
   const w = W(), plan = planAhead(), out = [];
   const ids = Object.keys(plan);
   Object.keys(w.kfood).forEach(id => { if (ids.indexOf(id) < 0) ids.push(id); });
+  /* a dish is cooked, not bought: whole batches short of it are its
+     ingredients short */
+  ids.slice().forEach(id => {
+    const fd = w.foods[id];
+    if (!isRecipe(fd)) return;
+    const short = (plan[id] || 0) + minOf(id) - stock(id).q;
+    if (short <= EPS) return;
+    const n = Math.ceil(short - EPS);
+    recipeItems(fd).forEach(it => {
+      const g = w.foods[it.food];
+      if (!g || isRecipe(g)) return;
+      plan[it.food] = (plan[it.food] || 0) + baseAmt(g) * num(it.mult) * n;
+      if (ids.indexOf(it.food) < 0) ids.push(it.food);
+    });
+  });
   ids.forEach(id => {
     const fd = w.foods[id];
-    if (!fd) return;
+    if (!fd || isRecipe(fd)) return;
     const have = stock(id).q, need = (plan[id] || 0) + minOf(id) - have;
     if (need > EPS) out.push({ id, fd, need, have });
   });
@@ -911,6 +1022,13 @@ function shelfRow(id) {
 function shelfMenu(id, e) {
   const fd = food(id);
   if (!fd) return;
+  /* a dish is cooked, never bought */
+  if (isRecipe(fd)) return menu(e, [
+    { label: 'Cook a batch', fn: () => cookBatch(id) },
+    { label: 'Count', fn: () => countSheet(id) },
+    canUseUp(id) ? { label: 'Used up', fn: () => usedUp(id) } : null,
+    { label: 'Edit recipe', fn: () => recipeSheet(id) },
+  ], nameOf(fd));
   menu(e, [
     { label: 'Bought', fn: () => boughtSheet(id) },
     { label: 'Count', fn: () => countSheet(id) },
@@ -920,7 +1038,8 @@ function shelfMenu(id, e) {
 }
 /* only something in the kitchen can be used up, the same test as the food sheet */
 const canUseUp = id => { const s = stock(id); return s.inKitchen && (s.q > EPS || s.unknown); };
-const addToShelf = () => pickFood({ title: 'ADD FOOD' }, fid => boughtSheet(fid));
+/* a recipe picked here opens its sheet, where COOK A BATCH is */
+const addToShelf = () => pickFood({ title: 'ADD FOOD' }, fid => (isRecipe(food(fid)) ? foodSheet(fid) : boughtSheet(fid)));
 
 /* The list as plain text, for a phone note or a chat. */
 function shareList(buy) {
@@ -943,11 +1062,15 @@ function foodSheet(fid) {
   liveSheet({ title: nameOf(food(fid)), width: 520, actions: [{ label: 'DONE', kind: 'go' }] }, b => {
     const fd = food(fid);
     if (!fd) { b.appendChild(el('p', 'kx-empty', 'This food was deleted.')); return; }
-    const s = stock(fid), min = minOf(fid);
+    const s = stock(fid), min = minOf(fid), rec = isRecipe(fd);
     const bits = [fd.brand, fd.cat].filter(Boolean).map(String);
+    if (rec) {
+      const n = recipeItems(fd).length;
+      bits.push(n + (n === 1 ? ' ingredient' : ' ingredients') + (makesOf(fd) ? ', makes ' + fx(makesOf(fd), 1) + ' servings' : ''));
+    }
     if (min > 0) bits.push('keep at least ' + amtText(fd, min, true));
     const blind = s.q <= EPS && s.unknown;
-    b.appendChild(el('div', 'kx-big', esc(s.inKitchen ? (s.q > EPS ? amtText(fd, s.q) : blind ? 'Not counted' : 'Used up') : 'Not in the kitchen') +
+    b.appendChild(el('div', 'kx-big', esc(s.inKitchen ? (s.q > EPS ? amtText(fd, s.q) : blind ? 'Not counted' : 'Used up') : rec ? 'Not cooked yet' : 'Not in the kitchen') +
       (bits.length ? '<small>' + esc(bits.join(' · ')) + '</small>' : '')));
     if (s.flag) b.appendChild(el('p', 'kx-note', '<span class="kx-flag">count it</span>Logged more than was stocked.'));
     if (min > 0 && s.q < min - EPS && !blind) b.appendChild(el('p', 'kx-note', '<span class="kx-flag">low</span>Under the amount to keep.'));
@@ -958,12 +1081,21 @@ function foodSheet(fid) {
       b.appendChild(l);
     }
     const acts = el('div', 'kx-acts');
-    acts.appendChild(button('BOUGHT', '', () => boughtSheet(fid)));
-    acts.appendChild(button('COUNT', '', () => countSheet(fid)));
-    if (canUseUp(fid)) acts.appendChild(button('USED UP', '', () => usedUp(fid)));
-    acts.appendChild(button('KEEP AT LEAST', '', () => keepSheet(fid)));
-    if (isMV(fd) && !pieceServe(fd)) acts.appendChild(button('PIECE WEIGHT', '', () => pieceSheet(fid)));
-    acts.appendChild(button('FILL BLANKS', '', () => fillFood(fid)));
+    /* a dish is cooked from its ingredients; its figures are theirs, so it
+       has nothing to buy, weigh or fill */
+    if (rec) {
+      acts.appendChild(button('COOK A BATCH', 'go', () => cookBatch(fid)));
+      acts.appendChild(button('EDIT RECIPE', '', () => recipeSheet(fid)));
+      acts.appendChild(button('COUNT', '', () => countSheet(fid)));
+      if (canUseUp(fid)) acts.appendChild(button('USED UP', '', () => usedUp(fid)));
+    } else {
+      acts.appendChild(button('BOUGHT', '', () => boughtSheet(fid)));
+      acts.appendChild(button('COUNT', '', () => countSheet(fid)));
+      if (canUseUp(fid)) acts.appendChild(button('USED UP', '', () => usedUp(fid)));
+      acts.appendChild(button('KEEP AT LEAST', '', () => keepSheet(fid)));
+      if (isMV(fd) && !pieceServe(fd)) acts.appendChild(button('PIECE WEIGHT', '', () => pieceSheet(fid)));
+      acts.appendChild(button('FILL BLANKS', '', () => fillFood(fid)));
+    }
     b.appendChild(acts);
 
     /* where filled figures came from, each one removable */
@@ -992,7 +1124,13 @@ function foodSheet(fid) {
 function eventRow(fd, e) {
   const r = el('div', 'kx-ev');
   let text = '', items = null;
-  if (e.kind === 'count') {
+  if (e.cook && e.kind === 'in') {
+    text = 'Cooked <b>' + esc(batchText(e.q)) + '</b> · ' + esc(dd(e.date));
+    items = [{ label: 'Remove', kind: 'bad', fn: () => uncook(e.date, e.key) }];
+  } else if (e.cook) {
+    const rf = food((e.p || {}).food);
+    text = 'Cooked into <b>' + esc(rf ? nameOf(rf) : 'a recipe') + '</b> · ' + esc(e.q != null ? amtText(fd, e.q, true) : 'an amount') + ' · ' + esc(dd(e.date));
+  } else if (e.kind === 'count') {
     text = e.q > EPS ? 'Counted <b>' + esc(amtText(fd, e.q, true)) + '</b> · ' + esc(dd(e.date)) : '<b>Used up</b> · ' + esc(dd(e.date));
   } else if (e.kind === 'in') {
     const p = e.p || {};
@@ -1038,12 +1176,198 @@ function usedUp(fid) {
   UI.undo('<b>' + esc(nameOf(fd)) + '</b> used up.', () => { if (was) Rec.set('kcount', t, fid, was); else Rec.del('kcount', t, fid); });
 }
 
+/* ── recipes: cooking a batch, and the recipe itself ── */
+/* The parts a batch is cut into: the servings it makes, else the usual
+   ones, and the whole. Each fills the box; nothing is assumed. */
+function fracChips(fd, pick) {
+  const n = makesOf(fd), seen = {}, out = [];
+  const add = v => { const t = fracText(v); if (!seen[t]) { seen[t] = 1; out.push(v); } };
+  if (n >= 2 && n <= 8 && Math.abs(n - Math.round(n)) < EPS) for (let k = 1; k < n; k++) add(k / n);
+  else [1 / 4, 1 / 3, 1 / 2, 2 / 3, 3 / 4].forEach(add);
+  add(1);
+  const chips = el('div', 'mb-chips');
+  out.forEach(v => {
+    const c = el('button', 'mb-chip mb-press mb-tap', esc(v === 1 ? 'Whole' : fracText(v)));
+    c.type = 'button';
+    c.onclick = () => { pick(v); Mobile.feedback('select'); };
+    chips.appendChild(c);
+  });
+  return chips;
+}
+/* COOK A BATCH: the batch goes on the shelf and its ingredients come off,
+   as the recipe stands now. One row, so UNDO takes back all of it. */
+function cookBatch(fid) {
+  const fd = food(fid);
+  if (!isRecipe(fd)) return;
+  const items = recipeItems(fd).map(it => ({ food: it.food, mult: num(it.mult) }));
+  if (!items.length) { UI.toast('No ingredients yet.', { bad: 1 }); return; }
+  const d = Day.today(), k = uid();
+  Rec.set('kcook', d, k, { food: fid, n: 1, t: Date.now(), items });
+  Mobile.feedback('success');
+  UI.undo('Cooked a batch of <b>' + esc(nameOf(fd)) + '</b>.', () => Rec.del('kcook', d, k));
+}
+function uncook(date, key) {
+  const was = Rec.get('kcook', date, key);
+  if (!was) return;
+  Rec.del('kcook', date, key);
+  Mobile.haptic('warn');
+  UI.undo('Removed a batch.', () => Rec.set('kcook', date, key, was));
+}
+/* Its figures follow its ingredients: on any change to the store, a
+   recipe whose sum no longer matches what it carries is patched, key by
+   key. A recipe with an ingredient not in the store yet (a device still
+   syncing) is left alone, or it would wipe figures it cannot see. */
+let followT = 0, followOn = false;
+function recipeFollow() {
+  if (!followOn) return;
+  const w = W();
+  Object.keys(w.foods).forEach(id => {
+    const fd = w.foods[id];
+    if (!isRecipe(fd)) return;
+    const items = recipeItems(fd), r = recipeBase(items);
+    if (!items.length || r.gone) return;
+    const b = fd.base || {}, ch = {};
+    RKEYS.forEach(k => {
+      const nv = r.base[k], ov = known(b[k]) ? num(b[k]) : null;
+      if (nv == null && ov == null) return;
+      if (nv != null && ov != null && Math.abs(nv - ov) < 1e-6) return;
+      ch['base.' + k] = nv == null ? undefined : nv;
+    });
+    if (Object.keys(ch).length) Rec.patch('food', null, id, ch);
+  });
+}
+const followSoon = () => { clearTimeout(followT); followT = setTimeout(recipeFollow, 300); };
+
+/* NEW RECIPE and EDIT RECIPE: ingredients with amounts for one batch, what
+   it makes, and its cooked weight if known. Nothing is written before SAVE. */
+function recipeSheet(fid, name, cb) {
+  const was = fid ? food(fid) : null;
+  if (fid && !isRecipe(was)) return;
+  const items = recipeItems(was).map(it => ({ food: it.food, mult: num(it.mult) }));
+  const f = {};
+  let list, sum;
+  const nm = () => (f.name && f.name.value.trim()) || 'the recipe';
+  const paint = () => {
+    list.innerHTML = '';
+    if (!items.length) list.appendChild(el('p', 'kx-empty', 'No ingredients yet.'));
+    items.forEach((it, i) => {
+      const fd = food(it.food);
+      const r = el('button', 'kx-row mb-plate mb-press');
+      r.type = 'button';
+      const bits = [];
+      if (fd) {
+        bits.push(planText(fd, it.mult));
+        if (countCal()) { const kc = baseVal(fd, 'kcal'); if (kc != null) bits.push(fx(kc * it.mult) + ' kcal'); }
+      }
+      r.innerHTML = '<span class="tx"><span class="nm">' + esc(fd ? nameOf(fd) : 'Deleted food') + '</span>' +
+        (bits.length ? '<span class="sub">' + esc(bits.join(' · ')) + '</span>' : '') + '</span>';
+      r.onclick = () => {
+        if (!fd) { items.splice(i, 1); paint(); return; }
+        amountSheet(it.food, { mult: it.mult, note: 'In ' + nm(),
+          done: m => { it.mult = m; paint(); },
+          remove: () => { items.splice(i, 1); paint(); } });
+      };
+      list.appendChild(r);
+    });
+    paintSum();
+  };
+  const paintSum = () => {
+    sum.innerHTML = '';
+    if (!items.length) return;
+    const r = recipeBase(items), mk = parseFrac(f.makes.value);
+    const usda = ['kcal', 'p', 'c', 'f'].some(k => r.base[k] != null && items.some(it => usdaIn(food(it.food), k)));
+    if (countCal()) {
+      const line = m => ['kcal', 'p', 'c', 'f'].map(k => r.base[k] == null ? null :
+        (k === 'kcal' ? fx(r.base[k] * m) + ' kcal' : nf(r.base[k] * m) + ' g ' + { p: 'protein', c: 'carbs', f: 'fat' }[k])).filter(Boolean).join(' · ');
+      const whole = line(1);
+      sum.appendChild(el('p', 'kx-note', '<b>Whole batch</b> · ' + esc(whole || 'calories and macros not known') + (whole && usda ? ' ' + USDA : '')));
+      if (mk > 1 && whole) sum.appendChild(el('p', 'kx-note', '<b>1 serving (' + esc(fracText(1 / mk)) + ')</b> · ' + esc(line(1 / mk))));
+    }
+    const any = RKEYS.filter(k => items.some(it => food(it.food) && baseVal(food(it.food), k) != null));
+    const off = any.filter(k => r.base[k] == null);
+    if (off.length) {
+      const who = [];
+      off.forEach(k => (r.short[k] || []).forEach(id => { const n = nameOf(food(id)); if (who.indexOf(n) < 0) who.push(n); }));
+      sum.appendChild(el('p', 'kx-q', esc(off.length + (off.length === 1 ? ' figure is' : ' figures are') + ' left off: ' +
+        who.join(', ') + (who.length === 1 ? ' has' : ' have') + ' no number for ' + (off.length === 1 ? 'it' : 'them') + '.')));
+    }
+    if (r.gone) sum.appendChild(el('p', 'kx-q', esc(r.gone + (r.gone === 1 ? ' ingredient is' : ' ingredients are') + ' no longer in your foods.')));
+  };
+  const addIng = () => pickFood({ title: 'ADD INGREDIENT', noRecipes: 1 }, id =>
+    amountSheet(id, { note: 'In ' + nm(), done: m => { items.push({ food: id, mult: m }); paint(); } }));
+  const h = UI.dialog({
+    title: was ? 'RECIPE' : 'NEW RECIPE', width: 560,
+    body: (b, hh) => {
+      const form = el('div', 'kx-form');
+      const lab = (text, node) => { const l = el('label', 'kx-lab', '<span>' + esc(text) + '</span>'); l.appendChild(node); return l; };
+      form.appendChild(el('p', 'kx-q', 'One batch. Its figures follow its ingredients.'));
+      f.name = UI.field('name', { placeholder: 'Name', value: was ? nameOf(was) : (name || '') });
+      form.appendChild(lab('Name', f.name));
+      const two = el('div', 'kx-two');
+      f.makes = UI.field('decimal', { placeholder: 'servings', value: was && makesOf(was) ? String(makesOf(was)) : null });
+      f.cooked = UI.field('decimal', { placeholder: 'g, if weighed', value: was && num(was.recipe.cooked, 0) > 0 ? String(num(was.recipe.cooked)) : null });
+      two.appendChild(lab('Makes', f.makes));
+      two.appendChild(lab('Cooked weight', f.cooked));
+      form.appendChild(two);
+      f.makes.addEventListener('input', () => paintSum());
+      form.appendChild(el('div', 'kx-gh', 'Ingredients'));
+      list = el('div', 'kx-list');
+      form.appendChild(list);
+      form.appendChild(el('div', 'kx-btns')).appendChild(button('ADD INGREDIENT', '', addIng));
+      sum = el('div', 'kx-form');
+      form.appendChild(sum);
+      b.appendChild(form);
+      paint();
+      Mobile.form(form, () => save(hh));
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: hh => { save(hh); return false; } }],
+  });
+  function save(hh) {
+    const n = f.name.value.trim();
+    if (!n) { UI.focusSoon(f.name, true); return; }
+    if (!items.length) { UI.toast('Add an ingredient.', { bad: 1 }); return; }
+    const mt = f.makes.value.trim(), mk = mt ? parseFrac(mt) : null;
+    if (mt && !(mk > 0)) { UI.focusSoon(f.makes, true); return; }
+    const ct = f.cooked.value.trim(), ck = ct ? UI.amount(ct, 'g') : null;
+    if (ct && !(ck > 0)) { UI.focusSoon(f.cooked, true); return; }
+    const r = recipeBase(items);
+    const recipe = { items: items.map(it => ({ food: it.food, mult: it.mult })) };
+    if (mk > 0) recipe.makes = mk;
+    if (ck > 0) recipe.cooked = ck;
+    /* STATUS logs it by these: a serving, and 100 g when it was weighed */
+    const serves = [];
+    if (mk > 1) serves.push({ label: '1 serving', mult: 1 / mk });
+    if (ck > 0) serves.push({ label: '100 g', mult: 100 / ck });
+    hh.close();
+    Mobile.feedback('success');
+    if (!was) {
+      const id = uid();
+      const row = { id, name: n, brand: '', cat: 'Recipes', base: Object.assign({ amt: 1, unit: 'batch' }, r.base), recipe, uses: 0 };
+      /* no empty list: it would not survive live sync */
+      if (serves.length) row.serves = serves;
+      Rec.set('food', null, id, row);
+      UI.toast('Added <b>' + esc(n) + '</b>.');
+      if (cb) cb(id);
+      return;
+    }
+    const before = Rec.get('food', null, fid);
+    if (!before) return;
+    const ch = { name: n, recipe, serves: serves.length ? serves : undefined, 'base.amt': 1, 'base.unit': 'batch' };
+    /* a figure an ingredient lost goes; one every ingredient now has comes */
+    RKEYS.forEach(k => { ch['base.' + k] = r.base[k] == null ? undefined : r.base[k]; });
+    Rec.patch('food', null, fid, ch);
+    UI.undo('Saved <b>' + esc(n) + '</b>.', () => Rec.set('food', null, fid, before));
+  }
+  if (h && h.body && !was) UI.focusSoon(f.name);
+}
+
 /* ── the amount box and the units allowed for one food ── */
 function unitsFor(fd) {
   const u = unitOf(fd), out = [];
   if (u === 'g') out.push({ id: 'g', name: 'g', want: 'g', f: 1 }, { id: 'kg', name: 'kg', want: 'kg', f: 1000 });
   else if (u === 'ml') out.push({ id: 'ml', name: 'ml', want: 'ml', f: 1 }, { id: 'l', name: 'L', want: 'l', f: 1000 });
   else if (u === 'serving') out.push({ id: 'serving', name: 'servings', f: 1 });
+  else if (isRecipe(fd)) out.push({ id: 'batch', name: 'of the batch', f: 1 });
   else out.push({ id: u, name: unitText(fd), f: 1 });
   const pa = pieceAmt(fd);
   if (pa > 0) out.push({ id: 'pc', name: pieceWord(fd)[1], f: pa, pc: 1 });
@@ -1058,6 +1382,8 @@ function amountBox(fd, placeholder) {
   ln.appendChild(input);
   if (units.length === 1) ln.appendChild(el('span', 'u', esc(cur.name)));
   wrap.appendChild(ln);
+  /* a dish is counted as a part of its batch: the parts it is cut into */
+  if (isRecipe(fd)) wrap.appendChild(fracChips(fd, v => { input.value = fracText(v); UI.focusSoon(input, true); }));
   if (units.length > 1) {
     const chips = el('div', 'mb-chips');
     units.forEach(u => {
@@ -1085,7 +1411,7 @@ function amountBox(fd, placeholder) {
         const base = v * cur.f;
         return { base, qty: base, unit: unitOf(fd) };
       }
-      const n = num(t.replace(/,/g, ''));
+      const n = isRecipe(fd) ? parseFrac(t) : num(t.replace(/,/g, ''));
       if (!(n > 0)) return null;
       return cur.pc ? { base: n * cur.f, qty: n, unit: 'pc' } : { base: n, qty: n, unit: cur.id === 'serving' ? 'serving' : unitText(fd) };
     },
@@ -1383,6 +1709,7 @@ function fillPlan(fd, figs, w) {
 function fillFood(fid) {
   const fd = food(fid);
   if (!fd) return;
+  if (isRecipe(fd)) { UI.toast("A recipe's figures come from its ingredients. Fill those.", { bad: 1 }); return; }
   const T = window.FoodTable || null;
   let input = null, state = !T ? 'none' : T.ready ? 'ready' : 'loading';
   const h = UI.dialog({
@@ -1603,7 +1930,14 @@ function missSheet(k, kind) {
     const s = sumOf(periodOf(kind), k), ids = Object.keys(s.miss);
     /* a food with the figure is not known only through a meal logged with
        no amount its label can be read against: a fill would change nothing */
-    const mine = ids.filter(id => food(id) && baseVal(food(id), k) == null);
+    const mine = [];
+    /* a recipe with no figure is short through its ingredients: those are
+       what get filled */
+    ids.filter(id => food(id) && baseVal(food(id), k) == null).forEach(id => {
+      const fd = food(id);
+      (isRecipe(fd) ? recipeItems(fd).map(it => it.food).filter(f => food(f) && !isRecipe(food(f)) && baseVal(food(f), k) == null) : [id])
+        .forEach(f => { if (mine.indexOf(f) < 0) mine.push(f); });
+    });
     const noAmt = ids.filter(id => food(id) && baseVal(food(id), k) != null).map(id => nameOf(food(id)));
     /* a meal typed with no food, and a food since deleted: nothing to fill */
     const loose = ids.filter(id => !food(id) && id.indexOf('name:') === 0).map(id => s.miss[id]);
@@ -1669,10 +2003,14 @@ function pickFood(o, cb) {
       const sc = el('button', 'mb-btn quiet mb-press mb-tap', 'SCAN');
       sc.type = 'button';
       sc.setAttribute('aria-label', 'Scan a barcode');
+      /* NEW RECIPE beside it (Tom, 2026-10-22), from SHELF and from a PLAN slot */
+      const nr = el('button', 'mb-btn quiet mb-press mb-tap');
+      nr.type = 'button';
       const adds = el('div', 'kx-btns');
       adds.style.marginTop = 'var(--s-3)';
       adds.appendChild(sc);
       adds.appendChild(nw);
+      if (!o.noRecipes) adds.appendChild(nr);
       const paint = () => {
         const w = W(), q = input.value.trim(), ql = q.toLowerCase();
         dl.innerHTML = '';
@@ -1693,6 +2031,8 @@ function pickFood(o, cb) {
         }
         let ids = Object.keys(w.foods).filter(id => {
           const f = w.foods[id];
+          /* an ingredient is a food, never another recipe */
+          if (o.noRecipes && isRecipe(f)) return false;
           return !ql || (String(f.name || '') + ' ' + String(f.brand || '')).toLowerCase().indexOf(ql) >= 0;
         });
         /* on PLAN, what is in the kitchen comes first */
@@ -1703,14 +2043,19 @@ function pickFood(o, cb) {
         ids.forEach(id => {
           const f = w.foods[id], r = el('button', 'kx-row mb-plate mb-press');
           r.type = 'button';
-          r.innerHTML = '<span class="tx"><span class="nm">' + esc(nameOf(f)) + (f.brand ? ' <small>' + esc(f.brand) + '</small>' : '') + '</span></span>' +
+          r.innerHTML = '<span class="tx"><span class="nm">' + esc(nameOf(f)) + (f.brand ? ' <small>' + esc(f.brand) + '</small>' : '') + '</span>' +
+            (isRecipe(f) ? '<span class="sub">Recipe</span>' : '') + '</span>' +
             (inStock(id) ? '<span class="num">' + esc(amtText(f, stock(id).q)) + '</span>' : '');
           r.onclick = () => { hh.close(); cb(id); };
-          /* hold or right-click: fill its blanks, the picker stays under it */
-          Mobile.hold(r, e => menu(e, [{ label: 'Fill blanks', fn: () => fillFood(id) }], nameOf(f)), { dots: true, dotsLabel: 'More for ' + nameOf(f) });
+          /* hold or right-click: fill its blanks, the picker stays under it;
+             a recipe's figures are its ingredients', so it is edited instead */
+          Mobile.hold(r, e => menu(e, isRecipe(f)
+            ? [{ label: 'Edit recipe', fn: () => recipeSheet(id) }, { label: 'Cook a batch', fn: () => cookBatch(id) }]
+            : [{ label: 'Fill blanks', fn: () => fillFood(id) }], nameOf(f)), { dots: true, dotsLabel: 'More for ' + nameOf(f) });
           list.appendChild(r);
         });
         nw.textContent = q ? 'New food "' + q + '"' : 'New food';
+        nr.textContent = 'New recipe';
         /* one tap picks, never automatic */
         tb.innerHTML = '';
         if (T && T.ready) tState = 'ready';
@@ -1732,6 +2077,7 @@ function pickFood(o, cb) {
         }
       };
       nw.onclick = () => { const q = input.value.trim(); hh.close(); newFood(q, cb); };
+      nr.onclick = () => { const q = input.value.trim(); hh.close(); recipeSheet(null, q, cb); };
       sc.onclick = () => { hh.close(); scanFood(cb); };
       input.addEventListener('input', paint);
       const tb = el('div', 'kx-list');
@@ -1793,15 +2139,35 @@ function newFood(name, cb, scan) {
      Another unit has no figures from the source (no density guess): the
      boxes empty. A box typed over is the person's and never moves. */
   const MACROS4 = ['kcal', 'p', 'c', 'f'], put = {};
+  /* Tom, 2026-10-22: a drink kept per ml, filled from the table's per 100 g,
+     asks the grams. So does a serving. Never 1 ml = 1 g */
+  const gramsOf = () => {
+    if (!f.gw) return null;
+    const t = f.gw.value.trim();
+    return t ? UI.amount(t, 'g') : null;
+  };
+  /* how many of the source's 100 the typed amount is: its own unit, or the
+     grams asked for a table food in another */
+  const scaleOf = (u, a) => {
+    if (u && u !== got.unit) { const gw = scan && scan.table ? gramsOf() : null; return gw > 0 ? gw / (num(got.amt, 0) || 100) : null; }
+    return a > 0 ? a / (num(got.amt, 0) || 100) : undefined;
+  };
   function follow() {
-    if (!got || !f.kcal) return;
+    if (!got) return;
     const m = f.amt.value.trim().toLowerCase().replace(/,/g, '').match(/^([0-9]*\.?[0-9]+)\s*(g|ml|servings?)?$/);
     const u = unit || (m && m[2] ? (m[2].indexOf('serv') === 0 ? 'serving' : m[2]) : null), a = m ? num(m[1]) : null;
+    if (f.gwl) {
+      const ask = !!(scan && scan.table && u && u !== got.unit);
+      f.gwl.hidden = !ask;
+      if (ask) f.gwl.firstChild.textContent = 'How many g is ' + (a > 0 ? fx(a, 2) : 'that') + ' ' + (u === 'serving' ? (a === 1 ? 'serving' : 'servings') : u) + '?';
+    }
+    if (!f.kcal) return;
     MACROS4.forEach(k => {
       if (f[k].value !== put[k] || got.base[k] == null) return;
+      const x = scaleOf(u, a);
       let v;
-      if (u && u !== got.unit) v = '';
-      else if (a > 0) { const x = a / (num(got.amt, 0) || 100); v = String(Math.abs(x - 1) < EPS ? got.base[k] : tidy3(got.base[k] * x)); }
+      if (x === null) v = '';
+      else if (x > 0) v = String(Math.abs(x - 1) < EPS ? got.base[k] : tidy3(got.base[k] * x));
       else return;
       f[k].value = put[k] = v;
     });
@@ -1847,6 +2213,16 @@ function newFood(name, cb, scan) {
       });
       al.appendChild(uc);
       form.appendChild(al);
+      /* a table food in ml or servings: the grams it weighs, so its
+         figures per 100 g can be carried over */
+      if (scan && scan.table) {
+        f.gw = UI.field('decimal', { placeholder: 'g' });
+        f.gwl = lab('How many g is that?', f.gw);
+        f.gwl.hidden = true;
+        form.appendChild(f.gwl);
+        f.gw.addEventListener('input', follow);
+        f.amt.addEventListener('input', follow);
+      }
       /* a device that does not count food is never asked for calories */
       if (countCal()) {
         const two = el('div', 'kx-two');
@@ -1905,8 +2281,9 @@ function newFood(name, cb, scan) {
        its unit, so an amount changed in the same unit scales them, and a
        changed unit takes none of the ones with no box (no density guess) */
     const fromSrc = {};
+    const gw = scan && scan.table && unit !== got.unit ? gramsOf() : null;
     if (got) {
-      const k = unit === got.unit ? a / (num(got.amt, 0) || 100) : null;
+      const k = unit === got.unit ? a / (num(got.amt, 0) || 100) : gw > 0 ? gw / (num(got.amt, 0) || 100) : null;
       if (k != null) Object.keys(got.base).forEach(key => { fromSrc[key] = Math.abs(k - 1) < EPS ? got.base[key] : tidy3(got.base[key] * k); });
       Object.keys(fromSrc).forEach(key => { if (!(key in f) && base[key] == null) base[key] = fromSrc[key]; });
       /* the source is named only when one of its figures was kept */
@@ -1923,7 +2300,7 @@ function newFood(name, cb, scan) {
       const keys = Object.keys(fromSrc).filter(key => FILL_KEYS.indexOf(key) >= 0 && base[key] === fromSrc[key]);
       const v = {};
       keys.forEach(key => { v[key] = base[key]; });
-      if (keys.length) row.fills = [{ src: 'usda', from: scan.from, id: scan.id, keys, v, t: Date.now() }];
+      if (keys.length) row.fills = [Object.assign({ src: 'usda', from: scan.from, id: scan.id, keys, v, t: Date.now() }, gw > 0 ? { g: gw } : {})];
     }
     /* no serves: an empty list does not survive live sync, and none is needed */
     Rec.set('food', null, id, row);
@@ -2116,6 +2493,8 @@ function itemMenu(r, e) {
   const p = r.payload || {}, fd = food(p.food), s = slotOf(p);
   menu(e, [
     fd ? { label: 'Change amount', fn: () => amountSheet(p.food, { date: r.date, slot: s, key: r.key, mult: num(p.mult, 0) }) } : null,
+    isRecipe(fd) ? { label: 'Cook a batch', fn: () => cookBatch(p.food) } : null,
+    isRecipe(fd) ? { label: 'Edit recipe', fn: () => recipeSheet(p.food) } : null,
     { label: 'Move to another slot', sub: SLOTS.filter(x => x[0] !== s).map(x => ({ label: x[1], fn: () => moveSlot(r, x[0]) })) },
     { label: 'Move to another day', fn: () => pickDay('MOVE TO', d => moveDay(r, d), r.date) },
     '-',
@@ -2249,25 +2628,32 @@ function pickDay(title, cb, exclude, back) {
 }
 
 /* ── the amount sheet: how much of a food to plan ──
-   o: {date, slot, key and mult when changing one, pickSlot, offer} */
+   o: {date, slot, key and mult when changing one, pickSlot, offer}, or
+   {done(mult), mult and remove() when changing one, note} for an
+   ingredient of a recipe: nothing is written here, the amount goes back.
+   A recipe is planned as a part of its batch (Tom, 2026-10-22: a
+   fraction, not grams or servings). */
 function amountSheet(fid, o) {
   const fd = food(fid);
   if (!fd) { UI.toast('This food is no longer in the library.', { bad: 1 }); return; }
-  const sv = servesOf(fd), u = unitOf(fd), byUnit = u === 'g' || u === 'ml';
-  const edit = !!o.key;
-  let slot = o.slot || 's', mode = byUnit ? 'unit' : 0, input, lab, prevw, modeChips;
+  const sv = servesOf(fd), u = unitOf(fd), byUnit = u === 'g' || u === 'ml', rec = isRecipe(fd);
+  const edit = !!o.key || !!(o.done && o.mult > 0);
+  let slot = o.slot || 's', mode = rec ? 'frac' : byUnit ? 'unit' : 0, input, lab, prevw, modeChips;
   const readMult = () => {
     const t = input.value.trim();
     if (!t) return null;
+    if (mode === 'frac') { const v = parseFrac(t); return v > 0 ? v : null; }
     if (mode === 'unit') { const v = UI.amount(t, u); return v > 0 ? v / baseAmt(fd) : null; }
     const n = num(t.replace(/,/g, ''));
     return n > 0 ? n * sv[mode].mult : null;
   };
   const show = m => {
+    if (mode === 'frac') { input.value = m > 0 ? fracText(m) : ''; return; }
     if (mode === 'unit') input.value = m > 0 ? String(Math.round(baseAmt(fd) * m * 10) / 10) : '';
     else input.value = m > 0 ? String(Math.round(m / sv[mode].mult * 100) / 100) : '';
   };
   const paintMode = () => {
+    if (mode === 'frac') { lab.textContent = 'Part of the batch'; return; }
     lab.textContent = mode === 'unit' ? (u === 'g' ? 'Grams' : 'Millilitres') : 'How many of ' + sv[mode].label;
     modeChips.querySelectorAll('.mb-chip').forEach(c => {
       const on = String(c.dataset.m) === String(mode);
@@ -2296,7 +2682,7 @@ function amountSheet(fid, o) {
   const h = UI.dialog({
     title: nameOf(fd), width: 480,
     body: (b, hh) => {
-      b.appendChild(el('p', 'kx-note', esc(dayName(o.date)) + (o.pickSlot ? '' : ' · ' + esc(SLOT_NAME[slot]))));
+      b.appendChild(el('p', 'kx-note', o.done ? esc(o.note || '') : esc(dayName(o.date)) + (o.pickSlot ? '' : ' · ' + esc(SLOT_NAME[slot]))));
       if (o.pickSlot) {
         const sc = el('div', 'mb-chips');
         SLOTS.forEach(x => {
@@ -2307,17 +2693,18 @@ function amountSheet(fid, o) {
         });
         b.appendChild(sc);
       }
-      /* servings first, then straight weight when it is weighed */
-      modeChips = el('div', 'mb-chips');
+      /* servings first, then straight weight when it is weighed; a
+         recipe's parts instead, the servings it makes or the usual ones */
+      modeChips = rec ? fracChips(fd, v => { show(v); preview(); UI.focusSoon(input, true); }) : el('div', 'mb-chips');
       modeChips.style.marginTop = 'var(--s-3)';
-      sv.forEach((s, i) => {
+      if (!rec) sv.forEach((s, i) => {
         const c = el('button', 'mb-chip mb-press', esc(s.label));
         c.type = 'button';
         c.dataset.m = String(i);
         c.onclick = () => { setMode(i, true); Mobile.feedback('select'); UI.focusSoon(input, true); };
         modeChips.appendChild(c);
       });
-      if (byUnit) {
+      if (byUnit && !rec) {
         const c = el('button', 'mb-chip mb-press', u === 'g' ? 'Grams' : 'Millilitres');
         c.type = 'button';
         c.dataset.m = 'unit';
@@ -2336,9 +2723,10 @@ function amountSheet(fid, o) {
         offers.appendChild(c);
       }
       if (o.offer) {
-        const c = el('button', 'mb-chip mb-press', esc('One serving: ' + planText(fd, 1)));
+        const one = oneServe(fd);
+        const c = el('button', 'mb-chip mb-press', esc('One serving: ' + planText(fd, one)));
         c.type = 'button';
-        c.onclick = () => { setMode(0); show(1); preview(); Mobile.feedback('select'); UI.focusSoon(input, true); };
+        c.onclick = () => { if (!rec) setMode(0); show(one); preview(); Mobile.feedback('select'); UI.focusSoon(input, true); };
         offers.appendChild(c);
       }
       if (offers.children.length) b.appendChild(offers);
@@ -2358,7 +2746,10 @@ function amountSheet(fid, o) {
       input.addEventListener('input', preview);
       Mobile.form(b, () => save(hh));
     },
-    actions: edit
+    actions: o.done
+      ? (edit ? [{ label: 'REMOVE', kind: 'bad', fn: () => { if (o.remove) o.remove(); } }, { label: 'SAVE', kind: 'go', fn: hh => { save(hh); return false; } }]
+        : [{ label: 'CANCEL' }, { label: 'ADD', kind: 'go', fn: hh => { save(hh); return false; } }])
+      : edit
       ? [{ label: 'REMOVE', kind: 'bad', fn: () => (removeItem(o.date, o.key) ? undefined : false) },
          { label: 'MOVE', kind: 'quiet', fn: () => { const r = { date: o.date, key: o.key, payload: Rec.get('kplan', o.date, o.key) || {} }; setTimeout(() => itemMenu(r, null), 0); } },
          { label: 'SAVE', kind: 'go', fn: hh => { save(hh); return false; } }]
@@ -2367,6 +2758,7 @@ function amountSheet(fid, o) {
   function save(hh) {
     const m = readMult();
     if (!(m > 0)) { UI.focusSoon(input, true); return; }
+    if (o.done) { hh.close(); o.done(m); return; }
     if (edit) {
       const pl = Rec.get('kplan', o.date, o.key);
       if (!pl) { hh.close(); return; }
@@ -2467,7 +2859,7 @@ function periodOf(kind) {
   return { kind, items, days: 1, note: 'Solid is eaten today. Striped is planned for today.' };
 }
 function sumOf(P, k) {
-  const o = { eat: 0, plan: 0, miss: {}, n: 0, ok: 0 };
+  const o = { eat: 0, plan: 0, miss: {}, n: 0, ok: 0, usda: false };
   const salts = k === 'na' || k === 'k' || k === 'ca';
   P.items.forEach(it => {
     /* ELEMENT's rows add 0 to everything but the salts, so they say
@@ -2478,6 +2870,7 @@ function sumOf(P, k) {
     if (v == null) { o.miss[it.id] = it.name; return; }
     o.ok++;
     o[it.src] += v;
+    if (v > 0 && it.fd && usdaIn(it.fd, k)) o.usda = true;
   });
   o.eat /= P.days; o.plan /= P.days;
   o.total = o.eat + o.plan;
@@ -2551,7 +2944,7 @@ function nutRow(row, P) {
   const b = el('button', 'kx-nrow mb-press');
   b.type = 'button';
   const s = row.s, t = row.t;
-  const w = el('div', 'kx-meter', '<div class="kx-mline"><span>' + esc(row.label) + '</span><b>' + esc(valText(row)) + '</b></div>');
+  const w = el('div', 'kx-meter', '<div class="kx-mline"><span>' + esc(row.label) + '</span><b>' + esc(valText(row)) + (s.usda ? ' ' + USDA : '') + '</b></div>');
   if (t) {
     const m = el('div', 'kx-bar');
     const ea = Math.min(1, s.eat / t.v), pl = Math.min(1 - ea, s.plan / t.v);
@@ -2573,7 +2966,7 @@ const inSentence = l => /\s/.test(l) ? l : l.charAt(0).toLowerCase() + l.slice(1
 /* Foods richest in a nutrient per label serving, on the shelf or not. */
 function richest(k, n, shelf) {
   const w = W();
-  return Object.keys(w.foods).map(id => ({ id, fd: w.foods[id], v: baseVal(w.foods[id], k) }))
+  return Object.keys(w.foods).map(id => { const v = baseVal(w.foods[id], k); return { id, fd: w.foods[id], v: v == null ? null : v * oneServe(w.foods[id]) }; })
     .filter(x => x.v > 0 && (shelf == null || inStock(x.id) === shelf))
     .sort((a, b) => b.v - a.v).slice(0, n);
 }
@@ -2593,7 +2986,7 @@ function shortCard(P, rows) {
     picks.forEach(x => {
       const s = el('button', 'kx-row mb-plate mb-press');
       s.type = 'button';
-      const serv = unitOf(x.fd) === 'serving' && baseAmt(x.fd) === 1 ? '1 serving' : '1 serving (' + planText(x.fd, 1) + ')';
+      const serv = !isRecipe(x.fd) && unitOf(x.fd) === 'serving' && baseAmt(x.fd) === 1 ? '1 serving' : '1 serving (' + planText(x.fd, oneServe(x.fd)) + ')';
       s.innerHTML = '<span class="tx"><span class="nm">' + esc(serv + ' of ' + nameOf(x.fd) + ' adds ' + nf(x.v) + ' ' + (r.k === 'kcal' ? 'kcal' : r.unit + ' ' + inSentence(r.label))) + '</span>' +
         (off ? '<span class="sub">not on the shelf</span>' : '') + '</span>' + ico('add', 18);
       s.onclick = () => suggestAdd(x.id, P);
@@ -2620,6 +3013,7 @@ function nutSheet(row0, P0) {
   }, b => {
     const P = periodOf(P0.kind), row = Object.assign({}, row0, { s: sumOf(P, k) });
     b.appendChild(el('div', 'kx-big', esc(valText(row)) + '<small>' + esc(P.note) + '</small>'));
+    if (row.s.usda) b.appendChild(el('p', 'kx-q', USDA + ' Includes USDA averages: figures for a food in general, not your pack.'));
     const t = row.t;
     if (t) b.appendChild(el('p', 'kx-q', esc(t.typed ? 'A typed target.' : t.kind === 'target' ? "STATUS's target." + (t.note ? ' ' + t.note : '') :
       (t.kind === 'limit' ? 'A limit' : t.kind === 'ai' ? 'An adequate intake' : 'A recommended allowance') + ' from the US National Academies.')));
@@ -2628,15 +3022,16 @@ function nutSheet(row0, P0) {
     P.items.forEach(it => {
       const v = itemVal(it, k);
       if (v == null) return;
-      const x = by[it.id] = by[it.id] || { name: it.name, v: 0, src: {} };
+      const x = by[it.id] = by[it.id] || { name: it.name, v: 0, src: {}, usda: false };
       x.v += v; x.src[it.src] = 1;
+      if (v > 0 && it.fd && usdaIn(it.fd, k)) x.usda = true;
     });
     const from = Object.keys(by).map(id => by[id]).filter(x => x.v > 0).sort((a, c) => c.v - a.v);
     const sec = el('div', 'kx-sec');
     sec.appendChild(el('div', 'kx-gh', P.kind === 'today' ? 'Where it came from today' : 'Where it came from, in total'));
     if (!from.length) sec.appendChild(el('p', 'kx-empty', 'Nothing counted carries it.'));
     from.forEach(x => sec.appendChild(el('div', 'kx-ev', '<span class="tx"><b>' + esc(x.name) + '</b> · ' + esc(nf(x.v) + u) +
-      ' · ' + esc(x.src.eat && x.src.plan ? 'eaten and planned' : x.src.eat ? 'eaten' : 'planned') + '</span>')));
+      ' · ' + esc(x.src.eat && x.src.plan ? 'eaten and planned' : x.src.eat ? 'eaten' : 'planned') + (x.usda ? ' ' + USDA : '') + '</span>')));
     if (row.s.missN) {
       const names = Object.keys(row.s.miss).map(id => row.s.miss[id]);
       const say = 'Not known for ' + names.join(', ') + '.';
@@ -2671,7 +3066,7 @@ function nutSheet(row0, P0) {
         (inStock(x.id) ? ' · on the shelf' : '') + '</span>')));
       b.appendChild(s2);
     };
-    rich('Richest per serving', richest(k, 8, null), x => 'per ' + planText(x.fd, 1));
+    rich('Richest per serving', richest(k, 8, null), x => 'per ' + planText(x.fd, oneServe(x.fd)));
     /* a device that does not count food is never shown calories */
     if (k !== 'kcal' && countCal()) {
       const w = W();
@@ -2834,7 +3229,7 @@ function soon() {
   soonT = setTimeout(draw, 30);
 }
 document.addEventListener('focusout', () => setTimeout(() => { if (pending && !typing()) { pending = false; soon(); } }, 0));
-Rec.on(() => { gen++; soon(); });
+Rec.on(() => { gen++; soon(); followSoon(); });
 Day.on(soon);
 /* Day.on does not fire at midnight, so look once a minute and on return. */
 let shown = Day.today();
@@ -2856,7 +3251,7 @@ addEventListener('resize', () => {
 });
 
 draw();            /* paint what localStorage has now */
-Rec.ready(draw);   /* again once IndexedDB (big rows) has merged in */
+Rec.ready(() => { draw(); followOn = true; followSoon(); });   /* again once IndexedDB (big rows) has merged in */
 </script>
 </body>
 </html>

@@ -46,6 +46,7 @@ App id `kitchen` is permanent: settings, theme and sound are saved under it.
 | `kplan` | uid | the planned day | `{slot, food, mult, ord, dish?}` one planned food. `slot` `b` `l` `d` `s`. `mult` a multiple of the food's base serving. `dish` the saved meal it came from |
 | `kdish` | uid | null | `{name, items:[{food, mult}], ord}` a saved meal. `items` never empty |
 | `kskip` | meal key | the meal's date | `{skip: 1}` this logged meal did not come out of the kitchen, so it takes no stock off. Kept off the meal row, as WEALTH's `mark` is kept off `spend` |
+| `kcook` | uid | the day cooked | `{food, n, t, items: [{food, mult}]}` a batch of a recipe cooked: `n` batches (1), `items` the recipe's ingredients as they were then, so editing the recipe later never rewrites past stock |
 
 Settings (`Rec.setting('kitchen', ...)`), each written only when the person
 changes it: `tab` (the last tab, the suite's way: QUESTS and WEALTH do the
@@ -88,6 +89,8 @@ the "foods out" fold are view state, never stored.
   clear only what is not eaten and say how many eaten were kept; with
   nothing uneaten, Clear is not offered. Move to another day keeps the meal
   on its old day on purpose.
+- **A recipe is a `food`** (1.0.9): `{id, name, brand: '', cat: 'Recipes', base: {amt: 1, unit: 'batch', ...}, recipe: {items: [{food, mult}], makes?, cooked?}, serves?, uses: 0}`. `mult` is a multiple of the ingredient's own base amount, as `kdish` items are. `serves` is `1 serving` (1/makes) when it makes more than one and `100 g` (100/cooked) when a cooked weight was typed, so STATUS can log it its own way; neither is written when it would be empty. EDIT RECIPE writes by `Rec.patch` (name, recipe, serves, every `base.<key>` set or removed), with UNDO to the row as read.
+- **`food.base.<key>` on a recipe, by itself** (`recipeFollow`): on any store change, after `Rec.ready`, a recipe whose summed figures differ from what it carries is patched key by key, so FILL BLANKS on an ingredient, or a label changed in STATUS or FOODDÉX, reaches the recipe. A recipe with an ingredient not in the store (a device still syncing) is skipped, never wiped. This is the one write KITCHEN makes that the person did not press; the figures are on screen wherever the recipe is.
 - **`food`** when a food is added here: new uid, `{id, name, brand: '',
   cat?, base: {amt, unit, kcal?, p?, c?, f?}, uses: 0}` with blank boxes
   left OFF. No `serves` (an empty list does not survive sync). Setting a
@@ -121,6 +124,7 @@ Worked out every draw in `stock(fid)`, never stored. Events for one food:
   one for one). No amount,
   `pc` with no piece weight, `pc` on a serving food, or mass into volume
   cannot be counted (no density guess).
+- **cooked** (1.0.9): a `kcook` row is **in** for the recipe (`n` batches, at `t`) and **out** for each of its `items` (`base.amt * mult * n`), ranked like any in and out.
 - **out**: `meal` rows with `fid === id`, not `kskip`ped: `meal.amt` when
   `meal.unit` is the base unit, else `base.amt * meal.mult`. At the date
   plus `at`, else `t` when it falls on the meal's date, else noon.
@@ -140,7 +144,8 @@ guide's shelf picks.
 
 **To buy** = planned over the next 7 days from today, not yet eaten, plus
 `kfood.min`, less stock. Offered in whole pieces for pieced foods, rounded
-up otherwise.
+up otherwise. A recipe is never on it: what is short of a dish, rounded up
+to whole batches, is added to its ingredients' need.
 
 ## Screens
 
@@ -402,12 +407,71 @@ Chromium), before to after: SHELF 1.84 to 1.00 at 1280, 1720 and 2560 x
 **1.0.6, 2026-10-06: dealt, not flowed.** On his 3840x1080 (Main Menu now gives every app the whole window) CSS columns stacked SHELF's and GUIDE's short cards under the tallest (Vitamins, 1105px) and left 1632px of the right side empty, with GUIDE scrolling 1.41 screens. `mason()` now deals the cards into flex columns (`.kx-mcol`): as many as there are cards and as fit at 384px, at most 768px each, each card into the shortest column, re-dealt on resize from the kept order (`host._cards`). A nutrient card with more than six rows on a wide window lists them in a grid (`.kx-nlist`, 288px at least), so a 750px Vitamins card is two columns. Measured on the demo, headless Chromium: at 3840x1000 SHELF and GUIDE fill the width, GUIDE 1.41 to 1.00 screens; at 1920 SHELF went from ending at 1428px to filling it, GUIDE 1.41 either way; at 1280 GUIDE 1.74 to 1.76. Under 1100px nothing changed.
 Not watched: the Foods out list opened (the demo has no food at zero).
 
-## In progress (2026-10-05)
+## RECIPES (1.0.9, 2026-10-22)
 
-- **RECIPES** (Tom 2026-10-05): live in KITCHEN, beside New food. Ingredients
-  with amounts make one food whose numbers follow them; "makes N servings"
-  plus an optional cooked weight; also log a fraction of a cooked batch.
-  Logged meals keep their frozen numbers. Not built.
+Tom, 2026-10-05: recipes live in KITCHEN; ingredients with amounts make one
+food whose numbers follow them; "makes N servings" plus an optional cooked
+weight; log a fraction of a cooked batch; logged meals keep their frozen
+numbers. His answers, 2026-10-22: started from **New recipe beside New
+food AND from a PLAN slot**; part of a cooked batch is logged as **a
+fraction of the batch (1/4), not grams or servings**.
+
+- **Where it starts.** NEW RECIPE sits beside SCAN and New food in every
+  food picker (named from the search box, like New food), so it is there
+  from SHELF's ADD FOOD and from each PLAN slot's add. From a slot, SAVE goes
+  straight on to the amount for that slot; from SHELF, to the recipe's food
+  sheet, where COOK A BATCH is. The picker for an ingredient (`noRecipes`)
+  lists no recipes and has no New recipe: a recipe is never an ingredient,
+  so there are no loops.
+- **The recipe sheet.** Name (caret in it), Makes (servings, optional),
+  Cooked weight (g, optional), the ingredients (tap one to change its
+  amount or REMOVE it, in the plan's own amount sheet with `done`), ADD
+  INGREDIENT, then the whole batch and one serving in calories and macros
+  (only when STATUS's Count calories is on), and "N figures are left off:
+  X has no number for them." Nothing is written before SAVE.
+- **Its figures** are `recipeBase`: each key summed over the ingredients
+  only when every ingredient carries it (blank is not known, never zero),
+  rounded to 0.01, per batch. A fill on an ingredient reaches the recipe
+  through `recipeFollow`.
+- **The fraction.** A recipe's base is 1 batch, so `mult` IS the fraction.
+  Its amount sheet (PLAN, the Short suggestions) says "Part of the batch"
+  with chips for the parts it makes (k/N when it makes 2 to 8, else 1/4,
+  1/3, 1/2, 2/3, 3/4) and Whole; the box takes "1/4", "1 1/2" or "0.25".
+  Words: `batchText`, "1/4 batch", "1 1/2 batches", "1 batch", on the plan,
+  the shelf and the meal's `serve`. COUNT on a recipe takes the same.
+- **Cooking.** COOK A BATCH on the recipe's food sheet, its shelf menu, its
+  PLAN item's menu and the picker's hold menu writes one `kcook` row with
+  UNDO: the batch goes on the shelf, each ingredient's amount comes off.
+  The history says "Cooked 1 batch" (Remove, with UNDO) on the recipe and
+  "Cooked into X · 500 g" on the ingredient. Eating a part of it (the tick,
+  or STATUS) takes that part off the batch, never the ingredients again.
+- **What a recipe does not have.** BOUGHT, KEEP AT LEAST, PIECE WEIGHT and
+  FILL BLANKS (its figures are its ingredients'; FILL BLANKS on one says so).
+  GUIDE's "Not known ... Fill blanks" lists a recipe's ingredients with no
+  figure instead of the recipe.
+- **One serving** of a recipe is 1/makes of the batch (`oneServe`) in
+  Short suggestions, "Richest per serving" and the "One serving" offer.
+- **Not built:** deleting a recipe here (STATUS's food editor deletes any
+  food); cooking more than one batch at once (press it again); a recipe
+  inside a recipe.
+
+## USDA mark and drinks (1.0.9, 2026-10-22)
+
+- **The USDA mark.** Tom: totals that include USDA averages show a small
+  USDA symbol. `usdaIn(fd, k)`: a figure filled from the food table
+  (`fills` with `src: 'usda'`), or a macro on a food added from it
+  (`base.src: 'usda'`); a recipe's is any ingredient's. GUIDE puts a small
+  outlined "USDA" (`.kx-usda`, words, not a colour) after a row's total when
+  any counted item over 0 carries one; the row's sheet repeats it with
+  "Includes USDA averages: figures for a food in general, not your pack."
+  and marks each food in "Where it came from". The recipe sheet marks its
+  whole-batch line the same way.
+- **Drinks per ml from the per-100 g table.** Tom: ask the grams. NEW FOOD
+  from the food table in ml or servings shows "How many g is 250 ml?"; the
+  four boxes and the figures with no box follow the grams typed (no grams,
+  no figures: never 1 ml = 1 g), and the `fills` entry keeps `g`. FILL
+  BLANKS already asked the same way.
+- **Never PhilFCT** (DOST-FNRI). Tom, 2026-10-22: do not add it.
 
 ## Not in this version
 
@@ -416,6 +480,12 @@ A home screen widget; prices and grocery cost; expiry dates; storage places
 macros (never: see FILL BLANKS); filling a food by itself (never).
 
 ## Needs from the foundation
+
+- **The root ownership table needs `kcook`** (kitchen, uid, dated the day
+  cooked, `{food, n, t, items}`) **and the `food` line needs the recipe
+  shape**: `recipe: {items: [{food, mult}], makes, cooked}`, `base.unit:
+  'batch'` with `amt: 1`, written by KITCHEN, and its `base` figures
+  rewritten by KITCHEN when an ingredient changes (`recipeFollow`).
 
 - Meaning and chart colours as marks. Chart and meaning colours are never words now (1.0.8, 2026-10-22), so they only ever draw a mark: a dot, a ring, a bar or a line under a word. The theme layer floors text tokens and leaves these alone, and on Craft Day's grey page several marks cannot be seen: `--danger` 1.06 to 1 on the page, `--info` 1.11 and `--data-3` 1.00 on a recessed row (it IS the row's grey, #8B8B8B), `--rank-E` 1.18 on a card. The words still read, so nothing is lost but the colour. Wanted: `skins.js` floors `--success`, `--warn`, `--danger`, `--info`, `--data-1` to `--data-6` and `--rank-*` to 3 to 1 (the graphic ratio) against the four grounds, the way `liftAll` already does the text tokens. Brick is Tom's call and left out.
 

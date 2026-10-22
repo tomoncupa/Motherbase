@@ -134,3 +134,32 @@ Chromium 142 of 142 at 1280 x 900 and at 390 x 844 touch; WebKit 141 of
 a real long press in Safari), a real camera, a real Open Food Facts answer.
 
 1.0.8, 2026-10-22: the shelf's LOW and COUNT IT flags read in every theme. They were amber words, 1.3 to 1 in Craft Day (minecraft2) against 4.5. A meaning colour is not a word colour (root brief, Known traps): the word is in the text colour with an amber dot before it. Measured in headless Chromium on the demo at 1280, all 23 factory themes, Shelf: failing words 20 to 8, words in a meaning colour 12 to 0; the 8 left are Brick's text token, Ragnarok's logo and FFVII's ADD FOOD. Block 0 to 0. Looked at in Block and Craft Day at 390. Not seen on the iPhone.
+
+## RECIPES, the USDA mark and drinks watched (2026-10-22, 1.0.9)
+
+Pressed on the demo (`?demo=1`), headless, by tapping in WebKit at iPhone
+13 Pro size and clicking in Chromium at 1280x900: PLAN, today's Lunch add,
+NEW RECIPE (caret in Name), Makes 4, Cooked weight 1200, three ingredients
+through the ingredient picker and the amount sheet (chicken 500 g, rice
+600 g, broccoli 300 g), one changed to 200 g and back (1,707 to 1,673 kcal
+and back), SAVE, straight to "Part of the batch", 1/4, ADD. The food row:
+base 1 batch, kcal 1707, p 179.6, c 187.8, f 21 against the hand sum, and
+exactly the keys all three carry (5 of them). Cook a batch from the item's
+menu, tick: the meal 426.75 kcal, 44.9 g protein, serve "1/4 batch"; SHELF
+"3/4 batch", the chicken's history "Cooked into" 500 g; GUIDE's eaten
+calories equal the day's meals. From SHELF's ADD FOOD (Chromium 1280): a
+recipe named from the search, its sheet, COOK A BATCH (900 to 400 g of
+chicken), two batches planned for tomorrow with one on the shelf adds
+exactly one batch (500 g) to the chicken's To buy and the dish is not on
+it; broccoli changed elsewhere moved the recipe 927 to 957 kcal while the
+eaten meal stayed 463.5; an ingredient with no protein took protein off;
+EDIT RECIPE to makes 4 rewrote `serves`; Remove on "Cooked 1 batch" put
+the chicken back. The food table: whole milk as 250 ml asked "How many g
+is 250 ml?", kcal empty until 258 was typed, then 157 (61 x 2.58); saved
+per 250 ml with 34 table figures and `g: 258`; GUIDE marked Calories and 25
+other totals USDA, and the row's sheet said why. No page errors in either
+engine. Looked at: the recipe sheet and the fraction sheet at 390, the
+grams box at 390, GUIDE with the marks at 1280.
+Not watched: the iPhone; GUIDE's Fill blanks list for a recipe (it lists
+the ingredients); COUNT on a recipe; a recipe on a device still syncing
+(the follow skips it by design).
