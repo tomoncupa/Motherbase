@@ -44,7 +44,7 @@ see the root brief on many writers. Every edit merges into the row as it is
 | `sgroup` | group id, dated | `{name, slot, ex:[ids], jump, resthold}` — a superset |
 | `program` | program id | `{name, ord}` — a routine |
 | `progday` | id | `{program, name, ord}` — a day within a routine |
-| `progex` | id | `{day, ex, ord, fill, sets:[{kg, r, u}], plan, slot}` — an exercise in a routine day; `plan` is the coach's target, `slot` an open slot with `ex: null` |
+| `progex` | id | `{day, ex, ord, fill, sets:[{kg, r, u}], plan, slot, range}` — an exercise in a routine day; `plan` is the coach's target, `slot` an open slot with `ex: null`, `range` Tom's own rep range on a routine built here (`"8-15"`, none copies last time) |
 | `goal` | goal id | `{kind, ex, kg, r, u, title, from, to, ord}` |
 | `setting` | `train.*` | configuration |
 
@@ -414,9 +414,34 @@ Each is short here; its story is under the heading named.
   `train.split*`, guesses). (HISTORY.md: Split sets in strength (1.0.70, 2026-10-18))
 - **A block can carry its days** (`phase.program`: a routine, a FORGE
   program, or a client's own); the empty day leads with Next in the rotation
-  (`nextBlockDay`), set one loaded by `suggestFill`. **The step rule is
-  Claude's reading of the Algrowrithm, not yet Tom's**, and a TRAIN-built
-  routine has no rep range, so it copies last time. (HISTORY.md: A block's days, in rotation (1.0.71, 2026-10-18))
+  (`nextBlockDay`), set one loaded by `suggestFill`. (HISTORY.md: A block's days, in rotation (1.0.71, 2026-10-18))
+
+## The next-weight rule (Tom's answer, 2026-10-22; 1.0.77)
+
+Tom: *"Most sets is always a step higher, since we're meant to travel down
+the range."* Next sets set one's load from last time's first working set,
+read against set one's band (the top of the range: 13-15 of 8-15 over three
+sets, the Algrowrithm doc's own "a weight we think we can do 13-15 times"):
+
+- **past the top of the band: +2 steps**
+- **anywhere in the band, the top included: +1 step**
+- **under the bottom of the band: -1 step**
+
+A step is the exercise's increment (`TRAIN.increment`). Reps and every set
+after set one are last time's. `TRAIN.nextSteps` is the rule, `TRAIN.topBand`
+the band; no range, no rule, last time as it was. The doc ("The Algrowrithm",
+his Drive) says only how to go up within a session (near the top heavier,
+hit it heavier, past it a lot heavier) and nothing about under the bottom, so
+the -1 is Tom's answer, not the doc's.
+
+**Rep ranges, one rule for every routine.** A routine built here carries an
+optional range per exercise: its menu's Rep Range (one box, blank copies last
+time), stored as `progex.range`, shown on the row as "8-15 reps". A coach's
+program (FORGE, COACH) carries `plan.reps` and `plan.bands` instead and is not
+offered the box. `TRAIN.repRange` reads either, and the band is worked out the
+way FORGE's `bands()` does (`hi - i*(hi-lo)/n`, rounded; `n` the coach's set
+count, else the routine's predefined sets, else last time's working sets), so
+the same range gives the same band in both apps.
 - **The session strip is one 44px line**: name with the block under it, then
   `.sessnote` (comment, tags, ratings), never clipped; a tap opens one
   SESSION sheet. (HISTORY.md: Notes and context in the session strip (1.0.72, 2026-10-18))
