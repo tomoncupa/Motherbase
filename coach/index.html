@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.28, 2026-10-22">
+<meta name="mb-version" content="1.0.29, 2026-10-23">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -364,7 +364,12 @@ const clientsIn = box => Object.entries(people())
   .filter(([, p]) => (p.box || 'one') === box)
   .sort((a, b) => (a[1].slot == null ? 999 : a[1].slot) - (b[1].slot == null ? 999 : b[1].slot) || String(a[1].name).localeCompare(String(b[1].name)));
 const own = (type, pid) => Rec.all(type).filter(r => String(r.key).indexOf(pid + '|') === 0);
-const setsOf = pid => own('cset', pid);
+/* TRAIN's rule (`TRAIN.counts`, TRAIN 1.0.78): a set TRAIN suggested
+   (`plan`) is not training until ticked or UPDATEd, on any day. Tom presses
+   Next for a 1:1 and the suggestions are guides; one left untouched must not
+   show in the week, the sessions, strength, the range, or bill. */
+const setCounts = s => !s || !s.plan || !!s.done;
+const setsOf = pid => own('cset', pid).filter(r => setCounts(r.payload));
 const exOf = pid => { const m = {}; own('cex', pid).forEach(r => { m[r.key.slice(pid.length + 1)] = r.payload; }); return m; };
 
 /* ── a client's check-ins ──
@@ -542,7 +547,7 @@ function exFor(pid, name) {
 const billsBySession = p => { const c = p && p.wc && Rec.get('client', null, p.wc); return !!c && (c.cycle === 'sesh' || c.cycle === 'session' || c.cycle === 'pack'); };
 function countSession(pid, date) {
   const p = people()[pid]; if (!p || !p.wc) return;
-  const key = 'k-' + pid, any = billsBySession(p) && coachSets(pid, date).some(r => r.payload.r > 0);
+  const key = 'k-' + pid, any = billsBySession(p) && coachSets(pid, date).some(r => r.payload.r > 0 && setCounts(r.payload));
   if (any) { if (!Rec.get('sesh', date, key)) Rec.set('sesh', date, key, { client: p.wc, src: 'coach', pid: pid }); }
   else if (Rec.get('sesh', date, key)) Rec.del('sesh', date, key);
 }

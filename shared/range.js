@@ -111,8 +111,8 @@ var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'A
 /** what the range draws, from set and phase rows shaped like TRAIN's
     (a whole row with a payload, or the payload alone). TRAIN hands it its
     own rows and COACH a client's. A warmup is never work, and neither is a
-    plan still waiting today; a past day counts as it was logged, which is
-    TRAIN's rule (`TRAIN.counts`). */
+    plan not yet ticked or updated, on any day, which is TRAIN's rule
+    (`TRAIN.counts`, since TRAIN 1.0.78: a suggestion is never logged). */
 function fromRows(sets, phases, to) {
   var by = {};
   to = to || todayStr();
@@ -120,7 +120,7 @@ function fromRows(sets, phases, to) {
     if (!r || r.deleted) return;
     var s = r.payload || r, date = r.date || s.date;
     if (!date || isWarm(s)) return;
-    if (s.plan && !s.done && date >= to) return;
+    if (s.plan && !s.done) return;
     var d = by[date] || (by[date] = { date: date, vol: 0, sets: 0, reps: 0, pr: false });
     var kg = +s.kg || 0, reps = +s.r || 0;
     d.sets++; d.reps += reps; d.vol += kg * reps;

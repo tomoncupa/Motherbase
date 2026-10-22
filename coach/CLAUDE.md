@@ -428,3 +428,7 @@ client, and Tom's own `set`, `exercise` and `tick` counts did not move.
   board on another client, the heading's right click menu; at 390 with touch
   a grip drag moved Range under Week and saved. Not tried in Main Menu.exe or
   on his screens.
+
+## A suggestion is not a session (1.0.29, 2026-10-23)
+
+- TRAIN 1.0.78 made every suggestion a ghost (`plan`, never logged until ticked or UPDATEd). COACH read every `cset` with no regard for `plan`, so Next or Copy on a 1:1 left untouched showed in the week, RECENT SESSIONS, STRENGTH and the range, and billed a WEALTH `sesh`. `setsOf` and `countSession` now skip a set by TRAIN's rule (`setCounts`). Watched on the demo: Copy Previous Sets in Mika's TRAIN frame showed ghosts (55.0, 6), COACH counted 0 sets, 1 after one tick; a ghost cset on Lia (billed per session) billed nothing until ticked. One real 1:1 held 15 such sets on 2026-10-07, a copied day matching 10-06 with no session billed; they stop counting.

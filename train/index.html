@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.77, 2026-10-22">
+<meta name="mb-version" content="1.0.78, 2026-10-23">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -354,6 +354,11 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
   background:none;color:var(--text-1);font:inherit;font-size:var(--f-7);font-weight:var(--w-bold);
   font-variant-numeric:tabular-nums;padding:var(--s-2) 0;outline:none}
 .stepper input:focus{border-bottom-color:var(--accent)}
+/* A suggestion is a ghost, never a value (Tom, 2026-10-23: "guided
+   suggestions more than numbers that need to be overwritten"). The app's
+   number sits in the placeholder, dim, so typing replaces it with nothing
+   to delete; SAVE or UPDATE on an untouched box takes what it shows. */
+.stepper input::placeholder{color:var(--text-muted);opacity:1;font-weight:var(--w-bold)}
 
 .gobar{display:flex;gap:var(--s-3);margin-top:var(--s-4)}
 .gobar button{flex:1;min-height:var(--tap);border:0;border-radius:var(--radius-md);
@@ -1565,7 +1570,8 @@ TRAIN.volume = function (sets) {
 TRAIN.ACTIVITY = 'training';
 TRAIN.assertTick = function (date) {
   if (!date) return;
-  var n = TRAIN.setsOn(date).length;
+  /* a suggestion he has not taken is not training (1.0.78) */
+  var n = TRAIN.setsOn(date).filter(TRAIN.counts).length;
   var had = Rec.has('tick', date, TRAIN.ACTIVITY);
   if (n > 0) {
     var cur = Rec.get('tick', date, TRAIN.ACTIVITY);
@@ -3668,6 +3674,8 @@ TRAIN.patchSet = function (key, date, patch) {
   for (k in patch) next[k] = patch[k];
   Rec.set('set', date, key, next);
   TRAIN.reindex();
+  /* taking a suggestion (tick or UPDATE) makes it training */
+  if ('done' in patch || 'plan' in patch) TRAIN.assertTick(date);
   return next;
 };
 
@@ -4184,6 +4192,7 @@ function drawTrack(m) {
   var pad = UI.el('div', 'trackbox');
   var inputs = {};
   var DRAFT = { w: 'draftW', r: 'draftR', d: 'draftD', t: 'draftT' };
+  var GHOST = { w: 'ghostW', r: 'ghostR', d: 'ghostD', t: 'ghostT' };
   f.forEach(function (k, i) {
     var label = UI.el('div', 'fieldlabel');
     if (i) label.style.marginTop = 'var(--s-4)';
@@ -4200,12 +4209,13 @@ function drawTrack(m) {
     var paintPlates = function (v) {
       if (plates) plates.textContent = TRAIN.platesText(TRAIN.toKg(parseFloat(v) || 0, TRAIN.unit(exId)), TRAIN.unit(exId));
     };
-    paintPlates(TRAIN.draftW);
+    var ghost = TRAIN[GHOST[k]] == null ? '' : String(TRAIN[GHOST[k]]);
+    paintPlates(TRAIN.draftW || TRAIN.ghostW);
     pad.appendChild(label);
     var stepBy = k === 'w' ? TRAIN.increment(ex) : k === 'r' ? 1 : k === 'd' ? 0.1
       : (TRAIN.kindOf(exId) === 'dt' ? 60 : 15);
     var st = stepper(k, TRAIN[DRAFT[k]] == null ? '' : TRAIN[DRAFT[k]], stepBy,
-      function (v) { TRAIN[DRAFT[k]] = v; paintPlates(v); });
+      function (v) { TRAIN[DRAFT[k]] = v; paintPlates(v || ghost); }, ghost);
     pad.appendChild(st);
     inputs[k] = st.input;
   });
@@ -4218,6 +4228,7 @@ function drawTrack(m) {
   clear.textContent = 'CLEAR';
   clear.onclick = function () {
     TRAIN.draftW = TRAIN.draftR = TRAIN.draftD = TRAIN.draftT = null;
+    clearGhosts();
     TRAIN.sel = null;
     Mobile.feedback('select');
     draw();
@@ -4278,8 +4289,9 @@ function lastBit(s, f) {
 
 /* Weight is typed as often as it is stepped, so the number is a real field
    and the buttons nudge it. inputmode decimal keeps the phone keypad. */
-function stepper(kind, value, step, onChange) {
+function stepper(kind, value, step, onChange, ghost) {
   var NAME = { w: 'weight', r: 'reps', d: 'distance', t: 'time' }[kind] || kind;
+  ghost = ghost == null ? '' : String(ghost);
   var box = UI.el('div', 'stepper');
   var minus = UI.el('button', 'mb-press mb-tap');
   minus.innerHTML = ico('minus');
@@ -4289,14 +4301,18 @@ function stepper(kind, value, step, onChange) {
      a half rep is logged as 8.5 (Tom, 2026-09-25). */
   Mobile.field(input, kind === 't' ? 'text' : 'decimal', {});
   if (kind === 't') input.placeholder = '0:00';
+  /* the app's suggestion, as a ghost (see .stepper input::placeholder) */
+  if (ghost !== '') input.placeholder = ghost;
   input.value = value === '' ? '' : String(value);
-  input.setAttribute('aria-label', NAME);
+  input.setAttribute('aria-label', ghost !== '' ? NAME + ', suggested ' + ghost : NAME);
   var plus = UI.el('button', 'mb-press mb-tap');
   plus.innerHTML = ico('add');
   plus.setAttribute('aria-label', 'Increase ' + NAME);
 
+  /* a step from an untouched box starts at the ghost, the number it shows */
   var read = function () {
-    var n = kind === 't' ? TRAIN.parseTime(input.value) : parseFloat(input.value);
+    var v = String(input.value).trim() === '' ? ghost : input.value;
+    var n = kind === 't' ? TRAIN.parseTime(v) : parseFloat(v);
     return isNaN(n) ? 0 : n;
   };
   var write = function (n) {
@@ -4335,10 +4351,17 @@ TRAIN.increment = function (ex) {
 
 function commitSet(inputs) {
   var exId = TRAIN.exId, date = TRAIN.date, f = TRAIN.fieldsOf(exId);
-  var val = function (k) {
+  /* What a box says: what he typed, else the ghost it shows. Pressing SAVE
+     or UPDATE on a ghost is taking it (2026-10-23). */
+  var shown = function (k) {
     var el = inputs[k];
-    if (!el || String(el.value).trim() === '') return null;
-    var n = k === 't' ? TRAIN.parseTime(el.value) : k === 'r' ? TRAIN.readReps(el.value) : parseFloat(el.value);
+    if (!el) return '';
+    return String(el.value).trim() !== '' ? String(el.value).trim() : String(TRAIN[GHOSTS[k]] == null ? '' : TRAIN[GHOSTS[k]]);
+  };
+  var val = function (k) {
+    var v = shown(k);
+    if (v === '') return null;
+    var n = k === 't' ? TRAIN.parseTime(v) : k === 'r' ? TRAIN.readReps(v) : parseFloat(v);
     return isNaN(n) ? null : n;
   };
   if (f.every(function (k) { return !val(k); })) {
@@ -4352,11 +4375,12 @@ function commitSet(inputs) {
     su: cleanSetup(exId),
   };
   /* The numbers stay in the steppers after SAVE, as in FitNotes, so the same
-     set again is one more tap. */
-  TRAIN.draftW = inputs.w ? inputs.w.value : null;
-  TRAIN.draftR = inputs.r ? inputs.r.value : null;
-  TRAIN.draftD = inputs.d ? inputs.d.value : null;
-  TRAIN.draftT = inputs.t ? inputs.t.value : null;
+     set again is one more tap. They stay as ghosts (2026-10-23), so a
+     different number is typed straight over them. */
+  ['w', 'r', 'd', 't'].forEach(function (k) {
+    TRAIN[GHOSTS[k]] = inputs[k] ? shown(k) : null;
+    TRAIN[DRAFTS[k]] = inputs[k] ? '' : null;
+  });
 
   if (TRAIN.sel) {
     var selKey = TRAIN.sel, was = Rec.get('set', date, selKey);
@@ -4612,7 +4636,8 @@ function commentDialog(s, date) {
 /* ═════════════════ HISTORY ═════════════════
    Every past workout for this exercise, newest first, exactly as logged. */
 function drawHistory(m) {
-  var all = TRAIN.historyOf(TRAIN.exId);
+  /* as logged: a suggestion never taken is not history */
+  var all = TRAIN.historyOf(TRAIN.exId).filter(TRAIN.counts);
   if (!all.length) {
     var e = UI.el('div', 'empty');
     e.textContent = 'No sets recorded';
@@ -8185,7 +8210,9 @@ TRAIN.gymDialog = function () {
 var FILL_NAMES = ["Don't populate any sets", 'Copy previous sets', 'Use predefined sets'];
 
 TRAIN.lastSetsOf = function (exId, before) {
-  var hist = TRAIN.historyOf(exId).filter(function (s) { return s.date < before && !s.warm; });
+  /* what he did, never a suggestion left untouched, or the next one would
+     be built on it */
+  var hist = TRAIN.historyOf(exId).filter(function (s) { return s.date < before && !s.warm && TRAIN.counts(s); });
   if (!hist.length) return [];
   var d = hist[hist.length - 1].date;
   return hist.filter(function (s) { return s.date === d; });
@@ -8723,12 +8750,29 @@ TRAIN.groupOf = function (date, exId) {
 /* ═══════════════ AUTO-SELECT NEXT SET ═══════════════
    FitNotes' setting of that name. On a day that was copied or filled from a
    routine, the next set still to be done loads into the steppers, so logging
-   it is change-the-number and press UPDATE. */
+   it is change-the-number and press UPDATE.
+   A set the app wrote and he has not done (`TRAIN.pending`) loads as GHOSTS,
+   never values (Tom, 2026-10-23: "guided suggestions more than numbers that
+   need to be overwritten"): typing replaces a ghost with nothing to delete,
+   UPDATE or the set's tick takes it. A set he logged loads as values, his
+   own numbers to correct. */
+var DRAFTS = { w: 'draftW', r: 'draftR', d: 'draftD', t: 'draftT' };
+var GHOSTS = { w: 'ghostW', r: 'ghostR', d: 'ghostD', t: 'ghostT' };
+function clearGhosts() { TRAIN.ghostW = TRAIN.ghostR = TRAIN.ghostD = TRAIN.ghostT = null; }
+/* what a stepper box shows: typed, else its ghost */
+TRAIN.shownW = function () { return TRAIN.draftW || TRAIN.ghostW || ''; };
+TRAIN.shownR = function () { return TRAIN.draftR || TRAIN.ghostR || ''; };
 function loadDraft(s) {
-  TRAIN.draftW = s.kg ? TRAIN.showWeight(s.kg, s.u, s.ex) : '';
-  TRAIN.draftR = s.r ? String(s.r) : '';
-  TRAIN.draftD = s.dist ? TRAIN.showDist(s.dist) : '';
-  TRAIN.draftT = s.dur ? fmtSecs(s.dur) : '';
+  var v = {
+    w: s.kg ? TRAIN.showWeight(s.kg, s.u, s.ex) : '',
+    r: s.r ? String(s.r) : '',
+    d: s.dist ? TRAIN.showDist(s.dist) : '',
+    t: s.dur ? fmtSecs(s.dur) : '',
+  }, ghost = TRAIN.pending(s);
+  Object.keys(v).forEach(function (k) {
+    TRAIN[DRAFTS[k]] = ghost ? '' : v[k];
+    TRAIN[GHOSTS[k]] = ghost ? v[k] : null;
+  });
   if (s.su) TRAIN.draftSU = copyObj(s.su);
 }
 TRAIN.selectNextOpen = function () {
@@ -9026,17 +9070,20 @@ function dayY(d, from) {
     ? Day.label(d) : Day.label(d, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/* A set counts unless it is a plan waiting to be done. A past day counts as it
-   was logged: 1,099 of his FitNotes sets were never ticked, and Analysis has
-   always counted them. Today, a copied or routine-filled set is not work until
-   it is ticked, and `plan` is what marks one.
+/* A set counts unless it is a plan waiting to be done. 1,099 of his FitNotes
+   sets were never ticked and they count: they carry no `plan`. A copied or
+   routine-filled set is not work until it is ticked or UPDATEd, on any day.
+   Until 1.0.78 a past day's untouched plan counted too, so a suggestion
+   left alone became logged training at midnight; Tom, 2026-10-23, wants
+   suggestions to be guides, and a guide is never saved as logged. His own
+   log held no such set; one 1:1 client held 15, a copied day never done.
 
    Until 2026-09-24 saving a set wrote done:1 and this asked about `done`
    alone. Tom asked for saved sets to stop ticking themselves, so the two facts
    had to come apart: `plan` says the app wrote this set on his behalf, `done`
    is the box he ticks. A set he typed and saved is work the moment it is
    saved, box or no box. */
-TRAIN.counts = function (s) { return !s.plan || !!s.done || s.date < Day.today(); };
+TRAIN.counts = function (s) { return !s.plan || !!s.done; };
 
 /* A plan still waiting: what auto-select next set goes looking for, and what
    stops the session timer from ending the moment the first set lands. */
@@ -9734,7 +9781,7 @@ TRAIN.compareCtx = function (date) {
   return { sess: sess, named: named };
 };
 TRAIN.vsFor = function (date, exId, ctx) {
-  var has = function (d) { return TRAIN.setsOn(d).some(function (s) { return s.ex === exId && !s.warm; }); };
+  var has = function (d) { return TRAIN.setsOn(d).some(function (s) { return s.ex === exId && !s.warm && TRAIN.counts(s); }); };
   var s = ctx.move ? {} : ctx.sess;
   if (!ctx.move) {
   if (s.vs && s.vs < date && has(s.vs)) return { date: s.vs, why: 'picked' };
@@ -9742,7 +9789,7 @@ TRAIN.vsFor = function (date, exId, ctx) {
   if (s.from && s.from < date && has(s.from)) return { date: s.from, why: 'copy' };
   }
   var h = TRAIN.historyOf(exId);
-  for (var j = h.length - 1; j >= 0; j--) if (h[j].date < date && !h[j].warm) return { date: h[j].date, why: 'last' };
+  for (var j = h.length - 1; j >= 0; j--) if (h[j].date < date && !h[j].warm && TRAIN.counts(h[j])) return { date: h[j].date, why: 'last' };
   return null;
 };
 
@@ -10999,7 +11046,7 @@ TRAIN.addWarmups = function (exId, date) {
   var heaviest = function (list) {
     return list.reduce(function (m, s) { return !s.warm && s.kg > m ? s.kg : m; }, 0);
   };
-  var typed = parseFloat(TRAIN.draftW);
+  var typed = parseFloat(TRAIN.shownW());
   var work = typed > 0 ? TRAIN.toKg(typed, TRAIN.unit(exId)) : heaviest(mine) || heaviest(TRAIN.lastSetsOf(exId, date));
   if (!(work > 0)) return UI.toast('Type the working weight first', { bad: true });
   var unit = TRAIN.unit(exId), inc = TRAIN.increment(ex), workU = TRAIN.toUnit(work, unit);
@@ -11039,12 +11086,12 @@ document.getElementById('moreBtn').onclick = function (e) {
       { label: 'Copy Previous Sets', fn: function () { TRAIN.copyPreviousSets(id); } },
       { label: 'Plate Calculator', fn: function () {
         var sel = TRAIN.sel && Rec.get('set', date, TRAIN.sel);
-        var typed = parseFloat(TRAIN.draftW);
+        var typed = parseFloat(TRAIN.shownW());
         TRAIN.platePanel(sel ? sel.kg : (typed > 0 ? TRAIN.toKg(typed, TRAIN.unit(id)) : 0), id);
       } },
       { label: 'Set Calculator', fn: function () { TRAIN.setCalc(id); } },
       { label: 'Estimated 1RM Calculator', fn: function () {
-        var typed = parseFloat(TRAIN.draftW), reps = TRAIN.readReps(TRAIN.draftR);
+        var typed = parseFloat(TRAIN.shownW()), reps = TRAIN.readReps(TRAIN.shownR());
         TRAIN.e1rmCalc(typed > 0 ? TRAIN.toKg(typed, TRAIN.unit(id)) : 0, reps > 0 ? reps : 0, id);
       } },
       { label: 'Add To Superset', fn: function () { TRAIN.supersetPanel(id); } },
@@ -11208,10 +11255,14 @@ TRAIN.addExercise = function () {
 };
 TRAIN.openExercise = function (exId) {
   TRAIN.draftW = TRAIN.draftR = TRAIN.draftD = TRAIN.draftT = null;
+  clearGhosts();
   TRAIN.sel = null;
   TRAIN.suFor = null;
   TRAIN.tab = 'track';
   TRAIN.show('training', { ex: exId });
+  /* an exercise with a set waiting opens on it, its numbers as ghosts in the
+     steppers (1.0.78): only the load on open had done this */
+  if (Rec.setting(APP.id, 'autoNext') !== 0) TRAIN.selectNextOpen();
 };
 /* copyWorkout is implemented above, with the rest of the day's operations. The
    placeholder that used to sit here was written before it existed and was never

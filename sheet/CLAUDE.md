@@ -149,3 +149,7 @@ the log. Do not "fix" this app back towards DOCTRINE's no-XP rules.
 1. Tom's verdict on `art/knight96.png`, and background choice.
 2. Tom runs the cape / helmet / shield prompts in Gemini, pastes results.
 3. Diff-extract items, then build `sheet/index.html` from `_template/`.
+
+## 1.0.6, 2026-10-23
+
+`workSets` follows TRAIN 1.0.78: a planned set counts once ticked or updated, never by its day passing. A suggestion left untouched is no feat.

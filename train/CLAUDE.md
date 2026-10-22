@@ -175,11 +175,14 @@ reps; kept on the index as `er`. (HISTORY.md: What a comment says (the brief's v
 
 ### What counts
 
-A set counts unless it is a plan still waiting. **A past day counts as it was
-logged**: 1,099 of his FitNotes sets were never ticked, and Analysis has always
-counted them. Today, a copied or routine-filled set is not work until it is
-ticked or pressed UPDATE on, and `plan` is what marks one. A set he typed and
-saved is work the moment it is saved, box or no box. Warmups count (1.0.50).
+A set counts unless it is a plan still waiting (`TRAIN.counts`). His 1,099
+unticked FitNotes sets count: they carry no `plan`. A copied or routine-filled
+set is not work until it is ticked or pressed UPDATE on, **on any day** since
+1.0.78 (until then a past day's untouched plan counted, so a suggestion became
+logged training at midnight). A set he typed and saved is work the moment it
+is saved, box or no box. Warmups count (1.0.50). Every reader of sets uses the
+same rule: COACH (`setCounts`, its billing too), `range.js`, SHEET, the home
+screen's `setCounts`, the training tick's qty, last time and History.
 
 ### Training blocks
 
@@ -447,6 +450,24 @@ the same range gives the same band in both apps.
   SESSION sheet. (HISTORY.md: Notes and context in the session strip (1.0.72, 2026-10-18))
 - **`&block=new` or `&block=<key>` on a client's address opens the block
   dialog** and closing it returns to COACH. (HISTORY.md: Opened from COACH onto a block (1.0.74, 2026-10-21))
+
+## Suggestions are ghosts (Tom, 2026-10-23; 1.0.78)
+
+Tom: *"Make sure the numbers are more like guided suggestions more than
+numbers that need to be overwritten."* Every number the app suggests (Next,
+LOG ALL, a routine's fill, Copy Previous Sets, Copy Past Session, Copy Set,
+Add Warmups) is a `plan` set, drawn muted in the list, and loads into the
+steppers as a GHOST: the placeholder, `--text-muted`, never the value.
+- **Typing replaces a ghost**, nothing to delete; a step from an untouched box
+  starts at its ghost.
+- **Taking one is one press**: the set's tick, or UPDATE (SAVE) with the box
+  untouched; a typed box beside an untouched one takes the typed number and
+  the ghost.
+- **Never logged unless taken** (`TRAIN.counts`, above). The next suggestion
+  is built from what he did only (`lastSetsOf`, `vsFor`).
+- A set he logged loads as values (his number to correct). After SAVE his
+  numbers stay as ghosts, so the same set again is still one press.
+- An exercise with a set waiting opens on it, ghosts showing (`openExercise`).
 
 ## Parked
 
