@@ -308,3 +308,9 @@ cell in a zoomed-out day is centred in its row; it sat at the top, above
 the day's date. The rest is the length of the history: Month is 31 days
 a screen, so the demo's 121 days are about four screens at any width, and
 fewer would make Month not a month.
+
+1.0.24, 2026-10-22: the day's mood and energy read in every theme. The numbers were drawn in `--data-1` and `--data-3`, and in Craft Day (minecraft2) measured under 2.5 to 1 against 4.5. A chart colour is a line colour, not a word colour (root brief, Known traps): the number is in the text colour now with a 3px line under it in its series colour, the same colour as the faint line across the day; the unit is an inline block so the line stays under the number. Measured in headless Chromium on the demo at 1280x900, all 23 factory themes: failing words 1,775 to 280, words in a chart colour 1,617 to 0; 278 of the 280 are Brick's text token on its red and blue rows (Tom's call), the rest Ragnarok's date and FFVII's ADD. Block 0 to 0. Looked at in Block and Craft Day at 1280 (the columns are off screen at 390). Not seen on the PC.
+
+## Needs from the foundation
+
+- Meaning and chart colours as marks. Chart and meaning colours are never words now (1.0.24, 2026-10-22), so they only ever draw a mark: a dot, a ring, a bar or a line under a word. The theme layer floors text tokens and leaves these alone, and on Craft Day's grey page several marks cannot be seen: `--danger` 1.06 to 1 on the page, `--info` 1.11 and `--data-3` 1.00 on a recessed row (it IS the row's grey, #8B8B8B), `--rank-E` 1.18 on a card. The words still read, so nothing is lost but the colour. Wanted: `skins.js` floors `--success`, `--warn`, `--danger`, `--info`, `--data-1` to `--data-6` and `--rank-*` to 3 to 1 (the graphic ratio) against the four grounds, the way `liftAll` already does the text tokens. Brick is Tom's call and left out.
