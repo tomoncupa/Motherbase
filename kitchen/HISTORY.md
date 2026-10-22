@@ -132,3 +132,5 @@ Chromium 142 of 142 at 1280 x 900 and at 390 x 844 touch; WebKit 141 of
 
 **Not watched:** an iPhone (the keyboard on the chooser and the grams box,
 a real long press in Safari), a real camera, a real Open Food Facts answer.
+
+1.0.8, 2026-10-22: the shelf's LOW and COUNT IT flags read in every theme. They were amber words, 1.3 to 1 in Craft Day (minecraft2) against 4.5. A meaning colour is not a word colour (root brief, Known traps): the word is in the text colour with an amber dot before it. Measured in headless Chromium on the demo at 1280, all 23 factory themes, Shelf: failing words 20 to 8, words in a meaning colour 12 to 0; the 8 left are Brick's text token, Ragnarok's logo and FFVII's ADD FOOD. Block 0 to 0. Looked at in Block and Craft Day at 390. Not seen on the iPhone.
