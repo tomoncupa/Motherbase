@@ -71,6 +71,17 @@
       which only mean anything when there is real data to check, which is
       exactly why this is worth running on your own machine rather than mine.
 
+   4. DOES IT STILL FOLLOW THE DESIGN RULES. Four machine checks from Tom's
+      DESIGN.md (tom-context, section 6), added 2026-10-22, run on the screen
+      each app is left on: every press target catches 44 x 44 (on a touch
+      screen, where `mb-tap` grows a small drawing), nothing is under the
+      12px reading size, no words spill past or are cut by their box and the
+      page never scrolls sideways, and an empty state is one plain sentence
+      with no Oops, no ! and no em dash. ARC, BLOCK, STYLE and FORGE are desk
+      only, so their frame is widened to 1280 for these and the target check
+      skips them. What an app's own session has not fixed yet is in `KNOWN`,
+      shown as a note with its count, never as a pass.
+
    WHY IT IS SAFE. Nothing in here writes a row an app owns. The app checks
    only read and click; the write tests live in `_smoke.html`, which has always
    used made-up types and tidies up after itself.
@@ -124,17 +135,17 @@ const APPS = [
   { id: 'quest',  name: 'QUESTS',    path: 'quest/index.html',  root: '#list',     nav: '#side .nav' },
   { id: 'portion', name: 'FOODDÉX',   path: 'portion/index.html', root: '#main',     nav: '' },
   { id: 'log',    name: 'LOG',       path: 'log/index.html',    root: '#cal .day', nav: '' },
-  { id: 'block',  name: 'BLOCK',     path: 'block/index.html',  root: '#board, #app', nav: '#tabs button' },
+  { id: 'block',  name: 'BLOCK',     path: 'block/index.html',  root: '#board, #app', nav: '#tabs button' , desk: true },
   { id: 'train',  name: 'TRAIN',     path: 'train/index.html',  root: '#main',     nav: '#tabs button' },
   { id: 'coach',  name: 'COACH',     path: 'coach/index.html',  root: '#main .card', nav: '' },
-  { id: 'forge',  name: 'FORGE',     path: 'forge/index.html',  root: '#board .card, #lanes', nav: '#viewSeg button' },
+  { id: 'forge',  name: 'FORGE',     path: 'forge/index.html',  root: '#board .card, #lanes', nav: '#viewSeg button' , desk: true },
   { id: 'checkin', name: 'CHECK IN', path: 'checkin/index.html', root: '#main .card', nav: '#nav button' },
   { id: 'kitchen', name: 'KITCHEN', path: 'kitchen/index.html', root: '#view[data-drawn]', nav: 'nav.kx-tabs button' },
   { id: 'bullet', name: 'BULLET',    path: 'bullet/index.html', root: '#main .card', nav: '' },
   { id: 'sheet',  name: 'SHEET',     path: 'sheet/index.html',  root: '#main',     nav: '' },
   { id: 'system', name: 'NOTICE',    path: 'system/index.html', root: '#stage',    nav: '' },
-  { id: 'arc',    name: 'ARC',       path: 'arc/index.html',    root: '#viewport', nav: '' },
-  { id: 'style',  name: 'STYLE',     path: 'style/index.html',  root: '#grid',     nav: '#tabs button' },
+  { id: 'arc',    name: 'ARC',       path: 'arc/index.html',    root: '#viewport', nav: '' , desk: true },
+  { id: 'style',  name: 'STYLE',     path: 'style/index.html',  root: '#grid',     nav: '#tabs button' , desk: true },
   { id: 'wealth', name: 'WEALTH',    path: 'wealth/index.html', root: '#main',     nav: '#nav button' },
   { id: 'speak',  name: 'SPEAK',     path: 'speak/index.html',  root: '#main .card', nav: '#nav button' },
   { id: 'mix',    name: 'ELEMENT',       path: 'mix/index.html',    root: '#main .card', nav: '' },
@@ -155,6 +166,118 @@ function frameFor(path) {
        review can come back green on code that was never loaded. */
     f.src = path + '?review=' + Date.now();
   });
+}
+
+/* ── the design rules (DESIGN.md section 6) ──
+   Each returns a list of what breaks the rule, read with the frame's own
+   getComputedStyle (ours answers wrong about another document). */
+const KNOWN = {
+  /* app:check -> why it is not fixed here. Shown as a note with the count. */
+  'home:tiny': 'the phone bar names are 9.5px so eight apps fit at 375; bigger names is Tom\'s call',
+  'arc:tiny': 'ARC sets 73 of its sizes between 9 and 11.5px; a type pass is ARC\'s own work',
+  'log:overflow': 'LOG\'s first screen is 143px wider than a 390 phone; LOG session',
+  'block:tiny': 'BLOCK draws its labels at 9 to 11px throughout; a type pass is BLOCK\'s own work',
+  'coach:words': 'COACH\'s empty box explains in four sentences; COACH session',
+  'forge:words': 'FORGE\'s empty program and empty list run two and three sentences; FORGE session',
+  'kitchen:words': 'KITCHEN\'s empty shelf and guide run two sentences each; KITCHEN session',
+  'status:target': 'STATUS\'s day cells are drawn 30px wide with no wider catch; STATUS session',
+  'wealth:words': 'WEALTH\'s empty runway and month run two sentences; WEALTH session',
+};
+function designLook(w) {
+  const d = w.document, px = v => parseFloat(v) || 0;
+  const out = { target: [], tiny: [], overflow: [], words: [] };
+  const shown = el => {
+    for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
+      const cs = w.getComputedStyle(e);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) return false;
+      if (e.hidden || e.inert || e.getAttribute('aria-hidden') === 'true') return false;
+    }
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.left < w.innerWidth;
+  };
+  const name = el => {
+    const t = (el.getAttribute('aria-label') || el.textContent || el.title || '').trim().replace(/\s+/g, ' ').slice(0, 28);
+    const c = typeof el.className === 'string' ? el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+    return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (c ? '.' + c : '') + (t ? ' "' + t + '"' : '');
+  };
+  /* 1. What a finger catches: the box, grown by a pseudo-element laid over
+     it (mb-tap's ::after), or by a label round a small box. Only on a touch
+     screen: `mb-tap` is coarse-pointer only, and a mouse is not a thumb. A
+     link inside running text is exempt, as it is in WCAG's target rule. */
+  if (w.matchMedia('(pointer:coarse)').matches) {
+    d.querySelectorAll('button, a[href], [role="button"], input[type="checkbox"], input[type="radio"], select, summary').forEach(el => {
+      if (el.disabled || !shown(el)) return;
+      if (el.tagName === 'A' && w.getComputedStyle(el).display === 'inline') return;
+      const r = el.getBoundingClientRect();
+      let W = r.width, H = r.height;
+      ['::after', '::before'].forEach(p => {
+        const cs = w.getComputedStyle(el, p);
+        if (!cs || cs.content === 'none' || cs.position !== 'absolute' || cs.pointerEvents === 'none') return;
+        W = Math.max(W, r.width - Math.min(px(cs.left), 0) - Math.min(px(cs.right), 0), px(cs.width));
+        H = Math.max(H, r.height - Math.min(px(cs.top), 0) - Math.min(px(cs.bottom), 0), px(cs.height));
+      });
+      const lab = el.closest('label');
+      if (lab) { const lr = lab.getBoundingClientRect(); W = Math.max(W, lr.width); H = Math.max(H, lr.height); }
+      if (W < 43.5 || H < 43.5) out.target.push(name(el) + ' ' + Math.round(W) + 'x' + Math.round(H));
+    });
+  } else out.target = null;
+  /* 2 and 3. Every element holding words of its own. Overflow is the words'
+     own ink against their box, measured with a range: spilling past it or cut
+     by it. A box meant to scroll sideways is left alone. */
+  const tw = d.createTreeWalker(d.body, 4), seen = new Set();
+  for (let n; (n = tw.nextNode());) {
+    const el = n.parentElement;
+    if (!n.textContent.trim() || !el || seen.has(el)) continue;
+    seen.add(el);
+    if (el.closest('svg, canvas, script, style, noscript, textarea, option, [contenteditable="true"]') || !shown(el)) continue;
+    const cs = w.getComputedStyle(el);
+    if (px(cs.fontSize) < 11.95) out.tiny.push(name(el) + ' ' + cs.fontSize);
+    if (cs.display !== 'inline' && cs.overflowX !== 'auto' && cs.overflowX !== 'scroll') {
+      const rg = d.createRange(); rg.selectNodeContents(el);
+      const tr = rg.getBoundingClientRect(), er = el.getBoundingClientRect();
+      const past = Math.max(er.left - tr.left, tr.right - er.right);
+      if (tr.width > 0 && past > 1.5) out.overflow.push(name(el) + ' ' + Math.round(past) + 'px past');
+    }
+  }
+  const se = d.scrollingElement || d.documentElement;
+  if (se.scrollWidth > w.innerWidth + 1) out.overflow.push('the page scrolls sideways by ' + (se.scrollWidth - w.innerWidth) + 'px');
+  /* 4. An empty state is a bare fact: one sentence, no Oops, no !, no em
+     dash. Found by its class, which every app spells with "empty". */
+  d.querySelectorAll('[class*="empty"]').forEach(el => {
+    if (!shown(el)) return;
+    const t = (el.textContent || '').trim().replace(/\s+/g, ' ');
+    if (!/[a-z]{2}/i.test(t)) return;
+    const why = [];
+    if (/\b(oops|whoops|uh[- ]oh)\b/i.test(t)) why.push('oops');
+    if (/!/.test(t)) why.push('!');
+    if (/—/.test(t)) why.push('em dash');
+    if (/[.?]\s+[A-Z]/.test(t) && !el.querySelector('button, a')) why.push('more than one sentence');
+    if (why.length) out.words.push(name(el) + ' [' + why.join(', ') + ']');
+  });
+  return out;
+}
+async function reviewDesign(a, f) {
+  const w = f.contentWindow;
+  if (a.desk) { f.style.width = '1280px'; f.style.height = '900px'; await wait(500); }
+  let r;
+  try { r = designLook(w); } catch (e) { ok(a.id + ': design rules could be read', false, e.message); return; }
+  const rules = [
+    ['target', 'every press target catches 44 x 44'],
+    ['tiny', 'no words under 12px'],
+    ['overflow', 'no words spill past their box'],
+    ['words', 'empty states are one plain sentence'],
+  ];
+  for (const [k, label] of rules) {
+    const list = r[k];
+    if (list === null || (k === 'target' && a.desk)) {
+      note(a.id + ': ' + label, a.desk ? 'desk only, mouse density allowed' : 'judged on a touch screen only');
+      continue;
+    }
+    const why = KNOWN[a.id + ':' + k];
+    if (why && list.length) { note(a.id + ': ' + label, 'KNOWN, ' + list.length + ': ' + why + ' (' + list[0] + ')'); continue; }
+    ok(a.id + ': ' + label, !list.length,
+      list.length ? list.length + ': ' + list.slice(0, 3).join(' | ') : (why ? 'KNOWN entry not seen on this screen' : ''));
+  }
 }
 
 async function reviewApp(a) {
@@ -233,6 +356,8 @@ async function reviewApp(a) {
         ok(a.id + ': every tab draws (' + tabs.length + ')', !broke, broke);
       }
     }
+
+    await reviewDesign(a, f);
 
     ok(a.id + ': nothing threw while being used', thrown.length === 0, thrown.slice(0, 2).join(' | '));
   } catch (e) {
