@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.80, 2026-10-22">
+<meta name="mb-version" content="1.0.81, 2026-10-22">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -8826,9 +8826,37 @@ function screenFlush() {
 }
 addEventListener('pagehide', () => { if (DESK && HOSTED) screenFlush(); });
 
+/* ── the first check of the day comes when he sits down ──
+   Tom, 2026-10-22: the first check of the day comes a few minutes after he
+   sits down at the PC, not on the 60 to 90 minute timer. Sitting down is
+   `deskBack()`, the same reading DESK TIME and the morning questions use,
+   and the minutes are counted from the start of the stretch at the PC he is
+   in now (`scrSpan`, breaks under 10 minutes joined). Until it has been
+   answered, the timer holds, so a timer that came due overnight does not
+   jump in the moment he touches the mouse. With no launcher there is no
+   stretch to count from, and the timer carries it as before. */
+const DESK_SAT = 3;   /* minutes at the PC before the first check of the day */
+let deskFirst = false; /* the check on the screen is the day's first */
+function deskFirstDue() {
+  if (!HOSTED || !scrSpan) return null;
+  const d = Day.today(), now = new Date();
+  if (S.get('desk.newday', '') === d || deskSmallHours(now) || scrSpan.d !== d || !deskBack()) return null;
+  return now.getHours() * 60 + now.getMinutes() - scrSpan.a >= DESK_SAT;
+}
+
 function deskTick() {
   if (!DESK) return;
   if (!deskCfg().on) { deskNext = 0; deskWaiting = false; return; }
+  const first = deskFirstDue();
+  if (first != null) {
+    if (!first || deskAway() || checkOn || deskAsking || deskPanel || sheetH) return;
+    deskWaiting = false;
+    deskFirst = true;
+    deskAsk();
+    /* nothing switched on to ask: the day's first is done, the timer goes on */
+    if (!checkOn) { deskFirst = false; S.set('desk.newday', Day.today()); }
+    return;
+  }
   if (deskWaiting) {
     if (deskAway()) return;
     deskWaiting = false;
@@ -9384,7 +9412,7 @@ function checkSave() {
      be walking away that closed it, and walking away is no longer something
      this can be done to. */
   if (deskAskedNight) { S.set('desk.nightOff', deskAskedNight); deskAskedNight = ''; }
-  if (checkMorn.length) { S.set('desk.newday', d); checkMorn = []; }
+  if (checkMorn.length || deskFirst) { S.set('desk.newday', d); checkMorn = []; deskFirst = false; }
   checkOn = false;
   document.body.classList.remove('checking');
   deskAsking = false;
@@ -9616,7 +9644,8 @@ function drawDeskTab(pane) {
   });
   if (c.on && DESK) {
     const mins = deskNext ? Math.round((deskNext - Date.now()) / 60000) : null;
-    pane.appendChild(el('div', 'note', mins == null ? 'Working out when the next one is.'
+    pane.appendChild(el('div', 'note', deskFirstDue() != null ? 'The first one today comes ' + DESK_SAT + ' minutes after you sit down.'
+      : mins == null ? 'Working out when the next one is.'
       : mins <= 0 ? 'The next one is due now.'
       : 'The next one is about <b>' + mins + '</b> minute' + (mins === 1 ? '' : 's') + ' away.'));
   }
