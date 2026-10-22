@@ -648,6 +648,11 @@ because it runs the real thing rather than only parsing it:
    one tally. `shared/_smoke.html` on its own is still there for when you are
    working on the foundation and want its checks without the apps.
    Every check must pass.
+   Since 2026-10-22 each app also gets the four DESIGN.md checks (tom-context,
+   section 6): 44px targets on a touch screen, no words under 12px, no words
+   past their box or sideways scroll, one-sentence empty states. What an app
+   has not fixed yet is in `KNOWN` at the top of those checks, shown as a
+   note; fix it in the app and take the line out, never add one to get green.
    **Load it with a `?cb=<something new>` on the end.** The browser caches these
    files hard, and a run against a stale copy is worse than no run: it reports
    green on code you have not tested. Run it at phone width too — some checks
