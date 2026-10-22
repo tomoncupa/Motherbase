@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.78, 2026-10-21">
+<meta name="mb-version" content="1.0.79, 2026-10-22">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -2177,6 +2177,102 @@ const partsOf = (W, cfg) => (typeof W.parts === 'function' ? W.parts(cfg) : W.pa
 const partToggle = (cfg, id, label, redraw) => ({ label: label, check: partOn(cfg, id), fn: () => {
   const off = (cfg.off || []).filter(o => o !== id); if (partOn(cfg, id)) off.push(id);
   if (off.length) cfg.off = off; else delete cfg.off; redraw(); } });
+
+/* ── WEALTH's sums, for MONEY IN, MONEY OUT, NET and NEXT BILL ──
+   Copies of wealth/index.html, so the board says what WEALTH says: `num`,
+   `norm`, `acctKey`, `catOf` (his mark, else the longest rule that
+   matches), `isMove` (money between his own accounts is not spending),
+   `rangeSpend`'s total (big purchases counted), `rangeIn` (borrowed money
+   left out), `billDates` and `billsOwed`. Change WEALTH's and these
+   together. Reads only. */
+const WM = (() => {
+  const num = (v, d) => { const n = parseFloat(typeof v === 'string' ? v.replace(/,/g, '') : v); return isFinite(n) ? n : (d == null ? 0 : d); };
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const acctKey = v => {
+    if (v == null || v === '') return '';
+    const raw = String(v);
+    if (Rec.has('acct', null, raw)) return raw;
+    const low = raw.toLowerCase();
+    if (Rec.has('acct', null, low)) return low;
+    const hit = Rec.all('acct').find(r => r.payload && String(r.payload.name || '').toLowerCase() === low);
+    return hit ? hit.key : raw;
+  };
+  const catGrp = id => (Rec.get('cat', null, id) || {}).grp || '';
+  const markOf = s => Rec.get('mark', null, s.date + '|' + s.key) || {};
+  const rules = () => Rec.all('rule').map(r => r.payload || {}).filter(r => r.match)
+    .sort((a, b) => b.match.length - a.match.length);
+  const catOf = (s, R) => {
+    const m = markOf(s);
+    if (m.cat) return m.cat;
+    const t = norm(s.note || '');
+    const hit = t ? (R || rules()).find(r => t.indexOf(norm(r.match)) > -1) : null;
+    return hit ? hit.cat : '';
+  };
+  const isMove = (s, R) => catGrp(catOf(s, R)) === 'move';
+  const spendRows = (from, to) => Rec.all('spend', { from: from, to: to }).map(r => Object.assign({ key: r.key, date: r.date }, r.payload,
+    { acct: acctKey(r.payload && r.payload.acct) }));
+  const pad = n => String(n).padStart(2, '0');
+  const month = () => LifeOS.day().slice(0, 7);
+  const start = m => m + '-01';
+  const end = m => { const p = m.split('-'); return m + '-' + new Date(+p[0], +p[1], 0).getDate(); };
+  const back = (m, n) => { const p = m.split('-'), d = new Date(+p[0], +p[1] - 1 - n, 1); return d.getFullYear() + '-' + pad(d.getMonth() + 1); };
+  const monthLabel = m => { const p = m.split('-'); return new Date(+p[0], +p[1] - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }); };
+  const monthOut = m => { const R = rules(); return spendRows(start(m), end(m)).filter(s => !isMove(s, R)).reduce((a, s) => a + num(s.amt, 0), 0); };
+  const monthIn = m => Rec.all('paid', { from: start(m), to: end(m) }).map(r => r.payload || {}).filter(p => !p.loan)
+    .reduce((a, p) => a + num(p.amt, 0), 0);
+  function billDates(b, from, to) {
+    const out = [];
+    const inRange = iso => iso >= from && (!b.from || iso >= b.from) && (!b.until || iso <= b.until);
+    if (b.cycle === 'days') {
+      const n = Math.max(1, num(b.every, 7)), s = b.start || from;
+      let i = Math.max(1, Math.floor(Day.diff(from, s) / n) - 1);
+      for (let guard = 0; guard < 500; guard++, i++) {
+        const iso = Day.shift(s, Math.round(i * n));
+        if (iso > to) break;
+        if (inRange(iso)) out.push(iso);
+      }
+      return out;
+    }
+    const day = num(b.day, 1), step = Math.max(1, Math.round(num(b.months, 1)));
+    const s0 = b.start ? +b.start.slice(0, 4) * 12 + +b.start.slice(5, 7) - 1 : null;
+    const d = new Date(from.slice(0, 4), +from.slice(5, 7) - 1, 1);
+    for (let i = 0; i < 24 * step; i++) {
+      const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      const iso = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(Math.min(day, last));
+      if (iso > to) break;
+      const onStep = step === 1 || s0 == null || ((d.getFullYear() * 12 + d.getMonth() - s0) % step + step) % step === 0;
+      if (onStep && inRange(iso)) out.push(iso);
+      d.setMonth(d.getMonth() + 1);
+    }
+    return out;
+  }
+  /* a due date counts as paid when a purchase names the bill, or sits in its
+     category at roughly its amount, from a few days before it up to today */
+  function billsOwed(from, to) {
+    const t = Day.today(), used = {}, paid = {}, R = rules(), all = [];
+    Rec.all('bill').forEach(r => { const b = Object.assign({ id: r.key }, r.payload); billDates(b, from, to).forEach(d => all.push({ bill: b, date: d })); });
+    all.sort((a, b) => a.date.localeCompare(b.date));
+    Rec.all('spend').forEach(r => { if (r.key.indexOf('bill-') === 0) paid[r.key] = 1; });
+    return all.filter(x => {
+      if (paid['bill-' + x.bill.id + '-' + x.date]) return false;
+      if (x.date > Day.shift(t, 3)) return true;
+      const b = x.bill;
+      const gap = b.cycle === 'days' ? Math.max(1, num(b.every, 7)) : 28 * Math.max(1, Math.round(num(b.months, 1)));
+      const reach = Math.max(0, Math.min(3, Math.floor(gap / 2)));
+      const amt = num(b.amt, 0), name = norm(b.name);
+      const hit = spendRows(Day.shift(x.date, -reach), t).find(s => {
+        if (used[s.date + s.key] || isMove(s, R) && catOf(s, R) !== b.cat) return false;
+        if (b.acct && s.acct && s.acct !== b.acct) return false;
+        if (name.length > 2 && norm(s.note).indexOf(name) > -1) return true;
+        const a = num(s.amt, 0);
+        return !!b.cat && catOf(s, R) === b.cat && a >= amt * .5 && a <= amt * 1.5;
+      });
+      if (hit) { used[hit.date + hit.key] = 1; return false; }
+      return true;
+    });
+  }
+  return { num, month, back, monthLabel, monthIn, monthOut, billsOwed };
+})();
 
 const WIDGETS = {
   /* ══════════════ TODAY ══════════════
@@ -4415,6 +4511,79 @@ const WIDGETS = {
     },
   },
 
+  /* Tom's 5a, 2026-10-22: WEALTH's month as numbers on the board. MONEY IN,
+     MONEY OUT and NET are the three tiles at the top of WEALTH's MONEY IN
+     and MONEY OUT tabs (`netCard`); NEXT BILL is the first line of its THE
+     NEXT 60 DAYS that is a bill. The sums are `WM` below, copied from
+     WEALTH, so the board and WEALTH say the same number. Read only. */
+  moneyin: {
+    nm: 'MONEY IN', w: 3, h: 2, app: 'wealth', to: ['wealth'],
+    parts: [['now', 'This month'], ['last', 'Last month']],
+    about: 'Money received this month, as WEALTH counts it: borrowed money left out.',
+    sub: () => WM.monthLabel(WM.month()),
+    draw(body, cfg) {
+      if (!Rec.all('paid').length) { body.appendChild(el('div', 'empty', 'No payments logged')); return; }
+      const m = WM.month(), st = el('div', 'stats');
+      if (partOn(cfg, 'now')) st.appendChild(el('div', 'stat acc', '<b>' + peso(WM.monthIn(m)) + '</b><span>THIS MONTH</span>'));
+      if (partOn(cfg, 'last')) st.appendChild(el('div', 'stat', '<b>' + peso(WM.monthIn(WM.back(m, 1))) + '</b><span>LAST MONTH</span>'));
+      body.appendChild(st);
+    },
+  },
+  moneyout: {
+    nm: 'MONEY OUT', w: 3, h: 2, app: 'wealth', to: ['wealth'],
+    parts: [['now', 'This month'], ['last', 'Last month']],
+    about: 'Money spent this month, as WEALTH counts it: money moved between your own accounts left out.',
+    sub: () => WM.monthLabel(WM.month()),
+    draw(body, cfg) {
+      if (!Rec.all('spend').length) { body.appendChild(el('div', 'empty', 'No spending logged')); return; }
+      const m = WM.month(), st = el('div', 'stats');
+      if (partOn(cfg, 'now')) st.appendChild(el('div', 'stat acc', '<b>' + peso(WM.monthOut(m)) + '</b><span>THIS MONTH</span>'));
+      if (partOn(cfg, 'last')) st.appendChild(el('div', 'stat', '<b>' + peso(WM.monthOut(WM.back(m, 1))) + '</b><span>LAST MONTH</span>'));
+      body.appendChild(st);
+    },
+  },
+  moneynet: {
+    nm: 'NET', w: 3, h: 2, app: 'wealth', to: ['wealth'],
+    parts: [['now', 'This month'], ['last', 'Last month']],
+    about: 'Money in less money out this month, the NET tile in WEALTH.',
+    sub: () => WM.monthLabel(WM.month()),
+    draw(body, cfg) {
+      if (!Rec.all('paid').length && !Rec.all('spend').length) { body.appendChild(el('div', 'empty', 'No money logged')); return; }
+      const m = WM.month(), net = x => { const n = WM.monthIn(x) - WM.monthOut(x); return (n > 0 ? '+' : '') + peso(n); };
+      const st = el('div', 'stats');
+      if (partOn(cfg, 'now')) st.appendChild(el('div', 'stat acc', '<b>' + net(m) + '</b><span>THIS MONTH</span>'));
+      if (partOn(cfg, 'last')) st.appendChild(el('div', 'stat', '<b>' + net(WM.back(m, 1)) + '</b><span>LAST MONTH</span>'));
+      body.appendChild(st);
+    },
+  },
+  nextbill: {
+    nm: 'NEXT BILL', w: 3, h: 3, app: 'wealth', to: ['wealth'],
+    parts: [['next', 'The next bill'], ['more', 'The two after it']],
+    about: 'The next bill not yet paid: what, how much and when, from WEALTH’s next 60 days.',
+    list: () => WM.billsOwed(LifeOS.day(), LifeOS.shift(LifeOS.day(), 60)),
+    sub: () => { const n = WIDGETS.nextbill.list().length; return n ? n + ' in 60 days' : ''; },
+    draw(body, cfg) {
+      if (!Rec.all('bill').length) { body.appendChild(el('div', 'empty', 'No bills set')); return; }
+      const L = WIDGETS.nextbill.list();
+      if (!L.length) { body.appendChild(el('div', 'empty', 'No bills due in 60 days')); return; }
+      if (partOn(cfg, 'next')) {
+        const x = L[0], st = el('div', 'stats');
+        st.appendChild(el('div', 'stat acc', '<b>' + peso(WM.num(x.bill.amt, 0)) + '</b><span>' +
+          esc(String(x.bill.name || 'Bill').toUpperCase()) + ' · ' + esc(dueWords(x.date).toUpperCase()) + '</span>'));
+        body.appendChild(st);
+      }
+      if (!partOn(cfg, 'more') || L.length < 2) return;
+      const list = el('div', 'rowlist');
+      L.slice(1, 3).forEach(y => {
+        const row = el('div', 'row');
+        row.innerHTML = '<span class="n">' + esc(y.bill.name || 'Bill') + '</span><span class="d">' + esc(dueWords(y.date)) +
+          '</span><span class="rt">' + peso(WM.num(y.bill.amt, 0)) + '</span>';
+        list.appendChild(row);
+      });
+      body.appendChild(list);
+    },
+  },
+
 
   /* ══════════════ the desk ══════════════
      Tom, 2026-09-25: "Add some general widgets as well like timers and stop
@@ -5158,9 +5327,15 @@ Object.assign(WIDGETS, {
    do its job on the board. The sizes are each app's own: a phone app gets
    a phone-wide card, WEALTH and NOTICE the width their two columns need.
    An app this build does not carry has no card, so the client build loses
-   the Tom-only ones with nothing else to do. */
+   the Tom-only ones with nothing else to do.
+   Tom's 5b, 2026-10-22, "all that make sense": LOG, COACH, FOODDÉX,
+   RECEIPTS and SHEET joined; each lays out in one column when narrow.
+   Not here: BLOCK, ARC, STYLE and FORGE need a full window (lanes, a
+   canvas, themes side by side, weeks of days); FORM is two videos side by
+   side; BULLET as above; CODEX is not on the roster. */
 [['status', 4, 8], ['quest', 4, 8], ['train', 4, 8], ['checkin', 4, 8], ['kitchen', 4, 8],
- ['wealth', 7, 9], ['system', 6, 8], ['speak', 4, 8], ['mix', 5, 8]].forEach(c => {
+ ['wealth', 7, 9], ['system', 6, 8], ['speak', 4, 8], ['mix', 5, 8],
+ ['log', 6, 9], ['coach', 6, 9], ['portion', 5, 8], ['receipts', 4, 8], ['sheet', 4, 8]].forEach(c => {
   const id = c[0], a = app(id);
   if (!a || !a.file) return;
   const to = a.nodock ? ['over', id] : [id];

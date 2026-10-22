@@ -478,3 +478,31 @@ carry the button, no head changed height, no head overflows at 375, 390,
 1920 or 3840; the button and right click open the same five items; TIMER
 added through + WIDGET shows four 44px buttons; tabs read STATUS to SPEAK,
 STATUS tap opens it, the logo tap comes home. NOT on his screens.]
+
+## 2026-10-22, HOME 1.0.79: WEALTH numbers and five more app cards
+
+Tom's 5a and 5b of 2026-10-22, from the open questions of the 2026-10-16
+widget handoff ("all that make sense").
+- **MONEY IN, MONEY OUT, NET** (3 x 2) and **NEXT BILL** (3 x 3), Tom only
+  (`app: 'wealth'`, so the client build drops them). The first three are
+  the IN, OUT and NET tiles at the top of WEALTH's MONEY IN and MONEY OUT
+  tabs (`netCard`), this month and last month, each a part on the card's
+  menu; NEXT BILL is the first bill line of WEALTH's THE NEXT 60 DAYS, its
+  amount, name and day, with the two after it as rows. The sums are `WM`,
+  just above `WIDGETS`: copies of WEALTH's `num`, `norm`, `acctKey`,
+  `catOf`, `isMove`, `rangeSpend`'s total, `rangeIn`, `billDates` and
+  `billsOwed`. **Change WEALTH's and `WM` together.** Read only.
+- **App cards for LOG, COACH, FOODDÉX, RECEIPTS and SHEET** (each lays out in
+  one column when narrow). Left out: BLOCK, ARC, STYLE and FORGE need a full
+  window (lanes, a canvas, themes side by side, weeks of days); FORM is two
+  videos side by side; BULLET is never opened on the PC; CODEX is not on the
+  roster and loads nothing shared.
+[TESTED in headless Chromium on the demo at 1920 by pressing + WIDGET and
+each row: all nine listed and added; MONEY IN 14,800 / 10,000, MONEY OUT
+9,573 / 26,965, NET +5,227 / -16,965 and NEXT BILL Phone plan 999 today,
+then Gym membership Nov 1 and Rent Nov 5, each equal to WEALTH's own
+`monthIn`, `monthSpend().total` and `billsOwed` read in the same store;
+no card body overflows (NEXT BILL went from 2 rows to 3 for that); the
+five frames draw their apps (LOG 49 bullets); 390 wide: OPEN rows 336 x 44,
+SHEET's opens SHEET, no sideways scroll; review 142/142. NOT on his
+screens; NEXT BILL with no bills and the empty states not watched.]
