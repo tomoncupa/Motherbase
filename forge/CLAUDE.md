@@ -235,6 +235,18 @@ Move To another client, the tabs and order survived a reload, `?p=` opened
 the right tab both ways, and a new program in a client's tab was theirs. No
 page errors. `_review.html` 142 of 142 in headless Chromium at 1280.
 
+## Rep ranges and TRAIN's next weight (1.0.4, 2026-10-22)
+
+- **A blank REPS box reads "last"**, as a blank load does: TRAIN copies the
+  client's last session and there is no range for Next to load set one
+  from. It read "8-15" until 1.0.4, which looked set when it was not.
+- **One rule for FORGE's programs and TRAIN's own routines.** The range a
+  plate carries goes out as `reps` and `bands`; TRAIN's Next reads set one's
+  band from it (`TRAIN.topBand`, worked out the way `bands()` is here) and
+  steps set one's load: past the band +2, in it +1, under it -1 (Tom,
+  2026-10-22; `train/CLAUDE.md`, The next-weight rule). Change `bands()` and
+  `TRAIN.topBand` together.
+
 ## Open
 
 - The reverse shelf (`coach/CLAUDE.md`, client files item 2) will carry the
