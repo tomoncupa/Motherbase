@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
-<meta name="mb-version" content="1.0.4, 2026-10-21">
+<meta name="mb-version" content="1.0.5, 2026-10-22">
 <title>CHARACTER SHEET</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -76,6 +76,14 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .count{color:var(--text-muted);font-size:var(--f-2);text-align:center;margin-top:var(--s-2)}
 .seg{display:flex;flex-direction:column;gap:var(--s-1)}
 
+/* TITLES: the worn one big, the list as plates; the worn plate wears a ring */
+.worn{display:flex;align-items:center;gap:var(--s-3)}
+.worn .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--s-1)}
+.worn small{color:var(--text-muted);font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap)}
+.worn b{font-family:var(--font-display);font-size:var(--f-5);font-weight:var(--w-bold);overflow-wrap:anywhere}
+.tlist{display:flex;flex-direction:column;gap:var(--s-2)}
+.feat.on{box-shadow:inset 0 0 0 2px var(--accent)}
+
 /* NEW and FEATS sit in .top, the months in .hlist. On a phone both are the
    plain column they always were, same gaps. On a wide window (Tom,
    2026-10-02: "on a wide window, lay things out side by side; never fold
@@ -92,6 +100,8 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
   .hlist .month:first-child{margin-top:0}
   .hlist .feats{display:block}
   .hlist .feat{break-inside:avoid;margin-bottom:var(--s-2)}
+  .tlist{display:block;column-width:calc(var(--s-10) * 2.5);column-gap:var(--s-5)}
+  .tlist .feat{break-inside:avoid;margin-bottom:var(--s-2)}
 }
 </style>
 </head>
@@ -109,7 +119,7 @@ const APP = {
   id: 'sheet',
   name: 'Character Sheet',
   icon: '◆',
-  blurb: 'your feats from TRAIN and STATUS, as status windows',
+  blurb: 'your feats and titles from TRAIN and STATUS, as status windows',
   types: ['feat'],   // one window he has been shown: key is the feat id, undated
 };
 
@@ -300,12 +310,24 @@ function trainFeats(out) {
     if (recs.length > shown.length) lines.push('- [x] ' + (recs.length - shown.length) + ' more');
     lines.push('Rewards:');
     shown.forEach(x => lines.push('+' + wt(x.gain) + ' on ' + x.name));
-    out.push({ id: 'rec|' + d, date: d, kind: 'record', title: recs.length === 1 ? 'Record: ' + recs[0].name : recs.length + ' records',
+    out.push({ id: 'rec|' + d, date: d, kind: 'record', n: recs.length, title: recs.length === 1 ? 'Record: ' + recs[0].name : recs.length + ' records',
       sub: shown.map(x => x.name).join(', '), text: lines.join('\n') });
   });
 
   /* SESSIONS: the Nth day he trained. */
   const trainDays = Array.from(new Set(sets.map(s => s.date))).sort();
+
+  /* What only the titles read (TITLES below): every record day, the first
+     with three or more, the first session after 28 days or more away, and
+     the first day with 10 working sets on a leg category. */
+  FACTS.recDays = Object.keys(recDays).sort();
+  FACTS.rampage = FACTS.recDays.filter(d => recDays[d].length >= 3)[0] || null;
+  FACTS.ret = trainDays.filter((d, i) => i && Day.diff(d, trainDays[i - 1]) >= 28)[0] || null;
+  const cats = Rec.map('excat'), legN = {};
+  const isLeg = id => { const e = exs[id], c = e && cats[e.cat];
+    return !!c && /leg|quad|ham|glute|calf|calves/i.test(c.name || ''); };
+  sets.forEach(s => { if (isLeg(s.ex)) legN[s.date] = (legN[s.date] || 0) + 1; });
+  FACTS.legDay = Object.keys(legN).filter(d => legN[d] >= 10).sort()[0] || null;
   trainDays.forEach((d, i) => {
     const n = i + 1;
     if (!isStep(LADDER.sessions, n)) return;
@@ -355,6 +377,7 @@ function statusFeats(out) {
 
   /* DAYS LOGGED IN A ROW: any reading, or any line in the journal. */
   const logDays = Array.from(new Set(evs.map(r => r.date).concat(noteDays))).sort();
+  FACTS.firstLog = logDays[0] || null;
   runs(logDays, LADDER.logDays, (n, d, start) => out.push({ id: 'log|' + start + '|' + n, date: d, kind: 'streak',
     title: n + ' days logged in a row', sub: 'STATUS, every day',
     text: ['# QUEST', 'Daily Log', '- [x] Log something every day ' + n + '/' + n,
@@ -386,12 +409,78 @@ function statusFeats(out) {
 }
 
 /* Everything, newest first. Two feats on one day keep a steady order. */
+let FACTS = {};
 function allFeats() {
   const out = [];
+  FACTS = {};
   try { trainFeats(out); } catch (e) { console.error('SHEET: TRAIN feats', e); }
   try { statusFeats(out); } catch (e) { console.error('SHEET: STATUS feats', e); }
   const rank = { record: 0, sessions: 1, tonnage: 2, weeks: 3, streak: 4, target: 5 };
   return out.sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : rank[a.kind] - rank[b.kind]);
+}
+
+/* ═══════════════════════════ TITLES ═══════════════════════════
+   Tom, 2026-10-22, design A: every step of the feat ladders above, and a few
+   firsts, unlocks a game title. One is worn, printed on the story picture.
+   Worked out from the feats every open, never stored, like the feats: a
+   title's only row is the same `feat` row a feat gets ("this window was
+   shown"), keyed `title|<slug>`, so no new type. The worn one is the one
+   setting, `sheet.title`, written only when he taps a title. With none
+   picked, the newest unlocked is worn and nothing is saved. */
+const LIFTED = n => unit() === 'lb' ? fmt(Math.round(n * 1000 * LB)) + ' lb' : fmt(n) + ' tonnes';
+const TITLE_DEFS = [
+  ['sessions', n => n === 1 ? 'Log a session' : n + ' sessions logged', [[1, 'Newcomer'], [10, 'Initiate'], [25, 'Regular'], [50, 'Iron Apprentice'],
+    [75, 'Gym Rat'], [100, 'Centurion'], [150, 'Veteran'], [200, 'Iron Disciple'], [250, 'Barbell Knight'],
+    [300, 'Spartan'], [400, 'Warlord'], [500, 'Living Legend'], [750, 'Iron Sovereign'], [1000, 'The Thousand']]],
+  ['weeks', n => n + ' weeks in a row', [[4, 'Steady Hand'], [8, 'Clockwork'], [12, 'Quarter Keeper'], [26, 'Half-Year Hero'],
+    [52, 'Iron Calendar'], [78, 'Unbreakable'], [104, 'Two-Year Titan'], [156, 'Timeless']]],
+  ['tonnes', n => 'Lifted ' + LIFTED(n), [[10, 'Pack Mule'], [25, 'Ox'], [50, 'Forklift'], [100, 'Freight Train'],
+    [250, 'Mountain Mover'], [500, 'Atlas'], [1000, 'World Lifter']]],
+  ['records', n => n === 1 ? 'Break a record' : n + ' record days', [[1, 'Record Breaker'], [10, 'PR Hunter'],
+    [25, 'Limit Breaker'], [50, 'Ceiling Crusher'], [100, 'Unchained'], [250, 'Beyond Limits']]],
+  ['logDays', n => n + ' days logged in a row', [[7, 'Scribe'], [14, 'Chronicler'], [30, 'Record Keeper'], [60, 'Archivist'],
+    [100, 'Loremaster'], [200, 'Keeper of Days'], [365, 'The Ledger']]],
+  ['target', n => n + ' days on target in a row', [[7, 'On Target'], [14, 'Marksman'], [30, 'Sharpshooter'], [60, 'Sniper'],
+    [100, 'Deadeye'], [200, 'Never Misses'], [365, 'Perfect Aim']]],
+];
+/* one-off firsts: [slug, name, goal, the fact's date] */
+const FIRSTS = [
+  ['awakened', 'Awakened', 'Log a day in STATUS', () => FACTS.firstLog],
+  ['rampage', 'Rampage', '3 records in one day', () => FACTS.rampage],
+  ['return', 'The Return', 'Train after 28 days away', () => FACTS.ret],
+  ['legday', 'Leg Day Survivor', '10 leg sets in one day', () => FACTS.legDay],
+];
+const TITLE_COUNT = TITLE_DEFS.reduce((a, d) => a + d[2].length, 0) + FIRSTS.length;
+
+/* Unlocked titles, newest first, each with the day it was earned. */
+function allTitles(feats) {
+  const got = {};
+  const take = (k, d) => { if (d && (!got[k] || d < got[k])) got[k] = d; };
+  feats.forEach(f => {
+    const p = f.id.split('|'), last = p[p.length - 1];
+    if (f.kind === 'sessions') take('sessions-' + p[1], f.date);
+    else if (f.kind === 'weeks') take('weeks-' + last, f.date);
+    else if (f.kind === 'tonnage') take('tonnes-' + p[1], f.date);
+    else if (f.kind === 'streak') take('logDays-' + last, f.date);
+    else if (f.kind === 'target') take('target-' + last, f.date);
+  });
+  (FACTS.recDays || []).forEach((d, i) => take('records-' + (i + 1), d));
+  const out = [];
+  const add = (slug, name, goal, date, ord) => out.push({ slug: slug, id: 'title|' + slug, date: date, kind: 'title', ord: ord,
+    title: name, goal: goal, text: ['# TITLE UNLOCKED', name, '- [x] ' + goal].join('\n') });
+  let ord = 0;
+  TITLE_DEFS.forEach(([key, goal, steps]) => steps.forEach(([n, name]) => {
+    const d = got[key + '-' + n]; ord++;
+    if (d) add(key + '-' + n, name, goal(n), d, ord);
+  }));
+  FIRSTS.forEach(([slug, name, goal, when]) => { ord++; const d = when(); if (d) add(slug, name, goal, d, ord); });
+  return out.sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : b.ord - a.ord);
+}
+let TITLES = [];
+/* the worn title: his pick if still unlocked, else the newest */
+function worn() {
+  const pick = get('title', null);
+  return TITLES.filter(t => t.slug === pick)[0] || TITLES[0] || null;
 }
 
 /* ═══════════════════════════ WHAT POPS ═══════════════════════════
@@ -408,13 +497,43 @@ function since() {
   return s;
 }
 const fresh = feats => { const s = since(); return feats.filter(f => f.date >= s && !seen(f.id)); };
+/* Feats and titles in one queue, oldest first; a title after the feat that earned it. */
+const queue = () => fresh(FEATS).concat(fresh(TITLES))
+  .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.kind === 'title') - (b.kind === 'title'));
 const markSeen = f => { if (!Rec.has('feat', null, f.id)) Rec.set('feat', null, f.id, { t: Date.now(), date: f.date }); };
 
 /* ═══════════════════════════ THE PICTURE ═══════════════════════════ */
 const style = () => { const s = get('style', 'block'); return Notice.STYLES[s] ? s : 'block'; };
 const canDraw = () => !!(window.Notice && Notice.parse && Notice.draw && Notice.compose);
 function windowOf(f) {
-  return Notice.draw(Notice.parse(f.text, 'auto'), style(), { seed: 0 });
+  const win = Notice.draw(Notice.parse(f.text, 'auto'), style(), { seed: 0 });
+  return f.kind === 'title' ? win : withTitle(win);
+}
+/* The worn title in a band over the window, in the window's own palette, so
+   the band and the window scale onto the story as one picture. A TITLE
+   UNLOCKED window already names its title, so it goes without. */
+function withTitle(win) {
+  const t = worn();
+  if (!t) return win;
+  const st = Notice.get(style()), band = 230;
+  const c = document.createElement('canvas');
+  c.width = win.width; c.height = win.height + band;
+  const x = c.getContext('2d'), cx = c.width / 2;
+  x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  x.font = '700 36px "' + st.face + '", "Chakra Petch", sans-serif';
+  x.fillStyle = st.mute;
+  if ('letterSpacing' in x) x.letterSpacing = '10px';
+  x.fillText('TITLE', cx, 92);
+  if ('letterSpacing' in x) x.letterSpacing = '0px';
+  let px = 84;
+  const name = st.brackets ? '[' + t.title + ']' : t.title;
+  do { x.font = '700 ' + px + 'px "' + st.face + '", "Chakra Petch", sans-serif'; px -= 4; }
+  while (x.measureText(name).width > c.width - 160 && px > 40);
+  x.fillStyle = st.acc; x.shadowColor = st.glow; x.shadowBlur = 24;
+  x.fillText(name, cx, 190);
+  x.shadowBlur = 0; x.shadowColor = 'transparent';
+  x.drawImage(win, 0, band);
+  return c;
 }
 function storyOf(f) {
   const c = document.createElement('canvas');
@@ -426,7 +545,7 @@ function savePicture(f) {
   try { png = storyOf(f).toDataURL('image/png'); } catch (e) { UI.toast('Could not draw the picture', { bad: true }); return; }
   Rec.patch('feat', null, f.id, { t: (Rec.get('feat', null, f.id) || {}).t || Date.now(), saved: Date.now() });
   Mobile.feedback('success');
-  IO.handOver(png, 'feat-' + f.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.png');
+  IO.handOver(png, (f.kind === 'title' ? '' : 'feat-') + f.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.png');
 }
 
 /* One window at a time, the way a game hands them out: NEXT walks the queue,
@@ -464,13 +583,22 @@ function showWindows(list, start) {
   });
 }
 
+/* Tap a title to wear it. The one write: his pick. */
+function wear(t) {
+  if (!t || (worn() || {}).slug === t.slug) return;
+  put('title', t.slug);
+  Mobile.feedback('select');
+  draw();
+}
+
 /* ═══════════════════════════ THE SCREEN ═══════════════════════════ */
 let FEATS = [];
 function draw() {
   FEATS = allFeats();
+  TITLES = allTitles(FEATS);
   const m = document.getElementById('main');
   m.innerHTML = '';
-  const neu = fresh(FEATS);
+  const neu = queue();
   const top = document.createElement('div'); top.className = 'top';
   m.appendChild(top);
 
@@ -478,7 +606,7 @@ function draw() {
     const c = document.createElement('section'); c.className = 'card mb-card';
     c.innerHTML = '<h2>NEW</h2><div class="muted">' + (neu.length === 1 ? 'One window waiting.' : neu.length + ' windows waiting.') + '</div>';
     const b = document.createElement('button'); b.className = 'mb-btn go mb-press mb-tap'; b.textContent = 'OPEN';
-    b.onclick = () => showWindows(neu.slice().reverse());
+    b.onclick = () => showWindows(queue());
     c.appendChild(b); top.appendChild(c);
   }
 
@@ -493,6 +621,35 @@ function draw() {
   sg.appendChild(UI.segmented(Notice.list(), style(), v => { put('style', v); Mobile.feedback('select'); }));
   t.appendChild(sg);
   top.appendChild(t);
+
+  /* TITLES: the worn one, and every unlocked one, newest first. Tap to wear. */
+  const tc = document.createElement('section'); tc.className = 'card mb-card';
+  tc.innerHTML = '<h2>TITLES ' + TITLES.length + '/' + TITLE_COUNT + '</h2>';
+  const w = worn();
+  if (!w) {
+    const e = document.createElement('div'); e.className = 'muted'; e.textContent = 'None unlocked.';
+    tc.appendChild(e);
+  } else {
+    const wr = document.createElement('div'); wr.className = 'worn';
+    wr.innerHTML = '<span class="tx"><small>WORN</small><b>' + UI.esc(w.title) + '</b></span>';
+    const v = document.createElement('button'); v.className = 'mb-btn mb-press mb-tap'; v.textContent = 'VIEW';
+    v.onclick = () => showWindows([w]);
+    wr.appendChild(v); tc.appendChild(wr);
+    const tl = document.createElement('div'); tl.className = 'tlist';
+    const newT = {}; neu.forEach(f => newT[f.id] = 1);
+    TITLES.forEach(t => {
+      const b = document.createElement('button');
+      const on = t.slug === w.slug;
+      b.className = 'feat mb-plate mb-press' + (on ? ' on' : '') + (newT[t.id] ? ' new' : '');
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.innerHTML = '<span class="tx"><b>' + UI.esc(t.title) + '</b><small>' + UI.esc(t.goal) + '</small></span>' +
+        '<span class="dt">' + UI.esc(Day.short(t.date)) + '</span>';
+      b.onclick = () => wear(t);
+      tl.appendChild(b);
+    });
+    tc.appendChild(tl);
+  }
+  m.appendChild(tc);
 
   const hcard = document.createElement('section'); hcard.className = 'card mb-card';
   hcard.innerHTML = '<h2>HISTORY</h2>';
@@ -535,8 +692,8 @@ draw();
 Rec.ready(() => {
   draw();
   /* Pops by itself once per open, after the big half of the store is in. */
-  const neu = fresh(FEATS);
-  if (neu.length) showWindows(neu.slice().reverse());
+  const neu = queue();
+  if (neu.length) showWindows(neu);
 });
 Rec.on(soon);
 Day.on(soon);

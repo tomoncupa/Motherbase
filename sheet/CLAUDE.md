@@ -37,8 +37,49 @@ can save and look at the history of when I open the CHARACTER SHEET".
   log (12k sets) and on a phone. Review 122/122 at both widths.
 - **No live pop-ups in TRAIN or STATUS.** Tom, 2026-09-25: "NO - SHEET is silly and
   self contained for now". Feats pop only when SHEET is opened.
-- Next: devise an ACHIEVEMENT SYSTEM for SHEET (Tom, 2026-09-25). Design it
-  and show Tom before building.
+- The ACHIEVEMENT SYSTEM is TITLES, below (Tom picked design A, 2026-10-22).
+
+## Titles (SHEET 1.0.5, 2026-10-22)
+
+Tom's pick A, "Titles", Tom only while SHEET stays in `DROP_APPS`.
+- **Every step of a feat ladder unlocks a title**, plus four firsts. 53 in
+  all, in `TITLE_DEFS` and `FIRSTS`: sessions 1 Newcomer, 10 Initiate, 25
+  Regular, 50 Iron Apprentice, 75 Gym Rat, 100 Centurion, 150 Veteran, 200
+  Iron Disciple, 250 Barbell Knight, 300 Spartan, 400 Warlord, 500 Living
+  Legend, 750 Iron Sovereign, 1000 The Thousand; weeks in a row 4 Steady
+  Hand, 8 Clockwork, 12 Quarter Keeper, 26 Half-Year Hero, 52 Iron Calendar,
+  78 Unbreakable, 104 Two-Year Titan, 156 Timeless; tonnes 10 Pack Mule, 25
+  Ox, 50 Forklift, 100 Freight Train, 250 Mountain Mover, 500 Atlas, 1000
+  World Lifter; record days 1 Record Breaker, 10 PR Hunter, 25 Limit
+  Breaker, 50 Ceiling Crusher, 100 Unchained, 250 Beyond Limits; STATUS days
+  logged in a row 7 Scribe, 14 Chronicler, 30 Record Keeper, 60 Archivist,
+  100 Loremaster, 200 Keeper of Days, 365 The Ledger; a target hit in a row
+  (any field) 7 On Target, 14 Marksman, 30 Sharpshooter, 60 Sniper, 100
+  Deadeye, 200 Never Misses, 365 Perfect Aim. Firsts: Awakened (first day
+  logged in STATUS), Rampage (3 records in one day), The Return (a session
+  after 28 days or more away), Leg Day Survivor (10 working sets on a leg,
+  quad, ham, glute or calf category in one day).
+- **Worked out from the feats every open, never stored.** A title's day is
+  the first day it was earned. Its only row is the feat row, keyed
+  `title|<slug>` (`title|sessions-100`), "this window was shown": no new type.
+- **TITLE UNLOCKED** is a NOTICE window in the same queue as the feats,
+  oldest first, a title after the feat that earned it, same `sheet.since`
+  rule (nothing earned before SHEET's first open week pops).
+- **One is worn**: `sheet.title`, the slug, the only new setting, written
+  only when he taps a title. None picked: the newest unlocked is worn and
+  nothing is saved. The TITLES card shows WORN big with VIEW (its window,
+  SAVE PICTURE there) and every unlocked title, newest first; tap to wear;
+  the worn plate wears an accent ring. Header counts `TITLES 24/53`; locked
+  titles are not listed and there is no bar.
+- **The worn title is printed on every feat picture**: a band above the
+  window ("TITLE", then the name in the window style's accent and font), on
+  the story and in the dialog. A TITLE UNLOCKED window goes without it.
+- [TESTED headless Chromium on the demo by clicking and tapping: 1280x900
+  and 390x844 touch; 24 of 53 unlocked; a tap wore Quarter Keeper and wrote
+  `weeks-12`; VIEW then SAVE PICTURE downloaded `title-weeks-12.png`; with
+  `since` moved back 40 days the queue popped 3 TITLE UNLOCKED windows among
+  15 feats and wrote 3 `title|` rows; no button under 44px, no sideways
+  scroll. Review 142/142 Chromium 1280.] UNTESTED on his real log and phone.
 
 ## Wide windows (SHEET 1.0.2, 2026-10-02)
 
@@ -76,7 +117,8 @@ the log. Do not "fix" this app back towards DOCTRINE's no-XP rules.
 - **Stats (draft):** STR best lifts vs bodyweight, VIT total sessions, AGI best
   session's sets per hour, INT total PRs ever. Never go down. Untested on real logs.
 - **Titles:** silly game style ("Leg Day Survivor"), unlocked from real facts,
-  worked out from history, never stored. One worn at a time.
+  worked out from history, never stored. One worn at a time. Built 1.0.5,
+  see Titles above.
 - **No PERSONAL PROTAGONIST footer** on the picture.
 - **Background:** undecided — gold light burst (recommended) or a pixel landscape.
 
