@@ -276,3 +276,5 @@ The receipt's smudged total (585.71 or 685.71 against a 694.00 subtotal) was
 left empty and said why. The two transfers print no date, which is what
 added the photo-date fallback; the three waiting records were patched to
 match. Disk free stayed at about 1.1 GB. Not yet opened in the RECEIPTS app.
+
+**1.0.4, 2026-10-22.** The NOTHING WAITING card says one sentence in each of its three cases (watching, press FOLDER, no folder watching in this browser), from two. Found by `_review.html`'s empty-state check (DESIGN.md: an empty state is one plain sentence).
