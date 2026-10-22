@@ -57,4 +57,4 @@ stays small enough for per-module sessions.
 
 ## Needs from the foundation
 
-- Meaning and chart colours as marks. Chart and meaning colours are never words now (1.0.80, 2026-10-22), so they only ever draw a mark: a dot, a ring, a bar or a line under a word. The theme layer floors text tokens and leaves these alone, and on Craft Day's grey page several marks cannot be seen: `--danger` 1.06 to 1 on the page, `--info` 1.11 and `--data-3` 1.00 on a recessed row (it IS the row's grey, #8B8B8B), `--rank-E` 1.18 on a card. The words still read, so nothing is lost but the colour. Wanted: `skins.js` floors `--success`, `--warn`, `--danger`, `--info`, `--data-1` to `--data-6` and `--rank-*` to 3 to 1 (the graphic ratio) against the four grounds, the way `liftAll` already does the text tokens. Brick is Tom's call and left out.
+Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)

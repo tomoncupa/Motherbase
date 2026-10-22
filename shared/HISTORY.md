@@ -288,3 +288,22 @@ in LOG, QUESTS, STATUS and KITCHEN, the app trap in the root brief.
 Brick is NOT fixed and cannot be by text or page colours: red and blue bricks
 need white words, the yellow raised face and light grey page need dark ones,
 and one text token cannot do both. Tom's call.
+
+2026-10-22, marks floored, and Brick on a dark page. Two changes in `skins.js`.
+The meaning colours, the chart ramp and the ranks are now floored to 3 to 1
+(the graphic ratio) against all four grounds, after the surfaces, with
+`liftEvery`: the smallest move toward black or white that clears every ground
+at once, not the biggest of four pushes, which failed the other side on
+Craft Day's greys and Craft's brown page under a grey card. Failing marks
+across the 23 factory themes: 424 to 0. Block, Ice, RPG, Doodle, System,
+Hero, Crystal and Sunset unchanged, token for token. And Brick, Tom's option
+(a): a dark grey page (#2E3134), a dark stone shelf (#595D60) for `.card`,
+the raised token the green brick (#237841), the header the dark red brick
+(#8B0B0D, so STATUS's date faded to .65 reads), white words everywhere, and
+the yellow brick named in Brick's own CSS for buttons with dark words. A
+quiet button has no brick and takes the page's words. Failing words across
+eight apps on the demo at 1280 (home, STATUS, QUESTS, TRAIN, LOG, KITCHEN,
+CHECK IN, WEALTH): 246 to 18; Block fails 17 of the same 18 (STATUS's tile
+labels and dashes, TRAIN's DELETE behind its swipe rows, LOG's 0 total), and
+the last is WEALTH's "counted 45 days ago" in `--warn` as a word, the app
+trap. Not redone: the per-theme iPhone icons in `shared/icons/`.
