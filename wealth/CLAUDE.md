@@ -364,15 +364,44 @@ safe areas still; quick entry on a phone stays in STATUS. (HISTORY.md: Device)
 across past 1700px, four past 2300; `wfull`, `w2`, `t2` act only there.
 (HISTORY.md: A wide window)
 
-## Moving cards (1.0.34, 2026-10-21)
+## Moving cards (1.0.34; free since 1.0.35, 2026-10-22)
 
-**Each screen's cards keep the order he drags them into**, one layout for
-every device: setting `wealth.layout` `{tab: 'id|id'}`, written only by a
-move, Reset layout or its UNDO, never on open. Id = `data-card` (heading up
-to " · ", or set: `net`, `goal`, `day`, `shelf-<id>`); no heading, no move.
-The grip ending each heading drags (a thumb only there) and, pressed, opens
-the menu a right click or hold on the heading opens. Modelled on COACH's
-`grabCard`. (HISTORY.md: Moving cards (1.0.34))
+**A card goes in any spot, the way Home's widgets do** (Tom, 2026-10-22,
+"Free for both"; it only reordered in 1.0.34). `FreeBoard` in the script, the
+same code as COACH's: Home's 146 x 84 cell, twelve columns at least, shrunk
+only in a window too narrow; a card is a column, a row and a width, its height
+the rows its contents need (never cut off); nothing overlaps (the card just
+moved wins, the rest pushed down, nothing pulled up, a gap stays a gap); a
+window 2880 or wider wears a wide board of its own (24 columns), as Home does.
+Below 1000px the cards stack in the order their spots read; a drag or Move Up
+/ Down there trades spots, each with its width.
+
+- **Saved:** setting `wealth.board`, `{'<tab>@std' | '<tab>@wide': 'id:x.y.w|...'}`,
+  one board for every device, written only by a drop, a resize, Move Up /
+  Down or Reset Layout and its UNDO, never on open, and settled before it is
+  saved. 1.0.34's `wealth.layout` order still lays out a screen with no spots
+  (in memory); Reset Layout clears both.
+- **Handle:** the heading with a mouse, the grip ending it with a thumb; the
+  grip pressed opens the menu a right click or hold on the heading opens
+  (Move Up, Move Down, Reset Layout). The corner makes a card wider or
+  narrower, a mouse only. A card with no heading (UNALLOCATED, a screen's own
+  header) is fixed at the top left.
+- **Default widths** are 1.0.34's at 1920: 4 of 12, `wfull` all 12; wide 6,
+  `w2` 12, `wfull` 24.
+- Watched in headless Chromium on the demo: at 1920 a real mouse drag of
+  RUNWAY to an empty spot and a corner drag of THIS MONTH two columns wider,
+  each saved once and read back after a reload with nothing written on open;
+  every screen at 3840 on the wide board with no card cut off; at 390 with
+  touch a grip drag moved SIX MONTHS to the top and a grip tap opened its
+  menu (it closed itself at once before: the tap's click hit the menu's
+  veil). Not tried in Main Menu.exe or on his screens.
+
+## Needs from the foundation
+
+**One board engine in `shared/`.** `FreeBoard` is copied the same into WEALTH
+and COACH (between `FREE BOARD` and `const FB_FINE`), and Home's own board is a
+third version of it in index.html. A foundation session could lift it into
+`shared/` and point all three at it.
 
 ## First paint
 
