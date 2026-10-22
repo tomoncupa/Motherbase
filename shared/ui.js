@@ -688,7 +688,8 @@ const UI = {
   /** the switch. Returns the element; read `.on` for its state. */
   toggle(on, onChange) {
     css();
-    const b = el('button', 'mb-sw' + (on ? ' on' : ''));
+    /* mb-tap: 50 x 30 drawn, 44 x 44 caught (2026-10-22, the review's target check) */
+    const b = el('button', 'mb-sw mb-tap' + (on ? ' on' : ''));
     b.type = 'button';
     b.setAttribute('role', 'switch');
     b.setAttribute('aria-checked', on ? 'true' : 'false');

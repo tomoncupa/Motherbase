@@ -201,6 +201,7 @@ body{overscroll-behavior-y:none}
 .mb-x{position:relative;flex:0 0 auto;width:32px;height:32px;border:0;border-radius:var(--radius-full,999px);
   background:var(--surface-2,#131b26);color:var(--text-2,#7f93a8);
   font-size:var(--f-2,14px);line-height:1;cursor:pointer}
+.mb-x svg{display:block;margin:auto}
 .mb-x::after{content:'';position:absolute;left:50%;top:50%;
   width:var(--tap,44px);height:var(--tap,44px);transform:translate(-50%,-50%)}
 .mb-sheet-body{padding:0 var(--s-4,16px);line-height:var(--lh-body,1.6);min-height:0;flex:1 1 auto}
@@ -470,7 +471,10 @@ function sheet(o) {
   if (o.dismissable !== false) {
     const x = doc.createElement('button');
     x.className = 'mb-x mb-press mb-tap'; x.type = 'button';
-    x.setAttribute('aria-label', 'Close'); x.textContent = '✕';
+    x.setAttribute('aria-label', 'Close');
+    /* A character is not an icon: the cross was a font glyph, 37px of ink in
+       a 30px button on TRAIN (2026-10-22, the overflow check). */
+    x.innerHTML = (g.Icons && g.Icons.svg && g.Icons.svg('close', { size: 16 })) || '✕';
     x.onclick = () => handle.close();
     head.appendChild(x);
   }
