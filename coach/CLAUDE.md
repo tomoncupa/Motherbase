@@ -241,6 +241,11 @@ UNDO, Duplicate Day and Use For wrote what they said. Not tried on an iPad.
 
 ## Needs from the foundation
 
+**One board engine in `shared/`.** `FreeBoard` (1.0.28) is copied the same into
+COACH and WEALTH (between `FREE BOARD` and `const FB_FINE`), and Home's board
+is a third version of it. A foundation session could lift it into `shared/`.
+
+
 `shared/_smoke.html` checks the 0.1 shelf (`send`, `waiting`, `took`,
 `who`). Nothing checks cloud.js 0.2.0's trays and outbox yet: `post` queueing
 with no signal and sending on `online`, `list` and `count` from names, `fetch`,
@@ -393,3 +398,33 @@ client, and Tom's own `set`, `exercise` and `tick` counts did not move.
 - **`link()` pairs nothing until live sync's first answer is merged** (`syncPending`): signed in (`Cloud.state()` `on`, not `out`), not yet `loaded`. cloud.js arrives after the store (io.js), so no `Cloud` reads as "not yet" for 15 s, and a sync that never goes live stops waiting after 15 s; the demo and a file never wait. While waiting it redraws once a second. Why: COACH opened before synced rows arrived made a blank `c-<pid>` WEALTH client for a client whose real one was on its way (WEALTH handoff, 2026-09-24), and the name and status pass stamped stale values newer than edits from another device. Signed in with no signal, pairing waits for the signal.
 - Watched in headless Chromium with `Cloud.state` stubbed: pending, a client with no twin got none, then the twin arrived and paired to it (no `c-` row); answer already in, or not signed in, the old pairing ran at once (`c-p-x` made); real cloud.js signed out paired within 2 s. Not tried signed in on his PC.
 - Also checked the same day (1.0.20's rule): a 300 kg x 5 Deadlift set commented "wu" left the all-time table at 117.5 x 11 and 38 days; a 301 kg x 5 work set beside it took over at 39 days.
+
+## The cards go anywhere (1.0.28, 2026-10-22)
+
+- Tom: "Free for both". The client's six cards (Name, Range, Week, Check In,
+  Recent Sessions, Strength) go in any spot of a grid, the way Home's widgets
+  do, replacing 1.0.24's top row and three columns. `FreeBoard`, the same code
+  as WEALTH's: Home's 146 x 84 cell, twelve columns at least across the
+  client column, shrunk only when too narrow; height is what the card needs
+  in whole rows; nothing overlaps (the card just moved wins, the rest pushed
+  down, gaps stay); a window 2880 or wider has a wide board of its own and
+  `.cols` loses its 2400px cap there.
+- **Saved:** `coach.board`, `{std | wide: 'id:x.y.w|...'}`, one board for every
+  client and device, written only by a drop, a resize, Move Up / Down or
+  Reset Layout and its UNDO, never on open, settled before it is saved. With
+  none saved, 1.0.24's `coach.layout` (or `LAY0`) becomes spots in memory:
+  the top row shared across 12 columns, then columns of four (`oldSpots`).
+- **Handle:** the heading (`.who`, `.wkhead`, range.js's `.rg-head`, or the
+  `h2`) with a mouse, a grip at its end with a thumb (new here; 1.0.24 had
+  none); the grip pressed opens Move Up, Move Down, Reset Layout. Headings
+  with their own menu (the name, the week, strength) keep it, with the moves
+  under a divider (`andCard`). The corner widens a card, a mouse only.
+- **Narrower than 1180** the cards stack in the order their spots read, with
+  grips: a drag there trades spots, each with its width. It used to be one
+  fixed order with no handles.
+- Watched in headless Chromium on the demo: at 1920 a real mouse drag of
+  Recent Sessions to column 9 row 2 (Range pushed under it), saved once,
+  read back the same after a reload with nothing written on open, the same
+  board on another client, the heading's right click menu; at 390 with touch
+  a grip drag moved Range under Week and saved. Not tried in Main Menu.exe or
+  on his screens.
