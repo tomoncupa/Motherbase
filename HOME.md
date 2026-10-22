@@ -506,3 +506,5 @@ no card body overflows (NEXT BILL went from 2 rows to 3 for that); the
 five frames draw their apps (LOG 49 bullets); 390 wide: OPEN rows 336 x 44,
 SHEET's opens SHEET, no sideways scroll; review 142/142. NOT on his
 screens; NEXT BILL with no bills and the empty states not watched.]
+
+1.0.80, 2026-10-22: a comment in the WEALTH sums named WEALTH's page path, and `tools/build-client.py` refuses any home screen naming a dropped app, so the client build stopped. Reworded. The WEALTH cards themselves already leave the client build through `widgetHere`, since WEALTH is not in its roster.
