@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.78, 2026-10-23">
+<meta name="mb-version" content="1.0.79, 2026-10-23">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -208,6 +208,11 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .setrow .cmt{width:1.25em;flex:0 0 auto;color:var(--accent);opacity:0;font-size:var(--f-2)}
 .setrow.has-note .cmt{opacity:1}
 .setrow .grow{flex:1}
+/* HISTORY: a set's comment in the gap, and the day's session comment under
+   its date, so a past note is read without a hover a phone does not have. */
+.setrow .hnote{flex:1 1 0;min-width:0;align-self:center;font-size:var(--f-1);line-height:var(--lh-tight);
+  color:var(--text-2);overflow-wrap:anywhere;padding-right:var(--s-2)}
+.hday{padding:var(--s-3) var(--s-4) 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .setrow .col{text-align:right;white-space:nowrap}
 .setrow .col.w{min-width:7.5em}
 .setrow .col.r{min-width:5.5em}
@@ -4659,16 +4664,31 @@ function drawHistory(m) {
   m.appendChild(grid);
   shown.forEach(function (d) {
     var card = UI.el('div', 'exblock');
-    var head = UI.el('div', 'head');
+    /* Tap the date to open that session, where its comment and every lift
+       of the day are. Tom, 2026-10-23: "I should be able to select and see
+       past session notes from this screen". */
+    var head = UI.el('div', 'head go mb-press');
+    head.setAttribute('role', 'button');
+    head.tabIndex = 0;
+    head.setAttribute('aria-label', 'Open ' + Day.label(d));
     head.innerHTML = '<span class="nm">' + UI.esc(Day.label(d)) + '</span>' +
       '<span class="u" style="color:var(--text-muted);font-size:var(--f-1)">' +
       byDate[d].length + ' sets</span>';
+    head.onclick = function () { Mobile.feedback('select'); TRAIN.date = d; TRAIN.show('workout'); };
+    head.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); head.onclick(); } };
     card.appendChild(head);
+    var sn = String((Rec.get('session', d, '') || {}).note || '').trim();
+    if (sn) {
+      var dn = UI.el('div', 'daynote hday');
+      dn.textContent = sn;
+      card.appendChild(dn);
+    }
     var sets = UI.el('div', 'sets');
     byDate[d].forEach(function (s) {
-      var row = UI.el('div', 'setrow' + (s.note ? ' has-note' : ''));
-      row.innerHTML = '<span class="cmt" title="' + UI.esc(s.note || '') + '">' + BUBBLE +
-        '</span><span class="grow"></span>' + setCols(s);
+      var nt = String(s.note || '').trim();
+      var row = UI.el('div', 'setrow' + (nt ? ' has-note' : ''));
+      row.innerHTML = '<span class="cmt">' + BUBBLE + '</span>' +
+        (nt ? '<span class="hnote">' + UI.esc(nt) + '</span>' : '<span class="grow"></span>') + setCols(s);
       sets.appendChild(row);
     });
     card.appendChild(sets);

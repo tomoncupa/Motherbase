@@ -288,7 +288,10 @@ Session, above Settings. **Copy Past Session is the calendar with a confirm**
 comments, unticked, and never a day he did not pick.
 **Every row that can be changed has a menu** on a long press and a right click,
 and a visible way in (a ⋮, or the screen's More). **Summaries are facts, never
-verdicts.** (HISTORY.md: Where things live on screen)
+verdicts.** **An exercise's HISTORY shows every note** (1.0.79, Tom: "I should
+be able to select and see past session notes from this screen"): a set's
+comment in the gap beside its numbers, the day's session comment under its
+date, and the date opens that session. Never a hover. (HISTORY.md: Where things live on screen)
 
 ## First run
 
