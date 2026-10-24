@@ -195,9 +195,14 @@ block and its week number. Deleting a block keeps every session in it.
 - A name locks nothing, a copy carries it, and **a number on its end is
   dropped when matching** (`TRAIN.nameKey`: Back 1, Back 2 and Back are one
   session).
-- **Each exercise is measured against**, first match wins: a day he picked
-  (Compare With A Day), the last same-named session (this block first), the
-  day it was copied from, the last time that exercise was done.
+- **Each exercise is measured against** a day he picked (Compare With A
+  Day), else **the last time that exercise was done, whatever the session
+  was called** (1.0.80, Tom 2026-10-24: "Most recent wins"). A same name or
+  the copied-from day only labels why (`why`), never picks an older day.
+- **A past day says so on TRACK** (`.pastday`, a GO TO TODAY button), and
+  **a resumed app moves to the new day** (`TRAIN.catchDay`, on show and
+  every minute) when it was on the day that ended, unless a set went in on
+  it in the last three hours. A day he picked stays.
 - **Working set N against working set N**, warmups out of both sides. The
   change names every part that moved: `+5 lb · −1 rep · +1.5%`. A split set
   against a straight one gets no direction.
