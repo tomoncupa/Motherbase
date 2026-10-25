@@ -322,6 +322,13 @@ work. Clean up any test data you write, and stop the server when you are done.
   steps are the whole tab's, shared with every frame the review opened. The
   back stack check's `history.go(-3)` walked the review itself back a page
   once (2026-09-25). Push spare entries and leave them.
+  **And push one before the first back, in WebKit.** A framed page's own
+  load gets no history entry there, so one push and its back already step
+  off the page, to the frame's `about:blank`: the review lost its smoke
+  tally that way from 2026-09-30 to 2026-10-25. Probed by wrapping
+  `history` in every frame (Playwright `add_init_script`) and logging into
+  `top`, since WebKit sends no console messages from frames. An app in the
+  home screen's frames could hit the same in Safari: not checked.
 - **Nothing between a tap and a focus() may wait.** iOS raises the keyboard
   only for a focus made while the tap is still being handled. `Mobile.actions`
   ran its item 60ms late until 2026-09-30, so every menu item that opened a
