@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.81, 2026-10-23">
+<meta name="mb-version" content="1.0.82, 2026-10-25">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -4212,6 +4212,181 @@ const WIDGETS = {
     },
   },
 
+  /* ══════════════ HALF-LIFE ══════════════
+     How much of a dose is still in the body, from the bullets he writes:
+     every dose times 0.5 to the power of hours since over the half-life,
+     summed. What is tracked is his, never this file's: each one is its own
+     setting row, `lifeos.halflife.<id>` = {name, match, per, unit, half,
+     bare, ord}. `match` is the words a dose starts with, comma separated; a
+     name of one or two letters must start the line and is case-sensitive
+     ("A2"), a longer one may sit anywhere as a whole word. The number
+     after it times `per` is the amount; no number counts as `bare` units,
+     or not at all when `bare` is blank. Entries, events and done todos
+     count; open todos, ideas and cancelled lines do not. */
+  halflife: {
+    nm: 'HALF-LIFE', w: 5, h: 6, app: 'status', to: ['status'],
+    days: [[3, '3 days'], [7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
+    list: () => Rec.all('setting').filter(r => r.key.indexOf('lifeos.halflife.') === 0 && r.payload && r.payload.v && r.payload.v.name)
+      .map(r => Object.assign({}, r.payload.v, { key: r.key.slice(7) })).sort((a, b) => (a.ord || 0) - (b.ord || 0)),
+    shown: cfg => WIDGETS.halflife.list().filter(x => !(cfg && cfg.hid && cfg.hid.indexOf(x.key) > -1)),
+    /* every dose of one tracker, as [ms, amount], oldest first */
+    doses(x) {
+      const names = String(x.match || '').split(',').map(s => s.trim()).filter(Boolean);
+      const num = '\\s*(\\d+(?:\\.\\d+)?)?';
+      const res = names.map(n => {
+        const q = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return n.length <= 2 ? new RegExp('^' + q + '(?![\\p{L}])' + num, 'u') : new RegExp('(?:^|[^\\p{L}\\d])' + q + '(?![\\p{L}])' + num, 'iu');
+      });
+      const per = Number(x.per) || 1, bare = x.bare === '' || x.bare == null ? null : Number(x.bare), out = [];
+      noteRows().forEach(r => {
+        const p = r.payload || {};
+        if (typeof p.text !== 'string' || p.cancelled || p.kind === 'idea' || (p.kind === 'todo' && !p.done)) return;
+        const text = p.text.trim();
+        let m = null;
+        for (let i = 0; i < res.length && !m; i++) m = text.match(res[i]);
+        if (!m) return;
+        const units = m[1] != null ? Number(m[1]) : bare;
+        if (units == null || !isFinite(units) || units <= 0) return;
+        /* the time typed on the line, else when it was written, else noon */
+        let ms = null;
+        const at = /^(\d{1,2}):(\d\d)/.exec(p.at || '');
+        if (r.date && at) ms = new Date(r.date + 'T' + zpad(+at[1]) + ':' + at[2] + ':00').getTime();
+        else if (p.t) {
+          const w = new Date(p.t), wd = w.getFullYear() + '-' + zpad(w.getMonth() + 1) + '-' + zpad(w.getDate());
+          ms = !r.date || wd === r.date ? p.t : new Date(r.date + 'T12:00:00').getTime();
+        } else if (r.date) ms = new Date(r.date + 'T12:00:00').getTime();
+        if (ms != null && isFinite(ms)) out.push([ms, units * per]);
+      });
+      return out.sort((a, b) => a[0] - b[0]);
+    },
+    left: (doses, half, at) => doses.reduce((s, d) => d[0] <= at ? s + d[1] * Math.pow(0.5, (at - d[0]) / 3600000 / half) : s, 0),
+    sub: cfg => {
+      const L = WIDGETS.halflife.list();
+      return L.length ? '' : 'nothing tracked';
+    },
+    /* the editor: one dialog for a new tracker and for changing one */
+    edit(x) {
+      x = x || {};
+      const fmtHalf = h => !h ? '' : h >= 48 ? +(h / 24).toFixed(2) + ' days' : +(+h).toFixed(2) + ' hours';
+      let f = {};
+      const box = (kind, value, ph) => UI.field(kind, { value: value == null ? '' : String(value), placeholder: ph || '' });
+      UI.dialog({
+        title: x.key ? 'EDIT ' + String(x.name).toUpperCase() : 'TRACK A DOSE', width: 400,
+        body: b => {
+          f.name = box('text', x.name, 'Name');
+          f.match = box('text', x.match, 'A, B');
+          f.per = box('decimal', x.per == null ? 1 : x.per);
+          f.unit = box('text', x.unit || 'mg');
+          f.half = box('text', fmtHalf(x.half), '9 hours');
+          f.bare = box('decimal', x.bare);
+          b.appendChild(UI.row('Name', 'What the card calls it.', f.name));
+          b.appendChild(UI.row('Written as', 'The words a dose starts with, comma separated. One or two letters must start the line.', f.match));
+          b.appendChild(UI.row('Each 1 is', 'What the number after it is worth.', f.per));
+          b.appendChild(UI.row('Unit', 'Shown after the amount.', f.unit));
+          b.appendChild(UI.row('Half-life', 'Hours or days, such as 9 hours or 4.5 days.', f.half));
+          b.appendChild(UI.row('No number', 'How many a line without a number counts as. Blank skips it.', f.bare));
+          UI.focusSoon(f.name);
+        },
+        actions: (x.key ? [{ label: 'REMOVE', kind: 'bad', fn: () => {
+          const was = Rec.setting('lifeos', x.key);
+          Rec.del('setting', null, 'lifeos.' + x.key);
+          drawHome();
+          UI.undo(String(x.name) + ' removed', () => { Rec.setting('lifeos', x.key, was); drawHome(); });
+        } }] : []).concat([{ label: 'CANCEL' }, { label: x.key ? 'SAVE' : 'ADD', kind: 'go', fn: () => {
+          const v = k => String(f[k].value || '').trim();
+          const hm = /^(\d+(?:\.\d+)?)\s*(d|days?|h|hrs?|hours?)?$/i.exec(v('half'));
+          const half = hm ? Number(hm[1]) * (/^d/i.test(hm[2] || '') ? 24 : 1) : 0;
+          const per = Number(v('per') || 1), bare = v('bare');
+          if (!v('name') || !v('match')) { toast('Needs a name and how it is written', { bad: true }); return false; }
+          if (!(half > 0)) { toast('Half-life needs a number of hours or days', { bad: true }); return false; }
+          if (!(per > 0) || (bare !== '' && !(Number(bare) >= 0))) { toast('Amounts need to be numbers', { bad: true }); return false; }
+          const id = x.key ? x.key : 'halflife.' + Date.now().toString(36);
+          const was = x.key ? (Rec.setting('lifeos', id) || {}) : { ord: WIDGETS.halflife.list().length };
+          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare) }));
+          drawHome();
+        } }]),
+      });
+    },
+    menu(cfg, redraw) {
+      const L = WIDGETS.halflife.list(), hid = (cfg && cfg.hid) || [];
+      const out = ['-', { label: 'Track a dose', fn: () => WIDGETS.halflife.edit() }];
+      if (L.length) {
+        out.push({ label: 'Show', sub: L.map(x => ({ label: x.name, check: hid.indexOf(x.key) < 0, fn: () => {
+          const h = (cfg.hid || []).slice(), i = h.indexOf(x.key);
+          if (i > -1) h.splice(i, 1); else if (L.length - h.length > 1) h.push(x.key);
+          cfg.hid = h; redraw();
+        } })) });
+        out.push({ label: 'Edit', sub: L.map(x => ({ label: x.name, fn: () => WIDGETS.halflife.edit(x) })) });
+      }
+      return out;
+    },
+    draw(body, cfg) {
+      cfg = cfg || {};
+      const H = WIDGETS.halflife, L = H.shown(cfg);
+      if (!H.list().length) {
+        body.appendChild(el('div', 'empty', 'Nothing tracked yet.'));
+        const bar = el('div', 'tbar');
+        bar.appendChild(tbtn('+ TRACK A DOSE', () => H.edit(), 'go'));
+        body.appendChild(bar);
+        return;
+      }
+      body.style.gap = '0';
+      const days = cfg.days || 7, now = Date.now(), DAY = 86400000;
+      const t0 = new Date(LifeOS.shift(LifeOS.day(), -(days - 1)) + 'T00:00:00').getTime();
+      const step = (days <= 7 ? 1 : days <= 14 ? 2 : 4) * 3600000;
+      const amt = v => v >= 10 ? Math.round(v).toLocaleString() : v >= 1 ? +v.toFixed(1) + '' : v >= 0.05 ? +v.toFixed(2) + '' : '0';
+      const when = ms => {
+        const d = new Date(ms), ds = d.getFullYear() + '-' + zpad(d.getMonth() + 1) + '-' + zpad(d.getDate());
+        const h = d.getHours(), hm = (h % 12 || 12) + (d.getMinutes() ? ':' + zpad(d.getMinutes()) : '') + (h < 12 ? 'am' : 'pm');
+        return (ds === LifeOS.day() ? 'today' : Day.short(ds)) + ' ' + hm;
+      };
+      L.forEach((x, i) => {
+        const doses = H.doses(x), half = Number(x.half) || 1, u = x.unit || '';
+        const pts = [];
+        const at = ms => { const v = H.left(doses, half, ms); pts.push([(ms - t0) / DAY, v, amt(v) + ' ' + u + ' · ' + when(ms)]); };
+        /* a point every few hours, and one either side of each dose so the
+           rise is a step, not a slope */
+        const inside = doses.filter(d => d[0] > t0 && d[0] <= now).map(d => d[0]);
+        let k = 0;
+        for (let ms = t0; ms < now; ms += step) {
+          while (k < inside.length && inside[k] <= ms) { at(inside[k] - 1); at(inside[k]); k++; }
+          at(ms);
+        }
+        while (k < inside.length) { at(inside[k] - 1); at(inside[k]); k++; }
+        at(now);
+        const cur = pts[pts.length - 1][1], last = doses.filter(d => d[0] <= now).pop();
+        const strip = el('div', 'strip');
+        strip.style.cssText = 'flex:1 1 0;min-height:112px;display:flex;flex-direction:column;min-width:0';
+        const said = last ? 'last dose ' + when(last[0]) : 'no doses written yet';
+        const head = Chart.header({ size: 'sm', label: x.name, value: amt(cur), unit: u, when: 'now', sub: said });
+        strip.appendChild(head.el);
+        const box = el('div', 'fits');
+        box.style.cssText = 'flex:1 1 auto;min-height:72px';
+        strip.appendChild(box);
+        body.appendChild(strip);
+        if (!doses.length) return;
+        const lastStrip = i === L.length - 1, span = (now - t0) / DAY;
+        Chart.mount(box, { pad: { l: 46, r: 12, t: 8, b: lastStrip ? 22 : 6 }, label: x.name + ', ' + days + ' days' }, c => {
+          c.xLinear(0, span);
+          c.yFit(pts.map(p => p[1]), { min: 0, lines: 2 });
+          c.grid();
+          /* the days along the bottom: a linear axis has no dates of its own */
+          if (lastStrip) {
+            const every = [1, 2, 3, 7].filter(n => days / n <= Math.max(2, Math.floor((c.W - c.P.l - c.P.r) / 64)))[0] || 7;
+            for (let n = 0; n < days; n += every) {
+              const t = c.add('text', { x: c.X(n), y: c.H - 6, 'text-anchor': n ? 'middle' : 'start' }, 'mb-lab');
+              t.textContent = n === days - 1 ? 'today' : Day.short(LifeOS.shift(LifeOS.day(), -(days - 1 - n)));
+            }
+          }
+          c.area(pts); c.line(pts);
+          c.dots(pts.filter((p, j) => j && pts[j - 1][0] === p[0] - 1 / DAY));
+          c.end(pts[pts.length - 1], amt(cur));
+          c.scrub(pts, { onMove: p => head.set(amt(p[1]), said, when(t0 + p[0] * DAY)), onLeave: head.reset });
+        });
+      });
+    },
+  },
+
   macros: {
     nm: 'MACROS', w: 4, h: 3, app: 'status', fit: 1, to: ['status', 'food'],
     sub: () => Math.round(macroToday('kcal')).toLocaleString() + ' kcal so far today',
@@ -6788,6 +6963,7 @@ const ABOUT = {
   brief: 'The morning brief from your PC, and its todos.',
   rhythms: 'BLOCK’s Every blocks and Habits: owed, due, coming up and this period’s count, tickable.',
   measure: 'Any measure you track in STATUS, charted.',
+  halflife: 'How much of a dose you write in STATUS is still in you, by its half-life.',
   macros: 'Protein, carbs, fat and calories today against your targets.',
   meals: 'What you have eaten today.',
   records: 'The records TRAIN marked, newest first.',
