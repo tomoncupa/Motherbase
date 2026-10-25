@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.82, 2026-10-25">
+<meta name="mb-version" content="1.0.83, 2026-10-25">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -671,10 +671,11 @@ body.dragging #cardframes{z-index:0}
 .hrow+.hrow{border-top:1px solid var(--line)}
 /* DRINKS: a drink is a row you tap to open ELEMENT over the home screen */
 .row.drink{cursor:pointer;align-items:flex-start}
-.row.drink .n{white-space:normal}
-.row.drink .n small{display:block;color:var(--dim2);font-size:var(--f-1);font-family:var(--f1);letter-spacing:.06em;margin-top:var(--s-1)}
-.row.drink .dl{display:block;margin-top:var(--s-1);font-size:var(--f-1);color:var(--dim)}
-.row.drink .dl i{font-style:normal;color:var(--txt);font-variant-numeric:tabular-nums}
+.row.weigh{align-items:flex-start}
+.row.drink .n,.row.weigh .n{white-space:normal}
+.row.drink .n small,.row.weigh .n small{display:block;color:var(--dim2);font-size:var(--f-1);font-family:var(--f1);letter-spacing:.06em;margin-top:var(--s-1)}
+.row.drink .dl,.row.weigh .dl{display:block;margin-top:var(--s-1);font-size:var(--f-1);color:var(--dim)}
+.row.drink .dl i,.row.weigh .dl i{font-style:normal;color:var(--txt);font-variant-numeric:tabular-nums}
 /* WORK DONE */
 table.wd{width:100%;border-collapse:collapse;font-size:var(--f-2)}
 table.wd th{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--dim2);font-weight:400;text-align:right;padding:0 0 var(--s-1) var(--s-2)}
@@ -2275,6 +2276,34 @@ const WM = (() => {
   return { num, month, back, monthLabel, monthIn, monthOut, billsOwed };
 })();
 
+/* A copy of ELEMENT's `toStatus` (mix/index.html), for TO WEIGH's tick:
+   what went down today, summed from the `dose` rows, written to STATUS as
+   zinc and magnesium readings and as salt and citrate meals. Change both. */
+function mixToStatus(d) {
+  const wb = Rec.setting('mix', 'writeBack');
+  if (wb != null && !wb) return;
+  const n = v => { const x = parseFloat(String(v).replace(/,/g, '')); return isFinite(x) ? x : 0; };
+  const sum = { na: 0, k: 0, zn: 0, mg: 0 };
+  Rec.all('dose', { date: d }).forEach(r => { const p = r.payload; if (p && sum[p.nut] != null) sum[p.nut] += n(p.mg); });
+  [['zinc', sum.zn], ['magnesium', sum.mg]].forEach(([fid, mg]) => {
+    const r = Rec.get('ev', d, fid);
+    const e = (r && r.e ? r.e : []).filter(x => x.src !== 'mix');
+    if (mg > 0) e.push({ t: Date.now(), v: Math.round(mg), src: 'mix' });
+    if (e.length) Rec.set('ev', d, fid, { e: e });
+    else if (r) Rec.del('ev', d, fid);
+  });
+  const meal = (key, name, na, k) => {
+    if (!(na > 0 || k > 0)) { if (Rec.get('meal', d, key)) Rec.del('meal', d, key); return; }
+    Rec.set('meal', d, key, {
+      fid: null, name: name, serve: 'mixed by ELEMENT', unit: 'g', amt: 0, mult: 1,
+      kcal: 0, p: 0, c: 0, f: 0, na: Math.round(na), k: Math.round(k), ca: 0, caff: 0,
+      price: 0, t: Date.now(), src: 'mix',
+    });
+  };
+  meal('mix-salt', 'Salt (ELEMENT)', sum.na, 0);
+  meal('mix-cit', 'Potassium citrate (ELEMENT)', 0, sum.k);
+}
+
 const WIDGETS = {
   /* ══════════════ TODAY ══════════════
      The day as one list. BLOCK owns the blocks and STATUS owns the bullets,
@@ -3167,6 +3196,61 @@ const WIDGETS = {
           (partOn(cfg, 'doses') ? '<span class="dl">' + d.doses.map(x => esc(x.name) + ' <i>' + x.g.toFixed(3) + 'g</i>').join(' · ') + '</span>' : '') + '</div>';
         r.onclick = openIt;
         r.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openIt(); } };
+        list.appendChild(r);
+      });
+      body.appendChild(list);
+    },
+  },
+
+  /* ══════════════ TO WEIGH ══════════════
+     Tom, 2026-10-25: ELEMENT's powders still to weigh today, in grams, each
+     drink or meal with a tick. The grams are ELEMENT's, read from the plan it
+     publishes (`mix.plan`, each dose with its mineral and mg since ELEMENT
+     1.0.11); this card does no sums of its own. A tick writes the `dose` rows
+     the way ELEMENT's `tickCard` does and then `mixToStatus`, a copy of
+     ELEMENT's `toStatus`, so STATUS's sodium, potassium, zinc and magnesium
+     move at once. Change ELEMENT's and these together. */
+  toweigh: {
+    nm: 'TO WEIGH', w: 4, h: 4, app: 'mix', fit: 1, to: ['over', 'mix'],
+    plan: () => WIDGETS.drinks.plan(),
+    sub: () => {
+      const p = WIDGETS.toweigh.plan();
+      if (!p) return 'no plan today';
+      const left = p.filter(d => !d.done).length;
+      return left ? left + ' of ' + p.length + ' left' : 'all taken';
+    },
+    parts: [['done', 'Taken today'], ['sub', 'Details']],
+    tick(s, on) {
+      const d = LifeOS.day();
+      if (on && s.doses.some(x => !x.nut)) { toast('Open ELEMENT once today to tick from here'); openOver('mix'); return; }
+      s.doses.forEach(x => {
+        if (on) Rec.set('dose', d, x.id, { nut: x.nut, mg: x.mg, g: x.g, slot: s.id, t: Date.now() });
+        else Rec.del('dose', d, x.id);
+      });
+      mixToStatus(d);
+      if (typeof Mobile !== 'undefined') Mobile.feedback(on ? 'success' : 'untick');
+      drawHome();
+    },
+    draw(body, cfg) {
+      const p = WIDGETS.toweigh.plan();
+      if (!p) {
+        body.appendChild(el('div', 'empty', 'No plan today.'));
+        const bar = el('div', 'tbar');
+        bar.appendChild(tbtn('OPEN ELEMENT', () => openOver('mix'), 'go'));
+        body.appendChild(bar);
+        return;
+      }
+      const show = p.filter(s => !s.done || partOn(cfg, 'done'));
+      if (!show.length) { body.appendChild(el('div', 'empty', 'All taken today.')); return; }
+      const list = el('div', 'rowlist');
+      show.forEach(s => {
+        const r = el('div', 'row weigh' + (s.done ? ' done' : ''));
+        const ck = el('button', 'chk' + (s.done ? ' on' : ''), (typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '✓');
+        ck.setAttribute('aria-label', (s.done ? 'Untick ' : 'Taken: ') + s.nm);
+        ck.onclick = ev => { ev.stopPropagation(); WIDGETS.toweigh.tick(s, !s.done); };
+        r.appendChild(ck);
+        r.appendChild(el('div', 'n', '<b>' + esc(s.nm) + '</b>' + (partOn(cfg, 'sub') && s.sub ? '<small>' + esc(s.sub) + '</small>' : '') +
+          '<span class="dl">' + s.doses.map(x => esc(x.name) + ' <i>' + x.g.toFixed(3) + 'g</i>').join(' · ') + '</span>'));
         list.appendChild(r);
       });
       body.appendChild(list);
@@ -6964,6 +7048,7 @@ const ABOUT = {
   rhythms: 'BLOCK’s Every blocks and Habits: owed, due, coming up and this period’s count, tickable.',
   measure: 'Any measure you track in STATUS, charted.',
   halflife: 'How much of a dose you write in STATUS is still in you, by its half-life.',
+  toweigh: 'ELEMENT’s powders still to weigh today, in grams, with a tick for each drink.',
   macros: 'Protein, carbs, fat and calories today against your targets.',
   meals: 'What you have eaten today.',
   records: 'The records TRAIN marked, newest first.',

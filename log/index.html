@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.24, 2026-10-22">
+<meta name="mb-version" content="1.0.25, 2026-10-25">
 <title>LOG</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -261,6 +261,21 @@ main.dragging{cursor:grabbing;user-select:none}
   border:0;border-radius:0;background:none;color:var(--text-1);font:inherit;font-size:var(--tb, var(--f-4));
   line-height:var(--lh-tight);padding:var(--s-2) var(--s-3);cursor:text}
 .cell:focus{outline:var(--border-width) solid var(--accent);outline-offset:calc(var(--border-width) * -1)}
+/* The day's ticked todos above his own words, in the box's type, one a
+   line, quieter than what he typed. Zoomed out, the day is one line: the
+   ticks run on as one line, and give way to his words when he wrote some. */
+.xw{display:flex;flex-direction:column;height:100%;min-height:100%}
+.xw>.cell{flex:1 1 auto;height:auto;min-height:0}
+.gd{display:flex;flex-direction:column;padding:var(--s-2) var(--s-3) 0;color:var(--text-2);
+  font-size:var(--tb, var(--f-4));line-height:var(--lh-tight)}
+.cal.small:not(.near) .xw{flex-direction:row;overflow:hidden}
+.cal.small:not(.near) .gd{align-self:center}
+.cal.small:not(.near) .xw.typed>.gd{display:none}
+.cal.small:not(.near) .xw:not(.typed)>.cell{flex:0 0 0;padding:0;width:0}
+.cal.small:not(.near) .gd{flex-direction:row;gap:var(--s-3);padding:0 var(--s-3);
+  font-size:var(--ts, var(--f-2));line-height:1;white-space:pre}
+.cal.book .xw{height:auto;min-height:0}
+.cal.book .gd{padding:var(--s-2) 0 0}
 /* A textarea ignores align-items, so its one line is centred in the day by
    padding the top by half of what the line leaves of the day's height: it sat
    at the top, above the day's date, which showed once a tall window gave
@@ -637,12 +652,18 @@ let byDay = new Map();
 let byKey = new Map();
 let firstMin = new Map();
 let lineCount = 0;
+/* The todos ticked on each day, for What got done. Tom, 2026-10-25, picked
+   from a count of his own log: 57 todos ticked on 23 days, the column typed
+   on 12. Read off the journal every draw and never written, so a tick or an
+   untick anywhere shows here at once. Not filtered by the Show panel: what
+   got done does not depend on which kinds the day is showing. */
+let doneBy = new Map();
 
 /* Time order is the start, the same as STATUS: Journal.sortClock. */
 function sortClock(p) { return Journal.sortClock(p); }
 
 function indexJournal() {
-  byDay = new Map(); byKey = new Map(); firstMin = new Map(); lineCount = 0;
+  byDay = new Map(); byKey = new Map(); firstMin = new Map(); doneBy = new Map(); lineCount = 0;
   const show = shown();
   Rec.all('note', {}).forEach(r => {
     const p = r.payload;
@@ -658,6 +679,10 @@ function indexJournal() {
     if (open && p.due === '') return;
     const day = kind === 'todo' && p.done ? (p.doneOn || r.date) : (open && p.due ? p.due : r.date);
     if (!day || !DATE_OK.test(day)) return;
+    if (kind === 'todo' && p.done && !p.cancelled && String(p.text || '').trim()) {
+      if (!doneBy.has(day)) doneBy.set(day, []);
+      doneBy.get(day).push(p);
+    }
     const c = sortClock(p);
     if (c !== 9999) {
       const m = Math.floor(c / 100) * 60 + c % 100;
@@ -693,6 +718,7 @@ function indexJournal() {
     return sortClock(a.p) - sortClock(b.p) || (a.p.t || 0) - (b.p.t || 0);
   };
   byDay.forEach(list => list.sort(cmp));
+  doneBy.forEach(list => list.sort((a, b) => (a.doneAt || a.t || 0) - (b.doneAt || b.t || 0)));
 }
 const counted = d => (byDay.get(d) || []).filter(x => !x.open && !x.p.cancelled && !x.movedAway).length;
 
@@ -724,7 +750,15 @@ function indexGraph() {
     });
     return m;
   };
-  G = { mood: F.mood || null, energy: F.energy || null, caf, meals: byDate('meal'), spends: byDate('spend') };
+  /* The days TRAIN has a session or a set on. Tom, 2026-10-25: "Fill in the
+     trained column for me". STATUS's tile already ticks Trained off TRAIN
+     (its `logged`, 2026-09-18) and LOG's column never did, so 15 of his 34
+     TRAIN days since 21 Aug read blank here. Same rule as STATUS, read and
+     never written. Sets are read only once the store is in, as STATUS does,
+     so LOG's first paint never waits on them; their arrival redraws. */
+  const trained = new Set(Rec.all('session', {}).map(r => r.date));
+  if (Rec.hydrated || Rec.loaded('set')) Rec.all('set', {}).forEach(r => trained.add(r.date));
+  G = { mood: F.mood || null, energy: F.energy || null, caf, meals: byDate('meal'), spends: byDate('spend'), trained };
   xDefCache = null;
 }
 const evList = (date, fid) => { const r = Rec.get('ev', date, fid); return r && r.e ? r.e : []; };
@@ -747,6 +781,8 @@ function xValue(def, d) {
     return s ? money(s) : '';
   }
   const f = def.f, per = f.per == null ? 1 : f.per;
+  /* STATUS's trainField: Trained, or any field whose id starts with train */
+  if (f.measure === 'check' && (f.id === 'trained' || /^train/i.test(f.id)) && G.trained.has(d)) return '✓';
   const e = evList(d, f.id).map(x => ({ t: +x.t || 0, v: +x.v || 0 }));
   if (f.from) (G.meals.get(d) || []).forEach(m => {
     const v = (parseFloat(m[f.from]) || 0) * per;
@@ -1021,9 +1057,15 @@ function dayHTML(p) {
         '" aria-label="' + attr(colName(k) + ', ' + p.label) + '"></div>';
     }
     if (def.kind === 'text') {
+      const box = '<textarea class="cell" rows="1" data-d="' + p.from + '" data-col="' + k + '" aria-label="' + attr(colName(k) + ', ' + p.label) + '">' +
+        esc(cellOf(p.from, k)) + '</textarea>';
+      /* What got done: the day's ticked todos first, then his own box. */
+      const got = k === 'done' ? doneBy.get(p.from) || [] : [];
       return '<div class="xc xt" data-col="' + k + '"' + cw + '><span class="xl">' + esc(colName(k)) + '</span>' +
-        '<textarea class="cell" rows="1" data-d="' + p.from + '" data-col="' + k + '" aria-label="' + attr(colName(k) + ', ' + p.label) + '">' +
-        esc(cellOf(p.from, k)) + '</textarea></div>';
+        (got.length
+          ? '<div class="xw' + (cellOf(p.from, k) ? ' typed' : '') + '"><div class="gd">' +
+            got.map(t => '<span>' + esc(t.text) + '</span>').join('') + '</div>' + box + '</div>'
+          : box) + '</div>';
     }
     const v = xValue(def, p.from);
     return '<div class="xc xn ' + k + (v ? '' : ' empty') + '" data-col="' + k + '"' + cw + '>' +
