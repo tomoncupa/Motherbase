@@ -671,12 +671,12 @@ because it runs the real thing rather than only parsing it:
    while curl reached the same address, so the WebKit and headless Chromium
    zips were fetched with curl into `%LOCALAPPDATA%/ms-playwright`
    (`webkit-2359`, `chromium_headless_shell-1243`).
-   **Known, 2026-09-30:** in WebKit every app passes and one check fails,
-   "foundation: the shared checks ran, never finished": partway through, the
-   smoke page's frame inside the review loses its page (its `#out` is gone).
-   `shared/_smoke.html` opened on its own passes in WebKit, 385 of 385. Not
-   yet found; suspect a history step inside a frame (see the trap on smoke
-   checks and history).
+   **Fixed 2026-10-25:** from 2026-09-30, WebKit failed one check,
+   "foundation: the shared checks ran, never finished". In a frame, WebKit
+   gives the page's own load no history entry, so the smoke page's first
+   `Mobile.trap` back landed on the frame's starting `about:blank` and
+   unloaded the page. The smoke page now pushes a floor entry of its own
+   before any history check when framed; 210 of 210 in WebKit.
 5. Clean up any test data you wrote, and stop the server.
 
 **Always test:** record merge including the two-device case where each device wrote
