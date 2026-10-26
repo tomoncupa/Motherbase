@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.79, 2026-10-23">
+<meta name="mb-version" content="1.0.80, 2026-10-24">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -423,6 +423,14 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .lastline .lasttime{display:-webkit-box;-webkit-box-orient:vertical;
   -webkit-line-clamp:2;overflow:hidden}
 .lasttime b{color:var(--text-2);font-variant-numeric:tabular-nums}
+/* A past day on TRACK: a ring in the theme's warning colour, the words in
+   the reading colour so every theme can read them. */
+.pastday{display:flex;align-items:center;gap:var(--s-2);margin:var(--s-1) var(--s-1) 0;
+  padding:var(--s-1) var(--s-1) var(--s-1) var(--s-2);border-radius:var(--radius-sm);
+  box-shadow:inset 0 0 0 calc(var(--border-width) * 2) var(--warn);
+  font-size:var(--f-2);color:var(--text-1)}
+.pastday span{flex:1;min-width:0}
+.pastday .mb-btn{flex:0 0 auto}
 
 /* ══════════ THE DAY'S EXERCISES DRAWER ══════════ */
 .dwrap{position:fixed;inset:0;z-index:60;display:none}
@@ -4157,6 +4165,25 @@ function drawTrack(m) {
   var ex = TRAIN.exercises()[exId] || { name: 'Exercise' };
   var f = TRAIN.fieldsOf(exId);
   var mine = TRAIN.setsOn(date).filter(function (s) { return s.ex === exId; });
+
+  /* Not today, said loudly. Tom, 2026-10-24: "I need some way of knowing if
+     I'm on today and not accidentally editing a past workout." The bar was
+     the exercise's name and nothing else, so a past day looked exactly like
+     today. Never drawn on today. */
+  if (date !== Day.today()) {
+    var past = UI.el('div', 'pastday');
+    var pl0 = UI.el('span');
+    pl0.innerHTML = '<b>' + UI.esc(date === Day.shift(Day.today(), -1) ? 'Yesterday' : dayY(date)) + '</b>, not today';
+    var toToday = UI.el('button', 'mb-btn mb-press mb-tap');
+    toToday.textContent = 'Go to today';
+    toToday.onclick = function () {
+      Mobile.feedback('select');
+      TRAIN.date = Day.today(); TRAIN.sel = null; TRAIN.suFor = null;
+      draw();
+    };
+    past.appendChild(pl0); past.appendChild(toToday);
+    m.appendChild(past);
+  }
 
   /* What this is measured against: the last session with the same name, a
      day he picked, the day it was copied from, or the last time, in that
@@ -9803,14 +9830,17 @@ TRAIN.compareCtx = function (date) {
 TRAIN.vsFor = function (date, exId, ctx) {
   var has = function (d) { return TRAIN.setsOn(d).some(function (s) { return s.ex === exId && !s.warm && TRAIN.counts(s); }); };
   var s = ctx.move ? {} : ctx.sess;
-  if (!ctx.move) {
-  if (s.vs && s.vs < date && has(s.vs)) return { date: s.vs, why: 'picked' };
-  for (var i = 0; i < ctx.named.length; i++) if (has(ctx.named[i])) return { date: ctx.named[i], why: 'name' };
-  if (s.from && s.from < date && has(s.from)) return { date: s.from, why: 'copy' };
-  }
-  var h = TRAIN.historyOf(exId);
-  for (var j = h.length - 1; j >= 0; j--) if (h[j].date < date && !h[j].warm && TRAIN.counts(h[j])) return { date: h[j].date, why: 'last' };
-  return null;
+  if (!ctx.move && s.vs && s.vs < date && has(s.vs)) return { date: s.vs, why: 'picked' };
+  /* Most recent wins. Tom, 2026-10-24: Lat Pulldown in a session named Quick
+     Back was set against the last Quick Back, Sep 29, and every Lat Pulldown
+     since under another name was never looked at. So the day is always the
+     last time the lift was done, and the name or the copy only says why. */
+  var h = TRAIN.historyOf(exId), last = null;
+  for (var j = h.length - 1; j >= 0; j--) if (h[j].date < date && !h[j].warm && TRAIN.counts(h[j])) { last = h[j].date; break; }
+  if (!last) return null;
+  if (!ctx.move && ctx.named.indexOf(last) > -1) return { date: last, why: 'name' };
+  if (!ctx.move && s.from === last) return { date: last, why: 'copy' };
+  return { date: last, why: 'last' };
 };
 
 /* One set against the same set last time. Tom, 2026-09-15: "I want to see how
@@ -11675,6 +11705,32 @@ document.getElementById('restchip').onclick = function () {
     { label: 'Stop timer', fn: function () { TRAIN.restStop(); } },
   ], 'REST TIMER');
 };
+
+/* A new day while the app sat open or asleep. TRAIN.date is set once, on
+   open, and an iPhone home-screen app is resumed for days (root brief, Known
+   traps), so yesterday's TRAIN stayed on yesterday and the next session went
+   in under it. If he was on the day that just ended, he is moved to today,
+   unless a set went in on it in the last three hours: a session crossing
+   midnight stays on its start day, and the past-day bar says so. A day he
+   picked himself is left alone. */
+TRAIN._today = Day.today();
+TRAIN.catchDay = function () {
+  var t = Day.today(), was = TRAIN._today;
+  if (t === was) return false;
+  TRAIN._today = t;
+  var lastAt = 0;
+  if (TRAIN.date === was) Rec.all('set', { date: was }).forEach(function (r) {
+    var n = Date.parse(r.updated_at);
+    if (n > lastAt) lastAt = n;
+  });
+  if (TRAIN.date !== was || Date.now() - lastAt < 3 * 3600000) { draw(); return false; }
+  TRAIN.date = t; TRAIN.sel = null; TRAIN.suFor = null;
+  draw();
+  UI.toast('A new day. TRAIN is on today.');
+  return true;
+};
+document.addEventListener('visibilitychange', function () { if (!document.hidden) TRAIN.catchDay(); });
+setInterval(function () { if (!document.hidden) TRAIN.catchDay(); }, 60000);
 
 TRAIN.reindex();
 draw();
