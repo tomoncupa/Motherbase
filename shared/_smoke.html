@@ -816,6 +816,43 @@ async function run() {
     seg.remove();
     return h >= parseFloat(tok('--tap'));
   })());
+  /* GO, 2026-10-26: a todo or block that opens a spot in the suite */
+  ok('go: a suite address reads as its app and spot, anything else is not one', (() => {
+    const a = UI.spot('mb:status/check'), b = UI.spot('mb:train');
+    return a && a.app === 'status' && a.show === 'check' && a.name === 'STATUS · Status check' &&
+      b && b.app === 'train' && b.show === '' && !UI.spot('mb:nosuchapp') && !UI.spot('https://x.com') &&
+      UI.isLink('https://x.com') && !UI.isLink('javascript:alert(1)') && !UI.isLink('');
+  })());
+  ok('go: a spot has a real address that carries the spot', /\/status\/index\.html\?show=check$/.test(UI.linkHref('mb:status/check')));
+  ok('go: linked words open the spot, and the row under them never hears the press', (() => {
+    const had = window.mbHome, got = [];
+    window.mbHome = to => got.push(to.join('/'));
+    const row = document.createElement('div');
+    let rowHeard = 0;
+    row.onclick = () => { rowHeard++; };
+    row.innerHTML = UI.linkHTML('mb:status/check', 'Check-In') + ' beside';
+    document.body.appendChild(row);
+    row.querySelector('a[data-go]').click();
+    row.click();
+    row.remove();
+    if (had === undefined) delete window.mbHome; else window.mbHome = had;
+    return got.join() === 'status/check' && rowHeard === 1;
+  })());
+  ok('go: a line with a link draws its words as the link, one without draws plain words', (() => {
+    const J = window.Journal;
+    if (!J) return false;
+    const a = J.textHTML({ kind: 'todo', text: 'Check <in>', link: 'mb:status/check' });
+    const b = J.textHTML({ kind: 'todo', text: 'Check <in>' });
+    return /<a class="mb-golink" [^>]*data-go="mb:status\/check"[^>]*>Check &lt;in&gt;<\/a>/.test(a) && !/data-go/.test(b);
+  })());
+  ok('go: the todo menu offers Link it, and Change the link once there is one', (() => {
+    const J = window.Journal;
+    if (!J) return false;
+    const a = J.menuItems({ kind: 'todo', text: 'x', date: '2026-01-01', key: 'smoke-go' }).map(i => i.label);
+    const b = J.menuItems({ kind: 'todo', text: 'x', date: '2026-01-01', key: 'smoke-go', link: 'mb:train' });
+    const ch = b.find(i => i.label === 'Change the link');
+    return a.indexOf('Link it') > -1 && !!ch && ch.note === 'Opens TRAIN';
+  })());
   ok('ui: a row keeps its label when its control is a field', (() => {
     const box = document.createElement('div');
     box.style.width = '360px';
@@ -1041,7 +1078,7 @@ async function run() {
   ok('journal: an open todo offers both moves and Cancel it, a done one does not move', (() => {
     const open = J.menuItems({ kind: 'todo', date: '2026-01-01', key: 'k' }).map(i => i.label).join();
     const done = J.menuItems({ kind: 'todo', done: 1, date: '2026-01-01', key: 'k' }).map(i => i.label).join();
-    return open === 'Move to tomorrow,Move to a day,Cancel it' && done === 'Cancel it' &&
+    return open === 'Move to tomorrow,Move to a day,Link it,Cancel it' && done === 'Link it,Cancel it' &&
       J.menuItems({ kind: 'entry' }).length === 0;
   })());
   /* ---- moving a todo to a day you name ----

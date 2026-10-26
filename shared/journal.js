@@ -723,7 +723,8 @@ function sortClock(x) {
 function textHTML(x, day) {
   css();
   const tm = timeText(x);
-  return esc(x.text) +
+  /* a line with a `link` (2026-10-26): its words open it, UI.linkHTML */
+  return (x.link && g.UI && g.UI.linkHTML ? g.UI.linkHTML(x.link, esc(x.text)) : esc(x.text)) +
     (tm.s ? '<i class="at' + (tm.wrote ? ' wrote' : '') + '">' + esc(tm.s) + '</i>' : '') +
     /* the mood it was rated, a face and the number (2026-09-25), then how it
        felt in words (2026-09-19), when STATUS's BULLETS switches asked */
@@ -838,6 +839,19 @@ function menuItems(x, after, src) {
         const back = moveTo(x.date, x.key, src, x.day, d);
         if (after) after();
         if (back && g.UI && g.UI.undo) g.UI.undo('Moved to ' + Day().label(d), () => { back(); if (after) after(); });
+      }) });
+  }
+  /* Tom, 2026-10-26: a todo can open the thing it is about. Its words then
+     open a spot in the suite or a web page (shared/ui.js, GO). */
+  if (g.UI && g.UI.pickLink) {
+    const sp = x.link && g.UI.spot(x.link);
+    out.push({ label: x.link ? 'Change the link' : 'Link it', icon: ico('link'),
+      note: x.link ? (sp ? 'Opens ' + sp.name : x.link) : 'Its words open an app or a page',
+      fn: () => g.UI.pickLink(x.link, { what: 'the words' }).then(v => {
+        if (v === null || v === (x.link || '')) return;
+        const back = patchNote(x.date, x.key, { link: v }, src);
+        if (after) after();
+        if (back && g.UI.undo) g.UI.undo(v ? 'Linked' : 'Link removed', () => { back(); if (after) after(); });
       }) });
   }
   out.push(x.cancelled

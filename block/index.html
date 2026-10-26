@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.23, 2026-10-18">
+<meta name="mb-version" content="1.0.24, 2026-10-26">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -3476,10 +3476,13 @@ function blockNode(laneId, it, s, e, meta) {
   if (it.link) {
     const a = el('a', 'b-name b-titlelink');
     a.textContent = it.name;
-    a.href = it.link;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.title = it.link + '  —  right-click the block to rename it';
+    /* a suite address (`mb:status/check`) opens that spot, through the
+       press shared/ui.js catches on `data-go` (2026-10-26) */
+    const sp = UI.spot(it.link);
+    a.href = sp ? UI.linkHref(it.link) : it.link;
+    if (sp) a.dataset.go = it.link;
+    else { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+    a.title = (sp ? 'Opens ' + sp.name : it.link) + '  —  right-click the block to rename it';
     a.onclick = ev => ev.stopPropagation();
     txt.appendChild(a);
   } else {
@@ -3664,24 +3667,17 @@ function blockMenu(laneId, it, x, y) {
        Only shown on a block that HAS one: an extra line in the menu for every
        block, to serve the few that go somewhere, is the same clutter in a
        different place. */
+    /* a spot in the suite or a web page, from the suite's one picker
+       (UI.pickLink, shared/ui.js; Tom, 2026-10-26) */
     { label: it.link ? 'Change where it goes' : 'Make the title a link',
-      fn: () => {
-        const now = prompt(
-          'Paste an address. The title becomes a link to it.' +
-          String.fromCharCode(10) + String.fromCharCode(10) +
-          'Leave it empty to remove the link.' + String.fromCharCode(10) +
-          'https://todoist.com/app/today' + String.fromCharCode(10) +
-          'https://calendar.google.com/calendar/r/day',
-          it.link || 'https://');
-        if (now === null) return;
-        const v = now.trim();
-        if (v && !LINK_OK.test(v)) return toast('Only web addresses, starting <b>http</b> or <b>https</b>');
+      fn: () => UI.pickLink(it.link, { what: 'the title' }).then(v => {
+        if (v === null || v === (it.link || '')) return;
         snap();
         it.link = v || '';
         syncKin(it, { link: it.link });
         render();
         toast(v ? '<b>' + esc(it.name) + '</b> opens that now' : 'link removed');
-      } },
+      }) },
     ...(it.link ? [{ label: 'Rename', fn: () => {
         const v = (prompt('Rename this block', it.name) || '').replace(/\s+/g, ' ').trim();
         if (!v || v === it.name) return;

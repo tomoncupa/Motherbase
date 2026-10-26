@@ -714,6 +714,36 @@ The demo seeds what the home widgets read: `activity` names for BLOCK's ticks,
 shape was checked against the app that writes it. Gap found in passing: real
 BLOCK never names a rhythm, so a rhythm streak shows its slug in STREAKS.
 
+## GO: a todo or block opens the thing it is about (2026-10-26, `ui.js`)
+
+Tom, pointing at a TODAY row "STATUS Check-In": make it open the actual
+thing, and "I want an underlying system so I can do the same for other
+to-dos."
+
+- **`link`** on a `note` (any kind) or a BLOCK block: a web address, or a
+  suite address `mb:<app>` / `mb:<app>/<spot>`. BLOCK's old web `link` is the
+  same field; its plan carries it to TODAY and QUESTS.
+- **A spot is the `show` message** the home screen's widget titles already
+  send. `UI.SPOTS` lists each app and the spots it answers (STATUS gained
+  `check`, the status check itself). An app that does not know a spot opens.
+- **`UI.go(link)`**: on the home screen, `window.mbHome` (its `goTo`); in a
+  frame of it, a `{lifeos:1, nav, show}` message to the top; on its own page,
+  the address `<app>/index.html?show=<spot>`. The bottom of `ui.js` turns a
+  `?show=` into the same message after load and takes it off the address, so
+  no app had to learn it.
+- **`UI.linkHTML(link, words, cls)`** draws `a[data-go]`; one capture-phase
+  click listener in `ui.js` opens it before the row hears the press, so the
+  words open and the rest of the row still ticks or edits.
+  `Journal.textHTML` draws a line's words this way.
+- **`UI.pickLink(cur, {what})`**: every app and its spots, a web address,
+  Remove. Resolves the link, `''` removed, `null` unchanged. Apps a copy does
+  not have are dropped when their folder fails a HEAD. `Journal.menuItems`
+  carries "Link it" / "Change the link" for todos, so STATUS, LOG and QUESTS
+  got it unedited; BLOCK's "Make the title a link" opens it.
+- Five `go:` smoke checks. Watched in Chrome: QUESTS menu, Link it, Status
+  check, click the words, STATUS opened with the check up; the same from the
+  home screen's TODAY card; BLOCK's menu publishing the link into the plan.
+
 ## History
 
 `HISTORY.md`, beside this file, holds the debt list, the numbered foundation

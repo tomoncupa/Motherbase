@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.83, 2026-10-25">
+<meta name="mb-version" content="1.0.84, 2026-10-26">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -1192,8 +1192,16 @@ function goTo(to) {
   if (f.dataset.loaded) send(); else f.addEventListener('load', () => setTimeout(send, 50), { once: true });
 }
 
-/* apps can ask the shell to move: postMessage({lifeos:1, nav:'home'}) */
-window.addEventListener('message', e => { const m = e.data; if (m && m.lifeos === 1 && m.nav && app(m.nav)) go(m.nav); });
+/* apps can ask the shell to move: postMessage({lifeos:1, nav:'home'}), and
+   to open a spot there too, {nav:'status', show:'check'}: a linked todo or
+   block pressed inside an app (UI.go, shared/ui.js, 2026-10-26) */
+window.addEventListener('message', e => {
+  const m = e.data;
+  if (!m || m.lifeos !== 1 || !m.nav || !app(m.nav)) return;
+  if (typeof m.show === 'string' && m.show) goTo([m.nav, m.show]); else go(m.nav);
+});
+/* UI.go on this page itself */
+window.mbHome = to => goTo(to);
 
 function drawNav() {
   const n = $('#nav'); n.innerHTML = '';
@@ -1739,7 +1747,7 @@ function todayItems() {
     const end = isTodo && n.at ? (n.done ? n.byWas : (n.byAuto ? null : n.by)) : null;
     const span = end ? ((toMin(end) - toMin(n.at)) % 1440 + 1440) % 1440 : 0;
     out.push({
-      kind: n.kind, name: n.text || '', at: mins,
+      kind: n.kind, name: n.text || '', link: n.link || '', at: mins,
       dur: n.dur || span || 0, tag: '', colour: '', done: !!n.done, todo: isTodo,
       /* Only a todo has something to tick. An entry is a record of a thing
          that already happened and there is nothing to say about it. */
@@ -1808,7 +1816,7 @@ const LINK_RE = /\[[^\]]{1,120}\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>"']+
 function linkIn(x) {
   /* The block's own link first. Falling back to one written into a note keeps
      anything set up before the link field existed working. */
-  if (x && x.link && LINK_OK.test(x.link)) return x.link;
+  if (x && x.link && (LINK_OK.test(x.link) || (typeof UI !== 'undefined' && UI.spot && UI.spot(x.link)))) return x.link;
   const m = LINK_RE.exec(String((x && x.note) || ''));
   return m ? (m[1] || m[2]) : null;
 }
@@ -2364,8 +2372,7 @@ const WIDGETS = {
           band.innerHTML =
             '<div class="nlab">' + lab + (when ? '<i>' + esc(when) + '</i>' : '') + '</div>' +
             '<div class="nname">' + (nn.it.at != null ? '<b>' + MIN2(nn.it.at) + '</b> ' : '') +
-            (bhref ? '<a class="rlink" href="' + esc(bhref) + '" target="_blank" rel="noopener noreferrer">' +
-              esc(nn.it.name) + '</a>' : esc(nn.it.name)) + '</div>';
+            (bhref ? UI.linkHTML(bhref, esc(nn.it.name), 'rlink') : esc(nn.it.name)) + '</div>';
           /* The band is the tick target too, so following the day never means
              hunting for the right row in the list under it. */
           if (nn.it.tick) {
@@ -2443,10 +2450,7 @@ const WIDGETS = {
         /* Two targets, two meanings, the same split as everywhere else: the
            box ticks it, the words take you to the thing. */
         const href = linkIn(x);
-        r.appendChild(href
-          ? el('div', 'n', '<a class="rlink" href="' + esc(href) +
-              '" target="_blank" rel="noopener noreferrer">' + esc(x.name) + '</a>')
-          : el('div', 'n', esc(x.name)));
+        r.appendChild(el('div', 'n', href ? UI.linkHTML(href, esc(x.name), 'rlink') : esc(x.name)));
         if (x.tag) r.appendChild(el('div', 'tag', esc(x.tag)));
         if (x.dur) r.appendChild(el('div', 'd', DUR(x.dur)));
         if (x.tick) {

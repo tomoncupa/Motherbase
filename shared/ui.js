@@ -245,6 +245,10 @@ function css() {
   border-top:1px solid var(--border,#1e2a38);margin-top:12px}
 .mb-act{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 12px;border:0;
   cursor:pointer;border-radius:var(--radius-md,10px);background:var(--surface-2,#131b26);color:inherit;font:inherit}
+.mb-golist,.mb-gogrp{display:flex;flex-direction:column;gap:var(--s-1,4px)}
+.mb-golist{margin-bottom:var(--s-3,12px)}
+.mb-golink{color:inherit;text-decoration:underline dotted var(--accent,#f0b323);text-underline-offset:3px;cursor:pointer}
+.mb-golink:hover{color:var(--accent,#f0b323)}
 `;
     document.head.appendChild(l);
   }
@@ -1090,6 +1094,161 @@ function drawApp(appId, pane) {
       UI.toggle(M.haptics, on => { M.setHaptics(on); if (on) M.haptic('success'); })));
   }
 }
+
+/* ══════════════ GO: a line that opens a spot in the suite ══════════════
+   Tom, 2026-10-26, pointing at a TODAY row, "STATUS Check-In": "have this act
+   as a hyperlink button ... that activates the actual thing", and "I want an
+   underlying system so I can do the same for other to-dos."
+
+   A todo (`note`) or a BLOCK block may carry `link`. A web address opens in a
+   tab, as BLOCK's links always did. A SUITE address, `mb:<app>` or
+   `mb:<app>/<spot>`, opens that app at that spot. The spot is the `show`
+   message the home screen's widget titles already send ({lifeos:1, show}),
+   so an app that answers one answers the other, and an app that does not
+   know a spot just opens.
+
+   Opened outside the home screen, the address is `<app>/index.html?show=x`,
+   and the bottom of this file posts the same message to the page once it
+   has loaded. No app had to be taught the address.
+
+   Words carrying a link are drawn by `UI.linkHTML`, an `a[data-go]`, and one
+   listener here catches the press before the row under it does, so a tap on
+   the words opens and a tap beside them still ticks or edits. */
+const SPOTS = [
+  ['status', 'STATUS', [['check', 'Status check'], ['now', 'Today'], ['food', 'Food'], ['money', 'Money'], ['trends', 'Report']]],
+  ['quest', 'QUESTS', [['today', 'Today'], ['inbox', 'Inbox'], ['upcoming', 'Upcoming']]],
+  ['kitchen', 'KITCHEN', [['shelf', 'Shelf'], ['plan', 'Plan'], ['guide', 'Guide']]],
+  ['train', 'TRAIN'], ['checkin', 'CHECK IN'], ['block', 'BLOCK'], ['log', 'LOG'], ['bullet', 'BULLET'],
+  ['mix', 'ELEMENT'], ['speak', 'SPEAK'], ['coach', 'COACH'], ['forge', 'FORGE'], ['wealth', 'WEALTH'],
+  ['arc', 'ARC'], ['portion', 'FOODDÉX'], ['sheet', 'SHEET'], ['system', 'NOTICE'], ['form', 'FORM'],
+  ['style', 'STYLE'], ['receipts', 'RECEIPTS'],
+];
+const SPOT_RE = /^mb:([a-z]+)(?:\/([a-z0-9-]+))?$/;
+const WEB_RE = /^https?:\/\//i;
+/* the suite's root, read off this file's own address, so a link works from
+   any app folder, from the home screen, and in the client copy */
+const ROOT = ((document.currentScript && document.currentScript.src) || '').replace(/shared\/ui\.js(\?.*)?$/, '');
+/* the app this page is, from its folder */
+const HERE = (location.pathname.match(/\/([a-z]+)\/(index\.html)?$/) || [])[1] || '';
+
+Object.assign(UI, {
+  SPOTS: SPOTS,
+  /** `mb:status/check` as {app, show, name}: "STATUS · Status check". Null for anything else. */
+  spot(link) {
+    const m = SPOT_RE.exec(String(link || '').trim());
+    if (!m) return null;
+    const a = SPOTS.find(s => s[0] === m[1]);
+    if (!a) return null;
+    const sp = m[2] ? (a[2] || []).find(s => s[0] === m[2]) : null;
+    return { app: m[1], show: m[2] || '', name: a[1] + (m[2] ? ' · ' + (sp ? sp[1] : m[2]) : '') };
+  },
+  /** a link this suite can open: a suite address or a web one */
+  isLink(link) { return !!UI.spot(link) || WEB_RE.test(String(link || '').trim()); },
+  /** where a link goes, as a real address, for a tooltip or a long press */
+  linkHref(link) {
+    const s = UI.spot(link);
+    if (s) return ROOT + s.app + '/index.html' + (s.show ? '?show=' + s.show : '');
+    return WEB_RE.test(String(link || '')) ? String(link).trim() : '';
+  },
+  /** words that open `link`, `words` already escaped; the words alone when there is none */
+  linkHTML(link, words, cls) {
+    if (!UI.isLink(link)) return words;
+    const s = UI.spot(link);
+    return '<a class="mb-golink' + (cls ? ' ' + cls : '') + '" href="' + esc(UI.linkHref(link)) + '" data-go="' + esc(link) + '" title="' +
+      esc(s ? 'Opens ' + s.name : link) + '">' + words + '</a>';
+  },
+  /** open it: the home screen moves to the app, a page in the home screen
+      asks the home screen, a page on its own goes to the address */
+  go(link) {
+    link = String(link || '').trim();
+    const s = UI.spot(link);
+    if (!s) { if (WEB_RE.test(link)) g.open(link, '_blank', 'noopener,noreferrer'); return; }
+    buzz('select');
+    if (g.mbHome) { g.mbHome([s.app, s.show]); return; }
+    let home = null;
+    try { if (g.top !== g && g.top.mbHome) home = g.top; } catch (e) {}
+    if (home) { home.postMessage({ lifeos: 1, nav: s.app, show: s.show }, '*'); return; }
+    if (s.app === HERE) { if (s.show) g.postMessage({ lifeos: 1, show: s.show }, '*'); return; }
+    location.href = UI.linkHref(link);
+  },
+  /** the picker: every app and the spots it answers, a web address, and
+      Remove. Resolves the new link, '' for removed, or null for no change. */
+  pickLink(cur, opts) {
+    opts = opts || {};
+    cur = String(cur || '');
+    return new Promise(res => {
+      let done = false, web = null;
+      const take = (h, v) => { done = true; res(v); h.close(); };
+      UI.dialog({
+        title: opts.title || 'OPENS',
+        width: 460,
+        body: (b, h) => {
+          b.appendChild(el('p', null, esc(opts.what ? 'Tapping ' + opts.what + ' opens this.' : 'Tapping the words opens this.')));
+          const list = el('div', 'mb-golist');
+          SPOTS.forEach(a => {
+            const spots = [['', 'Open ' + a[1]]].concat((a[2] || []).map(s => [s[0], s[1]]));
+            const grp = el('div', 'mb-gogrp');
+            grp.dataset.app = a[0];
+            grp.appendChild(el('div', 'mb-group', esc(a[1])));
+            spots.forEach(s => {
+              const v = 'mb:' + a[0] + (s[0] ? '/' + s[0] : '');
+              const bt = el('button', 'mb-act mb-press mb-tap' + (v === cur ? ' on' : ''), '<span>' + esc(s[1]) + '</span>');
+              bt.type = 'button';
+              bt.onclick = () => take(h, v);
+              grp.appendChild(bt);
+            });
+            list.appendChild(grp);
+            /* an app this copy does not have (a client's copy carries fewer)
+               is taken off once the folder fails to answer */
+            if (ROOT && /^https?:/.test(ROOT)) fetch(ROOT + a[0] + '/index.html', { method: 'HEAD' })
+              .then(r => { if (!r.ok) grp.remove(); }).catch(() => {});
+          });
+          b.appendChild(list);
+          b.appendChild(el('div', 'mb-group', 'A WEB ADDRESS'));
+          web = el('input', 'mb-input');
+          web.type = 'url'; web.placeholder = 'https://';
+          web.setAttribute('aria-label', 'A web address');
+          if (WEB_RE.test(cur)) web.value = cur;
+          web.onkeydown = e => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            const v = web.value.trim();
+            if (!WEB_RE.test(v)) return UI.toast('Starts with http or https.', { bad: true });
+            take(h, v);
+          };
+          b.appendChild(web);
+        },
+        actions: (cur ? [{ label: 'REMOVE LINK', kind: 'bad', fn: () => { done = true; res(''); } }] : [])
+          .concat([{ label: 'USE ADDRESS', kind: 'go', fn: () => {
+            const v = web ? web.value.trim() : '';
+            if (!WEB_RE.test(v)) { UI.toast('Type a web address first, or pick a spot above.', { bad: true }); return false; }
+            done = true; res(v);
+          } }]),
+        onClose: () => { if (!done) res(null); },
+      });
+    });
+  },
+});
+
+/* the press on linked words, caught before any row under them hears it */
+document.addEventListener('click', e => {
+  const a = e.target && e.target.closest && e.target.closest('a[data-go]');
+  if (!a) return;
+  e.preventDefault(); e.stopPropagation();
+  UI.go(a.dataset.go);
+}, true);
+
+/* `?show=<spot>` on this page's address: the same message the home screen
+   sends, once the page has loaded, then taken off the address so a reload
+   does not open it again */
+(function () {
+  let q = null;
+  try { q = new URLSearchParams(location.search).get('show'); } catch (e) {}
+  if (!q || !/^[a-z0-9-]+$/.test(q)) return;
+  try { const u = new URL(location.href); u.searchParams.delete('show'); history.replaceState(history.state, '', u.href); } catch (e) {}
+  const send = () => setTimeout(() => g.postMessage({ lifeos: 1, show: q }, '*'), 300);
+  if (document.readyState === 'complete') send(); else g.addEventListener('load', send, { once: true });
+})();
 
 /* The stylesheet goes in as soon as this file loads, not the first time a
    component draws. A page that used the shared classes before drawing one got
