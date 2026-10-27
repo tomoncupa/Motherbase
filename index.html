@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.84, 2026-10-26">
+<meta name="mb-version" content="1.0.85, 2026-10-27">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -4310,7 +4310,11 @@ const WIDGETS = {
      ("A2"), a longer one may sit anywhere as a whole word. The number
      after it times `per` is the amount; no number counts as `bare` units,
      or not at all when `bare` is blank. Entries, events and done todos
-     count; open todos, ideas and cancelled lines do not. */
+     count; open todos, ideas and cancelled lines do not. A tracker may also
+     name `field`, a STATUS measure: every reading of it counts as a dose
+     at its own time, and so does the food behind it when the measure reads
+     one (`from`, caffeine off a meal), the way STATUS's `entries` adds
+     `fromFood`. Copy of that rule: change both. */
   halflife: {
     nm: 'HALF-LIFE', w: 5, h: 6, app: 'status', to: ['status'],
     days: [[3, '3 days'], [7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
@@ -4326,7 +4330,15 @@ const WIDGETS = {
         return n.length <= 2 ? new RegExp('^' + q + '(?![\\p{L}])' + num, 'u') : new RegExp('(?:^|[^\\p{L}\\d])' + q + '(?![\\p{L}])' + num, 'iu');
       });
       const per = Number(x.per) || 1, bare = x.bare === '' || x.bare == null ? null : Number(x.bare), out = [];
-      noteRows().forEach(r => {
+      if (x.field) {
+        const F = (Rec.map('field') || {})[x.field] || {}, fp = F.per == null ? 1 : (Number(F.per) || 0);
+        Rec.all('ev').forEach(r => {
+          if (r.key !== x.field) return;
+          ((r.payload && r.payload.e) || []).forEach(e => { const v = Number(e.v); if (e.t && v > 0) out.push([e.t, v * per]); });
+        });
+        if (F.from) Rec.all('meal').forEach(r => { const m = r.payload || {}, v = (parseFloat(m[F.from]) || 0) * fp; if (m.t && v > 0) out.push([m.t, v * per]); });
+      }
+      if (res.length) noteRows().forEach(r => {
         const p = r.payload || {};
         if (typeof p.text !== 'string' || p.cancelled || p.kind === 'idea' || (p.kind === 'todo' && !p.done)) return;
         const text = p.text.trim();
@@ -4367,7 +4379,22 @@ const WIDGETS = {
           f.unit = box('text', x.unit || 'mg');
           f.half = box('text', fmtHalf(x.half), '9 hours');
           f.bare = box('decimal', x.bare);
+          /* a STATUS measure that holds amounts; a done-or-not or a 1-to-5 has no dose in it */
+          const F = Rec.map('field') || {};
+          f.field = el('select', 'mb-input');
+          f.field.appendChild(new Option('None', ''));
+          Object.keys(F).filter(k => F[k] && F[k].on !== 0 && F[k].measure !== 'check' && F[k].measure !== 'scale')
+            .sort((a, c) => (F[a].order || 99) - (F[c].order || 99))
+            .forEach(k => f.field.appendChild(new Option(F[k].label || k, k, false, x.field === k)));
+          f.field.onchange = () => {
+            const m = F[f.field.value];
+            if (!m) return;
+            if (!f.name.value.trim()) f.name.value = m.label || f.field.value;
+            if (m.unit && (!f.unit.value.trim() || (!x.key && f.unit.value === 'mg'))) f.unit.value = m.unit;
+            if (m.half && !f.half.value.trim()) f.half.value = fmtHalf(m.half);
+          };
           b.appendChild(UI.row('Name', 'What the card calls it.', f.name));
+          b.appendChild(UI.row('STATUS measure', 'Its readings, and the food behind it, count as doses.', f.field));
           b.appendChild(UI.row('Written as', 'The words a dose starts with, comma separated. One or two letters must start the line.', f.match));
           b.appendChild(UI.row('Each 1 is', 'What the number after it is worth.', f.per));
           b.appendChild(UI.row('Unit', 'Shown after the amount.', f.unit));
@@ -4385,12 +4412,12 @@ const WIDGETS = {
           const hm = /^(\d+(?:\.\d+)?)\s*(d|days?|h|hrs?|hours?)?$/i.exec(v('half'));
           const half = hm ? Number(hm[1]) * (/^d/i.test(hm[2] || '') ? 24 : 1) : 0;
           const per = Number(v('per') || 1), bare = v('bare');
-          if (!v('name') || !v('match')) { toast('Needs a name and how it is written', { bad: true }); return false; }
+          if (!v('name') || !(v('match') || v('field'))) { toast('Needs a name, and a STATUS measure or how it is written', { bad: true }); return false; }
           if (!(half > 0)) { toast('Half-life needs a number of hours or days', { bad: true }); return false; }
           if (!(per > 0) || (bare !== '' && !(Number(bare) >= 0))) { toast('Amounts need to be numbers', { bad: true }); return false; }
           const id = x.key ? x.key : 'halflife.' + Date.now().toString(36);
           const was = x.key ? (Rec.setting('lifeos', id) || {}) : { ord: WIDGETS.halflife.list().length };
-          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare) }));
+          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), field: v('field'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare) }));
           drawHome();
         } }]),
       });
