@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.86, 2026-10-27">
+<meta name="mb-version" content="1.0.87, 2026-10-27">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -2312,6 +2312,11 @@ function mixToStatus(d) {
   meal('mix-cit', 'Potassium citrate (ELEMENT)', 0, sum.k);
 }
 
+/* HALF-LIFE's stores: the share of a dose a store keeps when it is empty.
+   A guess from creatine loading, where about half to two thirds of an
+   early dose is kept. */
+const STORE_TAKE = 0.6;
+
 const WIDGETS = {
   /* ══════════════ TODAY ══════════════
      The day as one list. BLOCK owns the blocks and STATUS owns the bullets,
@@ -4314,7 +4319,16 @@ const WIDGETS = {
      name `field`, a STATUS measure: every reading of it counts as a dose
      at its own time, and so does the food behind it when the measure reads
      one (`from`, caffeine off a meal), the way STATUS's `entries` adds
-     `fromFood`. Copy of that rule: change both. */
+     `fromFood`. Copy of that rule: change both.
+     STORES (Tom, 2026-10-27, for creatine: "build a muscle-stores view
+     instead of a half-life"). A tracker with `kind: 'store'` is not a sum of
+     halvings: it is the extra held over the body's own level, which fills
+     less the fuller it is and drains slowly. Each dose adds dose x STORE_TAKE
+     x (1 - extra / cap); between doses the extra halves every `half` hours.
+     It reads as % full, 0 being the body's own level and 100 `cap` over it.
+     `cap` (default 30 g over a baseline of about 120 g), STORE_TAKE and the
+     three-week drain are guesses from the loading studies, labelled so on the
+     card's dialog; Tom can change cap and drain there. */
   halflife: {
     nm: 'HALF-LIFE', w: 5, h: 6, app: 'status', to: ['status'],
     days: [[3, '3 days'], [7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
@@ -4360,6 +4374,16 @@ const WIDGETS = {
       return out.sort((a, b) => a[0] - b[0]);
     },
     left: (doses, half, at) => doses.reduce((s, d) => d[0] <= at ? s + d[1] * Math.pow(0.5, (at - d[0]) / 3600000 / half) : s, 0),
+    /* the extra held in a store at `at`, doses oldest first */
+    store(doses, half, cap, at) {
+      let e = 0, was = null;
+      for (let i = 0; i < doses.length && doses[i][0] <= at; i++) {
+        if (was != null) e *= Math.pow(0.5, (doses[i][0] - was) / 3600000 / half);
+        e += doses[i][1] * STORE_TAKE * Math.max(0, 1 - e / cap);
+        was = doses[i][0];
+      }
+      return was == null ? 0 : e * Math.pow(0.5, (at - was) / 3600000 / half);
+    },
     sub: cfg => {
       const L = WIDGETS.halflife.list();
       return L.length ? '' : 'nothing tracked';
@@ -4379,6 +4403,13 @@ const WIDGETS = {
           f.unit = box('text', x.unit || 'mg');
           f.half = box('text', fmtHalf(x.half), '9 hours');
           f.bare = box('decimal', x.bare);
+          f.kind = el('select', 'mb-input');
+          f.kind.appendChild(new Option('Half-life', '', false, x.kind !== 'store'));
+          f.kind.appendChild(new Option('Store that fills up', 'store', false, x.kind === 'store'));
+          f.cap = box('decimal', x.cap == null ? 30 : x.cap);
+          const capRow = UI.row('Full at', 'How much over your own level fills it, in the dose unit. A guess: about 30 g for creatine.', f.cap);
+          const showCap = () => { capRow.style.display = f.kind.value === 'store' ? '' : 'none'; };
+          f.kind.onchange = () => { showCap(); if (f.kind.value === 'store' && !f.half.value.trim()) f.half.value = '21 days'; };
           /* a STATUS measure that holds amounts; a done-or-not or a 1-to-5 has no dose in it */
           const F = Rec.map('field') || {};
           f.field = el('select', 'mb-input');
@@ -4398,7 +4429,9 @@ const WIDGETS = {
           b.appendChild(UI.row('Written as', 'The words a dose starts with, comma separated. One or two letters must start the line.', f.match));
           b.appendChild(UI.row('Each 1 is', 'What the number after it is worth.', f.per));
           b.appendChild(UI.row('Unit', 'Shown after the amount.', f.unit));
-          b.appendChild(UI.row('Half-life', 'Hours or days, such as 9 hours or 4.5 days.', f.half));
+          b.appendChild(UI.row('Counts as', 'A store fills up with each dose and drains slowly, like creatine in muscle.', f.kind));
+          b.appendChild(capRow); showCap();
+          b.appendChild(UI.row('Half-life', 'Hours or days, such as 9 hours or 4.5 days. For a store, how fast the extra drains: a guess of 21 days for creatine.', f.half));
           b.appendChild(UI.row('No number', 'How many a line without a number counts as. Blank skips it.', f.bare));
           UI.focusSoon(f.name);
         },
@@ -4414,10 +4447,10 @@ const WIDGETS = {
           const per = Number(v('per') || 1), bare = v('bare');
           if (!v('name') || !(v('match') || v('field'))) { toast('Needs a name, and a STATUS measure or how it is written', { bad: true }); return false; }
           if (!(half > 0)) { toast('Half-life needs a number of hours or days', { bad: true }); return false; }
-          if (!(per > 0) || (bare !== '' && !(Number(bare) >= 0))) { toast('Amounts need to be numbers', { bad: true }); return false; }
+          if (!(per > 0) || (bare !== '' && !(Number(bare) >= 0)) || (f.kind.value === 'store' && !(Number(v('cap')) > 0))) { toast('Amounts need to be numbers', { bad: true }); return false; }
           const id = x.key ? x.key : 'halflife.' + Date.now().toString(36);
           const was = x.key ? (Rec.setting('lifeos', id) || {}) : { ord: WIDGETS.halflife.list().length };
-          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), field: v('field'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare) }));
+          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), field: v('field'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare), kind: f.kind.value, cap: Number(v('cap')) || 30 }));
           drawHome();
         } }]),
       });
@@ -4456,9 +4489,11 @@ const WIDGETS = {
         return (ds === LifeOS.day() ? 'today' : Day.short(ds)) + ' ' + hm;
       };
       L.forEach((x, i) => {
-        const doses = H.doses(x), half = Number(x.half) || 1, u = x.unit || '';
+        const doses = H.doses(x), half = Number(x.half) || 1, st = x.kind === 'store', cap = Number(x.cap) || 30;
+        const u = st ? '%' : x.unit || '';
+        const val = ms => st ? Math.min(100, 100 * H.store(doses, half, cap, ms) / cap) : H.left(doses, half, ms);
         const pts = [];
-        const at = ms => { const v = H.left(doses, half, ms); pts.push([(ms - t0) / DAY, v, amt(v) + ' ' + u + ' · ' + when(ms)]); };
+        const at = ms => { const v = val(ms); pts.push([(ms - t0) / DAY, v, (st ? Math.round(v) + '% full' : amt(v) + ' ' + u) + ' · ' + when(ms)]); };
         /* a point every few hours, and one either side of each dose so the
            rise is a step, not a slope */
         const inside = doses.filter(d => d[0] > t0 && d[0] <= now).map(d => d[0]);
@@ -4472,8 +4507,11 @@ const WIDGETS = {
         const cur = pts[pts.length - 1][1], last = doses.filter(d => d[0] <= now).pop();
         const strip = el('div', 'strip');
         strip.style.cssText = 'flex:1 1 0;min-height:112px;display:flex;flex-direction:column;min-width:0';
-        const said = last ? 'last dose ' + when(last[0]) : 'no doses written yet';
-        const head = Chart.header({ size: 'sm', label: x.name, value: amt(cur), unit: u, when: 'now', sub: said });
+        const sayAt = v => (st && last ? 'about ' + amt(v * cap / 100) + ' ' + (x.unit || '') + ' over your own level, ' : '') +
+          (last ? 'last dose ' + when(last[0]) : 'no doses written yet');
+        const said = sayAt(cur);
+        const shown = v => st ? String(Math.round(v)) : amt(v);
+        const head = Chart.header({ size: 'sm', label: x.name, value: shown(cur), unit: st ? '% full' : u, when: 'now', sub: said });
         strip.appendChild(head.el);
         const box = el('div', 'fits');
         box.style.cssText = 'flex:1 1 auto;min-height:72px';
@@ -4483,7 +4521,7 @@ const WIDGETS = {
         const lastStrip = i === L.length - 1, span = (now - t0) / DAY;
         Chart.mount(box, { pad: { l: 46, r: 12, t: 8, b: lastStrip ? 22 : 6 }, label: x.name + ', ' + days + ' days' }, c => {
           c.xLinear(0, span);
-          c.yFit(pts.map(p => p[1]), { min: 0, lines: 2 });
+          if (st) c.ySet(0, 100, 50); else c.yFit(pts.map(p => p[1]), { min: 0, lines: 2 });
           c.grid();
           /* the days along the bottom: a linear axis has no dates of its own */
           if (lastStrip) {
@@ -4495,8 +4533,8 @@ const WIDGETS = {
           }
           c.area(pts); c.line(pts);
           c.dots(pts.filter((p, j) => j && pts[j - 1][0] === p[0] - 1 / DAY));
-          c.end(pts[pts.length - 1], amt(cur));
-          c.scrub(pts, { onMove: p => head.set(amt(p[1]), said, when(t0 + p[0] * DAY)), onLeave: head.reset });
+          c.end(pts[pts.length - 1], shown(cur));
+          c.scrub(pts, { onMove: p => head.set(shown(p[1]), sayAt(p[1]), when(t0 + p[0] * DAY)), onLeave: head.reset });
         });
       });
     },
