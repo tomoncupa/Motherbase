@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.87, 2026-10-27">
+<meta name="mb-version" content="1.0.88, 2026-10-27">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -2312,10 +2312,12 @@ function mixToStatus(d) {
   meal('mix-cit', 'Potassium citrate (ELEMENT)', 0, sum.k);
 }
 
-/* HALF-LIFE's stores: the share of a dose a store keeps when it is empty.
-   A guess from creatine loading, where about half to two thirds of an
-   early dose is kept. */
-const STORE_TAKE = 0.6;
+/* HALF-LIFE's stores: the share of a dose a store keeps until it is full.
+   A guess fitted to creatine studies: 20 g a day fills it in under a week,
+   3 to 5 g a day in about four. */
+const STORE_TAKE = 0.5;
+/* at or over this share of full, a store reads SATURATED */
+const STORE_SAT = 0.9;
 
 const WIDGETS = {
   /* ══════════════ TODAY ══════════════
@@ -4323,9 +4325,12 @@ const WIDGETS = {
      STORES (Tom, 2026-10-27, for creatine: "build a muscle-stores view
      instead of a half-life"). A tracker with `kind: 'store'` is not a sum of
      halvings: it is the extra held over the body's own level, which fills
-     less the fuller it is and drains slowly. Each dose adds dose x STORE_TAKE
-     x (1 - extra / cap); between doses the extra halves every `half` hours.
-     It reads as % full, 0 being the body's own level and 100 `cap` over it.
+     until it is full and drains slowly. Each dose adds dose x STORE_TAKE,
+     and what would pass `cap` is not kept; between doses the extra halves
+     every `half` hours. It reads as % full, 0 being the body's own level and
+     100 `cap` over it, and SATURATED from STORE_SAT up, the question a
+     store is read for. A taper (keep less the fuller it is) was tried first and read 75% on a
+     steady 5 g a day, which the studies call full.
      `cap` (default 30 g over a baseline of about 120 g), STORE_TAKE and the
      three-week drain are guesses from the loading studies, labelled so on the
      card's dialog; Tom can change cap and drain there. */
@@ -4379,7 +4384,7 @@ const WIDGETS = {
       let e = 0, was = null;
       for (let i = 0; i < doses.length && doses[i][0] <= at; i++) {
         if (was != null) e *= Math.pow(0.5, (doses[i][0] - was) / 3600000 / half);
-        e += doses[i][1] * STORE_TAKE * Math.max(0, 1 - e / cap);
+        e = Math.min(cap, e + doses[i][1] * STORE_TAKE);
         was = doses[i][0];
       }
       return was == null ? 0 : e * Math.pow(0.5, (at - was) / 3600000 / half);
@@ -4507,9 +4512,17 @@ const WIDGETS = {
         const cur = pts[pts.length - 1][1], last = doses.filter(d => d[0] <= now).pop();
         const strip = el('div', 'strip');
         strip.style.cssText = 'flex:1 1 0;min-height:112px;display:flex;flex-direction:column;min-width:0';
-        const sayAt = v => (st && last ? 'about ' + amt(v * cap / 100) + ' ' + (x.unit || '') + ' over your own level, ' : '') +
-          (last ? 'last dose ' + when(last[0]) : 'no doses written yet');
-        const said = sayAt(cur);
+        const sat = v => st && v >= STORE_SAT * 100;
+        /* a reading names the last dose before its own moment, not today's */
+        const sayAt = (v, ms) => {
+          const was = ms == null ? last : doses.filter(d => d[0] <= ms).pop();
+          return (sat(v) ? 'Saturated, ' : st && was ? 'about ' + amt(v * cap / 100) + ' ' + (x.unit || '') + ' over your own level, ' : '') +
+            (was ? 'last dose ' + when(was[0]) : 'no doses written yet');
+        };
+        /* now, a saturated store also says how long it stays so with no dose */
+        const dayOf = ms => { const d = new Date(ms); return d.getFullYear() + '-' + zpad(d.getMonth() + 1) + '-' + zpad(d.getDate()); };
+        const satTill = sat(cur) ? now + half * 3600000 * Math.log2(cur / (STORE_SAT * 100)) : 0;
+        const said = satTill ? 'Saturated until ' + Day.short(dayOf(satTill)) + ' with no dose, last dose ' + when(last[0]) : sayAt(cur);
         const shown = v => st ? String(Math.round(v)) : amt(v);
         const head = Chart.header({ size: 'sm', label: x.name, value: shown(cur), unit: st ? '% full' : u, when: 'now', sub: said });
         strip.appendChild(head.el);
@@ -4534,7 +4547,7 @@ const WIDGETS = {
           c.area(pts); c.line(pts);
           c.dots(pts.filter((p, j) => j && pts[j - 1][0] === p[0] - 1 / DAY));
           c.end(pts[pts.length - 1], shown(cur));
-          c.scrub(pts, { onMove: p => head.set(shown(p[1]), sayAt(p[1]), when(t0 + p[0] * DAY)), onLeave: head.reset });
+          c.scrub(pts, { onMove: p => head.set(shown(p[1]), sayAt(p[1], t0 + p[0] * DAY), when(t0 + p[0] * DAY)), onLeave: head.reset });
         });
       });
     },
