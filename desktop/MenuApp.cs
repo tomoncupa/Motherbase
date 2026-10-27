@@ -172,6 +172,7 @@ class Menu : Form
         }
         /* the first-run setup page (SetupPage.cs) */
         new Setup(c, HOSTED, Log).Attach();
+        Updater.Start(Log);
         Caption(c);
         c.Navigate(pageUrl);
 

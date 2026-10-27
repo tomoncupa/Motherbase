@@ -50,7 +50,7 @@ Free-Exe $out
   -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
   -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
   -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
-  (Join-Path $dir 'StatusApp.cs') (Join-Path $dir 'KeyBox.cs') (Join-Path $dir 'Hosted.cs')
+  (Join-Path $dir 'StatusApp.cs') (Join-Path $dir 'KeyBox.cs') (Join-Path $dir 'Hosted.cs') (Join-Path $dir 'Updater.cs')
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Build failed."; exit $LASTEXITCODE }
 
@@ -67,7 +67,7 @@ Free-Exe $menu
   -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
   -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
   -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" -reference:System.Web.Extensions.dll `
-  (Join-Path $dir 'MenuApp.cs') (Join-Path $dir 'ClaudeBridge.cs') (Join-Path $dir 'Hosted.cs') (Join-Path $dir 'SetupPage.cs')
+  (Join-Path $dir 'MenuApp.cs') (Join-Path $dir 'ClaudeBridge.cs') (Join-Path $dir 'Hosted.cs') (Join-Path $dir 'SetupPage.cs') (Join-Path $dir 'Updater.cs')
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Main Menu build failed."; exit $LASTEXITCODE }
 

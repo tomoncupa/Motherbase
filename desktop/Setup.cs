@@ -28,7 +28,7 @@ class SetupApp : Form
 {
     const string CLIENT = "https://tomoncupa.github.io/Mainmenu-client/";
     const string NAME = "Motherbase";
-    const string VERSION = "1.0.1";
+    const string VERSION = "1.0.2";
     const string UNINSTALL_KEY = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Motherbase";
     const string RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string RUN_NAME = "Motherbase STATUS";
@@ -71,12 +71,15 @@ class SetupApp : Form
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         bool remove = false;
+        string update = null;
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "/uninstall") remove = true;
             if (args[i] == "--address" && i + 1 < args.Length) address = args[++i];
             if (args[i] == "--dir" && i + 1 < args.Length) testDir = Path.GetFullPath(args[++i]);
+            if (args[i] == "--update" && i + 1 < args.Length) update = Path.GetFullPath(args[++i]);
         }
+        if (update != null) { Environment.Exit(Update(update)); return; }
         if (remove) { Uninstall(); return; }
         Application.Run(new SetupApp());
     }
@@ -249,16 +252,31 @@ class SetupApp : Form
             }
     }
 
-    void Install()
+    /* `--update <folder>`, run by Updater.cs inside the programs: the new
+       files over the old, quietly, with nothing closed. Windows lets a running
+       program's files be renamed, so each one in use goes aside as .old and
+       keeps running; the next open is the new build. The address, the
+       shortcuts, the settings and the data are left as they are. */
+    static int Update(string dir)
     {
-        string dir = InstallDir;
-        Directory.CreateDirectory(dir);
-        StopRunning();
+        string home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", NAME);
+        if (!string.Equals(dir.TrimEnd('\\'), home, StringComparison.OrdinalIgnoreCase)) testDir = dir;
+        try
+        {
+            if (!File.Exists(Path.Combine(dir, "Main Menu.exe"))) return 2;   /* not an install */
+            PutFiles(dir);
+            Register(dir);
+            return 0;
+        }
+        catch { return 1; }
+    }
+
+    static void PutFiles(string dir)
+    {
         var me = Assembly.GetExecutingAssembly();
         foreach (string f in FILES)
         {
             string to = Path.Combine(dir, f);
-            /* a file Windows still holds can be renamed, not overwritten */
             if (File.Exists(to))
             {
                 try { File.Delete(to); }
@@ -270,25 +288,18 @@ class SetupApp : Form
                 using (var dst = File.Create(to)) src.CopyTo(dst);
             }
         }
-        File.WriteAllText(Path.Combine(dir, "address.txt"),
-            "# Which copy of Motherbase these programs open.\r\n" + address + "\r\n");
-
-        /* itself, so Settings, Apps can remove it later */
+        /* itself, last: its fingerprint is how the programs know which build
+           they are, so it only changes once every file above is in */
         string self = Path.Combine(dir, "Setup.exe");
         if (!string.Equals(Path.GetFullPath(Application.ExecutablePath), self, StringComparison.OrdinalIgnoreCase))
             File.Copy(Application.ExecutablePath, self, true);
+    }
 
-        string menu = Path.Combine(dir, "Main Menu.exe"), widget = Path.Combine(dir, "STATUS.exe");
-        string desk = DeskDir, start = StartDir;
-        string remover = "/uninstall" + (testDir != null ? " --dir \"" + testDir + "\"" : "");
-        Directory.CreateDirectory(desk);
-        Directory.CreateDirectory(start);
-        Link(Path.Combine(desk, "Motherbase.lnk"), menu, "", "Every app in one window");
-        Link(Path.Combine(desk, "STATUS.lnk"), widget, "", "The STATUS widget");
-        Link(Path.Combine(start, "Motherbase.lnk"), menu, "", "Every app in one window");
-        Link(Path.Combine(start, "STATUS.lnk"), widget, "", "The STATUS widget");
-        Link(Path.Combine(start, "Uninstall Motherbase.lnk"), self, remover, "Remove Motherbase from this computer");
+    static string Remover { get { return "/uninstall" + (testDir != null ? " --dir \"" + testDir + "\"" : ""); } }
 
+    /* the Settings, Apps entry */
+    static void Register(string dir)
+    {
         long kb = 0;
         foreach (string f in Directory.GetFiles(dir)) kb += new FileInfo(f).Length / 1024;
         using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(AppsKey))
@@ -297,13 +308,35 @@ class SetupApp : Form
             k.SetValue("DisplayVersion", VERSION);
             k.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
             k.SetValue("EstimatedSize", (int)kb, Microsoft.Win32.RegistryValueKind.DWord);
-            k.SetValue("DisplayIcon", menu);
+            k.SetValue("DisplayIcon", Path.Combine(dir, "Main Menu.exe"));
             k.SetValue("Publisher", "Personal Protagonist");
             k.SetValue("InstallLocation", dir);
-            k.SetValue("UninstallString", "\"" + self + "\" " + remover);
+            k.SetValue("UninstallString", "\"" + Path.Combine(dir, "Setup.exe") + "\" " + Remover);
             k.SetValue("NoModify", 1);
             k.SetValue("NoRepair", 1);
         }
+    }
+
+    void Install()
+    {
+        string dir = InstallDir;
+        Directory.CreateDirectory(dir);
+        StopRunning();
+        PutFiles(dir);
+        File.WriteAllText(Path.Combine(dir, "address.txt"),
+            "# Which copy of Motherbase these programs open.\r\n" + address + "\r\n");
+
+        string self = Path.Combine(dir, "Setup.exe");
+        string menu = Path.Combine(dir, "Main Menu.exe"), widget = Path.Combine(dir, "STATUS.exe");
+        string desk = DeskDir, start = StartDir;
+        Directory.CreateDirectory(desk);
+        Directory.CreateDirectory(start);
+        Link(Path.Combine(desk, "Motherbase.lnk"), menu, "", "Every app in one window");
+        Link(Path.Combine(desk, "STATUS.lnk"), widget, "", "The STATUS widget");
+        Link(Path.Combine(start, "Motherbase.lnk"), menu, "", "Every app in one window");
+        Link(Path.Combine(start, "STATUS.lnk"), widget, "", "The STATUS widget");
+        Link(Path.Combine(start, "Uninstall Motherbase.lnk"), self, Remover, "Remove Motherbase from this computer");
+        Register(dir);
     }
 
     /* A shortcut through Windows' own scripting object; nothing to reference. */
@@ -356,6 +389,7 @@ class SetupApp : Form
         catch { }
         try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(AppsKey, false); } catch { }
         if (testDir != null) try { Directory.Delete(DeskDir, true); } catch { }
+        try { Directory.Delete(Path.Combine(dir, "update"), true); } catch { }
 
         foreach (string f in Directory.Exists(dir) ? Directory.GetFiles(dir) : new string[0])
         {

@@ -137,6 +137,19 @@ both read (`Hosted.cs`). No `address.txt`, as here, is Tom's copy. A client
 copy has its own single-instance lock and no CLAUDE panel. If their PC has no
 WebView2 (rare on Windows 10, never on 11), Setup says so with a button to get it.
 
+**It keeps itself current** (Tom, 2026-10-28). The pages inside always came
+from the site. The programs themselves now do too: half a minute after either
+opens, and every six hours after, a Setup-installed copy reads
+`desktop/update.txt` on its site. If that fingerprint is not its own
+`Setup.exe`'s, it downloads the new `Motherbase Setup.exe`, checks it, and
+runs it with `--update`, which swaps the files in without closing anything;
+the next open is the new build. No connection or a bad download changes
+nothing. Your own copy never checks (`Updater.cs`).
+
+So **a change to STATUS.exe or Main Menu.exe reaches them only through the
+client build**: commit the rebuilt `Motherbase Setup.exe` with them, then
+`tools/build-client.py` puts it and its `update.txt` on the client site.
+
 To test on this PC without touching your own shortcuts:
 `"Motherbase Setup.exe" --dir <folder> --address http://127.0.0.1:8811/`.
 
@@ -169,5 +182,7 @@ three Microsoft WebView2 files in `lib\`.
 | `Motherbase Setup.exe` `Setup.cs` | the package for someone else, and its source |
 | `setup.html` `SetupPage.cs` | the first-run setup page, and how the Main Menu serves it |
 | `Hosted.cs` | which address both programs open (`address.txt`) |
+| `Updater.cs` | a given copy updating itself from the client site |
 
-Windows only. Not in the client build: clients get it as `Motherbase Setup.exe`.
+Windows only. Not in the client build, except `Motherbase Setup.exe` and its
+`update.txt`, which the client site carries for the update check.

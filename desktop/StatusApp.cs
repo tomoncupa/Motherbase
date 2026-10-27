@@ -151,6 +151,7 @@ class App : Form
         dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
         try { File.Delete(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "status-app.log")); } catch { }
         LoadCfg();
+        Updater.Start(Log);
 
         string page = Path.Combine(root, "status", "index.html");
         if (UseFolder() && !File.Exists(page))
