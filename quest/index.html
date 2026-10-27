@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.24, 2026-10-26">
+<meta name="mb-version" content="1.0.25, 2026-10-27">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -210,6 +210,29 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .brief .bx h4{margin:var(--s-3) 0 var(--s-1);font-family:var(--font-display);font-size:var(--f-2);
   letter-spacing:var(--track-cap);text-transform:uppercase;color:var(--text-muted)}
 .brief .bx ul{margin:0 0 var(--s-2);padding-left:var(--s-5)}
+/* goals: Tom, 2026-10-27. A goal is made on its own screen, so the task line goes. */
+#main.goalsv .add{display:none}
+.hat{font-family:var(--font-mono);font-weight:var(--w-bold)}
+.qin .hl mark.aim{background:color-mix(in srgb,var(--data-5) 30%,transparent)}
+.gh .rv{font-size:var(--f-1);color:var(--text-muted)}
+.addg{display:inline-flex;align-items:center;gap:var(--s-1);border:0;background:none;cursor:pointer;
+  min-height:var(--tap);padding:0 var(--s-2);color:var(--text-2);border-radius:var(--radius-md)}
+.addg:hover,.addg:focus-visible{background:var(--surface-2);color:var(--text-1);outline:none}
+.gh .addg{margin-left:auto}
+.gh .gi{display:flex;color:var(--accent)}
+.row.aim .meta .pj{margin-left:0}
+.row .lastnote{margin-top:var(--s-1);font-size:var(--f-2);color:var(--text-2);overflow-wrap:anywhere}
+.aimq{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-2)}
+.empty.sm{padding:var(--s-3) 0;text-align:left}
+.aimcard .aimtx{font-family:var(--font-display);font-size:var(--f-4)}
+.aimcard .why{color:var(--text-2)}
+.tagin{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-2);margin:var(--s-3) 0}
+.tagin .mb-input{flex:1;min-width:0}
+.tagin .hint{flex-basis:100%;font-size:var(--f-1);color:var(--text-muted)}
+.dq{font-family:var(--font-display);margin-bottom:var(--s-3);overflow-wrap:anywhere}
+.oldnote{font-size:var(--f-2);color:var(--text-2);margin-top:var(--s-2);overflow-wrap:anywhere}
+.sh{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);text-transform:uppercase;
+  color:var(--text-muted);margin-top:var(--s-4)}
 /* the month grid: Tom, 2026-09-18 */
 .calbar{display:flex;align-items:center;gap:var(--s-2);margin-bottom:var(--s-3)}
 .calbar b{font-family:var(--font-display);font-size:var(--f-3);flex:1}
@@ -303,7 +326,7 @@ const APP = {
   name: 'Quests',
   icon: '◆',
   blurb: 'what you have to do, and when',
-  types: ['project'],
+  types: ['project', 'aim'],
 };
 
 Skins.load('../shared/skins.json').then(() => {
@@ -318,7 +341,7 @@ Rec.declare(APP.id, APP.types);
    would bring back the projects and none of the todos in them. */
 /* `reads`: todos written in STATUS and LOG, and BLOCK's published plan for
    Today, each from its own app's tab on the sheet (shared/io.js, pull). */
-IO.register({ app: APP.id, name: APP.name, types: ['note', 'project'],
+IO.register({ app: APP.id, name: APP.name, types: ['note', 'project', 'aim'],
   reads: { status: ['note'], log: ['note'], block: ['plan'] } });
 /* `brief` is read, never written: the daemon on the PC writes it. */
 
@@ -345,6 +368,7 @@ function openSettings() {
       UI.toggle(S.get(k, 1) !== 0, v => { S.set(k, v ? 1 : 0); draw(); })));
     sw('BLOCK’s plan on Today', 'What BLOCK planned for today, among your tasks by time', 'showPlan');
     sw('Finished tasks on Today', 'What you ticked today, at the bottom', 'showDone');
+    sw('A goal on Today', 'One of your goals, a different one each day', 'showAim');
   } }], { order: ['quests', 'data'] });
 }
 let seq = 0;
@@ -547,6 +571,9 @@ const RULES = [
      It sits after the time rules on purpose, so "@8" is still eight o'clock,
      which is what it has always meant here. A tag therefore cannot be only
      digits, and that is a fair trade: nobody labels a task @8. */
+  /* ^name: the goal this todo serves (2026-10-27). Only a goal that exists
+     is read; any other ^word stays words. */
+  { kind: 'aim', src: '\\^[^\\s^]+', fn: w => { const a = aimByTag(slug(w.slice(1))); return a ? a.key : null; } },
   { kind: 'tag', src: '@[^\\s@]+', fn: w => w.slice(1).replace(/[.,;:!?)]+$/, '') || null },
 ];
 /* A clock as minutes past midnight. Tom, 2026-09-14: "at 8 on 7:55AM means
@@ -575,7 +602,7 @@ const slug = s => String(s).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').repla
 
 function parseQuest(raw, ignore) {
   const text = String(raw || ''), ig = (ignore || []).map(s => s.toLowerCase());
-  const taken = [], spans = [], out = { text: '', due: null, at: null, dur: null, pri: null, proj: null, projName: null, tags: [], rep: null, spans: spans };
+  const taken = [], spans = [], out = { text: '', due: null, at: null, dur: null, pri: null, proj: null, projName: null, tags: [], rep: null, aim: null, spans: spans };
   const free = (a, b) => !taken.some(t => a < t[1] && b > t[0]);
   RULES.forEach(rule => {
     /* the kind a rule reads is not always the field it fills */
@@ -649,7 +676,7 @@ const movedFrom = d => quests().filter(x => {
    list had never heard of was quietly called STATUS, so the next writer to
    arrive would have been mislabelled the same way and nothing would have
    said so. A src that is not in the table now names itself. */
-const SRC_NAME = { quest: 'QUESTS', status: 'STATUS', block: 'BLOCK', arc: 'ARC', wealth: 'WEALTH', brief: 'BRIEF' };
+const SRC_NAME = { quest: 'QUESTS', status: 'STATUS', block: 'BLOCK', arc: 'ARC', wealth: 'WEALTH', brief: 'BRIEF', goals: 'GOALS' };
 /* A row from before the stamp carries no src at all: QUESTS's if it has the
    three fields only QUESTS writes on creation, STATUS's otherwise. */
 const srcOf = x => x.src || (('pri' in x && 'proj' in x && 'rep' in x) ? 'quest' : 'status');
@@ -663,6 +690,107 @@ function ensureProject(key, name) {
   if (!key || Rec.get('project', null, key)) return;
   const n = projects().length;
   Rec.set('project', null, key, { name: name || key, slot: (n % 6) + 1, ord: n });
+}
+
+/* ══════════════ GOALS ══════════════
+   Tom, 2026-10-27: "Quests could stand to have a place where all our goals
+   are visible: 1 month, 6 month, 1, 5, 10 years. What is visible is top of
+   mind... but I worry it can also be a habit to ignore something we see
+   everyday." Both halves are right; quest/CLAUDE.md, Goals, has the evidence.
+   So every goal sits on one screen you go to, Today shows ONE that changes
+   every day (the neglected first, since a display that changes resists
+   habituation and one that never does is wallpaper within days), a todo or a
+   project serves a goal with ^name, and each horizon's review arrives as a
+   todo on its own rhythm, because writing progress down is what moves a goal.
+
+   An `aim` row, undated, keyed by an id: {text, tag, h, why, made, by, state,
+   doneOn, ord, log}. `tag` is the short name typed after ^. `state` is ''
+   open, 'done' or 'dropped'. `log` is the check-ins, [{d, text}]. Not `goal`,
+   which is TRAIN's. */
+const HZ = [
+  /* `one` is the name before a noun ("a 6 month goal"), `more` after Another */
+  { id: '1m', name: '1 month', one: '1 month', more: 'month', months: 1, rev: 'week', every: 'every week' },
+  { id: '6m', name: '6 months', one: '6 month', more: '6 months', months: 6, rev: 'month', every: 'every month' },
+  { id: '1y', name: '1 year', one: '1 year', more: 'year', months: 12, rev: 'quarter', every: 'every quarter' },
+  { id: '5y', name: '5 years', one: '5 year', more: '5 years', months: 60, rev: 'year', every: 'every year' },
+  { id: '10y', name: '10 years', one: '10 year', more: '10 years', months: 120, rev: 'year', every: 'every year' },
+];
+const hzOf = id => HZ.find(h => h.id === id) || HZ[0];
+const aims = () => Object.entries(Rec.map('aim'))
+  .map(e => Object.assign({ key: e[0] }, e[1]))
+  .sort((a, b) => (a.ord || 0) - (b.ord || 0) || String(a.made || '').localeCompare(String(b.made || '')));
+const openAims = () => aims().filter(a => !a.state);
+const aimByTag = t => openAims().find(a => a.tag === t) || null;
+const aimName = k => { const a = k && Rec.get('aim', null, k); return a ? a.tag : ''; };
+/* A todo serves a goal if it says so, or if its project does. */
+const aimOf = x => x.aim || (x.proj && (Rec.get('project', null, x.proj) || {}).aim) || '';
+/* The first two real words of the goal, and a number if another goal has them. */
+function aimTag(text, skip) {
+  const base = slug(text).split('-').filter(w => w.length > 2).slice(0, 2).join('-') || 'goal';
+  const used = aims().filter(a => a.key !== skip).map(a => a.tag);
+  let t = base, n = 1;
+  while (used.indexOf(t) > -1) t = base + '-' + (++n);
+  return t;
+}
+/* What has moved on each goal: the newest linked todo finished, how many are
+   still open, and how many days since anything was done (or since it was set). */
+function aimWorkAll() {
+  const w = {};
+  aims().forEach(a => { w[a.key] = { last: null, open: 0 }; });
+  quests().forEach(x => {
+    const k = aimOf(x), o = w[k];
+    if (!o) return;
+    if (!x.done) o.open++;
+    else if (x.doneOn && (!o.last || x.doneOn > o.last.doneOn)) o.last = x;
+  });
+  aims().forEach(a => { const o = w[a.key]; o.idle = Day.diff(T(), o.last ? o.last.doneOn : (a.made || T())); });
+  return w;
+}
+const STALE = 14;
+function workLine(a, w) {
+  if (w.last) return (w.idle >= STALE ? 'Nothing done on it in ' + w.idle + ' days. ' : '') +
+    'Last done ' + dayWord(w.last.doneOn) + ': ' + w.last.text;
+  if (w.open) return w.open + ' open task' + (w.open === 1 ? '' : 's') + ', none done yet';
+  return 'No tasks serve it yet. Type ^' + a.tag + ' on one.';
+}
+/* Today's one goal. The ones nothing has been done on for STALE days take
+   turns first; with none of those, every open goal does. A turn is a day,
+   counted from a fixed date, so it changes daily and needs nothing stored. */
+function aimForToday() {
+  const open = openAims();
+  if (!open.length) return null;
+  const w = aimWorkAll(), stale = open.filter(a => w[a.key].idle >= STALE);
+  const pool = (stale.length ? stale : open).slice().sort((a, b) => a.key.localeCompare(b.key));
+  return pool[Math.abs(Day.diff(T(), '2000-01-01')) % pool.length];
+}
+/* ── reviews ──
+   1 month weekly, 6 months monthly, 1 year quarterly, 5 and 10 years yearly.
+   One todo per rhythm per period, dated and due on the period's first day,
+   keyed `aimrev-<rhythm>-<that day>`, so every device makes the same row and a
+   deleted one stays deleted. Only for goals set before the period began, so a
+   goal made today does not ask to be reviewed today. */
+function periodStart(unit, d) {
+  if (unit === 'week') return weekStart(d);
+  if (unit === 'month') return d.slice(0, 8) + '01';
+  if (unit === 'quarter') return d.slice(0, 5) + pad(Math.floor((+d.slice(5, 7) - 1) / 3) * 3 + 1) + '-01';
+  return d.slice(0, 5) + '01-01';
+}
+function reviewTodos() {
+  const t = T(), open = openAims(), due = {};
+  HZ.forEach(h => {
+    const s = periodStart(h.rev, t);
+    if (!open.some(a => a.h === h.id && (a.made || t) < s)) return;
+    (due[h.rev] = due[h.rev] || { s: s, hs: [] }).hs.push(h);
+  });
+  Object.keys(due).forEach(u => {
+    const s = due[u].s, k = 'aimrev-' + u + '-' + s;
+    if (Rec.get('note', s, k) || Rec.tombstone('note', s, k)) return;
+    Rec.set('note', s, k, { kind: 'todo', src: 'goals', aimrev: u, t: Date.now(), made: s,
+      text: 'Review your ' + due[u].hs.map(h => h.one).join(' and ') + ' goals',
+      at: null, dur: null, ord: Rec.all('note', { date: s }).length, done: 0, cancelled: 0,
+      due: s, pri: 0, proj: null, rep: null });
+    publishNotes(s);
+  });
 }
 
 /* Every change re-reads the row and merges into it (root brief, many
@@ -691,6 +819,7 @@ function addQuest(p) {
   const ex = { parsed: true, src: 'quest', at: p.at || null, dur: p.dur || null,
     due: p.due || '', pri: p.pri || 0, proj: p.proj || '', rep: p.rep || null };
   if (p.tags && p.tags.length) ex.tags = p.tags;
+  if (p.aim) ex.aim = p.aim;
   Journal.add(d, 'todo', p.text, ex, APP.id);
   Mobile.feedback('success');
 }
@@ -771,6 +900,7 @@ function viewInfo(v) {
       groups: calDay ? [{ id: d, title: dayTitle(d), day: d, items: onDay(d).concat(movedFrom(d)) }] : [],
       due: d, proj: '', showProj: true };
   }
+  if (v === 'goals') return { title: 'Goals', groups: [], due: '', proj: '', showProj: true };
   if (v === 'inbox') return { title: 'Inbox', groups: byDate(open.filter(x => !x.proj)), due: '', proj: '', showProj: false };
   if (v === 'upcoming') {
     const over = open.filter(x => dueOf(x) && dueOf(x) < t), groups = [];
@@ -816,6 +946,7 @@ function counts() {
     if (x.proj) c['p:' + x.proj] = (c['p:' + x.proj] || 0) + 1;
     (x.tags || []).forEach(t2 => { c['t:' + t2] = (c['t:' + t2] || 0) + 1; });
   });
+  c.goals = openAims().length;
   return c;
 }
 /* Every tag in use, most-used first. Tags have no rows of their own: a tag is
@@ -855,6 +986,7 @@ function drawSide() {
   nav('today', ico('today'), 'Today');
   nav('upcoming', ico('schedule'), 'Upcoming');
   nav('cal', ico('calendar'), 'Calendar').addEventListener('click', () => { calDay = ''; calMonth = T().slice(0, 7); draw(); });
+  nav('goals', ico('goal'), 'Goals');
   const ps = projects();
   if (ps.length) side.appendChild(el('h3', null, 'Projects'));
   ps.forEach(p => {
@@ -924,9 +1056,246 @@ function drawBrief(list) {
   list.appendChild(box);
 }
 
+/* ══════════════ GOALS, DRAWN ══════════════ */
+const aimItems = (cur, fn) => [{ label: 'No goal', icon: ico('close'), on: !cur, fn: () => fn('') }]
+  .concat(openAims().map(a => ({ label: a.text, icon: ico('goal'), rt: hzOf(a.h).name, on: cur === a.key, fn: () => fn(a.key) })));
+
+/* Today's one goal, folded for the day like the brief. */
+function drawAimCard(list) {
+  const a = aimForToday();
+  if (!a) return;
+  const t = T(), shut = S.get('aimShut', '') === t, w = aimWorkAll()[a.key];
+  const box = el('section', 'grp brief aimcard');
+  const head = el('div', 'gh', '<span class="gi">' + ico('goal') + '</span><b>Goal</b><span class="when">' + esc(hzOf(a.h).name) + '</span>' +
+    '<span class="chev">' + ico(shut ? 'down' : 'up') + '</span>');
+  head.setAttribute('role', 'button');
+  head.tabIndex = 0;
+  head.setAttribute('aria-expanded', shut ? 'false' : 'true');
+  const flip = () => { S.set('aimShut', shut ? '' : t); draw(); };
+  head.onclick = flip;
+  head.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } };
+  box.appendChild(head);
+  if (!shut) {
+    const bx = el('div', 'bx');
+    bx.appendChild(el('p', 'aimtx', esc(a.text)));
+    if (a.why) bx.appendChild(el('p', 'why', esc(a.why)));
+    bx.appendChild(el('p', 'why', esc(workLine(a, w))));
+    const all = el('button', 'addg', ico('forward') + '<span>All goals</span>');
+    all.type = 'button';
+    all.onclick = () => go('goals');
+    bx.appendChild(all);
+    box.appendChild(bx);
+  }
+  list.appendChild(box);
+}
+
+/* The Goals screen: the five horizons, then what is finished. Nothing earned
+   is ever taken off it: a goal done or dropped stays, under Finished. */
+function drawGoals(list) {
+  const w = aimWorkAll(), all = aims();
+  HZ.forEach(h => {
+    const mine = all.filter(a => !a.state && a.h === h.id);
+    const box = el('section', 'grp');
+    const head = el('div', 'gh', '<b>' + esc(h.name) + '</b><span class="n">' + (mine.length || '') + '</span>' +
+      '<span class="rv">Reviewed ' + esc(h.every) + '</span>');
+    const add = el('button', 'addg', ico('add') + '<span>Add</span>');
+    add.type = 'button';
+    add.setAttribute('aria-label', 'Add a ' + h.one + ' goal');
+    add.onclick = () => aimSheet(null, h.id);
+    head.appendChild(add);
+    box.appendChild(head);
+    mine.forEach(a => box.appendChild(aimRow(a, w[a.key])));
+    if (!mine.length) box.appendChild(el('div', 'empty sm', 'No ' + esc(h.one) + ' goal yet.'));
+    list.appendChild(box);
+  });
+  const past = all.filter(a => a.state).sort((a, b) => String(b.doneOn || '').localeCompare(String(a.doneOn || '')));
+  if (past.length) {
+    const box = el('section', 'grp');
+    box.appendChild(el('div', 'gh', '<b>Finished</b><span class="n">' + past.length + '</span>'));
+    past.forEach(a => box.appendChild(aimRow(a, w[a.key])));
+    list.appendChild(box);
+  }
+}
+function aimRow(a, w) {
+  const h = hzOf(a.h), late = !a.state && a.by && a.by < T();
+  const r = el('div', 'row aim' + (a.state ? ' done' : ''));
+  const body = el('div', 'body');
+  body.appendChild(el('div', 'tt', esc(a.text)));
+  const meta = el('div', 'meta');
+  if (a.state) meta.appendChild(el('span', null, (a.state === 'done' ? 'Done ' : 'Dropped ') + esc(dayWord(a.doneOn || T()))));
+  else if (a.by) meta.appendChild(el('span', late ? 'late' : '', ico('calendar') + esc((late ? 'Time is up, ' : 'By ') + dayWord(a.by))));
+  if (!a.state) meta.appendChild(el('span', null, esc(workLine(a, w))));
+  meta.appendChild(el('span', 'pj', '<span class="hat">^</span> ' + esc(a.tag)));
+  body.appendChild(meta);
+  const note = (a.log || []).slice(-1)[0];
+  if (note) body.appendChild(el('div', 'lastnote', esc(dayWord(note.d) + ': ' + note.text)));
+  /* A goal whose time has run out asks once what happened. It never just
+     disappears, and it is never marked failed. */
+  if (late) {
+    const q = el('div', 'aimq');
+    [['Done', () => finishAim(a, 'done')], ['Another ' + h.more, () => rollAim(a)], ['Drop it', () => finishAim(a, 'dropped')]].forEach(c => {
+      const b = el('button', 'chip', esc(c[0]));
+      b.type = 'button';
+      b.onclick = e => { e.stopPropagation(); c[1](); };
+      q.appendChild(b);
+    });
+    body.appendChild(q);
+  }
+  const acts = el('div', 'acts');
+  const act = (icon, label, fn) => {
+    const b = el('button', '', icon);
+    b.type = 'button'; b.title = label; b.setAttribute('aria-label', label);
+    b.onclick = e => { e.stopPropagation(); fn(b); };
+    acts.appendChild(b);
+  };
+  if (!a.state) act(ico('note'), 'Check in', () => checkInAim(a));
+  act(ico('more'), 'More', b => aimMenu(a, b));
+  r.appendChild(body); r.appendChild(acts);
+  r.onclick = () => aimSheet(a);
+  r.oncontextmenu = e => { e.preventDefault(); aimMenu(a, { x: e.clientX, y: e.clientY }); };
+  holdMenu(r, pt => aimMenu(a, pt));
+  return r;
+}
+function aimMenu(a, anchor) {
+  choose(anchor, a.text, [
+    { label: 'Edit', icon: ico('edit'), fn: () => aimSheet(a) },
+    ...(a.state ? [{ label: 'Open it again', icon: ico('undo'), fn: () => finishAim(a, '') }] : [
+      { label: 'Check in', icon: ico('note'), fn: () => checkInAim(a) },
+      { label: 'Done', icon: ico('done'), fn: () => finishAim(a, 'done') },
+      { label: 'Drop it', icon: ico('close'), fn: () => finishAim(a, 'dropped') },
+    ]),
+    { label: 'Delete', icon: ico('delete'), cls: 'bad', kind: 'bad', fn: () => deleteAim(a) },
+  ]);
+}
+function finishAim(a, state) {
+  const was = { state: a.state || '', doneOn: a.doneOn || '' };
+  Rec.patch('aim', null, a.key, { state: state, doneOn: state ? T() : '' });
+  Mobile.feedback(state === 'done' ? 'success' : 'select');
+  UI.undo((state === 'done' ? 'Done: ' : state ? 'Dropped: ' : 'Open again: ') + '<b>' + esc(a.text) + '</b>',
+    () => Rec.patch('aim', null, a.key, was));
+}
+function rollAim(a) {
+  const was = a.by, next = addMonths(a.by || T(), hzOf(a.h).months);
+  Rec.patch('aim', null, a.key, { by: next });
+  UI.undo('Now by <b>' + esc(dayWord(next)) + '</b>', () => Rec.patch('aim', null, a.key, { by: was }));
+}
+function deleteAim(a) {
+  UI.confirm('Delete this goal?', 'Done or Drop it keeps it under Finished. Delete takes it away, check-ins and all.', { yes: 'DELETE', danger: true }).then(yes => {
+    if (!yes) return;
+    const keep = Rec.get('aim', null, a.key);
+    Rec.del('aim', null, a.key);
+    UI.undo('Deleted <b>' + esc(a.text) + '</b>', () => Rec.set('aim', null, a.key, keep));
+  });
+}
+/* A check-in is one line on where the goal stands. Writing progress down is
+   the part of goal tracking that measurably helps (quest/CLAUDE.md, Goals). */
+function checkInAim(a) {
+  const old = (Rec.get('aim', null, a.key) || {}).log || [];
+  UI.dialog({ title: 'CHECK IN', width: 520, body: b => {
+    b.appendChild(el('p', 'dq', esc(a.text)));
+    const i = UI.field('note', { placeholder: 'Where it stands, in a line or two' });
+    i.setAttribute('autocapitalize', 'sentences');
+    b.appendChild(i);
+    old.slice(-3).reverse().forEach(n => b.appendChild(el('p', 'oldnote', esc(dayWord(n.d) + ': ' + n.text))));
+    UI.focusSoon(i);
+  }, actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: h => {
+    const v = h.body.querySelector('textarea').value.trim();
+    if (!v) return false;
+    const cur = (Rec.get('aim', null, a.key) || {}).log || [];
+    Rec.patch('aim', null, a.key, { log: cur.concat([{ d: T(), text: v }]) });
+    Mobile.feedback('success');
+  } }] });
+}
+/* Making or changing a goal: the words, the horizon, its ^name, a target
+   date, and why it matters. */
+function aimSheet(a, hid) {
+  const cur = a ? Rec.get('aim', null, a.key) : null;
+  if (a && !cur) return;
+  const st = cur ? Object.assign({}, cur) : { text: '', h: hid || '1m', why: '', made: T(), by: addMonths(T(), hzOf(hid).months), tag: '' };
+  let tagTouched = !!(cur && cur.tag), text, why, tag;
+  const save = () => {
+    const v = text.value.trim();
+    if (!v) { UI.toast('Write the goal first', { bad: true }); return false; }
+    const tg = slug(tag.value.replace(/^\^/, '')) || aimTag(v, a && a.key);
+    if (aims().some(x => x.tag === tg && (!a || x.key !== a.key))) { UI.toast('^' + tg + ' is another goal’s name', { bad: true }); return false; }
+    const patch = { text: v, h: st.h, why: why.value.trim(), by: st.by || '', tag: tg };
+    if (a) Rec.patch('aim', null, a.key, patch);
+    else Rec.set('aim', null, newId(), Object.assign(patch, { made: T(), state: '', ord: aims().length }));
+    Mobile.feedback('success');
+    return true;
+  };
+  UI.dialog({
+    title: a ? 'GOAL' : 'NEW GOAL', width: 560,
+    body: (b, hd) => {
+      text = UI.field('text', { value: st.text, placeholder: 'What you want to be true' });
+      text.setAttribute('autocapitalize', 'sentences');
+      text.oninput = () => { if (!tagTouched) tag.value = aimTag(text.value, a && a.key); };
+      text.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); if (save()) hd.close(); } };
+      b.appendChild(text);
+      const chips = el('div', 'chips');
+      const inline = el('div');
+      const paint = () => {
+        chips.innerHTML = '';
+        HZ.forEach(h => {
+          const c = el('button', 'chip' + (st.h === h.id ? ' set' : ''), esc(h.name));
+          c.type = 'button';
+          c.onclick = () => {
+            /* a target date still at the old horizon's default moves with it */
+            if (!a || st.by === addMonths(st.made || T(), hzOf(st.h).months)) st.by = addMonths(st.made || T(), h.months);
+            st.h = h.id; paint();
+          };
+          chips.appendChild(c);
+        });
+        const d = el('button', 'chip' + (st.by ? ' set' : ''), ico('calendar') + ' ' + esc(st.by ? 'By ' + dayWord(st.by) : 'No date'));
+        d.type = 'button';
+        d.onclick = () => {
+          const pick = v => { st.by = v.due || ''; paint(); };
+          if (narrow()) {
+            if (inline.children.length) { inline.innerHTML = ''; return; }
+            dateMenu(d, { due: st.by }, pick, { bulk: true, inline: inline });
+          } else dateMenu(d, { due: st.by }, pick, { bulk: true, title: 'BY WHEN' });
+        };
+        chips.appendChild(d);
+      };
+      paint();
+      b.appendChild(chips);
+      b.appendChild(inline);
+      const tw = el('div', 'tagin', '<span class="hat">^</span>');
+      tag = UI.field('text', { value: st.tag || aimTag(st.text, a && a.key), placeholder: 'name' });
+      tag.setAttribute('aria-label', 'Its name after ^');
+      tag.setAttribute('autocapitalize', 'off');
+      tag.oninput = () => { tagTouched = true; };
+      tw.appendChild(tag);
+      tw.appendChild(el('span', 'hint', 'Type this after ^ on a task to say it serves this goal.'));
+      b.appendChild(tw);
+      why = UI.field('note', { value: st.why || '', placeholder: 'Why it matters (optional)', rows: 2 });
+      b.appendChild(why);
+      if (a) {
+        const linked = quests().filter(x => !x.done && aimOf(x) === a.key);
+        if (linked.length) {
+          b.appendChild(el('h4', 'sh', 'Open tasks serving it'));
+          linked.slice(0, 8).forEach(x => b.appendChild(el('p', 'oldnote', esc(x.text))));
+          if (linked.length > 8) b.appendChild(el('p', 'oldnote', 'and ' + (linked.length - 8) + ' more'));
+        }
+        const log = cur.log || [];
+        if (log.length) {
+          b.appendChild(el('h4', 'sh', 'Check-ins'));
+          log.slice().reverse().forEach(n => b.appendChild(el('p', 'oldnote', esc(dayWord(n.d) + ': ' + n.text))));
+        }
+      }
+      if (!a) UI.focusSoon(text);
+    },
+    actions: (a ? [{ label: 'DELETE', kind: 'bad', fn: () => { deleteAim(a); } }] : []).concat([
+      { label: 'CANCEL' },
+      { label: 'SAVE', kind: 'go', fn: () => save() ? undefined : false },
+    ]),
+  });
+}
+
 function draw() {
   if (!$('#main')) return;
   briefTodos();
+  reviewTodos();
   if (VIEW.indexOf('p:') === 0 && !Rec.get('project', null, VIEW.slice(2))) VIEW = 'today';
   /* A label with nothing left on it is not a place you can stand. */
   if (VIEW.indexOf('t:') === 0 && tagsInUse().indexOf(VIEW.slice(2)) < 0) VIEW = 'today';
@@ -939,13 +1308,16 @@ function draw() {
     esc(info.title) + (info.sub ? '<small>' + esc(info.sub) + '</small>' : '');
   const list = $('#list');
   list.innerHTML = '';
+  /* Goals are made on their own screen, not typed into the task line. */
+  $('#main').classList.toggle('goalsv', VIEW === 'goals');
+  if (VIEW === 'goals') { drawGoals(list); fit(list); return; }
   if (VIEW === 'cal') {
     if (!calDay) { drawMonth(list); fit(list); return; }
     const bk = el('button', 'mb-btn mb-press mb-tap flat', ico('back') + '<span>' + esc(monthName(calDay.slice(0, 7))) + '</span>');
     bk.onclick = () => { calDay = ''; draw(); };
     list.appendChild(bk);
   }
-  if (VIEW === 'today') drawBrief(list);
+  if (VIEW === 'today') { drawBrief(list); if (S.get('showAim', 1) !== 0) drawAimCard(list); }
   const any = info.groups.some(g => g.items.length);
   info.groups.forEach(g => {
     if (!g.items.length && g.id !== T() && !g.day) return;
@@ -1040,6 +1412,8 @@ function rowEl(x, info) {
   }
   if (x.rep) meta.appendChild(el('span', null, ico('repeat') + esc(repLabel(x.rep))));
   meta.appendChild(el('span', 'src', esc(srcName(x))));
+  const ak = aimOf(x);
+  if (ak && aimName(ak)) meta.appendChild(el('span', 'pj', '<span class="hat">^</span> ' + esc(aimName(ak))));
   if (x.proj && info.showProj) meta.appendChild(el('span', 'pj', '<span class="hash" style="--mk:var(--data-' +
     ((Rec.get('project', null, x.proj) || {}).slot || 1) + ')">#</span> ' + esc(projName(x.proj))));
   /* Every label the line carries, except the one you are already standing in:
@@ -1064,7 +1438,8 @@ function rowEl(x, info) {
     choose(b, 'Move to', projItems(x.proj, pr => saveRow(x, pr ? { proj: pr.key, projName: pr.name } : { proj: '' }))));
   act(ico('more'), 'More', '', b => rowMenu(x, b));
   r.appendChild(tk); r.appendChild(body); r.appendChild(acts);
-  r.onclick = () => editSheet(x);
+  /* a review todo is about the goals, so it opens them */
+  r.onclick = () => x.aimrev ? go('goals') : editSheet(x);
   r.oncontextmenu = e => { e.preventDefault(); rowMenu(x, { x: e.clientX, y: e.clientY }); };
   holdMenu(r, pt => rowMenu(x, pt));
   return r;
@@ -1337,7 +1712,7 @@ function dateMenu(anchor, cur, pick, opts) {
     return;
   }
   if (narrow()) {
-    UI.dialog({ title: opts.bulk ? 'RESCHEDULE' : 'DUE DATE', width: 420, body: (b, h) => {
+    UI.dialog({ title: opts.title || (opts.bulk ? 'RESCHEDULE' : 'DUE DATE'), width: 420, body: (b, h) => {
       const wrap = el('div', 'sheet-date');
       const p = el('div', 'pop'); p.appendChild(box); wrap.appendChild(p);
       b.appendChild(wrap);
@@ -1380,12 +1755,13 @@ function ensureAddBar() {
   };
   function final() {
     const p = parseQuest(inp.value, ignore);
-    const o = { text: p.text, due: p.due, at: p.at, dur: p.dur, pri: p.pri, proj: p.proj, projName: p.projName, rep: p.rep, p: p };
+    const o = { text: p.text, due: p.due, at: p.at, dur: p.dur, pri: p.pri, proj: p.proj, projName: p.projName, rep: p.rep, tags: p.tags, p: p };
     if (o.due == null) {
       if (set.date) { o.due = set.date.due; o.at = o.at || set.date.at; o.rep = set.date.rep; }
       else o.due = o.at ? T() : (view.due || '');
     }
     if (o.pri == null) o.pri = set.pri || 0;
+    o.aim = p.aim || (set.aim !== undefined ? set.aim : '');
     if (!o.proj) {
       if (set.proj !== undefined) { o.proj = set.proj ? set.proj.key : ''; o.projName = set.proj ? set.proj.name : ''; }
       else o.proj = view.proj || '';
@@ -1415,8 +1791,35 @@ function ensureAddBar() {
     return { word: m[2], start: caret - m[2].length };
   }
 
+  /* The ^word the caret is in: the goals there are, narrowed as you type.
+     A goal is made on the Goals screen, so nothing here offers a new one. */
+  function aimBeingTyped(v) {
+    const caret = inp.selectionStart == null ? v.length : inp.selectionStart;
+    const m = /(^|\s)\^([^\s^]*)$/.exec(v.slice(0, caret));
+    return m ? { word: m[2], start: caret - m[2].length, caret: caret } : null;
+  }
   function paintSug(v) {
     sug.innerHTML = '';
+    const g = aimBeingTyped(v);
+    if (g) {
+      const typed = slug(g.word);
+      const near = openAims().filter(a => !typed || a.tag.indexOf(typed) === 0).slice(0, 8);
+      near.forEach(a => {
+        const b = el('button', '', '<span class="hat">^</span> ' + esc(a.tag) + ' &middot; ' + esc(hzOf(a.h).name));
+        b.type = 'button';
+        b.onmousedown = e => {
+          e.preventDefault();
+          inp.value = v.slice(0, g.start) + a.tag + v.slice(g.caret) + ' ';
+          inp.focus();
+          const end = g.start + a.tag.length + 1;
+          try { inp.setSelectionRange(end, end); } catch (er) {}
+          paint();
+        };
+        sug.appendChild(b);
+      });
+      if (!near.length) sug.appendChild(el('button', 'new', esc(openAims().length ? 'No goal starts ^' + typed : 'No goals yet: make one on Goals')));
+      return;
+    }
     const t = tagBeingTyped(v);
     if (!t) return;
     const typed = slug(t.word);
@@ -1455,7 +1858,7 @@ function ensureAddBar() {
     let html = '', at = 0;
     p.spans.forEach(s => {
       html += esc(v.slice(at, s.start)) +
-        '<mark' + (s.kind === 'tag' ? ' class="tag"' : '') + '>' + esc(s.word) + '</mark>';
+        '<mark' + (s.kind === 'tag' ? ' class="tag"' : s.kind === 'aim' ? ' class="aim"' : '') + '>' + esc(s.word) + '</mark>';
       at = s.end;
     });
     hl.innerHTML = html + esc(v.slice(at)) + ' ';
@@ -1483,6 +1886,11 @@ function ensureAddBar() {
       chip('<span class="at">@</span> ' + esc(t2), 'set', null,
         typedTag.length ? () => { ignore = ignore.concat(typedTag); paint(); } : null);
     });
+    /* The goal it serves, shown once there is a goal to serve. */
+    const typedAim = words(p, ['aim']);
+    if (o.aim || openAims().length) chip(o.aim ? '<span class="hat">^</span> ' + esc(aimName(o.aim)) : ico('goal') + ' Goal', o.aim ? 'set' : '',
+      c => choose(c, 'Serves a goal', aimItems(o.aim, k => { dropWords(parseQuest(inp.value, ignore), ['aim']); set.aim = k; paint(); })),
+      typedAim.length ? () => { ignore = ignore.concat(typedAim); paint(); } : (set.aim ? () => { delete set.aim; paint(); } : null));
     const addB = el('button', 'mb-btn mb-press mb-tap go', 'ADD');
     addB.onclick = submit;
     chips.appendChild(addB);
@@ -1525,6 +1933,8 @@ function rowMenu(x, anchor) {
       choose(anchor, 'Priority', priItems(x.pri, n => saveRow(x, { pri: n }))) },
     { label: 'Move to', icon: '<span class="hash">#</span>', rt: x.proj ? projName(x.proj) : 'Inbox', fn: () =>
       choose(anchor, 'Move to', projItems(x.proj, pr => saveRow(x, pr ? { proj: pr.key, projName: pr.name } : { proj: '' }))) },
+    ...(x.aim || openAims().length ? [{ label: 'Serves a goal', icon: ico('goal'), rt: aimName(x.aim), fn: () =>
+      choose(anchor, 'Serves a goal', aimItems(x.aim, k => saveRow(x, { aim: k }))) }] : []),
     { label: x.done ? 'Mark not done' : 'Complete', icon: ico('done'), fn: () => tick(x) },
     /* Move to tomorrow and Cancel it, the same as STATUS and LOG */
     ...Journal.menuItems(x, null, APP.id),
@@ -1545,6 +1955,8 @@ function projectMenu(p, anchor) {
       label: 'Colour ' + n, icon: '<span class="hash" style="--mk:var(--data-' + n + ')">#</span>', on: (p.slot || 1) === n,
       fn: () => Rec.set('project', null, p.key, Object.assign({}, Rec.get('project', null, p.key), { slot: n })),
     }))) },
+    ...(p.aim || openAims().length ? [{ label: 'Serves a goal', icon: ico('goal'), rt: aimName(p.aim), fn: () =>
+      choose(anchor, 'Serves a goal', aimItems(p.aim, k => Rec.patch('project', null, p.key, { aim: k }))) }] : []),
     { label: 'Delete project', icon: ico('delete'), cls: 'bad', kind: 'bad', fn: () => {
       const inside = quests().filter(x => x.proj === p.key);
       UI.confirm('Delete #' + p.name + '?', inside.length ? inside.length + ' tasks move to the Inbox.' : '', { yes: 'DELETE', danger: true }).then(yes => {
@@ -1569,12 +1981,12 @@ function editSheet(x) {
   const cur = Rec.get('note', x.date, x.key);
   if (!cur) return;
   x = Object.assign({ key: x.key, date: x.date }, cur);
-  const st = { due: dueOf(x) || '', at: x.at || null, rep: x.rep || null, pri: x.pri || 0, proj: x.proj || '', projName: '' };
+  const st = { due: dueOf(x) || '', at: x.at || null, rep: x.rep || null, pri: x.pri || 0, proj: x.proj || '', projName: '', aim: x.aim || '' };
   let input = null;
   const save = () => {
     const p = parseQuest(input.value);
     if (!p.text) { UI.toast('Nothing to save', { bad: true }); return false; }
-    const patch = { text: p.text, due: st.due, at: st.at, rep: st.rep, pri: st.pri, proj: st.proj };
+    const patch = { text: p.text, due: st.due, at: st.at, rep: st.rep, pri: st.pri, proj: st.proj, aim: p.aim || st.aim };
     if (p.due) { patch.due = p.due; patch.at = p.at || null; patch.rep = p.rep || null; }
     else if (p.at) patch.at = p.at;
     if (p.at) patch.dur = p.dur || null;
@@ -1610,6 +2022,8 @@ function editSheet(x) {
         mk(st.pri ? 'P' + st.pri : 'Priority', st.pri ? 'set p' + st.pri : '', c => choose(c, 'Priority', priItems(st.pri, n => { st.pri = n; paint(); })));
         mk(st.proj ? '<span class="hash">#</span> ' + esc(st.projName || projName(st.proj)) : 'Inbox', st.proj ? 'set' : '',
           c => choose(c, 'Project', projItems(st.proj, pr => { st.proj = pr ? pr.key : ''; st.projName = pr ? pr.name : ''; paint(); })));
+        if (st.aim || openAims().length) mk(st.aim ? '<span class="hat">^</span> ' + esc(aimName(st.aim)) : ico('goal') + ' Goal', st.aim ? 'set' : '',
+          c => choose(c, 'Serves a goal', aimItems(st.aim, k => { st.aim = k; paint(); })));
       };
       paint();
       if (x.t) {
