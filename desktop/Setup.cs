@@ -28,6 +28,7 @@ class SetupApp : Form
 {
     const string CLIENT = "https://tomoncupa.github.io/Mainmenu-client/";
     const string NAME = "Motherbase";
+    const string VERSION = "1.0.1";
     const string UNINSTALL_KEY = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Motherbase";
     const string RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string RUN_NAME = "Motherbase STATUS";
@@ -43,13 +44,24 @@ class SetupApp : Form
         INK = Color.FromArgb(0xDB, 0xE7, 0xF0), MUT = Color.FromArgb(0x7F, 0x93, 0xA8),
         GOLD = Color.FromArgb(0xF0, 0xB3, 0x23), BAD = Color.FromArgb(0xFF, 0x6B, 0x81);
 
-    /* `--dir <folder>` installs there with no shortcuts and no Settings, Apps
-       entry: a test on a PC that already has Tom's own STATUS shortcut. */
+    /* `--dir <folder>` is a test on a PC that already has Tom's own STATUS
+       shortcut: it installs there, its "desktop" and "Start menu" are folders
+       beside it, and its Settings, Apps entry is "Motherbase (test)". */
     static string testDir = null;
     static string InstallDir
     {
         get { return testDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", NAME); }
     }
+    static string DeskDir
+    {
+        get { return testDir != null ? testDir + "-desktop" : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory); }
+    }
+    /* one Start menu folder holding everything, the remover included */
+    static string StartDir
+    {
+        get { return testDir != null ? testDir + "-start" : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), NAME); }
+    }
+    static string AppsKey { get { return UNINSTALL_KEY + (testDir != null ? "Test" : ""); } }
 
     static string address = CLIENT;
 
@@ -58,12 +70,14 @@ class SetupApp : Form
     {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        bool remove = false;
         for (int i = 0; i < args.Length; i++)
         {
-            if (args[i] == "/uninstall") { Uninstall(); return; }
+            if (args[i] == "/uninstall") remove = true;
             if (args[i] == "--address" && i + 1 < args.Length) address = args[++i];
             if (args[i] == "--dir" && i + 1 < args.Length) testDir = Path.GetFullPath(args[++i]);
         }
+        if (remove) { Uninstall(); return; }
         Application.Run(new SetupApp());
     }
 
@@ -265,40 +279,61 @@ class SetupApp : Form
             File.Copy(Application.ExecutablePath, self, true);
 
         string menu = Path.Combine(dir, "Main Menu.exe"), widget = Path.Combine(dir, "STATUS.exe");
-        if (testDir != null) return;
-        string desk = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        string start = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), NAME);
+        string desk = DeskDir, start = StartDir;
+        string remover = "/uninstall" + (testDir != null ? " --dir \"" + testDir + "\"" : "");
+        Directory.CreateDirectory(desk);
         Directory.CreateDirectory(start);
-        Link(Path.Combine(desk, "Motherbase.lnk"), menu, "Every app in one window");
-        Link(Path.Combine(desk, "STATUS.lnk"), widget, "The STATUS widget");
-        Link(Path.Combine(start, "Motherbase.lnk"), menu, "Every app in one window");
-        Link(Path.Combine(start, "STATUS.lnk"), widget, "The STATUS widget");
+        Link(Path.Combine(desk, "Motherbase.lnk"), menu, "", "Every app in one window");
+        Link(Path.Combine(desk, "STATUS.lnk"), widget, "", "The STATUS widget");
+        Link(Path.Combine(start, "Motherbase.lnk"), menu, "", "Every app in one window");
+        Link(Path.Combine(start, "STATUS.lnk"), widget, "", "The STATUS widget");
+        Link(Path.Combine(start, "Uninstall Motherbase.lnk"), self, remover, "Remove Motherbase from this computer");
 
-        using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(UNINSTALL_KEY))
+        long kb = 0;
+        foreach (string f in Directory.GetFiles(dir)) kb += new FileInfo(f).Length / 1024;
+        using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(AppsKey))
         {
-            k.SetValue("DisplayName", "Motherbase");
+            k.SetValue("DisplayName", testDir != null ? "Motherbase (test)" : "Motherbase");
+            k.SetValue("DisplayVersion", VERSION);
+            k.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
+            k.SetValue("EstimatedSize", (int)kb, Microsoft.Win32.RegistryValueKind.DWord);
             k.SetValue("DisplayIcon", menu);
             k.SetValue("Publisher", "Personal Protagonist");
             k.SetValue("InstallLocation", dir);
-            k.SetValue("UninstallString", "\"" + self + "\" /uninstall");
+            k.SetValue("UninstallString", "\"" + self + "\" " + remover);
             k.SetValue("NoModify", 1);
             k.SetValue("NoRepair", 1);
         }
     }
 
     /* A shortcut through Windows' own scripting object; nothing to reference. */
-    static void Link(string lnk, string target, string what)
+    static void Link(string lnk, string target, string args, string what)
     {
         Type t = Type.GetTypeFromProgID("WScript.Shell");
         object sh = Activator.CreateInstance(t);
         object sc = t.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, sh, new object[] { lnk });
         Type st = sc.GetType();
         st.InvokeMember("TargetPath", BindingFlags.SetProperty, null, sc, new object[] { target });
+        if (args != "") st.InvokeMember("Arguments", BindingFlags.SetProperty, null, sc, new object[] { args });
         st.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, sc, new object[] { Path.GetDirectoryName(target) });
         st.InvokeMember("Description", BindingFlags.SetProperty, null, sc, new object[] { what });
         st.InvokeMember("Save", BindingFlags.InvokeMethod, null, sc, null);
         Marshal.FinalReleaseComObject(sc);
         Marshal.FinalReleaseComObject(sh);
+    }
+
+    static bool Opens(string lnk, string dir)
+    {
+        if (!File.Exists(lnk)) return false;
+        try
+        {
+            Type t = Type.GetTypeFromProgID("WScript.Shell");
+            object sh = Activator.CreateInstance(t);
+            object sc = t.InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, sh, new object[] { lnk });
+            string to = (string)sc.GetType().InvokeMember("TargetPath", BindingFlags.GetProperty, null, sc, null);
+            return to.StartsWith(dir, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
     }
 
     static void Uninstall()
@@ -309,18 +344,18 @@ class SetupApp : Form
                 "Motherbase", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
         StopRunning();
         string dir = InstallDir;
-        string desk = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        string start = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), NAME);
-        foreach (string p in new[] { Path.Combine(desk, "Motherbase.lnk"), Path.Combine(desk, "STATUS.lnk") })
-            try { File.Delete(p); } catch { }
-        try { Directory.Delete(start, true); } catch { }
+        /* only shortcuts that open this copy: a desktop can hold another */
+        foreach (string p in new[] { Path.Combine(DeskDir, "Motherbase.lnk"), Path.Combine(DeskDir, "STATUS.lnk") })
+            if (Opens(p, dir)) try { File.Delete(p); } catch { }
+        try { Directory.Delete(StartDir, true); } catch { }
         try
         {
             using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RUN_KEY, true))
                 if (k != null && ((k.GetValue(RUN_NAME) as string) ?? "").IndexOf(dir, StringComparison.OrdinalIgnoreCase) >= 0) k.DeleteValue(RUN_NAME);
         }
         catch { }
-        try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(UNINSTALL_KEY, false); } catch { }
+        try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(AppsKey, false); } catch { }
+        if (testDir != null) try { Directory.Delete(DeskDir, true); } catch { }
 
         foreach (string f in Directory.Exists(dir) ? Directory.GetFiles(dir) : new string[0])
         {

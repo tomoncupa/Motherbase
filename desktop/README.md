@@ -120,6 +120,11 @@ programs and Microsoft's WebView2 files are inside it. Added 27 October 2026.
 2. It asks **Have you used Motherbase before?** and installs into their own
    AppData (no admin prompt), with Motherbase and STATUS on the desktop and in
    the Start menu, and an entry in Settings, Apps to remove it.
+   Everything, their data included, sits in one folder,
+   `%LOCALAPPDATA%\Programs\Motherbase`. The Start menu's Motherbase folder
+   holds Motherbase, STATUS and Uninstall Motherbase. Removing it asks once
+   whether to delete what is stored on that PC, and never touches a shortcut
+   that opens another copy.
 3. The Main Menu opens on the setup page (`setup.html`, served by
    `SetupPage.cs`). Already in the system: sign in with Google, then the
    widget. First time: sign in (or Later), what to track, how often the
