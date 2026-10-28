@@ -179,6 +179,16 @@ carry meaning ("Main Quests", "Daily Routines").
 - Test against one throwaway task in his real Todoist, tick both ways, then
   delete it.
 
+**Not wanted for now** (Tom, 2026-10-29): Todoist's phone widget and
+reminders. **Email into the Inbox is replaced by the morning brief**: "we can
+do a morning brief - something that can also suggest todos for the day". The
+brief card and its todos already exist here (`briefTodos`, `drawBrief`), but
+no writer of `brief` rows was found in this repo on 2026-10-29: find the
+"daemon on the PC" (OUTER HEAVEN?) or build one before anything else. Once
+Todoist rows are in the store, the brief picks from them, overdue first.
+Open, Tom's call: does a suggested todo land on Today by itself (as built), or
+wait for a tap to accept?
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
