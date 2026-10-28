@@ -535,3 +535,8 @@ Tom: "Creatine: build a muscle-stores view instead of a half-life." A tracker's 
 
 A store now keeps STORE_TAKE (0.5) of each dose until it is full and spills the rest; the 1.0.87 taper never read full on a steady daily dose. At or over STORE_SAT (90%) the strip says "Saturated until <day> with no dose". A reading on hover names the last dose before its own moment, not the latest, on every tracker.
 [TESTED in headless Chromium at 1920 and 375, set up through the dialog; WebKit review 210 of 210.]
+
+## 2026-10-29, HOME 1.0.89: HALF-LIFE grows with its trackers
+
+HALF-LIFE is a `fit` card: five trackers in the 6-row default cut the last two off. It grows to its strips as far as the window's bottom and scrolls inside past that, like every fit card.
+[TESTED in headless Chromium at 1920 and 375 with five trackers; WebKit review 210 of 210.]
