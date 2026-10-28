@@ -131,6 +131,54 @@ QUESTS, built 2026-09-14 and tested in the browser at desktop width; phone width
 
 1.0.23, 2026-10-22: words in a meaning colour read in every theme. In Craft Day (minecraft2) the #, @, Overdue, Reschedule, Yesterday and Today in the row's date measured 1.06 to 2.5 to 1 against 4.5. A chart or meaning colour is a line colour, not a word colour (root brief, Known traps), so every word keeps its text colour and the colour goes on a mark: a 3px line under # and @ (`--mk`, set where the # is drawn), a dot before Overdue and Now (`.mk-dot`), a red underline on Reschedule, the calendar icon for a late or today date, the chip's border for P1 to P3, a bar down the left of a late todo in the month grid, a ring round today in the date menu. Measured in headless Chromium on the demo at 1280, all 23 factory themes, Today view: failing words 168 to 10, words in a chart colour 158 to 0; the 10 left are Brick's own text token, Ragnarok's logo and FFVII's ADD, theme faults. Block 0 to 0. Looked at in Block and Craft Day at 390, and the project list at 1280: in Block a project's colour is now the line under its #, not the # itself. Not seen on the iPhone; month grid and date menu not measured, only changed.
 
+## Todoist sync: decided, not built (2026-10-29)
+
+Tom: "something to check Todoist every once in a while and then have it
+reflect on quests". He captures with Todoist's iPhone widget and checks it
+daily; QUESTS stays the place he sees and works the list. He picked all three
+of Claude's recommendations:
+
+1. **One way in, ticks back.** Todoist tasks become QUESTS todos. Ticking,
+   rescheduling or deleting one in QUESTS (or STATUS, LOG, the home screen:
+   they all tick through `Journal.tick`) does the same in Todoist. Todos typed
+   in QUESTS stay in QUESTS; pushing them would flood Todoist with ARC,
+   WEALTH and brief todos.
+2. **Everything active comes in**, overdue included (40+ overdue since
+   2026-09-10 on 2026-10-29). Reschedule clears them and the dates go back.
+3. **An Inbox capture is a todo**, in QUESTS's Inbox, so a tick can go back.
+
+No new home screen widget: TODO, UPCOMING and the QUESTS card already show
+QUESTS todos.
+
+**Facts found.** `api.todoist.com/api/v1` answers a preflight from
+`https://tomoncupa.github.io` with Allow-Origin, GET/POST/PUT/DELETE and the
+Authorization header (curl, 2026-10-29), so the page calls Todoist directly
+on the phone and the PC; no daemon. His Todoist is the free plan (the
+activity log answers PREMIUM_ONLY). 8 projects, 39 sections, sections
+carry meaning ("Main Quests", "Daily Routines").
+
+**Plan, Claude's calls.**
+- Row: the usual `note` todo, key `td-<todoist id>`, `src: 'todoist'`
+  (add to `SRC_NAME`), plus `td: {id, proj, sec, parent, desc, labels,
+  due, rec, at}` holding what Todoist last said, so nothing QUESTS cannot
+  show is lost and a change is told apart from Todoist's own. Project maps
+  to a QUESTS `project` by name; labels to `tags`; p1 to p3 to `pri`
+  (Todoist's API numbers priority backwards: 4 is p1).
+- Pull on open, on `visibilitychange` back, and every 5 minutes while open.
+  A task gone from Todoist (done or deleted there) is ticked or tombstoned
+  here.
+- Push by reconciling, not on the click: a row whose `done`, `due` or
+  tombstone differs from `td` is sent, so a tick from any app goes. Before
+  closing a RECURRING task, fetch it and close only if its due still equals
+  `td.due`, or two devices would each advance it a round. `navigator.locks`
+  keeps one QUESTS per device syncing (the home screen frames QUESTS too).
+- The key: Todoist, Settings, Integrations, Developer, pasted once in
+  QUESTS Settings. Kept as a setting NOT prefixed `quest.` (the sheet push
+  takes every `quest.*` setting, `io.js` ~1228), so it rides live sync but
+  not the sheet. Never print it.
+- Test against one throwaway task in his real Todoist, tick both ways, then
+  delete it.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
