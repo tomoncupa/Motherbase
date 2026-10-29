@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.35, 2026-10-22">
+<meta name="mb-version" content="1.0.36, 2026-10-29">
 <title>WEALTH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -802,21 +802,35 @@ function seshBoxes(box, clientId, block, repaint, altName) {
       repaint();
     };
     row.appendChild(tick);
-    if (x) {
+    /* A session COACH made is dated by the day its sets were logged, and its
+       key is one per client per day, so moving two onto one day made them one
+       row and lost a session (Jay, 2026-10-28). Its date is shown, not edited. */
+    const fromCoach = x && (String(x.key).indexOf('k-') === 0 || (Rec.get('sesh', x.date, x.key) || {}).src === 'coach');
+    if (x && fromCoach) {
+      const d = el('span', 'note', esc(Day.short(x.date)) + ', logged in COACH');
+      d.style.flex = '1';
+      row.appendChild(d);
+    } else if (x) {
       const d = dateField(x.date);
       d.max = Day.today();
       d.style.flex = '1';
       d.setAttribute('aria-label', 'Date of session ' + (block.first + i));
-      d.onchange = () => {
+      /* Saved when the box is left or on Enter, never on change: typing the 2
+         of a 23 fired change as the 2nd, the redraw re-sorted the boxes, and
+         three sessions went to 2 Oct (2026-10-28). */
+      const commit = () => {
         const v = d.value;
         if (!v || v === x.date) return;
         /* The future is not a record and cannot be ticked. */
         if (v > Day.today()) { d.value = x.date; UI.toast('that session has not happened yet', { bad: true }); return; }
+        if (Rec.get('sesh', v, x.key)) { d.value = x.date; return; }
         const p = Rec.get('sesh', x.date, x.key) || { client: clientId };
         Rec.del('sesh', x.date, x.key);
         Rec.set('sesh', v, x.key, p);
         repaint();
       };
+      d.addEventListener('blur', commit);
+      d.addEventListener('keydown', e => { if (e.key === 'Enter') d.blur(); });
       row.appendChild(d);
       if (altName) {
         const k = el('button', 'chip mb-tap' + (x.alt ? ' on' : ''), esc(altName));
