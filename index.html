@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.89, 2026-10-29">
+<meta name="mb-version" content="1.0.90, 2026-10-29">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -4342,18 +4342,29 @@ const WIDGETS = {
     shown: cfg => WIDGETS.halflife.list().filter(x => !(cfg && cfg.hid && cfg.hid.indexOf(x.key) > -1)),
     /* every dose of one tracker, as [ms, amount], oldest first */
     doses(x) {
-      const names = String(x.match || '').split(',').map(s => s.trim()).filter(Boolean);
+      /* "word=amount": that word always counts as that amount in the unit,
+         whatever number sits after it, and once a day however many lines say it */
+      const names = String(x.match || '').split(',').map(s => s.trim()).filter(Boolean)
+        .map(s => { const i = s.indexOf('='), a = i > 0 ? Number(s.slice(i + 1)) : NaN; return i > 0 && a > 0 ? [s.slice(0, i).trim(), a] : [s, null]; })
+        .filter(n => n[0]);
+      const fixed = names.map(n => n[1]);
       const num = '\\s*(\\d+(?:\\.\\d+)?)?';
-      const res = names.map(n => {
+      const res = names.map(([n]) => {
         const q = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         return n.length <= 2 ? new RegExp('^' + q + '(?![\\p{L}])' + num, 'u') : new RegExp('(?:^|[^\\p{L}\\d])' + q + '(?![\\p{L}])' + num, 'iu');
       });
-      const per = Number(x.per) || 1, bare = x.bare === '' || x.bare == null ? null : Number(x.bare), out = [];
+      const per = Number(x.per) || 1, bare = x.bare === '' || x.bare == null ? null : Number(x.bare), out = [], once = {};
+      /* a time written on another day than the row's is a backfill: it counts at that day's noon */
+      const onDay = (t, date) => {
+        if (!date) return t;
+        const w = new Date(t), wd = w.getFullYear() + '-' + zpad(w.getMonth() + 1) + '-' + zpad(w.getDate());
+        return wd === date ? t : new Date(date + 'T12:00:00').getTime();
+      };
       if (x.field) {
         const F = (Rec.map('field') || {})[x.field] || {}, fp = F.per == null ? 1 : (Number(F.per) || 0);
         Rec.all('ev').forEach(r => {
           if (r.key !== x.field) return;
-          ((r.payload && r.payload.e) || []).forEach(e => { const v = Number(e.v); if (e.t && v > 0) out.push([e.t, v * per]); });
+          ((r.payload && r.payload.e) || []).forEach(e => { const v = Number(e.v); if (e.t && v > 0) out.push([onDay(e.t, r.date), v * per]); });
         });
         if (F.from) Rec.all('meal').forEach(r => { const m = r.payload || {}, v = (parseFloat(m[F.from]) || 0) * fp; if (m.t && v > 0) out.push([m.t, v * per]); });
       }
@@ -4361,20 +4372,19 @@ const WIDGETS = {
         const p = r.payload || {};
         if (typeof p.text !== 'string' || p.cancelled || p.kind === 'idea' || (p.kind === 'todo' && !p.done)) return;
         const text = p.text.trim();
-        let m = null;
-        for (let i = 0; i < res.length && !m; i++) m = text.match(res[i]);
+        let m = null, i = 0;
+        for (; i < res.length && !m; i++) m = text.match(res[i]);
         if (!m) return;
-        const units = m[1] != null ? Number(m[1]) : bare;
-        if (units == null || !isFinite(units) || units <= 0) return;
+        const amt = fixed[i - 1] != null ? fixed[i - 1] : (m[1] != null ? Number(m[1]) : bare) * per;
+        if (amt == null || !isFinite(amt) || amt <= 0) return;
+        if (fixed[i - 1] != null) { if (once[i + '|' + r.date]) return; once[i + '|' + r.date] = 1; }
         /* the time typed on the line, else when it was written, else noon */
         let ms = null;
         const at = /^(\d{1,2}):(\d\d)/.exec(p.at || '');
         if (r.date && at) ms = new Date(r.date + 'T' + zpad(+at[1]) + ':' + at[2] + ':00').getTime();
-        else if (p.t) {
-          const w = new Date(p.t), wd = w.getFullYear() + '-' + zpad(w.getMonth() + 1) + '-' + zpad(w.getDate());
-          ms = !r.date || wd === r.date ? p.t : new Date(r.date + 'T12:00:00').getTime();
-        } else if (r.date) ms = new Date(r.date + 'T12:00:00').getTime();
-        if (ms != null && isFinite(ms)) out.push([ms, units * per]);
+        else if (p.t) ms = onDay(p.t, r.date);
+        else if (r.date) ms = new Date(r.date + 'T12:00:00').getTime();
+        if (ms != null && isFinite(ms)) out.push([ms, amt]);
       });
       return out.sort((a, b) => a[0] - b[0]);
     },
@@ -4431,7 +4441,7 @@ const WIDGETS = {
           };
           b.appendChild(UI.row('Name', 'What the card calls it.', f.name));
           b.appendChild(UI.row('STATUS measure', 'Its readings, and the food behind it, count as doses.', f.field));
-          b.appendChild(UI.row('Written as', 'The words a dose starts with, comma separated. One or two letters must start the line.', f.match));
+          b.appendChild(UI.row('Written as', 'The words a dose starts with, comma separated. One or two letters must start the line. A word with =amount after it, such as pill=50, always counts that much.', f.match));
           b.appendChild(UI.row('Each 1 is', 'What the number after it is worth.', f.per));
           b.appendChild(UI.row('Unit', 'Shown after the amount.', f.unit));
           b.appendChild(UI.row('Counts as', 'A store fills up with each dose and drains slowly, like creatine in muscle.', f.kind));

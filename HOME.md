@@ -540,3 +540,8 @@ A store now keeps STORE_TAKE (0.5) of each dose until it is full and spills the 
 
 HALF-LIFE is a `fit` card: five trackers in the 6-row default cut the last two off. It grows to its strips as far as the window's bottom and scrolls inside past that, like every fit card.
 [TESTED in headless Chromium at 1920 and 375 with five trackers; WebKit review 210 of 210.]
+
+## 2026-10-29, HOME 1.0.90: a word that always counts one amount
+
+HALF-LIFE's Written as takes `word=amount`: that word, anywhere in a line, counts as that amount in the tracker's unit, once a day however many lines say it. A STATUS reading or a line written on a later day than its own (a backfill) counts at its own day's noon, not when it was typed.
+[TESTED against the live store in Chrome, in memory, before the tracker was changed.]
