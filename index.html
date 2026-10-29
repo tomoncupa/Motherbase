@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.91, 2026-10-29">
+<meta name="mb-version" content="1.0.92, 2026-10-29">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -2318,6 +2318,8 @@ function mixToStatus(d) {
 const STORE_TAKE = 0.5;
 /* at or over this share of full, a store reads SATURATED */
 const STORE_SAT = 0.9;
+/* a daily aim is read as the average a day over this many days */
+const AIM_DAYS = 28;
 
 const WIDGETS = {
   /* ══════════════ TODAY ══════════════
@@ -4333,7 +4335,13 @@ const WIDGETS = {
      steady 5 g a day, which the studies call full.
      `cap` (default 30 g over a baseline of about 120 g), STORE_TAKE and the
      three-week drain are guesses from the loading studies, labelled so on the
-     card's dialog; Tom can change cap and drain there. */
+     card's dialog; Tom can change cap and drain there.
+     AIMS (2026-10-29). A tracker may carry `aim`, an amount a day, and
+     `aimName`, what the aim is for. Its strip then has a line under the
+     header: the average a day over the last AIM_DAYS days, how many of those
+     days had a dose, and whether the average reaches the aim. It follows the
+     hovered point. For an effect studies tie to weeks of a daily amount
+     rather than to a level anything can measure. */
   halflife: {
     nm: 'HALF-LIFE', w: 5, h: 6, app: 'status', fit: 1, to: ['status'],
     days: [[3, '3 days'], [7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
@@ -4422,6 +4430,8 @@ const WIDGETS = {
           f.unit = box('text', x.unit || 'mg');
           f.half = box('text', fmtHalf(x.half), '9 hours');
           f.bare = box('decimal', x.bare);
+          f.aim = box('decimal', x.aim);
+          f.aimName = box('text', x.aimName, 'Aim');
           f.kind = el('select', 'mb-input');
           f.kind.appendChild(new Option('Half-life', '', false, x.kind !== 'store'));
           f.kind.appendChild(new Option('Store that fills up', 'store', false, x.kind === 'store'));
@@ -4452,6 +4462,8 @@ const WIDGETS = {
           b.appendChild(capRow); showCap();
           b.appendChild(UI.row('Half-life', 'Hours or days, such as 9 hours or 4.5 days. For a store, how fast the extra drains: a guess of 21 days for creatine.', f.half));
           b.appendChild(UI.row('No number', 'How many a line without a number counts as. Blank skips it.', f.bare));
+          b.appendChild(UI.row('Daily aim', 'An amount a day, read as the average over the last ' + AIM_DAYS + ' days. Blank for none.', f.aim));
+          b.appendChild(UI.row('Aim is for', 'What the aim line is called on the card.', f.aimName));
           UI.focusSoon(f.name);
         },
         actions: (x.key ? [{ label: 'REMOVE', kind: 'bad', fn: () => {
@@ -4466,10 +4478,10 @@ const WIDGETS = {
           const per = Number(v('per') || 1), bare = v('bare');
           if (!v('name') || !(v('match') || v('field'))) { toast('Needs a name, and a STATUS measure or how it is written', { bad: true }); return false; }
           if (!(half > 0)) { toast('Half-life needs a number of hours or days', { bad: true }); return false; }
-          if (!(per > 0) || (bare !== '' && !(Number(bare) >= 0)) || (f.kind.value === 'store' && !(Number(v('cap')) > 0))) { toast('Amounts need to be numbers', { bad: true }); return false; }
+          if (!(per > 0) || (bare !== '' && !(Number(bare) >= 0)) || (v('aim') !== '' && !(Number(v('aim')) > 0)) || (f.kind.value === 'store' && !(Number(v('cap')) > 0))) { toast('Amounts need to be numbers', { bad: true }); return false; }
           const id = x.key ? x.key : 'halflife.' + Date.now().toString(36);
           const was = x.key ? (Rec.setting('lifeos', id) || {}) : { ord: WIDGETS.halflife.list().length };
-          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), field: v('field'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare), kind: f.kind.value, cap: Number(v('cap')) || 30 }));
+          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), field: v('field'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare), kind: f.kind.value, cap: Number(v('cap')) || 30, aim: v('aim') === '' ? '' : Number(v('aim')), aimName: v('aimName') }));
           drawHome();
         } }]),
       });
@@ -4525,7 +4537,7 @@ const WIDGETS = {
         at(now);
         const cur = pts[pts.length - 1][1], last = doses.filter(d => d[0] <= now).pop();
         const strip = el('div', 'strip');
-        strip.style.cssText = 'flex:1 1 0;min-height:112px;display:flex;flex-direction:column;min-width:0';
+        strip.style.cssText = 'flex:1 0 auto;min-height:112px;display:flex;flex-direction:column;min-width:0';
         const sat = v => st && v >= STORE_SAT * 100;
         /* a reading names the last dose before its own moment, not today's */
         const sayAt = (v, ms) => {
@@ -4540,6 +4552,21 @@ const WIDGETS = {
         const shown = v => st ? String(Math.round(v)) : amt(v);
         const head = Chart.header({ size: 'sm', label: x.name, value: shown(cur), unit: st ? '% full' : u, when: 'now', sub: said });
         strip.appendChild(head.el);
+        /* the aim line: the average a day over the AIM_DAYS days before `ms` */
+        const aim = Number(x.aim) || 0;
+        let aimSet = null;
+        if (aim > 0) {
+          const line = el('div', 'mb-chead sm'), k = el('div', 'k'), d = el('div', 'd');
+          k.textContent = x.aimName || 'Aim';
+          line.append(k, d);
+          strip.appendChild(line);
+          aimSet = ms => {
+            const f = doses.filter(p => p[0] <= ms && p[0] > ms - AIM_DAYS * DAY);
+            const a = f.reduce((s, p) => s + p[1], 0) / AIM_DAYS, n = new Set(f.map(p => dayOf(p[0]))).size, un = x.unit || '';
+            d.textContent = (a >= aim ? 'Reached: ' : 'Under: ') + amt(a) + ' ' + un + ' a day over ' + AIM_DAYS + ' days, aim ' + amt(aim) + ' ' + un + ', a dose on ' + n + ' of them';
+          };
+          aimSet(now);
+        }
         const box = el('div', 'fits');
         box.style.cssText = 'flex:1 1 auto;min-height:72px';
         strip.appendChild(box);
@@ -4561,7 +4588,10 @@ const WIDGETS = {
           c.area(pts); c.line(pts);
           c.dots(pts.filter((p, j) => j && pts[j - 1][0] === p[0] - 1 / DAY));
           c.end(pts[pts.length - 1], shown(cur));
-          c.scrub(pts, { onMove: p => head.set(shown(p[1]), sayAt(p[1], t0 + p[0] * DAY), when(t0 + p[0] * DAY)), onLeave: head.reset });
+          c.scrub(pts, {
+            onMove: p => { head.set(shown(p[1]), sayAt(p[1], t0 + p[0] * DAY), when(t0 + p[0] * DAY)); if (aimSet) aimSet(t0 + p[0] * DAY); },
+            onLeave: () => { head.reset(); if (aimSet) aimSet(now); },
+          });
         });
       });
     },

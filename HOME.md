@@ -550,3 +550,8 @@ HALF-LIFE's Written as takes `word=amount`: that word, anywhere in a line, count
 
 An entry of `!words` in Written as stops any line holding those words counting for that tracker, for a line that names the word but was not a dose.
 [TESTED against the live store in Chrome.]
+
+## 2026-10-29, HOME 1.0.92: a daily aim line
+
+A HALF-LIFE tracker may carry `aim`, an amount a day, and `aimName`. Its strip then shows a line under the header: the average a day over the last AIM_DAYS (28) days, how many of those days had a dose, and Reached or Under against the aim, following the hovered point. Set in the dialog as Daily aim and Aim is for. For an effect studies tie to weeks of a daily amount rather than a level. A strip no longer shrinks below its own words (`flex:1 0 auto`): at phone width the header had pushed the chart out of the card.
+[TESTED in headless Chromium at 1920 and 375, set up through the dialog, with `word=amount` and `!words` in the same tracker; five-tracker fit check rerun.]
