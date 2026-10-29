@@ -186,8 +186,24 @@ brief card and its todos already exist here (`briefTodos`, `drawBrief`), but
 no writer of `brief` rows was found in this repo on 2026-10-29: find the
 "daemon on the PC" (OUTER HEAVEN?) or build one before anything else. Once
 Todoist rows are in the store, the brief picks from them, overdue first.
-Open, Tom's call: does a suggested todo land on Today by itself (as built), or
-wait for a tap to accept?
+A suggested todo waits for a tap to accept (Tom, 2026-10-29, "A").
+
+**The brief, rebuilt from scratch** (Tom, 2026-10-29: "better if you write
+the daily brief function from scratch"). It opens as a pop-up in the
+morning, offers 1 to 3 todos for the day to accept with a tap (Most
+Important Tasks), and **holds a box for last-minute journal entries for the
+day before** ("a field for last-minute journal entries for the prior day").
+Those entries are `note` rows dated yesterday, written through
+`Journal.add`, so STATUS and LOG show them on that day. Who writes the brief
+and where it runs is the first thing to decide when building.
+
+**Ways to organise** (Tom, 2026-10-29: "I definitely want a board view").
+Claude recommended one BOARD view grouped several ways: by stage (Kanban:
+To do, Doing, Done), by section (Todoist's board, sections synced as
+columns), by priority, and the Eisenhower 2x2 (urgent from the due date,
+important from P1 and P2). GTD's missing pieces (Someday, Waiting For, a
+weekly review) and 1-3-5 were offered, not chosen. Which groupings to build
+is still Tom's call.
 
 ## Needs from the foundation
 
