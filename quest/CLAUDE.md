@@ -202,8 +202,10 @@ Claude recommended one BOARD view grouped several ways: by stage (Kanban:
 To do, Doing, Done), by section (Todoist's board, sections synced as
 columns), by priority, and the Eisenhower 2x2 (urgent from the due date,
 important from P1 and P2). GTD's missing pieces (Someday, Waiting For, a
-weekly review) and 1-3-5 were offered, not chosen. Which groupings to build
-is still Tom's call.
+weekly review) and 1-3-5 were offered, not chosen. Tom picked all four
+groupings (2026-10-29: "A"): stage, section, priority and Eisenhower, one
+BOARD view with a switch between them. Build order: Todoist sync, then the
+board, then the brief.
 
 ## Needs from the foundation
 
