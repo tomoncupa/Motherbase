@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.24, 2026-10-26">
+<meta name="mb-version" content="1.0.25, 2026-10-29">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -345,6 +345,16 @@ function openSettings() {
       UI.toggle(S.get(k, 1) !== 0, v => { S.set(k, v ? 1 : 0); draw(); })));
     sw('BLOCK’s plan on Today', 'What BLOCK planned for today, among your tasks by time', 'showPlan');
     sw('Finished tasks on Today', 'What you ticked today, at the bottom', 'showDone');
+    /* Todoist: the key is pasted once and reaches every signed-in device. A
+       password box, so it is never on screen for a camera or a share. */
+    const k = UI.field('text', { placeholder: 'Paste your Todoist key', value: TD.key() });
+    k.type = 'password'; k.autocomplete = 'off'; k.spellcheck = false;
+    k.onchange = () => { Rec.setting('todoist', 'key', k.value.trim()); TD.run(true); };
+    pane.appendChild(UI.row('Todoist key', 'In Todoist: Settings, Integrations, Developer, API token. Empty the box to stop syncing.', k));
+    const now = el('button', 'mb-btn mb-tap', 'SYNC NOW');
+    now.type = 'button';
+    now.onclick = () => TD.run(true);
+    pane.appendChild(UI.row('Todoist', '<span id="td-state">' + esc(TD.line()) + '</span>', now));
   } }], { order: ['quests', 'data'] });
 }
 let seq = 0;
@@ -649,7 +659,7 @@ const movedFrom = d => quests().filter(x => {
    list had never heard of was quietly called STATUS, so the next writer to
    arrive would have been mislabelled the same way and nothing would have
    said so. A src that is not in the table now names itself. */
-const SRC_NAME = { quest: 'QUESTS', status: 'STATUS', block: 'BLOCK', arc: 'ARC', wealth: 'WEALTH', brief: 'BRIEF' };
+const SRC_NAME = { quest: 'QUESTS', status: 'STATUS', block: 'BLOCK', arc: 'ARC', wealth: 'WEALTH', brief: 'BRIEF', todoist: 'TODOIST' };
 /* A row from before the stamp carries no src at all: QUESTS's if it has the
    three fields only QUESTS writes on creation, STATUS's otherwise. */
 const srcOf = x => x.src || (('pri' in x && 'proj' in x && 'rep' in x) ? 'quest' : 'status');
@@ -715,6 +725,234 @@ function removeQuest(x) {
   Mobile.haptic('warn');
   UI.undo('Deleted <b>' + esc(keep.text) + '</b>', () => { Rec.set('note', x.date, x.key, keep); publishNotes(x.date); });
 }
+
+/* ══════════════ TODOIST ══════════════
+   quest/CLAUDE.md, "Todoist sync". Tom, 2026-10-29: his Todoist tasks come in
+   as todos, and a tick, a new date or a delete made here (or in STATUS, LOG
+   or the home screen, which all tick the same row) goes back. Todos typed
+   here stay here. One call to Todoist's sync endpoint reads every open task,
+   project and section.
+
+   The row is keyed `td-<todoist id>` and dated the day Todoist says it was
+   added, so every device makes the same row. `td` on it is what Todoist said
+   last time: a field that differs from `td` was changed here, a Todoist
+   field that differs from `td` was changed there, and nothing is lost that
+   QUESTS cannot show yet (section, description, parent).
+
+   The key is the setting `todoist.key`, not `quest.*`: the sheet takes every
+   `quest.*` setting (shared/io.js), and a key does not belong on a sheet. It
+   rides live sync, so pasting it once reaches every signed-in device. */
+const TD = (() => {
+  const API = 'https://api.todoist.com/api/v1/';
+  const KEY_RE = /^td-([A-Za-z0-9]+)$/;
+  const FIELDS = ['text', 'pri', 'proj', 'tags', 'due', 'at'];
+  const RES = JSON.stringify(['items', 'projects', 'sections']);
+  const key = () => String(Rec.setting('todoist', 'key') || '').trim();
+  const st = { busy: false, at: 0, n: 0, err: '', quiet: false };
+  let last = 0, soonT = null, uid = 0;
+  const same = (a, b) => JSON.stringify(a == null ? null : a) === JSON.stringify(b == null ? null : b);
+  const localYmd = t => t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate());
+  const say = () => { const b = document.getElementById('td-state'); if (b) b.textContent = line(); };
+
+  function call(path, body) {
+    const o = { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + key() } };
+    if (body) {
+      o.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      o.body = new URLSearchParams(body).toString();
+    }
+    return fetch(API + path, o).then(r => {
+      if (r.status === 401 || r.status === 403) throw new Error('key');
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.json();
+    });
+  }
+  const read = () => call('sync', { sync_token: '*', resource_types: RES });
+
+  /* Todoist's due: a date, a floating date and time, or a fixed one ending
+     in Z. `raw` is kept as sent, for the recurring check in push. */
+  function dueParts(d) {
+    if (!d || !d.date) return { due: '', at: null, raw: '', rec: '' };
+    const s = String(d.date);
+    let due = s.slice(0, 10), at = null;
+    if (s.length > 10) {
+      if (/(Z|[+-]\d\d:?\d\d)$/.test(s)) { const t = new Date(s); due = localYmd(t); at = pad(t.getHours()) + ':' + pad(t.getMinutes()); }
+      else at = s.slice(11, 16);
+    }
+    return { due: due, at: at, raw: s, rec: d.is_recurring ? String(d.string || '') : '' };
+  }
+
+  /* What a Todoist task says, in QUESTS's fields, and the `td` to keep.
+     Todoist numbers priority backwards: 4 is p1. Its Inbox is QUESTS's Inbox,
+     which is no project (Tom, 3A). */
+  function said(it, P, SEC) {
+    const d = dueParts(it.due), p = P[it.project_id], s = SEC[it.section_id];
+    const proj = p && !p.inbox_project ? slug(p.name) : '';
+    const row = {
+      text: String(it.content || ''), pri: it.priority > 1 ? 5 - it.priority : 0, proj: proj,
+      tags: (it.labels || []).map(slug).filter(Boolean), due: d.due, at: d.at,
+    };
+    const td = Object.assign({}, row, {
+      id: it.id, raw: d.raw, rec: d.rec, done: 0, projId: it.project_id || '',
+      sec: it.section_id || '', secName: s ? s.name : '', parent: it.parent_id || '',
+      desc: it.description || '', labels: it.labels || [],
+    });
+    return { row: row, td: td, projName: p ? p.name : '' };
+  }
+
+  /* Every Todoist row here, alive or deleted, found by its key on any date
+     (root brief, Known traps: look on every date, and the tombstone too). */
+  function index() {
+    const rows = {}, tombs = {};
+    Rec.all('note').forEach(r => { const m = KEY_RE.exec(r.key); if (m) rows[m[1]] = r; });
+    Rec.tombstones('note').forEach(r => { const m = KEY_RE.exec(r.key); if (m && !rows[m[1]]) tombs[m[1]] = r; });
+    return { rows: rows, tombs: tombs };
+  }
+  const days = new Set();
+  function put(r, payload) { Rec.set('note', r.date, r.key, payload); days.add(r.date); }
+
+  /* A recurring task closed here has done a round, as Journal.tick does for
+     QUESTS's own repeats: a finished copy on the day it was done, `of`
+     pointing back, and the todo open again. The copy's key comes from the
+     round's due date, so two devices finishing one round make one copy. */
+  function round(r) {
+    const p = Rec.get('note', r.date, r.key);
+    if (!p) return;
+    const d = p.doneOn || T();
+    Rec.set('note', d, r.key + '-r' + String(p.td.due || d), Object.assign({}, p, {
+      done: 1, doneOn: d, due: p.td.due || d, of: r.key, td: null, rep: null, t: Date.now(), made: d,
+    }));
+    days.add(d);
+    put(r, Object.assign({}, p, { done: 0, doneAt: null, doneOn: null, by: p.byWas || null, byWas: null, byAuto: 0 }));
+  }
+
+  /* What changed here goes to Todoist: a tick, an untick, a new date or time,
+     a delete. Text, priority and project changed here stay here (Tom's 1A).
+     A recurring task is closed only while Todoist still has it on the date
+     this device last saw, or two devices would each move it on a round. */
+  async function push(data) {
+    const live = {};
+    (data.items || []).forEach(it => { if (!it.checked && !it.is_deleted) live[it.id] = it; });
+    const ix = index(), cmds = [], after = {};
+    const add = (type, args, fn) => {
+      const u = 'mb' + Date.now().toString(36) + (uid++).toString(36) + Math.random().toString(36).slice(2, 6);
+      cmds.push({ type: type, uuid: u, args: args });
+      after[u] = fn;
+    };
+    const setTd = (r, ch) => () => {
+      const p = Rec.get('note', r.date, r.key);
+      if (p) put(r, Object.assign({}, p, { td: Object.assign({}, p.td, ch) }));
+    };
+    Object.keys(ix.tombs).forEach(id => { if (live[id]) add('item_delete', { id: id }, () => {}); });
+    Object.keys(ix.rows).forEach(id => {
+      const r = ix.rows[id], p = r.payload, td = p.td, it = live[id];
+      if (!td || p.cancelled) return;
+      if (p.done && !td.done) {
+        if (!it) return;
+        if (td.rec) {
+          if (String((it.due && it.due.date) || '') !== td.raw) { round(r); return; }
+          add('item_close', { id: id }, () => round(r));
+        } else add('item_close', { id: id }, setTd(r, { done: 1 }));
+      } else if (!p.done && td.done) {
+        add('item_uncomplete', { id: id }, setTd(r, { done: 0 }));
+      } else if (!p.done && it && ((p.due || '') !== td.due || (p.at || null) !== (td.at || null))) {
+        const due = p.due ? Object.assign({ date: p.due + (p.at ? 'T' + p.at + ':00' : '') },
+          td.rec ? { string: td.rec, is_recurring: true, lang: 'en' } : {}) : null;
+        add('item_update', { id: id, due: due }, setTd(r, { due: p.due || '', at: p.at || null }));
+      }
+    });
+    if (!cmds.length) return false;
+    const res = await call('sync', { commands: JSON.stringify(cmds) });
+    const ok = (res && res.sync_status) || {};
+    cmds.forEach(c => { if (ok[c.uuid] === 'ok') after[c.uuid](); });
+    return true;
+  }
+
+  /* What changed in Todoist comes here. A task that has left Todoist's open
+     list was finished or deleted there; Todoist is asked which. */
+  async function apply(data) {
+    const P = {}, SEC = {}, seen = {}, ix = index();
+    (data.projects || []).forEach(p => { P[p.id] = p; });
+    (data.sections || []).forEach(s => { SEC[s.id] = s; });
+    (data.items || []).forEach(it => {
+      if (it.checked || it.is_deleted) return;
+      seen[it.id] = 1;
+      const f = said(it, P, SEC), r = ix.rows[it.id];
+      if (f.row.proj) ensureProject(f.row.proj, f.projName);
+      if (!r) {
+        if (ix.tombs[it.id]) return;
+        const t = Date.parse(it.added_at) || Date.now(), d = localYmd(new Date(t));
+        put({ date: d, key: 'td-' + it.id }, Object.assign({
+          kind: 'todo', t: t, made: d, at: null, dur: null, ord: it.child_order || 0,
+          done: 0, cancelled: 0, src: 'todoist', rep: null,
+        }, f.row, { td: f.td }));
+        return;
+      }
+      const p = r.payload, was = p.td || {}, next = Object.assign({}, p);
+      FIELDS.forEach(k => { if (!same(was[k], f.row[k])) next[k] = f.row[k]; });
+      if (was.done) Object.assign(next, { done: 0, doneAt: null, doneOn: null });
+      next.td = Object.assign({}, f.td, { done: 0 });
+      if (!same(next, p)) put(r, next);
+    });
+    const gone = Object.keys(ix.rows).filter(id => !seen[id] && ix.rows[id].payload.td).slice(0, 20);
+    for (const id of gone) {
+      const r = ix.rows[id], p = r.payload;
+      if (p.td.done) continue;
+      if (p.done) { put(r, Object.assign({}, p, { td: Object.assign({}, p.td, { done: 1 }) })); continue; }
+      const it = await call('tasks/' + id);
+      if (!it || it.is_deleted) { Rec.del('note', r.date, r.key); days.add(r.date); }
+      else if (it.checked) {
+        const t = Date.parse(it.completed_at) || Date.now(), d = localYmd(new Date(t));
+        put(r, Object.assign({}, p, { done: 1, doneOn: d, doneAt: pad(new Date(t).getHours()) + ':' + pad(new Date(t).getMinutes()),
+          byAuto: 1, td: Object.assign({}, p.td, { done: 1 }) }));
+      }
+    }
+  }
+
+  async function once() {
+    st.busy = true; st.err = ''; say();
+    try {
+      let data = await read();
+      st.quiet = true;
+      if (await push(data)) data = await read();
+      await apply(data);
+      st.n = (data.items || []).filter(it => !it.checked && !it.is_deleted).length;
+      st.at = Date.now();
+    } catch (e) {
+      st.err = e && e.message === 'key' ? 'key' : 'net';
+    }
+    st.quiet = false; st.busy = false; last = Date.now();
+    days.forEach(d => publishNotes(d)); days.clear();
+    say(); draw();
+  }
+
+  /* One QUESTS per device talks to Todoist at a time: the home screen frames
+     QUESTS too. Not in the demo, which is a made-up person. */
+  function run(force) {
+    if (!key() || st.busy || window.MB_DEMO) return Promise.resolve();
+    if (!force && Date.now() - last < 45000) return Promise.resolve();
+    if (navigator.locks && navigator.locks.request)
+      return navigator.locks.request('mb-todoist', { ifAvailable: true }, l => l ? once() : null);
+    return once();
+  }
+  /* A tick anywhere on a Todoist row goes a few seconds later, after the
+     six-second Undo has had its chance. */
+  function soon(list) {
+    if (st.quiet || !key() || !(list || []).some(r => r && r.type === 'note' && /^td-/.test(r.key))) return;
+    clearTimeout(soonT);
+    soonT = setTimeout(() => run(true), 8000);
+  }
+  function line() {
+    if (!key()) return 'Not connected. Paste your key to bring your Todoist tasks in.';
+    if (st.busy) return 'Syncing with Todoist.';
+    if (st.err === 'key') return 'Todoist refused this key. Copy it again from Todoist.';
+    if (st.err) return 'Could not reach Todoist. It tries again in 5 minutes.';
+    if (!st.at) return 'Waiting to sync.';
+    const m = Math.round((Date.now() - st.at) / 60000);
+    return 'Synced ' + (m < 1 ? 'just now' : m + ' min ago') + '. ' + st.n + ' open tasks in Todoist.';
+  }
+  return { run: run, soon: soon, line: line, key: key, st: st, _said: said, _dueParts: dueParts };
+})();
 
 /* ══════════════ VIEWS ══════════════
    Todoist's four: Inbox (no project), Today (overdue, then today), Upcoming
@@ -1039,6 +1277,7 @@ function rowEl(x, info) {
     meta.appendChild(s);
   }
   if (x.rep) meta.appendChild(el('span', null, ico('repeat') + esc(repLabel(x.rep))));
+  else if (x.td && x.td.rec) meta.appendChild(el('span', null, ico('repeat') + esc(x.td.rec)));
   meta.appendChild(el('span', 'src', esc(srcName(x))));
   if (x.proj && info.showProj) meta.appendChild(el('span', 'pj', '<span class="hash" style="--mk:var(--data-' +
     ((Rec.get('project', null, x.proj) || {}).slot || 1) + ')">#</span> ' + esc(projName(x.proj))));
@@ -1637,13 +1876,17 @@ document.addEventListener('keydown', e => {
   if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); if (ADD) ADD.focus(); }
 });
 
-Rec.on(draw);
+Rec.on(list => { if (!TD.st.quiet) draw(); TD.soon(list); });
 Day.on(draw);
 draw();
 Rec.ready(draw);
 /* Now and Next on BLOCK's rows move with the clock. */
 setInterval(() => { if (!POP) draw(); }, 60000);
 if (location.hash === '#add' && ADD) UI.focusSoon(ADD.input);
+/* Todoist: on open, on coming back to the page, and every five minutes. */
+Rec.ready(() => TD.run(true));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) TD.run(); });
+setInterval(() => TD.run(), 300000);
 </script>
 </body>
 </html>

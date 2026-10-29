@@ -131,7 +131,7 @@ QUESTS, built 2026-09-14 and tested in the browser at desktop width; phone width
 
 1.0.23, 2026-10-22: words in a meaning colour read in every theme. In Craft Day (minecraft2) the #, @, Overdue, Reschedule, Yesterday and Today in the row's date measured 1.06 to 2.5 to 1 against 4.5. A chart or meaning colour is a line colour, not a word colour (root brief, Known traps), so every word keeps its text colour and the colour goes on a mark: a 3px line under # and @ (`--mk`, set where the # is drawn), a dot before Overdue and Now (`.mk-dot`), a red underline on Reschedule, the calendar icon for a late or today date, the chip's border for P1 to P3, a bar down the left of a late todo in the month grid, a ring round today in the date menu. Measured in headless Chromium on the demo at 1280, all 23 factory themes, Today view: failing words 168 to 10, words in a chart colour 158 to 0; the 10 left are Brick's own text token, Ragnarok's logo and FFVII's ADD, theme faults. Block 0 to 0. Looked at in Block and Craft Day at 390, and the project list at 1280: in Block a project's colour is now the line under its #, not the # itself. Not seen on the iPhone; month grid and date menu not measured, only changed.
 
-## Todoist sync: decided, not built (2026-10-29)
+## Todoist sync (decided and built 2026-10-29, 1.0.25)
 
 Tom: "something to check Todoist every once in a while and then have it
 reflect on quests". He captures with Todoist's iPhone widget and checks it
@@ -178,6 +178,32 @@ carry meaning ("Main Quests", "Daily Routines").
   not the sheet. Never print it.
 - Test against one throwaway task in his real Todoist, tick both ways, then
   delete it.
+
+**Built, 1.0.25** (`TD` in `index.html`). As planned, plus:
+- Talks to `api/v1/sync` only: one read gets items, projects and sections;
+  ticks, unticks, new dates and deletes go as one batch of commands
+  (`item_close`, `item_uncomplete`, `item_update`, `item_delete`). A task
+  that left the open list is asked about by `GET tasks/<id>`, at most 20 a
+  run: 404 or deleted removes the row here, checked ticks it.
+- The row is dated the day Todoist ADDED the task (local), so every device
+  derives the same row id. Written with `Rec.set`, not `Journal.add`,
+  because `Journal.add` makes its own key.
+- A recurring task ticked here: closed in Todoist only while its due still
+  equals `td.raw`, then a done copy keyed `td-<id>-r<round due>` with `of`,
+  and the row reopens on Todoist's next date. Its words show as the row's
+  repeat chip (`td.rec`); QUESTS's own `rep` stays empty.
+- Text, priority, project and labels changed here stay here and are not
+  overwritten until Todoist changes that field (Tom's 1A: only ticks, dates
+  and deletes go back). A moved date keeps a recurring task's words.
+- Runs on `Rec.ready`, on coming back to the page (45s apart at most), every
+  5 minutes, and 8s after a write to any `td-` row (after Undo's 6s).
+  `navigator.locks` `mb-todoist`; never in the demo. QUESTS's own redraws
+  wait until a run ends.
+- Settings: a password box for the key and a line saying what the last run
+  did, with SYNC NOW.
+- Tested: 29 checks against a stand-in Todoist in headless Chromium
+  (scratchpad, not in the repo). **Not yet run against the real Todoist**:
+  the field names are from Todoist's v1 docs as Claude knows them.
 
 **Not wanted for now** (Tom, 2026-10-29): Todoist's phone widget and
 reminders. **Email into the Inbox is replaced by the morning brief**: "we can
