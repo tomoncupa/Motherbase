@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.90, 2026-10-29">
+<meta name="mb-version" content="1.0.91, 2026-10-29">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -4343,8 +4343,11 @@ const WIDGETS = {
     /* every dose of one tracker, as [ms, amount], oldest first */
     doses(x) {
       /* "word=amount": that word always counts as that amount in the unit,
-         whatever number sits after it, and once a day however many lines say it */
-      const names = String(x.match || '').split(',').map(s => s.trim()).filter(Boolean)
+         whatever number sits after it, and once a day however many lines say it.
+         "!words": a line holding those words is not a dose of this one */
+      const parts = String(x.match || '').split(',').map(s => s.trim()).filter(Boolean);
+      const skip = parts.filter(s => s[0] === '!').map(s => s.slice(1).trim().toLowerCase()).filter(Boolean);
+      const names = parts.filter(s => s[0] !== '!')
         .map(s => { const i = s.indexOf('='), a = i > 0 ? Number(s.slice(i + 1)) : NaN; return i > 0 && a > 0 ? [s.slice(0, i).trim(), a] : [s, null]; })
         .filter(n => n[0]);
       const fixed = names.map(n => n[1]);
@@ -4372,6 +4375,7 @@ const WIDGETS = {
         const p = r.payload || {};
         if (typeof p.text !== 'string' || p.cancelled || p.kind === 'idea' || (p.kind === 'todo' && !p.done)) return;
         const text = p.text.trim();
+        if (skip.length && skip.some(w => text.toLowerCase().indexOf(w) > -1)) return;
         let m = null, i = 0;
         for (; i < res.length && !m; i++) m = text.match(res[i]);
         if (!m) return;
@@ -4441,7 +4445,7 @@ const WIDGETS = {
           };
           b.appendChild(UI.row('Name', 'What the card calls it.', f.name));
           b.appendChild(UI.row('STATUS measure', 'Its readings, and the food behind it, count as doses.', f.field));
-          b.appendChild(UI.row('Written as', 'The words a dose starts with, comma separated. One or two letters must start the line. A word with =amount after it, such as pill=50, always counts that much.', f.match));
+          b.appendChild(UI.row('Written as', 'The words a dose starts with, comma separated. One or two letters must start the line. A word with =amount after it, such as pill=50, always counts that much; !words skips any line holding them.', f.match));
           b.appendChild(UI.row('Each 1 is', 'What the number after it is worth.', f.per));
           b.appendChild(UI.row('Unit', 'Shown after the amount.', f.unit));
           b.appendChild(UI.row('Counts as', 'A store fills up with each dose and drains slowly, like creatine in muscle.', f.kind));

@@ -545,3 +545,8 @@ HALF-LIFE is a `fit` card: five trackers in the 6-row default cut the last two o
 
 HALF-LIFE's Written as takes `word=amount`: that word, anywhere in a line, counts as that amount in the tracker's unit, once a day however many lines say it. A STATUS reading or a line written on a later day than its own (a backfill) counts at its own day's noon, not when it was typed.
 [TESTED against the live store in Chrome, in memory, before the tracker was changed.]
+
+## 2026-10-29, HOME 1.0.91: a tracker can skip a line
+
+An entry of `!words` in Written as stops any line holding those words counting for that tracker, for a line that names the word but was not a dose.
+[TESTED against the live store in Chrome.]
