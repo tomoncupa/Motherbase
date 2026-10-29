@@ -209,8 +209,10 @@ carry meaning ("Main Quests", "Daily Routines").
 reminders. **Email into the Inbox is replaced by the morning brief**: "we can
 do a morning brief - something that can also suggest todos for the day". The
 brief card and its todos already exist here (`briefTodos`, `drawBrief`), but
-no writer of `brief` rows was found in this repo on 2026-10-29: find the
-"daemon on the PC" (OUTER HEAVEN?) or build one before anything else. Once
+its writer is outside this repo: OUTER HEAVEN writes
+`Receipts/out/brief-<date>.json` after 5am and RECEIPTS lets it in as the
+row (tom-context `projects/motherbase.md`, 2026-09-23). Check it still runs
+before rebuilding. Once
 Todoist rows are in the store, the brief picks from them, overdue first.
 A suggested todo waits for a tap to accept (Tom, 2026-10-29, "A").
 
