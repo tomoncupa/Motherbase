@@ -272,7 +272,8 @@ An app may read any type. It writes only the types it owns.
 | `acct` | **status** | account id | `{name, order}` |
 | `shot` | **status** | photo id | a shrunk photo of a label or receipt |
 | `habit` | quest, later | | a todolist, once STATUS took the measurements |
-| `project` | **quest**; **arc** makes one named after a skill tree's map | slug of the hashtag | `{name, slot, ord}` — a Todoist project. `slot` is a theme colour slot, never a hex |
+| `project` | **quest**; **arc** makes one named after a skill tree's map | slug of the hashtag | `{name, slot, ord, aim}` — a Todoist project. `slot` is a theme colour slot, never a hex; `aim` the goal it serves |
+| `aim` | **quest** | id, undated | `{text, tag, h, why, made, by, state, doneOn, ord, log}` — one goal on QUESTS's Goals screen: `h` is `1m` `6m` `1y` `5y` `10y`, `tag` the name typed after `^` on a todo (which then carries `aim`, the key), `state` `''`, `done` or `dropped`, `log` the check-ins `[{d, text}]`. Not `goal`, which is TRAIN's. See `quest/CLAUDE.md`, Goals |
 | `excat` | **train** | category id | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex |
 | `exercise` | **train** | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar, wu}` — `setup` is the setup fields he names for it, each a toggle or a setting; `bar` 1 or 0 overrides reading a barbell lift off the name; `wu` `kg` or `lb` is its own weight unit (`unit` is not, see `train/CLAUDE.md`) |
 | `set` | **train** | timestamp id | one logged set, weight stored in kg with the unit it was typed in; `warm` a warmup marked by hand, `su` the setup it was done with, `rir` reps in reserve (5 means five or more) and `q` set quality 1 to 4, both from the comment box. Warmups and split sets are also read from its comment, never stored |
