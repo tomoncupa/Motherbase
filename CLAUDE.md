@@ -1059,6 +1059,7 @@ answer, or take it out.
   code. Tom's iPhone TRAIN app was on 1.0.61 three days after 1.0.62
   shipped the fix he said was missing (2026-10-18).
 
+- **A fact the suite shows in two places is read by two copies of a rule.** A dose can be a STATUS reading, a journal line or a BLOCK tick; HOME's HALF-LIFE card learned the line and the tick and STATUS's tile did not, so the same day read 10g on one screen and blank on the other (2026-10-30). Until one shared reader answers "how much on this day", a change to what counts as a dose changes `WIDGETS.halflife.doses` in index.html AND `entries` in status/index.html, and is checked on both screens.
 - Commands run from the Claude app see a frozen copy of `%LOCALAPPDATA%`, not the live one.
   A scheduled task's state there (RECEIPTS `seen.json`) reads weeks stale from a Claude
   session; check the task's own `status.json` or Task Scheduler's last run instead.
