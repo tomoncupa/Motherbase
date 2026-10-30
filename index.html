@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.93, 2026-10-30">
+<meta name="mb-version" content="1.0.94, 2026-10-30">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -35,6 +35,7 @@ try { if (window.frameElement && typeof parent.stayIn === 'function') location.r
 <script src="shared/day.js"></script>
 <script src="shared/records.js"></script>
 <script src="shared/journal.js"></script>
+<script src="shared/dose.js"></script>
 <script src="shared/measure.js"></script>
 <script src="shared/chart.js"></script>
 <script src="shared/mobile.js"></script>
@@ -4322,8 +4323,8 @@ const WIDGETS = {
      count; open todos, ideas and cancelled lines do not. A tracker may also
      name `field`, a STATUS measure: every reading of it counts as a dose
      at its own time, and so does the food behind it when the measure reads
-     one (`from`, caffeine off a meal), the way STATUS's `entries` adds
-     `fromFood`. Copy of that rule: change both.
+     one (`from`, caffeine off a meal). What counts as a dose, all of it, is
+     shared/dose.js since 2026-10-30, which STATUS's tiles read too.
      STORES (Tom, 2026-10-27, for creatine: "build a muscle-stores view
      instead of a half-life"). A tracker with `kind: 'store'` is not a sum of
      halvings: it is the extra held over the body's own level, which fills
@@ -4345,80 +4346,11 @@ const WIDGETS = {
   halflife: {
     nm: 'HALF-LIFE', w: 5, h: 6, app: 'status', fit: 1, to: ['status'],
     days: [[3, '3 days'], [7, '7 days'], [14, '14 days'], [30, '30 days']], day0: 7,
-    list: () => Rec.all('setting').filter(r => r.key.indexOf('lifeos.halflife.') === 0 && r.payload && r.payload.v && r.payload.v.name)
-      .map(r => Object.assign({}, r.payload.v, { key: r.key.slice(7) })).sort((a, b) => (a.ord || 0) - (b.ord || 0)),
+    list: () => Dose.trackers(),
     shown: cfg => WIDGETS.halflife.list().filter(x => !(cfg && cfg.hid && cfg.hid.indexOf(x.key) > -1)),
-    /* every dose of one tracker, as [ms, amount], oldest first */
-    doses(x) {
-      /* "word=amount": that word always counts as that amount in the unit,
-         whatever number sits after it, and once a day however many lines say it.
-         "!words": a line holding those words is not a dose of this one */
-      const parts = String(x.match || '').split(',').map(s => s.trim()).filter(Boolean);
-      const skip = parts.filter(s => s[0] === '!').map(s => s.slice(1).trim().toLowerCase()).filter(Boolean);
-      const names = parts.filter(s => s[0] !== '!')
-        .map(s => { const i = s.indexOf('='), a = i > 0 ? Number(s.slice(i + 1)) : NaN; return i > 0 && a > 0 ? [s.slice(0, i).trim(), a] : [s, null]; })
-        .filter(n => n[0]);
-      const fixed = names.map(n => n[1]);
-      const num = '\\s*(\\d+(?:\\.\\d+)?)?';
-      const res = names.map(([n]) => {
-        const q = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        /* a longer word may also have its number in front: "5g Word" */
-        return n.length <= 2 ? new RegExp('^' + q + '(?![\\p{L}])' + num, 'u') : new RegExp('(?:^|[^\\p{L}\\d.])(?:(\\d+(?:\\.\\d+)?)\\s*(?:mg|g|ml)?\\s+)?' + q + '(?![\\p{L}])' + num, 'iu');
-      });
-      const per = Number(x.per) || 1, bare = x.bare === '' || x.bare == null ? null : Number(x.bare), out = [], once = {};
-      /* a time written on another day than the row's is a backfill: it counts at that day's noon */
-      const onDay = (t, date) => {
-        if (!date) return t;
-        const w = new Date(t), wd = w.getFullYear() + '-' + zpad(w.getMonth() + 1) + '-' + zpad(w.getDate());
-        return wd === date ? t : new Date(date + 'T12:00:00').getTime();
-      };
-      if (x.field) {
-        const F = (Rec.map('field') || {})[x.field] || {}, fp = F.per == null ? 1 : (Number(F.per) || 0);
-        Rec.all('ev').forEach(r => {
-          if (r.key !== x.field) return;
-          ((r.payload && r.payload.e) || []).forEach(e => { const v = Number(e.v); if (e.t && v > 0) out.push([onDay(e.t, r.date), v * per]); });
-        });
-        if (F.from) Rec.all('meal').forEach(r => { const m = r.payload || {}, v = (parseFloat(m[F.from]) || 0) * fp; if (m.t && v > 0) out.push([m.t, v * per]); });
-      }
-      if (res.length) noteRows().forEach(r => {
-        const p = r.payload || {};
-        if (typeof p.text !== 'string' || p.cancelled || p.kind === 'idea' || (p.kind === 'todo' && !p.done)) return;
-        const text = p.text.trim();
-        if (skip.length && skip.some(w => text.toLowerCase().indexOf(w) > -1)) return;
-        let m = null, i = 0;
-        for (; i < res.length && !m; i++) m = text.match(res[i]);
-        if (!m) return;
-        const said = m[2] != null ? m[2] : m[1];
-        const amt = fixed[i - 1] != null ? fixed[i - 1] : (said != null ? Number(said) : bare) * per;
-        if (amt == null || !isFinite(amt) || amt <= 0) return;
-        if (fixed[i - 1] != null) { if (once[i + '|' + r.date]) return; once[i + '|' + r.date] = 1; }
-        /* the time typed on the line, else when it was written, else noon */
-        let ms = null;
-        const at = /^(\d{1,2}):(\d\d)/.exec(p.at || '');
-        if (r.date && at) ms = new Date(r.date + 'T' + zpad(+at[1]) + ':' + at[2] + ':00').getTime();
-        else if (p.t) ms = onDay(p.t, r.date);
-        else if (r.date) ms = new Date(r.date + 'T12:00:00').getTime();
-        if (ms != null && isFinite(ms)) out.push([ms, amt]);
-      });
-      /* `tick`, "Name=amount": a BLOCK tick of a block whose name starts
-         with Name counts that amount, once a day, and only on a day with no
-         other dose of this one, since the tick and the line are one dose */
-      const ticks = String(x.tick || '').split(',').map(s => s.trim()).map(s => { const i = s.lastIndexOf('='); return [s.slice(0, i).trim().toLowerCase(), Number(s.slice(i + 1))]; })
-        .filter(t => t[0] && t[1] > 0);
-      if (ticks.length) {
-        const A = Rec.map('activity') || {}, had = {}, ymd = ms => { const d = new Date(ms); return d.getFullYear() + '-' + zpad(d.getMonth() + 1) + '-' + zpad(d.getDate()); };
-        out.forEach(d => { had[ymd(d[0])] = 1; });
-        Rec.all('tick').forEach(r => {
-          const p = r.payload || {};
-          if (r.deleted || !r.date || had[r.date] || p.qty === 0) return;
-          const nm = String((A[r.key] && A[r.key].name) || r.key).toLowerCase(), t = ticks.find(t => nm.indexOf(t[0]) === 0);
-          if (!t) return;
-          had[r.date] = 1;
-          out.push([onDay(p.ts || r.updated_at || new Date(r.date + 'T12:00:00').getTime(), r.date), t[1]]);
-        });
-      }
-      return out.sort((a, b) => a[0] - b[0]);
-    },
+    /* every dose of one tracker, as [ms, amount], oldest first: shared/dose.js
+       decides what counts, the same answer STATUS's tile reads */
+    doses: x => Dose.all(x).map(d => [d.t, d.v]),
     left: (doses, half, at) => doses.reduce((s, d) => d[0] <= at ? s + d[1] * Math.pow(0.5, (at - d[0]) / 3600000 / half) : s, 0),
     /* the extra held in a store at `at`, doses oldest first */
     store(doses, half, cap, at) {

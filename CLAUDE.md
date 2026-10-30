@@ -164,6 +164,7 @@ in between. Anything that breaks opening from a folder breaks the product.
 | `records.js` | The store. Rows, merging, subscriptions. The one file to be careful with. |
 | `day.js` | One definition of "today" for the whole suite. |
 | `chart.js` | Every chart. Answer first (`Chart.header`), drawn at the box's real size (`Chart.mount`), latest value marked, one bar lit, drag to explore (`c.scrub`), pies with a key and ranked shares for part of a whole, rings, sparklines and legends. Theme tokens only. |
+| `dose.js` | One answer to "how much of this was taken, and when", since 2026-10-30. A dose is a STATUS reading, the food behind a measure, a journal line or a BLOCK tick, as a HOME HALF-LIFE tracker (`lifeos.halflife.<id>`) says. `Dose.all(x)` and `Dose.day(x, date)` run the same rule; HOME's HALF-LIFE card and STATUS's `entries()` both ask it, so the two screens cannot disagree. Anything else that shows a dose asks it too. |
 | `journal.js` | The bullet system. `Journal.add` is the one way to write a new line, since 2026-09-18: STATUS, LOG, QUESTS, the home screen's DOING box and the status check all call it, so every line carries when it was written. `moveTo` sends a todo to any day and `moveToTomorrow` is that with one date filled in; the menu carries both, so LOG and QUESTS got it without being edited. One journal line: its kinds, which day it shows on, the time typed into it, how it is drawn (mark, words, then "7:00pm - 7:31pm"), time order by its start, ticking, Move to tomorrow, Cancel it, and a repeat's next round. STATUS names the `note` shape and wins any disagreement; STATUS, LOG, QUESTS and the home screen all read this, so a todo bullet looks and behaves the same in each. |
 | `skins.js` + `skins.json` | Themes, and the colour layer on top of them. |
 | `sound.js` | Sound themes and instruments, synthesised, no audio files. |
@@ -1059,7 +1060,7 @@ answer, or take it out.
   code. Tom's iPhone TRAIN app was on 1.0.61 three days after 1.0.62
   shipped the fix he said was missing (2026-10-18).
 
-- **A fact the suite shows in two places is read by two copies of a rule.** A dose can be a STATUS reading, a journal line or a BLOCK tick; HOME's HALF-LIFE card learned the line and the tick and STATUS's tile did not, so the same day read 10g on one screen and blank on the other (2026-10-30). Until one shared reader answers "how much on this day", a change to what counts as a dose changes `WIDGETS.halflife.doses` in index.html AND `entries` in status/index.html, and is checked on both screens.
+- **A fact the suite shows in two places must be read by one rule.** A dose can be a STATUS reading, a journal line or a BLOCK tick; HOME's HALF-LIFE card learned the line and the tick and STATUS's tile did not, so the same day read 10g on one screen and blank on the other (2026-10-30). `shared/dose.js` is now the one reader. When a fix teaches the suite a new way to record a fact, put it where every screen that shows the fact reads it, and check each screen.
 - Commands run from the Claude app see a frozen copy of `%LOCALAPPDATA%`, not the live one.
   A scheduled task's state there (RECEIPTS `seen.json`) reads weeks stale from a Claude
   session; check the task's own `status.json` or Task Scheduler's last run instead.

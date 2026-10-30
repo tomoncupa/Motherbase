@@ -59,6 +59,8 @@ stays small enough for per-module sessions.
 
 1.0.85, 2026-10-30: a measure the home HALF-LIFE card tracks fills from the journal and BLOCK. Tom: the tile stayed empty on days the dose was written as a journal line or ticked in BLOCK. A HALF-LIFE tracker (setting `lifeos.halflife.<id>`) naming the measure as its `field` lends its `match` and `tick`: `entries()` adds the day's matching lines (`hlWritten`) and, on a day with nothing else, the matching tick (`hlTicked`), read every time like `fromFood`, never copied. Such a reading says journal or BLOCK tick in the sheet, has no delete button and is not offered back as a dose chip. The rule is copied from the root index.html's `WIDGETS.halflife.doses`: change both. Driven in headless Chromium at 390 touch on a fresh store: a line, a tick, a line and a tick on one day (counted once) and a typed reading, tile and sheet read.
 
+1.0.86, 2026-10-30: `entries()` is `Dose.day()` from `shared/dose.js`, the same rule HOME's HALF-LIFE card reads, and the 1.0.85 copy is gone. A reading keeps `et`, the time stored on it, and its delete button uses that, because a backfilled reading now counts at its own day's noon. Only a reading (`src: 'reading'`) is offered back as a dose chip or has a delete button. Review 210/210 Chromium 390.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)

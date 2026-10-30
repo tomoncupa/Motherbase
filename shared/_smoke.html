@@ -10,6 +10,7 @@
 <script src="day.js"></script>
 <script src="records.js"></script>
 <script src="journal.js"></script>
+<script src="dose.js"></script>
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
@@ -973,6 +974,47 @@ async function run() {
     return a !== b && A && A.t > 0 && A.made === t && A.dur === 45 && A.text === 'Walk' && A.at === null &&
       B && /^\d\d:\d\d$/.test(B.at) && C && C.text === 'at 8 is words here' && C.pri === 2 && C.kind === 'todo';
   })());
+  /* ---- doses ----
+     shared/dose.js is the one answer to "how much was taken, and when", read
+     by HOME's HALF-LIFE card and STATUS's tiles. Through a stand-in store, so
+     nothing real is written. */
+  const doseRun = (fn) => {
+    const real = window.Rec, D = n => '2001-03-0' + n, at = (n, h) => new Date(D(n) + 'T' + h + ':00').getTime();
+    const line = (n, k, text, kind, extra) => ({ key: k, date: D(n), payload: Object.assign({ kind: kind || 'entry', text: text, t: at(n, '08:00'), done: 0, cancelled: 0 }, extra || {}) });
+    const rows = {
+      field: [{ key: 'sm', date: null, payload: { id: 'sm' } }],
+      activity: [{ key: 'smoke.am', date: null, payload: { name: 'Smoke check' } }],
+      ev: [{ key: 'sm', date: D(3), payload: { e: [{ t: at(4, '09:00'), v: 7 }] } }],
+      note: [line(1, 'a', '5g Smk'), line(1, 'b', 'pill now'), line(1, 'c', 'pill again'), line(1, 'd', 'bought pill box'),
+        line(2, 'e', 'Smk 3'), line(2, 'f', 'Smk 4', 'todo'), line(2, 'g', 'Smk 9', 'idea')],
+      tick: [{ key: 'smoke.am', date: D(2), payload: { src: 'block' } }, { key: 'smoke.am', date: D(4), payload: { src: 'block', ts: at(4, '07:00') } }],
+    };
+    window.Rec = { appId: 'smoke', all: (ty, o) => (rows[ty] || []).filter(r => !o || o.date == null || r.date === o.date),
+      get: (ty, d, k) => { const r = (rows[ty] || []).filter(r => r.date === d && r.key === k)[0]; return r ? r.payload : null; },
+      map: ty => { const m = {}; (rows[ty] || []).forEach(r => { m[r.key] = r.payload; }); return m; }, on: () => {}, ready: () => Promise.resolve() };
+    try { return fn({ name: 'Smoke', field: 'sm', match: 'Smk, pill=50, !bought', tick: 'Smoke=10', per: 1 }, D, at); } finally { window.Rec = real; }
+  };
+  ok('dose: loaded', !!window.Dose && typeof Dose.all === 'function' && typeof Dose.day === 'function');
+  ok('dose: a number before or after the word, word=amount once a day, !words skipped, open todos and ideas left out', doseRun((x, D) => {
+    const a = Dose.all(x).filter(d => d.src === 'journal').map(d => d.date.slice(8) + ':' + d.v).join();
+    return a === '01:5,01:50,02:3';
+  }));
+  ok('dose: a BLOCK tick counts only on a day with no other dose', doseRun((x, D) => {
+    const b = Dose.all(x).filter(d => d.src === 'block');
+    return b.length === 1 && b[0].date === D(4) && b[0].v === 10;
+  }));
+  ok('dose: a backfilled reading counts on its own day and keeps the time stored on it', doseRun((x, D, at) => {
+    const r = Dose.all(x).filter(d => d.src === 'reading')[0];
+    return !!r && r.date === D(3) && r.t === new Date(D(3) + 'T12:00:00').getTime() && r.et === at(4, '09:00') && r.v === 7;
+  }));
+  ok('dose: one day at a time gives exactly what every day gives', doseRun((x, D) => {
+    const all = JSON.stringify(Dose.all(x)), days = JSON.stringify([1, 2, 3, 4].reduce((o, n) => o.concat(Dose.day(x, D(n))), []).sort((a, b) => a.t - b.t));
+    return all === days && Dose.all(x).length === 5;
+  }));
+  ok('dose: a measure no tracker names gives its readings alone', doseRun((x, D) => {
+    const d = Dose.day({ field: 'sm' }, D(3));
+    return d.length === 1 && d[0].src === 'reading' && Dose.day({ field: 'sm' }, D(1)).length === 0;
+  }));
   ok('journal: a range on a todo is its start and its end; on an entry a start and a length', (() => {
     const t = Day.shift(Day.today(), -2), real = window.Rec, rows = {};
     window.Rec = { appId: 'smoke', all: () => [], set: (ty, dd, k, p) => { if (ty === 'note') rows[k] = p; }, del: () => {} };

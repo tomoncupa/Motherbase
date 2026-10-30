@@ -560,3 +560,8 @@ A HALF-LIFE tracker may carry `aim`, an amount a day, and `aimName`. Its strip t
 
 A longer word in Written as also reads a number in front of it ("5g Word"); before, only a number after it counted. A tracker may carry `tick`, "Name=amount" (dialog: Ticked in BLOCK): a BLOCK tick of a block whose name starts with Name counts that amount, once a day, and only on a day with no other dose of that tracker, since a tick and a written line are the same dose. Its time is the tick's own stamp.
 [TESTED against the live store in Chrome, in memory: the other trackers unchanged.]
+
+## 2026-10-30, HOME 1.0.94: HALF-LIFE asks shared/dose.js
+
+What counts as a dose moved out of `WIDGETS.halflife.doses` into `shared/dose.js`, which STATUS's tiles read too, so the card and a tile can no longer disagree. `list()` is `Dose.trackers()`. A written number is multiplied by the tracker's `per`; a STATUS reading and its food are taken as they are (every tracker naming a measure had `per` 1).
+[TESTED: review 210/210 Chromium 390 and 195/195 at 1280, six new `dose:` smoke checks; WebKit could not launch.]

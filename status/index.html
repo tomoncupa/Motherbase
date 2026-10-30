@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.85, 2026-10-30">
+<meta name="mb-version" content="1.0.86, 2026-10-30">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -20,6 +20,7 @@
 <script src="../shared/day.js"></script>
 <script src="../shared/records.js"></script>
 <script src="../shared/journal.js"></script>
+<script src="../shared/dose.js"></script>
 <script src="../shared/chart.js"></script>
 <script src="../shared/mobile.js"></script>
 <script src="../shared/sound.js"></script>
@@ -1507,86 +1508,17 @@ function fromFood(date, f) {
   return out;
 }
 
-/* ── a measure the home screen's HALF-LIFE card tracks ──
-   Tom, 2026-10-30: the tile stayed empty on days the dose was written in the
-   journal or ticked in BLOCK. A HALF-LIFE tracker (setting
-   `lifeos.halflife.<id>`) that names this measure as its `field` says how a
-   dose is written (`match`) and ticked (`tick`), and those count here too,
-   read and never copied, like fromFood. A line or tick that counted carries
-   `src`, so it has no delete button: it is the journal line or the tick.
-   Copy of the rule in the root index.html, WIDGETS.halflife.doses: change both. */
-let HL = null;
-Rec.on(() => { HL = null; });
-function hlTracker(fid) {
-  if (!HL) {
-    HL = Object.create(null);
-    Rec.all('setting').forEach(r => {
-      const x = r.key.indexOf('lifeos.halflife.') === 0 && r.payload && r.payload.v;
-      if (x && x.field && !HL[x.field]) HL[x.field] = x;
-    });
-  }
-  return HL[fid] || null;
-}
-function hlWritten(date, x) {
-  const parts = String(x.match || '').split(',').map(s => s.trim()).filter(Boolean);
-  const skip = parts.filter(s => s[0] === '!').map(s => s.slice(1).trim().toLowerCase()).filter(Boolean);
-  const names = parts.filter(s => s[0] !== '!')
-    .map(s => { const i = s.indexOf('='), a = i > 0 ? Number(s.slice(i + 1)) : NaN; return i > 0 && a > 0 ? [s.slice(0, i).trim(), a] : [s, null]; })
-    .filter(n => n[0]);
-  if (!names.length) return [];
-  const num = '\\s*(\\d+(?:\\.\\d+)?)?';
-  const res = names.map(([n]) => {
-    const q = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return n.length <= 2 ? new RegExp('^' + q + '(?![\\p{L}])' + num, 'u') : new RegExp('(?:^|[^\\p{L}\\d.])(?:(\\d+(?:\\.\\d+)?)\\s*(?:mg|g|ml)?\\s+)?' + q + '(?![\\p{L}])' + num, 'iu');
-  });
-  const per = Number(x.per) || 1, bare = x.bare === '' || x.bare == null ? null : Number(x.bare), once = {}, out = [];
-  Rec.all('note', { date: date }).forEach(r => {
-    const p = r.payload || {};
-    if (typeof p.text !== 'string' || p.cancelled || p.kind === 'idea' || (p.kind === 'todo' && !p.done)) return;
-    const text = p.text.trim();
-    if (skip.some(w => text.toLowerCase().indexOf(w) > -1)) return;
-    let m = null, i = 0;
-    for (; i < res.length && !m; i++) m = text.match(res[i]);
-    if (!m) return;
-    const fixed = names[i - 1][1], said = m[2] != null ? m[2] : m[1];
-    const v = fixed != null ? fixed : (said != null ? Number(said) : bare) * per;
-    if (v == null || !isFinite(v) || v <= 0) return;
-    if (fixed != null) { if (once[i]) return; once[i] = 1; }
-    const at = /^(\d{1,2}):(\d\d)/.exec(p.at || '');
-    const t = at ? new Date(date + 'T' + String(+at[1]).padStart(2, '0') + ':' + at[2] + ':00').getTime()
-      : p.t && Day.calendar(p.t) === date ? p.t : new Date(date + 'T12:00:00').getTime();
-    out.push({ t: t, v: v, src: 'journal' });
-  });
-  return out;
-}
-function hlTicked(date, x) {
-  const ticks = String(x.tick || '').split(',').map(s => s.trim()).map(s => { const i = s.lastIndexOf('='); return [s.slice(0, i).trim().toLowerCase(), Number(s.slice(i + 1))]; })
-    .filter(t => t[0] && t[1] > 0);
-  if (!ticks.length) return [];
-  const A = Rec.map('activity') || {};
-  for (const r of Rec.all('tick', { date: date })) {
-    const p = r.payload || {};
-    if (p.qty === 0) continue;
-    const nm = String((A[r.key] && A[r.key].name) || r.key).toLowerCase(), t = ticks.find(t => nm.indexOf(t[0]) === 0);
-    if (!t) continue;
-    const ms = p.ts || r.updated_at;
-    return [{ t: ms && Day.calendar(ms) === date ? ms : new Date(date + 'T12:00:00').getTime(), v: t[1], src: 'block' }];
-  }
-  return [];
-}
-
-/* Every reading for a field on a day, in the order they happened. */
+/* Every reading for a field on a day, in the order they happened.
+   shared/dose.js decides it, the same answer HOME's HALF-LIFE card reads
+   (Tom, 2026-10-30: one day read 10g there and blank here). A measure a
+   HALF-LIFE tracker names also counts that tracker's journal lines and BLOCK
+   ticks. A reading keeps `et`, the time stored on it; a food reading keeps
+   `food`; a line or a tick (`src` journal or block) has no row of its own
+   here, so it has no delete button. */
 function entries(date, fid) {
-  const f = field(fid) || {}, x = hlTracker(fid);
-  if (!f.from && !x) return evList(date, fid);
-  let out = evList(date, fid).concat(fromFood(date, f));
-  if (x) {
-    out = out.concat(hlWritten(date, x));
-    /* a tick is the same dose as a line or a reading, so it counts only alone */
-    if (!out.length) out = hlTicked(date, x);
-  }
-  return out.sort((a, b) => a.t - b.t);
+  return Dose.day(Dose.forField(fid) || { field: fid }, date);
 }
+const fromElsewhere = e => e.src === 'journal' || e.src === 'block';
 
 function value(date, fid) {
   const e = entries(date, fid);
@@ -3171,7 +3103,7 @@ function recentDoses(f) {
     for (let j = list.length - 1; j >= 0 && out.length < DOSE_CHIPS; j--) {
       /* a figure off a food label is not a dose you chose, so it is not
          offered back to you as one */
-      if (list[j].food || list[j].src) continue;
+      if (list[j].src !== 'reading') continue;
       const v = r1(list[j].v);
       if (!v || seen[v]) continue;
       seen[v] = 1; out.push(v);
@@ -3300,14 +3232,14 @@ function numberSheet(f, date) {
 function entryRow(f, d, e) {
   const r = el('div', 'row');
   r.innerHTML = '<span class="nm">' + r1(e.v) + (f.unit ? ' ' + esc(f.unit) : '') +
-    (e.food ? '<small>' + esc(e.food) + '</small>' : e.src ? '<small>' + (e.src === 'block' ? 'BLOCK tick' : 'journal') + '</small>' : '') +
+    (e.food ? '<small>' + esc(e.food) + '</small>' : fromElsewhere(e) ? '<small>' + (e.src === 'block' ? 'BLOCK tick' : 'journal') + '</small>' : '') +
     '</span><span class="fig">' + new Date(e.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '</span>';
   /* One that came off a food label has no row of its own to delete: it is the
      meal, read a different way. Removing it means removing the meal, which is
      one screen away and where you would expect to do it. */
-  if (!e.food && !e.src) {
+  if (e.src === 'reading') {
     const x = el('button', 'x', '✕');
-    x.onclick = () => { evDrop(d, f.id, e.t); fieldSheet(f, d); };
+    x.onclick = () => { evDrop(d, f.id, e.et); fieldSheet(f, d); };
     r.appendChild(x);
   }
   return r;
