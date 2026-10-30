@@ -57,6 +57,8 @@ stays small enough for per-module sessions.
 
 1.0.84, 2026-10-28: one press, one save. Tom: "Status food double input bug", on the PC: today's Cheesy Ramen was two `meal` rows written 44ms apart (keys `local-mvrs1eqa`, `local-mvrs1eri`; he deleted one), so one action saved twice. The sheet's Log it button stays under the pointer while its sheet slides away, and a second click within that (a quick double or a bouncing mouse button) ran `logMeal` again. Reproduced in headless Chromium at 1280: a click and a second 40ms later added 2 meals. `saveBar` now ignores a press within 700ms of the last, which covers every sheet's save button in STATUS; the same double press adds 1, a single click 1. Not seen in STATUS.exe.
 
+1.0.85, 2026-10-30: a measure the home HALF-LIFE card tracks fills from the journal and BLOCK. Tom: the tile stayed empty on days the dose was written as a journal line or ticked in BLOCK. A HALF-LIFE tracker (setting `lifeos.halflife.<id>`) naming the measure as its `field` lends its `match` and `tick`: `entries()` adds the day's matching lines (`hlWritten`) and, on a day with nothing else, the matching tick (`hlTicked`), read every time like `fromFood`, never copied. Such a reading says journal or BLOCK tick in the sheet, has no delete button and is not offered back as a dose chip. The rule is copied from the root index.html's `WIDGETS.halflife.doses`: change both. Driven in headless Chromium at 390 touch on a fresh store: a line, a tick, a line and a tick on one day (counted once) and a typed reading, tile and sheet read.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
