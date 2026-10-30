@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.86, 2026-10-30">
+<meta name="mb-version" content="1.0.87, 2026-10-30">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -467,7 +467,7 @@ nav button.on{color:var(--accent);opacity:1}
 .kindpick .chip:not(.on){box-shadow:inset 0 0 0 1px var(--border-strong)}
 
 /* ── things you type into: the one place a border earns its keep ── */
-input[type=text],input[type=search],input[type=time],input.num,textarea,select{
+input[type=text],input[type=search],input[type=time],input[type=date],input.num,textarea,select{
   width:100%;min-width:0;padding:var(--s-3);border:1px solid var(--border);
   border-radius:var(--radius-md);background:var(--surface-2);color:var(--text-1);
   font:inherit;font-size:var(--f-3);
@@ -475,6 +475,7 @@ input[type=text],input[type=search],input[type=time],input.num,textarea,select{
 input.num{font-family:var(--font-mono);font-size:var(--f-7);font-weight:600;text-align:center;padding:var(--s-3) var(--s-2)}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 input[type=time]{font-family:var(--font-mono);text-align:center}
+input[type=date]{font-family:var(--font-mono)}
 label.fl{
   display:block;font-size:var(--f-1);font-weight:600;color:var(--text-muted);
   margin:var(--s-4) 0 var(--s-2);
@@ -590,6 +591,10 @@ label.fl:first-child{margin-top:0}
 
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-2)}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--s-2)}
+/* as many columns as fit: a one-off's every figure, three across a phone */
+.gridn{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(var(--tap) * 2.4),1fr));gap:0 var(--s-2)}
+.gridn > .field{display:flex;flex-direction:column;justify-content:flex-end;min-width:0}
+.gridn > .field > label.fl{margin-top:0}
 .field{margin-bottom:var(--s-4)}          /* more space around a group than inside it */
 .stepper{display:flex;align-items:center;gap:var(--s-2)}
 .stepper input{flex:1;min-width:0}
@@ -2960,7 +2965,9 @@ function mealMenu(x, d, e) {
   /* where the mouse was: Tom, 2026-09-15, "right clicks in STATUS are not
      creating the menu where my mouse is". A phone gets a sheet either way. */
   UI.menu(e ? e.clientX : 0, e ? e.clientY : 0, [
-    { label: 'Edit this serving', note: 'Only this one row', icon: '✎', fn: () => mealSheet(x, d) },
+    lockedMeal(x)
+      ? { label: 'Edit this serving', note: 'Only this one row', icon: '✎', fn: () => mealSheet(x, d) }
+      : { label: 'Edit in full', note: 'Every figure, the day, the time and the cost', icon: '✎', fn: () => oneOffEditor(x, d) },
     fd ? { label: 'Edit ' + fd.name, note: 'The food itself, everywhere', icon: '◈', fn: () => foodEditor(fd) } : null,
     !x.fid && x.src !== 'kitchen' ? { label: 'Save to foods', note: 'One tap next time. This meal stays as it is', icon: '◈', fn: () => mealToFood(x) } : null,
     '-',
@@ -2973,8 +2980,122 @@ function mealMenu(x, d, e) {
   ].filter(Boolean), { title: x.name });
 }
 
+/* ── a one-off, in full ──
+   Tom, 2026-10-30: "let me edit one time food entries in complete detail".
+   A typed meal has no food behind it, so its row is the only place its
+   figures live, and the serving sheet's Amount meant nothing for it. Every
+   figure is here: the eight, the rest of the label from shared/nutrients.js,
+   the day, the time, the cost, how sure and the account. Merged into the row,
+   never rebuilt; a box left blank is not known and takes only its own figure
+   off. A label is read in the unit it is typed in, as on a food. */
+function oneOffEditor(x, d) {
+  openSheet(x.name || 'One-off', body => {
+    const inp = {};
+    const box = (key, label, unit) => {
+      const w = el('div', 'field');
+      w.appendChild(el('label', 'fl', esc(label) + (unit ? ' (' + unit + ')' : '')));
+      const i = document.createElement('input');
+      i.type = 'text'; i.inputMode = 'decimal'; i.setAttribute('pattern', '[0-9.]*');
+      i.autocomplete = 'off'; i.setAttribute('aria-label', label);
+      const v = num(x[key]);
+      /* worked-out calories stay out of the box and show as its dim hint */
+      if (v != null && !(key === 'kcal' && x.kx)) i.value = key === 'kcal' ? String(Math.round(v)) : String(Math.round(v * 1000) / 1000);
+      i.addEventListener('blur', () => {
+        const n = UI.amount(i.value, unit);
+        if (n == null) return;
+        const shown = String(Math.round(n * 1000) / 1000);
+        if (shown !== i.value) i.value = shown;
+      });
+      inp[key] = { i: i, unit: unit };
+      w.appendChild(i);
+      return w;
+    };
+
+    body.appendChild(el('label', 'fl', 'Name'));
+    const nm = document.createElement('input');
+    nm.type = 'text'; nm.autocomplete = 'off'; nm.setAttribute('autocapitalize', 'sentences');
+    nm.value = x.name || '';
+    body.appendChild(nm);
+
+    /* The day it was eaten, and the time. A meal moved to another day keeps
+       its key, so its spend moves with it. */
+    const g0 = el('div', 'grid2');
+    const dw = el('div', 'field');
+    dw.appendChild(el('label', 'fl', 'Day'));
+    const di = document.createElement('input');
+    di.type = 'date'; di.value = d; di.max = Day.today();
+    dw.appendChild(di); g0.appendChild(dw);
+    let atv = x.at || (x.t ? Journal.hhmm(x.t) : '');
+    const tw = el('div', 'field');
+    tw.appendChild(el('label', 'fl', 'Time eaten'));
+    tw.appendChild(timeInput(atv, v => { atv = v || ''; }));
+    g0.appendChild(tw);
+    body.appendChild(g0);
+
+    const g1 = el('div', 'gridn');
+    [['kcal', 'Calories'], ['p', 'Protein'], ['c', 'Carbs'], ['f', 'Fat'],
+     ['na', 'Sodium'], ['k', 'Potassium'], ['ca', 'Calcium'], ['caff', 'Caffeine']]
+      .forEach(k => g1.appendChild(box(k[0], k[1], NUT_UNIT[k[0]])));
+    body.appendChild(g1);
+    const hint = () => {
+      const k = num(inp.kcal.i.value) == null
+        ? macroKcal(num(inp.p.i.value), num(inp.c.i.value), num(inp.f.i.value)) : null;
+      inp.kcal.i.placeholder = k == null ? '' : String(k);
+    };
+    ['p', 'c', 'f', 'kcal'].forEach(k => inp[k].i.addEventListener('input', hint));
+    hint();
+
+    if (window.Nutrients) {
+      body.appendChild(el('label', 'fl', 'The rest of the label'));
+      const g2 = el('div', 'gridn');
+      Nutrients.LIST.forEach(n => g2.appendChild(box(n.k, n.label, n.unit)));
+      body.appendChild(g2);
+    }
+
+    const g3 = el('div', 'gridn');
+    g3.appendChild(box('price', 'Cost', ''));
+    body.appendChild(g3);
+    let err = num(x.err, 0) || 0, acct = x.acct || '';
+    body.appendChild(el('label', 'fl', 'How sure'));
+    body.appendChild(errChips(err, v => { err = v; }));
+    body.appendChild(el('label', 'fl', 'Paid from'));
+    body.appendChild(acctChips(acct, v => { acct = v; }));
+
+    Mobile.form(body);
+
+    body.appendChild(saveBar('Save', () => {
+      const name = nm.value.trim();
+      if (!name) return UI.toast('Needs a name', { bad: true });
+      const day = di.value || d;
+      if (day > Day.today()) return UI.toast('That day has not happened yet', { bad: true });
+      const was = Rec.get('meal', d, x.key);
+      if (!was) { closeSheet(); draw(); return; }
+      const row = Object.assign({}, was, { name: name });
+      Object.keys(inp).forEach(k => {
+        const v = UI.amount(inp[k].i.value, inp[k].unit);
+        if (v != null) row[k] = v; else delete row[k];
+      });
+      /* blank calories are worked out from the macros, as in the table */
+      if (num(inp.kcal.i.value) != null) delete row.kx;
+      else {
+        const mk = macroKcal(num(row.p), num(row.c), num(row.f));
+        if (mk != null) { row.kcal = mk; row.kx = 1; } else { delete row.kcal; delete row.kx; }
+      }
+      if (atv) row.at = atv; else delete row.at;
+      row.err = err; row.acct = acct;
+      if (day !== d) { Rec.del('meal', d, x.key); mealSpend(d, x.key, null); }
+      Rec.set('meal', day, x.key, row);
+      mealSpend(day, x.key, row);
+      Mobile.feedback('success');
+      closeSheet(); draw();
+      if (day !== d) UI.toast('<b>' + esc(name) + '</b> moved to ' + esc(day));
+    }));
+  });
+}
+
 /* one logged serving: change how much, or when */
 function mealSheet(x, d) {
+  if (!lockedMeal(x)) return oneOffEditor(x, d);
   const fd = foods()[x.fid];
   openSheet(x.name, body => {
     body.appendChild(el('div', 'note', 'This serving only. ' +
@@ -5319,6 +5440,8 @@ function mealToFood(x) {
   ['kcal', 'p', 'c', 'f'].forEach(n => { if (num(x[n]) != null) base[n] = num(x[n]); });
   /* the One-off sheet wrote 0 for a box left empty; a 0 here is not known */
   ['na', 'k', 'ca', 'caff', 'price'].forEach(n => { if ((num(x[n], 0) || 0) > 0) base[n] = num(x[n]); });
+  /* the rest of the label, typed in Edit in full */
+  if (window.Nutrients) Nutrients.keys().forEach(n => { if (num(x[n]) != null) base[n] = num(x[n]); });
   const past = pastOneOffs().find(o => o.key === key);
   const id = uid();
   Rec.set('food', null, id, { id: id, name: x.name, brand: '', base: base, serves: [], uses: past ? past.n : 1 });

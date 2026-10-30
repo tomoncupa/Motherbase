@@ -61,6 +61,8 @@ stays small enough for per-module sessions.
 
 1.0.86, 2026-10-30: `entries()` is `Dose.day()` from `shared/dose.js`, the same rule HOME's HALF-LIFE card reads, and the 1.0.85 copy is gone. A reading keeps `et`, the time stored on it, and its delete button uses that, because a backfilled reading now counts at its own day's noon. Only a reading (`src: 'reading'`) is offered back as a dose chip or has a delete button. Review 210/210 Chromium 390.
 
+1.0.87, 2026-10-30: EDIT IN FULL. Tom: "let me edit one time food entries in complete detail". A one-off (`!lockedMeal(x)`) opened `mealSheet`, whose Amount meant nothing for it, and had no box for anything past protein and cost. `oneOffEditor(x, d)` now opens from the row's menu ("Edit in full") and from any `mealSheet` call on a one-off: name, Day (moves the row and its spend, same key; no future day), time eaten, the eight, every `Nutrients.LIST` figure, cost, how sure, paid from. Merged into the row; a blank box takes only its own figure off; blank calories are worked out from the macros (`kx`), as in the table; boxes read typed units (`UI.amount`, 1.2g into sodium is 1200). `.gridn` lays them as many across as fit. Save to foods carries the extra nutrients onto `food.base`. `input[type=date]` now wears the box style (also Goals' goal date). Driven by typing and pressing in headless Chromium at 390 touch and 1280 on the demo; review 210/210 Chromium 390. WebKit did not launch (Playwright's `winldd-1007` missing).
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
