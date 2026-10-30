@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.92, 2026-10-29">
+<meta name="mb-version" content="1.0.93, 2026-10-30">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -4362,7 +4362,8 @@ const WIDGETS = {
       const num = '\\s*(\\d+(?:\\.\\d+)?)?';
       const res = names.map(([n]) => {
         const q = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return n.length <= 2 ? new RegExp('^' + q + '(?![\\p{L}])' + num, 'u') : new RegExp('(?:^|[^\\p{L}\\d])' + q + '(?![\\p{L}])' + num, 'iu');
+        /* a longer word may also have its number in front: "5g Word" */
+        return n.length <= 2 ? new RegExp('^' + q + '(?![\\p{L}])' + num, 'u') : new RegExp('(?:^|[^\\p{L}\\d.])(?:(\\d+(?:\\.\\d+)?)\\s*(?:mg|g|ml)?\\s+)?' + q + '(?![\\p{L}])' + num, 'iu');
       });
       const per = Number(x.per) || 1, bare = x.bare === '' || x.bare == null ? null : Number(x.bare), out = [], once = {};
       /* a time written on another day than the row's is a backfill: it counts at that day's noon */
@@ -4387,7 +4388,8 @@ const WIDGETS = {
         let m = null, i = 0;
         for (; i < res.length && !m; i++) m = text.match(res[i]);
         if (!m) return;
-        const amt = fixed[i - 1] != null ? fixed[i - 1] : (m[1] != null ? Number(m[1]) : bare) * per;
+        const said = m[2] != null ? m[2] : m[1];
+        const amt = fixed[i - 1] != null ? fixed[i - 1] : (said != null ? Number(said) : bare) * per;
         if (amt == null || !isFinite(amt) || amt <= 0) return;
         if (fixed[i - 1] != null) { if (once[i + '|' + r.date]) return; once[i + '|' + r.date] = 1; }
         /* the time typed on the line, else when it was written, else noon */
@@ -4398,6 +4400,23 @@ const WIDGETS = {
         else if (r.date) ms = new Date(r.date + 'T12:00:00').getTime();
         if (ms != null && isFinite(ms)) out.push([ms, amt]);
       });
+      /* `tick`, "Name=amount": a BLOCK tick of a block whose name starts
+         with Name counts that amount, once a day, and only on a day with no
+         other dose of this one, since the tick and the line are one dose */
+      const ticks = String(x.tick || '').split(',').map(s => s.trim()).map(s => { const i = s.lastIndexOf('='); return [s.slice(0, i).trim().toLowerCase(), Number(s.slice(i + 1))]; })
+        .filter(t => t[0] && t[1] > 0);
+      if (ticks.length) {
+        const A = Rec.map('activity') || {}, had = {}, ymd = ms => { const d = new Date(ms); return d.getFullYear() + '-' + zpad(d.getMonth() + 1) + '-' + zpad(d.getDate()); };
+        out.forEach(d => { had[ymd(d[0])] = 1; });
+        Rec.all('tick').forEach(r => {
+          const p = r.payload || {};
+          if (r.deleted || !r.date || had[r.date] || p.qty === 0) return;
+          const nm = String((A[r.key] && A[r.key].name) || r.key).toLowerCase(), t = ticks.find(t => nm.indexOf(t[0]) === 0);
+          if (!t) return;
+          had[r.date] = 1;
+          out.push([onDay(p.ts || r.updated_at || new Date(r.date + 'T12:00:00').getTime(), r.date), t[1]]);
+        });
+      }
       return out.sort((a, b) => a[0] - b[0]);
     },
     left: (doses, half, at) => doses.reduce((s, d) => d[0] <= at ? s + d[1] * Math.pow(0.5, (at - d[0]) / 3600000 / half) : s, 0),
@@ -4430,6 +4449,7 @@ const WIDGETS = {
           f.unit = box('text', x.unit || 'mg');
           f.half = box('text', fmtHalf(x.half), '9 hours');
           f.bare = box('decimal', x.bare);
+          f.tick = box('text', x.tick, 'Name=10');
           f.aim = box('decimal', x.aim);
           f.aimName = box('text', x.aimName, 'Aim');
           f.kind = el('select', 'mb-input');
@@ -4462,6 +4482,7 @@ const WIDGETS = {
           b.appendChild(capRow); showCap();
           b.appendChild(UI.row('Half-life', 'Hours or days, such as 9 hours or 4.5 days. For a store, how fast the extra drains: a guess of 21 days for creatine.', f.half));
           b.appendChild(UI.row('No number', 'How many a line without a number counts as. Blank skips it.', f.bare));
+          b.appendChild(UI.row('Ticked in BLOCK', 'A block name and what one tick of it is worth, such as Vitamin D=1. Counts on a day with no other dose.', f.tick));
           b.appendChild(UI.row('Daily aim', 'An amount a day, read as the average over the last ' + AIM_DAYS + ' days. Blank for none.', f.aim));
           b.appendChild(UI.row('Aim is for', 'What the aim line is called on the card.', f.aimName));
           UI.focusSoon(f.name);
@@ -4476,12 +4497,12 @@ const WIDGETS = {
           const hm = /^(\d+(?:\.\d+)?)\s*(d|days?|h|hrs?|hours?)?$/i.exec(v('half'));
           const half = hm ? Number(hm[1]) * (/^d/i.test(hm[2] || '') ? 24 : 1) : 0;
           const per = Number(v('per') || 1), bare = v('bare');
-          if (!v('name') || !(v('match') || v('field'))) { toast('Needs a name, and a STATUS measure or how it is written', { bad: true }); return false; }
+          if (!v('name') || !(v('match') || v('field') || v('tick'))) { toast('Needs a name, and a STATUS measure, how it is written or a BLOCK block', { bad: true }); return false; }
           if (!(half > 0)) { toast('Half-life needs a number of hours or days', { bad: true }); return false; }
           if (!(per > 0) || (bare !== '' && !(Number(bare) >= 0)) || (v('aim') !== '' && !(Number(v('aim')) > 0)) || (f.kind.value === 'store' && !(Number(v('cap')) > 0))) { toast('Amounts need to be numbers', { bad: true }); return false; }
           const id = x.key ? x.key : 'halflife.' + Date.now().toString(36);
           const was = x.key ? (Rec.setting('lifeos', id) || {}) : { ord: WIDGETS.halflife.list().length };
-          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), field: v('field'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare), kind: f.kind.value, cap: Number(v('cap')) || 30, aim: v('aim') === '' ? '' : Number(v('aim')), aimName: v('aimName') }));
+          Rec.setting('lifeos', id, Object.assign({}, was, { name: v('name'), field: v('field'), match: v('match'), per: per, unit: v('unit'), half: half, bare: bare === '' ? '' : Number(bare), kind: f.kind.value, cap: Number(v('cap')) || 30, aim: v('aim') === '' ? '' : Number(v('aim')), aimName: v('aimName'), tick: v('tick') }));
           drawHome();
         } }]),
       });

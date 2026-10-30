@@ -555,3 +555,8 @@ An entry of `!words` in Written as stops any line holding those words counting f
 
 A HALF-LIFE tracker may carry `aim`, an amount a day, and `aimName`. Its strip then shows a line under the header: the average a day over the last AIM_DAYS (28) days, how many of those days had a dose, and Reached or Under against the aim, following the hovered point. Set in the dialog as Daily aim and Aim is for. For an effect studies tie to weeks of a daily amount rather than a level. A strip no longer shrinks below its own words (`flex:1 0 auto`): at phone width the header had pushed the chart out of the card.
 [TESTED in headless Chromium at 1920 and 375, set up through the dialog, with `word=amount` and `!words` in the same tracker; five-tracker fit check rerun.]
+
+## 2026-10-30, HOME 1.0.93: doses from BLOCK ticks, and a number written first
+
+A longer word in Written as also reads a number in front of it ("5g Word"); before, only a number after it counted. A tracker may carry `tick`, "Name=amount" (dialog: Ticked in BLOCK): a BLOCK tick of a block whose name starts with Name counts that amount, once a day, and only on a day with no other dose of that tracker, since a tick and a written line are the same dose. Its time is the tick's own stamp.
+[TESTED against the live store in Chrome, in memory: the other trackers unchanged.]
