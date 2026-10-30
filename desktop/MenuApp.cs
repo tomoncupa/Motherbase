@@ -54,7 +54,7 @@ class Menu : Form
        a file named use-folder-copy.txt beside the program switches BOTH
        programs back, because they share one store and must never split. The
        folder copy's rows stay in the data folder under its own address. */
-    const string HOSTED = "https://tomoncupa.github.io/Motherbase/";
+    static readonly string HOSTED = Hosted.Url;
     static bool UseFolder()
     {
         return File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "use-folder-copy.txt"));
@@ -71,11 +71,15 @@ class Menu : Form
         catch { return false; }
     }
 
+    /* Setup.exe opens it once as `Main Menu.exe --setup new` or `existing`. */
+    static string setupMode = "";
+
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
+        if (args.Length > 1 && args[0] == "--setup" && (args[1] == "new" || args[1] == "existing")) setupMode = args[1];
         bool fresh;
-        only = new Mutex(true, "Motherbase.MainMenu.App", out fresh);
+        only = new Mutex(true, "Motherbase.MainMenu.App" + (Hosted.Client ? ".client" : ""), out fresh);
         if (!fresh)
         {
             /* Opening it again brings the one he has, rather than a second. */
@@ -129,6 +133,7 @@ class Menu : Form
         web.CreationProperties.UserDataFolder = dataDir;
         /* fresh=1: this open comes from the network, not the kept copy. */
         pageUrl = UseFolder() ? new Uri(page).AbsoluteUri : HOSTED + "?fresh=1";
+        if (setupMode != "" && !UseFolder()) pageUrl = Setup.Url(HOSTED, setupMode);
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);
         web.EnsureCoreWebView2Async(null);
@@ -159,8 +164,15 @@ class Menu : Form
         c.NavigationCompleted += (s2, e2) =>
             Log("page loaded: " + (e2.IsSuccess ? "yes" : "NO, " + e2.WebErrorStatus));
         /* Claude, as a panel on every suite page (ClaudeBridge.cs) */
-        claude = new ClaudeBridge(this, c, UseFolder() ? new Uri(root + Path.DirectorySeparatorChar).AbsoluteUri : HOSTED, Log);
-        claude.Attach();
+        /* Not in a copy given to someone else: it runs Tom's claude.exe. */
+        if (!Hosted.Client)
+        {
+            claude = new ClaudeBridge(this, c, UseFolder() ? new Uri(root + Path.DirectorySeparatorChar).AbsoluteUri : HOSTED, Log);
+            claude.Attach();
+        }
+        /* the first-run setup page (SetupPage.cs) */
+        new Setup(c, HOSTED, Log).Attach();
+        Updater.Start(Log);
         Caption(c);
         c.Navigate(pageUrl);
 
@@ -243,7 +255,7 @@ class Menu : Form
             if (File.Exists(p)) using (var bmp = new Bitmap(p)) return Icon.FromHandle(bmp.GetHicon());
         }
         catch { }
-        return SystemIcons.Application;
+        return Hosted.OwnIcon();
     }
 
     /* â”€â”€ where it was last time â”€â”€

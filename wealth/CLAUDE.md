@@ -220,6 +220,8 @@ the package's, due that day. Packages only. (HISTORY.md: A second kind of sessio
 
 **Session boxes are `sesh` rows in date order**; a future date is refused. (HISTORY.md: Sessions as boxes)
 
+**A session's date saves when its box is left or on Enter, never on `change`** (1.0.36, 2026-10-29). Chrome's date box reads a typed "2" as the 2nd and fires `change`; the redraw re-sorted the boxes, so typing 23, 26 and 27 sent three of Jay's sessions to 2 Oct on 2026-10-28. **A COACH session (`k-<pid>` key, `src: 'coach'`) shows its date and cannot be moved**: its key is one per client per day, so two moved onto one day became one row and a session was lost. Repaired by hand the next day.
+
 **Earnings a session and a week**, the week marked "about". (HISTORY.md: What a session earns)
 
 **A payer is not a client.** Names live in `wealth.payers`, keyed on what

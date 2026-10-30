@@ -133,7 +133,7 @@ is seconds; FitNotes distance is read as metres (unverified).
 
 ## Exercise types
 
-Six kinds, each the two fields it logs: `wr` `dt` `wd` `wt` `rd` `rt`. Older
+Six kinds, each the two fields it logs: `wr` `dt` `wd` `wt` `rd` `rt`, and since 1.0.81 a seventh, `t`, time only. Older
 values `0`, `2`, `'weight_reps'` read as `wr`; `1`, `'distance_time'` as `dt`.
 An imported exercise of any other type is read off what was logged against it
 (`TRAIN.kindOf`). (HISTORY.md: Exercise types)
@@ -406,6 +406,14 @@ Each is short here; its story is under the heading named.
   resend; a new exercise from a program reuses a muscle group by name. (HISTORY.md: Open slots, and a muscle group left alone (FORGE branch 1.0.23, on main as TRAIN 1.0.32, 2026-09-25))
 - **Merge Into** moves every row onto the kept exercise with one UNDO;
   renaming or dropping a starter needs a `SEED_RENAME` or `SEED_FOLD` entry. (HISTORY.md: Merging two exercises, and starters renamed (1.0.35, 2026-09-25))
+- **Tidy Movements** (exercise list More, `TRAIN.tidyOpen`, screen `tidy`)
+  walks every movement needs-you first (no group, reads like a note, a wide
+  or contradicted group, the rest by group); CHECKED, NEXT saves the group
+  and type picked and stamps `exercise.tidy` (a date). Its rules read names
+  only and never know one person's movements; a brand machine is never the
+  same as another brand or an unbranded one. A + group is made only when
+  picked; Prehab is renamed P/Rehab on open. Time only is a seventh kind,
+  `t: ['t']`: a reader of `fieldsOf` must cope with one field. (HISTORY.md: Tidy Movements, and Time only (1.0.81, 2026-10-28))
 - **Warmups count in every total**; records and set-N comparisons stay on
   working sets. A lift's GRAPH opens on Top 3 Sets & Total Work with a
   least-squares trend; the set 1 to 4 lines are hidden, not deleted. (HISTORY.md: Strength graphics and what a trend measures (1.0.49 to 1.0.59))

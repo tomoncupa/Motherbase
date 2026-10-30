@@ -110,6 +110,49 @@ Set up once with:
 powershell -ExecutionPolicy Bypass -File "C:\Users\user\Downloads\Motherbase\desktop\install-backup-task.ps1"
 ```
 
+## Giving it to someone else
+
+Send them **Motherbase Setup.exe** (built beside this file). One file: both
+programs and Microsoft's WebView2 files are inside it. Added 27 October 2026.
+
+1. They double click it. Windows may say "Windows protected your PC" because
+   the file is not signed: **More info**, then **Run anyway**.
+2. It asks **Have you used Motherbase before?** and installs into their own
+   AppData (no admin prompt), with Motherbase and STATUS on the desktop and in
+   the Start menu, and an entry in Settings, Apps to remove it.
+   Everything, their data included, sits in one folder,
+   `%LOCALAPPDATA%\Programs\Motherbase`. The Start menu's Motherbase folder
+   holds Motherbase, STATUS and Uninstall Motherbase. Removing it asks once
+   whether to delete what is stored on that PC, and never touches a shortcut
+   that opens another copy.
+3. The Main Menu opens on the setup page (`setup.html`, served by
+   `SetupPage.cs`). Already in the system: sign in with Google, then the
+   widget. First time: sign in (or Later), what to track, how often the
+   status check comes and between which hours, the widget's shortcut, on top
+   and start with Windows, and a code to scan for the phone. Then STATUS opens.
+
+Their copy opens the client address, `tomoncupa.github.io/Mainmenu-client/`,
+never this one: Setup writes it into `address.txt` beside the programs, which
+both read (`Hosted.cs`). No `address.txt`, as here, is Tom's copy. A client
+copy has its own single-instance lock and no CLAUDE panel. If their PC has no
+WebView2 (rare on Windows 10, never on 11), Setup says so with a button to get it.
+
+**It keeps itself current** (Tom, 2026-10-28). The pages inside always came
+from the site. The programs themselves now do too: half a minute after either
+opens, and every six hours after, a Setup-installed copy reads
+`desktop/update.txt` on its site. If that fingerprint is not its own
+`Setup.exe`'s, it downloads the new `Motherbase Setup.exe`, checks it, and
+runs it with `--update`, which swaps the files in without closing anything;
+the next open is the new build. No connection or a bad download changes
+nothing. Your own copy never checks (`Updater.cs`).
+
+So **a change to STATUS.exe or Main Menu.exe reaches them only through the
+client build**: commit the rebuilt `Motherbase Setup.exe` with them, then
+`tools/build-client.py` puts it and its `update.txt` on the client site.
+
+To test on this PC without touching your own shortcuts:
+`"Motherbase Setup.exe" --dir <folder> --address http://127.0.0.1:8811/`.
+
 ## Building it
 
 Only needed if the `.cs` files change. Editing STATUS never needs a rebuild.
@@ -136,5 +179,10 @@ three Microsoft WebView2 files in `lib\`.
 | `StatusDesktop.cs` | the old Chrome launcher, kept until the new one has earned its place |
 | `Backup.exe` `Backup.cs` | the nightly backup and its source; reads `tools/backup.html` |
 | `install-backup-task.ps1` | sets up (or `-Remove`s) the 4am task that starts it |
+| `Motherbase Setup.exe` `Setup.cs` | the package for someone else, and its source |
+| `setup.html` `SetupPage.cs` | the first-run setup page, and how the Main Menu serves it |
+| `Hosted.cs` | which address both programs open (`address.txt`) |
+| `Updater.cs` | a given copy updating itself from the client site |
 
-Windows only, Tom only. Not in the client build.
+Windows only. Not in the client build, except `Motherbase Setup.exe` and its
+`update.txt`, which the client site carries for the update check.

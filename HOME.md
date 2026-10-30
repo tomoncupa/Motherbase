@@ -530,3 +530,33 @@ Tom: "Add creatine and caffeine tracking to this." A tracker may name `field`, a
 
 Tom: "Creatine: build a muscle-stores view instead of a half-life." A tracker's Counts as is Half-life or **Store that fills up** (`kind: 'store'`, `cap`). A store is the extra held over the body's own level: each dose adds dose x `STORE_TAKE` (0.6) x (1 - extra / cap), and between doses the extra halves every `half` (21 days by default for a store). It reads as % full, 0 the body's own level and 100 `cap` over it (30 g by default), with "about N g over your own level" under it, following the hovered point. Cap, the drain and 0.6 are guesses from the creatine loading studies (about 120 g in the body, about 150 g full, back to normal in four to six weeks off), and the dialog says so.
 [TESTED in headless Chromium at 1920 and 375 on a fresh store, set up through the dialog: five days of 20 g then 5 g a day reads 87% full after the load, 54% ten days after the last dose, matching a separate sum; the tag and the header follow the hovered point. NOT on his screens.]
+
+## 2026-10-27, HOME 1.0.88: a store reads SATURATED
+
+A store now keeps STORE_TAKE (0.5) of each dose until it is full and spills the rest; the 1.0.87 taper never read full on a steady daily dose. At or over STORE_SAT (90%) the strip says "Saturated until <day> with no dose". A reading on hover names the last dose before its own moment, not the latest, on every tracker.
+[TESTED in headless Chromium at 1920 and 375, set up through the dialog; WebKit review 210 of 210.]
+
+## 2026-10-29, HOME 1.0.89: HALF-LIFE grows with its trackers
+
+HALF-LIFE is a `fit` card: five trackers in the 6-row default cut the last two off. It grows to its strips as far as the window's bottom and scrolls inside past that, like every fit card.
+[TESTED in headless Chromium at 1920 and 375 with five trackers; WebKit review 210 of 210.]
+
+## 2026-10-29, HOME 1.0.90: a word that always counts one amount
+
+HALF-LIFE's Written as takes `word=amount`: that word, anywhere in a line, counts as that amount in the tracker's unit, once a day however many lines say it. A STATUS reading or a line written on a later day than its own (a backfill) counts at its own day's noon, not when it was typed.
+[TESTED against the live store in Chrome, in memory, before the tracker was changed.]
+
+## 2026-10-29, HOME 1.0.91: a tracker can skip a line
+
+An entry of `!words` in Written as stops any line holding those words counting for that tracker, for a line that names the word but was not a dose.
+[TESTED against the live store in Chrome.]
+
+## 2026-10-29, HOME 1.0.92: a daily aim line
+
+A HALF-LIFE tracker may carry `aim`, an amount a day, and `aimName`. Its strip then shows a line under the header: the average a day over the last AIM_DAYS (28) days, how many of those days had a dose, and Reached or Under against the aim, following the hovered point. Set in the dialog as Daily aim and Aim is for. For an effect studies tie to weeks of a daily amount rather than a level. A strip no longer shrinks below its own words (`flex:1 0 auto`): at phone width the header had pushed the chart out of the card.
+[TESTED in headless Chromium at 1920 and 375, set up through the dialog, with `word=amount` and `!words` in the same tracker; five-tracker fit check rerun.]
+
+## 2026-10-30, HOME 1.0.93: doses from BLOCK ticks, and a number written first
+
+A longer word in Written as also reads a number in front of it ("5g Word"); before, only a number after it counted. A tracker may carry `tick`, "Name=amount" (dialog: Ticked in BLOCK): a BLOCK tick of a block whose name starts with Name counts that amount, once a day, and only on a day with no other dose of that tracker, since a tick and a written line are the same dose. Its time is the tick's own stamp.
+[TESTED against the live store in Chrome, in memory: the other trackers unchanged.]

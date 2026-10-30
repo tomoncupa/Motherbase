@@ -80,7 +80,7 @@ class App : Form
        a file named use-folder-copy.txt beside the program switches BOTH
        programs back, because they share one store and must never split. The
        folder copy's rows stay in the data folder under its own address. */
-    const string HOSTED = "https://tomoncupa.github.io/Motherbase/";
+    static readonly string HOSTED = Hosted.Url;
     static bool UseFolder()
     {
         return File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "use-folder-copy.txt"));
@@ -135,7 +135,7 @@ class App : Form
     static void Main()
     {
         bool fresh;
-        only = new Mutex(true, "Motherbase.STATUS.App", out fresh);
+        only = new Mutex(true, "Motherbase.STATUS.App" + (Hosted.Client ? ".client" : ""), out fresh);
         if (!fresh) return;          /* one copy; the running one is the app */
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
@@ -151,6 +151,7 @@ class App : Form
         dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
         try { File.Delete(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "status-app.log")); } catch { }
         LoadCfg();
+        Updater.Start(Log);
 
         string page = Path.Combine(root, "status", "index.html");
         if (UseFolder() && !File.Exists(page))
@@ -753,7 +754,7 @@ class App : Form
             if (File.Exists(p)) using (var bmp = new Bitmap(p)) return Icon.FromHandle(bmp.GetHicon());
         }
         catch { }
-        return SystemIcons.Application;
+        return Hosted.OwnIcon();
     }
 
     public static bool ParseHotkey(string s, out uint mod, out uint vk)

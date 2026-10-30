@@ -50,7 +50,7 @@ Free-Exe $out
   -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
   -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
   -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
-  (Join-Path $dir 'StatusApp.cs') (Join-Path $dir 'KeyBox.cs')
+  (Join-Path $dir 'StatusApp.cs') (Join-Path $dir 'KeyBox.cs') (Join-Path $dir 'Hosted.cs') (Join-Path $dir 'Updater.cs')
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Build failed."; exit $LASTEXITCODE }
 
@@ -67,7 +67,7 @@ Free-Exe $menu
   -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
   -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
   -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" -reference:System.Web.Extensions.dll `
-  (Join-Path $dir 'MenuApp.cs') (Join-Path $dir 'ClaudeBridge.cs')
+  (Join-Path $dir 'MenuApp.cs') (Join-Path $dir 'ClaudeBridge.cs') (Join-Path $dir 'Hosted.cs') (Join-Path $dir 'SetupPage.cs') (Join-Path $dir 'Updater.cs')
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Main Menu build failed."; exit $LASTEXITCODE }
 
@@ -81,9 +81,23 @@ $backup = Join-Path $dir 'Backup.exe'
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Backup build failed."; exit $LASTEXITCODE }
 
+# ── the package for someone else: one Setup.exe holding both programs ──
+# Tom, 2026-10-27. Everything it installs is built into it, so it is one file
+# to send. It installs a copy that opens the client address (Setup.cs).
+$setup = Join-Path $dir 'Motherbase Setup.exe'
+$res = @()
+foreach ($f in @('STATUS.exe','Main Menu.exe','setup.html')) { $res += "-resource:$(Join-Path $dir $f),$f" }
+foreach ($f in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll')) { $res += "-resource:$(Join-Path $lib $f),$f" }
+& $csc -nologo -target:winexe -out:"$setup" -win32icon:"$dir\menu.ico" `
+  -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
+  @res (Join-Path $dir 'Setup.cs')
+
+if ($LASTEXITCODE -ne 0) { Write-Output "Setup build failed."; exit $LASTEXITCODE }
+
 Write-Output "Built:"
 Write-Output "  $out"
 Write-Output "  $menu"
 Write-Output "  $backup"
+Write-Output "  $setup"
 Write-Output ""
 Write-Output "Double click it. It puts an icon in the tray, next to the clock."

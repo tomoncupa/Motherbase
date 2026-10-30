@@ -62,7 +62,8 @@ COPY_FILES = ['index.html', '.nojekyll', 'manifest.json',
 #            has used it himself (2026-09-25). Take it out of DROP_APPS and
 #            add it to COPY_DIRS to ship it
 #   desktop/ the Windows launcher for STATUS. Tom's machine only, and a
-#            .exe is not something to hand a client on a phone
+#            .exe is not something to hand a client on a phone. All but
+#            Motherbase Setup.exe, which a given copy updates itself from
 #   _template/ tools/ and every *.md brief - these are build notes
 DROP_APPS = ['form', 'portion', 'wealth', 'arc', 'speak', 'system', 'mix', 'receipts', 'coach', 'forge', 'sheet']   # removed from the home screen roster
 # The dead widgets are no longer here to remove: HABITS, the habit-backed
@@ -97,6 +98,11 @@ DROP_SHARED = ['claude.js']   # cloud.js went to clients 2026-09-23, Tom: "push 
 KEEP_THEMES = ['block', 'ice', 'chalkboard', 'sketch', 'doodle']
 RENAME_THEMES = {'block': 'Default', 'ice': 'System'}
 
+# The Windows package, so a copy someone was given keeps itself current
+# (desktop/Updater.cs, Tom 2026-10-28: "Build A"). Only this one file of
+# desktop/ goes, with a fingerprint beside it; the rest is Tom's machine.
+SETUP = 'desktop/Motherbase Setup.exe'
+
 # Files that exist only in the client copy, taken from tools/client/.
 CLIENT_ONLY = {'README.md': 'README.md', 'guide.html': 'guide.html',
                'gitignore.txt': '.gitignore'}
@@ -114,7 +120,7 @@ def fail(msg):
 # for a session that knows the unsaved change is its own and finished.
 def refuse_dirty():
     import subprocess
-    paths = [d + '/' for d in COPY_DIRS] + COPY_FILES
+    paths = [d + '/' for d in COPY_DIRS] + COPY_FILES + [SETUP]
     try:
         out = subprocess.run(['git', 'status', '--porcelain', '--'] + paths,
                              cwd=ROOT, capture_output=True, text=True).stdout
@@ -285,6 +291,22 @@ for src, dst in CLIENT_ONLY.items():
     if not os.path.isfile(p):
         fail('missing tools/client/' + src)
     shutil.copy2(p, os.path.join(DEST, dst))
+
+# ── the Windows package ───────────────────────────────────────────────────
+# A copy Setup installed reads desktop/update.txt every few hours and, when
+# the fingerprint differs from its own Setup.exe, downloads this one and
+# swaps its files in quietly. Never cached on a phone: the offline list
+# below only takes pages and shared files.
+src = os.path.join(ROOT, SETUP)
+if not os.path.isfile(src):
+    fail('missing ' + SETUP + ' - run desktop/build.ps1')
+os.makedirs(os.path.join(DEST, 'desktop'))
+shutil.copy2(src, os.path.join(DEST, SETUP))
+import hashlib
+blob = io.open(src, 'rb').read()
+with open(os.path.join(DEST, 'desktop', 'update.txt'), 'wb') as f:
+    f.write(('# The newest Motherbase Setup.exe. Written by tools/build-client.py.\n'
+             'sha256=%s\nsize=%d\n' % (hashlib.sha256(blob).hexdigest(), len(blob))).encode('utf-8'))
 
 # ── cache stamp ───────────────────────────────────────────────────────────
 # GitHub Pages caches hard, and a client who added this to their home screen

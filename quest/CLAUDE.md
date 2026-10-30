@@ -192,7 +192,111 @@ QUESTS, built 2026-09-14 and tested in the browser at desktop width; phone width
 
 1.0.23, 2026-10-22: words in a meaning colour read in every theme. In Craft Day (minecraft2) the #, @, Overdue, Reschedule, Yesterday and Today in the row's date measured 1.06 to 2.5 to 1 against 4.5. A chart or meaning colour is a line colour, not a word colour (root brief, Known traps), so every word keeps its text colour and the colour goes on a mark: a 3px line under # and @ (`--mk`, set where the # is drawn), a dot before Overdue and Now (`.mk-dot`), a red underline on Reschedule, the calendar icon for a late or today date, the chip's border for P1 to P3, a bar down the left of a late todo in the month grid, a ring round today in the date menu. Measured in headless Chromium on the demo at 1280, all 23 factory themes, Today view: failing words 168 to 10, words in a chart colour 158 to 0; the 10 left are Brick's own text token, Ragnarok's logo and FFVII's ADD, theme faults. Block 0 to 0. Looked at in Block and Craft Day at 390, and the project list at 1280: in Block a project's colour is now the line under its #, not the # itself. Not seen on the iPhone; month grid and date menu not measured, only changed.
 
-1.0.25, 2026-10-27: Goals (above). Also fixed in passing: labels typed in the add bar were never saved, because `final()` built its result without `tags` and `addQuest` read `tags` off it; watched on main, `Call the bank @phone @15min` saved no tags. Watched in headless Chromium: 30 checks on the goals (typing `^`, the chip, the highlight, saving `aim` and both labels, an unknown `^word` left as words, project linking, three reviews written once and a deleted one staying deleted, the card, the daily rotation over four stubbed days, Goals' five horizons, making a 5 year goal, a check-in, Another year, Finished, a review opening Goals, nothing sideways at 390), and `_review.html` 195 of 195 at 1280 and 210 of 210 at 390. Not run in WebKit (none in that cloud session) and not seen on the iPhone.
+1.0.26, 2026-10-30 (written 2026-10-27, merged after Todoist sync took 1.0.25): Goals (above). Also fixed in passing: labels typed in the add bar were never saved, because `final()` built its result without `tags` and `addQuest` read `tags` off it; watched on main, `Call the bank @phone @15min` saved no tags. Watched in headless Chromium: 30 checks on the goals (typing `^`, the chip, the highlight, saving `aim` and both labels, an unknown `^word` left as words, project linking, three reviews written once and a deleted one staying deleted, the card, the daily rotation over four stubbed days, Goals' five horizons, making a 5 year goal, a check-in, Another year, Finished, a review opening Goals, nothing sideways at 390), and `_review.html` 195 of 195 at 1280 and 210 of 210 at 390. Not run in WebKit (none in that cloud session) and not seen on the iPhone.
+
+## Todoist sync (decided and built 2026-10-29, 1.0.25)
+
+Tom: "something to check Todoist every once in a while and then have it
+reflect on quests". He captures with Todoist's iPhone widget and checks it
+daily; QUESTS stays the place he sees and works the list. He picked all three
+of Claude's recommendations:
+
+1. **One way in, ticks back.** Todoist tasks become QUESTS todos. Ticking,
+   rescheduling or deleting one in QUESTS (or STATUS, LOG, the home screen:
+   they all tick through `Journal.tick`) does the same in Todoist. Todos typed
+   in QUESTS stay in QUESTS; pushing them would flood Todoist with ARC,
+   WEALTH and brief todos.
+2. **Everything active comes in**, overdue included (40+ overdue since
+   2026-09-10 on 2026-10-29). Reschedule clears them and the dates go back.
+3. **An Inbox capture is a todo**, in QUESTS's Inbox, so a tick can go back.
+
+No new home screen widget: TODO, UPCOMING and the QUESTS card already show
+QUESTS todos.
+
+**Facts found.** `api.todoist.com/api/v1` answers a preflight from
+`https://tomoncupa.github.io` with Allow-Origin, GET/POST/PUT/DELETE and the
+Authorization header (curl, 2026-10-29), so the page calls Todoist directly
+on the phone and the PC; no daemon. His Todoist is the free plan (the
+activity log answers PREMIUM_ONLY). 8 projects, 39 sections, sections
+carry meaning ("Main Quests", "Daily Routines").
+
+**Plan, Claude's calls.**
+- Row: the usual `note` todo, key `td-<todoist id>`, `src: 'todoist'`
+  (add to `SRC_NAME`), plus `td: {id, proj, sec, parent, desc, labels,
+  due, rec, at}` holding what Todoist last said, so nothing QUESTS cannot
+  show is lost and a change is told apart from Todoist's own. Project maps
+  to a QUESTS `project` by name; labels to `tags`; p1 to p3 to `pri`
+  (Todoist's API numbers priority backwards: 4 is p1).
+- Pull on open, on `visibilitychange` back, and every 5 minutes while open.
+  A task gone from Todoist (done or deleted there) is ticked or tombstoned
+  here.
+- Push by reconciling, not on the click: a row whose `done`, `due` or
+  tombstone differs from `td` is sent, so a tick from any app goes. Before
+  closing a RECURRING task, fetch it and close only if its due still equals
+  `td.due`, or two devices would each advance it a round. `navigator.locks`
+  keeps one QUESTS per device syncing (the home screen frames QUESTS too).
+- The key: Todoist, Settings, Integrations, Developer, pasted once in
+  QUESTS Settings. Kept as a setting NOT prefixed `quest.` (the sheet push
+  takes every `quest.*` setting, `io.js` ~1228), so it rides live sync but
+  not the sheet. Never print it.
+- Test against one throwaway task in his real Todoist, tick both ways, then
+  delete it.
+
+**Built, 1.0.25** (`TD` in `index.html`). As planned, plus:
+- Talks to `api/v1/sync` only: one read gets items, projects and sections;
+  ticks, unticks, new dates and deletes go as one batch of commands
+  (`item_close`, `item_uncomplete`, `item_update`, `item_delete`). A task
+  that left the open list is asked about by `GET tasks/<id>`, at most 20 a
+  run: 404 or deleted removes the row here, checked ticks it.
+- The row is dated the day Todoist ADDED the task (local), so every device
+  derives the same row id. Written with `Rec.set`, not `Journal.add`,
+  because `Journal.add` makes its own key.
+- A recurring task ticked here: closed in Todoist only while its due still
+  equals `td.raw`, then a done copy keyed `td-<id>-r<round due>` with `of`,
+  and the row reopens on Todoist's next date. Its words show as the row's
+  repeat chip (`td.rec`); QUESTS's own `rep` stays empty.
+- Text, priority, project and labels changed here stay here and are not
+  overwritten until Todoist changes that field (Tom's 1A: only ticks, dates
+  and deletes go back). A moved date keeps a recurring task's words.
+- Runs on `Rec.ready`, on coming back to the page (45s apart at most), every
+  5 minutes, and 8s after a write to any `td-` row (after Undo's 6s).
+  `navigator.locks` `mb-todoist`; never in the demo. QUESTS's own redraws
+  wait until a run ends.
+- Settings: a password box for the key and a line saying what the last run
+  did, with SYNC NOW.
+- Tested: 29 checks against a stand-in Todoist in headless Chromium
+  (scratchpad, not in the repo). **Not yet run against the real Todoist**:
+  the field names are from Todoist's v1 docs as Claude knows them.
+
+**Not wanted for now** (Tom, 2026-10-29): Todoist's phone widget and
+reminders. **Email into the Inbox is replaced by the morning brief**: "we can
+do a morning brief - something that can also suggest todos for the day". The
+brief card and its todos already exist here (`briefTodos`, `drawBrief`), but
+its writer is outside this repo: OUTER HEAVEN writes
+`Receipts/out/brief-<date>.json` after 5am and RECEIPTS lets it in as the
+row (tom-context `projects/motherbase.md`, 2026-09-23). Check it still runs
+before rebuilding. Once
+Todoist rows are in the store, the brief picks from them, overdue first.
+A suggested todo waits for a tap to accept (Tom, 2026-10-29, "A").
+
+**The brief, rebuilt from scratch** (Tom, 2026-10-29: "better if you write
+the daily brief function from scratch"). It opens as a pop-up in the
+morning, offers 1 to 3 todos for the day to accept with a tap (Most
+Important Tasks), and **holds a box for last-minute journal entries for the
+day before** ("a field for last-minute journal entries for the prior day").
+Those entries are `note` rows dated yesterday, written through
+`Journal.add`, so STATUS and LOG show them on that day. Who writes the brief
+and where it runs is the first thing to decide when building.
+
+**Ways to organise** (Tom, 2026-10-29: "I definitely want a board view").
+Claude recommended one BOARD view grouped several ways: by stage (Kanban:
+To do, Doing, Done), by section (Todoist's board, sections synced as
+columns), by priority, and the Eisenhower 2x2 (urgent from the due date,
+important from P1 and P2). GTD's missing pieces (Someday, Waiting For, a
+weekly review) and 1-3-5 were offered, not chosen. Tom picked all four
+groupings (2026-10-29: "A"): stage, section, priority and Eisenhower, one
+BOARD view with a switch between them. Build order: Todoist sync, then the
+board, then the brief.
 
 ## Needs from the foundation
 

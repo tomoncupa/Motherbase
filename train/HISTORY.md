@@ -1412,3 +1412,69 @@ TRAIN never edits `shared/`; a need goes here. (HISTORY.md: For the foundation) 
   feats can disagree with TRAIN's records. A SHEET session should copy
   `TRAIN.effReps` and the three `train.split*` settings. COACH reads no split rule.
 - **A note row on the Share panel.** `options` are switch rows only, so nothing can say which lifts were left out and why.
+
+## Tidy Movements, and Time only (1.0.81, 2026-10-28)
+
+Tom approved the mockup the same day: "Build. Include ALL the things we might
+want to clean and tidy up." His log had 286 movements in 11 groups, 63 with
+no sets, one (Rack Belt Squat) pointing at a `quads` group that did not
+exist, and two spellings of many lifts; Marc's had 192, many of them notes
+typed where a name goes.
+
+- **Where:** the exercise list's More, Tidy Movements, beside Sort Into
+  Groups. A screen (`tidy`); the bar's back goes to the list. Works on a
+  client's profile, writing their `cex`/`cexcat`/`csession` rows (watched).
+- **The queue:** no group, then "reads like a note" (a number with `:`, `/`
+  or `=`, one generic word, or no movement word: `8:3 5:5`, `Box 20`,
+  `Well Fed, 4pm Session`), then a group too wide (Shoulders, Legs, Other,
+  Arms) or one the name contradicts (Leg Curl in Biceps), then the rest by
+  group. A checked one leaves the first three. NEXT walks the order as it
+  stood when the movement came up, so picking a group (which moves it to
+  another section) does not make next jump.
+- **Group chips:** every group, then the + groups the log lacks (Front, Side
+  and Rear Delts, Quads, Hamstrings, Glutes, Calves, P/Rehab, Cardio, Traps,
+  Adductors, Lower Back, Neck, Mobility, Plyo), made on pick in a colour no
+  group uses. "now" on the current, a dashed gold ring and "suggested" on
+  `TRAIN.tidySuggest` (`TIDY_RULES`, then `noteCat`). A dip or close grip
+  press is right in Chest or Triceps. Prehab is renamed P/Rehab on open.
+- **Same movement?** `TRAIN.tidySame`: both names as words (DB, BB, SLDL,
+  RDL, neutral as parallel, plural s, rotator as rotation), the brand taken
+  off once both carry the same one; rear, front, incline, decline, reverse,
+  internal, external, close, wide, narrow, calf, hip, high, sumo, assisted
+  or weighted on one side only, or different kit, means different. Shared
+  words over 0.6, or one name inside the other. MERGE IN keeps the one on
+  screen when it has as many sets or more, else MERGE INTO; the row's menu
+  does either way. A search box finds any other (`nameMatch`). Scored
+  against the cleanup plan's pairs in headless Chromium: A1 to A5, A7, A8,
+  B1 to B3, B5 to B11, B13 and B14 are offered; A6 and B12 (different
+  words), B4 (only "rear" and "raise" shared) and B15 (Hammer Strength
+  against an unbranded typo, the brand rule) are not, and the search finds
+  them. Leg Curl is not offered for Leg Press or Bayesian Curls.
+- **Type:** shown when the stored kind is unknown, the name says another
+  (plank, holds, hangs, wall sit, stretch: Time; cardio: Distance and time),
+  or Change Type was chosen. CHECKED also writes the canonical code over
+  `weight_reps` and the like.
+- **Not A Movement:** each day's sets become a line in that day's session
+  comment ("Box 20: 44.1 lbs x 10 reps (felt heavy)"), then the movement and
+  its sets go; one UNDO puts sets, movement and comments back.
+- **Lost sets:** sets whose movement is gone are counted at the top, and a
+  starter id names its movement (`seed-dumbbell-curl` offers Dumbbell
+  Curl). `foldSeeds` does not catch these: its spare map only covers a
+  starter that still has a twin, or one in `SEED_FOLD`.
+- **Desk:** list left, card right, each scrolling; Enter is CHECKED, a
+  number picks a chip (two digits within 0.8 s reach past nine). **Phone:**
+  the card, a LIST sheet, the footer stuck to the bottom.
+- **A redraw waits while the search box has the caret** (every write
+  redraws TRAIN), and draws once he leaves it. A blur event does not fire in
+  a hidden page, so it checks every 400 ms rather than waiting on blur.
+- **Time only** (Tom, same day): `KIND_FIELDS.t = ['t']`, `KIND_NAMES.t =
+  'Time'`. The type picker lists it by itself; a set row puts the time in the
+  right-hand column; records and the records card show Max time; the shared
+  lift line says "+0:10". setDelta, GRAPH, History and Share As Text were
+  already generic. Watched: a plank logged 1:30 from TRACK, stored `dur: 90`.
+
+Tested 2026-10-28 in the Browser pane (hidden, so controls pressed with
+`.click()`) on a seeded 35-movement log, 375 x 812 and 1920 x 1080: no
+target under 44, no words under 12px, no overflow, no sideways scroll.
+`tools/safari-check.py`: Chromium 1280 x 900 195/195, WebKit 390 x 844
+210/210. Not seen on his phone or on his real log.
