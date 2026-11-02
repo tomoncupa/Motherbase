@@ -752,6 +752,16 @@ to-dos."
   check, click the words, STATUS opened with the check up; the same from the
   home screen's TODAY card; BLOCK's menu publishing the link into the plan.
 
+## Ctrl+Z (2026-11-02, `ui.js`)
+
+Tom: "add a ctrl z feature", "everywhere". Every `UI.undo` is kept (30,
+newest last) and Ctrl+Z / Cmd+Z presses them one at a time after the
+snackbar has gone; "Undone: <its words>" when the undo itself says nothing.
+An undo run from the key or its button adds none of its own (`undoing`), or
+Ctrl+Z would flip a change back and forth. A text box keeps its own Ctrl+Z.
+Every app and the OUTER HEAVEN board got it unedited. One smoke check; watched
+in Chrome on the smoke page and on the board (a cleared ramble came back).
+
 ## History
 
 `HISTORY.md`, beside this file, holds the debt list, the numbered foundation
