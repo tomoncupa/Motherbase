@@ -254,7 +254,22 @@ function css() {
   }
 }
 
-let toastEl, toastT;
+let toastEl, toastT, toastN = 0;
+/* Ctrl+Z (Tom, 2026-11-02: "add a ctrl z feature", "everywhere"): every
+   UI.undo is kept, newest last, and Ctrl+Z presses them one at a time, long
+   after the snackbar has gone. An undo run from here or from its button adds
+   none of its own, or Ctrl+Z would flip a change back and forth. */
+const UNDOS = [];
+let undoing = 0;
+const runUndo = (u, msg) => {
+  const i = UNDOS.indexOf(u); if (i >= 0) UNDOS.splice(i, 1);
+  const n = toastN;
+  undoing++;
+  try { u.fn(); } catch (e) { if (g.console) console.error(e); UI.toast('That could not be undone.', { bad: true }); return; }
+  finally { undoing--; }
+  /* most undos redraw quietly: say what came back unless the undo spoke */
+  if (msg && toastN === n) UI.toast('Undone: ' + u.said);
+};
 /* Every overlay in the suite goes through mobile.js when it is loaded, which
    is what makes the same call site a bottom sheet on a phone and a centred
    card on a laptop. Without mobile.js these fall back to the plain versions,
@@ -540,7 +555,7 @@ const UI = {
 
   /** The snackbar. `opts.action = {label, fn}` turns it into an undo. */
   toast(html, opts) {
-    css(); opts = opts || {};
+    css(); opts = opts || {}; toastN++;
     if (!toastEl) { toastEl = el('div', 'mb-toast'); document.body.appendChild(toastEl); }
     toastEl.className = 'mb-toast' + (opts.bad ? ' bad' : '');
     toastEl.innerHTML = '';
@@ -564,7 +579,9 @@ const UI = {
   /** Delete something and offer it straight back. Nothing in this suite
       should ever destroy work without a way out of it. */
   undo(message, fn, opts) {
-    UI.toast(message, Object.assign({ action: { label: 'UNDO', fn: fn } }, opts || {}));
+    const u = { fn: fn, said: message };
+    if (!undoing) { UNDOS.push(u); if (UNDOS.length > 30) UNDOS.shift(); }
+    UI.toast(message, Object.assign({ action: { label: 'UNDO', fn: () => runUndo(u) } }, opts || {}));
   },
 
   /** the one dialog. `body` is a function that fills the content element.
@@ -1237,6 +1254,19 @@ document.addEventListener('click', e => {
   e.preventDefault(); e.stopPropagation();
   UI.go(a.dataset.go);
 }, true);
+
+/* Ctrl+Z (Cmd+Z on a Mac) presses the newest UI.undo. A text box keeps its
+   own Ctrl+Z, so typing is undone the way it always was. */
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || String(e.key).toLowerCase() !== 'z' || e.repeat) return;
+  const t = e.target;
+  if (t && t.closest && t.closest('input,textarea,select,[contenteditable]:not([contenteditable=false])')) return;
+  e.preventDefault();
+  const u = UNDOS[UNDOS.length - 1];
+  if (!u) { UI.toast('Nothing to undo.'); return; }
+  clearTimeout(toastT); if (toastEl) toastEl.classList.remove('on');
+  runUndo(u, true);
+});
 
 /* `?show=<spot>` on this page's address: the same message the home screen
    sends, once the page has loaded, then taken off the address so a reload
