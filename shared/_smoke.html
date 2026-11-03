@@ -11,6 +11,7 @@
 <script src="records.js"></script>
 <script src="journal.js"></script>
 <script src="dose.js"></script>
+<script src="grade.js"></script>
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
@@ -1023,6 +1024,33 @@ async function run() {
   ok('dose: a measure no tracker names gives its readings alone', doseRun((x, D) => {
     const d = Dose.day({ field: 'sm' }, D(3));
     return d.length === 1 && d[0].src === 'reading' && Dose.day({ field: 'sm' }, D(1)).length === 0;
+  }));
+  /* ---- the day's letter ----
+     shared/grade.js is the one answer to "what letter is this day", read by
+     STATUS's Today and HOME's DAY PLAN. Through a stand-in store, on STATUS's
+     default ladders: sleep 8 is S, steps 10000 is A, protein and calories on
+     target are S, so the day is S; a day with nothing on it is all F. */
+  const gradeRun = (fn) => {
+    const real = window.Rec, D = '2001-04-02', at = new Date(D + 'T09:00:00').getTime();
+    const rows = {
+      field: [{ key: 'sleep', date: null, payload: { id: 'sleep', label: 'Sleep', on: 1 } }, { key: 'steps', date: null, payload: { id: 'steps', label: 'Steps', on: 1 } }],
+      ev: [{ key: 'sleep', date: D, payload: { e: [{ t: at, v: 8 }] } }, { key: 'steps', date: D, payload: { e: [{ t: at, v: 10000 }] } }],
+      meal: [{ key: 'm1', date: D, payload: { t: at, p: 175, kcal: 2220 } }],
+    };
+    window.Rec = { appId: 'smoke', hydrated: true, loaded: () => true, setting: () => null,
+      all: (ty, o) => (rows[ty] || []).filter(r => !o || o.date == null || r.date === o.date),
+      get: (ty, d, k) => { const r = (rows[ty] || []).filter(r => r.date === d && r.key === k)[0]; return r ? r.payload : null; },
+      map: ty => { const m = {}; (rows[ty] || []).forEach(r => { m[r.key] = r.payload; }); return m; }, on: () => {}, ready: () => Promise.resolve() };
+    try { return fn(D); } finally { window.Rec = real; }
+  };
+  ok('grade: loaded', !!window.Grade && typeof Grade.day === 'function' && Grade.RANKS.length === 7);
+  ok('grade: each pillar reads its own ladder and the day is the average of the letters', gradeRun(D => {
+    const g = Grade.day(D), L = {}; g.parts.forEach(p => { L[p.id] = p.letter; });
+    return L.sleep === 'S' && L.steps === 'A' && L.protein === 'S' && L.kcal === 'S' && g.letter === 'S' && g.parts.length === 4;
+  }));
+  ok('grade: a day with nothing on it starts at F, and protein over its target is full marks', gradeRun(D => {
+    const g = Grade.day('2001-04-03');
+    return g.letter === 'F' && g.pct === 0 && g.pending.length === 4 && Grade.pillarLetter('protein', 220, 175) === 'S';
   }));
   ok('journal: a range on a todo is its start and its end; on an entry a start and a length', (() => {
     const t = Day.shift(Day.today(), -2), real = window.Rec, rows = {};
