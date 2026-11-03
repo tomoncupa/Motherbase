@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.87, 2026-10-30">
+<meta name="mb-version" content="1.0.88, 2026-11-03">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -21,6 +21,7 @@
 <script src="../shared/records.js"></script>
 <script src="../shared/journal.js"></script>
 <script src="../shared/dose.js"></script>
+<script src="../shared/grade.js"></script>
 <script src="../shared/chart.js"></script>
 <script src="../shared/mobile.js"></script>
 <script src="../shared/sound.js"></script>
@@ -1525,16 +1526,7 @@ function entries(date, fid) {
 }
 const fromElsewhere = e => e.src === 'journal' || e.src === 'block';
 
-function value(date, fid) {
-  const e = entries(date, fid);
-  /* A day TRAIN has sets on is a ticked Trained, here too: the tile, its
-     history and the export all read this, and only logged() knew until 1.0.67. */
-  if (!e.length) return trainField(fid) && (field(fid) || {}).measure === 'check' && trainLogged(date) ? 1 : null;
-  const f = field(fid) || {};
-  if (f.agg === 'sum') return e.reduce((a, x) => a + x.v, 0);
-  if (f.agg === 'avg') return e.reduce((a, x) => a + x.v, 0) / e.length;
-  return e[e.length - 1].v;
-}
+function value(date, fid) { return Grade.value(date, fid); }
 /* A session in TRAIN ticks Trained. Tom, 2026-09-18: "Data in TRAIN should
    toggle TRAIN in STATUS". Read, not written: the grade already counted TRAIN's
    rows, and now the tile says what the grade knew. */
@@ -1669,7 +1661,7 @@ function dayTotals(date) {
   t.kerr = meals(date).reduce((a, m) => a + (num(m.kcal, 0) || 0) * (num(m.err, 0) || 0), 0);
   return t;
 }
-const TARGETS = () => S.get('targets', { p: 175, c: 200, f: 80, kcal: 2220, na: 3500, k: 4500 });
+const TARGETS = () => Grade.targets();
 
 /* One number, one place it comes from. Either you set it, or it is derived
    from the measured TDEE and a goal rate you chose. Never invented.      */
@@ -5622,15 +5614,10 @@ function drawMoney(m) {
 
 const tok = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
 
-const RANKS = [
-  { k: 'S', at: 95, say: 'Near perfect' },
-  { k: 'A', at: 88, say: 'Strong' },
-  { k: 'B', at: 80, say: 'Good' },
-  { k: 'C', at: 70, say: 'Patchy' },
-  { k: 'D', at: 60, say: 'Slipping' },
-  { k: 'E', at: 50, say: 'Barely there' },
-  { k: 'F', at: 0,  say: 'Failing' },
-];
+/* The ladder of letters, and every rule below that grades a day, live in
+   shared/grade.js since 2026-11-03, so the home screen's DAY PLAN card
+   reads the same letter. The comments here still say why each rule is so. */
+const RANKS = Grade.RANKS;
 const rankFor = pct => RANKS.find(r => pct >= r.at) || RANKS[RANKS.length - 1];
 const rankColour = k => tok('--rank-' + k) || tok('--accent');
 const rankUp = (k, n) => {
@@ -5668,12 +5655,7 @@ const rankFloor = (k, floor) => {
    different for each person and being 400 over is as wrong as 400 under.
 
    Kept as a setting so the standards can be raised without a code change. */
-const STANDARDS = () => S.get('standards', {
-  sleep:   [['S', 8], ['A', 7.5], ['B', 7], ['C', 6.5], ['D', 6], ['E', 5.5]],
-  steps:   [['S', 12500], ['A', 10000], ['B', 8800], ['C', 7500], ['D', 6500], ['E', 5000]],
-  kcal:    [['S', 97], ['A', 95], ['B', 90], ['C', 85], ['D', 80], ['E', 75], ['F', 70]],
-  protein: [['S', 97], ['A', 95], ['B', 90], ['C', 85], ['D', 80], ['E', 75], ['F', 70]],
-});
+const STANDARDS = () => Grade.standards();
 
 /* Training is graded against the plan you set rather than a flat number,
    because four sessions out of four is not the same day's work as four out
@@ -5688,17 +5670,10 @@ const TRAIN_STANDARD = () => S.get('trainStandard', {
 });
 
 /** where a letter sits: S is 0, F is the last one */
-const rankIndex = k => {
-  const i = RANKS.findIndex(r => r.k === k);
-  return i < 0 ? RANKS.length - 1 : i;
-};
+const rankIndex = k => Grade.rankIndex(k);
 
 /** the letter a number earns on a ladder, or F if it clears nothing */
-function ladderLetter(rungs, v) {
-  if (v == null) return 'F';
-  for (let i = 0; i < rungs.length; i++) if (v >= rungs[i][1]) return rungs[i][0];
-  return 'F';
-}
+function ladderLetter(rungs, v) { return Grade.ladderLetter(rungs, v); }
 
 /** how close you landed to a target, as a percentage.
 
@@ -5711,31 +5686,10 @@ function ladderLetter(rungs, v) {
     five is not a miss by fourteen percent, it is the target met, and grading
     it as a C was the model being tidy rather than right. Protein is always
     'over'; calories are whichever the user picked. */
-function accuracy(v, target, free) {
-  if (!target) return null;
-  if (v == null) return 0;
-  if (free === 'over' && v >= target) return 100;
-  if (free === 'under' && v <= target) return 100;
-  return Math.max(0, 100 - Math.abs(v - target) / target * 100);
-}
+function accuracy(v, target, free) { return Grade.accuracy(v, target, free); }
 
 /** the letter for one pillar on one day, or null if it does not apply */
-function pillarLetter(id, v, target) {
-  /* Sent or not sent, and nothing in between. Answered here rather than as a
-     rung in STANDARDS, because STANDARDS is a stored setting: anyone who had
-     already edited theirs would never see a key added to the default later. */
-  if (id === SENT) return v ? 'S' : 'F';
-  const st = STANDARDS();
-  if (id === 'kcal' || id === 'protein') {
-    /* Protein is always free above the target. Calories are whichever way
-       the user said a miss should count. */
-    const free = id === 'protein' ? 'over' : kcalDir();
-    const a = accuracy(v, target, free);
-    return a == null ? null : ladderLetter(st[id], a);
-  }
-  if (!st[id]) return null;
-  return ladderLetter(st[id], v);
-}
+function pillarLetter(id, v, target) { return Grade.pillarLetter(id, v, target); }
 
 /** the training letter for a stretch, against the plan */
 function trainLetter(sessions, perWeek, weeks) {
@@ -5749,12 +5703,7 @@ function trainLetter(sessions, perWeek, weeks) {
 }
 
 /** letters in, one letter out */
-function averageLetter(letters) {
-  const ok = letters.filter(Boolean);
-  if (!ok.length) return null;
-  const mean = ok.reduce((a, k) => a + rankIndex(k), 0) / ok.length;
-  return RANKS[Math.max(0, Math.min(RANKS.length - 1, Math.round(mean)))].k;
-}
+function averageLetter(letters) { return Grade.averageLetter(letters); }
 
 /* The old curve, kept because the tiles and the charts still ask "how close
    is this to the target" as a fraction, which is a different question from
@@ -5799,14 +5748,10 @@ function closeness(v, target, both) {
 
    It is a setting per device, because there is no server to set it from. Tom
    turns it off on a client's phone when he sets them up. */
-const countCal = () => !!S.get('countCal', 1);
-const SENT = 'sentfood';
+const countCal = () => Grade.countCal();
+const SENT = Grade.SENT;
 
-const PILLARS = () => {
-  const set = S.get('pillars', ['protein', 'sleep', 'steps', 'kcal', 'training']);
-  if (countCal()) return set;
-  return set.filter(k => k !== 'protein' && k !== 'kcal').concat(SENT);
-};
+const PILLARS = () => Grade.pillars();
 
 /* The field behind the question. Made the first time counting goes off, and
    only ever turned OFF after that: a field turned off keeps its data, and
@@ -5829,13 +5774,7 @@ function syncSentField(flipped) {
 
 /* Training comes from TRAIN if it is there, and from a tracked yes/no in here
    if it is not. Naming a body part is itself a yes. */
-function trainedOn(date) {
-  if (Rec.get('session', date, '')) return true;
-  if (setsOn(date).length) return true;
-  const f = Object.values(fields()).filter(x => /^train/i.test(x.id) || /training/i.test(x.label || ''))[0];
-  if (f && logged(date, f.id)) return true;
-  return false;
-}
+function trainedOn(date) { return Grade.trainedOn(date); }
 
 /* ══════════════ FRESH START ══════════════
    Tom, 2026-10-12: "a lot of my people get depressed and have lapses in
@@ -5930,72 +5869,13 @@ function freshWhenSettled() {
 
 /* ── one day ── */
 function dayScore(date) {
-  const live = PILLARS(), parts = [], pending = [];
-  const today = date === Day.today();
-  const T = TARGETS(), tot = dayTotals(date), ate = meals(date).length > 0;
-  const untracked = dayUntracked(date);
-
   /* Each pillar earns a letter off its own ladder and the day is the average
-     of those letters. `score` is the same letter as a fraction, so the tiles
-     and the "costing the most" list still have something to sort on, and so
-     the percentage on the badge can never disagree with the letter beside it.
-
-     Sleep and steps read straight off the table. Calories and protein are
-     scored on ACCURACY to your own target, either side, because 400 over is
-     as wrong as 400 under. */
-  const asScore = k => 1 - rankIndex(k) / (RANKS.length - 1);
-
-  /* ── every pillar keeps its working ──
-     A letter with no number behind it is a verdict you cannot argue with,
-     which is the opposite of useful. Tom, 2026-09-05: "When I click the
-     letter, I wanna see the data for the day." So each part carries what it
-     was measured on, and for calories and protein the accuracy the ladder
-     actually read. */
-  /* ── the day starts at F and is graded up ──
-     Tom, 2026-09-09: "Let each day begin at F then be graded up appropriately
-     but always out of the full expectations."
-
-     Every live pillar is in the average from midnight. One with no reading yet
-     is an F, because that is what it is: not done. So the letter opens at F
-     and climbs as the day is actually lived, and it is always out of the whole
-     day rather than out of the bit that has happened so far.
-
-     This replaces holding a pillar back until its hour and averaging only the
-     rest, which sounds fairer and is not. A denominator that grows through the
-     day means the same morning is an S at 9am and a C by teatime with nothing
-     having changed, and it let one good reading stand as the whole grade —
-     nine hours of sleep and nothing else read as an A. `pending` is now only
-     a list to name on the day sheet; it no longer excludes anything. */
-  const add = (id, label, letter, val, target, unit) => {
-    if (letter == null) return;
-    const acc = (id === 'kcal' || id === 'protein')
-      ? accuracy(val, target, id === 'protein' ? 'over' : kcalDir()) : null;
-    if (val == null) pending.push(label);
-    parts.push({ id: id, label: label, letter: letter, score: asScore(letter),
-                 val: val, target: target, unit: unit || '', acc: acc,
-                 waiting: val == null, partial: acc != null && untracked });
-  };
-
-  if (live.indexOf('protein') > -1)
-    add('protein', 'Protein', pillarLetter('protein', ate ? num(tot.p, 0) : null, num(T.p, 0)),
-        ate ? Math.round(num(tot.p, 0)) : null, Math.round(num(T.p, 0)), 'g');
-  if (live.indexOf('kcal') > -1)
-    add('kcal', 'Calories', pillarLetter('kcal', ate ? num(tot.kcal, 0) : null, num(T.kcal, 0)),
-        ate ? Math.round(num(tot.kcal, 0)) : null, Math.round(num(T.kcal, 0)), '');
-
-  /* The ladders for sleep and steps are absolute, so a field with no target
-     of its own is still graded - eight hours is an S whatever you aimed at. */
-  Object.values(fields()).forEach(f => {
-    if (!f.on || !dueToday(f, date)) return;
-    const id = /sleep/i.test(f.id) ? 'sleep' : /step/i.test(f.id) ? 'steps' : f.id;
-    if (live.indexOf(id) === -1) return;
-    add(id, f.label, pillarLetter(id, value(date, f.id), num(f.target, 0)),
-        value(date, f.id), num(f.target, 0) || null, f.unit || '');
-  });
-
-  const scored = parts;
-  const letter = averageLetter(scored.map(p => p.letter));
-  const pct = scored.length ? Math.round(scored.reduce((a, p) => a + p.score, 0) / scored.length * 100) : null;
+     of those letters; every pillar is in from midnight as an F and graded
+     up (Tom, 2026-09-09). shared/grade.js does it, for here and the home
+     screen alike. */
+  const g = Grade.day(date);
+  const today = date === Day.today(), ate = meals(date).length > 0;
+  const scored = g.parts, letter = g.letter, pct = g.pct, pending = g.pending;
 
   /* ── a day you never opened is not a day you failed ──
 
@@ -8093,7 +7973,7 @@ const KCAL_DIRS = [
   ['under', 'Only if I go over',    'At or under the target is full marks'],
   ['over',  'Only if I fall short', 'At or over the target is full marks'],
 ];
-const kcalDir = () => S.get('kcalDir', 'both');
+const kcalDir = () => Grade.kcalDir();
 
 function drawQuestsTab(pane) {
   settingsPane = pane; pane.classList.add('setpane');
