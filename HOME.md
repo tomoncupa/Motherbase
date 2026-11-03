@@ -565,3 +565,12 @@ A longer word in Written as also reads a number in front of it ("5g Word"); befo
 
 What counts as a dose moved out of `WIDGETS.halflife.doses` into `shared/dose.js`, which STATUS's tiles read too, so the card and a tile can no longer disagree. `list()` is `Dose.trackers()`. A written number is multiplied by the tracker's `per`; a STATUS reading and its food are taken as they are (every tracker naming a measure had `per` 1).
 [TESTED: review 210/210 Chromium 390 and 195/195 at 1280, six new `dose:` smoke checks; WebKit could not launch.]
+
+
+## 2026-11-03, HOME 1.0.95: DAY PLAN
+
+Tom: "a big widget that just shows my score for the day as it is, then under the letter I can schedule what time I do the walking chunks, training, eating, and bed time." He picked the Main Menu board, usual times every day starts with and that can be moved for today only, and each time a journal event. **DAY PLAN** (4 x 6, `app: 'status'`): today's letter big in a ring of its rank colour, its word and percentage under it, the same letter STATUS's Today shows because both ask `shared/grade.js`; a tap opens STATUS. Under it WALKS, TRAINING, MEALS and BED, each time a button, + adds one (BED holds one). A time's dialog: the time, Every day (on for the first of its kind), REMOVE, SAVE; every change has Undo. The header says the next time ("next: walk at 12:15pm").
+- **Usual times** are one setting, `lifeos.dayplan` = [{id, kind, at}], written only when he saves with Every day on.
+- **A day's times are `note` events**, key `plan-<day>-<id>` (a today-only one `plan-<day>-x...`), `src: 'plan'`, `plan` the kind, text Walk, Train, Eat or Bed. The widget reads these rows, so moving one in STATUS's journal moves it here. A bed time before 5am is dated the next day.
+- **Usual times reach a day by `seed`**, on draw once the store is in: a `Rec.merge` stamped at that day's midnight, so any real edit or removal, from any device, beats it, and two devices make the same row. Only today is seeded, so a day the board was never opened gets no events.
+[TESTED: Chrome on the demo at 3840 wide: added from + WIDGET, letter E matching STATUS; add usual, add today-only, a 1am bed dated the next day, tomorrow seeded with no second copy, moved for today only with the usual time kept, REMOVE and Undo, the times in `Journal.notes`. Phone width only through the review run.]

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.94, 2026-10-30">
+<meta name="mb-version" content="1.0.95, 2026-11-03">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -36,6 +36,7 @@ try { if (window.frameElement && typeof parent.stayIn === 'function') location.r
 <script src="shared/records.js"></script>
 <script src="shared/journal.js"></script>
 <script src="shared/dose.js"></script>
+<script src="shared/grade.js"></script>
 <script src="shared/measure.js"></script>
 <script src="shared/chart.js"></script>
 <script src="shared/mobile.js"></script>
@@ -601,6 +602,17 @@ body.dragging #cardframes{z-index:0}
 .lap i{font-style:normal;color:var(--dim2)}
 .row .abig{font-family:var(--f1);font-size:var(--f-3);color:var(--txt);letter-spacing:.04em;flex:0 0 auto;min-width:6ch;font-variant-numeric:tabular-nums}
 .row .abig small{font-size:var(--f-1);color:var(--dim2);margin-left:var(--s-1)}
+.dptop{display:flex;flex-direction:column;align-items:center;gap:var(--s-2);padding-bottom:var(--s-3);border-bottom:var(--border-width,1px) solid var(--line);margin-bottom:var(--s-2)}
+.dpletter{font-family:var(--f1);font-size:calc(var(--f-5) * 4);line-height:1;color:var(--txt);flex:0 0 auto;
+  min-width:1.4em;aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  border:calc(var(--border-width,1px) * 3) solid var(--rc,var(--acc));border-radius:var(--radius-md,6px)}
+.dpsay{font-family:var(--f1);font-size:var(--f-3);color:var(--txt);letter-spacing:.04em;display:flex;align-items:baseline;gap:var(--s-2)}
+.dpsay small{font-size:var(--f-1);color:var(--dim);letter-spacing:.1em}
+.dpline{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-1) 0}
+.dplab{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--dim2);flex:0 0 9ch}
+.dpchips{display:flex;flex-wrap:wrap;gap:var(--s-2);flex:1 1 auto;min-width:0}
+.dpchips .tbtn{color:var(--txt);letter-spacing:.04em}
+.dpchips .tbtn.dpadd{color:var(--dim);min-width:var(--tap,44px)}
 .srv{font-style:normal;font-size:var(--f-1);color:var(--dim2);margin-left:var(--s-1)}
 .srv.blk{display:block;margin-left:0}
 .dayrow{display:flex;gap:var(--s-1);flex-wrap:wrap}
@@ -4546,6 +4558,155 @@ const WIDGETS = {
             onLeave: () => { head.reset(); if (aimSet) aimSet(now); },
           });
         });
+      });
+    },
+  },
+
+  /* ── DAY PLAN ──
+     Tom, 2026-11-03: "a big widget that just shows my score for the day as it
+     is, then under the letter I can schedule what time I do the walking
+     chunks, training, eating, and bed time". He picked: the Main Menu board,
+     usual times that every day starts with and that can be moved for today
+     only, and every time a journal EVENT, so it shows in STATUS's journal,
+     TODAY and the calendar.
+
+     The letter is shared/grade.js, the one STATUS shows on its Today screen.
+     The usual times are one setting, `lifeos.dayplan` = [{id, kind, at}],
+     written only when he changes them. A day's times are `note` events keyed
+     `plan-<day>-<id>`, `src: 'plan'`: the row IS the time, so moving it in
+     STATUS moves it here. A bed time before 5am is that night's, dated the
+     next day. A usual time becomes the day's event by a merge stamped at the
+     day's own midnight, so any real edit, a removal, or a device that synced
+     first always wins over it, and two devices make the same row. */
+  dayplan: {
+    nm: 'DAY PLAN', w: 4, h: 6, app: 'status', fit: 1, to: ['status'],
+    kinds: [['walk', 'WALKS', 'Walk'], ['train', 'TRAINING', 'Train'], ['eat', 'MEALS', 'Eat'], ['bed', 'BED', 'Bed']],
+    usual: () => (Rec.setting('lifeos', 'dayplan') || []).filter(x => x && x.id && /^\d\d:\d\d$/.test(x.at || '')),
+    /* after midnight is still the night before, for bed only */
+    late: (kind, at) => kind === 'bed' && at < '05:00',
+    dateFor(day, kind, at) { return WIDGETS.dayplan.late(kind, at) ? Day.shift(day, 1) : day; },
+    mins(kind, at) { const h = at.split(':'); return +h[0] * 60 + (+h[1]) + (WIDGETS.dayplan.late(kind, at) ? 1440 : 0); },
+    /* the day's times, read from the journal */
+    rows(day) {
+      const pre = 'plan-' + day + '-';
+      return Rec.all('note', { date: day }).concat(Rec.all('note', { date: Day.shift(day, 1) }))
+        .filter(r => r.key.indexOf(pre) === 0 && r.payload && r.payload.at && !r.payload.cancelled)
+        .map(r => ({ key: r.key, date: r.date, kind: r.payload.plan || 'walk', at: r.payload.at, id: r.payload.planId || '' }));
+    },
+    payload(day, kind, at, id, t) {
+      const k = WIDGETS.dayplan.kinds.find(x => x[0] === kind) || WIDGETS.dayplan.kinds[0];
+      return { kind: 'event', text: k[2], t: t, made: day, at: at, dur: null, ord: 0, done: 0, cancelled: 0,
+               src: 'plan', plan: kind, planId: id || '' };
+    },
+    /* the usual times not yet on the day, written so that anything real wins */
+    seed(day) {
+      if (!Rec.hydrated) return;
+      const D = WIDGETS.dayplan, mid = new Date(day + 'T00:00:00').getTime(), out = [];
+      D.usual().forEach(u => {
+        const key = 'plan-' + day + '-' + u.id, date = D.dateFor(day, u.kind, u.at);
+        if (Rec.row('note', date, key) || Rec.tombstone('note', date, key)) return;
+        /* a usual bed time moved across midnight: the old date may hold it */
+        const other = date === day ? Day.shift(day, 1) : day;
+        if (Rec.row('note', other, key) || Rec.tombstone('note', other, key)) return;
+        out.push({ id: Rec.idOf('note', date, key), user_id: Rec.USER, type: 'note', date: date, key: key,
+                   payload: D.payload(day, u.kind, u.at, u.id, mid), updated_at: mid, deleted: false, by: 'home' });
+      });
+      if (!out.length) return;
+      Rec.merge(out);
+      [...new Set(out.map(r => r.date))].forEach(d => Journal.publishNotes(d, 'home'));
+    },
+    /* put one time on the day, moving it to the right date if it crossed midnight */
+    put(day, key, kind, at, id) {
+      const D = WIDGETS.dayplan, date = D.dateFor(day, kind, at), other = date === day ? Day.shift(day, 1) : day;
+      if (Rec.row('note', other, key)) Rec.del('note', other, key);
+      if (Rec.row('note', date, key)) Rec.patch('note', date, key, { at: at });
+      else Rec.set('note', date, key, D.payload(day, kind, at, id, Date.now()));
+      Journal.publishNotes(date, 'home');
+    },
+    edit(day, kind, was) {
+      const D = WIDGETS.dayplan, k = D.kinds.find(x => x[0] === kind);
+      const usualHas = was && was.id && D.usual().some(u => u.id === was.id);
+      let tm, every;
+      const save = (rm) => {
+        if (!rm && !/^\d\d:\d\d$/.test(tm.value)) { toast('Pick a time', { bad: true }); return false; }
+        const at = tm.value, all = !!every.on;
+        const usualWas = D.usual(), rowsWas = D.rows(day);
+        let id = was ? was.id : '';
+        if (!id && all) id = kind[0] + Date.now().toString(36);
+        const key = was ? was.key : 'plan-' + day + '-' + (id || 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5));
+        if (rm) {
+          if (was) { Rec.del('note', was.date, was.key); Journal.publishNotes(was.date, 'home'); }
+          if (all && id) Rec.setting('lifeos', 'dayplan', usualWas.filter(u => u.id !== id));
+        } else {
+          if (all) Rec.setting('lifeos', 'dayplan', usualWas.filter(u => u.id !== id).concat({ id: id, kind: kind, at: at }));
+          D.put(day, key, kind, at, all ? id : (was ? was.id : ''));
+        }
+        drawHome();
+        const say = rm ? k[2] + ' removed' : k[2] + ' at ' + MIN2(D.mins(kind, at));
+        UI.undo(say + (all ? ', every day' : ', today'), () => {
+          Rec.setting('lifeos', 'dayplan', usualWas);
+          D.rows(day).filter(r => !rowsWas.some(o => o.key === r.key)).forEach(r => Rec.del('note', r.date, r.key));
+          rowsWas.forEach(o => {
+            const now = D.rows(day).find(r => r.key === o.key);
+            if (!now || now.at !== o.at || now.date !== o.date) {
+              if (Rec.tombstone('note', o.date, o.key) || !Rec.row('note', o.date, o.key)) Rec.set('note', o.date, o.key, D.payload(day, o.kind, o.at, o.id, Date.now()));
+              else D.put(day, o.key, o.kind, o.at, o.id);
+            }
+          });
+          drawHome();
+        });
+      };
+      UI.dialog({
+        title: (was ? 'CHANGE ' : 'ADD ') + k[1].replace(/S$/, ''), width: 360,
+        body: b => {
+          tm = document.createElement('input'); tm.type = 'time'; tm.className = 'mb-input';
+          tm.value = was ? was.at : ({ walk: '07:00', train: '17:00', eat: '12:00', bed: '23:00' })[kind];
+          b.appendChild(UI.row('Time', '', tm));
+          /* a new time is a usual one when there are none of its kind yet */
+          const on = was ? usualHas : !D.usual().some(u => u.kind === kind);
+          every = UI.toggle(on);
+          b.appendChild(UI.row('Every day', 'Off changes today only', every));
+        },
+        actions: (was ? [{ label: 'REMOVE', fn: () => save(true) }] : []).concat([{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: () => save(false) }]),
+      });
+    },
+    /* the letter's word is under the letter, so the header says what is next */
+    sub: () => {
+      const D = WIDGETS.dayplan, now = new Date(), m = now.getHours() * 60 + now.getMinutes();
+      const k = Object.fromEntries(D.kinds.map(x => [x[0], x[2]]));
+      const n = D.rows(LifeOS.day()).map(x => ({ x: x, m: D.mins(x.kind, x.at) })).filter(o => o.m >= m).sort((a, b) => a.m - b.m)[0];
+      return n ? 'next: ' + k[n.x.kind].toLowerCase() + ' at ' + MIN2(n.m) : '';
+    },
+    draw(body) {
+      const D = WIDGETS.dayplan, day = LifeOS.day();
+      D.seed(day);
+      const g = Grade.day(day), k = g.letter || 'F', r = Grade.RANKS.find(x => x.k === k);
+      const top = el('div', 'dptop');
+      const ring = el('div', 'dpletter', esc(k));
+      ring.style.setProperty('--rc', 'var(--rank-' + k + ')');
+      top.appendChild(ring);
+      top.appendChild(el('div', 'dpsay', esc(r ? r.say : '') + (g.pct != null ? '<small>' + g.pct + '%</small>' : '')));
+      top.style.cursor = 'pointer';
+      top.onclick = () => goTo(['status']);
+      body.appendChild(top);
+      const have = D.rows(day);
+      D.kinds.forEach(kd => {
+        const line = el('div', 'dpline');
+        line.appendChild(el('span', 'dplab', kd[1]));
+        const chips = el('div', 'dpchips');
+        have.filter(x => x.kind === kd[0]).sort((a, b) => D.mins(a.kind, a.at) - D.mins(b.kind, b.at)).forEach(x => {
+          const c = tbtn(esc(MIN2(D.mins(x.kind, x.at))), () => D.edit(day, kd[0], x));
+          c.setAttribute('aria-label', 'Change ' + kd[2].toLowerCase() + ' at ' + MIN2(D.mins(x.kind, x.at)));
+          c.oncontextmenu = ev => { ev.preventDefault(); ev.stopPropagation(); D.edit(day, kd[0], x); };
+          chips.appendChild(c);
+        });
+        if (kd[0] !== 'bed' || !have.some(x => x.kind === 'bed')) {
+          const add = tbtn((typeof Icons !== 'undefined' && Icons.svg('add', { size: 13 })) || '+', () => D.edit(day, kd[0], null), 'dpadd');
+          add.setAttribute('aria-label', 'Add a ' + kd[2].toLowerCase() + ' time');
+          chips.appendChild(add);
+        }
+        line.appendChild(chips);
+        body.appendChild(line);
       });
     },
   },
