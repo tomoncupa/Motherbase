@@ -84,7 +84,10 @@ if ($LASTEXITCODE -ne 0) { Write-Output "Backup build failed."; exit $LASTEXITCO
 # ── the package for someone else: one Setup.exe holding both programs ──
 # Tom, 2026-10-27. Everything it installs is built into it, so it is one file
 # to send. It installs a copy that opens the client address (Setup.cs).
-$setup = Join-Path $dir 'Motherbase Setup.exe'
+# Named for the day it was built (Tom, 2026-11-04: "Date the file name"), so
+# a file sent or downloaded says how new it is. Only the newest is kept.
+Get-ChildItem $dir -Filter 'Motherbase Setup*.exe' | Remove-Item -Force
+$setup = Join-Path $dir ('Motherbase Setup ' + (Get-Date -Format 'yyyy-MM-dd') + '.exe')
 $res = @()
 foreach ($f in @('STATUS.exe','Main Menu.exe','setup.html')) { $res += "-resource:$(Join-Path $dir $f),$f" }
 foreach ($f in @('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.WinForms.dll','WebView2Loader.dll')) { $res += "-resource:$(Join-Path $lib $f),$f" }

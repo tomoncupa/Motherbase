@@ -101,7 +101,13 @@ RENAME_THEMES = {'block': 'Default', 'ice': 'System'}
 # The Windows package, so a copy someone was given keeps itself current
 # (desktop/Updater.cs, Tom 2026-10-28: "Build A"). Only this one file of
 # desktop/ goes, with a fingerprint beside it; the rest is Tom's machine.
-SETUP = 'desktop/Motherbase Setup.exe'
+# Its name carries the day it was built, `Motherbase Setup 2026-11-04.exe`
+# (Tom, 2026-11-04); desktop/build.ps1 keeps only the newest.
+SETUP = 'desktop/Motherbase Setup*.exe'
+# The name copies installed before then download, every update. Kept beside
+# the dated one until every given copy has run Setup 1.0.4 once, after which
+# it reads the name from update.txt and this can go.
+SETUP_OLD = 'desktop/Motherbase Setup.exe'
 
 # Files that exist only in the client copy, taken from tools/client/.
 CLIENT_ONLY = {'README.md': 'README.md', 'guide.html': 'guide.html',
@@ -297,16 +303,26 @@ for src, dst in CLIENT_ONLY.items():
 # the fingerprint differs from its own Setup.exe, downloads this one and
 # swaps its files in quietly. Never cached on a phone: the offline list
 # below only takes pages and shared files.
-src = os.path.join(ROOT, SETUP)
-if not os.path.isfile(src):
+import glob, hashlib
+found = sorted(glob.glob(os.path.join(ROOT, SETUP)))
+if not found:
     fail('missing ' + SETUP + ' - run desktop/build.ps1')
+src = found[-1]
+name = os.path.basename(src)
 os.makedirs(os.path.join(DEST, 'desktop'))
-shutil.copy2(src, os.path.join(DEST, SETUP))
-import hashlib
+shutil.copy2(src, os.path.join(DEST, 'desktop', name))
+shutil.copy2(src, os.path.join(DEST, SETUP_OLD))
 blob = io.open(src, 'rb').read()
 with open(os.path.join(DEST, 'desktop', 'update.txt'), 'wb') as f:
-    f.write(('# The newest Motherbase Setup.exe. Written by tools/build-client.py.\n'
-             'sha256=%s\nsize=%d\n' % (hashlib.sha256(blob).hexdigest(), len(blob))).encode('utf-8'))
+    f.write(('# The newest Motherbase Setup. Written by tools/build-client.py.\n'
+             'file=%s\nsha256=%s\nsize=%d\n' % (name, hashlib.sha256(blob).hexdigest(), len(blob))).encode('utf-8'))
+# the guide's download link and the name it shows follow the file
+g = os.path.join(DEST, 'guide.html')
+html = io.open(g, encoding='utf-8').read()
+if 'Motherbase%20Setup.exe' not in html:
+    fail('guide.html has no Motherbase%20Setup.exe link to point at ' + name)
+html = html.replace('Motherbase%20Setup.exe', name.replace(' ', '%20')).replace('Motherbase Setup.exe', name)
+io.open(g, 'w', encoding='utf-8', newline='').write(html)
 
 # ── cache stamp ───────────────────────────────────────────────────────────
 # GitHub Pages caches hard, and a client who added this to their home screen

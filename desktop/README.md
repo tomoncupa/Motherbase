@@ -112,7 +112,7 @@ powershell -ExecutionPolicy Bypass -File "C:\Users\user\Downloads\Motherbase\des
 
 ## Giving it to someone else
 
-Send them **Motherbase Setup.exe** (built beside this file). One file: both
+Send them **Motherbase Setup <date>.exe** (built beside this file, named for the day it was built). One file: both
 programs and Microsoft's WebView2 files are inside it. Added 27 October 2026.
 
 1. They double click it. Windows may say "Windows protected your PC" because
@@ -141,17 +141,17 @@ WebView2 (rare on Windows 10, never on 11), Setup says so with a button to get i
 from the site. The programs themselves now do too: half a minute after either
 opens, and every six hours after, a Setup-installed copy reads
 `desktop/update.txt` on its site. If that fingerprint is not its own
-`Setup.exe`'s, it downloads the new `Motherbase Setup.exe`, checks it, and
+`Setup.exe`'s, it downloads the Setup that `update.txt` names, checks it, and
 runs it with `--update`, which swaps the files in without closing anything;
 the next open is the new build. No connection or a bad download changes
 nothing. Your own copy never checks (`Updater.cs`).
 
 So **a change to STATUS.exe or Main Menu.exe reaches them only through the
-client build**: commit the rebuilt `Motherbase Setup.exe` with them, then
+client build**: commit the rebuilt `Motherbase Setup <date>.exe` (and the old one's removal) with them, then
 `tools/build-client.py` puts it and its `update.txt` on the client site.
 
 To test on this PC without touching your own shortcuts:
-`"Motherbase Setup.exe" --dir <folder> --address http://127.0.0.1:8811/`.
+`"Motherbase Setup <date>.exe" --dir <folder> --address http://127.0.0.1:8811/`.
 
 ## Building it
 
@@ -179,10 +179,10 @@ three Microsoft WebView2 files in `lib\`.
 | `StatusDesktop.cs` | the old Chrome launcher, kept until the new one has earned its place |
 | `Backup.exe` `Backup.cs` | the nightly backup and its source; reads `tools/backup.html` |
 | `install-backup-task.ps1` | sets up (or `-Remove`s) the 4am task that starts it |
-| `Motherbase Setup.exe` `Setup.cs` | the package for someone else, and its source |
+| `Motherbase Setup <date>.exe` `Setup.cs` | the package for someone else, and its source |
 | `setup.html` `SetupPage.cs` | the first-run setup page, and how the Main Menu serves it |
 | `Hosted.cs` | which address both programs open (`address.txt`) |
 | `Updater.cs` | a given copy updating itself from the client site |
 
-Windows only. Not in the client build, except `Motherbase Setup.exe` and its
+Windows only. Not in the client build, except `Motherbase Setup <date>.exe` and its
 `update.txt`, which the client site carries for the update check.

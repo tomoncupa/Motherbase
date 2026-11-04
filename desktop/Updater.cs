@@ -55,13 +55,14 @@ static class Updater
             string info;
             using (var wc = new WebClient()) info = wc.DownloadString(Hosted.Url + "desktop/update.txt" + bust);
 
-            string want = null;
+            string want = null, name = "Motherbase Setup.exe";   /* the name before 2026-11-04 */
             long size = 0;
             foreach (string raw in info.Split('\n'))
             {
                 string line = raw.Trim();
                 if (line.StartsWith("sha256=")) want = line.Substring(7).ToLowerInvariant();
                 if (line.StartsWith("size=")) long.TryParse(line.Substring(5), out size);
+                if (line.StartsWith("file=") && line.EndsWith(".exe") && line.IndexOfAny(new[] { '/', '\\' }) < 0) name = line.Substring(5);
             }
             /* what the last update left: the files that were running then,
                and the setup it ran. Whatever is still in use stays. */
@@ -74,7 +75,7 @@ static class Updater
 
             Directory.CreateDirectory(upd);
             string file = Path.Combine(upd, "Setup.exe");
-            using (var wc = new WebClient()) wc.DownloadFile(Hosted.Url + "desktop/Motherbase%20Setup.exe" + bust, file);
+            using (var wc = new WebClient()) wc.DownloadFile(Hosted.Url + "desktop/" + Uri.EscapeDataString(name) + bust, file);
             if (Sha(file) != want)
             {
                 log("update: the download did not match, not used");
