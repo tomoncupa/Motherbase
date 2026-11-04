@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.25, 2026-10-25">
+<meta name="mb-version" content="1.0.26, 2026-11-04">
 <title>LOG</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2350,6 +2350,24 @@ if (PANE) {
   const d = (location.search.match(/[?&]d=(\d{4}-\d\d-\d\d)/) || [])[1];
   if (d && d !== TODAY) { focus = d; touched = true; placeFocus(); showFocus(); }
 }
+/* The home screen opens LOG on a day: its LOG WEEK card presses send
+   {lifeos:1, show:'YYYY-MM-DD'} through the shell's goTo (Tom, 2026-11-04). */
+if (!PANE) addEventListener('message', e => {
+  const d = e.source === parent && e.data && e.data.lifeos === 1 ? e.data.show : '';
+  if (!T || !/^\d{4}-\d\d-\d\d$/.test(d || '')) return;
+  focus = d;
+  touched = true;
+  placeFocus();
+  showFocus();
+  /* In Month the last weeks already fit one screen and nothing scrolls, so
+     the day pressed is outlined until he next touches LOG. A rule rather
+     than a class, so a redraw of the days keeps it. */
+  let s = $('sentDay');
+  if (!s) { s = document.createElement('style'); s.id = 'sentDay'; document.head.appendChild(s); }
+  s.textContent = '.day[data-from="' + d + '"],.lrow[data-d="' + d + '"]{outline:calc(var(--border-width,1px) * 2) solid var(--accent);outline-offset:calc(var(--border-width,1px) * -2)}';
+  const off = () => { s.textContent = ''; ['pointerdown', 'wheel', 'keydown'].forEach(t => removeEventListener(t, off, true)); };
+  ['pointerdown', 'wheel', 'keydown'].forEach(t => addEventListener(t, off, true));
+});
 Rec.ready(soon);
 Rec.on(soon);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure(); applySizes(); if (!touched) toToday(); });

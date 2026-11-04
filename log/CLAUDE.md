@@ -313,6 +313,8 @@ fewer would make Month not a month.
 
 1.0.24, 2026-10-22: the day's mood and energy read in every theme. The numbers were drawn in `--data-1` and `--data-3`, and in Craft Day (minecraft2) measured under 2.5 to 1 against 4.5. A chart colour is a line colour, not a word colour (root brief, Known traps): the number is in the text colour now with a 3px line under it in its series colour, the same colour as the faint line across the day; the unit is an inline block so the line stays under the number. Measured in headless Chromium on the demo at 1280x900, all 23 factory themes: failing words 1,775 to 280, words in a chart colour 1,617 to 0; 278 of the 280 are Brick's text token on its red and blue rows (Tom's call), the rest Ragnarok's date and FFVII's ADD. Block 0 to 0. Looked at in Block and Craft Day at 1280 (the columns are off screen at 390). Not seen on the PC.
 
+1.0.26, 2026-11-04: the home screen can open LOG on a day. Its LOG WEEK card sends `{lifeos:1, show:'YYYY-MM-DD'}` through the shell's `goTo`; LOG moves its focus there and outlines that day (and its List row) in the accent until he next touches, scrolls or types, because in Month the last weeks already fit one screen and nothing would visibly move. A style rule, not a class, so a redraw keeps it. The pane's own `{logDay}` is untouched. [TESTED] demo in Chrome, a real press on Fri 30: outlined, cleared on scroll.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
