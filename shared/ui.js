@@ -1132,6 +1132,8 @@ function drawApp(appId, pane) {
    listener here catches the press before the row under it does, so a tap on
    the words opens and a tap beside them still ticks or edits. */
 const SPOTS = [
+  /* the home screen is the root's index.html, not a folder (Plan the day, 2026-11-04) */
+  ['home', 'HOME', [['planday', 'Plan the day']]],
   ['status', 'STATUS', [['check', 'Status check'], ['now', 'Today'], ['food', 'Food'], ['money', 'Money'], ['trends', 'Report']]],
   ['quest', 'QUESTS', [['today', 'Today'], ['inbox', 'Inbox'], ['upcoming', 'Upcoming']]],
   ['kitchen', 'KITCHEN', [['shelf', 'Shelf'], ['plan', 'Plan'], ['guide', 'Guide']]],
@@ -1164,7 +1166,7 @@ Object.assign(UI, {
   /** where a link goes, as a real address, for a tooltip or a long press */
   linkHref(link) {
     const s = UI.spot(link);
-    if (s) return ROOT + s.app + '/index.html' + (s.show ? '?show=' + s.show : '');
+    if (s) return ROOT + (s.app === 'home' ? '' : s.app + '/') + 'index.html' + (s.show ? '?show=' + s.show : '');
     return WEB_RE.test(String(link || '')) ? String(link).trim() : '';
   },
   /** words that open `link`, `words` already escaped; the words alone when there is none */
@@ -1217,7 +1219,7 @@ Object.assign(UI, {
             list.appendChild(grp);
             /* an app this copy does not have (a client's copy carries fewer)
                is taken off once the folder fails to answer */
-            if (ROOT && /^https?:/.test(ROOT)) fetch(ROOT + a[0] + '/index.html', { method: 'HEAD' })
+            if (ROOT && /^https?:/.test(ROOT) && a[0] !== 'home') fetch(ROOT + a[0] + '/index.html', { method: 'HEAD' })
               .then(r => { if (!r.ok) grp.remove(); }).catch(() => {});
           });
           b.appendChild(list);

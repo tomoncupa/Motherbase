@@ -29,7 +29,7 @@ const wv = g.chrome && g.chrome.webview;
 if (!wv || g.top !== g || g.MB_CLAUDE) return;
 g.MB_CLAUDE = true;
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const doc = g.document;
 const me = doc.getElementById('mb-claude-js') || doc.currentScript;
 const ROOT = String((me && me.src) || '').replace(/shared\/claude\.js.*$/, '');
@@ -38,7 +38,9 @@ const MODEL = 'sonnet';
 /* types Claude may read but never write: pictures, other devices, themes,
    the brief the daemon owns, and every app's settings */
 const NO_WRITE = { device: 1, setting: 1, skin: 1, cphoto: 1, cref: 1, shot: 1, brief: 1 };
-const LONG = 1200;    /* a string longer than this is a picture or pasted text */
+const LONG = 1200;
+/* DAY PLAN's kinds and their words, as the home screen's card writes them */
+const PLAN = { walk: 'Walk', train: 'Train', eat: 'Eat', bed: 'Bed' };    /* a string longer than this is a picture or pasted text */
 
 let state = { open: false, busy: false, msgs: [], found: true };
 let dirty = true;     /* has the store changed since Claude last got a copy */
@@ -94,7 +96,9 @@ const SCHEMA = JSON.stringify({
   properties: {
     reply: { type: 'string' },
     writes: { type: 'array', items: { type: 'object', properties: {
-      do: { type: 'string', enum: ['note', 'add', 'patch', 'delete'] },
+      do: { type: 'string', enum: ['note', 'add', 'patch', 'delete', 'plan', 'steps'] },
+      what: { type: 'string', enum: ['walk', 'train', 'eat', 'bed'] }, at: { type: 'string' },
+      blocks: { type: 'number' }, passive: { type: 'number' },
       say: { type: 'string' },
       type: { type: 'string' }, date: { type: ['string', 'null'] }, key: { type: 'string' },
       payload: { type: 'object' }, changes: { type: 'object' },
@@ -126,6 +130,14 @@ function system() {
     '- Never write these types: ' + Object.keys(NO_WRITE).join(', ') + '.',
     '- If which exercise, food or account is unclear, ask instead of writing.',
     '- A question is not a request to log. No writes unless he asked for one.',
+    '',
+    '## Planning a day',
+    'His "Plan the day" todo sends you the day he is planning, what BLOCK has on it, and anything out of the ordinary. Finalize it:',
+    '- DAY PLAN times are `note` rows keyed `plan-<day>-...` with `payload.plan` walk, train, eat or bed and `payload.at` "HH:MM" (a bed time before 05:00 is filed on the next date). Read that day\'s and the next day\'s `rows/note.jsonl` lines first.',
+    '- A new time: `{do:"plan", date:<the day>, what, at:"HH:MM"}`. Move one: `{do:"patch", type:"note", date, key, changes:{at}}`. Drop one: `{do:"delete", type:"note", date, key}`. Fit the times around BLOCK\'s blocks and what he told you.',
+    '- Step blocks: `{do:"steps", blocks, passive}`, how many walks and the passive steps outside them. It is his usual for every day, so change it only when the day needs it. Each walk then carries its share of what is left to 12,500.',
+    '- Todos for the day: `{do:"note", kind:"todo", text, date}`; to move one, patch its `due`. Do not duplicate a todo that is already there.',
+    '- Reply with the day in a few short lines, in time order.',
     '',
     '## Replies',
     'Short and plain, for a twelve year old. Answer first. No tables and no headings. Skip the confidence line and the next action for a simple log or a quick answer.',
@@ -174,6 +186,19 @@ function apply(w) {
       const d = w.date || today();
       out.key = g.Journal.add(d, w.kind || 'entry', w.text || w.say);
       out.type = 'note'; out.date = d; out.prev = null;
+    } else if (w.do === 'plan') {
+      /* one DAY PLAN time, the row the home screen's card writes (index.html, WIDGETS.dayplan) */
+      if (!/^\d\d:\d\d$/.test(w.at || '')) throw new Error('no time given');
+      const what = PLAN[w.what] ? w.what : 'walk', day = w.date || today();
+      const d = what === 'bed' && w.at < '05:00' ? g.Day.shift(day, 1) : day;
+      const k = 'plan-' + day + '-c' + Date.now().toString(36) + (newKey.n = (newKey.n || 0) + 1).toString(36);
+      R.set('note', d, k, { kind: 'event', text: PLAN[what], t: Date.now(), made: day, at: w.at, dur: null, ord: 0,
+                            done: 0, cancelled: 0, src: 'plan', plan: what, planId: '' });
+      if (g.Journal && g.Journal.publishNotes) g.Journal.publishNotes(d, 'claude');
+      out.type = 'note'; out.key = k; out.date = d; out.prev = null;
+    } else if (w.do === 'steps') {
+      out.prev = R.setting('lifeos', 'steplan') || {};
+      R.setting('lifeos', 'steplan', { blocks: Math.max(0, Math.min(12, Math.round(+w.blocks || 0))), passive: Math.max(0, Math.round(+w.passive || 0)) });
     } else {
       if (!w.type) throw new Error('no type given');
       if (NO_WRITE[w.type]) throw new Error(w.type + ' is not Claude\'s to write');
@@ -213,7 +238,8 @@ function follow(w) {
 function undo(i, j) {
   const R = g.Rec, w = state.msgs[i].writes[j];
   if (!w || w.state !== 'done') return;
-  if (w.prev == null) {
+  if (w.do === 'steps') R.setting('lifeos', 'steplan', w.prev || {});
+  else if (w.prev == null) {
     R.del(w.type, w.date || null, w.key);
     /* "Paid 250 - lunch" written as a line also wrote a spend keyed off it */
     if (w.do === 'note' && R.has('spend', w.date, 'note-' + w.key)) R.del('spend', w.date, 'note-' + w.key);
@@ -237,7 +263,7 @@ function applyNew() {
     });
   });
   if (!todo.length) return Promise.resolve();
-  const notes = todo.some(x => x[2].do === 'note');
+  const notes = todo.some(x => x[2].do === 'note' || x[2].do === 'plan');
   return g.Rec.need().then(() => notes ? needJournal() : null).then(function () {
     todo.forEach(function (x) {
       const out = apply(x[2]);
@@ -398,5 +424,16 @@ function start() {
   post({ op: 'hello' });
 }
 if (doc.body) start(); else doc.addEventListener('DOMContentLoaded', start);
-g.MBClaude = { VERSION: VERSION };
+/* another part of the page asks for it: the home screen's Plan the day
+   (2026-11-04). Opens the panel and sends the words as if typed. False
+   while an answer is still coming. */
+g.MBClaude = {
+  VERSION: VERSION,
+  ask: function (text) {
+    if (state.busy || !panel) return false;
+    setOpen(true);
+    ask(text);
+    return true;
+  },
+};
 })(window);
