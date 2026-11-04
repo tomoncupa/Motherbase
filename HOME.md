@@ -580,3 +580,7 @@ Tom: "a big widget that just shows my score for the day as it is, then under the
 Tom: "a LOG widget that just shows day summary for the last 7 days and the week". A card (`logweek`) that only reads: each of the last seven days' summary (`day.note`, LOG's summary column), newest first, and above them every LOG week those days touch (`recap` keyed `week`, dated on the week's first day; LOG's weeks run 1, 8, 15, 22, 29 of the month, so seven days can touch two). An empty one says Not written. Pressing it opens LOG. It does not open LOG on the pressed day: LOG takes `{logDay}` only from its own side pane, and a LOG session would have to add that.
 
 [TESTED] Demo in Chrome: both weeks, a long summary wrapping, Today in gold, a real press opening LOG. Not seen with his real rows or on the phone.
+
+## 2026-11-04, HOME 1.0.97: LOG WEEK opens LOG on the day
+
+Tom said yes to it. A day or week pressed on LOG WEEK goes through `goTo(['log', d])`, which LOG 1.0.26 now answers: it moves there and outlines the day until his next touch. [TESTED] demo in Chrome, a real press.
