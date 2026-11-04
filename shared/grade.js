@@ -153,8 +153,99 @@
     return { date: date, pct: pct, letter: letter, parts: parts, pending: pending };
   }
 
+  /* ── the steps still to walk, split over the walks still to come ──
+     Tom, 2026-11-04: DAY PLAN "should also ask me how many blocks im planning
+     to do my steps in, as well as a 'Passive steps throughout the day'". The
+     two numbers are one setting, `lifeos.steplan` = {blocks, passive}, the
+     same every day. A walk is a DAY PLAN time (a `note` keyed
+     `plan-<day>-...`, `plan: 'walk'`); blocks past the timed walks are walks
+     with no time yet. A walk whose time has passed is done.
+     Passive steps are spread evenly from 07:00 to bed (DAY PLAN's bed time,
+     else 23:00), so the ones still to come shrink through the day. That
+     spread is a guess, not a measurement. What is left after them is shared
+     out over the walks to come, rounded up to the hundred. */
+  const stepId = () => {
+    const f = Object.values(fields()).filter(x => x.on && /step/i.test(x.id))[0];
+    return f ? f.id : null;
+  };
+  const sRung = id => { const r = (standards()[id] || []).find(x => x[0] === 'S'); return r ? r[1] : null; };
+  const hm = at => { const h = String(at || '').split(':'); return +h[0] * 60 + (+h[1] || 0); };
+  function stepPlan(date) {
+    const set = g.Rec.setting('lifeos', 'steplan') || {};
+    const passive = Math.max(0, num(set.passive, 0) || 0);
+    const goal = sRung('steps'), fid = stepId();
+    const now = fid ? value(date, fid) || 0 : 0;
+    const pre = 'plan-' + date + '-';
+    const plan = g.Rec.all('note', { date: date }).concat(g.Rec.all('note', { date: g.Day.shift(date, 1) }))
+      .filter(r => r.key.indexOf(pre) === 0 && r.payload && r.payload.at && !r.payload.cancelled)
+      .map(r => ({ kind: r.payload.plan || 'walk', at: r.payload.at,
+                   m: hm(r.payload.at) + (r.date !== date ? 1440 : 0) }));
+    const today = date === g.Day.today(), past = date < g.Day.today();
+    const d = new Date(), nowM = today ? d.getHours() * 60 + d.getMinutes() : (past ? 1e9 : -1);
+    const walks = plan.filter(x => x.kind === 'walk').sort((a, b) => a.m - b.m)
+      .map(x => ({ at: x.at, m: x.m, done: x.m <= nowM }));
+    const blocks = Math.max(Math.round(num(set.blocks, 0) || 0), walks.length);
+    const untimed = blocks - walks.length;
+    const bed = plan.filter(x => x.kind === 'bed').map(x => x.m)[0] || 23 * 60;
+    const from = 7 * 60;
+    const frac = bed <= from ? 0 : Math.max(0, Math.min(1, (bed - Math.max(nowM, from)) / (bed - from)));
+    const passiveLeft = Math.round(passive * frac);
+    const left = goal == null ? null : Math.max(0, goal - now);
+    const toCome = walks.filter(w => !w.done).length + (past ? 0 : untimed);
+    const need = left == null ? null : Math.max(0, left - passiveLeft);
+    const per = need && toCome ? Math.ceil(need / toCome / 100) * 100 : 0;
+    walks.forEach(w => { w.share = w.done ? 0 : per; });
+    return { goal: goal, now: now, left: left, passive: passive, passiveLeft: passiveLeft,
+             blocks: blocks, untimed: untimed, walks: walks, toCome: toCome, need: need, per: per,
+             next: walks.filter(w => !w.done)[0] || null };
+  }
+
+  /* ── what each pillar still needs for an S ──
+     Tom, 2026-11-04: "a consistent always on top overlay showing what I need
+     to do to get an s rank day", every pillar shown. The day is S when the
+     average of the letters rounds to S, so every pillar at S is the plain
+     way there; each line says how far its pillar is from its own S. A part
+     is Grade.day's part plus `text`, and `fixed` when nothing done today
+     can change it (sleep is last night's, calories past the top). `clock`
+     writes a walk's time the way the caller writes times. */
+  const fmt = n => Math.round(n).toLocaleString('en-US');
+  function toS(date, clock) {
+    const T = targets(), out = [];
+    day(date).parts.forEach(p => {
+      const x = Object.assign({}, p, { text: '', fixed: false });
+      const s = sRung(p.id);
+      if (p.id === SENT) x.text = p.letter === 'S' ? 'Sent' : 'Send today\'s food';
+      else if (p.id === 'protein' || p.id === 'kcal') {
+        const t = p.id === 'protein' ? num(T.p, 0) : num(T.kcal, 0), v = p.val || 0, a = s == null ? 97 : s;
+        const lo = Math.ceil(t * a / 100), hi = Math.floor(t * (2 - a / 100));
+        const dir = p.id === 'protein' ? 'over' : kcalDir(), u = p.id === 'protein' ? 'g' : ' kcal';
+        if (p.letter === 'S') x.text = 'At S';
+        else if (v > hi && dir !== 'over') { x.text = fmt(v - hi) + u + ' over the S band'; x.fixed = true; }
+        else if (dir === 'under') x.text = 'Up to ' + fmt(hi - v) + u + ' more';
+        else if (dir === 'over') x.text = fmt(lo - v) + u + ' more';
+        else x.text = fmt(lo - v) + ' to ' + fmt(hi - v) + u + ' more';
+      } else if (p.id === 'steps') {
+        const sp = stepPlan(date);
+        if (p.letter === 'S' || !sp.left) x.text = 'At S';
+        else {
+          x.text = fmt(sp.left) + ' more';
+          if (sp.next) x.text += ' · ' + (clock ? clock(sp.next.at) : sp.next.at) + ' walk ' + fmt(sp.next.share);
+          else if (sp.toCome) x.text += ' · ' + sp.toCome + (sp.toCome > 1 ? ' walks of ' : ' walk of ') + fmt(sp.per);
+        }
+        x.plan = sp;
+      } else if (p.id === 'sleep') {
+        x.fixed = true;
+        x.text = p.letter === 'S' ? 'At S' : p.val == null ? 'Not logged · S is ' + s + 'h'
+          : (+p.val).toFixed(1).replace(/\.0$/, '') + 'h · S is ' + s + 'h';
+      } else if (s != null) x.text = p.letter === 'S' ? 'At S' : fmt(s - (p.val || 0)) + (p.unit ? ' ' + p.unit : '') + ' more';
+      else x.text = p.letter === 'S' ? 'Done' : 'Not yet';
+      out.push(x);
+    });
+    return out;
+  }
+
   g.Grade = {
-    VERSION: '1.0.0', RANKS: RANKS, SENT: SENT, day: day,
+    VERSION: '1.1.0', RANKS: RANKS, SENT: SENT, day: day, toS: toS, stepPlan: stepPlan,
     rankIndex: rankIndex, ladderLetter: ladderLetter, accuracy: accuracy,
     pillarLetter: pillarLetter, averageLetter: averageLetter,
     standards: standards, targets: targets, kcalDir: kcalDir, countCal: countCal, pillars: pillars,
