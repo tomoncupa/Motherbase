@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.97, 2026-11-04">
+<meta name="mb-version" content="1.0.98, 2026-11-04">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -613,6 +613,8 @@ body.dragging #cardframes{z-index:0}
 .dpchips{display:flex;flex-wrap:wrap;gap:var(--s-2);flex:1 1 auto;min-width:0}
 .dpchips .tbtn{color:var(--txt);letter-spacing:.04em}
 .dpchips .tbtn.dpadd{color:var(--dim);min-width:var(--tap,44px)}
+.dpchips .tbtn small{font-size:var(--f-1);color:var(--acc);margin-left:var(--s-1);letter-spacing:.02em}
+.dpchips .tbtn.dpdone{color:var(--dim)}
 .lwweek,.lwday{flex:none;display:flex;gap:var(--s-3);align-items:baseline;width:100%;min-height:var(--tap,44px);padding:var(--s-2) 0;
   background:none;border:0;border-bottom:var(--border-width,1px) solid var(--line);color:var(--txt);font:inherit;text-align:left;cursor:pointer}
 .lwweek{flex-direction:column;gap:var(--s-1)}
@@ -4632,6 +4634,31 @@ const WIDGETS = {
       else Rec.set('note', date, key, D.payload(day, kind, at, id, Date.now()));
       Journal.publishNotes(date, 'home');
     },
+    /* Tom, 2026-11-04: ask how many blocks the steps are walked in, and the
+       passive steps throughout the day. One setting, the same every day;
+       Grade.stepPlan splits what is left over the walks to come. */
+    steps() {
+      const was = Rec.setting('lifeos', 'steplan') || {};
+      let bl, pa;
+      const box = (v, x) => { const i = document.createElement('input'); i.type = 'number'; i.inputMode = 'numeric';
+        i.min = 0; i.step = x; i.className = 'mb-input'; i.value = v || ''; return i; };
+      UI.dialog({
+        title: 'STEP PLAN', width: 360,
+        body: b => {
+          bl = box(was.blocks, 1); pa = box(was.passive, 500);
+          b.appendChild(UI.row('Blocks', 'How many walks', bl));
+          b.appendChild(UI.row('Passive steps', 'Throughout the day, outside the walks', pa));
+        },
+        actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: () => {
+          const v = { blocks: Math.max(0, Math.min(12, Math.round(+bl.value || 0))), passive: Math.max(0, Math.round(+pa.value || 0)) };
+          Rec.setting('lifeos', 'steplan', v);
+          drawHome();
+          UI.undo(v.blocks + (v.blocks === 1 ? ' walk, ' : ' walks, ') + v.passive.toLocaleString('en-US') + ' passive steps', () => {
+            Rec.setting('lifeos', 'steplan', was); drawHome();
+          });
+        } }],
+      });
+    },
     edit(day, kind, was) {
       const D = WIDGETS.dayplan, k = D.kinds.find(x => x[0] === kind);
       const usualHas = was && was.id && D.usual().some(u => u.id === was.id);
@@ -4698,18 +4725,40 @@ const WIDGETS = {
       top.style.cursor = 'pointer';
       top.onclick = () => goTo(['status']);
       body.appendChild(top);
-      const have = D.rows(day);
+      const have = D.rows(day), sp = Grade.stepPlan(day), n0 = v => Math.round(v).toLocaleString('en-US');
+      /* how many walks the steps are split into, and the passive steps around them */
+      const sline = el('div', 'dpline');
+      sline.appendChild(el('span', 'dplab', 'STEPS'));
+      const schips = el('div', 'dpchips');
+      [[sp.blocks + (sp.blocks === 1 ? ' BLOCK' : ' BLOCKS'), 'Set how many walks'],
+       [n0(sp.passive) + ' PASSIVE', 'Set passive steps throughout the day']].forEach(s => {
+        const c = tbtn(esc(s[0]), () => D.steps());
+        c.setAttribute('aria-label', s[1]);
+        schips.appendChild(c);
+      });
+      sline.appendChild(schips);
+      body.appendChild(sline);
       D.kinds.forEach(kd => {
         const line = el('div', 'dpline');
         line.appendChild(el('span', 'dplab', kd[1]));
         const chips = el('div', 'dpchips');
         have.filter(x => x.kind === kd[0]).sort((a, b) => D.mins(a.kind, a.at) - D.mins(b.kind, b.at)).forEach(x => {
-          const c = tbtn(esc(MIN2(D.mins(x.kind, x.at))), () => D.edit(day, kd[0], x));
+          /* a walk still to come carries its share of the steps left */
+          const w = kd[0] === 'walk' && sp.walks.find(v => v.at === x.at);
+          const c = tbtn(esc(MIN2(D.mins(x.kind, x.at))) + (w && w.share ? '<small>' + n0(w.share) + '</small>' : ''),
+                         () => D.edit(day, kd[0], x), w && w.done ? 'dpdone' : '');
           c.setAttribute('aria-label', 'Change ' + kd[2].toLowerCase() + ' at ' + MIN2(D.mins(x.kind, x.at)));
           c.oncontextmenu = ev => { ev.preventDefault(); ev.stopPropagation(); D.edit(day, kd[0], x); };
           chips.appendChild(c);
         });
-        if (kd[0] !== 'bed' || !have.some(x => x.kind === 'bed')) {
+        /* blocks with no time yet: each one a place to put a time */
+        if (kd[0] === 'walk') for (let i = 0; i < sp.untimed; i++) {
+          const c = tbtn(((typeof Icons !== 'undefined' && Icons.svg('add', { size: 13 })) || '+') + (sp.per ? '<small>' + n0(sp.per) + '</small>' : ''),
+                         () => D.edit(day, 'walk', null), 'dpadd');
+          c.setAttribute('aria-label', 'Give walk ' + (sp.walks.length + i + 1) + ' a time');
+          chips.appendChild(c);
+        }
+        if (kd[0] === 'walk' ? !sp.untimed : (kd[0] !== 'bed' || !have.some(x => x.kind === 'bed'))) {
           const add = tbtn((typeof Icons !== 'undefined' && Icons.svg('add', { size: 13 })) || '+', () => D.edit(day, kd[0], null), 'dpadd');
           add.setAttribute('aria-label', 'Add a ' + kd[2].toLowerCase() + ' time');
           chips.appendChild(add);

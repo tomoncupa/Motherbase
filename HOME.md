@@ -584,3 +584,7 @@ Tom: "a LOG widget that just shows day summary for the last 7 days and the week"
 ## 2026-11-04, HOME 1.0.97: LOG WEEK opens LOG on the day
 
 Tom said yes to it. A day or week pressed on LOG WEEK goes through `goTo(['log', d])`, which LOG 1.0.26 now answers: it moves there and outlines the day until his next touch. [TESTED] demo in Chrome, a real press.
+
+## 2026-11-04, HOME 1.0.98: DAY PLAN asks for step blocks and passive steps
+
+Tom: "it should also ask me how many blocks im planning to do my steps in, as well as a 'Passive steps throughout the day'". He picked splitting the rest. A STEPS line on DAY PLAN shows BLOCKS and PASSIVE; either opens STEP PLAN, saved as `lifeos.steplan` {blocks, passive}, the same every day. Each walk still to come shows its share of the steps left to S (`Grade.stepPlan`); blocks with no time yet show as + chips carrying the share. [TESTED] demo in Chrome: 3 blocks, 3,000 passive, one walk timed, 3,600 a walk. Not seen with his real rows.
