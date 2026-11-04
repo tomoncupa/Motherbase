@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.88, 2026-11-03">
+<meta name="mb-version" content="1.0.89, 2026-11-04">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -793,6 +793,17 @@ body.deskmini .mb-toast { display: none; }
 .frow .lbl small { display: block; color: var(--text-muted); font-size: var(--f-1); }
 .frow input { width: 5em; min-width: 0; text-align: center; }
 .frow input.wide { width: auto; flex: 2; text-align: left; }
+/* what is left for an S, under the box: a letter, the pillar, how far */
+.desks { display: flex; flex-direction: column; gap: var(--s-1); width: 100%; padding: var(--s-2) 0 0;
+  border: 0; border-top: var(--border-width) solid var(--border); background: none; text-align: left;
+  color: var(--text-1); font: inherit; cursor: pointer; }
+.desksl { display: grid; grid-template-columns: var(--s-5) 11ch 1fr; align-items: baseline; gap: var(--s-2);
+  font-size: var(--f-1); line-height: 1.35; }
+.desksl b { font-family: var(--font-display); font-size: var(--f-2); color: var(--rc, var(--text-1)); text-align: center; }
+.desksl i { font-style: normal; color: var(--text-muted); text-transform: uppercase; letter-spacing: .1em;
+  overflow-wrap: anywhere; }
+.desksl span { overflow-wrap: anywhere; }
+.desksl.at span, .desksl.fixed span { color: var(--text-muted); }
 body.deskmini #deskbar {
   display: flex; flex-direction: column; gap: var(--s-2);
   height: 100vh; padding: var(--s-3); background: var(--surface-1);
@@ -9107,6 +9118,27 @@ function deskBar() {
   fab.onclick = () => deskAsk();
   row.appendChild(fab);
 
+  /* ── what is left for an S ──
+     Tom, 2026-11-04: "for desktop only, a consistent always on top overlay
+     showing what I need to do to get an s rank day", every pillar shown. The
+     widget is already the thing above his work, so it lives here, under the
+     box. Each line is its pillar's letter and how far it is from its own S,
+     from shared/grade.js, the one rule STATUS's Today and the home screen's
+     DAY PLAN read. Pressing it opens Today. */
+  const toS = Grade.toS(Day.today(), clockLabel);
+  if (toS.length) {
+    const box = el('button', 'desks');
+    box.setAttribute('aria-label', 'What is left for an S today. Open Today');
+    toS.forEach(p => {
+      const ln = el('span', 'desksl' + (p.letter === 'S' ? ' at' : '') + (p.fixed ? ' fixed' : ''));
+      ln.innerHTML = '<b style="--rc:var(--rank-' + esc(p.letter) + ')">' + esc(p.letter) + '</b>' +
+                     '<i>' + esc(p.label) + '</i><span>' + esc(p.text) + '</span>';
+      box.appendChild(ln);
+    });
+    box.onclick = () => { deskSetSmall(false); };
+    bar.appendChild(box);
+  }
+
   if (window.Icons && Icons.paint) Icons.paint(bar);
   deskWatchBox(bar);
   deskTitle();
@@ -9760,6 +9792,9 @@ if (DESK) {
     handle(document.querySelector('header'));
   }
   Rec.on(() => { if (deskSmall && !deskPanel) deskBar(); });
+  /* what is left for an S moves with the clock too: a walk passes, passive
+     steps still to come run down */
+  setInterval(() => { if (deskSmall && !deskPanel && !checkOn) deskBar(); }, 5 * 60 * 1000);
   /* It opens as the widget, because that is the thing he asked for. The
      whole app is one click away, and the choice is remembered. */
   /* Decide before saying anything. Telling the host what to be while the
