@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.98, 2026-11-04">
+<meta name="mb-version" content="1.0.99, 2026-11-04">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -615,6 +615,13 @@ body.dragging #cardframes{z-index:0}
 .dpchips .tbtn.dpadd{color:var(--dim);min-width:var(--tap,44px)}
 .dpchips .tbtn small{font-size:var(--f-1);color:var(--acc);margin-left:var(--s-1);letter-spacing:.02em}
 .dpchips .tbtn.dpdone{color:var(--dim)}
+/* Plan the day's sequence */
+.pdsay{margin:0 0 var(--s-3)}
+.pdlist{display:flex;flex-direction:column;gap:var(--s-1);max-height:50vh;overflow:auto}
+.pdrow{display:grid;grid-template-columns:8ch 1fr auto;gap:var(--s-2);align-items:baseline;font-size:var(--f-2)}
+.pdrow b{font-family:var(--font-display);font-weight:500;color:var(--mut)}
+.pdrow i{font-style:normal;color:var(--dim)}
+.pdodd{width:100%;min-height:calc(var(--tap,44px) * 2);resize:vertical}
 .lwweek,.lwday{flex:none;display:flex;gap:var(--s-3);align-items:baseline;width:100%;min-height:var(--tap,44px);padding:var(--s-2) 0;
   background:none;border:0;border-bottom:var(--border-width,1px) solid var(--line);color:var(--txt);font:inherit;text-align:left;cursor:pointer}
 .lwweek{flex-direction:column;gap:var(--s-1)}
@@ -1208,6 +1215,7 @@ addEventListener('keydown', ev => { if (ev.key === 'Escape' && $('#over').classL
    the spot just opens where it was. */
 function goTo(to) {
   if (!to) return;
+  if (to[0] === 'home' && to[1] === 'planday') { go('home'); PLANDAY.open(); return; }
   if (to[0] === 'over') { openOver(to[1]); return; }
   go(to[0]);
   if (!to[1]) return;
@@ -1221,6 +1229,8 @@ function goTo(to) {
    block pressed inside an app (UI.go, shared/ui.js, 2026-10-26) */
 window.addEventListener('message', e => {
   const m = e.data;
+  /* `index.html?show=planday`, from a Plan the day todo pressed in an app on its own */
+  if (m && m.lifeos === 1 && !m.nav && m.show === 'planday' && e.source === window) { PLANDAY.open(); return; }
   if (!m || m.lifeos !== 1 || !m.nav || !app(m.nav)) return;
   if (typeof m.show === 'string' && m.show) goTo([m.nav, m.show]); else go(m.nav);
 });
@@ -4610,9 +4620,9 @@ const WIDGETS = {
                src: 'plan', plan: kind, planId: id || '' };
     },
     /* the usual times not yet on the day, written so that anything real wins */
-    seed(day) {
+    seed(day, stamp) {
       if (!Rec.hydrated) return;
-      const D = WIDGETS.dayplan, mid = new Date(day + 'T00:00:00').getTime(), out = [];
+      const D = WIDGETS.dayplan, mid = stamp || new Date(day + 'T00:00:00').getTime(), out = [];
       D.usual().forEach(u => {
         const key = 'plan-' + day + '-' + u.id, date = D.dateFor(day, u.kind, u.at);
         if (Rec.row('note', date, key) || Rec.tombstone('note', date, key)) return;
@@ -6855,8 +6865,131 @@ const WIC = { lockedin: 'energy', workdone: 'done', todo: 'done', ideas: 'edit',
   countdown: 'timer', worldclock: 'timer', desktime: 'timer', calendar: 'calendar', year: 'calendar', life: 'calendar',
   links: 'link', apps: 'menu', upcoming: 'calendar', projects: 'filter', onthisday: 'history', recap: 'history',
   log: 'history', ticks: 'done', 'add-todo': 'add', 'add-entry': 'add', 'add-event': 'add', 'add-idea': 'add' };
+/* ── PLAN THE DAY ──
+   Tom, 2026-11-04: "an event that asks me to plan and prompt my day. It
+   should ask me if block has the day scheduled or if anything is happening
+   today out of the ordinary. It should ask you to finalize how my day is
+   going." He picked: a daily todo that launches its own sequence, for today
+   or tomorrow, and the CLAUDE panel finalizing it, allowed to set DAY PLAN
+   times, the day's todos and the step blocks (shared/claude.js 1.1.0).
+
+   The todo is `planday-<day>`, made by a merge stamped at the day's own
+   midnight, so two devices make the same row and any real edit wins. Its
+   link, `mb:home/planday`, opens the sequence from STATUS, QUESTS, LOG or
+   TODAY. One left untouched on an earlier day is deleted, so a skipped day
+   does not follow him. Outside Main Menu.exe there is no panel, so the
+   words are copied for Claude chat instead. */
+const PLANDAY = {
+  key: d => 'planday-' + d,
+  seed() {
+    if (!Rec.hydrated || typeof Journal === 'undefined') return;
+    const day = Day.today(), key = PLANDAY.key(day), mid = d => new Date(d + 'T00:00:00').getTime();
+    for (let i = 1; i <= 7; i++) {
+      const d = Day.shift(day, -i), r = Rec.row('note', d, PLANDAY.key(d));
+      if (r && !r.deleted && r.payload && !r.payload.done && r.updated_at === mid(d)) Rec.del('note', d, PLANDAY.key(d));
+    }
+    if (Rec.row('note', day, key) || Rec.tombstone('note', day, key)) return;
+    Rec.merge([{ id: Rec.idOf('note', day, key), user_id: Rec.USER, type: 'note', date: day, key: key,
+      payload: { kind: 'todo', text: 'Plan the day', t: mid(day), made: day, at: null, dur: null, ord: -1, done: 0, cancelled: 0,
+                 src: 'plan', link: 'mb:home/planday' },
+      updated_at: mid(day), deleted: false, by: 'home' }]);
+    Journal.publishNotes(day, 'home');
+  },
+  lab: d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+  /* the words Claude gets */
+  words(s) {
+    const day = s.day, when = day === Day.today() ? 'today' : 'tomorrow';
+    const lab = new Date(day + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    const plan = Rec.get('plan', day, 'routine'), bl = (plan && plan.blocks) || [];
+    const out = ['Plan the day: ' + lab + ' (' + day + '), ' + when + '.'];
+    if (bl.length) {
+      const timed = bl.filter(x => x.s != null), loose = bl.filter(x => x.s == null);
+      out.push('BLOCK has ' + (plan.name || 'a routine') + ': ' +
+        (timed.map(x => MIN2(x.s) + ' ' + x.name + (x.dur ? ' ' + DUR(x.dur) : '')).join('; ') || 'no timed blocks') +
+        (loose.length ? '. Also: ' + loose.map(x => x.name).join(', ') : '') + '.');
+    } else out.push('BLOCK has nothing published for that day.');
+    if (bl.length) out.push('Is BLOCK right for the day: ' + (s.block === 'yes' ? 'yes.' : 'not quite, see below.'));
+    out.push('Out of the ordinary: ' + (s.odd.trim() || 'nothing.'));
+    if (when === 'today') {
+      const gap = Grade.toS(day, at => MIN2(+at.slice(0, 2) * 60 + (+at.slice(3, 5)))).filter(p => p.letter !== 'S');
+      if (gap.length) out.push('Where today stands for an S: ' + gap.map(p => p.label + ' ' + p.text).join('; ') + '.');
+    }
+    out.push('Finalize the day: set its DAY PLAN times (walks, training, meals, bed), the step blocks, and its todos, so it can be an S day. Then tell me the day in time order.');
+    return out.join('\n');
+  },
+  open() {
+    const s = { day: '', block: 'yes', odd: '' }, today = Day.today(), tom = Day.shift(today, 1), lab = PLANDAY.lab;
+    const next = f => setTimeout(f, 0);
+    const late = new Date().getHours() >= 18;
+    /* 2: what BLOCK has on it */
+    const block = () => {
+      const plan = Rec.get('plan', s.day, 'routine'), bl = (plan && plan.blocks) || [];
+      UI.dialog({
+        title: 'BLOCK · ' + lab(s.day).toUpperCase(), width: 400,
+        body: b => {
+          if (!bl.length) { b.appendChild(el('p', 'pdsay', 'BLOCK has nothing on this day yet. Opening BLOCK publishes the next two weeks.')); return; }
+          b.appendChild(el('p', 'pdsay', esc(plan.name || 'Routine') + ', ' + bl.length + (bl.length === 1 ? ' block' : ' blocks') + '. Is this the day?'));
+          const list = el('div', 'pdlist');
+          bl.slice(0, 12).forEach(x => list.appendChild(el('div', 'pdrow',
+            '<b>' + (x.s == null ? '' : esc(MIN2(x.s))) + '</b><span>' + esc(x.name) + '</span><i>' + (x.dur ? esc(DUR(x.dur)) : '') + '</i>')));
+          if (bl.length > 12) list.appendChild(el('div', 'pdrow', '<b></b><span>' + (bl.length - 12) + ' more</span><i></i>'));
+          b.appendChild(list);
+        },
+        actions: [{ label: 'OPEN BLOCK', fn: () => next(() => goTo(['block'])) }]
+          .concat(bl.length ? [{ label: 'NOT QUITE', fn: () => { s.block = 'no'; next(odd); } }] : [])
+          .concat([{ label: bl.length ? 'YES' : 'NEXT', kind: 'go', fn: () => { s.block = 'yes'; next(odd); } }]),
+      });
+    };
+    /* 3: anything out of the ordinary, then Claude */
+    const odd = () => {
+      let box;
+      UI.dialog({
+        title: 'ANYTHING DIFFERENT', width: 400,
+        body: b => {
+          b.appendChild(el('p', 'pdsay', s.block === 'yes' ? 'Anything out of the ordinary? A client moved, travel, an appointment, feeling off.'
+                                                           : 'What is different from BLOCK?'));
+          box = document.createElement('textarea'); box.className = 'mb-input pdodd'; box.rows = 4;
+          box.placeholder = 'Nothing, or say what';
+          b.appendChild(box);
+          if (UI.focusSoon) UI.focusSoon(box);
+        },
+        actions: [{ label: 'CANCEL' }, { label: 'FINALIZE', kind: 'go', fn: () => { s.odd = box.value; next(() => PLANDAY.send(s)); } }],
+      });
+    };
+    /* 1: which day */
+    UI.dialog({
+      title: 'PLAN THE DAY', width: 400,
+      body: b => b.appendChild(el('p', 'pdsay', 'Which day are you planning?')),
+      actions: [{ label: 'CANCEL' },
+        { label: 'TODAY · ' + lab(today).toUpperCase(), kind: late ? '' : 'go', fn: () => { s.day = today; next(block); } },
+        { label: 'TOMORROW · ' + lab(tom).toUpperCase(), kind: late ? 'go' : '', fn: () => { s.day = tom; next(block); } }],
+    });
+  },
+  send(s) {
+    /* tomorrow's usual times go on now, so Claude moves them rather than adding beside them */
+    if (s.day !== Day.today()) WIDGETS.dayplan.seed(s.day, Date.now());
+    const text = PLANDAY.words(s), today = Day.today(), key = PLANDAY.key(today);
+    const tick = () => { const r = Rec.get('note', today, key); if (r && !r.done) { Journal.tick(today, key, { src: 'home' }); drawHome(); } };
+    if (window.MBClaude && MBClaude.ask) {
+      if (!MBClaude.ask(text)) { toast('Claude is still answering. Try again when it finishes.', { bad: true }); return; }
+      tick();
+      return;
+    }
+    const shown = () => UI.dialog({
+      title: 'FOR CLAUDE', width: 460,
+      body: b => { b.appendChild(el('p', 'pdsay', 'Paste this into Claude.'));
+        const t = document.createElement('textarea'); t.className = 'mb-input pdodd'; t.rows = 9; t.value = text; t.readOnly = true;
+        b.appendChild(t); setTimeout(() => t.select(), 50); },
+      actions: [{ label: 'DONE', kind: 'go' }],
+    });
+    tick();
+    try { navigator.clipboard.writeText(text).then(() => toast('Copied. Paste it into Claude.'), shown); } catch (e) { shown(); }
+  },
+};
+
 function drawHome() {
   useBoard();
+  PLANDAY.seed();
   const g = $('#grid'); g.innerHTML = '';
   let firstDone = 0;
   const later = [];

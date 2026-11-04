@@ -588,3 +588,13 @@ Tom said yes to it. A day or week pressed on LOG WEEK goes through `goTo(['log',
 ## 2026-11-04, HOME 1.0.98: DAY PLAN asks for step blocks and passive steps
 
 Tom: "it should also ask me how many blocks im planning to do my steps in, as well as a 'Passive steps throughout the day'". He picked splitting the rest. A STEPS line on DAY PLAN shows BLOCKS and PASSIVE; either opens STEP PLAN, saved as `lifeos.steplan` {blocks, passive}, the same every day. Each walk still to come shows its share of the steps left to S (`Grade.stepPlan`); blocks with no time yet show as + chips carrying the share. [TESTED] demo in Chrome: 3 blocks, 3,000 passive, one walk timed, 3,600 a walk. Not seen with his real rows.
+
+## 2026-11-04, HOME 1.0.99: Plan the day
+
+Tom: "an event that asks me to plan and prompt my day. It should ask me if block has the day scheduled or if anything is happening today out of the ordinary. It should ask you to finalize how my day is going." He picked a daily todo that launches its own sequence, for today or tomorrow, finished by the CLAUDE panel, which may set DAY PLAN times, the day's todos and the step blocks.
+
+- `PLANDAY.seed` (run from `drawHome`) makes today's todo, `planday-<day>`, "Plan the day", linked `mb:home/planday`, by a merge stamped at the day's midnight, so two devices make one row. An untouched one from the seven days before is deleted, so a skipped day does not follow him.
+- Pressing its words (TODAY, STATUS, QUESTS, LOG) opens three steps: which day (TOMORROW is the default after 6pm), what BLOCK's published `plan` has on it (YES, NOT QUITE, OPEN BLOCK; only NEXT when BLOCK has nothing there), and anything out of the ordinary. FINALIZE puts tomorrow's usual DAY PLAN times on (stamped now) so Claude moves them rather than adding beside them, sends the words to `MBClaude.ask`, and ticks today's todo. With no panel (phone, Chrome) the words are copied for Claude chat, or shown to copy.
+- From an app on its own, the link is `index.html?show=planday`. `mb:home` is a spot in `shared/ui.js` for this.
+
+[TESTED] demo in Chrome: the todo on TODAY pressed by mouse, all three steps, the words handed over, the todo ticked, the `?show=planday` address. Claude's `plan` and `steps` writes and their Undo through claude.js with a stand-in window. NOT tested in Main Menu.exe with the real panel and claude.exe.
