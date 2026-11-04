@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.95, 2026-11-03">
+<meta name="mb-version" content="1.0.96, 2026-11-04">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -613,6 +613,15 @@ body.dragging #cardframes{z-index:0}
 .dpchips{display:flex;flex-wrap:wrap;gap:var(--s-2);flex:1 1 auto;min-width:0}
 .dpchips .tbtn{color:var(--txt);letter-spacing:.04em}
 .dpchips .tbtn.dpadd{color:var(--dim);min-width:var(--tap,44px)}
+.lwweek,.lwday{flex:none;display:flex;gap:var(--s-3);align-items:baseline;width:100%;min-height:var(--tap,44px);padding:var(--s-2) 0;
+  background:none;border:0;border-bottom:var(--border-width,1px) solid var(--line);color:var(--txt);font:inherit;text-align:left;cursor:pointer}
+.lwweek{flex-direction:column;gap:var(--s-1)}
+.lwday:last-child{border-bottom:0}
+.lwlab{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;text-transform:uppercase;color:var(--dim2);flex:0 0 8ch;white-space:nowrap}
+.lwweek .lwlab{flex:none;color:var(--acc)}
+.lwday.today .lwlab{color:var(--acc)}
+.lwtx{flex:1 1 auto;min-width:0;font-size:var(--f-2);line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.lwtx.none{color:var(--dim2)}
 .srv{font-style:normal;font-size:var(--f-1);color:var(--dim2);margin-left:var(--s-1)}
 .srv.blk{display:block;margin-left:0}
 .dayrow{display:flex;gap:var(--s-1);flex-wrap:wrap}
@@ -4708,6 +4717,44 @@ const WIDGETS = {
         line.appendChild(chips);
         body.appendChild(line);
       });
+    },
+  },
+
+  /* ── LOG WEEK ──
+     Tom, 2026-11-04: "a LOG widget that just shows day summary for the last 7
+     days and the week". A day's summary is `day.note`, the line he writes in
+     LOG's summary column; the week is LOG's `recap` row keyed `week`, dated
+     on the week's first day. LOG's weeks run in sevens from the 1st of the
+     month (1, 8, 15, 22, 29), so the last seven days can touch two of them,
+     and each one they touch is shown, newest first. Reading only: pressing
+     it opens LOG, where they are written. */
+  logweek: {
+    nm: 'LOG WEEK', w: 4, h: 7, app: 'log', fit: 1, to: ['log'],
+    starts: [1, 8, 15, 22, 29],
+    weekOf(d) { const n = +d.slice(8); return d.slice(0, 8) + String(WIDGETS.logweek.starts.filter(s => s <= n).pop()).padStart(2, '0'); },
+    weekName(from) {
+      const L = WIDGETS.logweek, s = +from.slice(8), i = L.starts.indexOf(s);
+      const last = new Date(+from.slice(0, 4), +from.slice(5, 7), 0).getDate();
+      const e = i < L.starts.length - 1 ? Math.min(L.starts[i + 1] - 1, last) : last;
+      return 'Week ' + (i + 1) + ' · ' + s + (e === s ? '' : '–' + e) + ' ' + Day.label(from, { month: 'short' });
+    },
+    days: () => [0, 1, 2, 3, 4, 5, 6].map(i => Day.shift(LifeOS.day(), -i)),
+    note: d => ((Rec.get('day', d, '') || {}).note || '').trim(),
+    sub: () => { const n = WIDGETS.logweek.days().filter(d => WIDGETS.logweek.note(d)).length; return n + ' of 7 days written'; },
+    draw(body) {
+      const L = WIDGETS.logweek, today = LifeOS.day(), days = L.days();
+      const row = (cls, d, lab, text, none) => {
+        const b = el('button', cls + ' mb-press');
+        b.type = 'button';
+        b.appendChild(el('span', 'lwlab', esc(lab)));
+        b.appendChild(el('span', 'lwtx' + (text ? '' : ' none'), esc(text || none)));
+        b.onclick = () => goTo(['log']);
+        body.appendChild(b);
+      };
+      [...new Set(days.map(L.weekOf))].forEach(from =>
+        row('lwweek', from, L.weekName(from), ((Rec.get('recap', from, 'week') || {}).text || '').trim(), 'No week summary yet'));
+      days.forEach(d => row('lwday' + (d === today ? ' today' : ''), d,
+        d === today ? 'Today' : Day.label(d, { weekday: 'short' }) + ' ' + +d.slice(8), L.note(d), 'Not written'));
     },
   },
 

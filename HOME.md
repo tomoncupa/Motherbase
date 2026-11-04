@@ -574,3 +574,9 @@ Tom: "a big widget that just shows my score for the day as it is, then under the
 - **A day's times are `note` events**, key `plan-<day>-<id>` (a today-only one `plan-<day>-x...`), `src: 'plan'`, `plan` the kind, text Walk, Train, Eat or Bed. The widget reads these rows, so moving one in STATUS's journal moves it here. A bed time before 5am is dated the next day.
 - **Usual times reach a day by `seed`**, on draw once the store is in: a `Rec.merge` stamped at that day's midnight, so any real edit or removal, from any device, beats it, and two devices make the same row. Only today is seeded, so a day the board was never opened gets no events.
 [TESTED: Chrome on the demo at 3840 wide: added from + WIDGET, letter E matching STATUS; add usual, add today-only, a 1am bed dated the next day, tomorrow seeded with no second copy, moved for today only with the usual time kept, REMOVE and Undo, the times in `Journal.notes`. Phone width only through the review run.]
+
+## 2026-11-04, HOME 1.0.96: LOG WEEK
+
+Tom: "a LOG widget that just shows day summary for the last 7 days and the week". A card (`logweek`) that only reads: each of the last seven days' summary (`day.note`, LOG's summary column), newest first, and above them every LOG week those days touch (`recap` keyed `week`, dated on the week's first day; LOG's weeks run 1, 8, 15, 22, 29 of the month, so seven days can touch two). An empty one says Not written. Pressing it opens LOG. It does not open LOG on the pressed day: LOG takes `{logDay}` only from its own side pane, and a LOG session would have to add that.
+
+[TESTED] Demo in Chrome: both weeks, a long summary wrapping, Today in gold, a real press opening LOG. Not seen with his real rows or on the phone.
