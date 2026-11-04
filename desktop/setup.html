@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="mb-version" content="1.0.0, 2026-10-27">
+<meta name="mb-version" content="1.0.1, 2026-11-04">
 <title>Motherbase setup</title>
 <!--
   The desktop setup, second half. Setup.exe asked "have you used Motherbase
@@ -55,6 +55,11 @@
   .sw::after { content: ''; position: absolute; left: 8px; top: 16px; width: 12px; height: 12px; border-radius: 50%; background: var(--mut); transition: transform var(--dur), background var(--dur); }
   .sw[aria-checked="true"]::before { background: var(--raised); box-shadow: inset 0 0 0 1px var(--acc); }
   .sw[aria-checked="true"]::after { transform: translateX(20px); background: var(--acc); }
+  .seg { display: flex; flex: none; border: 1px solid var(--line-2); border-radius: var(--r); overflow: hidden; }
+  .seg button { min-width: 56px; min-height: var(--tap); border: 0; background: var(--panel); color: var(--mut); font: 600 var(--t-m)/1 var(--head); letter-spacing: .06em; }
+  .seg button + button { border-left: 1px solid var(--line-2); }
+  .seg button[aria-checked="true"] { background: var(--raised); color: var(--acc); box-shadow: inset 0 0 0 1px var(--acc); }
+  .seg button:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
   .opts { display: grid; gap: var(--s2); margin: var(--s4) 0; }
   .opt { min-height: var(--tap); text-align: left; padding: var(--s3) var(--s4); border-radius: var(--r); border: 1px solid var(--line-2); background: var(--panel); display: flex; align-items: center; gap: var(--s3); }
   .opt::before { content: ''; width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--mut); flex: none; }
@@ -214,7 +219,27 @@
           .filter(function (f) { return f.label; })
           .sort(function (a, b) { return (a.order || 99) - (b.order || 99); });
         list.forEach(function (f) {
-          card.appendChild(sw(!!f.on, f.label, f.unit ? 'In ' + f.unit : '', function (v) { picks['field:' + f.id] = v ? 1 : 0; }));
+          if (f.id !== 'weight') return card.appendChild(sw(!!f.on, f.label, f.unit ? 'In ' + f.unit : '', function (v) { picks['field:' + f.id] = v ? 1 : 0; }));
+          /* weight's unit is only a label STATUS reads (TD.unit), so picking it
+             here is the whole change; kg is shown first because most people
+             who get this weigh in kilos, and it is written on Next */
+          card.appendChild(sw(!!f.on, f.label, '', function (v) { picks['field:weight'] = v ? 1 : 0; }));
+          var cur = /^kg|kilo/i.test(f.unit || '') ? 'kg' : (f.unit && Rec.count('ev') ? 'lb' : 'kg');
+          if (cur !== String(f.unit || '').toLowerCase()) picks.unit = cur;
+          var r = el('div', 'row'), seg = el('div', 'seg');
+          r.appendChild(el('span', 'what', 'Weigh in'));
+          seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-label', 'Weigh in');
+          ['kg', 'lb'].forEach(function (u) {
+            var b = el('button', '', u.toUpperCase());
+            b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', u === cur ? 'true' : 'false');
+            b.onclick = function () {
+              [].forEach.call(seg.children, function (c) { c.setAttribute('aria-checked', 'false'); });
+              b.setAttribute('aria-checked', 'true');
+              picks.unit = u;
+            };
+            seg.appendChild(b);
+          });
+          r.appendChild(seg); card.appendChild(r);
         });
         card.appendChild(sw(!!setting('countCal', 1), 'Count calories', 'A Food tab for meals, calories and protein.',
           function (v) { picks.countCal = v ? 1 : 0; }));
@@ -317,6 +342,7 @@
     Object.keys(picks).forEach(function (k) {
       if (k.indexOf('field:') === 0) F.Rec.patch('field', null, k.slice(6), { on: picks[k] });
     });
+    if ('unit' in picks) F.Rec.patch('field', null, 'weight', { unit: picks.unit });
     if ('countCal' in picks) F.Rec.setting('status', 'countCal', picks.countCal);
     if ('every' in picks) {
       var e = EVERY.filter(function (x) { return x.id === picks.every; })[0];

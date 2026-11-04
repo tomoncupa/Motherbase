@@ -28,7 +28,7 @@ class SetupApp : Form
 {
     const string CLIENT = "https://tomoncupa.github.io/Mainmenu-client/";
     const string NAME = "Motherbase";
-    const string VERSION = "1.0.2";
+    const string VERSION = "1.0.3";
     const string UNINSTALL_KEY = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Motherbase";
     const string RUN_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string RUN_NAME = "Motherbase STATUS";
