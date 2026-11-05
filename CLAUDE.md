@@ -135,7 +135,7 @@ index.html         the home screen
 _review.html       the review every client push must pass
 sw.js              the offline cache. `?nosw=1` turns it off
 shared/            the foundation. Its own brief holds the debt and findings
-desktop/           STATUS.exe and Main Menu.exe, Windows, Tom only. README.md
+desktop/           STATUS.exe, Main Menu.exe and the Setup clients install. README.md
 tools/             build-client.py and helpers. Not build steps
 _template/         the starter app to copy
 <app>/index.html   one app per folder; <app>/CLAUDE.md is that app's brief
@@ -1212,5 +1212,11 @@ Then: `py -3 tools/build-client.py`, commit the generated folder with what
 changed and why, and push. Nothing in that folder is ever edited by hand.
 
 A change clients cannot see is one to an app they do not have (`wealth/`,
-`arc/`, `speak/`, `system/`, `form/`, `portion/`, `coach/`, `forge/`), to `tools/`, to
-`desktop/`, or to a brief. Those need no rebuild. Building it is fine.
+`arc/`, `speak/`, `system/`, `form/`, `portion/`, `coach/`, `forge/`), to `tools/`, or to
+a brief. Those need no rebuild. Building it is fine.
+
+**A change to a desktop program's `.cs` is one clients CAN see** (since
+2026-10-28 their copies update themselves). `desktop/build.ps1` makes a new
+`Motherbase Setup <date>.exe` every time; commit it with the old one's removal,
+then rebuild and push the client copy, and installed copies take it within six
+hours. Tom never asks for a new version: the session that changed the program ships it.
