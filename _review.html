@@ -357,6 +357,7 @@ async function reviewApp(a) {
       }
     }
 
+    if (a.id === 'home') await reviewBoard(w);
     await reviewDesign(a, f);
 
     ok(a.id + ': nothing threw while being used', thrown.length === 0, thrown.slice(0, 2).join(' | '));
@@ -365,6 +366,30 @@ async function reviewApp(a) {
   } finally {
     if (f) f.remove();
   }
+}
+
+/* ── the home screen's widgets ──
+   Tom, 2026-11-05, after + WIDGET opened nothing for a day: "make sure that
+   glitch doesnt happen again". One level under the bug: every widget is the
+   shape the board reads (index.html, WIDGET_SHAPE), and + WIDGET, pressed,
+   lists every widget it should. */
+async function reviewBoard(w) {
+  let faults;
+  try { faults = w.eval('widgetFaults()'); } catch (e) { faults = ['could not be read: ' + e.message]; }
+  ok('home: every widget is the shape the board reads', !faults.length, faults.slice(0, 3).join(' | '));
+  let said = '';
+  try {
+    w.document.querySelector('#btnWidget').click();
+    await wait(250);
+    /* the list is lifted into a shared sheet, so it is found by its own class */
+    const boxes = w.document.querySelectorAll('.wpickbox'), box = boxes[boxes.length - 1];
+    const rows = box ? box.querySelectorAll('.wpick > .opt').length : 0;
+    const want = w.eval('Object.keys(WIDGETS).filter(k => !WIDGETS[k].hidden && widgetHere(WIDGETS[k])).length');
+    if (!box) said = 'the list never opened';
+    else if (rows < want) said = rows + ' rows for ' + want + ' widgets';
+    w.eval('closeModal()');
+  } catch (e) { said = e.message; }
+  ok('home: + WIDGET opens and lists every widget', !said, said);
 }
 
 /* ── the foundation, folded in ──

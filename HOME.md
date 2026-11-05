@@ -604,3 +604,7 @@ Tom: "an event that asks me to plan and prompt my day. It should ask me if block
 LOG WEEK (1.0.96) named a helper `days`, which every widget uses for its SHOW range, so ADD A WIDGET and LOG WEEK's own card menu threw on `W.days.map` and never opened. It is `week` now. Never give a widget a property named after a shared one (`days`, `menu`, `parts`, `periods`).
 
 Tom: clients too, "but make sure its optional". `lifeos.planday` is `off` once switched off, from "Stop adding this todo every day" in the first window or DAY PLAN's menu, and absent until then. Off deletes today's undone todo; on brings it back. The first window is 500 wide: at 400 CANCEL hung off its left edge.
+
+## 2026-11-05, HOME 1.0.101: the widget glitch cannot come back
+
+Tom: "make sure that gitch doesnt happen again". `WIDGET_SHAPE` beside `widgetMenu` lists every name the board reads off a widget and the shape it must be; `widgetFaults()` checks all of them, and `_review.html` fails the home screen on any fault and presses + WIDGET to count its rows (`reviewBoard`). Proved by planting the old `days` helper: the review failed, naming it. The board also stopped trusting a widget: `days` is only read when it is a list, a menu that throws gives no items (`menuOf`), and a widget whose row throws is left off ADD A WIDGET instead of taking the list with it. A new name the board reads goes in `WIDGET_SHAPE`.
