@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.99, 2026-11-04">
+<meta name="mb-version" content="1.0.100, 2026-11-05">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -621,6 +621,7 @@ body.dragging #cardframes{z-index:0}
 .pdrow{display:grid;grid-template-columns:8ch 1fr auto;gap:var(--s-2);align-items:baseline;font-size:var(--f-2)}
 .pdrow b{font-family:var(--font-display);font-weight:500;color:var(--mut)}
 .pdrow i{font-style:normal;color:var(--dim)}
+.pdoff{color:var(--dim);min-height:var(--tap,44px)}
 .pdodd{width:100%;min-height:calc(var(--tap,44px) * 2);resize:vertical}
 .lwweek,.lwday{flex:none;display:flex;gap:var(--s-3);align-items:baseline;width:100%;min-height:var(--tap,44px);padding:var(--s-2) 0;
   background:none;border:0;border-bottom:var(--border-width,1px) solid var(--line);color:var(--txt);font:inherit;text-align:left;cursor:pointer}
@@ -4603,6 +4604,7 @@ const WIDGETS = {
     nm: 'DAY PLAN', w: 4, h: 6, app: 'status', fit: 1, to: ['status'],
     kinds: [['walk', 'WALKS', 'Walk'], ['train', 'TRAINING', 'Train'], ['eat', 'MEALS', 'Eat'], ['bed', 'BED', 'Bed']],
     usual: () => (Rec.setting('lifeos', 'dayplan') || []).filter(x => x && x.id && /^\d\d:\d\d$/.test(x.at || '')),
+    menu: (cfg, redraw) => [{ label: 'Daily Plan the day todo', check: PLANDAY.on(), fn: () => { PLANDAY.set(!PLANDAY.on()); redraw(); } }],
     /* after midnight is still the night before, for bed only */
     late: (kind, at) => kind === 'bed' && at < '05:00',
     dateFor(day, kind, at) { return WIDGETS.dayplan.late(kind, at) ? Day.shift(day, 1) : day; },
@@ -4797,11 +4799,11 @@ const WIDGETS = {
       const e = i < L.starts.length - 1 ? Math.min(L.starts[i + 1] - 1, last) : last;
       return 'Week ' + (i + 1) + ' · ' + s + (e === s ? '' : '–' + e) + ' ' + Day.label(from, { month: 'short' });
     },
-    days: () => [0, 1, 2, 3, 4, 5, 6].map(i => Day.shift(LifeOS.day(), -i)),
+    week: () => [0, 1, 2, 3, 4, 5, 6].map(i => Day.shift(LifeOS.day(), -i)),
     note: d => ((Rec.get('day', d, '') || {}).note || '').trim(),
-    sub: () => { const n = WIDGETS.logweek.days().filter(d => WIDGETS.logweek.note(d)).length; return n + ' of 7 days written'; },
+    sub: () => { const n = WIDGETS.logweek.week().filter(d => WIDGETS.logweek.note(d)).length; return n + ' of 7 days written'; },
     draw(body) {
-      const L = WIDGETS.logweek, today = LifeOS.day(), days = L.days();
+      const L = WIDGETS.logweek, today = LifeOS.day(), days = L.week();
       const row = (cls, d, lab, text, none) => {
         const b = el('button', cls + ' mb-press');
         b.type = 'button';
@@ -6878,9 +6880,32 @@ const WIC = { lockedin: 'energy', workdone: 'done', todo: 'done', ideas: 'edit',
    link, `mb:home/planday`, opens the sequence from STATUS, QUESTS, LOG or
    TODAY. One left untouched on an earlier day is deleted, so a skipped day
    does not follow him. Outside Main Menu.exe there is no panel, so the
-   words are copied for Claude chat instead. */
+   words are copied for Claude chat instead.
+
+   Tom, 2026-11-05: clients get it too, "but make sure its optional". The
+   setting `lifeos.planday` is 'off' once turned off, from the sequence's
+   first window or DAY PLAN's menu, and nothing until then, so no default
+   is ever written. */
 const PLANDAY = {
   key: d => 'planday-' + d,
+  on: () => Rec.setting('lifeos', 'planday') !== 'off',
+  todo: (day, t) => ({ kind: 'todo', text: 'Plan the day', t: t, made: day, at: null, dur: null, ord: -1, done: 0, cancelled: 0,
+                       src: 'plan', link: 'mb:home/planday' }),
+  set(on) {
+    const day = Day.today(), key = PLANDAY.key(day);
+    Rec.setting('lifeos', 'planday', on ? null : 'off');
+    if (on && Rec.tombstone('note', day, key)) {
+      /* turned off today and on again: the todo it took away comes back */
+      Rec.set('note', day, key, PLANDAY.todo(day, Date.now()));
+      Journal.publishNotes(day, 'home');
+    } else if (on) PLANDAY.seed();
+    else {
+      const r = Rec.get('note', day, key);
+      if (r && !r.done) { Rec.del('note', day, key); Journal.publishNotes(day, 'home'); }
+    }
+    toast(on ? 'Plan the day is back on today’s todos.' : 'Plan the day turned off. DAY PLAN’s menu turns it back on.');
+    drawHome();
+  },
   seed() {
     if (!Rec.hydrated || typeof Journal === 'undefined') return;
     const day = Day.today(), key = PLANDAY.key(day), mid = d => new Date(d + 'T00:00:00').getTime();
@@ -6888,10 +6913,9 @@ const PLANDAY = {
       const d = Day.shift(day, -i), r = Rec.row('note', d, PLANDAY.key(d));
       if (r && !r.deleted && r.payload && !r.payload.done && r.updated_at === mid(d)) Rec.del('note', d, PLANDAY.key(d));
     }
-    if (Rec.row('note', day, key) || Rec.tombstone('note', day, key)) return;
+    if (!PLANDAY.on() || Rec.row('note', day, key) || Rec.tombstone('note', day, key)) return;
     Rec.merge([{ id: Rec.idOf('note', day, key), user_id: Rec.USER, type: 'note', date: day, key: key,
-      payload: { kind: 'todo', text: 'Plan the day', t: mid(day), made: day, at: null, dur: null, ord: -1, done: 0, cancelled: 0,
-                 src: 'plan', link: 'mb:home/planday' },
+      payload: PLANDAY.todo(day, mid(day)),
       updated_at: mid(day), deleted: false, by: 'home' }]);
     Journal.publishNotes(day, 'home');
   },
@@ -6957,9 +6981,13 @@ const PLANDAY = {
       });
     };
     /* 1: which day */
-    UI.dialog({
-      title: 'PLAN THE DAY', width: 400,
-      body: b => b.appendChild(el('p', 'pdsay', 'Which day are you planning?')),
+    const first = UI.dialog({
+      title: 'PLAN THE DAY', width: 500,
+      body: b => {
+        b.appendChild(el('p', 'pdsay', 'Which day are you planning?'));
+        const off = tbtn('Stop adding this todo every day', () => { if (first && first.close) first.close(); PLANDAY.set(false); }, 'pdoff');
+        b.appendChild(off);
+      },
       actions: [{ label: 'CANCEL' },
         { label: 'TODAY · ' + lab(today).toUpperCase(), kind: late ? '' : 'go', fn: () => { s.day = today; next(block); } },
         { label: 'TOMORROW · ' + lab(tom).toUpperCase(), kind: late ? 'go' : '', fn: () => { s.day = tom; next(block); } }],

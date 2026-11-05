@@ -598,3 +598,9 @@ Tom: "an event that asks me to plan and prompt my day. It should ask me if block
 - From an app on its own, the link is `index.html?show=planday`. `mb:home` is a spot in `shared/ui.js` for this.
 
 [TESTED] demo in Chrome: the todo on TODAY pressed by mouse, all three steps, the words handed over, the todo ticked, the `?show=planday` address. Claude's `plan` and `steps` writes and their Undo through claude.js with a stand-in window. NOT tested in Main Menu.exe with the real panel and claude.exe.
+
+## 2026-11-05, HOME 1.0.100: + WIDGET opens again, and Plan the day is optional
+
+LOG WEEK (1.0.96) named a helper `days`, which every widget uses for its SHOW range, so ADD A WIDGET and LOG WEEK's own card menu threw on `W.days.map` and never opened. It is `week` now. Never give a widget a property named after a shared one (`days`, `menu`, `parts`, `periods`).
+
+Tom: clients too, "but make sure its optional". `lifeos.planday` is `off` once switched off, from "Stop adding this todo every day" in the first window or DAY PLAN's menu, and absent until then. Off deletes today's undone todo; on brings it back. The first window is 500 wide: at 400 CANCEL hung off its left edge.
