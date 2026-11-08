@@ -26,6 +26,14 @@ Tom: "If we wanted to specifically do Habits in BLOCK what can we retool", then 
 - **An every-day thing stays a block** (Tom). The block menu's "Track as a habit" adds a habit with `act`, the block's own tick id, so its grid shows the block's history and a tick in either place is one tick. Its count is the days the block runs a week. It is left off the Day's Also column and the published plan, because the block is already there.
 - The view id stays `anytime` and the kind stays `anytime`, so nothing stored moved.
 
+## 1.0.25, 2026-11-09: Week, Every and Habits are one Schedule page
+
+Tom: "Weekly and every so often and habit tracked routines just in 1 page". The Schedule tab (`#vWeek`) shows `#sched`, which holds `#week` on top and `#every` and `#anytime` side by side below (`.schpair`, stacked when narrow). Rules that stand:
+
+- The view ids `week`, `every` and `anytime` all mean the Schedule page, so saved views, self-tests and "Tracked on Habits" still land; that link scrolls to Habits.
+- `#vEvery` and `#vAny` stay in the page, hidden, so putting the tabs back is one commit. Every's owed-or-due count rides on Schedule (`rhBadge`).
+- Only the week strip scrolls sideways when the window is narrower than seven day columns; the page itself never does.
+
 ## Needs from the home screen
 
 None. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.
