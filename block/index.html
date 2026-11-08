@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.24, 2026-10-26">
+<meta name="mb-version" content="1.0.25, 2026-11-09">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -431,6 +431,15 @@ main{display:flex;flex:1;min-height:0}
 .weekbar{grid-column:1/-1;display:flex;align-items:center;gap:7px;margin-bottom:2px}
 #pri,#sum,#every,#anytime{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:14px;max-width:920px}
 #pri.hide,#sum.hide,#every.hide,#anytime.hide{display:none}
+/* ---------- schedule: week, every and habits on one page ---------- */
+#sched{flex:1;overflow:auto;padding:var(--s-3);display:flex;flex-direction:column;gap:var(--s-5);min-width:0}
+#sched.hide{display:none}
+#sched #week,#sched #every,#sched #anytime{flex:none;overflow:visible;padding:0;max-width:none}
+#sched #week{overflow-x:auto}
+.schpair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));gap:var(--s-5);align-items:start}
+.schsec{display:flex;flex-direction:column;gap:var(--s-2);min-width:0}
+.schh{font-family:var(--font-display);font-size:var(--f-3);letter-spacing:.12em;text-transform:uppercase;color:var(--text-1);margin:0;
+  padding-bottom:var(--s-2);border-bottom:1px solid var(--line)}
 /* ---------- every and anytime ---------- */
 .views .vbadge{margin-left:var(--s-1);color:var(--warn);font-size:var(--f-1)}
 .rhadd{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap;padding:var(--s-3);
@@ -713,9 +722,9 @@ footer .sp{flex:1}
     <div class="logo"><span>BLO<b>CK</b></span></div>
     <div class="views">
       <button id="vDay" class="on" data-tip="<b>Day</b> — build one routine out of blocks">Day</button>
-      <button id="vWeek" data-tip="<b>Week</b> — which <b>day</b> runs on which weekday">Week</button>
-      <button id="vEvery" data-tip="<b>Every</b>: blocks that come round every few days, weeks or months">Every</button>
-      <button id="vAny" data-tip="<b>Habits</b>: done on any day at no set time, so many times a week, a fortnight or a month">Habits</button>
+      <button id="vWeek" data-tip="<b>Schedule</b>: the week, what comes round every so often, and habits, on one page">Schedule</button>
+      <button id="vEvery" style="display:none">Every</button>
+      <button id="vAny" style="display:none">Habits</button>
       <button id="vSum" data-tip="<b>Summary</b> — what actually gets done, and what to do about it">Summary</button>
     </div>
     <div id="datebar"></div>
@@ -772,10 +781,17 @@ footer .sp{flex:1}
 
     <button id="binShow" data-tip="Show the bin again">›</button>
     <div id="board"></div>
-    <div id="week" class="hide"></div>
+    <!-- Week, Every and Habits were three tabs until 1.0.25 (Tom: "just in
+         1 page"). The three panes and their renderers are untouched; this
+         wrapper scrolls them as one page. -->
+    <div id="sched" class="hide">
+      <section class="schsec"><h2 class="schh">Week</h2><div id="week"></div></section>
+      <div class="schpair">
+        <section class="schsec"><h2 class="schh">Every</h2><div id="every"></div></section>
+        <section class="schsec"><h2 class="schh">Habits</h2><div id="anytime"></div></section>
+      </div>
+    </div>
     <div id="sum" class="hide"></div>
-    <div id="every" class="hide"></div>
-    <div id="anytime" class="hide"></div>
   </main>
 
   <footer>
@@ -2437,12 +2453,13 @@ function render() {
   rolloverIfNewDay();
   RULECHK = checkRules(S.current);
   $('#board').classList.toggle('hide', S.view !== 'day');
-  $('#week').classList.toggle('hide', S.view !== 'week');
+  /* 'every' and 'anytime' are kept as names for the one Schedule page, so a
+     saved view and the "Tracked on Habits" link still land there */
+  const sched = S.view === 'week' || S.view === 'every' || S.view === 'anytime';
+  $('#sched').classList.toggle('hide', !sched);
   $('#sum').classList.toggle('hide', S.view !== 'sum');
-  $('#every').classList.toggle('hide', S.view !== 'every');
-  $('#anytime').classList.toggle('hide', S.view !== 'anytime');
   $('#vDay').classList.toggle('on', S.view === 'day');
-  $('#vWeek').classList.toggle('on', S.view === 'week');
+  $('#vWeek').classList.toggle('on', sched);
   $('#vEvery').classList.toggle('on', S.view === 'every');
   $('#vAny').classList.toggle('on', S.view === 'anytime');
   $('#vSum').classList.toggle('on', S.view === 'sum');
@@ -2469,8 +2486,8 @@ function render() {
   db.innerHTML = '';
   if (S.view === 'day') renderDateBar(db);
   renderTabs(); renderBin();
-  if (S.view === 'day') renderBoard(); else if (S.view === 'week') renderWeek();
-  else if (S.view === 'every') renderEvery(); else if (S.view === 'anytime') renderAnytime(); else renderSum();
+  if (S.view === 'day') renderBoard();
+  else if (sched) { renderWeek(); renderEvery(); renderAnytime(); } else renderSum();
   rhBadge(); renderFoot(); saveQuiet();
 }
 
@@ -3658,7 +3675,7 @@ function blockMenu(laneId, it, x, y) {
     (() => {
       const L = lane(laneId), id = window.LifeOS ? actIdOf(it, L) : null;
       const has = id && (S.rhythms || []).find(r => r.act === id);
-      return has ? { label: 'Tracked on Habits', fn: () => { S.view = 'anytime'; render(); } }
+      return has ? { label: 'Tracked on Habits', fn: () => { S.view = 'anytime'; render(); $('#anytime').parentNode.scrollIntoView({ block: 'start' }); } }
         : { label: 'Track as a habit', fn: () => trackBlock(it, L) };
     })(),
     { sep: 1 },
@@ -4172,10 +4189,10 @@ function renderAnytime() {
 /* Only Every carries a number on its tab: owed or due today. A count of
    Anytime habits not yet met would read as a debt every Monday morning. */
 function rhBadge() {
-  const b = $('#vEvery'); if (!b) return;
+  const b = $('#vWeek'); if (!b) return;
   const log = rhLog(), today = todayKey();
   const n = rhythms('every').filter(r => { const s = everyState(r, log[rhTick(r)] || [], today).st; return s === 'owed' || s === 'due'; }).length;
-  b.innerHTML = 'Every' + (n ? '<span class="vbadge">' + n + '</span>' : '');
+  b.innerHTML = 'Schedule' + (n ? '<span class="vbadge">' + n + '</span>' : '');
 }
 
 function rhMenu(r, x, y) {
