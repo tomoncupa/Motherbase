@@ -69,6 +69,8 @@ stays small enough for per-module sessions.
 
 1.0.90, 2026-11-09: a bullet that names a food logs it. Tom: "can we implement automatic food tracking from bullets?" Counted first in his 580 lines: 48 mention food, most name nothing loggable, and the ones naming a saved food were mostly logged by hand that day too. `jfScan` writes a real `meal`, the food's default serving, keyed `jr-<line key>-<food id>`, `src: 'journal'`, `line`, with one UNDO toast; the Food row's grey line says `journal`. Guards: eaten (the food is the whole line or clause, or an eating word in `JF_EAT` stands before it with only `JF_FILL` count or filler between: "Getting Cobra", "Cobra Walk" log nothing); one food (a name read by its first words goes to the most-logged food only at 3x the next, so "chicken" logs nothing); no double count (same food logged by hand within 3 h); a deleted meal's tombstone keeps it deleted. Saved foods only, never one-offs. Today and yesterday, lines from `JF_FROM` 2026-11-09 on, entries, events and done todos, and only after live sync has gone quiet 3 s (`jfStart`), so a deletion made on another device lands first. Off with Count calories off. Driven in headless Chromium at 390 with 13 lines; review 212/212 Chromium 390. WebKit did not launch (winldd missing). Not on the iPhone.
 
+1.0.91, 2026-11-09: the "no backup in a while" toast is gone, on open and when the widget opens the whole app. Tom: "remove no backup in a while". `IO.isStale` and the DATA button's amber stay; `deskNagged` is left unused so a reversal is one commit. A fresh store opened in headless Chromium at 390 shows no toast and no errors.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
