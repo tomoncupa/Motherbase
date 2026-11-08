@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.106, 2026-11-09">
+<meta name="mb-version" content="1.0.107, 2026-11-09">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -6876,25 +6876,39 @@ function hint(m, x, y, w, h, land) {
   n.style.height = (h * m.R - m.gap) + 'px';
   g.classList.toggle('gapon', !land);
 }
-/* B: an empty patch offers a widget, the size of the patch */
+/* B: an empty patch offers a widget, one standard block of it */
 (function watchGaps() {
   const g = $('#grid');
+  /* Tom, 2026-11-09: "Why is this 1 giant widget? The underlying grid should
+     be standard sized nodes and blocks". The hint was the whole empty patch,
+     so a big gap read as one giant card. It is now one standard block, 4 by 3,
+     on a lattice of blocks counted from the patch's corner, smaller only where
+     the patch is. A widget added there keeps its own size, cut to the room
+     the patch has right and down of the block. */
+  const BW = 4, BH = 3;
+  const block = (gap, at) => {
+    if (!gap.w) return { x: Math.min(gap.x, COLS - BW + 1), y: gap.y, w: BW, h: BH, room: null };
+    const w = Math.min(BW, gap.w), h = Math.min(BH, gap.h);
+    const x = Math.min(gap.x + Math.floor((at.c - gap.x) / BW) * BW, gap.x + gap.w - w);
+    const y = Math.min(gap.y + Math.floor((at.r - gap.y) / BH) * BH, gap.y + gap.h - h);
+    return { x: x, y: y, w: w, h: h, room: { w: gap.x + gap.w - x, h: gap.y + gap.h - y } };
+  };
   const target = ev => {
     if (ev.target !== g || moving || sizing || editing || NARROW()) return null;
     const m = gridMetrics(), at = cellAt(m, ev.clientX, ev.clientY);
-    return { m: m, gap: gapAt(at.c, at.r) };
+    const gap = gapAt(at.c, at.r);
+    return { m: m, gap: gap, b: gap && block(gap, at) };
   };
   g.addEventListener('mousemove', ev => {
     if (moving || sizing) return;
     const t = target(ev);
     if (!t || !t.gap) { hint(); return; }
-    const x = t.gap.w ? t.gap.x : Math.min(t.gap.x, COLS - 3);
-    hint(t.m, x, t.gap.y, t.gap.w || 4, t.gap.h || 3);
+    hint(t.m, t.b.x, t.b.y, t.b.w, t.b.h);
   });
   g.addEventListener('mouseleave', () => { if (!moving && !sizing) hint(); });
   g.addEventListener('click', ev => {
     const t = target(ev);
-    if (t && t.gap) { hint(); widgetPicker(t.gap); }
+    if (t && t.gap) { hint(); widgetPicker({ x: t.b.x, y: t.b.y, w: 0, h: 0, room: t.b.room }); }
   });
 })();
 
@@ -7762,6 +7776,7 @@ function widgetPicker(spot) {
     if (spot) {
       cfg.x = spot.x; cfg.y = spot.y;
       if (spot.w) { const m = minSize(cfg.t); cfg.w = Math.max(m.w, spot.w); cfg.h = Math.max(m.h, spot.h); }
+      else if (spot.room) { const m = minSize(cfg.t); cfg.w = Math.max(m.w, Math.min(cfg.w, spot.room.w)); cfg.h = Math.max(m.h, Math.min(cfg.h, spot.room.h)); }
       else cfg.x = Math.min(spot.x, COLS + 1 - cfg.w);
     }
     layout.push(cfg);

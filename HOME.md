@@ -622,3 +622,7 @@ Tom: "It should tell me what my default AM doses are, then I can either edit the
 ## 2026-11-09, HOME 1.0.105: Plan the day is Tom only for now
 
 Tom: "Make the plan the day task me only for now". `PLANDAY.on()` is false in a build with no `mine` app (`MINE_BUILD`), so the client copy never adds the todo, `seed` takes back today's untouched one it already added, and DAY PLAN's menu loses its switch there. `lifeos.planday` is untouched, so turning it back on for clients is taking `MINE_BUILD &&` out of `on`.
+
+## 2026-11-09, HOME 1.0.107: an empty patch offers one standard block
+
+Tom, of a dashed box covering a whole empty patch: "Why is this 1 giant widget? The underlying grid should be standard sized nodes and blocks". The hover hint (`#gaphint`) was the whole patch `gapAt` found. `watchGaps` now shows one 4 by 3 block, stepped in blocks from the patch's corner and smaller only where the patch is; the last step in a patch that is not a multiple of 3 rows overlaps the one before rather than shrinking. A click hands `widgetPicker` that block's corner and `room` (the patch right and down of it), and the widget keeps its own size cut to that room, so nothing below is pushed. [TESTED] demo in Chrome at 1889 wide: an 8 by 7 gap gave only 4 by 3 hints; DAY LOG added from the lower right one landed at 5,4, 4 by 3, RECORDS below unmoved. Not seen on his board.
