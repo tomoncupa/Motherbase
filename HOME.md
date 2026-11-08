@@ -608,3 +608,9 @@ Tom: clients too, "but make sure its optional". `lifeos.planday` is `off` once s
 ## 2026-11-05, HOME 1.0.101: the widget glitch cannot come back
 
 Tom: "make sure that gitch doesnt happen again". `WIDGET_SHAPE` beside `widgetMenu` lists every name the board reads off a widget and the shape it must be; `widgetFaults()` checks all of them, and `_review.html` fails the home screen on any fault and presses + WIDGET to count its rows (`reviewBoard`). Proved by planting the old `days` helper: the review failed, naming it. The board also stopped trusting a widget: `days` is only read when it is a list, a menu that throws gives no items (`menuOf`), and a widget whose row throws is left off ADD A WIDGET instead of taking the list with it. A new name the board reads goes in `WIDGET_SHAPE`.
+
+## 2026-11-09, HOME 1.0.102: WORK DONE has a smallest size, and ADD A WIDGET has a search box
+
+Tom sent WORK DONE at 4 columns by 6 rows: "the smallest the widget can functionally be". A widget may now carry `min: {w, h}` in columns and rows; `minSize(t)` is the one floor every resize path reads (the corner drag, Taller and Shorter, a widget dropped into an empty patch), and `fitGrid` draws a card saved smaller than its minimum at the minimum. WORK DONE's is 4 by 6 and its factory size is 6 by 6. `min` is in `WIDGET_SHAPE`.
+
+Tom: "I also want a search function when I add a new widget". A box at the top of ADD A WIDGET, focused on open with a mouse and left down on a phone. Every word must match. Names (and groups and ready-made versions) win: "work" gave every app card at first, because their lines say they work inside the card, so the one-line descriptions are searched only when no name matches. LAYOUT is hidden while searching.

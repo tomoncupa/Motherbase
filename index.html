@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.101, 2026-11-05">
+<meta name="mb-version" content="1.0.102, 2026-11-09">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -769,6 +769,8 @@ table.wd tr.grp td{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.16
 .opt.danger .ic{color:var(--warn)}
 /* ADD A WIDGET: a widget's row with its gear beside it, and its own page */
 .wlede{color:var(--dim2);line-height:1.6;margin-bottom:var(--s-4)}
+.wfind{display:block;width:100%;min-height:var(--tap,44px);margin-bottom:var(--s-4)}
+.wfind[hidden]{display:none}
 .wpick{display:flex;align-items:stretch;gap:var(--s-1)}
 .wpick .mb-opt{flex:1;min-width:0}
 .wgear{flex:0 0 var(--tap,44px);min-height:var(--tap,44px);display:grid;place-items:center;
@@ -3318,7 +3320,10 @@ const WIDGETS = {
      records do not reach back that far; its cells say how many days had a
      reading, as before. */
   workdone: {
-    nm: 'WORK DONE', w: 6, h: 5, fit: 1,
+    /* `min`, columns and rows: the smallest it can be with every row in
+       view and nothing scrolling inside (Tom, 2026-11-09, with a picture of
+       it at two time frames) */
+    nm: 'WORK DONE', w: 6, h: 6, fit: 1, min: { w: 4, h: 6 },
     periods: PERIODS.map(p => p[0]),
     periodsDef() {
       const first = firstDay(), today = LifeOS.day();
@@ -6807,7 +6812,7 @@ function tickList(title, x, y, list, isOn, put) {
 const WIDGET_SHAPE = {
   nm: 'string', w: 'number', h: 'number', app: 'string', grp: 'string', about: 'string',
   draw: 'function', sub: 'function', nmFor: 'function', menu: 'function', periodsDef: 'function',
-  days: 'list', periods: 'list', presets: 'list', to: 'list', parts: 'list or function',
+  days: 'list', periods: 'list', presets: 'list', to: 'list', parts: 'list or function', min: 'object',
 };
 function widgetFaults() {
   const out = [];
@@ -6836,7 +6841,7 @@ function widgetMenu(i, x, y) {
      shows, not its factory one, and keeps what it is given (`hs`). */
   const set = (k, v) => {
     if (k === 'h' && W.fit) { cfg.h = effH[i] || cfg.h; cfg.hs = 1; }
-    cfg[k] = Math.max(k === 'h' && W.fit ? 1 : 2, Math.min(k === 'w' ? COLS : 1e4, (cfg[k] || 3) + v));
+    cfg[k] = Math.max(minSize(cfg.t)[k], Math.min(k === 'w' ? COLS : 1e4, (cfg[k] || 3) + v));
     saveLayout(); drawHome();
   };
   /* Move up, Move down, Wider and Narrower are off the menu (Tom,
@@ -6851,7 +6856,7 @@ function widgetMenu(i, x, y) {
   UI.menu(x, y, [
     ...(NARROW() ? [] : [
       { label: 'Taller', fn: () => set('h', 1) },
-      hNow > (W.fit ? 1 : 2) ? { label: 'Shorter', fn: () => set('h', -1) } : null,
+      hNow > minSize(cfg.t).h ? { label: 'Shorter', fn: () => set('h', -1) } : null,
       W.fit && cfg.hs ? { label: 'Fit to contents', fn: () => { delete cfg.hs; cfg.h = W.h; saveLayout(); drawHome(); } } : null,
     ]),
     /* A widget that says what ranges it understands gets them offered here,
@@ -7277,6 +7282,12 @@ function fitBoard() {
 }
 let COLS = 12, SCALE = 1;
 const CELL = { w: 146, h: 84 };
+/* the smallest a card may be, in columns and rows: two by two, a fit card
+   one row tall, or the widget's own `min` (WORK DONE's, 2026-11-09) */
+const minSize = t => {
+  const W = WIDGETS[t] || {}, m = W.min || {};
+  return { w: Math.max(2, m.w || 0), h: Math.max(W.fit ? 1 : 2, m.h || 0) };
+};
 function fitGrid() {
   const g = $('#grid'), home = $('#home');
   if (NARROW()) {
@@ -7296,6 +7307,14 @@ function fitGrid() {
   const fits = [].slice.call(g.querySelectorAll(':scope > .w.fit'));
   const nodes = [].slice.call(g.querySelectorAll(':scope > .w'));
   effH.length = 0;
+  /* a card saved smaller than its widget's minimum is drawn at the minimum */
+  nodes.forEach(n => {
+    const c = layout[+n.dataset.i]; if (!c) return;
+    const m = minSize(c.t);
+    if (c.w < m.w) c.w = m.w;
+    if (c.hs && c.h < m.h) c.h = m.h;
+    if (!WIDGETS[c.t] || !WIDGETS[c.t].fit) { if (c.h < m.h) c.h = m.h; }
+  });
   /* the most rows a fit card takes: it stops there and scrolls inside, or
      LINKS stood 1668px tall in a 1000px window with CLIENTS below the fold.
      Since 1.0.70 it grows to its contents only as far as the bottom of the
@@ -7324,7 +7343,7 @@ function fitGrid() {
        contents (Tom, 2026-10-18: "I need widgets to be vertically scalable
        as well"); short, the body scrolls and a small card leaves rows off */
     const c = layout[+n.dataset.i];
-    const ch = c.hs ? c.h : Math.min(want, Math.max(c.h, win - (c.y || 1) + 1));
+    const ch = Math.max(minSize(c.t).h, c.hs ? c.h : Math.min(want, Math.max(c.h, win - (c.y || 1) + 1)));
     n.classList.toggle('capped', ch < want);
     n.style.setProperty('--ch', ch);
     effH[+n.dataset.i] = ch;
@@ -7515,7 +7534,8 @@ function onResize(ev) {
   if (!sizing) return;
   const dw = Math.round((ev.clientX - sizing.x) / (sizing.colw + sizing.gap));
   const dh = Math.round((ev.clientY - sizing.y) / (parseFloat($('#grid').style.getPropertyValue('--row')) || 84));
-  const w = Math.max(2, Math.min(sizing.cols, sizing.w + dw));
+  const mn = minSize(layout[sizing.i].t);
+  const w = Math.max(mn.w, Math.min(sizing.cols, sizing.w + dw));
   layout[sizing.i].w = w;
   sizing.node.style.setProperty('--cw', w);
   const c = layout[sizing.i];
@@ -7527,7 +7547,7 @@ function onResize(ev) {
   /* no ceiling: a card can be dragged as tall as he likes and the board
      scrolls (Tom, 2026-10-18: "today should be infinitely vertically
      expandable"). It was 12 rows. */
-  const h = Math.max(sizing.fit ? 1 : 2, sizing.h + dh);
+  const h = Math.max(mn.h, sizing.h + dh);
   c.h = h;
   if (sizing.fit) { c.hs = 1; effH[sizing.i] = h; }
   sizing.node.style.setProperty('--ch', h);
@@ -7619,7 +7639,7 @@ function widgetPicker(spot) {
   const put = cfg => {
     if (spot) {
       cfg.x = spot.x; cfg.y = spot.y;
-      if (spot.w) { cfg.w = Math.max(2, spot.w); cfg.h = Math.max(1, spot.h); }
+      if (spot.w) { const m = minSize(cfg.t); cfg.w = Math.max(m.w, spot.w); cfg.h = Math.max(m.h, spot.h); }
       else cfg.x = Math.min(spot.x, COLS + 1 - cfg.w);
     }
     layout.push(cfg);
@@ -7629,6 +7649,17 @@ function widgetPicker(spot) {
   const ico = (role, ch) => (typeof Icons !== 'undefined' && Icons.svg(role, { size: 18 })) || ch;
   const mo = $('#modal'); mo.innerHTML = '';
   mo.appendChild(el('h3', null, 'ADD A WIDGET'));
+  /* Search (Tom, 2026-11-09: "I also want a search function when I add a
+     new widget"): every word typed must appear in the widget's name, its
+     one line, its group or a ready-made version's name. Shown on the list,
+     hidden on one widget's page. */
+  let q = '';
+  const find = el('input', 'mb-input wfind');
+  find.type = 'search'; find.placeholder = 'Search widgets'; find.setAttribute('aria-label', 'Search widgets');
+  find.autocomplete = 'off';
+  find.oninput = () => { q = find.value.trim().toLowerCase(); list(); };
+  mo.appendChild(find);
+  const hit = (...xs) => { const s = xs.join(' ').toLowerCase(); return q.split(/\s+/).every(w => s.indexOf(w) >= 0); };
   /* the list and one widget's page take turns in this one box */
   const box = el('div', 'wpickbox');
   mo.appendChild(box);
@@ -7652,7 +7683,7 @@ function widgetPicker(spot) {
   const page = (k, back) => {
     const W = WIDGETS[k], cfg = { t: k, w: W.w, h: W.h };
     const draw = () => {
-      box.innerHTML = '';
+      box.innerHTML = ''; find.hidden = true;
       const bk = optBtn(ico('back', '←'), 'All widgets', '');
       bk.onclick = back; box.appendChild(bk);
       const top = el('div', 'wpage');
@@ -7677,12 +7708,21 @@ function widgetPicker(spot) {
   };
 
   const list = () => {
-    box.innerHTML = '';
-    box.appendChild(el('div', 'wlede', FINE
+    box.innerHTML = ''; find.hidden = false;
+    if (!q) box.appendChild(el('div', 'wlede', FINE
       ? 'Press a widget to add it, or its gear to set it up first. On the board, drag a widget by its title to move it, drag its bottom-right corner to resize it, and right click it for its menu.'
       : 'Press a widget to add it, or its gear to set it up first. Your layout follows you to every device you sign in on.'));
-    groups.forEach(g => keys.filter(k => grpOf(WIDGETS[k]) === g).forEach((k, gi) => { try {
+    /* names first: "work" is WORK DONE, not every app card whose line says
+       it works inside the card. The lines are searched only when no name
+       matches, so "sleep" still finds what shows sleep. */
+    const byName = k => hit(WIDGETS[k].nm, grpOf(WIDGETS[k]), (WIDGETS[k].presets || []).map(p => p.nm).join(' '));
+    const named = q && keys.some(byName);
+    const shown = k => !q || (named ? byName(k)
+      : hit(WIDGETS[k].nm, ABOUT[k] || '', grpOf(WIDGETS[k]), (WIDGETS[k].presets || []).map(p => p.nm + ' ' + (p.note || '')).join(' ')));
+    let found = 0;
+    groups.forEach(g => keys.filter(k => grpOf(WIDGETS[k]) === g && shown(k)).forEach((k, gi) => { try {
       const W = WIDGETS[k], n = layout.filter(c => c.t === k).length;
+      found++;
       if (!gi) box.appendChild(group(g));
       const line = (ABOUT[k] || '') + (n ? ' On the board' + (n > 1 ? ' ' + n + ' times' : '') + '.' : '');
       const row = el('div', 'wpick');
@@ -7713,6 +7753,10 @@ function widgetPicker(spot) {
         box.appendChild(pr);
       });
     } catch (e) { console.warn('[home] ' + k + ' left off ADD A WIDGET', e); } }));
+    if (q) {
+      if (!found) box.appendChild(el('div', 'wlede', 'No widget matches “' + esc(find.value.trim()) + '”.'));
+      return;
+    }
     box.appendChild(group('LAYOUT'));
     /* a row of the list, with the gear's room kept like the rest */
     const layoutRow = b => {
@@ -7740,6 +7784,9 @@ function widgetPicker(spot) {
   };
   list();
   openModal();
+  /* a mouse can type straight away; a phone keeps its keyboard down until
+     the box is pressed, so the list is not half covered on open */
+  if (FINE && typeof UI !== 'undefined' && UI.focusSoon) UI.focusSoon(find);
 }
 
 /* ══════════════ backup and export ══════════════
