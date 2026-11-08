@@ -1478,3 +1478,40 @@ Tested 2026-10-28 in the Browser pane (hidden, so controls pressed with
 target under 44, no words under 12px, no overflow, no sideways scroll.
 `tools/safari-check.py`: Chromium 1280 x 900 195/195, WebKit 390 x 844
 210/210. Not seen on his phone or on his real log.
+
+## First sessions, ghosts from last time, a warmup switch (1.0.82, 2026-11-09)
+
+Four asks from Tom in one message, his words:
+
+- **"Don't count PRs for a new movements first session."** Every set of a
+  new movement was a trophy and a medal, and a second heavier set the same
+  day sounded the record save. `TRAIN.firstDay(exId)` is the first date with
+  a working set that counts; `recomputePRs`, `prKinds` (all five symbols,
+  the medal included) and `recordHits` (the save sound and toast, the
+  session card's RECORDS, the share picture's PRs) give that day nothing.
+  Its sets still set the bar. A block's first session of an old movement
+  keeps its medal. While there: `recomputePRs` now skips a waiting
+  suggestion (it could be stored as the record), and `recordsFor` (Records
+  screen, records sheet, records card) skips them too.
+- **The barbell and crown asked too narrow a question.** The barbell
+  compared only with earlier sets at exactly the same reps, the crown only
+  at exactly the same weight, so 70 x 7 got a barbell after something
+  heavier for more reps was done. Now against everything before the set.
+  Measured on his 13,108 sets by the coordinating session: crowns 1,021 to
+  765, barbells 1,199 to 1,180 (not re-measured here).
+- **"if I click last sessions numbers let them show up as ghosts on the
+  left."** The faded last-time line above the steppers: each set in it is a
+  button now, the same words with a dotted line under them, and a tap loads
+  its numbers into the steppers as ghosts through `loadDraft(s, true)`, the
+  path a suggestion already used. "On the left" read as the steppers.
+  Measured at 390: the line kept its height (15px) and every set its place.
+- **"warmup designation should also be a toggle in set details button."**
+  The comment box (the bubble on a set) has a Warmup switch above RIR.
+- **"space between weight and reps."** On TRACK the two columns are inline
+  spans, so their `min-width` never applied and the reps touched the unit:
+  0px. Now `--s-4`, 16px; rows still 44px. The day screen and History
+  (flex rows) already stood 34 to 45px apart and were left.
+
+Tested in the Browser pane (hidden; controls pressed with `.click()`) at
+390 x 844 on a seeded log, and the switch on `?client=testpid`. Not seen on
+his phone or his real log.

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.81, 2026-10-28">
+<meta name="mb-version" content="1.0.82, 2026-11-09">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -403,6 +403,10 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .tset .col{text-align:right;white-space:nowrap}
 .tset .col.w{min-width:7em}
 .tset .col.r{min-width:5em}
+/* the columns are inline here, so their min-widths never applied and the
+   reps sat touching the unit: "65.0 kgs7 reps" (Tom, 2026-11-09: "space
+   between weight and reps") */
+.tset .col.w:not(:empty) + .col.r{margin-left:var(--s-4)}
 .tset b{font-size:var(--f-4);font-weight:var(--w-bold);color:var(--text-2)}
 .tset .u{color:var(--text-muted);font-size:var(--f-2)}
 .tset .chk{width:var(--s-6);height:var(--s-6);flex:0 0 auto;border:0;background:none;
@@ -423,6 +427,12 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .lastline .lasttime{display:-webkit-box;-webkit-box-orient:vertical;
   -webkit-line-clamp:2;overflow:hidden}
 .lasttime b{color:var(--text-2);font-variant-numeric:tabular-nums}
+/* one of last time's sets, a press that loads it as ghosts (1.0.82): the
+   same words, a dotted line under them, and the press state */
+.lastset{display:inline;font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;
+  cursor:pointer;text-decoration:underline dotted var(--text-muted);
+  border-radius:var(--radius-sm);-webkit-tap-highlight-color:transparent}
+.lastset:active{color:var(--text-1);background:var(--surface-2)}
 /* A past day on TRACK: a ring in the theme's warning colour, the words in
    the reading colour so every theme can read them. */
 .pastday{display:flex;align-items:center;gap:var(--s-2);margin:var(--s-1) var(--s-1) 0;
@@ -4290,12 +4300,29 @@ function drawTrack(m) {
        nothing here, so this has to cost as little room as a line can. Tom,
        2026-09-22: "small, faded, and unintrusive, maintain the fitnotes
        layout". One line, cut off with an ellipsis rather than wrapping. */
+    /* Each set is a press (Tom, 2026-11-09: "if I click last sessions
+       numbers let them show up as ghosts on the left"): its numbers load
+       into the steppers as ghosts, the way a suggestion's do, and nothing
+       is saved until SAVE. Drawn as the same words, a dotted line under
+       each so it reads as pressable, and mb-tap catches 44 x 44. */
     var card = UI.el('div', 'lastline');
     card.innerHTML = '<div class="lasttime">' + (vsName ? UI.esc(vsName) + ' · ' : '') +
       UI.esc(dayY(vs.date, date)) + ' · ' +
-      then.map(function (s) {
-        return lastBit(s, f) + (s.split ? ' (' + UI.esc(s.split.text) + (TRAIN.sr(s) !== s.r ? ', counts as ' + TRAIN.showReps(TRAIN.sr(s)) : '') + ')' : '');
+      then.map(function (s, i) {
+        return '<button type="button" class="lastset mb-press mb-tap" data-i="' + i + '" aria-label="Load set ' + (i + 1) + ' from last time">' +
+          lastBit(s, f) + (s.split ? ' (' + UI.esc(s.split.text) + (TRAIN.sr(s) !== s.r ? ', counts as ' + TRAIN.showReps(TRAIN.sr(s)) : '') + ')' : '') +
+          '</button>';
       }).join(', ') + '</div>';
+    card.querySelectorAll('.lastset').forEach(function (bt) {
+      bt.onclick = function () {
+        var s = then[+bt.dataset.i];
+        if (!s) return;
+        Mobile.feedback('select');
+        TRAIN.sel = null;
+        loadDraft(s, true);
+        draw();
+      };
+    });
     m.appendChild(card);
   }
   /* The coach's target, when this was started from a routine a coach sent:
@@ -4727,12 +4754,25 @@ function setMenu(s, date, e) {
 
 /* FitNotes shows a comment in a small box with Edit and Done. Same shape. */
 function commentDialog(s, date) {
-  var noteEl = null;
+  var noteEl = null, warmSet = false;
   UI.dialog({
     title: 'COMMENT', width: 420,
     body: function (b, h) {
       var i = noteEl = UI.field('note', { value: s.note || '', placeholder: 'Comment Text ...' });
       b.appendChild(i);
+      /* Warmup as a switch (Tom, 2026-11-09: "warmup designation should
+         also be a toggle in set details button"). It starts as TRAIN reads
+         the set, its mark else its comment, and writes the mark: 1 or 0,
+         which beats the comment either way. */
+      var wr = UI.row('Warmup', 'Counts in totals, never a record', UI.toggle(s.warm ? 1 : 0, function (v) {
+        warmSet = true;
+        TRAIN.patchSet(s.key, date, { warm: v ? 1 : 0 });
+        s.warm = v ? 1 : 0;
+        TRAIN.recomputePRs([s.ex]);
+        draw();
+      }));
+      wr.classList.add('warmrow');
+      b.appendChild(wr);
       var rt = rateFor(s, date);
       if (rt) b.appendChild(rt);
       b.appendChild(setupFor(s, date));
@@ -4748,7 +4788,8 @@ function commentDialog(s, date) {
     /* The comment decides whether it is a warmup or a split set, so a changed
        comment hands that back to it and the records are worked out again. */
     var note = (i.value || '').trim(), ch = { note: note };
-    if (TRAIN.noteWarm(note) !== TRAIN.noteWarm(s.note)) ch.warm = undefined;
+    /* a warmup switched in this box stays as switched */
+    if (!warmSet && TRAIN.noteWarm(note) !== TRAIN.noteWarm(s.note)) ch.warm = undefined;
     TRAIN.patchSet(s.key, date, ch);
     TRAIN.recomputePRs([s.ex]);
     h.close();
@@ -5511,15 +5552,31 @@ TRAIN.e1rm = function (kg, reps) {
    22.05 lb set drifted into a tie with a 10 kg one that FitNotes had told
    apart. Checked 2026-09-14 against his 12,370 sets and FitNotes' own flags.
 
-   A warmup is never a record. */
+   A warmup is never a record, and neither is a suggestion still waiting
+   (TRAIN.counts): until 1.0.82 a waiting plan set could be stored as one.
+
+   A MOVEMENT'S FIRST SESSION EARNS NO RECORDS (Tom, 2026-11-09: "Don't
+   count PRs for a new movements first session"). Its sets still set the
+   bar: a later set has to beat them. TRAIN.firstDay is that day. */
 TRAIN.PR_SCALE = 1000;
+/* The first day this movement has a working set that counts. */
+TRAIN.firstDay = function (exId) {
+  var c = TRAIN._first;
+  if (!c || c.built !== TRAIN.idx.built) c = TRAIN._first = { built: TRAIN.idx.built, ex: {} };
+  if (c.ex[exId] !== undefined) return c.ex[exId];
+  var d = null;
+  TRAIN.historyOf(exId).forEach(function (x) {
+    if (!x.warm && TRAIN.counts(x) && (d === null || x.date < d)) d = x.date;
+  });
+  return (c.ex[exId] = d);
+};
 TRAIN.recomputePRs = function (only) {
   var exs = TRAIN.exercises(), changed = 0;
   var ids = only && only.length ? only.filter(function (id) { return exs[id]; }) : Object.keys(exs);
   var rd = function (kg) { return Math.round((kg || 0) * TRAIN.PR_SCALE) / TRAIN.PR_SCALE; };
   ids.forEach(function (id) {
-    var list = TRAIN.historyOf(id);
-    var work = list.filter(function (x) { return !x.warm && (x.kg || 0) > 0 && (x.r || 0) > 0; })
+    var list = TRAIN.historyOf(id), first = TRAIN.firstDay(id);
+    var work = list.filter(function (x) { return !x.warm && (x.kg || 0) > 0 && (x.r || 0) > 0 && TRAIN.counts(x); })
       .sort(function (a, b) {
         return rd(b.kg) - rd(a.kg) || TRAIN.sr(b) - TRAIN.sr(a) ||
           (a.date < b.date ? -1 : a.date > b.date ? 1 : TRAIN.setStamp(a) - TRAIN.setStamp(b));
@@ -5535,7 +5592,7 @@ TRAIN.recomputePRs = function (only) {
     var isPr = {}, maxR = 0;
     work.forEach(function (x) {
       var r = TRAIN.sr(x);
-      if (r > maxR) { isPr[x.key] = 1; maxR = r; }
+      if (r > maxR) { if (x.date !== first) isPr[x.key] = 1; maxR = r; }
     });
     list.forEach(function (x) {
       var want = isPr[x.key] ? 1 : 0;
@@ -5569,6 +5626,8 @@ TRAIN.recordsFor = function (exId, range) {
     if ((range.from && s.date < range.from) || (range.to && s.date > range.to)) return;
     /* a warmup counts as a set, as it does everywhere in TRAIN since
        2026-10-05, and is never a record */
+    /* a suggestion still waiting is not training (TRAIN.counts, 1.0.82) */
+    if (!TRAIN.counts(s)) return;
     r.sets++;
     days[s.date] = 1;
     if (s.warm) return;
@@ -9696,18 +9755,21 @@ function clearGhosts() { TRAIN.ghostW = TRAIN.ghostR = TRAIN.ghostD = TRAIN.ghos
 /* what a stepper box shows: typed, else its ghost */
 TRAIN.shownW = function () { return TRAIN.draftW || TRAIN.ghostW || ''; };
 TRAIN.shownR = function () { return TRAIN.draftR || TRAIN.ghostR || ''; };
-function loadDraft(s) {
+/* asGhost: load a set he did as ghosts, not values. Last time's sets on
+   TRACK use it (1.0.82); a set waiting is always ghosts. */
+function loadDraft(s, asGhost) {
   var v = {
     w: s.kg ? TRAIN.showWeight(s.kg, s.u, s.ex) : '',
     r: s.r ? String(s.r) : '',
     d: s.dist ? TRAIN.showDist(s.dist) : '',
     t: s.dur ? fmtSecs(s.dur) : '',
-  }, ghost = TRAIN.pending(s);
+  }, ghost = asGhost || TRAIN.pending(s);
   Object.keys(v).forEach(function (k) {
     TRAIN[DRAFTS[k]] = ghost ? '' : v[k];
     TRAIN[GHOSTS[k]] = ghost ? v[k] : null;
   });
-  if (s.su) TRAIN.draftSU = copyObj(s.su);
+  /* last time's setup is not loaded: today's carries on */
+  if (s.su && !asGhost) TRAIN.draftSU = copyObj(s.su);
 }
 TRAIN.selectNextOpen = function () {
   var nxt = TRAIN.setsOn(TRAIN.date).filter(function (s) { return s.ex === TRAIN.exId && TRAIN.pending(s); })[0];
@@ -10860,11 +10922,13 @@ TRAIN.dayCompare = function (date, off, mode) {
    session's records are different: what was a record on the day it was
    lifted, against everything before it, and against everything before it
    in this block. The first time an exercise is done, or done in a block, is
-   not a record of anything. A record the same session then beat is dropped. */
+   not a record of anything, and nothing in a movement's first session is
+   (Tom, 2026-11-09). A record the same session then beat is dropped. */
 TRAIN.recordHits = function (exId, date) {
   var f = TRAIN.fieldsOf(exId);
   if (f[0] !== 'w' || f[1] !== 'r') return [];
   var rd = function (kg) { return Math.round((kg || 0) * TRAIN.PR_SCALE) / TRAIN.PR_SCALE; };
+  if (date === TRAIN.firstDay(exId)) return [];
   var ph = TRAIN.phaseOn(date);
   var hist = TRAIN.historyOf(exId).filter(function (x) {
     return !x.warm && x.kg > 0 && x.r > 0 && x.date <= date && TRAIN.counts(x);
@@ -10906,20 +10970,20 @@ TRAIN.sessionRecords = function (date, off) {
    a page of 40 ideas, 2026-10-19):
      Lifetime PR        the stored `pr` flag: all-time, still standing     trophy
      Block PR           the same rule inside the set's own training block  medal
-     Weight PR          the heaviest ever at that many reps               barbell
-     Reps at weight PR  the most reps ever at that exact weight           crown
+     Weight PR          the heaviest ever at that many reps or more       barbell
+     Reps at weight PR  the most reps ever at that weight or heavier      crown
      Volume PR          the most weight x reps in one set                 rising bars
    Weight, reps and volume are what the set was ON THE DAY it was lifted,
    against everything before it, and it keeps its symbol after a later set
-   beats it (his pick A). It needs an earlier set to have beaten: the first
-   8 ever is not a Weight PR at 8. Reps are effective reps
+   beats it (his pick A). It needs an earlier set to have beaten, and a
+   movement's first session is none of them (2026-11-09). Reps are effective reps
    (TRAIN.effReps) everywhere but volume, which is every rep. Working sets
    that count only. A set shows every kind it is (his pick B), small. */
 TRAIN.PR_KINDS = [
   { id: 'life', name: 'Lifetime PR', say: 'Nothing heavier at these reps or more, ever' },
   { id: 'block', name: 'Block PR', say: 'The same, inside this training block' },
-  { id: 'weight', name: 'Weight PR', say: 'Heaviest ever at these reps, when lifted' },
-  { id: 'reps', name: 'Reps at weight PR', say: 'Most reps ever at this weight, when lifted' },
+  { id: 'weight', name: 'Weight PR', say: 'Heaviest ever at these reps or more, when lifted' },
+  { id: 'reps', name: 'Reps at weight PR', say: 'Most reps ever at this weight or heavier, when lifted' },
   { id: 'vol', name: 'Volume PR', say: 'Most weight x reps in one set, when lifted' }
 ];
 /* The five symbols are shared/icons.js roles, pr-<id>, so a theme's stroke
@@ -10938,17 +11002,32 @@ TRAIN.prKinds = function (exId) {
   var when = function (a, b) {
     return a.date < b.date ? -1 : a.date > b.date ? 1 : ((a.ord || 0) - (b.ord || 0)) || TRAIN.setStamp(a) - TRAIN.setStamp(b);
   };
-  var atReps = {}, atKg = {}, vol = 0, any = false;
+  /* The movement's first session earns nothing (Tom, 2026-11-09), and its
+     sets still set the bar for every set after it. */
+  var first = TRAIN.firstDay(exId);
+  /* Weight and reps are against EVERYTHING before the set, not one rep
+     count or one weight (2026-11-09): until 1.0.82 the barbell asked only
+     sets at exactly these reps and the crown only sets at exactly this
+     weight, so 70 x 7 got a barbell after something heavier for more reps
+     had been done. Weight: some earlier set had at least these reps, and
+     this is heavier than the heaviest of them. Reps: some earlier set was
+     at least this heavy, and these reps beat the most of them. */
+  var prior = [], vol = 0;
   work.slice().sort(when).forEach(function (s) {
-    var k = {}, sr = TRAIN.sr(s), n = Math.floor(sr), w = rd(s.kg), v = s.kg * s.r;
-    if (s.pr) k.life = 1;
-    if (atReps[n] != null && w > atReps[n]) k.weight = 1;
-    if (atKg[w] != null && sr > atKg[w] + 1e-6) k.reps = 1;
-    if (any && v > vol + 1e-6) k.vol = 1;
-    atReps[n] = Math.max(atReps[n] || 0, w);
-    atKg[w] = Math.max(atKg[w] || 0, sr);
+    var k = {}, sr = TRAIN.sr(s), w = rd(s.kg), v = s.kg * s.r;
+    var topW = null, topR = null;
+    prior.forEach(function (p) {
+      if (p.r >= sr - 1e-6 && (topW === null || p.w > topW)) topW = p.w;
+      if (p.w >= w && (topR === null || p.r > topR)) topR = p.r;
+    });
+    if (s.date !== first) {
+      if (s.pr) k.life = 1;
+      if (topW !== null && w > topW) k.weight = 1;
+      if (topR !== null && sr > topR + 1e-6) k.reps = 1;
+      if (prior.length && v > vol + 1e-6) k.vol = 1;
+    }
+    prior.push({ w: w, r: sr });
     vol = Math.max(vol, v);
-    any = true;
     out[s.key] = k;
   });
   /* the still-standing rule, one block at a time */
@@ -10962,7 +11041,7 @@ TRAIN.prKinds = function (exId) {
     blocks[b].sort(function (a, c) { return rd(c.kg) - rd(a.kg) || TRAIN.sr(c) - TRAIN.sr(a) || when(a, c); })
       .forEach(function (s) {
         var r = TRAIN.sr(s);
-        if (r > maxR) { out[s.key].block = 1; maxR = r; }
+        if (r > maxR) { if (s.date !== first) out[s.key].block = 1; maxR = r; }
       });
   });
   return out;

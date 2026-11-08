@@ -156,6 +156,13 @@ An imported exercise of any other type is read off what was logged against it
   set was on its day and keep their symbol after a later set beats it; a set
   shows every kind it is, gold, 12px under the numbers on TRACK so the row
   stays 44px. The records sheet ends with the key.
+- **A movement's first session earns no records of any kind** (Tom,
+  2026-11-09: "Don't count PRs for a new movements first session";
+  `TRAIN.firstDay`): no trophy, medal, barbell, crown, bars, save sound or
+  card line, but its sets still set the bar. A waiting suggestion is never
+  a record. **Barbell and crown are against everything before the set**:
+  heavier than the heaviest earlier set with at least these reps; more reps
+  than the most at this weight or heavier. (HISTORY.md: First sessions, ghosts from last time, a warmup switch (1.0.82, 2026-11-09))
 (HISTORY.md: Personal records (the brief's version, 2026-10-21))
 
 ## Training, not working out
@@ -396,7 +403,10 @@ Each is short here; its story is under the heading named.
   groups; a group's colour is `TRAIN.CAT_SLOT`; `fillCats` finds a group by
   name and moves no exercise; movements change group only through the SORT
   sheet. Plates ride the WEIGHT label on barbell lifts. Add Warmups writes
-  `warm: 1, plan: 1`. Swipe a set left to delete. (HISTORY.md: The training screen, as Tom rebuilt it on 2026-09-24)
+  `warm: 1, plan: 1`. Swipe a set left to delete. **The comment box has a
+  Warmup switch** (1.0.82, Tom 2026-11-09): it starts as TRAIN reads the
+  set and writes `warm` 1 or 0. Weight and reps on a TRACK row stand
+  `--s-4` apart (the columns are inline, so their min-widths never apply). (HISTORY.md: The training screen, as Tom rebuilt it on 2026-09-24)
 - **Routines list his named sessions**; TRAIN opens on today's first waiting
   set; a save is silent unless it is a record. (HISTORY.md: Named sessions, and what opens first (1.0.26, 2026-09-25))
 - **A FORGE program is one routine per week** (`prog-<id>-wN`); its target is
@@ -484,6 +494,11 @@ steppers as a GHOST: the placeholder, `--text-muted`, never the value.
 - A set he logged loads as values (his number to correct). After SAVE his
   numbers stay as ghosts, so the same set again is still one press.
 - An exercise with a set waiting opens on it, ghosts showing (`openExercise`).
+- **Tapping one of last time's sets on TRACK loads it as ghosts** (Tom,
+  2026-11-09: "if I click last sessions numbers let them show up as ghosts
+  on the left"; `loadDraft(s, true)`): nothing saved, a new set not an
+  update, today's setup kept. Each set in the faded line is a button, a
+  dotted line under it, 44px caught by `mb-tap`.
 
 ## Parked
 
