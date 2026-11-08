@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.102, 2026-11-09">
+<meta name="mb-version" content="1.0.103, 2026-11-09">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -465,6 +465,18 @@ body.dragging #cardframes{z-index:0}
 
 /* ---------- shared widget bits ---------- */
 .rowlist{display:flex;flex-direction:column;gap:5px}
+/* TODAY's trial (2026-11-09): a row is a line, not a plate; the routine's
+   name and colour sit once above its rows; the row you are on is marked by
+   a gold box, not a gold border */
+.rowlist.ruled{gap:0}
+.rowlist.ruled > .row{border-radius:0;border-top:var(--border-width,1px) solid var(--line)}
+.rowlist.ruled > .rgrp{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-3) 0 var(--s-1);
+  font-size:var(--f-1);color:var(--dim)}
+.rowlist.ruled > .rgrp:first-child{padding-top:0}
+.rowlist.ruled > .rgrp.gap{padding:var(--s-2) 0 0}
+.rowlist.ruled > .rgrp i{flex:0 0 auto;width:var(--s-2);height:var(--s-2);border-radius:50%;background:var(--c,var(--dim2))}
+.rowlist.ruled > .row.here .chk:not(.on):not(.jk){border-color:var(--acc)}
+.rowlist.ruled > .row.here .chk.jk{color:var(--acc)}
 /* a row is a plate in its own colour, the way a block is in BLOCK: drawHome
    puts mb-plate on it, and --c is the block's colour or the widget's app's */
 .row{display:flex;align-items:center;gap:10px;padding:8px 9px;min-height:var(--tap,44px);
@@ -2476,12 +2488,24 @@ const WIDGETS = {
             .concat(items.filter(x => x.done))
         : items;
 
-      const list = el('div', 'rowlist');
+      /* `ruled`: rows on thin lines, not each in a box, and a routine's name
+         once above its run of rows instead of a chip on every row (Tom,
+         2026-11-09, "A, trial": TODAY only, to see it beside the boxed cards) */
+      const list = el('div', 'rowlist ruled');
       const mark = nn && nn.it ? nn.it : null;
-      let here = null;
+      let here = null, lane = null;
       /* no row with a time, no time column: an empty 60px gutter otherwise */
       const anyAt = shown.some(x => x.at != null);
       shown.forEach(x => {
+        const tg = x.tag || '';
+        if (tg !== lane) {
+          if (tg || lane) {
+            const g = el('div', 'rgrp' + (tg ? '' : ' gap'), tg ? '<i></i>' + esc(tg) : '');
+            if (x.colour) g.style.setProperty('--c', x.colour);
+            list.appendChild(g);
+          }
+          lane = tg;
+        }
         /* `late` is quiet on purpose. It is the difference between a list and
            a telling-off, and a day you are behind on is the day you most need
            to still want to open this. */
@@ -2497,7 +2521,6 @@ const WIDGETS = {
            box ticks it, the words take you to the thing. */
         const href = linkIn(x);
         r.appendChild(el('div', 'n', href ? UI.linkHTML(href, esc(x.name), 'rlink') : esc(x.name)));
-        if (x.tag) r.appendChild(el('div', 'tag', esc(x.tag)));
         if (x.dur) r.appendChild(el('div', 'd', DUR(x.dur)));
         if (x.tick) {
           /* Tom, 2026-09-17: "Today widget has the check at the right, why not
@@ -7167,7 +7190,7 @@ function drawHome() {
       /* the rows inside are the plates, in their own colour or the widget's.
          Only the card-shaped rows: a ruled list line (.hrow, .logline) is a
          line, and a plate on it would be a border on a border. */
-      body.querySelectorAll('.row').forEach(r => r.classList.add('mb-plate'));
+      body.querySelectorAll('.row').forEach(r => { if (!r.closest('.ruled')) r.classList.add('mb-plate'); });
     };
     /* On a phone the first TODAY goes to the top and is drawn before
        anything else, so its NOW line is the first thing painted. Tom,
