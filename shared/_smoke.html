@@ -1025,6 +1025,18 @@ async function run() {
     const d = Dose.day({ field: 'sm' }, D(3));
     return d.length === 1 && d[0].src === 'reading' && Dose.day({ field: 'sm' }, D(1)).length === 0;
   }));
+  /* Tom, 2026-11-09: "status should let me log 0 hours of sleep". A typed 0
+     was dropped as if nothing was logged; a blank still is nothing. */
+  ok('dose: a reading of 0 is a reading, a blank one is not', (() => {
+    const real = window.Rec, D = '2001-03-05', t = new Date(D + 'T09:00:00').getTime();
+    const ev = { z: [{ t: t, v: 0 }], b: [{ t: t, v: '' }, { t: t + 1, v: null }] };
+    window.Rec = { appId: 'smoke', all: ty => ty === 'ev' ? Object.keys(ev).map(k => ({ key: k, date: D, payload: { e: ev[k] } })) : [],
+      get: (ty, d, k) => ty === 'ev' && d === D && ev[k] ? { e: ev[k] } : null, map: () => ({}), on: () => {}, ready: () => Promise.resolve() };
+    try {
+      const z = Dose.day({ field: 'z' }, D);
+      return z.length === 1 && z[0].v === 0 && Dose.day({ field: 'b' }, D).length === 0;
+    } finally { window.Rec = real; }
+  })());
   /* ---- the day's letter ----
      shared/grade.js is the one answer to "what letter is this day", read by
      STATUS's Today and HOME's DAY PLAN. Through a stand-in store, on STATUS's

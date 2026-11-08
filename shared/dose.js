@@ -97,8 +97,10 @@
       rows('ev').forEach(r => {
         if (r.key !== x.field) return;
         ((r.payload && r.payload.e) || []).forEach(e => {
-          const v = Number(e.v);
-          if (e.t && v > 0) out.push({ t: onDay(e.t, r.date), et: e.t, v: v, src: 'reading', date: r.date });
+          /* A typed 0 is a reading (0 hours of sleep, 0 steps), not nothing.
+             Tom, 2026-11-09: "status should let me log 0 hours of sleep". */
+          const v = e.v === '' || e.v == null ? NaN : Number(e.v);
+          if (e.t && isFinite(v) && v >= 0) out.push({ t: onDay(e.t, r.date), et: e.t, v: v, src: 'reading', date: r.date });
         });
       });
       if (F.from) rows('meal').forEach(r => {
@@ -157,5 +159,5 @@
   /* every dose there is, oldest first */
   function all(x) { return build(x, type => g.Rec.all(type)); }
 
-  g.Dose = { VERSION: '1.0.0', trackers: trackers, forField: forField, day: day, all: all, _onDay: onDay };
+  g.Dose = { VERSION: '1.0.1', trackers: trackers, forField: forField, day: day, all: all, _onDay: onDay };
 })(typeof window !== 'undefined' ? window : this);
