@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.91, 2026-11-09">
+<meta name="mb-version" content="1.0.92, 2026-11-09">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -965,6 +965,15 @@ html.deskhost header { padding-right: var(--s-7); }
   font-variant-numeric: tabular-nums; color: var(--text-1); white-space: nowrap;
 }
 .desktime.idle { color: var(--text-muted); }
+/* a digit's cell is as wide as a 0, so the clock never changes width (deskTimeText) */
+.desktime .dg { display: inline-block; width: 1ch; text-align: center; }
+/* Track drawn as wide as its icon's band so the line beside it gets the room;
+   still pressed at 44, its target reaching into the gaps either side. */
+.deskrow > .deskplay { width: var(--s-5); position: relative; }
+.deskrow > .deskplay::after {
+  content: ''; position: absolute; top: 0; bottom: 0;
+  left: calc((var(--s-5) - var(--tap)) / 2); right: calc((var(--s-5) - var(--tap)) / 2);
+}
 
 /* the last thing he wrote, one line under the box, beside the icons.
    Everything in the row hangs from its top, in a band as tall as the icons,
@@ -973,7 +982,9 @@ html.deskhost header { padding-right: var(--s-7); }
 .deskmark { flex: none; height: var(--s-5); color: var(--accent); display: flex; align-items: center; }
 /* never cut off: a line too long for the room wraps, and the window grows */
 .deskline {
-  flex: 1; min-width: 0; overflow-wrap: anywhere;
+  /* break-word, not anywhere: a word is only split when it alone is wider
+     than the room. "anywhere" cut Training into Trai / ning (2026-11-09). */
+  flex: 1; min-width: 0; overflow-wrap: break-word;
   font-size: var(--f-1); color: var(--text-2);
   /* the first line centred in the icons' band, whatever the theme's line height */
   padding-top: var(--s-1); padding-top: calc((var(--s-5) - 1lh) / 2);
@@ -9313,6 +9324,15 @@ function deskNewDay() {
    is still on at 00:01 keeps running through the small hours, until his
    hours start (`deskSmallHours`). */
 let deskClockT = 0;
+/* Tom, 2026-11-09: "even the clock changing rearranges the current bullet".
+   The display font has no fixed-width digits (a 1 is 6px, a 0 is 10px), so
+   the clock changed width every second and the line beside it rewrapped.
+   Each digit sits in a cell as wide as a 0, the widest, so the clock is the
+   same width whatever it reads. */
+function deskTimeText(t, txt) {
+  if (t.textContent === txt) return;
+  t.innerHTML = txt.replace(/\d/g, '<span class="dg">$&</span>');
+}
 function deskClock() {
   const t = document.querySelector('#deskbar .desktime');
   if (!t) return;
@@ -9330,7 +9350,7 @@ function deskClock() {
     const s2 = run ? Math.max(0, Math.floor((Date.now() - run.run) / 1000)) : 0;
     const txt2 = Math.floor(s2 / 3600) + ':' + String(Math.floor(s2 / 60) % 60).padStart(2, '0') +
                  ':' + String(s2 % 60).padStart(2, '0');
-    if (t.textContent !== txt2) t.textContent = txt2;
+    deskTimeText(t, txt2);
     t.classList.toggle('idle', !run);
     t.title = run ? 'Tracking ' + run.text : 'Nothing tracked. Press Track on a line to time it';
     return;
@@ -9342,7 +9362,7 @@ function deskClock() {
   const s = on ? Math.max(0, Math.floor((Date.now() - last.payload.t) / 1000)) : 0;
   const txt = Math.floor(s / 3600) + ':' + String(Math.floor(s / 60) % 60).padStart(2, '0') +
               ':' + String(s % 60).padStart(2, '0');
-  if (t.textContent !== txt) t.textContent = txt;
+  deskTimeText(t, txt);
   t.classList.toggle('idle', !on);
   t.title = on ? 'Since ' + last.payload.text : 'Nothing written yet today';
 }

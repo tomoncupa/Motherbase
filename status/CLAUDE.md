@@ -71,6 +71,8 @@ stays small enough for per-module sessions.
 
 1.0.91, 2026-11-09: the "no backup in a while" toast is gone, on open and when the widget opens the whole app. Tom: "remove no backup in a while". `IO.isStale` and the DATA button's amber stay; `deskNagged` is left unused so a reversal is one commit. A fresh store opened in headless Chromium at 390 shows no toast and no errors.
 
+1.0.92, 2026-11-09: the widget's clock no longer moves the line beside it. Tom: "even the clock changing rearranges the current bullet". Chakra Petch has no fixed-width digits (1 is 6px, 0 is 10px), so `tabular-nums` did nothing and the clock column changed width every second. `deskTimeText` puts each digit in a `1ch` cell. The line wraps by word (`overflow-wrap: break-word`, was `anywhere`, which cut "Training" into "Trai / ning"), and Track is drawn 24 wide (44 target kept by `::after`), giving the line 20px. Measured in headless Chromium at 440 and 464 with mood and energy chips: columns identical across ticks. Not seen in STATUS.exe.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
