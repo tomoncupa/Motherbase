@@ -529,6 +529,20 @@
       runs in a tab the browser is not painting, and WEALTH once drew nothing
       at all for that reason. The timeout is the second chance for a box that
       is not in the document yet. */
+  /* A chart draws itself in once per page, not once per redraw. A screen
+     that rebuilds on every store write made a fresh mount each time, so
+     every chart on it replayed its draw-in, and a run of writes (live sync,
+     a device row every few seconds) flashed the whole screen (2026-11-09).
+     Keyed by the label with its numbers taken out, so "Weight, 45 weigh-ins"
+     is the same chart at 46. A chart with no label animates as before. */
+  const played = new Set();
+  function once(label) {
+    if (!label) return true;
+    const k = String(label).replace(/[\d.,]+/g, '#');
+    if (played.has(k)) return false;
+    played.add(k);
+    return true;
+  }
   function mount(box, o, draw) {
     css();
     o = o || {};
@@ -552,7 +566,7 @@
       } else h = Math.round(typeof o.h === 'function' ? o.h(w) : o.h);
       if (!force && w === lastW && h === lastH) return true;
       lastW = w; lastH = h;
-      const c = make(Object.assign({}, o, { w: w, h: h, anim: first && o.anim !== false }));
+      const c = make(Object.assign({}, o, { w: w, h: h, anim: first && o.anim !== false && once(o.label) }));
       draw(c, w, h);
       if (fill) c.el.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%';
       box.innerHTML = '';
@@ -713,7 +727,7 @@
     ringBox.style.width = S + 'px';
     const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('viewBox', '0 0 ' + S + ' ' + S);
-    svg.setAttribute('class', 'mb-piesvg');
+    svg.setAttribute('class', 'mb-piesvg' + (o.label && !once('pie:' + o.label) ? ' mb-still' : ''));
     svg.setAttribute('role', 'img');
     svg.setAttribute('aria-label', (o.label || 'total') + ' ' + fmt(total) + ': ' +
       list.map(r => r.name + ' ' + Math.round(r.amt / total * 100) + '%').join(', '));
@@ -895,6 +909,7 @@
       '.mb-key .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-1)}' +
       '.mb-key .v{font-variant-numeric:tabular-nums;color:var(--text-1)}' +
       '.mb-key .p{min-width:4ch;text-align:right;font-size:var(--f-1);color:var(--text-muted)}' +
+      '.mb-piesvg.mb-still{animation:none}' +
       '@media (prefers-reduced-motion:reduce){.mb-piesvg{animation:none}.mb-slice{transition:none}}' +
       /* legend */
       '.mb-legend{display:flex;flex-wrap:wrap;gap:var(--s-1) var(--s-4);font-size:var(--f-1);color:var(--text-2);margin-top:var(--s-2)}' +
