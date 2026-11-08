@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.104, 2026-11-09">
+<meta name="mb-version" content="1.0.105, 2026-11-09">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -4726,7 +4726,7 @@ const WIDGETS = {
     nm: 'DAY PLAN', w: 4, h: 6, app: 'status', fit: 1, to: ['status'],
     kinds: [['walk', 'WALKS', 'Walk'], ['train', 'TRAINING', 'Train'], ['eat', 'MEALS', 'Eat'], ['bed', 'BED', 'Bed']],
     usual: () => (Rec.setting('lifeos', 'dayplan') || []).filter(x => x && x.id && /^\d\d:\d\d$/.test(x.at || '')),
-    menu: (cfg, redraw) => [{ label: 'Daily Plan the day todo', check: PLANDAY.on(), fn: () => { PLANDAY.set(!PLANDAY.on()); redraw(); } }],
+    menu: (cfg, redraw) => MINE_BUILD ? [{ label: 'Daily Plan the day todo', check: PLANDAY.on(), fn: () => { PLANDAY.set(!PLANDAY.on()); redraw(); } }] : [],
     /* after midnight is still the night before, for bed only */
     late: (kind, at) => kind === 'bed' && at < '05:00',
     dateFor(day, kind, at) { return WIDGETS.dayplan.late(kind, at) ? Day.shift(day, 1) : day; },
@@ -7037,10 +7037,13 @@ const WIC = { lockedin: 'energy', workdone: 'done', todo: 'done', ideas: 'edit',
    Tom, 2026-11-05: clients get it too, "but make sure its optional". The
    setting `lifeos.planday` is 'off' once turned off, from the sequence's
    first window or DAY PLAN's menu, and nothing until then, so no default
-   is ever written. */
+   is ever written.
+   Tom only for now (Tom, 2026-11-09: "Make the plan the day task me only
+   for now"): a client build, which has no `mine` app, never adds it and
+   takes back an untouched one it already added. */
 const PLANDAY = {
   key: d => 'planday-' + d,
-  on: () => Rec.setting('lifeos', 'planday') !== 'off',
+  on: () => MINE_BUILD && Rec.setting('lifeos', 'planday') !== 'off',
   todo: (day, t) => ({ kind: 'todo', text: 'Plan the day', t: t, made: day, at: null, dur: null, ord: -1, done: 0, cancelled: 0,
                        src: 'plan', link: 'mb:home/planday' }),
   set(on) {
@@ -7061,7 +7064,7 @@ const PLANDAY = {
   seed() {
     if (!Rec.hydrated || typeof Journal === 'undefined') return;
     const day = Day.today(), key = PLANDAY.key(day), mid = d => new Date(d + 'T00:00:00').getTime();
-    for (let i = 1; i <= 7; i++) {
+    for (let i = MINE_BUILD ? 1 : 0; i <= 7; i++) {
       const d = Day.shift(day, -i), r = Rec.row('note', d, PLANDAY.key(d));
       if (r && !r.deleted && r.payload && !r.payload.done && r.updated_at === mid(d)) Rec.del('note', d, PLANDAY.key(d));
     }
