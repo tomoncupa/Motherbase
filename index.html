@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.103, 2026-11-09">
+<meta name="mb-version" content="1.0.104, 2026-11-09">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -720,6 +720,17 @@ body.dragging #cardframes{z-index:0}
 .row.drink .n small,.row.weigh .n small{display:block;color:var(--dim2);font-size:var(--f-1);font-family:var(--f1);letter-spacing:.06em;margin-top:var(--s-1)}
 .row.drink .dl,.row.weigh .dl{display:block;margin-top:var(--s-1);font-size:var(--f-1);color:var(--dim)}
 .row.drink .dl i,.row.weigh .dl i{font-style:normal;color:var(--txt);font-variant-numeric:tabular-nums}
+/* ELEMENT: AM and NIGHT, a drink's name, then one line per powder */
+.mixw .mixh{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.16em;color:var(--acc);margin-top:var(--s-2)}
+.mixw .mixh:first-child{margin-top:0}
+.mixw .mixd{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--dim2)}
+.mixw .mixd small{display:block;letter-spacing:0;color:var(--dim);font-family:inherit;font-size:var(--f-1)}
+.row.mixr{align-items:center;gap:var(--s-2)}
+.row.mixr .n{flex:1;min-width:0;white-space:normal}
+.row.mixr .mb-input{flex:0 0 auto;width:6.5em;min-height:var(--tap,44px);text-align:right;font-variant-numeric:tabular-nums}
+.row.mixr .u{color:var(--dim2)}
+.row.mixr.done .n{color:var(--dim)}
+.mixfeed{position:fixed;width:0;height:0;border:0;visibility:hidden;pointer-events:none}
 /* WORK DONE */
 table.wd{width:100%;border-collapse:collapse;font-size:var(--f-2)}
 table.wd th{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;color:var(--dim2);font-weight:400;text-align:right;padding:0 0 var(--s-1) var(--s-2)}
@@ -2333,7 +2344,34 @@ const WM = (() => {
   return { num, month, back, monthLabel, monthIn, monthOut, billsOwed };
 })();
 
-/* A copy of ELEMENT's own `toStatus`, for TO WEIGH's tick:
+/* ELEMENT, running unseen beside the board (Tom, 2026-11-09). Its sums
+   live in ELEMENT and only there, and it writes today's plan (`mix.plan`)
+   each time it draws, which until now was only when he opened it. Loaded
+   once by the cards that read the plan, on the top page only, outside the
+   grid so a redraw never reloads it. It redraws itself on every store write,
+   so food logged anywhere moves the night drink; a plan left from yesterday
+   is redrawn at most once a minute. */
+let mixFrame = null, mixNudged = 0;
+function mixFeed() {
+  if (window.top !== window) return;
+  if (!mixFrame) {
+    mixFrame = document.createElement('iframe');
+    mixFrame.src = 'mix/index.html';
+    mixFrame.title = 'ELEMENT';
+    mixFrame.tabIndex = -1;
+    mixFrame.setAttribute('aria-hidden', 'true');
+    mixFrame.className = 'mixfeed';
+    document.body.appendChild(mixFrame);
+    return;
+  }
+  const p = Rec.setting('mix', 'plan');
+  if (p && p.date === LifeOS.day()) return;
+  if (Date.now() - mixNudged < 60000) return;
+  mixNudged = Date.now();
+  setTimeout(() => { try { mixFrame.contentWindow.draw(); } catch (e) {} }, 0);
+}
+
+/* A copy of ELEMENT's own `toStatus`, for ELEMENT's tick:
    what went down today, summed from the `dose` rows, written to STATUS as
    zinc and magnesium readings and as salt and citrate meals. Change both. */
 function mixToStatus(d) {
@@ -3251,6 +3289,7 @@ const WIDGETS = {
     },
     parts: [['sub', 'Details'], ['doses', 'Amounts']],
     draw(body, cfg) {
+      mixFeed();
       const p = WIDGETS.drinks.plan();
       const list = el('div', 'rowlist');
       const openIt = () => openOver('mix');
@@ -3275,57 +3314,112 @@ const WIDGETS = {
     },
   },
 
-  /* ══════════════ TO WEIGH ══════════════
-     Tom, 2026-10-25: ELEMENT's powders still to weigh today, in grams, each
-     drink or meal with a tick. The grams are ELEMENT's, read from the plan it
-     publishes (`mix.plan`, each dose with its mineral and mg since ELEMENT
-     1.0.11); this card does no sums of its own. A tick writes the `dose` rows
-     the way ELEMENT's `tickCard` does and then `mixToStatus`, a copy of
-     ELEMENT's `toStatus`, so STATUS's sodium, potassium, zinc and magnesium
-     move at once. Change ELEMENT's and these together. */
+  /* ══════════════ ELEMENT DOSES (was TO WEIGH) ══════════════
+     Tom, 2026-10-25: ELEMENT's powders still to weigh today, with a tick.
+     Tom, 2026-11-09: "It should tell me what my default AM doses are, then
+     I can either edit the number, but I check box it to confirm I did that.
+     Then the night intake is more flexible, element already reads my food
+     intake." So every drink but the night one is AM: one line per powder,
+     its grams in a box he can change, and a tick that writes what he took.
+     NIGHT is what ELEMENT works out is left once the food and the AM doses
+     are in, so it moves as he logs, and it ticks the same way.
+     The grams are still ELEMENT's (`mix.plan`); this card does no sums.
+     ELEMENT runs unseen beside the board (`mixFeed`), so the plan is today's
+     without opening it: until 1.0.104 it was written only when ELEMENT was
+     opened, and his last one was 25 Oct. A tick writes the `dose` row the
+     way ELEMENT's `tickCard` does, with the grams in the box and their mg
+     at the plan's own strength, then `mixToStatus`, a copy of ELEMENT's
+     `toStatus`. Change ELEMENT's and these together. */
   toweigh: {
-    nm: 'TO WEIGH', w: 4, h: 4, app: 'mix', fit: 1, to: ['over', 'mix'],
+    nm: 'ELEMENT DOSES', w: 4, h: 4, app: 'mix', fit: 1, to: ['over', 'mix'],
     plan: () => WIDGETS.drinks.plan(),
     sub: () => {
       const p = WIDGETS.toweigh.plan();
       if (!p) return 'no plan today';
-      const left = p.filter(d => !d.done).length;
-      return left ? left + ' of ' + p.length + ' left' : 'all taken';
+      const all = [].concat.apply([], p.map(s => s.doses)), took = WIDGETS.toweigh.took();
+      const left = all.filter(x => !took[x.id]).length;
+      return left ? left + ' of ' + all.length + ' left' : 'all taken';
     },
     parts: [['done', 'Taken today'], ['sub', 'Details']],
-    tick(s, on) {
+    /* grams typed but not yet ticked, by day and dose; a tick takes them */
+    ed: {},
+    took() {
+      const t = {};
+      Rec.all('dose', { date: LifeOS.day() }).forEach(r => { if (r.payload) t[r.key] = r.payload; });
+      return t;
+    },
+    /* mg in a gram of each powder, ELEMENT's default strengths, for a dose
+       the plan gives no mg for */
+    per: { na: 393, k: 362, zn: 280, mg: 110 },
+    write(s, x, g, on) {
       const d = LifeOS.day();
-      if (on && s.doses.some(x => !x.nut)) { toast('Open ELEMENT once today to tick from here'); openOver('mix'); return; }
-      s.doses.forEach(x => {
-        if (on) Rec.set('dose', d, x.id, { nut: x.nut, mg: x.mg, g: x.g, slot: s.id, t: Date.now() });
-        else Rec.del('dose', d, x.id);
-      });
+      if (on) {
+        const per = x.g > 0 && x.mg > 0 ? x.mg / x.g : WIDGETS.toweigh.per[x.nut] || 0;
+        Rec.set('dose', d, x.id, { nut: x.nut, mg: Math.round(g * per), g: +g.toFixed(3), slot: s.id, t: Date.now() });
+      } else Rec.del('dose', d, x.id);
       mixToStatus(d);
-      if (typeof Mobile !== 'undefined') Mobile.feedback(on ? 'success' : 'untick');
-      drawHome();
     },
     draw(body, cfg) {
-      const p = WIDGETS.toweigh.plan();
+      mixFeed();
+      const W = WIDGETS.toweigh, p = W.plan();
       if (!p) {
-        body.appendChild(el('div', 'empty', 'No plan today.'));
+        body.appendChild(el('div', 'empty', 'No plan for today yet.'));
         const bar = el('div', 'tbar');
         bar.appendChild(tbtn('OPEN ELEMENT', () => openOver('mix'), 'go'));
         body.appendChild(bar);
         return;
       }
-      const show = p.filter(s => !s.done || partOn(cfg, 'done'));
-      if (!show.length) { body.appendChild(el('div', 'empty', 'All taken today.')); return; }
-      const list = el('div', 'rowlist');
-      show.forEach(s => {
-        const r = el('div', 'row weigh' + (s.done ? ' done' : ''));
-        const ck = el('button', 'chk' + (s.done ? ' on' : ''), (typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '✓');
-        ck.setAttribute('aria-label', (s.done ? 'Untick ' : 'Taken: ') + s.nm);
-        ck.onclick = ev => { ev.stopPropagation(); WIDGETS.toweigh.tick(s, !s.done); };
+      const d = LifeOS.day(), took = W.took();
+      const grams = s => { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) && v >= 0 ? v : null; };
+      const list = el('div', 'rowlist mixw');
+      const row = (s, x) => {
+        const t = took[x.id], key = d + '|' + x.id;
+        const g = t ? (+t.g || 0) : (W.ed[key] != null ? W.ed[key] : x.g);
+        const r = el('div', 'row mixr' + (t ? ' done' : ''));
+        const ck = el('button', 'chk' + (t ? ' on' : ''), (typeof Icons !== 'undefined' && Icons.svg('done', { size: 14 })) || '');
+        ck.setAttribute('aria-label', (t ? 'Untick ' : 'Taken: ') + x.name);
+        const box = el('input', 'mb-input');
+        box.type = 'text'; box.inputMode = 'decimal'; box.autocomplete = 'off';
+        box.value = g.toFixed(3);
+        box.setAttribute('aria-label', 'Grams of ' + x.name);
+        box.onclick = ev => ev.stopPropagation();
+        box.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); box.blur(); } };
+        box.onchange = () => {
+          const v = grams(box.value);
+          if (v == null) { box.value = g.toFixed(3); return; }
+          box.value = v.toFixed(3);
+          if (t) { W.write(s, x, v, true); drawHome(); } else W.ed[key] = v;
+        };
+        ck.onclick = ev => {
+          ev.stopPropagation();
+          if (!t && !x.nut) { toast('Open ELEMENT once today to tick from here'); openOver('mix'); return; }
+          const v = grams(box.value);
+          W.write(s, x, v == null ? g : v, !t);
+          delete W.ed[key];
+          if (typeof Mobile !== 'undefined') Mobile.feedback(t ? 'untick' : 'success');
+          drawHome();
+        };
         r.appendChild(ck);
-        r.appendChild(el('div', 'n', '<b>' + esc(s.nm) + '</b>' + (partOn(cfg, 'sub') && s.sub ? '<small>' + esc(s.sub) + '</small>' : '') +
-          '<span class="dl">' + s.doses.map(x => esc(x.name) + ' <i>' + x.g.toFixed(3) + 'g</i>').join(' · ') + '</span>'));
-        list.appendChild(r);
-      });
+        r.appendChild(el('div', 'n', esc(x.name)));
+        r.appendChild(box);
+        r.appendChild(el('span', 'u', 'g'));
+        return r;
+      };
+      const group = (label, drinks) => {
+        const out = [];
+        drinks.forEach(s => {
+          const rows = s.doses.filter(x => !took[x.id] || partOn(cfg, 'done'));
+          if (!rows.length) return;
+          out.push(el('div', 'mixd', esc(s.nm) + (partOn(cfg, 'sub') && s.sub ? '<small>' + esc(s.sub) + '</small>' : '')));
+          rows.forEach(x => out.push(row(s, x)));
+        });
+        if (!out.length) return;
+        list.appendChild(el('div', 'mixh', label));
+        out.forEach(n => list.appendChild(n));
+      };
+      group('AM', p.filter(s => s.id !== 'night'));
+      group('NIGHT', p.filter(s => s.id === 'night'));
+      if (!list.children.length) { body.appendChild(el('div', 'empty', 'All taken today.')); return; }
       body.appendChild(list);
     },
   },
@@ -7618,7 +7712,7 @@ const ABOUT = {
   rhythms: 'BLOCK’s Every blocks and Habits: owed, due, coming up and this period’s count, tickable.',
   measure: 'Any measure you track in STATUS, charted.',
   halflife: 'How much of a dose you write in STATUS is still in you, by its half-life.',
-  toweigh: 'ELEMENT’s powders still to weigh today, in grams, with a tick for each drink.',
+  toweigh: 'Today’s ELEMENT doses: AM powders you can change and tick, and the night drink worked out from your food.',
   macros: 'Protein, carbs, fat and calories today against your targets.',
   meals: 'What you have eaten today.',
   records: 'The records TRAIN marked, newest first.',
