@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.89, 2026-11-04">
+<meta name="mb-version" content="1.0.90, 2026-11-09">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1664,6 +1664,142 @@ function mealSpend(date, key, row) {
   });
 }
 const meals = date => Rec.all('meal', { date: date }).map(r => Object.assign({ key: r.key }, r.payload)).sort((a, b) => a.t - b.t);
+
+/* ══ a bullet that names a food logs it ══
+   Tom, 2026-11-09: "can we implement automatic food tracking from bullets?"
+   A journal line that says he ate one of his saved foods writes a real meal
+   row, its default serving, keyed `jr-<line key>-<food id>` with `src:
+   'journal'`, so every device makes the same row and anything that reads
+   meals (the grade, KITCHEN, the sheet) sees it with no change. One UNDO.
+
+   Read off his own 580 lines first: 48 talk about food, most say nothing a
+   meal can be made of ("Dinner", "Eating"), and the ones naming a food were
+   usually logged by hand that day too. So, three guards:
+   - It must be EATEN. The food is the whole line or clause ("Cheesy ramen",
+     "Had Cobra, shot content"), or an eating word stands just before it,
+     with only a count or filler between ("on 2nd cobra", "after morning
+     Cobra"). "Getting Cobra", "Looking for green cobra" and "Cobra Walk"
+     log nothing.
+   - It must be ONE food. A name read by its first words ("cobra", "cheesy
+     ramen") goes to the food he logs most only when it is logged three
+     times as often as the next; otherwise nothing.
+   - No double count: the same food already logged by hand within 3 hours
+     of the line, nothing.
+   A meal he deletes stays deleted (its tombstone). Never touches a line
+   from before this shipped, today and yesterday only, and only once live
+   sync has gone quiet, so a deletion on another device has arrived first. */
+const JF_FROM = '2026-11-09';
+const JF_EAT = /^(had|have|having|ate|eat|eats|eating|drank|drink|drinks|drinking|on|after|finished|finishing)$/;
+const JF_FILL = /^(a|an|the|my|some|another|more|morning|afternoon|evening|night|late|first|second|third|\d+|\d+(st|nd|rd|th)|x\d+)$/;
+const jfStem = w => w.length > 3 ? w.replace(/(ies|es|s|y|e)$/, '') : w;
+const jfWords = s => String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+
+/* every name a food answers to: its full name and each run of its first
+   words, at least four letters, owned by one food or by none */
+function jfNames() {
+  const used = Object.create(null);
+  Rec.all('meal').forEach(r => { const f = r.payload && r.payload.fid; if (f) used[f] = (used[f] || 0) + 1; });
+  const by = Object.create(null);
+  Object.values(foods()).forEach(fd => {
+    if (!fd || !fd.id || !fd.base || !fd.name) return;
+    const w = jfWords(fd.name).map(jfStem), n = Math.max(num(fd.uses, 0) || 0, used[fd.id] || 0);
+    for (let k = 1; k <= Math.min(w.length, 6); k++) {
+      const s = w.slice(0, k).join(' ');
+      if (s.replace(/ /g, '').length < 4) continue;
+      (by[s] = by[s] || []).push({ fd: fd, n: n, full: w.join(' ') });
+    }
+  });
+  const out = Object.create(null);
+  Object.keys(by).forEach(s => {
+    /* two saved foods with the same name are one food; the busier one wins */
+    const best = Object.create(null);
+    by[s].forEach(c => { if (!best[c.full] || c.n > best[c.full].n) best[c.full] = c; });
+    const list = Object.values(best).sort((a, b) => b.n - a.n);
+    if (list.length === 1 || list[0].n >= 3 * Math.max(1, list[1].n)) out[s] = list[0].fd;
+  });
+  return out;
+}
+
+/* the foods a line says were eaten: [{fd, n}] */
+function jfRead(text, names) {
+  const found = [];
+  String(text || '').split(/[,;.!?]| - /).forEach(part => {
+    const raw = jfWords(part), w = raw.map(jfStem);
+    for (let i = 0; i < w.length; i++) {
+      let hit = null, len = 0;
+      for (let k = Math.min(6, w.length - i); k >= 1 && !hit; k--) {
+        const s = w.slice(i, i + k).join(' ');
+        if (names[s]) { hit = names[s]; len = k; }
+      }
+      if (!hit) continue;
+      let j = i - 1, n = 1;
+      if (j >= 0 && /^\d+$/.test(raw[j]) && +raw[j] > 0 && +raw[j] <= 20) n = +raw[j];
+      while (j >= 0 && JF_FILL.test(raw[j])) j--;
+      const eaten = (j >= 0 && JF_EAT.test(raw[j])) || (j < 0 && i + len === w.length);
+      if (eaten && !found.some(f => f.fd.id === hit.id)) found.push({ fd: hit, n: n });
+      i += len - 1;
+    }
+  });
+  return found;
+}
+
+/* when the line happened: its start, else when it was written, else noon */
+function jfWhen(date, p) {
+  if (p.at) return new Date(date + 'T' + p.at + ':00').getTime();
+  if (p.t && Day.calendar(p.t) === date) return p.t;
+  return new Date(date + 'T12:00:00').getTime();
+}
+
+let jfOn = false, jfT = 0;
+function jfScan() {
+  if (!jfOn || !countCal()) return;
+  const today = Day.today(), y = Day.shift(today, -1);
+  const dates = [y, today].filter(d => d >= JF_FROM);
+  if (!dates.length) return;
+  let names = null;
+  const made = [];
+  dates.forEach(d => Rec.all('note', { date: d }).forEach(r => {
+    const p = r.payload;
+    if (!p || p.cancelled || p.kind === 'idea' || (p.kind === 'todo' && !p.done)) return;
+    if (!names) names = jfNames();
+    jfRead(p.text, names).forEach(f => {
+      const key = 'jr-' + r.key + '-' + f.fd.id;
+      if (Rec.get('meal', d, key) || Rec.tombstone('meal', d, key)) return;
+      const t = jfWhen(d, p);
+      if (meals(d).some(m => m.fid === f.fd.id && m.src !== 'journal' && Math.abs((m.t || 0) - t) < 3 * 3600e3)) return;
+      const sv = foodServes(f.fd)[Math.min(f.fd.dflt || 0, foodServes(f.fd).length - 1)];
+      const mult = sv.mult * f.n, s = scale(f.fd, mult);
+      const row = { fid: f.fd.id, name: f.fd.name, serve: serveLabel(sv, mult), unit: f.fd.base.unit, t: t, src: 'journal', line: r.key };
+      NUTS.forEach(k => { row[k] = s[k]; });
+      row.price = s.price; row.amt = s.amt; row.mult = mult;
+      Rec.set('meal', d, key, row);
+      made.push({ d: d, key: key, name: f.fd.name });
+    });
+  }));
+  if (!made.length || document.hidden) return;
+  UI.undo('logged <b>' + (made.length === 1 ? esc(made[0].name) : made.length + ' foods') + '</b> from the journal',
+    () => { made.forEach(m => Rec.del('meal', m.d, m.key)); draw(); });
+}
+function jfSoon() { clearTimeout(jfT); jfT = setTimeout(jfScan, 400); }
+/* live sync first: the same wait as the fresh start offer */
+function jfStart() {
+  const start = Date.now();
+  const go = () => { jfOn = true; jfScan(); };
+  const wait = () => {
+    let C = null;
+    try { C = window.Cloud || (window.top !== window && window.top.Cloud) || null; } catch (e) { C = window.Cloud || null; }
+    const s = C && C.state ? C.state() : null;
+    if (!s) { if (Date.now() - start < 6000) setTimeout(wait, 500); else go(); return; }
+    if (!s.on) { go(); return; }
+    let got = s.gotAt, quiet = Date.now();
+    const iv = setInterval(() => {
+      const st = C.state();
+      if (st.gotAt !== got) { got = st.gotAt; quiet = Date.now(); }
+      if (st.conn && st.loaded && Date.now() - quiet >= 3000) { clearInterval(iv); go(); }
+    }, 500);
+  };
+  wait();
+}
 
 function dayTotals(date) {
   const t = { p: 0, c: 0, f: 0, kcal: 0, na: 0, k: 0, ca: 0, caff: 0, price: 0 };
@@ -5138,6 +5274,7 @@ function mealMarks(x) {
   /* when it was eaten: Tom, 2026-09-18, "Food entry should have a time stamp" */
   const when = x.at || (x.t ? Journal.hhmm(x.t) : '');
   const bits = [when ? clockLabel(when) : ''];
+  if (x.src === 'journal') bits.push('journal');
   if (lockedMeal(x)) {
     /* A meal logged before serveLabel existed carries the right `mult` and a
        label that forgot it. The number on the row is the record, so the count
@@ -8589,10 +8726,12 @@ Rec.ready(() => {
   draw();
   setTimeout(phoneCheck, 600);
   freshWhenSettled();
+  jfStart();
   if (IO.isStale(APP.id)) setTimeout(() => UI.toast('no backup in ' + (IO.staleDays(APP.id) == null ? 'a while' : IO.staleDays(APP.id) + ' days') + ' — <b>settings → data</b>'), 1500);
 });
 wireDaySwipe();
 Rec.on(draw);
+Rec.on(jfSoon);
 Day.on(() => { TD.tick(); draw(); });
 
 /* ══════════════ STATUS DESKTOP TRACKER ══════════════
