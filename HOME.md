@@ -626,3 +626,7 @@ Tom: "Make the plan the day task me only for now". `PLANDAY.on()` is false in a 
 ## 2026-11-09, HOME 1.0.107: an empty patch offers one standard block
 
 Tom, of a dashed box covering a whole empty patch: "Why is this 1 giant widget? The underlying grid should be standard sized nodes and blocks". The hover hint (`#gaphint`) was the whole patch `gapAt` found. `watchGaps` now shows one 4 by 3 block, stepped in blocks from the patch's corner and smaller only where the patch is; the last step in a patch that is not a multiple of 3 rows overlaps the one before rather than shrinking. A click hands `widgetPicker` that block's corner and `room` (the patch right and down of it), and the widget keeps its own size cut to that room, so nothing below is pushed. [TESTED] demo in Chrome at 1889 wide: an 8 by 7 gap gave only 4 by 3 hints; DAY LOG added from the lower right one landed at 5,4, 4 by 3, RECORDS below unmoved. Not seen on his board.
+
+## 2026-11-09, HOME 1.0.108: blocks never overlap
+
+Tom chose 11 rows over shorter rows ("A"): his screen is 12 columns at 1920, 24 at 3840, 11 rows at about 1000px tall (worked out, not measured on his window). A patch's leftover edge is now a smaller block on the same lattice instead of a full block overlapping the one before, so a full-height patch reads as three 4 by 3 blocks and a 4 by 2 strip. [TESTED] demo in Chrome: an 8 by 7 gap gave 4 by 3 at rows 1 and 4 and a 4 by 1 strip at row 7; review 197/197.
