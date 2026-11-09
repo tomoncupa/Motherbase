@@ -75,6 +75,8 @@ stays small enough for per-module sessions.
 
 1.0.93, 2026-11-09: the widget's last line gets a row of its own and never grows the window. Tom picked A of two mockups, then: "Don't let the box expand to make space for a long entry, make the text as small as needed I don't really need to read it". Rows: the box; the write buttons and readings with the status check at the end; the last line with Track and the clock at the end. `deskFitLine` shrinks the line to one line down to 9px, then two half-band lines down to 5px, then cuts; refits on resize; full text on hover. Measured in headless Chromium at 440: strip 119px tall for a 2-word, a 63-character and a 220-character line; looked at. Review 212/212 Chromium 390. Not seen in STATUS.exe.
 
+MEALS NOT LOGGED, 2026-11-09, shipped inside 1.0.93 (that session staged the whole file). Tom: "Tracking number of tracked Vs untracked meals might help"; he picked a counter on the Food tab and HOME's CONSISTENCY tile to show it. "Logged in full" is now "Not logged  [-] n [+]" (`.unlog`), the meals eaten that day and not logged, stored as `day.unmeals`. `setDayUnlogged` writes `untracked: 1` beside any count above 0, so TDEE and `shared/grade.js` read the day as before; `dayUnlogged` reads an old flag with no count as 1. The hold menu's "Not fully tracked" sets 1 or 0; the island note says "N meals not logged". Tapped + + - - in headless Chromium at 390 touch on the demo: row 48px as before, buttons drawn 32 with 44 targets; review 212/212. Not on the iPhone.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)

@@ -630,3 +630,7 @@ Tom, of a dashed box covering a whole empty patch: "Why is this 1 giant widget? 
 ## 2026-11-09, HOME 1.0.108: blocks never overlap
 
 Tom chose 11 rows over shorter rows ("A"): his screen is 12 columns at 1920, 24 at 3840, 11 rows at about 1000px tall (worked out, not measured on his window). A patch's leftover edge is now a smaller block on the same lattice instead of a full block overlapping the one before, so a full-height patch reads as three 4 by 3 blocks and a 4 by 2 strip. [TESTED] demo in Chrome: an 8 by 7 gap gave 4 by 3 at rows 1 and 4 and a 4 by 1 strip at row 7; review 197/197.
+
+## 2026-11-09, HOME 1.0.109: CONSISTENCY counts meals not logged
+
+Tom: "Tracking number of tracked Vs untracked meals might help". He picked a count on STATUS's Food tab and this tile to show it. `sums` adds `unmeals`, every day row's count in the stretch (a day flagged not fully tracked before the count existed is 1). MEALS TRACKED reads "3.7 of 4.0 a day", then "93% tracked" with the change in that share against the stretch before. [TESTED] demo in headless Chromium, 2 meals not logged yesterday: 26 tracked, 2 not, "3.7 of 4.0 a day 93% tracked, down 7"; review 212/212 at 390. Not seen on his board.

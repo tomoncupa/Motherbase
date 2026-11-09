@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.108, 2026-11-09">
+<meta name="mb-version" content="1.0.109, 2026-11-09">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -709,6 +709,7 @@ body.dragging #cardframes{z-index:0}
 .lc-d.dn{color:var(--danger)}
 .lc-d.flat{color:var(--txt)}
 .lc-d svg{flex:0 0 auto}
+.lc-k{color:var(--dim);margin-right:var(--s-1)}
 #grid > .w[data-sz=s] .lc-v{font-size:var(--f-4)}
 @media (max-width:820px){ .lc{height:auto} .lc-t{container-type:normal} .lc-v{font-size:var(--f-7)} }
 .hrow{display:flex;align-items:center;gap:10px;padding:6px 2px}
@@ -3559,6 +3560,12 @@ const WIDGETS = {
       Rec.all('meal').forEach(r => { if (!inP(r.date)) return; kcal[r.date] = (kcal[r.date] || 0) + (Number(r.payload.kcal) || 0);
         if (r.payload.t) (at[r.date] = at[r.date] || []).push(+r.payload.t); else meals++; });
       Object.keys(at).forEach(d => at[d].sort((x, z) => x - z).forEach((t, i, A) => { if (!i || t - A[i - 1] > 45 * 60000) meals++; }));
+      /* Tom, 2026-11-09: "tracked Vs untracked meals". Meals eaten and not
+         logged are STATUS's count on the day row (`unmeals`, its Food tab);
+         a day flagged not fully tracked before the count existed is 1. */
+      let unmeals = 0;
+      Rec.all('day').forEach(r => { if (!inP(r.date) || r.deleted) return; const p = r.payload || {};
+        unmeals += p.unmeals != null ? Math.max(0, Math.round(Number(p.unmeals) || 0)) : (p.untracked ? 1 : 0); });
       const st = Rec.setting('status', 'tdeeState'), tdee = st && Number(st.v) > 0 ? Number(st.v) : 0;
       const tgt = Number(statusTargets().kcal) || 0, base = tdee || tgt;
       const fd = Object.keys(kcal);
@@ -3566,7 +3573,7 @@ const WIDGETS = {
       const sday = {};
       for (let i = 0; i < n; i++) { const dd = LifeOS.shift(to, -i), v = evValue(dd, 'steps'); if (v != null && isFinite(v)) { steps.push(Number(v)); sday[dd] = Number(v); } }
       return {
-        n: n, sessions: Object.keys(trained).length, meals: meals, foodDays: fd.length,
+        n: n, sessions: Object.keys(trained).length, meals: meals, unmeals: unmeals, foodDays: fd.length,
         base: base, vs: tdee ? 'maintenance' : 'target',
         diff: base && fd.length ? fd.reduce((a, d) => a + kcal[d] - base, 0) / fd.length : null,
         eat: fd.length ? fd.reduce((a, d) => a + kcal[d], 0) / fd.length : null, tgt: tgt, tdee: tdee,
@@ -3587,15 +3594,15 @@ const WIDGETS = {
          against the n days before. `tone` 1 colours the change by which way
          it went (more training, meals, steps); 0 keeps it neutral, since a
          smaller deficit is not better or worse on its own */
-      const tile = (id, label, val, unit, now, was, dp, tone, wasSaid) => {
+      const tile = (id, label, val, unit, now, was, dp, tone, wasSaid, lead) => {
         if (!partOn(cfg, id)) return;
         const t = el('div', 'lc-t');
         let ch = '';
         if (partOn(cfg, 'change') && now != null && was != null) {
           const dd = Math.round((now - was) * Math.pow(10, dp)) / Math.pow(10, dp);
-          ch = !dd ? '<span class="lc-d">same as before</span>'
-            : '<span class="lc-d ' + (tone ? (dd > 0 ? 'up' : 'dn') : 'flat') + '">' + ico(dd > 0 ? 'collapse' : 'expand') + num(Math.abs(dd), dp) + '</span>';
-        }
+          ch = !dd ? '<span class="lc-d">' + (lead ? lead + ', ' : '') + 'same as before</span>'
+            : '<span class="lc-d ' + (tone ? (dd > 0 ? 'up' : 'dn') : 'flat') + '">' + (lead ? '<span class="lc-k">' + lead + '</span>' : '') + ico(dd > 0 ? 'collapse' : 'expand') + num(Math.abs(dd), dp) + (lead ? '%' : '') + '</span>';
+        } else if (lead) ch = '<span class="lc-d">' + lead + '</span>';
         t.innerHTML = '<span class="lc-l">' + label + '</span>' +
           '<span class="lc-v' + (val === '—' ? ' nil' : '') + '">' + val + (unit ? ' <span class="lc-u">' + unit + '</span>' : '') + '</span>' + ch;
         if (wasSaid) t.title = 'The ' + n + ' days before: ' + wasSaid;
@@ -3605,8 +3612,14 @@ const WIDGETS = {
       if (!Rec.all('set').length) tile('train', 'TRAINED', '—', 'nothing in TRAIN', null, null, 0, 1);
       else if (n === 7) tile('train', 'TRAINED', num(a.sessions, 0), a.sessions === 1 ? 'session' : 'sessions', a.sessions, b.sessions, 0, 1, b.sessions + ' sessions');
       else tile('train', 'TRAINED', num(perWk(a), 1), 'a week', perWk(a), perWk(b), 1, 1, num(perWk(b), 1) + ' a week');
-      if (!a.foodDays) tile('meals', 'MEALS TRACKED', '—', 'no food logged', null, null, 1, 1);
-      else tile('meals', 'MEALS TRACKED', num(perDay(a), 1), 'a day', perDay(a), b.foodDays ? perDay(b) : null, 1, 1, b.foodDays ? num(perDay(b), 1) + ' a day' : '');
+      /* tracked of all eaten, a day; the change is the share tracked */
+      const allDay = s => (s.meals + s.unmeals) / s.n, share = s => s.meals + s.unmeals ? Math.round(s.meals / (s.meals + s.unmeals) * 100) : null;
+      if (!a.foodDays && !a.unmeals) tile('meals', 'MEALS TRACKED', '—', 'no food logged', null, null, 1, 1);
+      else {
+        const was = share(b);
+        tile('meals', 'MEALS TRACKED', num(perDay(a), 1), 'of ' + num(allDay(a), 1) + ' a day', share(a), was, 0, 1,
+          was == null ? '' : num(perDay(b), 1) + ' of ' + num(allDay(b), 1) + ' a day, ' + was + '% tracked', share(a) + '% tracked');
+      }
       /* calories as the gap a day to maintenance, else to the target */
       if (a.eat == null) tile('kcal', 'CALORIES', '—', 'no food logged', null, null, 0, 0);
       else if (a.diff == null) tile('kcal', 'CALORIES', num(Math.round(a.eat), 0), 'a day', a.eat, b.eat, 0, 0, b.eat == null ? '' : num(Math.round(b.eat), 0) + ' a day');
