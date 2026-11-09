@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.109, 2026-11-09">
+<meta name="mb-version" content="1.0.110, 2026-11-10">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -4047,8 +4047,30 @@ const WIDGETS = {
       if (partOn(cfg, 'age')) top.appendChild(head);
       body.appendChild(top);
 
+      /* Tom, 2026-11-10: "Give me dynamic resizing". Twenty columns always,
+         so a short card showed two rows of four and scrolled. Now the box
+         under the age is measured and the squares take whichever column
+         count draws them biggest with every year showing. A phone card is
+         as tall as what is in it, so there only the width is fitted. */
       const grid = el('div');
       grid.style.cssText = 'display:grid;grid-template-columns:repeat(20,1fr);gap:var(--s-1)';
+      const room = el('div');
+      room.style.cssText = 'flex:1 1 0;min-height:0;min-width:0;overflow:hidden';
+      room.appendChild(grid);
+      const fitYears = () => {
+        if (NARROW()) return;
+        const W = room.clientWidth, H = room.clientHeight;
+        if (!W || !H) return;
+        const g = parseFloat(getComputedStyle(grid).columnGap) || 0;
+        let best = 0, cols = 20;
+        for (let n = 1; n <= span; n++) {
+          const r = Math.ceil(span / n);
+          const s = Math.min((W - (n - 1) * g) / n, (H - (r - 1) * g) / r);
+          if (s > best) { best = s; cols = n; }
+        }
+        grid.style.gridTemplateColumns = 'repeat(' + cols + ',' + Math.floor(best) + 'px)';
+      };
+      if (window.ResizeObserver) new ResizeObserver(fitYears).observe(room);
       for (let i = 0; i < span; i++) {
         const b = el('i');
         const band = bandOf(i);
@@ -4074,7 +4096,7 @@ const WIDGETS = {
         };
         grid.appendChild(b);
       }
-      if (partOn(cfg, 'grid')) body.appendChild(grid);
+      if (partOn(cfg, 'grid')) body.appendChild(NARROW() ? grid : room);
 
       /* ── the legend ──
          What he asked the bands FOR: "when I was young and when im gonna be
