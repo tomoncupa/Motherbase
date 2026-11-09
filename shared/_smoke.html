@@ -1025,6 +1025,21 @@ async function run() {
     const d = Dose.day({ field: 'sm' }, D(3));
     return d.length === 1 && d[0].src === 'reading' && Dose.day({ field: 'sm' }, D(1)).length === 0;
   }));
+  /* Tom, 2026-11-09: a Cobra's time edited in STATUS did not move the
+     caffeine timer. STATUS saves an edited time as `at`; `t` stays when
+     the meal was logged. */
+  ok('dose: a meal counts at the time typed on it, else when it was logged', (() => {
+    const real = window.Rec, D = '2001-03-05', t = new Date(D + 'T09:00:00').getTime();
+    const meal = [{ key: 'm1', date: D, payload: { name: 'Cobra', caff: 80, t: t, at: '14:30' } },
+      { key: 'm2', date: D, payload: { name: 'Tea', caff: 20, t: t } }];
+    window.Rec = { appId: 'smoke', all: ty => ty === 'meal' ? meal : [],
+      get: (ty, d, k) => ty === 'field' && k === 'cf' ? { id: 'cf', from: 'caff' } : null, map: () => ({}), on: () => {}, ready: () => Promise.resolve() };
+    try {
+      const d = Dose.day({ field: 'cf' }, D);
+      return d.length === 2 && d[0].food === 'Tea' && d[0].t === t &&
+        d[1].food === 'Cobra' && d[1].t === new Date(D + 'T14:30:00').getTime();
+    } finally { window.Rec = real; }
+  })());
   /* Tom, 2026-11-09: "status should let me log 0 hours of sleep". A typed 0
      was dropped as if nothing was logged; a blank still is nothing. */
   ok('dose: a reading of 0 is a reading, a blank one is not', (() => {

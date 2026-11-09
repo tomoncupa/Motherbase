@@ -46,6 +46,13 @@
   /* a time stamped on another day than its row's is a backfill: it counts
      at that day's noon, not when it was typed */
   const onDay = (t, date) => !date ? t : t && ymd(t) === date ? t : noon(date);
+  /* when a meal was eaten: the time typed on it in STATUS (`at`, "HH:MM"),
+     else when it was logged. Tom, 2026-11-09: a Cobra's edited time did not
+     move the caffeine timer, because only `t` was read. */
+  const eaten = (m, date) => {
+    const a = /^(\d{1,2}):(\d\d)/.exec(m.at || '');
+    return date && a ? new Date(date + 'T' + pad(+a[1]) + ':' + a[2] + ':00').getTime() : m.t;
+  };
 
   /* ── the trackers, kept until the store changes ── */
   let cache = null;
@@ -105,7 +112,8 @@
       });
       if (F.from) rows('meal').forEach(r => {
         const m = r.payload || {}, v = (parseFloat(m[F.from]) || 0) * fp;
-        if (m.t && v > 0) out.push({ t: m.t, v: v, src: 'food', food: m.name, date: r.date || ymd(m.t) });
+        const t = eaten(m, r.date);
+        if (t && v > 0) out.push({ t: t, v: v, src: 'food', food: m.name, date: r.date || ymd(t) });
       });
     }
     const w = words(x);
