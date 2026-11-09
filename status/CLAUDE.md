@@ -73,6 +73,8 @@ stays small enough for per-module sessions.
 
 1.0.92, 2026-11-09: the widget's clock no longer moves the line beside it. Tom: "even the clock changing rearranges the current bullet". Chakra Petch has no fixed-width digits (1 is 6px, 0 is 10px), so `tabular-nums` did nothing and the clock column changed width every second. `deskTimeText` puts each digit in a `1ch` cell. The line wraps by word (`overflow-wrap: break-word`, was `anywhere`, which cut "Training" into "Trai / ning"), and Track is drawn 24 wide (44 target kept by `::after`), giving the line 20px. Measured in headless Chromium at 440 and 464 with mood and energy chips: columns identical across ticks. Not seen in STATUS.exe.
 
+1.0.93, 2026-11-09: the widget's last line gets a row of its own and never grows the window. Tom picked A of two mockups, then: "Don't let the box expand to make space for a long entry, make the text as small as needed I don't really need to read it". Rows: the box; the write buttons and readings with the status check at the end; the last line with Track and the clock at the end. `deskFitLine` shrinks the line to one line down to 9px, then two half-band lines down to 5px, then cuts; refits on resize; full text on hover. Measured in headless Chromium at 440: strip 119px tall for a 2-word, a 63-character and a 220-character line; looked at. Review 212/212 Chromium 390. Not seen in STATUS.exe.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
