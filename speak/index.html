@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.7, 2026-10-06">
+<meta name="mb-version" content="1.0.8, 2026-11-10">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -132,6 +132,8 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 #take .meter.in .v{color:var(--success)}
 #take .meter.out .v{color:var(--warn)}
 #take .meter.off .v{color:var(--text-muted)}
+#take .lamp{display:inline-block;width:var(--s-4);height:var(--s-4);border-radius:var(--radius-full);background:var(--lc);
+  margin-right:var(--s-2);vertical-align:middle;box-shadow:0 0 var(--s-3) var(--lc)}
 #take .level{height:var(--s-2);border-radius:var(--radius-full);background:var(--surface-2);overflow:hidden;margin-top:var(--s-2)}
 #take .level i{display:block;height:100%;width:0;background:var(--accent);transition:width var(--dur-tap) linear}
 #take .foot{flex:0 0 auto;display:flex;justify-content:center;gap:var(--s-3);margin-top:var(--s-4)}
@@ -575,7 +577,7 @@ const STYLES = [
   { id: 'live',  name: 'Live',          note: 'a stream, thinking out loud',        band: [140, 170] },
   { id: 'read',  name: 'Read aloud',    note: 'a passage, no thinking',             band: [140, 160] },
 ];
-const DEFAULT_TGT = { fpm: 4, fpmLow: 2, eye: 80, eyeStart: 60, crispPct: 85, pitch: 6 };
+const DEFAULT_TGT = { fpm: 4, fpmLow: 2, eye: 80, eyeStart: 60, crispPct: 85, pitch: 6, ttMin: 60, ttMax: 120 };
 function targets() { return Object.assign({}, DEFAULT_TGT, opt('tgt', {}) || {}); }
 function band(style) {
   const t = targets(), s = STYLES.filter(x => x.id === style)[0] || STYLES[0];
@@ -602,13 +604,14 @@ const METRICS = {
   eye:     { name: 'On the lens', unit: '%', fmt: v => Math.round(v), note: 'share of the take with eyes and head in the lens zone' },
   eyeAway: { name: 'Longest look away', unit: 's', fmt: v => r1(v), note: '' },
   hiss:    { name: 'Longest sound', unit: 's', fmt: v => r1(v), note: 'one breath, one sound' },
+  time:    { name: 'Time', unit: '', fmt: v => mmss(v), gfmt: v => mmss(v), note: 'from the first word to STOP' },
 };
 const OPS = { in: (v, t) => v >= t[0] && v <= t[1], le: (v, t) => v <= t, ge: (v, t) => v >= t };
 function goalText(g) {
-  const m = METRICS[g.m];
-  if (g.op === 'in') return m.name.toLowerCase() + ' ' + g.v[0] + ' to ' + g.v[1] + ' ' + m.unit;
-  if (g.op === 'le') return m.name.toLowerCase() + ' ' + g.v + m.unit + ' or under';
-  if (g.op === 'ge') return m.name.toLowerCase() + ' ' + g.v + m.unit + ' or over';
+  const m = METRICS[g.m], f = m.gfmt || (x => x);
+  if (g.op === 'in') return (m.name.toLowerCase() + ' ' + f(g.v[0]) + ' to ' + f(g.v[1]) + ' ' + m.unit).trim();
+  if (g.op === 'le') return m.name.toLowerCase() + ' ' + f(g.v) + m.unit + ' or under';
+  if (g.op === 'ge') return m.name.toLowerCase() + ' ' + f(g.v) + m.unit + ' or over';
   return m.name.toLowerCase();
 }
 
@@ -731,7 +734,18 @@ const DRILLS = [
     why: 'A take is all of it at once.',
     how: 'One minute, everything on.' },
 ];
-const drillById = id => DRILLS.filter(d => d.id === id)[0] || null;
+/* TABLE TOPIC, off the path. Toastmasters runs one every meeting: a question
+   nobody has seen, answered on the spot, with a green light at the shortest
+   time, yellow halfway and red at the longest. He stops it himself; it stops
+   on its own 30 seconds past red. `?mini=1` opens straight onto it. */
+const TOPIC_SKILL = { id: 'topics', name: 'TABLE TOPIC', slot: 6 };
+const TT = { id: 'topics', skill: 'topics', step: 0, name: 'Table topic', style: 'live', kind: 'question', lights: true, asr: true,
+  get dur() { return targets().ttMax + 30; },
+  goals: t => [{ m: 'time', op: 'in', v: [t.ttMin, t.ttMax] }, { m: 'fpm', op: 'le', v: t.fpm }],
+  why: 'Toastmasters practises speaking off the cuff this way every meeting: one unseen question, one to two minutes, timed by lights.',
+  how: 'The question appears after the count. Answer it, and press STOP between green and red.' };
+const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || TOPIC_SKILL;
+const drillById = id => id === TT.id ? TT : DRILLS.filter(d => d.id === id)[0] || null;
 
 /* the daily warm-up: three steps, about three minutes, each measured */
 const WARM = [
@@ -788,6 +802,9 @@ const STORIES = [
 const PASSAGES = [
   { name: 'The North Wind and the Sun', text: 'The North Wind and the Sun were disputing which was the stronger, when a traveler came along wrapped in a warm cloak. They agreed that the one who first succeeded in making the traveler take his cloak off should be considered stronger than the other. Then the North Wind blew as hard as he could, but the more he blew the more closely did the traveler fold his cloak around him; and at last the North Wind gave up the attempt. Then the Sun shone out warmly, and immediately the traveler took off his cloak. And so the North Wind was obliged to confess that the Sun was the stronger of the two.' },
   { name: 'Harvard sentences, list one', text: 'The birch canoe slid on the smooth planks. Glue the sheet to the dark blue background. It is easy to tell the depth of a well. These days a chicken leg is a rare dish. Rice is often served in round bowls. The juice of lemons makes fine punch. The box was thrown beside the parked truck. The hogs were fed chopped corn and garbage. Four hours of steady work faced us. A large size in stockings is hard to sell. The boy was there when the sun rose. A rod is used to catch pink salmon. The source of the huge river is the clear spring. Kick the ball straight and follow through. Help the woman get back to her feet. A pot of tea helps to pass the evening. Smoky fires lack flame and heat. The soft cushion broke the man\'s fall. The salt breeze came across from the sea. The girl at the booth sold fifty bonds.' },
+  { name: 'Abraham Lincoln, Gettysburg, 1863', text: 'Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal. Now we are engaged in a great civil war, testing whether that nation, or any nation so conceived and so dedicated, can long endure. We are met on a great battle-field of that war. We have come to dedicate a portion of that field, as a final resting place for those who here gave their lives that that nation might live. It is altogether fitting and proper that we should do this. But, in a larger sense, we can not dedicate, we can not consecrate, we can not hallow this ground. The brave men, living and dead, who struggled here, have consecrated it, far above our poor power to add or detract.' },
+  { name: 'Franklin Roosevelt, first inaugural, 1933', text: 'This is preeminently the time to speak the truth, frankly and boldly. Nor need we shrink from honestly facing conditions in our country today. This great Nation will endure as it has endured, will revive and will prosper. So, first of all, let me assert my firm belief that the only thing we have to fear is fear itself, nameless, unreasoning, unjustified terror which paralyzes needed efforts to convert retreat into advance.' },
+  { name: 'John F. Kennedy, inaugural, 1961', text: 'Let the word go forth from this time and place, to friend and foe alike, that the torch has been passed to a new generation of Americans, born in this century, tempered by war, disciplined by a hard and bitter peace, proud of our ancient heritage, and unwilling to witness or permit the slow undoing of those human rights to which this Nation has always been committed, and to which we are committed today at home and around the world. And so, my fellow Americans: ask not what your country can do for you, ask what you can do for your country.' },
   { name: 'Marcus Aurelius, translated by George Long', text: 'Begin the morning by saying to thyself, I shall meet with the busybody, the ungrateful, arrogant, deceitful, envious, unsocial. All these things happen to them by reason of their ignorance of what is good and evil. But I who have seen the nature of the good that it is beautiful, and of the bad that it is ugly, and the nature of him who does wrong, that it is akin to me, not only of the same blood or seed, but that it participates in the same intelligence and the same portion of the divinity, I can neither be injured by any of them, for no one can fix on me what is ugly, nor can I be angry with my kinsman, nor hate him. For we are made for cooperation, like feet, like hands, like eyelids, like the rows of the upper and lower teeth.' },
 ];
 const TWISTERS = [
@@ -795,6 +812,21 @@ const TWISTERS = [
   'She sells sea shells by the sea shore.', 'Peter Piper picked a peck of pickled peppers.', 'Toy boat, toy boat, toy boat.',
   'Six thick thistle sticks.', 'The lips, the teeth, the tip of the tongue.', 'Good blood, bad blood.',
   'A proper copper coffee pot.', 'Betty bought a bit of butter but the butter was bitter.', 'Fresh fried fish, fish fresh fried.',
+];
+/* questions for a table topic: answered on the spot, about anyone */
+const QUESTIONS = [
+  'What would you teach if you had to teach a class tomorrow?', 'What is something you changed your mind about this year?',
+  'If you could fix one thing about how people eat, what would it be?', 'What does a good day look like for you?',
+  'What is the best money you ever spent?', 'Who taught you the most without meaning to?', 'What is overrated?',
+  'What habit would you give everyone if you could?', 'What do you do when you have no motivation at all?',
+  'What would you tell yourself ten years ago?', 'What is a rule you break on purpose?', 'Describe the best meal you have had.',
+  'What should every beginner hear on day one?', 'What do people misunderstand about discipline?', 'Where do you go to think?',
+  'What is the hardest thing you have trained for?', 'What would you do with a year off?', 'What makes a good coach?',
+  'What is one thing you are proud of that nobody knows about?', 'Should people track everything?', 'What is the point of a streak?',
+  'What did you get wrong the first time you tried something hard?', 'What is the most useful question to ask a stranger?',
+  'Is rest earned or required?', 'What is a small thing that makes a big difference?', 'Why do people stop going to the gym?',
+  'What would your perfect week of training look like?', 'What is a skill everyone should learn by thirty?',
+  'What would you build if money did not matter?', 'What is the difference between a goal and a system?',
 ];
 const pick = (list, n) => { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a.slice(0, n); };
 function myTopics() { return Object.entries(Rec.map('topic')).map(([k, v]) => Object.assign({ key: k }, v)); }
@@ -807,6 +839,7 @@ function promptFor(kind) {
   }
   if (kind === 'story') { const own = mine.filter(t => t.kind === 'story'); return { kind: 'story', text: pick(own.length && Math.random() < 0.5 ? own.map(t => t.text) : STORIES, 1)[0] }; }
   if (kind === 'hook') return { kind: 'hook', text: pick(HOOKS, 1)[0] };
+  if (kind === 'question') return { kind: 'question', text: pick(QUESTIONS, 1)[0] };
   if (kind === 'bullets') { const own = mine.filter(t => t.kind === 'bullets'); const set = own.length && Math.random() < 0.5 ? own.map(t => t.text.split('|').map(s => s.trim())) : BULLETS; return { kind: 'bullets', items: pick(set, 1)[0] }; }
   if (kind === 'read') { const p = pick(PASSAGES, 1)[0]; return { kind: 'read', name: p.name, text: p.text }; }
   if (kind === 'twister') return { kind: 'twister', items: pick(TWISTERS, 3) };
@@ -818,8 +851,18 @@ function promptEl(p) {
   else if (p.kind === 'twister') box.innerHTML = p.items.map(i => '<div>' + esc(i) + '</div>').join('');
   else if (p.kind === 'read') box.innerHTML = '<div class="muted">' + esc(p.name) + '</div>' + esc(p.text);
   else if (p.kind === 'hook') box.innerHTML = '<div class="muted">Start on this line</div>' + esc(p.text);
+  else if (p.kind === 'question') box.innerHTML = '<div class="muted">Answer this</div>' + esc(p.text);
   else box.textContent = p.text;
   return box;
+}
+/* the prompt a take was given, so SAME PROMPT can give it again. Older takes
+   kept only the words, so the shape is rebuilt from the drill's kind. */
+function promptOf(t, d) {
+  if (t.p) return t.p;
+  if (!t.prompt || !d) return null;
+  if (d.kind === 'bullets' || d.kind === 'twister') return { kind: d.kind, items: t.prompt.split(' | ') };
+  if (d.kind === 'read') { const p = PASSAGES.filter(x => x.text === t.prompt)[0]; return p ? { kind: 'read', name: p.name, text: p.text } : null; }
+  return { kind: d.kind, text: t.prompt };
 }
 
 /* ══════════════ takes ══════════════
@@ -939,12 +982,18 @@ function drawToday(m) {
   wc.appendChild(wrow);
   m.appendChild(wc);
 
-  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm').length + ' done');
+  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id).length + ' done');
   const list = el('div', 'list');
   todaysDrills().forEach(d => list.appendChild(drillRow(d)));
   if (!list.children.length) list.appendChild(el('p', 'muted', 'Every step is met. Pick any drill on PATH to run it again.'));
   dc.appendChild(list);
   m.appendChild(dc);
+
+  const qc = card('QUICK PRACTICE');
+  const ql = el('div', 'list');
+  ql.appendChild(drillRow(TT));
+  qc.appendChild(ql);
+  m.appendChild(qc);
 
   if (done.length) {
     const tc = card('TAKES TODAY');
@@ -962,7 +1011,7 @@ function warmLine(w) {
   return bits.join(' · ') || 'done';
 }
 function drillRow(d) {
-  const skill = SKILLS.filter(s => s.id === d.skill)[0];
+  const skill = skillOf(d);
   const last = lastTake(d.id), today = doneToday(d.id);
   const r = el('button', 'row mb-plate mb-press' + (today ? (last && last.pass ? ' done' : ' miss') : ' now'));
   r.style.setProperty('--c', 'var(--data-' + skill.slot + ')');
@@ -971,7 +1020,7 @@ function drillRow(d) {
     '<span class="tx"><span class="nm">' + esc(skill.name + ' · ' + d.name) + '</span>' +
     '<span class="sub">' + esc(goals.length ? 'Goal: ' + goals.map(goalText).join(', ') : 'Goal: a count to start from') + '</span></span>' +
     '<span class="num">' + (last ? '<b>' + esc(mainNumber(d, last)) + '</b>' +
-      (today ? (last.pass ? 'met' : unmeasured(last) ? 'no reading' : 'not met') : 'last') : '<b>' + mmss(d.dur) + '</b>new') + '</span>';
+      (today ? (last.pass ? 'met' : unmeasured(last) ? 'no reading' : 'not met') : 'last') : '<b>' + mmss(d.lights ? targets().ttMax : d.dur) + '</b>new') + '</span>';
   r.onclick = () => openDrill(d);
   Mobile.hold(r, e => drillMenu(d, e), { dots: true, dotsLabel: 'More for ' + d.name });
   return r;
@@ -986,7 +1035,7 @@ function mainNumber(d, t) {
 }
 function takeRow(t) {
   const d = t.drill === 'warm' ? null : drillById(t.drill);
-  const skill = d ? SKILLS.filter(s => s.id === d.skill)[0] : null;
+  const skill = d ? skillOf(d) : null;
   const r = el('button', 'row mb-plate mb-press' + (t.pass ? ' done' : (d ? ' miss' : '')));
   r.style.setProperty('--c', skill ? 'var(--data-' + skill.slot + ')' : 'var(--accent)');
   const when = new Date(t.at || 0);
@@ -1163,7 +1212,7 @@ function stat(box, k, v, d, cls) {
 
 /* ══════════════ a drill's sheet: goal, why, how, start ══════════════ */
 function openDrill(d) {
-  const skill = SKILLS.filter(s => s.id === d.skill)[0];
+  const skill = skillOf(d);
   const goals = d.goals(targets());
   const last = lastTake(d.id);
   const st = stepState(d);
@@ -1175,7 +1224,7 @@ function openDrill(d) {
       g.innerHTML = '<b>Goal</b><span class="g">' + esc(goals.length ? goals.map(goalText).join(', and ') : 'finish, and see the count') + '</span>' +
         '<b>Why</b><span>' + esc(d.why) + '</span>' +
         '<b>How</b><span>' + esc(d.how) + '</span>' +
-        '<b>Time</b><span>' + mmss(d.dur) + (d.cam && camOn() ? ', camera on' : '') +
+        '<b>Time</b><span>' + (d.lights ? mmss(targets().ttMin) + ' to ' + mmss(targets().ttMax) + ', lights on' : mmss(d.dur)) + (d.cam && camOn() ? ', camera on' : '') +
           (d.asr && asrOn() ? ', transcript on' : '') + (d.beat && optOn('beat', 1) ? ', beat on' : '') + '</span>' +
         (last ? '<b>Last</b><span>' + esc(lastLine(d, last)) + '</span>' : '') +
         (st === 'locked' ? '<b>Locked</b><span>Opens when step ' + (d.step - 1) + ' is met. Hold it on PATH to open it anyway.</span>' : '');
@@ -1210,7 +1259,7 @@ function lastLine(d, t) {
    count while the eyes are read at the lens, then the drill's seconds. Stop
    early with the button. Then the numbers, the goals, met or not, saved. */
 const T = { live: false };
-async function startTake(d, warmStep) {
+async function startTake(d, warmStep, prompt) {
   if (T.live) return;
   const wantCam = !!(d && d.cam && camOn());
   const wantAsr = !!(d && asrOn());
@@ -1236,7 +1285,7 @@ async function startTake(d, warmStep) {
   T.src.connect(T.proc); T.proc.connect(T.mute); T.mute.connect(T.ac.destination);
   T.listener = wantAsr ? Listener(opt('lang', 'en-US')) : null;
   T.eye = { looks: [], base: null, calib: [] };
-  T.prompt = warmStep ? null : promptFor(d.kind);
+  T.prompt = warmStep ? null : (prompt || promptFor(d.kind));
   T.beat = !!(d && d.beat && optOn('beat', 1));
   const screen = $('#take');
   $('#tkName').textContent = warmStep ? 'WARM-UP · ' + warmStep.name.toUpperCase() : d.name.toUpperCase();
@@ -1300,7 +1349,7 @@ function runTake() {
   const mk = (id, k) => { const m = el('div', 'meter mb-plate off'); m.id = id; m.innerHTML = '<div class="k">' + k + '</div><div class="v">·</div>'; meters.appendChild(m); return m; };
   const mPace = mk('mPace', T.warm ? (T.warm.kind === 'hiss' ? 'sound' : T.warm.kind === 'siren' ? 'spread' : 'crisp') : 'pace');
   const mLvl = mk('mLvl', 'time'); mLvl.innerHTML += '<div class="level"><i></i></div>';
-  const mEye = mk('mEye', T.cam ? 'lens' : T.listener ? 'transcript' : 'time');
+  const mEye = mk('mEye', d && d.lights ? 'light' : T.cam ? 'lens' : T.listener ? 'transcript' : 'time');
   $('#tkFoot').innerHTML = '';
   const stop = el('button', 'mb-btn go mb-press mb-tap', ICN('stop') + '<span>STOP</span>');
   stop.onclick = () => stopTake(false);
@@ -1315,7 +1364,8 @@ function runTake() {
   T.timer = setInterval(() => {
     if (!T.live) return;
     const s = (performance.now() - T.t0) / 1000;
-    $('#tkClock').textContent = mmss(Math.max(0, dur - s));
+    $('#tkClock').textContent = d && d.lights ? mmss(s) : mmss(Math.max(0, dur - s));
+    if (d && d.lights) lamp(mEye, s);
     $('#mLvl .level i').style.width = Math.round(T.ear.level() * 100) + '%';
     $('#mLvl .v').textContent = mmss(s);
     if (s >= dur) { stopTake(false); return; }
@@ -1333,11 +1383,24 @@ function runTake() {
       if (T.cam) {
         const recent = T.eye.looks.slice(-10), on = recent.filter(x => x.on).length, seen = recent.filter(x => x.seen).length;
         setMeter(mEye, seen ? Math.round(on / seen * 100) + '%' : (engineState === 'failed' ? 'off' : '…'), seen ? (on / seen >= 0.8 ? 'in' : 'out') : 'off');
+      } else if (d && d.lights) {
       } else if (T.listener) setMeter(mEye, T.listener.out.state === 'failed' ? 'off' : T.listener.out.words + ' w', T.listener.out.state === 'failed' ? 'off' : '');
       else setMeter(mEye, mmss(dur), '');
     }
   }, 100);
   if (T.cam) T.eyeTimer = setInterval(() => readEye(false), 100);
+}
+/* the Toastmasters lights: nothing before the shortest time, green from it,
+   yellow from halfway, red from the longest. A lamp with its word beside it */
+function lamp(m, s) {
+  const t = targets(), mid = (t.ttMin + t.ttMax) / 2;
+  const on = s >= t.ttMax ? ['red', 'var(--danger)'] : s >= mid ? ['yellow', 'var(--warn)'] : s >= t.ttMin ? ['green', 'var(--success)'] : null;
+  const k = on ? on[0] : '';
+  if (m.dataset.lamp === k) return;
+  m.dataset.lamp = k;
+  m.className = 'meter mb-plate' + (on ? '' : ' off');
+  m.querySelector('.v').innerHTML = on ? '<i class="lamp" style="--lc:' + on[1] + '"></i>' + on[0].toUpperCase() : '·';
+  if (on) Sfx.play('blip');
 }
 function setMeter(m, v, cls) { m.querySelector('.v').textContent = v; m.className = 'meter mb-plate ' + (cls || ''); }
 /* the pace beat: one click per syllable at the middle of the band, scheduled
@@ -1398,7 +1461,7 @@ function finishTake(m, secs) {
     restarts: m.restarts, pitch: m.pitchSpread == null ? null : r1(m.pitchSpread), f0: m.f0 == null ? null : Math.round(m.f0),
     crispRaw: r1(m.crisp * 1000) / 1000, crisp: ref ? m.crisp / ref * 100 : null,
     eye: eye == null ? null : r1(eye), eyeAway: eyeAway == null ? null : r1(eyeAway),
-    spoken: r1(m.spoken), loud: m.loud == null ? null : r1(m.loud),
+    spoken: r1(m.spoken), loud: m.loud == null ? null : r1(m.loud), time: Math.round(secs),
   };
   const goals = d.goals(targets()).map(g => {
     const got = out[g.m];
@@ -1408,8 +1471,8 @@ function finishTake(m, secs) {
   const pass = goals.length ? goals.every(g => g.ok) : true;
   const take = { drill: d.id, skill: d.skill, style: d.style, dur: Math.round(secs), m: out, goals: goals, pass: pass ? 1 : 0,
     asr: asrOn ? 1 : 0, cam: eye != null ? 1 : 0, tx: asrOn ? T.listener.text().slice(0, 4000) : '', hits: asrOn ? tx.hits : null,
-    prompt: T.prompt && (T.prompt.text || (T.prompt.items || []).join(' | ')) };
-  saveTake(take);
+    prompt: T.prompt && (T.prompt.text || (T.prompt.items || []).join(' | ')), p: T.prompt, at: Date.now() };
+  take.key = saveTake(take);
   Mobile.feedback(pass ? 'complete' : 'done');
   showTake(take, tx && tx.html);
 }
@@ -1459,6 +1522,12 @@ function openWarm() {
   });
 }
 
+/* a take's numbers in one line: its goals, or pace and fillers where it had none */
+function numsOf(d, t) {
+  const gs = t.goals || [], m = t.m || {};
+  if (gs.length) return gs.map(g => METRICS[g.m].name.toLowerCase() + ' ' + (g.got == null ? 'not measured' : METRICS[g.m].fmt(g.got) + METRICS[g.m].unit)).join(', ');
+  return [m.wpm != null ? Math.round(m.wpm) + ' wpm' : '', m.fpm != null ? 'fillers ' + r1(m.fpm) + '/min' : ''].filter(Boolean).join(', ');
+}
 /* the numbers of one take, every goal met or not, the transcript marked */
 function showTake(t, html) {
   const d = t.drill === 'warm' ? null : drillById(t.drill);
@@ -1498,6 +1567,8 @@ function showTake(t, html) {
       }
       b.appendChild(rows);
       if (t.prompt) b.appendChild(el('p', 'muted', 'Prompt: ' + esc(t.prompt)));
+      const before = d && t.prompt ? takes().filter(x => x.drill === t.drill && x.prompt === t.prompt && x.key !== t.key && (x.at || 0) < (t.at || 0)).pop() : null;
+      if (before) b.appendChild(el('p', 'muted', 'Same prompt, ' + esc(Day.label(before.date)) + ': ' + esc(numsOf(d, before)) + '.'));
       if (t.tx || html) {
         const h = el('h2', null, 'TRANSCRIPT'); h.style.cssText = 'font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--text-muted);margin:var(--s-4) 0 var(--s-2)';
         b.appendChild(h);
@@ -1505,7 +1576,8 @@ function showTake(t, html) {
         b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
       } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
     },
-    actions: d ? [{ label: 'CLOSE' }, { label: 'AGAIN', kind: 'go', fn: () => { startTake(d); } }] : [{ label: 'CLOSE' }],
+    actions: d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { startTake(d); } },
+      { label: 'SAME PROMPT', kind: 'go', fn: () => { startTake(d, null, promptOf(t, d)); } }] : [{ label: 'CLOSE' }],
   });
 }
 
@@ -1540,6 +1612,8 @@ function drawTargets(p) {
   p.appendChild(UI.row('First EYES goal, %', 'for finding the lens', numField(t.eyeStart, n => setTgt('eyeStart', n))));
   p.appendChild(UI.row('Crispness, % of warm-up', 'the CLEAR goal', numField(t.crispPct, n => setTgt('crispPct', n))));
   p.appendChild(UI.row('Pitch spread, semitones', 'the Voice moves goal', numField(t.pitch, n => setTgt('pitch', n))));
+  p.appendChild(UI.row('Table topic, shortest, seconds', 'the green light', numField(t.ttMin, n => setTgt('ttMin', n))));
+  p.appendChild(UI.row('Table topic, longest, seconds', 'the red light', numField(t.ttMax, n => setTgt('ttMax', n))));
   const acts = el('div', 'acts');
   const reset = el('button', 'mb-btn mb-press mb-tap', 'Reset targets');
   reset.onclick = () => { Rec.setting(APP.id, 'tgt', {}); p.innerHTML = ''; drawTargets(p); };
@@ -1594,6 +1668,7 @@ Day.on(soon);
 /* paint what localStorage has, then again when the big half lands */
 draw();
 Rec.ready(draw);
+if (/[?&]mini=1/.test(location.search)) Rec.ready(() => openDrill(TT));
 </script>
 </body>
 </html>

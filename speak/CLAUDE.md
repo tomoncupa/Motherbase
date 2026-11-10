@@ -120,11 +120,11 @@ transcript, when on, is kept on the take, capped at 4,000 characters.
 
 | Type | Date | Key | Payload |
 |---|---|---|---|
-| `take` | day | timestamp id | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, hits, prompt, at}`. `m` is every number above; `goals` is each goal as it stood, with `got` and `ok`. The warm-up is one `take` a day with `drill: 'warm'`, `steps` and `m.hiss`, `m.pitch`, `m.crispRaw`, merged as each step finishes |
+| `take` | day | timestamp id | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, hits, prompt, p, at}`; `p` is the prompt as given, for SAME PROMPT. `m` is every number above; `goals` is each goal as it stood, with `got` and `ok`. The warm-up is one `take` a day with `drill: 'warm'`, `steps` and `m.hiss`, `m.pitch`, `m.crispRaw`, merged as each step finishes |
 | `topic` | — | id | `{text, kind}`. His own prompts: `topic`, `story`, or `bullets` split with `\|` |
 | `tick` | day | `speak` | written once a day when a take is saved, so BLOCK and the home screen see it |
 
-Settings under `speak.`: `tgt` (the targets and per-style bands), `crutch`
+Settings under `speak.`: `tgt` (the targets, per-style bands and the table topic window), `crutch`
 (his phrase list; null means the default list), `asr`, `lang`, `cam`, `facing`,
 `beat`, and `open` (steps opened by hand).
 
@@ -168,6 +168,38 @@ Nothing here has run on a phone or with a real voice through a real microphone.
 - Whether the beat drill is usable with the click coming out of the same
   device the microphone is on. It is muted into the analysis path, not the
   room.
+
+## Toastmasters, added 2026-11-10
+
+Tom asked what Toastmasters teaches and how the great speakers got good, then:
+*"Integrate what we can with Speak."* Three things the app lacked:
+
+- **TABLE TOPIC**, on TODAY under QUICK PRACTICE, off the path (`TT`, drill
+  `topics`, skill `topics`, chart slot 6). One question he has not seen,
+  shown after the count, from `QUESTIONS`. The clock counts up and a LIGHT
+  meter shows nothing, then green at the shortest time, yellow halfway, red at
+  the longest, as a Toastmasters timer does. He presses STOP; it stops itself
+  30 seconds past red. Goals: time inside the window, fillers at or under the
+  first CLEAN target. The window is his, Settings, TARGETS (`ttMin` 60,
+  `ttMax` 120). Not counted in TODAY'S DRILLS or Steps met; it does count for
+  the streak and the tick. **`?mini=1` opens straight onto its sheet**: the
+  address any quick-practice button or overlay opens.
+- **Read like the greats.** Lincoln at Gettysburg, Roosevelt's 1933 inaugural
+  and Kennedy's 1961 inaugural joined the read passages. All public domain.
+  Douglass learned by reading great speeches aloud; the read drills now do that.
+- **SAME PROMPT.** A take's sheet offers NEW PROMPT and SAME PROMPT. The same
+  prompt runs again and its sheet names the last take on that prompt with its
+  numbers: the great speakers refined the same material over many deliveries.
+  A take keeps its prompt as `p`; older takes are rebuilt from `prompt`
+  (`promptOf`).
+
+Every take now also carries `m.time`, seconds from the first word to STOP.
+
+Watched 2026-11-10 in headless Chromium with a fake microphone at 1280 and
+390, on a 3 to 8 second test window: the lights turned at 3, 6 and 8 seconds,
+the take saved met with its time, SAME PROMPT showed the same question, and
+the second sheet named the first take's numbers. No page errors. Not run with
+a real voice.
 
 ## History, moved from the root brief on 2026-09-22
 

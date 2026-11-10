@@ -164,6 +164,10 @@ crispness reference. About three minutes.
 The difference here: no 0 to 10 scores and no "confidence". Each number is
 shown against a target with met or not, and the target is his.
 
+## 10. Toastmasters and the great speakers
+
+Toastmasters International's Table Topics: an impromptu answer of one to two minutes to a question the speaker has not seen, timed with green, yellow and red lights, with a speaker over the limit by 30 seconds out of time in contests. Its meetings also count fillers (the Ah-Counter) and give spoken evaluation. The great speakers' common pattern, from their biographies: high volume over years, a model imitated (Frederick Douglass read *The Columbian Orator* aloud; Cicero declaimed set pieces), written preparation, and the same material refined across deliveries (King used the "dream" refrain in speeches before August 1963). Demosthenes' pebbles come from Plutarch and are partly legend.
+
 ## Confidence
 
 High on the figures confirmed by two or more independent extracts: Bortfeld
