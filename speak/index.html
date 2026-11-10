@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.8, 2026-11-10">
+<meta name="mb-version" content="1.0.9, 2026-11-10">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -144,6 +144,14 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 /* the breath ring on the warm-up */
 .ring{display:flex;flex-direction:column;align-items:center;gap:var(--s-3)}
 .ring .big{font-family:var(--font-display);font-size:var(--f-8);font-weight:var(--w-bold);color:var(--accent)}
+/* ── the widget: SPEAK.exe, small and on top, one button ── */
+#wid{display:none}
+body.widget>header,body.widget>#nav,body.widget>main{display:none}
+body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:var(--s-3);padding:var(--s-3) var(--s-4)}
+#wid .wtop{display:flex;align-items:baseline;gap:var(--s-3);min-width:0}
+#wid .logo{font-size:var(--f-3)}
+#wid .muted{flex:1;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#wid #widGo{width:100%;min-height:var(--tap);font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-cap)}
 @media (max-width:640px){
   .path{grid-template-columns:1fr}
   #take .meters{grid-template-columns:repeat(3,1fr)}
@@ -165,6 +173,11 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
   <button type="button" data-v="progress" class="mb-press">PROGRESS</button>
 </nav>
 <main class="mb-scroll"><div class="wrap" id="main"></div></main>
+
+<div id="wid">
+  <div class="wtop"><div class="logo">SPE<b>AK</b></div><span class="muted" id="widSub"></span></div>
+  <button class="mb-btn go mb-press mb-tap" id="widGo">TABLE TOPIC</button>
+</div>
 
 <div id="take" role="dialog" aria-modal="true">
   <div class="top">
@@ -957,6 +970,7 @@ function draw() {
   else if (view === 'path') drawPath(m);
   else drawProgress(m);
   paintIcons(m); paintIcons($('header'));
+  if (W.on) widSub();
 }
 function drawStreak() {
   const s = streakInfo(), b = $('#streak');
@@ -1657,6 +1671,43 @@ function drawGear(p) {
   p.appendChild(el('p', 'muted', 'Nothing is recorded. The sound is counted as it arrives and dropped.'));
 }
 
+/* ══════════════ the widget ══════════════
+   Tom, 2026-11-10: "an always on overlay widget, so I can start a mini
+   practice whenever". desktop/SpeakApp.cs is SPEAK.exe, a small window on
+   top of everything that opens this page with ?widget=1. Small, it is one
+   button, TABLE TOPIC, which starts a take straight away with no sheet in
+   front of it. The window grows while a take or its numbers are up and
+   shrinks back after, asked by message (mbsize:big, mbsize:small). In a
+   plain browser the messages go nowhere and the page still works. */
+const W = { on: /[?&]widget=1/.test(location.search), size: '', hold: false };
+function widSize(v) {
+  if (v === W.size) return;
+  W.size = v;
+  try { window.chrome.webview.postMessage('mbsize:' + v); } catch (e) {}
+}
+function widSub() {
+  const n = takes().filter(t => t.date === Day.today()).length;
+  $('#widSub').textContent = n ? n + ' take' + (n === 1 ? '' : 's') + ' today' : 'No takes today';
+}
+function widget() {
+  document.body.classList.add('widget');
+  widSub();
+  $('#widGo').onclick = async () => {
+    W.hold = true; widSize('big');
+    try { await startTake(TT); } finally { W.hold = false; }
+  };
+  /* big at once, small only after a second of nothing open: the take
+     closing and its numbers opening leave a gap that would shrink and grow
+     the window in between */
+  let idle = 0;
+  setInterval(() => {
+    const busy = W.hold || T.live || $('#take').classList.contains('on') || document.querySelector('.mb-sheet.on');
+    idle = busy ? 0 : idle + 1;
+    if (busy) widSize('big'); else if (idle >= 4) widSize('small');
+  }, 300);
+  widSize('small');
+}
+
 /* ══════════════ nav and boot ══════════════ */
 document.querySelectorAll('#nav button').forEach(b => {
   b.onclick = () => { view = b.dataset.v; document.querySelectorAll('#nav button').forEach(x => x.classList.toggle('on', x === b)); Mobile.feedback('nav'); draw(); };
@@ -1669,6 +1720,7 @@ Day.on(soon);
 draw();
 Rec.ready(draw);
 if (/[?&]mini=1/.test(location.search)) Rec.ready(() => openDrill(TT));
+if (W.on) widget();
 </script>
 </body>
 </html>

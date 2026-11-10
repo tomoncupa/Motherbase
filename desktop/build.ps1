@@ -71,6 +71,17 @@ Free-Exe $menu
 
 if ($LASTEXITCODE -ne 0) { Write-Output "Main Menu build failed."; exit $LASTEXITCODE }
 
+# ── SPEAK.exe, the practice widget on top of everything. Tom only, so not in Setup ──
+$speak = Join-Path $dir 'SPEAK.exe'
+Free-Exe $speak
+& $csc -nologo -target:winexe -out:"$speak" -win32icon:"$dir\speak.ico" `
+  -reference:System.dll -reference:System.Windows.Forms.dll -reference:System.Drawing.dll `
+  -reference:"$lib\Microsoft.Web.WebView2.Core.dll" `
+  -reference:"$lib\Microsoft.Web.WebView2.WinForms.dll" `
+  (Join-Path $dir 'SpeakApp.cs') (Join-Path $dir 'Hosted.cs')
+
+if ($LASTEXITCODE -ne 0) { Write-Output "SPEAK build failed."; exit $LASTEXITCODE }
+
 # ── the nightly backup, started by Windows, never seen ──
 $backup = Join-Path $dir 'Backup.exe'
 & $csc -nologo -target:winexe -out:"$backup" `
@@ -100,6 +111,7 @@ if ($LASTEXITCODE -ne 0) { Write-Output "Setup build failed."; exit $LASTEXITCOD
 Write-Output "Built:"
 Write-Output "  $out"
 Write-Output "  $menu"
+Write-Output "  $speak"
 Write-Output "  $backup"
 Write-Output "  $setup"
 Write-Output ""
