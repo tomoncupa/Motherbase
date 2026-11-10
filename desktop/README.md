@@ -91,6 +91,27 @@ If it says Claude is signed out, press SIGN IN and sign in on the Claude website
 
 The panel is `shared/claude.js`; the window side is `ClaudeBridge.cs`.
 
+## SPEAK.exe, the practice widget
+
+Tom, 2026-11-10: "an always on overlay widget, so I can start a mini practice
+whenever." He chose a PC widget of its own over a button on STATUS.
+
+- A small window, 300 by 116 inside, on top of every other window, with
+  Windows' own title bar coloured like the page so it drags and snaps.
+- One button, **TABLE TOPIC**. It starts a take at once. The window grows to
+  440 by 760 for the take and its numbers, keeping its top left corner where
+  that fits, and goes back to where it was a second after the numbers close.
+  The page asks for each size (`speak/index.html`, the widget).
+- It opens `speak/index.html?widget=1` at the hosted address and shares
+  `data` with STATUS and the Main Menu, so a take made here is in SPEAK
+  everywhere.
+- The microphone and camera are allowed without a prompt in this window only.
+- **Start with Windows** is on from its first open: a line under the user's
+  Run key, `Motherbase SPEAK`. Right click the title bar to turn it off.
+- Where it sits is kept in `speak-app.txt`.
+- Tom only, like SPEAK, so Setup.exe does not carry it and a change to
+  `SpeakApp.cs` needs no client Setup.
+
 ## The nightly backup
 
 Every night at 4am, and ten minutes after you sign in on a day the PC was

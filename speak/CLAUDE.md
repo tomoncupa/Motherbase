@@ -201,6 +201,23 @@ the take saved met with its time, SAME PROMPT showed the same question, and
 the second sheet named the first take's numbers. No page errors. Not run with
 a real voice.
 
+## The widget, added 2026-11-10
+
+Tom chose "Own PC widget" for the overlay. `desktop/SpeakApp.cs` is
+SPEAK.exe; `desktop/README.md` has the program's side.
+
+- `?widget=1` puts `widget` on the body: header, nav and main hide, and
+  `#wid` shows the name, today's take count, and one TABLE TOPIC button that
+  calls `startTake(TT)` with no drill sheet first.
+- The page sizes the window by message: `mbsize:big` the moment a take, its
+  numbers or any sheet is up, `mbsize:small` only after 1.2 s of nothing
+  open, because the take closing and its numbers opening leave a gap that
+  would flicker the window. In a browser the messages go nowhere.
+- Watched in Chromium at 300x116 and 440x760 with a fake microphone: nothing
+  overflows the small window, the take ran, the numbers came up, CLOSE
+  shrank it once. The exe itself was not run by Claude (its first open
+  writes the Run key); its title bar and its sizes are unwatched.
+
 ## History, moved from the root brief on 2026-09-22
 
 What was built and watched, newest last. Moved here verbatim so the root brief
