@@ -248,7 +248,7 @@ Tom, on his 5120 screen in Week with the split pane: *"This is ugly"*. His answe
 
 - *"Not everything needs a notebook view."*
 - **2 Days:** *"I just want to see 2 days side by side."* One day a page, no stream flowing from the right page to the left.
-- **Week:** *"all 7 days on 1 side and the open day on the other."* Open question for the build: is each of the 7 days one line (date, summary, columns, count) so all seven fit, or its bullets too? One line fits 7 on a screen; ask if unsure. In split mode the pane already is "the other side".
+- **Week:** *"all 7 days on 1 side and the open day on the other."* Each of the 7 days is **only its line** (date, summary, columns, count), no bullets, so all seven fit; the bullets are read in the open day. Tom, 2026-11-10: *"week should only show its line"*. In split mode the pane already is "the other side".
 - **Month and Year:** one line per day. Already so (`far: 1`); nothing to build.
 - Seen in his screenshot, not his taste, so fix: bullets cut off with "…" in a narrow Day column (words he wrote are never cut off: shrink, then wrap), and the split pane's Day drawing one line of What got done and no bullets, its row clipped.
 
