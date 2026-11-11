@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.110, 2026-11-10">
+<meta name="mb-version" content="1.0.111, 2026-11-11">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -635,15 +635,19 @@ body.dragging #cardframes{z-index:0}
 .pdrow i{font-style:normal;color:var(--dim)}
 .pdoff{color:var(--dim);min-height:var(--tap,44px)}
 .pdodd{width:100%;min-height:calc(var(--tap,44px) * 2);resize:vertical}
-.lwweek,.lwday{flex:none;display:flex;gap:var(--s-3);align-items:baseline;width:100%;min-height:var(--tap,44px);padding:var(--s-2) 0;
-  background:none;border:0;border-bottom:var(--border-width,1px) solid var(--line);color:var(--txt);font:inherit;text-align:left;cursor:pointer}
-.lwweek{flex-direction:column;gap:var(--s-1)}
+.lwweek,.lwday{flex:none;display:flex;gap:var(--s-3);align-items:flex-start;width:100%;
+  border-bottom:var(--border-width,1px) solid var(--line);color:var(--txt)}
+.lwweek{flex-direction:column;gap:0}
 .lwday:last-child{border-bottom:0}
-.lwlab{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;text-transform:uppercase;color:var(--dim2);flex:0 0 8ch;white-space:nowrap}
+.lwlab{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.14em;text-transform:uppercase;color:var(--dim2);flex:0 0 8ch;white-space:nowrap;
+  min-height:var(--tap,44px);padding:0;background:none;border:0;text-align:left;cursor:pointer;display:flex;align-items:center}
 .lwweek .lwlab{flex:none;color:var(--acc)}
 .lwday.today .lwlab{color:var(--acc)}
-.lwtx{flex:1 1 auto;min-width:0;font-size:var(--f-2);line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
-.lwtx.none{color:var(--dim2)}
+.lwtx{flex:1 1 auto;min-width:0;width:100%;min-height:var(--tap,44px);padding:calc((var(--tap,44px) - 1.45em) / 2) 0;margin:0;resize:none;overflow:hidden;
+  border:0;outline:0;background:transparent;color:var(--txt);font-family:inherit;font-size:var(--f-2);line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.lwtx::placeholder{color:var(--dim2);opacity:1}
+.lwtx:focus{box-shadow:inset 0 calc(var(--border-width,1px) * -2) 0 var(--acc)}
+.lwweek .lwtx{padding-top:0}
 .srv{font-style:normal;font-size:var(--f-1);color:var(--dim2);margin-left:var(--s-1)}
 .srv.blk{display:block;margin-left:0}
 .dayrow{display:flex;gap:var(--s-1);flex-wrap:wrap}
@@ -4946,8 +4950,13 @@ const WIDGETS = {
      LOG's summary column; the week is LOG's `recap` row keyed `week`, dated
      on the week's first day. LOG's weeks run in sevens from the 1st of the
      month (1, 8, 15, 22, 29), so the last seven days can touch two of them,
-     and each one they touch is shown, newest first. Reading only: pressing
-     a day or a week opens LOG on it, where it is written. */
+     and each one they touch is shown, newest first. Pressing a day or a
+     week's name opens LOG on it.
+     Tom, 2026-11-11: "Yes, make it editable". Each summary is a box typed
+     into on the card, saved the way LOG's own summary dialog saves it:
+     trimmed, merged into the row, the row deleted when nothing is left in
+     it. Half a second after the last key, at once on leaving the box, and
+     Enter saves and leaves (Shift+Enter is a new line), as in LOG. */
   logweek: {
     nm: 'LOG WEEK', w: 4, h: 7, app: 'log', fit: 1, to: ['log'],
     starts: [1, 8, 15, 22, 29],
@@ -4961,19 +4970,57 @@ const WIDGETS = {
     week: () => [0, 1, 2, 3, 4, 5, 6].map(i => Day.shift(LifeOS.day(), -i)),
     note: d => ((Rec.get('day', d, '') || {}).note || '').trim(),
     sub: () => { const n = WIDGETS.logweek.week().filter(d => WIDGETS.logweek.note(d)).length; return n + ' of 7 days written'; },
+    recap: from => ((Rec.get('recap', from, 'week') || {}).text || '').trim(),
+    /* LOG's saveSummary and its week dialog's save, letter for letter */
+    save(kind, d, raw) {
+      const v = String(raw || '').trim();
+      if (kind === 'day') {
+        const cur = Rec.get('day', d, '') || {};
+        if ((cur.note || '') === v) return;
+        const next = Object.assign({}, cur, { note: v });
+        if (!v) delete next.note;
+        if (Object.keys(next).length) Rec.set('day', d, '', next);
+        else Rec.del('day', d, '');
+      } else {
+        const cur = Rec.get('recap', d, 'week');
+        if (((cur && cur.text) || '').trim() === v) return;
+        if (v) Rec.set('recap', d, 'week', Object.assign({}, cur || {}, { text: v }));
+        else if (cur) Rec.del('recap', d, 'week');
+      }
+    },
     draw(body) {
       const L = WIDGETS.logweek, today = LifeOS.day(), days = L.week();
-      const row = (cls, d, lab, text, none) => {
-        const b = el('button', cls + ' mb-press');
+      const row = (cls, kind, d, lab, text, none) => {
+        const r = el('div', cls);
+        const b = el('button', 'lwlab mb-press', esc(lab));
         b.type = 'button';
-        b.appendChild(el('span', 'lwlab', esc(lab)));
-        b.appendChild(el('span', 'lwtx' + (text ? '' : ' none'), esc(text || none)));
+        b.title = 'Open in LOG';
         b.onclick = () => goTo(['log', d]);
-        body.appendChild(b);
+        const ta = document.createElement('textarea');
+        ta.className = 'lwtx';
+        ta.rows = 1;
+        ta.value = text;
+        ta.placeholder = none;
+        ta.spellcheck = false;
+        ta.setAttribute('aria-label', lab + ' summary');
+        /* grows with what is in it, so a long summary is never cut off */
+        const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+        let t;
+        const save = () => { clearTimeout(t); L.save(kind, d, ta.value); };
+        ta.oninput = () => { fit(); clearTimeout(t); t = setTimeout(save, 500); };
+        ta.onblur = save;
+        ta.onkeydown = e => {
+          if (e.key !== 'Enter' || e.shiftKey || e.altKey || e.isComposing || e.keyCode === 229) return;
+          e.preventDefault();
+          ta.blur();
+        };
+        r.appendChild(b); r.appendChild(ta);
+        body.appendChild(r);
+        requestAnimationFrame(fit);
       };
       [...new Set(days.map(L.weekOf))].forEach(from =>
-        row('lwweek', from, L.weekName(from), ((Rec.get('recap', from, 'week') || {}).text || '').trim(), 'No week summary yet'));
-      days.forEach(d => row('lwday' + (d === today ? ' today' : ''), d,
+        row('lwweek', 'week', from, L.weekName(from), L.recap(from), 'No week summary yet'));
+      days.forEach(d => row('lwday' + (d === today ? ' today' : ''), 'day', d,
         d === today ? 'Today' : Day.label(d, { weekday: 'short' }) + ' ' + +d.slice(8), L.note(d), 'Not written'));
     },
   },
