@@ -79,6 +79,8 @@ MEALS NOT LOGGED, 2026-11-09, shipped inside 1.0.93 (that session staged the who
 
 1.0.94, 2026-11-13: RED DOT. Tom: "an option to make the status desktop app check non full screen, maybe like a non invasive notification or even just like a red dot around the app icon". Settings, DESKTOP, How it comes: Whole screen (default, unchanged) or Red dot (`desk.how` 'dot'). With the dot, a due check (`deskNow`) sets `deskDot` and sends `due|1`: a red dot on the widget's status check button and on STATUS.exe's taskbar and tray icons. It never goes away until a check is answered; pressing the button opens it as a 760x720 box (`checkin`, no sound) instead of `takeover`. The day's first check and the night key ride on the dot. Also fixed: `drawSettingsPane('desk')` drew the sheet setup tab, so the timer switch did too. Driven in headless Chromium at 440 with a stubbed host: due|1, press, due|0 and checkin|760|720, SAVE, widget; Whole screen still sends takeover; settings picked by click. The taskbar dot's drawing was rendered from the same code; not watched in the running STATUS.exe.
 
+1.0.95, 2026-11-13: POP UP. Tom, pointing at the tray: "also offer a small pop up from here". A third choice, Pop up (`desk.how` 'pop'): the red dot plus one Windows notification from the tray icon (`due|2`, `NotifyIcon.ShowBalloonTip`); clicking it runs `deskDotOpen()`. Driven in headless Chromium with a stubbed host (due|2, press, box, SAVE); the notification itself not watched in STATUS.exe.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)

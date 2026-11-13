@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.94, 2026-11-13">
+<meta name="mb-version" content="1.0.95, 2026-11-13">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -8891,7 +8891,11 @@ function deskCfg() {
    in the middle of the screen. The dot is page memory, so a reload drops it
    and the timer brings the next one. */
 const DESK_BOX = { w: 760, h: 720 };
-function deskGentle() { return S.get('desk.how', 'screen') === 'dot'; }
+function deskGentle() { const h = S.get('desk.how', 'screen'); return h === 'dot' || h === 'pop'; }
+/* Tom, 2026-11-13, pointing at the tray: "also offer a small pop up from here".
+   Pop up is the red dot plus one Windows notification from the tray icon
+   (`due|2`); clicking it opens the check like the button does. */
+function deskPop() { return S.get('desk.how', 'screen') === 'pop'; }
 let deskDot = '';       /* '', 'timed' or 'first': what the dot is holding */
 let deskDotNight = '';  /* the night it came due on, if outside hours */
 function deskDotSet(v) {
@@ -8899,7 +8903,7 @@ function deskDotSet(v) {
   deskDot = v;
   if (v) { const now = new Date(); deskDotNight = deskAwake(now) ? '' : deskNightKey(now); }
   else deskDotNight = '';
-  deskSend('due|' + (v ? 1 : 0));
+  deskSend('due|' + (v ? (deskPop() ? 2 : 1) : 0));
   if (deskSmall) deskBar();
 }
 /* a check is due: the screen, or the dot */
@@ -9954,15 +9958,18 @@ function drawDeskTab(pane) {
     pair('Every', ['desk.min', c.min, 'min'], ['desk.max', c.max, 'max'], 'minutes, a different gap each time');
     pair('Between', ['desk.from', c.from, '0'], ['desk.to', c.to, '0'], 'hours, 0 to 23. 0 and 0 is all day');
     pane.appendChild(UI.row('How it comes', '', UI.segmented(
-      [{ id: 'screen', name: 'Whole screen' }, { id: 'dot', name: 'Red dot' }],
-      deskGentle() ? 'dot' : 'screen',
+      [{ id: 'screen', name: 'Whole screen' }, { id: 'dot', name: 'Red dot' }, { id: 'pop', name: 'Pop up' }],
+      deskPop() ? 'pop' : deskGentle() ? 'dot' : 'screen',
       v => {
         S.set('desk.how', v);
         /* one waiting behind the dot comes up the new way on the next tick */
+        if (v !== 'screen' && deskDot) { const was = deskDot; deskDot = ''; deskDotSet(was); }
         if (v === 'screen' && deskDot) { const f = deskDot === 'first'; deskDotSet(''); if (!f) deskWaiting = true; }
         drawSettingsPane('desk');
       })));
-    pane.appendChild(el('div', 'note', deskGentle()
+    pane.appendChild(el('div', 'note', deskPop()
+      ? 'A small pop up comes from the STATUS icon by the clock, and a red dot waits on the status check button and the taskbar icon until you press either and answer.'
+      : deskGentle()
       ? 'A red dot goes on the status check button and on the STATUS icon in the taskbar, and waits there until you press it and answer.'
       : 'It fills the screen and takes the focus until you answer it.'));
     pane.appendChild(toggleRow('Wait until I am at the desk',

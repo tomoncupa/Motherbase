@@ -316,7 +316,7 @@ class App : Form
            than the whole screen (STATUS Settings, DESKTOP, How it comes).
            `due|1` puts a red dot on the taskbar button and the tray icon,
            `due|0` takes it off. The page decides when; this only paints. */
-        if (verb == "due") { Due(bits.Length > 1 && bits[1] == "1"); return; }
+        if (verb == "due") { string d = bits.Length > 1 ? bits[1] : "0"; Due(d != "0", d == "2"); return; }
         if (verb == "menu") { if (trayMenu != null) trayMenu.Show(this, PointToClient(Cursor.Position)); return; }
         /* The tray's settings, asked for from STATUS's own Settings, so there
            is one place to set them. The tray menu still works. */
@@ -736,6 +736,11 @@ class App : Form
         trayMenu = menu;
         tray.Visible = true;
         tray.DoubleClick += (s, e) => Front();
+        tray.BalloonTipClicked += (s, e) =>
+        {
+            if (!ready) return;
+            try { web.CoreWebView2.ExecuteScriptAsync("typeof deskDot !== 'undefined' && deskDot && deskDotOpen()"); } catch { }
+        };
         MarkKeys(keys);
     }
 
@@ -758,7 +763,7 @@ class App : Form
 
     /* ── the red dot ── */
     Icon plainIcon, dotIcon;
-    void Due(bool on)
+    void Due(bool on, bool pop)
     {
         if (plainIcon == null) plainIcon = Icon;
         if (on && dotIcon == null) dotIcon = DotIcon(plainIcon);
@@ -766,7 +771,12 @@ class App : Form
         if (use == null) return;
         Icon = use;
         if (tray != null) { tray.Icon = use; tray.Text = on ? "STATUS - a status check is waiting" : "STATUS"; }
-        Log(on ? "red dot on" : "red dot off");
+        /* `due|2`: one small Windows notification from the tray icon as
+           well (Tom, 2026-11-13, "also offer a small pop up from here").
+           Clicking it opens the check, the same as the widget's button. */
+        if (on && pop && tray != null)
+            tray.ShowBalloonTip(10000, "STATUS", "A status check is waiting. Click to answer it.", ToolTipIcon.None);
+        Log(on ? (pop ? "red dot on, pop up" : "red dot on") : "red dot off");
     }
     static Icon DotIcon(Icon from)
     {
