@@ -312,6 +312,11 @@ class App : Form
             return;
         }
         if (verb == "quit") { Quit(); return; }
+        /* Tom, 2026-11-13: the status check can come as a red dot rather
+           than the whole screen (STATUS Settings, DESKTOP, How it comes).
+           `due|1` puts a red dot on the taskbar button and the tray icon,
+           `due|0` takes it off. The page decides when; this only paints. */
+        if (verb == "due") { Due(bits.Length > 1 && bits[1] == "1"); return; }
         if (verb == "menu") { if (trayMenu != null) trayMenu.Show(this, PointToClient(Cursor.Position)); return; }
         /* The tray's settings, asked for from STATUS's own Settings, so there
            is one place to set them. The tray menu still works. */
@@ -409,11 +414,16 @@ class App : Form
             }
             else
             {
+                /* The red dot's check: he pressed for it, so a box in the
+                   middle, no sound, and back where he was after. */
+                if (mode == "checkin") return;
+                if (mode == "app") { backRight = Left + Width; backTop = Top; }
                 mode = "checkin";
                 ClientSize = new Size(w, h);
                 Centre();
                 Round();
                 Front();
+                return;
             }
             try { System.Media.SystemSounds.Exclamation.Play(); } catch { }
         }
@@ -744,6 +754,37 @@ class App : Form
             mi.Text = known ? "Choose my own..." : "Choose my own...  (" + Pretty(hotkey) + ")";
             mi.Checked = !known;
         }
+    }
+
+    /* ── the red dot ── */
+    Icon plainIcon, dotIcon;
+    void Due(bool on)
+    {
+        if (plainIcon == null) plainIcon = Icon;
+        if (on && dotIcon == null) dotIcon = DotIcon(plainIcon);
+        Icon use = on ? dotIcon : plainIcon;
+        if (use == null) return;
+        Icon = use;
+        if (tray != null) { tray.Icon = use; tray.Text = on ? "STATUS - a status check is waiting" : "STATUS"; }
+        Log(on ? "red dot on" : "red dot off");
+    }
+    static Icon DotIcon(Icon from)
+    {
+        try
+        {
+            using (var bmp = new Bitmap(64, 64))
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                using (var src = from.ToBitmap()) g.DrawImage(src, 0, 0, 64, 64);
+                /* bottom right, ringed in the page colour so it reads on any taskbar */
+                using (var ring = new SolidBrush(Color.FromArgb(8, 11, 16))) g.FillEllipse(ring, 30, 30, 34, 34);
+                using (var red = new SolidBrush(Color.FromArgb(232, 64, 64))) g.FillEllipse(red, 34, 34, 26, 26);
+                return Icon.FromHandle(bmp.GetHicon());
+            }
+        }
+        catch { return null; }
     }
 
     Icon TrayIcon()

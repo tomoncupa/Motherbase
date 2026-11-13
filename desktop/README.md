@@ -22,7 +22,9 @@ Opening it twice does nothing. There is only ever one.
   its time, today's mood and energy once there are any, and three controls.
   **Drag it anywhere** by its background and it stays there.
 - **The status check** is meant to be in the way, and since 17 September it
-  takes the **whole screen**. It comes up in front of whatever you are doing,
+  takes the **whole screen**, unless STATUS Settings, DESKTOP, How it comes,
+  is Red dot: then a red dot sits on the widget's button and the taskbar
+  icon until you press it, and it opens as a box (`due|1`, `checkin`). It comes up in front of whatever you are doing,
   takes the focus and makes a sound. There is no close button and no skip:
   SAVE is the only way out, and until every scale is pressed it names the one
   still missing. It wears a status window, and which one is in Settings,

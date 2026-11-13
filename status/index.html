@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.93, 2026-11-09">
+<meta name="mb-version" content="1.0.94, 2026-11-13">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1070,6 +1070,13 @@ body.deskmini .deskdoing:focus { border-color: var(--accent); }
   transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .deskfab:hover { background: var(--accent); color: var(--accent-fg); }
+/* a status check is waiting behind the red dot (Settings, DESKTOP, How it comes) */
+.deskfab.due { position: relative; }
+.deskfab.due::before {
+  content: ''; position: absolute; top: calc(var(--s-1) * -1); right: calc(var(--s-1) * -1);
+  width: var(--s-3); height: var(--s-3); border-radius: var(--radius-full);
+  background: var(--danger); box-shadow: 0 0 0 var(--border-width) var(--bg);
+}
 
 body.deskmini .mb-input { width: 100%; }
 </style>
@@ -8544,6 +8551,8 @@ function drawSettingsPane(which) {
   /* Missing until 2026-09-15, so choosing how a calorie miss counts or the
      sessions a week redrew the grades tab as the sheet setup. */
   else if (which === 'quests') drawQuestsTab(pane);
+  /* Missing until 2026-11-13, so the timer switch drew the sheet setup. */
+  else if (which === 'desk') drawDeskTab(pane);
   else drawSyncTab(pane);
 }
 
@@ -8829,7 +8838,7 @@ function deskSend(m) {
      after it looked like a repeat and was dropped, and maximising cleared the
      way only because it put a different message in between. Tom found it by
      noticing max-then-min made dragging work again. */
-  if (m === 'drag') { try { window.chrome.webview.postMessage(m); } catch (e) {} return; }
+  if (m === 'drag' || m.indexOf('due|') === 0) { try { window.chrome.webview.postMessage(m); } catch (e) {} return; }
   if (m === deskSaid) return;
   /* Saying the same thing twice is a window resize for nothing. Seeding the
      fields on a first run redrew the widget twenty times in one second, and
@@ -8869,6 +8878,42 @@ function deskCfg() {
     from: +S.get('desk.from', DESK_DEF.from) || 0,
     to:   +S.get('desk.to',   DESK_DEF.to)   || 0,
   };
+}
+
+/* ── a red dot instead of the whole screen ──
+   Tom, 2026-11-13: "an option to make the status desktop app check non full
+   screen, maybe like a non invasive notification or even just like a red dot
+   around the app icon". Settings, DESKTOP, How it comes: Whole screen (the
+   default, unchanged) or Red dot. With the dot, a check that comes due puts a
+   red dot on the widget's status check button and on STATUS's taskbar and
+   tray icons (`due|1`, STATUS.exe), and waits. It still never goes away: the
+   dot stays until a check is answered. Pressing the button opens it as a box
+   in the middle of the screen. The dot is page memory, so a reload drops it
+   and the timer brings the next one. */
+const DESK_BOX = { w: 760, h: 720 };
+function deskGentle() { return S.get('desk.how', 'screen') === 'dot'; }
+let deskDot = '';       /* '', 'timed' or 'first': what the dot is holding */
+let deskDotNight = '';  /* the night it came due on, if outside hours */
+function deskDotSet(v) {
+  if (deskDot === v) return;
+  deskDot = v;
+  if (v) { const now = new Date(); deskDotNight = deskAwake(now) ? '' : deskNightKey(now); }
+  else deskDotNight = '';
+  deskSend('due|' + (v ? 1 : 0));
+  if (deskSmall) deskBar();
+}
+/* a check is due: the screen, or the dot */
+function deskNow(first) {
+  if (deskGentle()) { deskDotSet(first ? 'first' : (deskDot || 'timed')); return; }
+  if (first) deskFirst = true;
+  deskAsk();
+}
+function deskDotOpen() {
+  const first = deskDot === 'first', night = deskDotNight;
+  if (first) deskFirst = true;
+  deskAsk();
+  if (night && checkOn) deskAskedNight = night;
+  if (first && !checkOn) { deskFirst = false; S.set('desk.newday', Day.today()); }
 }
 
 /* ── the widget measures itself ──
@@ -8915,7 +8960,9 @@ function deskTitle() {
      widget's measured size, so any redraw that changed the box by a pixel made
      a new message, and a new message is another grab at a screen he is not
      sitting at. It carries a fixed size the host ignores anyway. */
-  if (checkOn) { deskSend('takeover|1|1'); return; }
+  /* With the red dot chosen he opened it himself, so it comes up as a box
+     in the middle of the screen, never the whole of it. */
+  if (checkOn) { deskSend(deskGentle() ? 'checkin|' + DESK_BOX.w + '|' + DESK_BOX.h : 'takeover|1|1'); return; }
   if (deskSmall && s) deskSend('widget|' + s.w + '|' + s.h);
   else if (!deskSmall) deskSend('app|390|844');
 }
@@ -9083,6 +9130,7 @@ function deskTick() {
   if (first != null) {
     if (!first || deskAway() || checkOn || deskAsking || deskPanel || sheetH) return;
     deskWaiting = false;
+    if (deskGentle()) { deskNow(true); return; }
     deskFirst = true;
     deskAsk();
     /* nothing switched on to ask: the day's first is done, the timer goes on */
@@ -9092,7 +9140,7 @@ function deskTick() {
   if (deskWaiting) {
     if (deskAway()) return;
     deskWaiting = false;
-    if (!(checkOn || deskAsking || deskPanel || sheetH)) deskAsk();
+    if (!(checkOn || deskAsking || deskPanel || sheetH)) deskNow();
     return;
   }
   if (!deskNext) { deskRoll(); return; }
@@ -9109,7 +9157,7 @@ function deskTick() {
      it is the thing working. */
   if (checkOn || deskAsking || deskPanel || sheetH) return;
   if (deskAway()) { deskWaiting = true; return; }
-  deskAsk();
+  deskNow();
 }
 
 /* ── the last thing he wrote ──
@@ -9308,7 +9356,12 @@ function deskBar() {
   fab.setAttribute('data-icon-size', '22');
   fab.setAttribute('aria-label', 'Status check');
   fab.title = 'Status check';
-  fab.onclick = () => deskAsk();
+  fab.onclick = () => deskDot ? deskDotOpen() : deskAsk();
+  if (deskDot) {
+    fab.classList.add('due');
+    fab.setAttribute('aria-label', 'A status check is waiting');
+    fab.title = 'A status check is waiting';
+  }
   row.appendChild(fab);
 
   /* ── what is left for an S ──
@@ -9727,6 +9780,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) setT
 
 function deskAsk() {
   if (checkOn) return;
+  deskDotSet('');   /* any check opened answers the dot */
   deskAsking = true;
   deskAskedAt = Date.now();
   const now = new Date();
@@ -9874,7 +9928,7 @@ function drawDeskTab(pane) {
   settingsPane = pane; pane.classList.add('setpane');
   const c = deskCfg();
   pane.appendChild(el('div', 'note',
-    'The status check asks how you are and fills the screen until you answer ' +
+    'The status check asks how you are and stays until you answer ' +
     'it. There is no way past it but answering, which is the point of it. ' +
     'What you answer goes in as an ordinary reading, so the rest of STATUS ' +
     'sees it straight away.'));
@@ -9899,6 +9953,18 @@ function drawDeskTab(pane) {
     };
     pair('Every', ['desk.min', c.min, 'min'], ['desk.max', c.max, 'max'], 'minutes, a different gap each time');
     pair('Between', ['desk.from', c.from, '0'], ['desk.to', c.to, '0'], 'hours, 0 to 23. 0 and 0 is all day');
+    pane.appendChild(UI.row('How it comes', '', UI.segmented(
+      [{ id: 'screen', name: 'Whole screen' }, { id: 'dot', name: 'Red dot' }],
+      deskGentle() ? 'dot' : 'screen',
+      v => {
+        S.set('desk.how', v);
+        /* one waiting behind the dot comes up the new way on the next tick */
+        if (v === 'screen' && deskDot) { const f = deskDot === 'first'; deskDotSet(''); if (!f) deskWaiting = true; }
+        drawSettingsPane('desk');
+      })));
+    pane.appendChild(el('div', 'note', deskGentle()
+      ? 'A red dot goes on the status check button and on the STATUS icon in the taskbar, and waits there until you press it and answer.'
+      : 'It fills the screen and takes the focus until you answer it.'));
     pane.appendChild(toggleRow('Wait until I am at the desk',
       'One that comes due while you are away goes up the moment you touch the mouse or keyboard',
       S.get('desk.wait', 1) !== 0, v => { S.set('desk.wait', v ? 1 : 0); }));
