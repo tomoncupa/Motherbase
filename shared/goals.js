@@ -177,6 +177,29 @@
     return ds.length ? sr[ds[ds.length - 1]] : null;
   }
   const fed = a => !!(a && a.src && (COUNT[a.src.kind] || MEASURE[a.src.kind]));
+  /* ── a goal that has been off for three weeks ──
+     Tom, 2026-11-16, "B": root brief, "a target that has been missed for three
+     weeks is not a target, it is furniture", so the app offers to make it
+     smaller. Three full weeks under half (a count), 42 days with nothing done
+     (tasks), or off track and 21 days old (a measure). Not while his own call
+     says otherwise, and not again until `keepUntil` once he says Keep it.
+     Hands back {n} (a smaller count a week, one step past his best of those
+     weeks) or {days} (more time), or null. */
+  function stuck(a, list) {
+    if (!a || a.state) return null;
+    const t = D().today();
+    if (a.keepUntil && a.keepUntil > t) return null;
+    const h = health(a, list);
+    if (!h || h.mark) return null;
+    if (fed(a) && COUNT[a.src.kind]) {
+      const n = Math.max(1, +a.src.n || 1), w = h.weeks.slice(-4, -1).map(k => k.n);
+      if (n <= 1 || w.length < 3 || w.some(c => c >= Math.ceil(n / 2))) return null;
+      if (D().diff(t, a.made || t) < 21) return null;
+      return { n: Math.max(1, Math.min(n - 1, Math.max.apply(null, w) + 1)) };
+    }
+    if (fed(a)) return h.v === 'off' && D().diff(t, a.made || t) >= 21 ? { days: 28 } : null;
+    return h.idle >= 42 ? { days: 28 } : null;
+  }
 
   function health(a, list) {
     if (!a || a.state) return null;
@@ -231,5 +254,5 @@
 
   g.Goals = { NAME: NAME, MK: MK, WEEKS: WEEKS, weekStart: weekStart, todos: todos, due: due,
     aims: aims, of: of, order: order, health: health, next: next, mark: mark, toToday: toToday,
-    startOf: startOf, fed: fed, SRC_NAME: SRC_NAME, LB: LB };
+    startOf: startOf, fed: fed, stuck: stuck, SRC_NAME: SRC_NAME, LB: LB };
 })(typeof window !== 'undefined' ? window : this);

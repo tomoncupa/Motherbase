@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.34, 2026-11-16">
+<meta name="mb-version" content="1.0.35, 2026-11-16">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -286,6 +286,7 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .wk.now{box-shadow:0 0 0 var(--border-width) var(--text-muted)}
 .hfix{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-1) var(--s-3);font-size:var(--f-2);color:var(--text-2)}
 .hfix .nx{overflow-wrap:anywhere;min-width:0}
+.hsmall{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-1);font-size:var(--f-2);color:var(--text-2)}
 .srcin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-2)}
 .srcin .mb-input{flex:1 1 calc(var(--s-10) * 1.5);min-width:0}
 .srcin .hint{font-size:var(--f-1);color:var(--text-muted)}
@@ -929,6 +930,33 @@ function healthEl(a, w) {
     fix.appendChild(b);
   }
   if (fix.children.length) box.appendChild(fix);
+  const sk = Goals.stuck(a, quests());
+  if (sk) box.appendChild(smallerEl(a, sk));
+  return box;
+}
+/* B: three weeks off, so offer it smaller or later, once, with Keep it */
+function smallerEl(a, sk) {
+  const box = el('div', 'hsmall');
+  const cur = Rec.get('aim', null, a.key) || {};
+  const per = a.src && a.src.kind === 'train' ? ' sessions a week' : ' days a week';
+  box.appendChild(el('span', 'nx', sk.n ? 'Three weeks under half of ' + a.src.n + per + '.' : 'Three weeks off track.'));
+  const btn = (label, fn) => { const b = el('button', 'chip', esc(label)); b.type = 'button'; b.onclick = e => { e.stopPropagation(); fn(); }; box.appendChild(b); };
+  const undoTo = (words, was) => UI.undo(words, () => Rec.patch('aim', null, a.key, was));
+  if (sk.n) btn('Make it ' + sk.n + per, () => {
+    const was = { src: cur.src };
+    Rec.patch('aim', null, a.key, { src: Object.assign({}, cur.src, { n: sk.n }) });
+    undoTo('Now ' + sk.n + per, was);
+  });
+  if (sk.days) btn('Give it 4 more weeks', () => {
+    const was = { by: cur.by || '' }, by = Day.shift(cur.by && cur.by > T() ? cur.by : T(), sk.days);
+    Rec.patch('aim', null, a.key, { by: by });
+    undoTo('Now by <b>' + esc(dayWord(by)) + '</b>', was);
+  });
+  btn('Keep it', () => {
+    const was = { keepUntil: cur.keepUntil || '' };
+    Rec.patch('aim', null, a.key, { keepUntil: Day.shift(T(), 21) });
+    undoTo('Kept as it is', was);
+  });
   return box;
 }
 function putOnToday(x) {
