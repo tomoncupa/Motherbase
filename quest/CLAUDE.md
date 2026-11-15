@@ -112,6 +112,18 @@ the review, which write progress down.
 - **A goal past its date** asks once: Done, Another (its horizon), or Drop it.
   Never marked failed, never vanished. Done and dropped goals stay under
   Finished; only Delete, behind a confirm, takes one away.
+- **Goal health** (Tom, 2026-11-16, from Superfocus; 1.0.28): every open goal
+  row and Today's goal card show this week's call, On track, Adjust or Off
+  track, from days since a task serving it was done (7 or fewer, 21 or fewer,
+  more). Made this week with nothing done: "New this week", no call. Beside it
+  the last 6 weeks' done counts, the number in each box, and "Day 41 of 180"
+  from made to by. Under it one fix: the next task due this week, else Put on
+  today (the open one first by `sortQ`), else Add a task (typed like the task
+  line, saved with `aim`). Tapping the call marks it right or another call,
+  kept as `marks: {<week start>: {v, t}}` on the aim, "your call" shown. The
+  goal's menu adds Add a task and Link a project (`project.aim`).
+  **On 2026-11-16 he had 0 goals and 0 linked todos**, so nothing shows until
+  goals exist; Link a project is the cheap way to link his Todoist projects.
 - **The words never praise or score.** "Nothing done on it in 23 days. Last
   done Oct 4: ..." states the behaviour and the date and stops there (root
   brief, self-determination theory).
@@ -297,6 +309,23 @@ weekly review) and 1-3-5 were offered, not chosen. Tom picked all four
 groupings (2026-10-29: "A"): stage, section, priority and Eisenhower, one
 BOARD view with a switch between them. Build order: Todoist sync, then the
 board, then the brief.
+
+## Week draft (Tom, 2026-11-16: "Both", from Superfocus; NOT BUILT YET)
+
+On Sunday and Monday a card on Today, and any day at the top of Upcoming
+until handled that week, proposes changes to the week: "4 added, 1 moved,
+24 back to Inbox". Each line kept by default with a round toggle; KEEP N
+applies them (one Undo restores every row), NOT THIS WEEK hides it. Handled is
+the setting `weekDraft` = that week's Monday, written only when he acts.
+Rules, no AI (0 `brief` rows ever reached the store as of 2026-11-16):
+- Week: from today to Sunday; on a Sunday, next Monday to Sunday.
+- Moved: open overdue todos 30 days late or less, P1 first, onto the earliest
+  day under 3 todos. Skip repeats (`rep`, `td.rec`) and WEALTH, ARC and GOALS rows.
+- Back to Inbox: overdue more than 30 days, due set to No date (Todoist gets
+  the cleared date). His data: 24 of 38 overdue.
+- Added: No date todos that serve a stale goal or carry P1 to P3, up to 5 and
+  the week's spare room (3 a day).
+If the brief writer is ever rebuilt, it may hand the same list on the brief row.
 
 ## Needs from the foundation
 
