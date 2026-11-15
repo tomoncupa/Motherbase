@@ -289,7 +289,7 @@ called testers until 2026-09-14, and not the coaching clients in WEALTH.
 | FOODDÉX | `portion/` | desktop | no, Tom only | Food database input and overview. Works with STATUS. **To be expanded.** |
 | CHECK IN | `checkin/` | everywhere | yes | Physique check-ins, for Tom and for his clients: a goal, photos measured into neutral numbers, and a timelapse. Reads weight from STATUS rather than asking for it twice. A client's check-in reaches Tom as a file and is kept under their name, in rows a later COACH can read. |
 | NOTICE | `system/` | everywhere | no, Tom only | Text in, a status window out. A game notice or quest window as a picture, for a post or a story. Built 2026-09-15. |
-| SPEAK | `speak/` | everywhere | no, Tom only | Talking to a camera, measured. A path of drills for pace, fillers, flow, clarity and eyes, a daily warm-up, a streak. Numbers against his own targets, never a verdict. |
+| SPEAK | `speak/` | everywhere | no, Tom only | Talking to a camera, measured. A path of drills for pace, fillers, flow, clarity and eyes, a daily warm-up, a streak. Numbers against his own targets, and after each take the one fault to fix with a drill for it, which he marks right or wrong. |
 | COACH | `coach/` | iPhone, iPad and PC | no, Tom only | Clients send their TRAIN logs here. For now, TRAIN with profiles: track each client's strength, and log the sessions of 1:1s. A separate app, with TRAIN as its core file. A profile is the same client as in WEALTH, so a 1:1 logged here is a session WEALTH counts. A log arrives as a file the client sends from TRAIN's share menu; sending again only adds what is new. Built 2026-09-22 as a Pokémon PC box: clients from CHECK IN in three boxes, a client's TRAIN file opened into their own rows, strength, recent sessions, the range, and first sets sent back as a program file. Since 1.0.1 a 1:1 is logged in COACH as sets, WEALTH counts it as a session, and every client is in both apps. Since 1.0.4 their check-ins are on the profile too — the photos, the measurements and what changed since last time, read out of CHECK IN's own rows rather than copied, and a check-in file opens here as well. |
 | FORGE | `forge/` | desktop only | no, Tom only | The program builder, built 2026-09-24. Works like BLOCK: days are lanes, exercises are plates dragged in from a bin, and weeks run along the top. Each exercise carries sets, a rep range, first-set load, RIR (0-3 unless set) and rest, per the Algrowrithm; a later week says only what changes. Every program is published into COACH's PROGRAMS, and SEND puts it on a client and saves the file their TRAIN opens, one routine per week. |
 | KITCHEN | `kitchen/` | everywhere | yes, since 2026-09-28 | "Pantry inventory, meal planner, nutritional guide" (Tom, 2026-09-28). What is on the shelf: receipts add, eating subtracts, a hand count corrects either. The week's meals planned from it. Daily targets for calories, protein, fibre, vitamins and minerals, how today and the planned week meet them, and which foods on the shelf close a gap. |
@@ -549,8 +549,10 @@ drill saying its goal as a number and why in one sentence, the take stopping
 and the numbers appearing at once, and the same numbers a month later showing
 which way they moved.
 
-**Never:** a verdict, a score, a level, or praise. It counts, shows the target,
-and says met or not met. The target is his.
+**Never:** a score, a level, or praise. Since 2026-11-16 it coaches: after a
+take it names the one fault that cost the most, the fix, and a short drill for
+it, and he marks the call right or wrong (Tom: "actually actively help me
+improve").
 
 ### NOTICE — `system/` · everywhere · Tom only
 

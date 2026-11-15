@@ -16,11 +16,12 @@ not just mindless gameplay."*
 **Function.** Practise talking to a camera and see, in numbers, whether it is
 getting cleaner.
 
-**Never:** a verdict. It counts, shows the target, and says met or not met
-against a target he can change. No praise, no score, no XP, no levels (root
-brief, behaviour rules). A drill's WHY is the one place the app explains
-itself, because he asked for the reason, and each one is a sentence with a
-source in `RESEARCH.md`.
+**It coaches, not only counts.** Tom, 2026-11-16: *"I need Speak to actually
+give me feedback and drills for what's happening. I don't need it to just
+rate what I'm doing."* This replaces the old "never a verdict" rule, under
+his suite-wide rule of 2026-09-24 that verdicts on him are fine when they are
+correct and he can mark them right or wrong. Still no praise, no score, no
+XP, no levels (root brief, behaviour rules).
 
 **Device:** everywhere. A take is made wherever the camera is: a phone propped
 up, or a laptop at a desk. Built to the phone rules.
@@ -200,6 +201,49 @@ Watched 2026-11-10 in headless Chromium with a fake microphone at 1280 and
 the take saved met with its time, SAME PROMPT showed the same question, and
 the second sheet named the first take's numbers. No page errors. Not run with
 a real voice.
+
+## The coach, added 2026-11-16 (SPEAK 1.0.10)
+
+Every take's sheet opens on **WHAT TO FIX**, above the numbers:
+
+- **A strip of the take:** each held sound (the um proxy) a gold tick, each
+  pause a gap, silences over 1.5 s darker, and the pace in each third. A take
+  now keeps `ev`: `end`, `held [[s, dur]]`, `pz [[s, dur]]` (every pause of
+  250 ms or more, in seconds from the start) and `pace [a, b, c]`. The ear's
+  summary returns `pauseAt` for it. Takes before 1.0.10 have no `ev`, so
+  their coach reads the totals only.
+- **The one fault that cost the most** (`coach(t)`), said with where it
+  happened, a FIX in one move, and a DRILL whose goal sits one step past this
+  take's number (`stepLe` 70% of the way, `stepGe` a fixed step), never the
+  final target. A fault on a goal the take missed weighs 1.5 times. Faults:
+  ums right after a pause, ums in the opening seconds, ums near the end, plain
+  fillers over the line, crutch phrases (the top phrase named), speeding up
+  across thirds, too fast or too slow for the style's band, silences over
+  1.5 s (with their times), too few pauses, stammered starts, a flat voice,
+  soft consonants, eyes off the lens. Up to two more show as "Also".
+- **Right / Wrong** on the call. Wrong drops it (the next fault shows) and it
+  never counts toward FOCUS; stored on the take as `fb {faultId: 1|0}`.
+- **Nothing over its line** on a met take offers NEXT: the step it opened.
+
+**Fix drills** (`FIXES`, ids `fix-…`): twelve short drills off the path, one
+per fault, 30 to 45 s. They count their one fault live in the third meter
+(`live`: ums, crutch, silences, pauses, restarts), which turns amber when it
+goes up: an ah-counter on screen. FIRST LINE and LAST LINE (`prep`) count
+down ten seconds with the prompt showing. A fix take keeps `from`, the take
+it came from, and its sheet offers AGAIN and BACK TO THE TAKE, which reruns
+the original drill on the same prompt so the same-prompt line shows whether
+it carried over. Fix takes do not count in TODAY'S DRILLS or Steps met.
+
+**FOCUS** on TODAY, above the drills: a fault that came top in at least two of
+the last five takes this week, with its fix and its drill.
+
+Watched 2026-11-16 in headless Chromium at 390 with a fake microphone (a
+synthetic 33 s clip): take, coach, DRILL IT, the fix take linked by `from`,
+BACK TO THE TAKE, FOCUS, Wrong dropping the call and saving `fb`; no page
+errors, no sideways scroll. Every filler pattern, speeding up and crutch were
+checked on seeded takes. The synthetic voice reads as stammered starts, so
+the live ear's calls on a real voice are not known yet, and the fault weights
+are a first guess to tune against his Right / Wrong marks.
 
 ## The widget, added 2026-11-10
 

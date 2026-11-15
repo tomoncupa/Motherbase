@@ -168,6 +168,26 @@ shown against a target with met or not, and the target is his.
 
 Toastmasters International's Table Topics: an impromptu answer of one to two minutes to a question the speaker has not seen, timed with green, yellow and red lights, with a speaker over the limit by 30 seconds out of time in contests. Its meetings also count fillers (the Ah-Counter) and give spoken evaluation. The great speakers' common pattern, from their biographies: high volume over years, a model imitated (Frederick Douglass read *The Columbian Orator* aloud; Cicero declaimed set pieces), written preparation, and the same material refined across deliveries (King used the "dream" refrain in speeches before August 1963). Demosthenes' pebbles come from Plutarch and are partly legend.
 
+## 11. Coaching after the take, added 2026-11-16
+
+- **Um comes before a delay.** Clark and Fox Tree 2002 (Cognition) found
+  speakers use "uh" before short delays and "um" before longer ones: the
+  filler announces that the next words are still being found. So ums that sit
+  right after a pause are planning, and the fix aims at the pause (breathe in,
+  then the first real word), not at willpower.
+- **Real-time feedback.** Tanveer, Lin and Hoque 2015 (Rhema, IUI) gave
+  speakers live cues on pace and volume while they spoke and reported it
+  helped them adjust without breaking the talk. The fix drills' live counter
+  is the same idea, on one number only.
+- **Easy onset.** A soft, slightly slowed first sound is a standard
+  fluency-shaping technique in stuttering therapy; here it is offered for
+  stammered starts, which the ear only approximates.
+- **One fault at a time, one step at a time.** Scaffolding (root brief): the
+  drill's goal is one step from this take, never the finished target.
+
+Not checked here: the exact effect sizes in either paper. Labelled from
+memory of the abstracts, not re-read on 2026-11-16.
+
 ## Confidence
 
 High on the figures confirmed by two or more independent extracts: Bortfeld

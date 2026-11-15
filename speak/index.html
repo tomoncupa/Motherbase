@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.9, 2026-11-10">
+<meta name="mb-version" content="1.0.10, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -101,6 +101,20 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .acts{display:flex;gap:var(--s-2);flex-wrap:wrap;margin-top:var(--s-3)}
 .acts .mb-btn{display:inline-flex;align-items:center;gap:var(--s-2)}
 .chartbox{margin-top:var(--s-2)}
+/* the coach: what to fix, at the top of a take's sheet and on FOCUS */
+.coach{padding:var(--s-3);border-radius:var(--radius-md);margin-bottom:var(--s-3)}
+.coach h3{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);letter-spacing:var(--track-cap);color:var(--text-muted);margin:0 0 var(--s-2)}
+.what{font-size:var(--f-3);color:var(--text-1);line-height:var(--lh-body);margin:var(--s-2) 0}
+.coach .marked{align-self:center}
+.tl .bar{position:relative;height:var(--s-5);border-radius:var(--radius-sm);background:var(--surface-2);overflow:hidden}
+.tl .bar i{position:absolute;top:0;bottom:0}
+.tl i.pz{background:color-mix(in srgb,var(--text-muted) 30%,transparent)}
+.tl i.pz.long{background:color-mix(in srgb,var(--text-muted) 70%,transparent)}
+.tl .bar i.um{width:var(--s-1);margin-left:calc(var(--s-1) / -2);background:var(--warn)}
+.tl .leg{display:flex;gap:var(--s-3);flex-wrap:wrap;align-items:center;font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-1)}
+.tl .leg .end{margin-left:auto}
+.tl .leg .k i{display:inline-block;width:var(--s-2);height:var(--s-2);border-radius:var(--radius-sm);vertical-align:middle;margin-right:var(--s-1)}
+.tl .leg i.um{background:var(--warn)}
 /* the goal and the why, on a drill sheet and on a today card */
 .goal{display:grid;grid-template-columns:var(--s-9) 1fr;gap:var(--s-2) var(--s-3);align-items:baseline;
   font-size:var(--f-2);line-height:var(--lh-body);margin:var(--s-3) 0}
@@ -330,18 +344,18 @@ function Ear(sr) {
       const runs = []; let a = 0;
       for (let i = 1; i <= N; i++) if (i === N || on[i] !== on[a]) { runs.push({ on: on[a], a: a, b: i }); a = i; }
       const PAUSE = 25, LONG = 150;                       /* 250ms is a pause; 1.5s is a long one */
-      const pauses = [], longs = [];
+      const pauses = [], longs = [], pz = [];               /* pz: where each pause sits, for the coach */
       let speechFrames = 0, first = -1, last = -1;
       runs.forEach(r => {
         const len = r.b - r.a;
         if (r.on) { speechFrames += len; if (first < 0) first = r.a; last = r.b; }
-        else if (len >= PAUSE) { pauses.push(len); if (len >= LONG) longs.push(len); }
+        else if (len >= PAUSE) { pauses.push(len); pz.push([r.a, len]); if (len >= LONG) longs.push(len); }
         else speechFrames += len;
       });
       if (first >= 0) {
         const lead = runs[0].on ? 0 : runs[0].b, tail = runs[runs.length - 1].on ? 0 : N - runs[runs.length - 1].a;
-        if (!runs[0].on && lead >= PAUSE) { pauses.shift(); if (lead >= LONG) longs.shift(); }
-        if (!runs[runs.length - 1].on && tail >= PAUSE && pauses.length) { pauses.pop(); if (tail >= LONG) longs.pop(); }
+        if (!runs[0].on && lead >= PAUSE) { pauses.shift(); pz.shift(); if (lead >= LONG) longs.shift(); }
+        if (!runs[runs.length - 1].on && tail >= PAUSE && pauses.length) { pauses.pop(); pz.pop(); if (tail >= LONG) longs.pop(); }
         speechFrames -= (lead < PAUSE ? lead : 0) + (tail < PAUSE ? tail : 0);
       }
       const spoken = first < 0 ? 0 : (last - first) * 0.01;
@@ -411,6 +425,7 @@ function Ear(sr) {
         sps: spoken > 0 ? syll / spoken : 0, art: phon > 0 ? syll / phon : 0,
         wpmEst: spoken > 0 ? (syll / 1.4) / (spoken / 60) : 0,
         pauses: pauses.length, longPauses: longs.length, heldPauses: heldPauses, pauseSec: pauseSec,
+        pauseAt: pz.map(p => ({ at: (from + p[0]) * 0.01, dur: p[1] * 0.01 })),
         longestPause: pauses.length ? Math.max.apply(null, pauses) * 0.01 : 0,
         ratio: spoken > 0 ? phon / spoken : 0,
         held: held.length, heldSec: held.reduce((s, h) => s + h.dur, 0), heldAt: held,
@@ -758,7 +773,201 @@ const TT = { id: 'topics', skill: 'topics', step: 0, name: 'Table topic', style:
   why: 'Toastmasters practises speaking off the cuff this way every meeting: one unseen question, one to two minutes, timed by lights.',
   how: 'The question appears after the count. Answer it, and press STOP between green and red.' };
 const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || TOPIC_SKILL;
-const drillById = id => id === TT.id ? TT : DRILLS.filter(d => d.id === id)[0] || null;
+/* ══════════════ the coach ══════════════
+   Tom, 2026-11-16: "I need Speak to actually give me feedback and drills for
+   what's happening. I don't need it to just rate what I'm doing." After a
+   take the coach reads WHERE things happened (each um, each silence, the pace
+   by thirds), names the one fault that cost the most, the fix as one move,
+   and a short drill for it whose goal sits one step past this take's number
+   (scaffolding). He marks a call right or wrong; a call marked wrong drops
+   out and never counts toward FOCUS. Sources: RESEARCH.md section 11. */
+let fixFrom = null;                         /* the take a fix drill was opened from */
+const stepLe = (cur, tgt) => cur == null || cur <= tgt ? tgt : Math.max(tgt, r1(cur * 0.7));
+const stepGe = (cur, tgt, add) => cur == null || cur >= tgt ? tgt : Math.min(tgt, r1(cur + add));
+const srcM = () => (fixFrom && fixFrom.m) || {};
+const FIXES = [
+  { id: 'fix-pause-word', skill: 'clean', name: 'Pause, then the word', style: 'long', kind: 'topic', dur: 45, asr: true, live: 'held',
+    goals: t => [{ m: 'fpm', op: 'le', v: stepLe(srcM().fpm, t.fpm) }, { m: 'pauses', op: 'ge', v: 4 }],
+    why: 'Um comes while the next thought loads; a breath in fills the same gap with nothing.',
+    how: 'At every pause, breathe in through the nose, then start on the sentence\'s first real word.' },
+  { id: 'fix-first-line', skill: 'clean', name: 'First line ready', style: 'long', kind: 'topic', dur: 30, asr: true, live: 'held', prep: 'FIRST LINE',
+    goals: t => [{ m: 'fpm', op: 'le', v: stepLe(srcM().fpm, t.fpm) }],
+    why: 'The opening seconds carry the most fillers while the first sentence is still being found.',
+    how: 'The topic shows during a ten second count. Find your first sentence, then open on it.' },
+  { id: 'fix-close', skill: 'clean', name: 'Land the close', style: 'long', kind: 'topic', dur: 45, asr: true, live: 'held', prep: 'LAST LINE',
+    goals: t => [{ m: 'fpm', op: 'le', v: stepLe(srcM().fpm, t.fpm) }],
+    why: 'Fillers pile up at the end when there is no last line to stop on.',
+    how: 'Pick your last sentence during the ten second count. When you reach it, say it and press STOP.' },
+  { id: 'fix-fillers', skill: 'clean', name: 'Silence, not um', style: 'long', kind: 'topic', dur: 45, asr: true, live: 'held',
+    goals: t => [{ m: 'fpm', op: 'le', v: stepLe(srcM().fpm, t.fpm) }],
+    why: 'A silent pause costs the listener the same time as a filler and does not lower what they think you know.',
+    how: 'Watch the ums meter. When one is coming, close your lips and let the silence run.' },
+  { id: 'fix-crutch', skill: 'clean', name: 'Full stop instead', style: 'long', kind: 'bullets', dur: 45, asr: true, needsAsr: true, live: 'crutch',
+    goals: t => [{ m: 'crutch', op: 'le', v: srcM().crutch ? Math.floor(srcM().crutch / 2) : 0 }],
+    why: 'A crutch phrase asks the viewer to agree, and a video cannot answer.',
+    how: 'End the sentence where the phrase would go. The full stop is the whole move.' },
+  { id: 'fix-slow', skill: 'pace', name: 'Slow to the beat', style: 'long', kind: 'topic', dur: 45, beat: true,
+    goals: t => [{ m: 'wpm', op: 'in', v: band('long') }],
+    why: 'A beat sets the speed from outside, so the mouth learns the band by feel.',
+    how: 'Land one syllable on each click, and keep it there to the last sentence.' },
+  { id: 'fix-moving', skill: 'flow', name: 'Keep it moving', style: 'live', kind: 'topic', dur: 45, live: 'longPauses',
+    goals: t => [{ m: 'longP', op: 'le', v: 0 }],
+    why: 'A pause under 1.5 seconds reads as thought; a longer one reads as lost.',
+    how: 'When the next thought is not there, say the last one again in fewer words.' },
+  { id: 'fix-breath', skill: 'pace', name: 'One idea, one breath', style: 'teach', kind: 'bullets', dur: 45, live: 'pauses',
+    goals: t => [{ m: 'pauses', op: 'ge', v: 6 }],
+    why: 'A point lands when there is a pause after it; without pauses every sentence weighs the same.',
+    how: 'One sentence, then stop and breathe in. Six stops at least.' },
+  { id: 'fix-easy-start', skill: 'flow', name: 'Soft start', style: 'read', kind: 'read', dur: 45, live: 'restarts',
+    goals: t => [{ m: 'restarts', op: 'le', v: 0 }],
+    why: 'A soft, slightly slow first sound is the standard fluency-shaping move against blocked starts.',
+    how: 'Start every sentence as if sighing into its first sound, then carry on at normal speed.' },
+  { id: 'fix-key-word', skill: 'clear', name: 'Lift the key word', style: 'story', kind: 'story', dur: 45,
+    goals: t => [{ m: 'pitch', op: 'ge', v: stepGe(srcM().pitch, t.pitch, 1.5) }],
+    why: 'One stressed word a sentence makes a voice move without sounding put on.',
+    how: 'Find the one word in each sentence that matters and lift your voice on it.' },
+  { id: 'fix-crisp', skill: 'clear', name: 'Finish the consonants', style: 'read', kind: 'read', dur: 45, crisp: true,
+    goals: t => [{ m: 'crisp', op: 'ge', v: stepGe(srcM().crisp, t.crispPct, 5) }],
+    why: 'Consonants live at 2 to 4kHz, and the last one of each word is the first to go.',
+    how: 'Open the mouth wider and sound the last consonant of every word.' },
+  { id: 'fix-lens', skill: 'eyes', name: 'Think at the lens', style: 'long', kind: 'topic', dur: 45, cam: true,
+    goals: t => [{ m: 'eye', op: 'ge', v: stepGe(srcM().eye, t.eye, 10) }, { m: 'eyeAway', op: 'le', v: 2 }],
+    why: 'Eyes leave the lens to look for the next sentence, and the screen never has it.',
+    how: 'Find the next thought with the eyes still on the lens. Glances under two seconds.' },
+];
+FIXES.forEach(f => { f.fix = true; f.step = 0; });
+const isFix = id => /^fix-/.test(id || '');
+const drillById = id => id === TT.id ? TT : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
+const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
+/* each fault the coach can name, in a few words, for FOCUS */
+const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
+  fillers: 'Fillers', crutch: 'Crutch phrases', speedup: 'Speeding up', fast: 'Too fast', slow: 'Too slow', 'dead-air': 'Long silences',
+  'run-on': 'Too few pauses', restarts: 'Stammered starts', flat: 'A flat voice', mumble: 'Soft consonants', eyes: 'Eyes off the lens' };
+/* what went wrong in one take, worst first: {id, sev, what, cue, fix} */
+function coach(t) {
+  const d = t && t.drill !== 'warm' ? drillById(t.drill) : null;
+  if (!d) return [];
+  const m = t.m || {}, ev = t.ev || null, tg = targets(), b = band(d.style), out = [];
+  const failed = {}, goalOf = {};
+  (t.goals || []).forEach(g => { goalOf[g.m] = g.v; if (g.got != null && !g.ok) failed[g.m] = 1; });
+  const add = (id, metric, sev, what, cue, fix) => out.push({ id: id, sev: clamp(sev, 0.1, 2) * (failed[metric] ? 1.5 : 1), what: what, cue: cue, fix: fix });
+  const end = (ev && ev.end) || m.time || t.dur || 0;
+  /* fillers, and where they sat */
+  const lim = goalOf.fpm != null ? goalOf.fpm : tg.fpm;
+  if (m.fpm != null && m.fpm > lim && (m.fillers || 0) >= 2) {
+    const sev = (m.fpm - lim) / Math.max(1, lim) * 0.9;
+    const held = (ev && ev.held) || [], n = held.length, pz = (ev && ev.pz) || [];
+    const after = held.filter(h => pz.some(p => p[0] + p[1] >= h[0] - 0.6 && p[0] + p[1] <= h[0] + 0.1)).length;
+    const cut = Math.max(10, Math.round(end * 0.2)), early = held.filter(h => h[0] < cut).length;
+    const tail = Math.max(10, Math.round(end * 0.3)), late = held.filter(h => h[0] > end - tail).length;
+    if (n >= 3 && after / n >= 0.6) add('um-pause', 'fpm', sev, after + ' of ' + n + ' ums came right after a pause.', 'Breathe in during the pause, then start on the first real word.', 'fix-pause-word');
+    else if (n >= 3 && early / n >= 0.5) add('um-start', 'fpm', sev, early + ' of ' + n + ' ums came in the first ' + cut + ' seconds.', 'Know your first sentence before you start.', 'fix-first-line');
+    else if (n >= 3 && late / n >= 0.5) add('um-end', 'fpm', sev, late + ' of ' + n + ' ums came in the last ' + tail + ' seconds.', 'Decide your last line before you start, and stop on it.', 'fix-close');
+    else add('fillers', 'fpm', sev, r1(m.fpm) + ' fillers a minute, against ' + lim + '.', 'Close your lips when one is coming and let the silence run.', 'fix-fillers');
+  }
+  if (m.crutch) {
+    const hits = Object.entries(t.hits || {}).filter(([w]) => FILLERS.indexOf(w) < 0).sort((x, y) => y[1] - x[1]);
+    const top = hits[0];
+    add('crutch', 'crutch', m.crutch / 3 * 0.8, top ? '"' + top[0] + '" ' + top[1] + (top[1] === 1 ? ' time' : ' times') + (m.crutch > top[1] ? ', ' + m.crutch + ' crutch phrases in all.' : '.') : m.crutch + ' crutch phrases.',
+      'End the sentence where the phrase would go.', 'fix-crutch');
+  }
+  /* pace against this style's band, and whether it drifted */
+  const wpm = m.wpm != null ? Math.round(m.wpm) : null, p3 = ev && ev.pace;
+  if (wpm != null && !d.lights) {
+    if (p3 && p3[2] > p3[0] * 1.15 && p3[2] > b[1]) add('speedup', 'wpm', (p3[2] - b[1]) / b[1] * 4 * 0.75, 'Pace rose from ' + p3[0] + ' to ' + p3[2] + ' wpm by the end.', 'Hold the last sentence at the speed of the first.', 'fix-slow');
+    else if (wpm > b[1] + 5) add('fast', 'wpm', (wpm - b[1]) / b[1] * 4 * 0.8, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Stop and breathe in at every full stop.', 'fix-slow');
+    else if (wpm < b[0] - 5) add('slow', 'wpm', (b[0] - wpm) / b[0] * 4 * 0.6, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Shorter sentences, and start the next one before it is perfect.', 'fix-moving');
+  }
+  const longs = (ev && ev.pz || []).filter(p => p[1] >= 1.5);
+  if (m.longP >= (d.style === 'short' ? 1 : d.style === 'story' ? 3 : 2)) {
+    const at = longs.slice(0, 3).map(p => mmss(p[0])).join(', ');
+    add('dead-air', 'longP', m.longP / 3, m.longP + ' silences over 1.5 seconds' + (at ? ', at ' + at : '') + (m.longestPause ? ', the longest ' + m.longestPause + 's.' : '.'),
+      'When lost, say the last point again in fewer words.', 'fix-moving');
+  }
+  const ppm = m.spoken ? m.pauses / (m.spoken / 60) : null;
+  if (ppm != null && m.spoken >= 30 && ppm < 6 && wpm != null && wpm >= b[0]) add('run-on', 'pauses', (6 - ppm) / 6 * 0.9, m.pauses + ' pauses in ' + Math.round(m.spoken) + ' seconds.', 'One idea, one breath. Stop at each full stop.', 'fix-breath');
+  if (m.restarts >= 2 || (m.repeats || 0) >= 3) add('restarts', 'restarts', Math.max(m.restarts, (m.repeats || 0) / 2) / 3 * 0.9,
+    (m.restarts || 0) + ' stammered starts' + (m.repeats ? ' and ' + m.repeats + ' repeated words.' : '.'), 'Start each sentence soft and a little slow on its first sound.', 'fix-easy-start');
+  if (m.pitch != null && m.pitch < tg.pitch - 1 && d.style !== 'read') add('flat', 'pitch', (tg.pitch - m.pitch) / tg.pitch * 0.75, 'Pitch moved ' + m.pitch + ' semitones, against ' + tg.pitch + '.', 'Lift your voice on the one word in each sentence that matters.', 'fix-key-word');
+  if (m.crisp != null && m.crisp < tg.crispPct) add('mumble', 'crisp', (tg.crispPct - m.crisp) / tg.crispPct * 2.8, 'Crispness ' + Math.round(m.crisp) + '% of this morning\'s warm-up, against ' + tg.crispPct + '%.', 'Open the mouth wider and sound every last consonant.', 'fix-crisp');
+  if (m.eye != null && m.eye < tg.eye) add('eyes', 'eye', (tg.eye - m.eye) / tg.eye * 2.1, 'On the lens ' + Math.round(m.eye) + '%' + (m.eyeAway ? ', the longest look away ' + m.eyeAway + 's.' : '.'), 'Find the next thought with the eyes on the lens.', 'fix-lens');
+  const fb = t.fb || {};
+  return out.filter(f => fb[f.id] !== 0).sort((x, y) => y.sev - x.sev);
+}
+/* FOCUS: the fault that came top in at least two of the last five takes this week */
+function focus() {
+  const since = Day.shift(Day.today(), -6);
+  const recent = takes().filter(t => t.drill !== 'warm' && !isFix(t.drill) && t.date >= since).slice(-5);
+  const n = {}, last = {};
+  recent.forEach(t => { const f = coach(t)[0]; if (!f) return; n[f.id] = (n[f.id] || 0) + 1; last[f.id] = { f: f, t: t }; });
+  const best = Object.keys(n).sort((a, b) => n[b] - n[a] || (last[b].t.at || 0) - (last[a].t.at || 0))[0];
+  if (!best || n[best] < 2) return null;
+  return { f: last[best].f, t: last[best].t, n: n[best], of: recent.length };
+}
+/* the take drawn as a strip: each um a tick, each silence a gap */
+function timeline(t) {
+  const ev = t.ev, end = Math.max(1, ev.end || t.dur || 1);
+  const pct = s => clamp(s / end * 100, 0, 100).toFixed(2) + '%';
+  const w = el('div', 'tl'), bar = el('div', 'bar');
+  (ev.pz || []).forEach(p => { const s = el('i', p[1] >= 1.5 ? 'pz long' : 'pz'); s.style.left = pct(p[0]); s.style.width = pct(p[1]); bar.appendChild(s); });
+  (ev.held || []).forEach(h => { const s = el('i', 'um'); s.style.left = pct(h[0]); bar.appendChild(s); });
+  w.appendChild(bar);
+  w.appendChild(el('div', 'leg', '<span>0:00</span><span class="k"><i class="um"></i>um</span><span class="k"><i class="pz"></i>pause</span>' +
+    '<span class="k"><i class="pz long"></i>over 1.5s</span><span class="end">' + mmss(end) + '</span>'));
+  if (ev.pace) w.appendChild(el('p', 'muted', 'Pace by third: ' + ev.pace.join(' · ') + ' wpm'));
+  return w;
+}
+/* the coach's box at the top of a take's sheet */
+function coachBox(t, d, h) {
+  const box = el('div', 'coach mb-plate');
+  const render = () => {
+    box.innerHTML = '';
+    box.appendChild(el('h3', null, 'WHAT TO FIX'));
+    if (t.ev) box.appendChild(timeline(t));
+    const fs = coach(t), f = fs[0];
+    if (!f) {
+      box.appendChild(el('p', 'what', 'Nothing over its line.'));
+      const next = !d.fix && !d.lights ? DRILLS.filter(x => x.skill === d.skill && x.step === d.step + 1)[0] : null;
+      if (t.pass && next && stepState(next) === 'now') {
+        const acts = el('div', 'acts'), go = el('button', 'mb-btn go mb-press mb-tap', ICN('play') + '<span>NEXT: ' + esc(next.name.toUpperCase()) + '</span>');
+        go.onclick = () => { h.close(); openDrill(next); };
+        acts.appendChild(go); box.appendChild(acts);
+      }
+      paintIcons(box);
+      return;
+    }
+    const fx = drillById(f.fix);
+    box.appendChild(el('p', 'what', esc(f.what)));
+    const g = el('div', 'goal');
+    fixFrom = t;
+    const gl = fx.goals(targets());
+    g.innerHTML = '<b>Fix</b><span class="g">' + esc(f.cue) + '</span>' +
+      '<b>Drill</b><span>' + esc(fx.name + ', ' + mmss(fx.dur) + (gl.length ? ': ' + gl.map(goalText).join(', and ') : '')) + '</span>';
+    box.appendChild(g);
+    const acts = el('div', 'acts');
+    const need = blocked(fx);
+    const go = el('button', 'mb-btn go mb-press mb-tap', ICN('play') + '<span>' + (need ? 'NEEDS ' + esc(need.replace('the ', '').toUpperCase()) : 'DRILL IT') + '</span>');
+    go.onclick = () => { fixFrom = t; h.close(); if (need) openDrill(fx); else startTake(fx); };
+    acts.appendChild(go);
+    const mark = (ok, label) => {
+      const bt = el('button', 'mb-btn mb-press mb-tap', label);
+      bt.onclick = () => {
+        t.fb = Object.assign({}, t.fb, { [f.id]: ok });
+        if (t.key && t.date) Rec.patch('take', t.date, t.key, { fb: t.fb });
+        UI.toast(ok ? 'Marked right.' : 'Marked wrong. It will not count toward FOCUS.');
+        render();
+      };
+      return bt;
+    };
+    if ((t.fb || {})[f.id] === 1) acts.appendChild(el('span', 'muted marked', 'Marked right'));
+    else { acts.appendChild(mark(1, 'Right')); acts.appendChild(mark(0, 'Wrong')); }
+    box.appendChild(acts);
+    if (fs.length > 1) box.appendChild(el('p', 'muted', 'Also: ' + esc(fs.slice(1, 3).map(x => x.what).join(' '))));
+    paintIcons(box);
+  };
+  render();
+  return box;
+}
 
 /* the daily warm-up: three steps, about three minutes, each measured */
 const WARM = [
@@ -996,7 +1205,17 @@ function drawToday(m) {
   wc.appendChild(wrow);
   m.appendChild(wc);
 
-  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id).length + ' done');
+  const fo = focus();
+  if (fo) {
+    const fc = card('FOCUS', fo.n + ' of the last ' + fo.of);
+    fc.appendChild(el('p', 'what', esc(FAULT[fo.f.id] || fo.f.what) + ', the top fault in ' + fo.n + ' of your last ' + fo.of + ' takes.'));
+    fc.appendChild(el('p', 'muted', 'Fix: ' + esc(fo.f.cue)));
+    const fl = el('div', 'list'), fx = drillById(fo.f.fix);
+    if (fx) fl.appendChild(drillRow(fx, fo.t));
+    fc.appendChild(fl);
+    m.appendChild(fc);
+  }
+  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id && !isFix(t.drill)).length + ' done');
   const list = el('div', 'list');
   todaysDrills().forEach(d => list.appendChild(drillRow(d)));
   if (!list.children.length) list.appendChild(el('p', 'muted', 'Every step is met. Pick any drill on PATH to run it again.'));
@@ -1024,8 +1243,9 @@ function warmLine(w) {
   if (w.m.crispRaw != null) bits.push('crispness set');
   return bits.join(' · ') || 'done';
 }
-function drillRow(d) {
+function drillRow(d, src) {
   const skill = skillOf(d);
+  if (d.fix && src) fixFrom = src;
   const last = lastTake(d.id), today = doneToday(d.id);
   const r = el('button', 'row mb-plate mb-press' + (today ? (last && last.pass ? ' done' : ' miss') : ' now'));
   r.style.setProperty('--c', 'var(--data-' + skill.slot + ')');
@@ -1035,7 +1255,7 @@ function drillRow(d) {
     '<span class="sub">' + esc(goals.length ? 'Goal: ' + goals.map(goalText).join(', ') : 'Goal: a count to start from') + '</span></span>' +
     '<span class="num">' + (last ? '<b>' + esc(mainNumber(d, last)) + '</b>' +
       (today ? (last.pass ? 'met' : unmeasured(last) ? 'no reading' : 'not met') : 'last') : '<b>' + mmss(d.lights ? targets().ttMax : d.dur) + '</b>new') + '</span>';
-  r.onclick = () => openDrill(d);
+  r.onclick = () => { if (d.fix && src) fixFrom = src; openDrill(d); };
   Mobile.hold(r, e => drillMenu(d, e), { dots: true, dotsLabel: 'More for ' + d.name });
   return r;
 }
@@ -1288,6 +1508,9 @@ async function startTake(d, warmStep, prompt) {
     else { UI.toast('No microphone.', { bad: true }); return; }
   }
   T.live = true; T.d = d; T.warm = warmStep || null; T.stream = stream;
+  T.origin = d && d.fix ? fixFrom : null;
+  T.goals = d ? d.goals(targets()) : [];
+  T.liveLast = 0;
   T.cam = !!(wantCam && stream.getVideoTracks().length);
   T.ac = new (window.AudioContext || window.webkitAudioContext)();
   try { await T.ac.resume(); } catch (e) {}
@@ -1319,9 +1542,13 @@ function countIn() {
   return new Promise(res => {
     const mid = $('#tkMid'); mid.innerHTML = '';
     const n = el('div', 'count', '3'); mid.appendChild(n);
-    mid.appendChild(el('div', 'say', T.cam ? 'LOOK AT THE LENS' : (T.warm ? T.warm.how.toUpperCase() : 'READY')));
+    const prep = T.d && T.d.prep && !T.warm;
+    mid.appendChild(el('div', 'say', T.cam ? 'LOOK AT THE LENS' : T.warm ? T.warm.how.toUpperCase() : prep ? T.d.prep : 'READY'));
+    if (prep) { mid.appendChild(promptEl(T.prompt)); mid.appendChild(el('p', 'muted', esc(T.d.how))); }
+    else if (T.d && T.d.fix && !T.warm) mid.appendChild(el('p', 'muted', esc(T.d.how)));
     $('#tkMeters').innerHTML = ''; $('#tkFoot').innerHTML = '';
-    let k = 3;
+    let k = prep ? 10 : 3;
+    n.textContent = String(k);
     /* the eyes are read every quarter second through the count: that is the
        lens zone the whole take is measured against */
     if (T.cam) T.eyeTick = setInterval(() => readEye(true), 250);
@@ -1363,7 +1590,7 @@ function runTake() {
   const mk = (id, k) => { const m = el('div', 'meter mb-plate off'); m.id = id; m.innerHTML = '<div class="k">' + k + '</div><div class="v">·</div>'; meters.appendChild(m); return m; };
   const mPace = mk('mPace', T.warm ? (T.warm.kind === 'hiss' ? 'sound' : T.warm.kind === 'siren' ? 'spread' : 'crisp') : 'pace');
   const mLvl = mk('mLvl', 'time'); mLvl.innerHTML += '<div class="level"><i></i></div>';
-  const mEye = mk('mEye', d && d.lights ? 'light' : T.cam ? 'lens' : T.listener ? 'transcript' : 'time');
+  const mEye = mk('mEye', d && d.lights ? 'light' : T.cam ? 'lens' : d && d.live ? LIVE[d.live] : T.listener ? 'transcript' : 'time');
   $('#tkFoot').innerHTML = '';
   const stop = el('button', 'mb-btn go mb-press mb-tap', ICN('stop') + '<span>STOP</span>');
   stop.onclick = () => stopTake(false);
@@ -1374,7 +1601,7 @@ function runTake() {
   Sfx.play('start');
   if (T.beat) startBeat();
   const dur = T.warm ? T.warm.dur : d.dur;
-  const band_ = !T.warm && d.goals(targets()).filter(g => g.m === 'wpm')[0];
+  const band_ = !T.warm && T.goals.filter(g => g.m === 'wpm')[0];
   T.timer = setInterval(() => {
     if (!T.live) return;
     const s = (performance.now() - T.t0) / 1000;
@@ -1398,6 +1625,14 @@ function runTake() {
         const recent = T.eye.looks.slice(-10), on = recent.filter(x => x.on).length, seen = recent.filter(x => x.seen).length;
         setMeter(mEye, seen ? Math.round(on / seen * 100) + '%' : (engineState === 'failed' ? 'off' : '…'), seen ? (on / seen >= 0.8 ? 'in' : 'out') : 'off');
       } else if (d && d.lights) {
+      } else if (d && d.live) {
+        /* a fix drill counts its one fault live, and the meter flashes when it goes up */
+        let v = null;
+        if (d.live === 'crutch') v = T.listener && T.listener.out.state !== 'failed' ? scan(T.listener.out.chunks).crutch : null;
+        else { const all = T.ear.summary({ from: T.from }); v = all ? all[d.live] : 0; }
+        const up = v != null && v > T.liveLast && d.live !== 'pauses';
+        if (v != null) T.liveLast = v;
+        setMeter(mEye, v == null ? '·' : String(v), v == null ? 'off' : up ? 'out' : '');
       } else if (T.listener) setMeter(mEye, T.listener.out.state === 'failed' ? 'off' : T.listener.out.words + ' w', T.listener.out.state === 'failed' ? 'off' : '');
       else setMeter(mEye, mmss(dur), '');
     }
@@ -1477,16 +1712,26 @@ function finishTake(m, secs) {
     eye: eye == null ? null : r1(eye), eyeAway: eyeAway == null ? null : r1(eyeAway),
     spoken: r1(m.spoken), loud: m.loud == null ? null : r1(m.loud), time: Math.round(secs),
   };
-  const goals = d.goals(targets()).map(g => {
+  const goals = T.goals.map(g => {
     const got = out[g.m];
     const ok = got == null ? false : OPS[g.op](got, g.v);
     return { m: g.m, op: g.op, v: g.v, got: got == null ? null : r1(got), ok: ok };
   });
   const pass = goals.length ? goals.every(g => g.ok) : true;
-  const take = { drill: d.id, skill: d.skill, style: d.style, dur: Math.round(secs), m: out, goals: goals, pass: pass ? 1 : 0,
+  /* where things happened, for the coach: each um and each pause in seconds
+     from the start, and the pace in each third of the take */
+  const rel = x => r1(Math.max(0, x - T.from));
+  const ev = { end: r1(m.total), held: m.heldAt.map(h => [rel(h.at), r1(h.dur)]), pz: m.pauseAt.map(p => [rel(p.at), r1(p.dur)]) };
+  if (m.peaks.length >= 12 && m.spoken >= 20) {
+    const a = m.peaks[0], z = m.peaks[m.peaks.length - 1], seg = (z - a) / 3;
+    const k = m.wpmEst ? out.wpm / m.wpmEst : 1;
+    if (seg > 2) ev.pace = [0, 1, 2].map(i => { const lo = a + seg * i, hi = lo + seg; const n = m.peaks.filter(p => p >= lo && (i === 2 ? p <= hi : p < hi)).length; return Math.round(n / 1.4 / (seg / 60) * k); });
+  }
+  const take = { drill: d.id, skill: d.skill, style: d.style, dur: Math.round(secs), m: out, goals: goals, pass: pass ? 1 : 0, ev: ev,
     asr: asrOn ? 1 : 0, cam: eye != null ? 1 : 0, tx: asrOn ? T.listener.text().slice(0, 4000) : '', hits: asrOn ? tx.hits : null,
     prompt: T.prompt && (T.prompt.text || (T.prompt.items || []).join(' | ')), p: T.prompt, at: Date.now() };
-  take.key = saveTake(take);
+  if (T.origin && T.origin.key) take.from = T.origin.key;
+  take.key = saveTake(take); take.date = Day.today();
   Mobile.feedback(pass ? 'complete' : 'done');
   showTake(take, tx && tx.html);
 }
@@ -1542,6 +1787,14 @@ function numsOf(d, t) {
   if (gs.length) return gs.map(g => METRICS[g.m].name.toLowerCase() + ' ' + (g.got == null ? 'not measured' : METRICS[g.m].fmt(g.got) + METRICS[g.m].unit)).join(', ');
   return [m.wpm != null ? Math.round(m.wpm) + ' wpm' : '', m.fpm != null ? 'fillers ' + r1(m.fpm) + '/min' : ''].filter(Boolean).join(', ');
 }
+/* a fix drill's sheet: again, or back to the take it came from on the same prompt */
+function fixActions(t, d) {
+  const origin = t.from ? takes().filter(x => x.key === t.from)[0] : null;
+  const od = origin && drillById(origin.drill);
+  const acts = [{ label: 'CLOSE' }, { label: 'AGAIN', kind: od ? '' : 'go', fn: () => { fixFrom = origin || fixFrom; startTake(d); } }];
+  if (od) acts.push({ label: 'BACK TO THE TAKE', kind: 'go', fn: () => { startTake(od, null, promptOf(origin, od)); } });
+  return acts;
+}
 /* the numbers of one take, every goal met or not, the transcript marked */
 function showTake(t, html) {
   const d = t.drill === 'warm' ? null : drillById(t.drill);
@@ -1550,7 +1803,8 @@ function showTake(t, html) {
     title: (d ? d.name : 'Warm-up').toUpperCase() + ' · ' +
       (t.pass ? 'MET' : !(t.goals && t.goals.length) ? 'DONE'
         : t.goals.some(g => g.got == null) ? 'NOT MEASURED' : 'NOT MET'), width: 560,
-    body: b => {
+    body: (b, h) => {
+      if (d) b.appendChild(coachBox(t, d, h));
       if (d) {
         const gs = el('div', 'stats');
         (t.goals || []).forEach(g => {
@@ -1590,7 +1844,7 @@ function showTake(t, html) {
         b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
       } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
     },
-    actions: d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { startTake(d); } },
+    actions: d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { startTake(d); } },
       { label: 'SAME PROMPT', kind: 'go', fn: () => { startTake(d, null, promptOf(t, d)); } }] : [{ label: 'CLOSE' }],
   });
 }
