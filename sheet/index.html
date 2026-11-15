@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
-<meta name="mb-version" content="1.0.7, 2026-11-16">
+<meta name="mb-version" content="1.0.8, 2026-11-16">
 <title>CHARACTER SHEET</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -261,8 +261,11 @@ function bwOn(L, date) {
 function workSets() {
   const today = Day.today();
   const out = [], sw = splitWeights();
-  const exs = Rec.map('exercise'), aMemo = {}, bw = bwList();
+  const exs = Rec.map('exercise'), aMemo = {}, bw = bwList(), neg = {};
   const assisted = id => id in aMemo ? aMemo[id] : (aMemo[id] = isAssisted(exs[id]));
+  /* a lift with any set below zero is read against bodyweight, as
+     TRAIN.goesBelow does (TRAIN 1.0.85): -20 on a pull-up is 20 of help */
+  Rec.all('set').forEach(r => { const p = r.payload; if (p && (+p.kg || 0) < 0) neg[p.ex] = 1; });
   Rec.all('set').forEach(r => {
     const p = r.payload || {};
     if (!r.date || r.date > today || !p.ex) return;
@@ -271,10 +274,10 @@ function workSets() {
     if (warm) return;
     const reps = +p.r || 0, split = splitNote(p.note, reps);
     /* `er` is what the set counts for in strength, `r` every rep */
-    const kg = +p.kg || 0, a = assisted(p.ex);
+    const kg = +p.kg || 0, a = assisted(p.ex), below = a || !!neg[p.ex];
     let load = kg;
-    if (a) { const b = bwOn(bw, r.date); load = b ? Math.max(0, b - kg) : null; }
-    out.push({ date: r.date, ex: p.ex, kg: kg, w: a ? -kg : kg, a: a, load: load,
+    if (below) { const b = bwOn(bw, r.date); load = b ? Math.max(0, a ? b - kg : b + kg) : null; }
+    out.push({ date: r.date, ex: p.ex, kg: kg, w: a ? -kg : kg, a: a, below: below, load: load,
       r: reps, split: split, er: split ? effReps(split, reps, sw) : reps });
   });
   return out.sort((x, y) => x.date < y.date ? -1 : x.date > y.date ? 1 : 0);
@@ -318,7 +321,7 @@ function trainFeats(out) {
      exercise has two earlier days, or every first week of a new movement is
      all records. One window per day, one line per exercise. */
   const byEx = {};
-  sets.forEach(s => { if (s.kg > 0 && s.er > 0) (byEx[s.ex] = byEx[s.ex] || []).push(s); });
+  sets.forEach(s => { if ((s.kg !== 0 || s.below) && s.er > 0) (byEx[s.ex] = byEx[s.ex] || []).push(s); });
   const recDays = {};
   Object.keys(byEx).forEach(ex => {
     const list = byEx[ex].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);

@@ -446,3 +446,12 @@ client, and Tom's own `set`, `exercise` and `tick` counts did not move.
   opens on 1.0.83 (`prRule` 4); until then an old flag can sit on the
   wrong set. Watched on a made-up client: no weigh-in, the day's volume was
   the bench only; with 180 lb it was (180-70)x13 plus the bench.
+
+## Weight below zero (1.0.31, 2026-11-16)
+
+- TRAIN 1.0.85's rule: a client's lift with any set below zero is read
+  against bodyweight (`exOf` marks it `below`, `goesBelow`), so its load is
+  their weight plus the number, null with no weigh-in, in volume, strength
+  and the range. A set below zero shows as `-9×8`. Typing a negative weight
+  in COACH's set boxes is allowed (`toKg`). Records are still TRAIN's own
+  `pr` flag. [TESTED only through TRAIN's click test and the review.]
