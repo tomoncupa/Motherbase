@@ -280,6 +280,30 @@ carry meaning ("Main Quests", "Daily Routines").
   (scratchpad, not in the repo). **Not yet run against the real Todoist**:
   the field names are from Todoist's v1 docs as Claude knows them.
 
+**Moved to `shared/todoist.js`, QUESTS 1.0.29 and STATUS 1.0.97
+(2026-11-16).** Six DECISION tasks deleted in Todoist on 11-12 still showed
+in STATUS on 11-16. Cause, read in the backups: the sync ran only inside a
+QUESTS page, and no signed-in device had opened QUESTS since 11-10 (every
+`td-` row in the synced store was last written 11-08). The Chrome where Tom
+does open QUESTS had dropped them, but that Chrome was never signed in to
+live sync (`Cloud.state().on` false; the "Not syncing" read there was the
+sync dot's hidden placeholder text), so nothing it did reached STATUS.
+- `TodoistSync` is the engine; QUESTS keeps `const TD = TodoistSync` and
+  calls `TD.start({app, draw})`. STATUS calls `TodoistSync.start({app:
+  'status'})`, so the PC widget and the iPhone STATUS app sync Todoist with
+  QUESTS closed. `mb-todoist` in navigator.locks still allows one runner per
+  browser.
+- The 20 checks a run counted rows already settled (`td.done`), and a ticked
+  row is never in the open list again, so ticks could use up every check.
+  Settled rows are left out before counting now.
+- The real Todoist answered as the brief guessed: the deletion check removed
+  all six in that Chrome on 11-16 (tombstones 1 to 3 s apart, one `GET
+  tasks/<id>` each), so the field names and the 404 are right.
+- Watched: a stand-in Todoist in Chrome on localhost, 25 settled rows plus a
+  deleted and a finished task; both asked about, one removed, one ticked.
+  STATUS ran a sync on open with no QUESTS anywhere. `_review.html` 212 of
+  212 in WebKit at 390.
+
 **Not wanted for now** (Tom, 2026-10-29): Todoist's phone widget and
 reminders. **Email into the Inbox is replaced by the morning brief**: "we can
 do a morning brief - something that can also suggest todos for the day". The
