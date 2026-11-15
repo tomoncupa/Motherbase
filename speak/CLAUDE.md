@@ -133,6 +133,7 @@ transcript, when on, is kept on the take, capped at 4,000 characters.
 |---|---|---|---|
 | `take` | day | timestamp id | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, hits, prompt, p, at}`; `p` is the prompt as given, for SAME PROMPT. `m` is every number above; `goals` is each goal as it stood, with `got` and `ok`. The warm-up is one `take` a day with `drill: 'warm'`, `steps` and `m.hiss`, `m.pitch`, `m.crispRaw`, merged as each step finishes |
 | `tclip` | the take's day | the take's key | `{mime, dur, data, pad}`: the take's sound as a data address. Every row is padded past 64KB so live sync never sends it and it lives in IndexedDB only, on the device that made it; not in `IO.register`, so the sheet never gets it either. "Back up everything" does carry it. Deleted with its take, or alone from the take's menu, each with UNDO |
+| `answer` | day | the take's key | the fitness bank: `{q, src, term, bracket, text, words, dur, at}`, one per FITNESS TOPIC answer. Syncs, in the sheet and backups |
 | `topic` | — | id | `{text, kind}`. His own prompts: `topic`, `story`, or `bullets` split with `\|` |
 | `tick` | day | `speak` | written once a day when a take is saved, so BLOCK and the home screen see it |
 
@@ -332,6 +333,59 @@ the sheet reopened from the store played, Delete the recording removed it,
 and with Record takes off nothing was kept. No page errors, every button 44px.
 Not heard on the iPhone: whether Safari records AAC and plays it back from
 the store is only proved on the phone.
+
+## FITNESS TOPIC and the fitness bank, added 2026-11-16 (SPEAK 1.0.13)
+
+Tom: *"a separate button from table topic to be a fitness/school topic. So
+this serves a double purpose of me working on my speech, as well as I actually
+get to fill up my personal data bank for use with school and elsewhere."* His
+answers: the bank is *"a sort of fitness databank where other work can pull
+from whether its for skool or content or future projects"*; transcript *"Yes
+for everything, I want a transcript and a voice recording of all my answers"*;
+prompts from viewer questions, Skool terms, and *"a separate automated system"*
+that finds current topics (built by another session, see below).
+
+- **FT**, drill `fitness`, skill `fitness` (`FIT_SKILL`, chart slot 1), on
+  TODAY under QUICK PRACTICE below TABLE TOPIC. Same window and lights as a
+  table topic (`ttMin` to `ttMax`), same goals, style `long`. `forceAsr`: the
+  transcript is on for it even if the switch is off. Not counted in TODAY'S
+  DRILLS. The coach and recording work on it like any take.
+- **Prompts, in order** (`fitPrompt`): an open Todoist task in the store whose
+  text starts `Shoot:` (the daily question engine, Round 1 in Todoist Content,
+  see `tom-context/content-questions.md`), due today or earlier, oldest first,
+  labelled "Today's Shoot question"; then an open `Topic:` task (the weekly
+  topic finder, a desktop scheduled task on Mondays at 1pm, built 2026-11-16 in
+  session "Automated finder for current fitness topics"); then a third of the
+  time "Explain <term> to a beginner." from `SKOOL_TERMS` (39, from
+  `tom-context/skool-brackets.md`, labelled with the bracket), otherwise a
+  viewer question from `FIT_QS` (108, from `content-questions.md`, sources left
+  out). Already-answered questions and ones passed over with NEW PROMPT this
+  visit (`fitSkip`) are skipped. Todoist rows had not reached the store since
+  2026-11-08 when this was built, so the first two only work once the Todoist
+  sync (`shared/todoist.js`, not SPEAK's) runs again.
+- **The bank**: one `answer` row per answer, keyed by its take: `{q, src
+  (shoot, topic, viewer, term), term, bracket, text (the full transcript,
+  20,000 characters at most), words, dur, at}`. Under 64KB, so it syncs
+  everywhere, goes to the sheet's SPEAK tab (in `APP.types`) and into every
+  backup: that is how other work reads it. The recording stays on the device
+  (`tclip`).
+- **BANK tab** (fourth on the nav): ANSWER ONE, EXPORT (the whole bank as
+  `fitness-bank-<date>.md`, grouped by question), a search box over questions
+  and answers, then a card per question with each answer: date, length, words,
+  where the question came from, the words, COPY, PLAY AND COACH (or OPEN TAKE,
+  opening the take's sheet with its player), ANSWER AGAIN (the same question),
+  and a hold or dots menu with Delete from the bank (UNDO).
+- **The transcript is now on by default** (`opt('asr', 1)`), replacing the
+  2026-09-15 "off by default". Tom's own setting still wins where he sets one.
+
+Watched 2026-11-16 in headless Chromium at 390 with a fake microphone and
+seeded Todoist notes: today's Shoot question came first, a ticked one was
+skipped, once answered the `Topic:` task came next, the take saved its
+`answer` row, BANK listed it with two seeded answers, search filtered, COPY
+put the words on the clipboard, EXPORT saved the Markdown file. No page
+errors, no sideways scroll; review 197/197. The headless recogniser cannot
+reach Google, so no real words were transcribed; real words only on his
+devices.
 
 ## Needs from the foundation
 

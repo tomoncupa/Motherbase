@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.12, 2026-11-16">
+<meta name="mb-version" content="1.0.13, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -126,6 +126,9 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .moments .mb-btn{display:inline-flex;align-items:center;gap:var(--s-1);font-family:var(--font-mono)}
 .also{margin-top:var(--s-2)}
 .also p{margin:0}
+.bank-q{width:100%;margin-top:var(--s-3);min-height:var(--tap);font-size:var(--f-3)}
+.ans{padding:var(--s-3);border-radius:var(--radius-md);margin-top:var(--s-2)}
+.ans .tx{margin-top:var(--s-2);white-space:pre-wrap}
 /* the goal and the why, on a drill sheet and on a today card */
 .goal{display:grid;grid-template-columns:var(--s-9) 1fr;gap:var(--s-2) var(--s-3);align-items:baseline;
   font-size:var(--f-2);line-height:var(--lh-body);margin:var(--s-3) 0}
@@ -207,6 +210,7 @@ body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:cente
   <button type="button" data-v="today" class="mb-press on">TODAY</button>
   <button type="button" data-v="path" class="mb-press">PATH</button>
   <button type="button" data-v="progress" class="mb-press">PROGRESS</button>
+  <button type="button" data-v="bank" class="mb-press">BANK</button>
 </nav>
 <main class="mb-scroll"><div class="wrap" id="main"></div></main>
 
@@ -244,7 +248,7 @@ const APP = {
   name: 'Speak',
   icon: '◍',
   blurb: 'talk to the camera, measured: pace, fillers, flow, clarity, eyes',
-  types: ['take', 'topic', 'script'],
+  types: ['take', 'topic', 'script', 'answer'],
 };
 
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
@@ -473,7 +477,7 @@ const ASR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
    local on my machine". The recogniser is the only thing in SPEAK that sends
    his voice anywhere, so it is off until he turns it on for a take he wants
    the crutch phrases counted in. Everything else is measured on the device. */
-const asrOn = () => !!(ASR && optOn('asr', 0));
+const asrOn = () => !!(ASR && optOn('asr', 1));
 const camOn = () => optOn('cam', 1);
 function Listener(lang) {
   const out = { chunks: [], at: [], words: 0, state: ASR ? 'idle' : 'none', error: '' };
@@ -964,7 +968,20 @@ const TT = { id: 'topics', skill: 'topics', step: 0, name: 'Table topic', style:
   goals: t => [{ m: 'time', op: 'in', v: [t.ttMin, t.ttMax] }, { m: 'fpm', op: 'le', v: t.fpm }],
   why: 'Toastmasters practises speaking off the cuff this way every meeting: one unseen question, one to two minutes, timed by lights.',
   how: 'The question appears after the count. Answer it, and press STOP between green and red.' };
-const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || TOPIC_SKILL;
+/* FITNESS TOPIC, beside TABLE TOPIC. Tom, 2026-11-16: "a fitness/school topic
+   ... a double purpose of me working on my speech, as well as I actually get
+   to fill up my personal data bank for use with school and elsewhere". The
+   same lights as a table topic; the question is a real fitness question; and
+   every answer, words and sound, goes into the fitness bank (`answer` rows),
+   which Skool, content and anything later can read. The transcript is always
+   on for it: the words are the point. */
+const FIT_SKILL = { id: 'fitness', name: 'FITNESS TOPIC', slot: 1 };
+const FT = { id: 'fitness', skill: 'fitness', step: 0, name: 'Fitness topic', style: 'long', kind: 'fitq', asr: true, forceAsr: true, bank: true,
+  win: t => [t.ttMin, t.ttMax],
+  goals: t => [{ m: 'time', op: 'in', v: [t.ttMin, t.ttMax] }, { m: 'fpm', op: 'le', v: t.fpm }],
+  why: 'A real question answered out loud is the freestyle draft of a Reel or a lesson, and the answer is kept in your fitness bank.',
+  how: 'The question appears after the count. Answer it as you would to one client, and press STOP between green and red.' };
+const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || (d.skill === 'fitness' ? FIT_SKILL : TOPIC_SKILL);
 /* ══════════════ the coach ══════════════
    Tom, 2026-11-16: "I need Speak to actually give me feedback and drills for
    what's happening. I don't need it to just rate what I'm doing." After a
@@ -1029,7 +1046,7 @@ const FIXES = [
 ];
 FIXES.forEach(f => { f.fix = true; f.step = 0; });
 const isFix = id => /^fix-/.test(id || '');
-const drillById = id => id === TT.id ? TT : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
+const drillById = id => id === TT.id ? TT : id === FT.id ? FT : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
 const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
@@ -1310,6 +1327,37 @@ const QUESTIONS = [
   'What would your perfect week of training look like?', 'What is a skill everyone should learn by thirty?',
   'What would you build if money did not matter?', 'What is the difference between a goal and a system?',
 ];
+/* viewer questions, from tom-context/content-questions.md (real questions
+   pulled from YouTube on 2026-11-09, sources left out) */
+const FIT_QS = [ "Can I eat rice and still lose weight?", "My TDEE is 1620, minus 500 is 1120 a day, is that right?", "How do I weigh food with a food scale?", "What even is a calorie?", "Is 1 cup of rice 200 grams?", "Bread or rice?", "Why am I not losing weight?", "How do I lose weight when everything tastes so good?", "Can I drink alcohol and still lose fat?", "How often counts as drinking being a recurring thing?", "Which drinks are OK on a diet (Black Label, Alfonso, Emperador Light)?", "Can I eat fast food and still lose weight?", "How do I lose weight with a desk job?", "How do I lose belly fat as a man?", "Is intermittent fasting effective?", "Walking, gym or jogging: which loses more?", "Can I lose weight without exercise?", "Is cold water fattening? Does napping make you fat?", "How long does it take to lose 10 kg?", "How much muscle can I gain in a month naturally?", "I go to the gym all the time, why am I not getting bigger?", "I take creatine and whey and I'm only getting thinner", "I eat five cups of rice and still don't gain", "Skinny fat: bulk or cut first?", "Should skinny-fat people still do cardio?", "Can I build muscle and lose fat at the same time?", "How many times a week should I work out?", "Is a 30-minute workout every day OK?", "Bro split, PPL or upper/lower?", "How heavy should I lift?", "Will I still grow if I miss my protein target?", "If I'm sore, did the workout work?", "Do I need to train to failure?", "Can I build muscle at home without a gym or supplements?", "Is the deadlift bad for my back?", "Lower back pain or soreness after deadlifts?", "Does deadlifting burn fat?", "How strong should I be?", "How strong should I be for my age?", "How do I break a bench plateau?", "How do I increase my deadlift?", "My knees hurt when I squat: squat or leg press?", "Squat or deadlift first?", "How many reps and kilos at 40+?", "What do I do on my first day at the gym?", "Scared or embarrassed to go to the gym?", "How do I stay consistent?", "How do I get back into the gym after a long break?", "How fast do I lose muscle if I stop?", "Can I train on little sleep (puyat)?", "Can I go to the gym while on medication?", "I finished in 45 minutes, is that enough?", "Can I shower right after working out?", "Can I smoke after a workout?", "Gym myths: don't close your eyes while exercising?", "Why can't I stick to a diet?", "Cheap protein sources in the Philippines?", "Canned tuna and sardines are processed, still OK?", "How many eggs a day is safe?", "Chicken breast: 21 g or 31 g protein per 100 g? (raw vs cooked)", "Do I need whey protein?", "Whey or mass gainer for a skinny guy?", "Which whey is legit in the Philippines?", "Is creatine safe for my kidneys?", "Do I need a creatine loading phase?", "Creatine before or after a workout?", "Should I cycle creatine?", "Creatine while losing weight, water weight?", "Can a high-protein diet damage my kidneys?", "How much protein do I need per day?", "Is oatmeal OK on a diet? Hotdogs?", "Can I still build muscle after 40?", "I'm 50, lifted before, stopped for work, can I still get bigger?", "Recovery got worse after 50: mental or hormones?", "Does lifting raise testosterone?", "Does masturbation hurt gains?", "Joint pain from lifting (elbows, shoulders)?", "Too late to start at 30, 35, 40?", "What split for men over 40?", "Can I fix my posture?", "How do I look good as a man / as a fat guy / as an Asian?", "How should I dress if I'm skinny fat, short or skinny?", "What body fat percentage looks best?", "How do I get a V taper?", "Love handles?", "How do I lose face fat?", "Skincare for Filipino men (oily skin)?", "How important is sleep for muscle?", "Do I really need 8 hours?", "Does exercise help depression?", "Can losing weight cure depression? (viewers push back)", "How do I become disciplined?", "How do I change my life at 30 or 40?", "When does fitness become an obsession?", "What if my weight problem isn't about food (emotional eating)?", "How do I stay motivated?", "How did you lose so much weight?", "Are you natural?", "How long until you saw changes?", "How long until I see abs?", "What do you eat in a day?", "Do you ever eat junk food?", "What are your credentials?", "How did you become a coach?", "How tall are you? How old are you?", "What supplements do you take?", "How did you lose loose chest fat after weight loss?", "Do you take clients?" ];
+/* Skool bracket terms, from tom-context/skool-brackets.md; CODEX has the same list */
+const SKOOL_TERMS = [["Food Weighing", "SKILLS"],["Nutrition Label Reading", "SKILLS"],["Calorie Counting", "SKILLS"],["Scale Tracking", "SKILLS"],["Training", "SKILLS"],["Cardio", "SKILLS"],["Lifting", "SKILLS"],["Weight Training", "SKILLS"],["Progressive Overloading", "SKILLS"],["Recovery", "SKILLS"],["Calorie Banking", "SKILLS"],["Fasting", "SKILLS"],["Environment Design", "SKILLS"],["Journaling", "SKILLS"],["Volume Eating", "SKILLS"],["Form Review", "SKILLS"],["Weight", "STATS"],["Height", "STATS"],["Body Composition", "STATS"],["Maintenance Calories", "STATS"],["Personal Record", "STATS"],["Sleep", "STATS"],["Stress", "STATS"],["Willpower", "STATS"],["Dopamine", "STATS"],["Satiety", "STATS"],["Palatability", "STATS"],["DOMS", "CONDITIONS"],["Sleep Deprivation", "CONDITIONS"],["Stressed", "CONDITIONS"],["Hypothyroidism", "CONDITIONS"],["PCOS", "CONDITIONS"],["Lipedema", "CONDITIONS"],["Calorie Deficit", "CONDITIONS"],["Weight Loss", "CONDITIONS"],["Dopamine Overload", "CONDITIONS"],["Depression", "CONDITIONS"],["Alzheimer's", "CONDITIONS"],["Neurodegeneration", "CONDITIONS"]];
+/* the fitness bank: one `answer` row per answer, keyed by its take */
+const answers = () => Rec.all('answer').map(r => Object.assign({ key: r.key, date: r.date }, r.payload)).sort((a, b) => (b.at || 0) - (a.at || 0));
+const fitSkip = {};                         /* questions passed over with NEW PROMPT, this visit only */
+/* open Todoist tasks that start "Shoot:" (the daily question) or "Topic:" (the
+   weekly topic finder), as they arrive through the Todoist sync */
+function todoQs(prefix) {
+  const re = new RegExp('^' + prefix + ':\\s*', 'i');
+  return Rec.all('note').filter(r => !r.deleted && r.payload && re.test(String(r.payload.text || '')) && !r.payload.done && !r.payload.cancelled &&
+    !(r.payload.td && r.payload.td.done)).map(r => ({ text: String(r.payload.text).replace(re, '').trim(), due: r.payload.due || r.date || '' }));
+}
+function fitPrompt() {
+  const said = {}; answers().forEach(a => { said[String(a.q || '').toLowerCase()] = 1; });
+  const fresh = q => !said[q.toLowerCase()] && !fitSkip[q.toLowerCase()];
+  const today = Day.today();
+  const shoot = todoQs('Shoot').filter(x => fresh(x.text) && (!x.due || x.due <= today)).sort((a, b) => String(a.due).localeCompare(String(b.due)))[0];
+  if (shoot) return { kind: 'fitq', text: shoot.text, src: 'shoot', label: shoot.due === today ? 'Today\'s Shoot question' : 'Shoot question' + (shoot.due ? ', due ' + Day.short(shoot.due) : '') };
+  const topic = todoQs('Topic').filter(x => fresh(x.text)).sort((a, b) => String(b.due).localeCompare(String(a.due)))[0];
+  if (topic) return { kind: 'fitq', text: topic.text, src: 'topic', label: 'Current topic' };
+  const qs = FIT_QS.filter(fresh), terms = SKOOL_TERMS.filter(t => fresh('Explain ' + t[0] + ' to a beginner.'));
+  if (terms.length && (!qs.length || Math.random() < 1 / 3)) {
+    const t = pick(terms, 1)[0];
+    return { kind: 'fitq', text: 'Explain ' + t[0] + ' to a beginner.', src: 'term', term: t[0], bracket: t[1], label: 'Skool term \u00b7 [' + t[1] + ']' };
+  }
+  const q = pick(qs.length ? qs : FIT_QS, 1)[0];
+  return { kind: 'fitq', text: q, src: 'viewer', label: 'Viewer question' };
+}
 const pick = (list, n) => { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a.slice(0, n); };
 function myTopics() { return Object.entries(Rec.map('topic')).map(([k, v]) => Object.assign({ key: k }, v)); }
 function promptFor(kind, d) {
@@ -1322,6 +1370,7 @@ function promptFor(kind, d) {
   if (kind === 'story') { const own = mine.filter(t => t.kind === 'story'); return { kind: 'story', text: pick(own.length && Math.random() < 0.5 ? own.map(t => t.text) : STORIES, 1)[0] }; }
   if (kind === 'hook') return { kind: 'hook', text: pick(HOOKS, 1)[0] };
   if (kind === 'question') return { kind: 'question', text: pick(QUESTIONS, 1)[0] };
+  if (kind === 'fitq') return fitPrompt();
   if (kind === 'bullets') { const own = mine.filter(t => t.kind === 'bullets'); const set = own.length && Math.random() < 0.5 ? own.map(t => t.text.split('|').map(s => s.trim())) : BULLETS; return { kind: 'bullets', items: pick(set, 1)[0] }; }
   if (kind === 'read') { const p = pick(PASSAGES, 1)[0]; return { kind: 'read', name: p.name, text: p.text }; }
   if (kind === 'twister') return { kind: 'twister', items: pick(TWISTERS, 3) };
@@ -1339,6 +1388,7 @@ function promptEl(p) {
   else if (p.kind === 'read') box.innerHTML = '<div class="muted">' + esc(p.name) + '</div>' + esc(p.text);
   else if (p.kind === 'hook') box.innerHTML = '<div class="muted">Start on this line</div>' + esc(p.text);
   else if (p.kind === 'question') box.innerHTML = '<div class="muted">Answer this</div>' + esc(p.text);
+  else if (p.kind === 'fitq') box.innerHTML = '<div class="muted">' + esc(p.label || 'Answer this') + '</div>' + esc(p.text);
   else if (p.kind === 'frame') box.innerHTML = esc(p.text) + '<div class="frame">' + p.frame.map(f => '<span>' + esc(f) + '</span>').join('') + '</div>';
   else if (p.kind === 'dev') box.innerHTML = '<div class="muted">' + esc(p.device) + '</div>' + esc(p.text);
   else if (p.kind === 'script') {
@@ -1454,6 +1504,91 @@ function todaysDrills() {
   return out;
 }
 
+/* ══════════════ the fitness bank ══════════════
+   Every FITNESS TOPIC answer, grouped by question, newest first: his words,
+   when, how long, and the take behind it (its recording plays there). COPY
+   puts one answer on the clipboard; EXPORT saves the whole bank as a
+   Markdown file for Skool, a script or a project. The rows themselves sync
+   everywhere, go to the sheet's SPEAK tab and into every backup, which is
+   how other work reads them. */
+let bankQ = '';
+const SRC_NAME = { shoot: 'Shoot question', topic: 'Current topic', viewer: 'Viewer question', term: 'Skool term' };
+function bankText(list) {
+  const by = {}; list.forEach(a => { (by[a.q] = by[a.q] || []).push(a); });
+  return '# Fitness bank\n\nExported ' + Day.today() + ' from SPEAK. ' + list.length + ' answers.\n\n' + Object.keys(by).map(q =>
+    '## ' + q + '\n\n' + by[q].map(a => '*' + Day.short(a.date) + ' \u00b7 ' + mmss(a.dur || 0) + ' \u00b7 ' + (SRC_NAME[a.src] || 'Question') + (a.bracket ? ' [' + a.bracket + ']' : '') + '*\n\n' +
+      (a.text || '(no words came back from the transcript)')).join('\n\n') + '\n').join('\n');
+}
+function copyText(text, what) {
+  const done = () => UI.toast(what + ' copied.');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => UI.toast('Copy failed.', { bad: true }));
+  else UI.toast('Copy failed.', { bad: true });
+}
+function drawBank(m) {
+  const all = answers();
+  const top = card('FITNESS BANK', all.length + (all.length === 1 ? ' answer' : ' answers'));
+  const acts = el('div', 'acts');
+  const go = el('button', 'mb-btn go mb-press mb-tap', ICN('play') + '<span>ANSWER ONE</span>');
+  go.onclick = () => openDrill(FT);
+  acts.appendChild(go);
+  if (all.length) {
+    const ex = el('button', 'mb-btn mb-press mb-tap', 'EXPORT');
+    ex.onclick = () => {
+      const blob = new Blob([bankText(all)], { type: 'text/markdown' }), a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'fitness-bank-' + Day.today() + '.md';
+      document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    };
+    acts.appendChild(ex);
+  }
+  top.appendChild(acts);
+  if (all.length) {
+    const box = el('input', 'mb-input bank-q');
+    box.type = 'search'; box.placeholder = 'Search questions and answers'; box.value = bankQ;
+    box.setAttribute('aria-label', 'Search the bank');
+    box.oninput = () => { bankQ = box.value; fill(); };
+    top.appendChild(box);
+  } else top.appendChild(el('p', 'muted', 'No answers yet.'));
+  m.appendChild(top);
+  const list = el('div', 'bank');
+  m.appendChild(list);
+  function fill() {
+    list.innerHTML = '';
+    const q = bankQ.trim().toLowerCase();
+    const hit = all.filter(a => !q || String(a.q).toLowerCase().indexOf(q) >= 0 || String(a.text || '').toLowerCase().indexOf(q) >= 0);
+    if (all.length && !hit.length) { list.appendChild(el('p', 'muted', 'Nothing matches.')); return; }
+    const by = {}, order = [];
+    hit.forEach(a => { if (!by[a.q]) { by[a.q] = []; order.push(a.q); } by[a.q].push(a); });
+    order.forEach(qq => {
+      const c = card();
+      c.appendChild(el('p', 'what', esc(qq)));
+      by[qq].forEach(a => {
+        const row = el('div', 'ans mb-plate');
+        row.appendChild(el('div', 'muted', esc(Day.label(a.date) + ' \u00b7 ' + mmss(a.dur || 0) + ' \u00b7 ' + (a.words || 0) + ' words \u00b7 ' + (SRC_NAME[a.src] || 'Question') + (a.bracket ? ' [' + a.bracket + ']' : ''))));
+        row.appendChild(el('div', 'tx', a.text ? esc(a.text) : '<span class="muted">No words came back from the transcript.</span>'));
+        const ra = el('div', 'acts');
+        if (a.text) { const cp = el('button', 'mb-btn mb-press mb-tap', 'COPY'); cp.onclick = () => copyText(a.text, 'Answer'); ra.appendChild(cp); }
+        const tk = takes().filter(x => x.key === a.key)[0];
+        if (tk) { const op = el('button', 'mb-btn mb-press mb-tap', hasClip(tk) ? 'PLAY AND COACH' : 'OPEN TAKE'); op.onclick = () => showTake(tk); ra.appendChild(op); }
+        const again = el('button', 'mb-btn mb-press mb-tap', 'ANSWER AGAIN');
+        again.onclick = () => startTake(FT, null, { kind: 'fitq', text: a.q, src: a.src, term: a.term, bracket: a.bracket, label: 'Again' });
+        ra.appendChild(again);
+        row.appendChild(ra);
+        Mobile.hold(row, e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
+          { label: 'Copy', fn: () => copyText(a.text || '', 'Answer') },
+          { label: 'Delete from the bank', kind: 'bad', fn: () => {
+            const was = Object.assign({}, a); delete was.key; delete was.date;
+            Rec.del('answer', a.date, a.key); Mobile.haptic('warn');
+            UI.undo('deleted an answer', () => Rec.set('answer', a.date, a.key, was));
+          } },
+        ], { title: 'ANSWER' }), { dots: true, dotsLabel: 'More for this answer' });
+        c.appendChild(row);
+      });
+      list.appendChild(c);
+    });
+    paintIcons(list);
+  }
+  fill();
+}
 /* ══════════════ drawing ══════════════ */
 let view = 'today';
 function draw() {
@@ -1461,6 +1596,7 @@ function draw() {
   drawStreak();
   if (view === 'today') drawToday(m);
   else if (view === 'path') drawPath(m);
+  else if (view === 'bank') drawBank(m);
   else drawProgress(m);
   paintIcons(m); paintIcons($('header'));
   if (W.on) widSub();
@@ -1499,7 +1635,7 @@ function drawToday(m) {
     fc.appendChild(fl);
     m.appendChild(fc);
   }
-  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id && !isFix(t.drill)).length + ' done');
+  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id && t.drill !== FT.id && !isFix(t.drill)).length + ' done');
   const cs = curStage(), sg = STAGES[cs - 1];
   if (sg) {
     const all = DRILLS.filter(d => skillOf(d).stage === cs), left = stageLeft(cs).length;
@@ -1514,6 +1650,7 @@ function drawToday(m) {
   const qc = card('QUICK PRACTICE');
   const ql = el('div', 'list');
   ql.appendChild(drillRow(TT));
+  ql.appendChild(drillRow(FT));
   qc.appendChild(ql);
   m.appendChild(qc);
 
@@ -1869,7 +2006,7 @@ const T = { live: false };
 async function startTake(d, warmStep, prompt) {
   if (T.live) return;
   const wantCam = !!(d && d.cam && camOn());
-  const wantAsr = !!(d && asrOn());
+  const wantAsr = !!(d && (asrOn() || (d.forceAsr && ASR)));
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -2145,6 +2282,11 @@ function finishTake(m, secs) {
   if (T.origin && T.origin.key) take.from = T.origin.key;
   if (T.prompt && T.prompt.kind === 'script') take.script = T.prompt.key;
   take.key = saveTake(take); take.date = Day.today();
+  if (d.bank && T.prompt && T.prompt.text) {
+    const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
+    Rec.set('answer', take.date, take.key, { q: T.prompt.text, src: T.prompt.src || '', term: T.prompt.term || '', bracket: T.prompt.bracket || '',
+      text: words, words: asrOn ? T.listener.out.words : 0, dur: Math.round(secs), at: take.at });
+  }
   if (T.clipP) { take.clipP = T.clipP; T.clipP.then(b => saveClip(take, b)); }
   Mobile.feedback(pass ? 'complete' : 'done');
   showTake(take, tx && tx.html);
@@ -2276,7 +2418,7 @@ function showTake(t, html) {
         b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
       } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
     },
-    actions: d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { startTake(d); } },
+    actions: d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { if (d === FT && t.prompt) fitSkip[String(t.prompt).toLowerCase()] = 1; startTake(d); } },
       { label: 'SAME PROMPT', kind: 'go', fn: () => { startTake(d, null, promptOf(t, d)); } }] : [{ label: 'CLOSE' }],
   });
 }
@@ -2345,7 +2487,7 @@ function drawCrutch(p) {
   acts.appendChild(reset); p.appendChild(acts);
 }
 function drawGear(p) {
-  p.appendChild(el('p', 'muted', 'Everything is measured on this machine. The transcript is the one exception, and it is off unless you turn it on.'));
+  p.appendChild(el('p', 'muted', 'Everything is measured on this machine. The transcript is the one exception: it sends your voice to Google for the words. FITNESS TOPIC always uses it.'));
   p.appendChild(UI.row('Transcript', ASR ? 'Off, your voice stays on this machine. On, it goes to Apple or Google for the words, which is what counts your crutch phrases' : 'This browser cannot make one', ASR ? UI.toggle(asrOn(), on => Rec.setting(APP.id, 'asr', on ? 1 : 0)) : null));
   const lang = el('select', 'mb-sel');
   ['en-US', 'en-GB', 'en-AU', 'en-PH', 'fil-PH'].forEach(l => { const o = el('option', null, l); o.value = l; if (l === opt('lang', 'en-US')) o.selected = true; lang.appendChild(o); });
