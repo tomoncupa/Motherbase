@@ -12,6 +12,7 @@
 <script src="journal.js"></script>
 <script src="dose.js"></script>
 <script src="grade.js"></script>
+<script src="goals.js"></script>
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
@@ -1078,6 +1079,46 @@ async function run() {
   ok('grade: a day with nothing on it starts at F, and protein over its target is full marks', gradeRun(D => {
     const g = Grade.day('2001-04-03');
     return g.letter === 'F' && g.pct === 0 && g.pending.length === 4 && Grade.pillarLetter('protein', 220, 175) === 'S';
+  }));
+  /* ---- a goal's week ----
+     shared/goals.js is the one answer to "how is this goal doing this week",
+     read by QUESTS's Goals screen and HOME's THIS WEEK card. Through a
+     stand-in store: done 3 days ago is on track, 10 days adjust, 30 off, a
+     goal made today with nothing done has no call, his mark wins, and a task
+     in a project that serves the goal counts. */
+  const goalRun = (fn) => {
+    const real = window.Rec, t = Day.today(), rows = { aim: [], note: [], project: [] };
+    const todo = (k, p) => rows.note.push({ key: k, date: Day.shift(t, -40), payload: Object.assign({ kind: 'todo', text: k, done: 0 }, p) });
+    window.Rec = { appId: 'smoke', setting: () => null,
+      all: ty => rows[ty] || [], map: ty => { const m = {}; (rows[ty] || []).forEach(r => { m[r.key] = r.payload; }); return m; },
+      get: (ty, d, k) => { const r = (rows[ty] || []).filter(r => r.key === k)[0]; return r ? r.payload : null; } };
+    try { return fn(t, rows, todo); } finally { window.Rec = real; }
+  };
+  ok('goals: loaded', !!window.Goals && typeof Goals.health === 'function' && typeof Goals.next === 'function');
+  ok('goals: the call is read from days since a task serving it was done', goalRun((t, rows, todo) => {
+    const made = Day.shift(t, -60), mk = k => ({ key: k, made: made, by: Day.shift(t, 30), state: '' });
+    todo('a', { aim: 'g1', done: 1, doneOn: Day.shift(t, -3) });
+    todo('b', { aim: 'g2', done: 1, doneOn: Day.shift(t, -10) });
+    todo('c', { aim: 'g3', done: 1, doneOn: Day.shift(t, -30) });
+    return Goals.health(mk('g1')).v === 'on' && Goals.health(mk('g2')).v === 'adj' && Goals.health(mk('g3')).v === 'off' &&
+      Goals.health({ key: 'g4', made: t, state: '' }).v === '' && Goals.health(mk('g1')).weeks.length === Goals.WEEKS;
+  }));
+  ok('goals: his own call for the week wins, and a project serving the goal counts', goalRun((t, rows, todo) => {
+    rows.project.push({ key: 'run', date: null, payload: { name: 'Run', aim: 'g1' } });
+    todo('p', { proj: 'run', done: 1, doneOn: Day.shift(t, -2) });
+    const a = { key: 'g1', made: Day.shift(t, -60), state: '', marks: {} };
+    const h1 = Goals.health(a);
+    a.marks[h1.ws] = { v: 'adj' };
+    const h2 = Goals.health(a);
+    return h1.v === 'on' && h2.v === 'adj' && h2.auto === 'on' && h2.mark === 'adj';
+  }));
+  ok('goals: the fix is the next task this week, else one to put on today, else add one', goalRun((t, rows, todo) => {
+    todo('later', { aim: 'g1', due: '' });
+    const a = { key: 'g1', state: '' }, b = { key: 'g2', state: '' };
+    const n1 = Goals.next(a), n2 = Goals.next(b);
+    todo('soon', { aim: 'g1', due: t });
+    const n3 = Goals.next(a);
+    return n1.kind === 'sched' && n1.x.key === 'later' && n2.kind === 'add' && n3.kind === 'next' && n3.x.key === 'soon';
   }));
   ok('journal: a range on a todo is its start and its end; on an entry a start and a length', (() => {
     const t = Day.shift(Day.today(), -2), real = window.Rec, rows = {};

@@ -334,7 +334,7 @@ groupings (2026-10-29: "A"): stage, section, priority and Eisenhower, one
 BOARD view with a switch between them. Build order: Todoist sync, then the
 board, then the brief.
 
-## Week draft (Tom, 2026-11-16: "Both", from Superfocus; NOT BUILT YET)
+## Week draft (Tom, 2026-11-16: "Both", from Superfocus; built 1.0.30)
 
 On Sunday and Monday a card on Today, and any day at the top of Upcoming
 until handled that week, proposes changes to the week: "4 added, 1 moved,
@@ -350,6 +350,20 @@ Rules, no AI (0 `brief` rows ever reached the store as of 2026-11-16):
 - Added: No date todos that serve a stale goal or carry P1 to P3, up to 5 and
   the week's spare room (3 a day).
 If the brief writer is ever rebuilt, it may hand the same list on the brief row.
+
+**Built as planned, plus** (Tom, 2026-11-16: "operate as if a user does not
+have todoist", and he picked "a box per goal"): each open goal with nothing due
+this week comes first, under For your goals, as its open task to schedule or a
+box to type its next step (read like the task line, saved with `aim`, a typed
+day beats the chip). Every kept line's day is a chip that picks any day of the
+week. A goal step's tick fills only once it has words. The list redraw waits
+while a step box has the caret and while a menu opened from the card is up
+(`DRAW_HELD`). `{lifeos:1, show:'week'}` opens Upcoming with the draft forced
+open, even after it was handled: the home screen's PLAN THE WEEK.
+**Goal health's rule is `shared/goals.js` since 1.0.31**, read by QUESTS and
+the home screen's THIS WEEK card; change the rule there, never here.
+Tested in headless Chromium at 1280 and 390 by clicking, with no Todoist rows;
+not run in WebKit.
 
 ## Needs from the foundation
 

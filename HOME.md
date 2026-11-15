@@ -635,6 +635,42 @@ Tom chose 11 rows over shorter rows ("A"): his screen is 12 columns at 1920, 24 
 
 Tom: "Tracking number of tracked Vs untracked meals might help". He picked a count on STATUS's Food tab and this tile to show it. `sums` adds `unmeals`, every day row's count in the stretch (a day flagged not fully tracked before the count existed is 1). MEALS TRACKED reads "3.7 of 4.0 a day", then "93% tracked" with the change in that share against the stretch before. [TESTED] demo in headless Chromium, 2 meals not logged yesterday: 26 tracked, 2 not, "3.7 of 4.0 a day 93% tracked, down 7"; review 212/212 at 390. Not seen on his board.
 
+## 2026-11-10, HOME 1.0.110: LIFE fills its card
+
+Tom: "Give me dynamic resizing". The year squares were 20 columns always, so a short card scrolled. A ResizeObserver on the box under the age picks the column count that draws the squares biggest with every year showing (`fitYears`). Phone keeps 20 columns. [TESTED] Chrome, six card sizes, every year inside; WebKit 212/212.
+
 ## 2026-11-11, HOME 1.0.111: LOG WEEK is typed into
 
 Tom: "Yes, make it editable". Each summary on LOG WEEK, a day's (`day.note`) and a week's (`recap` keyed `week`), is a box on the card. It saves the way LOG's summary dialog does (trimmed, merged into the row, the row deleted when empty), half a second after the last key and on leaving the box; Enter saves and leaves, Shift+Enter is a new line. The box grows with the text. The day or week name is the button that opens LOG there. [TESTED] demo in Chrome at 1918 wide, real clicks and keys: today and a two-line week saved and shown, a week cleared to no row, LOG's store reading the same row, the name opening LOG; review 212/212 in WebKit at 390.
+
+## 2026-11-16, HOME 1.0.114: THIS WEEK
+
+Tom, from Superfocus, "integrate this into quests and Motherbase", for people
+with no Todoist, and he picked a home card. THIS WEEK (`thisweek`, 4 by 5)
+lists every open QUESTS goal: its words (never cut), this week's call as a
+button with its colour on a dot (tap: That's right, another call, Clear my
+call, written by `Goals.mark`), the last 6 weeks' done counts with the number
+in each box, "Day X of Y", and one fix: the next task this week, Put on today
+(`Goals.toToday`, with Undo) or Add a task (opens QUESTS Goals). PLAN THE WEEK
+opens QUESTS's week draft (`goTo(['quest', 'week'])`). No goals: "No goals"
+and SET A GOAL. Every rule is `shared/goals.js`, the one QUESTS reads. Tested
+in headless Chromium at 1600 and 390 by clicking; review 197 of 197.
+
+## 2026-11-16, HOME 1.0.112: the size is his, the contents fit it
+
+Tom: "I don't want the size of the widget to change. I want the contents and the data display to change and to adjust the magnification ... I don't want limits to widget size, and I don't want, as much as possible, intra widget scrolling." Rules since:
+- A card is only ever the size he set. Fit cards no longer grow to their contents; Fit to contents is a one-press item on every card's menu (`needRows`), measured once.
+- No size limits: `minSize` is 1 by 1; a widget's `min` stays on it, unread.
+- Nothing scrolls inside a card on the desk (`overflow:hidden`); `cutCards` leaves off what does not fit at every size, not only small.
+- Shift+wheel zooms like Ctrl+wheel (deltaX counts: Windows turns Shift+wheel sideways); zoom runs 25% to 300%. Zoomed out, more rows fit.
+- Not done: a chart still shows a fixed number of days when zoomed out. Each chart widget would need its own "more days when there is room".
+[TESTED] demo in Chrome: no card spills, RECORDS shows 21, 24, 27 items at 100, 90, 80%; 1 by 1 allowed; WebKit 212/212.
+
+## 2026-11-16, HOME 1.0.113: half cells, and a board for smaller screens
+
+Tom: "a universal building block to build our widget system on", for iPads and other screen sizes.
+- The unit is half a cell (`U = 2`): a unit is (146 - gap) / 2 wide and 42 tall, so two units and the gap are one old cell and every card kept its pixel size. Spots, sizes, `boardReach2`, BLOCK's 4 by 3 patch and a new widget's `W.w`/`W.h` (and a preset's `w`/`h`) all count in units; widget definitions stay in old cells and are multiplied by `U` when added.
+- The board saves as `lifeos.layout2`. The old `lifeos.layout` is converted once in memory (`readLayout`, `toHalf`, after `splitOld`) and never written, so a device still on old code keeps its old board instead of drawing cards twice the size. A board emptied on purpose (`layoutEmpty`) never falls back to the old one.
+- Three boards: std (the card's own x, y, w, h), `W` for a window 2880px or wider, and `T` for one under 1440px (`TAB_BELOW`: an iPad on its side, a laptop, a half-snapped window). A board with no spot for a card gives it its 1920 width shared evenly across the row (`shareRow`) and lets the grid place it. A phone still stacks the std order.
+- The fewest columns a board draws is what fits the window at full size (was a flat 12 cells).
+[TESTED] Chrome at 1918: eight cards, same pixel sizes as 1.0.112; an old saved board converted (3 by 2 at 1,1 to 6 by 4; `W` 13,2 to 25,3), a half step 541px, old row untouched; at 1164: `tab`, 14 units, two cards a row, no sideways scroll. WebKit 212/212 on a clean checkout. [UNTESTED] the 3840 board, a real iPad.

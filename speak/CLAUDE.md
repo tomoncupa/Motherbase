@@ -119,7 +119,12 @@ with nothing on screen saying why. Turn the switch back on and it gates
 normally again, which was watched both ways. A goal that could not be read
 says *no reading* and *not measured*, never *not met*.
 
-**Nothing is recorded.** The microphone feeds the ear and is dropped. The
+**Each take is recorded, on the device only.** Tom, 2026-11-16: *"I also
+wanted to take an audio recording of what I say, and ... show me which parts
+of the feedback apply to which parts of what I said."* A MediaRecorder on the
+take's own microphone stream, 32 kbps Opus (or AAC where WebM is missing),
+from the moment the take starts to STOP; a cancelled take keeps nothing, and
+the warm-up is never recorded. Settings, Record takes, turns it off. The
 transcript, when on, is kept on the take, capped at 4,000 characters.
 
 ## Rows
@@ -127,6 +132,7 @@ transcript, when on, is kept on the take, capped at 4,000 characters.
 | Type | Date | Key | Payload |
 |---|---|---|---|
 | `take` | day | timestamp id | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, hits, prompt, p, at}`; `p` is the prompt as given, for SAME PROMPT. `m` is every number above; `goals` is each goal as it stood, with `got` and `ok`. The warm-up is one `take` a day with `drill: 'warm'`, `steps` and `m.hiss`, `m.pitch`, `m.crispRaw`, merged as each step finishes |
+| `tclip` | the take's day | the take's key | `{mime, dur, data, pad}`: the take's sound as a data address. Every row is padded past 64KB so live sync never sends it and it lives in IndexedDB only, on the device that made it; not in `IO.register`, so the sheet never gets it either. "Back up everything" does carry it. Deleted with its take, or alone from the take's menu, each with UNDO |
 | `topic` | — | id | `{text, kind}`. His own prompts: `topic`, `story`, or `bullets` split with `\|` |
 | `tick` | day | `speak` | written once a day when a take is saved, so BLOCK and the home screen see it |
 
@@ -303,6 +309,34 @@ shared fonts check, not SPEAK. **Not watched:** anything from a real
 transcript (headless Chromium has no recogniser; SPEAK.exe's WebView2 may not
 either, which would leave DEVICES 3 to 5 and SCRIPT 2 to 5 reading "no
 reading" there), a real voice, the phone.
+
+## Hearing the feedback, added 2026-11-16 (SPEAK 1.0.12)
+
+The coach's strip is now the take's player: a play button beside it, a
+playhead while it plays, and a tap anywhere on the strip plays from there.
+Each fault, the top one and the "Also" ones, carries its moments (`at`, up to
+six `[s, length]`) drawn as buttons under it; a button plays from 1.5 s before
+the moment to 1.5 s after it ends. Moments: the ums the pattern names, each
+silence over 1.5 s, the third of the take that was fastest or slowest or
+sped up (six seconds of it), the longest run with no pause, each stammered
+start (`ev.rs`, from the ear's new `restartAt`), and each crutch phrase
+(`ev.cx`), which is placed by when its chunk of transcript landed and labelled
+"about" because the recogniser has no clock. A fault with no moment (a flat
+voice, soft consonants, eyes) gets Play the take. The sound stops when the
+sheet closes.
+
+Watched 2026-11-16 in headless Chromium at 390 with a fake microphone: a 31 s
+take saved a 140KB `tclip`, the moment buttons played and stopped on their
+own, a tap three quarters along the strip played from there, pause worked,
+the sheet reopened from the store played, Delete the recording removed it,
+and with Record takes off nothing was kept. No page errors, every button 44px.
+Not heard on the iPhone: whether Safari records AAC and plays it back from
+the store is only proved on the phone.
+
+## Needs from the foundation
+
+- A device-only row type: one `Rec` would keep and back up but live sync
+  would never send. SPEAK pads `tclip` past 64KB to get that today.
 
 ## The widget, added 2026-11-10
 

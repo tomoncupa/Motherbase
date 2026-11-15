@@ -306,6 +306,7 @@ An app may read any type. It writes only the types it owns.
 | `cell` | **log** | column id (`done`), dated | `{text}` — one day's entry in one of LOG's text columns, such as "What got done today". Kept apart from `day.note` on purpose |
 | `take` | **speak** | timestamp id, dated | `{drill, skill, style, dur, m, goals, pass, asr, cam, tx, prompt}` — one practice take: every number the ear read, each goal as it stood with `got` and `ok`, and the transcript if there was one. The day's warm-up is one `take` with `drill: 'warm'` |
 | `topic` | **speak** | id | `{text, kind}` — his own prompt: a topic, a story, or three bullets |
+| `tclip` | **speak** | the take's key, dated as the take | `{mime, dur, data, pad}` — the take's sound, padded past 64KB so it never syncs and stays on the device that made it. See `speak/CLAUDE.md` |
 | `script` | **speak** | id, undated | `{title, text, at}` — a talk he writes, one line per thought, rehearsed through SPEAK's SCRIPT steps |
 | `cset` `cex` `cphase` `csession` | **coach** | `pid\|` + the key the row had in the client's TRAIN; dated as it was | a client's set, exercise, block and day, exactly as their TRAIN wrote it, merged with its own updated_at so a second file only adds what is new |
 | `cexcat` `csgroup` `cgoal` `cprogram` `cprogday` `cprogex` | **coach**; **train** writes all of these and the four above when opened as `train/index.html?client=<pid>` | the same | the rest of a client's TRAIN. That address points TRAIN's store at the client (the top of `train/index.html`), so COACH's LOG A SESSION is the real TRAIN on their rows. A set Tom logs there is keyed `pid\|k-...` and bills in WEALTH like one from the old quick logger |
@@ -1071,9 +1072,13 @@ answer, or take it out.
   shipped the fix he said was missing (2026-10-18).
 
 - **A fact the suite shows in two places must be read by one rule.** A dose can be a STATUS reading, a journal line or a BLOCK tick; HOME's HALF-LIFE card learned the line and the tick and STATUS's tile did not, so the same day read 10g on one screen and blank on the other (2026-10-30). `shared/dose.js` is now the one reader. When a fix teaches the suite a new way to record a fact, put it where every screen that shows the fact reads it, and check each screen.
+- **A set's weight is not "heavier is stronger" and is not always above zero.** An assisted lift's weight is help (less is stronger) and any lift can be logged below zero (-20 on a pull-up is help) since TRAIN 1.0.83 and 1.0.85. A reader of TRAIN's `set` rows compares `TRAIN.wk` (help negated) and asks `TRAIN.weighed(s)`, never `kg > 0`, and gets volume from `TRAIN.load` (bodyweight plus or minus, null with no weigh-in). COACH (`loadOf`, `goesBelow`) and SHEET copy the rule; range.js, HOME and any widget reading sets need it too (2026-11-16).
 - Commands run from the Claude app see a frozen copy of `%LOCALAPPDATA%`, not the live one.
   A scheduled task's state there (RECEIPTS `seen.json`) reads weeks stale from a Claude
   session; check the task's own `status.json` or Task Scheduler's last run instead.
+- **`build-client.py` empties the client folder before copying, and a locked file stops it halfway.** A file open elsewhere (`shared/icons/ragnarok/form.png`, 2026-11-16) threw PermissionError with 422 client files already deleted. Nothing was committed: `git checkout -- .` in the client folder put it back and the second run passed. Read `git status` in the client folder after every build; a list of D lines is this.
+- **Committing your hunks around another session's, check what landed.** `git apply --cached --unidiff-zero` of a hand-split `-U0` patch put a two-line comment 100 lines from where it belonged (2026-11-16, HOME 1.0.113). After applying, `git diff index.html` must show only the other session's lines; anything of yours there landed wrong.
+- **A big single-file app can already hold the name you pick.** HOME's `const BKEY` clashed with the backup key 2000 lines further down and the whole page died on a SyntaxError (2026-11-16). Grep `\bNAME\b` before adding a top-level const.
 
 ---
 

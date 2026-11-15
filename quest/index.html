@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.30, 2026-11-16">
+<meta name="mb-version" content="1.0.31, 2026-11-16">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -18,6 +18,7 @@
 <script src="../shared/day.js"></script>
 <script src="../shared/records.js"></script>
 <script src="../shared/journal.js"></script>
+<script src="../shared/goals.js"></script>
 <script src="../shared/todoist.js"></script>
 <script src="../shared/mobile.js"></script>
 <script src="../shared/sound.js"></script>
@@ -822,39 +823,11 @@ function aimForToday() {
    or less is adjust, longer is off. A goal made this week with nothing done
    gets no call yet. He can mark the call right or wrong (how-we-work: a
    verdict on him needs that), kept per week on the goal as `marks`. */
-const HEALTH = { on: 'On track', adj: 'Adjust', off: 'Off track' };
-const HEALTH_MK = { on: 'var(--success)', adj: 'var(--warn)', off: 'var(--danger)' };
-const HEALTH_WEEKS = 6;
-function aimHealth(a, w) {
-  if (a.state) return null;
-  const t = T(), ws = weekStart(t), weeks = [];
-  for (let i = HEALTH_WEEKS - 1; i >= 0; i--) weeks.push({ s: Day.shift(ws, -7 * i), n: 0 });
-  quests().forEach(x => {
-    if (!x.done || !x.doneOn || aimOf(x) !== a.key) return;
-    const c = weeks.find(k => k.s === weekStart(x.doneOn));
-    if (c) c.n++;
-  });
-  const auto = !w.last && Day.diff(t, a.made || t) < 7 ? '' : w.idle <= 7 ? 'on' : w.idle <= 21 ? 'adj' : 'off';
-  const mark = ((a.marks || {})[ws] || {}).v || '';
-  const span = a.made && a.by && a.by > a.made && a.by >= t
-    ? 'Day ' + (Day.diff(t, a.made) + 1) + ' of ' + Day.diff(a.by, a.made) : '';
-  return { ws: ws, auto: auto, mark: mark, v: mark || auto, weeks: weeks, span: span };
-}
-/* The one thing to do next for a goal: its next task this week, or one to put
-   on today, or a task to add when nothing open serves it. */
-function aimNext(a) {
-  const open = quests().filter(x => !x.done && aimOf(x) === a.key);
-  const end = Day.shift(weekStart(T()), 6);
-  const soon = open.filter(x => dueOf(x) && dueOf(x) <= end).sort((p, q) => dueOf(p).localeCompare(dueOf(q)) || sortQ(p, q));
-  if (soon.length) return { kind: 'next', x: soon[0] };
-  if (open.length) return { kind: 'sched', x: open.slice().sort(sortQ)[0] };
-  return { kind: 'add' };
-}
-function markAim(a, ws, v) {
-  const marks = Object.assign({}, (Rec.get('aim', null, a.key) || {}).marks || {});
-  if (v) marks[ws] = { v: v, t: Date.now() }; else delete marks[ws];
-  Rec.patch('aim', null, a.key, { marks: marks });
-}
+/* The rule is shared/goals.js, which the home screen's THIS WEEK card reads too. */
+const HEALTH = Goals.NAME, HEALTH_MK = Goals.MK, HEALTH_WEEKS = Goals.WEEKS;
+const aimHealth = a => Goals.health(a, quests());
+const aimNext = a => Goals.next(a, quests());
+const markAim = (a, ws, v) => Goals.mark(a.key, ws, v);
 function healthMenu(a, hl, anchor) {
   const items = [];
   if (hl.auto && !hl.mark) items.push({ label: 'That’s right', icon: ico('done'), fn: () => markAim(a, hl.ws, hl.auto) });
@@ -867,7 +840,7 @@ function healthMenu(a, hl, anchor) {
 }
 /* The call, the weeks behind it, and the fix, for a goal row or Today's card. */
 function healthEl(a, w) {
-  const hl = aimHealth(a, w);
+  const hl = aimHealth(a);
   if (!hl) return null;
   const box = el('div', 'health');
   const line = el('div', 'hline');
