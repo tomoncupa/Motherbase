@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.32, 2026-11-16">
+<meta name="mb-version" content="1.0.33, 2026-11-16">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -197,6 +197,51 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .row .acts button.on{color:var(--accent)}
 .row .acts button.p1{color:var(--danger)} .row .acts button.p2{color:var(--warn)} .row .acts button.p3{color:var(--info)}
 @media (max-width:600px){.row .acts button.wide{display:none}}
+/* ── QUESTS on a phone (Tom, 2026-11-16: "does not feel like it was designed for
+   mobile at all"; he picked 1 to 4). The first task sat 756px down a 664px
+   screen. On a phone: tasks first, the add line behind a + by the thumb,
+   four tabs and More at the bottom, rows without their source word or
+   buttons (a hold opens the task sheet). Past 600px nothing here applies. ── */
+#tabs,#fab,#addveil{display:none}
+@media (max-width:600px){
+  #side{display:none}
+  #app{grid-template-rows:1fr}
+  main{padding-bottom:calc(var(--tap) * 3 + var(--safe-b))}
+  #main .add{display:none}
+  body.adding #main .add{display:block;position:fixed;left:0;right:0;bottom:var(--kb);z-index:62;margin:0;
+    border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:var(--s-3) var(--s-3) calc(var(--s-3) + var(--safe-b))}
+  body.adding #addveil{display:block;position:fixed;inset:0;z-index:61;background:color-mix(in srgb,var(--bg) 70%,transparent)}
+  #tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:50;
+    background:var(--surface-1);border-top:var(--border-width) solid var(--border);padding-bottom:var(--safe-b)}
+  #tabs button{min-height:calc(var(--tap) + var(--s-3));display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:var(--s-1);border:0;background:none;color:var(--text-muted);font-size:var(--f-1);cursor:pointer;padding:0}
+  #tabs button svg{width:var(--f-4);height:var(--f-4)}
+  #tabs button.on{color:var(--accent)}
+  #fab{display:flex;align-items:center;justify-content:center;position:fixed;right:var(--s-4);z-index:51;
+    bottom:calc(var(--tap) + var(--s-3) + var(--safe-b) + var(--s-4));width:calc(var(--tap) + var(--s-3));height:calc(var(--tap) + var(--s-3));
+    border:0;border-radius:var(--radius-full);background:var(--accent);color:var(--accent-fg);box-shadow:var(--e-2);cursor:pointer}
+  #fab svg{width:var(--f-5);height:var(--f-5)}
+  #main.goalsv ~ #fab,body.goalsv #fab{display:none}
+  .row .meta .src,.row .acts{display:none}
+  .row .meta .pj{margin-left:0}
+  .row{padding:var(--s-2) 0;min-height:var(--tap)}
+  h1{margin-bottom:var(--s-3)}
+}
+/* a one-line card on a phone: the week draft and today's goal, tapped for the rest */
+.pline{display:flex;align-items:center;gap:var(--s-2);width:100%;min-height:var(--tap);padding:var(--s-2) var(--s-3);
+  margin-bottom:var(--s-2);border-radius:var(--radius-md);border:var(--border-width) solid var(--border);
+  background:var(--surface-1);color:var(--text-1);font:inherit;text-align:left;cursor:pointer}
+.pline .nm{flex:1;min-width:0;overflow-wrap:anywhere}
+.pline .rt{color:var(--text-muted);font-size:var(--f-2)}
+.pline .gi{display:flex;color:var(--accent)}
+.pline.mk-dot::before{margin-right:var(--s-1)}
+/* the task sheet a hold opens on a phone, after Todoist's */
+.qrow{margin-top:var(--s-1)}
+.qacts{display:flex;flex-direction:column;margin-top:var(--s-3);border-top:var(--border-width) solid var(--border)}
+.qacts button{display:flex;align-items:center;gap:var(--s-3);min-height:var(--tap);border:0;background:none;color:var(--text-1);
+  font:inherit;text-align:left;cursor:pointer;border-bottom:var(--border-width) solid var(--border);padding:0 var(--s-1)}
+.qacts button .rt{margin-left:auto;color:var(--text-muted);font-size:var(--f-2)}
+.qacts button.bad{color:var(--danger)}
 .src{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);text-transform:uppercase;
   color:var(--text-muted);border:var(--border-width) solid var(--border);border-radius:var(--radius-sm);padding:0 var(--s-1)}
 .row.blk.past .tt{color:var(--text-muted)}
@@ -959,6 +1004,14 @@ function draftSummary(items) {
 function drawDraft(list, force) {
   const dw = draftWeek(), r = dw.r, items = dw.items;
   if (!force && (draftDone(r) || !items.length)) return;
+  if (!force && PHONE() && !DRAFT_PHONE) {
+    const ln = el('button', 'pline', '<span class="gi">' + ico('schedule') + '</span><span class="nm">Week draft</span><span class="rt">' +
+      esc(draftSummary(items)) + '</span>' + ico('next'));
+    ln.type = 'button';
+    ln.onclick = () => { DRAFT_PHONE = true; draw(); };
+    list.appendChild(ln);
+    return;
+  }
   const box = el('section', 'grp brief wkd');
   const md = d => asDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const range = md(r.s) + ' to ' + (r.s.slice(0, 7) === r.e.slice(0, 7) ? String(+r.e.slice(8)) : md(r.e));
@@ -1362,6 +1415,16 @@ const aimItems = (cur, fn) => [{ label: 'No goal', icon: ico('close'), on: !cur,
 function drawAimCard(list) {
   const a = aimForToday();
   if (!a) return;
+  if (PHONE()) {
+    const hl = aimHealth(a);
+    const ln = el('button', 'pline' + (hl && hl.v ? ' mk-dot' : ''), '<span class="nm">' + esc(a.text) + '</span><span class="rt">' +
+      esc(hl && hl.v ? HEALTH[hl.v] : hzOf(a.h).name) + '</span>' + ico('next'));
+    ln.type = 'button';
+    if (hl && hl.v) ln.style.setProperty('--mk', HEALTH_MK[hl.v]);
+    ln.onclick = () => go('goals');
+    list.appendChild(ln);
+    return;
+  }
   const t = T(), shut = S.get('aimShut', '') === t, w = aimWorkAll()[a.key];
   const box = el('section', 'grp brief aimcard');
   const head = el('div', 'gh', '<span class="gi">' + ico('goal') + '</span><b>Goal</b><span class="when">' + esc(hzOf(a.h).name) + '</span>' +
@@ -1671,6 +1734,87 @@ function aimSheet(a, hid) {
   });
 }
 
+/* ══════════════ ON A PHONE ══════════════
+   quest/CLAUDE.md, On the phone. Tabs and the + live outside the list and are
+   made once; the CSS shows them only under 600px. */
+const PHONE = () => innerWidth <= 600;
+let DRAFT_PHONE = false;
+function phoneChrome() {
+  if ($('#tabs')) return;
+  const tabs = el('nav'); tabs.id = 'tabs'; tabs.setAttribute('aria-label', 'Views');
+  const fab = el('button', 'mb-press', ico('add')); fab.id = 'fab'; fab.type = 'button';
+  fab.setAttribute('aria-label', 'Add a task');
+  /* the keyboard comes up inside the tap (shared/STANDARDS.md, rule 14) */
+  fab.onclick = () => { document.body.classList.add('adding'); if (ADD) ADD.focus(); };
+  const veil = el('div'); veil.id = 'addveil';
+  veil.onclick = () => { document.body.classList.remove('adding'); const f = document.activeElement; if (f && f.blur) f.blur(); };
+  document.body.appendChild(veil); document.body.appendChild(tabs); document.body.appendChild(fab);
+}
+function drawTabs() {
+  const t = $('#tabs');
+  if (!t) return;
+  t.innerHTML = '';
+  const main = ['today', 'upcoming', 'inbox', 'goals'];
+  [['today', 'today', 'Today'], ['upcoming', 'schedule', 'Upcoming'], ['inbox', 'rows', 'Inbox'], ['goals', 'goal', 'Goals']].forEach(v => {
+    const b = el('button', VIEW === v[0] ? 'on' : '', ico(v[1]) + '<span>' + v[2] + '</span>');
+    b.type = 'button'; b.setAttribute('aria-current', VIEW === v[0] ? 'page' : 'false');
+    b.onclick = () => go(v[0]);
+    t.appendChild(b);
+  });
+  const more = el('button', main.indexOf(VIEW) < 0 ? 'on' : '', ico('more') + '<span>More</span>');
+  more.type = 'button';
+  more.onclick = () => choose(more, 'More', [
+    { label: 'Calendar', icon: ico('calendar'), fn: () => { calDay = ''; calMonth = T().slice(0, 7); go('cal'); } },
+    ...projects().map(pr => ({ label: '# ' + pr.name, fn: () => go('p:' + pr.key) })),
+    ...tagsInUse().map(t2 => ({ label: '@ ' + t2, fn: () => go('t:' + t2) })),
+  ]);
+  t.appendChild(more);
+  document.body.classList.toggle('goalsv', VIEW === 'goals');
+}
+/* Todoist's hold: the task's day and priority one tap away, then the rest. */
+function quickSheet(x) {
+  const t = T(), dw = Day.dow(t), due = dueOf(x);
+  const sat = Day.shift(t, (6 - dw + 7) % 7), mon = Day.shift(t, ((8 - dw) % 7) || 7);
+  const keep = Rec.get('note', x.date, x.key);
+  const undo = words => UI.undo(words + ': <b>' + esc(x.text) + '</b>', () => { if (keep) { Rec.set('note', x.date, x.key, keep); publishNotes(x.date); } });
+  const setDue = d => { saveRow(x, { due: d }); undo(d ? dayWord(d) : 'No date'); };
+  const setPri = n => { saveRow(x, { pri: n }); undo(n ? 'P' + n : 'No priority'); };
+  UI.dialog({ title: 'TASK', width: 520, body: (b, h) => {
+    b.appendChild(el('p', 'dq', esc(x.text)));
+    const row = (label, items) => {
+      b.appendChild(el('h4', 'sh', label));
+      const c = el('div', 'chips qrow');
+      items.forEach(it => {
+        const k = el('button', 'chip' + (it[1] ? ' set' : '') + (it[3] ? ' ' + it[3] : ''), it[0]);
+        k.type = 'button'; k.onclick = () => { h.close(); it[2](); };
+        c.appendChild(k);
+      });
+      b.appendChild(c);
+    };
+    row('Date', [[ico('today') + ' Today', due === t, () => setDue(t)], ['Tomorrow', due === Day.shift(t, 1), () => setDue(Day.shift(t, 1))],
+      ['This weekend', due === sat, () => setDue(sat)], ['Next week', due === mon, () => setDue(mon)], ['No date', !due, () => setDue('')],
+      [ico('calendar') + ' Pick a day', false, () => dateMenu({ x: innerWidth / 2, y: innerHeight / 2 }, { due: due || '', at: x.at, rep: x.rep },
+        v => saveRow(x, { due: v.due || '', at: v.at || null, rep: v.rep || null }))]]);
+    row('Priority', [['P1', x.pri === 1, () => setPri(1), 'p1'], ['P2', x.pri === 2, () => setPri(2), 'p2'], ['P3', x.pri === 3, () => setPri(3), 'p3'], ['None', !x.pri, () => setPri(0)]]);
+    const acts = el('div', 'qacts');
+    const act = (icon, label, rt, fn, cls) => {
+      const a = el('button', cls || '', '<span>' + icon + '</span><span>' + esc(label) + '</span>' + (rt ? '<span class="rt">' + esc(rt) + '</span>' : ''));
+      a.type = 'button'; a.onclick = () => { h.close(); fn(); };
+      acts.appendChild(a);
+    };
+    const mid = { x: innerWidth / 2, y: innerHeight / 2 };
+    act('<span class="hash">#</span>', 'Move to', x.proj ? projName(x.proj) : 'Inbox', () =>
+      choose(mid, 'Move to', projItems(x.proj, pr => saveRow(x, pr ? { proj: pr.key, projName: pr.name } : { proj: '' }))));
+    if (x.aim || openAims().length) act(ico('goal'), 'Serves a goal', aimName(x.aim), () =>
+      choose(mid, 'Serves a goal', aimItems(x.aim, k => saveRow(x, { aim: k }))));
+    act(ico('edit'), 'Edit', '', () => editSheet(x));
+    act(ico('done'), x.done ? 'Mark not done' : 'Complete', '', () => tick(x));
+    act(ico('more'), 'More', '', () => rowMenu(x, mid));
+    act(ico('delete'), 'Delete', '', () => removeQuest(x), 'bad');
+    b.appendChild(acts);
+  }, actions: [] });
+}
+
 /* A redraw would wipe a step half typed into the week draft, so it waits until
    the box is left (root brief, Known traps: a board that redraws on every write). */
 let DRAW_HELD = false;
@@ -1695,6 +1839,7 @@ function draw() {
   /* A label with nothing left on it is not a place you can stand. */
   if (VIEW.indexOf('t:') === 0 && tagsInUse().indexOf(VIEW.slice(2)) < 0) VIEW = 'today';
   drawSide();
+  drawTabs();
   const info = viewInfo(VIEW);
   ensureAddBar();
   ADD.setView(info);
@@ -1843,7 +1988,7 @@ function rowEl(x, info) {
   /* a review todo is about the goals, so it opens them */
   r.onclick = () => x.aimrev ? go('goals') : editSheet(x);
   r.oncontextmenu = e => { e.preventDefault(); rowMenu(x, { x: e.clientX, y: e.clientY }); };
-  holdMenu(r, pt => rowMenu(x, pt));
+  holdMenu(r, pt => PHONE() ? quickSheet(x) : rowMenu(x, pt));
   return r;
 }
 /* ── a block from BLOCK's plan ──
@@ -2453,6 +2598,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); if (ADD) ADD.focus(); }
 });
 
+phoneChrome();
 Rec.on(() => { if (!TD.st.quiet) draw(); });
 Day.on(draw);
 draw();
