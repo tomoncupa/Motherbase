@@ -698,3 +698,13 @@ Tom asked for a sweep of what card zoom could have broken. Found: the size class
 - A chart card with a days pick reads `zoomDays(cfg, cfg.days)` wherever it read `cfg.days`, and names the stretch with `zoomDaysName`. WEIGHT, the measure card and SLEEP do. A list card (RECORDS, UPCOMING) does not: zoomed out it already shows more rows.
 Swept and fine: the drag ghost and the + WIDGET picker titles, the phone (no zoom, picked days shown, no sideways scroll), redraw speed (a year of weigh-ins at 25% is 38 ms against 34 at 100%), no other file reads a card's zoom or title.
 [TESTED] demo in headless Chromium at 1918: WEIGHT, MOOD and SLEEP at 100/200/300% keep title, menu and answer; a really small SLEEP still drops its answer line at every zoom; phone at 390. [UNTESTED] his board.
+
+## 2026-11-16, decided, not built: a time frame he picks is locked
+
+Tom, answering the sweep: "If I chose a setting manually, the zooming in can't change it", and TRAIN volume and HALF-LIFE should follow the zoom "unless I lock a number". Claude's call, given to Tom: no lock button; picking a time frame from the card's menu IS the lock. To build:
+- Picking from Time frame (both menus, the card's and the one near `cfg.days = d[0]; redraw()`) sets `cfg.dlock = 1`; `zoomDays` returns `n` untouched when `cfg.dlock`. A new first item, "Follow the zoom", clears `dlock` (and keeps `days` as the 100% amount). The tick shows which.
+- Picks made before this (no `dlock`) keep following the zoom, so his board does not change under him.
+- TRAIN volume (`trainvol`, weeks) and HALF-LIFE then read `zoomDays` too.
+- AVG WEIGHT never follows the zoom (an average over the days he chose).
+- The time frame menu keeps ticking the picked days while a zoomed title says more: Tom, "leave it".
+- Zoom showing more data is a Motherbase rule only (Tom: "mobo only for now"), not ui-standards.
