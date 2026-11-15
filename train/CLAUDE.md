@@ -288,8 +288,21 @@ An exercise carries the setup it needs, named by him, each a **toggle** (Straps)
 or a **setting** (Seat height, Back pad). **Each set records its own**, because
 straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and three setup bugs (1.0.84, 2026-11-16))
 
-- **One line above the steppers** (`setupLine`), only on an exercise that has
-  setup: chips for toggles, small boxes for settings, a pencil for the list.
+- **Nothing goes above WEIGHT on TRACK** (Tom, 2026-11-16: "We want as
+  little data as possible before the input for weight and reps"). The
+  stepper box starts with its WEIGHT label. Under SAVE, in this order: the
+  setup line, the faded last-time line, the coach's line (1.0.88: "Move
+  the faded last time numbers below save"), then the logged sets.
+- **Last session's comment shows faded on today's same working set**
+  (`.ghostnote`, 1.0.88; Tom: "last set's notes to show up as faded out
+  text so it's clear that this is last session's notes ... unless
+  anything is written, just keep it there"): set N against last time's
+  set N, warmups out, muted and slanted, never stored. His own comment
+  replaces it; the comment box shows it as the placeholder.
+- **One line under SAVE** (`setupLine`, 1.0.86), above the logged sets, only
+  on an exercise that has setup: chips for toggles, small boxes for
+  settings, a pencil for the list. Tapping a setting's name puts the caret
+  in its box.
   **It is exactly what SAVE or UPDATE records**, and changing it writes
   nothing until then. No setup, no line: Add Setup is in More and in a set's
   comment box, which also edits a past set's setup.
@@ -304,7 +317,18 @@ straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and
   one the line shows.
 - **Edit Setup saves as it goes**: ADD or Enter saves a field, a removal saves
   with an UNDO, TOGGLE is the default. A set keeps what it recorded when a
-  field is removed. The row under each set shows setup only when it changed.
+  field is removed.
+- **A set row says only what CHANGED in setup** (`setupDiff`, 1.0.87; Tom,
+  2026-11-16: "unless anything changes, then it just holds on from the last
+  set", so the room goes to comments): "Straps", "Straps off", "Seat 5",
+  "Seat off". The day's first set says its whole setup. A suggestion not
+  taken says nothing and is not the set before.
+- **A suggestion ticked done records the carried setup** (`TRAIN.carriedSetup`),
+  as UPDATE on it does. A set with no `su` reads as everything off.
+- **A set's comment and setup words open its comment box** on a tap (Tom,
+  2026-11-16: "edit the text by clicking on the text, not just the text
+  box"), as the bubble does; the rest of the row still loads the set, and a
+  hold anywhere still lifts it.
 
 ### Asked about, and turned down
 

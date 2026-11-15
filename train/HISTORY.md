@@ -1578,3 +1578,88 @@ Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro, real taps on
 the line, the steppers, SAVE, UPDATE, the comment box and the dialog: 19 of
 19, no errors, no sideways scroll, every control on the line 44px. Not seen on
 his phone or his real log.
+
+## Setup under SAVE, and words that open their editor (1.0.86, 2026-11-16)
+
+Tom, on the 1.0.84 before/after picture: "Oh, I don't like this. We want as
+little data as possible before the input for weight and reps. put the
+settings between the save button and the actual save if needed. Also, I'd
+like the ability to edit the text by clicking on the text, not just the text
+box."
+
+- The setup line moved from the top of the stepper box to under the SAVE
+  bar, above the logged sets. Read "between the save button and the actual
+  save" as between SAVE and the saved sets. It still only shows on an
+  exercise with setup, and is still exactly what the next SAVE records.
+- A set row's comment and setup words (`.tnote`) now open that set's
+  comment box on a tap, the way the bubble does, without loading the set.
+  Read "the text box" as the comment bubble. Tapping a setting's name on
+  the setup line already focused its box (it is a `label`); now checked.
+- The faded "last time" line still sits above the steppers. It was asked
+  for on 2026-09-22 and was not part of this ask, so it stayed.
+
+Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro, real taps:
+23 of 23 (the 19 from 1.0.84 with the position check changed, plus the
+WEIGHT label being first, the setting's name focusing its box, and the note
+words opening the comment box without loading the set). Not seen on his
+phone or his real log.
+
+## Setup on a row says only what changed (1.0.87, 2026-11-16)
+
+Tom: "I don't want the setup settings to repeat per set. The understanding is
+unless anything changes, then it just holds on from the last set. Because
+obviously, otherwise, it would just take up too much space that could be put
+towards set comments instead."
+
+Until now a row showed its WHOLE setup whenever any part changed, so taking
+straps off on set 3 printed "Seat 4" again. `setupDiff` now says only the
+parts that moved: "Straps", "Straps off", "Seat 5", "Seat off". The first set
+of the day says its whole setup so a day reads on its own (an assumption,
+not asked). A suggestion not yet taken says nothing and does not count as
+the set before.
+
+Found on the way, from 1.0.84: ticking a suggestion (LOG ALL, a routine,
+Copy Previous Sets) stored no `su`, and 1.0.84's carry reads no `su` as
+everything off, so the NEXT set lost its straps; the new row would also have
+said "Straps off" on it. The tick now records the carried setup
+(`TRAIN.carriedSetup`: the setup line when it is showing the carry, else
+`lastSetup`), the same as UPDATE on a suggestion already did.
+
+Tested in headless Chromium at 390 x 844: 7 of 7 new checks (the row words
+for six sets, a ticked suggestion recording straps and saying nothing, the
+carry kept, all off saying "Straps off · Seat off", a suggestion ticked after
+all off storing none), and the 23 from 1.0.84 to 1.0.86. Not seen on his
+phone.
+
+## Last time under SAVE, last session's comments as ghosts (1.0.88, 2026-11-16)
+
+Tom: "The first set of the day shows us all set up. Actually, I would like
+last set's notes to show up as faded out text so it's clear that this is
+last session's notes. And unless anything is written, just keep it there,
+but have it clear that it's not written that day. Have it show up faded
+still. Move the faded last time numbers below save. No, exercise reordering
+makes sense if the list is exercises, and then set reordering makes sense in
+the actual logging view. Fix the bugs."
+
+- The first set of the day keeps its whole setup (confirmed).
+- The faded last-time line and the coach's line moved under SAVE, after the
+  setup line, inside the stepper box. Nothing sits above WEIGHT now.
+- A row with no comment of its own shows last session's comment on the same
+  working set (`then[n - 1]`, the day `vsFor` picks; warmups out), in
+  `--text-muted` and italic, never written to today's set. Writing a comment
+  replaces it. The comment box (bubble or words) opens with "Last time: ..."
+  as its placeholder.
+- Reordering stays as it is: a hold on the workout overview moves exercises,
+  a hold in the logging view moves sets.
+- "Fix the bugs": the code bugs (A, B, C and the ticked suggestion) were
+  fixed in 1.0.84 and 1.0.87. The sets they already wrote wrong cannot be
+  found: `set` is a whole-row type in `records.js` (`WHOLE_ROW`), so no
+  per-field write time says when `su` changed, and a wrong setup reads the
+  same as a right one. Nothing was rewritten; a wrong set is fixed by
+  tapping its setup words.
+
+Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro: 11 of 11
+(WEIGHT first, last time under SAVE after setup, his own comment winning, no
+ghost where last time had none, the ghost on set 3, muted and italic,
+nothing stored, the placeholder, his words replacing it, no sideways
+scroll, no errors), plus 23 and 7 from 1.0.84 to 1.0.87.
