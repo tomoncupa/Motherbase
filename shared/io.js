@@ -1741,39 +1741,78 @@ const IO = {
     /* an app's folder is not always its name */
     const NAMES = { home: 'HOME', quest: 'QUESTS', portion: 'FOODDÉX', mix: 'ELEMENT', system: 'NOTICE', sheet: 'CHARACTER SHEET' };
     const nameOf = k => NAMES[k] || String(k || 'an app').toUpperCase();
-    host.appendChild(el('div', 'mb-group', 'DEVICES'));
-    if (t && t.ready) {
+    /* Tom, 2026-11-16: "a whole lot of words and numbers that take up a lot
+       of space". Folded to one line, DEVICES and a count, that says only
+       whether a device had errors this week. Open it for one line per
+       device; open a device for what it said before. */
+    if (!document.getElementById('mb-dev-css')) {
+      const st = document.createElement('style');
+      st.id = 'mb-dev-css';
+      st.textContent =
+        '.mb-dev>summary,.mb-dev-d>summary{list-style:none;cursor:pointer;display:flex;align-items:center;' +
+        'gap:var(--s-2,8px);min-height:44px;-webkit-user-select:none;user-select:none}' +
+        '.mb-dev>summary::-webkit-details-marker,.mb-dev-d>summary::-webkit-details-marker{display:none}' +
+        '.mb-dev>summary.mb-group{margin-bottom:0}' +
+        '.mb-dev-n{margin-left:auto;font-family:var(--font-body,system-ui);font-weight:400;letter-spacing:0;' +
+        'font-size:var(--f-2,13px);color:var(--text-2,GrayText);display:flex;align-items:center;gap:var(--s-2,8px)}' +
+        '.mb-dev svg{width:16px;height:16px;flex:none;color:var(--text-muted,GrayText);transition:transform var(--dur-1,120ms)}' +
+        '.mb-dev[open]>summary svg,.mb-dev-d[open]>summary svg{transform:rotate(180deg)}' +
+        '.mb-dev-d{border-top:var(--border-width,1px) solid var(--border,GrayText)}' +
+        '.mb-dev-d>summary{font-size:var(--f-2,13px)}' +
+        '.mb-dev-d>summary b{flex:1;min-width:0}' +
+        '.mb-dev-x{width:8px;height:8px;border-radius:50%;background:var(--warn,GrayText);flex:none}' +
+        '.mb-dev-b{padding:0 0 var(--s-3,12px)}' +
+        '.mb-dev-b p{' + small + '}' +
+        '@media (prefers-reduced-motion:reduce){.mb-dev svg{transition:none}}';
+      document.head.appendChild(st);
+    }
+    const chev = g.Icons && g.Icons.svg ? g.Icons.svg('expand') : '';
+    const week = Date.now() - 7 * 86400000;
+    const shown = list.slice(0, 8);
+    const recentOf = d => (d.errs || []).filter(e => Date.parse(e.t) > week);
+    const bad = shown.filter(d => recentOf(d).length).length;
+    const all = el('details', 'mb-dev');
+    const word = !shown.length ? 'this one'
+      : shown.length + (shown.length === 1 ? ' device' : ' devices') + ', ' +
+        (bad ? bad + ' with errors' : 'no errors');
+    all.appendChild(el('summary', 'mb-group', 'DEVICES<span class="mb-dev-n">' +
+      (bad ? '<i class="mb-dev-x"></i>' : '') + esc(word) + chev + '</span>'));
+    host.appendChild(all);
+    if (t && t.ready && !shown.some(d => d.me)) {
       const op = el('p', null, 'Opened in <b>' + secs(Math.max(t.paint, t.ready)) + '</b> here' +
         (t.paint ? ', first drawn at ' + secs(t.paint) : '') + '.');
       op.className = 'mb-opened';
-      host.appendChild(op);
+      op.style.cssText = small;
+      all.appendChild(op);
     }
-    const week = Date.now() - 7 * 86400000;
-    list.slice(0, 8).forEach(d => {
-      const box = el('div');
-      box.style.cssText = 'margin:0 0 var(--s-3,12px)';
+    shown.forEach(d => {
+      const recent = recentOf(d);
+      const box = el('details', 'mb-dev-d');
+      box.appendChild(el('summary', null, '<b>' + esc(d.name) + (d.me ? ' (this one)' : '') + '</b>' +
+        '<span class="mb-dev-n">' + (recent.length ? '<i class="mb-dev-x"></i>' + recent.length +
+          (recent.length === 1 ? ' error, ' : ' errors, ') : '') + esc(d.me ? 'now' : ago(d.seen)) + chev + '</span>'));
+      const body = el('div', 'mb-dev-b');
       const sync = d.sync === 'live' ? 'synced ' + ago(d.syncedAt) : d.sync || 'no live sync';
-      box.appendChild(el('p', null, '<b>' + esc(d.name) + '</b>' + (d.me ? ' (this one)' : '') +
-        '. Seen ' + esc(ago(d.seen)) + ', ' + esc(sync) + '.'));
-      const recent = d.errs.filter(e => Date.parse(e.t) > week);
+      body.appendChild(el('p', null, esc('Seen ' + ago(d.seen) + ', ' + sync + '.')));
+      if (d.me && t && t.ready) {
+        const op = el('p', null, 'Opened in <b>' + secs(Math.max(t.paint, t.ready)) + '</b> here' +
+          (t.paint ? ', first drawn at ' + secs(t.paint) : '') + '.');
+        op.className = 'mb-opened';
+        body.appendChild(op);
+      }
       const last = d.errs[d.errs.length - 1];
-      const e = el('p', null, recent.length
+      body.appendChild(el('p', null, recent.length
         ? esc(recent.length + (recent.length === 1 ? ' error' : ' errors') + ' this week. Last, in ' + nameOf(last.app) + ': ' + last.m)
-        : 'No errors this week.');
-      e.style.cssText = small;
-      box.appendChild(e);
+        : 'No errors this week.'));
       /* the last three opens on that device, newest first */
       const opens = Object.keys(d.open || {}).map(k => [k, d.open[k]]).filter(x => x[1] && x[1].s != null)
         .sort((a, b) => String(b[1].at || '').localeCompare(String(a[1].at || ''))).slice(0, 3);
-      if (opens.length) {
-        const o = el('p', null, esc('Opened ' + opens.map(x => nameOf(x[0]) + ' in ' + x[1].s + ' s' +
-          (x[1].p ? ' (drawn at ' + x[1].p + ' s)' : '')).join(', ') + '.'));
-        o.style.cssText = small;
-        box.appendChild(o);
-      }
+      if (opens.length) body.appendChild(el('p', null, esc('Open times: ' +
+        opens.map(x => nameOf(x[0]) + ' ' + x[1].s + ' s').join(', ') + '.')));
       const v = Object.keys(d.v).sort().map(k => nameOf(k) + ' ' + d.v[k]).join(', ');
-      if (v) { const vp = el('p', null, esc(v)); vp.style.cssText = small; box.appendChild(vp); }
-      host.appendChild(box);
+      if (v) body.appendChild(el('p', null, esc('Versions: ' + v + '.')));
+      box.appendChild(body);
+      all.appendChild(box);
     });
   },
 };

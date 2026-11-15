@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.112, 2026-11-16">
+<meta name="mb-version" content="1.0.113, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -6216,13 +6216,42 @@ const defaultLayout = () => {
    own, `layoutEmpty`, saying the empty list was chosen; without it a reload
    fell back to the old key or the factory board. */
 const chosenEmpty = () => { try { return !!Rec.setting('lifeos', 'layoutEmpty'); } catch (e) { return false; } };
-let layout, layoutHeld = [];
-try { const saved = Rec.setting('lifeos', 'layout'); if (Array.isArray(saved) && saved.length) layout = saved; } catch (e) {}
-if (!layout && !chosenEmpty()) {
-  try { layout = JSON.parse(localStorage.getItem(LKEY)); } catch (e) {}
-  if (!Array.isArray(layout) || !layout.length) layout = defaultLayout();
+/* ── the building block is half a cell (2026-11-16) ──
+   Tom: "a universal building block to build our widget system on". A
+   card's spot and size count in half cells, so it sizes and sits in steps
+   half as wide and half as tall; every card kept its size, because two half
+   cells and the gap between them are one old cell. U is how many units an
+   old cell is.
+
+   The board in units is a new row, `lifeos.layout2`, read first; the old
+   `lifeos.layout` is converted from once, in memory, and left alone, so a
+   device still on the old code keeps drawing its old board rather than
+   every card twice its size. Saved only when he next changes the board. */
+const U = 2, LAYOUT_KEY = 'layout2';
+const halfSpot = s => {
+  if (!s) return s;
+  const r = Object.assign({}, s);
+  if (r.x) r.x = r.x * U - (U - 1);
+  if (r.y) r.y = r.y * U - (U - 1);
+  if (r.w) r.w *= U;
+  if (r.h) r.h *= U;
+  return r;
+};
+const toHalf = list => list.map(c => {
+  if (!c) return c;
+  const o = Object.assign({}, c, halfSpot(spotOf(c)));
+  if (c.W) o.W = halfSpot(c.W);
+  return o;
+});
+function readLayout() {
+  let s = null; try { s = Rec.setting('lifeos', LAYOUT_KEY); } catch (e) {}
+  if (Array.isArray(s) && s.length) return s;
+  /* emptied on purpose: the old board must not come back in its place */
+  if (chosenEmpty()) return null;
+  let o = null; try { o = Rec.setting('lifeos', 'layout'); } catch (e) {}
+  return Array.isArray(o) && o.length ? toHalf(splitOld(o)) : null;
 }
-if (!Array.isArray(layout)) layout = [];
+let layout, layoutHeld = [];
 /* ── two boards: one for the 1920 screen, one for the 3840 ──
    Tom, 2026-10-16, a few hours after 1.0.69 scaled one board to every
    window: "Just save 2 positions between the 2 main screen sizes, I don't
@@ -6238,7 +6267,23 @@ if (!Array.isArray(layout)) layout = [];
    none of the drag, resize and add code had to learn about two boards;
    the other board's spots ride along in `S` and are put back on saving. */
 const WIDE_AT = 2880;
-const boardFor = () => !matchMedia('(max-width:820px)').matches && innerWidth >= WIDE_AT ? 'wide' : 'std';
+/* ── and a third, for a smaller screen (2026-11-16) ──
+   Tom: "accommodate iPad screen sizes, other resolutions". A window under
+   1440px wide (an iPad on its side, a laptop, a window snapped to half the
+   1920 screen) has a board of its own, `T`, drawn at full size rather than
+   the 1920 board shrunk. Until he arranges it, each card takes its 1920
+   size, cut to the window, and the grid packs them in reading order. A
+   phone still stacks. */
+const TAB_BELOW = 1440;
+const BOARD_LETTER = { wide: 'W', tab: 'T' };
+const boardFor = () => matchMedia('(max-width:820px)').matches ? 'std'
+  : innerWidth >= WIDE_AT ? 'wide' : innerWidth < TAB_BELOW ? 'tab' : 'std';
+/* units across a window at full size: a unit is 67px and a 12px gap */
+const fitUnits = () => Math.max(4, Math.floor((innerWidth - 16) / 79));
+/* a card's width on a board it has no spot on yet: as many cards to a row
+   as its 1920 width suggests, sharing the row evenly, so two 8-unit cards
+   on a 14-unit window are 7 each rather than one card and 6 units of gap */
+const shareRow = w => { const f = fitUnits(), n = Math.max(1, Math.round(f / w)); return Math.max(1, Math.min(w, Math.floor(f / n))); };
 let BOARD = boardFor();
 /* `hs`: he set this fit card's height by hand, so it keeps it (1.0.72) */
 const spotOf = e => { const s = {}; ['x', 'y', 'w', 'h', 'hs'].forEach(k => { if (e[k] != null) s[k] = e[k]; }); return s; };
@@ -6271,20 +6316,22 @@ function splitOld(list) {
 }
 /* the saved list, made into the board on screen, and back */
 function toWork(list, b) {
-  if (b !== 'wide') return list;
+  const k = BOARD_LETTER[b]; if (!k) return list;
   return list.map(e => {
-    const o = Object.assign({}, e); delete o.W;
+    const o = Object.assign({}, e); delete o[k];
     o.S = spotOf(e);
-    return setSpot(o, e.W || spotOf(e));
+    /* the wide board falls back to the 1920 spot, as it always did; the
+       small one to the 1920 size, cut to the window, placed by the grid */
+    return setSpot(o, e[k] || (b === 'wide' ? spotOf(e) : { w: shareRow(e.w), h: e.h, hs: e.hs }));
   });
 }
 function toStore(list, b) {
-  if (b !== 'wide') return list;
+  const k = BOARD_LETTER[b]; if (!k) return list;
   return list.map(e => {
     const o = Object.assign({}, e); delete o.S;
-    o.W = spotOf(e);
-    /* a card added on the wide screen finds its own spot on the 1920 one */
-    return setSpot(o, e.S || { w: Math.min(e.w, 12), h: e.h });
+    o[k] = spotOf(e);
+    /* a card added on another board finds its own spot on the 1920 one */
+    return setSpot(o, e.S || { w: Math.min(e.w, 12 * U), h: e.h });
   });
 }
 /* the window crossed 2880px: put this board's spots away, take the other's */
@@ -6324,7 +6371,13 @@ function retire(list) {
    first time the board was changed on the old copy. */
 const known = c => !!(c && WIDGETS[c.t] && widgetHere(WIDGETS[c.t]));
 const takeLayout = list => { const r = retire(list); layoutHeld = r.filter(c => !known(c)); return r.filter(known); };
-layout = toWork(takeLayout(splitOld(layout)), BOARD);
+layout = readLayout();
+if (!layout && !chosenEmpty()) {
+  try { layout = JSON.parse(localStorage.getItem(LKEY)); } catch (e) {}
+  layout = Array.isArray(layout) && layout.length ? toHalf(splitOld(layout)) : toHalf(defaultLayout());
+}
+if (!Array.isArray(layout)) layout = [];
+layout = toWork(takeLayout(layout), BOARD);
 /* Written only when he changes something, never on open. A device opened
    before its synced rows arrive has only the factory layout, and saving that
    stamped it newer than his real one, so it replaced his arrangement on every
@@ -6337,21 +6390,21 @@ const saveLayout = () => { try {
   const all = toStore(layout, BOARD).concat(layoutHeld);
   /* the list first, then the flag, each only as it changes */
   layoutSeen = JSON.stringify([all, !all.length]);
-  Rec.setting('lifeos', 'layout', all);
+  Rec.setting('lifeos', LAYOUT_KEY, all);
   if (chosenEmpty() !== !all.length) Rec.setting('lifeos', 'layoutEmpty', all.length ? 0 : 1);
-  layoutSeen = seenKey(Rec.setting('lifeos', 'layout'));
+  layoutSeen = seenKey(readLayout());
 } catch (e) {} };
 /* the layout is a row, so another device's arrangement can land while this
    one is open; it is picked up then, not at the next reload */
 function reloadLayout() {
-  let s = null; try { s = Rec.setting('lifeos', 'layout'); } catch (e) {}
+  const s = readLayout();
   const j = seenKey(s);
   if (j === layoutSeen) return;
   layoutSeen = j;
-  if (Array.isArray(s) && s.length) layout = toWork(takeLayout(splitOld(s)), BOARD);
+  if (Array.isArray(s) && s.length) layout = toWork(takeLayout(s), BOARD);
   else if (chosenEmpty()) { layout = []; layoutHeld = []; }
 }
-try { layoutSeen = seenKey(Rec.setting('lifeos', 'layout')); } catch (e) {}
+try { layoutSeen = seenKey(readLayout()); } catch (e) {}
 
 /* Is there a real pointer? Everything that can only be done by dragging with
    a mouse is gated on this. */
@@ -6374,6 +6427,8 @@ function move(i, d) {
   }
   saveLayout(); drawHome();
   Mobile.feedback('select');
+/* The board on screen's spots sit in x, y, w and h; the 1920 board's ride
+   in `S`, and the other board's stay under its own letter untouched. */
 }
 
 /* ══════════════ the body heatmap's figure ══════════════
@@ -6967,7 +7022,7 @@ function hint(m, x, y, w, h, land) {
      on a lattice of blocks counted from the patch's corner, smaller only where
      the patch is. A widget added there keeps its own size, cut to the room
      the patch has right and down of the block. */
-  const BW = 4, BH = 3;
+  const BW = 4 * U, BH = 3 * U;
   const block = (gap, at) => {
     if (!gap.w) return { x: Math.min(gap.x, COLS - BW + 1), y: gap.y, w: BW, h: BH, room: null };
     /* blocks never overlap: what is left at a patch's edge is a smaller
@@ -7485,13 +7540,19 @@ function drawHome() {
    a card leaving the edge leaves empty columns instead; it grows when a
    card goes further right, and never shrinks by itself. */
 let drawnReach = 0;
-const boardReach = () => { const v = Rec.setting('lifeos', 'boardReach'); return v && typeof v === 'object' ? v : {}; };
+/* in units since 2026-11-16, under its own name; the old reach doubled */
+const boardReach = () => {
+  const v = Rec.setting('lifeos', 'boardReach2'); if (v && typeof v === 'object') return v;
+  const o = Rec.setting('lifeos', 'boardReach'), r = {};
+  if (o && typeof o === 'object') for (const k in o) r[k] = (o[k] || 0) * U;
+  return r;
+};
 function keepReach() {
   if (NARROW() || !drawnReach) return;
   const r = boardReach();
   if ((r[BOARD] || 0) >= drawnReach) return;
   r[BOARD] = drawnReach;
-  Rec.setting('lifeos', 'boardReach', r);
+  Rec.setting('lifeos', 'boardReach2', r);
 }
 function fitBoard() {
   const f = SCALE, was = layout.map(c => Object.assign({}, c)), wasReach = boardReach();
@@ -7500,10 +7561,10 @@ function fitBoard() {
     c.x = Math.round((c.x - 1) * f) + 1; c.y = Math.round((c.y - 1) * f) + 1;
     c.w = Math.max(1, Math.round(c.w * f)); c.h = Math.max(1, Math.round(c.h * f));
   });
-  const r = boardReach(); r[BOARD] = 0; Rec.setting('lifeos', 'boardReach', r);
+  const r = boardReach(); r[BOARD] = 0; Rec.setting('lifeos', 'boardReach2', r);
   drawnReach = 0; saveLayout(); drawHome(); saveLayout();
   UI.undo('Board fitted to the screen', () => {
-    layout.splice(0, layout.length, ...was); Rec.setting('lifeos', 'boardReach', wasReach);
+    layout.splice(0, layout.length, ...was); Rec.setting('lifeos', 'boardReach2', wasReach);
     drawnReach = 0; saveLayout(); drawHome();
   });
 }
@@ -7572,12 +7633,15 @@ function fitGrid() {
   /* how far the cards reach, and the cell that fits that in the window;
      never less than the board has been, so taking a card off the right
      edge does not make every other card jump bigger (keepReach) */
-  const usedC = Math.max(12, layout.reduce((a, c) => Math.max(a, (c.x || 1) + c.w - 1), 1), boardReach()[BOARD] || 0);
+  /* a unit is half a cell less half a gap, so two of them and the gap
+     between are one old cell; at least as many as fit the window */
+  const UW = (CELL.w - gap) / U, UH = CELL.h / U;
+  const usedC = Math.max(Math.max(4, Math.floor((Wd + gap) / (UW + gap))), layout.reduce((a, c) => Math.max(a, (c.x || 1) + c.w - 1), 1), boardReach()[BOARD] || 0);
   drawnReach = usedC;
-  const sw = (Wd - (usedC - 1) * gap) / (usedC * CELL.w);
+  const sw = (Wd - (usedC - 1) * gap) / (usedC * UW);
   /* full size, and smaller only in a window too narrow for the board */
   SCALE = Math.max(0.1, Math.min(1, sw));
-  const cw = CELL.w * SCALE, R = CELL.h * SCALE;
+  const cw = UW * SCALE, R = Math.max(gap + 4, UH * SCALE);
   COLS = Math.max(usedC, Math.floor((Wd + gap) / (cw + gap)));
   g.style.gridTemplateColumns = 'repeat(' + COLS + ',' + cw.toFixed(2) + 'px)';
   g.style.width = (COLS * cw + (COLS - 1) * gap).toFixed(2) + 'px';
@@ -7905,7 +7969,7 @@ function widgetPicker(spot) {
   /* One widget's page: what it shows, its choices, and ADD. The choices
      write a draft copy, so nothing on the board changes until ADD. */
   const page = (k, back) => {
-    const W = WIDGETS[k], cfg = { t: k, w: W.w, h: W.h };
+    const W = WIDGETS[k], cfg = { t: k, w: W.w * U, h: W.h * U };
     const draw = () => {
       box.innerHTML = ''; find.hidden = true;
       const bk = optBtn(ico('back', '←'), 'All widgets', '');
@@ -7951,7 +8015,7 @@ function widgetPicker(spot) {
       const line = (ABOUT[k] || '') + (n ? ' On the board' + (n > 1 ? ' ' + n + ' times' : '') + '.' : '');
       const row = el('div', 'wpick');
       const b = optBtn(ico('app.' + (W.app || 'home'), '▤'), W.nm, line);
-      b.onclick = () => add({ t: k, w: W.w, h: W.h }, W.nm);
+      b.onclick = () => add({ t: k, w: W.w * U, h: W.h * U }, W.nm);
       row.appendChild(b);
       if (widgetChoices(W, { t: k }, () => {}).length) {
         const gb = el('button', 'wgear mb-press', ico('options', '⚙'));
@@ -7969,7 +8033,7 @@ function widgetPicker(spot) {
       (W.presets || []).forEach(ps => {
         const pr = el('div', 'wpick');
         const pb = optBtn(ico('app.' + (W.app || 'home'), '▤'), ps.nm, ps.note || '');
-        pb.onclick = () => add(Object.assign({ t: k, w: W.w, h: W.h }, ps.cfg), ps.nm);
+        pb.onclick = () => add(Object.assign({ t: k, w: W.w * U, h: W.h * U }, ps.cfg, ps.cfg.w ? { w: ps.cfg.w * U } : {}, ps.cfg.h ? { h: ps.cfg.h * U } : {}), ps.nm);
         pr.appendChild(pb);
         const sp = el('span', 'wgear none');
         sp.setAttribute('aria-hidden', 'true');
@@ -8001,7 +8065,7 @@ function widgetPicker(spot) {
          was the list, so every move after it was written into the factory
          board and the next Reset gave the moved board back */
       const was = layout.slice(), held = layoutHeld.slice();
-      layout = toWork(defaultLayout(), BOARD); layoutHeld = []; saveLayout(); closeModal(); drawHome();
+      layout = toWork(toHalf(defaultLayout()), BOARD); layoutHeld = []; saveLayout(); closeModal(); drawHome();
       UI.undo('layout reset', () => { layout = was; layoutHeld = held; saveLayout(); drawHome(); });
     };
     layoutRow(rb);
