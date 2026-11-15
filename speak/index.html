@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.16, 2026-11-16">
+<meta name="mb-version" content="1.0.17, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -136,6 +136,13 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .chip small{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap)}
 .ask-note{width:100%;min-height:calc(var(--s-10) * 1.2);margin-top:var(--s-3);font-size:var(--f-3);line-height:var(--lh-body)}
 .rank .row{gap:var(--s-2)}
+.voice{overflow-x:auto;margin-top:var(--s-2)}
+.voice table{border-collapse:collapse;width:100%;font-size:var(--f-2)}
+.voice th,.voice td{padding:var(--s-2);text-align:left;border-bottom:var(--border-width) solid var(--line);vertical-align:top}
+.voice td{font-family:var(--font-mono);white-space:nowrap}
+.voice thead th{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);color:var(--text-muted);text-transform:uppercase}
+.voice tbody th{font-weight:var(--w-body)}
+.voice th small{display:block;font-size:var(--f-1);color:var(--text-muted)}
 /* the goal and the why, on a drill sheet and on a today card */
 .goal{display:grid;grid-template-columns:var(--s-9) 1fr;gap:var(--s-2) var(--s-3);align-items:baseline;
   font-size:var(--f-2);line-height:var(--lh-body);margin:var(--s-3) 0}
@@ -260,7 +267,7 @@ const APP = {
   name: 'Speak',
   icon: '◍',
   blurb: 'talk to the camera, measured: pace, fillers, flow, clarity, eyes',
-  types: ['take', 'topic', 'script', 'answer', 'ask'],
+  types: ['take', 'topic', 'script', 'answer', 'ask', 'speaker'],
 };
 
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
@@ -1551,6 +1558,142 @@ function todaysDrills() {
   return out;
 }
 
+/* ══════════════ your voice ══════════════
+   Tom, 2026-11-16: "Speak just updates and keeps a continual update of how I
+   actually talk and what my speech patterns are. The purpose of this would be
+   to help Claude write in my voice and so that I have an awareness of how I
+   talk and be able to compare this to other speakers." Read from every take's
+   transcript (and every bank answer), so it moves as he speaks; compared only
+   with speakers he adds by pasting a transcript (`speaker` rows, his pick).
+   Claude keeps tom-context/voice-spoken.md from the same rows. */
+const STOP = new Set(('a an the and or but so if then than to of in on at by for with from as is are was were be been being it its this that these those ' +
+  'i me my we our you your he she they them his her their there here what which who how when where why not no yes do does did done have has had ' +
+  'just very really can could would should will shall may might must also too like um uh okay ok yeah gonna wanna right').split(' '));
+const PRON = { i: 'i', me: 'i', my: 'i', mine: 'i', "i'm": 'i', "i've": 'i', "i'll": 'i', "i'd": 'i',
+  you: 'you', your: 'you', yours: 'you', "you're": 'you', "you've": 'you', "you'll": 'you',
+  we: 'we', us: 'we', our: 'we', ours: 'we', "we're": 'we', "we've": 'we', "we'll": 'we' };
+/* the numbers of a body of speech. `pieces` are breath groups for him (the
+   transcript's chunks) and sentences for a pasted transcript, said so on screen */
+function voiceOf(pieces) {
+  const ws = [].concat.apply([], pieces.map(wordsOf));
+  const n = ws.length;
+  if (n < 30) return { n: n };
+  let ttr = 0, wins = 0;
+  for (let i = 0; i + 100 <= n; i += 50) { ttr += new Set(ws.slice(i, i + 100)).size / 100; wins++; }
+  const pr = { i: 0, you: 0, we: 0 }; ws.forEach(w => { if (PRON[w]) pr[PRON[w]]++; });
+  const fill = ws.filter(w => FILLERS.indexOf(w) >= 0).length;
+  const list = crutchList().map(x => x.toLowerCase());
+  const joined = ' ' + ws.join(' ') + ' ';
+  const crutch = list.reduce((s0, ph) => s0 + (joined.split(' ' + ph + ' ').length - 1), 0);
+  const count = (arr) => { const c = {}; arr.forEach(x => { c[x] = (c[x] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1]); };
+  const grams = [];
+  pieces.forEach(pc => { const w = wordsOf(pc); for (let i = 0; i + 3 <= w.length; i++) { const g = w.slice(i, i + 3); if (g.some(x => !STOP.has(x))) grams.push(g.join(' ')); } });
+  const lens = pieces.map(pc => wordsOf(pc).length).filter(x => x > 0);
+  return {
+    n: n, pieces: lens.length,
+    perPiece: lens.length ? n / lens.length : 0,
+    variety: wins ? ttr / wins * 100 : new Set(ws).size / n * 100,
+    wordLen: ws.reduce((s0, w) => s0 + w.length, 0) / n,
+    i: pr.i / n * 100, you: pr.you / n * 100, we: pr.we / n * 100,
+    fill: (fill + crutch) / n * 100,
+    /* a phrase that is only a shift of one already kept ("so the thing" beside
+       "the thing is") is the same phrase, so it is left out */
+    phrases: count(grams).filter(x => x[1] >= 3).reduce((kept, x) => {
+      const w = x[0].split(' ');
+      if (!kept.some(k => { const v = k[0].split(' '); return (w[0] === v[1] && w[1] === v[2]) || (w[1] === v[0] && w[2] === v[1]); })) kept.push(x);
+      return kept;
+    }, []).slice(0, 8),
+    openers: count(pieces.map(pc => wordsOf(pc).slice(0, 2).join(' ')).filter(x => x.split(' ').length === 2)).filter(x => x[1] >= 2).slice(0, 5),
+    words: count(ws.filter(w => !STOP.has(w) && w.length > 2)).slice(0, 12),
+  };
+}
+/* his own speech: every transcript, the takes' chunks and bank answers not
+   already counted through their take */
+function myVoice() {
+  const all = takes().filter(t => t.tx);
+  const pieces = [].concat.apply([], all.map(t => String(t.tx).split(' | ')));
+  const v = voiceOf(pieces);
+  const recent = all.filter(t => t.date >= Day.shift(Day.today(), -29) && t.m);
+  const avg = k => { const xs = recent.map(t => t.m[k]).filter(x => x != null); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; };
+  v.takes = all.length; v.wpm = avg('wpm'); v.fpm = avg('fpm');
+  return v;
+}
+const speakers = () => Rec.all('speaker').map(r => Object.assign({ key: r.key }, r.payload)).sort((a, b) => (a.at || 0) - (b.at || 0));
+const speakerVoice = sp => voiceOf(String(sp.text || '').split(/[.!?]+\s+|\n+/));
+const VOICE_ROWS = [
+  ['perPiece', 'Words per sentence', v => r1(v), 'yours: per breath group, the transcript has no full stops'],
+  ['variety', 'Word variety', v => Math.round(v) + '%', 'different words in every hundred'],
+  ['wordLen', 'Word length', v => r1(v), 'letters a word'],
+  ['i', 'I, me, my', v => r1(v), 'per hundred words'],
+  ['you', 'You, your', v => r1(v), 'per hundred words'],
+  ['we', 'We, us, our', v => r1(v), 'per hundred words'],
+  ['fill', 'Fillers in the words', v => r1(v), 'um, uh and your crutch list, per hundred words'],
+];
+function voiceText(v) {
+  if (!v || v.n < 30) return '# How Tom talks\n\nNot enough transcript yet.\n';
+  const L = ['# How Tom talks', '', 'From ' + v.takes + ' takes, ' + v.n + ' words, read by SPEAK on ' + Day.today() + '.', ''];
+  if (v.wpm != null) L.push('- Pace: ' + Math.round(v.wpm) + ' words a minute (last 30 days)');
+  if (v.fpm != null) L.push('- Fillers: ' + r1(v.fpm) + ' a minute (last 30 days)');
+  VOICE_ROWS.forEach(r => L.push('- ' + r[1] + ': ' + r[2](v[r[0]]) + ' (' + r[3] + ')'));
+  if (v.phrases.length) L.push('', 'Phrases he repeats: ' + v.phrases.map(x => '"' + x[0] + '" (' + x[1] + ')').join(', '));
+  if (v.openers.length) L.push('', 'How he starts a thought: ' + v.openers.map(x => '"' + x[0] + '"').join(', '));
+  if (v.words.length) L.push('', 'Words he reaches for: ' + v.words.map(x => x[0]).join(', '));
+  return L.join('\n') + '\n';
+}
+function addSpeaker() {
+  UI.dialog({
+    title: 'ADD A SPEAKER', width: 560,
+    body: (b, h) => {
+      b.appendChild(el('p', 'muted', 'Paste a transcript of someone you want to compare with: a YouTube transcript, a podcast, a speech.'));
+      const nm = el('input', 'mb-input bank-q'); nm.placeholder = 'Their name'; nm.setAttribute('aria-label', 'Their name');
+      const tx = el('textarea', 'mb-input ask-note'); tx.placeholder = 'Their words'; tx.setAttribute('aria-label', 'Their words');
+      b.appendChild(nm); b.appendChild(tx);
+      const go = el('button', 'mb-btn go mb-press mb-tap', 'ADD');
+      go.onclick = () => {
+        const name = nm.value.trim(), text = tx.value.trim();
+        if (!name || wordsOf(text).length < 30) { UI.toast('A name and at least 30 words.', { bad: true }); return; }
+        Rec.set('speaker', null, newId(), { name: name, text: text.slice(0, 40000), at: Date.now() });
+        h.close(); draw();
+      };
+      const a = el('div', 'acts'); a.appendChild(go); b.appendChild(a);
+      UI.focusSoon(nm);
+    },
+    actions: [{ label: 'CLOSE' }],
+  });
+}
+function drawVoice(m) {
+  const me = myVoice(), sps = speakers();
+  const c = card('YOUR VOICE', me.takes ? me.takes + ' takes, ' + me.n + ' words' : '');
+  if (me.n < 30) c.appendChild(el('p', 'muted', 'Your voice builds from your transcripts. Answer a FITNESS or OTHER TOPIC to start it.'));
+  else {
+    const cols = [{ name: 'You', v: me }].concat(sps.map(sp => ({ name: sp.name, v: speakerVoice(sp), sp: sp })));
+    const tb = el('div', 'voice mb-scroll');
+    let html = '<table><thead><tr><th></th>' + cols.map(x => '<th>' + esc(x.name) + '</th>').join('') + '</tr></thead><tbody>';
+    if (me.wpm != null) html += '<tr><th>Pace<small>words a minute, 30 days</small></th><td>' + Math.round(me.wpm) + '</td>' + cols.slice(1).map(() => '<td class="muted">·</td>').join('') + '</tr>';
+    VOICE_ROWS.forEach(r => {
+      html += '<tr><th>' + esc(r[1]) + '<small>' + esc(r[3]) + '</small></th>' + cols.map(x => '<td>' + (x.v.n >= 30 ? esc(String(r[2](x.v[r[0]]))) : '·') + '</td>').join('') + '</tr>';
+    });
+    tb.innerHTML = html + '</tbody></table>';
+    c.appendChild(tb);
+    const lst = (title, arr, q) => { if (arr && arr.length) c.appendChild(el('p', 'muted', '<b>' + title + ':</b> ' + arr.map(x => esc(q ? '"' + x[0] + '"' : x[0]) + (q ? ' ' + x[1] : '')).join(', '))); };
+    lst('Phrases you repeat', me.phrases, true);
+    lst('How you start a thought', me.openers, true);
+    lst('Words you reach for', me.words, false);
+  }
+  const acts = el('div', 'acts');
+  const add = el('button', 'mb-btn mb-press mb-tap', 'ADD A SPEAKER'); add.onclick = addSpeaker; acts.appendChild(add);
+  if (me.n >= 30) { const cp = el('button', 'mb-btn mb-press mb-tap', 'COPY FOR CLAUDE'); cp.onclick = () => copyText(voiceText(me), 'Your voice'); acts.appendChild(cp); }
+  c.appendChild(acts);
+  sps.forEach(sp => {
+    const r = el('div', 'row mb-plate');
+    r.innerHTML = '<span class="tx"><span class="nm">' + esc(sp.name) + '</span><span class="sub">' + wordsOf(sp.text).length + ' words pasted</span></span>';
+    Mobile.hold(r, e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
+      { label: 'Remove ' + sp.name, kind: 'bad', fn: () => { const was = Object.assign({}, sp); delete was.key; Rec.del('speaker', null, sp.key); UI.undo('removed ' + sp.name, () => { Rec.set('speaker', null, sp.key, was); draw(); }); draw(); } },
+    ], { title: 'SPEAKER' }), { dots: true, dotsLabel: 'More for ' + sp.name });
+    c.appendChild(r);
+  });
+  m.appendChild(c);
+}
 /* ══════════════ questions for you ══════════════ */
 const ASK_DEST = { knowledge: 'Fitness Knowledge Bank', brand: 'brand.md', codex: 'CODEX' };
 function askSpec(desc) {
@@ -2053,6 +2196,7 @@ function addTopic() {
 /* PROGRESS: a chart per measure over the last 30 days, the target as a rule,
    the latest value marked, and what he has already done. No verdicts. */
 function drawProgress(m) {
+  drawVoice(m);
   const all = takes().filter(t => t.drill !== 'warm');
   const done = card('ALREADY DONE');
   const st = el('div', 'stats');

@@ -310,6 +310,7 @@ An app may read any type. It writes only the types it owns.
 | `topic` | **speak** | id | `{text, kind}` — his own prompt: a topic, a story, or three bullets |
 | `answer` | **speak** | the take's key, dated as the take | `{q, src, term, bracket, subj, text, words, dur, at}` — the answer bank (fitness, productivity, philosophy, behaviour change): one spoken answer to a FITNESS TOPIC question, its full transcript. Other work (Skool, content) reads it from the backup or the sheet |
 | `ask` | **speak** | the `Ask:` note's key, undated | `{q, kind, answer, optId, ranking, brackets, note, said, take, dest, context, onRecord, tdId, askedAt, answeredAt}` — Tom's answer to a question any producer asked through a Todoist `Ask:` task. Claude files it at `dest`; see `tom-context/fitness-knowledge-bank.md` |
+| `speaker` | **speak** | id, undated | `{name, text, at}` — a speaker Tom compares his voice with: their pasted transcript |
 | `tclip` | **speak** | the take's key, dated as the take | `{mime, dur, data, pad}` — the take's sound, padded past 64KB so it never syncs and stays on the device that made it. See `speak/CLAUDE.md` |
 | `script` | **speak** | id, undated | `{title, text, at}` — a talk he writes, one line per thought, rehearsed through SPEAK's SCRIPT steps |
 | `cset` `cex` `cphase` `csession` | **coach** | `pid\|` + the key the row had in the client's TRAIN; dated as it was | a client's set, exercise, block and day, exactly as their TRAIN wrote it, merged with its own updated_at so a second file only adds what is new |

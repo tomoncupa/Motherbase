@@ -478,6 +478,37 @@ OTHER opened OTHER TOPIC. Not watched in SPEAK.exe itself; it opens the
 hosted page, so it gets the buttons on its next open (twice, per the root
 brief's shared-file trap).
 
+## YOUR VOICE, added 2026-11-16 (SPEAK 1.0.17)
+
+Tom: *"Speak just updates and keeps a continual update of how I actually talk
+and what my speech patterns are. The purpose of this would be to help Claude
+write in my voice and so that I have an awareness of how I talk and be able to
+compare this to other speakers."* His picks: Claude's copy lives in its own
+file, `tom-context/voice-spoken.md`; compare only with speakers he adds.
+
+- **First card on PROGRESS** (`drawVoice`). From every take's `tx` (chunks
+  are breath groups) through `voiceOf`: words, words per breath group, word
+  variety (different words per hundred, moving windows of 100), word length,
+  I / you / we per hundred words, fillers and his crutch list per hundred
+  words; pace and fillers a minute from the last 30 days' takes; phrases he
+  repeats (three-word runs said 3 times or more, at least one non-stop word,
+  a shifted copy of a kept phrase left out), how he starts a thought (first
+  two words of a breath group), and the words he reaches for.
+- **ADD A SPEAKER**: a name and a pasted transcript (30 words at least,
+  40,000 characters at most), a `speaker` row `{name, text, at}`; split into
+  sentences by full stops, which the screen says differs from his breath
+  groups. Each one is a column in the table; a hold or dots menu removes it
+  with UNDO.
+- **COPY FOR CLAUDE** puts the profile on the clipboard as Markdown, the shape
+  `voice-spoken.md`'s Profile section takes.
+- Uses the program's `wordsOf` (one definition; a second one stopped the page
+  loading until it was taken out).
+
+Watched 2026-11-16 in headless Chromium at 390: the empty state, then three
+seeded takes showing every measure and the phrases, a pasted speaker as a
+second column, COPY FOR CLAUDE. No page errors, no sideways scroll. Review
+197/197. His real backup had 16 takes and no transcripts that day.
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync
