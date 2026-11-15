@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.113, 2026-11-16">
+<meta name="mb-version" content="1.0.114, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -37,6 +37,7 @@ try { if (window.frameElement && typeof parent.stayIn === 'function') location.r
 <script src="shared/journal.js"></script>
 <script src="shared/dose.js"></script>
 <script src="shared/grade.js"></script>
+<script src="shared/goals.js"></script>
 <script src="shared/measure.js"></script>
 <script src="shared/chart.js"></script>
 <script src="shared/mobile.js"></script>
@@ -463,6 +464,27 @@ body.dragging #cardframes{z-index:0}
 .empty .link::after{content:'';position:absolute;left:50%;top:50%;width:max(100%,var(--tap,44px));
   height:var(--tap,44px);transform:translate(-50%,-50%)}
 
+/* THIS WEEK: Tom, 2026-11-16. The call's colour is on its dot; words stay text. */
+.twlist{display:flex;flex-direction:column}
+.twg{padding:var(--s-2) 0;border-top:var(--border-width,1px) solid var(--line);display:flex;flex-direction:column;gap:var(--s-1)}
+.twg:first-child{border-top:0;padding-top:0}
+.twtop{display:flex;align-items:flex-start;gap:var(--s-2)}
+.twn{flex:1;min-width:0;overflow-wrap:anywhere;line-height:var(--lh-body,1.4)}
+.twcall,.twfixb{flex:none;position:relative;display:inline-flex;align-items:center;gap:var(--s-1);border:var(--border-width,1px) solid var(--line);
+  background:var(--surface-2);color:var(--txt);border-radius:var(--radius-md,6px);padding:var(--s-1) var(--s-2);font:inherit;font-size:var(--f-1);cursor:pointer}
+.twcall::before{content:'';width:var(--s-2);height:var(--s-2);border-radius:50%;background:var(--mk)}
+.twcall.mine{border-color:var(--dim2)}
+.twcall::after,.twfixb::after{content:'';position:absolute;left:50%;top:50%;width:max(100%,var(--tap,44px));height:var(--tap,44px);transform:translate(-50%,-50%)}
+.twnew,.twspan{flex:none;font-size:var(--f-1);color:var(--dim2)}
+.twmid{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-2)}
+.twwks{display:inline-flex;gap:var(--s-1)}
+.twwk{min-width:var(--s-5);height:var(--s-5);display:inline-flex;align-items:center;justify-content:center;font-family:var(--f1);
+  font-size:var(--f-1);color:var(--dim2);border:var(--border-width,1px) solid var(--line);border-radius:var(--radius-sm,4px)}
+.twwk.got{color:var(--txt);background:color-mix(in srgb,var(--success) 18%,transparent);border-color:color-mix(in srgb,var(--success) 45%,transparent)}
+.twwk.now{box-shadow:0 0 0 var(--border-width,1px) var(--dim)}
+.twfix{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-1) var(--s-2);font-size:var(--f-1);color:var(--dim)}
+.twnx{min-width:0;overflow-wrap:anywhere}
+.twplan{margin-top:var(--s-3);align-self:flex-start}
 /* ---------- shared widget bits ---------- */
 .rowlist{display:flex;flex-direction:column;gap:5px}
 /* TODAY's trial (2026-11-09): a row is a line, not a plate; the routine's
@@ -4310,6 +4332,88 @@ const WIDGETS = {
     },
   },
 
+  /* THIS WEEK: Tom, 2026-11-16, from Superfocus. Each QUESTS goal's call for
+     the week, the weeks behind it and its one fix, read from shared/goals.js,
+     the rule QUESTS's Goals screen shows, plus PLAN THE WEEK, which opens
+     QUESTS's week draft. Nothing here needs Todoist. */
+  thisweek: {
+    nm: 'THIS WEEK', w: 4, h: 5, app: 'quest', to: ['quest', 'goals'],
+    sub: () => {
+      const A = Goals.aims();
+      if (!A.length) return 'no goals set';
+      const L = Goals.todos(), n = { on: 0, adj: 0, off: 0 };
+      A.forEach(a => { const h = Goals.health(a, L); if (h && h.v) n[h.v]++; });
+      return ['on', 'adj', 'off'].filter(k => n[k]).map(k => n[k] + ' ' + Goals.NAME[k].toLowerCase()).join(', ') || A.length + ' new this week';
+    },
+    draw(body) {
+      const A = Goals.aims(), L = Goals.todos();
+      const plan = el('button', 'mb-btn mb-press mb-tap twplan', 'PLAN THE WEEK');
+      plan.type = 'button';
+      plan.onclick = e => { e.stopPropagation(); goTo(['quest', 'week']); };
+      if (!A.length) {
+        body.appendChild(el('div', 'empty', 'No goals'));
+        const set = el('button', 'mb-btn mb-press mb-tap twplan', 'SET A GOAL');
+        set.type = 'button';
+        set.onclick = e => { e.stopPropagation(); goTo(['quest', 'goals']); };
+        body.appendChild(set);
+        return;
+      }
+      const wrap = el('div', 'twlist');
+      A.forEach(a => {
+        const h = Goals.health(a, L), nx = Goals.next(a, L);
+        const g = el('div', 'twg');
+        const top = el('div', 'twtop');
+        top.appendChild(el('span', 'twn', esc(a.text)));
+        if (h.v) {
+          const c = el('button', 'twcall', esc(Goals.NAME[h.v]));
+          c.type = 'button';
+          c.style.setProperty('--mk', Goals.MK[h.v]);
+          c.setAttribute('aria-label', 'This week: ' + Goals.NAME[h.v] + (h.mark ? ', your call' : '') + '. Mark it right or wrong');
+          if (h.mark) c.classList.add('mine');
+          c.onclick = e => {
+            e.stopPropagation();
+            const r = c.getBoundingClientRect(), items = [];
+            if (h.auto && !h.mark) items.push({ label: 'That’s right', fn: () => Goals.mark(a.key, h.ws, h.auto) });
+            ['on', 'adj', 'off'].forEach(v => { if (v !== h.v) items.push({ label: 'It’s ' + Goals.NAME[v].toLowerCase(), fn: () => Goals.mark(a.key, h.ws, v) }); });
+            if (h.mark) items.push({ label: 'Clear my call', fn: () => Goals.mark(a.key, h.ws, '') });
+            UI.menu(r.left, r.bottom, items, { title: 'This week’s call' });
+          };
+          top.appendChild(c);
+        } else top.appendChild(el('span', 'twnew', 'New'));
+        g.appendChild(top);
+        const mid = el('div', 'twmid');
+        const strip = el('span', 'twwks');
+        strip.setAttribute('aria-label', 'Tasks done each week, last ' + Goals.WEEKS + ' weeks');
+        h.weeks.forEach((k, i) => {
+          const s = el('span', 'twwk' + (k.n ? ' got' : '') + (i === h.weeks.length - 1 ? ' now' : ''), String(k.n));
+          s.title = (i === h.weeks.length - 1 ? 'This week' : 'Week of ' + Day.short(k.s)) + ': ' + k.n + ' done';
+          strip.appendChild(s);
+        });
+        mid.appendChild(strip);
+        if (h.span) mid.appendChild(el('span', 'twspan', esc(h.span)));
+        g.appendChild(mid);
+        const fix = el('div', 'twfix');
+        if (nx.kind === 'next') fix.appendChild(el('span', 'twnx', 'Next: ' + esc(nx.x.text) + ', ' + esc(Day.label(Goals.due(nx.x)))));
+        else {
+          if (nx.kind === 'sched') fix.appendChild(el('span', 'twnx', 'Next: ' + esc(nx.x.text)));
+          const b = el('button', 'twfixb', nx.kind === 'sched' ? 'Put on today' : 'Add a task');
+          b.type = 'button';
+          b.onclick = e => {
+            e.stopPropagation();
+            if (nx.kind !== 'sched') { goTo(['quest', 'goals']); return; }
+            const keep = Goals.toToday(nx.x);
+            if (keep) UI.undo('On today: <b>' + esc(nx.x.text) + '</b>', () => Rec.set('note', nx.x.date, nx.x.key, keep));
+          };
+          fix.appendChild(b);
+        }
+        g.appendChild(fix);
+        wrap.appendChild(g);
+      });
+      body.appendChild(wrap);
+      body.appendChild(plan);
+    },
+  },
+
   projects: {
     nm: 'PROJECTS', w: 4, h: 3, app: 'quest', to: ['quest'],
     count() {
@@ -7877,6 +7981,7 @@ const ABOUT = {
   links: 'Every app’s web address, to copy or open.',
   apps: 'A button for every app, in dock order; keys 1 to 9 open the first nine.',
   upcoming: 'Todos with a date coming up.',
+  thisweek: 'Each goal’s call for the week, its one fix, and Plan the week.',
   projects: 'Open todos for each project.',
   brief: 'The morning brief from your PC, and its todos.',
   rhythms: 'BLOCK’s Every blocks and Habits: owed, due, coming up and this period’s count, tickable.',
