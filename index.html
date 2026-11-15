@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.116, 2026-11-16">
+<meta name="mb-version" content="1.0.117, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -484,7 +484,8 @@ body.dragging #cardframes{z-index:0}
 .twwk.now{box-shadow:0 0 0 var(--border-width,1px) var(--dim)}
 .twfix{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-1) var(--s-2);font-size:var(--f-1);color:var(--dim)}
 .twnx{min-width:0;overflow-wrap:anywhere}
-.twplan{margin-top:var(--s-3);align-self:flex-start}
+.twplan{align-self:flex-start}
+.twbar{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-3)}
 /* ---------- shared widget bits ---------- */
 .rowlist{display:flex;flex-direction:column;gap:5px}
 /* TODAY's trial (2026-11-09): a row is a line, not a plate; the routine's
@@ -3217,9 +3218,9 @@ const WIDGETS = {
       const mean = got.reduce((a, v) => a + v, 0) / got.length;
       return mean.toFixed(1) + ' hrs a night' + (target ? ', ' + got.filter(v => v >= target).length + ' of ' + got.length + ' on target' : '');
     },
-    sub: cfg => WIDGETS.sleep.said((cfg && cfg.days) || 7),
+    sub: cfg => WIDGETS.sleep.said(zoomDays(cfg, (cfg && cfg.days) || 7)),
     draw(body, cfg) {
-      const f = Rec.map('field').sleep, n = (cfg && cfg.days) || 7;
+      const f = Rec.map('field').sleep, n = zoomDays(cfg, (cfg && cfg.days) || 7);
       const target = f && f.target ? Number(f.target) : 0;
       const days = [];
       for (let i = n - 1; i >= 0; i--) {
@@ -4431,7 +4432,28 @@ const WIDGETS = {
         wrap.appendChild(g);
       });
       body.appendChild(wrap);
-      body.appendChild(plan);
+      /* In Main Menu.exe the CLAUDE panel can draft the week (Tom, 2026-11-16, "2A"):
+         it is handed each goal and writes todos with a day and a goal, each with Undo. */
+      const bar = el('div', 'twbar');
+      bar.appendChild(plan);
+      if (window.MBClaude && MBClaude.ask) {
+        const ai = el('button', 'mb-btn mb-press mb-tap twplan', 'PLAN WITH CLAUDE');
+        ai.type = 'button';
+        ai.onclick = e => {
+          e.stopPropagation();
+          const t = Day.today(), end = Day.shift(Goals.weekStart(t), Day.dow(t) === 0 ? 13 : 6), s0 = Day.dow(t) === 0 ? Day.shift(t, 1) : t;
+          const lines = A.map(a => {
+            const h = Goals.health(a, L), nx = Goals.next(a, L);
+            return '- ' + a.text + ' (key ' + a.key + (a.by ? ', by ' + a.by : '') + '): ' + (h.v ? Goals.NAME[h.v] : 'new') +
+              (h.line ? '; ' + h.line : '') + (nx.kind === 'next' ? '; next task ' + nx.x.text + ' due ' + Goals.due(nx.x) : nx.kind === 'sched' ? '; open task with no day this week: ' + nx.x.text : h.line ? '' : '; nothing open serves it');
+          });
+          const text = ['Plan my week, ' + s0 + ' to ' + end + '. Today is ' + t + '. My goals:'].concat(lines,
+            ['Draft the week as todos with a day and the goal each serves. Say what you wrote.']).join(String.fromCharCode(10));
+          if (!MBClaude.ask(text)) toast('Claude is still answering. Try again when it finishes.', { bad: true });
+        };
+        bar.appendChild(ai);
+      }
+      body.appendChild(bar);
     },
   },
 
@@ -4576,7 +4598,7 @@ const WIDGETS = {
       return id ? Object.assign({ id: id }, F[id]) : null;
     },
     series(cfg) {
-      const f = WIDGETS.measure.field(cfg), days = (cfg && cfg.days) || 30, out = [];
+      const f = WIDGETS.measure.field(cfg), days = zoomDays(cfg, (cfg && cfg.days) || 30), out = [];
       if (!f) return out;
       for (let i = days - 1; i >= 0; i--) {
         const d = LifeOS.shift(LifeOS.day(), -i), v = evValue(d, f.id);
@@ -4586,7 +4608,7 @@ const WIDGETS = {
     },
     nmFor: cfg => {
       const f = WIDGETS.measure.field(cfg);
-      const span = (WIDGETS.measure.days.filter(d => d[0] === ((cfg && cfg.days) || 30))[0] || [0, ''])[1];
+      const span = zoomDaysName(WIDGETS.measure.days, zoomDays(cfg, (cfg && cfg.days) || 30));
       return (f ? String(f.label || f.id).toUpperCase() : 'MEASURE') + ' \u00b7 ' + span;
     },
     sub: cfg => {
@@ -4614,7 +4636,7 @@ const WIDGETS = {
       let kept = null;
       const box = el('div', 'fits');
       body.appendChild(box);
-      const line = pts.map(p => [p.d, p.v]), days = (cfg && cfg.days) || 30;
+      const line = pts.map(p => [p.d, p.v]), days = zoomDays(cfg, (cfg && cfg.days) || 30);
       Chart.mount(box, { label: (f.label || f.id) + ', ' + pts.length + ' readings' }, c => {
         c.xTime(LifeOS.shift(LifeOS.day(), -(days - 1)), LifeOS.day());
         /* a 1-to-5 scale on its own scale, and a count from zero: mood on a

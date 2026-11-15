@@ -29,7 +29,7 @@ const wv = g.chrome && g.chrome.webview;
 if (!wv || g.top !== g || g.MB_CLAUDE) return;
 g.MB_CLAUDE = true;
 
-const VERSION = '1.1.1';
+const VERSION = '1.1.2';
 const doc = g.document;
 const me = doc.getElementById('mb-claude-js') || doc.currentScript;
 const ROOT = String((me && me.src) || '').replace(/shared\/claude\.js.*$/, '');
@@ -103,6 +103,7 @@ const SCHEMA = JSON.stringify({
       type: { type: 'string' }, date: { type: ['string', 'null'] }, key: { type: 'string' },
       payload: { type: 'object' }, changes: { type: 'object' },
       kind: { type: 'string', enum: ['todo', 'entry', 'event', 'idea'] }, text: { type: 'string' },
+      due: { type: 'string' }, aim: { type: 'string' },
     }, required: ['do', 'say'] } },
   },
   required: ['reply', 'writes'],
@@ -138,6 +139,13 @@ function system() {
     '- Step blocks: `{do:"steps", blocks, passive}`, how many walks and the passive steps outside them. It is his usual for every day, so change it only when the day needs it. Each walk then carries its share of what is left to 12,500.',
     '- Todos for the day: `{do:"note", kind:"todo", text, date}`; to move one, patch its `due`. Do not duplicate a todo that is already there.',
     '- Reply with the day in a few short lines, in time order.',
+    '',
+    '## Planning a week',
+    'The home screen\'s THIS WEEK card sends "Plan my week" with each QUESTS goal (`rows/aim.jsonl`, open when `state` is empty), this week\'s call on it and what moves it. Draft the week the way QUESTS\'s week draft does, but with your judgement:',
+    '- A goal moved by its tasks (no `src`) needs one next step this week if nothing serving it is due this week. A goal with `src` (training, a lift, a measure, a habit) is moved by that data: add a task only when it truly helps.',
+    '- A new todo: `{do:"note", kind:"todo", text, date:<today>, due:<the day>, aim:<the goal\'s key>}`. Move one: `{do:"patch", type:"note", date, key, changes:{due}}`. A todo serves a goal when its `aim` is that goal\'s key, or its project (`rows/project.jsonl`) has that `aim`.',
+    '- At most 3 todos due on any one day, counting what is already due. Overdue todos 30 days late or less: move them into the week. Never delete; never touch todos written by WEALTH, ARC or GOALS (`src`).',
+    '- Reply with the week in a few short lines, by day.',
     '',
     '## Replies',
     'Short and plain, for a twelve year old. Answer first. No tables and no headings. Skip the confidence line and the next action for a simple log or a quick answer.',
@@ -184,7 +192,11 @@ function apply(w) {
     if (w.do === 'note') {
       if (!g.Journal || !g.Journal.add) throw new Error('the journal would not load');
       const d = w.date || today();
-      out.key = g.Journal.add(d, w.kind || 'entry', w.text || w.say);
+      /* a todo from Plan my week carries its day and the goal it serves */
+      const ex = {};
+      if (w.kind === 'todo' && /^\d{4}-\d\d-\d\d$/.test(w.due || '')) ex.due = w.due;
+      if (w.kind === 'todo' && w.aim && R.has('aim', null, w.aim)) ex.aim = w.aim;
+      out.key = g.Journal.add(d, w.kind || 'entry', w.text || w.say, Object.keys(ex).length ? ex : undefined);
       out.type = 'note'; out.date = d; out.prev = null;
     } else if (w.do === 'plan') {
       /* one DAY PLAN time, the row the home screen's card writes (index.html, WIDGETS.dayplan) */
