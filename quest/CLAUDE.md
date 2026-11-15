@@ -124,6 +124,7 @@ the review, which write progress down.
   goal's menu adds Add a task and Link a project (`project.aim`).
   **On 2026-11-16 he had 0 goals and 0 linked todos**, so nothing shows until
   goals exist; Link a project is the cheap way to link his Todoist projects.
+- **Three open goals at a time** (Tom, 2026-11-16: "Cap Quests at 3 Major Goals at a time"; 1.0.37, `AIM_CAP`): Add, a new goal's SAVE and Open it again refuse a fourth with "3 goals are open. Finish or drop one to add another." Goals already open past three stay. The Goals screen says "N of 3 goals open".
 - **The words never praise or score.** "Nothing done on it in 23 days. Last
   done Oct 4: ..." states the behaviour and the date and stops there (root
   brief, self-determination theory).
