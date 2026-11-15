@@ -814,7 +814,11 @@ answer, or take it out.
 - **Staging a whole file commits another session's half-done edit in it.**
   WEALTH 1.0.30 shipped a foundation session's broken icon line that way.
   Before `git add <file>`, read `git diff <file>` and stop if you did not
-  write every hunk.
+  write every hunk. It happened again 2026-11-16: a GOALS commit (6726841)
+  carried a HOME session's untested zoom hunks out under HOME 1.0.117. To
+  commit only yours: save `git diff <file>` to a patch, keep your hunks,
+  `git apply --cached` it, and check `git diff --cached <file>` before
+  committing.
 - **Never pick your own elements by a short class name alone.** `Chart.header`
   draws its date line as `.w`, the home screen's card class, and `fitGrid`
   took those lines for cards, threw during boot and left the dock and clock

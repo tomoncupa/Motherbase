@@ -690,3 +690,11 @@ The STATUS measure card (`measure`) and SLEEP read `zoomDays` like WEIGHT: 30 da
 Dec 16. On pace: 81.5") and readings in the weeks' boxes. In Main Menu.exe
 (`window.MBClaude`) it adds PLAN WITH CLAUDE, which sends each goal, its call,
 its line and its next task to the CLAUDE panel as "Plan my week".
+
+## 2026-11-16, HOME 1.0.118: zoomed in, a card keeps its title and answer
+
+Tom asked for a sweep of what card zoom could have broken. Found: the size class (`data-sz`) is read in the card's zoom, so a card zoomed to 200% counted as small and its title bar lost the answer line, and at 300% a short card counted as too short for a title (`sz-xs`) and lost the title, its menu button and the bar that drags it. The title bar is never zoomed, so it now goes by the card's real size: `data-hs` (s or l, same thresholds) carries the header rules, and `sz-xs` reads the real height. The body's rules keep `data-sz` in the zoom. Rules since:
+- A rule that styles `.w-head` keys on `data-hs`; one that styles what is inside `.w-body` keys on `data-sz`.
+- A chart card with a days pick reads `zoomDays(cfg, cfg.days)` wherever it read `cfg.days`, and names the stretch with `zoomDaysName`. WEIGHT, the measure card and SLEEP do. A list card (RECORDS, UPCOMING) does not: zoomed out it already shows more rows.
+Swept and fine: the drag ghost and the + WIDGET picker titles, the phone (no zoom, picked days shown, no sideways scroll), redraw speed (a year of weigh-ins at 25% is 38 ms against 34 at 100%), no other file reads a card's zoom or title.
+[TESTED] demo in headless Chromium at 1918: WEIGHT, MOOD and SLEEP at 100/200/300% keep title, menu and answer; a really small SLEEP still drops its answer line at every zoom; phone at 390. [UNTESTED] his board.

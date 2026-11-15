@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.117, 2026-11-16">
+<meta name="mb-version" content="1.0.118, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -373,8 +373,10 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
    whole (`sz-cut`, from cutCards) rather than cut in half or scrolled.
    Medium: a chart may be a shorter strip. Large is the widget as built. */
 @media(min-width:821px){
-  #grid > .w[data-sz=s] .w-head{padding:var(--s-2) var(--s-3) var(--s-1)}
-  #grid > .w[data-sz=s] .w-head .sub{display:none}
+  /* the title bar is never zoomed, so it goes by the card's real size
+     (`data-hs`), not the zoomed one: zoomed in, a card kept its answer line */
+  #grid > .w[data-hs=s] .w-head{padding:var(--s-2) var(--s-3) var(--s-1)}
+  #grid > .w[data-hs=s] .w-head .sub{display:none}
   #grid > .w[data-sz=s] .w-body{overflow:hidden;gap:var(--s-1);padding-bottom:var(--s-2);container-type:size}
   #grid > .w[data-sz=s] .w-body > .fits{min-height:0}
   /* a card too short for its title shows only its answer; REARRANGE
@@ -7745,7 +7747,7 @@ function fitGrid() {
   const g = $('#grid'), home = $('#home');
   if (NARROW()) {
     g.style.removeProperty('--row'); g.style.minHeight = ''; g.style.gridTemplateColumns = ''; g.style.width = '';
-    g.querySelectorAll(':scope > .w').forEach(n => { delete n.dataset.sz; });
+    g.querySelectorAll(':scope > .w').forEach(n => { delete n.dataset.sz; delete n.dataset.hs; });
     COLS = 4; SCALE = 1; placeCards(); return;
   }
   const gap = parseFloat(getComputedStyle(g).rowGap) || 12;
@@ -7823,10 +7825,14 @@ function sizeCards(nodes, cw, R, gap) {
     const c = layout[+n.dataset.i]; if (!c) return;
     /* in the card's own zoom: a card zoomed to 200% has half the room */
     const z = (!NARROW() && c.zoom) || 1;
-    const w = (c.w * cw + (c.w - 1) * gap) / z, h = ((effH[+n.dataset.i] || c.h) * R - gap) / z;
+    const rw = c.w * cw + (c.w - 1) * gap, rh = (effH[+n.dataset.i] || c.h) * R - gap;
+    const w = rw / z, h = rh / z;
     n.dataset.sz = h < 150 || w < 190 ? 's' : h < 300 || w < 300 ? 'm' : 'l';
+    /* the title bar is not zoomed, so its rules read the real size: zoomed
+       to 300%, a short card kept its title, its menu and its drag handle */
+    n.dataset.hs = rh < 150 || rw < 190 ? 's' : 'l';
     /* too short for a title and an answer both: the answer wins */
-    n.classList.toggle('sz-xs', h < 80);
+    n.classList.toggle('sz-xs', rh < 80);
   });
   cutCards(nodes);
 }
