@@ -1078,7 +1078,7 @@ answer, or take it out.
   session; check the task's own `status.json` or Task Scheduler's last run instead.
 - **`build-client.py` empties the client folder before copying, and a locked file stops it halfway.** A file open elsewhere (`shared/icons/ragnarok/form.png`, 2026-11-16) threw PermissionError with 422 client files already deleted. Nothing was committed: `git checkout -- .` in the client folder put it back and the second run passed. Read `git status` in the client folder after every build; a list of D lines is this.
 - **Committing your hunks around another session's, check what landed.** `git apply --cached --unidiff-zero` of a hand-split `-U0` patch put a two-line comment 100 lines from where it belonged (2026-11-16, HOME 1.0.113). After applying, `git diff index.html` must show only the other session's lines; anything of yours there landed wrong.
-- **A big single-file app can already hold the name you pick.** HOME's `const BKEY` clashed with the backup key 2000 lines further down and the whole page died on a SyntaxError (2026-11-16). Grep `NAME` before adding a top-level const.
+- **A big single-file app can already hold the name you pick.** HOME's `const BKEY` clashed with the backup key 2000 lines further down and the whole page died on a SyntaxError (2026-11-16). Grep `\bNAME\b` before adding a top-level const.
 
 ---
 
