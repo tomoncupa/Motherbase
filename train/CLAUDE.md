@@ -273,10 +273,25 @@ a block exists.
 
 An exercise carries the setup it needs, named by him, each a **toggle** (Straps)
 or a **setting** (Seat height, Back pad). **Each set records its own**, because
-straps go on after a couple of working sets. A new set takes the setup of the set
-before it today; the first set of a session takes the first set of the last
-session. TRACK shows it above the steppers and under each set. Edit Setup is in
-the training screen's More.
+straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and three setup bugs (1.0.84, 2026-11-16))
+
+- **One line above the steppers** (`setupLine`), only on an exercise that has
+  setup: chips for toggles, small boxes for settings, a pencil for the list.
+  **It is exactly what SAVE or UPDATE records**, and changing it writes
+  nothing until then. No setup, no line: Add Setup is in More and in a set's
+  comment box, which also edits a past set's setup.
+- **The next set takes the last set DONE today, with or without setup**: a
+  set with everything off says off. The first set of a session takes the
+  first set done last session. A planned set not yet done says nothing
+  (`TRAIN.lastSetup`).
+- **Tapping a set he did loads its exact setup, none included**
+  (`loadDraft`), so UPDATE can never stamp the line onto it; once nothing is
+  selected the carried setup comes back (`TRAIN.suFromSel`). A past set's
+  setup changed in its comment box moves the line only if that set is the
+  one the line shows.
+- **Edit Setup saves as it goes**: ADD or Enter saves a field, a removal saves
+  with an UNDO, TOGGLE is the default. A set keeps what it recorded when a
+  field is removed. The row under each set shows setup only when it changed.
 
 ### Asked about, and turned down
 
