@@ -16,6 +16,11 @@ not just mindless gameplay."*
 **Function.** Practise talking to a camera and see, in numbers, whether it is
 getting cleaner.
 
+**It makes an orator.** Tom, 2026-11-16: *"the purpose of Speak is to turn
+me into a great orator"*, and *"Everything, the goal is a program designed to
+create a master speaker."* Delivery is half of it; the program adds structure,
+story, the devices and a whole rehearsed talk (The program, below).
+
 **It coaches, not only counts.** Tom, 2026-11-16: *"I need Speak to actually
 give me feedback and drills for what's happening. I don't need it to just
 rate what I'm doing."* This replaces the old "never a verdict" rule, under
@@ -133,7 +138,9 @@ transcript, when on, is kept on the take, capped at 4,000 characters.
 
 Settings under `speak.`: `tgt` (the targets, per-style bands and the table topic window), `crutch`
 (his phrase list; null means the default list), `asr`, `lang`, `cam`, `facing`,
-`beat`, and `open` (steps opened by hand).
+`beat`, `open` (steps opened by hand), and `script` (the script being rehearsed;
+none means the newest). A `script` row is `{title, text, at}`, undated, keyed by
+id; a take on it keeps `script`, its key.
 
 ## Words
 
@@ -250,6 +257,58 @@ errors, no sideways scroll. Every filler pattern, speeding up and crutch were
 checked on seeded takes. The synthetic voice reads as stammered starts, so
 the live ear's calls on a real voice are not known yet, and the fault weights
 are a first guess to tune against his Right / Wrong marks.
+
+## The program, added 2026-11-16 (SPEAK 1.0.11)
+
+Five **stages** (`STAGES`), each a set of skills (`skill.stage`), in the
+order the old schools taught: VOICE (PACE, CLEAR), FLUENCY (CLEAN, FLOW),
+MESSAGE (EYES, SHAPE), CRAFT (STORY, DEVICES), THE TALK (SCRIPT).
+`RESEARCH.md` section 12 has the sources.
+
+- **The stage he is on** is the first with a step not met (`curStage`); a
+  step a switch cannot measure does not hold a stage, a missing script does.
+  TODAY's drills come only from skills at or before it, and when fewer than
+  three are left it adds **review**: met steps of earlier stages not run for
+  7 days, oldest first. TODAY'S DRILLS says "Stage 2 of 5, FLUENCY: 3 of 10
+  steps met." PATH draws a heading per stage (met, now with steps to go, or
+  later). **Every step stays startable**: a stage decides what TODAY offers,
+  never what he may do. Not levels: nothing is earned or shown off.
+- **New skills**, 5 steps each: SHAPE (one sentence, point reason example,
+  three parts signposted, problem solution result, open and close a loop),
+  STORY (one minute one turn, start in the scene, voices, three minutes, a
+  five-minute slam), DEVICES (rule of three, the pause, contrast, repeated
+  opening, all of them), SCRIPT (read it, first words only, nothing showing,
+  from memory to the lens, piece to camera clean).
+- **CLEAR step 2 is Pen in the teeth** (`clear-pen`, `halves: 'PEN OUT'`):
+  half the take with a pen, PEN OUT at halfway, crispness measured on the
+  second half only; `penGain` is the second half against the first. CLEAR's
+  later steps moved down one. Passes are by drill id, so no one lost a step.
+- **Window drills** (`win`): the clock counts up and the Toastmasters lights
+  turn at the window's ends and middle; TABLE TOPIC is one (`win` replaced
+  `lights`). `durOf(d)` gives the auto-stop, the window's end plus a quarter.
+- **New numbers**, all on `m`: `openUms` (held sounds in the first 5 s),
+  and from the transcript only, else null: `signs`, `callback`, `contrast`,
+  `repeatOpen` (`devicesOf`), `cover` (`coverage`: script words heard in
+  order, each looked for in the next 12 words heard). SHAPE adds its
+  signpost and callback goals only while the transcript is on.
+- **Scripts**: YOUR SCRIPTS under stage 5 on PATH; write, edit, rehearse this
+  one, delete with UNDO. A SCRIPT step with none is blocked as `'a script'`
+  and its sheet offers Write a script. Its window is the script at 150 a
+  minute, plus or minus 15%. The sheet names the script, the rehearsal count
+  and the take it first came out clean on.
+
+Watched 2026-11-16 in headless Chromium at 1280 and 390 with a fake
+microphone: stage 1 on an empty store, stage 2 after seeding every stage 1
+pass with a stage 1 review added, PATH by stage with no sideways scroll,
+writing a script from the blocked step's button, the cue prompt, the pen
+drill's PEN OUT and `penGain`, a window drill's lights and pass, a script
+take keeping `script`. `devicesOf` on known lines: "I have a dream" and "we
+shall fight" three times each read 3, two contrasts read 2, a callback read
+and a missing one not. Suite review 211 of 212 at 390, the one failure the
+shared fonts check, not SPEAK. **Not watched:** anything from a real
+transcript (headless Chromium has no recogniser; SPEAK.exe's WebView2 may not
+either, which would leave DEVICES 3 to 5 and SCRIPT 2 to 5 reading "no
+reading" there), a real voice, the phone.
 
 ## Hearing the feedback, added 2026-11-16 (SPEAK 1.0.12)
 
