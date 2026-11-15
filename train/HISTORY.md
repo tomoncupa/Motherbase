@@ -1515,3 +1515,38 @@ Four asks from Tom in one message, his words:
 Tested in the Browser pane (hidden; controls pressed with `.click()`) at
 390 x 844 on a seeded log, and the switch on `?client=testpid`. Not seen on
 his phone or his real log.
+
+## Setup on one line, and three setup bugs (1.0.83, 2026-11-15)
+
+Tom: "How setup works also a bit unintuitive", and picked option 1 of three
+(a line above the steppers plus the bug fixes; the others were a read-only
+"Next set" line under the steppers, or the fixes alone).
+
+What was wrong. Since 2026-09-22 setup lived only in a SAVED set's comment
+box, so a set's setup could only be said after it was logged, and nothing on
+TRACK showed what the next SAVE would record. `setupCard` was still in the
+file, called by nothing. Edit Setup staged a field on ADD and wrote it on
+SAVE, so CANCEL lost it, and SETTING was the default.
+
+Three bugs, each reproduced in the app before the fix:
+
+- **A.** Tapping a set with no setup left the draft as it was, and UPDATE
+  wrote it onto the set: set 1 with no straps got straps.
+- **B.** `lastSetup` skipped sets with no setup, so straps taken off on the
+  last set came back on the next open.
+- **C.** Changing set 1's setup in its comment box after set 3 made set 1's
+  setup the draft, so set 4 got it.
+
+Built: `setupLine` replaces `setupCard` at the top of the stepper box, one
+44px line, nothing on an exercise with no setup. `loadDraft` loads a done
+set's setup exactly and marks `TRAIN.suFromSel`; drawTrack puts the carried
+setup back once nothing is selected (CLEAR, UPDATE, a delete, leaving).
+`lastSetup` reads the last set done, everything off included, and a planned
+set not done says nothing. The comment box's `keep` moves the line only for
+the set it shows. Edit Setup saves on ADD or Enter, a removal saves with
+`UI.undo`, one DONE button, TOGGLE first.
+
+Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro, real taps on
+the line, the steppers, SAVE, UPDATE, the comment box and the dialog: 20 of
+20, no errors, no sideways scroll, every control on the line 44px. Not seen on
+his phone or his real log.

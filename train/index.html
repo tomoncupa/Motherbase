@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.82, 2026-11-09">
+<meta name="mb-version" content="1.0.83, 2026-11-15">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -727,6 +727,7 @@ main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hid
 .setup .sufield{display:flex;align-items:center;gap:var(--s-2);font-size:var(--f-2);color:var(--text-2)}
 .setup .sufield .mb-input{width:4.5em;min-width:0;text-align:center}
 .setup .ico{margin-left:auto}
+.trackbox > .suline{margin-bottom:var(--s-3)}
 .sulist .ico{color:var(--text-muted)}
 
 /* ── the card: a session, a week or a profile, made to be shared ──
@@ -4336,11 +4337,20 @@ function drawTrack(m) {
   /* Setup lives in each set's comment box now, the way FitNotes keeps
      everything that is not a number. Tom, 2026-09-22: "put our extra input
      features in the comments part of fitnotes because train feels
-     claustrophobic now". The next set still carries the last setup, because
-     draftSU is primed here exactly as setupCard primed it. */
-  if (TRAIN.suFor !== exId) { TRAIN.suFor = exId; TRAIN.draftSU = TRAIN.lastSetup(exId, date); }
+     claustrophobic now". Since 1.0.83 one line of it is back above the
+     steppers, only on an exercise that has setup (Tom, 2026-11-15, "How
+     setup works also a bit unintuitive"): it is exactly what SAVE records.
+     A set loaded from the list shows its own; once none is loaded, the
+     carried setup comes back. */
+  if (TRAIN.suFor !== exId || (!TRAIN.sel && TRAIN.suFromSel)) {
+    TRAIN.suFor = exId;
+    TRAIN.draftSU = TRAIN.lastSetup(exId, date);
+    TRAIN.suFromSel = false;
+  }
 
   var pad = UI.el('div', 'trackbox');
+  var suLine = setupLine(exId, ex);
+  if (suLine) pad.appendChild(suLine);
   var inputs = {};
   var DRAFT = { w: 'draftW', r: 'draftR', d: 'draftD', t: 'draftT' };
   var GHOST = { w: 'ghostW', r: 'ghostR', d: 'ghostD', t: 'ghostT' };
@@ -9768,8 +9778,16 @@ function loadDraft(s, asGhost) {
     TRAIN[DRAFTS[k]] = ghost ? '' : v[k];
     TRAIN[GHOSTS[k]] = ghost ? v[k] : null;
   });
-  /* last time's setup is not loaded: today's carries on */
-  if (s.su && !asGhost) TRAIN.draftSU = copyObj(s.su);
+  /* A set he did loads exactly the setup it was done with, none included,
+     so UPDATE can never stamp the setup line onto a set that had none
+     (1.0.83). A planned set not done yet keeps what carries, and last
+     time's setup is never loaded: today's carries on. drawTrack puts the
+     carried setup back once nothing is selected. */
+  if (!asGhost && (s.su || !TRAIN.pending(s))) {
+    TRAIN.draftSU = copyObj(s.su || {});
+    TRAIN.suFor = s.ex;
+    TRAIN.suFromSel = true;
+  }
 }
 TRAIN.selectNextOpen = function () {
   var nxt = TRAIN.setsOn(TRAIN.date).filter(function (s) { return s.ex === TRAIN.exId && TRAIN.pending(s); })[0];
@@ -11766,14 +11784,20 @@ function recScopeBar(m) {
 
    A new set takes the setup of the set before it today. The first set of a
    session takes the first set of the last session, which is how that
-   session started. */
+   session started.
+
+   "The set before" is the last set DONE, with or without setup: a set with
+   everything off says everything is off. Until 1.0.83 sets with no setup
+   were skipped, so straps taken off on the last set came back on the next
+   open. A planned set not yet done says nothing either way. */
 TRAIN.lastSetup = function (exId, date) {
-  var today = TRAIN.setsOn(date).filter(function (s) { return s.ex === exId && s.su; });
-  if (today.length) return copyObj(today[today.length - 1].su);
+  var did = function (s) { return s.ex === exId && !TRAIN.pending(s); };
+  var today = TRAIN.setsOn(date).filter(did);
+  if (today.length) return copyObj(today[today.length - 1].su || {});
   var h = TRAIN.historyOf(exId), last = null;
-  for (var i = h.length - 1; i >= 0; i--) if (h[i].date < date && h[i].su) { last = h[i].date; break; }
+  for (var i = h.length - 1; i >= 0; i--) if (h[i].date < date && did(h[i])) { last = h[i].date; break; }
   if (!last) return {};
-  return copyObj(h.filter(function (s) { return s.date === last && s.su; })[0].su);
+  return copyObj(h.filter(function (s) { return s.date === last && did(s); })[0].su || {});
 };
 function cleanSetup(exId) {
   var defs = ((TRAIN.exercises()[exId] || {}).setup) || [];
@@ -11845,11 +11869,17 @@ function setupFor(s, date) {
   Object.keys(s.su || {}).forEach(function (k) { su[k] = s.su[k]; });
   var wrap = UI.el('div', 'setup');
   wrap.style.marginTop = 'var(--s-3)';
+  /* The setup line follows this change only where this set is what it
+     shows: the set loaded in the steppers, or, with none loaded, the last
+     set done, which is the one the next set carries. Fixing set 1 after
+     set 3 no longer hands set 1's setup to set 4 (1.0.83). */
   var keep = function () {
     TRAIN.patchSet(s.key, date, { su: Object.keys(su).length ? su : undefined });
     s.su = su;
-    TRAIN.suFor = s.ex;
-    TRAIN.draftSU = JSON.parse(JSON.stringify(su));
+    var shown = TRAIN.sel ? TRAIN.sel === s.key
+      : (TRAIN.setsOn(date).filter(function (x) { return x.ex === s.ex && !TRAIN.pending(x); }).pop() || {}).key === s.key;
+    if (shown && TRAIN.suFor === s.ex) TRAIN.draftSU = copyObj(su);
+    draw();
   };
   defs.forEach(function (d) {
     if (d.kind === 'toggle') {
@@ -11883,19 +11913,16 @@ function setupFor(s, date) {
   return wrap;
 }
 
-function setupCard(exId, ex, date) {
+/* The setup line above the steppers (1.0.83): what SAVE or UPDATE will
+   record, changed in place. Toggles are chips, settings small boxes, and
+   the pencil edits the list. Nothing at all on an exercise with no setup,
+   so the screen costs no room for it; Add Setup is in More and in a set's
+   comment box. It changes only the draft: nothing is written until SAVE. */
+function setupLine(exId, ex) {
   var defs = (ex && ex.setup) || [];
-  if (TRAIN.suFor !== exId) { TRAIN.suFor = exId; TRAIN.draftSU = TRAIN.lastSetup(exId, date); }
+  if (!defs.length) return null;
   var su = TRAIN.draftSU || (TRAIN.draftSU = {});
-  var card = UI.el('div', 'exblock pad');
-  var box = UI.el('div', 'setup');
-  if (!defs.length) {
-    var add = UI.el('button', CHIP + ' mb-press mb-tap');
-    add.type = 'button';
-    add.textContent = 'Add Setup';
-    add.onclick = function () { TRAIN.setupDialog(exId); };
-    box.appendChild(add);
-  }
+  var box = UI.el('div', 'setup suline');
   defs.forEach(function (d) {
     if (d.kind === 'toggle') {
       var c = UI.el('button', CHIP + ' mb-press mb-tap' + (su[d.id] ? ' on' : ''));
@@ -11904,8 +11931,9 @@ function setupCard(exId, ex, date) {
       c.setAttribute('aria-pressed', su[d.id] ? 'true' : 'false');
       c.onclick = function () {
         if (su[d.id]) delete su[d.id]; else su[d.id] = 1;
+        c.classList.toggle('on', !!su[d.id]);
+        c.setAttribute('aria-pressed', su[d.id] ? 'true' : 'false');
         Mobile.feedback('select');
-        draw();
       };
       box.appendChild(c);
     } else {
@@ -11918,21 +11946,26 @@ function setupCard(exId, ex, date) {
       box.appendChild(w);
     }
   });
-  if (defs.length) {
-    var ed = UI.el('button', 'ico mb-press mb-tap');
-    ed.type = 'button';
-    ed.innerHTML = ico('edit');
-    ed.setAttribute('aria-label', 'Edit setup');
-    ed.onclick = function () { TRAIN.setupDialog(exId); };
-    box.appendChild(ed);
-  }
-  card.appendChild(box);
-  return card;
+  var ed = UI.el('button', 'ico mb-press mb-tap');
+  ed.type = 'button';
+  ed.innerHTML = ico('edit');
+  ed.setAttribute('aria-label', 'Edit setup');
+  ed.onclick = function () { TRAIN.setupDialog(exId); };
+  box.appendChild(ed);
+  return box;
 }
 TRAIN.setupDialog = function (exId) {
   var ex = TRAIN.exercises()[exId];
   if (!ex) return;
-  var defs = copyObj(ex.setup || []), name = null, kind = 'value', paint = null;
+  /* One step (1.0.83): ADD, or Enter, saves the field there and then, and
+     a removal is saved at once with an UNDO. Until then ADD only staged it
+     and SAVE wrote it, so a field typed, added and then CANCELled was lost.
+     TOGGLE comes first: most of what he names is on or off. */
+  var defs = copyObj(ex.setup || []), name = null, kind = 'toggle', paint = null;
+  var write = function () {
+    TRAIN.patchExercise(exId, { setup: defs.length ? copyObj(defs) : undefined });
+    draw();
+  };
   var addOne = function () {
     var nm = String(name.value || '').trim();
     if (!nm) { UI.toast('Please enter a name', { bad: true }); UI.focusSoon(name); return false; }
@@ -11943,7 +11976,10 @@ TRAIN.setupDialog = function (exId) {
     defs.push({ id: (nm.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'x') + '-' + Date.now().toString(36).slice(-4),
                 name: nm, kind: kind });
     name.value = '';
+    write();
     paint();
+    Mobile.feedback('select');
+    UI.focusSoon(name);
     return true;
   };
   UI.dialog({
@@ -11960,7 +11996,15 @@ TRAIN.setupDialog = function (exId) {
           del.type = 'button';
           del.innerHTML = ico('del');
           del.setAttribute('aria-label', 'Remove ' + d.name);
-          del.onclick = function () { defs.splice(i, 1); paint(); };
+          del.onclick = function () {
+            var gone = defs.splice(i, 1)[0];
+            write(); paint();
+            /* the sets keep what they recorded; only the field is gone */
+            UI.undo(UI.esc(gone.name) + ' removed', function () {
+              defs.splice(Math.min(i, defs.length), 0, gone);
+              write(); paint();
+            });
+          };
           list.appendChild(UI.row(d.name, d.kind === 'toggle' ? 'Toggle' : 'Setting', del));
         });
       };
@@ -11969,7 +12013,7 @@ TRAIN.setupDialog = function (exId) {
       name = UI.field('text', { placeholder: 'Straps, Seat height, Back pad' });
       b.appendChild(UI.row('Name', '', name));
       b.appendChild(UI.row('Type', 'A toggle is on or off. A setting holds a number or a word.',
-        UI.segmented([{ id: 'value', name: 'SETTING' }, { id: 'toggle', name: 'TOGGLE' }], kind,
+        UI.segmented([{ id: 'toggle', name: 'TOGGLE' }, { id: 'value', name: 'SETTING' }], kind,
           function (v) { kind = v; })));
       var add = UI.el('button', 'mb-btn mb-press mb-tap');
       add.type = 'button'; add.style.width = '100%'; add.textContent = 'ADD';
@@ -11978,14 +12022,14 @@ TRAIN.setupDialog = function (exId) {
       Mobile.form(b, addOne);
     },
     actions: [
-      { label: 'CANCEL' },
-      { label: 'SAVE', kind: 'go', fn: function () {
+      /* everything is saved as it happens; DONE also adds a name typed
+         and not yet added, so nothing typed is lost */
+      { label: 'DONE', kind: 'go', fn: function () {
         if (String(name.value || '').trim() && !addOne()) return false;
-        TRAIN.patchExercise(exId, { setup: defs.length ? defs : undefined });
-        draw();
       } },
     ],
   });
+  if (!defs.length) UI.focusSoon(name);
 };
 
 /* ═══════════════════ NAVIGATION ═══════════════════ */
