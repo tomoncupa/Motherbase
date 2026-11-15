@@ -152,7 +152,11 @@
     }
     const L = latest(sr, t);
     if (!L) return { auto: 'adj', line: 'No reading in 14 days' };
-    const now = src.kind === 'lift' ? L.v : L.last, start = +src.start, target = +src.target;
+    /* a measure is the average of the last 7 days' readings, so one heavy morning
+       cannot flip the call (2026-11-16); a lift is its best of the last 14 days */
+    const wk = Object.keys(sr).filter(d => d <= t && D().diff(t, d) < 7).map(d => sr[d]);
+    const now = src.kind === 'lift' ? L.v : wk.length ? wk.reduce((x, y) => x + y, 0) / wk.length : L.last;
+    const start = +src.start, target = +src.target;
     const aim = 'aim ' + show(target) + (a.by ? ' by ' + D().short(a.by) : '');
     if ((now - target) * dir >= 0) return { auto: 'on', line: 'Now ' + show(now) + ', ' + aim + '. Reached' };
     if (!a.by || !a.made || a.by <= a.made) {
@@ -166,7 +170,9 @@
   /* where a measure stands today, kept on the goal as `src.start` when it is set */
   function startOf(src) {
     const sr = series(src), L = latest(sr, D().today());
-    if (L) return src.kind === 'lift' ? L.v : L.last;
+    if (L && src.kind === 'lift') return L.v;
+    if (L) { const wk = Object.keys(sr).filter(d => d <= D().today() && D().diff(D().today(), d) < 7).map(d => sr[d]);
+      return wk.length ? wk.reduce((x, y) => x + y, 0) / wk.length : L.last; }
     const ds = Object.keys(sr).sort();
     return ds.length ? sr[ds[ds.length - 1]] : null;
   }
