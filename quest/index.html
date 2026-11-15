@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.36, 2026-11-16">
+<meta name="mb-version" content="1.0.37, 2026-11-16">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1619,7 +1619,7 @@ function drawGoals(list) {
   const w = aimWorkAll(), all = aims();
   const ch = Chapter.current(), cbox = el('section', 'grp');
   const chead = el('div', 'gh', '<b>' + esc(ch ? Chapter.label(ch) : 'Chapter') + '</b><span class="rv">' +
-    esc(ch ? 'since ' + dayWord(ch.start) : 'none started') + '</span>');
+    esc((ch ? 'since ' + dayWord(ch.start) : 'none started') + ' · ' + openAims().length + ' of ' + AIM_CAP + ' goals open') + '</span>');
   const nb = el('button', 'addg', ico('refresh') + '<span>New chapter</span>');
   nb.type = 'button'; nb.onclick = () => chapterSheet();
   chead.appendChild(nb);
@@ -1633,7 +1633,7 @@ function drawGoals(list) {
     const add = el('button', 'addg', ico('add') + '<span>Add</span>');
     add.type = 'button';
     add.setAttribute('aria-label', 'Add a ' + h.one + ' goal');
-    add.onclick = () => aimSheet(null, h.id);
+    add.onclick = () => { if (!capFull()) aimSheet(null, h.id); };
     head.appendChild(add);
     box.appendChild(head);
     mine.forEach(a => box.appendChild(aimRow(a, w[a.key])));
@@ -1704,7 +1704,17 @@ function aimMenu(a, anchor) {
     { label: 'Delete', icon: ico('delete'), cls: 'bad', kind: 'bad', fn: () => deleteAim(a) },
   ]);
 }
+/* Three open goals at a time (Tom, 2026-11-16: "Cap Quests at 3 Major Goals
+   at a time"). A fourth waits until one is done or dropped; opening a finished
+   one again counts the same. Goals already open past three stay open. */
+const AIM_CAP = 3;
+function capFull() {
+  if (openAims().length < AIM_CAP) return false;
+  UI.toast(AIM_CAP + ' goals are open. Finish or drop one to add another.', { bad: true });
+  return true;
+}
 function finishAim(a, state) {
+  if (!state && a.state && capFull()) return;
   const was = { state: a.state || '', doneOn: a.doneOn || '' };
   Rec.patch('aim', null, a.key, { state: state, doneOn: state ? T() : '' });
   Mobile.feedback(state === 'done' ? 'success' : 'select');
@@ -1830,7 +1840,7 @@ function aimSheet(a, hid) {
     if (src === false) return false;
     const patch = { text: v, h: st.h, why: why.value.trim(), by: st.by || '', tag: tg, src: src };
     if (a) Rec.patch('aim', null, a.key, patch);
-    else Rec.set('aim', null, newId(), Object.assign(patch, { made: T(), state: '', ord: aims().length }));
+    else { if (capFull()) return false; Rec.set('aim', null, newId(), Object.assign(patch, { made: T(), state: '', ord: aims().length })); }
     Mobile.feedback('success');
     return true;
   };
