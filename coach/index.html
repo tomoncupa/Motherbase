@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.29, 2026-10-23">
+<meta name="mb-version" content="1.0.30, 2026-11-16">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -371,6 +371,38 @@ const own = (type, pid) => Rec.all(type).filter(r => String(r.key).indexOf(pid +
 const setCounts = s => !s || !s.plan || !!s.done;
 const setsOf = pid => own('cset', pid).filter(r => setCounts(r.payload));
 const exOf = pid => { const m = {}; own('cex', pid).forEach(r => { m[r.key.slice(pid.length + 1)] = r.payload; }); return m; };
+/* An assisted lift (TRAIN 1.0.83): the weight logged is the machine's help,
+   so less is stronger. TRAIN's rule: the name says "assist" unless the
+   exercise's own switch (`assist` 1 or 0) says otherwise. What the body
+   moved is the client's weight less the help, from CHECK IN's `cval`
+   <pid>|weight in their unit; with no weigh-in an assisted set has no
+   estimated 1RM and adds nothing to volume. Records come from TRAIN's own
+   `pr` flag, which TRAIN works out the right way up. */
+const isAssisted = x => !!x && (x.assist === 1 || x.assist === 0 ? x.assist === 1 : /assist/i.test(x.name || ''));
+const bwList = pid => {
+  const u = (Rec.get('cperson', null, pid) || {}).unit || 'lb', want = pid + '|weight';
+  return Rec.all('cval').filter(r => r.key === want && r.date && r.payload && +r.payload.v > 0)
+    .map(r => [r.date, u === 'lb' ? +r.payload.v / KG_LB : +r.payload.v])
+    .sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+};
+const bwOn = (L, date) => { let v = null; for (const x of L) { if (x[0] <= date || v === null) v = x[1]; if (x[0] > date) break; } return v; };
+/* range.js multiplies weight by reps and knows no exercise names, so an
+   assisted set goes in as what the body moved, or nothing */
+const rangeSets = pid => {
+  const ex = exOf(pid), L = bwList(pid);
+  return setsOf(pid).map(r => {
+    const s = r.payload || {};
+    if (!isAssisted(ex[s.ex])) return r;
+    return Object.assign({}, r, { payload: Object.assign({}, s, { kg: loadOf(ex[s.ex], s, r.date, L) || 0 }) });
+  });
+};
+/* the weight the body moved; null for an assisted set with no bodyweight */
+const loadOf = (x, s, date, L) => {
+  const kg = +s.kg || 0;
+  if (!isAssisted(x)) return kg;
+  const bw = bwOn(L, date);
+  return bw ? Math.max(0, bw - kg) : null;
+};
 
 /* ── a client's check-ins ──
    CHECK IN keys a client's answers and photos `pid|field`, under the same
@@ -972,11 +1004,11 @@ function drawBox(col) {
 const warmSet = s => s.warm === 1 || s.warm === true ? true : s.warm === 0 || s.warm === false ? false
   : !!s.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(s.note);
 function sessionsOf(pid) {
-  const ex = exOf(pid), by = {};
+  const ex = exOf(pid), by = {}, bwL = bwList(pid);
   setsOf(pid).forEach(r => {
     const s = r.payload; if (warmSet(s)) return;
     const d = by[r.date] || (by[r.date] = { date: r.date, vol: 0, sets: 0, ex: [], lifts: [], byEx: {} });
-    d.vol += (+s.kg || 0) * (+s.r || 0);
+    d.vol += (loadOf(ex[s.ex], s, r.date, bwL) || 0) * (+s.r || 0);
     d.sets++;
     const nm = (ex[s.ex] || {}).name || 'Exercise';
     let L = d.byEx[s.ex];
@@ -1005,13 +1037,13 @@ function sessionsOf(pid) {
   });
 }
 function liftsOf(pid) {
-  const ex = exOf(pid), by = {};
+  const ex = exOf(pid), by = {}, bwL = bwList(pid);
   setsOf(pid).forEach(r => {
     const s = r.payload; if (warmSet(s) || !(s.kg > 0) || !(s.r > 0)) return;
     const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', best: 0, bs: null, days: {}, last: '' });
     x.days[r.date] = 1;
     if (r.date > x.last) x.last = r.date;
-    const v = e1(s.kg, s.r);
+    const v = e1(loadOf(ex[s.ex], s, r.date, bwL), s.r);
     if (v > x.best) { x.best = v; x.bs = s; }
   });
   return Object.values(by).filter(x => x.best > 0)
@@ -1088,11 +1120,11 @@ function blockLine(pid) {
 
 let bkAt = -1, bkFor = '', bkN = 0;
 function blockLifts(pid, a, z) {
-  const ex = exOf(pid), by = {};
+  const ex = exOf(pid), by = {}, bwL = bwList(pid);
   setsOf(pid).forEach(r => {
     if (r.date < a || r.date > z) return;
     const s = r.payload; if (warmSet(s)) return;
-    const v = e1(s.kg, s.r); if (!v) return;
+    const v = e1(loadOf(ex[s.ex], s, r.date, bwL), s.r); if (!v) return;
     const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', days: {} });
     const d = x.days[r.date]; if (!d || v > d.v) x.days[r.date] = { v: v, kg: s.kg, r: s.r };
   });
@@ -1885,7 +1917,7 @@ function drawClientIn(put) {
     const rc = document.createElement('div'); rc.className = 'card range';
     /* the year at a glance first (2026-10-18), not under everything else */
     put('range').appendChild(rc);
-    Range.mount(rc, Range.fromRows(setsOf(sel), own('cphase', sel), Day.today()), WIDE.matches ? 140 : 200, {
+    Range.mount(rc, Range.fromRows(rangeSets(sel), own('cphase', sel), Day.today()), WIDE.matches ? 140 : 200, {
       print: opt('rangePrint'), perDay: 2,
       volume: kg => { const v = +show(kg) || 0; return (v >= 1e6 ? Math.round(v / 1e5) / 10 + 'M' : v >= 1e5 ? Math.round(v / 1e3) + 'k' : Math.round(v).toLocaleString()) + ' ' + unit(); },
       onChange: o => { if (o.print !== opt('rangePrint')) Rec.setting(APP.id, 'rangePrint', o.print); },

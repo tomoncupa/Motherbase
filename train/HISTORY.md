@@ -1515,3 +1515,31 @@ Four asks from Tom in one message, his words:
 Tested in the Browser pane (hidden; controls pressed with `.click()`) at
 390 x 844 on a seeded log, and the switch on `?client=testpid`. Not seen on
 his phone or his real log.
+
+## Assisted lifts (1.0.83, 2026-11-16)
+
+Found building Jay's strength report: his assisted pull-up scored 70 lb of
+help x 13 above 50 lb x 16. Tom: "We also need to fix the assisted pull up,
+since more weight there means more assist." Every reader of weight treated
+heavier as stronger: `recomputePRs`, `recordsFor`, the five kinds,
+`recordHits`, `setDelta`, `volUp`, `liftLine`, goals, `repMax`, GRAPH, Top 3,
+`suggestFill`, every volume total and the range.
+
+- Records need no bodyweight: they compare `TRAIN.wk`, the help negated.
+- Volume and estimated 1RM need what the body moved, so they use bodyweight
+  minus help when STATUS (or CHECK IN for a client) has a weigh-in, and
+  leave the lift out otherwise. Chosen over a stand-in bodyweight because a
+  guessed number would be shown as fact. A COACH client with no check-in
+  weight gets the lift out of volume and no 1RM.
+- `shared/range.js` was not touched: it knows no exercise, so TRAIN
+  (`TRAIN.rangeFrom`) and COACH (`rangeSets`) hand it an assisted set's load,
+  or 0, in place of the help.
+- Watched in headless Chromium on a fresh store with a made-up Assisted
+  Pull-up (60x10, 50x16, 70x13 in lb): 50x16 stored as the record, 70x13 not,
+  Records "Least help 50 x 16", 70 vs 50 "+20.0 lb help, -3 reps" pointing
+  down, beating 8-15 with 16 suggested 45 lb (two steps less help), 13 in
+  the band 67.5, a bench beside it still stepped up; no bodyweight, the
+  session's volume was the bench only; a 180 lb weigh-in made it
+  (180-70)x13 plus the bench exactly. The Assisted switch clicked off and
+  saved `assist: 0`, name, unit and note kept, records flipped back. Not on
+  the iPhone.
