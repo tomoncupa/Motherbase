@@ -395,6 +395,13 @@ so the week draft has CLAUDE and CHATGPT (copy a prompt of goals and up to 40
 open tasks, each named by a five-letter hash of its key, and open the site) and
 PASTE THE PLAN (reads "Day | [id] task | ^goal" lines, moves or adds them, one
 Undo). Main Menu's PLAN WITH CLAUDE stays the one-press version.
+**Make it smaller, 1.0.35** (Tom picked "B" of the off-track safeguards): a
+goal off for three weeks (`Goals.stuck`: a count under half three full weeks
+running, tasks with nothing done in 42 days, a measure off track at 21 days
+old) shows one line under its call: Make it N a week (one past his best of
+those weeks) or Give it 4 more weeks, and Keep it (`keepUntil`, 21 days). Not
+while his own call is set. A softer word for Off track (A) and the last win
+(C) were not built; a fuller Fresh start is being designed with him.
 
 ## Needs from the foundation
 
