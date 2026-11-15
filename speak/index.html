@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.10, 2026-11-16">
+<meta name="mb-version" content="1.0.11, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -115,6 +115,17 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .tl .leg .end{margin-left:auto}
 .tl .leg .k i{display:inline-block;width:var(--s-2);height:var(--s-2);border-radius:var(--radius-sm);vertical-align:middle;margin-right:var(--s-1)}
 .tl .leg i.um{background:var(--warn)}
+.player{display:flex;gap:var(--s-3);align-items:flex-start}
+.player.none .pl{display:none}
+.player .pl{flex:0 0 auto}
+.player .tl{flex:1;min-width:0}
+.tl .hit{padding:var(--s-3) 0;cursor:pointer}
+.tl .bar i.head{width:var(--s-1);margin-left:calc(var(--s-1) / -2);background:var(--text-1);display:none}
+.player.on .tl .bar i.head{display:block}
+.moments{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:var(--s-2) 0}
+.moments .mb-btn{display:inline-flex;align-items:center;gap:var(--s-1);font-family:var(--font-mono)}
+.also{margin-top:var(--s-2)}
+.also p{margin:0}
 /* the goal and the why, on a drill sheet and on a today card */
 .goal{display:grid;grid-template-columns:var(--s-9) 1fr;gap:var(--s-2) var(--s-3);align-items:baseline;
   font-size:var(--f-2);line-height:var(--lh-body);margin:var(--s-3) 0}
@@ -402,13 +413,14 @@ function Ear(sr) {
       }
       flush(N);
       /* stammered starts: three or more bursts of 40 to 150ms with gaps under 150ms */
-      let restarts = 0, streak = 0;
+      let restarts = 0, streak = 0, sAt = 0;
+      const restartAt = [], hit = () => { restarts++; restartAt.push((from + sAt) * 0.01); };
       runs.forEach(r => {
         const len = r.b - r.a;
-        if (r.on) { if (len >= 4 && len <= 15) streak++; else { if (streak >= 3) restarts++; streak = 0; } }
-        else if (len > 15) { if (streak >= 3) restarts++; streak = 0; }
+        if (r.on) { if (len >= 4 && len <= 15) { if (!streak) sAt = r.a; streak++; } else { if (streak >= 3) hit(); streak = 0; } }
+        else if (len > 15) { if (streak >= 3) hit(); streak = 0; }
       });
-      if (streak >= 3) restarts++;
+      if (streak >= 3) hit();
       /* pitch spread in semitones: the 10th to the 90th percentile of voiced frames */
       const st = [];
       for (i = 0; i < N; i++) if (voiced[i] && F(i).f0 > 0) st.push(12 * Math.log2(F(i).f0 / 100));
@@ -429,7 +441,7 @@ function Ear(sr) {
         longestPause: pauses.length ? Math.max.apply(null, pauses) * 0.01 : 0,
         ratio: spoken > 0 ? phon / spoken : 0,
         held: held.length, heldSec: held.reduce((s, h) => s + h.dur, 0), heldAt: held,
-        restarts: restarts,
+        restarts: restarts, restartAt: restartAt,
         pitchSpread: pv, f0: f0med,
         crisp: hfn ? hfs / hfn : 0,
         loud: dbN ? dbS / dbN : null, floor: floor, speakAt: speakAt,
@@ -453,7 +465,7 @@ const ASR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 const asrOn = () => !!(ASR && optOn('asr', 0));
 const camOn = () => optOn('cam', 1);
 function Listener(lang) {
-  const out = { chunks: [], words: 0, state: ASR ? 'idle' : 'none', error: '' };
+  const out = { chunks: [], at: [], words: 0, state: ASR ? 'idle' : 'none', error: '' };
   let rec = null, live = false;
   function start() {
     if (!ASR || live) return;
@@ -462,7 +474,7 @@ function Listener(lang) {
     rec.onresult = e => {
       for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) {
         const t = String(e.results[i][0].transcript || '').trim();
-        if (t) { out.chunks.push(t); out.words += t.split(/\s+/).length; }
+        if (t) { out.chunks.push(t); out.at.push(performance.now()); out.words += t.split(/\s+/).length; }
       }
       out.state = 'on';
     };
@@ -487,10 +499,10 @@ const AMBIGUOUS = { right: 1, like: 1, so: 1, okay: 1, actually: 1 };
 const JOINERS = /^(so|and|but|because|okay|ok|now|like|i|you|we|it|that|this|then|yeah|um|uh)$/;
 function crutchList() { const v = opt('crutch', null); return Array.isArray(v) ? v : DEFAULT_CRUTCH.slice(); }
 function scan(chunks) {
-  const hits = {}, marked = [];
+  const hits = {}, marked = [], spots = [];
   let fillers = 0, crutch = 0, repeats = 0;
   const list = crutchList().map(p => p.toLowerCase().trim()).filter(Boolean).sort((a, b) => b.length - a.length);
-  chunks.forEach(chunk => {
+  chunks.forEach((chunk, ci) => {
     const words = chunk.toLowerCase().replace(/[^a-z' ]+/g, ' ').split(/\s+/).filter(Boolean);
     const flag = new Array(words.length).fill(0);
     /* the same word twice running: "I I think", "the the" */
@@ -507,14 +519,14 @@ function scan(chunks) {
           const beside = (i > 0 && JOINERS.test(words[i - 1])) || (i + 1 < words.length && JOINERS.test(words[i + 1]));
           if (!edge && !beside) continue;
         }
-        crutch++; hits[p] = (hits[p] || 0) + 1;
+        crutch++; hits[p] = (hits[p] || 0) + 1; spots.push([ci, i, words.length, p]);
         for (let k = 0; k < pw.length; k++) flag[i + k] = 2;
       }
     });
     marked.push(words.map((w, i) => flag[i] ? '<mark' + (flag[i] === 2 ? ' class="c"' : '') + '>' + esc(w) + '</mark>' : esc(w)).join(' '));
   });
   const asrUms = FILLERS.reduce((s, w) => s + (hits[w] || 0), 0);
-  return { fillers: fillers, crutch: crutch, repeats: repeats, asrUms: asrUms, hits: hits, html: marked.join(' <span class="muted">|</span> ') };
+  return { fillers: fillers, crutch: crutch, repeats: repeats, asrUms: asrUms, hits: hits, spots: spots, html: marked.join(' <span class="muted">|</span> ') };
 }
 
 /* ══════════════ the eyes, where the face finder loads ══════════════
@@ -850,44 +862,51 @@ function coach(t) {
   const m = t.m || {}, ev = t.ev || null, tg = targets(), b = band(d.style), out = [];
   const failed = {}, goalOf = {};
   (t.goals || []).forEach(g => { goalOf[g.m] = g.v; if (g.got != null && !g.ok) failed[g.m] = 1; });
-  const add = (id, metric, sev, what, cue, fix) => out.push({ id: id, sev: clamp(sev, 0.1, 2) * (failed[metric] ? 1.5 : 1), what: what, cue: cue, fix: fix });
+  const add = (id, metric, sev, what, cue, fix, at) => out.push({ id: id, sev: clamp(sev, 0.1, 2) * (failed[metric] ? 1.5 : 1), what: what, cue: cue, fix: fix, at: (at || []).slice(0, 6) });
   const end = (ev && ev.end) || m.time || t.dur || 0;
   /* fillers, and where they sat */
   const lim = goalOf.fpm != null ? goalOf.fpm : tg.fpm;
   if (m.fpm != null && m.fpm > lim && (m.fillers || 0) >= 2) {
     const sev = (m.fpm - lim) / Math.max(1, lim) * 0.9;
     const held = (ev && ev.held) || [], n = held.length, pz = (ev && ev.pz) || [];
-    const after = held.filter(h => pz.some(p => p[0] + p[1] >= h[0] - 0.6 && p[0] + p[1] <= h[0] + 0.1)).length;
-    const cut = Math.max(10, Math.round(end * 0.2)), early = held.filter(h => h[0] < cut).length;
-    const tail = Math.max(10, Math.round(end * 0.3)), late = held.filter(h => h[0] > end - tail).length;
-    if (n >= 3 && after / n >= 0.6) add('um-pause', 'fpm', sev, after + ' of ' + n + ' ums came right after a pause.', 'Breathe in during the pause, then start on the first real word.', 'fix-pause-word');
-    else if (n >= 3 && early / n >= 0.5) add('um-start', 'fpm', sev, early + ' of ' + n + ' ums came in the first ' + cut + ' seconds.', 'Know your first sentence before you start.', 'fix-first-line');
-    else if (n >= 3 && late / n >= 0.5) add('um-end', 'fpm', sev, late + ' of ' + n + ' ums came in the last ' + tail + ' seconds.', 'Decide your last line before you start, and stop on it.', 'fix-close');
-    else add('fillers', 'fpm', sev, r1(m.fpm) + ' fillers a minute, against ' + lim + '.', 'Close your lips when one is coming and let the silence run.', 'fix-fillers');
+    const afterL = held.filter(h => pz.some(p => p[0] + p[1] >= h[0] - 0.6 && p[0] + p[1] <= h[0] + 0.1)), after = afterL.length;
+    const cut = Math.max(10, Math.round(end * 0.2)), earlyL = held.filter(h => h[0] < cut), early = earlyL.length;
+    const tail = Math.max(10, Math.round(end * 0.3)), lateL = held.filter(h => h[0] > end - tail), late = lateL.length;
+    if (n >= 3 && after / n >= 0.6) add('um-pause', 'fpm', sev, after + ' of ' + n + ' ums came right after a pause.', 'Breathe in during the pause, then start on the first real word.', 'fix-pause-word', afterL);
+    else if (n >= 3 && early / n >= 0.5) add('um-start', 'fpm', sev, early + ' of ' + n + ' ums came in the first ' + cut + ' seconds.', 'Know your first sentence before you start.', 'fix-first-line', earlyL);
+    else if (n >= 3 && late / n >= 0.5) add('um-end', 'fpm', sev, late + ' of ' + n + ' ums came in the last ' + tail + ' seconds.', 'Decide your last line before you start, and stop on it.', 'fix-close', lateL);
+    else add('fillers', 'fpm', sev, r1(m.fpm) + ' fillers a minute, against ' + lim + '.', 'Close your lips when one is coming and let the silence run.', 'fix-fillers', held);
   }
   if (m.crutch) {
     const hits = Object.entries(t.hits || {}).filter(([w]) => FILLERS.indexOf(w) < 0).sort((x, y) => y[1] - x[1]);
     const top = hits[0];
     add('crutch', 'crutch', m.crutch / 3 * 0.8, top ? '"' + top[0] + '" ' + top[1] + (top[1] === 1 ? ' time' : ' times') + (m.crutch > top[1] ? ', ' + m.crutch + ' crutch phrases in all.' : '.') : m.crutch + ' crutch phrases.',
-      'End the sentence where the phrase would go.', 'fix-crutch');
+      'End the sentence where the phrase would go.', 'fix-crutch', (ev && ev.cx || []).map(c => [c[0], 1.5]));
   }
   /* pace against this style's band, and whether it drifted */
-  const wpm = m.wpm != null ? Math.round(m.wpm) : null, p3 = ev && ev.pace;
+  const wpm = m.wpm != null ? Math.round(m.wpm) : null, p3 = ev && ev.pace, th = ev && ev.thirds;
+  const third = pick => p3 && th ? [[th[p3.indexOf(pick.apply(null, p3))], 6]] : [];
   if (wpm != null && !d.lights) {
-    if (p3 && p3[2] > p3[0] * 1.15 && p3[2] > b[1]) add('speedup', 'wpm', (p3[2] - b[1]) / b[1] * 4 * 0.75, 'Pace rose from ' + p3[0] + ' to ' + p3[2] + ' wpm by the end.', 'Hold the last sentence at the speed of the first.', 'fix-slow');
-    else if (wpm > b[1] + 5) add('fast', 'wpm', (wpm - b[1]) / b[1] * 4 * 0.8, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Stop and breathe in at every full stop.', 'fix-slow');
-    else if (wpm < b[0] - 5) add('slow', 'wpm', (b[0] - wpm) / b[0] * 4 * 0.6, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Shorter sentences, and start the next one before it is perfect.', 'fix-moving');
+    if (p3 && p3[2] > p3[0] * 1.15 && p3[2] > b[1]) add('speedup', 'wpm', (p3[2] - b[1]) / b[1] * 4 * 0.75, 'Pace rose from ' + p3[0] + ' to ' + p3[2] + ' wpm by the end.', 'Hold the last sentence at the speed of the first.', 'fix-slow', th ? [[th[2], 6]] : []);
+    else if (wpm > b[1] + 5) add('fast', 'wpm', (wpm - b[1]) / b[1] * 4 * 0.8, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Stop and breathe in at every full stop.', 'fix-slow', third(Math.max));
+    else if (wpm < b[0] - 5) add('slow', 'wpm', (b[0] - wpm) / b[0] * 4 * 0.6, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Shorter sentences, and start the next one before it is perfect.', 'fix-moving', third(Math.min));
   }
   const longs = (ev && ev.pz || []).filter(p => p[1] >= 1.5);
   if (m.longP >= (d.style === 'short' ? 1 : d.style === 'story' ? 3 : 2)) {
     const at = longs.slice(0, 3).map(p => mmss(p[0])).join(', ');
     add('dead-air', 'longP', m.longP / 3, m.longP + ' silences over 1.5 seconds' + (at ? ', at ' + at : '') + (m.longestPause ? ', the longest ' + m.longestPause + 's.' : '.'),
-      'When lost, say the last point again in fewer words.', 'fix-moving');
+      'When lost, say the last point again in fewer words.', 'fix-moving', longs);
   }
   const ppm = m.spoken ? m.pauses / (m.spoken / 60) : null;
-  if (ppm != null && m.spoken >= 30 && ppm < 6 && wpm != null && wpm >= b[0]) add('run-on', 'pauses', (6 - ppm) / 6 * 0.9, m.pauses + ' pauses in ' + Math.round(m.spoken) + ' seconds.', 'One idea, one breath. Stop at each full stop.', 'fix-breath');
+  if (ppm != null && m.spoken >= 30 && ppm < 6 && wpm != null && wpm >= b[0]) {
+    /* the longest run with no pause in it */
+    const edges = [0].concat(((ev && ev.pz) || []).reduce((a, p) => a.concat([p[0], p[0] + p[1]]), [])).concat([end]);
+    let run = null; for (let i = 0; i + 1 < edges.length; i += 2) { const len = edges[i + 1] - edges[i]; if (!run || len > run[1]) run = [edges[i], len]; }
+    add('run-on', 'pauses', (6 - ppm) / 6 * 0.9, m.pauses + ' pauses in ' + Math.round(m.spoken) + ' seconds' + (run && ev ? ', the longest run ' + Math.round(run[1]) + 's from ' + mmss(run[0]) + '.' : '.'),
+      'One idea, one breath. Stop at each full stop.', 'fix-breath', run && ev ? [[run[0], Math.min(8, run[1])]] : []);
+  }
   if (m.restarts >= 2 || (m.repeats || 0) >= 3) add('restarts', 'restarts', Math.max(m.restarts, (m.repeats || 0) / 2) / 3 * 0.9,
-    (m.restarts || 0) + ' stammered starts' + (m.repeats ? ' and ' + m.repeats + ' repeated words.' : '.'), 'Start each sentence soft and a little slow on its first sound.', 'fix-easy-start');
+    (m.restarts || 0) + ' stammered starts' + (m.repeats ? ' and ' + m.repeats + ' repeated words.' : '.'), 'Start each sentence soft and a little slow on its first sound.', 'fix-easy-start', (ev && ev.rs || []).map(x => [x, 1]));
   if (m.pitch != null && m.pitch < tg.pitch - 1 && d.style !== 'read') add('flat', 'pitch', (tg.pitch - m.pitch) / tg.pitch * 0.75, 'Pitch moved ' + m.pitch + ' semitones, against ' + tg.pitch + '.', 'Lift your voice on the one word in each sentence that matters.', 'fix-key-word');
   if (m.crisp != null && m.crisp < tg.crispPct) add('mumble', 'crisp', (tg.crispPct - m.crisp) / tg.crispPct * 2.8, 'Crispness ' + Math.round(m.crisp) + '% of this morning\'s warm-up, against ' + tg.crispPct + '%.', 'Open the mouth wider and sound every last consonant.', 'fix-crisp');
   if (m.eye != null && m.eye < tg.eye) add('eyes', 'eye', (tg.eye - m.eye) / tg.eye * 2.1, 'On the lens ' + Math.round(m.eye) + '%' + (m.eyeAway ? ', the longest look away ' + m.eyeAway + 's.' : '.'), 'Find the next thought with the eyes on the lens.', 'fix-lens');
@@ -917,13 +936,68 @@ function timeline(t) {
   if (ev.pace) w.appendChild(el('p', 'muted', 'Pace by third: ' + ev.pace.join(' · ') + ' wpm'));
   return w;
 }
+/* the take's recording on its strip: play and pause, a tap on the strip plays
+   from there, and play(from, to) plays one moment the coach named */
+function clipPlayer(t) {
+  const row = !t.clipP && t.key ? Rec.get('tclip', t.date, t.key) : null;
+  if (!t.clipP && !(row && row.data)) return null;
+  const end = Math.max(1, (t.ev && t.ev.end) || t.dur || 1);
+  const pct = x => clamp(x / end * 100, 0, 100).toFixed(2) + '%';
+  const wrap = el('div', 'player');
+  const btn = el('button', 'mb-btn mb-press mb-tap pl', ICN('play'));
+  btn.setAttribute('aria-label', 'Play the take');
+  const tl = t.ev ? timeline(t) : el('div', 'tl', '<div class="bar"></div>');
+  const bar = tl.querySelector('.bar'), hit = el('div', 'hit'), head = el('i', 'head');
+  tl.insertBefore(hit, bar); hit.appendChild(bar); bar.appendChild(head);
+  wrap.appendChild(btn); wrap.appendChild(tl);
+  const audio = new Audio(); audio.preload = 'auto';
+  let url = null, stopAt = null, raf = 0;
+  const src = (t.clipP ? t.clipP.then(b => b ? (url = URL.createObjectURL(b)) : null) : Promise.resolve(row.data))
+    .then(s => { if (s) audio.src = s; else wrap.classList.add('none'); return s; });
+  const tick = () => {
+    head.style.left = pct(audio.currentTime);
+    if (stopAt != null && audio.currentTime >= stopAt) audio.pause();
+    if (!audio.paused) raf = requestAnimationFrame(tick);
+  };
+  const face = on => { btn.innerHTML = ICN(on ? 'stop' : 'play'); btn.setAttribute('aria-label', on ? 'Pause' : 'Play the take'); paintIcons(btn); };
+  audio.onplay = () => { wrap.classList.add('on'); face(1); cancelAnimationFrame(raf); tick(); };
+  audio.onpause = audio.onended = () => { face(0); cancelAnimationFrame(raf); };
+  const play = (from, to) => src.then(s => {
+    if (!s) return;
+    stopAt = to == null ? null : Math.min(end, to);
+    try { audio.currentTime = clamp(from, 0, end); } catch (e) {}
+    audio.play().catch(() => UI.toast('The recording would not play.', { bad: true }));
+  });
+  btn.onclick = () => { if (audio.paused) play(audio.currentTime >= end - 0.3 ? 0 : audio.currentTime, null); else audio.pause(); };
+  hit.onclick = e => { const r = hit.getBoundingClientRect(); play((e.clientX - r.left) / Math.max(1, r.width) * end, null); };
+  return { el: wrap, play: play, stop: () => { audio.pause(); if (url) URL.revokeObjectURL(url); } };
+}
+/* a fault's moments as buttons, each playing a second and a half either side */
+function moments(f, player) {
+  const box = el('div', 'moments');
+  if (!player) return box;
+  if (!f.at.length) {
+    const b = el('button', 'mb-btn mb-press mb-tap', ICN('play') + '<span>Play the take</span>');
+    b.onclick = () => player.play(0, null);
+    box.appendChild(b);
+  } else f.at.forEach(a => {
+    const b = el('button', 'mb-btn mb-press mb-tap', ICN('play') + '<span>' + (f.id === 'crutch' ? 'about ' : '') + mmss(a[0]) + '</span>');
+    b.onclick = () => player.play(a[0] - 1.5, a[0] + (a[1] || 0) + 1.5);
+    box.appendChild(b);
+  });
+  paintIcons(box);
+  return box;
+}
 /* the coach's box at the top of a take's sheet */
 function coachBox(t, d, h) {
   const box = el('div', 'coach mb-plate');
+  const player = clipPlayer(t);
+  box._stop = () => { if (player) player.stop(); };
   const render = () => {
     box.innerHTML = '';
     box.appendChild(el('h3', null, 'WHAT TO FIX'));
-    if (t.ev) box.appendChild(timeline(t));
+    if (player) box.appendChild(player.el);
+    else if (t.ev) box.appendChild(timeline(t));
     const fs = coach(t), f = fs[0];
     if (!f) {
       box.appendChild(el('p', 'what', 'Nothing over its line.'));
@@ -938,6 +1012,7 @@ function coachBox(t, d, h) {
     }
     const fx = drillById(f.fix);
     box.appendChild(el('p', 'what', esc(f.what)));
+    box.appendChild(moments(f, player));
     const g = el('div', 'goal');
     fixFrom = t;
     const gl = fx.goals(targets());
@@ -962,7 +1037,12 @@ function coachBox(t, d, h) {
     if ((t.fb || {})[f.id] === 1) acts.appendChild(el('span', 'muted marked', 'Marked right'));
     else { acts.appendChild(mark(1, 'Right')); acts.appendChild(mark(0, 'Wrong')); }
     box.appendChild(acts);
-    if (fs.length > 1) box.appendChild(el('p', 'muted', 'Also: ' + esc(fs.slice(1, 3).map(x => x.what).join(' '))));
+    fs.slice(1, 3).forEach((x, i) => {
+      const a = el('div', 'also');
+      a.appendChild(el('p', 'muted', (i ? '' : 'Also: ') + esc(x.what)));
+      if (x.at.length) a.appendChild(moments(x, player));
+      box.appendChild(a);
+    });
     paintIcons(box);
   };
   render();
@@ -1274,7 +1354,7 @@ function takeRow(t) {
   r.style.setProperty('--c', skill ? 'var(--data-' + skill.slot + ')' : 'var(--accent)');
   const when = new Date(t.at || 0);
   r.innerHTML = '<span class="ic">' + ICN(t.pass ? 'done' : 'mic') + '</span><span class="tx"><span class="nm">' + esc(d ? d.name : 'Warm-up') + '</span>' +
-    '<span class="sub">' + esc(when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · ' + mmss(t.dur || 0) + (t.asr ? ' · transcript' : '') + (t.cam ? ' · camera' : '')) + '</span></span>' +
+    '<span class="sub">' + esc(when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · ' + mmss(t.dur || 0) + (t.asr ? ' · transcript' : '') + (t.cam ? ' · camera' : '') + (t.drill !== 'warm' && hasClip(t) ? ' · recorded' : '')) + '</span></span>' +
     '<span class="num"><b>' + esc(d ? mainNumber(d, t) : warmLine(t)) + '</b>' +
       (d ? (t.pass ? 'met' : unmeasured(t) ? 'no reading' : 'not met') : '') + '</span>';
   r.onclick = () => showTake(t);
@@ -1286,12 +1366,20 @@ function takeMenu(t, e) {
   UI.menu(x, y, [
     { label: 'Open', fn: () => showTake(t) },
     { label: 'Delete', kind: 'bad', fn: () => {
-      const was = Object.assign({}, t); delete was.key; delete was.date;
+      const was = Object.assign({}, t); delete was.key; delete was.date; delete was.clipP;
+      const clip = Rec.get('tclip', t.date, t.key);
       Rec.del('take', t.date, t.key);
+      if (clip) Rec.del('tclip', t.date, t.key);
       Mobile.haptic('warn');
-      UI.undo('deleted a take', () => Rec.set('take', t.date, t.key, was));
+      UI.undo('deleted a take', () => { Rec.set('take', t.date, t.key, was); if (clip) Rec.set('tclip', t.date, t.key, clip); });
     } },
-  ], { title: 'TAKE' });
+  ].concat(Rec.has('tclip', t.date, t.key) ? [{ label: 'Delete the recording', kind: 'bad', fn: () => {
+      const clip = Rec.get('tclip', t.date, t.key);
+      Rec.del('tclip', t.date, t.key);
+      Mobile.haptic('warn');
+      UI.undo('deleted a recording', () => Rec.set('tclip', t.date, t.key, clip));
+    } }] : []).concat([
+  ]), { title: 'TAKE' });
 }
 function drillMenu(d, e) {
   const x = e && e.clientX || 0, y = e && e.clientY || 0;
@@ -1511,6 +1599,17 @@ async function startTake(d, warmStep, prompt) {
   T.origin = d && d.fix ? fixFrom : null;
   T.goals = d ? d.goals(targets()) : [];
   T.liveLast = 0;
+  /* the take's own sound, kept on this device so the coach's moments can be
+     played back. Tom, 2026-11-16. Off in Settings; never for the warm-up */
+  T.rec = null; T.clipP = null;
+  if (d && optOn('rec', 1) && window.MediaRecorder) try {
+    const mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'].filter(x => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(x))[0] || '';
+    const o = { audioBitsPerSecond: 32000 }; if (mime) o.mimeType = mime;
+    const rec = new MediaRecorder(new MediaStream(stream.getAudioTracks()), o), parts = [];
+    rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+    T.clipP = new Promise(res => { rec.onstop = () => res(parts.length ? new Blob(parts, { type: rec.mimeType || mime || 'audio/webm' }) : null); });
+    T.rec = rec;
+  } catch (e) { T.rec = null; T.clipP = null; }
   T.cam = !!(wantCam && stream.getVideoTracks().length);
   T.ac = new (window.AudioContext || window.webkitAudioContext)();
   try { await T.ac.resume(); } catch (e) {}
@@ -1597,6 +1696,7 @@ function runTake() {
   $('#tkFoot').appendChild(stop);
   paintIcons($('#take'));
   T.t0 = performance.now(); T.from = T.ear.seconds();
+  if (T.rec) try { T.rec.start(1000); } catch (e) { T.rec = null; T.clipP = null; }
   if (T.listener) T.listener.start();
   Sfx.play('start');
   if (T.beat) startBeat();
@@ -1674,6 +1774,7 @@ function stopTake(cancel) {
   clearInterval(T.timer); clearInterval(T.eyeTimer); clearInterval(T.beatTimer); clearInterval(T.eyeTick);
   if (T.listener) T.listener.stop();
   try { T.proc.disconnect(); T.src.disconnect(); } catch (e) {}
+  if (T.rec && T.rec.state !== 'inactive') try { T.rec.stop(); } catch (e) {}
   try { T.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
   const ac = T.ac; setTimeout(() => { try { ac.close(); } catch (e) {} }, 400);
   if (T.release) { const r = T.release; T.release = null; r(); }
@@ -1725,16 +1826,41 @@ function finishTake(m, secs) {
   if (m.peaks.length >= 12 && m.spoken >= 20) {
     const a = m.peaks[0], z = m.peaks[m.peaks.length - 1], seg = (z - a) / 3;
     const k = m.wpmEst ? out.wpm / m.wpmEst : 1;
+    if (seg > 2) ev.thirds = [rel(a), rel(a + seg), rel(a + seg * 2)];
     if (seg > 2) ev.pace = [0, 1, 2].map(i => { const lo = a + seg * i, hi = lo + seg; const n = m.peaks.filter(p => p >= lo && (i === 2 ? p <= hi : p < hi)).length; return Math.round(n / 1.4 / (seg / 60) * k); });
   }
+  ev.rs = (m.restartAt || []).map(rel);
+  /* crutch phrases, placed by when their chunk of transcript landed: the
+     recogniser gives no clock, so these are about right, not exact */
+  if (tx && tx.spots.length) ev.cx = tx.spots.map(sp => {
+    const land = ((T.listener.out.at[sp[0]] || T.t0) - T.t0) / 1000;
+    return [r1(Math.max(0, land - 0.8 - (sp[2] - sp[1]) * 0.4)), sp[3]];
+  });
   const take = { drill: d.id, skill: d.skill, style: d.style, dur: Math.round(secs), m: out, goals: goals, pass: pass ? 1 : 0, ev: ev,
     asr: asrOn ? 1 : 0, cam: eye != null ? 1 : 0, tx: asrOn ? T.listener.text().slice(0, 4000) : '', hits: asrOn ? tx.hits : null,
     prompt: T.prompt && (T.prompt.text || (T.prompt.items || []).join(' | ')), p: T.prompt, at: Date.now() };
   if (T.origin && T.origin.key) take.from = T.origin.key;
   take.key = saveTake(take); take.date = Day.today();
+  if (T.clipP) { take.clipP = T.clipP; T.clipP.then(b => saveClip(take, b)); }
   Mobile.feedback(pass ? 'complete' : 'done');
   showTake(take, tx && tx.html);
 }
+/* A take's sound is one `tclip` row, keyed as its take. Every one is kept
+   past 64KB, the line live sync never sends across, so a recording stays on
+   the device it was made on: the suite has no device-only type yet (Needs
+   from the foundation, in the brief). Not in IO.register either, so the sheet
+   never gets it. */
+function saveClip(t, blob) {
+  if (!blob || !t.key) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    const data = String(fr.result || ''), row = { mime: blob.type, dur: t.dur, data: data };
+    if (data.length < 66000) row.pad = ' '.repeat(66000 - data.length);
+    Rec.set('tclip', t.date, t.key, row);
+  };
+  fr.readAsDataURL(blob);
+}
+const hasClip = t => !!(t.clipP || (t.key && Rec.has('tclip', t.date, t.key)));
 function finishWarm(m, secs) {
   const step = T.warm;
   const w = warmToday();
@@ -1797,14 +1923,16 @@ function fixActions(t, d) {
 }
 /* the numbers of one take, every goal met or not, the transcript marked */
 function showTake(t, html) {
+  let cb = null;
   const d = t.drill === 'warm' ? null : drillById(t.drill);
   const m = t.m || {};
   UI.dialog({
     title: (d ? d.name : 'Warm-up').toUpperCase() + ' · ' +
       (t.pass ? 'MET' : !(t.goals && t.goals.length) ? 'DONE'
         : t.goals.some(g => g.got == null) ? 'NOT MEASURED' : 'NOT MET'), width: 560,
+    onClose: () => { if (cb) cb._stop(); },
     body: (b, h) => {
-      if (d) b.appendChild(coachBox(t, d, h));
+      if (d) b.appendChild(cb = coachBox(t, d, h));
       if (d) {
         const gs = el('div', 'stats');
         (t.goals || []).forEach(g => {
@@ -1913,7 +2041,7 @@ function drawCrutch(p) {
   acts.appendChild(reset); p.appendChild(acts);
 }
 function drawGear(p) {
-  p.appendChild(el('p', 'muted', 'Everything is measured on this machine. The transcript is the one exception, and it is off.'));
+  p.appendChild(el('p', 'muted', 'Everything is measured on this machine. The transcript is the one exception, and it is off unless you turn it on.'));
   p.appendChild(UI.row('Transcript', ASR ? 'Off, your voice stays on this machine. On, it goes to Apple or Google for the words, which is what counts your crutch phrases' : 'This browser cannot make one', ASR ? UI.toggle(asrOn(), on => Rec.setting(APP.id, 'asr', on ? 1 : 0)) : null));
   const lang = el('select', 'mb-sel');
   ['en-US', 'en-GB', 'en-AU', 'en-PH', 'fil-PH'].forEach(l => { const o = el('option', null, l); o.value = l; if (l === opt('lang', 'en-US')) o.selected = true; lang.appendChild(o); });
@@ -1922,7 +2050,8 @@ function drawGear(p) {
   p.appendChild(UI.row('Camera', 'On for the EYES drills. About 15MB of face finder, fetched once and then kept. The picture never leaves this machine', UI.toggle(camOn(), on => Rec.setting(APP.id, 'cam', on ? 1 : 0))));
   p.appendChild(UI.row('Which camera', 'front is the one you talk to', UI.segmented([{ id: 'user', name: 'Front' }, { id: 'environment', name: 'Back' }], opt('facing', 'user'), v => Rec.setting(APP.id, 'facing', v))));
   p.appendChild(UI.row('Pace beat', 'a click per syllable on the To the beat drill', UI.toggle(optOn('beat', 1), on => Rec.setting(APP.id, 'beat', on ? 1 : 0))));
-  p.appendChild(el('p', 'muted', 'Nothing is recorded. The sound is counted as it arrives and dropped.'));
+  p.appendChild(UI.row('Record takes', 'Keeps each take\'s sound on this device, to play the moments the coach names', UI.toggle(optOn('rec', 1), on => Rec.setting(APP.id, 'rec', on ? 1 : 0))));
+  p.appendChild(el('p', 'muted', 'A recording stays on the device it was made on and is never synced. A take\'s menu deletes its recording.'));
 }
 
 /* ══════════════ the widget ══════════════
