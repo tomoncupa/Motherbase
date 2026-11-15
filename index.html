@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.118, 2026-11-16">
+<meta name="mb-version" content="1.0.119, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -1647,11 +1647,20 @@ function evValue(date, id) { return Measure.value(date, id); }
    data. If it gets too small, let it show more." The days picked on a card
    are what it shows at 100%; zoomed to 50% it shows twice as many, at 200%
    half, never under a week. "All of it" stays all of it. A phone has no
-   card zoom. Any chart card with a days pick asks this, and names its
-   stretch with zoomDaysName. */
+   card zoom. Any chart card with a days pick asks this, names its
+   stretch with zoomDaysName, and goes in ZOOM_DAYS so its menus offer
+   "Follow the zoom".
+   A time frame he picks is locked (`dlock`): Tom, 2026-11-16, "If I chose
+   a setting manually, the zooming in can't change it". Picking is the
+   lock, no button; "Follow the zoom" takes it off. Picks made before the
+   lock existed carry no `dlock` and keep following. */
+const ZOOM_DAYS = { weight: 1, measure: 1, sleep: 1, trainvol: 1, halflife: 1 };
 function zoomDays(cfg, n) {
+  if (cfg && cfg.dlock) return n;
   const z = (cfg && cfg.zoom && !matchMedia('(max-width:820px)').matches) ? cfg.zoom : 1;
-  return n >= 3650 || z === 1 ? n : Math.max(7, Math.round(n / z));
+  /* never under a week, unless the pick itself is under one (HALF-LIFE's 3
+     days): zooming in must never show more */
+  return n >= 3650 || z === 1 ? n : Math.max(Math.min(n, 7), Math.round(n / z));
 }
 function zoomDaysName(list, d) {
   const hit = list.filter(x => x[0] === d)[0];
@@ -2879,7 +2888,7 @@ const WIDGETS = {
     /* how many weeks, from the card's menu, as days so the menu's one
        Time frame list serves it; untouched it is the 8 it always was */
     days: [[28, '4 weeks'], [56, '8 weeks'], [91, '13 weeks'], [182, '26 weeks'], [364, '52 weeks']], day0: 56,
-    nWk: cfg => Math.round(((cfg && cfg.days) || 56) / 7),
+    nWk: cfg => Math.max(1, Math.round(zoomDays(cfg, (cfg && cfg.days) || 56) / 7)),
     weeks(cfg) {
       const t = LifeOS.day(), out = [];
       for (let w = WIDGETS.trainvol.nWk(cfg) - 1; w >= 0; w--) {
@@ -4809,7 +4818,7 @@ const WIDGETS = {
         return;
       }
       body.style.gap = '0';
-      const days = cfg.days || 7, now = Date.now(), DAY = 86400000;
+      const days = zoomDays(cfg, cfg.days || 7), now = Date.now(), DAY = 86400000;
       const t0 = new Date(LifeOS.shift(LifeOS.day(), -(days - 1)) + 'T00:00:00').getTime();
       const step = (days <= 7 ? 1 : days <= 14 ? 2 : 4) * 3600000;
       const amt = v => v >= 10 ? Math.round(v).toLocaleString() : v >= 1 ? +v.toFixed(1) + '' : v >= 0.05 ? +v.toFixed(2) + '' : '0';
@@ -7291,9 +7300,7 @@ function widgetMenu(i, x, y) {
        so a second copy of it can show a different stretch of time. */
     cfg.zoom && !NARROW() ? { label: 'Zoom back to 100%', fn: () => { delete cfg.zoom; saveLayout(); drawHome(); } } : null,
     Array.isArray(W.days) || W.periods || W.parts ? '-' : null,
-    Array.isArray(W.days) ? { label: 'Time frame', sub: W.days.map(d => ({
-        label: d[1], check: (cfg.days || W.day0 || 90) === d[0],
-        fn: () => { cfg.days = d[0]; saveLayout(); drawHome(); } })) } : null,
+    Array.isArray(W.days) ? { label: 'Time frame', sub: daysMenu(W, cfg, () => { saveLayout(); drawHome(); }) } : null,
     /* tick lists: each pick redraws the card and opens the list again, so
        several can be ticked in a row; the last one on cannot go */
     W.periods ? { label: 'Time frames', sub: tickList('Time frames', x, y,
@@ -7849,7 +7856,11 @@ function cutCards(nodes) {
     if (NARROW()) return;
     const body = n.querySelector(':scope > .w-body');
     if (!body || body.classList.contains('appslot')) return;
-    const bottom = body.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(body).paddingBottom) || 0) + 1;
+    /* the padding is read at 100% and drawn in the card's zoom: unscaled, a
+       chart that fills a card zoomed out counted as a few pixels over and
+       was left off whole (HALF-LIFE at 50%, 2026-11-16) */
+    const bz = parseFloat(body.style.zoom) || 1;
+    const bottom = body.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(body).paddingBottom) || 0) * bz + 1;
     const walk = box => {
       [].slice.call(box.children).forEach((e, k) => {
         if (e.classList.contains('sz-cut')) return;
@@ -8062,10 +8073,19 @@ Object.keys(WIDGETS).forEach(k => { if (WIDGETS[k].about && !ABOUT[k]) ABOUT[k] 
    (`days`) and any pick list its `menu` offers. Only pick lists: a menu item
    that opens a sheet of its own (WEIGHT's cut plan) stays on the card, since
    a sheet opened from this one walks history off the page (root brief). */
+/* the Time frame list, in the card's menu and in + WIDGET: picking a
+   stretch locks it against the zoom; on a card that follows the zoom,
+   "Follow the zoom" comes first and is the one ticked */
+function daysMenu(W, cfg, done) {
+  const zk = Object.keys(WIDGETS).filter(k => WIDGETS[k] === W)[0], zoomable = !!ZOOM_DAYS[zk];
+  const L = W.days.map(d => ({ label: d[1], check: (!zoomable || cfg.dlock) && (cfg.days || W.day0 || 90) === d[0],
+    fn: () => { cfg.days = d[0]; if (zoomable) cfg.dlock = 1; done(); } }));
+  if (zoomable) L.unshift({ label: 'Follow the zoom', check: !cfg.dlock, fn: () => { delete cfg.dlock; done(); } });
+  return L;
+}
 function widgetChoices(W, cfg, redraw) {
   const out = [];
-  if (Array.isArray(W.days)) out.push({ label: 'SHOW', sub: W.days.map(d => ({
-    label: d[1], check: (cfg.days || W.day0 || 90) === d[0], fn: () => { cfg.days = d[0]; redraw(); } })) });
+  if (Array.isArray(W.days)) out.push({ label: 'SHOW', sub: daysMenu(W, cfg, redraw) });
   menuOf(W, cfg, redraw).forEach(x => { if (x && x.sub && x.sub.length) out.push({ label: String(x.label).toUpperCase(), sub: x.sub }); });
   return out;
 }

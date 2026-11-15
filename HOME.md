@@ -699,7 +699,7 @@ Tom asked for a sweep of what card zoom could have broken. Found: the size class
 Swept and fine: the drag ghost and the + WIDGET picker titles, the phone (no zoom, picked days shown, no sideways scroll), redraw speed (a year of weigh-ins at 25% is 38 ms against 34 at 100%), no other file reads a card's zoom or title.
 [TESTED] demo in headless Chromium at 1918: WEIGHT, MOOD and SLEEP at 100/200/300% keep title, menu and answer; a really small SLEEP still drops its answer line at every zoom; phone at 390. [UNTESTED] his board.
 
-## 2026-11-16, decided, not built: a time frame he picks is locked
+## 2026-11-16, HOME 1.0.119: a time frame he picks is locked (built the same day)
 
 Tom, answering the sweep: "If I chose a setting manually, the zooming in can't change it", and TRAIN volume and HALF-LIFE should follow the zoom "unless I lock a number". Claude's call, given to Tom: no lock button; picking a time frame from the card's menu IS the lock. To build:
 - Picking from Time frame (both menus, the card's and the one near `cfg.days = d[0]; redraw()`) sets `cfg.dlock = 1`; `zoomDays` returns `n` untouched when `cfg.dlock`. A new first item, "Follow the zoom", clears `dlock` (and keeps `days` as the 100% amount). The tick shows which.
@@ -708,3 +708,6 @@ Tom, answering the sweep: "If I chose a setting manually, the zooming in can't c
 - AVG WEIGHT never follows the zoom (an average over the days he chose).
 - The time frame menu keeps ticking the picked days while a zoomed title says more: Tom, "leave it".
 - Zoom showing more data is a Motherbase rule only (Tom: "mobo only for now"), not ui-standards.
+
+Built as specified, in 1.0.119. `ZOOM_DAYS` names the five chart cards that follow the zoom (WEIGHT, the measure card, SLEEP, TRAIN volume, HALF-LIFE); `daysMenu` draws the Time frame list in both the card's menu and + WIDGET, with "Follow the zoom" first on those five. `zoomDays` never takes a pick under a week up to a week, so HALF-LIFE's 3 days zoomed in stays 3. Found on the way: `cutCards` took the body's bottom padding off at 100% while the body was drawn in its zoom, so a chart filling a card zoomed out counted as a few pixels over and was left off whole (HALF-LIFE's chart vanished at 50%); the padding is now scaled by the zoom.
+[TESTED] demo in headless Chromium at 1918, by clicking: WEIGHT followed the zoom (90 to 120 days at 75%), picking 30 days locked it through a further zoom, "Follow the zoom" gave 60 at 50%; the ticks move from Follow the zoom to the pick; TRAIN volume 8/16/4 weeks and HALF-LIFE 3/6/12/3 days at 100/50/25/200%, its chart drawn at every zoom. [UNTESTED] his board.
