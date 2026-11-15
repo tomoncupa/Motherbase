@@ -29,7 +29,7 @@ const wv = g.chrome && g.chrome.webview;
 if (!wv || g.top !== g || g.MB_CLAUDE) return;
 g.MB_CLAUDE = true;
 
-const VERSION = '1.1.0';
+const VERSION = '1.1.1';
 const doc = g.document;
 const me = doc.getElementById('mb-claude-js') || doc.currentScript;
 const ROOT = String((me && me.src) || '').replace(/shared\/claude\.js.*$/, '');
@@ -206,7 +206,12 @@ function apply(w) {
       if (w.do === 'add') {
         const k = w.key || newKey();
         if (R.has(w.type, d, k)) throw new Error('that row is already there');
-        R.set(w.type, d, k, w.payload || {});
+        /* Where this type's rows carry their own key as `id` (STATUS's foods),
+           the new row's id is the key made here, which Claude cannot know.
+           Without it STATUS logged the food under "undefined" (2026-11-16). */
+        const pay = Object.assign({}, w.payload || {});
+        if (R.all(w.type).some(r => !r.deleted && r.payload && r.payload.id === r.key)) pay.id = k;
+        R.set(w.type, d, k, pay);
         out.key = k; out.date = d; out.prev = null;
       } else if (w.do === 'patch' || w.do === 'delete') {
         if (!R.has(w.type, d, w.key)) throw new Error('row not found');

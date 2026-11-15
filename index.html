@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.111, 2026-11-11">
+<meta name="mb-version" content="1.0.112, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -360,8 +360,6 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
    so, and the chart takes what is left rather than taking what it likes. */
 .w-body{flex:1;padding:0 var(--s-3) var(--s-3);min-height:0;overflow:visible;
   display:flex;flex-direction:column;gap:var(--s-2)}
-/* a card that sizes to its contents stops at the window and scrolls inside */
-.w.capped .w-body{overflow:auto}
 /* the zoom level, shown while Ctrl+scroll changes it, gone on the redraw */
 .ztag{position:absolute;top:var(--s-2);right:var(--s-2);z-index:2;pointer-events:none;
   padding:var(--s-1) var(--s-2);border-radius:var(--radius-sm,6px);background:var(--surface-3);
@@ -390,7 +388,9 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
    with the answer on top of it, a small widget left it no room at all. */
 .w-body > .fits{flex:1 1 auto;min-height:var(--s-9,96px)}
 .w-body > .fits > svg{width:100%;height:100%;display:block}
-@media (hover:hover) and (pointer:fine){ .w-body{overflow:auto} }
+/* no scrolling inside a card on the desk (Tom, 2026-11-16): it was auto
+   with a mouse. What does not fit is left off whole by cutCards. */
+@media(min-width:821px){ #grid > .w > .w-body:not(.appslot){overflow:hidden} }
 /* BODY HEATMAP's two figures: one above the other, or side by side,
    whichever draws them bigger in the box. Standing and Double biceps are
    tall and narrow, so they go side by side much sooner than Vitruvian. A
@@ -7076,7 +7076,12 @@ function widgetMenu(i, x, y) {
     ...(NARROW() ? [] : [
       { label: 'Taller', fn: () => set('h', 1) },
       hNow > minSize(cfg.t).h ? { label: 'Shorter', fn: () => set('h', -1) } : null,
-      W.fit && cfg.hs ? { label: 'Fit to contents', fn: () => { delete cfg.hs; cfg.h = W.h; saveLayout(); drawHome(); } } : null,
+      /* one press, once: the card takes the rows its contents need at
+         its width and zoom, then stays that size (2026-11-16) */
+      document.querySelector('#grid > .w[data-i="' + i + '"] > .w-body.appslot') ? null : { label: 'Fit to contents', fn: () => {
+        const r = needRows(i); if (!r) return;
+        cfg.h = r; cfg.hs = 1; saveLayout(); drawHome();
+      } },
     ]),
     /* A widget that says what ranges it understands gets them offered here,
        so a second copy of it can show a different stretch of time. */
@@ -7493,7 +7498,7 @@ function fitBoard() {
   layout.forEach(c => {
     if (!c.x) return;
     c.x = Math.round((c.x - 1) * f) + 1; c.y = Math.round((c.y - 1) * f) + 1;
-    c.w = Math.max(2, Math.round(c.w * f)); c.h = Math.max(c.hs ? 1 : 2, Math.round(c.h * f));
+    c.w = Math.max(1, Math.round(c.w * f)); c.h = Math.max(1, Math.round(c.h * f));
   });
   const r = boardReach(); r[BOARD] = 0; Rec.setting('lifeos', 'boardReach', r);
   drawnReach = 0; saveLayout(); drawHome(); saveLayout();
@@ -7504,12 +7509,30 @@ function fitBoard() {
 }
 let COLS = 12, SCALE = 1;
 const CELL = { w: 146, h: 84 };
-/* the smallest a card may be, in columns and rows: two by two, a fit card
-   one row tall, or the widget's own `min` (WORK DONE's, 2026-11-09) */
-const minSize = t => {
-  const W = WIDGETS[t] || {}, m = W.min || {};
-  return { w: Math.max(2, m.w || 0), h: Math.max(W.fit ? 1 : 2, m.h || 0) };
-};
+/* the smallest a card may be: one cell. Tom, 2026-11-16: "I don't want
+   limits to widget size". It was two by two, a fit card one row, or the
+   widget's own `min` (WORK DONE's 4 by 6, 2026-11-09); `min` stays on the
+   widget, unread. What does not fit in a small card is left off whole. */
+const minSize = () => ({ w: 1, h: 1 });
+/* The rows card i's contents need at its own width and zoom, measured
+   whole (nothing left off) and squeezed to one row, so a child that
+   stretches to fill the card cannot report the card's height as its need. */
+function needRows(i) {
+  const n = $('#grid').querySelector(':scope > .w[data-i="' + i + '"]');
+  if (!n) return 0;
+  const head = n.querySelector('.w-head'), body = n.querySelector(':scope > .w-body');
+  if (!head || !body) return 0;
+  const R = parseFloat($('#grid').style.getPropertyValue('--row')) || CELL.h;
+  const gap = parseFloat(getComputedStyle($('#grid')).rowGap) || 12;
+  const sz = n.dataset.sz, ch = n.style.getPropertyValue('--ch'), ov = body.style.overflow;
+  n.style.setProperty('--ch', 1); n.dataset.sz = 'l'; n.classList.remove('sz-xs');
+  n.querySelectorAll('.sz-cut').forEach(e => e.classList.remove('sz-cut'));
+  body.style.overflow = 'auto';
+  const z = parseFloat(body.style.zoom) || 1;
+  const need = head.offsetHeight + body.scrollHeight * z + 2;
+  body.style.overflow = ov; n.style.setProperty('--ch', ch); n.dataset.sz = sz;
+  return Math.max(1, Math.ceil((need + gap) / R));
+}
 function fitGrid() {
   const g = $('#grid'), home = $('#home');
   if (NARROW()) {
@@ -7537,38 +7560,14 @@ function fitGrid() {
     if (c.hs && c.h < m.h) c.h = m.h;
     if (!WIDGETS[c.t] || !WIDGETS[c.t].fit) { if (c.h < m.h) c.h = m.h; }
   });
-  /* the most rows a fit card takes: it stops there and scrolls inside, or
-     LINKS stood 1668px tall in a 1000px window with CLIENTS below the fold.
-     Since 1.0.70 it grows to its contents only as far as the bottom of the
-     window, and never stays smaller than the size he gave it, so a fit
-     card low on the board no longer makes the whole board scroll. */
-  const win = Math.max(1, Math.floor((H + gap) / CELL.h));
+  /* A fit card no longer grows to its contents. Tom, 2026-11-16: "the
+     overall widget size should be manually set". Every card is the size he
+     gave it, and its contents fit that (cutCards, and the zoom). Measuring
+     is now one press, Fit to contents on the card's menu (`needRows`). */
   fits.forEach(n => {
-    /* measured squeezed to one row, so a child that stretches to fill
-       the card cannot report the card's own height back as its need, and
-       at its full-size width, so a smaller window does not wrap its lines
-       into more rows */
-    const head = n.querySelector('.w-head'), body = n.querySelector('.w-body');
-    const cw = layout[+n.dataset.i].w;
-    n.style.setProperty('--ch', 1);
-    n.style.width = (cw * CELL.w + (cw - 1) * gap) + 'px';
-    /* measured whole: as a large card, with nothing left off */
-    n.dataset.sz = 'l'; n.classList.remove('sz-xs');
-    n.querySelectorAll('.sz-cut').forEach(e => e.classList.remove('sz-cut'));
-    const was = body.style.overflow;
-    body.style.overflow = 'auto';
-    const need = head.offsetHeight + body.scrollHeight + 2;
-    body.style.overflow = was;
-    n.style.width = '';
-    const want = Math.max(1, Math.ceil((need + gap) / CELL.h));
-    /* a height he dragged or picked is kept, taller or shorter than the
-       contents (Tom, 2026-10-18: "I need widgets to be vertically scalable
-       as well"); short, the body scrolls and a small card leaves rows off */
     const c = layout[+n.dataset.i];
-    const ch = Math.max(minSize(c.t).h, c.hs ? c.h : Math.min(want, Math.max(c.h, win - (c.y || 1) + 1)));
-    n.classList.toggle('capped', ch < want);
-    n.style.setProperty('--ch', ch);
-    effH[+n.dataset.i] = ch;
+    n.style.setProperty('--ch', c.h);
+    effH[+n.dataset.i] = c.h;
   });
   /* how far the cards reach, and the cell that fits that in the window;
      never less than the board has been, so taking a card off the right
@@ -7627,7 +7626,10 @@ function sizeCards(nodes, cw, R, gap) {
 function cutCards(nodes) {
   nodes.forEach(n => {
     n.querySelectorAll('.sz-cut').forEach(e => e.classList.remove('sz-cut'));
-    if (n.dataset.sz !== 's') return;
+    /* every size since 2026-11-16 (Tom: "I don't want, as much as possible,
+       intra widget scrolling"): a card never scrolls inside, so whatever
+       its size and zoom leave no room for is left off whole */
+    if (NARROW()) return;
     const body = n.querySelector(':scope > .w-body');
     if (!body || body.classList.contains('appslot')) return;
     const bottom = body.getBoundingClientRect().bottom - (parseFloat(getComputedStyle(body).paddingBottom) || 0) + 1;
@@ -7664,17 +7666,21 @@ if (document.fonts) {
    level is `zoom` on the card's layout entry, so it syncs and survives a
    redraw. Desk only. An app card's frame is its own page and takes no
    zoom from here. */
-const ZOOMS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 let zoomT = 0, zoomAcc = 0;
+/* Shift and the wheel does the same since 2026-11-16 (Tom: "shift size
+   scrolling", the card's size untouched and what it shows changing).
+   Zoomed in, less fits and the rest is left off; zoomed out, more fits.
+   Windows turns a Shift+wheel into a sideways scroll, so deltaX counts. */
 document.addEventListener('wheel', ev => {
-  if (!ev.ctrlKey || view !== 'home' || NARROW()) return;
+  if (!(ev.ctrlKey || ev.shiftKey) || view !== 'home' || NARROW()) return;
   const n = ev.target && ev.target.closest && ev.target.closest('#grid > .w');
   if (!n) return;
   ev.preventDefault();
   const c = layout[+n.dataset.i], body = n.querySelector(':scope > .w-body');
   if (!c || !body || body.classList.contains('appslot')) return;
   /* a mouse notch is about 100, a trackpad sends many small ones */
-  zoomAcc += ev.deltaY;
+  zoomAcc += ev.deltaY || ev.deltaX;
   if (Math.abs(zoomAcc) < 40) return;
   const up = zoomAcc < 0; zoomAcc = 0;
   const z = c.zoom || 1;
@@ -7761,11 +7767,6 @@ function onResize(ev) {
   layout[sizing.i].w = w;
   sizing.node.style.setProperty('--cw', w);
   const c = layout[sizing.i];
-  /* a fit card dragged back to where it started measures itself again */
-  if (sizing.fit && !dh) {
-    c.h = sizing.h0; if (sizing.hs) c.hs = 1; else delete c.hs;
-    if (!sizing.hs) { sizing.node.style.setProperty('--ch', sizing.h); return placeCards(); }
-  }
   /* no ceiling: a card can be dragged as tall as he likes and the board
      scrolls (Tom, 2026-10-18: "today should be infinitely vertically
      expandable"). It was 12 rows. */

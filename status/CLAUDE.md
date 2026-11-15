@@ -81,6 +81,8 @@ MEALS NOT LOGGED, 2026-11-09, shipped inside 1.0.93 (that session staged the who
 
 1.0.95, 2026-11-13: POP UP. Tom, pointing at the tray: "also offer a small pop up from here". A third choice, Pop up (`desk.how` 'pop'): the red dot plus one Windows notification from the tray icon (`due|2`, `NotifyIcon.ShowBalloonTip`); clicking it runs `deskDotOpen()`. Driven in headless Chromium with a stubbed host (due|2, press, box, SAVE); the notification itself not watched in STATUS.exe.
 
+1.0.96, 2026-11-16: a food is known by its key. Tom: "Clean up my database". 14 of his foods had no `id` in their payload (written by the CLAUDE panel, `shared/claude.js` 1.1.1 fixed the same day), so `logMeal` wrote `Rec.set('food', null, undefined, ...)`: a ghost food keyed "undefined" and a meal with no `fid`. `foods()` now sets each food's `id` to its key. Watched in headless Chromium at 390 on a fresh store: the old file made the ghost, the new one logs the meal with its `fid` and counts the use. His store was cleaned by hand the same day (ids set, ghosts deleted, raw chicken zeros blanked, four meal totals moved from 100 g to 1 Order).
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
