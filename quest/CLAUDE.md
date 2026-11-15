@@ -365,6 +365,20 @@ the home screen's THIS WEEK card; change the rule there, never here.
 Tested in headless Chromium at 1280 and 390 by clicking, with no Todoist rows;
 not run in WebKit.
 
+**What moves a goal** (Tom, 2026-11-16, "1A"; 1.0.32): the goal sheet's
+Moved by row picks Tasks, Training sessions (a week), A lift (estimated 1RM to
+reach, lb or kg), A measure (a STATUS field to reach) or A habit (a BLOCK
+activity's days a week), saved as `aim.src`; a measure keeps where it stood
+when set as `src.start`. The rule is `shared/goals.js`. A fed goal shows its
+data line instead of the task line, skips Add a task, and gets no step box in
+the week draft. TRAIN's brief lists "goals tied to sessions" as turned down
+inside TRAIN (2026-09-14); this lives in QUESTS and Tom picked it.
+**On the phone, not yet changed** (Tom, 2026-11-16: "does not feel like it
+was designed for mobile at all"): at 390 by 664 the first task sat at 756px,
+below the screen, under the header, the view strip, the 135px add box, the
+week draft and the goal card; rows 73 to 92px with date, source, project and
+label. Fixes offered as a pick list with a mockup; build only what he picks.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)

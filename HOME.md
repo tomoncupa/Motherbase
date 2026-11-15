@@ -684,3 +684,9 @@ Tom: "So if it gets too big, let it show less clusters of data. If it gets too s
 
 The STATUS measure card (`measure`) and SLEEP read `zoomDays` like WEIGHT: 30 days of MOOD at 50% is 60, at 25% 120, at 200% 15; 7 nights of sleep at 50% is 14, at 25% 28, never under 7. The measure card's title names the stretch (`zoomDaysName`). These lines went out inside 6726841 (another session's GOALS commit, HOME 1.0.117), which staged the whole file while this change was uncommitted. Left as is, never rewrite a pushed commit. Zoomed to 200%, a card counts as small and hides its side note: that is 1.0.112's size rule, not this. Still fixed: TRAIN volume, HALF-LIFE, AVG WEIGHT (an average, so zoom would change its meaning; ask first).
 [TESTED] demo in headless Chromium at 1918: MOOD 30/60/120/15 days and SLEEP 7/14/28/7 nights at 100/50/25/200%, axis dates to match, card sizes unchanged, nothing spilling; WebKit 212/212 on clean 7901556. [UNTESTED] his board.
+
+1.0.116 and 1.0.117, the same day: THIS WEEK shows a goal fed by data
+(`aim.src`) with its line ("2 of 3 sessions this week", "Now 83, aim 80 by
+Dec 16. On pace: 81.5") and readings in the weeks' boxes. In Main Menu.exe
+(`window.MBClaude`) it adds PLAN WITH CLAUDE, which sends each goal, its call,
+its line and its next task to the CLAUDE panel as "Plan my week".
