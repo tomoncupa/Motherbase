@@ -1071,6 +1071,7 @@ answer, or take it out.
   shipped the fix he said was missing (2026-10-18).
 
 - **A fact the suite shows in two places must be read by one rule.** A dose can be a STATUS reading, a journal line or a BLOCK tick; HOME's HALF-LIFE card learned the line and the tick and STATUS's tile did not, so the same day read 10g on one screen and blank on the other (2026-10-30). `shared/dose.js` is now the one reader. When a fix teaches the suite a new way to record a fact, put it where every screen that shows the fact reads it, and check each screen.
+- **A set's weight is not "heavier is stronger" and is not always above zero.** An assisted lift's weight is help (less is stronger) and any lift can be logged below zero (-20 on a pull-up is help) since TRAIN 1.0.83 and 1.0.85. A reader of TRAIN's `set` rows compares `TRAIN.wk` (help negated) and asks `TRAIN.weighed(s)`, never `kg > 0`, and gets volume from `TRAIN.load` (bodyweight plus or minus, null with no weigh-in). COACH (`loadOf`, `goesBelow`) and SHEET copy the rule; range.js, HOME and any widget reading sets need it too (2026-11-16).
 - Commands run from the Claude app see a frozen copy of `%LOCALAPPDATA%`, not the live one.
   A scheduled task's state there (RECEIPTS `seen.json`) reads weeks stale from a Claude
   session; check the task's own `status.json` or Task Scheduler's last run instead.
