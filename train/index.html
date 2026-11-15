@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.87, 2026-11-16">
+<meta name="mb-version" content="1.0.88, 2026-11-16">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -401,6 +401,8 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .tset .tnote{flex:1 1 0;min-width:0;font-size:var(--f-1);line-height:var(--lh-tight);color:var(--text-2);
   overflow-wrap:anywhere}
 .tset .tnote.tedit{cursor:pointer}
+.tset .ghostnote{color:var(--text-muted);font-style:italic}
+.trackbox > .lastline{padding:var(--s-3) 0 0}
 .tset .col{text-align:right;white-space:nowrap}
 .tset .col.w{min-width:7em}
 .tset .col.r{min-width:5em}
@@ -4306,9 +4308,13 @@ function drawTrack(m) {
      load. */
   var vs = TRAIN.vsFor(date, exId, TRAIN.compareCtx(date));
   var then = vs ? workOn(vs.date, exId) : [];
+  /* Last time and the coach's line sit under SAVE since 1.0.88 (Tom,
+     2026-11-16: "Move the faded last time numbers below save"); built here,
+     placed after the setup line. */
+  var below = [];
   if (then.length) {
     var vsName = (Rec.get('session', vs.date, '') || {}).name;
-    /* A faded line above the steppers, not a card of its own: FitNotes has
+    /* A faded line under SAVE (above the steppers until 1.0.88), not a card: FitNotes has
        nothing here, so this has to cost as little room as a line can. Tom,
        2026-09-22: "small, faded, and unintrusive, maintain the fitnotes
        layout". One line, cut off with an ellipsis rather than wrapping. */
@@ -4335,7 +4341,7 @@ function drawTrack(m) {
         draw();
       };
     });
-    m.appendChild(card);
+    below.push(card);
   }
   /* The coach's target, when this was started from a routine a coach sent:
      the same faded line, under last time. Stated, never checked against. */
@@ -4343,7 +4349,7 @@ function drawTrack(m) {
   if (coachSays) {
     var pl = UI.el('div', 'lastline');
     pl.innerHTML = '<div class="lasttime">Coach · ' + UI.esc(coachSays) + '</div>';
-    m.appendChild(pl);
+    below.push(pl);
   }
   /* Setup lives in each set's comment box now, the way FitNotes keeps
      everything that is not a number. Tom, 2026-09-22: "put our extra input
@@ -4411,6 +4417,7 @@ function drawTrack(m) {
      still what the next SAVE records. */
   var suLine = setupLine(exId, ex);
   if (suLine) pad.appendChild(suLine);
+  below.forEach(function (el) { pad.appendChild(el); });
   m.appendChild(pad);
 
   if (mine.length) {
@@ -4437,7 +4444,14 @@ function drawTrack(m) {
         suSaid = setupDiff(prevSu, s.su, exId);
         prevSu = s.su || {};
       }
-      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d, suSaid));
+      /* Last session's comment on the same working set, faded, until he
+         writes one of his own (Tom, 2026-11-16: "last set's notes to show
+         up as faded out text so it's clear that this is last session's
+         notes ... unless anything is written, just keep it there"). Never
+         stored on today's set. */
+      var ghost = '';
+      if (!s.warm && !String(s.note || '').trim() && then[n - 1]) ghost = String(then[n - 1].note || '').trim();
+      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d, suSaid, ghost));
     });
     /* Hold a set and drag it to put it in another place; let go without
        moving and its menu opens, as the hold always did. The numbers follow
@@ -4659,7 +4673,7 @@ function fitNotes(box) {
     }
   });
 }
-function trainingSetRow(s, n, date, showChk, delta, suSaid) {
+function trainingSetRow(s, n, date, showChk, delta, suSaid, ghost) {
   var row = UI.el('div', 'tset' + (TRAIN.sel === s.key ? ' sel' : '') + (s.warm ? ' warm' : '') +
     (TRAIN.pending(s) ? ' plan' : ''));
   row.dataset.key = s.key;
@@ -4667,7 +4681,7 @@ function trainingSetRow(s, n, date, showChk, delta, suSaid) {
   var bub = UI.el('button', 'bub nohold mb-tap' + (s.note || s.rir != null || s.q ? ' on' : ''));
   bub.innerHTML = BUBBLE;
   bub.setAttribute('aria-label', s.note ? 'Edit comment' : 'Add comment');
-  bub.onclick = function (e) { e.stopPropagation(); commentDialog(s, date); };
+  bub.onclick = function (e) { e.stopPropagation(); commentDialog(s, date, ghost); };
   row.appendChild(bub);
 
   var idx = UI.el('span', 'idx');
@@ -4679,7 +4693,14 @@ function trainingSetRow(s, n, date, showChk, delta, suSaid) {
      smaller but readable font". Never cut off: see fitNotes. */
   var said = [String(s.note || '').trim(), suSaid || ''].filter(Boolean).join(' · ');
   var tn = UI.el('span', 'tnote');
-  tn.textContent = said;
+  if (ghost) {
+    /* last session's words, faded and slanted so they never read as today's */
+    var gh = UI.el('span', 'ghostnote');
+    gh.textContent = ghost;
+    tn.appendChild(gh);
+    if (said) tn.appendChild(document.createTextNode(' · ' + said));
+    said = said ? ghost + ' · ' + said : ghost;
+  } else tn.textContent = said;
   if (said) {
     tn.title = said;
     /* The words are a way into editing them (Tom, 2026-11-16: "edit the
@@ -4688,8 +4709,8 @@ function trainingSetRow(s, n, date, showChk, delta, suSaid) {
        The rest of the row still loads the set; a hold still lifts it. */
     tn.classList.add('tedit');
     tn.setAttribute('role', 'button');
-    tn.setAttribute('aria-label', 'Edit comment: ' + said);
-    tn.onclick = function (e) { e.stopPropagation(); commentDialog(s, date); };
+    tn.setAttribute('aria-label', ghost ? 'Add comment, last time: ' + ghost : 'Edit comment: ' + said);
+    tn.onclick = function (e) { e.stopPropagation(); commentDialog(s, date, ghost); };
   }
   row.appendChild(tn);
 
@@ -4802,12 +4823,13 @@ function setMenu(s, date, e) {
 }
 
 /* FitNotes shows a comment in a small box with Edit and Done. Same shape. */
-function commentDialog(s, date) {
+function commentDialog(s, date, ghost) {
   var noteEl = null, warmSet = false;
   UI.dialog({
     title: 'COMMENT', width: 420,
     body: function (b, h) {
-      var i = noteEl = UI.field('note', { value: s.note || '', placeholder: 'Comment Text ...' });
+      /* last session's comment as the placeholder: faded, never saved */
+      var i = noteEl = UI.field('note', { value: s.note || '', placeholder: ghost ? 'Last time: ' + ghost : 'Comment Text ...' });
       b.appendChild(i);
       /* Warmup as a switch (Tom, 2026-11-09: "warmup designation should
          also be a toggle in set details button"). It starts as TRAIN reads

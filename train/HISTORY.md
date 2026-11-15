@@ -1630,3 +1630,36 @@ for six sets, a ticked suggestion recording straps and saying nothing, the
 carry kept, all off saying "Straps off · Seat off", a suggestion ticked after
 all off storing none), and the 23 from 1.0.84 to 1.0.86. Not seen on his
 phone.
+
+## Last time under SAVE, last session's comments as ghosts (1.0.88, 2026-11-16)
+
+Tom: "The first set of the day shows us all set up. Actually, I would like
+last set's notes to show up as faded out text so it's clear that this is
+last session's notes. And unless anything is written, just keep it there,
+but have it clear that it's not written that day. Have it show up faded
+still. Move the faded last time numbers below save. No, exercise reordering
+makes sense if the list is exercises, and then set reordering makes sense in
+the actual logging view. Fix the bugs."
+
+- The first set of the day keeps its whole setup (confirmed).
+- The faded last-time line and the coach's line moved under SAVE, after the
+  setup line, inside the stepper box. Nothing sits above WEIGHT now.
+- A row with no comment of its own shows last session's comment on the same
+  working set (`then[n - 1]`, the day `vsFor` picks; warmups out), in
+  `--text-muted` and italic, never written to today's set. Writing a comment
+  replaces it. The comment box (bubble or words) opens with "Last time: ..."
+  as its placeholder.
+- Reordering stays as it is: a hold on the workout overview moves exercises,
+  a hold in the logging view moves sets.
+- "Fix the bugs": the code bugs (A, B, C and the ticked suggestion) were
+  fixed in 1.0.84 and 1.0.87. The sets they already wrote wrong cannot be
+  found: `set` is a whole-row type in `records.js` (`WHOLE_ROW`), so no
+  per-field write time says when `su` changed, and a wrong setup reads the
+  same as a right one. Nothing was rewritten; a wrong set is fixed by
+  tapping its setup words.
+
+Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro: 11 of 11
+(WEIGHT first, last time under SAVE after setup, his own comment winning, no
+ghost where last time had none, the ghost on set 3, muted and italic,
+nothing stored, the placeholder, his words replacing it, no sideways
+scroll, no errors), plus 23 and 7 from 1.0.84 to 1.0.87.

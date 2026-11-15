@@ -290,7 +290,15 @@ straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and
 
 - **Nothing goes above WEIGHT on TRACK** (Tom, 2026-11-16: "We want as
   little data as possible before the input for weight and reps"). The
-  stepper box starts with its WEIGHT label.
+  stepper box starts with its WEIGHT label. Under SAVE, in this order: the
+  setup line, the faded last-time line, the coach's line (1.0.88: "Move
+  the faded last time numbers below save"), then the logged sets.
+- **Last session's comment shows faded on today's same working set**
+  (`.ghostnote`, 1.0.88; Tom: "last set's notes to show up as faded out
+  text so it's clear that this is last session's notes ... unless
+  anything is written, just keep it there"): set N against last time's
+  set N, warmups out, muted and slanted, never stored. His own comment
+  replaces it; the comment box shows it as the placeholder.
 - **One line under SAVE** (`setupLine`, 1.0.86), above the logged sets, only
   on an exercise that has setup: chips for toggles, small boxes for
   settings, a pencil for the list. Tapping a setting's name puts the caret
