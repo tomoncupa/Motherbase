@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.29, 2026-11-16">
+<meta name="mb-version" content="1.0.30, 2026-11-16">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -240,6 +240,21 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .wk.now{box-shadow:0 0 0 var(--border-width) var(--text-muted)}
 .hfix{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-1) var(--s-3);font-size:var(--f-2);color:var(--text-2)}
 .hfix .nx{overflow-wrap:anywhere;min-width:0}
+/* the week draft: Tom, 2026-11-16 */
+.wkd .sum{font-family:var(--font-display);font-size:var(--f-3);margin-bottom:var(--s-2)}
+.drow{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-2) 0;border-bottom:var(--border-width) solid var(--border)}
+.drow .body{flex:1;min-width:0}
+.drow .tt{overflow-wrap:anywhere}
+.drow .meta{font-size:var(--f-1);color:var(--text-muted);margin-top:var(--s-1)}
+.drow .for{font-size:var(--f-2);color:var(--text-2);margin-bottom:var(--s-1);overflow-wrap:anywhere}
+.drow .tk{margin:0}
+.drow .tk i{display:flex;align-items:center;justify-content:center;color:transparent}
+.drow .tk i svg{width:var(--f-2);height:var(--f-2)}
+.drow.keep .tk i{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.drow:not(.keep) .tt,.drow:not(.keep) .for{color:var(--text-muted)}
+.dday{flex:none;font-size:var(--f-2);color:var(--text-2)}
+.dbar{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-3)}
+.dbar .go{margin-left:0}
 
 .aimcard .aimtx{font-family:var(--font-display);font-size:var(--f-4)}
 .aimcard .why{color:var(--text-2)}
@@ -908,6 +923,156 @@ function addAimTask(a) {
     addQuest(Object.assign({}, p, { text: p.text || v, aim: a.key }));
   } }] });
 }
+
+/* ══════════════ THE WEEK DRAFT ══════════════
+   Tom, 2026-11-16, from Superfocus: a draft of the week's changes, "4 added,
+   1 moved", each one kept or dropped, applied with one press. Rules, no AI,
+   and nothing in it needs Todoist: a person with only QUESTS gets a box per
+   goal to type its next step. quest/CLAUDE.md, Week draft. */
+const DAY_CAP = 3, LATE_DAYS = 30, ADD_MAX = 5;
+const MACHINE = { wealth: 1, arc: 1, goals: 1 };
+let DRAFT = { ws: '', off: {}, day: {}, txt: {} }, DRAFT_OPEN = false;
+function draftRange() {
+  const t = T(), sun = Day.dow(t) === 0, s = sun ? Day.shift(t, 1) : t;
+  const e = Day.shift(weekStart(s), 6), days = [];
+  for (let d = s; d <= e; d = Day.shift(d, 1)) days.push(d);
+  return { s: s, e: e, ws: weekStart(s), days: days };
+}
+function draftWeek() {
+  const t = T(), r = draftRange(), load = {}, items = [], used = {};
+  if (DRAFT.ws !== r.ws) DRAFT = { ws: r.ws, off: {}, day: {}, txt: {} };
+  r.days.forEach(d => { load[d] = 0; });
+  const open = quests().filter(x => !x.done);
+  open.forEach(x => { const d = dueOf(x); if (d in load) load[d]++; });
+  const roomy = () => r.days.slice().sort((a, b) => load[a] - load[b] || a.localeCompare(b))[0];
+  const earliest = () => r.days.find(d => load[d] < DAY_CAP) || roomy();
+  const put = (id, d) => { const day = DRAFT.day[id] && r.days.indexOf(DRAFT.day[id]) > -1 ? DRAFT.day[id] : d; load[day]++; return day; };
+  const movable = x => !x.rep && !(x.td && x.td.rec) && !MACHINE[srcOf(x)];
+  /* each goal with nothing due this week: its open task, or a box for one */
+  openAims().forEach(a => {
+    const nx = aimNext(a);
+    if (nx.kind === 'next') return;
+    if (nx.kind === 'sched' && movable(nx.x)) {
+      used[nx.x.key] = 1;
+      items.push({ id: nx.x.key, op: 'add', x: nx.x, a: a, day: put(nx.x.key, roomy()) });
+    } else if (nx.kind === 'add') items.push({ id: 'g:' + a.key, op: 'step', a: a, day: put('g:' + a.key, roomy()) });
+  });
+  open.filter(x => movable(x) && !used[x.key] && dueOf(x) && dueOf(x) < t).sort(sortQ).forEach(x => {
+    used[x.key] = 1;
+    if (Day.diff(t, dueOf(x)) > LATE_DAYS) items.push({ id: x.key, op: 'inbox', x: x });
+    else items.push({ id: x.key, op: 'move', x: x, day: put(x.key, earliest()) });
+  });
+  const spare = r.days.reduce((n, d) => n + Math.max(0, DAY_CAP - load[d]), 0);
+  open.filter(x => movable(x) && !used[x.key] && !dueOf(x) && (x.pri || aimOf(x))).sort(sortQ)
+    .slice(0, Math.min(ADD_MAX, spare)).forEach(x => items.push({ id: x.key, op: 'add', x: x, day: put(x.key, roomy()) }));
+  return { r: r, items: items };
+}
+const draftDone = r => S.get('weekDraft', '') === r.ws;
+const kept = it => !DRAFT.off[it.id] && (it.op !== 'step' || !!(DRAFT.txt[it.id] || '').trim());
+const shortDay = d => asDate(d).toLocaleDateString('en-US', { weekday: 'short' });
+function draftSummary(items) {
+  const n = { add: 0, move: 0, inbox: 0 };
+  items.forEach(it => { n[it.op === 'step' ? 'add' : it.op]++; });
+  return [n.add && n.add + ' added', n.move && n.move + ' moved', n.inbox && n.inbox + ' back to Inbox'].filter(Boolean).join(', ');
+}
+function drawDraft(list, force) {
+  const dw = draftWeek(), r = dw.r, items = dw.items;
+  if (!force && (draftDone(r) || !items.length)) return;
+  const box = el('section', 'grp brief wkd');
+  const md = d => asDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const range = md(r.s) + ' to ' + (r.s.slice(0, 7) === r.e.slice(0, 7) ? String(+r.e.slice(8)) : md(r.e));
+  box.appendChild(el('div', 'gh', '<span class="gi">' + ico('schedule') + '</span><b>Week draft</b><span class="when">' + esc(range) + '</span>'));
+  const bx = el('div', 'bx');
+  if (!items.length) {
+    bx.appendChild(el('p', 'why', openAims().length ? 'Nothing to change this week.' : 'No goals to plan the week around.'));
+    if (!openAims().length) { const g = el('button', 'addg', ico('goal') + '<span>Set a goal</span>'); g.type = 'button'; g.onclick = () => go('goals'); bx.appendChild(g); }
+    box.appendChild(bx); list.appendChild(box); return;
+  }
+  bx.appendChild(el('p', 'sum', esc(draftSummary(items))));
+  const keepBtn = el('button', 'mb-btn mb-press mb-tap go');
+  const count = () => { const n = items.filter(kept).length; keepBtn.textContent = n ? 'KEEP ' + n : 'KEEP'; keepBtn.disabled = !n; };
+  const groups = [['step', 'For your goals'], ['add', 'Added'], ['move', 'Moved'], ['inbox', 'Back to Inbox']];
+  groups.forEach(g => {
+    const mine = items.filter(it => it.op === g[0] || (g[0] === 'step' && it.op === 'add' && it.a));
+    if (g[0] === 'add') mine.splice(0, mine.length, ...items.filter(it => it.op === 'add' && !it.a));
+    if (!mine.length) return;
+    bx.appendChild(el('h4', null, esc(g[1])));
+    mine.forEach(it => {
+      const row = el('div', 'drow' + (kept(it) ? ' keep' : ''));
+      const tk = el('button', 'tk', '<i>' + ico('done') + '</i>');
+      tk.type = 'button';
+      const label = it.x ? it.x.text : 'Next step for ' + it.a.text;
+      tk.setAttribute('aria-label', 'Keep: ' + label);
+      tk.setAttribute('aria-pressed', DRAFT.off[it.id] ? 'false' : 'true');
+      tk.onclick = () => {
+        DRAFT.off[it.id] = !DRAFT.off[it.id];
+        row.classList.toggle('keep', kept(it));
+        tk.setAttribute('aria-pressed', DRAFT.off[it.id] ? 'false' : 'true');
+        count();
+      };
+      row.appendChild(tk);
+      const body = el('div', 'body');
+      if (it.op === 'step') {
+        body.appendChild(el('div', 'for', '<span class="hat">^</span> ' + esc(it.a.text)));
+        const i = UI.field('text', { value: DRAFT.txt[it.id] || '', placeholder: 'Its next step this week' });
+        i.setAttribute('autocapitalize', 'sentences');
+        i.setAttribute('aria-label', 'Next step for ' + it.a.text);
+        i.oninput = () => { DRAFT.txt[it.id] = i.value; row.classList.toggle('keep', kept(it)); count(); };
+        body.appendChild(i);
+      } else {
+        body.appendChild(el('div', 'tt', esc(it.x.text)));
+        const was = dueOf(it.x);
+        body.appendChild(el('div', 'meta', it.a ? '<span><span class="hat">^</span> ' + esc(it.a.text) + '</span>'
+          : was ? '<span>Was ' + esc(dayWord(was)) + '</span>' : ''));
+      }
+      row.appendChild(body);
+      if (it.op === 'inbox') row.appendChild(el('span', 'dday', 'No date'));
+      else {
+        const dd = el('button', 'chip dday', esc(shortDay(it.day)));
+        dd.type = 'button';
+        dd.setAttribute('aria-label', 'Day: ' + DAYNAME[Day.dow(it.day)] + '. Change it');
+        dd.onclick = () => choose(dd, 'Which day', r.days.map(d => ({ label: dayWord(d), rt: shortDay(d), on: d === it.day,
+          fn: () => { DRAFT.day[it.id] = d; it.day = d; dd.textContent = shortDay(d); } })));
+        row.appendChild(dd);
+      }
+      bx.appendChild(row);
+    });
+  });
+  const bar = el('div', 'dbar');
+  const skip = el('button', 'mb-btn mb-press mb-tap flat', 'NOT THIS WEEK');
+  skip.onclick = () => { S.set('weekDraft', r.ws); DRAFT_OPEN = false; UI.undo('Week draft hidden', () => S.set('weekDraft', '')); };
+  keepBtn.onclick = () => applyDraft(r, items.filter(kept));
+  count();
+  bar.appendChild(skip); bar.appendChild(keepBtn);
+  bx.appendChild(bar);
+  box.appendChild(bx);
+  list.appendChild(box);
+}
+function applyDraft(r, items) {
+  if (!items.length) return;
+  const undo = [];
+  items.forEach(it => {
+    if (it.op === 'step') {
+      const v = DRAFT.txt[it.id].trim(), p = parseQuest(v);
+      const before = new Set(Rec.all('note', { date: T() }).map(x => x.key));
+      addQuest(Object.assign({}, p, { text: p.text || v, aim: it.a.key, due: p.due || it.day }));
+      Rec.all('note', { date: T() }).filter(x => !before.has(x.key)).forEach(x => undo.push({ date: T(), key: x.key, keep: null }));
+      return;
+    }
+    const keep = Rec.get('note', it.x.date, it.x.key);
+    if (!keep) return;
+    undo.push({ date: it.x.date, key: it.x.key, keep: keep });
+    saveRow(it.x, { due: it.op === 'inbox' ? '' : it.day });
+  });
+  S.set('weekDraft', r.ws);
+  DRAFT_OPEN = false;
+  DRAFT = { ws: '', off: {}, day: {}, txt: {} };
+  Mobile.feedback('success');
+  UI.undo('Kept ' + items.length + ' change' + (items.length === 1 ? '' : 's'), () => {
+    undo.forEach(u => { if (u.keep) Rec.set('note', u.date, u.key, u.keep); else Rec.del('note', u.date, u.key); publishNotes(u.date); });
+    S.set('weekDraft', '');
+  });
+}
 /* ── reviews ──
    1 month weekly, 6 months monthly, 1 year quarterly, 5 and 10 years yearly.
    One todo per rhythm per period, dated and due on the period's first day,
@@ -1119,7 +1284,9 @@ function go(v) { VIEW = v; S.set('view', v); draw(); }
    show:'today'}). Tom, 2026-09-22. */
 addEventListener('message', e => {
   const m = e.data;
-  if (m && m.lifeos === 1 && typeof m.show === 'string' && m.show) go(m.show);
+  if (!(m && m.lifeos === 1 && typeof m.show === 'string' && m.show)) return;
+  /* `week` is Upcoming with the week draft open, the home screen's PLAN THE WEEK */
+  if (m.show === 'week') { DRAFT_OPEN = true; go('upcoming'); } else go(m.show);
 });
 function drawSide() {
   const side = $('#side'), c = counts();
@@ -1449,8 +1616,24 @@ function aimSheet(a, hid) {
   });
 }
 
+/* A redraw would wipe a step half typed into the week draft, so it waits until
+   the box is left (root brief, Known traps: a board that redraws on every write). */
+let DRAW_HELD = false;
+document.addEventListener('focusout', e => {
+  if (!DRAW_HELD || !e.target.closest || !e.target.closest('.wkd')) return;
+  /* and while a menu opened from the card (a day chip) is up, it waits for that too */
+  const later = () => {
+    const f = document.activeElement;
+    if (f && f.closest && f.closest('.wkd input')) return;
+    if (POP || document.querySelector('.mb-sheet.on, .mb-veil.on')) { setTimeout(later, 400); return; }
+    DRAW_HELD = false; draw();
+  };
+  setTimeout(later, 400);
+});
 function draw() {
   if (!$('#main')) return;
+  const fa = document.activeElement;
+  if (fa && fa.closest && fa.closest('.wkd input')) { DRAW_HELD = true; return; }
   briefTodos();
   reviewTodos();
   if (VIEW.indexOf('p:') === 0 && !Rec.get('project', null, VIEW.slice(2))) VIEW = 'today';
@@ -1474,7 +1657,13 @@ function draw() {
     bk.onclick = () => { calDay = ''; draw(); };
     list.appendChild(bk);
   }
-  if (VIEW === 'today') { drawBrief(list); if (S.get('showAim', 1) !== 0) drawAimCard(list); }
+  if (VIEW === 'today') {
+    drawBrief(list);
+    /* the week draft comes to Today on Sunday and Monday, and lives on Upcoming */
+    if (Day.dow(T()) < 2) drawDraft(list, false);
+    if (S.get('showAim', 1) !== 0) drawAimCard(list);
+  }
+  if (VIEW === 'upcoming') drawDraft(list, DRAFT_OPEN);
   const any = info.groups.some(g => g.items.length);
   info.groups.forEach(g => {
     if (!g.items.length && g.id !== T() && !g.day) return;
