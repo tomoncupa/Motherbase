@@ -981,6 +981,32 @@ function offline() {
     .then(function (reg) { try { reg.update(); } catch (e) {} })
     .catch(function () {});
   catchUp(nav, root);
+  wireReload(nav);
+}
+
+/* ── Ctrl+R and F5: one press, the newest copy ──
+   Added 2026-11-16. Tom: "why can't we just press Control R to update". A
+   plain reload is just another open to sw.js, which hands back the kept copy
+   and fetches the new one for next time, so the first press showed the old
+   code and the second the new. The key now reopens the TOP page with
+   ?fresh=1, network first for every file for 20 seconds, frames included.
+   It works inside STATUS.exe and Main Menu.exe too: a WebView2 with its own
+   reload key switched off still hands the key to the page. Ctrl+Shift+R and
+   Ctrl+F5 are left to the browser, which skips sw.js on those already. */
+function wireReload(nav) {
+  if (/\/_[^\/]*$/.test(g.location.pathname)) return;
+  g.addEventListener('keydown', function (e) {
+    var k = e.key;
+    var key = (k === 'F5' && !e.ctrlKey && !e.shiftKey && !e.altKey) ||
+      ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (k === 'r' || k === 'R'));
+    if (!key || !nav.serviceWorker.controller) return;
+    e.preventDefault();
+    var top = g;
+    try { if (g.top !== g && g.top.location.href) top = g.top; } catch (x) {}
+    var u = new URL(top.location.href);
+    u.searchParams.set('fresh', '1');
+    top.location.replace(u.href);
+  }, true);
 }
 
 /* ── catching up: a page running older code than the hosted copy ──

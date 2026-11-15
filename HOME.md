@@ -674,3 +674,8 @@ Tom: "a universal building block to build our widget system on", for iPads and o
 - Three boards: std (the card's own x, y, w, h), `W` for a window 2880px or wider, and `T` for one under 1440px (`TAB_BELOW`: an iPad on its side, a laptop, a half-snapped window). A board with no spot for a card gives it its 1920 width shared evenly across the row (`shareRow`) and lets the grid place it. A phone still stacks the std order.
 - The fewest columns a board draws is what fits the window at full size (was a flat 12 cells).
 [TESTED] Chrome at 1918: eight cards, same pixel sizes as 1.0.112; an old saved board converted (3 by 2 at 1,1 to 6 by 4; `W` 13,2 to 25,3), a half step 541px, old row untouched; at 1164: `tab`, 14 units, two cards a row, no sideways scroll. WebKit 212/212 on a clean checkout. [UNTESTED] the 3840 board, a real iPad.
+
+## 2026-11-16, HOME 1.0.115: zoomed out, WEIGHT shows more days
+
+Tom: "So if it gets too big, let it show less clusters of data. If it gets too small, let it show more." The days picked on a WEIGHT card are what it shows at 100%; the card's zoom divides them (`zoomDays`): 30 days at 50% is 60, at 25% is 120, at 200% is 15, never under 7, "all of it" unchanged, no zoom on a phone. The title names the stretch shown (`zoomDaysName`: "WEIGHT · 60 DAYS"). This is the pattern for every chart card with a days pick: read `zoomDays(cfg, cfg.days)` wherever it read `cfg.days`, and name it with `zoomDaysName`.
+[TESTED] demo in headless Chromium at 1918: 30-day card at 100/50/25/200% drew 30/60/120/15 days with axis dates to match, card 620 by 240 at every zoom, nothing spilling; three real Shift+wheel notches took a 90-day card to 75% and 120 days, Ctrl+wheel back to 90. [UNTESTED] his board.
