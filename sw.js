@@ -87,6 +87,7 @@ const PRECACHE = [
   'shared/ui.js',
   'shared/io.js',
   'shared/report.js',
+  'shared/phone.js',
   'shared/icons.js',
   'shared/health.js',
   'shared/import.js',

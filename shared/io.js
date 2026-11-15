@@ -1711,6 +1711,9 @@ const IO = {
        pane has left the document, which needs no cooperation from whoever
        closed it. */
     const off = C.on(() => { pane.isConnected ? draw() : off(); });
+    /* YOUR IPHONE, once signed in (phone.js draws it, and draws it itself
+       into any LIVE SYNC row already open when it arrives) */
+    if (g.Phone) g.Phone.row(wrap);
     IO.deviceRow(wrap);
   },
 
@@ -3491,8 +3494,11 @@ function addShared(id, file, done) {
 /* report.js: this device's note. cloud.js: LIVE SYNC. */
 IO.loadCloud = function (done) {
   if (DEMO) return;
-  if (g.Cloud) { if (done) setTimeout(done, 0); return; }
-  addShared('mb-cloud-js', 'cloud.js', done);
+  /* phone.js (2026-11-16) reads what the iPhone's Shortcut sends; it needs
+     cloud.js, so it follows it in. */
+  const phone = () => addShared('mb-phone-js', 'phone.js');
+  if (g.Cloud) { phone(); if (done) setTimeout(done, 0); return; }
+  addShared('mb-cloud-js', 'cloud.js', () => { phone(); if (done) done(); });
 };
 /* ── the sync dot (2026-10-06) ──
    Tom, from a design review: "Maybe a small green dot." A sync that failed in

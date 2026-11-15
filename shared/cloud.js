@@ -1348,7 +1348,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.7',
+  VERSION: '0.2.8',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -1417,6 +1417,9 @@ var Cloud = {
 
   /** the account id the database sees, for pasting into the drop rules */
   who: function () { return account().then(function (me) { return { uid: me.uid, email: me.email }; }); },
+  /** the signed-in account and its database, for phone.js's inbox (2026-11-16).
+      Rejects with the plain reason when there is none, like everything here. */
+  db: function () { return account(); },
   /** 0.1: one parcel in the client's single slot on the shelf. Kept for the
       smoke checks and for anything older; apps send with `post` now. */
   send: put,
