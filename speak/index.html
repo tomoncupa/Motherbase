@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.10, 2026-11-16">
+<meta name="mb-version" content="1.0.11, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -158,6 +158,17 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 /* the breath ring on the warm-up */
 .ring{display:flex;flex-direction:column;align-items:center;gap:var(--s-3)}
 .ring .big{font-family:var(--font-display);font-size:var(--f-8);font-weight:var(--w-bold);color:var(--accent)}
+/* ── the program: stages on PATH, frames and scripts in a prompt ── */
+.stage h2{font-family:var(--font-display);font-size:var(--f-3);font-weight:var(--w-bold);letter-spacing:var(--track-cap);
+  display:flex;align-items:baseline;gap:var(--s-3);margin-top:var(--s-3)}
+.stage.now h2{color:var(--accent)}
+.stage h2 .r{margin-left:auto;font-family:var(--font-mono);font-size:var(--f-2);font-weight:var(--w-body);letter-spacing:0;color:var(--text-muted)}
+.stage .muted{margin-top:var(--s-1)}
+.prompt .frame{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-3)}
+.prompt .frame span{font-family:var(--font-display);font-size:var(--f-1);letter-spacing:var(--track-cap);text-transform:uppercase;
+  color:var(--text-2);padding:var(--s-1) var(--s-2);border-radius:var(--radius-sm);background:var(--surface-1)}
+.prompt .cue{display:block}
+textarea.scx{width:100%;min-height:calc(var(--s-10) * 2);margin-top:var(--s-3);line-height:var(--lh-body)}
 /* ── the widget: SPEAK.exe, small and on top, one button ── */
 #wid{display:none}
 body.widget>header,body.widget>#nav,body.widget>main{display:none}
@@ -222,7 +233,7 @@ const APP = {
   name: 'Speak',
   icon: '◍',
   blurb: 'talk to the camera, measured: pace, fillers, flow, clarity, eyes',
-  types: ['take', 'topic'],
+  types: ['take', 'topic', 'script'],
 };
 
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
@@ -633,10 +644,20 @@ const METRICS = {
   eyeAway: { name: 'Longest look away', unit: 's', fmt: v => r1(v), note: '' },
   hiss:    { name: 'Longest sound', unit: 's', fmt: v => r1(v), note: 'one breath, one sound' },
   time:    { name: 'Time', unit: '', fmt: v => mmss(v), gfmt: v => mmss(v), note: 'from the first word to STOP' },
+  /* the program's: read off the transcript where there is one, so each is
+     null with it off, and the pen drill's halves */
+  openUms: { name: 'Ums in the first 5 s', unit: '', fmt: v => Math.round(v), note: 'held sounds before the story got going' },
+  signs:   { name: 'Signposts', unit: '', fmt: v => Math.round(v), note: 'first, second, third, next, finally, from the transcript' },
+  callback:{ name: 'Callback', unit: '', fmt: v => v ? 'yes' : 'no', gt: g => 'end on the opening', note: 'two of the opening\u2019s words back in the last quarter, from the transcript' },
+  contrast:{ name: 'Contrasts', unit: '', fmt: v => Math.round(v), note: 'not ... but, instead of, rather than, from the transcript' },
+  repeatOpen:{ name: 'Repeated openings', unit: '', fmt: v => Math.round(v), note: 'the most lines that started the same way, or a three-word run said again' },
+  cover:   { name: 'Script said', unit: '%', fmt: v => Math.round(v), note: 'the script\u2019s words heard in order in the transcript' },
+  penGain: { name: 'Pen out', unit: '%', fmt: v => Math.round(v), note: 'crispness after the pen came out, against with it in' },
 };
 const OPS = { in: (v, t) => v >= t[0] && v <= t[1], le: (v, t) => v <= t, ge: (v, t) => v >= t };
 function goalText(g) {
   const m = METRICS[g.m], f = m.gfmt || (x => x);
+  if (m.gt) return m.gt(g);
   if (g.op === 'in') return (m.name.toLowerCase() + ' ' + f(g.v[0]) + ' to ' + f(g.v[1]) + ' ' + m.unit).trim();
   if (g.op === 'le') return m.name.toLowerCase() + ' ' + f(g.v) + m.unit + ' or under';
   if (g.op === 'ge') return m.name.toLowerCase() + ' ' + f(g.v) + m.unit + ' or over';
@@ -649,11 +670,31 @@ function goalText(g) {
    as a number and its WHY in one sentence, with the source in RESEARCH.md.
    `goals` is a function of the targets so a changed target moves the goal. */
 const SKILLS = [
-  { id: 'pace',  name: 'PACE',  slot: 1, why: 'Words a minute. Each style of video has a band; the drills find yours and move it.' },
-  { id: 'clean', name: 'CLEAN', slot: 2, why: 'Fillers and crutch phrases. First counted, then cut, then replaced with silence.' },
-  { id: 'flow',  name: 'FLOW',  slot: 3, why: 'Talking from bullets, from nothing, and for longer, without dead air or false starts.' },
-  { id: 'clear', name: 'CLEAR', slot: 4, why: 'Consonants and a voice that moves. The opposite of mumbling, measured.' },
-  { id: 'eyes',  name: 'EYES',  slot: 5, why: 'Time on the lens, with the camera on. The lens gets nothing by default.' },
+  { id: 'pace',  name: 'PACE',  slot: 1, stage: 1, why: 'Words a minute. Each style of video has a band; the drills find yours and move it.' },
+  { id: 'clean', name: 'CLEAN', slot: 2, stage: 2, why: 'Fillers and crutch phrases. First counted, then cut, then replaced with silence.' },
+  { id: 'flow',  name: 'FLOW',  slot: 3, stage: 2, why: 'Talking from bullets, from nothing, and for longer, without dead air or false starts.' },
+  { id: 'clear', name: 'CLEAR', slot: 4, stage: 1, why: 'Consonants and a voice that moves. The opposite of mumbling, measured.' },
+  { id: 'eyes',  name: 'EYES',  slot: 5, stage: 3, why: 'Time on the lens, with the camera on. The lens gets nothing by default.' },
+  { id: 'shape', name: 'SHAPE', slot: 6, stage: 3, why: 'One idea, built so it lands: the point first, parts you can hear, a close that comes back to the open.' },
+  { id: 'story', name: 'STORY', slot: 3, stage: 4, why: 'Something happened and something changed. Told from inside the scene, with voices and a pause at the turn.' },
+  { id: 'devices', name: 'DEVICES', slot: 2, stage: 4, why: 'The patterns that make a line stick: three, the pause, contrast, a repeated opening.' },
+  { id: 'script', name: 'SCRIPT', slot: 4, stage: 5, why: 'Write it, rehearse it until it is not needed, then give it clean to the lens.' },
+];
+/* ══════════════ the program ══════════════
+   Tom, 2026-11-16: "the purpose of Speak is to turn me into a great orator",
+   then "Everything, the goal is a program designed to create a master
+   speaker." Five stages in the order the old schools taught it (RESEARCH.md
+   section 12): the voice, then fluency, then arrangement, then style, then
+   memory and delivery of a whole talk. TODAY's drills come from the stage he
+   is on, with the oldest met steps of earlier stages brought back for
+   review. Every step stays open on PATH: a stage decides what TODAY offers,
+   never what he may do. Not levels: nothing is earned, nothing is shown off. */
+const STAGES = [
+  { n: 1, name: 'VOICE', why: 'The instrument first: a pace people can follow and consonants they can hear. Every school of oratory started with the voice.' },
+  { n: 2, name: 'FLUENCY', why: 'Fillers out, silence in, and talking without dead air.' },
+  { n: 3, name: 'MESSAGE', why: 'One idea, given a shape, said to the lens.' },
+  { n: 4, name: 'CRAFT', why: 'Stories people retell and lines people quote.' },
+  { n: 5, name: 'THE TALK', why: 'How a TED talk is made: written, rehearsed until it is not needed, given clean.' },
 ];
 const DRILLS = [
   /* PACE */
@@ -724,19 +765,23 @@ const DRILLS = [
     goals: t => [],
     why: 'Exaggerating every consonant is the drill every clinic uses for mumbling. Today\'s warm-up reading is the reference.',
     how: 'Each twister three times, every consonant too much.' },
-  { id: 'clear-read', skill: 'clear', step: 2, name: 'Crisp, reading', style: 'read', kind: 'read', dur: 45, crisp: true,
+  { id: 'clear-pen', skill: 'clear', step: 2, name: 'Pen in the teeth', style: 'read', kind: 'read', dur: 50, crisp: true, halves: 'PEN OUT',
+    goals: t => [{ m: 'crisp', op: 'ge', v: t.crispPct }],
+    why: 'Talking around a pen makes the tongue and lips work harder, and the effort stays a while after it comes out. A voice coaches\' drill; the second half is what is measured.',
+    how: 'Hold a pen across your back teeth and read. At PEN OUT, take it out and keep reading.' },
+  { id: 'clear-read', skill: 'clear', step: 3, name: 'Crisp, reading', style: 'read', kind: 'read', dur: 45, crisp: true,
     goals: t => [{ m: 'crisp', op: 'ge', v: t.crispPct }],
     why: 'Consonants live at 2 to 4kHz. Mumbling is that band going quiet.',
     how: 'Read at a normal pace and keep the consonants from the warm-up.' },
-  { id: 'clear-free', skill: 'clear', step: 3, name: 'Crisp while thinking', style: 'long', kind: 'topic', dur: 60, crisp: true,
+  { id: 'clear-free', skill: 'clear', step: 4, name: 'Crisp while thinking', style: 'long', kind: 'topic', dur: 60, crisp: true,
     goals: t => [{ m: 'crisp', op: 'ge', v: t.crispPct }],
     why: 'Articulation drops first when the mind is on the next sentence.',
     how: 'A topic, one minute, consonants kept.' },
-  { id: 'clear-fast', skill: 'clear', step: 4, name: 'Crisp and fast', style: 'short', kind: 'hook', dur: 30, crisp: true,
+  { id: 'clear-fast', skill: 'clear', step: 5, name: 'Crisp and fast', style: 'short', kind: 'hook', dur: 30, crisp: true,
     goals: t => [{ m: 'crisp', op: 'ge', v: t.crispPct }, { m: 'wpm', op: 'in', v: band('short') }],
     why: 'Speed is where articulation collapses. Short-form asks for both.',
     how: 'Thirty seconds at short-form pace, consonants kept.' },
-  { id: 'clear-voice', skill: 'clear', step: 5, name: 'Voice moves', style: 'story', kind: 'story', dur: 60,
+  { id: 'clear-voice', skill: 'clear', step: 6, name: 'Voice moves', style: 'story', kind: 'story', dur: 60,
     goals: t => [{ m: 'pitch', op: 'ge', v: t.pitch }],
     why: 'Clear speech has a wider pitch range, and reading from a script flattens it.',
     how: 'Tell it as if to one person across a table. Let the voice rise and fall.' },
@@ -761,14 +806,149 @@ const DRILLS = [
     goals: t => [{ m: 'eye', op: 'ge', v: t.eye }, { m: 'fpm', op: 'le', v: t.fpmLow }, { m: 'wpm', op: 'in', v: band('long') }],
     why: 'A take is all of it at once.',
     how: 'One minute, everything on.' },
+  /* SHAPE: arrangement. A window drill (`win`) counts up and shows the lights */
+  { id: 'shape-one', skill: 'shape', step: 1, name: 'One sentence', style: 'long', kind: 'topic', win: t => [4, 15],
+    goals: t => [{ m: 'time', op: 'in', v: [4, 15] }],
+    why: 'TED\'s coaches ask for the throughline first: the whole talk in one sentence. If it will not fit in one, the talk is not ready.',
+    how: 'Say the point you would make about the topic, in one sentence, then press STOP.' },
+  { id: 'shape-prep', skill: 'shape', step: 2, name: 'Point, reason, example', style: 'long', kind: 'prep', win: t => [45, 75],
+    goals: t => [{ m: 'time', op: 'in', v: [45, 75] }, { m: 'longP', op: 'le', v: 1 }],
+    why: 'Point, reason, example, point is the frame media trainers teach for an answer. It ends where it began, so the point is heard twice.',
+    how: 'Follow the four labels in order. The last one is the first, said again.' },
+  { id: 'shape-three', skill: 'shape', step: 3, name: 'Three parts, signposted', style: 'teach', kind: 'three', win: t => [75, 105],
+    goals: t => [{ m: 'time', op: 'in', v: [75, 105] }, { m: 'heldP', op: 'ge', v: 2 }].concat(asrOn() ? [{ m: 'signs', op: 'ge', v: 3 }] : []),
+    why: 'A listener cannot reread. Saying first, second, third, with a pause between, is the structure they can hear.',
+    how: 'Say the three parts out loud as you reach them, and hold a pause before each.' },
+  { id: 'shape-psr', skill: 'shape', step: 4, name: 'Problem, solution, result', style: 'long', kind: 'psr', win: t => [60, 100],
+    goals: t => [{ m: 'time', op: 'in', v: [60, 100] }, { m: 'heldP', op: 'ge', v: 2 }],
+    why: 'The shape of almost every case study and most good explainers: what was wrong, what was done, what changed.',
+    how: 'Three parts in order, a held pause before the solution and another before the result.' },
+  { id: 'shape-loop', skill: 'shape', step: 5, name: 'Open a loop, close it', style: 'long', kind: 'hook', win: t => [90, 150],
+    goals: t => [{ m: 'time', op: 'in', v: [90, 150] }, { m: 'longP', op: 'le', v: 1 }].concat(asrOn() ? [{ m: 'callback', op: 'ge', v: 1 }] : []),
+    why: 'A talk that ends on its opening image feels finished. Speechwriters call it the callback.',
+    how: 'Start on the hook line. End by coming back to it, in its own words.' },
+  /* STORY: The Moth's rules. Something happened, something changed */
+  { id: 'story-60', skill: 'story', step: 1, name: 'One minute, one turn', style: 'story', kind: 'story', win: t => [45, 75],
+    goals: t => [{ m: 'time', op: 'in', v: [45, 75] }, { m: 'heldP', op: 'ge', v: 1 }],
+    why: 'The Moth\'s rule for a story: it happened to you, and something changed. A held pause marks the change.',
+    how: 'Before, the moment it turned, after. Pause at the turn.' },
+  { id: 'story-scene', skill: 'story', step: 2, name: 'Start in the scene', style: 'story', kind: 'story', win: t => [60, 100],
+    goals: t => [{ m: 'time', op: 'in', v: [60, 100] }, { m: 'openUms', op: 'le', v: 0 }],
+    why: 'Storytellers start in the middle of the action, "I was on the roof when", with no run-up. The first seconds decide whether anyone listens.',
+    how: 'Open on a place and a moment. No "so, this one time".' },
+  { id: 'story-voices', skill: 'story', step: 3, name: 'Give them voices', style: 'story', kind: 'story', win: t => [60, 120],
+    goals: t => [{ m: 'pitch', op: 'ge', v: t.pitch + 2 }],
+    why: 'Dialogue in the person\'s own voice turns a summary into a scene, and it widens the pitch range.',
+    how: 'Put in at least two lines someone said, said the way they said them.' },
+  { id: 'story-three', skill: 'story', step: 4, name: 'Three minutes, no notes', style: 'story', kind: 'story', win: t => [150, 210],
+    goals: t => [{ m: 'time', op: 'in', v: [150, 210] }, { m: 'longP', op: 'le', v: 2 }, { m: 'restarts', op: 'le', v: 1 }],
+    why: 'Long enough to need a middle. Storytellers learn the shape, never the words.',
+    how: 'Know your first line and your last line. Find the middle as you go.' },
+  { id: 'story-slam', skill: 'story', step: 5, name: 'Five minutes, slam rules', style: 'story', kind: 'story', asr: true, win: t => [240, 360],
+    goals: t => [{ m: 'time', op: 'in', v: [240, 360] }, { m: 'fpm', op: 'le', v: t.fpm }, { m: 'heldP', op: 'ge', v: 3 }],
+    why: 'A Moth slam gives five minutes and a one-minute grace, no notes. It is the test storytellers train for.',
+    how: 'A true story of yours. The lights turn at four, five and six minutes.' },
+  /* DEVICES: style. The transcript has no commas, so a list of three cannot
+     be found in it; that step says so and counts nothing */
+  { id: 'dev-three', skill: 'devices', step: 1, name: 'Rule of three', style: 'long', kind: 'dev', device: 'Two lists of three', dur: 60,
+    goals: t => [],
+    why: '"Of the people, by the people, for the people." Three is the shortest list that sounds complete.',
+    how: 'Use at least two lists of three. Nothing is counted: the transcript has no commas to find a list by.' },
+  { id: 'dev-pause', skill: 'devices', step: 2, name: 'The pause before the line', style: 'story', kind: 'dev', device: 'Pause before every line that matters', dur: 60,
+    goals: t => [{ m: 'heldP', op: 'ge', v: 3 }],
+    why: 'Churchill marked his scripts with where to pause. A held pause before the key line tells the room it matters.',
+    how: 'Three lines you want remembered, a pause of a second or two before each.' },
+  { id: 'dev-contrast', skill: 'devices', step: 3, name: 'Not this, but that', style: 'long', kind: 'dev', device: 'Not this, but that', dur: 60, asr: true, needsAsr: true,
+    goals: t => [{ m: 'contrast', op: 'ge', v: 2 }],
+    why: '"Ask not what your country can do for you." Contrast makes a point by showing what it is not.',
+    how: 'Twice at least: "it is not about X, it is about Y", or "rather than", or "instead of".' },
+  { id: 'dev-repeat', skill: 'devices', step: 4, name: 'Repeat the opening', style: 'story', kind: 'dev', device: 'Start three lines the same way', dur: 60, asr: true, needsAsr: true,
+    goals: t => [{ m: 'repeatOpen', op: 'ge', v: 3 }],
+    why: '"I have a dream." Starting lines the same way builds a rhythm the room can feel coming.',
+    how: 'Three lines or more that start with the same words, a pause after each.' },
+  { id: 'dev-all', skill: 'devices', step: 5, name: 'All of them', style: 'long', kind: 'dev', device: 'Three, the pause, contrast, a repeated opening', dur: 90, asr: true, needsAsr: true,
+    goals: t => [{ m: 'heldP', op: 'ge', v: 2 }, { m: 'contrast', op: 'ge', v: 1 }, { m: 'repeatOpen', op: 'ge', v: 3 }],
+    why: 'The great speeches stack them. Each one alone is a trick; together they are a style.',
+    how: 'Ninety seconds on the topic with every device in it.' },
+  /* SCRIPT: the TED loop. Written, read, cued, from memory, to the lens */
+  { id: 'script-read', skill: 'script', step: 1, name: 'Read it aloud', style: 'long', kind: 'script', cue: 'full', script: true, win: t => scriptWin(),
+    goals: t => [{ m: 'time', op: 'in', v: scriptWin() }, { m: 'fpm', op: 'le', v: t.fpm }],
+    why: 'TED speakers write the talk out first. Reading it aloud is where the sentences that look fine but sound wrong show up.',
+    how: 'Read the whole script at the pace you will give it. Fix anything you tripped on in the script.' },
+  { id: 'script-cue', skill: 'script', step: 2, name: 'First words only', style: 'long', kind: 'script', cue: 'cue', script: true, asr: true, needsAsr: true, win: t => scriptWin(),
+    goals: t => [{ m: 'cover', op: 'ge', v: 80 }, { m: 'time', op: 'in', v: scriptWin() }],
+    why: 'Speakers move from a full script to cue cards: the first words of each line, so the line comes back by itself.',
+    how: 'Only the first words of each line show. Say the rest from memory.' },
+  { id: 'script-none', skill: 'script', step: 3, name: 'Nothing showing', style: 'long', kind: 'script', cue: 'none', script: true, asr: true, needsAsr: true, win: t => scriptWin(),
+    goals: t => [{ m: 'cover', op: 'ge', v: 80 }, { m: 'longP', op: 'le', v: 1 }],
+    why: 'TED\'s guide: learn it so well that it stops sounding learned. That takes many rehearsals, and this is where they are counted.',
+    how: 'The whole talk from memory. Keep going past a slip.' },
+  { id: 'script-lens', skill: 'script', step: 4, name: 'From memory, to the lens', style: 'long', kind: 'script', cue: 'none', script: true, asr: true, needsAsr: true, cam: true,
+    get dur() { return Math.round(scriptSecs() * 1.3) + 15; },
+    goals: t => [{ m: 'cover', op: 'ge', v: 85 }, { m: 'eye', op: 'ge', v: t.eye }],
+    why: 'Remembering pulls the eyes up and away. The talk is not learned until it can be said to the lens.',
+    how: 'From memory, eyes on the lens. Glance away to think, not to remember.' },
+  { id: 'script-clean', skill: 'script', step: 5, name: 'Piece to camera, clean', style: 'long', kind: 'script', cue: 'none', script: true, asr: true, needsAsr: true, cam: true,
+    get dur() { return Math.round(scriptSecs() * 1.3) + 15; },
+    goals: t => [{ m: 'cover', op: 'ge', v: 90 }, { m: 'fpm', op: 'le', v: t.fpmLow }, { m: 'restarts', op: 'le', v: 0 }, { m: 'eye', op: 'ge', v: t.eye }],
+    why: 'A presenter does a piece to camera until one take is clean. The number of takes it needs falls as the skill grows.',
+    how: 'Everything at once. The sheet keeps count of the takes it took.' },
 ];
+const stageSkills = n => SKILLS.filter(s => s.stage === n);
+/* the steps of a stage still to meet. One a switch cannot measure does not
+   hold a stage, except a missing script, which only he can fix */
+function stageLeft(n) {
+  return DRILLS.filter(d => { const s = skillOf(d), b = blocked(d); return s.stage === n && stepState(d) !== 'passed' && (!b || b === 'a script'); });
+}
+function curStage() { for (const sg of STAGES) if (stageLeft(sg.n).length) return sg.n; return STAGES.length + 1; }
+/* a window drill counts up to its lights; anything else counts down */
+const winOf = d => d && d.win ? d.win(targets()) : null;
+const durOf = d => { const w = winOf(d); return w ? w[1] + Math.max(15, Math.round(w[1] * 0.25)) : d.dur; };
+
+/* ══════════════ scripts ══════════════
+   A talk he writes, one line per thought, and rehearses through the SCRIPT
+   steps. The one being rehearsed is the setting `script`, or the newest. */
+const scripts = () => Object.entries(Rec.map('script')).map(([k, v]) => Object.assign({ key: k }, v)).sort((a, b) => (b.at || 0) - (a.at || 0));
+function curScript() { const all = scripts(); if (!all.length) return null; const k = opt('script', null); return all.filter(x => x.key === k)[0] || all[0]; }
+const wordsOf = x => (x || '').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
+function scriptSecs(sc) { sc = sc || curScript(); return sc ? Math.max(20, Math.round(wordsOf(sc.text).length / 150 * 60)) : 60; }
+function scriptWin() { const x = scriptSecs(); return [Math.round(x * 0.85), Math.round(x * 1.15)]; }
+const rehearsals = key => takes().filter(t => t.script === key);
+/* how much of the script was said, in order: each script word found within
+   the next twelve words heard, so a skipped line costs its words and an um
+   in between costs nothing */
+function coverage(script, said) {
+  const a = wordsOf(script), b = wordsOf(said);
+  if (!a.length) return null;
+  let j = 0, hit = 0;
+  a.forEach(w => { for (let k = j; k < Math.min(b.length, j + 12); k++) if (b[k] === w) { hit++; j = k + 1; return; } });
+  return hit / a.length * 100;
+}
+/* the devices, read off the transcript. Patterns, not understanding: each
+   is labelled as an estimate, and a goal on one opens a step, nothing more */
+const STOPW = /^(the|a|an|and|or|but|so|to|of|in|on|at|it|is|was|i|you|we|they|he|she|that|this|be|for|with|my|your|um|uh|just|like|its|it's|i'm|have|had|do|did)$/;
+function devicesOf(chunks, text) {
+  const t = ' ' + (text || '').toLowerCase().replace(/[^a-z' ]+/g, ' ') + ' ';
+  const signs = (t.match(/\b(first|firstly|second|secondly|third|thirdly|finally|lastly|next)\b/g) || []).length;
+  const contrast = (t.match(/\bnot\b(?:\s+\S+){0,8}?\s+(?:but|instead)\b|\binstead of\b|\brather than\b/g) || []).length;
+  const starts = {}, tri = {};
+  let rep = 0;
+  /* a line's opening up to its first real word ("i have a dream"), or any
+     three-word run with a real word in it */
+  (chunks || []).forEach(c => { const w = wordsOf(c), n = w.slice(0, 4).findIndex(x => !STOPW.test(x)); if (n >= 0 && w.length >= 3) { const k = w.slice(0, Math.max(2, n + 1)).join(' '); starts[k] = (starts[k] || 0) + 1; rep = Math.max(rep, starts[k]); } });
+  const w = wordsOf(text);
+  for (let i = 0; i + 2 < w.length; i++) { const g = w.slice(i, i + 3); if (!g.some(x => !STOPW.test(x))) continue; const k = g.join(' '); tri[k] = (tri[k] || 0) + 1; rep = Math.max(rep, tri[k]); }
+  const head = w.slice(0, 12).filter(x => x.length > 3 && !STOPW.test(x)), tail = w.slice(Math.floor(w.length * 0.75));
+  const callback = w.length >= 40 && head.filter((x, i) => head.indexOf(x) === i && tail.indexOf(x) >= 0).length >= 2 ? 1 : 0;
+  return { signs: signs, contrast: contrast, rep: rep, callback: callback };
+}
 /* TABLE TOPIC, off the path. Toastmasters runs one every meeting: a question
    nobody has seen, answered on the spot, with a green light at the shortest
    time, yellow halfway and red at the longest. He stops it himself; it stops
    on its own 30 seconds past red. `?mini=1` opens straight onto it. */
 const TOPIC_SKILL = { id: 'topics', name: 'TABLE TOPIC', slot: 6 };
-const TT = { id: 'topics', skill: 'topics', step: 0, name: 'Table topic', style: 'live', kind: 'question', lights: true, asr: true,
-  get dur() { return targets().ttMax + 30; },
+const TT = { id: 'topics', skill: 'topics', step: 0, name: 'Table topic', style: 'live', kind: 'question', asr: true,
+  win: t => [t.ttMin, t.ttMax],
   goals: t => [{ m: 'time', op: 'in', v: [t.ttMin, t.ttMax] }, { m: 'fpm', op: 'le', v: t.fpm }],
   why: 'Toastmasters practises speaking off the cuff this way every meeting: one unseen question, one to two minutes, timed by lights.',
   how: 'The question appears after the count. Answer it, and press STOP between green and red.' };
@@ -873,7 +1053,7 @@ function coach(t) {
   }
   /* pace against this style's band, and whether it drifted */
   const wpm = m.wpm != null ? Math.round(m.wpm) : null, p3 = ev && ev.pace;
-  if (wpm != null && !d.lights) {
+  if (wpm != null && d !== TT) {
     if (p3 && p3[2] > p3[0] * 1.15 && p3[2] > b[1]) add('speedup', 'wpm', (p3[2] - b[1]) / b[1] * 4 * 0.75, 'Pace rose from ' + p3[0] + ' to ' + p3[2] + ' wpm by the end.', 'Hold the last sentence at the speed of the first.', 'fix-slow');
     else if (wpm > b[1] + 5) add('fast', 'wpm', (wpm - b[1]) / b[1] * 4 * 0.8, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Stop and breathe in at every full stop.', 'fix-slow');
     else if (wpm < b[0] - 5) add('slow', 'wpm', (b[0] - wpm) / b[0] * 4 * 0.6, wpm + ' wpm, against ' + b[0] + ' to ' + b[1] + '.', 'Shorter sentences, and start the next one before it is perfect.', 'fix-moving');
@@ -927,7 +1107,7 @@ function coachBox(t, d, h) {
     const fs = coach(t), f = fs[0];
     if (!f) {
       box.appendChild(el('p', 'what', 'Nothing over its line.'));
-      const next = !d.fix && !d.lights ? DRILLS.filter(x => x.skill === d.skill && x.step === d.step + 1)[0] : null;
+      const next = !d.fix && d !== TT ? DRILLS.filter(x => x.skill === d.skill && x.step === d.step + 1)[0] : null;
       if (t.pass && next && stepState(next) === 'now') {
         const acts = el('div', 'acts'), go = el('button', 'mb-btn go mb-press mb-tap', ICN('play') + '<span>NEXT: ' + esc(next.name.toUpperCase()) + '</span>');
         go.onclick = () => { h.close(); openDrill(next); };
@@ -1052,7 +1232,7 @@ const QUESTIONS = [
 ];
 const pick = (list, n) => { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a.slice(0, n); };
 function myTopics() { return Object.entries(Rec.map('topic')).map(([k, v]) => Object.assign({ key: k }, v)); }
-function promptFor(kind) {
+function promptFor(kind, d) {
   const mine = myTopics();
   if (kind === 'topic') {
     const own = mine.filter(t => !t.kind || t.kind === 'topic');
@@ -1065,22 +1245,34 @@ function promptFor(kind) {
   if (kind === 'bullets') { const own = mine.filter(t => t.kind === 'bullets'); const set = own.length && Math.random() < 0.5 ? own.map(t => t.text.split('|').map(s => s.trim())) : BULLETS; return { kind: 'bullets', items: pick(set, 1)[0] }; }
   if (kind === 'read') { const p = pick(PASSAGES, 1)[0]; return { kind: 'read', name: p.name, text: p.text }; }
   if (kind === 'twister') return { kind: 'twister', items: pick(TWISTERS, 3) };
+  if (kind === 'prep') return { kind: 'frame', text: promptFor('topic').text, frame: ['Point', 'Reason', 'Example', 'Point again'] };
+  if (kind === 'three') return { kind: 'frame', text: promptFor('topic').text, frame: ['First', 'Second', 'Third'] };
+  if (kind === 'psr') return { kind: 'frame', text: promptFor('topic').text, frame: ['The problem', 'What was done', 'What changed'] };
+  if (kind === 'dev') return { kind: 'dev', text: promptFor('topic').text, device: (d && d.device) || '' };
+  if (kind === 'script') { const sc = curScript(); return sc ? { kind: 'script', key: sc.key, title: sc.title, text: sc.text, cue: (d && d.cue) || 'full' } : { kind: 'free', text: '' }; }
   return { kind: 'free', text: '' };
 }
 function promptEl(p) {
-  const box = el('div', 'prompt' + (p.kind === 'read' ? ' read mb-scroll' : ''));
+  const box = el('div', 'prompt' + (p.kind === 'read' || (p.kind === 'script' && p.cue !== 'none') ? ' read mb-scroll' : ''));
   if (p.kind === 'bullets') box.innerHTML = '<ul>' + p.items.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>';
   else if (p.kind === 'twister') box.innerHTML = p.items.map(i => '<div>' + esc(i) + '</div>').join('');
   else if (p.kind === 'read') box.innerHTML = '<div class="muted">' + esc(p.name) + '</div>' + esc(p.text);
   else if (p.kind === 'hook') box.innerHTML = '<div class="muted">Start on this line</div>' + esc(p.text);
   else if (p.kind === 'question') box.innerHTML = '<div class="muted">Answer this</div>' + esc(p.text);
+  else if (p.kind === 'frame') box.innerHTML = esc(p.text) + '<div class="frame">' + p.frame.map(f => '<span>' + esc(f) + '</span>').join('') + '</div>';
+  else if (p.kind === 'dev') box.innerHTML = '<div class="muted">' + esc(p.device) + '</div>' + esc(p.text);
+  else if (p.kind === 'script') {
+    const lines = (p.text || '').split(/\n+/).map(x => x.trim()).filter(Boolean);
+    box.innerHTML = '<div class="muted">' + (p.cue === 'none' ? 'From memory' : esc(p.title || 'Your script')) + '</div>' +
+      (p.cue === 'none' ? esc(p.title || 'Your script') : lines.map(l => '<span class="cue">' + esc(p.cue === 'cue' ? l.split(/\s+/).slice(0, 3).join(' ') + ' \u2026' : l) + '</span>').join(''));
+  }
   else box.textContent = p.text;
   return box;
 }
 /* the prompt a take was given, so SAME PROMPT can give it again. Older takes
    kept only the words, so the shape is rebuilt from the drill's kind. */
 function promptOf(t, d) {
-  if (t.p) return t.p;
+  if (t.p) return t.p.kind === 'script' ? promptFor('script', d) : t.p;
   if (!t.prompt || !d) return null;
   if (d.kind === 'bullets' || d.kind === 'twister') return { kind: d.kind, items: t.prompt.split(' | ') };
   if (d.kind === 'read') { const p = PASSAGES.filter(x => x.text === t.prompt)[0]; return p ? { kind: 'read', name: p.name, text: p.text } : null; }
@@ -1109,6 +1301,7 @@ function saveTake(t) {
    needs the words. It is never MET and never NOT MET, it simply cannot run,
    and DOCTRINE law 5 says do not offer what does not apply. */
 function blocked(d) {
+  if (d.script && !curScript()) return 'a script';
   if (d.needsAsr && !asrOn()) return 'the transcript';
   if (d.cam && !camOn()) return 'the camera';
   return '';
@@ -1157,7 +1350,8 @@ function streakInfo() {
    Three, one per skill, from the skills furthest from their target: no take
    yet counts as furthest. Eyes needs a camera and is skipped while it is off. */
 function todaysDrills() {
-  const rank = SKILLS.map(s => {
+  const cs = curStage();
+  const rank = SKILLS.filter(s => s.stage <= cs).map(s => {
     const d = nowStep(s.id); if (!d) return null;
     if (blocked(d)) return null;
     const last = lastTake(d.id);
@@ -1167,7 +1361,17 @@ function todaysDrills() {
   }).filter(Boolean).sort((a, b) => b.dist - a.dist);
   const done = rank.filter(r => doneToday(r.d.id)).map(r => r.d);
   const todo = rank.filter(r => !doneToday(r.d.id)).map(r => r.d);
-  return done.concat(todo).slice(0, Math.max(3, done.length));
+  let out = done.concat(todo).slice(0, Math.max(3, done.length));
+  /* REVIEW: met steps of earlier stages, the longest unrun first, once a
+     week at most, so the voice work is not dropped once FLUENCY starts */
+  if (out.length < 3) {
+    const early = DRILLS.filter(d => skillOf(d).stage < cs && passedEver(d.id) && !blocked(d) && out.indexOf(d) < 0);
+    const did = early.filter(d => doneToday(d.id));
+    const due = early.filter(d => !doneToday(d.id)).map(d => ({ d: d, at: (lastTake(d.id) || {}).date || '' }))
+      .filter(x => !x.at || Day.diff(Day.today(), x.at) >= 7).sort((a, b) => a.at < b.at ? -1 : a.at > b.at ? 1 : 0).map(x => x.d);
+    out = out.concat(did, due).slice(0, Math.max(3, out.length + did.length));
+  }
+  return out;
 }
 
 /* ══════════════ drawing ══════════════ */
@@ -1216,6 +1420,11 @@ function drawToday(m) {
     m.appendChild(fc);
   }
   const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id && !isFix(t.drill)).length + ' done');
+  const cs = curStage(), sg = STAGES[cs - 1];
+  if (sg) {
+    const all = DRILLS.filter(d => skillOf(d).stage === cs), left = stageLeft(cs).length;
+    dc.appendChild(el('p', 'muted', 'Stage ' + cs + ' of ' + STAGES.length + ', ' + sg.name + ': ' + (all.length - left) + ' of ' + all.length + ' steps met.'));
+  } else dc.appendChild(el('p', 'muted', 'Every stage is met. These are the steps longest since their last run.'));
   const list = el('div', 'list');
   todaysDrills().forEach(d => list.appendChild(drillRow(d)));
   if (!list.children.length) list.appendChild(el('p', 'muted', 'Every step is met. Pick any drill on PATH to run it again.'));
@@ -1254,7 +1463,7 @@ function drillRow(d, src) {
     '<span class="tx"><span class="nm">' + esc(skill.name + ' · ' + d.name) + '</span>' +
     '<span class="sub">' + esc(goals.length ? 'Goal: ' + goals.map(goalText).join(', ') : 'Goal: a count to start from') + '</span></span>' +
     '<span class="num">' + (last ? '<b>' + esc(mainNumber(d, last)) + '</b>' +
-      (today ? (last.pass ? 'met' : unmeasured(last) ? 'no reading' : 'not met') : 'last') : '<b>' + mmss(d.lights ? targets().ttMax : d.dur) + '</b>new') + '</span>';
+      (today ? (last.pass ? 'met' : unmeasured(last) ? 'no reading' : 'not met') : 'last') : '<b>' + mmss(winOf(d) ? winOf(d)[1] : durOf(d)) + '</b>new') + '</span>';
   r.onclick = () => { if (d.fix && src) fixFrom = src; openDrill(d); };
   Mobile.hold(r, e => drillMenu(d, e), { dots: true, dotsLabel: 'More for ' + d.name });
   return r;
@@ -1302,8 +1511,14 @@ function drillMenu(d, e) {
 }
 
 function drawPath(m) {
+  const cs = curStage();
+  STAGES.forEach(sg => {
+  const head = el('div', 'stage' + (sg.n === cs ? ' now' : ''));
+  head.innerHTML = '<h2>STAGE ' + sg.n + ' \u00b7 ' + esc(sg.name) + '<span class="r">' +
+    (sg.n < cs ? 'met' : sg.n === cs ? 'now, ' + stageLeft(sg.n).length + ' to go' : 'later') + '</span></h2><p class="muted">' + esc(sg.why) + '</p>';
+  m.appendChild(head);
   const wrap = el('div', 'path');
-  SKILLS.forEach(s => {
+  stageSkills(sg.n).forEach(s => {
     const c = card();
     c.classList.add('skill');
     c.style.setProperty('--c', 'var(--data-' + s.slot + ')');
@@ -1313,7 +1528,7 @@ function drawPath(m) {
     DRILLS.filter(d => d.skill === s.id).forEach(d => {
       const st = stepState(d), need = blocked(d);
       const b = el('button', 'step mb-plate mb-press ' + (need && st !== 'passed' ? 'locked' : st));
-      if (need) b.title = 'Measured with ' + need + ', which is off';
+      if (need) b.title = need === 'a script' ? 'Needs a script: write one under YOUR SCRIPTS' : 'Measured with ' + need + ', which is off';
       b.innerHTML = '<span class="n">' + d.step + '</span><span class="nm">' + esc(d.name) + '</span>' +
         '<span class="st">' + ICN(st === 'passed' ? 'done' : need ? 'settings' : st === 'now' ? 'play' : 'lock') + '</span>';
       b.onclick = () => openDrill(d);
@@ -1324,6 +1539,8 @@ function drawPath(m) {
     wrap.appendChild(c);
   });
   m.appendChild(wrap);
+  if (sg.n === 5) m.appendChild(scriptCard());
+  });
   const t = card('YOUR TOPICS', myTopics().length + '');
   t.appendChild(el('p', 'muted', 'Content ideas to talk about. A topic, a story, or three bullets split with |.'));
   const tl = el('div', 'list');
@@ -1342,6 +1559,59 @@ function drawPath(m) {
   acts.appendChild(add);
   t.appendChild(acts);
   m.appendChild(t);
+}
+function scriptCard() {
+  const all = scripts(), cur = curScript();
+  const c = card('YOUR SCRIPTS', all.length + '');
+  c.appendChild(el('p', 'muted', 'A talk you write, then rehearse until you do not need it. One line per thought: the first words of each line become the cues.'));
+  const l = el('div', 'list');
+  all.forEach(sc => {
+    const on = cur && cur.key === sc.key, n = rehearsals(sc.key).length;
+    const r = el('button', 'row mb-plate mb-press' + (on ? ' done' : ''));
+    r.innerHTML = '<span class="ic">' + ICN(on ? 'done' : 'note') + '</span><span class="tx"><span class="nm">' + esc(sc.title || 'Untitled') + '</span><span class="sub">' +
+      esc(wordsOf(sc.text).length + ' words \u00b7 about ' + mmss(scriptSecs(sc)) + ' \u00b7 ' + (n ? 'rehearsed ' + n + ' time' + (n === 1 ? '' : 's') : 'not rehearsed yet') + (on ? ' \u00b7 rehearsing' : '')) + '</span></span>';
+    const menu = e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
+      { label: 'Rehearse this one', fn: () => Rec.setting(APP.id, 'script', sc.key) },
+      { label: 'Edit', fn: () => scriptEditor(sc) },
+      { label: 'Delete', kind: 'bad', fn: () => {
+        const was = { title: sc.title, text: sc.text, at: sc.at };
+        Rec.del('script', null, sc.key);
+        UI.undo('deleted <b>' + esc(sc.title || 'a script') + '</b>', () => Rec.set('script', null, sc.key, was));
+      } },
+    ], { title: 'SCRIPT' });
+    r.onclick = menu;
+    Mobile.hold(r, menu, { dots: true, dotsLabel: 'More for ' + (sc.title || 'this script') });
+    l.appendChild(r);
+  });
+  if (!all.length) l.appendChild(el('p', 'muted', 'No script yet. Writing one opens the SCRIPT steps.'));
+  c.appendChild(l);
+  const acts = el('div', 'acts');
+  const add = el('button', 'mb-btn mb-press mb-tap', ICN('add') + '<span>Write a script</span>');
+  add.onclick = () => scriptEditor(null);
+  acts.appendChild(add);
+  c.appendChild(acts);
+  return c;
+}
+function scriptEditor(sc) {
+  UI.dialog({
+    title: sc ? 'EDIT SCRIPT' : 'WRITE A SCRIPT', width: 600, focus: true,
+    body: b => {
+      const ti = UI.field('text', { value: sc ? sc.title : '', placeholder: 'What the talk is called' }); ti.classList.add('sct');
+      const tx = UI.field('note', { value: sc ? sc.text : '', rows: 12, placeholder: 'One line per thought. Two minutes is about 300 words.' }); tx.classList.add('scx');
+      const n = el('p', 'muted');
+      const count = () => { const w = wordsOf(tx.value).length; n.textContent = w ? w + ' words, about ' + mmss(Math.max(20, Math.round(w / 150 * 60))) + ' at 150 a minute' : 'TED talks run up to 18 minutes. Start with one or two.'; };
+      tx.oninput = count; count();
+      b.appendChild(ti); b.appendChild(tx); b.appendChild(n);
+    },
+    actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: h => {
+      const title = h.body.querySelector('.sct').value.trim(), text = h.body.querySelector('.scx').value.trim();
+      if (!text) { h.body.querySelector('.scx').focus(); return false; }
+      const key = sc ? sc.key : newId();
+      Rec.set('script', null, key, { title: title || text.split(/\s+/).slice(0, 5).join(' '), text: text, at: Date.now() });
+      if (!sc) Rec.setting(APP.id, 'script', key);
+      UI.toast('saved <b>' + esc(title || 'the script') + '</b>');
+    } }],
+  });
 }
 function addTopic() {
   let kind = 'topic';
@@ -1458,14 +1728,22 @@ function openDrill(d) {
       g.innerHTML = '<b>Goal</b><span class="g">' + esc(goals.length ? goals.map(goalText).join(', and ') : 'finish, and see the count') + '</span>' +
         '<b>Why</b><span>' + esc(d.why) + '</span>' +
         '<b>How</b><span>' + esc(d.how) + '</span>' +
-        '<b>Time</b><span>' + (d.lights ? mmss(targets().ttMin) + ' to ' + mmss(targets().ttMax) + ', lights on' : mmss(d.dur)) + (d.cam && camOn() ? ', camera on' : '') +
+        (d.script && curScript() ? '<b>Script</b><span>' + esc(scriptLine(d)) + '</span>' : '') +
+        '<b>Time</b><span>' + (winOf(d) ? mmss(winOf(d)[0]) + ' to ' + mmss(winOf(d)[1]) + ', lights on' : mmss(durOf(d))) + (d.cam && camOn() ? ', camera on' : '') +
           (d.asr && asrOn() ? ', transcript on' : '') + (d.beat && optOn('beat', 1) ? ', beat on' : '') + '</span>' +
         (last ? '<b>Last</b><span>' + esc(lastLine(d, last)) + '</span>' : '') +
         (st === 'locked' ? '<b>Locked</b><span>Opens when step ' + (d.step - 1) + ' is met. Hold it on PATH to open it anyway.</span>' : '');
       b.appendChild(g);
       /* A drill nothing can measure says so, and the switch it wants is right
          here rather than three taps away in Settings (DOCTRINE law 6). */
-      if (need) {
+      if (need === 'a script') {
+        b.appendChild(el('p', 'muted', 'This one rehearses your script, and there is none yet.'));
+        const acts = el('div', 'acts');
+        const w = el('button', 'mb-btn go mb-press mb-tap', 'Write a script');
+        w.onclick = () => { h.close(); scriptEditor(null); };
+        acts.appendChild(w);
+        b.appendChild(acts);
+      } else if (need) {
         b.appendChild(el('p', 'muted', 'This one is measured with ' + need + ', which is off. Nothing here can be counted until it is on.'));
         const acts = el('div', 'acts');
         const on = el('button', 'mb-btn go mb-press mb-tap', 'Turn ' + need + ' on');
@@ -1480,6 +1758,13 @@ function openDrill(d) {
     actions: blocked(d) ? [{ label: 'CLOSE' }]
       : [{ label: 'CLOSE' }, { label: 'START', kind: 'go', fn: () => { startTake(d); } }],
   });
+}
+/* the script being rehearsed, how often, and the take it first came out clean */
+function scriptLine(d) {
+  const sc = curScript(), rs = rehearsals(sc.key);
+  const clean = rs.findIndex(t => t.drill === 'script-clean' && t.pass);
+  return (sc.title || 'Untitled') + ', ' + wordsOf(sc.text).length + ' words, rehearsed ' + rs.length + ' time' + (rs.length === 1 ? '' : 's') +
+    (clean >= 0 ? ', clean on take ' + (clean + 1) : '');
 }
 function lastLine(d, t) {
   const gs = t.goals || [];
@@ -1522,7 +1807,8 @@ async function startTake(d, warmStep, prompt) {
   T.src.connect(T.proc); T.proc.connect(T.mute); T.mute.connect(T.ac.destination);
   T.listener = wantAsr ? Listener(opt('lang', 'en-US')) : null;
   T.eye = { looks: [], base: null, calib: [] };
-  T.prompt = warmStep ? null : (prompt || promptFor(d.kind));
+  T.prompt = warmStep ? null : (prompt || promptFor(d.kind, d));
+  T.half = false; T.mid = null; T.penA = null;
   T.beat = !!(d && d.beat && optOn('beat', 1));
   const screen = $('#take');
   $('#tkName').textContent = warmStep ? 'WARM-UP · ' + warmStep.name.toUpperCase() : d.name.toUpperCase();
@@ -1590,7 +1876,8 @@ function runTake() {
   const mk = (id, k) => { const m = el('div', 'meter mb-plate off'); m.id = id; m.innerHTML = '<div class="k">' + k + '</div><div class="v">·</div>'; meters.appendChild(m); return m; };
   const mPace = mk('mPace', T.warm ? (T.warm.kind === 'hiss' ? 'sound' : T.warm.kind === 'siren' ? 'spread' : 'crisp') : 'pace');
   const mLvl = mk('mLvl', 'time'); mLvl.innerHTML += '<div class="level"><i></i></div>';
-  const mEye = mk('mEye', d && d.lights ? 'light' : T.cam ? 'lens' : d && d.live ? LIVE[d.live] : T.listener ? 'transcript' : 'time');
+  const w = d && winOf(d);
+  const mEye = mk('mEye', w ? 'light' : T.cam ? 'lens' : d && d.live ? LIVE[d.live] : T.listener ? 'transcript' : 'time');
   $('#tkFoot').innerHTML = '';
   const stop = el('button', 'mb-btn go mb-press mb-tap', ICN('stop') + '<span>STOP</span>');
   stop.onclick = () => stopTake(false);
@@ -1600,13 +1887,18 @@ function runTake() {
   if (T.listener) T.listener.start();
   Sfx.play('start');
   if (T.beat) startBeat();
-  const dur = T.warm ? T.warm.dur : d.dur;
+  const dur = T.warm ? T.warm.dur : durOf(d);
   const band_ = !T.warm && T.goals.filter(g => g.m === 'wpm')[0];
   T.timer = setInterval(() => {
     if (!T.live) return;
     const s = (performance.now() - T.t0) / 1000;
-    $('#tkClock').textContent = d && d.lights ? mmss(s) : mmss(Math.max(0, dur - s));
-    if (d && d.lights) lamp(mEye, s);
+    $('#tkClock').textContent = w ? mmss(s) : mmss(Math.max(0, dur - s));
+    if (w) lamp(mEye, s, w);
+    /* the pen drill's switch: the first half is kept, the second measured */
+    if (d && d.halves && !T.half && s >= dur / 2) {
+      T.half = true; T.penA = (T.ear.summary({ from: T.from }) || {}).crisp || null; T.mid = T.ear.seconds();
+      Sfx.play('blip'); mid.insertBefore(el('div', 'say', d.halves), mid.firstChild);
+    }
     $('#mLvl .level i').style.width = Math.round(T.ear.level() * 100) + '%';
     $('#mLvl .v').textContent = mmss(s);
     if (s >= dur) { stopTake(false); return; }
@@ -1624,7 +1916,7 @@ function runTake() {
       if (T.cam) {
         const recent = T.eye.looks.slice(-10), on = recent.filter(x => x.on).length, seen = recent.filter(x => x.seen).length;
         setMeter(mEye, seen ? Math.round(on / seen * 100) + '%' : (engineState === 'failed' ? 'off' : '…'), seen ? (on / seen >= 0.8 ? 'in' : 'out') : 'off');
-      } else if (d && d.lights) {
+      } else if (w) {
       } else if (d && d.live) {
         /* a fix drill counts its one fault live, and the meter flashes when it goes up */
         let v = null;
@@ -1641,9 +1933,9 @@ function runTake() {
 }
 /* the Toastmasters lights: nothing before the shortest time, green from it,
    yellow from halfway, red from the longest. A lamp with its word beside it */
-function lamp(m, s) {
-  const t = targets(), mid = (t.ttMin + t.ttMax) / 2;
-  const on = s >= t.ttMax ? ['red', 'var(--danger)'] : s >= mid ? ['yellow', 'var(--warn)'] : s >= t.ttMin ? ['green', 'var(--success)'] : null;
+function lamp(m, s, w) {
+  const mid = (w[0] + w[1]) / 2;
+  const on = s >= w[1] ? ['red', 'var(--danger)'] : s >= mid ? ['yellow', 'var(--warn)'] : s >= w[0] ? ['green', 'var(--success)'] : null;
   const k = on ? on[0] : '';
   if (m.dataset.lamp === k) return;
   m.dataset.lamp = k;
@@ -1712,16 +2004,27 @@ function finishTake(m, secs) {
     eye: eye == null ? null : r1(eye), eyeAway: eyeAway == null ? null : r1(eyeAway),
     spoken: r1(m.spoken), loud: m.loud == null ? null : r1(m.loud), time: Math.round(secs),
   };
+  /* where things happened, for the coach: each um and each pause in seconds
+     from the start, and the pace in each third of the take */
+  const rel = x => r1(Math.max(0, x - T.from));
+  const ev = { end: r1(m.total), held: m.heldAt.map(h => [rel(h.at), r1(h.dur)]), pz: m.pauseAt.map(p => [rel(p.at), r1(p.dur)]) };
+  out.openUms = ev.held.filter(h => h[0] < 5).length;
+  if (asrOn) {
+    const dv = devicesOf(T.listener.out.chunks, T.listener.text());
+    out.signs = dv.signs; out.contrast = dv.contrast; out.repeatOpen = dv.rep; out.callback = dv.callback;
+    const sc = T.prompt && T.prompt.kind === 'script' ? scripts().filter(x => x.key === T.prompt.key)[0] : null;
+    out.cover = sc ? r1(coverage(sc.text, T.listener.text())) : null;
+  } else { out.signs = out.contrast = out.repeatOpen = out.callback = out.cover = null; }
+  if (d.halves && T.mid != null) {
+    const m2 = T.ear.summary({ from: T.mid });
+    if (m2) { out.crisp = ref ? m2.crisp / ref * 100 : null; out.penGain = T.penA ? r1(m2.crisp / T.penA * 100) : null; }
+  }
   const goals = T.goals.map(g => {
     const got = out[g.m];
     const ok = got == null ? false : OPS[g.op](got, g.v);
     return { m: g.m, op: g.op, v: g.v, got: got == null ? null : r1(got), ok: ok };
   });
   const pass = goals.length ? goals.every(g => g.ok) : true;
-  /* where things happened, for the coach: each um and each pause in seconds
-     from the start, and the pace in each third of the take */
-  const rel = x => r1(Math.max(0, x - T.from));
-  const ev = { end: r1(m.total), held: m.heldAt.map(h => [rel(h.at), r1(h.dur)]), pz: m.pauseAt.map(p => [rel(p.at), r1(p.dur)]) };
   if (m.peaks.length >= 12 && m.spoken >= 20) {
     const a = m.peaks[0], z = m.peaks[m.peaks.length - 1], seg = (z - a) / 3;
     const k = m.wpmEst ? out.wpm / m.wpmEst : 1;
@@ -1731,6 +2034,7 @@ function finishTake(m, secs) {
     asr: asrOn ? 1 : 0, cam: eye != null ? 1 : 0, tx: asrOn ? T.listener.text().slice(0, 4000) : '', hits: asrOn ? tx.hits : null,
     prompt: T.prompt && (T.prompt.text || (T.prompt.items || []).join(' | ')), p: T.prompt, at: Date.now() };
   if (T.origin && T.origin.key) take.from = T.origin.key;
+  if (T.prompt && T.prompt.kind === 'script') take.script = T.prompt.key;
   take.key = saveTake(take); take.date = Day.today();
   Mobile.feedback(pass ? 'complete' : 'done');
   showTake(take, tx && tx.html);
