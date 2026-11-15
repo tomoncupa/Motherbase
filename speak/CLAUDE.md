@@ -215,8 +215,11 @@ SPEAK.exe; `desktop/README.md` has the program's side.
   would flicker the window. In a browser the messages go nowhere.
 - Watched in Chromium at 300x116 and 440x760 with a fake microphone: nothing
   overflows the small window, the take ran, the numbers came up, CLOSE
-  shrank it once. The exe itself was not run by Claude (its first open
-  writes the Run key); its title bar and its sizes are unwatched.
+  shrank it once. The exe, 2026-11-16 on his PC, live copy: 300x116 inside,
+  on top, title bar #080B10; TABLE TOPIC grew it to 440x760 (moved up to fit
+  the screen) with a real question and the real mic; the mouse's back button
+  cancelled the take, saving nothing, and it went back to its spot. Escape
+  does not end a take. Not watched in the exe: STOP, the numbers, CLOSE.
 
 ## History, moved from the root brief on 2026-09-22
 
