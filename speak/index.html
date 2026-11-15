@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.13, 2026-11-16">
+<meta name="mb-version" content="1.0.14, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -129,6 +129,9 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .bank-q{width:100%;margin-top:var(--s-3);min-height:var(--tap);font-size:var(--f-3)}
 .ans{padding:var(--s-3);border-radius:var(--radius-md);margin-top:var(--s-2)}
 .ans .tx{margin-top:var(--s-2);white-space:pre-wrap}
+.cmp{padding:var(--s-3);border-radius:var(--radius-md);margin-top:var(--s-3)}
+.cmp summary{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);letter-spacing:var(--track-cap);color:var(--text-muted);cursor:pointer;min-height:var(--tap);display:flex;align-items:center}
+.cmp .tx{margin-top:var(--s-2)}
 /* the goal and the why, on a drill sheet and on a today card */
 .goal{display:grid;grid-template-columns:var(--s-9) 1fr;gap:var(--s-2) var(--s-3);align-items:baseline;
   font-size:var(--f-2);line-height:var(--lh-body);margin:var(--s-3) 0}
@@ -216,7 +219,7 @@ body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:cente
 
 <div id="wid">
   <div class="wtop"><div class="logo">SPE<b>AK</b></div><span class="muted" id="widSub"></span></div>
-  <button class="mb-btn go mb-press mb-tap" id="widGo">TABLE TOPIC</button>
+  <button class="mb-btn go mb-press mb-tap" id="widGo">SPEAK PRACTICE</button>
 </div>
 
 <div id="take" role="dialog" aria-modal="true">
@@ -962,8 +965,10 @@ function devicesOf(chunks, text) {
    nobody has seen, answered on the spot, with a green light at the shortest
    time, yellow halfway and red at the longest. He stops it himself; it stops
    on its own 30 seconds past red. `?mini=1` opens straight onto it. */
-const TOPIC_SKILL = { id: 'topics', name: 'TABLE TOPIC', slot: 6 };
-const TT = { id: 'topics', skill: 'topics', step: 0, name: 'Table topic', style: 'live', kind: 'question', asr: true,
+/* named SPEAK PRACTICE since 2026-11-16 (Tom: "because I also wanted to expand in scope"); the id stays
+   `topics` so old takes keep their drill */
+const TOPIC_SKILL = { id: 'topics', name: 'SPEAK PRACTICE', slot: 6 };
+const TT = { id: 'topics', skill: 'topics', step: 0, name: 'Speak practice', style: 'live', kind: 'question', asr: true,
   win: t => [t.ttMin, t.ttMax],
   goals: t => [{ m: 'time', op: 'in', v: [t.ttMin, t.ttMax] }, { m: 'fpm', op: 'le', v: t.fpm }],
   why: 'Toastmasters practises speaking off the cuff this way every meeting: one unseen question, one to two minutes, timed by lights.',
@@ -981,7 +986,13 @@ const FT = { id: 'fitness', skill: 'fitness', step: 0, name: 'Fitness topic', st
   goals: t => [{ m: 'time', op: 'in', v: [t.ttMin, t.ttMax] }, { m: 'fpm', op: 'le', v: t.fpm }],
   why: 'A real question answered out loud is the freestyle draft of a Reel or a lesson, and the answer is kept in your fitness bank.',
   how: 'The question appears after the count. Answer it as you would to one client, and press STOP between green and red.' };
-const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || (d.skill === 'fitness' ? FIT_SKILL : TOPIC_SKILL);
+/* OTHER TOPIC, beside FITNESS TOPIC. Tom, 2026-11-16, through the topic
+   finder's session: productivity, philosophy and behaviour change, working
+   like FITNESS TOPIC, answers into the bank with their subject. */
+const OTHER_SKILL = { id: 'other', name: 'OTHER TOPIC', slot: 5 };
+const OT = Object.assign({}, FT, { id: 'other', skill: 'other', kind: 'otherq', name: 'Other topic',
+  why: 'A question on productivity, philosophy or behaviour change answered out loud is a draft of a post or a lesson, and the answer is kept in your bank.' });
+const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || (d.skill === 'fitness' ? FIT_SKILL : d.skill === 'other' ? OTHER_SKILL : TOPIC_SKILL);
 /* ══════════════ the coach ══════════════
    Tom, 2026-11-16: "I need Speak to actually give me feedback and drills for
    what's happening. I don't need it to just rate what I'm doing." After a
@@ -1046,7 +1057,7 @@ const FIXES = [
 ];
 FIXES.forEach(f => { f.fix = true; f.step = 0; });
 const isFix = id => /^fix-/.test(id || '');
-const drillById = id => id === TT.id ? TT : id === FT.id ? FT : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
+const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
 const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
@@ -1340,16 +1351,16 @@ const fitSkip = {};                         /* questions passed over with NEW PR
 function todoQs(prefix) {
   const re = new RegExp('^' + prefix + ':\\s*', 'i');
   return Rec.all('note').filter(r => !r.deleted && r.payload && re.test(String(r.payload.text || '')) && !r.payload.done && !r.payload.cancelled &&
-    !(r.payload.td && r.payload.td.done)).map(r => ({ text: String(r.payload.text).replace(re, '').trim(), due: r.payload.due || r.date || '' }));
+    !(r.payload.td && r.payload.td.done)).map(r => ({ text: String(r.payload.text).replace(re, '').trim(), due: r.payload.due || r.date || '', notes: String((r.payload.td && r.payload.td.desc) || '').slice(0, 6000) }));
 }
 function fitPrompt() {
   const said = {}; answers().forEach(a => { said[String(a.q || '').toLowerCase()] = 1; });
   const fresh = q => !said[q.toLowerCase()] && !fitSkip[q.toLowerCase()];
   const today = Day.today();
   const shoot = todoQs('Shoot').filter(x => fresh(x.text) && (!x.due || x.due <= today)).sort((a, b) => String(a.due).localeCompare(String(b.due)))[0];
-  if (shoot) return { kind: 'fitq', text: shoot.text, src: 'shoot', label: shoot.due === today ? 'Today\'s Shoot question' : 'Shoot question' + (shoot.due ? ', due ' + Day.short(shoot.due) : '') };
+  if (shoot) return { kind: 'fitq', text: shoot.text, notes: shoot.notes, src: 'shoot', label: shoot.due === today ? 'Today\'s Shoot question' : 'Shoot question' + (shoot.due ? ', due ' + Day.short(shoot.due) : '') };
   const topic = todoQs('Topic').filter(x => fresh(x.text)).sort((a, b) => String(b.due).localeCompare(String(a.due)))[0];
-  if (topic) return { kind: 'fitq', text: topic.text, src: 'topic', label: 'Current topic' };
+  if (topic) return { kind: 'fitq', text: topic.text, notes: topic.notes, src: 'topic', label: 'Current topic' };
   const qs = FIT_QS.filter(fresh), terms = SKOOL_TERMS.filter(t => fresh('Explain ' + t[0] + ' to a beginner.'));
   if (terms.length && (!qs.length || Math.random() < 1 / 3)) {
     const t = pick(terms, 1)[0];
@@ -1357,6 +1368,18 @@ function fitPrompt() {
   }
   const q = pick(qs.length ? qs : FIT_QS, 1)[0];
   return { kind: 'fitq', text: q, src: 'viewer', label: 'Viewer question' };
+}
+/* OTHER TOPIC's own questions: productivity, philosophy and behaviour change, about anyone */
+const OTHER_QS = [["productivity", "How do you decide what to do first when everything feels urgent?"], ["productivity", "Is a to-do list a plan or a wish list?"], ["productivity", "What does a productive day actually look like?"], ["productivity", "Why do people work hard and still feel behind?"], ["productivity", "Should you work on your weaknesses or your strengths?"], ["productivity", "What is the difference between busy and productive?"], ["productivity", "How do you protect deep work from your phone?"], ["productivity", "When is it right to quit something?"], ["productivity", "How much should you plan a week ahead?"], ["productivity", "What do you do on a day with zero motivation?"], ["productivity", "Is multitasking ever worth it?"], ["productivity", "How do you know you are working on the right thing?"], ["productivity", "What is one system that saves you an hour a week?"], ["productivity", "How do you start when a task feels too big?"], ["productivity", "Why do deadlines work?"], ["philosophy", "What does it mean to live a good life?"], ["philosophy", "Is discipline a form of freedom?"], ["philosophy", "Can you choose who you become?"], ["philosophy", "What do you owe the person you will be in ten years?"], ["philosophy", "Is comfort the enemy of growth?"], ["philosophy", "What is worth suffering for?"], ["philosophy", "How much of your life is in your control?"], ["philosophy", "What makes a person strong?"], ["philosophy", "Is it better to be respected or liked?"], ["philosophy", "What would you do if nobody would ever know?"], ["philosophy", "Does hard work make you a better person?"], ["philosophy", "What is the point of a goal you may never reach?"], ["philosophy", "How should you treat a failure?"], ["philosophy", "Is ambition a virtue?"], ["philosophy", "What does it mean to be the main character of your own life?"], ["behaviour change", "Why do most new habits fail in the second week?"], ["behaviour change", "Is motivation something you have or something you build?"], ["behaviour change", "How small should a new habit start?"], ["behaviour change", "What should you do the day after you break a streak?"], ["behaviour change", "Why is it easier to change your environment than your willpower?"], ["behaviour change", "How long does it really take to form a habit?"], ["behaviour change", "What is the difference between a goal and an identity?"], ["behaviour change", "Why do people know what to do and still not do it?"], ["behaviour change", "How do you stop a habit you enjoy?"], ["behaviour change", "What makes a reward work?"], ["behaviour change", "Should you tell people about your goals?"], ["behaviour change", "How do you rebuild trust with yourself after quitting?"], ["behaviour change", "What role do other people play in the habits you keep?"], ["behaviour change", "Why does tracking change behaviour?"], ["behaviour change", "How do you make the right choice the easy choice?"]];
+/* the subject the topic finder wrote on its Found line, else none */
+const subjOf = notes => { const m = /\*\*Found:\*\*[^,\n]*,\s*topic finder,\s*([a-z ]+?)\s*(\(|$|\n)/i.exec(notes || ''); return m ? m[1].trim().toLowerCase() : ''; };
+function otherPrompt() {
+  const said = {}; answers().forEach(a => { said[String(a.q || '').toLowerCase()] = 1; });
+  const fresh = q => !said[q.toLowerCase()] && !fitSkip[q.toLowerCase()];
+  const t = todoQs('Other').filter(x => fresh(x.text)).sort((a, b) => String(a.due).localeCompare(String(b.due)))[0];
+  if (t) { const sj = subjOf(t.notes); return { kind: 'otherq', text: t.text, notes: t.notes, src: 'other', subj: sj, label: 'Current topic' + (sj ? ' \u00b7 ' + sj : '') }; }
+  const pool = OTHER_QS.filter(x => fresh(x[1])), x = pick(pool.length ? pool : OTHER_QS, 1)[0];
+  return { kind: 'otherq', text: x[1], src: 'otherbank', subj: x[0], label: x[0].charAt(0).toUpperCase() + x[0].slice(1) };
 }
 const pick = (list, n) => { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a.slice(0, n); };
 function myTopics() { return Object.entries(Rec.map('topic')).map(([k, v]) => Object.assign({ key: k }, v)); }
@@ -1371,6 +1394,7 @@ function promptFor(kind, d) {
   if (kind === 'hook') return { kind: 'hook', text: pick(HOOKS, 1)[0] };
   if (kind === 'question') return { kind: 'question', text: pick(QUESTIONS, 1)[0] };
   if (kind === 'fitq') return fitPrompt();
+  if (kind === 'otherq') return otherPrompt();
   if (kind === 'bullets') { const own = mine.filter(t => t.kind === 'bullets'); const set = own.length && Math.random() < 0.5 ? own.map(t => t.text.split('|').map(s => s.trim())) : BULLETS; return { kind: 'bullets', items: pick(set, 1)[0] }; }
   if (kind === 'read') { const p = pick(PASSAGES, 1)[0]; return { kind: 'read', name: p.name, text: p.text }; }
   if (kind === 'twister') return { kind: 'twister', items: pick(TWISTERS, 3) };
@@ -1388,7 +1412,7 @@ function promptEl(p) {
   else if (p.kind === 'read') box.innerHTML = '<div class="muted">' + esc(p.name) + '</div>' + esc(p.text);
   else if (p.kind === 'hook') box.innerHTML = '<div class="muted">Start on this line</div>' + esc(p.text);
   else if (p.kind === 'question') box.innerHTML = '<div class="muted">Answer this</div>' + esc(p.text);
-  else if (p.kind === 'fitq') box.innerHTML = '<div class="muted">' + esc(p.label || 'Answer this') + '</div>' + esc(p.text);
+  else if (p.kind === 'fitq' || p.kind === 'otherq') box.innerHTML = '<div class="muted">' + esc(p.label || 'Answer this') + '</div>' + esc(p.text);
   else if (p.kind === 'frame') box.innerHTML = esc(p.text) + '<div class="frame">' + p.frame.map(f => '<span>' + esc(f) + '</span>').join('') + '</div>';
   else if (p.kind === 'dev') box.innerHTML = '<div class="muted">' + esc(p.device) + '</div>' + esc(p.text);
   else if (p.kind === 'script') {
@@ -1512,11 +1536,12 @@ function todaysDrills() {
    everywhere, go to the sheet's SPEAK tab and into every backup, which is
    how other work reads them. */
 let bankQ = '';
-const SRC_NAME = { shoot: 'Shoot question', topic: 'Current topic', viewer: 'Viewer question', term: 'Skool term' };
+const SRC_NAME = { shoot: 'Shoot question', topic: 'Current topic', viewer: 'Viewer question', term: 'Skool term', other: 'Current topic', otherbank: 'Question' };
+const srcLine = a => (SRC_NAME[a.src] || 'Question') + (a.bracket ? ' [' + a.bracket + ']' : '') + (a.subj ? ' \u00b7 ' + a.subj : '');
 function bankText(list) {
   const by = {}; list.forEach(a => { (by[a.q] = by[a.q] || []).push(a); });
-  return '# Fitness bank\n\nExported ' + Day.today() + ' from SPEAK. ' + list.length + ' answers.\n\n' + Object.keys(by).map(q =>
-    '## ' + q + '\n\n' + by[q].map(a => '*' + Day.short(a.date) + ' \u00b7 ' + mmss(a.dur || 0) + ' \u00b7 ' + (SRC_NAME[a.src] || 'Question') + (a.bracket ? ' [' + a.bracket + ']' : '') + '*\n\n' +
+  return '# Answer bank\n\nExported ' + Day.today() + ' from SPEAK. ' + list.length + ' answers.\n\n' + Object.keys(by).map(q =>
+    '## ' + q + '\n\n' + by[q].map(a => '*' + Day.short(a.date) + ' \u00b7 ' + mmss(a.dur || 0) + ' \u00b7 ' + srcLine(a) + '*\n\n' +
       (a.text || '(no words came back from the transcript)')).join('\n\n') + '\n').join('\n');
 }
 function copyText(text, what) {
@@ -1526,16 +1551,19 @@ function copyText(text, what) {
 }
 function drawBank(m) {
   const all = answers();
-  const top = card('FITNESS BANK', all.length + (all.length === 1 ? ' answer' : ' answers'));
+  const top = card('ANSWER BANK', all.length + (all.length === 1 ? ' answer' : ' answers'));
   const acts = el('div', 'acts');
-  const go = el('button', 'mb-btn go mb-press mb-tap', ICN('play') + '<span>ANSWER ONE</span>');
+  const go = el('button', 'mb-btn go mb-press mb-tap', ICN('play') + '<span>FITNESS</span>');
   go.onclick = () => openDrill(FT);
   acts.appendChild(go);
+  const go2 = el('button', 'mb-btn mb-press mb-tap', ICN('play') + '<span>OTHER</span>');
+  go2.onclick = () => openDrill(OT);
+  acts.appendChild(go2);
   if (all.length) {
     const ex = el('button', 'mb-btn mb-press mb-tap', 'EXPORT');
     ex.onclick = () => {
       const blob = new Blob([bankText(all)], { type: 'text/markdown' }), a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = 'fitness-bank-' + Day.today() + '.md';
+      a.href = URL.createObjectURL(blob); a.download = 'answer-bank-' + Day.today() + '.md';
       document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     };
     acts.appendChild(ex);
@@ -1563,14 +1591,15 @@ function drawBank(m) {
       c.appendChild(el('p', 'what', esc(qq)));
       by[qq].forEach(a => {
         const row = el('div', 'ans mb-plate');
-        row.appendChild(el('div', 'muted', esc(Day.label(a.date) + ' \u00b7 ' + mmss(a.dur || 0) + ' \u00b7 ' + (a.words || 0) + ' words \u00b7 ' + (SRC_NAME[a.src] || 'Question') + (a.bracket ? ' [' + a.bracket + ']' : ''))));
+        row.appendChild(el('div', 'muted', esc(Day.label(a.date) + ' \u00b7 ' + mmss(a.dur || 0) + ' \u00b7 ' + (a.words || 0) + ' words \u00b7 ' + srcLine(a))));
         row.appendChild(el('div', 'tx', a.text ? esc(a.text) : '<span class="muted">No words came back from the transcript.</span>'));
         const ra = el('div', 'acts');
         if (a.text) { const cp = el('button', 'mb-btn mb-press mb-tap', 'COPY'); cp.onclick = () => copyText(a.text, 'Answer'); ra.appendChild(cp); }
         const tk = takes().filter(x => x.key === a.key)[0];
         if (tk) { const op = el('button', 'mb-btn mb-press mb-tap', hasClip(tk) ? 'PLAY AND COACH' : 'OPEN TAKE'); op.onclick = () => showTake(tk); ra.appendChild(op); }
         const again = el('button', 'mb-btn mb-press mb-tap', 'ANSWER AGAIN');
-        again.onclick = () => startTake(FT, null, { kind: 'fitq', text: a.q, src: a.src, term: a.term, bracket: a.bracket, label: 'Again' });
+        const od = a.src === 'other' || a.src === 'otherbank' ? OT : FT;
+        again.onclick = () => startTake(od, null, { kind: od.kind, text: a.q, src: a.src, term: a.term, bracket: a.bracket, subj: a.subj, label: 'Again' });
         ra.appendChild(again);
         row.appendChild(ra);
         Mobile.hold(row, e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
@@ -1635,7 +1664,7 @@ function drawToday(m) {
     fc.appendChild(fl);
     m.appendChild(fc);
   }
-  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id && t.drill !== FT.id && !isFix(t.drill)).length + ' done');
+  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id && t.drill !== FT.id && t.drill !== OT.id && !isFix(t.drill)).length + ' done');
   const cs = curStage(), sg = STAGES[cs - 1];
   if (sg) {
     const all = DRILLS.filter(d => skillOf(d).stage === cs), left = stageLeft(cs).length;
@@ -1651,6 +1680,7 @@ function drawToday(m) {
   const ql = el('div', 'list');
   ql.appendChild(drillRow(TT));
   ql.appendChild(drillRow(FT));
+  ql.appendChild(drillRow(OT));
   qc.appendChild(ql);
   m.appendChild(qc);
 
@@ -2284,7 +2314,7 @@ function finishTake(m, secs) {
   take.key = saveTake(take); take.date = Day.today();
   if (d.bank && T.prompt && T.prompt.text) {
     const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
-    Rec.set('answer', take.date, take.key, { q: T.prompt.text, src: T.prompt.src || '', term: T.prompt.term || '', bracket: T.prompt.bracket || '',
+    Rec.set('answer', take.date, take.key, { q: T.prompt.text, src: T.prompt.src || '', term: T.prompt.term || '', bracket: T.prompt.bracket || '', subj: T.prompt.subj || (d === FT ? 'fitness' : ''),
       text: words, words: asrOn ? T.listener.out.words : 0, dur: Math.round(secs), at: take.at });
   }
   if (T.clipP) { take.clipP = T.clipP; T.clipP.then(b => saveClip(take, b)); }
@@ -2409,6 +2439,14 @@ function showTake(t, html) {
       }
       b.appendChild(rows);
       if (t.prompt) b.appendChild(el('p', 'muted', 'Prompt: ' + esc(t.prompt)));
+      /* the notes that came with a Todoist question (a Shoot card, or the
+         topic finder's answer notes), held back until he has answered */
+      if (t.p && t.p.notes) {
+        const cmp = el('details', 'cmp mb-plate');
+        cmp.innerHTML = '<summary class="mb-tap">COMPARE YOUR ANSWER</summary><div class="tx">' +
+          esc(t.p.notes).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>') + '</div>';
+        b.appendChild(cmp);
+      }
       const before = d && t.prompt ? takes().filter(x => x.drill === t.drill && x.prompt === t.prompt && x.key !== t.key && (x.at || 0) < (t.at || 0)).pop() : null;
       if (before) b.appendChild(el('p', 'muted', 'Same prompt, ' + esc(Day.label(before.date)) + ': ' + esc(numsOf(d, before)) + '.'));
       if (t.tx || html) {
@@ -2418,7 +2456,7 @@ function showTake(t, html) {
         b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
       } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
     },
-    actions: d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { if (d === FT && t.prompt) fitSkip[String(t.prompt).toLowerCase()] = 1; startTake(d); } },
+    actions: d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { if ((d === FT || d === OT) && t.prompt) fitSkip[String(t.prompt).toLowerCase()] = 1; startTake(d); } },
       { label: 'SAME PROMPT', kind: 'go', fn: () => { startTake(d, null, promptOf(t, d)); } }] : [{ label: 'CLOSE' }],
   });
 }
@@ -2454,8 +2492,8 @@ function drawTargets(p) {
   p.appendChild(UI.row('First EYES goal, %', 'for finding the lens', numField(t.eyeStart, n => setTgt('eyeStart', n))));
   p.appendChild(UI.row('Crispness, % of warm-up', 'the CLEAR goal', numField(t.crispPct, n => setTgt('crispPct', n))));
   p.appendChild(UI.row('Pitch spread, semitones', 'the Voice moves goal', numField(t.pitch, n => setTgt('pitch', n))));
-  p.appendChild(UI.row('Table topic, shortest, seconds', 'the green light', numField(t.ttMin, n => setTgt('ttMin', n))));
-  p.appendChild(UI.row('Table topic, longest, seconds', 'the red light', numField(t.ttMax, n => setTgt('ttMax', n))));
+  p.appendChild(UI.row('Speak practice and topics, shortest, seconds', 'the green light', numField(t.ttMin, n => setTgt('ttMin', n))));
+  p.appendChild(UI.row('Speak practice and topics, longest, seconds', 'the red light', numField(t.ttMax, n => setTgt('ttMax', n))));
   const acts = el('div', 'acts');
   const reset = el('button', 'mb-btn mb-press mb-tap', 'Reset targets');
   reset.onclick = () => { Rec.setting(APP.id, 'tgt', {}); p.innerHTML = ''; drawTargets(p); };

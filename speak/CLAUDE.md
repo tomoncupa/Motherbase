@@ -387,6 +387,38 @@ errors, no sideways scroll; review 197/197. The headless recogniser cannot
 reach Google, so no real words were transcribed; real words only on his
 devices.
 
+## SPEAK PRACTICE, OTHER TOPIC and compare your answer, added 2026-11-16 (SPEAK 1.0.14)
+
+Asked by Tom in the topic finder's session and passed on here:
+
+- **TABLE TOPIC is now SPEAK PRACTICE** (*"because I also wanted to expand
+  in scope"*): `TOPIC_SKILL.name`, `TT.name`, the SPEAK.exe widget button
+  (`#widGo`) and the Settings targets lines. The id stays `topics`, so old
+  takes keep their drill. `desktop/SpeakApp.cs` still says TABLE TOPIC in a
+  comment only.
+- **OTHER TOPIC** (`OT`, drill and skill `other`, `OTHER_SKILL` chart slot 5),
+  under FITNESS TOPIC in QUICK PRACTICE: FT with its own prompts
+  (`otherPrompt`). First an open Todoist task `Other: <question>` (the daily
+  topic finder, scheduled task `fitness-topic-finder-daily` at 1pm, adds one
+  a day, rotating productivity, philosophy and behaviour change), its subject
+  read off the task's `**Found:** <date>, topic finder, <subject> (` line
+  (`subjOf`); then `OTHER_QS`, 45 built-in questions, 15 per subject. Answers
+  go to the same bank with `subj`; FITNESS TOPIC answers carry
+  `subj: 'fitness'`. The bank is now ANSWER BANK, with FITNESS and OTHER
+  buttons, the subject on each answer's line, and exports as
+  `answer-bank-<date>.md`.
+- **COMPARE YOUR ANSWER**: a prompt that came from a Todoist task keeps the
+  task's description (`td.desc`, 6,000 characters at most) as `p.notes` on the
+  take. That is the Shoot card (IDEA, OPEN, LAST) or the topic finder's Answer
+  notes, What people say and Check. The take's sheet shows it folded under
+  COMPARE YOUR ANSWER, and never during the take, so he never reads an answer
+  off the screen.
+
+Watched 2026-11-16 in headless Chromium at 390 with a fake microphone and a
+seeded `Other:` task: the subject read as productivity, the notes stayed off
+the take screen and opened after it, the answer saved with `src: 'other'` and
+its subject, BANK showed it. Review 197/197.
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync
