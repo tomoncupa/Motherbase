@@ -188,6 +188,41 @@ Toastmasters International's Table Topics: an impromptu answer of one to two min
 Not checked here: the exact effect sizes in either paper. Labelled from
 memory of the abstracts, not re-read on 2026-11-16.
 
+## 12. The program: how orators were made, added 2026-11-16
+
+Tom: *"the purpose of Speak is to turn me into a great orator"*, then
+*"Everything, the goal is a program designed to create a master speaker."*
+
+- **The order of the stages** follows the classical canons (Cicero, *De
+  Oratore*; Quintilian, *Institutio Oratoria*): invention, arrangement,
+  style, memory, delivery. Schools started the voice and delivery early and
+  drilled them throughout; SPEAK puts the voice first (VOICE), then fluency,
+  arrangement (MESSAGE), style (CRAFT), and memory with delivery (THE TALK).
+  Graded exercises from simple to whole speeches are the *progymnasmata*.
+- **Arrangement.** The throughline, one idea per talk, and writing the talk out
+  then learning it until it stops sounding learned: Chris Anderson, *TED Talks:
+  The Official TED Guide to Public Speaking* (2016). Point, reason, example,
+  point is a media-training and Toastmasters frame; problem, solution, result
+  is the case-study frame. The callback is speechwriting practice, no study.
+- **Story.** The Moth's rules: true, happened to you, something changes, no
+  notes, five minutes with a one-minute grace at slams (themoth.org).
+- **Devices.** Tricolon, anaphora, antithesis and the pause are the classical
+  figures; the examples are Lincoln 1863, King 1963, Kennedy 1961. Churchill
+  laying out his speeches in broken lines with pauses marked is documented in
+  his speech notes. The transcript has no punctuation, so a list of three
+  cannot be found and that step counts nothing; contrast and repeated
+  openings are text patterns, labelled as estimates.
+- **Rehearsal counts.** Jill Bolte Taylor's ~200 rehearsals is reported by
+  Carmine Gallo, *Talk Like TED* (2014), not by TED. Treat as anecdote.
+- **Pen in the teeth.** A voice and acting coaching drill. No controlled study
+  was found; it is in as a drill whose second half is measured, nothing more.
+- **Review.** Earlier stages come back once a week at most because skills not
+  practised fade (the spacing effect, Cepeda et al. 2006), and deliberate
+  practice keeps a few skills in focus at a time (Ericsson et al. 1993).
+
+Set here with no source: every time window in SHAPE and STORY except the
+slam, the 80, 85 and 90% script thresholds, and the 7-day review gap.
+
 ## Confidence
 
 High on the figures confirmed by two or more independent extracts: Bortfeld
