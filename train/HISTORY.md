@@ -1575,6 +1575,6 @@ the set it shows. Edit Setup saves on ADD or Enter, a removal saves with
 `UI.undo`, one DONE button, TOGGLE first.
 
 Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro, real taps on
-the line, the steppers, SAVE, UPDATE, the comment box and the dialog: 20 of
-20, no errors, no sideways scroll, every control on the line 44px. Not seen on
+the line, the steppers, SAVE, UPDATE, the comment box and the dialog: 19 of
+19, no errors, no sideways scroll, every control on the line 44px. Not seen on
 his phone or his real log.
