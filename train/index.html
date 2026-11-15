@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.86, 2026-11-16">
+<meta name="mb-version" content="1.0.87, 2026-11-16">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -4426,10 +4426,18 @@ function drawTrack(m) {
           if (d) d.volUp = TRAIN.volUp(s, then[n - 1], kind, d);
         }
       }
-      /* setup only when it changed from the set before (Tom, 2026-10-18) */
-      var su = JSON.stringify(s.su || {});
-      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d, su === prevSu));
-      prevSu = su;
+      /* Setup says only what CHANGED from the set before, never the parts
+         that held (Tom, 2026-11-16: "I don't want the setup settings to
+         repeat per set ... unless anything changes, then it just holds on
+         from the last set", so the room goes to comments). The day's first
+         set says its whole setup, so a day reads on its own. A suggestion
+         not taken yet says nothing and is not "the set before". */
+      var suSaid = '';
+      if (!TRAIN.pending(s)) {
+        suSaid = setupDiff(prevSu, s.su, exId);
+        prevSu = s.su || {};
+      }
+      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d, suSaid));
     });
     /* Hold a set and drag it to put it in another place; let go without
        moving and its menu opens, as the hold always did. The numbers follow
@@ -4651,7 +4659,7 @@ function fitNotes(box) {
     }
   });
 }
-function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
+function trainingSetRow(s, n, date, showChk, delta, suSaid) {
   var row = UI.el('div', 'tset' + (TRAIN.sel === s.key ? ' sel' : '') + (s.warm ? ' warm' : '') +
     (TRAIN.pending(s) ? ' plan' : ''));
   row.dataset.key = s.key;
@@ -4669,7 +4677,7 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
   /* The comment and the setup, in the gap between the number and the
      weight. Tom, 2026-10-18: "Put comments and setup in this blank space,
      smaller but readable font". Never cut off: see fitNotes. */
-  var said = [String(s.note || '').trim(), sameSetup ? '' : setupText(s.su, s.ex)].filter(Boolean).join(' · ');
+  var said = [String(s.note || '').trim(), suSaid || ''].filter(Boolean).join(' · ');
   var tn = UI.el('span', 'tnote');
   tn.textContent = said;
   if (said) {
@@ -4724,7 +4732,12 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
     chk.setAttribute('aria-label', s.done ? 'Mark not done' : 'Mark done');
     chk.onclick = function (e) {
       e.stopPropagation();
-      TRAIN.patchSet(s.key, date, { done: s.done ? 0 : 1 });
+      var tick = { done: s.done ? 0 : 1 };
+      if (tick.done && TRAIN.pending(s) && !s.su && ((TRAIN.exercises()[s.ex] || {}).setup || []).length) {
+        var csu = TRAIN.carriedSetup(s.ex, date);
+        if (csu) tick.su = csu;
+      }
+      TRAIN.patchSet(s.key, date, tick);
       Mobile.feedback(s.done ? 'untick' : 'tick');
       if (!s.done) afterSave(s.ex, date, true);
       if (TRAIN.pendingJump) {
@@ -11987,6 +12000,32 @@ function cleanSetup(exId) {
   });
   return any ? out : null;
 }
+/* What changed between two sets' setup, in words: "Straps" put on, "Straps
+   off", "Seat 5", "Seat off" for a setting emptied. With no set before
+   (`prev` undefined) it is the whole setup. Nothing that held is said. */
+function setupDiff(prev, su, exId) {
+  if (prev === undefined) return setupText(su, exId);
+  var defs = ((TRAIN.exercises()[exId] || {}).setup) || [];
+  var val = function (o, id) { var v = (o || {})[id]; return v == null || v === '' || v === 0 ? '' : String(v); };
+  return defs.map(function (d) {
+    var a = val(prev, d.id), b = val(su, d.id);
+    if (a === b) return '';
+    if (d.kind === 'toggle') return b ? d.name : d.name + ' off';
+    return b ? d.name + ' ' + b : d.name + ' off';
+  }).filter(Boolean).join(' · ');
+}
+/* A suggestion ticked done is a set done with the setup that carried, so it
+   records it, exactly as UPDATE on it would (1.0.87). Until then a ticked
+   suggestion stored none, which reads as everything off: the next set lost
+   its straps and the row would have said "Straps off". */
+TRAIN.carriedSetup = function (exId, date) {
+  if (TRAIN.suFor === exId && !TRAIN.suFromSel) return cleanSetup(exId);
+  var keep = TRAIN.draftSU, keepFor = TRAIN.suFor;
+  TRAIN.suFor = exId; TRAIN.draftSU = TRAIN.lastSetup(exId, date);
+  var out = cleanSetup(exId);
+  TRAIN.draftSU = keep; TRAIN.suFor = keepFor;
+  return out;
+};
 function setupText(su, exId) {
   if (!su) return '';
   var defs = ((TRAIN.exercises()[exId] || {}).setup) || [];

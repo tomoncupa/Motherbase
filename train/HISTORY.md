@@ -1603,3 +1603,30 @@ Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro, real taps:
 WEIGHT label being first, the setting's name focusing its box, and the note
 words opening the comment box without loading the set). Not seen on his
 phone or his real log.
+
+## Setup on a row says only what changed (1.0.87, 2026-11-16)
+
+Tom: "I don't want the setup settings to repeat per set. The understanding is
+unless anything changes, then it just holds on from the last set. Because
+obviously, otherwise, it would just take up too much space that could be put
+towards set comments instead."
+
+Until now a row showed its WHOLE setup whenever any part changed, so taking
+straps off on set 3 printed "Seat 4" again. `setupDiff` now says only the
+parts that moved: "Straps", "Straps off", "Seat 5", "Seat off". The first set
+of the day says its whole setup so a day reads on its own (an assumption,
+not asked). A suggestion not yet taken says nothing and does not count as
+the set before.
+
+Found on the way, from 1.0.84: ticking a suggestion (LOG ALL, a routine,
+Copy Previous Sets) stored no `su`, and 1.0.84's carry reads no `su` as
+everything off, so the NEXT set lost its straps; the new row would also have
+said "Straps off" on it. The tick now records the carried setup
+(`TRAIN.carriedSetup`: the setup line when it is showing the carry, else
+`lastSetup`), the same as UPDATE on a suggestion already did.
+
+Tested in headless Chromium at 390 x 844: 7 of 7 new checks (the row words
+for six sets, a ticked suggestion recording straps and saying nothing, the
+carry kept, all off saying "Straps off · Seat off", a suggestion ticked after
+all off storing none), and the 23 from 1.0.84 to 1.0.86. Not seen on his
+phone.

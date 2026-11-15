@@ -309,7 +309,14 @@ straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and
   one the line shows.
 - **Edit Setup saves as it goes**: ADD or Enter saves a field, a removal saves
   with an UNDO, TOGGLE is the default. A set keeps what it recorded when a
-  field is removed. The row under each set shows setup only when it changed.
+  field is removed.
+- **A set row says only what CHANGED in setup** (`setupDiff`, 1.0.87; Tom,
+  2026-11-16: "unless anything changes, then it just holds on from the last
+  set", so the room goes to comments): "Straps", "Straps off", "Seat 5",
+  "Seat off". The day's first set says its whole setup. A suggestion not
+  taken says nothing and is not the set before.
+- **A suggestion ticked done records the carried setup** (`TRAIN.carriedSetup`),
+  as UPDATE on it does. A set with no `su` reads as everything off.
 - **A set's comment and setup words open its comment box** on a tap (Tom,
   2026-11-16: "edit the text by clicking on the text, not just the text
   box"), as the bubble does; the rest of the row still loads the set, and a
