@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.30, 2026-11-16">
+<meta name="mb-version" content="1.0.31, 2026-11-16">
 <title>COACH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -355,7 +355,8 @@ const opt = (k, d) => { const v = Rec.setting(APP.id, k); return v == null ? d :
 const unit = () => opt('unit', 'kg');
 const KG_LB = 2.20462;
 const show = kg => kg == null || kg === '' ? '' : String(Math.round((unit() === 'lb' ? kg * KG_LB : kg) * 10) / 10);
-const toKg = v => { const n = parseFloat(v); if (!(n >= 0)) return null; return Math.round((unit() === 'lb' ? n / KG_LB : n) * 1000) / 1000; };
+/* a weight may be below zero, -20 on a pull-up being 20 of help (TRAIN 1.0.85) */
+const toKg = v => { const n = parseFloat(v); if (!isFinite(n)) return null; return Math.round((unit() === 'lb' ? n / KG_LB : n) * 1000) / 1000; };
 const e1 = (kg, r) => kg > 0 && r > 0 && r <= 12 ? kg * (1 + r / 30) : 0;
 
 /* ── clients ── */
@@ -370,7 +371,16 @@ const own = (type, pid) => Rec.all(type).filter(r => String(r.key).indexOf(pid +
    show in the week, the sessions, strength, the range, or bill. */
 const setCounts = s => !s || !s.plan || !!s.done;
 const setsOf = pid => own('cset', pid).filter(r => setCounts(r.payload));
-const exOf = pid => { const m = {}; own('cex', pid).forEach(r => { m[r.key.slice(pid.length + 1)] = r.payload; }); return m; };
+/* `below`: a lift with any set below zero is read against bodyweight, as
+   TRAIN.goesBelow does (TRAIN 1.0.85). A copy, never the store's payload. */
+const exOf = pid => {
+  const m = {}, neg = {};
+  own('cset', pid).forEach(r => { if (r.payload && (+r.payload.kg || 0) < 0) neg[r.payload.ex] = 1; });
+  own('cex', pid).forEach(r => { const id = r.key.slice(pid.length + 1);
+    m[id] = neg[id] ? Object.assign({}, r.payload, { below: 1 }) : r.payload; });
+  return m;
+};
+const goesBelow = x => isAssisted(x) || !!(x && x.below);
 /* An assisted lift (TRAIN 1.0.83): the weight logged is the machine's help,
    so less is stronger. TRAIN's rule: the name says "assist" unless the
    exercise's own switch (`assist` 1 or 0) says otherwise. What the body
@@ -392,16 +402,18 @@ const rangeSets = pid => {
   const ex = exOf(pid), L = bwList(pid);
   return setsOf(pid).map(r => {
     const s = r.payload || {};
-    if (!isAssisted(ex[s.ex])) return r;
+    if (!goesBelow(ex[s.ex])) return r;
     return Object.assign({}, r, { payload: Object.assign({}, s, { kg: loadOf(ex[s.ex], s, r.date, L) || 0 }) });
   });
 };
-/* the weight the body moved; null for an assisted set with no bodyweight */
+/* the weight the body moved; null for an assisted set, or one on a lift
+   that goes below zero, with no bodyweight. Below zero: bodyweight plus the
+   number, so -20 is bodyweight less 20 (TRAIN 1.0.85). */
 const loadOf = (x, s, date, L) => {
-  const kg = +s.kg || 0;
-  if (!isAssisted(x)) return kg;
+  const kg = +s.kg || 0, a = isAssisted(x);
+  if (!a && !(x && x.below)) return kg;
   const bw = bwOn(L, date);
-  return bw ? Math.max(0, bw - kg) : null;
+  return bw ? Math.max(0, a ? bw - kg : bw + kg) : null;
 };
 
 /* ── a client's check-ins ──
@@ -1039,7 +1051,7 @@ function sessionsOf(pid) {
 function liftsOf(pid) {
   const ex = exOf(pid), by = {}, bwL = bwList(pid);
   setsOf(pid).forEach(r => {
-    const s = r.payload; if (warmSet(s) || !(s.kg > 0) || !(s.r > 0)) return;
+    const s = r.payload; if (warmSet(s) || (!(+s.kg) && !goesBelow(ex[s.ex])) || !(s.r > 0)) return;
     const x = by[s.ex] || (by[s.ex] = { name: (ex[s.ex] || {}).name || 'Exercise', best: 0, bs: null, days: {}, last: '' });
     x.days[r.date] = 1;
     if (r.date > x.last) x.last = r.date;
@@ -1316,11 +1328,11 @@ function drawWeek(col, pid, ss) {
    they are out of the volume. */
 function setText(s) {
   const kg = +s.kg || 0, r = +s.r || 0;
-  if (kg > 0 && r > 0) return show(kg) + '×' + r;
+  if (kg !== 0 && r > 0) return show(kg) + '×' + r;
   if (r > 0) return r + ' reps';
   if (s.dist > 0) return (Math.round(s.dist * 100) / 100) + ' km';
   if (s.dur > 0) return Math.round(s.dur / 60) + ' min';
-  return kg > 0 ? show(kg) + ' ' + unit() : '—';
+  return kg !== 0 ? show(kg) + ' ' + unit() : '—';
 }
 function drawRecent(col, pid, ss) {
   const card = document.createElement('div'); card.className = 'card';
