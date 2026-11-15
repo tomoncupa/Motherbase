@@ -634,3 +634,7 @@ Tom chose 11 rows over shorter rows ("A"): his screen is 12 columns at 1920, 24 
 ## 2026-11-09, HOME 1.0.109: CONSISTENCY counts meals not logged
 
 Tom: "Tracking number of tracked Vs untracked meals might help". He picked a count on STATUS's Food tab and this tile to show it. `sums` adds `unmeals`, every day row's count in the stretch (a day flagged not fully tracked before the count existed is 1). MEALS TRACKED reads "3.7 of 4.0 a day", then "93% tracked" with the change in that share against the stretch before. [TESTED] demo in headless Chromium, 2 meals not logged yesterday: 26 tracked, 2 not, "3.7 of 4.0 a day 93% tracked, down 7"; review 212/212 at 390. Not seen on his board.
+
+## 2026-11-11, HOME 1.0.111: LOG WEEK is typed into
+
+Tom: "Yes, make it editable". Each summary on LOG WEEK, a day's (`day.note`) and a week's (`recap` keyed `week`), is a box on the card. It saves the way LOG's summary dialog does (trimmed, merged into the row, the row deleted when empty), half a second after the last key and on leaving the box; Enter saves and leaves, Shift+Enter is a new line. The box grows with the text. The day or week name is the button that opens LOG there. [TESTED] demo in Chrome at 1918 wide, real clicks and keys: today and a two-line week saved and shown, a week cleared to no row, LOG's store reading the same row, the name opening LOG; review 212/212 in WebKit at 390.

@@ -37,7 +37,7 @@ see the root brief on many writers. Every edit merges into the row as it is
 | Type | Key | Payload |
 |---|---|---|
 | `excat` | category id, the slug of its name | `{name, slot, ord}` — a muscle group. `slot` is a theme colour slot, never a hex, and there are only twelve |
-| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar, wu}` |
+| `exercise` | exercise id | `{name, cat, kind, inc, rest, unit, fav, note, graph, also, gdef, setup, bar, wu, assist}` |
 | `set` | timestamp id, or `fn<id>` from FitNotes | `{ex, kg, r, u, done, plan, pr, prf, dist, dur, note, ord, warm, su}` — **one row per set** |
 | `session` | `''` | `{start, end, note, from, order, name, vs, tags, energy, pump, quality, pday}` — the day's timer, comment, the day it was copied from, the exercise order he set, the session's name, a day he picked to compare it with, how it went (context tags, three 1 to 5 ratings), and the routine day it was started from |
 | `phase` | phase id | `{name, start, end, program}` — a training block. `end` is optional; `program` is the routine or FORGE program its days come from (1.0.71) |
@@ -150,6 +150,24 @@ An imported exercise of any other type is read off what was logged against it
   split set's strength is stated it says so: "10 5 (counts as 14)".
 - **Records start again with each training block**; the stored `pr` is the
   all-time rule, block records are worked out when shown.
+- **An assisted lift reads the right way up** (1.0.83, Tom 2026-11-16: "more
+  weight there means more assist"). The weight is the machine's help, so
+  less is stronger. `TRAIN.isAssisted`: the name says "assist", unless
+  Edit Exercise's Assisted switch wrote `exercise.assist` 1 or 0. **Every
+  reader of weight goes through one of three:** `TRAIN.wk(s)` (bigger is
+  stronger, the help negated; every record rule, the five kinds, session
+  records, rep maxes, goals, the session card's top set), `TRAIN.load(s)`
+  (what the body moved: bodyweight minus help, null with no bodyweight),
+  and `TRAIN.e1rmS` / `TRAIN.volS`, which read the load. **Volume: bodyweight
+  minus help when a weigh-in exists, else left out**; no estimated 1RM
+  without one, never a guess. Bodyweight is STATUS's `ev` weight for Tom,
+  CHECK IN's `cval` `<pid>|weight` on a client, the weigh-in on or before
+  the day, else the first after. Next weight steps the help DOWN when the
+  band is beaten; the set arrow says "+20 lb help" and points down; GRAPH
+  shows Least Help, and hides 1RM and volume with no bodyweight. A new
+  reader of `s.kg` as strength uses these, never `s.kg` itself. `prRule` 4
+  recomputed every record once. Not inverted: Add Warmups and the Set
+  Calculator. (HISTORY.md: Assisted lifts (1.0.83, 2026-11-16))
 - **Five kinds, five symbols** (`TRAIN.prKinds`, `TRAIN.prMarks`; icons
   `pr-life` trophy, `pr-block` medal, `pr-weight` barbell, `pr-reps` crown,
   `pr-vol` bars, in `shared/icons.js`). Weight, reps and volume are what the
@@ -255,7 +273,7 @@ a block exists.
 
 An exercise carries the setup it needs, named by him, each a **toggle** (Straps)
 or a **setting** (Seat height, Back pad). **Each set records its own**, because
-straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and three setup bugs (1.0.83, 2026-11-15))
+straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and three setup bugs (1.0.84, 2026-11-16))
 
 - **One line above the steppers** (`setupLine`), only on an exercise that has
   setup: chips for toggles, small boxes for settings, a pencil for the list.
