@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.33, 2026-11-16">
+<meta name="mb-version" content="1.0.34, 2026-11-16">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -304,6 +304,10 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .dday{flex:none;font-size:var(--f-2);color:var(--text-2)}
 .dbar{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-3)}
 .dbar .go{margin-left:0}
+.aiask{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-3);padding-top:var(--s-3);
+  border-top:var(--border-width) solid var(--border)}
+.aiask .hint{flex-basis:100%;font-size:var(--f-1);color:var(--text-muted)}
+.aiprev{margin-top:var(--s-2)}
 
 .aimcard .aimtx{font-family:var(--font-display);font-size:var(--f-4)}
 .aimcard .why{color:var(--text-2)}
@@ -1020,6 +1024,7 @@ function drawDraft(list, force) {
   if (!items.length) {
     bx.appendChild(el('p', 'why', openAims().length ? 'Nothing to change this week.' : 'No goals to plan the week around.'));
     if (!openAims().length) { const g = el('button', 'addg', ico('goal') + '<span>Set a goal</span>'); g.type = 'button'; g.onclick = () => go('goals'); bx.appendChild(g); }
+    bx.appendChild(aiRow(r));
     box.appendChild(bx); list.appendChild(box); return;
   }
   bx.appendChild(el('p', 'sum', esc(draftSummary(items))));
@@ -1079,8 +1084,126 @@ function drawDraft(list, force) {
   count();
   bar.appendChild(skip); bar.appendChild(keepBtn);
   bx.appendChild(bar);
+  bx.appendChild(aiRow(r));
   box.appendChild(bx);
   list.appendChild(box);
+}
+/* ── plan the week with your own Claude or ChatGPT ──
+   Tom, 2026-11-16: "give people an option to log into their Claude or
+   chatgpt". Neither lets another app sign in to someone's subscription, so
+   QUESTS copies a prompt, opens Claude or ChatGPT where they are already
+   signed in, and reads the reply pasted back: one line a task, a day, the
+   task, and the goal it serves. No key, no account here, nothing sent by
+   QUESTS itself. Main Menu.exe's PLAN WITH CLAUDE does the same in one press. */
+const AI_SITES = { claude: ['Claude', 'https://claude.ai/new'], chatgpt: ['ChatGPT', 'https://chatgpt.com/'] };
+/* a task's five-letter name in the prompt: a hash of its key, so two keys ending alike never share one */
+const shortId = k => { let h = 5381; for (const c of String(k)) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0; return ('0000' + h.toString(36)).slice(-5); };
+function aiPrompt(r) {
+  const t = T(), open = quests().filter(x => !x.done), end = r.days[r.days.length - 1];
+  const goals = openAims().map(a => {
+    const h = aimHealth(a), nx = aimNext(a);
+    return '- ' + a.text + ' (^' + a.tag + '): ' + (h && h.v ? HEALTH[h.v] : 'new') + (h && h.line ? '; ' + h.line : '') +
+      (nx.kind === 'next' ? '; next: ' + nx.x.text + ' on ' + dueOf(nx.x) : '');
+  });
+  const pick = open.filter(x => { const d = dueOf(x); return (d && d <= end) || (!d && (x.pri || aimOf(x))); })
+    .sort((a, b) => String(dueOf(a) || '9').localeCompare(String(dueOf(b) || '9')) || sortQ(a, b)).slice(0, 40);
+  const tasks = pick.map(x => '- [' + shortId(x.key) + '] ' + x.text + ' (' + (dueOf(x) ? 'due ' + dueOf(x) : 'no date') +
+    (x.pri ? ', P' + x.pri : '') + (aimName(aimOf(x)) ? ', ^' + aimName(aimOf(x)) : '') + ')');
+  return ['Plan my week in my todo app, ' + r.s + ' to ' + end + '. Today is ' + t + ' (' + DAYNAME[Day.dow(t)] + ').',
+    '', 'My goals:', goals.length ? goals.join('\n') : '- none set', '',
+    'Open tasks:', tasks.length ? tasks.join('\n') : '- none', '',
+    'Keep it to 3 tasks a day at most. Move late tasks into the week. A goal with nothing this week gets one small next step.',
+    'Reply with ONLY lines like these, nothing else:',
+    'Tue | [' + (pick[0] ? shortId(pick[0].key) : 'ab12c') + '] ' + (pick[0] ? pick[0].text : 'Pay the electricity bill'),
+    'Wed | Easy 5k run | ^' + (openAims()[0] ? openAims()[0].tag : 'goal-name'),
+    'Use a day name (Mon to Sun) or a date (YYYY-MM-DD). Start an existing task with its [id]. End a line with ^ and the goal name when it serves one.'].join('\n');
+}
+/* One line of the reply: {day, x (an open task) or text, aim}; null if it says nothing usable. */
+function aiLine(ln, r) {
+  const parts = ln.replace(/^[-*•\s]+/, '').split('|').map(p => p.trim());
+  if (parts.length < 2) return null;
+  let day = null;
+  const d0 = parts[0].toLowerCase();
+  if (/^\d{4}-\d\d-\d\d$/.test(d0)) day = d0;
+  else { const w = DOWN[d0.slice(0, 3)]; if (w != null) day = r.days.find(d => Day.dow(d) === w) || null; }
+  if (!day) return null;
+  let text = parts[1], x = null, aim = '';
+  const id = /^\[([a-z0-9]+)\]\s*/i.exec(text);
+  if (id) { x = quests().find(q => !q.done && shortId(q.key) === id[1].toLowerCase()) || null; text = text.slice(id[0].length).trim(); }
+  const tagPart = (parts[2] || '') + ' ' + text, tm = /\^([\p{L}\p{N}-]+)/u.exec(tagPart);
+  if (tm) { const a = aimByTag(slug(tm[1])); if (a) aim = a.key; text = text.replace(/\s*\^[\p{L}\p{N}-]+/u, '').trim(); }
+  if (!x && !text) return null;
+  return { day: day, x: x, text: text, aim: aim };
+}
+function aiRow(r) {
+  const row = el('div', 'aiask');
+  row.appendChild(el('span', 'hint', 'Plan it with your own AI'));
+  Object.keys(AI_SITES).forEach(k => {
+    const b = el('button', 'mb-btn mb-press mb-tap flat', esc(AI_SITES[k][0].toUpperCase()));
+    b.type = 'button';
+    b.onclick = () => {
+      const text = aiPrompt(r);
+      /* both inside the tap: a phone allows the copy and the new tab only then */
+      const copied = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject();
+      window.open(AI_SITES[k][1], '_blank', 'noopener');
+      copied.then(() => UI.toast('Copied. Paste it into ' + AI_SITES[k][0] + ', then bring the reply back here.'),
+        () => aiShowPrompt(text));
+    };
+    row.appendChild(b);
+  });
+  const paste = el('button', 'mb-btn mb-press mb-tap flat', 'PASTE THE PLAN');
+  paste.type = 'button';
+  paste.onclick = () => aiPaste(r);
+  row.appendChild(paste);
+  return row;
+}
+/* where the copy is refused: the prompt in a box to copy by hand */
+function aiShowPrompt(text) {
+  UI.dialog({ title: 'FOR YOUR AI', width: 560, body: b => {
+    b.appendChild(el('p', 'oldnote', 'Copy this into Claude or ChatGPT.'));
+    const ta = UI.field('note', { value: text, rows: 10 });
+    ta.setAttribute('data-keep-caret', '');
+    b.appendChild(ta);
+    setTimeout(() => { ta.focus(); ta.select(); }, 0);
+  }, actions: [{ label: 'DONE', kind: 'go' }] });
+}
+function aiPaste(r) {
+  let lines = [];
+  UI.dialog({ title: 'PASTE THE PLAN', width: 560, body: b => {
+    const ta = UI.field('note', { placeholder: 'Tue | [ab12c] Pay the electricity bill', rows: 8 });
+    ta.setAttribute('aria-label', 'The plan your AI wrote');
+    const out = el('div', 'aiprev');
+    const read = () => {
+      lines = String(ta.value).split(/\r?\n/).map(l => aiLine(l, r)).filter(Boolean);
+      out.innerHTML = '';
+      lines.forEach(l => out.appendChild(el('p', 'oldnote', esc(shortDay(l.day) + ': ' + (l.x ? l.x.text + ' (moved)' : l.text) +
+        (l.aim ? ' ^' + aimName(l.aim) : '')))));
+      if (ta.value.trim() && !lines.length) out.appendChild(el('p', 'oldnote', 'No lines in the form Day | task.'));
+    };
+    ta.oninput = read;
+    b.appendChild(ta); b.appendChild(out);
+    UI.focusSoon(ta);
+  }, actions: [{ label: 'CANCEL' }, { label: 'ADD THEM', kind: 'go', fn: () => {
+    if (!lines.length) { UI.toast('Paste the reply first', { bad: true }); return false; }
+    const undo = [];
+    lines.forEach(l => {
+      if (l.x) {
+        const keep = Rec.get('note', l.x.date, l.x.key);
+        if (!keep) return;
+        undo.push({ date: l.x.date, key: l.x.key, keep: keep });
+        saveRow(l.x, l.aim && !aimOf(l.x) ? { due: l.day, aim: l.aim } : { due: l.day });
+      } else {
+        const before = new Set(Rec.all('note', { date: T() }).map(n => n.key));
+        const pq = parseQuest(l.text);
+        addQuest(Object.assign({}, pq, { text: pq.text || l.text, due: l.day, aim: l.aim || pq.aim || '' }));
+        Rec.all('note', { date: T() }).filter(n => !before.has(n.key)).forEach(n => undo.push({ date: T(), key: n.key, keep: null }));
+      }
+    });
+    Mobile.feedback('success');
+    UI.undo('Added ' + lines.length + ' from your plan', () => {
+      undo.forEach(u => { if (u.keep) Rec.set('note', u.date, u.key, u.keep); else Rec.del('note', u.date, u.key); publishNotes(u.date); });
+    });
+  } }] });
 }
 function applyDraft(r, items) {
   if (!items.length) return;
