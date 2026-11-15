@@ -711,3 +711,10 @@ Tom, answering the sweep: "If I chose a setting manually, the zooming in can't c
 
 Built as specified, in 1.0.119. `ZOOM_DAYS` names the five chart cards that follow the zoom (WEIGHT, the measure card, SLEEP, TRAIN volume, HALF-LIFE); `daysMenu` draws the Time frame list in both the card's menu and + WIDGET, with "Follow the zoom" first on those five. `zoomDays` never takes a pick under a week up to a week, so HALF-LIFE's 3 days zoomed in stays 3. Found on the way: `cutCards` took the body's bottom padding off at 100% while the body was drawn in its zoom, so a chart filling a card zoomed out counted as a few pixels over and was left off whole (HALF-LIFE's chart vanished at 50%); the padding is now scaled by the zoom.
 [TESTED] demo in headless Chromium at 1918, by clicking: WEIGHT followed the zoom (90 to 120 days at 75%), picking 30 days locked it through a further zoom, "Follow the zoom" gave 60 at 50%; the ticks move from Follow the zoom to the pick; TRAIN volume 8/16/4 weeks and HALF-LIFE 3/6/12/3 days at 100/50/25/200%, its chart drawn at every zoom. [UNTESTED] his board.
+
+## 2026-11-16, HOME 1.0.120: NEW CHAPTER
+
+Tom: "a reset widget that's just a reset button that removes itself". One
+button that opens QUESTS's New chapter. The card stamps `at` when added
+(`put`, only for this card); once a chapter starts after that, its draw takes
+the card off the layout, with Undo. Tested in headless Chromium.

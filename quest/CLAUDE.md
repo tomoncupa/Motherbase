@@ -406,3 +406,27 @@ while his own call is set. A softer word for Off track (A) and the last win
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
+
+## New chapter (Tom, 2026-11-16; 1.0.36)
+
+"A much more comprehensive restart feature", "blocks, similar to TRAIN", each
+app its own reset point with overlap, called new chapter; 3A plus "a mass set
+date one by one mode"; 4A. The rule is `shared/chapter.js`.
+- **Where:** Goals screen, top, New chapter beside the current chapter's name;
+  the home screen's NEW CHAPTER card (`show: 'chapter'`); and on Today one
+  line, Start a new chapter, once nothing has been written or ticked for 14
+  days (`QUIET`, machine-written todos left out) and no chapter began since.
+- **The sheet:** a name (optional); Starts (Today or a day); Each app counts
+  from (The start, Last 8 weeks, Everything, or a day) for every app in
+  `Chapter.APPS`; each open goal adjusted one by one (its words, Keep or Drop
+  it, its date, its number a week or its target); and the overdue tasks: All
+  to the Inbox (default), One by one, or Leave them. One Undo takes it all back.
+- **Goals count from QUESTS's chapter day** (`Goals` `cutOf`): a week wholly
+  before it is blank, a done task before it is no last win, a goal is "new"
+  for its first week in the chapter, Make it smaller waits three weeks inside
+  it, and a measure's pace line starts there.
+- **One by one** (`oneByOne`): one task at a time, Today, Tomorrow, This
+  weekend, Next week, No date, Pick a day or Skip, "3 of 24"; one Undo when it
+  closes. Also beside Reschedule on every Overdue heading.
+- Tested in headless Chromium by clicking; review 197 of 197 Chromium and 212
+  of 212 WebKit. STATUS, TRAIN and BLOCK do not read it yet.
