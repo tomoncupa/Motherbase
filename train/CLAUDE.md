@@ -275,8 +275,13 @@ An exercise carries the setup it needs, named by him, each a **toggle** (Straps)
 or a **setting** (Seat height, Back pad). **Each set records its own**, because
 straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and three setup bugs (1.0.84, 2026-11-16))
 
-- **One line above the steppers** (`setupLine`), only on an exercise that has
-  setup: chips for toggles, small boxes for settings, a pencil for the list.
+- **Nothing goes above WEIGHT on TRACK** (Tom, 2026-11-16: "We want as
+  little data as possible before the input for weight and reps"). The
+  stepper box starts with its WEIGHT label.
+- **One line under SAVE** (`setupLine`, 1.0.85), above the logged sets, only
+  on an exercise that has setup: chips for toggles, small boxes for
+  settings, a pencil for the list. Tapping a setting's name puts the caret
+  in its box.
   **It is exactly what SAVE or UPDATE records**, and changing it writes
   nothing until then. No setup, no line: Add Setup is in More and in a set's
   comment box, which also edits a past set's setup.
@@ -292,6 +297,10 @@ straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and
 - **Edit Setup saves as it goes**: ADD or Enter saves a field, a removal saves
   with an UNDO, TOGGLE is the default. A set keeps what it recorded when a
   field is removed. The row under each set shows setup only when it changed.
+- **A set's comment and setup words open its comment box** on a tap (Tom,
+  2026-11-16: "edit the text by clicking on the text, not just the text
+  box"), as the bubble does; the rest of the row still loads the set, and a
+  hold anywhere still lifts it.
 
 ### Asked about, and turned down
 

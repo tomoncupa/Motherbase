@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.84, 2026-11-16">
+<meta name="mb-version" content="1.0.85, 2026-11-16">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -400,6 +400,7 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .tset .grow{flex:0 0 auto}
 .tset .tnote{flex:1 1 0;min-width:0;font-size:var(--f-1);line-height:var(--lh-tight);color:var(--text-2);
   overflow-wrap:anywhere}
+.tset .tnote.tedit{cursor:pointer}
 .tset .col{text-align:right;white-space:nowrap}
 .tset .col.w{min-width:7em}
 .tset .col.r{min-width:5em}
@@ -727,7 +728,7 @@ main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hid
 .setup .sufield{display:flex;align-items:center;gap:var(--s-2);font-size:var(--f-2);color:var(--text-2)}
 .setup .sufield .mb-input{width:4.5em;min-width:0;text-align:center}
 .setup .ico{margin-left:auto}
-.trackbox > .suline{margin-bottom:var(--s-3)}
+.trackbox > .suline{margin-top:var(--s-3)}
 .sulist .ico{color:var(--text-muted)}
 
 /* ── the card: a session, a week or a profile, made to be shared ──
@@ -4345,9 +4346,9 @@ function drawTrack(m) {
   /* Setup lives in each set's comment box now, the way FitNotes keeps
      everything that is not a number. Tom, 2026-09-22: "put our extra input
      features in the comments part of fitnotes because train feels
-     claustrophobic now". Since 1.0.84 one line of it is back above the
-     steppers, only on an exercise that has setup (Tom, 2026-11-15, "How
-     setup works also a bit unintuitive"): it is exactly what SAVE records.
+     claustrophobic now". Since 1.0.84 one line of it is on TRACK, only on an
+     exercise that has setup (Tom, 2026-11-15, "How setup works also a bit
+     unintuitive"), under SAVE since 1.0.85: it is exactly what SAVE records.
      A set loaded from the list shows its own; once none is loaded, the
      carried setup comes back. */
   if (TRAIN.suFor !== exId || (!TRAIN.sel && TRAIN.suFromSel)) {
@@ -4357,8 +4358,6 @@ function drawTrack(m) {
   }
 
   var pad = UI.el('div', 'trackbox');
-  var suLine = setupLine(exId, ex);
-  if (suLine) pad.appendChild(suLine);
   var inputs = {};
   var DRAFT = { w: 'draftW', r: 'draftR', d: 'draftD', t: 'draftT' };
   var GHOST = { w: 'ghostW', r: 'ghostR', d: 'ghostD', t: 'ghostT' };
@@ -4404,6 +4403,12 @@ function drawTrack(m) {
   };
   bar.appendChild(save); bar.appendChild(clear);
   pad.appendChild(bar);
+  /* Setup sits under SAVE, never above the weight (Tom, 2026-11-16: "We
+     want as little data as possible before the input for weight and reps.
+     put the settings between the save button and the actual save"). It is
+     still what the next SAVE records. */
+  var suLine = setupLine(exId, ex);
+  if (suLine) pad.appendChild(suLine);
   m.appendChild(pad);
 
   if (mine.length) {
@@ -4664,7 +4669,17 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
   var said = [String(s.note || '').trim(), sameSetup ? '' : setupText(s.su, s.ex)].filter(Boolean).join(' · ');
   var tn = UI.el('span', 'tnote');
   tn.textContent = said;
-  if (said) tn.title = said;
+  if (said) {
+    tn.title = said;
+    /* The words are a way into editing them (Tom, 2026-11-16: "edit the
+       text by clicking on the text, not just the text box"): a tap on a
+       set's comment or setup opens its comment box, as the bubble does.
+       The rest of the row still loads the set; a hold still lifts it. */
+    tn.classList.add('tedit');
+    tn.setAttribute('role', 'button');
+    tn.setAttribute('aria-label', 'Edit comment: ' + said);
+    tn.onclick = function (e) { e.stopPropagation(); commentDialog(s, date); };
+  }
   row.appendChild(tn);
 
   var body = UI.el('span', 'grow');
@@ -12038,7 +12053,7 @@ function setupFor(s, date) {
   return wrap;
 }
 
-/* The setup line above the steppers (1.0.84): what SAVE or UPDATE will
+/* The setup line under SAVE (1.0.84, moved there in 1.0.85): what SAVE or UPDATE will
    record, changed in place. Toggles are chips, settings small boxes, and
    the pencil edits the list. Nothing at all on an exercise with no setup,
    so the screen costs no room for it; Add Setup is in More and in a set's

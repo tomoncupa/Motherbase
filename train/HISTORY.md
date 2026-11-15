@@ -1578,3 +1578,28 @@ Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro, real taps on
 the line, the steppers, SAVE, UPDATE, the comment box and the dialog: 19 of
 19, no errors, no sideways scroll, every control on the line 44px. Not seen on
 his phone or his real log.
+
+## Setup under SAVE, and words that open their editor (1.0.85, 2026-11-16)
+
+Tom, on the 1.0.84 before/after picture: "Oh, I don't like this. We want as
+little data as possible before the input for weight and reps. put the
+settings between the save button and the actual save if needed. Also, I'd
+like the ability to edit the text by clicking on the text, not just the text
+box."
+
+- The setup line moved from the top of the stepper box to under the SAVE
+  bar, above the logged sets. Read "between the save button and the actual
+  save" as between SAVE and the saved sets. It still only shows on an
+  exercise with setup, and is still exactly what the next SAVE records.
+- A set row's comment and setup words (`.tnote`) now open that set's
+  comment box on a tap, the way the bubble does, without loading the set.
+  Read "the text box" as the comment bubble. Tapping a setting's name on
+  the setup line already focused its box (it is a `label`); now checked.
+- The faded "last time" line still sits above the steppers. It was asked
+  for on 2026-09-22 and was not part of this ask, so it stayed.
+
+Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro, real taps:
+23 of 23 (the 19 from 1.0.84 with the position check changed, plus the
+WEIGHT label being first, the setting's name focusing its box, and the note
+words opening the comment box without loading the set). Not seen on his
+phone or his real log.
