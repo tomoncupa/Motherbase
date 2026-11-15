@@ -291,7 +291,7 @@ straps go on after a couple of working sets. (HISTORY.md: Setup on one line, and
 - **Nothing goes above WEIGHT on TRACK** (Tom, 2026-11-16: "We want as
   little data as possible before the input for weight and reps"). The
   stepper box starts with its WEIGHT label.
-- **One line under SAVE** (`setupLine`, 1.0.85), above the logged sets, only
+- **One line under SAVE** (`setupLine`, 1.0.86), above the logged sets, only
   on an exercise that has setup: chips for toggles, small boxes for
   settings, a pencil for the list. Tapping a setting's name puts the caret
   in its box.

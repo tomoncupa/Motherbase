@@ -1579,7 +1579,7 @@ the line, the steppers, SAVE, UPDATE, the comment box and the dialog: 19 of
 19, no errors, no sideways scroll, every control on the line 44px. Not seen on
 his phone or his real log.
 
-## Setup under SAVE, and words that open their editor (1.0.85, 2026-11-16)
+## Setup under SAVE, and words that open their editor (1.0.86, 2026-11-16)
 
 Tom, on the 1.0.84 before/after picture: "Oh, I don't like this. We want as
 little data as possible before the input for weight and reps. put the
