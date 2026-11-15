@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.14, 2026-11-16">
+<meta name="mb-version" content="1.0.15, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -132,6 +132,10 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .cmp{padding:var(--s-3);border-radius:var(--radius-md);margin-top:var(--s-3)}
 .cmp summary{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold);letter-spacing:var(--track-cap);color:var(--text-muted);cursor:pointer;min-height:var(--tap);display:flex;align-items:center}
 .cmp .tx{margin-top:var(--s-2)}
+.chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:var(--s-1);text-align:left}
+.chip small{font-size:var(--f-1);color:var(--text-muted);letter-spacing:var(--track-cap)}
+.ask-note{width:100%;min-height:calc(var(--s-10) * 1.2);margin-top:var(--s-3);font-size:var(--f-3);line-height:var(--lh-body)}
+.rank .row{gap:var(--s-2)}
 /* the goal and the why, on a drill sheet and on a today card */
 .goal{display:grid;grid-template-columns:var(--s-9) 1fr;gap:var(--s-2) var(--s-3);align-items:baseline;
   font-size:var(--f-2);line-height:var(--lh-body);margin:var(--s-3) 0}
@@ -251,7 +255,7 @@ const APP = {
   name: 'Speak',
   icon: '◍',
   blurb: 'talk to the camera, measured: pace, fillers, flow, clarity, eyes',
-  types: ['take', 'topic', 'script', 'answer'],
+  types: ['take', 'topic', 'script', 'answer', 'ask'],
 };
 
 Skins.load('../shared/skins.json').then(() => { Skins.restore(APP.id);
@@ -992,7 +996,21 @@ const FT = { id: 'fitness', skill: 'fitness', step: 0, name: 'Fitness topic', st
 const OTHER_SKILL = { id: 'other', name: 'OTHER TOPIC', slot: 5 };
 const OT = Object.assign({}, FT, { id: 'other', skill: 'other', kind: 'otherq', name: 'Other topic',
   why: 'A question on productivity, philosophy or behaviour change answered out loud is a draft of a post or a lesson, and the answer is kept in your bank.' });
-const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || (d.skill === 'fitness' ? FIT_SKILL : d.skill === 'other' ? OTHER_SKILL : TOPIC_SKILL);
+/* QUESTIONS FOR YOU, since 2026-11-16 (Tom: "absorbing the functions of open
+   decisions into Speak... this works in the future for any prompts"). Any
+   producer, a Claude session, the topic finder or Tom himself, adds a Todoist
+   task `Ask: <question>` whose description may carry a fenced `ask` block
+   (JSON: context, onRecord, kind, options, items, dest, notePrompt). The
+   Todoist sync brings it in as a note; SPEAK draws it by `kind`, nothing per
+   question. A tap answers a pick (Tom: "Tap counts, voice optional"); a free
+   question is answered by speaking or by the note. The answer is an `ask`
+   row, the note is ticked so the task closes in Todoist, and Claude files the
+   answer at its `dest`. */
+const ASK_SKILL = { id: 'ask', name: 'QUESTION', slot: 4 };
+const AQ = Object.assign({}, FT, { id: 'ask', skill: 'ask', kind: 'askq', name: 'Question for you', bank: false,
+  why: 'A decision said out loud is clearer than one ticked, and it is speech practice.',
+  how: 'Answer the question as if explaining your call to a client. Your words are kept with the answer.' });
+const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || (d.skill === 'fitness' ? FIT_SKILL : d.skill === 'other' ? OTHER_SKILL : d.skill === 'ask' ? ASK_SKILL : TOPIC_SKILL);
 /* ══════════════ the coach ══════════════
    Tom, 2026-11-16: "I need Speak to actually give me feedback and drills for
    what's happening. I don't need it to just rate what I'm doing." After a
@@ -1057,7 +1075,7 @@ const FIXES = [
 ];
 FIXES.forEach(f => { f.fix = true; f.step = 0; });
 const isFix = id => /^fix-/.test(id || '');
-const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
+const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
 const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
@@ -1412,7 +1430,7 @@ function promptEl(p) {
   else if (p.kind === 'read') box.innerHTML = '<div class="muted">' + esc(p.name) + '</div>' + esc(p.text);
   else if (p.kind === 'hook') box.innerHTML = '<div class="muted">Start on this line</div>' + esc(p.text);
   else if (p.kind === 'question') box.innerHTML = '<div class="muted">Answer this</div>' + esc(p.text);
-  else if (p.kind === 'fitq' || p.kind === 'otherq') box.innerHTML = '<div class="muted">' + esc(p.label || 'Answer this') + '</div>' + esc(p.text);
+  else if (p.kind === 'fitq' || p.kind === 'otherq' || p.kind === 'askq') box.innerHTML = '<div class="muted">' + esc(p.label || 'Answer this') + '</div>' + esc(p.text);
   else if (p.kind === 'frame') box.innerHTML = esc(p.text) + '<div class="frame">' + p.frame.map(f => '<span>' + esc(f) + '</span>').join('') + '</div>';
   else if (p.kind === 'dev') box.innerHTML = '<div class="muted">' + esc(p.device) + '</div>' + esc(p.text);
   else if (p.kind === 'script') {
@@ -1528,6 +1546,120 @@ function todaysDrills() {
   return out;
 }
 
+/* ══════════════ questions for you ══════════════ */
+const ASK_DEST = { knowledge: 'Fitness Knowledge Bank', brand: 'brand.md', codex: 'CODEX' };
+function askSpec(desc) {
+  const m = /```ask\s*([\s\S]*?)```/.exec(desc || '');
+  let spec = {};
+  if (m) { try { spec = JSON.parse(m[1]) || {}; } catch (e) { spec = {}; } }
+  const rest = String(desc || '').replace(/```ask[\s\S]*?```/, '').trim();
+  if (!spec.context && rest) spec.context = rest;
+  if (['choice', 'rank', 'brackets', 'free'].indexOf(spec.kind) < 0) spec.kind = (spec.options || []).length ? 'choice' : 'free';
+  return spec;
+}
+/* open questions: an `Ask:` note not ticked, not cancelled, not answered here */
+function askQueue() {
+  const done = Rec.map('ask');
+  return Rec.all('note').filter(r => !r.deleted && r.payload && /^ask:\s*/i.test(String(r.payload.text || '')) && !r.payload.done && !r.payload.cancelled &&
+    !(r.payload.td && r.payload.td.done) && !(done[r.key] && done[r.key].answeredAt))
+    .map(r => Object.assign({ key: r.key, date: r.date, q: String(r.payload.text).replace(/^ask:\s*/i, '').trim(), tdId: (r.payload.td && r.payload.td.id) || '',
+      askedAt: r.payload.t || 0 }, askSpec(r.payload.td && r.payload.td.desc)))
+    .sort((a, b) => (a.askedAt || 0) - (b.askedAt || 0));
+}
+const askedAll = () => Rec.all('ask').map(r => Object.assign({ key: r.key }, r.payload)).filter(a => a.answeredAt).sort((a, b) => b.answeredAt - a.answeredAt);
+function askAnswerText(a) {
+  if (a.kind === 'rank') return (a.ranking || []).map((x, i) => (i + 1) + '. ' + x).join(', ');
+  if (a.kind === 'brackets') return Object.keys(a.brackets || {}).map(k => k + ': ' + a.brackets[k]).join(', ');
+  return String(a.answer || '');
+}
+/* save an answer, close the question here and in Todoist, Undo for six seconds */
+function askAnswer(q, fields, h) {
+  const was = Rec.get('ask', null, q.key);
+  const row = Object.assign({}, was || {}, { q: q.q, kind: q.kind, dest: q.dest || '', context: q.context || '', onRecord: q.onRecord || '',
+    tdId: q.tdId, askedAt: q.askedAt || 0 }, fields, { answeredAt: Date.now() });
+  Rec.set('ask', null, q.key, row);
+  const note = Rec.get('note', q.date, q.key);
+  if (note) Rec.patch('note', q.date, q.key, { done: 1 });
+  Mobile.feedback('complete');
+  UI.undo('answered: ' + q.q, () => {
+    if (was) Rec.set('ask', null, q.key, was); else Rec.del('ask', null, q.key);
+    if (note) Rec.patch('note', q.date, q.key, { done: 0 });
+    draw();
+  });
+  if (h) h.close();
+  draw();
+}
+function openAsk(q) {
+  const wide = window.innerWidth >= 900;
+  UI.dialog({
+    title: 'QUESTION FOR YOU', width: 560,
+    body: (b, h) => {
+      b.appendChild(el('p', 'what', esc(q.q)));
+      if (q.context || q.onRecord) {
+        const cx = el('details', 'cmp mb-plate'); if (wide) cx.open = true;
+        cx.innerHTML = '<summary class="mb-tap">WHY IT IS ASKED</summary><div class="tx">' + (q.context ? esc(q.context) : '') +
+          (q.onRecord ? '<p><b>On record:</b> ' + esc(q.onRecord) + '</p>' : '') + (q.dest ? '<p class="muted">Goes to: ' + esc(ASK_DEST[q.dest] || q.dest) + '</p>' : '') + '</div>';
+        b.appendChild(cx);
+      }
+      const note = el('textarea', 'mb-input ask-note');
+      note.placeholder = q.notePrompt || 'A note, optional';
+      note.setAttribute('aria-label', q.notePrompt || 'A note');
+      const box = el('div', 'ask-body');
+      if (q.kind === 'choice') {
+        const ch = el('div', 'moments');
+        (q.options || []).forEach(o => {
+          const c = el('button', 'mb-btn mb-press mb-tap chip', '<span>' + esc(o.label) + '</span>' + (o.rec ? '<small>Recommended</small>' : ''));
+          c.onclick = () => askAnswer(q, { answer: o.label, optId: o.id, note: note.value.trim() }, h);
+          ch.appendChild(c);
+        });
+        box.appendChild(ch);
+      } else if (q.kind === 'rank') {
+        let order = (q.items || []).map(x => x.label || x);
+        const list = el('div', 'list rank');
+        const fill = () => {
+          list.innerHTML = '';
+          order.forEach((lab, i) => {
+            const r = el('div', 'row mb-plate');
+            r.innerHTML = '<span class="num"><b>' + (i + 1) + '</b></span><span class="tx"><span class="nm">' + esc(lab) + '</span></span>';
+            const up = el('button', 'mb-btn mb-press mb-tap', ICN('collapse')); up.setAttribute('aria-label', 'Move ' + lab + ' up'); up.disabled = !i;
+            const dn = el('button', 'mb-btn mb-press mb-tap', ICN('expand')); dn.setAttribute('aria-label', 'Move ' + lab + ' down'); dn.disabled = i === order.length - 1;
+            up.onclick = () => { const t = order[i - 1]; order[i - 1] = order[i]; order[i] = t; fill(); };
+            dn.onclick = () => { const t = order[i + 1]; order[i + 1] = order[i]; order[i] = t; fill(); };
+            r.appendChild(up); r.appendChild(dn); list.appendChild(r);
+          });
+          paintIcons(list);
+        };
+        fill();
+        box.appendChild(list);
+        const lk = el('button', 'mb-btn go mb-press mb-tap', ICN('lock') + '<span>LOCK THIS ORDER</span>');
+        lk.onclick = () => askAnswer(q, { ranking: order.slice(), note: note.value.trim() }, h);
+        const a = el('div', 'acts'); a.appendChild(lk); box.appendChild(a);
+      } else if (q.kind === 'brackets') {
+        const picks = {};
+        const save = el('button', 'mb-btn go mb-press mb-tap', 'SAVE');
+        const ready = () => { save.disabled = (q.items || []).some(x => !picks[x.label || x]); };
+        (q.items || []).forEach(x => {
+          const lab = x.label || x;
+          const opts = (q.options || []).map(o => ({ id: o.id || o, name: o.label || o }));
+          box.appendChild(UI.row(lab, x.rec ? 'Recommended: ' + x.rec : '', UI.segmented(opts, '', v => { picks[lab] = v; ready(); })));
+        });
+        save.onclick = () => askAnswer(q, { brackets: Object.assign({}, picks), note: note.value.trim() }, h);
+        ready();
+        const a = el('div', 'acts'); a.appendChild(save); box.appendChild(a);
+      } else {
+        const sv = el('button', 'mb-btn mb-press mb-tap', 'SAVE THE NOTE AS MY ANSWER');
+        sv.onclick = () => { if (note.value.trim()) askAnswer(q, { answer: note.value.trim(), note: '' }, h); else UI.toast('Write the answer, or speak it.', { bad: true }); };
+        const a = el('div', 'acts'); a.appendChild(sv); box.appendChild(a);
+      }
+      b.appendChild(box);
+      b.appendChild(note);
+      const said = Rec.get('ask', null, q.key);
+      if (said && said.said) b.appendChild(el('p', 'muted', 'You said: ' + esc(said.said.slice(0, 400))));
+      paintIcons(b);
+    },
+    actions: [{ label: 'CLOSE' }, { label: 'SPEAK IT', kind: q.kind === 'free' ? 'go' : '', fn: () => { startTake(AQ, null, { kind: 'askq', text: q.q, ask: q.key, label: 'Question for you' }); } }],
+  });
+}
 /* ══════════════ the fitness bank ══════════════
    Every FITNESS TOPIC answer, grouped by question, newest first: his words,
    when, how long, and the take behind it (its recording plays there). COPY
@@ -1577,6 +1709,18 @@ function drawBank(m) {
     top.appendChild(box);
   } else top.appendChild(el('p', 'muted', 'No answers yet.'));
   m.appendChild(top);
+  const done = askedAll();
+  if (done.length) {
+    const hc = card('ANSWERED QUESTIONS', String(done.length));
+    done.forEach(a => {
+      const row = el('div', 'ans mb-plate');
+      row.appendChild(el('p', 'what', esc(a.q)));
+      row.appendChild(el('div', 'tx', '<b>' + esc(askAnswerText(a)) + '</b>' + (a.note ? '<br>' + esc(a.note) : '')));
+      row.appendChild(el('div', 'muted', esc(new Date(a.answeredAt).toLocaleDateString([], { day: 'numeric', month: 'short' }) + (a.dest ? ' \u00b7 goes to ' + (ASK_DEST[a.dest] || a.dest) : '') + (a.filed ? ' \u00b7 filed' : ''))));
+      hc.appendChild(row);
+    });
+    m.appendChild(hc);
+  }
   const list = el('div', 'bank');
   m.appendChild(list);
   function fill() {
@@ -1645,6 +1789,21 @@ function drawToday(m) {
   const today = Day.today();
   const done = takesOn(today);
   const w = warmToday();
+  const aq = askQueue();
+  if (aq.length) {
+    const qc = card('QUESTIONS FOR YOU', aq.length + ' open');
+    const ql = el('div', 'list');
+    aq.forEach(q => {
+      const r = el('button', 'row mb-plate mb-press now');
+      r.style.setProperty('--c', 'var(--data-4)');
+      r.innerHTML = '<span class="ic">' + ICN('note') + '</span><span class="tx"><span class="nm">' + esc(q.q) + '</span>' +
+        (q.context ? '<span class="sub">' + esc(q.context.split(/\.\s/)[0]) + '</span>' : '') + '</span>';
+      r.onclick = () => openAsk(q);
+      ql.appendChild(r);
+    });
+    qc.appendChild(ql);
+    m.appendChild(qc);
+  }
   const wc = card('WARM-UP', w ? 'done' : 'about 3 min');
   const wrow = el('button', 'row mb-plate mb-press' + (w ? ' done' : ' now'));
   wrow.style.setProperty('--c', 'var(--accent)');
@@ -1664,7 +1823,7 @@ function drawToday(m) {
     fc.appendChild(fl);
     m.appendChild(fc);
   }
-  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id && t.drill !== FT.id && t.drill !== OT.id && !isFix(t.drill)).length + ' done');
+  const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id && t.drill !== FT.id && t.drill !== OT.id && t.drill !== AQ.id && !isFix(t.drill)).length + ' done');
   const cs = curStage(), sg = STAGES[cs - 1];
   if (sg) {
     const all = DRILLS.filter(d => skillOf(d).stage === cs), left = stageLeft(cs).length;
@@ -2312,6 +2471,12 @@ function finishTake(m, secs) {
   if (T.origin && T.origin.key) take.from = T.origin.key;
   if (T.prompt && T.prompt.kind === 'script') take.script = T.prompt.key;
   take.key = saveTake(take); take.date = Day.today();
+  if (d === AQ && T.prompt && T.prompt.ask) {
+    const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
+    const q = askQueue().filter(x => x.key === T.prompt.ask)[0];
+    if (q && q.kind === 'free' && words) askAnswer(q, { answer: words, said: words, take: take.key }, null);
+    else if (q) Rec.set('ask', null, q.key, Object.assign({}, Rec.get('ask', null, q.key) || {}, { q: q.q, said: words, take: take.key }));
+  }
   if (d.bank && T.prompt && T.prompt.text) {
     const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
     Rec.set('answer', take.date, take.key, { q: T.prompt.text, src: T.prompt.src || '', term: T.prompt.term || '', bracket: T.prompt.bracket || '', subj: T.prompt.subj || (d === FT ? 'fitness' : ''),

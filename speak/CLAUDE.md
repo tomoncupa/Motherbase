@@ -420,6 +420,52 @@ seeded `Other:` task: the subject read as productivity, the notes stayed off
 the take screen and opened after it, the answer saved with `src: 'other'` and
 its subject, BANK showed it. Review 197/197.
 
+## QUESTIONS FOR YOU, added 2026-11-16 (SPEAK 1.0.15)
+
+The Open Decisions page moved into SPEAK (handoff
+`tom-context/handoffs/motherbase-speak-questions.md`; Tom: "absorbing the
+functions of open decisions into Speak... this works in the future for any
+prompts that might happen from speak"). His picks: a tap counts for a pick
+question, voice optional; doctrine answers go to a **Fitness Knowledge Bank**
+(`tom-context/fitness-knowledge-bank.md`), "and Skool pulls from this"; LUL
+is lower, upper, lower.
+
+- **Any producer**, no code change: a Todoist task `Ask: <question>`, its
+  description optionally holding a fenced `ask` block of JSON (`context`,
+  `onRecord`, `kind` choice / rank / brackets / free, `options` or `items` with
+  `rec`, `dest` knowledge / brand / codex, `notePrompt`). No block: the
+  description is the context and the kind is free. Arrives through the
+  Todoist sync as a `note` (`askQueue`, `askSpec`).
+- **TODAY, first card, QUESTIONS FOR YOU** (needs-you-now), oldest first. A
+  row opens the question's sheet (`openAsk`): the question, WHY IT IS ASKED
+  folded (open at 900px and wider) with On record and where it goes, then by
+  kind: option chips with "Recommended" written under one (never a gold
+  fill); a list with up and down buttons and LOCK THIS ORDER; a bracket
+  picker per item, SAVE only once all are picked, no preselected value; or a
+  free answer by note or by voice. A note box under every kind. SPEAK IT
+  starts a take (`AQ`, drill and skill `ask`) with the question on screen.
+- **Answering** (`askAnswer`) writes an `ask` row (undated, keyed by the
+  note's key: `{q, kind, answer, optId, ranking, brackets, note, said, take,
+  dest, context, onRecord, tdId, askedAt, answeredAt}`), ticks the note so the
+  Todoist sync closes the task, and gives UNDO for six seconds (or Ctrl+Z),
+  which removes the answer and unticks the note. A spoken take on a free
+  question answers it with the transcript; on a pick question it is kept as
+  `said` and the question stays until tapped.
+- **BANK, ANSWERED QUESTIONS**: every answer, newest first, with where it goes.
+- **Filing is Claude's**, from the nightly backup, at the row's `dest`
+  (`fitness-knowledge-bank.md` says how). The page cannot write tom-context.
+- **Imported 2026-11-16** as Todoist `Ask:` tasks: rest 2 minutes, the
+  training-priorities order, PPL and LUL timing and the Why We Lift closer
+  (Skool), and market scope as a confirm (TM Brand). The brackets card was
+  dropped (CODEX 1.0.4 already decided it); the Algrowrithm split was
+  answered yes on 2026-11-10 and went straight into the knowledge bank.
+
+Watched 2026-11-16 in headless Chromium at 390 with seeded `Ask:` notes, one of
+each kind: the card first on TODAY; a chip tap saved the answer and ticked
+the note, Ctrl+Z undid both; two Move up presses and LOCK saved the order;
+SAVE stayed off until a bracket was picked; a note answered a free question;
+BANK listed the three. No page errors, no sideways scroll.
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync
