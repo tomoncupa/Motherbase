@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.85, 2026-11-16">
+<meta name="mb-version" content="1.0.88, 2026-11-16">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -400,6 +400,9 @@ h2{font-family:var(--font-display);font-size:var(--f-1);font-weight:var(--w-bold
 .tset .grow{flex:0 0 auto}
 .tset .tnote{flex:1 1 0;min-width:0;font-size:var(--f-1);line-height:var(--lh-tight);color:var(--text-2);
   overflow-wrap:anywhere}
+.tset .tnote.tedit{cursor:pointer}
+.tset .ghostnote{color:var(--text-muted);font-style:italic}
+.trackbox > .lastline{padding:var(--s-3) 0 0}
 .tset .col{text-align:right;white-space:nowrap}
 .tset .col.w{min-width:7em}
 .tset .col.r{min-width:5em}
@@ -727,7 +730,7 @@ main.mb-scroll:has(> #main.mv-r),main.mb-scroll:has(> #main.mv-l){overflow-x:hid
 .setup .sufield{display:flex;align-items:center;gap:var(--s-2);font-size:var(--f-2);color:var(--text-2)}
 .setup .sufield .mb-input{width:4.5em;min-width:0;text-align:center}
 .setup .ico{margin-left:auto}
-.trackbox > .suline{margin-bottom:var(--s-3)}
+.trackbox > .suline{margin-top:var(--s-3)}
 .sulist .ico{color:var(--text-muted)}
 
 /* ── the card: a session, a week or a profile, made to be shared ──
@@ -4305,9 +4308,13 @@ function drawTrack(m) {
      load. */
   var vs = TRAIN.vsFor(date, exId, TRAIN.compareCtx(date));
   var then = vs ? workOn(vs.date, exId) : [];
+  /* Last time and the coach's line sit under SAVE since 1.0.88 (Tom,
+     2026-11-16: "Move the faded last time numbers below save"); built here,
+     placed after the setup line. */
+  var below = [];
   if (then.length) {
     var vsName = (Rec.get('session', vs.date, '') || {}).name;
-    /* A faded line above the steppers, not a card of its own: FitNotes has
+    /* A faded line under SAVE (above the steppers until 1.0.88), not a card: FitNotes has
        nothing here, so this has to cost as little room as a line can. Tom,
        2026-09-22: "small, faded, and unintrusive, maintain the fitnotes
        layout". One line, cut off with an ellipsis rather than wrapping. */
@@ -4334,7 +4341,7 @@ function drawTrack(m) {
         draw();
       };
     });
-    m.appendChild(card);
+    below.push(card);
   }
   /* The coach's target, when this was started from a routine a coach sent:
      the same faded line, under last time. Stated, never checked against. */
@@ -4342,14 +4349,14 @@ function drawTrack(m) {
   if (coachSays) {
     var pl = UI.el('div', 'lastline');
     pl.innerHTML = '<div class="lasttime">Coach · ' + UI.esc(coachSays) + '</div>';
-    m.appendChild(pl);
+    below.push(pl);
   }
   /* Setup lives in each set's comment box now, the way FitNotes keeps
      everything that is not a number. Tom, 2026-09-22: "put our extra input
      features in the comments part of fitnotes because train feels
-     claustrophobic now". Since 1.0.84 one line of it is back above the
-     steppers, only on an exercise that has setup (Tom, 2026-11-15, "How
-     setup works also a bit unintuitive"): it is exactly what SAVE records.
+     claustrophobic now". Since 1.0.84 one line of it is on TRACK, only on an
+     exercise that has setup (Tom, 2026-11-15, "How setup works also a bit
+     unintuitive"), under SAVE since 1.0.86: it is exactly what SAVE records.
      A set loaded from the list shows its own; once none is loaded, the
      carried setup comes back. */
   if (TRAIN.suFor !== exId || (!TRAIN.sel && TRAIN.suFromSel)) {
@@ -4359,8 +4366,6 @@ function drawTrack(m) {
   }
 
   var pad = UI.el('div', 'trackbox');
-  var suLine = setupLine(exId, ex);
-  if (suLine) pad.appendChild(suLine);
   var inputs = {};
   var DRAFT = { w: 'draftW', r: 'draftR', d: 'draftD', t: 'draftT' };
   var GHOST = { w: 'ghostW', r: 'ghostR', d: 'ghostD', t: 'ghostT' };
@@ -4406,6 +4411,13 @@ function drawTrack(m) {
   };
   bar.appendChild(save); bar.appendChild(clear);
   pad.appendChild(bar);
+  /* Setup sits under SAVE, never above the weight (Tom, 2026-11-16: "We
+     want as little data as possible before the input for weight and reps.
+     put the settings between the save button and the actual save"). It is
+     still what the next SAVE records. */
+  var suLine = setupLine(exId, ex);
+  if (suLine) pad.appendChild(suLine);
+  below.forEach(function (el) { pad.appendChild(el); });
   m.appendChild(pad);
 
   if (mine.length) {
@@ -4421,10 +4433,25 @@ function drawTrack(m) {
           if (d) d.volUp = TRAIN.volUp(s, then[n - 1], kind, d);
         }
       }
-      /* setup only when it changed from the set before (Tom, 2026-10-18) */
-      var su = JSON.stringify(s.su || {});
-      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d, su === prevSu));
-      prevSu = su;
+      /* Setup says only what CHANGED from the set before, never the parts
+         that held (Tom, 2026-11-16: "I don't want the setup settings to
+         repeat per set ... unless anything changes, then it just holds on
+         from the last set", so the room goes to comments). The day's first
+         set says its whole setup, so a day reads on its own. A suggestion
+         not taken yet says nothing and is not "the set before". */
+      var suSaid = '';
+      if (!TRAIN.pending(s)) {
+        suSaid = setupDiff(prevSu, s.su, exId);
+        prevSu = s.su || {};
+      }
+      /* Last session's comment on the same working set, faded, until he
+         writes one of his own (Tom, 2026-11-16: "last set's notes to show
+         up as faded out text so it's clear that this is last session's
+         notes ... unless anything is written, just keep it there"). Never
+         stored on today's set. */
+      var ghost = '';
+      if (!s.warm && !String(s.note || '').trim() && then[n - 1]) ghost = String(then[n - 1].note || '').trim();
+      listCard.appendChild(trainingSetRow(s, s.warm ? 0 : n, date, showChk, d, suSaid, ghost));
     });
     /* Hold a set and drag it to put it in another place; let go without
        moving and its menu opens, as the hold always did. The numbers follow
@@ -4646,7 +4673,7 @@ function fitNotes(box) {
     }
   });
 }
-function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
+function trainingSetRow(s, n, date, showChk, delta, suSaid, ghost) {
   var row = UI.el('div', 'tset' + (TRAIN.sel === s.key ? ' sel' : '') + (s.warm ? ' warm' : '') +
     (TRAIN.pending(s) ? ' plan' : ''));
   row.dataset.key = s.key;
@@ -4654,7 +4681,7 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
   var bub = UI.el('button', 'bub nohold mb-tap' + (s.note || s.rir != null || s.q ? ' on' : ''));
   bub.innerHTML = BUBBLE;
   bub.setAttribute('aria-label', s.note ? 'Edit comment' : 'Add comment');
-  bub.onclick = function (e) { e.stopPropagation(); commentDialog(s, date); };
+  bub.onclick = function (e) { e.stopPropagation(); commentDialog(s, date, ghost); };
   row.appendChild(bub);
 
   var idx = UI.el('span', 'idx');
@@ -4664,10 +4691,27 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
   /* The comment and the setup, in the gap between the number and the
      weight. Tom, 2026-10-18: "Put comments and setup in this blank space,
      smaller but readable font". Never cut off: see fitNotes. */
-  var said = [String(s.note || '').trim(), sameSetup ? '' : setupText(s.su, s.ex)].filter(Boolean).join(' · ');
+  var said = [String(s.note || '').trim(), suSaid || ''].filter(Boolean).join(' · ');
   var tn = UI.el('span', 'tnote');
-  tn.textContent = said;
-  if (said) tn.title = said;
+  if (ghost) {
+    /* last session's words, faded and slanted so they never read as today's */
+    var gh = UI.el('span', 'ghostnote');
+    gh.textContent = ghost;
+    tn.appendChild(gh);
+    if (said) tn.appendChild(document.createTextNode(' · ' + said));
+    said = said ? ghost + ' · ' + said : ghost;
+  } else tn.textContent = said;
+  if (said) {
+    tn.title = said;
+    /* The words are a way into editing them (Tom, 2026-11-16: "edit the
+       text by clicking on the text, not just the text box"): a tap on a
+       set's comment or setup opens its comment box, as the bubble does.
+       The rest of the row still loads the set; a hold still lifts it. */
+    tn.classList.add('tedit');
+    tn.setAttribute('role', 'button');
+    tn.setAttribute('aria-label', ghost ? 'Add comment, last time: ' + ghost : 'Edit comment: ' + said);
+    tn.onclick = function (e) { e.stopPropagation(); commentDialog(s, date, ghost); };
+  }
   row.appendChild(tn);
 
   var body = UI.el('span', 'grow');
@@ -4709,7 +4753,12 @@ function trainingSetRow(s, n, date, showChk, delta, sameSetup) {
     chk.setAttribute('aria-label', s.done ? 'Mark not done' : 'Mark done');
     chk.onclick = function (e) {
       e.stopPropagation();
-      TRAIN.patchSet(s.key, date, { done: s.done ? 0 : 1 });
+      var tick = { done: s.done ? 0 : 1 };
+      if (tick.done && TRAIN.pending(s) && !s.su && ((TRAIN.exercises()[s.ex] || {}).setup || []).length) {
+        var csu = TRAIN.carriedSetup(s.ex, date);
+        if (csu) tick.su = csu;
+      }
+      TRAIN.patchSet(s.key, date, tick);
       Mobile.feedback(s.done ? 'untick' : 'tick');
       if (!s.done) afterSave(s.ex, date, true);
       if (TRAIN.pendingJump) {
@@ -4774,12 +4823,13 @@ function setMenu(s, date, e) {
 }
 
 /* FitNotes shows a comment in a small box with Edit and Done. Same shape. */
-function commentDialog(s, date) {
+function commentDialog(s, date, ghost) {
   var noteEl = null, warmSet = false;
   UI.dialog({
     title: 'COMMENT', width: 420,
     body: function (b, h) {
-      var i = noteEl = UI.field('note', { value: s.note || '', placeholder: 'Comment Text ...' });
+      /* last session's comment as the placeholder: faded, never saved */
+      var i = noteEl = UI.field('note', { value: s.note || '', placeholder: ghost ? 'Last time: ' + ghost : 'Comment Text ...' });
       b.appendChild(i);
       /* Warmup as a switch (Tom, 2026-11-09: "warmup designation should
          also be a toggle in set details button"). It starts as TRAIN reads
@@ -11972,6 +12022,32 @@ function cleanSetup(exId) {
   });
   return any ? out : null;
 }
+/* What changed between two sets' setup, in words: "Straps" put on, "Straps
+   off", "Seat 5", "Seat off" for a setting emptied. With no set before
+   (`prev` undefined) it is the whole setup. Nothing that held is said. */
+function setupDiff(prev, su, exId) {
+  if (prev === undefined) return setupText(su, exId);
+  var defs = ((TRAIN.exercises()[exId] || {}).setup) || [];
+  var val = function (o, id) { var v = (o || {})[id]; return v == null || v === '' || v === 0 ? '' : String(v); };
+  return defs.map(function (d) {
+    var a = val(prev, d.id), b = val(su, d.id);
+    if (a === b) return '';
+    if (d.kind === 'toggle') return b ? d.name : d.name + ' off';
+    return b ? d.name + ' ' + b : d.name + ' off';
+  }).filter(Boolean).join(' · ');
+}
+/* A suggestion ticked done is a set done with the setup that carried, so it
+   records it, exactly as UPDATE on it would (1.0.87). Until then a ticked
+   suggestion stored none, which reads as everything off: the next set lost
+   its straps and the row would have said "Straps off". */
+TRAIN.carriedSetup = function (exId, date) {
+  if (TRAIN.suFor === exId && !TRAIN.suFromSel) return cleanSetup(exId);
+  var keep = TRAIN.draftSU, keepFor = TRAIN.suFor;
+  TRAIN.suFor = exId; TRAIN.draftSU = TRAIN.lastSetup(exId, date);
+  var out = cleanSetup(exId);
+  TRAIN.draftSU = keep; TRAIN.suFor = keepFor;
+  return out;
+};
 function setupText(su, exId) {
   if (!su) return '';
   var defs = ((TRAIN.exercises()[exId] || {}).setup) || [];
@@ -12075,7 +12151,7 @@ function setupFor(s, date) {
   return wrap;
 }
 
-/* The setup line above the steppers (1.0.84): what SAVE or UPDATE will
+/* The setup line under SAVE (1.0.84, moved there in 1.0.86): what SAVE or UPDATE will
    record, changed in place. Toggles are chips, settings small boxes, and
    the pencil edits the list. Nothing at all on an exercise with no setup,
    so the screen costs no room for it; Add Setup is in More and in a set's
