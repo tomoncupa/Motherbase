@@ -157,3 +157,7 @@ the log. Do not "fix" this app back towards DOCTRINE's no-XP rules.
 ## 1.0.7, 2026-11-16
 
 **An assisted lift reads the right way up**, copied from TRAIN 1.0.83 (`isAssisted`, `bwOn` in SHEET). The weight on an assisted pull-up or dip machine is the help, so less is stronger: assisted when the name says "assist", unless `exercise.assist` is 1 or 0. RECORD compares `w`, the help negated, and its window reads "40 lb help × 16" with "10 lb less help on ..." as the reward. TONNAGE adds bodyweight minus help (STATUS's `ev` weight, the weigh-in on or before the day, else the first after) and leaves the set out with no weigh-in. `workSets` now returns oldest first, as its comment always said. [TESTED headless Chromium with made-up rows: Assisted Pull-up 50 x 16 three days then 70 x 13 gives no record, 40 x 16 does; a Dip Machine with `assist: 1` and Bench Press both record; load null with no weigh-in, 130 and 110 lb at 180 lb bodyweight.] UNTESTED on his real log and phone.
+
+## 1.0.8, 2026-11-16
+
+Weight below zero, TRAIN 1.0.85's rule: a lift with any set below zero is read against bodyweight, so a negative set and its 0 can be records (bigger is stronger, -10 over -20) and tonnage adds bodyweight plus the number, nothing with no weigh-in. Untested in SHEET beyond the review.

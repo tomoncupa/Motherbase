@@ -168,6 +168,19 @@ An imported exercise of any other type is read off what was logged against it
   reader of `s.kg` as strength uses these, never `s.kg` itself. `prRule` 4
   recomputed every record once. Not inverted: Add Warmups and the Set
   Calculator. (HISTORY.md: Assisted lifts (1.0.83, 2026-11-16))
+- **Weight may go below zero on any lift** (1.0.85, Tom 2026-11-16: "the
+  option to put negative weight for something like pull ups or negative
+  weight anywhere actually"). The weight stepper's minus walks past 0; a
+  typed `-` works where the keyboard has one (the iPhone decimal pad has
+  none). -20 lb is 20 lb of help, so the plain number reads the right way
+  up (-10 beats -20, 0 beats -10) and `TRAIN.wk` is unchanged. **A lift with
+  any set below zero goes below** (`TRAIN.goesBelow`, `idx.neg`; an assisted
+  lift too): its 0 is a real weight, and its load is bodyweight plus the
+  number for every set, null with no weigh-in. **Every record rule asks
+  `TRAIN.weighed(s)`, never `kg > 0`.** Max Weight and goals have no floor at
+  0; a goal at or below zero fills only once met; Next steps freely below
+  zero, and help never below none. `prRule` 5 recomputed every record once.
+  Not handled: plates, Add Warmups and the Set Calculator ignore a negative.
 - **Five kinds, five symbols** (`TRAIN.prKinds`, `TRAIN.prMarks`; icons
   `pr-life` trophy, `pr-block` medal, `pr-weight` barbell, `pr-reps` crown,
   `pr-vol` bars, in `shared/icons.js`). Weight, reps and volume are what the

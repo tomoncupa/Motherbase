@@ -251,7 +251,7 @@ checked on seeded takes. The synthetic voice reads as stammered starts, so
 the live ear's calls on a real voice are not known yet, and the fault weights
 are a first guess to tune against his Right / Wrong marks.
 
-## Hearing the feedback, added 2026-11-16 (on branch `speak-recording`)
+## Hearing the feedback, added 2026-11-16 (SPEAK 1.0.12)
 
 The coach's strip is now the take's player: a play button beside it, a
 playhead while it plays, and a tap anywhere on the strip plays from there.

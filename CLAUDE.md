@@ -910,6 +910,13 @@ answer, or take it out.
   only a stored `warm` and counted 12,370 sets where Profile says 12,209
   (2026-09-25). COACH, SHEET and any widget reading sets need the same rule,
   and a stored 0 beats the comment.
+- **A reader of a set's weight as strength must know an assisted lift.** On
+  an assisted machine `kg` is help, so less is stronger: the name says
+  "assist" unless `exercise.assist` is 1 or 0. Records compare the help
+  negated; volume and 1RM use bodyweight minus help, or leave the set out
+  with no weigh-in. 70 lb of help x 13 outranked 50 x 16 everywhere until
+  TRAIN 1.0.83, COACH 1.0.30 and SHEET 1.0.7 (2026-11-16). `range.js` knows no
+  exercise, so its callers hand it the load.
 - **When the Browser pane is not drawing, a coordinate click lands on
   nothing** and screenshots time out; typing into a box that never got focus
   is lost too. Focus the box and press the real control with `.click()` from

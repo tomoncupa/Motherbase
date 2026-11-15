@@ -1518,7 +1518,7 @@ his phone or his real log.
 
 ## Assisted lifts (1.0.83, 2026-11-16)
 
-Found building Jay's strength report: his assisted pull-up scored 70 lb of
+Found building a client's strength report: their assisted pull-up scored 70 lb of
 help x 13 above 50 lb x 16. Tom: "We also need to fix the assisted pull up,
 since more weight there means more assist." Every reader of weight treated
 heavier as stronger: `recomputePRs`, `recordsFor`, the five kinds,
