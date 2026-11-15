@@ -634,6 +634,15 @@ device id lives in localStorage). Two causes, still not told apart:
 
 Read every device's `disk` and `auth` in the nightly backup before guessing.
 
+**2026-11-16, asked again.** The 14 Nov backup: every device `disk: kept`,
+`kept: LOCAL`, no `authErr` anywhere, so Google never refused a token. Only
+"PC, desktop program" carries `lostKept: LOCAL`. Two PC causes found, both
+outside the code: C: (222 GB) hit 0 MB free on 15 and 16 Nov (`backup.log`
+SKIPPED), and Windows logged 10 power losses since 1 Oct (Kernel-Power 41,
+bugcheck 0; Tom: him or Meralco, plus a cheap PSU). Either can stop
+WebView2 reading or keeping its store at start. Unproven which; 30 GB was
+freed that day. No code change.
+
 ## The start screen (2026-10-04, `boot.js`)
 
 Tom: "a sort of cool startup animation when we're opening up the app",
