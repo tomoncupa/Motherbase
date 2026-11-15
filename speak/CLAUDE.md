@@ -360,9 +360,10 @@ that finds current topics (built by another session, see below).
   `tom-context/skool-brackets.md`, labelled with the bracket), otherwise a
   viewer question from `FIT_QS` (108, from `content-questions.md`, sources left
   out). Already-answered questions and ones passed over with NEW PROMPT this
-  visit (`fitSkip`) are skipped. Todoist rows had not reached the store since
-  2026-11-08 when this was built, so the first two only work once the Todoist
-  sync (`shared/todoist.js`, not SPEAK's) runs again.
+  visit (`fitSkip`) are skipped. Todoist rows reach the store through the sync in
+  `shared/todoist.js`, which runs in QUESTS and, since STATUS 1.0.97, in
+  STATUS (STATUS.exe every 5 minutes). Between 8 and 16 Nov nothing ran it, so
+  no Shoot task arrived; on 2026-11-16 the 30 Shoot and 7 Topic rows landed.
 - **The bank**: one `answer` row per answer, keyed by its take: `{q, src
   (shoot, topic, viewer, term), term, bracket, text (the full transcript,
   20,000 characters at most), words, dur, at}`. Under 64KB, so it syncs
