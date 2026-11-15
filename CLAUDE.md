@@ -329,6 +329,7 @@ An app may read any type. It writes only the types it owns.
 | `kdish` | **kitchen** | timestamp id, undated | `{name, items:[{food, mult}], ord}` — a saved meal. `items` is never empty: removing the last item removes the meal |
 | `kskip` | **kitchen** | the meal's key, dated the meal's date | `{skip: 1}` — this logged meal did not come out of the kitchen, so it takes no stock off. Kept off `meal`, the way WEALTH's `mark` is kept off `spend` |
 | `device` | **the shared layer** (`shared/report.js`); every device writes its own | a random id this browser made once, kept in localStorage `mb.device`, undated | `{name, seen, sync, syncedAt, revived, v: {app: version}, errs: [{t, app, m, at}], errN, open: {app: {s, p, r, at}}}` — how this device is doing. `revived` is the last time live sync remade a connection that died asleep, and why. `open` is each app's last open in seconds (`s` drawn and ready, `p` first paint, `r` Rec.ready), shown in DATA as "Opened in X s". An iPhone home-screen app has storage of its own, so it is a device of its own |
+| `kpiece` | **OUTER HEAVEN** (`jobs/knowledge.py`), through Backup.exe's inbox; **arc** reads it | `skool|<course>|<page>` or `ramble|<thread id>`, undated | `{src, title, text, subj, ref, born}` — one piece of what Tom made for ARC's knowledge banks: a Skool lesson page (`src: 'skool'`, `subj` from its course, `ref` the course) or a RAMBLES thread (`src: 'ramble'`, no subj). See `arc/CLAUDE.md`, Knowledge banks |
 | `buy` | **receipts**; **kitchen** writes it too, for a purchase typed by hand, since clients have no RECEIPTS | `<receipt key>-<line>`, dated the receipt day; KITCHEN's is a timestamp id, dated the day bought | `{food, text, qty, unit, each, amount, shop, receipt}` — one line off a receipt. `unit` is `kg`, `g`, `L`, `ml`, `pc` or blank, and any field may be missing. KITCHEN's is `{food, text, qty, unit, t, src: 'kitchen'}` and never comes with a `spend` |
 | `phone` `pplace` `papp` | **the shared layer** (`shared/phone.js`) | `phone` undated `''`; `pplace` the send time, dated; `papp` the app's slug, dated | `phone` `{at, k, n}`: when the iPhone was last heard and with what. `pplace` `{lat, lon, t}`: where the phone was when the Shortcut ran. `papp` `{name, spans: [[from, to]], open}`: one app's open spans that day, from the Shortcut's app automations, a span past 4 hours dropped as a missed close |
 
@@ -537,6 +538,14 @@ and for LIVE SYNC to catch up, and writes the home screen's "Back up
 everything" file to `Documents/Backups/Motherbase nightly`, outside any repo,
 the last 30 kept, `backup.log` beside them. Any app's DATA, Restore merges it
 back. `desktop/README.md` has the rest.
+
+**The inbox** (2026-11-16): the one door from a program on the PC into the
+store. Backup.exe hands every `*.json` in `Documents/Motherbase inbox` to
+`tools/backup.html` before it loads; a file is `{kind: 'motherbase-inbox',
+rows: [{type, date, key, payload}], gone: [{type, date, key}]}`, only the
+types in the page's `INBOX_TYPES` go in (`kpiece` so far), and taken files
+move to `done/`. Once a day, signed in, so rows reach every device through
+live sync. `Backup.exe --force` runs it now.
 
 The Data button turns amber once a backup is 14 days old. LIVE SYNC carries
 no photos (a row over 64KB), so a backup or the sheet is still the only copy

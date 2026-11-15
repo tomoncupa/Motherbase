@@ -52,7 +52,7 @@
    is not signed in, or a cloud that never answers, is backed up as it is and
    the file says so in `synced`. */
 (function () {
-  var B = window.MB_BACKUP = { state: 'waiting', rows: 0, json: '', why: '', synced: false };
+  var B = window.MB_BACKUP = { state: 'waiting', rows: 0, json: '', why: '', synced: false, took: [], inbox: '' };
   var $ = function (id) { return document.getElementById(id); };
   function show(state, detail) { $('state').textContent = state; if (detail != null) $('detail').textContent = detail; }
   var start = Date.now(), MAX = 120000, QUIET = 10000;
@@ -91,10 +91,47 @@
     }, 1000);
   }
 
+  /* ── the inbox (2026-11-16) ──
+     A program on the PC cannot write to the store; this page can, signed in,
+     once a day. Backup.exe reads Documents/Motherbase inbox/*.json and hands
+     each file over as window.MB_INBOX = [{name, text}] before this page
+     loads. A file is {kind: 'motherbase-inbox', rows: [{type, date, key,
+     payload}], gone: [{type, date, key}]}. Only the types in INBOX_TYPES go
+     in, so nothing on the PC can write a set or a spend. Rec.set skips a row
+     whose payload has not changed, so sending the same file daily is
+     harmless; `gone` tombstones a piece its maker no longer has. The names
+     taken go back in MB_BACKUP.took and Backup.exe moves those files to
+     done/. First user: OUTER HEAVEN's knowledge job, `kpiece` rows for
+     ARC's knowledge banks. */
+  var INBOX_TYPES = { kpiece: 1 };
+  function inbox() {
+    var files = window.MB_INBOX || [], put = 0, del = 0, bad = [];
+    files.forEach(function (f) {
+      var bag;
+      try { bag = JSON.parse(f.text); } catch (e) { bad.push(f.name); return; }
+      if (!bag || bag.kind !== 'motherbase-inbox') { bad.push(f.name); return; }
+      (bag.rows || []).forEach(function (r) {
+        if (!r || !INBOX_TYPES[r.type] || !r.key || !r.payload) return;
+        var before = Rec.get(r.type, r.date || null, r.key);
+        if (JSON.stringify(before) !== JSON.stringify(r.payload)) { Rec.set(r.type, r.date || null, r.key, r.payload); put++; }
+      });
+      (bag.gone || []).forEach(function (r) {
+        if (!r || !INBOX_TYPES[r.type] || !r.key) return;
+        if (Rec.get(r.type, r.date || null, r.key)) { Rec.del(r.type, r.date || null, r.key); del++; }
+      });
+      B.took.push(f.name);
+    });
+    B.inbox = files.length ? files.length + ' inbox file' + (files.length === 1 ? '' : 's') + ': ' + put + ' rows in, ' + del + ' removed' +
+      (bad.length ? ', not read: ' + bad.join(', ') : '') : '';
+  }
+
   /* Rec.need: TRAIN's sets are kept out of an open until asked for (records.js,
      KEPT OUT), and a backup without them is not a backup. */
   Rec.ready(function () {
-    (Rec.need ? Rec.need() : Promise.resolve()).then(function () { show('Store loaded', ''); setTimeout(waitCloud, 1500); });
+    (Rec.need ? Rec.need() : Promise.resolve()).then(function () {
+      try { inbox(); } catch (e) { B.inbox = 'the inbox could not be read: ' + (e && e.message); }
+      show('Store loaded', B.inbox); setTimeout(waitCloud, 1500);
+    });
   });
 })();
 </script>

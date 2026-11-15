@@ -25,6 +25,14 @@
        Backup.exe --data <dir>    another store (a test one)
        Backup.exe --out <dir>     another folder
        Backup.exe --url <page>    another backup page (a local test server)
+       Backup.exe --inbox <dir>   another inbox folder
+
+   The inbox (2026-11-16): every *.json in Documents/Motherbase inbox is
+   handed to the page as window.MB_INBOX before it loads, and the page
+   writes the rows it allows into the store (tools/backup.html, the inbox).
+   A program on the PC cannot reach the store itself; this page is signed in
+   and runs every day. Files the page took are moved to done/ inside the
+   inbox, the last 20 kept. OUTER HEAVEN's knowledge job is the first to use it.
 
    Everything it did is a line in backup.log in the backup folder.        */
 
@@ -50,7 +58,7 @@ class Backup : Form
 
     WebView2 web;
     Timer poll;
-    string dataDir, outDir, url, day, logPath;
+    string dataDir, outDir, url, day, logPath, inboxDir;
     bool force;
     DateTime began = DateTime.Now;
     int exitCode = 1;
@@ -90,10 +98,12 @@ class Backup : Form
             else if (args[i] == "--data" && i + 1 < args.Length) dataDir = args[++i];
             else if (args[i] == "--out" && i + 1 < args.Length) outDir = args[++i];
             else if (args[i] == "--url" && i + 1 < args.Length) url = args[++i];
+            else if (args[i] == "--inbox" && i + 1 < args.Length) inboxDir = args[++i];
         }
         day = DateTime.Now.ToString("yyyy-MM-dd");
         try { Directory.CreateDirectory(outDir); } catch { }
         logPath = Path.Combine(outDir, "backup.log");
+        if (inboxDir == null) inboxDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Motherbase inbox");
 
         if (!force && File.Exists(Path.Combine(outDir, "motherbase-all-" + day + ".json")))
         { exitCode = 0; return; }
@@ -162,7 +172,66 @@ class Backup : Form
             poll.Tick += (s3, e3) => Ask();
             poll.Start();
         };
-        c.Navigate(url);
+        string inbox = InboxScript();
+        if (inbox != null) c.AddScriptToExecuteOnDocumentCreatedAsync(inbox).ContinueWith(t => BeginInvoke((Action)(() => c.Navigate(url))));
+        else c.Navigate(url);
+    }
+
+    /* ── the inbox: each file's text, as a script the page finds before it loads ── */
+    string InboxScript()
+    {
+        try
+        {
+            if (!Directory.Exists(inboxDir)) return null;
+            var files = Directory.GetFiles(inboxDir, "*.json").OrderBy(f => f, StringComparer.Ordinal)
+                .Where(f => new FileInfo(f).Length < 20L * 1024 * 1024).ToList();
+            if (files.Count == 0) return null;
+            var sb = new StringBuilder("window.MB_INBOX=[");
+            for (int i = 0; i < files.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append("{\"name\":").Append(Js(Path.GetFileName(files[i]))).Append(",\"text\":")
+                  .Append(Js(File.ReadAllText(files[i], Encoding.UTF8))).Append('}');
+            }
+            sb.Append("];");
+            return sb.ToString();
+        }
+        catch (Exception ex) { Log("inbox    could not be read: " + ex.Message); return null; }
+    }
+
+    /* files the page took go to done/, the last 20 kept */
+    void Took(string names, string said)
+    {
+        if (!string.IsNullOrEmpty(said)) Log("inbox    " + said);
+        if (string.IsNullOrEmpty(names)) return;
+        try
+        {
+            string done = Path.Combine(inboxDir, "done");
+            Directory.CreateDirectory(done);
+            foreach (string n in names.Split('/'))
+            {
+                if (n.Length == 0 || n.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) continue;
+                string from = Path.Combine(inboxDir, n), to = Path.Combine(done, day + " " + n);
+                if (!File.Exists(from)) continue;
+                if (File.Exists(to)) File.Delete(to);
+                File.Move(from, to);
+            }
+            foreach (string old in Directory.GetFiles(done).OrderByDescending(f => f, StringComparer.Ordinal).Skip(20)) File.Delete(old);
+        }
+        catch (Exception ex) { Log("inbox    could not move a file to done: " + ex.Message); }
+    }
+
+    static string Js(string s)
+    {
+        var sb = new StringBuilder(s.Length + 16).Append('"');
+        foreach (char ch in s)
+        {
+            if (ch == '"') sb.Append("\\\"");
+            else if (ch == '\\') sb.Append("\\\\");
+            else if (ch < 32 || ch == '\u2028' || ch == '\u2029' || ch == '<') sb.Append("\\u").Append(((int)ch).ToString("x4"));
+            else sb.Append(ch);
+        }
+        return sb.Append('"').ToString();
     }
 
     /* ── is the page ready? ── */
@@ -171,7 +240,7 @@ class Backup : Form
         if ((DateTime.Now - began).TotalMinutes > 5) { poll.Stop(); Fail("the page was not ready after five minutes"); return; }
         web.CoreWebView2.ExecuteScriptAsync(
             "(function(){var B=window.MB_BACKUP;return B?JSON.stringify({s:B.state,n:B.rows,len:(B.json||'').length," +
-            "why:B.why||'',synced:!!B.synced}):''})()").ContinueWith(t =>
+            "why:B.why||'',synced:!!B.synced,took:(B.took||[]).join('/'),inbox:B.inbox||''}):''})()").ContinueWith(t =>
         {
             string raw;
             try { raw = Unquote(t.Result); } catch { return; }
@@ -180,6 +249,7 @@ class Backup : Form
     }
 
     bool reading;
+    string tookNames, inboxSaid;
     void Answer(string state)
     {
         if (reading || string.IsNullOrEmpty(state)) return;
@@ -193,6 +263,7 @@ class Backup : Form
         int.TryParse(Field(state, "n"), out rows);
         bool synced = state.Contains("\"synced\":true");
         string why = Field(state, "why");
+        tookNames = Field(state, "took"); inboxSaid = Field(state, "inbox");
         ReadAll(len, rows, synced, why);
     }
 
@@ -222,6 +293,7 @@ class Backup : Form
                     (bytes / 1048576.0).ToString("0.0") + " MB, " +
                     (synced ? "live sync caught up first" : "NOT caught up with live sync: " + why));
                 Prune();
+                Took(tookNames, inboxSaid);
                 exitCode = 0;
                 Close();
                 return;
