@@ -191,6 +191,11 @@ story that fits the device row.
   `catch-up:` smoke checks run the real sw.js against a stand-in cache.
 - Still only proved in Playwright. iOS's resume and `visibilitychange` are
   the phone's to show.
+- **Ctrl+R and F5** (2026-11-16, Tom: "why do we have to open twice?"): a
+  plain reload is one more open to sw.js and got the kept copy, and
+  STATUS.exe has the browser's reload key off. `mobile.js` `wireReload` now
+  catches the key in every page and frame and reopens the top page with
+  `?fresh=1`. sw-check's 11th step; the old code fails it.
 
 ## Live sync waking up (`cloud.js` 0.2.7, 2026-10-18)
 
