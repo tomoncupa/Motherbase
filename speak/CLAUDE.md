@@ -466,6 +466,18 @@ the note, Ctrl+Z undid both; two Move up presses and LOCK saved the order;
 SAVE stayed off until a bracket was picked; a note answered a free question;
 BANK listed the three. No page errors, no sideways scroll.
 
+## The widget's three buttons, 2026-11-16 (SPEAK 1.0.16)
+
+Tom asked (through the topic finder's session) for FITNESS TOPIC and OTHER
+TOPIC on the small SPEAK.exe window. `#wid .wbtns` holds SPEAK, FITNESS and
+OTHER side by side, each starting its drill straight away (`data-d`, through
+`drillById`). Measured at 300 x 116: each 84 x 44, nothing clipped, the page
+fits, so `desktop/SpeakApp.cs` and its SMALL size did not change and no new
+exe was needed. Watched in headless Chromium: FITNESS opened FITNESS TOPIC,
+OTHER opened OTHER TOPIC. Not watched in SPEAK.exe itself; it opens the
+hosted page, so it gets the buttons on its next open (twice, per the root
+brief's shared-file trap).
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync
