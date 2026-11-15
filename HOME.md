@@ -718,3 +718,8 @@ Tom: "a reset widget that's just a reset button that removes itself". One
 button that opens QUESTS's New chapter. The card stamps `at` when added
 (`put`, only for this card); once a chapter starts after that, its draw takes
 the card off the layout, with Undo. Tested in headless Chromium.
+
+## 2026-11-16, HOME 1.0.121: the add-a-card hint stays in its patch
+
+Tom's screenshot: the dashed + box sat over WEIGHT and DESK TIME on his wide board. `gapAt` returned an empty patch that runs off the bottom of the board as only the pointer's cell, so the hint drew a full 4 by 3 block (8 by 6 units) from the pointer's column, over whatever stood beside or above it. It now returns the free run's width with `h: Infinity`, and `block` lays its lattice inside it like any bounded patch: cut at the sides, full blocks down. `room.h` is Infinity, so a widget added there keeps its own height. Rule: any patch the hint is drawn in is bounded at the sides.
+[TESTED] headless Chromium at 1918, a board shaped like his (a card above, DESK TIME to the right, the patch open below), the pointer at every empty spot: old code 620 by 240 hints over WEIGHT and DESK TIME (his screenshot's size), new code none in 631 spots. Ctrl+R: `tools/sw-check.py` 11 of 11 in WebKit and Chromium, "Ctrl+R once is running the push" included, on TRAIN. [UNTESTED] Ctrl+R inside Main Menu.exe (WebView2, browser keys on), his board.
