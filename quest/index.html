@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.31, 2026-11-16">
+<meta name="mb-version" content="1.0.32, 2026-11-16">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -241,6 +241,9 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .wk.now{box-shadow:0 0 0 var(--border-width) var(--text-muted)}
 .hfix{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-1) var(--s-3);font-size:var(--f-2);color:var(--text-2)}
 .hfix .nx{overflow-wrap:anywhere;min-width:0}
+.srcin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-2)}
+.srcin .mb-input{flex:1 1 calc(var(--s-10) * 1.5);min-width:0}
+.srcin .hint{font-size:var(--f-1);color:var(--text-muted)}
 /* the week draft: Tom, 2026-11-16 */
 .wkd .sum{font-family:var(--font-display);font-size:var(--f-3);margin-bottom:var(--s-2)}
 .drow{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-2) 0;border-bottom:var(--border-width) solid var(--border)}
@@ -853,17 +856,22 @@ function healthEl(a, w) {
     line.appendChild(c);
   } else line.appendChild(el('span', 'hnew', 'New this week'));
   const strip = el('span', 'wks');
-  strip.setAttribute('aria-label', 'Tasks done each week, last ' + HEALTH_WEEKS + ' weeks');
+  const meas = hl.src === 'lift' || hl.src === 'ev';
+  strip.setAttribute('aria-label', (meas ? 'Each week’s reading' : hl.src ? 'Days each week' : 'Tasks done each week') + ', last ' + HEALTH_WEEKS + ' weeks');
   hl.weeks.forEach((k, i) => {
-    const s = el('span', 'wk' + (k.n ? ' got' : '') + (i === hl.weeks.length - 1 ? ' now' : ''), String(k.n));
-    s.title = (i === hl.weeks.length - 1 ? 'This week' : 'Week of ' + dayWord(k.s)) + ': ' + k.n + ' done';
+    const lit = meas ? k.up : k.n;
+    const s = el('span', 'wk' + (lit ? ' got' : '') + (i === hl.weeks.length - 1 ? ' now' : ''), k.n === '' ? '-' : String(k.n));
+    s.title = (i === hl.weeks.length - 1 ? 'This week' : 'Week of ' + dayWord(k.s)) + ': ' + (meas ? (k.n === '' ? 'no reading' : k.n) : k.n + (hl.src ? ' days' : ' done'));
     strip.appendChild(s);
   });
   line.appendChild(strip);
   if (hl.span) line.appendChild(el('span', 'span', esc(hl.span)));
   box.appendChild(line);
+  /* a goal fed by data says where the data stands; its tasks are optional */
+  if (hl.line) box.appendChild(el('div', 'hfix', '<span class="nx">' + esc(hl.line) + '</span>'));
   const nx = aimNext(a), fix = el('div', 'hfix');
   if (nx.kind === 'next') fix.appendChild(el('span', 'nx', 'Next: ' + esc(nx.x.text) + ', ' + esc(dayWord(dueOf(nx.x)))));
+  else if (nx.kind === 'add' && hl.line) { /* nothing to add: the data moves it */ }
   else {
     if (nx.kind === 'sched') fix.appendChild(el('span', 'nx', 'Nothing due this week. Next: ' + esc(nx.x.text)));
     const b = el('button', 'addg', ico(nx.kind === 'sched' ? 'today' : 'add') + '<span>' + (nx.kind === 'sched' ? 'Put on today' : 'Add a task') + '</span>');
@@ -871,7 +879,7 @@ function healthEl(a, w) {
     b.onclick = e => { e.stopPropagation(); nx.kind === 'sched' ? putOnToday(nx.x) : addAimTask(a); };
     fix.appendChild(b);
   }
-  box.appendChild(fix);
+  if (fix.children.length) box.appendChild(fix);
   return box;
 }
 function putOnToday(x) {
@@ -928,7 +936,7 @@ function draftWeek() {
     if (nx.kind === 'sched' && movable(nx.x)) {
       used[nx.x.key] = 1;
       items.push({ id: nx.x.key, op: 'add', x: nx.x, a: a, day: put(nx.x.key, roomy()) });
-    } else if (nx.kind === 'add') items.push({ id: 'g:' + a.key, op: 'step', a: a, day: put('g:' + a.key, roomy()) });
+    } else if (nx.kind === 'add' && !Goals.fed(a)) items.push({ id: 'g:' + a.key, op: 'step', a: a, day: put('g:' + a.key, roomy()) });
   });
   open.filter(x => movable(x) && !used[x.key] && dueOf(x) && dueOf(x) < t).sort(sortQ).forEach(x => {
     used[x.key] = 1;
@@ -1369,7 +1377,7 @@ function drawAimCard(list) {
     const bx = el('div', 'bx');
     bx.appendChild(el('p', 'aimtx', esc(a.text)));
     if (a.why) bx.appendChild(el('p', 'why', esc(a.why)));
-    bx.appendChild(el('p', 'why', esc(workLine(a, w))));
+    if (!Goals.fed(a)) bx.appendChild(el('p', 'why', esc(workLine(a, w))));
     const hb = healthEl(a, w);
     if (hb) bx.appendChild(hb);
     const all = el('button', 'addg', ico('forward') + '<span>All goals</span>');
@@ -1416,7 +1424,7 @@ function aimRow(a, w) {
   const meta = el('div', 'meta');
   if (a.state) meta.appendChild(el('span', null, (a.state === 'done' ? 'Done ' : 'Dropped ') + esc(dayWord(a.doneOn || T()))));
   else if (a.by) meta.appendChild(el('span', late ? 'late' : '', ico('calendar') + esc((late ? 'Time is up, ' : 'By ') + dayWord(a.by))));
-  if (!a.state) meta.appendChild(el('span', null, esc(workLine(a, w))));
+  if (!a.state && !Goals.fed(a)) meta.appendChild(el('span', null, esc(workLine(a, w))));
   meta.appendChild(el('span', 'pj', '<span class="hat">^</span> ' + esc(a.tag)));
   body.appendChild(meta);
   const note = (a.log || []).slice(-1)[0];
@@ -1503,19 +1511,92 @@ function checkInAim(a) {
     Mobile.feedback('success');
   } }] });
 }
+/* What moves a goal (Tom, 2026-11-16, "1A"): its tasks, or data he already
+   logs: TRAIN sessions a week, a lift's estimated 1RM, a STATUS measure, a
+   BLOCK habit's days a week. The rule is shared/goals.js. Hands back
+   {read()}: the src to save, null for tasks, false when a box is wrong. */
+function srcPicker(b, cur) {
+  let kind = (cur && cur.kind) || '';
+  b.appendChild(el('h4', 'sh', 'Moved by'));
+  const chips = el('div', 'chips'), more = el('div', 'srcin');
+  b.appendChild(chips); b.appendChild(more);
+  const exs = Rec.map('exercise') || {}, flds = Rec.map('field') || {}, acts = Rec.map('activity') || {};
+  const nameOf = (m, k, f) => (m[k] && (m[k][f] || m[k].name || m[k].label)) || '';
+  const list = (id, m, f) => {
+    const dl = el('datalist'); dl.id = id;
+    Object.keys(m).map(k => nameOf(m, k, f)).filter(Boolean).sort((x, y) => x.localeCompare(y))
+      .forEach(n => { const o = document.createElement('option'); o.value = n; dl.appendChild(o); });
+    return dl;
+  };
+  const keyOf = (m, f, name) => Object.keys(m).find(k => nameOf(m, k, f).toLowerCase() === String(name).trim().toLowerCase()) || '';
+  const num = (v, ph, label) => { const i = UI.field('text', { value: v == null ? '' : String(v), placeholder: ph }); i.inputMode = 'decimal'; i.setAttribute('aria-label', label); return i; };
+  let f1, f2, unit = (cur && cur.u) || 'lb';
+  const draw = () => {
+    chips.innerHTML = ''; more.innerHTML = '';
+    Object.keys(Goals.SRC_NAME).forEach(k => {
+      const c = el('button', 'chip' + (kind === k ? ' set' : ''), esc(Goals.SRC_NAME[k]));
+      c.type = 'button'; c.onclick = () => { kind = k; draw(); };
+      chips.appendChild(c);
+    });
+    const same = cur && cur.kind === kind;
+    f1 = f2 = null;
+    if (kind === 'train') {
+      f1 = num(same ? cur.n : 3, 'Sessions a week', 'Sessions a week');
+      more.appendChild(el('span', 'hint', 'Sessions a week')); more.appendChild(f1);
+    } else if (kind === 'tick') {
+      more.appendChild(list('srcacts', acts, 'name'));
+      f2 = UI.field('text', { value: same ? nameOf(acts, cur.act, 'name') : '', placeholder: 'Which habit' });
+      f2.setAttribute('list', 'srcacts'); f2.setAttribute('aria-label', 'Which habit');
+      f1 = num(same ? cur.n : 5, 'Days a week', 'Days a week');
+      more.appendChild(f2); more.appendChild(el('span', 'hint', 'Days a week')); more.appendChild(f1);
+    } else if (kind === 'lift') {
+      more.appendChild(list('srcexs', exs, 'name'));
+      f2 = UI.field('text', { value: same ? nameOf(exs, cur.ex, 'name') : '', placeholder: 'Which lift' });
+      f2.setAttribute('list', 'srcexs'); f2.setAttribute('aria-label', 'Which lift');
+      const tv = same && cur.target ? Math.round((unit === 'lb' ? cur.target * Goals.LB : cur.target) * 10) / 10 : '';
+      f1 = num(tv, 'Estimated 1RM to reach', 'Estimated one rep max to reach');
+      const u = el('button', 'chip set', unit); u.type = 'button';
+      u.onclick = () => { unit = unit === 'lb' ? 'kg' : 'lb'; u.textContent = unit; };
+      more.appendChild(f2); more.appendChild(f1); more.appendChild(u);
+    } else if (kind === 'ev') {
+      more.appendChild(list('srcflds', flds, 'label'));
+      f2 = UI.field('text', { value: same ? nameOf(flds, cur.field, 'label') : '', placeholder: 'Which measure' });
+      f2.setAttribute('list', 'srcflds'); f2.setAttribute('aria-label', 'Which measure');
+      f1 = num(same ? cur.target : '', 'Number to reach', 'Number to reach');
+      more.appendChild(f2); more.appendChild(f1);
+    }
+  };
+  draw();
+  return { read() {
+    if (!kind) return null;
+    const n = parseFloat(String(f1.value).replace(',', '.'));
+    if (!isFinite(n) || (kind !== 'ev' && kind !== 'lift' && n <= 0)) { UI.toast('Write a number', { bad: true }); return false; }
+    if (kind === 'train') return { kind: kind, n: Math.round(n) };
+    const pick = kind === 'tick' ? keyOf(acts, 'name', f2.value) : kind === 'lift' ? keyOf(exs, 'name', f2.value) : keyOf(flds, 'label', f2.value);
+    if (!pick) { UI.toast('Pick one from the list', { bad: true }); return false; }
+    if (kind === 'tick') return { kind: kind, act: pick, n: Math.round(n) };
+    const src = kind === 'lift' ? { kind: kind, ex: pick, u: unit, target: unit === 'lb' ? n / Goals.LB : n } : { kind: kind, field: pick, target: n };
+    const keep = cur && cur.kind === kind && (cur.ex || cur.field) === pick && cur.start != null;
+    src.start = keep ? cur.start : Goals.startOf(src);
+    if (src.start == null) { UI.toast('No readings of that yet', { bad: true }); return false; }
+    return src;
+  } };
+}
 /* Making or changing a goal: the words, the horizon, its ^name, a target
-   date, and why it matters. */
+   date, why it matters, and what moves it. */
 function aimSheet(a, hid) {
   const cur = a ? Rec.get('aim', null, a.key) : null;
   if (a && !cur) return;
   const st = cur ? Object.assign({}, cur) : { text: '', h: hid || '1m', why: '', made: T(), by: addMonths(T(), hzOf(hid).months), tag: '' };
-  let tagTouched = !!(cur && cur.tag), text, why, tag;
+  let tagTouched = !!(cur && cur.tag), text, why, tag, srcUI;
   const save = () => {
     const v = text.value.trim();
     if (!v) { UI.toast('Write the goal first', { bad: true }); return false; }
     const tg = slug(tag.value.replace(/^\^/, '')) || aimTag(v, a && a.key);
     if (aims().some(x => x.tag === tg && (!a || x.key !== a.key))) { UI.toast('^' + tg + ' is another goal’s name', { bad: true }); return false; }
-    const patch = { text: v, h: st.h, why: why.value.trim(), by: st.by || '', tag: tg };
+    const src = srcUI.read();
+    if (src === false) return false;
+    const patch = { text: v, h: st.h, why: why.value.trim(), by: st.by || '', tag: tg, src: src };
     if (a) Rec.patch('aim', null, a.key, patch);
     else Rec.set('aim', null, newId(), Object.assign(patch, { made: T(), state: '', ord: aims().length }));
     Mobile.feedback('success');
@@ -1567,6 +1648,7 @@ function aimSheet(a, hid) {
       b.appendChild(tw);
       why = UI.field('note', { value: st.why || '', placeholder: 'Why it matters (optional)', rows: 2 });
       b.appendChild(why);
+      srcUI = srcPicker(b, st.src || null);
       if (a) {
         const linked = quests().filter(x => !x.done && aimOf(x) === a.key);
         if (linked.length) {

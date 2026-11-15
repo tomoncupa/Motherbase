@@ -1120,6 +1120,28 @@ async function run() {
     const n3 = Goals.next(a);
     return n1.kind === 'sched' && n1.x.key === 'later' && n2.kind === 'add' && n3.kind === 'next' && n3.x.key === 'soon';
   }));
+  ok('goals: a goal fed by data counts TRAIN sessions and BLOCK habit days a week, plans and warmups as TRAIN does', goalRun((t, rows) => {
+    const ws = Goals.weekStart(t), lw = Day.shift(ws, -7);
+    rows.set = [0, 2, 4].map(o => ({ key: 's' + o, date: Day.shift(lw, o), payload: { ex: 'b', kg: 100, r: 5, done: 1 } }))
+      .concat([{ key: 'p', date: ws, payload: { ex: 'b', kg: 200, r: 5, plan: 1, done: 0 } }]);
+    rows.tick = [{ key: 'walk.am', date: ws, payload: { qty: 1 } }, { key: 'walk', date: lw, payload: { qty: 1 } }, { key: 'walker', date: lw, payload: { qty: 1 } }];
+    const made = Day.shift(t, -30);
+    const tr = Goals.health({ key: 'a', made: made, state: '', src: { kind: 'train', n: 3 } });
+    const hb = Goals.health({ key: 'b', made: made, state: '', src: { kind: 'tick', act: 'walk', n: 2 } });
+    return tr.v === 'on' && tr.weeks[Goals.WEEKS - 2].n === 3 && tr.weeks[Goals.WEEKS - 1].n === 0 &&
+      hb.weeks[Goals.WEEKS - 1].n === 1 && hb.weeks[Goals.WEEKS - 2].n === 1 && hb.v === 'adj';
+  }));
+  ok('goals: a lift reads its best estimated 1RM, working sets only, and a measure is held to its pace line', goalRun((t, rows) => {
+    rows.set = [{ key: 'w', date: Day.shift(t, -1), payload: { ex: 'b', kg: 150, r: 5, done: 1, note: 'wu' } },
+      { key: 'x', date: Day.shift(t, -1), payload: { ex: 'b', kg: 100, r: 1, done: 1 } }];
+    rows.ev = [{ key: 'kg', date: Day.shift(t, -1), payload: { e: [{ t: 1, v: 90 }, { t: 2, v: 84 }] } }];
+    const lift = Goals.health({ key: 'l', made: Day.shift(t, -10), by: Day.shift(t, 10), state: '', src: { kind: 'lift', ex: 'b', target: 100, start: 90 } });
+    const a = { key: 'm', made: Day.shift(t, -10), by: Day.shift(t, 10), state: '', src: { kind: 'ev', field: 'kg', target: 80, start: 90 } };
+    const m = Goals.health(a);
+    a.src.target = 70;
+    const slow = Goals.health(a);
+    return lift.v === 'on' && /Reached/.test(lift.line) && m.v === 'on' && slow.v === 'adj' && Goals.startOf({ kind: 'ev', field: 'kg' }) === 84;
+  }));
   ok('journal: a range on a todo is its start and its end; on an entry a start and a length', (() => {
     const t = Day.shift(Day.today(), -2), real = window.Rec, rows = {};
     window.Rec = { appId: 'smoke', all: () => [], set: (ty, dd, k, p) => { if (ty === 'note') rows[k] = p; }, del: () => {} };
