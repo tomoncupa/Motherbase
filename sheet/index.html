@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- this app's own version: bump it in the commit that changes the app (root CLAUDE.md, Commits) -->
-<meta name="mb-version" content="1.0.6, 2026-10-23">
+<meta name="mb-version" content="1.0.7, 2026-11-16">
 <title>CHARACTER SHEET</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -223,11 +223,46 @@ const showReps = n => String(Math.round((+n || 0) * 100) / 100);
 const repsText = s => !s.split ? showReps(s.r)
   : s.split.text + (Math.abs(s.er - s.r) > 1e-6 ? ' (counts as ' + showReps(s.er) + ')' : '');
 
+/* Assisted lifts, the right way up: TRAIN.isAssisted, TRAIN.wk and
+   TRAIN.load since TRAIN 1.0.83. On an assisted pull-up or dip machine the
+   weight logged is the HELP, so less is stronger. Assisted when the name says
+   "assist", unless the exercise's own switch (`assist`, 1 or 0) says
+   otherwise. `w` is the weight where bigger is stronger (the help negated),
+   which records compare; `load` is what the body moved, bodyweight minus
+   help, null with no weigh-in, which tonnage adds. Bodyweight is STATUS's
+   `ev` weight in its field's unit, the weigh-in on or before the day, else
+   the first after. */
+function isAssisted(ex) {
+  if (!ex) return false;
+  if (ex.assist === 1 || ex.assist === 0) return ex.assist === 1;
+  return /assist/i.test(ex.name || '');
+}
+function bwList() {
+  const list = [];
+  try {
+    const fu = (Rec.map('field').weight || {}).unit || 'lb';
+    Rec.all('ev').forEach(r => {
+      const e = r && r.key === 'weight' && r.date && r.payload ? r.payload.e : null;
+      const v = e && e.length ? +e[e.length - 1].v : 0;
+      if (v > 0) list.push([r.date, fu === 'lb' ? v / LB : v]);
+    });
+  } catch (err) { return []; }
+  return list.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+}
+function bwOn(L, date) {
+  if (!L.length) return null;
+  let lo = 0, hi = L.length - 1, at = -1;
+  while (lo <= hi) { const mid = (lo + hi) >> 1; if (L[mid][0] <= date) { at = mid; lo = mid + 1; } else hi = mid - 1; }
+  return L[at < 0 ? 0 : at][1];
+}
+
 /* Working sets that count, oldest first. A planned set counts once ticked
    or updated, never by its day passing, which is TRAIN.counts (1.0.78). */
 function workSets() {
   const today = Day.today();
   const out = [], sw = splitWeights();
+  const exs = Rec.map('exercise'), aMemo = {}, bw = bwList();
+  const assisted = id => id in aMemo ? aMemo[id] : (aMemo[id] = isAssisted(exs[id]));
   Rec.all('set').forEach(r => {
     const p = r.payload || {};
     if (!r.date || r.date > today || !p.ex) return;
@@ -236,9 +271,13 @@ function workSets() {
     if (warm) return;
     const reps = +p.r || 0, split = splitNote(p.note, reps);
     /* `er` is what the set counts for in strength, `r` every rep */
-    out.push({ date: r.date, ex: p.ex, kg: +p.kg || 0, r: reps, split: split, er: split ? effReps(split, reps, sw) : reps });
+    const kg = +p.kg || 0, a = assisted(p.ex);
+    let load = kg;
+    if (a) { const b = bwOn(bw, r.date); load = b ? Math.max(0, b - kg) : null; }
+    out.push({ date: r.date, ex: p.ex, kg: kg, w: a ? -kg : kg, a: a, load: load,
+      r: reps, split: split, er: split ? effReps(split, reps, sw) : reps });
   });
-  return out;
+  return out.sort((x, y) => x.date < y.date ? -1 : x.date > y.date ? 1 : 0);
 }
 
 /* Milestones: the fixed ones, then every `step` after the last. */
@@ -283,8 +322,10 @@ function trainFeats(out) {
   const recDays = {};
   Object.keys(byEx).forEach(ex => {
     const list = byEx[ex].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-    const best = {};                       // best[er] = heaviest kg at exactly er reps; er may be 13.6
-    const atLeast = r => { let m = 0; for (const k in best) if (+k >= r - 1e-6 && best[k] > m) m = best[k]; return m; };
+    /* best[er] = the strongest `w` at exactly er reps; er may be 13.6. `w` is
+       the help negated on an assisted lift, so less help is the record. */
+    const best = {};
+    const atLeast = r => { let m = null; for (const k in best) if (+k >= r - 1e-6 && (m === null || best[k] > m)) m = best[k]; return m; };
     let days = 0;
     for (let i = 0; i < list.length;) {
       const d = list[i].date, day = [];
@@ -293,12 +334,13 @@ function trainFeats(out) {
         let top = null;
         day.forEach(s => {
           const was = atLeast(s.er);
-          if (was > 0 && s.kg > was + 1e-6 && (!top || s.kg > top.kg || (s.kg === top.kg && s.er > top.s.er)))
-            top = { kg: s.kg, s: s, was: was };
+          if (was !== null && s.w > was + 1e-6 && (!top || s.w > top.s.w || (s.w === top.s.w && s.er > top.s.er)))
+            top = { s: s, was: was };
         });
-        if (top) (recDays[d] = recDays[d] || []).push({ ex: ex, name: exName(ex), kg: top.kg, reps: repsText(top.s), gain: top.kg - top.was });
+        if (top) (recDays[d] = recDays[d] || []).push({ ex: ex, name: exName(ex), kg: top.s.kg, a: top.s.a,
+          reps: repsText(top.s), gain: top.s.w - top.was });
       }
-      day.forEach(s => { if (!(best[s.er] >= s.kg)) best[s.er] = s.kg; });
+      day.forEach(s => { if (!(best[s.er] >= s.w)) best[s.er] = s.w; });
       days++;
     }
   });
@@ -306,10 +348,10 @@ function trainFeats(out) {
     const recs = recDays[d].sort((a, b) => b.gain - a.gain);
     const shown = recs.slice(0, 5);
     const lines = ['# RECORD BROKEN', recs.length === 1 ? 'A record has been broken.' : recs.length + ' records have been broken.'];
-    shown.forEach(x => lines.push('- [x] ' + x.name + ' ' + wt(x.kg) + ' × ' + x.reps));
+    shown.forEach(x => lines.push('- [x] ' + x.name + ' ' + wt(x.kg) + (x.a ? ' help' : '') + ' × ' + x.reps));
     if (recs.length > shown.length) lines.push('- [x] ' + (recs.length - shown.length) + ' more');
     lines.push('Rewards:');
-    shown.forEach(x => lines.push('+' + wt(x.gain) + ' on ' + x.name));
+    shown.forEach(x => lines.push(x.a ? wt(x.gain) + ' less help on ' + x.name : '+' + wt(x.gain) + ' on ' + x.name));
     out.push({ id: 'rec|' + d, date: d, kind: 'record', n: recs.length, title: recs.length === 1 ? 'Record: ' + recs[0].name : recs.length + ' records',
       sub: shown.map(x => x.name).join(', '), text: lines.join('\n') });
   });
@@ -353,12 +395,13 @@ function trainFeats(out) {
         'Started the week of ' + Day.label(wStart) + '.', 'Rewards: ' + wn + ' weeks unbroken'].join('\n') });
   });
 
-  /* TONNAGE: everything lifted, weight times reps, added up. */
+  /* TONNAGE: everything lifted, weight times reps, added up. An assisted
+     set adds bodyweight minus help, and nothing with no weigh-in. */
   let kg = 0, step = 0;
   const ton = LADDER.tonnes;
   const hits = ton[0].slice();
   sets.forEach(s => {
-    kg += s.kg * s.r;
+    kg += (s.load || 0) * s.r;
     while (true) {
       const next = step < hits.length ? hits[step] : hits[hits.length - 1] + (step - hits.length + 1) * ton[1];
       if (kg < next * 1000) break;

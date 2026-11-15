@@ -153,3 +153,7 @@ the log. Do not "fix" this app back towards DOCTRINE's no-XP rules.
 ## 1.0.6, 2026-10-23
 
 `workSets` follows TRAIN 1.0.78: a planned set counts once ticked or updated, never by its day passing. A suggestion left untouched is no feat.
+
+## 1.0.7, 2026-11-16
+
+**An assisted lift reads the right way up**, copied from TRAIN 1.0.83 (`isAssisted`, `bwOn` in SHEET). The weight on an assisted pull-up or dip machine is the help, so less is stronger: assisted when the name says "assist", unless `exercise.assist` is 1 or 0. RECORD compares `w`, the help negated, and its window reads "40 lb help × 16" with "10 lb less help on ..." as the reward. TONNAGE adds bodyweight minus help (STATUS's `ev` weight, the weigh-in on or before the day, else the first after) and leaves the set out with no weigh-in. `workSets` now returns oldest first, as its comment always said. [TESTED headless Chromium with made-up rows: Assisted Pull-up 50 x 16 three days then 70 x 13 gives no record, 40 x 16 does; a Dip Machine with `assist: 1` and Bench Press both record; load null with no weigh-in, 130 and 110 lb at 180 lb bodyweight.] UNTESTED on his real log and phone.
