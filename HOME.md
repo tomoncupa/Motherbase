@@ -638,3 +638,16 @@ Tom: "Tracking number of tracked Vs untracked meals might help". He picked a cou
 ## 2026-11-11, HOME 1.0.111: LOG WEEK is typed into
 
 Tom: "Yes, make it editable". Each summary on LOG WEEK, a day's (`day.note`) and a week's (`recap` keyed `week`), is a box on the card. It saves the way LOG's summary dialog does (trimmed, merged into the row, the row deleted when empty), half a second after the last key and on leaving the box; Enter saves and leaves, Shift+Enter is a new line. The box grows with the text. The day or week name is the button that opens LOG there. [TESTED] demo in Chrome at 1918 wide, real clicks and keys: today and a two-line week saved and shown, a week cleared to no row, LOG's store reading the same row, the name opening LOG; review 212/212 in WebKit at 390.
+
+## 2026-11-16, HOME 1.0.114: THIS WEEK
+
+Tom, from Superfocus, "integrate this into quests and Motherbase", for people
+with no Todoist, and he picked a home card. THIS WEEK (`thisweek`, 4 by 5)
+lists every open QUESTS goal: its words (never cut), this week's call as a
+button with its colour on a dot (tap: That's right, another call, Clear my
+call, written by `Goals.mark`), the last 6 weeks' done counts with the number
+in each box, "Day X of Y", and one fix: the next task this week, Put on today
+(`Goals.toToday`, with Undo) or Add a task (opens QUESTS Goals). PLAN THE WEEK
+opens QUESTS's week draft (`goTo(['quest', 'week'])`). No goals: "No goals"
+and SET A GOAL. Every rule is `shared/goals.js`, the one QUESTS reads. Tested
+in headless Chromium at 1600 and 390 by clicking; review 197 of 197.
