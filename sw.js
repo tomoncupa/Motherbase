@@ -77,6 +77,7 @@ const PRECACHE = [
   'shared/dose.js',
   'shared/grade.js',
   'shared/goals.js',
+  'shared/chapter.js',
   'shared/skins.js',
   'shared/boot.js',
   'shared/skins.json',

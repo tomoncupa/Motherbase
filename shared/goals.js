@@ -123,19 +123,22 @@
     return { d: ds[ds.length - 1], v: ds.reduce((m, d) => Math.max(m, sr[d]), -Infinity), last: sr[ds[ds.length - 1]] };
   }
   /* What a goal fed by data says this week. Fills weeks; gives auto and line. */
-  function fromSource(a, t, weeks) {
+  function fromSource(a, t, weeks, cut) {
     const src = a.src;
     if (COUNT[src.kind]) {
       const days = countDays(src), n = Math.max(1, +src.n || 1);
-      weeks.forEach(k => { for (let i = 0; i < 7; i++) if (days[D().shift(k.s, i)]) k.n++; });
-      const now = weeks[weeks.length - 1].n, prev = weeks[weeks.length - 2].n;
-      const fresh = D().diff(t, a.made || t) < 7;
+      weeks.forEach(k => { for (let i = 0; i < 7; i++) { const d = D().shift(k.s, i); if (days[d] && (!cut || d >= cut)) k.n++; } });
+      weeks.forEach(k => { if (cut && D().shift(k.s, 6) < cut) k.n = ''; });
+      const now = weeks[weeks.length - 1].n || 0, prev = weeks[weeks.length - 2].n || 0;
+      const fresh = D().diff(t, begun(a, cut)) < 7;
       const auto = now >= n || (!fresh && prev >= n) ? 'on' : fresh ? '' : prev >= Math.ceil(n / 2) ? 'adj' : 'off';
       const what = src.kind === 'train' ? 'sessions' : 'days';
       return { auto: auto, line: now + ' of ' + n + ' ' + what + ' this week' + (fresh ? '' : ', ' + prev + ' last week') };
     }
     /* stronger is always up; a measure goes the way its target lies */
-    const sr = series(src), dir = src.kind === 'lift' || +src.target >= +src.start ? 1 : -1, u = src.u;
+    const all = series(src), sr = {};
+    Object.keys(all).forEach(d => { if (!cut || d >= cut) sr[d] = all[d]; });
+    const dir = src.kind === 'lift' || +src.target >= +src.start ? 1 : -1, u = src.u;
     const show = v => src.kind === 'lift' ? fmtLift(v, u) : String(round(v));
     weeks.forEach(k => {
       let best = null;
@@ -151,6 +154,7 @@
       weeks[i].up = weeks[i].v != null && before != null && (weeks[i].v - before) * dir > 0;
     }
     const L = latest(sr, t);
+    if (!L && D().diff(t, begun(a, cut)) < 7) return { auto: '', line: 'No reading yet this chapter' };
     if (!L) return { auto: 'adj', line: 'No reading in 14 days' };
     /* a measure is the average of the last 7 days' readings, so one heavy morning
        cannot flip the call (2026-11-16); a lift is its best of the last 14 days */
@@ -159,10 +163,11 @@
     const start = +src.start, target = +src.target;
     const aim = 'aim ' + show(target) + (a.by ? ' by ' + D().short(a.by) : '');
     if ((now - target) * dir >= 0) return { auto: 'on', line: 'Now ' + show(now) + ', ' + aim + '. Reached' };
-    if (!a.by || !a.made || a.by <= a.made) {
+    const b0 = begun(a, cut);
+    if (!a.by || a.by <= b0) {
       return { auto: (now - start) * dir > 0 ? 'on' : 'adj', line: 'Now ' + show(now) + ', ' + aim };
     }
-    const frac = Math.min(1, Math.max(0, D().diff(t, a.made) / D().diff(a.by, a.made)));
+    const frac = Math.min(1, Math.max(0, D().diff(t, b0) / D().diff(a.by, b0)));
     const pace = start + (target - start) * frac, done = (now - start) * dir, need = (pace - start) * dir;
     const auto = done >= need ? 'on' : done >= need / 2 ? 'adj' : 'off';
     return { auto: auto, line: 'Now ' + show(now) + ', ' + aim + '. On pace: ' + show(pace) };
@@ -177,6 +182,13 @@
     return ds.length ? sr[ds[ds.length - 1]] : null;
   }
   const fed = a => !!(a && a.src && (COUNT[a.src.kind] || MEASURE[a.src.kind]));
+  /* ── a new chapter ──
+     shared/chapter.js: QUESTS counts from its chapter date, so nothing before
+     it is a call, a week, a last win or a reason to say off track. A week
+     wholly before it is drawn blank. `begun(a)` is the later of the day the
+     goal was made and that date. */
+  const cutOf = () => (g.Chapter && g.Chapter.from('quest')) || '';
+  const begun = (a, cut) => [a.made || '', cut || ''].sort().pop() || D().today();
   /* ── a goal that has been off for three weeks ──
      Tom, 2026-11-16, "B": root brief, "a target that has been missed for three
      weeks is not a target, it is furniture", so the app offers to make it
@@ -193,11 +205,11 @@
     if (!h || h.mark) return null;
     if (fed(a) && COUNT[a.src.kind]) {
       const n = Math.max(1, +a.src.n || 1), w = h.weeks.slice(-4, -1).map(k => k.n);
-      if (n <= 1 || w.length < 3 || w.some(c => c >= Math.ceil(n / 2))) return null;
-      if (D().diff(t, a.made || t) < 21) return null;
+      if (n <= 1 || w.length < 3 || w.some(c => c === '' || c >= Math.ceil(n / 2))) return null;
+      if (D().diff(t, begun(a, cutOf())) < 21) return null;
       return { n: Math.max(1, Math.min(n - 1, Math.max.apply(null, w) + 1)) };
     }
-    if (fed(a)) return h.v === 'off' && D().diff(t, a.made || t) >= 21 ? { days: 28 } : null;
+    if (fed(a)) return h.v === 'off' && D().diff(t, begun(a, cutOf())) >= 21 ? { days: 28 } : null;
     return h.idle >= 42 ? { days: 28 } : null;
   }
 
@@ -205,21 +217,23 @@
     if (!a || a.state) return null;
     const t = D().today(), ws = weekStart(t), weeks = [];
     for (let i = WEEKS - 1; i >= 0; i--) weeks.push({ s: D().shift(ws, -7 * i), n: 0 });
+    const cut = cutOf();
     if (fed(a)) {
-      const f = fromSource(a, t, weeks), mk = ((a.marks || {})[ws] || {}).v || '';
+      const f = fromSource(a, t, weeks, cut), mk = ((a.marks || {})[ws] || {}).v || '';
       const sp = a.made && a.by && a.by > a.made && a.by >= t
         ? 'Day ' + (D().diff(t, a.made) + 1) + ' of ' + D().diff(a.by, a.made) : '';
       return { ws: ws, auto: f.auto, mark: mk, v: mk || f.auto, weeks: weeks, span: sp, line: f.line, src: a.src.kind };
     }
     let last = null;
     (list || todos()).forEach(x => {
-      if (!x.done || !x.doneOn || of(x) !== a.key) return;
+      if (!x.done || !x.doneOn || of(x) !== a.key || (cut && x.doneOn < cut)) return;
       if (!last || x.doneOn > last.doneOn) last = x;
       const c = weeks.find(k => k.s === weekStart(x.doneOn));
       if (c) c.n++;
     });
-    const idle = D().diff(t, last ? last.doneOn : (a.made || t));
-    const auto = !last && D().diff(t, a.made || t) < 7 ? '' : idle <= 7 ? 'on' : idle <= 21 ? 'adj' : 'off';
+    if (cut) weeks.forEach(k => { if (D().shift(k.s, 6) < cut) k.n = ''; });
+    const idle = D().diff(t, last ? last.doneOn : begun(a, cut));
+    const auto = !last && D().diff(t, begun(a, cut)) < 7 ? '' : idle <= 7 ? 'on' : idle <= 21 ? 'adj' : 'off';
     const mark = ((a.marks || {})[ws] || {}).v || '';
     const span = a.made && a.by && a.by > a.made && a.by >= t
       ? 'Day ' + (D().diff(t, a.made) + 1) + ' of ' + D().diff(a.by, a.made) : '';

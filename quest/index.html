@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.35, 2026-11-16">
+<meta name="mb-version" content="1.0.36, 2026-11-16">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -18,6 +18,7 @@
 <script src="../shared/day.js"></script>
 <script src="../shared/records.js"></script>
 <script src="../shared/journal.js"></script>
+<script src="../shared/chapter.js"></script>
 <script src="../shared/goals.js"></script>
 <script src="../shared/todoist.js"></script>
 <script src="../shared/mobile.js"></script>
@@ -286,6 +287,12 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .wk.now{box-shadow:0 0 0 var(--border-width) var(--text-muted)}
 .hfix{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-1) var(--s-3);font-size:var(--f-2);color:var(--text-2)}
 .hfix .nx{overflow-wrap:anywhere;min-width:0}
+.chapp{padding:var(--s-2) 0;border-bottom:var(--border-width) solid var(--border)}
+.chnm{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--s-2)}
+.chnm .hint,.chg .hint{font-size:var(--f-1);color:var(--text-muted)}
+.chg{padding:var(--s-2) 0;border-bottom:var(--border-width) solid var(--border)}
+.chg .chips .mb-input{width:calc(var(--s-10) * .75);flex:none}
+.gh .lnk.ob{margin-left:0;text-decoration-color:var(--border-strong)}
 .hsmall{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-1);font-size:var(--f-2);color:var(--text-2)}
 .srcin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-2)}
 .srcin .mb-input{flex:1 1 calc(var(--s-10) * 1.5);min-width:0}
@@ -1471,7 +1478,10 @@ addEventListener('message', e => {
   const m = e.data;
   if (!(m && m.lifeos === 1 && typeof m.show === 'string' && m.show)) return;
   /* `week` is Upcoming with the week draft open, the home screen's PLAN THE WEEK */
-  if (m.show === 'week') { DRAFT_OPEN = true; go('upcoming'); } else go(m.show);
+  if (m.show === 'week') { DRAFT_OPEN = true; go('upcoming'); }
+  /* the home screen's NEW CHAPTER card */
+  else if (m.show === 'chapter') { go('goals'); chapterSheet(); }
+  else go(m.show);
 });
 function drawSide() {
   const side = $('#side'), c = counts();
@@ -1607,6 +1617,14 @@ function drawAimCard(list) {
    is ever taken off it: a goal done or dropped stays, under Finished. */
 function drawGoals(list) {
   const w = aimWorkAll(), all = aims();
+  const ch = Chapter.current(), cbox = el('section', 'grp');
+  const chead = el('div', 'gh', '<b>' + esc(ch ? Chapter.label(ch) : 'Chapter') + '</b><span class="rv">' +
+    esc(ch ? 'since ' + dayWord(ch.start) : 'none started') + '</span>');
+  const nb = el('button', 'addg', ico('refresh') + '<span>New chapter</span>');
+  nb.type = 'button'; nb.onclick = () => chapterSheet();
+  chead.appendChild(nb);
+  cbox.appendChild(chead);
+  list.appendChild(cbox);
   HZ.forEach(h => {
     const mine = all.filter(a => !a.state && a.h === h.id);
     const box = el('section', 'grp');
@@ -1885,6 +1903,195 @@ function aimSheet(a, hid) {
   });
 }
 
+/* ══════════════ A NEW CHAPTER ══════════════
+   Tom, 2026-11-16: reset tracking with zero guilt; a start date; dates in
+   blocks like TRAIN's; goals adjusted one by one; each app its own reset
+   point, overlap allowed; old overdue tasks to the Inbox (3A) or set one by
+   one; offered on Today after 14 quiet days (4A). The rule is
+   shared/chapter.js. Nothing is deleted: a chapter only moves where
+   counting begins. */
+const QUIET = 14;
+/* the last day anything was written or ticked in the journal */
+function lastActive() {
+  let last = '';
+  Rec.all('note').forEach(r => {
+    const p = r.payload || {};
+    if (p.src === 'goals' || p.src === 'wealth' || p.src === 'arc' || p.src === 'brief') return;
+    const d = p.done && p.doneOn ? p.doneOn : r.date;
+    if (d && d <= T() && d > last) last = d;
+  });
+  return last;
+}
+function quietOffer(list) {
+  const last = lastActive(), c = Chapter.current();
+  if (!last || Day.diff(T(), last) < QUIET || (c && c.start > last)) return;
+  const ln = el('button', 'pline', '<span class="gi">' + ico('refresh') + '</span><span class="nm">Start a new chapter</span><span class="rt">count from today</span>' + ico('next'));
+  ln.type = 'button';
+  ln.onclick = () => chapterSheet();
+  list.appendChild(ln);
+}
+function chapterSheet() {
+  const t = T(), aimsNow = openAims();
+  const over = quests().filter(x => !x.done && dueOf(x) && dueOf(x) < t && !x.rep && !(x.td && x.td.rec) && !MACHINE[srcOf(x)]);
+  const st = { name: '', start: t, from: {}, goals: {}, tasks: 'inbox' };
+  aimsNow.forEach(a => { st.goals[a.key] = { keep: true, text: a.text, by: a.by || '', n: a.src && a.src.n, target: a.src && a.src.target }; });
+  const chipRow = (box, opts, cur, pick) => {
+    box.innerHTML = '';
+    opts.forEach(o => {
+      const c = el('button', 'chip' + (o[0] === cur ? ' set' : ''), o[1]);
+      c.type = 'button'; c.onclick = () => pick(o[0], c);
+      box.appendChild(c);
+    });
+  };
+  const pickDay = (anchor, cur, fn) => dateMenu(anchor, { due: cur || '' }, v => fn(v.due || ''), { bulk: true, title: 'WHICH DAY' });
+  UI.dialog({ title: 'NEW CHAPTER', width: 620, body: b => {
+    b.appendChild(el('p', 'oldnote', 'Pick where counting starts. Nothing is deleted; earlier days stay, they just stop counting.'));
+    const nm = UI.field('text', { placeholder: 'Its name (optional)' });
+    nm.setAttribute('aria-label', 'The chapter’s name');
+    nm.oninput = () => { st.name = nm.value; };
+    b.appendChild(nm);
+    b.appendChild(el('h4', 'sh', 'Starts'));
+    const sbox = el('div', 'chips');
+    const drawStart = () => chipRow(sbox, [['t', ico('today') + ' Today'], ['pick', ico('calendar') + ' ' + (st.start === t ? 'Pick a day' : esc(dayWord(st.start)))]],
+      st.start === t ? 't' : 'pick', (v, c) => { if (v === 't') { st.start = t; drawStart(); drawApps(); } else pickDay(c, st.start, d => { st.start = d || t; drawStart(); drawApps(); }); });
+    b.appendChild(sbox);
+    b.appendChild(el('h4', 'sh', 'Each app counts from'));
+    const abox = el('div');
+    const drawApps = () => {
+      abox.innerHTML = '';
+      Chapter.APPS.forEach(app => {
+        const row = el('div', 'chapp');
+        row.appendChild(el('div', 'chnm', '<b>' + esc(app.name) + '</b><span class="hint">' + esc(app.what) + '</span>'));
+        const box = el('div', 'chips');
+        const cur = st.from[app.id] || '', eight = Day.shift(st.start, -56);
+        const which = !cur ? 'start' : cur === 'all' ? 'all' : cur === eight ? '8w' : 'pick';
+        chipRow(box, [['start', 'The start'], ['8w', 'Last 8 weeks'], ['all', 'Everything'], ['pick', ico('calendar') + ' ' + (which === 'pick' ? esc(dayWord(cur)) : 'Pick a day')]], which, (v, c) => {
+          if (v === 'start') st.from[app.id] = '';
+          else if (v === '8w') st.from[app.id] = eight;
+          else if (v === 'all') st.from[app.id] = 'all';
+          else { pickDay(c, cur && cur !== 'all' ? cur : st.start, d => { st.from[app.id] = d || ''; drawApps(); }); return; }
+          drawApps();
+        });
+        row.appendChild(box);
+        abox.appendChild(row);
+      });
+    };
+    drawStart(); drawApps();
+    b.appendChild(abox);
+    if (aimsNow.length) {
+      b.appendChild(el('h4', 'sh', 'Your goals'));
+      aimsNow.forEach(a => {
+        const g = st.goals[a.key], row = el('div', 'chg');
+        const tx = UI.field('text', { value: g.text });
+        tx.setAttribute('aria-label', 'Goal');
+        tx.oninput = () => { g.text = tx.value; };
+        row.appendChild(tx);
+        const box = el('div', 'chips');
+        const drawRow = () => {
+          box.innerHTML = '';
+          chipRow(box, [['keep', 'Keep'], ['drop', 'Drop it']], g.keep ? 'keep' : 'drop', v => { g.keep = v === 'keep'; drawRow(); });
+          const d = el('button', 'chip', ico('calendar') + ' ' + esc(g.by ? 'By ' + dayWord(g.by) : 'No date'));
+          d.type = 'button'; d.onclick = () => pickDay(d, g.by, v => { g.by = v; drawRow(); });
+          box.appendChild(d);
+          if (a.src && (a.src.kind === 'train' || a.src.kind === 'tick')) {
+            const n = UI.field('text', { value: String(g.n || '') }); n.inputMode = 'numeric';
+            n.setAttribute('aria-label', a.src.kind === 'train' ? 'Sessions a week' : 'Days a week');
+            n.oninput = () => { g.n = parseInt(n.value, 10) || g.n; };
+            box.appendChild(n); box.appendChild(el('span', 'hint', a.src.kind === 'train' ? 'sessions a week' : 'days a week'));
+          } else if (a.src && (a.src.kind === 'lift' || a.src.kind === 'ev')) {
+            const lb = a.src.kind === 'lift' && a.src.u === 'lb';
+            const v0 = a.src.kind === 'lift' ? Math.round((lb ? a.src.target * Goals.LB : a.src.target) * 10) / 10 : a.src.target;
+            const n = UI.field('text', { value: String(v0) }); n.inputMode = 'decimal';
+            n.setAttribute('aria-label', 'Target');
+            n.oninput = () => { const v = parseFloat(n.value); if (isFinite(v)) g.target = a.src.kind === 'lift' && lb ? v / Goals.LB : v; };
+            box.appendChild(n); box.appendChild(el('span', 'hint', a.src.kind === 'lift' ? (lb ? 'lb' : 'kg') + ', estimated 1RM' : 'to reach'));
+          }
+        };
+        drawRow();
+        row.appendChild(box);
+        b.appendChild(row);
+      });
+    }
+    if (over.length) {
+      b.appendChild(el('h4', 'sh', over.length + ' overdue task' + (over.length === 1 ? '' : 's')));
+      const obox = el('div', 'chips');
+      const drawOver = () => chipRow(obox, [['inbox', 'All to the Inbox'], ['one', 'One by one'], ['leave', 'Leave them']], st.tasks, v => { st.tasks = v; drawOver(); });
+      drawOver();
+      b.appendChild(obox);
+    }
+  }, actions: [{ label: 'CANCEL' }, { label: 'START THE CHAPTER', kind: 'go', fn: () => {
+    const undo = { goals: [], tasks: [] };
+    const from = {};
+    Object.keys(st.from).forEach(k => { if (st.from[k]) from[k] = st.from[k]; });
+    const key = Chapter.begin({ name: st.name, start: st.start, from: from });
+    aimsNow.forEach(a => {
+      const g = st.goals[a.key], cur = Rec.get('aim', null, a.key);
+      if (!cur) return;
+      undo.goals.push({ key: a.key, keep: cur });
+      if (!g.keep) { Rec.patch('aim', null, a.key, { state: 'dropped', doneOn: T() }); return; }
+      const patch = { text: String(g.text || '').trim() || cur.text, by: g.by || '' };
+      if (cur.src && (cur.src.kind === 'train' || cur.src.kind === 'tick') && g.n) patch.src = Object.assign({}, cur.src, { n: g.n });
+      if (cur.src && (cur.src.kind === 'lift' || cur.src.kind === 'ev') && isFinite(g.target)) {
+        const src = Object.assign({}, cur.src, { target: g.target });
+        const now = Goals.startOf(src);
+        if (now != null) src.start = now;
+        patch.src = src;
+      }
+      Rec.patch('aim', null, a.key, patch);
+    });
+    if (st.tasks === 'inbox') over.forEach(x => {
+      const keep = Rec.get('note', x.date, x.key);
+      if (!keep) return;
+      undo.tasks.push({ date: x.date, key: x.key, keep: keep });
+      saveRow(x, { due: '' });
+    });
+    Mobile.feedback('success');
+    UI.undo('New chapter from <b>' + esc(dayWord(st.start)) + '</b>', () => {
+      Rec.del('chapter', null, key);
+      undo.goals.forEach(u => Rec.set('aim', null, u.key, u.keep));
+      undo.tasks.forEach(u => { Rec.set('note', u.date, u.key, u.keep); publishNotes(u.date); });
+    });
+    if (st.tasks === 'one') setTimeout(() => oneByOne(over), 0);
+  } }] });
+}
+/* Set dates one by one (Tom: "a mass set date one by one mode"): one task at
+   a time, its day one tap away, then the next. One Undo puts every one back. */
+function oneByOne(list) {
+  list = list.filter(x => Rec.get('note', x.date, x.key));
+  if (!list.length) return;
+  const t = T(), dw = Day.dow(t), sat = Day.shift(t, (6 - dw + 7) % 7), mon = Day.shift(t, ((8 - dw) % 7) || 7);
+  const undo = [];
+  let i = 0, set = 0;
+  UI.dialog({ title: 'ONE BY ONE', width: 520, body: (b, h) => {
+    const draw = () => {
+      b.innerHTML = '';
+      if (i >= list.length) { h.close(); return; }
+      const x = list[i];
+      b.appendChild(el('p', 'oldnote', (i + 1) + ' of ' + list.length + (dueOf(x) ? ', was ' + esc(dayWord(dueOf(x))) : '')));
+      b.appendChild(el('p', 'dq', esc(x.text)));
+      const box = el('div', 'chips');
+      const go2 = d => {
+        const keep = Rec.get('note', x.date, x.key);
+        if (keep && d !== undefined) { undo.push({ date: x.date, key: x.key, keep: keep }); saveRow(x, { due: d }); set++; }
+        i++; draw();
+      };
+      [[ico('today') + ' Today', t], ['Tomorrow', Day.shift(t, 1)], ['This weekend', sat], ['Next week', mon], ['No date', '']].forEach(o => {
+        const c = el('button', 'chip', o[0]); c.type = 'button'; c.onclick = () => go2(o[1]); box.appendChild(c);
+      });
+      const pk = el('button', 'chip', ico('calendar') + ' Pick a day'); pk.type = 'button';
+      pk.onclick = () => dateMenu(pk, { due: dueOf(x) || '' }, v => go2(v.due || ''), { bulk: true, title: 'WHICH DAY' });
+      box.appendChild(pk);
+      const sk = el('button', 'chip', 'Skip'); sk.type = 'button'; sk.onclick = () => go2(undefined);
+      box.appendChild(sk);
+      b.appendChild(box);
+    };
+    draw();
+  }, onClose: () => {
+    if (!set) return;
+    UI.undo('Set ' + set + ' date' + (set === 1 ? '' : 's'), () => undo.forEach(u => { Rec.set('note', u.date, u.key, u.keep); publishNotes(u.date); }));
+  }, actions: [{ label: 'DONE' }] });
+}
+
 /* ══════════════ ON A PHONE ══════════════
    quest/CLAUDE.md, On the phone. Tabs and the + live outside the list and are
    made once; the CSS shows them only under 600px. */
@@ -2009,6 +2216,7 @@ function draw() {
     list.appendChild(bk);
   }
   if (VIEW === 'today') {
+    quietOffer(list);
     drawBrief(list);
     /* the week draft comes to Today on Sunday and Monday, and lives on Upcoming */
     if (Day.dow(T()) < 2) drawDraft(list, false);
@@ -2026,6 +2234,9 @@ function draw() {
         g.items.forEach(x => saveRow(x, { due: v.due == null ? '' : v.due }));
       });
       head.appendChild(r);
+      const ob = el('button', 'lnk ob', 'One by one');
+      ob.onclick = () => oneByOne(g.items.filter(x => !x.movedAway));
+      head.appendChild(ob);
     }
     box.appendChild(head);
     if (g.mixed) {

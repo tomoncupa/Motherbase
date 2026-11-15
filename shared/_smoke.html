@@ -12,6 +12,7 @@
 <script src="journal.js"></script>
 <script src="dose.js"></script>
 <script src="grade.js"></script>
+<script src="chapter.js"></script>
 <script src="goals.js"></script>
 <script src="mobile.js"></script>
 <script src="sound.js"></script>
@@ -1151,6 +1152,20 @@ async function run() {
     const fine = Goals.stuck(Object.assign({}, a, { src: { kind: 'train', n: 2 } }));
     const quiet = Goals.stuck({ key: 'q', made: Day.shift(t, -60), state: '' });
     return s1 && s1.n === 2 && kept === null && fine === null && quiet && quiet.days === 28;
+  }));
+  ok('chapter: each app counts from its own day, before the start allowed, everything kept on request', goalRun((t, rows) => {
+    rows.chapter = [{ key: 'c1', date: null, payload: { name: 'Old', start: Day.shift(t, -100), from: {}, t: 1 } },
+      { key: 'c2', date: null, payload: { name: '', start: Day.shift(t, -3), from: { status: Day.shift(t, -59), train: 'all' }, t: 2 } }];
+    return Chapter.current().key === 'c2' && Chapter.from('quest') === Day.shift(t, -3) && Chapter.from('status') === Day.shift(t, -59) &&
+      Chapter.from('train') === null && Chapter.from('quest', Day.shift(t, -50)) === Day.shift(t, -100) && Chapter.list().length === 2;
+  }));
+  ok('chapter: a goal counts only from QUESTS chapter day, so old misses are no call and no week', goalRun((t, rows, todo) => {
+    todo('old', { aim: 'g', done: 1, doneOn: Day.shift(t, -30) });
+    const a = { key: 'g', made: Day.shift(t, -90), state: '' };
+    const before = Goals.health(a);
+    rows.chapter = [{ key: 'c', date: null, payload: { start: Day.shift(t, -2), from: {}, t: 1 } }];
+    const after = Goals.health(a);
+    return before.v === 'off' && after.v === '' && after.weeks[0].n === '' && Goals.stuck(a) === null;
   }));
   ok('goals: a measure reads the last 7 days on average, so one heavy morning does not flip the call', goalRun((t, rows) => {
     rows.ev = [83, 83, 83, 83, 83, 83].map((v, i) => ({ key: 'kg', date: Day.shift(t, -1 - i), payload: { e: [{ t: 1, v: v }] } }))
@@ -4247,6 +4262,49 @@ async function run() {
       return /Opened in \d+(\.\d)? s here/.test(pane.textContent);
     })());
     if (was) Rec.set('device', null, id, was); else Rec.del('device', null, id);
+  }
+
+  /* ---- phone: what the iPhone's Shortcut sends (2026-11-16) ----
+     Parcels go straight into Phone._take, no database. Every row is dated
+     1999 and deleted after, so a run on a real device leaves nothing but
+     tombstones from 1999. */
+  for (let i = 0; i < 60 && !window.Phone; i++) await new Promise(r => setTimeout(r, 50));
+  ok('phone: io.js brings phone.js in after cloud.js', !!window.Phone && !!document.getElementById('mb-phone-js'));
+  if (window.Phone) {
+    const P = window.Phone, D = '1999-01-02';
+    const pd = P._perDay('1999-01-01 7,512\n' + D + ' 8514\n2999-01-01 5');
+    ok('phone: a day per line is read, commas and all, and a future day is left out',
+      pd.length === 2 && pd[0][0] === '1999-01-01' && pd[0][1] === 7512 && pd[1][1] === 8514);
+    const lone = P._perDay('4321');
+    ok('phone: a lone number is today', lone.length === 1 && lone[0][0] === Day.today() && lone[0][1] === 4321);
+    /* a push id made the way Firebase makes one, for a known moment */
+    const C64 = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz', when = 1794800000000;
+    let id = '', n = when; for (let i = 0; i < 8; i++) { id = C64.charAt(n % 64) + id; n = Math.floor(n / 64); }
+    ok('phone: when a parcel was sent is read off its push id', P._pushTime(id + 'abcdefghijkl') === when);
+    const had = Rec.get('ev', D, 'steps');
+    Rec.set('ev', D, 'steps', { e: [{ t: 1, v: 6000 }] });
+    const n1 = P._take({ k: 'steps', v: D + ' 8514' }, Date.now());
+    const n2 = P._take({ k: 'steps', v: D + ' 8514' }, Date.now());
+    P._take({ k: 'steps', v: D + ' 9001' }, Date.now());
+    const e = (Rec.get('ev', D, 'steps') || {}).e || [];
+    ok('phone: steps land as one phone reading that a newer figure replaces, the typed one kept',
+      n1 === 1 && n2 === 0 && e.length === 2 && e.some(x => x.v === 6000 && !x.src) &&
+      e.filter(x => x.src === 'phone').length === 1 && e.find(x => x.src === 'phone').v === 9001);
+    if (had) Rec.set('ev', D, 'steps', had); else Rec.del('ev', D, 'steps');
+    const t0 = new Date(1999, 0, 2, 9, 0).getTime();
+    const a1 = P._take({ k: 'app', v: 'Smoke App open' }, t0);
+    const a2 = P._take({ k: 'app', v: 'Smoke App close' }, t0 + 600000);
+    const a3 = P._take({ k: 'app', v: 'Smoke App close' }, t0 + 900000);
+    const ar = Rec.get('papp', D, 'smoke-app') || {};
+    ok('phone: an app open then close is one span; a close with no open adds nothing',
+      a1 === 1 && a2 === 1 && a3 === 0 && ar.name === 'Smoke App' && ar.spans && ar.spans.length === 1 &&
+      ar.spans[0][1] - ar.spans[0][0] === 600000 && !ar.open);
+    Rec.del('papp', D, 'smoke-app');
+    const pl = P._take({ k: 'place', v: '14.599512,120.984222' }, t0);
+    const pr = Rec.get('pplace', D, String(t0)) || {};
+    ok('phone: a place lands as its own dated row', pl === 1 && pr.lat === 14.59951 && pr.lon === 120.98422);
+    Rec.del('pplace', D, String(t0));
+    ok('phone: a parcel it does not know changes nothing', P._take({ k: 'safari', v: 'x' }, t0) === 0 && P._take(null, t0) === 0);
   }
 
   /* every promised check settles before anything is counted */

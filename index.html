@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.119, 2026-11-16">
+<meta name="mb-version" content="1.0.120, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -37,6 +37,7 @@ try { if (window.frameElement && typeof parent.stayIn === 'function') location.r
 <script src="shared/journal.js"></script>
 <script src="shared/dose.js"></script>
 <script src="shared/grade.js"></script>
+<script src="shared/chapter.js"></script>
 <script src="shared/goals.js"></script>
 <script src="shared/measure.js"></script>
 <script src="shared/chart.js"></script>
@@ -4468,6 +4469,32 @@ const WIDGETS = {
     },
   },
 
+  /* NEW CHAPTER: Tom, 2026-11-16, "a reset widget that's just a reset button
+     that removes itself". It opens QUESTS's New chapter (shared/chapter.js);
+     once a chapter starts after the card went on the board, the card takes
+     itself off, with Undo. */
+  newchapter: {
+    nm: 'NEW CHAPTER', w: 3, h: 2, app: 'quest', to: ['quest', 'chapter'],
+    sub: () => { const c = Chapter.current(); return c ? 'this one since ' + Day.short(c.start) : 'count from a new day'; },
+    draw(body, cfg) {
+      const c = Chapter.current();
+      if (c && cfg && cfg.at && c.t > cfg.at) {
+        setTimeout(() => {
+          const i = layout.indexOf(cfg);
+          if (i < 0) return;
+          const gone = layout.splice(i, 1)[0];
+          saveLayout(); drawHome();
+          UI.undo('<b>NEW CHAPTER</b> card removed', () => { layout.splice(i, 0, gone); saveLayout(); drawHome(); });
+        }, 0);
+        return;
+      }
+      const b = el('button', 'mb-btn mb-press mb-tap twplan', 'NEW CHAPTER');
+      b.type = 'button';
+      b.onclick = e => { e.stopPropagation(); goTo(['quest', 'chapter']); };
+      body.appendChild(b);
+    },
+  },
+
   projects: {
     nm: 'PROJECTS', w: 4, h: 3, app: 'quest', to: ['quest'],
     count() {
@@ -8042,6 +8069,7 @@ const ABOUT = {
   apps: 'A button for every app, in dock order; keys 1 to 9 open the first nine.',
   upcoming: 'Todos with a date coming up.',
   thisweek: 'Each goal’s call for the week, its one fix, and Plan the week.',
+  newchapter: 'One button that starts a new chapter, then takes itself off.',
   projects: 'Open todos for each project.',
   brief: 'The morning brief from your PC, and its todos.',
   rhythms: 'BLOCK’s Every blocks and Habits: owed, due, coming up and this period’s count, tickable.',
@@ -8104,6 +8132,8 @@ function widgetPicker(spot) {
       else if (spot.room) { const m = minSize(cfg.t); cfg.w = Math.max(m.w, Math.min(cfg.w, spot.room.w)); cfg.h = Math.max(m.h, Math.min(cfg.h, spot.room.h)); }
       else cfg.x = Math.min(spot.x, COLS + 1 - cfg.w);
     }
+    /* NEW CHAPTER takes itself off once a chapter starts after this moment */
+    if (cfg.t === 'newchapter') cfg.at = Date.now();
     layout.push(cfg);
     pinned = layout.length - 1;
   };
