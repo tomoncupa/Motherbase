@@ -379,6 +379,23 @@ below the screen, under the header, the view strip, the 135px add box, the
 week draft and the goal card; rows 73 to 92px with date, source, project and
 label. Fixes offered as a pick list with a mockup; build only what he picks.
 
+**Built, 1.0.33** (he picked 1 to 4, plus Todoist's hold): under 600px the
+view strip and the add box go; tabs at the bottom (Today, Upcoming, Inbox,
+Goals, More: Calendar, projects, labels); a gold + by the thumb opens the add
+line above the keyboard (`--kb`) with a veil that closes it; the week draft and
+today's goal are one line each (`.pline`); rows lose their source word and
+buttons; a hold opens the task sheet (`quickSheet`): Today, Tomorrow, This
+weekend, Next week, No date, Pick a day, P1 to P3 and None, each one tap with
+Undo, then Move to, Serves a goal, Edit, Complete, More, Delete. Past 600px
+nothing changed. Measured at 390 by 664: first task 756px down to 241px, rows
+62px. Review 212 of 212 in WebKit at 390.
+**Your own AI, 1.0.34** (Tom: "give people an option to log into their Claude
+or chatgpt"): no app can sign in to someone's Claude or ChatGPT subscription,
+so the week draft has CLAUDE and CHATGPT (copy a prompt of goals and up to 40
+open tasks, each named by a five-letter hash of its key, and open the site) and
+PASTE THE PLAN (reads "Day | [id] task | ^goal" lines, moves or adds them, one
+Undo). Main Menu's PLAN WITH CLAUDE stays the one-press version.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
