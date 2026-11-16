@@ -49,6 +49,8 @@
   });
   const targets = () => st('targets', { p: 175, c: 200, f: 80, kcal: 2220, na: 3500, k: 4500 });
   const kcalDir = () => st('kcalDir', 'both');
+  /** under-is-free calories still need at least this share of the target */
+  const FLOOR = 2 / 3;
   const countCal = () => !!st('countCal', 1);
   const SENT = 'sentfood';
   const pillars = () => {
@@ -69,7 +71,10 @@
     if (!target) return null;
     if (v == null) return 0;
     if (free === 'over' && v >= target) return 100;
-    if (free === 'under' && v <= target) return 100;
+    /* Tom, 2026-11-16: under is free only down to the floor. Under two
+       thirds of the target is an F, or a day with almost nothing eaten
+       reads as S from its first meal. */
+    if (free === 'under' && v <= target) return v < target * FLOOR ? 0 : 100;
     return Math.max(0, 100 - Math.abs(v - target) / target * 100);
   }
   /** the letter for one pillar on one day, or null if it does not apply */
@@ -221,7 +226,7 @@
         const dir = p.id === 'protein' ? 'over' : kcalDir(), u = p.id === 'protein' ? 'g' : ' kcal';
         if (p.letter === 'S') x.text = 'At S';
         else if (v > hi && dir !== 'over') { x.text = fmt(v - hi) + u + ' over the S band'; x.fixed = true; }
-        else if (dir === 'under') x.text = 'Up to ' + fmt(hi - v) + u + ' more';
+        else if (dir === 'under') x.text = fmt(Math.ceil(t * FLOOR) - v) + ' to ' + fmt(hi - v) + u + ' more';
         else if (dir === 'over') x.text = fmt(lo - v) + u + ' more';
         else x.text = fmt(lo - v) + ' to ' + fmt(hi - v) + u + ' more';
       } else if (p.id === 'steps') {
@@ -245,7 +250,7 @@
   }
 
   g.Grade = {
-    VERSION: '1.1.0', RANKS: RANKS, SENT: SENT, day: day, toS: toS, stepPlan: stepPlan,
+    VERSION: '1.1.1', FLOOR: FLOOR, RANKS: RANKS, SENT: SENT, day: day, toS: toS, stepPlan: stepPlan,
     rankIndex: rankIndex, ladderLetter: ladderLetter, accuracy: accuracy,
     pillarLetter: pillarLetter, averageLetter: averageLetter,
     standards: standards, targets: targets, kcalDir: kcalDir, countCal: countCal, pillars: pillars,
