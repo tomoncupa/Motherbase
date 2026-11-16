@@ -714,6 +714,23 @@ Also seen: Local Storage was recreated "since it was missing" on 14 Nov
 another power loss at 04:41 on the 16th. Same morning the store's IndexedDB
 answered slower than live sync waits with three programs open on it
 (`tools/backup.html`, Rec.whole); Firebase keeps the sign-in there first.
+cloud.js 0.2.10 keeps a second copy of the sign-in (`mb.signin`), tested with
+a made-up copy only: Google refused it and the copy deleted itself.
+
+**Open, asked by Tom the same day: "keep TRAIN to caring about the last
+month".** 13,168 of 25,854 rows are sets, 231 from the last month. Apps open
+in 1 to 4 s on the desktop (device rows); the slow part is live sync's start,
+which waits for every set (`R.need()`) and IndexedDB (`R.whole()`). Not
+measured which step costs the time: cloud.js 0.2.11 writes `took` on
+`mb.cloud` (ms since open for sdk, auth, need, whole, first, sent); read it
+from `desktop/data/EBWebView/Default/Local Storage/leveldb` once a desktop
+program has started twice on 0.2.11. If `need` is the cost, the plan is
+live sync starting on recent sets and reading an older set only when the
+cloud sends one or a push needs one, never cutting what TRAIN keeps
+(records, Profile, range.js and COACH read all of it). That touches
+records.js; another session was editing it that day. Also seen: the hosted
+home in Tom's Chrome froze for minutes at 1.4 GB with 1,619 rows in its
+store and its set read taking 24 s.
 
 ## The start screen (2026-10-04, `boot.js`)
 
