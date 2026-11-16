@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.22, 2026-11-16">
+<meta name="mb-version" content="1.0.23, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2152,12 +2152,12 @@ function drawContent(m) {
 /* FREE SPEAK's sheet: his jumping off points, newest first, or straight into
    a ramble. With none yet it goes straight in. */
 const jumps = () => myTopics().filter(t => t.kind === 'jump' && !t.used).sort((a, b) => (b.at || 0) - (a.at || 0));
-const JUMP_LABEL = { push: 'Push back', link: 'Connection', ask: 'Clarify', thread: 'Open thread' };
+const JUMP_LABEL = { push: 'Push back', link: 'Connection', ask: 'Clarify', thread: 'Open thread', gap: 'Gap' };
 /* one point as a row: what it says, what kind it is, and what it came from */
 function jumpRow(j, pick) {
-  const ttl = k => { const x = answers().filter(y => y.key === k)[0]; return x ? x.q : ''; };
+  const ttl = k => { const x = answers().filter(y => y.key === k)[0]; if (x) return x.q; const kp = String(k).indexOf('|') > 0 && Rec.all('kpiece').filter(r => r.key === k)[0]; return kp && kp.payload ? kp.payload.title || '' : ''; };
   const from = ttl(j.from);
-  const sub = (JUMP_LABEL[j.how] || 'Open thread') + (j.how === 'link'
+  const sub = (JUMP_LABEL[j.how] || 'Open thread') + (j.how === 'gap' && j.topic ? ': ' + j.topic : j.how === 'link'
     ? ': ' + [from].concat((j.with || []).map(ttl)).filter(Boolean).map(s => '"' + s + '"').join(' and ')
     : from ? ': from "' + from + '"' : '');
   const r = el('button', 'row mb-plate mb-press mb-tap');
@@ -2240,6 +2240,38 @@ function nextBox(t, h) {
    devices filing the same ramble write the same rows. */
 const SORT = { busy: false, tried: {} };
 const SUBJ = ['fitness', 'productivity', 'behaviour change', 'philosophy', 'observations'];
+/* THE BANKS (SPEAK 1.0.23, from the Knowledge banks session's spec): what a
+   new ramble can connect to is every live `answer` plus OUTER HEAVEN's
+   `kpiece` rows from RAMBLES (`ramble|<id>`) and graded posts (`post|<id>`),
+   less any row already inside a ramble thread (named in its `srcs`), never
+   Skool. Claude is sent the eight nearest by shared rare words, and up to six
+   topics ARC shows empty (`arc.bankgaps`, if ARC has saved it). */
+const BANK_STOP = new Set('that this with have from what they your about just like there their when then them were will would could should which because really thing things know going want into more some people also even only much very been make made than these those over here every still doing does said dont youre thats'.split(' '));
+const toks = t => String(t || '').toLowerCase().match(/[a-z']{4,}/g) || [];
+function bankPool() {
+  const ks = Rec.all('kpiece').filter(r => r.payload && (r.payload.src === 'ramble' || r.payload.src === 'post'));
+  const inside = {};
+  ks.forEach(r => (r.payload.srcs || []).forEach(x => { if (x && x.key) inside[x.key] = 1; }));
+  const out = answers().filter(x => x.text && !inside[x.key]).map(x => ({ key: x.key, kind: 'said', date: x.date, title: x.q, text: x.text }));
+  ks.forEach(r => { if (!inside[r.key]) out.push({ key: r.key, kind: r.payload.src, date: String(r.payload.born || r.date || '').slice(0, 10), title: r.payload.title || '', text: r.payload.text || '' }); });
+  return out;
+}
+function bankNear(a) {
+  const pool = bankPool().filter(x => x.key !== a.key);
+  if (!pool.length) return [];
+  const df = {};
+  const sets = pool.map(x => { const w = new Set(toks(x.title + ' ' + x.text).filter(t => !BANK_STOP.has(t))); w.forEach(t => { df[t] = (df[t] || 0) + 1; }); return w; });
+  const mine = new Set(toks(a.text).filter(t => !BANK_STOP.has(t)));
+  return pool.map((x, i) => { let sc = 0; mine.forEach(t => { if (sets[i].has(t)) sc += Math.log(1 + pool.length / df[t]); }); return { x: x, sc: sc }; })
+    .filter(r => r.sc > 0).sort((p, q) => q.sc - p.sc).slice(0, 8).map(r => r.x);
+}
+function bankGaps(a) {
+  const g = Rec.setting('arc', 'bankgaps');
+  if (!g || typeof g !== 'object') return [];
+  const all = [].concat(g.fitness || [], g.self || [], g.phil || []).map(String).filter(Boolean);
+  const mine = new Set(toks(a.text));
+  return all.map(t => ({ t: t, sc: toks(t).filter(w => mine.has(w)).length })).sort((p, q) => q.sc - p.sc).slice(0, 6).map(r => r.t);
+}
 async function sortFree() {
   if (!REF.on || SORT.busy) return;
   const a = answers().filter(x => x.src === 'free' && !x.sorted && !SORT.tried[x.key] && wordsOf(x.text || '').length >= 30).pop();
@@ -2250,28 +2282,36 @@ async function sortFree() {
      the connection and clarifying questions." So Claude reads this ramble
      beside his twenty newest other answers, any kind, and the points are a
      connection between two of them, a clarifying question, an open thread. */
-  const others = answers().filter(x => x.key !== a.key && x.text).slice(0, 20);
+  const near = bankNear(a), gaps = bankGaps(a);
   const r = await askRefine('Tom rambled out loud in a free speak. File it, and find what it connects to in what he has said before. Reply with one JSON object and nothing else: ' +
     '{"subj": one of ' + JSON.stringify(SUBJ.concat([''])) + ' (empty when none fits), ' +
     '"title": the question or idea it answers, in his words, under 12 words, ' +
-    '"jumps": up to 4 prompts for his next ramble, one line each under 25 words, as {"text": the prompt, "kind": "push", "link", "ask" or "thread", "with": [ids of earlier answers it draws on]}. ' +
+    '"jumps": up to 4 prompts for his next ramble, one line each under 25 words, as {"text": the prompt, "kind": "push", "link", "ask", "thread" or "gap", "with": [ids of the pieces it draws on], "topic": the gap topic, for a gap only}. ' +
     'Give one of each kind where you can. "push" only when he made a real claim: argue the strongest opposite view of it, the best version an expert who disagrees would give, and end by asking him to answer it; "link" names a connection between this ramble and an earlier answer about a separate but related thing and asks him to talk it through; ' +
-    '"ask" is a clarifying question about something he said but left vague or unproven; "thread" is an idea he opened and did not finish.}' +
+    '"ask" is a clarifying question about something he said but left vague or unproven; "thread" is an idea he opened and did not finish; ' +
+    '"gap" is a question that would make him talk about a topic his banks have nothing on yet, starting from something he just said: at most one, and only if a topic below is close to what he said.}' +
     '\n\nTHE RAMBLE:\n' + a.text +
-    (others.length ? '\n\nWHAT HE SAID BEFORE (id: title: words):\n' + others.map(x => x.key + ': ' + x.q + ': ' + String(x.text).slice(0, 400)).join('\n') : ''));
+    (near.length ? '\n\nPIECES FROM HIS KNOWLEDGE BANKS (earlier rambles, posts he published, answers; id | kind | date | title | words). A connection may join this ramble to any of them:\n' +
+      near.map(x => x.key + ' | ' + x.kind + ' | ' + (x.date || '') + ' | ' + x.title + ' | ' + String(x.text).slice(0, 400)).join('\n') : '') +
+    (gaps.length ? '\n\nTOPICS HIS BANKS HAVE NOTHING ON YET: ' + gaps.join(', ') : ''));
   SORT.busy = false;
   let o = null;
   try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
   if (!o) return;
   const subj = SUBJ.indexOf(String(o.subj || '').toLowerCase()) >= 0 ? String(o.subj).toLowerCase() : '';
   Rec.patch('answer', a.date, a.key, { subj: subj, q: String(o.title || '').trim().slice(0, 140) || a.q, sorted: 1 });
-  const known = {}; answers().forEach(x => { known[x.key] = 1; });
+  const known = {}; bankPool().forEach(x => { known[x.key] = 1; });
+  let gapMade = 0;
   (Array.isArray(o.jumps) ? o.jumps : []).slice(0, 4).forEach((j, i) => {
     const jo = j && typeof j === 'object' ? j : { text: j };
     const text = String(jo.text || '').trim().slice(0, 240), key = 'jump-' + a.key + '-' + i;
-    const how = ['push', 'link', 'ask', 'thread'].indexOf(jo.kind) >= 0 ? jo.kind : 'thread';
+    const how = ['push', 'link', 'ask', 'thread', 'gap'].indexOf(jo.kind) >= 0 ? jo.kind : 'thread';
+    if (how === 'gap' && (gapMade || !gaps.length)) return;
+    if (how === 'gap') gapMade = 1;
     const withs = (Array.isArray(jo.with) ? jo.with : []).map(String).filter(k => known[k] && k !== a.key).slice(0, 3);
-    if (text && !Rec.has('topic', null, key)) Rec.set('topic', null, key, { text: text, kind: 'jump', how: how, with: withs, from: a.key, at: Date.now() });
+    const row = { text: text, kind: 'jump', how: how, with: withs, from: a.key, at: Date.now() };
+    if (how === 'gap') row.topic = String(jo.topic || '').trim().slice(0, 80);
+    if (text && !Rec.has('topic', null, key)) Rec.set('topic', null, key, row);
   });
   setTimeout(sortFree, 1500);
 }
