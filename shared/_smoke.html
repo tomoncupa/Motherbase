@@ -366,12 +366,12 @@ async function run() {
      them the moment anything asks, and must not lose a patch, a delete or an
      older copy that turns up before they are in. Each frame is its own page
      load; the rows are this run's own and are deleted at the end. */
-  const lazyFrame = extra => new Promise(res => {
+  const lazyFrame = (extra, pre) => new Promise(res => {
     const fr = document.createElement('iframe');
     fr.style.cssText = 'position:absolute;width:1px;height:1px;border:0;left:-9px';
     document.body.appendChild(fr);
     fr.contentDocument.open();
-    fr.contentDocument.write('<scr' + 'ipt src="day.js"></scr' + 'ipt><scr' + 'ipt src="records.js"></scr' + 'ipt>' + (extra || ''));
+    fr.contentDocument.write((pre || '') + '<scr' + 'ipt src="day.js"></scr' + 'ipt><scr' + 'ipt src="records.js"></scr' + 'ipt>' + (extra || ''));
     fr.contentDocument.close();
     const t0 = Date.now();
     (function wait() {
@@ -426,6 +426,29 @@ async function run() {
     ok('rec: a page that reads sets while it boots has them all by Rec.ready',
       R.loaded('set') && R.all('set', { date: lzD }).length === 1 && R.timing().lazy.set > 0);
     fr.remove();
+
+    /* Rec.whole, 2026-11-16: a store whose IndexedDB answers after Rec.ready
+       has given up waiting must not call itself whole until it does. The
+       backup saved 4,700 rows of 26,000 for want of this. A frame whose
+       IndexedDB open answers 3.5 s late, past IDBWAIT; a row over 64KB lives
+       in IndexedDB alone, so it is the row that is missing until then. */
+    const bigK = 'smoke-whole-' + Date.now(), bigId = Rec.idOf(stamp, null, bigK);
+    Rec.set(stamp, null, bigK, { s: 'x'.repeat(70000) });
+    await Rec.saved();
+    const late = '<scr' + 'ipt>(function(){var real=indexedDB.open.bind(indexedDB);indexedDB.open=function(n,v){' +
+      'var q=real(n,v),f={};q.onupgradeneeded=function(){f.result=q.result;f.onupgradeneeded&&f.onupgradeneeded();};' +
+      'q.onsuccess=function(){setTimeout(function(){f.result=q.result;f.onsuccess&&f.onsuccess();},3500);};' +
+      'q.onerror=function(){f.error=q.error;f.onerror&&f.onerror();};return f;};})();</scr' + 'ipt>';
+    fr = await lazyFrame('', late); R = fr.contentWindow.Rec;
+    let wholeAt = 0;
+    const wp = R.whole().then(w => { wholeAt = Date.now(); return w; });
+    await new Promise(r => setTimeout(r, 50));
+    const readyHalf = R.hydrated && R.stats().idbSlow && !R._rows[bigId] && !wholeAt;
+    const w = await wp;
+    ok('rec: Rec.whole waits for an IndexedDB that answers after Rec.ready, and then holds its rows',
+      readyHalf && w.ok === true && !!R._rows[bigId]);
+    fr.remove();
+    Rec.del(stamp, null, bigK);
     await Rec.need('set');
     Rec.del('set', lzD, lzA); Rec.del('set', lzD, lzB);
   }

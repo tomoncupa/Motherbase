@@ -411,6 +411,34 @@ should be ON the mountains."
   it with none, is a mountain named Block 1. Drawn only (`auto: true` in
   `layout`), never a row; `Range.blocksOf` does not include it.
 
+## Ready is not whole (2026-11-16, `Rec.whole`, `cloud.js` 0.2.9)
+
+Every backup that caught up with live sync from 06:56 on 16 Nov held 4,700
+rows of 26,000: no sets, most dated rows absent, no extra tombstones. Runs
+where live sync did not connect held everything. STATUS.exe, SPEAK.exe and
+Main Menu.exe share `desktop/data` with Backup.exe, and with all of them
+open IndexedDB answered the backup page later than IDBWAIT (2.5 s), so
+`Rec.ready` and `Rec.need` went ahead on the trimmed fast half and the page
+saved it ten quiet seconds after live sync connected. A run with no live
+sync waited two minutes, long enough for IndexedDB. Proved: a copy of the
+store opened alone gave 26,255 rows, the real one with the programs open
+gave 4,984. Nothing was lost; the files were short.
+
+- **`Rec.whole()`** resolves `{ok}` once IndexedDB has really answered for
+  the big half and every kept-out type asked for so far, `{ok: false, why}`
+  if it failed. It starts no load: call `Rec.need()` first.
+- **`tools/backup.html`** waits on it, 150 s at most, and on a failure or a
+  timeout saves nothing (Backup.exe logs FAILED, the last good file stays).
+  A wait of 5 s or more is written on backup.log's inbox line.
+- **`cloud.js` 0.2.9** waits on it too, a minute at most, before its first
+  merge: a row heard from the cloud while the IndexedDB copy is still on its
+  way met no copy and was taken whole, over a newer one.
+- **Not found: why IndexedDB is that slow** with the programs open. Each
+  page's `Rec.reload()` on a poke re-reads all of IndexedDB, and so does
+  `makeRoom`; a storm of those in one browser process is the likeliest
+  story, unwatched. Main Menu took about 45 s through `R.need()` the same
+  morning. One `rec:` smoke check (an IndexedDB open held 3.5 s).
+
 ## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
 
 A row stamped more than a day ahead (`soon()`) is never sent and never moves

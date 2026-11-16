@@ -901,6 +901,17 @@ function start() {
     var R = store();
     return me && !probe && R && R.need ? R.need().then(function () { return me; }) : me;
   });
+  /* 0.2.9 (2026-11-16): and until IndexedDB has really answered. Rec.ready
+     and Rec.need go ahead on localStorage alone after 2.5 s, and the desktop
+     programs' shared store took far longer that morning; a row heard from the
+     cloud then met no copy here and was taken whole, over a newer one still
+     on its way in. A minute at most, then on as before. */
+  found = found.then(function (me) {
+    var R = store();
+    if (!me || probe || !R || !R.whole) return me;
+    return Promise.race([R.whole(), new Promise(function (res) { setTimeout(res, 60000); })])
+      .then(function () { return me; }, function () { return me; });
+  });
   return found.then(function (me) {
     if (!me) { signedOut(); return false; }
     if (started) return false;
@@ -1348,7 +1359,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.8',
+  VERSION: '0.2.9',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {

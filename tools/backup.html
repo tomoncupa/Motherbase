@@ -55,7 +55,7 @@
   var B = window.MB_BACKUP = { state: 'waiting', rows: 0, json: '', why: '', synced: false, took: [], inbox: '' };
   var $ = function (id) { return document.getElementById(id); };
   function show(state, detail) { $('state').textContent = state; if (detail != null) $('detail').textContent = detail; }
-  var start = Date.now(), MAX = 120000, QUIET = 10000;
+  var start = Date.now(), MAX = 120000, QUIET = 10000, WHOLE_MAX = 150000, waited = 0;
 
   function build() {
     try {
@@ -75,6 +75,7 @@
   function waitCloud() {
     var C = window.Cloud, s = C && C.state ? C.state() : null;
     if (!s || !s.on) { B.why = 'This store is not signed in to live sync, so it holds what this PC last had.'; return build(); }
+    start = Date.now();
     var quietSince = Date.now(), lastGot = s.gotAt;
     show('Waiting for live sync', 'Signed in as ' + (s.email || 'this account') + '.');
     var t = setInterval(function () {
@@ -126,10 +127,35 @@
   }
 
   /* Rec.need: TRAIN's sets are kept out of an open until asked for (records.js,
-     KEPT OUT), and a backup without them is not a backup. */
+     KEPT OUT), and a backup without them is not a backup.
+
+     Rec.whole (2026-11-16): Rec.ready fires on localStorage alone when
+     IndexedDB is slow, and with STATUS.exe, SPEAK.exe and Main Menu.exe on the
+     same store it was slower than live sync's ten quiet seconds. Every caught-up
+     run from 06:56 that day saved the fast half, 4,700 rows of 26,000, over the
+     day's good file. So nothing is gathered until IndexedDB has really
+     answered, and a store it never answers for saves nothing: Backup.exe logs
+     FAILED and the last good file stays. */
+  function failWhole(why) {
+    B.state = 'error';
+    B.why = why + '; nothing saved, the last good file is kept';
+    show('Could not read the whole store', B.why);
+  }
   Rec.ready(function () {
+    var t0 = Date.now();
     (Rec.need ? Rec.need() : Promise.resolve()).then(function () {
+      if (!Rec.whole) return { ok: true };
+      show('Waiting for the whole store', 'IndexedDB has not answered yet.');
+      return Promise.race([Rec.whole(), new Promise(function (res) {
+        setTimeout(function () { res({ ok: false, why: 'IndexedDB did not answer in ' + Math.round(WHOLE_MAX / 1000) + ' s' }); }, WHOLE_MAX);
+      })]);
+    }).then(function (w) {
+      waited = Math.round((Date.now() - t0) / 1000);
+      if (!w || !w.ok) return failWhole((w && w.why) || 'IndexedDB failed');
       try { inbox(); } catch (e) { B.inbox = 'the inbox could not be read: ' + (e && e.message); }
+      /* a slow store is worth a line in backup.log, and the inbox line is the
+         one Backup.exe already writes */
+      if (waited >= 5) B.inbox = (B.inbox ? B.inbox + '; ' : '') + 'the store took ' + waited + ' s to load';
       show('Store loaded', B.inbox); setTimeout(waitCloud, 1500);
     });
   });

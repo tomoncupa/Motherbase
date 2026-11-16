@@ -640,8 +640,41 @@ function trimFast(idbList, max, to) {
    Writes are unaffected — they queue on the same open and land when it does. */
 const IDBWAIT = 2500;
 let idbSlow = false, baseDone = false;
+/* ── the whole store, not just ready (2026-11-16) ──
+
+   Rec.ready fires after IDBWAIT on localStorage alone when IndexedDB is slow,
+   and that is right for a first paint and wrong for anything that must see
+   every row. On 2026-11-16 the desktop programs (STATUS.exe, SPEAK.exe, Main
+   Menu.exe, Backup.exe) shared one store and IndexedDB took longer than that
+   to answer the backup page; the page waited ten quiet seconds for live sync
+   and saved the fast half: 4,700 rows of 26,000, every set and most dated rows
+   absent. Nothing was lost, the file was just short.
+
+   `Rec.whole()` resolves once IndexedDB has really answered: the big half, and
+   every kept-out type something has asked for (it starts none itself, so call
+   Rec.need first for those). {ok: true} then, or {ok: false, why} when
+   IndexedDB failed outright, in which case what is in memory is all this page
+   will ever have. A device with no IndexedDB at all is whole on localStorage. */
+let bigState = 0, bigWhy = '';          /* 0 waiting, 1 answered, -1 failed */
+const wholeQ = [];
+function checkWhole() {
+  if (!wholeQ.length) return;
+  if (bigState === 0) return;
+  let ok = bigState === 1, why = bigWhy;
+  for (const t in LZ) {
+    const z = LZ[t];
+    if (!z.big) return;
+    if (z.big < 0) { ok = false; why = why || z.bigWhy || ('indexeddb could not read ' + t); }
+  }
+  const q = wholeQ.splice(0);
+  q.forEach(f => { try { f({ ok: ok, why: ok ? '' : why }); } catch (e) { console.warn('[records]', e); } });
+}
+function bigSettled(state, why) {
+  if (bigState !== 1) { bigState = state; if (state < 0) bigWhy = why || 'indexeddb failed'; }
+  checkWhole();
+}
 function hydrate() {
-  if (!IDB.available) { baseIn(); return; }
+  if (!IDB.available) { bigSettled(1); baseIn(); return; }
   let settled = false;
   const slow = setTimeout(() => {
     if (settled) return;
@@ -662,10 +695,12 @@ function hydrate() {
     if (changed) { repairDates(); announce([], false); }
     try { makeRoom(list); } catch (e) { console.warn('[records] trim', e); }
     baseIn();
+    bigSettled(1);
   }).catch(e => {
     settled = true; clearTimeout(slow); idbSlow = false;
     console.warn('[records] indexeddb unavailable, localStorage only', e);
     baseIn();
+    bigSettled(-1, 'indexeddb unavailable: ' + ((e && (e.message || e.name)) || 'no reason given'));
   });
 }
 function baseIn() { baseDone = true; maybeReady(); }
@@ -732,7 +767,7 @@ function touchAll(types) { (types && types.length ? types : lazyTypes()).forEach
 
 function lazyLoad(type) {
   if (LZ[type]) return LZ[type].p;
-  const z = LZ[type] = { state: 1, early: !hydrated, q: [], p: null };
+  const z = LZ[type] = { state: 1, early: !hydrated, q: [], p: null, big: 0 };
   z.p = new Promise(res => { z.res = res; });
   lazyRead(type, z);
   return z.p;
@@ -770,7 +805,7 @@ function lazyRead(type, z) {
     announce([], false);
     maybeReady();
   };
-  if (!IDB.available) { done(); return; }
+  if (!IDB.available) { z.big = 1; done(); checkWhole(); return; }
   let settled = false;
   const slow = setTimeout(() => {
     if (settled) return;
@@ -787,10 +822,13 @@ function lazyRead(type, z) {
     });
     moveOut(inLs, held);
     done();
+    z.big = 1; checkWhole();
   }).catch(e => {
     settled = true; clearTimeout(slow);
     console.warn('[records] indexeddb unavailable for ' + type + ', localStorage only', e);
     done();
+    if (z.big !== 1) { z.big = -1; z.bigWhy = 'indexeddb could not read ' + type + ': ' + ((e && (e.message || e.name)) || 'no reason given'); }
+    checkWhole();
   });
 }
 /* The fast half's copies of a kept-out type go once IndexedDB holds them at
@@ -867,6 +905,13 @@ const Rec = {
     readyQ.push(fn);
   },
   get hydrated() { return hydrated; },
+  /** Resolves once IndexedDB has really answered for the big half and every
+      kept-out type asked for so far: {ok: true}, or {ok: false, why} when it
+      failed. Rec.ready may fire before this on a slow IndexedDB; anything that
+      must see every row (a backup) waits on Rec.need() and then this. */
+  whole() {
+    return new Promise(res => { wholeQ.push(res); checkWhole(); });
+  },
   /** true when every page on this origin hears each write's rows through
       the channel: a served address with BroadcastChannel. A page's own poke
       to its neighbours is then only needed for a write with no rows. */
