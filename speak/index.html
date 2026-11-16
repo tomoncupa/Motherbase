@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.34, 2026-11-16">
+<meta name="mb-version" content="1.0.35, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -74,6 +74,14 @@ main{flex:1;min-height:0;padding:var(--s-4) var(--s-4) calc(var(--s-9) + var(--s
 .row .num b{display:block;font-size:var(--f-4);color:var(--text-1);font-weight:var(--w-bold)}
 .row.done .num b{color:var(--success)}
 .row.miss .num b{color:var(--warn)}
+/* TODAY'S TAKES: the drill as a coloured tag, the prompt, then time and numbers */
+.row.tk{align-items:flex-start}
+.row.tk .tag{display:flex;align-items:center;gap:var(--s-2);font-family:var(--font-display);font-size:var(--f-2);
+  letter-spacing:var(--track-cap);text-transform:uppercase;color:var(--text-muted);margin-bottom:var(--s-1)}
+.row.tk .tag i{flex:0 0 auto;width:var(--s-2);height:var(--s-2);border-radius:var(--radius-full);background:var(--c)}
+.row.tk .nm{color:var(--text-1)}
+.row.tk .sub{color:var(--text-muted)}
+.row.tk .sub .tm{font-family:var(--font-mono);color:var(--text-2)}
 /* the skill columns on PATH */
 .path{display:grid;grid-template-columns:repeat(auto-fit,minmax(calc(var(--s-10) * 2),1fr));gap:var(--s-4)}
 .skill h3{font-family:var(--font-display);font-size:var(--f-3);font-weight:var(--w-bold);letter-spacing:var(--track-cap);
@@ -2710,22 +2718,59 @@ function card(title, right) {
 function camRow() {
   return UI.row('Camera', 'Eyes and mouth are measured when it is on', UI.toggle(optOn('camAll', 1), on => Rec.setting(APP.id, 'camAll', on ? 1 : 0)));
 }
-/* today's takes, newest first, each opening its sheet */
+/* today's takes, newest first, each opening its sheet. Each row wears its
+   drill's colour; CLEAR takes rows off this list (hid: 1) and keeps the
+   take, its numbers and its recording (Tom 2026-11-16: "just cleaner") */
 function openTodayTakes() {
-  const ts = takesOn(Day.today()).filter(t => t.drill !== 'warm').slice().reverse();
+  let showAll = false;
+  const all = () => takesOn(Day.today()).filter(t => t.drill !== 'warm').slice().reverse();
+  const hide = (list, v) => list.forEach(t => Rec.patch('take', t.date, t.key, { hid: v }));
   UI.dialog({
     title: 'TODAY\u2019S TAKES', width: 560,
     body: (b, h) => {
-      if (!ts.length) { b.appendChild(el('p', 'muted', 'No takes yet today.')); return; }
-      const l = el('div', 'list');
-      ts.forEach(t => {
-        const d = drillById(t.drill), r = el('button', 'row mb-plate mb-press mb-tap');
-        r.innerHTML = '<span class="tx"><span class="nm">' + esc((d ? d.name : t.drill) + (t.prompt ? ': ' + t.prompt : '')) + '</span><span class="sub">' +
-          esc(new Date(t.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' \u00b7 ' + mmss(t.dur || 0) + (d ? ' \u00b7 ' + numsOf(d, t) : '')) + '</span></span>';
-        r.onclick = () => { h.close(); showTake(t); };
-        l.appendChild(r);
-      });
-      b.appendChild(l);
+      const fill = () => {
+        b.innerHTML = '';
+        const ts = all(), shown = showAll ? ts : ts.filter(t => !t.hid), gone = ts.length - ts.filter(t => !t.hid).length;
+        if (!ts.length) { b.appendChild(el('p', 'muted', 'No takes yet today.')); return; }
+        const top = el('div', 'acts');
+        if (shown.some(t => !t.hid)) {
+          const cb = el('button', 'mb-btn mb-press mb-tap', '<span>CLEAR LIST</span>');
+          cb.onclick = () => { const was = ts.filter(t => !t.hid); hide(was, 1); fill(); UI.undo('cleared ' + was.length + ' take' + (was.length === 1 ? '' : 's') + ' from the list', () => { hide(was, 0); fill(); }); };
+          top.appendChild(cb);
+        }
+        if (gone) {
+          const sb = el('button', 'mb-btn mb-press mb-tap', '<span>' + (showAll ? 'HIDE CLEARED' : 'SHOW ' + gone + ' CLEARED') + '</span>');
+          sb.onclick = () => { showAll = !showAll; fill(); };
+          top.appendChild(sb);
+        }
+        b.appendChild(top);
+        if (!shown.length) { b.appendChild(el('p', 'muted', 'List cleared. The takes are kept.')); return; }
+        const l = el('div', 'list');
+        shown.forEach(t => {
+          const d = drillById(t.drill), skill = d ? skillOf(d) : null;
+          const r = el('button', 'row tk mb-plate mb-press mb-tap' + (t.hid ? ' locked' : '') + (d && (t.goals || []).length ? (t.pass ? ' done' : unmeasured(t) ? '' : ' miss') : ''));
+          r.style.setProperty('--c', skill ? 'var(--data-' + skill.slot + ')' : 'var(--accent)');
+          const nums = d ? numsOf(d, t) : '';
+          r.innerHTML = '<span class="tx"><span class="tag"><i></i>' + esc(d ? d.name : t.drill) + '</span>' +
+            '<span class="nm">' + esc(t.prompt || (d ? d.name : 'Take')) + '</span>' +
+            '<span class="sub"><span class="tm">' + esc(new Date(t.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' \u00b7 ' + mmss(t.dur || 0)) + '</span>' +
+            (nums ? ' \u00b7 ' + esc(nums) : '') + '</span></span>' +
+            (d ? '<span class="num"><b>' + esc(mainNumber(d, t)) + '</b>' + ((t.goals || []).length ? (t.pass ? 'met' : unmeasured(t) ? 'no reading' : 'not met') : '') + '</span>' : '');
+          r.onclick = () => { h.close(); showTake(t); };
+          Mobile.hold(r, e => {
+            const x = e && e.clientX || 0, y = e && e.clientY || 0;
+            UI.menu(x, y, [
+              { label: 'Open', fn: () => { h.close(); showTake(t); } },
+              t.hid ? { label: 'Put back on the list', fn: () => { hide([t], 0); fill(); } }
+                : { label: 'Clear from the list', fn: () => { hide([t], 1); fill(); UI.undo('cleared a take from the list', () => { hide([t], 0); fill(); }); } },
+              { label: 'Delete the take', kind: 'bad', fn: () => { h.close(); takeMenuDelete(t); } },
+            ], { title: 'TAKE' });
+          }, { dots: true, dotsLabel: 'More for this take' });
+          l.appendChild(r);
+        });
+        b.appendChild(l);
+      };
+      fill();
     },
     actions: [{ label: 'CLOSE' }],
   });
@@ -2860,14 +2905,7 @@ function takeMenu(t, e) {
   const x = e && e.clientX || 0, y = e && e.clientY || 0;
   UI.menu(x, y, [
     { label: 'Open', fn: () => showTake(t) },
-    { label: 'Delete', kind: 'bad', fn: () => {
-      const was = Object.assign({}, t); delete was.key; delete was.date; delete was.clipP;
-      const clip = Rec.get('tclip', t.date, t.key);
-      Rec.del('take', t.date, t.key);
-      if (clip) Rec.del('tclip', t.date, t.key);
-      Mobile.haptic('warn');
-      UI.undo('deleted a take', () => { Rec.set('take', t.date, t.key, was); if (clip) Rec.set('tclip', t.date, t.key, clip); });
-    } },
+    { label: 'Delete', kind: 'bad', fn: () => takeMenuDelete(t) },
   ].concat(Rec.has('tclip', t.date, t.key) ? [{ label: 'Delete the recording', kind: 'bad', fn: () => {
       const clip = Rec.get('tclip', t.date, t.key);
       Rec.del('tclip', t.date, t.key);
@@ -2875,6 +2913,14 @@ function takeMenu(t, e) {
       UI.undo('deleted a recording', () => Rec.set('tclip', t.date, t.key, clip));
     } }] : []).concat([
   ]), { title: 'TAKE' });
+}
+function takeMenuDelete(t) {
+  const was = Object.assign({}, t); delete was.key; delete was.date; delete was.clipP;
+  const clip = Rec.get('tclip', t.date, t.key);
+  Rec.del('take', t.date, t.key);
+  if (clip) Rec.del('tclip', t.date, t.key);
+  Mobile.haptic('warn');
+  UI.undo('deleted a take', () => { Rec.set('take', t.date, t.key, was); if (clip) Rec.set('tclip', t.date, t.key, clip); });
 }
 function drillMenu(d, e) {
   const x = e && e.clientX || 0, y = e && e.clientY || 0;
