@@ -5,6 +5,14 @@ win any argument. Written 2026-09-15, the day the app was built.
 
 ## What it is for
 
+**What SPEAK is for, as of 2026-11-16.** Tom: *"way more of what Speak is for [is] entirely on the work we've done today, which is to get me speaking like Faizan, but my own ideal version of it. So somewhere between Hormozi and Jocko Willink ... make sure it can assess how I speak correctly. So that's eye contact, that's mouth use, that's mumbling, that's voice crispness, that's coherence, that's concision. And then it's also meant to add to my data bank, my knowledge base, my second brain stuff ... And this feeds into my content as well."* Three jobs, in this order:
+
+1. **Make him his own ideal speaker**: Faizan Asif's clarity (no crutch phrases, pauses only at full stops, the point carried by the voice), in Tom's authority register, between Alex Hormozi and Jocko Willink: claims stated flat and finished, no "right?" tags, about 160 to 190 words a minute, a held beat after the line that matters, purposeful gestures. Faizan's one measured video and Tom's own Story are the reference numbers (see the session's 2026-11-16 analysis in `HISTORY.md` if moved there).
+2. **Assess him correctly** on six things: eye contact (on the lens), mouth use (evenness, opening), mumbling and voice crispness (the ear's crispness), coherence and concision (Claude's reading, below). Every verdict carries Right/Wrong marks; a reading his marks keep calling wrong gets fixed, not argued with.
+3. **Feed his second brain and his content**: every transcript can go into the banks (FREE SPEAK, the topics, ADD TO KNOWLEDGE BANK), filed by subject for ARC, and any take can become a draft (REFINE INTO CONTENT).
+
+PATH is left as it is for now (Tom: "we can leave out path for now").
+
 Tom, 2026-09-15: *"Speech improvement app to help me with YT and short form
 content."* Pace, filler words, speaking from bullets and from nothing, mumbling
 and stuttering, eye contact, and two phrases in particular: "you know what I
@@ -593,6 +601,10 @@ Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FR
 - **FROM YOUR POSTS** on TODAY under FOCUS: each post of the last 14 days with pace, crutch a minute (top phrase), "at least" ums and long silences; the sheet has the coach's fault and drill, the transcript with crutch phrases marked, the `how` honesty lines and OPEN THE POST.
 - **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
 - **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
+
+## Coherence and concision, added 2026-11-16 (SPEAK 1.0.29)
+
+Claude in SPEAK.exe reads every take of 40 words or more (not warm-ups or fix drills) and scores coherence and concision 1 to 5, each with one line why quoting his words, and his main point in one sentence (`judgeTake`, stored on the take as `judge: {coh, cohWhy, con, conWhy, point, at}`). The take's sheet shows both beside the other numbers, waiting while Claude reads. At 2 or under the coach names `unclear` (fix: Point, reason, example) or `wordy` (fix: One sentence), and his Right/Wrong mark on that fault is how the reading is checked. A take made away from the PC is read the next time SPEAK.exe is open, one at a time.
 
 ## Desktop first, 2026-11-16 (SPEAK 1.0.27)
 

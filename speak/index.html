@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.28, 2026-11-16">
+<meta name="mb-version" content="1.0.29, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1198,7 +1198,7 @@ const isFix = id => /^fix-/.test(id || '');
 const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : id === 'tight' ? TIGHT : id === 'post-story' ? PS_STORY : id === 'post-reel' ? PS_REEL : DRILLS.concat(FIXES, LIB).filter(d => d.id === id)[0] || null;
 const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
 /* each fault the coach can name, in a few words, for FOCUS */
-const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
+const FAULT = { 'wordy': 'Too many words for the point', 'unclear': 'Hard to follow', 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
   fillers: 'Fillers', crutch: 'Crutch phrases', speedup: 'Speeding up', fast: 'Too fast', slow: 'Too slow', 'dead-air': 'Long silences',
   'run-on': 'Too few pauses', mouth: 'Talking from one side', restarts: 'Stammered starts', flat: 'A flat voice', mumble: 'Soft consonants', eyes: 'Eyes off the lens' };
 /* what went wrong in one take, worst first: {id, sev, what, cue, fix} */
@@ -1258,6 +1258,10 @@ function coach(t) {
   if (m.eye != null && m.eye < tg.eye) add('eyes', 'eye', (tg.eye - m.eye) / tg.eye * 2.1, 'On the lens ' + Math.round(m.eye) + '%' + (m.eyeAway ? ', the longest look away ' + m.eyeAway + 's.' : '.'), 'Find the next thought with the eyes on the lens.', 'fix-lens');
   if (m.mouthEven != null && m.mouthEven < tg.mouthEven) add('mouth', 'mouthEven', (tg.mouthEven - m.mouthEven) / tg.mouthEven * 3,
     'Mouth evenness ' + Math.round(m.mouthEven) + '%: your ' + (m.mouthDir || 'one') + ' side did more of the work.', 'Open the whole mouth on every vowel, both corners moving the same.', 'fix-mouth', (ev && ev.mz) || []);
+  /* coherence and concision, read by Claude in SPEAK.exe (`judgeTake`) */
+  const jg = t.judge;
+  if (jg && jg.con != null && jg.con <= 2) add('wordy', 'concision', (3 - jg.con) / 2 + 0.4, 'Concision ' + jg.con + ' of 5: ' + (jg.conWhy || ''), 'Say the point in one sentence first. Everything after it has to earn its place.', 'shape-one', []);
+  if (jg && jg.coh != null && jg.coh <= 2) add('unclear', 'coherence', (3 - jg.coh) / 2 + 0.4, 'Coherence ' + jg.coh + ' of 5: ' + (jg.cohWhy || ''), 'Point, reason, example, then the point again.', 'shape-prep', []);
   const fb = t.fb || {};
   return out.filter(f => fb[f.id] !== 0).sort((x, y) => y.sev - x.sev);
 }
@@ -2423,6 +2427,34 @@ function nextBox(t, h) {
    next time SPEAK.exe is open. A jump's key comes from its take, so two
    devices filing the same ramble write the same rows. */
 const SORT = { busy: false, tried: {} };
+/* COHERENCE AND CONCISION (SPEAK 1.0.29). Tom, 2026-11-16: SPEAK must
+   assess "eye contact, mouth use, mumbling, voice crispness, coherence,
+   concision". The ear and the camera measure the first four; these two need
+   a reader, so Claude in SPEAK.exe scores every take of 40 words or more,
+   1 to 5 each, with one line why, and the tight version of its point. Stored
+   on the take as `judge`; the coach names `unclear` or `wordy` at 2 or under,
+   and his Right or Wrong mark on the fault says whether the reading held. A
+   take made away from the PC is read the next time SPEAK.exe is open. */
+const JUDGE = { busy: false, tried: {} };
+async function judgeTake(t) {
+  if (!REF.on || JUDGE.busy) return;
+  const x = t || takes().filter(y => y.tx && !y.judge && !JUDGE.tried[y.key] && y.drill !== 'warm' && !isFix(y.drill) && wordsOf(y.tx).length >= 40).pop();
+  if (!x || x.judge || JUDGE.tried[x.key] || !x.tx || wordsOf(x.tx).length < 40) { if (t) setTimeout(() => judgeTake(), 2000); return; }
+  JUDGE.busy = true; JUDGE.tried[x.key] = 1;
+  const r = await askRefine('Grade one spoken practice take by Tom, a fitness coach training to speak on camera like a direct, authoritative creator. ' +
+    'Reply with one JSON object and nothing else: {"coh": 1 to 5, "cohWhy": one line, "con": 1 to 5, "conWhy": one line, "point": his main point in one sentence of his own words}. ' +
+    'Coherence: does it make one clear point a listener can follow, in an order that builds (5), or does it wander, restart and contradict itself (1)? ' +
+    'Concision: does every sentence earn its place (5), or is the point buried in repeats, tags and detours (1)? Ignore transcription errors and missing punctuation. ' +
+    'Name the specific thing in each why, quoting a few of his words.' +
+    (x.prompt ? '\n\nThe prompt: ' + x.prompt : '') + '\n\nTHE TRANSCRIPT:\n' + x.tx);
+  JUDGE.busy = false;
+  let o = null;
+  try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
+  const n = v => { v = Math.round(+v); return v >= 1 && v <= 5 ? v : null; };
+  if (o && n(o.coh) && n(o.con)) Rec.patch('take', x.date, x.key, { judge: { coh: n(o.coh), cohWhy: String(o.cohWhy || '').slice(0, 300), con: n(o.con), conWhy: String(o.conWhy || '').slice(0, 300), point: String(o.point || '').slice(0, 300), at: Date.now() } });
+  setTimeout(() => judgeTake(), 2000);
+}
+if (REF.on) Rec.ready(() => setTimeout(() => judgeTake(), 9000));
 const SUBJ = ['fitness', 'productivity', 'behaviour change', 'philosophy', 'observations'];
 /* THE BANKS (SPEAK 1.0.23, from the Knowledge banks session's spec): what a
    new ramble can connect to is every live `answer` plus OUTER HEAVEN's
@@ -3285,6 +3317,7 @@ function finishTake(m, secs) {
   if (T.vid && T.clipP) take.vid = 1;
   if (T.prompt && T.prompt.kind === 'script') take.script = T.prompt.key;
   take.key = saveTake(take); take.date = Day.today();
+  if (asrOn && !T.warm && !d.fix) setTimeout(() => judgeTake(take), 400);
   if (d === AQ && T.prompt && T.prompt.ask) {
     const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
     const q = askQueue().filter(x => x.key === T.prompt.ask)[0];
@@ -3434,6 +3467,15 @@ function showTake(t, html) {
         put('mouthEven', m.mouthEven, m.mouthDir ? 'your ' + m.mouthDir + ' side did more' : ''); put('mouthOpen', m.mouthOpen);
         if (m.crisp == null && m.crispRaw != null) stat(rows, 'Crispness, raw', Math.round(m.crispRaw * 1000), 'no warm-up to measure against');
         if (m.eye == null && d.cam) stat(rows, 'On the lens', '·', 'not measured');
+        const jbox = el('div'); rows.appendChild(jbox);
+        const jfill = () => {
+          const x = takes().filter(y => y.key === t.key)[0] || t, jg = x.judge;
+          jbox.innerHTML = '';
+          if (jg) { stat(jbox, 'Coherence', jg.coh + '/5', jg.cohWhy || ''); stat(jbox, 'Concision', jg.con + '/5', jg.conWhy || ''); return 1; }
+          if (t.tx && wordsOf(t.tx).length >= 40) stat(jbox, 'Coherence and concision', '\u00b7', REF.on ? 'Claude is reading it' : 'read by Claude in SPEAK on the PC');
+          return 0;
+        };
+        if (!jfill() && REF.on && t.tx) { let n = 0; const iv = setInterval(() => { n++; if (!jbox.isConnected || jfill() || n > 120) clearInterval(iv); }, 1500); }
       } else {
         put('hiss', m.hiss); put('pitch', m.pitch, 'the siren');
         if (m.crispRaw != null) stat(rows, 'Crispness reference', Math.round(m.crispRaw * 1000), 'what today\'s CLEAR drills are measured against');
