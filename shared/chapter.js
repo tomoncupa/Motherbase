@@ -22,13 +22,17 @@
    current(day)     the chapter running on `day`, or null.
    list()           every chapter, oldest first.
    begin(o)         starts one: {name, start, from}; hands back its key.
-   APPS             the apps that read it so far. An app adds itself when it
-                    honours `from`; a chapter offers only these.
+   APPS             the apps that count from it; a chapter offers only these.
+                    TRAIN is not one: it counts in training blocks (Tom).
    ══════════════════════════════════════════════════════════════════════ */
 (function (g) {
   'use strict';
   const D = () => g.Day;
-  const APPS = [{ id: 'quest', name: 'QUESTS', what: 'goal calls, weeks and last wins' }];
+  const APPS = [
+    { id: 'quest', name: 'QUESTS', what: 'goal calls, weeks and last wins' },
+    { id: 'status', name: 'STATUS', what: 'grades, rank and days-hit counts' },
+    { id: 'block', name: 'BLOCK', what: 'streaks, habit streaks and anything owed' }
+  ];
 
   function list() {
     return Object.entries(g.Rec.map('chapter') || {})

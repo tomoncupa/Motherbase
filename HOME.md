@@ -731,4 +731,4 @@ Tom: "Having a big dash box does not look refined at all. Just have it match ...
 
 ## Needs from BLOCK, 2026-11-16: count from the new chapter
 
-BLOCK 1.0.26 counts its streaks from `Chapter.from('block')`. Three home cards should follow: STREAKS and EVERY & HABITS (`rhAnyState`, a copy of BLOCK's habit maths; BLOCK's `rhStreak` and `everyState` gained a `floor`) count from `Chapter.from('block')`, and CONSISTENCY, whose rows are TRAIN and STATUS facts, not ticks, from `Chapter.from('train')` and `Chapter.from('status')`.
+BLOCK 1.0.26 counts its streaks from `Chapter.from('block')`. Three home cards should follow: STREAKS and EVERY & HABITS (`rhAnyState`, a copy of BLOCK's habit maths; BLOCK's `rhStreak` and `everyState` gained a `floor`) count from `Chapter.from('block')`, and CONSISTENCY, whose rows are TRAIN and STATUS facts, not ticks, counts its STATUS rows from `Chapter.from('status')` (STATUS's own cut is `countFrom()`, the later of that and its fresh start); TRAIN reads no chapter (Tom, 2026-11-16), so its rows stay as they are.
