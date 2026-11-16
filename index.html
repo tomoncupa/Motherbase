@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.128, 2026-11-17">
+<meta name="mb-version" content="1.0.129, 2026-11-17">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -491,6 +491,7 @@ body.dragging #cardframes{z-index:0}
 .twwk.now{box-shadow:0 0 0 var(--border-width,1px) var(--dim)}
 .twfix{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-1) var(--s-2);font-size:var(--f-1);color:var(--dim)}
 .twnx{min-width:0;overflow-wrap:anywhere}
+.pdtime{display:block;width:100%;min-height:44px;margin-bottom:var(--s-3)}
 .twplan{align-self:flex-start}
 .twbar{display:flex;flex-wrap:wrap;gap:var(--s-2);margin-top:var(--s-3)}
 /* ---------- shared widget bits ---------- */
@@ -4469,6 +4470,12 @@ const WIDGETS = {
         g.appendChild(mid);
         /* a goal fed by TRAIN, STATUS or BLOCK says where its data stands */
         if (h.line) g.appendChild(el('div', 'twfix', '<span class="twnx">' + esc(h.line) + '</span>'));
+        /* WOOP (2026-11-17): the if-then and the days it was kept this week */
+        if (Goals.hasWoop(a)) {
+          const w = Goals.woop(a), k = Goals.kept(a, h.ws, Day.today());
+          g.appendChild(el('div', 'twfix', '<span class="twnx">If ' + esc(w.if || 'the moment comes') + ', then ' + esc(w.then || 'the plan') +
+            '. Kept ' + k.kept + ' of ' + k.cued + ' planned ' + (k.cued === 1 ? 'day' : 'days') + ' this week</span>'));
+        }
         const fix = el('div', 'twfix');
         if (nx.kind === 'next') fix.appendChild(el('span', 'twnx', 'Next: ' + esc(nx.x.text) + ', ' + esc(Day.label(Goals.due(nx.x)))));
         else if (!(nx.kind === 'add' && h.line)) {
@@ -7625,6 +7632,33 @@ const PLANDAY = {
     const s = { day: '', block: 'yes', odd: '' }, today = Day.today(), tom = Day.shift(today, 1), lab = PLANDAY.lab;
     const next = f => setTimeout(f, 0);
     const late = new Date().getHours() >= 18;
+    /* 1b: WOOP (Tom, 2026-11-17): when each goal's "if" moment happens that
+       day. A time becomes a timed todo, woop-<goal>-<day>, the moment ROOM's
+       wallpaper lifts that goal's card (shared/goals.js, cue). */
+    const cues = () => {
+      const A = Goals.cards();
+      if (!A.length) return block();
+      const boxes = {};
+      UI.dialog({
+        title: 'YOUR PLANS · ' + lab(s.day).toUpperCase(), width: 460,
+        body: b => {
+          b.appendChild(el('p', 'pdsay', 'When will each moment happen ' + (s.day === today ? 'today' : 'tomorrow') + '? Blank skips it.'));
+          A.forEach(a => {
+            const w = Goals.woop(a) || {}, was = Rec.get('note', s.day, Goals.cueKey(a.key, s.day));
+            b.appendChild(el('p', 'pdsay', '<b>If ' + esc(w.if || 'the moment comes') + '</b>, then ' + esc(w.then || 'the plan')));
+            const i = document.createElement('input');
+            i.type = 'time'; i.className = 'mb-input pdtime'; i.value = (was && was.at) || '';
+            i.setAttribute('aria-label', 'When: ' + (w.if || a.text));
+            boxes[a.key] = i; b.appendChild(i);
+          });
+        },
+        actions: [{ label: 'CANCEL' }, { label: 'NEXT', kind: 'go', fn: () => {
+          A.forEach(a => { const v = boxes[a.key].value, was = Rec.get('note', s.day, Goals.cueKey(a.key, s.day));
+            if (v || (was && !was.done)) Goals.cue(a, s.day, v); });
+          next(block);
+        } }],
+      });
+    };
     /* 2: what BLOCK has on it */
     const block = () => {
       const plan = Rec.get('plan', s.day, 'routine'), bl = (plan && plan.blocks) || [];
@@ -7669,8 +7703,8 @@ const PLANDAY = {
         b.appendChild(off);
       },
       actions: [{ label: 'CANCEL' },
-        { label: 'TODAY · ' + lab(today).toUpperCase(), kind: late ? '' : 'go', fn: () => { s.day = today; next(block); } },
-        { label: 'TOMORROW · ' + lab(tom).toUpperCase(), kind: late ? 'go' : '', fn: () => { s.day = tom; next(block); } }],
+        { label: 'TODAY · ' + lab(today).toUpperCase(), kind: late ? '' : 'go', fn: () => { s.day = today; next(cues); } },
+        { label: 'TOMORROW · ' + lab(tom).toUpperCase(), kind: late ? 'go' : '', fn: () => { s.day = tom; next(cues); } }],
     });
   },
   send(s) {

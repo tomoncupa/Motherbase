@@ -321,7 +321,7 @@
   }
 
   function next(a, list) {
-    const open = (list || todos()).filter(x => !x.done && of(x) === a.key);
+    const open = (list || todos()).filter(x => !x.done && x.src !== 'woop' && of(x) === a.key);
     const end = D().shift(weekStart(D().today()), 6);
     const soon = open.filter(x => due(x) && due(x) <= end).sort((p, q) => due(p).localeCompare(due(q)) || order(p, q));
     if (soon.length) return { kind: 'next', x: soon[0] };

@@ -762,3 +762,16 @@ Tom: recovery should not be "hyper individualized to me", and should follow "the
 - **His log does not have the evidence yet.** Checked on the 16 Nov backup in a throwaway browser: most of his pairs per muscle are 4 days or more apart, and the close ones swing wildly (biceps +50% after a day, -17% after four: the lift and the rep range moving, not recovery). No muscle reaches 8 pairs within 4 days, so sets decide for every muscle today. A made-up log with clear evidence (30 hours apart 5% down, 50 hours 1% up, 20 cycles) gave "back only after about 48 hours".
 - The row's hover says why: the sets, and the log only when it moved the window.
 - **An untrained muscle is green, never grey** (Tom: "have the body show up as green, not empty and gray if I am untrained for a couple of days ... meant to motivate me to train more often, not guilt me"): ready, at the lowest brightness (0.4; trained muscles 0.4 to 1 by sets). After days off the whole body reads green and the card says "Every muscle is ready to train".
+
+## WOOP in Plan the day and THIS WEEK (2026-11-17, 1.0.129)
+
+Tom said yes to all ten WOOP points and asked for them joined to plan
+tomorrow. Plan the day now asks, after Today or Tomorrow and before BLOCK,
+YOUR PLANS: for each goal with a WOOP (`Goals.cards()`, three at most), "If
+<if>, then <then>" and a time box. A time writes the timed todo
+`woop-<goal>-<day>` (src 'woop', `Goals.cue`) and `wrun.cue`; a blank leaves
+it or takes an untouched one back. That todo is the phone's cue and the moment
+ROOM's wallpaper lifts the goal's card. THIS WEEK adds under each WOOP goal
+its if-then and "Kept K of C planned days this week" (`Goals.kept`). The rule
+lives in `shared/goals.js`. Tested in headless Chromium at 1920 by clicking
+TOMORROW, typing 23:00 and NEXT; the THIS WEEK line by drawing the card.
