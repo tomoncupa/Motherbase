@@ -1208,8 +1208,8 @@ briefs). A session works on one module:
   names any uncommitted file in an app clients get, because it packages every
   client app and would ship another session's half-finished work. `--dirty`
   overrides it only when the change is yours and finished.
-- **Wrap when the module's task is done.** Past 200k a hook tells Tom once;
-  whether to wrap then is his call, never suggested (Tom, 2026-11-16).
+- **Wrap when the module's task is done.** A hook tells Tom once at 200k and
+  asks once at 300k; never suggest it otherwise (Tom, 2026-11-16).
 
 - **Look before you write:** a fresh read of the file right before editing it.
 - **After a structural change, tell Tom to restart his other sessions.** They
