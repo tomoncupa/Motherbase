@@ -31,7 +31,7 @@
    Bumped by hand, and only when something changed that a person would notice
    or that changes the shape of stored data. VERSIONS.md says what each one
    did. */
-const VERSION = '0.1.17';
+const VERSION = '0.1.18';
 
 const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const apps = Object.create(null);
@@ -1664,8 +1664,12 @@ const IO = {
         : s.live
         ? 'Signed in as <b>' + esc(s.email || 'you') + '</b>, but not connected right now. Everything is saved here and goes up when the connection is back.' + times
         : s.why ? '<b>Not syncing.</b> ' + esc(s.why) + '.' + times
-        : s.on ? '<b>Not syncing yet.</b> Starting up.' + times
+        /* 2026-11-16, Tom: "I get logged out???" He was not: the program had
+           just reopened and was still asking Google, and this line sat over a
+           Sign in button. A sign-out Google confirms lands in s.why above. */
+        : s.on ? 'Signed in as <b>' + esc(s.email || 'you') + '</b>. Connecting, nothing to do.' + times
         : 'Set up on this device, and not signed in yet.';
+      const starting = s.on && !s.live && !s.why;
 
       const btn = (label, cls, fn) => {
         const b = el('button', 'mb-btn ' + cls + ' mb-press mb-tap', label);
@@ -1675,7 +1679,9 @@ const IO = {
         return b;
       };
 
-      if (!s.live) {
+      if (starting) {
+        /* no button while it connects; it redraws on its own when start ends */
+      } else if (!s.live) {
         btn('Sign in with Google', 'go', e => {
           const b = e.currentTarget;
           b.disabled = true;
