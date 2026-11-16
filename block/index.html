@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.27, 2026-11-16">
+<meta name="mb-version" content="1.0.28, 2026-11-16">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -445,6 +445,10 @@ main{display:flex;flex:1;min-height:0}
 .rhadd{display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap;padding:var(--s-3);
   border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel)}
 .rhadd .rhname{flex:1 1 220px;min-width:0}
+/* the add boxes had no background of their own and drew white under light text */
+.rhadd input,.rhadd select{background:var(--bg);color:var(--text-1);border:1px solid var(--line2);border-radius:var(--radius-sm);
+  padding:var(--s-1) var(--s-2);outline:none}
+.rhadd input:focus,.rhadd select:focus{border-color:var(--acc-d)}
 .rhadd input[type=number]{width:4.5em}
 .rhword{color:var(--text-muted);font-size:var(--f-1)}
 .rhsec{display:flex;flex-direction:column;gap:var(--s-1)}
@@ -550,6 +554,9 @@ main{display:flex;flex:1;min-height:0}
 .day{border:1px solid var(--line);border-radius:11px;background:linear-gradient(180deg,rgba(19,27,38,.75),rgba(11,16,23,.55));display:flex;flex-direction:column;min-height:220px}
 .day.today{border-color:var(--acc-d);box-shadow:0 0 0 1px var(--acc-d)}
 .day.wpast{opacity:.72}
+/* a weekday with no day on it is its name and its picker, nothing under them */
+.day.wempty{min-height:0}
+.day.wempty .day-head{border-bottom:0}
 .day-head h3 .dnum{font-size:10px;color:var(--dim2);font-weight:400}
 .day-ck.fut{opacity:.35}
 .day-head{padding:9px 10px;border-bottom:1px solid var(--line)}
@@ -3816,7 +3823,7 @@ function renderWeek() {
     /* It reads as an option in a list of day names, so calling it "rest day"
        made it look like a day he had built and named. It is the absence of
        one. */
-    sel.appendChild(el('option', null, '— none —')).value = '';
+    sel.appendChild(el('option', null, 'None')).value = '';
     /* One-offs are not on the menu: they belong to a date, not to a weekday,
        and offering one here would ask you to run Tuesday's shoot every week. */
     templates().forEach(x => { const o = el('option', null, esc(x.name)); o.value = x.id; if (x.id === vid) o.selected = true; sel.appendChild(o); });
@@ -3896,7 +3903,7 @@ function renderWeek() {
     } else {
       head.appendChild(meta);
       colEl.appendChild(head);
-      colEl.appendChild(el('div', 'day-body', '<div class="day-rest">— rest day —<br><span style="opacity:.6">pick a routine above</span></div>'));
+      colEl.classList.add('wempty');
     }
     w.appendChild(colEl);
   });
@@ -6045,6 +6052,19 @@ $('#vWeek').onclick = () => { S.view = 'week'; render(); };
 $('#vSum').onclick = () => { S.view = 'sum'; render(); };
 $('#vEvery').onclick = () => { S.view = 'every'; render(); };
 $('#vAny').onclick = () => { S.view = 'anytime'; render(); };
+/* The home screen opens a spot here: {lifeos:1, show}. 'schedule' is the
+   Schedule page; 'habits' and 'every' are that page with the cursor in that
+   section's add box (EVERY & HABITS's ADD ONE). */
+window.addEventListener('message', e => {
+  const m = e.data, sh = m && m.lifeos === 1 && m.show;
+  const v = { schedule: 'week', habits: 'anytime', every: 'every' }[sh];
+  if (!v) return;
+  S.view = v; render();
+  if (sh === 'schedule') { $('#sched').scrollTop = 0; return; }
+  const box = $('#' + v + ' .rhname'); if (!box) return;
+  box.closest('.schsec').scrollIntoView({ block: 'start' });
+  if (window.UI && UI.focusSoon) UI.focusSoon(box); else box.focus();
+});
 $('#bExp').onclick = openExport;
 /* Everything that used to have its own button on the bar. Rules keeps its
    warning count, because a broken rule is a thing you should see without
