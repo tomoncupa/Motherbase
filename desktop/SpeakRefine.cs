@@ -80,6 +80,87 @@ static class Refine
         return res;
     }
 
+    /* ── the transcript, written on this PC (SPEAK 1.0.33) ──
+       WebView2, the engine inside SPEAK.exe, has no speech-to-text of its
+       own, so a take made here came back with no transcript (Tom,
+       2026-11-16: "why was there no transcript?"). The page posts the take's
+       recording as mbhear:{id, ext, b64}; this saves it and runs CLIP's own
+       transcriber (faster-whisper, in CLIP's Python) on it, and posts back
+       {mb:'hear', id, text, chunks:[...]} or {.., error}. */
+    public static void Hear(string body, Action<string> log, Action<string> send)
+    {
+        Dictionary<string, object> m;
+        try { m = json.DeserializeObject(body) as Dictionary<string, object>; } catch { return; }
+        if (m == null) return;
+        string id = Convert.ToString(m.ContainsKey("id") ? m["id"] : "");
+        string ext = Convert.ToString(m.ContainsKey("ext") ? m["ext"] : "webm");
+        string b64 = Convert.ToString(m.ContainsKey("b64") ? m["b64"] : "");
+        if (id == "" || b64 == "") return;
+        new Thread(() => send(json.Serialize(HearRun(id, ext, b64, log)))) { IsBackground = true }.Start();
+    }
+
+    static Dictionary<string, object> HearRun(string id, string ext, string b64, Action<string> log)
+    {
+        var res = new Dictionary<string, object> { { "mb", "hear" }, { "id", id } };
+        string tools = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "CLIP", "tools");
+        string py = Path.Combine(tools, "venv", "Scripts", "python.exe");
+        if (!File.Exists(py)) { res["error"] = "CLIP's transcriber is not on this PC, so no transcript."; return res; }
+        string room = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Motherbase", "hear");
+        Directory.CreateDirectory(room);
+        string safe = new string(Array.FindAll(id.ToCharArray(), ch => char.IsLetterOrDigit(ch) || ch == '-'));
+        if (safe == "") safe = "take";
+        string clip = Path.Combine(room, safe + "." + (ext == "mp4" ? "mp4" : "webm"));
+        string outDir = Path.Combine(room, safe);
+        string script = Path.Combine(room, "hear.py");
+        try
+        {
+            File.WriteAllBytes(clip, Convert.FromBase64String(b64));
+            File.WriteAllText(script,
+                "import sys, os, json\n" +
+                "tools, video, out = sys.argv[1], sys.argv[2], sys.argv[3]\n" +
+                "sys.path.insert(0, tools)\n" +
+                "import engine\n" +
+                "engine.transcribe(video, 'fast', out_dir=out)\n" +
+                "with open(os.path.join(out, 'words.json'), encoding='utf-8') as f: d = json.load(f)\n" +
+                "segs = [s.get('text', '').strip() for s in d.get('segments') or [] if s.get('text', '').strip()]\n" +
+                "sys.stdout.write(json.dumps({'chunks': segs}))\n", new UTF8Encoding(false));
+        }
+        catch (Exception x) { res["error"] = "Could not save the recording to hear it: " + x.Message; return res; }
+        var psi = new ProcessStartInfo(py, Join(new List<string> { script, tools, clip, outDir }))
+        {
+            UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = tools,
+            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
+        };
+        string outText = "", errText = "";
+        try
+        {
+            var p = Process.Start(psi);
+            p.StandardInput.Close();
+            var errTask = p.StandardError.ReadToEndAsync();
+            var outTask = p.StandardOutput.ReadToEndAsync();
+            if (!p.WaitForExit(10 * 60 * 1000)) { try { p.Kill(); } catch { } }
+            outText = outTask.Result; errText = errTask.Result;
+        }
+        catch (Exception x) { errText = x.Message; }
+        try { File.Delete(clip); } catch { }
+        int brace = outText.LastIndexOf("{\"chunks\"");
+        Dictionary<string, object> r = null;
+        if (brace >= 0) try { r = json.DeserializeObject(outText.Substring(brace)) as Dictionary<string, object>; } catch { }
+        var chunks = r != null && r.ContainsKey("chunks") ? r["chunks"] as System.Collections.IList : null;
+        if (chunks == null)
+        {
+            log("hear: failed: " + (errText.Length > 400 ? errText.Substring(errText.Length - 400) : errText));
+            res["error"] = "The transcriber did not finish this one.";
+            return res;
+        }
+        var list = new List<string>();
+        foreach (var c in chunks) list.Add(Convert.ToString(c));
+        res["chunks"] = list;
+        res["text"] = string.Join(" ", list);
+        return res;
+    }
+
     /* how Tom talks, and the brand rules, as they stand in tom-context today */
     static string System_()
     {

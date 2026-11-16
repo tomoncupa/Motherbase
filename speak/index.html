@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.32, 2026-11-16">
+<meta name="mb-version" content="1.0.33, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1992,10 +1992,18 @@ function askSpec(desc) {
   return spec;
 }
 /* open questions: an `Ask:` note not ticked, not cancelled, not answered here */
+/* A question is open until it is answered, whichever copy of it was
+   answered: the Todoist sync can bring one task back as a second note, and
+   answering one copy left the other on QUESTIONS FOR YOU (Tom, 2026-11-16:
+   "why is this still open I just answered it"). Matched by its words too,
+   and each question shows once. */
+const askKey = q => String(q || '').toLowerCase().replace(/^ask:\s*/, '').replace(/[^a-z0-9]+/g, ' ').trim();
 function askQueue() {
-  const done = Rec.map('ask');
+  const done = Rec.map('ask'), saidQ = {}, seen = {};
+  Object.keys(done).forEach(k => { const a = done[k]; if (a && a.answeredAt && a.q) saidQ[askKey(a.q)] = 1; });
   return Rec.all('note').filter(r => !r.deleted && r.payload && /^ask:\s*/i.test(String(r.payload.text || '')) && !r.payload.done && !r.payload.cancelled &&
-    !(r.payload.td && r.payload.td.done) && !(done[r.key] && done[r.key].answeredAt))
+    !(r.payload.td && r.payload.td.done) && !(done[r.key] && done[r.key].answeredAt) && !saidQ[askKey(r.payload.text)] &&
+    !seen[askKey(r.payload.text)] && (seen[askKey(r.payload.text)] = 1))
     .map(r => Object.assign({ key: r.key, date: r.date, q: String(r.payload.text).replace(/^ask:\s*/i, '').trim(), tdId: (r.payload.td && r.payload.td.id) || '',
       askedAt: r.payload.t || 0 }, askSpec(r.payload.td && r.payload.td.desc)))
     .sort((a, b) => (a.askedAt || 0) - (b.askedAt || 0));
@@ -2264,6 +2272,43 @@ function askRefine(prompt) {
     catch (e) { delete REF.wait[id]; res({ error: 'This window cannot reach Claude.' }); }
   });
 }
+/* THE TRANSCRIPT ON THIS PC (SPEAK 1.0.33). SPEAK.exe's engine has no
+   speech-to-text, so a take made there had none (Tom, 2026-11-16: "why was
+   there no transcript?"). Its recording goes to SPEAK.exe, which runs CLIP's
+   transcriber on it (desktop/SpeakRefine.cs, mbhear:), and the words come
+   back into the take: transcript, crutch phrases, word count and pace from
+   words, and the bank's answer. Then coherence, concision and filing run on
+   it like any take with a transcript. */
+const HEAR = { wait: {}, busy: {} };
+try {
+  window.chrome.webview.addEventListener('message', e => {
+    const d = e.data;
+    if (d && d.mb === 'hear' && HEAR.wait[d.id]) { const f = HEAR.wait[d.id]; delete HEAR.wait[d.id]; f(d); }
+  });
+} catch (e) {}
+function hearTake(t, blob) {
+  if (!t || !t.key || HEAR.busy[t.key]) return;
+  HEAR.busy[t.key] = 1;
+  const fr = new FileReader();
+  fr.onload = () => {
+    const d = String(fr.result || ''), i = d.indexOf(';base64,');
+    if (i < 0) { delete HEAR.busy[t.key]; return; }
+    const ext = /mp4/.test(blob.type || '') ? 'mp4' : 'webm';
+    HEAR.wait[t.key] = r => {
+      delete HEAR.busy[t.key];
+      if (!r || !r.chunks || !r.chunks.length) { if (r && r.error) UI.toast(esc(r.error)); return; }
+      const text = r.chunks.join(' ').trim(), sc = scan(r.chunks), x = Rec.get('take', t.date, t.key) || t;
+      const words = wordsOf(text).length, m = Object.assign({}, x.m || {}, { words: words, crutch: sc.crutch, repeats: Math.max((x.m || {}).repeats || 0, sc.repeats) });
+      if (m.spoken) m.wpm = Math.round(words / (m.spoken / 60));
+      Rec.patch('take', t.date, t.key, { tx: text.slice(0, 4000), asr: 1, asrBy: 'pc', hits: sc.hits, m: m });
+      if (Rec.has('answer', t.date, t.key)) Rec.patch('answer', t.date, t.key, { text: text.slice(0, 20000), words: words });
+      setTimeout(() => judgeTake(), 300); setTimeout(sortFree, 600);
+    };
+    try { window.chrome.webview.postMessage('mbhear:' + JSON.stringify({ id: t.key, ext: ext, b64: d.slice(i + 8) })); }
+    catch (e) { delete HEAR.wait[t.key]; delete HEAR.busy[t.key]; }
+  };
+  fr.readAsDataURL(blob);
+}
 /* the plate at the foot of a take: why it may be content, and the way in */
 function contentBox(t, h) {
   const box = el('div', 'cnt mb-plate');
@@ -2494,6 +2539,7 @@ async function judgeTake(t) {
   JUDGE.busy = true; JUDGE.tried[x.key] = 1;
   const r = await askRefine('Grade one spoken practice take by Tom, a fitness coach training to speak on camera like a direct, authoritative creator. ' +
     'Reply with one JSON object and nothing else: {"coh": 1 to 5, "cohWhy": one line, "con": 1 to 5, "conWhy": one line, "point": his main point in one sentence of his own words}. ' +
+    '"sum": two to four sentences summarising what he said, in his words, ready to keep in his knowledge bank. ' +
     'Coherence: does it make one clear point a listener can follow, in an order that builds (5), or does it wander, restart and contradict itself (1)? ' +
     'Concision: does every sentence earn its place (5), or is the point buried in repeats, tags and detours (1)? Ignore transcription errors and missing punctuation. ' +
     'Name the specific thing in each why, quoting a few of his words.' +
@@ -2502,7 +2548,8 @@ async function judgeTake(t) {
   let o = null;
   try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
   const n = v => { v = Math.round(+v); return v >= 1 && v <= 5 ? v : null; };
-  if (o && n(o.coh) && n(o.con)) Rec.patch('take', x.date, x.key, { judge: { coh: n(o.coh), cohWhy: String(o.cohWhy || '').slice(0, 300), con: n(o.con), conWhy: String(o.conWhy || '').slice(0, 300), point: String(o.point || '').slice(0, 300), at: Date.now() } });
+  if (o && n(o.coh) && n(o.con)) Rec.patch('take', x.date, x.key, { judge: { coh: n(o.coh), cohWhy: String(o.cohWhy || '').slice(0, 300), con: n(o.con), conWhy: String(o.conWhy || '').slice(0, 300), point: String(o.point || '').slice(0, 300), sum: String(o.sum || '').slice(0, 1200), at: Date.now() } });
+  if (o && o.sum && Rec.has('answer', x.date, x.key)) Rec.patch('answer', x.date, x.key, { sum: String(o.sum).slice(0, 1200) });
   setTimeout(() => judgeTake(), 2000);
 }
 if (REF.on) Rec.ready(() => setTimeout(() => judgeTake(), 9000));
@@ -3047,6 +3094,8 @@ function remindFrom(t) {
 function nextBoxFor(t, h) {
   const box = el('div', 'cnt mb-plate');
   box.appendChild(el('h3', null, 'NEXT TIME'));
+  const wk = coach(t)[0];
+  if (wk) box.appendChild(el('p', null, '<b>Weakest this take: ' + esc(FAULT[wk.id] || wk.id) + '.</b> ' + esc(wk.what)));
   const r = remindFrom(t);
   if (r.cues.length) box.appendChild(el('p', null, r.cues.map(esc).join('<br>')));
   const l = el('div', 'list');
@@ -3455,6 +3504,7 @@ function finishTake(m, secs) {
   const take = { drill: d.id, skill: d.skill, style: d.style, dur: Math.round(secs), m: out, goals: goals, pass: pass ? 1 : 0, ev: ev,
     asr: asrOn ? 1 : 0, cam: eye != null ? 1 : 0, tx: asrOn ? T.listener.text().slice(0, 4000) : '', hits: asrOn ? tx.hits : null,
     prompt: T.prompt && (T.prompt.text || (T.prompt.items || []).join(' | ')), p: T.prompt, at: Date.now() };
+  if (T.listener && T.listener.out.error) take.asrErr = String(T.listener.out.error).slice(0, 40);
   if (d.check) { if (T.ph != null) checkSnap(); const res = checkResult(T.phases); take.m = { check: res }; take.goals = []; take.pass = res.all ? 1 : 0; }
   if (T.origin && T.origin.key) take.from = T.origin.key;
   if (T.vid && T.clipP) take.vid = 1;
@@ -3478,6 +3528,7 @@ function finishTake(m, secs) {
     if (fr) setTimeout(sortFree, 500);
   }
   if (T.clipP) { take.clipP = T.clipP; T.clipP.then(b => saveClip(take, b)); }
+  if (!asrOn && T.clipP && window.MB_HEAR && !T.warm && !d.check) { const cp = T.clipP; cp.then(b => { if (b) hearTake(take, b); }); }
   Mobile.feedback(pass ? 'complete' : 'done');
   showTake(take, tx && tx.html);
 }
@@ -3619,11 +3670,25 @@ function showTake(t, html) {
         const jfill = () => {
           const x = takes().filter(y => y.key === t.key)[0] || t, jg = x.judge;
           jbox.innerHTML = '';
-          if (jg) { stat(jbox, 'Coherence', jg.coh + '/5', jg.cohWhy || ''); stat(jbox, 'Concision', jg.con + '/5', jg.conWhy || ''); return 1; }
-          if (t.tx && wordsOf(t.tx).length >= 40) stat(jbox, 'Coherence and concision', '\u00b7', REF.on ? 'Claude is reading it' : 'read by Claude in SPEAK on the PC');
+          if (jg) {
+            stat(jbox, 'Coherence', jg.coh + '/5', jg.cohWhy || ''); stat(jbox, 'Concision', jg.con + '/5', jg.conWhy || '');
+            if (jg.sum) {
+              const sb = el('div', 'cnt mb-plate'); sb.style.gridColumn = '1 / -1';
+              sb.appendChild(el('h3', null, 'SUMMARY'));
+              sb.appendChild(el('p', null, esc(jg.sum)));
+              const inBank = Rec.has('answer', x.date, x.key);
+              const kb = el('button', 'mb-btn mb-press mb-tap', '<span>' + (inBank ? 'IN YOUR BANK' : 'ADD TO KNOWLEDGE BANK') + '</span>');
+              kb.disabled = inBank;
+              kb.onclick = () => { Rec.set('answer', x.date, x.key, { q: x.prompt || (d ? d.name : 'Take'), src: 'take', subj: '', text: x.tx || '', sum: jg.sum, words: wordsOf(x.tx || '').length, dur: x.dur || 0, at: x.at || Date.now() }); kb.disabled = true; kb.innerHTML = '<span>IN YOUR BANK</span>'; setTimeout(sortFree, 300); };
+              sb.appendChild(kb);
+              jbox.appendChild(sb);
+            }
+            return 1;
+          }
+          if ((x.tx || t.tx) && wordsOf(x.tx || t.tx).length >= 40) stat(jbox, 'Coherence and concision', '\u00b7', REF.on ? 'Claude is reading it' : 'read by Claude in SPEAK on the PC');
           return 0;
         };
-        if (!jfill() && REF.on && t.tx) { let n = 0; const iv = setInterval(() => { n++; if (!jbox.isConnected || jfill() || n > 120) clearInterval(iv); }, 1500); }
+        if (!jfill() && REF.on && (t.tx || window.MB_HEAR)) { let n = 0; const iv = setInterval(() => { n++; if (!jbox.isConnected || jfill() || n > 120) clearInterval(iv); }, 1500); }
       } else {
         put('hiss', m.hiss); put('pitch', m.pitch, 'the siren');
         if (m.crispRaw != null) stat(rows, 'Crispness reference', Math.round(m.crispRaw * 1000), 'what today\'s CLEAR drills are measured against');
@@ -3645,7 +3710,36 @@ function showTake(t, html) {
         b.appendChild(h);
         b.appendChild(el('div', 'tx', html || esc(t.tx)));
         b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
-      } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
+      } else if (d && (d.asr || window.MB_HEAR)) {
+        const hb = el('div', 'cnt mb-plate'); b.appendChild(hb);
+        const hfill = () => {
+          const x = takes().filter(y => y.key === t.key)[0] || t;
+          hb.innerHTML = '';
+          if (x.tx) {
+            hb.appendChild(el('h3', null, 'TRANSCRIPT'));
+            hb.appendChild(el('div', 'tx', esc(x.tx)));
+            hb.appendChild(el('p', 'muted', 'Written on this PC from your recording. Crutch phrases: ' + ((x.m || {}).crutch || 0) + '.'));
+            if (!Rec.has('answer', x.date, x.key)) {
+              const kbb = el('button', 'mb-btn mb-press mb-tap', '<span>ADD TO KNOWLEDGE BANK</span>');
+              kbb.onclick = () => { Rec.set('answer', x.date, x.key, { q: x.prompt || d.name, src: 'take', subj: '', text: x.tx, words: wordsOf(x.tx).length, dur: x.dur || 0, at: x.at || Date.now() }); kbb.disabled = true; kbb.innerHTML = '<span>IN YOUR BANK</span>'; setTimeout(sortFree, 300); };
+              hb.appendChild(kbb);
+            }
+            return 1;
+          }
+          if (window.MB_HEAR && HEAR.busy[t.key]) { hb.appendChild(el('p', 'muted', 'No transcript from the browser. Writing one on this PC from your recording; it appears here when done.')); return 0; }
+          hb.appendChild(el('p', 'muted', 'No transcript' + (t.asrErr ? ' (the browser said: ' + esc(t.asrErr) + ')' : '') + '. Fillers are the held sounds only.'));
+          if (window.MB_HEAR && hasClip(t)) {
+            const wb = el('button', 'mb-btn go mb-press mb-tap', '<span>WRITE THE TRANSCRIPT ON THIS PC</span>');
+            wb.onclick = () => {
+              const row = Rec.get('tclip', t.date, t.key); if (!row) return;
+              fetch(clipUrl(row)).then(r => r.blob()).then(bl => { hearTake(t, bl); hfill(); });
+            };
+            hb.appendChild(wb);
+          }
+          return 0;
+        };
+        if (!hfill() && window.MB_HEAR) { let n = 0; const iv = setInterval(() => { n++; if (!hb.isConnected || hfill() || n > 400) clearInterval(iv); }, 1500); }
+      }
       if (d && !d.fix && !d.check && t.drill !== 'warm') b.appendChild(nextBoxFor(t, h));
       if (d && !d.fix && t.tx && t.key) b.appendChild(contentBox(t, h));
       if (d && t.tx && t.key && !Rec.has('answer', t.date, t.key) && t.drill !== 'warm') {
@@ -3665,7 +3759,7 @@ function showTake(t, html) {
       }
     },
     actions: d && d.check ? [{ label: 'CLOSE' }, { label: 'AGAIN', kind: 'go', fn: () => { startTake(d); } }] : d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { if ((d === FT || d === OT) && t.prompt) fitSkip[String(t.prompt).toLowerCase()] = 1; startTake(d); } },
-      { label: 'SAME PROMPT', kind: 'go', fn: () => { startTake(d, null, promptOf(t, d)); } }] : [{ label: 'CLOSE' }],
+      { label: 'RETRY, KEEP THIS ONE', kind: 'go', fn: () => { startTake(d, null, promptOf(t, d)); } }] : [{ label: 'CLOSE' }],
   });
 }
 

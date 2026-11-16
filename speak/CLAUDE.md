@@ -602,6 +602,17 @@ Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FR
 - **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
 - **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
 
+## The transcript on the PC, summary, weakest, retry, 2026-11-16 (SPEAK 1.0.33)
+
+Tom: *"why was there no transcript? I also want to know which was my weakest metric ... a summary of what I said to be created as a draft to be added to data bank OR an option to retry the prompt WITHOUT losing my first entry."*
+
+- **Why there was none**: SPEAK.exe runs the page in WebView2, which has no speech-to-text of its own (Chrome and Edge get it from an online service), so every take made in SPEAK.exe came back with no transcript and pace "estimated from syllables". The recogniser's error is now kept on the take as `asrErr`.
+- **The fix** (`hearTake`, `desktop/SpeakRefine.cs` `Hear`): when a take ends with no transcript inside SPEAK.exe (`window.MB_HEAR`), its recording goes to SPEAK.exe (`mbhear:{id, ext, b64}`), which runs CLIP's transcriber (faster-whisper in `Downloads/CLIP/tools/venv`, `engine.transcribe(video, 'fast')`) and posts back the sentences. The take gets `tx`, `asr: 1`, `asrBy: 'pc'`, crutch phrases from `scan`, word count and pace from words; a bank answer for the take gets the words; then coherence, concision and filing run. An older take with a recording shows WRITE THE TRANSCRIPT ON THIS PC. Needs Record takes on (the default). Tested on Faizan Asif's video: every word came back.
+- **Weakest this take** heads NEXT TIME: the coach's top fault and why.
+- **SUMMARY**: Claude's reading (`judgeTake`) also writes 2 to 4 sentences of what he said (`judge.sum`), shown on the take with ADD TO KNOWLEDGE BANK; an answer in the bank gets it as `sum`.
+- **RETRY, KEEP THIS ONE** (was SAME PROMPT): a new take on the same prompt; the first take and its answer stay.
+- **QUESTIONS FOR YOU** hides a question once any copy of it is answered (matched by its words too) and shows each question once (`askKey`). Tom: "why is this still open I just answered it".
+
 ## What each number means, NEXT TIME and reminders, 2026-11-16 (SPEAK 1.0.32)
 
 Tom: *"I have these numbers but I don't know what my metrics are or what I can do about them"*, "3 suggestions for drills", "reminders for the next time I do a speak entry".

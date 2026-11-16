@@ -331,7 +331,7 @@ class Speak : Form
         Caption(c);
         c.WebMessageReceived += Message;
         /* tells the page Claude can rewrite a take here, and what this program's settings are */
-        c.AddScriptToExecuteOnDocumentCreatedAsync("window.MB_REFINE=1;window.MB_EXE=" + App.State(mini) + ";");
+        c.AddScriptToExecuteOnDocumentCreatedAsync("window.MB_REFINE=1;window.MB_HEAR=1;window.MB_EXE=" + App.State(mini) + ";");
         c.Navigate(pageUrl);
     }
 
@@ -342,6 +342,7 @@ class Speak : Form
         if (m == null) return;
         if (m.StartsWith("mbsize:")) { if (!mini) return; if (m == "mbsize:big") Grow(BIG); else if (m == "mbsize:small") Grow(SMALL); else if (m == "mbsize:wide") Grow(WIDE); }
         else if (m.StartsWith("mbrefine:")) Refine.Ask(m.Substring(9), App.Log, s => BeginInvoke((Action)(() => Post(s))));
+        else if (m.StartsWith("mbhear:")) Refine.Hear(m.Substring(7), App.Log, s => BeginInvoke((Action)(() => Post(s))));
         else if (m.StartsWith("mbset:"))
         {
             string kv = m.Substring(6); int eq = kv.IndexOf('=');
