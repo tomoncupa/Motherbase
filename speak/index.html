@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.31, 2026-11-16">
+<meta name="mb-version" content="1.0.32, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2644,6 +2644,7 @@ function drawToday(m) {
   tc.appendChild(ta);
   tc.appendChild(camRow());
   m.appendChild(tc);
+  const rc = remindCard(); if (rc) m.appendChild(rc);
   const w = warmToday();
   const aq = askQueue();
   if (aq.length) {
@@ -2985,6 +2986,85 @@ function targetFor(id) {
   if (id === 'pitch') return t.pitch;
   return null;
 }
+/* WHAT EACH NUMBER MEANS (SPEAK 1.0.32). Tom, 2026-11-16: "I have these
+   numbers but I don't know what my metrics are or what I can do about them."
+   Each reading says its target, comes up met or missed, and when missed says
+   the one thing to do. Targets are his TARGETS, the style's pace band, and
+   for counts with no target of his own a line a coach would draw. */
+const MEAN_FIX = {
+  fpm: 'Close your lips and let the pause be silent instead of um.',
+  held: 'Each held sound is an um. Close your lips and pause instead.',
+  crutch: 'End the sentence where the phrase would go, and hold a beat.',
+  slow: 'Shorter sentences, and start the next one as the last lands.',
+  fast: 'Breathe in at every full stop.',
+  longP: 'Lost? Say your last point again in fewer words.',
+  restarts: 'Start each sentence soft and a little slow on its first sound.',
+  repeats: 'Finish the word once; a repeat is a restart.',
+  ratio: 'Too little silence. Let a pause do the work instead of filling it.',
+  pitch: 'Lift your voice on the one word in each line that matters.',
+  crisp: 'Open the mouth and sound every last consonant.',
+  eye: 'Find the next thought with your eyes on the lens.',
+  mouthEven: 'Open the whole mouth, both corners moving the same.',
+};
+function readOf(id, v, d) {
+  const t = targets(), b = band(d.style);
+  const R = (ok, tgt, fixKey) => ({ cls: ok ? 'met' : 'miss', line: tgt + (ok ? ' \u00b7 met' : ' \u00b7 ' + MEAN_FIX[fixKey || id]) });
+  switch (id) {
+    case 'wpm': return v < b[0] - 5 ? R(false, 'target ' + b[0] + ' to ' + b[1], 'slow') : v > b[1] + 5 ? R(false, 'target ' + b[0] + ' to ' + b[1], 'fast') : R(true, 'target ' + b[0] + ' to ' + b[1]);
+    case 'fpm': return R(v <= t.fpm, 'target ' + t.fpm + '/min or under');
+    case 'held': return R(v <= 2, 'target 2 or fewer');
+    case 'crutch': return R(v <= 0, 'target none');
+    case 'longP': return R(v <= 2, 'target 2 or fewer');
+    case 'restarts': return R(v <= 1, 'target 1 or fewer');
+    case 'repeats': return R(v <= 2, 'target 2 or fewer');
+    case 'ratio': return R(v <= 80, 'target 80% or under: silence is part of the delivery');
+    case 'pitch': return R(v >= t.pitch, 'target ' + t.pitch + ' st or more');
+    case 'crisp': return R(v >= t.crispPct, 'target ' + t.crispPct + '% or more');
+    case 'eye': return R(v >= t.eye, 'target ' + t.eye + '% or more');
+    case 'mouthEven': return R(v >= t.mouthEven, 'target ' + t.mouthEven + '% or more');
+    case 'pauses': return { cls: '', line: 'short pauses between thoughts are good; ums are not' };
+    default: return null;
+  }
+}
+/* NEXT TIME: the three drills for this take's top faults, and a reminder
+   that greets the next take (setting `speak.remind`, written when a take
+   finishes, which is him acting) */
+function nextDrills(t) {
+  const ids = [], d = drillById(t.drill);
+  coach(t).forEach(f => { if (f.fix && ids.indexOf(f.fix) < 0 && drillById(f.fix)) ids.push(f.fix); });
+  const m = t.m || {};
+  if (m.held >= 3 && ids.indexOf('fix-fillers') < 0) ids.push('fix-fillers');
+  if (m.restarts >= 2 && ids.indexOf('fix-easy-start') < 0 && drillById('fix-easy-start')) ids.push('fix-easy-start');
+  ['lib-notag', 'lib-nostop', 'lib-jam'].forEach(x => { if (ids.length < 3 && ids.indexOf(x) < 0) ids.push(x); });
+  return ids.slice(0, 3).map(drillById).filter(Boolean);
+}
+function remindFrom(t) {
+  const fs = coach(t).slice(0, 2), m = t.m || {}, cues = fs.map(f => f.cue);
+  if (!t.asr) cues.push('Transcript was off: your crutch phrases and coherence were not read.');
+  return { take: t.key, at: Date.now(), cues: cues.slice(0, 3), drills: nextDrills(t).map(x => x.id),
+    nums: [m.wpm != null ? Math.round(m.wpm) + ' wpm' : '', m.fpm != null ? r1(m.fpm) + ' fillers/min' : ''].filter(Boolean).join(', ') };
+}
+function nextBoxFor(t, h) {
+  const box = el('div', 'cnt mb-plate');
+  box.appendChild(el('h3', null, 'NEXT TIME'));
+  const r = remindFrom(t);
+  if (r.cues.length) box.appendChild(el('p', null, r.cues.map(esc).join('<br>')));
+  const l = el('div', 'list');
+  nextDrills(t).forEach(x => { const row = drillRow(x), go = row.onclick; row.onclick = e => { if (h) h.close(); go(e); }; l.appendChild(row); });
+  box.appendChild(l);
+  box.appendChild(el('p', 'muted', 'This reminder greets your next take.'));
+  return box;
+}
+function remindCard() {
+  const r = opt('remind', null);
+  if (!r || !r.cues || !r.cues.length) return null;
+  const c = card('REMEMBER THIS TIME', r.nums || '');
+  c.appendChild(el('p', null, r.cues.map(esc).join('<br>')));
+  const l = el('div', 'list');
+  (r.drills || []).map(drillById).filter(Boolean).forEach(x => l.appendChild(drillRow(x)));
+  c.appendChild(l);
+  return c;
+}
 function stat(box, k, v, d, cls) {
   const s = el('div', 'stat mb-plate' + (cls ? ' ' + cls : ''));
   s.innerHTML = '<div class="k">' + esc(k) + '</div><div class="v">' + esc(String(v)) + '</div>' + (d ? '<div class="d">' + esc(d) + '</div>' : '');
@@ -3135,6 +3215,7 @@ function countIn() {
     mid.appendChild(el('div', 'say', T.cam ? 'LOOK AT THE LENS' : T.warm ? T.warm.how.toUpperCase() : prep ? T.d.prep : 'READY'));
     if (prep) { mid.appendChild(promptEl(T.prompt)); mid.appendChild(el('p', 'muted', esc(T.d.how))); }
     else if (T.d && T.d.fix && !T.warm) mid.appendChild(el('p', 'muted', esc(T.d.how)));
+    else if (!T.warm) { const r = opt('remind', null); if (r && r.cues && r.cues[0]) mid.appendChild(el('p', 'muted', 'Remember: ' + esc(r.cues[0]))); }
     $('#tkMeters').innerHTML = ''; $('#tkFoot').innerHTML = '';
     let k = prep ? 10 : 3;
     n.textContent = String(k);
@@ -3379,6 +3460,7 @@ function finishTake(m, secs) {
   if (T.vid && T.clipP) take.vid = 1;
   if (T.prompt && T.prompt.kind === 'script') take.script = T.prompt.key;
   take.key = saveTake(take); take.date = Day.today();
+  if (!T.warm && !d.fix && !d.check) { try { Rec.setting(APP.id, 'remind', remindFrom(take)); } catch (e) {} }
   if (asrOn && !T.warm && !d.fix) setTimeout(() => judgeTake(take), 400);
   if (d === AQ && T.prompt && T.prompt.ask) {
     const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
@@ -3518,7 +3600,10 @@ function showTake(t, html) {
       }
       const rows = el('div', 'stats');
       rows.style.marginTop = 'var(--s-3)';
-      const put = (id, v, note) => { if (v == null) return; const mt = METRICS[id]; stat(rows, mt.name, mt.fmt(v) + (mt.unit ? ' ' + mt.unit : ''), note || mt.note); };
+      const put = (id, v, note) => {
+        if (v == null) return; const mt = METRICS[id], j = d ? readOf(id, v, d) : null;
+        stat(rows, mt.name, mt.fmt(v) + (mt.unit ? ' ' + mt.unit : ''), j ? j.line : (note || mt.note), j ? j.cls : '');
+      };
       if (d) {
         put('wpm', m.wpm, t.asr ? m.words + ' words in ' + r1(m.spoken) + 's' : 'estimated from ' + m.syll + ' syllables');
         put('fpm', m.fpm, (m.held || 0) + ' held' + (m.crutch != null ? ', ' + m.crutch + ' crutch' : ''));
@@ -3561,6 +3646,7 @@ function showTake(t, html) {
         b.appendChild(el('div', 'tx', html || esc(t.tx)));
         b.appendChild(el('p', 'muted', 'Marked: fillers and crutch phrases. The browser\'s transcript, so um and uh are mostly missing from it; held sounds stand in.'));
       } else if (d && d.asr) b.appendChild(el('p', 'muted', 'No transcript. Fillers are the held sounds only.'));
+      if (d && !d.fix && !d.check && t.drill !== 'warm') b.appendChild(nextBoxFor(t, h));
       if (d && !d.fix && t.tx && t.key) b.appendChild(contentBox(t, h));
       if (d && t.tx && t.key && !Rec.has('answer', t.date, t.key) && t.drill !== 'warm') {
         const kb = el('div', 'acts'), kbb = el('button', 'mb-btn mb-press mb-tap', '<span>ADD TO KNOWLEDGE BANK</span>');

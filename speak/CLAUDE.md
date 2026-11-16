@@ -602,6 +602,14 @@ Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FR
 - **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
 - **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
 
+## What each number means, NEXT TIME and reminders, 2026-11-16 (SPEAK 1.0.32)
+
+Tom: *"I have these numbers but I don't know what my metrics are or what I can do about them"*, "3 suggestions for drills", "reminders for the next time I do a speak entry".
+
+- **Every reading on a take's sheet** (`readOf`) shows its target, met (green) or missed (amber), and when missed the one thing to do (`MEAN_FIX`). Targets: his TARGETS and the style's pace band; for counts with no target of his own, a coach's line (held sounds 2 or fewer, stammered starts 1 or fewer, sound share 80% or under, long pauses 2 or fewer, crutch phrases none).
+- **NEXT TIME** under the numbers (`nextBoxFor`): the coach's top cues and three drills (`nextDrills`: the fix drills of the top faults, then Silence not um or Soft start when the counts call for them, then Land it no tag, Don't stop, Just a Minute).
+- **The reminder** (`speak.remind`, written when a take finishes, `remindFrom`): REMEMBER THIS TIME on TODAY under the TODAY card, and the first cue on the count before every take. A take with no transcript adds "Transcript was off".
+
 ## CHECK THE COACH, added 2026-11-16 (SPEAK 1.0.30)
 
 Proves the eye, mouth and crispness readings follow him before he trusts them. One minute, camera on, four parts of 15 s the screen names (`CHECK_PH`): NORMAL, LOOK AWAY, SIDE OF THE MOUTH, MUMBLE. Each part is measured on its own (`checkSnap`: on-the-lens share of that part's looks, `mouthOf` evenness, the ear's raw crispness from the part's start). A reading passes only if it moved the right way against NORMAL (`checkResult`): on the lens down 30 points or more looking away, evenness down 10 or more from one side, crispness 15% or more lower mumbling. Stored as a take of `lib-check` with `m: {check}`; the coach and FOCUS ignore it. Pressed from TODAY (CHECK THE COACH) or the DRILL MENU under EYES ON THE LENS. Headless Chromium's fake camera has no face, so eyes and mouth read "not measured" there and its constant tone fails crispness, as it should; only his own face and voice can pass it.
