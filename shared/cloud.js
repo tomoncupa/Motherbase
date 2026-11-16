@@ -323,8 +323,49 @@ function app() {
   /* Named, so a page that has its own default Firebase app for some other
      reason cannot collide with ours. */
   try { fb = g.firebase.app('motherbase'); }
-  catch (e) { fb = g.firebase.initializeApp(c, 'motherbase'); }
+  catch (e) { putBack(c); fb = g.firebase.initializeApp(c, 'motherbase'); }
   return fb;
+}
+
+/* ── the second copy of the sign-in (0.2.10) ──
+
+   Tom, 2026-11-16: "Do A as long as no security issues". Firebase keeps the
+   sign-in in IndexedDB, the same files as every row, and a power cut, a full
+   disk or a store too busy to answer can leave it unreadable at start; the
+   device then reads as signed out. So the account Firebase hands back is
+   also written to localStorage, `mb.signin`, a separate set of files. Before
+   Firebase starts, if its own localStorage slot is empty, the copy is put in
+   that slot: Firebase reads IndexedDB first, so a sign-in still there wins
+   and the copy is never used; with none there, Firebase takes the copy and
+   moves it back into IndexedDB itself.
+
+   Security: the copy holds what Firebase's own localStorage slot holds, on
+   the same origin, readable by exactly the scripts that can already read the
+   IndexedDB copy. It is never a row, never in a backup, a device note or a
+   log, and Sign out deletes it. A copy for another account or another
+   Firebase project is never put back. */
+var SKEY = 'mb.signin';
+var offered = false;   /* the copy was put in Firebase's slot this open */
+function fbKey(c) { return 'firebase:authUser:' + c.apiKey + ':motherbase'; }
+function keepSignIn(u) {
+  if (probe || !u || typeof u.toJSON !== 'function') return;
+  try { localStorage.setItem(SKEY, JSON.stringify(u.toJSON())); } catch (e) {}
+}
+function dropSignIn() { try { localStorage.removeItem(SKEY); } catch (e) {} }
+function putBack(c) {
+  if (probe || !cfg.on || !c || !c.apiKey) return;
+  try {
+    var s = localStorage.getItem(SKEY);
+    if (!s) return;
+    var j = JSON.parse(s);
+    if (!j || !j.uid || j.apiKey !== c.apiKey || j.appName !== 'motherbase') return;
+    if (cfg.uid && j.uid !== cfg.uid) return;
+    if (localStorage.getItem(fbKey(c))) return;
+    /* Put back on every open where Firebase's slot is empty, which is most
+       of them; Firebase deletes it again when IndexedDB answered. */
+    localStorage.setItem(fbKey(c), s);
+    offered = true;
+  } catch (e) {}
 }
 
 /* ── signing in ──
@@ -351,6 +392,7 @@ function signIn() {
   }).then(function (r) {
     var u = r && r.user;
     if (!u) throw new Error('signed in, but no account came back');
+    keepSignIn(u);
     cfg.uid = u.uid; cfg.email = u.email || ''; cfg.on = 1; cfg.lost = ''; csave();
     note('', 1);
     /* anything that waited for a sign-in goes now */
@@ -360,6 +402,7 @@ function signIn() {
 }
 
 function signOut() {
+  dropSignIn();
   stop();
   cfg.on = 0; cfg.uid = ''; cfg.email = ''; cfg.seen = ''; cfg.pushed = ''; cfg.lost = ''; csave();
   var done = Promise.resolve();
@@ -975,6 +1018,9 @@ function onConn(s) {
    in the suite signed them out: the sign-in was simply gone. Said in words
    that name the one fix. */
 function signedOut() {
+  /* Signed out with the second copy on offer: Google refused it too (watched
+     2026-11-16 with a made-up copy: 400 INVALID_ID_TOKEN), so it goes. */
+  if (offered) { dropSignIn(); offered = false; }
   if (cfg.on && !cfg.lost) { cfg.lost = new Date().toLocaleString(); cfg.lostKept = keptIn(); csave(); }
   note('Google has signed this device out' + (cfg.lost ? ' (noticed ' + cfg.lost + ')' : '') +
     '. Nothing syncs from here until you sign in again', 0);
@@ -1021,6 +1067,8 @@ function watch() {
     stop();
     signedOut();
   });
+  /* the second copy follows every token Firebase is handed, once now */
+  auth.onIdTokenChanged(function (u) { if (u) keepSignIn(u); });
 }
 
 function stop() {
@@ -1359,7 +1407,7 @@ function topCloud() {
 
 /* ── the public face ────────────────────────────────────────────────────── */
 var Cloud = {
-  VERSION: '0.2.9',
+  VERSION: '0.2.10',
 
   /** everything a settings row needs, and nothing it can break */
   state: function () {
@@ -1417,7 +1465,7 @@ var Cloud = {
     csave(); say();
     return '';
   },
-  forget: function () { stop(); fb = null; cfg = { cfg: BUILT_IN, on: 0, uid: '', email: '', at: '', sentAt: '', gotAt: '', lost: '', pushed: '', seen: '' }; csave(); say(); },
+  forget: function () { dropSignIn(); stop(); fb = null; cfg = { cfg: BUILT_IN, on: 0, uid: '', email: '', at: '', sentAt: '', gotAt: '', lost: '', pushed: '', seen: '' }; csave(); say(); },
 
   signIn: signIn,
   signOut: signOut,
