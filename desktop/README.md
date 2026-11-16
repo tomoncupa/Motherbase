@@ -216,3 +216,7 @@ three Microsoft WebView2 files in `lib\`.
 
 Windows only. Not in the client build, except `Motherbase Setup <date>.exe` and its
 `update.txt`, which the client site carries for the update check.
+
+## Opening from the saved copy (2026-11-16)
+
+STATUS.exe, Main Menu.exe and SPEAK.exe open the hosted page without `?fresh=1`, so the copy `sw.js` kept answers at once. With `fresh=1` the page and every script went to the network first and waited up to 3 s each (`SLOW_MS`) before the kept copy answered, and one of GitHub Pages' four addresses (185.199.111.153) never answers from Tom's ISP, so STATUS took 6 s to draw. New code still arrives: `sw.js` refreshes kept copies in the background, `mobile.js` reopens an untouched page onto new code, and STATUS reloads itself onto a newer version when idle. Measured launch to page loaded: 0.6 to 0.7 s, was about 6 s.

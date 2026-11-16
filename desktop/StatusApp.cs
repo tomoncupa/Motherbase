@@ -209,11 +209,17 @@ class App : Form
         web.DefaultBackgroundColor = BackColor;
         web.CreationProperties = new CoreWebView2CreationProperties();
         web.CreationProperties.UserDataFolder = dataDir;
-        /* fresh=1 (2026-10-05): the offline cache hands over the copy it kept
-           and fetches the new one for next time, so a push showed up one open
-           late and the widget stayed the old one. The PC is always online. */
+        /* No fresh=1 (Tom, 2026-11-16: "Status takes way too long to open...
+           why can't we open the last saved copy and then in the background have
+           it update"). fresh=1 (2026-10-05) sent the page and every script to
+           the network first, each waiting up to 3 s (sw.js SLOW_MS) before the
+           kept copy answered, and one of GitHub's four addresses never answers
+           from his ISP: first paint 6.2 s. The kept copy opens at once; sw.js
+           fetches new copies in the background, mobile.js reopens an untouched
+           page onto new code, and STATUS reloads itself onto a newer version
+           when idle (its desktop block), so a push still arrives. */
         pageUrl = UseFolder() ? new Uri(page).AbsoluteUri + "?desktop=1&host=app"
-                              : HOSTED + "status/index.html?desktop=1&host=app&fresh=1";
+                              : HOSTED + "status/index.html?desktop=1&host=app";
         web.CoreWebView2InitializationCompleted += Started;
         Controls.Add(web);
         /* Navigating after the engine is up, rather than setting Source

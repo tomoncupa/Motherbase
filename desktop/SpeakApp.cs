@@ -236,7 +236,7 @@ class Speak : Form
 
         string page = Path.Combine(Path.GetFullPath(Path.Combine(App.Dir, "..")), "speak", "index.html");
         string q = mini ? "?widget=1&boot=0" : "?boot=0";
-        pageUrl = UseFolder() ? new Uri(page).AbsoluteUri + q : Hosted.Url + "speak/index.html" + q + "&fresh=1";
+        pageUrl = UseFolder() ? new Uri(page).AbsoluteUri + q : Hosted.Url + "speak/index.html" + q;   /* no fresh=1: the kept copy opens at once (2026-11-16, see StatusApp.cs) */
         web = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = BackColor };
         web.CreationProperties = new CoreWebView2CreationProperties { UserDataFolder = Path.Combine(App.Dir, "data") };
         web.CoreWebView2InitializationCompleted += Started;
