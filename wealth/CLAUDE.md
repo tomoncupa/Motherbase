@@ -300,9 +300,11 @@ and client and takes the bank's amount and date: *"Obey the numbers from the
 actual files rather than whats from STATUS."* Nothing is written until apply;
 a skipped line is remembered. (HISTORY.md: Import, and what it took)
 
-**A PDF password goes to the reader and nowhere else**: not a setting, not a
-row, not the console. Readers load from a CDN only when needed; pasting still
-works. (HISTORY.md: What the parser had to learn)
+**Statement passwords are a setting, `wealth.stmtPw`** (Tom, 2026-11-16: "put a
+default password in wealth settings ... automatically apply it"). A locked PDF or
+spreadsheet tries each in turn before asking; one he types that opens a file is
+added. Settings, MONEY, STATEMENT PASSWORDS shows dots only; never print one to the
+console or a log. Readers load from a CDN only when needed; pasting still works. (HISTORY.md: What the parser had to learn)
 
 **The running balance decides a line's amount.** A statement that does not
 add up is refused without "import it anyway". Reversals cancel; his own money

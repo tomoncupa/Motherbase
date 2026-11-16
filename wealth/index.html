@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.36, 2026-10-29">
+<meta name="mb-version" content="1.0.37, 2026-11-16">
 <title>WEALTH</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -2485,6 +2485,12 @@ function guessAcct(st) {
    UNSURE on the Spending screen until he remembers. */
 const ONETIME = 'onetime', UNSURE = 'unsure';
 const listSetting = k => { const v = S.get(k, []); return Array.isArray(v) ? v.slice() : []; };
+/* Statement passwords. Tom, 2026-11-16: "put a default password in wealth
+   settings ... you just automatically apply it." A locked statement tries
+   each in turn before asking, and one he types that opens a file is kept.
+   They are a setting, so every signed-in device has them; never printed. */
+const stmtPws = () => listSetting('stmtPw').filter(p => typeof p === 'string' && p);
+const keepStmtPw = p => { const l = stmtPws(); if (p && l.indexOf(p) < 0) { l.push(p); S.set('stmtPw', l); } };
 
 /* Who was paid, pulled out of a description, as text a rule can match. The
    bank's wording is full of branch names, reference numbers and country
@@ -3204,6 +3210,40 @@ function drawMoneyTab(pane) {
   pane.appendChild(UI.row('Ignore an accidental second click',
     'For a mouse that fires twice. A second press of the same button within 400 milliseconds is dropped, so one press cannot write two bills or file two purchases. The arrows that step through days and months are left alone.',
     UI.toggle(doubleGuardOn(), v => { S.set('noDoubleTap', v ? 1 : 0); })));
+
+  pane.appendChild(el('h2', null, 'STATEMENT PASSWORDS'));
+  pane.appendChild(el('div', 'note', 'A locked statement tries these first. One you type that opens a file is added here.'));
+  stmtPws().forEach((p, i) => {
+    const rm = el('button', 'btn mb-press mb-tap', 'Remove');
+    rm.type = 'button';
+    rm.onclick = () => {
+      const was = stmtPws();
+      S.set('stmtPw', was.filter((x, j) => j !== i));
+      UI.undo('removed password ' + (i + 1), () => S.set('stmtPw', was));
+      redraw();
+    };
+    pane.appendChild(UI.row('Password ' + (i + 1), '•'.repeat(Math.min(12, p.length)), rm));
+  });
+  const npw = el('input', 'mb-input');
+  npw.type = 'password';
+  npw.autocomplete = 'new-password';
+  npw.setAttribute('data-keep-caret', '');
+  pane.appendChild(fld(stmtPws().length ? 'Add another' : 'Password', npw));
+  const addPw = () => {
+    const v = npw.value; npw.value = '';
+    if (!v) { npw.focus(); UI.toast('type a password first', { bad: true }); return; }
+    keepStmtPw(v);
+    Mobile.feedback('success');
+    UI.toast('password saved');
+    redraw();
+  };
+  npw.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addPw(); } };
+  const pwBtns = el('div', 'rowbtns');
+  const addBtn = el('button', 'btn go wide mb-press mb-tap', 'Save the password');
+  addBtn.type = 'button';
+  addBtn.onclick = addPw;
+  pwBtns.appendChild(addBtn);
+  pane.appendChild(pwBtns);
 }
 
 /* ══════════════════════════ the screens ══════════════════════════ */
@@ -6351,28 +6391,37 @@ function importSheet(dropped) {
         dayFirst = null;
         try {
           const kind = fileKind(f);
-          if (kind === 'xlsx') return openXlsxStep(await readAs(f, 'buf'), '');
-          if (kind === 'pdf') return openPdfStep(await readAs(f, 'buf'), '');
+          if (kind === 'xlsx') return openXlsxStep(await readAs(f, 'buf'), '', 0);
+          if (kind === 'pdf') return openPdfStep(await readAs(f, 'buf'), '', 0);
           lastText = await readAs(f, 'text');
           source = 'text';
           return reread();
         } catch (e) { fail(e.message || String(e)); }
       }
-      async function openXlsxStep(buf, pw) {
+      /* A locked file tries the saved passwords in turn (`next` is the one
+         to try after this), then asks. A typed one that opens it is kept. */
+      function locked(buf, e, pw, next, open) {
+        const saved = stmtPws();
+        if (next != null && next < saved.length) return open(buf, saved[next], next + 1);
+        return stepPassword(buf, next == null && e.password === 'wrong', open, next != null && saved.length > 0);
+      }
+      async function openXlsxStep(buf, pw, next) {
         busy(pw ? 'Unlocking the spreadsheet…' : 'Reading the spreadsheet…');
         try {
           lastGrid = await openXlsx(buf, pw);
+          if (next == null) keepStmtPw(pw);
           source = 'grid';
           reread();
         } catch (e) {
-          if (e.password) return stepPassword(buf, e.password === 'wrong', openXlsxStep);
+          if (e.password) return locked(buf, e, pw, next, openXlsxStep);
           fail(e.message || String(e));
         }
       }
-      async function openPdfStep(buf, pw) {
+      async function openPdfStep(buf, pw, next) {
         busy('Reading the PDF…');
         try {
           const text = await openPdf(buf, pw);
+          if (next == null) keepStmtPw(pw);
           if (text.length) {
             lastText = text.join('\n');
             source = 'text';
@@ -6383,17 +6432,17 @@ function importSheet(dropped) {
           source = 'picture';
           reread();
         } catch (e) {
-          if (e.password) return stepPassword(buf, e.password === 'wrong');
+          if (e.password) return locked(buf, e, pw, next, openPdfStep);
           fail(e.message || String(e));
         }
       }
-      function stepPassword(buf, wrong, open) {
+      function stepPassword(buf, wrong, open, savedFailed) {
         open = open || openPdfStep;
         pane.innerHTML = '';
         pane.appendChild(el('h2', null, open === openPdfStep ? 'THIS PDF IS LOCKED' : 'THIS SPREADSHEET IS LOCKED'));
         pane.appendChild(el('div', 'note', (wrong ? '<span class="stale">That password did not open it.</span> ' : '') +
-          'GCash and most banks lock a statement with a password they tell you when they send it. ' +
-          'It is used once, to open this file on this computer, and it is never saved.'));
+          (savedFailed ? '<span class="stale">None of your saved passwords opened it.</span> ' : '') +
+          'A password that opens it is saved in Settings, STATEMENT PASSWORDS.'));
         const pw = el('input', 'mb-input');
         pw.type = 'password';
         pw.autocomplete = 'off';
