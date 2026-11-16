@@ -108,6 +108,8 @@ MEALS NOT LOGGED, 2026-11-09, shipped inside 1.0.93 (that session staged the who
 
 Settings size, STATUS.exe only, 2026-11-16: the whole screen was "a bit inconvenient. I'm sure there's a reasonable middle ground" (Tom, relayed). `Wide(true)` now opens a window centred on the screen it is on, 80% of the work area's width up to 1760 and 90% of its height up to 960, rounded corners, still never on top. Scratch STATUS.exe, driven inside the page: 1760x928 at 1040,52 on 3840x1032, DESKTOP in 3 columns with no scrolling, DONE back to 390x844.
 
+1.0.106, 2026-11-16: the status check is back to how it was before 1.0.104. Tom: "don't change the old regular status check". 1.0.104 reverted whole (68b3628): no side-by-side questions on a wide screen.
+
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
