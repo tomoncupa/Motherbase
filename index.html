@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.125, 2026-11-16">
+<meta name="mb-version" content="1.0.126, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -544,6 +544,12 @@ body.dragging #cardframes{z-index:0}
 /* IDEAS and EVENTS: the words wrap, a little air above and below a second line */
 .row.mb-bullet.wraps .tx{white-space:normal;padding-block:var(--s-1)}
 .row .d{font-size:var(--f-1);color:var(--dim2);font-family:var(--f1);letter-spacing:.06em;flex:0 0 auto}
+/* EVERY & HABITS: this period's ticks as dots, the streak beside them, and the empty state's one button */
+.row .d .rhdots{display:inline-flex;gap:var(--s-1);vertical-align:middle}
+.row .d .rhdots i{width:var(--s-2);height:var(--s-2);border-radius:50%;border:1px solid var(--text-muted)}
+.row .d .rhdots i.on{background:var(--success);border-color:var(--success)}
+.row .d .rhst{margin-left:var(--s-2);color:var(--text-2)}
+.rhempty{display:flex;flex-direction:column;align-items:flex-start;gap:var(--s-2)}
 /* MEALS: what a meal was is the point of the row, so not the faintest text */
 .row .d.kc{color:var(--dim);font-variant-numeric:tabular-nums}
 .row.done{opacity:.5}
@@ -2228,11 +2234,29 @@ function rhPeriodH(r, date, today, start, made) {
   const f = Day.shift(anchor, len * Math.floor(Day.diff(date, anchor) / len));
   return [f, Day.shift(f, len - 1)];
 }
-function rhAnyState(r, dates, today, start) {
+function rhAnyState(r, dates, today, start, floor) {
   const made = [r.made, dates[0]].filter(Boolean).sort()[0] || today;
   const from = rhPeriodH(r, today, today, start, made)[0];
   const n = dates.filter(d => d >= from && d <= today).length;
-  return { n: n, of: r.times || 1, met: n >= (r.times || 1), today: dates.indexOf(today) >= 0, per: RH_PER_H[rhPerH(r)].one };
+  return { n: n, of: r.times || 1, met: n >= (r.times || 1), today: dates.indexOf(today) >= 0, per: RH_PER_H[rhPerH(r)].one,
+    streak: rhStreakH(r, dates, today, start, made, floor) };
+}
+/* BLOCK's rhStreak, copied: periods with the target met, a short period with
+   any tick holds it, one empty period is forgiven, two end it, the open one
+   never breaks it. `floor` is BLOCK's count-from day (chapter or setting). */
+function rhStreakH(r, dates, today, start, made, floor) {
+  const times = r.times || 1, count = (a, b) => dates.filter(d => d >= a && d <= b).length;
+  const stop = floor && floor > made ? floor : made;
+  let [from, to] = rhPeriodH(r, today, today, start, made);
+  let run = 0, empty = 0, open = true;
+  for (let guard = 0; to >= stop && guard < 2000; guard++) {
+    const n = count(from, to);
+    if (n >= times) { run++; empty = 0; }
+    else if (!open) { if (n) empty = 0; else if (++empty >= 2) break; }
+    open = false;
+    [from, to] = rhPeriodH(r, Day.shift(from, -1), today, start, made);
+  }
+  return run;
 }
 
 /* ── small things several widgets share ── */
@@ -4582,17 +4606,19 @@ const WIDGETS = {
 
   /* ── BLOCK ── */
   rhythms: {
-    nm: 'EVERY & HABITS', w: 4, h: 4, app: 'block', to: ['block'],
+    nm: 'EVERY & HABITS', w: 4, h: 4, app: 'block', to: ['block', 'schedule'],
     state() {
       const today = LifeOS.day(), log = {};
       Rec.all('tick').forEach(t => { if (t.date && t.date <= today) (log[t.key] || (log[t.key] = [])).push(t.date); });
       Object.keys(log).forEach(k => log[k].sort());
       const ws = Rec.setting('block', 'weekStart'), rh = Rec.map('rhythm');
+      const ch = window.Chapter ? Chapter.from('block', today) || null : null, sf = Rec.setting('block', 'streakFrom') || null;
+      const floor = ch && (!sf || ch > sf) ? ch : sf;
       return Object.keys(rh).map(id => Object.assign({ id: id }, rh[id]))
         .filter(r => r.name && (r.kind === 'every' || r.kind === 'anytime'))
         .map(r => {
           const tid = rhTickH(r), dates = log[tid] || [];
-          return { r: r, tid: tid, s: r.kind === 'every' ? rhEveryState(r, dates, today) : rhAnyState(r, dates, today, ws == null ? 1 : ws) };
+          return { r: r, tid: tid, s: r.kind === 'every' ? rhEveryState(r, dates, today) : rhAnyState(r, dates, today, ws == null ? 1 : ws, floor) };
         });
     },
     sub: () => {
@@ -4603,7 +4629,12 @@ const WIDGETS = {
     parts: [['every', 'Every'], ['any', 'Habits'], ['done', 'Done today'], ['later', 'Coming later']],
     draw(body, cfg) {
       const all = WIDGETS.rhythms.state(), today = LifeOS.day();
-      if (!all.length) { body.appendChild(el('div', 'empty', 'No Every blocks or habits')); return; }
+      if (!all.length) {
+        const e = el('div', 'empty rhempty', 'No Every blocks or habits.');
+        const add = el('button', 'mb-btn go mb-press mb-tap', 'ADD ONE');
+        add.onclick = ev => { ev.stopPropagation(); goTo(['block', 'habits']); };
+        e.appendChild(add); body.appendChild(e); return;
+      }
       const list = el('div', 'rowlist');
       const row = (x, done, tail, cls) => {
         const r = el('div', 'row' + (done ? ' done' : '') + (cls ? ' ' + cls : ''));
@@ -4630,7 +4661,13 @@ const WIDGETS = {
       if (any.length) {
         list.appendChild(el('div', 'mb-group', 'HABITS'));
         any.sort((a, b) => (a.s.met ? 1 : 0) - (b.s.met ? 1 : 0))
-          .forEach(x => row(x, x.s.today, x.s.n + ' of ' + x.s.of + ' this ' + x.s.per, x.s.met ? 'met' : ''));
+          .forEach(x => {
+            /* dots while they can be counted at a glance, the words past that; the streak as on BLOCK's page */
+            const k = Math.max(x.s.of, x.s.n), words = x.s.n + ' of ' + x.s.of + ' this ' + x.s.per;
+            let tail = k > 14 ? words : '<span class="rhdots" title="' + words + '">' + Array.from({ length: k }, (_, i) => '<i' + (i < x.s.n ? ' class="on"' : '') + '></i>').join('') + '</span>';
+            if (x.s.streak) tail += '<span class="rhst">' + x.s.streak + ' ' + x.s.per + (x.s.streak === 1 ? '' : 's') + '</span>';
+            row(x, x.s.today, tail, x.s.met ? 'met' : '');
+          });
       }
       body.appendChild(list);
     },
