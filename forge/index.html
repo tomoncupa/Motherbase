@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.6, 2026-11-16">
+<meta name="mb-version" content="1.0.7, 2026-11-17">
 <title>FORGE</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -519,29 +519,34 @@ function trainRow(name) {
   return EXN[String(name || '').trim().toLowerCase()] || null;
 }
 function musShare(x) {
-  if (x.slot === 'mus') { const o = {}; if (x.mus) o[x.mus] = 1; return o; }
+  if (x.slot === 'mus') { const o = {}; if (x.mus) o[musName(x.mus)] = 1; return o; }
   if (x.slot === 'pat') return {};
   const t = tagOf(x.name), row = trainRow(x.name);
   const g = x.cat && x.cat !== 'Other' ? x.cat : null;
   if (!window.Muscles) { if (Array.isArray(t.mus) && t.mus.length) { const o = {}; t.mus.forEach((m, i) => { o[m] = i ? 0.5 : 1; }); return o; } const o = {}; if (g) o[g] = 1; return o; }
   return Muscles.forLift(x.name, row && row.mus, Array.isArray(t.mus) ? t.mus : null, g).share;
 }
+/* an old muscle name read as its new one (Muscles.OLD: Forearm Flexors is
+   Forearm Flex. since 2026-11-16), so an older tag or slot still matches */
+const musName = m => (window.Muscles && Muscles.OLD && Muscles.OLD[m]) || m;
 function musOf(x) {
   const sh = musShare(x);
   return Object.keys(sh).sort((a, b) => sh[b] - sh[a]);
 }
 function patOfPlate(x) { return x.slot === 'pat' ? { id: x.pat, guess: false } : x.slot === 'mus' ? { id: '', guess: false } : patOf(x.name); }
 /* every muscle group there is to pick: TRAIN's, or its starter list when
-   TRAIN has never opened here, plus any a tag has used */
+   TRAIN has never opened here, plus any a tag has used. The master list's
+   groups, not its muscles: no Adductors (Tom, 2026-11-16, filed under
+   Glutes), though an adductor lift still counts toward Adductors. */
 function musList() {
   const out = {}, cats = Rec.map('excat');
   Object.keys(cats).forEach(k => { if (cats[k].name) out[cats[k].name] = cats[k].ord == null ? 99 : cats[k].ord; });
-  if (window.Muscles) Muscles.LIST.forEach((n, i) => { if (out[n] == null) out[n] = 50 + i; });
+  if (window.Muscles) (Muscles.GROUP_LIST || Muscles.LIST).forEach((n, i) => { if (out[n] == null) out[n] = 50 + i; });
   if (!Object.keys(out).length) ['Chest', 'Back', 'Shoulders', 'Legs', 'Arms', 'Core'].forEach((n, i) => { out[n] = i; });
-  Rec.all('ftag').forEach(r => ((r.payload || {}).mus || []).forEach(m => { if (out[m] == null) out[m] = 100; }));
+  Rec.all('ftag').forEach(r => ((r.payload || {}).mus || []).forEach(m => { m = musName(m); if (out[m] == null) out[m] = 100; }));
   return Object.keys(out).sort((a, b) => out[a] - out[b] || a.localeCompare(b));
 }
-const slotLabel = x => x.slot === 'pat' ? patName(x.pat) || 'Pattern' : x.slot === 'mus' ? x.mus || 'Muscle' : '';
+const slotLabel = x => x.slot === 'pat' ? patName(x.pat) || 'Pattern' : x.slot === 'mus' ? musName(x.mus) || 'Muscle' : '';
 const plateName = x => x.slot ? 'Any ' + slotLabel(x) : (x.name || 'Exercise');
 const plateColor = x => catColor(x.slot === 'pat' ? slotLabel(x) : x.slot === 'mus' ? x.mus : x.cat);
 
@@ -1043,12 +1048,20 @@ function withFills(flat, fills) {
 }
 /* The exercises that fit a slot, the client's own first: what they have
    logged is what their gym has. A pattern matches on the exercise's pattern;
-   a muscle on its muscles. */
+   a muscle on the muscle it mainly trains or the group it is filed in, read
+   by the suite's one rule (Muscles.forLift, 2026-11-17), so a Biceps slot
+   offers a chin up with no tag and a Glutes slot an adductor machine. */
 function fitsSlot(slot, name, cat) {
   if (slot.kind === 'pat') return patOf(name).id === slot.pat;
-  const t = tagOf(name);
-  const mus = Array.isArray(t.mus) && t.mus.length ? t.mus : cat ? [cat] : [];
-  return mus.some(m => String(m).toLowerCase() === String(slot.mus || '').toLowerCase());
+  const want = String(musName(slot.mus) || '').toLowerCase(), t = tagOf(name);
+  if (!want) return false;
+  const g = cat && cat !== 'Other' ? cat : null;
+  if (window.Muscles) {
+    const row = trainRow(name), r = Muscles.forLift(name, row && row.mus, Array.isArray(t.mus) ? t.mus : null, g);
+    return [r.main, r.group, g].some(m => m && String(m).toLowerCase() === want);
+  }
+  const mus = Array.isArray(t.mus) && t.mus.length ? t.mus : g ? [g] : [];
+  return mus.some(m => String(musName(m)).toLowerCase() === want);
 }
 function suggestFor(slot, cid) {
   const theirs = [], ccat = {};

@@ -297,7 +297,7 @@ forearm muscles are Forearm Flex. and Forearm Ext.
 Offered once more (`sortSeen` 2). A new log is seeded and sorted at once.
 Tidy suggests the list's group first. Below it, eight weeks of sets per muscle. **No targets**, at Tom's
 request: "I'd rather be told how many times I hit a muscle, I'll know if I need to
-hit more."
+hit more." 1.0.94: Edit Exercise shows a lift saved with an old forearm name as the new one, and picking Adductors as the main muscle files it in Glutes.
 
 ### Profile
 

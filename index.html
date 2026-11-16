@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.127, 2026-11-16">
+<meta name="mb-version" content="1.0.128, 2026-11-17">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -41,6 +41,7 @@ try { if (window.frameElement && typeof parent.stayIn === 'function') location.r
 <script src="shared/goals.js"></script>
 <script src="shared/measure.js"></script>
 <script src="shared/chart.js"></script>
+<script src="shared/muscles.js"></script>
 <script src="shared/mobile.js"></script>
 <script src="shared/sound.js"></script>
 <script src="shared/ui.js"></script>
@@ -2965,9 +2966,13 @@ const WIDGETS = {
      the brighter a muscle, the more sets it got. Counted the way TRAIN's
      WEEKLY counts them: warmups out, a set from today only once it is done,
      and a muscle an exercise ALSO works gets its share (half a set for
-     biceps on a pull-up). TRAIN's muscle groups are names he can change, so
-     each is read onto the body by what it says: "Legs" lights every leg
-     muscle, "Hamstrings" lights only those. A group the body cannot show,
+     biceps on a pull-up). Since 2026-11-17 (Tom: "update the relevant
+     widgets, so all things in our system align") each lift is read by the
+     suite's one rule, `shared/muscles.js` Muscles.forLift, with the rows
+     TRAIN asks with, as TRAIN's VOLUME view counts it: a chin up lights
+     biceps 1 and lats 0.8 (`bodyShare`). A lift no rule knows falls back
+     to its group's name, read by what it says: "Legs" lights every leg
+     muscle. A muscle the body cannot show,
      other than cardio, is named under the list rather than dropped. No
      target and no verdict, as in TRAIN: "I'd rather be told how many times I
      hit a muscle, I'll know if I need to hit more."
@@ -6703,6 +6708,39 @@ const bodyParts = name => {
   for (let i = 0; i < BODY_RULES.length; i++) if (BODY_RULES[i][0].test(n)) return BODY_RULES[i][1];
   return null;
 };
+/* every muscle on the master list (shared/muscles.js) onto the figure.
+   Adductors light the glutes, where TRAIN files them; Neck has no shape. */
+const BODY_MUS = { 'Upper Chest': 'chest', 'Lower Chest': 'chest', Lats: 'lats', 'Upper Back': 'traps',
+  'Upper Traps': 'traps', 'Lower Traps': 'traps', 'Lower Back': 'lowback', 'Front Delts': 'delts',
+  'Side Delts': 'delts', 'Rear Delts': 'delts', 'Rotator Cuff': 'delts', Biceps: 'biceps', Triceps: 'triceps',
+  'Forearm Flex.': 'forearms', 'Forearm Ext.': 'forearms', Abs: 'core', Obliques: 'core', Serratus: 'core',
+  Quads: 'quads', Hamstrings: 'hams', Glutes: 'glutes', Adductors: 'glutes', Calves: 'calves', Tibialis: 'calves' };
+/* What one set of a lift gives each body part: Muscles.forLift with the
+   lift's own `mus`, FORGE's tag, the list, then its group (TRAIN.musOf
+   asks the same). Two muscles on one part give the part the bigger share,
+   so a bench is one set of chest, not one and a half. `top` is the parts at
+   the lift's biggest share, the ones its weight measures. */
+function bodyShare(id, ex, cats, memo) {
+  if (memo[id]) return memo[id];
+  const g = ex.cat && cats[ex.cat] ? cats[ex.cat].name : null;
+  let also = null, sh;
+  if (ex.also) { also = {}; Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) also[cats[c].name] = +ex.also[c] || 0; }); }
+  if (window.Muscles) {
+    const t = ex.name ? Rec.get('ftag', null, String(ex.name).trim().toLowerCase()) : null;
+    sh = Muscles.forLift(ex.name || '', ex.mus, t && Array.isArray(t.mus) ? t.mus : null, g, also).share;
+  } else {
+    sh = {}; if (g) sh[g] = 1;
+    if (also) Object.keys(also).forEach(k => { if (k !== g && also[k] > 0) sh[k] = also[k]; });
+  }
+  const parts = {}, off = {}, hi = Math.max(0, ...Object.values(sh));
+  const top = {};
+  Object.keys(sh).forEach(m => {
+    const ps = BODY_MUS[m] ? [BODY_MUS[m]] : bodyParts(m);
+    if (ps) ps.forEach(k => { parts[k] = Math.max(parts[k] || 0, sh[m]); if (sh[m] === hi) top[k] = 1; });
+    else if (!/cardio/i.test(m)) off[m] = Math.max(off[m] || 0, sh[m]);
+  });
+  return (memo[id] = { parts: parts, off: off, top: top });
+}
 /* the same test as TRAIN.noteWarm in train/index.html: change both */
 const setIsWarm = p => p.warm === 1 || p.warm === true ||
   (p.warm !== 0 && p.warm !== false && !!p.note && /\bwarm[ -]?ups?\b|\bwu\b/i.test(p.note));
@@ -6713,21 +6751,16 @@ const setIsWarm = p => p.warm === 1 || p.warm === true ||
 const setCounts = (p, date, today) => !p.plan || !!p.done;
 function bodyHeat(from, to) {
   const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day();
-  const v = {}, offN = {};
-  const put = (cat, share) => {
-    const c = cats[cat], name = c ? c.name : '';
-    const parts = bodyParts(name);
-    if (parts) parts.forEach(k => { v[k] = (v[k] || 0) + share; });
-    else if (name && !/cardio/i.test(name)) offN[name] = (offN[name] || 0) + share;
-  };
+  const v = {}, offN = {}, memo = {};
   Rec.all('set').forEach(r => {
     if (!r.date || r.date < from || r.date > to) return;
     const p = r.payload || {};
     if (setIsWarm(p) || !setCounts(p, r.date, today)) return;
     const ex = exs[p.ex];
-    if (!ex || !ex.cat) return;
-    put(ex.cat, 1);
-    if (ex.also) Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) put(c, +ex.also[c] || 0); });
+    if (!ex) return;
+    const b = bodyShare(p.ex, ex, cats, memo);
+    Object.keys(b.parts).forEach(k => { v[k] = (v[k] || 0) + b.parts[k]; });
+    Object.keys(b.off).forEach(n => { offN[n] = (offN[n] || 0) + b.off[n]; });
   });
   return { v: v, off: Object.keys(offN).map(k => ({ name: k, n: offN[k] })).sort((a, b) => b.n - a.n) };
 }
@@ -6770,22 +6803,21 @@ function bodyLearn() {
   const exs = Rec.map('exercise'), cats = Rec.map('excat'), from = LifeOS.shift(today, -180);
   const sess = {};
   Rec.all('session').forEach(r => { if (r.date >= from) sess[r.date] = r.payload || {}; });
-  const M = {};   /* muscle -> date -> {t0, t1, n, best: {ex: e1rm}} */
+  const M = {}, memo = {};   /* muscle -> date -> {t0, t1, n, best: {ex: e1rm}} */
   all.forEach(r => {
     if (!r.date || r.date < from || r.date > today) return;
     const p = r.payload || {};
     if (setIsWarm(p) || !setCounts(p, r.date, today)) return;
     const ex = exs[p.ex];
-    if (!ex || !ex.cat) return;
+    if (!ex) return;
     const t = setTime(r, sess), kg = +p.kg || 0, reps = +p.r || 0;
     const plain = kg > 0 && reps >= 1 && reps <= 20 && !(ex.assist === 1 || (ex.assist !== 0 && /assist/i.test(ex.name || '')));
-    const hit = (cat, share, own) => (bodyParts(cats[cat] && cats[cat].name) || []).forEach(k => {
+    const b = bodyShare(p.ex, ex, cats, memo);
+    Object.keys(b.parts).forEach(k => {
       const d = (M[k] = M[k] || {})[r.date] || (M[k][r.date] = { t0: t, t1: t, n: 0, best: {} });
-      d.t0 = Math.min(d.t0, t); d.t1 = Math.max(d.t1, t); d.n += share;
-      if (own && plain) { const e = kg * (1 + reps / 30); if (!(d.best[p.ex] >= e)) d.best[p.ex] = e; }
+      d.t0 = Math.min(d.t0, t); d.t1 = Math.max(d.t1, t); d.n += b.parts[k];
+      if (b.top[k] && plain) { const e = kg * (1 + reps / 30); if (!(d.best[p.ex] >= e)) d.best[p.ex] = e; }
     });
-    hit(ex.cat, 1, true);
-    if (ex.also) Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) hit(c, +ex.also[c] || 0, false); });
   });
   const out = {};
   Object.keys(M).forEach(k => {
@@ -6822,22 +6854,20 @@ function bodyLearn() {
 }
 function bodyRecovery(now) {
   const exs = Rec.map('exercise'), cats = Rec.map('excat'), today = LifeOS.day(), from = LifeOS.shift(today, -6);
-  const sess = {}, last = {}, day = {};
+  const sess = {}, last = {}, day = {}, memo = {};
   Rec.all('session').forEach(r => { if (r.date >= from) sess[r.date] = r.payload || {}; });
   Rec.all('set').forEach(r => {
     if (!r.date || r.date < from || r.date > today) return;
     const p = r.payload || {};
     if (setIsWarm(p) || !setCounts(p, r.date, today)) return;
     const ex = exs[p.ex];
-    if (!ex || !ex.cat) return;
-    const t = setTime(r, sess);
-    const hit = (cat, share) => (bodyParts(cats[cat] && cats[cat].name) || []).forEach(k => {
+    if (!ex) return;
+    const t = setTime(r, sess), b = bodyShare(p.ex, ex, cats, memo);
+    Object.keys(b.parts).forEach(k => {
       const d = day[k] || (day[k] = {});
-      d[r.date] = (d[r.date] || 0) + share;
+      d[r.date] = (d[r.date] || 0) + b.parts[k];
       if (!last[k] || t > last[k].t) last[k] = { t: t, date: r.date };
     });
-    hit(ex.cat, 1);
-    if (ex.also) Object.keys(ex.also).forEach(c => { if (c !== ex.cat && cats[c]) hit(c, +ex.also[c] || 0); });
   });
   const L = bodyLearn(), out = {};
   Object.keys(last).forEach(k => {
