@@ -594,6 +594,14 @@ Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FR
 - **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
 - **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
 
+## DRILL MENU, added 2026-11-16 (SPEAK 1.0.26)
+
+Tom: *"populate the drills menu ... and then I also want you to recommend the best drill for what I'm currently working on. And I also like the idea of not stopping."*
+
+- **DRILL MENU** (`openMenu`), a button on PATH and under TODAY'S DRILLS: BEST FOR YOU NOW on top (`menuPick`: FOCUS's fix drill; else Land it, no tag when crutch phrases showed in his posts or takes this fortnight; else Don't stop), then every drill folded by what it works on (`MENU_GROUPS`, by skill). Picking one closes the menu and opens the drill.
+- **Its own drills** (`LIB`, not on PATH's stages): Don't stop (Faizan Asif's daily rep, two minutes, no STOP, `noStop`), Just a Minute (the BBC game, 60 s, no silence, no repeats), Land it, no tag (a direct speaker's statement with no "right?", crutch 0), Pace ladder 160-180, 180-200, 200-220 (crutch 0 on each rung), One word per line (the actor's operative word, `STRESS_LINES`, pitch spread goal).
+- **`noStop`**: the take's STOP is replaced by a disabled KEEP GOING; the take ends itself at its time. Back still cancels.
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync

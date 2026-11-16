@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.25, 2026-11-16">
+<meta name="mb-version" content="1.0.26, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1098,6 +1098,47 @@ let fixFrom = null;                         /* the take a fix drill was opened f
 const stepLe = (cur, tgt) => cur == null || cur <= tgt ? tgt : Math.max(tgt, r1(cur * 0.7));
 const stepGe = (cur, tgt, add) => cur == null || cur >= tgt ? tgt : Math.min(tgt, r1(cur + add));
 const srcM = () => (fixFrom && fixFrom.m) || {};
+/* THE DRILL MENU's own drills (SPEAK 1.0.26). Tom, 2026-11-16: "populate
+   the drills menu", "recommend the best drill for what I'm currently working
+   on", "I also like the idea of not stopping". Drills people actually use:
+   Faizan Asif's daily timed extemporaneous rep where you do not stop, the
+   BBC's Just a Minute, the actor's operative word, a pace ladder, and a no
+   tag drill for a direct, authoritative speaker. Not on PATH's stages; in
+   the menu, beside every PATH drill and fix drill. */
+const STRESS_LINES = ['I never SAID you had to train every day.', 'Consistency beats INTENSITY over a year.', 'The plan is not the PROBLEM. You are skipping it.',
+  'You do not need more MOTIVATION. You need a smaller first step.', 'Sleep is the CHEAPEST performance drug there is.', 'Most people quit in WEEK two, not week ten.',
+  'Strength is a SKILL. Practise it like one.', 'Your body keeps the SCORE of what you repeat.', 'Eat the PROTEIN first and the rest takes care of itself.',
+  'Discipline is just DECIDING once.', 'Progress is boring. That is why it WORKS.', 'You are not lazy. You are UNDER-RECOVERED.'];
+const LIB = [
+  { id: 'lib-nostop', skill: 'flow', name: "Don't stop", style: 'live', kind: 'topic', dur: 120, asr: true, live: 'longPauses', noStop: true,
+    goals: t => [{ m: 'longP', op: 'le', v: 1 }, { m: 'fpm', op: 'le', v: t.fpm }],
+    why: 'Faizan Asif\'s daily rep, from his debate years: a random topic and a timer, and you keep talking until it ends. It finds the pace where your mind and your mouth keep up with each other.',
+    how: 'Talk for the full two minutes. There is no STOP: it ends itself. If you lose the thread, say your last point again in fewer words and keep going.' },
+  { id: 'lib-jam', skill: 'flow', name: 'Just a Minute', style: 'live', kind: 'topic', dur: 60, asr: true, live: 'longPauses', noStop: true,
+    goals: t => [{ m: 'longP', op: 'le', v: 0 }, { m: 'repeats', op: 'le', v: 1 }, { m: 'fpm', op: 'le', v: t.fpm }],
+    why: 'The BBC radio game since 1967: sixty seconds on a subject with no hesitation, no repetition and no wandering off it.',
+    how: 'Sixty seconds on the topic. No silence over a second and a half, no word twice in a row, stay on the subject.' },
+  { id: 'lib-notag', skill: 'clean', name: 'Land it, no tag', style: 'live', kind: 'topic', dur: 60, asr: true, needsAsr: true, live: 'crutch',
+    goals: t => [{ m: 'crutch', op: 'le', v: 0 }],
+    why: 'A tag like "right?" or "you know" asks the listener to agree. A direct speaker states the point and lets it stand, and the silence after it does the work.',
+    how: 'Make a claim, end the sentence, and stop. Where "right?" would go, hold one beat of silence with your eyes on the lens.' },
+  { id: 'lib-ladder-1', skill: 'pace', name: 'Pace ladder: 160 to 180', style: 'live', kind: 'bullets', dur: 45, asr: true, live: 'crutch',
+    goals: t => [{ m: 'wpm', op: 'in', v: [160, 180] }, { m: 'crutch', op: 'le', v: 0 }],
+    why: 'Speed comes from finishing thoughts faster, not from rushing words. The ladder raises the pace a rung at a time while the crutch phrases stay at zero.',
+    how: 'Talk through the three points between 160 and 180 words a minute, with no crutch phrases.' },
+  { id: 'lib-ladder-2', skill: 'pace', name: 'Pace ladder: 180 to 200', style: 'live', kind: 'bullets', dur: 45, asr: true, live: 'crutch',
+    goals: t => [{ m: 'wpm', op: 'in', v: [180, 200] }, { m: 'crutch', op: 'le', v: 0 }],
+    why: 'The second rung. Shorter sentences, and the next one starts as the last one lands.',
+    how: 'The three points again, between 180 and 200 words a minute, no crutch phrases.' },
+  { id: 'lib-ladder-3', skill: 'pace', name: 'Pace ladder: 200 to 220', style: 'live', kind: 'bullets', dur: 45, asr: true, live: 'crutch',
+    goals: t => [{ m: 'wpm', op: 'in', v: [200, 220] }, { m: 'crutch', op: 'le', v: 0 }],
+    why: 'The top rung, toward Faizan\'s pace without copying it. Clear at this speed means clear at any speed.',
+    how: 'Between 200 and 220 words a minute, no crutch phrases, every sentence finished.' },
+  { id: 'lib-stress', skill: 'clear', name: 'One word per line', style: 'read', kind: 'stress', dur: 45,
+    goals: t => [{ m: 'pitch', op: 'ge', v: t.pitch }],
+    why: 'The actor\'s operative word: one word in each line carries the meaning. Stress it, and keep the rest level, and the listener hears the point. Stress everything and nothing stands out.',
+    how: 'Read each line. Hit the word in capitals louder and higher; say every other word plainly.' },
+];
 const FIXES = [
   { id: 'fix-pause-word', skill: 'clean', name: 'Pause, then the word', style: 'long', kind: 'topic', dur: 45, asr: true, live: 'held',
     goals: t => [{ m: 'fpm', op: 'le', v: stepLe(srcM().fpm, t.fpm) }, { m: 'pauses', op: 'ge', v: 4 }],
@@ -1154,7 +1195,7 @@ const FIXES = [
 ];
 FIXES.forEach(f => { f.fix = true; f.step = 0; });
 const isFix = id => /^fix-/.test(id || '');
-const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : id === 'tight' ? TIGHT : id === 'post-story' ? PS_STORY : id === 'post-reel' ? PS_REEL : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
+const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : id === 'tight' ? TIGHT : id === 'post-story' ? PS_STORY : id === 'post-reel' ? PS_REEL : DRILLS.concat(FIXES, LIB).filter(d => d.id === id)[0] || null;
 const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
@@ -1287,6 +1328,53 @@ function showPost(r) {
       if (!r.raw) hl.unshift('A cut reel: its ums and silences measure the edit, so only pace and crutch phrases count.');
       if (hl.length) b.appendChild(el('p', 'muted', hl.map(esc).join('<br>')));
       if (r.link) { const a = el('a', 'mb-btn mb-press mb-tap', 'OPEN THE POST'); a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; b.appendChild(a); }
+      paintIcons(b);
+    },
+    actions: [{ label: 'CLOSE' }],
+  });
+}
+/* THE DRILL MENU: every drill, grouped by what it works on, with the one
+   that fits what he is working on now at the top. The pick: FOCUS's fix
+   drill; else crutch phrases in his posts or takes this fortnight, Land it,
+   no tag; else Don't stop. */
+const MENU_GROUPS = [
+  ['CRUTCH PHRASES AND FILLERS', d => d.skill === 'clean'],
+  ['KEEP IT MOVING', d => d.skill === 'flow'],
+  ['PACE', d => d.skill === 'pace'],
+  ['CLEAR AND EXPRESSIVE', d => d.skill === 'clear'],
+  ['EYES ON THE LENS', d => d.skill === 'eyes'],
+  ['STRUCTURE', d => d.skill === 'shape'],
+  ['STORIES AND DEVICES', d => d.skill === 'story' || d.skill === 'devices'],
+  ['A WHOLE TALK', d => d.skill === 'script'],
+];
+function menuPick() {
+  const fo = focus(), fx = fo && drillById(fo.f.fix);
+  if (fx) return { d: fx, why: 'Your FOCUS: ' + (FAULT[fo.f.id] || fo.f.what) + '.' };
+  const since = Day.shift(Day.today(), -13);
+  const crutchy = postsRecent().some(r => (r.m || {}).crutch >= 2) || takes().some(t => t.date >= since && (t.m || {}).crutch >= 2);
+  if (crutchy) return { d: drillById('lib-notag'), why: 'Crutch phrases showed up in your posts or takes this fortnight.' };
+  return { d: drillById('lib-nostop'), why: 'The daily rep: two minutes, no stopping.' };
+}
+function openMenu() {
+  const pk = menuPick();
+  UI.dialog({
+    title: 'DRILL MENU', width: 640,
+    body: (b, h) => {
+      const all = LIB.concat(DRILLS, FIXES);
+      b.appendChild(el('h3', null, 'BEST FOR YOU NOW'));
+      b.appendChild(el('p', 'muted', esc(pk.why)));
+      const row = d => { const r = drillRow(d), go = r.onclick; r.onclick = e => { h.close(); go(e); }; return r; };
+      const top = el('div', 'list'); top.appendChild(row(pk.d)); b.appendChild(top);
+      MENU_GROUPS.forEach(g => {
+        const ds = all.filter(g[1]);
+        if (!ds.length) return;
+        const dt = el('details', 'cmp mb-plate');
+        dt.innerHTML = '<summary class="mb-tap">' + esc(g[0]) + ' (' + ds.length + ')</summary>';
+        const l = el('div', 'list');
+        ds.forEach(d => l.appendChild(row(d)));
+        dt.appendChild(l);
+        b.appendChild(dt);
+      });
       paintIcons(b);
     },
     actions: [{ label: 'CLOSE' }],
@@ -1562,6 +1650,7 @@ function promptFor(kind, d) {
   if (kind === 'bullets') { const own = mine.filter(t => t.kind === 'bullets'); const set = own.length && Math.random() < 0.5 ? own.map(t => t.text.split('|').map(s => s.trim())) : BULLETS; return { kind: 'bullets', items: pick(set, 1)[0] }; }
   if (kind === 'read') { const p = pick(PASSAGES, 1)[0]; return { kind: 'read', name: p.name, text: p.text }; }
   if (kind === 'twister') return { kind: 'twister', items: pick(TWISTERS, 3) };
+  if (kind === 'stress') return { kind: 'bullets', items: pick(STRESS_LINES, 4) };
   if (kind === 'prep') return { kind: 'frame', text: promptFor('topic').text, frame: ['Point', 'Reason', 'Example', 'Point again'] };
   if (kind === 'three') return { kind: 'frame', text: promptFor('topic').text, frame: ['First', 'Second', 'Third'] };
   if (kind === 'psr') return { kind: 'frame', text: promptFor('topic').text, frame: ['The problem', 'What was done', 'What changed'] };
@@ -2485,6 +2574,8 @@ function drawToday(m) {
   todaysDrills().forEach(d => list.appendChild(drillRow(d)));
   if (!list.children.length) list.appendChild(el('p', 'muted', 'Every step is met. Pick any drill on PATH to run it again.'));
   dc.appendChild(list);
+  const dm = el('div', 'acts'), dmb = el('button', 'mb-btn mb-press mb-tap', '<span>DRILL MENU</span>');
+  dmb.onclick = openMenu; dm.appendChild(dmb); dc.appendChild(dm);
   m.appendChild(dc);
 
   const qc = card('QUICK PRACTICE');
@@ -2578,6 +2669,8 @@ function drillMenu(d, e) {
 }
 
 function drawPath(m) {
+  const mb = el('div', 'acts'), mbb = el('button', 'mb-btn go mb-press mb-tap', '<span>DRILL MENU</span>');
+  mbb.onclick = openMenu; mb.appendChild(mbb); m.appendChild(mb);
   const cs = curStage();
   STAGES.forEach(sg => {
   const head = el('div', 'stage' + (sg.n === cs ? ' now' : ''));
@@ -2975,6 +3068,7 @@ function runTake() {
   const stop = el('button', 'mb-btn go mb-press mb-tap', ICN('stop') + '<span>STOP</span>');
   stop.onclick = () => stopTake(false);
   $('#tkFoot').appendChild(stop);
+  if (d && d.noStop) { stop.disabled = true; stop.innerHTML = '<span>KEEP GOING</span>'; }
   paintIcons($('#take'));
   T.t0 = performance.now(); T.from = T.ear.seconds();
   if (T.rec) try { T.rec.start(1000); } catch (e) { T.rec = null; T.clipP = null; }
