@@ -1,4 +1,4 @@
-/* MUSCLES 0.1.0, 2026-11-16. The master list: which muscles a movement trains, and how much.
+/* MUSCLES 0.1.3, 2026-11-16. The master list: which muscles a movement trains, and how much.
 
    Tom, 2026-11-16: split Back into its parts, count every lift toward each
    muscle it trains, "intelligently pre populate it", and catch the
@@ -104,7 +104,7 @@
     ['Dead bug', 'core', /dead ?bug|mcgill|curl up/, { Abs: 1 }],
 
     /* ── conditioning and whole-body ── */
-    ['Thruster', 'squat', /thruster|squat (and|to) press|wall ball/, { Quads: 1, 'Front Delts': 0.75, Glutes: 0.5, Triceps: 0.5 }],
+    ['Thruster', 'squat', /thruster|squat (and|to) press|wall ball/, { Quads: 1, 'Front Delts': 0.75, Glutes: 0.5, Triceps: 0.5, Abs: 0.25, Obliques: 0.25 }],
     ['Sled', 'carry', /sled|prowler/, { Quads: 1, Glutes: 0.75, Calves: 0.5 }],
     ['Battle ropes', 'carry', /battle rope|rope wave|rope slam/, { 'Front Delts': 1, 'Side Delts': 0.5, 'Forearm Flexors': 0.5, Abs: 0.25 }],
     ['Turkish get up', 'carry', /turkish|get up/, { Obliques: 1, 'Front Delts': 0.5, Glutes: 0.5 }],
@@ -124,13 +124,13 @@
     ['Climbing', 'pull-v', /^climb|rope climb|climbing|boulder/, { Lats: 1, 'Forearm Flexors': 1, Biceps: 0.75, 'Upper Back': 0.5 }],
 
     /* ── hinges, before rows: "Bb Row Machine SLDL" is a stiff-leg deadlift ── */
-    ['Rack pull', 'hinge', /rack pull|block pull/, { 'Lower Back': 1, Glutes: 0.75, 'Upper Traps': 0.5, Hamstrings: 0.25, 'Forearm Flexors': 0.25 }],
+    ['Rack pull', 'hinge', /rack pull|block pull/, { 'Lower Back': 1, Glutes: 0.75, 'Upper Traps': 0.5, Hamstrings: 0.25, Obliques: 0.25, 'Forearm Flexors': 0.25 }],
     ['Single-leg RDL', 'hinge', /single leg (romanian|stiff)|b stance|kickstand/, { Hamstrings: 1, Glutes: 0.75, 'Lower Back': 0.25 }],
     ['Romanian deadlift', 'hinge', /romanian/, { Hamstrings: 1, Glutes: 0.75, 'Lower Back': 0.5 }],
     ['Stiff-leg deadlift', 'hinge', /stiff|straight leg deadlift/, { Hamstrings: 1, Glutes: 0.75, 'Lower Back': 0.75 }],
-    ['Sumo deadlift', 'hinge', /sumo deadlift/, { Glutes: 1, Quads: 0.75, Adductors: 0.75, 'Lower Back': 0.75, Hamstrings: 0.5 }],
-    ['Trap bar deadlift', 'hinge', /(trap|hex) bar deadlift|^(?!.*(row|shrug|carry)).*(trap|hex) bar/, { Glutes: 1, Quads: 0.75, 'Lower Back': 0.75, Hamstrings: 0.5, 'Upper Traps': 0.25 }],
-    ['Deadlift', 'hinge', /deadlift/, { 'Lower Back': 1, Glutes: 0.75, Hamstrings: 0.5, Quads: 0.5, 'Upper Traps': 0.25, 'Forearm Flexors': 0.25 }],
+    ['Sumo deadlift', 'hinge', /sumo deadlift/, { Glutes: 1, Quads: 0.75, Adductors: 0.75, 'Lower Back': 0.75, Hamstrings: 0.5, Obliques: 0.25, Abs: 0.25 }],
+    ['Trap bar deadlift', 'hinge', /(trap|hex) bar deadlift|^(?!.*(row|shrug|carry)).*(trap|hex) bar/, { Glutes: 1, Quads: 0.75, 'Lower Back': 0.75, Hamstrings: 0.5, Obliques: 0.25, Abs: 0.25, 'Upper Traps': 0.25 }],
+    ['Deadlift', 'hinge', /deadlift/, { 'Lower Back': 1, Glutes: 0.75, Hamstrings: 0.5, Quads: 0.5, Obliques: 0.25, Abs: 0.25, 'Upper Traps': 0.25, 'Forearm Flexors': 0.25 }],
 
     /* ── vertical pulls ── */
     ['Neutral grip chin up', 'pull-v', /(neutral|parallel|hammer) grip (chinup|pullup)|(neutral|parallel) (chinup|pullup)/, { Lats: 1, Biceps: 0.75, 'Forearm Extensors': 0.25, 'Upper Back': 0.5 }],
@@ -155,15 +155,16 @@
     ['External rotation', 'iso', /external rotat|internal rotat|cuban|rotator|\bw raise|no money|90 90|sleeper|shoulder rotation|\bl fly|band dislocat|shoulder dislocat/, { 'Rotator Cuff': 1, 'Rear Delts': 0.25 }],
     ['Y raise', 'iso', /\by raise|prone y|lower trap|\bi y t\b|ytw|\by t w|\bi t y|trap 3|cable y|incline y/, { 'Lower Traps': 1, 'Rear Delts': 0.5 }],
     ['Shrug', 'iso', /shrug/, { 'Upper Traps': 1, 'Forearm Flexors': 0.25 }],
+    ['Suitcase carry', 'carry', /suitcase|single arm (farmer|carry)|one arm (farmer|carry)/, { Obliques: 1, 'Forearm Flexors': 1, 'Upper Traps': 0.5 }],
     ['Carry', 'carry', /farmer|suitcase carry|carry|yoke/, { 'Forearm Flexors': 1, 'Upper Traps': 0.75, Obliques: 0.5, Abs: 0.25 }],
 
     /* ── other hinges ── */
-    ['Good morning', 'hinge', /good ?morning/, { Hamstrings: 1, 'Lower Back': 0.75, Glutes: 0.5 }],
+    ['Good morning', 'hinge', /good ?morning/, { Hamstrings: 1, 'Lower Back': 0.75, Glutes: 0.5, Abs: 0.25 }],
     ['Reverse hyper', 'hinge', /reverse hyper/, { Glutes: 1, Hamstrings: 0.75, 'Lower Back': 0.5 }],
     ['Back extension', 'hinge', /hyperextension|back extension|roman chair|45 degree|superman|jefferson/, { 'Lower Back': 1, Glutes: 0.75, Hamstrings: 0.5 }],
     ['Glute ham raise', 'hinge', /glute ham|nordic/, { Hamstrings: 1, Glutes: 0.25 }],
     ['Pull through', 'hinge', /pull through|kettlebell swing|\bswing/, { Glutes: 1, Hamstrings: 0.75, 'Lower Back': 0.5 }],
-    ['Olympic lift', 'hinge', /clean|snatch|jerk/, { Glutes: 1, Quads: 0.75, 'Upper Traps': 0.75, Hamstrings: 0.5, 'Lower Back': 0.5 }],
+    ['Olympic lift', 'hinge', /clean|snatch|jerk/, { Glutes: 1, Quads: 0.75, 'Upper Traps': 0.75, Hamstrings: 0.5, 'Lower Back': 0.5, Abs: 0.25, Obliques: 0.25 }],
 
     /* ── glutes and hips (hip thrust before curls: "Leg Curl Machine Hip Thrust") ── */
     ['Hip thrust', 'hinge', /hip thrust|glute bridge|barbell bridge|glute drive|frog pump/, { Glutes: 1, Hamstrings: 0.25, Quads: 0.25 }],
@@ -175,9 +176,10 @@
     ['Calf raise', 'iso', /calf|calves/, { Calves: 1 }],
     ['Wall sit', 'squat', /wall sit/, { Quads: 1 }],
     ['Sissy squat', 'squat', /sissy/, { Quads: 1 }],
-    ['Front squat', 'squat', /front squat|goblet|zercher|hack squat|pendulum|belt squat|v squat|smith (machine )?squat/, { Quads: 1, Glutes: 0.5, Adductors: 0.25 }],
+    ['Front squat', 'squat', /front squat|goblet|zercher/, { Quads: 1, Glutes: 0.5, 'Upper Back': 0.25, Abs: 0.25, Obliques: 0.25, 'Lower Back': 0.25, Adductors: 0.25 }],
+    ['Machine squat', 'squat', /hack squat|pendulum|belt squat|v squat|smith (machine )?squat/, { Quads: 1, Glutes: 0.5, Adductors: 0.25 }],
     ['Split squat', 'lunge', /split squat|bulgarian|lunge|step ?up/, { Quads: 1, Glutes: 0.75, Adductors: 0.5 }],
-    ['Squat', 'squat', /squat/, { Quads: 1, Glutes: 0.75, Adductors: 0.5, 'Lower Back': 0.25 }],
+    ['Squat', 'squat', /squat/, { Quads: 1, Glutes: 0.75, Adductors: 0.5, 'Lower Back': 0.5, Obliques: 0.25, Abs: 0.25 }],
     ['Leg press', 'squat', /leg press/, { Quads: 1, Glutes: 0.5, Adductors: 0.5 }],
     ['Leg extension', 'iso', /leg extension|quad extension/, { Quads: 1 }],
     ['Leg curl', 'iso', /leg curl|hamstring curl/, { Hamstrings: 1 }],
@@ -193,9 +195,10 @@
     ['Decline fly', 'iso', /decline.*fly|high to low/, { 'Lower Chest': 1 }],
     ['Decline press', 'press-h', /decline.*(press|bench|pushup|chess|chest)/, { 'Lower Chest': 1, Triceps: 0.5, 'Front Delts': 0.25 }],
     ['Chest fly', 'iso', /fly|pec deck|crossover|svend|plate press/, { 'Lower Chest': 1, 'Upper Chest': 0.5 }],
-    ['Landmine press', 'press-v', /landmine press/, { 'Front Delts': 1, 'Upper Chest': 0.5, Triceps: 0.5 }],
-    ['Push press', 'press-v', /push press|jerk/, { 'Front Delts': 1, Triceps: 0.5, 'Side Delts': 0.5, Quads: 0.25 }],
-    ['Overhead press', 'press-v', /overhead|military|shoulder press|arnold|behind the neck|log press|z press|^(seated |standing )?(dumbbell )?press$|dumbbell press (standing|seated|machine)|(seated|standing) dumbbell press|one arm standing dumbbell press|smith machine overhead/, { 'Front Delts': 1, 'Side Delts': 0.5, Triceps: 0.5, 'Upper Chest': 0.25 }],
+    ['Landmine press', 'press-v', /landmine press/, { 'Front Delts': 1, 'Upper Chest': 0.5, Triceps: 0.5, Obliques: 0.25 }],
+    ['Push press', 'press-v', /push press|jerk/, { 'Front Delts': 1, Triceps: 0.5, 'Side Delts': 0.5, Quads: 0.25, Abs: 0.25, Obliques: 0.25 }],
+    ['Seated overhead press', 'press-v', /^(?=.*(seated|machine|shoulder press machine))(?=.*(overhead|military|shoulder press|dumbbell press|arnold))/, { 'Front Delts': 1, 'Side Delts': 0.5, Triceps: 0.5, 'Upper Chest': 0.25 }],
+    ['Overhead press', 'press-v', /overhead|military|shoulder press|arnold|behind the neck|log press|z press|^(seated |standing )?(dumbbell )?press$|dumbbell press (standing|seated|machine)|(seated|standing) dumbbell press|one arm standing dumbbell press|smith machine overhead/, { 'Front Delts': 1, 'Side Delts': 0.5, Triceps: 0.5, 'Upper Chest': 0.25, Abs: 0.25, Obliques: 0.25 }],
     ['Push up plus', 'press-h', /pushup plus|scapular pushup|serratus|landmine punch|ceiling punch|scapular protraction|\bpunch/, { Serratus: 1 }],
     ['Bench press', 'press-h', /^(?!.*curl).*(bench|chest|floor press|pushup|press up|pec press)/, { 'Lower Chest': 1, 'Upper Chest': 0.5, Triceps: 0.5, 'Front Delts': 0.5 }],
 
@@ -236,5 +239,5 @@
     return null;
   }
 
-  g.Muscles = { version: '0.1.2', LIST: LIST, REGION: REGION, GROUPS: GROUPS, RULES: RULES, PREHAB: PREHAB, norm: norm, of: of };
+  g.Muscles = { version: '0.1.3', LIST: LIST, REGION: REGION, GROUPS: GROUPS, RULES: RULES, PREHAB: PREHAB, norm: norm, of: of };
 })(typeof window !== 'undefined' ? window : this);
