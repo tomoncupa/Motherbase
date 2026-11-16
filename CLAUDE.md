@@ -1115,6 +1115,8 @@ answer, or take it out.
   waits on `Rec.need()` and then `Rec.whole()` (`shared/CLAUDE.md`, Ready is
   not whole).
 - **A big single-file app can already hold the name you pick.** HOME's `const BKEY` clashed with the backup key 2000 lines further down and the whole page died on a SyntaxError (2026-11-16). Grep `\bNAME\b` before adding a top-level const.
+- **A test copy of a desktop program runs on his real screen.** A scratch STATUS.exe's status check took the whole screen mid-test, and two copies each drew an overlay so he saw double (2026-11-16). Switch the check off in a test copy first (`S.set('desk.on', 0)`), close it with `CloseMainWindow` when done, and reopen his real one without `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`.
+- **WinForms `TopMost = true` is ignored from a program that is not in front.** STATUS.exe needed `SetWindowPos(HWND_TOPMOST, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)` too (`Pin` in `desktop/StatusApp.cs`, 2026-11-16).
 
 ---
 
