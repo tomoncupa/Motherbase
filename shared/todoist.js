@@ -41,7 +41,26 @@
   const st = { busy: false, at: 0, n: 0, err: '', quiet: false };
   const opt = { app: 'quest', draw: null };
   let last = 0, soonT = null, uid = 0;
-  const same = (a, b) => JSON.stringify(a == null ? null : a) === JSON.stringify(b == null ? null : b);
+  /* Same CONTENT, whatever order the keys came in and whether an empty list,
+     empty object or null was kept at all. Live sync's database hands a row
+     back with its keys sorted and its empty lists and nulls gone (root brief,
+     Known traps), so a whole-payload JSON.stringify never matched a row that
+     had been through it once. From 2026-11-16 05:34 every pass, in every
+     STATUS, rewrote all 461 Todoist rows; each write redrew every open app and
+     went round live sync to the other STATUS, which wrote them all again. The
+     desktop programs' page sat at a full core and 5 GB, and IndexedDB stopped
+     answering anything else on that store. */
+  const canon = x => {
+    if (x == null) return null;
+    if (Array.isArray(x)) return x.length ? x.map(canon) : null;
+    if (typeof x === 'object') {
+      const o = {};
+      Object.keys(x).sort().forEach(k => { const v = canon(x[k]); if (v !== null) o[k] = v; });
+      return Object.keys(o).length ? o : null;
+    }
+    return x;
+  };
+  const same = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
   const localYmd = t => t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate());
   const say = () => { const b = document.getElementById('td-state'); if (b) b.textContent = line(); };
 
@@ -265,5 +284,5 @@
     document.addEventListener('visibilitychange', () => { if (!document.hidden) run(); });
     setInterval(() => run(), 300000);
   }
-  g.TodoistSync = { run: run, soon: soon, line: line, key: key, st: st, start: start, _said: said, _dueParts: dueParts, _apply: apply };
+  g.TodoistSync = { run: run, soon: soon, line: line, key: key, st: st, start: start, _said: said, _dueParts: dueParts, _apply: apply, _same: same };
 })(typeof window !== 'undefined' ? window : this);

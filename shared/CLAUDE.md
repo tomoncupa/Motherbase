@@ -458,11 +458,17 @@ gave 4,984. Nothing was lost; the files were short.
 - **`cloud.js` 0.2.9** waits on it too, a minute at most, before its first
   merge: a row heard from the cloud while the IndexedDB copy is still on its
   way met no copy and was taken whole, over a newer one.
-- **Not found: why IndexedDB is that slow** with the programs open. Each
-  page's `Rec.reload()` on a poke re-reads all of IndexedDB, and so does
-  `makeRoom`; a storm of those in one browser process is the likeliest
-  story, unwatched. Main Menu took about 45 s through `R.need()` the same
-  morning. One `rec:` smoke check (an IndexedDB open held 3.5 s).
+- **Why IndexedDB was that slow: `todoist.js`.** Profiled over the
+  programs' debug port: Main Menu's page at a full core and 5 GB, 77% of it
+  inside `announce` from `TodoistSync` writing rows. Its `same()` compared
+  whole payloads by `JSON.stringify`, and live sync hands a row back with its
+  keys sorted and empty lists and nulls gone, so no Todoist row ever matched
+  again. Since it moved into STATUS (05:34, 05b93b2) every pass in every
+  STATUS rewrote all 461 Todoist rows, each write redrew every open app, and
+  the rows went round live sync and the channel to the other STATUS, which
+  did the same. `same` now compares content (`canon`: sorted keys, empties
+  dropped). A busy page holds its IndexedDB transactions open, and nothing
+  else on the store is answered. One `todoist:` and one `rec:` smoke check.
 
 ## Live sync boundaries (2026-09-24, `cloud.js` 0.1.3)
 

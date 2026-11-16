@@ -470,6 +470,23 @@ async function run() {
       readyHalf && w.ok === true && !!R._rows[bigId]);
     fr.remove();
     Rec.del(stamp, null, bigK);
+
+    /* todoist.js, 2026-11-16: a Todoist row that has been through live sync
+       comes back with its keys sorted and its empty lists and nulls gone. It
+       must still read as unchanged, or every pass rewrites every row: 461 rows
+       every pass in every STATUS that day, round live sync and back. Only the
+       comparison is driven; nothing here reads the store or calls Todoist. */
+    fr = await lazyFrame('<scr' + 'ipt src="todoist.js"></scr' + 'ipt>');
+    const TS = fr.contentWindow.TodoistSync;
+    const tdRow = { kind: 'todo', t: 1, made: '2026-11-16', at: null, dur: null, ord: 0, done: 0, cancelled: 0, src: 'todoist', rep: null,
+      text: 'Smoke', pri: 0, proj: 'skool', tags: [], due: '', td: { id: 'x', raw: null, rec: null, done: 0, projId: 'p', sec: '', secName: '', parent: '', desc: '', labels: [], text: 'Smoke', due: '', at: null } };
+    const strip = x => Array.isArray(x) ? (x.length ? x.map(strip) : undefined) : (x && typeof x === 'object')
+      ? Object.keys(x).sort().reduce((o, k) => { const v = strip(x[k]); if (v != null) o[k] = v; return o; }, {}) : x;
+    const back = JSON.parse(JSON.stringify(strip(tdRow)));
+    ok('todoist: a row back from live sync, keys sorted and empties gone, reads as unchanged',
+      !!TS && !!TS._same && TS._same(tdRow, back) && !TS._same(tdRow, Object.assign({}, back, { text: 'Smoke 2' })) &&
+      !TS._same(tdRow, Object.assign({}, back, { tags: ['a'] })));
+    fr.remove();
     await Rec.need('set');
     Rec.del('set', lzD, lzA); Rec.del('set', lzD, lzB);
   }
