@@ -442,3 +442,30 @@ date one by one mode"; 4A. The rule is `shared/chapter.js`.
 - Tested in headless Chromium by clicking; review 197 of 197 Chromium and 212
   of 212 WebKit. STATUS (1.0.98) and BLOCK (1.0.26) read from a new chapter
   too; TRAIN does not, it counts in training blocks (Tom).
+
+## WOOP (Tom, 2026-11-17: all ten points, joined to the week plan and plan tomorrow; 1.0.39)
+
+Every goal may carry a WOOP (wish, outcome, obstacle, plan): `aim.woop =
+{outcome, obstacle, if, then, odds, oddsWs, pic}`, typed in the goal sheet
+under "Plan for it", saved by merge. The rule is `shared/goals.js`, WOOP.
+- **Obstacle inside him** (point 7): an obstacle naming only the world
+  (traffic, work, clients) gets one amber line asking what he does, thinks or
+  feels; never refused (`Goals.inner`).
+- **`wrun` rows** (key the aim key, dated): `{ran, cue, kept, t}`. Run through
+  (goal row, Today's goal, the goal menu) shows picture, obstacle, if, then and
+  RAN IT. At the cue time, KEPT IT / NOT TODAY on the goal; KEPT IT ticks the
+  `woop-<aim>-<day>` todo, NOT TODAY sets it aside; one Undo. A ticked cue
+  todo anywhere counts as kept unless he said NOT TODAY (`Goals.keptOn`).
+  "Kept N days" is the record; no score.
+- **Week draft** (point 10): Your plans this week, per goal with a WOOP: last
+  week's kept and planned days, "Still the obstacle?" with Change the plan,
+  odds 1 to 10 (`woop.odds`, `woop.oddsWs` the week). Odds 4 or less: "Make
+  this week's step smaller", Make it N-1 a week for a count goal, else
+  Change the plan. The draft shows for WOOP goals even with nothing to move.
+- **Money and work numbers** in Moved by: Money (a savings pot or income this
+  month; shown only where WEALTH rows exist, so never for a client) and Work
+  numbers (Skool members, posts a week from OUTER HEAVEN, revenue this month).
+  Members and revenue have no feed: the goal menu's Type members now / Type
+  revenue today writes a `pnum` row (QUESTS and OUTER HEAVEN both write it).
+- **The cue time is set in HOME's Plan the day**; ROOM's wallpaper shows the
+  cards. Tested in headless Chromium at 1280 and 390 by clicking, demo goals.

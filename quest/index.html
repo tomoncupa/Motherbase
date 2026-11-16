@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.38, 2026-11-16">
+<meta name="mb-version" content="1.0.39, 2026-11-17">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -298,6 +298,15 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .chw span{font-size:var(--f-1);color:var(--text-muted);overflow-wrap:anywhere}
 .chg .chips .mb-input{width:calc(var(--s-10) * .75);flex:none}
 .gh .lnk.ob{margin-left:0;text-decoration-color:var(--border-strong)}
+.woop{margin-top:var(--s-1)}
+.woop .nx b{color:var(--text-1);font-weight:600}
+.woopnudge{font-size:var(--f-2);color:var(--warn);margin:var(--s-1) 0}
+.wwk{padding:var(--s-2) 0;border-bottom:var(--border-width) solid var(--border)}
+.wwk .for{font-size:var(--f-2);color:var(--text-2);overflow-wrap:anywhere}
+.wwk .tt{overflow-wrap:anywhere;margin:var(--s-1) 0}
+.wwk .meta{font-size:var(--f-2);color:var(--text-muted)}
+.wwk .chips{margin-top:var(--s-1)}
+.odds .chip{min-width:44px;justify-content:center}
 .hsmall{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-1);font-size:var(--f-2);color:var(--text-2)}
 .srcin{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-2)}
 .srcin .mb-input{flex:1 1 calc(var(--s-10) * 1.5);min-width:0}
@@ -918,7 +927,7 @@ function healthEl(a, w) {
     line.appendChild(c);
   } else line.appendChild(el('span', 'hnew', 'New this week'));
   const strip = el('span', 'wks');
-  const meas = hl.src === 'lift' || hl.src === 'ev';
+  const meas = Goals.kindOf(a.src) === 'measure';
   strip.setAttribute('aria-label', (meas ? 'Each week’s reading' : hl.src ? 'Days each week' : 'Tasks done each week') + ', last ' + HEALTH_WEEKS + ' weeks');
   hl.weeks.forEach((k, i) => {
     const lit = meas ? k.up : k.n;
@@ -944,7 +953,110 @@ function healthEl(a, w) {
   if (fix.children.length) box.appendChild(fix);
   const sk = Goals.stuck(a, quests());
   if (sk) box.appendChild(smallerEl(a, sk));
+  box.appendChild(woopEl(a));
   return box;
+}
+/* ── WOOP on the goal (Tom, 2026-11-17; shared/goals.js, WOOP) ──
+   The if-then and the days it was kept; the 30-second run-through; and at
+   the planned moment, KEPT IT or NOT TODAY. */
+function woopEl(a) {
+  const w = Goals.woop(a) || {}, box = el('div', 'hfix woop');
+  const btn = (icon, label, fn) => {
+    const b = el('button', 'addg', ico(icon) + '<span>' + esc(label) + '</span>');
+    b.type = 'button'; b.onclick = e => { e.stopPropagation(); fn(); };
+    box.appendChild(b);
+  };
+  if (!Goals.hasWoop(a)) { btn('add', 'Plan for the obstacle', () => aimSheet(a, null, true)); return box; }
+  const t = T(), k = Goals.kept(a), r = Goals.runOf(a.key, t) || {}, cue = Rec.get('note', t, Goals.cueKey(a.key, t));
+  if (w.if || w.then) box.appendChild(el('span', 'nx', '<b>If</b> ' + esc(w.if || 'the moment comes') + ', <b>then</b> ' + esc(w.then || 'the plan')));
+  if (k.kept) box.appendChild(el('span', 'nx', 'Kept ' + k.kept + (k.kept === 1 ? ' day' : ' days')));
+  const now = new Date(), hm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  if (cue && cue.at && cue.at <= hm && Goals.keptOn(a.key, t) == null) {
+    btn('done', 'Kept it', () => woopTap(a, 1));
+    btn('close', 'Not today', () => woopTap(a, 0));
+  }
+  if (!r.ran) btn('goal', 'Run through', () => runThrough(a));
+  return box;
+}
+/* his tap at the moment; the cue todo is ticked, or set aside, with it */
+function woopTap(a, v) {
+  const t = T(), key = Goals.cueKey(a.key, t), was = Rec.get('note', t, key), run = Goals.runOf(a.key, t) || {};
+  Goals.run(a.key, t, { kept: v });
+  if (was && !was.done && !was.cancelled) {
+    if (v) Journal.tick(t, key, { day: t, stamp: nowHHMM(), src: APP.id });
+    else Rec.patch('note', t, key, { cancelled: 1 });
+    publishNotes(t);
+  }
+  Mobile.feedback(v ? 'success' : 'select');
+  UI.undo(v ? 'Kept it today' : 'Not today', () => {
+    Rec.patch('wrun', t, a.key, { kept: run.kept === undefined ? null : run.kept });
+    if (was) { Rec.set('note', t, key, was); publishNotes(t); }
+  });
+}
+/* the daily run-through (WOOP point 2): the best result, then what stands in
+   the way, then the plan, read in that order */
+function runThrough(a) {
+  const w = Goals.woop(a) || {};
+  UI.dialog({ title: 'RUN THROUGH', width: 520, body: b => {
+    b.appendChild(el('p', 'dq', esc(a.text) + (a.by ? ', by ' + esc(dayWord(a.by)) : '')));
+    [['Picture it', w.outcome], ['What stands in the way', w.obstacle], ['If', w.if], ['Then', w.then]].forEach(p => {
+      if (!p[1]) return;
+      b.appendChild(el('h4', 'sh', esc(p[0])));
+      b.appendChild(el('p', 'oldnote', esc(p[1])));
+    });
+  }, actions: [{ label: 'CLOSE' }, { label: 'RAN IT', kind: 'go', fn: () => {
+    Goals.run(a.key, T(), { ran: 1 });
+    Mobile.feedback('success');
+  } }] });
+}
+/* typed outcome, obstacle, if, then and odds, merged into what the goal has */
+function woopFields(b, w0) {
+  const w = Object.assign({}, w0 || {});
+  b.appendChild(el('h4', 'sh', 'Plan for it: outcome, obstacle, if, then'));
+  const mk = (k, ph, label, rows) => {
+    const i = UI.field(rows ? 'note' : 'text', { value: w[k] || '', placeholder: ph, rows: rows || undefined });
+    i.setAttribute('aria-label', label); i.setAttribute('autocapitalize', 'sentences');
+    b.appendChild(i); return i;
+  };
+  const out = mk('outcome', 'The best result, pictured: what you see and feel', 'Outcome', 2);
+  const obs = mk('obstacle', 'What in you is most likely to stop it', 'Obstacle', 2);
+  const nudge = el('p', 'woopnudge'); b.appendChild(nudge);
+  const sayN = () => { nudge.textContent = Goals.inner(obs.value); nudge.hidden = !nudge.textContent; };
+  obs.addEventListener('input', sayN); sayN();
+  const iff = mk('if', 'If: the moment it shows up', 'If');
+  const then = mk('then', 'Then: what you do', 'Then');
+  b.appendChild(el('span', 'hint', 'Odds you follow the plan this week, 1 to 10'));
+  const odds = el('div', 'chips odds');
+  let ov = w.oddsWs === Goals.weekStart(T()) ? (w.odds || 0) : 0;
+  const paint = () => {
+    odds.innerHTML = '';
+    for (let n = 1; n <= 10; n++) {
+      const c = el('button', 'chip' + (ov === n ? ' set' : ''), String(n));
+      c.type = 'button'; c.setAttribute('aria-pressed', ov === n ? 'true' : 'false');
+      c.onclick = () => { ov = ov === n ? 0 : n; paint(); };
+      odds.appendChild(c);
+    }
+  };
+  paint(); b.appendChild(odds);
+  return { first: out, read() {
+    const r = { outcome: out.value.trim(), obstacle: obs.value.trim(), if: iff.value.trim().replace(/^if\s+/i, ''), then: then.value.trim().replace(/^then\s+/i, '') };
+    if (ov) { r.odds = ov; r.oddsWs = Goals.weekStart(T()); }
+    return Object.assign(w, r);
+  } };
+}
+/* a work number with no feed, typed (Skool members now, revenue in today) */
+function typeNum(a) {
+  const of = a.src.of, mem = of === 'members';
+  UI.dialog({ title: mem ? 'SKOOL MEMBERS' : 'REVENUE TODAY', width: 400, body: b => {
+    const i = UI.field('text', { value: '', placeholder: mem ? 'Members now' : 'Money in today' });
+    i.inputMode = 'decimal'; i.setAttribute('aria-label', mem ? 'Members now' : 'Money in today');
+    b.appendChild(i); UI.focusSoon(i);
+  }, actions: [{ label: 'CANCEL' }, { label: 'SAVE', kind: 'go', fn: h => {
+    const v = parseFloat(String(h.body.querySelector('input').value).replace(/[,\u20B1\s]/g, ''));
+    if (!isFinite(v)) { UI.toast('Write a number', { bad: true }); return false; }
+    Rec.set('pnum', T(), of, { v: v, src: 'quest' });
+    Mobile.feedback('success');
+  } }] });
 }
 /* B: three weeks off, so offer it smaller or later, once, with Keep it */
 function smallerEl(a, sk) {
@@ -1000,7 +1112,7 @@ function addAimTask(a) {
    and nothing in it needs Todoist: a person with only QUESTS gets a box per
    goal to type its next step. quest/CLAUDE.md, Week draft. */
 const DAY_CAP = 3, LATE_DAYS = 30, ADD_MAX = 5;
-const MACHINE = { wealth: 1, arc: 1, goals: 1 };
+const MACHINE = { wealth: 1, arc: 1, goals: 1, woop: 1 };
 let DRAFT = { ws: '', off: {}, day: {}, txt: {} }, DRAFT_OPEN = false;
 function draftRange() {
   const t = T(), sun = Day.dow(t) === 0, s = sun ? Day.shift(t, 1) : t;
@@ -1047,10 +1159,11 @@ function draftSummary(items) {
 }
 function drawDraft(list, force) {
   const dw = draftWeek(), r = dw.r, items = dw.items;
-  if (!force && (draftDone(r) || !items.length)) return;
+  const wq = openAims().filter(Goals.hasWoop);
+  if (!force && (draftDone(r) || (!items.length && !wq.length))) return;
   if (!force && PHONE() && !DRAFT_PHONE) {
     const ln = el('button', 'pline', '<span class="gi">' + ico('schedule') + '</span><span class="nm">Week draft</span><span class="rt">' +
-      esc(draftSummary(items)) + '</span>' + ico('next'));
+      esc(draftSummary(items) || wq.length + (wq.length === 1 ? ' plan' : ' plans') + ' to check') + '</span>' + ico('next'));
     ln.type = 'button';
     ln.onclick = () => { DRAFT_PHONE = true; draw(); };
     list.appendChild(ln);
@@ -1061,7 +1174,13 @@ function drawDraft(list, force) {
   const range = md(r.s) + ' to ' + (r.s.slice(0, 7) === r.e.slice(0, 7) ? String(+r.e.slice(8)) : md(r.e));
   box.appendChild(el('div', 'gh', '<span class="gi">' + ico('schedule') + '</span><b>Week draft</b><span class="when">' + esc(range) + '</span>'));
   const bx = el('div', 'bx');
+  woopWeek(bx, r);
   if (!items.length) {
+    if (wq.length) {
+      const bar = el('div', 'dbar'), ok = el('button', 'mb-btn mb-press mb-tap go', 'DONE');
+      ok.onclick = () => { S.set('weekDraft', r.ws); DRAFT_OPEN = false; draw(); };
+      bar.appendChild(ok); bx.appendChild(bar); box.appendChild(bx); list.appendChild(box); return;
+    }
     bx.appendChild(el('p', 'why', openAims().length ? 'Nothing to change this week.' : 'No goals to plan the week around.'));
     if (!openAims().length) { const g = el('button', 'addg', ico('goal') + '<span>Set a goal</span>'); g.type = 'button'; g.onclick = () => go('goals'); bx.appendChild(g); }
     bx.appendChild(aiRow(r));
@@ -1127,6 +1246,52 @@ function drawDraft(list, force) {
   bx.appendChild(aiRow(r));
   box.appendChild(bx);
   list.appendChild(box);
+}
+/* Each goal's WOOP, run again for the week (Tom, 2026-11-17): last week's
+   kept days, still the obstacle, and the odds 1 to 10. Odds of 4 or less
+   offer a smaller step (root brief: one step from where he is). */
+function woopWeek(bx, r) {
+  const list = openAims().filter(Goals.hasWoop);
+  if (!list.length) return;
+  bx.appendChild(el('h4', null, 'Your plans this week'));
+  const lw = Day.shift(r.ws, -7);
+  list.forEach(a => {
+    const w = Goals.woop(a), row = el('div', 'wwk');
+    row.appendChild(el('div', 'for', '<span class="hat">^</span> ' + esc(a.text)));
+    const k = Goals.kept(a, lw, Day.shift(lw, 6));
+    if (k.cued || k.ran) row.appendChild(el('div', 'meta', 'Last week: kept ' + k.kept + ' of ' + k.cued + ' planned ' + (k.cued === 1 ? 'day' : 'days') +
+      (k.ran ? ', ran through it ' + k.ran + (k.ran === 1 ? ' day' : ' days') : '')));
+    row.appendChild(el('div', 'tt', 'Still the obstacle? ' + esc(w.obstacle || 'None written.')));
+    const ch = el('div', 'chips');
+    const edit = el('button', 'chip', 'Change the plan'); edit.type = 'button'; edit.onclick = () => aimSheet(a, null, true);
+    ch.appendChild(edit); row.appendChild(ch);
+    row.appendChild(el('div', 'meta', 'Odds you follow the plan this week, 1 to 10'));
+    const odds = el('div', 'chips odds'), low = el('div', 'hsmall');
+    let ov = w.oddsWs === r.ws ? (w.odds || 0) : 0;
+    const paint = () => {
+      odds.innerHTML = ''; low.innerHTML = '';
+      for (let n = 1; n <= 10; n++) {
+        const c = el('button', 'chip' + (ov === n ? ' set' : ''), String(n));
+        c.type = 'button'; c.setAttribute('aria-pressed', ov === n ? 'true' : 'false');
+        c.onclick = () => { ov = n; Rec.patch('aim', null, a.key, { 'woop.odds': n, 'woop.oddsWs': r.ws }); paint(); };
+        odds.appendChild(c);
+      }
+      if (!ov || ov > 4) return;
+      low.appendChild(el('span', 'nx', 'Make this week’s step smaller, until the odds are an 8.'));
+      const n = a.src && Goals.kindOf(a.src) === 'count' ? Math.max(1, +a.src.n || 1) : 0;
+      if (n > 1) {
+        const b = el('button', 'chip', 'Make it ' + (n - 1) + ' a week'); b.type = 'button';
+        b.onclick = () => { const was = { src: a.src }; Rec.patch('aim', null, a.key, { src: Object.assign({}, a.src, { n: n - 1 }) }); UI.undo('Now ' + (n - 1) + ' a week', () => Rec.patch('aim', null, a.key, was)); };
+        low.appendChild(b);
+      } else {
+        const b = el('button', 'chip', 'Change the plan'); b.type = 'button'; b.onclick = () => aimSheet(a, null, true);
+        low.appendChild(b);
+      }
+    };
+    paint();
+    row.appendChild(odds); row.appendChild(low);
+    bx.appendChild(row);
+  });
 }
 /* ── plan the week with your own Claude or ChatGPT ──
    Tom, 2026-11-16: "give people an option to log into their Claude or
@@ -1703,6 +1868,8 @@ function aimMenu(a, anchor) {
     ...(a.state ? [{ label: 'Open it again', icon: ico('undo'), fn: () => finishAim(a, '') }] : [
       { label: 'Check in', icon: ico('note'), fn: () => checkInAim(a) },
       { label: 'Add a task', icon: ico('add'), fn: () => addAimTask(a) },
+      ...(Goals.hasWoop(a) ? [{ label: 'Run through', icon: ico('goal'), fn: () => runThrough(a) }] : []),
+      ...(a.src && a.src.kind === 'pro' && a.src.of !== 'posts' ? [{ label: a.src.of === 'members' ? 'Type members now' : 'Type revenue today', icon: ico('edit'), fn: () => typeNum(a) }] : []),
       ...(projects().length ? [{ label: 'Link a project', icon: ico('goal'), fn: () => choose(anchor, 'Every task in it serves this goal',
         projects().map(p => ({ label: p.name, icon: '<span class="hash" style="--mk:var(--data-' + (p.slot || 1) + ')">#</span>', on: p.aim === a.key,
           fn: () => Rec.patch('project', null, p.key, { aim: p.aim === a.key ? '' : a.key }) }))) }] : []),
@@ -1780,16 +1947,50 @@ function srcPicker(b, cur) {
   };
   const keyOf = (m, f, name) => Object.keys(m).find(k => nameOf(m, k, f).toLowerCase() === String(name).trim().toLowerCase()) || '';
   const num = (v, ph, label) => { const i = UI.field('text', { value: v == null ? '' : String(v), placeholder: ph }); i.inputMode = 'decimal'; i.setAttribute('aria-label', label); return i; };
-  let f1, f2, unit = (cur && cur.u) || 'lb';
+  let f1, f2, f3, unit = (cur && cur.u) || 'lb', of = (cur && cur.of) || '';
+  const pots = Rec.map('pot') || {};
+  /* money is Tom's: WEALTH is never in the client build, so no pot or paid row means no Money */
+  const hasMoney = () => Object.keys(pots).length || Rec.all('paid').length;
+  const ofChips = (names, dflt) => {
+    if (!names[of]) of = dflt;
+    const ch = el('div', 'chips');
+    Object.keys(names).forEach(k => {
+      const c = el('button', 'chip' + (of === k ? ' set' : ''), esc(names[k]));
+      c.type = 'button'; c.onclick = () => { of = k; draw(); };
+      ch.appendChild(c);
+    });
+    more.appendChild(ch);
+  };
   const draw = () => {
     chips.innerHTML = ''; more.innerHTML = '';
-    Object.keys(Goals.SRC_NAME).forEach(k => {
+    Object.keys(Goals.SRC_NAME).filter(k => k !== 'money' || hasMoney() || kind === 'money').forEach(k => {
       const c = el('button', 'chip' + (kind === k ? ' set' : ''), esc(Goals.SRC_NAME[k]));
       c.type = 'button'; c.onclick = () => { kind = k; draw(); };
       chips.appendChild(c);
     });
     const same = cur && cur.kind === kind;
-    f1 = f2 = null;
+    f1 = f2 = f3 = null;
+    if (kind === 'money') {
+      ofChips(Goals.MONEY_OF, Object.keys(pots).length ? 'pot' : 'income');
+      const s2 = cur && cur.kind === kind && cur.of === of;
+      if (of === 'pot') {
+        more.appendChild(list('srcpots', pots, 'name'));
+        f2 = UI.field('text', { value: s2 ? nameOf(pots, cur.pot, 'name') : '', placeholder: 'Which pot' });
+        f2.setAttribute('list', 'srcpots'); f2.setAttribute('aria-label', 'Which pot');
+        more.appendChild(f2);
+      }
+      f1 = num(s2 ? cur.target : '', of === 'pot' ? 'Balance to reach' : 'Income a month to reach', 'Target in pesos');
+      more.appendChild(f1);
+    } else if (kind === 'pro') {
+      ofChips(Goals.PRO_OF, 'members');
+      const s2 = cur && cur.kind === kind && cur.of === of;
+      if (of === 'posts') { f1 = num(s2 ? cur.n : 5, 'Posts a week', 'Posts a week'); more.appendChild(el('span', 'hint', 'Posts a week, from OUTER HEAVEN')); }
+      else f1 = num(s2 ? cur.target : '', of === 'members' ? 'Members to reach' : 'Revenue a month to reach', of === 'members' ? 'Members to reach' : 'Revenue a month to reach');
+      more.appendChild(f1);
+      if (of === 'members' && Goals.startOf({ kind: 'pro', of: 'members' }) == null) {
+        f3 = num('', 'Members now', 'Members now'); more.appendChild(f3);
+      }
+    }
     if (kind === 'train') {
       f1 = num(same ? cur.n : 3, 'Sessions a week', 'Sessions a week');
       more.appendChild(el('span', 'hint', 'Sessions a week')); more.appendChild(f1);
@@ -1822,6 +2023,26 @@ function srcPicker(b, cur) {
     const n = parseFloat(String(f1.value).replace(',', '.'));
     if (!isFinite(n) || (kind !== 'ev' && kind !== 'lift' && n <= 0)) { UI.toast('Write a number', { bad: true }); return false; }
     if (kind === 'train') return { kind: kind, n: Math.round(n) };
+    if (kind === 'money' && of === 'income') return { kind: kind, of: of, target: n };
+    if (kind === 'money') {
+      const pot = keyOf(pots, 'name', f2.value);
+      if (!pot) { UI.toast('Pick a pot from the list', { bad: true }); return false; }
+      const src = { kind: kind, of: 'pot', pot: pot, target: n };
+      src.start = cur && cur.kind === kind && cur.pot === pot && cur.start != null ? cur.start : Goals.startOf(src) || 0;
+      return src;
+    }
+    if (kind === 'pro' && of === 'posts') return { kind: kind, of: of, n: Math.round(n) };
+    if (kind === 'pro' && of === 'revenue') return { kind: kind, of: of, target: n };
+    if (kind === 'pro') {
+      const src = { kind: kind, of: 'members', target: n };
+      if (f3) {
+        const m = parseFloat(String(f3.value).replace(',', '.'));
+        if (!isFinite(m)) { UI.toast('Write how many members there are now', { bad: true }); return false; }
+        Rec.set('pnum', T(), 'members', { v: m, src: 'quest' });
+      }
+      src.start = cur && cur.kind === kind && cur.of === 'members' && cur.start != null ? cur.start : Goals.startOf(src);
+      return src;
+    }
     const pick = kind === 'tick' ? keyOf(acts, 'name', f2.value) : kind === 'lift' ? keyOf(exs, 'name', f2.value) : keyOf(flds, 'label', f2.value);
     if (!pick) { UI.toast('Pick one from the list', { bad: true }); return false; }
     if (kind === 'tick') return { kind: kind, act: pick, n: Math.round(n) };
@@ -1834,11 +2055,11 @@ function srcPicker(b, cur) {
 }
 /* Making or changing a goal: the words, the horizon, its ^name, a target
    date, why it matters, and what moves it. */
-function aimSheet(a, hid) {
+function aimSheet(a, hid, toWoop) {
   const cur = a ? Rec.get('aim', null, a.key) : null;
   if (a && !cur) return;
   const st = cur ? Object.assign({}, cur) : { text: '', h: hid || '1m', why: '', made: T(), by: addMonths(T(), hzOf(hid).months), tag: '' };
-  let tagTouched = !!(cur && cur.tag), text, why, tag, srcUI;
+  let tagTouched = !!(cur && cur.tag), text, why, tag, srcUI, woopUI;
   const save = () => {
     const v = text.value.trim();
     if (!v) { UI.toast('Write the goal first', { bad: true }); return false; }
@@ -1846,7 +2067,7 @@ function aimSheet(a, hid) {
     if (aims().some(x => x.tag === tg && (!a || x.key !== a.key))) { UI.toast('^' + tg + ' is another goal’s name', { bad: true }); return false; }
     const src = srcUI.read();
     if (src === false) return false;
-    const patch = { text: v, h: st.h, why: why.value.trim(), by: st.by || '', tag: tg, src: src };
+    const patch = { text: v, h: st.h, why: why.value.trim(), by: st.by || '', tag: tg, src: src, woop: woopUI.read() };
     if (a) Rec.patch('aim', null, a.key, patch);
     else { if (capFull()) return false; Rec.set('aim', null, newId(), Object.assign(patch, { made: T(), state: '', ord: aims().length })); }
     Mobile.feedback('success');
@@ -1899,6 +2120,8 @@ function aimSheet(a, hid) {
       why = UI.field('note', { value: st.why || '', placeholder: 'Why it matters (optional)', rows: 2 });
       b.appendChild(why);
       srcUI = srcPicker(b, st.src || null);
+      woopUI = woopFields(b, st.woop);
+      if (toWoop) { UI.focusSoon(woopUI.first); setTimeout(() => woopUI.first.scrollIntoView({ block: 'center' }), 60); }
       if (a) {
         const linked = quests().filter(x => !x.done && aimOf(x) === a.key);
         if (linked.length) {
