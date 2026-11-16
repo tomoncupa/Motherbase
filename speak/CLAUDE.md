@@ -21,6 +21,15 @@ me into a great orator"*, and *"Everything, the goal is a program designed to
 create a master speaker."* Delivery is half of it; the program adds structure,
 story, the devices and a whole rehearsed talk (The program, below).
 
+**The speaker is a creator on camera, not a podium.** Tom, 2026-11-16: *"our
+goal isn't really to be someone giving a speech at a podium. It's more to be
+a master content creator, YouTuber, personality type individual ... more of a
+motivational speaker than someone giving a presidential type effect."* Every
+target, drill and fault is judged against a YouTuber or motivational speaker
+talking to a lens: energy, personality and how he looks while talking count
+as much as clarity. Formal oratory (lectern pace, set-piece structure) is
+the wrong model.
+
 **It coaches, not only counts.** Tom, 2026-11-16: *"I need Speak to actually
 give me feedback and drills for what's happening. I don't need it to just
 rate what I'm doing."* This replaces the old "never a verdict" rule, under
