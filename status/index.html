@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.109, 2026-11-16">
+<meta name="mb-version" content="1.0.110, 2026-11-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -900,6 +900,14 @@ body.checking .deskx { display: none; }
   font-family: var(--nw-body); text-align: center; color: var(--nw-ink);
   font-size: clamp(15px, 3.4vmin, 30px); line-height: 1.25;
 }
+/* the day's brief, on the morning check (Tom, 2026-11-16) */
+.nwbrief {
+  font-family: var(--nw-body); color: var(--nw-ink); line-height: 1.45;
+  font-size: clamp(12px, 2vmin, 17px); max-height: 30vh; overflow-y: auto; flex: none;
+}
+.nwbrief b { display: block; margin-top: var(--s-2); color: var(--nw-acc); font-weight: 700; }
+.nwbrief b:first-child { margin-top: 0; }
+.nwbrief div { padding-left: var(--s-3); text-indent: calc(-1 * var(--s-3)); }
 .nwlabel {
   font-family: var(--nw-face); font-weight: 700; color: var(--nw-acc);
   letter-spacing: .22em; font-size: clamp(10px, 1.9vmin, 15px);
@@ -9375,8 +9383,24 @@ let deskFirst = false; /* the check on the screen is the day's first */
 function deskFirstDue() {
   if (!HOSTED || !scrSpan) return null;
   const d = Day.today(), now = new Date();
-  if (S.get('desk.newday', '') === d || deskSmallHours(now) || scrSpan.d !== d || !deskBack()) return null;
-  return now.getHours() * 60 + now.getMinutes() - scrSpan.a >= DESK_SAT;
+  if (S.get('desk.newday', '') === d || deskSmallHours(now) || scrSpan.d !== d || !deskBack()) { deskSyncFrom = 0; return null; }
+  if (now.getHours() * 60 + now.getMinutes() - scrSpan.a < DESK_SAT) return false;
+  /* Tom, 2026-11-16: "if I log weight on my phone before I go to my PC, then
+     it should not show up anymore as part of the morning check". A PC that
+     slept has not heard the phone yet the moment he sits down, so the first
+     check waits until live sync has caught up (connected, loaded, quiet 3 s),
+     a minute at most. */
+  if (!deskSyncFrom) deskSyncFrom = Date.now();
+  return deskSynced() || Date.now() - deskSyncFrom > 60000;
+}
+let deskSyncFrom = 0, deskSyncSeen = null, deskSyncAt = 0;
+function deskSynced() {
+  let C = null;
+  try { C = window.Cloud || null; } catch (e) { C = null; }
+  const s = C && C.state ? C.state() : null;
+  if (!s || !s.on) return true;
+  if (s.gotAt !== deskSyncSeen) { deskSyncSeen = s.gotAt; deskSyncAt = Date.now(); }
+  return !!(s.conn && s.loaded && Date.now() - deskSyncAt >= 3000);
 }
 
 function deskTick() {
@@ -9886,6 +9910,25 @@ function checkDraw() {
   win.appendChild(el('div', 'nwhead', esc(Notice.bracket(st, 'STATUS CHECK'))));
   win.appendChild(el('div', 'nwrule'));
   win.appendChild(el('div', 'nwask', checkOnly || checkMorn.length ? 'New day.' : 'How are you?'));
+  /* Tom, 2026-11-16: "I'd also love for the morning check to show my brief
+     for the day." The daemon's `brief` row for today, read only: headings,
+     points and its action items. Nothing shows on a day with no brief. */
+  const br = checkMorn.length ? Rec.get('brief', Day.today(), '') : null;
+  if (br && (br.text || (br.todo && br.todo.length))) {
+    win.appendChild(el('div', 'nwlabel', "TODAY'S BRIEF"));
+    const bx = el('div', 'nwbrief');
+    String(br.text || '').split(/\r?\n/).forEach(l => {
+      const t = l.trim();
+      if (!t) return;
+      if (t.indexOf('# ') === 0) bx.appendChild(el('b', '', esc(t.slice(2))));
+      else bx.appendChild(el('div', '', esc(t.indexOf('- ') === 0 ? '· ' + t.slice(2) : t)));
+    });
+    (br.todo || []).forEach(x => {
+      const t = typeof x === 'string' ? x : (x && x.text) || '';
+      if (t) bx.appendChild(el('div', '', '☐ ' + esc(t)));
+    });
+    win.appendChild(bx);
+  }
 
   const fs = checkFields();
   checkShown = fs.map(f => f.id);
@@ -10564,6 +10607,29 @@ if (DESK) {
     handle(document.querySelector('header'));
   }
   Rec.on(() => { if (deskSmall && !deskPanel) deskBar(); });
+  /* ── catching up while open all day ──
+     Tom, 2026-11-16, after a fix was live and his STATUS.exe still showed the
+     old status check: the program stays open for days and a page only takes
+     new code when it opens. Every 20 minutes it asks the network for its own
+     page; a newer version reloads it, but only while nothing is open or half
+     typed and he has not touched it for two minutes. */
+  let deskTouched = Date.now();
+  ['keydown', 'pointerdown'].forEach(t => addEventListener(t, () => { deskTouched = Date.now(); }, true));
+  setInterval(() => {
+    if (checkOn || deskAsking || sheetH || deskPanel || (deskDoing || '').trim()) return;
+    const a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value) return;
+    if (Date.now() - deskTouched < 120000) return;
+    const mine = (document.querySelector('meta[name="mb-version"]') || {}).content || '';
+    fetch(location.pathname + '?fresh=1&cb=' + Date.now(), { cache: 'no-store' })
+      .then(r => r.ok ? r.text() : '')
+      .then(t => {
+        const m = /name="mb-version" content="([^"]+)"/.exec(t || '');
+        if (!m || !mine || m[1] === mine || checkOn || Date.now() - deskTouched < 120000) return;
+        const q = new URLSearchParams(location.search); q.set('fresh', '1');
+        location.replace(location.pathname + '?' + q.toString());
+      }).catch(() => {});
+  }, 20 * 60 * 1000);
   /* what is left for an S moves with the clock too: a walk passes, passive
      steps still to come run down */
   setInterval(() => { if (deskSmall && !deskPanel && !checkOn) deskBar(); }, 5 * 60 * 1000);
