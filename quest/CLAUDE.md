@@ -429,5 +429,16 @@ date one by one mode"; 4A. The rule is `shared/chapter.js`.
 - **One by one** (`oneByOne`): one task at a time, Today, Tomorrow, This
   weekend, Next week, No date, Pick a day or Skip, "3 of 24"; one Undo when it
   closes. Also beside Reschedule on every Overdue heading.
+- **What the last chapter held** (1.0.38, Tom picked A): the sheet opens on
+  number tiles for the chapter ending now, since its start, or the last 8 weeks
+  with none (`chapterWins`): training sessions, the most in one week, tasks
+  done, goals reached, days logged in STATUS (a phone's own steps left out),
+  blocks and habits ticked. A zero tile is left out; nothing shows nothing.
+  Numbers and the behaviour only, never praise (self-efficacy).
+- **Days that feel like a new page** (1.0.38, Tom picked B): Starts offers
+  Today, Next Monday, The 1st of <next month>, or a day (`chapterDays`). A
+  chapter set ahead starts counting on its day; the Goals head says "next
+  from <day>" until then.
 - Tested in headless Chromium by clicking; review 197 of 197 Chromium and 212
-  of 212 WebKit. STATUS, TRAIN and BLOCK do not read it yet.
+  of 212 WebKit. STATUS (1.0.98) and BLOCK (1.0.26) read from a new chapter
+  too; TRAIN does not, it counts in training blocks (Tom).

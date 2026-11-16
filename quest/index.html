@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.37, 2026-11-16">
+<meta name="mb-version" content="1.0.38, 2026-11-16">
 <title>QUESTS</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -291,6 +291,11 @@ h1 small{font-family:var(--font-body);font-size:var(--f-2);color:var(--text-mute
 .chnm{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--s-2)}
 .chnm .hint,.chg .hint{font-size:var(--f-1);color:var(--text-muted)}
 .chg{padding:var(--s-2) 0;border-bottom:var(--border-width) solid var(--border)}
+.chwins:not(:empty){margin-bottom:var(--s-3)}
+.chwgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(calc(var(--s-10) * 1.25),1fr));gap:var(--s-2)}
+.chw{display:flex;flex-direction:column;gap:var(--s-1);padding:var(--s-2) var(--s-3);border-radius:var(--radius-md);background:var(--surface-2);min-width:0}
+.chw b{font-family:var(--font-display);font-size:var(--f-4);font-weight:var(--w-bold);font-variant-numeric:tabular-nums}
+.chw span{font-size:var(--f-1);color:var(--text-muted);overflow-wrap:anywhere}
 .chg .chips .mb-input{width:calc(var(--s-10) * .75);flex:none}
 .gh .lnk.ob{margin-left:0;text-decoration-color:var(--border-strong)}
 .hsmall{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s-2);margin-top:var(--s-1);font-size:var(--f-2);color:var(--text-2)}
@@ -1618,8 +1623,11 @@ function drawAimCard(list) {
 function drawGoals(list) {
   const w = aimWorkAll(), all = aims();
   const ch = Chapter.current(), cbox = el('section', 'grp');
+  /* a chapter set for a day still to come (Next Monday, the 1st) */
+  const soon = Chapter.list().filter(c => c.start > T())[0];
   const chead = el('div', 'gh', '<b>' + esc(ch ? Chapter.label(ch) : 'Chapter') + '</b><span class="rv">' +
-    esc((ch ? 'since ' + dayWord(ch.start) : 'none started') + ' · ' + openAims().length + ' of ' + AIM_CAP + ' goals open') + '</span>');
+    esc((ch ? 'since ' + dayWord(ch.start) : 'none started') + (soon ? ' · next from ' + dayWord(soon.start) : '') +
+    ' · ' + openAims().length + ' of ' + AIM_CAP + ' goals open') + '</span>');
   const nb = el('button', 'addg', ico('refresh') + '<span>New chapter</span>');
   nb.type = 'button'; nb.onclick = () => chapterSheet();
   chead.appendChild(nb);
@@ -1940,6 +1948,50 @@ function quietOffer(list) {
   ln.onclick = () => chapterSheet();
   list.appendChild(ln);
 }
+/* What got done in the chapter ending now (Tom, 2026-11-16, picked A:
+   "last chapter's wins"). Having done a thing is the strongest reason to
+   believe it can be done again (self-efficacy), so a new chapter opens on
+   what the last one held, not on what it missed. Numbers and the behaviour
+   only: never praise, never a score. Since the current chapter began, or the
+   last 8 weeks with none. A line with nothing in it is left out, and a
+   stretch with nothing shows nothing. TRAIN's sets are read when they land. */
+function chapterWins() {
+  const t = T(), c = Chapter.current();
+  const from = c ? c.start : Day.shift(t, -55);
+  const inP = d => !!d && d >= from && d <= t;
+  const days = {}, weeks = {};
+  Rec.all('set').forEach(r => { const p = r.payload || {}; if (inP(r.date) && !(p.plan && !p.done)) days[r.date] = 1; });
+  Object.keys(days).forEach(d => { const w = Goals.weekStart(d); weeks[w] = (weeks[w] || 0) + 1; });
+  let best = '';
+  Object.keys(weeks).forEach(w => { if (!best || weeks[w] > weeks[best]) best = w; });
+  const done = quests().filter(x => x.done && inP(x.doneOn) && !MACHINE[srcOf(x)]).length;
+  const reached = Rec.all('aim').filter(r => r.payload && r.payload.state === 'done' && inP(r.payload.doneOn)).length;
+  /* a day he logged something in STATUS; a phone's own steps are not him */
+  const logged = {};
+  Rec.all('ev').forEach(r => { if (inP(r.date) && ((r.payload && r.payload.e) || []).some(e => e.src !== 'phone')) logged[r.date] = 1; });
+  Rec.all('meal').forEach(r => { if (inP(r.date)) logged[r.date] = 1; });
+  const ticks = Rec.all('tick').filter(r => inP(r.date) && !(r.payload && r.payload.qty === 0)).length;
+  const n = Object.keys(days).length, nl = Object.keys(logged).length;
+  return {
+    label: c ? 'Since ' + dayWord(c.start) + (c.name ? ', ' + c.name : '') : 'The last 8 weeks',
+    items: [
+      [n, n === 1 ? 'training session' : 'training sessions'],
+      [Object.keys(weeks).length > 1 ? weeks[best] : 0, 'most sessions in a week, from ' + dayWord(best)],
+      [done, done === 1 ? 'task done' : 'tasks done'],
+      [reached, reached === 1 ? 'goal reached' : 'goals reached'],
+      [nl, nl === 1 ? 'day logged in STATUS' : 'days logged in STATUS'],
+      [ticks, ticks === 1 ? 'block or habit ticked' : 'blocks and habits ticked']
+    ].filter(x => x[0] > 0)
+  };
+}
+/* Days that feel like a new page (Tom, 2026-11-16, picked B): people start
+   more on a Monday or the 1st than on any Thursday (the fresh start effect). */
+function chapterDays(t) {
+  const mon = Day.shift(t, 7 - ((Day.dow(t) + 6) % 7));
+  const d = new Date(t + 'T12:00:00'), n = new Date(d.getFullYear(), d.getMonth() + 1, 1, 12);
+  const first = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-01';
+  return { mon: mon, first: first, month: n.toLocaleString('en', { month: 'long' }) };
+}
 function chapterSheet() {
   const t = T(), aimsNow = openAims();
   const over = quests().filter(x => !x.done && dueOf(x) && dueOf(x) < t && !x.rep && !(x.td && x.td.rec) && !MACHINE[srcOf(x)]);
@@ -1956,14 +2008,35 @@ function chapterSheet() {
   const pickDay = (anchor, cur, fn) => dateMenu(anchor, { due: cur || '' }, v => fn(v.due || ''), { bulk: true, title: 'WHICH DAY' });
   UI.dialog({ title: 'NEW CHAPTER', width: 620, body: b => {
     b.appendChild(el('p', 'oldnote', 'Pick where counting starts. Nothing is deleted; earlier days stay, they just stop counting.'));
+    const wbox = el('div', 'chwins');
+    const drawWins = () => {
+      const w = chapterWins();
+      wbox.innerHTML = '';
+      if (!w.items.length) return;
+      wbox.appendChild(el('h4', 'sh', esc(w.label)));
+      const gr = el('div', 'chwgrid');
+      w.items.forEach(x => gr.appendChild(el('div', 'chw', '<b>' + x[0] + '</b><span>' + esc(x[1]) + '</span>')));
+      wbox.appendChild(gr);
+    };
+    drawWins();
+    if (Rec.loaded && !Rec.loaded('set')) Rec.need('set').then(drawWins);
+    b.appendChild(wbox);
     const nm = UI.field('text', { placeholder: 'Its name (optional)' });
     nm.setAttribute('aria-label', 'The chapter’s name');
     nm.oninput = () => { st.name = nm.value; };
     b.appendChild(nm);
     b.appendChild(el('h4', 'sh', 'Starts'));
     const sbox = el('div', 'chips');
-    const drawStart = () => chipRow(sbox, [['t', ico('today') + ' Today'], ['pick', ico('calendar') + ' ' + (st.start === t ? 'Pick a day' : esc(dayWord(st.start)))]],
-      st.start === t ? 't' : 'pick', (v, c) => { if (v === 't') { st.start = t; drawStart(); drawApps(); } else pickDay(c, st.start, d => { st.start = d || t; drawStart(); drawApps(); }); });
+    const nd = chapterDays(t);
+    const drawStart = () => {
+      const which = st.start === t ? 't' : st.start === nd.mon ? 'mon' : st.start === nd.first ? 'first' : 'pick';
+      chipRow(sbox, [['t', ico('today') + ' Today'], ['mon', 'Next Monday'], ['first', 'The 1st of ' + esc(nd.month)],
+        ['pick', ico('calendar') + ' ' + (which === 'pick' ? esc(dayWord(st.start)) : 'Pick a day')]], which, (v, c) => {
+        if (v === 'pick') { pickDay(c, st.start, d => { st.start = d || t; drawStart(); drawApps(); }); return; }
+        st.start = v === 'mon' ? nd.mon : v === 'first' ? nd.first : t;
+        drawStart(); drawApps();
+      });
+    };
     b.appendChild(sbox);
     b.appendChild(el('h4', 'sh', 'Each app counts from'));
     const abox = el('div');
