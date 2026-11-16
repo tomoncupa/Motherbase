@@ -113,3 +113,5 @@ Settings size, STATUS.exe only, 2026-11-16: the whole screen was "a bit inconven
 ## Needs from the foundation
 
 Nothing waiting. (Marks floored to 3 to 1 on all four grounds by `skins.js`, 2026-10-22.)
+
+1.0.107, 2026-11-16: a status check opened by hand (the widget's face button with no dot up) restarts the timer from now (`deskManual`). Tom: "if I start a manual checkup, then it should reset the timer that I set before". Clicked in headless Chromium on the demo: 5 s from due, pressed, next timed check 77 min out (setting 60 to 90).
