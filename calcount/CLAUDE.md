@@ -245,6 +245,8 @@ Community and Estimate.
   Crunchy Chicken Sandwich, Mang Inasal rice and liempo, Greenwich pastas and
   others). A food here needs protein, carbs and fat.
 
+**Estimates lean high** (Tom, 2026-11-16: most Filipinos want to lose fat, and it is safer to err toward the higher range). An `est` food's calories sit about three quarters of the way up the range you would bet on four times in five for it as sold in Manila. CALCOUNT 1.0.6 raised 146 of the 154 estimates this way, +13% on average (turon 216 to 250, siomai 178 to 222), by Claude per food, not by a flat multiplier; drinks with alcohol were left alone. Sourced figures (`pub`, `label`, `ref`, `board`, `avg`) are copied as published and are never raised.
+
 **Never upgrade a `src` without a source.** Changing `est` to `pub` means the
 figure was read from something the chain published, and the commit says where.
 
