@@ -506,6 +506,11 @@ Each is short here; its story is under the heading named.
   (the Algrowrithm). (HISTORY.md: A program in weeks, and the coach's target (FORGE branch 1.0.21-1.0.22, on main as TRAIN 1.0.32, 2026-09-25))
 - **An open slot** ("Any Chest") is picked once for every week and survives a
   resend; a new exercise from a program reuses a muscle group by name. (HISTORY.md: Open slots, and a muscle group left alone (FORGE branch 1.0.23, on main as TRAIN 1.0.32, 2026-09-25))
+- **A lift with sets is never left deleted** (1.0.92, `TRAIN.reviveLifts`):
+  a starter comes back by its starter name, anything else as Unnamed lift;
+  an empty set is no reason. A set changed on another device recomputes
+  that lift's records. His data was cleaned 2026-11-16 (pound sets stored
+  as kilos, orphan sets, doubles, the group sort) through the backup inbox.
 - **Merge Into** moves every row onto the kept exercise with one UNDO;
   renaming or dropping a starter needs a `SEED_RENAME` or `SEED_FOLD` entry. (HISTORY.md: Merging two exercises, and starters renamed (1.0.35, 2026-09-25))
 - **Tidy Movements** (exercise list More, `TRAIN.tidyOpen`, screen `tidy`)

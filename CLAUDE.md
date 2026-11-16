@@ -549,7 +549,10 @@ store. Backup.exe hands every `*.json` in `Documents/Motherbase inbox` to
 rows: [{type, date, key, payload}], gone: [{type, date, key}]}`, only the
 types in the page's `INBOX_TYPES` go in (`kpiece` so far), and taken files
 move to `done/`. Once a day, signed in, so rows reach every device through
-live sync. `Backup.exe --force` runs it now.
+live sync. `Backup.exe --force` runs it now. A file named `train-cleanup-*.json`
+may also carry `fix` (fields merged into TRAIN `exercise`, `set` or `excat`
+rows still alive), `make` and `fixGone`: Claude's data cleanups, built from a
+backup, never a whole payload (2026-11-16).
 
 The Data button turns amber once a backup is 14 days old. LIVE SYNC carries
 no photos (a row over 64KB), so a backup or the sheet is still the only copy

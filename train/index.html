@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.91, 2026-11-16">
+<meta name="mb-version" content="1.0.92, 2026-11-16">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1568,6 +1568,35 @@ TRAIN.undoSort = function (did) {
 
 TRAIN.seedId = function (name) {
   return 'seed-' + String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+};
+
+/* A lift that still has sets is never left deleted (1.0.92). Deleting a lift
+   here deletes its sets with it, so a live set under a dead lift only comes
+   from two devices: the importer's clearSeed on one removed starters it saw
+   no sets for, while the phone was logging into them (5 Oct 2026, a "seed
+   hammer curl" showing by its id). The lift comes back: a starter with its
+   starter name and group, anything else as "Unnamed lift" in no group, which
+   Tidy Movements puts first. */
+TRAIN.reviveLifts = function () {
+  var ex = TRAIN.exercises(), seen = {}, made = 0, starter = {};
+  Object.keys(TRAIN.DEFAULT_EX).forEach(function (g) {
+    TRAIN.DEFAULT_EX[g].forEach(function (row, j) { starter[TRAIN.seedId(row[0])] = { g: g, name: row[0], kind: row[1], ord: j }; });
+  });
+  Rec.all('set').forEach(function (r) {
+    var id = r.payload && r.payload.ex;
+    var q = r.payload;
+    if (!id || ex[id] || seen[id]) return;
+    if (!q.r && !q.kg && !q.dur && !q.dist && !String(q.note || '').trim()) return;   /* an empty set is no reason */
+    seen[id] = 1;
+    var s = starter[id];
+    Rec.set('exercise', null, id, s
+      ? { name: s.name, cat: TRAIN.catByWord(s.g) || null, kind: s.kind, inc: s.kind === 0 ? 2.5 : 1,
+          rest: 0, unit: 0, fav: 0, note: '', graph: 0, ord: s.ord }
+      : { name: 'Unnamed lift', cat: null, kind: 'wr', inc: 2.5, rest: 0, fav: 0, note: '', graph: 0 });
+    made++;
+  });
+  if (made) { TRAIN._exC = null; TRAIN._musC = null; TRAIN.reindex(); }
+  return made;
 };
 
 /* ── folding the copies back into one ──
@@ -13123,13 +13152,21 @@ function boot() {
   if (TRAIN.foldSeeds()) TRAIN.recomputePRs();
   /* Only once every device's rows and tombstones are in, or a group deleted
      on another device comes back. */
-  Rec.ready(function () { if ((TRAIN.splitCoarse() + TRAIN.fillCats()) && TRAIN.redraw) TRAIN.redraw(); });
+  Rec.ready(function () { if ((TRAIN.splitCoarse() + TRAIN.fillCats() + TRAIN.reviveLifts()) && TRAIN.redraw) TRAIN.redraw(); });
   /* and again whenever exercises or sets arrive from another copy */
-  var foldT = null;
+  var foldT = null, foldEx = {};
   Rec.on(function (rows) {
     if (!rows || !rows.some(function (r) { return r.type === 'exercise' || r.type === 'set'; })) return;
     clearTimeout(foldT);
-    foldT = setTimeout(function () { if (TRAIN.foldSeeds()) { TRAIN.recomputePRs(); if (TRAIN.redraw) TRAIN.redraw(); } }, 800);
+    /* a set changed on another device (a weight corrected) changes that
+       lift's records here too, not only on the device that wrote it */
+    rows.forEach(function (r) { if (r.type === 'set' && r.payload && r.payload.ex) foldEx[r.payload.ex] = 1; });
+    foldT = setTimeout(function () {
+      var f = TRAIN.foldSeeds(), v = TRAIN.reviveLifts(), ids = Object.keys(foldEx);
+      foldEx = {};
+      if (f) TRAIN.recomputePRs(); else if (ids.length) TRAIN.recomputePRs(ids);
+      if ((f || v) && TRAIN.redraw) TRAIN.redraw();
+    }, 800);
   });
   TRAIN.restRestore();
   TRAIN.wake();
