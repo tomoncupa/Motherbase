@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.27, 2026-11-16">
+<meta name="mb-version" content="1.0.28, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1411,7 +1411,7 @@ function clipPlayer(t) {
   const audio = isVid ? document.createElement('video') : new Audio(); audio.preload = 'auto';
   if (isVid) { audio.playsInline = true; audio.setAttribute('playsinline', ''); audio.className = 'vid'; wrap.classList.add('hasvid'); wrap.insertBefore(audio, wrap.firstChild); }
   let url = null, stopAt = null, raf = 0;
-  const src = (t.clipP ? t.clipP.then(b => b ? (url = URL.createObjectURL(b)) : null) : Promise.resolve(row.data))
+  const src = (t.clipP ? t.clipP.then(b => b ? (url = URL.createObjectURL(b)) : null) : Promise.resolve(row.data ? (url = clipUrl(row)) : null))
     .then(s => { if (s) audio.src = s; else wrap.classList.add('none'); return s; });
   const tick = () => {
     head.style.left = pct(audio.currentTime);
@@ -3318,6 +3318,22 @@ function saveClip(t, blob) {
     Rec.set('tclip', t.date, t.key, row);
   };
   fr.readAsDataURL(blob);
+}
+/* A saved recording back as something a player can open. Its text form
+   starts "data:video/webm;codecs=vp8,opus;base64,", and the comma inside the
+   codecs ends the type early, so a browser read the rest as broken data and
+   every camera take refused to play once reopened (Tom, 2026-11-16: "It's
+   telling me the recording would not play"). Rebuilt from the bytes after
+   ";base64," with the plain type, which also mends recordings made before. */
+function clipUrl(row) {
+  const d = String(row.data || ''), i = d.indexOf(';base64,');
+  if (i < 0) return d;
+  try {
+    const bin = atob(d.slice(i + 8)), n = bin.length, u = new Uint8Array(n);
+    for (let k = 0; k < n; k++) u[k] = bin.charCodeAt(k);
+    const type = (String(row.mime || '').split(';')[0]) || (/^data:video/.test(d) ? 'video/webm' : 'audio/webm');
+    return URL.createObjectURL(new Blob([u], { type: type }));
+  } catch (e) { return d; }
 }
 const hasClip = t => !!(t.clipP || (t.key && Rec.has('tclip', t.date, t.key)));
 function finishWarm(m, secs) {
