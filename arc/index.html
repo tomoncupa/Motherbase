@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<meta name="mb-version" content="1.0.11, 2026-11-16">
+<meta name="mb-version" content="1.0.12, 2026-11-16">
 <title>ARC — Mind Canvas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;600&family=Space+Grotesk:wght@500;700&family=Caveat:wght@500;700&family=Patrick+Hand&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
@@ -168,6 +168,10 @@ body.presenting .pathbadge{display:none}
 .bk-text{font-size:14px;line-height:1.6;color:var(--ink);white-space:pre-wrap;max-width:75ch}
 .bk-q{display:block;width:100%;text-align:left;min-height:44px;padding:8px 12px;margin-bottom:6px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:13px;line-height:1.4;cursor:pointer}
 .bk-q:hover{border-color:var(--acc)}
+.bk-in{border:1px solid var(--line);border-radius:6px;margin-bottom:6px}
+.bk-in summary{min-height:44px;display:flex;flex-direction:column;justify-content:center;padding:6px 12px;cursor:pointer;font-size:13px;line-height:1.4;color:var(--ink)}
+.bk-in summary span{font-family:var(--f-mono);font-size:12px;color:var(--mut)}
+.bk-in .bk-text{padding:0 12px 10px}
 #bk-fixin{width:100%;min-height:220px;font-family:var(--f-mono);font-size:13px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:10px;resize:vertical}
 .node.gap{opacity:.4;border-style:dashed}
 .tstart{background:color-mix(in srgb,var(--acc) 14%,transparent);border:1px solid var(--acc);border-radius:10px;padding:12px 14px;margin-bottom:14px}
@@ -3142,9 +3146,9 @@ if(!RO){
    {t: {nodeId: [topic names]}, add: {topic name: subject}}. */
 var BANK='bank-fit';   /* the first bank; also what tells positionNodebar the code has run */
 const BANKS=[
-  {id:'bank-fit',title:'FITNESS KNOWLEDGE',subj:['fitness']},
-  {id:'bank-self',title:'PRODUCTIVITY AND SELF IMPROVEMENT',subj:['productivity','behaviour change','self improvement']},
-  {id:'bank-phil',title:'PHILOSOPHY AND OBSERVATIONS',subj:['philosophy','observations']},
+  {id:'bank-fit',gk:'fitness',title:'FITNESS KNOWLEDGE',subj:['fitness']},
+  {id:'bank-self',gk:'self',title:'PRODUCTIVITY AND SELF IMPROVEMENT',subj:['productivity','behaviour change','self improvement']},
+  {id:'bank-phil',gk:'phil',title:'PHILOSOPHY AND OBSERVATIONS',subj:['philosophy','observations']},
 ];
 const BANK_GROUPS=['SKILLS','STATS','CONDITIONS'];
 const bankOfSubj=s=>{s=String(s||'').toLowerCase();const b=BANKS.find(x=>x.subj.indexOf(s)>=0);return b?b.id:''};
@@ -3255,21 +3259,35 @@ function bankList(){
 }
 const bankQid=key=>'q-'+String(key).replace(/[^A-Za-z0-9_-]/g,'_');
 const bankPid=key=>'p-'+String(key).replace(/[^A-Za-z0-9_-]/g,'_');
-const BANK_SRC={said:'Said',skool:'Skool',ramble:'Ramble'};
-/* every piece, answers and kpieces alike: {id, key, kind, src, q, text, subj, when, row} */
+const BANK_SRC={said:'Said',skool:'Skool',ramble:'Ramble',post:'Post'};
+/* every piece, answers and kpieces alike: {id, key, kind, src, q, text, subj, when, row}.
+   One idea, one piece (2026-11-16, from OUTER HEAVEN's one pipeline): a row
+   named in a live kpiece's `srcs`, or a SAY IT TIGHTER answer (`how: 'tight'`
+   with a `parent`), is not a piece of its own. It rides on the piece that
+   names it, in `saidIn`, and stands alone again once that piece is gone. */
 function bankPieces(){
-  const out=[];
+  const out=[], all={};
   Rec.all('answer').forEach(r=>{
-    const a=r&&!r.deleted&&r.payload; if(!a||!a.q)return;
-    out.push({id:bankQid(r.key),key:r.key,type:'answer',src:'said',q:a.q,text:a.text||'',term:a.term||'',subj:String(a.subj||'fitness').toLowerCase(),
-      date:r.date,dur:a.dur,words:a.words,at:a.at||0});
+    const a=r&&!r.deleted&&r.payload; if(!a)return;
+    const p={id:bankQid(r.key),key:r.key,type:'answer',src:'said',q:a.q||'',text:a.text||'',term:a.term||'',subj:String(a.subj||'fitness').toLowerCase(),
+      date:r.date,dur:a.dur,words:a.words,at:a.at||0,how:a.how||'',parent:a.parent||'',srcs:[]};
+    all['answer|'+r.key]=p; if(a.q)out.push(p);
   });
   Rec.all('kpiece').forEach(r=>{
-    const p=r&&!r.deleted&&r.payload; if(!p||!p.title)return;
-    out.push({id:bankPid(r.key),key:r.key,type:'kpiece',src:p.src||'skool',q:p.title,text:p.text||'',term:'',subj:String(p.subj||'').toLowerCase(),
-      ref:p.ref||'',date:p.born||'',at:p.at||0});
+    const k=r&&!r.deleted&&r.payload; if(!k||!k.title)return;
+    const p={id:bankPid(r.key),key:r.key,type:'kpiece',src:k.src||'skool',q:k.title,text:k.text||'',term:'',subj:String(k.subj||'').toLowerCase(),
+      ref:k.ref||'',date:k.born||'',at:k.at||0,grade:k.grade,srcs:Array.isArray(k.srcs)?k.srcs:[]};
+    all['kpiece|'+r.key]=p; out.push(p);
   });
-  return out.sort((a,b)=>(a.at||0)-(b.at||0)||String(a.key).localeCompare(String(b.key)));
+  const into={};
+  out.forEach(p=>p.srcs.forEach(s=>{const k=(s&&s.type||'answer')+'|'+(s&&s.key); if(all[k]&&all[k]!==p)into[k]=p}));
+  Object.keys(all).forEach(k=>{const p=all[k]; if(p.type!=='answer'||p.how!=='tight'||!p.parent||into[k])return;
+    const par=all['answer|'+p.parent]; if(par&&par!==p)into[k]=par});
+  const host=k=>{let h=into[k],n=0; while(h&&into[h.type+'|'+h.key]&&n++<8)h=into[h.type+'|'+h.key]; return h};
+  out.forEach(p=>p.saidIn=[]);
+  Object.keys(into).forEach(k=>{const h=host(k); if(h&&h!==all[k])h.saidIn.push(all[k])});
+  out.forEach(p=>p.saidIn.sort((a,b)=>(a.at||0)-(b.at||0)||String(a.date).localeCompare(String(b.date))));
+  return out.filter(p=>!into[p.type+'|'+p.key]).sort((a,b)=>(a.at||0)-(b.at||0)||String(a.key).localeCompare(String(b.key)));
 }
 /* Topic scores for a piece, among `list`: the Skool term asked 9, the title
    naming the topic 3, the text naming it three or more times 1 to 4. */
@@ -3303,6 +3321,7 @@ function bankTopicsOf(p,list,bank){
   return bankScore(p,list.filter(t=>t.bank===bank)).slice(0,4).map(x=>x[2].name);
 }
 function bankWhen(p){
+  if(p.src==='post')return ['Post',p.grade!=null&&p.grade!==''?'grade '+p.grade:'',p.date&&window.Day&&Day.short?Day.short(p.date):p.date].filter(Boolean).join(' · ');
   if(p.src!=='said')return [BANK_SRC[p.src]||'Piece',p.ref,p.date&&window.Day&&Day.short?Day.short(p.date):p.date].filter(Boolean).join(' · ');
   const d=p.date&&window.Day&&Day.short?Day.short(p.date):(p.date||'');
   const s=Math.round(p.dur||0), t=s?Math.floor(s/60)+':'+String(s%60).padStart(2,'0'):'';
@@ -3317,7 +3336,7 @@ function bankWant(bid){
   if(bid==='bank-fit')BANK_GROUPS.forEach(g=>{N['g-'+g.toLowerCase()]={text:'['+g+']',parent:'root',bank:{kind:'grp'}}});
   list.forEach(t=>{
     N['t-'+bankSlug(t.name)]={text:t.name,parent:t.grp&&bid==='bank-fit'?'g-'+t.grp.toLowerCase():'root',bank:{kind:'t',name:t.name}};
-    tally[t.name]={said:0,skool:0,ramble:0}; qs[t.name]=[];
+    tally[t.name]={said:0,skool:0,ramble:0,post:0}; qs[t.name]=[];
   });
   bankPieces().forEach(p=>{
     if(bankOf(p,all)!==bid)return;
@@ -3329,8 +3348,8 @@ function bankWant(bid){
   });
   let on=0; const grp={};
   list.forEach(t=>{
-    const n=N['t-'+bankSlug(t.name)], c=tally[t.name], any=c.said+c.skool+c.ramble;
-    n.desc=any?[bankCount(c.said,'said','said'),bankCount(c.skool,'lesson','lessons'),bankCount(c.ramble,'ramble','rambles')].filter(Boolean).join(' · '):'No answers yet';
+    const n=N['t-'+bankSlug(t.name)], c=tally[t.name], any=c.said+c.skool+c.ramble+c.post;
+    n.desc=any?[bankCount(c.said,'said','said'),bankCount(c.skool,'lesson','lessons'),bankCount(c.ramble,'ramble','rambles'),bankCount(c.post,'post','posts')].filter(Boolean).join(' · '):'No answers yet';
     if(!any)n.gap=1; else on++;
     const o=grp[n.parent]=grp[n.parent]||{on:0,all:0}; o.all++; if(any)o.on++;
   });
@@ -3394,9 +3413,10 @@ var bankW={}, bankVer=0;
 function bankSync(make){
   if(RO||!DB||!DB.maps)return;
   bankVer++;
-  let redraw=false, saveIt=false; const made=[];
+  let redraw=false, saveIt=false; const made=[], gaps={};
   BANKS.forEach(B=>{
     const W=bankWant(B.id); bankW[B.id]=W;
+    gaps[B.gk]=W.list.filter(t=>{const n=W.nodes['t-'+bankSlug(t.name)];return n&&n.gap}).map(t=>t.name);
     let m=bankMap(B.id);
     const fresh=!m;
     if(fresh){
@@ -3410,6 +3430,9 @@ function bankSync(make){
   });
   if(redraw)render();
   if(saveIt)save();
+  /* the faded topics, for SPEAK's talking points; written only when they change */
+  const was=Rec.setting('arc','bankgaps');
+  if(JSON.stringify(was||null)!==JSON.stringify(gaps))Rec.setting('arc','bankgaps',gaps);
   if(made.length&&!make)toast('Knowledge bank'+(made.length>1?'s':'')+' made: '+made.join(', '));
   bankPanel(true);
 }
@@ -3458,9 +3481,9 @@ function bankPanel(force){
   $('#bankpanel h3').textContent=B.title;
   body.textContent='';
   body.appendChild(mk('div','tsec','COVERAGE'));
-  const by={said:0,skool:0,ramble:0}; W.items.forEach(x=>by[x.src]=(by[x.src]||0)+1);
+  const by={said:0,skool:0,ramble:0,post:0}; W.items.forEach(x=>by[x.src]=(by[x.src]||0)+1);
   body.appendChild(mk('p','bk-sum',W.on+' of '+W.list.length+' topics covered.'));
-  body.appendChild(mk('p','bk-hint',[bankCount(by.said,'answer said','answers said'),bankCount(by.skool,'Skool lesson','Skool lessons'),bankCount(by.ramble,'ramble','rambles')].filter(Boolean).join(' · ')||'Nothing in this bank yet.'));
+  body.appendChild(mk('p','bk-hint',[bankCount(by.said,'answer said','answers said'),bankCount(by.skool,'Skool lesson','Skool lessons'),bankCount(by.ramble,'ramble','rambles'),bankCount(by.post,'post','posts')].filter(Boolean).join(' · ')||'Nothing in this bank yet.'));
   const row=mk('div','bk-row');
   const ask=mk('button','bk-btn go','CHECK WITH CLAUDE'); ask.title='Copy this bank’s topics and pieces for Claude to check the sorting';
   ask.onclick=bankAsk;
@@ -3484,6 +3507,14 @@ function bankPanel(force){
       body.appendChild(chips);
     }
     body.appendChild(a.text?mk('div','bk-text',a.text):mk('p','bk-hint',a.src==='said'?'No transcript was saved for this answer.':'No text came with this piece.'));
+    /* what this piece was made from: free speaks, posts, a tighter take */
+    if(a.saidIn&&a.saidIn.length){
+      body.appendChild(mk('div','tsec','SAID IN'));
+      a.saidIn.forEach(x=>{const d=mk('details','bk-in'),s=mk('summary');
+        s.appendChild(mk('span',null,[x.how==='tight'?'Tighter':BANK_SRC[x.src]||'Piece',x.date&&window.Day&&Day.short?Day.short(x.date):x.date].filter(Boolean).join(' · ')));
+        s.appendChild(document.createTextNode(x.q||(x.text?x.text.slice(0,80):'')));d.appendChild(s);
+        d.appendChild(x.text?mk('div','bk-text',x.text):mk('p','bk-hint','No words were saved.'));body.appendChild(d)});
+    }
   }else if(b&&b.kind==='t'){
     body.appendChild(mk('h4',null,b.name));
     const ids=W.qs[b.name]||[];
