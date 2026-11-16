@@ -602,6 +602,15 @@ Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FR
 - **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
 - **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
 
+## DO THIS NEXT and SEND TO WRITE, 2026-11-16 (SPEAK 1.0.34)
+
+Tom: *"I don't just want numbers and statistics. I want the best course of action given what I just outputted. It doesn't have to be every speak take. It can just give me a button with content or send to [WRITE's] inbox as a raw seed."*
+
+- **DO THIS NEXT** at the top of every take's sheet (`doNext`), one verdict with its button, the numbers below: no transcript and the PC can write one, WRITE THE TRANSCRIPT; else the take reads like content (the content check, or coherence and concision both 4 or better), REFINE INTO CONTENT; else the weakest fault's drill, now ("Fix the weakest thing now: ..."); else Don't stop. It waits for the PC transcript and Claude's reading, and redraws when they land.
+- **SEND TO WRITE AS A RAW SEED** beside it on any take with a transcript: marks the take `seed: 1, seedAt`. OUTER HEAVEN brings only marked takes into WRITE's Inbox as raw seeds.
+- **The coach weighs ums by count as well as rate** (14 ums against 2 outranks 4 stammered starts), so the weakest fault matches what the numbers show.
+- **How this was missed**: every test ran in headless Chromium with a fake transcript plugged in, never a real take inside SPEAK.exe, whose engine has no speech-to-text. Root brief, Known traps.
+
 ## The transcript on the PC, summary, weakest, retry, 2026-11-16 (SPEAK 1.0.33)
 
 Tom: *"why was there no transcript? I also want to know which was my weakest metric ... a summary of what I said to be created as a draft to be added to data bank OR an option to retry the prompt WITHOUT losing my first entry."*

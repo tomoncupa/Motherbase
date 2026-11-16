@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.33, 2026-11-16">
+<meta name="mb-version" content="1.0.34, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1231,7 +1231,9 @@ function coach(t) {
   /* fillers, and where they sat */
   const lim = goalOf.fpm != null ? goalOf.fpm : tg.fpm;
   if (m.fpm != null && m.fpm > lim && (m.fillers || 0) >= 2) {
-    const sev = (m.fpm - lim) / Math.max(1, lim) * 0.9;
+    /* how far over, by the rate or by the count of ums, whichever is worse:
+       14 ums against 2 is a bigger miss than 6.2 a minute against 4 says */
+    const sev = Math.max((m.fpm - lim) / Math.max(1, lim), ((m.held || 0) - 2) / 6) * 0.9;
     const held = (ev && ev.held) || [], n = held.length, pz = (ev && ev.pz) || [];
     const afterL = held.filter(h => pz.some(p => p[0] + p[1] >= h[0] - 0.6 && p[0] + p[1] <= h[0] + 0.1)), after = afterL.length;
     const cut = Math.max(10, Math.round(end * 0.2)), earlyL = held.filter(h => h[0] < cut), early = earlyL.length;
@@ -2232,6 +2234,55 @@ const CONTENT_SIGNS = [
   [/\b(two|three|four|five|2|3|4|5) (things|ways|mistakes|rules|steps|reasons|habits|tips)\b/i, 'a list'],
   [/\b(you (need|have) to|if you want|try this|do this|start with)\b/i, 'advice for the viewer'],
 ];
+/* DO THIS NEXT (SPEAK 1.0.34). Tom, 2026-11-16: "I don't just want numbers
+   and statistics. I want the best course of action given what I just
+   outputted." One verdict at the top of every take, with its button, and the
+   numbers below it for when he wants them. In order:
+   1. no transcript and the PC can write one: write it first, nothing else
+      can be judged without it;
+   2. the take reads like content (the content check, or Claude scoring it 4
+      or better on both coherence and concision): refine it;
+   3. otherwise: the drill for the weakest thing, now, while it is fresh.
+   SEND TO WRITE sits beside every take with a transcript: it marks the take
+   `seed: 1`, and OUTER HEAVEN brings only marked takes into WRITE's Inbox
+   as raw seeds ("It doesn't have to be every speak take"). */
+function doNext(t, d, h) {
+  const box = el('div', 'cnt mb-plate donext');
+  box.appendChild(el('h3', null, 'DO THIS NEXT'));
+  const say = el('p'), acts = el('div', 'acts');
+  box.appendChild(say); box.appendChild(acts);
+  const btn = (label, go, fn) => { const b = el('button', 'mb-btn mb-press mb-tap' + (go ? ' go' : ''), '<span>' + label + '</span>'); b.onclick = fn; acts.appendChild(b); return b; };
+  const fill = () => {
+    const x = takes().filter(y => y.key === t.key)[0] || t, jg = x.judge, wk = coach(x)[0];
+    say.innerHTML = ''; acts.innerHTML = '';
+    if (!x.tx && window.MB_HEAR && (HEAR.busy[x.key] || hasClip(x))) {
+      say.innerHTML = '<b>Get the transcript first.</b> Without your words, crutch phrases, coherence and concision cannot be judged, and nothing reaches your bank.';
+      if (HEAR.busy[x.key]) btn('WRITING IT ON THIS PC...', false, () => {}).disabled = true;
+      else btn('WRITE THE TRANSCRIPT', true, () => { const row = Rec.get('tclip', x.date, x.key); if (row) fetch(clipUrl(row)).then(r => r.blob()).then(bl => { hearTake(x, bl); fill(); }); });
+      return false;
+    }
+    const strong = jg && jg.coh >= 4 && jg.con >= 4, why = contentCheck(x);
+    if (x.tx && (strong || why)) {
+      say.innerHTML = '<b>This is content. Refine it while it is fresh.</b> ' + esc(strong ? 'It held together and stayed tight (coherence ' + jg.coh + ', concision ' + jg.con + ' of 5).' : 'It has ' + why.join(' and ') + '.');
+      btn('REFINE INTO CONTENT', true, () => { if (h) h.close(); openRefine(x); });
+    } else if (wk && drillById(wk.fix)) {
+      const fx = drillById(wk.fix);
+      say.innerHTML = '<b>Fix the weakest thing now: ' + esc(FAULT[wk.id] || wk.id) + '.</b> ' + esc(wk.what) + ' Do ' + esc(fx.name) + ', ' + mmss(durOf(fx)) + ', then go again.';
+      btn(fx.name.toUpperCase(), true, () => { if (h) h.close(); fixFrom = x; openDrill(fx); });
+    } else {
+      say.innerHTML = '<b>Nothing stood out. Go longer.</b> Two minutes on a harder topic, no stopping.';
+      btn('DON\u2019T STOP', true, () => { if (h) h.close(); openDrill(drillById('lib-nostop')); });
+    }
+    if (x.tx) {
+      const sent = !!x.seed;
+      const sb = btn(sent ? 'SENT TO WRITE' : 'SEND TO WRITE AS A RAW SEED', false, () => { Rec.patch('take', x.date, x.key, { seed: 1, seedAt: Date.now() }); sb.disabled = true; sb.innerHTML = '<span>SENT TO WRITE</span>'; UI.toast('In WRITE\u2019s Inbox after the next nightly backup.'); });
+      sb.disabled = sent;
+    }
+    return !!x.tx || !window.MB_HEAR;
+  };
+  if (!fill()) { let n = 0; const iv = setInterval(() => { n++; if (!box.isConnected || fill() || n > 400) clearInterval(iv); }, 1500); }
+  return box;
+}
 function contentCheck(t) {
   const tx = String(t.tx || '');
   if (tx.split(/\s+/).filter(Boolean).length < 60) return null;
@@ -3637,6 +3688,7 @@ function showTake(t, html) {
     onClose: () => { if (cb) cb._stop(); },
     body: (b, h) => {
       if (d && d.check) { b.appendChild(checkBox(t)); return; }
+      if (d && !d.fix && t.drill !== 'warm') b.appendChild(doNext(t, d, h));
       if (d) b.appendChild(cb = coachBox(t, d, h));
       if (d) {
         const gs = el('div', 'stats');
