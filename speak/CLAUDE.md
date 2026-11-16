@@ -584,6 +584,16 @@ can just skip directly into a free flowing ramble."*
   showing them is OUTER HEAVEN's work, reading `topic` rows with `kind:
   'jump'` and no `used` from the nightly backup.
 
+## From your posts and drafts made, added 2026-11-16 (SPEAK 1.0.25)
+
+Tom approved both through the SPEAK/knowledge master chat ("Yes, all three"). FREE SPEAK is settled as his one place to ramble out loud.
+
+- **postspeech** rows (OUTER HEAVEN, through the inbox; spec `postspeech-spec.md` in the oh-speak-feed side notes) are read as takes of two pseudo drills, `post-story` (style live) and `post-reel` (style short), so `coach()` names their fault (`postFaults`). A cut reel (`raw` false) drops um, dead-air and run-on faults. They never count in TODAY'S DRILLS, steps, PROGRESS or practice numbers.
+- **FOCUS**: a fault top in 2+ posts of the last 14 days counts once more, and posts alone can raise crutch phrases. The card says "and also in N of your posts", or "the top fault in N of your posts" when only posts raised it.
+- **FROM YOUR POSTS** on TODAY under FOCUS: each post of the last 14 days with pace, crutch a minute (top phrase), "at least" ums and long silences; the sheet has the coach's fault and drill, the transcript with crutch phrases marked, the `how` honesty lines and OPEN THE POST.
+- **YOUR VOICE** gains a Posted column, every post's words read as one speaker.
+- **draftmade** (undated, keyed by the take; `tools/backup.html` takes it): the draft shows "Posted <day> as a <kind>, graded N" with the link, leaves POSSIBLE CONTENT, and SPEAK sets its own `draft.state` to `done`, `doneBy: 'post'`, `doneAt` from the row, only if the draft was open (`syncMade`). When the row goes (Tom marked the match wrong), a draft with `doneBy: 'post'` goes back to open; one he pressed MADE IT on stays made.
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync

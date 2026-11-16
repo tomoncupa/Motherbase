@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.24, 2026-11-16">
+<meta name="mb-version" content="1.0.25, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1076,6 +1076,15 @@ const FS = Object.assign({}, FT, { id: 'free', skill: 'free', kind: 'free', name
 const TIGHT = Object.assign({}, FS, { id: 'tight', name: 'Say it tighter', open: false, dur: 60,
   why: 'Saying a point again in a minute is how a ramble becomes a Reel, and the second take shows what changed in your delivery.',
   how: 'Make the one point again, tight, in sixty seconds.' });
+/* FROM YOUR POSTS (SPEAK 1.0.24). Tom approved 2026-11-16 ("Yes, all
+   three", the SPEAK/knowledge master chat, decision 4): how he spoke in what
+   he posted shows beside his practice. OUTER HEAVEN writes one `postspeech`
+   row per posted Story or reel, shaped like a take (spec postspeech-spec.md
+   in the oh-speak-feed side notes). They are read as takes of these two
+   pseudo drills so coach() can name a fault; they never count in TODAY'S
+   DRILLS, steps, PROGRESS or practice numbers. */
+const PS_STORY = { id: 'post-story', skill: 'free', name: 'Story', style: 'live', goals: () => [] };
+const PS_REEL = { id: 'post-reel', skill: 'free', name: 'Reel', style: 'short', goals: () => [] };
 const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || (d.skill === 'fitness' ? FIT_SKILL : d.skill === 'other' ? OTHER_SKILL : d.skill === 'ask' ? ASK_SKILL : d.skill === 'free' ? FREE_SKILL : TOPIC_SKILL);
 /* ══════════════ the coach ══════════════
    Tom, 2026-11-16: "I need Speak to actually give me feedback and drills for
@@ -1145,7 +1154,7 @@ const FIXES = [
 ];
 FIXES.forEach(f => { f.fix = true; f.step = 0; });
 const isFix = id => /^fix-/.test(id || '');
-const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : id === 'tight' ? TIGHT : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
+const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : id === 'tight' ? TIGHT : id === 'post-story' ? PS_STORY : id === 'post-reel' ? PS_REEL : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
 const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
@@ -1217,9 +1226,71 @@ function focus() {
   const recent = takes().filter(t => t.drill !== 'warm' && !isFix(t.drill) && t.date >= since).slice(-5);
   const n = {}, last = {};
   recent.forEach(t => { const f = coach(t)[0]; if (!f) return; n[f.id] = (n[f.id] || 0) + 1; last[f.id] = { f: f, t: t }; });
-  const best = Object.keys(n).sort((a, b) => n[b] - n[a] || (last[b].t.at || 0) - (last[a].t.at || 0))[0];
+  /* a fault top in two or more posts of the last 14 days counts once more,
+     and posts alone may raise crutch phrases, which practice only sees with
+     the transcript on */
+  const pn = {}, plast = {};
+  postsRecent().forEach(r => { const f = postFaults(r)[0]; if (!f) return; pn[f.id] = (pn[f.id] || 0) + 1; plast[f.id] = f; });
+  Object.keys(pn).forEach(id => { if (pn[id] < 2) return; n[id] = Math.max((n[id] || 0) + 1, id === 'crutch' ? 2 : 0); if (!last[id]) last[id] = { f: plast[id], t: null }; });
+  const best = Object.keys(n).sort((a, b) => n[b] - n[a] || ((last[b].t || {}).at || 0) - ((last[a].t || {}).at || 0))[0];
   if (!best || n[best] < 2) return null;
-  return { f: last[best].f, t: last[best].t, n: n[best], of: recent.length };
+  return { f: last[best].f, t: last[best].t, n: n[best], of: recent.length, posts: pn[best] >= 2 ? pn[best] : 0 };
+}
+const postRows = () => Rec.all('postspeech').map(r => Object.assign({ key: r.key, date: r.date }, r.payload)).sort((a, b) => (b.at || 0) - (a.at || 0));
+const postsRecent = () => { const since = Day.shift(Day.today(), -13); return postRows().filter(r => (r.day || r.date || '') >= since); };
+const postTake = r => Object.assign({ drill: r.kind === 'story' ? 'post-story' : 'post-reel', goals: [] }, r);
+/* a cut reel's ums and gaps measure the edit, not him; posts have no eyes, voice or mouth readings */
+const POST_RAW_ONLY = { fillers: 1, 'um-pause': 1, 'um-start': 1, 'um-end': 1, 'dead-air': 1, 'run-on': 1 };
+const postFaults = r => coach(postTake(r)).filter(f => (r.raw || !POST_RAW_ONLY[f.id]) && ['eyes', 'flat', 'mumble', 'mouth'].indexOf(f.id) < 0);
+function postLine(r) {
+  const m = r.m || {}, mins = (m.spoken || 0) / 60;
+  const top = Object.entries(r.hits || {}).filter(([w]) => FILLERS.indexOf(w) < 0).sort((x, y) => y[1] - x[1])[0];
+  return [m.wpm != null ? Math.round(m.wpm) + ' wpm' : '', mins > 0 && m.crutch ? r1(m.crutch / mins) + ' crutch a minute' + (top ? ' ("' + top[0] + '")' : '') : 'no crutch phrases',
+    r.raw && m.fillers != null ? 'at least ' + m.fillers + ' um' + (m.fillers === 1 ? '' : 's') : '', r.raw && m.longP ? m.longP + ' long silence' + (m.longP === 1 ? '' : 's') : ''].filter(Boolean).join(' \u00b7 ');
+}
+function postsCard(pr) {
+  const c = card('FROM YOUR POSTS', pr.length + ' in 14 days');
+  c.appendChild(el('p', 'muted', 'How you spoke in what you posted. Kept apart from your practice numbers.'));
+  const list = el('div', 'list');
+  pr.forEach(r => {
+    const b = el('button', 'row mb-plate mb-press mb-tap'), f = postFaults(r)[0];
+    b.innerHTML = '<span class="tx"><span class="nm">' + esc((r.kind === 'story' ? 'Story' : r.kind === 'reel' ? 'Reel' : 'Post') + ', ' + Day.label(r.day || r.date)) + (f ? ' \u00b7 ' + esc(FAULT[f.id] || f.id) : '') + '</span><span class="sub">' + esc(postLine(r)) + '</span></span>';
+    b.onclick = () => showPost(r);
+    list.appendChild(b);
+  });
+  c.appendChild(list);
+  return c;
+}
+function showPost(r) {
+  const fs = postFaults(r), f = fs[0], fx = f && drillById(f.fix);
+  UI.dialog({
+    title: (r.kind === 'story' ? 'STORY' : r.kind === 'reel' ? 'REEL' : 'POST') + ' \u00b7 ' + Day.label(r.day || r.date).toUpperCase(), width: 560,
+    body: (b, h) => {
+      b.appendChild(el('p', 'muted', esc(postLine(r))));
+      if (f) {
+        const box = el('div', 'cnt mb-plate');
+        box.appendChild(el('h3', null, 'WHAT TO FIX'));
+        box.appendChild(el('p', 'what', esc(f.what)));
+        box.appendChild(el('p', 'muted', 'Fix: ' + esc(f.cue)));
+        if (fx) { const l = el('div', 'list'); l.appendChild(drillRow(fx)); box.appendChild(l); }
+        b.appendChild(box);
+      } else b.appendChild(el('p', 'muted', 'Nothing the coach can measure stood out.'));
+      if (r.tx) {
+        const words = Object.keys(r.hits || {}).sort((x, y) => y.length - x.length).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        let html = esc(r.tx).replace(/ \| /g, '<br>');
+        if (words.length) html = html.replace(new RegExp('\\b(' + words.join('|') + ')\\b', 'gi'), '<mark>$1</mark>');
+        b.appendChild(el('h3', null, 'WHAT YOU SAID'));
+        b.appendChild(el('div', 'tx', html));
+      }
+      const how = r.how || {};
+      const hl = Object.keys(how).map(k => how[k]).filter(Boolean);
+      if (!r.raw) hl.unshift('A cut reel: its ums and silences measure the edit, so only pace and crutch phrases count.');
+      if (hl.length) b.appendChild(el('p', 'muted', hl.map(esc).join('<br>')));
+      if (r.link) { const a = el('a', 'mb-btn mb-press mb-tap', 'OPEN THE POST'); a.href = r.link; a.target = '_blank'; a.rel = 'noopener'; b.appendChild(a); }
+      paintIcons(b);
+    },
+    actions: [{ label: 'CLOSE' }],
+  });
 }
 /* the take drawn as a strip: each um a tick, each silence a gap */
 function timeline(t) {
@@ -1736,6 +1807,8 @@ function drawVoice(m) {
   if (me.n < 30) c.appendChild(el('p', 'muted', 'Your voice builds from your transcripts. Answer a FITNESS or OTHER TOPIC to start it.'));
   else {
     const cols = [{ name: 'You', v: me }].concat(sps.map(sp => ({ name: sp.name, v: speakerVoice(sp), sp: sp })));
+    const pt = postRows().map(r => String(r.tx || '').replace(/ \| /g, ' ')).join(' ');
+    if (wordsOf(pt).length >= 30) cols.splice(1, 0, { name: 'Posted', v: speakerVoice({ name: 'Posted', text: pt }) });
     const tb = el('div', 'voice mb-scroll');
     let html = '<table><thead><tr><th></th>' + cols.map(x => '<th>' + esc(x.name) + '</th>').join('') + '</tr></thead><tbody>';
     if (me.wpm != null) html += '<tr><th>Pace<small>words a minute, 30 days</small></th><td>' + Math.round(me.wpm) + '</td>' + cols.slice(1).map(() => '<td class="muted">·</td>').join('') + '</tr>';
@@ -2015,6 +2088,23 @@ function contentCheck(t) {
 }
 const drafts = () => Rec.all('draft').map(r => Object.assign({ key: r.key, date: r.date }, r.payload)).sort((a, b) => (b.at || 0) - (a.at || 0));
 const draftOf = t => Rec.get('draft', t.date, t.key);
+/* DRAFT MADE (SPEAK 1.0.24). Tom approved 2026-11-16 (decision 2): OUTER
+   HEAVEN matches a post to the WRITE document made from a draft and writes
+   `draftmade`, keyed by the take, undated, through Backup.exe's inbox
+   ({take, doc, post, day, kind, permalink, grade, at}); it never writes
+   `draft` itself. SPEAK shows it and marks its own draft made. */
+const madeOf = k => Rec.get('draftmade', null, k);
+function syncMade() {
+  /* a post marks an open draft made; if the match is later marked wrong
+     (the row goes), only a draft the post marked goes back, never one he
+     pressed MADE IT on */
+  drafts().forEach(d => {
+    const dm = madeOf(d.key);
+    if (dm && !d.state) Rec.patch('draft', d.date, d.key, { state: 'done', doneBy: 'post', doneAt: dm.at ? dm.at * (dm.at < 1e12 ? 1000 : 1) : Date.now() });
+    else if (!dm && d.state === 'done' && d.doneBy === 'post') Rec.patch('draft', d.date, d.key, { state: '', doneBy: '', doneAt: 0 });
+  });
+}
+const madeLine = dm => 'Posted ' + Day.label(dm.day || '') + ' as a ' + (dm.kind || 'post') + (dm.grade != null ? ', graded ' + dm.grade : '') + '.';
 const REF = { on: !!window.MB_REFINE, open: false, wait: {} };
 try {
   window.chrome.webview.addEventListener('message', e => {
@@ -2034,7 +2124,9 @@ function askRefine(prompt) {
 function contentBox(t, h) {
   const box = el('div', 'cnt mb-plate');
   const dr = draftOf(t), why = contentCheck(t);
-  if (dr) box.appendChild(el('p', 'muted', 'A draft from this take, ' + ((dr.vers || []).length) + ' version' + ((dr.vers || []).length === 1 ? '' : 's') + (dr.state === 'done' ? ', made' : dr.state === 'dropped' ? ', dropped' : '') + '.'));
+  const dmk = dr && madeOf(t.key);
+  if (dmk) { const pl = el('p', null, '<b>' + esc(madeLine(dmk)) + '</b>' + (dmk.permalink ? ' <a href="' + esc(dmk.permalink) + '" target="_blank" rel="noopener">Open the post</a>' : '')); box.appendChild(pl); }
+  else if (dr) box.appendChild(el('p', 'muted', 'A draft from this take, ' + ((dr.vers || []).length) + ' version' + ((dr.vers || []).length === 1 ? '' : 's') + (dr.state === 'done' ? ', made' : dr.state === 'dropped' ? ', dropped' : '') + '.'));
   else if (why) box.appendChild(el('p', null, '<b>This could be content.</b> It has ' + esc(why.join(' and ')) + '.'));
   const b = el('button', 'mb-btn mb-press mb-tap' + (why || dr ? ' go' : ''), ICN('edit') + '<span>' + (dr ? 'OPEN DRAFT' : 'REFINE INTO CONTENT') + '</span>');
   b.onclick = () => { if (h) h.close(); openRefine(t); };
@@ -2091,6 +2183,8 @@ function openRefine(t) {
     body: (b, h) => {
       const d = dr();
       b.appendChild(el('p', 'muted', esc((d.prompt ? d.prompt + ' · ' : '') + Day.label(t.date))));
+      const dm = madeOf(t.key);
+      if (dm) b.appendChild(el('p', null, '<b>' + esc(madeLine(dm)) + '</b>' + (dm.permalink ? ' <a href="' + esc(dm.permalink) + '" target="_blank" rel="noopener">Open the post</a>' : '')));
       b.appendChild(UI.segmented(FMTS.map(f => ({ id: f.id, name: f.name })), d.fmt || 'short', v => put({ fmt: v })));
       nav = el('div', 'ref-ver');
       const pv = el('button', 'mb-btn mb-press mb-tap pv', ICN('back')); pv.setAttribute('aria-label', 'Older version');
@@ -2129,7 +2223,8 @@ function openRefine(t) {
 /* the first version (what he said) always stays; then the newest eleven */
 function trimVers(vs) { return vs.length <= 12 ? vs : [vs[0]].concat(vs.slice(vs.length - 11)); }
 function drawContent(m) {
-  const open = drafts().filter(d => !d.state);
+  syncMade();
+  const open = drafts().filter(d => !d.state && !madeOf(d.key));
   if (!open.length) return;
   const c = card('POSSIBLE CONTENT', String(open.length));
   open.forEach(d => {
@@ -2371,13 +2466,15 @@ function drawToday(m) {
   const fo = focus();
   if (fo) {
     const fc = card('FOCUS', fo.n + ' of the last ' + fo.of);
-    fc.appendChild(el('p', 'what', esc(FAULT[fo.f.id] || fo.f.what) + ', the top fault in ' + fo.n + ' of your last ' + fo.of + ' takes.'));
+    fc.appendChild(el('p', 'what', esc(FAULT[fo.f.id] || fo.f.what) + (fo.t ? ', the top fault in ' + fo.n + ' of your last ' + fo.of + ' takes' + (fo.posts ? ', and also in ' + fo.posts + ' of your posts.' : '.') : ', the top fault in ' + fo.posts + ' of your posts from the last 14 days.')));
     fc.appendChild(el('p', 'muted', 'Fix: ' + esc(fo.f.cue)));
     const fl = el('div', 'list'), fx = drillById(fo.f.fix);
     if (fx) fl.appendChild(drillRow(fx, fo.t));
     fc.appendChild(fl);
     m.appendChild(fc);
   }
+  const pr = postsRecent();
+  if (pr.length) m.appendChild(postsCard(pr));
   const dc = card('TODAY\'S DRILLS', done.filter(t => t.drill !== 'warm' && t.drill !== TT.id && t.drill !== FT.id && t.drill !== OT.id && t.drill !== AQ.id && !isFix(t.drill)).length + ' done');
   const cs = curStage(), sg = STAGES[cs - 1];
   if (sg) {
