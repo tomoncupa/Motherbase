@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.123, 2026-11-16">
+<meta name="mb-version" content="1.0.124, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -387,6 +387,7 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
   #grid > .w[data-sz=s] .ckbig{font-size:min(var(--f-8),70cqh);line-height:1}
   #grid > .w[data-sz=m] .w-body > .fits{min-height:var(--s-7,48px)}
   #grid > .w .sz-cut{display:none !important}
+  #grid > .w .sz-wrap{white-space:normal !important;text-overflow:clip !important}
 }
 /* A chart takes the room that is left, but never less than a readable strip:
    with the answer on top of it, a small widget left it no room at all. */
@@ -416,6 +417,8 @@ body.editing .w{box-shadow:var(--e-3),0 0 0 1px var(--acc)}
 .bh-pair.bh-p-vitruvian .bh-sv{width:22%;align-self:center}
 .row .bh-dot{flex:0 0 auto;width:var(--s-2);height:var(--s-2);border-radius:var(--radius-full,999px)}
 .row.bh-row{flex-wrap:wrap;row-gap:0}
+.bh-zero{font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--dim);padding:0 var(--s-1) var(--s-2);line-height:var(--lh-tight)}
+.bh-zero b{color:var(--txt);font-weight:inherit;letter-spacing:.14em;margin-right:var(--s-1)}
 .row .bh-rec{margin-left:auto;display:inline-flex;align-items:center;justify-content:flex-end;min-width:5ch;gap:var(--s-1);
   font-family:var(--f1);font-size:var(--f-1);letter-spacing:.06em;color:var(--dim2)}
 @media (min-width:821px){
@@ -2969,6 +2972,10 @@ const WIDGETS = {
       const days = (cfg && cfg.days) || 7, today = LifeOS.day(), from = LifeOS.shift(today, -(days - 1));
       const heat = bodyHeat(from, today);
       const regs = Object.keys(BODY_NAMES).filter(k => heat.v[k] > 0).sort((a, b) => heat.v[b] - heat.v[a]);
+      /* the muscles at 0 sets, one line at the top of the list, so a short
+         card that leaves rows off still shows them (Tom, 2026-11-16: "show
+         sets done always so that I can see if I did 0 sets") */
+      const zero = Object.keys(BODY_NAMES).filter(k => !(heat.v[k] > 0));
       if (!regs.length && !heat.off.length) {
         /* A8, 2026-10-05: the body, every muscle in its zero colour, and the
            sentence under it, so a new client sees the map they are about to
@@ -3000,6 +3007,7 @@ const WIDGETS = {
             ((typeof Icons !== 'undefined' && Icons.svg('rest', { size: 12 })) || '') + bodyHours(rec[k].left) + '</span>' : '<span class="bh-rec"></span>');
         list.appendChild(row);
       });
+      if (zero.length && partOn(cfg, 'list')) side.appendChild(el('div', 'bh-zero', '<b>0 SETS</b> ' + zero.map(k => esc(BODY_NAMES[k])).join(', ')));
       if (partOn(cfg, 'list')) side.appendChild(list);
       if (heat.off.length && partOn(cfg, 'off')) {
         const off = el('div', 'empty');
@@ -7892,13 +7900,26 @@ function sizeCards(nodes, cw, R, gap) {
    whole row goes rather than the list. */
 function cutCards(nodes) {
   nodes.forEach(n => {
-    n.querySelectorAll('.sz-cut').forEach(e => e.classList.remove('sz-cut'));
+    n.querySelectorAll('.sz-cut, .sz-wrap').forEach(e => e.classList.remove('sz-cut', 'sz-wrap'));
+    n.querySelectorAll('[data-fit]').forEach(e => { e.style.fontSize = e.dataset.fit === '-' ? '' : e.dataset.fit; delete e.dataset.fit; });
     /* every size since 2026-11-16 (Tom: "I don't want, as much as possible,
        intra widget scrolling"): a card never scrolls inside, so whatever
        its size and zoom leave no room for is left off whole */
     if (NARROW()) return;
     const body = n.querySelector(':scope > .w-body');
     if (!body || body.classList.contains('appslot')) return;
+    /* Words cut with "…" wrap instead (DESIGN.md: his words are never
+       ellipsed), before anything is measured for height, so a wrapped line
+       that no longer fits goes whole below. Only a box actually cut. */
+    body.querySelectorAll('*').forEach(e => {
+      if (!(e.scrollWidth > e.clientWidth + 1 && e.firstChild && getComputedStyle(e).textOverflow === 'ellipsis')) return;
+      /* two lines at most: in a box too narrow for that (a todo beside its
+         tick in the smallest card) wrapping stood one word on each line,
+         400px tall, and the card showed nothing, so the "…" stays */
+      const h = e.offsetHeight;
+      e.classList.add('sz-wrap');
+      if (e.offsetHeight > h * 2.2) e.classList.remove('sz-wrap');
+    });
     /* the padding is read at 100% and drawn in the card's zoom: unscaled, a
        chart that fills a card zoomed out counted as a few pixels over and
        was left off whole (HALF-LIFE at 50%, 2026-11-16) */
@@ -7940,7 +7961,56 @@ function cutCards(nodes) {
         e.classList.add('sz-cut');
       }
     });
+    cutSides(n, body);
   });
+}
+/* The same rule across: a word or a number the card or one of its boxes
+   cuts at the side is left off whole, last first, so "HAMSTRINGS" does not
+   read "HAMSTRI" in a card zoomed to 200%. The last words left in a card
+   stay, cut or not: something beats nothing. Words a box hides whole were
+   left off on purpose and are not touched (2026-11-16, tools/home-sweep.py). */
+function cutSides(n, body) {
+  /* big type shrinks to fit first (DESIGN.md: shrink, then wrap, then leave
+     off): DAY PLAN's letter, the clock, a phase's name. Never under 12px. */
+  for (let pass = 0; pass < 6; pass++) {
+    const big = cutTexts(n, body).filter(o => o.cut && parseFloat(getComputedStyle(o.e).fontSize) > 13);
+    if (!big.length) break;
+    big.forEach(o => {
+      const fs = parseFloat(getComputedStyle(o.e).fontSize);
+      if (o.e.dataset.fit == null) o.e.dataset.fit = o.e.style.fontSize || '-';
+      o.e.style.fontSize = Math.max(12, Math.floor(fs * 0.82)) + 'px';
+    });
+  }
+  const texts = cutTexts(n, body);
+  const left = texts.filter(o => !o.cut).length;
+  if (!left) return;
+  texts.reverse().forEach(o => { if (o.cut) o.e.classList.add('sz-cut'); });
+}
+/* every piece of words the card shows, and whether a box cuts it (across
+   or down); words a box hides whole are not listed */
+function cutTexts(n, body) {
+  const card = n.getBoundingClientRect();
+  const texts = [];
+  const wk = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  for (let x = wk.nextNode(); x; x = wk.nextNode()) {
+    if (!x.nodeValue.trim() || !x.parentElement || x.parentElement.closest('.sz-cut')) continue;
+    const rg = document.createRange(); rg.selectNodeContents(x);
+    const q = rg.getBoundingClientRect();
+    if (q.width < 0.5 || q.height < 0.5) continue;
+    /* what clips it: the card, and any box between with its overflow cut */
+    let l = card.left, r = card.right, t = card.top, b = card.bottom;
+    for (let a = x.parentElement; a && a !== n; a = a.parentElement) {
+      if (a.scrollWidth <= a.clientWidth + 1 && a.scrollHeight <= a.clientHeight + 1 && a !== body) continue;
+      const cs = getComputedStyle(a);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const ar = a.getBoundingClientRect();
+      l = Math.max(l, ar.left); r = Math.min(r, ar.right); t = Math.max(t, ar.top); b = Math.min(b, ar.bottom);
+    }
+    const sw = Math.min(q.right, r) - Math.max(q.left, l), sh = Math.min(q.bottom, b) - Math.max(q.top, t);
+    if (sw <= 0.5 || sh <= 0.5) continue;
+    texts.push({ e: x.parentElement, cut: sw < q.width - 2 || sh < q.height - 2 });
+  }
+  return texts;
 }
 /* A fit card measured in the fallback font came out a row short and was
    never measured again: MACROS opened with CALORIES cut in half, then grew
