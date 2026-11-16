@@ -115,6 +115,14 @@ class App : Form
     NotifyIcon tray;
     Rectangle wideBack;      /* where the window was before Settings took the screen */
     string wideMode;
+    /* The whole app resizes from any edge, keeping its shape, and everything in
+       it grows with it (Tom, 2026-11-16: "It should scale with it ... from cell
+       phone size ... as big as to occupy the entire vertical resolution. But it
+       stays within the same ratio the whole time."). `zoom` is how much bigger
+       than the phone size the page asked for; 1 is the smallest. */
+    double zoom = 1;
+    Size appBase = new Size(390, 844);
+    const int GRIP = 6;
     /* where the whole app was put when it opened, and its corner before a
        status check took the screen, so going back lands where he left it */
     Point appPlaced = new Point(int.MinValue, 0);
@@ -391,7 +399,7 @@ class App : Form
                chevron is, and stays there. */
             bool moved = mode == "app" && Location != appPlaced;
             int right = Left + Width, top = Top;
-            mode = "widget"; ClientSize = new Size(w, h);
+            mode = "widget"; Unzoom(); ClientSize = new Size(w, h);
             if (moved) { KeepCorner(right, top); posX = Left; posY = Top; SaveCfg(); }
             else PlaceWidget();
             Round();
@@ -406,7 +414,9 @@ class App : Form
             if (mode == "checkin" && backRight != int.MinValue) { right = backRight; top = backTop; }
             backRight = int.MinValue;
             mode = "app";
-            ClientSize = new Size(w, h);
+            appBase = new Size(w, h);
+            ZoomTo(zoom);
+            ClientSize = AppSize();
             KeepCorner(right, top);
             appPlaced = Location;
             Round();
@@ -441,6 +451,7 @@ class App : Form
                 if (mode == "app") { backRight = Left + Width; backTop = Top; }
                 if (mode == "wide") { backRight = wideBack.Right; backTop = wideBack.Top; Pin(onTop); }
                 mode = "checkin";
+                Unzoom();
                 var scr = Screen.FromPoint(Cursor.Position).Bounds;
                 Square();
                 Bounds = scr;
@@ -454,6 +465,7 @@ class App : Form
                 if (mode == "checkin") return;
                 if (mode == "app") { backRight = Left + Width; backTop = Top; }
                 mode = "checkin";
+                Unzoom();
                 ClientSize = new Size(w, h);
                 Centre();
                 Round();
@@ -784,6 +796,7 @@ class App : Form
     {
         base.OnResizeEnd(e);
         if (mode == "widget") { posX = Left; posY = Top; SaveCfg(); }
+        if (mode == "app") { SaveCfg(); Log("app window " + Width + "x" + Height + ", zoom " + zoom.ToString("0.###", CultureInfo.InvariantCulture)); }
     }
 
     protected override void OnMove(EventArgs e)
@@ -813,6 +826,7 @@ class App : Form
                 if (k == "hotkey") hotkey = v.ToLowerInvariant();
                 else if (k == "ontop") onTop = (v != "0");
                 else if (k == "tray") trayOn = (v == "1");
+                else if (k == "zoom") { double z; if (double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out z) && z >= 1 && z < 10) zoom = z; }
                 else if (k == "pos")
                 {
                     string[] xy = v.Split(',');
@@ -834,6 +848,7 @@ class App : Form
                 "hotkey=" + hotkey + "\r\n" +
                 "ontop=" + (onTop ? "1" : "0") + "\r\n" +
                 "tray=" + (trayOn ? "1" : "0") + "\r\n" +
+                "zoom=" + zoom.ToString("0.###", CultureInfo.InvariantCulture) + "\r\n" +
                 (posX == int.MinValue ? "" : "pos=" + posX + "," + posY + "\r\n"));
         }
         catch { }
@@ -894,12 +909,35 @@ class App : Form
         Log("tray icon on");
     }
 
+    double ZoomMax()
+    {
+        var wa = Screen.FromRectangle(Bounds).WorkingArea;
+        return Math.Max(1, (wa.Height - 2.0 * GRIP) / appBase.Height);
+    }
+    Size AppSize()
+    {
+        return new Size((int)Math.Round(appBase.Width * zoom) + 2 * GRIP, (int)Math.Round(appBase.Height * zoom) + 2 * GRIP);
+    }
+    void ZoomTo(double z)
+    {
+        zoom = Math.Max(1, Math.Min(ZoomMax(), z));
+        Padding = new Padding(GRIP);
+        try { web.ZoomFactor = zoom; } catch { }
+    }
+    /* the widget, the status check and Settings are drawn at their own size */
+    void Unzoom()
+    {
+        Padding = new Padding(0);
+        try { web.ZoomFactor = 1; } catch { }
+    }
+
     void Wide(bool on)
     {
         if (on)
         {
             if (mode == "wide" || mode == "checkin") return;
             wideBack = Bounds; wideMode = mode; mode = "wide";
+            Unzoom();
             var wa = Screen.FromRectangle(Bounds).WorkingArea;
             Square();
             /* Always on top is for the widget and the status check, never
@@ -914,6 +952,7 @@ class App : Form
         {
             if (mode != "wide") return;
             mode = wideMode ?? "app";
+            if (mode == "app") ZoomTo(zoom);
             Bounds = wideBack;
             Pin(onTop);
             Round();
@@ -1098,6 +1137,45 @@ class App : Form
            worked, which is most of what "hard to drag" was. MA_ACTIVATE says
            focus it AND let the click through. */
         if (m.Msg == WM_MOUSEACTIVATE) { m.Result = new IntPtr(MA_ACTIVATE); return; }
+
+        if (m.Msg == 0x84 && mode == "app")   /* WM_NCHITTEST: the strip round the page resizes */
+        {
+            long lp = m.LParam.ToInt64();
+            Point c = PointToClient(new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF)));
+            const int CORNER = 20;
+            bool l = c.X < GRIP, r = c.X >= ClientSize.Width - GRIP, t = c.Y < GRIP, b = c.Y >= ClientSize.Height - GRIP;
+            bool nl = c.X < CORNER, nr = c.X >= ClientSize.Width - CORNER, nt = c.Y < CORNER, nb = c.Y >= ClientSize.Height - CORNER;
+            int hit = 0;
+            if ((t && nl) || (l && nt)) hit = 13;
+            else if ((t && nr) || (r && nt)) hit = 14;
+            else if ((b && nl) || (l && nb)) hit = 16;
+            else if ((b && nr) || (r && nb)) hit = 17;
+            else if (l) hit = 10; else if (r) hit = 11; else if (t) hit = 12; else if (b) hit = 15;
+            if (hit != 0) { m.Result = new IntPtr(hit); return; }
+        }
+        if (m.Msg == 0x214 && mode == "app")  /* WM_SIZING: same shape, phone size to the screen's height */
+        {
+            var rc = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
+            int edge = m.WParam.ToInt32();
+            /* a press on the edge that has not moved yet changes nothing */
+            if (rc.R - rc.L == Width && rc.B - rc.T == Height) { m.Result = new IntPtr(1); return; }
+            double w = rc.R - rc.L - 2 * GRIP, h = rc.B - rc.T - 2 * GRIP;
+            bool vertical = edge == 3 || edge == 6;
+            double z = vertical ? h / appBase.Height : w / appBase.Width;
+            /* never past the top or bottom of the screen it is on */
+            var wa = Screen.FromPoint(new Point((rc.L + rc.R) / 2, (rc.T + rc.B) / 2)).WorkingArea;
+            bool fromTop = edge == 3 || edge == 4 || edge == 5;
+            double room = (fromTop ? rc.B - wa.Top : wa.Bottom - rc.T) - 2.0 * GRIP;
+            z = Math.Min(z, room / appBase.Height);
+            ZoomTo(z);
+            Size s2 = AppSize();
+            /* the right edge holds still unless he is dragging the left one, so the chevron stays put */
+            if (edge == 1 || edge == 4 || edge == 7 || vertical) rc.L = rc.R - s2.Width; else rc.R = rc.L + s2.Width;
+            if (edge == 3 || edge == 4 || edge == 5) rc.T = rc.B - s2.Height; else rc.B = rc.T + s2.Height;
+            Marshal.StructureToPtr(rc, m.LParam, false);
+            m.Result = new IntPtr(1);
+            return;
+        }
 
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID)
         {
