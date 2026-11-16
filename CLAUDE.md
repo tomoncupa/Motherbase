@@ -311,6 +311,7 @@ An app may read any type. It writes only the types it owns.
 | `answer` | **speak** | the take's key, dated as the take | `{q, src, term, bracket, subj, text, words, dur, at}` — the answer bank (fitness, productivity, philosophy, behaviour change): one spoken answer to a FITNESS TOPIC question, its full transcript. Other work (Skool, content) reads it from the backup or the sheet |
 | `ask` | **speak** | the `Ask:` note's key, undated | `{q, kind, answer, optId, ranking, brackets, note, said, take, dest, context, onRecord, tdId, askedAt, answeredAt}` — Tom's answer to a question any producer asked through a Todoist `Ask:` task. Claude files it at `dest`; see `tom-context/fitness-knowledge-bank.md` |
 | `speaker` | **speak** | id, undated | `{name, text, at}` — a speaker Tom compares his voice with: their pasted transcript |
+| `draft` | **speak** | the take's key, dated as the take | `{take, prompt, tx, fmt, state, vers: [{text, by, ask, at}], cur}` — a take being refined into content, every version kept (12 at most). OUTER HEAVEN reads it from the nightly backup. See `speak/CLAUDE.md`, Possible content |
 | `tclip` | **speak** | the take's key, dated as the take | `{mime, dur, data, pad}` — the take's sound, or picture and sound when the camera was on, padded past 64KB so it never syncs and stays on the device that made it. See `speak/CLAUDE.md` |
 | `script` | **speak** | id, undated | `{title, text, at}` — a talk he writes, one line per thought, rehearsed through SPEAK's SCRIPT steps |
 | `cset` `cex` `cphase` `csession` | **coach** | `pid\|` + the key the row had in the client's TRAIN; dated as it was | a client's set, exercise, block and day, exactly as their TRAIN wrote it, merged with its own updated_at so a second file only adds what is new |
@@ -959,6 +960,11 @@ answer, or take it out.
   by the id it derives from type, date and key, so a hand-made `id` is a
   second row that `Rec.all` and `Rec.map` list and `Rec.get` cannot see, and
   the app shows a ghost (2026-09-25). Seed test rows with `Rec.set`.
+  Since 2026-11-16 `Rec.merge` refuses a row whose id names a different
+  type than its `type`: TRAIN's `?client=` adapter hands out copies with the
+  client's id and TRAIN's type, and 769 came back on the PC as Tom's own sets
+  and exercises. Never pass a row from `Rec.all`, `Rec.export` or `Rec.on`
+  inside a `?client=` TRAIN into another store.
 - **A bulk merge of sets on a page that has not read them is held, not
   written** (2026-09-30). `Rec.merge` of a kept-out type before it is in
   queues the rows until it arrives, so they are compared with the stored

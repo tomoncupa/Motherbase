@@ -250,6 +250,27 @@ async function run() {
   const n2 = Rec.merge([newer]);
   ok('rec: newer row wins the merge', Rec.get(stamp, d, 'a').v === 42);
   ok('rec: merge is idempotent', n1 === 1 && n2 === 0);
+  /* 2026-11-16: 769 of a COACH client's rows came back wearing TRAIN's type
+     with the client's id (`local|cset|...` typed `set`), the copies TRAIN's
+     ?client= adapter hands out, and were counted as Tom's own sets. A copy
+     like that is refused, and one already stored is put back, key and all,
+     as a write stamped now so live sync carries it. */
+  ok('rec: a row whose id names another type is refused, and a stored one is put back', await (async () => {
+    const ct = stamp + 'c';
+    const orig = Rec.set(ct, d, 'p|k1', { v: 1 });
+    const dressed = Object.assign({}, orig, { type: stamp, key: 'k1', updated_at: new Date(Date.now() + 60000).toISOString() });
+    const refused = Rec.merge([dressed]) === 0 && !Rec.all(stamp).some(r => r.id === orig.id) &&
+      Rec.get(ct, d, 'p|k1').v === 1 && Rec.misfits() > 0;
+    const sid = 'local|' + ct + '|' + d + '|p-k2', old = '2026-10-08T09:27:02.494Z';
+    localStorage.setItem('mb.r.' + sid, JSON.stringify({ id: sid, user_id: 'local', type: stamp, date: d, key: 'k2',
+      payload: { v: 2 }, updated_at: old, deleted: false }));
+    Rec.reload();
+    const back = Rec.row(ct, d, 'p|k2');
+    const fixed = !!back && back.id === sid && back.type === ct && back.key === 'p|k2' && back.updated_at > old &&
+      !Rec.all(stamp).some(r => r.id === sid) && JSON.parse(localStorage.getItem('mb.r.' + sid)).type === ct;
+    Rec.del(ct, d, 'p|k1'); Rec.del(ct, d, 'p|k2');
+    return refused && fixed;
+  })());
 
   /* ---- two devices, one row, different fields ----
      Tom, 2026-09-15: a phone and a laptop each change a different part of the

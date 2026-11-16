@@ -411,6 +411,31 @@ should be ON the mountains."
   it with none, is a mountain named Block 1. Drawn only (`auto: true` in
   `layout`), never a row; `Range.blocksOf` does not include it.
 
+## A row whose id names another type (2026-11-16, `records.js`)
+
+The PC's store held 769 COACH client rows as `local|cset|...` typed `set`
+(and `cex` as `exercise`, `csession` as `session`, `cexcat` as `excat`), the
+client's prefix gone from the key, `updated_at` 8 and 9 Oct. Every file up
+to 14 Nov 23:46 was clean; every 16 Nov file had them. `Rec.all('set')`
+counted 253 client sets as Tom's. They are the copies TRAIN's `?client=`
+adapter hands out (`back()`, train/index.html), which keep the client's id.
+They reached the PC whole while its store came up near empty (Local Storage
+recreated 14 Nov 21:45, IndexedDB failing on the full disk), most likely
+from live sync's copy, so no stored row stood against them. **Not proved:**
+how such copies left a client TRAIN on 8 and 9 Oct; COACH frames it, and
+cloud.js, the sheet and claude.js all stay out of frames.
+
+- **`merge` refuses** a row whose id's type segment is not its `type`
+  (`fits`); `Rec.misfits()` counts them. The 14 Nov file has none that
+  differ by type (55 differ by key only, left alone).
+- **`repairTypes`** runs wherever `repairDates` does (boot, the IndexedDB
+  read, a kept-out type arriving, reload): the type from the id, the key from
+  the id when the id carries a prefix the key lost, only when the result
+  rebuilds the id exactly. Each is a write stamped now and announced, so live
+  sync sends the right copy on. Checked on the real rows: 769 of 769 came
+  back as the 14 Nov file has them.
+- One `rec:` smoke check, watched failing on the old file.
+
 ## Ready is not whole (2026-11-16, `Rec.whole`, `cloud.js` 0.2.9)
 
 Every backup that caught up with live sync from 06:56 on 16 Nov held 4,700

@@ -531,7 +531,53 @@ function localDate(ms) {
   const d = new Date(ms);
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
 }
+/* ── a row whose id names another type (2026-11-16) ──
+
+   A row's id is built from its type, date and key, and `byType` files it
+   under `type`. 769 of a COACH client's rows reached the PC's store as
+   `local|cset|...` typed `set` (and `cex` as `exercise`, `csession`,
+   `cexcat`), with the client's prefix gone from the key: exactly the copies
+   TRAIN's `?client=` adapter hands out (`back()` in train/index.html), which
+   keep the client's id and wear TRAIN's type. `Rec.all('set')` then counted
+   253 client sets as Tom's. They arrived whole while the store came up with
+   nearly nothing in it (14 to 16 Nov: Local Storage recreated, IndexedDB
+   failing on a full disk), so nothing stood in their way.
+
+   `merge` now refuses such a row (`fits`). This puts back any that are
+   already stored: the type is read off the id, and the key off the id too
+   when the id says one with a prefix the key has lost, but only when the
+   result rebuilds the id exactly; anything else is left alone. It is a
+   write, stamped now, so it reaches live sync and the copies elsewhere. */
+const fits = r => String(r.id).split('|')[1] === clean(r.type);
+let misfits = 0;
+function repairTypes() {
+  const fixed = [];
+  for (const id in rows) {
+    const r = rows[id];
+    if (fits(r)) continue;
+    const p = String(id).split('|');
+    if (p.length !== 4 || p[0] !== USER || p[2] !== clean(r.date || '')) continue;
+    const ck = clean(r.key);
+    let key = r.key;
+    if (p[3] !== ck) {
+      if (!(p[3].length > ck.length + 1 && p[3].slice(-(ck.length + 1)) === '-' + ck)) continue;
+      key = p[3].slice(0, p[3].length - ck.length - 1) + '|' + (r.key == null ? '' : r.key);
+    }
+    if (rowId(p[1], r.date, key) !== id) continue;
+    const t = now();
+    const out = Object.assign({}, r, { type: p[1], key: key, updated_at: t > r.updated_at ? t : r.updated_at });
+    write(out);
+    fixed.push(out);
+  }
+  if (fixed.length) {
+    console.warn('[records] put back the type of ' + fixed.length + ' row(s) whose id named another');
+    announce(fixed, true);
+  }
+  return fixed.length;
+}
+
 function repairDates() {
+  repairTypes();
   const bad = [];
   for (const id in rows) { const r = rows[id]; if (r.date && !DATE_OK.test(r.date)) bad.push(r); }
   if (!bad.length) return 0;
@@ -881,6 +927,8 @@ const Rec = {
 
   /** how many rows this page could not save in either half */
   unkept() { return unkept; },
+  /** rows `merge` refused because their id names another type (repairTypes) */
+  misfits() { return misfits; },
   /** fn(count) on every row that could not be saved anywhere */
   onUnkept(fn) { if (typeof fn === 'function') unkeptFns.push(fn); },
 
@@ -1082,6 +1130,10 @@ const Rec = {
     const changed = [];
     (incoming || []).forEach(r => {
       if (!r || !r.id || !r.type) return;
+      /* An id that names another type is a copy dressed as something it is
+         not (repairTypes, above). Filed under its `type` it would be read as
+         that type's row; refused, the stored row it copies stands. */
+      if (!fits(r)) { if (!misfits++) console.warn('[records] refused a row whose id names another type', r.id, r.type); return; }
       /* A kept-out type not in yet (KEPT OUT). A row another page on this
          device just wrote is stored already, so a page not holding the type
          lets it go; anything from outside waits for the stored copy. */
