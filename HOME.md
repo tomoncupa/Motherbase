@@ -749,3 +749,7 @@ What `cutCards` learned: big type that does not fit shrinks first, 0.82 at a tim
 **Needs from the foundation (done the same day, from this session: `Chart.grid` and `c.labels` now skip words that would touch, shared/CLAUDE.md):** `Chart.grid` (shared/chart.js) prints a number at every step with no check that the numbers have room, so a chart under about 80px tall prints 80, 81 and 82 over each other (WEIGHT, SLEEP, the measure card, TRAIN volume at 2 by 2). It should skip labels that would come within a line of the one before, the way `timeAxis` already drops dates. `py -3 tools/home-sweep.py weight sleep measure trainvol` checks it.
 
 Also in 1.0.124, BODY HEATMAP: the muscles at 0 sets in the range are one line at the top of the list, "0 SETS Biceps, Calves" (Tom: "show sets done always so that I can see if I did 0 sets"). Tried first as greyed rows at the bottom; on his board the card is shorter than the list, so those were the first rows left off. [TESTED] demo with two muscles forced to 0, at the board's size and taller.
+
+## 1.0.126, 2026-11-16: EVERY & HABITS
+
+The card opens BLOCK on Schedule (`to: ['block', 'schedule']`). Empty, it says "No Every blocks or habits." with ADD ONE, which opens Schedule with the cursor in the Habits box. A habit row shows this period's ticks as dots (words past 14) and the streak; `rhStreakH` copies BLOCK's `rhStreak`, floored at BLOCK's chapter or count-from day. Checked equal to BLOCK on three tick patterns.

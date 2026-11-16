@@ -34,6 +34,16 @@ Tom: "Weekly and every so often and habit tracked routines just in 1 page". The 
 - `#vEvery` and `#vAny` stay in the page, hidden, so putting the tabs back is one commit. Every's owed-or-due count rides on Schedule (`rhBadge`).
 - Only the week strip scrolls sideways when the window is narrower than seven day columns; the page itself never does.
 
+## 1.0.28, 2026-11-16: the Schedule review, picks 1, 2 and 5
+
+Tom picked from the review page (claude.ai/artifact/UPC7MfBNsYeNBvvr6xvTUq). Rules that stand:
+
+- The Every and Habits add boxes draw on `--bg` with `--text-1`. They had no background and drew white under light text.
+- A weekday with no day on it is `.day.wempty`: its name and picker, no body. A weekday running a day keeps its column.
+- A `{lifeos:1, show}` message opens a spot: `schedule` the Schedule page, `habits` or `every` that section with the cursor in its add box. HOME's EVERY & HABITS uses all of it.
+- Not picked: bigger habit squares (3) and text at 12px with no em dashes (4).
+- The self-test's two drag checks ("drag into a routine", "drag between routines") failed with or without this change, so something in 1.0.26 or 1.0.27 broke them. Not looked into.
+
 ## Needs from the home screen
 
 The new chapter: `HOME.md`, Needs from BLOCK (2026-11-16), asks STREAKS and EVERY & HABITS to count from `Chapter.from('block')`. HOME 1.0.75 copied `rhPeriod`, `rhPer` and `act` ticking into its EVERY & HABITS card (`rhAnyState`, `rhTickH`). Change both when habit maths changes.
