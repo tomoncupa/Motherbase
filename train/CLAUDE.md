@@ -228,6 +228,11 @@ A `phase` row: a name, a start, and an optional end. A block runs until the next
 one starts, or until its own end. The session strip under the date shows the
 block and its week number. Deleting a block keeps every session in it.
 
+**TRAIN does not read chapters** (`shared/chapter.js`). Tom, 2026-11-16:
+"Train doesn't directly care about chapters it operates in blocks". Records,
+comparisons and counts stay on training blocks; a new chapter offers no
+block, and TRAIN is not in `Chapter.APPS`.
+
 ### Names, and how much stronger
 
 - A name locks nothing, a copy carries it, and **a number on its end is
