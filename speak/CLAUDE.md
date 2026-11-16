@@ -550,6 +550,37 @@ fresh speak practice."*
 - **OUTER HEAVEN** reads `draft` rows from the nightly backup, as
   `knowledge.py` reads `answer` rows. Its side is its own session's work.
 
+## FREE SPEAK and jumping off points, added 2026-11-16 (SPEAK 1.0.20)
+
+Tom: *"I also want the three current buttons to stack vertically, and then I
+want a fourth button to be just a free speak. So speak will also become my
+way of turning or transcribing speech to text, and then it will auto sort
+the transcript into the relevant data bank."* And the things he talks about
+*"synthesized into possible prompts"*, in his wallpaper program or *"when I
+click free speech, I'm shown also these possible jumping off points, or I
+can just skip directly into a free flowing ramble."*
+
+- **The widget** stacks four buttons, SPEAK, FITNESS, OTHER, FREE SPEAK, and
+  SPEAK.exe's small window is 300 x 260 to fit them. FREE SPEAK is also on
+  BANK beside FITNESS and OTHER.
+- **FREE SPEAK** (`FS`, `openFree`): with jumping off points, a sheet lists
+  the newest six (hold: Not this one) and JUST RAMBLE; with none it starts a
+  ramble straight away. No lights, no goals, the clock counts up, it stops
+  itself at 15 minutes, transcript forced on. The sheet says DONE, never MET.
+- **The bank**: every free speak is an `answer` with `src: 'free'`, `q`
+  "Free speak" or the jumping off point, and no subject yet.
+- **Filing** (`sortFree`, SPEAK.exe only): Claude reads each unfiled free
+  speak of 30 words or more, oldest first, one at a time, and the answer
+  gets `subj` (fitness, productivity, behaviour change, philosophy or
+  observations, which ARC's three banks read), a title as `q`, and
+  `sorted: 1`. Up to three jumping off points become `topic` rows, `kind:
+  'jump'`, keyed `jump-<take key>-<n>` so two devices write the same rows;
+  starting from one marks it `used`. A ramble made on the phone is filed the
+  next time SPEAK.exe opens.
+- **Only free speaks make jumping off points** for now. The wallpaper
+  showing them is OUTER HEAVEN's work, reading `topic` rows with `kind:
+  'jump'` and no `used` from the nightly backup.
+
 ## Needs from the foundation
 
 - A device-only row type: one `Rec` would keep and back up but live sync

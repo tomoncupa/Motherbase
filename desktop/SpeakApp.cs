@@ -41,7 +41,7 @@ class Speak : Form
     const string TITLE = "SPEAK";
 
     /* the page's two sizes, inside the frame */
-    static readonly Size SMALL = new Size(300, 116), BIG = new Size(440, 760), WIDE = new Size(1000, 820);
+    static readonly Size SMALL = new Size(300, 260), BIG = new Size(440, 760), WIDE = new Size(1000, 820);
     Size bigAs = Size.Empty;
 
     WebView2 web;

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.19, 2026-11-16">
+<meta name="mb-version" content="1.0.20, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -213,7 +213,7 @@ body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:cente
 #wid .wtop{display:flex;align-items:baseline;gap:var(--s-3);min-width:0}
 #wid .logo{font-size:var(--f-3)}
 #wid .muted{flex:1;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#wid .wbtns{display:flex;gap:var(--s-2)}
+#wid .wbtns{display:flex;flex-direction:column;gap:var(--s-2)}
 #wid .wbtns button{flex:1;min-width:0;min-height:var(--tap);padding:0 var(--s-1);font-family:var(--font-display);font-weight:var(--w-bold);letter-spacing:var(--track-cap)}
 @media (max-width:640px){
   .path{grid-template-columns:1fr}
@@ -244,6 +244,7 @@ body.widget #wid{flex:1;display:flex;flex-direction:column;justify-content:cente
     <button class="mb-btn go mb-press mb-tap" id="widGo" data-d="topics" aria-label="Speak practice">SPEAK</button>
     <button class="mb-btn mb-press mb-tap" data-d="fitness" aria-label="Fitness topic">FITNESS</button>
     <button class="mb-btn mb-press mb-tap" data-d="other" aria-label="Other topic">OTHER</button>
+    <button class="mb-btn mb-press mb-tap" data-d="free" aria-label="Free speak">FREE SPEAK</button>
   </div>
 </div>
 
@@ -1057,7 +1058,20 @@ const ASK_SKILL = { id: 'ask', name: 'QUESTION', slot: 4 };
 const AQ = Object.assign({}, FT, { id: 'ask', skill: 'ask', kind: 'askq', name: 'Question for you', bank: false,
   why: 'A decision said out loud is clearer than one ticked, and it is speech practice.',
   how: 'Answer the question as if explaining your call to a client. Your words are kept with the answer.' });
-const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || (d.skill === 'fitness' ? FIT_SKILL : d.skill === 'other' ? OTHER_SKILL : d.skill === 'ask' ? ASK_SKILL : TOPIC_SKILL);
+/* FREE SPEAK, 2026-11-16 (SPEAK 1.0.20). Tom: "a fourth button to be just a
+   free speak. So speak will also become my way of turning or transcribing
+   speech to text, and then it will auto sort the transcript into the
+   relevant data bank", and jumping off points from what he talks about, "or
+   I can just skip directly into a free flowing ramble". No lights, no goals,
+   fifteen minutes at most; the words go into the bank as an `answer` with
+   `src: 'free'`, and SPEAK.exe's Claude gives it a subject, a title and
+   up to three jumping off points (`topic` rows, `kind: 'jump'`). */
+const FREE_SKILL = { id: 'free', name: 'FREE SPEAK', slot: 2 };
+const FS = Object.assign({}, FT, { id: 'free', skill: 'free', kind: 'free', name: 'Free speak', open: true, dur: 900,
+  win: null, goals: () => [],
+  why: 'Thinking out loud on camera is the raw material for content, and every word is kept and filed in your banks.',
+  how: 'Talk about whatever is on your mind, or start from a jumping off point. Press STOP when you are done.' });
+const skillOf = d => SKILLS.filter(s => s.id === d.skill)[0] || (d.skill === 'fitness' ? FIT_SKILL : d.skill === 'other' ? OTHER_SKILL : d.skill === 'ask' ? ASK_SKILL : d.skill === 'free' ? FREE_SKILL : TOPIC_SKILL);
 /* ══════════════ the coach ══════════════
    Tom, 2026-11-16: "I need Speak to actually give me feedback and drills for
    what's happening. I don't need it to just rate what I'm doing." After a
@@ -1126,7 +1140,7 @@ const FIXES = [
 ];
 FIXES.forEach(f => { f.fix = true; f.step = 0; });
 const isFix = id => /^fix-/.test(id || '');
-const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
+const drillById = id => id === TT.id ? TT : id === FT.id ? FT : id === OT.id ? OT : id === AQ.id ? AQ : id === 'free' ? FS : DRILLS.concat(FIXES).filter(d => d.id === id)[0] || null;
 const LIVE = { held: 'ums', crutch: 'crutch', longPauses: 'silences', pauses: 'pauses', restarts: 'restarts' };
 /* each fault the coach can name, in a few words, for FOCUS */
 const FAULT = { 'um-pause': 'Ums right after a pause', 'um-start': 'Ums in the opening seconds', 'um-end': 'Ums near the end',
@@ -1486,7 +1500,8 @@ function promptEl(p) {
   else if (p.kind === 'read') box.innerHTML = '<div class="muted">' + esc(p.name) + '</div>' + esc(p.text);
   else if (p.kind === 'hook') box.innerHTML = '<div class="muted">Start on this line</div>' + esc(p.text);
   else if (p.kind === 'question') box.innerHTML = '<div class="muted">Answer this</div>' + esc(p.text);
-  else if (p.kind === 'fitq' || p.kind === 'otherq' || p.kind === 'askq') box.innerHTML = '<div class="muted">' + esc(p.label || 'Answer this') + '</div>' + esc(p.text);
+  else if (p.kind === 'free' && !p.text) box.innerHTML = '<div class="muted">Free speak</div>Whatever is on your mind.';
+  else if (p.kind === 'fitq' || p.kind === 'otherq' || p.kind === 'askq' || p.kind === 'free') box.innerHTML = '<div class="muted">' + esc(p.label || 'Answer this') + '</div>' + esc(p.text);
   else if (p.kind === 'frame') box.innerHTML = esc(p.text) + '<div class="frame">' + p.frame.map(f => '<span>' + esc(f) + '</span>').join('') + '</div>';
   else if (p.kind === 'dev') box.innerHTML = '<div class="muted">' + esc(p.device) + '</div>' + esc(p.text);
   else if (p.kind === 'script') {
@@ -1865,7 +1880,7 @@ function openAsk(q) {
    everywhere, go to the sheet's SPEAK tab and into every backup, which is
    how other work reads them. */
 let bankQ = '';
-const SRC_NAME = { shoot: 'Shoot question', topic: 'Current topic', viewer: 'Viewer question', term: 'Skool term', other: 'Current topic', otherbank: 'Question' };
+const SRC_NAME = { free: 'Free speak', shoot: 'Shoot question', topic: 'Current topic', viewer: 'Viewer question', term: 'Skool term', other: 'Current topic', otherbank: 'Question' };
 const srcLine = a => (SRC_NAME[a.src] || 'Question') + (a.bracket ? ' [' + a.bracket + ']' : '') + (a.subj ? ' \u00b7 ' + a.subj : '');
 function bankText(list) {
   const by = {}; list.forEach(a => { (by[a.q] = by[a.q] || []).push(a); });
@@ -1888,6 +1903,9 @@ function drawBank(m) {
   const go2 = el('button', 'mb-btn mb-press mb-tap', ICN('play') + '<span>OTHER</span>');
   go2.onclick = () => openDrill(OT);
   acts.appendChild(go2);
+  const go3 = el('button', 'mb-btn mb-press mb-tap', ICN('play') + '<span>FREE SPEAK</span>');
+  go3.onclick = () => openFree();
+  acts.appendChild(go3);
   if (all.length) {
     const ex = el('button', 'mb-btn mb-press mb-tap', 'EXPORT');
     ex.onclick = () => {
@@ -1940,7 +1958,7 @@ function drawBank(m) {
         const tk = takes().filter(x => x.key === a.key)[0];
         if (tk) { const op = el('button', 'mb-btn mb-press mb-tap', hasClip(tk) ? 'PLAY AND COACH' : 'OPEN TAKE'); op.onclick = () => showTake(tk); ra.appendChild(op); }
         const again = el('button', 'mb-btn mb-press mb-tap', 'ANSWER AGAIN');
-        const od = a.src === 'other' || a.src === 'otherbank' ? OT : FT;
+        const od = a.src === 'free' ? FS : a.src === 'other' || a.src === 'otherbank' ? OT : FT;
         again.onclick = () => startTake(od, null, { kind: od.kind, text: a.q, src: a.src, term: a.term, bracket: a.bracket, subj: a.subj, label: 'Again' });
         ra.appendChild(again);
         row.appendChild(ra);
@@ -2125,6 +2143,62 @@ function drawContent(m) {
   });
   m.appendChild(c);
 }
+
+/* FREE SPEAK's sheet: his jumping off points, newest first, or straight into
+   a ramble. With none yet it goes straight in. */
+const jumps = () => myTopics().filter(t => t.kind === 'jump' && !t.used).sort((a, b) => (b.at || 0) - (a.at || 0));
+function openFree() {
+  const js = jumps().slice(0, 6);
+  if (!js.length) { startTake(FS, null, { kind: 'free', text: '' }); return; }
+  UI.dialog({
+    title: 'FREE SPEAK', width: 560,
+    body: (b, h) => {
+      b.appendChild(el('p', 'muted', 'Start from one of these, made from what you talked about, or just ramble.'));
+      const list = el('div', 'list');
+      js.forEach(j => {
+        const r = el('button', 'row mb-plate mb-press mb-tap');
+        r.innerHTML = '<span class="tx"><span class="nm">' + esc(j.text) + '</span></span>';
+        r.onclick = () => { h.close(); startTake(FS, null, { kind: 'free', text: j.text, label: 'Jumping off point', jump: j.key }); };
+        Mobile.hold(r, e => UI.menu(e && e.clientX || 0, e && e.clientY || 0, [
+          { label: 'Not this one', kind: 'bad', fn: () => { Rec.patch('topic', null, j.key, { used: Date.now(), skip: 1 }); h.close(); openFree(); } },
+        ], { title: 'JUMPING OFF POINT' }), { dots: true, dotsLabel: 'More for this point' });
+        list.appendChild(r);
+      });
+      b.appendChild(list);
+    },
+    actions: [{ label: 'CLOSE' }, { label: 'JUST RAMBLE', kind: 'go', fn: () => { startTake(FS, null, { kind: 'free', text: '' }); } }],
+  });
+}
+/* Claude, in SPEAK.exe, files each free speak: a subject (which knowledge
+   bank in ARC), a title for the bank, and up to three jumping off points.
+   One at a time, oldest first; a free speak made on the phone is filed the
+   next time SPEAK.exe is open. A jump's key comes from its take, so two
+   devices filing the same ramble write the same rows. */
+const SORT = { busy: false, tried: {} };
+const SUBJ = ['fitness', 'productivity', 'behaviour change', 'philosophy', 'observations'];
+async function sortFree() {
+  if (!REF.on || SORT.busy) return;
+  const a = answers().filter(x => x.src === 'free' && !x.sorted && !SORT.tried[x.key] && wordsOf(x.text || '').length >= 30).pop();
+  if (!a) return;
+  SORT.busy = true; SORT.tried[a.key] = 1;
+  const r = await askRefine('Tom rambled out loud in a free speak. File it. Reply with one JSON object and nothing else: ' +
+    '{"subj": one of ' + JSON.stringify(SUBJ.concat([''])) + ' (empty when none fits), ' +
+    '"title": the question or idea it answers, in his words, under 12 words, ' +
+    '"jumps": up to 3 prompts he could ramble on next, each one line under 15 words, pulled from threads he opened and did not finish}.' +
+    '\n\nTHE RAMBLE:\n' + a.text);
+  SORT.busy = false;
+  let o = null;
+  try { const mm = String(r && r.text || '').match(/\{[\s\S]*\}/); o = mm ? JSON.parse(mm[0]) : null; } catch (e) { o = null; }
+  if (!o) return;
+  const subj = SUBJ.indexOf(String(o.subj || '').toLowerCase()) >= 0 ? String(o.subj).toLowerCase() : '';
+  Rec.patch('answer', a.date, a.key, { subj: subj, q: String(o.title || '').trim().slice(0, 140) || a.q, sorted: 1 });
+  (Array.isArray(o.jumps) ? o.jumps : []).slice(0, 3).forEach((j, i) => {
+    const text = String(j || '').trim().slice(0, 200), key = 'jump-' + a.key + '-' + i;
+    if (text && !Rec.has('topic', null, key)) Rec.set('topic', null, key, { text: text, kind: 'jump', from: a.key, at: Date.now() });
+  });
+  setTimeout(sortFree, 1500);
+}
+if (REF.on) Rec.ready(() => setTimeout(sortFree, 3000));
 
 /* ══════════════ drawing ══════════════ */
 let view = 'today';
@@ -2688,7 +2762,7 @@ function runTake() {
   T.timer = setInterval(() => {
     if (!T.live) return;
     const s = (performance.now() - T.t0) / 1000;
-    $('#tkClock').textContent = w ? mmss(s) : mmss(Math.max(0, dur - s));
+    $('#tkClock').textContent = w || (d && d.open) ? mmss(s) : mmss(Math.max(0, dur - s));
     if (w) lamp(mEye, s, w);
     /* the pen drill's switch: the first half is kept, the second measured */
     if (d && d.halves && !T.half && s >= dur / 2) {
@@ -2854,10 +2928,12 @@ function finishTake(m, secs) {
     if (q && q.kind === 'free' && words) askAnswer(q, { answer: words, said: words, take: take.key }, null);
     else if (q) Rec.set('ask', null, q.key, Object.assign({}, Rec.get('ask', null, q.key) || {}, { q: q.q, said: words, take: take.key }));
   }
-  if (d.bank && T.prompt && T.prompt.text) {
+  if (d.bank && T.prompt && (T.prompt.text || d === FS)) {
     const words = asrOn ? T.listener.out.chunks.join(' ').slice(0, 20000) : '';
-    Rec.set('answer', take.date, take.key, { q: T.prompt.text, src: T.prompt.src || '', term: T.prompt.term || '', bracket: T.prompt.bracket || '', subj: T.prompt.subj || (d === FT ? 'fitness' : ''),
+    Rec.set('answer', take.date, take.key, { q: T.prompt.text || 'Free speak', src: d === FS ? 'free' : T.prompt.src || '', term: T.prompt.term || '', bracket: T.prompt.bracket || '', subj: T.prompt.subj || (d === FT ? 'fitness' : ''),
       text: words, words: asrOn ? T.listener.out.words : 0, dur: Math.round(secs), at: take.at });
+    if (d === FS && T.prompt.jump) Rec.patch('topic', null, T.prompt.jump, { used: Date.now() });
+    if (d === FS) setTimeout(sortFree, 500);
   }
   if (T.clipP) { take.clipP = T.clipP; T.clipP.then(b => saveClip(take, b)); }
   Mobile.feedback(pass ? 'complete' : 'done');
@@ -2946,7 +3022,7 @@ function showTake(t, html) {
   const m = t.m || {};
   UI.dialog({
     title: (d ? d.name : 'Warm-up').toUpperCase() + ' · ' +
-      (t.pass ? 'MET' : !(t.goals && t.goals.length) ? 'DONE'
+      (d && d.open ? 'DONE' : t.pass ? 'MET' : !(t.goals && t.goals.length) ? 'DONE'
         : t.goals.some(g => g.got == null) ? 'NOT MEASURED' : 'NOT MET'), width: 560,
     onClose: () => { if (cb) cb._stop(); },
     body: (b, h) => {
@@ -3105,10 +3181,12 @@ function widSub() {
 function widget() {
   document.body.classList.add('widget');
   widSub();
-  /* three buttons, Tom 2026-11-16: SPEAK PRACTICE, FITNESS TOPIC and OTHER
-     TOPIC side by side, so the 300 x 116 window did not have to grow */
+  /* four buttons stacked, Tom 2026-11-16: SPEAK PRACTICE, FITNESS TOPIC,
+     OTHER TOPIC and FREE SPEAK, in a 300 x 260 window; FREE SPEAK opens its
+     jumping off points first */
   document.querySelectorAll('#wid .wbtns button').forEach(b => {
     b.onclick = async () => {
+      if (b.dataset.d === 'free') { widSize('big'); openFree(); return; }
       W.hold = true; widSize('big');
       try { await startTake(drillById(b.dataset.d)); } finally { W.hold = false; }
     };
