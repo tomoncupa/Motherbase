@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<meta name="mb-version" content="1.0.13, 2026-11-16">
+<meta name="mb-version" content="1.0.14, 2026-11-16">
 <title>ARC — Mind Canvas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;600&family=Space+Grotesk:wght@500;700&family=Caveat:wght@500;700&family=Patrick+Hand&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
@@ -3150,9 +3150,10 @@ const BANKS=[
   {id:'bank-self',gk:'self',title:'PRODUCTIVITY AND SELF IMPROVEMENT',subj:['productivity','behaviour change','self improvement']},
   {id:'bank-phil',gk:'phil',title:'PHILOSOPHY AND OBSERVATIONS',subj:['philosophy','observations']},
 ];
-const BANK_GROUPS=['SKILLS','STATS','CONDITIONS'];
+const BANK_GROUPS=['SKILLS','STATS','CONDITIONS']; /* Skool's brackets: no longer drawn in a bank (Tom 2026-11-16, "no mention of school") */
 const bankOfSubj=s=>{s=String(s||'').toLowerCase();const b=BANKS.find(x=>x.subj.indexOf(s)>=0);return b?b.id:''};
-const isBankMap=id=>BANKS.some(b=>b.id===id);
+const SKOOL={id:'bank-skool',title:'SKOOL'};
+const isBankMap=id=>BANKS.some(b=>b.id===id)||id===SKOOL.id;
 /* [name, subject, Skool bracket or '', the words that find it]. The bracket
    terms are tom-context/skool-brackets.md, the same list as SPEAK's
    SKOOL_TERMS; the rest are what SPEAK's question lists and his rambles are
@@ -3277,7 +3278,7 @@ function bankPieces(){
     const k=r&&!r.deleted&&r.payload; if(!k||!k.title)return;
     const p={id:bankPid(r.key),key:r.key,type:'kpiece',src:k.src||'skool',q:k.title,text:k.text||'',term:'',subj:String(k.subj||'').toLowerCase(),
       ref:k.ref||'',date:k.born||'',at:k.at||0,grade:k.grade,srcs:Array.isArray(k.srcs)?k.srcs:[]};
-    all['kpiece|'+r.key]=p; out.push(p);
+    all['kpiece|'+r.key]=p; if(p.src!=='skool')out.push(p);
   });
   const into={};
   out.forEach(p=>p.srcs.forEach(s=>{const k=(s&&s.type||'answer')+'|'+(s&&s.key); if(all[k]&&all[k]!==p)into[k]=p}));
@@ -3327,15 +3328,52 @@ function bankWhen(p){
   const s=Math.round(p.dur||0), t=s?Math.floor(s/60)+':'+String(s%60).padStart(2,'0'):'';
   return ['Said',d,t,p.words?p.words+' words':''].filter(Boolean).join(' · ');
 }
+/* ── SKOOL (2026-11-16) ──
+   Tom: "Take them out, but put them in their own school area that also shows
+   the progression ... more of like a linear pathway that people travel along."
+   Skool is built from the banks, never the other way, so its lessons are
+   drawn here and nowhere else: each course a lane, its lessons in order, each
+   lesson the child of the one before; a solid line from a course to the next.
+   Order: `cord` (course) and `ord` (lesson) when the rows carry them, else
+   the course name and the key. */
+function skoolLessons(){
+  const out=[];
+  Rec.all('kpiece').forEach(r=>{
+    const k=r&&!r.deleted&&r.payload; if(!k||!k.title||k.src!=='skool')return;
+    out.push({id:bankPid(r.key),key:r.key,src:'skool',course:k.ref||String(r.key).split('|')[1]||'Skool',q:k.title,text:k.text||'',
+      ord:isFinite(+k.ord)&&k.ord!==''&&k.ord!=null?+k.ord:1e9,cord:isFinite(+k.cord)&&k.cord!==''&&k.cord!=null?+k.cord:1e9});
+  });
+  return out;
+}
+const SK_ROW=8, SK_DX=300, SK_DY=110;
+function skoolWant(){
+  const by={};
+  skoolLessons().forEach(l=>(by[l.course]=by[l.course]||[]).push(l));
+  const courses=Object.keys(by).map(c=>({name:c,cord:Math.min(...by[c].map(l=>l.cord)),ls:by[c].sort((a,b)=>a.ord-b.ord||String(a.key).localeCompare(String(b.key)))}))
+    .sort((a,b)=>a.cord-b.cord||a.name.localeCompare(b.name));
+  const N={}, L=[], items=[]; let y=200, prev=null;
+  N.root={text:SKOOL.title,parent:null,bank:{kind:'root'},at:{x:0,y:0}};
+  courses.forEach(c=>{
+    const cid='c-'+bankSlug(c.name);
+    N[cid]={text:c.name,desc:c.ls.length+' lesson'+(c.ls.length===1?'':'s'),parent:'root',bank:{kind:'course',name:c.name},at:{x:0,y:y}};
+    if(prev)L.push({id:'sk-'+prev+'-'+cid,a:prev,b:cid,rel:'equal'});
+    c.ls.forEach((l,i)=>{
+      l.n=i+1; l.of=c.ls.length; items.push(l);
+      N[l.id]={text:l.q,desc:'Lesson '+(i+1)+' of '+c.ls.length,parent:i?c.ls[i-1].id:cid,bank:{kind:'q',id:l.id},
+        at:{x:340+(i%SK_ROW)*SK_DX,y:y+Math.floor(i/SK_ROW)*SK_DY}};
+    });
+    prev=cid; y+=Math.ceil(Math.max(1,c.ls.length)/SK_ROW)*SK_DY+120;
+  });
+  return{bank:SKOOL.id,nodes:N,links:L,items:items,courses:courses};
+}
 const bankCount=(c,word,many)=>c?c+' '+(c===1?word:many):'';
 /* the map one bank asks for, as nodes and links, parents before children */
 function bankWant(bid){
   const B=BANKS.find(b=>b.id===bid), all=bankList(), list=all.filter(t=>t.bank===bid);
   const N={}, L=[], tally={}, qs={}, items=[];
   N.root={text:B.title,parent:null,bank:{kind:'root'}};
-  if(bid==='bank-fit')BANK_GROUPS.forEach(g=>{N['g-'+g.toLowerCase()]={text:'['+g+']',parent:'root',bank:{kind:'grp'}}});
   list.forEach(t=>{
-    N['t-'+bankSlug(t.name)]={text:t.name,parent:t.grp&&bid==='bank-fit'?'g-'+t.grp.toLowerCase():'root',bank:{kind:'t',name:t.name}};
+    N['t-'+bankSlug(t.name)]={text:t.name,parent:'root',bank:{kind:'t',name:t.name}};
     tally[t.name]={said:0,skool:0,ramble:0,post:0}; qs[t.name]=[];
   });
   bankPieces().forEach(p=>{
@@ -3394,7 +3432,7 @@ function bankApply(m,W){
     const w=W.nodes[id]; let n=nodes[id];
     const was=n?JSON.stringify(n):'';
     /* a width to start from, so a piece reads as a line; his own resize wins after */
-    if(!n){const at=bankSeat(m,w.parent); n=nodes[id]={id:id,text:'',x:Math.round(at.x),y:Math.round(at.y),w:w.bank.kind==='q'?280:190}}
+    if(!n){const at=w.at||bankSeat(m,w.parent); n=nodes[id]={id:id,text:'',x:Math.round(at.x),y:Math.round(at.y),w:w.bank.kind==='q'?280:190}}
     n.text=w.text; delete n.html;
     n.parentId=w.parent;
     if(w.desc)n.desc=w.desc; else delete n.desc;
@@ -3403,7 +3441,7 @@ function bankApply(m,W){
     if(JSON.stringify(n)!==was)ch++;
   });
   const have={}; m.links.forEach(l=>have[l.id]=1);
-  W.links.forEach(l=>{if(!have[l.id]){m.links.push({id:l.id,a:l.a,b:l.b,rel:'child',bank:1});ch++}});
+  W.links.forEach(l=>{if(!have[l.id]){m.links.push({id:l.id,a:l.a,b:l.b,rel:l.rel||'child',bank:1});ch++}});
   return ch;
 }
 const bankMap=id=>DB&&DB.maps&&DB.maps.find(m=>m.id===(id||BANK));
@@ -3428,6 +3466,15 @@ function bankSync(make){
     if(fresh)bankSeed(m);
     if(ch||fresh){saveIt=true; if(DB.currentId===B.id)redraw=true}
   });
+  {
+    const W=skoolWant(); bankW[SKOOL.id]=W;
+    let m=bankMap(SKOOL.id); const fresh=!m;
+    if(fresh&&(make||W.items.length)&&!(Rec.tombstone&&Rec.tombstone('map',null,SKOOL.id))){
+      m={id:SKOOL.id,title:SKOOL.title,nodes:{},links:[],snaps:[],view:{x:200,y:120,k:.35},edgeStyle:'straight'};
+      DB.maps.push(m); made.push(SKOOL.title);
+    }
+    if(m){const ch=bankApply(m,W); if(ch||fresh){saveIt=true; if(DB.currentId===SKOOL.id)redraw=true}}
+  }
   if(redraw)render();
   if(saveIt)save();
   /* the faded topics, for SPEAK's talking points; written only when they change */
@@ -3476,8 +3523,9 @@ function bankPanel(force){
   const key=bid+'|'+sel+'|'+bankVer;
   if(!force&&key===bankPK)return;
   bankPK=key;
-  const W=bankW[bid]||(bankW[bid]=bankWant(bid)), B=BANKS.find(b=>b.id===bid);
   const body=$('#bankbody'), mk=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e};
+  if(bid===SKOOL.id)return skoolPanel(body,mk);
+  const W=bankW[bid]||(bankW[bid]=bankWant(bid)), B=BANKS.find(b=>b.id===bid);
   $('#bankpanel h3').textContent=B.title;
   body.textContent='';
   body.appendChild(mk('div','tsec','COVERAGE'));
@@ -3524,12 +3572,41 @@ function bankPanel(force){
     body.appendChild(mk('p','bk-hint','Pick a piece to read it.'));
   }
 }
+function skoolPanel(body,mk){
+  const W=bankW[SKOOL.id]||(bankW[SKOOL.id]=skoolWant());
+  $('#bankpanel h3').textContent=SKOOL.title;
+  body.textContent='';
+  body.appendChild(mk('div','tsec','PATH'));
+  body.appendChild(mk('p','bk-sum',W.courses.length+' course'+(W.courses.length===1?'':'s')+' · '+W.items.length+' lesson'+(W.items.length===1?'':'s')+'.'));
+  const goTo=id=>{if(M().nodes[id]){sel=id;render();navTo(id)}};
+  const n=sel&&M().nodes[sel], b=n&&n.bank;
+  if(b&&b.kind==='q'){
+    const i=W.items.findIndex(x=>x.id===b.id), a=W.items[i];
+    body.appendChild(mk('div','tsec','LESSON'));
+    if(!a){body.appendChild(mk('p','bk-hint','This lesson is no longer in Skool.'));return}
+    body.appendChild(mk('h4',null,a.q));
+    body.appendChild(mk('div','bk-meta',a.course+' · lesson '+a.n+' of '+a.of));
+    const row=mk('div','bk-row');
+    if(i>0){const pv=mk('button','bk-btn','PREVIOUS');pv.title=W.items[i-1].q;pv.onclick=()=>goTo(W.items[i-1].id);row.appendChild(pv)}
+    if(i<W.items.length-1){const nx=mk('button','bk-btn go','NEXT');nx.title=W.items[i+1].q;nx.onclick=()=>goTo(W.items[i+1].id);row.appendChild(nx)}
+    body.appendChild(row);
+    body.appendChild(a.text?mk('div','bk-text',a.text):mk('p','bk-hint','No text came with this lesson.'));
+  }else if(b&&b.kind==='course'){
+    const c=W.courses.find(x=>x.name===b.name);
+    body.appendChild(mk('div','tsec','COURSE'));
+    body.appendChild(mk('h4',null,b.name));
+    body.appendChild(mk('div','bk-meta',c?c.ls.length+' lesson'+(c.ls.length===1?'':'s'):'No lessons.'));
+    (c?c.ls:[]).forEach(l=>{const e=mk('button','bk-q',l.n+'. '+l.q);e.onclick=()=>goTo(l.id);body.appendChild(e)});
+  }else{
+    body.appendChild(mk('p','bk-hint','Pick a lesson to read it.'));
+  }
+}
 $('#bank-close').onclick=()=>{bankShut=true;bankPanel(true)};
 /* CHECK WITH CLAUDE: no API call, the clipboard, as the skill tree does */
 function bankAsk(){
   const bid=M().id, W=bankW[bid]||bankWant(bid), B=BANKS.find(b=>b.id===bid);
   if(!W.items.length){toast('Nothing in this bank yet');return}
-  const L=['This is my '+B.title+' knowledge bank: answers I spoke out loud, my Skool lessons and my rambles, sorted into topics by keyword. Check the sorting.','',
+  const L=['This is my '+B.title+' knowledge bank: answers I spoke out loud, my rambles and my posts, sorted into topics by keyword. Check the sorting.','',
     'Topics: '+W.list.map(t=>t.name).join(', '),
     'Other banks: '+BANKS.filter(x=>x.id!==bid).map(x=>x.title+' ('+bankList().filter(t=>t.bank===x.id).map(t=>t.name).join(', ')+')').join('; '),
     '','Pieces (id | kind | title | topics now | start of the text):'];
