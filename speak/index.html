@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.29, 2026-11-16">
+<meta name="mb-version" content="1.0.30, 2026-11-16">
 <title>SPEAK</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1109,7 +1109,23 @@ const STRESS_LINES = ['I never SAID you had to train every day.', 'Consistency b
   'You do not need more MOTIVATION. You need a smaller first step.', 'Sleep is the CHEAPEST performance drug there is.', 'Most people quit in WEEK two, not week ten.',
   'Strength is a SKILL. Practise it like one.', 'Your body keeps the SCORE of what you repeat.', 'Eat the PROTEIN first and the rest takes care of itself.',
   'Discipline is just DECIDING once.', 'Progress is boring. That is why it WORKS.', 'You are not lazy. You are UNDER-RECOVERED.'];
+/* CHECK THE COACH (SPEAK 1.0.30). Tom, 2026-11-16: "make sure it can
+   assess how I speak correctly", then "Yes, build it". One minute in four
+   parts: normal, then deliberately looking away, talking from one side of
+   the mouth, and mumbling. Each part is measured on its own, and each
+   reading passes only if it moved the way it should against the normal
+   part. A reading that fails is not trusted until it is fixed. */
+const CHECK_PH = [
+  { id: 'normal', name: 'NORMAL', how: 'Talk to the lens the way you normally would. Any topic.' },
+  { id: 'away', name: 'LOOK AWAY', how: 'Keep talking, but look off to the side, away from the lens.' },
+  { id: 'side', name: 'SIDE OF THE MOUTH', how: 'Keep talking, eyes back on the lens, from one side of your mouth.' },
+  { id: 'mumble', name: 'MUMBLE', how: 'Keep talking, eyes on the lens, lips lazy, mumble it.' },
+];
 const LIB = [
+  { id: 'lib-check', skill: 'eyes', name: 'Check the coach', style: 'live', kind: 'free', dur: 60, cam: true, check: true,
+    goals: () => [],
+    why: 'A coach that misreads you is worse than none. This proves the eye, mouth and crispness readings follow what you actually do.',
+    how: 'Four parts of fifteen seconds; the screen says what to do in each. Keep talking the whole minute.' },
   { id: 'lib-nostop', skill: 'flow', name: "Don't stop", style: 'live', kind: 'topic', dur: 120, asr: true, live: 'longPauses', noStop: true,
     goals: t => [{ m: 'longP', op: 'le', v: 1 }, { m: 'fpm', op: 'le', v: t.fpm }],
     why: 'Faizan Asif\'s daily rep, from his debate years: a random topic and a timer, and you keep talking until it ends. It finds the pace where your mind and your mouth keep up with each other.',
@@ -1204,7 +1220,7 @@ const FAULT = { 'wordy': 'Too many words for the point', 'unclear': 'Hard to fol
 /* what went wrong in one take, worst first: {id, sev, what, cue, fix} */
 function coach(t) {
   const d = t && t.drill !== 'warm' ? drillById(t.drill) : null;
-  if (!d) return [];
+  if (!d || d.check) return [];
   const m = t.m || {}, ev = t.ev || null, tg = targets(), b = band(d.style), out = [];
   const failed = {}, goalOf = {};
   (t.goals || []).forEach(g => { goalOf[g.m] = g.v; if (g.got != null && !g.ok) failed[g.m] = 1; });
@@ -1383,6 +1399,39 @@ function openMenu() {
     },
     actions: [{ label: 'CLOSE' }],
   });
+}
+/* one part of CHECK THE COACH, measured on its own */
+function checkSnap() {
+  const now = performance.now(), from = T.phT || T.t0;
+  const looks = (T.eye && T.eye.looks || []).filter(x => x.t >= from && x.t <= now);
+  const judged = looks.filter(x => x.on != null);
+  const mo = mouthOf(looks, T.t0, 5);
+  const sum = T.ear.summary({ from: T.phE || 0 }) || {};
+  T.phases[T.ph] = { id: CHECK_PH[T.ph].id, eye: judged.length >= 5 ? Math.round(judged.filter(x => x.on).length / judged.length * 100) : null,
+    seen: looks.length, mouth: mo ? Math.round(mo.even) : null, crisp: sum.crisp != null ? Math.round(sum.crisp * 1000) / 1000 : null };
+}
+/* each reading passes when it moved the way it should against NORMAL */
+function checkResult(ph) {
+  const by = {}; (ph || []).forEach(p => { if (p) by[p.id] = p; });
+  const n = by.normal || {}, a = by.away || {}, sd = by.side || {}, mu = by.mumble || {};
+  const v = (x, y, ok) => x == null || y == null ? null : ok ? 1 : 0;
+  const eyes = v(n.eye, a.eye, n.eye - a.eye >= 30);
+  const mouth = v(n.mouth, sd.mouth, n.mouth - sd.mouth >= 10);
+  const crisp = v(n.crisp, mu.crisp, mu.crisp <= n.crisp * 0.85);
+  return { phases: ph, eyes: eyes, mouth: mouth, crisp: crisp, all: eyes === 1 && mouth === 1 && crisp === 1 ? 1 : 0 };
+}
+function checkBox(t) {
+  const r = (t.m || {}).check || {}, by = {};
+  (r.phases || []).forEach(p => { if (p) by[p.id] = p; });
+  const box = el('div');
+  const line = (name, ok, what) => box.appendChild(el('p', ok === 1 ? '' : 'muted', '<b>' + esc(name) + ': ' + (ok === 1 ? 'reads you correctly' : ok === 0 ? 'did NOT move the way it should' : 'not measured') + '</b><br>' + esc(what)));
+  const f = x => x == null ? '\u00b7' : String(x);
+  line('Eye contact', r.eyes, 'On the lens ' + f((by.normal || {}).eye) + '% normally, ' + f((by.away || {}).eye) + '% looking away. It should drop by 30 points or more.');
+  line('Mouth use', r.mouth, 'Evenness ' + f((by.normal || {}).mouth) + '% normally, ' + f((by.side || {}).mouth) + '% from one side. It should drop by 10 points or more.');
+  line('Mumbling and crispness', r.crisp, 'Crispness ' + f((by.normal || {}).crisp) + ' normally, ' + f((by.mumble || {}).crisp) + ' mumbling. Mumbling should read at least 15% lower.');
+  box.appendChild(el('p', 'muted', r.all ? 'All three readings followed you. Trust them.' :
+    'A reading that did not move is not to be trusted yet. Tell Claude which one, and it gets fixed before you rely on it.'));
+  return box;
 }
 /* the take drawn as a strip: each um a tick, each silence a gap */
 function timeline(t) {
@@ -2589,6 +2638,7 @@ function drawToday(m) {
   const tb = el('button', 'mb-btn mb-press mb-tap', '<span>TODAY\u2019S TAKES</span>'); tb.onclick = openTodayTakes; ta.appendChild(tb);
   const fb = el('button', 'mb-btn go mb-press mb-tap', '<span>FREE SPEAK</span>'); fb.onclick = () => openFree(); ta.appendChild(fb);
   const mb2 = el('button', 'mb-btn mb-press mb-tap', '<span>DRILL MENU</span>'); mb2.onclick = openMenu; ta.appendChild(mb2);
+  const ck = el('button', 'mb-btn mb-press mb-tap', '<span>CHECK THE COACH</span>'); ck.onclick = () => openDrill(drillById('lib-check')); ta.appendChild(ck);
   tc.appendChild(ta);
   tc.appendChild(camRow());
   m.appendChild(tc);
@@ -3059,7 +3109,7 @@ async function startTakeNow(d, warmStep, prompt) {
   T.listener = wantAsr ? Listener(opt('lang', 'en-US')) : null;
   T.eye = { looks: [], base: null, calib: [] };
   T.prompt = warmStep ? null : (prompt || promptFor(d.kind, d));
-  T.half = false; T.mid = null; T.penA = null;
+  T.half = false; T.mid = null; T.penA = null; T.ph = null; T.phases = [];
   T.beat = !!(d && d.beat && optOn('beat', 1));
   const screen = $('#take');
   $('#tkName').textContent = warmStep ? 'WARM-UP · ' + warmStep.name.toUpperCase() : d.name.toUpperCase();
@@ -3164,6 +3214,15 @@ function runTake() {
     }
     $('#mLvl .level i').style.width = Math.round(T.ear.level() * 100) + '%';
     $('#mLvl .v').textContent = mmss(s);
+    if (d && d.check) {
+      const ph = Math.min(CHECK_PH.length - 1, Math.floor(s / 15));
+      if (T.ph == null || ph !== T.ph) {
+        if (T.ph != null) checkSnap();
+        T.ph = ph; T.phT = performance.now(); T.phE = T.ear.seconds();
+        mid.innerHTML = '<div class="say">' + esc(CHECK_PH[ph].name) + '</div><p class="muted">' + esc(CHECK_PH[ph].how) + '</p>';
+        Sfx.play('blip');
+      }
+    }
     if (s >= dur) { stopTake(false); return; }
     if (Math.round(s * 10) % 10 === 0) {
       const m = T.ear.summary({ from: Math.max(T.from, T.ear.seconds() - 10) });
@@ -3313,6 +3372,7 @@ function finishTake(m, secs) {
   const take = { drill: d.id, skill: d.skill, style: d.style, dur: Math.round(secs), m: out, goals: goals, pass: pass ? 1 : 0, ev: ev,
     asr: asrOn ? 1 : 0, cam: eye != null ? 1 : 0, tx: asrOn ? T.listener.text().slice(0, 4000) : '', hits: asrOn ? tx.hits : null,
     prompt: T.prompt && (T.prompt.text || (T.prompt.items || []).join(' | ')), p: T.prompt, at: Date.now() };
+  if (d.check) { if (T.ph != null) checkSnap(); const res = checkResult(T.phases); take.m = { check: res }; take.goals = []; take.pass = res.all ? 1 : 0; }
   if (T.origin && T.origin.key) take.from = T.origin.key;
   if (T.vid && T.clipP) take.vid = 1;
   if (T.prompt && T.prompt.kind === 'script') take.script = T.prompt.key;
@@ -3437,10 +3497,11 @@ function showTake(t, html) {
   const m = t.m || {};
   UI.dialog({
     title: (d ? d.name : 'Warm-up').toUpperCase() + ' · ' +
-      (d && (d.open || d === TIGHT) ? 'DONE' : t.pass ? 'MET' : !(t.goals && t.goals.length) ? 'DONE'
+      (d && d.check ? (t.pass ? 'ALL THREE HOLD' : 'SEE WHAT FAILED') : d && (d.open || d === TIGHT) ? 'DONE' : t.pass ? 'MET' : !(t.goals && t.goals.length) ? 'DONE'
         : t.goals.some(g => g.got == null) ? 'NOT MEASURED' : 'NOT MET'), width: 560,
     onClose: () => { if (cb) cb._stop(); },
     body: (b, h) => {
+      if (d && d.check) { b.appendChild(checkBox(t)); return; }
       if (d) b.appendChild(cb = coachBox(t, d, h));
       if (d) {
         const gs = el('div', 'stats');
@@ -3515,7 +3576,7 @@ function showTake(t, html) {
         b.appendChild(nextBox(t, h));
       }
     },
-    actions: d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { if ((d === FT || d === OT) && t.prompt) fitSkip[String(t.prompt).toLowerCase()] = 1; startTake(d); } },
+    actions: d && d.check ? [{ label: 'CLOSE' }, { label: 'AGAIN', kind: 'go', fn: () => { startTake(d); } }] : d && d.fix ? fixActions(t, d) : d ? [{ label: 'CLOSE' }, { label: 'NEW PROMPT', fn: () => { if ((d === FT || d === OT) && t.prompt) fitSkip[String(t.prompt).toLowerCase()] = 1; startTake(d); } },
       { label: 'SAME PROMPT', kind: 'go', fn: () => { startTake(d, null, promptOf(t, d)); } }] : [{ label: 'CLOSE' }],
   });
 }
