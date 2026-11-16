@@ -1663,3 +1663,38 @@ Tested in headless Chromium at 390 x 844 as an iPhone 13 Pro: 11 of 11
 ghost where last time had none, the ghost on set 3, muted and italic,
 nothing stored, the placeholder, his words replacing it, no sideways
 scroll, no errors), plus 23 and 7 from 1.0.84 to 1.0.87.
+
+## Volume By Set (1.0.90, 2026-11-16)
+
+Tom: "x axis set y axis volume". He picked a new view on a movement's GRAPH
+screen, beside Top 3 Sets & Total Work, not a change to it.
+
+- Set number 1, 2, 3 along the bottom; that set's weight x reps up the side,
+  drawn from zero. Each session is one line across its working sets: the
+  newest bold in the accent, the one before it `--data-2`, up to six older
+  ones thin and muted. Eight sessions at most, inside the period picked.
+- Working sets only (warmups by TRAIN's rule, plans not taken left out),
+  numbered in the order done. The weight is `TRAIN.load`, so an assisted
+  lift reads bodyweight minus help and a below-zero lift bodyweight plus the
+  number; with no weigh-in the set is left out and keeps its number.
+- Above the chart, the newest session's total and its change against the
+  session before, in the unit and in percent, no words about it.
+- A tap or drag shows the set at the point (date, set, weight x reps =
+  volume) and the header follows it with the set's comment and the day's
+  session comment. The drag finds the nearest set number, and every session
+  has a set 1, so a row of chips under the chart (date and total, which is
+  also the key) picks which session's line it reads. Tapping the chart
+  does not open the big view here, unlike the other graphs: the tap is the
+  reading.
+- Offered only when the movement is weight and reps. Fewer than two
+  sessions in the period: "Only one session in this period" or "No sessions
+  in this period".
+
+Tested in the Browser pane at 390 x 844 and 1280 x 900 on seeded rows: five
+sessions with a "wu" warmup each (header 3,485 lbs, −725 lbs, −17.2% vs the
+session before, all by hand), x labels 1 to 4, y from 0, newest 3px gold,
+before it 2px, older 1px muted; set 1's reading carried "felt strong" and
+"Session: Slept badly"; chips moved the reading to Nov 10 set 4 (840) and
+Nov 1 set 3 (1,080); an assisted pull up at 180 lb bodyweight read 130 x 8 =
+1,040 from 50 lb of help; a run offered no Volume By Set; no sideways
+scroll, every button 44px. Not seen on the iPhone.

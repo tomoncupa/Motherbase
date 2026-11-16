@@ -502,6 +502,14 @@ Each is short here; its story is under the heading named.
 - **Warmups count in every total**; records and set-N comparisons stay on
   working sets. A lift's GRAPH opens on Top 3 Sets & Total Work with a
   least-squares trend; the set 1 to 4 lines are hidden, not deleted. (HISTORY.md: Strength graphics and what a trend measures (1.0.49 to 1.0.59))
+- **GRAPH's Volume By Set** (1.0.90, Tom 2026-11-16: "x axis set y axis
+  volume"; `TRAIN.volBySet`, `drawVolBySet`): weight and reps lifts only,
+  set number along the bottom, weight x reps up the side from zero, one
+  line per session (last 8 in the period; newest the accent, the one before
+  `--data-2`, older faded). Working sets that count, warmups out, weight
+  through `TRAIN.load` (no load answer, left out, its number kept). Header:
+  the newest session's total and its change, numbers only. A chip per
+  session picks the line a tap or drag reads. (HISTORY.md: Volume By Set (1.0.90, 2026-11-16))
 - **A set's green arrow** shows when it moved more weight x reps than set N
   last time or its estimated 1RM rose. **Decided, not built**: a session
   crossing midnight stays on its start day; a comparison day only within 8

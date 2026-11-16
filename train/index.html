@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.89, 2026-11-16">
+<meta name="mb-version" content="1.0.90, 2026-11-16">
 <title>TRAIN</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -616,6 +616,14 @@ div.prow{padding:0}
 .mb-line.sv2{stroke:var(--data-2)}.mb-dot.sv2{fill:var(--data-2)}
 .mb-line.sv3{stroke:var(--data-3)}.mb-dot.sv3{fill:var(--data-3)}
 .mb-line.sv4{stroke:var(--data-4)}.mb-dot.sv4{fill:var(--data-4)}
+/* Volume By Set: the newest session loud, the one before it clear, older faded */
+.mb-line.vbs-new{stroke:var(--accent);stroke-width:3}.mb-dot.vbs-new{fill:var(--accent);opacity:1}
+.mb-line.vbs-prev{stroke:var(--data-2);stroke-width:2}.mb-dot.vbs-prev{fill:var(--data-2);opacity:1}
+.mb-line.vbs-old{stroke:var(--text-muted);stroke-width:1;opacity:.55}.mb-dot.vbs-old{fill:var(--text-muted);opacity:.8}
+.chartbox.vbs{cursor:crosshair}
+.vbskey{margin-top:var(--s-3)}
+.vbskey .mb-chip{display:inline-flex;align-items:center;gap:var(--s-2);font-variant-numeric:tabular-nums}
+.vbskey .mb-chip i{display:inline-block;width:var(--s-4);border-top:var(--s-1) solid var(--k);border-radius:var(--radius-sm)}
 .calbanner{background:var(--accent);color:var(--accent-fg);text-align:center;font-weight:var(--w-bold);
   padding:var(--s-3);border-radius:var(--radius-md)}
 .calmonth .caltitle{padding:var(--s-3) 0}
@@ -4949,7 +4957,7 @@ function drawGraph(m) {
     var e = UI.el('div', 'empty'); e.textContent = 'No sets recorded'; m.appendChild(e);
     return;
   }
-  if (TRAIN.graphEx !== exId) { TRAIN.graphEx = exId; TRAIN.graphType = null; TRAIN.graphPer = null; }
+  if (TRAIN.graphEx !== exId) { TRAIN.graphEx = exId; TRAIN.graphType = null; TRAIN.graphPer = null; TRAIN.vbsPick = null; }
   var ex = TRAIN.exercises()[exId] || {}, f = TRAIN.fieldsOf(exId), U = TRAIN.unit(exId);
   var W = function (kg) { return TRAIN.toUnit(kg || 0, U); };
   var D = function (km) { return TRAIN.distUnit() === 'mi' ? (km || 0) / KM_PER_MI : (km || 0); };
@@ -4960,6 +4968,8 @@ function drawGraph(m) {
      about 1rms". Then FitNotes' graphs for the type of exercise on screen. */
   var G = [], sv = TRAIN.setVolume(exId);
   if (sv) G.push({ id: 'setvol', name: 'Top 3 Sets & Total Work', u: sv.reps ? 'reps' : U + 's' });
+  /* weight and reps only: a set's volume is weight x reps (1.0.90) */
+  if (f.length === 2 && f[0] === 'w' && f[1] === 'r') G.push({ id: 'byset', name: 'Volume By Set', u: U + 's' });
   if (f.indexOf('w') > -1) {
     var noLoad = TRAIN.goesBelow(exId) && !TRAIN.bwList().length;
     if (!noLoad) G.push({ id: 'e1rm', name: 'Estimated 1RM', u: U + 's', v: function (ss) { return W(max(ss, function (x) { return TRAIN.e1rmS(x); })); } });
@@ -5009,6 +5019,7 @@ function drawGraph(m) {
 
   var range = TRAIN.periodRange(per), byDay = {}, order = [];
   if (gid === 'setvol') return drawSetVolume(m, ex, exId, per, range);
+  if (gid === 'byset') return drawVolBySet(m, ex, exId, per, range);
   all.forEach(function (x) {
     if (x.date < range.from || x.date > range.to) return;
     if (!byDay[x.date]) { byDay[x.date] = []; order.push(x.date); }
@@ -5335,6 +5346,134 @@ function drawSetVolume(m, ex, exId, per, range) {
     list.appendChild(recLine(Day.label(d.date), d.sets.map(num).join(' · ') + ' · top 3 ' + num(d.top3) + ' · total ' + num(d.total) + ' ' + UI.esc(sv.u), ''));
   });
   m.appendChild(list);
+}
+
+/* ── Volume By Set (Tom, 2026-11-16: "x axis set y axis volume"; 1.0.90) ──
+   One line per session across its working sets: set 1, 2, 3 along the
+   bottom, that set's weight x reps up the side, from zero. Only sets that
+   count (TRAIN.counts), warmups out by TRAIN's rule (`warm` on the index),
+   numbered in the order done that day. The weight is TRAIN.load, so an
+   assisted or below-zero lift is what the body moved; a set with no load
+   answer (no weigh-in) is left out and keeps its number. Every rep counts
+   (`r`), as in every volume. The last TRAIN.VBS_MAX sessions in the period:
+   the newest the accent, the one before it the second colour, the rest
+   faded. A chip per session picks which line a tap or drag reads, because
+   the drag finds the nearest set number and every session has a set 1. */
+TRAIN.VBS_MAX = 8;
+TRAIN.volBySet = function (exId, range) {
+  range = range || {};
+  var U = TRAIN.unit(exId), byDay = {};
+  TRAIN.historyOf(exId).forEach(function (s) {
+    if (!TRAIN.counts(s) || s.warm) return;
+    if ((range.from && s.date < range.from) || (range.to && s.date > range.to)) return;
+    (byDay[s.date] = byDay[s.date] || []).push(s);
+  });
+  var days = Object.keys(byDay).sort().map(function (d) {
+    var sets = [];
+    byDay[d].sort(function (a, b) { return (a.ord || 0) - (b.ord || 0) || TRAIN.setStamp(a) - TRAIN.setStamp(b); })
+      .forEach(function (s, i) {
+        var l = TRAIN.load(s);
+        if (l == null) return;
+        sets.push({ n: i + 1, s: s, kg: l, v: TRAIN.toUnit(l * (+s.r || 0), U) });
+      });
+    return { date: d, sets: sets, total: sets.reduce(function (a, x) { return a + x.v; }, 0),
+             note: String((Rec.get('session', d, '') || {}).note || '').trim() };
+  }).filter(function (x) { return x.total > 0; });
+  return { u: U + 's', days: days.slice(-TRAIN.VBS_MAX) };
+};
+function drawVolBySet(m, ex, exId, per, range) {
+  var vb = TRAIN.volBySet(exId, range), days = vb.days, u = vb.u;
+  if (days.length < 2) {
+    var e = UI.el('div', 'empty');
+    e.textContent = days.length ? 'Only one session in this period' : 'No sessions in this period';
+    m.appendChild(e);
+    return;
+  }
+  var num = function (v) { return Math.round(v).toLocaleString(); };
+  var sign = function (v) { return v > 0 ? '+' : v < 0 ? '−' : ''; };
+  var last = days[days.length - 1], prev = days[days.length - 2];
+  var diff = last.total - prev.total, pct = prev.total ? diff / prev.total * 100 : null;
+  var pd = days.filter(function (d) { return d.date === TRAIN.vbsPick; })[0] || last;
+
+  var card = UI.el('div', 'exblock pad');
+  card.innerHTML = '<div class="fieldlabel">VOLUME BY SET (' + UI.esc(u) + ')</div>';
+  /* the answer first: the newest session's volume and its change, numbers only */
+  var head = Chart.header({
+    value: num(last.total), unit: u,
+    sub: 'Session total, ' + sign(Math.round(diff)) + num(Math.abs(diff)) + ' ' + u +
+      (pct != null ? ' · ' + sign(Math.round(pct * 10)) + Math.abs(pct).toFixed(1) + '%' : '') +
+      ' vs ' + Day.label(prev.date),
+    when: Day.label(last.date),
+  });
+  card.appendChild(head.el);
+  var box = UI.el('div', 'chartbox vbs');
+  card.appendChild(box);
+
+  var wOf = function (x) { return TRAIN.showWeight(x.kg, x.kg === +x.s.kg ? x.s.u : null, exId); };
+  var setAt = function (n) { return pd.sets.filter(function (y) { return y.n === n; })[0]; };
+  var n = 0, vals = [];
+  days.forEach(function (d) { d.sets.forEach(function (x) { n = Math.max(n, x.n); vals.push(x.v); }); });
+  var ptsOf = function (d) {
+    return d.sets.map(function (x) {
+      return [x.n, x.v, Day.label(d.date) + ', set ' + x.n + ': ' + num(x.v) + ' ' + u];
+    });
+  };
+  Chart.mount(box, { label: 'Volume by set (' + u + ')' }, function (c) {
+    c.xLinear(n > 1 ? 0.75 : 0.5, n > 1 ? n + 0.25 : 1.5);
+    fitY(c, vals, true);
+    c.grid(function (v) { return v >= 10000 ? Math.round(v / 1000) + 'k' : Math.round(v).toLocaleString(); });
+    var labs = [];
+    for (var i = 1; i <= n; i++) labs.push([i, String(i)]);
+    c.labels(labs);
+    /* oldest first, so the newest lies on top */
+    days.forEach(function (d, k) {
+      var age = days.length - 1 - k, cls = age === 0 ? 'vbs-new' : age === 1 ? 'vbs-prev' : 'vbs-old';
+      var pts = ptsOf(d);
+      c.line(pts, 'mb-line ' + cls);
+      if (age < 2 || d === pd || pts.length === 1) c.dots(pts, 'mb-dot ' + cls, age === 0 ? 3.5 : 3);
+    });
+    var lp = ptsOf(last);
+    c.end(lp[lp.length - 1], num(lp[lp.length - 1][1]));
+    c.scrub(ptsOf(pd), {
+      fmt: function (p) {
+        var x = setAt(p[0]);
+        return Day.short(pd.date) + ' · set ' + x.n + ': ' + wOf(x) + ' × ' + TRAIN.showReps(x.s.r || 0) + ' = ' + num(x.v);
+      },
+      onMove: function (p) {
+        var x = setAt(p[0]), nt = String(x.s.note || '').trim();
+        head.set(num(x.v), 'Set ' + x.n + ' · ' + wOf(x) + ' ' + TRAIN.unitLabel(exId) + ' × ' + TRAIN.showReps(x.s.r || 0) +
+          (nt ? ' · ' + nt : '') + (pd.note ? ' · Session: ' + pd.note : ''), Day.label(pd.date));
+      },
+      onLeave: head.reset,
+    });
+  });
+
+  /* which line is which, newest first; a tap picks the line a drag reads */
+  var key = UI.el('div', 'mb-chips vbskey');
+  days.slice().reverse().forEach(function (d, age) {
+    var b = UI.el('button', 'mb-chip mb-press' + (d === pd ? ' on' : ''));
+    b.type = 'button';
+    b.setAttribute('aria-pressed', d === pd ? 'true' : 'false');
+    b.innerHTML = '<i style="--k:' + (age === 0 ? 'var(--accent)' : age === 1 ? 'var(--data-2)' : 'var(--text-muted)') + '"></i>' +
+      UI.esc(Day.short(d.date)) + ' · ' + num(d.total);
+    b.onclick = function () { Mobile.feedback('select'); TRAIN.vbsPick = d.date; draw(); };
+    key.appendChild(b);
+  });
+  card.appendChild(key);
+  var foot = UI.el('div', 'lasttime');
+  foot.style.marginTop = 'var(--s-3)';
+  foot.textContent = 'Each line is one session, working sets only, set 1 on the left.';
+  card.appendChild(foot);
+  var dflt = UI.el('button', 'mb-btn mb-press mb-tap');
+  dflt.style.width = '100%';
+  dflt.style.marginTop = 'var(--s-3)';
+  dflt.textContent = 'SET AS DEFAULT GRAPH';
+  dflt.onclick = function () {
+    TRAIN.patchExercise(exId, { gdef: { type: 'byset', per: per } });
+    UI.toast('Default graph saved');
+  };
+  card.appendChild(dflt);
+  m.appendChild(card);
 }
 
 /* ═════════════════ THE DAY'S EXERCISES DRAWER ═════════════════ */
