@@ -1,4 +1,4 @@
-# FORGE
+# FORGE (CLAUDE.md)
 
 **Muscles come from the suite's one rule** (1.0.6, 2026-11-16): `musShare`/`musOf` ask `shared/muscles.js` `Muscles.forLift` with TRAIN's exercise row (`mus`), this app's `ftag`, the master list, then the group, exactly as TRAIN does. The week's per-muscle chips count DIRECT sets (each set once, toward the main muscle), as TRAIN's first view. Every master muscle is offered in the pickers. (CLAUDE.md)
 
