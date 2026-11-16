@@ -651,6 +651,14 @@ bugcheck 0; Tom: him or Meralco, plus a cheap PSU). Either can stop
 WebView2 reading or keeping its store at start. Unproven which; 30 GB was
 freed that day. No code change.
 
+**2026-11-16, 8am, "I get logged out???"** Not a sign-out. The program had
+reopened at 07:58:28; its own `mb.cloud` showed `lost` empty and a send at
+07:59:19. For the ~45 s of start (auth, then `R.need()`) DATA read "Not
+syncing yet. Starting up." over a Sign in button. io.js 0.1.18 says
+"Signed in as X. Connecting" with no button until start ends or `why` is set.
+Also seen: Local Storage was recreated "since it was missing" on 14 Nov
+21:45 (Chromium's LOG), and another power loss at 04:41 that day.
+
 ## The start screen (2026-10-04, `boot.js`)
 
 Tom: "a sort of cool startup animation when we're opening up the app",
