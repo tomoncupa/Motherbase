@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
-<meta name="mb-version" content="1.0.98, 2026-11-16">
+<meta name="mb-version" content="1.0.99, 2026-11-16">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4608,13 +4608,32 @@ function dayUnlogged(date) {
   const r = Rec.get('day', date, '') || {};
   return r.unmeals != null ? Math.max(0, Math.round(Number(r.unmeals) || 0)) : (r.untracked ? 1 : 0);
 }
-function dayUntracked(date) { return dayUnlogged(date) > 0; }
+/* Tom, 2026-11-16: "I've not once been able to set a day as not fully
+   tracked", and he named the fix: the morning check asks what percent of
+   yesterday was tracked (`day.tracked`, 0 to 100). Under 100 is the same
+   flag, so `untracked` stays the one thing TDEE and grade.js read, written
+   from both the count and the percent. */
+function dayTracked(date) {
+  const v = (Rec.get('day', date, '') || {}).tracked;
+  return v == null || v === '' || !isFinite(+v) ? null : Math.max(0, Math.min(100, +v));
+}
+function dayUntracked(date) { const t = dayTracked(date); return dayUnlogged(date) > 0 || (t != null && t < 100); }
+function untrackedFlag(n, t) { return n > 0 || (t != null && t < 100) ? 1 : undefined; }
 function setDayUnlogged(date, n) {
   n = Math.max(0, Math.round(n || 0));
-  Rec.patch('day', date, '', { unmeals: n || undefined, untracked: n ? 1 : undefined });
+  Rec.patch('day', date, '', { unmeals: n || undefined, untracked: untrackedFlag(n, dayTracked(date)) });
   if (window.TD) TD._dirty = true;
 }
-function setDayUntracked(date, on) { setDayUnlogged(date, on ? Math.max(1, dayUnlogged(date)) : 0); }
+function setDayTracked(date, pct) {
+  const t = pct == null ? null : Math.max(0, Math.min(100, Math.round(pct)));
+  Rec.patch('day', date, '', { tracked: t == null ? undefined : t, untracked: untrackedFlag(dayUnlogged(date), t) });
+  if (window.TD) TD._dirty = true;
+}
+function setDayUntracked(date, on) {
+  if (on) { setDayUnlogged(date, Math.max(1, dayUnlogged(date))); return; }
+  Rec.patch('day', date, '', { unmeals: undefined, tracked: undefined, untracked: undefined });
+  if (window.TD) TD._dirty = true;
+}
 
 function isleOrderMenu(node) {
   const open = e => {
@@ -4652,9 +4671,10 @@ function drawNow(m) {
      month wondering about. It says what it does to the maths, because that is
      the only reason to set it. */
   if (dayUntracked(d)) {
-    const un = dayUnlogged(d);
+    const un = dayUnlogged(d), t = dayTracked(d);
+    const said = [t != null && t < 100 ? t + '% of food tracked' : '', un ? un + (un === 1 ? ' meal' : ' meals') + ' not logged' : ''].filter(Boolean).join(', ');
     isle.appendChild(el('div', 'note',
-      '<b>' + un + (un === 1 ? ' meal' : ' meals') + ' not logged</b>. The weigh-in still counts; what you ate is left out of TDEE.'));
+      '<b>' + said.charAt(0).toUpperCase() + said.slice(1) + '</b>. The weigh-in still counts; what you ate is left out of TDEE.'));
   }
   m.appendChild(isle);
 
@@ -5274,10 +5294,20 @@ function drawFood(m) {
   more.setAttribute('aria-label', 'One more meal not logged');
   if (window.Icons) { less.innerHTML = Icons.svg('minus'); more.innerHTML = Icons.svg('add'); }
   less.disabled = !un;
-  less.onclick = () => { setDayUnlogged(d, un - 1); Mobile.feedback('select'); draw(); };
-  more.onclick = () => { setDayUnlogged(d, un + 1); Mobile.feedback('select'); draw(); };
+  /* 2026-11-16: it redraws ITSELF and reads the count at the press. A tap on
+     an iPhone leaves the caret in the food table, which holds draw() back
+     (`foodBusy`), so the number sat at 0 and every press wrote 1 again. */
+  const shown = el('span', 'un', String(un));
+  const bump = step => {
+    const n = Math.max(0, dayUnlogged(d) + step);
+    setDayUnlogged(d, n); Mobile.feedback('select');
+    shown.textContent = String(n); less.disabled = !n; cnt.classList.toggle('on', n > 0);
+    draw();
+  };
+  less.onclick = () => bump(-1);
+  more.onclick = () => bump(1);
   cnt.appendChild(less);
-  cnt.appendChild(el('span', 'un', String(un)));
+  cnt.appendChild(shown);
   cnt.appendChild(more);
   bar.appendChild(cnt);
   c2.appendChild(bar);
@@ -9601,7 +9631,7 @@ let checkOnly = null;    /* a fixed list for this one check, the new day's two *
 function checkFields() {
   const d = Day.today();
   if (checkOnly) return checkOnly.filter(f => !logged(d, f.id));
-  const m = checkMorn.filter(f => f.fid || !logged(d, f.id)), ids = m.map(f => f.id);
+  const m = checkMorn.filter(f => f.fid || f.yday || !logged(d, f.id)), ids = m.map(f => f.id);
   return m.concat(checkChosen().filter(f => ids.indexOf(f.id) < 0 &&
     !((f.measure === 'check' || (f.measure === 'number' && f.once)) && logged(d, f.id))));
 }
@@ -9646,6 +9676,15 @@ function deskMorning() {
     const y = Day.shift(d, -1), e = evList(y, st.id), was = e.length ? +e[e.length - 1].v : null;
     out.push(Object.assign({}, st, { id: st.id + '@y', fid: st.id, date: y, was: was, label: 'Steps yesterday' }));
   }
+  /* Tom, 2026-11-16: "have the morning input prompt for a summary for
+     yesterday if there wasn't one, and then you can also give it a text
+     field for the percent yesterday was tracked." The summary is the day
+     row's `note`, LOG's and the journal's pinned line, so it is only asked
+     while yesterday has none. The percent is asked while calories are
+     counted; blank writes nothing. */
+  const y = Day.shift(d, -1), yr = Rec.get('day', y, '') || {};
+  if (!String(yr.note || '').trim()) out.push({ id: 'sum@y', yday: 'sum', date: y, measure: 'text', label: "Yesterday's summary", was: '' });
+  if (countCal()) out.push({ id: 'trk@y', yday: 'pct', date: y, measure: 'number', unit: '%', label: "Yesterday's food tracked, %", was: dayTracked(y) });
   return out;
 }
 let checkDoing = '';     /* "what are you doing now", as typed */
@@ -9669,12 +9708,17 @@ function checkDraw() {
   const fs = checkFields();
   fs.forEach(f => {
     win.appendChild(el('div', 'nwlabel', esc(String(f.label || f.id).toUpperCase())));
-    /* A number is typed, and optional: it is a reading you may not have. */
-    if (f.measure === 'number' || f.measure === 'amount') {
+    /* A number is typed, and optional: it is a reading you may not have.
+       Yesterday's summary is words, in the same kind of box. */
+    if (f.measure === 'number' || f.measure === 'amount' || f.measure === 'text') {
+      const words = f.measure === 'text';
       const i = document.createElement('input');
-      i.type = 'text'; i.inputMode = 'decimal'; i.className = 'nwdoing';
+      i.type = 'text'; i.inputMode = words ? 'text' : 'decimal'; i.className = 'nwdoing';
       i.placeholder = f.unit || ''; i.value = checkVals[f.id] != null ? String(checkVals[f.id]) : '';
-      i.oninput = () => { const v = num(i.value); if (v == null) delete checkVals[f.id]; else checkVals[f.id] = v; };
+      i.oninput = () => {
+        const v = words ? (i.value.trim() || null) : num(i.value);
+        if (v == null) delete checkVals[f.id]; else checkVals[f.id] = v;
+      };
       /* Enter goes to the next box, and from the last one it is SAVE: his
          hands are on the keys, he came here by pressing Enter on a line. */
       i.onkeydown = e => {
@@ -9773,6 +9817,8 @@ function checkSave() {
     if (v == null) return;
     /* NOT YET writes nothing, so it is asked again next time */
     if (f.measure === 'check' && !v) return;
+    if (f.yday === 'sum') { Rec.patch('day', f.date, '', { note: String(v).trim() }); n++; return; }
+    if (f.yday === 'pct') { if (v !== f.was) { setDayTracked(f.date, v); n++; } return; }
     if (f.fid) { if (v !== f.was) { evAdd(f.date, f.fid, v); n++; } return; }
     evAdd(d, f.id, v); n++;
   });
@@ -9843,7 +9889,7 @@ function deskAsk() {
   deskRaise();
   checkMorn = deskMorning();
   checkOpen();
-  checkMorn.forEach(f => { if (f.fid && f.was != null && checkVals[f.id] == null) checkVals[f.id] = f.was; });
+  checkMorn.forEach(f => { if ((f.fid || f.yday === 'pct') && f.was != null && checkVals[f.id] == null) checkVals[f.id] = f.was; });
   if (checkOn && checkMorn.length) checkDraw();
 }
 
