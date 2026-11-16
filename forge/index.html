@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.4, 2026-10-22">
+<meta name="mb-version" content="1.0.5, 2026-11-16">
 <title>FORGE</title>
 <link rel="icon" href="icon-192.png">
 <meta name="theme-color" content="#0B0E14">
@@ -1168,7 +1168,14 @@ function wireLane(lane, dayKey, pid, index) {
     draw();
   });
 }
-document.addEventListener('dragend', () => { drag = null; clearMarks(); });
+/* A row landing mid-drag used to redraw the board under the carried plate:
+   the lane it was over was gone, and the plate's own dragend went with its
+   old node, so `drag` stayed set. Now the redraw waits for the drag to end
+   (draw() holds while `drag` is set), and ending catches up (2026-11-16). */
+document.addEventListener('dragend', () => { drag = null; clearMarks(); if (pending) draw(); });
+/* The browser sends no mouse moves while it carries something, so a move
+   with `drag` still set is a drag whose ending was never heard. */
+document.addEventListener('pointermove', e => { if (drag && e.buttons === 0) { drag = null; clearMarks(); if (pending) draw(); } }, { passive: true });
 
 /* ── the side ── */
 function drawSide() {
@@ -1726,6 +1733,7 @@ function drawGrid(board) {
    another device waits for the box to be left. */
 let pending = false;
 function draw() {
+  if (drag) { pending = true; return; }
   const a = document.activeElement;
   if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && document.getElementById('app').contains(a) && a.id !== 'q') { pending = true; return; }
   drawNow();

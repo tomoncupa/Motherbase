@@ -1050,7 +1050,10 @@ answer, or take it out.
   old node is gone, the release is never heard, and the ghost stays on the
   page for good (COACH's box, 2026-10-08). Put `pointermove`/`pointerup`/
   `pointercancel` on `window` for the length of the drag and remove them on
-  release.
+  release. Since 2026-11-16 a new pointer drag uses `Mobile.drag`, which
+  does that and always ends once (drop, tap or cancel: a cancelled pointer,
+  blur, hidden, Escape, an unheard release); BLOCK and the home screen use
+  it, and a board asks `Mobile.dragging()` before redrawing.
 - **Anything that measures itself while built off the page measures 0.**
   An app that builds columns detached and appends them after (COACH past
   1560px) hands a shared component a box with no width, so it cannot

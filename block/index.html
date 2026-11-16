@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.26, 2026-11-16">
+<meta name="mb-version" content="1.0.27, 2026-11-16">
 <title>BLOCK — routine scheduler</title>
 <link rel="icon" href="icon-192.png">
 <!-- No font link. skins.js fetches the face the chosen theme asks for and
@@ -4552,8 +4552,10 @@ function startDrag(ev, cfg) {
   const rect = cfg.node.getBoundingClientRect();
   drag = { cfg, startX: ev.clientX, startY: ev.clientY, offX: ev.clientX - rect.left, offY: ev.clientY - rect.top, moved: false, ghost: null, ph: null, target: null, idx: 0 };
   ev.preventDefault();
-  window.addEventListener('pointermove', onDragMove);
-  window.addEventListener('pointerup', onDragUp, { once: true });
+  /* the shared drag owns the gesture, so it always ends once: a dropped
+     touch, Alt+Tab or Escape puts the block back instead of leaving it
+     lifted out and the board refusing to redraw (2026-11-16) */
+  Mobile.drag(ev, { move: onDragMove, drop: onDragUp, tap: onDragUp, cancel: putBackDrag });
 }
 function onDragMove(ev) {
   if (!drag) return;
@@ -4631,11 +4633,19 @@ function onDragUp() {
 }
 function cancelDrag() {
   window.removeEventListener('pointermove', onDragMove);
+  document.body.style.cursor = '';
   if (drag && drag.ghost) drag.ghost.remove();
   if (drag && drag.moved) HIST.pop();
   drag = null; render();
 }
-window.addEventListener('keydown', e => { if (e.key === 'Escape' && drag) { const d = drag; if (d.from) d.from.arr.splice(d.from.i, 0, d.payload); cancelDrag(); } });
+/* every way a drag can end without a drop: the block goes back where it was */
+function putBackDrag() {
+  if (!drag) return;
+  const d = drag;
+  if (d.from && d.payload) d.from.arr.splice(d.from.i, 0, d.payload);
+  if (!d.moved) { drag = null; return; }
+  cancelDrag();
+}
 
 function startResize(ev, it, node) {
   ev.preventDefault(); ev.stopPropagation();
@@ -4652,8 +4662,8 @@ function startResize(ev, it, node) {
     if (last !== d0) { snap(); it.dur = last; }
     render();
   };
-  window.addEventListener('pointermove', mv);
-  window.addEventListener('pointerup', up, { once: true });
+  /* a resize that never hears its release keeps the length it had */
+  Mobile.drag(ev, { slop: 0, move: mv, drop: up, tap: up, cancel: () => render() });
 }
 
 /* ============================ exports ============================ */
@@ -6275,7 +6285,7 @@ let quietT = null;
 /** Why now is a bad moment to redraw, or null when it is a fine one. */
 function boardBusy() {
   if (touched) return 'saving';
-  if (typeof drag !== 'undefined' && drag) return 'dragging';
+  if ((typeof drag !== 'undefined' && drag) || (window.Mobile && Mobile.dragging())) return 'dragging';
   /* BLOCK's own modal, its right-click menu and its popovers, plus the shared
      layer's menus and sheets. All four are put into the page when they open
      and taken out when they close, so being there is being open. */

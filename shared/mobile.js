@@ -31,6 +31,7 @@
      Mobile.form(container)                 Next through the fields, Done on the last
      Mobile.swipe(row, {left:{...}})        swipe a row to act on it
      Mobile.trap(closeFn)                   system back closes your thing, not the app
+     Mobile.drag(ev, {start,move,drop,tap,cancel})  a drag that always ends once
 
    Honest about the platform: iPhone Safari has no vibration API, so haptics
    are Android-only. That is why every shared component pairs a haptic with a
@@ -784,6 +785,100 @@ function swipe(row, opts) {
   return { reset: reset, face: face };
 }
 
+/* ── drag: one gesture, one named step, always one ending ─────────────────
+   2026-11-16, after a sweep of the suite's drags. COACH's slot drag had
+   learned to listen on the window and to hear a cancelled pointer; BLOCK,
+   the home screen and FORGE had not, so a touch the browser took back, an
+   Alt+Tab mid-drag or a redraw under the finger left a block lifted out of
+   its lane, a ghost on the page, and the board refusing to redraw because
+   it still thought something was being carried.
+
+   Mobile.drag(ev, opts) is called from a pointerdown. It owns the gesture:
+     opts.start(e, d)   the pointer moved past opts.slop (5px): a real drag
+     opts.move(e, d)    every move after that
+     opts.drop(e, d)    released while dragging
+     opts.tap(e, d)     released without ever moving past the slop
+     opts.cancel(e, d)  anything else: the browser cancelled the pointer, the
+                        window lost focus or went hidden, Escape, a release
+                        never heard (a move with no button down), a new drag,
+                        a callback that threw, or Mobile.drag.cancel(). Put
+                        back whatever start() lifted out. d.why says which.
+   Exactly one of drop, tap or cancel runs, once, and every listener goes
+   with it. d.state is the one word: pressed, dragging, then dropped, tapped
+   or cancelled. Mobile.dragging() is the live drag's state or '', so a board
+   asks one question before redrawing. Mobile.drag.log holds the last 20
+   endings, for whoever is reading what happened. */
+const DRAG_LOG = [];
+let liveDrag = null;
+function drag(ev, opts) {
+  opts = opts || {};
+  if (liveDrag) liveDrag.cancel('replaced');
+  const slop = opts.slop == null ? 5 : opts.slop;
+  const d = {
+    state: 'pressed', why: '', id: ev.pointerId, type: ev.pointerType || 'mouse',
+    x0: ev.clientX, y0: ev.clientY, x: ev.clientX, y: ev.clientY, at: Date.now(),
+    cancel: why => end('cancelled', null, why || 'asked'),
+  };
+  const call = (fn, e) => {
+    if (!fn) return true;
+    try { fn(e, d); return true; } catch (er) {
+      try { console.error('Mobile.drag', er); } catch (e2) {}
+      return false;
+    }
+  };
+  const mine = e => e.pointerId == null || d.id == null || e.pointerId === d.id;
+  function onMove(e) {
+    if (!mine(e)) return;
+    /* a mouse with no button down means the release happened where we could
+       not hear it; touch and pen report 0 on hover only, never mid-contact */
+    if (d.type === 'mouse' && e.buttons === 0) return end('cancelled', e, 'lost');
+    d.x = e.clientX; d.y = e.clientY;
+    if (d.state === 'pressed') {
+      if (Math.abs(d.x - d.x0) < slop && Math.abs(d.y - d.y0) < slop) return;
+      d.state = 'dragging';
+      if (!call(opts.start, e)) return end('cancelled', e, 'error');
+      if (d.state !== 'dragging') return;
+    }
+    if (!call(opts.move, e)) end('cancelled', e, 'error');
+  }
+  function onUp(e) {
+    if (!mine(e)) return;
+    if (d.state === 'dragging') end('dropped', e, 'up');
+    else end('tapped', e, 'up');
+  }
+  const onCancel = e => { if (mine(e)) end('cancelled', e, 'pointercancel'); };
+  const onBlur = () => end('cancelled', null, 'blur');
+  const onHidden = () => { if (doc.hidden) end('cancelled', null, 'hidden'); };
+  const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); end('cancelled', null, 'escape'); } };
+  function end(state, e, why) {
+    if (d.state !== 'pressed' && d.state !== 'dragging') return;
+    const was = d.state;
+    d.state = state; d.why = why;
+    g.removeEventListener('pointermove', onMove);
+    g.removeEventListener('pointerup', onUp);
+    g.removeEventListener('pointercancel', onCancel);
+    g.removeEventListener('blur', onBlur);
+    doc.removeEventListener('visibilitychange', onHidden);
+    g.removeEventListener('keydown', onKey, true);
+    if (liveDrag === d) liveDrag = null;
+    DRAG_LOG.push({ at: Date.now(), state: state, why: why, was: was, ms: Date.now() - d.at });
+    if (DRAG_LOG.length > 20) DRAG_LOG.shift();
+    if (state === 'dropped') { if (!call(opts.drop, e)) call(opts.cancel, e); }
+    else if (state === 'tapped') call(opts.tap, e);
+    else call(opts.cancel, e);
+  }
+  g.addEventListener('pointermove', onMove);
+  g.addEventListener('pointerup', onUp);
+  g.addEventListener('pointercancel', onCancel);
+  g.addEventListener('blur', onBlur);
+  doc.addEventListener('visibilitychange', onHidden);
+  g.addEventListener('keydown', onKey, true);
+  liveDrag = d;
+  return d;
+}
+drag.log = DRAG_LOG;
+drag.cancel = why => { if (liveDrag) liveDrag.cancel(why); };
+
 /* ── the API ───────────────────────────────────────────────────────────── */
 const Mobile = {
   ios: ios, android: android, touch: touch, standalone: !!standalone,
@@ -840,6 +935,11 @@ const Mobile = {
       two gestures stay tellable apart. opts.skip is a selector for children
       that should keep their own behaviour. */
   hold: hold,
+  /** carry something with a pointer; see "drag" above for the callbacks.
+      Always ends in exactly one of drop, tap or cancel. */
+  drag: drag,
+  /** the live drag's step ('pressed' or 'dragging'), or '' when none */
+  dragging() { return liveDrag ? liveDrag.state : ''; },
 
   /** the contextual menu, as a sheet on a phone.
       items: [{label, note, icon, kind:'bad', on:true, fn}] or '-' */

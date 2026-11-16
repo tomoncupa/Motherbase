@@ -681,6 +681,31 @@ async function run() {
       return a === 1 && b === 2 && n === 3;
     })();
   })());
+  /* One level under every stuck drag (2026-11-16): BLOCK, the home screen
+     and FORGE each left something lifted when the release was never heard.
+     The shared drag must end exactly once whichever way it ends. */
+  ok('mobile: a drag ends exactly once: tap, drop, cancelled pointer, Escape, blur, unheard release, a throw, a new drag', (() => {
+    const fire = (type, o) => window.dispatchEvent(new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true, pointerId: 9, pointerType: 'touch', clientX: 10, clientY: 10, buttons: 1 }, o || {})));
+    const log = [], down = { pointerId: 9, pointerType: 'touch', clientX: 10, clientY: 10 };
+    const mk = () => ({ start: () => log.push('start'), move: () => log.push('move'), drop: () => log.push('drop'), tap: () => log.push('tap'), cancel: (e, d) => log.push('cancel:' + d.why) });
+    const take = () => { const s = log.join(); log.length = 0; return s; };
+    Mobile.drag(down, mk()); fire('pointerup'); const tap = take();
+    Mobile.drag(down, mk()); fire('pointermove', { clientX: 40 }); const busy = Mobile.dragging(); fire('pointerup', { clientX: 40 }); fire('pointerup'); const drop = take();
+    Mobile.drag(down, mk()); fire('pointermove', { clientX: 40 }); fire('pointercancel'); fire('pointerup'); const cxl = take();
+    Mobile.drag(down, mk()); fire('pointermove', { clientX: 40 }); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); const esc = take();
+    Mobile.drag(down, mk()); fire('pointermove', { clientX: 40 }); window.dispatchEvent(new Event('blur')); const blur = take();
+    Mobile.drag({ pointerId: 1, pointerType: 'mouse', clientX: 10, clientY: 10 }, mk());
+    fire('pointermove', { pointerId: 1, pointerType: 'mouse', clientX: 40, buttons: 1 }); fire('pointermove', { pointerId: 1, pointerType: 'mouse', clientX: 50, buttons: 0 }); const lost = take();
+    const ce = console.error; console.error = () => {};
+    Mobile.drag(down, { move: () => { throw new Error('smoke'); }, cancel: (e, d) => log.push('cancel:' + d.why) }); fire('pointermove', { clientX: 40 });
+    console.error = ce; const thrown = take();
+    Mobile.drag(down, mk()); Mobile.drag(down, {}); const replaced = take(); Mobile.drag.cancel();
+    const ends = Mobile.drag.log.slice(-8).map(x => x.state + ':' + x.why).join();
+    return tap === 'tap' && busy === 'dragging' && drop === 'start,move,drop' &&
+      cxl === 'start,move,cancel:pointercancel' && esc === 'start,move,cancel:escape' && blur === 'start,move,cancel:blur' &&
+      lost === 'start,move,cancel:lost' && thrown === 'cancel:error' && replaced === 'cancel:replaced' &&
+      Mobile.dragging() === '' && /cancelled:asked$/.test(ends);
+  })());
   /* This one exists because it broke: a menu item ran 60ms after the tap,
      so a typing box it opened was focused outside the gesture and an iPhone
      showed the caret with no keyboard (KITCHEN's Count, 2026-09-30). The

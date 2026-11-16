@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <link rel="manifest" href="manifest.json">
-<meta name="mb-version" content="1.0.124, 2026-11-16">
+<meta name="mb-version" content="1.0.125, 2026-11-16">
 <script>
 /* An app's home button, pressed in one of this page's own frames, opens
    this page inside the frame: a second home screen in a box, loading app
@@ -8077,8 +8077,20 @@ function startMove(ev, i) {
      WEIGHT is its range and not plain WEIGHT */
   const W = WIDGETS[layout[i].t];
   gh.innerHTML = '<div class="w-head">' + esc(W.nmFor ? W.nmFor(layout[i]) : W.nm) + '</div>';
-  window.addEventListener('pointermove', onMove);
-  window.addEventListener('pointerup', endMove, { once: true });
+  /* the shared drag always ends once: a release never heard (Alt+Tab, a
+     touch the browser took back, Escape) drops nothing and leaves no ghost,
+     where it used to leave `moving` set and the board refusing to redraw */
+  Mobile.drag(ev, { slop: 0, move: onMove, drop: endMove, tap: endMove, cancel: cancelMove });
+}
+function cancelMove() {
+  if (!moving) return;
+  window.removeEventListener('pointermove', onMove);
+  document.body.classList.remove('dragging');
+  $('#ghost').style.display = 'none';
+  moving.node.classList.remove('drag');
+  hint();
+  moving = null;
+  drawHome();
 }
 function onMove(ev) {
   if (!moving) return;
@@ -8118,8 +8130,19 @@ function startResize(ev, i, node) {
   document.body.classList.add('dragging');
   sizing = { i: i, node: node, fit: fit, cols: m.cols, colw: m.colw, gap: m.gap, x: ev.clientX, y: ev.clientY, w: layout[i].w,
     h: fit ? (effH[i] || layout[i].h) : layout[i].h, h0: layout[i].h, hs: layout[i].hs };
-  window.addEventListener('pointermove', onResize);
-  window.addEventListener('pointerup', endResize, { once: true });
+  Mobile.drag(ev, { slop: 0, move: onResize, drop: endResize, tap: endResize, cancel: cancelResize });
+}
+/* a resize that never hears its release goes back to the size it had */
+function cancelResize() {
+  if (!sizing) return;
+  window.removeEventListener('pointermove', onResize);
+  document.body.classList.remove('dragging');
+  const c = layout[sizing.i];
+  if (c) {
+    c.w = sizing.w; c.h = sizing.h0;
+    if (sizing.hs === undefined) delete c.hs; else c.hs = sizing.hs;
+  }
+  sizing = null; drawHome();
 }
 function onResize(ev) {
   if (!sizing) return;

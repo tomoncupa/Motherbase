@@ -876,3 +876,34 @@ Read it when working in that corner; add build stories there, not here.
 ## Axis words never touch (2026-11-16, `chart.js`)
 
 From a HOME session, Tom: "Do this task here". `c.grid` printed a side number at every step, so a chart about 60px tall printed 80, 81 and 82 over each other; it now keeps every second (third...) step, line and number, when the steps are closer than the label size plus 4px. `c.labels` dropped nothing; it now leaves off a word that would come within `LAB_GAP` of the one before, and a lit one (third item) outranks those before it, the way `timeAxis` already did. One `chart:` smoke check, watched failing on the old file (5 numbers in 60px). Found by `tools/home-sweep.py` (WEIGHT, SLEEP, the measure card, TRAIN volume at 2 by 2), which now reports none.
+
+## One drag, always one ending (2026-11-16, `mobile.js`)
+
+Tom picked B from the state-machine sweep, drags first: COACH's slot drag
+listened on the window and heard a cancelled pointer; BLOCK, the home screen
+and FORGE did not, so a release never heard left a block lifted out of its
+lane, a ghost on the page, and the board refusing to redraw.
+
+- **`Mobile.drag(ev, {start, move, drop, tap, cancel, slop})`** from a
+  pointerdown. One named step, `d.state`: pressed, dragging, then dropped,
+  tapped or cancelled. Exactly one of drop, tap or cancel runs, once.
+  Cancel covers pointercancel, window blur, the page going hidden, Escape,
+  a mouse move with no button down (a release never heard), a callback that
+  threw, a new drag, and `Mobile.drag.cancel()`; `d.why` says which.
+- **`Mobile.dragging()`** is the live drag's step or ''. BLOCK's
+  `boardBusy` asks it. **`Mobile.drag.log`** keeps the last 20 endings.
+- **Moved onto it:** BLOCK 1.0.27 (block drag puts the block back on any
+  cancel; resize keeps its length), HOME 1.0.125 (card move leaves no ghost;
+  resize goes back to its size). **FORGE 1.0.5** uses the browser's own
+  drag and drop, which this cannot own: its redraw now waits while `drag` is
+  set, catches up on dragend, and a pointer move with no button down clears
+  a drag whose ending was never heard. COACH keeps its own, which already
+  listens on the window. TRAIN's `holdToMove` listens on its list, which a
+  redraw replaces, and is not moved yet: a TRAIN session's job.
+- One `mobile:` smoke check runs all nine endings. Watched in headless
+  Chromium with a real mouse: BLOCK reorder, then lift and blur, Escape and
+  pointercancel each put the block back with no ghost and the board free;
+  HOME lift and blur moved nothing, a real move moved the card, a resize and
+  Escape went back; FORGE took a row landing mid-drag after the drop. Review
+  212/212 WebKit at 390, 197/197 Chromium at 1280, smoke 483/483. **Not
+  watched:** a touch screen's own pointercancel, on a real device.
